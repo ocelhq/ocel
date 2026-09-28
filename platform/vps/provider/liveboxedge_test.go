@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge/edgeconformance"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/router"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
@@ -62,11 +63,8 @@ func (f front) serves(t *testing.T, vm machine, path string) string {
 		" http://"+caddy.Container+path))
 }
 
-func promotes(t *testing.T, stack router.Stack, id, tag string, staged release, at int64) {
-	t.Helper()
-
-	ctx := context.Background()
-	record := router.DeploymentRecord{
+func liveRecord(tag string, staged release) router.DeploymentRecord {
+	return router.DeploymentRecord{
 		App:        liveApp,
 		Build:      tag,
 		Entry:      "/",
@@ -74,11 +72,32 @@ func promotes(t *testing.T, stack router.Stack, id, tag string, staged release, 
 		Physical:   staged.physical,
 		HealthPath: healthPath,
 	}
-	if err := stack.Flip(ctx, router.Flip{
-		Promotion: router.Promotion{PromotionID: id, Ts: at, Builds: map[string]string{liveApp: tag}},
-		Records:   map[string]router.DeploymentRecord{liveApp: record},
+}
+
+func promotes(t *testing.T, p *vps.Provider, stack edge.EdgeStack, id, tag string, staged release, at int64) {
+	t.Helper()
+	promotion := router.Promotion{PromotionID: id, Ts: at, Builds: map[string]string{liveApp: tag}}
+	promotesRecord(t, p, stack, "", promotion, liveRecord(tag, staged))
+}
+
+func promotesRecord(t *testing.T, p *vps.Provider, stack edge.EdgeStack, pointer string, promotion router.Promotion, record router.DeploymentRecord) {
+	t.Helper()
+
+	ctx := context.Background()
+	state := stack.State()
+	releases := ledger.New(p.KeyValues(), state.Tier, state.Slug)
+	if err := releases.PutStaged(ctx, record); err != nil {
+		t.Fatalf("PutStaged(%s/%s): %v", record.App, record.Build, err)
+	}
+	if err := releases.Promote(ctx, promotion, pointer, progress.DiscardProgress()); err != nil {
+		t.Fatalf("Promote(%s): %v", promotion.PromotionID, err)
+	}
+	if err := routed(t, p, stack).Flip(ctx, router.Flip{
+		Pointer:   pointer,
+		Promotion: promotion,
+		Records:   map[string]router.DeploymentRecord{record.App: record},
 	}, progress.DiscardProgress()); err != nil {
-		t.Fatalf("Promote(%s): %v", id, err)
+		t.Fatalf("Flip(%s): %v", promotion.PromotionID, err)
 	}
 }
 
@@ -89,13 +108,13 @@ func TestLiveARetiredContainerIsStoppedRatherThanRemovedAndARollbackRunsItAgain(
 	f := fronting(t, p, "rollback")
 
 	one := provisioned(t, p, "one")
-	promotes(t, f.routes, "p-one", "one", one, 1)
+	promotes(t, p, f.stack, "p-one", "one", one, 1)
 	if served := f.serves(t, vm, "/"); served != "one" {
 		t.Fatalf("the proxy served %q after the first promotion, want the release it was pointed at", served)
 	}
 
 	two := provisioned(t, p, "two")
-	promotes(t, f.routes, "p-two", "two", two, 2)
+	promotes(t, p, f.stack, "p-two", "two", two, 2)
 	if served := f.serves(t, vm, "/"); served != "two" {
 		t.Fatalf("the proxy served %q after the second promotion, want the release it was pointed at", served)
 	}
@@ -103,7 +122,7 @@ func TestLiveARetiredContainerIsStoppedRatherThanRemovedAndARollbackRunsItAgain(
 		t.Fatalf("the retired container reads as %q, want it stopped and still present: this release loop stops what it retires and never removes it, so the release it rolled off can still be read for logs and an exit code after the flip", state)
 	}
 
-	promotes(t, f.routes, "p-rollback", "one", one, 3)
+	promotes(t, p, f.stack, "p-rollback", "one", one, 3)
 
 	if state := vm.state(t, one.physical); state != "running" {
 		t.Errorf("the container the rollback re-points at reads as %q, want it running: nothing provisions on this path, so a promote that does not make the containers running is a ledger edit and not a restored site. The rollback runs the image again under that name rather than starting the container that was there", state)
@@ -126,13 +145,13 @@ func TestLiveARollbackRunsTheSameImageDigestTheBoxAlreadyHad(t *testing.T) {
 	f := fronting(t, p, "retained")
 
 	one := provisioned(t, p, "one")
-	promotes(t, f.routes, "p-one", "one", one, 1)
+	promotes(t, p, f.stack, "p-one", "one", one, 1)
 	retained := vm.imageID(t, fixtureAt("one"))
 
 	two := provisioned(t, p, "two")
-	promotes(t, f.routes, "p-two", "two", two, 2)
+	promotes(t, p, f.stack, "p-two", "two", two, 2)
 
-	promotes(t, f.routes, "p-rollback", "one", one, 3)
+	promotes(t, p, f.stack, "p-rollback", "one", one, 3)
 
 	if again := vm.inspects(t, "image", fixtureAt("one"), "{{.Id}}"); again != retained {
 		t.Errorf("the image the rollback ran is %q, want the %q this box already retained: a rollback re-points at a retained digest, and a coordinate that resolves to a different image is one this box rebuilt or fetched behind the rollback", again, retained)
@@ -151,7 +170,7 @@ func TestLiveAClaimedHostnameIsLoadedOntoTheProxyAndChangesNothingItServes(t *te
 	ctx := context.Background()
 
 	one := provisioned(t, p, "one")
-	promotes(t, f.routes, "p-one", "one", one, 1)
+	promotes(t, p, f.stack, "p-one", "one", one, 1)
 
 	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: claimHostname}); err != nil {
 		t.Fatalf("BindDomain: %v", err)
@@ -222,16 +241,17 @@ func TestLiveARollbackOntoAnImageTheBoxHasSweptIsRefusedAndLeavesTheSiteServing(
 	f := fronting(t, p, "swept")
 
 	one := provisioned(t, p, "one")
-	promotes(t, f.routes, "p-one", "one", one, 1)
+	promotes(t, p, f.stack, "p-one", "one", one, 1)
 	two := provisioned(t, p, "two")
-	promotes(t, f.routes, "p-two", "two", two, 2)
+	promotes(t, p, f.stack, "p-two", "two", two, 2)
 
 	vm.ssh(t, "sudo docker rm --force "+quote(one.physical)+" >/dev/null 2>&1 || true")
 	vm.ssh(t, "sudo docker rmi "+quote(fixtureAt("one")))
 
-	err := f.routes.Flip(context.Background(), router.Flip{Promotion: router.Promotion{
-		PromotionID: "p-rollback", Ts: 3, Builds: map[string]string{liveApp: "one"},
-	}}, progress.DiscardProgress())
+	err := f.routes.Flip(context.Background(), router.Flip{
+		Promotion: router.Promotion{PromotionID: "p-rollback", Ts: 3, Builds: map[string]string{liveApp: "one"}},
+		Records:   map[string]router.DeploymentRecord{liveApp: liveRecord("one", one)},
+	}, progress.DiscardProgress())
 	if err == nil {
 		t.Fatal("a rollback onto an image this box no longer has succeeded, and docker run would then reach for a registry with no credentials on this path")
 	}
