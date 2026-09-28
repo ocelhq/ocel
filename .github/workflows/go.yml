@@ -45,6 +45,48 @@ env:
   OCEL_FLOCI_GCP_IMAGE: floci/floci-gcp:0.8.0
 
 jobs:
+  lint:
+    if: github.event.action != 'closed'
+    name: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: ./.github/actions/go
+
+      - uses: ./.github/actions/node-workspace
+        with:
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+
+      - name: Everything the modules embed
+        run: |
+          set -euo pipefail
+          for dir in cli platform/aws/provider platform/gcp/provider platform/vps/provider pkg/provider/transform; do
+            go generate -C "$dir" ./...
+          done
+
+      - name: Install golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.13.2
+          install-only: true
+          skip-cache: true
+
+      - name: golangci-lint and redactvet, every module
+        run: |
+          set -uo pipefail
+          go build -o "$RUNNER_TEMP/redactvet" ./scripts/redactvet || exit 1
+          status=0
+          for dir in $(go list -m -f '{{.Dir}}'); do
+            (cd "$dir" && golangci-lint run ./...) || status=1
+            (cd "$dir" && go vet -vettool="$RUNNER_TEMP/redactvet" ./...) || status=1
+          done
+          exit "$status"
+
   go:
     if: github.event.action != 'closed'
     name: ${{ matrix.group.name }}
@@ -178,28 +220,6 @@ jobs:
         if: matrix.group.name == 'pkg, s3 and edge'
         run: go generate -C pkg/provider/transform ./...
 
-      - name: Install golangci-lint
-        uses: golangci/golangci-lint-action@v9
-        with:
-          version: v2.13.2
-          install-only: true
-          skip-cache: true
-
-      - name: golangci-lint
-        run: |
-          set -euo pipefail
-          for dir in $DIRS; do
-            (cd "$dir" && golangci-lint run ./...)
-          done
-
-      - name: redactvet
-        run: |
-          set -euo pipefail
-          go build -o "$RUNNER_TEMP/redactvet" ./scripts/redactvet
-          for dir in $DIRS; do
-            (cd "$dir" && go vet -vettool="$RUNNER_TEMP/redactvet" ./...)
-          done
-
       - name: go build
         run: |
           set -euo pipefail
@@ -216,7 +236,7 @@ jobs:
           for dir in $DIRS; do
             packages+=("./$dir/...")
           done
-          go test -race -count=1 "${packages[@]}"
+          go test -race "${packages[@]}"
 
       - name: Run the dev stack's live suite on the runner's docker
         if: matrix.group.name == 'cli'
