@@ -192,7 +192,7 @@ func writeEntry(t *testing.T, root string, key keyvalue.Key, value string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	file := filepath.Join(RecordsDir(root, key.Partition.Tier), path+EntrySuffix)
+	file := filepath.Join(KeyValuesDir(root, key.Partition.Tier), path+EntrySuffix)
 	if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
 		t.Fatal(err)
 	}

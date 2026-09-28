@@ -18,7 +18,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
-func TestTheRecordsHelperComparesAndSetsUnderItsOwnLock(t *testing.T) {
+func TestTheKeyValueHelperComparesAndSetsUnderItsOwnLock(t *testing.T) {
 	t.Parallel()
 
 	dir := helperDir(t)
@@ -26,7 +26,7 @@ func TestTheRecordsHelperComparesAndSetsUnderItsOwnLock(t *testing.T) {
 
 	first := helperWrite(t, dir, name, "", "one")
 	if first == "" {
-		t.Fatal("the helper wrote a record and reported no revision, and a compare-and-set has nothing to compare")
+		t.Fatal("the helper wrote an entry and reported no revision, and a compare-and-set has nothing to compare")
 	}
 	if revision, body := helperRead(t, dir, name); revision != first || body != "one" {
 		t.Fatalf("read back %q at %q, want %q at %q", body, revision, "one", first)
@@ -46,12 +46,12 @@ func TestTheRecordsHelperComparesAndSetsUnderItsOwnLock(t *testing.T) {
 	if _, code := helper(t, dir, "", "remove", name, second); code != 0 {
 		t.Errorf("a removal at the current revision exited %d, want it gone", code)
 	}
-	if _, code := helper(t, dir, "", "read", name); code != boxstore.ExitNoRecord {
-		t.Errorf("a read after a removal exited %d, want %d", code, boxstore.ExitNoRecord)
+	if _, code := helper(t, dir, "", "read", name); code != boxstore.ExitNotFound {
+		t.Errorf("a read after a removal exited %d, want %d", code, boxstore.ExitNotFound)
 	}
 }
 
-func TestTheRecordsHelperRefusesAPairWhereEitherHalfMoved(t *testing.T) {
+func TestTheKeyValueHelperRefusesAPairWhereEitherHalfMoved(t *testing.T) {
 	t.Parallel()
 
 	dir := helperDir(t)
@@ -59,7 +59,7 @@ func TestTheRecordsHelperRefusesAPairWhereEitherHalfMoved(t *testing.T) {
 
 	fed := asJSON("one") + "\n" + asJSON("one") + "\n"
 	if _, code := helper(t, dir, fed, "pair", one, "", two, ""); code != 0 {
-		t.Fatalf("a pair of new records exited %d, want both stored", code)
+		t.Fatalf("a pair of new entries exited %d, want both stored", code)
 	}
 	current, _ := helperRead(t, dir, one)
 	moved := "a revision nobody wrote"
@@ -73,7 +73,7 @@ func TestTheRecordsHelperRefusesAPairWhereEitherHalfMoved(t *testing.T) {
 	}
 }
 
-func TestTheRecordsHelperListsEverythingUnderAPrefixAndNothingBeside(t *testing.T) {
+func TestTheKeyValueHelperListsEverythingUnderAPrefixAndNothingBeside(t *testing.T) {
 	t.Parallel()
 
 	dir := helperDir(t)
@@ -122,19 +122,19 @@ func helperDir(t *testing.T) string {
 	return root
 }
 
-func recordsDir(t *testing.T, root string) string {
+func keyValuesDir(t *testing.T, root string) string {
 	t.Helper()
 	return filepath.Join(root, helperTier, "records")
 }
 
 func helper(t *testing.T, root, stdin string, args ...string) (string, int) {
 	t.Helper()
-	script := filepath.Join(t.TempDir(), "records")
-	if err := os.WriteFile(script, recordsScript, 0o755); err != nil {
+	script := filepath.Join(t.TempDir(), "keyvalues")
+	if err := os.WriteFile(script, keyValuesScript, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	cmd := exec.Command("/bin/sh", append([]string{script, helperTier}, args...)...)
-	cmd.Env = append(os.Environ(), "OCEL_RECORDS_ROOT="+root)
+	cmd.Env = append(os.Environ(), "OCEL_STATE_ROOT="+root)
 	cmd.Stdin = strings.NewReader(stdin)
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
@@ -146,7 +146,7 @@ func helper(t *testing.T, root, stdin string, args ...string) (string, int) {
 	case errors.As(err, &exit):
 		return string(rendered), exit.ExitCode()
 	default:
-		t.Fatalf("run the records helper: %v\n%s", err, stderr.String())
+		t.Fatalf("run the key-value helper: %v\n%s", err, stderr.String())
 		return "", 0
 	}
 }
@@ -198,7 +198,7 @@ func TestAPairGivenOneBodyWritesNeitherHalf(t *testing.T) {
 	one, two := "conformance+pair/record", "conformance+pair/value"
 
 	if _, code := helper(t, dir, asJSON("one")+"\n"+asJSON("one")+"\n", "pair", one, "", two, ""); code != 0 {
-		t.Fatalf("a pair of new records exited %d, want both stored", code)
+		t.Fatalf("a pair of new entries exited %d, want both stored", code)
 	}
 	first, _ := helperRead(t, dir, one)
 	second, _ := helperRead(t, dir, two)
@@ -213,36 +213,36 @@ func TestAPairGivenOneBodyWritesNeitherHalf(t *testing.T) {
 	}
 }
 
-func TestARecordThatNamesNoRevisionIsNotOverwritten(t *testing.T) {
+func TestAnEntryThatNamesNoRevisionIsNotOverwritten(t *testing.T) {
 	t.Parallel()
 
 	dir := helperDir(t)
 	name := "conformance+truncated/truncated"
 	helperWrite(t, dir, name, "", "one")
 
-	f := filepath.Join(recordsDir(t, dir), name+".json")
+	f := filepath.Join(keyValuesDir(t, dir), name+".json")
 	if err := os.Truncate(f, 0); err != nil {
 		t.Fatal(err)
 	}
 	if _, code := helper(t, dir, asJSON("two")+"\n", "write", name, ""); code == 0 {
-		t.Fatal("a write over a record with no revision exited 0, and a compare-and-set that compares nothing is a lost update")
+		t.Fatal("a write over an entry with no revision exited 0, and a compare-and-set that compares nothing is a lost update")
 	}
 }
 
-func TestARecordIsReadableOnlyByTheUserThatWroteIt(t *testing.T) {
+func TestAnEntryIsReadableOnlyByTheUserThatWroteIt(t *testing.T) {
 	t.Parallel()
 
 	dir := helperDir(t)
 	name := "values+shop/cells/DATABASE_URL"
 	helperWrite(t, dir, name, "", "postgres://example")
 
-	f := filepath.Join(recordsDir(t, dir), name+".json")
+	f := filepath.Join(keyValuesDir(t, dir), name+".json")
 	info, err := os.Stat(f)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if info.Mode().Perm()&0o077 != 0 {
-		t.Errorf("%s has mode %04o, and a record contains the values of a deploy", f, info.Mode().Perm())
+		t.Errorf("%s has mode %04o, and an entry contains the values of a deploy", f, info.Mode().Perm())
 	}
 	within, err := os.Stat(filepath.Dir(f))
 	if err != nil {
@@ -253,12 +253,12 @@ func TestARecordIsReadableOnlyByTheUserThatWroteIt(t *testing.T) {
 	}
 }
 
-func TestARecordsDirectoryThatIsASymlinkIsRefusedAndNothingLandsWhereItPoints(t *testing.T) {
+func TestAKeyValueDirectoryThatIsASymlinkIsRefusedAndNothingLandsWhereItPoints(t *testing.T) {
 	t.Parallel()
 
 	root := helperDir(t)
 	elsewhere := t.TempDir()
-	dir := recordsDir(t, root)
+	dir := keyValuesDir(t, root)
 	if err := os.Remove(dir); err != nil {
 		t.Fatal(err)
 	}
@@ -268,18 +268,18 @@ func TestARecordsDirectoryThatIsASymlinkIsRefusedAndNothingLandsWhereItPoints(t 
 
 	for _, args := range [][]string{{"list", "conformance+a"}, {"read", "conformance+a/a"}} {
 		if rendered, code := helper(t, root, "", args...); code == 0 {
-			t.Errorf("%s through a records directory that points at %s exited 0 with %q, want it refused", args[0], elsewhere, rendered)
+			t.Errorf("%s through a key-value directory that points at %s exited 0 with %q, want it refused", args[0], elsewhere, rendered)
 		}
 	}
 	if _, code := helper(t, root, asJSON("one")+"\n", "write", "conformance+a/a", ""); code == 0 {
-		t.Error("a write through a records directory that is a symlink exited 0, want it refused")
+		t.Error("a write through a key-value directory that is a symlink exited 0, want it refused")
 	}
 	left, err := os.ReadDir(elsewhere)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(left) != 0 {
-		t.Errorf("%s holds %d entries after the helper ran through a symlink to it, want nothing: whoever can swap the records directory would choose where root writes", elsewhere, len(left))
+		t.Errorf("%s holds %d entries after the helper ran through a symlink to it, want nothing: whoever can swap the key-value directory would choose where root writes", elsewhere, len(left))
 	}
 }
 
@@ -292,7 +292,7 @@ func TestAListingThatCannotBeReadIsNoEmptyListing(t *testing.T) {
 	dir := helperDir(t)
 	helperWrite(t, dir, "conformance+tree/tree/b/one", "", "one")
 
-	shut := filepath.Join(recordsDir(t, dir), "conformance+tree/tree/b")
+	shut := filepath.Join(keyValuesDir(t, dir), "conformance+tree/tree/b")
 	if err := os.Chmod(shut, 0); err != nil {
 		t.Fatal(err)
 	}
@@ -304,7 +304,7 @@ func TestAListingThatCannotBeReadIsNoEmptyListing(t *testing.T) {
 	}
 }
 
-func TestTheRecordTierIsReachedUnderNoElevationAtAll(t *testing.T) {
+func TestTheKeyValueTierIsReachedUnderNoElevationAtAll(t *testing.T) {
 	t.Parallel()
 
 	b := machine(nil)
@@ -315,27 +315,27 @@ func TestTheRecordTierIsReachedUnderNoElevationAtAll(t *testing.T) {
 		switch {
 		case strings.Contains(command, "echo present"):
 			return session.Result{Stdout: "present\n"}, true
-		case strings.Contains(command, boxstore.RecordsHelper):
+		case strings.Contains(command, boxstore.KeyValuesHelper):
 			return session.Result{Stdout: "0123456789abcdef0123456789abcdef\t{}\n"}, true
 		}
 		return session.Result{}, false
 	}
 
-	record, err := NewKeyValues(b.host()).Read(context.Background(), stackrecords.ProjectKey(environment.TierProduction, "shop"))
+	entry, err := NewKeyValues(b.host()).Read(context.Background(), stackrecords.ProjectKey(environment.TierProduction, "shop"))
 	if err != nil {
 		t.Fatalf("Read() as the login every deploy runs as = %v", err)
 	}
-	if string(record.Value) != "{}" {
-		t.Errorf("the read answered %q, want the row the helper rendered", record.Value)
+	if string(entry.Value) != "{}" {
+		t.Errorf("the read answered %q, want the row the helper rendered", entry.Value)
 	}
 	reached := 0
 	for _, command := range b.commands() {
-		if !strings.Contains(command, boxstore.RecordsHelper) {
+		if !strings.Contains(command, boxstore.KeyValuesHelper) {
 			continue
 		}
 		reached++
 		if strings.Contains(command, "sudo") {
-			t.Errorf("the read ran as %q: %s has no sudoers line beside the seal helper, so a record tier reached through sudo is a record tier no deploy ever reads", command, deployUser)
+			t.Errorf("the read ran as %q: %s has no sudoers line beside the seal helper, so a key-value tier reached through sudo is one no deploy ever reads", command, deployUser)
 		}
 	}
 	if reached == 0 {
@@ -343,7 +343,7 @@ func TestTheRecordTierIsReachedUnderNoElevationAtAll(t *testing.T) {
 	}
 }
 
-func TestARecordThisLoginCannotWriteNamesTheElevationItWasRefused(t *testing.T) {
+func TestAnEntryThisLoginCannotWriteNamesTheElevationItWasRefused(t *testing.T) {
 	t.Parallel()
 
 	b := machine(nil)
@@ -354,7 +354,7 @@ func TestARecordThisLoginCannotWriteNamesTheElevationItWasRefused(t *testing.T) 
 		switch {
 		case strings.Contains(command, "echo present"):
 			return session.Result{Stdout: "present\n"}, true
-		case strings.Contains(command, boxstore.RecordsHelper):
+		case strings.Contains(command, boxstore.KeyValuesHelper):
 			return session.Result{Code: 1, Stderr: "Permission denied"}, true
 		}
 		return session.Result{}, false
@@ -362,7 +362,7 @@ func TestARecordThisLoginCannotWriteNamesTheElevationItWasRefused(t *testing.T) 
 
 	_, err := NewKeyValues(b.host()).Read(context.Background(), stackrecords.ProjectKey(environment.TierProduction, "shop"))
 	if err == nil {
-		t.Fatal("a record tier this login could neither read nor elevate to read answered a row")
+		t.Fatal("a key-value tier this login could neither read nor elevate to read answered a row")
 	}
 	if !strings.Contains(err.Error(), "sudo") {
 		t.Errorf("the read failed with\n%s\nand never names the elevation that was refused; the deploy login owns this tier, so a permission error on it is the preflight refusal showing up somewhere it cannot be acted on", err)

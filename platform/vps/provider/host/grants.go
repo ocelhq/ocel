@@ -39,10 +39,10 @@ func grants(tier environment.Tier, arch string) []Grant {
 			Detail: "bootstrap writes nothing for " + deployer.name + " under " + sudoersRoot,
 		})
 	}
-	if helper := written(items, KindFile, boxstore.RecordsHelper); helper.Name != "" {
+	if helper := written(items, KindFile, boxstore.KeyValuesHelper); helper.Name != "" {
 		grants = append(grants, Grant{
 			Name:   "runs " + helper.Name,
-			Detail: fmt.Sprintf("root-owned at %04o; %s runs it to compare-and-set its records and cannot write it", helper.Mode, deployer.name),
+			Detail: fmt.Sprintf("root-owned at %04o; %s runs it to compare-and-set its entries and cannot write it", helper.Mode, deployer.name),
 		})
 	}
 	if helper := written(items, KindFile, releasesHelper); helper.Name != "" {
@@ -72,7 +72,7 @@ func grants(tier environment.Tier, arch string) []Grant {
 		grants = append(grants, Grant{
 			Name: "no hand in " + unit.Name,
 			Detail: "root's env source sync, " + LiveBinary + " " + live.EnvSourceSyncCommand + ", run by systemd, not by " + deployer.name +
-				". Bounded to CAP_CHOWN and CAP_DAC_OVERRIDE on a read-only system, it writes " + RecordsDir(tier) +
+				". Bounded to CAP_CHOWN and CAP_DAC_OVERRIDE on a read-only system, it writes " + KeyValuesDir(tier) +
 				" and nothing beside, seals through " + boxstore.SealHelper + " without sudo, and logs in to each env source with the credential " +
 				string(tier) + " stores in ocel's own values",
 		})

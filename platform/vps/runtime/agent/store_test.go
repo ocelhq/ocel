@@ -171,7 +171,7 @@ func (b *box) dump(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		path := filepath.Join(vars.RecordsDir(b.stateRoot, record.Key.Partition.Tier), encoded+vars.EntrySuffix)
+		path := filepath.Join(vars.KeyValuesDir(b.stateRoot, record.Key.Partition.Tier), encoded+vars.EntrySuffix)
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatal(err)
 		}

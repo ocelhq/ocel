@@ -26,17 +26,17 @@ func TestWhatATierKeepsIsRootsAndItsStateIsTheDeployPrincipalsAlone(t *testing.T
 		owners[item.Name] = item.Owner
 	}
 	for name, want := range map[string]string{
-		tierRoot:                               rootOwner,
-		TierDir(environment.TierProduction):    rootOwner,
-		boxstore.Dir:                           rootOwner,
-		boxstore.RecordsHelper:                 rootOwner,
-		releasesHelper:                         rootOwner,
-		stateRoot:                              deployUser,
-		releasesRoot:                           deployUser,
-		sshDir:                                 deployUser,
-		authorizedKeys:                         deployUser,
-		StateDir(environment.TierProduction):   deployUser,
-		RecordsDir(environment.TierProduction): deployUser,
+		tierRoot:                                 rootOwner,
+		TierDir(environment.TierProduction):      rootOwner,
+		boxstore.Dir:                             rootOwner,
+		boxstore.KeyValuesHelper:                 rootOwner,
+		releasesHelper:                           rootOwner,
+		stateRoot:                                deployUser,
+		releasesRoot:                             deployUser,
+		sshDir:                                   deployUser,
+		authorizedKeys:                           deployUser,
+		StateDir(environment.TierProduction):     deployUser,
+		KeyValuesDir(environment.TierProduction): deployUser,
 	} {
 		if owners[name] != want {
 			t.Errorf("%s is written to %q, want %q: a path with two owners is a path with none", name, owners[name], want)

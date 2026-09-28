@@ -34,7 +34,7 @@ const (
 	partitionJoiner = "+"
 )
 
-func RecordsDir(root string, tier environment.Tier) string {
+func KeyValuesDir(root string, tier environment.Tier) string {
 	return filepath.Join(root, string(tier), "records")
 }
 
@@ -51,7 +51,7 @@ func (s KeyValues) Read(_ context.Context, key keyvalue.Key) (keyvalue.Entry, er
 	if err != nil {
 		return keyvalue.Entry{}, err
 	}
-	raw, err := os.ReadFile(filepath.Join(RecordsDir(s.Root, key.Partition.Tier), path+EntrySuffix))
+	raw, err := os.ReadFile(filepath.Join(KeyValuesDir(s.Root, key.Partition.Tier), path+EntrySuffix))
 	if errors.Is(err, fs.ErrNotExist) {
 		return keyvalue.Entry{}, keyvalue.ErrNotFound
 	}
@@ -66,7 +66,7 @@ func (s KeyValues) List(_ context.Context, in keyvalue.Partition, under ...strin
 	if err != nil {
 		return nil, err
 	}
-	partition := filepath.Join(RecordsDir(s.Root, in.Tier), dir)
+	partition := filepath.Join(KeyValuesDir(s.Root, in.Tier), dir)
 	beneath := partition
 	var found []keyvalue.Entry
 	if len(under) > 0 {
@@ -265,12 +265,12 @@ func decodeSegment(segment string) (string, error) {
 		}
 		if i+2 >= len(segment) {
 			return "", refusal.Refuse(refusal.CodeDenied,
-				"the records helper returned %q, which ocel did not write", segment)
+				"the key-value helper returned %q, which ocel did not write", segment)
 		}
 		value, err := strconv.ParseUint(segment[i+1:i+3], 16, 8)
 		if err != nil {
 			return "", refusal.Refuse(refusal.CodeDenied,
-				"the records helper returned %q, which ocel did not write", segment)
+				"the key-value helper returned %q, which ocel did not write", segment)
 		}
 		written.WriteByte(byte(value))
 		i += 2

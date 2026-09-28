@@ -15,7 +15,7 @@ const (
 
 	ContainersSlug = "ocel-containers"
 
-	containerFrontRecord = "front"
+	containerFrontSegment = "front"
 )
 
 type ContainerFront struct {
@@ -24,23 +24,23 @@ type ContainerFront struct {
 }
 
 func ContainerFrontKey(tier environment.Tier) keyvalue.Key {
-	return stackrecords.StacksPartition(tier, ContainersSlug).Key(containerFrontRecord)
+	return stackrecords.StacksPartition(tier, ContainersSlug).Key(containerFrontSegment)
 }
 
 func ReadContainerFront(ctx context.Context, store keyvalue.Store, tier environment.Tier) (ContainerFront, bool, error) {
-	record, err := keyvalue.ReadOrEmpty(ctx, store, ContainerFrontKey(tier))
+	entry, err := keyvalue.ReadOrEmpty(ctx, store, ContainerFrontKey(tier))
 	if err != nil {
 		return ContainerFront{}, false, err
 	}
-	if len(record.Value) == 0 {
+	if len(entry.Value) == 0 {
 		return ContainerFront{}, false, nil
 	}
 	var front ContainerFront
-	if err := json.Unmarshal(record.Value, &front); err != nil {
-		return ContainerFront{}, false, fmt.Errorf("read the container front %s records: %w", record.Key, err)
+	if err := json.Unmarshal(entry.Value, &front); err != nil {
+		return ContainerFront{}, false, fmt.Errorf("read the container front %s holds: %w", entry.Key, err)
 	}
 	if front.VPCOrigin == "" || front.Host == "" {
-		return ContainerFront{}, false, fmt.Errorf("the container front %s records names no VPC origin or host", record.Key)
+		return ContainerFront{}, false, fmt.Errorf("the container front %s holds names no VPC origin or host", entry.Key)
 	}
 	return front, true, nil
 }

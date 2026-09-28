@@ -46,7 +46,7 @@ func TestEachTierRunsItsOwnEnvSourceSyncThatWritesThatTiersRecordsAlone(t *testi
 		}
 	}
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		if want := "ReadWritePaths=" + RecordsDir(tier) + "\n"; !strings.Contains(strings.ReplaceAll(template, "%i", string(tier)), want) {
+		if want := "ReadWritePaths=" + KeyValuesDir(tier) + "\n"; !strings.Contains(strings.ReplaceAll(template, "%i", string(tier)), want) {
 			t.Errorf("the sync's unit reads:\n%s\nand as the %s instance never says %q: it writes that tier's records and nothing else", template, tier, want)
 		}
 	}
@@ -168,7 +168,7 @@ func TestTheDeployLoginIsToldTheEnvSourceSyncIsRootsAndWhatItMayWrite(t *testing
 			continue
 		}
 		named = true
-		for _, want := range []string{LiveBinary, deployUser, RecordsDir(tier), "CAP_CHOWN", "CAP_DAC_OVERRIDE", boxstore.SealHelper} {
+		for _, want := range []string{LiveBinary, deployUser, KeyValuesDir(tier), "CAP_CHOWN", "CAP_DAC_OVERRIDE", boxstore.SealHelper} {
 			if !strings.Contains(grant.Detail, want) {
 				t.Errorf("the grant reads %q and never says %q", grant.Detail, want)
 			}

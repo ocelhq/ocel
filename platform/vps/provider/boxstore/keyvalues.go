@@ -15,13 +15,13 @@ import (
 )
 
 const (
-	Dir           = "/usr/local/lib/ocel"
-	RecordsHelper = Dir + "/records"
-	SealHelper    = Dir + "/seal"
+	Dir             = "/usr/local/lib/ocel"
+	KeyValuesHelper = Dir + "/keyvalues"
+	SealHelper      = Dir + "/seal"
 )
 
 const (
-	ExitNoRecord = 3
+	ExitNotFound = 3
 	ExitStale    = 4
 )
 
@@ -66,7 +66,7 @@ func (s *KeyValues) Read(ctx context.Context, key keyvalue.Key) (keyvalue.Entry,
 	revision, value, split := strings.Cut(strings.TrimRight(rendered, "\n"), "\t")
 	if !split {
 		return keyvalue.Entry{}, refusal.Refuse(refusal.CodeDenied,
-			"the records helper answered a read with %q", rendered)
+			"the key-value helper answered a read with %q", rendered)
 	}
 	return entryOf(key, revision, value)
 }
@@ -121,7 +121,7 @@ func (s *KeyValues) WritePair(ctx context.Context, first, second keyvalue.Entry)
 	left, right, split := strings.Cut(strings.TrimSpace(rendered), "\t")
 	if !split {
 		return refusal.Refuse(refusal.CodeDenied,
-			"the records helper answered a pair with %q", rendered)
+			"the key-value helper answered a pair with %q", rendered)
 	}
 	if _, err := parseRevision(left); err != nil {
 		return err
@@ -148,7 +148,7 @@ func (s *KeyValues) Remove(ctx context.Context, key keyvalue.Key, expected keyva
 	}
 	if strings.TrimSpace(rendered) != acknowledged {
 		return refusal.Refuse(refusal.CodeDenied,
-			"the records helper did not confirm removing %s", key)
+			"the key-value helper did not confirm removing %s", key)
 	}
 	return nil
 }
@@ -185,7 +185,7 @@ func (s *KeyValues) List(ctx context.Context, in keyvalue.Partition, under ...st
 		columns := strings.SplitN(line, "\t", 3)
 		if len(columns) != 3 {
 			return nil, refusal.Refuse(refusal.CodeDenied,
-				"the records helper listed a row ocel cannot read: %q", line)
+				"the key-value helper listed a row ocel cannot read: %q", line)
 		}
 		key, err := live.KeyOf(in, columns[0])
 		if err != nil {
@@ -230,7 +230,7 @@ func parseRevision(rendered string) (keyvalue.Revision, error) {
 	revision := strings.TrimSpace(rendered)
 	if len(revision) != revisionWidth || strings.Trim(revision, revisionHex) != "" {
 		return "", refusal.Refuse(refusal.CodeDenied,
-			"the records helper answered %q, not a revision", rendered)
+			"the key-value helper answered %q, not a revision", rendered)
 	}
 	return keyvalue.Revision(revision), nil
 }

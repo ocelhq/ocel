@@ -55,7 +55,7 @@ func StateDir(tier environment.Tier) string { return stateRoot + "/" + string(ti
 
 func ReleasesDir() string { return releasesRoot }
 
-func RecordsDir(tier environment.Tier) string { return StateDir(tier) + "/records" }
+func KeyValuesDir(tier environment.Tier) string { return StateDir(tier) + "/records" }
 
 type Item struct {
 	Kind    string
@@ -82,7 +82,7 @@ func TierItems(tier environment.Tier) []Item {
 func StorageItems(tier environment.Tier, keys []byte) []Item {
 	return []Item{
 		dir(boxstore.Dir, 0o755, rootOwner, ""),
-		{Kind: KindFile, Name: boxstore.RecordsHelper, Mode: 0o755, Owner: rootOwner, Content: recordsScript, Note: "deploy records"},
+		{Kind: KindFile, Name: boxstore.KeyValuesHelper, Mode: 0o755, Owner: rootOwner, Content: keyValuesScript, Note: "deploy records"},
 		{Kind: KindFile, Name: releasesHelper, Mode: 0o755, Owner: rootOwner, Content: releasesScript, Note: "release window"},
 		{Kind: KindFile, Name: boxstore.SealHelper, Mode: 0o755, Owner: rootOwner, Content: sealScript, Note: "seals secret values"},
 		principal(),
@@ -92,7 +92,7 @@ func StorageItems(tier environment.Tier, keys []byte) []Item {
 		dir(sshDir, 0o700, stateOwner, ""),
 		{Kind: KindFile, Name: authorizedKeys, Mode: 0o600, Owner: stateOwner, Content: keys, Note: "keys allowed to deploy"},
 		dir(StateDir(tier), 0o750, stateOwner, ""),
-		dir(RecordsDir(tier), 0o750, stateOwner, ""),
+		dir(KeyValuesDir(tier), 0o750, stateOwner, ""),
 		sealKey(tier),
 	}
 }

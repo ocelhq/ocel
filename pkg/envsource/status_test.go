@@ -18,7 +18,7 @@ type listing struct {
 	under []string
 }
 
-type watchedRecords struct {
+type watchedKeyValues struct {
 	keyvalue.Store
 
 	mu            sync.Mutex
@@ -28,28 +28,28 @@ type watchedRecords struct {
 	failRemovesIn string
 }
 
-func (w *watchedRecords) List(ctx context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
+func (w *watchedKeyValues) List(ctx context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
 	w.mu.Lock()
 	w.listed = append(w.listed, listing{in: in, under: under})
 	w.mu.Unlock()
 	return w.Store.List(ctx, in, under...)
 }
 
-func (w *watchedRecords) Read(ctx context.Context, key keyvalue.Key) (keyvalue.Entry, error) {
+func (w *watchedKeyValues) Read(ctx context.Context, key keyvalue.Key) (keyvalue.Entry, error) {
 	if w.failIn != "" && key.Partition.Root == w.failIn {
 		return keyvalue.Entry{}, errors.New("the table is unreachable")
 	}
 	return w.Store.Read(ctx, key)
 }
 
-func (w *watchedRecords) Write(ctx context.Context, record keyvalue.Entry) (keyvalue.Revision, error) {
-	if w.staleIn != "" && record.Key.Partition.Root == w.staleIn {
+func (w *watchedKeyValues) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
+	if w.staleIn != "" && entry.Key.Partition.Root == w.staleIn {
 		return "", keyvalue.ErrStale
 	}
-	return w.Store.Write(ctx, record)
+	return w.Store.Write(ctx, entry)
 }
 
-func (w *watchedRecords) Remove(ctx context.Context, key keyvalue.Key, expected keyvalue.Revision) error {
+func (w *watchedKeyValues) Remove(ctx context.Context, key keyvalue.Key, expected keyvalue.Revision) error {
 	w.mu.Lock()
 	failing := w.failRemovesIn
 	w.mu.Unlock()
@@ -59,13 +59,13 @@ func (w *watchedRecords) Remove(ctx context.Context, key keyvalue.Key, expected 
 	return w.Store.Remove(ctx, key, expected)
 }
 
-func (w *watchedRecords) removeAgain() {
+func (w *watchedKeyValues) removeAgain() {
 	w.mu.Lock()
 	w.failRemovesIn = ""
 	w.mu.Unlock()
 }
 
-func (w *watchedRecords) lists() []listing {
+func (w *watchedKeyValues) lists() []listing {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return slices.Clone(w.listed)
@@ -165,7 +165,7 @@ func TestAScheduledSyncMovesAProjectWhoseCredentialMovedToItsNewStatus(t *testin
 func TestForgettingAProjectReadsNoOtherProjectsRegistration(t *testing.T) {
 	t.Parallel()
 	store, _ := storeFixture()
-	watched := &watchedRecords{Store: store.KeyValues}
+	watched := &watchedKeyValues{Store: store.KeyValues}
 	store.KeyValues = watched
 	for _, project := range []string{"shop", "admin", "blog"} {
 		register(t, store, infisicalRegistration(project, "https://infisical.example.com", cloudIdentity, ""))
@@ -185,7 +185,7 @@ func TestADedupeKeyWhoseCredentialCannotBeReadIsAnError(t *testing.T) {
 	t.Parallel()
 	store, scope := storeFixture()
 	setCredentials(t, store, "shop", "client-id", "client-secret")
-	store.KeyValues = &watchedRecords{Store: store.KeyValues, failIn: keyvalue.RootValues}
+	store.KeyValues = &watchedKeyValues{Store: store.KeyValues, failIn: keyvalue.RootValues}
 	descriptor := infisicalRegistration("shop", "https://infisical.example.com", universal, "").Descriptor
 	if key, err := envsource.DedupeKey(context.Background(), store, scope, descriptor); err == nil {
 		t.Fatalf("DedupeKey() over an unreadable store = %q, want the failure rather than a key naming the credential unset", key)
@@ -221,7 +221,7 @@ func TestForgettingAProjectAgainAfterItFailedPartWayLeavesNoStatusBehind(t *test
 	if _, err := sync.CopyProject(ctx, registration); err != nil {
 		t.Fatal(err)
 	}
-	watched := &watchedRecords{Store: store.KeyValues, failRemovesIn: keyvalue.RootEnvSourceStatus}
+	watched := &watchedKeyValues{Store: store.KeyValues, failRemovesIn: keyvalue.RootEnvSourceStatus}
 	store.KeyValues = watched
 
 	if err := envsource.ForgetProject(ctx, store, environment.TierProduction, "shop"); err == nil {
@@ -242,7 +242,7 @@ func TestAStatusRewrittenUnderEveryAttemptToRecordItIsAnError(t *testing.T) {
 	fake.put("/", fakeSecret{id: "s1", key: "K", value: "v", version: 1})
 	registration := infisicalRegistration("shop", host, cloudIdentity, "")
 	register(t, store, registration)
-	sync.Store.KeyValues = &watchedRecords{Store: store.KeyValues, staleIn: keyvalue.RootEnvSourceStatus}
+	sync.Store.KeyValues = &watchedKeyValues{Store: store.KeyValues, staleIn: keyvalue.RootEnvSourceStatus}
 
 	if _, err := sync.CopyProject(context.Background(), registration); err == nil {
 		t.Fatal("CopyProject() whose status was rewritten under every attempt = nil, want the lost status reported")

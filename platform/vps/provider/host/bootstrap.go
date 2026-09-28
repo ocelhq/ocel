@@ -624,7 +624,7 @@ func removing(read, sibling Reading, apps appsPresent) []removal {
 			taking(KindFile, imagesLock, ""),
 			sharing(stateRoot, ""),
 			taking(KindUser, deployUser, ""),
-			taking(KindFile, boxstore.RecordsHelper, ""),
+			taking(KindFile, boxstore.KeyValuesHelper, ""),
 			taking(KindFile, releasesHelper, ""),
 			taking(KindFile, boxstore.SealHelper, ""),
 			taking(KindFile, SwitchboardBinary, ""),

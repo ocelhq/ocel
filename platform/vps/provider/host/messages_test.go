@@ -79,7 +79,7 @@ func TestAHealSaysWhatItRewroteAndWhatItLeftAsItIs(t *testing.T) {
 	tier := environment.TierProduction
 	installed := bootstrapped(t, tier)
 	for at, item := range installed {
-		if (item.Kind == KindDir && item.Name == RecordsDir(tier)) || (item.Kind == KindUnit && item.Name == dockerUnit) {
+		if (item.Kind == KindDir && item.Name == KeyValuesDir(tier)) || (item.Kind == KindUnit && item.Name == dockerUnit) {
 			installed[at].Mode = 0o700
 		}
 	}

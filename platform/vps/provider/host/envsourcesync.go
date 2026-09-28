@@ -32,7 +32,7 @@ func envSourceSyncUnit() []byte {
 		"RestartSec=" + envSourceSyncRestartWait,
 		"NoNewPrivileges=yes",
 		"ProtectSystem=strict",
-		"ReadWritePaths=" + RecordsDir(unitInstance),
+		"ReadWritePaths=" + KeyValuesDir(unitInstance),
 		"ProtectHome=yes",
 		"PrivateTmp=yes",
 		"CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE",
