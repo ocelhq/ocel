@@ -159,7 +159,7 @@ func (s *stack) findDistributionFor(ctx context.Context, c Clients, name string)
 	return findDistribution(ctx, c, name)
 }
 
-func (s *stack) publishOn(ctx context.Context, c Clients, promotionID string, records map[string]router.DeploymentRecord, hostnames []string, guard func(context.Context) error) error {
+func (s *stack) publishOn(ctx context.Context, c Clients, promotionID string, records map[string]router.DeploymentRecord, hostnames []string, stillActive router.StillActive) error {
 	if len(hostnames) == 0 {
 		return nil
 	}
@@ -172,7 +172,7 @@ func (s *stack) publishOn(ctx context.Context, c Clients, promotionID string, re
 		puts[hostname] = published
 	}
 	routes := s.routes(c)
-	routes.guard = guard
+	routes.stillActive = stillActive
 	return routes.apply(ctx, puts, nil)
 }
 

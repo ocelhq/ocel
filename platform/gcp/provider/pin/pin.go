@@ -11,7 +11,7 @@ import (
 )
 
 type Pins interface {
-	Pin(ctx context.Context, service, revision string, stillActive func(context.Context) error) error
+	Pin(ctx context.Context, service, revision string, stillActive router.StillActive) error
 }
 
 func Flip(ctx context.Context, pins Pins, flip router.Flip, progress progress.Progress) error {

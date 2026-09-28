@@ -2,12 +2,14 @@ package router
 
 import "context"
 
+type StillActive func(ctx context.Context) error
+
 type Flip struct {
 	Pointer     string
 	Promotion   Promotion
 	Records     map[string]DeploymentRecord
 	Hostnames   []string
-	StillActive func(ctx context.Context) error
+	StillActive StillActive
 }
 
 func (f Flip) RefuseInactive(ctx context.Context) error {

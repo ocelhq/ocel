@@ -25,7 +25,7 @@ type pinRecorder struct {
 	refuse error
 }
 
-func (p *pinRecorder) Pin(ctx context.Context, service, revision string, stillActive func(context.Context) error) error {
+func (p *pinRecorder) Pin(ctx context.Context, service, revision string, stillActive router.StillActive) error {
 	for {
 		p.mu.Lock()
 		read, refused := len(p.pinned), p.refuse

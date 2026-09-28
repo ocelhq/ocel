@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/router"
 )
 
 const (
@@ -250,7 +251,7 @@ func heldTraffic(current *run.GoogleCloudRunV2Service) []*run.GoogleCloudRunV2Tr
 	return trafficTo(serving)
 }
 
-func (p *Provider) Pin(ctx context.Context, service, revision string, stillActive func(context.Context) error) error {
+func (p *Provider) Pin(ctx context.Context, service, revision string, stillActive router.StillActive) error {
 	if revision == "" {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"%s is asked to serve a revision nothing named, and traffic is pinned to one revision by name", service)
@@ -280,7 +281,7 @@ func latestReady(service string) func(*run.GoogleCloudRunV2Service) (string, err
 	}
 }
 
-func activeNamed(ctx context.Context, revision string, stillActive func(context.Context) error) func(*run.GoogleCloudRunV2Service) (string, error) {
+func activeNamed(ctx context.Context, revision string, stillActive router.StillActive) func(*run.GoogleCloudRunV2Service) (string, error) {
 	return func(*run.GoogleCloudRunV2Service) (string, error) {
 		if stillActive == nil {
 			return revision, nil
