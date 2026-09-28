@@ -223,7 +223,11 @@ func (s KeyValues) List(ctx context.Context, in keyvalue.Partition, under ...str
 		if !keyed || path == "" {
 			continue
 		}
-		entry, err := entryOf(in.Key(keyvalue.SplitSegments(path, segmentSeparator)...), snapshot)
+		segments, err := keyvalue.SplitSegments(path, segmentSeparator)
+		if err != nil {
+			return nil, err
+		}
+		entry, err := entryOf(in.Key(segments...), snapshot)
 		if err != nil {
 			return nil, err
 		}

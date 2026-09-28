@@ -292,8 +292,11 @@ func (s KeyValues) List(ctx context.Context, in keyvalue.Partition, under ...str
 			return nil, fmt.Errorf("read everything in %s: %w", in, err)
 		}
 		for _, item := range page.Items {
-			path, ok := pathOf(item)
-			if !ok {
+			path, keyed, err := pathOf(item)
+			if err != nil {
+				return nil, err
+			}
+			if !keyed {
 				continue
 			}
 			entry, err := entryOf(in.Key(path...), item)
@@ -309,13 +312,14 @@ func (s KeyValues) List(ctx context.Context, in keyvalue.Partition, under ...str
 	}
 }
 
-func pathOf(item map[string]ddbtypes.AttributeValue) ([]string, bool) {
+func pathOf(item map[string]ddbtypes.AttributeValue) ([]string, bool, error) {
 	sk := stringAttribute(item, sortAttribute)
 	rest, ok := strings.CutSuffix(sk, segmentSeparator)
 	if !ok || rest == "" {
-		return nil, false
+		return nil, false, nil
 	}
-	return keyvalue.SplitSegments(rest, segmentSeparator), true
+	path, err := keyvalue.SplitSegments(rest, segmentSeparator)
+	return path, err == nil, err
 }
 
 func entryOf(key keyvalue.Key, item map[string]ddbtypes.AttributeValue) (keyvalue.Entry, error) {
