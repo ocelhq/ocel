@@ -11,6 +11,7 @@ node = "26.7.0"
 
 [env]
 OCEL_ENV = 'dev'
+GOFLAGS = "{{ (get_env(name='GOFLAGS', default='') | replace(from='-trimpath', to='') ~ ' -trimpath') | trim }}"
 _.path = "{{config_root}}/dist/bin"
 
 [tasks.oc]

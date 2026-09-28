@@ -30,6 +30,10 @@ runs:
         go-version-file: ${{ inputs.go-version-file }}
         cache: false
 
+    - name: Every build trims source paths, as mise.toml has it locally
+      shell: bash
+      run: echo "GOFLAGS=${GOFLAGS:+$GOFLAGS }-trimpath" >> "$GITHUB_ENV"
+
     - name: Name the caches
       id: paths
       shell: bash
