@@ -12,12 +12,13 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const groupVendor provider.Vendor = "aws"
@@ -266,7 +267,7 @@ func installedEdgeChanges(kind edge.Kind, feature string, planned []edge.PlanCha
 	return &group
 }
 
-func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, progress edge.Progress) error {
+func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Progress) error {
 	if req.Heal {
 		return b.heal(ctx, req, progress)
 	}
@@ -277,7 +278,7 @@ func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 	return err
 }
 
-func (b Bootstrap) heal(ctx context.Context, req provider.BootstrapRequest, progress edge.Progress) error {
+func (b Bootstrap) heal(ctx context.Context, req provider.BootstrapRequest, progress progress.Progress) error {
 	_, err := bootstrap.Heal(ctx, b.apis(), b.Namespace, string(req.Class), bootstrap.HealRequest{
 		Features: req.Features,
 		Writer:   req.WrittenBy,
@@ -288,7 +289,7 @@ func (b Bootstrap) heal(ctx context.Context, req provider.BootstrapRequest, prog
 	return err
 }
 
-func (b Bootstrap) Remove(ctx context.Context, class edge.Class, progress edge.Progress) error {
+func (b Bootstrap) Remove(ctx context.Context, class edge.Class, progress progress.Progress) error {
 	read, err := bootstrap.Read(ctx, b.CFN, b.Namespace, string(class))
 	if err != nil {
 		return err

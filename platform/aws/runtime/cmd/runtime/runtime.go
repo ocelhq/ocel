@@ -18,10 +18,10 @@ import (
 	"github.com/aws/aws-lambda-go/lambdacontext"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/platform/aws/runtime/bytecode"
 	source "github.com/ocelhq/ocel/platform/aws/runtime/live"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func main() {

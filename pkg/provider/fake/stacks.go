@@ -8,9 +8,10 @@ import (
 	"sync"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type Stacks struct {
@@ -48,15 +49,15 @@ func (r *Stacks) Provisioned() []provider.StackSpec {
 	return slices.Clone(r.provisioned)
 }
 
-func (r *Stacks) Plan(ctx context.Context, spec provider.StackSpec, _ edge.Progress) (provider.Plan, error) {
+func (r *Stacks) Plan(ctx context.Context, spec provider.StackSpec, _ progress.Progress) (provider.Plan, error) {
 	return resources.SynthesizedPlan(ctx, r.artifacts, spec, r.Inspect(spec.Ref).Result)
 }
 
-func (r *Stacks) PlanDestroy(_ context.Context, ref provider.StackRef, _ edge.Progress) (provider.Plan, error) {
+func (r *Stacks) PlanDestroy(_ context.Context, ref provider.StackRef, _ progress.Progress) (provider.Plan, error) {
 	return resources.SynthesizedRemoval(ref, r.Inspect(ref).Result), nil
 }
 
-func (r *Stacks) Provision(ctx context.Context, spec provider.StackSpec, progress edge.Progress) (provider.StackResult, error) {
+func (r *Stacks) Provision(ctx context.Context, spec provider.StackSpec, progress progress.Progress) (provider.StackResult, error) {
 	if err := ctx.Err(); err != nil {
 		return provider.StackResult{}, err
 	}
@@ -110,7 +111,7 @@ func (r *Stacks) RefuseNextDestroy(err error) {
 	r.refusal = err
 }
 
-func (r *Stacks) Destroy(_ context.Context, ref provider.StackRef, progress edge.Progress) error {
+func (r *Stacks) Destroy(_ context.Context, ref provider.StackRef, progress progress.Progress) error {
 	r.journal.note("destroy " + ref.Name.String())
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -204,22 +205,22 @@ func propertiesFor(t provider.BindingType, name string) map[string]string {
 	return properties
 }
 
-func (*Provider) ProvisionFunctions(_ context.Context, spec provider.StackSpec, _ edge.Progress) ([]provider.Function, error) {
+func (*Provider) ProvisionFunctions(_ context.Context, spec provider.StackSpec, _ progress.Progress) ([]provider.Function, error) {
 	return ProvisionedFunctions(spec), nil
 }
 
-func (p *Provider) RemoveFunctions(_ context.Context, _ provider.StackRef, functions []provider.Function, _ edge.Progress) error {
+func (p *Provider) RemoveFunctions(_ context.Context, _ provider.StackRef, functions []provider.Function, _ progress.Progress) error {
 	for _, function := range functions {
 		p.stacks.recordDestroyed(function.Name)
 	}
 	return nil
 }
 
-func (*Provider) ProvisionContainers(_ context.Context, spec provider.StackSpec, _ edge.Progress) ([]provider.AppContainer, error) {
+func (*Provider) ProvisionContainers(_ context.Context, spec provider.StackSpec, _ progress.Progress) ([]provider.AppContainer, error) {
 	return ProvisionedContainers(spec), nil
 }
 
-func (p *Provider) RemoveContainers(_ context.Context, _ provider.StackRef, containers []provider.AppContainer, _ edge.Progress) error {
+func (p *Provider) RemoveContainers(_ context.Context, _ provider.StackRef, containers []provider.AppContainer, _ progress.Progress) error {
 	for _, container := range containers {
 		p.stacks.recordDestroyed(container.Name)
 	}

@@ -11,8 +11,8 @@ import (
 	"buf.build/go/protovalidate"
 	connect "connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type recordingStream struct {

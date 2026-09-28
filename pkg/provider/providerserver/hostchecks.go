@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func HostChecksProto(checks []provider.HostCheck) []*contractv1.HostCheck {

@@ -12,11 +12,11 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/envsourcewire"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const FakeEnvSourceEnvVar = "OCEL_TEST_FAKE_ENV_SOURCE"

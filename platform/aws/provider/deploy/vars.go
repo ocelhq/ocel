@@ -13,13 +13,13 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/baked"
 	vars "github.com/ocelhq/ocel/platform/aws/provider/vars/live"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const functionEnvBudgetBytes = 4096

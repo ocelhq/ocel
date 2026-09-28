@@ -5,8 +5,8 @@ import (
 	"encoding/hex"
 	"slices"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type Kind string

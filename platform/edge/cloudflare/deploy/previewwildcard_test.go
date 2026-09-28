@@ -8,7 +8,7 @@ import (
 	"mime/multipart"
 	"testing"
 
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 func uploadedMetadata(t *testing.T, m *cfMock, scriptName string) map[string]any {

@@ -12,7 +12,6 @@ require (
 	github.com/evanw/esbuild v0.28.1
 	github.com/google/go-containerregistry v0.21.7
 	github.com/lestrrat-go/jwx/v3 v3.3.0
-	github.com/ocelhq/ocel/platform/edge/contract v0.0.0
 	github.com/shopspring/decimal v1.4.0
 	golang.org/x/sync v0.22.0
 	google.golang.org/protobuf v1.36.12
@@ -62,5 +61,3 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20260825221802-da73d73af1c5 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260825221802-da73d73af1c5 // indirect
 )
-
-replace github.com/ocelhq/ocel/platform/edge/contract => ../platform/edge/contract

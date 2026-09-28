@@ -4,7 +4,8 @@ import (
 	"context"
 	"io"
 
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 )
 
 type ArtifactStore interface {
@@ -14,7 +15,7 @@ type ArtifactStore interface {
 
 	Open(ctx context.Context, ref ArtifactRef) (io.ReadCloser, error)
 
-	RemovePrefix(ctx context.Context, class edge.Class, prefix string, progress edge.Progress) error
+	RemovePrefix(ctx context.Context, class edge.Class, prefix string, progress progress.Progress) error
 }
 
 type ArtifactRef struct {

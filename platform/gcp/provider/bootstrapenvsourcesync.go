@@ -16,9 +16,9 @@ import (
 	"google.golang.org/api/googleapi"
 	run "google.golang.org/api/run/v2"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )

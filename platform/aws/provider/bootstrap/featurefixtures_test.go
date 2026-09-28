@@ -1,6 +1,6 @@
 package bootstrap
 
-import edge "github.com/ocelhq/ocel/platform/edge/contract"
+import "github.com/ocelhq/ocel/pkg/edge"
 
 func namesFor(class string, kind edge.Kind) edgeNames {
 	names, err := edgeNamesFor(defaultNamespace, class, kind)

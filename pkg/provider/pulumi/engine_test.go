@@ -5,9 +5,9 @@ import (
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/pulumi"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type recordingEngine struct {
@@ -19,17 +19,17 @@ type recordingEngine struct {
 	err       error
 }
 
-func (e *recordingEngine) Preview(_ context.Context, _ pulumi.WorkspaceSpec, op pulumi.Operation, _ edge.Progress) ([]provider.Change, error) {
+func (e *recordingEngine) Preview(_ context.Context, _ pulumi.WorkspaceSpec, op pulumi.Operation, _ progress.Progress) ([]provider.Change, error) {
 	e.previewed = op
 	return e.rows, e.err
 }
 
-func (e *recordingEngine) Up(_ context.Context, setup pulumi.WorkspaceSpec, _ edge.Progress) (auto.OutputMap, error) {
+func (e *recordingEngine) Up(_ context.Context, setup pulumi.WorkspaceSpec, _ progress.Progress) (auto.OutputMap, error) {
 	e.up = setup
 	return e.outputs, e.err
 }
 
-func (e *recordingEngine) Destroy(_ context.Context, setup pulumi.WorkspaceSpec, _ edge.Progress) error {
+func (e *recordingEngine) Destroy(_ context.Context, setup pulumi.WorkspaceSpec, _ progress.Progress) error {
 	e.down = setup
 	return e.err
 }
@@ -49,7 +49,7 @@ func (decoding) Decode(_ context.Context, _ provider.StackSpec, outputs auto.Out
 }
 
 type sayings struct {
-	edge.Progress
+	progress.Progress
 	said []string
 }
 

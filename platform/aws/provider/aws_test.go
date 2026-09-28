@@ -10,8 +10,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/envvars"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
@@ -22,7 +24,6 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 var defaultNamespace = bootstrap.Namespace(provider.DefaultNamespace)
@@ -61,7 +62,7 @@ func (s stubBootstrap) Plan(context.Context, provider.BootstrapRequest) (provide
 	return provider.Plan{}, s.err
 }
 
-func (s stubBootstrap) Apply(context.Context, provider.BootstrapRequest, edge.Progress) error {
+func (s stubBootstrap) Apply(context.Context, provider.BootstrapRequest, progress.Progress) error {
 	return s.err
 }
 
@@ -69,7 +70,7 @@ func (stubBootstrap) PlanRemove(context.Context, edge.Class) (provider.Plan, err
 	return provider.Plan{}, nil
 }
 
-func (s stubBootstrap) Remove(context.Context, edge.Class, edge.Progress) error {
+func (s stubBootstrap) Remove(context.Context, edge.Class, progress.Progress) error {
 	return s.err
 }
 

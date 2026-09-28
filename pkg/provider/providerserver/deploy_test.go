@@ -16,6 +16,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -31,7 +33,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const webDeploymentID = "0123456789abcdef0123456789abcdef"
@@ -380,15 +381,15 @@ func (r refusingStacks) Stacks() provider.Stacks { return r.stacks }
 
 type halfBindingStacks struct{}
 
-func (halfBindingStacks) Plan(ctx context.Context, spec provider.StackSpec, _ edge.Progress) (provider.Plan, error) {
+func (halfBindingStacks) Plan(ctx context.Context, spec provider.StackSpec, _ progress.Progress) (provider.Plan, error) {
 	return resources.SynthesizedPlan(ctx, fake.NewArtifacts(), spec, provider.StackResult{})
 }
 
-func (halfBindingStacks) PlanDestroy(_ context.Context, ref provider.StackRef, _ edge.Progress) (provider.Plan, error) {
+func (halfBindingStacks) PlanDestroy(_ context.Context, ref provider.StackRef, _ progress.Progress) (provider.Plan, error) {
 	return resources.SynthesizedRemoval(ref, provider.StackResult{}), nil
 }
 
-func (halfBindingStacks) Provision(_ context.Context, spec provider.StackSpec, _ edge.Progress) (provider.StackResult, error) {
+func (halfBindingStacks) Provision(_ context.Context, spec provider.StackSpec, _ progress.Progress) (provider.StackResult, error) {
 	var result provider.StackResult
 	for _, resource := range spec.Resources {
 		result.Bindings = append(result.Bindings, provider.Binding{
@@ -400,7 +401,7 @@ func (halfBindingStacks) Provision(_ context.Context, spec provider.StackSpec, _
 	return result, nil
 }
 
-func (halfBindingStacks) Destroy(context.Context, provider.StackRef, edge.Progress) error {
+func (halfBindingStacks) Destroy(context.Context, provider.StackRef, progress.Progress) error {
 	return nil
 }
 
@@ -494,15 +495,15 @@ func (r *resolvingStacks) Resolved() []provider.Binding {
 	return slices.Clone(r.resolved)
 }
 
-func (r *resolvingStacks) Plan(ctx context.Context, spec provider.StackSpec, progress edge.Progress) (provider.Plan, error) {
+func (r *resolvingStacks) Plan(ctx context.Context, spec provider.StackSpec, progress progress.Progress) (provider.Plan, error) {
 	return r.inner.Plan(ctx, spec, progress)
 }
 
-func (r *resolvingStacks) PlanDestroy(ctx context.Context, ref provider.StackRef, progress edge.Progress) (provider.Plan, error) {
+func (r *resolvingStacks) PlanDestroy(ctx context.Context, ref provider.StackRef, progress progress.Progress) (provider.Plan, error) {
 	return r.inner.PlanDestroy(ctx, ref, progress)
 }
 
-func (r *resolvingStacks) Provision(ctx context.Context, spec provider.StackSpec, progress edge.Progress) (provider.StackResult, error) {
+func (r *resolvingStacks) Provision(ctx context.Context, spec provider.StackSpec, progress progress.Progress) (provider.StackResult, error) {
 	result, err := r.inner.Provision(ctx, spec, progress)
 	if err != nil {
 		return result, err
@@ -525,7 +526,7 @@ func (r *resolvingStacks) Provision(ctx context.Context, spec provider.StackSpec
 	return result, nil
 }
 
-func (r *resolvingStacks) Destroy(ctx context.Context, ref provider.StackRef, progress edge.Progress) error {
+func (r *resolvingStacks) Destroy(ctx context.Context, ref provider.StackRef, progress progress.Progress) error {
 	return r.inner.Destroy(ctx, ref, progress)
 }
 

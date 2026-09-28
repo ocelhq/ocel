@@ -15,7 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 const EdgeName = "box"

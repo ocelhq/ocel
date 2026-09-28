@@ -11,12 +11,13 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func servingRoot(t *testing.T, app string, desc edge.ServeDescriptor, manifest []byte) string {
@@ -251,7 +252,7 @@ type recordingStacks struct {
 	drawn []provider.StackSpec
 }
 
-func (r *recordingStacks) Plan(ctx context.Context, spec provider.StackSpec, progress edge.Progress) (provider.Plan, error) {
+func (r *recordingStacks) Plan(ctx context.Context, spec provider.StackSpec, progress progress.Progress) (provider.Plan, error) {
 	r.mu.Lock()
 	r.drawn = append(r.drawn, spec)
 	r.mu.Unlock()

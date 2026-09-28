@@ -12,9 +12,10 @@ import (
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type S3API interface {
@@ -170,7 +171,7 @@ func (a Artifacts) Open(ctx context.Context, ref provider.ArtifactRef) (io.ReadC
 	return out.Body, nil
 }
 
-func (a Artifacts) RemovePrefix(ctx context.Context, class edge.Class, prefix string, progress edge.Progress) error {
+func (a Artifacts) RemovePrefix(ctx context.Context, class edge.Class, prefix string, progress progress.Progress) error {
 	if prefix == "" {
 		return refusal.Refuse(refusal.CodeInvalid, "an empty prefix names every artifact this account keeps")
 	}

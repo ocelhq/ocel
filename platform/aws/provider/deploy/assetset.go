@@ -12,9 +12,9 @@ import (
 	"github.com/pulumi/pulumi-go-provider/infer"
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/pulumi"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
@@ -34,7 +34,7 @@ type assetSet struct {
 	app    string
 	files  int
 	digest string
-	push   func(ctx context.Context, progress edge.Progress) error
+	push   func(ctx context.Context, progress progress.Progress) error
 }
 
 type setManifest struct {
@@ -55,7 +55,7 @@ func (m *setManifest) digest() string { return hex.EncodeToString(m.h.Sum(nil)) 
 
 type pendingSet struct {
 	set      assetSet
-	progress edge.Progress
+	progress progress.Progress
 }
 
 type pendingSets struct {
@@ -65,7 +65,7 @@ type pendingSets struct {
 
 func newPendingSets() *pendingSets { return &pendingSets{pending: map[string]pendingSet{}} }
 
-func (p *pendingSets) add(stack string, sets []assetSet, progress edge.Progress) {
+func (p *pendingSets) add(stack string, sets []assetSet, progress progress.Progress) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for _, set := range sets {

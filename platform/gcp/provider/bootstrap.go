@@ -22,10 +22,11 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -102,7 +103,7 @@ func (g bootstrapGate) Plan(ctx context.Context, req provider.BootstrapRequest) 
 	return b.Plan(ctx, req)
 }
 
-func (g bootstrapGate) Apply(ctx context.Context, req provider.BootstrapRequest, progress edge.Progress) error {
+func (g bootstrapGate) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Progress) error {
 	b, err := g.openBootstrap(ctx)
 	if err != nil {
 		return err
@@ -118,7 +119,7 @@ func (g bootstrapGate) PlanRemove(ctx context.Context, class edge.Class) (provid
 	return b.PlanRemove(ctx, class)
 }
 
-func (g bootstrapGate) Remove(ctx context.Context, class edge.Class, progress edge.Progress) error {
+func (g bootstrapGate) Remove(ctx context.Context, class edge.Class, progress progress.Progress) error {
 	b, err := g.openBootstrap(ctx)
 	if err != nil {
 		return err
@@ -131,8 +132,8 @@ type bootstrap struct {
 	fronts  provider.Edges
 
 	pushBinary    func(ctx context.Context, class edge.Class, name, ref string, binary []byte, path string) error
-	deployService func(ctx context.Context, s serving, progress edge.Progress) (release, error)
-	tearDown      func(ctx context.Context, service string, progress edge.Progress) error
+	deployService func(ctx context.Context, s serving, progress progress.Progress) (release, error)
+	tearDown      func(ctx context.Context, service string, progress progress.Progress) error
 }
 
 func (b bootstrap) Describe(ctx context.Context, class edge.Class) (provider.BootstrapDescription, error) {
@@ -238,7 +239,7 @@ func sharedWith(class edge.Class) string {
 	return fmt.Sprintf(reasonShared, siblingOf(class))
 }
 
-func (b bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, progress edge.Progress) error {
+func (b bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Progress) error {
 	read, err := b.surveyFor(ctx, req)
 	if err != nil {
 		return err
@@ -290,7 +291,7 @@ func stampItem(items []item, stampBucket item) item {
 	return stampBucket
 }
 
-func (b bootstrap) provision(ctx context.Context, read survey, target item, progress edge.Progress) error {
+func (b bootstrap) provision(ctx context.Context, read survey, target item, progress progress.Progress) error {
 	if mends := read.mends(target); mends != "" {
 		if err := b.mend(ctx, read, target); err != nil {
 			return err
@@ -888,7 +889,7 @@ func removing(read survey, target item) removal {
 	return taking
 }
 
-func (b bootstrap) Remove(ctx context.Context, class edge.Class, progress edge.Progress) error {
+func (b bootstrap) Remove(ctx context.Context, class edge.Class, progress progress.Progress) error {
 	read, err := b.survey(ctx, class)
 	if err != nil {
 		return err
@@ -929,7 +930,7 @@ func (b bootstrap) Remove(ctx context.Context, class edge.Class, progress edge.P
 	return nil
 }
 
-func (r removal) report(progress edge.Progress) {
+func (r removal) report(progress progress.Progress) {
 	progress = ensureProgress(progress)
 	switch {
 	case r.action == provider.ActionKeep && r.reason == reasonAbsent:

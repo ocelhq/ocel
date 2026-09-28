@@ -10,12 +10,13 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/records"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func seedPromotions(t *testing.T, provider *fake.Provider, class edge.Class, slug, pointer string, ids ...string) *ledger.Ledger {
@@ -26,7 +27,7 @@ func seedPromotions(t *testing.T, provider *fake.Provider, class edge.Class, slu
 	}
 	for i, id := range ids {
 		promotion := edge.Promotion{PromotionID: id, Ts: int64(i + 1), Builds: map[string]string{"web": buildIdentity(i)}}
-		if err := releases.Promote(context.Background(), promotion, pointer, edge.DiscardProgress()); err != nil {
+		if err := releases.Promote(context.Background(), promotion, pointer, progress.DiscardProgress()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -99,11 +100,11 @@ type capturingLedger struct {
 	marker string
 
 	mu       sync.Mutex
-	progress edge.Progress
+	progress progress.Progress
 	heard    bool
 }
 
-func (c *capturingLedger) Promote(ctx context.Context, promotion edge.Promotion, pointer string, progress edge.Progress) error {
+func (c *capturingLedger) Promote(ctx context.Context, promotion edge.Promotion, pointer string, progress progress.Progress) error {
 	c.mu.Lock()
 	c.progress, c.heard = progress, true
 	c.mu.Unlock()
@@ -113,7 +114,7 @@ func (c *capturingLedger) Promote(ctx context.Context, promotion edge.Promotion,
 	return c.Ledger.Promote(ctx, promotion, pointer, progress)
 }
 
-func (c *capturingLedger) flipped() (edge.Progress, bool) {
+func (c *capturingLedger) flipped() (progress.Progress, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.progress, c.heard
@@ -136,11 +137,11 @@ func TestTheDeployFlipSpeaksThroughThePromotionStagesOwnProgress(t *testing.T) {
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
-	progress, heard := capturer.flipped()
+	flipped, heard := capturer.flipped()
 	if !heard {
 		t.Fatal("the deploy never reached Promote, so nothing was reported from the flip")
 	}
-	if progress == edge.DiscardProgress() {
+	if flipped == progress.DiscardProgress() {
 		t.Fatal("the deploy handed the flip a discarding reporter, want the Promotion stage's own")
 	}
 
@@ -176,12 +177,12 @@ func TestTheRollbackFlipIsHandedProgressThatDiscards(t *testing.T) {
 	if _, err := client.Rollback(context.Background(), &contractv1.RollbackRequest{Slug: "shop", To: "p1"}); err != nil {
 		t.Fatalf("Rollback() error = %v", err)
 	}
-	progress, heard := capturer.flipped()
+	flipped, heard := capturer.flipped()
 	if !heard {
 		t.Fatal("the rollback never reached Promote")
 	}
-	if progress != edge.DiscardProgress() {
-		t.Errorf("the rollback handed the flip %#v, want the discarding reporter: Rollback is a unary RPC that streams nothing", progress)
+	if flipped != progress.DiscardProgress() {
+		t.Errorf("the rollback handed the flip %#v, want the discarding reporter: Rollback is a unary RPC that streams nothing", flipped)
 	}
 }
 
@@ -289,7 +290,7 @@ func (m *memoryLedger) Prune(_ context.Context, keepN int, _ string) (edge.Prune
 	return edge.PruneResult{KeptPromotionIDs: []string{"own-1"}}, nil
 }
 
-func (*memoryLedger) Promote(context.Context, edge.Promotion, string, edge.Progress) error {
+func (*memoryLedger) Promote(context.Context, edge.Promotion, string, progress.Progress) error {
 	return nil
 }
 

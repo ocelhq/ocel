@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/images"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func TestAStackSpecWithARegistryRendersWithoutItsPassword(t *testing.T) {
@@ -86,6 +86,6 @@ func (keptSecret) Has(context.Context, provider.ImagePush) (bool, error) { retur
 
 func (keptSecret) Destination() string { return "the kept registry" }
 
-func (keptSecret) Push(context.Context, provider.ImagePush, edge.Progress) error {
+func (keptSecret) Push(context.Context, provider.ImagePush, progress.Progress) error {
 	return nil
 }

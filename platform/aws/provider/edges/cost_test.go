@@ -3,8 +3,8 @@ package edges
 import (
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/pricing"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func TestEveryEdgeThisProviderFrontsWithShapesWhatItProvisions(t *testing.T) {

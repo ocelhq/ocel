@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -48,7 +48,7 @@ func certificateRefusal(t *testing.T, p *vps.Provider, hostname string) error {
 	t.Helper()
 
 	_, err := p.Certificates().Issue(context.Background(), provider.CertificateRequest{
-		Kind: boxedge.Kind, Hostname: hostname, Progress: edge.DiscardProgress(),
+		Kind: boxedge.Kind, Hostname: hostname, Progress: progress.DiscardProgress(),
 	})
 	return err
 }
@@ -106,7 +106,7 @@ func TestAProxyWithNothingToSayCertifiesAsItAlwaysDid(t *testing.T) {
 
 	machine := boxWhoseProxyWasRefused(`{"level":"info","msg":"certificate obtained successfully"}`)
 	cert, err := certifying(machine).Certificates().Issue(context.Background(), provider.CertificateRequest{
-		Kind: boxedge.Kind, Hostname: "pr-9.preview.acme.com", Progress: edge.DiscardProgress(),
+		Kind: boxedge.Kind, Hostname: "pr-9.preview.acme.com", Progress: progress.DiscardProgress(),
 	})
 	if err != nil {
 		t.Fatalf("Certificate() = %v", err)

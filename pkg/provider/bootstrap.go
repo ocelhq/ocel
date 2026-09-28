@@ -3,7 +3,8 @@ package provider
 import (
 	"context"
 
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 )
 
 type Bootstrap interface {
@@ -13,11 +14,11 @@ type Bootstrap interface {
 
 	Plan(ctx context.Context, req BootstrapRequest) (Plan, error)
 
-	Apply(ctx context.Context, req BootstrapRequest, progress edge.Progress) error
+	Apply(ctx context.Context, req BootstrapRequest, progress progress.Progress) error
 
 	PlanRemove(ctx context.Context, class edge.Class) (Plan, error)
 
-	Remove(ctx context.Context, class edge.Class, progress edge.Progress) error
+	Remove(ctx context.Context, class edge.Class, progress progress.Progress) error
 }
 
 type BootstrapDescription struct {

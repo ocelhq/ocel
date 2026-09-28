@@ -2,8 +2,6 @@ module github.com/ocelhq/ocel/platform/vps/connector
 
 go 1.27.0
 
-replace github.com/ocelhq/ocel/platform/edge/contract => ../../edge/contract
-
 replace github.com/ocelhq/ocel/platform/vps/provider => ../provider
 
 require (
@@ -29,7 +27,6 @@ require (
 	github.com/lestrrat-go/httprc/v3 v3.0.6 // indirect
 	github.com/lestrrat-go/jwx/v3 v3.3.0 // indirect
 	github.com/lestrrat-go/option/v2 v2.0.0 // indirect
-	github.com/ocelhq/ocel/platform/edge/contract v0.0.0 // indirect
 	github.com/segmentio/asm v1.2.1 // indirect
 	github.com/stoewer/go-strcase v1.3.1 // indirect
 	github.com/valyala/fastjson v1.6.10 // indirect

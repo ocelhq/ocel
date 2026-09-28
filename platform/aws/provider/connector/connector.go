@@ -17,12 +17,13 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
@@ -57,7 +58,7 @@ type Wake struct {
 
 const WakeHeartbeat = "heartbeat"
 
-func reviewing(ns bootstrap.Namespace, progress edge.Progress) cfn.ChangeReview {
+func reviewing(ns bootstrap.Namespace, progress progress.Progress) cfn.ChangeReview {
 	return bootstrap.AdmitReplacements(ns, false, progress)
 }
 
@@ -157,7 +158,7 @@ func varsKeys(ctx context.Context, api cfn.StacksAPI, ns bootstrap.Namespace) ([
 }
 
 func Install(ctx context.Context, apis APIs, ns bootstrap.Namespace, release Release,
-	writer provider.WrittenBy, progress edge.Progress) (Installation, error) {
+	writer provider.WrittenBy, progress progress.Progress) (Installation, error) {
 	keys, err := varsKeys(ctx, apis.CFN, ns)
 	if err != nil {
 		return Installation{}, err
@@ -204,7 +205,7 @@ func Install(ctx context.Context, apis APIs, ns bootstrap.Namespace, release Rel
 	return installed, nil
 }
 
-func Remove(ctx context.Context, apis APIs, ns bootstrap.Namespace, progress edge.Progress) error {
+func Remove(ctx context.Context, apis APIs, ns bootstrap.Namespace, progress progress.Progress) error {
 	stack, err := cfn.DescribeStack(ctx, apis.CFN, StackName(ns))
 	if err != nil {
 		return err
@@ -231,7 +232,7 @@ func Remove(ctx context.Context, apis APIs, ns bootstrap.Namespace, progress edg
 }
 
 func codeBucket(ctx context.Context, apis APIs, ns bootstrap.Namespace,
-	writer provider.WrittenBy, progress edge.Progress) (string, error) {
+	writer provider.WrittenBy, progress progress.Progress) (string, error) {
 	stack, err := cfn.DescribeStack(ctx, apis.CFN, StackName(ns))
 	if err != nil {
 		return "", err

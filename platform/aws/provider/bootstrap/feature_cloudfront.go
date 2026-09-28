@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront/resolver"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (

@@ -11,9 +11,10 @@ import (
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iterator"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -106,7 +107,7 @@ func (a artifacts) Open(ctx context.Context, ref provider.ArtifactRef) (io.ReadC
 	return reader, nil
 }
 
-func (a artifacts) RemovePrefix(ctx context.Context, class edge.Class, prefix string, progress edge.Progress) error {
+func (a artifacts) RemovePrefix(ctx context.Context, class edge.Class, prefix string, progress progress.Progress) error {
 	if prefix == "" {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"an empty prefix names every artifact this project keeps")

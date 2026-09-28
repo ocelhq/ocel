@@ -7,21 +7,22 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type buckets struct {
 	removed []provider.Binding
 }
 
-func (b *buckets) ProvisionBucket(_ context.Context, in resources.ProvisionRequest, _ edge.Progress) (provider.Binding, error) {
+func (b *buckets) ProvisionBucket(_ context.Context, in resources.ProvisionRequest, _ progress.Progress) (provider.Binding, error) {
 	return provider.Binding{
 		Type:       provider.BindingBucket,
 		Name:       in.Resource.Name,
@@ -29,7 +30,7 @@ func (b *buckets) ProvisionBucket(_ context.Context, in resources.ProvisionReque
 	}, nil
 }
 
-func (b *buckets) RemoveResource(_ context.Context, _ provider.StackRef, binding provider.Binding, _ edge.Progress) error {
+func (b *buckets) RemoveResource(_ context.Context, _ provider.StackRef, binding provider.Binding, _ progress.Progress) error {
 	b.removed = append(b.removed, binding)
 	return nil
 }
@@ -46,7 +47,7 @@ func (n neon) hooks() resources.Hooks {
 	return hooks
 }
 
-func (neon) ProvisionPostgres(_ context.Context, in resources.ProvisionRequest, _ edge.Progress) (provider.Binding, error) {
+func (neon) ProvisionPostgres(_ context.Context, in resources.ProvisionRequest, _ progress.Progress) (provider.Binding, error) {
 	return provider.Binding{
 		Type: provider.BindingPostgres,
 		Name: in.Resource.Name,
@@ -66,7 +67,7 @@ func (h halfBinding) hooks() resources.Hooks {
 	return resources.Hooks{ProvisionPostgres: h.ProvisionPostgres}
 }
 
-func (halfBinding) ProvisionPostgres(_ context.Context, in resources.ProvisionRequest, _ edge.Progress) (provider.Binding, error) {
+func (halfBinding) ProvisionPostgres(_ context.Context, in resources.ProvisionRequest, _ progress.Progress) (provider.Binding, error) {
 	return provider.Binding{
 		Type:       provider.BindingPostgres,
 		Name:       in.Resource.Name,
@@ -382,7 +383,7 @@ func (w *withFunctions) hooks() resources.Hooks {
 	return hooks
 }
 
-func (w *withFunctions) ProvisionFunctions(_ context.Context, spec provider.StackSpec, _ edge.Progress) ([]provider.Function, error) {
+func (w *withFunctions) ProvisionFunctions(_ context.Context, spec provider.StackSpec, _ progress.Progress) ([]provider.Function, error) {
 	var functions []provider.Function
 	for _, fn := range spec.App.Functions {
 		functions = append(functions, function(spec.Ref, fn.Name))
@@ -390,7 +391,7 @@ func (w *withFunctions) ProvisionFunctions(_ context.Context, spec provider.Stac
 	return functions, nil
 }
 
-func (w *withFunctions) RemoveFunctions(_ context.Context, _ provider.StackRef, functions []provider.Function, _ edge.Progress) error {
+func (w *withFunctions) RemoveFunctions(_ context.Context, _ provider.StackRef, functions []provider.Function, _ progress.Progress) error {
 	w.removed = append(w.removed, functions...)
 	return nil
 }
@@ -497,12 +498,12 @@ func (w *withContainers) hooks() resources.Hooks {
 	return hooks
 }
 
-func (w *withContainers) ProvisionContainers(_ context.Context, spec provider.StackSpec, _ edge.Progress) ([]provider.AppContainer, error) {
+func (w *withContainers) ProvisionContainers(_ context.Context, spec provider.StackSpec, _ progress.Progress) ([]provider.AppContainer, error) {
 	w.provisioned = append(w.provisioned, spec)
 	return []provider.AppContainer{container(spec.Ref, spec.App.App)}, nil
 }
 
-func (w *withContainers) RemoveContainers(_ context.Context, _ provider.StackRef, containers []provider.AppContainer, _ edge.Progress) error {
+func (w *withContainers) RemoveContainers(_ context.Context, _ provider.StackRef, containers []provider.AppContainer, _ progress.Progress) error {
 	w.removed = append(w.removed, containers...)
 	return nil
 }
@@ -806,7 +807,7 @@ func (m misnaming) hooks() resources.Hooks {
 	return hooks
 }
 
-func (m misnaming) ProvisionContainers(_ context.Context, spec provider.StackSpec, _ edge.Progress) ([]provider.AppContainer, error) {
+func (m misnaming) ProvisionContainers(_ context.Context, spec provider.StackSpec, _ progress.Progress) ([]provider.AppContainer, error) {
 	m.provisioned = append(m.provisioned, spec)
 	return []provider.AppContainer{container(spec.Ref, spec.App.App+"-svc")}, nil
 }
@@ -926,7 +927,7 @@ func (r *retaining) hooks() resources.Hooks {
 
 func (r *retaining) retains(imageRef string) bool { return r.retained[imageRef] }
 
-func (r *retaining) ProvisionContainers(_ context.Context, spec provider.StackSpec, _ edge.Progress) ([]provider.AppContainer, error) {
+func (r *retaining) ProvisionContainers(_ context.Context, spec provider.StackSpec, _ progress.Progress) ([]provider.AppContainer, error) {
 	if r.provisioning != nil {
 		if err := r.provisioning(); err != nil {
 			return nil, err
@@ -936,14 +937,14 @@ func (r *retaining) ProvisionContainers(_ context.Context, spec provider.StackSp
 	return []provider.AppContainer{{Name: spec.App.App, Physical: spec.Ref.Name.String() + "-" + spec.App.App, Image: spec.App.Image}}, nil
 }
 
-func (r *retaining) RemoveContainers(_ context.Context, _ provider.StackRef, going []provider.AppContainer, _ edge.Progress) error {
+func (r *retaining) RemoveContainers(_ context.Context, _ provider.StackRef, going []provider.AppContainer, _ progress.Progress) error {
 	for _, container := range going {
 		r.taken = append(r.taken, container.Physical)
 	}
 	return nil
 }
 
-func (r *retaining) ProvisionBucket(ctx context.Context, in resources.ProvisionRequest, progress edge.Progress) (provider.Binding, error) {
+func (r *retaining) ProvisionBucket(ctx context.Context, in resources.ProvisionRequest, progress progress.Progress) (provider.Binding, error) {
 	if r.served != nil {
 		if err := r.served(in); err != nil {
 			return provider.Binding{}, err
@@ -952,7 +953,7 @@ func (r *retaining) ProvisionBucket(ctx context.Context, in resources.ProvisionR
 	return r.buckets.ProvisionBucket(ctx, in, progress)
 }
 
-func (r *retaining) ReconcileImages(_ context.Context, _ provider.StackRef, app, imageRef string, _ edge.Progress) error {
+func (r *retaining) ReconcileImages(_ context.Context, _ provider.StackRef, app, imageRef string, _ progress.Progress) error {
 	r.swept = append(r.swept, app+" "+imageRef)
 	if r.sweeping != nil {
 		if err := r.sweeping(); err != nil {
@@ -967,7 +968,7 @@ func (r *retaining) ReconcileImages(_ context.Context, _ provider.StackRef, app,
 	return nil
 }
 
-func (r *retaining) ForgetReleases(_ context.Context, _ provider.StackRef, app string, _ edge.Progress) error {
+func (r *retaining) ForgetReleases(_ context.Context, _ provider.StackRef, app string, _ progress.Progress) error {
 	if r.forgetting != nil {
 		if err := r.forgetting(); err != nil {
 			return err
@@ -983,7 +984,7 @@ func (r refusingImages) Has(context.Context, provider.ImagePush) (bool, error) {
 
 func (refusingImages) Destination() string { return "the refusing registry" }
 
-func (r refusingImages) Push(context.Context, provider.ImagePush, edge.Progress) error {
+func (r refusingImages) Push(context.Context, provider.ImagePush, progress.Progress) error {
 	return r.err
 }
 

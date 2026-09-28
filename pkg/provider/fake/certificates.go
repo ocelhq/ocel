@@ -5,8 +5,9 @@ import (
 	"slices"
 	"strconv"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func (p *Provider) PinServingCertificate(hostname, certificate string) {
@@ -114,7 +115,7 @@ func (p certificates) Inspect(_ context.Context, _ edge.Kind, hostname string, c
 	return health, nil
 }
 
-func (p certificates) Discard(_ context.Context, cert provider.Certificate, _ edge.Progress) error {
+func (p certificates) Discard(_ context.Context, cert provider.Certificate, _ progress.Progress) error {
 	p.mu.Lock()
 	refusal := p.servingDiscardRefusal
 	p.mu.Unlock()

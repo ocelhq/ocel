@@ -3,10 +3,10 @@ package aws
 import (
 	"context"
 
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func (p *Provider) PackApp(ctx context.Context, req provider.PackAppRequest, progress edge.Progress) (provider.PackAppResult, error) {
+func (p *Provider) PackApp(ctx context.Context, req provider.PackAppRequest, progress progress.Progress) (provider.PackAppResult, error) {
 	return p.stacks.PackApp(ctx, req, progress)
 }

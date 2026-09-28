@@ -8,9 +8,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
@@ -40,7 +41,7 @@ func (k *killer) Detail(string) {}
 
 func (k *killer) Debug(string) {}
 
-func (k *killer) Span(string, time.Time, time.Time, error, ...edge.Attr) {}
+func (k *killer) Span(string, time.Time, time.Time, error, ...progress.Attr) {}
 
 type sayings []string
 
@@ -54,7 +55,7 @@ func (s *sayings) Detail(string) {}
 
 func (s *sayings) Debug(line string) { *s = append(*s, line) }
 
-func (s *sayings) Span(string, time.Time, time.Time, error, ...edge.Attr) {}
+func (s *sayings) Span(string, time.Time, time.Time, error, ...progress.Attr) {}
 
 func refused(t *testing.T, err error, code refusal.Code) refusal.Refusal {
 	t.Helper()

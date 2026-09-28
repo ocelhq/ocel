@@ -15,13 +15,14 @@ import (
 	"sync"
 
 	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
@@ -245,7 +246,7 @@ func (p *Provider) storeCredential(ctx context.Context, ref provider.StackRef, n
 	return storeCredential{sealed: sealed, secret: string(opened)}, nil
 }
 
-func (p *Provider) ProvisionBucket(ctx context.Context, in resources.ProvisionRequest, progress edge.Progress) (provider.Binding, error) {
+func (p *Provider) ProvisionBucket(ctx context.Context, in resources.ProvisionRequest, progress progress.Progress) (provider.Binding, error) {
 
 	spec := storeContainer(in)
 	spec, err := p.reshaped(ctx, in, transformTypeBucket, spec)
@@ -512,7 +513,7 @@ func declaredPublic(spec *provider.BucketSpec) bool {
 	return spec != nil && spec.Public
 }
 
-func (p *Provider) removeBucket(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress edge.Progress) error {
+func (p *Provider) removeBucket(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Progress) error {
 	if err := p.dropBucket(ctx, ref, binding, progress); err != nil {
 		return err
 	}
@@ -520,7 +521,7 @@ func (p *Provider) removeBucket(ctx context.Context, ref provider.StackRef, bind
 	return p.reconcileStore(ctx, ref, progress)
 }
 
-func (p *Provider) dropBucket(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress edge.Progress) error {
+func (p *Provider) dropBucket(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Progress) error {
 	store := storeName(ref)
 	root, err := p.storeRoot(ctx, ref, store)
 	if err != nil {
@@ -551,7 +552,7 @@ func (p *Provider) dropBucket(ctx context.Context, ref provider.StackRef, bindin
 	})
 }
 
-func (p *Provider) reconcileStore(ctx context.Context, ref provider.StackRef, progress edge.Progress) error {
+func (p *Provider) reconcileStore(ctx context.Context, ref provider.StackRef, progress progress.Progress) error {
 	last, err := p.lastBucket(ctx, ref)
 	if err != nil || !last {
 		return err
@@ -578,7 +579,7 @@ func (p *Provider) lastBucket(ctx context.Context, ref provider.StackRef) (bool,
 	return true, nil
 }
 
-func (p *Provider) removeStore(ctx context.Context, ref provider.StackRef, progress edge.Progress) error {
+func (p *Provider) removeStore(ctx context.Context, ref provider.StackRef, progress progress.Progress) error {
 	store := storeName(ref)
 	if progress != nil {
 		progress.Say("Removing object store " + store + ": no bucket in this environment uses it any more")

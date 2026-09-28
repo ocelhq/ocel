@@ -15,7 +15,7 @@ import (
 	cf "github.com/cloudflare/cloudflare-go/v4"
 	"github.com/cloudflare/cloudflare-go/v4/option"
 
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 func seedBootstrapBundles(t *testing.T, store, writer string) (string, string) {

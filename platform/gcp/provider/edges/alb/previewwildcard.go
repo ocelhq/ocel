@@ -6,11 +6,12 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type previewEntry struct {
@@ -63,7 +64,7 @@ func (e *Edge) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewWi
 			Kind, wildcard)
 	}
 	entry := previewEntry{BaseDomain: spec.BaseDomain, Certificate: spec.Certificate}
-	front, err := e.raiseServing(ctx, edge.ClassPreview, entry, edge.DiscardProgress())
+	front, err := e.raiseServing(ctx, edge.ClassPreview, entry, progress.DiscardProgress())
 	if err != nil {
 		return "", err
 	}
@@ -102,7 +103,7 @@ func (e *Edge) DestroyPreviewWildcard(ctx context.Context, baseDomain string) er
 		}
 	}
 	if front.provisioned() {
-		if _, err := e.raiseServing(ctx, edge.ClassPreview, previewEntry{}, edge.DiscardProgress()); err != nil {
+		if _, err := e.raiseServing(ctx, edge.ClassPreview, previewEntry{}, progress.DiscardProgress()); err != nil {
 			return err
 		}
 	}

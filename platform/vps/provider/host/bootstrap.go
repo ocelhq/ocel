@@ -5,10 +5,11 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
@@ -159,7 +160,7 @@ func (b Bootstrap) read(ctx context.Context, class edge.Class) (Reading, error) 
 	return b.recorded(ctx, read)
 }
 
-func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, progress edge.Progress) error {
+func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Progress) error {
 	if req.Heal {
 		return b.heal(ctx, req, progress)
 	}
@@ -249,7 +250,7 @@ func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 	return b.host.Stamp(ctx, req.Class, stamp)
 }
 
-func (b Bootstrap) heal(ctx context.Context, req provider.BootstrapRequest, progress edge.Progress) error {
+func (b Bootstrap) heal(ctx context.Context, req provider.BootstrapRequest, progress progress.Progress) error {
 	read, err := b.host.Own(ctx, req.Class)
 	if err != nil {
 		return err
@@ -384,7 +385,7 @@ func (r Reading) adopting() error {
 		StampPath(r.Class), recorded, SealKeyPath(r.Class), present)
 }
 
-func (b Bootstrap) write(ctx context.Context, read Reading, items []Item, progress edge.Progress) error {
+func (b Bootstrap) write(ctx context.Context, read Reading, items []Item, progress progress.Progress) error {
 	return b.writing(ctx, read, items, progress, func(ctx context.Context, item Item) error {
 		if item.Kind == KindEngine {
 			return b.host.installEngine(ctx, progress)
@@ -393,7 +394,7 @@ func (b Bootstrap) write(ctx context.Context, read Reading, items []Item, progre
 	})
 }
 
-func (b Bootstrap) writing(ctx context.Context, read Reading, items []Item, progress edge.Progress,
+func (b Bootstrap) writing(ctx context.Context, read Reading, items []Item, progress progress.Progress,
 	install func(context.Context, Item) error) error {
 	for _, item := range items {
 		if read.current(item) {
@@ -408,13 +409,13 @@ func (b Bootstrap) writing(ctx context.Context, read Reading, items []Item, prog
 	return nil
 }
 
-func say(progress edge.Progress, message string) {
+func say(progress progress.Progress, message string) {
 	if progress != nil {
 		progress.Say(message)
 	}
 }
 
-func debug(progress edge.Progress, line string) {
+func debug(progress progress.Progress, line string) {
 	if progress != nil {
 		progress.Debug(line)
 	}
@@ -447,7 +448,7 @@ func (b Bootstrap) PlanRemove(ctx context.Context, class edge.Class) (provider.P
 	return provider.Plan{Groups: bootstrapplan.PrefixWithVendor(b.vendor, []provider.ChangeGroup{group})}, nil
 }
 
-func (b Bootstrap) Remove(ctx context.Context, class edge.Class, progress edge.Progress) error {
+func (b Bootstrap) Remove(ctx context.Context, class edge.Class, progress progress.Progress) error {
 	defer b.host.forgetTiers()
 	forget, err := b.host.forgetting(ctx)
 	if err != nil {

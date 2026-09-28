@@ -7,8 +7,8 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func UploadRows(ctx context.Context, store provider.ArtifactStore, uploads []provider.Upload) ([]provider.Change, error) {
@@ -32,7 +32,7 @@ func TakeUploadSlot() func() {
 	return func() { <-uploadSlots }
 }
 
-func ShipUploads(ctx context.Context, store provider.ArtifactStore, uploads []provider.Upload, progress edge.Progress) error {
+func ShipUploads(ctx context.Context, store provider.ArtifactStore, uploads []provider.Upload, progress progress.Progress) error {
 	group, ctx := errgroup.WithContext(ctx)
 	group.SetLimit(UploadConcurrency)
 	for _, upload := range uploads {
@@ -44,7 +44,7 @@ func ShipUploads(ctx context.Context, store provider.ArtifactStore, uploads []pr
 	return group.Wait()
 }
 
-func ship(ctx context.Context, store provider.ArtifactStore, upload provider.Upload, progress edge.Progress) error {
+func ship(ctx context.Context, store provider.ArtifactStore, upload provider.Upload, progress progress.Progress) error {
 	present, err := store.Has(ctx, upload.Ref)
 	if err != nil {
 		return fmt.Errorf("look for %s's artifact: %w", upload.Name, err)

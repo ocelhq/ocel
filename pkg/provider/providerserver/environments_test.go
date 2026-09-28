@@ -12,9 +12,11 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/envvarsserver"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -29,7 +31,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func TestAPreviewIdentityThatNamesProductionIsRefused(t *testing.T) {
@@ -339,22 +340,22 @@ type sweeper struct {
 	forgotten  []string
 }
 
-func (s *sweeper) ProvisionContainers(context.Context, provider.StackSpec, edge.Progress) ([]provider.AppContainer, error) {
+func (s *sweeper) ProvisionContainers(context.Context, provider.StackSpec, progress.Progress) ([]provider.AppContainer, error) {
 	return nil, nil
 }
 
-func (s *sweeper) RemoveContainers(context.Context, provider.StackRef, []provider.AppContainer, edge.Progress) error {
+func (s *sweeper) RemoveContainers(context.Context, provider.StackRef, []provider.AppContainer, progress.Progress) error {
 	return nil
 }
 
-func (s *sweeper) ReconcileImages(_ context.Context, _ provider.StackRef, app, imageRef string, _ edge.Progress) error {
+func (s *sweeper) ReconcileImages(_ context.Context, _ provider.StackRef, app, imageRef string, _ progress.Progress) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.reconciled = append(s.reconciled, app+" "+imageRef)
 	return nil
 }
 
-func (s *sweeper) ForgetReleases(_ context.Context, _ provider.StackRef, app string, _ edge.Progress) error {
+func (s *sweeper) ForgetReleases(_ context.Context, _ provider.StackRef, app string, _ progress.Progress) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.forgotten = append(s.forgotten, app)

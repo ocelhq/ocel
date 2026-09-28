@@ -9,7 +9,9 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -18,7 +20,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type wildcards struct {
@@ -73,7 +74,7 @@ func (w *wildcards) save(ctx context.Context) error {
 func (h *handlers) UsePreviewWildcard(ctx context.Context, req *contractv1.UsePreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	unit := UnitStage(naming.UnitEdge, string(edge.ClassPreview),
 		"Serving every project's previews on "+edge.PreviewWildcard(req.GetBaseDomain()), progressv1.Phase_PHASE_PROVISION)
-	return streamed(ctx, stream, unit, func(sender *eventStream, progress edge.Progress) error {
+	return streamed(ctx, stream, unit, func(sender *eventStream, progress progress.Progress) error {
 		base, err := previewBaseDomain(req.GetBaseDomain())
 		if err != nil {
 			return err
@@ -91,7 +92,7 @@ func (h *handlers) UsePreviewWildcard(ctx context.Context, req *contractv1.UsePr
 	})
 }
 
-func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progress edge.Progress) error {
+func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progress progress.Progress) error {
 	if err := w.claimable(front, base); err != nil {
 		return err
 	}
@@ -384,7 +385,7 @@ func edgeGroupProto(group edge.PlanGroup) (*planv1.ChangeGroup, error) {
 
 func (h *handlers) RemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	unit := UnitStage(naming.UnitEdge, string(edge.ClassPreview), "Releasing the global preview domain", progressv1.Phase_PHASE_DESTROY)
-	return streamed(ctx, stream, unit, func(_ *eventStream, progress edge.Progress) error {
+	return streamed(ctx, stream, unit, func(_ *eventStream, progress progress.Progress) error {
 		w, err := h.wildcard(ctx, req.GetEdge())
 		if err != nil {
 			return err
@@ -393,7 +394,7 @@ func (h *handlers) RemovePreviewWildcard(ctx context.Context, req *contractv1.Pr
 	})
 }
 
-func (w *wildcards) release(ctx context.Context, progress edge.Progress) error {
+func (w *wildcards) release(ctx context.Context, progress progress.Progress) error {
 	if w.recorded.BaseDomain == "" {
 		progress.Say("Nothing to release: previews use no global preview domain")
 		return nil

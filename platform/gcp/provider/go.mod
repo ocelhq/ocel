@@ -13,7 +13,6 @@ require (
 	github.com/ocelhq/ocel/pkg v0.0.0
 	github.com/ocelhq/ocel/pkg/provider/pulumi v0.0.0
 	github.com/ocelhq/ocel/platform/edge/cloudflare/deploy v0.0.0
-	github.com/ocelhq/ocel/platform/edge/contract v0.0.0
 	github.com/pulumi/pulumi-gcp/sdk/v9 v9.36.1
 	github.com/pulumi/pulumi/sdk/v3 v3.259.0
 	github.com/shopspring/decimal v1.4.0
@@ -215,8 +214,6 @@ require (
 )
 
 replace github.com/ocelhq/ocel/pkg/provider/pulumi => ../../../pkg/provider/pulumi
-
-replace github.com/ocelhq/ocel/platform/edge/contract => ../../edge/contract
 
 replace github.com/ocelhq/ocel/platform/edge/cloudflare/deploy => ../../edge/cloudflare/deploy
 

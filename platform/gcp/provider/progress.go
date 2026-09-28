@@ -1,10 +1,10 @@
 package gcp
 
-import edge "github.com/ocelhq/ocel/platform/edge/contract"
+import "github.com/ocelhq/ocel/pkg/progress"
 
-func ensureProgress(progress edge.Progress) edge.Progress {
-	if progress == nil {
-		return edge.DiscardProgress()
+func ensureProgress(runProgress progress.Progress) progress.Progress {
+	if runProgress == nil {
+		return progress.DiscardProgress()
 	}
-	return progress
+	return runProgress
 }

@@ -3,8 +3,8 @@ package bootstrapplan
 import (
 	"fmt"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func EdgeGroup(kind edge.Kind, feature string, planned []edge.PlanChange) (provider.ChangeGroup, error) {

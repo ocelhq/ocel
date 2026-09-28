@@ -8,10 +8,10 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type occupied struct{ *fake.Provider }
@@ -72,7 +72,7 @@ func (e *embedding) Hooks() provider.Hooks {
 	return hooks
 }
 
-func (e *embedding) EmbedCode(_ context.Context, function string, ref provider.ArtifactRef, _ edge.Progress) error {
+func (e *embedding) EmbedCode(_ context.Context, function string, ref provider.ArtifactRef, _ progress.Progress) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.embedded = append(e.embedded, function+" "+ref.Key)
@@ -92,7 +92,7 @@ func (w *warming) Hooks() provider.Hooks {
 	return hooks
 }
 
-func (w *warming) WarmFunctions(_ context.Context, targets []string, _ edge.Progress) error {
+func (w *warming) WarmFunctions(_ context.Context, targets []string, _ progress.Progress) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.warmed = append(w.warmed, targets...)

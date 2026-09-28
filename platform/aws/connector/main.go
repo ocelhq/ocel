@@ -22,6 +22,7 @@ import (
 	"github.com/awslabs/aws-lambda-go-api-proxy/httpadapter"
 
 	"github.com/ocelhq/ocel/pkg/connectorserver"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/envvarsserver"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/target"
@@ -30,7 +31,6 @@ import (
 	awsconnector "github.com/ocelhq/ocel/platform/aws/provider/connector"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 var version = "dev"

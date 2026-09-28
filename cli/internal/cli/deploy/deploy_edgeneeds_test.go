@@ -7,8 +7,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/edge"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/envwire"

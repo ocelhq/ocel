@@ -13,7 +13,7 @@ import (
 	"sync"
 	"testing"
 
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 func answeringAs(t *testing.T, header string, handler http.HandlerFunc) string {

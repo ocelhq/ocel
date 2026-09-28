@@ -3,7 +3,7 @@ package alb
 import (
 	"testing"
 
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 func TestEveryResponseTheLoadBalancerSendsNamesItAsTheEdge(t *testing.T) {

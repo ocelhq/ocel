@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (

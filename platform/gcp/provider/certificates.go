@@ -10,10 +10,11 @@ import (
 	certmanager "google.golang.org/api/certificatemanager/v1"
 	"google.golang.org/api/googleapi"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
@@ -303,7 +304,7 @@ func discarding(id string, current *certmanager.Certificate) string {
 	}
 }
 
-func (p certificates) Discard(ctx context.Context, cert provider.Certificate, progress edge.Progress) error {
+func (p certificates) Discard(ctx context.Context, cert provider.Certificate, progress progress.Progress) error {
 	if !cert.Issued() {
 		return nil
 	}

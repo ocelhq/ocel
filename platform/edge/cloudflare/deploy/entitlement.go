@@ -10,7 +10,7 @@ import (
 	"github.com/cloudflare/cloudflare-go/v4/accounts"
 	"github.com/cloudflare/cloudflare-go/v4/shared"
 
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 func (p *cloudflare) codeEntitlement(ctx context.Context) (edge.CodeEntitlement, error) {

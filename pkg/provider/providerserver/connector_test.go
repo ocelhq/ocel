@@ -8,13 +8,13 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/progress"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type connectorHost struct {
@@ -35,7 +35,7 @@ func (h *connectorHost) Target(context.Context) (provider.ConnectorTarget, error
 	}, nil
 }
 
-func (h *connectorHost) Install(_ context.Context, install provider.ConnectorInstall, progress edge.Progress) (provider.ConnectorAddress, error) {
+func (h *connectorHost) Install(_ context.Context, install provider.ConnectorInstall, progress progress.Progress) (provider.ConnectorAddress, error) {
 	h.install = install
 	progress.Say("wrote the connector")
 	compute := install.Compute
@@ -49,7 +49,7 @@ func (h *connectorHost) Install(_ context.Context, install provider.ConnectorIns
 	}, nil
 }
 
-func (h *connectorHost) Remove(context.Context, edge.Progress) error {
+func (h *connectorHost) Remove(context.Context, progress.Progress) error {
 	h.removed = true
 	return nil
 }

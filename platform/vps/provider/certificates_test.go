@@ -15,9 +15,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
@@ -69,7 +70,7 @@ func certificateFor(t *testing.T, p *vps.Provider, hostname string) provider.Cer
 	cert, err := p.Certificates().Issue(context.Background(), provider.CertificateRequest{
 		Kind:     boxedge.Kind,
 		Hostname: hostname,
-		Progress: edge.DiscardProgress(),
+		Progress: progress.DiscardProgress(),
 		Prove: func(context.Context, provider.Certificate, []edge.Record) (provider.Certificate, error) {
 			t.Error("the box asked for a validation record to be proved, and ocel asks no CA on a box")
 			return provider.Certificate{}, nil
@@ -145,7 +146,7 @@ func TestAPinThatDoesNotCoverTheHostnameIsRefusedAtBindWithAReasonThatNamesBoth(
 	)
 
 	_, err := p.Certificates().Issue(context.Background(), provider.CertificateRequest{
-		Kind: boxedge.Kind, Hostname: "pr-7.preview.example.com", Progress: edge.DiscardProgress(),
+		Kind: boxedge.Kind, Hostname: "pr-7.preview.example.com", Progress: progress.DiscardProgress(),
 	})
 	var refused refusal.Refusal
 	if !asRefusal(err, &refused) {
@@ -171,7 +172,7 @@ func TestAnExpiredPinIsRefusedRatherThanServedUnderAHandleThatReadsHealthy(t *te
 	)
 
 	_, err := p.Certificates().Issue(context.Background(), provider.CertificateRequest{
-		Kind: boxedge.Kind, Hostname: "pr-7.preview.example.com", Progress: edge.DiscardProgress(),
+		Kind: boxedge.Kind, Hostname: "pr-7.preview.example.com", Progress: progress.DiscardProgress(),
 	})
 	var refused refusal.Refusal
 	if !asRefusal(err, &refused) || !strings.Contains(refused.Message, "expired") {
@@ -209,7 +210,7 @@ func TestAnUnpinnedHostnameGetsTheProxysOwnHandleAndAsksNothingOfTheBox(t *testi
 	}) {
 		t.Errorf("minting a handle asked the proxy nothing (%v), so a box the CA has already refused for this registered domain names a slot it knows will stay empty and the user is told when the browser tells them", machine.commands())
 	}
-	if err := p.Certificates().Discard(context.Background(), cert, edge.DiscardProgress()); err != nil {
+	if err := p.Certificates().Discard(context.Background(), cert, progress.DiscardProgress()); err != nil {
 		t.Errorf("Discard() = %v, want nil", err)
 	}
 }

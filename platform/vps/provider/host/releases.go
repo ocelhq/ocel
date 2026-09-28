@@ -5,9 +5,10 @@ import (
 	_ "embed"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 //go:embed releases.sh
@@ -38,7 +39,7 @@ func (h *Host) Forget(ctx context.Context, class edge.Class, project, app string
 	return err
 }
 
-func (h *Host) Reconcile(ctx context.Context, project, app, imageRef string, progress edge.Progress) error {
+func (h *Host) Reconcile(ctx context.Context, project, app, imageRef string, progress progress.Progress) error {
 	repository, named := Repository(imageRef)
 	if !named {
 		return refusal.Refuse(refusal.CodeInvalid,

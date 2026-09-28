@@ -10,6 +10,8 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -18,7 +20,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
@@ -291,7 +292,7 @@ func TestLiveTheCertificateBehindAnUnboundHostnameStaysOnTheBox(t *testing.T) {
 	}
 
 	retained := provider.Certificate{ID: certs.ProxyHandle(hostname)}
-	if err := p.Certificates().Discard(context.Background(), retained, edge.DiscardProgress()); err != nil {
+	if err := p.Certificates().Discard(context.Background(), retained, progress.DiscardProgress()); err != nil {
 		t.Errorf("DiscardCertificate(%s) = %v, want nil: ocel places no key material on a box so it has authority to remove none, and the retained certificate is what makes a re-bind free against the CA's per-week ceiling",
 			retained.ID, err)
 	}

@@ -15,16 +15,17 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/images"
+	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func (r *deployRun) pack(ctx context.Context, entry provider.AppEntry, values provider.AppValues, progress edge.Progress) (provider.PackAppResult, error) {
+func (r *deployRun) pack(ctx context.Context, entry provider.AppEntry, values provider.AppValues, progress progress.Progress) (provider.PackAppResult, error) {
 	packApp := r.provider.Hooks().PackApp
 	if packApp == nil {
 		return provider.PackAppResult{}, nil

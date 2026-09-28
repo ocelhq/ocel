@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const fromInfisical = "infisical:p/prod"

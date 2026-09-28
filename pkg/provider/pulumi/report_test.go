@@ -11,14 +11,14 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/events"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
 
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type recordedSpan struct {
 	name  string
 	err   error
-	attrs []edge.Attr
+	attrs []progress.Attr
 }
 
 type fakeProgress struct {
@@ -40,7 +40,7 @@ func (r *fakeProgress) Detail(message string) { r.details = append(r.details, me
 
 func (r *fakeProgress) Debug(line string) { r.debugs = append(r.debugs, line) }
 
-func (r *fakeProgress) Span(name string, _, _ time.Time, err error, attrs ...edge.Attr) {
+func (r *fakeProgress) Span(name string, _, _ time.Time, err error, attrs ...progress.Attr) {
 	r.spans = append(r.spans, recordedSpan{name: name, err: err, attrs: attrs})
 }
 

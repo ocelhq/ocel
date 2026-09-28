@@ -11,8 +11,8 @@ import (
 	"google.golang.org/api/cloudscheduler/v1"
 	run "google.golang.org/api/run/v2"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 var bothClasses = []edge.Class{edge.ClassProduction, edge.ClassPreview}

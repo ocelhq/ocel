@@ -3,10 +3,10 @@ package bootstrapplan_test
 import (
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func TestPrefixWithVendorNamesEveryGroupUnderTheVendorThatOwnsIt(t *testing.T) {

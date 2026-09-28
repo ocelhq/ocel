@@ -8,10 +8,10 @@ import (
 	"errors"
 	"net"
 
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/target"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
@@ -91,7 +91,7 @@ func (p connector) Target(ctx context.Context) (provider.ConnectorTarget, error)
 	return described, nil
 }
 
-func (p connector) Install(ctx context.Context, install provider.ConnectorInstall, progress edge.Progress) (provider.ConnectorAddress, error) {
+func (p connector) Install(ctx context.Context, install provider.ConnectorInstall, progress progress.Progress) (provider.ConnectorAddress, error) {
 	compute, err := provider.ConnectorCompute(install.Compute, connectorCompute)
 	if err != nil {
 		return provider.ConnectorAddress{}, err
@@ -115,7 +115,7 @@ func (p connector) Install(ctx context.Context, install provider.ConnectorInstal
 	}, nil
 }
 
-func (p connector) Remove(ctx context.Context, progress edge.Progress) error {
+func (p connector) Remove(ctx context.Context, progress progress.Progress) error {
 	if _, err := p.Session(ctx); err != nil {
 		return err
 	}

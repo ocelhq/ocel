@@ -11,10 +11,10 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/edge"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func servedDescriptor(t *testing.T, app string, desc edge.ServeDescriptor) string {

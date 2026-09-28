@@ -16,6 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 
 	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -26,7 +27,6 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 	"github.com/ocelhq/ocel/platform/aws/provider/tagclock"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const artifactRootDirName = constants.ProjectStateDirName + "/output"

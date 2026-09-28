@@ -14,8 +14,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
@@ -74,7 +75,7 @@ func (b *bench) waits() []time.Duration {
 
 type recorder struct{ said *[]string }
 
-func saying(said *[]string) edge.Progress { return recorder{said: said} }
+func saying(said *[]string) progress.Progress { return recorder{said: said} }
 
 func (r recorder) Say(message string) { *r.said = append(*r.said, message) }
 
@@ -86,7 +87,7 @@ func (recorder) Detail(string) {}
 
 func (recorder) Debug(string) {}
 
-func (recorder) Span(string, time.Time, time.Time, error, ...edge.Attr) {}
+func (recorder) Span(string, time.Time, time.Time, error, ...progress.Attr) {}
 
 func (b *bench) dial(ctx context.Context) (Conn, error) {
 	if err := ctx.Err(); err != nil {

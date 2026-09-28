@@ -12,7 +12,8 @@ import (
 
 	cf "github.com/cloudflare/cloudflare-go/v4"
 	"github.com/cloudflare/cloudflare-go/v4/workers"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 )
 
 var errStoreRequestUnbuildable = errors.New("build deployments-store request")
@@ -60,7 +61,7 @@ type promoteBody struct {
 	Pointer string `json:"pointer,omitempty"`
 }
 
-func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, _ edge.Progress) error {
+func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, _ progress.Progress) error {
 	_, err := s.p.storeRequest(ctx, s.state, http.MethodPost, "/promote", promoteBody{Promotion: promotion, Pointer: pointer}, nil)
 	return err
 }
@@ -77,7 +78,7 @@ func (s *stack) History(ctx context.Context, pointer string) ([]edge.HistoryEntr
 	return history, nil
 }
 
-func (s *stack) RemovePointer(ctx context.Context, pointer string, _ edge.Progress) (edge.PruneResult, error) {
+func (s *stack) RemovePointer(ctx context.Context, pointer string, _ progress.Progress) (edge.PruneResult, error) {
 	var result edge.PruneResult
 	if _, err := s.p.storeRequest(ctx, s.state, http.MethodPost, "/remove-pointer", map[string]string{"pointer": pointer}, &result); err != nil {
 		return edge.PruneResult{}, err

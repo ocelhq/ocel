@@ -10,14 +10,15 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func (h *handlers) ListPromotions(ctx context.Context, req *contractv1.ListPromotionsRequest) (*contractv1.ListPromotionsResponse, error) {
@@ -57,7 +58,7 @@ func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest
 		Tag:         target.Tag,
 		Flip:        &flip,
 	}
-	if err := session.stack.Promote(ctx, promoted, "", edge.DiscardProgress()); err != nil {
+	if err := session.stack.Promote(ctx, promoted, "", progress.DiscardProgress()); err != nil {
 		return nil, provider.RefusalError(err)
 	}
 	if err := session.checkpoint(ctx); err != nil {
@@ -97,7 +98,7 @@ func rollbackTarget(history []edge.HistoryEntry, to, tag string) (edge.Promotion
 
 func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.RemoveStalePromotionsRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	unit := UnitStage(naming.UnitPromotion, req.GetSlug(), pruneTitle(req), progressv1.Phase_PHASE_DESTROY)
-	return streamed(ctx, stream, unit, func(_ *eventStream, progress edge.Progress) error {
+	return streamed(ctx, stream, unit, func(_ *eventStream, progress progress.Progress) error {
 		class, err := classOf(req.GetEnvironment().GetTier())
 		if err != nil {
 			return err

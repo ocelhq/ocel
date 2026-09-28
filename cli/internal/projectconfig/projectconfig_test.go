@@ -14,9 +14,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/configdoc"
 	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func nestedDir(t *testing.T, root string) string {

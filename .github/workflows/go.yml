@@ -63,7 +63,7 @@ jobs:
           - name: vps
             dirs: platform/vps/provider platform/vps/runtime platform/vps/connector
           - name: pkg, s3 and edge
-            dirs: pkg pkg/provider/pulumi platform/s3 platform/edge/contract platform/edge/cloudflare/deploy
+            dirs: pkg pkg/provider/pulumi platform/s3 platform/edge/cloudflare/deploy
     env:
       DIRS: ${{ matrix.group.dirs }}
     steps:

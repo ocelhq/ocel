@@ -12,7 +12,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	agtypes "github.com/aws/aws-sdk-go-v2/service/apigateway/types"
 
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 )
 
 func deletionTrail(w *world) []string {
@@ -94,7 +95,7 @@ func TestRemovingPreviewsOneByOneSpacesThemAgainstEachOther(t *testing.T) {
 	w.gateway.calls = nil
 
 	for _, pointer := range pointers {
-		if _, err := stack.RemovePointer(ctx, pointer, edge.DiscardProgress()); err != nil {
+		if _, err := stack.RemovePointer(ctx, pointer, progress.DiscardProgress()); err != nil {
 			t.Fatalf("RemovePointer(%s): %v", pointer, err)
 		}
 	}

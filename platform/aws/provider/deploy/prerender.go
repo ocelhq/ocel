@@ -20,10 +20,11 @@ import (
 	smithy "github.com/aws/smithy-go"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func storageCoordinate(env, slug, app string, release naming.Release) naming.Coordinate {
@@ -92,13 +93,13 @@ func prerenderAssetSet(cfg Config, app string, cache *isrConfig) (*assetSet, err
 		app:    app,
 		files:  manifest.files,
 		digest: manifest.digest(),
-		push: func(ctx context.Context, progress edge.Progress) error {
+		push: func(ctx context.Context, progress progress.Progress) error {
 			return pushPrerenderAssets(ctx, cfg, app, cache, uploads, progress)
 		},
 	}, nil
 }
 
-func pushPrerenderAssets(ctx context.Context, cfg Config, app string, cache *isrConfig, uploads []prerenderUpload, progress edge.Progress) error {
+func pushPrerenderAssets(ctx context.Context, cfg Config, app string, cache *isrConfig, uploads []prerenderUpload, progress progress.Progress) error {
 	if err := seedTagSnapshot(ctx, cfg, cache, time.Now()); err != nil {
 		return err
 	}

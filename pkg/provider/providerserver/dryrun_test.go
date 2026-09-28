@@ -5,11 +5,11 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func lastPlan(events []*progressv1.OperationEvent) *planv1.ChangePlan {

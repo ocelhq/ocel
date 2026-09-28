@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
@@ -126,7 +126,7 @@ func keyPathed(config []byte) ([]byte, error) {
 	return append(written, '\n'), nil
 }
 
-func (c *Connector) Install(ctx context.Context, hostname string, binary, config []byte, progress edge.Progress) (ConnectorState, error) {
+func (c *Connector) Install(ctx context.Context, hostname string, binary, config []byte, progress progress.Progress) (ConnectorState, error) {
 	written, err := keyPathed(config)
 	if err != nil {
 		return ConnectorState{}, err
@@ -160,7 +160,7 @@ func (c *Connector) Install(ctx context.Context, hostname string, binary, config
 	return c.Describe(ctx)
 }
 
-func (c *Connector) Remove(ctx context.Context, progress edge.Progress) error {
+func (c *Connector) Remove(ctx context.Context, progress progress.Progress) error {
 	if err := c.Route(ctx, ""); err != nil {
 		return err
 	}

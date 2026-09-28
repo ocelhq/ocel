@@ -1,8 +1,8 @@
 package provider
 
 import (
+	"github.com/ocelhq/ocel/pkg/edge"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const CostSource = "ocel"

@@ -7,10 +7,11 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
 )
 
@@ -70,7 +71,7 @@ func promoted(t *testing.T, stack edge.EdgeStack, id, identity string) error {
 	return stack.Promote(context.Background(), edge.Promotion{
 		PromotionID: id,
 		Builds:      map[string]string{"web": identity},
-	}, "", edge.DiscardProgress())
+	}, "", progress.DiscardProgress())
 }
 
 func TestARollbackPinsCloudRunBackToTheRevisionThePromotionRecorded(t *testing.T) {
@@ -232,7 +233,7 @@ func TestAPromotionInterruptedAtItsPinStillPutsThePointerBack(t *testing.T) {
 	defer cancel()
 	pins.interrupt, pins.refuse = cancel, context.Canceled
 
-	if err := stack.Promote(ctx, edge.Promotion{PromotionID: "p2", Builds: map[string]string{"web": "b2"}}, "", edge.DiscardProgress()); err == nil {
+	if err := stack.Promote(ctx, edge.Promotion{PromotionID: "p2", Builds: map[string]string{"web": "b2"}}, "", progress.DiscardProgress()); err == nil {
 		t.Fatal("Promote(p2) interrupted at its pin = nil")
 	}
 	history, err := stack.Ledger().History(context.Background(), "")

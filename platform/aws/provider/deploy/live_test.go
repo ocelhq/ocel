@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -15,7 +16,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/baked"
 	vars "github.com/ocelhq/ocel/platform/aws/provider/vars/live"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (

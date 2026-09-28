@@ -11,7 +11,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 func (p *Provider) pushBinary(ctx context.Context, class edge.Class, name, ref string, binary []byte, path string) error {

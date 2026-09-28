@@ -15,13 +15,14 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/images"
+	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func builtTree(t *testing.T, files map[string]string) string {
@@ -213,7 +214,7 @@ func (p *packingProvider) Hooks() provider.Hooks {
 	return hooks
 }
 
-func (p *packingProvider) PackApp(_ context.Context, req provider.PackAppRequest, _ edge.Progress) (provider.PackAppResult, error) {
+func (p *packingProvider) PackApp(_ context.Context, req provider.PackAppRequest, _ progress.Progress) (provider.PackAppResult, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.requests = append(p.requests, req)

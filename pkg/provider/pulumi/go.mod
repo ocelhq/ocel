@@ -5,7 +5,6 @@ go 1.27.0
 require (
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/ocelhq/ocel/pkg v0.0.0
-	github.com/ocelhq/ocel/platform/edge/contract v0.0.0
 	github.com/pulumi/pulumi-go-provider v1.6.0
 	github.com/pulumi/pulumi/sdk/v3 v3.259.0
 	google.golang.org/grpc v1.83.1
@@ -133,7 +132,5 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	lukechampine.com/frand v1.5.1 // indirect
 )
-
-replace github.com/ocelhq/ocel/platform/edge/contract => ../../../platform/edge/contract
 
 replace github.com/ocelhq/ocel/pkg => ../..

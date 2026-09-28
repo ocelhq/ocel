@@ -7,8 +7,9 @@ import (
 	"sync/atomic"
 	"testing"
 
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
-	"github.com/ocelhq/ocel/platform/edge/contract/edgeconformance"
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/edge/edgeconformance"
+	"github.com/ocelhq/ocel/pkg/progress"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
@@ -74,7 +75,7 @@ func promotes(t *testing.T, stack edge.EdgeStack, id, tag string, staged release
 	}
 	if err := stack.Promote(ctx, edge.Promotion{
 		PromotionID: id, Ts: at, Builds: map[string]string{liveApp: tag},
-	}, "", edge.DiscardProgress()); err != nil {
+	}, "", progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote(%s): %v", id, err)
 	}
 }
@@ -231,7 +232,7 @@ func TestLiveARollbackOntoAnImageTheBoxHasSweptIsRefusedAndLeavesTheSiteServing(
 
 	err := stack.Promote(context.Background(), edge.Promotion{
 		PromotionID: "p-rollback", Ts: 3, Builds: map[string]string{liveApp: "one"},
-	}, "", edge.DiscardProgress())
+	}, "", progress.DiscardProgress())
 	if err == nil {
 		t.Fatal("a rollback onto an image this box no longer has succeeded, and docker run would then reach for a registry with no credentials on this path")
 	}

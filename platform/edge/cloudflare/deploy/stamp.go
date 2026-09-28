@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 const envSkipEdgeReconcile = "OCEL_SKIP_EDGE_RECONCILE"

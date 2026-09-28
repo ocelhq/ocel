@@ -3,7 +3,7 @@ package deploy
 import (
 	"maps"
 
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 type originGuard struct {

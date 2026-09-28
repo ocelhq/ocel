@@ -5,9 +5,10 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
@@ -78,7 +79,7 @@ func (b bootstrap) eachFront(features []string, visit func(provider.Feature, edg
 	return nil
 }
 
-func (b bootstrap) raiseFronts(ctx context.Context, req provider.BootstrapRequest, progress edge.Progress) error {
+func (b bootstrap) raiseFronts(ctx context.Context, req provider.BootstrapRequest, progress progress.Progress) error {
 	return b.eachFront(req.Features, func(feature provider.Feature, front edge.Edge) error {
 		ensureProgress(progress).Say("Installing feature " + feature.Name + " for " + string(req.Class) + ": " + feature.Summary)
 		_, err := front.Bootstrap(ctx, req.Class)
@@ -100,7 +101,7 @@ func (b bootstrap) dropFronts(
 	ctx context.Context,
 	read survey,
 	req provider.BootstrapRequest,
-	progress edge.Progress,
+	progress progress.Progress,
 ) error {
 	dropping := droppedFeatures(read.Stamp.Features, req)
 	if err := b.frontsFree(ctx, req.Class, dropping); err != nil {

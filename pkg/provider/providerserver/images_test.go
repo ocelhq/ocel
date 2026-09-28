@@ -21,7 +21,9 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/images"
+	"github.com/ocelhq/ocel/pkg/progress"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -29,7 +31,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 var pushedCoordinate = "ghcr.io/acme/web:" + images.RuntimeTag("sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", []byte(fake.RuntimeBinary))
@@ -89,19 +90,19 @@ func TestADryDeployShowsTheImagePushAsARowAndPushesNothing(t *testing.T) {
 
 type muteStacks struct{}
 
-func (muteStacks) Plan(context.Context, provider.StackSpec, edge.Progress) (provider.Plan, error) {
+func (muteStacks) Plan(context.Context, provider.StackSpec, progress.Progress) (provider.Plan, error) {
 	return provider.Plan{}, nil
 }
 
-func (muteStacks) PlanDestroy(_ context.Context, ref provider.StackRef, _ edge.Progress) (provider.Plan, error) {
+func (muteStacks) PlanDestroy(_ context.Context, ref provider.StackRef, _ progress.Progress) (provider.Plan, error) {
 	return provider.Plan{}, nil
 }
 
-func (muteStacks) Provision(_ context.Context, spec provider.StackSpec, _ edge.Progress) (provider.StackResult, error) {
+func (muteStacks) Provision(_ context.Context, spec provider.StackSpec, _ progress.Progress) (provider.StackResult, error) {
 	return provider.StackResult{Containers: fake.ProvisionedContainers(spec)}, nil
 }
 
-func (muteStacks) Destroy(context.Context, provider.StackRef, edge.Progress) error {
+func (muteStacks) Destroy(context.Context, provider.StackRef, progress.Progress) error {
 	return nil
 }
 
@@ -305,7 +306,7 @@ func (s refusingStore) Has(context.Context, provider.ImagePush) (bool, error) {
 	return false, nil
 }
 
-func (s refusingStore) Push(context.Context, provider.ImagePush, edge.Progress) error {
+func (s refusingStore) Push(context.Context, provider.ImagePush, progress.Progress) error {
 	return errors.New("the stream stopped short")
 }
 
@@ -849,7 +850,7 @@ func (s *stubStore) Has(context.Context, provider.ImagePush) (bool, error) {
 
 func (s *stubStore) Destination() string { return "the stub registry" }
 
-func (s *stubStore) Push(_ context.Context, push provider.ImagePush, _ edge.Progress) error {
+func (s *stubStore) Push(_ context.Context, push provider.ImagePush, _ progress.Progress) error {
 	s.pushed = append(s.pushed, push)
 	return nil
 }

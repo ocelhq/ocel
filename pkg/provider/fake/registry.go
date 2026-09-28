@@ -3,8 +3,8 @@ package fake
 import (
 	"context"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func (p *Provider) EnsureImageRegistry(context.Context, edge.Class, []string) (provider.RegistryTarget, error) {

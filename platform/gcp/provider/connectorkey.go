@@ -12,8 +12,8 @@ import (
 	run "google.golang.org/api/run/v2"
 	"google.golang.org/api/secretmanager/v1"
 
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
@@ -73,7 +73,7 @@ func connectorPublicKeyOf(service *run.GoogleCloudRunV2Service) string {
 	return ""
 }
 
-func (p *Provider) connectorKey(ctx context.Context, progress edge.Progress) (string, error) {
+func (p *Provider) connectorKey(ctx context.Context, progress progress.Progress) (string, error) {
 	clients, err := p.openClients(ctx)
 	if err != nil {
 		return "", err
@@ -167,7 +167,7 @@ func boundSecretMember(bindings []*secretmanager.Binding, role, member string, g
 	return append(bindings, &secretmanager.Binding{Role: role, Members: []string{member}}), true
 }
 
-func (p *Provider) takeConnectorKey(ctx context.Context, progress edge.Progress) error {
+func (p *Provider) takeConnectorKey(ctx context.Context, progress progress.Progress) error {
 	clients, err := p.openClients(ctx)
 	if err != nil {
 		return err

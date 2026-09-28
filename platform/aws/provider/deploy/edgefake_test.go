@@ -7,11 +7,12 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/edge/edgeconformance"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
-	"github.com/ocelhq/ocel/platform/edge/contract/edgeconformance"
 )
 
 const fakeStoreEndpoint = "https://store.fake"
@@ -202,7 +203,7 @@ func (s *recordingStack) PutStaged(_ context.Context, record edge.DeploymentReco
 	return nil
 }
 
-func (s *recordingStack) Promote(_ context.Context, promotion edge.Promotion, pointer string, _ edge.Progress) error {
+func (s *recordingStack) Promote(_ context.Context, promotion edge.Promotion, pointer string, _ progress.Progress) error {
 	if err := s.checkAuth(); err != nil {
 		return err
 	}
@@ -257,7 +258,7 @@ func (s *recordingStack) Prune(_ context.Context, keepN int, pointer string) (ed
 	return result, nil
 }
 
-func (s *recordingStack) RemovePointer(_ context.Context, pointer string, _ edge.Progress) (edge.PruneResult, error) {
+func (s *recordingStack) RemovePointer(_ context.Context, pointer string, _ progress.Progress) (edge.PruneResult, error) {
 	if err := s.checkAuth(); err != nil {
 		return edge.PruneResult{}, err
 	}
@@ -420,7 +421,7 @@ func TestRecordingEdge(t *testing.T) {
 			t.Fatalf("PutStaged: %v", err)
 		}
 		promotion := edge.Promotion{PromotionID: "promo-1", Ts: 1, Builds: map[string]string{"web": "b1"}}
-		if err := stack.Promote(ctx, promotion, "", edge.DiscardProgress()); err != nil {
+		if err := stack.Promote(ctx, promotion, "", progress.DiscardProgress()); err != nil {
 			t.Fatalf("Promote: %v", err)
 		}
 		history, err := stack.Ledger().History(ctx, "")

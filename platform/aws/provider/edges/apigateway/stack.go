@@ -12,9 +12,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/apigateway"
 	agtypes "github.com/aws/aws-sdk-go-v2/service/apigateway/types"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type private struct {
@@ -159,7 +160,7 @@ func (s *stack) findAPIFor(ctx context.Context, c Clients, pointer, name string)
 	return findAPI(ctx, c, name)
 }
 
-func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, progress edge.Progress) error {
+func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, progress progress.Progress) error {
 	c, err := s.p.clientsFor(ctx)
 	if err != nil {
 		return err
@@ -280,7 +281,7 @@ func (s *stack) stagePatch(ctx context.Context, c Clients, promotion edge.Promot
 	}), nil
 }
 
-func (s *stack) RemovePointer(ctx context.Context, pointer string, _ edge.Progress) (edge.PruneResult, error) {
+func (s *stack) RemovePointer(ctx context.Context, pointer string, _ progress.Progress) (edge.PruneResult, error) {
 	c, err := s.p.clientsFor(ctx)
 	if err != nil {
 		return edge.PruneResult{}, err

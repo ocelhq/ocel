@@ -6,12 +6,13 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
 
@@ -58,7 +59,7 @@ func (e *Edge) Bootstrap(ctx context.Context, class edge.Class) (edge.BootstrapO
 		return edge.BootstrapOutput{}, refusal.Refuse(refusal.CodeInvalid,
 			"the %q edge provisions one load balancer per class, and this bootstrap names none", Kind)
 	}
-	front, err := e.raise(ctx, class, edge.DiscardProgress())
+	front, err := e.raise(ctx, class, progress.DiscardProgress())
 	if err != nil {
 		return edge.BootstrapOutput{}, err
 	}
@@ -70,7 +71,7 @@ func (e *Edge) Bootstrap(ctx context.Context, class edge.Class) (edge.BootstrapO
 	}}, nil
 }
 
-func (e *Edge) raise(ctx context.Context, class edge.Class, progress edge.Progress) (Front, error) {
+func (e *Edge) raise(ctx context.Context, class edge.Class, progress progress.Progress) (Front, error) {
 	var preview previewEntry
 	if class == edge.ClassPreview {
 		recorded, err := e.recordedPreview(ctx)
@@ -82,7 +83,7 @@ func (e *Edge) raise(ctx context.Context, class edge.Class, progress edge.Progre
 	return e.raiseServing(ctx, class, preview, progress)
 }
 
-func (e *Edge) raiseServing(ctx context.Context, class edge.Class, preview previewEntry, progress edge.Progress) (Front, error) {
+func (e *Edge) raiseServing(ctx context.Context, class edge.Class, preview previewEntry, progress progress.Progress) (Front, error) {
 	names := frontNames(class)
 	outputs, err := e.deps.Stacks.Up(ctx, Target{Class: class}, frontProgram(frontSpec{
 		Region:  e.deps.Region,
@@ -135,7 +136,7 @@ func (e *Edge) Teardown(ctx context.Context, class edge.Class) error {
 				"release those hostnames with `ocel domain remove` in the projects that bound them, then take this bootstrap down",
 			Kind, class, strings.Join(bound, ", "))
 	}
-	return e.deps.Stacks.Destroy(ctx, Target{Class: class}, edge.DiscardProgress())
+	return e.deps.Stacks.Destroy(ctx, Target{Class: class}, progress.DiscardProgress())
 }
 
 type edgeRecord struct {

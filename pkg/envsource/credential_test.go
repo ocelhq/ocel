@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/envvars"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func scopeOf(project string) envvars.Scope {

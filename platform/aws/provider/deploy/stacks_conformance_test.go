@@ -16,12 +16,13 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
 	"github.com/ocelhq/ocel/pkg/provider/pulumi"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type mockedEngine struct {
@@ -75,7 +76,7 @@ func (e *mockedEngine) stacks() []string {
 
 var _ pulumi.Engine = (*mockedEngine)(nil)
 
-func (e *mockedEngine) Up(_ context.Context, setup pulumi.WorkspaceSpec, _ edge.Progress) (auto.OutputMap, error) {
+func (e *mockedEngine) Up(_ context.Context, setup pulumi.WorkspaceSpec, _ progress.Progress) (auto.OutputMap, error) {
 	var monitor sdk.MockResourceMonitor = standInCloud{}
 	if e.mocks != nil {
 		monitor = e.mocks
@@ -95,7 +96,7 @@ func (e *mockedEngine) Up(_ context.Context, setup pulumi.WorkspaceSpec, _ edge.
 	return e.outputs, nil
 }
 
-func (e *mockedEngine) Preview(_ context.Context, setup pulumi.WorkspaceSpec, op pulumi.Operation, _ edge.Progress) ([]provider.Change, error) {
+func (e *mockedEngine) Preview(_ context.Context, setup pulumi.WorkspaceSpec, op pulumi.Operation, _ progress.Progress) ([]provider.Change, error) {
 	if op == pulumi.OperationDestroy {
 		rows := make([]provider.Change, 0, len(e.previewed))
 		for _, row := range e.previewed {
@@ -136,7 +137,7 @@ func (p *previewing) Call(args sdk.MockCallArgs) (resource.PropertyMap, error) {
 	return p.inner.Call(args)
 }
 
-func (e *mockedEngine) Destroy(_ context.Context, setup pulumi.WorkspaceSpec, _ edge.Progress) error {
+func (e *mockedEngine) Destroy(_ context.Context, setup pulumi.WorkspaceSpec, _ progress.Progress) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.torndown = append(e.torndown, setup.Stack)
@@ -284,7 +285,7 @@ func (s *shippedArtifacts) Open(_ context.Context, ref provider.ArtifactRef) (io
 	return io.NopCloser(bytes.NewReader(slices.Clone(blob))), nil
 }
 
-func (s *shippedArtifacts) RemovePrefix(_ context.Context, _ edge.Class, prefix string, _ edge.Progress) error {
+func (s *shippedArtifacts) RemovePrefix(_ context.Context, _ edge.Class, prefix string, _ progress.Progress) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for at := range s.objects {

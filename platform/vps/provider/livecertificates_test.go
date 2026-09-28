@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
@@ -88,7 +88,7 @@ func TestLiveTheProxyHandleIsReadOffAHandshakeAndAsksTheAdminApiNothing(t *testi
 
 	ctx := context.Background()
 	cert, err := pinned.Certificates().Issue(ctx, provider.CertificateRequest{
-		Kind: boxedge.Kind, Hostname: caddy.Container, Progress: edge.DiscardProgress(),
+		Kind: boxedge.Kind, Hostname: caddy.Container, Progress: progress.DiscardProgress(),
 	})
 	if err != nil {
 		t.Fatalf("Certificate(%s) = %v", caddy.Container, err)
@@ -136,7 +136,7 @@ func TestLiveAPinnedPairIsVerifiedFromTheCertificateAndTheKeyIsNeverRead(t *test
 
 	ctx := context.Background()
 	cert, err := pinned.Certificates().Issue(ctx, provider.CertificateRequest{
-		Kind: boxedge.Kind, Hostname: "pr-7.preview.example.invalid", Progress: edge.DiscardProgress(),
+		Kind: boxedge.Kind, Hostname: "pr-7.preview.example.invalid", Progress: progress.DiscardProgress(),
 	})
 	if err != nil {
 		t.Fatalf("Issue() over a pinned wildcard = %v", err)
@@ -152,7 +152,7 @@ func TestLiveAPinnedPairIsVerifiedFromTheCertificateAndTheKeyIsNeverRead(t *test
 		t.Errorf("Inspect().Renewal = %q, want %q", health.Renewal, certs.PinRenewal)
 	}
 
-	if err := pinned.Certificates().Discard(ctx, cert, edge.DiscardProgress()); err != nil {
+	if err := pinned.Certificates().Discard(ctx, cert, progress.DiscardProgress()); err != nil {
 		t.Errorf("Discard() = %v, want nil", err)
 	}
 	if !vm.exists(t, caddy.PinKey(at)) {

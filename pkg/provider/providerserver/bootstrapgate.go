@@ -8,12 +8,13 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type Gate struct {
@@ -223,7 +224,7 @@ func (g Gate) noteDependents(ctx context.Context, class edge.Class, groups []pro
 	return nil
 }
 
-func (g Gate) Apply(ctx context.Context, shown provider.Plan, class edge.Class, req ApplyRequest, progress edge.Progress) error {
+func (g Gate) Apply(ctx context.Context, shown provider.Plan, class edge.Class, req ApplyRequest, progress progress.Progress) error {
 	status, err := g.Status(ctx, class)
 	if err != nil {
 		return err
@@ -256,7 +257,7 @@ func (g Gate) Apply(ctx context.Context, shown provider.Plan, class edge.Class, 
 	return stackrecords.EnsureSchema(ctx, g.Records, class)
 }
 
-func (g Gate) Remove(ctx context.Context, shown provider.Plan, class edge.Class, progress edge.Progress) error {
+func (g Gate) Remove(ctx context.Context, shown provider.Plan, class edge.Class, progress progress.Progress) error {
 	if err := g.RefuseIfInUse(ctx, class); err != nil {
 		return err
 	}
@@ -334,7 +335,7 @@ func ProjectsDependingOn(recorded map[string][]string, dropped []string) []strin
 	return out
 }
 
-func (g Gate) EnsureReady(ctx context.Context, class edge.Class, required []string, heal bool, progress edge.Progress) (BootstrapStatus, error) {
+func (g Gate) EnsureReady(ctx context.Context, class edge.Class, required []string, heal bool, progress progress.Progress) (BootstrapStatus, error) {
 	status, err := g.Status(ctx, class)
 	if err != nil {
 		return BootstrapStatus{}, err
@@ -369,7 +370,7 @@ func (s BootstrapStatus) lacking(required []string, command string) error {
 		strings.Join(missing, ", "), command, strings.Join(missing, ","))
 }
 
-func (g Gate) heal(ctx context.Context, status BootstrapStatus, required []string, progress edge.Progress) bool {
+func (g Gate) heal(ctx context.Context, status BootstrapStatus, required []string, progress progress.Progress) bool {
 	if !status.AutoHeal || len(status.healable(required)) == 0 {
 		return false
 	}
@@ -563,13 +564,13 @@ func destroyCommand(class edge.Class) string {
 	return "ocel destroy production"
 }
 
-func say(progress edge.Progress, message string) {
+func say(progress progress.Progress, message string) {
 	if progress != nil {
 		progress.Say(message)
 	}
 }
 
-func warn(progress edge.Progress, message string) {
+func warn(progress progress.Progress, message string) {
 	if progress != nil {
 		progress.Warn(message)
 	}

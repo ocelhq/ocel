@@ -15,10 +15,11 @@ import (
 	run "google.golang.org/api/run/v2"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
@@ -183,7 +184,7 @@ type release struct {
 	revision string
 }
 
-func (p *Provider) deployService(ctx context.Context, s serving, progress edge.Progress) (release, error) {
+func (p *Provider) deployService(ctx context.Context, s serving, progress progress.Progress) (release, error) {
 	clients, err := p.openClients(ctx)
 	if err != nil {
 		return release{}, err
@@ -377,7 +378,7 @@ func (p *Provider) await(ctx context.Context, services *run.Service, call func(.
 	return nil
 }
 
-func (p *Provider) tearDown(ctx context.Context, service string, progress edge.Progress) error {
+func (p *Provider) tearDown(ctx context.Context, service string, progress progress.Progress) error {
 	clients, err := p.openClients(ctx)
 	if err != nil {
 		return err

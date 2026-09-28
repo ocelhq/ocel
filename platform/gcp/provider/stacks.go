@@ -7,12 +7,13 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
 	vars "github.com/ocelhq/ocel/platform/gcp/provider/live"
 )
@@ -27,7 +28,7 @@ func serviceFor(names Names, spec provider.StackSpec, app *provider.AppSpec, fun
 const previewOpenWarning = "is a preview and answers anyone who knows its Cloud Run url: the %q edge shields nothing, " +
 	"and Cloud Run's invoker check would shut browsers out too. Front previews with an edge that shields the origin, or keep their urls to yourselves"
 
-func warnPreviewOpen(spec provider.StackSpec, service string, progress edge.Progress) {
+func warnPreviewOpen(spec provider.StackSpec, service string, progress progress.Progress) {
 	if spec.Ref.Class != edge.ClassPreview || factsOf(spec.Edge).ShieldsOrigin {
 		return
 	}
@@ -38,7 +39,7 @@ func warnPreviewOpen(spec provider.StackSpec, service string, progress edge.Prog
 	ensureProgress(progress).Warn("Cloud Run service " + service + " " + fmt.Sprintf(previewOpenWarning, kind))
 }
 
-func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSpec, progress edge.Progress) ([]provider.Function, error) {
+func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSpec, progress progress.Progress) ([]provider.Function, error) {
 	app := spec.App
 	if app == nil {
 		return nil, nil
@@ -94,7 +95,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 	return deployed, nil
 }
 
-func (p *Provider) RemoveFunctions(ctx context.Context, _ provider.StackRef, functions []provider.Function, progress edge.Progress) error {
+func (p *Provider) RemoveFunctions(ctx context.Context, _ provider.StackRef, functions []provider.Function, progress progress.Progress) error {
 	for _, function := range functions {
 		if function.Physical == "" {
 			continue
@@ -106,7 +107,7 @@ func (p *Provider) RemoveFunctions(ctx context.Context, _ provider.StackRef, fun
 	return nil
 }
 
-func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackSpec, progress edge.Progress) ([]provider.AppContainer, error) {
+func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackSpec, progress progress.Progress) ([]provider.AppContainer, error) {
 	app := spec.App
 	if app == nil {
 		return nil, nil
@@ -154,7 +155,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	}}, nil
 }
 
-func (p *Provider) RemoveContainers(ctx context.Context, _ provider.StackRef, containers []provider.AppContainer, progress edge.Progress) error {
+func (p *Provider) RemoveContainers(ctx context.Context, _ provider.StackRef, containers []provider.AppContainer, progress progress.Progress) error {
 	for _, container := range containers {
 		if container.Physical == "" {
 			continue

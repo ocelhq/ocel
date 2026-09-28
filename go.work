@@ -8,7 +8,6 @@ use (
 	./platform/aws/provider
 	./platform/aws/runtime
 	./platform/edge/cloudflare/deploy
-	./platform/edge/contract
 	./platform/gcp/connector
 	./platform/gcp/provider
 	./platform/gcp/runtime

@@ -10,10 +10,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/acm"
 	acmtypes "github.com/aws/aws-sdk-go-v2/service/acm/types"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const issuedARN = "arn:aws:acm:us-east-1:111122223333:certificate/issued"
@@ -27,7 +28,7 @@ func (silentProgress) Error(string)  {}
 func (silentProgress) Detail(string) {}
 func (silentProgress) Debug(string)  {}
 
-func (silentProgress) Span(string, time.Time, time.Time, error, ...edge.Attr) {}
+func (silentProgress) Span(string, time.Time, time.Time, error, ...progress.Attr) {}
 
 type stubACM struct {
 	statuses  []string

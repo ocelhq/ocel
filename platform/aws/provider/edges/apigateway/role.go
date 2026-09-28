@@ -3,9 +3,9 @@ package apigateway
 import (
 	"fmt"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func requireInvokeRole(ns bootstrap.Namespace, deployed bootstrap.Deployed, class edge.Class) (string, error) {

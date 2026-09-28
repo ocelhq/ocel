@@ -7,8 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func originsAppliedAfter(calls []string, moved string) bool {
@@ -67,7 +68,7 @@ func TestAPreviewsHostnamesAreOriginsItsProjectsBucketsAnswer(t *testing.T) {
 		t.Errorf("the preview claimed its hostname and never applied it to its project's buckets: %v", m.calls)
 	}
 
-	if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardProgress()); err != nil {
+	if _, err := stack.RemovePointer(context.Background(), "pr-7", progress.DiscardProgress()); err != nil {
 		t.Fatalf("RemovePointer: %v", err)
 	}
 	gone := slices.Index(m.calls, "disclaim "+"ocel--"+slug+"--preview/pr-7")
@@ -87,7 +88,7 @@ func TestAnUnbindWhoseBucketOriginsCannotBeAppliedStillReleasesTheHostnameAndWar
 	m.refuseOn("ApplyOrigins", errors.New("the store answered 503"))
 
 	err := stack.UnbindDomain(ctx, "shop.example.com")
-	var warned edge.Warning
+	var warned progress.Warning
 	if !errors.As(err, &warned) {
 		t.Fatalf("UnbindDomain = %v, want a warning: the name is already released on the box, and failing here leaves `domain rm` unable to finish over a CORS rule the next deploy rewrites anyway", err)
 	}

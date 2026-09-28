@@ -12,11 +12,12 @@ import (
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func appStackSpec(t *testing.T) (Config, provider.StackSpec) {
@@ -222,7 +223,7 @@ func TestTheWarmerAndTheEmbedderReachTheFunctionsTheStackDeployed(t *testing.T) 
 	if fn.Bytecode == nil || fn.Bytecode.Prefix != spec.App.Bytecode.Prefix {
 		t.Errorf("bytecode = %+v, want the cache prefix the spec passed", fn.Bytecode)
 	}
-	if err := release.Warm(context.Background(), []string{"shop-prod-web-entry"}, edge.DiscardProgress()); err != nil {
+	if err := release.Warm(context.Background(), []string{"shop-prod-web-entry"}, progress.DiscardProgress()); err != nil {
 		t.Errorf("Warm() with no invoker configured = %v, want it to pass over", err)
 	}
 }

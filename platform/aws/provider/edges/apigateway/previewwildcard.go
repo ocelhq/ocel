@@ -9,8 +9,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/apigateway"
 	agtypes "github.com/aws/aws-sdk-go-v2/service/apigateway/types"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func (p *apiGateway) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewWildcardSpec) (string, error) {

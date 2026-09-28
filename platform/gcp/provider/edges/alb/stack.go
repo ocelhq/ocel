@@ -9,11 +9,12 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
 
@@ -31,14 +32,14 @@ func (s *stack) openLedger() *ledger.Ledger {
 
 func (s *stack) Ledger() edge.Ledger { return s.openLedger() }
 
-func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, progress edge.Progress) error {
+func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, progress progress.Progress) error {
 	if err := pin.Promote(ctx, s.openLedger(), s.e.deps.Pins, promotion, pointer, progress); err != nil {
 		return err
 	}
 	return s.released(ctx, promotion, progress)
 }
 
-func (s *stack) released(ctx context.Context, promotion edge.Promotion, progress edge.Progress) error {
+func (s *stack) released(ctx context.Context, promotion edge.Promotion, progress progress.Progress) error {
 	hosts := maps.Clone(s.recorded.Hosts)
 	serving := map[string]string{}
 	var took []string
@@ -84,7 +85,7 @@ func (s *stack) released(ctx context.Context, promotion edge.Promotion, progress
 	return nil
 }
 
-func (s *stack) RemovePointer(ctx context.Context, pointer string, _ edge.Progress) (edge.PruneResult, error) {
+func (s *stack) RemovePointer(ctx context.Context, pointer string, _ progress.Progress) (edge.PruneResult, error) {
 	return s.openLedger().RemovePointer(ctx, pointer)
 }
 
@@ -193,7 +194,7 @@ func (s *stack) target() Target { return Target{Class: s.state.Class, Slug: s.st
 func (s *stack) raise(ctx context.Context, hosts map[string]Host) error {
 	target := s.target()
 	if len(hosts) == 0 {
-		return s.e.deps.Stacks.Destroy(ctx, target, edge.DiscardProgress())
+		return s.e.deps.Stacks.Destroy(ctx, target, progress.DiscardProgress())
 	}
 	_, err := s.e.deps.Stacks.Up(ctx, target, bindingProgram(bindingSpec{
 		Region:         s.e.deps.Region,
@@ -201,7 +202,7 @@ func (s *stack) raise(ctx context.Context, hosts map[string]Host) error {
 		Class:          s.state.Class,
 		CertificateMap: s.recorded.Front.CertificateMap,
 		Hosts:          hosts,
-	}), edge.DiscardProgress())
+	}), progress.DiscardProgress())
 	return err
 }
 
@@ -296,7 +297,7 @@ func (s *stack) Destroy(ctx context.Context) error {
 		}
 	}
 	if len(s.recorded.Hosts) > 0 {
-		if err := s.e.deps.Stacks.Destroy(ctx, s.target(), edge.DiscardProgress()); err != nil {
+		if err := s.e.deps.Stacks.Destroy(ctx, s.target(), progress.DiscardProgress()); err != nil {
 			return err
 		}
 	}

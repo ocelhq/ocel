@@ -10,8 +10,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type countingStore struct {
@@ -45,7 +46,7 @@ func (s *countingStore) Open(context.Context, provider.ArtifactRef) (io.ReadClos
 	return nil, os.ErrNotExist
 }
 
-func (s *countingStore) RemovePrefix(context.Context, edge.Class, string, edge.Progress) error {
+func (s *countingStore) RemovePrefix(context.Context, edge.Class, string, progress.Progress) error {
 	return nil
 }
 

@@ -4,6 +4,8 @@ import (
 	"context"
 	"slices"
 	"time"
+
+	"github.com/ocelhq/ocel/pkg/progress"
 )
 
 type Kind string
@@ -115,9 +117,9 @@ type EdgeStack interface {
 
 	Ledger() Ledger
 
-	Promote(ctx context.Context, promotion Promotion, pointer string, progress Progress) error
+	Promote(ctx context.Context, promotion Promotion, pointer string, progress progress.Progress) error
 
-	RemovePointer(ctx context.Context, pointer string, progress Progress) (PruneResult, error)
+	RemovePointer(ctx context.Context, pointer string, progress progress.Progress) (PruneResult, error)
 
 	BindDomain(ctx context.Context, binding DomainBinding) error
 

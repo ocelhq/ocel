@@ -9,8 +9,8 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/diag/colors"
 
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 var errResourceOperationFailed = errors.New("resource operation failed")
@@ -237,22 +237,22 @@ func awaitTrace(result <-chan engineTrace, grace time.Duration) engineTrace {
 	}
 }
 
-func reportTrace(progress edge.Progress, trace engineTrace, runErr error) {
-	if progress == nil || (trace.ResourceCount == 0 && runErr == nil) {
+func reportTrace(runProgress progress.Progress, trace engineTrace, runErr error) {
+	if runProgress == nil || (trace.ResourceCount == 0 && runErr == nil) {
 		return
 	}
 	batchErr := runErr
 	if batchErr == nil && trace.Failed {
 		batchErr = errResourceOperationFailed
 	}
-	progress.Span(engineBatchSpanName, trace.Start, trace.End, batchErr, provider.AttrResourceCount(trace.ResourceCount))
+	runProgress.Span(engineBatchSpanName, trace.Start, trace.End, batchErr, provider.AttrResourceCount(trace.ResourceCount))
 
 	for _, s := range trace.Ops {
 		var opErr error
 		if s.Failed {
 			opErr = errResourceOperationFailed
 		}
-		attrs := []edge.Attr{provider.AttrDurationMS(s.End.Sub(s.Start))}
+		attrs := []progress.Attr{provider.AttrDurationMS(s.End.Sub(s.Start))}
 		if s.Type != "" {
 			attrs = append(attrs, provider.AttrResourceType(s.Type))
 		}
@@ -262,9 +262,9 @@ func reportTrace(progress edge.Progress, trace engineTrace, runErr error) {
 		if s.Action != "" {
 			attrs = append(attrs, provider.AttrResourceAction(s.Action))
 		}
-		progress.Span(resourceOpName(s.Op, s.Failed), s.Start, s.End, opErr, attrs...)
+		runProgress.Span(resourceOpName(s.Op, s.Failed), s.Start, s.End, opErr, attrs...)
 		if s.Failed && s.Diagnostic != "" {
-			progress.Error(s.label() + ": " + s.Diagnostic)
+			runProgress.Error(s.label() + ": " + s.Diagnostic)
 		}
 	}
 }

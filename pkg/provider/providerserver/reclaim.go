@@ -8,14 +8,15 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func ReclaimPreview(ctx context.Context, p provider.Provider, slug, pointer string, removed edge.PruneResult, progress edge.Progress) error {
+func ReclaimPreview(ctx context.Context, p provider.Provider, slug, pointer string, removed edge.PruneResult, progress progress.Progress) error {
 	targets, err := ReclaimTargets(slug, pointer,
 		removed.RemovedRecordKeys, removed.SurvivingRecordKeys, removed.SurvivingPointerRecordKeys)
 	if err != nil {
@@ -28,7 +29,7 @@ func ReclaimPreview(ctx context.Context, p provider.Provider, slug, pointer stri
 		removed.SurvivingRecordKeys, removed.SurvivingPointerRecordKeys, progress)
 }
 
-func destroyPointerStacks(ctx context.Context, p provider.Provider, slug, pointer string, surviving, servingHere []string, progress edge.Progress) error {
+func destroyPointerStacks(ctx context.Context, p provider.Provider, slug, pointer string, surviving, servingHere []string, progress progress.Progress) error {
 	entries, err := stackrecords.List(ctx, p.Records(), edge.ClassPreview, slug)
 	if err != nil {
 		return err
@@ -172,7 +173,7 @@ func destroyReclaimTargets(
 	slug string,
 	class edge.Class,
 	targets []ReclaimTarget,
-	progress edge.Progress,
+	progress progress.Progress,
 ) error {
 	var errs []error
 	for i, target := range targets {

@@ -13,8 +13,8 @@ import (
 	"github.com/cloudflare/cloudflare-go/v4/workers"
 	"github.com/cloudflare/cloudflare-go/v4/zones"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type routeSpec struct {
