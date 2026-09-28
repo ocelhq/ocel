@@ -82,12 +82,51 @@ func TestTheCloudFrontRouterBehavesAsEveryRouterMust(t *testing.T) {
 			FailNextFlip: func(err error) { w.store.updateErr = err },
 		}
 	}
-	routerconformance.Run(t, routerconformance.Suite{
-		New:      previews,
-		Previews: previews,
-		Pointer:  previewPointer,
-		Hostname: boundHost,
+	t.Run("on a preview pointer", func(t *testing.T) {
+		routerconformance.Run(t, routerconformance.Suite{
+			New:      previews,
+			Previews: previews,
+			Pointer:  previewPointer,
+			Hostname: boundHost,
+		})
 	})
+	t.Run("on the production pointer", func(t *testing.T) {
+		routerconformance.Run(t, routerconformance.Suite{
+			New: func(t *testing.T) routerconformance.Fixture {
+				w := newWorld()
+				e := bootstrapped(t, w)
+				stack, err := e.Reconcile(context.Background(), testSpec(), edge.StackState{})
+				if err != nil {
+					t.Fatalf("Reconcile: %v", err)
+				}
+				bound(t, stack)
+				state := stack.State()
+				return routerconformance.Fixture{
+					Router: Router{p: e},
+					Spec:   router.StackSpec{Tier: state.Tier, Slug: state.Slug},
+					Prior:  router.NewStackState(state),
+					Serving: func(string) string {
+						return productionRoutes(t, w)[boundHost].Release
+					},
+					FailNextFlip: func(err error) { w.store.updateErr = err },
+				}
+			},
+			Hostname: boundHost,
+		})
+	})
+}
+
+func productionRoutes(t *testing.T, w *world) map[string]route {
+	t.Helper()
+	routes := map[string]route{}
+	for key, value := range w.store.itemsOf(fakeRoutesARN(environment.TierProduction)) {
+		var published route
+		if err := json.Unmarshal([]byte(value), &published); err != nil {
+			t.Fatalf("decode the route under %q: %v", key, err)
+		}
+		routes[key] = published
+	}
+	return routes
 }
 
 func reconciled(t *testing.T, w *world) edge.EdgeStack {
