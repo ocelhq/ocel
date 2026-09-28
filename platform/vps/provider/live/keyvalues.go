@@ -22,8 +22,8 @@ const (
 )
 
 const (
-	EntrySuffix     = ".json"
-	partitionJoiner = "+"
+	EntrySuffix      = ".json"
+	segmentSeparator = "+"
 )
 
 func KeyValuesDir(root string, tier environment.Tier) string {
@@ -143,7 +143,7 @@ func PartitionDir(in keyvalue.Partition) (string, error) {
 	for i, segment := range segments {
 		segments[i] = encodeSegment(segment)
 	}
-	return strings.Join(segments, partitionJoiner), nil
+	return strings.Join(segments, segmentSeparator), nil
 }
 
 func PathOf(key keyvalue.Key) (string, error) {
