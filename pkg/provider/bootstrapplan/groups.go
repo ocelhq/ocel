@@ -81,7 +81,7 @@ func PrefixWithVendor(vendor provider.Vendor, groups []provider.ChangeGroup) []p
 
 func FeatureNeedingEdge(catalogue []provider.Feature, kind edge.Kind) string {
 	for _, f := range catalogue {
-		if slices.Contains(f.Needs, provider.NeedsEdgePrefix+string(kind)) {
+		if slices.Contains(f.Edges, kind) {
 			return f.Name
 		}
 	}

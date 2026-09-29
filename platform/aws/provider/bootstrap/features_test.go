@@ -43,7 +43,7 @@ func TestWhatThisCatalogueSaysAProjectNeeds(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
 		frameworks []string
-		edge       string
+		edge       edge.Kind
 		want       []string
 	}{
 		{

@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"sync"
 	"testing"
 
@@ -387,11 +386,6 @@ func RunBootstrap(t *testing.T, bootstrap provider.Bootstrap, kind edge.Kind) {
 					t.Errorf("%s depends on %q, which this provider does not offer", f.Name, dep)
 				}
 			}
-			for _, need := range f.Needs {
-				if !strings.HasPrefix(need, provider.NeedsFrameworkPrefix) && !strings.HasPrefix(need, provider.NeedsEdgePrefix) {
-					t.Errorf("%s needs %q, which is neither a %s nor an %s token", f.Name, need, provider.NeedsFrameworkPrefix, provider.NeedsEdgePrefix)
-				}
-			}
 		}
 		if _, err := bootstrapplan.FeatureLevels(catalogue, named); err != nil {
 			t.Fatalf("FeatureLevels() over the whole catalogue = %v, want an order that installs every feature", err)
@@ -554,7 +548,7 @@ func RunBootstrap(t *testing.T, bootstrap provider.Bootstrap, kind edge.Kind) {
 }
 
 func applicable(catalogue []provider.Feature, kind edge.Kind) ([]string, error) {
-	required, err := bootstrapplan.RequiredFeatures(catalogue, nil, string(kind))
+	required, err := bootstrapplan.RequiredFeatures(catalogue, nil, kind)
 	if err != nil {
 		return nil, err
 	}
@@ -563,7 +557,7 @@ func applicable(catalogue []provider.Feature, kind edge.Kind) ([]string, error) 
 		applies[name] = true
 	}
 	for _, f := range catalogue {
-		if len(f.Needs) == 0 {
+		if len(f.Frameworks) == 0 && len(f.Edges) == 0 {
 			applies[f.Name] = true
 		}
 	}

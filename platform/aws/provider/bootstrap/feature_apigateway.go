@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
@@ -39,7 +39,7 @@ var edgeNotFoundContentTypes = []string{
 var apiGatewayEdgeFeature = feature{
 	name:       FeatureAPIGatewayEdge,
 	summary:    "API Gateway as the front — invoke role, 404 responder for unclaimed hosts",
-	needs:      []string{provider.NeedsEdgePrefix + KindAPIGateway},
+	edges:      []edge.Kind{KindAPIGateway},
 	template:   apiGatewayEdgeTemplate,
 	payloads:   noPayloads,
 	placements: noPlacements,

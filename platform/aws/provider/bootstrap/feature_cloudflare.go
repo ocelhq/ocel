@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -16,7 +17,7 @@ var cloudflareEdgeFeature = feature{
 	name:       FeatureCloudflareEdge,
 	summary:    "Cloudflare as the front — workers, credential, snapshot publisher",
 	dependsOn:  []string{FeatureISR},
-	needs:      []string{provider.NeedsEdgePrefix + KindCloudflare},
+	edges:      []edge.Kind{KindCloudflare},
 	template:   cloudflareEdgeTemplate,
 	payloads:   cloudflareEdgePayloads,
 	placements: cloudflareEdgePlacements,

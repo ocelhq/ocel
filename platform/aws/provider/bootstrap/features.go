@@ -60,10 +60,11 @@ type stepDeps struct {
 }
 
 type feature struct {
-	name      string
-	summary   string
-	dependsOn []string
-	needs     []string
+	name       string
+	summary    string
+	dependsOn  []string
+	frameworks []string
+	edges      []edge.Kind
 
 	template   func(featureInputs) featureStack
 	payloads   func(context.Context, ObjectStore, string) (stackPayloads, error)
@@ -93,12 +94,10 @@ func (f feature) staged(ctx context.Context, store ObjectStore, in featureInputs
 }
 
 func (f feature) edgeKind() (edge.Kind, bool) {
-	for _, need := range f.needs {
-		if kind, ok := strings.CutPrefix(need, provider.NeedsEdgePrefix); ok {
-			return edge.Kind(kind), true
-		}
+	if len(f.edges) == 0 {
+		return edge.None, false
 	}
-	return "", false
+	return f.edges[0], true
 }
 
 func (f feature) stackName(ns Namespace, tier environment.Tier) string {
@@ -118,10 +117,11 @@ func Catalogue() []provider.Feature {
 	out := make([]provider.Feature, 0, len(featureRegistry))
 	for _, f := range featureRegistry {
 		out = append(out, provider.Feature{
-			Name:      f.name,
-			Summary:   f.summary,
-			DependsOn: slices.Clone(f.dependsOn),
-			Needs:     slices.Clone(f.needs),
+			Name:       f.name,
+			Summary:    f.summary,
+			DependsOn:  slices.Clone(f.dependsOn),
+			Frameworks: slices.Clone(f.frameworks),
+			Edges:      slices.Clone(f.edges),
 		})
 	}
 	return out

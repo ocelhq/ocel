@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
@@ -45,7 +46,7 @@ func FeatureLevels(catalogue []provider.Feature, names []string) ([][]string, er
 	return levels, nil
 }
 
-func RequiredFeatures(catalogue []provider.Feature, frameworks []string, edgeKind string) ([]string, error) {
+func RequiredFeatures(catalogue []provider.Feature, frameworks []string, edgeKind edge.Kind) ([]string, error) {
 	var needed []string
 	for _, f := range catalogue {
 		if featureNeeded(f, frameworks, edgeKind) {
@@ -55,16 +56,13 @@ func RequiredFeatures(catalogue []provider.Feature, frameworks []string, edgeKin
 	return FeaturesWithDependencies(catalogue, needed)
 }
 
-func featureNeeded(f provider.Feature, frameworks []string, edgeKind string) bool {
-	for _, need := range f.Needs {
-		if id, ok := strings.CutPrefix(need, provider.NeedsFrameworkPrefix); ok && slices.Contains(frameworks, id) {
-			return true
-		}
-		if kind, ok := strings.CutPrefix(need, provider.NeedsEdgePrefix); ok && kind == edgeKind && edgeKind != "" {
+func featureNeeded(f provider.Feature, frameworks []string, edgeKind edge.Kind) bool {
+	for _, framework := range f.Frameworks {
+		if slices.Contains(frameworks, framework) {
 			return true
 		}
 	}
-	return false
+	return edgeKind != edge.None && slices.Contains(f.Edges, edgeKind)
 }
 
 func FeaturesWithDependencies(catalogue []provider.Feature, names []string) ([]string, error) {

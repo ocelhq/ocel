@@ -3,6 +3,7 @@ package bootstrapplan_test
 import (
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
@@ -27,7 +28,7 @@ func TestFeatureNeedingEdgeFindsTheFeatureTheEdgeParticipatesThrough(t *testing.
 
 	catalogue := []provider.Feature{
 		{Name: "isr"},
-		{Name: "cloudflare-edge", Needs: []string{provider.NeedsEdgePrefix + "cloudflare"}},
+		{Name: "cloudflare-edge", Edges: []edge.Kind{"cloudflare"}},
 	}
 	if got := bootstrapplan.FeatureNeedingEdge(catalogue, "cloudflare"); got != "cloudflare-edge" {
 		t.Errorf("FeatureNeedingEdge(cloudflare) = %q, want the feature that names it", got)

@@ -36,7 +36,7 @@ func (h *handlers) Shape(ctx context.Context, req *contractv1.ShapeRequest) (*co
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	features, err := bootstrapplan.RequiredFeatures(gate.Bootstrap.Catalogue(), frameworksOf(req.GetManifest()), string(gate.Edge))
+	features, err := bootstrapplan.RequiredFeatures(gate.Bootstrap.Catalogue(), frameworksOf(req.GetManifest()), gate.Edge)
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}

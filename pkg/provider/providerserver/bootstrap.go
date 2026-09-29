@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"slices"
-	"strings"
 
 	connect "connectrpc.com/connect"
 
@@ -116,7 +115,7 @@ func (h *handlers) DescribeBootstrap(ctx context.Context, req *contractv1.Descri
 			Name:       f.Name,
 			Summary:    f.Summary,
 			DependsOn:  f.DependsOn,
-			Edges:      featureEdges(f.Needs),
+			Edges:      featureEdges(f.Edges),
 			Enabled:    slices.Contains(status.Features, f.Name),
 			Dependents: ProjectsDependingOn(recorded, []string{f.Name}),
 		})
@@ -124,12 +123,10 @@ func (h *handlers) DescribeBootstrap(ctx context.Context, req *contractv1.Descri
 	return resp, nil
 }
 
-func featureEdges(needs []string) []string {
+func featureEdges(kinds []edge.Kind) []string {
 	var edges []string
-	for _, need := range needs {
-		if kind, ok := strings.CutPrefix(need, provider.NeedsEdgePrefix); ok {
-			edges = append(edges, kind)
-		}
+	for _, kind := range kinds {
+		edges = append(edges, string(kind))
 	}
 	return edges
 }

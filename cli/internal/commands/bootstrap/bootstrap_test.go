@@ -168,8 +168,8 @@ func catalogue() []provider.Feature {
 		{Name: featureISR, Summary: "incremental static regeneration"},
 		{Name: featureImageOptimization, Summary: "on-demand image optimization"},
 		{Name: provider.FeatureVarsKey, Summary: "a key the variables are sealed under"},
-		{Name: featureRelayEdge, Summary: "a relay front", DependsOn: []string{featureISR}, Needs: []string{provider.NeedsEdgePrefix + "relay"}},
-		{Name: featureDirectEdge, Summary: "a direct front", Needs: []string{provider.NeedsEdgePrefix + "direct"}},
+		{Name: featureRelayEdge, Summary: "a relay front", DependsOn: []string{featureISR}, Edges: []edge.Kind{"relay"}},
+		{Name: featureDirectEdge, Summary: "a direct front", Edges: []edge.Kind{"direct"}},
 	}
 }
 

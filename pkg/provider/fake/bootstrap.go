@@ -93,15 +93,16 @@ func (b *Bootstrap) Catalogue() []provider.Feature {
 	}
 	return []provider.Feature{
 		{
-			Name:    FeatureCache,
-			Summary: "the reference provider's response cache",
-			Needs:   []string{provider.NeedsFrameworkPrefix + "next"},
+			Name:       FeatureCache,
+			Summary:    "the reference provider's response cache",
+			Frameworks: []string{"next"},
 		},
 		{
-			Name:      FeatureImages,
-			Summary:   "the reference provider's image optimizer",
-			DependsOn: []string{FeatureCache},
-			Needs:     []string{provider.NeedsFrameworkPrefix + "next", provider.NeedsEdgePrefix + "relay"},
+			Name:       FeatureImages,
+			Summary:    "the reference provider's image optimizer",
+			DependsOn:  []string{FeatureCache},
+			Frameworks: []string{"next"},
+			Edges:      []edge.Kind{"relay"},
 		},
 	}
 }

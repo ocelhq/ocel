@@ -48,7 +48,7 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 		return nil, err
 	}
 
-	required, err := bootstrapplan.RequiredFeatures(gate.Bootstrap.Catalogue(), req.GetFrameworks(), string(gate.Edge))
+	required, err := bootstrapplan.RequiredFeatures(gate.Bootstrap.Catalogue(), req.GetFrameworks(), gate.Edge)
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}

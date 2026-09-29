@@ -6,14 +6,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 var testCatalogue = []provider.Feature{
-	{Name: "isr", Summary: "incremental regeneration", Needs: []string{provider.NeedsFrameworkPrefix + "next"}},
-	{Name: "image-optimization", Summary: "image optimizer", Needs: []string{provider.NeedsFrameworkPrefix + "next"}},
-	{Name: "cloudflare-edge", Summary: "cloudflare front", DependsOn: []string{"isr"}, Needs: []string{provider.NeedsEdgePrefix + "cloudflare"}},
+	{Name: "isr", Summary: "incremental regeneration", Frameworks: []string{"next"}},
+	{Name: "image-optimization", Summary: "image optimizer", Frameworks: []string{"next"}},
+	{Name: "cloudflare-edge", Summary: "cloudflare front", DependsOn: []string{"isr"}, Edges: []edge.Kind{"cloudflare"}},
 }
 
 func TestFeaturesWithDependencies(t *testing.T) {
@@ -215,7 +216,7 @@ func TestRequiredFeatures(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
 		frameworks []string
-		edge       string
+		edge       edge.Kind
 		want       []string
 	}{
 		{name: "a project needing nothing needs no feature"},

@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 )
@@ -42,16 +43,12 @@ type BootstrapStack struct {
 }
 
 type Feature struct {
-	Name      string
-	Summary   string
-	DependsOn []string
-	Needs     []string
+	Name       string
+	Summary    string
+	DependsOn  []string
+	Frameworks []string
+	Edges      []edge.Kind
 }
-
-const (
-	NeedsFrameworkPrefix = "framework:"
-	NeedsEdgePrefix      = "edge:"
-)
 
 type BootstrapRequest struct {
 	Tier environment.Tier

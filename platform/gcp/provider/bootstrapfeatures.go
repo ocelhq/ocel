@@ -29,12 +29,12 @@ func (bootstrap) Catalogue() []provider.Feature {
 		Name: albFeature,
 		Summary: "a global external Application Load Balancer as the front: one address, one certificate map, one URL map — " +
 			"the one bootstrap item with a recurring cost, about $18 a month plus egress",
-		Needs: []string{provider.NeedsEdgePrefix + string(alb.Kind)},
+		Edges: []edge.Kind{alb.Kind},
 	}, {
 		Name: albShieldedFeature,
 		Summary: "a global external Application Load Balancer that Cloudflare forwards to and that refuses any client without the certificate the zone presents — " +
 			"a recurring cost, about $18 a month plus egress",
-		Needs: []string{provider.NeedsEdgePrefix + string(cloudflare.Kind)},
+		Edges: []edge.Kind{cloudflare.Kind},
 	}}
 }
 
@@ -52,21 +52,11 @@ func installedFeatures(catalogue []provider.Feature, recorded []string, req prov
 func (b bootstrap) fronted(features []string) []provider.Feature {
 	var wanted []provider.Feature
 	for _, feature := range b.Catalogue() {
-		if slices.Contains(features, feature.Name) && len(edgesNeededBy(feature)) > 0 {
+		if slices.Contains(features, feature.Name) && len(feature.Edges) > 0 {
 			wanted = append(wanted, feature)
 		}
 	}
 	return wanted
-}
-
-func edgesNeededBy(feature provider.Feature) []edge.Kind {
-	var kinds []edge.Kind
-	for _, need := range feature.Needs {
-		if kind, named := strings.CutPrefix(need, provider.NeedsEdgePrefix); named {
-			kinds = append(kinds, edge.Kind(kind))
-		}
-	}
-	return kinds
 }
 
 func (b bootstrap) eachFront(features []string, visit func(provider.Feature, edge.Edge) error) error {
@@ -79,7 +69,7 @@ func (b bootstrap) eachFront(features []string, visit func(provider.Feature, edg
 			"%s installs an edge's front, and this bootstrap was opened with no edge registry to open it through", wanted[0].Name)
 	}
 	for _, feature := range wanted {
-		for _, kind := range edgesNeededBy(feature) {
+		for _, kind := range feature.Edges {
 			front, err := b.fronts.Open(kind)
 			if err != nil {
 				return err

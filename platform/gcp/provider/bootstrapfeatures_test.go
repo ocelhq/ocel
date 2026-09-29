@@ -26,7 +26,7 @@ func TestTheLoadBalancerIsAFeatureOnlyTheEdgeThatNeedsItPullsIn(t *testing.T) {
 		t.Errorf("the %q feature reads %q, and the one bootstrap item with a recurring cost says the price in the plan", albFeature, feature.Summary)
 	}
 
-	fronted, err := bootstrapplan.RequiredFeatures(catalogue, nil, string(alb.Kind))
+	fronted, err := bootstrapplan.RequiredFeatures(catalogue, nil, alb.Kind)
 	if err != nil {
 		t.Fatalf("RequiredFeatures(alb) = %v", err)
 	}
@@ -34,7 +34,7 @@ func TestTheLoadBalancerIsAFeatureOnlyTheEdgeThatNeedsItPullsIn(t *testing.T) {
 		t.Errorf("an %q bootstrap requires %v, want %q among them", alb.Kind, fronted, albFeature)
 	}
 
-	plain, err := bootstrapplan.RequiredFeatures(catalogue, nil, string(edge.None))
+	plain, err := bootstrapplan.RequiredFeatures(catalogue, nil, edge.None)
 	if err != nil {
 		t.Fatalf("RequiredFeatures(no edge) = %v", err)
 	}
@@ -62,7 +62,7 @@ func TestTheShieldedLoadBalancerIsAFeatureOnlyTheCloudflareEdgePullsIn(t *testin
 	if !slices.Contains(proxied, albShieldedFeature) || slices.Contains(proxied, albFeature) {
 		t.Errorf("a cloudflare bootstrap requires %v, want %q and not the front browsers reach directly", proxied, albShieldedFeature)
 	}
-	fronted, err := bootstrapplan.RequiredFeatures(catalogue, nil, string(alb.Kind))
+	fronted, err := bootstrapplan.RequiredFeatures(catalogue, nil, alb.Kind)
 	if err != nil {
 		t.Fatalf("RequiredFeatures(alb) = %v", err)
 	}

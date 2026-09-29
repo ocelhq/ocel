@@ -13,7 +13,7 @@ func TestTheSuiteAppliesOnlyWhatTheEdgeItOpenedTheBootstrapperForRequires(t *tes
 
 	catalogue := []provider.Feature{
 		{Name: "state", Summary: "installed under every edge"},
-		{Name: "other-front", Summary: "the front the other edge is served from", Needs: []string{provider.NeedsEdgePrefix + "other"}},
+		{Name: "other-front", Summary: "the front the other edge is served from", Edges: []edge.Kind{"other"}},
 	}
 
 	for kind, want := range map[edge.Kind][]string{
@@ -38,7 +38,7 @@ func TestAFeatureAnotherFeatureDependsOnComesWithIt(t *testing.T) {
 
 	catalogue := []provider.Feature{
 		{Name: "state", Summary: "what the front keeps its state in"},
-		{Name: "front", Summary: "the front", DependsOn: []string{"state"}, Needs: []string{provider.NeedsEdgePrefix + "other"}},
+		{Name: "front", Summary: "the front", DependsOn: []string{"state"}, Edges: []edge.Kind{"other"}},
 	}
 
 	got, err := applicable(catalogue, "other")
