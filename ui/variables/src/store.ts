@@ -1,13 +1,13 @@
 import { parseDotenv } from "./dotenv";
 import {
-  type Address,
   abilityOf,
-  addressKey,
   applyDotenv,
   baselineOf,
   blockedVariableGroupColumns,
+  type Coordinate,
   type CopyPlan,
   catalogueOf,
+  coordinateKey,
   type DropOutcome,
   dirtyEntries,
   editable,
@@ -51,7 +51,7 @@ export const environment = signal("");
 export const search = signal("");
 export const unfilledOnly = signal(false);
 export const selected = signal<ReadonlySet<string>>(new Set());
-export const extras = signal<readonly Address[]>([]);
+export const extras = signal<readonly Coordinate[]>([]);
 export const awaitingApproval = signal<ReadonlySet<string>>(new Set());
 export const expanded = signal<ReadonlySet<string>>(new Set());
 export const spotlight = signal<string | null>(null);
@@ -69,7 +69,7 @@ export const dragTarget = signal<string | null>(null);
 export const dropped = signal<(DropOutcome & { name: string }) | null>(null);
 
 export interface Removal {
-  cells: { at: Address; version: number }[];
+  cells: { at: Coordinate; version: number }[];
 }
 
 export const removing = signal<Removal | null>(null);
@@ -87,7 +87,7 @@ export interface CopyDialog {
 export const copying = signal<CopyDialog | null>(null);
 export const copyLoading = signal(false);
 
-export const drawer = signal<Address | null>(null);
+export const drawer = signal<Coordinate | null>(null);
 export const history = signal<Version[] | null>(null);
 export const historyError = signal<string | null>(null);
 
@@ -175,7 +175,9 @@ export function switchVariableGroup(group: string, on: boolean): void {
   const rooted = mine.some((derived) => derived.folder === "");
   const touched = mine.flatMap((derived) => {
     const inheritsRoot = (member: VariableGroupMember) =>
-      rooted && derived.folder !== "" && member.addresses.some((address) => address.folder === "");
+      rooted &&
+      derived.folder !== "" &&
+      member.coordinates.some((coordinate) => coordinate.folder === "");
     const applied = applyVariableGroup(
       group,
       derived.folder,
@@ -296,53 +298,53 @@ export function showUnfilled(on: boolean): void {
   selected.value = new Set();
 }
 
-export function toggleSelected(at: Address): void {
+export function toggleSelected(at: Coordinate): void {
   const next = new Set(selected.value);
-  const key = addressKey(at);
+  const key = coordinateKey(at);
   if (!next.delete(key)) next.add(key);
   selected.value = next;
 }
 
 export function selectVisible(on: boolean): void {
-  selected.value = on ? new Set(visible.value.map((v) => addressKey(v.at))) : new Set();
+  selected.value = on ? new Set(visible.value.map((v) => coordinateKey(v.at))) : new Set();
 }
 
 export function clearSelection(): void {
   selected.value = new Set();
 }
 
-function remember(at: Address): void {
-  if (variants.value.has(addressKey(at))) return;
+function remember(at: Coordinate): void {
+  if (variants.value.has(coordinateKey(at))) return;
   extras.value = [...extras.value, at];
 }
 
-export function addOverride(at: Address): void {
+export function addOverride(at: Coordinate): void {
   remember(at);
   environment.value = at.environment;
   search.value = "";
   unfilledOnly.value = false;
   selected.value = new Set();
   expand(at.folder);
-  focusing.value = addressKey(at);
+  focusing.value = coordinateKey(at);
 }
 
-export function setFor(at: Address): void {
+export function setFor(at: Coordinate): void {
   remember(at);
   expand(at.folder);
-  focusing.value = addressKey(at);
+  focusing.value = coordinateKey(at);
 }
 
-export function dismiss(at: Address): void {
-  const key = addressKey(at);
-  extras.value = extras.value.filter((extra) => addressKey(extra) !== key);
+export function dismiss(at: Coordinate): void {
+  const key = coordinateKey(at);
+  extras.value = extras.value.filter((extra) => coordinateKey(extra) !== key);
   const next = new Map(drafts.value);
   next.delete(key);
   drafts.value = next;
 }
 
-export function setDraft(at: Address, value: string): void {
+export function setDraft(at: Coordinate, value: string): void {
   remember(at);
-  const key = addressKey(at);
+  const key = coordinateKey(at);
   const next = new Map(drafts.value);
   if (value === baselineOf(at, baselines.value)) next.delete(key);
   else next.set(key, value);
@@ -357,9 +359,9 @@ export function discard(): void {
   outcome.value = null;
 }
 
-export async function reveal(cells: readonly Address[]): Promise<void> {
+export async function reveal(cells: readonly Coordinate[]): Promise<void> {
   const asked = cells.filter((at) => {
-    const variant = variants.value.get(addressKey(at));
+    const variant = variants.value.get(coordinateKey(at));
     return variant !== undefined && revealable(variant);
   });
   if (asked.length === 0) return;
@@ -368,30 +370,30 @@ export async function reveal(cells: readonly Address[]): Promise<void> {
     read = await port().reveal(asked);
   } catch (thrown) {
     const errors = new Map(revealErrors.value);
-    for (const at of asked) errors.set(addressKey(at), message(thrown));
+    for (const at of asked) errors.set(coordinateKey(at), message(thrown));
     revealErrors.value = errors;
     return;
   }
   const values = new Map(baselines.value);
   const errors = new Map(revealErrors.value);
   for (const found of read.values) {
-    values.set(addressKey(found), found.value);
-    errors.delete(addressKey(found));
+    values.set(coordinateKey(found), found.value);
+    errors.delete(coordinateKey(found));
   }
   for (const failed of read.errors) {
-    errors.set(addressKey(failed), failed.error);
-    values.delete(addressKey(failed));
+    errors.set(coordinateKey(failed), failed.error);
+    values.delete(coordinateKey(failed));
   }
   baselines.value = values;
   revealErrors.value = errors;
 }
 
-export function hide(cells: readonly Address[]): void {
+export function hide(cells: readonly Coordinate[]): void {
   const values = new Map(baselines.value);
   const errors = new Map(revealErrors.value);
   for (const at of cells) {
-    values.delete(addressKey(at));
-    errors.delete(addressKey(at));
+    values.delete(coordinateKey(at));
+    errors.delete(coordinateKey(at));
   }
   baselines.value = values;
   revealErrors.value = errors;
@@ -399,7 +401,7 @@ export function hide(cells: readonly Address[]): void {
 
 export const shown = computed(() => {
   const open = visible.value.filter(revealable);
-  return open.length > 0 && open.every((v) => baselines.value.has(addressKey(v.at)));
+  return open.length > 0 && open.every((v) => baselines.value.has(coordinateKey(v.at)));
 });
 
 export function toggleRevealVisible(): void {
@@ -408,9 +410,9 @@ export function toggleRevealVisible(): void {
   else void reveal(cells);
 }
 
-function chosen(): Address[] {
+function chosen(): Coordinate[] {
   return variantsOf(catalogue.value)
-    .filter((v) => selected.value.has(addressKey(v.at)))
+    .filter((v) => selected.value.has(coordinateKey(v.at)))
     .map((v) => v.at);
 }
 
@@ -422,9 +424,9 @@ export function hideSelected(): void {
   hide(chosen());
 }
 
-export async function copyValue(at: Address): Promise<void> {
-  if (!baselines.value.has(addressKey(at))) await reveal([at]);
-  const value = baselines.value.get(addressKey(at));
+export async function copyValue(at: Coordinate): Promise<void> {
+  if (!baselines.value.has(coordinateKey(at))) await reveal([at]);
+  const value = baselines.value.get(coordinateKey(at));
   if (value === undefined) {
     outcome.value = { text: `Could not read the value of ${at.key} to copy it.`, tone: "error" };
     return;
@@ -437,7 +439,7 @@ export async function copyValue(at: Address): Promise<void> {
   }
 }
 
-async function attempt(at: Address, run: () => Promise<unknown>): Promise<SaveResult> {
+async function attempt(at: Coordinate, run: () => Promise<unknown>): Promise<SaveResult> {
   try {
     await run();
     return { at, ok: true };
@@ -464,7 +466,7 @@ export async function save(): Promise<void> {
   if ((pending.length === 0 && variableGroupRemovals.value.size === 0) || saving.value) return;
   const states = variableGroupStates.value;
   const blocked = blockedVariableGroupColumns(states);
-  const open = (at: Address) => !blocked.has(variableGroupColumn(at.folder, at.environment));
+  const open = (at: Coordinate) => !blocked.has(variableGroupColumn(at.folder, at.environment));
   const savable = pending.filter((draft) => open(draft.at));
   const dropping = [...variableGroupRemovals.value].flatMap((key) => {
     const variant = variants.value.get(key);
@@ -479,15 +481,15 @@ export async function save(): Promise<void> {
   }
   saving.value = true;
   outcome.value = null;
-  const created: Address[] = [];
-  const updated: Address[] = [];
-  const awaiting: Address[] = [];
+  const created: Coordinate[] = [];
+  const updated: Coordinate[] = [];
+  const awaiting: Coordinate[] = [];
   const envSource = state.value?.envSource?.id;
   try {
     const results = await Promise.all(
       savable.map((draft) =>
         attempt(draft.at, async () => {
-          const variant = variants.value.get(addressKey(draft.at));
+          const variant = variants.value.get(coordinateKey(draft.at));
           if (variant?.writesToEnvSource) {
             const answer = await port().setInEnvSource(draft.at, draft.value);
             (answer.awaitingApproval ? awaiting : variant.set ? updated : created).push(draft.at);
@@ -503,12 +505,12 @@ export async function save(): Promise<void> {
       ),
     );
     if (awaiting.length > 0) {
-      awaitingApproval.value = new Set([...awaitingApproval.value, ...awaiting.map(addressKey)]);
+      awaitingApproval.value = new Set([...awaitingApproval.value, ...awaiting.map(coordinateKey)]);
     }
-    const attempted = new Set(dropping.map((variant) => addressKey(variant.at)));
+    const attempted = new Set(dropping.map((variant) => coordinateKey(variant.at)));
     variableGroupRemovals.value = new Set([
       ...[...variableGroupRemovals.value].filter((key) => !attempted.has(key)),
-      ...removed.filter((result) => !result.ok).map((result) => addressKey(result.at)),
+      ...removed.filter((result) => !result.ok).map((result) => coordinateKey(result.at)),
     ]);
     await refresh();
     const reduced = applyResults(results);
@@ -522,8 +524,8 @@ export async function save(): Promise<void> {
         .filter((key) => switched.has(key)),
     );
     const cleared = removed.filter((result) => result.ok).length;
-    const sent = new Set([...created, ...updated, ...awaiting].map(addressKey));
-    const stored = results.filter((result) => !sent.has(addressKey(result.at)));
+    const sent = new Set([...created, ...updated, ...awaiting].map(coordinateKey));
+    const stored = results.filter((result) => !sent.has(coordinateKey(result.at)));
     outcome.value = {
       text: [
         stored.length > 0 || sent.size === 0
@@ -571,7 +573,7 @@ function settleOn(offered: readonly Offered[]): void {
   const first =
     offered.flatMap((step) => step.derived.missing).find((member) => members.includes(member)) ??
     members[0];
-  if (first) focusing.value = addressKey(first.at);
+  if (first) focusing.value = coordinateKey(first.at);
 }
 
 function applyVariableGroup(
@@ -592,7 +594,7 @@ function applyVariableGroup(
   if (on) {
     switchedOn.add(column);
     for (const member of derived.members) {
-      for (const address of member.addresses) removals.delete(addressKey(address));
+      for (const coordinate of member.coordinates) removals.delete(coordinateKey(coordinate));
     }
     variableGroupsOn.value = switchedOn;
     variableGroupRemovals.value = removals;
@@ -602,8 +604,8 @@ function applyVariableGroup(
   }
   switchedOn.delete(column);
   for (const member of derived.members) {
-    for (const address of member.addresses) {
-      const key = addressKey(address);
+    for (const coordinate of member.coordinates) {
+      const key = coordinateKey(coordinate);
       remaining.delete(key);
       const variant = variants.value.get(key);
       if (variant?.set && !variant.reference && !variant.owner) removals.add(key);
@@ -615,9 +617,9 @@ function applyVariableGroup(
   return { derived, members: [] };
 }
 
-export function askRemoval(cells: readonly Address[]): void {
+export function askRemoval(cells: readonly Coordinate[]): void {
   const stored = cells
-    .map((at) => variants.value.get(addressKey(at)))
+    .map((at) => variants.value.get(coordinateKey(at)))
     .filter((v) => v?.set && !v.reference && !v.owner)
     .map((v) => ({ at: v!.at, version: v!.version }));
   if (stored.length === 0) return;
@@ -659,17 +661,17 @@ export function applyDrop(name: string, text: string, into: string): void {
   }
   const out = applyDotenv(catalogue.value, parseDotenv(text), into);
   const added = [...extras.value];
-  const known = new Set(added.map(addressKey));
+  const known = new Set(added.map(coordinateKey));
   const next = new Map(drafts.value);
   for (const fill of out.fills) {
-    if (fill.materialise && !known.has(addressKey(fill.at))) {
+    if (fill.materialise && !known.has(coordinateKey(fill.at))) {
       added.push(fill.at);
-      known.add(addressKey(fill.at));
+      known.add(coordinateKey(fill.at));
     }
     if (fill.value === baselineOf(fill.at, baselines.value)) {
-      next.delete(addressKey(fill.at));
+      next.delete(coordinateKey(fill.at));
     } else {
-      next.set(addressKey(fill.at), fill.value);
+      next.set(coordinateKey(fill.at), fill.value);
     }
   }
   extras.value = added;
@@ -698,7 +700,7 @@ export async function openCopy(): Promise<void> {
     copying.value = {
       tier: other.tier,
       plan,
-      chosen: new Set(plan.fills.map((cell) => addressKey(cell.at))),
+      chosen: new Set(plan.fills.map((cell) => coordinateKey(cell.at))),
       overwriting: false,
       open: new Set([""]),
       busy: false,
@@ -714,12 +716,12 @@ export async function openCopy(): Promise<void> {
   }
 }
 
-export function toggleCopy(cells: readonly Address[], on?: boolean): void {
+export function toggleCopy(cells: readonly Coordinate[], on?: boolean): void {
   const dialog = copying.value;
   if (!dialog || dialog.busy) return;
   const next = new Set(dialog.chosen);
   for (const at of cells) {
-    const key = addressKey(at);
+    const key = coordinateKey(at);
     const want = on ?? !next.has(key);
     if (want) next.add(key);
     else next.delete(key);
@@ -733,7 +735,7 @@ export function toggleOverwriting(): void {
   const overwriting = !dialog.overwriting;
   const chosen = new Set(dialog.chosen);
   if (!overwriting) {
-    for (const cell of dialog.plan.overwrites) chosen.delete(addressKey(cell.at));
+    for (const cell of dialog.plan.overwrites) chosen.delete(coordinateKey(cell.at));
   }
   copying.value = { ...dialog, overwriting, chosen };
 }
@@ -755,7 +757,7 @@ export async function confirmCopy(): Promise<void> {
   const dialog = copying.value;
   if (!dialog || dialog.busy) return;
   const cells = [...dialog.plan.fills, ...dialog.plan.overwrites].filter((cell) =>
-    dialog.chosen.has(addressKey(cell.at)),
+    dialog.chosen.has(coordinateKey(cell.at)),
   );
   if (cells.length === 0) return;
   copying.value = { ...dialog, busy: true, error: null };
@@ -765,11 +767,11 @@ export async function confirmCopy(): Promise<void> {
       cells.map((cell) => ({ ...cell.at, version: cell.hereVersion })),
     );
     const added = [...extras.value];
-    const known = new Set(added.map(addressKey));
+    const known = new Set(added.map(coordinateKey));
     for (const cell of cells) {
-      if (cell.materialise && !known.has(addressKey(cell.at))) {
+      if (cell.materialise && !known.has(coordinateKey(cell.at))) {
         added.push(cell.at);
-        known.add(addressKey(cell.at));
+        known.add(coordinateKey(cell.at));
       }
     }
     extras.value = added;
@@ -805,7 +807,7 @@ export async function confirmCopy(): Promise<void> {
   }
 }
 
-export function openDrawer(at: Address): void {
+export function openDrawer(at: Coordinate): void {
   drawer.value = at;
   history.value = null;
   historyError.value = null;
@@ -813,12 +815,12 @@ export function openDrawer(at: Address): void {
     .history(at)
     .then(
       (read) => {
-        if (drawer.value && addressKey(drawer.value) === addressKey(at)) {
+        if (drawer.value && coordinateKey(drawer.value) === coordinateKey(at)) {
           history.value = read;
         }
       },
       (thrown: unknown) => {
-        if (drawer.value && addressKey(drawer.value) === addressKey(at)) {
+        if (drawer.value && coordinateKey(drawer.value) === coordinateKey(at)) {
           historyError.value = message(thrown);
         }
       },

@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
-  type Address,
-  addressKey,
+  type Coordinate,
+  coordinateKey,
   type EnvSource,
   type MatrixCell,
   type MatrixRow,
@@ -103,7 +103,10 @@ describe("toggleVariableGroup", () => {
     store.toggleVariableGroup("github", "/web", true);
     expect(switchedOn("github", "/web")).toBe(true);
     expect(statusOf("github", "/web")).toBe("off");
-    expect(store.extras.value.map(addressKey)).toEqual(["GITHUB_ID /web ", "GITHUB_TENANT /web "]);
+    expect(store.extras.value.map(coordinateKey)).toEqual([
+      "GITHUB_ID /web ",
+      "GITHUB_TENANT /web ",
+    ]);
     expect(store.focusing.value).toBe("GITHUB_ID /web ");
   });
 
@@ -111,7 +114,10 @@ describe("toggleVariableGroup", () => {
     expect(statusOf("github", "/web")).toBe("off");
     store.toggleVariableGroup("github", "/web", true);
     expect(switchedOn("github", "/web")).toBe(true);
-    expect(store.extras.value.map(addressKey)).toEqual(["GITHUB_ID /web ", "GITHUB_SECRET /web "]);
+    expect(store.extras.value.map(coordinateKey)).toEqual([
+      "GITHUB_ID /web ",
+      "GITHUB_SECRET /web ",
+    ]);
     expect(store.focusing.value).toBe("GITHUB_ID /web ");
     expect(store.expanded.value.has("/web")).toBe(true);
   });
@@ -143,7 +149,7 @@ describe("toggleVariableGroup", () => {
 
 interface Sent {
   verb: "set" | "setInEnvSource" | "remove";
-  at: Address;
+  at: Coordinate;
   value?: string;
   version?: number;
 }
@@ -221,7 +227,7 @@ describe("switchVariableGroup", () => {
       ),
     );
     store.switchVariableGroup("github", true);
-    expect(store.extras.value.map(addressKey)).toEqual(["GITHUB_ID /web "]);
+    expect(store.extras.value.map(coordinateKey)).toEqual(["GITHUB_ID /web "]);
     expect(store.expanded.value.has("/web")).toBe(true);
   });
 
@@ -503,7 +509,7 @@ describe("ability", () => {
   it("still fills from a dropped .env when the caller can write", () => {
     store.applyDrop("prod.env", "GITHUB_ID=abc\n", "");
     expect(
-      store.drafts.value.get(addressKey({ key: "GITHUB_ID", folder: "", environment: "" })),
+      store.drafts.value.get(coordinateKey({ key: "GITHUB_ID", folder: "", environment: "" })),
     ).toBe("abc");
   });
 });
@@ -528,7 +534,7 @@ const readingFrom = (envSource: EnvSource): State => ({
   },
 });
 
-const at = (key: string): Address => ({ key, folder: "", environment: "" });
+const at = (key: string): Coordinate => ({ key, folder: "", environment: "" });
 
 describe("saving under an env source", () => {
   beforeEach(() => {
@@ -560,7 +566,9 @@ describe("saving under an env source", () => {
     store.setDraft(at("STRIPE_KEY"), "sk_live_again");
     await store.save();
     expect(sent).toEqual([{ verb: "setInEnvSource", at: at("STRIPE_KEY"), value: "sk_live" }]);
-    expect(store.variants.value.get(addressKey(at("STRIPE_KEY")))?.writesToEnvSource).toBe(false);
+    expect(store.variants.value.get(coordinateKey(at("STRIPE_KEY")))?.writesToEnvSource).toBe(
+      false,
+    );
   });
 
   it("never offers to remove a value the env source owns", () => {

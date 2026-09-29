@@ -7,7 +7,7 @@ export interface Cell {
   folder: string;
 }
 
-export interface Address extends Cell {
+export interface Coordinate extends Cell {
   environment: string;
 }
 
@@ -114,7 +114,7 @@ export interface Version {
 export type VariantKind = "root" | "folder" | "environment";
 
 export interface Variant {
-  at: Address;
+  at: Coordinate;
   kind: VariantKind;
   unknown: boolean;
   class: Class;
@@ -132,7 +132,7 @@ export interface Variant {
   awaitingApproval?: true;
 }
 
-export function addressKey(at: Address): string {
+export function coordinateKey(at: Coordinate): string {
   return `${at.key} ${at.folder} ${at.environment}`;
 }
 
@@ -187,7 +187,7 @@ const forbiddenRoot: MatrixCell = {
   version: 0,
 };
 
-export function ownerOf(envSource: EnvSource | undefined, at: Address): Owner | undefined {
+export function ownerOf(envSource: EnvSource | undefined, at: Coordinate): Owner | undefined {
   if (envSource === undefined || envSource.id === "builtin" || at.environment !== "") {
     return undefined;
   }
@@ -280,7 +280,7 @@ export interface Catalogue {
 
 export function catalogueOf(
   current: State,
-  extras: readonly Address[],
+  extras: readonly Coordinate[],
   awaitingApproval: ReadonlySet<string> = new Set(),
 ): Catalogue {
   const off = offVariableGroupsOf(current);
@@ -288,7 +288,7 @@ export function catalogueOf(
   const envSource = current.envSource;
   const variants = new Map<string, Variant>();
   const put = (variant: Variant) => {
-    const key = addressKey(variant.at);
+    const key = coordinateKey(variant.at);
     if (variants.has(key)) return;
     variants.set(
       key,
@@ -321,8 +321,8 @@ export function variantsOf(catalogue: Catalogue): Variant[] {
   return [...catalogue.variants.values()];
 }
 
-export function variantAt(catalogue: Catalogue, at: Address): Variant | undefined {
-  const known = catalogue.variants.get(addressKey(at));
+export function variantAt(catalogue: Catalogue, at: Coordinate): Variant | undefined {
+  const known = catalogue.variants.get(coordinateKey(at));
   if (known) return known;
   const row = catalogue.rows.find((candidate) => candidate.key === at.key);
   const cell = row && cellOf(row, at.folder);
@@ -341,8 +341,8 @@ export function variantAt(catalogue: Catalogue, at: Address): Variant | undefine
 export type VariableGroupStatus = "off" | "partial" | "complete";
 
 export interface VariableGroupMember {
-  at: Address;
-  addresses: Address[];
+  at: Coordinate;
+  coordinates: Coordinate[];
   required: boolean;
   present: boolean;
 }
@@ -402,8 +402,8 @@ function resolution(row: MatrixRow, folder: string): MatrixCell[] {
   return out;
 }
 
-function filled(cell: MatrixCell, at: Address, pending: VariableGroupPending): boolean {
-  const key = addressKey(at);
+function filled(cell: MatrixCell, at: Coordinate, pending: VariableGroupPending): boolean {
+  const key = coordinateKey(at);
   const draft = pending.drafts.get(key);
   if (draft !== undefined) return draft !== "";
   if (pending.removals.has(key)) return false;
@@ -420,7 +420,7 @@ function memberOf(
   const cells = resolution(row, folder);
   const root = cells[cells.length - 1];
   if (root === undefined) return undefined;
-  const reach: { cell: MatrixCell; at: Address }[] = [];
+  const reach: { cell: MatrixCell; at: Coordinate }[] = [];
   for (const cell of cells) {
     if (environment !== "") {
       reach.push({ cell, at: { key: row.key, folder: cell.folder, environment } });
@@ -429,7 +429,7 @@ function memberOf(
   }
   return {
     at: reach[0]!.at,
-    addresses: reach.map((step) => step.at),
+    coordinates: reach.map((step) => step.at),
     required: root.state === "required",
     present: reach.some((step) => filled(step.cell, step.at, pending)),
   };
@@ -514,7 +514,7 @@ export function missingVariableGroupCellsOf(
   const out = new Set<string>();
   for (const derived of states) {
     if (derived.status !== "partial") continue;
-    for (const member of derived.missing) out.add(addressKey(member.at));
+    for (const member of derived.missing) out.add(coordinateKey(member.at));
   }
   return out;
 }
@@ -529,13 +529,13 @@ export function variableGroupTally(states: readonly VariableGroupState[]): {
   let present = 0;
   for (const derived of states) {
     for (const member of derived.members) {
-      const key = addressKey(member.at);
+      const key = coordinateKey(member.at);
       if (!seen.has(key)) {
         seen.add(key);
         if (member.present) present += 1;
       }
     }
-    for (const member of derived.missing) missing.add(addressKey(member.at));
+    for (const member of derived.missing) missing.add(coordinateKey(member.at));
   }
   return { members: seen.size, present, missing: missing.size };
 }
@@ -596,7 +596,7 @@ export function optionalGroupsOf(
       const stored = new Set(
         lit.flatMap((derived) =>
           derived.members.flatMap((member) =>
-            member.addresses.map(addressKey).filter((key) => {
+            member.coordinates.map(coordinateKey).filter((key) => {
               const variant = variants.get(key);
               return variant?.set === true && !variant.reference && !variant.owner;
             }),
@@ -689,7 +689,7 @@ function lineOf(
 ): KeyLine {
   const at = { key: row.key, folder: cell.folder, environment };
   const variant =
-    catalogue.variants.get(addressKey(at)) ??
+    catalogue.variants.get(coordinateKey(at)) ??
     variantOf(row, cell, environment, true, catalogue.off, catalogue.unknown, catalogue.envSource);
   const root = cellOf(row, "");
   let inherits: Inherits = null;
@@ -710,7 +710,7 @@ function lineOf(
     inherits,
     overrides: (cell.overrides ?? []).map((override) => override.environment),
     orphaned: (cell.overrides ?? []).some((override) => override.orphaned === true),
-    needed: missing.has(addressKey(at)),
+    needed: missing.has(coordinateKey(at)),
   };
 }
 
@@ -739,7 +739,7 @@ export function listingOf(
     if (lens.unfilledOnly) {
       for (const cell of row.cells) {
         const refused = missing.has(
-          addressKey({ key: row.key, folder: cell.folder, environment: "" }),
+          coordinateKey({ key: row.key, folder: cell.folder, environment: "" }),
         );
         if (
           refused ||
@@ -771,7 +771,7 @@ export function listingOf(
   const groups: Group[] = [];
   if (!flat) {
     const inCatalogue = (row: MatrixRow, folder: string): boolean =>
-      catalogue.variants.has(addressKey({ key: row.key, folder, environment: "" }));
+      catalogue.variants.has(coordinateKey({ key: row.key, folder, environment: "" }));
     for (const folder of current.matrix.columns) {
       if (folder === "") continue;
       const lines: KeyLine[] = [];
@@ -807,13 +807,13 @@ export function setForOptions(catalogue: Catalogue, row: MatrixRow): string[] {
   return readable(row).filter(
     (folder) =>
       folder !== "" &&
-      !catalogue.variants.has(addressKey({ key: row.key, folder, environment: "" })),
+      !catalogue.variants.has(coordinateKey({ key: row.key, folder, environment: "" })),
   );
 }
 
 export function overrideOptions(current: State, catalogue: Catalogue, at: Cell): string[] {
   return current.environments.filter(
-    (environment) => !catalogue.variants.has(addressKey({ ...at, environment })),
+    (environment) => !catalogue.variants.has(coordinateKey({ ...at, environment })),
   );
 }
 
@@ -856,21 +856,21 @@ export function plural(count: number, noun: string): string {
 }
 
 export interface Draft {
-  at: Address;
+  at: Coordinate;
   value: string;
   version: number;
 }
 
-export function baselineOf(at: Address, baselines: ReadonlyMap<string, string>): string {
-  return baselines.get(addressKey(at)) ?? "";
+export function baselineOf(at: Coordinate, baselines: ReadonlyMap<string, string>): string {
+  return baselines.get(coordinateKey(at)) ?? "";
 }
 
 export function isDirty(
-  at: Address,
+  at: Coordinate,
   drafts: ReadonlyMap<string, string>,
   baselines: ReadonlyMap<string, string>,
 ): boolean {
-  const draft = drafts.get(addressKey(at));
+  const draft = drafts.get(coordinateKey(at));
   return draft !== undefined && draft !== baselineOf(at, baselines);
 }
 
@@ -885,7 +885,7 @@ export function dirtyEntries(
     if (!isDirty(variant.at, drafts, baselines)) continue;
     out.push({
       at: variant.at,
-      value: drafts.get(addressKey(variant.at))!,
+      value: drafts.get(coordinateKey(variant.at))!,
       version: variant.version,
     });
   }
@@ -893,8 +893,8 @@ export function dirtyEntries(
 }
 
 export type SaveResult =
-  | { at: Address; ok: true }
-  | { at: Address; ok: false; status: number; message: string };
+  | { at: Coordinate; ok: true }
+  | { at: Coordinate; ok: false; status: number; message: string };
 
 export interface Problem {
   kind: "conflict" | "error";
@@ -925,7 +925,7 @@ export function reduceSave(
     failed: 0,
   };
   for (const result of results) {
-    const key = addressKey(result.at);
+    const key = coordinateKey(result.at);
     if (result.ok) {
       const value = out.drafts.get(key);
       if (value !== undefined && out.baselines.has(key)) {
@@ -969,7 +969,7 @@ export function removeSummary(outcome: SaveOutcome): string {
 }
 
 export interface Fill {
-  at: Address;
+  at: Coordinate;
   value: string;
   materialise: boolean;
 }
@@ -1007,7 +1007,7 @@ export function applyDotenv(
       continue;
     }
     const at = { key: entry.key, folder, environment: "" };
-    const variant = catalogue.variants.get(addressKey(at));
+    const variant = catalogue.variants.get(coordinateKey(at));
     if (variant?.reference) {
       out.skipped.push({
         key: entry.key,
@@ -1032,7 +1032,7 @@ export function applyDotenv(
   return out;
 }
 
-export interface OtherValue extends Address {
+export interface OtherValue extends Coordinate {
   version: number;
   class: Class;
   reference?: Reference;
@@ -1041,7 +1041,7 @@ export interface OtherValue extends Address {
 }
 
 export interface CopyCell {
-  at: Address;
+  at: Coordinate;
   class: Class;
   there: string | undefined;
   hereSet: boolean;
@@ -1052,7 +1052,7 @@ export interface CopyCell {
 export interface CopyPlan {
   fills: CopyCell[];
   overwrites: CopyCell[];
-  unreadable: { at: Address; error: string }[];
+  unreadable: { at: Coordinate; error: string }[];
   skipped: Skipped[];
 }
 
@@ -1081,7 +1081,7 @@ export function planCopy(
       });
       continue;
     }
-    const variant = catalogue.variants.get(addressKey(at));
+    const variant = catalogue.variants.get(coordinateKey(at));
     if (variant?.reference) {
       plan.skipped.push({
         key: value.key,
@@ -1147,7 +1147,7 @@ export function unfilledLensCount(
   for (const row of current.matrix.rows) {
     for (const cell of row.cells) {
       const refused = missing.has(
-        addressKey({ key: row.key, folder: cell.folder, environment: "" }),
+        coordinateKey({ key: row.key, folder: cell.folder, environment: "" }),
       );
       if (refused || unfilledCell(row, cell, catalogue.off)) total += 1;
     }
@@ -1158,7 +1158,7 @@ export function unfilledLensCount(
 export function missingSet(recovery: Recovery | undefined): ReadonlySet<string> {
   return new Set(
     (recovery?.missing ?? []).map((cell) =>
-      addressKey({ key: cell.key, folder: cell.folder, environment: "" }),
+      coordinateKey({ key: cell.key, folder: cell.folder, environment: "" }),
     ),
   );
 }
@@ -1170,7 +1170,7 @@ export function stillMissingOf(
   baselines: ReadonlyMap<string, string>,
 ): Variant[] {
   return variantsOf(catalogue).filter((variant) => {
-    const key = addressKey(variant.at);
+    const key = coordinateKey(variant.at);
     if (!missing.has(key) || locked(variant)) return false;
     if (isDirty(variant.at, drafts, baselines)) return false;
     return !variant.set || variant.problem !== undefined;

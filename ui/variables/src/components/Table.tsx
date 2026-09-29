@@ -20,9 +20,9 @@ import { type DragEvent, type ReactNode, useEffect, useRef, useState } from "rea
 import { glyph, role } from "../lib/type";
 import { cn } from "../lib/utils";
 import {
-  addressKey,
   baselineOf,
   type Class,
+  coordinateKey,
   editable,
   envSourceGroup,
   folderName,
@@ -252,7 +252,12 @@ export function Table() {
             ))}
             <tbody>
               {list.keys.map((line) => (
-                <KeyRow line={line} flat={list.flat} depth={0} key={addressKey(line.variant.at)} />
+                <KeyRow
+                  line={line}
+                  flat={list.flat}
+                  depth={0}
+                  key={coordinateKey(line.variant.at)}
+                />
               ))}
             </tbody>
             {list.credentials.length > 0 && <CredentialSection lines={list.credentials} />}
@@ -376,7 +381,7 @@ function CredentialSection({ lines }: { lines: KeyLine[] }) {
         {description && <span className={cn(note, "min-w-0 truncate")}>{description}</span>}
       </SectionHead>
       {lines.map((line) => (
-        <KeyRow line={line} flat={false} depth={1} key={addressKey(line.variant.at)} />
+        <KeyRow line={line} flat={false} depth={1} key={coordinateKey(line.variant.at)} />
       ))}
     </tbody>
   );
@@ -658,7 +663,7 @@ function FolderGroup({ group, open }: { group: Group; open: boolean }) {
       </tr>
       {open &&
         group.lines.map((line) => (
-          <KeyRow line={line} flat={false} depth={1} key={addressKey(line.variant.at)} />
+          <KeyRow line={line} flat={false} depth={1} key={coordinateKey(line.variant.at)} />
         ))}
       {open && group.keys === 0 && (
         <tr className="border-b border-border">
@@ -679,7 +684,7 @@ function describe(variant: Variant): string {
 
 function KeyRow({ line, flat, depth }: { line: KeyLine; flat: boolean; depth: number }) {
   const { row, variant } = line;
-  const key = addressKey(variant.at);
+  const key = coordinateKey(variant.at);
   const picked = useValue(selected).has(key);
   const groupMissing = useValue(missingVariableGroupCells).has(key);
   const open = editable(variant);
@@ -768,7 +773,7 @@ function KeyRow({ line, flat, depth }: { line: KeyLine; flat: boolean; depth: nu
 
 function Notes({ line, depth }: { line: KeyLine; depth: number }) {
   const { variant } = line;
-  const key = addressKey(variant.at);
+  const key = coordinateKey(variant.at);
   const trouble = useValue(problems).get(key);
   const unreadable = useValue(revealErrors).get(key);
   const revealed = useValue(baselines);
@@ -806,7 +811,7 @@ function Notes({ line, depth }: { line: KeyLine; depth: number }) {
 
 function Value({ line }: { line: KeyLine }) {
   const { variant } = line;
-  const key = addressKey(variant.at);
+  const key = coordinateKey(variant.at);
   const known = useValue(baselines);
   const typed = useValue(drafts);
   const trouble = useValue(problems);
@@ -939,7 +944,7 @@ function Absent({ owner, awaitingApproval }: { owner: Owner; awaitingApproval: b
 }
 
 function Linked({ variant, reference }: { variant: Variant; reference: Reference }) {
-  const key = addressKey(variant.at);
+  const key = coordinateKey(variant.at);
   const value = useValue(baselines).get(key);
   return (
     <div className={cn(rowHeight, "flex flex-wrap items-center gap-1.5 px-3")}>
@@ -966,7 +971,7 @@ function Actions({ line }: { line: KeyLine }) {
   const { row, variant } = line;
   const current = useValue(state)!;
   const busy = useValue(saving);
-  const revealed = useValue(baselines).has(addressKey(variant.at));
+  const revealed = useValue(baselines).has(coordinateKey(variant.at));
   const known = useValue(catalogue);
   const can = useValue(ability);
   const env = variant.at.environment;

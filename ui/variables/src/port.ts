@@ -1,4 +1,4 @@
-import type { Address, OtherValue, State, Version } from "./model";
+import type { Coordinate, OtherValue, State, Version } from "./model";
 
 export class VariablesError extends Error {
   status: number;
@@ -12,11 +12,11 @@ export class VariablesError extends Error {
 export const conflict = 409;
 
 export interface Revealed {
-  values: (Address & { value: string })[];
-  errors: (Address & { error: string })[];
+  values: (Coordinate & { value: string })[];
+  errors: (Coordinate & { error: string })[];
 }
 
-export interface CopyResult extends Address {
+export interface CopyResult extends Coordinate {
   saved: boolean;
   conflict?: boolean;
   error?: string;
@@ -24,13 +24,13 @@ export interface CopyResult extends Address {
 
 export interface VariablesPort {
   read(): Promise<State>;
-  reveal(cells: readonly Address[]): Promise<Revealed>;
-  set(at: Address, value: string, version: number): Promise<void>;
-  setInEnvSource(at: Address, value: string): Promise<{ awaitingApproval: boolean }>;
-  remove(at: Address, version: number): Promise<void>;
-  history(at: Address): Promise<Version[]>;
+  reveal(cells: readonly Coordinate[]): Promise<Revealed>;
+  set(at: Coordinate, value: string, version: number): Promise<void>;
+  setInEnvSource(at: Coordinate, value: string): Promise<{ awaitingApproval: boolean }>;
+  remove(at: Coordinate, version: number): Promise<void>;
+  history(at: Coordinate): Promise<Version[]>;
   other(): Promise<{ tier: string; values: OtherValue[] }>;
-  copy(cells: readonly (Address & { version: number })[]): Promise<CopyResult[]>;
+  copy(cells: readonly (Coordinate & { version: number })[]): Promise<CopyResult[]>;
 }
 
 export interface SessionPort {

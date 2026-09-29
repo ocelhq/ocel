@@ -2,10 +2,10 @@ import { ArrowRightIcon, CaretRightIcon } from "@phosphor-icons/react";
 import { glyph, role } from "../lib/type";
 import { cn } from "../lib/utils";
 import {
-  type Address,
-  addressKey,
+  type Coordinate,
   type CopyBranch,
   type CopyCell,
+  coordinateKey,
   copyTree,
   folderName,
   plural,
@@ -48,7 +48,7 @@ function Panel({ here }: { here: string }) {
   const dialog = useValue(copying)!;
   const { plan, chosen, busy } = dialog;
   const count = [...plan.fills, ...plan.overwrites].filter((cell) =>
-    chosen.has(addressKey(cell.at)),
+    chosen.has(coordinateKey(cell.at)),
   ).length;
   const branches = copyTree(plan);
   const nothing = branches.length + plan.unreadable.length + plan.skipped.length === 0;
@@ -102,7 +102,7 @@ function Panel({ here }: { here: string }) {
             <SectionLabel className="mt-6">Could not be read from {dialog.tier}</SectionLabel>
             <ul className="space-y-2">
               {plan.unreadable.map((cell) => (
-                <li key={addressKey(cell.at)} className="flex flex-wrap items-center gap-2">
+                <li key={coordinateKey(cell.at)} className="flex flex-wrap items-center gap-2">
                   <Where at={cell.at} />
                   <Fault>{cell.error}</Fault>
                 </li>
@@ -152,7 +152,7 @@ function Branch({ branch }: { branch: CopyBranch }) {
   const dialog = useValue(copying)!;
   const open = dialog.open.has(branch.folder);
   const enabled = branch.cells.filter((cell) => !cell.hereSet || dialog.overwriting);
-  const picked = enabled.filter((cell) => dialog.chosen.has(addressKey(cell.at)));
+  const picked = enabled.filter((cell) => dialog.chosen.has(coordinateKey(cell.at)));
   const all = enabled.length > 0 && picked.length === enabled.length;
   return (
     <li className="border-b border-border last:border-b-0">
@@ -188,7 +188,7 @@ function Branch({ branch }: { branch: CopyBranch }) {
       {open && (
         <ul className="mb-2 ml-8 space-y-2">
           {branch.cells.map((cell) => (
-            <Leaf key={addressKey(cell.at)} cell={cell} />
+            <Leaf key={coordinateKey(cell.at)} cell={cell} />
           ))}
         </ul>
       )}
@@ -198,7 +198,7 @@ function Branch({ branch }: { branch: CopyBranch }) {
 
 function Leaf({ cell }: { cell: CopyCell }) {
   const dialog = useValue(copying)!;
-  const key = addressKey(cell.at);
+  const key = coordinateKey(cell.at);
   const locked = cell.hereSet && !dialog.overwriting;
   return (
     <li className={cn("flex flex-col gap-1", locked && "opacity-45")}>
@@ -227,7 +227,7 @@ function Leaf({ cell }: { cell: CopyCell }) {
   );
 }
 
-function Where({ at }: { at: Address }) {
+function Where({ at }: { at: Coordinate }) {
   return (
     <span className="inline-flex flex-wrap items-center gap-1.5">
       <span className={role.key}>{at.key}</span>
@@ -238,7 +238,7 @@ function Where({ at }: { at: Address }) {
 }
 
 function Here({ cell }: { cell: CopyCell }) {
-  const revealed = useValue(baselines).get(addressKey(cell.at));
+  const revealed = useValue(baselines).get(coordinateKey(cell.at));
   if (!cell.hereSet) return <span className="text-muted-foreground">empty</span>;
   if (cell.class === "secret") {
     return <span className="text-stored">secret · v{cell.hereVersion}</span>;

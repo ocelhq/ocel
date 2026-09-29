@@ -174,22 +174,22 @@ func (s *Session) handlePage(w http.ResponseWriter, r *http.Request) {
 	s.writePage(r.Context(), w)
 }
 
-type addressRequest struct {
+type coordinateRequest struct {
 	Key         string `json:"key"`
 	Folder      string `json:"folder"`
 	Environment string `json:"environment"`
 }
 
-func (a addressRequest) address() variables.Coordinate {
+func (a coordinateRequest) coordinate() variables.Coordinate {
 	return variables.Coordinate{Cell: variables.Cell{Key: a.Key, Folder: a.Folder}, Environment: a.Environment}
 }
 
-func addressOf(at variables.Coordinate) addressRequest {
-	return addressRequest{Key: at.Cell.Key, Folder: at.Cell.Folder, Environment: at.Environment}
+func coordinateOf(at variables.Coordinate) coordinateRequest {
+	return coordinateRequest{Key: at.Cell.Key, Folder: at.Cell.Folder, Environment: at.Environment}
 }
 
 type valueRequest struct {
-	addressRequest
+	coordinateRequest
 	Value   string `json:"value"`
 	Version *int64 `json:"version"`
 }
@@ -200,7 +200,7 @@ func (s *Session) handleSet(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, fmt.Errorf("read this request: %w", err))
 		return
 	}
-	at := req.address()
+	at := req.coordinate()
 	if err := s.writable(at); err != nil {
 		fail(w, http.StatusBadRequest, err)
 		return
@@ -228,7 +228,7 @@ func (s *Session) handleSetInEnvSource(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, fmt.Errorf("read this request: %w", err))
 		return
 	}
-	at := req.address()
+	at := req.coordinate()
 	if err := s.settableInEnvSource(at); err != nil {
 		fail(w, http.StatusBadRequest, err)
 		return
@@ -262,7 +262,7 @@ func (s *Session) description(key string) string {
 }
 
 func (s *Session) handleDelete(w http.ResponseWriter, r *http.Request) {
-	at := queryAddress(r)
+	at := queryCoordinate(r)
 	if err := addressable(at.Cell.Folder); err != nil {
 		fail(w, http.StatusBadRequest, err)
 		return
@@ -307,16 +307,16 @@ func (s *Session) clearProblems(at variables.Coordinate) {
 }
 
 type revealRequest struct {
-	Cells []addressRequest `json:"cells"`
+	Cells []coordinateRequest `json:"cells"`
 }
 
 type revealedValue struct {
-	addressRequest
+	coordinateRequest
 	Value string `json:"value"`
 }
 
 type cellError struct {
-	addressRequest
+	coordinateRequest
 	Error string `json:"error"`
 }
 
@@ -338,7 +338,7 @@ func (s *Session) handleReveal(w http.ResponseWriter, r *http.Request) {
 			fail(w, http.StatusBadRequest, fmt.Errorf("%s is a secret, and a secret's value never reaches a browser; overwrite it here or read it with ocel env get --reveal", cell.Key))
 			return
 		}
-		rows = append(rows, cell.address())
+		rows = append(rows, cell.coordinate())
 	}
 	writeJSON(w, s.reveal(r.Context(), s.opts.Values, rows))
 }
@@ -352,11 +352,11 @@ func (s *Session) reveal(ctx context.Context, from Values, rows []variables.Coor
 	for _, at := range rows {
 		switch value, ok := found[at]; {
 		case err != nil:
-			out.Errors = append(out.Errors, cellError{addressOf(at), err.Error()})
+			out.Errors = append(out.Errors, cellError{coordinateOf(at), err.Error()})
 		case !ok:
-			out.Errors = append(out.Errors, cellError{addressOf(at), "no value could be read here"})
+			out.Errors = append(out.Errors, cellError{coordinateOf(at), "no value could be read here"})
 		default:
-			out.Values = append(out.Values, revealedValue{addressOf(at), value})
+			out.Values = append(out.Values, revealedValue{coordinateOf(at), value})
 		}
 	}
 	return out
@@ -373,7 +373,7 @@ func (s *Session) secrets() map[string]bool {
 }
 
 func (s *Session) handleHistory(w http.ResponseWriter, r *http.Request) {
-	versions, err := s.opts.Values.History(r.Context(), queryAddress(r))
+	versions, err := s.opts.Values.History(r.Context(), queryCoordinate(r))
 	if err != nil {
 		fail(w, http.StatusBadGateway, err)
 		return
@@ -385,7 +385,7 @@ func (s *Session) handleHistory(w http.ResponseWriter, r *http.Request) {
 }
 
 type otherValue struct {
-	addressRequest
+	coordinateRequest
 	Version   int64                `json:"version"`
 	Class     string               `json:"class"`
 	Reference *variables.Reference `json:"reference,omitempty"`
@@ -418,7 +418,7 @@ func (s *Session) handleOther(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		out.Values = append(out.Values, otherValue{
-			addressRequest: addressOf(row.Coordinate),
+			coordinateRequest: coordinateOf(row.Coordinate),
 			Version:        row.Version,
 			Class:          class,
 		})
@@ -430,14 +430,14 @@ func (s *Session) handleOther(w http.ResponseWriter, r *http.Request) {
 	read := s.reveal(r.Context(), s.opts.OtherValues, readable)
 	values := make(map[variables.Coordinate]string, len(read.Values))
 	for _, v := range read.Values {
-		values[v.address()] = v.Value
+		values[v.coordinate()] = v.Value
 	}
 	problems := make(map[variables.Coordinate]string, len(read.Errors))
 	for _, e := range read.Errors {
-		problems[e.address()] = e.Error
+		problems[e.coordinate()] = e.Error
 	}
 	for i := range out.Values {
-		at := out.Values[i].address()
+		at := out.Values[i].coordinate()
 		if value, ok := values[at]; ok {
 			out.Values[i].Value = &value
 		}
@@ -456,13 +456,13 @@ func (s *Session) classes() map[string]string {
 
 type copyRequest struct {
 	Cells []struct {
-		addressRequest
+		coordinateRequest
 		Version *int64 `json:"version"`
 	} `json:"cells"`
 }
 
 type copyOutcome struct {
-	addressRequest
+	coordinateRequest
 	Saved    bool   `json:"saved"`
 	Conflict bool   `json:"conflict,omitempty"`
 	Error    string `json:"error,omitempty"`
@@ -480,22 +480,22 @@ func (s *Session) handleCopy(w http.ResponseWriter, r *http.Request) {
 	}
 	rows := make([]variables.Coordinate, 0, len(req.Cells))
 	for _, cell := range req.Cells {
-		rows = append(rows, cell.address())
+		rows = append(rows, cell.coordinate())
 	}
 	read := s.reveal(r.Context(), s.opts.OtherValues, rows)
 	values := make(map[variables.Coordinate]string, len(read.Values))
 	for _, v := range read.Values {
-		values[v.address()] = v.Value
+		values[v.coordinate()] = v.Value
 	}
 	problems := make(map[variables.Coordinate]string, len(read.Errors))
 	for _, e := range read.Errors {
-		problems[e.address()] = e.Error
+		problems[e.coordinate()] = e.Error
 	}
 
 	outcomes := make([]copyOutcome, 0, len(req.Cells))
 	for _, cell := range req.Cells {
-		at := cell.address()
-		outcome := copyOutcome{addressRequest: cell.addressRequest}
+		at := cell.coordinate()
+		outcome := copyOutcome{coordinateRequest: cell.coordinateRequest}
 		value, ok := values[at]
 		switch {
 		case !ok:
@@ -602,7 +602,7 @@ func addressable(folder string) error {
 	return variables.ValidateFolder(folder)
 }
 
-func queryAddress(r *http.Request) variables.Coordinate {
+func queryCoordinate(r *http.Request) variables.Coordinate {
 	return variables.Coordinate{
 		Cell:        variables.Cell{Key: r.URL.Query().Get("key"), Folder: r.URL.Query().Get("folder")},
 		Environment: r.URL.Query().Get("environment"),

@@ -996,7 +996,7 @@ func TestRevealingSendsOnlyReadableValuesToTheBrowser(t *testing.T) {
 		}
 		got := decode[revealed](t, resp)
 		if len(got.Values) != 2 || got.Values[0].Value != "https://root.example" || got.Values[1].Environment != "staging" || got.Values[1].Value != "override" {
-			t.Errorf("values = %+v, want the root value and the staging override, each under its own address", got.Values)
+			t.Errorf("values = %+v, want the root value and the staging override, each under its own coordinate", got.Values)
 		}
 		if len(got.Errors) != 1 || got.Errors[0].Folder != "/web" {
 			t.Errorf("errors = %+v, want the empty /web cell reported as unreadable rather than shown blank", got.Errors)

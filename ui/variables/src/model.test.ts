@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  type Address,
   abilityOf,
-  addressKey,
   applyDotenv,
+  type Coordinate,
   catalogueOf,
+  coordinateKey,
   copyTree,
   dirtyEntries,
   doneLabel,
@@ -70,7 +70,7 @@ const stateOf = (
   matrix: { columns, rows, apps: [] },
 });
 
-const at = (key: string, folder = "", environment = ""): Address => ({
+const at = (key: string, folder = "", environment = ""): Coordinate => ({
   key,
   folder,
   environment,
@@ -241,7 +241,7 @@ describe("catalogueOf", () => {
     expect(catalogue.variants.get("A  gone")?.orphaned).toBe(true);
   });
 
-  it("materialises asked-for addresses as empty extras and never duplicates a real one", () => {
+  it("materialises asked-for coordinates as empty extras and never duplicates a real one", () => {
     const catalogue = catalogueOf(
       stateOf([row("A", [cell({}), cell({ folder: "/web", set: true, version: 1 })])], ["staging"]),
       [at("A", "/web"), at("A", "", "staging"), at("A", "/web", "staging")],
@@ -288,7 +288,7 @@ describe("catalogueOf", () => {
     });
   });
 
-  it("answers any declared address on demand, as an extra when the catalogue lacks it", () => {
+  it("answers any declared coordinate on demand, as an extra when the catalogue lacks it", () => {
     const catalogue = catalogueOf(
       stateOf([row("A", [cell({ set: true, version: 2 }), cell({ folder: "/web" })])], ["qa"]),
       [],
@@ -345,7 +345,7 @@ describe("listingOf", () => {
   it("lists in a group only the keys with a cell of their own there, never the ones that merely inherit", () => {
     const listing = listingOf(current, catalogue, none, lens());
     expect(
-      listing.groups.map((group) => group.lines.map((line) => addressKey(line.variant.at))),
+      listing.groups.map((group) => group.lines.map((line) => coordinateKey(line.variant.at))),
     ).toEqual([["B /web "], ["A /api "]]);
   });
 
@@ -377,7 +377,7 @@ describe("listingOf", () => {
       ["S", "qa", "base", false],
     ]);
     expect(
-      listing.groups[1]?.lines.map((line) => [addressKey(line.variant.at), line.inherits]),
+      listing.groups[1]?.lines.map((line) => [coordinateKey(line.variant.at), line.inherits]),
     ).toEqual([["A /api qa", "base"]]);
   });
 
@@ -401,7 +401,7 @@ describe("listingOf", () => {
   it("lists an optional group's keys in their folders like any other key while the group is on", () => {
     const listing = listingOf(optional, catalogueOf(optional, []), none, lens());
     expect(listing.keys.map((line) => line.row.key)).toEqual(["A", "G"]);
-    expect(listing.groups[0]?.lines.map((line) => addressKey(line.variant.at))).toEqual([
+    expect(listing.groups[0]?.lines.map((line) => coordinateKey(line.variant.at))).toEqual([
       "G /web ",
     ]);
     expect(listing.hidden).toEqual([]);
@@ -449,7 +449,7 @@ describe("listingOf", () => {
     const listing = listingOf(current, catalogue, none, lens({ query: " b " }));
     expect(listing.flat).toBe(true);
     expect(listing.groups).toEqual([]);
-    expect(listing.keys.map((line) => addressKey(line.variant.at))).toEqual(["B /web "]);
+    expect(listing.keys.map((line) => coordinateKey(line.variant.at))).toEqual(["B /web "]);
   });
 
   it("flattens to the cells a deploy is missing, wherever they live", () => {
@@ -463,13 +463,13 @@ describe("listingOf", () => {
     const listing = listingOf(current, catalogue, missing, lens({ unfilledOnly: true }));
     expect(listing.flat).toBe(true);
     expect(listing.groups).toEqual([]);
-    expect(listing.keys.map((line) => [addressKey(line.variant.at), line.needed])).toEqual([
+    expect(listing.keys.map((line) => [coordinateKey(line.variant.at), line.needed])).toEqual([
       ["B /web ", true],
       ["C  ", true],
     ]);
   });
 
-  it("offers an override only for environments the address lacks", () => {
+  it("offers an override only for environments the coordinate lacks", () => {
     expect(overrideOptions(current, catalogue, at("A"))).toEqual(["staging"]);
     expect(
       overrideOptions(current, catalogueOf(current, [at("A", "", "staging")]), at("A")),
@@ -670,7 +670,7 @@ describe("planCopy", () => {
       },
     ]);
     expect(
-      copyTree(plan).map((branch) => [branch.folder, branch.cells.map((c) => addressKey(c.at))]),
+      copyTree(plan).map((branch) => [branch.folder, branch.cells.map((c) => coordinateKey(c.at))]),
     ).toEqual([
       ["", ["S  ", "A  staging", "A  "]],
       ["/web", ["A /web "]],
@@ -735,9 +735,9 @@ describe("recovery", () => {
       at("D", "/web"),
     ]);
     const drafts = new Map([
-      [addressKey(at("B")), "b"],
-      [addressKey(at("C")), "fixed"],
-      [addressKey(at("D", "/web")), "d"],
+      [coordinateKey(at("B")), "b"],
+      [coordinateKey(at("C")), "fixed"],
+      [coordinateKey(at("D", "/web")), "d"],
     ]);
     expect(stillMissingOf(catalogue, missing, drafts, new Map())).toEqual([]);
   });
@@ -769,7 +769,7 @@ describe("dirtyEntries", () => {
     ),
     [at("A", "", "staging")],
   );
-  const key = (a: Address) => addressKey(a);
+  const key = (a: Coordinate) => coordinateKey(a);
 
   it("is empty when no draft differs from its baseline", () => {
     expect(dirtyEntries(catalogue, new Map(), new Map())).toEqual([]);
@@ -812,10 +812,10 @@ describe("dirtyEntries", () => {
 
 describe("reduceSave", () => {
   const drafts = new Map([
-    [addressKey(at("A")), "a"],
-    [addressKey(at("B")), "b"],
-    [addressKey(at("C")), "c"],
-    [addressKey(at("D")), "d"],
+    [coordinateKey(at("A")), "a"],
+    [coordinateKey(at("B")), "b"],
+    [coordinateKey(at("C")), "c"],
+    [coordinateKey(at("D")), "d"],
   ]);
   const results: SaveResult[] = [
     { at: at("A"), ok: true },
@@ -826,29 +826,37 @@ describe("reduceSave", () => {
   it("clears saved drafts and keeps the rest, marking why", () => {
     const out = reduceSave(drafts, new Map(), new Map(), results);
     expect([...out.drafts.keys()]).toEqual([
-      addressKey(at("B")),
-      addressKey(at("C")),
-      addressKey(at("D")),
+      coordinateKey(at("B")),
+      coordinateKey(at("C")),
+      coordinateKey(at("D")),
     ]);
-    expect(out.problems.get(addressKey(at("B")))).toEqual({ kind: "conflict", message: "moved" });
-    expect(out.problems.get(addressKey(at("C")))).toEqual({ kind: "error", message: "store down" });
+    expect(out.problems.get(coordinateKey(at("B")))).toEqual({
+      kind: "conflict",
+      message: "moved",
+    });
+    expect(out.problems.get(coordinateKey(at("C")))).toEqual({
+      kind: "error",
+      message: "store down",
+    });
     expect([out.saved, out.conflicted, out.failed]).toEqual([1, 1, 1]);
   });
 
   it("drops an old problem once its row saves", () => {
-    const stale = new Map([[addressKey(at("A")), { kind: "conflict" as const, message: "was" }]]);
+    const stale = new Map([
+      [coordinateKey(at("A")), { kind: "conflict" as const, message: "was" }],
+    ]);
     const out = reduceSave(drafts, new Map(), stale, [{ at: at("A"), ok: true }]);
     expect(out.problems.size).toBe(0);
   });
 
   it("moves a saved draft into its baseline when the row was revealed", () => {
-    const revealed = new Map([[addressKey(at("A")), "old"]]);
+    const revealed = new Map([[coordinateKey(at("A")), "old"]]);
     const out = reduceSave(drafts, revealed, new Map(), [
       { at: at("A"), ok: true },
       { at: at("B"), ok: true },
     ]);
-    expect(out.baselines.get(addressKey(at("A")))).toBe("a");
-    expect(out.baselines.has(addressKey(at("B")))).toBe(false);
+    expect(out.baselines.get(coordinateKey(at("A")))).toBe("a");
+    expect(out.baselines.has(coordinateKey(at("B")))).toBe(false);
   });
 
   it("summarises the batch honestly", () => {
@@ -920,9 +928,9 @@ const readingFrom = (
   ...over,
 });
 
-const variantOf = (current: State, where: Address) => {
+const variantOf = (current: State, where: Coordinate) => {
   const found = variantAt(catalogueOf(current, []), where);
-  if (!found) throw new Error(`no variant at ${addressKey(where)}`);
+  if (!found) throw new Error(`no variant at ${coordinateKey(where)}`);
   return found;
 };
 
@@ -1016,7 +1024,7 @@ describe("what an owned cell allows", () => {
     expect(variantOf(updating, at("DATABASE_URL")).writesToEnvSource).toBe(true);
     expect(locked(variantOf(updating, at("DATABASE_URL")))).toBe(false);
     expect(locked(variantOf(updating, at("STRIPE_KEY")))).toBe(false);
-    const drafts = new Map([[addressKey(at("DATABASE_URL")), "postgres://mine"]]);
+    const drafts = new Map([[coordinateKey(at("DATABASE_URL")), "postgres://mine"]]);
     expect(dirtyEntries(catalogueOf(updating, []), drafts, new Map()).map((d) => d.at.key)).toEqual(
       ["DATABASE_URL"],
     );
@@ -1045,8 +1053,8 @@ describe("what an owned cell allows", () => {
       { ...at("STRIPE_KEY"), version: 1, class: "plain", value: "sk" },
       { ...at("STRIPE_KEY", "", "pr-12"), version: 1, class: "plain", value: "sk_pr" },
     ]);
-    expect(plan.fills.map((fill) => addressKey(fill.at))).toEqual([
-      addressKey(at("STRIPE_KEY", "", "pr-12")),
+    expect(plan.fills.map((fill) => coordinateKey(fill.at))).toEqual([
+      coordinateKey(at("STRIPE_KEY", "", "pr-12")),
     ]);
     expect(plan.skipped).toEqual([
       { key: "STRIPE_KEY", reason: "STRIPE_KEY in root is read from infisical:p-1/prod here" },
@@ -1054,7 +1062,7 @@ describe("what an owned cell allows", () => {
   });
 
   it("keeps the deploy waiting on no cell only the env source can fill", () => {
-    const missing = new Set([addressKey(at("STRIPE_KEY"))]);
+    const missing = new Set([coordinateKey(at("STRIPE_KEY"))]);
     expect(stillMissingOf(catalogueOf(readOnly, []), missing, new Map(), new Map())).toEqual([]);
     expect(
       stillMissingOf(catalogueOf(writable, []), missing, new Map(), new Map()).map((v) => v.at.key),
@@ -1063,8 +1071,8 @@ describe("what an owned cell allows", () => {
 
   it("saves no draft typed into a locked cell", () => {
     const drafts = new Map([
-      [addressKey(at("DATABASE_URL")), "postgres://mine"],
-      [addressKey(at("STRIPE_KEY")), "sk"],
+      [coordinateKey(at("DATABASE_URL")), "postgres://mine"],
+      [coordinateKey(at("STRIPE_KEY")), "sk"],
     ]);
     expect(dirtyEntries(catalogueOf(writable, []), drafts, new Map()).map((d) => d.at.key)).toEqual(
       ["STRIPE_KEY"],

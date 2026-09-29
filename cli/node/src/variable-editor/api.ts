@@ -1,5 +1,5 @@
 import type {
-  Address,
+  Coordinate,
   CopyResult,
   Revealed,
   SessionPort,
@@ -32,7 +32,7 @@ async function api<T>(method: string, path: string, body?: unknown): Promise<T> 
   return text ? (JSON.parse(text) as T) : (undefined as T);
 }
 
-function query(at: Address): string {
+function query(at: Coordinate): string {
   return `key=${encodeURIComponent(at.key)}&folder=${encodeURIComponent(at.folder)}&environment=${encodeURIComponent(at.environment)}`;
 }
 

@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { role } from "../lib/type";
 import { cn } from "../lib/utils";
 import {
-  addressKey,
+  coordinateKey,
   folderName,
   type MatrixRow,
   names,
@@ -26,7 +26,7 @@ export function Drawer() {
   const trouble = useValue(problems);
   const row = at && known.rows.find((candidate) => candidate.key === at.key);
   const variant = at && variantAt(known, at);
-  const problem = at && trouble.get(addressKey(at));
+  const problem = at && trouble.get(coordinateKey(at));
   return (
     <Sheet open={at !== null} onOpenChange={(open) => !open && closeDrawer()}>
       {row && variant && (

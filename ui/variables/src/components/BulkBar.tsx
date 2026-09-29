@@ -1,7 +1,7 @@
 import { TrashIcon } from "@phosphor-icons/react";
 import { role } from "../lib/type";
 import { cn } from "../lib/utils";
-import { addressKey, plural } from "../model";
+import { coordinateKey, plural } from "../model";
 import { useValue } from "../signals";
 import {
   ability,
@@ -26,7 +26,7 @@ export function BulkBar() {
     .filter((v) => v !== undefined)
     .map((v) => v!.at);
   const removable = cells.filter((at) => {
-    const v = known.get(addressKey(at));
+    const v = known.get(coordinateKey(at));
     return v?.set && !v.reference && !v.owner;
   });
   return (
