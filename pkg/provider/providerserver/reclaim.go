@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -218,10 +219,14 @@ func envFor(tier environment.Tier, pointer string) string {
 	return pointer
 }
 
+const ownReclaimWindow = 15 * time.Minute
+
 func (r *deployRun) reclaimOwnRelease(ctx context.Context) {
 	if r.dry {
 		return
 	}
+	ctx, stop := context.WithTimeout(context.WithoutCancel(ctx), ownReclaimWindow)
+	defer stop()
 	stage := UnitStage("reclaim/"+r.spec.PromotionID, environmentSubject(r.spec.Tier, r.spec.Env),
 		"Reclaiming what this failed deploy provisioned", progressv1.Phase_PHASE_DESTROY)
 	_ = r.tracked.unit(stage, func(*unitRun) error {
