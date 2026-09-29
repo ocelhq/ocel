@@ -27,7 +27,7 @@ func claimShielded(ctx context.Context, front edge.Edge, hostname string, claim 
 		origin, err := claim(ctx, nil)
 		return origin, nil, err
 	}
-	staged, err := certificates.Stage(ctx, hostname)
+	staged, err := certificates.Ensure(ctx, hostname)
 	if err != nil {
 		return edge.Origin{}, nil, err
 	}
@@ -38,7 +38,7 @@ func claimShielded(ctx context.Context, front edge.Edge, hostname string, claim 
 	if err := certificates.Present(ctx, hostname); err != nil {
 		return edge.Origin{}, nil, err
 	}
-	presented, err := certificates.Stage(ctx, hostname)
+	presented, err := certificates.Ensure(ctx, hostname)
 	if err != nil {
 		return edge.Origin{}, nil, err
 	}
@@ -54,7 +54,7 @@ func stagedClientCertificatesChanged(ctx context.Context, front edge.Edge, hostn
 	if certificates == nil {
 		return false, nil
 	}
-	staged, err := certificates.Stage(ctx, hostname)
+	staged, err := certificates.Ensure(ctx, hostname)
 	if err != nil {
 		return false, err
 	}

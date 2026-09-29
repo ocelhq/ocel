@@ -73,6 +73,7 @@ type cfMock struct {
 	revokedOrigin    []string
 	uploadedKeys     []string
 	originPulls      bool
+	globalPulls      bool
 	originPullWrites []bool
 	purges           [][]string
 	sslMode          string
@@ -409,6 +410,14 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 		m.deletedClientCertificates = append(m.deletedClientCertificates, id)
 		m.clientCertificates = slices.DeleteFunc(m.clientCertificates, func(listed map[string]any) bool { return listed["id"] == id })
 		writeResult(w, map[string]any{"id": id})
+	})
+
+	mux.HandleFunc("GET /zones/"+m.zoneID+"/settings/tls_client_auth", func(w http.ResponseWriter, _ *http.Request) {
+		value := "off"
+		if m.globalPulls {
+			value = "on"
+		}
+		writeResult(w, map[string]any{"id": "tls_client_auth", "value": value, "editable": true})
 	})
 
 	mux.HandleFunc("GET /zones/"+m.zoneID+"/origin_tls_client_auth/settings", func(w http.ResponseWriter, _ *http.Request) {

@@ -21,7 +21,7 @@ type Hooks struct {
 }
 
 type ClientCertificateHooks struct {
-	Stage   func(ctx context.Context, hostname string) ([]string, error)
+	Ensure  func(ctx context.Context, hostname string) ([]string, error)
 	Present func(ctx context.Context, hostname string) error
 }
 

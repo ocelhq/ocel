@@ -225,7 +225,7 @@ func (e *Edge) revokeOriginCertificate(_ context.Context, id string) error {
 	return nil
 }
 
-func (e *Edge) StagesClientCertificates(certificates ...string) {
+func (e *Edge) HoldsClientCertificates(certificates ...string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.staged = certificates
@@ -237,10 +237,10 @@ func (e *Edge) ClientCertificateEvents() []string {
 	return slices.Clone(e.events)
 }
 
-func (e *Edge) stageClientCertificates(context.Context, string) ([]string, error) {
+func (e *Edge) ensureClientCertificates(context.Context, string) ([]string, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	e.events = append(e.events, "stage")
+	e.events = append(e.events, "ensure")
 	if e.staged == nil {
 		return []string{ClientCertificate(e.kind)}, nil
 	}
@@ -457,7 +457,7 @@ func (e *Edge) Hooks() edge.Hooks {
 	defer e.mu.Unlock()
 	hooks := edge.Hooks{VerifyCredentials: e.verify}
 	if e.proxies {
-		hooks.ClientCertificates = &edge.ClientCertificateHooks{Stage: e.stageClientCertificates, Present: e.presentClientCertificate}
+		hooks.ClientCertificates = &edge.ClientCertificateHooks{Ensure: e.ensureClientCertificates, Present: e.presentClientCertificate}
 		hooks.PurgeHostnames = e.purge
 	}
 	if e.issues {
