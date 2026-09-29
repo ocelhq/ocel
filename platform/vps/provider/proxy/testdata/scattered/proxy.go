@@ -16,7 +16,7 @@ func (s *Scattered) File() string { return "" }
 
 func (s *Scattered) Unrendered([]byte, proxy.Permission) string { return "" }
 
-func (s *Scattered) Unrouted(context.Context, []string) error { return nil }
+func (s *Scattered) RefuseRouted(context.Context, []string) error { return nil }
 
 func (s *Scattered) Validate(context.Context, []byte) error { return nil }
 

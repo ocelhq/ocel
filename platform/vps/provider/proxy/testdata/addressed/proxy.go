@@ -16,7 +16,7 @@ func (*Addressed) File() string { return "" }
 
 func (*Addressed) Unrendered([]byte, proxy.Permission) string { return "" }
 
-func (*Addressed) Unrouted(context.Context, []string) error { return nil }
+func (*Addressed) RefuseRouted(context.Context, []string) error { return nil }
 
 func (*Addressed) Validate(context.Context, []byte) error { return nil }
 

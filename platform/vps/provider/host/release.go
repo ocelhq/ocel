@@ -407,7 +407,7 @@ func (h *Host) composeRouting(ctx context.Context, compose func(RoutingTable) (R
 		if added := slices.DeleteFunc(next.hostnames(), func(hostname string) bool {
 			return slices.Contains(table.hostnames(), hostname)
 		}); len(added) > 0 {
-			if err := h.front.Unrouted(ctx, added); err != nil {
+			if err := h.front.RefuseRouted(ctx, added); err != nil {
 				return shaped, err
 			}
 		}

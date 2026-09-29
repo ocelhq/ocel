@@ -27,7 +27,7 @@ func (Builtin) Unrendered(config []byte, permission proxy.Permission) string {
 	return unrendered(config, permission)
 }
 
-func (Builtin) Unrouted(context.Context, []string) error { return nil }
+func (Builtin) RefuseRouted(context.Context, []string) error { return nil }
 
 func (Builtin) Validate(context.Context, []byte) error { return nil }
 

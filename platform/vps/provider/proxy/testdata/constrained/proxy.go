@@ -16,7 +16,7 @@ func (Constrained) File() string { return "" }
 
 func (Constrained) Unrendered([]byte, proxy.Permission) string { return "" }
 
-func (Constrained) Unrouted(context.Context, []string) error { return nil }
+func (Constrained) RefuseRouted(context.Context, []string) error { return nil }
 
 func (Constrained) Validate(context.Context, []byte) error { return nil }
 

@@ -139,10 +139,10 @@ func (h *Host) ServedRouter(ctx context.Context, hostname string) (Answer, error
 type frontBox struct{ h *Host }
 
 func (b frontBox) Ran(ctx context.Context, what string, argv []string) (string, error) {
-	return b.Fed(ctx, what, argv, nil)
+	return b.RanWithStdin(ctx, what, argv, nil)
 }
 
-func (b frontBox) Fed(ctx context.Context, what string, argv []string, stdin []byte) (string, error) {
+func (b frontBox) RanWithStdin(ctx context.Context, what string, argv []string, stdin []byte) (string, error) {
 	elevation, err := b.elevation(ctx, argv)
 	if err != nil {
 		return "", err
@@ -161,7 +161,7 @@ func (b frontBox) elevation(ctx context.Context, argv []string) (string, error) 
 	return b.h.reachDocker(ctx)
 }
 
-func (b frontBox) Placed(ctx context.Context, path string) (string, error) {
+func (b frontBox) PlacedSum(ctx context.Context, path string) (string, error) {
 	return b.h.destinationSum(ctx, path)
 }
 

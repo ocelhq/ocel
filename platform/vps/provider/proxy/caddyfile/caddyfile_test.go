@@ -43,13 +43,13 @@ func (b *box) Ran(_ context.Context, _ string, argv []string) (string, error) {
 	return b.answer(argv, nil)
 }
 
-func (b *box) Fed(_ context.Context, _ string, argv []string, stdin []byte) (string, error) {
+func (b *box) RanWithStdin(_ context.Context, _ string, argv []string, stdin []byte) (string, error) {
 	return b.answer(argv, stdin)
 }
 
 func (b *box) Claimed(context.Context) ([]string, error) { return b.claimed, nil }
 
-func (b *box) Placed(context.Context, string) (string, error) { return b.placed, nil }
+func (b *box) PlacedSum(context.Context, string) (string, error) { return b.placed, nil }
 
 func (b *box) Probe(_ context.Context, hostname string) (router.Kind, string, error) {
 	return b.answers[hostname], b.failures[hostname], nil

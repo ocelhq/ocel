@@ -16,7 +16,7 @@ func (c *Conforming) File() string { return "" }
 
 func (c *Conforming) Unrendered([]byte, proxy.Permission) string { return "" }
 
-func (c *Conforming) Unrouted(context.Context, []string) error { return nil }
+func (c *Conforming) RefuseRouted(context.Context, []string) error { return nil }
 
 func (c *Conforming) Validate(context.Context, []byte) error { return nil }
 

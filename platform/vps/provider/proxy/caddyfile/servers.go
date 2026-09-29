@@ -37,10 +37,10 @@ type upstream struct {
 }
 
 type site struct {
-	server string
-	route  int
-	hosts  []string
-	ocels  bool
+	server             string
+	route              int
+	hosts              []string
+	reachesSwitchboard bool
 }
 
 func (s site) String() string {
@@ -70,7 +70,7 @@ func (c Caddyfile) sites(ctx context.Context) ([]site, error) {
 	var found []site
 	for _, name := range slices.Sorted(maps.Keys(servers)) {
 		for at, top := range servers[name].Routes {
-			found = append(found, site{server: name, route: at + 1, hosts: top.hosts(), ocels: top.reaches(c.upstream())})
+			found = append(found, site{server: name, route: at + 1, hosts: top.hosts(), reachesSwitchboard: top.reaches(c.upstream())})
 		}
 	}
 	return found, nil
@@ -125,7 +125,7 @@ func (s site) covering(hostname string) (string, bool) {
 
 func collision(sites []site, hostname string) (site, string, bool) {
 	for _, each := range sites {
-		if each.ocels {
+		if each.reachesSwitchboard {
 			continue
 		}
 		if host, covered := each.covering(hostname); covered {
@@ -133,20 +133,4 @@ func collision(sites []site, hostname string) (site, string, bool) {
 		}
 	}
 	return site{}, "", false
-}
-
-func (c Caddyfile) unrouted(ctx context.Context, hostnames []string) error {
-	sites, err := c.sites(ctx)
-	if err != nil {
-		return err
-	}
-	for _, hostname := range hostnames {
-		if theirs, host, taken := collision(sites, hostname); taken {
-			return refusal.Refuse(refusal.CodeBusy,
-				"%s is already served by %s: %s matches host %s\n"+
-					"Ocel never takes a hostname your Caddy serves; remove it from that site and reload your Caddy, or bind another hostname",
-				hostname, c.named(), theirs, host)
-		}
-	}
-	return nil
 }

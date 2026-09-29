@@ -20,7 +20,7 @@ func (*Grouped) File() string { return "" }
 
 func (*Grouped) Unrendered([]byte, proxy.Permission) string { return "" }
 
-func (*Grouped) Unrouted(context.Context, []string) error { return nil }
+func (*Grouped) RefuseRouted(context.Context, []string) error { return nil }
 
 func (*Grouped) Validate(context.Context, []byte) error { return nil }
 

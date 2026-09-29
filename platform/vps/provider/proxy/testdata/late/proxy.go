@@ -16,7 +16,7 @@ func (l *Late) File() string { return "" }
 
 func (l *Late) Unrendered([]byte, proxy.Permission) string { return "" }
 
-func (l *Late) Unrouted(context.Context, []string) error { return nil }
+func (l *Late) RefuseRouted(context.Context, []string) error { return nil }
 
 func (l *Late) Validate(context.Context, []byte) error { return nil }
 
