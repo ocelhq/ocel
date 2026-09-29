@@ -62,10 +62,14 @@ func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest
 		Builds:      target.Builds,
 		Flip:        &flip,
 	}
-	if _, err := session.promote(ctx, "", current.Active, promoted, progress.DiscardProgress()); err != nil {
+	pruned, err := session.promote(ctx, "", current.Active, promoted, progress.DiscardProgress())
+	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
 	if err := session.checkpoint(ctx); err != nil {
+		return nil, provider.RefusalError(err)
+	}
+	if err := reclaimDropped(ctx, session.provider, req.GetSlug(), environment.TierProduction, stackrecords.ProductionEnv, promoted.PromotionID, pruned, progress.DiscardProgress()); err != nil {
 		return nil, provider.RefusalError(err)
 	}
 	return &contractv1.RollbackResponse{Promoted: promotionProto(promoted)}, nil
@@ -134,12 +138,7 @@ func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.Re
 		if tier == environment.TierProduction {
 			env = stackrecords.ProductionEnv
 		}
-		targets, err := ReclaimTargets(req.GetSlug(), env,
-			pruned.RemovedRecordKeys, pruned.SurvivingRecordKeys, pruned.SurvivingPointerRecordKeys)
-		if err != nil {
-			return err
-		}
-		if err := destroyReclaimTargets(ctx, session.provider, req.GetSlug(), tier, targets, progress); err != nil {
+		if err := reclaimPruned(ctx, session.provider, req.GetSlug(), tier, env, pruned, progress); err != nil {
 			return err
 		}
 		for _, line := range pruneLines(pruned) {

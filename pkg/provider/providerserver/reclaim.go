@@ -12,18 +12,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 func ReclaimPreview(ctx context.Context, p provider.Provider, slug, pointer string, removed router.PruneResult, progress progress.Progress) error {
-	targets, err := ReclaimTargets(slug, pointer,
-		removed.RemovedRecordKeys, removed.SurvivingRecordKeys, removed.SurvivingPointerRecordKeys)
-	if err != nil {
-		return err
-	}
-	if err := destroyReclaimTargets(ctx, p, slug, environment.TierPreview, targets, progress); err != nil {
+	if err := reclaimPruned(ctx, p, slug, environment.TierPreview, pointer, removed, progress); err != nil {
 		return err
 	}
 	return destroyPointerStacks(ctx, p, slug, pointer,
@@ -166,6 +162,21 @@ func releasesOf(keys []string) map[appRelease]bool {
 		served[appRelease{app: app, release: identity.Release().String()}] = true
 	}
 	return served
+}
+
+func reclaimPruned(ctx context.Context, p provider.Provider, slug string, tier environment.Tier, env string, pruned router.PruneResult, progress progress.Progress) error {
+	targets, err := ReclaimTargets(slug, env, pruned.RemovedRecordKeys, pruned.SurvivingRecordKeys, pruned.SurvivingPointerRecordKeys)
+	if err != nil {
+		return err
+	}
+	return destroyReclaimTargets(ctx, p, slug, tier, targets, progress)
+}
+
+func reclaimDropped(ctx context.Context, p provider.Provider, slug string, tier environment.Tier, env, promotionID string, pruned router.PruneResult, progress progress.Progress) error {
+	if err := reclaimPruned(ctx, p, slug, tier, env, pruned, progress); err != nil {
+		return fmt.Errorf("promotion %s serves, and the builds it dropped past the newest %d promotions were not all reclaimed: %w", promotionID, ledger.KeptPromotions, err)
+	}
+	return nil
 }
 
 func destroyReclaimTargets(

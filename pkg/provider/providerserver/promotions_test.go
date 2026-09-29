@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 
 	connect "connectrpc.com/connect"
@@ -301,5 +302,62 @@ func TestAPruneSaysWhichPromotionsItReclaimedAndHowManyItKept(t *testing.T) {
 				t.Errorf("the prune said %q, want %q", said, tc.wants)
 			}
 		})
+	}
+}
+
+func TestARollbackPastTheRetainedPromotionsReclaimsTheBuildItDropped(t *testing.T) {
+	t.Parallel()
+	client, provider := contractServed(t, "1.0.0")
+	edgeProvisioned(t, provider, environment.TierProduction, "shop")
+	ids := make([]string, ledger.KeptPromotions)
+	for i := range ids {
+		ids[i] = fmt.Sprintf("p%02d", i)
+	}
+	releases := seedPromotions(t, provider, environment.TierProduction, "shop", "", ids...)
+
+	if _, err := client.Rollback(context.Background(), &contractv1.RollbackRequest{Slug: "shop"}); err != nil {
+		t.Fatalf("Rollback() error = %v", err)
+	}
+
+	if _, found, err := releases.Record(context.Background(), "web", buildIdentity(0)); err != nil || found {
+		t.Errorf("the record of p00's build = found %v, %v, want it removed once no promotion names it", found, err)
+	}
+	var destroyed []string
+	for _, entry := range provider.Journal() {
+		if strings.HasPrefix(entry, "destroy ") {
+			destroyed = append(destroyed, entry)
+		}
+	}
+	if len(destroyed) != 1 {
+		t.Errorf("the rollback destroyed %v, want the one stack of the build it dropped", destroyed)
+	}
+}
+
+func TestADeployPastTheRetainedPromotionsReclaimsTheBuildItDropped(t *testing.T) {
+	builtProject(t)
+	client, provider := deployServed(t)
+	ids := make([]string, ledger.KeptPromotions)
+	for i := range ids {
+		ids[i] = fmt.Sprintf("p%02d", i)
+	}
+	releases := seedPromotions(t, provider, environment.TierProduction, "shop", "", ids...)
+
+	result, events := deploy(t, client, deployRequest())
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	if _, found, err := releases.Record(context.Background(), "web", buildIdentity(0)); err != nil || found {
+		t.Errorf("the record of p00's build = found %v, %v, want it removed once no promotion names it", found, err)
+	}
+	want := fmt.Sprintf("Destroying the stack of web build %s (1 of 1)", buildIdentity(0))
+	var said []string
+	for _, event := range events {
+		if line := saidLine(event); line != "" {
+			said = append(said, line)
+		}
+	}
+	if !slices.Contains(said, want) {
+		t.Errorf("the deploy said %q, want %q", said, want)
 	}
 }
