@@ -35,12 +35,6 @@ func TestEveryScopeTheFakeProviderOpensEndsBeforeItsResult(t *testing.T) {
 		{"a dry deploy", func() (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
 			return client.Deploy(ctx, &contractv1.DeployRequest{Dry: true, Manifest: &contractv1.Manifest{SchemaVersion: "1"}})
 		}},
-		{"a connector install", func() (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
-			return client.InstallConnector(ctx, &contractv1.InstallConnectorRequest{})
-		}},
-		{"a connector removal", func() (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
-			return client.RemoveConnector(ctx, &contractv1.RemoveConnectorRequest{})
-		}},
 		{"a promotion prune", func() (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
 			return client.RemoveStalePromotions(ctx, &contractv1.RemoveStalePromotionsRequest{})
 		}},

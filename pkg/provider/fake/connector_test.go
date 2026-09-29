@@ -7,6 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 )
@@ -24,7 +25,7 @@ func TestTheFakeRunsNoConnectorUntilATestGivesItATarget(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Install err = %v", err)
 	}
-	if at.URL != "https://box.example.com/.ocel/connector" || at.Compute != provider.ComputeContainer {
+	if at.URL != "https://box.example.com/"+constants.ProjectStateDirName+"/connector" || at.Compute != provider.ComputeContainer {
 		t.Errorf("address = %+v, want the box's connector path on container compute", at)
 	}
 	if installed := p.FakeConnector().Installed(); len(installed) != 1 || string(installed[0].Binary) != "connector" {
