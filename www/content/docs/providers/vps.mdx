@@ -255,9 +255,11 @@ recreates both. `ocel destroy` removes `ocel.yml`, then the switchboard, which t
 their network.
 
 A Traefik ocel writes to reaches a switchboard listener that takes every request as https for
-the `Host` it asked for, and hears no `X-Forwarded-*` header at all. Every other container on
-that network, which on Coolify and Dokploy means their apps and databases, can reach that
-listener too. Any of them can make a plaintext request your apps take as https, for a `Host` it
+the `Host` it asked for, and hears no `X-Forwarded-*` header at all. With `network`, every
+other container on that network, which on Coolify and Dokploy means their apps and databases,
+can reach that listener too. Without it, the listener sits on the `ocel` network and is
+published on `127.0.0.1:<port>`, so every process on the machine and every container on the
+`ocel` network can reach it. Any of them can make a plaintext request your apps take as https, for a `Host` it
 could send anyway. None of them can choose `X-Forwarded-Host` or `X-Forwarded-For`. This is
 the same kind of concession `manual` makes to every process on the machine.
 
