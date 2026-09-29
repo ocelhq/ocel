@@ -374,21 +374,15 @@ func TestPlanDestroyTakesDownEveryBindingTheStackRecorded(t *testing.T) {
 
 type withFunctions struct {
 	*buckets
-	removed          []provider.Function
-	removedRevisions []provider.Function
+	removed []provider.Function
 }
 
 func (w *withFunctions) hooks() resources.Hooks {
 	hooks := w.buckets.hooks()
 	hooks.Functions = &resources.FunctionHooks{
-		Provision: w.ProvisionFunctions, Remove: w.RemoveFunctions, RemoveRevisions: w.RemoveFunctionRevisions,
+		Provision: w.ProvisionFunctions, Remove: w.RemoveFunctions,
 	}
 	return hooks
-}
-
-func (w *withFunctions) RemoveFunctionRevisions(_ context.Context, _ provider.StackRef, functions []provider.Function, _ progress.Progress) error {
-	w.removedRevisions = append(w.removedRevisions, functions...)
-	return nil
 }
 
 func (w *withFunctions) ProvisionFunctions(_ context.Context, spec provider.StackSpec, _ progress.Progress) ([]provider.Function, error) {
@@ -496,22 +490,16 @@ func TestAReleaseDeclaringNoAppTakesDownTheFunctionsItsPlanShowsGoing(t *testing
 
 type withContainers struct {
 	*buckets
-	provisioned      []provider.StackSpec
-	removed          []provider.AppContainer
-	removedRevisions []provider.AppContainer
+	provisioned []provider.StackSpec
+	removed     []provider.AppContainer
 }
 
 func (w *withContainers) hooks() resources.Hooks {
 	hooks := w.buckets.hooks()
 	hooks.Containers = &resources.ContainerHooks{
-		Provision: w.ProvisionContainers, Remove: w.RemoveContainers, RemoveRevisions: w.RemoveContainerRevisions,
+		Provision: w.ProvisionContainers, Remove: w.RemoveContainers,
 	}
 	return hooks
-}
-
-func (w *withContainers) RemoveContainerRevisions(_ context.Context, _ provider.StackRef, containers []provider.AppContainer, _ progress.Progress) error {
-	w.removedRevisions = append(w.removedRevisions, containers...)
-	return nil
 }
 
 func (w *withContainers) ProvisionContainers(_ context.Context, spec provider.StackSpec, _ progress.Progress) ([]provider.AppContainer, error) {
