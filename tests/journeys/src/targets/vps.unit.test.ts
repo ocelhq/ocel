@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { REDACTED } from "../checks/context";
 import {
+  appOrigin,
   boxLane,
   entryFile,
   heldProbe,
@@ -24,6 +25,12 @@ describe("boxLane", () => {
 
   it("refuses an answer it cannot read rather than guessing a box is disposable", () => {
     expect(() => boxLane("")).toThrow(/whether it runs under incus/);
+  });
+});
+
+describe("appOrigin", () => {
+  it("names the app's own hostname behind the box edge, never the forwarder's loopback port", () => {
+    expect(appOrigin("web-j-1-deploy-node.localhost")).toBe("http://web-j-1-deploy-node.localhost");
   });
 });
 

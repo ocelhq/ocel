@@ -110,6 +110,10 @@ export function boxLane(said: string): Lane {
   );
 }
 
+export function appOrigin(hostname: string): string {
+  return `http://${hostname}`;
+}
+
 export function hostnamesWithoutUrl(said: string, hostnames: string[]): string[] {
   return hostnames.filter(
     (hostname) => !new RegExp(`https://${hostname.replaceAll(".", "\\.")}(?![\\w.-])`).test(said),
@@ -628,7 +632,8 @@ export class VpsTarget implements Target, ReleaseCycle {
   private async deployment(cell: CellUnderTest, session: BoxSession): Promise<Deployment> {
     const urls = new Map<string, string>();
     for (const [app, hostname] of this.hostnamesOf(cell)) {
-      urls.set(app, await session.gateway.serving(hostname));
+      await session.gateway.serving(hostname);
+      urls.set(app, appOrigin(hostname));
     }
     await cell.evidence.write(
       "deploy",
