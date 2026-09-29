@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/declare"
+	"github.com/ocelhq/ocel/cli/internal/declaration"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
@@ -14,7 +14,7 @@ func TestDeclarations(t *testing.T) {
 	t.Run("maps resource fields", func(t *testing.T) {
 		t.Parallel()
 
-		resources := []declare.Resource{
+		resources := []declaration.Resource{
 			{
 				Name:     "main",
 				Type:     resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
@@ -43,7 +43,7 @@ func TestDeclarations(t *testing.T) {
 		t.Parallel()
 
 		configDir := t.TempDir()
-		resources := []declare.Resource{{
+		resources := []declaration.Resource{{
 			Name:   "main",
 			Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 			Source: filepath.Join(configDir, "shared", "db.ts") + ":3",

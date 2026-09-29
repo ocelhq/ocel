@@ -26,9 +26,9 @@ func TestDeployPathIsolation(t *testing.T) {
 		})
 	}
 
-	t.Run("deploycollector cannot read the dotfile itself", func(t *testing.T) {
+	t.Run("declaration cannot read the dotfile itself", func(t *testing.T) {
 		t.Parallel()
-		const pkg = "github.com/ocelhq/ocel/cli/internal/deploycollector"
+		const pkg = "github.com/ocelhq/ocel/cli/internal/declaration"
 		for _, dep := range list(t, "-f", `{{join .Imports "\n"}}`, pkg) {
 			if dep == self {
 				t.Errorf("%s imports %s directly — the dotfile belongs to config evaluation, never to collection", pkg, self)

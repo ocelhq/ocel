@@ -19,7 +19,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/attribution"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
-	"github.com/ocelhq/ocel/cli/internal/declare"
+	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
@@ -119,7 +119,7 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 	return manifest, inline, nil
 }
 
-func assembleManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, declarations *variables.Declarations, phase *events.Scope, resources []declare.Resource, appValues map[string][]manifestbuilder.Variable, images map[string]string, compute, configName string) (*contractv1.Manifest, error) {
+func assembleManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, declarations *variables.Declarations, phase *events.Scope, resources []declaration.Resource, appValues map[string][]manifestbuilder.Variable, images map[string]string, compute, configName string) (*contractv1.Manifest, error) {
 	functions, err := deps.CollectAppFunctions(cfg.Dir)
 	if err != nil {
 		return nil, err
@@ -229,7 +229,7 @@ func (b *buildSteps) run(subject, title string, step func() error) error {
 	return err
 }
 
-func inlineRecords(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, declarations *variables.Declarations, resources []declare.Resource, scope *events.Scope) ([]inlinebinding.Record, error) {
+func inlineRecords(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, declarations *variables.Declarations, resources []declaration.Resource, scope *events.Scope) ([]inlinebinding.Record, error) {
 	values, err := declarations.ResolveBindingVariables(ctx)
 	if err != nil {
 		return nil, err
@@ -550,7 +550,7 @@ func detectedApps(functions []manifestbuilder.Function) []string {
 	return detected
 }
 
-func toAttributionDeclarations(resources []declare.Resource) []attribution.Declaration {
+func toAttributionDeclarations(resources []declaration.Resource) []attribution.Declaration {
 	decls := make([]attribution.Declaration, len(resources))
 	for i, r := range resources {
 		decls[i] = attribution.Declaration{Type: r.Type, Name: r.Name, Source: r.Source}

@@ -1,4 +1,4 @@
-package declare
+package declaration
 
 import (
 	"fmt"

@@ -20,7 +20,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/appimages"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console"
-	"github.com/ocelhq/ocel/cli/internal/deploycollector"
+	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -54,7 +54,7 @@ func NewDeps() cmddeps.Deps {
 		ProbePostgres:       fakeProbePostgres,
 		ProbeBucket:         fakeProbeBucket,
 		DeploymentID:        appbuilder.DeploymentID,
-		CollectDeclarations: deploycollector.PrepareAndCollect,
+		CollectDeclarations: declaration.Collect,
 		ServeVariableEditor: projecteditor.Serve,
 		DiscoverPRNumber:    func() string { return os.Getenv("OCEL_PR_NUMBER") },
 		StdinIsTerminal:     func(io.Reader) bool { return false },

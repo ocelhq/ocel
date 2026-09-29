@@ -1,4 +1,4 @@
-package declare
+package declaration
 
 import (
 	"testing"
@@ -6,7 +6,7 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
-func TestParse(t *testing.T) {
+func TestParseKeepsTheTypedConfigAndRefusesAMalformedDeclaration(t *testing.T) {
 	t.Parallel()
 
 	rejects := []struct {

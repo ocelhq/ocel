@@ -54,7 +54,7 @@ func (e *envValues) forgetDeclarations() {
 	e.declarations = variables.NewDeclarations(e.store, e.scope)
 }
 
-func (e *envValues) declare(ctx context.Context, req *resourcesv1.DeclareEnvRequest) (*resourcesv1.DeclareEnvResponse, error) {
+func (e *envValues) DeclareEnv(ctx context.Context, req *resourcesv1.DeclareEnvRequest) (*resourcesv1.DeclareEnvResponse, error) {
 	e.declaring.Lock()
 	defer e.declaring.Unlock()
 
@@ -67,6 +67,13 @@ func (e *envValues) declare(ctx context.Context, req *resourcesv1.DeclareEnvRequ
 		return nil, err
 	}
 	return declarations.DeclareEnv(ctx, req)
+}
+
+func (e *envValues) ReportEnvProblems(ctx context.Context, req *resourcesv1.ReportEnvProblemsRequest) (*resourcesv1.ReportEnvProblemsResponse, error) {
+	if _, declarations := e.current(); declarations != nil {
+		return declarations.ReportEnvProblems(ctx, req)
+	}
+	return &resourcesv1.ReportEnvProblemsResponse{}, nil
 }
 
 func (e *envValues) secretKeys() []string {

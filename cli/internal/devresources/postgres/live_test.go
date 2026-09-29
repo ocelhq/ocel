@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/declare"
+	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 	"github.com/ocelhq/ocel/cli/internal/devresources/postgres"
 )
@@ -31,7 +31,7 @@ func TestDockerDeclaredDatabasesComeUpAndKeepTheirDataAcrossRuns(t *testing.T) {
 	})
 
 	first := postgres.New(docker.Open, t.TempDir())
-	resolved, err := first.Resolve(ctx, project, []declare.Resource{declared("main", "17"), declared("audit log", "17")})
+	resolved, err := first.Resolve(ctx, project, []declaration.Resource{declared("main", "17"), declared("audit log", "17")})
 	if err != nil {
 		t.Fatalf("Resolve = %v", err)
 	}
@@ -53,7 +53,7 @@ func TestDockerDeclaredDatabasesComeUpAndKeepTheirDataAcrossRuns(t *testing.T) {
 
 	second := postgres.New(docker.Open, t.TempDir())
 	t.Cleanup(func() { _ = second.Close(ctx, true) })
-	again, err := second.Resolve(ctx, project, []declare.Resource{declared("audit log", "17")})
+	again, err := second.Resolve(ctx, project, []declaration.Resource{declared("audit log", "17")})
 	if err != nil {
 		t.Fatalf("Resolve on a second run = %v", err)
 	}

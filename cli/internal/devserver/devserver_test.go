@@ -15,7 +15,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/cli/internal/declare"
+	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/devresources/binding"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/channel"
@@ -27,12 +27,12 @@ import (
 
 type fakeResources struct {
 	mu      sync.Mutex
-	asked   [][]declare.Resource
-	resolve func([]declare.Resource) ([]binding.Resolved, error)
+	asked   [][]declaration.Resource
+	resolve func([]declaration.Resource) ([]binding.Resolved, error)
 	mounted bool
 }
 
-func (f *fakeResources) Resolve(_ context.Context, resources []declare.Resource) ([]binding.Resolved, error) {
+func (f *fakeResources) Resolve(_ context.Context, resources []declaration.Resource) ([]binding.Resolved, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.asked = append(f.asked, resources)
@@ -249,7 +249,7 @@ func TestDeclare(t *testing.T) {
 		t.Parallel()
 		s := newDevServer(&fakeResources{})
 
-		_, err := s.Declare(context.Background(), &resourcesv1.DeclareRequest{
+		_, err := s.declarations.Declare(context.Background(), &resourcesv1.DeclareRequest{
 			Resource: &resourcesv1.ResourceIdentifier{Name: "main"},
 		})
 		if err == nil {
@@ -325,7 +325,7 @@ func TestSync(t *testing.T) {
 
 	t.Run("propagates what the dev resources refused", func(t *testing.T) {
 		t.Parallel()
-		s := newDevServer(&fakeResources{resolve: func([]declare.Resource) ([]binding.Resolved, error) {
+		s := newDevServer(&fakeResources{resolve: func([]declaration.Resource) ([]binding.Resolved, error) {
 			return nil, errors.New("boom")
 		}})
 		url := serve(t, s)

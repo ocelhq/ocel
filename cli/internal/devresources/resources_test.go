@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/declare"
+	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/devresources"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker/dockertest"
@@ -15,8 +15,8 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
-func postgres(name string) declare.Resource {
-	return declare.Resource{Name: name, Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Postgres: &resourcesv1.PostgresConfig{Version: "17"}}
+func postgres(name string) declaration.Resource {
+	return declaration.Resource{Name: name, Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Postgres: &resourcesv1.PostgresConfig{Version: "17"}}
 }
 
 func TestEveryBindableResourceTypeHasABackend(t *testing.T) {
@@ -30,7 +30,7 @@ func TestEveryBindableResourceTypeHasABackend(t *testing.T) {
 			continue
 		}
 		stack := devresources.New("shop", devresources.Options{Open: (&dockertest.Engine{}).OpenFunc(), StateDir: t.TempDir()})
-		_, err := stack.Resolve(interrupted, []declare.Resource{{Name: "declared", Type: kind}})
+		_, err := stack.Resolve(interrupted, []declaration.Resource{{Name: "declared", Type: kind}})
 		if err != nil && strings.Contains(err.Error(), "serves no") {
 			t.Errorf("%s can be declared and no backend serves it in dev: %v", kind, err)
 		}
@@ -66,7 +66,7 @@ func TestResolve(t *testing.T) {
 		stack := devresources.New("shop", devresources.Options{Open: engine.OpenFunc(), StateDir: t.TempDir(), Stdout: &out})
 
 		for range 2 {
-			resolved, err := stack.Resolve(context.Background(), []declare.Resource{postgres("main")})
+			resolved, err := stack.Resolve(context.Background(), []declaration.Resource{postgres("main")})
 			if err != nil {
 				t.Fatalf("Resolve = %v", err)
 			}
@@ -87,7 +87,7 @@ func TestResolve(t *testing.T) {
 			return nil, &docker.Unreachable{Address: "unix:///var/run/docker.sock", Err: errors.New("connect: no such file or directory")}
 		}})
 
-		_, err := stack.Resolve(context.Background(), []declare.Resource{postgres("main")})
+		_, err := stack.Resolve(context.Background(), []declaration.Resource{postgres("main")})
 		if err == nil {
 			t.Fatal("Resolve = nil with no docker daemon")
 		}
@@ -103,7 +103,7 @@ func TestResolve(t *testing.T) {
 
 		engine := &dockertest.Engine{}
 		stack := devresources.New("shop", devresources.Options{Open: engine.OpenFunc(), StateDir: t.TempDir()})
-		if _, err := stack.Resolve(context.Background(), []declare.Resource{postgres("main")}); err != nil {
+		if _, err := stack.Resolve(context.Background(), []declaration.Resource{postgres("main")}); err != nil {
 			t.Fatalf("Resolve = %v", err)
 		}
 		if err := stack.Close(context.Background()); err != nil {
@@ -123,7 +123,7 @@ func TestTwoProcessesOfOneProjectShareTheStackAndTheLastOneOutStopsIt(t *testing
 	first := devresources.New("shop", devresources.Options{Open: engine.OpenFunc(), StateDir: state})
 	second := devresources.New("shop", devresources.Options{Open: engine.OpenFunc(), StateDir: state})
 	for _, stack := range []*devresources.Resources{first, second} {
-		if _, err := stack.Resolve(context.Background(), []declare.Resource{postgres("main")}); err != nil {
+		if _, err := stack.Resolve(context.Background(), []declaration.Resource{postgres("main")}); err != nil {
 			t.Fatalf("Resolve = %v", err)
 		}
 	}
@@ -151,7 +151,7 @@ func TestReset(t *testing.T) {
 		state := t.TempDir()
 		engine := &dockertest.Engine{}
 		stack := devresources.New("shop-1a2b", devresources.Options{Open: engine.OpenFunc(), StateDir: state})
-		first, err := stack.Resolve(context.Background(), []declare.Resource{postgres("main")})
+		first, err := stack.Resolve(context.Background(), []declaration.Resource{postgres("main")})
 		if err != nil {
 			t.Fatalf("Resolve = %v", err)
 		}
@@ -166,7 +166,7 @@ func TestReset(t *testing.T) {
 			t.Fatalf("wiped %v, want exactly what is labelled with this project", engine.Wiped)
 		}
 
-		again, err := devresources.New("shop-1a2b", devresources.Options{Open: engine.OpenFunc(), StateDir: state}).Resolve(context.Background(), []declare.Resource{postgres("main")})
+		again, err := devresources.New("shop-1a2b", devresources.Options{Open: engine.OpenFunc(), StateDir: state}).Resolve(context.Background(), []declaration.Resource{postgres("main")})
 		if err != nil {
 			t.Fatalf("Resolve after Reset = %v", err)
 		}
@@ -181,7 +181,7 @@ func TestReset(t *testing.T) {
 		state := t.TempDir()
 		engine := &dockertest.Engine{}
 		stack := devresources.New("shop", devresources.Options{Open: engine.OpenFunc(), StateDir: state})
-		if _, err := stack.Resolve(context.Background(), []declare.Resource{postgres("main")}); err != nil {
+		if _, err := stack.Resolve(context.Background(), []declaration.Resource{postgres("main")}); err != nil {
 			t.Fatalf("Resolve = %v", err)
 		}
 		t.Cleanup(func() { _ = stack.Close(context.Background()) })

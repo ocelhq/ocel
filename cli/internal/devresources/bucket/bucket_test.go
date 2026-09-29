@@ -11,7 +11,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/cli/internal/declare"
+	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/devresources/bucket"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker/dockertest"
@@ -20,8 +20,8 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
-func declared(name string, origins ...string) declare.Resource {
-	return declare.Resource{
+func declared(name string, origins ...string) declaration.Resource {
+	return declaration.Resource{
 		Name:   name,
 		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET,
 		Bucket: &resourcesv1.BucketConfig{AllowedOrigins: origins},
@@ -34,7 +34,7 @@ func resolveInterrupted(t *testing.T, backend *bucket.Backend, project string) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := backend.Resolve(ctx, project, []declare.Resource{declared("uploads")}); err == nil {
+	if _, err := backend.Resolve(ctx, project, []declaration.Resource{declared("uploads")}); err == nil {
 		t.Fatal("Resolve = nil against a store that is not there")
 	}
 }

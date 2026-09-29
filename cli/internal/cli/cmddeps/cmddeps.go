@@ -10,7 +10,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/console"
-	"github.com/ocelhq/ocel/cli/internal/declare"
+	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
@@ -33,7 +33,7 @@ type Deps struct {
 	BuildAppImages      func(ctx context.Context, cfg *projectconfig.Config, archs map[string]string, out appbuilder.Output) (map[string]string, error)
 	CollectAppFunctions func(projectDir string) ([]manifestbuilder.Function, error)
 	DeploymentID        func(projectDir, app string) (string, error)
-	CollectDeclarations func(ctx context.Context, cfg *projectconfig.Config, declarations *variables.Declarations, stdout, stderr io.Writer) ([]declare.Resource, error)
+	CollectDeclarations func(ctx context.Context, cfg *projectconfig.Config, declarations *variables.Declarations, stdout, stderr io.Writer) ([]declaration.Resource, error)
 	OpenBrowser         func(url string) error
 	ProbePostgres       inlinebinding.PostgresProbe
 	ProbeBucket         inlinebinding.BucketProbe

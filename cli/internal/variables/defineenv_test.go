@@ -11,13 +11,13 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
-	"github.com/ocelhq/ocel/cli/internal/deploycollector"
+	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
-func TestDefineEnvDeclaresThroughTheDeployCollector(t *testing.T) {
+func TestDefineEnvDeclaresThroughDeclarationCollection(t *testing.T) {
 	t.Run("declares through the real wire into the declarations", func(t *testing.T) {
 		root := setUpFixture(t, envFixture)
 
@@ -153,7 +153,7 @@ func runDiscovery(t *testing.T, root string, declarations *variables.Declaration
 	}
 
 	var stdout, stderr strings.Builder
-	if _, err := deploycollector.PrepareAndCollect(context.Background(), cfg, declarations, &stdout, &stderr); err != nil {
+	if _, err := declaration.Collect(context.Background(), cfg, declarations, &stdout, &stderr); err != nil {
 		t.Fatalf("discovery: %v\nstdout: %s\nstderr: %s", err, stdout.String(), stderr.String())
 	}
 }

@@ -13,7 +13,7 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 
-	"github.com/ocelhq/ocel/cli/internal/declare"
+	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/devresources/bucket"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
@@ -60,7 +60,7 @@ func startLive(t *testing.T, project string) liveBucket {
 		_ = engine.Close()
 	})
 
-	resolved, err := backend.Resolve(ctx, project, []declare.Resource{declared("User Uploads")})
+	resolved, err := backend.Resolve(ctx, project, []declaration.Resource{declared("User Uploads")})
 	if err != nil {
 		t.Fatalf("Resolve = %v", err)
 	}
@@ -232,7 +232,7 @@ func TestDockerTheAppsOriginIsReadAgainOnEverySync(t *testing.T) {
 		t.Fatalf("%s may upload before the app ever ran there", moved)
 	}
 	*live.origins = []string{moved}
-	if _, err := live.backend.Resolve(context.Background(), live.project, []declare.Resource{declared("User Uploads")}); err != nil {
+	if _, err := live.backend.Resolve(context.Background(), live.project, []declaration.Resource{declared("User Uploads")}); err != nil {
 		t.Fatalf("Resolve = %v", err)
 	}
 	if got := allowed(moved); got != moved {

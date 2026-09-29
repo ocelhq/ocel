@@ -2,7 +2,7 @@ package manifestwire
 
 import (
 	"github.com/ocelhq/ocel/cli/internal/attribution"
-	"github.com/ocelhq/ocel/cli/internal/declare"
+	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 )
@@ -11,7 +11,7 @@ func Framework(framework projectconfig.Framework) manifestbuilder.Framework {
 	return manifestbuilder.Framework{Name: framework.Name, Arch: framework.Arch}
 }
 
-func Declarations(configDir string, resources []declare.Resource) []manifestbuilder.Declaration {
+func Declarations(configDir string, resources []declaration.Resource) []manifestbuilder.Declaration {
 	decls := make([]manifestbuilder.Declaration, len(resources))
 	for i, r := range resources {
 		var source string

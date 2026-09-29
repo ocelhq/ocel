@@ -1,4 +1,4 @@
-package deploycollector
+package declaration
 
 import (
 	"bytes"
@@ -19,7 +19,7 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
-func TestCollect(t *testing.T) {
+func TestCollectReturnsEveryResourceTheProgramDeclares(t *testing.T) {
 	t.Run("a project with no discovery directory declares nothing and does not fail", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("uses a POSIX-style fixture entrypoint")
@@ -31,7 +31,7 @@ func TestCollect(t *testing.T) {
 		}
 
 		var stdout, stderr bytes.Buffer
-		resources, err := PrepareAndCollect(context.Background(), cfg, variables.NewDeclarations(emptyValues{}, variables.Scope{}), &stdout, &stderr)
+		resources, err := Collect(context.Background(), cfg, variables.NewDeclarations(emptyValues{}, variables.Scope{}), &stdout, &stderr)
 		if err != nil {
 			t.Fatalf("Collect: %v; stderr=%s", err, stderr.String())
 		}
@@ -80,7 +80,7 @@ export {};
 		}
 
 		var stdout, stderr bytes.Buffer
-		resources, err := PrepareAndCollect(context.Background(), cfg, variables.NewDeclarations(emptyValues{}, variables.Scope{}), &stdout, &stderr)
+		resources, err := Collect(context.Background(), cfg, variables.NewDeclarations(emptyValues{}, variables.Scope{}), &stdout, &stderr)
 		if err != nil {
 			t.Fatalf("Collect: %v; stderr=%s", err, stderr.String())
 		}
@@ -106,7 +106,7 @@ export {};
 	})
 }
 
-func TestACallToTheCollectorThatIsNotTheChildsIsRefused(t *testing.T) {
+func TestADeclarationThatIsNotTheChildsIsRefused(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a POSIX-style fixture entrypoint")
 	}
@@ -157,7 +157,7 @@ export {};
 	}
 
 	var stdout, stderr bytes.Buffer
-	resources, err := PrepareAndCollect(context.Background(), cfg, variables.NewDeclarations(emptyValues{}, variables.Scope{}), &stdout, &stderr)
+	resources, err := Collect(context.Background(), cfg, variables.NewDeclarations(emptyValues{}, variables.Scope{}), &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("Collect: %v; stderr=%s", err, stderr.String())
 	}
@@ -171,14 +171,14 @@ export {};
 		t.Fatalf("unmarshal %q: %v", raw, err)
 	}
 	if want := []int{403, 403, 403, 200}; !slices.Equal(got, want) {
-		t.Errorf("statuses = %v, want %v: only the child with the token, from the collector's own origin, may declare", got, want)
+		t.Errorf("statuses = %v, want %v: only the child with the token, from the declaration server's own origin, may declare", got, want)
 	}
 	if len(resources) != 1 {
 		t.Fatalf("Collect() returned %d resources, want only the one declare that sent the token: %+v", len(resources), resources)
 	}
 }
 
-func TestCollectRunsTheBundlePrepareAlreadyBuilt(t *testing.T) {
+func TestCollectPreparedRunsTheBundlePrepareAlreadyBuilt(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a POSIX-style fixture entrypoint")
 	}
@@ -191,8 +191,8 @@ func TestCollectRunsTheBundlePrepareAlreadyBuilt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Prepare: %v", err)
 	}
-	if prepared.Fingerprint() == "" {
-		t.Fatal("Fingerprint() is empty, want the hash of the bundle Prepare built")
+	if prepared.Entry() == "" {
+		t.Fatal("Entry() is empty, want the bundle Prepare built")
 	}
 
 	writeFile(t, filepath.Join(root, constants.ProjectStateDirName, "entry.mjs"), `
@@ -207,7 +207,7 @@ await fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.`+c
 `)
 
 	var stdout, stderr bytes.Buffer
-	resources, err := Collect(context.Background(), cfg, variables.NewDeclarations(emptyValues{}, variables.Scope{}), prepared, &stdout, &stderr)
+	resources, err := CollectPrepared(context.Background(), cfg, variables.NewDeclarations(emptyValues{}, variables.Scope{}), prepared, &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("Collect: %v; stderr=%s", err, stderr.String())
 	}
@@ -253,7 +253,7 @@ export {};
 	}
 
 	var stdout, stderr bytes.Buffer
-	resources, err := PrepareAndCollect(context.Background(), cfg, variables.NewDeclarations(emptyValues{}, variables.Scope{}), &stdout, &stderr)
+	resources, err := Collect(context.Background(), cfg, variables.NewDeclarations(emptyValues{}, variables.Scope{}), &stdout, &stderr)
 	var mismatch *sdkversion.MismatchError
 	if !errors.As(err, &mismatch) {
 		t.Fatalf("Collect() = %+v, %v; want the SDK refused for its version; stderr=%s", resources, err, stderr.String())

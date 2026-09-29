@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/declare"
+	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/devresources"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 )
@@ -34,11 +34,11 @@ func TestDockerTwoProcessesOfOneProjectShareOnePostgres(t *testing.T) {
 		_ = first.Close(ctx)
 		_ = second.Close(ctx)
 	})
-	mine, err := first.Resolve(ctx, []declare.Resource{postgres("main")})
+	mine, err := first.Resolve(ctx, []declaration.Resource{postgres("main")})
 	if err != nil {
 		t.Fatalf("Resolve = %v", err)
 	}
-	theirs, err := second.Resolve(ctx, []declare.Resource{postgres("main")})
+	theirs, err := second.Resolve(ctx, []declaration.Resource{postgres("main")})
 	if err != nil {
 		t.Fatalf("Resolve while another process runs the same stack = %v", err)
 	}

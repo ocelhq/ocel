@@ -17,7 +17,7 @@ import (
 	connect "connectrpc.com/connect"
 	"github.com/gofrs/flock"
 
-	"github.com/ocelhq/ocel/cli/internal/declare"
+	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/devresources/binding"
 	"github.com/ocelhq/ocel/cli/internal/devresources/bucket"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
@@ -28,7 +28,7 @@ import (
 )
 
 type Backend interface {
-	Resolve(ctx context.Context, project string, resources []declare.Resource) ([]binding.Resolved, error)
+	Resolve(ctx context.Context, project string, resources []declaration.Resource) ([]binding.Resolved, error)
 	Routes(mux *http.ServeMux, guard func(http.Handler) http.Handler, options ...connect.HandlerOption)
 	Close(ctx context.Context, stopContainers bool) error
 }
@@ -125,9 +125,9 @@ func (r *Resources) Routes(mux *http.ServeMux, guard func(http.Handler) http.Han
 	}
 }
 
-func (r *Resources) Resolve(ctx context.Context, resources []declare.Resource) ([]binding.Resolved, error) {
+func (r *Resources) Resolve(ctx context.Context, resources []declaration.Resource) ([]binding.Resolved, error) {
 	var kinds []resourcesv1.ResourceType
-	byKind := map[resourcesv1.ResourceType][]declare.Resource{}
+	byKind := map[resourcesv1.ResourceType][]declaration.Resource{}
 	for _, resource := range resources {
 		if _, served := r.backends[resource.Type]; !served {
 			return nil, fmt.Errorf("%s %q: ocel dev serves no %s", label(resource.Type), resource.Name, resource.Type)

@@ -18,7 +18,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/cli/internal/declare"
+	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/devresources/binding"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 	"github.com/ocelhq/ocel/cli/internal/devresources/secret"
@@ -59,7 +59,7 @@ func New(open docker.OpenFunc, secretsDir string, appOrigins func() []string) *B
 	return &Backend{open: open, secretsDir: secretsDir, appOrigins: appOrigins, buckets: map[string][]string{}}
 }
 
-func (c *Backend) Resolve(ctx context.Context, project string, resources []declare.Resource) ([]binding.Resolved, error) {
+func (c *Backend) Resolve(ctx context.Context, project string, resources []declaration.Resource) ([]binding.Resolved, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -104,7 +104,7 @@ func bucketName(resource string) string {
 	return strings.Trim("dev-"+readable, "-") + "-" + hex.EncodeToString(sum[:4])
 }
 
-func bind(resource declare.Resource, name string) (binding.Resolved, error) {
+func bind(resource declaration.Resource, name string) (binding.Resolved, error) {
 	return binding.Encode(resource.Type, &bindingsv1.Binding{
 		Name:       resource.Name,
 		Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: name}},

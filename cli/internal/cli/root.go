@@ -26,7 +26,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/login"
 	"github.com/ocelhq/ocel/cli/internal/cli/permissions"
 	"github.com/ocelhq/ocel/cli/internal/console"
-	"github.com/ocelhq/ocel/cli/internal/deploycollector"
+	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
@@ -140,7 +140,7 @@ func newDeps() cmddeps.Deps {
 		ProbePostgres:       inlinebinding.ProbePostgres,
 		ProbeBucket:         inlinebinding.ProbeBucket,
 		DeploymentID:        appbuilder.DeploymentID,
-		CollectDeclarations: deploycollector.PrepareAndCollect,
+		CollectDeclarations: declaration.Collect,
 		OpenBrowser:         browser.OpenURL,
 		ServeVariableEditor: projecteditor.Serve,
 		CurrentGitBranch:    gitBranch,

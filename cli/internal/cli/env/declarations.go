@@ -5,8 +5,8 @@ import (
 	"io"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/declcache"
-	"github.com/ocelhq/ocel/cli/internal/deploycollector"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
@@ -18,11 +18,16 @@ import (
 )
 
 func declaredVariables(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, prov *providerclient.Provider, key string, opts envOptions, run *events.Run) ([]*resourcesv1.VariableDefinition, []*resourcesv1.GroupDefinition, error) {
-	prepared, err := deploycollector.Prepare(cfg)
+	prepared, err := declaration.Prepare(cfg)
 	if err != nil {
 		return nil, nil, err
 	}
-	fingerprint := prepared.Fingerprint()
+	var fingerprint string
+	if prepared.Entry() != "" {
+		if fingerprint, err = declcache.ContentHash(prepared.Entry()); err != nil {
+			return nil, nil, err
+		}
+	}
 
 	cache, cacheErr := declcache.Open()
 	if cacheErr == nil {
@@ -33,7 +38,7 @@ func declaredVariables(ctx context.Context, deps cmddeps.Deps, cfg *projectconfi
 
 	declarations := projectDeclarations(cfg, prov, opts)
 	err = collecting(run, cfg, func(output io.Writer) error {
-		_, err := deploycollector.Collect(ctx, cfg, declarations, prepared, io.Discard, output)
+		_, err := declaration.CollectPrepared(ctx, cfg, declarations, prepared, io.Discard, output)
 		return err
 	})
 	if err != nil {
@@ -63,7 +68,7 @@ func withImpliedDeclarations(cfg *projectconfig.Config, opts envOptions, definit
 func discoverVariables(ctx context.Context, cfg *projectconfig.Config, prov *providerclient.Provider, opts envOptions, run *events.Run) (*variables.Declarations, error) {
 	declarations := projectDeclarations(cfg, prov, opts)
 	err := collecting(run, cfg, func(output io.Writer) error {
-		_, err := deploycollector.PrepareAndCollect(ctx, cfg, declarations, io.Discard, output)
+		_, err := declaration.Collect(ctx, cfg, declarations, io.Discard, output)
 		return err
 	})
 	if err != nil {

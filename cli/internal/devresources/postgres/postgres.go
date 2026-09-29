@@ -15,7 +15,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/cli/internal/declare"
+	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/devresources/binding"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 	"github.com/ocelhq/ocel/cli/internal/devresources/secret"
@@ -50,7 +50,7 @@ func New(open docker.OpenFunc, secretsDir string) *Backend {
 	return &Backend{open: open, secretsDir: secretsDir, servers: map[string]*server{}}
 }
 
-func (c *Backend) Resolve(ctx context.Context, project string, resources []declare.Resource) ([]binding.Resolved, error) {
+func (c *Backend) Resolve(ctx context.Context, project string, resources []declaration.Resource) ([]binding.Resolved, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -150,7 +150,7 @@ func ensureDatabase(ctx context.Context, engine docker.Engine, srv *server, name
 	return nil
 }
 
-func bind(resource declare.Resource, srv *server) (binding.Resolved, error) {
+func bind(resource declaration.Resource, srv *server) (binding.Resolved, error) {
 	host, rawPort, err := net.SplitHostPort(srv.container.Address)
 	if err != nil {
 		return binding.Resolved{}, err
