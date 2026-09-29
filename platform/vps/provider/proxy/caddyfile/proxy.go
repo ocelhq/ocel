@@ -19,12 +19,16 @@ func (c Caddyfile) File() string { return filepath.Join(c.Directory, FileName) }
 func (Caddyfile) Unrendered([]byte, proxy.Permission) string { return "" }
 
 func (c Caddyfile) RefuseRouted(ctx context.Context, hostnames []string) error {
+	placed, err := c.Box.Claimed(ctx)
+	if err != nil {
+		return err
+	}
 	sites, err := c.sites(ctx)
 	if err != nil {
 		return err
 	}
 	for _, hostname := range hostnames {
-		if theirs, host, taken := collision(sites, hostname); taken {
+		if theirs, host, taken := collision(sites, placed, hostname); taken {
 			return refusal.Refuse(refusal.CodeBusy,
 				"%s is already served by %s: %s matches host %s\n"+
 					"Ocel never takes a hostname your Caddy serves; remove it from that site and reload your Caddy, or bind another hostname",

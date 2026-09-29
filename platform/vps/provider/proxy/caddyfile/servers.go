@@ -47,6 +47,19 @@ func (s site) String() string {
 	return fmt.Sprintf("server %s, route %d (%s)", s.server, s.route, strings.Join(s.hosts, ", "))
 }
 
+func (s site) isOcels(placed []string) bool {
+	return s.reachesSwitchboard && len(placed) > 0 && slices.Equal(hostSet(s.hosts), hostSet(placed))
+}
+
+func hostSet(hosts []string) []string {
+	set := make([]string, 0, len(hosts))
+	for _, host := range hosts {
+		set = append(set, strings.ToLower(host))
+	}
+	slices.Sort(set)
+	return slices.Compact(set)
+}
+
 func (c Caddyfile) adminReading() []string {
 	if c.Container == "" {
 		return []string{"curl", "-fsS", adminServers}
@@ -123,9 +136,9 @@ func (s site) covering(hostname string) (string, bool) {
 	return "", false
 }
 
-func collision(sites []site, hostname string) (site, string, bool) {
+func collision(sites []site, placed []string, hostname string) (site, string, bool) {
 	for _, each := range sites {
-		if each.reachesSwitchboard {
+		if each.isOcels(placed) {
 			continue
 		}
 		if host, covered := each.covering(hostname); covered {

@@ -144,3 +144,17 @@ func TestInspectStopsAtAnAdminEndpointThatDoesNotAnswer(t *testing.T) {
 		t.Errorf("admin endpoint = %+v, want it failed with what the read met", check)
 	}
 }
+
+func TestInspectDoesNotTakeASiteOfYoursProxyingToTheSwitchboardForOcelsImport(t *testing.T) {
+	t.Parallel()
+
+	machine, front := servingCoolify(t)
+	machine.said[caddyfile.AdminServers] = sameUpstream(append(slices.Clone(coolifyServed), "mine.p1305.test"))
+	checks := checked(t, front)
+	if check := checks["import of /data/coolify/proxy/caddy/dynamic/ocel.caddy"]; check.Verdict != provider.HostFail {
+		t.Errorf("import = %+v, want it failed: the only route to the switchboard is a site of yours that serves more than ocel placed", check)
+	}
+	if check := checks["hostnames your Caddy also serves"]; check.Verdict != provider.HostFail || !strings.Contains(check.Finding, "shop.p1305.test") {
+		t.Errorf("collisions = %+v, want it failed naming shop.p1305.test, which a site of yours serves", check)
+	}
+}
