@@ -25,7 +25,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/devstack"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
-	"github.com/ocelhq/ocel/cli/internal/exitsig"
+	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
 	"github.com/ocelhq/ocel/cli/internal/variables"
@@ -381,10 +381,10 @@ func runFollower(ctx context.Context, deps cmddeps.Deps, running leader.Leader, 
 		case <-streamDone:
 			child.Stop()
 			if ctx.Err() != nil {
-				return &exitsig.ExitError{Code: exitsig.InterruptCode}
+				return &exitcode.ExitError{Code: exitcode.Interrupt}
 			}
 			fmt.Fprintln(stderr, "Leader disconnected. Restart `ocel dev` in the leader's terminal, then re-run this command.")
-			return &exitsig.ExitError{Code: 1}
+			return &exitcode.ExitError{Code: 1}
 		}
 	}
 }
@@ -400,7 +400,7 @@ func startAppChild(ctx context.Context, deps cmddeps.Deps, appArgs []string, env
 
 func appExitError(ctx context.Context, err error) error {
 	if ctx.Err() != nil {
-		return &exitsig.ExitError{Code: exitsig.InterruptCode}
+		return &exitcode.ExitError{Code: exitcode.Interrupt}
 	}
 	return waitExitError(err)
 }
@@ -411,7 +411,7 @@ func waitExitError(err error) error {
 	}
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
-		return &exitsig.ExitError{Code: childprocess.ExitCode(exitErr)}
+		return &exitcode.ExitError{Code: childprocess.ExitCode(exitErr)}
 	}
 	return err
 }

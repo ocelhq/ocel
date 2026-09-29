@@ -1,16 +1,16 @@
-package exitsig
+package interrupt
 
 import (
 	"bytes"
 	"context"
-	"errors"
-	"fmt"
 	"os"
 	"strings"
 	"sync"
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/ocelhq/ocel/cli/internal/exitcode"
 )
 
 func fakeExit(t *testing.T) (exit func(int), calls func() []int) {
@@ -43,7 +43,7 @@ func fakeCall(t *testing.T) (call func(), callCount func() int) {
 		}
 }
 
-func TestInterruptHandlerFirstSignalCancelsContext(t *testing.T) {
+func TestHandleFirstSignalCancelsContext(t *testing.T) {
 	t.Parallel()
 
 	var stderr bytes.Buffer
@@ -52,7 +52,7 @@ func TestInterruptHandlerFirstSignalCancelsContext(t *testing.T) {
 	forceKill, forceKillCalls := fakeCall(t)
 	teardown, teardownCalls := fakeCall(t)
 
-	ctx, stop := InstallWithExit(context.Background(), &stderr, ch, time.Hour, teardown, forceKill, exit)
+	ctx, stop := handle(context.Background(), &stderr, ch, time.Hour, teardown, forceKill, exit)
 	defer stop()
 
 	select {
@@ -80,7 +80,7 @@ func TestInterruptHandlerFirstSignalCancelsContext(t *testing.T) {
 	}
 }
 
-func TestInterruptHandlerSecondSignalForcesExit(t *testing.T) {
+func TestHandleSecondSignalForcesExit(t *testing.T) {
 	t.Parallel()
 
 	var stderr bytes.Buffer
@@ -89,7 +89,7 @@ func TestInterruptHandlerSecondSignalForcesExit(t *testing.T) {
 	forceKill, forceKillCalls := fakeCall(t)
 	teardown, teardownCalls := fakeCall(t)
 
-	ctx, stop := InstallWithExit(context.Background(), &stderr, ch, time.Hour, teardown, forceKill, exit)
+	ctx, stop := handle(context.Background(), &stderr, ch, time.Hour, teardown, forceKill, exit)
 	defer stop()
 
 	ch <- os.Interrupt
@@ -100,8 +100,8 @@ func TestInterruptHandlerSecondSignalForcesExit(t *testing.T) {
 	if !waitFor(func() bool { return len(calls()) == 1 }, 2*time.Second) {
 		t.Fatalf("exit was not called after a second signal; calls = %v", calls())
 	}
-	if got := calls(); got[0] != InterruptCode {
-		t.Errorf("exit code = %d, want %d (the conventional interrupt status)", got[0], InterruptCode)
+	if got := calls(); got[0] != exitcode.Interrupt {
+		t.Errorf("exit code = %d, want %d (the conventional interrupt status)", got[0], exitcode.Interrupt)
 	}
 	if !strings.Contains(stderr.String(), "Interrupted again") {
 		t.Errorf("stderr = %q, want it to say a second interrupt happened", stderr.String())
@@ -114,7 +114,7 @@ func TestInterruptHandlerSecondSignalForcesExit(t *testing.T) {
 	}
 }
 
-func TestInterruptHandlerTerminateDoesNotCutTheWindowShort(t *testing.T) {
+func TestHandleTerminateDoesNotCutTheWindowShort(t *testing.T) {
 	t.Parallel()
 
 	var stderr bytes.Buffer
@@ -123,7 +123,7 @@ func TestInterruptHandlerTerminateDoesNotCutTheWindowShort(t *testing.T) {
 	forceKill, forceKillCalls := fakeCall(t)
 	teardown, teardownCalls := fakeCall(t)
 
-	ctx, stop := InstallWithExit(context.Background(), &stderr, ch, time.Hour, teardown, forceKill, exit)
+	ctx, stop := handle(context.Background(), &stderr, ch, time.Hour, teardown, forceKill, exit)
 	defer stop()
 
 	ch <- os.Interrupt
@@ -150,7 +150,7 @@ func TestInterruptHandlerTerminateDoesNotCutTheWindowShort(t *testing.T) {
 	}
 }
 
-func TestInterruptHandlerGracefulWindowExpiryForcesExit(t *testing.T) {
+func TestHandleGracefulWindowExpiryForcesExit(t *testing.T) {
 	t.Parallel()
 
 	var stderr bytes.Buffer
@@ -159,7 +159,7 @@ func TestInterruptHandlerGracefulWindowExpiryForcesExit(t *testing.T) {
 	forceKill, forceKillCalls := fakeCall(t)
 	teardown, teardownCalls := fakeCall(t)
 
-	ctx, stop := InstallWithExit(context.Background(), &stderr, ch, 20*time.Millisecond, teardown, forceKill, exit)
+	ctx, stop := handle(context.Background(), &stderr, ch, 20*time.Millisecond, teardown, forceKill, exit)
 	defer stop()
 
 	ch <- os.Interrupt
@@ -168,8 +168,8 @@ func TestInterruptHandlerGracefulWindowExpiryForcesExit(t *testing.T) {
 	if !waitFor(func() bool { return len(calls()) == 1 }, 2*time.Second) {
 		t.Fatalf("exit was not called after the graceful window expired; calls = %v", calls())
 	}
-	if got := calls(); got[0] != InterruptCode {
-		t.Errorf("exit code = %d, want %d", got[0], InterruptCode)
+	if got := calls(); got[0] != exitcode.Interrupt {
+		t.Errorf("exit code = %d, want %d", got[0], exitcode.Interrupt)
 	}
 	if strings.Contains(stderr.String(), "Interrupted again") {
 		t.Errorf("stderr = %q, want the expiry path not to accuse a single Ctrl-C of being a second interrupt", stderr.String())
@@ -185,7 +185,7 @@ func TestInterruptHandlerGracefulWindowExpiryForcesExit(t *testing.T) {
 	}
 }
 
-func TestInterruptHandlerStopPreventsForcedExit(t *testing.T) {
+func TestHandleStopPreventsForcedExit(t *testing.T) {
 	t.Parallel()
 
 	var stderr bytes.Buffer
@@ -194,7 +194,7 @@ func TestInterruptHandlerStopPreventsForcedExit(t *testing.T) {
 	forceKill, forceKillCalls := fakeCall(t)
 	teardown, teardownCalls := fakeCall(t)
 
-	ctx, stop := InstallWithExit(context.Background(), &stderr, ch, 20*time.Millisecond, teardown, forceKill, exit)
+	ctx, stop := handle(context.Background(), &stderr, ch, 20*time.Millisecond, teardown, forceKill, exit)
 
 	ch <- os.Interrupt
 	<-ctx.Done()
@@ -212,7 +212,7 @@ func TestInterruptHandlerStopPreventsForcedExit(t *testing.T) {
 	}
 }
 
-func TestInterruptHandlerStopIsSafeToCallTwice(t *testing.T) {
+func TestHandleStopIsSafeToCallTwice(t *testing.T) {
 	t.Parallel()
 
 	var stderr bytes.Buffer
@@ -221,42 +221,10 @@ func TestInterruptHandlerStopIsSafeToCallTwice(t *testing.T) {
 	forceKill, _ := fakeCall(t)
 	teardown, _ := fakeCall(t)
 
-	_, stop := InstallWithExit(context.Background(), &stderr, ch, time.Hour, teardown, forceKill, exit)
+	_, stop := handle(context.Background(), &stderr, ch, time.Hour, teardown, forceKill, exit)
 
 	stop()
 	stop()
-}
-
-func TestExitCodeMapsExitError(t *testing.T) {
-	t.Parallel()
-
-	code, ok := ExitCode(fmt.Errorf("build failed: %w", &ExitError{Code: 7}))
-	if !ok || code != 7 {
-		t.Errorf("ExitCode = (%d, %v), want (7, true)", code, ok)
-	}
-}
-
-func TestExitCodeMapsCancellationToInterrupt(t *testing.T) {
-	t.Parallel()
-
-	code, ok := ExitCode(fmt.Errorf("read ocel.config.ts: %w", context.Canceled))
-	if !ok || code != InterruptCode {
-		t.Errorf("ExitCode = (%d, %v), want (%d, true)", code, ok, InterruptCode)
-	}
-}
-
-func TestExitCodeLeavesOrdinaryErrorsAlone(t *testing.T) {
-	t.Parallel()
-
-	if code, ok := ExitCode(errors.New("boom")); ok {
-		t.Errorf("ExitCode = (%d, true), want no mapping so the error is printed and reported as 1", code)
-	}
-	if code, ok := ExitCode(context.DeadlineExceeded); ok {
-		t.Errorf("ExitCode = (%d, true), want a timeout not to look like a Ctrl-C", code)
-	}
-	if code, ok := ExitCode(nil); ok {
-		t.Errorf("ExitCode = (%d, true), want no mapping for a nil error", code)
-	}
 }
 
 func TestForcedExitTearsTheUIDownBeforeAnythingElseTouchesTheTerminal(t *testing.T) {
@@ -275,7 +243,7 @@ func TestForcedExitTearsTheUIDownBeforeAnythingElseTouchesTheTerminal(t *testing
 	ch := make(chan os.Signal, 2)
 	exit, calls := fakeExit(t)
 
-	ctx, stop := InstallWithExit(context.Background(), recordingWriter{record: record("stderr")}, ch, time.Hour, record("teardown"), record("forceKill"), exit)
+	ctx, stop := handle(context.Background(), recordingWriter{record: record("stderr")}, ch, time.Hour, record("teardown"), record("forceKill"), exit)
 	defer stop()
 
 	ch <- os.Interrupt

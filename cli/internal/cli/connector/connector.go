@@ -14,7 +14,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/events"
-	"github.com/ocelhq/ocel/cli/internal/exitsig"
+	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/pkg/connectorserver"
@@ -53,7 +53,7 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 		Example: "  $ ocel connector add --config ocel.vps.json\n  $ ocel connector status\n  $ ocel connector rm --config ocel.vps.json",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			_ = cmd.Help()
-			return &exitsig.ExitError{Code: 1}
+			return &exitcode.ExitError{Code: 1}
 		},
 	}
 	cmd.AddCommand(newAddCommand(deps), newRemoveCommand(deps), newStatusCommand(deps))
@@ -136,7 +136,7 @@ func withOptions(cmd *cobra.Command, deps cmddeps.Deps, opts *options,
 	}
 	if link == nil {
 		fmt.Fprintln(cmd.ErrOrStderr(), "This directory isn't linked to a console project. Run `ocel link` first.")
-		return &exitsig.ExitError{Code: 1}
+		return &exitcode.ExitError{Code: 1}
 	}
 	return run(ctx, cfg, link)
 }

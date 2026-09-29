@@ -25,7 +25,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/devstack"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
-	"github.com/ocelhq/ocel/cli/internal/exitsig"
+	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
 	"github.com/ocelhq/ocel/cli/internal/variables"
@@ -134,9 +134,9 @@ func TestRunDev(t *testing.T) {
 		err := runDev(context.Background(), deps, false, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
 		t.Run("the child's exit code becomes the command's", func(t *testing.T) {
-			var exitErr *exitsig.ExitError
+			var exitErr *exitcode.ExitError
 			if !errors.As(err, &exitErr) {
-				t.Fatalf("runDev err = %v, want *exitsig.ExitError; stderr=%s", err, stderr.String())
+				t.Fatalf("runDev err = %v, want *exitcode.ExitError; stderr=%s", err, stderr.String())
 			}
 			if exitErr.Code != 7 {
 				t.Fatalf("ExitError.Code = %d, want 7", exitErr.Code)
@@ -175,7 +175,7 @@ func TestRunDev(t *testing.T) {
 		var stdout, stderr syncBuffer
 		err := runDev(context.Background(), deps, false, root, []string{"sh", "-c", "exit 7"}, &stdout, &stderr, strings.NewReader(""))
 
-		var exitErr *exitsig.ExitError
+		var exitErr *exitcode.ExitError
 		if !errors.As(err, &exitErr) || exitErr.Code != 7 {
 			t.Fatalf("runDev err = %v, want exit 7; stderr=%s", err, stderr.String())
 		}
@@ -225,9 +225,9 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		var followerStdout, followerStderr bytes.Buffer
 		err := runDev(context.Background(), deps, false, subdir, followerAppArgs, &followerStdout, &followerStderr, strings.NewReader(""))
 
-		var exitErr *exitsig.ExitError
+		var exitErr *exitcode.ExitError
 		if !errors.As(err, &exitErr) {
-			t.Fatalf("follower runDev err = %v, want *exitsig.ExitError; stderr=%s", err, followerStderr.String())
+			t.Fatalf("follower runDev err = %v, want *exitcode.ExitError; stderr=%s", err, followerStderr.String())
 		}
 		if exitErr.Code != 9 {
 			t.Fatalf("follower ExitError.Code = %d, want 9", exitErr.Code)
@@ -291,9 +291,9 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		var stdout, stderr syncBuffer
 		err := runDev(context.Background(), deps, false, secondClone, appCmd, &stdout, &stderr, strings.NewReader(""))
 
-		var exitErr *exitsig.ExitError
+		var exitErr *exitcode.ExitError
 		if !errors.As(err, &exitErr) {
-			t.Fatalf("second clone runDev err = %v, want *exitsig.ExitError; stderr=%s", err, stderr.String())
+			t.Fatalf("second clone runDev err = %v, want *exitcode.ExitError; stderr=%s", err, stderr.String())
 		}
 		if exitErr.Code != 9 {
 			t.Fatalf("second clone ExitError.Code = %d, want 9", exitErr.Code)
@@ -688,9 +688,9 @@ export default { slug: "test-app" };
 
 		select {
 		case err := <-followerDone:
-			var exitErr *exitsig.ExitError
+			var exitErr *exitcode.ExitError
 			if !errors.As(err, &exitErr) {
-				t.Fatalf("follower runDev err = %v, want *exitsig.ExitError; stderr=%s", err, stderr.String())
+				t.Fatalf("follower runDev err = %v, want *exitcode.ExitError; stderr=%s", err, stderr.String())
 			}
 			if exitErr.Code == 0 {
 				t.Fatalf("follower ExitError.Code = 0, want non-zero")

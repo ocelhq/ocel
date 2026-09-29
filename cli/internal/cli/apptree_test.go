@@ -17,7 +17,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/dev/leader"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/devstack"
-	"github.com/ocelhq/ocel/cli/internal/exitsig"
+	"github.com/ocelhq/ocel/cli/internal/exitcode"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
@@ -232,9 +232,9 @@ export default { slug: "test-app" };
 		select {
 		case err := <-done:
 			if err != nil && !errors.Is(err, context.Canceled) {
-				var exitErr *exitsig.ExitError
+				var exitErr *exitcode.ExitError
 				if !errors.As(err, &exitErr) {
-					t.Fatalf("runDev (follower) err = %v, want nil or *exitsig.ExitError", err)
+					t.Fatalf("runDev (follower) err = %v, want nil or *exitcode.ExitError", err)
 				}
 			}
 		case <-time.After(5 * time.Second):

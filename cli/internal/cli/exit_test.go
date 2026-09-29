@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/exitsig"
+	"github.com/ocelhq/ocel/cli/internal/exitcode"
 )
 
 func TestAppExitErrorReportsInterruptWhenCancelled(t *testing.T) {
@@ -16,11 +16,11 @@ func TestAppExitErrorReportsInterruptWhenCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	for _, err := range []error{nil, context.Canceled, &exitsig.ExitError{Code: 255}} {
+	for _, err := range []error{nil, context.Canceled, &exitcode.ExitError{Code: 255}} {
 		got := appExitError(ctx, err)
-		var exitErr *exitsig.ExitError
-		if !errors.As(got, &exitErr) || exitErr.Code != exitsig.InterruptCode {
-			t.Errorf("appExitError(cancelled, %v) = %v, want *exitsig.ExitError with code %d", err, got, exitsig.InterruptCode)
+		var exitErr *exitcode.ExitError
+		if !errors.As(got, &exitErr) || exitErr.Code != exitcode.Interrupt {
+			t.Errorf("appExitError(cancelled, %v) = %v, want *exitcode.ExitError with code %d", err, got, exitcode.Interrupt)
 		}
 	}
 }
@@ -32,9 +32,9 @@ func TestAppExitErrorKeepsTheAppsCodeWhenNotCancelled(t *testing.T) {
 	waitErr := cmd.Run()
 
 	got := appExitError(context.Background(), waitErr)
-	var exitErr *exitsig.ExitError
+	var exitErr *exitcode.ExitError
 	if !errors.As(got, &exitErr) || exitErr.Code != 3 {
-		t.Fatalf("appExitError = %v, want *exitsig.ExitError with code 3", got)
+		t.Fatalf("appExitError = %v, want *exitcode.ExitError with code 3", got)
 	}
 	if got := appExitError(context.Background(), nil); got != nil {
 		t.Errorf("appExitError(nil) = %v, want nil", got)

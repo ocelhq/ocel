@@ -1,8 +1,7 @@
-package exitsig
+package interrupt
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -10,39 +9,17 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/ocelhq/ocel/cli/internal/exitcode"
 )
 
-type ExitError struct {
-	Code int
-}
-
-func (e *ExitError) Error() string {
-	return fmt.Sprintf("exit status %d", e.Code)
-}
-
-const InterruptCode = 130
-
-func ExitCode(err error) (int, bool) {
-	if err == nil {
-		return 0, false
-	}
-	var exitErr *ExitError
-	if errors.As(err, &exitErr) {
-		return exitErr.Code, true
-	}
-	if errors.Is(err, context.Canceled) {
-		return InterruptCode, true
-	}
-	return 0, false
-}
-
-func Install(parent context.Context, stderr io.Writer, window time.Duration, teardown, forceKill func()) (context.Context, context.CancelFunc) {
+func Handle(parent context.Context, stderr io.Writer, window time.Duration, teardown, forceKill func()) (context.Context, context.CancelFunc) {
 	ch := make(chan os.Signal, 2)
 	signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
-	return InstallWithExit(parent, stderr, ch, window, teardown, forceKill, os.Exit)
+	return handle(parent, stderr, ch, window, teardown, forceKill, os.Exit)
 }
 
-func InstallWithExit(parent context.Context, stderr io.Writer, ch chan os.Signal, window time.Duration, teardown, forceKill func(), exit func(int)) (context.Context, context.CancelFunc) {
+func handle(parent context.Context, stderr io.Writer, ch chan os.Signal, window time.Duration, teardown, forceKill func(), exit func(int)) (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithCancel(parent)
 	done := make(chan struct{})
 
@@ -74,7 +51,7 @@ func InstallWithExit(parent context.Context, stderr io.Writer, ch chan os.Signal
 		teardown()
 		fmt.Fprintln(stderr, notice)
 		forceKill()
-		exit(InterruptCode)
+		exit(exitcode.Interrupt)
 	}()
 
 	var stopOnce sync.Once

@@ -19,7 +19,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/ocelhq/ocel/cli/internal/console"
-	"github.com/ocelhq/ocel/cli/internal/exitsig"
+	"github.com/ocelhq/ocel/cli/internal/exitcode"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
@@ -102,9 +102,9 @@ func TestRunLink(t *testing.T) {
 		var stderr bytes.Buffer
 		err := run(context.Background(), deps, t.TempDir(), "", options{}, &bytes.Buffer{}, &stderr, strings.NewReader(""))
 
-		var exitErr *exitsig.ExitError
+		var exitErr *exitcode.ExitError
 		if !errors.As(err, &exitErr) {
-			t.Fatalf("run err = %v (%T), want *exitsig.ExitError", err, err)
+			t.Fatalf("run err = %v (%T), want *exitcode.ExitError", err, err)
 		}
 		if !strings.Contains(stderr.String(), "ocel login") {
 			t.Fatalf("stderr = %q, want it to mention `ocel login`", stderr.String())
@@ -380,7 +380,7 @@ func failedLink(t *testing.T, deps cmddeps.Deps, dir, projectRef string, opts op
 	var out bytes.Buffer
 	clitest.AttachTerminalSink(deps, &out)
 	err := run(context.Background(), deps, dir, projectRef, opts, &out, &bytes.Buffer{}, strings.NewReader(""))
-	var exitErr *exitsig.ExitError
+	var exitErr *exitcode.ExitError
 	if !errors.As(err, &exitErr) || exitErr.Code != 1 {
 		t.Fatalf("run err = %v, want the run to fail with exit code 1", err)
 	}

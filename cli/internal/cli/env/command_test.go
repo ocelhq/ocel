@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
-	"github.com/ocelhq/ocel/cli/internal/exitsig"
+	"github.com/ocelhq/ocel/cli/internal/exitcode"
 )
 
 func TestCommandHelp(t *testing.T) {
@@ -40,7 +40,7 @@ func TestCommandNeedsSubcommand(t *testing.T) {
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 	err := cmd.Execute()
-	var exitErr *exitsig.ExitError
+	var exitErr *exitcode.ExitError
 	if !errors.As(err, &exitErr) || exitErr.Code != 1 {
 		t.Fatalf("Execute() = %v, want exit code 1", err)
 	}

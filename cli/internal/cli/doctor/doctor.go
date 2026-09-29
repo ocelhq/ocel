@@ -20,7 +20,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/events"
-	"github.com/ocelhq/ocel/cli/internal/exitsig"
+	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runui"
@@ -55,7 +55,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, stdout io.Writer) e
 	found := build(ctx, deps, cwd)
 	found.render(stdout, newPaint(stdout))
 	if found.failures() > 0 {
-		return &exitsig.ExitError{Code: 1}
+		return &exitcode.ExitError{Code: 1}
 	}
 	return nil
 }

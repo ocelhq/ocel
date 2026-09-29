@@ -14,7 +14,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/ocelhq/ocel/cli/internal/events"
-	"github.com/ocelhq/ocel/cli/internal/exitsig"
+	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/constants"
@@ -104,7 +104,7 @@ func TestAFailedRunEndsWithAnErrorResultAndExitsWithOne(t *testing.T) {
 	if result.GetDurationMs() != 1500 {
 		t.Fatalf("duration = %dms, want 1500ms", result.GetDurationMs())
 	}
-	var exit *exitsig.ExitError
+	var exit *exitcode.ExitError
 	if !errors.As(err, &exit) || exit.Code != 1 {
 		t.Fatalf("err = %v, want an exit with code 1", err)
 	}
@@ -144,8 +144,8 @@ func TestAnInterruptedRunEndsCancelledAtWarnAndExitsAsInterrupted(t *testing.T) 
 		t.Fatalf("result = interrupted %v headline %q level %s, want Deploy cancelled at WARN",
 			ev.GetResult().GetInterrupted(), ev.GetResult().GetHeadline(), ev.GetLevel())
 	}
-	var exit *exitsig.ExitError
-	if !errors.As(err, &exit) || exit.Code != exitsig.InterruptCode {
+	var exit *exitcode.ExitError
+	if !errors.As(err, &exit) || exit.Code != exitcode.Interrupt {
 		t.Fatalf("err = %v, want the interrupt exit", err)
 	}
 }

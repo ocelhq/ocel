@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/exitsig"
+	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
@@ -378,7 +378,7 @@ func TestADeployMissingVariablesOpensTheEditorAndResumesOnceTheyAreSet(t *testin
 
 		select {
 		case err := <-done:
-			var exit *exitsig.ExitError
+			var exit *exitcode.ExitError
 			if !errors.As(err, &exit) || exit.Code == 0 {
 				t.Fatalf("runDeploy err = %v, want a non-zero exit; stdout=%s", err, out.String())
 			}
@@ -423,7 +423,7 @@ func TestADeployMissingVariablesOpensTheEditorAndResumesOnceTheyAreSet(t *testin
 
 		select {
 		case err := <-done:
-			var exit *exitsig.ExitError
+			var exit *exitcode.ExitError
 			if !errors.As(err, &exit) || exit.Code == 0 {
 				t.Fatalf("runDeploy err = %v, want a non-zero exit", err)
 			}
@@ -468,7 +468,7 @@ func TestADeployMissingVariablesOpensTheEditorAndResumesOnceTheyAreSet(t *testin
 
 		select {
 		case err := <-done:
-			var exit *exitsig.ExitError
+			var exit *exitcode.ExitError
 			if !errors.As(err, &exit) || exit.Code == 0 {
 				t.Fatalf("runDeploy err = %v, want the second invalid value refused with a non-zero exit; stdout=%s", err, out.String())
 			}
@@ -551,7 +551,7 @@ func TestADeployMissingVariablesOpensTheEditorAndResumesOnceTheyAreSet(t *testin
 
 		select {
 		case err := <-done:
-			var exit *exitsig.ExitError
+			var exit *exitcode.ExitError
 			if !errors.As(err, &exit) || exit.Code == 0 {
 				t.Fatalf("runDeploy err = %v, want the abandoned deploy to exit non-zero", err)
 			}

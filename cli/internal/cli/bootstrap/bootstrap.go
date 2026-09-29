@@ -16,7 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/events"
-	"github.com/ocelhq/ocel/cli/internal/exitsig"
+	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -46,7 +46,7 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 			"  $ ocel bootstrap preview --features all",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_ = cmd.Help()
-			return &exitsig.ExitError{Code: 1}
+			return &exitcode.ExitError{Code: 1}
 		},
 	}
 

@@ -12,7 +12,7 @@ import (
 
 	"github.com/zalando/go-keyring"
 
-	"github.com/ocelhq/ocel/cli/internal/exitsig"
+	"github.com/ocelhq/ocel/cli/internal/exitcode"
 )
 
 const (
@@ -134,7 +134,7 @@ func RequireLogin(load func() (Credentials, error), stderr io.Writer) (Credentia
 	creds, err := load()
 	if err != nil {
 		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
-		return Credentials{}, &exitsig.ExitError{Code: 1}
+		return Credentials{}, &exitcode.ExitError{Code: 1}
 	}
 	return creds, nil
 }

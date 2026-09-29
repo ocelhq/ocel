@@ -5,12 +5,12 @@ import (
 	"os"
 
 	"github.com/ocelhq/ocel/cli/internal/cli"
-	"github.com/ocelhq/ocel/cli/internal/exitsig"
+	"github.com/ocelhq/ocel/cli/internal/exitcode"
 )
 
 func main() {
 	if err := cli.Execute(); err != nil {
-		if code, ok := exitsig.ExitCode(err); ok {
+		if code, ok := exitcode.Of(err); ok {
 			os.Exit(code)
 		}
 		fmt.Fprintln(os.Stderr, "Error:", err)

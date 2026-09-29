@@ -17,7 +17,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/dev/leader"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/devstack"
-	"github.com/ocelhq/ocel/cli/internal/exitsig"
+	"github.com/ocelhq/ocel/cli/internal/exitcode"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
@@ -45,9 +45,9 @@ export default { slug: "test-app" };
 		err := runRun(context.Background(), deps, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
 		t.Run("the child's exit code becomes the command's", func(t *testing.T) {
-			var exitErr *exitsig.ExitError
+			var exitErr *exitcode.ExitError
 			if !errors.As(err, &exitErr) {
-				t.Fatalf("runRun err = %v, want *exitsig.ExitError; stderr=%s", err, stderr.String())
+				t.Fatalf("runRun err = %v, want *exitcode.ExitError; stderr=%s", err, stderr.String())
 			}
 			if exitErr.Code != 7 {
 				t.Fatalf("ExitError.Code = %d, want 7", exitErr.Code)
@@ -109,9 +109,9 @@ export default { slug: "test-app" };
 		var stdout, stderr bytes.Buffer
 		err := runRun(context.Background(), deps, root, runAppArgs, &stdout, &stderr, strings.NewReader(""))
 
-		var exitErr *exitsig.ExitError
+		var exitErr *exitcode.ExitError
 		if !errors.As(err, &exitErr) {
-			t.Fatalf("runRun err = %v, want *exitsig.ExitError; stderr=%s", err, stderr.String())
+			t.Fatalf("runRun err = %v, want *exitcode.ExitError; stderr=%s", err, stderr.String())
 		}
 		if exitErr.Code != 9 {
 			t.Fatalf("ExitError.Code = %d, want 9", exitErr.Code)

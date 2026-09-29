@@ -11,7 +11,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/ocelhq/ocel/cli/internal/exitsig"
+	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -60,7 +60,7 @@ func (r *Run) End(errp *error) {
 		}
 		r.bus.finish(r)
 		if code != 0 {
-			*errp = &exitsig.ExitError{Code: code}
+			*errp = &exitcode.ExitError{Code: code}
 		}
 	})
 }
@@ -85,7 +85,7 @@ func (r *Run) result(err error) (*streamv1.RunResultEvent, int) {
 		if r.mayHaveChanged() {
 			result.Detail = fmt.Sprintf("Resources may be partially created.\nRe-run `%s` to reconcile.", r.command)
 		}
-		return result, exitsig.InterruptCode
+		return result, exitcode.Interrupt
 	}
 	result := &streamv1.RunResultEvent{Headline: r.verdict("failed"), Detail: err.Error()}
 	var missing missingVariablesError

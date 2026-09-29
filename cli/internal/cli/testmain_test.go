@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
-	"github.com/ocelhq/ocel/cli/internal/exitsig"
+	"github.com/ocelhq/ocel/cli/internal/exitcode"
 )
 
 const rootArgsEnvVar = "OCEL_TEST_ROOT_ARGS"
@@ -18,7 +18,7 @@ func runRootSubprocess(args []string) int {
 	if err == nil {
 		return 0
 	}
-	if code, ok := exitsig.ExitCode(err); ok {
+	if code, ok := exitcode.Of(err); ok {
 		return code
 	}
 	fmt.Fprintln(os.Stderr, "Error:", err)

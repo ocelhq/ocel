@@ -19,7 +19,7 @@ import (
 	"github.com/creack/pty"
 	"golang.org/x/sys/unix"
 
-	"github.com/ocelhq/ocel/cli/internal/exitsig"
+	"github.com/ocelhq/ocel/cli/internal/exitcode"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
@@ -43,7 +43,7 @@ func runProcessTreeSubprocess() int {
 	if err == nil {
 		return 0
 	}
-	var exitErr *exitsig.ExitError
+	var exitErr *exitcode.ExitError
 	if errors.As(err, &exitErr) {
 		return exitErr.Code
 	}
@@ -337,8 +337,8 @@ func TestProcessTreeNonOrphanedCtrlCReachesCLIAndApp(t *testing.T) {
 	select {
 	case err := <-waitDone:
 		var exitErr *exec.ExitError
-		if !errors.As(err, &exitErr) || exitErr.ExitCode() != exitsig.InterruptCode {
-			t.Fatalf("CLI exit error = %v, want exit code %d after a Ctrl-C", err, exitsig.InterruptCode)
+		if !errors.As(err, &exitErr) || exitErr.ExitCode() != exitcode.Interrupt {
+			t.Fatalf("CLI exit error = %v, want exit code %d after a Ctrl-C", err, exitcode.Interrupt)
 		}
 		if out := tty(); strings.Contains(out, "did not finish") || strings.Contains(out, "Interrupted again") {
 			t.Fatalf("tty output = %q, want a single Ctrl-C to take the graceful path, not the force-kill one", out)
@@ -384,8 +384,8 @@ func TestProcessTreeNonOrphanedSecondCtrlCIsFatal(t *testing.T) {
 		if !errors.As(err, &exitErr) {
 			t.Fatalf("session harness wait error = %v, want an *exec.ExitError with the CLI's exit code", err)
 		}
-		if code := exitErr.ExitCode(); code != exitsig.InterruptCode {
-			t.Fatalf("CLI exit code = %d, want %d (forced exit on the second Ctrl-C)", code, exitsig.InterruptCode)
+		if code := exitErr.ExitCode(); code != exitcode.Interrupt {
+			t.Fatalf("CLI exit code = %d, want %d (forced exit on the second Ctrl-C)", code, exitcode.Interrupt)
 		}
 	case <-time.After(childprocess.GracePeriod + 3*time.Second):
 		_ = cmd.Process.Kill()

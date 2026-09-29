@@ -20,7 +20,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/dev/leader"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
-	"github.com/ocelhq/ocel/cli/internal/exitsig"
+	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
 	"github.com/ocelhq/ocel/cli/internal/variables"
@@ -588,7 +588,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		var stdout, stderr syncBuffer
 		err := runDev(context.Background(), deps, false, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
-		var exitErr *exitsig.ExitError
+		var exitErr *exitcode.ExitError
 		if !errors.As(err, &exitErr) || exitErr.Code != 7 {
 			t.Fatalf("runDev err = %v, want exit 7; stderr=%s", err, stderr.String())
 		}
@@ -708,7 +708,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		var stdout, stderr syncBuffer
 		err := runDev(context.Background(), deps, false, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
-		var exitErr *exitsig.ExitError
+		var exitErr *exitcode.ExitError
 		if !errors.As(err, &exitErr) || exitErr.Code != 7 {
 			t.Fatalf("runDev err = %v, want the app to have run and exited 7; stderr=%s", err, stderr.String())
 		}
@@ -892,7 +892,7 @@ export default {
 		var stdout, stderr syncBuffer
 		err := runDev(context.Background(), deps, false, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
-		var exitErr *exitsig.ExitError
+		var exitErr *exitcode.ExitError
 		if !errors.As(err, &exitErr) || exitErr.Code != 7 {
 			t.Fatalf("runDev err = %v, want exit 7 (no refusal); stderr=%s", err, stderr.String())
 		}
@@ -926,7 +926,7 @@ export default {
 		var stdout, stderr syncBuffer
 		err := runDev(context.Background(), deps, false, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
-		var exitErr *exitsig.ExitError
+		var exitErr *exitcode.ExitError
 		if !errors.As(err, &exitErr) || exitErr.Code != 7 {
 			t.Fatalf("runDev err = %v, want exit 7 (no refusal); stderr=%s", err, stderr.String())
 		}
@@ -981,7 +981,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		var stdout, stderr bytes.Buffer
 		err := runRun(context.Background(), deps, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
-		var exitErr *exitsig.ExitError
+		var exitErr *exitcode.ExitError
 		if !errors.As(err, &exitErr) || exitErr.Code != 7 {
 			t.Fatalf("runRun err = %v, want the app to have run and exited 7; stderr=%s", err, stderr.String())
 		}
@@ -1012,7 +1012,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		var stdout, stderr bytes.Buffer
 		err := runRun(context.Background(), deps, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
-		var exitErr *exitsig.ExitError
+		var exitErr *exitcode.ExitError
 		if !errors.As(err, &exitErr) || exitErr.Code != 7 {
 			t.Fatalf("runRun err = %v, want exit 7; stderr=%s", err, stderr.String())
 		}
@@ -1079,7 +1079,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		var stdout, stderr syncBuffer
 		err := runRun(context.Background(), devDeps(), root, []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}, &stdout, &stderr, strings.NewReader(""))
 
-		var exitErr *exitsig.ExitError
+		var exitErr *exitcode.ExitError
 		if !errors.As(err, &exitErr) || exitErr.Code != 7 {
 			t.Fatalf("runRun err = %v, want exit 7 (no refusal); stderr=%s", err, stderr.String())
 		}
@@ -1100,7 +1100,7 @@ func dumpDevEnv(t *testing.T, deps cmddeps.Deps, root string) (map[string]string
 	envDumpPath := filepath.Join(root, "env.out")
 	var stdout, stderr syncBuffer
 	err := runDev(context.Background(), deps, false, root, []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}, &stdout, &stderr, strings.NewReader(""))
-	var exitErr *exitsig.ExitError
+	var exitErr *exitcode.ExitError
 	if !errors.As(err, &exitErr) || exitErr.Code != 7 {
 		t.Fatalf("runDev err = %v, want exit 7 (no refusal); stderr=%s", err, stderr.String())
 	}
@@ -1222,7 +1222,7 @@ export default {
 			var stdout, stderr syncBuffer
 			err := command.run(root, []string{"sh", "-c", "exit 7"}, &stdout, &stderr)
 
-			var exitErr *exitsig.ExitError
+			var exitErr *exitcode.ExitError
 			if !errors.As(err, &exitErr) || exitErr.Code != 7 {
 				t.Fatalf("err = %v, want the app started and its exit 7 passed through; stderr=%s", err, stderr.String())
 			}

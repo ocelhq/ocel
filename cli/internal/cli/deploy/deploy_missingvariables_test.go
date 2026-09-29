@@ -12,7 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/exitsig"
+	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
@@ -60,7 +60,7 @@ func TestADeployIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 		if err == nil {
 			t.Fatal("runDeploy err = nil, want the declarations to refuse")
 		}
-		var exit *exitsig.ExitError
+		var exit *exitcode.ExitError
 		if !errors.As(err, &exit) || exit.Code == 0 {
 			t.Errorf("runDeploy err = %v, want a non-zero exit", err)
 		}

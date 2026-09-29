@@ -15,7 +15,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
-	"github.com/ocelhq/ocel/cli/internal/exitsig"
+	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/version"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
@@ -34,7 +34,7 @@ func exitCode(t *testing.T, err error) int {
 	if err == nil {
 		return 0
 	}
-	code, ok := exitsig.ExitCode(err)
+	code, ok := exitcode.Of(err)
 	if !ok {
 		t.Fatalf("err = %v, want an exit signal", err)
 	}

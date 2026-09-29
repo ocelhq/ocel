@@ -20,7 +20,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console"
-	"github.com/ocelhq/ocel/cli/internal/exitsig"
+	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/providers"
@@ -480,7 +480,7 @@ func TestAnUnlinkedTreeIsPointedAtOcelLink(t *testing.T) {
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	if err := chdir(t, root, cmd.Execute); !errors.As(err, new(*exitsig.ExitError)) {
+	if err := chdir(t, root, cmd.Execute); !errors.As(err, new(*exitcode.ExitError)) {
 		t.Fatalf("Execute() = %v, want an exit error", err)
 	}
 	if !strings.Contains(out.String(), "ocel link") {
@@ -502,7 +502,7 @@ func TestBeingLoggedOutIsPointedAtOcelLogin(t *testing.T) {
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	if err := chdir(t, root, cmd.Execute); !errors.As(err, new(*exitsig.ExitError)) {
+	if err := chdir(t, root, cmd.Execute); !errors.As(err, new(*exitcode.ExitError)) {
 		t.Fatalf("Execute() = %v, want an exit error", err)
 	}
 	if !strings.Contains(out.String(), "ocel login") {
