@@ -317,8 +317,8 @@ func frontedRecords(t *testing.T, e edge.Edge, state edge.StackState, hostname s
 		t.Fatalf("records = %v, want one of them at %q", records, hostname)
 	}
 	rec := records[at]
-	if rec.Proxied != target.ServesUnbound {
-		t.Errorf("record %v is proxied = %t, want %t: only an edge that answers on the zone itself takes the proxy", rec, rec.Proxied, target.ServesUnbound)
+	if rec.Proxied != target.ProxiesRecords {
+		t.Errorf("record %v is proxied = %t, want %t: a record is proxied exactly when Facts().ProxiesRecords says the edge proxies what it points at", rec, rec.Proxied, target.ProxiesRecords)
 	}
 	addr, addrErr := netip.ParseAddr(rec.Value)
 	switch rec.Type {

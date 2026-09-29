@@ -148,7 +148,7 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progr
 		return err
 	}
 
-	target := edge.DNSTarget{Kind: front.Kind(), ServesUnbound: front.Facts().ServesUnbound, Front: published}
+	target := edge.DNSTarget{Kind: front.Kind(), ServesUnbound: front.Facts().ServesUnbound, ProxiesRecords: front.Facts().ProxiesRecords, Front: published}
 	dnsRecords, err := edge.RecordsFor(target, []string{wildcard})
 	if err != nil {
 		return err

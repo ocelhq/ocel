@@ -76,10 +76,11 @@ type DNSRecords interface {
 }
 
 type DNSTarget struct {
-	Kind          Kind
-	ServesUnbound bool
-	Front         string
-	FrontByHost   map[string]string
+	Kind           Kind
+	ServesUnbound  bool
+	ProxiesRecords bool
+	Front          string
+	FrontByHost    map[string]string
 }
 
 func (t DNSTarget) FrontFor(hostname string) string {
@@ -114,11 +115,17 @@ func (s *StackState) PublishFront(hostname, front string) {
 }
 
 func TargetFor(e Edge, state StackState) DNSTarget {
-	return TargetOf(e.Kind(), e.Facts().ServesUnbound, state)
+	return TargetOf(e.Kind(), e.Facts(), state)
 }
 
-func TargetOf(kind Kind, servesUnbound bool, state StackState) DNSTarget {
-	return DNSTarget{Kind: kind, ServesUnbound: servesUnbound, Front: state.Front, FrontByHost: state.Fronts}
+func TargetOf(kind Kind, facts Facts, state StackState) DNSTarget {
+	return DNSTarget{
+		Kind:           kind,
+		ServesUnbound:  facts.ServesUnbound,
+		ProxiesRecords: facts.ProxiesRecords,
+		Front:          state.Front,
+		FrontByHost:    state.Fronts,
+	}
 }
 
 func Pointable(target DNSTarget, bound []string, hostname string) bool {
@@ -131,15 +138,17 @@ func RecordsFor(target DNSTarget, hostnames []string) ([]Record, error) {
 		if host == "" || Loopback(host) {
 			continue
 		}
-		if target.ServesUnbound {
-			records = append(records, Record{Name: host, Type: RecordTypeAAAA, Value: ProxyPlaceholder, Proxied: true})
-			continue
-		}
 		front := target.FrontFor(host)
-		if front == "" {
+		switch {
+		case front != "":
+			record := addressRecord(host, front)
+			record.Proxied = target.ProxiesRecords
+			records = append(records, record)
+		case target.ServesUnbound:
+			records = append(records, Record{Name: host, Type: RecordTypeAAAA, Value: ProxyPlaceholder, Proxied: true})
+		default:
 			return nil, fmt.Errorf("nothing to point %s at: this deployment published no hostname or address to point it at", host)
 		}
-		records = append(records, addressRecord(host, front))
 	}
 	return records, nil
 }

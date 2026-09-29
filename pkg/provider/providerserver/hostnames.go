@@ -318,7 +318,7 @@ func (d *hostnames) statusHosts() []string {
 func (d *hostnames) statusOf(ctx context.Context, host string) (*contractv1.ProductionHostname, error) {
 	hostState := d.state.Host(host)
 	stackState := d.edgeStack().State()
-	bound := edge.Pointable(edge.TargetOf(d.cutover.kind, d.cutover.unbound, stackState), stackState.Bound, host)
+	bound := edge.Pointable(edge.TargetOf(d.cutover.kind, d.cutover.facts, stackState), stackState.Bound, host)
 
 	var manual []edge.Record
 	if bound {

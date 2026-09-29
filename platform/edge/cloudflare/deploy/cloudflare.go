@@ -95,6 +95,7 @@ func (p *cloudflare) Facts() edge.Facts {
 		Compatibility:   edge.Compatibility{Date: compatDate, Flags: slices.Clone(compatFlags)},
 		RunsCode:        true,
 		ServesUnbound:   true,
+		ProxiesRecords:  true,
 		CredentialScope: os.Getenv(envAccountID),
 	}
 }

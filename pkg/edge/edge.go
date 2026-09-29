@@ -59,6 +59,7 @@ type Facts struct {
 	Compatibility         Compatibility
 	RunsCode              bool
 	ServesUnbound         bool
+	ProxiesRecords        bool
 	ShieldsOrigin         bool
 	InvalidatesByCacheTag bool
 	CredentialScope       string

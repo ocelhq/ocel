@@ -66,6 +66,7 @@ func (f *recordingEdge) Facts() edge.Facts {
 		Compatibility:         edge.Compatibility{Date: "2025-01-01", Flags: []string{"nodejs_compat"}},
 		RunsCode:              true,
 		ServesUnbound:         declared.ServesUnbound,
+		ProxiesRecords:        declared.ProxiesRecords,
 		InvalidatesByCacheTag: declared.InvalidatesByCacheTag,
 	}
 }
