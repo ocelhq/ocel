@@ -34,19 +34,23 @@ func Announce(ctx context.Context, scope *events.Scope, prov *providerclient.Pro
 
 func announce(ctx context.Context, scope *events.Scope, prov *providerclient.Provider, cfg *projectconfig.Config, required environmentv1.Tier, slug string, domains []string, frameworks []string, ready func(*contractv1.PreflightResponse) error) (*contractv1.PreflightResponse, error) {
 	unit := scope.Unit(prov.Name(), checking(required, cfg.Slug))
-	resp, err := answer(ctx, scope, prov, cfg, required, &contractv1.PreflightRequest{
+	resp, err := answer(ctx, scope, prov, cfg, required, NewRequest(cfg, required, slug, domains, frameworks), ready)
+	unit.End(err)
+	if err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+func NewRequest(cfg *projectconfig.Config, required environmentv1.Tier, slug string, domains, frameworks []string) *contractv1.PreflightRequest {
+	return &contractv1.PreflightRequest{
 		RequiredTier: required,
 		Slug:         slug,
 		Domains:      domains,
 		Frameworks:   frameworks,
 		Containers:   Containers(cfg),
 		Edge:         edgewire.Selection(cfg),
-	}, ready)
-	unit.End(err)
-	if err != nil {
-		return nil, err
 	}
-	return resp, nil
 }
 
 func answer(ctx context.Context, scope *events.Scope, prov *providerclient.Provider, cfg *projectconfig.Config, required environmentv1.Tier, req *contractv1.PreflightRequest, ready func(*contractv1.PreflightResponse) error) (*contractv1.PreflightResponse, error) {

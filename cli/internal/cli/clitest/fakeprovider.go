@@ -1007,7 +1007,11 @@ func journalPreflight(req *contractv1.PreflightRequest) {
 		return
 	}
 	defer f.Close()
-	fmt.Fprintf(f, "slug=%s domains=%s tier=%s\n", req.GetSlug(), strings.Join(req.GetDomains(), ","), req.GetRequiredTier())
+	containers := make([]string, 0, len(req.GetContainers()))
+	for _, container := range req.GetContainers() {
+		containers = append(containers, container.GetApp())
+	}
+	fmt.Fprintf(f, "slug=%s domains=%s tier=%s containers=%s\n", req.GetSlug(), strings.Join(req.GetDomains(), ","), req.GetRequiredTier(), strings.Join(containers, ","))
 }
 
 func resolvedEdgeKind(kind string) string {

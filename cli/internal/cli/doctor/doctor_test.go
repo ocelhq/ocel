@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -220,6 +221,46 @@ func TestRunDoctorOnAHealthyProject(t *testing.T) {
 	}, "\n")
 	if got := rendered(t, stdout.String()); got != want {
 		t.Errorf("stdout:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestDoctorAsksTheProviderAboutTheContainerAppsADeployWould(t *testing.T) {
+	root := healthyProject(t)
+	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  slug: "my-shop",
+  provider: { aws: {} },
+  apps: [
+    { name: "web", path: "apps/web", framework: "node" },
+    { name: "api", path: "apps/api", compute: "container" },
+  ],
+};
+`)
+	journal := filepath.Join(t.TempDir(), "preflight.journal")
+	t.Setenv(clitest.FakePreflightJournalEnvVar, journal)
+	t.Setenv(clitest.FakeBootstrapEnvVar, "current")
+	t.Setenv(clitest.FakePreviewBootstrapEnvVar, "current")
+
+	deps := clitest.NewDeps()
+	clitest.SetLoggedIn(&deps)
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(deps, &stderr)
+	if err := Run(context.Background(), deps, root, &stdout); err != nil {
+		t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	sent, err := os.ReadFile(journal)
+	if err != nil {
+		t.Fatalf("read the preflight journal: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(sent)), "\n")
+	if len(lines) == 0 || lines[0] == "" {
+		t.Fatal("doctor sent no preflight")
+	}
+	for _, line := range lines {
+		if !strings.Contains(line, "containers=api") {
+			t.Errorf("doctor sent preflight %q, want it to name the container app api as a deploy's preflight does", line)
+		}
 	}
 }
 

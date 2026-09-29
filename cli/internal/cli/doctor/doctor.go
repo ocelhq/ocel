@@ -374,15 +374,10 @@ func askProvider(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Conf
 		checkHosts := tier == environmentv1.Tier_TIER_PRODUCTION
 		var resp *contractv1.PreflightResponse
 		err := prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
-			resp, err = client.Preflight(ctx, &contractv1.PreflightRequest{
-				RequiredTier:     tier,
-				Slug:             cfg.Slug,
-				Domains:          preflight.Names(preflight.Hostnames(cfg, bootstrap.Name(tier))),
-				Frameworks:       preflight.Frameworks(cfg),
-				Edge:             edgewire.Selection(cfg),
-				CheckHosts:       checkHosts,
-				HostCheckDomains: hostCheckDomains(checkHosts, cfg),
-			})
+			req := preflight.NewRequest(cfg, tier, cfg.Slug, preflight.Names(preflight.Hostnames(cfg, bootstrap.Name(tier))), preflight.Frameworks(cfg))
+			req.CheckHosts = checkHosts
+			req.HostCheckDomains = hostCheckDomains(checkHosts, cfg)
+			resp, err = client.Preflight(ctx, req)
 			return err
 		})
 		if err != nil {
