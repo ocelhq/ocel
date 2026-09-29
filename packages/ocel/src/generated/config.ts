@@ -44,7 +44,7 @@ export interface OcelConfig {
   /** Where the resources an app declares are found. */
   discovery?: DiscoveryConfig;
   /** Where the project's hostname records are written, keyed by the DNS service's identifier with its options as the value, or named alone. */
-  dns?: DnsDescriptor;
+  dns?: DNSDescriptor;
   /** The hostnames this project is served on. */
   domains?: ProjectDomainConfig;
   /** The edge in front of the origin, keyed by its identifier with its options as the value, or named alone. Omit it for the provider's default: CloudFront on AWS, and no edge on GCP or a VPS. */
@@ -170,19 +170,19 @@ export interface DiscoveryConfig {
 }
 
 /** Where the project's hostname records are written, keyed by the DNS service's identifier with its options as the value, or named alone. */
-export type DnsDescriptor =
+export type DNSDescriptor =
   | "cloudflare"
   | "route53"
   | {
-      cloudflare: DnsOptions;
+      cloudflare: DNSOptions;
       route53?: never;
     }
   | {
       cloudflare?: never;
-      route53: DnsOptions;
+      route53: DNSOptions;
     };
 
-export interface DnsOptions {
+export interface DNSOptions {
   /** The zone the records are written into. Omit it and ocel picks the zone that covers the hostname. */
   zone?: string;
 }

@@ -1331,7 +1331,7 @@
                 "type": "string"
               }
             },
-            "title": "DnsOptions",
+            "title": "DNSOptions",
             "type": "object"
           },
           "maxProperties": 1,
@@ -1339,7 +1339,7 @@
           "type": "object"
         }
       ],
-      "title": "DnsDescriptor"
+      "title": "DNSDescriptor"
     },
     "domains": {
       "additionalProperties": false,

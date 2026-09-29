@@ -6,7 +6,7 @@ export type {
   BuildConfig,
   DevEnvSourceDescriptor,
   DiscoveryConfig,
-  DnsDescriptor,
+  DNSDescriptor,
   EdgeDescriptor,
   EnvSourceConfig,
   EnvSourceDescriptor,

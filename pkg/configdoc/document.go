@@ -13,7 +13,7 @@ type Document struct {
 	Discovery     *DiscoveryConfig     `json:"discovery,omitempty" doc:"Where the resources an app declares are found."`
 	Provider      *ProviderDescriptor  `json:"provider,omitempty" doc:"The provider ocel deploy provisions into, keyed by its identifier with its options as the value. A provider that needs no options may be named alone."`
 	Edge          *EdgeDescriptor      `json:"edge,omitempty" doc:"The edge in front of the origin, keyed by its identifier with its options as the value, or named alone. Omit it for the provider's default: CloudFront on AWS, and no edge on GCP or a VPS."`
-	DNS           *DnsDescriptor       `json:"dns,omitempty" doc:"Where the project's hostname records are written, keyed by the DNS service's identifier with its options as the value, or named alone."`
+	DNS           *DNSDescriptor       `json:"dns,omitempty" doc:"Where the project's hostname records are written, keyed by the DNS service's identifier with its options as the value, or named alone."`
 	AllowDegraded []string             `json:"allowDegraded,omitempty" doc:"The needs this project waives rather than have a deploy refused over." enum:"edge-middleware,edge-runtime,ppr-resume,edge-cache,streaming"`
 	Apps          []AppConfig          `json:"apps,omitempty" doc:"The apps this project deploys. Left off, ocel detects one at the project root."`
 	Domains       *ProjectDomainConfig `json:"domains,omitempty" doc:"The hostnames this project is served on."`

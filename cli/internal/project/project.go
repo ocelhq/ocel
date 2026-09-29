@@ -144,7 +144,7 @@ func normalize(doc *configdoc.Document, configPath string) (*Project, error) {
 	}, nil
 }
 
-func normalizeDNS(raw *configdoc.DnsDescriptor) *DNS {
+func normalizeDNS(raw *configdoc.DNSDescriptor) *DNS {
 	if raw == nil {
 		return nil
 	}

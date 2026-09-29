@@ -1,4 +1,4 @@
-import type { DnsDescriptor } from "../../generated/config.js";
+import type { DNSDescriptor } from "../../generated/config.js";
 
 /** Options for Route 53. */
 export interface Route53Options {
@@ -10,6 +10,6 @@ export interface Route53Options {
 }
 
 /** Declares Route 53 as the DNS the project's records are written into. */
-export function route53(options: Route53Options = {}): DnsDescriptor {
+export function route53(options: Route53Options = {}): DNSDescriptor {
   return { route53: options };
 }

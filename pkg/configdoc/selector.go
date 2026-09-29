@@ -60,15 +60,21 @@ type selectorKind interface {
 	of() selection
 }
 
-type ProviderDescriptor = Selector[json.RawMessage, providerSelector]
+type ProviderDescriptor struct {
+	Selector[json.RawMessage, providerSelector]
+}
 
-type EdgeDescriptor = Selector[EdgeOptions, edgeSelector]
+type EdgeDescriptor struct {
+	Selector[EdgeOptions, edgeSelector]
+}
 
 type EdgeOptions struct{}
 
-type DnsDescriptor = Selector[DnsOptions, dnsSelector]
+type DNSDescriptor struct {
+	Selector[DNSOptions, dnsSelector]
+}
 
-type DnsOptions struct {
+type DNSOptions struct {
 	Zone string `json:"zone,omitempty" doc:"The zone the records are written into. Omit it and ocel picks the zone that covers the hostname."`
 }
 
@@ -86,7 +92,7 @@ func (edgeSelector) of() selection { return known.Edge }
 
 type dnsSelector struct{}
 
-func (dnsSelector) title() string { return "DnsDescriptor" }
+func (dnsSelector) title() string { return "DNSDescriptor" }
 func (dnsSelector) noun() string  { return "DNS service" }
 func (dnsSelector) of() selection { return known.DNS }
 
