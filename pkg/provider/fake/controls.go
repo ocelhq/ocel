@@ -59,3 +59,5 @@ func (p *Provider) ResourceStacks(hooks resources.Hooks) *Provider {
 }
 
 func (p *Provider) FakeStacks() *Stacks { return p.stacks }
+
+func (p *Provider) FakeConnector() *Connector { return p.connector }

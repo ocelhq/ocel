@@ -9,11 +9,13 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/providers"
 	"github.com/ocelhq/ocel/cli/internal/version"
+	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 )
 
 const FakeConnectorBinary = "#!/bin/sh\necho fake connector\n"
 
-func SetUpConnectorFixture(t *testing.T, fingerprint, hostname string) string {
+func SetUpConnectorFixture(t *testing.T, fingerprint, hostname string) FakeProject {
 	t.Helper()
 
 	if runtime.GOOS == "windows" {
@@ -25,26 +27,15 @@ func SetUpConnectorFixture(t *testing.T, fingerprint, hostname string) string {
 	root := t.TempDir()
 	WriteFile(t, filepath.Join(root, "ocel.fake.json"), `{
   "slug": "`+FixtureSlug+`",
-  "provider": { "fake": { "ssh": "`+hostname+`" } }
+  "provider": { "fake": {} }
 }
 `)
 
-	testBinary, err := filepath.Abs(os.Args[0])
-	if err != nil {
-		t.Fatalf("resolve test binary path: %v", err)
-	}
-	InstallProvider(t, "fake", func(dest string) error { return os.Symlink(testBinary, dest) })
-	InstallConnector(t, "fake", providers.Platform{GOOS: "linux", GOARCH: "amd64"}, []byte(FakeConnectorBinary))
-
-	t.Setenv(FakeProviderEnvVar, "1")
-	t.Setenv(fakeProviderSockEnvVar, filepath.Join(t.TempDir(), "connector-provider.sock"))
-	t.Setenv(FakeConnectorTargetEnvVar, fingerprint)
-	t.Setenv(FakeConnectorHostEnvVar, hostname)
-	t.Setenv(FakeConnectorOSEnvVar, "linux")
-	t.Setenv(FakeConnectorArchEnvVar, "amd64")
-	t.Setenv(FakeConnectorLogEnvVar, filepath.Join(t.TempDir(), "connector.json"))
-
-	return root
+	p := fake.NewForProject(fake.Options{}, root)
+	p.FakeConnector().Runs(provider.ConnectorTarget{Fingerprint: fingerprint, Hostname: hostname, OS: "linux", Arch: "amd64"})
+	requests := ServeFake(t, p)
+	InstallConnector(t, string(fake.Vendor), providers.Platform{GOOS: "linux", GOARCH: "amd64"}, []byte(FakeConnectorBinary))
+	return FakeProject{Root: root, Provider: p, Requests: requests}
 }
 
 func InstallConnector(t *testing.T, name string, platform providers.Platform, content []byte) string {

@@ -46,6 +46,7 @@ type Provider struct {
 	edges          *Edges
 	routers        *Routers
 	dns            *DNS
+	connector      *Connector
 }
 
 func New(_ context.Context, settings provider.Settings) (provider.Provider, error) {
@@ -82,6 +83,7 @@ func NewProvider(options Options) *Provider {
 		edges:     edges,
 		routers:   newRouters(edges),
 		dns:       NewDNS(),
+		connector: &Connector{},
 
 		runtimeArch:   "amd64",
 		runtimeBinary: []byte(RuntimeBinary),
@@ -150,7 +152,7 @@ func (p *Provider) DNS() provider.DNS { return p.dns }
 
 func (p *Provider) Certificates() provider.Certificates { return certificates{p} }
 
-func (p *Provider) Connector() provider.Connector { return connector{} }
+func (p *Provider) Connector() provider.Connector { return p.connector }
 
 func (p *Provider) Runtime() provider.Runtime { return containerRuntime{p} }
 

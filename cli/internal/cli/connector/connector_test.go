@@ -28,6 +28,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 const (
@@ -116,7 +118,8 @@ func opened(t *testing.T, srv *consoleServer) options {
 }
 
 func TestAddPairsTheTargetWithTheConsoleAndInstallsTheAsset(t *testing.T) {
-	root := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
 	srv := newConsoleServer(t)
 	linked(t, root, srv.URL)
 
@@ -152,18 +155,15 @@ func TestAddPairsTheTargetWithTheConsoleAndInstallsTheAsset(t *testing.T) {
 		t.Errorf("patched compute = %v, want the compute the provider chose for itself", srv.patched[0]["compute"])
 	}
 
-	log, err := clitest.LoadFakeConnectorLog(os.Getenv(clitest.FakeConnectorLogEnvVar))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !log.Installed {
+	installed := project.Provider.FakeConnector().Installed()
+	if len(installed) == 0 {
 		t.Fatal("the provider was never asked to install a connector")
 	}
-	if string(log.Binary) != clitest.FakeConnectorBinary {
-		t.Errorf("the provider was handed %q, want the connector asset the arch names", string(log.Binary))
+	if string(installed[0].Binary) != clitest.FakeConnectorBinary {
+		t.Errorf("the provider was handed %q, want the connector asset the arch names", string(installed[0].Binary))
 	}
 	var config map[string]any
-	if err := json.Unmarshal(log.ConfigJSON, &config); err != nil {
+	if err := json.Unmarshal(installed[0].Config, &config); err != nil {
 		t.Fatalf("the config the provider was handed is not an object: %v", err)
 	}
 	if config["console"] != srv.URL || config["connectorId"] != "con_1" || config["organizationId"] != "org_1" {
@@ -182,9 +182,10 @@ func TestAddPairsTheTargetWithTheConsoleAndInstallsTheAsset(t *testing.T) {
 }
 
 func TestAddInstallsTheConnectorBuiltForThePlatformTheProviderNames(t *testing.T) {
-	root := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
 	clitest.InstallConnector(t, "fake", providers.Platform{GOOS: "freebsd", GOARCH: "amd64"}, []byte("freebsd connector"))
-	t.Setenv(clitest.FakeConnectorOSEnvVar, "freebsd")
+	project.Provider.FakeConnector().Runs(provider.ConnectorTarget{Fingerprint: fingerprint, Hostname: hostname, OS: "freebsd", Arch: "amd64"})
 	srv := newConsoleServer(t)
 	linked(t, root, srv.URL)
 
@@ -198,17 +199,15 @@ func TestAddInstallsTheConnectorBuiltForThePlatformTheProviderNames(t *testing.T
 		t.Fatalf("runAdd err = %v\n%s", err, stdout.String())
 	}
 
-	log, err := clitest.LoadFakeConnectorLog(os.Getenv(clitest.FakeConnectorLogEnvVar))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(log.Binary) != "freebsd connector" {
-		t.Errorf("the provider was handed %q, want the connector built for the freebsd target it described", string(log.Binary))
+	installed := project.Provider.FakeConnector().Installed()
+	if len(installed) != 1 || string(installed[0].Binary) != "freebsd connector" {
+		t.Errorf("the provider was handed %v, want the connector built for the freebsd target it described", installed)
 	}
 }
 
 func TestAddRelaysWhatTheProviderSaysWhileItInstallsThroughItsRun(t *testing.T) {
-	root := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
 	srv := newConsoleServer(t)
 	linked(t, root, srv.URL)
 
@@ -237,7 +236,8 @@ func TestAddRelaysWhatTheProviderSaysWhileItInstallsThroughItsRun(t *testing.T) 
 }
 
 func TestAddGrantsRevealOnlyWhenItIsAskedFor(t *testing.T) {
-	root := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
 	srv := newConsoleServer(t)
 	linked(t, root, srv.URL)
 
@@ -251,12 +251,12 @@ func TestAddGrantsRevealOnlyWhenItIsAskedFor(t *testing.T) {
 		t.Fatalf("runAdd err = %v", err)
 	}
 
-	log, err := clitest.LoadFakeConnectorLog(os.Getenv(clitest.FakeConnectorLogEnvVar))
-	if err != nil {
-		t.Fatal(err)
+	installed := project.Provider.FakeConnector().Installed()
+	if len(installed) != 1 {
+		t.Fatalf("installed = %v, want one connector", installed)
 	}
 	var config map[string]any
-	if err := json.Unmarshal(log.ConfigJSON, &config); err != nil {
+	if err := json.Unmarshal(installed[0].Config, &config); err != nil {
 		t.Fatal(err)
 	}
 	grants, _ := config["grants"].([]any)
@@ -266,7 +266,8 @@ func TestAddGrantsRevealOnlyWhenItIsAskedFor(t *testing.T) {
 }
 
 func TestAConnectorOverTheChannelCeilingIsRefusedBeforeItIsSent(t *testing.T) {
-	root := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
 	srv := newConsoleServer(t)
 	linked(t, root, srv.URL)
 
@@ -289,13 +290,14 @@ func TestAConnectorOverTheChannelCeilingIsRefusedBeforeItIsSent(t *testing.T) {
 			t.Errorf("runAdd err = %q, want it to contain %q", said, want)
 		}
 	}
-	if _, statErr := os.Stat(os.Getenv(clitest.FakeConnectorLogEnvVar)); !errors.Is(statErr, os.ErrNotExist) {
-		t.Errorf("the connector was installed anyway (stat err = %v), want nothing sent over the channel", statErr)
+	if installed := project.Provider.FakeConnector().Installed(); len(installed) != 0 {
+		t.Errorf("the connector was installed anyway (%d installs), want nothing sent over the channel", len(installed))
 	}
 }
 
 func TestAFailedAddSaysRunningItAgainFinishesIt(t *testing.T) {
-	root := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
 	srv := newConsoleServer(t)
 	srv.refusePatch = true
 	linked(t, root, srv.URL)
@@ -318,7 +320,8 @@ func TestAFailedAddSaysRunningItAgainFinishesIt(t *testing.T) {
 }
 
 func TestRemoveTakesTheConnectorOffTheBoxAndForgetsTheRow(t *testing.T) {
-	root := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
 	srv := newConsoleServer(t, map[string]any{
 		"id": "con_1", "target": fingerprint, "vendor": "fake", "compute": "container", "reach": "dial",
 		"capabilities": []string{"envvars.read"},
@@ -334,11 +337,7 @@ func TestRemoveTakesTheConnectorOffTheBoxAndForgetsTheRow(t *testing.T) {
 		t.Fatalf("runRemove err = %v", err)
 	}
 
-	log, err := clitest.LoadFakeConnectorLog(os.Getenv(clitest.FakeConnectorLogEnvVar))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !log.Removed {
+	if project.Provider.FakeConnector().Removals() == 0 {
 		t.Fatal("the provider was never asked to take the connector off the machine")
 	}
 	if len(srv.deleted) != 1 || srv.deleted[0] != "con_1" {
@@ -347,8 +346,9 @@ func TestRemoveTakesTheConnectorOffTheBoxAndForgetsTheRow(t *testing.T) {
 }
 
 func TestAnUnreachableMachineIsPointedAtRmTarget(t *testing.T) {
-	root := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
-	t.Setenv(clitest.FakeConnectorRefuseEnvVar, "this machine is not reachable")
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
+	project.Provider.FakeConnector().Refuse(refusal.Refuse(refusal.CodeNotReady, "this machine is not reachable"))
 	srv := newConsoleServer(t, map[string]any{
 		"id": "con_1", "target": fingerprint, "vendor": "fake", "compute": "container", "reach": "dial",
 	})
@@ -372,8 +372,9 @@ func TestAnUnreachableMachineIsPointedAtRmTarget(t *testing.T) {
 }
 
 func TestRmTargetForgetsTheRowWithoutTouchingTheTarget(t *testing.T) {
-	root := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
-	t.Setenv(clitest.FakeConnectorRefuseEnvVar, "this machine is not reachable")
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
+	project.Provider.FakeConnector().Refuse(refusal.Refuse(refusal.CodeNotReady, "this machine is not reachable"))
 	srv := newConsoleServer(t, map[string]any{
 		"id": "con_1", "target": fingerprint, "vendor": "fake", "compute": "container", "reach": "dial",
 	})
@@ -393,7 +394,7 @@ func TestRmTargetForgetsTheRowWithoutTouchingTheTarget(t *testing.T) {
 	if len(srv.deleted) != 1 || srv.deleted[0] != "con_1" {
 		t.Fatalf("deleted = %v, want the row keyed by the target the flag named", srv.deleted)
 	}
-	if log, err := clitest.LoadFakeConnectorLog(os.Getenv(clitest.FakeConnectorLogEnvVar)); err == nil && log.Removed {
+	if project.Provider.FakeConnector().Removals() != 0 {
 		t.Error("the provider was asked to take the connector off a machine this run was told not to reach")
 	}
 	if !strings.Contains(stdout.String(), "never reached") {
@@ -402,7 +403,8 @@ func TestRmTargetForgetsTheRowWithoutTouchingTheTarget(t *testing.T) {
 }
 
 func TestRmTargetSaysSoWhenTheConsoleHasNoSuchTarget(t *testing.T) {
-	root := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
 	srv := newConsoleServer(t)
 	linked(t, root, srv.URL)
 
@@ -426,7 +428,8 @@ func TestRmTargetSaysSoWhenTheConsoleHasNoSuchTarget(t *testing.T) {
 }
 
 func TestStatusSaysWhatTheConsoleHasRegistered(t *testing.T) {
-	root := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
 	seen := time.Now().Add(-10 * time.Second)
 	srv := newConsoleServer(t, map[string]any{
 		"id": "con_1", "target": fingerprint, "vendor": "fake", "compute": "container", "reach": "dial",
@@ -451,7 +454,8 @@ func TestStatusSaysWhatTheConsoleHasRegistered(t *testing.T) {
 }
 
 func TestStatusSaysSoWhenTheOrganizationHasNoConnector(t *testing.T) {
-	root := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
 	srv := newConsoleServer(t)
 	linked(t, root, srv.URL)
 
@@ -469,7 +473,8 @@ func TestStatusSaysSoWhenTheOrganizationHasNoConnector(t *testing.T) {
 }
 
 func TestAnUnlinkedTreeIsPointedAtOcelLink(t *testing.T) {
-	root := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
 
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
@@ -489,7 +494,8 @@ func TestAnUnlinkedTreeIsPointedAtOcelLink(t *testing.T) {
 }
 
 func TestBeingLoggedOutIsPointedAtOcelLogin(t *testing.T) {
-	root := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
 
 	deps := clitest.NewDeps()
 	deps.LoadCredentials = func() (console.Credentials, error) {
@@ -529,25 +535,24 @@ func TestTheVendorIsWhateverTheConfigPointsAtAndNoTableGatesIt(t *testing.T) {
 }
 
 func TestTheComputeGoesToTheProviderUntouched(t *testing.T) {
-	root := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
 	srv := newConsoleServer(t)
 	linked(t, root, srv.URL)
 
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
 
+	project.Provider.FakeConnector().RunsOn(provider.ComputeContainer, provider.ComputeServerless)
 	opts := opened(t, srv)
 	opts.compute = "serverless"
 	if err := runAdd(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opts); err != nil {
 		t.Fatalf("runAdd err = %v", err)
 	}
 
-	log, err := clitest.LoadFakeConnectorLog(os.Getenv(clitest.FakeConnectorLogEnvVar))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if log.Compute != "serverless" {
-		t.Errorf("the provider was asked for %q, want the compute the flag named passed through with no vendor table in the way", log.Compute)
+	installed := project.Provider.FakeConnector().Installed()
+	if len(installed) != 1 || installed[0].Compute != provider.ComputeServerless {
+		t.Errorf("the provider was asked for %v, want the compute the flag named passed through with no vendor table in the way", installed)
 	}
 	if len(srv.patched) != 1 || srv.patched[0]["compute"] != "serverless" {
 		t.Errorf("patches = %v, want the console told what the provider chose", srv.patched)
@@ -620,7 +625,8 @@ func runEvents(t *testing.T, out string) []*streamv1.RunEvent {
 }
 
 func TestStatusForAConfigReadsItsTargetInTheCheckPhaseOfItsRunAndPrintsWhatTheConsoleHasAloneOnStdout(t *testing.T) {
-	root := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
 	srv := newConsoleServer(t, map[string]any{
 		"id": "con_1", "target": fingerprint, "vendor": "fake", "compute": "container", "reach": "dial",
 	})
