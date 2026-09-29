@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/seal"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/cloudrun"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
@@ -89,6 +90,7 @@ func (p *Provider) Facts() provider.Facts {
 		Pairings: []provider.Pairing{
 			{Edge: edge.None, Router: cloudrun.RouterKind, Computes: provider.Computes()},
 			{Edge: alb.Kind, Router: router.Kind(alb.Kind), Computes: provider.Computes()},
+			{Edge: cloudflare.Kind, Router: router.Kind(alb.Kind), Computes: provider.Computes()},
 		},
 		DNSKinds:        []provider.DNSKind{dnsCloudflare},
 		StoresArtifacts: true,

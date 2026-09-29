@@ -13,19 +13,26 @@ import (
 type Program func(ctx *pulumi.Context, project string) error
 
 type Target struct {
-	Tier environment.Tier
-	Slug string
+	Tier     environment.Tier
+	Slug     string
+	Shielded bool
 }
 
 func (t Target) Name() string {
-	if t.Slug == "" {
-		return FrontStack(t.Tier)
+	switch {
+	case t.Slug != "":
+		return BindingStack(t.Slug, t.Tier)
+	case t.Shielded:
+		return ShieldedFrontStack(t.Tier)
 	}
-	return BindingStack(t.Slug, t.Tier)
+	return FrontStack(t.Tier)
 }
 
 func (t Target) Prefix() string {
-	if t.Slug == "" {
+	switch {
+	case t.Slug == "" && t.Shielded:
+		return dashed(string(Kind), "front", shieldedWord, string(t.Tier))
+	case t.Slug == "":
 		return dashed(string(Kind), "front", string(t.Tier))
 	}
 	return dashed(string(Kind), "project", naming.Sanitize(t.Slug))
@@ -56,6 +63,7 @@ type Front struct {
 	CertificateMap string `json:"certificateMap,omitempty"`
 	URLMap         string `json:"urlMap,omitempty"`
 	NotFound       string `json:"notFound,omitempty"`
+	Shielded       bool   `json:"shielded,omitempty"`
 }
 
 func (f Front) provisioned() bool {
@@ -79,6 +87,10 @@ func frontOf(outputs map[string]string) Front {
 }
 
 func FrontStack(tier environment.Tier) string { return dashed(string(Kind), "front", string(tier)) }
+
+func ShieldedFrontStack(tier environment.Tier) string {
+	return dashed(string(Kind), "front", shieldedWord, string(tier))
+}
 
 func BindingStack(slug string, tier environment.Tier) string {
 	return dashed(string(Kind), string(tier), naming.Sanitize(slug))

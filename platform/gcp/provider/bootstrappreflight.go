@@ -115,17 +115,23 @@ func (b bootstrap) preflight(ctx context.Context, read survey, features []string
 }
 
 func permissionsFor(features []string) []string {
-	if !slices.Contains(features, albFeature) {
-		return slices.Clone(bootstrapPermissions)
+	switch {
+	case slices.Contains(features, albShieldedFeature):
+		return slices.Concat(bootstrapPermissions, alb.ShieldedPermissions)
+	case slices.Contains(features, albFeature):
+		return slices.Concat(bootstrapPermissions, alb.Permissions)
 	}
-	return slices.Concat(bootstrapPermissions, alb.Permissions)
+	return slices.Clone(bootstrapPermissions)
 }
 
 func rolesCovering(features []string) []string {
-	if !slices.Contains(features, albFeature) {
-		return rolesFor(edge.PurposeBootstrap)
+	switch {
+	case slices.Contains(features, albShieldedFeature):
+		return slices.Concat(rolesFor(edge.PurposeBootstrap), alb.ShieldedRoles())
+	case slices.Contains(features, albFeature):
+		return slices.Concat(rolesFor(edge.PurposeBootstrap), alb.Roles())
 	}
-	return slices.Concat(rolesFor(edge.PurposeBootstrap), alb.Roles())
+	return rolesFor(edge.PurposeBootstrap)
 }
 
 func (b bootstrap) servicesOn(ctx context.Context, features []string) error {

@@ -93,25 +93,33 @@ func TestAnEdgeThisProviderCannotFrontWithIsRefusedWithThePriceOfTheOneThatCan(t
 	}
 }
 
-func TestNamingTheCloudflareEdgeIsRefusedWhenTheBootstrapIsOpenedAndSaysWhy(t *testing.T) {
+func TestCloudflareFrontsTheLoadBalancerAsAProxyThatRunsNoCode(t *testing.T) {
 	t.Parallel()
 
 	p := testProvider(t)
-	if slices.Contains(p.Facts().Edges, cloudflare.Kind) {
-		t.Errorf("Facts().Edges = %v, and an edge this provider builds no program for is one every deploy through it is refused on", p.Facts().Edges)
+	if !slices.Contains(p.Facts().Edges, cloudflare.Kind) {
+		t.Errorf("Facts().Edges = %v, want cloudflare among them", p.Facts().Edges)
 	}
-	var refused refusal.Refusal
-	_, err := p.Bootstrap(cloudflare.Kind)
-	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
-		t.Fatalf("Bootstrap(%q) = %v, want an %s refusal before a token is spent provisioning anything", cloudflare.Kind, err, refusal.CodeInvalid)
+	if _, err := p.Bootstrap(cloudflare.Kind); err != nil {
+		t.Fatalf("Bootstrap(%q) = %v, want the bootstrap that raises the load balancer it forwards to", cloudflare.Kind, err)
 	}
-	for _, said := range []string{"program", "`edge` out", string(alb.Kind)} {
-		if !strings.Contains(refused.Message, said) {
-			t.Errorf("the refusal reads %q, want it to say %q: the reader learns why it is refused and what to name instead", refused.Message, said)
-		}
+	front, err := p.Edges().Open(cloudflare.Kind)
+	if err != nil {
+		t.Fatalf("Open(%q) = %v", cloudflare.Kind, err)
 	}
-	if _, err := p.Edges().Open(cloudflare.Kind); !errors.As(err, &refused) {
-		t.Errorf("Open(%q) = %v, want the same refusal on the deploy path", cloudflare.Kind, err)
+	facts := front.Facts()
+	if facts.RunsCode || !facts.ProxiesRecords || facts.ServesUnbound {
+		t.Errorf("the cloudflare edge's facts = %+v, want a proxy that forwards records to an origin and runs no worker", facts)
+	}
+	if !facts.ShieldsOrigin {
+		t.Errorf("the cloudflare edge's facts = %+v, want the origin shielded, so a Cloud Run service answers only its load balancer", facts)
+	}
+	hooks := front.Hooks()
+	if hooks.EnsureClientCertificate == nil || hooks.CheckBootstrapInstalled == nil || hooks.ListBoundHostnames == nil {
+		t.Error("the cloudflare edge presents no client certificate, or says nothing of the load balancer its bootstrap raises")
+	}
+	if got := p.Facts().ListPairedRouters(cloudflare.Kind); !slices.Equal(got, []router.Kind{router.Kind(alb.Kind)}) {
+		t.Errorf("ListPairedRouters(cloudflare) = %v, want the load balancer alone", got)
 	}
 }
 

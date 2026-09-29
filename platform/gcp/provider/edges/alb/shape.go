@@ -42,7 +42,7 @@ const (
 )
 
 func ShapeFront(tier environment.Tier, previewBaseDomain string) []pricing.Shaped {
-	front := frontNames(tier)
+	front := frontNames(tier, false)
 	shaped := []pricing.Shaped{
 		{Name: front.Address, Type: tfGlobalAddress, Properties: map[string]any{"address_type": "EXTERNAL"}},
 		{Name: front.NotFound, Type: tfBackendService, Properties: backendProperties(false)},

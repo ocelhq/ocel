@@ -5,6 +5,7 @@ import (
 
 	"github.com/pulumi/pulumi-gcp/sdk/v9/go/gcp/certificatemanager"
 	"github.com/pulumi/pulumi-gcp/sdk/v9/go/gcp/compute"
+	"github.com/pulumi/pulumi-gcp/sdk/v9/go/gcp/networksecurity"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -31,12 +32,17 @@ type names struct {
 	URLMap         string
 	Proxy          string
 	Rule           string
+	Trust          string
+	Policy         string
 }
 
 func dashed(parts ...string) string { return strings.Join(parts, "-") }
 
-func frontNames(tier environment.Tier) names {
+func frontNames(tier environment.Tier, shielded bool) names {
 	stem := dashed("ocel", string(Kind), string(tier))
+	if shielded {
+		stem = dashed("ocel", string(Kind), shieldedWord, string(tier))
+	}
 	return names{
 		Address:        stem + "-address",
 		NotFound:       stem + "-notfound",
@@ -44,13 +50,16 @@ func frontNames(tier environment.Tier) names {
 		URLMap:         stem + "-routes",
 		Proxy:          stem + "-https",
 		Rule:           stem + "-forward",
+		Trust:          stem + "-trust",
+		Policy:         stem + "-mtls",
 	}
 }
 
 type frontSpec struct {
-	Region  string
-	Names   names
-	Preview previewEntry
+	Region             string
+	Names              names
+	Preview            previewEntry
+	ClientCertificates []string
 }
 
 const notFoundStatus = 404
@@ -132,6 +141,43 @@ func previewWildcardResources(ctx *pulumi.Context, spec frontSpec, project strin
 	return err
 }
 
+const (
+	rejectInvalidClients = "REJECT_INVALID"
+	trustConfigPath      = "projects/%s/locations/global/trustConfigs/%s"
+	serverPolicyPath     = "//networksecurity.googleapis.com/projects/%s/locations/global/serverTlsPolicies/%s"
+	globalLocation       = "global"
+)
+
+func clientValidation(ctx *pulumi.Context, spec frontSpec, project string) (pulumi.Resource, error) {
+	allowed := certificatemanager.TrustConfigAllowlistedCertificateArray{}
+	for _, pem := range spec.ClientCertificates {
+		allowed = append(allowed, &certificatemanager.TrustConfigAllowlistedCertificateArgs{PemCertificate: pulumi.String(pem)})
+	}
+	trust, err := certificatemanager.NewTrustConfig(ctx, spec.Names.Trust, &certificatemanager.TrustConfigArgs{
+		Name:                    pulumi.String(spec.Names.Trust),
+		Project:                 pulumi.String(project),
+		Location:                pulumi.String(globalLocation),
+		AllowlistedCertificates: allowed,
+		Description:             pulumi.String("the client certificates the edge in front of this load balancer presents, and nothing else"),
+	})
+	if err != nil {
+		return nil, err
+	}
+	policy, err := networksecurity.NewServerTlsPolicy(ctx, spec.Names.Policy, &networksecurity.ServerTlsPolicyArgs{
+		Name:     pulumi.String(spec.Names.Policy),
+		Project:  pulumi.String(project),
+		Location: pulumi.String(globalLocation),
+		MtlsPolicy: &networksecurity.ServerTlsPolicyMtlsPolicyArgs{
+			ClientValidationMode:        pulumi.String(rejectInvalidClients),
+			ClientValidationTrustConfig: pulumi.Sprintf(trustConfigPath, project, spec.Names.Trust),
+		},
+	}, pulumi.DependsOn([]pulumi.Resource{trust}))
+	if err != nil {
+		return nil, err
+	}
+	return policy, nil
+}
+
 func frontProgram(spec frontSpec) Program {
 	return func(ctx *pulumi.Context, project string) error {
 		projectID := pulumi.String(project)
@@ -172,12 +218,22 @@ func frontProgram(spec frontSpec) Program {
 		if err != nil {
 			return err
 		}
-		proxy, err := compute.NewTargetHttpsProxy(ctx, spec.Names.Proxy, &compute.TargetHttpsProxyArgs{
+		proxyArgs := &compute.TargetHttpsProxyArgs{
 			Name:           pulumi.String(spec.Names.Proxy),
 			Project:        projectID,
 			UrlMap:         routes.SelfLink,
 			CertificateMap: pulumi.Sprintf(certificateHost, project, spec.Names.CertificateMap),
-		})
+		}
+		var validating []pulumi.ResourceOption
+		if len(spec.ClientCertificates) > 0 {
+			policy, err := clientValidation(ctx, spec, project)
+			if err != nil {
+				return err
+			}
+			proxyArgs.ServerTlsPolicy = pulumi.Sprintf(serverPolicyPath, project, spec.Names.Policy)
+			validating = append(validating, pulumi.DependsOn([]pulumi.Resource{policy}))
+		}
+		proxy, err := compute.NewTargetHttpsProxy(ctx, spec.Names.Proxy, proxyArgs, validating...)
 		if err != nil {
 			return err
 		}

@@ -22,7 +22,7 @@ type edges struct {
 	region    string
 }
 
-var supportedEdges = []edge.Kind{alb.Kind}
+var supportedEdges = []edge.Kind{alb.Kind, cloudflare.Kind}
 
 func (p *Provider) edges() edges {
 	return edges{
@@ -58,11 +58,7 @@ func (e edges) Open(kind edge.Kind) (edge.Edge, error) {
 	case alb.Kind:
 		return e.openALB(), nil
 	case cloudflare.Kind:
-		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"this provider cannot front deployments with the %q edge yet: that edge answers every request from a worker it runs, "+
-				"and nothing here builds the program that worker would run, so a bootstrap of it would provision resources no deploy could use.\n"+
-				"Leave `edge` out, and each service answers on the url Cloud Run gives it, or name %s, which provisions one load balancer per bootstrap tier at %s",
-			kind, alb.Kind, alb.BaselineCost)
+		return cloudflareFront{Proxy: cloudflare.NewProxy(string(e.namespace)), origin: e.openALB().Shielded()}, nil
 	}
 	return nil, refusal.Refuse(refusal.CodeInvalid,
 		"this provider cannot front deployments with the %q edge: leave `edge` out, and each service answers on the url Cloud Run gives it, "+

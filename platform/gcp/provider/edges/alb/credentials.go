@@ -18,6 +18,23 @@ var roles = []string{loadBalancerRole, certificatesRole}
 
 func Roles() []string { return slices.Clone(roles) }
 
+var shieldingRoles = []string{"roles/compute.networkAdmin", "roles/compute.securityAdmin"}
+
+func ShieldedRoles() []string { return slices.Concat(roles, shieldingRoles) }
+
+var ShieldedPermissions = slices.Concat(Permissions, []string{
+	"certificatemanager.trustconfigs.create",
+	"certificatemanager.trustconfigs.delete",
+	"certificatemanager.trustconfigs.get",
+	"certificatemanager.trustconfigs.update",
+	"certificatemanager.trustconfigs.use",
+	"networksecurity.serverTlsPolicies.create",
+	"networksecurity.serverTlsPolicies.delete",
+	"networksecurity.serverTlsPolicies.get",
+	"networksecurity.serverTlsPolicies.use",
+	"compute.targetHttpsProxies.update",
+})
+
 var Permissions = []string{
 	"compute.globalAddresses.create",
 	"compute.globalAddresses.delete",

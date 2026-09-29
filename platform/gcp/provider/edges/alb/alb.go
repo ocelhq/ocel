@@ -29,9 +29,14 @@ type Deps struct {
 	Pins      pin.Pins
 	Project   string
 	Region    string
+	Shielded  bool
 }
 
 type Edge struct{ deps Deps }
+
+func (e *Edge) frontTarget(tier environment.Tier) Target {
+	return Target{Tier: tier, Shielded: e.deps.Shielded}
+}
 
 func New(deps Deps) *Edge { return &Edge{deps: deps} }
 
@@ -84,16 +89,24 @@ func (e *Edge) raise(ctx context.Context, tier environment.Tier, progress progre
 }
 
 func (e *Edge) raiseServing(ctx context.Context, tier environment.Tier, preview previewEntry, progress progress.Progress) (Front, error) {
-	names := frontNames(tier)
-	outputs, err := e.deps.Stacks.Up(ctx, Target{Tier: tier}, frontProgram(frontSpec{
+	spec := frontSpec{
 		Region:  e.deps.Region,
-		Names:   names,
+		Names:   frontNames(tier, e.deps.Shielded),
 		Preview: preview,
-	}), progress)
+	}
+	if e.deps.Shielded {
+		trusted, err := e.trustedOrPlaceholder(ctx, tier)
+		if err != nil {
+			return Front{}, err
+		}
+		spec.ClientCertificates = trusted
+	}
+	outputs, err := e.deps.Stacks.Up(ctx, e.frontTarget(tier), frontProgram(spec), progress)
 	if err != nil {
 		return Front{}, err
 	}
 	front := frontOf(outputs)
+	front.Shielded = e.deps.Shielded
 	if !front.provisioned() {
 		return Front{}, fmt.Errorf(
 			"provision the %s load balancer for tier %s: it reported %+v, and a hostname is bound by writing into its certificate map and its url map",
@@ -103,7 +116,7 @@ func (e *Edge) raiseServing(ctx context.Context, tier environment.Tier, preview 
 }
 
 func (e *Edge) bootstrapInstalled(ctx context.Context, tier environment.Tier) (bool, error) {
-	outputs, err := e.deps.Stacks.Outputs(ctx, Target{Tier: tier})
+	outputs, err := e.deps.Stacks.Outputs(ctx, e.frontTarget(tier))
 	if err != nil {
 		return false, err
 	}
@@ -114,7 +127,7 @@ func (e *Edge) boundHostnames(ctx context.Context, tier environment.Tier) ([]str
 	if e.deps.Entries == nil {
 		return nil, nil
 	}
-	outputs, err := e.deps.Stacks.Outputs(ctx, Target{Tier: tier})
+	outputs, err := e.deps.Stacks.Outputs(ctx, e.frontTarget(tier))
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +149,7 @@ func (e *Edge) Teardown(ctx context.Context, tier environment.Tier) error {
 				"release those hostnames with `ocel domain remove` in the projects that bound them, then take this bootstrap down",
 			Kind, tier, strings.Join(bound, ", "))
 	}
-	return e.deps.Stacks.Destroy(ctx, Target{Tier: tier}, progress.DiscardProgress())
+	return e.deps.Stacks.Destroy(ctx, e.frontTarget(tier), progress.DiscardProgress())
 }
 
 type edgeRecord struct {
@@ -160,7 +173,7 @@ func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.St
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"the %q edge serves a project by slug, and this stack names none", Kind)
 	}
-	outputs, err := e.deps.Stacks.Outputs(ctx, Target{Tier: spec.Tier})
+	outputs, err := e.deps.Stacks.Outputs(ctx, e.frontTarget(spec.Tier))
 	if err != nil {
 		return nil, err
 	}

@@ -47,11 +47,29 @@ func (r routerStack) State() router.StackState {
 	return router.NewStackState(r.s.State())
 }
 
-func (r routerStack) Claim(context.Context, router.Claim) (edge.Origin, error) {
-	return edge.Origin{}, nil
+func (r routerStack) Claim(ctx context.Context, claim router.Claim) (edge.Origin, error) {
+	s := r.s
+	fronted := s.e
+	if claim.ClientCertificate != "" {
+		fronted = s.e.Shielded()
+	}
+	if claim.ClientCertificate != "" || !s.recorded.Front.provisioned() {
+		front, err := fronted.frontFor(ctx, s.state.Tier, claim.ClientCertificate)
+		if err != nil {
+			return edge.Origin{}, err
+		}
+		s.recorded.Front = front
+		s.keep()
+	}
+	if err := s.BindDomain(ctx, edge.DomainBinding{Hostname: claim.Hostname, Certificate: claim.Certificate, App: claim.App}); err != nil {
+		return edge.Origin{}, err
+	}
+	return edge.Origin{Address: s.recorded.Front.Address}, nil
 }
 
-func (r routerStack) Disclaim(context.Context, string) error { return nil }
+func (r routerStack) Disclaim(ctx context.Context, hostname string) error {
+	return r.s.UnbindDomain(ctx, hostname)
+}
 
 func (r routerStack) Flip(ctx context.Context, flip router.Flip, progress progress.Progress) error {
 	if err := pin.Flip(ctx, r.s.e.deps.Pins, flip, progress); err != nil {
@@ -62,4 +80,4 @@ func (r routerStack) Flip(ctx context.Context, flip router.Flip, progress progre
 
 func (r routerStack) RemovePointer(context.Context, string, progress.Progress) error { return nil }
 
-func (r routerStack) Destroy(context.Context) error { return nil }
+func (r routerStack) Destroy(ctx context.Context) error { return r.s.Destroy(ctx) }
