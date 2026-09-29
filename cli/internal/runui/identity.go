@@ -8,11 +8,10 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/fatih/color"
 
+	"github.com/ocelhq/ocel/cli/internal/version"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
-
-var Version = "dev"
 
 const (
 	identityGap  = "  "
@@ -26,7 +25,7 @@ const (
 func identityLines(present Presentation, ev *streamv1.IdentityEvent) []string {
 	var out []string
 	if head := identityHeadline(present, ev); head != "" {
-		out = append(out, identityPill(present).Render(identityName)+identityGap+muted(present, Version)+head)
+		out = append(out, identityPill(present).Render(identityName)+identityGap+muted(present, version.Version)+head)
 	}
 	rows := partyRows(present, ev)
 	if len(out) > 0 && len(rows) > 0 {

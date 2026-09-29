@@ -88,7 +88,6 @@ func handleInterrupts(cmd *cobra.Command) {
 }
 
 func init() {
-	runui.Version = version.Version
 	s := newDeps()
 	rootCmd.PersistentPreRun = func(cmd *cobra.Command, _ []string) {
 		s.AttachCommandSink(cmd)
