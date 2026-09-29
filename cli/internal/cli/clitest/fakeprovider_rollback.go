@@ -3,6 +3,7 @@ package clitest
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"connectrpc.com/connect"
 
@@ -34,7 +35,7 @@ func (s *deployFakeProviderServer) Rollback(ctx context.Context, req *contractv1
 const FakeRollbackPromotionID = "promo-rollback"
 
 func rollbackResponseFor(entry *contractv1.PromotionHistoryEntry) *contractv1.RollbackResponse {
-	return &contractv1.RollbackResponse{
+	rolled := &contractv1.RollbackResponse{
 		Promoted: &contractv1.Promotion{
 			PromotionId: FakeRollbackPromotionID,
 			Ts:          9999,
@@ -42,4 +43,8 @@ func rollbackResponseFor(entry *contractv1.PromotionHistoryEntry) *contractv1.Ro
 			FlipBound:   fakeFlipBound(),
 		},
 	}
+	if warning := os.Getenv(FakeRollbackWarningEnvVar); warning != "" {
+		rolled.Warnings = []string{warning}
+	}
+	return rolled
 }

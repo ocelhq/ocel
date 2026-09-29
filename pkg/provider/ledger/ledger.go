@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -36,7 +37,15 @@ func Partition(tier environment.Tier, slug string) keyvalue.Partition {
 	return partition
 }
 
-func RecordKey(app, build string) string { return "record:" + app + "/" + build }
+const recordKeyPrefix = "record:"
+
+func RecordKey(app, build string) string { return recordKeyPrefix + app + "/" + build }
+
+func splitRecordKey(key string) (string, string, bool) {
+	rest, prefixed := strings.CutPrefix(key, recordKeyPrefix)
+	app, build, split := strings.Cut(rest, "/")
+	return app, build, prefixed && split && app != "" && build != ""
+}
 
 func (l *Ledger) pointerKey(pointer string) keyvalue.Key {
 	return l.partition.Key("pointers", pointer)
@@ -145,35 +154,27 @@ func (l *Ledger) write(ctx context.Context, stored keyvalue.Entry, next Pointer)
 	return err
 }
 
-func (l *Ledger) Promote(ctx context.Context, promotion router.Promotion, pointer, replaces string) (router.PruneResult, error) {
-	return l.recordPromotion(ctx, pointer, func(current Pointer) (Pointer, []RecordedPromotion, error) {
+func (l *Ledger) Promote(ctx context.Context, promotion router.Promotion, pointer, replaces string) ([]RecordedPromotion, error) {
+	_, dropped, err := l.change(ctx, router.ResolvePointer(pointer), func(current Pointer) (Pointer, []RecordedPromotion, error) {
 		return current.Promote(promotion, replaces, KeptPromotions)
 	})
+	return dropped, err
 }
 
-func (l *Ledger) Rollback(ctx context.Context, target string, promotion router.Promotion, pointer, replaces string) (router.PruneResult, error) {
-	return l.recordPromotion(ctx, pointer, func(current Pointer) (Pointer, []RecordedPromotion, error) {
+func (l *Ledger) Rollback(ctx context.Context, target string, promotion router.Promotion, pointer, replaces string) ([]RecordedPromotion, error) {
+	_, dropped, err := l.change(ctx, router.ResolvePointer(pointer), func(current Pointer) (Pointer, []RecordedPromotion, error) {
 		return current.Rollback(target, promotion, replaces, KeptPromotions)
 	})
-}
-
-func (l *Ledger) recordPromotion(ctx context.Context, pointer string, apply func(Pointer) (Pointer, []RecordedPromotion, error)) (router.PruneResult, error) {
-	kept, dropped, err := l.change(ctx, router.ResolvePointer(pointer), apply)
-	if err != nil {
-		return router.PruneResult{}, err
-	}
-	if len(dropped) == 0 {
-		return router.PruneResult{KeptPromotionIDs: collectPromotionIDs(kept.Promotions)}, nil
-	}
-	return l.removeDropped(ctx, kept, dropped)
+	return dropped, err
 }
 
 func (l *Ledger) changeDropping(ctx context.Context, pointer string, apply func(Pointer) (Pointer, []RecordedPromotion, error)) (router.PruneResult, error) {
-	kept, dropped, err := l.change(ctx, router.ResolvePointer(pointer), apply)
+	name := router.ResolvePointer(pointer)
+	_, dropped, err := l.change(ctx, name, apply)
 	if err != nil {
 		return router.PruneResult{}, err
 	}
-	return l.removeDropped(ctx, kept, dropped)
+	return l.ReadUnnamedRecords(ctx, name, dropped)
 }
 
 func (l *Ledger) Unpromote(ctx context.Context, promotionID, pointer string) error {
@@ -224,58 +225,70 @@ func (l *Ledger) RemovePointer(ctx context.Context, pointer string) (router.Prun
 	})
 }
 
-func (l *Ledger) removeDropped(ctx context.Context, kept Pointer, dropped []RecordedPromotion) (router.PruneResult, error) {
-	named, err := l.readRecordKeysNamedElsewhere(ctx, kept.Name)
+func (l *Ledger) ReadUnnamedRecords(ctx context.Context, pointer string, dropped []RecordedPromotion) (router.PruneResult, error) {
+	name := router.ResolvePointer(pointer)
+	pointers, err := l.readPointers(ctx)
 	if err != nil {
 		return router.PruneResult{}, err
 	}
-	keptKeys := collectRecordKeys(kept.Promotions)
-	var removed []string
-	for _, recorded := range dropped {
-		for app, build := range recorded.Builds {
-			key := RecordKey(app, build)
-			if slices.Contains(keptKeys, key) || named[key] || slices.Contains(removed, key) {
-				continue
-			}
-			if err := keyvalue.Forget(ctx, l.keyValues, l.deploymentKey(app, build)); err != nil {
-				return router.PruneResult{}, fmt.Errorf("remove the deployment record %s/%s no promotion names: %w", app, build, err)
-			}
-			removed = append(removed, key)
+	kept := Pointer{Name: name}
+	named := map[string]bool{}
+	for _, read := range pointers {
+		if read.Name == name {
+			kept = read
+		}
+		for _, key := range collectRecordKeys(read.Promotions) {
+			named[key] = true
 		}
 	}
-	slices.Sort(removed)
-	surviving, err := l.readRecordKeys(ctx)
+	recorded, err := l.readRecordKeys(ctx)
 	if err != nil {
 		return router.PruneResult{}, err
+	}
+	var unnamed []string
+	for _, key := range collectRecordKeys(dropped) {
+		if !named[key] && slices.Contains(recorded, key) {
+			unnamed = append(unnamed, key)
+		}
 	}
 	return router.PruneResult{
 		KeptPromotionIDs:           collectPromotionIDs(kept.Promotions),
 		RemovedPromotionIDs:        collectPromotionIDs(dropped),
-		RemovedRecordKeys:          removed,
-		SurvivingRecordKeys:        surviving,
-		SurvivingPointerRecordKeys: keptKeys,
+		UnnamedRecordKeys:          unnamed,
+		SurvivingRecordKeys:        slices.DeleteFunc(recorded, func(key string) bool { return slices.Contains(unnamed, key) }),
+		SurvivingPointerRecordKeys: collectRecordKeys(kept.Promotions),
 	}, nil
 }
 
-func (l *Ledger) readRecordKeysNamedElsewhere(ctx context.Context, name string) (map[string]bool, error) {
+func (l *Ledger) ForgetUnnamedRecords(ctx context.Context, keys []string) error {
+	var errs []error
+	for _, key := range keys {
+		app, build, ok := splitRecordKey(key)
+		if !ok {
+			errs = append(errs, fmt.Errorf("forget the deployment record %q: it names no app and build", key))
+			continue
+		}
+		if err := keyvalue.Forget(ctx, l.keyValues, l.deploymentKey(app, build)); err != nil {
+			errs = append(errs, fmt.Errorf("remove the deployment record %s/%s no promotion names: %w", app, build, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func (l *Ledger) readPointers(ctx context.Context) ([]Pointer, error) {
 	stored, err := l.keyValues.List(ctx, l.partition, "pointers")
 	if err != nil {
 		return nil, fmt.Errorf("read the pointers for %s: %w", l.partition, err)
 	}
-	named := map[string]bool{}
+	pointers := make([]Pointer, 0, len(stored))
 	for _, entry := range stored {
-		var other Pointer
-		if err := json.Unmarshal(entry.Value, &other); err != nil {
+		var read Pointer
+		if err := json.Unmarshal(entry.Value, &read); err != nil {
 			return nil, fmt.Errorf("decode the pointer %s: %w", entry.Key, err)
 		}
-		if other.Name == name {
-			continue
-		}
-		for _, key := range collectRecordKeys(other.Promotions) {
-			named[key] = true
-		}
+		pointers = append(pointers, read)
 	}
-	return named, nil
+	return pointers, nil
 }
 
 func (l *Ledger) Pointers(ctx context.Context) ([]string, error) {

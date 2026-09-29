@@ -431,3 +431,25 @@ func TestARollbackPassesOverAPromotionTakenBackAndRefusesToNameOne(t *testing.T)
 		t.Errorf("rollbackTarget(--to p2) err = %v, want p2 refused as a promotion that never served", err)
 	}
 }
+
+func TestARollbackShowsTheWarningsTheProviderReturned(t *testing.T) {
+	root, sockPath := clitest.SetUpDeployFixture(t)
+	deps := newTestDeps()
+	clitest.SetLoggedIn(&deps)
+	clitest.StubBuild(&deps, nil)
+	t.Setenv(clitest.FakeInfraTierEnvVar, "production")
+	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+	const warned = "the stack of an old build is still provisioned"
+	t.Setenv(clitest.FakeRollbackWarningEnvVar, warned)
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(deps, &stdout)
+	if err := runRollback(context.Background(), deps, root, rollbackOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runRollback err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	if out := stdout.String(); !strings.Contains(out, warned) || !strings.Contains(out, "Rolled back to promotion promo-1") {
+		t.Errorf("stdout = %q, want the rollback reported with the provider's warning %q", out, warned)
+	}
+
+	clitest.WaitForNoStaleSocket(t, sockPath)
+}

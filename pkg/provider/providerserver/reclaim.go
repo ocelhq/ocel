@@ -19,7 +19,7 @@ import (
 )
 
 func ReclaimPreview(ctx context.Context, p provider.Provider, slug, pointer string, removed router.PruneResult, progress progress.Progress) error {
-	if err := reclaimPruned(ctx, p, slug, environment.TierPreview, pointer, removed, progress); err != nil {
+	if err := reclaimUnnamed(ctx, p, openProjectLedger(p, environment.TierPreview, slug), pointer, removed, progress); err != nil {
 		return err
 	}
 	return destroyPointerStacks(ctx, p, slug, pointer,
@@ -164,45 +164,60 @@ func releasesOf(keys []string) map[appRelease]bool {
 	return served
 }
 
-func reclaimPruned(ctx context.Context, p provider.Provider, slug string, tier environment.Tier, env string, pruned router.PruneResult, progress progress.Progress) error {
-	targets, err := ReclaimTargets(slug, env, pruned.RemovedRecordKeys, pruned.SurvivingRecordKeys, pruned.SurvivingPointerRecordKeys)
+func (s *edgeSession) reclaimDropped(ctx context.Context, pointer string, dropped []ledger.RecordedPromotion, progress progress.Progress) error {
+	if len(dropped) == 0 {
+		return nil
+	}
+	unnamed, err := s.ledger.ReadUnnamedRecords(ctx, pointer, dropped)
 	if err != nil {
 		return err
 	}
-	return destroyReclaimTargets(ctx, p, slug, tier, targets, progress)
+	return reclaimUnnamed(ctx, s.provider, s.ledger, pointer, unnamed, progress)
 }
 
-func reclaimDropped(ctx context.Context, p provider.Provider, slug string, tier environment.Tier, env, promotionID string, pruned router.PruneResult, progress progress.Progress) error {
-	if err := reclaimPruned(ctx, p, slug, tier, env, pruned, progress); err != nil {
-		return fmt.Errorf("promotion %s serves, and the builds it dropped past the newest %d promotions were not all reclaimed: %w", promotionID, ledger.KeptPromotions, err)
+func unreclaimedWarning(promotionID string, err error) string {
+	return fmt.Sprintf("Promotion %s serves, but reclaiming the builds it dropped past the newest %d promotions failed, and what was not reclaimed stays until this environment is destroyed: %v",
+		promotionID, ledger.KeptPromotions, err)
+}
+
+func reclaimUnnamed(ctx context.Context, p provider.Provider, l projectLedger, pointer string, unnamed router.PruneResult, progress progress.Progress) error {
+	targets, err := ReclaimTargets(l.slug, envFor(l.tier, pointer), unnamed.UnnamedRecordKeys, unnamed.SurvivingRecordKeys, unnamed.SurvivingPointerRecordKeys)
+	if err != nil {
+		return err
 	}
-	return nil
-}
-
-func destroyReclaimTargets(
-	ctx context.Context,
-	p provider.Provider,
-	slug string,
-	tier environment.Tier,
-	targets []ReclaimTarget,
-	progress progress.Progress,
-) error {
 	var errs []error
+	unreclaimed := map[string]bool{}
 	for i, target := range targets {
 		progress.Say(fmt.Sprintf("Destroying the stack of %s build %s (%d of %d)", target.App, target.Build, i+1, len(targets)))
-		ref := provider.StackRef{Project: slug, Tier: tier, Name: target.Stack}
-		if err := p.Stacks().Destroy(ctx, ref, progress); err != nil {
-			errs = append(errs, fmt.Errorf("destroy %s: %w", target.Stack, err))
-			continue
-		}
-		if err := stackrecords.Forget(ctx, p.KeyValues(), tier, slug, target.Stack); err != nil {
+		if err := destroyReclaimTarget(ctx, p, l.slug, l.tier, target, progress); err != nil {
 			errs = append(errs, err)
+			unreclaimed[ledger.RecordKey(target.App, target.Build.String())] = true
 		}
-		for _, prefix := range target.Prefixes {
-			if err := p.Artifacts().RemovePrefix(ctx, tier, prefix, progress); err != nil {
-				errs = append(errs, fmt.Errorf("remove %s: %w", prefix, err))
-			}
+	}
+	reclaimed := slices.DeleteFunc(slices.Clone(unnamed.UnnamedRecordKeys), func(key string) bool { return unreclaimed[key] })
+	return errors.Join(append(errs, l.ForgetUnnamedRecords(ctx, reclaimed))...)
+}
+
+func destroyReclaimTarget(ctx context.Context, p provider.Provider, slug string, tier environment.Tier, target ReclaimTarget, progress progress.Progress) error {
+	ref := provider.StackRef{Project: slug, Tier: tier, Name: target.Stack}
+	if err := p.Stacks().Destroy(ctx, ref, progress); err != nil {
+		return fmt.Errorf("destroy %s: %w", target.Stack, err)
+	}
+	var errs []error
+	if err := stackrecords.Forget(ctx, p.KeyValues(), tier, slug, target.Stack); err != nil {
+		errs = append(errs, err)
+	}
+	for _, prefix := range target.Prefixes {
+		if err := p.Artifacts().RemovePrefix(ctx, tier, prefix, progress); err != nil {
+			errs = append(errs, fmt.Errorf("remove %s: %w", prefix, err))
 		}
 	}
 	return errors.Join(errs...)
+}
+
+func envFor(tier environment.Tier, pointer string) string {
+	if tier == environment.TierProduction {
+		return stackrecords.ProductionEnv
+	}
+	return pointer
 }

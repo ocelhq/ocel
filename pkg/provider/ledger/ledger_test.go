@@ -216,34 +216,72 @@ func TestAPromoteThatLosesTheWriteToAChangeThatLeftWhatItReplacesActiveLands(t *
 	}
 }
 
-func TestAPromoteRemovesTheRecordsOfTheBuildsItDropped(t *testing.T) {
-	l, _ := fixture()
-	ctx := context.Background()
+func promotedPastTheKept(t *testing.T, l *Ledger) []RecordedPromotion {
+	t.Helper()
 	for i := range KeptPromotions {
 		promoting(t, l, "", fmt.Sprintf("p%02d", i))
 	}
-	replaces := activeIn(t, l, "")
+	dropped, err := l.Promote(context.Background(), staged(t, l, "latest"), "", activeIn(t, l, ""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dropped
+}
 
-	pruned, err := l.Promote(ctx, staged(t, l, "latest"), "", replaces)
+func TestAPromoteThatDropsPromotionsIsStillOneReadAndOneWriteOfThePointerDocument(t *testing.T) {
+	l, store := fixture()
+	for i := range KeptPromotions {
+		promoting(t, l, "", fmt.Sprintf("p%02d", i))
+	}
+	next := staged(t, l, "latest")
+	store.forget()
+
+	dropped, err := l.Promote(context.Background(), next, "", activeIn(t, l, ""))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if want := []string{"p00"}; !slices.Equal(pruned.RemovedPromotionIDs, want) {
-		t.Errorf("dropped %v, want %v: a promote keeps the newest %d", pruned.RemovedPromotionIDs, want, KeptPromotions)
+	if got := strings.Join(collectPromotionIDs(dropped), ","); got != "p00" {
+		t.Errorf("dropped %s, want p00: a promote keeps the newest %d", got, KeptPromotions)
 	}
-	if want := []string{RecordKey("web", "web-p00")}; !slices.Equal(pruned.RemovedRecordKeys, want) {
-		t.Errorf("removed records %v, want %v", pruned.RemovedRecordKeys, want)
+	pointer := l.pointerKey(router.DefaultPointer).String()
+	for key, n := range store.writes {
+		if key != pointer {
+			t.Errorf("a promote that dropped p00 wrote %s %d times, want only the pointer document: once it has landed, nothing left for it to do can fail", key, n)
+		}
+	}
+}
+
+func TestTheRecordsOfTheBuildsAPromoteDroppedStayUntilTheyAreForgotten(t *testing.T) {
+	l, _ := fixture()
+	ctx := context.Background()
+	dropped := promotedPastTheKept(t, l)
+
+	if _, found, err := l.Record(ctx, "web", "web-p00"); err != nil || !found {
+		t.Fatalf("the record of the dropped build = found %v, %v, want it kept until its stack is reclaimed", found, err)
+	}
+	unnamed, err := l.ReadUnnamedRecords(ctx, "", dropped)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{RecordKey("web", "web-p00")}; !slices.Equal(unnamed.UnnamedRecordKeys, want) {
+		t.Errorf("unnamed records %v, want %v", unnamed.UnnamedRecordKeys, want)
+	}
+	if want := "p00"; strings.Join(unnamed.RemovedPromotionIDs, ",") != want {
+		t.Errorf("removed promotions %v, want %s", unnamed.RemovedPromotionIDs, want)
+	}
+	if err := l.ForgetUnnamedRecords(ctx, unnamed.UnnamedRecordKeys); err != nil {
+		t.Fatal(err)
 	}
 	if _, found, err := l.Record(ctx, "web", "web-p00"); err != nil || found {
-		t.Errorf("the record of the dropped build = found %v, %v, want it removed", found, err)
+		t.Errorf("the record of the dropped build once forgotten = found %v, %v, want it removed", found, err)
 	}
 	if _, found, err := l.Record(ctx, "web", "web-p01"); err != nil || !found {
 		t.Errorf("the record of a kept build = found %v, %v, want it kept", found, err)
 	}
 }
 
-func TestAPromoteKeepsTheRecordOfADroppedBuildAnotherPointerStillNames(t *testing.T) {
+func TestADroppedBuildAnotherPointerStillNamesIsNotUnnamed(t *testing.T) {
 	l, _ := fixture()
 	ctx := context.Background()
 	promoting(t, l, "staging", "p00")
@@ -251,12 +289,22 @@ func TestAPromoteKeepsTheRecordOfADroppedBuildAnotherPointerStillNames(t *testin
 	if _, err := l.Promote(ctx, shared, "", ""); err != nil {
 		t.Fatal(err)
 	}
+	var dropped []RecordedPromotion
 	for i := 1; i <= KeptPromotions; i++ {
-		promoting(t, l, "staging", fmt.Sprintf("p%02d", i))
+		replaces := activeIn(t, l, "staging")
+		lost, err := l.Promote(ctx, staged(t, l, fmt.Sprintf("p%02d", i)), "staging", replaces)
+		if err != nil {
+			t.Fatal(err)
+		}
+		dropped = append(dropped, lost...)
 	}
 
-	if _, found, err := l.Record(ctx, "web", "web-p00"); err != nil || !found {
-		t.Errorf("the record %s dropped while @production still names it = found %v, %v, want it kept", "web-p00", found, err)
+	unnamed, err := l.ReadUnnamedRecords(ctx, "staging", dropped)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(unnamed.UnnamedRecordKeys) != 0 {
+		t.Errorf("unnamed records %v, want none: @production still names web-p00", unnamed.UnnamedRecordKeys)
 	}
 }
 
@@ -273,15 +321,15 @@ func TestRemovingAPointerKeepsTheRecordsAnotherPointerStillNames(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(removed.RemovedRecordKeys) != 0 {
-		t.Errorf("removed records %v, want none: pr-8 still serves web-p1", removed.RemovedRecordKeys)
+	if len(removed.UnnamedRecordKeys) != 0 {
+		t.Errorf("unnamed records %v, want none: pr-8 still serves web-p1", removed.UnnamedRecordKeys)
 	}
 	if _, found, err := l.Record(ctx, "web", "web-p1"); err != nil || !found {
 		t.Errorf("the record pr-8 serves = found %v, %v, want it kept", found, err)
 	}
 }
 
-func TestRemovingAPointerRemovesItAndTheRecordsOnlyItNamed(t *testing.T) {
+func TestRemovingAPointerRemovesItAndNamesTheRecordsOnlyItNamed(t *testing.T) {
 	l, _ := fixture()
 	ctx := context.Background()
 	promoting(t, l, "pr-7", "p1", "p2")
@@ -290,8 +338,8 @@ func TestRemovingAPointerRemovesItAndTheRecordsOnlyItNamed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.Join(removed.RemovedRecordKeys, ","); got != "record:web/web-p1,record:web/web-p2" {
-		t.Errorf("removed records %s, want both of pr-7's", got)
+	if got := strings.Join(removed.UnnamedRecordKeys, ","); got != "record:web/web-p1,record:web/web-p2" {
+		t.Errorf("unnamed records %s, want both of pr-7's", got)
 	}
 	if got := strings.Join(removed.RemovedPromotionIDs, ","); got != "p2,p1" {
 		t.Errorf("removed promotions %s, want p2,p1", got)
@@ -356,7 +404,7 @@ func TestUnpromotingUnderAnInterruptedDeployStillPutsThePointerBack(t *testing.T
 	}
 }
 
-func TestPruneKeepsNAndTheActivePromotionAndRemovesTheRestsRecords(t *testing.T) {
+func TestPruneKeepsNAndTheActivePromotionAndNamesTheRestsRecords(t *testing.T) {
 	l, _ := fixture()
 	ctx := context.Background()
 	promoting(t, l, "", "p1", "p2", "p3", "p4")
@@ -371,8 +419,8 @@ func TestPruneKeepsNAndTheActivePromotionAndRemovesTheRestsRecords(t *testing.T)
 	if got := strings.Join(result.RemovedPromotionIDs, ","); got != "p2,p1" {
 		t.Errorf("removed = %s", got)
 	}
-	if got := strings.Join(result.RemovedRecordKeys, ","); got != "record:web/web-p1,record:web/web-p2" {
-		t.Errorf("removed record keys = %s", got)
+	if got := strings.Join(result.UnnamedRecordKeys, ","); got != "record:web/web-p1,record:web/web-p2" {
+		t.Errorf("unnamed record keys = %s", got)
 	}
 	if got := strings.Join(result.SurvivingRecordKeys, ","); got != "record:web/web-p3,record:web/web-p4" {
 		t.Errorf("surviving record keys = %s", got)
@@ -399,8 +447,8 @@ func TestPruneKeepsARecordAKeptPromotionStillNames(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.RemovedRecordKeys) != 0 {
-		t.Errorf("removed record keys = %v, want nothing: the kept promotion serves the same build", result.RemovedRecordKeys)
+	if len(result.UnnamedRecordKeys) != 0 {
+		t.Errorf("unnamed record keys = %v, want nothing: the kept promotion serves the same build", result.UnnamedRecordKeys)
 	}
 	if _, found, err := l.Record(ctx, "web", "web-p1"); err != nil || !found {
 		t.Errorf("the record the kept promotion serves = found %v, %v, want it kept", found, err)

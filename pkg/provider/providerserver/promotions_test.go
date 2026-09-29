@@ -2,6 +2,7 @@ package providerserver_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -14,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
@@ -410,11 +412,7 @@ func TestARollbackPastTheRetainedPromotionsReclaimsTheBuildItDropped(t *testing.
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
 	edgeProvisioned(t, provider, environment.TierProduction, "shop")
-	ids := make([]string, ledger.KeptPromotions)
-	for i := range ids {
-		ids[i] = fmt.Sprintf("p%02d", i)
-	}
-	releases := seedPromotions(t, provider, environment.TierProduction, "shop", "", ids...)
+	releases := seedKept(t, provider)
 
 	if _, err := client.Rollback(context.Background(), &contractv1.RollbackRequest{Slug: "shop"}); err != nil {
 		t.Fatalf("Rollback() error = %v", err)
@@ -437,11 +435,7 @@ func TestARollbackPastTheRetainedPromotionsReclaimsTheBuildItDropped(t *testing.
 func TestADeployPastTheRetainedPromotionsReclaimsTheBuildItDropped(t *testing.T) {
 	builtProject(t)
 	client, provider := deployServed(t)
-	ids := make([]string, ledger.KeptPromotions)
-	for i := range ids {
-		ids[i] = fmt.Sprintf("p%02d", i)
-	}
-	releases := seedPromotions(t, provider, environment.TierProduction, "shop", "", ids...)
+	releases := seedKept(t, provider)
 
 	result, events := deploy(t, client, deployRequest())
 	if result == nil || !result.GetSuccess() {
@@ -460,5 +454,105 @@ func TestADeployPastTheRetainedPromotionsReclaimsTheBuildItDropped(t *testing.T)
 	}
 	if !slices.Contains(said, want) {
 		t.Errorf("the deploy said %q, want %q", said, want)
+	}
+}
+
+func seedKept(t *testing.T, vendor *fake.Provider) *ledger.Ledger {
+	t.Helper()
+	ids := make([]string, ledger.KeptPromotions)
+	for i := range ids {
+		ids[i] = fmt.Sprintf("p%02d", i)
+	}
+	return seedPromotions(t, vendor, environment.TierProduction, "shop", "", ids...)
+}
+
+func warnings(events []*progressv1.OperationEvent) []string {
+	var warned []string
+	for _, event := range events {
+		if event.GetBody() == nil && event.GetLevel() == progressv1.Level_LEVEL_WARN {
+			warned = append(warned, event.GetMessage())
+		}
+	}
+	return warned
+}
+
+func TestADeployWhoseDroppedBuildCannotBeReclaimedServesAndWarnsWithTheReason(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	releases := seedKept(t, vendor)
+	vendor.FakeStacks().RefuseNextDestroy(errors.New("the stack is locked by another run"))
+
+	result, events := deploy(t, client, deployRequest())
+
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() whose reclaim failed = %q, want it to succeed: its promotion serves", result.GetError())
+	}
+	warned := strings.Join(warnings(events), "\n")
+	for _, want := range []string{result.GetPromotionId(), "the stack is locked by another run"} {
+		if !strings.Contains(warned, want) {
+			t.Errorf("the deploy warned %q, want it to name %q", warned, want)
+		}
+	}
+	if _, found, err := releases.Record(context.Background(), "web", buildIdentity(0)); err != nil || !found {
+		t.Errorf("the record of p00's build = found %v, %v, want it kept: its stack was not destroyed", found, err)
+	}
+}
+
+func TestADeployWhoseDroppedRecordCannotBeRemovedStillServesItsPromotion(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	releases := seedKept(t, vendor)
+	record := ledger.Partition(environment.TierProduction, "shop").Key("records", "web", buildIdentity(0))
+	vendor.KeyValues().(*fake.KeyValues).SetRemovalError(record, errors.New("the table refused the delete"))
+
+	result, events := deploy(t, client, deployRequest())
+
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() whose dropped record could not be removed = %q, want it to succeed", result.GetError())
+	}
+	active, found, err := releases.ReadActive(context.Background(), "")
+	if err != nil || !found || active.PromotionID != result.GetPromotionId() {
+		t.Fatalf("the ledger names %+v, %v, %v, want %s", active, found, err, result.GetPromotionId())
+	}
+	if served := relayPlane(vendor).Builds("shop", environment.TierProduction, router.DefaultPointer)["web"]; served != active.Builds["web"] {
+		t.Errorf("the router serves web %q, want %q, the build the ledger names", served, active.Builds["web"])
+	}
+	if !strings.Contains(strings.Join(warnings(events), "\n"), "the table refused the delete") {
+		t.Errorf("the deploy warned %q, want the removal that failed named", warnings(events))
+	}
+}
+
+func TestADeployARouterLeftUnservedStillReclaimsTheBuildItsPromoteDropped(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	releases := seedKept(t, vendor)
+	relayPlane(vendor).FailNextFlip(errors.New("the data plane refused the write"))
+
+	result, _ := deploy(t, client, deployRequest())
+
+	if result.GetSuccess() {
+		t.Fatal("Deploy() with a router that refused its flip = success, want it to fail")
+	}
+	if _, found, err := releases.Record(context.Background(), "web", buildIdentity(0)); err != nil || found {
+		t.Errorf("the record of p00's build = found %v, %v, want it reclaimed: the promote dropped p00 whether or not it served", found, err)
+	}
+	if !slices.ContainsFunc(vendor.Journal(), func(entry string) bool { return strings.HasPrefix(entry, "destroy ") }) {
+		t.Errorf("the journal reads %v, want the stack of p00's build destroyed", vendor.Journal())
+	}
+}
+
+func TestARollbackWhoseDroppedBuildCannotBeReclaimedServesAndWarns(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	edgeProvisioned(t, vendor, environment.TierProduction, "shop")
+	seedKept(t, vendor)
+	vendor.FakeStacks().RefuseNextDestroy(errors.New("the stack is locked by another run"))
+
+	rolled, err := client.Rollback(context.Background(), &contractv1.RollbackRequest{Slug: "shop"})
+	if err != nil {
+		t.Fatalf("Rollback() whose reclaim failed = %v, want it to succeed: its promotion serves", err)
+	}
+	if warned := strings.Join(rolled.GetWarnings(), "\n"); !strings.Contains(warned, "the stack is locked by another run") {
+		t.Errorf("Rollback() warned %q, want the destroy that failed named", warned)
 	}
 }

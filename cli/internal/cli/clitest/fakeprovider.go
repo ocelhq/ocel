@@ -62,6 +62,8 @@ const (
 
 const FakeFlipBoundEnvVar = "OCEL_TEST_FAKE_FLIP_BOUND"
 
+const FakeRollbackWarningEnvVar = "OCEL_TEST_FAKE_ROLLBACK_WARNING"
+
 const FakeKnownSlugsEnvVar = "OCEL_TEST_FAKE_KNOWN_SLUGS"
 
 const FakeComputesEnvVar = "OCEL_TEST_FAKE_COMPUTES"

@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
@@ -55,14 +56,14 @@ func (s *sharedStack) adopt(routed router.Stack) error {
 	return nil
 }
 
-func (s *sharedStack) promote(ctx context.Context, req promoteRequest, progress progress.Progress) (router.PruneResult, error) {
+func (s *sharedStack) promote(ctx context.Context, req promoteRequest, progress progress.Progress) ([]ledger.RecordedPromotion, error) {
 	routed, err := s.openRouterStack()
 	if err != nil {
-		return router.PruneResult{}, err
+		return nil, err
 	}
 	apps := slices.Sorted(maps.Keys(req.promotion.Builds))
-	pruned, err := promote(ctx, s.ledger, req, []appRouter{{stack: routed, apps: apps}}, progress)
-	return pruned, errors.Join(err, s.adopt(routed))
+	dropped, err := promote(ctx, s.ledger, req, []appRouter{{stack: routed, apps: apps}}, progress)
+	return dropped, errors.Join(err, s.adopt(routed))
 }
 
 func (s *sharedStack) removePointer(ctx context.Context, pointer string, progress progress.Progress) (router.PruneResult, error) {

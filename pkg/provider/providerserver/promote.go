@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 )
@@ -32,38 +33,38 @@ type promoteRequest struct {
 	promotion   router.Promotion
 }
 
-func (r promoteRequest) record(ctx context.Context, l projectLedger) (router.PruneResult, error) {
+func (r promoteRequest) record(ctx context.Context, l projectLedger) ([]ledger.RecordedPromotion, error) {
 	if r.rollsBackTo != "" {
 		return l.Rollback(ctx, r.rollsBackTo, r.promotion, r.pointer, r.replaces)
 	}
 	return l.Promote(ctx, r.promotion, r.pointer, r.replaces)
 }
 
-func promote(ctx context.Context, l projectLedger, req promoteRequest, routers []appRouter, progress progress.Progress) (router.PruneResult, error) {
+func promote(ctx context.Context, l projectLedger, req promoteRequest, routers []appRouter, progress progress.Progress) ([]ledger.RecordedPromotion, error) {
 	pointer, promoted := req.pointer, req.promotion
 	flips := make([]router.Flip, len(routers))
 	for i, routed := range routers {
 		records, err := l.readRecords(ctx, promoted, routed.apps)
 		if err != nil {
-			return router.PruneResult{}, err
+			return nil, err
 		}
 		flips[i] = router.Flip{Pointer: pointer, Promotion: promoted, Records: records, StillActive: newStillActive(l, pointer, promoted.PromotionID)}
 	}
-	pruned, err := req.record(ctx, l)
+	dropped, err := req.record(ctx, l)
 	if err != nil {
-		return router.PruneResult{}, err
+		return nil, err
 	}
 	for i, routed := range routers {
 		err := routed.stack.Flip(ctx, flips[i], progress)
 		var unserved router.Unserved
 		if errors.As(err, &unserved) {
-			return pruned, errors.Join(err, unpromote(ctx, l, pointer, promoted.PromotionID, routers[:i]))
+			return dropped, errors.Join(err, unpromote(ctx, l, pointer, promoted.PromotionID, routers[:i]))
 		}
 		if err != nil {
-			return pruned, err
+			return dropped, err
 		}
 	}
-	return pruned, nil
+	return dropped, nil
 }
 
 func unpromote(ctx context.Context, l projectLedger, pointer, promotionID string, flipped []appRouter) error {

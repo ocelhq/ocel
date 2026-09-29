@@ -19,7 +19,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
-	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 func (h *handlers) ListPromotions(ctx context.Context, req *contractv1.ListPromotionsRequest) (*contractv1.ListPromotionsResponse, error) {
@@ -62,17 +61,18 @@ func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest
 		Builds:      target.Builds,
 		Flip:        &flip,
 	}
-	pruned, err := session.promote(ctx, promoteRequest{replaces: current.Active, rollsBackTo: target.PromotionID, promotion: promoted}, progress.DiscardProgress())
+	dropped, err := session.promote(ctx, promoteRequest{replaces: current.Active, rollsBackTo: target.PromotionID, promotion: promoted}, progress.DiscardProgress())
 	if err != nil {
-		return nil, provider.RefusalError(err)
+		return nil, provider.RefusalError(errors.Join(err, session.reclaimDropped(ctx, "", dropped, progress.DiscardProgress())))
 	}
 	if err := session.checkpoint(ctx); err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	if err := reclaimDropped(ctx, session.provider, req.GetSlug(), environment.TierProduction, stackrecords.ProductionEnv, promoted.PromotionID, pruned, progress.DiscardProgress()); err != nil {
-		return nil, provider.RefusalError(err)
+	rolled := &contractv1.RollbackResponse{Promoted: promotionProto(promoted)}
+	if err := session.reclaimDropped(ctx, "", dropped, progress.DiscardProgress()); err != nil {
+		rolled.Warnings = append(rolled.Warnings, unreclaimedWarning(promoted.PromotionID, err))
 	}
-	return &contractv1.RollbackResponse{Promoted: promotionProto(promoted)}, nil
+	return rolled, nil
 }
 
 func rollbackTarget(history []router.HistoryEntry, to, tag string) (router.Promotion, error) {
@@ -136,11 +136,7 @@ func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.Re
 		if err := session.checkpoint(ctx); err != nil {
 			return err
 		}
-		env := pointer
-		if tier == environment.TierProduction {
-			env = stackrecords.ProductionEnv
-		}
-		if err := reclaimPruned(ctx, session.provider, req.GetSlug(), tier, env, pruned, progress); err != nil {
+		if err := reclaimUnnamed(ctx, session.provider, session.ledger, pointer, pruned, progress); err != nil {
 			return err
 		}
 		for _, line := range pruneLines(pruned) {
