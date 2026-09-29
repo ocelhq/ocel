@@ -28,7 +28,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/statedir"
 
-	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
+	"github.com/ocelhq/ocel/cli/internal/clitest"
 )
 
 func declareEnvScript(definitions ...string) string {

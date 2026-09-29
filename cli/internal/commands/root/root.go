@@ -1,0 +1,198 @@
+package root
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"strings"
+	"time"
+
+	"github.com/pkg/browser"
+	"github.com/spf13/cobra"
+
+	"github.com/ocelhq/ocel/cli/internal/build"
+	"github.com/ocelhq/ocel/cli/internal/cli/doctor"
+	"github.com/ocelhq/ocel/cli/internal/commands/bootstrap"
+	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/commands/connector"
+	"github.com/ocelhq/ocel/cli/internal/commands/cost"
+	"github.com/ocelhq/ocel/cli/internal/commands/deploy"
+	"github.com/ocelhq/ocel/cli/internal/commands/env"
+	"github.com/ocelhq/ocel/cli/internal/commands/link"
+	"github.com/ocelhq/ocel/cli/internal/commands/login"
+	"github.com/ocelhq/ocel/cli/internal/commands/permissions"
+	"github.com/ocelhq/ocel/cli/internal/console"
+	"github.com/ocelhq/ocel/cli/internal/declaration"
+	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
+	"github.com/ocelhq/ocel/cli/internal/projecteditor"
+	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
+	"github.com/ocelhq/ocel/cli/internal/version"
+)
+
+var verboseFlag bool
+
+var configFlag string
+
+func explicitConfigPath() string {
+	if configFlag != "" {
+		return configFlag
+	}
+	return os.Getenv(cmddeps.ConfigEnvVar)
+}
+
+func verboseEnabled() bool {
+	if verboseFlag {
+		return true
+	}
+	_, ok := os.LookupEnv(cmddeps.DebugEnvVar)
+	return ok
+}
+
+var logFormatFlag string
+
+var bus = run.NewBus(time.Now)
+
+var rootCmd = &cobra.Command{
+	Use:           "ocel <command>",
+	Short:         "Ocel CLI",
+	Long:          "Ocel CLI\n\nocel deploys apps to your own infrastructure",
+	Version:       version.Version,
+	SilenceUsage:  true,
+	SilenceErrors: true,
+}
+
+var stopInterruptHandler context.CancelFunc = func() {}
+
+func Execute() error {
+	err := rootCmd.Execute()
+	stopInterruptHandler()
+	return errors.Join(err, bus.Close())
+}
+
+func handleInterrupts(cmd *cobra.Command) {
+	install := installInterruptHandler
+	if cmd == devCmd || cmd == runCmd {
+		install = installDevInterruptHandler
+	}
+	ctx, stop := install(cmd.Root().Context(), cmd.ErrOrStderr())
+	cmd.SetContext(ctx)
+	stopInterruptHandler = stop
+}
+
+func init() {
+	s := newDeps()
+	rootCmd.PersistentPreRun = func(cmd *cobra.Command, _ []string) {
+		s.AttachCommandSink(cmd)
+		handleInterrupts(cmd)
+	}
+
+	rootCmd.PersistentFlags().BoolVarP(&verboseFlag, "verbose", "v", false, "Stream full logs instead of the progress view (also $OCEL_DEBUG)")
+	rootCmd.PersistentFlags().StringVarP(&configFlag, "config", "c", "", "Project config `file` (default: $OCEL_CONFIG, else the nearest ocel.json, ocel.yaml, ocel.yml or ocel.config.ts)")
+	rootCmd.PersistentFlags().StringVar(&logFormatFlag, "log-format", string(terminal.FormatHuman), "Log output format: human or json")
+
+	rootCmd.AddCommand(devCmd)
+	rootCmd.AddCommand(runCmd)
+	rootCmd.AddCommand(initCmd)
+	rootCmd.AddCommand(generateCmd)
+	rootCmd.AddCommand(buildCmd)
+	rootCmd.AddCommand(lockCmd)
+	rootCmd.AddCommand(deploy.NewCommand(s))
+	rootCmd.AddCommand(deploy.NewPreviewCommand(s))
+	rootCmd.AddCommand(env.NewCommand(s))
+	rootCmd.AddCommand(rollbackCmd)
+	rootCmd.AddCommand(deploymentsCmd)
+
+	rootCmd.AddCommand(bootstrap.NewCommand(s))
+	rootCmd.AddCommand(permissions.NewCommand(s))
+	rootCmd.AddCommand(cost.NewCommand(s))
+	rootCmd.AddCommand(doctor.NewCommand(s))
+
+	rootCmd.AddGroup(
+		&cobra.Group{ID: coreGroup, Title: "CORE COMMANDS"},
+		&cobra.Group{ID: consoleGroup, Title: "CONSOLE COMMANDS"},
+	)
+	loginCmd, logoutCmd, linkCmd := login.NewCommand(s), login.NewLogoutCommand(s), link.NewCommand(s)
+	connectorCmd := connector.NewCommand(s)
+	readsConsoleURL(rootCmd, loginCmd, logoutCmd, linkCmd, connectorCmd)
+	addConsoleCommands(rootCmd, loginCmd, logoutCmd, linkCmd, link.NewUnlinkCommand(s), connectorCmd)
+
+	installHelpStyle(rootCmd)
+}
+
+func newDeps() cmddeps.Deps {
+	return cmddeps.Deps{
+		LoadCredentials:         console.LoadCredentials,
+		SaveCredentials:         console.SaveCredentials,
+		DeleteCredentials:       console.DeleteCredentials,
+		OpenDocker:              docker.Open,
+		BuildApps:               build.Apps,
+		RefuseUnbuildableImages: build.RefuseUnbuildableImages,
+		ReadPrebuilt:            build.ReadPrebuilt,
+		ReadFunctions:           build.ReadFunctions,
+		DeploymentID:            build.DeploymentID,
+		CollectDeclarations:     declaration.Collect,
+		OpenBrowser:             browser.OpenURL,
+		ServeVariableEditor:     projecteditor.Serve,
+		CurrentGitBranch:        gitBranch,
+		DiscoverPRNumber:        prNumberFromEnv,
+		RunPackageManager:       runPackageManagerCommand,
+		Questions:               providerclient.Questions{Prompt: terminal.NewPrompt(os.Stderr, os.Stdin), Out: os.Stderr},
+		StdinIsTerminal:         func(in io.Reader) bool { return terminal.IsTerminal(in) },
+		ConfigPath:              explicitConfigPath,
+		Presentation:            presentation,
+		Events:                  bus,
+	}
+}
+
+func gitBranch(dir string) (string, error) {
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD").Output()
+	if err != nil {
+		return "", fmt.Errorf("determine current git branch: %w", err)
+	}
+	branch := strings.TrimSpace(string(out))
+	if branch == "" {
+		return "", errors.New("determine current git branch: empty ref")
+	}
+	return branch, nil
+}
+
+func prNumberFromEnv() string {
+	if n := os.Getenv(cmddeps.PRNumberEnvVar); n != "" {
+		return n
+	}
+	return prNumberFromRef(os.Getenv("GITHUB_REF"))
+}
+
+func prNumberFromRef(ref string) string {
+	rest, ok := strings.CutPrefix(ref, "refs/pull/")
+	if !ok {
+		return ""
+	}
+	number, suffix, ok := strings.Cut(rest, "/")
+	if !ok || number == "" || (suffix != "merge" && suffix != "head") {
+		return ""
+	}
+	for _, r := range number {
+		if r < '0' || r > '9' {
+			return ""
+		}
+	}
+	return number
+}
+
+func runPackageManagerCommand(ctx context.Context, dir string, argv []string, output io.Writer) error {
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	cmd.Dir = dir
+	cmd.Stdout = output
+	cmd.Stderr = output
+	return cmd.Run()
+}
+
+func presentation(w io.Writer) terminal.Presentation {
+	return terminal.Detect(terminal.Format(logFormatFlag), verboseEnabled(), w)
+}

@@ -44,7 +44,7 @@ func TestGoCodeNamesSharedPathsThroughConstants(t *testing.T) {
 		"cli/internal/attribution/rust_test.go": {
 			DefaultRootDirName: true,
 		},
-		"cli/internal/cli/clitest/fakeprovider.go": {
+		"cli/internal/clitest/fakeprovider.go": {
 			DefaultRootDirName: true,
 		},
 		"cli/internal/discovery/rust_test.go": {

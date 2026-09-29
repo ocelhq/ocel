@@ -299,7 +299,7 @@ const specs = [
     "noiseTier": "precise",
     "filePatterns": [
       "cli/ocel/main.go",
-      "cli/internal/cli/*.go",
+      "cli/internal/commands/**/*.go",
       "cli/internal/authclient/*.go",
       "cli/internal/credentials/credentials.go"
     ],
@@ -526,7 +526,7 @@ const specs = [
     "description": "Execution entry points for Ocel CLI commands and their direct command-level tests.",
     "noiseTier": "precise",
     "filePatterns": [
-      "cli/internal/cli/*.go"
+      "cli/internal/commands/**/*.go"
     ],
     "patterns": [
       {

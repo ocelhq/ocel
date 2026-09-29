@@ -1,0 +1,654 @@
+package connector
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+	"time"
+
+	"google.golang.org/protobuf/encoding/protojson"
+
+	"github.com/ocelhq/ocel/cli/internal/clitest"
+	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/console"
+	"github.com/ocelhq/ocel/cli/internal/exitcode"
+	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/providers"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/statedir"
+)
+
+const (
+	fingerprint = "fake/sha256:aaaa/ocel"
+	hostname    = "box.example.com"
+)
+
+type consoleServer struct {
+	*httptest.Server
+	rows        []map[string]any
+	upserted    []map[string]any
+	patched     []map[string]any
+	deleted     []string
+	refusePatch bool
+}
+
+func newConsoleServer(t *testing.T, rows ...map[string]any) *consoleServer {
+	t.Helper()
+
+	c := &consoleServer{rows: rows}
+	c.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/connectors" && r.Method == http.MethodGet:
+			_ = json.NewEncoder(w).Encode(c.rows)
+		case r.URL.Path == "/api/connectors" && r.Method == http.MethodPut:
+			var body map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			c.upserted = append(c.upserted, body)
+			registered := map[string]any{"id": "con_1", "organizationId": "org_1", "capabilities": []string{}}
+			for key, value := range body {
+				registered[key] = value
+			}
+			c.rows = append(c.rows, registered)
+			_ = json.NewEncoder(w).Encode(registered)
+		case strings.HasPrefix(r.URL.Path, "/api/connectors/") && r.Method == http.MethodPatch:
+			if c.refusePatch {
+				http.Error(w, "nope", http.StatusInternalServerError)
+				return
+			}
+			var body map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			c.patched = append(c.patched, body)
+			registered := map[string]any{"id": "con_1", "target": fingerprint, "vendor": "fake", "compute": "container", "reach": "dial"}
+			for key, value := range body {
+				registered[key] = value
+			}
+			_ = json.NewEncoder(w).Encode(registered)
+		case strings.HasPrefix(r.URL.Path, "/api/connectors/") && r.Method == http.MethodDelete:
+			c.deleted = append(c.deleted, strings.TrimPrefix(r.URL.Path, "/api/connectors/"))
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(c.Close)
+	return c
+}
+
+func linked(t *testing.T, dir, apiURL string) {
+	t.Helper()
+
+	if err := console.WriteLink(dir, console.Link{
+		APIURL:         apiURL,
+		OrganizationID: "org_1",
+		ProjectID:      "p1",
+		ProjectName:    "My App",
+	}); err != nil {
+		t.Fatalf("consolelink.Write: %v", err)
+	}
+}
+
+func resolved(t *testing.T, root string) *project.Project {
+	t.Helper()
+
+	cfg, err := project.Load(context.Background(), root, filepath.Join(root, "ocel.fake.json"))
+	if err != nil {
+		t.Fatalf("project.Resolve: %v", err)
+	}
+	return cfg
+}
+
+func opened(t *testing.T, srv *consoleServer) options {
+	t.Helper()
+
+	return options{write: true, apiURL: srv.URL, console: console.New(srv.URL)}
+}
+
+func TestAddPairsTheTargetWithTheConsoleAndInstallsTheAsset(t *testing.T) {
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
+	srv := newConsoleServer(t)
+	linked(t, root, srv.URL)
+
+	deps := clitest.NewDeps()
+	clitest.SetLoggedIn(&deps)
+	deps.ConfigPath = func() string { return filepath.Join(root, "ocel.fake.json") }
+
+	var stdout bytes.Buffer
+	clitest.AttachTerminalSink(deps, &stdout)
+	if err := runAdd(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv)); err != nil {
+		t.Fatalf("runAdd err = %v\n%s", err, stdout.String())
+	}
+
+	if len(srv.upserted) != 1 {
+		t.Fatalf("upserts = %v, want one", srv.upserted)
+	}
+	want := map[string]any{"target": fingerprint, "vendor": "fake", "reach": "dial"}
+	for key, value := range want {
+		if srv.upserted[0][key] != value {
+			t.Errorf("upsert %s = %v, want %v", key, srv.upserted[0][key], value)
+		}
+	}
+	if len(srv.patched) != 1 {
+		t.Fatalf("patches = %v, want one", srv.patched)
+	}
+	if srv.patched[0]["url"] != "https://"+hostname+"/"+statedir.Name+"/connector" {
+		t.Errorf("patched url = %v, want the box's own connector path", srv.patched[0]["url"])
+	}
+	if srv.patched[0]["publicKey"] == "" {
+		t.Error("the console was told no public key, so it can verify no heartbeat")
+	}
+	if srv.patched[0]["compute"] != "container" {
+		t.Errorf("patched compute = %v, want the compute the provider chose for itself", srv.patched[0]["compute"])
+	}
+
+	installed := project.Provider.FakeConnector().Installed()
+	if len(installed) == 0 {
+		t.Fatal("the provider was never asked to install a connector")
+	}
+	if string(installed[0].Binary) != clitest.FakeConnectorBinary {
+		t.Errorf("the provider was handed %q, want the connector asset the arch names", string(installed[0].Binary))
+	}
+	var config map[string]any
+	if err := json.Unmarshal(installed[0].Config, &config); err != nil {
+		t.Fatalf("the config the provider was handed is not an object: %v", err)
+	}
+	if config["console"] != srv.URL || config["connectorId"] != "con_1" || config["organizationId"] != "org_1" {
+		t.Errorf("config = %v, want it to name this console, the row it upserted and the org", config)
+	}
+	if config["target"] != fingerprint {
+		t.Errorf("config target = %v, want %q", config["target"], fingerprint)
+	}
+	grants, _ := config["grants"].([]any)
+	if len(grants) != 2 || grants[0] != "envvars.read" || grants[1] != "envvars.write" {
+		t.Errorf("grants = %v, want read and write and no reveal", grants)
+	}
+	if !strings.Contains(stdout.String(), fingerprint) {
+		t.Errorf("stdout = %q, want it to name the target it paired", stdout.String())
+	}
+}
+
+func TestAddInstallsTheConnectorBuiltForThePlatformTheProviderNames(t *testing.T) {
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
+	clitest.InstallConnector(t, "fake", providers.Platform{GOOS: "freebsd", GOARCH: "amd64"}, []byte("freebsd connector"))
+	project.Provider.FakeConnector().Runs(provider.ConnectorTarget{Fingerprint: fingerprint, Hostname: hostname, OS: "freebsd", Arch: "amd64"})
+	srv := newConsoleServer(t)
+	linked(t, root, srv.URL)
+
+	deps := clitest.NewDeps()
+	clitest.SetLoggedIn(&deps)
+	deps.ConfigPath = func() string { return filepath.Join(root, "ocel.fake.json") }
+
+	var stdout bytes.Buffer
+	clitest.AttachTerminalSink(deps, &stdout)
+	if err := runAdd(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv)); err != nil {
+		t.Fatalf("runAdd err = %v\n%s", err, stdout.String())
+	}
+
+	installed := project.Provider.FakeConnector().Installed()
+	if len(installed) != 1 || string(installed[0].Binary) != "freebsd connector" {
+		t.Errorf("the provider was handed %v, want the connector built for the freebsd target it described", installed)
+	}
+}
+
+func TestAddRelaysWhatTheProviderSaysWhileItInstallsThroughItsRun(t *testing.T) {
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
+	srv := newConsoleServer(t)
+	linked(t, root, srv.URL)
+
+	deps := jsonDeps()
+	deps.ConfigPath = func() string { return filepath.Join(root, "ocel.fake.json") }
+
+	var stream bytes.Buffer
+	clitest.AttachTerminalSink(deps, &stream)
+	if err := runAdd(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv)); err != nil {
+		t.Fatalf("runAdd err = %v\n%s", err, stream.String())
+	}
+
+	evs := runEvents(t, stream.String())
+	if !slices.ContainsFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetMessage() == "wrote the connector" }) {
+		t.Errorf("stream = %s, want the line the provider said while installing", stream.String())
+	}
+	result := evs[len(evs)-1].GetSummary()
+	if !result.GetSuccess() || !strings.Contains(result.GetHeadline(), fingerprint) || strings.Contains(result.GetHeadline(), "envvars") {
+		t.Errorf("result = %v, want a success that names the paired target and leaves the grants to their own line", result)
+	}
+	if !slices.ContainsFunc(evs, func(ev *streamv1.RunEvent) bool {
+		return ev.GetBody() == nil && ev.GetMessage() == "The console may use this connector for envvars.read and envvars.write"
+	}) {
+		t.Errorf("stream = %s, want the grants said on a line of their own", stream.String())
+	}
+}
+
+func TestAddGrantsRevealOnlyWhenItIsAskedFor(t *testing.T) {
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
+	srv := newConsoleServer(t)
+	linked(t, root, srv.URL)
+
+	deps := clitest.NewDeps()
+	clitest.SetLoggedIn(&deps)
+
+	opts := opened(t, srv)
+	opts.reveal = true
+	opts.write = false
+	if err := runAdd(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opts); err != nil {
+		t.Fatalf("runAdd err = %v", err)
+	}
+
+	installed := project.Provider.FakeConnector().Installed()
+	if len(installed) != 1 {
+		t.Fatalf("installed = %v, want one connector", installed)
+	}
+	var config map[string]any
+	if err := json.Unmarshal(installed[0].Config, &config); err != nil {
+		t.Fatal(err)
+	}
+	grants, _ := config["grants"].([]any)
+	if len(grants) != 2 || grants[0] != "envvars.read" || grants[1] != "envvars.reveal" {
+		t.Errorf("grants = %v, want read and reveal and no write", grants)
+	}
+}
+
+func TestAConnectorOverTheChannelCeilingIsRefusedBeforeItIsSent(t *testing.T) {
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
+	srv := newConsoleServer(t)
+	linked(t, root, srv.URL)
+
+	binary := clitest.InstallConnector(t, "fake", providers.Platform{GOOS: "linux", GOARCH: "amd64"}, []byte(clitest.FakeConnectorBinary))
+	if err := os.Truncate(binary, providerclient.MaxMessageBytes+1); err != nil {
+		t.Fatalf("grow the connector past the ceiling: %v", err)
+	}
+
+	deps := jsonDeps()
+	var stream bytes.Buffer
+	clitest.AttachTerminalSink(deps, &stream)
+
+	err := runAdd(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv))
+	if err == nil {
+		t.Fatal("runAdd err = nil, want a connector over the ceiling refused")
+	}
+	said := failure(t, stream.String())
+	for _, want := range []string{"fake connector", "over the"} {
+		if !strings.Contains(said, want) {
+			t.Errorf("runAdd err = %q, want it to contain %q", said, want)
+		}
+	}
+	if installed := project.Provider.FakeConnector().Installed(); len(installed) != 0 {
+		t.Errorf("the connector was installed anyway (%d installs), want nothing sent over the channel", len(installed))
+	}
+}
+
+func TestAFailedAddSaysRunningItAgainFinishesIt(t *testing.T) {
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
+	srv := newConsoleServer(t)
+	srv.refusePatch = true
+	linked(t, root, srv.URL)
+
+	deps := jsonDeps()
+	var stream bytes.Buffer
+	clitest.AttachTerminalSink(deps, &stream)
+
+	err := runAdd(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv))
+	if err == nil {
+		t.Fatal("a console that refused the address answered no error")
+	}
+	said := failure(t, stream.String())
+	if !strings.Contains(said, "ocel connector add") || !strings.Contains(said, "already has this target registered") {
+		t.Errorf("runAdd err = %q, and a half-finished add has to say that the console has the target registered and that re-running finishes it", said)
+	}
+	if len(srv.upserted) != 1 {
+		t.Errorf("upserts = %v, want the one the run made before it failed", srv.upserted)
+	}
+}
+
+func TestRemoveTakesTheConnectorOffTheBoxAndForgetsTheRow(t *testing.T) {
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
+	srv := newConsoleServer(t, map[string]any{
+		"id": "con_1", "target": fingerprint, "vendor": "fake", "compute": "container", "reach": "dial",
+		"capabilities": []string{"envvars.read"},
+	})
+	linked(t, root, srv.URL)
+
+	deps := clitest.NewDeps()
+	clitest.SetLoggedIn(&deps)
+
+	var stdout bytes.Buffer
+	clitest.AttachTerminalSink(deps, &stdout)
+	if err := runRemove(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv)); err != nil {
+		t.Fatalf("runRemove err = %v", err)
+	}
+
+	if project.Provider.FakeConnector().Removals() == 0 {
+		t.Fatal("the provider was never asked to take the connector off the machine")
+	}
+	if len(srv.deleted) != 1 || srv.deleted[0] != "con_1" {
+		t.Fatalf("deleted = %v, want the one row keyed by this target", srv.deleted)
+	}
+}
+
+func TestAnUnreachableMachineIsPointedAtRmTarget(t *testing.T) {
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
+	project.Provider.FakeConnector().Refuse(refusal.Refuse(refusal.CodeNotReady, "this machine is not reachable"))
+	srv := newConsoleServer(t, map[string]any{
+		"id": "con_1", "target": fingerprint, "vendor": "fake", "compute": "container", "reach": "dial",
+	})
+	linked(t, root, srv.URL)
+
+	deps := jsonDeps()
+	var stream bytes.Buffer
+	clitest.AttachTerminalSink(deps, &stream)
+
+	err := runRemove(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv))
+	if err == nil {
+		t.Fatal("runRemove err = nil, want the unreachable machine reported")
+	}
+	said := failure(t, stream.String())
+	if !strings.Contains(said, "ocel connector status") || !strings.Contains(said, "rm --target") {
+		t.Errorf("runRemove err = %q, want it to name the remedy for a target that will not answer", said)
+	}
+	if len(srv.deleted) != 0 {
+		t.Fatalf("deleted = %v: with no fingerprint there is no row to key on", srv.deleted)
+	}
+}
+
+func TestRmTargetForgetsTheRowWithoutTouchingTheTarget(t *testing.T) {
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
+	project.Provider.FakeConnector().Refuse(refusal.Refuse(refusal.CodeNotReady, "this machine is not reachable"))
+	srv := newConsoleServer(t, map[string]any{
+		"id": "con_1", "target": fingerprint, "vendor": "fake", "compute": "container", "reach": "dial",
+	})
+	linked(t, root, srv.URL)
+
+	deps := clitest.NewDeps()
+	clitest.SetLoggedIn(&deps)
+
+	opts := opened(t, srv)
+	opts.target = fingerprint
+
+	var stdout bytes.Buffer
+	clitest.AttachTerminalSink(deps, &stdout)
+	if err := runRemove(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opts); err != nil {
+		t.Fatalf("runRemove err = %v", err)
+	}
+	if len(srv.deleted) != 1 || srv.deleted[0] != "con_1" {
+		t.Fatalf("deleted = %v, want the row keyed by the target the flag named", srv.deleted)
+	}
+	if project.Provider.FakeConnector().Removals() != 0 {
+		t.Error("the provider was asked to take the connector off a machine this run was told not to reach")
+	}
+	if !strings.Contains(stdout.String(), "never reached") {
+		t.Errorf("stdout = %q, want it to say the target itself was left alone", stdout.String())
+	}
+}
+
+func TestRmTargetSaysSoWhenTheConsoleHasNoSuchTarget(t *testing.T) {
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
+	srv := newConsoleServer(t)
+	linked(t, root, srv.URL)
+
+	deps := clitest.NewDeps()
+	clitest.SetLoggedIn(&deps)
+
+	opts := opened(t, srv)
+	opts.target = fingerprint
+
+	var stdout bytes.Buffer
+	clitest.AttachTerminalSink(deps, &stdout)
+	if err := runRemove(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opts); err != nil {
+		t.Fatalf("runRemove err = %v", err)
+	}
+	if len(srv.deleted) != 0 {
+		t.Fatalf("deleted = %v, want nothing deleted", srv.deleted)
+	}
+	if !strings.Contains(stdout.String(), "has no connector registered") {
+		t.Errorf("stdout = %q, want it to say the console has no such target registered", stdout.String())
+	}
+}
+
+func TestStatusSaysWhatTheConsoleHasRegistered(t *testing.T) {
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
+	seen := time.Now().Add(-10 * time.Second)
+	srv := newConsoleServer(t, map[string]any{
+		"id": "con_1", "target": fingerprint, "vendor": "fake", "compute": "container", "reach": "dial",
+		"url": "https://" + hostname + "/" + statedir.Name + "/connector", "capabilities": []string{"envvars.read", "envvars.write"},
+		"connectedAt": seen, "lastSeenAt": seen, "online": true,
+	})
+	linked(t, root, srv.URL)
+
+	deps := clitest.NewDeps()
+	clitest.SetLoggedIn(&deps)
+	deps.ConfigPath = func() string { return "" }
+
+	var stdout bytes.Buffer
+	if err := runStatus(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv), &stdout); err != nil {
+		t.Fatalf("runStatus err = %v", err)
+	}
+	for _, want := range []string{fingerprint, "container over dial", "online", "envvars.read, envvars.write"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("stdout = %q, want it to contain %q", stdout.String(), want)
+		}
+	}
+}
+
+func TestStatusSaysSoWhenTheOrganizationHasNoConnector(t *testing.T) {
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
+	srv := newConsoleServer(t)
+	linked(t, root, srv.URL)
+
+	deps := clitest.NewDeps()
+	clitest.SetLoggedIn(&deps)
+	deps.ConfigPath = func() string { return "" }
+
+	var stdout bytes.Buffer
+	if err := runStatus(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv), &stdout); err != nil {
+		t.Fatalf("runStatus err = %v", err)
+	}
+	if !strings.Contains(stdout.String(), "ocel connector add") {
+		t.Errorf("stdout = %q, want it to point at the command that adds one", stdout.String())
+	}
+}
+
+func TestAnUnlinkedTreeIsPointedAtOcelLink(t *testing.T) {
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
+
+	deps := clitest.NewDeps()
+	clitest.SetLoggedIn(&deps)
+	deps.ConfigPath = func() string { return filepath.Join(root, "ocel.fake.json") }
+
+	cmd := NewCommand(deps)
+	cmd.SetArgs([]string{"status"})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	if err := chdir(t, root, cmd.Execute); !errors.As(err, new(*exitcode.ExitError)) {
+		t.Fatalf("Execute() = %v, want an exit error", err)
+	}
+	if !strings.Contains(out.String(), "ocel link") {
+		t.Errorf("output = %q, want it to point at `ocel link`", out.String())
+	}
+}
+
+func TestBeingLoggedOutIsPointedAtOcelLogin(t *testing.T) {
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
+
+	deps := clitest.NewDeps()
+	deps.LoadCredentials = func() (console.Credentials, error) {
+		return console.Credentials{}, console.ErrNotLoggedIn
+	}
+	deps.ConfigPath = func() string { return filepath.Join(root, "ocel.fake.json") }
+
+	cmd := NewCommand(deps)
+	cmd.SetArgs([]string{"status"})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	if err := chdir(t, root, cmd.Execute); !errors.As(err, new(*exitcode.ExitError)) {
+		t.Fatalf("Execute() = %v, want an exit error", err)
+	}
+	if !strings.Contains(out.String(), "ocel login") {
+		t.Errorf("output = %q, want it to point at `ocel login`", out.String())
+	}
+}
+
+func TestTheVendorIsWhateverTheConfigPointsAtAndNoTableGatesIt(t *testing.T) {
+	t.Parallel()
+
+	for _, vendor := range []string{"fake", "elsewhere", "nowhere"} {
+		cfg := &project.Project{
+			Path:     "ocel." + vendor + ".json",
+			Provider: &project.Provider{ID: vendor},
+		}
+		named, err := vendored(cfg)
+		if err != nil {
+			t.Fatalf("vendored(%s) = %v, want the vendor the config names", vendor, err)
+		}
+		if named != vendor {
+			t.Errorf("vendored(%s) = %q, want %q", vendor, named, vendor)
+		}
+	}
+}
+
+func TestTheComputeGoesToTheProviderUntouched(t *testing.T) {
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
+	srv := newConsoleServer(t)
+	linked(t, root, srv.URL)
+
+	deps := clitest.NewDeps()
+	clitest.SetLoggedIn(&deps)
+
+	project.Provider.FakeConnector().RunsOn(provider.ComputeContainer, provider.ComputeServerless)
+	opts := opened(t, srv)
+	opts.compute = "serverless"
+	if err := runAdd(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opts); err != nil {
+		t.Fatalf("runAdd err = %v", err)
+	}
+
+	installed := project.Provider.FakeConnector().Installed()
+	if len(installed) != 1 || installed[0].Compute != provider.ComputeServerless {
+		t.Errorf("the provider was asked for %v, want the compute the flag named passed through with no vendor table in the way", installed)
+	}
+	if len(srv.patched) != 1 || srv.patched[0]["compute"] != "serverless" {
+		t.Errorf("patches = %v, want the console told what the provider chose", srv.patched)
+	}
+}
+
+func read(t *testing.T, dir, apiURL string) *console.Link {
+	t.Helper()
+
+	linked, err := console.ReadLink(dir, apiURL)
+	if err != nil {
+		t.Fatalf("consolelink.Read: %v", err)
+	}
+	if linked == nil {
+		t.Fatal("no link written")
+	}
+	return linked
+}
+
+func chdir(t *testing.T, dir string, run func() error) error {
+	t.Helper()
+
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(wd)
+	return run()
+}
+
+func jsonDeps() cmddeps.Deps {
+	deps := clitest.NewDeps()
+	clitest.SetLoggedIn(&deps)
+	deps.Presentation = func(io.Writer) terminal.Presentation {
+		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
+	}
+	return deps
+}
+
+func failure(t *testing.T, stream string) string {
+	t.Helper()
+	evs := runEvents(t, stream)
+	if len(evs) == 0 || evs[len(evs)-1].GetSummary() == nil {
+		t.Fatalf("stream = %s, want it to end with the run's result", stream)
+	}
+	result := evs[len(evs)-1].GetSummary()
+	if result.GetSuccess() {
+		t.Fatalf("result = %v, want the run to fail", result)
+	}
+	return result.GetDetail()
+}
+
+func runEvents(t *testing.T, out string) []*streamv1.RunEvent {
+	t.Helper()
+	var evs []*streamv1.RunEvent
+	for _, line := range strings.Split(out, "\n") {
+		if line == "" {
+			continue
+		}
+		ev := &streamv1.RunEvent{}
+		if err := protojson.Unmarshal([]byte(line), ev); err != nil {
+			t.Fatalf("line %q is not a protojson RunEvent: %v", line, err)
+		}
+		evs = append(evs, ev)
+	}
+	return evs
+}
+
+func TestStatusForAConfigReadsItsTargetInTheCheckPhaseOfItsRunAndPrintsWhatTheConsoleHasAloneOnStdout(t *testing.T) {
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
+	srv := newConsoleServer(t, map[string]any{
+		"id": "con_1", "target": fingerprint, "vendor": "fake", "compute": "container", "reach": "dial",
+	})
+	linked(t, root, srv.URL)
+
+	deps := jsonDeps()
+	deps.ConfigPath = func() string { return filepath.Join(root, "ocel.fake.json") }
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(deps, &stderr)
+	if err := runStatus(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv), &stdout); err != nil {
+		t.Fatalf("runStatus err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	evs := runEvents(t, stderr.String())
+	if len(evs) == 0 || evs[0].GetStarted() == nil || evs[0].GetPhase() != progressv1.Phase_PHASE_CHECK {
+		t.Fatalf("stream = %s, want a run that opens with the check phase that starts the provider", stderr.String())
+	}
+	if result := evs[len(evs)-1].GetSummary(); !result.GetSuccess() {
+		t.Errorf("result = %v, want the status run to succeed", result)
+	}
+	if !strings.Contains(stdout.String(), fingerprint) || strings.Contains(stderr.String(), "container over dial") {
+		t.Errorf("stdout = %q, stream = %q: want what the console has on stdout and not on the stream", stdout.String(), stderr.String())
+	}
+}

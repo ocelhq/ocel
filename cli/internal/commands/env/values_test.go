@@ -1,0 +1,776 @@
+package env
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+
+	"google.golang.org/protobuf/encoding/protojson"
+
+	"github.com/ocelhq/ocel/cli/internal/terminal"
+	"github.com/ocelhq/ocel/pkg/processenv"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
+
+	"github.com/ocelhq/ocel/cli/internal/clitest"
+	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
+)
+
+func setUpEnvFixture(t *testing.T) string {
+	t.Helper()
+	return clitest.SetUpVariablesFixtureWith(t, "[]", envDeclaringScript(fixtureDefinitions))
+}
+
+const fixtureDefinitions = `[
+  {"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SECRET","required":true},
+  {"key":"API_TOKEN","class":"VARIABLE_CLASS_SECRET","required":true},
+  {"key":"LOG_LEVEL","class":"VARIABLE_CLASS_PLAIN","required":true},
+  {"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true}
+]`
+
+func streamedDeps(stream io.Writer) cmddeps.Deps {
+	deps := clitest.NewDeps()
+	clitest.AttachTerminalSink(deps, stream)
+	return deps
+}
+
+func envSet(t *testing.T, root, key, value string, opts envOptions) string {
+	t.Helper()
+	var stdout, stderr bytes.Buffer
+	if err := runEnvSet(context.Background(), streamedDeps(&stderr), root, key, value, opts, nil, &stdout, &stderr); err != nil {
+		t.Fatalf("runEnvSet(%s) err = %v; stdout=%s stderr=%s", key, err, stdout.String(), stderr.String())
+	}
+	return stdout.String()
+}
+
+func seedFakeValue(t *testing.T, tier environmentv1.Tier, c *envvarsv1.Coordinate, value string) {
+	t.Helper()
+	store, err := clitest.LoadFakeStore()
+	if err != nil {
+		t.Fatalf("load the fake store: %v", err)
+	}
+	store[clitest.FakeCoordinateID(tier, c)] = &clitest.FakeCell{
+		Tier:       tier,
+		Coordinate: clitest.FakeCoordinate{Slug: c.GetSlug(), Folder: c.GetFolder(), Key: c.GetKey(), Environment: c.GetEnvironment()},
+		Versions:   []clitest.FakeCellData{{Value: value, Ts: 1_700_000_000}},
+	}
+	if err := clitest.SaveFakeStore(store); err != nil {
+		t.Fatalf("save the fake store: %v", err)
+	}
+}
+
+func envDeclaringScript(definitions string) string {
+	return envDeclaringRequest(`{"definitions": ` + definitions + `}`)
+}
+
+func envDeclaringRequest(body string) string {
+	return fmt.Sprintf(`
+declare global {
+  var __ocelRegister: Promise<unknown>[];
+}
+globalThis.__ocelRegister ??= [];
+
+globalThis.__ocelRegister.push(
+  (async () => {
+    const log = process.env.OCEL_TEST_DISCOVERY_LOG;
+    if (log) await (await import("node:fs/promises")).appendFile(log, "ran\n");
+
+    const res = await fetch(new URL("/app.resources.v1.ResourceService/DeclareEnv", process.env.%s), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + process.env.`+processenv.DevServerTokenEnvVar+` },
+      body: JSON.stringify(%s),
+    });
+    if (!res.ok) throw new Error("DeclareEnv failed: " + res.status + " " + (await res.text()));
+  })(),
+);
+export {};
+`, processenv.DevServerEnvVar, body)
+}
+
+func setUpDeclaringFixture(t *testing.T, definitions string) (root, log string) {
+	t.Helper()
+	root = clitest.SetUpVariablesFixtureWith(t, "[]", envDeclaringScript(definitions))
+	log = filepath.Join(t.TempDir(), "discovery.log")
+	t.Setenv("OCEL_TEST_DISCOVERY_LOG", log)
+	return root, log
+}
+
+func discoveryRuns(t *testing.T, log string) int {
+	t.Helper()
+	data, err := os.ReadFile(log)
+	if err != nil {
+		return 0
+	}
+	return strings.Count(string(data), "ran\n")
+}
+
+func TestSettingAValueStoresItOnlyWhereADeclarationReadsIt(t *testing.T) {
+	t.Run("refuses a key no app declares", func(t *testing.T) {
+		root := setUpEnvFixture(t)
+
+		var stdout, stderr bytes.Buffer
+		err := runEnvSet(context.Background(), streamedDeps(&stderr), root, "SITE_HOSTNAME", "acme.example", envOptions{}, nil, &stdout, &stderr)
+		if err == nil {
+			t.Fatal("runEnvSet(SITE_HOSTNAME) err = nil, want a key nothing declares refused: the declarations deliver declared keys only, so the value would sit in the store and reach no build and no function")
+		}
+		for _, want := range []string{"SITE_HOSTNAME", "defineEnv"} {
+			if !strings.Contains(stderr.String(), want) {
+				t.Errorf("stream = %q, want %q named", stderr.String(), want)
+			}
+		}
+	})
+
+	t.Run("names the key it set, and the value it wrote reads back only when revealing is explicit", func(t *testing.T) {
+		root := setUpEnvFixture(t)
+
+		if out := envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{}); !strings.Contains(out, "STRIPE_API_KEY") {
+			t.Errorf("set stdout = %q, want it to name the key it set", out)
+		}
+
+		t.Run("the value is withheld without --reveal", func(t *testing.T) {
+			var plain bytes.Buffer
+			if err := runEnvGet(context.Background(), streamedDeps(&plain), root, "STRIPE_API_KEY", envOptions{}, &plain, &plain); err != nil {
+				t.Fatalf("runEnvGet err = %v; out=%s", err, plain.String())
+			}
+			if strings.Contains(plain.String(), "sk_live_secret") {
+				t.Errorf("get stdout = %q, want the value withheld without --reveal", plain.String())
+			}
+			if !strings.Contains(plain.String(), "--reveal") {
+				t.Errorf("get stdout = %q, want it to name the flag that reveals", plain.String())
+			}
+		})
+
+		t.Run("--reveal prints exactly the value so it is scriptable", func(t *testing.T) {
+			var revealed bytes.Buffer
+			var chatter bytes.Buffer
+			if err := runEnvGet(context.Background(), streamedDeps(&chatter), root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true}, &revealed, &chatter); err != nil {
+				t.Fatalf("runEnvGet --reveal err = %v; out=%s", err, revealed.String())
+			}
+			if strings.TrimSpace(revealed.String()) != "sk_live_secret" {
+				t.Errorf("get --reveal stdout = %q, want exactly the value so it is scriptable", revealed.String())
+			}
+		})
+	})
+
+	t.Run("an override is its own cell beside the value bound to all environments", func(t *testing.T) {
+		root := setUpEnvFixture(t)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
+
+		preview := envOptions{preview: true}
+		staging := envOptions{preview: true, environment: "staging"}
+		envSet(t, root, "STRIPE_API_KEY", "sk_shared", preview)
+		envSet(t, root, "STRIPE_API_KEY", "sk_staging", staging)
+
+		for name, tc := range map[string]struct {
+			opts envOptions
+			want string
+		}{
+			"the environment with the override": {opts: staging, want: "sk_staging"},
+			"every other environment":           {opts: preview, want: "sk_shared"},
+		} {
+			t.Run(name, func(t *testing.T) {
+				opts := tc.opts
+				opts.reveal, opts.yes = true, true
+				var stdout bytes.Buffer
+				var chatter bytes.Buffer
+				if err := runEnvGet(context.Background(), streamedDeps(&chatter), root, "STRIPE_API_KEY", opts, &stdout, &chatter); err != nil {
+					t.Fatalf("runEnvGet err = %v; out=%s", err, stdout.String())
+				}
+				if got := strings.TrimSpace(stdout.String()); got != tc.want {
+					t.Errorf("value = %q, want %q", got, tc.want)
+				}
+			})
+		}
+	})
+
+	t.Run("refuses an environment that does not exist, and the refused write does not land", func(t *testing.T) {
+		root := setUpEnvFixture(t)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
+
+		var stdout, stderr bytes.Buffer
+		err := runEnvSet(context.Background(), streamedDeps(&stderr), root, "STRIPE_API_KEY", "sk_typo", envOptions{preview: true, environment: "stagng"}, nil, &stdout, &stderr)
+		if err == nil {
+			t.Fatal("runEnvSet against an environment that does not exist err = nil, want a refusal")
+		}
+		if !strings.Contains(stderr.String(), "stagng") || !strings.Contains(stderr.String(), "staging") {
+			t.Errorf("stream = %q, want it to name what was asked for and what exists", stderr.String())
+		}
+
+		var get bytes.Buffer
+		if err := runEnvGet(context.Background(), streamedDeps(&get), root, "STRIPE_API_KEY", envOptions{preview: true, environment: "stagng", reveal: true, yes: true}, &get, &get); err == nil {
+			t.Errorf("the refused write landed anyway: get = %q", get.String())
+		}
+	})
+
+	t.Run("refuses an environment on production", func(t *testing.T) {
+		root := setUpEnvFixture(t)
+
+		var stdout, stderr bytes.Buffer
+		err := runEnvSet(context.Background(), streamedDeps(&stderr), root, "STRIPE_API_KEY", "sk_live", envOptions{environment: "staging"}, nil, &stdout, &stderr)
+		if err == nil {
+			t.Fatal("runEnvSet --environment against production err = nil, want a refusal")
+		}
+		if !strings.Contains(err.Error(), "--preview") {
+			t.Errorf("err = %v, want it to name the flag that selects the bootstrap overrides live on", err)
+		}
+	})
+
+	t.Run("refuses on preview infrastructure", func(t *testing.T) {
+		root := setUpEnvFixture(t)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
+
+		var stdout, stderr bytes.Buffer
+		err := runEnvSet(context.Background(), streamedDeps(&stderr), root, "STRIPE_API_KEY", "sk_live_secret", envOptions{}, nil, &stdout, &stderr)
+		if err == nil {
+			t.Fatal("runEnvSet against preview infrastructure err = nil, want a tier-mismatch refusal")
+		}
+	})
+
+	t.Run("refuses a root value for a scoped key", func(t *testing.T) {
+		root := clitest.SetUpVariablesFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web","/admin"]}]`)
+
+		var stdout, stderr bytes.Buffer
+		err := runEnvSet(context.Background(), streamedDeps(&stderr), root, "POSTHOG_ID", "ph_root", envOptions{}, nil, &stdout, &stderr)
+		if err == nil {
+			t.Fatal("runEnvSet err = nil, want a root value for a scoped key refused: nothing could ever read it")
+		}
+		for _, want := range []string{"POSTHOG_ID", "/web", "/admin"} {
+			if !strings.Contains(stderr.String(), want) {
+				t.Errorf("stream = %q, want it to name %q", stderr.String(), want)
+			}
+		}
+	})
+
+	t.Run("refuses a scoped key in a folder it does not name", func(t *testing.T) {
+		root := clitest.SetUpVariablesFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`)
+
+		var stdout, stderr bytes.Buffer
+		err := runEnvSet(context.Background(), streamedDeps(&stderr), root, "POSTHOG_ID", "ph", envOptions{folder: "/admin"}, nil, &stdout, &stderr)
+		if err == nil {
+			t.Fatal("runEnvSet err = nil, want a folder outside the key's scope refused")
+		}
+		if !strings.Contains(stderr.String(), "/admin") {
+			t.Errorf("stream = %q, want it to name the folder it refused", stderr.String())
+		}
+	})
+
+	t.Run("accepts a scoped key in a folder it names", func(t *testing.T) {
+		root := clitest.SetUpVariablesFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`)
+
+		if out := envSet(t, root, "POSTHOG_ID", "ph_web", envOptions{folder: "/web"}); !strings.Contains(out, "/web") {
+			t.Errorf("set stdout = %q, want the folder it wrote named", out)
+		}
+	})
+
+	t.Run("leaves an unscoped key writable at root and in a folder", func(t *testing.T) {
+		root := clitest.SetUpVariablesFixture(t, `[{"key":"LOG_LEVEL","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
+
+		envSet(t, root, "LOG_LEVEL", "info", envOptions{})
+		envSet(t, root, "LOG_LEVEL", "debug", envOptions{folder: "/web"})
+	})
+
+	t.Run("a second write reuses the declarations the first one learned", func(t *testing.T) {
+		root, log := setUpDeclaringFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`)
+
+		envSet(t, root, "POSTHOG_ID", "ph_one", envOptions{folder: "/web"})
+		envSet(t, root, "POSTHOG_ID", "ph_two", envOptions{folder: "/web"})
+
+		if got := discoveryRuns(t, log); got != 1 {
+			t.Errorf("discovery ran %d times over two writes, want 1: nothing the declarations come from changed between them", got)
+		}
+
+		var out bytes.Buffer
+		var chatter bytes.Buffer
+		if err := runEnvGet(context.Background(), streamedDeps(&chatter), root, "POSTHOG_ID", envOptions{folder: "/web", reveal: true}, &out, &chatter); err != nil {
+			t.Fatalf("runEnvGet err = %v; out=%s", err, out.String())
+		}
+		if strings.TrimSpace(out.String()) != "ph_two" {
+			t.Errorf("value in /web = %q, want %q: the second write must land like the first", out.String(), "ph_two")
+		}
+	})
+
+	t.Run("picks up a scope the code gained since the last write", func(t *testing.T) {
+		root, log := setUpDeclaringFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
+
+		envSet(t, root, "POSTHOG_ID", "ph_root", envOptions{})
+
+		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "env.ts"),
+			envDeclaringScript(`[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`))
+
+		var stdout, stderr bytes.Buffer
+		err := runEnvSet(context.Background(), streamedDeps(&stderr), root, "POSTHOG_ID", "ph_root_again", envOptions{}, nil, &stdout, &stderr)
+		if err == nil {
+			t.Fatal("runEnvSet err = nil, want the scope the code now declares to refuse a root write")
+		}
+		if !strings.Contains(stderr.String(), "/web") {
+			t.Errorf("stream = %q, want it to name the folder the key is now scoped to", stderr.String())
+		}
+		if got := discoveryRuns(t, log); got != 2 {
+			t.Errorf("discovery ran %d times, want 2: the declaring code changed between the writes", got)
+		}
+	})
+
+	t.Run("does not trust a cached absence for a conditionally scoped key", func(t *testing.T) {
+		root := clitest.SetUpVariablesFixtureWith(t,
+			`[{"key":"LOG_LEVEL","class":"VARIABLE_CLASS_PLAIN","required":true}]`, clitest.EnvDeclareOnlyScript)
+
+		envSet(t, root, "LOG_LEVEL", "info", envOptions{})
+
+		t.Setenv("OCEL_TEST_ENV_DEFINITIONS", `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`)
+
+		var stdout, stderr bytes.Buffer
+		err := runEnvSet(context.Background(), streamedDeps(&stderr), root, "POSTHOG_ID", "ph_root", envOptions{}, nil, &stdout, &stderr)
+		if err == nil {
+			t.Fatal("runEnvSet err = nil, want a root value for a scoped key refused: a cached set that never mentioned the key cannot say it is unscoped")
+		}
+		if !strings.Contains(stderr.String(), "/web") {
+			t.Errorf("stream = %q, want it to name the folder the key is scoped to", stderr.String())
+		}
+
+		var out bytes.Buffer
+		if err := runEnvGet(context.Background(), streamedDeps(&out), root, "POSTHOG_ID", envOptions{reveal: true}, &out, &out); err == nil {
+			t.Errorf("runEnvGet at root err = nil (out=%q), want no root cell written", out.String())
+		}
+	})
+}
+
+func TestEnvAsksTheBootstrapOnlyWhetherThisCLICanSpeakToIt(t *testing.T) {
+	root, _ := clitest.SetUpDeployFixture(t)
+	deps := clitest.NewDeps()
+	clitest.SetLoggedIn(&deps)
+	clitest.StubBuild(&deps, nil)
+	t.Setenv(clitest.FakeInfraTierEnvVar, "production")
+	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+	t.Setenv(clitest.FakeBootstrapEnvVar, "missing")
+
+	var stdout, stderr bytes.Buffer
+	if err := runEnvLs(context.Background(), deps, root, envOptions{}, &stdout, &stderr); err != nil {
+		t.Fatalf("a variable this bootstrap stores was refused over a feature no variable needs: %v", err)
+	}
+}
+
+func TestGettingAValueReadsOneCellOfOneTier(t *testing.T) {
+	t.Run("reports an unset key", func(t *testing.T) {
+		root := setUpEnvFixture(t)
+
+		var stdout, stderr bytes.Buffer
+		err := runEnvGet(context.Background(), streamedDeps(&stderr), root, "NEVER_SET", envOptions{reveal: true}, &stdout, &stderr)
+		if err == nil {
+			t.Fatal("runEnvGet on an unset key err = nil, want a failure rather than an empty value")
+		}
+		if !strings.Contains(stderr.String(), "NEVER_SET") {
+			t.Errorf("stream = %q, want it to name the key", stderr.String())
+		}
+	})
+
+	t.Run("a folder and the root are separate cells", func(t *testing.T) {
+		root := setUpEnvFixture(t)
+		envSet(t, root, "POSTHOG_ID", "web-id", envOptions{folder: "/web"})
+
+		var stdout, stderr bytes.Buffer
+		if err := runEnvGet(context.Background(), streamedDeps(&stderr), root, "POSTHOG_ID", envOptions{reveal: true}, &stdout, &stderr); err == nil {
+			t.Fatalf("runEnvGet at root err = nil (out=%q), want the root cell to be unset", stdout.String())
+		}
+
+		var folder bytes.Buffer
+		var chatter bytes.Buffer
+		if err := runEnvGet(context.Background(), streamedDeps(&chatter), root, "POSTHOG_ID", envOptions{folder: "/web", reveal: true}, &folder, &chatter); err != nil {
+			t.Fatalf("runEnvGet in /web err = %v", err)
+		}
+		if strings.TrimSpace(folder.String()) != "web-id" {
+			t.Errorf("get in /web = %q, want %q", folder.String(), "web-id")
+		}
+	})
+
+	t.Run("production and preview are separate stores", func(t *testing.T) {
+		root := setUpEnvFixture(t)
+		envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
+
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
+
+		var get bytes.Buffer
+		if err := runEnvGet(context.Background(), streamedDeps(&get), root, "STRIPE_API_KEY", envOptions{preview: true, reveal: true, yes: true}, &get, &get); err == nil {
+			t.Errorf("preview get err = nil (out=%q), want the production value unreadable from preview", get.String())
+		}
+
+		var ls bytes.Buffer
+		if err := runEnvLs(context.Background(), streamedDeps(&ls), root, envOptions{preview: true}, &ls, &ls); err != nil {
+			t.Fatalf("runEnvLs --preview err = %v; out=%s", err, ls.String())
+		}
+		if strings.Contains(ls.String(), "STRIPE_API_KEY") {
+			t.Errorf("preview ls = %q, want no production value listed", ls.String())
+		}
+
+		envSet(t, root, "STRIPE_API_KEY", "sk_test_preview", envOptions{preview: true})
+
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
+
+		var production bytes.Buffer
+		var chatter bytes.Buffer
+		if err := runEnvGet(context.Background(), streamedDeps(&chatter), root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true}, &production, &chatter); err != nil {
+			t.Fatalf("runEnvGet err = %v; out=%s", err, production.String())
+		}
+		if got := strings.TrimSpace(production.String()); got != "sk_live_secret" {
+			t.Errorf("production value = %q, want %q: a preview write must not reach production", got, "sk_live_secret")
+		}
+	})
+}
+
+func TestRemovingAValueDeletesItsCell(t *testing.T) {
+	t.Run("removes the value", func(t *testing.T) {
+		root := setUpEnvFixture(t)
+		envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
+
+		var stdout, stderr bytes.Buffer
+		if err := runEnvRm(context.Background(), streamedDeps(&stderr), root, "STRIPE_API_KEY", envOptions{}, &stdout, &stderr); err != nil {
+			t.Fatalf("runEnvRm err = %v; stderr=%s", err, stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "STRIPE_API_KEY") {
+			t.Errorf("rm stdout = %q, want it to name the removed key", stdout.String())
+		}
+
+		var after bytes.Buffer
+		if err := runEnvLs(context.Background(), streamedDeps(&after), root, envOptions{}, &after, &after); err != nil {
+			t.Fatalf("runEnvLs err = %v", err)
+		}
+		if strings.Contains(after.String(), "STRIPE_API_KEY") {
+			t.Errorf("ls after rm = %q, want the value gone", after.String())
+		}
+	})
+
+	t.Run("reports nothing to remove", func(t *testing.T) {
+		root := setUpEnvFixture(t)
+
+		var stdout, stderr bytes.Buffer
+		if err := runEnvRm(context.Background(), streamedDeps(&stderr), root, "NEVER_SET", envOptions{}, &stdout, &stderr); err != nil {
+			t.Fatalf("runEnvRm err = %v; stderr=%s", err, stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "No value") {
+			t.Errorf("rm of an unset key = %q, want it to say there was nothing set", stdout.String())
+		}
+	})
+
+	t.Run("an orphaned override is listed and removable", func(t *testing.T) {
+		root := setUpEnvFixture(t)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
+		envSet(t, root, "STRIPE_API_KEY", "sk_staging", envOptions{preview: true, environment: "staging"})
+
+		t.Setenv(clitest.FakeEnvironmentsEnvVar, "none")
+
+		var ls bytes.Buffer
+		if err := runEnvLs(context.Background(), streamedDeps(&ls), root, envOptions{preview: true}, &ls, &ls); err != nil {
+			t.Fatalf("runEnvLs err = %v; out=%s", err, ls.String())
+		}
+		if !strings.Contains(ls.String(), "orphaned") {
+			t.Errorf("ls = %q, want the override marked orphaned once its environment is gone", ls.String())
+		}
+
+		var rm bytes.Buffer
+		if err := runEnvRm(context.Background(), streamedDeps(&rm), root, "STRIPE_API_KEY", envOptions{preview: true, environment: "staging"}, &rm, &rm); err != nil {
+			t.Fatalf("runEnvRm err = %v; out=%s", err, rm.String())
+		}
+		if !strings.Contains(rm.String(), "Removed") {
+			t.Errorf("rm = %q, want the orphan removed rather than reported unset", rm.String())
+		}
+
+		var after bytes.Buffer
+		if err := runEnvLs(context.Background(), streamedDeps(&after), root, envOptions{preview: true}, &after, &after); err != nil {
+			t.Fatalf("runEnvLs err = %v; out=%s", err, after.String())
+		}
+		if strings.Contains(after.String(), "STRIPE_API_KEY") {
+			t.Errorf("ls = %q, want the removed orphan gone from the listing", after.String())
+		}
+	})
+}
+
+func TestAValuesHistoryShowsMetadataNewestFirst(t *testing.T) {
+	t.Run("shows metadata newest first and never a plaintext", func(t *testing.T) {
+		root := setUpEnvFixture(t)
+		secrets := []string{"sk_first", "sk_second", "sk_third"}
+		for _, v := range secrets {
+			envSet(t, root, "STRIPE_API_KEY", v, envOptions{})
+		}
+
+		for name, opts := range map[string]envOptions{
+			"without --reveal": {},
+			"with --reveal":    {reveal: true},
+		} {
+			t.Run(name, func(t *testing.T) {
+				var stdout bytes.Buffer
+				var chatter bytes.Buffer
+				if err := runEnvHistory(context.Background(), streamedDeps(&chatter), root, "STRIPE_API_KEY", opts, &stdout, &chatter); err != nil {
+					t.Fatalf("runEnvHistory(reveal=%v) err = %v; out=%s", opts.reveal, err, stdout.String())
+				}
+				out := stdout.String()
+
+				for _, secret := range secrets {
+					if strings.Contains(out, secret) {
+						t.Errorf("history(reveal=%v) stdout = %q, want no plaintext (found %q)", opts.reveal, out, secret)
+					}
+				}
+				if strings.Contains(out, "VALUE") {
+					t.Errorf("history(reveal=%v) stdout = %q, want no VALUE column", opts.reveal, out)
+				}
+
+				rows := strings.Split(strings.TrimSpace(out), "\n")
+				if len(rows) != 4 {
+					t.Fatalf("history(reveal=%v) stdout = %q, want a header and three versions", opts.reveal, out)
+				}
+				for i, wantVersion := range []string{"3", "2", "1"} {
+					if got := strings.Fields(rows[i+1])[0]; got != wantVersion {
+						t.Errorf("history(reveal=%v) row %d = %q, want version %s: newest first", opts.reveal, i, rows[i+1], wantVersion)
+					}
+				}
+			})
+		}
+	})
+}
+
+func TestSettingSeveralPairsValidatesEveryPairBeforeWritingAny(t *testing.T) {
+	t.Run("sets every declared pair", func(t *testing.T) {
+		root := setUpEnvFixture(t)
+		var stdout, stderr bytes.Buffer
+		err := runEnvSetPairs(context.Background(), clitest.NewDeps(), root, []envSetPair{
+			{key: "STRIPE_API_KEY", value: "sk_live_secret"},
+			{key: "LOG_LEVEL", value: "debug"},
+		}, envOptions{}, nil, &stdout, &stderr)
+		if err != nil {
+			t.Fatalf("runEnvSetPairs() = %v; stdout=%s", err, stdout.String())
+		}
+		for _, key := range []string{"STRIPE_API_KEY", "LOG_LEVEL"} {
+			if !strings.Contains(stdout.String(), key) {
+				t.Errorf("stdout = %q, want %s", stdout.String(), key)
+			}
+		}
+	})
+
+	t.Run("validates every pair before writing any", func(t *testing.T) {
+		root := setUpEnvFixture(t)
+		var stdout, stderr bytes.Buffer
+		err := runEnvSetPairs(context.Background(), clitest.NewDeps(), root, []envSetPair{
+			{key: "STRIPE_API_KEY", value: "sk_live_secret"},
+			{key: "SITE_HOSTNAME", value: "acme.example"},
+		}, envOptions{}, nil, &stdout, &stderr)
+		if err == nil {
+			t.Fatal("runEnvSetPairs() = nil, want an undeclared key refusal")
+		}
+		store, loadErr := clitest.LoadFakeStore()
+		if loadErr != nil {
+			t.Fatalf("load fake store: %v", loadErr)
+		}
+		if len(store) != 0 {
+			t.Errorf("store = %#v, want no writes", store)
+		}
+	})
+}
+
+func TestTheEnvCommandsOfferOnlyTheFlagsTheyHonour(t *testing.T) {
+	t.Parallel()
+
+	t.Run("history offers no --reveal flag where get still does", func(t *testing.T) {
+		t.Parallel()
+
+		cmd := NewCommand(clitest.NewDeps())
+		history, _, _ := cmd.Find([]string{"history"})
+		get, _, _ := cmd.Find([]string{"get"})
+		if f := history.Flags().Lookup("reveal"); f != nil {
+			t.Errorf("`ocel env history` registers --reveal (%q); history is metadata only", f.Usage)
+		}
+		if get.Flags().Lookup("reveal") == nil {
+			t.Error("`ocel env get` lost --reveal; reading one named value back is the surface history's removal relies on")
+		}
+	})
+
+	t.Run("address a named environment", func(t *testing.T) {
+		t.Parallel()
+
+		cmd := NewCommand(clitest.NewDeps())
+		for _, name := range []string{"set", "get", "rm", "history"} {
+			c, _, _ := cmd.Find([]string{name})
+			if c.Flags().Lookup("environment") == nil {
+				t.Errorf("`ocel env %s` cannot address a named environment's override", c.Name())
+			}
+		}
+	})
+}
+
+func TestRevealingASecretNeedsAnExplicitYes(t *testing.T) {
+	t.Run("--reveal alone will not print a secret", func(t *testing.T) {
+		root := setUpEnvFixture(t)
+		envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
+
+		var stdout, stderr bytes.Buffer
+		err := runEnvGet(context.Background(), streamedDeps(&stderr), root, "STRIPE_API_KEY", envOptions{reveal: true}, &stdout, &stderr)
+		if err == nil {
+			t.Fatal("runEnvGet --reveal on a secret err = nil, want it refused: a secret must not reach stdout on a flag the operator passes out of habit")
+		}
+		if strings.Contains(stdout.String()+stderr.String()+err.Error(), "sk_live_secret") {
+			t.Errorf("output = %q / %q / %v, want no plaintext anywhere in a refusal", stdout.String(), stderr.String(), err)
+		}
+		for _, want := range []string{"STRIPE_API_KEY", "--yes"} {
+			if !strings.Contains(stderr.String(), want) {
+				t.Errorf("stream = %q, want %q named", stderr.String(), want)
+			}
+		}
+	})
+
+	t.Run("--reveal --yes prints the secret on stdout and warns on stderr", func(t *testing.T) {
+		root := setUpEnvFixture(t)
+		envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
+
+		var stdout, stderr bytes.Buffer
+		if err := runEnvGet(context.Background(), streamedDeps(&stderr), root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true}, &stdout, &stderr); err != nil {
+			t.Fatalf("runEnvGet --reveal --yes err = %v; stderr=%s", err, stderr.String())
+		}
+		if got := strings.TrimSpace(stdout.String()); got != "sk_live_secret" {
+			t.Errorf("stdout = %q, want exactly the value so a script can capture it", got)
+		}
+		if !strings.Contains(stderr.String(), "STRIPE_API_KEY") {
+			t.Errorf("stderr = %q, want a warning naming the secret that was printed", stderr.String())
+		}
+		if strings.Contains(stderr.String(), "sk_live_secret") {
+			t.Errorf("stderr = %q, want the warning to name the key, never repeat the plaintext", stderr.String())
+		}
+	})
+
+	t.Run("--reveal --yes warns through the run, so nothing reaches stderr beside it", func(t *testing.T) {
+		root := setUpEnvFixture(t)
+		envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
+
+		var stdout, stderr, stream bytes.Buffer
+		if err := runEnvGet(context.Background(), streamedDeps(&stream), root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true}, &stdout, &stderr); err != nil {
+			t.Fatalf("runEnvGet --reveal --yes err = %v; stream=%s", err, stream.String())
+		}
+		if stderr.Len() != 0 {
+			t.Errorf("stderr = %q, want nothing written around the run", stderr.String())
+		}
+		if !strings.Contains(stream.String(), "WARN  [check] STRIPE_API_KEY") {
+			t.Errorf("stream = %q, want the warning as a WARN line of the run naming the secret", stream.String())
+		}
+	})
+
+	t.Run("a plain value needs no acknowledgement and warns about nothing", func(t *testing.T) {
+		root := setUpEnvFixture(t)
+		envSet(t, root, "LOG_LEVEL", "debug", envOptions{})
+
+		var stdout, stderr bytes.Buffer
+		if err := runEnvGet(context.Background(), streamedDeps(&stderr), root, "LOG_LEVEL", envOptions{reveal: true}, &stdout, &stderr); err != nil {
+			t.Fatalf("runEnvGet --reveal on a plain value err = %v; stderr=%s", err, stderr.String())
+		}
+		if got := strings.TrimSpace(stdout.String()); got != "debug" {
+			t.Errorf("stdout = %q, want %q", got, "debug")
+		}
+		if strings.Contains(stderr.String(), "secret") {
+			t.Errorf("stderr = %q, want no secrecy warning over a value that is not a secret", stderr.String())
+		}
+	})
+}
+
+func TestEnvWritesQuoteTheVersionTheyRead(t *testing.T) {
+	t.Run("a set is refused when another write landed between the read and the write", func(t *testing.T) {
+		root := setUpEnvFixture(t)
+		envSet(t, root, "LOG_LEVEL", "info", envOptions{})
+		t.Setenv(clitest.FakeRacingWriteEnvVar, "LOG_LEVEL")
+
+		var stdout, stderr bytes.Buffer
+		err := runEnvSet(context.Background(), streamedDeps(&stderr), root, "LOG_LEVEL", "debug", envOptions{}, nil, &stdout, &stderr)
+		if err == nil {
+			t.Fatal("runEnvSet over a value somebody else moved err = nil, want a refusal: two operators racing must not overwrite each other silently")
+		}
+		for _, want := range []string{"LOG_LEVEL", "ocel env get"} {
+			if !strings.Contains(stderr.String(), want) {
+				t.Errorf("stream = %q, want %q named so the operator can re-read and retry", stderr.String(), want)
+			}
+		}
+
+		t.Setenv(clitest.FakeRacingWriteEnvVar, "")
+		if got := strings.TrimSpace(envGet(t, root, "LOG_LEVEL", envOptions{reveal: true})); got == "debug" {
+			t.Errorf("value = %q, want the write that landed first kept: a refused set must not land", got)
+		}
+	})
+
+	t.Run("an rm is refused when another write landed between the read and the delete", func(t *testing.T) {
+		root := setUpEnvFixture(t)
+		envSet(t, root, "LOG_LEVEL", "info", envOptions{})
+		t.Setenv(clitest.FakeRacingWriteEnvVar, "LOG_LEVEL")
+
+		var stdout, stderr bytes.Buffer
+		err := runEnvRm(context.Background(), streamedDeps(&stderr), root, "LOG_LEVEL", envOptions{}, &stdout, &stderr)
+		if err == nil {
+			t.Fatal("runEnvRm over a value somebody else moved err = nil, want a refusal: the operator would be deleting a value they never saw")
+		}
+		if !strings.Contains(stderr.String(), "LOG_LEVEL") {
+			t.Errorf("stream = %q, want it to name the key", stderr.String())
+		}
+
+		t.Setenv(clitest.FakeRacingWriteEnvVar, "")
+		if got := strings.TrimSpace(envGet(t, root, "LOG_LEVEL", envOptions{reveal: true})); got == "" {
+			t.Errorf("value = %q, want the cell still set: a refused rm must not land", got)
+		}
+	})
+
+	t.Run("an uncontested set and rm land on the version they read", func(t *testing.T) {
+		root := setUpEnvFixture(t)
+		envSet(t, root, "LOG_LEVEL", "info", envOptions{})
+		if out := envSet(t, root, "LOG_LEVEL", "debug", envOptions{}); !strings.Contains(out, "version 2") {
+			t.Errorf("set stdout = %q, want version 2: the write quoted version 1 and moved it on", out)
+		}
+
+		var stdout, stderr bytes.Buffer
+		if err := runEnvRm(context.Background(), streamedDeps(&stderr), root, "LOG_LEVEL", envOptions{}, &stdout, &stderr); err != nil {
+			t.Fatalf("runEnvRm err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "Removed LOG_LEVEL") {
+			t.Errorf("rm stdout = %q, want the removal reported", stdout.String())
+		}
+	})
+}
+
+func runEvents(t *testing.T, out string) []*streamv1.RunEvent {
+	t.Helper()
+	var evs []*streamv1.RunEvent
+	for _, line := range strings.Split(out, "\n") {
+		if line == "" {
+			continue
+		}
+		ev := &streamv1.RunEvent{}
+		if err := protojson.Unmarshal([]byte(line), ev); err != nil {
+			t.Fatalf("line %q is not a protojson RunEvent: %v", line, err)
+		}
+		evs = append(evs, ev)
+	}
+	return evs
+}
+
+func TestWhatTheDeclarationCollectorPrintsReachesTheRunAsOutputAndNeverRawStderr(t *testing.T) {
+	root := clitest.SetUpVariablesFixtureWith(t, "[]", `console.error("collecting the declared variables");`+envDeclaringScript(fixtureDefinitions))
+	deps := clitest.NewDeps()
+	deps.Presentation = func(io.Writer) terminal.Presentation {
+		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
+	}
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(deps, &stderr)
+	if err := runEnvLs(context.Background(), deps, root, envOptions{}, &stdout, &stderr); err != nil {
+		t.Fatalf("runEnvLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	evs := runEvents(t, stderr.String())
+	said := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool {
+		return ev.GetOutput() != nil && strings.Contains(ev.GetMessage(), "collecting the declared variables")
+	})
+	if said < 0 {
+		t.Fatalf("the collector's line never reached the run as output: %s", stderr.String())
+	}
+	if evs[said].GetPhase() != progressv1.Phase_PHASE_BUILD {
+		t.Errorf("the collector's line is in %v, want the build phase that ran it", evs[said].GetPhase())
+	}
+}
