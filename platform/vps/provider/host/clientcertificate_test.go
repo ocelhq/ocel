@@ -71,7 +71,7 @@ func TestAShieldedHostnameIsAnsweredOnlyToAClientPresentingACertificateItTrusts(
 	}
 }
 
-func TestARealProxyRefusesAShieldedHostnameOverPlainHTTPAndStillServesTheRest(t *testing.T) {
+func TestARealProxyRedirectsAShieldedHostnameOverPlainHTTPToHTTPSAndStillServesTheRest(t *testing.T) {
 	certificate, _ := pulledCertificate(t)
 	state := twoProjects()
 	state.Claims = []HostClaim{
@@ -81,8 +81,8 @@ func TestARealProxyRefusesAShieldedHostnameOverPlainHTTPAndStillServesTheRest(t 
 	state.Shields = []Shield{{Hostname: claimed, Owner: surface, ClientCertificates: []string{certificate}}}
 	ask := probing(t, state)
 
-	if said := ask(claimed); said.status != http.StatusForbidden || said.router == switchboard.RouterKind {
-		t.Errorf("a shielded hostname over plain http answered %d from %q, want 403 before the switchboard: :80 carries no client certificate, so a request that skips the edge reaches the app", said.status, said.router)
+	if said := ask(claimed); said.status != http.StatusPermanentRedirect || said.location != "https://"+claimed+"/" || said.router == switchboard.RouterKind {
+		t.Errorf("a shielded hostname over plain http answered %d to %q from %q, want 308 to https://%s/ before the switchboard: :80 carries no client certificate, so a request that skips the edge must reach no app, and a visitor Cloudflare forwarded over http lands on https", said.status, said.location, said.router, claimed)
 	}
 	if said := ask("blog.example.com"); said.router != switchboard.RouterKind {
 		t.Errorf("a hostname nothing shields over plain http answered %d from %q, want the switchboard: its http-01 challenge and plain-http leg go through here", said.status, said.router)

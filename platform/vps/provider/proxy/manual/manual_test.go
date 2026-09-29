@@ -314,11 +314,11 @@ func TestYourProxyFailsTheCheckWhenItForwardsAShieldedHostnameOverPlainHTTP(t *t
 		t.Fatalf("Inspect() = %v", err)
 	}
 	shop := verdicts(checks)["shop.example.com"]
-	if shop.Verdict != provider.HostFail || !strings.Contains(shop.Finding, "plain http") || !strings.Contains(shop.Fix, "port 80") {
-		t.Errorf("shop.example.com checks %+v, want a failure saying your proxy forwards it over plain http, and to stop forwarding it on port 80: a request there carries no client certificate", shop)
+	if shop.Verdict != provider.HostFail || !strings.Contains(shop.Finding, "plain http") || !strings.Contains(shop.Fix, "port 80") || !strings.Contains(shop.Fix, "redirect to https") {
+		t.Errorf("shop.example.com checks %+v, want a failure saying your proxy forwards it over plain http, and to redirect it to https on port 80: a request there carries no client certificate, and a visitor Cloudflare forwarded over http must land on https", shop)
 	}
 	if guarded := verdicts(checks)["guarded.example.com"]; guarded.Verdict != provider.HostPass {
-		t.Errorf("guarded.example.com checks %+v, want a pass: your proxy refuses it both without a certificate and over plain http", guarded)
+		t.Errorf("guarded.example.com checks %+v, want a pass: your proxy refuses it without a certificate and forwards it nowhere over plain http", guarded)
 	}
 }
 
