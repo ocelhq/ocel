@@ -229,3 +229,33 @@ describe("the public origin check", () => {
     expect(message).toContain("https");
   });
 });
+
+describe("the oversized cookie check", () => {
+  function refusing(cookieStatus: number, headers: Record<string, string>): Fetch {
+    return async (input, init) => {
+      if (new Headers(init?.headers).has("cookie")) {
+        return new Response("Request Header Or Cookie Too Large", {
+          status: cookieStatus,
+          headers,
+        });
+      }
+      const pad = new URL(String(input)).searchParams.get("pad");
+      return jsonResponse({ query: { pad } });
+    };
+  }
+
+  it("passes when a front ahead of ocel refuses the cookie with its documented 400", async () => {
+    await checkTitled("GET /api/probes/echo takes oversized cookies").run(
+      context(refusing(400, {})),
+    );
+  });
+
+  it("fails when ocel itself answers the cookie with a 400", async () => {
+    const message = await failure(
+      checkTitled("GET /api/probes/echo takes oversized cookies").run(
+        context(refusing(400, { "x-ocel-edge": "box" })),
+      ),
+    );
+    expect(message).toContain("twelve kilobytes of cookie answered 400 from box");
+  });
+});
