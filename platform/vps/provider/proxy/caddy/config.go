@@ -2,8 +2,11 @@ package caddy
 
 import (
 	"cmp"
+	"crypto/x509"
 	_ "embed"
+	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"net/http"
@@ -94,17 +97,26 @@ type httpApp struct {
 }
 
 type server struct {
-	Listen   []string           `json:"listen"`
-	Logs     json.RawMessage    `json:"logs,omitempty"`
-	Policies []connectionPolicy `json:"tls_connection_policies,omitempty"`
-	Routes   []route            `json:"routes"`
-	Errors   *failing           `json:"errors,omitempty"`
+	Listen        []string           `json:"listen"`
+	Logs          json.RawMessage    `json:"logs,omitempty"`
+	Policies      []connectionPolicy `json:"tls_connection_policies,omitempty"`
+	StrictSNIHost *bool              `json:"strict_sni_host,omitempty"`
+	Routes        []route            `json:"routes"`
+	Errors        *failing           `json:"errors,omitempty"`
 }
 
 type connectionPolicy struct {
-	Match     *handshakeMatch `json:"match,omitempty"`
-	Selection *selection      `json:"certificate_selection,omitempty"`
+	Match     *handshakeMatch       `json:"match,omitempty"`
+	Selection *selection            `json:"certificate_selection,omitempty"`
+	Client    *clientAuthentication `json:"client_authentication,omitempty"`
 }
+
+type clientAuthentication struct {
+	TrustedLeafCerts []string `json:"trusted_leaf_certs"`
+	Mode             string   `json:"mode"`
+}
+
+const requireClientCertificate = "require"
 
 type handshakeMatch struct {
 	SNI []string `json:"sni"`
@@ -168,7 +180,15 @@ func render(spec proxy.Spec) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	selecting, err = shielded(selecting, spec.ClientCertificates)
+	if err != nil {
+		return nil, err
+	}
 	front.Policies = slices.Concat(selecting, []connectionPolicy{{}})
+	if slices.ContainsFunc(selecting, func(policy connectionPolicy) bool { return policy.Client != nil }) {
+		strict := true
+		front.StrictSNIHost = &strict
+	}
 	front.Routes = []route{{Handle: []forward{{
 		Handler:     forwardHandler,
 		Upstreams:   []dial{{Dial: spec.Upstream}},
@@ -244,6 +264,42 @@ func loaded(pins []proxy.Pin) (*certificates, []connectionPolicy, error) {
 		return nil, nil, nil
 	}
 	return &certificates{LoadFiles: files}, selecting, nil
+}
+
+func shielded(selecting []connectionPolicy, pulls []proxy.ClientCertificate) ([]connectionPolicy, error) {
+	var shielding []connectionPolicy
+	for _, pull := range slices.SortedFunc(slices.Values(pulls), byHostname) {
+		hostname := strings.ToLower(strings.TrimSpace(pull.Hostname))
+		if hostname == "" {
+			return nil, errors.New("a client certificate the proxy requires names no hostname it shields")
+		}
+		trusted, err := leafDER(pull.Certificate)
+		if err != nil {
+			return nil, fmt.Errorf("the client certificate %s is shielded by: %w", hostname, err)
+		}
+		client := &clientAuthentication{TrustedLeafCerts: []string{trusted}, Mode: requireClientCertificate}
+		if at := slices.IndexFunc(selecting, func(policy connectionPolicy) bool { return policy.Match.SNI[0] == hostname }); at >= 0 {
+			selecting[at].Client = client
+			continue
+		}
+		shielding = append(shielding, connectionPolicy{Match: &handshakeMatch{SNI: []string{hostname}}, Client: client})
+	}
+	return slices.Concat(shielding, selecting), nil
+}
+
+func byHostname(a, b proxy.ClientCertificate) int {
+	return strings.Compare(strings.ToLower(a.Hostname), strings.ToLower(b.Hostname))
+}
+
+func leafDER(certificate string) (string, error) {
+	block, _ := pem.Decode([]byte(certificate))
+	if block == nil || block.Type != "CERTIFICATE" {
+		return "", errors.New("it is no PEM certificate")
+	}
+	if _, err := x509.ParseCertificate(block.Bytes); err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(block.Bytes), nil
 }
 
 func byPrecedence(a, b proxy.Pin) int {

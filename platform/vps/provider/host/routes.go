@@ -107,13 +107,20 @@ func proxySpec(state RoutingTable) proxy.Spec {
 	for _, pin := range state.Pins {
 		pins = append(pins, proxy.Pin(pin))
 	}
+	var pulls []proxy.ClientCertificate
+	for _, claim := range state.Claims {
+		if claim.ClientCertificate != "" {
+			pulls = append(pulls, proxy.ClientCertificate{Hostname: claim.Hostname, Certificate: claim.ClientCertificate})
+		}
+	}
 	return proxy.Spec{
-		Pins:        pins,
-		Hostnames:   state.hostnames(),
-		PreviewBase: state.PreviewBase,
-		Upstream:    SwitchboardUpstream,
-		Router:      switchboard.RouterKind,
-		Permission:  SwitchboardPermission,
+		Pins:               pins,
+		ClientCertificates: pulls,
+		Hostnames:          state.hostnames(),
+		PreviewBase:        state.PreviewBase,
+		Upstream:           SwitchboardUpstream,
+		Router:             switchboard.RouterKind,
+		Permission:         SwitchboardPermission,
 	}
 }
 
