@@ -21,6 +21,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
+	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -260,6 +261,9 @@ func (r *projectRemoval) run(ctx context.Context, progress progress.Progress) er
 			errs = append(errs, err)
 		}
 	}
+	if err := r.destroyUnrecordedHolders(ctx, progress); err != nil {
+		errs = append(errs, err)
+	}
 	written, certificates := r.state.PointerRecords(), r.state.Certificates()
 	if err := r.tearDownEdge(ctx, progress); err != nil {
 		errs = append(errs, err)
@@ -318,6 +322,22 @@ func (r *projectRemoval) destroyStack(ctx context.Context, stack naming.StackNam
 		return fmt.Errorf("destroy %s: %w", stack, err)
 	}
 	return stackrecords.Forget(ctx, r.provider.KeyValues(), r.tier, r.slug, stack)
+}
+
+func (r *projectRemoval) destroyUnrecordedHolders(ctx context.Context, progress progress.Progress) error {
+	restored, err := resources.RecordUnrecordedHolders(ctx, r.provider.KeyValues(), r.tier, r.slug,
+		func(stack naming.StackName) bool { return isOfTier(stack, r.tier) })
+	if err != nil {
+		return err
+	}
+	var errs []error
+	for _, stack := range restored {
+		progress.Say(fmt.Sprintf("Destroying stack %s: its record was gone, and it still holds what its releases share", stack))
+		if err := r.destroyStack(ctx, stack, progress); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func (r *projectRemoval) tearDownEdge(ctx context.Context, progress progress.Progress) error {

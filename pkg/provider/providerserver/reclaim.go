@@ -13,6 +13,7 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
+	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -36,6 +37,14 @@ func destroyPointerStacks(ctx context.Context, p provider.Provider, slug, pointe
 		if entry.Name.Env == pointer {
 			provisioned = append(provisioned, entry)
 		}
+	}
+	restored, err := resources.RecordUnrecordedHolders(ctx, p.KeyValues(), environment.TierPreview, slug,
+		func(stack naming.StackName) bool { return stack.Env == pointer })
+	if err != nil {
+		return err
+	}
+	for _, stack := range restored {
+		provisioned = append(provisioned, stackrecords.NamedStack{Name: stack})
 	}
 	slices.SortStableFunc(provisioned, func(a, b stackrecords.NamedStack) int {
 		return cmp.Compare(infraLast(a.Name), infraLast(b.Name))

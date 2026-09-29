@@ -208,10 +208,13 @@ func infraTags(p provider.DeploySpec) map[string]string {
 	return tags
 }
 
+func isOfTier(stack naming.StackName, tier environment.Tier) bool {
+	return (stack.Env == stackrecords.ProductionEnv) == (tier == environment.TierProduction)
+}
+
 func classifyStacks(entries []stackrecords.NamedStack, tier environment.Tier) (infra, apps []naming.StackName, pointers []string) {
 	for _, entry := range entries {
-		production := entry.Name.Env == stackrecords.ProductionEnv
-		if production != (tier == environment.TierProduction) {
+		if !isOfTier(entry.Name, tier) {
 			continue
 		}
 		if !slices.Contains(pointers, entry.Name.Env) {
