@@ -1,4 +1,4 @@
-package cli
+package dev
 
 import (
 	"bytes"
@@ -13,106 +13,26 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/pprof"
-	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/childprocess"
+	"github.com/ocelhq/ocel/cli/internal/childprocess/childprocesstest"
 
 	"github.com/ocelhq/ocel/cli/internal/dev/leader"
 	"github.com/ocelhq/ocel/cli/internal/devresources"
-	"github.com/ocelhq/ocel/cli/internal/devresources/binding"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/dotfile"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/filewatch"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/constants"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
-	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker/dockertest"
 )
-
-func init() {
-	watchDebounce = 20 * time.Millisecond
-}
-
-func TestMergeEnv(t *testing.T) {
-	t.Parallel()
-
-	t.Run("a resource outranks the project, and the project outranks the shell", func(t *testing.T) {
-		t.Parallel()
-
-		base := []string{"PATH=/bin", "SHARED=base"}
-		values := map[string]string{"SHARED": "project", "PROJECT_ONLY": "p"}
-		resources := []binding.Resolved{
-			{Name: "main", Env: map[string]string{"SHARED": "resource", "OCEL_RESOURCE_POSTGRES_main": "conn"}},
-		}
-
-		got := toMap(mergeEnv(base, nil, values, resources, runtimeAccess{}, "", variables.Scope{}))
-
-		cases := map[string]string{
-			"PATH":                        "/bin",
-			"SHARED":                      "resource",
-			"PROJECT_ONLY":                "p",
-			"OCEL_RESOURCE_POSTGRES_main": "conn",
-		}
-		for k, want := range cases {
-			if got[k] != want {
-				t.Errorf("env[%q] = %q, want %q", k, got[k], want)
-			}
-		}
-	})
-
-	t.Run("dev never tells the runtime to wait for a push", func(t *testing.T) {
-		t.Parallel()
-
-		live := map[string]string{"WEBHOOK_SECRET": "whsec_live"}
-
-		got := mergeEnv([]string{"PATH=/usr/bin"}, live, map[string]string{"PROJECT_ONLY": "p"}, nil, runtimeAccess{}, "", variables.Scope{})
-
-		for _, kv := range got {
-			if strings.HasPrefix(kv, "OCEL_LIVE_KEYS=") {
-				t.Errorf("dev set %q; there is no runtime here to send the push it promises", kv)
-			}
-		}
-		if !slices.Contains(got, "WEBHOOK_SECRET=whsec_live") {
-			t.Error("the live value did not reach the child's environment under its bare name, which is dev's only delivery")
-		}
-	})
-}
-
-func TestReportSecretValues(t *testing.T) {
-	t.Parallel()
-
-	t.Run("a run with no secret values says nothing", func(t *testing.T) {
-		t.Parallel()
-
-		var quiet bytes.Buffer
-		reportSecretValues(&quiet, nil)
-		if quiet.Len() != 0 {
-			t.Errorf("reportSecretValues wrote %q for a run with no secret values, want nothing", quiet.String())
-		}
-	})
-
-	t.Run("it names every secret key and says dev resolves them like any other value", func(t *testing.T) {
-		t.Parallel()
-
-		var out bytes.Buffer
-		reportSecretValues(&out, []string{"WEBHOOK_SECRET", "API_TOKEN"})
-		got := out.String()
-		for _, want := range []string{"API_TOKEN", "WEBHOOK_SECRET", "every other value", "bounded window"} {
-			if !strings.Contains(got, want) {
-				t.Errorf("reportSecretValues wrote %q, want it to mention %q", got, want)
-			}
-		}
-	})
-}
 
 func TestRunDev(t *testing.T) {
 	t.Run("with no config file it discovers, declares, syncs and spawns", func(t *testing.T) {
@@ -680,7 +600,7 @@ export default { slug: "test-app" };
 			followerDone <- runDev(context.Background(), deps, false, root, appArgs, &stdout, &stderr, strings.NewReader(""))
 		}()
 
-		waitForFile(t, startedPath)
+		childprocesstest.WaitForFile(t, startedPath)
 
 		if err := httpSrv.Close(); err != nil {
 			t.Fatalf("close fake leader: %v", err)
@@ -897,34 +817,6 @@ func TestDevLeavesNothingBehind(t *testing.T) {
 		}
 	})
 
-	t.Run("an interrupted run has time to stop its containers before the hard exit", func(t *testing.T) {
-		if docker.StopsWithin != 6*time.Second {
-			t.Errorf("docker.StopsWithin = %s, want 6s: a 3s grace, then docker's kill and the removal", docker.StopsWithin)
-		}
-		if devresources.StopsWithin < docker.StopsWithin {
-			t.Errorf("dev resources are given %s to stop and one container may take %s", devresources.StopsWithin, docker.StopsWithin)
-		}
-		if spent := childprocess.WaitDelay + devresources.StopsWithin; devShutdownWindow < spent+time.Second {
-			t.Errorf("the hard exit lands %s after the interrupt, and the app child then the dev resources may take %s", devShutdownWindow, spent)
-		}
-		if devShutdownWindow != 14*time.Second {
-			t.Errorf("devShutdownWindow = %s, want 14s", devShutdownWindow)
-		}
-	})
-}
-
-func TestTheAppsOriginsFollowThePortInTheDotfile(t *testing.T) {
-	root := t.TempDir()
-	origins := devAppOrigins(root, devSource{id: "dotenv"})
-
-	clitest.WriteFile(t, filepath.Join(root, dotfile.FileName), "PORT=4100\n")
-	if got := origins(); !slices.Contains(got, "http://localhost:4100") || !slices.Contains(got, "http://127.0.0.1:4100") {
-		t.Fatalf("origins = %v, want the app on port 4100", got)
-	}
-	clitest.WriteFile(t, filepath.Join(root, dotfile.FileName), "PORT=4200\n")
-	if got := origins(); !slices.Contains(got, "http://localhost:4200") || slices.Contains(got, "http://localhost:4100") {
-		t.Fatalf("origins = %v after the port moved to 4200", got)
-	}
 }
 
 func goroutineStacks(t *testing.T) string {
@@ -946,10 +838,36 @@ func toMap(env []string) map[string]string {
 	return m
 }
 
-func devDeps() cmddeps.Deps {
-	deps := newDeps()
-	deps.OpenDocker = (&dockertest.Engine{}).OpenFunc()
-	return deps
+type testDeps struct {
+	OpenDocker docker.OpenFunc
+}
+
+func devDeps() testDeps {
+	return testDeps{OpenDocker: (&dockertest.Engine{}).OpenFunc()}
+}
+
+func options(ctx context.Context, deps testDeps, cwd string, command []string, stdout, stderr io.Writer, stdin io.Reader) (Options, error) {
+	cfg, err := projectconfig.ResolveOptional(ctx, cwd, "")
+	if err != nil {
+		return Options{}, err
+	}
+	return Options{Config: cfg, Command: command, OpenDocker: deps.OpenDocker, Stdin: stdin, Stdout: stdout, Stderr: stderr}, nil
+}
+
+func runDev(ctx context.Context, deps testDeps, reset bool, cwd string, command []string, stdout, stderr io.Writer, stdin io.Reader) error {
+	opts, err := options(ctx, deps, cwd, command, stdout, stderr, stdin)
+	if err != nil {
+		return err
+	}
+	return Run(ctx, opts, reset)
+}
+
+func runRun(ctx context.Context, deps testDeps, cwd string, command []string, stdout, stderr io.Writer, stdin io.Reader) error {
+	opts, err := options(ctx, deps, cwd, command, stdout, stderr, stdin)
+	if err != nil {
+		return err
+	}
+	return RunOnce(ctx, opts, cwd)
 }
 
 func waitForLeaderRecord(t *testing.T, root string) {
@@ -1056,16 +974,4 @@ func waitForOutput(t *testing.T, buf *syncBuffer, want string) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatalf("output = %q, never contained %q", buf.String(), want)
-}
-
-func waitForFile(t *testing.T, path string) {
-	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
-	for time.Now().Before(deadline) {
-		if _, err := os.Stat(path); err == nil {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatalf("%q never appeared", path)
 }

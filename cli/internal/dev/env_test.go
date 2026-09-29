@@ -1,4 +1,4 @@
-package cli
+package dev
 
 import (
 	"bytes"
@@ -10,14 +10,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"reflect"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/dev/leader"
 	"github.com/ocelhq/ocel/cli/internal/devresources/binding"
 	"github.com/ocelhq/ocel/cli/internal/dotfile"
@@ -27,7 +25,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/constants"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
@@ -63,7 +60,7 @@ func TestResolvedEnv(t *testing.T) {
 			{Name: "main", Env: map[string]string{"OCEL_RESOURCE_POSTGRES_main": "conn"}},
 		}
 
-		got := toMap(mergeEnv(base, live, fileValues, resources, runtimeAccess{}, "", variables.Scope{}))
+		got := toMap(applyEnv(base, resolvedEnv(live, fileValues, resources, runtimeAccess{}, "", variables.Scope{})))
 
 		cases := map[string]string{
 			"PATH":                        "/bin",
@@ -105,7 +102,7 @@ func TestResolvedEnv(t *testing.T) {
 	t.Run("the runtime address travels with the token its routes answer to, and neither alone", func(t *testing.T) {
 		t.Parallel()
 
-		reached := resolvedEnv(nil, nil, nil, runtimeAccess{address: "http://127.0.0.1:4242", token: "app-token"}, "", variables.Scope{})
+		reached := resolvedEnv(nil, nil, nil, runtimeAccess{url: "http://127.0.0.1:4242", token: "app-token"}, "", variables.Scope{})
 		if reached[constants.RuntimeAddressEnvName] != "http://127.0.0.1:4242" || reached[channel.SessionTokenEnvVar] != "app-token" {
 			t.Errorf("env = %v, want %s and %s stated together", reached, constants.RuntimeAddressEnvName, channel.SessionTokenEnvVar)
 		}
@@ -135,7 +132,7 @@ func TestResolvedEnv(t *testing.T) {
 			t.Errorf("%s = %q, want the project root spelled as the empty string", constants.AppFolderEnvName, folder)
 		}
 
-		stale := toMap(mergeEnv([]string{constants.AppFolderEnvName + "=/stale"}, nil, nil, nil, runtimeAccess{}, "", variables.Scope{}))
+		stale := toMap(applyEnv([]string{constants.AppFolderEnvName + "=/stale"}, resolvedEnv(nil, nil, nil, runtimeAccess{}, "", variables.Scope{})))
 		if stale[constants.AppFolderEnvName] != "" {
 			t.Errorf("%s = %q, want the shell's stale binding overwritten", constants.AppFolderEnvName, stale[constants.AppFolderEnvName])
 		}
@@ -150,418 +147,6 @@ func TestResolvedEnv(t *testing.T) {
 		)
 		if contested[constants.AppFolderEnvName] != "/web" {
 			t.Errorf("%s = %q, want the binding dev states to outrank every source it merges", constants.AppFolderEnvName, contested[constants.AppFolderEnvName])
-		}
-	})
-}
-
-func TestDevRefusal(t *testing.T) {
-	t.Run("it names the dotfile rather than a store command", func(t *testing.T) {
-		refusal := &variables.MissingError{
-			Problems: []*resourcesv1.VariableProblem{
-				{Key: "DATABASE_URL", Kind: resourcesv1.VariableProblem_KIND_MISSING},
-				{Key: "API_BASE", Folder: "/web", Kind: resourcesv1.VariableProblem_KIND_INVALID, Detail: "expected a URL"},
-			},
-			Scope: variables.Scope{Apps: []variables.App{{Name: "web", Folder: "/web"}}},
-		}
-
-		got := devRefusal(refusal, nil, invocation{name: "dev", source: devSource{id: "dotenv"}}).Error()
-
-		for _, want := range []string{
-			"DATABASE_URL",
-			"API_BASE",
-			"/web",
-			"no value is set",
-			"expected a URL",
-			"DATABASE_URL=<VALUE>",
-			dotfile.FileName,
-		} {
-			if !strings.Contains(got, want) {
-				t.Errorf("refusal = %q, want it to mention %q", got, want)
-			}
-		}
-		if strings.Contains(got, "ocel env set") {
-			t.Errorf("refusal = %q, want no `ocel env set`: it needs a cloud provider this path deliberately has none of", got)
-		}
-		if strings.Contains(got, "--preview") {
-			t.Errorf("refusal = %q, want nothing about previews in a dev refusal", got)
-		}
-	})
-
-	t.Run("under another dev source it names that source and "+dotfile.LocalFileName, func(t *testing.T) {
-		refusal := &variables.MissingError{Problems: []*resourcesv1.VariableProblem{{Key: "DATABASE_URL", Kind: resourcesv1.VariableProblem_KIND_MISSING}}}
-
-		got := devRefusal(refusal, nil, invocation{name: "dev", source: devSource{id: "infisical:p-1/dev", values: map[string]string{}}}).Error()
-
-		for _, want := range []string{"set DATABASE_URL in infisical:p-1/dev", "DATABASE_URL=<VALUE> to " + dotfile.LocalFileName, "Set the values above in infisical:p-1/dev and " + dotfile.LocalFileName} {
-			if !strings.Contains(got, want) {
-				t.Errorf("refusal = %q, want it to say %q", got, want)
-			}
-		}
-	})
-
-	t.Run("it says so when the key is only in the shell", func(t *testing.T) {
-		t.Setenv("DATABASE_URL", "postgres://from-the-shell")
-
-		refusal := &variables.MissingError{
-			Problems: []*resourcesv1.VariableProblem{
-				{Key: "DATABASE_URL", Kind: resourcesv1.VariableProblem_KIND_MISSING},
-			},
-		}
-
-		got := devRefusal(refusal, nil, invocation{name: "dev", source: devSource{id: "dotenv"}}).Error()
-
-		if !strings.Contains(got, "shell") {
-			t.Errorf("refusal = %q, want it to say the key was seen in the environment", got)
-		}
-		if strings.Contains(got, "postgres://from-the-shell") {
-			t.Errorf("refusal = %q, want it to disclose no value", got)
-		}
-
-		inFile := devRefusal(refusal, dotfileValues(map[string]string{"DATABASE_URL": "postgres://from-the-file"}).keys(), invocation{name: "dev", source: devSource{id: "dotenv"}}).Error()
-		if strings.Contains(inFile, "set in this shell") {
-			t.Errorf("refusal = %q, want no shell hint for a key the file does contain", inFile)
-		}
-	})
-
-	t.Run("an invalid value the declarations kept no detail for ends at its schema", func(t *testing.T) {
-		refusal := &variables.MissingError{Problems: []*resourcesv1.VariableProblem{{Key: "API_TOKEN", Kind: resourcesv1.VariableProblem_KIND_INVALID}}}
-
-		got := devRefusal(refusal, nil, invocation{name: "dev", source: devSource{id: "dotenv"}}).Error()
-
-		if !strings.Contains(got, "set, but it does not satisfy its schema\n") {
-			t.Errorf("refusal = %q, want the reason to end at the schema with nothing trailing", got)
-		}
-	})
-
-	t.Run("it is never given a value it could print", func(t *testing.T) {
-		want := reflect.TypeOf(func(error, map[string]struct{}, invocation) error { return nil })
-		if got := reflect.TypeOf(devRefusal); got != want {
-			t.Fatalf("devRefusal is %s, want %s: any wider parameter puts a dotfile value in reach of the message", got, want)
-		}
-
-		refusal := &variables.MissingError{
-			Problems: []*resourcesv1.VariableProblem{
-				{Key: "DATABASE_URL", Kind: resourcesv1.VariableProblem_KIND_MISSING},
-				{Key: "API_TOKEN", Kind: resourcesv1.VariableProblem_KIND_INVALID, Detail: "expected a token"},
-			},
-		}
-		fileValues := map[string]string{
-			"DATABASE_URL": "postgres://must-not-appear",
-			"API_TOKEN":    "sk-live-must-not-appear",
-		}
-
-		got := devRefusal(refusal, dotfileValues(fileValues).keys(), invocation{name: "dev", source: devSource{id: "dotenv"}}).Error()
-
-		for _, value := range fileValues {
-			if strings.Contains(got, value) {
-				t.Errorf("refusal = %q, want it to disclose no value from %s", got, dotfile.FileName)
-			}
-		}
-	})
-}
-
-func TestRefusalsNameTheCommandThatRan(t *testing.T) {
-	refusal := &variables.MissingError{
-		Problems: []*resourcesv1.VariableProblem{
-			{Key: "DATABASE_URL", Kind: resourcesv1.VariableProblem_KIND_MISSING},
-		},
-	}
-
-	t.Run("a variable refusal names the command that was run", func(t *testing.T) {
-		t.Setenv("DATABASE_URL", "postgres://from-the-shell")
-
-		got := devRefusal(refusal, nil, invocation{name: "run", source: devSource{id: "dotenv"}}).Error()
-
-		if !strings.Contains(got, "`ocel run` again") {
-			t.Errorf("refusal = %q, want it to name the command that was run", got)
-		}
-		if strings.Contains(got, "`ocel dev`") {
-			t.Errorf("refusal = %q, want no mention of a command or flag this run never used", got)
-		}
-	})
-}
-
-func dotfileValues(values map[string]string) devValues {
-	return devValues{{from: dotfile.FileName, file: true, values: values}}
-}
-
-func TestTheDevValueReportNamesWhereEachKeyCameFromAndNeverAValue(t *testing.T) {
-	t.Parallel()
-
-	t.Run("it states what the file costs and prints no value", func(t *testing.T) {
-		t.Parallel()
-
-		var quiet bytes.Buffer
-		reportDevValues(&quiet, t.TempDir(), dotfileValues(nil), true)
-		if quiet.Len() != 0 {
-			t.Errorf("reportDevValues wrote %q for a run with no dotfile values, want nothing", quiet.String())
-		}
-
-		dir := gitRepository(t)
-		if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(".env\n"), 0o644); err != nil {
-			t.Fatalf("write .gitignore: %v", err)
-		}
-
-		var out bytes.Buffer
-		reportDevValues(&out, dir, dotfileValues(map[string]string{"API_TOKEN": "sk-live-must-not-appear", "DATABASE_URL": "postgres://secret"}), true)
-		got := out.String()
-
-		for _, want := range []string{"API_TOKEN", "DATABASE_URL", dotfile.FileName} {
-			if !strings.Contains(got, want) {
-				t.Errorf("notice = %q, want it to mention %q", got, want)
-			}
-		}
-		for _, leaked := range []string{"sk-live", "postgres://secret"} {
-			if strings.Contains(got, leaked) {
-				t.Fatalf("notice = %q, want it to disclose no value", got)
-			}
-		}
-		if !strings.Contains(got, "teammate") && !strings.Contains(got, "yours alone") {
-			t.Errorf("notice = %q, want it to say the collaboration a shared store provides is gone", got)
-		}
-		if !strings.Contains(got, "plaintext") {
-			t.Errorf("notice = %q, want it to say values reach the child in plaintext, which a deploy does not do", got)
-		}
-		if strings.Contains(got, ".gitignore") {
-			t.Errorf("notice = %q, want no gitignore warning when the file is already ignored", got)
-		}
-	})
-
-	t.Run("it warns when the file is not ignored", func(t *testing.T) {
-		t.Parallel()
-
-		var out bytes.Buffer
-		reportDevValues(&out, gitRepository(t), dotfileValues(map[string]string{"API_TOKEN": "x"}), true)
-
-		if got := out.String(); !strings.Contains(got, ".gitignore") {
-			t.Errorf("notice = %q, want it to say the file is not ignored by git", got)
-		}
-
-		dir := gitRepository(t)
-		if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(".env*\n!.env\n"), 0o644); err != nil {
-			t.Fatalf("write .gitignore: %v", err)
-		}
-		var reincluded bytes.Buffer
-		reportDevValues(&reincluded, dir, dotfileValues(map[string]string{"API_TOKEN": "x"}), true)
-		if got := reincluded.String(); !strings.Contains(got, ".gitignore") {
-			t.Errorf("notice = %q, want the warning when a later line re-includes the file", got)
-		}
-	})
-
-	t.Run("it names where each value came from, and checks "+dotfile.LocalFileName+" against .gitignore on its own", func(t *testing.T) {
-		t.Parallel()
-
-		dir := gitRepository(t)
-		if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(".env\n"), 0o644); err != nil {
-			t.Fatalf("write .gitignore: %v", err)
-		}
-		var out bytes.Buffer
-		reportDevValues(&out, dir, devValues{
-			{from: "infisical:p-1/dev", values: map[string]string{"API_TOKEN": "sk-live-must-not-appear"}},
-			{from: dotfile.LocalFileName, file: true, values: map[string]string{"LOG_LEVEL": "debug"}},
-		}, true)
-		got := out.String()
-
-		for _, want := range []string{"API_TOKEN from infisical:p-1/dev", "LOG_LEVEL from " + dotfile.LocalFileName, dotfile.LocalFileName + " is not ignored by git", "editing " + dotfile.LocalFileName + " re-resolves"} {
-			if !strings.Contains(got, want) {
-				t.Errorf("notice = %q, want it to say %q", got, want)
-			}
-		}
-		if strings.Contains(got, "sk-live") {
-			t.Fatalf("notice = %q, want it to disclose no value", got)
-		}
-
-		if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("*.local\n"), 0o644); err != nil {
-			t.Fatalf("write .gitignore: %v", err)
-		}
-		var ignored bytes.Buffer
-		reportDevValues(&ignored, dir, devValues{{from: dotfile.LocalFileName, file: true, values: map[string]string{"LOG_LEVEL": "debug"}}}, false)
-		if strings.Contains(ignored.String(), ".gitignore") {
-			t.Errorf("notice = %q, want no warning for a file a glob ignores", ignored.String())
-		}
-	})
-}
-
-func gitRepository(t *testing.T) string {
-	t.Helper()
-	dir := t.TempDir()
-	if out, err := exec.Command("git", "init", "-q", dir).CombinedOutput(); err != nil {
-		t.Fatalf("git init: %v: %s", err, out)
-	}
-	return dir
-}
-
-func TestTheDevValueReportAsksGitWhetherItIgnoresEachFile(t *testing.T) {
-	t.Parallel()
-
-	t.Run("a pattern in the repository's root .gitignore covers a project in a subdirectory", func(t *testing.T) {
-		t.Parallel()
-		repository := gitRepository(t)
-		if err := os.WriteFile(filepath.Join(repository, ".gitignore"), []byte("**/.env\n"), 0o644); err != nil {
-			t.Fatalf("write .gitignore: %v", err)
-		}
-		project := filepath.Join(repository, "apps", "web")
-		if err := os.MkdirAll(project, 0o755); err != nil {
-			t.Fatal(err)
-		}
-
-		var out bytes.Buffer
-		reportDevValues(&out, project, dotfileValues(map[string]string{"API_TOKEN": "x"}), true)
-		if strings.Contains(out.String(), ".gitignore") {
-			t.Errorf("notice = %q, want no warning for a file git ignores", out.String())
-		}
-	})
-
-	t.Run("outside a git repository it says it cannot tell", func(t *testing.T) {
-		t.Parallel()
-		dir := t.TempDir()
-		if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(".env\n"), 0o644); err != nil {
-			t.Fatalf("write .gitignore: %v", err)
-		}
-
-		var out bytes.Buffer
-		reportDevValues(&out, dir, dotfileValues(map[string]string{"API_TOKEN": "x"}), true)
-		if got := out.String(); !strings.Contains(got, "cannot tell whether git ignores "+dotfile.FileName) {
-			t.Errorf("notice = %q, want it to say it cannot tell", got)
-		}
-	})
-}
-
-func TestReportUnreadableLines(t *testing.T) {
-	t.Parallel()
-
-	t.Run("it names them by number only", func(t *testing.T) {
-		t.Parallel()
-
-		var out bytes.Buffer
-		reportUnreadableLines(&out, devValues{{from: dotfile.FileName, file: true, unreadable: []int{2, 5}}})
-		got := out.String()
-
-		for _, want := range []string{dotfile.FileName, "2, 5"} {
-			if !strings.Contains(got, want) {
-				t.Errorf("notice = %q, want it to mention %q", got, want)
-			}
-		}
-	})
-
-	t.Run("a single line is reported singularly", func(t *testing.T) {
-		t.Parallel()
-
-		var one bytes.Buffer
-		reportUnreadableLines(&one, devValues{{from: dotfile.LocalFileName, file: true, unreadable: []int{4}}})
-		if !strings.Contains(one.String(), dotfile.LocalFileName) {
-			t.Errorf("notice = %q, want the file named", one.String())
-		}
-		if !strings.Contains(one.String(), "line 4 is") {
-			t.Errorf("notice = %q, want a singular line reported singularly", one.String())
-		}
-	})
-}
-
-func TestADevRunRefusesAScopedValueNoChildItStartsCouldRead(t *testing.T) {
-	t.Parallel()
-
-	apps := []projectconfig.App{
-		{Name: "web", Path: "apps/web", Folder: "/web"},
-		{Name: "api", Path: "apps/api", Folder: "/api"},
-	}
-
-	t.Run("it refuses when the apps do not agree on one", func(t *testing.T) {
-		t.Parallel()
-
-		if err := checkStatableBinding(devSource{id: "dotenv"}, apps, "", projectconfig.DefaultFileName, nil); err != nil {
-			t.Errorf("checkStatableBinding = %v, want nil with no scoped variable declared", err)
-		}
-
-		agreed := []projectconfig.App{{Name: "web", Folder: "/web"}, {Name: "admin", Folder: "/web"}}
-		if err := checkStatableBinding(devSource{id: "dotenv"}, agreed, "/web", projectconfig.DefaultFileName, map[string][]string{"API_BASE": {"/web"}}); err != nil {
-			t.Errorf("checkStatableBinding = %v, want nil when every app binds the folder dev states", err)
-		}
-
-		err := checkStatableBinding(devSource{id: "dotenv"}, apps, "", projectconfig.DefaultFileName, map[string][]string{"API_BASE": {"/web", "/api"}})
-		if err == nil {
-			t.Fatal("checkStatableBinding = nil, want a refusal: no child of this run could read API_BASE")
-		}
-		got := err.Error()
-		for _, want := range []string{"API_BASE", "web binds /web", "api binds /api", "the project root", dotfile.FileName, "ocel.json"} {
-			if !strings.Contains(got, want) {
-				t.Errorf("refusal = %q, want it to mention %q", got, want)
-			}
-		}
-		if strings.Contains(got, "one `ocel dev` per app") || strings.Contains(got, "per app") {
-			t.Errorf("refusal = %q, want no per-app remedy: election keys on the project root, so a second run is a follower", got)
-		}
-	})
-
-	t.Run("it starts when no app binds the key's scope", func(t *testing.T) {
-		t.Parallel()
-
-		if err := checkStatableBinding(devSource{id: "dotenv"}, apps, "", projectconfig.DefaultFileName, map[string][]string{"NOBODY": {"/nowhere"}}); err != nil {
-			t.Errorf("checkStatableBinding = %v, want nil: no app binds /nowhere, so no read is lost", err)
-		}
-
-		scoped := map[string][]string{"NOBODY": {"/nowhere"}, "API_BASE": {"/web"}}
-		err := checkStatableBinding(devSource{id: "dotenv"}, apps, "", projectconfig.DefaultFileName, scoped)
-		if err == nil {
-			t.Fatal("checkStatableBinding = nil, want a refusal for API_BASE, which web would read under its own binding")
-		}
-		if strings.Contains(err.Error(), "NOBODY") {
-			t.Errorf("refusal = %q, want it silent about NOBODY: naming a key no app binds sends the developer after nothing", err.Error())
-		}
-	})
-
-	t.Run("it names where the dev tier reads its values from", func(t *testing.T) {
-		t.Parallel()
-
-		err := checkStatableBinding(devSource{id: "infisical:p-1/dev"}, apps, "", projectconfig.DefaultFileName, map[string][]string{"API_BASE": {"/web"}})
-		if err == nil {
-			t.Fatal("checkStatableBinding = nil, want a refusal: web would read API_BASE under its own binding")
-		}
-		if got := err.Error(); !strings.Contains(got, "even with the value in infisical:p-1/dev and .env.local") {
-			t.Errorf("refusal = %q, want it to name the dev env source and .env.local, never .env alone", got)
-		}
-	})
-
-	t.Run("it names only the apps binding the key's scope", func(t *testing.T) {
-		t.Parallel()
-
-		err := checkStatableBinding(devSource{id: "dotenv"}, apps, "", projectconfig.DefaultFileName, map[string][]string{"API_BASE": {"/web"}})
-		if err == nil {
-			t.Fatal("checkStatableBinding = nil, want a refusal: web would read API_BASE under its own binding")
-		}
-		got := err.Error()
-		if !strings.Contains(got, "API_BASE") || !strings.Contains(got, "web binds /web") {
-			t.Errorf("refusal = %q, want it to name API_BASE and web's binding", got)
-		}
-		if strings.Contains(got, "api binds /api") {
-			t.Errorf("refusal = %q, want no mention of api: /api is not in API_BASE's scope", got)
-		}
-	})
-
-	t.Run("it lists every losing key and app in a fixed order", func(t *testing.T) {
-		t.Parallel()
-
-		scoped := map[string][]string{
-			"D_KEY": {"/api"},
-			"B_KEY": {"/api"},
-			"C_KEY": {"/web"},
-			"A_KEY": {"/web"},
-		}
-
-		want := "A_KEY, B_KEY, C_KEY, D_KEY are scoped to a folder this run cannot state — the app has not been started.\n" +
-			"\n  web binds /web\n  api binds /api\n\n" +
-			"`ocel dev` and `ocel run` spawn one child for the whole project and nothing tells it which app that child is, " +
-			"so the binding they state is the project root. A scoped read refuses under it, even with the value in " + dotfile.FileName + ".\n\n" +
-			"fix: bind every app to the same folder in ocel.json, or drop `folders:` from those declarations"
-
-		for range 50 {
-			err := checkStatableBinding(devSource{id: "dotenv"}, apps, "", projectconfig.DefaultFileName, scoped)
-			if err == nil {
-				t.Fatal("checkStatableBinding = nil, want a refusal: both apps lose a read")
-			}
-			if got := err.Error(); got != want {
-				t.Fatalf("refusal =\n%q\nwant\n%q", got, want)
-			}
 		}
 	})
 }
@@ -621,7 +206,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 			if !strings.Contains(stdout.String(), "NEXT_PUBLIC_SITE_URL") {
 				t.Errorf("stdout = %q, want a declarable key accounted for", stdout.String())
 			}
-			if !strings.Contains(stdout.String(), devValues{{from: dotfile.FileName, file: true}, {from: dotfile.LocalFileName, file: true}}.advice(true)) {
+			if !strings.Contains(stdout.String(), valueLayers{{from: dotfile.FileName, file: true}, {from: dotfile.LocalFileName, file: true}}.advice(true)) {
 				t.Errorf("stdout = %q, want the advice for a run that re-resolves on save", stdout.String())
 			}
 		})
@@ -1028,7 +613,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		if env[constants.AppFolderEnvName] != "/web" {
 			t.Errorf("%s = %q, want the folder the only app binds", constants.AppFolderEnvName, env[constants.AppFolderEnvName])
 		}
-		if !strings.Contains(stdout.String(), devValues{{from: dotfile.FileName, file: true}, {from: dotfile.LocalFileName, file: true}}.advice(false)) {
+		if !strings.Contains(stdout.String(), valueLayers{{from: dotfile.FileName, file: true}, {from: dotfile.LocalFileName, file: true}}.advice(false)) {
 			t.Errorf("stdout = %q, want the advice for a run that reads the file once", stdout.String())
 		}
 	})
@@ -1095,7 +680,7 @@ func writeDevSource(t *testing.T, root, descriptor string) {
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), "export default { slug: \"test-app\", envSource: { dev: "+descriptor+" } };\n")
 }
 
-func dumpDevEnv(t *testing.T, deps cmddeps.Deps, root string) (map[string]string, string) {
+func dumpDevEnv(t *testing.T, deps testDeps, root string) (map[string]string, string) {
 	t.Helper()
 	envDumpPath := filepath.Join(root, "env.out")
 	var stdout, stderr syncBuffer
@@ -1247,4 +832,49 @@ func writeApp(t *testing.T, path, body string) {
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatalf("write %s: %v", path, err)
 	}
+}
+
+func TestTheChildEnvironment(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a resource outranks the project, and the project outranks the shell", func(t *testing.T) {
+		t.Parallel()
+
+		base := []string{"PATH=/bin", "SHARED=base"}
+		values := map[string]string{"SHARED": "project", "PROJECT_ONLY": "p"}
+		resources := []binding.Resolved{
+			{Name: "main", Env: map[string]string{"SHARED": "resource", "OCEL_RESOURCE_POSTGRES_main": "conn"}},
+		}
+
+		got := toMap(applyEnv(base, resolvedEnv(nil, values, resources, runtimeAccess{}, "", variables.Scope{})))
+
+		cases := map[string]string{
+			"PATH":                        "/bin",
+			"SHARED":                      "resource",
+			"PROJECT_ONLY":                "p",
+			"OCEL_RESOURCE_POSTGRES_main": "conn",
+		}
+		for k, want := range cases {
+			if got[k] != want {
+				t.Errorf("env[%q] = %q, want %q", k, got[k], want)
+			}
+		}
+	})
+
+	t.Run("dev never tells the runtime to wait for a push", func(t *testing.T) {
+		t.Parallel()
+
+		live := map[string]string{"WEBHOOK_SECRET": "whsec_live"}
+
+		got := applyEnv([]string{"PATH=/usr/bin"}, resolvedEnv(live, map[string]string{"PROJECT_ONLY": "p"}, nil, runtimeAccess{}, "", variables.Scope{}))
+
+		for _, kv := range got {
+			if strings.HasPrefix(kv, "OCEL_LIVE_KEYS=") {
+				t.Errorf("dev set %q; there is no runtime here to send the push it promises", kv)
+			}
+		}
+		if !slices.Contains(got, "WEBHOOK_SECRET=whsec_live") {
+			t.Error("the live value did not reach the child's environment under its bare name, which is dev's only delivery")
+		}
+	})
 }

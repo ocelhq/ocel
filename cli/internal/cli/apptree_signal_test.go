@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/cli/internal/childprocess/childprocesstest"
+
 	"github.com/ocelhq/ocel/cli/internal/childprocess"
 
 	"github.com/creack/pty"
@@ -79,7 +81,7 @@ export default { slug: "test-app" };
 
 func TestProcessTreeRealSIGINTKillsTheWholeTree(t *testing.T) {
 	root := setUpProcTreeFixtureProject(t)
-	appArgs, startedPath, pidPath := fixtureWorkerTree(t, root, "sigint")
+	appArgs, startedPath, pidPath := childprocesstest.WorkerTree(t, root, "sigint")
 
 	cmd := procTreeSubprocessCmd(t, root, appArgs)
 	var stderr strings.Builder
@@ -88,7 +90,7 @@ func TestProcessTreeRealSIGINTKillsTheWholeTree(t *testing.T) {
 		t.Fatalf("start subprocess: %v", err)
 	}
 
-	waitForFile(t, startedPath)
+	childprocesstest.WaitForFile(t, startedPath)
 
 	if err := cmd.Process.Signal(syscall.SIGINT); err != nil {
 		t.Fatalf("send SIGINT: %v", err)
@@ -104,12 +106,12 @@ func TestProcessTreeRealSIGINTKillsTheWholeTree(t *testing.T) {
 		t.Fatalf("subprocess did not exit after a real SIGINT (want the app's group SIGTERMed well within the %s graceful window); stderr:\n%s", gracefulShutdownWindow, stderr.String())
 	}
 
-	waitProcessDead(t, pidPath)
+	childprocesstest.WaitDead(t, pidPath)
 }
 
 func TestProcessTreeSetsidNonControllingTTYStillStarts(t *testing.T) {
 	root := setUpProcTreeFixtureProject(t)
-	appArgs, startedPath, pidPath := fixtureWorkerTree(t, root, "setsid-noctty")
+	appArgs, startedPath, pidPath := childprocesstest.WorkerTree(t, root, "setsid-noctty")
 
 	ptmx, ttySlave, err := pty.Open()
 	if err != nil {
@@ -128,7 +130,7 @@ func TestProcessTreeSetsidNonControllingTTYStillStarts(t *testing.T) {
 	}
 	ttySlave.Close()
 
-	waitForFile(t, startedPath)
+	childprocesstest.WaitForFile(t, startedPath)
 
 	if err := cmd.Process.Signal(syscall.SIGINT); err != nil {
 		t.Fatalf("send SIGINT: %v", err)
@@ -144,7 +146,7 @@ func TestProcessTreeSetsidNonControllingTTYStillStarts(t *testing.T) {
 		t.Fatal("subprocess did not exit after a real SIGINT")
 	}
 
-	waitProcessDead(t, pidPath)
+	childprocesstest.WaitDead(t, pidPath)
 }
 
 func TestProcessTreeOrphanedGroupTTYPassthrough(t *testing.T) {
@@ -320,12 +322,12 @@ func drainPTY(ptmx *os.File) func() string {
 
 func TestProcessTreeNonOrphanedCtrlCReachesCLIAndApp(t *testing.T) {
 	root := setUpProcTreeFixtureProject(t)
-	appArgs, startedPath, leafPidPath := fixtureDeepWorkerTree(t, root, "nonorphan-ctrlc")
+	appArgs, startedPath, leafPidPath := childprocesstest.DeepWorkerTree(t, root, "nonorphan-ctrlc")
 
 	cmd, ptmx := procTreeSessionCmd(t, root, appArgs)
 	tty := drainPTY(ptmx)
 
-	waitForFile(t, startedPath)
+	childprocesstest.WaitForFile(t, startedPath)
 
 	if _, err := ptmx.Write([]byte{ctrlC}); err != nil {
 		t.Fatalf("write ctrl-c to pty: %v", err)
@@ -348,7 +350,7 @@ func TestProcessTreeNonOrphanedCtrlCReachesCLIAndApp(t *testing.T) {
 		t.Fatalf("CLI did not exit within the graceful window after a single Ctrl-C")
 	}
 
-	waitProcessDead(t, leafPidPath)
+	childprocesstest.WaitDead(t, leafPidPath)
 }
 
 func fixtureStubbornWorkerTree(t *testing.T, root, name string) (appArgs []string, startedPath, pidPath string) {
@@ -365,7 +367,7 @@ func TestProcessTreeNonOrphanedSecondCtrlCIsFatal(t *testing.T) {
 
 	cmd, ptmx := procTreeSessionCmd(t, root, appArgs)
 
-	waitForFile(t, startedPath)
+	childprocesstest.WaitForFile(t, startedPath)
 
 	if _, err := ptmx.Write([]byte{ctrlC}); err != nil {
 		t.Fatalf("write first ctrl-c to pty: %v", err)
@@ -392,5 +394,5 @@ func TestProcessTreeNonOrphanedSecondCtrlCIsFatal(t *testing.T) {
 		t.Fatal("CLI did not force-exit promptly after a second Ctrl-C")
 	}
 
-	waitProcessDead(t, pidPath)
+	childprocesstest.WaitDead(t, pidPath)
 }

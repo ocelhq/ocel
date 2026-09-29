@@ -1,9 +1,9 @@
 //go:build unix
 
-package cli
+package childprocesstest
 
 import "syscall"
 
-func pidAlive(pid int) bool {
+func IsAlive(pid int) bool {
 	return syscall.Kill(pid, 0) == nil
 }

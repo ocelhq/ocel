@@ -1,53 +1,25 @@
 package cli
 
 import (
-	"context"
-	"errors"
-	"os/exec"
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/exitcode"
+	"github.com/ocelhq/ocel/cli/internal/childprocess"
+	"github.com/ocelhq/ocel/cli/internal/devresources"
+	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 )
 
-func TestAppExitErrorReportsInterruptWhenCancelled(t *testing.T) {
-	t.Parallel()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	for _, err := range []error{nil, context.Canceled, &exitcode.ExitError{Code: 255}} {
-		got := appExitError(ctx, err)
-		var exitErr *exitcode.ExitError
-		if !errors.As(got, &exitErr) || exitErr.Code != exitcode.Interrupt {
-			t.Errorf("appExitError(cancelled, %v) = %v, want *exitcode.ExitError with code %d", err, got, exitcode.Interrupt)
-		}
+func TestAnInterruptedDevRunHasTimeToStopItsContainersBeforeTheHardExit(t *testing.T) {
+	if docker.StopsWithin != 6*time.Second {
+		t.Errorf("docker.StopsWithin = %s, want 6s: a 3s grace, then docker's kill and the removal", docker.StopsWithin)
 	}
-}
-
-func TestAppExitErrorKeepsTheAppsCodeWhenNotCancelled(t *testing.T) {
-	t.Parallel()
-
-	cmd := exec.Command("sh", "-c", "exit 3")
-	waitErr := cmd.Run()
-
-	got := appExitError(context.Background(), waitErr)
-	var exitErr *exitcode.ExitError
-	if !errors.As(got, &exitErr) || exitErr.Code != 3 {
-		t.Fatalf("appExitError = %v, want *exitcode.ExitError with code 3", got)
+	if devresources.StopsWithin < docker.StopsWithin {
+		t.Errorf("dev resources are given %s to stop and one container may take %s", devresources.StopsWithin, docker.StopsWithin)
 	}
-	if got := appExitError(context.Background(), nil); got != nil {
-		t.Errorf("appExitError(nil) = %v, want nil", got)
+	if spent := childprocess.WaitDelay + devresources.StopsWithin; devShutdownWindow < spent+time.Second {
+		t.Errorf("the hard exit lands %s after the interrupt, and the app child then the dev resources may take %s", devShutdownWindow, spent)
 	}
-}
-
-func waitFor(cond func() bool, timeout time.Duration) bool {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if cond() {
-			return true
-		}
-		time.Sleep(5 * time.Millisecond)
+	if devShutdownWindow != 14*time.Second {
+		t.Errorf("devShutdownWindow = %s, want 14s", devShutdownWindow)
 	}
-	return cond()
 }

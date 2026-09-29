@@ -116,3 +116,14 @@ func linkOnATerminal(t *testing.T, console http.HandlerFunc, shown string) (scre
 	}
 	return out.String(), exited
 }
+
+func waitFor(cond func() bool, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return true
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	return cond()
+}

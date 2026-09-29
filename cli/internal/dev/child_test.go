@@ -1,4 +1,4 @@
-package cli
+package dev
 
 import (
 	"bytes"
@@ -6,13 +6,13 @@ import (
 	"errors"
 	"net"
 	"net/http"
-	"os"
+	"os/exec"
 	"path/filepath"
-	"runtime"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ocelhq/ocel/cli/internal/childprocess/childprocesstest"
 
 	"github.com/ocelhq/ocel/cli/internal/dev/leader"
 	"github.com/ocelhq/ocel/cli/internal/devresources"
@@ -21,67 +21,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
-
-func fixtureWorkerTree(t *testing.T, root, name string) (appArgs []string, startedPath, pidPath string) {
-	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("uses a POSIX shell fixture command")
-	}
-	startedPath = filepath.Join(root, name+".started")
-	pidPath = filepath.Join(root, name+".workerpid")
-	appArgs = []string{"sh", "-c", "sleep 30 & echo $! > " + pidPath + "; touch " + startedPath + "; wait"}
-	return appArgs, startedPath, pidPath
-}
-
-func fixtureDeepWorkerTree(t *testing.T, root, name string) (appArgs []string, startedPath, leafPidPath string) {
-	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("uses a POSIX shell fixture command")
-	}
-	scriptPath := filepath.Join(root, name+".sh")
-	startedPath = filepath.Join(root, name+".started")
-	pidPrefix := filepath.Join(root, name+".workerpid.")
-	clitest.WriteFile(t, scriptPath, `#!/bin/sh
-depth="$1"
-started="$2"
-pidprefix="$3"
-trap '' INT
-echo $$ > "${pidprefix}${depth}"
-if [ "$depth" -ge 3 ]; then
-  touch "$started"
-  exec sleep 30
-fi
-next=$((depth + 1))
-sh "$0" "$next" "$started" "$pidprefix" &
-child=$!
-wait "$child"
-`)
-	appArgs = []string{"sh", scriptPath, "1", startedPath, pidPrefix}
-	leafPidPath = pidPrefix + "3"
-	return appArgs, startedPath, leafPidPath
-}
-
-func waitProcessDead(t *testing.T, pidPath string) {
-	t.Helper()
-	waitForFile(t, pidPath)
-	raw, err := os.ReadFile(pidPath)
-	if err != nil {
-		t.Fatalf("read pid file: %v", err)
-	}
-	pid, err := strconv.Atoi(strings.TrimSpace(string(raw)))
-	if err != nil {
-		t.Fatalf("parse worker pid %q: %v", raw, err)
-	}
-
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		if !pidAlive(pid) {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatalf("worker pid %d is still alive after the CLI exited", pid)
-}
 
 func TestProcessTreeDiesWithTheCLI(t *testing.T) {
 	t.Run("a standalone `ocel run` kills its worker's grandchildren", func(t *testing.T) {
@@ -96,7 +35,7 @@ export default { slug: "test-app" };
 `)
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
 
-		appArgs, startedPath, pidPath := fixtureWorkerTree(t, root, "run")
+		appArgs, startedPath, pidPath := childprocesstest.WorkerTree(t, root, "run")
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -107,7 +46,7 @@ export default { slug: "test-app" };
 			done <- runRun(ctx, deps, root, appArgs, &stdout, &stderr, strings.NewReader(""))
 		}()
 
-		waitForFile(t, startedPath)
+		childprocesstest.WaitForFile(t, startedPath)
 		cancel()
 
 		select {
@@ -116,7 +55,7 @@ export default { slug: "test-app" };
 			t.Fatal("runRun did not exit after cancellation")
 		}
 
-		waitProcessDead(t, pidPath)
+		childprocesstest.WaitDead(t, pidPath)
 	})
 
 	t.Run("a standalone `ocel run` kills a 3-level deep descendant, non-tty", func(t *testing.T) {
@@ -131,7 +70,7 @@ export default { slug: "test-app" };
 `)
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
 
-		appArgs, startedPath, leafPidPath := fixtureDeepWorkerTree(t, root, "run-deep")
+		appArgs, startedPath, leafPidPath := childprocesstest.DeepWorkerTree(t, root, "run-deep")
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -142,7 +81,7 @@ export default { slug: "test-app" };
 			done <- runRun(ctx, deps, root, appArgs, &stdout, &stderr, strings.NewReader(""))
 		}()
 
-		waitForFile(t, startedPath)
+		childprocesstest.WaitForFile(t, startedPath)
 		cancel()
 
 		select {
@@ -151,7 +90,7 @@ export default { slug: "test-app" };
 			t.Fatal("runRun did not exit after cancellation")
 		}
 
-		waitProcessDead(t, leafPidPath)
+		childprocesstest.WaitDead(t, leafPidPath)
 	})
 
 	t.Run("a leader `ocel dev` kills its app's grandchildren", func(t *testing.T) {
@@ -166,7 +105,7 @@ export default { slug: "test-app" };
 `)
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
 
-		appArgs, startedPath, pidPath := fixtureWorkerTree(t, root, "leader")
+		appArgs, startedPath, pidPath := childprocesstest.WorkerTree(t, root, "leader")
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -178,7 +117,7 @@ export default { slug: "test-app" };
 		}()
 
 		waitForLeaderRecord(t, root)
-		waitForFile(t, startedPath)
+		childprocesstest.WaitForFile(t, startedPath)
 		cancel()
 
 		select {
@@ -187,7 +126,7 @@ export default { slug: "test-app" };
 			t.Fatal("runDev (leader) did not exit after cancellation")
 		}
 
-		waitProcessDead(t, pidPath)
+		childprocesstest.WaitDead(t, pidPath)
 	})
 
 	t.Run("a follower `ocel dev` kills its app's grandchildren", func(t *testing.T) {
@@ -215,7 +154,7 @@ export default { slug: "test-app" };
 export default { slug: "test-app" };
 `)
 
-		appArgs, startedPath, pidPath := fixtureWorkerTree(t, root, "follower")
+		appArgs, startedPath, pidPath := childprocesstest.WorkerTree(t, root, "follower")
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -226,7 +165,7 @@ export default { slug: "test-app" };
 			done <- runDev(ctx, deps, false, root, appArgs, &stdout, &stderr, strings.NewReader(""))
 		}()
 
-		waitForFile(t, startedPath)
+		childprocesstest.WaitForFile(t, startedPath)
 		cancel()
 
 		select {
@@ -241,6 +180,37 @@ export default { slug: "test-app" };
 			t.Fatal("runDev (follower) did not exit after cancellation")
 		}
 
-		waitProcessDead(t, pidPath)
+		childprocesstest.WaitDead(t, pidPath)
 	})
+}
+
+func TestExitErrorReportsInterruptWhenCancelled(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	for _, err := range []error{nil, context.Canceled, &exitcode.ExitError{Code: 255}} {
+		got := exitError(ctx, err)
+		var exitErr *exitcode.ExitError
+		if !errors.As(got, &exitErr) || exitErr.Code != exitcode.Interrupt {
+			t.Errorf("exitError(cancelled, %v) = %v, want *exitcode.ExitError with code %d", err, got, exitcode.Interrupt)
+		}
+	}
+}
+
+func TestExitErrorKeepsTheChildsCodeWhenNotCancelled(t *testing.T) {
+	t.Parallel()
+
+	cmd := exec.Command("sh", "-c", "exit 3")
+	waitErr := cmd.Run()
+
+	got := exitError(context.Background(), waitErr)
+	var exitErr *exitcode.ExitError
+	if !errors.As(got, &exitErr) || exitErr.Code != 3 {
+		t.Fatalf("exitError = %v, want *exitcode.ExitError with code 3", got)
+	}
+	if got := exitError(context.Background(), nil); got != nil {
+		t.Errorf("exitError(nil) = %v, want nil", got)
+	}
 }

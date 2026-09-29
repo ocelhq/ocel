@@ -1,18 +1,12 @@
 package cli
 
 import (
-	"context"
 	"fmt"
-	"io"
 	"os"
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/dev/leader"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/cli/internal/variablescope"
+	"github.com/ocelhq/ocel/cli/internal/dev"
 )
 
 var runCmd = &cobra.Command{
@@ -24,76 +18,10 @@ var runCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("determine working directory: %w", err)
 		}
-
-		return runRun(cmd.Context(), newDeps(), cwd, args, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		opts, err := devOptions(cmd.Context(), newDeps(), cwd, args, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		if err != nil {
+			return err
+		}
+		return dev.RunOnce(cmd.Context(), opts, cwd)
 	},
-}
-
-func runRun(ctx context.Context, deps cmddeps.Deps, cwd string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
-	// TODO: unlike build/deploy, this never calls runtrace.Start, so discovery
-	// below produces no spans or logs and nothing else says so.
-	cfg, err := projectconfig.ResolveOptional(ctx, cwd, explicitConfigPath())
-	if err != nil {
-		return err
-	}
-
-	running, found, err := leader.Find(cfg.Dir)
-	if err != nil {
-		return fmt.Errorf("look for a running dev server: %w", err)
-	}
-	if found {
-		return runOnceAsFollower(ctx, deps, running, appArgs, stdout, stderr, stdin)
-	}
-
-	return runStandalone(ctx, deps, cfg, targetScope(cfg, cwd), appArgs, stdout, stderr, stdin)
-}
-
-func runOnceAsFollower(ctx context.Context, deps cmddeps.Deps, running leader.Leader, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
-	stream, err := leader.Subscribe(ctx, running)
-	if err != nil {
-		return fmt.Errorf("connect to leader: %w", err)
-	}
-	defer stream.Close()
-
-	env, err := stream.Next()
-	if err != nil {
-		return fmt.Errorf("connect to leader: %w", err)
-	}
-
-	return runChildOnce(ctx, deps, appArgs, env, stdin, stdout, stderr)
-}
-
-func runStandalone(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, scope variables.Scope, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
-	source, err := readDevSource(ctx, cfg)
-	if err != nil {
-		return err
-	}
-	values, err := source.read(cfg.Dir)
-	if err != nil {
-		return err
-	}
-	reportUnreadableLines(stdout, values)
-	reportDevValues(stdout, cfg.Dir, values, false)
-
-	host, err := startDevHost(ctx, deps, cfg, source, stdout, stderr)
-	if err != nil {
-		return err
-	}
-	defer host.close()
-	host.srv.UseValues(values.merged(), variablescope.ForDev(cfg))
-
-	resolved, err := discoverAndSync(ctx, host.srv, cfg, values, scope, invocation{name: "run", source: source}, stdout, stderr)
-	if err != nil {
-		return err
-	}
-
-	return runChildOnce(ctx, deps, appArgs, resolved, stdin, stdout, stderr)
-}
-
-func runChildOnce(ctx context.Context, deps cmddeps.Deps, appArgs []string, env map[string]string, stdin io.Reader, stdout, stderr io.Writer) error {
-	child, err := startAppChild(ctx, deps, appArgs, env, stdin, stdout, stderr)
-	if err != nil {
-		return err
-	}
-	return appExitError(ctx, child.Wait())
 }

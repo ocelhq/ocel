@@ -5,18 +5,15 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
-	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/cli/node"
-	"github.com/ocelhq/ocel/pkg/appbuild"
 )
 
 var generateCmd = &cobra.Command{
@@ -56,7 +53,7 @@ func runGenerate(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, std
 	if err != nil {
 		return err
 	}
-	named, err := generateClientAccessors(cfg, keys)
+	named, err := clientenv.GenerateProjectAccessors(cfg, keys)
 	if err != nil {
 		return err
 	}
@@ -67,32 +64,6 @@ func runGenerate(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, std
 	}
 	fmt.Fprintf(stdout, "Generated the client accessor for %d client-accessible %s\n", named, noun)
 	return nil
-}
-
-func generateClientAccessors(cfg *projectconfig.Config, keys []clientenv.Key) (int, error) {
-	apps := []clientenv.App{{Dir: cfg.Dir, ClientBundle: discovery.ClientBundle(appbuild.FrameworkNode, cfg.Dir)}}
-	if len(cfg.Apps) > 0 {
-		apps = apps[:0]
-		for _, a := range cfg.Apps {
-			dir := filepath.Join(cfg.Dir, a.Path)
-			apps = append(apps, clientenv.App{Name: a.Name, Dir: dir, ClientBundle: discovery.ClientBundle(a.Framework.Name, dir)})
-		}
-	}
-	named := 0
-	for _, app := range apps {
-		if err := generateClientAccessor(cfg.Dir, app, keys); err != nil {
-			return 0, err
-		}
-		named = max(named, len(clientenv.Offered(keys, app.ClientBundle)))
-	}
-	return named, nil
-}
-
-func generateClientAccessor(projectDir string, app clientenv.App, keys []clientenv.Key) error {
-	if err := clientenv.GenerateKeys(projectDir, app, keys); err != nil {
-		return err
-	}
-	return clientenv.MapAppEnvImport(projectDir, app)
 }
 
 type noValues struct{}
