@@ -15,6 +15,7 @@ import type { PrepareFailures } from "../../prepare";
 import type { CellUnderTest } from "../../run/cellRun";
 import { copyTree } from "../../tree";
 import { migrateCommand } from "../../workspace";
+import { cloudflareUrls } from "../cloudflare";
 import type { Deployment, ReleaseCycle, Sweeper, Target } from "../types";
 import { fittedSlug, gcpSlug, namespaceOf, roomForSlug, serviceLead } from "./names";
 import {
@@ -267,12 +268,14 @@ export class GcpTarget implements Target, ReleaseCycle {
   private async deployment(cell: CellUnderTest, phase: Phase): Promise<Deployment> {
     const found = await this.services();
     const leads = leadsFor(cell.slug, cell.fixture.apps);
-    const urls = new Map(
-      cell.fixture.apps.map((app, at) => {
-        const lead = leads[at] ?? "";
-        return [app, reachable(servedBy(found, lead), endpoint())];
-      }),
-    );
+    const urls =
+      cloudflareUrls(cell, process.env.OCEL_JOURNEY_ZONE?.trim() || undefined) ??
+      new Map(
+        cell.fixture.apps.map((app, at) => {
+          const lead = leads[at] ?? "";
+          return [app, reachable(servedBy(found, lead), endpoint())];
+        }),
+      );
     await cell.evidence.write(
       phase,
       "deployment.json",

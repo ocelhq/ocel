@@ -95,16 +95,25 @@ export function overlayFor(
         ...(varsKey ? { varsKey } : {}),
       };
     }
-    case "gcp":
-      return { base: GCP_BASE, slug: gcpSlug(cell, env), ...cell.variant.config };
+    case "gcp": {
+      const proxied = cell.variant.config.edge === "cloudflare" && zone;
+      return {
+        base: GCP_BASE,
+        slug: gcpSlug(cell, env),
+        ...cell.variant.config,
+        ...(proxied ? { ...dnsOf(env), hostnames: hostnamesOf(cell, zone) } : {}),
+      };
+    }
     case "vps": {
       const front = frontNamed(env);
+      const edge = cell.variant.config.edge;
       return {
         base: VPS_BASE,
         slug: cell.slug,
         hostnames: hostnamesOf(cell, journeyZone(env)),
         ...registryOf(cell, env),
         ...(front ? { proxy: front.proxy } : {}),
+        ...(edge ? { edge, ...dnsOf(env) } : {}),
       };
     }
     case "dev":

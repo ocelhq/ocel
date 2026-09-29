@@ -41,8 +41,8 @@ export const deploy = {
     on: {
       dev: [defaults],
       aws: [container, apiGateway],
-      vps: [defaults, registry],
-      gcp: [defaults, container],
+      vps: [defaults, registry, cloudflare],
+      gcp: [defaults, container, cloudflare],
     },
     sample: { group: "node-http" },
   }),
@@ -107,7 +107,7 @@ export const lifecycle = {
     ],
     on: {
       aws: [defaults, container, cloudflare],
-      vps: [defaults],
+      vps: [defaults, cloudflare],
     },
   }),
 };

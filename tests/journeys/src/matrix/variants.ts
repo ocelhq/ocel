@@ -14,7 +14,7 @@ export const apiGateway = variant("api-gateway", {
 });
 
 export const cloudflare = variant("cloudflare", {
-  offeredOn: ["aws"],
+  offeredOn: ["aws", "vps", "gcp"],
   config: { edge: "cloudflare" },
 });
 

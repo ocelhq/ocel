@@ -172,6 +172,41 @@ describe("overlayFor", () => {
     );
   });
 
+  it("fronts a vps cloudflare cell with the cloudflare edge under the run's zone and dns", () => {
+    expect(
+      overlayFor(cell(deploy.node, cloudflare), "vps", {
+        OCEL_JOURNEY_ZONE: "j.example",
+        OCEL_JOURNEY_DNS: "cloudflare",
+      }),
+    ).toEqual({
+      base: VPS_BASE,
+      slug: "j-1-deploy-node",
+      hostnames: { web: "web-j-1-deploy-node.j.example" },
+      edge: "cloudflare",
+      dns: "cloudflare",
+    });
+  });
+
+  it("fronts a gcp cloudflare cell with the cloudflare edge, and binds its hostnames under the run's zone", () => {
+    expect(
+      overlayFor(cell(deploy.node, cloudflare), "gcp", {
+        OCEL_JOURNEY_ZONE: "j.example",
+        OCEL_JOURNEY_DNS: "cloudflare",
+      }),
+    ).toMatchObject({
+      base: GCP_BASE,
+      edge: "cloudflare",
+      dns: "cloudflare",
+      hostnames: { web: expect.stringMatching(/\.j\.example$/) },
+    });
+  });
+
+  it("binds no hostname on a gcp cell no edge fronts", () => {
+    expect(
+      overlayFor(cell(deploy.node), "gcp", { OCEL_JOURNEY_ZONE: "j.example" }),
+    ).not.toHaveProperty("hostnames");
+  });
+
   it("renames a dev cell and nothing else", () => {
     expect(
       overlayFor(cell(deploy.node), "dev", {

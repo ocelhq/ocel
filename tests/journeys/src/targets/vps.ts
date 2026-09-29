@@ -19,6 +19,7 @@ import { fixtureMember, outputRoot } from "../paths";
 import type { PrepareFailures } from "../prepare";
 import type { CellUnderTest } from "../run/cellRun";
 import { migrateCommand } from "../workspace";
+import { cloudflareUrls } from "./cloudflare";
 import { bootstrappedMissed, unbootstrappedMissed } from "./doctor";
 import { adoptionMissed, engineSeries } from "./engine";
 import {
@@ -631,8 +632,9 @@ export class VpsTarget implements Target, ReleaseCycle {
   }
 
   private async deployment(cell: CellUnderTest, session: BoxSession): Promise<Deployment> {
-    const urls = new Map<string, string>();
-    for (const [app, hostname] of this.hostnamesOf(cell)) {
+    const proxied = cloudflareUrls(cell, this.zone());
+    const urls = proxied ?? new Map<string, string>();
+    for (const [app, hostname] of proxied ? [] : this.hostnamesOf(cell)) {
       await session.gateway.serving(hostname);
       urls.set(app, appOrigin(hostname, schemeOf(this.front())));
     }
@@ -649,7 +651,9 @@ export class VpsTarget implements Target, ReleaseCycle {
         }
         return url;
       },
-      fetch: (input, init) => this.reaching(session, input, init),
+      fetch: proxied
+        ? (...args) => fetch(...args)
+        : (input, init) => this.reaching(session, input, init),
     };
   }
 
