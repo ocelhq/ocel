@@ -9,13 +9,13 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
-type Resolved struct {
+type ResolvedValue struct {
 	Folder  string
 	Value   string
 	Version int64
 }
 
-func (d *Declarations) Resolve(ctx context.Context, app string) (map[string]Resolved, error) {
+func (d *Declarations) Resolve(ctx context.Context, app string) (map[string]ResolvedValue, error) {
 	binding, known := d.binding(app)
 	if !known {
 		return nil, fmt.Errorf("app %q is not declared in this project's config, so it has no folder to resolve from", app)
@@ -48,9 +48,9 @@ func (d *Declarations) Resolve(ctx context.Context, app string) (map[string]Reso
 		return nil, err
 	}
 
-	resolved := make(map[string]Resolved, len(cells))
+	resolved := make(map[string]ResolvedValue, len(cells))
 	for _, c := range cells {
-		from := Resolved{Folder: c.cell.Folder, Version: present[c.cell]}
+		from := ResolvedValue{Folder: c.cell.Folder, Version: present[c.cell]}
 		if !c.live {
 			if !plaintext[c.cell].found {
 				continue

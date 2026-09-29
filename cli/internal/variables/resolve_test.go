@@ -14,7 +14,7 @@ func scoped(key string, folders ...string) *resourcesv1.VariableDefinition {
 	return d
 }
 
-func resolve(t *testing.T, g *variables.Declarations, app string) map[string]variables.Resolved {
+func resolve(t *testing.T, g *variables.Declarations, app string) map[string]variables.ResolvedValue {
 	t.Helper()
 	resolved, err := g.Resolve(context.Background(), app)
 	if err != nil {

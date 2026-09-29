@@ -296,7 +296,7 @@ func resolveVariables(ctx context.Context, declarations *variables.Declarations,
 	return variables, nil
 }
 
-func appVariables(definitions []*resourcesv1.VariableDefinition, resolved map[string]variables.Resolved) []manifestbuilder.Variable {
+func appVariables(definitions []*resourcesv1.VariableDefinition, resolved map[string]variables.ResolvedValue) []manifestbuilder.Variable {
 	variables := make([]manifestbuilder.Variable, 0, len(definitions))
 	for _, definition := range definitions {
 		cell, ok := resolved[definition.GetKey()]

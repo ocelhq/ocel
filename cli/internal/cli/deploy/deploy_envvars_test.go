@@ -26,7 +26,7 @@ func TestAppVariables(t *testing.T) {
 			definition("POSTHOG_ID", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
 			definition("WEBHOOK_SECRET", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET),
 		}
-		resolved := map[string]variables.Resolved{
+		resolved := map[string]variables.ResolvedValue{
 			"POSTHOG_ID":     {Value: "ph-123"},
 			"WEBHOOK_SECRET": {},
 		}
@@ -51,7 +51,7 @@ func TestAppVariables(t *testing.T) {
 			definition("CHECKOUT_ONLY", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
 		}
 
-		if got := appVariables(definitions, map[string]variables.Resolved{}); len(got) != 0 {
+		if got := appVariables(definitions, map[string]variables.ResolvedValue{}); len(got) != 0 {
 			t.Fatalf("appVariables = %+v, want nothing for a key this app resolves no cell for", got)
 		}
 	})
@@ -63,7 +63,7 @@ func TestAppVariables(t *testing.T) {
 			{Key: "PUBLIC_SITE_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, ClientAccessible: true},
 			{Key: "INTERNAL_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN},
 		}
-		resolved := map[string]variables.Resolved{
+		resolved := map[string]variables.ResolvedValue{
 			"PUBLIC_SITE_URL": {Value: "https://example.com"},
 			"INTERNAL_URL":    {Value: "http://internal"},
 		}
@@ -87,7 +87,7 @@ func TestAppVariables(t *testing.T) {
 			definition("PLAIN_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
 			definition("LIVE_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET),
 		}
-		resolved := map[string]variables.Resolved{
+		resolved := map[string]variables.ResolvedValue{
 			"PLAIN_KEY": {Value: "v", Version: 2},
 			"LIVE_KEY":  {Version: 9},
 		}
@@ -111,7 +111,7 @@ func TestAppVariables(t *testing.T) {
 			definition("ROOT_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET),
 			definition("SCOPED_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET),
 		}
-		resolved := map[string]variables.Resolved{
+		resolved := map[string]variables.ResolvedValue{
 			"ROOT_KEY":   {},
 			"SCOPED_KEY": {Folder: "/admin"},
 		}
