@@ -24,10 +24,9 @@ const goldenPath = "testdata/golden_manifest.json"
 const functionsGoldenPath = "testdata/golden_manifest_functions.json"
 
 type goldenManifest struct {
-	SchemaVersion string           `json:"schema_version"`
-	Slug          string           `json:"slug"`
-	Resources     []goldenResource `json:"resources"`
-	Functions     []goldenFunction `json:"functions,omitempty"`
+	Slug      string           `json:"slug"`
+	Resources []goldenResource `json:"resources"`
+	Functions []goldenFunction `json:"functions,omitempty"`
 }
 
 type goldenFramework struct {
@@ -74,7 +73,7 @@ func assembleOn(compute provider.Compute, slug string, domains project.Domains, 
 }
 
 func toGolden(m *contractv1.Manifest) goldenManifest {
-	g := goldenManifest{SchemaVersion: m.GetSchemaVersion(), Slug: m.GetSlug()}
+	g := goldenManifest{Slug: m.GetSlug()}
 	for _, r := range m.GetResources() {
 		gr := goldenResource{
 			LogicalName: r.GetLogicalName(),

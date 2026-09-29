@@ -101,8 +101,7 @@ func TestDeployReadsTheBuildUnderTheConfiguredProjectWhateverDirectoryItRunsIn(t
 func deployRequest() *contractv1.DeployRequest {
 	return &contractv1.DeployRequest{
 		Manifest: &contractv1.Manifest{
-			SchemaVersion: "1",
-			Slug:          "shop",
+			Slug: "shop",
 			Resources: []*contractv1.ManifestResource{{
 				LogicalName: "orders",
 				Resource: &resourcesv1.ResourceIdentifier{

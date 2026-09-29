@@ -69,7 +69,7 @@ func TestAStartedProvidersStreamEventsReachTheSpan(t *testing.T) {
 	p := startFake(t, ctx, "success", span, Questions{})
 
 	result, err := Stream(ctx, p, "Deploy", &contractv1.DeployRequest{
-		Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"},
+		Manifest: &contractv1.Manifest{Slug: "acme"},
 	}, contractv1connect.ProviderServiceClient.Deploy)
 	if err != nil {
 		t.Fatalf("Stream() error = %v", err)
@@ -98,7 +98,7 @@ func TestAPlanningStreamHandsBackThePlanAndForwardsEveryOtherEvent(t *testing.T)
 	p := startFake(t, ctx, "success", span, Questions{})
 
 	plan, err := Plan(ctx, p, "Deploy", &contractv1.DeployRequest{
-		Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"},
+		Manifest: &contractv1.Manifest{Slug: "acme"},
 		Dry:      true,
 	}, contractv1connect.ProviderServiceClient.Deploy)
 	if err != nil {

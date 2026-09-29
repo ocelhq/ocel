@@ -15,8 +15,6 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-const ContractVersion = "provider.v1"
-
 type Input struct {
 	Project      *project.Project
 	Tier         environmentv1.Tier
@@ -71,12 +69,11 @@ func assemble(slug string, domains project.Domains, apps []app, declarations []d
 	}
 
 	return &contractv1.Manifest{
-		SchemaVersion: ContractVersion,
-		Slug:          slug,
-		Resources:     resources,
-		Domains:       tierDomains(domains),
-		Apps:          manifestApps,
-		Usages:        usages,
+		Slug:      slug,
+		Resources: resources,
+		Domains:   tierDomains(domains),
+		Apps:      manifestApps,
+		Usages:    usages,
 	}, nil
 }
 

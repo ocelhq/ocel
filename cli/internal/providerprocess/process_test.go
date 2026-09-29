@@ -290,7 +290,7 @@ func TestDeploy(t *testing.T) {
 
 		var events []*progressv1.OperationEvent
 		err := streamed(ctx, r, "Deploy", &contractv1.DeployRequest{
-			Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"},
+			Manifest: &contractv1.Manifest{Slug: "acme"},
 		}, contractv1connect.ProviderServiceClient.Deploy, func(event *progressv1.OperationEvent) { events = append(events, event) })
 		if err != nil {
 			t.Fatalf("Deploy() error = %v, want nil", err)
@@ -326,7 +326,7 @@ func TestDeploy(t *testing.T) {
 		deployErrCh := make(chan error, 1)
 		go func() {
 			deployErrCh <- streamed(ctx, r, "Deploy", &contractv1.DeployRequest{
-				Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"},
+				Manifest: &contractv1.Manifest{Slug: "acme"},
 			}, contractv1connect.ProviderServiceClient.Deploy, func(event *progressv1.OperationEvent) { gotFirstEvent.Store(true) })
 		}()
 
@@ -367,7 +367,7 @@ func TestDeploy(t *testing.T) {
 		}
 
 		err := streamed(ctx, r, "Deploy", &contractv1.DeployRequest{
-			Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"},
+			Manifest: &contractv1.Manifest{Slug: "acme"},
 		}, contractv1connect.ProviderServiceClient.Deploy, nil)
 		if err == nil {
 			t.Fatal("Deploy() error = nil, want the crash reported")
@@ -394,7 +394,7 @@ func TestDeploy(t *testing.T) {
 		deployErrCh := make(chan error, 1)
 		go func() {
 			deployErrCh <- streamed(called, r, "Deploy", &contractv1.DeployRequest{
-				Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"},
+				Manifest: &contractv1.Manifest{Slug: "acme"},
 			}, contractv1connect.ProviderServiceClient.Deploy, func(event *progressv1.OperationEvent) { gotFirstEvent.Store(true) })
 		}()
 
@@ -436,7 +436,7 @@ func TestDeploy(t *testing.T) {
 			t.Fatalf("Ready() error = %v, want nil", err)
 		}
 
-		err := streamed(ctx, r, "Deploy", &contractv1.DeployRequest{Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"}}, contractv1connect.ProviderServiceClient.Deploy, nil)
+		err := streamed(ctx, r, "Deploy", &contractv1.DeployRequest{Manifest: &contractv1.Manifest{Slug: "acme"}}, contractv1connect.ProviderServiceClient.Deploy, nil)
 
 		var deployErr *OperationFailedError
 		if !errors.As(err, &deployErr) {
@@ -461,7 +461,7 @@ func TestDeploy(t *testing.T) {
 		}
 
 		var reported []string
-		err := streamed(ctx, r, "Deploy", &contractv1.DeployRequest{Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"}}, contractv1connect.ProviderServiceClient.Deploy, func(event *progressv1.OperationEvent) {
+		err := streamed(ctx, r, "Deploy", &contractv1.DeployRequest{Manifest: &contractv1.Manifest{Slug: "acme"}}, contractv1connect.ProviderServiceClient.Deploy, func(event *progressv1.OperationEvent) {
 			for _, app := range event.GetResult().GetApps() {
 				reported = append(reported, app.GetApp()+"="+app.GetOutcome().String())
 			}
@@ -495,7 +495,7 @@ func TestDeploy(t *testing.T) {
 
 		var seen int
 		err := streamed(ctx, r, "Deploy", &contractv1.DeployRequest{
-			Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"},
+			Manifest: &contractv1.Manifest{Slug: "acme"},
 		}, contractv1connect.ProviderServiceClient.Deploy, func(event *progressv1.OperationEvent) { seen++ })
 
 		if connect.CodeOf(err) != connect.CodeResourceExhausted {
@@ -512,7 +512,7 @@ func TestDeploy(t *testing.T) {
 		ctx := context.Background()
 		r, _ := spawnFake(t, ctx, "never-ready", LaunchSpec{ReadyTimeout: 50 * time.Millisecond})
 
-		err := streamed(ctx, r, "Deploy", &contractv1.DeployRequest{Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"}}, contractv1connect.ProviderServiceClient.Deploy, nil)
+		err := streamed(ctx, r, "Deploy", &contractv1.DeployRequest{Manifest: &contractv1.Manifest{Slug: "acme"}}, contractv1connect.ProviderServiceClient.Deploy, nil)
 		if !errors.Is(err, ErrClientUnavailable) {
 			t.Fatalf("Deploy() error = %v, want ErrClientUnavailable", err)
 		}

@@ -174,7 +174,6 @@ message ProductionHostname {
 }
 
 message Manifest {
-  string schema_version = 1 [(buf.validate.field).string.min_len = 1];
   repeated ManifestResource resources = 2;
 
   string slug = 4 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];

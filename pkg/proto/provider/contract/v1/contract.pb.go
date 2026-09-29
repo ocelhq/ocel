@@ -991,7 +991,6 @@ func (x *ProductionHostname) GetPending() string {
 
 type Manifest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	SchemaVersion string                 `protobuf:"bytes,1,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
 	Resources     []*ManifestResource    `protobuf:"bytes,2,rep,name=resources,proto3" json:"resources,omitempty"`
 	Slug          string                 `protobuf:"bytes,4,opt,name=slug,proto3" json:"slug,omitempty"`
 	Domains       []*TierDomains         `protobuf:"bytes,5,rep,name=domains,proto3" json:"domains,omitempty"`
@@ -1029,13 +1028,6 @@ func (x *Manifest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use Manifest.ProtoReflect.Descriptor instead.
 func (*Manifest) Descriptor() ([]byte, []int) {
 	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{12}
-}
-
-func (x *Manifest) GetSchemaVersion() string {
-	if x != nil {
-		return x.SchemaVersion
-	}
-	return ""
 }
 
 func (x *Manifest) GetResources() []*ManifestResource {
@@ -4713,9 +4705,8 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\rexpiring_soon\x18\x06 \x01(\bR\fexpiringSoon\x12'\n" +
 	"\x0fserving_pointer\x18\a \x01(\tR\x0eservingPointer\x12\x14\n" +
 	"\x05ready\x18\b \x01(\bR\x05ready\x12\x18\n" +
-	"\apending\x18\t \x01(\tR\apending\"\xe8\x02\n" +
-	"\bManifest\x12.\n" +
-	"\x0eschema_version\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\rschemaVersion\x12D\n" +
+	"\apending\x18\t \x01(\tR\apending\"\xb8\x02\n" +
+	"\bManifest\x12D\n" +
 	"\tresources\x18\x02 \x03(\v2&.provider.contract.v1.ManifestResourceR\tresources\x125\n" +
 	"\x04slug\x18\x04 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12;\n" +
 	"\adomains\x18\x05 \x03(\v2!.provider.contract.v1.TierDomainsR\adomains\x125\n" +

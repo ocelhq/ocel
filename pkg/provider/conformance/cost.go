@@ -57,8 +57,7 @@ func runCost(t *testing.T, suite Suite) {
 
 func CostManifest() *contractv1.Manifest {
 	return &contractv1.Manifest{
-		SchemaVersion: "provider.v1",
-		Slug:          "conformance",
+		Slug: "conformance",
 		Apps: []*contractv1.ManifestApp{
 			{Name: "web", Framework: &contractv1.Framework{Name: "node"},
 				Domains: []*contractv1.TierDomains{{Tier: environmentv1.Tier_TIER_PRODUCTION, Hostnames: []string{"web.example.com"}}},

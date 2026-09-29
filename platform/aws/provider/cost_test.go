@@ -46,8 +46,7 @@ func costServed(t *testing.T) (contractv1connect.ProviderServiceClient, costv1co
 
 func shopManifest() *contractv1.Manifest {
 	return &contractv1.Manifest{
-		SchemaVersion: "provider.v1",
-		Slug:          "shop",
+		Slug: "shop",
 		Apps: []*contractv1.ManifestApp{
 			{Name: "web", Framework: &contractv1.Framework{Name: "next", Arch: "arm64"},
 				Artifact: &contractv1.ManifestApp_Serverless{Serverless: &contractv1.ServerlessArtifact{Functions: []*contractv1.ManifestFunction{
