@@ -10,7 +10,10 @@ import (
 const (
 	repo       = "github.com/ocelhq/ocel/"
 	dnsRecords = repo + "platform/edge/cloudflare/deploy"
+	s3Store    = repo + "platform/s3"
 )
+
+var carriers = []string{dnsRecords, s3Store}
 
 var reachable = map[string]bool{
 	"github.com/ocelhq/ocel/platform/vps/provider": true,
@@ -43,6 +46,7 @@ var reachable = map[string]bool{
 	"github.com/ocelhq/ocel/pkg/statedir":          true,
 	"github.com/ocelhq/ocel/pkg/target":            true,
 	dnsRecords:                                     true,
+	s3Store:                                        true,
 }
 
 var goSSHStack = []string{
@@ -63,9 +67,12 @@ var provisioningEngines = []string{
 func TestTheProviderReachesNoCloudAndNoGoSSHStackOfItsOwn(t *testing.T) {
 	t.Parallel()
 
-	writers := depsOf(t, dnsRecords)
+	var carried []string
+	for _, carrier := range carriers {
+		carried = append(carried, depsOf(t, carrier)...)
+	}
 	own := slices.DeleteFunc(depsOf(t, "./..."), func(pkg string) bool {
-		return !strings.HasPrefix(pkg, repo) && slices.Contains(writers, pkg)
+		return !strings.HasPrefix(pkg, repo) && slices.Contains(carried, pkg)
 	})
 
 	for _, pkg := range own {
@@ -79,7 +86,7 @@ func TestTheProviderReachesNoCloudAndNoGoSSHStackOfItsOwn(t *testing.T) {
 		}
 		for _, engine := range provisioningEngines {
 			if strings.HasPrefix(pkg, engine) {
-				t.Errorf("the vps provider reaches %s of its own: a box is provisioned over a shell session, and the only vendor SDK it binds is the one the %s it opens brings with it", pkg, dnsRecords)
+				t.Errorf("the vps provider reaches %s of its own: a box is provisioned over a shell session, and the only vendor SDKs it binds are the ones %s bring with them", pkg, strings.Join(carriers, " and "))
 			}
 		}
 	}
@@ -100,7 +107,7 @@ func TestTheProviderNamesNoVendorSDKInItsOwnImports(t *testing.T) {
 		}
 		for _, engine := range append(slices.Clone(provisioningEngines), goSSHStack...) {
 			if strings.HasPrefix(imported, engine) {
-				t.Errorf("%s imports %s itself; a vendor SDK reaches this provider only behind the %s it opens", mine, imported, dnsRecords)
+				t.Errorf("%s imports %s itself; a vendor SDK reaches this provider only behind %s", mine, imported, strings.Join(carriers, " or "))
 			}
 		}
 	}
