@@ -3,6 +3,7 @@ package s3
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
 type Store struct {
@@ -31,6 +33,32 @@ func (s Store) Client() *s3.Client {
 
 func (s Store) Presigner() *s3.PresignClient {
 	return s3.NewPresignClient(s.Client())
+}
+
+func (s Store) EnsureBucket(ctx context.Context, name string, origins []string) error {
+	client := s.Client()
+	_, err := client.CreateBucket(ctx, &s3.CreateBucketInput{Bucket: aws.String(name)})
+	var owned *s3types.BucketAlreadyOwnedByYou
+	var taken *s3types.BucketAlreadyExists
+	if err != nil && !errors.As(err, &owned) && !errors.As(err, &taken) {
+		return fmt.Errorf("create bucket %s: %w", name, err)
+	}
+	if len(origins) == 0 {
+		return nil
+	}
+	_, err = client.PutBucketCors(ctx, &s3.PutBucketCorsInput{
+		Bucket: aws.String(name),
+		CORSConfiguration: &s3types.CORSConfiguration{CORSRules: []s3types.CORSRule{{
+			AllowedOrigins: origins,
+			AllowedMethods: []string{http.MethodPut, http.MethodPost},
+			AllowedHeaders: []string{"*"},
+			ExposeHeaders:  []string{"ETag"},
+		}}},
+	})
+	if err != nil {
+		return fmt.Errorf("allow %v to upload to bucket %s: %w", origins, name, err)
+	}
+	return nil
 }
 
 type HTTPPoster struct {
