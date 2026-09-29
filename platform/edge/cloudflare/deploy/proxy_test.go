@@ -409,9 +409,25 @@ func TestTheCloudflareProxyRefusesAZoneThatPresentsCloudflaresSharedCertificate(
 	held := &cfMock{zoneID: "zone1", zoneName: "app.com", globalPulls: true, clientCertificates: []map[string]any{
 		{"id": "yours", "certificate": "YOURS", "status": "active", "uploaded_on": "2026-01-01T00:00:00Z"},
 	}}
-	err := held.proxy(t).Hooks().ClientCertificates.Present(context.Background(), "shop.app.com")
-	if err == nil || len(held.originPullWrites) != 0 {
-		t.Errorf("Present on a zone presenting the shared certificate that holds one of yours = %v, set pulls %v, want it refused and the zone untouched", err, held.originPullWrites)
+	_, err := held.proxy(t).Hooks().ClientCertificates.Ensure(context.Background(), "shop.app.com")
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid || len(held.originPullWrites) != 0 {
+		t.Fatalf("Ensure on a zone presenting the shared certificate that holds one of yours = %v, set pulls %v, want it refused before any origin is claimed trusting a certificate the zone does not present", err, held.originPullWrites)
+	}
+	if strings.Contains(refused.Message, "holds no certificate") {
+		t.Errorf("the refusal reads %q, and the zone holds one of yours: it must name global authenticated origin pulls as what presents the shared certificate", refused.Message)
+	}
+}
+
+func TestTheCloudflareProxyTakesAZoneAnotherRunJustTurnedZoneLevelPullsOnFor(t *testing.T) {
+	m := proxyZoneMock()
+	m.afterListing = func(m *cfMock) {
+		m.clientCertificates = append(m.clientCertificates, map[string]any{"id": "other-run", "certificate": "OTHER RUN", "status": "active", "uploaded_on": "2026-09-29T09:00:00Z"})
+		m.originPulls = true
+	}
+
+	if _, err := m.proxy(t).Hooks().ClientCertificates.Ensure(context.Background(), "shop.app.com"); err != nil {
+		t.Errorf("Ensure while another run uploaded the zone's certificate and turned zone-level pulls on = %v, want it taken: ocel turned them on for a certificate the zone holds", err)
 	}
 }
 

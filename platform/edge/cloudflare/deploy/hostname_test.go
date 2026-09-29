@@ -75,6 +75,7 @@ type cfMock struct {
 	originPulls      bool
 	globalPulls      bool
 	originPullWrites []bool
+	afterListing     func(m *cfMock)
 	purges           [][]string
 	sslMode          string
 }
@@ -365,6 +366,10 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 			return
 		}
 		writeResult(w, m.clientCertificates)
+		if then := m.afterListing; then != nil {
+			m.afterListing = nil
+			then(m)
+		}
 	})
 
 	mux.HandleFunc("POST /zones/"+m.zoneID+"/origin_tls_client_auth", func(w http.ResponseWriter, r *http.Request) {
