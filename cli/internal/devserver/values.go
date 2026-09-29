@@ -2,6 +2,7 @@ package devserver
 
 import (
 	"context"
+	"maps"
 	"slices"
 	"sync"
 
@@ -12,13 +13,13 @@ import (
 type flatValues struct {
 	values map[string]string
 
-	mu     sync.Mutex
-	scopes map[string][]string
-	live   map[string]struct{}
+	mu         sync.Mutex
+	scopes     map[string][]string
+	secretKeys map[string]struct{}
 }
 
 func newFlatValues(values map[string]string) *flatValues {
-	return &flatValues{values: values, scopes: map[string][]string{}, live: map[string]struct{}{}}
+	return &flatValues{values: values, scopes: map[string][]string{}, secretKeys: map[string]struct{}{}}
 }
 
 func (v *flatValues) Declare(definitions []*resourcesv1.VariableDefinition) {
@@ -26,7 +27,7 @@ func (v *flatValues) Declare(definitions []*resourcesv1.VariableDefinition) {
 	defer v.mu.Unlock()
 	for _, definition := range definitions {
 		if definition.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_SECRET {
-			v.live[definition.GetKey()] = struct{}{}
+			v.secretKeys[definition.GetKey()] = struct{}{}
 		}
 		for _, folder := range definition.GetFolders() {
 			if !slices.Contains(v.scopes[definition.GetKey()], folder) {
@@ -40,11 +41,11 @@ func (v *flatValues) List(context.Context) ([]variables.ValueMetadata, error) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
-	keys := make([]string, 0, len(v.values)+len(v.live))
+	keys := make([]string, 0, len(v.values)+len(v.secretKeys))
 	for key := range v.values {
 		keys = append(keys, key)
 	}
-	for key := range v.live {
+	for key := range v.secretKeys {
 		if _, ok := v.values[key]; !ok {
 			keys = append(keys, key)
 		}
@@ -75,4 +76,10 @@ func (v *flatValues) Reveal(_ context.Context, rows []variables.Coordinate) (map
 		}
 	}
 	return found, nil
+}
+
+func (v *flatValues) sortedSecretKeys() []string {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return slices.Sorted(maps.Keys(v.secretKeys))
 }

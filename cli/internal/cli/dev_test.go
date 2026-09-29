@@ -87,28 +87,28 @@ func TestMergeEnv(t *testing.T) {
 	})
 }
 
-func TestReportLiveValues(t *testing.T) {
+func TestReportSecretValues(t *testing.T) {
 	t.Parallel()
 
-	t.Run("a run with no live values says nothing", func(t *testing.T) {
+	t.Run("a run with no secret values says nothing", func(t *testing.T) {
 		t.Parallel()
 
 		var quiet bytes.Buffer
-		reportLiveValues(&quiet, nil)
+		reportSecretValues(&quiet, nil)
 		if quiet.Len() != 0 {
-			t.Errorf("reportLiveValues wrote %q for a run with no live values, want nothing", quiet.String())
+			t.Errorf("reportSecretValues wrote %q for a run with no secret values, want nothing", quiet.String())
 		}
 	})
 
-	t.Run("it names every live key and says dev resolves them like any other value", func(t *testing.T) {
+	t.Run("it names every secret key and says dev resolves them like any other value", func(t *testing.T) {
 		t.Parallel()
 
 		var out bytes.Buffer
-		reportLiveValues(&out, []string{"WEBHOOK_SECRET", "API_TOKEN"})
+		reportSecretValues(&out, []string{"WEBHOOK_SECRET", "API_TOKEN"})
 		got := out.String()
 		for _, want := range []string{"API_TOKEN", "WEBHOOK_SECRET", "every other value", "bounded window"} {
 			if !strings.Contains(got, want) {
-				t.Errorf("reportLiveValues wrote %q, want it to mention %q", got, want)
+				t.Errorf("reportSecretValues wrote %q, want it to mention %q", got, want)
 			}
 		}
 	})

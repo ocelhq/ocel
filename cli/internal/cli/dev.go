@@ -200,7 +200,7 @@ func targetScope(cfg *projectconfig.Config, cwd string) variables.Scope {
 }
 
 func discoverAndSync(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, values devValues, scope variables.Scope, run invocation, stdout, stderr io.Writer) (map[string]string, error) {
-	if err := srv.Discover(ctx, cfg, stdout, stderr); err != nil {
+	if err := discover(ctx, srv, cfg, stdout, stderr); err != nil {
 		return nil, refusedSync(srv, err)
 	}
 
@@ -221,18 +221,37 @@ func discoverAndSync(ctx context.Context, srv *devserver.Server, cfg *projectcon
 		return nil, err
 	}
 
-	syncResult := <-srv.Sync()
+	syncResult := <-srv.SyncResults()
 	if syncResult.Err != nil {
 		return nil, fmt.Errorf("sync failed: %w", syncResult.Err)
 	}
 
-	reportLiveValues(stdout, syncResult.LiveKeys)
-	return resolvedEnv(syncResult.LiveValues, values.merged(), syncResult.Resources, runtimeAccess{address: syncResult.DevServerAddress, token: syncResult.AppToken}, appFolder, scope), nil
+	reportSecretValues(stdout, syncResult.SecretKeys)
+	return resolvedEnv(syncResult.SecretValues, values.merged(), syncResult.Resources, runtimeAccess{address: syncResult.DevServerURL, token: syncResult.AppToken}, appFolder, scope), nil
+}
+
+func discover(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, stdout, stderr io.Writer) error {
+	roots, err := discovery.RootsOf(cfg)
+	if err != nil {
+		return err
+	}
+
+	prepared, err := discovery.Prepare(cfg.Dir, roots)
+	if err != nil {
+		return err
+	}
+
+	_ = srv.TakeSDKRefusal()
+	err = discovery.Run(ctx, cfg.Dir, prepared, srv.DiscoveryTarget(), stdout, stderr)
+	if refused := srv.TakeSDKRefusal(); refused != nil {
+		return refused
+	}
+	return err
 }
 
 func refusedSync(srv *devserver.Server, err error) error {
 	select {
-	case result := <-srv.Sync():
+	case result := <-srv.SyncResults():
 		if result.Err != nil {
 			return result.Err
 		}
@@ -290,11 +309,11 @@ func devAppOrigins(dir string, source devSource) func() []string {
 	}
 }
 
-func reportLiveValues(stdout io.Writer, liveKeys []string) {
-	if len(liveKeys) == 0 {
+func reportSecretValues(stdout io.Writer, secretKeys []string) {
+	if len(secretKeys) == 0 {
 		return
 	}
-	keys := slices.Clone(liveKeys)
+	keys := slices.Clone(secretKeys)
 	slices.Sort(keys)
 	fmt.Fprintf(stdout, "resolved %s the way dev resolves every other value. Deployed, a rotated value is picked up within a bounded window.\n", strings.Join(keys, ", "))
 }
@@ -316,7 +335,7 @@ func watchAndReResolve(ctx context.Context, srv *devserver.Server, cfg *projectc
 	}
 
 	return filewatch.Start(ctx, filewatch.Config{Paths: paths, Debounce: watchDebounce, OnChange: func() {
-		srv.ResetManifest()
+		srv.ResetDeclarations()
 		resolved, err := resolveOnce(ctx, srv, cfg, run, stdout, stderr)
 		if err != nil {
 			if ctx.Err() == nil {
@@ -421,13 +440,13 @@ type runtimeAccess struct {
 	token   string
 }
 
-func mergeEnv(base []string, liveValues, values map[string]string, resources []binding.Resolved, runtime runtimeAccess, appFolder string, scope variables.Scope) []string {
-	return applyEnv(base, resolvedEnv(liveValues, values, resources, runtime, appFolder, scope))
+func mergeEnv(base []string, secretValues, values map[string]string, resources []binding.Resolved, runtime runtimeAccess, appFolder string, scope variables.Scope) []string {
+	return applyEnv(base, resolvedEnv(secretValues, values, resources, runtime, appFolder, scope))
 }
 
-func resolvedEnv(liveValues, values map[string]string, resources []binding.Resolved, runtime runtimeAccess, appFolder string, scope variables.Scope) map[string]string {
-	merged := make(map[string]string, len(liveValues)+len(values)+1)
-	for k, v := range liveValues {
+func resolvedEnv(secretValues, values map[string]string, resources []binding.Resolved, runtime runtimeAccess, appFolder string, scope variables.Scope) map[string]string {
+	merged := make(map[string]string, len(secretValues)+len(values)+1)
+	for k, v := range secretValues {
 		merged[k] = v
 	}
 	for k, v := range values {

@@ -32,7 +32,7 @@ func reportProblems(t *testing.T, url string, problems ...*resourcesv1.VariableP
 
 func serveValues(t *testing.T, values map[string]string, scope variables.Scope) (*Server, string) {
 	t.Helper()
-	s := newDevServer(&fakeStack{})
+	s := newDevServer(&fakeResources{})
 	if values != nil {
 		s.UseValues(values, scope)
 	}
@@ -65,7 +65,7 @@ func TestDeclareEnv(t *testing.T) {
 		}
 	})
 
-	t.Run("never reveals a live value", func(t *testing.T) {
+	t.Run("never reveals a secret value", func(t *testing.T) {
 		t.Parallel()
 		_, url := serveValues(t, map[string]string{"WEBHOOK_SECRET": "whsec_must_not_appear"}, variables.Scope{})
 
@@ -78,7 +78,7 @@ func TestDeclareEnv(t *testing.T) {
 			t.Fatalf("cells = %v, want presence for the declared key", cells)
 		}
 		if cells[0].GetValue() != "" {
-			t.Errorf("value = %q, want a live cell answered as presence with no plaintext", cells[0].GetValue())
+			t.Errorf("value = %q, want a secret cell answered as presence with no plaintext", cells[0].GetValue())
 		}
 	})
 
@@ -197,7 +197,7 @@ func TestCheckEnv(t *testing.T) {
 	t.Run("rules from the store as of the end of discovery", func(t *testing.T) {
 		t.Parallel()
 		ctx := context.Background()
-		s := newDevServer(&fakeStack{})
+		s := newDevServer(&fakeResources{})
 		s.UseValues(map[string]string{"API_BASE": "http://localhost:3000"}, variables.Scope{
 			Apps: []variables.App{{Name: "web", Folder: "/web"}},
 		})
@@ -220,7 +220,7 @@ func TestCheckEnv(t *testing.T) {
 		}
 	})
 
-	t.Run("states presence for a live key it has no value for", func(t *testing.T) {
+	t.Run("states presence for a secret key it has no value for", func(t *testing.T) {
 		t.Parallel()
 		ctx := context.Background()
 		s, url := serveValues(t, map[string]string{}, variables.Scope{Apps: []variables.App{{Name: "web"}}})
@@ -233,7 +233,7 @@ func TestCheckEnv(t *testing.T) {
 		}
 
 		if err := s.CheckEnv(ctx); err != nil {
-			t.Fatalf("CheckEnv = %v, want nil — a live key is resolved at sync, not from the file", err)
+			t.Fatalf("CheckEnv = %v, want nil — a secret key is resolved at sync, not from the file", err)
 		}
 
 		store, _ := s.env.current()
@@ -246,7 +246,7 @@ func TestCheckEnv(t *testing.T) {
 		}
 	})
 
-	t.Run("still refuses a plain key beside an exempt live one", func(t *testing.T) {
+	t.Run("still refuses a plain key beside an exempt secret one", func(t *testing.T) {
 		t.Parallel()
 		s, url := serveValues(t, map[string]string{}, variables.Scope{Apps: []variables.App{{Name: "web"}}})
 
@@ -265,7 +265,7 @@ func TestCheckEnv(t *testing.T) {
 		}
 	})
 
-	t.Run("states presence for every folder a live key is scoped to", func(t *testing.T) {
+	t.Run("states presence for every folder a secret key is scoped to", func(t *testing.T) {
 		t.Parallel()
 		s, url := serveValues(t, map[string]string{}, variables.Scope{
 			Apps: []variables.App{{Name: "web", Folder: "/web"}, {Name: "admin", Folder: "/admin"}},
@@ -304,7 +304,7 @@ func TestResetManifest(t *testing.T) {
 			t.Fatal("CheckEnv = nil, want a refusal before the reset")
 		}
 
-		s.ResetManifest()
+		s.ResetDeclarations()
 
 		if err := s.CheckEnv(context.Background()); err != nil {
 			t.Fatalf("CheckEnv = %v, want nil — the declaration that failed is gone", err)
@@ -322,7 +322,7 @@ func TestResetManifest(t *testing.T) {
 			Folders: []string{"/web"},
 		})
 
-		s.ResetManifest()
+		s.ResetDeclarations()
 
 		msg := declareEnv(t, url, &resourcesv1.VariableDefinition{
 			Key: "API_BASE", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Required: true,

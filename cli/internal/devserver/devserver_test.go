@@ -25,14 +25,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/app/resources/v1/resourcesv1connect"
 )
 
-type fakeStack struct {
+type fakeResources struct {
 	mu      sync.Mutex
 	asked   [][]declare.Resource
 	resolve func([]declare.Resource) ([]binding.Resolved, error)
 	mounted bool
 }
 
-func (f *fakeStack) Resolve(_ context.Context, resources []declare.Resource) ([]binding.Resolved, error) {
+func (f *fakeResources) Resolve(_ context.Context, resources []declare.Resource) ([]binding.Resolved, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.asked = append(f.asked, resources)
@@ -46,17 +46,17 @@ func (f *fakeStack) Resolve(_ context.Context, resources []declare.Resource) ([]
 	return out, nil
 }
 
-func (f *fakeStack) Routes(mux *http.ServeMux, guard func(http.Handler) http.Handler, options ...connect.HandlerOption) {
+func (f *fakeResources) Routes(mux *http.ServeMux, guard func(http.Handler) http.Handler, options ...connect.HandlerOption) {
 	f.mounted = true
 	path, handler := bucketv1connect.NewBucketServiceHandler(bucketv1connect.UnimplementedBucketServiceHandler{}, options...)
 	mux.Handle(path, guard(handler))
 }
 
-func newDevServer(stack *fakeStack) *Server {
-	return New("http://127.0.0.1:0", stack)
+func newDevServer(resources *fakeResources) *Server {
+	return New("http://127.0.0.1:0", resources)
 }
 
-const testSessionToken = "opensesame"
+const testDiscoveryToken = "opensesame"
 
 const testAppToken = "openforme"
 
@@ -73,15 +73,15 @@ func (a authorizing) RoundTrip(r *http.Request) (*http.Response, error) {
 
 var bareClient = &http.Client{Transport: &http.Transport{DisableKeepAlives: true}}
 
-var testClient = &http.Client{Transport: authorizing{testSessionToken, &http.Transport{DisableKeepAlives: true}}}
+var testClient = &http.Client{Transport: authorizing{testDiscoveryToken, &http.Transport{DisableKeepAlives: true}}}
 
 var appClient = &http.Client{Transport: authorizing{testAppToken, &http.Transport{DisableKeepAlives: true}}}
 
 func serve(t *testing.T, s *Server) string {
 	t.Helper()
 	ts := httptest.NewUnstartedServer(nil)
-	s.devServerAddr = "http://" + ts.Listener.Addr().String()
-	s.sessionToken = testSessionToken
+	s.url = "http://" + ts.Listener.Addr().String()
+	s.discoveryToken = testDiscoveryToken
 	s.appToken = testAppToken
 	ts.Config.Handler = s.Mux()
 	ts.Start()
@@ -104,10 +104,10 @@ func declareResource(t *testing.T, url, name string, typ resourcesv1.ResourceTyp
 	}
 }
 
-func TestACallToTheDevServerWithNoSessionTokenIsRefused(t *testing.T) {
+func TestACallToTheDevServerWithNoDiscoveryTokenIsRefused(t *testing.T) {
 	t.Parallel()
 
-	url := serve(t, newDevServer(&fakeStack{}))
+	url := serve(t, newDevServer(&fakeResources{}))
 
 	_, err := resourcesv1connect.NewResourceServiceClient(bareClient, url).Declare(
 		context.Background(),
@@ -133,7 +133,7 @@ func TestACallToTheDevServerWithNoSessionTokenIsRefused(t *testing.T) {
 func TestAnAppRouteAnswersOnlyTheAppTokenTheChildWasHanded(t *testing.T) {
 	t.Parallel()
 
-	s := newDevServer(&fakeStack{})
+	s := newDevServer(&fakeResources{})
 	s.PushEnv(map[string]string{"SECRET": "hunter2"})
 	url := serve(t, s)
 
@@ -217,17 +217,17 @@ func TestAnAppRouteAnswersOnlyTheAppTokenTheChildWasHanded(t *testing.T) {
 func TestTheSyncResultIncludesTheTokenTheAppReachesTheDevServerWith(t *testing.T) {
 	t.Parallel()
 
-	s := newDevServer(&fakeStack{})
+	s := newDevServer(&fakeResources{})
 	url := serve(t, s)
 
 	if status := postSync(t, url); status != http.StatusOK {
 		t.Fatalf("POST /sync status = %d, want %d", status, http.StatusOK)
 	}
-	result := <-s.Sync()
+	result := <-s.SyncResults()
 	if result.AppToken != testAppToken {
 		t.Fatalf("AppToken = %q, want the token the app routes answer to", result.AppToken)
 	}
-	if result.AppToken == s.SessionToken() {
+	if result.AppToken == s.DiscoveryTarget().Token {
 		t.Fatal("the app token is the discovery token, so an app that leaks its environment also hands out the discovery routes")
 	}
 }
@@ -247,7 +247,7 @@ func TestDeclare(t *testing.T) {
 
 	t.Run("rejects an unspecified resource type", func(t *testing.T) {
 		t.Parallel()
-		s := newDevServer(&fakeStack{})
+		s := newDevServer(&fakeResources{})
 
 		_, err := s.Declare(context.Background(), &resourcesv1.DeclareRequest{
 			Resource: &resourcesv1.ResourceIdentifier{Name: "main"},
@@ -261,10 +261,10 @@ func TestDeclare(t *testing.T) {
 func TestSync(t *testing.T) {
 	t.Parallel()
 
-	t.Run("hands every declaration, config and all, to the stack and delivers what it resolved", func(t *testing.T) {
+	t.Run("hands every declaration, config and all, to the dev resources and delivers what it resolved", func(t *testing.T) {
 		t.Parallel()
-		stack := &fakeStack{}
-		s := newDevServer(stack)
+		resources := &fakeResources{}
+		s := newDevServer(resources)
 		url := serve(t, s)
 
 		declareResource(t, url, "main", resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES)
@@ -274,36 +274,36 @@ func TestSync(t *testing.T) {
 			t.Fatalf("POST /sync status = %d, want 200", status)
 		}
 
-		result := <-s.Sync()
+		result := <-s.SyncResults()
 		if result.Err != nil {
 			t.Fatalf("Sync result error: %v", result.Err)
 		}
-		if len(stack.asked) != 1 || len(stack.asked[0]) != 2 {
-			t.Fatalf("the stack was asked %+v, want one call passing both declarations", stack.asked)
+		if len(resources.asked) != 1 || len(resources.asked[0]) != 2 {
+			t.Fatalf("the dev resources were asked %+v, want one call passing both declarations", resources.asked)
 		}
-		if main := stack.asked[0][0]; main.Name != "main" || main.Postgres == nil {
-			t.Errorf("the stack saw %+v, want main with its postgres config", main)
+		if main := resources.asked[0][0]; main.Name != "main" || main.Postgres == nil {
+			t.Errorf("the dev resources saw %+v, want main with its postgres config", main)
 		}
-		if storage := stack.asked[0][1]; storage.Name != "storage" || storage.Bucket == nil {
-			t.Errorf("the stack saw %+v, want storage with its bucket config, through the same door as every other kind", storage)
+		if storage := resources.asked[0][1]; storage.Name != "storage" || storage.Bucket == nil {
+			t.Errorf("the dev resources saw %+v, want storage with its bucket config, through the same door as every other kind", storage)
 		}
 		if len(result.Resources) != 2 || result.Resources[0].Env["BOUND_main"] != "yes" || result.Resources[1].Env["BOUND_storage"] != "yes" {
-			t.Fatalf("Resources = %+v, want what the stack resolved", result.Resources)
+			t.Fatalf("Resources = %+v, want what the dev resources resolved", result.Resources)
 		}
 	})
 
 	t.Run("only sees resources declared after a reset", func(t *testing.T) {
 		t.Parallel()
-		s := newDevServer(&fakeStack{})
+		s := newDevServer(&fakeResources{})
 		url := serve(t, s)
 
 		declareResource(t, url, "stale", resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES)
-		s.ResetManifest()
+		s.ResetDeclarations()
 		declareResource(t, url, "main", resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES)
 
 		postSync(t, url)
 
-		result := <-s.Sync()
+		result := <-s.SyncResults()
 		if len(result.Resources) != 1 || result.Resources[0].Name != "main" {
 			t.Fatalf("Resources = %+v, want only the entry declared after the reset", result.Resources)
 		}
@@ -311,7 +311,7 @@ func TestSync(t *testing.T) {
 
 	t.Run("refuses a method other than POST", func(t *testing.T) {
 		t.Parallel()
-		url := serve(t, newDevServer(&fakeStack{}))
+		url := serve(t, newDevServer(&fakeResources{}))
 
 		resp, err := testClient.Get(url + "/sync")
 		if err != nil {
@@ -323,9 +323,9 @@ func TestSync(t *testing.T) {
 		}
 	})
 
-	t.Run("propagates what the stack refused", func(t *testing.T) {
+	t.Run("propagates what the dev resources refused", func(t *testing.T) {
 		t.Parallel()
-		s := newDevServer(&fakeStack{resolve: func([]declare.Resource) ([]binding.Resolved, error) {
+		s := newDevServer(&fakeResources{resolve: func([]declare.Resource) ([]binding.Resolved, error) {
 			return nil, errors.New("boom")
 		}})
 		url := serve(t, s)
@@ -334,15 +334,15 @@ func TestSync(t *testing.T) {
 			t.Fatalf("POST /sync status = %d, want 500", status)
 		}
 
-		result := <-s.Sync()
+		result := <-s.SyncResults()
 		if result.Err == nil || !strings.Contains(result.Err.Error(), "boom") {
-			t.Fatalf("Sync result = %v, want the stack's error", result.Err)
+			t.Fatalf("Sync result = %v, want the dev resources' error", result.Err)
 		}
 	})
 
-	t.Run("serves a live-class value from the values it was given, like every other value", func(t *testing.T) {
+	t.Run("serves a secret-class value from the values it was given, like every other value", func(t *testing.T) {
 		t.Parallel()
-		s := newDevServer(&fakeStack{})
+		s := newDevServer(&fakeResources{})
 		s.UseValues(map[string]string{"WEBHOOK_SECRET": "whsec_from_the_dotfile", "POSTHOG_ID": "ph_1"}, variables.Scope{})
 		url := serve(t, s)
 
@@ -354,24 +354,24 @@ func TestSync(t *testing.T) {
 			t.Fatalf("POST /sync status = %d, want 200", status)
 		}
 
-		result := <-s.Sync()
+		result := <-s.SyncResults()
 		if result.Err != nil {
 			t.Fatalf("Sync result error: %v", result.Err)
 		}
-		if want := []string{"WEBHOOK_SECRET"}; !slices.Equal(result.LiveKeys, want) {
-			t.Errorf("LiveKeys = %v, want %v", result.LiveKeys, want)
+		if want := []string{"WEBHOOK_SECRET"}; !slices.Equal(result.SecretKeys, want) {
+			t.Errorf("SecretKeys = %v, want %v", result.SecretKeys, want)
 		}
-		if got := result.LiveValues["WEBHOOK_SECRET"]; got != "whsec_from_the_dotfile" {
-			t.Errorf("LiveValues[WEBHOOK_SECRET] = %q, want the value it was given", got)
+		if got := result.SecretValues["WEBHOOK_SECRET"]; got != "whsec_from_the_dotfile" {
+			t.Errorf("SecretValues[WEBHOOK_SECRET] = %q, want the value it was given", got)
 		}
-		if _, ok := result.LiveValues["POSTHOG_ID"]; ok {
-			t.Errorf("LiveValues = %v, want no entry for a key that is not live", result.LiveValues)
+		if _, ok := result.SecretValues["POSTHOG_ID"]; ok {
+			t.Errorf("SecretValues = %v, want no entry for a key that is not secret", result.SecretValues)
 		}
 	})
 
-	t.Run("names a live key it has no value for rather than resolving it", func(t *testing.T) {
+	t.Run("names a secret key it has no value for rather than resolving it", func(t *testing.T) {
 		t.Parallel()
-		s := newDevServer(&fakeStack{})
+		s := newDevServer(&fakeResources{})
 		s.UseValues(map[string]string{}, variables.Scope{})
 		url := serve(t, s)
 
@@ -380,21 +380,21 @@ func TestSync(t *testing.T) {
 		})
 		postSync(t, url)
 
-		result := <-s.Sync()
+		result := <-s.SyncResults()
 		if result.Err != nil {
 			t.Fatalf("Sync result error: %v", result.Err)
 		}
-		if want := []string{"WEBHOOK_SECRET"}; !slices.Equal(result.LiveKeys, want) {
-			t.Errorf("LiveKeys = %v, want %v", result.LiveKeys, want)
+		if want := []string{"WEBHOOK_SECRET"}; !slices.Equal(result.SecretKeys, want) {
+			t.Errorf("SecretKeys = %v, want %v", result.SecretKeys, want)
 		}
-		if len(result.LiveValues) != 0 {
-			t.Errorf("LiveValues = %v, want nothing for a key nothing sets", result.LiveValues)
+		if len(result.SecretValues) != 0 {
+			t.Errorf("SecretValues = %v, want nothing for a key nothing sets", result.SecretValues)
 		}
 	})
 
-	t.Run("forgets live keys a declaration no longer names after a reset", func(t *testing.T) {
+	t.Run("forgets secret keys a declaration no longer names after a reset", func(t *testing.T) {
 		t.Parallel()
-		s := newDevServer(&fakeStack{})
+		s := newDevServer(&fakeResources{})
 		s.UseValues(map[string]string{"GONE": "a", "KEPT": "b"}, variables.Scope{})
 		url := serve(t, s)
 
@@ -402,17 +402,17 @@ func TestSync(t *testing.T) {
 			Key: "GONE", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET,
 		})
 
-		s.ResetManifest()
+		s.ResetDeclarations()
 
 		declareEnv(t, url, &resourcesv1.VariableDefinition{
 			Key: "KEPT", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET,
 		})
 
 		postSync(t, url)
-		result := <-s.Sync()
+		result := <-s.SyncResults()
 
-		if want := []string{"KEPT"}; !slices.Equal(result.LiveKeys, want) {
-			t.Errorf("LiveKeys = %v, want only %v — the reset dropped the prior declaration", result.LiveKeys, want)
+		if want := []string{"KEPT"}; !slices.Equal(result.SecretKeys, want) {
+			t.Errorf("SecretKeys = %v, want only %v — the reset dropped the prior declaration", result.SecretKeys, want)
 		}
 	})
 }
@@ -422,7 +422,7 @@ func TestEnvStream(t *testing.T) {
 
 	t.Run("receives env pushed after connecting", func(t *testing.T) {
 		t.Parallel()
-		s := newDevServer(&fakeStack{})
+		s := newDevServer(&fakeResources{})
 		s.PushEnv(map[string]string{"INITIAL": "1"})
 		url := serve(t, s)
 
@@ -442,7 +442,7 @@ func TestEnvStream(t *testing.T) {
 
 	t.Run("a new subscriber immediately gets the latest env", func(t *testing.T) {
 		t.Parallel()
-		s := newDevServer(&fakeStack{})
+		s := newDevServer(&fakeResources{})
 		s.PushEnv(map[string]string{"FOO": "bar"})
 		url := serve(t, s)
 

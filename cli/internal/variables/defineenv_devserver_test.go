@@ -3,12 +3,15 @@ package variables_test
 import (
 	"context"
 	"errors"
+	"io"
 	"net"
 	"net/http"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/ocelhq/ocel/cli/internal/discovery"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/devresources"
@@ -39,10 +42,10 @@ func TestDefineEnvDeclaresThroughTheDevServer(t *testing.T) {
 		}
 
 		var stdout, stderr strings.Builder
-		if err := srv.Discover(context.Background(), cfg, &stdout, &stderr); err != nil {
+		if err := discover(cfg, srv, &stdout, &stderr); err != nil {
 			t.Fatalf("discovery: %v\nstdout: %s\nstderr: %s", err, stdout.String(), stderr.String())
 		}
-		<-srv.Sync()
+		<-srv.SyncResults()
 
 		t.Run("a declared scope arrives with its folders", func(t *testing.T) {
 			scoped := srv.ScopedFolders()
@@ -85,6 +88,21 @@ func TestDefineEnvDeclaresThroughTheDevServer(t *testing.T) {
 			}
 		})
 	})
+}
+
+func discover(cfg *projectconfig.Config, srv *devserver.Server, stdout, stderr io.Writer) error {
+	roots, err := discovery.RootsOf(cfg)
+	if err != nil {
+		return err
+	}
+	prepared, err := discovery.Prepare(cfg.Dir, roots)
+	if err != nil {
+		return err
+	}
+	if err := discovery.Run(context.Background(), cfg.Dir, prepared, srv.DiscoveryTarget(), stdout, stderr); err != nil {
+		return err
+	}
+	return srv.TakeSDKRefusal()
 }
 
 func serveDevServer(t *testing.T) *devserver.Server {

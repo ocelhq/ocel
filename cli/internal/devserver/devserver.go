@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"slices"
 	"strings"
@@ -16,7 +15,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/devresources/binding"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/resourceregistry"
 	"github.com/ocelhq/ocel/cli/internal/sdkversion"
 	"github.com/ocelhq/ocel/cli/internal/variables"
@@ -27,57 +25,55 @@ import (
 )
 
 type SyncResult struct {
-	Resources        []binding.Resolved
-	DevServerAddress string
-	AppToken         string
-	LiveValues       map[string]string
-	LiveKeys         []string
-	Err              error
+	Resources    []binding.Resolved
+	DevServerURL string
+	AppToken     string
+	SecretValues map[string]string
+	SecretKeys   []string
+	Err          error
 }
 
-type Stack interface {
+type Resources interface {
 	Resolve(ctx context.Context, resources []declare.Resource) ([]binding.Resolved, error)
 	Routes(mux *http.ServeMux, guard func(http.Handler) http.Handler, options ...connect.HandlerOption)
 }
 
 type Server struct {
-	registry      *resourceregistry.Registry
-	stack         Stack
-	devServerAddr string
-	sessionToken  string
-	appToken      string
-	syncCh        chan SyncResult
-	sdk           *sdkversion.Gate
+	registry       *resourceregistry.Registry
+	resources      Resources
+	url            string
+	discoveryToken string
+	appToken       string
+	syncResults    chan SyncResult
+	sdk            *sdkversion.Gate
 
-	live   *liveKeys
-	env    *envState
+	env    *envValues
 	fanout *envFanout
 }
 
-func New(devServerAddr string, stack Stack) *Server {
+func New(url string, resources Resources) *Server {
 	return &Server{
-		registry:      resourceregistry.New(),
-		stack:         stack,
-		devServerAddr: devServerAddr,
-		sessionToken:  channel.NewSessionToken(),
-		appToken:      channel.NewSessionToken(),
-		syncCh:        make(chan SyncResult, 1),
-		sdk:           sdkversion.NewGate(version.Version),
-		live:          newLiveKeys(),
-		env:           newEnvState(),
-		fanout:        newEnvFanout(),
+		registry:       resourceregistry.New(),
+		resources:      resources,
+		url:            url,
+		discoveryToken: channel.NewSessionToken(),
+		appToken:       channel.NewSessionToken(),
+		syncResults:    make(chan SyncResult, 1),
+		sdk:            sdkversion.NewGate(version.Version),
+		env:            newEnvValues(),
+		fanout:         newEnvFanout(),
 	}
 }
 
-func (s *Server) liveValues(keys []string) map[string]string {
+func (s *Server) secretValues(keys []string) map[string]string {
 	values := s.env.snapshot()
-	live := make(map[string]string, len(keys))
+	secrets := make(map[string]string, len(keys))
 	for _, key := range keys {
 		if value, ok := values[key]; ok {
-			live[key] = value
+			secrets[key] = value
 		}
 	}
-	return live
+	return secrets
 }
 
 func (s *Server) Declare(_ context.Context, req *resourcesv1.DeclareRequest) (*resourcesv1.DeclareResponse, error) {
@@ -95,7 +91,6 @@ func (s *Server) UseValues(values map[string]string, scope variables.Scope) {
 }
 
 func (s *Server) DeclareEnv(ctx context.Context, req *resourcesv1.DeclareEnvRequest) (*resourcesv1.DeclareEnvResponse, error) {
-	s.live.declare(req.GetDefinitions())
 	return s.env.declare(ctx, req)
 }
 
@@ -141,27 +136,30 @@ func (s *Server) ReportEnvProblems(ctx context.Context, req *resourcesv1.ReportE
 	return &resourcesv1.ReportEnvProblemsResponse{}, nil
 }
 
-func (s *Server) ResetManifest() {
+func (s *Server) ResetDeclarations() {
 	s.registry.Reset()
-	s.live.reset()
 	s.env.forgetDeclarations()
 }
 
-func (s *Server) SessionToken() string { return s.sessionToken }
+func (s *Server) DiscoveryTarget() discovery.Server {
+	return discovery.Server{URL: s.url, Token: s.discoveryToken}
+}
+
+func (s *Server) TakeSDKRefusal() error { return s.sdk.Take() }
 
 func (s *Server) AppToken() string { return s.appToken }
 
 func (s *Server) guard(token string, next http.Handler) http.Handler {
-	return channel.LoopbackGuard(strings.TrimPrefix(s.devServerAddr, "http://"), token, next)
+	return channel.LoopbackGuard(strings.TrimPrefix(s.url, "http://"), token, next)
 }
 
 func (s *Server) Mux() *http.ServeMux {
 	mux := http.NewServeMux()
 	interceptors := connect.WithInterceptors(validate.NewInterceptor())
 	resourcePath, resourceHandler := resourcesv1connect.NewResourceServiceHandler(s, connect.WithInterceptors(validate.NewInterceptor(), s.sdk.Interceptor()))
-	mux.Handle(resourcePath, s.guard(s.sessionToken, resourceHandler))
-	s.stack.Routes(mux, func(next http.Handler) http.Handler { return s.guard(s.appToken, next) }, interceptors)
-	mux.Handle("/sync", s.guard(s.sessionToken, http.HandlerFunc(s.handleSync)))
+	mux.Handle(resourcePath, s.guard(s.discoveryToken, resourceHandler))
+	s.resources.Routes(mux, func(next http.Handler) http.Handler { return s.guard(s.appToken, next) }, interceptors)
+	mux.Handle("/sync", s.guard(s.discoveryToken, http.HandlerFunc(s.handleSync)))
 	mux.Handle("/env", s.guard(s.appToken, http.HandlerFunc(s.handleEnv)))
 	return mux
 }
@@ -208,16 +206,16 @@ func (s *Server) handleEnv(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) Sync() <-chan SyncResult {
-	return s.syncCh
+func (s *Server) SyncResults() <-chan SyncResult {
+	return s.syncResults
 }
 
 func (s *Server) deliverSync(res SyncResult) {
 	select {
-	case <-s.syncCh:
+	case <-s.syncResults:
 	default:
 	}
-	s.syncCh <- res
+	s.syncResults <- res
 }
 
 func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
@@ -226,7 +224,7 @@ func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resolved, err := s.stack.Resolve(r.Context(), s.registry.Snapshot())
+	resolved, err := s.resources.Resolve(r.Context(), s.registry.Snapshot())
 	if err != nil {
 		err = fmt.Errorf("resolve resources: %w", err)
 		s.deliverSync(SyncResult{Err: err})
@@ -234,28 +232,9 @@ func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	liveKeys := s.live.sorted()
-	s.deliverSync(SyncResult{Resources: resolved, DevServerAddress: s.devServerAddr, AppToken: s.appToken, LiveValues: s.liveValues(liveKeys), LiveKeys: liveKeys})
+	secretKeys := s.env.secretKeys()
+	s.deliverSync(SyncResult{Resources: resolved, DevServerURL: s.url, AppToken: s.appToken, SecretValues: s.secretValues(secretKeys), SecretKeys: secretKeys})
 	w.WriteHeader(http.StatusOK)
-}
-
-func (s *Server) Discover(ctx context.Context, cfg *projectconfig.Config, stdout, stderr io.Writer) error {
-	roots, err := discovery.RootsOf(cfg)
-	if err != nil {
-		return err
-	}
-
-	prepared, err := discovery.Prepare(cfg.Dir, roots)
-	if err != nil {
-		return err
-	}
-
-	_ = s.sdk.Take()
-	err = discovery.Run(ctx, cfg.Dir, prepared, discovery.Server{URL: s.devServerAddr, Token: s.sessionToken}, stdout, stderr)
-	if refused := s.sdk.Take(); refused != nil {
-		return refused
-	}
-	return err
 }
 
 func (s *Server) ClientKeys() ([]clientenv.Key, error) {
