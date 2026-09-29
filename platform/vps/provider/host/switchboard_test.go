@@ -339,13 +339,13 @@ func TestTheBoxProbesWhatItServesOnItsOwnHttpsPortWithoutDocker(t *testing.T) {
 func TestTheDeployLoginIsToldItRunsTheSwitchboardAndCannotWriteIt(t *testing.T) {
 	t.Parallel()
 
-	at := slices.IndexFunc(grants(environment.TierProduction, ArchAMD64), func(grant Grant) bool {
+	at := slices.IndexFunc(grants(environment.TierProduction, ArchAMD64, Front{}), func(grant Grant) bool {
 		return grant.Name == "runs "+SwitchboardBinary
 	})
 	if at < 0 {
 		t.Fatalf("the deploy grants never name %s, and the deploy login runs it on the box for every loopback probe", SwitchboardBinary)
 	}
-	if detail := grants(environment.TierProduction, ArchAMD64)[at].Detail; !strings.Contains(detail, "0755") || !strings.Contains(detail, "cannot write it") {
+	if detail := grants(environment.TierProduction, ArchAMD64, Front{})[at].Detail; !strings.Contains(detail, "0755") || !strings.Contains(detail, "cannot write it") {
 		t.Errorf("the grant reads %q, want the mode it is written at and that the login cannot write it", detail)
 	}
 }

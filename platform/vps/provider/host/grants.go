@@ -14,10 +14,10 @@ type Grant struct {
 	Detail string
 }
 
-func Grants(tier environment.Tier) []Grant { return grants(tier, ArchAMD64) }
+func Grants(tier environment.Tier, front Front) []Grant { return grants(tier, ArchAMD64, front) }
 
-func grants(tier environment.Tier, arch string) []Grant {
-	items := Items(tier, nil, arch, Front{})
+func grants(tier environment.Tier, arch string, front Front) []Grant {
+	items := Items(tier, nil, arch, front)
 	deployer := deployLogin()
 
 	var grants []Grant
@@ -60,11 +60,13 @@ func grants(tier environment.Tier, arch string) []Grant {
 		})
 	}
 	grants = append(grants, sealing(items, tier, deployer)...)
-	grants = append(grants, Grant{
-		Name: "reloads your Caddy as root, through one line in " + sudoersCaddyReload + ", behind a caddy option with no container",
-		Detail: "the line is\n\n      " + strings.TrimSpace(string(caddyReloadSudoers())) +
-			"\n\n    which runs the unit's own `caddy reload`, in Caddy's environment. Bootstrap writes it only for a Caddy that runs as caddy.service, and `ocel destroy` removes it",
-	})
+	if line := written(items, KindFile, sudoersCaddyReload); line.Name != "" {
+		grants = append(grants, Grant{
+			Name: "reloads your Caddy as root, through one line in " + line.Name,
+			Detail: "the line is\n\n      " + strings.TrimSpace(string(line.Content)) +
+				"\n\n    which runs the unit's own `caddy reload`, in Caddy's environment. Bootstrap writes it only for a Caddy that runs as caddy.service, and `ocel destroy` removes it",
+		})
+	}
 	if agent := written(items, KindFile, LiveBinary); agent.Name != "" {
 		grants = append(grants, Grant{
 			Name: "no hand in " + LiveSocket,

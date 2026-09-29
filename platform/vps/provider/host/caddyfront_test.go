@@ -87,11 +87,32 @@ func TestACaddyServiceIsReloadedThroughOneSudoersLineThatBootstrapWritesAndGrant
 	if slices.ContainsFunc(ProxyItems(ArchAMD64, coolifysCaddy()), func(item Item) bool { return item.Name == sudoersCaddyReload }) {
 		t.Errorf("a Caddy in a container is given %s, want no sudo: docker exec reloads it", sudoersCaddyReload)
 	}
-	granted := slices.ContainsFunc(grants(environment.TierProduction, ArchAMD64), func(grant Grant) bool {
+	granted := slices.ContainsFunc(grants(environment.TierProduction, ArchAMD64, caddyService()), func(grant Grant) bool {
 		return strings.Contains(grant.Name, sudoersCaddyReload) && strings.Contains(grant.Detail, strings.TrimSpace(string(line.Content)))
 	})
 	if !granted {
 		t.Errorf("the grants never name %s and the line it holds", sudoersCaddyReload)
+	}
+}
+
+func TestTheCaddyReloadLineIsGrantedOnlyWhereBootstrapWritesIt(t *testing.T) {
+	t.Parallel()
+
+	for name, front := range map[string]Front{
+		"ocel's own proxy":  {},
+		"Coolify's Caddy":   coolifysCaddy(),
+		"a manual proxy":    {Manual: &ManualFront{Port: 8480}},
+		"a Caddy container": {Caddy: &CaddyFront{Directory: "/etc/caddy/ocel.d", Container: "caddy", Network: "web"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			for _, grant := range grants(environment.TierProduction, ArchAMD64, front) {
+				if strings.Contains(grant.Name, sudoersCaddyReload) {
+					t.Errorf("the grants behind %s name %q, want no %s: bootstrap writes it only for a Caddy that runs as caddy.service", name, grant.Name, sudoersCaddyReload)
+				}
+			}
+		})
 	}
 }
 

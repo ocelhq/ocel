@@ -76,7 +76,7 @@ func TestTheDeployDocumentNamesEveryGrantTheApplyMakes(t *testing.T) {
 
 	document := rendered(t, edge.PurposeDeploy).Document
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		for _, grant := range host.Grants(tier) {
+		for _, grant := range host.Grants(tier, host.Front{}) {
 			for _, want := range []string{grant.Name, grant.Detail} {
 				if !strings.Contains(document, want) {
 					t.Errorf("the deploy document does not include %q, so it claims less than a bootstrap hands out:\n%s", want, document)
@@ -126,7 +126,7 @@ func TestTheDeployDocumentSaysWhatTheDockerGroupIs(t *testing.T) {
 	group := describedGroup(t, tier)
 
 	var claim host.Grant
-	for _, grant := range host.Grants(tier) {
+	for _, grant := range host.Grants(tier, host.Front{}) {
 		if grant.Name == "membership of the "+group+" group" {
 			claim = grant
 		}
@@ -159,6 +159,26 @@ func TestTheDeployDocumentIncludesTheOneSudoersLineTheSealHelperNeeds(t *testing
 		return
 	}
 	t.Fatal("nothing in the item set whitelists the seal helper, so the deploy login seals nothing")
+}
+
+func TestTheDeployDocumentNamesTheCaddyReloadLineOnlyBehindACaddyService(t *testing.T) {
+	t.Parallel()
+
+	for proxy, want := range map[*vps.Proxy]bool{
+		nil: false,
+		{Caddy: &vps.Caddy{Directory: "/etc/caddy/ocel.d"}}:                                     true,
+		{Caddy: &vps.Caddy{Directory: "/etc/caddy/ocel.d", Container: "caddy", Network: "web"}}: false,
+		{Caddy: &vps.Caddy{Preset: "coolify"}}:                                                  false,
+	} {
+		p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10", User: "deployer"}, Proxy: proxy})
+		document, err := p.Credentials().Permissions(edge.PurposeDeploy)
+		if err != nil {
+			t.Fatalf("Permissions(deploy) = %v", err)
+		}
+		if named := strings.Contains(document.Document, "/etc/sudoers.d/ocel-caddy-reload"); named != want {
+			t.Errorf("behind %+v the deploy document names /etc/sudoers.d/ocel-caddy-reload = %v, want %v: bootstrap writes it only for a Caddy that runs as caddy.service", proxy, named, want)
+		}
+	}
 }
 
 func TestTheDeployDocumentSaysTheSealKeyIsNotTheDeployLoginsToRead(t *testing.T) {

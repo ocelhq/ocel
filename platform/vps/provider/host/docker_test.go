@@ -328,7 +328,7 @@ func TestTheDocumentSaysWhereTheDaemonTheGroupReachesCameFrom(t *testing.T) {
 
 	tier := environment.TierProduction
 	var claim Grant
-	for _, grant := range Grants(tier) {
+	for _, grant := range Grants(tier, Front{}) {
 		if grant.Name == "membership of the "+dockerGroup+" group" {
 			claim = grant
 		}

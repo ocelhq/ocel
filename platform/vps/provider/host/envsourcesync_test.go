@@ -163,7 +163,7 @@ func TestTheDeployLoginIsToldTheEnvSourceSyncIsRootsAndWhatItMayWrite(t *testing
 
 	tier := environment.TierPreview
 	var named bool
-	for _, grant := range Grants(tier) {
+	for _, grant := range Grants(tier, Front{}) {
 		if !strings.Contains(grant.Name, EnvSourceSyncService(tier)) {
 			continue
 		}

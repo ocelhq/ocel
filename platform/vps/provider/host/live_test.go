@@ -141,7 +141,7 @@ func TestTheDeployLoginIsToldItHasNoHandInTheAgent(t *testing.T) {
 	t.Parallel()
 
 	var named bool
-	for _, grant := range Grants(environment.TierProduction) {
+	for _, grant := range Grants(environment.TierProduction, Front{}) {
 		if !strings.Contains(grant.Name, live.SocketPath) {
 			continue
 		}
