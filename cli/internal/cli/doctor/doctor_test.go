@@ -50,7 +50,7 @@ func TestDoctorRendersEveryVerdict(t *testing.T) {
 	found.add(project)
 
 	edge := section{name: "Relay"}
-	edge.fail("CLOUDFLARE_API_TOKEN rejected", "create a token with the scopes from `ocel permissions deploy`")
+	edge.fail("FAKE_RELAY_TOKEN rejected", "create a token with the scopes from `ocel permissions deploy`")
 	found.add(edge)
 
 	preview := section{name: "Preview"}
@@ -66,7 +66,7 @@ func TestDoctorRendersEveryVerdict(t *testing.T) {
 		"  ✓ config loads — 2 apps (web, api)",
 		"",
 		"Relay",
-		"  ✗ CLOUDFLARE_API_TOKEN rejected",
+		"  ✗ FAKE_RELAY_TOKEN rejected",
 		"    → create a token with the scopes from `ocel permissions deploy`",
 		"",
 		"Preview",

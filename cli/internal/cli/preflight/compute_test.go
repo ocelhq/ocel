@@ -47,11 +47,11 @@ func TestAnAppThatNamesAComputeItsProviderDoesNotRunFailsThePlanByName(t *testin
 
 	cfg := &projectconfig.Config{Apps: []projectconfig.App{{Name: "web"}, {Name: "api", Compute: "container"}}}
 
-	_, err := ResolveComputes(cfg, []string{"serverless"}, "aws")
+	_, err := ResolveComputes(cfg, []string{"serverless"}, "fake")
 	if err == nil {
 		t.Fatal("ResolveComputes() admitted a compute the provider does not run, want the plan refused")
 	}
-	for _, want := range []string{`"api"`, `"container"`, "aws", "serverless"} {
+	for _, want := range []string{`"api"`, `"container"`, "fake", "serverless"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("ResolveComputes() error = %q, want it to name %s", err, want)
 		}
@@ -99,7 +99,7 @@ func TestARefusedPlanLeavesNoAppHalfResolved(t *testing.T) {
 
 	cfg := &projectconfig.Config{Apps: []projectconfig.App{{Name: "web"}, {Name: "api", Compute: "container"}}}
 
-	if _, err := ResolveComputes(cfg, []string{"serverless"}, "aws"); err == nil {
+	if _, err := ResolveComputes(cfg, []string{"serverless"}, "fake"); err == nil {
 		t.Fatal("ResolveComputes() admitted a compute the provider does not run, want the plan refused")
 	}
 	if cfg.Apps[0].Compute != "" {
@@ -112,11 +112,11 @@ func TestAProviderWhoseIdentityIsEmptyIsStillNamedByThePlan(t *testing.T) {
 
 	cfg := &projectconfig.Config{Apps: []projectconfig.App{{Name: "api"}}}
 
-	_, err := ResolveComputes(cfg, nil, "aws")
+	_, err := ResolveComputes(cfg, nil, "fake")
 	if err == nil {
 		t.Fatal("ResolveComputes() accepted a provider that names no compute, want the plan refused")
 	}
-	if !strings.Contains(err.Error(), "aws") {
+	if !strings.Contains(err.Error(), "fake") {
 		t.Errorf("ResolveComputes() error = %q, want the provider named from the package the project pins, which is known whether or not preflight could answer an identity", err)
 	}
 }
@@ -129,7 +129,7 @@ func TestAServerlessAppThatConfiguresABuildFailsThePlanByName(t *testing.T) {
 		{Name: "api", Compute: "serverless", Build: &projectconfig.Build{Dockerfile: "Dockerfile"}},
 	}}
 
-	_, err := ResolveComputes(cfg, []string{"serverless", "container"}, "aws")
+	_, err := ResolveComputes(cfg, []string{"serverless", "container"}, "fake")
 	if err == nil {
 		t.Fatal("ResolveComputes() admitted a build on a serverless app, which builds no image, so config that can do nothing would look like it might")
 	}
@@ -150,7 +150,7 @@ func TestAnAppThatFallsBackToServerlessIsRefusedItsBuildToo(t *testing.T) {
 		{Name: "api", Build: &projectconfig.Build{Dockerfile: "Dockerfile"}},
 	}}
 
-	if _, err := ResolveComputes(cfg, []string{"serverless"}, "aws"); err == nil {
+	if _, err := ResolveComputes(cfg, []string{"serverless"}, "fake"); err == nil {
 		t.Fatal("ResolveComputes() admitted a build on an app its provider runs serverless, so the refusal turns on what the config says rather than what the app runs on")
 	}
 }
@@ -163,7 +163,7 @@ func TestAContainerAppThatDeclaresAFrameworkFailsThePlanByTheKeyOcelJSONSets(t *
 		{Name: "api", Compute: "container", Framework: projectconfig.Framework{Name: "next"}},
 	}}
 
-	_, err := ResolveComputes(cfg, []string{"serverless", "container"}, "aws")
+	_, err := ResolveComputes(cfg, []string{"serverless", "container"}, "fake")
 	if err == nil {
 		t.Fatal("ResolveComputes() admitted a framework on a container app, which runs the image it is given, so config that can do nothing would look like it might")
 	}
@@ -202,7 +202,7 @@ func TestAnAppWhoseFrameworkWasOnlyDetectedKeepsItOnServerless(t *testing.T) {
 		{Name: "web", Framework: projectconfig.Framework{Name: "next", Detected: true}},
 	}}
 
-	if _, err := ResolveComputes(cfg, []string{"serverless", "container"}, "aws"); err != nil {
+	if _, err := ResolveComputes(cfg, []string{"serverless", "container"}, "fake"); err != nil {
 		t.Fatalf("ResolveComputes() error = %v", err)
 	}
 	if got := cfg.Apps[0].Framework.Name; got != "next" {
@@ -230,7 +230,7 @@ func TestAServerlessAppThatConfiguresAHealthCheckFailsThePlanByName(t *testing.T
 		{Name: "api", Compute: "serverless", Health: &projectconfig.Health{Path: "/healthz"}},
 	}}
 
-	_, err := ResolveComputes(cfg, []string{"serverless", "container"}, "aws")
+	_, err := ResolveComputes(cfg, []string{"serverless", "container"}, "fake")
 	if err == nil {
 		t.Fatal("ResolveComputes() admitted a health check on a serverless app, which has no always-on process to probe, so config that can do nothing would look like it might")
 	}
@@ -251,7 +251,7 @@ func TestAnAppThatFallsBackToServerlessIsRefusedItsHealthCheckToo(t *testing.T) 
 		{Name: "api", Health: &projectconfig.Health{Path: "/healthz"}},
 	}}
 
-	if _, err := ResolveComputes(cfg, []string{"serverless"}, "aws"); err == nil {
+	if _, err := ResolveComputes(cfg, []string{"serverless"}, "fake"); err == nil {
 		t.Fatal("ResolveComputes() admitted a health check on an app its provider runs serverless, so the refusal turns on what the config says rather than what the app runs on")
 	}
 }
