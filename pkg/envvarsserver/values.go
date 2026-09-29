@@ -3,6 +3,7 @@ package envvarsserver
 import (
 	"context"
 	"errors"
+	"slices"
 
 	"github.com/ocelhq/ocel/pkg/envvars"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
@@ -109,7 +110,7 @@ func (h *Service) ListVersions(ctx context.Context, req *envvarsv1.ListVersionsR
 		return nil, valuesError(err)
 	}
 	resp := &envvarsv1.ListVersionsResponse{Versions: make([]*envvarsv1.VersionEntry, 0, len(history))}
-	for _, v := range history {
+	for _, v := range slices.Backward(history) {
 		resp.Versions = append(resp.Versions, &envvarsv1.VersionEntry{
 			Version:   v.Version,
 			CreatedAt: v.CreatedAt,

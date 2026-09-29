@@ -134,6 +134,9 @@ func TestVersionsAndDeleteAnswerAcrossTheWire(t *testing.T) {
 	if err != nil || len(history.GetVersions()) != 2 {
 		t.Fatalf("ListVersions() = %+v, %v, want one entry per write", history.GetVersions(), err)
 	}
+	if newest := history.GetVersions()[0].GetVersion(); newest != 2 {
+		t.Errorf("ListVersions() lists version %d first, want the newest, 2", newest)
+	}
 
 	stale := int64(1)
 	_, err = vars.DeleteValue(ctx, &envvarsv1.DeleteValueRequest{
