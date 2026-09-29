@@ -13,6 +13,10 @@ import type { StackCheck } from "../stacks";
 import { namespaceOfSlug } from "../targets/aws/namespace";
 import { type Deployment, hasReleaseCycle, type Target } from "../targets/types";
 
+export function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export type CellUnderTest = Pick<
   CellRun,
   "name" | "fixture" | "variant" | "dir" | "slug" | "runId" | "evidence"
@@ -128,7 +132,7 @@ export class CellRun {
   ): Promise<void> {
     assert.ok(this.deployment, "a check ran before the cell was deployed");
     const guard = secretGuarded(this.deployment.fetch);
-    await work({
+    const failure = await work({
       app,
       baseUrl: this.deployment.baseUrl(app),
       greeting: this.greeting,
@@ -136,8 +140,23 @@ export class CellRun {
       phase,
       notes: this.notes,
       fetch: guard.fetch,
-    });
-    await guard.settle();
+    }).then(
+      () => undefined,
+      (error: unknown) => ({ error }),
+    );
+    try {
+      await guard.settle();
+    } catch (leak) {
+      if (failure) {
+        throw new Error(`${messageOf(leak)}; the check also failed: ${messageOf(failure.error)}`, {
+          cause: failure.error,
+        });
+      }
+      throw leak;
+    }
+    if (failure) {
+      throw failure.error;
+    }
   }
 
   async finish(phases: Phase[]): Promise<void> {

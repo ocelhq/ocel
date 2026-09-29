@@ -181,6 +181,29 @@ describe("a cell run", () => {
     ).rejects.toThrow(/\/api\/probes\/env leaked the secret value/);
   });
 
+  it("reports both a leak and the check's own failure when a check throws after the secret came back", async () => {
+    const run = runOf([], { answer: `{"token":"${SECRET_TOKEN}"}` });
+    await run.deploy();
+    const rejected = run.verify("web", "verify", async (ctx) => {
+      await ctx.fetch(`${ctx.baseUrl}/api/probes/env`);
+      throw new Error("the check's own failure");
+    });
+    await expect(rejected).rejects.toThrow(/leaked the secret value/);
+    await expect(rejected).rejects.toThrow(/the check's own failure/);
+  });
+
+  it("rethrows a check's own failure unchanged when nothing leaked", async () => {
+    const run = runOf([]);
+    await run.deploy();
+    const failure = new Error("the check's own failure");
+    await expect(
+      run.verify("web", "verify", async (ctx) => {
+        await ctx.fetch(`${ctx.baseUrl}/api/probes/env`);
+        throw failure;
+      }),
+    ).rejects.toBe(failure);
+  });
+
   it("deploys before it redeploys, however the steps are ordered", async () => {
     const called: Called = [];
     await runOf(called).redeploy();
