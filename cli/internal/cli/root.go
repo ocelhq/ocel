@@ -42,14 +42,14 @@ func explicitConfigPath() string {
 	if configFlag != "" {
 		return configFlag
 	}
-	return os.Getenv("OCEL_CONFIG")
+	return os.Getenv(cmddeps.ConfigEnvVar)
 }
 
 func verboseEnabled() bool {
 	if verboseFlag {
 		return true
 	}
-	_, ok := os.LookupEnv("OCEL_DEBUG")
+	_, ok := os.LookupEnv(cmddeps.DebugEnvVar)
 	return ok
 }
 
@@ -162,7 +162,7 @@ func gitBranch(dir string) (string, error) {
 }
 
 func prNumberFromEnv() string {
-	if n := os.Getenv("OCEL_PR_NUMBER"); n != "" {
+	if n := os.Getenv(cmddeps.PRNumberEnvVar); n != "" {
 		return n
 	}
 	return prNumberFromRef(os.Getenv("GITHUB_REF"))

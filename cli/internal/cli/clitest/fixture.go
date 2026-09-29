@@ -55,9 +55,9 @@ func NewDeps() cmddeps.Deps {
 		DeploymentID:            build.DeploymentID,
 		CollectDeclarations:     declaration.Collect,
 		ServeVariableEditor:     projecteditor.Serve,
-		DiscoverPRNumber:        func() string { return os.Getenv("OCEL_PR_NUMBER") },
+		DiscoverPRNumber:        func() string { return os.Getenv(cmddeps.PRNumberEnvVar) },
 		StdinIsTerminal:         func(io.Reader) bool { return false },
-		ConfigPath:              func() string { return os.Getenv("OCEL_CONFIG") },
+		ConfigPath:              func() string { return os.Getenv(cmddeps.ConfigEnvVar) },
 		Presentation:            func(io.Writer) terminal.Presentation { return terminal.Resolve(terminal.Conditions{}) },
 		Events:                  run.NewBus(time.Now),
 	}
@@ -103,7 +103,7 @@ func IsolateConfigHome() func() {
 		panic(err)
 	}
 	os.Setenv("XDG_CONFIG_HOME", dir)
-	os.Unsetenv("OCEL_CONFIG")
+	os.Unsetenv(cmddeps.ConfigEnvVar)
 	return func() { os.RemoveAll(dir) }
 }
 

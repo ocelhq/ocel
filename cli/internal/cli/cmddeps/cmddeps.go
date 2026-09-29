@@ -54,6 +54,12 @@ func (d Deps) LoadOptionalProject(ctx context.Context, cwd string) (*project.Pro
 
 const NoBrowserEnvVar = "OCEL_NO_BROWSER"
 
+const ConfigEnvVar = "OCEL_CONFIG"
+
+const DebugEnvVar = "OCEL_DEBUG"
+
+const PRNumberEnvVar = "OCEL_PR_NUMBER"
+
 func (d Deps) BrowserReachable(stdin io.Reader) bool {
 	return os.Getenv(NoBrowserEnvVar) == "" && d.StdinIsTerminal(stdin)
 }
