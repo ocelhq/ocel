@@ -9,9 +9,10 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/terminal"
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/envvars"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 
@@ -20,7 +21,7 @@ import (
 
 func TestTheListingShowsMetadataButNeverValues(t *testing.T) {
 	t.Run("shows keys and metadata but never values", func(t *testing.T) {
-		root := setUpEnvFixture(t)
+		root := setUpEnvFixture(t).Root
 		envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
 		envSet(t, root, "POSTHOG_ID", "ph_public_id", envOptions{folder: "/web"})
 
@@ -43,7 +44,7 @@ func TestTheListingShowsMetadataButNeverValues(t *testing.T) {
 	})
 
 	t.Run("reports an empty store", func(t *testing.T) {
-		root := setUpEnvFixture(t)
+		root := setUpEnvFixture(t).Root
 
 		var stdout, stderr bytes.Buffer
 		if err := runEnvList(context.Background(), newStreamedDependencies(&stderr), root, envOptions{}, &stdout, &stderr); err != nil {
@@ -55,13 +56,13 @@ func TestTheListingShowsMetadataButNeverValues(t *testing.T) {
 	})
 
 	t.Run("a production override is orphaned though a preview shares its name", func(t *testing.T) {
-		root := setUpEnvFixture(t)
-		seedFakeValue(t, environmentv1.Tier_TIER_PRODUCTION,
-			&envvarsv1.Coordinate{Slug: "test-app", Key: "STRIPE_API_KEY", Environment: "staging"}, "sk_stray")
-		t.Setenv(clitest.FakeEnvironmentsEnvVar, "staging")
+		project := setUpEnvFixture(t)
+		seedValue(t, project, environment.TierProduction, clitest.FixtureSlug,
+			envvars.Coordinate{Cell: envvars.Cell{Key: "STRIPE_API_KEY"}, Environment: "staging"}, "sk_stray")
+		seedEnvironment(t, project, "staging")
 
 		var ls bytes.Buffer
-		if err := runEnvList(context.Background(), newStreamedDependencies(&ls), root, envOptions{}, &ls, &ls); err != nil {
+		if err := runEnvList(context.Background(), newStreamedDependencies(&ls), project.Root, envOptions{}, &ls, &ls); err != nil {
 			t.Fatalf("runEnvList err = %v; out=%s", err, ls.String())
 		}
 		if !strings.Contains(ls.String(), "orphaned") {
@@ -141,7 +142,7 @@ func TestTheListingNamesFoldersOrphansAndDescriptions(t *testing.T) {
 }
 
 func TestListingValuesSaysWhoItActsAsInTheCheckPhaseOfItsRunAndPrintsTheListingAloneOnStdout(t *testing.T) {
-	root := setUpEnvFixture(t)
+	root := setUpEnvFixture(t).Root
 	envSet(t, root, "LOG_LEVEL", "debug", envOptions{})
 	dependencies := newTestDependencies()
 	dependencies.Presentation = func(io.Writer) terminal.Presentation {

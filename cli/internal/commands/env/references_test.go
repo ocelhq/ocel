@@ -6,22 +6,15 @@ import (
 	"strings"
 	"testing"
 
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
-	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/envvars"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 )
 
-func ownedElsewhere(t *testing.T, key, value string) {
+func ownedElsewhere(t *testing.T, project clitest.FakeProject, key, value string) {
 	t.Helper()
-	store, err := clitest.LoadFakeStore()
-	if err != nil {
-		t.Fatalf("load the fake store: %v", err)
-	}
-	c := &envvarsv1.Coordinate{Slug: "platform", Key: key}
-	if err := store.Write(environmentv1.Tier_TIER_PRODUCTION, c, clitest.FakeCellData{Value: value}); err != nil {
-		t.Fatalf("seed %s: %v", key, err)
-	}
+	seedValue(t, project, environment.TierProduction, "platform", cellAt(key), value)
 }
 
 func envRef(t *testing.T, root, key string, opts envOptions, ref envRefOptions) string {
@@ -44,8 +37,9 @@ func envGet(t *testing.T, root, key string, opts envOptions) string {
 
 func TestAReferenceReadsAValueAnotherProjectOwns(t *testing.T) {
 	t.Run("reads a value another project owns and keeps reading it", func(t *testing.T) {
-		root := setUpEnvFixture(t)
-		ownedElsewhere(t, "STRIPE_API_KEY", "sk_live_first")
+		project := setUpEnvFixture(t)
+		root := project.Root
+		ownedElsewhere(t, project, "STRIPE_API_KEY", "sk_live_first")
 
 		out := envRef(t, root, "STRIPE_API_KEY", envOptions{}, envRefOptions{project: "platform"})
 		if !strings.Contains(out, "platform/STRIPE_API_KEY") {
@@ -56,15 +50,16 @@ func TestAReferenceReadsAValueAnotherProjectOwns(t *testing.T) {
 			t.Errorf("revealed value = %q, want the owner's", got)
 		}
 
-		ownedElsewhere(t, "STRIPE_API_KEY", "sk_live_rotated")
+		ownedElsewhere(t, project, "STRIPE_API_KEY", "sk_live_rotated")
 		if got := strings.TrimSpace(envGet(t, root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true})); got != "sk_live_rotated" {
 			t.Errorf("revealed value after an edit at the source = %q, want %q with nothing re-run here", got, "sk_live_rotated")
 		}
 	})
 
 	t.Run("refuses to point at another reference", func(t *testing.T) {
-		root := setUpEnvFixture(t)
-		ownedElsewhere(t, "STRIPE_API_KEY", "sk_live_secret")
+		project := setUpEnvFixture(t)
+		root := project.Root
+		ownedElsewhere(t, project, "STRIPE_API_KEY", "sk_live_secret")
 		envRef(t, root, "STRIPE_API_KEY", envOptions{}, envRefOptions{project: "platform"})
 
 		var stdout, stderr bytes.Buffer
@@ -78,7 +73,8 @@ func TestAReferenceReadsAValueAnotherProjectOwns(t *testing.T) {
 	})
 
 	t.Run("points at a value not set yet", func(t *testing.T) {
-		root := setUpEnvFixture(t)
+		project := setUpEnvFixture(t)
+		root := project.Root
 
 		var stdout, stderr bytes.Buffer
 		if err := runEnvRef(context.Background(), newStreamedDependencies(&stderr), root, "STRIPE_API_KEY", envOptions{}, envRefOptions{project: "platform"}, &stdout, &stderr); err != nil {
@@ -94,7 +90,7 @@ func TestAReferenceReadsAValueAnotherProjectOwns(t *testing.T) {
 			t.Errorf("stream = %q, want it to name the cell that contains nothing", errs.String())
 		}
 
-		ownedElsewhere(t, "STRIPE_API_KEY", "sk_live_secret")
+		ownedElsewhere(t, project, "STRIPE_API_KEY", "sk_live_secret")
 		if got := strings.TrimSpace(envGet(t, root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true})); got != "sk_live_secret" {
 			t.Errorf("value once the source was set = %q, want it read through with no second write", got)
 		}
@@ -103,17 +99,14 @@ func TestAReferenceReadsAValueAnotherProjectOwns(t *testing.T) {
 
 func TestListingReferencesNamesWhatReadsAValue(t *testing.T) {
 	t.Run("lists what reads a value, and says so plainly when nothing does", func(t *testing.T) {
-		root := setUpEnvFixture(t)
+		project := setUpEnvFixture(t)
+		root := project.Root
 		envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
 
-		store, err := clitest.LoadFakeStore()
-		if err != nil {
-			t.Fatalf("load the fake store: %v", err)
-		}
-		target := &envvarsv1.Coordinate{Slug: "test-app", Key: "STRIPE_API_KEY"}
-		consumer := &envvarsv1.Coordinate{Slug: "billing", Folder: "/api", Key: "STRIPE_API_KEY"}
-		pointer := clitest.CoordinateOf(target)
-		if err := store.Write(environmentv1.Tier_TIER_PRODUCTION, consumer, clitest.FakeCellData{Target: &pointer}); err != nil {
+		billing := envvars.Scope{Project: "billing", Tier: environment.TierProduction}
+		consumer := envvars.Coordinate{Cell: envvars.Cell{Folder: "/api", Key: "STRIPE_API_KEY"}}
+		target := envvars.Target{Project: clitest.FixtureSlug, Cell: envvars.Cell{Key: "STRIPE_API_KEY"}}
+		if _, err := valuesOf(project).SetReference(context.Background(), billing, consumer, target); err != nil {
 			t.Fatalf("seed the consumer: %v", err)
 		}
 
@@ -143,8 +136,9 @@ func TestListingReferencesNamesWhatReadsAValue(t *testing.T) {
 
 func TestEveryEnvCommandTreatsAReferenceAsAPointer(t *testing.T) {
 	t.Run("get says a cell is a reference and where its value is edited", func(t *testing.T) {
-		root := setUpEnvFixture(t)
-		ownedElsewhere(t, "STRIPE_API_KEY", "sk_live_secret")
+		project := setUpEnvFixture(t)
+		root := project.Root
+		ownedElsewhere(t, project, "STRIPE_API_KEY", "sk_live_secret")
 		envRef(t, root, "STRIPE_API_KEY", envOptions{}, envRefOptions{project: "platform"})
 
 		out := envGet(t, root, "STRIPE_API_KEY", envOptions{})
@@ -157,8 +151,9 @@ func TestEveryEnvCommandTreatsAReferenceAsAPointer(t *testing.T) {
 	})
 
 	t.Run("set refuses to edit through a reference", func(t *testing.T) {
-		root := setUpEnvFixture(t)
-		ownedElsewhere(t, "STRIPE_API_KEY", "sk_live_secret")
+		project := setUpEnvFixture(t)
+		root := project.Root
+		ownedElsewhere(t, project, "STRIPE_API_KEY", "sk_live_secret")
 		envRef(t, root, "STRIPE_API_KEY", envOptions{}, envRefOptions{project: "platform"})
 
 		var stdout, stderr bytes.Buffer
@@ -175,8 +170,9 @@ func TestEveryEnvCommandTreatsAReferenceAsAPointer(t *testing.T) {
 	})
 
 	t.Run("rm removes a reference without touching its source", func(t *testing.T) {
-		root := setUpEnvFixture(t)
-		ownedElsewhere(t, "STRIPE_API_KEY", "sk_live_secret")
+		project := setUpEnvFixture(t)
+		root := project.Root
+		ownedElsewhere(t, project, "STRIPE_API_KEY", "sk_live_secret")
 		envRef(t, root, "STRIPE_API_KEY", envOptions{}, envRefOptions{project: "platform"})
 
 		var stdout, stderr bytes.Buffer
@@ -187,22 +183,20 @@ func TestEveryEnvCommandTreatsAReferenceAsAPointer(t *testing.T) {
 			t.Errorf("rm stdout = %q, want the reference removed in one step", stdout.String())
 		}
 
-		store, err := clitest.LoadFakeStore()
+		platform := envvars.Scope{Project: "platform", Tier: environment.TierProduction}
+		source, err := valuesOf(project).Get(context.Background(), platform, cellAt("STRIPE_API_KEY"), true)
 		if err != nil {
-			t.Fatalf("load the fake store: %v", err)
+			t.Fatalf("the source value went with the reference, want removing a consumer to leave it alone: %v", err)
 		}
-		source := store[clitest.FakeCoordinateID(environmentv1.Tier_TIER_PRODUCTION, &envvarsv1.Coordinate{Slug: "platform", Key: "STRIPE_API_KEY"})]
-		if source.LiveVersion() == 0 {
-			t.Fatal("the source value went with the reference, want removing a consumer to leave it alone")
-		}
-		if got, err := store.Resolve(environmentv1.Tier_TIER_PRODUCTION, source); err != nil || got != "sk_live_secret" {
-			t.Errorf("source value = %q (err %v), want it untouched", got, err)
+		if source.Plaintext != "sk_live_secret" {
+			t.Errorf("source value = %q, want it untouched", source.Plaintext)
 		}
 	})
 
 	t.Run("ls shows where a reference reads from", func(t *testing.T) {
-		root := setUpEnvFixture(t)
-		ownedElsewhere(t, "STRIPE_API_KEY", "sk_live_secret")
+		project := setUpEnvFixture(t)
+		root := project.Root
+		ownedElsewhere(t, project, "STRIPE_API_KEY", "sk_live_secret")
 		envRef(t, root, "STRIPE_API_KEY", envOptions{}, envRefOptions{project: "platform"})
 
 		var stdout, stderr bytes.Buffer

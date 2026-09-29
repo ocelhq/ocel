@@ -21,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/valuestore"
 	"github.com/ocelhq/ocel/cli/internal/variableeditor"
 	"github.com/ocelhq/ocel/cli/internal/variables"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -78,8 +79,10 @@ func stored(t *testing.T, rows []variables.ValueMetadata, key string) variables.
 
 func TestTheValuesTheVariablesPageShowsAndChangesAreTheProvidersAnswers(t *testing.T) {
 	t.Run("List includes a named environment's value as an override", func(t *testing.T) {
-		root := setUpEnvFixture(t)
-		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
+		project := setUpEnvFixture(t)
+		root := project.Root
+		clitest.Bootstrap(t, project.Provider, environment.TierPreview)
+		seedEnvironment(t, project, "staging")
 		preview := envOptions{preview: true}
 
 		withProviderValues(t, root, preview, func(ctx context.Context, slug string, provider *providerprocess.Provider, values valuestore.Store) error {
@@ -107,7 +110,7 @@ func TestTheValuesTheVariablesPageShowsAndChangesAreTheProvidersAnswers(t *testi
 	})
 
 	t.Run("a refused reveal hands back the provider's own typed error", func(t *testing.T) {
-		root := setUpEnvFixture(t)
+		root := setUpEnvFixture(t).Root
 
 		withProviderValues(t, root, envOptions{}, func(ctx context.Context, slug string, provider *providerprocess.Provider, values valuestore.Store) error {
 			vars, err := provider.Vars()
@@ -141,7 +144,7 @@ func TestTheValuesTheVariablesPageShowsAndChangesAreTheProvidersAnswers(t *testi
 	})
 
 	t.Run("Set against a stale version is refused as a stale value", func(t *testing.T) {
-		root := setUpEnvFixture(t)
+		root := setUpEnvFixture(t).Root
 
 		withProviderValues(t, root, envOptions{}, func(ctx context.Context, slug string, provider *providerprocess.Provider, values valuestore.Store) error {
 			storeValue(t, ctx, provider, envOptions{}.tier(), &envvarsv1.Coordinate{Slug: slug, Key: "API_URL"}, "https://someone-elses.example")
@@ -167,7 +170,7 @@ func TestTheValuesTheVariablesPageShowsAndChangesAreTheProvidersAnswers(t *testi
 	})
 
 	t.Run("Delete against a stale version is refused as a stale value", func(t *testing.T) {
-		root := setUpEnvFixture(t)
+		root := setUpEnvFixture(t).Root
 
 		withProviderValues(t, root, envOptions{}, func(ctx context.Context, slug string, provider *providerprocess.Provider, values valuestore.Store) error {
 			coordinate := &envvarsv1.Coordinate{Slug: slug, Key: "API_URL"}
@@ -193,21 +196,6 @@ func TestTheValuesTheVariablesPageShowsAndChangesAreTheProvidersAnswers(t *testi
 			return nil
 		})
 	})
-}
-
-func syncedEnvSourceFixture(t *testing.T, descriptor envsource.Descriptor) string {
-	t.Helper()
-	root := setUpEnvSourceFixture(t, clitest.FakeEnvSource{
-		Values: []clitest.FakeEnvSourceValue{{Key: "STRIPE_API_KEY", Value: "sk"}, {Key: "RETIRED", Value: "old"}},
-		URLs:   map[string]string{"": "https://infisical.example/prod"},
-	})
-	setCredentials(t, root)
-	registerFakeEnvSource(t, environmentv1.Tier_TIER_PRODUCTION, descriptor)
-	var synced bytes.Buffer
-	if err := runEnvSync(context.Background(), newTestDependencies(), root, envOptions{}, &synced, &synced); err != nil {
-		t.Fatalf("runEnvSync err = %v; out=%s", err, synced.String())
-	}
-	return root
 }
 
 func withEditor(t *testing.T, root string, drive func(s *variableeditor.Session)) {
@@ -274,10 +262,10 @@ func matrixRow(state variableeditor.Page, key string) (variables.MatrixRow, bool
 }
 
 func TestEnvUINamesTheEnvSourceAndWhatItCopied(t *testing.T) {
-	root := syncedEnvSourceFixture(t, infisicalProduction)
-	withEditor(t, root, func(s *variableeditor.Session) {
+	project, source := syncedEnvSourceFixture(t, envsource.WriteNever)
+	withEditor(t, project.Root, func(s *variableeditor.Session) {
 		state := editorPage(t, s)
-		if state.EnvSource == nil || state.EnvSource.ID != "infisical:p-1/prod" || state.EnvSource.URLs[""] != "https://infisical.example/prod" {
+		if state.EnvSource == nil || state.EnvSource.ID != "infisical:p-1/prod" || !strings.HasPrefix(state.EnvSource.URLs[""], source.URL+"/organizations/org-1/") {
 			t.Fatalf("env source = %+v, want infisical named with its root URL", state.EnvSource)
 		}
 		if !slices.Equal(state.EnvSource.Credentials, []string{"INFISICAL_CLIENT_ID", "INFISICAL_CLIENT_SECRET"}) {
@@ -299,11 +287,11 @@ func TestEnvUINamesTheEnvSourceAndWhatItCopied(t *testing.T) {
 }
 
 func TestEnvUIUpdatesAValueTheEnvSourceHoldsUnderWriteValues(t *testing.T) {
-	root := syncedEnvSourceFixture(t, writing(envsource.WriteValues))
+	project, source := syncedEnvSourceFixture(t, envsource.WriteValues)
 
-	withEditor(t, root, func(s *variableeditor.Session) {
-		if source := editorPage(t, s).EnvSource; source == nil || !source.CanCreate || !source.CanUpdate {
-			t.Fatalf("env source = %+v, want one ocel may create and update values in", source)
+	withEditor(t, project.Root, func(s *variableeditor.Session) {
+		if described := editorPage(t, s).EnvSource; described == nil || !described.CanCreate || !described.CanUpdate {
+			t.Fatalf("env source = %+v, want one ocel may create and update values in", described)
 		}
 		res := callEditor(t, s, http.MethodPost, "/api/env-source/value", map[string]string{"key": "STRIPE_API_KEY", "value": "sk_rotated"})
 		if res.StatusCode != http.StatusOK {
@@ -311,19 +299,15 @@ func TestEnvUIUpdatesAValueTheEnvSourceHoldsUnderWriteValues(t *testing.T) {
 			t.Fatalf("POST = %d: %s", res.StatusCode, body)
 		}
 	})
-	if updated := productionRegistration(t).Updated; !slices.Contains(updated, clitest.FakeEnvSourceValue{Key: "STRIPE_API_KEY", Value: "sk_rotated"}) {
-		t.Errorf("updated %+v, want STRIPE_API_KEY updated in the env source", updated)
+	if _, updated := source.writes(); !slices.Contains(updated, "STRIPE_API_KEY=sk_rotated") {
+		t.Errorf("updated %q, want STRIPE_API_KEY updated in the env source", updated)
 	}
 }
 
 func TestEnvUICreatesAValueTheEnvSourceLacksThere(t *testing.T) {
-	writable := infisicalProduction
-	options := *writable.Infisical
-	options.Write = envsource.WriteMissing
-	writable.Infisical = &options
-	root := syncedEnvSourceFixture(t, writable)
+	project, source := syncedEnvSourceFixture(t, envsource.WriteMissing)
 
-	withEditor(t, root, func(s *variableeditor.Session) {
+	withEditor(t, project.Root, func(s *variableeditor.Session) {
 		res := callEditor(t, s, http.MethodPost, "/api/env-source/value", map[string]string{"key": "API_TOKEN", "value": "tok"})
 		if res.StatusCode != http.StatusOK {
 			body, _ := io.ReadAll(res.Body)
@@ -334,12 +318,7 @@ func TestEnvUICreatesAValueTheEnvSourceLacksThere(t *testing.T) {
 			t.Errorf("API_TOKEN = %+v, want it set from the env source", token)
 		}
 	})
-	registrations, err := clitest.LoadFakeRegistrations()
-	if err != nil {
-		t.Fatal(err)
-	}
-	registration := registrations[clitest.FakeRegistrationKey(environmentv1.Tier_TIER_PRODUCTION, clitest.FixtureSlug)]
-	if !slices.Contains(registration.Created, clitest.FakeEnvSourceValue{Key: "API_TOKEN", Value: "tok"}) {
-		t.Errorf("created %+v, want API_TOKEN created in the env source", registration.Created)
+	if created, _ := source.writes(); !slices.Contains(created, "API_TOKEN=tok") {
+		t.Errorf("created %q, want API_TOKEN created in the env source", created)
 	}
 }

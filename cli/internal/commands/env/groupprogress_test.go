@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
-	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/envvars"
 )
 
 const groupedDefinitions = `[
@@ -26,20 +26,20 @@ const groupedGroups = `[
   {"key":"stripe","required":true}
 ]`
 
-func setUpGroupedFixture(t *testing.T) string {
+func setUpGroupedFixture(t *testing.T) clitest.FakeProject {
 	t.Helper()
-	return clitest.SetUpVariablesFixtureWith(t, "[]", envDeclaringRequest(`{"definitions": `+groupedDefinitions+`, "groups": `+groupedGroups+`}`))
+	return setUpDeclaringProject(t, envDeclaringRequest(`{"definitions": `+groupedDefinitions+`, "groups": `+groupedGroups+`}`))
 }
 
-func seedProductionValue(t *testing.T, key, folder, value string) {
+func seedProductionValue(t *testing.T, project clitest.FakeProject, key, folder, value string) {
 	t.Helper()
-	seedFakeValue(t, environmentv1.Tier_TIER_PRODUCTION,
-		&envvarsv1.Coordinate{Slug: clitest.FixtureSlug, Key: key, Folder: folder}, value)
+	seedValue(t, project, environment.TierProduction, clitest.FixtureSlug,
+		envvars.Coordinate{Cell: envvars.Cell{Folder: folder, Key: key}}, value)
 }
 
 func TestSettingAGroupMemberNamesWhatTheGroupStillLacks(t *testing.T) {
 	t.Run("a half-filled group names what is still missing", func(t *testing.T) {
-		root := setUpGroupedFixture(t)
+		root := setUpGroupedFixture(t).Root
 
 		out := envSet(t, root, "GITHUB_CLIENT_ID", "id", envOptions{})
 		want := "github: 1 of 2 set. Set together: GITHUB_CLIENT_SECRET"
@@ -49,20 +49,21 @@ func TestSettingAGroupMemberNamesWhatTheGroupStillLacks(t *testing.T) {
 	})
 
 	t.Run("a value set at the base counts for an environment override", func(t *testing.T) {
-		root := setUpGroupedFixture(t)
-		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
-		seedFakeValue(t, environmentv1.Tier_TIER_PREVIEW,
-			&envvarsv1.Coordinate{Slug: clitest.FixtureSlug, Key: "GITHUB_CLIENT_SECRET"}, "secret")
+		project := setUpGroupedFixture(t)
+		clitest.Bootstrap(t, project.Provider, environment.TierPreview)
+		seedEnvironment(t, project, "staging")
+		seedValue(t, project, environment.TierPreview, clitest.FixtureSlug, cellAt("GITHUB_CLIENT_SECRET"), "secret")
 
-		out := envSet(t, root, "GITHUB_CLIENT_ID", "id", envOptions{preview: true, environment: "staging"})
+		out := envSet(t, project.Root, "GITHUB_CLIENT_ID", "id", envOptions{preview: true, environment: "staging"})
 		if strings.Contains(out, "Set together") {
 			t.Errorf("set stdout = %q, want the base value to count for staging, as a deploy counts it", out)
 		}
 	})
 
 	t.Run("a filled group says nothing further", func(t *testing.T) {
-		root := setUpGroupedFixture(t)
-		seedProductionValue(t, "GITHUB_CLIENT_ID", "", "id")
+		project := setUpGroupedFixture(t)
+		root := project.Root
+		seedProductionValue(t, project, "GITHUB_CLIENT_ID", "", "id")
 
 		out := envSet(t, root, "GITHUB_CLIENT_SECRET", "secret", envOptions{})
 		if strings.Contains(out, "Set together") {
@@ -71,8 +72,9 @@ func TestSettingAGroupMemberNamesWhatTheGroupStillLacks(t *testing.T) {
 	})
 
 	t.Run("a value inherited from the project root counts as set", func(t *testing.T) {
-		root := setUpGroupedFixture(t)
-		seedProductionValue(t, "GITHUB_CLIENT_ID", "", "id")
+		project := setUpGroupedFixture(t)
+		root := project.Root
+		seedProductionValue(t, project, "GITHUB_CLIENT_ID", "", "id")
 
 		out := envSet(t, root, "GITHUB_CLIENT_SECRET", "secret", envOptions{folder: "/web"})
 		if strings.Contains(out, "Set together") {
@@ -81,7 +83,7 @@ func TestSettingAGroupMemberNamesWhatTheGroupStillLacks(t *testing.T) {
 	})
 
 	t.Run("a warm declaration cache still knows the group", func(t *testing.T) {
-		root := setUpGroupedFixture(t)
+		root := setUpGroupedFixture(t).Root
 		envSet(t, root, "GITHUB_CLIENT_ID", "id", envOptions{})
 
 		out := envSet(t, root, "GITHUB_CLIENT_ID", "id2", envOptions{})
@@ -92,7 +94,7 @@ func TestSettingAGroupMemberNamesWhatTheGroupStillLacks(t *testing.T) {
 	})
 
 	t.Run("every affected group prints, in declaration order", func(t *testing.T) {
-		root := setUpGroupedFixture(t)
+		root := setUpGroupedFixture(t).Root
 
 		var stdout, stderr bytes.Buffer
 		err := runEnvSetPairs(context.Background(), newTestDependencies(), root, []envSetPair{
@@ -115,9 +117,10 @@ func TestSettingAGroupMemberNamesWhatTheGroupStillLacks(t *testing.T) {
 
 func TestRemovingAGroupMemberNamesWhatTheGroupStillLacks(t *testing.T) {
 	t.Run("removing one member leaves the group partial", func(t *testing.T) {
-		root := setUpGroupedFixture(t)
-		seedProductionValue(t, "GITHUB_CLIENT_ID", "", "id")
-		seedProductionValue(t, "GITHUB_CLIENT_SECRET", "", "secret")
+		project := setUpGroupedFixture(t)
+		root := project.Root
+		seedProductionValue(t, project, "GITHUB_CLIENT_ID", "", "id")
+		seedProductionValue(t, project, "GITHUB_CLIENT_SECRET", "", "secret")
 
 		out := envRemove(t, root, "GITHUB_CLIENT_ID", envOptions{})
 		want := "github: 1 of 2 set. Set together: GITHUB_CLIENT_ID"
@@ -127,8 +130,9 @@ func TestRemovingAGroupMemberNamesWhatTheGroupStillLacks(t *testing.T) {
 	})
 
 	t.Run("emptying an optional group turns it off, and it says nothing", func(t *testing.T) {
-		root := setUpGroupedFixture(t)
-		seedProductionValue(t, "GITHUB_CLIENT_ID", "", "id")
+		project := setUpGroupedFixture(t)
+		root := project.Root
+		seedProductionValue(t, project, "GITHUB_CLIENT_ID", "", "id")
 
 		out := envRemove(t, root, "GITHUB_CLIENT_ID", envOptions{})
 		if strings.Contains(out, "Set together") {
@@ -137,8 +141,9 @@ func TestRemovingAGroupMemberNamesWhatTheGroupStillLacks(t *testing.T) {
 	})
 
 	t.Run("emptying a required group still needs every member", func(t *testing.T) {
-		root := setUpGroupedFixture(t)
-		seedProductionValue(t, "STRIPE_KEY", "", "sk")
+		project := setUpGroupedFixture(t)
+		root := project.Root
+		seedProductionValue(t, project, "STRIPE_KEY", "", "sk")
 
 		out := envRemove(t, root, "STRIPE_KEY", envOptions{})
 		want := "stripe: 0 of 2 set. Set together: STRIPE_KEY, STRIPE_WEBHOOK_SECRET"
@@ -149,7 +154,7 @@ func TestRemovingAGroupMemberNamesWhatTheGroupStillLacks(t *testing.T) {
 }
 
 func TestEnvRemoveLeavesTheProjectUnbuiltWhenNothingWasRemoved(t *testing.T) {
-	root := setUpGroupedFixture(t)
+	root := setUpGroupedFixture(t).Root
 	log := filepath.Join(t.TempDir(), "discovery.log")
 	t.Setenv("OCEL_TEST_DISCOVERY_LOG", log)
 
@@ -161,10 +166,11 @@ func TestEnvRemoveLeavesTheProjectUnbuiltWhenNothingWasRemoved(t *testing.T) {
 }
 
 func TestTheListingGathersEachGroupsMembers(t *testing.T) {
-	root := setUpGroupedFixture(t)
-	seedProductionValue(t, "LOG_LEVEL", "", "debug")
-	seedProductionValue(t, "GITHUB_CLIENT_ID", "", "id")
-	seedProductionValue(t, "GITHUB_CLIENT_SECRET", "", "secret")
+	project := setUpGroupedFixture(t)
+	root := project.Root
+	seedProductionValue(t, project, "LOG_LEVEL", "", "debug")
+	seedProductionValue(t, project, "GITHUB_CLIENT_ID", "", "id")
+	seedProductionValue(t, project, "GITHUB_CLIENT_SECRET", "", "secret")
 
 	var stdout, stderr bytes.Buffer
 	if err := runEnvList(context.Background(), newStreamedDependencies(&stderr), root, envOptions{}, &stdout, &stderr); err != nil {

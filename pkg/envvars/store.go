@@ -264,7 +264,7 @@ func (s Store) Reveal(ctx context.Context, scope Scope, cells []Coordinate) ([]V
 	found := make([]Coordinate, 0, len(cells))
 	cellValues := make([]storedValue, 0, len(cells))
 	for _, at := range cells {
-		cell, ok := stored[cellKey(scope, at).String()]
+		cell, ok := stored[CellKey(scope, at).String()]
 		if !ok || cell.live() == 0 {
 			continue
 		}
@@ -288,7 +288,7 @@ func (s Store) Reveal(ctx context.Context, scope Scope, cells []Coordinate) ([]V
 		target := *cellValues[i].Target
 		from[i] = Scope{Project: target.Project, Tier: scope.Tier}
 		sourceCells[i] = Coordinate{Cell: target.Cell}
-		source := sources[cellKey(from[i], sourceCells[i]).String()]
+		source := sources[CellKey(from[i], sourceCells[i]).String()]
 		if err := validateSource(at, &target, source); err != nil {
 			return nil, err
 		}
@@ -299,7 +299,7 @@ func (s Store) Reveal(ctx context.Context, scope Scope, cells []Coordinate) ([]V
 	slotOf := make([]int, len(found))
 	slots := make(map[string]int, len(found))
 	for i := range found {
-		key := cellKey(from[i], sourceCells[i]).String()
+		key := CellKey(from[i], sourceCells[i]).String()
 		slot, seen := slots[key]
 		if !seen {
 			slot = len(opening)
@@ -359,7 +359,7 @@ func (s Store) gather(ctx context.Context, scope Scope, stored map[string]stored
 		}
 		at := Scope{Project: cell.Target.Project, Tier: scope.Tier}
 		sourceAt := Coordinate{Cell: cell.Target.Cell}
-		key := cellKey(at, sourceAt).String()
+		key := CellKey(at, sourceAt).String()
 		if wanted[key] {
 			continue
 		}
@@ -371,7 +371,7 @@ func (s Store) gather(ctx context.Context, scope Scope, stored map[string]stored
 	sources := make([]storedValue, len(from))
 	if err := forEachConcurrently(ctx, len(from), func(ctx context.Context, i int) error {
 		if from[i].Project == scope.Project {
-			sources[i] = stored[cellKey(from[i], sourceCells[i]).String()]
+			sources[i] = stored[CellKey(from[i], sourceCells[i]).String()]
 			return nil
 		}
 		_, source, err := s.cellAt(ctx, from[i], sourceCells[i])
@@ -383,7 +383,7 @@ func (s Store) gather(ctx context.Context, scope Scope, stored map[string]stored
 
 	out := make(map[string]storedValue, len(from))
 	for i := range from {
-		out[cellKey(from[i], sourceCells[i]).String()] = sources[i]
+		out[CellKey(from[i], sourceCells[i]).String()] = sources[i]
 	}
 	return out, nil
 }
@@ -477,7 +477,7 @@ func (s Store) Purge(ctx context.Context, scope Scope) (int, error) {
 }
 
 func (s Store) cellAt(ctx context.Context, scope Scope, at Coordinate) (keyvalue.Entry, storedValue, error) {
-	recorded, err := keyvalue.ReadOrEmpty(ctx, s.KeyValues, cellKey(scope, at))
+	recorded, err := keyvalue.ReadOrEmpty(ctx, s.KeyValues, CellKey(scope, at))
 	if err != nil {
 		return keyvalue.Entry{}, storedValue{}, fmt.Errorf("read %s: %w", at, err)
 	}

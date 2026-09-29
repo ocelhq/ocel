@@ -10,8 +10,8 @@ import (
 
 func TestMain(m *testing.M) {
 	clitest.AddFakeProviderIDs()
-	if os.Getenv(clitest.FakeProviderEnvVar) == "1" {
-		os.Exit(clitest.RunFakeProvider())
+	if clitest.IsFakeSession() {
+		os.Exit(clitest.RunFakeSession())
 	}
 	clitest.UnsetColorEnv()
 	done := clitest.IsolateConfigHome()

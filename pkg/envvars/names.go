@@ -82,7 +82,7 @@ func ValuesPartition(scope Scope) keyvalue.Partition {
 
 func cellsPrefix(scope Scope) keyvalue.Key { return ValuesPartition(scope).Key("cells") }
 
-func cellKey(scope Scope, at Coordinate) keyvalue.Key {
+func CellKey(scope Scope, at Coordinate) keyvalue.Key {
 	at = at.canonical()
 	return ValuesPartition(scope).Key("cells", at.Folder, at.Key, at.Environment)
 }

@@ -4,14 +4,17 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 )
 
@@ -27,32 +30,113 @@ export default {
 };
 `
 
-var infisicalProduction = envsource.Descriptor{Kind: envsource.Infisical, Infisical: &envsource.InfisicalOptions{
-	Project: "p-1", Environment: "prod", Path: "/", Host: "https://app.infisical.com", Write: envsource.WriteNever,
-	Auth: envsource.InfisicalAuth{Method: envsource.AuthUniversal, ClientIDVariable: "INFISICAL_CLIENT_ID", ClientSecretVariable: "INFISICAL_CLIENT_SECRET"},
-}}
+type infisicalProject struct {
+	URL string
 
-func setUpEnvSourceFixture(t *testing.T, source clitest.FakeEnvSource) string {
-	t.Helper()
-	root := setUpEnvFixture(t)
-	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), infisicalConfig)
-	raw, err := json.Marshal(source)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv(clitest.FakeEnvSourceEnvVar, string(raw))
-	return root
+	mu       sync.Mutex
+	secrets  map[string]string
+	versions map[string]int
+	created  []string
+	updated  []string
+	refusal  string
 }
 
-func registerFakeEnvSource(t *testing.T, tier environmentv1.Tier, descriptor envsource.Descriptor) {
+func serveInfisicalProject(t *testing.T, secrets map[string]string) *infisicalProject {
 	t.Helper()
-	registrations, err := clitest.LoadFakeRegistrations()
-	if err != nil {
-		t.Fatal(err)
+	project := &infisicalProject{secrets: secrets, versions: map[string]int{}}
+	if project.secrets == nil {
+		project.secrets = map[string]string{}
 	}
-	registrations[clitest.FakeRegistrationKey(tier, clitest.FixtureSlug)] = clitest.FakeRegistration{Descriptor: descriptor, Folders: []string{""}}
-	if err := clitest.SaveFakeRegistrations(registrations); err != nil {
-		t.Fatal(err)
+	server := httptest.NewServer(project)
+	t.Cleanup(server.Close)
+	project.URL = server.URL
+	return project
+}
+
+func (p *infisicalProject) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	key := strings.TrimPrefix(r.URL.Path, "/api/v4/secrets/")
+	switch {
+	case r.URL.Path == "/api/v1/auth/universal-auth/login":
+		_ = json.NewEncoder(w).Encode(map[string]any{"accessToken": "token", "expiresIn": 3600})
+	case r.Header.Get("Authorization") != "Bearer token":
+		w.WriteHeader(http.StatusUnauthorized)
+	case r.URL.Path == "/api/v1/projects/p-1":
+		_ = json.NewEncoder(w).Encode(map[string]any{"project": map[string]any{"orgId": "org-1"}})
+	case p.refusal != "":
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]any{"message": p.refusal})
+	case r.Method == http.MethodGet && r.URL.Path == "/api/v4/secrets":
+		secrets := []map[string]any{}
+		for key, value := range p.secrets {
+			secrets = append(secrets, map[string]any{"id": key, "secretKey": key, "secretValue": value, "version": p.versions[key] + 1})
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"secrets": secrets})
+	case r.Method == http.MethodGet:
+		if _, exists := p.secrets[key]; !exists {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"secret": map[string]any{"id": key, "secretKey": key, "version": p.versions[key] + 1}})
+	case r.Method == http.MethodPost:
+		var body map[string]string
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if _, exists := p.secrets[key]; exists {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{"message": "Secret '" + key + "' already exists"})
+			return
+		}
+		p.secrets[key] = body["secretValue"]
+		p.created = append(p.created, key+"="+body["secretValue"])
+		_ = json.NewEncoder(w).Encode(map[string]any{"secret": map[string]any{"id": key}})
+	case r.Method == http.MethodPatch:
+		var body map[string]string
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if _, exists := p.secrets[key]; !exists {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		p.secrets[key] = body["secretValue"]
+		p.versions[key]++
+		p.updated = append(p.updated, key+"="+body["secretValue"])
+		_ = json.NewEncoder(w).Encode(map[string]any{"secret": map[string]any{"id": key}})
+	default:
+		w.WriteHeader(http.StatusNotFound)
+	}
+}
+
+func (p *infisicalProject) refuseReads(message string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.refusal = message
+}
+
+func (p *infisicalProject) writes() (created, updated []string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return slices.Clone(p.created), slices.Clone(p.updated)
+}
+
+func (p *infisicalProject) at(write envsource.WritePolicy) envsource.Descriptor {
+	return envsource.Descriptor{Kind: envsource.Infisical, Infisical: &envsource.InfisicalOptions{
+		Project: "p-1", Environment: "prod", Path: "/", Host: p.URL, Write: write,
+		Auth: envsource.InfisicalAuth{Method: envsource.AuthUniversal, ClientIDVariable: "INFISICAL_CLIENT_ID", ClientSecretVariable: "INFISICAL_CLIENT_SECRET"},
+	}}
+}
+
+func setUpEnvSourceFixture(t *testing.T) clitest.FakeProject {
+	t.Helper()
+	project := setUpEnvFixture(t)
+	clitest.WriteFile(t, filepath.Join(project.Root, "ocel.config.ts"), infisicalConfig)
+	return project
+}
+
+func registerEnvSource(t *testing.T, project clitest.FakeProject, tier environment.Tier, descriptor envsource.Descriptor) {
+	t.Helper()
+	registration := envsource.Registration{Project: clitest.FixtureSlug, Descriptor: descriptor, Folders: []string{""}}
+	if _, err := envsource.Register(context.Background(), valuesOf(project), tier, registration); err != nil {
+		t.Fatalf("register %s for %s: %v", descriptor.ID(), tier, err)
 	}
 }
 
@@ -62,8 +146,28 @@ func setCredentials(t *testing.T, root string) {
 	envSet(t, root, "INFISICAL_CLIENT_SECRET", "client-secret", envOptions{})
 }
 
+func envSync(t *testing.T, root string) string {
+	t.Helper()
+	var synced bytes.Buffer
+	if err := runEnvSync(context.Background(), newTestDependencies(), root, envOptions{}, &synced, &synced); err != nil {
+		t.Fatalf("runEnvSync err = %v; out=%s", err, synced.String())
+	}
+	return synced.String()
+}
+
+func syncedEnvSourceFixture(t *testing.T, write envsource.WritePolicy) (clitest.FakeProject, *infisicalProject) {
+	t.Helper()
+	project := setUpEnvSourceFixture(t)
+	source := serveInfisicalProject(t, map[string]string{"STRIPE_API_KEY": "sk", "RETIRED": "old"})
+	setCredentials(t, project.Root)
+	registerEnvSource(t, project, environment.TierProduction, source.at(write))
+	envSync(t, project.Root)
+	return project, source
+}
+
 func TestEnvSetTakesTheCredentialsATiersEnvSourceLogsInWith(t *testing.T) {
-	root := setUpEnvSourceFixture(t, clitest.FakeEnvSource{})
+	project := setUpEnvSourceFixture(t)
+	root := project.Root
 	if out := envSet(t, root, "INFISICAL_CLIENT_SECRET", "secret", envOptions{}); !strings.Contains(out, "INFISICAL_CLIENT_SECRET") {
 		t.Errorf("set stdout = %q, want the credential set though no app declares it", out)
 	}
@@ -74,7 +178,7 @@ func TestEnvSetTakesTheCredentialsATiersEnvSourceLogsInWith(t *testing.T) {
 		t.Fatalf("runEnvSet --folder err = %v, want a credential in a folder refused, naming the env source", err)
 	}
 
-	t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
+	clitest.Bootstrap(t, project.Provider, environment.TierPreview)
 	stderr.Reset()
 	err = runEnvSet(context.Background(), newStreamedDependencies(&stderr), root, "INFISICAL_CLIENT_SECRET", "secret", envOptions{preview: true}, nil, &stdout, &stderr)
 	if err == nil || !strings.Contains(stderr.String(), "declares") {
@@ -84,7 +188,7 @@ func TestEnvSetTakesTheCredentialsATiersEnvSourceLogsInWith(t *testing.T) {
 
 func TestEnvSyncReReadsTheEnvSourceADeployRegistered(t *testing.T) {
 	t.Run("a tier nothing registered has nothing to sync, and says a deploy reads what the config names", func(t *testing.T) {
-		root := setUpEnvSourceFixture(t, clitest.FakeEnvSource{})
+		root := setUpEnvSourceFixture(t).Root
 
 		var stdout, stderr bytes.Buffer
 		if err := runEnvSync(context.Background(), newStreamedDependencies(&stderr), root, envOptions{}, &stdout, &stderr); err != nil {
@@ -99,12 +203,12 @@ func TestEnvSyncReReadsTheEnvSourceADeployRegistered(t *testing.T) {
 	})
 
 	t.Run("a registered source is read now, and ls names it as each value's source", func(t *testing.T) {
-		root := setUpEnvSourceFixture(t, clitest.FakeEnvSource{
-			Values: []clitest.FakeEnvSourceValue{{Key: "STRIPE_API_KEY", Value: "sk"}, {Key: "API_TOKEN", Value: "t"}},
-		})
+		project := setUpEnvSourceFixture(t)
+		root := project.Root
+		source := serveInfisicalProject(t, map[string]string{"STRIPE_API_KEY": "sk", "API_TOKEN": "t"})
 		setCredentials(t, root)
 		envSet(t, root, "LOG_LEVEL", "debug", envOptions{})
-		registerFakeEnvSource(t, environmentv1.Tier_TIER_PRODUCTION, infisicalProduction)
+		registerEnvSource(t, project, environment.TierProduction, source.at(envsource.WriteNever))
 
 		var stdout, stderr bytes.Buffer
 		if err := runEnvSync(context.Background(), newStreamedDependencies(&stderr), root, envOptions{}, &stdout, &stderr); err != nil {
@@ -135,12 +239,12 @@ func TestEnvSyncReReadsTheEnvSourceADeployRegistered(t *testing.T) {
 	})
 
 	t.Run("a registered exec source is re-read only by a deploy", func(t *testing.T) {
-		root := setUpEnvSourceFixture(t, clitest.FakeEnvSource{})
-		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
-		registerFakeEnvSource(t, environmentv1.Tier_TIER_PREVIEW, envsource.Descriptor{Kind: envsource.Exec, Exec: &envsource.ExecOptions{Command: []string{"sh"}}})
+		project := setUpEnvSourceFixture(t)
+		clitest.Bootstrap(t, project.Provider, environment.TierPreview)
+		registerEnvSource(t, project, environment.TierPreview, envsource.Descriptor{Kind: envsource.Exec, Exec: &envsource.ExecOptions{Command: []string{"sh"}}})
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvSync(context.Background(), newStreamedDependencies(&stderr), root, envOptions{preview: true}, &stdout, &stderr)
+		err := runEnvSync(context.Background(), newStreamedDependencies(&stderr), project.Root, envOptions{preview: true}, &stdout, &stderr)
 		if err == nil || !strings.Contains(stderr.String(), "deploy") {
 			t.Fatalf("runEnvSync --preview err = %v, want exec's re-read left to a deploy", err)
 		}
@@ -148,12 +252,9 @@ func TestEnvSyncReReadsTheEnvSourceADeployRegistered(t *testing.T) {
 }
 
 func TestEnvSourceDescribesWhereATierReadsFrom(t *testing.T) {
-	root := setUpEnvSourceFixture(t, clitest.FakeEnvSource{
-		URLs:          map[string]string{"": "https://infisical.example/prod"},
-		LastAttemptAt: 1_700_000_120,
-		LastSuccessAt: 1_700_000_000,
-		LastError:     "Infisical answered 503",
-	})
+	project := setUpEnvSourceFixture(t)
+	root := project.Root
+	source := serveInfisicalProject(t, map[string]string{"STRIPE_API_KEY": "sk"})
 
 	var before bytes.Buffer
 	if err := runEnvSource(context.Background(), newStreamedDependencies(&before), root, envOptions{}, &before, &before); err != nil {
@@ -167,10 +268,12 @@ func TestEnvSourceDescribesWhereATierReadsFrom(t *testing.T) {
 	}
 
 	setCredentials(t, root)
-	registerFakeEnvSource(t, environmentv1.Tier_TIER_PRODUCTION, infisicalProduction)
-	var synced bytes.Buffer
-	if err := runEnvSync(context.Background(), newStreamedDependencies(&synced), root, envOptions{}, &synced, &synced); err != nil {
-		t.Fatalf("runEnvSync err = %v; out=%s", err, synced.String())
+	registerEnvSource(t, project, environment.TierProduction, source.at(envsource.WriteNever))
+	envSync(t, root)
+	source.refuseReads("the identity lost read access")
+	var refused bytes.Buffer
+	if err := runEnvSync(context.Background(), newTestDependencies(), root, envOptions{}, &refused, &refused); err == nil {
+		t.Fatalf("runEnvSync against an env source that refuses reads err = nil; out=%s", refused.String())
 	}
 
 	var stdout, stderr bytes.Buffer
@@ -178,7 +281,7 @@ func TestEnvSourceDescribesWhereATierReadsFrom(t *testing.T) {
 		t.Fatalf("runEnvSource err = %v; stderr=%s", err, stderr.String())
 	}
 	out := stdout.String()
-	for _, want := range []string{"production reads from infisical:p-1/prod", "synced every minute", "Infisical answered 503", "https://infisical.example/prod", "INFISICAL_CLIENT_SECRET"} {
+	for _, want := range []string{"production reads from infisical:p-1/prod", "synced every minute", "the identity lost read access", source.URL + "/organizations/org-1/", "INFISICAL_CLIENT_SECRET"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("stdout = %q, want %q", out, want)
 		}
@@ -189,17 +292,16 @@ func TestEnvSourceDescribesWhereATierReadsFrom(t *testing.T) {
 }
 
 func TestEnvSourceSaysWhatOcelMayWriteIntoIt(t *testing.T) {
-	root := setUpEnvSourceFixture(t, clitest.FakeEnvSource{})
+	project := setUpEnvSourceFixture(t)
+	source := serveInfisicalProject(t, nil)
 	for write, want := range map[envsource.WritePolicy]string{
 		envsource.WriteValues:  "create or update a value there, never delete one",
 		envsource.WriteMissing: "created there, never overwritten",
 		envsource.WriteNever:   "",
 	} {
-		options := *infisicalProduction.Infisical
-		options.Write = write
-		registerFakeEnvSource(t, environmentv1.Tier_TIER_PRODUCTION, envsource.Descriptor{Kind: envsource.Infisical, Infisical: &options})
+		registerEnvSource(t, project, environment.TierProduction, source.at(write))
 		var stdout, stderr bytes.Buffer
-		if err := runEnvSource(context.Background(), newStreamedDependencies(&stderr), root, envOptions{}, &stdout, &stderr); err != nil {
+		if err := runEnvSource(context.Background(), newStreamedDependencies(&stderr), project.Root, envOptions{}, &stdout, &stderr); err != nil {
 			t.Fatalf("runEnvSource err = %v; stderr=%s", err, stderr.String())
 		}
 		if writes := strings.Contains(stdout.String(), "writes"); writes != (want != "") || !strings.Contains(stdout.String(), want) {
@@ -209,77 +311,52 @@ func TestEnvSourceSaysWhatOcelMayWriteIntoIt(t *testing.T) {
 }
 
 func TestEnvSetOnAValueTheEnvSourceOwnsSaysWhereToChangeIt(t *testing.T) {
-	root := setUpEnvSourceFixture(t, clitest.FakeEnvSource{Values: []clitest.FakeEnvSourceValue{{Key: "STRIPE_API_KEY", Value: "sk"}}})
-	setCredentials(t, root)
-	registerFakeEnvSource(t, environmentv1.Tier_TIER_PRODUCTION, infisicalProduction)
-	var synced bytes.Buffer
-	if err := runEnvSync(context.Background(), newStreamedDependencies(&synced), root, envOptions{}, &synced, &synced); err != nil {
-		t.Fatalf("runEnvSync err = %v; out=%s", err, synced.String())
-	}
+	project, _ := syncedEnvSourceFixture(t, envsource.WriteNever)
 
 	var stdout, stderr bytes.Buffer
-	err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), root, "STRIPE_API_KEY", "by-hand", envOptions{}, nil, &stdout, &stderr)
+	err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), project.Root, "STRIPE_API_KEY", "by-hand", envOptions{}, nil, &stdout, &stderr)
 	if err == nil || !strings.Contains(stderr.String(), "infisical:p-1/prod") {
 		t.Fatalf("runEnvSet err = %v, want the env source that owns the value named", err)
 	}
-	envSet(t, root, "INFISICAL_CLIENT_SECRET", "rotated", envOptions{})
-}
-
-func writing(write envsource.WritePolicy) envsource.Descriptor {
-	options := *infisicalProduction.Infisical
-	options.Write = write
-	return envsource.Descriptor{Kind: envsource.Infisical, Infisical: &options}
-}
-
-func productionRegistration(t *testing.T) clitest.FakeRegistration {
-	t.Helper()
-	registrations, err := clitest.LoadFakeRegistrations()
-	if err != nil {
-		t.Fatal(err)
-	}
-	return registrations[clitest.FakeRegistrationKey(environmentv1.Tier_TIER_PRODUCTION, clitest.FixtureSlug)]
+	envSet(t, project.Root, "INFISICAL_CLIENT_SECRET", "rotated", envOptions{})
 }
 
 func TestEnvSetUpdatesAValueTheEnvSourceOwnsWhenItsWritePolicyIsValues(t *testing.T) {
-	root := syncedEnvSourceFixture(t, writing(envsource.WriteValues))
+	project, source := syncedEnvSourceFixture(t, envsource.WriteValues)
 
-	out := envSet(t, root, "STRIPE_API_KEY", "sk_rotated", envOptions{})
+	out := envSet(t, project.Root, "STRIPE_API_KEY", "sk_rotated", envOptions{})
 	if !strings.Contains(out, "infisical:p-1/prod") {
 		t.Errorf("stdout = %q, want the env source it was written to named", out)
 	}
-	if updated := productionRegistration(t).Updated; !slices.Contains(updated, clitest.FakeEnvSourceValue{Key: "STRIPE_API_KEY", Value: "sk_rotated"}) {
-		t.Fatalf("updated = %+v, want STRIPE_API_KEY written through to the env source", updated)
+	if _, updated := source.writes(); !slices.Contains(updated, "STRIPE_API_KEY=sk_rotated") {
+		t.Fatalf("updated = %q, want STRIPE_API_KEY written through to the env source", updated)
 	}
-	var got, chatter bytes.Buffer
-	if err := runEnvGet(context.Background(), newStreamedDependencies(&chatter), root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true}, &got, &chatter); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(got.String(), "sk_rotated") {
-		t.Errorf("ocel env get = %q, want the value synced straight back", got.String())
+	if got := envGet(t, project.Root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true}); !strings.Contains(got, "sk_rotated") {
+		t.Errorf("ocel env get = %q, want the value synced straight back", got)
 	}
 }
 
 func TestEnvSetCreatesAValueTheEnvSourceLacksWhenItsWritePolicyIsMissing(t *testing.T) {
-	root := syncedEnvSourceFixture(t, writing(envsource.WriteMissing))
+	project, source := syncedEnvSourceFixture(t, envsource.WriteMissing)
 
-	envSet(t, root, "API_TOKEN", "tok", envOptions{})
-	if created := productionRegistration(t).Created; !slices.Contains(created, clitest.FakeEnvSourceValue{Key: "API_TOKEN", Value: "tok"}) {
-		t.Fatalf("created = %+v, want API_TOKEN created in the env source", created)
+	envSet(t, project.Root, "API_TOKEN", "tok", envOptions{})
+	if created, _ := source.writes(); !slices.Contains(created, "API_TOKEN=tok") {
+		t.Fatalf("created = %q, want API_TOKEN created in the env source", created)
 	}
 
 	var stdout, stderr bytes.Buffer
-	err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), root, "STRIPE_API_KEY", "sk_rotated", envOptions{}, nil, &stdout, &stderr)
+	err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), project.Root, "STRIPE_API_KEY", "sk_rotated", envOptions{}, nil, &stdout, &stderr)
 	if err == nil || !strings.Contains(stderr.String(), `"values"`) {
 		t.Fatalf("runEnvSet over a value the env source holds = %v, want it refused naming write \"values\"", err)
 	}
 }
 
-func TestEnvSetKeepsANamedEnvironmentsOverrideAndACredentialInOcelsOwnStore(t *testing.T) {
-	root := syncedEnvSourceFixture(t, writing(envsource.WriteValues))
+func TestEnvSetKeepsACredentialInOcelsOwnStore(t *testing.T) {
+	project, source := syncedEnvSourceFixture(t, envsource.WriteValues)
 
-	envSet(t, root, "INFISICAL_CLIENT_SECRET", "rotated", envOptions{})
-	if registration := productionRegistration(t); len(registration.Updated)+len(registration.Created) != 0 {
-		t.Fatalf("registration = %+v, want a credential never written to the env source", registration)
+	envSet(t, project.Root, "INFISICAL_CLIENT_SECRET", "rotated", envOptions{})
+	if created, updated := source.writes(); len(created)+len(updated) != 0 {
+		t.Fatalf("created %q and updated %q, want a credential never written to the env source", created, updated)
 	}
 }
 

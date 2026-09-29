@@ -13,16 +13,31 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/envvars"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
+	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
-func setUpEnvFixture(t *testing.T) string {
+func setUpEnvFixture(t *testing.T) clitest.FakeProject {
 	t.Helper()
-	return clitest.SetUpVariablesFixtureWith(t, "[]", envDeclaringScript(fixtureDefinitions))
+	return setUpDeclaringProject(t, envDeclaringScript(fixtureDefinitions))
+}
+
+func setUpDeclaringProject(t *testing.T, script string) clitest.FakeProject {
+	t.Helper()
+	project := clitest.SetUpProject(t)
+	clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(project.Root), "env.ts"), script)
+	return project
 }
 
 const fixtureDefinitions = `[
@@ -47,20 +62,46 @@ func envSet(t *testing.T, root, key, value string, opts envOptions) string {
 	return stdout.String()
 }
 
-func seedFakeValue(t *testing.T, tier environmentv1.Tier, c *envvarsv1.Coordinate, value string) {
+func valuesOf(project clitest.FakeProject) envvars.Store {
+	return envvars.Store{KeyValues: project.Provider.KeyValues(), Cipher: project.Provider.Cipher()}
+}
+
+func cellAt(key string) envvars.Coordinate {
+	return envvars.Coordinate{Cell: envvars.Cell{Key: key}}
+}
+
+func seedValue(t *testing.T, project clitest.FakeProject, tier environment.Tier, slug string, at envvars.Coordinate, value string) {
 	t.Helper()
-	store, err := clitest.LoadFakeStore()
-	if err != nil {
-		t.Fatalf("load the fake store: %v", err)
+	if _, err := valuesOf(project).Set(context.Background(), envvars.Scope{Project: slug, Tier: tier}, at, value, nil); err != nil {
+		t.Fatalf("seed %s in %s's %s values: %v", at, slug, tier, err)
 	}
-	store[clitest.FakeCoordinateID(tier, c)] = &clitest.FakeCell{
-		Tier:       tier,
-		Coordinate: clitest.FakeCoordinate{Slug: c.GetSlug(), Folder: c.GetFolder(), Key: c.GetKey(), Environment: c.GetEnvironment()},
-		Versions:   []clitest.FakeCellData{{Value: value, Ts: 1_700_000_000}},
+}
+
+func seedEnvironment(t *testing.T, project clitest.FakeProject, name string) {
+	t.Helper()
+	if err := stackrecords.Write(context.Background(), project.Provider.KeyValues(), environment.TierPreview, clitest.FixtureSlug, naming.InfraStack(name), stackrecords.Stack{}); err != nil {
+		t.Fatalf("seed the %s preview environment: %v", name, err)
 	}
-	if err := clitest.SaveFakeStore(store); err != nil {
-		t.Fatalf("save the fake store: %v", err)
+}
+
+func removeEnvironment(t *testing.T, project clitest.FakeProject, name string) {
+	t.Helper()
+	if err := stackrecords.Forget(context.Background(), project.Provider.KeyValues(), environment.TierPreview, clitest.FixtureSlug, naming.InfraStack(name)); err != nil {
+		t.Fatalf("remove the %s preview environment: %v", name, err)
 	}
+}
+
+func bootstrapOnlyPreview(t *testing.T, project clitest.FakeProject) {
+	t.Helper()
+	clitest.Bootstrap(t, project.Provider, environment.TierPreview)
+	if err := project.Provider.FakeBootstrap().Remove(context.Background(), environment.TierProduction, nil); err != nil {
+		t.Fatalf("remove the production bootstrap: %v", err)
+	}
+}
+
+func moveBeforeTheNextWrite(project clitest.FakeProject, key string) {
+	scope := envvars.Scope{Project: clitest.FixtureSlug, Tier: environment.TierProduction}
+	project.Provider.KeyValues().(*fake.KeyValues).MoveBeforeNextWrite(envvars.CellKey(scope, cellAt(key)))
 }
 
 func envDeclaringScript(definitions string) string {
@@ -93,7 +134,7 @@ export {};
 
 func setUpDeclaringFixture(t *testing.T, definitions string) (root, log string) {
 	t.Helper()
-	root = clitest.SetUpVariablesFixtureWith(t, "[]", envDeclaringScript(definitions))
+	root = setUpDeclaringProject(t, envDeclaringScript(definitions)).Root
 	log = filepath.Join(t.TempDir(), "discovery.log")
 	t.Setenv("OCEL_TEST_DISCOVERY_LOG", log)
 	return root, log
@@ -110,7 +151,7 @@ func discoveryRuns(t *testing.T, log string) int {
 
 func TestSettingAValueStoresItOnlyWhereADeclarationReadsIt(t *testing.T) {
 	t.Run("refuses a key no app declares", func(t *testing.T) {
-		root := setUpEnvFixture(t)
+		root := setUpEnvFixture(t).Root
 
 		var stdout, stderr bytes.Buffer
 		err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), root, "SITE_HOSTNAME", "acme.example", envOptions{}, nil, &stdout, &stderr)
@@ -125,7 +166,7 @@ func TestSettingAValueStoresItOnlyWhereADeclarationReadsIt(t *testing.T) {
 	})
 
 	t.Run("names the key it set, and the value it wrote reads back only when revealing is explicit", func(t *testing.T) {
-		root := setUpEnvFixture(t)
+		root := setUpEnvFixture(t).Root
 
 		if out := envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{}); !strings.Contains(out, "STRIPE_API_KEY") {
 			t.Errorf("set stdout = %q, want it to name the key it set", out)
@@ -157,8 +198,10 @@ func TestSettingAValueStoresItOnlyWhereADeclarationReadsIt(t *testing.T) {
 	})
 
 	t.Run("an override is its own cell beside the value bound to all environments", func(t *testing.T) {
-		root := setUpEnvFixture(t)
-		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
+		project := setUpEnvFixture(t)
+		root := project.Root
+		clitest.Bootstrap(t, project.Provider, environment.TierPreview)
+		seedEnvironment(t, project, "staging")
 
 		preview := envOptions{preview: true}
 		staging := envOptions{preview: true, environment: "staging"}
@@ -188,8 +231,10 @@ func TestSettingAValueStoresItOnlyWhereADeclarationReadsIt(t *testing.T) {
 	})
 
 	t.Run("refuses an environment that does not exist, and the refused write does not land", func(t *testing.T) {
-		root := setUpEnvFixture(t)
-		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
+		project := setUpEnvFixture(t)
+		root := project.Root
+		clitest.Bootstrap(t, project.Provider, environment.TierPreview)
+		seedEnvironment(t, project, "staging")
 
 		var stdout, stderr bytes.Buffer
 		err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), root, "STRIPE_API_KEY", "sk_typo", envOptions{preview: true, environment: "stagng"}, nil, &stdout, &stderr)
@@ -207,7 +252,7 @@ func TestSettingAValueStoresItOnlyWhereADeclarationReadsIt(t *testing.T) {
 	})
 
 	t.Run("refuses an environment on production", func(t *testing.T) {
-		root := setUpEnvFixture(t)
+		root := setUpEnvFixture(t).Root
 
 		var stdout, stderr bytes.Buffer
 		err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), root, "STRIPE_API_KEY", "sk_live", envOptions{environment: "staging"}, nil, &stdout, &stderr)
@@ -220,8 +265,9 @@ func TestSettingAValueStoresItOnlyWhereADeclarationReadsIt(t *testing.T) {
 	})
 
 	t.Run("refuses on preview infrastructure", func(t *testing.T) {
-		root := setUpEnvFixture(t)
-		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
+		project := setUpEnvFixture(t)
+		root := project.Root
+		bootstrapOnlyPreview(t, project)
 
 		var stdout, stderr bytes.Buffer
 		err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), root, "STRIPE_API_KEY", "sk_live_secret", envOptions{}, nil, &stdout, &stderr)
@@ -231,7 +277,7 @@ func TestSettingAValueStoresItOnlyWhereADeclarationReadsIt(t *testing.T) {
 	})
 
 	t.Run("refuses a root value for a scoped key", func(t *testing.T) {
-		root := clitest.SetUpVariablesFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web","/admin"]}]`)
+		root := setUpDeclaringProject(t, envDeclaringScript(`[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web","/admin"]}]`)).Root
 
 		var stdout, stderr bytes.Buffer
 		err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), root, "POSTHOG_ID", "ph_root", envOptions{}, nil, &stdout, &stderr)
@@ -246,7 +292,7 @@ func TestSettingAValueStoresItOnlyWhereADeclarationReadsIt(t *testing.T) {
 	})
 
 	t.Run("refuses a scoped key in a folder it does not name", func(t *testing.T) {
-		root := clitest.SetUpVariablesFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`)
+		root := setUpDeclaringProject(t, envDeclaringScript(`[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`)).Root
 
 		var stdout, stderr bytes.Buffer
 		err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), root, "POSTHOG_ID", "ph", envOptions{folder: "/admin"}, nil, &stdout, &stderr)
@@ -259,7 +305,7 @@ func TestSettingAValueStoresItOnlyWhereADeclarationReadsIt(t *testing.T) {
 	})
 
 	t.Run("accepts a scoped key in a folder it names", func(t *testing.T) {
-		root := clitest.SetUpVariablesFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`)
+		root := setUpDeclaringProject(t, envDeclaringScript(`[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`)).Root
 
 		if out := envSet(t, root, "POSTHOG_ID", "ph_web", envOptions{folder: "/web"}); !strings.Contains(out, "/web") {
 			t.Errorf("set stdout = %q, want the folder it wrote named", out)
@@ -267,7 +313,7 @@ func TestSettingAValueStoresItOnlyWhereADeclarationReadsIt(t *testing.T) {
 	})
 
 	t.Run("leaves an unscoped key writable at root and in a folder", func(t *testing.T) {
-		root := clitest.SetUpVariablesFixture(t, `[{"key":"LOG_LEVEL","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
+		root := setUpDeclaringProject(t, envDeclaringScript(`[{"key":"LOG_LEVEL","class":"VARIABLE_CLASS_PLAIN","required":true}]`)).Root
 
 		envSet(t, root, "LOG_LEVEL", "info", envOptions{})
 		envSet(t, root, "LOG_LEVEL", "debug", envOptions{folder: "/web"})
@@ -315,8 +361,8 @@ func TestSettingAValueStoresItOnlyWhereADeclarationReadsIt(t *testing.T) {
 	})
 
 	t.Run("does not trust a cached absence for a conditionally scoped key", func(t *testing.T) {
-		root := clitest.SetUpVariablesFixtureWith(t,
-			`[{"key":"LOG_LEVEL","class":"VARIABLE_CLASS_PLAIN","required":true}]`, clitest.EnvDeclareOnlyScript)
+		t.Setenv("OCEL_TEST_ENV_DEFINITIONS", `[{"key":"LOG_LEVEL","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
+		root := setUpDeclaringProject(t, clitest.EnvDeclareOnlyScript).Root
 
 		envSet(t, root, "LOG_LEVEL", "info", envOptions{})
 
@@ -339,11 +385,8 @@ func TestSettingAValueStoresItOnlyWhereADeclarationReadsIt(t *testing.T) {
 }
 
 func TestEnvAsksTheBootstrapOnlyWhetherThisCLICanSpeakToIt(t *testing.T) {
-	root, _ := clitest.SetUpDeployFixture(t)
+	root := clitest.SetUpProject(t).Root
 	dependencies := newTestDependencies()
-	t.Setenv(clitest.FakeInfraTierEnvVar, "production")
-	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
-	t.Setenv(clitest.FakeBootstrapEnvVar, "missing")
 
 	var stdout, stderr bytes.Buffer
 	if err := runEnvList(context.Background(), dependencies, root, envOptions{}, &stdout, &stderr); err != nil {
@@ -353,7 +396,7 @@ func TestEnvAsksTheBootstrapOnlyWhetherThisCLICanSpeakToIt(t *testing.T) {
 
 func TestGettingAValueReadsOneCellOfOneTier(t *testing.T) {
 	t.Run("reports an unset key", func(t *testing.T) {
-		root := setUpEnvFixture(t)
+		root := setUpEnvFixture(t).Root
 
 		var stdout, stderr bytes.Buffer
 		err := runEnvGet(context.Background(), newStreamedDependencies(&stderr), root, "NEVER_SET", envOptions{reveal: true}, &stdout, &stderr)
@@ -366,7 +409,7 @@ func TestGettingAValueReadsOneCellOfOneTier(t *testing.T) {
 	})
 
 	t.Run("a folder and the root are separate cells", func(t *testing.T) {
-		root := setUpEnvFixture(t)
+		root := setUpEnvFixture(t).Root
 		envSet(t, root, "POSTHOG_ID", "web-id", envOptions{folder: "/web"})
 
 		var stdout, stderr bytes.Buffer
@@ -385,10 +428,10 @@ func TestGettingAValueReadsOneCellOfOneTier(t *testing.T) {
 	})
 
 	t.Run("production and preview are separate stores", func(t *testing.T) {
-		root := setUpEnvFixture(t)
+		project := setUpEnvFixture(t)
+		root := project.Root
+		clitest.Bootstrap(t, project.Provider, environment.TierPreview)
 		envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
-
-		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 
 		var get bytes.Buffer
 		if err := runEnvGet(context.Background(), newStreamedDependencies(&get), root, "STRIPE_API_KEY", envOptions{preview: true, reveal: true, yes: true}, &get, &get); err == nil {
@@ -405,8 +448,6 @@ func TestGettingAValueReadsOneCellOfOneTier(t *testing.T) {
 
 		envSet(t, root, "STRIPE_API_KEY", "sk_test_preview", envOptions{preview: true})
 
-		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
-
 		var production bytes.Buffer
 		var chatter bytes.Buffer
 		if err := runEnvGet(context.Background(), newStreamedDependencies(&chatter), root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true}, &production, &chatter); err != nil {
@@ -420,7 +461,7 @@ func TestGettingAValueReadsOneCellOfOneTier(t *testing.T) {
 
 func TestRemovingAValueDeletesItsCell(t *testing.T) {
 	t.Run("removes the value", func(t *testing.T) {
-		root := setUpEnvFixture(t)
+		root := setUpEnvFixture(t).Root
 		envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
 
 		var stdout, stderr bytes.Buffer
@@ -441,7 +482,7 @@ func TestRemovingAValueDeletesItsCell(t *testing.T) {
 	})
 
 	t.Run("reports nothing to remove", func(t *testing.T) {
-		root := setUpEnvFixture(t)
+		root := setUpEnvFixture(t).Root
 
 		var stdout, stderr bytes.Buffer
 		if err := runEnvRemove(context.Background(), newStreamedDependencies(&stderr), root, "NEVER_SET", envOptions{}, &stdout, &stderr); err != nil {
@@ -453,11 +494,13 @@ func TestRemovingAValueDeletesItsCell(t *testing.T) {
 	})
 
 	t.Run("an orphaned override is listed and removable", func(t *testing.T) {
-		root := setUpEnvFixture(t)
-		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
+		project := setUpEnvFixture(t)
+		root := project.Root
+		clitest.Bootstrap(t, project.Provider, environment.TierPreview)
+		seedEnvironment(t, project, "staging")
 		envSet(t, root, "STRIPE_API_KEY", "sk_staging", envOptions{preview: true, environment: "staging"})
 
-		t.Setenv(clitest.FakeEnvironmentsEnvVar, "none")
+		removeEnvironment(t, project, "staging")
 
 		var ls bytes.Buffer
 		if err := runEnvList(context.Background(), newStreamedDependencies(&ls), root, envOptions{preview: true}, &ls, &ls); err != nil {
@@ -487,7 +530,7 @@ func TestRemovingAValueDeletesItsCell(t *testing.T) {
 
 func TestAValuesHistoryShowsMetadataNewestFirst(t *testing.T) {
 	t.Run("shows metadata newest first and never a plaintext", func(t *testing.T) {
-		root := setUpEnvFixture(t)
+		root := setUpEnvFixture(t).Root
 		secrets := []string{"sk_first", "sk_second", "sk_third"}
 		for _, v := range secrets {
 			envSet(t, root, "STRIPE_API_KEY", v, envOptions{})
@@ -530,7 +573,7 @@ func TestAValuesHistoryShowsMetadataNewestFirst(t *testing.T) {
 
 func TestSettingSeveralPairsValidatesEveryPairBeforeWritingAny(t *testing.T) {
 	t.Run("sets every declared pair", func(t *testing.T) {
-		root := setUpEnvFixture(t)
+		root := setUpEnvFixture(t).Root
 		var stdout, stderr bytes.Buffer
 		err := runEnvSetPairs(context.Background(), newTestDependencies(), root, []envSetPair{
 			{key: "STRIPE_API_KEY", value: "sk_live_secret"},
@@ -547,21 +590,24 @@ func TestSettingSeveralPairsValidatesEveryPairBeforeWritingAny(t *testing.T) {
 	})
 
 	t.Run("validates every pair before writing any", func(t *testing.T) {
-		root := setUpEnvFixture(t)
+		project := setUpEnvFixture(t)
 		var stdout, stderr bytes.Buffer
-		err := runEnvSetPairs(context.Background(), newTestDependencies(), root, []envSetPair{
+		err := runEnvSetPairs(context.Background(), newTestDependencies(), project.Root, []envSetPair{
 			{key: "STRIPE_API_KEY", value: "sk_live_secret"},
 			{key: "SITE_HOSTNAME", value: "acme.example"},
 		}, envOptions{}, nil, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runEnvSetPairs() = nil, want an undeclared key refusal")
 		}
-		store, loadErr := clitest.LoadFakeStore()
-		if loadErr != nil {
-			t.Fatalf("load fake store: %v", loadErr)
+		if sent := clitest.RequestsTo[*envvarsv1.SetValueRequest](t, project.Requests, envvarsv1connect.EnvVarsServiceSetValueProcedure); len(sent) != 0 {
+			t.Errorf("the CLI sent %d writes, want none", len(sent))
 		}
-		if len(store) != 0 {
-			t.Errorf("store = %#v, want no writes", store)
+		stored, err := valuesOf(project).List(context.Background(), envvars.Scope{Project: clitest.FixtureSlug, Tier: environment.TierProduction})
+		if err != nil {
+			t.Fatalf("list the stored values: %v", err)
+		}
+		if len(stored) != 0 {
+			t.Errorf("stored = %+v, want no writes", stored)
 		}
 	})
 }
@@ -598,7 +644,7 @@ func TestTheEnvCommandsOfferOnlyTheFlagsTheyHonour(t *testing.T) {
 
 func TestRevealingASecretNeedsAnExplicitYes(t *testing.T) {
 	t.Run("--reveal alone will not print a secret", func(t *testing.T) {
-		root := setUpEnvFixture(t)
+		root := setUpEnvFixture(t).Root
 		envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
 
 		var stdout, stderr bytes.Buffer
@@ -617,7 +663,7 @@ func TestRevealingASecretNeedsAnExplicitYes(t *testing.T) {
 	})
 
 	t.Run("--reveal --yes prints the secret on stdout and warns on stderr", func(t *testing.T) {
-		root := setUpEnvFixture(t)
+		root := setUpEnvFixture(t).Root
 		envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
 
 		var stdout, stderr bytes.Buffer
@@ -636,7 +682,7 @@ func TestRevealingASecretNeedsAnExplicitYes(t *testing.T) {
 	})
 
 	t.Run("--reveal --yes warns through the run, so nothing reaches stderr beside it", func(t *testing.T) {
-		root := setUpEnvFixture(t)
+		root := setUpEnvFixture(t).Root
 		envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
 
 		var stdout, stderr, stream bytes.Buffer
@@ -652,7 +698,7 @@ func TestRevealingASecretNeedsAnExplicitYes(t *testing.T) {
 	})
 
 	t.Run("a plain value needs no acknowledgement and warns about nothing", func(t *testing.T) {
-		root := setUpEnvFixture(t)
+		root := setUpEnvFixture(t).Root
 		envSet(t, root, "LOG_LEVEL", "debug", envOptions{})
 
 		var stdout, stderr bytes.Buffer
@@ -670,9 +716,10 @@ func TestRevealingASecretNeedsAnExplicitYes(t *testing.T) {
 
 func TestEnvWritesQuoteTheVersionTheyRead(t *testing.T) {
 	t.Run("a set is refused when another write landed between the read and the write", func(t *testing.T) {
-		root := setUpEnvFixture(t)
+		project := setUpEnvFixture(t)
+		root := project.Root
 		envSet(t, root, "LOG_LEVEL", "info", envOptions{})
-		t.Setenv(clitest.FakeRacingWriteEnvVar, "LOG_LEVEL")
+		moveBeforeTheNextWrite(project, "LOG_LEVEL")
 
 		var stdout, stderr bytes.Buffer
 		err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), root, "LOG_LEVEL", "debug", envOptions{}, nil, &stdout, &stderr)
@@ -685,16 +732,16 @@ func TestEnvWritesQuoteTheVersionTheyRead(t *testing.T) {
 			}
 		}
 
-		t.Setenv(clitest.FakeRacingWriteEnvVar, "")
 		if got := strings.TrimSpace(envGet(t, root, "LOG_LEVEL", envOptions{reveal: true})); got == "debug" {
 			t.Errorf("value = %q, want the write that landed first kept: a refused set must not land", got)
 		}
 	})
 
 	t.Run("an rm is refused when another write landed between the read and the delete", func(t *testing.T) {
-		root := setUpEnvFixture(t)
+		project := setUpEnvFixture(t)
+		root := project.Root
 		envSet(t, root, "LOG_LEVEL", "info", envOptions{})
-		t.Setenv(clitest.FakeRacingWriteEnvVar, "LOG_LEVEL")
+		moveBeforeTheNextWrite(project, "LOG_LEVEL")
 
 		var stdout, stderr bytes.Buffer
 		err := runEnvRemove(context.Background(), newStreamedDependencies(&stderr), root, "LOG_LEVEL", envOptions{}, &stdout, &stderr)
@@ -705,14 +752,13 @@ func TestEnvWritesQuoteTheVersionTheyRead(t *testing.T) {
 			t.Errorf("stream = %q, want it to name the key", stderr.String())
 		}
 
-		t.Setenv(clitest.FakeRacingWriteEnvVar, "")
 		if got := strings.TrimSpace(envGet(t, root, "LOG_LEVEL", envOptions{reveal: true})); got == "" {
 			t.Errorf("value = %q, want the cell still set: a refused rm must not land", got)
 		}
 	})
 
 	t.Run("an uncontested set and rm land on the version they read", func(t *testing.T) {
-		root := setUpEnvFixture(t)
+		root := setUpEnvFixture(t).Root
 		envSet(t, root, "LOG_LEVEL", "info", envOptions{})
 		if out := envSet(t, root, "LOG_LEVEL", "debug", envOptions{}); !strings.Contains(out, "version 2") {
 			t.Errorf("set stdout = %q, want version 2: the write quoted version 1 and moved it on", out)
@@ -729,7 +775,7 @@ func TestEnvWritesQuoteTheVersionTheyRead(t *testing.T) {
 }
 
 func TestWhatTheDeclarationCollectorPrintsReachesTheRunAsOutputAndNeverRawStderr(t *testing.T) {
-	root := clitest.SetUpVariablesFixtureWith(t, "[]", `console.error("collecting the declared variables");`+envDeclaringScript(fixtureDefinitions))
+	root := setUpDeclaringProject(t, `console.error("collecting the declared variables");`+envDeclaringScript(fixtureDefinitions)).Root
 	dependencies := newTestDependencies()
 	dependencies.Presentation = func(io.Writer) terminal.Presentation {
 		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
@@ -755,7 +801,7 @@ func TestWhatTheDeclarationCollectorPrintsReachesTheRunAsOutputAndNeverRawStderr
 
 func setUpInlineBindingFixture(t *testing.T) string {
 	t.Helper()
-	root := setUpEnvFixture(t)
+	root := setUpEnvFixture(t).Root
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "`+clitest.FixtureSlug+`",
@@ -791,8 +837,7 @@ func TestRunEnvSetTakesAVariableABindingReads(t *testing.T) {
 }
 
 func TestSettingAValueForAnAppOnALiveComputePromisesNoDeploy(t *testing.T) {
-	root := setUpEnvFixture(t)
-	t.Setenv(clitest.FakeComputesEnvVar, "serverless")
+	root := setUpComputeFixture(t, provider.ComputeServerless)
 
 	said := envSet(t, root, "API_TOKEN", "sk-live", envOptions{})
 	if strings.Contains(said, "next deploy") {
@@ -801,13 +846,19 @@ func TestSettingAValueForAnAppOnALiveComputePromisesNoDeploy(t *testing.T) {
 }
 
 func TestSettingAValueForAContainerAppTheProviderReadsLivePromisesNoDeploy(t *testing.T) {
-	root := setUpEnvFixture(t)
-	t.Setenv(clitest.FakeComputesEnvVar, "container")
+	root := setUpComputeFixture(t, provider.ComputeContainer)
 
 	said := envSet(t, root, "API_TOKEN", "sk-live", envOptions{})
 	if strings.Contains(said, "next deploy") {
 		t.Errorf("`ocel env set` against a container app said\n%s\nand this provider names no compute it bakes values into, so the running container reads this one without a deploy", said)
 	}
+}
+
+func setUpComputeFixture(t *testing.T, compute provider.Compute) string {
+	t.Helper()
+	project := setUpEnvFixture(t)
+	project.Provider.WithFacts(func(facts *provider.Facts) { facts.Computes = []provider.Compute{compute} })
+	return project.Root
 }
 
 func envRemove(t *testing.T, root, key string, opts envOptions) string {
@@ -820,8 +871,7 @@ func envRemove(t *testing.T, root, key string, opts envOptions) string {
 }
 
 func TestRemovingAValueForAnAppOnALiveComputePromisesNoDeploy(t *testing.T) {
-	root := setUpEnvFixture(t)
-	t.Setenv(clitest.FakeComputesEnvVar, "serverless")
+	root := setUpComputeFixture(t, provider.ComputeServerless)
 	envSet(t, root, "API_TOKEN", "sk-live", envOptions{})
 
 	said := envRemove(t, root, "API_TOKEN", envOptions{})
@@ -831,8 +881,7 @@ func TestRemovingAValueForAnAppOnALiveComputePromisesNoDeploy(t *testing.T) {
 }
 
 func TestRemovingAValueForAContainerAppTheProviderReadsLivePromisesNoDeploy(t *testing.T) {
-	root := setUpEnvFixture(t)
-	t.Setenv(clitest.FakeComputesEnvVar, "container")
+	root := setUpComputeFixture(t, provider.ComputeContainer)
 	envSet(t, root, "API_TOKEN", "sk-live", envOptions{})
 
 	said := envRemove(t, root, "API_TOKEN", envOptions{})
@@ -841,17 +890,30 @@ func TestRemovingAValueForAContainerAppTheProviderReadsLivePromisesNoDeploy(t *t
 	}
 }
 
+var variablesKey = provider.Feature{Name: provider.FeatureVarsKey, Summary: "a key the variables are sealed under"}
+
+func setUpVariablesKeyFixture(t *testing.T) clitest.FakeProject {
+	t.Helper()
+	project := setUpEnvFixture(t)
+	project.Provider.FakeBootstrap().Offers(variablesKey)
+	return project
+}
+
+func bootstrapsRequested(t *testing.T, project clitest.FakeProject) []*contractv1.BootstrapRequest {
+	t.Helper()
+	return clitest.RequestsTo[*contractv1.BootstrapRequest](t, project.Requests, contractv1connect.ProviderServiceBootstrapProcedure)
+}
+
 func TestAWriteWithoutTheVariablesKeyOffersTheBootstrapThatAddsIt(t *testing.T) {
 	t.Run("a write with no key to seal under names the bootstrap that adds one", func(t *testing.T) {
-		t.Setenv(clitest.FakeBootstrapEnvVar, "current")
-		root := setUpEnvFixture(t)
+		root := setUpVariablesKeyFixture(t).Root
 
 		var stdout, stderr bytes.Buffer
 		err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), root, "LOG_LEVEL", "debug", envOptions{}, nil, &stdout, &stderr)
 		if err == nil {
 			t.Fatalf("runEnvSet err = nil, want it refused for want of a key; stdout=%s stderr=%s", stdout.String(), stderr.String())
 		}
-		if want := "vars-key"; !strings.Contains(stderr.String(), want) {
+		if want := provider.FeatureVarsKey; !strings.Contains(stderr.String(), want) {
 			t.Errorf("stream = %q, want it to name %s", stderr.String(), want)
 		}
 		if want := "ocel bootstrap production --features"; !strings.Contains(stderr.String(), want) {
@@ -860,8 +922,7 @@ func TestAWriteWithoutTheVariablesKeyOffersTheBootstrapThatAddsIt(t *testing.T) 
 	})
 
 	t.Run("a read asks for no key at all", func(t *testing.T) {
-		t.Setenv(clitest.FakeBootstrapEnvVar, "current")
-		root := setUpEnvFixture(t)
+		root := setUpVariablesKeyFixture(t).Root
 
 		var stdout, stderr bytes.Buffer
 		if err := runEnvList(context.Background(), newStreamedDependencies(&stderr), root, envOptions{}, &stdout, &stderr); err != nil {
@@ -870,11 +931,11 @@ func TestAWriteWithoutTheVariablesKeyOffersTheBootstrapThatAddsIt(t *testing.T) 
 	})
 
 	t.Run("a write goes through where the key is installed", func(t *testing.T) {
-		t.Setenv(clitest.FakeBootstrapEnvVar, "vars-key")
-		root := setUpEnvFixture(t)
+		project := setUpVariablesKeyFixture(t)
+		clitest.Bootstrap(t, project.Provider, environment.TierProduction, provider.FeatureVarsKey)
 
 		var stdout, stderr bytes.Buffer
-		if err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), root, "LOG_LEVEL", "debug", envOptions{}, nil, &stdout, &stderr); err != nil {
+		if err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), project.Root, "LOG_LEVEL", "debug", envOptions{}, nil, &stdout, &stderr); err != nil {
 			t.Fatalf("runEnvSet err = %v, want the write to land; stderr=%s", err, stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "Set LOG_LEVEL") {
@@ -883,25 +944,24 @@ func TestAWriteWithoutTheVariablesKeyOffersTheBootstrapThatAddsIt(t *testing.T) 
 	})
 
 	t.Run("a write asks for the key and for nothing else the bootstrap lacks", func(t *testing.T) {
-		t.Setenv(clitest.FakeBootstrapEnvVar, "missing")
-		root := setUpEnvFixture(t)
+		project := setUpEnvFixture(t)
+		project.Provider.FakeBootstrap().Offers(append(project.Provider.FakeBootstrap().Catalogue(), variablesKey)...)
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), root, "LOG_LEVEL", "debug", envOptions{}, nil, &stdout, &stderr)
+		err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), project.Root, "LOG_LEVEL", "debug", envOptions{}, nil, &stdout, &stderr)
 		if err == nil {
 			t.Fatalf("runEnvSet err = nil, want it refused for want of a key; stdout=%s stderr=%s", stdout.String(), stderr.String())
 		}
-		if want := "ocel bootstrap production --features vars-key"; !strings.Contains(stderr.String(), want) {
+		if want := "ocel bootstrap production --features " + provider.FeatureVarsKey; !strings.Contains(stderr.String(), want) {
 			t.Errorf("stream = %q, want it to name `%s` alone", stderr.String(), want)
 		}
-		if strings.Contains(err.Error(), "image-optimization") {
+		if strings.Contains(err.Error(), fake.FeatureImages) {
 			t.Errorf("runEnvSet err = %v, want a write to ask for the key it seals under, not for what a deploy would need", err)
 		}
 	})
 
 	t.Run("removing a value seals nothing, so it asks for no key", func(t *testing.T) {
-		t.Setenv(clitest.FakeBootstrapEnvVar, "current")
-		root := setUpEnvFixture(t)
+		root := setUpVariablesKeyFixture(t).Root
 
 		var stdout, stderr bytes.Buffer
 		if err := runEnvRemove(context.Background(), newStreamedDependencies(&stderr), root, "STRIPE_API_KEY", envOptions{}, &stdout, &stderr); err != nil {
@@ -910,8 +970,7 @@ func TestAWriteWithoutTheVariablesKeyOffersTheBootstrapThatAddsIt(t *testing.T) 
 	})
 
 	t.Run("pointing a value at another seals nothing, so it asks for no key", func(t *testing.T) {
-		t.Setenv(clitest.FakeBootstrapEnvVar, "current")
-		root := setUpEnvFixture(t)
+		root := setUpVariablesKeyFixture(t).Root
 
 		var stdout, stderr bytes.Buffer
 		ref := envRefOptions{project: "platform"}
@@ -921,39 +980,34 @@ func TestAWriteWithoutTheVariablesKeyOffersTheBootstrapThatAddsIt(t *testing.T) 
 	})
 
 	t.Run("a terminal is offered the key and the bootstrap runs where it is taken", func(t *testing.T) {
-		t.Setenv(clitest.FakeBootstrapEnvVar, "current")
-		journal := filepath.Join(t.TempDir(), "edge.journal")
-		t.Setenv(clitest.FakeEdgeJournalEnvVar, journal)
-		root := setUpEnvFixture(t)
+		project := setUpVariablesKeyFixture(t)
 		dependencies := newTestDependencies()
 		dependencies.StdinIsTerminal = func(io.Reader) bool { return true }
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvSet(context.Background(), dependencies, root, "LOG_LEVEL", "debug", envOptions{}, strings.NewReader("y\n"), &stdout, &stderr)
+		err := runEnvSet(context.Background(), dependencies, project.Root, "LOG_LEVEL", "debug", envOptions{}, strings.NewReader("y\n"), &stdout, &stderr)
 		if err != nil {
 			t.Fatalf("runEnvSet err = %v, want the offer taken and the write landed; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
-		if want := "Run `ocel bootstrap production --features vars-key` now?"; !strings.Contains(stderr.String(), want) {
+		if want := "Run `ocel bootstrap production --features " + provider.FeatureVarsKey + "` now?"; !strings.Contains(stderr.String(), want) {
 			t.Errorf("stderr = %q, want the offer put to whoever is at the terminal", stderr.String())
 		}
 		if strings.Contains(stdout.String(), "Run `ocel bootstrap") {
 			t.Errorf("stdout = %q, want the offer kept off the stream a script reads", stdout.String())
 		}
-		written, err := os.ReadFile(journal)
-		if err != nil {
-			t.Fatalf("the bootstrap the offer accepted never reached the provider: %v", err)
+		requested := bootstrapsRequested(t, project)
+		if len(requested) == 0 {
+			t.Fatal("the bootstrap the offer accepted never reached the provider")
 		}
-		if !strings.Contains(string(written), "features=vars-key") {
-			t.Errorf("the provider was asked for %q, want the key alone", strings.TrimSpace(string(written)))
+		if got := requested[len(requested)-1].GetFeatures(); !slices.Equal(got, []string{provider.FeatureVarsKey}) {
+			t.Errorf("the provider was asked for %q, want the key alone", got)
 		}
 	})
 }
 
 func TestAProviderWithoutTheVariablesKeyFeatureIsOfferedNothing(t *testing.T) {
 	t.Run("a write against a catalogue that never lists the key goes straight through", func(t *testing.T) {
-		t.Setenv(clitest.FakeBootstrapEnvVar, "current")
-		t.Setenv(clitest.FakeCatalogueEnvVar, clitest.FakeCatalogueNone)
-		root := setUpEnvFixture(t)
+		root := setUpEnvFixture(t).Root
 
 		var stdout, stderr bytes.Buffer
 		if err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), root, "LOG_LEVEL", "debug", envOptions{}, nil, &stdout, &stderr); err != nil {
@@ -965,23 +1019,19 @@ func TestAProviderWithoutTheVariablesKeyFeatureIsOfferedNothing(t *testing.T) {
 	})
 
 	t.Run("a terminal is offered nothing and the provider is left unbootstrapped", func(t *testing.T) {
-		t.Setenv(clitest.FakeBootstrapEnvVar, "current")
-		t.Setenv(clitest.FakeCatalogueEnvVar, clitest.FakeCatalogueNone)
-		journal := filepath.Join(t.TempDir(), "edge.journal")
-		t.Setenv(clitest.FakeEdgeJournalEnvVar, journal)
-		root := setUpEnvFixture(t)
+		project := setUpEnvFixture(t)
 		dependencies := newTestDependencies()
 		dependencies.StdinIsTerminal = func(io.Reader) bool { return true }
 
 		var stdout, stderr bytes.Buffer
-		if err := runEnvSet(context.Background(), dependencies, root, "LOG_LEVEL", "debug", envOptions{}, strings.NewReader("y\n"), &stdout, &stderr); err != nil {
+		if err := runEnvSet(context.Background(), dependencies, project.Root, "LOG_LEVEL", "debug", envOptions{}, strings.NewReader("y\n"), &stdout, &stderr); err != nil {
 			t.Fatalf("runEnvSet err = %v, want the write to land unbidden; stderr=%s", err, stderr.String())
 		}
 		if strings.Contains(stderr.String(), "Run `ocel bootstrap") {
 			t.Errorf("stderr = %q, want no offer of a feature this provider has no name for", stderr.String())
 		}
-		if _, err := os.Stat(journal); !os.IsNotExist(err) {
-			t.Errorf("the provider was bootstrapped for a feature it does not offer: %v", err)
+		if requested := bootstrapsRequested(t, project); len(requested) != 0 {
+			t.Errorf("the provider was bootstrapped for a feature it does not offer: %v", requested)
 		}
 	})
 }
