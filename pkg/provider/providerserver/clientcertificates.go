@@ -81,8 +81,8 @@ func (c originClaim) recordIssued(hostState *stackrecords.HostnameState) string 
 	if c.issued.ID == "" {
 		return ""
 	}
-	superseded := hostState.OriginCertificate
-	hostState.OriginCertificate, hostState.OriginCertificateExpires = c.issued.ID, c.issued.ExpiresAt
+	superseded := hostState.OriginCertificateID
+	hostState.OriginCertificateID, hostState.OriginCertificateExpiresAt = c.issued.ID, c.issued.ExpiresAt
 	if superseded == c.issued.ID {
 		return ""
 	}
@@ -107,8 +107,8 @@ func claimCertified(ctx context.Context, front edge.Edge, claim router.Claim, is
 }
 
 func originCertificateDue(hostState *stackrecords.HostnameState, now time.Time) bool {
-	return hostState.OriginCertificate != "" &&
-		edge.OriginCertificate{ExpiresAt: hostState.OriginCertificateExpires}.IsDue(now)
+	return hostState.OriginCertificateID != "" &&
+		edge.OriginCertificate{ExpiresAt: hostState.OriginCertificateExpiresAt}.IsDue(now)
 }
 
 func revokeOriginCertificate(ctx context.Context, front edge.Edge, id string, runProgress progress.Progress) {

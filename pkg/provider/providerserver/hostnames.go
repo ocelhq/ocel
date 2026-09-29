@@ -306,7 +306,7 @@ func (d *hostnames) remove(ctx context.Context, runProgress progress.Progress) e
 			return err
 		}
 		hostState := d.state.Host(host)
-		revokeOriginCertificate(ctx, d.front, hostState.OriginCertificate, runProgress)
+		revokeOriginCertificate(ctx, d.front, hostState.OriginCertificateID, runProgress)
 		if err := d.cutover.release(ctx, hostState.Written, runProgress.Say); err != nil {
 			return err
 		}

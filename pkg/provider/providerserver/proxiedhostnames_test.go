@@ -179,7 +179,7 @@ func TestAnOriginThatHoldsNoCertificateForAForwardedHostnameIsIssuedOneByTheEdge
 	if len(claims) != 2 || claims[0].OriginCertificate.ID != "" || claims[1].OriginCertificate.ID != "origin-certificate-1" {
 		t.Fatalf("the router took claims %+v, want the hostname claimed, then claimed again with the certificate the edge issued once the origin said it holds none", claims)
 	}
-	if recorded := readStack(t, vendor, environment.TierProduction, "shop").Host("app.acme.com").OriginCertificate; recorded != "origin-certificate-1" {
+	if recorded := readStack(t, vendor, environment.TierProduction, "shop").Host("app.acme.com").OriginCertificateID; recorded != "origin-certificate-1" {
 		t.Errorf("the hostname records origin certificate %q, want origin-certificate-1: it is revoked once nothing answers with it", recorded)
 	}
 
@@ -208,12 +208,12 @@ func TestAServedHostnameWhoseOriginCertificateIsDueIsIssuedASuccessorAndThePrede
 	relay.ForgetsOriginCertificate("app.acme.com")
 	state := readStack(t, vendor, environment.TierProduction, "shop")
 	hostState := state.Host("app.acme.com")
-	hostState.OriginCertificateExpires = time.Now().Add(time.Hour)
+	hostState.OriginCertificateExpiresAt = time.Now().Add(time.Hour)
 	state.SetHost("app.acme.com", hostState)
 	seedStack(t, vendor, environment.TierProduction, "shop", state)
 
 	addWebHostname(t, client, "app.acme.com", nil)
-	if recorded := readStack(t, vendor, environment.TierProduction, "shop").Host("app.acme.com").OriginCertificate; recorded != "origin-certificate-2" {
+	if recorded := readStack(t, vendor, environment.TierProduction, "shop").Host("app.acme.com").OriginCertificateID; recorded != "origin-certificate-2" {
 		t.Errorf("the hostname records origin certificate %q, want its successor origin-certificate-2", recorded)
 	}
 	if revoked := relay.RevokedOriginCertificates(); !slices.Equal(revoked, []string{"origin-certificate-1"}) {

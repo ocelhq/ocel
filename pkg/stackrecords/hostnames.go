@@ -45,9 +45,9 @@ type HostnameState struct {
 	Manual      []edge.Record          `json:"owed,omitempty"`
 	Probe       ServeProbe             `json:"probe,omitzero"`
 
-	ClientCertificateDigests []string  `json:"clientCertificateDigests,omitempty"`
-	OriginCertificate        string    `json:"originCertificate,omitempty"`
-	OriginCertificateExpires time.Time `json:"originCertificateExpires,omitzero"`
+	ClientCertificateDigests   []string  `json:"clientCertificateDigests,omitempty"`
+	OriginCertificateID        string    `json:"originCertificateId,omitempty"`
+	OriginCertificateExpiresAt time.Time `json:"originCertificateExpiresAt,omitzero"`
 }
 
 func (s *HostnameState) Supersede(cert provider.Certificate) {

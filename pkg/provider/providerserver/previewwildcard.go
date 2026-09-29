@@ -395,7 +395,7 @@ func (w *wildcards) disclaimEntry(ctx context.Context, front edge.Edge, runProgr
 	if err := entry.DisclaimPreviewEntry(ctx, w.recorded.BaseDomain); err != nil {
 		return err
 	}
-	revokeOriginCertificate(ctx, front, w.recorded.Host.OriginCertificate, runProgress)
+	revokeOriginCertificate(ctx, front, w.recorded.Host.OriginCertificateID, runProgress)
 	return nil
 }
 

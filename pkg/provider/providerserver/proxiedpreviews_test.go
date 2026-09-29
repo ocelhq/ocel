@@ -34,7 +34,7 @@ func TestTheSharedPreviewWildcardAnEdgeProxiesIsForwardedToThePreviewEntryItsRou
 	if last := specs[len(specs)-1]; last.Origin == nil || *last.Origin != fake.Origin(fake.RouterDirect) {
 		t.Errorf("the edge reconciled the wildcard forwarding to %+v, want the origin the router's preview entry answers on", last.Origin)
 	}
-	if recorded := readRecordedWildcard(t, vendor).Host.OriginCertificate; recorded != "origin-certificate-1" {
+	if recorded := readRecordedWildcard(t, vendor).Host.OriginCertificateID; recorded != "origin-certificate-1" {
 		t.Errorf("the wildcard records origin certificate %q, want origin-certificate-1", recorded)
 	}
 
