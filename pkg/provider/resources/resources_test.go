@@ -374,13 +374,21 @@ func TestPlanDestroyTakesDownEveryBindingTheStackRecorded(t *testing.T) {
 
 type withFunctions struct {
 	*buckets
-	removed []provider.Function
+	removed          []provider.Function
+	removedRevisions []provider.Function
 }
 
 func (w *withFunctions) hooks() resources.Hooks {
 	hooks := w.buckets.hooks()
-	hooks.Functions = &resources.FunctionHooks{Provision: w.ProvisionFunctions, Remove: w.RemoveFunctions}
+	hooks.Functions = &resources.FunctionHooks{
+		Provision: w.ProvisionFunctions, Remove: w.RemoveFunctions, RemoveRevisions: w.RemoveFunctionRevisions,
+	}
 	return hooks
+}
+
+func (w *withFunctions) RemoveFunctionRevisions(_ context.Context, _ provider.StackRef, functions []provider.Function, _ progress.Progress) error {
+	w.removedRevisions = append(w.removedRevisions, functions...)
+	return nil
 }
 
 func (w *withFunctions) ProvisionFunctions(_ context.Context, spec provider.StackSpec, _ progress.Progress) ([]provider.Function, error) {
@@ -417,6 +425,113 @@ func recordFunctions(t *testing.T, store keyvalue.Store, ref provider.StackRef, 
 	}
 	if err := stackrecords.Write(context.Background(), store, ref.Tier, ref.Project, ref.Name, stack); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func releaseRef(deploymentID string) provider.StackRef {
+	ref := appRef()
+	ref.Name = naming.AppStack("prod", "web", naming.NewRelease(deploymentID, "f1"))
+	return ref
+}
+
+func recordRelease(t *testing.T, store keyvalue.Store, ref provider.StackRef, functions ...provider.Function) {
+	t.Helper()
+	if err := stackrecords.Write(context.Background(), store, ref.Tier, ref.Project, ref.Name,
+		stackrecords.Stack{Kind: provider.StackApp, Functions: functions}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDestroyOfOneReleaseTakesOnlyItsRevisionFromAFunctionAnotherReleaseServes(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := fake.NewKeyValues()
+	dropped, surviving := releaseRef("d1"), releaseRef("d2")
+	recordRelease(t, store, dropped, provider.Function{Name: "api", Physical: "shop-prod-web-api", Revision: "shop-prod-web-api-00001"})
+	recordRelease(t, store, surviving, provider.Function{Name: "api", Physical: "shop-prod-web-api", Revision: "shop-prod-web-api-00002"})
+
+	own := &withFunctions{buckets: &buckets{}}
+	if err := resources.NewHookStacks(store, fake.NewArtifacts(), own.hooks()).Destroy(ctx, dropped, nil); err != nil {
+		t.Fatalf("Destroy() = %v", err)
+	}
+	if len(own.removed) != 0 {
+		t.Errorf("Destroy() took down %v, which the surviving release still serves from", own.removed)
+	}
+	if len(own.removedRevisions) != 1 || own.removedRevisions[0].Revision != "shop-prod-web-api-00001" {
+		t.Errorf("Destroy() took the revisions of %v, want only the revision the dropped release deployed", own.removedRevisions)
+	}
+}
+
+func TestDestroyOfOneReleaseLeavesARevisionAnotherReleaseAlsoServes(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := fake.NewKeyValues()
+	dropped, surviving := releaseRef("d1"), releaseRef("d2")
+	shared := provider.Function{Name: "api", Physical: "shop-prod-web-api", Revision: "shop-prod-web-api-00001"}
+	recordRelease(t, store, dropped, shared)
+	recordRelease(t, store, surviving, shared)
+
+	own := &withFunctions{buckets: &buckets{}}
+	if err := resources.NewHookStacks(store, fake.NewArtifacts(), own.hooks()).Destroy(ctx, dropped, nil); err != nil {
+		t.Fatalf("Destroy() = %v", err)
+	}
+	if len(own.removed) != 0 || len(own.removedRevisions) != 0 {
+		t.Errorf("Destroy() took down %v and the revisions of %v, and the surviving release serves that very revision",
+			own.removed, own.removedRevisions)
+	}
+}
+
+func TestDestroyOfTheLastReleaseNamingAFunctionTakesTheFunctionDown(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := fake.NewKeyValues()
+	dropped, last := releaseRef("d1"), releaseRef("d2")
+	recordRelease(t, store, dropped, provider.Function{Name: "api", Physical: "shop-prod-web-api", Revision: "shop-prod-web-api-00001"})
+	recordRelease(t, store, last, provider.Function{Name: "api", Physical: "shop-prod-web-api", Revision: "shop-prod-web-api-00002"})
+
+	own := &withFunctions{buckets: &buckets{}}
+	stacks := resources.NewHookStacks(store, fake.NewArtifacts(), own.hooks())
+	if err := stacks.Destroy(ctx, dropped, nil); err != nil {
+		t.Fatalf("Destroy() of the dropped release = %v", err)
+	}
+	if err := stackrecords.Forget(ctx, store, dropped.Tier, dropped.Project, dropped.Name); err != nil {
+		t.Fatal(err)
+	}
+	if err := stacks.Destroy(ctx, last, nil); err != nil {
+		t.Fatalf("Destroy() of the last release = %v", err)
+	}
+	if len(own.removed) != 1 || own.removed[0].Physical != "shop-prod-web-api" {
+		t.Errorf("Destroy() of the last release took down %v, want the function nothing else names", own.removed)
+	}
+}
+
+func TestDestroyOfOneReleaseTakesOnlyItsRevisionFromAContainerAnotherReleaseServes(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := fake.NewKeyValues()
+	dropped, surviving := releaseRef("d1"), releaseRef("d2")
+	for ref, revision := range map[provider.StackRef]string{dropped: "shop-prod-web-00001", surviving: "shop-prod-web-00002"} {
+		if err := stackrecords.Write(ctx, store, ref.Tier, ref.Project, ref.Name, stackrecords.Stack{
+			Kind:       provider.StackApp,
+			Containers: []provider.AppContainer{{Name: "web", Physical: "shop-prod-web", Revision: revision}},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	own := &withContainers{buckets: &buckets{}}
+	if err := resources.NewHookStacks(store, fake.NewArtifacts(), own.hooks()).Destroy(ctx, dropped, nil); err != nil {
+		t.Fatalf("Destroy() = %v", err)
+	}
+	if len(own.removed) != 0 {
+		t.Errorf("Destroy() took down %v, which the surviving release still serves from", own.removed)
+	}
+	if len(own.removedRevisions) != 1 || own.removedRevisions[0].Revision != "shop-prod-web-00001" {
+		t.Errorf("Destroy() took the revisions of %v, want only the revision the dropped release deployed", own.removedRevisions)
 	}
 }
 
@@ -488,14 +603,22 @@ func TestAReleaseDeclaringNoAppTakesDownTheFunctionsItsPlanShowsGoing(t *testing
 
 type withContainers struct {
 	*buckets
-	provisioned []provider.StackSpec
-	removed     []provider.AppContainer
+	provisioned      []provider.StackSpec
+	removed          []provider.AppContainer
+	removedRevisions []provider.AppContainer
 }
 
 func (w *withContainers) hooks() resources.Hooks {
 	hooks := w.buckets.hooks()
-	hooks.Containers = &resources.ContainerHooks{Provision: w.ProvisionContainers, Remove: w.RemoveContainers}
+	hooks.Containers = &resources.ContainerHooks{
+		Provision: w.ProvisionContainers, Remove: w.RemoveContainers, RemoveRevisions: w.RemoveContainerRevisions,
+	}
 	return hooks
+}
+
+func (w *withContainers) RemoveContainerRevisions(_ context.Context, _ provider.StackRef, containers []provider.AppContainer, _ progress.Progress) error {
+	w.removedRevisions = append(w.removedRevisions, containers...)
+	return nil
 }
 
 func (w *withContainers) ProvisionContainers(_ context.Context, spec provider.StackSpec, _ progress.Progress) ([]provider.AppContainer, error) {

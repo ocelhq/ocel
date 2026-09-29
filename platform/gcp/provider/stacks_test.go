@@ -10,9 +10,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
@@ -160,5 +162,120 @@ func TestASpecThatNamesWhatTheDeployDeliveredIsRefused(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "fn") {
 		t.Errorf("mergedValues() = %v, want what sets it said", err)
+	}
+}
+
+func functionRelease(deploymentID, image string) provider.StackSpec {
+	return provider.StackSpec{
+		Ref: provider.StackRef{
+			Project: "shop",
+			Tier:    environment.TierProduction,
+			Name:    naming.AppStack(stackrecords.ProductionEnv, "web", naming.NewRelease(deploymentID, "f1")),
+		},
+		Kind: provider.StackApp,
+		App: &provider.AppSpec{
+			App:     "web",
+			Compute: provider.ComputeServerless,
+			Functions: []provider.FunctionSpec{{
+				Name:      "fn--web--checkout",
+				Image:     image,
+				Framework: appbuild.Framework{Name: "nodejs", Arch: string(arch.X8664)},
+			}},
+		},
+	}
+}
+
+type releasedStacks struct {
+	stacks provider.Stacks
+	store  keyvalue.Store
+}
+
+func newReleasedStacks(p *Provider) releasedStacks {
+	store := fake.NewKeyValues()
+	return releasedStacks{stacks: resources.NewHookStacks(store, resources.NoArtifacts{}, p.resourceHooks()), store: store}
+}
+
+func (r releasedStacks) provision(t *testing.T, spec provider.StackSpec) provider.Function {
+	t.Helper()
+	ctx := context.Background()
+	result, err := r.stacks.Provision(ctx, spec, nil)
+	if err != nil {
+		t.Fatalf("Provision(%s) = %v", spec.Ref.Name, err)
+	}
+	if err := stackrecords.Write(ctx, r.store, spec.Ref.Tier, spec.Ref.Project, spec.Ref.Name,
+		stackrecords.Stack{Kind: provider.StackApp, Functions: result.Functions}); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Functions) != 1 {
+		t.Fatalf("Provision(%s) deployed %+v, want the one function its spec names", spec.Ref.Name, result.Functions)
+	}
+	return result.Functions[0]
+}
+
+func (r releasedStacks) destroy(t *testing.T, ref provider.StackRef) {
+	t.Helper()
+	ctx := context.Background()
+	if err := r.stacks.Destroy(ctx, ref, nil); err != nil {
+		t.Fatalf("Destroy(%s) = %v", ref.Name, err)
+	}
+	if err := stackrecords.Forget(ctx, r.store, ref.Tier, ref.Project, ref.Name); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestReclaimingADroppedFunctionReleaseLeavesTheServiceServingTheActiveRelease(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+	released := newReleasedStacks(p)
+	dropped := functionRelease("d1", "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:one")
+	gone := released.provision(t, dropped)
+	active := released.provision(t, functionRelease("d2", "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:two"))
+	if gone.Physical != active.Physical {
+		t.Fatalf("the releases deployed %q and %q, want one Cloud Run service per function that every release revises", gone.Physical, active.Physical)
+	}
+	if err := p.Pin(context.Background(), active.Physical, active.Revision, nil); err != nil {
+		t.Fatalf("Pin(%s) = %v", active.Revision, err)
+	}
+
+	released.destroy(t, dropped.Ref)
+
+	service := server.serving()
+	if service == nil {
+		t.Fatalf("reclaiming the dropped release deleted Cloud Run service %s, which the active release serves from", active.Physical)
+	}
+	if !servedBy(service.Traffic, active.Revision) {
+		t.Errorf("the service serves %+v after the reclaim, want all of it still on the active release's %s", service.Traffic, active.Revision)
+	}
+	if revisions := server.standing(); !slices.Equal(revisions, []string{active.Revision}) {
+		t.Errorf("the service keeps revisions %v after the reclaim, want only %s: the dropped release's revision is its own to reclaim", revisions, active.Revision)
+	}
+}
+
+func TestDestroyingEveryReleaseOfAFunctionDeletesItsServiceWhicheverGoesFirst(t *testing.T) {
+	for name, activeFirst := range map[string]bool{"the active release first": true, "the dropped release first": false} {
+		t.Run(name, func(t *testing.T) {
+			server := &runServer{}
+			p := server.open(t)
+			released := newReleasedStacks(p)
+			earlier := functionRelease("d1", "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:one")
+			later := functionRelease("d2", "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:two")
+			released.provision(t, earlier)
+			active := released.provision(t, later)
+			if err := p.Pin(context.Background(), active.Physical, active.Revision, nil); err != nil {
+				t.Fatalf("Pin(%s) = %v", active.Revision, err)
+			}
+
+			order := []provider.StackRef{earlier.Ref, later.Ref}
+			if activeFirst {
+				order = []provider.StackRef{later.Ref, earlier.Ref}
+			}
+			for _, ref := range order {
+				released.destroy(t, ref)
+			}
+
+			if service := server.serving(); service != nil {
+				t.Errorf("destroying every release left Cloud Run service %s standing", active.Physical)
+			}
+		})
 	}
 }

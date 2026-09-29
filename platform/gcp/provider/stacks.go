@@ -107,6 +107,15 @@ func (p *Provider) RemoveFunctions(ctx context.Context, _ provider.StackRef, fun
 	return nil
 }
 
+func (p *Provider) RemoveFunctionRevisions(ctx context.Context, _ provider.StackRef, functions []provider.Function, progress progress.Progress) error {
+	for _, function := range functions {
+		if err := p.removeRevision(ctx, function.Physical, function.Revision, progress); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackSpec, progress progress.Progress) ([]provider.AppContainer, error) {
 	app := spec.App
 	if app == nil {
@@ -161,6 +170,15 @@ func (p *Provider) RemoveContainers(ctx context.Context, _ provider.StackRef, co
 			continue
 		}
 		if err := p.tearDown(ctx, container.Physical, progress); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p *Provider) RemoveContainerRevisions(ctx context.Context, _ provider.StackRef, containers []provider.AppContainer, progress progress.Progress) error {
+	for _, container := range containers {
+		if err := p.removeRevision(ctx, container.Physical, container.Revision, progress); err != nil {
 			return err
 		}
 	}

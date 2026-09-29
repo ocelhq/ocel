@@ -108,8 +108,12 @@ func (p *Provider) Hooks() provider.Hooks {
 
 func (p *Provider) resourceHooks() resources.Hooks {
 	return resources.Hooks{
-		Functions:  &resources.FunctionHooks{Provision: p.ProvisionFunctions, Remove: p.RemoveFunctions},
-		Containers: &resources.ContainerHooks{Provision: p.ProvisionContainers, Remove: p.RemoveContainers},
+		Functions: &resources.FunctionHooks{
+			Provision: p.ProvisionFunctions, Remove: p.RemoveFunctions, RemoveRevisions: p.RemoveFunctionRevisions,
+		},
+		Containers: &resources.ContainerHooks{
+			Provision: p.ProvisionContainers, Remove: p.RemoveContainers, RemoveRevisions: p.RemoveContainerRevisions,
+		},
 	}
 }
 

@@ -415,3 +415,45 @@ func (p *Provider) tearDown(ctx context.Context, service string, progress progre
 	}
 	return err
 }
+
+func (p *Provider) removeRevision(ctx context.Context, service, revision string, progress progress.Progress) error {
+	if service == "" || revision == "" {
+		return nil
+	}
+	clients, err := p.openClients(ctx)
+	if err != nil {
+		return err
+	}
+	services, err := clients.Run()
+	if err != nil {
+		return err
+	}
+	path := clients.servicePath(service)
+	current, err := p.read(ctx, services, path, service)
+	if absent(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if isLatestOrRouted(current, revision) {
+		return nil
+	}
+	ensureProgress(progress).Say("Deleting revision " + revision + " of Cloud Run service " + service + " in " + clients.region)
+	err = p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
+		return services.Projects.Locations.Services.Revisions.Delete(path + "/revisions/" + revision).Context(ctx).Do(call...)
+	})
+	if absent(err) {
+		return nil
+	}
+	return err
+}
+
+func isLatestOrRouted(service *run.GoogleCloudRunV2Service, revision string) bool {
+	if revisionName(service.LatestReadyRevision) == revision || revisionName(service.LatestCreatedRevision) == revision {
+		return true
+	}
+	return slices.ContainsFunc(service.Traffic, func(target *run.GoogleCloudRunV2TrafficTarget) bool {
+		return revisionName(target.Revision) == revision
+	})
+}
