@@ -9,7 +9,9 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/appurl"
+	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/consent"
+	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/readiness"
@@ -18,11 +20,6 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-func preflightPreview(ctx context.Context, check *run.Span, prov *providerprocess.Provider, cfg *project.Project) error {
-	_, err := readiness.Check(ctx, check, prov, cfg, readiness.Request{Tier: environmentv1.Tier_TIER_PREVIEW, Require: readiness.Features})
-	return err
-}
-
 type preflightFacts struct {
 	declined       bool
 	project        *project.Project
@@ -30,16 +27,17 @@ type preflightFacts struct {
 	urls           map[string]string
 }
 
-func preflightPreviewUp(ctx context.Context, dependencies Dependencies, policy consent.Policy, check *run.Span, prov *providerprocess.Provider, cfg *project.Project, prebuilt bool, pointer string, out io.Writer, in io.Reader) (preflightFacts, error) {
-	resp, err := readiness.Check(ctx, check, prov, cfg, readiness.Request{
+func previewOpenOptions(dry bool, cfg *project.Project) commands.OpenOptions {
+	return commands.OpenOptions{
+		Pinning: executables.ChoosePinning(dry),
 		Tier:    environmentv1.Tier_TIER_PREVIEW,
 		Require: readiness.Infrastructure,
 		Slug:    cfg.Slug,
 		Domains: cfg.HostnameNames(environmentv1.Tier_TIER_PREVIEW),
-	})
-	if err != nil {
-		return preflightFacts{}, err
 	}
+}
+
+func preflightPreviewUp(ctx context.Context, dependencies Dependencies, policy consent.Policy, check *run.Span, prov *providerprocess.Provider, cfg *project.Project, resp *contractv1.PreflightResponse, prebuilt bool, pointer string, out io.Writer, in io.Reader) (preflightFacts, error) {
 	resolved, archs, err := resolveContainers(ctx, dependencies, check, prov, cfg, resp, prebuilt)
 	if err != nil {
 		return preflightFacts{}, err
@@ -68,17 +66,18 @@ func preflightPreviewUp(ctx context.Context, dependencies Dependencies, policy c
 	}, nil
 }
 
-func preflightDeploy(ctx context.Context, dependencies Dependencies, policy consent.Policy, check *run.Span, prov *providerprocess.Provider, cfg *project.Project, prebuilt bool, out io.Writer, in io.Reader) (preflightFacts, error) {
+func productionOpenOptions(dry, interactive bool, cfg *project.Project) commands.OpenOptions {
 	domains := cfg.HostnameNames(environmentv1.Tier_TIER_PRODUCTION)
-	resp, err := readiness.Check(ctx, check, prov, cfg, readiness.Request{
+	return commands.OpenOptions{
+		Pinning: executables.ChoosePinning(dry),
 		Tier:    environmentv1.Tier_TIER_PRODUCTION,
 		Require: readiness.Infrastructure,
-		Slug:    slugToScopeBy(policy.Interactive, domains, cfg),
+		Slug:    slugToScopeBy(interactive, domains, cfg),
 		Domains: domains,
-	})
-	if err != nil {
-		return preflightFacts{}, err
 	}
+}
+
+func preflightDeploy(ctx context.Context, dependencies Dependencies, policy consent.Policy, check *run.Span, prov *providerprocess.Provider, cfg *project.Project, resp *contractv1.PreflightResponse, prebuilt bool, out io.Writer, in io.Reader) (preflightFacts, error) {
 	resolved, archs, err := resolveContainers(ctx, dependencies, check, prov, cfg, resp, prebuilt)
 	if err != nil {
 		return preflightFacts{}, err

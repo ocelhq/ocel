@@ -64,17 +64,17 @@ func runDestroy(ctx context.Context, invocation commands.Invocation, cfg *projec
 	if notice != "" {
 		check.Warn(notice)
 	}
-	prov, err := providerprocess.Start(ctx, cfg, check, invocation.Questions, executables.ChoosePinning(opts.Dry))
-	if err != nil {
-		return err
-	}
-	defer prov.Close()
-
-	_, err = readiness.Check(ctx, check, prov, cfg, readiness.Request{Tier: tier, Require: readiness.Credentials, Slug: cfg.Slug})
+	prov, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{
+		Pinning: executables.ChoosePinning(opts.Dry),
+		Tier:    tier,
+		Require: readiness.Credentials,
+		Slug:    cfg.Slug,
+	})
 	check.End(err)
 	if err != nil {
 		return err
 	}
+	defer prov.Close()
 
 	planning := run.Phase(progressv1.Phase_PHASE_PLAN)
 	unit := planning.Unit(name, progress.Enumerating.Title(fmt.Sprintf("what removing the %s bootstrap would delete", name)))

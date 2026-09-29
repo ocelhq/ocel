@@ -13,10 +13,10 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/deployrecord"
-	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
+	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/valuestore"
@@ -206,13 +206,14 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := providerprocess.Start(ctx, cfg, check, dependencies.Questions, executables.ChoosePinning(opts.dry))
+	prov, resp, err := dependencies.OpenProvider(ctx, check, cfg, previewOpenOptions(opts.dry, cfg))
 	if err != nil {
+		check.End(err)
 		return err
 	}
 	defer prov.Close()
 
-	facts, err := preflightPreviewUp(ctx, dependencies, policy, check, prov, cfg, opts.prebuilt, env.GetIdentity(), stdout, stdin)
+	facts, err := preflightPreviewUp(ctx, dependencies, policy, check, prov, cfg, resp, opts.prebuilt, env.GetIdentity(), stdout, stdin)
 	check.End(err)
 	if err != nil {
 		return err
@@ -380,8 +381,9 @@ func runPreviewRemove(ctx context.Context, dependencies Dependencies, cwd string
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := providerprocess.Start(ctx, cfg, check, dependencies.Questions, executables.PinToLock)
+	prov, _, err := dependencies.OpenProvider(ctx, check, cfg, commands.OpenOptions{Tier: environmentv1.Tier_TIER_PREVIEW, Require: readiness.Features})
 	if err != nil {
+		check.End(err)
 		return err
 	}
 	defer prov.Close()
@@ -397,11 +399,7 @@ func runPreviewRemove(ctx context.Context, dependencies Dependencies, cwd string
 		}
 	}
 
-	err = preflightPreview(ctx, check, prov, cfg)
-	check.End(err)
-	if err != nil {
-		return err
-	}
+	check.End(nil)
 
 	req := &contractv1.RemoveEnvironmentRequest{
 		Environment: env,
@@ -440,7 +438,7 @@ func listPreviews(ctx context.Context, dependencies Dependencies, cfg *project.P
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := providerprocess.Start(ctx, cfg, check, dependencies.Questions, executables.PinToLock)
+	prov, _, err := dependencies.OpenProvider(ctx, check, cfg, commands.OpenOptions{})
 	check.End(err)
 	if err != nil {
 		return nil, err
@@ -477,17 +475,12 @@ func runPreviewPrune(ctx context.Context, dependencies Dependencies, cwd string,
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := providerprocess.Start(ctx, cfg, check, dependencies.Questions, executables.PinToLock)
-	if err != nil {
-		return err
-	}
-	defer prov.Close()
-
-	err = preflightPreview(ctx, check, prov, cfg)
+	prov, _, err := dependencies.OpenProvider(ctx, check, cfg, commands.OpenOptions{Tier: environmentv1.Tier_TIER_PREVIEW, Require: readiness.Features})
 	check.End(err)
 	if err != nil {
 		return err
 	}
+	defer prov.Close()
 
 	req := &contractv1.RemoveStalePromotionsRequest{
 		Slug:        cfg.Slug,

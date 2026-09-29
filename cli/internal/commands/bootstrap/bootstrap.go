@@ -17,7 +17,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/readiness"
-	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
@@ -175,13 +174,19 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier e
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := providerprocess.Start(ctx, cfg, check, invocation.Questions, executables.ChoosePinning(opts.Dry))
+	prov, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{
+		Pinning: executables.ChoosePinning(opts.Dry),
+		Tier:    tier,
+		Require: readiness.Credentials,
+		Slug:    cfg.Slug,
+	})
 	if err != nil {
+		check.End(err)
 		return err
 	}
 	defer prov.Close()
 
-	planned, err := describeBootstrap(ctx, check, prov, cfg, tier)
+	planned, err := describeBootstrap(ctx, prov, cfg, tier)
 	check.End(err)
 	if err != nil {
 		return err
@@ -309,10 +314,7 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier e
 	return nil
 }
 
-func describeBootstrap(ctx context.Context, check *run.Span, prov *providerprocess.Provider, cfg *project.Project, tier environmentv1.Tier) (*contractv1.DescribeBootstrapResponse, error) {
-	if _, err := readiness.Check(ctx, check, prov, cfg, readiness.Request{Tier: tier, Require: readiness.Credentials, Slug: cfg.Slug}); err != nil {
-		return nil, err
-	}
+func describeBootstrap(ctx context.Context, prov *providerprocess.Provider, cfg *project.Project, tier environmentv1.Tier) (*contractv1.DescribeBootstrapResponse, error) {
 	var planned *contractv1.DescribeBootstrapResponse
 	err := prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		planned, err = client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{

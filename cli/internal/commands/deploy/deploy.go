@@ -13,7 +13,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/deployrecord"
-	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
@@ -113,13 +112,14 @@ func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts 
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := providerprocess.Start(ctx, cfg, check, dependencies.Questions, executables.ChoosePinning(opts.dry))
+	prov, resp, err := dependencies.OpenProvider(ctx, check, cfg, productionOpenOptions(opts.dry, policy.Interactive, cfg))
 	if err != nil {
+		check.End(err)
 		return err
 	}
 	defer prov.Close()
 
-	facts, err := preflightDeploy(ctx, dependencies, policy, check, prov, cfg, opts.prebuilt, stdout, stdin)
+	facts, err := preflightDeploy(ctx, dependencies, policy, check, prov, cfg, resp, opts.prebuilt, stdout, stdin)
 	check.End(err)
 	if err != nil {
 		return err

@@ -8,7 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/executables"
+	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/readiness"
@@ -55,26 +55,21 @@ func runWithEnvProvider(ctx context.Context, dependencies Dependencies, cwd stri
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := providerprocess.Start(ctx, cfg, check, dependencies.Questions, executables.PinToLock)
+	prov, status, err := dependencies.OpenProvider(ctx, check, cfg, commands.OpenOptions{Tier: opts.tier(), Require: readiness.Infrastructure})
 	if err != nil {
+		check.End(err)
 		return err
 	}
 	defer prov.Close()
 
-	status, err := preflightEnvProvider(ctx, dependencies, check, prov, cfg, opts, keyOffer, stderr)
+	if keyOffer != nil {
+		err = offerVariablesKey(ctx, dependencies, check, prov, cfg, opts, status.GetBootstrap(), keyOffer.stdin, stderr)
+	}
 	check.End(err)
 	if err != nil {
 		return err
 	}
 	return drive(ctx, run, prov, cfg, status)
-}
-
-func preflightEnvProvider(ctx context.Context, dependencies Dependencies, check *run.Span, prov *providerprocess.Provider, cfg *project.Project, opts envOptions, keyOffer *variablesKeyOffer, stderr io.Writer) (*contractv1.PreflightResponse, error) {
-	status, err := readiness.Check(ctx, check, prov, cfg, readiness.Request{Tier: opts.tier(), Require: readiness.Infrastructure})
-	if err != nil || keyOffer == nil {
-		return status, err
-	}
-	return status, offerVariablesKey(ctx, dependencies, check, prov, cfg, opts, status.GetBootstrap(), keyOffer.stdin, stderr)
 }
 
 func offerVariablesKey(ctx context.Context, dependencies Dependencies, check *run.Span, prov *providerprocess.Provider, cfg *project.Project, opts envOptions, status *contractv1.BootstrapStatus, stdin io.Reader, stderr io.Writer) error {
