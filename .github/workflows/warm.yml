@@ -12,7 +12,6 @@ on:
       - "frameworks/**"
       - "tests/fixtures/**"
       - "go.work"
-      - "go.work.sum"
       - ".goreleaser.yaml"
       - ".golangci.yml"
       - "pnpm-lock.yaml"

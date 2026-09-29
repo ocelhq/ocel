@@ -15,7 +15,6 @@ on:
       - "tests/fixtures/sdk/rust/**"
       - "tests/fixtures/sdk/rust-workspace/**"
       - "go.work"
-      - "go.work.sum"
       - "crates/**"
       - "python/**"
       - "pnpm-lock.yaml"
