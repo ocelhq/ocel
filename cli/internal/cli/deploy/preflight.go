@@ -31,12 +31,12 @@ type preflightFacts struct {
 	urls           map[string]string
 }
 
-func preflightPreviewUp(ctx context.Context, deps cmddeps.Deps, policy consent.Policy, check *run.Span, prov *providerclient.Provider, cfg *project.Project, pointer string, out io.Writer, in io.Reader) (preflightFacts, error) {
+func preflightPreviewUp(ctx context.Context, deps cmddeps.Deps, policy consent.Policy, check *run.Span, prov *providerclient.Provider, cfg *project.Project, prebuilt bool, pointer string, out io.Writer, in io.Reader) (preflightFacts, error) {
 	resp, err := preflight.Run(ctx, check, prov, cfg, environmentv1.Tier_TIER_PREVIEW, cfg.Slug, preflight.Names(preflight.Hostnames(cfg, environmentv1.Tier_TIER_PREVIEW)), preflight.Frameworks(cfg), "ocel bootstrap preview")
 	if err != nil {
 		return preflightFacts{}, err
 	}
-	resolved, archs, err := resolveContainers(ctx, deps, check, prov, cfg, resp)
+	resolved, archs, err := resolveContainers(ctx, deps, check, prov, cfg, resp, prebuilt)
 	if err != nil {
 		return preflightFacts{}, err
 	}
@@ -64,13 +64,13 @@ func preflightPreviewUp(ctx context.Context, deps cmddeps.Deps, policy consent.P
 	}, nil
 }
 
-func preflightDeploy(ctx context.Context, deps cmddeps.Deps, policy consent.Policy, check *run.Span, prov *providerclient.Provider, cfg *project.Project, out io.Writer, in io.Reader) (preflightFacts, error) {
+func preflightDeploy(ctx context.Context, deps cmddeps.Deps, policy consent.Policy, check *run.Span, prov *providerclient.Provider, cfg *project.Project, prebuilt bool, out io.Writer, in io.Reader) (preflightFacts, error) {
 	domains := preflight.Names(preflight.Hostnames(cfg, environmentv1.Tier_TIER_PRODUCTION))
 	resp, err := preflight.Run(ctx, check, prov, cfg, environmentv1.Tier_TIER_PRODUCTION, slugToScopeBy(policy.Interactive, domains, cfg), domains, preflight.Frameworks(cfg), "ocel bootstrap production")
 	if err != nil {
 		return preflightFacts{}, err
 	}
-	resolved, archs, err := resolveContainers(ctx, deps, check, prov, cfg, resp)
+	resolved, archs, err := resolveContainers(ctx, deps, check, prov, cfg, resp, prebuilt)
 	if err != nil {
 		return preflightFacts{}, err
 	}
@@ -87,7 +87,7 @@ func preflightDeploy(ctx context.Context, deps cmddeps.Deps, policy consent.Poli
 	return preflightFacts{declined: !proceed, project: resolved, containerArchs: archs, urls: appurl.Production(resolved)}, nil
 }
 
-func resolveContainers(ctx context.Context, deps cmddeps.Deps, check *run.Span, prov *providerclient.Provider, cfg *project.Project, resp *contractv1.PreflightResponse) (*project.Project, map[string]string, error) {
+func resolveContainers(ctx context.Context, deps cmddeps.Deps, check *run.Span, prov *providerclient.Provider, cfg *project.Project, resp *contractv1.PreflightResponse, prebuilt bool) (*project.Project, map[string]string, error) {
 	resolved, err := cfg.ResolveComputes(resp.GetComputes(), prov.Name())
 	if err != nil {
 		return nil, nil, err
@@ -98,6 +98,9 @@ func resolveContainers(ctx context.Context, deps cmddeps.Deps, check *run.Span, 
 	archs, err := preflight.ContainerArchs(ctx, prov, resolved, resp.GetContainerArchs())
 	if err != nil {
 		return nil, nil, err
+	}
+	if prebuilt {
+		return resolved, archs, nil
 	}
 	if err := deps.RefuseUnbuildableImages(ctx, check, resolved, archs); err != nil {
 		return nil, nil, err

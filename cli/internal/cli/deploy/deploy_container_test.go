@@ -316,3 +316,24 @@ export default {
 		t.Errorf("the image was built for %v, want %v, what the provider names for an app that falls back to its container compute", built, want)
 	}
 }
+
+func TestAPrebuiltDeployDoesNotAskWhetherThisMachineCanBuildImages(t *testing.T) {
+	deps, root, built := registryProject(t, "")
+	asked := false
+	deps.RefuseUnbuildableImages = func(context.Context, *run.Span, *project.Project, map[string]string) error {
+		asked = true
+		return nil
+	}
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(deps, &stdout)
+	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true, prebuilt: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runDeploy() err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	if asked {
+		t.Error("a --prebuilt deploy asked whether this machine can build the image it will not build")
+	}
+	if built() {
+		t.Error("a --prebuilt deploy built the app")
+	}
+}

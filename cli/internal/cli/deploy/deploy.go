@@ -100,7 +100,7 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 	}
 	defer prov.Close()
 
-	facts, err := preflightDeploy(ctx, deps, policy, check, prov, cfg, stdout, stdin)
+	facts, err := preflightDeploy(ctx, deps, policy, check, prov, cfg, opts.prebuilt, stdout, stdin)
 	check.End(err)
 	if err != nil {
 		return err

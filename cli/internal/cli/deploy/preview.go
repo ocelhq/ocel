@@ -210,7 +210,7 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 	}
 	defer prov.Close()
 
-	facts, err := preflightPreviewUp(ctx, deps, policy, check, prov, cfg, env.GetIdentity(), stdout, stdin)
+	facts, err := preflightPreviewUp(ctx, deps, policy, check, prov, cfg, opts.prebuilt, env.GetIdentity(), stdout, stdin)
 	check.End(err)
 	if err != nil {
 		return err
