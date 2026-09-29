@@ -14,12 +14,14 @@ const fakeDigest = "sha256:" + "0123456789abcdef0123456789abcdef0123456789abcdef
 
 func containerOf(t *testing.T, m *contractv1.Manifest, app string) *contractv1.ContainerArtifact {
 	t.Helper()
+	var names []string
 	for _, a := range m.GetApps() {
 		if a.GetName() == app && a.GetContainer() != nil {
 			return a.GetContainer()
 		}
+		names = append(names, a.GetName())
 	}
-	t.Fatalf("manifest has no container for app %q: %+v", app, m.GetApps())
+	t.Fatalf("manifest has no container for app %q, only the apps %v", app, names)
 	return nil
 }
 

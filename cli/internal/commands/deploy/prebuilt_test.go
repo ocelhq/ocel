@@ -406,7 +406,11 @@ func TestPrebuiltDeploysTheImageTheBuildRecordedRatherThanBuildingOne(t *testing
 		t.Errorf("the prebuilt image was checked against %v, want the %v the provider runs", asked, archs)
 	}
 	apps := manifest.GetApps()
-	if len(apps) != 1 || apps[0].GetContainer().GetImage() != clitest.FixtureImage("api") {
-		t.Errorf("the manifest deploys the apps %v, want api on the prebuilt %q", apps, clitest.FixtureImage("api"))
+	if len(apps) != 1 || apps[0].GetName() != "api" || apps[0].GetContainer().GetImage() != clitest.FixtureImage("api") {
+		var deployed []string
+		for _, a := range apps {
+			deployed = append(deployed, a.GetName()+" on "+a.GetContainer().GetImage())
+		}
+		t.Errorf("the manifest deploys %v, want api on the prebuilt %q", deployed, clitest.FixtureImage("api"))
 	}
 }

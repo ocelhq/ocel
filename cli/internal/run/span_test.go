@@ -395,6 +395,6 @@ func TestAForwardedProviderEventKeepsEveryFieldItCarried(t *testing.T) {
 		Body:    &streamv1.RunEvent_Ended{Ended: op.GetEnded()},
 	}
 	if !proto.Equal(got, want) {
-		t.Errorf("forwarded = %v, want %v", got, want)
+		t.Errorf("the forwarded event is not span %s's end carried over field for field", op.GetSpanId())
 	}
 }
