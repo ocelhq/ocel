@@ -212,7 +212,7 @@ func TestAPlanIsDrawnWithItsHeadlineAndNotesInItsScopesPhaseLeavingTheCallersPla
 	run, _ := begin(t, sink)
 	plan := &planv1.ChangePlan{Headline: "from the provider"}
 
-	drawn := run.Phase(progressv1.Phase_PHASE_PLAN).Plan("Deploy to production", plan, "2 resources change")
+	drawn := run.Phase(progressv1.Phase_PHASE_PLAN).Plan("Deploy to production", plan, &planv1.Note{Text: "2 resources change"})
 
 	ev := sink.received()[1]
 	if !proto.Equal(ev.GetPlan(), drawn) || drawn.GetHeadline() != "Deploy to production" || len(drawn.GetNotes()) != 1 ||

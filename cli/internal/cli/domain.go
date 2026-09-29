@@ -352,7 +352,7 @@ func runDomainRelease(ctx context.Context, deps cmddeps.Deps, cwd string, opts d
 	}
 
 	shown := planning.Plan(fmt.Sprintf("This will release %s and stop serving every project's previews on it", wildcardOf(base)), plan,
-		"This cannot be undone.")
+		&planv1.Note{Text: "This cannot be undone."})
 	granted, err := gate.ConsentByName(ctx, planning, shown, "domain", base)
 	planning.End(err)
 	if err != nil {

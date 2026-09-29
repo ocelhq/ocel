@@ -228,12 +228,12 @@ func destroyProject(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.C
 func showDestroyPlan(planning *events.Scope, slug string, preview bool, plan *planv1.ChangePlan) *planv1.ChangePlan {
 	if preview {
 		return planning.Plan(fmt.Sprintf("This will permanently destroy the ENTIRE preview footprint of project %q", slug), plan,
-			"– all stored preview assets belonging to this project",
-			"– every preview variable value this project has, including each preview's own overrides",
-			"The account-level preview bootstrap is left intact. This cannot be undone.")
+			&planv1.Note{Action: planv1.Change_ACTION_DELETE, Text: "all stored preview assets belonging to this project"},
+			&planv1.Note{Action: planv1.Change_ACTION_DELETE, Text: "every preview variable value this project has, including each preview's own overrides"},
+			&planv1.Note{Text: "The account-level preview bootstrap is left intact. This cannot be undone."})
 	}
 	return planning.Plan(fmt.Sprintf("This will permanently destroy production project %q", slug), plan,
-		"– all stored assets belonging to this project",
-		"– every production variable value this project has, and their history",
-		"This cannot be undone.")
+		&planv1.Note{Action: planv1.Change_ACTION_DELETE, Text: "all stored assets belonging to this project"},
+		&planv1.Note{Action: planv1.Change_ACTION_DELETE, Text: "every production variable value this project has, and their history"},
+		&planv1.Note{Text: "This cannot be undone."})
 }

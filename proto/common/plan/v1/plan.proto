@@ -14,7 +14,13 @@ message ChangePlan {
 
   string headline = 4;
 
-  repeated string notes = 5;
+  repeated Note notes = 5;
+}
+
+message Note {
+  Change.Action action = 1;
+
+  string text = 2;
 }
 
 message ChangeGroup {

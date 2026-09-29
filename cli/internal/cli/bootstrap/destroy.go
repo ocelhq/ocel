@@ -92,7 +92,7 @@ func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Confi
 		return nil
 	}
 	consented := planning.Plan(fmt.Sprintf("This will permanently remove the %s bootstrap", name), plan,
-		"Every app already deployed from it keeps running and nothing can describe, update or remove it again. This cannot be undone.")
+		&planv1.Note{Text: "Every app already deployed from it keeps running and nothing can describe, update or remove it again. This cannot be undone."})
 	if opts.Dry {
 		planning.Say("Run without --dry to destroy.")
 		run.Finish(fmt.Sprintf("Planned the removal of the %s bootstrap", name))

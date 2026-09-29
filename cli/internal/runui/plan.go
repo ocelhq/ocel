@@ -213,16 +213,11 @@ func trail(present Presentation, lead, reason string, slow bool) string {
 	return b.String()
 }
 
-func noteLine(present Presentation, line string) string {
-	glyph, rest, found := strings.Cut(line, " ")
-	if !found {
-		return line
+func noteLine(present Presentation, note *planv1.Note) string {
+	if note.GetAction() == planv1.Change_ACTION_UNSPECIFIED {
+		return note.GetText()
 	}
-	attrs, ok := sigilAttrs[glyph]
-	if !ok {
-		return line
-	}
-	return colorFor(present, attrs...).Sprint(glyph) + " " + rest
+	return sigil(present, note.GetAction()) + " " + note.GetText()
 }
 
 var sigilAttrs = map[string][]color.Attribute{

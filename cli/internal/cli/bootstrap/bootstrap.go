@@ -241,9 +241,9 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 	rendered := len(plan.GetGroups()) > 0
 	switch {
 	case rendered:
-		var notes []string
+		var notes []*planv1.Note
 		if !consent.Mutates(plan) {
-			notes = append(notes, unchanged(tier))
+			notes = append(notes, &planv1.Note{Text: unchanged(tier)})
 		}
 		consented = planning.Plan(fmt.Sprintf("Proposed changes to the %s bootstrap", Name(tier)), plan, notes...)
 	case len(going) > 0:

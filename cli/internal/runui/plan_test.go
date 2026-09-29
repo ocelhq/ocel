@@ -159,7 +159,10 @@ This cannot be undone.
 	got := projectPlan(t, &planv1.ChangePlan{
 		Headline: `This will permanently destroy production project "shop"`,
 		EdgeKind: "cloudflare",
-		Notes:    []string{"– all stored assets belonging to this project", "This cannot be undone."},
+		Notes: []*planv1.Note{
+			{Action: planv1.Change_ACTION_DELETE, Text: "all stored assets belonging to this project"},
+			{Text: "This cannot be undone."},
+		},
 		Groups: []*planv1.ChangeGroup{
 			{Kind: "edge stack", Name: "shop", Action: planv1.Change_ACTION_DELETE},
 			{Kind: "infra stack", Name: "shop--infra", Action: planv1.Change_ACTION_DELETE, Reason: "databases and buckets, INCLUDING ALL DATA"},

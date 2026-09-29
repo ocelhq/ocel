@@ -82,7 +82,7 @@ func (x Change_Action) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use Change_Action.Descriptor instead.
 func (Change_Action) EnumDescriptor() ([]byte, []int) {
-	return file_common_plan_v1_plan_proto_rawDescGZIP(), []int{2, 0}
+	return file_common_plan_v1_plan_proto_rawDescGZIP(), []int{3, 0}
 }
 
 // What a run would change in the customer's account, drawn before it changes anything.
@@ -93,7 +93,7 @@ type ChangePlan struct {
 	EdgeKind      string                 `protobuf:"bytes,2,opt,name=edge_kind,json=edgeKind,proto3" json:"edge_kind,omitempty"`
 	Groups        []*ChangeGroup         `protobuf:"bytes,3,rep,name=groups,proto3" json:"groups,omitempty"`
 	Headline      string                 `protobuf:"bytes,4,opt,name=headline,proto3" json:"headline,omitempty"`
-	Notes         []string               `protobuf:"bytes,5,rep,name=notes,proto3" json:"notes,omitempty"`
+	Notes         []*Note                `protobuf:"bytes,5,rep,name=notes,proto3" json:"notes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -156,11 +156,63 @@ func (x *ChangePlan) GetHeadline() string {
 	return ""
 }
 
-func (x *ChangePlan) GetNotes() []string {
+func (x *ChangePlan) GetNotes() []*Note {
 	if x != nil {
 		return x.Notes
 	}
 	return nil
+}
+
+type Note struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Action        Change_Action          `protobuf:"varint,1,opt,name=action,proto3,enum=common.plan.v1.Change_Action" json:"action,omitempty"`
+	Text          string                 `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Note) Reset() {
+	*x = Note{}
+	mi := &file_common_plan_v1_plan_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Note) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Note) ProtoMessage() {}
+
+func (x *Note) ProtoReflect() protoreflect.Message {
+	mi := &file_common_plan_v1_plan_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Note.ProtoReflect.Descriptor instead.
+func (*Note) Descriptor() ([]byte, []int) {
+	return file_common_plan_v1_plan_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *Note) GetAction() Change_Action {
+	if x != nil {
+		return x.Action
+	}
+	return Change_ACTION_UNSPECIFIED
+}
+
+func (x *Note) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
 }
 
 type ChangeGroup struct {
@@ -178,7 +230,7 @@ type ChangeGroup struct {
 
 func (x *ChangeGroup) Reset() {
 	*x = ChangeGroup{}
-	mi := &file_common_plan_v1_plan_proto_msgTypes[1]
+	mi := &file_common_plan_v1_plan_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -190,7 +242,7 @@ func (x *ChangeGroup) String() string {
 func (*ChangeGroup) ProtoMessage() {}
 
 func (x *ChangeGroup) ProtoReflect() protoreflect.Message {
-	mi := &file_common_plan_v1_plan_proto_msgTypes[1]
+	mi := &file_common_plan_v1_plan_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -203,7 +255,7 @@ func (x *ChangeGroup) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChangeGroup.ProtoReflect.Descriptor instead.
 func (*ChangeGroup) Descriptor() ([]byte, []int) {
-	return file_common_plan_v1_plan_proto_rawDescGZIP(), []int{1}
+	return file_common_plan_v1_plan_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *ChangeGroup) GetKind() string {
@@ -268,7 +320,7 @@ type Change struct {
 
 func (x *Change) Reset() {
 	*x = Change{}
-	mi := &file_common_plan_v1_plan_proto_msgTypes[2]
+	mi := &file_common_plan_v1_plan_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -280,7 +332,7 @@ func (x *Change) String() string {
 func (*Change) ProtoMessage() {}
 
 func (x *Change) ProtoReflect() protoreflect.Message {
-	mi := &file_common_plan_v1_plan_proto_msgTypes[2]
+	mi := &file_common_plan_v1_plan_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -293,7 +345,7 @@ func (x *Change) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Change.ProtoReflect.Descriptor instead.
 func (*Change) Descriptor() ([]byte, []int) {
-	return file_common_plan_v1_plan_proto_rawDescGZIP(), []int{2}
+	return file_common_plan_v1_plan_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Change) GetKind() string {
@@ -335,14 +387,17 @@ var File_common_plan_v1_plan_proto protoreflect.FileDescriptor
 
 const file_common_plan_v1_plan_proto_rawDesc = "" +
 	"\n" +
-	"\x19common/plan/v1/plan.proto\x12\x0ecommon.plan.v1\"\xaa\x01\n" +
+	"\x19common/plan/v1/plan.proto\x12\x0ecommon.plan.v1\"\xc0\x01\n" +
 	"\n" +
 	"ChangePlan\x12\x18\n" +
 	"\asubject\x18\x01 \x01(\tR\asubject\x12\x1b\n" +
 	"\tedge_kind\x18\x02 \x01(\tR\bedgeKind\x123\n" +
 	"\x06groups\x18\x03 \x03(\v2\x1b.common.plan.v1.ChangeGroupR\x06groups\x12\x1a\n" +
-	"\bheadline\x18\x04 \x01(\tR\bheadline\x12\x14\n" +
-	"\x05notes\x18\x05 \x03(\tR\x05notes\"\xe4\x01\n" +
+	"\bheadline\x18\x04 \x01(\tR\bheadline\x12*\n" +
+	"\x05notes\x18\x05 \x03(\v2\x14.common.plan.v1.NoteR\x05notes\"Q\n" +
+	"\x04Note\x125\n" +
+	"\x06action\x18\x01 \x01(\x0e2\x1d.common.plan.v1.Change.ActionR\x06action\x12\x12\n" +
+	"\x04text\x18\x02 \x01(\tR\x04text\"\xe4\x01\n" +
 	"\vChangeGroup\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +
@@ -380,23 +435,26 @@ func file_common_plan_v1_plan_proto_rawDescGZIP() []byte {
 }
 
 var file_common_plan_v1_plan_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_common_plan_v1_plan_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_common_plan_v1_plan_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_common_plan_v1_plan_proto_goTypes = []any{
 	(Change_Action)(0),  // 0: common.plan.v1.Change.Action
 	(*ChangePlan)(nil),  // 1: common.plan.v1.ChangePlan
-	(*ChangeGroup)(nil), // 2: common.plan.v1.ChangeGroup
-	(*Change)(nil),      // 3: common.plan.v1.Change
+	(*Note)(nil),        // 2: common.plan.v1.Note
+	(*ChangeGroup)(nil), // 3: common.plan.v1.ChangeGroup
+	(*Change)(nil),      // 4: common.plan.v1.Change
 }
 var file_common_plan_v1_plan_proto_depIdxs = []int32{
-	2, // 0: common.plan.v1.ChangePlan.groups:type_name -> common.plan.v1.ChangeGroup
-	0, // 1: common.plan.v1.ChangeGroup.action:type_name -> common.plan.v1.Change.Action
-	3, // 2: common.plan.v1.ChangeGroup.changes:type_name -> common.plan.v1.Change
-	0, // 3: common.plan.v1.Change.action:type_name -> common.plan.v1.Change.Action
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	3, // 0: common.plan.v1.ChangePlan.groups:type_name -> common.plan.v1.ChangeGroup
+	2, // 1: common.plan.v1.ChangePlan.notes:type_name -> common.plan.v1.Note
+	0, // 2: common.plan.v1.Note.action:type_name -> common.plan.v1.Change.Action
+	0, // 3: common.plan.v1.ChangeGroup.action:type_name -> common.plan.v1.Change.Action
+	4, // 4: common.plan.v1.ChangeGroup.changes:type_name -> common.plan.v1.Change
+	0, // 5: common.plan.v1.Change.action:type_name -> common.plan.v1.Change.Action
+	6, // [6:6] is the sub-list for method output_type
+	6, // [6:6] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_common_plan_v1_plan_proto_init() }
@@ -410,7 +468,7 @@ func file_common_plan_v1_plan_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_common_plan_v1_plan_proto_rawDesc), len(file_common_plan_v1_plan_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   3,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

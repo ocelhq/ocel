@@ -81,7 +81,7 @@ func (s *Scope) Run() *Run { return s.run }
 
 func (s *Scope) Phase() progressv1.Phase { return s.phase }
 
-func (s *Scope) Plan(headline string, plan *planv1.ChangePlan, notes ...string) *planv1.ChangePlan {
+func (s *Scope) Plan(headline string, plan *planv1.ChangePlan, notes ...*planv1.Note) *planv1.ChangePlan {
 	drawn := proto.CloneOf(plan)
 	drawn.Headline, drawn.Notes = headline, notes
 	shown := s.run.bus.send(s.scoped(&streamv1.RunEvent{Body: &streamv1.RunEvent_Plan{Plan: drawn}}))
