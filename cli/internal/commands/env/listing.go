@@ -26,11 +26,11 @@ func runEnvList(ctx context.Context, dependencies Dependencies, cwd string, opts
 		if err != nil {
 			return err
 		}
-		vars, err := provider.Vars()
+		envVars, err := provider.EnvVars()
 		if err != nil {
 			return err
 		}
-		resp, err := vars.ListValues(ctx, &envvarsv1.ListValuesRequest{
+		resp, err := envVars.ListValues(ctx, &envvarsv1.ListValuesRequest{
 			Tier: opts.tier(),
 			Slug: cfg.Slug,
 		})

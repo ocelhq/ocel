@@ -92,11 +92,11 @@ func runEnvSync(ctx context.Context, dependencies Dependencies, cwd string, opts
 
 func runEnvSource(ctx context.Context, dependencies Dependencies, cwd string, opts envOptions, stdout, stderr io.Writer) error {
 	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env source", stderr, func(ctx context.Context, _ *run.Run, provider *providerprocess.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
-		vars, err := provider.Vars()
+		envVars, err := provider.EnvVars()
 		if err != nil {
 			return err
 		}
-		described, err := vars.DescribeEnvSource(ctx, &envvarsv1.DescribeEnvSourceRequest{Tier: opts.tier(), Slug: cfg.Slug})
+		described, err := envVars.DescribeEnvSource(ctx, &envvarsv1.DescribeEnvSourceRequest{Tier: opts.tier(), Slug: cfg.Slug})
 		if err != nil {
 			return err
 		}

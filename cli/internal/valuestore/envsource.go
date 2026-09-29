@@ -19,11 +19,11 @@ import (
 )
 
 func (s Store) DescribeEnvSource(ctx context.Context) (variables.EnvSource, error) {
-	vars, err := s.Provider.Vars()
+	envVars, err := s.Provider.EnvVars()
 	if err != nil {
 		return variables.EnvSource{}, err
 	}
-	resp, err := vars.DescribeEnvSource(ctx, &envvarsv1.DescribeEnvSourceRequest{Tier: s.Tier, Slug: s.Project.Slug})
+	resp, err := envVars.DescribeEnvSource(ctx, &envvarsv1.DescribeEnvSourceRequest{Tier: s.Tier, Slug: s.Project.Slug})
 	if err != nil {
 		return variables.EnvSource{}, err
 	}
@@ -43,11 +43,11 @@ func (s Store) SyncEnvSource(ctx context.Context) (variables.EnvSource, error) {
 			return variables.EnvSource{}, err
 		}
 	}
-	vars, err := s.Provider.Vars()
+	envVars, err := s.Provider.EnvVars()
 	if err != nil {
 		return variables.EnvSource{}, err
 	}
-	resp, err := vars.SyncEnvSource(ctx, &envvarsv1.SyncEnvSourceRequest{
+	resp, err := envVars.SyncEnvSource(ctx, &envvarsv1.SyncEnvSourceRequest{
 		Tier:    s.Tier,
 		Slug:    s.Project.Slug,
 		From:    &envvarsv1.SyncEnvSourceRequest_EnvSource{EnvSource: envsourceproto.Encode(descriptor, read)},
@@ -71,11 +71,11 @@ func syncedFolders(cfg *project.Project) []string {
 }
 
 func (s Store) SyncRegisteredEnvSource(ctx context.Context) (*envvarsv1.SyncEnvSourceResponse, error) {
-	vars, err := s.Provider.Vars()
+	envVars, err := s.Provider.EnvVars()
 	if err != nil {
 		return nil, err
 	}
-	return vars.SyncEnvSource(ctx, &envvarsv1.SyncEnvSourceRequest{
+	return envVars.SyncEnvSource(ctx, &envvarsv1.SyncEnvSourceRequest{
 		Tier: s.Tier,
 		Slug: s.Project.Slug,
 		From: &envvarsv1.SyncEnvSourceRequest_Registered{Registered: &envvarsv1.RegisteredEnvSource{}},
@@ -83,11 +83,11 @@ func (s Store) SyncRegisteredEnvSource(ctx context.Context) (*envvarsv1.SyncEnvS
 }
 
 func (s Store) SetInEnvSource(ctx context.Context, at variables.Cell, value, description string) (bool, error) {
-	vars, err := s.Provider.Vars()
+	envVars, err := s.Provider.EnvVars()
 	if err != nil {
 		return false, err
 	}
-	resp, err := vars.SetEnvSourceValue(ctx, &envvarsv1.SetEnvSourceValueRequest{
+	resp, err := envVars.SetEnvSourceValue(ctx, &envvarsv1.SetEnvSourceValueRequest{
 		Tier:        s.Tier,
 		Coordinate:  &envvarsv1.Coordinate{Slug: s.Project.Slug, Folder: at.Folder, Key: at.Key},
 		Value:       value,

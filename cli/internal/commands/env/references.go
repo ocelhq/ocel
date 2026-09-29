@@ -32,11 +32,11 @@ func runEnvRef(ctx context.Context, dependencies Dependencies, cwd, key string, 
 			return err
 		}
 		target := ref.target(cfg.Slug, key)
-		vars, err := provider.Vars()
+		envVars, err := provider.EnvVars()
 		if err != nil {
 			return err
 		}
-		resp, err := vars.SetReference(ctx, &envvarsv1.SetReferenceRequest{
+		resp, err := envVars.SetReference(ctx, &envvarsv1.SetReferenceRequest{
 			Tier:       opts.tier(),
 			Coordinate: wireCoordinate(cfg.Slug, key, opts),
 			Target:     target,
@@ -51,11 +51,11 @@ func runEnvRef(ctx context.Context, dependencies Dependencies, cwd, key string, 
 
 func runEnvRefs(ctx context.Context, dependencies Dependencies, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
 	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env refs", stderr, func(ctx context.Context, _ *run.Run, provider *providerprocess.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
-		vars, err := provider.Vars()
+		envVars, err := provider.EnvVars()
 		if err != nil {
 			return err
 		}
-		resp, err := vars.ListReferences(ctx, &envvarsv1.ListReferencesRequest{
+		resp, err := envVars.ListReferences(ctx, &envvarsv1.ListReferencesRequest{
 			Tier:       opts.tier(),
 			Coordinate: wireCoordinate(cfg.Slug, key, opts),
 		})

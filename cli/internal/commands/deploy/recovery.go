@@ -126,7 +126,7 @@ func (r variablesRecovery) createInEnvSource(ctx context.Context, span *run.Span
 	if !source.CanCreate || r.dry {
 		return
 	}
-	vars, err := r.provider.Vars()
+	envVars, err := r.provider.EnvVars()
 	if err != nil {
 		return
 	}
@@ -134,7 +134,7 @@ func (r variablesRecovery) createInEnvSource(ctx context.Context, span *run.Span
 		if problem.GetKind() != resourcesv1.VariableProblem_KIND_MISSING {
 			continue
 		}
-		resp, err := vars.SetEnvSourceValue(ctx, &envvarsv1.SetEnvSourceValueRequest{
+		resp, err := envVars.SetEnvSourceValue(ctx, &envvarsv1.SetEnvSourceValueRequest{
 			Tier:        declarations.Scope().Tier,
 			Coordinate:  &envvarsv1.Coordinate{Slug: r.cfg.Slug, Folder: problem.GetFolder(), Key: problem.GetKey()},
 			Description: refusal.Description(problem.GetKey()),

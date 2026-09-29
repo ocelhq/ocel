@@ -15,7 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/run"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/provider"
+	providercontract "github.com/ocelhq/ocel/pkg/provider"
 )
 
 func withCommand(cmd *cobra.Command, dependencies Dependencies, run func(context.Context, string) error) error {
@@ -55,30 +55,30 @@ func runWithEnvProvider(ctx context.Context, dependencies Dependencies, cwd stri
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	opened, status, err := dependencies.OpenProvider(ctx, check, cfg, commands.OpenOptions{Tier: opts.tier(), Require: readiness.Infrastructure})
+	provider, status, err := dependencies.OpenProvider(ctx, check, cfg, commands.OpenOptions{Tier: opts.tier(), Require: readiness.Infrastructure})
 	if err != nil {
 		check.End(err)
 		return err
 	}
-	defer opened.Close()
+	defer provider.Close()
 
 	if keyOffer != nil {
-		err = offerVariablesKey(ctx, dependencies, check, opened, cfg, opts, status.Response.GetBootstrap(), keyOffer.stdin, stderr)
+		err = offerVariablesKey(ctx, dependencies, check, provider, cfg, opts, status.Response.GetBootstrap(), keyOffer.stdin, stderr)
 	}
 	check.End(err)
 	if err != nil {
 		return err
 	}
-	return drive(ctx, run, opened, cfg, status.Response)
+	return drive(ctx, run, provider, cfg, status.Response)
 }
 
-func offerVariablesKey(ctx context.Context, dependencies Dependencies, check *run.Span, opened *providerprocess.Provider, cfg *project.Project, opts envOptions, status *contractv1.BootstrapStatus, stdin io.Reader, stderr io.Writer) error {
+func offerVariablesKey(ctx context.Context, dependencies Dependencies, check *run.Span, provider *providerprocess.Provider, cfg *project.Project, opts envOptions, status *contractv1.BootstrapStatus, stdin io.Reader, stderr io.Writer) error {
 	edge := cfg.EdgeSelection()
-	offered, err := readiness.HasOffer(ctx, opened, opts.tier(), edge, provider.FeatureVarsKey)
+	offered, err := readiness.HasOffer(ctx, provider, opts.tier(), edge, providercontract.FeatureVarsKey)
 	if err != nil || !offered {
 		return err
 	}
-	gap := readiness.NewFeatureGap(status, provider.FeatureVarsKey)
-	return readiness.OfferRepair(ctx, check, opened, gap, opts.tier(), edge,
+	gap := readiness.NewFeatureGap(status, providercontract.FeatureVarsKey)
+	return readiness.OfferRepair(ctx, check, provider, gap, opts.tier(), edge,
 		dependencies.StdinIsTerminal(stdin), stderr, stdin)
 }

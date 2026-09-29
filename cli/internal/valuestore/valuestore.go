@@ -22,11 +22,11 @@ type Store struct {
 }
 
 func (s Store) List(ctx context.Context) ([]variables.ValueMetadata, error) {
-	vars, err := s.Provider.Vars()
+	envVars, err := s.Provider.EnvVars()
 	if err != nil {
 		return nil, err
 	}
-	resp, err := vars.ListValues(ctx, &envvarsv1.ListValuesRequest{
+	resp, err := envVars.ListValues(ctx, &envvarsv1.ListValuesRequest{
 		Tier: s.Tier,
 		Slug: s.Project.Slug,
 	})
@@ -62,11 +62,11 @@ func (s Store) Reveal(ctx context.Context, rows []variables.Coordinate) (map[var
 	for _, row := range rows {
 		named = append(named, s.coordinate(row))
 	}
-	vars, err := s.Provider.Vars()
+	envVars, err := s.Provider.EnvVars()
 	if err != nil {
 		return nil, err
 	}
-	resp, err := vars.RevealValues(ctx, &envvarsv1.RevealValuesRequest{
+	resp, err := envVars.RevealValues(ctx, &envvarsv1.RevealValuesRequest{
 		Tier:  s.Tier,
 		Slug:  s.Project.Slug,
 		Cells: named,
@@ -86,11 +86,11 @@ func (s Store) coordinate(at variables.Coordinate) *envvarsv1.Coordinate {
 }
 
 func (s Store) Version(ctx context.Context, at variables.Coordinate) (int64, error) {
-	vars, err := s.Provider.Vars()
+	envVars, err := s.Provider.EnvVars()
 	if err != nil {
 		return 0, err
 	}
-	resp, err := vars.GetValue(ctx, &envvarsv1.GetValueRequest{
+	resp, err := envVars.GetValue(ctx, &envvarsv1.GetValueRequest{
 		Tier:       s.Tier,
 		Coordinate: s.coordinate(at),
 	})
@@ -101,11 +101,11 @@ func (s Store) Version(ctx context.Context, at variables.Coordinate) (int64, err
 }
 
 func (s Store) Set(ctx context.Context, at variables.Coordinate, value string, expected *int64) (int64, error) {
-	vars, err := s.Provider.Vars()
+	envVars, err := s.Provider.EnvVars()
 	if err != nil {
 		return 0, err
 	}
-	resp, err := vars.SetValue(ctx, &envvarsv1.SetValueRequest{
+	resp, err := envVars.SetValue(ctx, &envvarsv1.SetValueRequest{
 		Tier:            s.Tier,
 		Coordinate:      s.coordinate(at),
 		Value:           value,
@@ -118,11 +118,11 @@ func (s Store) Set(ctx context.Context, at variables.Coordinate, value string, e
 }
 
 func (s Store) Delete(ctx context.Context, at variables.Coordinate, expected *int64) (bool, error) {
-	vars, err := s.Provider.Vars()
+	envVars, err := s.Provider.EnvVars()
 	if err != nil {
 		return false, err
 	}
-	resp, err := vars.DeleteValue(ctx, &envvarsv1.DeleteValueRequest{
+	resp, err := envVars.DeleteValue(ctx, &envvarsv1.DeleteValueRequest{
 		Tier:            s.Tier,
 		Coordinate:      s.coordinate(at),
 		ExpectedVersion: expected,
@@ -144,11 +144,11 @@ func staleValueError(err error) error {
 }
 
 func (s Store) History(ctx context.Context, at variables.Coordinate) ([]variables.Version, error) {
-	vars, err := s.Provider.Vars()
+	envVars, err := s.Provider.EnvVars()
 	if err != nil {
 		return nil, err
 	}
-	resp, err := vars.ListVersions(ctx, &envvarsv1.ListVersionsRequest{
+	resp, err := envVars.ListVersions(ctx, &envvarsv1.ListVersionsRequest{
 		Tier:       s.Tier,
 		Coordinate: s.coordinate(at),
 	})

@@ -44,11 +44,11 @@ func withProviderValues(t *testing.T, root string, opts envOptions, drive func(c
 
 func storeValue(t *testing.T, ctx context.Context, provider *providerprocess.Provider, tier environmentv1.Tier, coordinate *envvarsv1.Coordinate, value string) {
 	t.Helper()
-	vars, err := provider.Vars()
+	envVars, err := provider.EnvVars()
 	if err != nil {
 		t.Fatalf("reach the provider's variable store: %v", err)
 	}
-	if _, err := vars.SetValue(ctx, &envvarsv1.SetValueRequest{
+	if _, err := envVars.SetValue(ctx, &envvarsv1.SetValueRequest{
 		Tier:       tier,
 		Coordinate: coordinate,
 		Value:      value,
@@ -113,11 +113,11 @@ func TestTheValuesTheVariablesPageShowsAndChangesAreTheProvidersAnswers(t *testi
 		root := setUpEnvFixture(t).Root
 
 		withProviderValues(t, root, envOptions{}, func(ctx context.Context, slug string, provider *providerprocess.Provider, values valuestore.Store) error {
-			vars, err := provider.Vars()
+			envVars, err := provider.EnvVars()
 			if err != nil {
 				t.Fatalf("reach the provider's variable store: %v", err)
 			}
-			if _, err := vars.SetReference(ctx, &envvarsv1.SetReferenceRequest{
+			if _, err := envVars.SetReference(ctx, &envvarsv1.SetReferenceRequest{
 				Tier:       envOptions{}.tier(),
 				Coordinate: &envvarsv1.Coordinate{Slug: slug, Key: "STRIPE_API_KEY"},
 				Target:     &envvarsv1.Coordinate{Slug: "platform", Key: "STRIPE_API_KEY"},
@@ -125,7 +125,7 @@ func TestTheValuesTheVariablesPageShowsAndChangesAreTheProvidersAnswers(t *testi
 				t.Fatalf("SetReference: %v", err)
 			}
 
-			_, direct := vars.RevealValues(ctx, &envvarsv1.RevealValuesRequest{
+			_, direct := envVars.RevealValues(ctx, &envvarsv1.RevealValuesRequest{
 				Tier:  envOptions{}.tier(),
 				Slug:  slug,
 				Cells: []*envvarsv1.Coordinate{{Slug: slug, Key: "STRIPE_API_KEY"}},

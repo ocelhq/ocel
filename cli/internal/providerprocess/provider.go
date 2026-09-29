@@ -96,8 +96,8 @@ func forward[Req any](ctx context.Context, p *Provider, rpc string, req *Req, ca
 	return result, err
 }
 
-func (p *Provider) Vars() (envvarsv1connect.EnvVarsServiceClient, error) {
-	return p.process.Vars()
+func (p *Provider) EnvVars() (envvarsv1connect.EnvVarsServiceClient, error) {
+	return p.process.EnvVars()
 }
 
 func (p *Provider) Cost() (costv1connect.CostServiceClient, error) {

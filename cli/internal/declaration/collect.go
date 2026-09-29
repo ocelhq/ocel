@@ -40,9 +40,9 @@ func CollectPrepared(ctx context.Context, cfg *project.Project, declarations *va
 		return nil, fmt.Errorf("start the declaration server: %w", err)
 	}
 	address, token := listener.Addr().String(), localrpc.NewSessionToken()
-	httpSrv := &http.Server{Handler: localrpc.LoopbackGuard(address, token, collectionMux(service))}
-	go httpSrv.Serve(listener)
-	defer httpSrv.Close()
+	httpServer := &http.Server{Handler: localrpc.LoopbackGuard(address, token, collectionMux(service))}
+	go httpServer.Serve(listener)
+	defer httpServer.Close()
 
 	server := discovery.Server{URL: "http://" + address, Token: token}
 	err = discovery.Run(ctx, cfg.Dir, prepared, server, stdout, stderr)

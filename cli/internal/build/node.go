@@ -36,9 +36,9 @@ type nodeAppBuild struct {
 
 var buildOwnedNames = []string{processenv.AppFolderEnvVar, processenv.PhaseEnvVar, "PATH"}
 
-func checkVariableNames(vars map[string]string) error {
+func checkVariableNames(variables map[string]string) error {
 	for _, name := range buildOwnedNames {
-		if _, taken := vars[name]; taken {
+		if _, taken := variables[name]; taken {
 			return fmt.Errorf("a variable is declared as %s, which the build environment owns; rename it where it is declared", name)
 		}
 	}

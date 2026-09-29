@@ -208,7 +208,7 @@ func runBindingsSet(ctx context.Context, invocation commands.Invocation, cwd str
 		return fmt.Errorf("publisher %q is the one ocel writes an inline binding's record as, at deploy, from the config; publish as your own tool with --owner", owner)
 	}
 	return withBindingProvider(ctx, invocation, cwd, opts, "ocel bindings set", func(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project) (string, error) {
-		client, err := provider.Vars()
+		client, err := provider.EnvVars()
 		if err != nil {
 			return "", err
 		}
@@ -327,7 +327,7 @@ func runBindingsRemove(ctx context.Context, invocation commands.Invocation, cwd,
 		return fmt.Errorf("%s is the record ocel keeps for a binding written inline in `bindings`, and the next deploy writes it again: remove that binding from the config, and the deploy after removes the record", name)
 	}
 	return withBindingProvider(ctx, invocation, cwd, opts, "ocel bindings rm", func(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project) (string, error) {
-		client, err := provider.Vars()
+		client, err := provider.EnvVars()
 		if err != nil {
 			return "", err
 		}
@@ -353,7 +353,7 @@ func runBindingsRemove(ctx context.Context, invocation commands.Invocation, cwd,
 
 func runBindingsList(ctx context.Context, invocation commands.Invocation, cwd string, opts bindingsOptions, stdout io.Writer) error {
 	return withBindingProvider(ctx, invocation, cwd, opts, "ocel bindings ls", func(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project) (string, error) {
-		client, err := provider.Vars()
+		client, err := provider.EnvVars()
 		if err != nil {
 			return "", err
 		}
@@ -375,7 +375,7 @@ func runBindingsList(ctx context.Context, invocation commands.Invocation, cwd st
 
 func runBindingsGenerate(ctx context.Context, invocation commands.Invocation, cwd string, opts bindingsOptions, stdout io.Writer) error {
 	return withBindingProvider(ctx, invocation, cwd, opts, "ocel bindings generate", func(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project) (string, error) {
-		client, err := provider.Vars()
+		client, err := provider.EnvVars()
 		if err != nil {
 			return "", err
 		}

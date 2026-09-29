@@ -593,8 +593,8 @@ func TestVars(t *testing.T) {
 		ctx := context.Background()
 		r, _ := spawnFake(t, ctx, "never-ready", LaunchSpec{ReadyTimeout: 50 * time.Millisecond})
 
-		if _, err := r.Vars(); !errors.Is(err, ErrVarsUnavailable) {
-			t.Fatalf("Vars() error = %v, want ErrVarsUnavailable", err)
+		if _, err := r.EnvVars(); !errors.Is(err, ErrEnvVarsUnavailable) {
+			t.Fatalf("Vars() error = %v, want ErrEnvVarsUnavailable", err)
 		}
 	})
 
@@ -607,8 +607,8 @@ func TestVars(t *testing.T) {
 			t.Fatalf("Ready() error = %v, want nil", err)
 		}
 
-		if vars, err := r.Vars(); err != nil || vars == nil {
-			t.Errorf("Vars() = %v, %v, want a client and no error", vars, err)
+		if envVars, err := r.EnvVars(); err != nil || envVars == nil {
+			t.Errorf("Vars() = %v, %v, want a client and no error", envVars, err)
 		}
 		if client, err := r.Client(); err != nil || client == nil {
 			t.Errorf("Client() = %v, %v, want a client and no error", client, err)
