@@ -45,7 +45,9 @@ export function frontNamed(env: NodeJS.ProcessEnv, dir = frontsDir): Front | und
 
 export function schemeOf(front: Front | undefined): Scheme {
   const proxy = front?.proxy;
-  return typeof proxy === "object" && proxy !== null && "caddy" in proxy ? "https" : "http";
+  return typeof proxy === "object" && proxy !== null && ("caddy" in proxy || "traefik" in proxy)
+    ? "https"
+    : "http";
 }
 
 const portOwners: Record<string, string> = {

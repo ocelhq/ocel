@@ -58,6 +58,12 @@ describe("schemeOf", () => {
       expect(schemeOf(frontNamed({ [FRONT_ENV]: name }))).toBe("https");
     }
   });
+
+  it("reaches every Traefik front over https, since ocel's routers there redirect http to https", () => {
+    for (const name of ["traefik", "coolify-traefik", "dokploy-traefik"]) {
+      expect(schemeOf(frontNamed({ [FRONT_ENV]: name }))).toBe("https");
+    }
+  });
 });
 
 describe("ownerOf", () => {
