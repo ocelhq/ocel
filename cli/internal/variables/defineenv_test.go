@@ -1,4 +1,4 @@
-package envwiretest
+package variables_test
 
 import (
 	"cmp"
@@ -17,24 +17,24 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
-func TestDefineEnv(t *testing.T) {
-	t.Run("declares through the real wire into the gate", func(t *testing.T) {
+func TestDefineEnvDeclaresThroughTheDeployCollector(t *testing.T) {
+	t.Run("declares through the real wire into the declarations", func(t *testing.T) {
 		root := setUpFixture(t, envFixture)
 
-		values := &fakeValues{plaintext: map[variables.Cell]string{
+		values := &readTrackingValues{plaintext: map[variables.Cell]string{
 			{Key: "PUBLIC_SITE_URL"}:            "https://example.com",
 			{Key: "PORT"}:                       "80",
 			{Key: "DB_PASSWORD"}:                "hunter2",
 			{Key: "POSTHOG_ID", Folder: "/web"}: "ph_web",
 		}}
-		gate := variables.NewDeclarations(values, variables.Scope{Apps: []variables.App{
+		declarations := variables.NewDeclarations(values, variables.Scope{Apps: []variables.App{
 			{Name: "web", Folder: "/web"},
 			{Name: "admin", Folder: "/admin"},
 		}})
 
-		runDiscovery(t, root, gate)
+		runDiscovery(t, root, declarations)
 
-		definitions := byKey(t, gate.Definitions())
+		definitions := byKey(t, declarations.Definitions())
 		source := filepath.Join(clitest.DiscoveryDir(root), "env.ts")
 
 		t.Run("every declared key arrives", func(t *testing.T) {
@@ -105,7 +105,7 @@ func TestDefineEnv(t *testing.T) {
 		})
 
 		t.Run("the verdict is exactly the cells the two halves need, in declaration order", func(t *testing.T) {
-			refusal := refuse(t, gate)
+			refusal := refuse(t, declarations)
 			got := describeProblems(refusal.Problems)
 			want := []string{
 				"PORT@ KIND_INVALID",
@@ -118,7 +118,7 @@ func TestDefineEnv(t *testing.T) {
 		})
 
 		t.Run("an invalid value reports the schema's own complaint", func(t *testing.T) {
-			refusal := refuse(t, gate)
+			refusal := refuse(t, declarations)
 			for _, problem := range refusal.Problems {
 				if problem.GetKind() != resourcesv1.VariableProblem_KIND_INVALID {
 					continue
@@ -143,7 +143,7 @@ func TestDefineEnv(t *testing.T) {
 	})
 }
 
-func runDiscovery(t *testing.T, root string, gate *variables.Declarations) {
+func runDiscovery(t *testing.T, root string, declarations *variables.Declarations) {
 	t.Helper()
 
 	cfg := &projectconfig.Config{
@@ -153,14 +153,14 @@ func runDiscovery(t *testing.T, root string, gate *variables.Declarations) {
 	}
 
 	var stdout, stderr strings.Builder
-	if _, err := deploycollector.PrepareAndCollect(context.Background(), cfg, gate, &stdout, &stderr); err != nil {
+	if _, err := deploycollector.PrepareAndCollect(context.Background(), cfg, declarations, &stdout, &stderr); err != nil {
 		t.Fatalf("discovery: %v\nstdout: %s\nstderr: %s", err, stdout.String(), stderr.String())
 	}
 }
 
-func refuse(t *testing.T, gate *variables.Declarations) *variables.MissingError {
+func refuse(t *testing.T, declarations *variables.Declarations) *variables.MissingError {
 	t.Helper()
-	err := gate.RefuseIncomplete()
+	err := declarations.RefuseIncomplete()
 	refusal := &variables.MissingError{}
 	ok := errors.As(err, &refusal)
 	if !ok {
@@ -181,14 +181,14 @@ func byKey(t *testing.T, definitions []*resourcesv1.VariableDefinition) map[stri
 	return out
 }
 
-type fakeValues struct {
+type readTrackingValues struct {
 	plaintext map[variables.Cell]string
 
 	mu    sync.Mutex
 	reads []variables.Cell
 }
 
-func (v *fakeValues) List(context.Context) ([]variables.ValueMetadata, error) {
+func (v *readTrackingValues) List(context.Context) ([]variables.ValueMetadata, error) {
 	var stored []variables.ValueMetadata
 	for cell := range v.plaintext {
 		stored = append(stored, variables.ValueMetadata{Coordinate: variables.Coordinate{Cell: cell}, Version: 1})
@@ -202,7 +202,7 @@ func (v *fakeValues) List(context.Context) ([]variables.ValueMetadata, error) {
 	return stored, nil
 }
 
-func (v *fakeValues) Reveal(_ context.Context, rows []variables.Coordinate) (map[variables.Coordinate]string, error) {
+func (v *readTrackingValues) Reveal(_ context.Context, rows []variables.Coordinate) (map[variables.Coordinate]string, error) {
 	v.mu.Lock()
 	for _, row := range rows {
 		v.reads = append(v.reads, row.Cell)
@@ -218,7 +218,7 @@ func (v *fakeValues) Reveal(_ context.Context, rows []variables.Coordinate) (map
 	return found, nil
 }
 
-func (v *fakeValues) revealed(cell variables.Cell) bool {
+func (v *readTrackingValues) revealed(cell variables.Cell) bool {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	for _, read := range v.reads {

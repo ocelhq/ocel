@@ -1,4 +1,4 @@
-package envwiretest
+package variables_test
 
 import (
 	"context"
@@ -17,7 +17,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/variables"
 )
 
-func TestDevserverDiscover(t *testing.T) {
+func TestDefineEnvDeclaresThroughTheDevServer(t *testing.T) {
 	t.Run("declares through devserver's own node spawn", func(t *testing.T) {
 		root := setUpFixture(t, envFixture)
 
@@ -94,7 +94,7 @@ func serveDevServer(t *testing.T) *devserver.Server {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := devserver.New("http://"+listener.Addr().String(), devstack.New("envwiretest", devstack.Env{}))
+	srv := devserver.New("http://"+listener.Addr().String(), devstack.New("defineenv", devstack.Env{}))
 	httpSrv := &http.Server{Handler: srv.Mux()}
 	go httpSrv.Serve(listener)
 	t.Cleanup(func() { httpSrv.Close() })

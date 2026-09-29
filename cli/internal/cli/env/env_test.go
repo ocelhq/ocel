@@ -27,7 +27,7 @@ import (
 
 func setUpEnvFixture(t *testing.T) string {
 	t.Helper()
-	return clitest.SetUpEnvGateFixtureWith(t, "[]", envDeclaringScript(fixtureDefinitions))
+	return clitest.SetUpVariablesFixtureWith(t, "[]", envDeclaringScript(fixtureDefinitions))
 }
 
 const fixtureDefinitions = `[
@@ -98,7 +98,7 @@ export {};
 
 func setUpDeclaringFixture(t *testing.T, definitions string) (root, log string) {
 	t.Helper()
-	root = clitest.SetUpEnvGateFixtureWith(t, "[]", envDeclaringScript(definitions))
+	root = clitest.SetUpVariablesFixtureWith(t, "[]", envDeclaringScript(definitions))
 	log = filepath.Join(t.TempDir(), "discovery.log")
 	t.Setenv("OCEL_TEST_DISCOVERY_LOG", log)
 	return root, log
@@ -120,7 +120,7 @@ func TestRunEnvSet(t *testing.T) {
 		var stdout, stderr bytes.Buffer
 		err := runEnvSet(context.Background(), streamedDeps(&stderr), root, "SITE_HOSTNAME", "acme.example", envOptions{}, nil, &stdout, &stderr)
 		if err == nil {
-			t.Fatal("runEnvSet(SITE_HOSTNAME) err = nil, want a key nothing declares refused: the gate delivers declared keys only, so the value would sit in the store and reach no build and no function")
+			t.Fatal("runEnvSet(SITE_HOSTNAME) err = nil, want a key nothing declares refused: the declarations deliver declared keys only, so the value would sit in the store and reach no build and no function")
 		}
 		for _, want := range []string{"SITE_HOSTNAME", "defineEnv"} {
 			if !strings.Contains(stderr.String(), want) {
@@ -236,7 +236,7 @@ func TestRunEnvSet(t *testing.T) {
 	})
 
 	t.Run("refuses a root value for a scoped key", func(t *testing.T) {
-		root := clitest.SetUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web","/admin"]}]`)
+		root := clitest.SetUpVariablesFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web","/admin"]}]`)
 
 		var stdout, stderr bytes.Buffer
 		err := runEnvSet(context.Background(), streamedDeps(&stderr), root, "POSTHOG_ID", "ph_root", envOptions{}, nil, &stdout, &stderr)
@@ -251,7 +251,7 @@ func TestRunEnvSet(t *testing.T) {
 	})
 
 	t.Run("refuses a scoped key in a folder it does not name", func(t *testing.T) {
-		root := clitest.SetUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`)
+		root := clitest.SetUpVariablesFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`)
 
 		var stdout, stderr bytes.Buffer
 		err := runEnvSet(context.Background(), streamedDeps(&stderr), root, "POSTHOG_ID", "ph", envOptions{folder: "/admin"}, nil, &stdout, &stderr)
@@ -264,7 +264,7 @@ func TestRunEnvSet(t *testing.T) {
 	})
 
 	t.Run("accepts a scoped key in a folder it names", func(t *testing.T) {
-		root := clitest.SetUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`)
+		root := clitest.SetUpVariablesFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`)
 
 		if out := envSet(t, root, "POSTHOG_ID", "ph_web", envOptions{folder: "/web"}); !strings.Contains(out, "/web") {
 			t.Errorf("set stdout = %q, want the folder it wrote named", out)
@@ -272,7 +272,7 @@ func TestRunEnvSet(t *testing.T) {
 	})
 
 	t.Run("leaves an unscoped key writable at root and in a folder", func(t *testing.T) {
-		root := clitest.SetUpEnvGateFixture(t, `[{"key":"LOG_LEVEL","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
+		root := clitest.SetUpVariablesFixture(t, `[{"key":"LOG_LEVEL","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
 
 		envSet(t, root, "LOG_LEVEL", "info", envOptions{})
 		envSet(t, root, "LOG_LEVEL", "debug", envOptions{folder: "/web"})
@@ -320,7 +320,7 @@ func TestRunEnvSet(t *testing.T) {
 	})
 
 	t.Run("does not trust a cached absence for a conditionally scoped key", func(t *testing.T) {
-		root := clitest.SetUpEnvGateFixtureWith(t,
+		root := clitest.SetUpVariablesFixtureWith(t,
 			`[{"key":"LOG_LEVEL","class":"VARIABLE_CLASS_PLAIN","required":true}]`, clitest.EnvDeclareOnlyScript)
 
 		envSet(t, root, "LOG_LEVEL", "info", envOptions{})
@@ -901,7 +901,7 @@ func TestListingValuesSaysWhoItActsAsInTheCheckPhaseOfItsRunAndPrintsTheListingA
 }
 
 func TestWhatTheDeclarationCollectorPrintsReachesTheRunAsOutputAndNeverRawStderr(t *testing.T) {
-	root := clitest.SetUpEnvGateFixtureWith(t, "[]", `console.error("collecting the declared variables");`+envDeclaringScript(fixtureDefinitions))
+	root := clitest.SetUpVariablesFixtureWith(t, "[]", `console.error("collecting the declared variables");`+envDeclaringScript(fixtureDefinitions))
 	deps := clitest.NewDeps()
 	deps.Presentation = func(io.Writer) runui.Presentation {
 		return runui.Resolve(runui.Origin{LogFormat: runui.FormatJSON})

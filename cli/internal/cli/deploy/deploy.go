@@ -12,11 +12,12 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/deployresult"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
-	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/servicemap"
+	"github.com/ocelhq/ocel/cli/internal/valuestore"
 	"github.com/ocelhq/ocel/cli/internal/variables"
+	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/constants"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -116,18 +117,19 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 	}
 
 	browser := deps.BrowserReachable(stdin)
-	scope := envwire.Scope(cfg, false, "")
+	scope := variablescope.Of(cfg, environmentv1.Tier_TIER_PRODUCTION, "")
 	scope.Browser = browser
-	recovery := gateRecovery{
+	recovery := variablesRecovery{
 		deps: deps,
 		cfg:  cfg,
 		prov: prov,
-		newGate: func(synced variables.EnvSource) *variables.Declarations {
+		tier: environmentv1.Tier_TIER_PRODUCTION,
+		newDeclarations: func(synced variables.EnvSource) *variables.Declarations {
 			scope := scope
 			scope.EnvSource = synced
-			return variables.NewDeclarations(envwire.Values{
+			return variables.NewDeclarations(valuestore.Store{
 				Provider: prov,
-				Slug:     cfg.Slug,
+				Config:   cfg,
 				Tier:     environmentv1.Tier_TIER_PRODUCTION,
 			}, scope)
 		},

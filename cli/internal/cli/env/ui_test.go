@@ -14,25 +14,26 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
-	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/projecteditor"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/valuestore"
+	"github.com/ocelhq/ocel/cli/internal/variableeditor"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/cli/internal/varsui"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 )
 
-func withProviderValues(t *testing.T, root string, opts envOptions, drive func(ctx context.Context, slug string, prov *providerclient.Provider, values envwire.Values) error) {
+func withProviderValues(t *testing.T, root string, opts envOptions, drive func(ctx context.Context, slug string, prov *providerclient.Provider, values valuestore.Store) error) {
 	t.Helper()
 	err := withEnvProvider(context.Background(), clitest.NewDeps(), root, opts, "ocel env", io.Discard, func(ctx context.Context, _ *events.Run, prov *providerclient.Provider, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
-		return drive(ctx, cfg.Slug, prov, envwire.Values{
+		return drive(ctx, cfg.Slug, prov, valuestore.Store{
 			Provider: prov,
-			Slug:     cfg.Slug,
-			Tier:     envTier(opts),
+			Config:   cfg,
+			Tier:     opts.tier(),
 		})
 	})
 	if err != nil {
@@ -55,7 +56,7 @@ func storeValue(t *testing.T, ctx context.Context, prov *providerclient.Provider
 	}
 }
 
-func revealOne(ctx context.Context, values envwire.Values, cell variables.Cell) (string, bool, error) {
+func revealOne(ctx context.Context, values valuestore.Store, cell variables.Cell) (string, bool, error) {
 	found, err := values.Reveal(ctx, []variables.Coordinate{{Cell: cell}})
 	if err != nil {
 		return "", false, err
@@ -81,9 +82,9 @@ func TestTheValuesTheVariablesPageShowsAndChangesAreTheProvidersAnswers(t *testi
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		preview := envOptions{preview: true}
 
-		withProviderValues(t, root, preview, func(ctx context.Context, slug string, prov *providerclient.Provider, values envwire.Values) error {
-			storeValue(t, ctx, prov, envTier(preview), &envvarsv1.Coordinate{Slug: slug, Key: "API_URL"}, "https://root.example")
-			storeValue(t, ctx, prov, envTier(preview), &envvarsv1.Coordinate{Slug: slug, Key: "STRIPE_API_KEY", Environment: "staging"}, "sk_pr")
+		withProviderValues(t, root, preview, func(ctx context.Context, slug string, prov *providerclient.Provider, values valuestore.Store) error {
+			storeValue(t, ctx, prov, preview.tier(), &envvarsv1.Coordinate{Slug: slug, Key: "API_URL"}, "https://root.example")
+			storeValue(t, ctx, prov, preview.tier(), &envvarsv1.Coordinate{Slug: slug, Key: "STRIPE_API_KEY", Environment: "staging"}, "sk_pr")
 
 			rows, err := values.List(ctx)
 			if err != nil {
@@ -108,13 +109,13 @@ func TestTheValuesTheVariablesPageShowsAndChangesAreTheProvidersAnswers(t *testi
 	t.Run("a refused reveal hands back the provider's own typed error", func(t *testing.T) {
 		root := setUpEnvFixture(t)
 
-		withProviderValues(t, root, envOptions{}, func(ctx context.Context, slug string, prov *providerclient.Provider, values envwire.Values) error {
+		withProviderValues(t, root, envOptions{}, func(ctx context.Context, slug string, prov *providerclient.Provider, values valuestore.Store) error {
 			vars, err := prov.Vars()
 			if err != nil {
 				t.Fatalf("reach the provider's variable store: %v", err)
 			}
 			if _, err := vars.SetReference(ctx, &envvarsv1.SetReferenceRequest{
-				Tier:       envTier(envOptions{}),
+				Tier:       envOptions{}.tier(),
 				Coordinate: &envvarsv1.Coordinate{Slug: slug, Key: "STRIPE_API_KEY"},
 				Target:     &envvarsv1.Coordinate{Slug: "platform", Key: "STRIPE_API_KEY"},
 			}); err != nil {
@@ -122,7 +123,7 @@ func TestTheValuesTheVariablesPageShowsAndChangesAreTheProvidersAnswers(t *testi
 			}
 
 			_, direct := vars.RevealValues(ctx, &envvarsv1.RevealValuesRequest{
-				Tier:  envTier(envOptions{}),
+				Tier:  envOptions{}.tier(),
 				Slug:  slug,
 				Cells: []*envvarsv1.Coordinate{{Slug: slug, Key: "STRIPE_API_KEY"}},
 			})
@@ -142,20 +143,20 @@ func TestTheValuesTheVariablesPageShowsAndChangesAreTheProvidersAnswers(t *testi
 	t.Run("Set against a stale version is refused as a stale value", func(t *testing.T) {
 		root := setUpEnvFixture(t)
 
-		withProviderValues(t, root, envOptions{}, func(ctx context.Context, slug string, prov *providerclient.Provider, values envwire.Values) error {
-			storeValue(t, ctx, prov, envTier(envOptions{}), &envvarsv1.Coordinate{Slug: slug, Key: "API_URL"}, "https://someone-elses.example")
+		withProviderValues(t, root, envOptions{}, func(ctx context.Context, slug string, prov *providerclient.Provider, values valuestore.Store) error {
+			storeValue(t, ctx, prov, envOptions{}.tier(), &envvarsv1.Coordinate{Slug: slug, Key: "API_URL"}, "https://someone-elses.example")
 			at := variables.Coordinate{Cell: variables.Cell{Key: "API_URL"}}
 
 			unset := int64(0)
-			if err := values.Set(ctx, at, "https://mine.example", &unset); !errors.Is(err, varsui.ErrStaleValue) {
-				t.Fatalf("Set expecting an empty cell err = %v, want varsui.ErrStaleValue — the page drew a cell somebody has since filled", err)
+			if _, err := values.Set(ctx, at, "https://mine.example", &unset); !errors.Is(err, variables.ErrStaleValue) {
+				t.Fatalf("Set expecting an empty cell err = %v, want variables.ErrStaleValue — the page drew a cell somebody has since filled", err)
 			}
 			if got, _, err := revealOne(ctx, values, at.Cell); err != nil || got != "https://someone-elses.example" {
 				t.Errorf("the cell contains %q (err %v), want the value already there — a refused write must not have landed", got, err)
 			}
 
 			current := int64(1)
-			if err := values.Set(ctx, at, "https://mine.example", &current); err != nil {
+			if _, err := values.Set(ctx, at, "https://mine.example", &current); err != nil {
 				t.Fatalf("Set expecting the current version err = %v, want the write to land", err)
 			}
 			if got, _, err := revealOne(ctx, values, at.Cell); err != nil || got != "https://mine.example" {
@@ -168,22 +169,22 @@ func TestTheValuesTheVariablesPageShowsAndChangesAreTheProvidersAnswers(t *testi
 	t.Run("Delete against a stale version is refused as a stale value", func(t *testing.T) {
 		root := setUpEnvFixture(t)
 
-		withProviderValues(t, root, envOptions{}, func(ctx context.Context, slug string, prov *providerclient.Provider, values envwire.Values) error {
+		withProviderValues(t, root, envOptions{}, func(ctx context.Context, slug string, prov *providerclient.Provider, values valuestore.Store) error {
 			coordinate := &envvarsv1.Coordinate{Slug: slug, Key: "API_URL"}
-			storeValue(t, ctx, prov, envTier(envOptions{}), coordinate, "https://first.example")
-			storeValue(t, ctx, prov, envTier(envOptions{}), coordinate, "https://someone-elses.example")
+			storeValue(t, ctx, prov, envOptions{}.tier(), coordinate, "https://first.example")
+			storeValue(t, ctx, prov, envOptions{}.tier(), coordinate, "https://someone-elses.example")
 			at := variables.Coordinate{Cell: variables.Cell{Key: "API_URL"}}
 
 			rendered := int64(1)
-			if err := values.Delete(ctx, at, &rendered); !errors.Is(err, varsui.ErrStaleValue) {
-				t.Fatalf("Delete expecting version 1 err = %v, want varsui.ErrStaleValue — the page drew a value somebody has since replaced", err)
+			if _, err := values.Delete(ctx, at, &rendered); !errors.Is(err, variables.ErrStaleValue) {
+				t.Fatalf("Delete expecting version 1 err = %v, want variables.ErrStaleValue — the page drew a value somebody has since replaced", err)
 			}
 			if got, found, err := revealOne(ctx, values, at.Cell); err != nil || !found || got != "https://someone-elses.example" {
 				t.Errorf("the cell contains %q (found %v, err %v), want the replacement — a refused delete must not have landed", got, found, err)
 			}
 
 			current := int64(2)
-			if err := values.Delete(ctx, at, &current); err != nil {
+			if _, err := values.Delete(ctx, at, &current); err != nil {
 				t.Fatalf("Delete expecting the current version err = %v, want the delete to land", err)
 			}
 			if _, found, err := revealOne(ctx, values, at.Cell); err != nil || found {
@@ -209,14 +210,14 @@ func syncedEnvSourceFixture(t *testing.T, descriptor envsource.Descriptor) strin
 	return root
 }
 
-func withVarsUI(t *testing.T, root string, drive func(s *varsui.Session)) {
+func withEditor(t *testing.T, root string, drive func(s *variableeditor.Session)) {
 	t.Helper()
 	err := withEnvProvider(context.Background(), clitest.NewDeps(), root, envOptions{}, "ocel env ui", io.Discard, func(ctx context.Context, run *events.Run, prov *providerclient.Provider, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
-		gate, err := discoverVariables(ctx, cfg, prov, envOptions{}, run)
+		declarations, err := discoverVariables(ctx, cfg, prov, envOptions{}, run)
 		if err != nil {
 			return err
 		}
-		s, err := envwire.ServeVarsUI(ctx, cfg, prov, false, gate, nil)
+		s, err := projecteditor.Serve(ctx, cfg, prov, environmentv1.Tier_TIER_PRODUCTION, declarations, nil)
 		if err != nil {
 			return err
 		}
@@ -225,11 +226,11 @@ func withVarsUI(t *testing.T, root string, drive func(s *varsui.Session)) {
 		return nil
 	})
 	if err != nil {
-		t.Fatalf("serve the variables UI: %v", err)
+		t.Fatalf("serve the variable editor: %v", err)
 	}
 }
 
-func callVarsUI(t *testing.T, s *varsui.Session, method, path string, body any) *http.Response {
+func callEditor(t *testing.T, s *variableeditor.Session, method, path string, body any) *http.Response {
 	t.Helper()
 	origin := strings.TrimSuffix(strings.SplitN(s.URL, "#", 2)[0], "/")
 	var payload io.Reader
@@ -254,17 +255,17 @@ func callVarsUI(t *testing.T, s *varsui.Session, method, path string, body any) 
 	return res
 }
 
-func varsUIState(t *testing.T, s *varsui.Session) varsui.State {
+func editorPage(t *testing.T, s *variableeditor.Session) variableeditor.Page {
 	t.Helper()
-	res := callVarsUI(t, s, http.MethodGet, "/api/state", nil)
-	var out varsui.State
+	res := callEditor(t, s, http.MethodGet, "/api/state", nil)
+	var out variableeditor.Page
 	if err := json.NewDecoder(res.Body).Decode(&out); err != nil {
 		t.Fatalf("decode the page's state (%d): %v", res.StatusCode, err)
 	}
 	return out
 }
 
-func matrixRow(state varsui.State, key string) (variables.MatrixRow, bool) {
+func matrixRow(state variableeditor.Page, key string) (variables.MatrixRow, bool) {
 	i := slices.IndexFunc(state.Matrix.Rows, func(row variables.MatrixRow) bool { return row.Key == key })
 	if i < 0 {
 		return variables.MatrixRow{}, false
@@ -274,8 +275,8 @@ func matrixRow(state varsui.State, key string) (variables.MatrixRow, bool) {
 
 func TestEnvUINamesTheEnvSourceAndWhatItCopied(t *testing.T) {
 	root := syncedEnvSourceFixture(t, infisicalProduction)
-	withVarsUI(t, root, func(s *varsui.Session) {
-		state := varsUIState(t, s)
+	withEditor(t, root, func(s *variableeditor.Session) {
+		state := editorPage(t, s)
 		if state.EnvSource == nil || state.EnvSource.ID != "infisical:p-1/prod" || state.EnvSource.URLs[""] != "https://infisical.example/prod" {
 			t.Fatalf("env source = %+v, want infisical named with its root URL", state.EnvSource)
 		}
@@ -300,11 +301,11 @@ func TestEnvUINamesTheEnvSourceAndWhatItCopied(t *testing.T) {
 func TestEnvUIUpdatesAValueTheEnvSourceHoldsUnderWriteValues(t *testing.T) {
 	root := syncedEnvSourceFixture(t, writing(envsource.WriteValues))
 
-	withVarsUI(t, root, func(s *varsui.Session) {
-		if source := varsUIState(t, s).EnvSource; source == nil || !source.CanCreate || !source.CanUpdate {
+	withEditor(t, root, func(s *variableeditor.Session) {
+		if source := editorPage(t, s).EnvSource; source == nil || !source.CanCreate || !source.CanUpdate {
 			t.Fatalf("env source = %+v, want one ocel may create and update values in", source)
 		}
-		res := callVarsUI(t, s, http.MethodPost, "/api/env-source/value", map[string]string{"key": "STRIPE_API_KEY", "value": "sk_rotated"})
+		res := callEditor(t, s, http.MethodPost, "/api/env-source/value", map[string]string{"key": "STRIPE_API_KEY", "value": "sk_rotated"})
 		if res.StatusCode != http.StatusOK {
 			body, _ := io.ReadAll(res.Body)
 			t.Fatalf("POST = %d: %s", res.StatusCode, body)
@@ -322,13 +323,13 @@ func TestEnvUICreatesAValueTheEnvSourceLacksThere(t *testing.T) {
 	writable.Infisical = &options
 	root := syncedEnvSourceFixture(t, writable)
 
-	withVarsUI(t, root, func(s *varsui.Session) {
-		res := callVarsUI(t, s, http.MethodPost, "/api/env-source/value", map[string]string{"key": "API_TOKEN", "value": "tok"})
+	withEditor(t, root, func(s *variableeditor.Session) {
+		res := callEditor(t, s, http.MethodPost, "/api/env-source/value", map[string]string{"key": "API_TOKEN", "value": "tok"})
 		if res.StatusCode != http.StatusOK {
 			body, _ := io.ReadAll(res.Body)
 			t.Fatalf("POST = %d: %s", res.StatusCode, body)
 		}
-		token, _ := matrixRow(varsUIState(t, s), "API_TOKEN")
+		token, _ := matrixRow(editorPage(t, s), "API_TOKEN")
 		if len(token.Cells) == 0 || !token.Cells[0].Set || token.Cells[0].EnvSource != "infisical:p-1/prod" {
 			t.Errorf("API_TOKEN = %+v, want it set from the env source", token)
 		}

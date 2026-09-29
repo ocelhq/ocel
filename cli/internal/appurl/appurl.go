@@ -1,9 +1,9 @@
 package appurl
 
 import (
-	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -27,7 +27,7 @@ func Preview(cfg *projectconfig.Config, host func(app string) string) map[string
 func byApp(cfg *projectconfig.Config, project []string, declared func(projectconfig.App) []string) map[string]string {
 	apps := cfg.Apps
 	if len(apps) == 0 {
-		apps = []projectconfig.App{{Name: envwire.RootApp}}
+		apps = []projectconfig.App{{Name: variablescope.RootApp}}
 	}
 	own := make([][]string, len(apps))
 	for slot, app := range apps {
@@ -60,7 +60,7 @@ func Variables(clientBundle bool, url string) []manifestbuilder.Variable {
 }
 
 func clientBundles(cfg *projectconfig.Config) map[string]bool {
-	apps := envwire.Apps(cfg)
+	apps := variablescope.Apps(cfg)
 	byName := make(map[string]bool, len(apps))
 	for _, a := range apps {
 		byName[a.Name] = a.ClientBundle
@@ -89,7 +89,7 @@ func BuildEnv(cfg *projectconfig.Config, byURL map[string]string) map[string]map
 }
 
 func BuildKey(app string) string {
-	if app == envwire.RootApp {
+	if app == variablescope.RootApp {
 		return ""
 	}
 	return app

@@ -114,8 +114,8 @@ func rootSpan(t *testing.T, spans []traceSpan) traceSpan {
 	return traceSpan{}
 }
 
-func TestGateRecoveryTracesEachAttemptAndTheHumanWait(t *testing.T) {
-	root := clitest.SetUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+func TestVariablesRecoveryTracesEachAttemptAndTheHumanWait(t *testing.T) {
+	root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 	problems := problemsFile(t, missingStripeKey)
 	deps := clitest.NewDeps()
 	terminalStdin(&deps)
@@ -131,7 +131,7 @@ func TestGateRecoveryTracesEachAttemptAndTheHumanWait(t *testing.T) {
 		done <- runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 	}()
 
-	address, token := awaitVarsUI(t, &out, 1)
+	address, token := awaitEditorURL(t, &out, 1)
 	setCell(t, address, token, "STRIPE_API_KEY", "sk_live_filled_in")
 	clitest.WriteFile(t, problems, "[]")
 	markDone(t, address, token)

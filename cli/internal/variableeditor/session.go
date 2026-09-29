@@ -1,4 +1,4 @@
-package varsui
+package variableeditor
 
 import (
 	"context"
@@ -16,32 +16,21 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/channel"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
 
 var ErrAbandoned = errors.New("variables UI abandoned")
 
-var ErrStaleValue = errors.New("stale value")
-
 const AbandonedMessage = "the variables UI closed before the matrix was complete"
 
-const DefaultAbsence = 5 * time.Second
+const DefaultAbandonAfter = 5 * time.Second
 
-type Reader interface {
+type Values interface {
 	List(ctx context.Context) ([]variables.ValueMetadata, error)
-	Read(ctx context.Context, rows []variables.Coordinate) (map[variables.Coordinate]string, error)
-}
-
-type Store interface {
-	Reader
-	Set(ctx context.Context, at variables.Coordinate, value string, expected *int64) error
-	Delete(ctx context.Context, at variables.Coordinate, expected *int64) error
-	History(ctx context.Context, at variables.Coordinate) ([]Version, error)
-}
-
-type Version struct {
-	Version   int64 `json:"version"`
-	CreatedAt int64 `json:"createdAt"`
-	Size      int64 `json:"size"`
+	Reveal(ctx context.Context, rows []variables.Coordinate) (map[variables.Coordinate]string, error)
+	Set(ctx context.Context, at variables.Coordinate, value string, expected *int64) (int64, error)
+	Delete(ctx context.Context, at variables.Coordinate, expected *int64) (bool, error)
+	History(ctx context.Context, at variables.Coordinate) ([]variables.Version, error)
 }
 
 type Recovery struct {
@@ -49,47 +38,38 @@ type Recovery struct {
 	Missing []variables.Cell `json:"missing"`
 }
 
-type State struct {
-	Slug         string           `json:"slug"`
-	Tier         string           `json:"tier"`
-	Other        string           `json:"other"`
-	Environments []string         `json:"environments"`
-	Matrix       variables.Matrix `json:"matrix"`
-	Recovery     *Recovery        `json:"recovery,omitempty"`
-	EnvSource    *EnvSource       `json:"envSource,omitempty"`
-}
-
-type EnvSource struct {
-	ID          string            `json:"id"`
-	CanCreate   bool              `json:"canCreate"`
-	CanUpdate   bool              `json:"canUpdate"`
-	URLs        map[string]string `json:"urls,omitempty"`
-	Credentials []string          `json:"credentials,omitempty"`
+type Page struct {
+	Slug         string               `json:"slug"`
+	Tier         string               `json:"tier"`
+	Other        string               `json:"other"`
+	Environments []string             `json:"environments"`
+	Matrix       variables.Matrix     `json:"matrix"`
+	Recovery     *Recovery            `json:"recovery,omitempty"`
+	EnvSource    *variables.EnvSource `json:"envSource,omitempty"`
 }
 
 type EnvSourceClient interface {
-	Describe(ctx context.Context) (variables.EnvSource, error)
-	Sync(ctx context.Context) error
-	Set(ctx context.Context, at variables.Cell, value, description string) (awaitingApproval bool, err error)
+	DescribeEnvSource(ctx context.Context) (variables.EnvSource, error)
+	SyncEnvSource(ctx context.Context) (variables.EnvSource, error)
+	SetInEnvSource(ctx context.Context, at variables.Cell, value, description string) (awaitingApproval bool, err error)
 }
-
 type Options struct {
 	Assets fs.FS
 
-	Gate *variables.Declarations
+	Declarations *variables.Declarations
 
-	Store     Store
-	Other     Reader
-	EnvSource EnvSourceClient
+	Values      Values
+	OtherValues Values
+	EnvSource   EnvSourceClient
 
-	Slug    string
-	Preview bool
+	Slug string
+	Tier environmentv1.Tier
 
 	Environments []string
 
 	Recovery *Recovery
 
-	Absence time.Duration
+	AbandonAfter time.Duration
 }
 
 type Session struct {
@@ -104,9 +84,9 @@ type Session struct {
 	outcome  error
 	closeOne sync.Once
 
-	present  sync.Mutex
-	pages    int
-	departed *time.Timer
+	viewersMu    sync.Mutex
+	viewers      int
+	abandonTimer *time.Timer
 }
 
 func Serve(ctx context.Context, opts Options) (*Session, error) {
@@ -115,8 +95,8 @@ func Serve(ctx context.Context, opts Options) (*Session, error) {
 		return nil, fmt.Errorf("open a loopback port for the variables UI: %w", err)
 	}
 
-	if opts.Absence <= 0 {
-		opts.Absence = DefaultAbsence
+	if opts.AbandonAfter <= 0 {
+		opts.AbandonAfter = DefaultAbandonAfter
 	}
 	s := &Session{
 		Token:    channel.NewSessionToken(),
@@ -166,7 +146,7 @@ func (s *Session) finish(outcome error) error {
 
 func (s *Session) handler() http.Handler {
 	api := http.NewServeMux()
-	api.HandleFunc("GET /api/state", s.handleState)
+	api.HandleFunc("GET /api/state", s.handlePage)
 	api.HandleFunc("PUT /api/value", s.handleSet)
 	api.HandleFunc("DELETE /api/value", s.handleDelete)
 	api.HandleFunc("POST /api/env-source/value", s.handleSetInEnvSource)
@@ -176,7 +156,7 @@ func (s *Session) handler() http.Handler {
 	api.HandleFunc("POST /api/copy", s.handleCopy)
 	api.HandleFunc("POST /api/done", s.handleDone)
 	api.HandleFunc("POST /api/abandon", s.handleAbandon)
-	api.HandleFunc("GET /api/presence", s.handlePresence)
+	api.HandleFunc("GET /api/presence", s.handleViewer)
 
 	page := http.FileServerFS(s.opts.Assets)
 
@@ -190,8 +170,8 @@ func (s *Session) guard(next http.Handler) http.Handler {
 	return channel.LoopbackGuard(s.listener.Addr().String(), s.Token, next)
 }
 
-func (s *Session) handleState(w http.ResponseWriter, r *http.Request) {
-	s.writeState(r.Context(), w)
+func (s *Session) handlePage(w http.ResponseWriter, r *http.Request) {
+	s.writePage(r.Context(), w)
 }
 
 type addressRequest struct {
@@ -225,8 +205,8 @@ func (s *Session) handleSet(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, err)
 		return
 	}
-	if err := s.opts.Store.Set(r.Context(), at, req.Value, req.Version); err != nil {
-		if errors.Is(err, ErrStaleValue) {
+	if _, err := s.opts.Values.Set(r.Context(), at, req.Value, req.Version); err != nil {
+		if errors.Is(err, variables.ErrStaleValue) {
 			fail(w, http.StatusConflict, err)
 			return
 		}
@@ -234,7 +214,7 @@ func (s *Session) handleSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.forget(at)
+	s.clearProblems(at)
 	writeJSON(w, struct{}{})
 }
 
@@ -253,12 +233,12 @@ func (s *Session) handleSetInEnvSource(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, err)
 		return
 	}
-	awaiting, err := s.opts.EnvSource.Set(r.Context(), at.Cell, req.Value, s.description(at.Cell.Key))
+	awaiting, err := s.opts.EnvSource.SetInEnvSource(r.Context(), at.Cell, req.Value, s.description(at.Cell.Key))
 	if err != nil {
 		fail(w, http.StatusBadGateway, err)
 		return
 	}
-	s.forget(at)
+	s.clearProblems(at)
 	writeJSON(w, map[string]bool{"awaitingApproval": awaiting})
 }
 
@@ -266,14 +246,14 @@ func (s *Session) settableInEnvSource(at variables.Coordinate) error {
 	if at.Environment != "" {
 		return fmt.Errorf("a value for %s alone is stored by ocel, never by the env source: save it as an override for %s instead", at.Environment, at.Environment)
 	}
-	if slices.Contains(s.opts.Gate.Scope().EnvSource.Credentials, at.Cell.Key) {
+	if slices.Contains(s.opts.Declarations.Scope().EnvSource.Credentials, at.Cell.Key) {
 		return fmt.Errorf("%s is what ocel logs in to the env source with, so ocel stores it itself: save it here instead", at.Cell.Key)
 	}
 	return s.writable(at)
 }
 
 func (s *Session) description(key string) string {
-	for _, definition := range s.opts.Gate.Declared() {
+	for _, definition := range s.opts.Declarations.Declared() {
 		if definition.GetKey() == key {
 			return definition.GetDescription()
 		}
@@ -292,15 +272,15 @@ func (s *Session) handleDelete(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, err)
 		return
 	}
-	if err := s.opts.Store.Delete(r.Context(), at, expected); err != nil {
-		if errors.Is(err, ErrStaleValue) {
+	if _, err := s.opts.Values.Delete(r.Context(), at, expected); err != nil {
+		if errors.Is(err, variables.ErrStaleValue) {
 			fail(w, http.StatusConflict, err)
 			return
 		}
 		fail(w, http.StatusBadGateway, err)
 		return
 	}
-	s.forget(at)
+	s.clearProblems(at)
 	writeJSON(w, struct{}{})
 }
 
@@ -308,10 +288,10 @@ func (s *Session) writable(at variables.Coordinate) error {
 	if err := addressable(at.Cell.Folder); err != nil {
 		return err
 	}
-	if err := variables.RefuseImpliedInFolder(s.opts.Gate.Scope(), at.Cell.Key, at.Cell.Folder); err != nil {
+	if err := variables.RefuseImpliedInFolder(s.opts.Declarations.Scope(), at.Cell.Key, at.Cell.Folder); err != nil {
 		return err
 	}
-	if err := variables.RefuseUnwritable(s.opts.Gate.Declared(), at.Cell.Key, at.Cell.Folder); err != nil {
+	if err := variables.RefuseUnwritable(s.opts.Declarations.Declared(), at.Cell.Key, at.Cell.Folder); err != nil {
 		return err
 	}
 	if at.Environment == "" || slices.Contains(s.opts.Environments, at.Environment) {
@@ -320,9 +300,9 @@ func (s *Session) writable(at variables.Coordinate) error {
 	return fmt.Errorf("no environment named %q exists, so nothing would ever read that value", at.Environment)
 }
 
-func (s *Session) forget(at variables.Coordinate) {
+func (s *Session) clearProblems(at variables.Coordinate) {
 	if at.Environment == "" {
-		s.opts.Gate.ClearProblems(at.Cell)
+		s.opts.Declarations.ClearProblems(at.Cell)
 	}
 }
 
@@ -360,15 +340,15 @@ func (s *Session) handleReveal(w http.ResponseWriter, r *http.Request) {
 		}
 		rows = append(rows, cell.address())
 	}
-	writeJSON(w, s.read(r.Context(), s.opts.Store, rows))
+	writeJSON(w, s.reveal(r.Context(), s.opts.Values, rows))
 }
 
-func (s *Session) read(ctx context.Context, from Reader, rows []variables.Coordinate) revealResponse {
+func (s *Session) reveal(ctx context.Context, from Values, rows []variables.Coordinate) revealResponse {
 	out := revealResponse{Values: []revealedValue{}, Errors: []cellError{}}
 	if len(rows) == 0 {
 		return out
 	}
-	found, err := from.Read(ctx, rows)
+	found, err := from.Reveal(ctx, rows)
 	for _, at := range rows {
 		switch value, ok := found[at]; {
 		case err != nil:
@@ -384,7 +364,7 @@ func (s *Session) read(ctx context.Context, from Reader, rows []variables.Coordi
 
 func (s *Session) secrets() map[string]bool {
 	out := map[string]bool{}
-	for _, definition := range s.opts.Gate.Declared() {
+	for _, definition := range s.opts.Declarations.Declared() {
 		if definition.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_SECRET {
 			out[definition.GetKey()] = true
 		}
@@ -393,13 +373,13 @@ func (s *Session) secrets() map[string]bool {
 }
 
 func (s *Session) handleHistory(w http.ResponseWriter, r *http.Request) {
-	versions, err := s.opts.Store.History(r.Context(), queryAddress(r))
+	versions, err := s.opts.Values.History(r.Context(), queryAddress(r))
 	if err != nil {
 		fail(w, http.StatusBadGateway, err)
 		return
 	}
 	if versions == nil {
-		versions = []Version{}
+		versions = []variables.Version{}
 	}
 	writeJSON(w, map[string]any{"versions": versions})
 }
@@ -419,11 +399,11 @@ type otherResponse struct {
 }
 
 func (s *Session) handleOther(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Other == nil {
+	if s.opts.OtherValues == nil {
 		fail(w, http.StatusNotFound, fmt.Errorf("this session has no %s store to read", s.otherTier()))
 		return
 	}
-	stored, err := s.opts.Other.List(r.Context())
+	stored, err := s.opts.OtherValues.List(r.Context())
 	if err != nil {
 		fail(w, http.StatusBadGateway, fmt.Errorf("read the %s values: %w", s.otherTier(), err))
 		return
@@ -447,7 +427,7 @@ func (s *Session) handleOther(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	read := s.read(r.Context(), s.opts.Other, readable)
+	read := s.reveal(r.Context(), s.opts.OtherValues, readable)
 	values := make(map[variables.Coordinate]string, len(read.Values))
 	for _, v := range read.Values {
 		values[v.address()] = v.Value
@@ -466,16 +446,10 @@ func (s *Session) handleOther(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, out)
 }
 
-var className = map[resourcesv1.VariableClass]string{
-	resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN:     "plain",
-	resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE: "sensitive",
-	resourcesv1.VariableClass_VARIABLE_CLASS_SECRET:    "secret",
-}
-
 func (s *Session) classes() map[string]string {
 	out := map[string]string{}
-	for _, definition := range s.opts.Gate.Declared() {
-		out[definition.GetKey()] = className[definition.GetClass()]
+	for _, definition := range s.opts.Declarations.Declared() {
+		out[definition.GetKey()] = variables.ClassName(definition.GetClass())
 	}
 	return out
 }
@@ -495,7 +469,7 @@ type copyOutcome struct {
 }
 
 func (s *Session) handleCopy(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Other == nil {
+	if s.opts.OtherValues == nil {
 		fail(w, http.StatusNotFound, fmt.Errorf("this session has no %s store to copy from", s.otherTier()))
 		return
 	}
@@ -508,7 +482,7 @@ func (s *Session) handleCopy(w http.ResponseWriter, r *http.Request) {
 	for _, cell := range req.Cells {
 		rows = append(rows, cell.address())
 	}
-	read := s.read(r.Context(), s.opts.Other, rows)
+	read := s.reveal(r.Context(), s.opts.OtherValues, rows)
 	values := make(map[variables.Coordinate]string, len(read.Values))
 	for _, v := range read.Values {
 		values[v.address()] = v.Value
@@ -531,16 +505,16 @@ func (s *Session) handleCopy(w http.ResponseWriter, r *http.Request) {
 				outcome.Error = err.Error()
 				break
 			}
-			err := s.opts.Store.Set(r.Context(), at, value, cell.Version)
+			_, err := s.opts.Values.Set(r.Context(), at, value, cell.Version)
 			switch {
-			case errors.Is(err, ErrStaleValue):
+			case errors.Is(err, variables.ErrStaleValue):
 				outcome.Conflict = true
 				outcome.Error = err.Error()
 			case err != nil:
 				outcome.Error = err.Error()
 			default:
 				outcome.Saved = true
-				s.forget(at)
+				s.clearProblems(at)
 			}
 		}
 		outcomes = append(outcomes, outcome)
@@ -551,30 +525,30 @@ func (s *Session) handleCopy(w http.ResponseWriter, r *http.Request) {
 func (s *Session) handleDone(w http.ResponseWriter, r *http.Request) {
 	if s.opts.Recovery != nil {
 		if s.opts.EnvSource != nil {
-			if err := s.opts.EnvSource.Sync(r.Context()); err != nil {
+			if _, err := s.opts.EnvSource.SyncEnvSource(r.Context()); err != nil {
 				fail(w, http.StatusBadGateway, fmt.Errorf("read the env source again: %w", err))
 				return
 			}
 		}
-		if err := s.opts.Gate.Prefetch(r.Context()); err != nil {
+		if err := s.opts.Declarations.Prefetch(r.Context()); err != nil {
 			fail(w, http.StatusBadGateway, err)
 			return
 		}
-		if err := s.opts.Gate.RefuseIncomplete(); err != nil {
+		if err := s.opts.Declarations.RefuseIncomplete(); err != nil {
 			fail(w, http.StatusConflict, fmt.Errorf("the deploy cannot resume yet: %w", err))
 			return
 		}
 	}
-	s.leave(w, nil)
+	s.respondAndFinish(w, nil)
 }
 
 func (s *Session) handleAbandon(w http.ResponseWriter, _ *http.Request) {
-	s.leave(w, ErrAbandoned)
+	s.respondAndFinish(w, ErrAbandoned)
 }
 
-func (s *Session) handlePresence(w http.ResponseWriter, r *http.Request) {
-	s.arrive()
-	defer s.depart()
+func (s *Session) handleViewer(w http.ResponseWriter, r *http.Request) {
+	s.join()
+	defer s.leave()
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
 	if flusher, ok := w.(http.Flusher); ok {
@@ -586,34 +560,34 @@ func (s *Session) handlePresence(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Session) arrive() {
-	s.present.Lock()
-	defer s.present.Unlock()
-	s.pages++
-	if s.departed != nil {
-		s.departed.Stop()
-		s.departed = nil
+func (s *Session) join() {
+	s.viewersMu.Lock()
+	defer s.viewersMu.Unlock()
+	s.viewers++
+	if s.abandonTimer != nil {
+		s.abandonTimer.Stop()
+		s.abandonTimer = nil
 	}
 }
 
-func (s *Session) depart() {
-	s.present.Lock()
-	defer s.present.Unlock()
-	s.pages--
-	if s.pages > 0 {
+func (s *Session) leave() {
+	s.viewersMu.Lock()
+	defer s.viewersMu.Unlock()
+	s.viewers--
+	if s.viewers > 0 {
 		return
 	}
-	s.departed = time.AfterFunc(s.opts.Absence, func() {
-		s.present.Lock()
-		gone := s.pages == 0
-		s.present.Unlock()
+	s.abandonTimer = time.AfterFunc(s.opts.AbandonAfter, func() {
+		s.viewersMu.Lock()
+		gone := s.viewers == 0
+		s.viewersMu.Unlock()
 		if gone {
 			_ = s.finish(ErrAbandoned)
 		}
 	})
 }
 
-func (s *Session) leave(w http.ResponseWriter, outcome error) {
+func (s *Session) respondAndFinish(w http.ResponseWriter, outcome error) {
 	w.WriteHeader(http.StatusOK)
 	if flusher, ok := w.(http.Flusher); ok {
 		flusher.Flush()
@@ -647,8 +621,8 @@ func queryVersion(r *http.Request) (*int64, error) {
 	return &version, nil
 }
 
-func (s *Session) writeState(ctx context.Context, w http.ResponseWriter) {
-	if err := s.opts.Gate.Prefetch(ctx); err != nil {
+func (s *Session) writePage(ctx context.Context, w http.ResponseWriter) {
+	if err := s.opts.Declarations.Prefetch(ctx); err != nil {
 		fail(w, http.StatusBadGateway, err)
 		return
 	}
@@ -656,34 +630,34 @@ func (s *Session) writeState(ctx context.Context, w http.ResponseWriter) {
 	if environments == nil {
 		environments = []string{}
 	}
-	out := State{
+	out := Page{
 		Slug:         s.opts.Slug,
 		Tier:         s.tier(),
 		Other:        s.otherTier(),
 		Environments: environments,
-		Matrix:       s.opts.Gate.Matrix(s.opts.Environments),
+		Matrix:       s.opts.Declarations.Matrix(s.opts.Environments),
 		Recovery:     s.opts.Recovery,
 	}
 	if s.opts.EnvSource != nil {
-		described, err := s.opts.EnvSource.Describe(ctx)
+		described, err := s.opts.EnvSource.DescribeEnvSource(ctx)
 		if err != nil {
 			fail(w, http.StatusBadGateway, fmt.Errorf("read which env source this tier reads from: %w", err))
 			return
 		}
-		out.EnvSource = &EnvSource{ID: described.ID, CanCreate: described.CanCreate, CanUpdate: described.CanUpdate, URLs: described.URLs, Credentials: described.Credentials}
+		out.EnvSource = &described
 	}
 	writeJSON(w, out)
 }
 
 func (s *Session) tier() string {
-	if s.opts.Preview {
+	if s.opts.Tier == environmentv1.Tier_TIER_PREVIEW {
 		return "preview"
 	}
 	return "production"
 }
 
 func (s *Session) otherTier() string {
-	if s.opts.Preview {
+	if s.opts.Tier == environmentv1.Tier_TIER_PREVIEW {
 		return "production"
 	}
 	return "preview"

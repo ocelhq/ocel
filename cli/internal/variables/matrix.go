@@ -68,10 +68,14 @@ type UndeclaredCell struct {
 	EnvSource string `json:"envSource"`
 }
 
-var className = map[resourcesv1.VariableClass]string{
+var classNames = map[resourcesv1.VariableClass]string{
 	resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN:     "plain",
 	resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE: "sensitive",
 	resourcesv1.VariableClass_VARIABLE_CLASS_SECRET:    "secret",
+}
+
+func ClassName(class resourcesv1.VariableClass) string {
+	return classNames[class]
 }
 
 func (d *Declarations) Matrix(environments []string) Matrix {
@@ -116,7 +120,7 @@ func (d *Declarations) Matrix(environments []string) Matrix {
 		row := MatrixRow{
 			Key:         definition.GetKey(),
 			Description: definition.GetDescription(),
-			Class:       className[definition.GetClass()],
+			Class:       ClassName(definition.GetClass()),
 			Scope:       definition.GetFolders(),
 			Group:       definition.GetGroup(),
 			Cells:       make([]MatrixCell, 0, len(columns)),

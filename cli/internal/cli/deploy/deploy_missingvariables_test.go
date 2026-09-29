@@ -46,9 +46,9 @@ export default {
 `)
 }
 
-func TestEnvGateOnDeploy(t *testing.T) {
+func TestADeployIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 	t.Run("a missing value refuses before anything is built", func(t *testing.T) {
-		root := clitest.SetUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+		root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		t.Setenv("OCEL_TEST_ENV_PROBLEMS", `[{"key":"STRIPE_API_KEY","folder":"","kind":"KIND_MISSING"}]`)
 		deps := clitest.NewDeps()
 		built := false
@@ -58,7 +58,7 @@ func TestEnvGateOnDeploy(t *testing.T) {
 		clitest.AttachTerminalSink(deps, &stdout)
 		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
-			t.Fatal("runDeploy err = nil, want the gate to refuse")
+			t.Fatal("runDeploy err = nil, want the declarations to refuse")
 		}
 		var exit *exitsig.ExitError
 		if !errors.As(err, &exit) || exit.Code == 0 {
@@ -72,7 +72,7 @@ func TestEnvGateOnDeploy(t *testing.T) {
 			}
 		}
 		if built {
-			t.Error("the app was built, want the gate to refuse before any build runs")
+			t.Error("the app was built, want the declarations to refuse before any build runs")
 		}
 		if strings.Contains(out, "DEPLOY ") {
 			t.Errorf("stdout = %q, want no Deploy to have been driven", out)
@@ -80,7 +80,7 @@ func TestEnvGateOnDeploy(t *testing.T) {
 	})
 
 	t.Run("a client value that fails its schema refuses before anything is built, naming the key and the complaint", func(t *testing.T) {
-		root := clitest.SetUpEnvGateFixture(t, `[{"key":"NEXT_PUBLIC_PORT","class":"VARIABLE_CLASS_PLAIN","required":true,"clientAccessible":true,"hasSchema":true,"schemaSource":"/app/env.schema.ts","source":"/app/env.ts"}]`)
+		root := clitest.SetUpVariablesFixture(t, `[{"key":"NEXT_PUBLIC_PORT","class":"VARIABLE_CLASS_PLAIN","required":true,"clientAccessible":true,"hasSchema":true,"schemaSource":"/app/env.schema.ts","source":"/app/env.ts"}]`)
 		t.Setenv("OCEL_TEST_ENV_PROBLEMS", `[{"key":"NEXT_PUBLIC_PORT","folder":"","kind":"KIND_INVALID","detail":"expected a number"}]`)
 		deps := clitest.NewDeps()
 		built := false
@@ -90,7 +90,7 @@ func TestEnvGateOnDeploy(t *testing.T) {
 		clitest.AttachTerminalSink(deps, &stdout)
 		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
-			t.Fatal("runDeploy err = nil, want the gate to refuse")
+			t.Fatal("runDeploy err = nil, want the declarations to refuse")
 		}
 		out := stdout.String()
 		for _, want := range []string{"NEXT_PUBLIC_PORT", "set, but expected a number", "ocel env set NEXT_PUBLIC_PORT=<VALUE>"} {
@@ -104,7 +104,7 @@ func TestEnvGateOnDeploy(t *testing.T) {
 	})
 
 	t.Run("a missing value refuses though discovery reported nothing", func(t *testing.T) {
-		root := clitest.SetUpEnvGateFixtureWith(t,
+		root := clitest.SetUpVariablesFixtureWith(t,
 			`[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`,
 			clitest.EnvDeclareOnlyScript)
 		deps := clitest.NewDeps()
@@ -115,7 +115,7 @@ func TestEnvGateOnDeploy(t *testing.T) {
 		clitest.AttachTerminalSink(deps, &stdout)
 		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
-			t.Fatal("runDeploy err = nil, want the gate to refuse on what it knows itself")
+			t.Fatal("runDeploy err = nil, want the declarations to refuse on what it knows itself")
 		}
 		out := stdout.String()
 		for _, want := range []string{"STRIPE_API_KEY", "ocel env set STRIPE_API_KEY=<VALUE>"} {
@@ -124,12 +124,12 @@ func TestEnvGateOnDeploy(t *testing.T) {
 			}
 		}
 		if built {
-			t.Error("the app was built, want the gate to refuse before any build runs")
+			t.Error("the app was built, want the declarations to refuse before any build runs")
 		}
 	})
 
-	t.Run("a value that is set passes the gate and deploys", func(t *testing.T) {
-		root := clitest.SetUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+	t.Run("a value that is set passes the declarations and deploys", func(t *testing.T) {
+		root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		envSet(t, root, "STRIPE_API_KEY", "sk_live_value", envOptions{})
 
 		var stdout, stderr bytes.Buffer
@@ -144,7 +144,7 @@ func TestEnvGateOnDeploy(t *testing.T) {
 	})
 
 	t.Run("a value that cannot be read names the cell", func(t *testing.T) {
-		root := clitest.SetUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+		root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		envSet(t, root, "STRIPE_API_KEY", "sk_live_value", envOptions{})
 		t.Setenv(clitest.FakeRevealFailureEnvVar, "the store is unreachable")
 
@@ -163,7 +163,7 @@ func TestEnvGateOnDeploy(t *testing.T) {
 	})
 
 	t.Run("a live value is never handed to the declaring process", func(t *testing.T) {
-		root := clitest.SetUpEnvGateFixture(t, `[{"key":"LIVE_KEY","class":"VARIABLE_CLASS_SECRET","required":true},{"key":"BAKED_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
+		root := clitest.SetUpVariablesFixture(t, `[{"key":"LIVE_KEY","class":"VARIABLE_CLASS_SECRET","required":true},{"key":"BAKED_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
 		envSet(t, root, "LIVE_KEY", "sk_live_do_not_leak", envOptions{})
 		envSet(t, root, "BAKED_KEY", "baked_value", envOptions{})
 
@@ -205,7 +205,7 @@ func TestEnvGateOnDeploy(t *testing.T) {
 	})
 
 	t.Run("a folder no app binds is a warning, not a refusal", func(t *testing.T) {
-		root := clitest.SetUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`)
+		root := clitest.SetUpVariablesFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`)
 		writeAppsConfig(t, root, `{ name: "api", path: "apps/api", framework: "node" }`)
 		writeAppSource(t, root, "api")
 		envSet(t, root, "POSTHOG_ID", "ph_web", envOptions{folder: "/web"})
@@ -224,7 +224,7 @@ func TestEnvGateOnDeploy(t *testing.T) {
 	})
 
 	t.Run("each app is built with its own diverged value", func(t *testing.T) {
-		root := clitest.SetUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web","/admin"]}]`)
+		root := clitest.SetUpVariablesFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web","/admin"]}]`)
 		writeAppsConfig(t, root, `
     { name: "web", path: "apps/web", framework: "node", folder: "/web" },
     { name: "admin", path: "apps/admin", framework: "node", folder: "/admin" }`)
@@ -246,7 +246,7 @@ func TestEnvGateOnDeploy(t *testing.T) {
 	})
 
 	t.Run("a half-completed folder rename stops the deploy naming both files", func(t *testing.T) {
-		root := clitest.SetUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web","/admin"],"source":"ocel/env.ts"}]`)
+		root := clitest.SetUpVariablesFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web","/admin"],"source":"ocel/env.ts"}]`)
 		writeAppsConfig(t, root, `
     { name: "web", path: "apps/web", framework: "node", folder: "/web" },
     { name: "admin", path: "apps/admin", framework: "node", folder: "/administration" }`)
@@ -274,8 +274,8 @@ func TestEnvGateOnDeploy(t *testing.T) {
 		}
 	})
 
-	t.Run("a reference satisfies the gate with its source's value", func(t *testing.T) {
-		root := clitest.SetUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
+	t.Run("a reference satisfies the declarations with its source's value", func(t *testing.T) {
+		root := clitest.SetUpVariablesFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
 		ownedElsewhere(t, "POSTHOG_ID", "ph_owned_by_platform")
 		envRef(t, root, "POSTHOG_ID", envOptions{}, envRefOptions{project: "platform"})
 
@@ -293,9 +293,9 @@ func TestEnvGateOnDeploy(t *testing.T) {
 	})
 }
 
-func TestEnvGateOnPreviewUp(t *testing.T) {
-	t.Run("a production value does not satisfy the preview gate", func(t *testing.T) {
-		root := clitest.SetUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+func TestAPreviewIsRefusedUntilItsVariablesAreReady(t *testing.T) {
+	t.Run("a production value does not satisfy the preview declarations", func(t *testing.T) {
+		root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		deps := clitest.NewDeps()
@@ -306,7 +306,7 @@ func TestEnvGateOnPreviewUp(t *testing.T) {
 		clitest.AttachTerminalSink(deps, &stdout)
 		err := runPreviewUp(context.Background(), deps, root, previewUpOptions{name: "staging"}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
-			t.Fatal("runPreviewUp err = nil, want the preview gate to refuse: the production store is not the preview one")
+			t.Fatal("runPreviewUp err = nil, want the preview declarations to refuse: the production store is not the preview one")
 		}
 
 		out := stdout.String() + stderr.String() + err.Error()
@@ -317,7 +317,7 @@ func TestEnvGateOnPreviewUp(t *testing.T) {
 			t.Errorf("output = %q, want no production value reachable from a preview", out)
 		}
 		if built {
-			t.Error("the app was built, want the gate to refuse before any build runs")
+			t.Error("the app was built, want the declarations to refuse before any build runs")
 		}
 	})
 
@@ -330,7 +330,7 @@ func TestEnvGateOnPreviewUp(t *testing.T) {
 			"another preview":                   {deploying: "canary", want: "ph_shared"},
 		} {
 			t.Run(name, func(t *testing.T) {
-				root := clitest.SetUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
+				root := clitest.SetUpVariablesFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
 				deps := clitest.NewDeps()
 				stubGit(&deps, "feature/login", "")
 				t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
@@ -359,7 +359,7 @@ func TestEnvGateOnPreviewUp(t *testing.T) {
 	})
 
 	t.Run("an override is the only value its own environment needs", func(t *testing.T) {
-		root := clitest.SetUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
+		root := clitest.SetUpVariablesFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
 		deps := clitest.NewDeps()
 		stubGit(&deps, "feature/login", "")
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
@@ -372,7 +372,7 @@ func TestEnvGateOnPreviewUp(t *testing.T) {
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(deps, &stdout)
 		if err := runPreviewUp(context.Background(), deps, root, previewUpOptions{name: "staging"}, &stdout, &stderr, strings.NewReader("")); err != nil {
-			t.Fatalf("runPreviewUp err = %v, want staging's own override to satisfy the gate; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+			t.Fatalf("runPreviewUp err = %v, want staging's own override to satisfy the declarations; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if len(*got) == 0 {
 			t.Fatal("no app was built, so nothing resolved a value")
@@ -385,7 +385,7 @@ func TestEnvGateOnPreviewUp(t *testing.T) {
 	})
 
 	t.Run("a redeployed branch finds the override it already had", func(t *testing.T) {
-		root := clitest.SetUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
+		root := clitest.SetUpVariablesFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
 		deps := clitest.NewDeps()
 		stubGit(&deps, "feature/login", "")
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")

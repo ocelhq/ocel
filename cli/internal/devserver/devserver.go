@@ -100,23 +100,23 @@ func (s *Server) DeclareEnv(ctx context.Context, req *resourcesv1.DeclareEnvRequ
 }
 
 func (s *Server) CheckEnv(ctx context.Context) error {
-	_, gate := s.env.current()
-	if gate == nil {
+	_, declarations := s.env.current()
+	if declarations == nil {
 		return nil
 	}
-	if err := gate.Prefetch(ctx); err != nil {
+	if err := declarations.Prefetch(ctx); err != nil {
 		return err
 	}
-	return gate.RefuseIncomplete()
+	return declarations.RefuseIncomplete()
 }
 
 func (s *Server) ScopedFolders() map[string][]string {
-	_, gate := s.env.current()
-	if gate == nil {
+	_, declarations := s.env.current()
+	if declarations == nil {
 		return nil
 	}
 	scoped := map[string][]string{}
-	for _, definition := range gate.Definitions() {
+	for _, definition := range declarations.Definitions() {
 		folders := definition.GetFolders()
 		if len(folders) == 0 {
 			continue
@@ -135,8 +135,8 @@ func (s *Server) ScopedFolders() map[string][]string {
 }
 
 func (s *Server) ReportEnvProblems(ctx context.Context, req *resourcesv1.ReportEnvProblemsRequest) (*resourcesv1.ReportEnvProblemsResponse, error) {
-	if _, gate := s.env.current(); gate != nil {
-		return gate.ReportEnvProblems(ctx, req)
+	if _, declarations := s.env.current(); declarations != nil {
+		return declarations.ReportEnvProblems(ctx, req)
 	}
 	return &resourcesv1.ReportEnvProblemsResponse{}, nil
 }
@@ -259,9 +259,9 @@ func (s *Server) Discover(ctx context.Context, cfg *projectconfig.Config, stdout
 }
 
 func (s *Server) ClientKeys() ([]clientenv.Key, error) {
-	_, gate := s.env.current()
-	if gate == nil {
+	_, declarations := s.env.current()
+	if declarations == nil {
 		return nil, nil
 	}
-	return clientenv.Declared(gate.Definitions())
+	return clientenv.Declared(declarations.Definitions())
 }

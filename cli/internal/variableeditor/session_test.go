@@ -1,4 +1,4 @@
-package varsui_test
+package variableeditor_test
 
 import (
 	"bytes"
@@ -17,8 +17,8 @@ import (
 	"testing/fstest"
 	"time"
 
+	"github.com/ocelhq/ocel/cli/internal/variableeditor"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/cli/internal/varsui"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
@@ -55,16 +55,6 @@ func (s *fakeStore) List(context.Context) ([]variables.ValueMetadata, error) {
 }
 
 func (s *fakeStore) Reveal(_ context.Context, rows []variables.Coordinate) (map[variables.Coordinate]string, error) {
-	found := map[variables.Coordinate]string{}
-	for _, row := range rows {
-		if value, ok := s.cells[row.Cell]; ok {
-			found[row] = value
-		}
-	}
-	return found, nil
-}
-
-func (s *fakeStore) Read(_ context.Context, rows []variables.Coordinate) (map[variables.Coordinate]string, error) {
 	if s.unreadable != "" {
 		return nil, errors.New(s.unreadable)
 	}
@@ -100,24 +90,24 @@ func (s *fakeStore) stale(at variables.Coordinate, expected *int64) bool {
 	return expected != nil && *expected != s.version(at)
 }
 
-func (s *fakeStore) Set(_ context.Context, at variables.Coordinate, value string, expected *int64) error {
+func (s *fakeStore) Set(_ context.Context, at variables.Coordinate, value string, expected *int64) (int64, error) {
 	s.expected = append(s.expected, expected)
 	if s.stale(at, expected) {
-		return varsui.ErrStaleValue
+		return 0, variables.ErrStaleValue
 	}
 	s.values[at] = value
 	if at.Environment != "" {
 		s.overrides = append(s.overrides, variables.ValueMetadata{Coordinate: at, Version: 1})
-		return nil
+		return 1, nil
 	}
 	s.cells[at.Cell] = value
-	return nil
+	return s.versions[at.Cell], nil
 }
 
-func (s *fakeStore) Delete(_ context.Context, at variables.Coordinate, expected *int64) error {
+func (s *fakeStore) Delete(_ context.Context, at variables.Coordinate, expected *int64) (bool, error) {
 	s.expected = append(s.expected, expected)
 	if s.stale(at, expected) {
-		return varsui.ErrStaleValue
+		return false, variables.ErrStaleValue
 	}
 	s.deletes++
 	delete(s.values, at)
@@ -125,19 +115,19 @@ func (s *fakeStore) Delete(_ context.Context, at variables.Coordinate, expected 
 		s.overrides = slices.DeleteFunc(s.overrides, func(row variables.ValueMetadata) bool {
 			return row.Cell == at.Cell && row.Environment == at.Environment
 		})
-		return nil
+		return true, nil
 	}
 	delete(s.cells, at.Cell)
 	delete(s.versions, at.Cell)
-	return nil
+	return true, nil
 }
 
-func (s *fakeStore) History(_ context.Context, at variables.Coordinate) ([]varsui.Version, error) {
+func (s *fakeStore) History(_ context.Context, at variables.Coordinate) ([]variables.Version, error) {
 	_, ok := s.values[at]
 	if _, base := s.cells[at.Cell]; !ok && (!base || at.Environment != "") {
 		return nil, nil
 	}
-	return []varsui.Version{{Version: 2, CreatedAt: 200}, {Version: 1, CreatedAt: 100}}, nil
+	return []variables.Version{{Version: 2, CreatedAt: 200}, {Version: 1, CreatedAt: 100}}, nil
 }
 
 func secretDef(key string) *resourcesv1.VariableDefinition {
@@ -157,36 +147,36 @@ func def(key string, folders ...string) *resourcesv1.VariableDefinition {
 
 func discovered(t *testing.T, store *fakeStore, definitions ...*resourcesv1.VariableDefinition) *variables.Declarations {
 	t.Helper()
-	gate := variables.NewDeclarations(store, variables.Scope{Apps: []variables.App{{Name: "web", Folder: "/web"}, {Name: "api"}}})
-	if err := gate.Prefetch(context.Background()); err != nil {
+	declarations := variables.NewDeclarations(store, variables.Scope{Apps: []variables.App{{Name: "web", Folder: "/web"}, {Name: "api"}}})
+	if err := declarations.Prefetch(context.Background()); err != nil {
 		t.Fatalf("Prefetch: %v", err)
 	}
-	if _, err := gate.DeclareEnv(context.Background(), &resourcesv1.DeclareEnvRequest{Definitions: definitions}); err != nil {
+	if _, err := declarations.DeclareEnv(context.Background(), &resourcesv1.DeclareEnvRequest{Definitions: definitions}); err != nil {
 		t.Fatalf("DeclareEnv: %v", err)
 	}
-	return gate
+	return declarations
 }
 
-func session(t *testing.T, store *fakeStore, definitions ...*resourcesv1.VariableDefinition) *varsui.Session {
+func session(t *testing.T, store *fakeStore, definitions ...*resourcesv1.VariableDefinition) *variableeditor.Session {
 	t.Helper()
 	return serve(t, store, discovered(t, store, definitions...))
 }
 
-func serve(t *testing.T, store *fakeStore, gate *variables.Declarations) *varsui.Session {
+func serve(t *testing.T, store *fakeStore, declarations *variables.Declarations) *variableeditor.Session {
 	t.Helper()
-	return serveUnder(t, context.Background(), store, gate)
+	return serveUnder(t, context.Background(), store, declarations)
 }
 
-func serveUnder(t *testing.T, ctx context.Context, store *fakeStore, gate *variables.Declarations) *varsui.Session {
+func serveUnder(t *testing.T, ctx context.Context, store *fakeStore, declarations *variables.Declarations) *variableeditor.Session {
 	t.Helper()
-	return serveWith(t, ctx, varsui.Options{Gate: gate, Store: store, Environments: store.environments})
+	return serveWith(t, ctx, variableeditor.Options{Declarations: declarations, Values: store, Environments: store.environments})
 }
 
-func serveWith(t *testing.T, ctx context.Context, opts varsui.Options) *varsui.Session {
+func serveWith(t *testing.T, ctx context.Context, opts variableeditor.Options) *variableeditor.Session {
 	t.Helper()
 	opts.Assets = fstest.MapFS{"index.html": {Data: []byte("<title>vars</title>")}}
 	opts.Slug = "shop"
-	s, err := varsui.Serve(ctx, opts)
+	s, err := variableeditor.Serve(ctx, opts)
 	if err != nil {
 		t.Fatalf("Serve: %v", err)
 	}
@@ -194,16 +184,16 @@ func serveWith(t *testing.T, ctx context.Context, opts varsui.Options) *varsui.S
 	return s
 }
 
-func origin(s *varsui.Session) string {
+func origin(s *variableeditor.Session) string {
 	return strings.TrimSuffix(strings.SplitN(s.URL, "#", 2)[0], "/")
 }
 
-func request(t *testing.T, s *varsui.Session, method, path string, body any) *http.Response {
+func request(t *testing.T, s *variableeditor.Session, method, path string, body any) *http.Response {
 	t.Helper()
 	return do(t, newRequest(t, s, method, path, body))
 }
 
-func newRequest(t *testing.T, s *varsui.Session, method, path string, body any) *http.Request {
+func newRequest(t *testing.T, s *variableeditor.Session, method, path string, body any) *http.Request {
 	t.Helper()
 	var payload io.Reader
 	if body != nil {
@@ -241,20 +231,20 @@ func bodyOf(t *testing.T, resp *http.Response) string {
 	return string(body)
 }
 
-func state(t *testing.T, s *varsui.Session) varsui.State {
+func state(t *testing.T, s *variableeditor.Session) variableeditor.Page {
 	t.Helper()
 	resp := request(t, s, http.MethodGet, "/api/state", nil)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("GET /api/state = %d: %s", resp.StatusCode, bodyOf(t, resp))
 	}
-	var out varsui.State
+	var out variableeditor.Page
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("decode state: %v", err)
 	}
 	return out
 }
 
-func cellState(t *testing.T, s varsui.State, key, folder string) variables.MatrixCell {
+func cellState(t *testing.T, s variableeditor.Page, key, folder string) variables.MatrixCell {
 	t.Helper()
 	for _, row := range s.Matrix.Rows {
 		if row.Key != key {
@@ -282,7 +272,7 @@ func format(expected []*int64) []string {
 	return out
 }
 
-func awaitStopped(t *testing.T, s *varsui.Session) {
+func awaitStopped(t *testing.T, s *variableeditor.Session) {
 	t.Helper()
 	address := strings.TrimPrefix(origin(s), "http://")
 	deadline := time.Now().Add(5 * time.Second)
@@ -306,7 +296,7 @@ func mustGet(t *testing.T, url string) *http.Request {
 	return req
 }
 
-func TestServe(t *testing.T) {
+func TestASessionServesThePageOnLoopbackBehindAToken(t *testing.T) {
 	t.Parallel()
 
 	t.Run("binds loopback only", func(t *testing.T) {
@@ -341,7 +331,7 @@ func TestServe(t *testing.T) {
 	})
 }
 
-func TestAuthorization(t *testing.T) {
+func TestOnlyARequestWithTheSessionTokenReachesTheAPI(t *testing.T) {
 	t.Parallel()
 
 	const write = `{"key":"API_URL","folder":"","value":"x"}`
@@ -352,7 +342,7 @@ func TestAuthorization(t *testing.T) {
 		method  string
 		path    string
 		body    string
-		prepare func(req *http.Request, s *varsui.Session)
+		prepare func(req *http.Request, s *variableeditor.Session)
 	}{
 		{
 			name:   "a request without the token is refused",
@@ -366,7 +356,7 @@ func TestAuthorization(t *testing.T) {
 			label:  "wrong-token GET",
 			method: http.MethodGet,
 			path:   "/api/state",
-			prepare: func(req *http.Request, s *varsui.Session) {
+			prepare: func(req *http.Request, s *variableeditor.Session) {
 				req.Header.Set("Authorization", "Bearer "+strings.Repeat("a", len(s.Token)))
 			},
 		},
@@ -376,7 +366,7 @@ func TestAuthorization(t *testing.T) {
 			method: http.MethodPut,
 			path:   "/api/value",
 			body:   write,
-			prepare: func(req *http.Request, s *varsui.Session) {
+			prepare: func(req *http.Request, s *variableeditor.Session) {
 				req.Header.Set("Origin", "https://evil.example")
 				req.Header.Set("Authorization", "Bearer "+s.Token)
 			},
@@ -386,7 +376,7 @@ func TestAuthorization(t *testing.T) {
 			label:  "rebound GET",
 			method: http.MethodGet,
 			path:   "/api/state",
-			prepare: func(req *http.Request, s *varsui.Session) {
+			prepare: func(req *http.Request, s *variableeditor.Session) {
 				req.Host = "rebound.example"
 				req.Header.Set("Authorization", "Bearer "+s.Token)
 			},
@@ -420,7 +410,7 @@ func TestAuthorization(t *testing.T) {
 	}
 }
 
-func TestGetState(t *testing.T) {
+func TestThePageStateDescribesTheMatrixAndItsEnvironments(t *testing.T) {
 	t.Parallel()
 
 	t.Run("reads the matrix with a token", func(t *testing.T) {
@@ -494,7 +484,7 @@ func TestGetState(t *testing.T) {
 	})
 }
 
-func TestPutValue(t *testing.T) {
+func TestSavingAValueWritesOnlyWhereItIsDeclaredAndAtTheVersionDrawn(t *testing.T) {
 	t.Parallel()
 
 	t.Run("a write to a forbidden cell is refused with the reason and never reaches the store", func(t *testing.T) {
@@ -538,14 +528,14 @@ func TestPutValue(t *testing.T) {
 	t.Run("a variable a binding reads is written at the root and refused in a folder", func(t *testing.T) {
 		t.Parallel()
 		store := newFakeStore()
-		gate := variables.NewDeclarations(store, variables.Scope{
+		declarations := variables.NewDeclarations(store, variables.Scope{
 			Apps:     []variables.App{{Name: "web", Folder: "/web"}},
 			Bindings: []variables.BindingVariables{{Group: "postgres.orders", Site: "bindings.postgres.orders", Keys: []string{"ORDERS_URL"}}},
 		})
-		if err := gate.Prefetch(context.Background()); err != nil {
+		if err := declarations.Prefetch(context.Background()); err != nil {
 			t.Fatalf("Prefetch: %v", err)
 		}
-		s := serve(t, store, gate)
+		s := serve(t, store, declarations)
 
 		folder := request(t, s, http.MethodPut, "/api/value", map[string]string{"key": "ORDERS_URL", "folder": "/web", "value": "postgres://db/orders"})
 		if folder.StatusCode != http.StatusBadRequest {
@@ -582,13 +572,13 @@ func TestPutValue(t *testing.T) {
 		t.Parallel()
 		store := newFakeStore()
 		store.cells[variables.Cell{Key: "API_URL"}] = "not-a-url"
-		gate := discovered(t, store, def("API_URL"))
-		if _, err := gate.ReportEnvProblems(context.Background(), &resourcesv1.ReportEnvProblemsRequest{
+		declarations := discovered(t, store, def("API_URL"))
+		if _, err := declarations.ReportEnvProblems(context.Background(), &resourcesv1.ReportEnvProblemsRequest{
 			Problems: []*resourcesv1.VariableProblem{{Key: "API_URL", Kind: resourcesv1.VariableProblem_KIND_INVALID, Detail: "must be a URL"}},
 		}); err != nil {
 			t.Fatalf("ReportEnvProblems: %v", err)
 		}
-		s := serve(t, store, gate)
+		s := serve(t, store, declarations)
 		if cellState(t, state(t, s), "API_URL", "").Problem == "" {
 			t.Fatal("the cell has no complaint before the fix, so the test cannot show one being cleared")
 		}
@@ -754,7 +744,7 @@ func TestPutValue(t *testing.T) {
 	})
 }
 
-func TestDeleteValue(t *testing.T) {
+func TestDeletingAValueRemovesOnlyTheVersionThePageDrew(t *testing.T) {
 	t.Parallel()
 
 	t.Run("a delete of an unaddressable folder is refused and never reaches the store", func(t *testing.T) {
@@ -842,7 +832,7 @@ func TestDeleteValue(t *testing.T) {
 	})
 }
 
-func TestGetHistory(t *testing.T) {
+func TestAValuesHistoryListsItsVersionsNewestFirst(t *testing.T) {
 	t.Parallel()
 
 	t.Run("history is readable newest first", func(t *testing.T) {
@@ -856,7 +846,7 @@ func TestGetHistory(t *testing.T) {
 			t.Fatalf("GET /api/history = %d: %s", resp.StatusCode, bodyOf(t, resp))
 		}
 		var out struct {
-			Versions []varsui.Version `json:"versions"`
+			Versions []variables.Version `json:"versions"`
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 			t.Fatalf("decode history: %v", err)
@@ -868,7 +858,7 @@ func TestGetHistory(t *testing.T) {
 	})
 }
 
-func TestSessionWait(t *testing.T) {
+func TestWaitingReturnsHowTheSessionEnded(t *testing.T) {
 	t.Parallel()
 
 	t.Run("returns when the developer says the matrix is done", func(t *testing.T) {
@@ -935,13 +925,13 @@ func TestSessionWait(t *testing.T) {
 		if err == nil {
 			t.Fatal("Wait = nil on a session nobody completed, want an abandonment — a deploy would resume the command the developer killed")
 		}
-		if !errors.Is(err, varsui.ErrAbandoned) {
-			t.Errorf("Wait = %v, want varsui.ErrAbandoned so a caller can tell an abandoned session from a completed one", err)
+		if !errors.Is(err, variableeditor.ErrAbandoned) {
+			t.Errorf("Wait = %v, want variableeditor.ErrAbandoned so a caller can tell an abandoned session from a completed one", err)
 		}
 	})
 }
 
-func TestSessionClose(t *testing.T) {
+func TestClosingASessionStopsItWatchingTheCallersContext(t *testing.T) {
 	t.Run("closing a session stops it watching the caller's context", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -985,7 +975,7 @@ type revealed struct {
 	}
 }
 
-func TestReveal(t *testing.T) {
+func TestRevealingSendsOnlyReadableValuesToTheBrowser(t *testing.T) {
 	t.Parallel()
 
 	t.Run("a plain or sensitive value is read on demand", func(t *testing.T) {
@@ -1019,6 +1009,7 @@ func TestReveal(t *testing.T) {
 		store.cells[variables.Cell{Key: "STRIPE_KEY"}] = "sk_live"
 		store.cells[variables.Cell{Key: "API_URL"}] = "https://root.example"
 		s := session(t, store, secretDef("STRIPE_KEY"), def("API_URL"))
+		store.read = nil
 
 		resp := request(t, s, http.MethodPost, "/api/reveal", map[string]any{"cells": []map[string]string{
 			{"key": "API_URL", "folder": "", "environment": ""},
@@ -1056,8 +1047,8 @@ func TestReveal(t *testing.T) {
 		t.Parallel()
 		store := newFakeStore()
 		store.cells[variables.Cell{Key: "API_URL"}] = "https://root.example"
-		store.unreadable = "the target project no longer exists"
 		s := session(t, store, def("API_URL"))
+		store.unreadable = "the target project no longer exists"
 
 		resp := request(t, s, http.MethodPost, "/api/reveal", map[string]any{"cells": []map[string]string{{"key": "API_URL"}}})
 		got := decode[revealed](t, resp)
@@ -1067,7 +1058,7 @@ func TestReveal(t *testing.T) {
 	})
 }
 
-func TestReferences(t *testing.T) {
+func TestTheMatrixNamesWhatAReferencedCellReads(t *testing.T) {
 	t.Parallel()
 
 	t.Run("the matrix names the source a referenced cell reads", func(t *testing.T) {
@@ -1106,7 +1097,7 @@ type copyOutcomes struct {
 	}
 }
 
-func TestOtherTierStore(t *testing.T) {
+func TestTheOtherTiersValuesAreListedAndCopiedThroughTheStore(t *testing.T) {
 	t.Parallel()
 
 	t.Run("reading the other tier's store lists declared cells with values for all but secrets", func(t *testing.T) {
@@ -1117,10 +1108,10 @@ func TestOtherTierStore(t *testing.T) {
 		other.cells[variables.Cell{Key: "STRIPE_KEY"}] = "sk_test"
 		other.cells[variables.Cell{Key: "UNDECLARED"}] = "nobody reads this"
 		other.versions[variables.Cell{Key: "API_URL"}] = 4
-		s := serveWith(t, context.Background(), varsui.Options{
-			Gate:  discovered(t, here, def("API_URL"), secretDef("STRIPE_KEY")),
-			Store: here,
-			Other: other,
+		s := serveWith(t, context.Background(), variableeditor.Options{
+			Declarations: discovered(t, here, def("API_URL"), secretDef("STRIPE_KEY")),
+			Values:       here,
+			OtherValues:  other,
 		})
 
 		resp := request(t, s, http.MethodGet, "/api/other", nil)
@@ -1164,10 +1155,10 @@ func TestOtherTierStore(t *testing.T) {
 		other := newFakeStore()
 		other.cells[variables.Cell{Key: "API_URL"}] = "https://preview.example"
 		other.cells[variables.Cell{Key: "STRIPE_KEY"}] = "sk_test"
-		s := serveWith(t, context.Background(), varsui.Options{
-			Gate:  discovered(t, here, def("API_URL"), secretDef("STRIPE_KEY"), def("MISSING")),
-			Store: here,
-			Other: other,
+		s := serveWith(t, context.Background(), variableeditor.Options{
+			Declarations: discovered(t, here, def("API_URL"), secretDef("STRIPE_KEY"), def("MISSING")),
+			Values:       here,
+			OtherValues:  other,
 		})
 
 		resp := request(t, s, http.MethodPost, "/api/copy", map[string]any{"cells": []map[string]any{
@@ -1208,17 +1199,17 @@ func TestOtherTierStore(t *testing.T) {
 	})
 }
 
-func TestRecovery(t *testing.T) {
+func TestAWaitingDeployIsDoneOnlyOnceItsCellsAreFilled(t *testing.T) {
 	t.Parallel()
 
 	t.Run("the state includes the deploy that is waiting and the cells it is missing", func(t *testing.T) {
 		t.Parallel()
 		store := newFakeStore()
 		missing := []variables.Cell{{Key: "API_URL"}}
-		s := serveWith(t, context.Background(), varsui.Options{
-			Gate:     discovered(t, store, def("API_URL")),
-			Store:    store,
-			Recovery: &varsui.Recovery{Deploy: "ocel deploy", Missing: missing},
+		s := serveWith(t, context.Background(), variableeditor.Options{
+			Declarations: discovered(t, store, def("API_URL")),
+			Values:       store,
+			Recovery:     &variableeditor.Recovery{Deploy: "ocel deploy", Missing: missing},
 		})
 		got := state(t, s)
 		if got.Recovery == nil || got.Recovery.Deploy != "ocel deploy" || !reflect.DeepEqual(got.Recovery.Missing, missing) {
@@ -1232,10 +1223,10 @@ func TestRecovery(t *testing.T) {
 	t.Run("done is refused while a cell is still unset, and accepted once it is filled", func(t *testing.T) {
 		t.Parallel()
 		store := newFakeStore()
-		s := serveWith(t, context.Background(), varsui.Options{
-			Gate:     discovered(t, store, def("API_URL")),
-			Store:    store,
-			Recovery: &varsui.Recovery{Deploy: "ocel deploy", Missing: []variables.Cell{{Key: "API_URL"}}},
+		s := serveWith(t, context.Background(), variableeditor.Options{
+			Declarations: discovered(t, store, def("API_URL")),
+			Values:       store,
+			Recovery:     &variableeditor.Recovery{Deploy: "ocel deploy", Missing: []variables.Cell{{Key: "API_URL"}}},
 		})
 
 		resp := request(t, s, http.MethodPost, "/api/done", nil)
@@ -1263,8 +1254,8 @@ func TestRecovery(t *testing.T) {
 		if resp := request(t, s, http.MethodPost, "/api/abandon", nil); resp.StatusCode != http.StatusOK {
 			t.Fatalf("POST /api/abandon = %d", resp.StatusCode)
 		}
-		if err := s.Wait(context.Background()); !errors.Is(err, varsui.ErrAbandoned) {
-			t.Errorf("Wait = %v, want %v", err, varsui.ErrAbandoned)
+		if err := s.Wait(context.Background()); !errors.Is(err, variableeditor.ErrAbandoned) {
+			t.Errorf("Wait = %v, want %v", err, variableeditor.ErrAbandoned)
 		}
 	})
 }
@@ -1295,23 +1286,23 @@ type createdValue struct {
 	description string
 }
 
-func (f *fakeEnvSource) Describe(context.Context) (variables.EnvSource, error) {
+func (f *fakeEnvSource) DescribeEnvSource(context.Context) (variables.EnvSource, error) {
 	f.describes++
 	return f.described, nil
 }
 
-func (f *fakeEnvSource) Sync(context.Context) error {
+func (f *fakeEnvSource) SyncEnvSource(context.Context) (variables.EnvSource, error) {
 	if f.syncError != nil {
-		return f.syncError
+		return variables.EnvSource{}, f.syncError
 	}
 	f.syncs++
 	for cell, value := range f.pending {
 		f.store.cells[cell] = value
 	}
-	return nil
+	return f.described, nil
 }
 
-func (f *fakeEnvSource) Set(_ context.Context, at variables.Cell, value, description string) (bool, error) {
+func (f *fakeEnvSource) SetInEnvSource(_ context.Context, at variables.Cell, value, description string) (bool, error) {
 	if f.refusal != nil {
 		return false, f.refusal
 	}
@@ -1329,29 +1320,29 @@ var infisical = variables.EnvSource{
 	Credentials: []string{"INFISICAL_CLIENT_ID"},
 }
 
-func envSourceSession(t *testing.T, source *fakeEnvSource, recovery *varsui.Recovery) *varsui.Session {
+func envSourceSession(t *testing.T, source *fakeEnvSource, recovery *variableeditor.Recovery) *variableeditor.Session {
 	t.Helper()
 	described := def("API_URL")
 	described.Description = "where the API lives"
-	gate := variables.NewDeclarations(source.store, variables.Scope{
+	declarations := variables.NewDeclarations(source.store, variables.Scope{
 		Apps:      []variables.App{{Name: "web", Folder: "/web"}, {Name: "api"}},
 		EnvSource: variables.EnvSource{ID: infisical.ID, Credentials: infisical.Credentials},
 	})
-	if err := gate.Prefetch(context.Background()); err != nil {
+	if err := declarations.Prefetch(context.Background()); err != nil {
 		t.Fatalf("Prefetch: %v", err)
 	}
-	if _, err := gate.DeclareEnv(context.Background(), &resourcesv1.DeclareEnvRequest{Definitions: []*resourcesv1.VariableDefinition{described}}); err != nil {
+	if _, err := declarations.DeclareEnv(context.Background(), &resourcesv1.DeclareEnvRequest{Definitions: []*resourcesv1.VariableDefinition{described}}); err != nil {
 		t.Fatalf("DeclareEnv: %v", err)
 	}
-	return serveWith(t, context.Background(), varsui.Options{
-		Gate:      gate,
-		Store:     source.store,
-		EnvSource: source,
-		Recovery:  recovery,
+	return serveWith(t, context.Background(), variableeditor.Options{
+		Declarations: declarations,
+		Values:       source.store,
+		EnvSource:    source,
+		Recovery:     recovery,
 	})
 }
 
-func createIn(t *testing.T, s *varsui.Session, body map[string]string) *http.Response {
+func createIn(t *testing.T, s *variableeditor.Session, body map[string]string) *http.Response {
 	t.Helper()
 	return request(t, s, http.MethodPost, "/api/env-source/value", body)
 }
@@ -1364,7 +1355,7 @@ func TestThePageNamesTheEnvSourceTheTierReadsFrom(t *testing.T) {
 		source := &fakeEnvSource{store: newFakeStore(), described: infisical}
 		got := state(t, envSourceSession(t, source, nil)).EnvSource
 
-		want := varsui.EnvSource{ID: infisical.ID, CanCreate: true, URLs: infisical.URLs, Credentials: infisical.Credentials}
+		want := variables.EnvSource{ID: infisical.ID, CanCreate: true, URLs: infisical.URLs, Credentials: infisical.Credentials}
 		if got == nil || !reflect.DeepEqual(*got, want) {
 			t.Errorf("env source = %+v, want %+v", got, want)
 		}
@@ -1478,20 +1469,20 @@ func TestResumingADeploySyncsTheEnvSourceFirst(t *testing.T) {
 		t.Parallel()
 		store := newFakeStore()
 		source := &fakeEnvSource{store: store, described: infisical, pending: map[variables.Cell]string{{Key: "API_URL"}: "https://set-there.example"}}
-		s := envSourceSession(t, source, &varsui.Recovery{Deploy: "ocel deploy", Missing: []variables.Cell{{Key: "API_URL"}}})
+		s := envSourceSession(t, source, &variableeditor.Recovery{Deploy: "ocel deploy", Missing: []variables.Cell{{Key: "API_URL"}}})
 
 		if resp := request(t, s, http.MethodPost, "/api/done", nil); resp.StatusCode != http.StatusOK {
 			t.Fatalf("POST /api/done = %d: %s", resp.StatusCode, bodyOf(t, resp))
 		}
 		if source.syncs != 1 {
-			t.Errorf("syncs = %d, want one before the gate is checked", source.syncs)
+			t.Errorf("syncs = %d, want one before the declarations is checked", source.syncs)
 		}
 	})
 
 	t.Run("and a failed sync keeps the deploy waiting", func(t *testing.T) {
 		t.Parallel()
 		source := &fakeEnvSource{store: newFakeStore(), described: infisical, syncError: errors.New("infisical:p-1/prod: 503")}
-		s := envSourceSession(t, source, &varsui.Recovery{Deploy: "ocel deploy", Missing: []variables.Cell{{Key: "API_URL"}}})
+		s := envSourceSession(t, source, &variableeditor.Recovery{Deploy: "ocel deploy", Missing: []variables.Cell{{Key: "API_URL"}}})
 
 		if resp := request(t, s, http.MethodPost, "/api/done", nil); resp.StatusCode != http.StatusBadGateway {
 			t.Fatalf("POST /api/done = %d, want %d", resp.StatusCode, http.StatusBadGateway)

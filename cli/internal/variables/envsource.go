@@ -14,12 +14,12 @@ import (
 const EnvSourceGroup = "env source"
 
 type EnvSource struct {
-	ID          string
-	CanCreate   bool
-	CanUpdate   bool
-	URLs        map[string]string
-	Present     []Cell
-	Credentials []string
+	ID          string            `json:"id"`
+	CanCreate   bool              `json:"canCreate"`
+	CanUpdate   bool              `json:"canUpdate"`
+	URLs        map[string]string `json:"urls,omitempty"`
+	Present     []Cell            `json:"-"`
+	Credentials []string          `json:"credentials,omitempty"`
 }
 
 func (s EnvSource) OwnsValues() bool {

@@ -15,14 +15,15 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/deployresult"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
-	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/servicemap"
+	"github.com/ocelhq/ocel/cli/internal/valuestore"
 	"github.com/ocelhq/ocel/cli/internal/variables"
+	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/edge"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -227,19 +228,19 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 	}
 
 	browser := deps.BrowserReachable(stdin)
-	scope := envwire.Scope(cfg, true, env.GetIdentity())
+	scope := variablescope.Of(cfg, environmentv1.Tier_TIER_PREVIEW, env.GetIdentity())
 	scope.Browser = browser
-	recovery := gateRecovery{
-		deps:    deps,
-		cfg:     cfg,
-		prov:    prov,
-		preview: true,
-		newGate: func(synced variables.EnvSource) *variables.Declarations {
+	recovery := variablesRecovery{
+		deps: deps,
+		cfg:  cfg,
+		prov: prov,
+		tier: environmentv1.Tier_TIER_PREVIEW,
+		newDeclarations: func(synced variables.EnvSource) *variables.Declarations {
 			scope := scope
 			scope.EnvSource = synced
-			return variables.NewDeclarations(envwire.Values{
+			return variables.NewDeclarations(valuestore.Store{
 				Provider: prov,
-				Slug:     cfg.Slug,
+				Config:   cfg,
 				Tier:     environmentv1.Tier_TIER_PREVIEW,
 			}, scope)
 		},

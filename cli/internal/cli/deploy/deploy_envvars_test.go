@@ -5,10 +5,10 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/attribution"
-	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/variables"
+	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
@@ -205,11 +205,11 @@ func TestBuildEnv(t *testing.T) {
 		t.Parallel()
 
 		variables := map[string][]manifestbuilder.Variable{
-			envwire.RootApp: {{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-123"}},
+			variablescope.RootApp: {{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-123"}},
 		}
 
 		env := buildEnv(appSpecs(&projectconfig.Config{Dir: t.TempDir()}, variables))
-		if _, ok := env[envwire.RootApp]; ok {
+		if _, ok := env[variablescope.RootApp]; ok {
 			t.Errorf("env = %v, still keyed by a placeholder name no build knows", env)
 		}
 		if got, want := env[""]["POSTHOG_ID"], "ph-123"; got != want {
@@ -229,8 +229,8 @@ func TestVariablesByApp(t *testing.T) {
 		}
 		functions := []manifestbuilder.Function{{Route: "index", App: "storefront"}}
 
-		got := variablesByApp(map[string][]manifestbuilder.Variable{envwire.RootApp: root}, functions)
-		if len(got[envwire.RootApp]) != 0 {
+		got := variablesByApp(map[string][]manifestbuilder.Variable{variablescope.RootApp: root}, functions)
+		if len(got[variablescope.RootApp]) != 0 {
 			t.Errorf("variables are still keyed by the placeholder root name: %v", got)
 		}
 		if len(got["storefront"]) != 1 || got["storefront"][0].Value != "ph-123" {

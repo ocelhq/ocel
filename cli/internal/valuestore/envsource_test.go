@@ -1,0 +1,42 @@
+package valuestore
+
+import (
+	"reflect"
+	"testing"
+
+	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/variables"
+	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
+)
+
+func TestASyncedEnvSourceIsWhatTheProviderSaysItRead(t *testing.T) {
+	synced := envSourceOf(&envvarsv1.SyncEnvSourceResponse{
+		Status: &envvarsv1.EnvSourceStatus{
+			EnvSource:   "infisical:p-1/prod",
+			CanCreate:   true,
+			CanUpdate:   true,
+			Links:       []*envvarsv1.FolderLink{{Folder: "", Url: "https://infisical.example/root"}},
+			Credentials: []string{"INFISICAL_CLIENT_ID", "INFISICAL_CLIENT_SECRET"},
+		},
+		Present: []*envvarsv1.Cell{{Key: "STRIPE_KEY"}, {Folder: "/web", Key: "API_URL"}},
+	})
+
+	want := variables.EnvSource{
+		ID:          "infisical:p-1/prod",
+		CanCreate:   true,
+		CanUpdate:   true,
+		URLs:        map[string]string{"": "https://infisical.example/root"},
+		Present:     []variables.Cell{{Key: "STRIPE_KEY"}, {Folder: "/web", Key: "API_URL"}},
+		Credentials: []string{"INFISICAL_CLIENT_ID", "INFISICAL_CLIENT_SECRET"},
+	}
+	if !reflect.DeepEqual(synced, want) {
+		t.Errorf("envSourceOf = %+v, want %+v", synced, want)
+	}
+}
+
+func TestAnEnvSourceIsSyncedForTheRootAndEveryAppFolder(t *testing.T) {
+	cfg := &projectconfig.Config{Apps: []projectconfig.App{{Name: "web", Folder: "/web"}, {Name: "api", Folder: "/api"}, {Name: "admin", Folder: "/web"}}}
+	if got, want := syncedFolders(cfg), []string{"", "/api", "/web"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("syncedFolders = %q, want %q", got, want)
+	}
+}

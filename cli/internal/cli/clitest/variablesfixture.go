@@ -65,12 +65,12 @@ globalThis.__ocelRegister.push(
 export {};
 `
 
-func SetUpEnvGateFixture(t *testing.T, definitions string) string {
+func SetUpVariablesFixture(t *testing.T, definitions string) string {
 	t.Helper()
-	return SetUpEnvGateFixtureWith(t, definitions, EnvDeclarationScript)
+	return SetUpVariablesFixtureWith(t, definitions, EnvDeclarationScript)
 }
 
-func SetUpEnvGateFixtureWith(t *testing.T, definitions, script string) string {
+func SetUpVariablesFixtureWith(t *testing.T, definitions, script string) string {
 	t.Helper()
 	root, _ := SetUpDeployFixture(t)
 	t.Setenv(FakeVarsStoreEnvVar, filepath.Join(t.TempDir(), "vars.json"))

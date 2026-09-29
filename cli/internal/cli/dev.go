@@ -25,11 +25,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devstack"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/election"
-	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
 	"github.com/ocelhq/ocel/cli/internal/variables"
+	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/cli/internal/watcher"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/channel"
@@ -177,12 +177,12 @@ func resolveOnce(ctx context.Context, srv *devserver.Server, cfg *projectconfig.
 		return nil, err
 	}
 	reportUnreadableLines(stdout, values)
-	srv.UseValues(values.merged(), envwire.DevScope(cfg))
-	return discoverAndSync(ctx, srv, cfg, values, envwire.DevScope(cfg), run, stdout, stderr)
+	srv.UseValues(values.merged(), variablescope.ForDev(cfg))
+	return discoverAndSync(ctx, srv, cfg, values, variablescope.ForDev(cfg), run, stdout, stderr)
 }
 
 func targetScope(cfg *projectconfig.Config, cwd string) variables.Scope {
-	scope := envwire.DevScope(cfg)
+	scope := variablescope.ForDev(cfg)
 	target, deepest := -1, -1
 	for i, app := range cfg.Apps {
 		rel, err := filepath.Rel(filepath.Join(cfg.Dir, app.Path), cwd)

@@ -11,7 +11,7 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
-	"github.com/ocelhq/ocel/cli/internal/envwire"
+	"github.com/ocelhq/ocel/cli/internal/variablescope"
 )
 
 func writeAppNeeds(t *testing.T, root, app, framework, needs string) {
@@ -29,7 +29,7 @@ func lintEdgeWarnings(t *testing.T, cfg *projectconfig.Config) []string {
 	}
 	warnings, err := variables.LintEdgeSecrets(
 		[]*resourcesv1.VariableDefinition{definition},
-		envwire.Apps(cfg),
+		variablescope.Apps(cfg),
 		edgeApps(cfg),
 	)
 	if err != nil {
@@ -47,7 +47,7 @@ func TestEdgeAppsReadsTheNeeds(t *testing.T) {
 		cfg := &projectconfig.Config{Dir: t.TempDir()}
 		writeAppNeeds(t, cfg.Dir, "web", "next", `{"edge-runtime":{"count":1,"routes":["/edgy"]}}`)
 
-		if apps := edgeApps(cfg); len(apps) != 1 || apps[0] != envwire.RootApp {
+		if apps := edgeApps(cfg); len(apps) != 1 || apps[0] != variablescope.RootApp {
 			t.Fatalf("edgeApps = %v, want the project's sole app", apps)
 		}
 		if warnings := lintEdgeWarnings(t, cfg); len(warnings) != 1 {

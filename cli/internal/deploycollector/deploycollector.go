@@ -24,8 +24,8 @@ type Collector struct {
 	resources []declare.Resource
 }
 
-func New(gate *variables.Declarations) *Collector {
-	return &Collector{Declarations: gate, sdk: sdkversion.NewGate(version.Version)}
+func New(declarations *variables.Declarations) *Collector {
+	return &Collector{Declarations: declarations, sdk: sdkversion.NewGate(version.Version)}
 }
 
 func (c *Collector) Declare(_ context.Context, req *resourcesv1.DeclareRequest) (*resourcesv1.DeclareResponse, error) {

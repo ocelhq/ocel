@@ -11,11 +11,12 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
-	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/valuestore"
+	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
@@ -71,12 +72,12 @@ func deployCommand(opts envOptions) string {
 
 func runEnvSync(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, stdout, stderr io.Writer) error {
 	return withEnvProvider(ctx, deps, cwd, opts, "ocel env sync", stderr, func(ctx context.Context, _ *events.Run, prov *providerclient.Provider, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
-		synced, err := envwire.SyncRegisteredEnvSource(ctx, prov, cfg.Slug, opts.preview)
+		synced, err := valuestore.Store{Provider: prov, Config: cfg, Tier: opts.tier()}.SyncRegisteredEnvSource(ctx)
 		if err != nil {
 			return err
 		}
 		status := synced.GetStatus()
-		if envwire.EnvSourceOfStatus(status).OwnsValues() {
+		if valuestore.EnvSourceOfStatus(status).OwnsValues() {
 			fmt.Fprintf(stdout, "Synced %s from %s: %d written, %d removed, %d found there.\n",
 				tierName(opts), status.GetEnvSource(), synced.GetWritten(), synced.GetRemoved(), len(synced.GetPresent()))
 			for _, refused := range synced.GetRefused() {
@@ -85,7 +86,7 @@ func runEnvSync(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOpti
 		} else {
 			fmt.Fprintf(stdout, "%s reads ocel's own store (%s), so there is nothing to sync.\n", tierName(opts), status.GetEnvSource())
 		}
-		renderConfiguredEnvSource(stdout, status, envwire.DeployedEnvSource(cfg, opts.preview), opts)
+		renderConfiguredEnvSource(stdout, status, variablescope.EnvSourceDescriptor(cfg, opts.tier()), opts)
 		return nil
 	})
 }
@@ -96,12 +97,12 @@ func runEnvSource(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOp
 		if err != nil {
 			return err
 		}
-		described, err := vars.DescribeEnvSource(ctx, &envvarsv1.DescribeEnvSourceRequest{Tier: envTier(opts), Slug: cfg.Slug})
+		described, err := vars.DescribeEnvSource(ctx, &envvarsv1.DescribeEnvSourceRequest{Tier: opts.tier(), Slug: cfg.Slug})
 		if err != nil {
 			return err
 		}
 		renderEnvSource(stdout, tierName(opts), described.GetStatus(), time.Now())
-		renderConfiguredEnvSource(stdout, described.GetStatus(), envwire.DeployedEnvSource(cfg, opts.preview), opts)
+		renderConfiguredEnvSource(stdout, described.GetStatus(), variablescope.EnvSourceDescriptor(cfg, opts.tier()), opts)
 		fmt.Fprintf(stdout, "dev reads from %s, then %s on top\n", cfg.EnvSource.Dev.ID(), dotenv.LocalFileName)
 		return nil
 	})
@@ -109,7 +110,7 @@ func runEnvSource(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOp
 
 func renderEnvSource(stdout io.Writer, tier string, status *envvarsv1.EnvSourceStatus, now time.Time) {
 	fmt.Fprintf(stdout, "%s reads from %s\n", tier, status.GetEnvSource())
-	if !envwire.EnvSourceOfStatus(status).OwnsValues() {
+	if !valuestore.EnvSourceOfStatus(status).OwnsValues() {
 		return
 	}
 	schedule := "no schedule: read at each deploy"

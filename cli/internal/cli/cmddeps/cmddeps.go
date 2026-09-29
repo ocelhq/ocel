@@ -12,14 +12,15 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/devstack/docker"
-	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runui"
-	"github.com/ocelhq/ocel/cli/internal/varsui"
+	"github.com/ocelhq/ocel/cli/internal/variableeditor"
+	"github.com/ocelhq/ocel/cli/internal/variables"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
 
 type Deps struct {
@@ -32,11 +33,11 @@ type Deps struct {
 	BuildAppImages      func(ctx context.Context, cfg *projectconfig.Config, archs map[string]string, out appbuilder.Output) (map[string]string, error)
 	CollectAppFunctions func(projectDir string) ([]manifestbuilder.Function, error)
 	DeploymentID        func(projectDir, app string) (string, error)
-	CollectDeclarations func(ctx context.Context, cfg *projectconfig.Config, gate *envgate.Gate, stdout, stderr io.Writer) ([]declare.Resource, error)
+	CollectDeclarations func(ctx context.Context, cfg *projectconfig.Config, declarations *variables.Declarations, stdout, stderr io.Writer) ([]declare.Resource, error)
 	OpenBrowser         func(url string) error
 	ProbePostgres       inlinebinding.PostgresProbe
 	ProbeBucket         inlinebinding.BucketProbe
-	ServeVarsUI         func(ctx context.Context, cfg *projectconfig.Config, prov *providerclient.Provider, preview bool, gate *envgate.Gate, recovery *varsui.Recovery) (*varsui.Session, error)
+	ServeVariableEditor func(ctx context.Context, cfg *projectconfig.Config, prov *providerclient.Provider, tier environmentv1.Tier, declarations *variables.Declarations, recovery *variableeditor.Recovery) (*variableeditor.Session, error)
 	CurrentGitBranch    func(dir string) (string, error)
 	DiscoverPRNumber    func() string
 	RunPackageManager   func(ctx context.Context, dir string, argv []string, output io.Writer) error

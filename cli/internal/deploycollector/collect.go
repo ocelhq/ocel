@@ -43,18 +43,18 @@ func Prepare(cfg *projectconfig.Config) (Prepared, error) {
 	return Prepared{discovery: prepared, fingerprint: fingerprint}, nil
 }
 
-func PrepareAndCollect(ctx context.Context, cfg *projectconfig.Config, gate *variables.Declarations, stdout, stderr io.Writer) ([]declare.Resource, error) {
+func PrepareAndCollect(ctx context.Context, cfg *projectconfig.Config, declarations *variables.Declarations, stdout, stderr io.Writer) ([]declare.Resource, error) {
 	prepared, err := Prepare(cfg)
 	if err != nil {
 		return nil, err
 	}
-	return Collect(ctx, cfg, gate, prepared, stdout, stderr)
+	return Collect(ctx, cfg, declarations, prepared, stdout, stderr)
 }
 
-func Collect(ctx context.Context, cfg *projectconfig.Config, gate *variables.Declarations, prepared Prepared, stdout, stderr io.Writer) ([]declare.Resource, error) {
-	c := New(gate)
+func Collect(ctx context.Context, cfg *projectconfig.Config, declarations *variables.Declarations, prepared Prepared, stdout, stderr io.Writer) ([]declare.Resource, error) {
+	c := New(declarations)
 
-	if err := gate.Prefetch(ctx); err != nil {
+	if err := declarations.Prefetch(ctx); err != nil {
 		return nil, err
 	}
 

@@ -10,12 +10,14 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
-	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/valuestore"
+	"github.com/ocelhq/ocel/cli/internal/variableeditor"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/cli/internal/varsui"
+	"github.com/ocelhq/ocel/cli/internal/variablescope"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
@@ -38,18 +40,18 @@ func newUICommand(deps cmddeps.Deps) *cobra.Command {
 
 func runEnvUI(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, stdin io.Reader, stdout, stderr io.Writer) error {
 	return withEnvProviderSealing(ctx, deps, cwd, opts, "ocel env ui", stdin, stderr, func(ctx context.Context, run *events.Run, prov *providerclient.Provider, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
-		gate, err := discoverVariables(ctx, cfg, prov, opts, run)
+		declarations, err := discoverVariables(ctx, cfg, prov, opts, run)
 		if err != nil {
 			return err
 		}
 
-		varsSession, err := serveAndOpenVarsUI(deps, ctx, cfg, prov, opts.preview, gate, stdin, stdout)
+		editor, err := serveAndOpenEditor(deps, ctx, cfg, prov, opts.tier(), declarations, stdin, stdout)
 		if err != nil {
 			return err
 		}
-		defer varsSession.Close()
-		err = varsSession.Wait(ctx)
-		if errors.Is(err, varsui.ErrAbandoned) {
+		defer editor.Close()
+		err = editor.Wait(ctx)
+		if errors.Is(err, variableeditor.ErrAbandoned) {
 			fmt.Fprintln(stdout, "The editor closed.")
 			return nil
 		}
@@ -57,47 +59,47 @@ func runEnvUI(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOption
 	})
 }
 
-func serveAndOpenVarsUI(
+func serveAndOpenEditor(
 	deps cmddeps.Deps,
 	ctx context.Context,
 	cfg *projectconfig.Config,
 	prov *providerclient.Provider,
-	preview bool,
-	gate *variables.Declarations,
+	tier environmentv1.Tier,
+	declarations *variables.Declarations,
 	stdin io.Reader,
 	stdout io.Writer,
-) (*varsui.Session, error) {
-	varsSession, err := deps.ServeVarsUI(ctx, cfg, prov, preview, gate, nil)
+) (*variableeditor.Session, error) {
+	editor, err := deps.ServeVariableEditor(ctx, cfg, prov, tier, declarations, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	fmt.Fprintf(stdout, "\nVariables for %s are at:\n\n  %s\n\n", cfg.Slug, varsSession.URL)
+	fmt.Fprintf(stdout, "\nVariables for %s are at:\n\n  %s\n\n", cfg.Slug, editor.URL)
 	if !deps.BrowserReachable(stdin) {
-		return varsSession, nil
+		return editor, nil
 	}
-	if err := deps.OpenBrowser(varsSession.URL); err != nil {
+	if err := deps.OpenBrowser(editor.URL); err != nil {
 		fmt.Fprintln(stdout, "Couldn't open your browser automatically — open the link above manually.")
 	}
-	return varsSession, nil
+	return editor, nil
 }
 
 func discoverVariables(ctx context.Context, cfg *projectconfig.Config, prov *providerclient.Provider, opts envOptions, run *events.Run) (*variables.Declarations, error) {
-	gate := envGate(cfg, prov, opts)
+	declarations := projectDeclarations(cfg, prov, opts)
 	err := collecting(run, cfg, func(output io.Writer) error {
-		_, err := deploycollector.PrepareAndCollect(ctx, cfg, gate, io.Discard, output)
+		_, err := deploycollector.PrepareAndCollect(ctx, cfg, declarations, io.Discard, output)
 		return err
 	})
 	if err != nil {
 		return nil, err
 	}
-	return gate, nil
+	return declarations, nil
 }
 
-func envGate(cfg *projectconfig.Config, prov *providerclient.Provider, opts envOptions) *variables.Declarations {
-	return variables.NewDeclarations(envwire.Values{
+func projectDeclarations(cfg *projectconfig.Config, prov *providerclient.Provider, opts envOptions) *variables.Declarations {
+	return variables.NewDeclarations(valuestore.Store{
 		Provider: prov,
-		Slug:     cfg.Slug,
-		Tier:     envTier(opts),
-	}, envwire.Scope(cfg, opts.preview, ""))
+		Config:   cfg,
+		Tier:     opts.tier(),
+	}, variablescope.Of(cfg, opts.tier(), ""))
 }

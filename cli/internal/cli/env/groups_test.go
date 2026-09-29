@@ -28,7 +28,7 @@ const groupedGroups = `[
 
 func setUpGroupedFixture(t *testing.T) string {
 	t.Helper()
-	return clitest.SetUpEnvGateFixtureWith(t, "[]", envDeclaringRequest(`{"definitions": `+groupedDefinitions+`, "groups": `+groupedGroups+`}`))
+	return clitest.SetUpVariablesFixtureWith(t, "[]", envDeclaringRequest(`{"definitions": `+groupedDefinitions+`, "groups": `+groupedGroups+`}`))
 }
 
 func seedProductionValue(t *testing.T, key, folder, value string) {
@@ -56,7 +56,7 @@ func TestGroupProgressOnSet(t *testing.T) {
 
 		out := envSet(t, root, "GITHUB_CLIENT_ID", "id", envOptions{preview: true, environment: "staging"})
 		if strings.Contains(out, "Set together") {
-			t.Errorf("set stdout = %q, want the base value to count for staging, as the deploy gate counts it", out)
+			t.Errorf("set stdout = %q, want the base value to count for staging, as a deploy counts it", out)
 		}
 	})
 
@@ -76,7 +76,7 @@ func TestGroupProgressOnSet(t *testing.T) {
 
 		out := envSet(t, root, "GITHUB_CLIENT_SECRET", "secret", envOptions{folder: "/web"})
 		if strings.Contains(out, "Set together") {
-			t.Errorf("set stdout = %q, want the root value to count for /web, as the deploy gate counts it", out)
+			t.Errorf("set stdout = %q, want the root value to count for /web, as a deploy counts it", out)
 		}
 	})
 

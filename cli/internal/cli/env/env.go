@@ -19,13 +19,13 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/declcache"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
-	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/valuestore"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/cli/internal/varsui"
+	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -120,7 +120,7 @@ func drivenEnvProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opts 
 }
 
 func checkEnvProvider(ctx context.Context, deps cmddeps.Deps, check *events.Scope, prov *providerclient.Provider, cfg *projectconfig.Config, opts envOptions, sealing *envSeal, stderr io.Writer) (*contractv1.PreflightResponse, error) {
-	status, err := preflight.Run(ctx, check, prov, cfg, envTier(opts), "", nil, nil, "ocel bootstrap "+bootstrap.Name(envTier(opts)))
+	status, err := preflight.Run(ctx, check, prov, cfg, opts.tier(), "", nil, nil, "ocel bootstrap "+bootstrap.Name(opts.tier()))
 	if err != nil || sealing == nil {
 		return status, err
 	}
@@ -129,36 +129,36 @@ func checkEnvProvider(ctx context.Context, deps cmddeps.Deps, check *events.Scop
 
 func offerVarsKey(ctx context.Context, deps cmddeps.Deps, check *events.Scope, prov *providerclient.Provider, cfg *projectconfig.Config, opts envOptions, status *contractv1.BootstrapStatus, stdin io.Reader, stderr io.Writer) error {
 	front := edgewire.Selection(cfg)
-	offered, err := bootstrap.Offers(ctx, prov, envTier(opts), front, provider.FeatureVarsKey)
+	offered, err := bootstrap.Offers(ctx, prov, opts.tier(), front, provider.FeatureVarsKey)
 	if err != nil || !offered {
 		return err
 	}
 	plan := bootstrap.PlanOnly(status, provider.FeatureVarsKey)
-	return bootstrap.OfferPlan(ctx, check, prov, plan, envTier(opts), front,
+	return bootstrap.OfferPlan(ctx, check, prov, plan, opts.tier(), front,
 		deps.StdinIsTerminal(stdin), stderr, stdin)
 }
 
-func envTier(opts envOptions) environmentv1.Tier {
-	if opts.preview {
+func (o envOptions) tier() environmentv1.Tier {
+	if o.preview {
 		return environmentv1.Tier_TIER_PREVIEW
 	}
 	return environmentv1.Tier_TIER_PRODUCTION
 }
 
-func envCoordinate(slug, key string, opts envOptions) *envvarsv1.Coordinate {
+func wireCoordinate(slug, key string, opts envOptions) *envvarsv1.Coordinate {
 	return &envvarsv1.Coordinate{Slug: slug, Folder: opts.folder, Key: key, Environment: opts.environment}
 }
 
-func envAddress(key string, opts envOptions) variables.Coordinate {
+func envCoordinate(key string, opts envOptions) variables.Coordinate {
 	return variables.Coordinate{Cell: variables.Cell{Key: key, Folder: opts.folder}, Environment: opts.environment}
 }
 
-func envValues(prov *providerclient.Provider, slug string, opts envOptions) envwire.Values {
-	return envwire.Values{Provider: prov, Slug: slug, Tier: envTier(opts)}
+func envValues(prov *providerclient.Provider, cfg *projectconfig.Config, opts envOptions) valuestore.Store {
+	return valuestore.Store{Provider: prov, Config: cfg, Tier: opts.tier()}
 }
 
 func staleCell(err error, key string, opts envOptions) error {
-	if !errors.Is(err, varsui.ErrStaleValue) {
+	if !errors.Is(err, variables.ErrStaleValue) {
 		return err
 	}
 	return fmt.Errorf("%s moved between this command reading it and writing it, so nothing was written — somebody else edited it at the same time. Read it again with `ocel env get %s` and run this command again",
@@ -185,7 +185,7 @@ func runEnvSetPairs(ctx context.Context, deps cmddeps.Deps, cwd string, pairs []
 			return err
 		}
 		for _, pair := range pairs {
-			if err := variables.RefuseImpliedInFolder(envwire.Scope(cfg, opts.preview, ""), pair.key, opts.folder); err != nil {
+			if err := variables.RefuseImpliedInFolder(variablescope.Of(cfg, opts.tier(), ""), pair.key, opts.folder); err != nil {
 				return err
 			}
 			if err := variables.RefuseUnwritable(definitions, pair.key, opts.folder); err != nil {
@@ -196,18 +196,17 @@ func runEnvSetPairs(ctx context.Context, deps cmddeps.Deps, cwd string, pairs []
 		if err != nil {
 			return err
 		}
-		envSource := envwire.EnvSourceClient{Provider: prov, Config: cfg, Preview: opts.preview}
+		values := envValues(prov, cfg, opts)
 		var owner variables.EnvSource
 		if opts.environment == "" {
-			if owner, err = envSource.Describe(ctx); err != nil {
+			if owner, err = values.DescribeEnvSource(ctx); err != nil {
 				return err
 			}
 		}
-		values := envValues(prov, cfg.Slug, opts)
 		for _, pair := range pairs {
-			at := envAddress(pair.key, opts)
+			at := envCoordinate(pair.key, opts)
 			if owner.CanSet(at) {
-				if err := setInEnvSource(ctx, envSource, owner.ID, at, pair.value, definitions, stdout); err != nil {
+				if err := setInEnvSource(ctx, values, owner.ID, at, pair.value, definitions, stdout); err != nil {
 					return err
 				}
 				continue
@@ -216,11 +215,11 @@ func runEnvSetPairs(ctx context.Context, deps cmddeps.Deps, cwd string, pairs []
 			if err != nil {
 				return err
 			}
-			metadata, err := values.Write(ctx, at, pair.value, &seen)
+			version, err := values.Set(ctx, at, pair.value, &seen)
 			if err != nil {
 				return staleCell(err, pair.key, opts)
 			}
-			fmt.Fprintf(stdout, "Set %s (version %d).\n", describeCell(pair.key, opts), metadata.GetVersion())
+			fmt.Fprintf(stdout, "Set %s (version %d).\n", describeCell(pair.key, opts), version)
 		}
 		if err := printGroupProgress(ctx, vars, cfg.Slug, definitions, groups, opts, pairs, stdout); err != nil {
 			return err
@@ -229,12 +228,12 @@ func runEnvSetPairs(ctx context.Context, deps cmddeps.Deps, cwd string, pairs []
 	})
 }
 
-func setInEnvSource(ctx context.Context, envSource envwire.EnvSourceClient, id string, at variables.Coordinate, value string, definitions []*resourcesv1.VariableDefinition, stdout io.Writer) error {
+func setInEnvSource(ctx context.Context, values valuestore.Store, id string, at variables.Coordinate, value string, definitions []*resourcesv1.VariableDefinition, stdout io.Writer) error {
 	description := ""
 	if i := slices.IndexFunc(definitions, func(definition *resourcesv1.VariableDefinition) bool { return definition.GetKey() == at.Cell.Key }); i >= 0 {
 		description = definitions[i].GetDescription()
 	}
-	awaiting, err := envSource.Set(ctx, at.Cell, value, description)
+	awaiting, err := values.SetInEnvSource(ctx, at.Cell, value, description)
 	if err != nil {
 		return err
 	}
@@ -264,16 +263,16 @@ func declaredVariables(ctx context.Context, deps cmddeps.Deps, cfg *projectconfi
 		}
 	}
 
-	gate := envGate(cfg, prov, opts)
+	declarations := projectDeclarations(cfg, prov, opts)
 	err = collecting(run, cfg, func(output io.Writer) error {
-		_, err := deploycollector.Collect(ctx, cfg, gate, prepared, io.Discard, output)
+		_, err := deploycollector.Collect(ctx, cfg, declarations, prepared, io.Discard, output)
 		return err
 	})
 	if err != nil {
 		return nil, nil, err
 	}
 
-	definitions, groups := gate.Definitions(), gate.Groups()
+	definitions, groups := declarations.Definitions(), declarations.Groups()
 	if cacheErr == nil {
 		_ = cache.Save(cfg.Dir, fingerprint, definitions, groups)
 	}
@@ -289,7 +288,7 @@ func collecting(run *events.Run, cfg *projectconfig.Config, collect func(output 
 }
 
 func withImpliedDeclarations(cfg *projectconfig.Config, opts envOptions, definitions []*resourcesv1.VariableDefinition, groups []*resourcesv1.GroupDefinition) ([]*resourcesv1.VariableDefinition, []*resourcesv1.GroupDefinition, error) {
-	implied, impliedGroups := variables.ImpliedDeclarations(envwire.Scope(cfg, opts.preview, ""))
+	implied, impliedGroups := variables.ImpliedDeclarations(variablescope.Of(cfg, opts.tier(), ""))
 	return append(definitions, implied...), append(groups, impliedGroups...), nil
 }
 
@@ -304,7 +303,7 @@ func runEnvLs(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOption
 			return err
 		}
 		resp, err := vars.ListValues(ctx, &envvarsv1.ListValuesRequest{
-			Tier: envTier(opts),
+			Tier: opts.tier(),
 			Slug: cfg.Slug,
 		})
 		if err != nil {
@@ -312,7 +311,7 @@ func runEnvLs(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOption
 		}
 		var environments []string
 		if opts.preview && overridden(resp.GetValues()) {
-			if environments, err = envwire.NamedEnvironments(ctx, prov, cfg.Slug); err != nil {
+			if environments, err = valuestore.ListEnvironmentNames(ctx, prov, cfg.Slug); err != nil {
 				return err
 			}
 		}
@@ -338,8 +337,8 @@ func runEnvGet(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts env
 			return err
 		}
 		resp, err := vars.GetValue(ctx, &envvarsv1.GetValueRequest{
-			Tier:       envTier(opts),
-			Coordinate: envCoordinate(cfg.Slug, key, opts),
+			Tier:       opts.tier(),
+			Coordinate: wireCoordinate(cfg.Slug, key, opts),
 			Reveal:     opts.reveal,
 		})
 		if err != nil {
@@ -395,13 +394,13 @@ func runEnvRm(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts envO
 		if err != nil {
 			return err
 		}
-		values := envValues(prov, cfg.Slug, opts)
-		at := envAddress(key, opts)
+		values := envValues(prov, cfg, opts)
+		at := envCoordinate(key, opts)
 		seen, err := values.Version(ctx, at)
 		if err != nil {
 			return err
 		}
-		deleted, err := values.Remove(ctx, at, &seen)
+		deleted, err := values.Delete(ctx, at, &seen)
 		if err != nil {
 			return staleCell(err, key, opts)
 		}
@@ -433,7 +432,7 @@ func printGroupProgress(ctx context.Context, vars envvarsv1connect.EnvVarsServic
 	if len(touched) == 0 {
 		return nil
 	}
-	listed, err := vars.ListValues(ctx, &envvarsv1.ListValuesRequest{Tier: envTier(opts), Slug: slug})
+	listed, err := vars.ListValues(ctx, &envvarsv1.ListValuesRequest{Tier: opts.tier(), Slug: slug})
 	if err != nil {
 		return err
 	}
@@ -483,8 +482,8 @@ func runEnvRef(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts env
 			return err
 		}
 		resp, err := vars.SetReference(ctx, &envvarsv1.SetReferenceRequest{
-			Tier:       envTier(opts),
-			Coordinate: envCoordinate(cfg.Slug, key, opts),
+			Tier:       opts.tier(),
+			Coordinate: wireCoordinate(cfg.Slug, key, opts),
 			Target:     target,
 		})
 		if err != nil {
@@ -502,8 +501,8 @@ func runEnvRefs(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts en
 			return err
 		}
 		resp, err := vars.ListReferences(ctx, &envvarsv1.ListReferencesRequest{
-			Tier:       envTier(opts),
-			Coordinate: envCoordinate(cfg.Slug, key, opts),
+			Tier:       opts.tier(),
+			Coordinate: wireCoordinate(cfg.Slug, key, opts),
 		})
 		if err != nil {
 			return err
@@ -520,8 +519,8 @@ func runEnvHistory(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts
 			return err
 		}
 		resp, err := vars.ListVersions(ctx, &envvarsv1.ListVersionsRequest{
-			Tier:       envTier(opts),
-			Coordinate: envCoordinate(cfg.Slug, key, opts),
+			Tier:       opts.tier(),
+			Coordinate: wireCoordinate(cfg.Slug, key, opts),
 		})
 		if err != nil {
 			return err

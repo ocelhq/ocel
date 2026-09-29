@@ -25,7 +25,8 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
-	"github.com/ocelhq/ocel/cli/internal/envwire"
+	"github.com/ocelhq/ocel/cli/internal/variablescope"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
 
 func newBuildScope(t *testing.T) (*events.Scope, *bytes.Buffer) {
@@ -51,14 +52,14 @@ func recordBuildApp(deps *cmddeps.Deps) *bool {
 	return &ran
 }
 
-func clientValueGate(t *testing.T, cfg *projectconfig.Config, value string) *variables.Declarations {
+func declarationsWithClientValue(t *testing.T, cfg *projectconfig.Config, value string) *variables.Declarations {
 	t.Helper()
 	cell := variables.Cell{Key: "PUBLIC_SITE_URL"}
-	gate := variables.NewDeclarations(oneValue{cell: cell, value: value}, envwire.Scope(cfg, false, ""))
-	if err := gate.Prefetch(context.Background()); err != nil {
+	declarations := variables.NewDeclarations(oneValue{cell: cell, value: value}, variablescope.Of(cfg, environmentv1.Tier_TIER_PRODUCTION, ""))
+	if err := declarations.Prefetch(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	_, err := gate.DeclareEnv(context.Background(), &resourcesv1.DeclareEnvRequest{
+	_, err := declarations.DeclareEnv(context.Background(), &resourcesv1.DeclareEnvRequest{
 		Definitions: []*resourcesv1.VariableDefinition{{
 			Key:              cell.Key,
 			Class:            resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN,
@@ -68,7 +69,7 @@ func clientValueGate(t *testing.T, cfg *projectconfig.Config, value string) *var
 	if err != nil {
 		t.Fatal(err)
 	}
-	return gate
+	return declarations
 }
 
 type oneValue struct {
@@ -92,8 +93,8 @@ func prebuiltConfig(root string) *projectconfig.Config {
 	}
 }
 
-func noGate(cfg *projectconfig.Config) *variables.Declarations {
-	return variables.NewDeclarations(emptyValues{}, envwire.Scope(cfg, false, ""))
+func emptyDeclarations(cfg *projectconfig.Config) *variables.Declarations {
+	return variables.NewDeclarations(emptyValues{}, variablescope.Of(cfg, environmentv1.Tier_TIER_PRODUCTION, ""))
 }
 
 type emptyValues struct{}
@@ -122,7 +123,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 
 		s, out := newBuildScope(t)
 		cfg := prebuiltConfig(root)
-		manifest, _, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, false, s, s, "serverless", nil, nil)
+		manifest, _, err := collectAndBuildManifest(context.Background(), deps, cfg, emptyDeclarations(cfg), true, false, s, s, "serverless", nil, nil)
 		if err != nil {
 			t.Fatalf("collectAndBuildManifest: %v", err)
 		}
@@ -153,7 +154,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 
 		s, _ := newBuildScope(t)
 		cfg := prebuiltConfig(root)
-		if _, _, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), false, false, s, s, "serverless", nil, nil); err != nil {
+		if _, _, err := collectAndBuildManifest(context.Background(), deps, cfg, emptyDeclarations(cfg), false, false, s, s, "serverless", nil, nil); err != nil {
 			t.Fatalf("collectAndBuildManifest: %v", err)
 		}
 		if !*ran {
@@ -167,7 +168,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 
 		s, _ := newBuildScope(t)
 		cfg := prebuiltConfig(t.TempDir())
-		_, _, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, false, s, s, "serverless", nil, nil)
+		_, _, err := collectAndBuildManifest(context.Background(), deps, cfg, emptyDeclarations(cfg), true, false, s, s, "serverless", nil, nil)
 		if err == nil {
 			t.Fatal("collectAndBuildManifest succeeded with no build output, want error")
 		}
@@ -185,7 +186,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 
 		s, _ := newBuildScope(t)
 		cfg := prebuiltConfig(root)
-		manifest, _, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, false, s, s, "serverless", nil, nil)
+		manifest, _, err := collectAndBuildManifest(context.Background(), deps, cfg, emptyDeclarations(cfg), true, false, s, s, "serverless", nil, nil)
 		if err != nil {
 			t.Fatalf("collectAndBuildManifest: %v", err)
 		}
@@ -206,7 +207,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 
 		s, _ := newBuildScope(t)
 		cfg := prebuiltConfig(root)
-		_, _, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, false, s, s, "serverless", nil, nil)
+		_, _, err := collectAndBuildManifest(context.Background(), deps, cfg, emptyDeclarations(cfg), true, false, s, s, "serverless", nil, nil)
 		if err == nil {
 			t.Fatal("collectAndBuildManifest succeeded for an app no build stamped, want error")
 		}
@@ -232,7 +233,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 
 		s, _ := newBuildScope(t)
 		cfg := prebuiltConfig(root)
-		if _, _, err := collectAndBuildManifest(context.Background(), deps, cfg, clientValueGate(t, cfg, "https://example.com"), false, false, s, s, "serverless", nil, nil); err != nil {
+		if _, _, err := collectAndBuildManifest(context.Background(), deps, cfg, declarationsWithClientValue(t, cfg, "https://example.com"), false, false, s, s, "serverless", nil, nil); err != nil {
 			t.Fatalf("collectAndBuildManifest: %v", err)
 		}
 
@@ -256,8 +257,8 @@ func TestCollectAndBuildManifest(t *testing.T) {
 		}
 
 		s, _ := newBuildScope(t)
-		gate := clientValueGate(t, cfg, "https://rotated.example.com")
-		_, _, err := collectAndBuildManifest(context.Background(), deps, cfg, gate, true, false, s, s, "serverless", nil, nil)
+		declarations := declarationsWithClientValue(t, cfg, "https://rotated.example.com")
+		_, _, err := collectAndBuildManifest(context.Background(), deps, cfg, declarations, true, false, s, s, "serverless", nil, nil)
 		if err == nil {
 			t.Fatal("collectAndBuildManifest = nil for a build predating the client value, want a refusal")
 		}
@@ -280,7 +281,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 		}
 
 		s, _ := newBuildScope(t)
-		_, _, err := collectAndBuildManifest(context.Background(), deps, cfg, clientValueGate(t, cfg, "https://example.com"), true, false, s, s, "serverless", nil, nil)
+		_, _, err := collectAndBuildManifest(context.Background(), deps, cfg, declarationsWithClientValue(t, cfg, "https://example.com"), true, false, s, s, "serverless", nil, nil)
 		if err == nil {
 			t.Fatal("collectAndBuildManifest = nil for an `ocel build` output, want a refusal")
 		}
@@ -306,8 +307,8 @@ func TestCollectAndBuildManifest(t *testing.T) {
 		}
 
 		s, _ := newBuildScope(t)
-		gate := clientValueGate(t, cfg, "https://example.com")
-		if _, _, err := collectAndBuildManifest(context.Background(), deps, cfg, gate, true, false, s, s, "serverless", nil, nil); err != nil {
+		declarations := declarationsWithClientValue(t, cfg, "https://example.com")
+		if _, _, err := collectAndBuildManifest(context.Background(), deps, cfg, declarations, true, false, s, s, "serverless", nil, nil); err != nil {
 			t.Fatalf("collectAndBuildManifest: %v", err)
 		}
 	})

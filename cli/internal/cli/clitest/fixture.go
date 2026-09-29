@@ -21,10 +21,10 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
-	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/projecteditor"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/providers"
 	"github.com/ocelhq/ocel/cli/internal/runui"
@@ -53,7 +53,7 @@ func NewDeps() cmddeps.Deps {
 		ProbeBucket:         fakeProbeBucket,
 		DeploymentID:        appbuilder.DeploymentID,
 		CollectDeclarations: deploycollector.PrepareAndCollect,
-		ServeVarsUI:         envwire.ServeVarsUI,
+		ServeVariableEditor: projecteditor.Serve,
 		DiscoverPRNumber:    func() string { return os.Getenv("OCEL_PR_NUMBER") },
 		StdinIsTerminal:     func(io.Reader) bool { return false },
 		ConfigPath:          func() string { return os.Getenv("OCEL_CONFIG") },

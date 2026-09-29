@@ -29,7 +29,7 @@ const stripeDeclared = `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITI
 
 func setUpInfisicalFixture(t *testing.T, config string, source clitest.FakeEnvSource) string {
 	t.Helper()
-	root := clitest.SetUpEnvGateFixtureWith(t, stripeDeclared, clitest.EnvDeclareOnlyScript)
+	root := clitest.SetUpVariablesFixtureWith(t, stripeDeclared, clitest.EnvDeclareOnlyScript)
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), config)
 	envSet(t, root, "INFISICAL_CLIENT_ID", "client-id", envOptions{})
 	envSet(t, root, "INFISICAL_CLIENT_SECRET", "client-secret", envOptions{})
@@ -48,8 +48,8 @@ func useFakeEnvSource(t *testing.T, source clitest.FakeEnvSource) {
 
 var infisicalURLs = map[string]string{"": "https://infisical.example/p-1/prod"}
 
-func TestADeployReadsItsTiersEnvSourceBeforeTheGate(t *testing.T) {
-	t.Run("a value the env source has passes the gate", func(t *testing.T) {
+func TestADeployReadsItsTiersEnvSourceBeforeCheckingItsVariables(t *testing.T) {
+	t.Run("a value the env source has passes the variables check", func(t *testing.T) {
 		root := setUpInfisicalFixture(t, infisicalProduction, clitest.FakeEnvSource{
 			Values: []clitest.FakeEnvSourceValue{{Key: "STRIPE_API_KEY", Value: "sk_live_from_infisical"}},
 			URLs:   infisicalURLs,
@@ -74,7 +74,7 @@ func TestADeployReadsItsTiersEnvSourceBeforeTheGate(t *testing.T) {
 		clitest.AttachTerminalSink(deps, &stdout)
 		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
-			t.Fatal("runDeploy err = nil, want the gate to refuse")
+			t.Fatal("runDeploy err = nil, want the variables check to refuse")
 		}
 		out := stdout.String()
 		for _, want := range []string{"STRIPE_API_KEY", "set it in infisical:p-1/prod", "https://infisical.example/p-1/prod"} {
@@ -121,7 +121,7 @@ func TestADeployReadsItsTiersEnvSourceBeforeTheGate(t *testing.T) {
 	})
 
 	t.Run("an unset credential stops the deploy with the command that sets it", func(t *testing.T) {
-		root := clitest.SetUpEnvGateFixtureWith(t, stripeDeclared, clitest.EnvDeclareOnlyScript)
+		root := clitest.SetUpVariablesFixtureWith(t, stripeDeclared, clitest.EnvDeclareOnlyScript)
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), infisicalProduction)
 		envSet(t, root, "INFISICAL_CLIENT_ID", "client-id", envOptions{})
 		useFakeEnvSource(t, clitest.FakeEnvSource{})
@@ -132,7 +132,7 @@ func TestADeployReadsItsTiersEnvSourceBeforeTheGate(t *testing.T) {
 		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		out := stdout.String()
 		if err == nil || !strings.Contains(out, "1 variable is not ready") || !strings.Contains(out, "INFISICAL_CLIENT_SECRET  root  no value") {
-			t.Fatalf("runDeploy err = %v; stdout=%s, want the gate to refuse the unset credential alone", err, out)
+			t.Fatalf("runDeploy err = %v; stdout=%s, want the variables check to refuse the unset credential alone", err, out)
 		}
 		if !strings.Contains(out, "ocel env set INFISICAL_CLIENT_SECRET=<VALUE>") {
 			t.Errorf("stdout = %q, want the credential's command named, not the env source", out)
@@ -140,7 +140,7 @@ func TestADeployReadsItsTiersEnvSourceBeforeTheGate(t *testing.T) {
 	})
 
 	t.Run("an unset credential opens the recovery page, and saving it there resumes the deploy", func(t *testing.T) {
-		root := clitest.SetUpEnvGateFixtureWith(t, stripeDeclared, clitest.EnvDeclareOnlyScript)
+		root := clitest.SetUpVariablesFixtureWith(t, stripeDeclared, clitest.EnvDeclareOnlyScript)
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), infisicalProduction)
 		useFakeEnvSource(t, clitest.FakeEnvSource{
 			Values: []clitest.FakeEnvSourceValue{{Key: "STRIPE_API_KEY", Value: "sk_live_from_infisical"}},
@@ -159,7 +159,7 @@ func TestADeployReadsItsTiersEnvSourceBeforeTheGate(t *testing.T) {
 			done <- runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 		}()
 
-		address, token := awaitVarsUI(t, &out, 1)
+		address, token := awaitEditorURL(t, &out, 1)
 		setCell(t, address, token, "INFISICAL_CLIENT_ID", "client-id")
 		setCell(t, address, token, "INFISICAL_CLIENT_SECRET", "client-secret")
 		markDone(t, address, token)
@@ -184,7 +184,7 @@ func TestADeployReadsItsTiersEnvSourceBeforeTheGate(t *testing.T) {
 		deps := clitest.NewDeps()
 		clitest.AttachTerminalSink(deps, &stdout)
 		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err == nil {
-			t.Fatal("runDeploy err = nil, want the gate to refuse: an empty key is still unset")
+			t.Fatal("runDeploy err = nil, want the variables check to refuse: an empty key is still unset")
 		}
 		registrations, err := clitest.LoadFakeRegistrations()
 		if err != nil {
@@ -220,7 +220,7 @@ func TestADeployReadsItsTiersEnvSourceBeforeTheGate(t *testing.T) {
 	})
 
 	t.Run("exec runs where ocel deploys, and the provider is handed what it printed", func(t *testing.T) {
-		root := clitest.SetUpEnvGateFixtureWith(t, stripeDeclared, clitest.EnvDeclareOnlyScript)
+		root := clitest.SetUpVariablesFixtureWith(t, stripeDeclared, clitest.EnvDeclareOnlyScript)
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), strings.Replace(infisicalProduction,
 			`production: { infisical: { project: "p-1", environment: "prod", auth: { universal: { clientId: { $env: "INFISICAL_CLIENT_ID" }, clientSecret: { $env: "INFISICAL_CLIENT_SECRET" } } } } },`,
 			`production: { exec: { command: ["sh", "-c", "printf 'STRIPE_API_KEY=sk_from_exec'"], format: "dotenv" } },`, 1))

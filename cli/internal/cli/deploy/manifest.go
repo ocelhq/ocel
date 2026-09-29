@@ -21,13 +21,13 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
-	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/manifestwire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/variables"
+	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/cli/internal/workspace"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
@@ -37,32 +37,32 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, gate *variables.Declarations, prebuilt, dry bool, phase, scope *events.Scope, compute string, containerArchs map[string]string, urls map[string]string) (*contractv1.Manifest, []inlinebinding.Record, error) {
+func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, declarations *variables.Declarations, prebuilt, dry bool, phase, scope *events.Scope, compute string, containerArchs map[string]string, urls map[string]string) (*contractv1.Manifest, []inlinebinding.Record, error) {
 	captured := &boundedCapture{}
 	tee := io.MultiWriter(scope.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED), captured)
-	resources, err := deps.CollectDeclarations(ctx, cfg, gate, tee, tee)
+	resources, err := deps.CollectDeclarations(ctx, cfg, declarations, tee, tee)
 	if err != nil {
 		return nil, nil, captured.annotate(err)
 	}
-	warnings, err := variables.LintFolders(gate.Definitions(), envwire.Apps(cfg), cfg.Path)
+	warnings, err := variables.LintFolders(declarations.Definitions(), variablescope.Apps(cfg), cfg.Path)
 	if err != nil {
 		return nil, nil, err
 	}
 	for _, warning := range warnings {
 		scope.Warn(warning)
 	}
-	for _, warning := range variables.ListUndeclared(gate.Declared(), gate.Scope().EnvSource) {
+	for _, warning := range variables.ListUndeclared(declarations.Declared(), declarations.Scope().EnvSource) {
 		scope.Warn(warning)
 	}
-	if err := gate.RefuseIncomplete(); err != nil {
+	if err := declarations.RefuseIncomplete(); err != nil {
 		return nil, nil, err
 	}
-	inline, err := inlineRecords(ctx, deps, cfg, gate, resources, scope)
+	inline, err := inlineRecords(ctx, deps, cfg, declarations, resources, scope)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	variables, err := resolveVariables(ctx, gate, cfg)
+	variables, err := resolveVariables(ctx, declarations, cfg)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -111,7 +111,7 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 
 	var manifest *contractv1.Manifest
 	if err := steps.run(cfg.Slug, "Assembling the deploy manifest of "+cfg.Slug, func() (err error) {
-		manifest, err = assembleManifest(ctx, deps, cfg, gate, phase, resources, variables, images, compute, configName)
+		manifest, err = assembleManifest(ctx, deps, cfg, declarations, phase, resources, variables, images, compute, configName)
 		return err
 	}); err != nil || manifest == nil {
 		return nil, nil, err
@@ -119,14 +119,14 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 	return manifest, inline, nil
 }
 
-func assembleManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, gate *variables.Declarations, phase *events.Scope, resources []declare.Resource, appValues map[string][]manifestbuilder.Variable, images map[string]string, compute, configName string) (*contractv1.Manifest, error) {
+func assembleManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, declarations *variables.Declarations, phase *events.Scope, resources []declare.Resource, appValues map[string][]manifestbuilder.Variable, images map[string]string, compute, configName string) (*contractv1.Manifest, error) {
 	functions, err := deps.CollectAppFunctions(cfg.Dir)
 	if err != nil {
 		return nil, err
 	}
 	functions = servedByFunctions(functions, cfg)
 
-	edgeWarnings, err := variables.LintEdgeSecrets(gate.Definitions(), envwire.Apps(cfg), edgeApps(cfg))
+	edgeWarnings, err := variables.LintEdgeSecrets(declarations.Definitions(), variablescope.Apps(cfg), edgeApps(cfg))
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +150,7 @@ func assembleManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig
 		return nil, err
 	}
 
-	manifest, err := manifestbuilder.Build(cfg.Slug, cfg.Domains, toApps(cfg.Dir, cfg.Apps, usages, compute, images, functions), compute, manifestwire.Declarations(cfg.Dir, resources), manifestwire.Bindings(cfg.BindingsFor(gate.Scope().Tier)), functions, variablesByApp(appValues, functions))
+	manifest, err := manifestbuilder.Build(cfg.Slug, cfg.Domains, toApps(cfg.Dir, cfg.Apps, usages, compute, images, functions), compute, manifestwire.Declarations(cfg.Dir, resources), manifestwire.Bindings(cfg.BindingsFor(declarations.Scope().Tier)), functions, variablesByApp(appValues, functions))
 	if err != nil {
 		return nil, err
 	}
@@ -229,12 +229,12 @@ func (b *buildSteps) run(subject, title string, step func() error) error {
 	return err
 }
 
-func inlineRecords(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, gate *variables.Declarations, resources []declare.Resource, scope *events.Scope) ([]inlinebinding.Record, error) {
-	values, err := gate.ResolveBindingVariables(ctx)
+func inlineRecords(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, declarations *variables.Declarations, resources []declare.Resource, scope *events.Scope) ([]inlinebinding.Record, error) {
+	values, err := declarations.ResolveBindingVariables(ctx)
 	if err != nil {
 		return nil, err
 	}
-	records, err := inlinebinding.Build(cfg.BindingsFor(gate.Scope().Tier), values, filepath.Base(cfg.Path))
+	records, err := inlinebinding.Build(cfg.BindingsFor(declarations.Scope().Tier), values, filepath.Base(cfg.Path))
 	if err != nil || len(records) == 0 {
 		return records, err
 	}
@@ -283,11 +283,11 @@ func (c *boundedCapture) annotate(err error) error {
 	return fmt.Errorf("%w\n%s", err, text)
 }
 
-func resolveVariables(ctx context.Context, gate *variables.Declarations, cfg *projectconfig.Config) (map[string][]manifestbuilder.Variable, error) {
-	definitions := gate.Definitions()
+func resolveVariables(ctx context.Context, declarations *variables.Declarations, cfg *projectconfig.Config) (map[string][]manifestbuilder.Variable, error) {
+	definitions := declarations.Definitions()
 	variables := make(map[string][]manifestbuilder.Variable, len(cfg.Apps))
-	for _, app := range envwire.Apps(cfg) {
-		resolved, err := gate.Resolve(ctx, app.Name)
+	for _, app := range variablescope.Apps(cfg) {
+		resolved, err := declarations.Resolve(ctx, app.Name)
 		if err != nil {
 			return nil, err
 		}
@@ -320,7 +320,7 @@ func appVariables(definitions []*resourcesv1.VariableDefinition, resolved map[st
 }
 
 func variablesByApp(variables map[string][]manifestbuilder.Variable, functions []manifestbuilder.Function) map[string][]manifestbuilder.Variable {
-	root, ok := variables[envwire.RootApp]
+	root, ok := variables[variablescope.RootApp]
 	if !ok {
 		return variables
 	}
@@ -340,7 +340,7 @@ type appSpec struct {
 
 func appSpecs(cfg *projectconfig.Config, variables map[string][]manifestbuilder.Variable) []appSpec {
 	if len(cfg.Apps) == 0 {
-		return []appSpec{{dir: cfg.Dir, clientBundle: discovery.ClientBundle(appbuild.FrameworkNode, cfg.Dir), variables: variables[envwire.RootApp]}}
+		return []appSpec{{dir: cfg.Dir, clientBundle: discovery.ClientBundle(appbuild.FrameworkNode, cfg.Dir), variables: variables[variablescope.RootApp]}}
 	}
 	specs := make([]appSpec, 0, len(cfg.Apps))
 	for _, a := range cfg.Apps {
@@ -386,7 +386,7 @@ func edgeApps(cfg *projectconfig.Config) []string {
 	if len(built) == 0 {
 		return nil
 	}
-	return []string{envwire.RootApp}
+	return []string{variablescope.RootApp}
 }
 
 func servedByFunctions(functions []manifestbuilder.Function, cfg *projectconfig.Config) []manifestbuilder.Function {

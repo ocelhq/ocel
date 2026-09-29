@@ -2,6 +2,7 @@ package variables
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 )
@@ -38,6 +39,14 @@ type Override struct {
 
 func IsOrphaned(environments []string, environment string) bool {
 	return environment != "" && !slices.Contains(environments, environment)
+}
+
+var ErrStaleValue = errors.New("stale value")
+
+type Version struct {
+	Version   int64 `json:"version"`
+	CreatedAt int64 `json:"createdAt"`
+	Size      int64 `json:"size"`
 }
 
 type Values interface {

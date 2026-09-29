@@ -202,8 +202,8 @@ func TestCheckEnv(t *testing.T) {
 			Apps: []variables.App{{Name: "web", Folder: "/web"}},
 		})
 
-		store, gate := s.env.current()
-		if err := gate.Prefetch(ctx); err != nil {
+		store, declarations := s.env.current()
+		if err := declarations.Prefetch(ctx); err != nil {
 			t.Fatalf("Prefetch: %v", err)
 		}
 		definitions := []*resourcesv1.VariableDefinition{{
@@ -211,7 +211,7 @@ func TestCheckEnv(t *testing.T) {
 			Folders: []string{"/web"},
 		}}
 		store.Declare(definitions)
-		if _, err := gate.DeclareEnv(ctx, &resourcesv1.DeclareEnvRequest{Definitions: definitions}); err != nil {
+		if _, err := declarations.DeclareEnv(ctx, &resourcesv1.DeclareEnvRequest{Definitions: definitions}); err != nil {
 			t.Fatalf("DeclareEnv: %v", err)
 		}
 

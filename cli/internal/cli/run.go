@@ -12,9 +12,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/devlock"
 	"github.com/ocelhq/ocel/cli/internal/election"
-	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/variables"
+	"github.com/ocelhq/ocel/cli/internal/variablescope"
 )
 
 var runCmd = &cobra.Command{
@@ -82,7 +82,7 @@ func runStandalone(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Co
 		return err
 	}
 	defer host.close()
-	host.srv.UseValues(values.merged(), envwire.DevScope(cfg))
+	host.srv.UseValues(values.merged(), variablescope.ForDev(cfg))
 
 	resolved, err := discoverAndSync(ctx, host.srv, cfg, values, scope, invocation{name: "run", source: source}, stdout, stderr)
 	if err != nil {

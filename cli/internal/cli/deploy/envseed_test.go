@@ -18,7 +18,7 @@ type envRefOptions struct {
 	project string
 }
 
-func gateTier(opts envOptions) environmentv1.Tier {
+func valueTier(opts envOptions) environmentv1.Tier {
 	if opts.preview {
 		return environmentv1.Tier_TIER_PREVIEW
 	}
@@ -27,12 +27,12 @@ func gateTier(opts envOptions) environmentv1.Tier {
 
 func envSet(t *testing.T, _ string, key, value string, opts envOptions) {
 	t.Helper()
-	seedCell(t, gateTier(opts), &envvarsv1.Coordinate{Slug: "test-app", Folder: opts.folder, Key: key, Environment: opts.environment}, clitest.FakeCellData{Value: value})
+	seedCell(t, valueTier(opts), &envvarsv1.Coordinate{Slug: "test-app", Folder: opts.folder, Key: key, Environment: opts.environment}, clitest.FakeCellData{Value: value})
 }
 
 func envRef(t *testing.T, _ string, key string, opts envOptions, ref envRefOptions) {
 	t.Helper()
-	seedCell(t, gateTier(opts), &envvarsv1.Coordinate{Slug: "test-app", Key: key}, clitest.FakeCellData{Target: &clitest.FakeCoordinate{Slug: ref.project, Key: key}})
+	seedCell(t, valueTier(opts), &envvarsv1.Coordinate{Slug: "test-app", Key: key}, clitest.FakeCellData{Target: &clitest.FakeCoordinate{Slug: ref.project, Key: key}})
 }
 
 func ownedElsewhere(t *testing.T, key, value string) {

@@ -1,4 +1,4 @@
-package envwiretest
+package variables_test
 
 import (
 	"os"

@@ -28,9 +28,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
 	"github.com/ocelhq/ocel/cli/internal/devstack/docker"
-	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
+	"github.com/ocelhq/ocel/cli/internal/projecteditor"
 	"github.com/ocelhq/ocel/cli/internal/prompt"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runui"
@@ -143,7 +143,7 @@ func newDeps() cmddeps.Deps {
 		DeploymentID:        appbuilder.DeploymentID,
 		CollectDeclarations: deploycollector.PrepareAndCollect,
 		OpenBrowser:         browser.OpenURL,
-		ServeVarsUI:         envwire.ServeVarsUI,
+		ServeVariableEditor: projecteditor.Serve,
 		CurrentGitBranch:    gitBranch,
 		DiscoverPRNumber:    prNumberFromEnv,
 		RunPackageManager:   runPackageManagerCommand,

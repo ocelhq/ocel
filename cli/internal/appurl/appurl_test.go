@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/appurl"
-	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -21,7 +21,7 @@ func TestProduction(t *testing.T) {
 		t.Parallel()
 		cfg := &projectconfig.Config{Domains: map[string][]string{"production": {"acme.com", "www.acme.com"}}}
 
-		if got, want := appurl.Production(cfg)[envwire.RootApp], "https://acme.com"; got != want {
+		if got, want := appurl.Production(cfg)[variablescope.RootApp], "https://acme.com"; got != want {
 			t.Errorf("url = %q, want %q", got, want)
 		}
 	})
@@ -146,7 +146,7 @@ func TestPrepend(t *testing.T) {
 func TestBuildEnv(t *testing.T) {
 	t.Parallel()
 
-	env := appurl.BuildEnv(&projectconfig.Config{}, map[string]string{envwire.RootApp: "https://acme.com"})
+	env := appurl.BuildEnv(&projectconfig.Config{}, map[string]string{variablescope.RootApp: "https://acme.com"})
 	if got, want := env[""][constants.AppURLEnvName], "https://acme.com"; got != want {
 		t.Errorf("build env = %v, want the unnamed app keyed as the builder keys it, set to %q", env, want)
 	}

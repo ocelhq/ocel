@@ -223,7 +223,7 @@ func TestDevRefusal(t *testing.T) {
 		}
 	})
 
-	t.Run("an invalid value the gate kept no detail for ends at its schema", func(t *testing.T) {
+	t.Run("an invalid value the declarations kept no detail for ends at its schema", func(t *testing.T) {
 		refusal := &variables.MissingError{Problems: []*resourcesv1.VariableProblem{{Key: "API_TOKEN", Kind: resourcesv1.VariableProblem_KIND_INVALID}}}
 
 		got := devRefusal(refusal, nil, invocation{name: "dev", source: devSource{id: "dotenv"}}).Error()
@@ -677,7 +677,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		err := runDev(context.Background(), deps, false, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
 		if err == nil {
-			t.Fatal("runDev = nil, want a refusal rather than a green gate and a throw at the first read")
+			t.Fatal("runDev = nil, want a refusal rather than a green variables check and a throw at the first read")
 		}
 		if !strings.Contains(err.Error(), "API_BASE") {
 			t.Errorf("err = %q, want it to name the scoped key", err.Error())
@@ -717,7 +717,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		}
 	})
 
-	t.Run("a dev source's value satisfies the gate without a dotfile", func(t *testing.T) {
+	t.Run("a dev source's value satisfies the variables check without a dotfile", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("uses a POSIX shell fixture command")
 		}

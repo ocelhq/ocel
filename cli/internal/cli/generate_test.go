@@ -21,8 +21,8 @@ import (
 )
 
 func declaring(deps *cmddeps.Deps, definitions ...*resourcesv1.VariableDefinition) {
-	deps.CollectDeclarations = func(ctx context.Context, _ *projectconfig.Config, gate *variables.Declarations, _, _ io.Writer) ([]declare.Resource, error) {
-		if _, err := gate.DeclareEnv(ctx, &resourcesv1.DeclareEnvRequest{Definitions: definitions}); err != nil {
+	deps.CollectDeclarations = func(ctx context.Context, _ *projectconfig.Config, declarations *variables.Declarations, _, _ io.Writer) ([]declare.Resource, error) {
+		if _, err := declarations.DeclareEnv(ctx, &resourcesv1.DeclareEnvRequest{Definitions: definitions}); err != nil {
 			return nil, err
 		}
 		return nil, nil

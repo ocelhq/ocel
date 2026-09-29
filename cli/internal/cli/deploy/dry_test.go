@@ -21,9 +21,10 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/servicemap"
+	"github.com/ocelhq/ocel/cli/internal/variableeditor"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/cli/internal/varsui"
 	"github.com/ocelhq/ocel/pkg/constants"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
 
 func dryDeps(t *testing.T) cmddeps.Deps {
@@ -185,7 +186,7 @@ func TestADryRunRefusesABootstrapThatIsBehindTheBuild(t *testing.T) {
 	}
 }
 
-func TestADryRunNeverOpensTheVarsUI(t *testing.T) {
+func TestADryRunNeverOpensTheVariableEditor(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		preview bool
@@ -208,7 +209,7 @@ func TestADryRunNeverOpensTheVarsUI(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			root := clitest.SetUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+			root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 			t.Setenv("OCEL_TEST_ENV_PROBLEMS", `[{"key":"STRIPE_API_KEY","folder":"","kind":"KIND_MISSING"}]`)
 			if tc.preview {
 				t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
@@ -216,7 +217,7 @@ func TestADryRunNeverOpensTheVarsUI(t *testing.T) {
 			deps := clitest.NewDeps()
 			terminalStdin(&deps)
 			served := 0
-			deps.ServeVarsUI = func(context.Context, *projectconfig.Config, *providerclient.Provider, bool, *variables.Declarations, *varsui.Recovery) (*varsui.Session, error) {
+			deps.ServeVariableEditor = func(context.Context, *projectconfig.Config, *providerclient.Provider, environmentv1.Tier, *variables.Declarations, *variableeditor.Recovery) (*variableeditor.Session, error) {
 				served++
 				return nil, errors.New("a dry run must never serve the variables UI")
 			}
@@ -224,7 +225,7 @@ func TestADryRunNeverOpensTheVarsUI(t *testing.T) {
 			var stdout, stderr bytes.Buffer
 			err := tc.run(deps, root, &stdout, &stderr)
 			if err == nil {
-				t.Fatalf("run err = nil, want the gate to refuse; stdout=%s", stdout.String())
+				t.Fatalf("run err = nil, want the declarations to refuse; stdout=%s", stdout.String())
 			}
 			if served != 0 {
 				t.Errorf("a dry run served the variables UI %d times, want none: a value written through it changes the account", served)

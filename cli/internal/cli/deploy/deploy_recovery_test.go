@@ -20,10 +20,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/variableeditor"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/cli/internal/varsui"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
@@ -42,16 +43,16 @@ func recordBrowser(deps *cmddeps.Deps, opened *[]string, mu *sync.Mutex) {
 	}
 }
 
-type varsUISessions struct {
+type editorSessions struct {
 	mu  sync.Mutex
-	all []*varsui.Session
+	all []*variableeditor.Session
 }
 
-func captureVarsUI(deps *cmddeps.Deps) *varsUISessions {
-	sessions := &varsUISessions{}
-	prev := deps.ServeVarsUI
-	deps.ServeVarsUI = func(ctx context.Context, cfg *projectconfig.Config, prov *providerclient.Provider, preview bool, gate *variables.Declarations, recovery *varsui.Recovery) (*varsui.Session, error) {
-		session, err := prev(ctx, cfg, prov, preview, gate, recovery)
+func captureEditorSessions(deps *cmddeps.Deps) *editorSessions {
+	sessions := &editorSessions{}
+	prev := deps.ServeVariableEditor
+	deps.ServeVariableEditor = func(ctx context.Context, cfg *projectconfig.Config, prov *providerclient.Provider, tier environmentv1.Tier, declarations *variables.Declarations, recovery *variableeditor.Recovery) (*variableeditor.Session, error) {
+		session, err := prev(ctx, cfg, prov, tier, declarations, recovery)
 		if err == nil {
 			sessions.mu.Lock()
 			sessions.all = append(sessions.all, session)
@@ -62,13 +63,13 @@ func captureVarsUI(deps *cmddeps.Deps) *varsUISessions {
 	return sessions
 }
 
-func (s *varsUISessions) abandon(t *testing.T, n int) {
+func (s *editorSessions) abandon(t *testing.T, n int) {
 	t.Helper()
 	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		s.mu.Lock()
 		count := len(s.all)
-		var session *varsui.Session
+		var session *variableeditor.Session
 		if count >= n {
 			session = s.all[n-1]
 		}
@@ -82,13 +83,13 @@ func (s *varsUISessions) abandon(t *testing.T, n int) {
 	t.Fatalf("session %d never opened", n)
 }
 
-var varsUIURL = regexp.MustCompile(`http://127\.0\.0\.1:\d+/#t=[A-Za-z0-9_-]+`)
+var editorURL = regexp.MustCompile(`http://127\.0\.0\.1:\d+/#t=[A-Za-z0-9_-]+`)
 
-func awaitVarsUI(t *testing.T, out *syncBuffer, n int) (address, token string) {
+func awaitEditorURL(t *testing.T, out *syncBuffer, n int) (address, token string) {
 	t.Helper()
 	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
-		if urls := varsUIURL.FindAllString(out.String(), -1); len(urls) >= n {
+		if urls := editorURL.FindAllString(out.String(), -1); len(urls) >= n {
 			address, token, _ = strings.Cut(urls[n-1], "/#t=")
 			return address, token
 		}
@@ -143,7 +144,7 @@ func problemsFile(t *testing.T, problems string) string {
 	return path
 }
 
-func varsUITier(t *testing.T, address, token string) string {
+func editorTier(t *testing.T, address, token string) string {
 	t.Helper()
 	req, err := http.NewRequest(http.MethodGet, address+"/api/state", nil)
 	if err != nil {
@@ -167,7 +168,7 @@ func varsUITier(t *testing.T, address, token string) string {
 const missingStripeKey = `[{"key":"STRIPE_API_KEY","folder":"","kind":"KIND_MISSING"}]`
 
 func TestAMissingVariableHoldsTheRunWithTheWaitingEventAndResumesIt(t *testing.T) {
-	root := clitest.SetUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+	root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 	problems := problemsFile(t, missingStripeKey)
 	deps := clitest.NewDeps()
 	terminalStdin(&deps)
@@ -184,7 +185,7 @@ func TestAMissingVariableHoldsTheRunWithTheWaitingEventAndResumesIt(t *testing.T
 		done <- runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 	}()
 
-	address, token := awaitVarsUI(t, &out, 1)
+	address, token := awaitEditorURL(t, &out, 1)
 	setCell(t, address, token, "STRIPE_API_KEY", "sk_live_filled_in")
 	clitest.WriteFile(t, problems, "[]")
 	markDone(t, address, token)
@@ -222,9 +223,9 @@ func TestAMissingVariableHoldsTheRunWithTheWaitingEventAndResumesIt(t *testing.T
 	}
 }
 
-func TestGateRecoveryOnDeploy(t *testing.T) {
-	t.Run("a gate refusal in a terminal opens the UI and resumes into the build", func(t *testing.T) {
-		root := clitest.SetUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+func TestADeployMissingVariablesOpensTheEditorAndResumesOnceTheyAreSet(t *testing.T) {
+	t.Run("a declarations refusal in a terminal opens the UI and resumes into the build", func(t *testing.T) {
+		root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		problems := problemsFile(t, missingStripeKey)
 		deps := clitest.NewDeps()
 		terminalStdin(&deps)
@@ -243,7 +244,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 			done <- runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 		}()
 
-		address, token := awaitVarsUI(t, &out, 1)
+		address, token := awaitEditorURL(t, &out, 1)
 		setCell(t, address, token, "STRIPE_API_KEY", "sk_live_filled_in")
 		clitest.WriteFile(t, problems, "[]")
 		markDone(t, address, token)
@@ -274,7 +275,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 	})
 
 	t.Run("the resumed pass declares each variable once", func(t *testing.T) {
-		root := clitest.SetUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
+		root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
 		problems := problemsFile(t, missingStripeKey)
 		deps := clitest.NewDeps()
 		terminalStdin(&deps)
@@ -293,7 +294,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 			done <- runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 		}()
 
-		address, token := awaitVarsUI(t, &out, 1)
+		address, token := awaitEditorURL(t, &out, 1)
 		setCell(t, address, token, "STRIPE_API_KEY", "pk_filled_in")
 		clitest.WriteFile(t, problems, "[]")
 		markDone(t, address, token)
@@ -317,7 +318,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 	})
 
 	t.Run("the waiting state says how to abort", func(t *testing.T) {
-		root := clitest.SetUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+		root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		problemsFile(t, missingStripeKey)
 		deps := clitest.NewDeps()
 		terminalStdin(&deps)
@@ -337,7 +338,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 			done <- runDeploy(ctx, deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 		}()
 
-		awaitVarsUI(t, &out, 1)
+		awaitEditorURL(t, &out, 1)
 		waiting := out.String()
 		for _, want := range []string{"Waiting", "Ctrl-C"} {
 			if !strings.Contains(waiting, want) {
@@ -352,7 +353,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 	})
 
 	t.Run("interrupting while waiting aborts with nothing built", func(t *testing.T) {
-		root := clitest.SetUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+		root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		problemsFile(t, missingStripeKey)
 		deps := clitest.NewDeps()
 		terminalStdin(&deps)
@@ -372,7 +373,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 			done <- runDeploy(ctx, deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 		}()
 
-		awaitVarsUI(t, &out, 1)
+		awaitEditorURL(t, &out, 1)
 		cancel()
 
 		select {
@@ -397,14 +398,14 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 	})
 
 	t.Run("closing the UI still names the keys that are missing", func(t *testing.T) {
-		root := clitest.SetUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+		root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		problemsFile(t, missingStripeKey)
 		deps := clitest.NewDeps()
 		terminalStdin(&deps)
 		var mu sync.Mutex
 		var opened []string
 		recordBrowser(&deps, &opened, &mu)
-		sessions := captureVarsUI(&deps)
+		sessions := captureEditorSessions(&deps)
 		built := false
 		stubAppBuildRecorder(&deps, &built)
 
@@ -416,7 +417,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 			done <- runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 		}()
 
-		awaitVarsUI(t, &out, 1)
+		awaitEditorURL(t, &out, 1)
 		before := out.String()
 		sessions.abandon(t, 1)
 
@@ -442,7 +443,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 	})
 
 	t.Run("a replacement that still fails the schema fails the deploy without reopening the UI", func(t *testing.T) {
-		root := clitest.SetUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+		root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		envSet(t, root, "STRIPE_API_KEY", "nope", envOptions{})
 		problemsFile(t, `[{"key":"STRIPE_API_KEY","folder":"","kind":"KIND_INVALID","detail":"must start with sk_"}]`)
 		deps := clitest.NewDeps()
@@ -461,7 +462,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 			done <- runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 		}()
 
-		address, token := awaitVarsUI(t, &out, 1)
+		address, token := awaitEditorURL(t, &out, 1)
 		setCell(t, address, token, "STRIPE_API_KEY", "also_nope")
 		markDone(t, address, token)
 
@@ -480,7 +481,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 		if strings.Contains(out.String(), "Deployed") {
 			t.Errorf("stdout = %q, want no deploy to have completed", out.String())
 		}
-		if urls := varsUIURL.FindAllString(out.String(), -1); len(urls) != 1 {
+		if urls := editorURL.FindAllString(out.String(), -1); len(urls) != 1 {
 			t.Errorf("the UI was offered %d times, want once per deploy: %q", len(urls), out.String())
 		}
 		mu.Lock()
@@ -494,7 +495,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 	})
 
 	t.Run("returning with a cell still missing is refused, and abandoning fails the deploy once", func(t *testing.T) {
-		root := clitest.SetUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true},{"key":"DATABASE_URL","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+		root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true},{"key":"DATABASE_URL","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		problemsFile(t, `[{"key":"STRIPE_API_KEY","folder":"","kind":"KIND_MISSING"},{"key":"DATABASE_URL","folder":"","kind":"KIND_MISSING"}]`)
 		deps := clitest.NewDeps()
 		terminalStdin(&deps)
@@ -512,7 +513,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 			done <- runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 		}()
 
-		address, token := awaitVarsUI(t, &out, 1)
+		address, token := awaitEditorURL(t, &out, 1)
 		if first := out.String(); !strings.Contains(first, "STRIPE_API_KEY") || !strings.Contains(first, "DATABASE_URL") {
 			t.Fatalf("stdout = %q, want the first refusal to name both cells", first)
 		}
@@ -561,7 +562,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 		if !strings.Contains(tail, "DATABASE_URL") || !strings.Contains(tail, "closed before the matrix was complete") {
 			t.Errorf("output after abandoning = %q, want the missing cell and the abandonment named", tail)
 		}
-		if urls := varsUIURL.FindAllString(out.String(), -1); len(urls) != 1 {
+		if urls := editorURL.FindAllString(out.String(), -1); len(urls) != 1 {
 			t.Errorf("the UI was offered %d times, want once per deploy", len(urls))
 		}
 		mu.Lock()
@@ -587,7 +588,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 			{name: cmddeps.NoBrowserEnvVar + "=anything", terminal: true, opts: deployOptions{yes: true}, env: "true"},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
-				root := clitest.SetUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+				root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 				t.Setenv("OCEL_TEST_ENV_PROBLEMS", missingStripeKey)
 				t.Setenv(cmddeps.NoBrowserEnvVar, tc.env)
 				deps := clitest.NewDeps()
@@ -613,11 +614,11 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 						t.Errorf("stdout = %q, want the refusal to list the missing variable (%q)", stdout.String(), want)
 					}
 				}
-				if varsUIURL.MatchString(stdout.String()) {
+				if editorURL.MatchString(stdout.String()) {
 					t.Errorf("stdout = %q, want no variables UI opened", stdout.String())
 				}
 				if built {
-					t.Error("the app was built, want the gate to refuse before any build runs")
+					t.Error("the app was built, want the declarations to refuse before any build runs")
 				}
 				mu.Lock()
 				defer mu.Unlock()
@@ -629,9 +630,9 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 	})
 }
 
-func TestGateRecoveryOnPreviewUp(t *testing.T) {
-	t.Run("a gate refusal in a terminal opens the UI and resumes", func(t *testing.T) {
-		root := clitest.SetUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+func TestAPreviewMissingVariablesOpensTheEditorAndResumesOnceTheyAreSet(t *testing.T) {
+	t.Run("a declarations refusal in a terminal opens the UI and resumes", func(t *testing.T) {
+		root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		problems := problemsFile(t, missingStripeKey)
 		deps := clitest.NewDeps()
@@ -650,8 +651,8 @@ func TestGateRecoveryOnPreviewUp(t *testing.T) {
 			done <- runPreviewUp(context.Background(), deps, root, previewUpOptions{name: "staging"}, &out, &stderr, strings.NewReader(""))
 		}()
 
-		address, token := awaitVarsUI(t, &out, 1)
-		if got := varsUITier(t, address, token); got != "preview" {
+		address, token := awaitEditorURL(t, &out, 1)
+		if got := editorTier(t, address, token); got != "preview" {
 			t.Errorf("bootstrap = %q, want the preview's own", got)
 		}
 		setCell(t, address, token, "STRIPE_API_KEY", "sk_live_filled_in")
@@ -681,7 +682,7 @@ func TestGateRecoveryOnPreviewUp(t *testing.T) {
 			{name: "no terminal with --yes", opts: previewUpOptions{name: "staging", yes: true}},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
-				root := clitest.SetUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+				root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 				t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 				t.Setenv("OCEL_TEST_ENV_PROBLEMS", missingStripeKey)
 				deps := clitest.NewDeps()
@@ -702,11 +703,11 @@ func TestGateRecoveryOnPreviewUp(t *testing.T) {
 				if err == nil {
 					t.Fatal("runPreviewUp err = nil, want the hard refusal kept")
 				}
-				if varsUIURL.MatchString(stdout.String()) {
+				if editorURL.MatchString(stdout.String()) {
 					t.Errorf("stdout = %q, want no variables UI opened", stdout.String())
 				}
 				if built {
-					t.Error("the app was built, want the gate to refuse before any build runs")
+					t.Error("the app was built, want the declarations to refuse before any build runs")
 				}
 				mu.Lock()
 				defer mu.Unlock()
@@ -729,7 +730,7 @@ func TestAbandonedRefusal(t *testing.T) {
 		}}
 		var err error = &abandonedRefusal{refusal: refusal}
 
-		if !errors.Is(err, varsui.ErrAbandoned) {
+		if !errors.Is(err, variableeditor.ErrAbandoned) {
 			t.Error("errors.Is(err, ErrAbandoned) = false, want an abandonment the caller can match")
 		}
 		var got *variables.MissingError

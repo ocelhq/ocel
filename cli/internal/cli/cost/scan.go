@@ -19,13 +19,13 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
-	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/manifestwire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/variables"
+	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -225,8 +225,8 @@ func (unread) Reveal(context.Context, []variables.Coordinate) (map[variables.Coo
 const unbuiltDigest = "0000000000000000000000000000000000000000000000000000000000000000"
 
 func scanManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, env *environmentv1.Environment, out io.Writer) (*contractv1.Manifest, []string, error) {
-	gate := variables.NewDeclarations(unread{}, envwire.Scope(cfg, env.GetTier() == environmentv1.Tier_TIER_PREVIEW, ""))
-	resources, err := deps.CollectDeclarations(ctx, cfg, gate, out, out)
+	declarations := variables.NewDeclarations(unread{}, variablescope.Of(cfg, env.GetTier(), ""))
+	resources, err := deps.CollectDeclarations(ctx, cfg, declarations, out, out)
 	if err != nil {
 		return nil, nil, err
 	}

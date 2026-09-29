@@ -1,4 +1,4 @@
-package varsui_test
+package variableeditor_test
 
 import (
 	"context"
@@ -7,22 +7,22 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/varsui"
+	"github.com/ocelhq/ocel/cli/internal/variableeditor"
 )
 
-const absence = 50 * time.Millisecond
+const abandonAfter = 50 * time.Millisecond
 
-func servePresent(t *testing.T) *varsui.Session {
+func serveAbandonedQuickly(t *testing.T) *variableeditor.Session {
 	t.Helper()
 	store := newFakeStore()
-	return serveWith(t, context.Background(), varsui.Options{
-		Gate:    discovered(t, store, def("API_URL")),
-		Store:   store,
-		Absence: absence,
+	return serveWith(t, context.Background(), variableeditor.Options{
+		Declarations: discovered(t, store, def("API_URL")),
+		Values:       store,
+		AbandonAfter: abandonAfter,
 	})
 }
 
-func attend(t *testing.T, s *varsui.Session) context.CancelFunc {
+func openViewer(t *testing.T, s *variableeditor.Session) context.CancelFunc {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	req := newRequest(t, s, http.MethodGet, "/api/presence", nil).WithContext(ctx)
@@ -42,7 +42,7 @@ func attend(t *testing.T, s *varsui.Session) context.CancelFunc {
 	return cancel
 }
 
-func stillOpen(t *testing.T, s *varsui.Session, window time.Duration) {
+func stillOpen(t *testing.T, s *variableeditor.Session, window time.Duration) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), window)
 	defer cancel()
@@ -51,66 +51,66 @@ func stillOpen(t *testing.T, s *varsui.Session, window time.Duration) {
 	}
 }
 
-func abandonedWithin(t *testing.T, s *varsui.Session, bound time.Duration) {
+func abandonedWithin(t *testing.T, s *variableeditor.Session, bound time.Duration) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), bound)
 	defer cancel()
-	if err := s.Wait(ctx); !errors.Is(err, varsui.ErrAbandoned) {
-		t.Fatalf("Wait = %v within %s, want %v", err, bound, varsui.ErrAbandoned)
+	if err := s.Wait(ctx); !errors.Is(err, variableeditor.ErrAbandoned) {
+		t.Fatalf("Wait = %v within %s, want %v", err, bound, variableeditor.ErrAbandoned)
 	}
 }
 
-func TestPresence(t *testing.T) {
+func TestASessionIsAbandonedOnlyOnceEveryPageHasLeftForAWhile(t *testing.T) {
 	t.Parallel()
 
 	t.Run("a page that drops its connection and never returns has abandoned the session", func(t *testing.T) {
 		t.Parallel()
-		s := servePresent(t)
-		leave := attend(t, s)
-		stillOpen(t, s, 3*absence)
+		s := serveAbandonedQuickly(t)
+		leave := openViewer(t, s)
+		stillOpen(t, s, 3*abandonAfter)
 
 		leave()
-		abandonedWithin(t, s, 20*absence)
+		abandonedWithin(t, s, 20*abandonAfter)
 	})
 
 	t.Run("a page sitting idle with its connection open is never treated as gone", func(t *testing.T) {
 		t.Parallel()
-		s := servePresent(t)
-		attend(t, s)
-		stillOpen(t, s, 6*absence)
+		s := serveAbandonedQuickly(t)
+		openViewer(t, s)
+		stillOpen(t, s, 6*abandonAfter)
 	})
 
 	t.Run("a reload that returns inside the grace keeps the session alive", func(t *testing.T) {
 		t.Parallel()
-		s := servePresent(t)
-		leave := attend(t, s)
+		s := serveAbandonedQuickly(t)
+		leave := openViewer(t, s)
 		leave()
-		attend(t, s)
-		stillOpen(t, s, 6*absence)
+		openViewer(t, s)
+		stillOpen(t, s, 6*abandonAfter)
 	})
 
 	t.Run("a second tab keeps the session alive after the first closes", func(t *testing.T) {
 		t.Parallel()
-		s := servePresent(t)
-		first := attend(t, s)
-		attend(t, s)
+		s := serveAbandonedQuickly(t)
+		first := openViewer(t, s)
+		openViewer(t, s)
 		first()
-		stillOpen(t, s, 6*absence)
+		stillOpen(t, s, 6*abandonAfter)
 	})
 
 	t.Run("a session nobody has visited waits for them", func(t *testing.T) {
 		t.Parallel()
-		s := servePresent(t)
-		stillOpen(t, s, 6*absence)
+		s := serveAbandonedQuickly(t)
+		stillOpen(t, s, 6*abandonAfter)
 	})
 
 	t.Run("finishing the session releases the page's connection", func(t *testing.T) {
 		t.Parallel()
-		s := servePresent(t)
-		attend(t, s)
+		s := serveAbandonedQuickly(t)
+		openViewer(t, s)
 		if resp := request(t, s, http.MethodPost, "/api/abandon", nil); resp.StatusCode != http.StatusOK {
 			t.Fatalf("POST /api/abandon = %d", resp.StatusCode)
 		}
-		abandonedWithin(t, s, 20*absence)
+		abandonedWithin(t, s, 20*abandonAfter)
 	})
 }

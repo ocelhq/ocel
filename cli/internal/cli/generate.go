@@ -12,9 +12,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
-	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/variables"
+	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/cli/node"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 )
@@ -47,12 +47,12 @@ func runGenerate(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, std
 		return err
 	}
 
-	gate := variables.NewDeclarations(noValues{}, variables.Scope{Apps: envwire.Apps(cfg)})
-	if _, err := deps.CollectDeclarations(ctx, cfg, gate, stderr, stderr); err != nil {
+	declarations := variables.NewDeclarations(noValues{}, variables.Scope{Apps: variablescope.Apps(cfg)})
+	if _, err := deps.CollectDeclarations(ctx, cfg, declarations, stderr, stderr); err != nil {
 		return err
 	}
 
-	keys, err := clientenv.Declared(gate.Definitions())
+	keys, err := clientenv.Declared(declarations.Definitions())
 	if err != nil {
 		return err
 	}
