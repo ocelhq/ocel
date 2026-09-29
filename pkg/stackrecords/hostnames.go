@@ -88,6 +88,8 @@ type ServeProbe struct {
 	Router router.Kind `json:"router,omitempty"`
 }
 
+func (p ServeProbe) IsAnsweredBy(kind router.Kind) bool { return p.Router != "" && p.Router == kind }
+
 func (s HostnameState) ServedEdge() (edge.Kind, bool) { return s.Edge, s.Probe.OK }
 
 type Wildcard struct {
@@ -109,7 +111,7 @@ func (s EdgeState) Hostnames() []string { return slices.Sorted(maps.Keys(s.Hosts
 
 func (s EdgeState) Ready(hostname string, front edge.Kind, answering router.Kind) bool {
 	host := s.Host(hostname)
-	return host.Probe.OK && host.Edge == front && answering != "" && host.Probe.Router == answering
+	return host.Probe.OK && host.Edge == front && host.Probe.IsAnsweredBy(answering)
 }
 
 func (s *EdgeState) SetHost(hostname string, state HostnameState) {

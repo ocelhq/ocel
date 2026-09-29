@@ -179,8 +179,10 @@ func (s dnsCutover) await(ctx context.Context, hostname string, answering router
 		default:
 			return stackrecords.ServeProbe{At: s.now().Unix(), Router: serving}, err
 		}
-		if serving != "" && serving == answering {
-			return stackrecords.ServeProbe{At: s.now().Unix(), OK: true, Router: serving}, nil
+		probe := stackrecords.ServeProbe{At: s.now().Unix(), Router: serving}
+		if probe.IsAnsweredBy(answering) {
+			probe.OK = true
+			return probe, nil
 		}
 		if !s.now().Add(s.wait).Before(deadline) {
 			break
