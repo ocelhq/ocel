@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"slices"
 	"sync"
 	"time"
 
@@ -174,6 +175,27 @@ func (e *Edge) routerFacts() router.Facts {
 		AnswersHostnames:            true,
 		StopsServingRemovedPointers: true,
 	}
+}
+
+const ClaimKind = "Fake::Claim"
+
+func (r Router) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
+	held := r.edge.heldClaims()
+	var changes []edge.PlanChange
+	for _, hostname := range scope.Hostnames {
+		if slices.Contains(held, hostname) {
+			changes = append(changes, edge.PlanChange{Kind: ClaimKind, Name: hostname, Action: edge.PlanDelete})
+		}
+	}
+	if len(changes) == 0 {
+		return nil
+	}
+	return []edge.PlanGroup{{
+		Kind:    edge.EdgeGroupKind,
+		Name:    edge.OriginGroupName,
+		Action:  edge.PlanDelete,
+		Changes: changes,
+	}}
 }
 
 func (r Router) Reconcile(_ context.Context, spec router.StackSpec, prior router.StackState) (router.Stack, error) {

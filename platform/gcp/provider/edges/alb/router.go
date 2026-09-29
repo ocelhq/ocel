@@ -41,6 +41,10 @@ func (r Router) Open(state router.StackState) (router.Stack, error) {
 	return routerStack{s: s}, nil
 }
 
+func (r Router) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
+	return r.e.ProjectRemovals(scope)
+}
+
 type routerStack struct{ s *stack }
 
 func (r routerStack) State() router.StackState {
