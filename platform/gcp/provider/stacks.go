@@ -96,24 +96,19 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 }
 
 func (p *Provider) RemoveFunctions(ctx context.Context, _ provider.StackRef, functions []provider.Function, progress progress.Progress) error {
-	for _, function := range functions {
-		if function.Physical == "" {
-			continue
-		}
-		if err := p.tearDown(ctx, function.Physical, progress); err != nil {
-			return err
-		}
-	}
-	return nil
+	return p.tearDownAll(ctx, functionRevisions(functions), progress)
 }
 
 func (p *Provider) RemoveFunctionRevisions(ctx context.Context, _ provider.StackRef, functions []provider.Function, progress progress.Progress) error {
+	return p.removeRevisions(ctx, functionRevisions(functions), progress)
+}
+
+func functionRevisions(functions []provider.Function) []serviceRevision {
+	revisions := make([]serviceRevision, 0, len(functions))
 	for _, function := range functions {
-		if err := p.removeRevision(ctx, function.Physical, function.Revision, progress); err != nil {
-			return err
-		}
+		revisions = append(revisions, serviceRevision{service: function.Physical, revision: function.Revision})
 	}
-	return nil
+	return revisions
 }
 
 func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackSpec, progress progress.Progress) ([]provider.AppContainer, error) {
@@ -165,20 +160,41 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 }
 
 func (p *Provider) RemoveContainers(ctx context.Context, _ provider.StackRef, containers []provider.AppContainer, progress progress.Progress) error {
+	return p.tearDownAll(ctx, containerRevisions(containers), progress)
+}
+
+func (p *Provider) RemoveContainerRevisions(ctx context.Context, _ provider.StackRef, containers []provider.AppContainer, progress progress.Progress) error {
+	return p.removeRevisions(ctx, containerRevisions(containers), progress)
+}
+
+func containerRevisions(containers []provider.AppContainer) []serviceRevision {
+	revisions := make([]serviceRevision, 0, len(containers))
 	for _, container := range containers {
-		if container.Physical == "" {
+		revisions = append(revisions, serviceRevision{service: container.Physical, revision: container.Revision})
+	}
+	return revisions
+}
+
+type serviceRevision struct {
+	service  string
+	revision string
+}
+
+func (p *Provider) tearDownAll(ctx context.Context, going []serviceRevision, progress progress.Progress) error {
+	for _, each := range going {
+		if each.service == "" {
 			continue
 		}
-		if err := p.tearDown(ctx, container.Physical, progress); err != nil {
+		if err := p.tearDown(ctx, each.service, progress); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (p *Provider) RemoveContainerRevisions(ctx context.Context, _ provider.StackRef, containers []provider.AppContainer, progress progress.Progress) error {
-	for _, container := range containers {
-		if err := p.removeRevision(ctx, container.Physical, container.Revision, progress); err != nil {
+func (p *Provider) removeRevisions(ctx context.Context, going []serviceRevision, progress progress.Progress) error {
+	for _, each := range going {
+		if err := p.removeRevision(ctx, each.service, each.revision, progress); err != nil {
 			return err
 		}
 	}
