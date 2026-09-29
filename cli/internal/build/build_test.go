@@ -11,30 +11,19 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/build/toolchain"
 	"github.com/ocelhq/ocel/cli/internal/fixturetest"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/node"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/edge"
 )
 
-func lookup(env []string, name string) (string, bool) {
-	value, found := "", false
-	for _, entry := range env {
-		if rest, ok := strings.CutPrefix(entry, name+"="); ok {
-			value, found = rest, true
-		}
-	}
-	return value, found
-}
-
-func writeBuilder(t *testing.T, projectDir string) string {
+func writeBuildScript(t *testing.T, projectDir string) string {
 	t.Helper()
-	if err := os.WriteFile(filepath.Join(projectDir, "package.json"), []byte("{}\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	path := node.BuilderPath(projectDir)
+	path := node.BuildScriptPath(projectDir)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -44,16 +33,12 @@ func writeBuilder(t *testing.T, projectDir string) string {
 	return path
 }
 
-func writePlan(t *testing.T, outDir string, summaries ...functionSummary) {
+func writeFile(t *testing.T, path, body string) {
 	t.Helper()
-	if err := os.MkdirAll(outDir, 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	data, err := json.Marshal(buildPlan{Functions: summaries})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(outDir, buildPlanFileName), data, 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -87,7 +72,7 @@ func assertFunctions(t *testing.T, label string, got, want []manifestbuilder.Fun
 
 func expressFixture(t *testing.T) string {
 	t.Helper()
-	fixtureRoot := repoRelPath(t, "cli", "node", "test", "fixtures", "express-app")
+	fixtureRoot := filepath.Join(fixturetest.RepoDir(t), "frameworks", "node", "build", "test", "fixtures", "express-app")
 	if _, err := os.Stat(fixtureRoot); err != nil {
 		t.Skipf("fixture not available: %v", err)
 	}
@@ -98,142 +83,119 @@ func expressFixture(t *testing.T) string {
 	return fixtureRoot
 }
 
-func repoRelPath(t *testing.T, parts ...string) string {
-	t.Helper()
-	return filepath.Join(append([]string{fixturetest.RepoDir(t)}, parts...)...)
+func nextApp(name, path string) projectconfig.App {
+	return projectconfig.App{Name: name, Path: path, Framework: projectconfig.Framework{Name: appbuild.FrameworkNext}}
+}
+
+func requestOf(got *nodeBuildRequest) nodeRun {
+	return func(_ context.Context, _ string, request []byte, _ Log) error {
+		return json.Unmarshal(request, got)
+	}
 }
 
 func TestBuild(t *testing.T) {
-	t.Run("runs the builder and discovers the functions it wrote", func(t *testing.T) {
+	t.Run("hands each next app to the node build script with what its build needs", func(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
-		builderPath := writeBuilder(t, root)
-		cfg := &projectconfig.Config{
-			Dir: root,
-			Apps: []projectconfig.App{
-				{Name: "api", Path: "apps/api", Entrypoint: "src/server.ts", Framework: projectconfig.Framework{Name: "node"}},
-				{Name: "worker", Path: "apps/worker"},
-			},
-		}
+		scriptPath := writeBuildScript(t, root)
+		web := nextApp("web", "apps/web")
+		web.Folder = "/web"
+		cfg := &projectconfig.Config{Dir: root, Apps: []projectconfig.App{web, nextApp("docs", "apps/docs")}}
 
 		var gotScript string
-		var gotReq builderRequest
-		var gotEnv []string
-		builder := nodeOnly{node: func(_ context.Context, scriptPath string, env []string, request []byte, _ Log) error {
-			gotScript = scriptPath
-			gotEnv = env
-			if err := json.Unmarshal(request, &gotReq); err != nil {
+		var got nodeBuildRequest
+		builder := nodeOnly{node: func(_ context.Context, script string, request []byte, _ Log) error {
+			gotScript = script
+			if err := json.Unmarshal(request, &got); err != nil {
 				return err
 			}
-			writeFuncConfig(t, gotReq.OutDir, "api", "index.func", appbuild.FunctionConfig{Framework: appbuild.Framework{Name: "node"}, Handler: "index.handler", App: "api"})
-			writeFuncConfig(t, gotReq.OutDir, "worker", "index.func", appbuild.FunctionConfig{Framework: appbuild.Framework{Name: "node"}, Handler: "index.handler", App: "worker"})
-			writePlan(t, gotReq.OutDir,
-				functionSummary{Name: "api", Framework: appbuild.Framework{Name: "node"}, Handler: "index.handler", ArtifactPath: filepath.Join("apps", "api", "functions", "index.func"), Strategy: traceStrategy},
-				functionSummary{Name: "worker", Framework: appbuild.Framework{Name: "node"}, Handler: "index.handler", ArtifactPath: filepath.Join("apps", "worker", "functions", "index.func"), Strategy: traceStrategy})
+			for _, app := range got.Apps {
+				writeFuncConfig(t, filepath.Dir(filepath.Dir(app.OutputDir)), app.Name, "index.func",
+					appbuild.FunctionConfig{Framework: appbuild.Framework{Name: "next"}, Handler: "index.handler", App: app.Name})
+			}
 			return nil
 		}}
 
-		if err := builder.Build(context.Background(), cfg, nil, Log{}); err != nil {
+		if err := builder.Build(context.Background(), cfg, map[string]map[string]string{"web": {"POSTHOG_ID": "ph-web"}}, Log{}); err != nil {
 			t.Fatalf("Build: %v", err)
+		}
+
+		if gotScript != scriptPath {
+			t.Errorf("script path = %q, want %q", gotScript, scriptPath)
+		}
+		if len(got.Apps) != 2 {
+			t.Fatalf("request had %d apps, want 2", len(got.Apps))
+		}
+		outputDir := appbuild.ArtifactRoot(root)
+		for i, want := range []nodeAppBuild{
+			{Framework: "next", Name: "web", Cwd: filepath.Join(root, "apps/web"), OutputDir: appbuild.AppArtifactRoot(outputDir, "web"), Folder: "/web", Env: map[string]string{"POSTHOG_ID": "ph-web"}},
+			{Framework: "next", Name: "docs", Cwd: filepath.Join(root, "apps/docs"), OutputDir: appbuild.AppArtifactRoot(outputDir, "docs")},
+		} {
+			app := got.Apps[i]
+			recorded, err := DeploymentID(root, want.Name)
+			if err != nil {
+				t.Fatalf("DeploymentID(%s): %v", want.Name, err)
+			}
+			if app.DeploymentID != recorded {
+				t.Errorf("%s builds under deployment id %q, want its recorded %q", want.Name, app.DeploymentID, recorded)
+			}
+			if app.Framework != want.Framework || app.Name != want.Name || app.Cwd != want.Cwd || app.OutputDir != want.OutputDir || app.Folder != want.Folder || app.Entrypoint != "" || app.FuncDir != "" {
+				t.Errorf("app[%d] = %+v, want %+v", i, app, want)
+			}
+			if app.Env["POSTHOG_ID"] != want.Env["POSTHOG_ID"] {
+				t.Errorf("%s POSTHOG_ID = %q, want %q", want.Name, app.Env["POSTHOG_ID"], want.Env["POSTHOG_ID"])
+			}
+		}
+		if got.Apps[0].DeploymentID == got.Apps[1].DeploymentID {
+			t.Errorf("both apps build under %q, want an id each", got.Apps[0].DeploymentID)
 		}
 
 		fns, err := ReadFunctions(root)
 		if err != nil {
-			t.Fatalf("CollectFunctions: %v", err)
+			t.Fatalf("ReadFunctions: %v", err)
 		}
-
 		assertFunctions(t, "ReadFunctions", fns, []manifestbuilder.Function{
-			{Route: "index", Framework: manifestbuilder.Framework{Name: "node"}, Handler: "index.handler", ArtifactPath: "apps/api/functions/index.func", App: "api"},
-			{Route: "index", Framework: manifestbuilder.Framework{Name: "node"}, Handler: "index.handler", ArtifactPath: "apps/worker/functions/index.func", App: "worker"},
+			{Route: "index", Framework: manifestbuilder.Framework{Name: "next"}, Handler: "index.handler", ArtifactPath: "apps/docs/functions/index.func", App: "docs"},
+			{Route: "index", Framework: manifestbuilder.Framework{Name: "next"}, Handler: "index.handler", ArtifactPath: "apps/web/functions/index.func", App: "web"},
 		})
-
-		if got, want := gotReq.OutDir, filepath.Join(root, constants.ProjectStateDirName, "output"); got != want {
-			t.Errorf("request outDir = %q, want %q", got, want)
-		}
-		if got, want := gotReq.ProjectRoot, root; got != want {
-			t.Errorf("request projectRoot = %q, want %q", got, want)
-		}
-		if len(gotReq.Apps) != 2 {
-			t.Fatalf("request had %d apps, want 2", len(gotReq.Apps))
-		}
-		if got, want := gotReq.Apps[0].Cwd, filepath.Join(root, "apps/api"); got != want {
-			t.Errorf("app[0].cwd = %q, want %q", got, want)
-		}
-		if got, want := gotReq.Apps[0].Entrypoint, "src/server.ts"; got != want {
-			t.Errorf("app[0].entrypoint = %q, want %q", got, want)
-		}
-		if got := gotReq.Apps[0].Framework; got == nil || got.Name != "node" || got.Arch != "" {
-			t.Errorf("app[0].framework = %+v, want the node framework with no arch", got)
-		}
-		if gotReq.Apps[1].Framework != nil {
-			t.Errorf("app[1].framework = %+v, want the key left out when the app declares none", gotReq.Apps[1].Framework)
-		}
-		if gotReq.Apps[1].Entrypoint != "" {
-			t.Errorf("app[1].entrypoint = %q, want empty", gotReq.Apps[1].Entrypoint)
-		}
-
-		if gotScript != builderPath {
-			t.Errorf("script path = %q, want %q", gotScript, builderPath)
-		}
-		if got, _ := lookup(gotEnv, "NEXT_ADAPTER_PATH"); got != node.AdapterPath(root) {
-			t.Errorf("adapter path = %q, want %q", got, node.AdapterPath(root))
-		}
 	})
 
-	t.Run("names the missing builder when none was materialized", func(t *testing.T) {
+	t.Run("names the missing build script when none was materialized", func(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
-		cfg := &projectconfig.Config{
-			Dir:  root,
-			Apps: []projectconfig.App{{Name: "api", Path: "apps/api"}},
-		}
+		cfg := &projectconfig.Config{Dir: root, Apps: []projectconfig.App{nextApp("web", "apps/web")}}
 
 		err := nodeOnly{node: runNode}.Build(context.Background(), cfg, nil, Log{})
 		if err == nil {
-			t.Fatal("Build succeeded with no materialized builder, want error")
+			t.Fatal("Build succeeded with no materialized build script, want error")
 		}
-		if !strings.Contains(err.Error(), node.BuilderPath(root)) {
-			t.Errorf("error = %q, want it to name the missing builder path", err)
+		if !strings.Contains(err.Error(), node.BuildScriptPath(root)) {
+			t.Errorf("error = %q, want it to name the missing build script", err)
 		}
 	})
 
-	t.Run("with no apps runs the builder for detection and resets output", func(t *testing.T) {
+	t.Run("with no apps and no package.json at the root resets output and builds nothing", func(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
-		writeBuilder(t, root)
-		writeFuncConfig(t, filepath.Join(root, constants.ProjectStateDirName, "output"), "stale", "index.func",
+		writeFuncConfig(t, appbuild.ArtifactRoot(root), "stale", "index.func",
 			appbuild.FunctionConfig{Framework: appbuild.Framework{Name: "node"}, Handler: "h", App: "stale"})
 
-		var gotReq builderRequest
-		builder := nodeOnly{node: func(_ context.Context, _ string, _ []string, request []byte, _ Log) error {
-			if err := json.Unmarshal(request, &gotReq); err != nil {
-				return err
-			}
-			writePlan(t, gotReq.OutDir)
+		ran := false
+		builder := nodeOnly{node: func(context.Context, string, []byte, Log) error {
+			ran = true
 			return nil
 		}}
-
 		if err := builder.Build(context.Background(), &projectconfig.Config{Dir: root}, nil, Log{}); err != nil {
 			t.Fatalf("Build: %v", err)
 		}
 
-		fns, err := ReadFunctions(root)
-		if err != nil {
-			t.Fatalf("CollectFunctions: %v", err)
+		if ran {
+			t.Error("the node build script ran for a project with nothing to build")
 		}
-		if fns != nil {
-			t.Errorf("CollectFunctions returned %+v, want nil", fns)
-		}
-		if len(gotReq.Apps) != 0 {
-			t.Errorf("request apps = %+v, want empty", gotReq.Apps)
-		}
-		if got, want := gotReq.ProjectRoot, root; got != want {
-			t.Errorf("request projectRoot = %q, want %q", got, want)
-		}
-		if _, err := os.Stat(filepath.Join(root, constants.ProjectStateDirName, "output", "apps", "stale")); !errors.Is(err, os.ErrNotExist) {
+		if _, err := os.Stat(filepath.Join(appbuild.AppsRoot(appbuild.ArtifactRoot(root)), "stale")); !errors.Is(err, os.ErrNotExist) {
 			t.Errorf("stale .func survived the reset (stat err = %v)", err)
 		}
 	})
@@ -242,350 +204,134 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
-		writeBuilder(t, root)
-		cfg := &projectconfig.Config{
-			Dir:  root,
-			Apps: []projectconfig.App{{Name: "api", Path: "apps/api"}},
-		}
+		writeBuildScript(t, root)
+		cfg := &projectconfig.Config{Dir: root, Apps: []projectconfig.App{nextApp("web", "apps/web")}}
 
-		builder := nodeOnly{node: func(_ context.Context, _ string, _ []string, _ []byte, _ Log) error {
-			return errors.New("node-builder failed: no entrypoint resolved for app \"api\"")
+		builder := nodeOnly{node: func(context.Context, string, []byte, Log) error {
+			return errors.New("node build failed: web has no build script")
 		}}
 
 		err := builder.Build(context.Background(), cfg, nil, Log{})
-		if err == nil {
-			t.Fatal("Build succeeded, want error")
-		}
-		if !strings.Contains(err.Error(), "no entrypoint resolved") {
-			t.Errorf("error = %q, want it to surface the node-builder failure", err)
+		if err == nil || !strings.Contains(err.Error(), "no build script") {
+			t.Errorf("error = %v, want it to surface the node build's failure", err)
 		}
 	})
 
-	t.Run("exports resolved values into the build environment", func(t *testing.T) {
+	t.Run("an unconfigured next project is one app named for its directory, built with the root's values", func(t *testing.T) {
 		t.Parallel()
 
-		root := t.TempDir()
-		writeBuilder(t, root)
+		root := filepath.Join(t.TempDir(), "My Shop!")
+		writeFile(t, filepath.Join(root, "package.json"), `{"dependencies":{"next":"16"}}`)
+		writeBuildScript(t, root)
 
-		var got []string
-		builder := nodeOnly{node: func(_ context.Context, _ string, env []string, _ []byte, _ Log) error {
-			got = env
-			writePlan(t, filepath.Join(root, constants.ProjectStateDirName, "output"))
-			return nil
-		}}
-
-		vars := map[string]map[string]string{"": {"POSTHOG_ID": "ph-123"}}
-		if err := builder.Build(context.Background(), &projectconfig.Config{Dir: root}, vars, Log{}); err != nil {
-			t.Fatalf("Build: %v", err)
-		}
-		if value, _ := lookup(got, "POSTHOG_ID"); value != "ph-123" {
-			t.Fatalf("build environment POSTHOG_ID = %q, want the resolved value", value)
-		}
-	})
-
-	t.Run("sends each app its own values and folder", func(t *testing.T) {
-		t.Parallel()
-
-		root := t.TempDir()
-		writeBuilder(t, root)
-
-		var got builderRequest
-		builder := nodeOnly{node: func(_ context.Context, _ string, _ []string, request []byte, _ Log) error {
-			writePlan(t, filepath.Join(root, constants.ProjectStateDirName, "output"))
-			return json.Unmarshal(request, &got)
-		}}
-
-		cfg := &projectconfig.Config{
-			Dir: root,
-			Apps: []projectconfig.App{
-				{Name: "storefront", Path: "apps/storefront", Folder: "/storefront"},
-				{Name: "admin", Path: "apps/admin", Folder: "/admin"},
-			},
-		}
-		vars := map[string]map[string]string{
-			"storefront": {"POSTHOG_ID": "ph-store"},
-			"admin":      {"POSTHOG_ID": "ph-admin"},
-		}
-		if err := builder.Build(context.Background(), cfg, vars, Log{}); err != nil {
+		var got nodeBuildRequest
+		vars := map[string]map[string]string{rootAppEnv: {"POSTHOG_ID": "ph-123"}}
+		if err := (nodeOnly{node: requestOf(&got)}).Build(context.Background(), &projectconfig.Config{Dir: root}, vars, Log{}); err != nil {
 			t.Fatalf("Build: %v", err)
 		}
 
-		if len(got.Apps) != 2 {
-			t.Fatalf("request included %d apps, want both", len(got.Apps))
+		if len(got.Apps) != 1 {
+			t.Fatalf("request had %d apps, want the project root alone", len(got.Apps))
 		}
-		for _, app := range got.Apps {
-			if app.Env["POSTHOG_ID"] != vars[app.Name]["POSTHOG_ID"] {
-				t.Errorf("%s POSTHOG_ID = %q, want %q", app.Name, app.Env["POSTHOG_ID"], vars[app.Name]["POSTHOG_ID"])
-			}
+		app := got.Apps[0]
+		if app.Name != "My-Shop" || app.Framework != "next" || app.Cwd != root {
+			t.Errorf("app = %+v, want next app My-Shop at %s", app, root)
 		}
-	})
-
-	t.Run("with two folders each build states its own binding", func(t *testing.T) {
-		t.Parallel()
-
-		root := t.TempDir()
-		writeBuilder(t, root)
-
-		var got builderRequest
-		builder := nodeOnly{node: func(_ context.Context, _ string, _ []string, request []byte, _ Log) error {
-			writePlan(t, filepath.Join(root, constants.ProjectStateDirName, "output"))
-			return json.Unmarshal(request, &got)
-		}}
-
-		cfg := &projectconfig.Config{
-			Dir: root,
-			Apps: []projectconfig.App{
-				{Name: "web", Path: "apps/web", Folder: "/web"},
-				{Name: "admin", Path: "apps/admin", Folder: "/admin"},
-			},
+		if app.Env["POSTHOG_ID"] != "ph-123" {
+			t.Errorf("POSTHOG_ID = %q, want the resolved root value", app.Env["POSTHOG_ID"])
 		}
-		if err := builder.Build(context.Background(), cfg, nil, Log{}); err != nil {
-			t.Fatalf("Build: %v", err)
-		}
-
-		folders := make(map[string]string, len(got.Apps))
-		for _, app := range got.Apps {
-			folders[app.Name] = app.Folder
-		}
-		if folders["web"] != "/web" || folders["admin"] != "/admin" {
-			t.Errorf("folders = %v, want each app the binding it declares", folders)
+		if recorded, err := DeploymentID(root, "My-Shop"); err != nil || recorded != app.DeploymentID {
+			t.Errorf("DeploymentID = %q, %v, want the id the build ran under, %q", recorded, err, app.DeploymentID)
 		}
 	})
 
 	t.Run("refuses a resolved value the build environment owns", func(t *testing.T) {
 		t.Parallel()
 
-		for _, name := range []string{"PATH", "NEXT_ADAPTER_PATH", constants.AppFolderEnvName} {
+		for _, name := range []string{"PATH", constants.AppFolderEnvName, constants.PhaseEnvName} {
 			t.Run(name, func(t *testing.T) {
 				t.Parallel()
 
 				root := t.TempDir()
-				writeBuilder(t, root)
-
+				writeBuildScript(t, root)
 				ran := false
-				builder := nodeOnly{node: func(_ context.Context, _ string, _ []string, _ []byte, _ Log) error {
+				builder := nodeOnly{node: func(context.Context, string, []byte, Log) error {
 					ran = true
 					return nil
 				}}
 
-				cfg := &projectconfig.Config{
-					Dir:  root,
-					Apps: []projectconfig.App{{Name: "web", Path: "apps/web"}},
-				}
-				vars := map[string]map[string]string{"web": {name: "hijacked"}}
-				err := builder.Build(context.Background(), cfg, vars, Log{})
-				if err == nil {
-					t.Fatalf("Build succeeded with a variable declared as %s, want a refusal", name)
-				}
-				if !strings.Contains(err.Error(), name) {
-					t.Errorf("error = %q, want it to name %q", err, name)
+				cfg := &projectconfig.Config{Dir: root, Apps: []projectconfig.App{nextApp("web", "apps/web")}}
+				err := builder.Build(context.Background(), cfg, map[string]map[string]string{"web": {name: "hijacked"}}, Log{})
+				if err == nil || !strings.Contains(err.Error(), name) {
+					t.Errorf("Build err = %v, want a refusal naming %q", err, name)
 				}
 				if ran {
-					t.Error("the builder ran, want the refusal before anything is built")
+					t.Error("the node build script ran, want the refusal before anything is built")
 				}
 			})
 		}
 	})
 
-	t.Run("the builder itself is bound to the project root", func(t *testing.T) {
-		root := t.TempDir()
-		writeBuilder(t, root)
-		t.Setenv(constants.AppFolderEnvName, "/stale")
-
-		var got []string
-		builder := nodeOnly{node: func(_ context.Context, _ string, env []string, _ []byte, _ Log) error {
-			got = env
-			writePlan(t, filepath.Join(root, constants.ProjectStateDirName, "output"))
-			return nil
-		}}
-
-		cfg := &projectconfig.Config{
-			Dir:  root,
-			Apps: []projectconfig.App{{Name: "web", Path: "apps/web", Folder: "/web"}},
-		}
-		if err := builder.Build(context.Background(), cfg, nil, Log{}); err != nil {
-			t.Fatalf("Build: %v", err)
-		}
-
-		value, found := lookup(got, constants.AppFolderEnvName)
-		if !found {
-			t.Fatal("no binding was stated, so a stale one from the parent environment still answers")
-		}
-		if value != "" {
-			t.Errorf("%s = %q, want the project root", constants.AppFolderEnvName, value)
-		}
-	})
-
-	t.Run("a planned bundle is produced from Go", func(t *testing.T) {
+	t.Run("a node app is bundled here, without the node build script", func(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
-		writeBuilder(t, root)
-		entrypoint := filepath.Join(root, "apps", "api", "src", "server.js")
-		if err := os.MkdirAll(filepath.Dir(entrypoint), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(entrypoint, []byte("export default { fetch: () => new Response('hi') };\n"), 0o644); err != nil {
-			t.Fatal(err)
-		}
+		writeFile(t, filepath.Join(root, "apps", "api", "src", "server.js"), "export default { fetch: () => new Response('hi') };\n")
 
-		builder := nodeOnly{node: func(_ context.Context, _ string, _ []string, _ []byte, _ Log) error {
-			writePlan(t, filepath.Join(root, constants.ProjectStateDirName, "output"), functionSummary{
-				Name:         "api",
-				Framework:    appbuild.Framework{Name: "node"},
-				Handler:      "index.mjs",
-				ArtifactPath: filepath.Join("apps", "api", "functions", "index.func"),
-				Strategy:     bundleStrategy,
-				Entrypoint:   entrypoint,
-			})
+		ran := false
+		builder := nodeOnly{node: func(context.Context, string, []byte, Log) error {
+			ran = true
 			return nil
 		}}
-
-		cfg := &projectconfig.Config{
-			Dir:  root,
-			Apps: []projectconfig.App{{Name: "api", Path: "apps/api"}},
-		}
+		cfg := &projectconfig.Config{Dir: root, Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Framework: projectconfig.Framework{Name: "node"}}}}
 		if err := builder.Build(context.Background(), cfg, nil, Log{}); err != nil {
 			t.Fatalf("Build: %v", err)
 		}
 
+		if ran {
+			t.Error("the node build script ran for an app bundled here")
+		}
 		fns, err := ReadFunctions(root)
 		if err != nil {
-			t.Fatalf("CollectFunctions: %v", err)
+			t.Fatalf("ReadFunctions: %v", err)
 		}
 		assertFunctions(t, "ReadFunctions", fns, []manifestbuilder.Function{
 			{Route: "index", Framework: manifestbuilder.Framework{Name: "node"}, Handler: "index.mjs", ArtifactPath: "apps/api/functions/index.func", RouteID: "/", App: "api"},
 		})
-
-		bundle := filepath.Join(root, constants.ProjectStateDirName, "output", "apps", "api", functionsDirName, "index.func", "index.mjs")
-		if _, err := os.Stat(bundle); err != nil {
-			t.Errorf("stat %s: %v (the plan asked Go to bundle)", bundle, err)
-		}
 		if got, err := BuildID(root, "api"); err != nil || len(got) != 16 {
 			t.Errorf("BuildID = %q, %v, want the artifact hash the bundle wrote", got, err)
 		}
 	})
 
-	t.Run("a planned trace leaves the tree the node builder wrote alone", func(t *testing.T) {
+	t.Run("a node app with no entrypoint names the files it looked for", func(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
-		writeBuilder(t, root)
-
-		builder := nodeOnly{node: func(_ context.Context, _ string, _ []string, _ []byte, _ Log) error {
-			outDir := filepath.Join(root, constants.ProjectStateDirName, "output")
-			writeFuncConfig(t, outDir, "web", "index.func",
-				appbuild.FunctionConfig{Framework: appbuild.Framework{Name: "next"}, Handler: "server.js", App: "web"})
-			writePlan(t, outDir, functionSummary{
-				Name:         "web",
-				Framework:    appbuild.Framework{Name: "next"},
-				Handler:      "server.js",
-				ArtifactPath: filepath.Join("apps", "web", "functions", "index.func"),
-				Strategy:     traceStrategy,
-			})
-			return nil
-		}}
-
-		cfg := &projectconfig.Config{
-			Dir:  root,
-			Apps: []projectconfig.App{{Name: "web", Path: "apps/web"}},
-		}
-		if err := builder.Build(context.Background(), cfg, nil, Log{}); err != nil {
-			t.Fatalf("Build: %v", err)
-		}
-
-		funcDir := filepath.Join(root, constants.ProjectStateDirName, "output", "apps", "web", functionsDirName, "index.func")
-		entries, err := os.ReadDir(funcDir)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(entries) != 1 || entries[0].Name() != appbuild.FunctionConfigFile {
-			t.Errorf("function directory contains %d entries, want only the %s the node builder wrote", len(entries), appbuild.FunctionConfigFile)
+		cfg := &projectconfig.Config{Dir: root, Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Framework: projectconfig.Framework{Name: "node"}}}}
+		err := nodeOnly{node: runNode}.Build(context.Background(), cfg, nil, Log{})
+		if err == nil || !strings.Contains(err.Error(), "src/server.ts") || !strings.Contains(err.Error(), `"api"`) {
+			t.Errorf("Build err = %v, want the app and the entrypoints tried named", err)
 		}
 	})
 
-	plans := []struct {
-		name  string
-		plan  func(t *testing.T, outDir string)
-		wants []string
-	}{
-		{
-			name:  "no plan at all",
-			plan:  func(_ *testing.T, _ string) {},
-			wants: []string{buildPlanFileName},
-		},
-		{
-			name: "an unreadable plan",
-			plan: func(t *testing.T, outDir string) {
-				if err := os.WriteFile(filepath.Join(outDir, buildPlanFileName), []byte("not json"), 0o644); err != nil {
-					t.Fatal(err)
-				}
-			},
-			wants: []string{"invalid build plan"},
-		},
-		{
-			name: "a strategy this build does not know",
-			plan: func(t *testing.T, outDir string) {
-				writePlan(t, outDir, functionSummary{Name: "api", Framework: appbuild.Framework{Name: "node"}, ArtifactPath: "apps/api/functions/index.func", Strategy: "teleport"})
-			},
-			wants: []string{"teleport"},
-		},
-		{
-			name: "a bundle with no entrypoint",
-			plan: func(t *testing.T, outDir string) {
-				writePlan(t, outDir, functionSummary{Name: "api", Framework: appbuild.Framework{Name: "node"}, ArtifactPath: "apps/api/functions/index.func", Strategy: bundleStrategy})
-			},
-			wants: []string{"entrypoint"},
-		},
-		{
-			name: "a bundle aimed outside the app layout",
-			plan: func(t *testing.T, outDir string) {
-				writePlan(t, outDir, functionSummary{Name: "api", Framework: appbuild.Framework{Name: "node"}, ArtifactPath: "elsewhere/index.func", Strategy: bundleStrategy, Entrypoint: filepath.Join(outDir, "server.js")})
-			},
-			wants: []string{"elsewhere"},
-		},
-	}
-	for _, tt := range plans {
-		t.Run(tt.name+" fails the build", func(t *testing.T) {
-			t.Parallel()
+	t.Run("an app that states no framework is refused", func(t *testing.T) {
+		t.Parallel()
 
-			root := t.TempDir()
-			writeBuilder(t, root)
-			builder := nodeOnly{node: func(_ context.Context, _ string, _ []string, _ []byte, _ Log) error {
-				outDir := filepath.Join(root, constants.ProjectStateDirName, "output")
-				if err := os.MkdirAll(outDir, 0o755); err != nil {
-					return err
-				}
-				tt.plan(t, outDir)
-				return nil
-			}}
+		root := t.TempDir()
+		cfg := &projectconfig.Config{Dir: root, Apps: []projectconfig.App{{Name: "api", Path: "apps/api"}}}
+		err := nodeOnly{node: runNode}.Build(context.Background(), cfg, nil, Log{})
+		if err == nil || !strings.Contains(err.Error(), `"framework"`) {
+			t.Errorf("Build err = %v, want the app told to state its framework", err)
+		}
+	})
 
-			cfg := &projectconfig.Config{
-				Dir:  root,
-				Apps: []projectconfig.App{{Name: "api", Path: "apps/api"}},
-			}
-			err := builder.Build(context.Background(), cfg, nil, Log{})
-			if err == nil {
-				t.Fatal("Build succeeded, want the unusable build plan to fail the build")
-			}
-			for _, want := range tt.wants {
-				if !strings.Contains(err.Error(), want) {
-					t.Errorf("error = %q, want it to name %q", err, want)
-				}
-			}
-		})
-	}
-
-	t.Run("over real node, builds the fixture app it is configured with", func(t *testing.T) {
+	t.Run("over real node, bundles the fixture app it is configured with", func(t *testing.T) {
 		if testing.Short() {
-			t.Skip("integration test: spawns real node over the builder")
+			t.Skip("integration test: bundles a real app")
 		}
 
 		fixtureRoot := expressFixture(t)
-		cfg := &projectconfig.Config{
-			Dir:  fixtureRoot,
-			Apps: []projectconfig.App{{Name: "api", Path: "."}},
-		}
+		cfg := &projectconfig.Config{Dir: fixtureRoot, Apps: []projectconfig.App{{Name: "api", Path: ".", Framework: projectconfig.Framework{Name: "node"}}}}
 
 		var stderr bytes.Buffer
 		if err := (nodeOnly{node: runNode}).Build(context.Background(), cfg, nil, Log{Shared: &stderr}); err != nil {
@@ -594,30 +340,16 @@ func TestBuild(t *testing.T) {
 
 		fns, err := ReadFunctions(fixtureRoot)
 		if err != nil {
-			t.Fatalf("CollectFunctions: %v", err)
+			t.Fatalf("ReadFunctions: %v", err)
 		}
-		if len(fns) != 1 {
-			t.Fatalf("CollectFunctions returned %d functions, want 1: %+v", len(fns), fns)
-		}
-		want := manifestbuilder.Function{
-			Route:        "index",
-			Framework:    manifestbuilder.Framework{Name: "node"},
-			Handler:      "index.mjs",
-			ArtifactPath: "apps/api/functions/index.func",
-			RouteID:      "/",
-			App:          "api",
-		}
-		if fns[0] != want {
-			t.Errorf("function = %+v, want %+v", fns[0], want)
-		}
-		if got, err := BuildID(fixtureRoot, "api"); err != nil || len(got) != 16 {
-			t.Errorf("BuildID = %q, %v, want the artifact hash the build wrote", got, err)
-		}
+		assertFunctions(t, "ReadFunctions", fns, []manifestbuilder.Function{
+			{Route: "index", Framework: manifestbuilder.Framework{Name: "node"}, Handler: "index.mjs", ArtifactPath: "apps/api/functions/index.func", RouteID: "/", App: "api"},
+		})
 	})
 
-	t.Run("over real node, detects a single app from an unconfigured project", func(t *testing.T) {
+	t.Run("over real node, an unconfigured project is one node app named for its directory", func(t *testing.T) {
 		if testing.Short() {
-			t.Skip("integration test: spawns real node over the builder")
+			t.Skip("integration test: bundles a real app")
 		}
 
 		fixtureRoot := expressFixture(t)
@@ -629,23 +361,112 @@ func TestBuild(t *testing.T) {
 
 		fns, err := ReadFunctions(fixtureRoot)
 		if err != nil {
-			t.Fatalf("CollectFunctions: %v", err)
+			t.Fatalf("ReadFunctions: %v", err)
 		}
-		if len(fns) != 1 {
-			t.Fatalf("CollectFunctions returned %d functions, want 1: %+v", len(fns), fns)
+		if len(fns) != 1 || fns[0].App != "express-app" || fns[0].Framework.Name != "node" {
+			t.Fatalf("ReadFunctions = %+v, want one node function of app express-app", fns)
 		}
-		if fns[0].Route != "index" || fns[0].Framework.Name != "node" {
-			t.Errorf("detected function = %+v, want route index framework node", fns[0])
+		if id, err := DeploymentID(fixtureRoot, "express-app"); err != nil || len(id) != 32 {
+			t.Errorf("DeploymentID = %q, %v, want the id the build minted", id, err)
 		}
-		if fns[0].App != "express-app" {
-			t.Errorf("detected function app = %q, want %q", fns[0].App, "express-app")
+	})
+}
+
+func TestBuildTracesANodeAppWhenTracingIsPreferred(t *testing.T) {
+	t.Setenv(toolchain.PreferTracingEnv, "1")
+
+	t.Run("the node build script copies the sources, and the artifact is described here", func(t *testing.T) {
+		root := t.TempDir()
+		writeBuildScript(t, root)
+		source := filepath.Join(root, "apps", "api")
+		writeFile(t, filepath.Join(source, "src", "server.ts"), "export default {};\n")
+
+		var got nodeBuildRequest
+		builder := nodeOnly{node: func(_ context.Context, _ string, request []byte, _ Log) error {
+			if err := json.Unmarshal(request, &got); err != nil {
+				return err
+			}
+			writeFile(t, filepath.Join(got.Apps[0].FuncDir, "src", "server.js"), "export default {};\n")
+			return nil
+		}}
+		cfg := &projectconfig.Config{Dir: root, Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Framework: projectconfig.Framework{Name: "node", Arch: "arm64"}}}}
+		if err := builder.Build(context.Background(), cfg, nil, Log{}); err != nil {
+			t.Fatalf("Build: %v", err)
 		}
-		id, err := DeploymentID(fixtureRoot, fns[0].App)
+
+		funcDir := filepath.Join(appbuild.AppArtifactRoot(appbuild.ArtifactRoot(root), "api"), functionsDirName, entryFuncDirName)
+		want := nodeAppBuild{Framework: "node", Name: "api", Cwd: source, Entrypoint: filepath.Join(source, "src", "server.ts"), FuncDir: funcDir}
+		if len(got.Apps) != 1 || got.Apps[0].Framework != want.Framework || got.Apps[0].Name != want.Name || got.Apps[0].Cwd != want.Cwd || got.Apps[0].Entrypoint != want.Entrypoint || got.Apps[0].FuncDir != want.FuncDir {
+			t.Fatalf("request apps = %+v, want [%+v]", got.Apps, want)
+		}
+
+		fns, err := ReadFunctions(root)
 		if err != nil {
-			t.Fatalf("DeploymentID(%q): %v", fns[0].App, err)
+			t.Fatalf("ReadFunctions: %v", err)
 		}
-		if len(id) != 32 {
-			t.Errorf("DeploymentID = %q, want the id the build minted", id)
+		assertFunctions(t, "ReadFunctions", fns, []manifestbuilder.Function{
+			{Route: "index", Framework: manifestbuilder.Framework{Name: "node", Arch: "arm64"}, Handler: "src/server.js", ArtifactPath: "apps/api/functions/index.func", RouteID: "/", App: "api"},
+		})
+		desc, found, err := appbuild.ReadServeDescriptor(appbuild.ArtifactRoot(root), "api")
+		if err != nil || !found {
+			t.Fatalf("ReadServeDescriptor = %v, %v", found, err)
+		}
+		if desc.Framework != "node" || len(desc.BuildID) != 16 || desc.Entry != "/" || desc.Needs == nil || desc.EdgeRouting {
+			t.Errorf("serve descriptor = %+v, want a node app's descriptor", desc)
+		}
+		if _, err := os.Stat(filepath.Join(funcDir, edge.ServeDescriptorFile)); err == nil {
+			t.Error("the serve descriptor landed inside the function directory")
+		}
+	})
+
+	t.Run("an entrypoint outside the app's own sources is refused before the node build script runs", func(t *testing.T) {
+		root := t.TempDir()
+		writeBuildScript(t, root)
+		writeFile(t, filepath.Join(root, "shared", "server.js"), "export default {};\n")
+
+		ran := false
+		builder := nodeOnly{node: func(context.Context, string, []byte, Log) error {
+			ran = true
+			return nil
+		}}
+		cfg := &projectconfig.Config{Dir: root, Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Entrypoint: "../../shared/server.js", Framework: projectconfig.Framework{Name: "node"}}}}
+		err := builder.Build(context.Background(), cfg, nil, Log{})
+		if err == nil || !strings.Contains(err.Error(), toolchain.PreferTracingEnv) {
+			t.Errorf("Build err = %v, want a refusal that names how to bundle instead", err)
+		}
+		if ran {
+			t.Error("the node build script ran for an entrypoint it cannot serve")
+		}
+	})
+
+	t.Run("over real node, traces the fixture app into its own module tree", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("integration test: spawns real node over the build script")
+		}
+
+		fixtureRoot := expressFixture(t)
+		cfg := &projectconfig.Config{Dir: fixtureRoot, Apps: []projectconfig.App{{Name: "api", Path: ".", Framework: projectconfig.Framework{Name: "node"}}}}
+
+		var stderr bytes.Buffer
+		if err := (nodeOnly{node: runNode}).Build(context.Background(), cfg, nil, Log{Shared: &stderr}); err != nil {
+			t.Fatalf("Build: %v; stderr=%s", err, stderr.String())
+		}
+
+		fns, err := ReadFunctions(fixtureRoot)
+		if err != nil {
+			t.Fatalf("ReadFunctions: %v", err)
+		}
+		assertFunctions(t, "ReadFunctions", fns, []manifestbuilder.Function{
+			{Route: "index", Framework: manifestbuilder.Framework{Name: "node"}, Handler: "src/server.js", ArtifactPath: "apps/api/functions/index.func", RouteID: "/", App: "api"},
+		})
+		funcDir := filepath.Join(appbuild.AppArtifactRoot(appbuild.ArtifactRoot(fixtureRoot), "api"), functionsDirName, entryFuncDirName)
+		for _, rel := range []string{"src/server.js", "node_modules/express/package.json"} {
+			if _, err := os.Stat(filepath.Join(funcDir, filepath.FromSlash(rel))); err != nil {
+				t.Errorf("traced artifact lacks %s: %v", rel, err)
+			}
+		}
+		if got, err := BuildID(fixtureRoot, "api"); err != nil || len(got) != 16 {
+			t.Errorf("BuildID = %q, %v, want the artifact hash", got, err)
 		}
 	})
 }
@@ -660,9 +481,9 @@ func TestBuildLearnsTheEdge(t *testing.T) {
 		wantDegraded []string
 	}{
 		{
-			name: "a project naming no edge names none to the builder either",
+			name: "a project naming no edge names none to the build either",
 			cfg: func(root string) *projectconfig.Config {
-				return &projectconfig.Config{Dir: root, Apps: []projectconfig.App{{Name: "web", Path: "apps/web"}}}
+				return &projectconfig.Config{Dir: root, Apps: []projectconfig.App{nextApp("web", "apps/web")}}
 			},
 			wantKind: "",
 		},
@@ -673,7 +494,7 @@ func TestBuildLearnsTheEdge(t *testing.T) {
 					Dir:           root,
 					Edge:          &projectconfig.EdgeDescriptor{ID: "cloudflare"},
 					AllowDegraded: []string{"edge-middleware", "edge-runtime"},
-					Apps:          []projectconfig.App{{Name: "web", Path: "apps/web"}},
+					Apps:          []projectconfig.App{nextApp("web", "apps/web")},
 				}
 			},
 			wantKind:     "cloudflare",
@@ -686,7 +507,7 @@ func TestBuildLearnsTheEdge(t *testing.T) {
 					Dir:           root,
 					Edge:          &projectconfig.EdgeDescriptor{ID: "api-gateway"},
 					AllowDegraded: []string{"edge-middleware"},
-					Apps:          []projectconfig.App{{Name: "web", Path: "apps/web"}},
+					Apps:          []projectconfig.App{nextApp("web", "apps/web")},
 				}
 			},
 			wantKind:     "api-gateway",
@@ -699,23 +520,21 @@ func TestBuildLearnsTheEdge(t *testing.T) {
 			t.Parallel()
 
 			root := t.TempDir()
-			writeBuilder(t, root)
+			writeBuildScript(t, root)
 
-			var got builderRequest
-			builder := nodeOnly{node: func(_ context.Context, _ string, _ []string, request []byte, _ Log) error {
-				writePlan(t, filepath.Join(root, constants.ProjectStateDirName, "output"))
-				return json.Unmarshal(request, &got)
-			}}
-
-			if err := builder.Build(context.Background(), tc.cfg(root), nil, Log{}); err != nil {
+			var got nodeBuildRequest
+			if err := (nodeOnly{node: requestOf(&got)}).Build(context.Background(), tc.cfg(root), nil, Log{}); err != nil {
 				t.Fatalf("Build: %v", err)
 			}
 
-			if got.EdgeKind != tc.wantKind {
-				t.Errorf("edgeKind = %q, want %q", got.EdgeKind, tc.wantKind)
+			if len(got.Apps) != 1 {
+				t.Fatalf("request had %d apps, want 1", len(got.Apps))
 			}
-			if !slices.Equal(got.AllowDegraded, tc.wantDegraded) {
-				t.Errorf("allowDegraded = %v, want %v", got.AllowDegraded, tc.wantDegraded)
+			if got.Apps[0].EdgeKind != tc.wantKind {
+				t.Errorf("edgeKind = %q, want %q", got.Apps[0].EdgeKind, tc.wantKind)
+			}
+			if !slices.Equal(got.Apps[0].AllowDegraded, tc.wantDegraded) {
+				t.Errorf("allowDegraded = %v, want %v", got.Apps[0].AllowDegraded, tc.wantDegraded)
 			}
 		})
 	}

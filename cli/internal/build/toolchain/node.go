@@ -22,7 +22,49 @@ const nativeDirName = "native"
 
 const nodeModulesDir = "node_modules"
 
-const tracingHint = "set OCEL_BUILD_PREFER_TRACING=1 to build this app by tracing instead of bundling"
+const PreferTracingEnv = "OCEL_BUILD_PREFER_TRACING"
+
+const tracingHint = "set " + PreferTracingEnv + "=1 to build this app by tracing instead of bundling"
+
+var entrypointCandidates = []string{
+	"src/server.ts",
+	"src/server.js",
+	"src/index.ts",
+	"src/index.js",
+	"src/app.ts",
+	"src/app.js",
+	"index.ts",
+	"index.js",
+	"server.ts",
+	"server.js",
+	"app.ts",
+	"app.js",
+}
+
+func NodeEntrypoint(source, declared string) (string, error) {
+	if declared != "" {
+		path := filepath.FromSlash(declared)
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(source, path)
+		}
+		if !regularFile(path) {
+			return "", fmt.Errorf("entrypoint %q not found in %s", declared, source)
+		}
+		return path, nil
+	}
+	for _, candidate := range entrypointCandidates {
+		path := filepath.Join(source, filepath.FromSlash(candidate))
+		if regularFile(path) {
+			return path, nil
+		}
+	}
+	return "", fmt.Errorf("no entrypoint found in %s; tried: %s", source, strings.Join(entrypointCandidates, ", "))
+}
+
+func regularFile(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.Mode().IsRegular()
+}
 
 const banner = `import { createRequire as __ocelCreateRequire } from "node:module";` +
 	`import { fileURLToPath as __ocelFileURLToPath } from "node:url";` +
@@ -34,6 +76,7 @@ const banner = `import { createRequire as __ocelCreateRequire } from "node:modul
 type Target struct {
 	App        string
 	Framework  appbuild.Framework
+	Source     string
 	Entrypoint string
 	FuncDir    string
 	AppDir     string

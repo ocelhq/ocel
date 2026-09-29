@@ -394,3 +394,53 @@ func TestBundle(t *testing.T) {
 		})
 	}
 }
+
+func TestNodeEntrypoint(t *testing.T) {
+	t.Parallel()
+
+	t.Run("finds the first candidate present", func(t *testing.T) {
+		t.Parallel()
+
+		source := t.TempDir()
+		writeTree(t, source, tree{"index.js": "", "src/app.ts": ""})
+		got, err := NodeEntrypoint(source, "")
+		if err != nil {
+			t.Fatalf("NodeEntrypoint: %v", err)
+		}
+		if want := filepath.Join(source, "src", "app.ts"); got != want {
+			t.Errorf("NodeEntrypoint = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("honours a declared entrypoint over every candidate", func(t *testing.T) {
+		t.Parallel()
+
+		source := t.TempDir()
+		writeTree(t, source, tree{"src/server.ts": "", "worker/main.ts": ""})
+		got, err := NodeEntrypoint(source, "worker/main.ts")
+		if err != nil {
+			t.Fatalf("NodeEntrypoint: %v", err)
+		}
+		if want := filepath.Join(source, "worker", "main.ts"); got != want {
+			t.Errorf("NodeEntrypoint = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("names a declared entrypoint that is not there", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := NodeEntrypoint(t.TempDir(), "worker/main.ts")
+		if err == nil || !strings.Contains(err.Error(), "worker/main.ts") {
+			t.Errorf("NodeEntrypoint err = %v, want it to name the declared entrypoint", err)
+		}
+	})
+
+	t.Run("names every candidate when none is there", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := NodeEntrypoint(t.TempDir(), "")
+		if err == nil || !strings.Contains(err.Error(), "src/server.ts") || !strings.Contains(err.Error(), "app.js") {
+			t.Errorf("NodeEntrypoint err = %v, want it to name the candidates tried", err)
+		}
+	})
+}

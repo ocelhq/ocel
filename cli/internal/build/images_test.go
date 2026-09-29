@@ -162,7 +162,7 @@ func TestAContainerAppIsBuiltIntoAnImageForTheArchitectureItIsAskedAndNeverHande
 	cfg.Slug = "shop"
 	var asked string
 	built, err := tools{
-		node: func(context.Context, string, []string, []byte, Log) error {
+		node: func(context.Context, string, []byte, Log) error {
 			t.Error("the node builder ran for a project whose only app runs in an image")
 			return nil
 		},

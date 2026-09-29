@@ -3,78 +3,38 @@ package build
 import (
 	"bytes"
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"slices"
 	"strings"
 	"sync"
 	"unicode"
 
-	"github.com/ocelhq/ocel/cli/internal/build/toolchain"
 	"github.com/ocelhq/ocel/cli/internal/nodeprotocol"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
-	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
 )
 
-const buildPlanFileName = "build-plan.json"
-
-const traceStrategy = "trace"
-
-const bundleStrategy = "bundle"
-
-type buildPlan struct {
-	Functions []functionSummary `json:"functions"`
+type nodeBuildRequest struct {
+	Apps []nodeAppBuild `json:"apps"`
 }
 
-type functionSummary struct {
-	Name         string             `json:"name"`
-	Framework    appbuild.Framework `json:"framework"`
-	Handler      string             `json:"handler"`
-	ArtifactPath string             `json:"artifactPath"`
-	Strategy     string             `json:"strategy"`
-	Entrypoint   string             `json:"entrypoint,omitempty"`
+type nodeAppBuild struct {
+	Framework     string            `json:"framework"`
+	Name          string            `json:"name"`
+	Cwd           string            `json:"cwd"`
+	OutputDir     string            `json:"outputDir,omitempty"`
+	DeploymentID  string            `json:"deploymentId,omitempty"`
+	Folder        string            `json:"folder,omitempty"`
+	Env           map[string]string `json:"env,omitempty"`
+	EdgeKind      string            `json:"edgeKind,omitempty"`
+	AllowDegraded []string          `json:"allowDegraded,omitempty"`
+	Entrypoint    string            `json:"entrypoint,omitempty"`
+	FuncDir       string            `json:"funcDir,omitempty"`
 }
 
-type builderRequest struct {
-	OutDir        string     `json:"outDir"`
-	ProjectRoot   string     `json:"projectRoot"`
-	EdgeKind      string     `json:"edgeKind"`
-	AllowDegraded []string   `json:"allowDegraded,omitempty"`
-	Apps          []appInput `json:"apps"`
-}
-
-type appInput struct {
-	Name       string            `json:"name"`
-	Cwd        string            `json:"cwd"`
-	Entrypoint string            `json:"entrypoint,omitempty"`
-	Framework  *frameworkInput   `json:"framework,omitempty"`
-	Env        map[string]string `json:"env,omitempty"`
-	Folder     string            `json:"folder,omitempty"`
-}
-
-func frameworkInputOf(framework projectconfig.Framework) *frameworkInput {
-	if framework.Name == "" && framework.Arch == "" {
-		return nil
-	}
-	return &frameworkInput{Name: framework.Name, Arch: framework.Arch}
-}
-
-type frameworkInput struct {
-	Name string `json:"name,omitempty"`
-	Arch string `json:"arch,omitempty"`
-}
-
-const adapterPathEnv = "NEXT_ADAPTER_PATH"
-
-var buildOwnedNames = []string{adapterPathEnv, constants.AppFolderEnvName, deploymentIDEnv, constants.PhaseEnvName, "PATH"}
+var buildOwnedNames = []string{constants.AppFolderEnvName, constants.PhaseEnvName, "PATH"}
 
 func checkVariableNames(vars map[string]string) error {
 	for _, name := range buildOwnedNames {
@@ -83,95 +43,6 @@ func checkVariableNames(vars map[string]string) error {
 		}
 	}
 	return nil
-}
-
-const rootAppEnv = ""
-
-func builderEnv(adapterPath string, vars map[string]string) []string {
-	keys := make([]string, 0, len(vars))
-	for key := range vars {
-		keys = append(keys, key)
-	}
-	slices.Sort(keys)
-
-	env := os.Environ()
-	for _, key := range keys {
-		env = append(env, key+"="+vars[key])
-	}
-	return append(env, adapterPathEnv+"="+adapterPath, constants.AppFolderEnvName+"=")
-}
-
-func recordDetectedDeploymentID(projectDir, outputDir, id string) error {
-	if id == "" {
-		return nil
-	}
-	entries, err := os.ReadDir(appbuild.AppsRoot(outputDir))
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return nil
-		}
-		return err
-	}
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		if err := writeDeploymentID(projectDir, entry.Name(), id); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func bundlePlanned(ctx context.Context, outputDir string, stderr io.Writer) error {
-	planPath := filepath.Join(outputDir, buildPlanFileName)
-	raw, err := os.ReadFile(planPath)
-	if err != nil {
-		return fmt.Errorf("the node builder reported no build plan at %s: %w", planPath, err)
-	}
-	var plan buildPlan
-	if err := json.Unmarshal(raw, &plan); err != nil {
-		return fmt.Errorf("%s: invalid build plan: %w", planPath, err)
-	}
-
-	for _, fn := range plan.Functions {
-		switch fn.Strategy {
-		case traceStrategy:
-			continue
-		case bundleStrategy:
-		default:
-			return fmt.Errorf("%s: %q reports build strategy %q, which this build does not know", planPath, fn.Name, fn.Strategy)
-		}
-		if fn.Entrypoint == "" {
-			return fmt.Errorf("%s: %q asks to be bundled without stating an entrypoint", planPath, fn.Name)
-		}
-
-		funcDir := filepath.Join(outputDir, filepath.FromSlash(fn.ArtifactPath))
-		appDir, err := appArtifactRoot(outputDir, funcDir)
-		if err != nil {
-			return err
-		}
-		if err := toolchain.Bundle(ctx, toolchain.Target{
-			App:        filepath.Base(appDir),
-			Framework:  fn.Framework,
-			Entrypoint: fn.Entrypoint,
-			FuncDir:    funcDir,
-			AppDir:     appDir,
-			Log:        stderr,
-		}); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func appArtifactRoot(outputDir, funcDir string) (string, error) {
-	functionsDir := filepath.Dir(funcDir)
-	appDir := filepath.Dir(functionsDir)
-	if filepath.Base(functionsDir) != functionsDirName || filepath.Dir(appDir) != appbuild.AppsRoot(outputDir) {
-		return "", fmt.Errorf("%s does not sit under %s", funcDir, filepath.Join(appbuild.AppsRoot(outputDir), "<app>", functionsDirName))
-	}
-	return appDir, nil
 }
 
 const summaryLines = 2
@@ -226,7 +97,7 @@ func (r *appRouting) begin(app string) func(error) {
 	}
 }
 
-func runNode(ctx context.Context, scriptPath string, env []string, request []byte, log Log) error {
+func runNode(ctx context.Context, scriptPath string, request []byte, log Log) error {
 	if _, err := exec.LookPath("node"); err != nil {
 		return fmt.Errorf("node not found on PATH: %w", err)
 	}
@@ -235,12 +106,11 @@ func runNode(ctx context.Context, scriptPath string, env []string, request []byt
 	var captured bytes.Buffer
 
 	cmd := exec.CommandContext(ctx, "node", scriptPath)
-	cmd.Env = env
 	cmd.Stdin = bytes.NewReader(request)
 
 	reader, writer, err := os.Pipe()
 	if err != nil {
-		return fmt.Errorf("node-builder failed: %w", err)
+		return fmt.Errorf("the node build failed: %w", err)
 	}
 	cmd.Stdout, cmd.Stderr = writer, writer
 
@@ -250,7 +120,7 @@ func runNode(ctx context.Context, scriptPath string, env []string, request []byt
 	_ = writer.Close()
 	if startErr != nil {
 		_ = reader.Close()
-		return fmt.Errorf("node-builder failed: %w", startErr)
+		return fmt.Errorf("the node build failed: %w", startErr)
 	}
 	proc.Scan(ctx, reader)
 	_ = reader.Close()
@@ -259,15 +129,15 @@ func runNode(ctx context.Context, scriptPath string, env []string, request []byt
 
 	if runErr != nil {
 		if msg := proc.Failure(); msg != "" {
-			return fmt.Errorf("node-builder failed (%w): %s", runErr, msg)
+			return fmt.Errorf("the node build failed (%w): %s", runErr, msg)
 		}
 		if summary := failureSummary(captured.String()); summary != "" {
-			return fmt.Errorf("node-builder failed (%w): %s", runErr, summary)
+			return fmt.Errorf("the node build failed (%w): %s", runErr, summary)
 		}
-		return fmt.Errorf("node-builder failed: %w", runErr)
+		return fmt.Errorf("the node build failed: %w", runErr)
 	}
 	if unended != nil {
-		return fmt.Errorf("node-builder failed: %w", unended)
+		return fmt.Errorf("the node build failed: %w", unended)
 	}
 	return nil
 }

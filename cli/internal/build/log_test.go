@@ -74,18 +74,16 @@ func nodeBuilder(t *testing.T, script string) *projectconfig.Config {
 		t.Skip("node not on PATH")
 	}
 	root := t.TempDir()
-	writeBuilder(t, root)
+	writeBuildScript(t, root)
 	emit := fmt.Sprintf(`const emit = (r) => process.stdout.write("\n" + %s + JSON.stringify(r) + "\n");
 const req = JSON.parse(require("fs").readFileSync(0, "utf8"));
-require("fs").mkdirSync(req.outDir, {recursive: true});
-require("fs").writeFileSync(require("path").join(req.outDir, %q), JSON.stringify({functions: []}));
-`, jsString(nodeprotocol.Prefix), buildPlanFileName)
-	if err := os.WriteFile(node.BuilderPath(root), []byte(emit+script), 0o644); err != nil {
+`, jsString(nodeprotocol.Prefix))
+	if err := os.WriteFile(node.BuildScriptPath(root), []byte(emit+script), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	return &projectconfig.Config{
 		Dir:  root,
-		Apps: []projectconfig.App{{Name: "web", Path: "."}, {Name: "api", Path: "."}},
+		Apps: []projectconfig.App{nextApp("web", "."), nextApp("api", ".")},
 	}
 }
 
@@ -183,7 +181,7 @@ func TestAGoAppCompiledHereBuildsInAUnitOfItsOwnThatEndsWithItsCompileError(t *t
 	t.Parallel()
 
 	root := t.TempDir()
-	writeBuilder(t, root)
+	writeBuildScript(t, root)
 	writeGoApp(t, root, "apps/api")
 	if err := os.WriteFile(filepath.Join(root, "apps/api/main.go"), []byte("package main\n\nfunc main() {\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -194,7 +192,7 @@ func TestAGoAppCompiledHereBuildsInAUnitOfItsOwnThatEndsWithItsCompileError(t *t
 	}
 
 	var units appUnits
-	err := nodeOnly{node: func(context.Context, string, []string, []byte, Log) error { return nil }}.Build(context.Background(), cfg, nil, units.output())
+	err := nodeOnly{node: func(context.Context, string, []byte, Log) error { return nil }}.Build(context.Background(), cfg, nil, units.output())
 	if err == nil {
 		t.Fatal("Build succeeded, want the compile error")
 	}

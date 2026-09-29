@@ -14,10 +14,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/nodeprotocol"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
-	"github.com/ocelhq/ocel/pkg/constants"
 )
 
-func TestAProjectWithNoJavaScriptNeverReachesForTheNodeBuilder(t *testing.T) {
+func TestAProjectWithNoJavaScriptNeverRunsTheNodeBuildScript(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -28,7 +27,7 @@ func TestAProjectWithNoJavaScriptNeverReachesForTheNodeBuilder(t *testing.T) {
 	cfg := &projectconfig.Config{Dir: root}
 
 	ran := false
-	builder := nodeOnly{node: func(context.Context, string, []string, []byte, Log) error {
+	builder := nodeOnly{node: func(context.Context, string, []byte, Log) error {
 		ran = true
 		return nil
 	}}
@@ -36,65 +35,8 @@ func TestAProjectWithNoJavaScriptNeverReachesForTheNodeBuilder(t *testing.T) {
 		t.Fatalf("Build: %v", err)
 	}
 	if ran {
-		t.Fatal("the node builder ran for a project with no JavaScript")
+		t.Fatal("the node build script ran for a project with no JavaScript")
 	}
-}
-
-func TestAJavaScriptProjectStillReachesTheNodeBuilderWithNoAppsDeclared(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	writeBuilder(t, root)
-	cfg := &projectconfig.Config{Dir: root}
-
-	ran := false
-	builder := nodeOnly{node: func(context.Context, string, []string, []byte, Log) error {
-		ran = true
-		writePlan(t, filepath.Join(root, constants.ProjectStateDirName, "output"))
-		return nil
-	}}
-	if err := builder.Build(context.Background(), cfg, nil, Log{}); err != nil {
-		t.Fatalf("Build: %v", err)
-	}
-	if !ran {
-		t.Fatal("the node builder was skipped for a project the builder is what detects")
-	}
-}
-
-func TestBuilderEnv(t *testing.T) {
-	t.Parallel()
-
-	t.Run("adds resolved values without losing the builder's own", func(t *testing.T) {
-		t.Parallel()
-
-		env := builderEnv("/adapters/next.js", map[string]string{"POSTHOG_ID": "ph-123"})
-
-		if got, _ := lookup(env, "NEXT_ADAPTER_PATH"); got != "/adapters/next.js" {
-			t.Errorf("NEXT_ADAPTER_PATH = %q, want the adapter path the builder needs", got)
-		}
-		if got, _ := lookup(env, "POSTHOG_ID"); got != "ph-123" {
-			t.Errorf("POSTHOG_ID = %q, want the resolved value", got)
-		}
-		if len(env) <= 3 {
-			t.Errorf("env has %d entries, want the inherited environment as well", len(env))
-		}
-	})
-
-	t.Run("what the build owns is applied last", func(t *testing.T) {
-		t.Parallel()
-
-		env := builderEnv("/adapters/next.js", map[string]string{
-			"NEXT_ADAPTER_PATH":        "/evil/adapter.js",
-			constants.AppFolderEnvName: "/admin",
-		})
-
-		if got, _ := lookup(env, "NEXT_ADAPTER_PATH"); got != "/adapters/next.js" {
-			t.Errorf("NEXT_ADAPTER_PATH = %q, want the builder's own adapter", got)
-		}
-		if got, _ := lookup(env, constants.AppFolderEnvName); got != "" {
-			t.Errorf("%s = %q, want the project root the builder process runs under", constants.AppFolderEnvName, got)
-		}
-	})
 }
 
 func TestFailureSummary(t *testing.T) {
@@ -154,7 +96,7 @@ func runNodeScript(t *testing.T, source string) error {
 	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	return runNode(context.Background(), path, os.Environ(), []byte("{}"), Log{})
+	return runNode(context.Background(), path, []byte(`{"apps":[]}`), Log{})
 }
 
 func TestRunNode(t *testing.T) {
@@ -208,7 +150,7 @@ process.exitCode = 1;
 		if err == nil {
 			t.Fatal("runNode succeeded on a non-zero exit, want error")
 		}
-		if !strings.Contains(err.Error(), "node-builder failed") {
+		if !strings.Contains(err.Error(), "the node build failed") {
 			t.Errorf("error = %q, want it to name the failing builder", err)
 		}
 	})
@@ -250,7 +192,7 @@ process.exit(1);
 			t.Fatal(err)
 		}
 		var stderr bytes.Buffer
-		err := runNode(context.Background(), path, os.Environ(), []byte("{}"), Log{Shared: &stderr})
+		err := runNode(context.Background(), path, []byte(`{"apps":[]}`), Log{Shared: &stderr})
 		if err == nil {
 			t.Fatal("runNode succeeded on a non-zero exit, want error")
 		}
@@ -294,7 +236,7 @@ emit({type:"span_end",id:"1",ok:true});
 		if writeErr := os.WriteFile(path, []byte(script), 0o644); writeErr != nil {
 			t.Fatal(writeErr)
 		}
-		if err := runNode(ctx, path, os.Environ(), []byte("{}"), Log{}); err != nil {
+		if err := runNode(ctx, path, []byte(`{"apps":[]}`), Log{}); err != nil {
 			t.Fatalf("runNode: %v", err)
 		}
 		if err := run.Close(); err != nil {

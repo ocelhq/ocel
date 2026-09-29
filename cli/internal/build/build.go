@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/ocelhq/ocel/cli/internal/build/image"
+	"github.com/ocelhq/ocel/cli/internal/build/toolchain"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/node"
@@ -40,7 +41,7 @@ type Output struct {
 	Images    map[string]string
 }
 
-type nodeRun func(ctx context.Context, scriptPath string, env []string, request []byte, log Log) error
+type nodeRun func(ctx context.Context, scriptPath string, request []byte, log Log) error
 
 type imageBuild func(ctx context.Context, app image.App, arch string, progress io.Writer) (image.Image, error)
 
@@ -92,81 +93,113 @@ func (t tools) functions(ctx context.Context, cfg *projectconfig.Config, envByAp
 		return fmt.Errorf("create %s: %w", appbuild.ArtifactRootDir, err)
 	}
 
-	deploymentIDs := make(map[string]string, len(cfg.Apps))
-	for _, a := range cfg.Apps {
-		id, err := mintDeploymentID()
-		if err != nil {
-			return err
-		}
-		if err := writeDeploymentID(cfg.Dir, a.Name, id); err != nil {
-			return err
-		}
-		deploymentIDs[a.Name] = id
+	apps, err := appsToBuild(cfg)
+	if err != nil {
+		return err
+	}
+	deploymentIDs, err := recordDeploymentIDs(cfg, apps)
+	if err != nil {
+		return err
 	}
 
-	req := builderRequest{
-		OutDir:        outputDir,
-		ProjectRoot:   cfg.Dir,
-		EdgeKind:      string(cfg.EdgeID()),
-		AllowDegraded: cfg.AllowDegraded,
-		Apps:          make([]appInput, 0, len(cfg.Apps)),
-	}
-	for _, a := range FunctionApps(cfg.Apps) {
-		if compiledFromSource(a.Framework.Name) {
+	preferTracing := os.Getenv(toolchain.PreferTracingEnv) == "1"
+	var req nodeBuildRequest
+	var traced []toolchain.Target
+	for _, a := range FunctionApps(apps) {
+		switch name := a.Framework.Name; {
+		case compiledFromSource(name):
 			appLog, ended := log.App(a.Name)
 			err := compile(ctx, cfg, a, outputDir, appLog)
 			ended(err)
 			if err != nil {
 				return err
 			}
-			continue
+		case name == appbuild.FrameworkNext:
+			req.Apps = append(req.Apps, nodeAppBuild{
+				Framework:     appbuild.FrameworkNext,
+				Name:          a.Name,
+				Cwd:           filepath.Join(cfg.Dir, a.Path),
+				OutputDir:     appbuild.AppArtifactRoot(outputDir, a.Name),
+				DeploymentID:  deploymentIDs[a.Name],
+				Folder:        a.Folder,
+				Env:           envOf(cfg, envByApp, a.Name),
+				EdgeKind:      string(cfg.EdgeID()),
+				AllowDegraded: cfg.AllowDegraded,
+			})
+		case name == appbuild.FrameworkNode:
+			target, err := nodeTarget(cfg, a, outputDir)
+			if err != nil {
+				return err
+			}
+			if preferTracing {
+				if _, err := target.TracedHandler(); err != nil {
+					return err
+				}
+				req.Apps = append(req.Apps, nodeAppBuild{
+					Framework:  appbuild.FrameworkNode,
+					Name:       a.Name,
+					Cwd:        target.Source,
+					Entrypoint: target.Entrypoint,
+					FuncDir:    target.FuncDir,
+				})
+				traced = append(traced, target)
+				continue
+			}
+			appLog, ended := log.App(a.Name)
+			target.Log = appLog
+			err = toolchain.Bundle(ctx, target)
+			ended(err)
+			if err != nil {
+				return err
+			}
+		case a.Framework.Missing != nil:
+			return a.Framework.Missing
+		default:
+			return fmt.Errorf("app %q: nothing in %s says what it is built with; set \"framework\" in the app config", a.Name, filepath.Join(cfg.Dir, a.Path))
 		}
-		req.Apps = append(req.Apps, appInput{
-			Name:       a.Name,
-			Cwd:        filepath.Join(cfg.Dir, a.Path),
-			Entrypoint: a.Entrypoint,
-			Framework:  frameworkInputOf(a.Framework),
-			Env:        withDeploymentID(envByApp[a.Name], deploymentIDs[a.Name]),
-			Folder:     a.Folder,
-		})
 	}
-	if len(req.Apps) == 0 {
-		if len(cfg.Apps) > 0 {
-			return nil
+
+	if len(req.Apps) > 0 {
+		scriptPath := node.BuildScriptPath(cfg.Dir)
+		if _, err := os.Stat(scriptPath); err != nil {
+			return fmt.Errorf("the node build script is not at %s: %w", scriptPath, err)
 		}
-		hasJS, err := HasJS(cfg)
+		payload, err := json.Marshal(req)
 		if err != nil {
+			return fmt.Errorf("marshal build request: %w", err)
+		}
+		if err := t.node(ctx, scriptPath, payload, log); err != nil {
 			return err
 		}
-		if !hasJS {
-			return nil
+	}
+	for _, target := range traced {
+		if err := toolchain.DescribeTrace(target); err != nil {
+			return err
 		}
 	}
+	return nil
+}
 
-	builderPath := node.BuilderPath(cfg.Dir)
-	if _, err := os.Stat(builderPath); err != nil {
-		return fmt.Errorf("node builder not found at %s: %w", builderPath, err)
-	}
-
-	payload, err := json.Marshal(req)
+func nodeTarget(cfg *projectconfig.Config, a projectconfig.App, outputDir string) (toolchain.Target, error) {
+	source := filepath.Join(cfg.Dir, a.Path)
+	entrypoint, err := toolchain.NodeEntrypoint(source, a.Entrypoint)
 	if err != nil {
-		return fmt.Errorf("marshal build request: %w", err)
+		return toolchain.Target{}, fmt.Errorf("app %q: %w", a.Name, err)
 	}
-	rootEnv := envByApp[rootAppEnv]
-	detectedID := ""
+	appDir := appbuild.AppArtifactRoot(outputDir, a.Name)
+	return toolchain.Target{
+		App:        a.Name,
+		Framework:  appbuild.Framework{Name: appbuild.FrameworkNode, Arch: a.Framework.Arch},
+		Source:     source,
+		Entrypoint: entrypoint,
+		FuncDir:    filepath.Join(appDir, functionsDirName, entryFuncDirName),
+		AppDir:     appDir,
+	}, nil
+}
+
+func envOf(cfg *projectconfig.Config, envByApp map[string]map[string]string, app string) map[string]string {
 	if len(cfg.Apps) == 0 {
-		id, err := mintDeploymentID()
-		if err != nil {
-			return err
-		}
-		detectedID = id
-		rootEnv = withDeploymentID(rootEnv, id)
+		return envByApp[rootAppEnv]
 	}
-	if err := t.node(ctx, builderPath, builderEnv(node.AdapterPath(cfg.Dir), rootEnv), payload, log); err != nil {
-		return err
-	}
-	if err := bundlePlanned(ctx, outputDir, log.shared()); err != nil {
-		return err
-	}
-	return recordDetectedDeploymentID(cfg.Dir, outputDir, detectedID)
+	return envByApp[app]
 }

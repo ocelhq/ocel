@@ -26,7 +26,7 @@ async function bundle(entry, outfile, options) {
 await rm(dist, { recursive: true, force: true });
 await mkdir(dist, { recursive: true });
 
-await bundle(join(platformDir, "src/builder/cli.ts"), join(dist, "builder/cli.cjs"), {
+await bundle(join(platformDir, "src/build/main.ts"), join(dist, "build/main.cjs"), {
   target: "node",
   format: "cjs",
   external: ["nock", "mock-aws-s3", "aws-sdk"],

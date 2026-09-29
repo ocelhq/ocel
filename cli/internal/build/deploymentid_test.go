@@ -2,7 +2,6 @@ package build
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,143 +11,31 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 )
 
-func TestBuildStampsTheDeploymentID(t *testing.T) {
+func TestAFreshBuildSupersedesTheDeploymentIDTheLastOneRecorded(t *testing.T) {
 	t.Parallel()
 
-	t.Run("every app builds with the id its own deploy will send", func(t *testing.T) {
-		t.Parallel()
+	root := t.TempDir()
+	writeBuildScript(t, root)
+	cfg := &projectconfig.Config{Dir: root, Apps: []projectconfig.App{nextApp("web", "apps/web")}}
+	builder := nodeOnly{node: func(context.Context, string, []byte, Log) error { return nil }}
 
-		root := t.TempDir()
-		writeBuilder(t, root)
-		cfg := &projectconfig.Config{
-			Dir: root,
-			Apps: []projectconfig.App{
-				{Name: "web", Path: "apps/web"},
-				{Name: "docs", Path: "apps/docs"},
-			},
-		}
-
-		var gotReq builderRequest
-		var gotEnv []string
-		builder := nodeOnly{node: func(_ context.Context, _ string, env []string, request []byte, _ Log) error {
-			gotEnv = env
-			if err := json.Unmarshal(request, &gotReq); err != nil {
-				return err
-			}
-			writePlan(t, gotReq.OutDir)
-			return nil
-		}}
-
-		envByApp := map[string]map[string]string{"web": {"POSTHOG_ID": "ph-123"}}
-		if err := builder.Build(context.Background(), cfg, envByApp, Log{}); err != nil {
-			t.Fatalf("Build: %v", err)
-		}
-
-		seen := map[string]string{}
-		for _, app := range gotReq.Apps {
-			recorded, err := DeploymentID(root, app.Name)
-			if err != nil {
-				t.Fatalf("DeploymentID(%s): %v", app.Name, err)
-			}
-			if got := app.Env[deploymentIDEnv]; got != recorded {
-				t.Errorf("app %s built with %s = %q, want its recorded %q", app.Name, deploymentIDEnv, got, recorded)
-			}
-			if other, taken := seen[recorded]; taken {
-				t.Errorf("apps %s and %s both deploy as %q, want an id each", other, app.Name, recorded)
-			}
-			seen[recorded] = app.Name
-		}
-		if got := gotReq.Apps[0].Env["POSTHOG_ID"]; got != "ph-123" {
-			t.Errorf("app web lost its resolved value: POSTHOG_ID = %q", got)
-		}
-		if got, taken := lookup(gotEnv, deploymentIDEnv); taken {
-			t.Errorf("builder env sets %s = %q, want each app to have its own", deploymentIDEnv, got)
-		}
-	})
-
-	t.Run("an app the builder names itself is recorded under that name", func(t *testing.T) {
-		t.Parallel()
-
-		root := t.TempDir()
-		writeBuilder(t, root)
-		cfg := &projectconfig.Config{Dir: root}
-		var gotEnv []string
-		builder := nodeOnly{node: func(_ context.Context, _ string, env []string, request []byte, _ Log) error {
-			gotEnv = env
-			var req builderRequest
-			if err := json.Unmarshal(request, &req); err != nil {
-				return err
-			}
-			if len(req.Apps) != 0 {
-				t.Errorf("request declares %d apps, want the builder to detect one", len(req.Apps))
-			}
-			id, _ := lookup(env, deploymentIDEnv)
-			if err := os.MkdirAll(filepath.Join(req.OutDir, "apps", "detected"), 0o755); err != nil {
-				return err
-			}
-			if id == "" {
-				t.Errorf("builder env sets no %s for the app it detects", deploymentIDEnv)
-			}
-			writePlan(t, req.OutDir)
-			return nil
-		}}
-
-		if err := builder.Build(context.Background(), cfg, nil, Log{}); err != nil {
-			t.Fatalf("Build: %v", err)
-		}
-		recorded, err := DeploymentID(root, "detected")
-		if err != nil {
-			t.Fatalf("DeploymentID: %v", err)
-		}
-		if built, _ := lookup(gotEnv, deploymentIDEnv); built != recorded {
-			t.Errorf("detected app built under %q, recorded %q", built, recorded)
-		}
-	})
-
-	t.Run("a fresh build supersedes the id the last one recorded", func(t *testing.T) {
-		t.Parallel()
-
-		root := t.TempDir()
-		writeBuilder(t, root)
-		cfg := &projectconfig.Config{Dir: root, Apps: []projectconfig.App{{Name: "web", Path: "apps/web"}}}
-		builder := nodeOnly{node: func(_ context.Context, _ string, _ []string, request []byte, _ Log) error {
-			var req builderRequest
-			if err := json.Unmarshal(request, &req); err != nil {
-				return err
-			}
-			writePlan(t, req.OutDir)
-			return nil
-		}}
-
-		if err := builder.Build(context.Background(), cfg, nil, Log{}); err != nil {
-			t.Fatalf("Build: %v", err)
-		}
-		first, err := DeploymentID(root, "web")
-		if err != nil {
-			t.Fatalf("DeploymentID: %v", err)
-		}
-		if err := builder.Build(context.Background(), cfg, nil, Log{}); err != nil {
-			t.Fatalf("Build: %v", err)
-		}
-		second, err := DeploymentID(root, "web")
-		if err != nil {
-			t.Fatalf("DeploymentID: %v", err)
-		}
-		if first == second {
-			t.Errorf("both builds recorded %q, want each build its own id", first)
-		}
-	})
-
-	t.Run("a variable may not claim the name the build owns", func(t *testing.T) {
-		t.Parallel()
-
-		root := t.TempDir()
-		cfg := &projectconfig.Config{Dir: root}
-		err := nodeOnly{node: runNode}.Build(context.Background(), cfg, map[string]map[string]string{"": {deploymentIDEnv: "mine"}}, Log{})
-		if err == nil || !strings.Contains(err.Error(), deploymentIDEnv) {
-			t.Errorf("Build err = %v, want it to refuse a variable named %s", err, deploymentIDEnv)
-		}
-	})
+	if err := builder.Build(context.Background(), cfg, nil, Log{}); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	first, err := DeploymentID(root, "web")
+	if err != nil {
+		t.Fatalf("DeploymentID: %v", err)
+	}
+	if err := builder.Build(context.Background(), cfg, nil, Log{}); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	second, err := DeploymentID(root, "web")
+	if err != nil {
+		t.Fatalf("DeploymentID: %v", err)
+	}
+	if first == second {
+		t.Errorf("both builds recorded %q, want each build its own id", first)
+	}
 }
 
 func TestDeploymentID(t *testing.T) {

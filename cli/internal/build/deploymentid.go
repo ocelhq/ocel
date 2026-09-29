@@ -10,11 +10,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/naming"
 )
-
-const deploymentIDEnv = "NEXT_DEPLOYMENT_ID"
 
 const deploymentIDFileName = "deployment-id"
 
@@ -61,11 +60,17 @@ func DeploymentID(projectDir, app string) (string, error) {
 	return id, nil
 }
 
-func withDeploymentID(vars map[string]string, id string) map[string]string {
-	merged := make(map[string]string, len(vars)+1)
-	for key, value := range vars {
-		merged[key] = value
+func recordDeploymentIDs(cfg *projectconfig.Config, apps []projectconfig.App) (map[string]string, error) {
+	ids := make(map[string]string, len(apps))
+	for _, a := range apps {
+		id, err := mintDeploymentID()
+		if err != nil {
+			return nil, err
+		}
+		if err := writeDeploymentID(cfg.Dir, a.Name, id); err != nil {
+			return nil, err
+		}
+		ids[a.Name] = id
 	}
-	merged[deploymentIDEnv] = id
-	return merged
+	return ids, nil
 }

@@ -38,7 +38,7 @@ func detectFramework(dir string) (string, error) {
 		if found[0] != language.JS {
 			return named[0], nil
 		}
-		next, err := nextApp(dir)
+		next, err := IsNextApp(dir)
 		if err != nil {
 			return "", err
 		}
@@ -59,7 +59,7 @@ func detectFramework(dir string) (string, error) {
 	}
 }
 
-func nextApp(dir string) (bool, error) {
+func IsNextApp(dir string) (bool, error) {
 	for _, name := range nextConfigNames {
 		if regularFile(filepath.Join(dir, name)) {
 			return true, nil

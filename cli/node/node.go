@@ -21,12 +21,8 @@ func DistDir(projectDir string) string {
 	return filepath.Join(projectDir, constants.ProjectStateDirName, "dist")
 }
 
-func BuilderPath(projectDir string) string {
-	return filepath.Join(DistDir(projectDir), "builder", "cli.cjs")
-}
-
-func AdapterPath(projectDir string) string {
-	return filepath.Join(DistDir(projectDir), "next-adapter", "next-adapter.mjs")
+func BuildScriptPath(projectDir string) string {
+	return filepath.Join(DistDir(projectDir), "build", "main.cjs")
 }
 
 const variableEditorDir = "variable-editor"

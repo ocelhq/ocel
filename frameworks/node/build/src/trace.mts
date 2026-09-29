@@ -1,13 +1,9 @@
-import { createHash } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { copyFile, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { ServeDescriptor } from "@platform/edge-contract/serve";
 import { nodeFileTrace } from "@vercel/nft";
 import { init as lexerInit, parse as parseImports } from "es-module-lexer";
 import ts from "typescript";
-import { appOutDir, functionRel, NODE_ENTRY_ROUTE_ID, SERVE_DESCRIPTOR_FILE } from "./layout.js";
-import type { AppInput, BuildOptions, FunctionSummary, RuntimeSpec } from "./types.js";
 
 const TS_EXT = new Set([".ts", ".tsx", ".mts", ".cts"]);
 
@@ -24,31 +20,6 @@ function transpileTs(source: string, ext: string): string {
 }
 
 const RESOLVE_EXT = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
-
-export function functionFramework(
-  input: AppInput,
-  spec: RuntimeSpec,
-): { name: string; arch?: string } {
-  const arch = input.framework?.arch;
-  return arch ? { name: spec.name, arch } : { name: spec.name };
-}
-
-export function resolveEntrypoint(input: AppInput, spec: RuntimeSpec): string {
-  if (input.entrypoint) {
-    const abs = path.resolve(input.cwd, input.entrypoint);
-    if (!existsSync(abs)) {
-      throw new Error(`ocel: entrypoint "${input.entrypoint}" not found in ${input.cwd}`);
-    }
-    return abs;
-  }
-  for (const candidate of spec.entrypointCandidates) {
-    const abs = path.resolve(input.cwd, candidate);
-    if (existsSync(abs)) return abs;
-  }
-  throw new Error(
-    `ocel: no entrypoint found in ${input.cwd}; tried: ${spec.entrypointCandidates.join(", ")}`,
-  );
-}
 
 function toOutExt(rel: string): string {
   const ext = path.extname(rel);
@@ -206,66 +177,24 @@ async function emitFile(absPath: string, dest: string): Promise<void> {
   await copyFile(absPath, dest);
 }
 
-async function regularFiles(dir: string, prefix = ""): Promise<string[]> {
-  const entries = await readdir(dir, { withFileTypes: true });
-  const found: string[] = [];
-  for (const entry of entries) {
-    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
-    if (entry.isDirectory()) {
-      found.push(...(await regularFiles(path.join(dir, entry.name), rel)));
-    } else if (entry.isFile()) {
-      found.push(rel);
-    }
-  }
-  return found;
+export interface TraceRequest {
+  cwd: string;
+  entrypoint: string;
+  funcDir: string;
 }
 
-export async function artifactHash(dir: string): Promise<string> {
-  const rels = (await regularFiles(dir)).sort();
-  const outer = createHash("sha256");
-  for (const rel of rels) {
-    const digest = createHash("sha256")
-      .update(await readFile(path.join(dir, rel)))
-      .digest("hex");
-    outer.update(`${rel}\0${digest}\n`);
-  }
-  return outer.digest("hex").slice(0, 16);
-}
-
-export async function writeServeDescriptor(
-  outDir: string,
-  app: string,
-  descriptor: ServeDescriptor,
-): Promise<void> {
-  const appDir = appOutDir(outDir, app);
-  await mkdir(appDir, { recursive: true });
-  await writeFile(
-    path.join(appDir, SERVE_DESCRIPTOR_FILE),
-    `${JSON.stringify(descriptor, null, 2)}\n`,
-  );
-}
-
-export async function traceBuild(
-  input: AppInput,
-  options: BuildOptions,
-  spec: RuntimeSpec,
-): Promise<FunctionSummary> {
-  const entrypoint = resolveEntrypoint(input, spec);
-  const framework = functionFramework(input, spec);
-
-  const funcRel = functionRel(input.name);
-  const funcDir = path.join(options.outDir, funcRel);
+export async function traceFunction({ cwd, entrypoint, funcDir }: TraceRequest): Promise<void> {
   await rm(funcDir, { recursive: true, force: true });
   await mkdir(funcDir, { recursive: true });
 
-  const base = traceBase(input.cwd);
+  const base = traceBase(cwd);
   const { fileList } = await nodeFileTrace([entrypoint], { base, readFile: traceReadFile });
 
   const pkgCache: PkgCache = new Map();
   const depPackages = new Map<string, string>();
   for (const rel of fileList) {
     const abs = path.resolve(base, rel);
-    const placement = placeFile(abs, input.cwd, pkgCache);
+    const placement = placeFile(abs, cwd, pkgCache);
     if (placement.pkg) depPackages.set(placement.pkg.root, placement.pkg.name);
     await emitFile(abs, path.join(funcDir, placement.dest));
   }
@@ -278,28 +207,4 @@ export async function traceBuild(
       await copyFile(src, dest);
     }
   }
-
-  const handler = toOutExt(placeFile(entrypoint, input.cwd, pkgCache).dest)
-    .split(path.sep)
-    .join("/");
-  await writeFile(
-    path.join(funcDir, "config.json"),
-    `${JSON.stringify({ framework, handler, id: NODE_ENTRY_ROUTE_ID, app: input.name }, null, 2)}\n`,
-  );
-
-  await writeServeDescriptor(options.outDir, input.name, {
-    framework: spec.name,
-    buildId: await artifactHash(funcDir),
-    edgeRouting: false,
-    entry: NODE_ENTRY_ROUTE_ID,
-    needs: {},
-  });
-
-  return {
-    name: input.name,
-    framework,
-    handler,
-    artifactPath: funcRel,
-    strategy: "trace",
-  };
 }

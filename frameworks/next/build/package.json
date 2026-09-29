@@ -1,0 +1,23 @@
+{
+  "name": "@framework/next-build",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "the build-time step that runs an app's own Next build through the ocel adapter",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/build.mts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "package-manager-detector": "^0.2.11"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  }
+}

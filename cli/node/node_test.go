@@ -17,11 +17,11 @@ func TestEnsure(t *testing.T) {
 
 		dir := ensured(t)
 		for _, path := range []string{
-			BuilderPath(dir),
-			AdapterPath(dir),
-			filepath.Join(filepath.Dir(AdapterPath(dir)), "edge-cache-handler.cjs"),
-			filepath.Join(filepath.Dir(AdapterPath(dir)), "edge-node-entry.cjs"),
-			filepath.Join(filepath.Dir(AdapterPath(dir)), "next-dispatch.cjs"),
+			BuildScriptPath(dir),
+			filepath.Join(DistDir(dir), "next-adapter", "next-adapter.mjs"),
+			filepath.Join(DistDir(dir), "next-adapter", "edge-cache-handler.cjs"),
+			filepath.Join(DistDir(dir), "next-adapter", "edge-node-entry.cjs"),
+			filepath.Join(DistDir(dir), "next-adapter", "next-dispatch.cjs"),
 			stampPath(dir),
 		} {
 			info, err := os.Stat(path)
@@ -39,12 +39,12 @@ func TestEnsure(t *testing.T) {
 		t.Parallel()
 
 		dir := ensured(t)
-		writeFile(t, BuilderPath(dir), "touched")
+		writeFile(t, BuildScriptPath(dir), "touched")
 
 		if err := Ensure(dir); err != nil {
 			t.Fatalf("Ensure: %v", err)
 		}
-		if got := readFile(t, BuilderPath(dir)); got != "touched" {
+		if got := readFile(t, BuildScriptPath(dir)); got != "touched" {
 			t.Error("Ensure rewrote the tree despite a matching STAMP")
 		}
 	})
@@ -77,12 +77,12 @@ func TestEnsure(t *testing.T) {
 		if err := os.Remove(stampPath(dir)); err != nil {
 			t.Fatal(err)
 		}
-		writeFile(t, BuilderPath(dir), "partial")
+		writeFile(t, BuildScriptPath(dir), "partial")
 
 		if err := Ensure(dir); err != nil {
 			t.Fatalf("Ensure: %v", err)
 		}
-		if got := readFile(t, BuilderPath(dir)); got == "partial" {
+		if got := readFile(t, BuildScriptPath(dir)); got == "partial" {
 			t.Error("Ensure left the partial builder in place")
 		}
 		if _, err := os.Stat(stampPath(dir)); err != nil {

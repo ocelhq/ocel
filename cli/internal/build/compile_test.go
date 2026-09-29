@@ -29,11 +29,11 @@ func writeGoApp(t *testing.T, root, path string) {
 	}
 }
 
-func TestAGoAppIsCompiledHereRatherThanHandedToTheNodeBuilder(t *testing.T) {
+func TestAGoAppIsCompiledHereRatherThanHandedToTheNodeBuildScript(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	writeBuilder(t, root)
+	writeBuildScript(t, root)
 	writeGoApp(t, root, "apps/api")
 	cfg := &projectconfig.Config{
 		Dir:  root,
@@ -41,7 +41,7 @@ func TestAGoAppIsCompiledHereRatherThanHandedToTheNodeBuilder(t *testing.T) {
 	}
 
 	ran := false
-	builder := nodeOnly{node: func(context.Context, string, []string, []byte, Log) error {
+	builder := nodeOnly{node: func(context.Context, string, []byte, Log) error {
 		ran = true
 		return nil
 	}}
@@ -49,7 +49,7 @@ func TestAGoAppIsCompiledHereRatherThanHandedToTheNodeBuilder(t *testing.T) {
 		t.Fatalf("Build: %v", err)
 	}
 	if ran {
-		t.Error("the node builder was run for a go app, and nothing it knows how to build was in the request")
+		t.Error("the node build script was run for a go app, and nothing it knows how to build was in the request")
 	}
 
 	fns, err := ReadFunctions(root)
@@ -86,7 +86,7 @@ func TestAPythonAppIsVendoredHereRatherThanHandedToTheNodeBuilder(t *testing.T) 
 	t.Parallel()
 
 	root := t.TempDir()
-	writeBuilder(t, root)
+	writeBuildScript(t, root)
 	writePythonApp(t, root, "apps/api")
 	cfg := &projectconfig.Config{
 		Dir:  root,
@@ -94,7 +94,7 @@ func TestAPythonAppIsVendoredHereRatherThanHandedToTheNodeBuilder(t *testing.T) 
 	}
 
 	ran := false
-	builder := nodeOnly{node: func(context.Context, string, []string, []byte, Log) error {
+	builder := nodeOnly{node: func(context.Context, string, []byte, Log) error {
 		ran = true
 		return nil
 	}}
@@ -102,7 +102,7 @@ func TestAPythonAppIsVendoredHereRatherThanHandedToTheNodeBuilder(t *testing.T) 
 		t.Fatalf("Build: %v", err)
 	}
 	if ran {
-		t.Error("the node builder was run for a python app, and nothing it knows how to build was in the request")
+		t.Error("the node build script was run for a python app, and nothing it knows how to build was in the request")
 	}
 
 	fns, err := ReadFunctions(root)
@@ -131,7 +131,7 @@ func TestARustAppIsCompiledHereRatherThanHandedToTheNodeBuilder(t *testing.T) {
 	}
 
 	root := t.TempDir()
-	writeBuilder(t, root)
+	writeBuildScript(t, root)
 	dir := filepath.Join(root, "apps", "api")
 	for name, body := range map[string]string{
 		"Cargo.toml":  "[package]\nname = \"api\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[workspace]\n",
@@ -150,7 +150,7 @@ func TestARustAppIsCompiledHereRatherThanHandedToTheNodeBuilder(t *testing.T) {
 	}
 
 	ran := false
-	builder := nodeOnly{node: func(context.Context, string, []string, []byte, Log) error {
+	builder := nodeOnly{node: func(context.Context, string, []byte, Log) error {
 		ran = true
 		return nil
 	}}
@@ -158,7 +158,7 @@ func TestARustAppIsCompiledHereRatherThanHandedToTheNodeBuilder(t *testing.T) {
 		t.Fatalf("Build: %v", err)
 	}
 	if ran {
-		t.Error("the node builder was run for a rust app, and nothing it knows how to build was in the request")
+		t.Error("the node build script was run for a rust app, and nothing it knows how to build was in the request")
 	}
 
 	fns, err := ReadFunctions(root)

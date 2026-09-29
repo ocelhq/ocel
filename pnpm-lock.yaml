@@ -268,21 +268,18 @@ importers:
       '@framework/next-adapter':
         specifier: workspace:^
         version: link:../../frameworks/next/adapter
+      '@framework/next-build':
+        specifier: workspace:^
+        version: link:../../frameworks/next/build
+      '@framework/node-build':
+        specifier: workspace:^
+        version: link:../../frameworks/node/build
       '@ui/theme':
         specifier: workspace:^
         version: link:../../ui/theme
       '@ui/variables':
         specifier: workspace:^
         version: link:../../ui/variables
-      '@vercel/nft':
-        specifier: ^0.27.4
-        version: 0.27.10(rollup@4.62.2)
-      es-module-lexer:
-        specifier: ^1.5.4
-        version: 1.7.0
-      package-manager-detector:
-        specifier: ^0.2.11
-        version: 0.2.11
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
@@ -293,9 +290,6 @@ importers:
       '@phosphor-icons/react':
         specifier: ^2.1.10
         version: 2.1.10(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      '@platform/edge-contract':
-        specifier: workspace:^
-        version: link:../../platform/edge/contract
       '@tailwindcss/postcss':
         specifier: ^4
         version: 4.3.2
@@ -314,9 +308,6 @@ importers:
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
-      express:
-        specifier: ~5.0.0
-        version: 5.0.1
       postcss:
         specifier: ^8.5.6
         version: 8.5.16
@@ -650,6 +641,22 @@ importers:
         specifier: ^3.2.7
         version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)(yaml@2.9.0)
 
+  frameworks/next/build:
+    dependencies:
+      package-manager-detector:
+        specifier: ^0.2.11
+        version: 0.2.11
+    devDependencies:
+      '@types/node':
+        specifier: ^24
+        version: 24.13.2
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.7
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)(yaml@2.9.0)
+
   frameworks/next/cache:
     devDependencies:
       '@types/node':
@@ -696,6 +703,28 @@ importers:
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
+      vitest:
+        specifier: ^3.2.7
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)(yaml@2.9.0)
+
+  frameworks/node/build:
+    dependencies:
+      '@vercel/nft':
+        specifier: ^0.27.4
+        version: 0.27.10(rollup@4.62.2)
+      es-module-lexer:
+        specifier: ^1.5.4
+        version: 1.7.0
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+    devDependencies:
+      '@types/node':
+        specifier: ^24
+        version: 24.13.2
+      express:
+        specifier: ~5.0.0
+        version: 5.0.1
       vitest:
         specifier: ^3.2.7
         version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)(yaml@2.9.0)
