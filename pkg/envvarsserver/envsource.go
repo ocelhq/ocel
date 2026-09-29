@@ -13,7 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
-	"github.com/ocelhq/ocel/pkg/envsourcewire"
+	"github.com/ocelhq/ocel/pkg/envsourceproto"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -43,7 +43,7 @@ func (h *Service) SyncEnvSource(ctx context.Context, req *envvarsv1.SyncEnvSourc
 	if req.GetRegistered() != nil {
 		return h.syncRegistered(ctx, store, scope)
 	}
-	descriptor, read := envsourcewire.Decode(req.GetEnvSource())
+	descriptor, read := envsourceproto.Decode(req.GetEnvSource())
 	if descriptor.Kind == envsource.Builtin {
 		if err := switchToBuiltin(ctx, store, scope); err != nil {
 			return nil, provider.RefusalError(err)

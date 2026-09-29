@@ -9,7 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
-	"github.com/ocelhq/ocel/pkg/progresswire"
+	"github.com/ocelhq/ocel/pkg/progressproto"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
@@ -144,7 +144,7 @@ func (t *spanEvents) ended(span Span, start, end time.Time, status progressv1.Sp
 		Body: &progressv1.OperationEvent_Ended{Ended: &progressv1.Ended{
 			Status:            status,
 			StartTimeUnixNano: start.UnixNano(),
-			Attributes:        progresswire.EncodeAttrs(attrs),
+			Attributes:        progressproto.EncodeAttrs(attrs),
 			Title:             title,
 		}},
 	})

@@ -1,4 +1,4 @@
-package progresswire
+package progressproto
 
 import (
 	"strings"
@@ -11,12 +11,12 @@ func EncodeAttrKey(key progress.AttrKey) progressv1.AttributeKey {
 	return progressv1.AttributeKey(progressv1.AttributeKey_value["ATTRIBUTE_KEY_"+strings.ToUpper(strings.TrimPrefix(key.Name, "ocel."))])
 }
 
-func DecodeAttrKey(wire progressv1.AttributeKey) (progress.AttrKey, bool) {
-	if wire == progressv1.AttributeKey_ATTRIBUTE_KEY_UNSPECIFIED {
+func DecodeAttrKey(protoKey progressv1.AttributeKey) (progress.AttrKey, bool) {
+	if protoKey == progressv1.AttributeKey_ATTRIBUTE_KEY_UNSPECIFIED {
 		return progress.AttrKey{}, false
 	}
 	for _, key := range progress.AttrKeys {
-		if EncodeAttrKey(key) == wire {
+		if EncodeAttrKey(key) == protoKey {
 			return key, true
 		}
 	}

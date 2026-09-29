@@ -12,7 +12,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/envsource"
-	"github.com/ocelhq/ocel/pkg/envsourcewire"
+	"github.com/ocelhq/ocel/pkg/envsourceproto"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
@@ -50,7 +50,7 @@ func (s Store) SyncEnvSource(ctx context.Context) (variables.EnvSource, error) {
 	resp, err := vars.SyncEnvSource(ctx, &envvarsv1.SyncEnvSourceRequest{
 		Tier:    s.Tier,
 		Slug:    s.Project.Slug,
-		From:    &envvarsv1.SyncEnvSourceRequest_EnvSource{EnvSource: envsourcewire.Encode(descriptor, read)},
+		From:    &envvarsv1.SyncEnvSourceRequest_EnvSource{EnvSource: envsourceproto.Encode(descriptor, read)},
 		Folders: folders,
 	})
 	if err != nil {

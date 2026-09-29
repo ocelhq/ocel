@@ -14,7 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
-	"github.com/ocelhq/ocel/pkg/envsourcewire"
+	"github.com/ocelhq/ocel/pkg/envsourceproto"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 )
@@ -116,7 +116,7 @@ func (s *deployFakeProviderServer) SyncEnvSource(_ context.Context, req *envvars
 				"%s in %s reads from exec, whose command runs where ocel deploys: deploy again to read it", req.GetSlug(), fakeTier(req.GetTier())))
 		}
 	} else {
-		descriptor, read := envsourcewire.Decode(req.GetEnvSource())
+		descriptor, read := envsourceproto.Decode(req.GetEnvSource())
 		if descriptor.Kind == envsource.Builtin {
 			if registered {
 				if err := clearFakeProvenance(req.GetTier(), req.GetSlug()); err != nil {

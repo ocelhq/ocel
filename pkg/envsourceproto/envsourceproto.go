@@ -1,4 +1,4 @@
-package envsourcewire
+package envsourceproto
 
 import (
 	"maps"
@@ -53,10 +53,10 @@ func encodeAuth(auth envsource.InfisicalAuth) *envvarsv1.InfisicalAuth {
 	return nil
 }
 
-func Decode(wire *envvarsv1.EnvSource) (envsource.Descriptor, map[envvars.Cell]envsource.Value) {
+func Decode(message *envvarsv1.EnvSource) (envsource.Descriptor, map[envvars.Cell]envsource.Value) {
 	switch {
-	case wire.GetInfisical() != nil:
-		sent := wire.GetInfisical()
+	case message.GetInfisical() != nil:
+		sent := message.GetInfisical()
 		write := envsource.WriteNever
 		for policy, encoded := range writePolicies {
 			if encoded == sent.GetWrite() {
@@ -72,8 +72,8 @@ func Decode(wire *envvarsv1.EnvSource) (envsource.Descriptor, map[envvars.Cell]e
 			Write:       write,
 		}.Normalize()
 		return envsource.Descriptor{Kind: envsource.Infisical, Infisical: &options}, nil
-	case wire.GetExec() != nil:
-		sent := wire.GetExec()
+	case message.GetExec() != nil:
+		sent := message.GetExec()
 		read := make(map[envvars.Cell]envsource.Value, len(sent.GetValues()))
 		for _, value := range sent.GetValues() {
 			at := envvars.Cell{Folder: value.GetCell().GetFolder(), Key: value.GetCell().GetKey()}
