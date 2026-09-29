@@ -33,7 +33,7 @@ func TestProvisioningABucketNamesTheObjectStoreItLandsIn(t *testing.T) {
 	if _, err := over(&box{}).ProvisionBucket(context.Background(), aBucket(t, "uploads", false), progress); err != nil {
 		t.Fatalf("ProvisionBucket() = %v", err)
 	}
-	heardAll(t, progress, "INFO Provisioning bucket uploads in object store prod-infra-store-s3")
+	heardAll(t, progress, "INFO Provisioning bucket uploads in object store shop-prod-infra-store-s3")
 }
 
 func TestProvisioningAPostgresNamesTheContainerItRunsIn(t *testing.T) {
@@ -45,7 +45,7 @@ func TestProvisioningAPostgresNamesTheContainerItRunsIn(t *testing.T) {
 	if _, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "17"), progress); err != nil {
 		t.Fatalf("ProvisionPostgres() = %v", err)
 	}
-	heardAll(t, progress, "INFO Provisioning postgres main in container prod-web-r0a1b2c3d-main-pg")
+	heardAll(t, progress, "INFO Provisioning postgres main in container shop-prod-web-r0a1b2c3d-main-pg")
 }
 
 func TestRemovingTheLastBucketSaysWhatItRemovedAndThatTheStoreGoesWithIt(t *testing.T) {
@@ -58,8 +58,8 @@ func TestRemovingTheLastBucketSaysWhatItRemovedAndThatTheStoreGoesWithIt(t *test
 		t.Fatalf("RemoveResource(bucket) = %v", err)
 	}
 	heardAll(t, progress,
-		"INFO Removing bucket uploads and its objects from object store prod-infra-store-s3",
-		"INFO Removing object store prod-infra-store-s3: no bucket in this environment uses it any more",
+		"INFO Removing bucket uploads and its objects from object store shop-prod-infra-store-s3",
+		"INFO Removing object store shop-prod-infra-store-s3: no bucket in this environment uses it any more",
 	)
 }
 
@@ -73,7 +73,7 @@ func TestABucketWhoseStoreKeepsNoCredentialIsSaidToBeSkipped(t *testing.T) {
 		t.Fatalf("RemoveResource(bucket) = %v", err)
 	}
 	heardAll(t, progress,
-		"INFO Skipped removing bucket uploads: the box keeps no credential for object store prod-infra-store-s3")
+		"INFO Skipped removing bucket uploads: the box keeps no credential for object store shop-prod-infra-store-s3")
 }
 
 func TestRemovingAPostgresNamesTheContainerAndTheDataItTakes(t *testing.T) {
@@ -86,7 +86,7 @@ func TestRemovingAPostgresNamesTheContainerAndTheDataItTakes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RemoveResource(postgres) = %v", err)
 	}
-	heardAll(t, progress, "INFO Removing postgres main, its container prod-web-r0a1b2c3d-main-pg and its data")
+	heardAll(t, progress, "INFO Removing postgres main, its container shop-prod-web-r0a1b2c3d-main-pg and its data")
 }
 
 func TestStartingAndRemovingAnAppNameItsContainer(t *testing.T) {

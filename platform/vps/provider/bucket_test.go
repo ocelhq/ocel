@@ -87,6 +87,18 @@ func TestADeclaredBucketRunsAStoreOnlyItsProjectReaches(t *testing.T) {
 	}
 }
 
+func TestTwoProjectsDeclaringBucketsOnOneBoxEachRunAndKeepTheirOwnStore(t *testing.T) {
+	t.Parallel()
+
+	shop := aBucket(t, "uploads", false).Ref
+	blog := shop
+	blog.Project = "blog"
+	if vps.StoreName(shop) == vps.StoreName(blog) {
+		t.Errorf("shop and blog share the store %q, so one opens the other's kept credential and a teardown of one removes the other's objects",
+			vps.StoreName(shop))
+	}
+}
+
 func TestABindingIsKeyedByTheNameTheAppDeclaredTheResourceUnder(t *testing.T) {
 	t.Parallel()
 
@@ -153,7 +165,7 @@ func TestTheStoreRunsOnACredentialTheBoxKeepsSealed(t *testing.T) {
 	}
 
 	joined := strings.Join(machine.commands(), "\n")
-	if !strings.Contains(joined, host.KeptPath(environment.TierProduction, "prod-infra-store-s3")) {
+	if !strings.Contains(joined, host.KeptPath(environment.TierProduction, "shop-prod-infra-store-s3")) {
 		t.Fatalf("nothing about the store's credential was kept on the box:\n%s", joined)
 	}
 	for _, fed := range machine.feeds() {
@@ -161,7 +173,7 @@ func TestTheStoreRunsOnACredentialTheBoxKeepsSealed(t *testing.T) {
 			t.Fatalf("the store's root credential was sent to the box outside the env file it is handed in:\n%s", fed)
 		}
 	}
-	handed := host.EnvFile(environment.TierProduction, "prod-infra-store-s3")
+	handed := host.EnvFile(environment.TierProduction, "shop-prod-infra-store-s3")
 	if !strings.Contains(joined, "rm -f "+quotedPath(handed)) {
 		t.Fatalf("the file the store's credential was handed over in is left on the box:\n%s", joined)
 	}
@@ -263,7 +275,7 @@ func TestAnAppBindingABucketIsHandedItsStoreSealedAndNeverInPlaintext(t *testing
 	if manifest.Store.Pointer != router.DefaultPointer {
 		t.Errorf("the manifest names pointer %q, and the box answers the store's public address out of what that pointer claims", manifest.Store.Pointer)
 	}
-	if manifest.Store.Endpoint != "http://prod-infra-store-s3:9000" || !manifest.Store.PathStyle {
+	if manifest.Store.Endpoint != "http://shop-prod-infra-store-s3:9000" || !manifest.Store.PathStyle {
 		t.Errorf("the manifest points the runtime at %+v, want the store this project runs, addressed path-style", manifest.Store)
 	}
 	if manifest.Store.Sealed == "" {

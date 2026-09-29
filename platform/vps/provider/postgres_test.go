@@ -141,7 +141,7 @@ func TestWhatABoxKeepsOfAPostgresPasswordIsSealedToThatResource(t *testing.T) {
 		fed := machine.feeds()[at]
 		raw, _ := base64.StdEncoding.DecodeString(strings.TrimSpace(fed))
 		if strings.Contains(fed, password) || strings.Contains(string(raw), password) {
-			t.Errorf("the box keeps the password in plaintext under %s, where it outlives every deploy", host.KeptPath(environment.TierProduction, "prod-web-r0a1b2c3d-main-pg"))
+			t.Errorf("the box keeps the password in plaintext under %s, where it outlives every deploy", host.KeptPath(environment.TierProduction, "shop-prod-web-r0a1b2c3d-main-pg"))
 		}
 	}
 	sealing := machine.at(boxstore.SealHelper)
@@ -194,7 +194,7 @@ func TestADeployThatLosesTheNameToAnotherSharesTheWinnersPostgres(t *testing.T) 
 	withRecordedPostgres(machine)
 	machine.refuses = func(command string) (session.Result, bool) {
 		if strings.Contains(command, "'docker' 'run'") {
-			return session.Result{Code: 125, Stderr: `docker: Error response from daemon: Conflict. The container name "/prod-web-r0a1b2c3d-main-pg" is already in use by container "9f2c"`}, true
+			return session.Result{Code: 125, Stderr: `docker: Error response from daemon: Conflict. The container name "/shop-prod-web-r0a1b2c3d-main-pg" is already in use by container "9f2c"`}, true
 		}
 		return session.Result{}, false
 	}
@@ -259,12 +259,12 @@ func TestARemovalReachesOnlyTheServerItsOwnStackProvisioned(t *testing.T) {
 	if strings.Contains(joined, "someone-elses-container") {
 		t.Errorf("a removal took its target from the record it was handed and ran %q: the name is the stack's and the resource's, and a record naming another container removes that one", joined)
 	}
-	if !strings.Contains(joined, "prod-web-r0a1b2c3d-main-pg") {
+	if !strings.Contains(joined, "shop-prod-web-r0a1b2c3d-main-pg") {
 		t.Errorf("a removal ran %q and never reached the server this stack provisioned for main", joined)
 	}
 }
 
-const takenDump = "/var/lib/ocel/production/backups/prod-web-r0a1b2c3d-main-pg/20260919T000000Z.dump"
+const takenDump = "/var/lib/ocel/production/backups/shop-prod-web-r0a1b2c3d-main-pg/20260919T000000Z.dump"
 
 func volumeOfAnotherMajor(machine *box, state string) {
 	withRecordedPostgres(machine)
@@ -301,18 +301,18 @@ func TestAPostgresDeclaredUnderANewerMajorIsDumpedThenSwappedWithAWayBack(t *tes
 	}
 	swap := machine.commands()[swapped]
 	for _, want := range []string{
-		"trap ", "docker stop 'prod-web-r0a1b2c3d-main-pg'",
-		"'prod-web-r0a1b2c3d-main-pg-retired'",
-		"src=prod-web-r0a1b2c3d-main-pg-g17",
-		"'restore' 'prod-web-r0a1b2c3d-main-pg' 'main' '" + takenDump + "'",
-		"docker volume rm 'prod-web-r0a1b2c3d-main-pg-g16'",
-		"docker start 'prod-web-r0a1b2c3d-main-pg'",
+		"trap ", "docker stop 'shop-prod-web-r0a1b2c3d-main-pg'",
+		"'shop-prod-web-r0a1b2c3d-main-pg-retired'",
+		"src=shop-prod-web-r0a1b2c3d-main-pg-g17",
+		"'restore' 'shop-prod-web-r0a1b2c3d-main-pg' 'main' '" + takenDump + "'",
+		"docker volume rm 'shop-prod-web-r0a1b2c3d-main-pg-g16'",
+		"docker start 'shop-prod-web-r0a1b2c3d-main-pg'",
 	} {
 		if !strings.Contains(swap, want) {
 			t.Errorf("the swap never runs %s:\n%s", want, swap)
 		}
 	}
-	if restored, removed := strings.Index(swap, "'restore'"), strings.LastIndex(swap, "docker volume rm 'prod-web-r0a1b2c3d-main-pg-g16'"); removed < restored {
+	if restored, removed := strings.Index(swap, "'restore'"), strings.LastIndex(swap, "docker volume rm 'shop-prod-web-r0a1b2c3d-main-pg-g16'"); removed < restored {
 		t.Errorf("the old data is removed before the new server has it back:\n%s", swap)
 	}
 	for at, command := range machine.commands() {
@@ -436,5 +436,38 @@ func TestAPostgresPasswordIsBoundToItsProjectTierStackAndResourceUnderResources(
 	opened, err := live.Open(key, bound, sealed)
 	if err != nil || string(opened) != "s3cr3t-postgres" {
 		t.Fatalf("Open() = %q, %v, want the password sealed at shop/production/prod--infra/resources/main/password/ to open: every box's Postgres password is bound to those bytes", opened, err)
+	}
+}
+
+func TestTwoProjectsDeclaringTheSamePostgresOnOneBoxEachRunAndKeepTheirOwn(t *testing.T) {
+	t.Parallel()
+
+	shop, blog := aPostgres(t, "17"), aPostgres(t, "17")
+	blog.Ref.Project = "blog"
+	shopBinding, err := over(&box{}).ProvisionPostgres(context.Background(), shop, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	blogBinding, err := over(&box{}).ProvisionPostgres(context.Background(), blog, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if shopBinding.Properties[provider.PropertyHost] == blogBinding.Properties[provider.PropertyHost] {
+		t.Errorf("shop and blog both run postgres main as %q, so one opens the other's kept password and a teardown of one removes the other's server",
+			shopBinding.Properties[provider.PropertyHost])
+	}
+}
+
+func TestAPostgresNameFitsTheDNSLabelAnAppResolvesItBy(t *testing.T) {
+	t.Parallel()
+
+	in := aPostgres(t, "17")
+	in.Ref.Project = strings.Repeat("a-very-long-project-slug-", 4)
+	binding, err := over(&box{}).ProvisionPostgres(context.Background(), in, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if name := binding.Properties[provider.PropertyHost]; len(name) > 63 {
+		t.Errorf("postgres main runs as %q, %d characters, and no resolver answers a label past 63", name, len(name))
 	}
 }

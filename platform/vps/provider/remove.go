@@ -11,7 +11,7 @@ import (
 func (p *Provider) RemoveResource(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Progress) error {
 	switch binding.Type {
 	case provider.BindingPostgres:
-		name := host.ResourceName(ref.Name.String(), binding.Name, postgresKind)
+		name := host.ResourceName(ref.Project, ref.Name.String(), binding.Name, postgresKind)
 		if progress != nil {
 			progress.Say("Removing postgres " + binding.Name + ", its container " + name + " and its data")
 		}
