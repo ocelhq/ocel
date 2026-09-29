@@ -64,6 +64,19 @@ export const gaps: Gap[] = [
     ],
   },
   {
+    id: "floci-lambda-names-no-zone",
+    reason:
+      "floci starts lambda with TZ=:/etc/localtime in an image that has no /etc/localtime, so node resolves no zone; lambda itself sets TZ=:UTC",
+    where: [
+      {
+        on: ["aws.floci"],
+        fixtures: [deploy.node],
+        variants: [apiGateway],
+        fails: [check(nodeRuntimeChecks)],
+      },
+    ],
+  },
+  {
     id: "floci-cloud-run-buffers-and-rewrites",
     reason:
       "floci-gcp reads a Cloud Run body whole before answering, rejects a malformed escape itself, answers every preflight from its storage CORS filter, and drops the Host the client asked for",
