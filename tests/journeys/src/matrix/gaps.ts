@@ -1,9 +1,11 @@
 import {
   bindingCheck,
   bindingQueryCheck,
+  clientAddressCheck,
   emptyBodyCheck,
   nextCacheChecks,
   nextDataCacheChecks,
+  nodeRuntimeChecks,
 } from "../checks";
 import { REGISTRY_TOKEN_ENV, REGISTRY_USER_ENV } from "../registry/settings";
 import { check, step } from "../steps";
@@ -17,6 +19,17 @@ const EVERY_NEXT_BEARING = [...DEPLOY_NEXT_BEARING, lifecycle.next, ...SDK_NEXT_
 const NEXT_CACHE = [...nextCacheChecks, ...nextDataCacheChecks];
 
 export const gaps: Gap[] = [
+  {
+    id: "dev-runs-as-development",
+    reason:
+      "ocel dev runs the app as development on the runner's clock, never as production in UTC",
+    where: [{ on: ["dev"], fails: [check(nodeRuntimeChecks)] }],
+  },
+  {
+    id: "no-hop-in-front-of-dev",
+    reason: "ocel dev fronts the app with no proxy, so nothing appends the client address",
+    where: [{ on: ["dev"], fails: [check(clientAddressCheck)] }],
+  },
   {
     id: "no-router-in-front-of-dev",
     reason: "ocel dev does not front a Next app with the router, so no cache tier is observable",
