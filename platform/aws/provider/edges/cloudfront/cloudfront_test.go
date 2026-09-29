@@ -526,23 +526,25 @@ func TestPromote(t *testing.T) {
 		stack := reconciled(t, w)
 		bound(t, stack)
 		record := staged(t, stack, fakeEntryURL, fakeAssetPrefix)
-		record.CreatedAt = rotatedAt.Unix() - 1
+		record.Build, record.CreatedAt = "d0.f0", rotatedAt.Unix()-1
 		if err := openRouter(stack).Ledger.PutStaged(context.Background(), record); err != nil {
 			t.Fatalf("PutStaged: %v", err)
 		}
+		deployedBefore := router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": record.Build}}
 
-		if err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: promotion()}, progress.DiscardProgress()); err != nil {
+		if err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: deployedBefore}, progress.DiscardProgress()); err != nil {
 			t.Fatalf("Promote: %v", err)
 		}
 		if published := routeOn(t, w, stack, boundHost); published.Secret != w.ssm.secret.Previous {
 			t.Errorf("the route presents %q, want the secret the release was deployed with: it accepts nothing minted after it", published.Secret)
 		}
 
-		record.CreatedAt = rotatedAt.Unix()
+		record.Build, record.CreatedAt = "d2.f2", rotatedAt.Unix()
 		if err := openRouter(stack).Ledger.PutStaged(context.Background(), record); err != nil {
 			t.Fatalf("PutStaged: %v", err)
 		}
-		if err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: promotionOf("p2")}, progress.DiscardProgress()); err != nil {
+		deployedAfter := router.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": record.Build}}
+		if err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: deployedAfter}, progress.DiscardProgress()); err != nil {
 			t.Fatalf("Promote: %v", err)
 		}
 		if published := routeOn(t, w, stack, boundHost); published.Secret != fakeSecret {

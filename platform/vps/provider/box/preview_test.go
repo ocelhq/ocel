@@ -139,8 +139,8 @@ func previewed(t *testing.T, stack boxStack, pointer string, apps ...string) {
 
 	builds := map[string]string{}
 	for _, app := range apps {
-		staged(t, stack, app, "b1", slug+"-"+app+"-"+pointer)
-		builds[app] = "b1"
+		staged(t, stack, app, "b-"+pointer, slug+"-"+app+"-"+pointer)
+		builds[app] = "b-" + pointer
 	}
 	if err := stack.Flip(context.Background(), router.Flip{Pointer: pointer, Promotion: router.Promotion{
 		PromotionID: "p-" + pointer, Ts: 1, Builds: builds,

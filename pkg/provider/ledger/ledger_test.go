@@ -314,7 +314,7 @@ func TestForgettingARecordAnotherPointerNamedSinceTheReclaimReadItKeepsIt(t *tes
 	}
 }
 
-func TestForgettingARecordRestagedSinceTheReclaimReadItKeepsIt(t *testing.T) {
+func TestAPromoteOfARecordRestagedWhileAReclaimRemovedItIsRefusedBusy(t *testing.T) {
 	l, store := fixture()
 	ctx := context.Background()
 	dropped := promotedPastTheKept(t, l)
@@ -327,12 +327,19 @@ func TestForgettingARecordRestagedSinceTheReclaimReadItKeepsIt(t *testing.T) {
 			t.Fatalf("restage web-p00 = %v", err)
 		}
 	}
-
 	if err := l.ForgetUnnamedRecords(ctx, unnamed.UnnamedRecordKeys); err != nil {
 		t.Fatal(err)
 	}
-	if _, found, err := l.Record(ctx, "web", "web-p00"); err != nil || !found {
-		t.Errorf("the record a deploy restaged during the reclaim = found %v, %v, want it kept", found, err)
+	restaged := router.Promotion{PromotionID: "s1", Builds: map[string]string{"web": "web-p00"}}
+	if _, err := l.Promote(ctx, restaged, "staging", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	err = l.RewriteRecords(ctx, restaged)
+
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
+		t.Fatalf("RewriteRecords() of a record the reclaim removed after its restage = %v, want a busy refusal before any router flips", err)
 	}
 }
 
@@ -609,19 +616,69 @@ func TestThePointerDocumentIsJSONACustomerCanRead(t *testing.T) {
 	}
 }
 
-func TestAContainerBuildNamedByItsImageReferenceIsOneRecord(t *testing.T) {
+func TestRestagingABuildWithTheRecordItHoldsSucceeds(t *testing.T) {
 	l, _ := fixture()
 	ctx := context.Background()
-
-	build := "ocel/web@sha256:0123"
-	if err := l.PutStaged(ctx, router.DeploymentRecord{App: "web", Build: build}); err != nil {
+	record := router.DeploymentRecord{App: "web", Build: "b1", Origin: "https://first.invalid", RoutingManifest: json.RawMessage(`{ "routes": [] }`)}
+	if err := l.PutStaged(ctx, record); err != nil {
 		t.Fatal(err)
 	}
-	if got, found, err := l.Record(ctx, "web", build); err != nil || !found || got.Build != build {
-		t.Fatalf("Record(web, %s) = %+v, %v, %v, want the record staged", build, got, found, err)
+
+	if err := l.PutStaged(ctx, record); err != nil {
+		t.Fatalf("PutStaged() of the record the build holds = %v, want it to succeed: it is the same write repeated", err)
 	}
-	if key := l.deploymentKey("web", build); len(key.Path) != 3 || key.Path[2] != build {
-		t.Fatalf("the record for web at %s is keyed %s, want the image reference as one segment", build, key)
+}
+
+func TestRestagingABuildWithAnotherRecordIsRefusedAndKeepsTheFirst(t *testing.T) {
+	l, _ := fixture()
+	ctx := context.Background()
+	if err := l.PutStaged(ctx, router.DeploymentRecord{App: "web", Build: "b1", Origin: "https://first.invalid"}); err != nil {
+		t.Fatal(err)
+	}
+
+	err := l.PutStaged(ctx, router.DeploymentRecord{App: "web", Build: "b1", Origin: "https://second.invalid"})
+
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || !strings.Contains(refused.Message, "b1") {
+		t.Fatalf("PutStaged() of another record for b1 = %v, want a refusal naming the build", err)
+	}
+	if got, _, _ := l.Record(ctx, "web", "b1"); got.Origin != "https://first.invalid" {
+		t.Errorf("after the refused restage b1 names origin %q, want the first record's", got.Origin)
+	}
+}
+
+func TestAStageThatLosesTheCreateToAnotherRecordIsRefused(t *testing.T) {
+	l, store := fixture()
+	ctx := context.Background()
+	store.beforeWrite = func(string) {
+		if err := l.PutStaged(ctx, router.DeploymentRecord{App: "web", Build: "b1", Origin: "https://first.invalid"}); err != nil {
+			t.Fatalf("the stage that won = %v", err)
+		}
+	}
+
+	err := l.PutStaged(ctx, router.DeploymentRecord{App: "web", Build: "b1", Origin: "https://second.invalid"})
+
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) {
+		t.Fatalf("PutStaged() that lost the create to another record = %v, want a refusal", err)
+	}
+	if got, _, _ := l.Record(ctx, "web", "b1"); got.Origin != "https://first.invalid" {
+		t.Errorf("b1 names origin %q, want the record that won the create", got.Origin)
+	}
+}
+
+func TestAStageThatLosesTheCreateToTheSameRecordSucceeds(t *testing.T) {
+	l, store := fixture()
+	ctx := context.Background()
+	record := router.DeploymentRecord{App: "web", Build: "b1", Origin: "https://first.invalid"}
+	store.beforeWrite = func(string) {
+		if err := l.PutStaged(ctx, record); err != nil {
+			t.Fatalf("the stage that won = %v", err)
+		}
+	}
+
+	if err := l.PutStaged(ctx, record); err != nil {
+		t.Fatalf("PutStaged() that lost the create to the same record = %v, want it to succeed", err)
 	}
 }
 

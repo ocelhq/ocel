@@ -1,6 +1,7 @@
 package ledger
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -60,17 +61,58 @@ func (l *Ledger) PutStaged(ctx context.Context, record router.DeploymentRecord) 
 	if record.App == "" || record.Build == "" {
 		return fmt.Errorf("stage a deployment record: it names app %q and build %q, and the ledger keys records by both", record.App, record.Build)
 	}
-	stored, err := keyvalue.ReadOrEmpty(ctx, l.keyValues, l.deploymentKey(record.App, record.Build))
+	staging, err := canonicalRecord(record)
 	if err != nil {
-		return fmt.Errorf("read the deployment record for %s: %w", record.App, err)
-	}
-	if stored.Value, err = json.Marshal(record); err != nil {
 		return fmt.Errorf("encode the deployment record for %s: %w", record.App, err)
 	}
-	if _, err := l.keyValues.Write(ctx, stored); err != nil {
-		return fmt.Errorf("stage the deployment record for %s: %w", record.App, err)
+	for range casAttempts {
+		stored, err := keyvalue.ReadOrEmpty(ctx, l.keyValues, l.deploymentKey(record.App, record.Build))
+		if err != nil {
+			return fmt.Errorf("read the deployment record for %s: %w", record.App, err)
+		}
+		if len(stored.Value) > 0 {
+			return refuseAnotherRecord(record, stored.Value, staging)
+		}
+		stored.Value = staging
+		_, err = l.keyValues.Write(ctx, stored)
+		if errors.Is(err, keyvalue.ErrStale) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("stage the deployment record for %s: %w", record.App, err)
+		}
+		return nil
 	}
-	return nil
+	return fmt.Errorf("stage the deployment record %s/%s: it moved under %d attempts", record.App, record.Build, casAttempts)
+}
+
+func refuseAnotherRecord(record router.DeploymentRecord, stored, staging []byte) error {
+	var held router.DeploymentRecord
+	if err := json.Unmarshal(stored, &held); err != nil {
+		return fmt.Errorf("decode the deployment record %s/%s: %w", record.App, record.Build, err)
+	}
+	canonical, err := canonicalRecord(held)
+	if err != nil {
+		return fmt.Errorf("encode the deployment record %s/%s: %w", record.App, record.Build, err)
+	}
+	if bytes.Equal(canonical, staging) {
+		return nil
+	}
+	return refusal.Refuse(refusal.CodeInvalid,
+		"stage the record of %s build %s: the ledger already holds another record for that build, and a build's record is written once, by the deploy that provisioned it. Run `ocel deploy` again to stage a new build",
+		record.App, record.Build)
+}
+
+func canonicalRecord(record router.DeploymentRecord) ([]byte, error) {
+	encoded, err := json.Marshal(record)
+	if err != nil {
+		return nil, err
+	}
+	var decoded router.DeploymentRecord
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		return nil, err
+	}
+	return json.Marshal(decoded)
 }
 
 func (l *Ledger) Record(ctx context.Context, app, build string) (router.DeploymentRecord, bool, error) {
