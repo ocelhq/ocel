@@ -561,7 +561,7 @@ func fileContents(t *testing.T, path string) string {
 func TestTheDeployLoginIsToldItOwnsTheRoutingTable(t *testing.T) {
 	t.Parallel()
 
-	owned := slices.ContainsFunc(grants(environment.TierProduction, ArchAMD64), func(grant Grant) bool {
+	owned := slices.ContainsFunc(grants(environment.TierProduction, ArchAMD64, Front{}), func(grant Grant) bool {
 		return grant.Name == "owns "+live.RoutingTable
 	})
 	if !owned {
@@ -981,7 +981,7 @@ func TestWhatTheDeployLoginIsGrantedIsTheSameWhicheverArchitectureTheBoxRuns(t *
 	t.Parallel()
 
 	tier := environment.TierProduction
-	if !slices.Equal(grants(tier, ArchAMD64), grants(tier, ArchARM64)) {
+	if !slices.Equal(grants(tier, ArchAMD64, Front{}), grants(tier, ArchARM64, Front{})) {
 		t.Error("`ocel permissions deploy` prints one thing on an amd64 box and another on an arm64 one, and what a login is granted does not depend on what the box runs")
 	}
 }
