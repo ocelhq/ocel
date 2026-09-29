@@ -11,7 +11,9 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"maps"
 	"math/big"
+	"reflect"
 	"slices"
 	"time"
 
@@ -19,12 +21,16 @@ import (
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 const shieldedWord = "shielded"
 
-const trustAttempts = 8
+const (
+	trustAttempts  = 8
+	maxAllowlisted = 500
+)
 
 func (e *Edge) Shielded() *Edge {
 	deps := e.deps
@@ -33,41 +39,52 @@ func (e *Edge) Shielded() *Edge {
 }
 
 type trustRecord struct {
-	Lineages [][]string `json:"lineages,omitempty"`
-	Raised   []string   `json:"raised,omitempty"`
+	Hostnames   map[string][]string `json:"hostnames,omitempty"`
+	Placeholder string              `json:"placeholder,omitempty"`
+	Provisioned []string            `json:"provisioned,omitempty"`
 }
 
-func (r trustRecord) trusted() []string {
+func (r trustRecord) allowlist() []string {
 	var trusted []string
-	for _, lineage := range r.Lineages {
-		trusted = append(trusted, lineage...)
+	for _, certificates := range r.Hostnames {
+		trusted = append(trusted, certificates...)
+	}
+	if len(trusted) == 0 && r.Placeholder != "" {
+		return []string{r.Placeholder}
 	}
 	slices.Sort(trusted)
 	return slices.Compact(trusted)
 }
 
-func (r trustRecord) succeededBy(certificates []string, adding bool) (trustRecord, bool) {
-	lineage := slices.Compact(slices.Sorted(slices.Values(certificates)))
-	kept := make([][]string, 0, len(r.Lineages)+1)
-	replaced := false
-	for _, held := range r.Lineages {
-		if slices.ContainsFunc(held, func(certificate string) bool { return slices.Contains(lineage, certificate) }) {
-			replaced = true
-			continue
+func (r trustRecord) withClaim(hostname string, certificates []string) trustRecord {
+	r = r.withCarried(certificates)
+	r.Hostnames[hostname] = sortedCertificates(certificates)
+	return r
+}
+
+func (r trustRecord) withCarried(certificates []string) trustRecord {
+	carried := sortedCertificates(certificates)
+	hostnames := make(map[string][]string, len(r.Hostnames)+1)
+	for hostname, held := range r.Hostnames {
+		if slices.ContainsFunc(held, func(certificate string) bool { return slices.Contains(carried, certificate) }) {
+			held = carried
 		}
-		kept = append(kept, held)
+		hostnames[hostname] = held
 	}
-	if !replaced && !adding {
-		return r, false
+	r.Hostnames = hostnames
+	return r
+}
+
+func (r trustRecord) withoutClaims(hostnames []string) trustRecord {
+	r.Hostnames = maps.Clone(r.Hostnames)
+	for _, hostname := range hostnames {
+		delete(r.Hostnames, hostname)
 	}
-	kept = append(kept, lineage)
-	slices.SortFunc(kept, slices.Compare)
-	kept = slices.CompactFunc(kept, slices.Equal)
-	if slices.EqualFunc(kept, r.Lineages, slices.Equal) {
-		return r, false
-	}
-	r.Lineages = kept
-	return r, true
+	return r
+}
+
+func sortedCertificates(certificates []string) []string {
+	return slices.Compact(slices.Sorted(slices.Values(certificates)))
 }
 
 func (e *Edge) trustKey(tier environment.Tier) keyvalue.Key {
@@ -88,15 +105,15 @@ func (e *Edge) readTrust(ctx context.Context, tier environment.Tier) (keyvalue.E
 	return entry, read, nil
 }
 
-func (e *Edge) changeTrust(ctx context.Context, tier environment.Tier, change func(trustRecord) (trustRecord, bool)) (trustRecord, error) {
+func (e *Edge) changeTrust(ctx context.Context, tier environment.Tier, change func(trustRecord) trustRecord) (trustRecord, error) {
 	for range trustAttempts {
 		entry, read, err := e.readTrust(ctx, tier)
 		if err != nil {
 			return trustRecord{}, err
 		}
-		changed, write := change(read)
-		if !write {
-			return changed, nil
+		changed := change(read)
+		if reflect.DeepEqual(changed, read) {
+			return read, nil
 		}
 		if entry.Value, err = json.Marshal(changed); err != nil {
 			return trustRecord{}, err
@@ -113,79 +130,86 @@ func (e *Edge) changeTrust(ctx context.Context, tier environment.Tier, change fu
 	return trustRecord{}, fmt.Errorf("record which client certificates the %s front of tier %s trusts: it changed under every one of %d attempts", Kind, tier, trustAttempts)
 }
 
-func (e *Edge) ensureTrusted(ctx context.Context, tier environment.Tier) ([]string, error) {
-	record, err := e.changeTrust(ctx, tier, func(read trustRecord) (trustRecord, bool) {
-		return read, false
-	})
+func (e *Edge) ensureAllowlist(ctx context.Context, tier environment.Tier) ([]string, error) {
+	_, record, err := e.readTrust(ctx, tier)
 	if err != nil {
 		return nil, err
 	}
-	if len(record.Lineages) > 0 {
-		return record.trusted(), nil
+	if trusted := record.allowlist(); len(trusted) > 0 {
+		return trusted, nil
 	}
 	placeholder, err := mintUnpresentableCertificate(time.Now())
 	if err != nil {
 		return nil, err
 	}
-	record, err = e.changeTrust(ctx, tier, func(read trustRecord) (trustRecord, bool) {
-		if len(read.Lineages) > 0 {
-			return read, false
+	record, err = e.changeTrust(ctx, tier, func(read trustRecord) trustRecord {
+		if read.Placeholder == "" {
+			read.Placeholder = placeholder
 		}
-		read.Lineages = [][]string{{placeholder}}
-		return read, true
+		return read
 	})
-	return record.trusted(), err
+	return record.allowlist(), err
 }
 
-func (e *Edge) shield(ctx context.Context, tier environment.Tier, certificates []string) (Front, error) {
-	front, err := e.trust(ctx, tier, certificates, true)
+func (e *Edge) trustClaim(ctx context.Context, tier environment.Tier, hostname string, certificates []string) (Front, error) {
+	front, err := e.applyTrust(ctx, tier, true, func(read trustRecord) trustRecord { return read.withClaim(hostname, certificates) })
 	if err != nil {
 		return Front{}, err
 	}
-	if _, err := e.trust(ctx, tier.Sibling(), certificates, false); err != nil {
+	if _, err := e.applyTrust(ctx, tier.Sibling(), false, func(read trustRecord) trustRecord { return read.withCarried(certificates) }); err != nil {
 		return Front{}, err
 	}
 	return front, nil
 }
 
-func (e *Edge) trust(ctx context.Context, tier environment.Tier, certificates []string, adding bool) (Front, error) {
+func (e *Edge) withdrawClaims(ctx context.Context, tier environment.Tier, hostnames ...string) error {
+	_, err := e.applyTrust(ctx, tier, false, func(read trustRecord) trustRecord { return read.withoutClaims(hostnames) })
+	return err
+}
+
+func (e *Edge) applyTrust(ctx context.Context, tier environment.Tier, provisioning bool, change func(trustRecord) trustRecord) (Front, error) {
 	outputs, err := e.deps.Stacks.Outputs(ctx, e.frontTarget(tier))
 	if err != nil {
 		return Front{}, err
 	}
 	front := frontOf(outputs)
 	front.Shielded = true
-	if !adding && !front.provisioned() {
-		return front, nil
-	}
-	record, err := e.changeTrust(ctx, tier, func(read trustRecord) (trustRecord, bool) {
-		return read.succeededBy(certificates, adding)
-	})
+	record, err := e.changeTrust(ctx, tier, change)
 	if err != nil {
 		return Front{}, err
 	}
-	trusted := record.trusted()
-	if front.provisioned() && slices.Equal(record.Raised, trusted) {
+	allowlist := record.allowlist()
+	if len(allowlist) > maxAllowlisted {
+		return Front{}, fmt.Errorf("the %s front of tier %s would trust %d client certificates, and a Certificate Manager trust config allowlists at most %d: delete the client certificates your Cloudflare zones no longer present, and deploy again",
+			Kind, tier, len(allowlist), maxAllowlisted)
+	}
+	if !provisioning && !front.provisioned() {
+		return front, nil
+	}
+	if front.provisioned() && slices.Equal(record.Provisioned, allowlist) {
 		return front, nil
 	}
 	front, err = e.raise(ctx, tier, progress.DiscardProgress())
 	if err != nil {
 		return Front{}, err
 	}
-	_, err = e.changeTrust(ctx, tier, func(read trustRecord) (trustRecord, bool) {
-		if !slices.Equal(read.trusted(), trusted) {
-			return read, false
+	_, err = e.changeTrust(ctx, tier, func(read trustRecord) trustRecord {
+		if slices.Equal(read.allowlist(), allowlist) {
+			read.Provisioned = allowlist
 		}
-		read.Raised = trusted
-		return read, true
+		return read
 	})
 	return front, err
 }
 
-func (e *Edge) ensureFront(ctx context.Context, tier environment.Tier, certificates []string) (Front, error) {
-	if len(certificates) > 0 {
-		return e.shield(ctx, tier, certificates)
+func (e *Edge) frontFor(claim router.Claim) *Edge {
+	if len(claim.ClientCertificates) > 0 {
+		return e.Shielded()
 	}
+	return e
+}
+
+func (e *Edge) readProvisionedFront(ctx context.Context, tier environment.Tier) (Front, error) {
 	outputs, err := e.deps.Stacks.Outputs(ctx, e.frontTarget(tier))
 	if err != nil {
 		return Front{}, err

@@ -97,7 +97,7 @@ func (e *Edge) raiseServing(ctx context.Context, tier environment.Tier, preview 
 		Preview: preview,
 	}
 	if e.deps.Shielded {
-		trusted, err := e.ensureTrusted(ctx, tier)
+		trusted, err := e.ensureAllowlist(ctx, tier)
 		if err != nil {
 			return Front{}, err
 		}

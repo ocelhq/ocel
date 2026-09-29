@@ -2,6 +2,8 @@ package alb
 
 import (
 	"context"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -52,10 +54,9 @@ func (r Router) ClaimPreviewEntry(ctx context.Context, claim router.Claim) (edge
 	if !wild {
 		return edge.Origin{}, refusal.Refuse(refusal.CodeInvalid, "a preview entry is a wildcard, and %q is none", claim.Hostname)
 	}
-	fronted := r.e
+	fronted := r.e.frontFor(claim)
 	if len(claim.ClientCertificates) > 0 {
-		fronted = r.e.Shielded()
-		if _, err := fronted.shield(ctx, environment.TierPreview, claim.ClientCertificates); err != nil {
+		if _, err := fronted.trustClaim(ctx, environment.TierPreview, claim.Hostname, claim.ClientCertificates); err != nil {
 			return edge.Origin{}, err
 		}
 	}
@@ -71,11 +72,14 @@ func (r Router) DisclaimPreviewEntry(ctx context.Context, baseDomain string) err
 	if err != nil || recorded.BaseDomain != baseDomain {
 		return err
 	}
-	fronted := r.e
-	if recorded.Shielded {
-		fronted = r.e.Shielded()
+	if !recorded.Shielded {
+		return r.e.DestroyPreviewWildcard(ctx, baseDomain)
 	}
-	return fronted.DestroyPreviewWildcard(ctx, baseDomain)
+	shielded := r.e.Shielded()
+	if err := shielded.DestroyPreviewWildcard(ctx, baseDomain); err != nil {
+		return err
+	}
+	return shielded.withdrawClaims(ctx, environment.TierPreview, edge.PreviewWildcard(baseDomain))
 }
 
 func (r Router) PreviewEntryRemovals(wildcard string) []edge.PlanGroup {
@@ -91,15 +95,21 @@ func (r routerStack) State() router.StackState {
 
 func (r routerStack) Claim(ctx context.Context, claim router.Claim) (edge.Origin, error) {
 	s := r.s
-	fronted := s.e
-	if len(claim.ClientCertificates) > 0 {
-		fronted = s.e.Shielded()
+	fronted := s.e.frontFor(claim)
+	var front Front
+	var err error
+	switch {
+	case len(claim.ClientCertificates) > 0:
+		front, err = fronted.trustClaim(ctx, s.state.Tier, claim.Hostname, claim.ClientCertificates)
+	case !s.recorded.Front.provisioned():
+		front, err = fronted.readProvisionedFront(ctx, s.state.Tier)
+	default:
+		front = s.recorded.Front
 	}
-	if len(claim.ClientCertificates) > 0 || !s.recorded.Front.provisioned() {
-		front, err := fronted.ensureFront(ctx, s.state.Tier, claim.ClientCertificates)
-		if err != nil {
-			return edge.Origin{}, err
-		}
+	if err != nil {
+		return edge.Origin{}, err
+	}
+	if front != s.recorded.Front {
 		s.recorded.Front = front
 		s.keep()
 	}
@@ -110,7 +120,14 @@ func (r routerStack) Claim(ctx context.Context, claim router.Claim) (edge.Origin
 }
 
 func (r routerStack) Disclaim(ctx context.Context, hostname string) error {
-	return r.s.UnbindDomain(ctx, hostname)
+	shielded := r.s.recorded.Front.Shielded
+	if err := r.s.UnbindDomain(ctx, hostname); err != nil {
+		return err
+	}
+	if !shielded {
+		return nil
+	}
+	return r.s.e.Shielded().withdrawClaims(ctx, r.s.state.Tier, hostname)
 }
 
 func (r routerStack) Flip(ctx context.Context, flip router.Flip, progress progress.Progress) error {
@@ -122,4 +139,13 @@ func (r routerStack) Flip(ctx context.Context, flip router.Flip, progress progre
 
 func (r routerStack) RemovePointer(context.Context, string, progress.Progress) error { return nil }
 
-func (r routerStack) Destroy(ctx context.Context) error { return r.s.Destroy(ctx) }
+func (r routerStack) Destroy(ctx context.Context) error {
+	shielded, hostnames := r.s.recorded.Front.Shielded, slices.Sorted(maps.Keys(r.s.recorded.Hosts))
+	if err := r.s.Destroy(ctx); err != nil {
+		return err
+	}
+	if !shielded || len(hostnames) == 0 {
+		return nil
+	}
+	return r.s.e.Shielded().withdrawClaims(ctx, r.s.state.Tier, hostnames...)
+}
