@@ -2,6 +2,9 @@ package host
 
 import (
 	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -165,6 +168,46 @@ func TestTheSwitchboardIsWrittenBesideYourTraefikOnlyOntoADirectoryTheBoxHas(t *
 	}
 	if !strings.Contains(written, "proxy.traefik.directory") {
 		t.Errorf("the switchboard write refuses a missing directory without naming the option that set it:\n%s", written)
+	}
+}
+
+func TestADeployStandingTheSwitchboardAgainTakesADirectoryItCannotLookIntoAsThere(t *testing.T) {
+	t.Parallel()
+
+	if os.Geteuid() == 0 {
+		t.Skip("root looks into every directory, and this is about the deploy login, which cannot")
+	}
+	root := t.TempDir()
+	shut := filepath.Join(root, "coolify", "proxy")
+	for _, dir := range []string{filepath.Join(shut, "dynamic"), filepath.Join(root, "dokploy")} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Chmod(shut, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(filepath.Dir(shut), 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(filepath.Dir(shut), 0o755) })
+
+	for dir, missing := range map[string]bool{
+		filepath.Join(shut, "dynamic"):            false,
+		filepath.Join(root, "dokploy", "dynamic"): true,
+	} {
+		board := boundToPlace(boxContainer{}, filepath.Join(dir, "ocel.yml"))
+		said, err := exec.Command("sh", "-c", presenceRead(board)).CombinedOutput()
+		if err != nil {
+			t.Fatalf("the presence read failed: %v\n%s", err, said)
+		}
+		if reported := strings.Contains(string(said), "missing="+dir); reported != missing {
+			t.Errorf("the presence read of %s says %q, want it missing = %v: Coolify's directory sits under one the deploy login cannot enter, and one it can see is gone is gone", dir, said, missing)
+		}
+		restored, err := exec.Command("sh", "-c", board.placePresent()).CombinedOutput()
+		if refused := err != nil; refused != missing {
+			t.Errorf("standing the switchboard onto %s = %v, %q; want it refused = %v", dir, err, restored, missing)
+		}
 	}
 }
 
