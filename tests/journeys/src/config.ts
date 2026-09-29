@@ -101,7 +101,7 @@ export function overlayFor(
         base: GCP_BASE,
         slug: gcpSlug(cell, env),
         ...cell.variant.config,
-        ...(proxied ? { ...dnsOf(env), hostnames: hostnamesOf(cell, zone) } : {}),
+        ...(proxied ? { dns: "cloudflare" as const, hostnames: hostnamesOf(cell, zone) } : {}),
       };
     }
     case "vps": {
@@ -113,7 +113,8 @@ export function overlayFor(
         hostnames: hostnamesOf(cell, journeyZone(env)),
         ...registryOf(cell, env),
         ...(front ? { proxy: front.proxy } : {}),
-        ...(edge ? { edge, ...dnsOf(env) } : {}),
+        ...(edge ? { edge } : {}),
+        ...(edge === "cloudflare" ? { dns: "cloudflare" as const } : {}),
       };
     }
     case "dev":

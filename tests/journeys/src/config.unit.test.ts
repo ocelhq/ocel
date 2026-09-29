@@ -194,6 +194,20 @@ describe("overlayFor", () => {
     });
   });
 
+  it("writes a vps cloudflare cell's records through Cloudflare, since the edge only forwards a record that exists", () => {
+    expect(
+      overlayFor(cell(deploy.node, cloudflareOnABox), "vps", { OCEL_JOURNEY_ZONE: "j.example" }),
+    ).toMatchObject({ edge: "cloudflare", dns: "cloudflare" });
+  });
+
+  it("writes a gcp cloudflare cell's records through Cloudflare, since the edge only forwards a record that exists", () => {
+    expect(
+      overlayFor(cell(deploy.node, cloudflareOnGoogleCloud), "gcp", {
+        OCEL_JOURNEY_ZONE: "j.example",
+      }),
+    ).toMatchObject({ edge: "cloudflare", dns: "cloudflare" });
+  });
+
   it("fronts a gcp cloudflare cell with the cloudflare edge, and binds its hostnames under the run's zone", () => {
     expect(
       overlayFor(cell(deploy.node, cloudflareOnGoogleCloud), "gcp", {
