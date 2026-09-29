@@ -96,14 +96,14 @@ func (vm machine) frontGrace(t *testing.T) string {
 func (vm machine) peers(t *testing.T, command string) string {
 	t.Helper()
 	return vm.ran(t, "a container on "+host.ProxyNetwork,
-		"sudo docker run --rm --network "+quote(host.ProxyNetwork)+" "+quote(caddy.Image)+
+		"sudo docker run --rm --network "+quote(host.ProxyNetwork)+" "+quote(caddy.Image())+
 			" sh -c "+containerScript(command))
 }
 
 func (vm machine) beside(t *testing.T, container, command string) string {
 	t.Helper()
 	return vm.ran(t, "a container sharing the network of "+container,
-		"sudo docker run --rm --network "+quote("container:"+container)+" "+quote(caddy.Image)+
+		"sudo docker run --rm --network "+quote("container:"+container)+" "+quote(caddy.Image())+
 			" sh -c "+containerScript(command))
 }
 
@@ -134,8 +134,8 @@ func TestLiveTheProxyIsStateTheBoxKeepsAndIsWrittenBackWhenItIsGone(t *testing.T
 		t.Fatalf("%s is not running after a bootstrap that installs it:\n%s",
 			caddy.Container, vm.ssh(t, "sudo docker logs --tail 40 "+caddy.Container+" 2>&1 || true"))
 	}
-	if image := vm.inspects(t, "container", caddy.Container, "{{.Config.Image}}"); image != caddy.Image {
-		t.Errorf("the proxy runs %q, want %q: a tag is a name its owner can repoint under a host that already trusts it", image, caddy.Image)
+	if image := vm.inspects(t, "container", caddy.Container, "{{.Config.Image}}"); image != caddy.Image() {
+		t.Errorf("the proxy runs %q, want %q: a tag is a name its owner can repoint under a host that already trusts it", image, caddy.Image())
 	}
 	if policy := vm.inspects(t, "container", caddy.Container, "{{.HostConfig.RestartPolicy.Name}}"); policy != "unless-stopped" {
 		t.Errorf("the proxy is restarted %q, want unless-stopped: a reboot must not be what takes the box's edge down", policy)

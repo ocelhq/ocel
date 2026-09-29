@@ -15,11 +15,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/officialimages"
 )
 
 const (
 	postgresKind      = "pg"
-	postgresRegistry  = "public.ecr.aws/docker/library/"
 	postgresPort      = "5432"
 	postgresSuperuser = "postgres"
 	postgresData      = "/var/lib/postgresql/data"
@@ -49,7 +49,7 @@ func postgresContainer(in resources.ProvisionRequest) (host.ResourceContainer, e
 		Resource: in.Resource.Name,
 		Tier:     in.Ref.Tier,
 
-		Image:        postgresRegistry + image,
+		Image:        officialimages.QualifyImage(image),
 		Env:          map[string]string{"POSTGRES_DB": in.Resource.Name},
 		Capabilities: postgresCapabilities,
 

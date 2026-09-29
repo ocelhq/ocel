@@ -277,7 +277,7 @@ type boxContainer struct {
 func frontProxy() boxContainer {
 	return boxContainer{
 		name:    caddy.Container,
-		image:   caddy.Image,
+		image:   caddy.Image(),
 		command: caddy.Command(),
 		binds: []string{
 			proxyRoot + ":" + caddy.ConfigDir + ":ro",

@@ -146,7 +146,7 @@ func appOn(t *testing.T, network, named, body string) string {
 	name := probeName(t) + "-" + named
 	exec.Command(dockerEngine, "rm", "--force", name).Run()
 	run := append([]string{"run", "--rm", "--detach", "--name", name}, enginetest.RunLabelArgs(t)...)
-	out, err := exec.Command(dockerEngine, append(run, "--network", network, caddy.Image,
+	out, err := exec.Command(dockerEngine, append(run, "--network", network, caddy.Image(),
 		"caddy", "respond", "--listen", ":"+appbuild.InjectedPortText, body)...).CombinedOutput()
 	if err != nil {
 		t.Skipf("this machine's engine will not run the app the proxy forwards to: %s", out)
