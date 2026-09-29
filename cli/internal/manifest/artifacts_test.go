@@ -171,7 +171,7 @@ func TestAContainerAppIsServedByItsImageAloneWhateverFunctionsTheBuildLeftForIt(
 	}
 	apps := manifest.GetApps()
 	if len(apps) != 1 || apps[0].GetContainer().GetImage() == "" || apps[0].GetServerless() != nil {
-		t.Errorf("apps = %v, want api served by its image and by no function, so routing has one answer per request", apps)
+		t.Errorf("apps = %v, container apps = %v, want api served by its image and by no function, so routing has one answer per request", appNames(apps), containerApps(manifest))
 	}
 }
 
