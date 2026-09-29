@@ -81,7 +81,7 @@ func runRollback(ctx context.Context, invocation commands.Invocation, cwd string
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{
+	provider, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{
 		Pinning: executables.ChoosePinning(opts.dry),
 		Tier:    environmentv1.Tier_TIER_PRODUCTION,
 		Require: readiness.Features,
@@ -90,9 +90,9 @@ func runRollback(ctx context.Context, invocation commands.Invocation, cwd string
 		check.End(err)
 		return err
 	}
-	defer prov.Close()
+	defer provider.Close()
 
-	history, err := promotionHistory(ctx, check, prov, cfg)
+	history, err := promotionHistory(ctx, check, provider, cfg)
 	check.End(err)
 	if err != nil {
 		return err
@@ -122,7 +122,7 @@ func runRollback(ctx context.Context, invocation commands.Invocation, cwd string
 	}
 
 	promoting := run.Phase(progressv1.Phase_PHASE_PROMOTE)
-	rolled, err := promote(ctx, promoting, prov, cfg, target)
+	rolled, err := promote(ctx, promoting, provider, cfg, target)
 	for _, warning := range rolled.GetWarnings() {
 		promoting.Warn(warning)
 	}
@@ -144,10 +144,10 @@ func runRollback(ctx context.Context, invocation commands.Invocation, cwd string
 	return nil
 }
 
-func promote(ctx context.Context, phase *run.Span, prov *providerprocess.Provider, cfg *project.Project, target *contractv1.Promotion) (*contractv1.RollbackResponse, error) {
+func promote(ctx context.Context, phase *run.Span, provider *providerprocess.Provider, cfg *project.Project, target *contractv1.Promotion) (*contractv1.RollbackResponse, error) {
 	unit := phase.Unit(cfg.Slug, progress.Switching.Title("production traffic back to promotion "+target.GetPromotionId()))
 	var resp *contractv1.RollbackResponse
-	err := prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
+	err := provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		resp, err = client.Rollback(ctx, &contractv1.RollbackRequest{
 			Slug: cfg.Slug,
 			To:   target.GetPromotionId(),

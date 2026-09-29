@@ -167,9 +167,9 @@ func (s Store) History(ctx context.Context, at variables.Coordinate) ([]variable
 	return versions, nil
 }
 
-func ListEnvironmentNames(ctx context.Context, prov *providerprocess.Provider, slug string) ([]string, error) {
+func ListEnvironmentNames(ctx context.Context, opened *providerprocess.Provider, slug string) ([]string, error) {
 	var resp *contractv1.ListEnvironmentsResponse
-	err := prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) error {
+	err := opened.Call(ctx, func(client contractv1connect.ProviderServiceClient) error {
 		var err error
 		resp, err = client.ListEnvironments(ctx, &contractv1.ListEnvironmentsRequest{
 			Slug: slug,

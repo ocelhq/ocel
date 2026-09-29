@@ -41,12 +41,12 @@ func runAdd(ctx context.Context, dependencies Dependencies, cfg *project.Project
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, described, err := reachTarget(ctx, dependencies, cfg, check)
+	provider, described, err := reachTarget(ctx, dependencies, cfg, check)
 	check.End(err)
 	if err != nil {
 		return err
 	}
-	defer prov.Close()
+	defer provider.Close()
 
 	registered, err := opts.console.UpsertConnector(ctx, access, console.ConnectorRegistration{
 		Target: described.GetTargetFingerprint(),
@@ -77,7 +77,7 @@ func runAdd(ctx context.Context, dependencies Dependencies, cfg *project.Project
 		return err
 	}
 
-	installed, err := providerprocess.Stream(ctx, prov, "InstallConnector", &contractv1.InstallConnectorRequest{
+	installed, err := providerprocess.Stream(ctx, provider, "InstallConnector", &contractv1.InstallConnectorRequest{
 		Binary:     binary,
 		Version:    version.Version,
 		ConfigJson: config,

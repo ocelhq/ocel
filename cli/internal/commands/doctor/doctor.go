@@ -283,14 +283,14 @@ type tierAnswer struct {
 }
 
 type answers struct {
-	pkg        string
-	problem    string
-	identity   *contractv1.Identity
-	problems   []*contractv1.CredentialProblem
-	tiers      map[environmentv1.Tier]*tierAnswer
-	hostChecks []*contractv1.HostCheck
-	hostnames  []*contractv1.ProductionHostname
-	wildcard   *contractv1.PreviewWildcard
+	providerName string
+	problem      string
+	identity     *contractv1.Identity
+	problems     []*contractv1.CredentialProblem
+	tiers        map[environmentv1.Tier]*tierAnswer
+	hostChecks   []*contractv1.HostCheck
+	hostnames    []*contractv1.ProductionHostname
+	wildcard     *contractv1.PreviewWildcard
 }
 
 func (a *answers) addHostChecks(checks []*contractv1.HostCheck) {
@@ -349,16 +349,16 @@ func checkSetup(ctx context.Context, invocation commands.Invocation, cfg *projec
 }
 
 func askProvider(ctx context.Context, invocation commands.Invocation, cfg *project.Project, unit *run.Span, got *answers) error {
-	prov, _, err := invocation.OpenProvider(ctx, unit, cfg, commands.OpenOptions{})
+	provider, _, err := invocation.OpenProvider(ctx, unit, cfg, commands.OpenOptions{})
 	if err != nil {
 		return err
 	}
-	defer prov.Close()
-	got.pkg = prov.Name()
+	defer provider.Close()
+	got.providerName = provider.Name()
 
 	for _, tier := range tiers {
 		checkHosts := tier == environmentv1.Tier_TIER_PRODUCTION
-		resp, err := readiness.Read(ctx, prov, cfg, readiness.Request{
+		resp, err := readiness.Read(ctx, provider, cfg, readiness.Request{
 			Tier:             tier,
 			Slug:             cfg.Slug,
 			Domains:          cfg.HostnameNames(tier),
@@ -378,7 +378,7 @@ func askProvider(ctx context.Context, invocation commands.Invocation, cfg *proje
 		}
 
 		var planned *contractv1.DescribeBootstrapResponse
-		err = prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
+		err = provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 			planned, err = client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{Tier: tier, Edge: cfg.EdgeSelection()})
 			return err
 		})
@@ -394,7 +394,7 @@ func askProvider(ctx context.Context, invocation commands.Invocation, cfg *proje
 			continue
 		}
 		var bound *contractv1.GetHostnameStatusResponse
-		err = prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
+		err = provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 			bound, err = client.GetHostnameStatus(ctx, &contractv1.HostnameRequest{
 				Slug:       cfg.Slug,
 				Configured: configured,
@@ -427,7 +427,7 @@ func (a *answers) keep(problems []*contractv1.CredentialProblem) {
 
 func credentialSections(cfg *project.Project, got *answers) []section {
 	if got.problem != "" {
-		s := section{name: "Provider", identity: got.pkg}
+		s := section{name: "Provider", identity: got.providerName}
 		if head, rest, multiline := strings.Cut(got.problem, "\n"); multiline {
 			s.checks = append(s.checks, check{verdict: verdictFail, text: head, detail: strings.Split(rest, "\n")})
 			return []section{s}

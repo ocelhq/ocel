@@ -54,8 +54,8 @@ func fakeSpec(t *testing.T, mode string, spec LaunchSpec) LaunchSpec {
 }
 
 func fakeSocket(spec LaunchSpec) string {
-	for _, kv := range spec.Env {
-		if path, ok := strings.CutPrefix(kv, fakeProviderSockEnvVar+"="); ok {
+	for _, variable := range spec.Env {
+		if path, ok := strings.CutPrefix(variable, fakeProviderSockEnvVar+"="); ok {
 			return path
 		}
 	}
@@ -291,7 +291,7 @@ func TestDeploy(t *testing.T) {
 		var events []*progressv1.OperationEvent
 		err := streamed(ctx, r, "Deploy", &contractv1.DeployRequest{
 			Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"},
-		}, contractv1connect.ProviderServiceClient.Deploy, func(ev *progressv1.OperationEvent) { events = append(events, ev) })
+		}, contractv1connect.ProviderServiceClient.Deploy, func(event *progressv1.OperationEvent) { events = append(events, event) })
 		if err != nil {
 			t.Fatalf("Deploy() error = %v, want nil", err)
 		}
@@ -327,7 +327,7 @@ func TestDeploy(t *testing.T) {
 		go func() {
 			deployErrCh <- streamed(ctx, r, "Deploy", &contractv1.DeployRequest{
 				Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"},
-			}, contractv1connect.ProviderServiceClient.Deploy, func(ev *progressv1.OperationEvent) { gotFirstEvent.Store(true) })
+			}, contractv1connect.ProviderServiceClient.Deploy, func(event *progressv1.OperationEvent) { gotFirstEvent.Store(true) })
 		}()
 
 		deadline := time.Now().Add(2 * time.Second)
@@ -395,7 +395,7 @@ func TestDeploy(t *testing.T) {
 		go func() {
 			deployErrCh <- streamed(called, r, "Deploy", &contractv1.DeployRequest{
 				Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"},
-			}, contractv1connect.ProviderServiceClient.Deploy, func(ev *progressv1.OperationEvent) { gotFirstEvent.Store(true) })
+			}, contractv1connect.ProviderServiceClient.Deploy, func(event *progressv1.OperationEvent) { gotFirstEvent.Store(true) })
 		}()
 
 		deadline := time.Now().Add(2 * time.Second)
@@ -461,8 +461,8 @@ func TestDeploy(t *testing.T) {
 		}
 
 		var reported []string
-		err := streamed(ctx, r, "Deploy", &contractv1.DeployRequest{Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"}}, contractv1connect.ProviderServiceClient.Deploy, func(ev *progressv1.OperationEvent) {
-			for _, app := range ev.GetResult().GetApps() {
+		err := streamed(ctx, r, "Deploy", &contractv1.DeployRequest{Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"}}, contractv1connect.ProviderServiceClient.Deploy, func(event *progressv1.OperationEvent) {
+			for _, app := range event.GetResult().GetApps() {
 				reported = append(reported, app.GetApp()+"="+app.GetOutcome().String())
 			}
 		})
@@ -496,7 +496,7 @@ func TestDeploy(t *testing.T) {
 		var seen int
 		err := streamed(ctx, r, "Deploy", &contractv1.DeployRequest{
 			Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"},
-		}, contractv1connect.ProviderServiceClient.Deploy, func(ev *progressv1.OperationEvent) { seen++ })
+		}, contractv1connect.ProviderServiceClient.Deploy, func(event *progressv1.OperationEvent) { seen++ })
 
 		if connect.CodeOf(err) != connect.CodeResourceExhausted {
 			t.Fatalf("Deploy() error = %v (code %v), want it refused with CodeResourceExhausted", err, connect.CodeOf(err))
@@ -546,7 +546,7 @@ func TestBootstrap(t *testing.T) {
 		}
 
 		var events []*progressv1.OperationEvent
-		err := streamed(ctx, r, "Bootstrap", &contractv1.BootstrapRequest{}, contractv1connect.ProviderServiceClient.Bootstrap, func(ev *progressv1.OperationEvent) { events = append(events, ev) })
+		err := streamed(ctx, r, "Bootstrap", &contractv1.BootstrapRequest{}, contractv1connect.ProviderServiceClient.Bootstrap, func(event *progressv1.OperationEvent) { events = append(events, event) })
 		if err != nil {
 			t.Fatalf("Bootstrap() error = %v, want nil", err)
 		}

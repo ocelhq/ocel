@@ -70,11 +70,11 @@ func fingerprinted(ctx context.Context, dependencies Dependencies, cfg *project.
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, described, err := reachTarget(ctx, dependencies, cfg, check)
+	provider, described, err := reachTarget(ctx, dependencies, cfg, check)
 	check.End(err)
 	if err != nil {
 		return "", err
 	}
-	prov.Close()
+	provider.Close()
 	return described.GetTargetFingerprint(), nil
 }

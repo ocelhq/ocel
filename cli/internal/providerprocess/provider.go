@@ -76,12 +76,12 @@ func Stream[Req any](ctx context.Context, p *Provider, rpc string, req *Req, cal
 
 func Plan[Req any](ctx context.Context, p *Provider, rpc string, req *Req, call streamCall[Req]) (*planv1.ChangePlan, error) {
 	var plan *planv1.ChangePlan
-	_, err := forward(ctx, p, rpc, req, call, func(ev *progressv1.OperationEvent) {
-		if shown := ev.GetPlan(); shown != nil {
+	_, err := forward(ctx, p, rpc, req, call, func(event *progressv1.OperationEvent) {
+		if shown := event.GetPlan(); shown != nil {
 			plan = shown
 			return
 		}
-		p.span.Forward(ev)
+		p.span.Forward(event)
 	})
 	return plan, err
 }

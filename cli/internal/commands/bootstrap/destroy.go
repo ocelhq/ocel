@@ -64,7 +64,7 @@ func runDestroy(ctx context.Context, invocation commands.Invocation, cfg *projec
 	if notice != "" {
 		check.Warn(notice)
 	}
-	prov, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{
+	provider, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{
 		Pinning: executables.ChoosePinning(opts.Dry),
 		Tier:    tier,
 		Require: readiness.Credentials,
@@ -74,12 +74,12 @@ func runDestroy(ctx context.Context, invocation commands.Invocation, cfg *projec
 	if err != nil {
 		return err
 	}
-	defer prov.Close()
+	defer provider.Close()
 
 	planning := run.Phase(progressv1.Phase_PHASE_PLAN)
 	unit := planning.Unit(name, progress.Enumerating.Title(fmt.Sprintf("what removing the %s bootstrap would delete", name)))
 	var plan *planv1.ChangePlan
-	err = prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
+	err = provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		plan, err = client.PlanRemoveBootstrap(ctx, &contractv1.BootstrapScope{
 			Tier: tier,
 			Edge: cfg.EdgeSelection(),
@@ -116,7 +116,7 @@ func runDestroy(ctx context.Context, invocation commands.Invocation, cfg *projec
 		Edge:      cfg.EdgeSelection(),
 		Consented: consented,
 	}
-	if _, err := providerprocess.Stream(ctx, prov, "RemoveBootstrap", req, contractv1connect.ProviderServiceClient.RemoveBootstrap); err != nil {
+	if _, err := providerprocess.Stream(ctx, provider, "RemoveBootstrap", req, contractv1connect.ProviderServiceClient.RemoveBootstrap); err != nil {
 		return err
 	}
 	run.Succeed(fmt.Sprintf("Removed the %s bootstrap", name))

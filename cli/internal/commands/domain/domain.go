@@ -79,14 +79,14 @@ func readDomain(ctx context.Context, invocation commands.Invocation, cfg *projec
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{Tier: tier, Require: readiness.Features})
+	provider, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{Tier: tier, Require: readiness.Features})
 	if err != nil {
 		return err
 	}
-	defer prov.Close()
+	defer provider.Close()
 
 	unit := check.Unit(cfg.Slug, reading)
-	err = prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) error { return read(ctx, client) })
+	err = provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) error { return read(ctx, client) })
 	unit.End(err)
 	check.End(err)
 	return err

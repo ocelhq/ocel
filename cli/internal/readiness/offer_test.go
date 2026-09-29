@@ -91,10 +91,10 @@ type heard struct {
 	events []*streamv1.RunEvent
 }
 
-func (h *heard) Receive(ev *streamv1.RunEvent) {
+func (h *heard) Receive(event *streamv1.RunEvent) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.events = append(h.events, ev)
+	h.events = append(h.events, event)
 }
 
 func (h *heard) Close() error { return nil }
@@ -103,14 +103,14 @@ func (h *heard) said() string {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	var b strings.Builder
-	for _, ev := range h.events {
-		if ev.GetBody() != nil {
+	for _, event := range h.events {
+		if event.GetBody() != nil {
 			continue
 		}
-		if ev.GetLevel() == progressv1.Level_LEVEL_WARN {
+		if event.GetLevel() == progressv1.Level_LEVEL_WARN {
 			b.WriteString("⚠ ")
 		}
-		b.WriteString(ev.GetMessage() + "\n")
+		b.WriteString(event.GetMessage() + "\n")
 	}
 	return b.String()
 }
@@ -119,15 +119,15 @@ func (h *heard) shape() []string {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	var out []string
-	for _, ev := range h.events {
+	for _, event := range h.events {
 		switch {
-		case ev.GetWaiting() != nil:
+		case event.GetWaiting() != nil:
 			out = append(out, "waiting")
-		case ev.GetResumed() != nil:
+		case event.GetResumed() != nil:
 			out = append(out, "resumed")
-		case ev.GetBody() == nil && ev.GetLevel() == progressv1.Level_LEVEL_WARN:
+		case event.GetBody() == nil && event.GetLevel() == progressv1.Level_LEVEL_WARN:
 			out = append(out, "warn")
-		case ev.GetBody() == nil:
+		case event.GetBody() == nil:
 			out = append(out, "say")
 		}
 	}

@@ -60,11 +60,11 @@ func readDomainStatus(ctx context.Context, invocation commands.Invocation, cfg *
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: readiness.Features})
+	provider, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: readiness.Features})
 	if err != nil {
 		return nil, err
 	}
-	defer prov.Close()
+	defer provider.Close()
 
 	req := &contractv1.HostnameRequest{
 		Slug:       cfg.Slug,
@@ -72,14 +72,14 @@ func readDomainStatus(ctx context.Context, invocation commands.Invocation, cfg *
 		Edge:       cfg.EdgeSelection(),
 		Probe:      true,
 	}
-	resp, err = awaitDomainStatus(ctx, check, cfg.Slug, hostnameStatus(prov, req), wait)
+	resp, err = awaitDomainStatus(ctx, check, cfg.Slug, hostnameStatus(provider, req), wait)
 	check.End(err)
 	return resp, err
 }
 
-func hostnameStatus(prov *providerprocess.Provider, req *contractv1.HostnameRequest) func(context.Context) (*contractv1.GetHostnameStatusResponse, error) {
+func hostnameStatus(provider *providerprocess.Provider, req *contractv1.HostnameRequest) func(context.Context) (*contractv1.GetHostnameStatusResponse, error) {
 	return func(ctx context.Context) (resp *contractv1.GetHostnameStatusResponse, err error) {
-		err = prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
+		err = provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 			resp, err = client.GetHostnameStatus(ctx, req)
 			return err
 		})

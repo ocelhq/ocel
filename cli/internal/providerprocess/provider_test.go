@@ -24,10 +24,10 @@ type recording struct {
 	events []*streamv1.RunEvent
 }
 
-func (r *recording) Receive(ev *streamv1.RunEvent) {
+func (r *recording) Receive(event *streamv1.RunEvent) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.events = append(r.events, ev)
+	r.events = append(r.events, event)
 }
 
 func (r *recording) Close() error { return nil }
@@ -79,9 +79,9 @@ func TestAStartedProvidersStreamEventsReachTheSpan(t *testing.T) {
 	}
 
 	var said, outcome bool
-	for _, ev := range seen.received() {
-		said = said || ev.GetMessage() == "step 1"
-		outcome = outcome || ev.GetResult().GetSuccess()
+	for _, event := range seen.received() {
+		said = said || event.GetMessage() == "step 1"
+		outcome = outcome || event.GetResult().GetSuccess()
 	}
 	if !said {
 		t.Error("the span never saw the provider's \"step 1\" line")
@@ -109,9 +109,9 @@ func TestAPlanningStreamHandsBackThePlanAndForwardsEveryOtherEvent(t *testing.T)
 	}
 
 	var said bool
-	for _, ev := range seen.received() {
-		said = said || ev.GetMessage() == "step 1"
-		if ev.GetPlan() != nil {
+	for _, event := range seen.received() {
+		said = said || event.GetMessage() == "step 1"
+		if event.GetPlan() != nil {
 			t.Error("the span saw the plan, want it handed back for the command to draw")
 		}
 	}
@@ -127,14 +127,14 @@ func TestALineTheProviderWritesToStderrReachesTheRunAtDebugNamingTheProviderInTh
 	p := startFake(t, ctx, "chatty", span, Questions{})
 	p.Close()
 
-	for _, ev := range seen.received() {
-		if ev.GetMessage() != fakeChattyLine {
+	for _, event := range seen.received() {
+		if event.GetMessage() != fakeChattyLine {
 			continue
 		}
-		if ev.GetLevel() != progressv1.Level_LEVEL_DEBUG || ev.GetSubject() != "fake" || ev.GetOutput().GetStream() != progressv1.Stream_STREAM_STDERR ||
-			ev.GetPhase() != progressv1.Phase_PHASE_DEPLOY {
+		if event.GetLevel() != progressv1.Level_LEVEL_DEBUG || event.GetSubject() != "fake" || event.GetOutput().GetStream() != progressv1.Stream_STREAM_STDERR ||
+			event.GetPhase() != progressv1.Phase_PHASE_DEPLOY {
 			t.Errorf("the stderr line arrived as %s from %q on %s in %s, want DEBUG output from \"fake\" on stderr in the deploy phase it started in",
-				ev.GetLevel(), ev.GetSubject(), ev.GetOutput().GetStream(), ev.GetPhase())
+				event.GetLevel(), event.GetSubject(), event.GetOutput().GetStream(), event.GetPhase())
 		}
 		return
 	}
@@ -143,12 +143,12 @@ func TestALineTheProviderWritesToStderrReachesTheRunAtDebugNamingTheProviderInTh
 
 func bodies(seen *recording) []string {
 	var kinds []string
-	for _, ev := range seen.received() {
+	for _, event := range seen.received() {
 		switch {
-		case ev.GetWaiting() != nil:
+		case event.GetWaiting() != nil:
 			kinds = append(kinds, "waiting")
-		case ev.GetResumed() != nil:
-			kinds = append(kinds, "resumed "+ev.GetResumed().GetReason())
+		case event.GetResumed() != nil:
+			kinds = append(kinds, "resumed "+event.GetResumed().GetReason())
 		}
 	}
 	return kinds
@@ -208,13 +208,13 @@ func TestAQuestionAskedAfterTheStartingPhaseEndedHoldsTheRunNotThatPhase(t *test
 	}
 
 	held := 0
-	for _, ev := range seen.received() {
-		if ev.GetWaiting() == nil && ev.GetResumed() == nil {
+	for _, event := range seen.received() {
+		if event.GetWaiting() == nil && event.GetResumed() == nil {
 			continue
 		}
 		held++
-		if ev.GetPhase() != progressv1.Phase_PHASE_UNSPECIFIED || len(ev.GetSpanId()) != 0 {
-			t.Errorf("the prompt's hold arrived in %s on span %x, want it on the run, not the check phase that had ended", ev.GetPhase(), ev.GetSpanId())
+		if event.GetPhase() != progressv1.Phase_PHASE_UNSPECIFIED || len(event.GetSpanId()) != 0 {
+			t.Errorf("the prompt's hold arrived in %s on span %x, want it on the run, not the check phase that had ended", event.GetPhase(), event.GetSpanId())
 		}
 	}
 	if held != 2 {

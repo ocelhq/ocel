@@ -112,9 +112,9 @@ func infraLabel(tier environmentv1.Tier) string {
 }
 
 func identityEvent(cfg *project.Project, tier environmentv1.Tier, id *contractv1.Identity) *streamv1.IdentityEvent {
-	ev := &streamv1.IdentityEvent{Project: cfg.Slug, Tier: tier}
+	event := &streamv1.IdentityEvent{Project: cfg.Slug, Tier: tier}
 	if id.GetProvider() != "" || id.GetAccount() != "" || id.GetPrincipal() != "" || id.GetLocation() != "" {
-		ev.Origin = &streamv1.Party{
+		event.Origin = &streamv1.Party{
 			Vendor:    id.GetProvider(),
 			Account:   id.GetAccount(),
 			Principal: id.GetPrincipal(),
@@ -122,9 +122,9 @@ func identityEvent(cfg *project.Project, tier environmentv1.Tier, id *contractv1
 		}
 	}
 	if scope := id.GetEdgeScope(); scope != "" {
-		ev.Edge = &streamv1.Party{Vendor: edgeVendor(cfg), Account: scope}
+		event.Edge = &streamv1.Party{Vendor: edgeVendor(cfg), Account: scope}
 	}
-	return ev
+	return event
 }
 
 func edgeVendor(cfg *project.Project) string {

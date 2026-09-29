@@ -23,7 +23,7 @@ import (
 
 func TestDeployThroughARealBuiltProviderServesTheAppItDeployed(t *testing.T) {
 	t.Run("a real built provider reports the typed resource output it decoded", func(t *testing.T) {
-		root, binPath := setUpRealProviderFixture(t)
+		root, binary := setUpRealProviderFixture(t)
 
 		var stdout, stderr bytes.Buffer
 		dependencies := newTestDependencies()
@@ -42,11 +42,11 @@ func TestDeployThroughARealBuiltProviderServesTheAppItDeployed(t *testing.T) {
 
 		sockPath := parseBoundSocketPath(t, stderr.String())
 		clitest.WaitForNoStaleSocket(t, sockPath)
-		waitForNoOrphanProcess(t, binPath)
+		waitForNoOrphanProcess(t, binary)
 	})
 
 	t.Run("an express app answers on the function URL it was deployed to", func(t *testing.T) {
-		root, binPath, fnName := setUpRealProviderExpressFixture(t)
+		root, binary, fnName := setUpRealProviderExpressFixture(t)
 
 		var stdout, stderr bytes.Buffer
 		dependencies := newTestDependencies()
@@ -68,11 +68,11 @@ func TestDeployThroughARealBuiltProviderServesTheAppItDeployed(t *testing.T) {
 
 		sockPath := parseBoundSocketPath(t, stderr.String())
 		clitest.WaitForNoStaleSocket(t, sockPath)
-		waitForNoOrphanProcess(t, binPath)
+		waitForNoOrphanProcess(t, binary)
 	})
 }
 
-func setUpRealProviderFixture(t *testing.T) (root, binPath string) {
+func setUpRealProviderFixture(t *testing.T) (root, binary string) {
 	t.Helper()
 
 	repoRoot := requireRealProviderEnv(t)
@@ -90,11 +90,11 @@ import { postgres } from "ocel/postgres";
 postgres("main", { version: "15" });
 `)
 
-	binPath = installRealProvider(t, repoRoot, root)
-	return root, binPath
+	binary = installRealProvider(t, repoRoot, root)
+	return root, binary
 }
 
-func setUpRealProviderExpressFixture(t *testing.T) (root, binPath, funcLogicalName string) {
+func setUpRealProviderExpressFixture(t *testing.T) (root, binary, funcLogicalName string) {
 	t.Helper()
 
 	repoRoot := requireRealProviderEnv(t)
@@ -126,8 +126,8 @@ export default {
 	}
 	clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), fmt.Sprintf("export * from %q;\n", filepath.ToSlash(resourceModule)))
 
-	binPath = installRealProvider(t, repoRoot, root)
-	return root, binPath, appName
+	binary = installRealProvider(t, repoRoot, root)
+	return root, binary, appName
 }
 
 func requireRealProviderEnv(t *testing.T) string {
@@ -155,7 +155,7 @@ func requireRealProviderEnv(t *testing.T) string {
 	return repoRoot
 }
 
-func installRealProvider(t *testing.T, repoRoot, root string) (binPath string) {
+func installRealProvider(t *testing.T, repoRoot, root string) (binary string) {
 	t.Helper()
 
 	nodeModules := filepath.Join(root, "node_modules")
@@ -166,8 +166,8 @@ func installRealProvider(t *testing.T, repoRoot, root string) (binPath string) {
 		t.Fatalf("symlink ocel package: %v", err)
 	}
 
-	return clitest.InstallProvider(t, "aws", func(dest string) error {
-		build := exec.Command("go", "build", "-o", dest, "github.com/ocelhq/ocel/platform/aws/provider/cmd/deploy")
+	return clitest.InstallProvider(t, "aws", func(executable string) error {
+		build := exec.Command("go", "build", "-o", executable, "github.com/ocelhq/ocel/platform/aws/provider/cmd/deploy")
 		build.Dir = repoRoot
 		if out, err := build.CombinedOutput(); err != nil {
 			return fmt.Errorf("go build the aws provider: %w\n%s", err, out)
@@ -199,7 +199,7 @@ func parseBoundSocketPath(t *testing.T, stderr string) string {
 	return m[1]
 }
 
-func waitForNoOrphanProcess(t *testing.T, binPath string) {
+func waitForNoOrphanProcess(t *testing.T, binary string) {
 	t.Helper()
 	if _, err := exec.LookPath("pgrep"); err != nil {
 		t.Skip("pgrep not found on PATH, cannot verify no orphaned provider process")
@@ -207,7 +207,7 @@ func waitForNoOrphanProcess(t *testing.T, binPath string) {
 
 	deadline := time.Now().Add(10 * time.Second)
 	for {
-		out, err := exec.Command("pgrep", "-f", binPath).Output()
+		out, err := exec.Command("pgrep", "-f", binary).Output()
 		if err != nil {
 			return
 		}
@@ -215,7 +215,7 @@ func waitForNoOrphanProcess(t *testing.T, binPath string) {
 			return
 		}
 		if time.Now().After(deadline) {
-			t.Errorf("orphaned provider process still running for %s: pids %s", binPath, strings.TrimSpace(string(out)))
+			t.Errorf("orphaned provider process still running for %s: pids %s", binary, strings.TrimSpace(string(out)))
 			return
 		}
 		time.Sleep(50 * time.Millisecond)

@@ -108,12 +108,12 @@ func resolveBuiltComputes(ctx context.Context, dependencies Dependencies, buildi
 	}
 	check := building.Phase(progressv1.Phase_PHASE_CHECK)
 	defer func() { check.End(err) }()
-	prov, _, err := dependencies.OpenProvider(ctx, check, declared, commands.OpenOptions{})
+	provider, _, err := dependencies.OpenProvider(ctx, check, declared, commands.OpenOptions{})
 	if err != nil {
 		return nil, err
 	}
-	defer prov.Close()
-	return readiness.ResolveComputes(ctx, prov, declared)
+	defer provider.Close()
+	return readiness.ResolveComputes(ctx, provider, declared)
 }
 
 func appBuildLog(phase *run.Span) build.Log {

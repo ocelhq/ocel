@@ -28,7 +28,7 @@ import (
 type variablesRecovery struct {
 	dependencies Dependencies
 	cfg          *project.Project
-	prov         *providerprocess.Provider
+	provider     *providerprocess.Provider
 	tier         environmentv1.Tier
 
 	newDeclarations func(variables.EnvSource) *variables.Declarations
@@ -110,7 +110,7 @@ func (r variablesRecovery) build(ctx context.Context, phase, span *run.Span, pre
 }
 
 func (r variablesRecovery) declarations(ctx context.Context) (*variables.Declarations, error) {
-	synced, err := valuestore.Store{Provider: r.prov, Project: r.cfg, Tier: r.tier}.SyncEnvSource(ctx)
+	synced, err := valuestore.Store{Provider: r.provider, Project: r.cfg, Tier: r.tier}.SyncEnvSource(ctx)
 	if problems := valuestore.CredentialProblems(err); len(problems) > 0 {
 		declarations := r.newDeclarations(variablescope.ConfiguredEnvSource(r.cfg, r.tier))
 		return declarations, declarations.RefuseCredentials(problems)
@@ -126,7 +126,7 @@ func (r variablesRecovery) createInEnvSource(ctx context.Context, span *run.Span
 	if !source.CanCreate || r.dry {
 		return
 	}
-	vars, err := r.prov.Vars()
+	vars, err := r.provider.Vars()
 	if err != nil {
 		return
 	}
@@ -161,7 +161,7 @@ func (r variablesRecovery) attempt(ctx context.Context, phase, unit *run.Span, d
 }
 
 func (r variablesRecovery) fill(ctx context.Context, span *run.Span, declarations *variables.Declarations, refusal *variables.MissingError) error {
-	editor, err := r.dependencies.ServeVariableEditor(ctx, r.cfg, r.prov, r.tier, declarations, r.recovery(refusal))
+	editor, err := r.dependencies.ServeVariableEditor(ctx, r.cfg, r.provider, r.tier, declarations, r.recovery(refusal))
 	if err != nil {
 		return err
 	}

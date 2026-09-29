@@ -14,7 +14,7 @@ type deployOutcome struct {
 	promotionID string
 }
 
-func streamDeploy(ctx context.Context, prov *providerprocess.Provider, req *contractv1.DeployRequest) (deployOutcome, error) {
-	res, err := providerprocess.Stream(ctx, prov, "Deploy", req, contractv1connect.ProviderServiceClient.Deploy)
+func streamDeploy(ctx context.Context, provider *providerprocess.Provider, req *contractv1.DeployRequest) (deployOutcome, error) {
+	res, err := providerprocess.Stream(ctx, provider, "Deploy", req, contractv1connect.ProviderServiceClient.Deploy)
 	return deployOutcome{apps: res.GetApps(), promotionID: res.GetPromotionId()}, err
 }

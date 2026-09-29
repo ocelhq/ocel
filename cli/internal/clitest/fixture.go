@@ -106,7 +106,7 @@ func SetUpDeployFixture(t *testing.T) (root, sockPath string) {
 	if err != nil {
 		t.Fatalf("resolve test binary path: %v", err)
 	}
-	InstallProvider(t, string(fake.Vendor), func(dest string) error { return os.Symlink(testBinary, dest) })
+	InstallProvider(t, string(fake.Vendor), func(executable string) error { return os.Symlink(testBinary, executable) })
 
 	sockPath = filepath.Join(t.TempDir(), "deploy-provider.sock")
 	t.Setenv(FakeProviderEnvVar, "1")
@@ -164,7 +164,7 @@ export {};
 	return root
 }
 
-func InstallProvider(t *testing.T, name string, place func(dest string) error) string {
+func InstallProvider(t *testing.T, name string, place func(executable string) error) string {
 	t.Helper()
 
 	dir := os.Getenv(executables.OverrideEnvVar)
@@ -172,15 +172,15 @@ func InstallProvider(t *testing.T, name string, place func(dest string) error) s
 		dir = t.TempDir()
 		t.Setenv(executables.OverrideEnvVar, dir)
 	}
-	binary := filepath.Join(dir, string(executables.KindProvider), name, version.Version, runtime.GOOS+"-"+runtime.GOARCH)
-	if err := os.MkdirAll(binary, 0o755); err != nil {
-		t.Fatalf("mkdir %s: %v", binary, err)
+	platformDir := filepath.Join(dir, string(executables.KindProvider), name, version.Version, runtime.GOOS+"-"+runtime.GOARCH)
+	if err := os.MkdirAll(platformDir, 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", platformDir, err)
 	}
-	dest := filepath.Join(binary, executables.ExecutableName(executables.KindProvider, name, runtime.GOOS))
-	if err := place(dest); err != nil {
-		t.Fatalf("install the %s provider at %s: %v", name, dest, err)
+	executable := filepath.Join(platformDir, executables.ExecutableName(executables.KindProvider, name, runtime.GOOS))
+	if err := place(executable); err != nil {
+		t.Fatalf("install the %s provider at %s: %v", name, executable, err)
 	}
-	return dest
+	return executable
 }
 
 const FixtureSlug = "test-app"

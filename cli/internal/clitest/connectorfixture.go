@@ -46,13 +46,13 @@ func InstallConnector(t *testing.T, name string, platform executables.Platform, 
 		dir = t.TempDir()
 		t.Setenv(executables.OverrideEnvVar, dir)
 	}
-	binary := filepath.Join(dir, string(executables.KindConnector), name, version.Version, platform.Dir())
-	if err := os.MkdirAll(binary, 0o755); err != nil {
-		t.Fatalf("mkdir %s: %v", binary, err)
+	platformDir := filepath.Join(dir, string(executables.KindConnector), name, version.Version, platform.Dir())
+	if err := os.MkdirAll(platformDir, 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", platformDir, err)
 	}
-	dest := filepath.Join(binary, executables.ExecutableName(executables.KindConnector, name, platform.GOOS))
-	if err := os.WriteFile(dest, content, 0o755); err != nil {
-		t.Fatalf("install the %s connector at %s: %v", name, dest, err)
+	executable := filepath.Join(platformDir, executables.ExecutableName(executables.KindConnector, name, platform.GOOS))
+	if err := os.WriteFile(executable, content, 0o755); err != nil {
+		t.Fatalf("install the %s connector at %s: %v", name, executable, err)
 	}
-	return dest
+	return executable
 }

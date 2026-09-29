@@ -174,7 +174,7 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier e
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{
+	provider, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{
 		Pinning: executables.ChoosePinning(opts.Dry),
 		Tier:    tier,
 		Require: readiness.Credentials,
@@ -184,9 +184,9 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier e
 		check.End(err)
 		return err
 	}
-	defer prov.Close()
+	defer provider.Close()
 
-	planned, err := describeBootstrap(ctx, prov, cfg, tier)
+	planned, err := describeBootstrap(ctx, provider, cfg, tier)
 	check.End(err)
 	if err != nil {
 		return err
@@ -238,7 +238,7 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier e
 	}
 
 	unit := planning.Unit(readiness.TierName(tier), progress.Planning.Title(fmt.Sprintf("the changes to the %s bootstrap", readiness.TierName(tier))))
-	plan, err := providerprocess.Plan(ctx, prov, "Bootstrap", request(true), contractv1connect.ProviderServiceClient.Bootstrap)
+	plan, err := providerprocess.Plan(ctx, provider, "Bootstrap", request(true), contractv1connect.ProviderServiceClient.Bootstrap)
 	unit.End(err)
 	if err != nil {
 		return err
@@ -288,9 +288,9 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier e
 		}
 	}
 
-	title := fmt.Sprintf("Bootstrap %s infrastructure with %s?", readiness.TierName(tier), prov.Name())
+	title := fmt.Sprintf("Bootstrap %s infrastructure with %s?", readiness.TierName(tier), provider.Name())
 	if rendered {
-		title = fmt.Sprintf("%s with %s?", consent.ConfirmVerb(consented), prov.Name())
+		title = fmt.Sprintf("%s with %s?", consent.ConfirmVerb(consented), provider.Name())
 	}
 	granted, err := policy.ConfirmPlan(ctx, planning, consented, title)
 	if err != nil {
@@ -307,16 +307,16 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier e
 	req.AcceptReplacements = rendered
 	req.Force = req.Force || len(going) > 0
 
-	if _, err := providerprocess.Stream(ctx, prov, "Bootstrap", req, contractv1connect.ProviderServiceClient.Bootstrap); err != nil {
+	if _, err := providerprocess.Stream(ctx, provider, "Bootstrap", req, contractv1connect.ProviderServiceClient.Bootstrap); err != nil {
 		return err
 	}
 	run.Succeed(fmt.Sprintf("Bootstrapped the %s environment", readiness.TierName(tier)))
 	return nil
 }
 
-func describeBootstrap(ctx context.Context, prov *providerprocess.Provider, cfg *project.Project, tier environmentv1.Tier) (*contractv1.DescribeBootstrapResponse, error) {
+func describeBootstrap(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project, tier environmentv1.Tier) (*contractv1.DescribeBootstrapResponse, error) {
 	var planned *contractv1.DescribeBootstrapResponse
-	err := prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
+	err := provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		planned, err = client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{
 			Tier:           tier,
 			WithDependents: true,

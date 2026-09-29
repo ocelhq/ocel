@@ -97,15 +97,15 @@ func listPromotions(ctx context.Context, invocation commands.Invocation, cfg *pr
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: readiness.Features})
+	provider, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: readiness.Features})
 	check.End(err)
 	if err != nil {
 		return nil, err
 	}
-	defer prov.Close()
+	defer provider.Close()
 
 	var listed *contractv1.ListPromotionsResponse
-	err = prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
+	err = provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		listed, err = client.ListPromotions(ctx, &contractv1.ListPromotionsRequest{
 			Slug: cfg.Slug,
 			Edge: cfg.EdgeSelection(),
@@ -137,12 +137,12 @@ func runPromotionsPrune(ctx context.Context, invocation commands.Invocation, cwd
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: readiness.Features})
+	provider, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: readiness.Features})
 	check.End(err)
 	if err != nil {
 		return err
 	}
-	defer prov.Close()
+	defer provider.Close()
 
 	plan := run.Phase(progressv1.Phase_PHASE_PLAN)
 	plan.Say(fmt.Sprintf("This will reclaim every production promotion of project %q but the newest %d and the live one; none of them can be rolled back to afterwards", cfg.Slug, opts.keep))
@@ -161,7 +161,7 @@ func runPromotionsPrune(ctx context.Context, invocation commands.Invocation, cwd
 		KeepN: int32(opts.keep),
 		Edge:  cfg.EdgeSelection(),
 	}
-	if _, err := providerprocess.Stream(ctx, prov, "RemoveStalePromotions", req, contractv1connect.ProviderServiceClient.RemoveStalePromotions); err != nil {
+	if _, err := providerprocess.Stream(ctx, provider, "RemoveStalePromotions", req, contractv1connect.ProviderServiceClient.RemoveStalePromotions); err != nil {
 		return err
 	}
 	run.Succeed(fmt.Sprintf("Pruned the production promotions of %s down to the newest %d", cfg.Slug, opts.keep))

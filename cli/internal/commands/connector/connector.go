@@ -127,11 +127,11 @@ func withOptions(cmd *cobra.Command, dependencies Dependencies, opts *options,
 	if err != nil {
 		return err
 	}
-	creds, err := console.RequireLogin(dependencies.LoadCredentials, cmd.ErrOrStderr())
+	credentials, err := console.RequireLogin(dependencies.LoadCredentials, cmd.ErrOrStderr())
 	if err != nil {
 		return err
 	}
-	opts.apiURL = console.BaseURL(creds.APIURL)
+	opts.apiURL = console.BaseURL(credentials.APIURL)
 	opts.console = console.New(opts.apiURL)
 
 	link, err := console.ReadLink(cfg.Dir, opts.apiURL)
@@ -146,36 +146,36 @@ func withOptions(cmd *cobra.Command, dependencies Dependencies, opts *options,
 }
 
 func reachTarget(ctx context.Context, dependencies Dependencies, cfg *project.Project, check *run.Span) (*providerprocess.Provider, *contractv1.DescribeConnectorTargetResponse, error) {
-	prov, _, err := dependencies.OpenProvider(ctx, check, cfg, commands.OpenOptions{})
+	provider, _, err := dependencies.OpenProvider(ctx, check, cfg, commands.OpenOptions{})
 	if err != nil {
 		return nil, nil, err
 	}
 	var described *contractv1.DescribeConnectorTargetResponse
-	err = prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
+	err = provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		described, err = client.DescribeConnectorTarget(ctx, &contractv1.DescribeConnectorTargetRequest{})
 		return err
 	})
 	if err != nil {
-		prov.Close()
+		provider.Close()
 		return nil, nil, err
 	}
-	return prov, described, nil
+	return provider, described, nil
 }
 
 func token(dependencies Dependencies) (string, error) {
-	creds, err := dependencies.LoadCredentials()
+	credentials, err := dependencies.LoadCredentials()
 	if err != nil {
 		return "", err
 	}
-	return creds.AccessToken, nil
+	return credentials.AccessToken, nil
 }
 
 func vendored(cfg *project.Project) (string, error) {
-	desc, err := cfg.RequireProvider()
+	declared, err := cfg.RequireProvider()
 	if err != nil {
 		return "", err
 	}
-	return desc.ID, nil
+	return declared.ID, nil
 }
 
 func printed(out io.Writer, registered console.Connector, live console.Liveness) {

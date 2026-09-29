@@ -76,14 +76,14 @@ func taken(ctx context.Context, dependencies Dependencies, run *run.Run, cfg *pr
 		return "", fmt.Errorf("this run names a target, so the machine behind %s was never asked", opts.target)
 	}
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, described, err := reachTarget(ctx, dependencies, cfg, check)
+	provider, described, err := reachTarget(ctx, dependencies, cfg, check)
 	check.End(err)
 	if err != nil {
 		return "", err
 	}
-	defer prov.Close()
+	defer provider.Close()
 
-	_, err = providerprocess.Stream(ctx, prov, "RemoveConnector", &contractv1.RemoveConnectorRequest{},
+	_, err = providerprocess.Stream(ctx, provider, "RemoveConnector", &contractv1.RemoveConnectorRequest{},
 		contractv1connect.ProviderServiceClient.RemoveConnector)
 	return described.GetTargetFingerprint(), err
 }

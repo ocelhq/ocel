@@ -41,19 +41,19 @@ func runDomainUse(ctx context.Context, invocation commands.Invocation, cwd, wild
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{Tier: environmentv1.Tier_TIER_PREVIEW, Require: readiness.Features})
+	provider, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{Tier: environmentv1.Tier_TIER_PREVIEW, Require: readiness.Features})
 	check.End(err)
 	if err != nil {
 		return err
 	}
-	defer prov.Close()
+	defer provider.Close()
 
 	req := &contractv1.UsePreviewWildcardRequest{
 		Tier:       environmentv1.Tier_TIER_PREVIEW,
 		BaseDomain: base,
 		Edge:       cfg.EdgeSelection(),
 	}
-	if _, err := providerprocess.Stream(ctx, prov, "UsePreviewWildcard", req, contractv1connect.ProviderServiceClient.UsePreviewWildcard); err != nil {
+	if _, err := providerprocess.Stream(ctx, provider, "UsePreviewWildcard", req, contractv1connect.ProviderServiceClient.UsePreviewWildcard); err != nil {
 		return err
 	}
 	run.Succeed(fmt.Sprintf("Previews are served on %s", wildcardOf(base)))

@@ -55,30 +55,30 @@ func runWithEnvProvider(ctx context.Context, dependencies Dependencies, cwd stri
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, status, err := dependencies.OpenProvider(ctx, check, cfg, commands.OpenOptions{Tier: opts.tier(), Require: readiness.Infrastructure})
+	opened, status, err := dependencies.OpenProvider(ctx, check, cfg, commands.OpenOptions{Tier: opts.tier(), Require: readiness.Infrastructure})
 	if err != nil {
 		check.End(err)
 		return err
 	}
-	defer prov.Close()
+	defer opened.Close()
 
 	if keyOffer != nil {
-		err = offerVariablesKey(ctx, dependencies, check, prov, cfg, opts, status.GetBootstrap(), keyOffer.stdin, stderr)
+		err = offerVariablesKey(ctx, dependencies, check, opened, cfg, opts, status.GetBootstrap(), keyOffer.stdin, stderr)
 	}
 	check.End(err)
 	if err != nil {
 		return err
 	}
-	return drive(ctx, run, prov, cfg, status)
+	return drive(ctx, run, opened, cfg, status)
 }
 
-func offerVariablesKey(ctx context.Context, dependencies Dependencies, check *run.Span, prov *providerprocess.Provider, cfg *project.Project, opts envOptions, status *contractv1.BootstrapStatus, stdin io.Reader, stderr io.Writer) error {
-	front := cfg.EdgeSelection()
-	offered, err := readiness.HasOffer(ctx, prov, opts.tier(), front, provider.FeatureVarsKey)
+func offerVariablesKey(ctx context.Context, dependencies Dependencies, check *run.Span, opened *providerprocess.Provider, cfg *project.Project, opts envOptions, status *contractv1.BootstrapStatus, stdin io.Reader, stderr io.Writer) error {
+	edge := cfg.EdgeSelection()
+	offered, err := readiness.HasOffer(ctx, opened, opts.tier(), edge, provider.FeatureVarsKey)
 	if err != nil || !offered {
 		return err
 	}
 	gap := readiness.NewFeatureGap(status, provider.FeatureVarsKey)
-	return readiness.OfferRepair(ctx, check, prov, gap, opts.tier(), front,
+	return readiness.OfferRepair(ctx, check, opened, gap, opts.tier(), edge,
 		dependencies.StdinIsTerminal(stdin), stderr, stdin)
 }

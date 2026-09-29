@@ -35,13 +35,13 @@ func newUICommand(dependencies Dependencies) *cobra.Command {
 }
 
 func runEnvUI(ctx context.Context, dependencies Dependencies, cwd string, opts envOptions, stdin io.Reader, stdout, stderr io.Writer) error {
-	return withEnvProviderOfferingVariablesKey(ctx, dependencies, cwd, opts, "ocel env ui", stdin, stderr, func(ctx context.Context, run *run.Run, prov *providerprocess.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
-		declarations, err := discoverVariables(ctx, cfg, prov, opts, run)
+	return withEnvProviderOfferingVariablesKey(ctx, dependencies, cwd, opts, "ocel env ui", stdin, stderr, func(ctx context.Context, run *run.Run, provider *providerprocess.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
+		declarations, err := discoverVariables(ctx, cfg, provider, opts, run)
 		if err != nil {
 			return err
 		}
 
-		editor, err := serveAndOpenEditor(dependencies, ctx, cfg, prov, opts.tier(), declarations, stdin, stdout)
+		editor, err := serveAndOpenEditor(dependencies, ctx, cfg, provider, opts.tier(), declarations, stdin, stdout)
 		if err != nil {
 			return err
 		}
@@ -59,13 +59,13 @@ func serveAndOpenEditor(
 	dependencies Dependencies,
 	ctx context.Context,
 	cfg *project.Project,
-	prov *providerprocess.Provider,
+	provider *providerprocess.Provider,
 	tier environmentv1.Tier,
 	declarations *variables.Declarations,
 	stdin io.Reader,
 	stdout io.Writer,
 ) (*variableeditor.Session, error) {
-	editor, err := dependencies.ServeVariableEditor(ctx, cfg, prov, tier, declarations, nil)
+	editor, err := dependencies.ServeVariableEditor(ctx, cfg, provider, tier, declarations, nil)
 	if err != nil {
 		return nil, err
 	}

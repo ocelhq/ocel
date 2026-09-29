@@ -37,15 +37,15 @@ func previewOpenOptions(dry bool, cfg *project.Project) commands.OpenOptions {
 	}
 }
 
-func preflightPreviewUp(ctx context.Context, dependencies Dependencies, policy consent.Policy, check *run.Span, prov *providerprocess.Provider, cfg *project.Project, resp *contractv1.PreflightResponse, prebuilt bool, pointer string, out io.Writer, in io.Reader) (preflightFacts, error) {
-	resolved, archs, err := resolveContainers(ctx, dependencies, check, prov, cfg, resp, prebuilt)
+func preflightPreviewUp(ctx context.Context, dependencies Dependencies, policy consent.Policy, check *run.Span, provider *providerprocess.Provider, cfg *project.Project, resp *contractv1.PreflightResponse, prebuilt bool, pointer string, out io.Writer, in io.Reader) (preflightFacts, error) {
+	resolved, archs, err := resolveContainers(ctx, dependencies, check, provider, cfg, resp, prebuilt)
 	if err != nil {
 		return preflightFacts{}, err
 	}
 	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path), check.Warn); err != nil {
 		return preflightFacts{}, err
 	}
-	if err := ensureBootstrap(ctx, policy, check, prov, cfg, resp.GetBootstrap(), environmentv1.Tier_TIER_PREVIEW, out, in); err != nil {
+	if err := ensureBootstrap(ctx, policy, check, provider, cfg, resp.GetBootstrap(), environmentv1.Tier_TIER_PREVIEW, out, in); err != nil {
 		return preflightFacts{}, err
 	}
 	site, err := requirePreviewDomain(cfg, resp.GetPreviewWildcard(), resp.GetIdentity(), pointer, check)
@@ -77,15 +77,15 @@ func productionOpenOptions(dry, interactive bool, cfg *project.Project) commands
 	}
 }
 
-func preflightDeploy(ctx context.Context, dependencies Dependencies, policy consent.Policy, check *run.Span, prov *providerprocess.Provider, cfg *project.Project, resp *contractv1.PreflightResponse, prebuilt bool, out io.Writer, in io.Reader) (preflightFacts, error) {
-	resolved, archs, err := resolveContainers(ctx, dependencies, check, prov, cfg, resp, prebuilt)
+func preflightDeploy(ctx context.Context, dependencies Dependencies, policy consent.Policy, check *run.Span, provider *providerprocess.Provider, cfg *project.Project, resp *contractv1.PreflightResponse, prebuilt bool, out io.Writer, in io.Reader) (preflightFacts, error) {
+	resolved, archs, err := resolveContainers(ctx, dependencies, check, provider, cfg, resp, prebuilt)
 	if err != nil {
 		return preflightFacts{}, err
 	}
 	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path), check.Warn); err != nil {
 		return preflightFacts{}, err
 	}
-	if err := ensureBootstrap(ctx, policy, check, prov, cfg, resp.GetBootstrap(), environmentv1.Tier_TIER_PRODUCTION, out, in); err != nil {
+	if err := ensureBootstrap(ctx, policy, check, provider, cfg, resp.GetBootstrap(), environmentv1.Tier_TIER_PRODUCTION, out, in); err != nil {
 		return preflightFacts{}, err
 	}
 	proceed, err := guardNewProject(ctx, policy, check, cfg, resp.GetKnownSlugs())
@@ -95,15 +95,15 @@ func preflightDeploy(ctx context.Context, dependencies Dependencies, policy cons
 	return preflightFacts{declined: !proceed, project: resolved, containerArchs: archs, urls: appurl.Production(resolved)}, nil
 }
 
-func resolveContainers(ctx context.Context, dependencies Dependencies, check *run.Span, prov *providerprocess.Provider, cfg *project.Project, resp *contractv1.PreflightResponse, prebuilt bool) (*project.Project, map[string]string, error) {
-	resolved, err := cfg.ResolveComputes(resp.GetComputes(), prov.Name())
+func resolveContainers(ctx context.Context, dependencies Dependencies, check *run.Span, provider *providerprocess.Provider, cfg *project.Project, resp *contractv1.PreflightResponse, prebuilt bool) (*project.Project, map[string]string, error) {
+	resolved, err := cfg.ResolveComputes(resp.GetComputes(), provider.Name())
 	if err != nil {
 		return nil, nil, err
 	}
 	if err := requireProjectRegistryPassword(resolved); err != nil {
 		return nil, nil, err
 	}
-	archs, err := readiness.ReadContainerArchs(ctx, prov, resolved, resp.GetContainerArchs())
+	archs, err := readiness.ReadContainerArchs(ctx, provider, resolved, resp.GetContainerArchs())
 	if err != nil {
 		return nil, nil, err
 	}
@@ -116,11 +116,11 @@ func resolveContainers(ctx context.Context, dependencies Dependencies, check *ru
 	return resolved, archs, nil
 }
 
-func ensureBootstrap(ctx context.Context, policy consent.Policy, check *run.Span, prov *providerprocess.Provider, cfg *project.Project, status *contractv1.BootstrapStatus, tier environmentv1.Tier, out io.Writer, in io.Reader) error {
+func ensureBootstrap(ctx context.Context, policy consent.Policy, check *run.Span, provider *providerprocess.Provider, cfg *project.Project, status *contractv1.BootstrapStatus, tier environmentv1.Tier, out io.Writer, in io.Reader) error {
 	if policy.DryRun {
 		return readiness.NewGap(status).RefuseIncomplete(tier)
 	}
-	return readiness.OfferRepair(ctx, check, prov, readiness.NewGap(status), tier, cfg.EdgeSelection(), policy.Interactive, out, in)
+	return readiness.OfferRepair(ctx, check, provider, readiness.NewGap(status), tier, cfg.EdgeSelection(), policy.Interactive, out, in)
 }
 
 func slugToScopeBy(interactive bool, domains []string, cfg *project.Project) string {

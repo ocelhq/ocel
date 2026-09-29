@@ -81,15 +81,15 @@ func credentialPermissions(ctx context.Context, invocation commands.Invocation, 
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{})
+	provider, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{})
 	check.End(err)
 	if err != nil {
 		return nil, err
 	}
-	defer prov.Close()
+	defer provider.Close()
 
 	var permissions *contractv1.CredentialPermissionsResponse
-	err = prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
+	err = provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		permissions, err = client.GetCredentialPermissions(ctx, &contractv1.CredentialPermissionsRequest{
 			Purpose: purpose,
 			Edge:    cfg.EdgeSelection(),

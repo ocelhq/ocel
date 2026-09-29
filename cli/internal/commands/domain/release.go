@@ -45,17 +45,17 @@ func runDomainRelease(ctx context.Context, invocation commands.Invocation, cwd s
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{Tier: environmentv1.Tier_TIER_PREVIEW, Require: readiness.Features})
+	provider, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{Tier: environmentv1.Tier_TIER_PREVIEW, Require: readiness.Features})
 	check.End(err)
 	if err != nil {
 		return err
 	}
-	defer prov.Close()
+	defer provider.Close()
 
 	planning := run.Phase(progressv1.Phase_PHASE_PLAN)
 	unit := planning.Unit(cfg.Slug, progress.Enumerating.Title("what releasing the global preview domain would remove"))
 	var plan *planv1.ChangePlan
-	err = prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
+	err = provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		plan, err = client.PlanRemovePreviewWildcard(ctx, &contractv1.PreviewWildcardRequest{
 			Tier: environmentv1.Tier_TIER_PREVIEW,
 		})
@@ -84,7 +84,7 @@ func runDomainRelease(ctx context.Context, invocation commands.Invocation, cwd s
 	}
 
 	req := &contractv1.PreviewWildcardRequest{Tier: environmentv1.Tier_TIER_PREVIEW, Edge: cfg.EdgeSelection()}
-	if _, err := providerprocess.Stream(ctx, prov, "RemovePreviewWildcard", req, contractv1connect.ProviderServiceClient.RemovePreviewWildcard); err != nil {
+	if _, err := providerprocess.Stream(ctx, provider, "RemovePreviewWildcard", req, contractv1connect.ProviderServiceClient.RemovePreviewWildcard); err != nil {
 		return err
 	}
 	run.Succeed(fmt.Sprintf("Released %s", wildcardOf(base)))

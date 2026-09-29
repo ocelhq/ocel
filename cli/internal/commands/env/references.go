@@ -23,8 +23,8 @@ func runEnvRef(ctx context.Context, dependencies Dependencies, cwd, key string, 
 			return err
 		}
 	}
-	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env ref", stderr, func(ctx context.Context, run *run.Run, prov *providerprocess.Provider, cfg *project.Project, status *contractv1.PreflightResponse) error {
-		definitions, _, err := declaredVariables(ctx, dependencies, cfg, prov, key, opts, run)
+	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env ref", stderr, func(ctx context.Context, run *run.Run, provider *providerprocess.Provider, cfg *project.Project, status *contractv1.PreflightResponse) error {
+		definitions, _, err := declaredVariables(ctx, dependencies, cfg, provider, key, opts, run)
 		if err != nil {
 			return err
 		}
@@ -32,7 +32,7 @@ func runEnvRef(ctx context.Context, dependencies Dependencies, cwd, key string, 
 			return err
 		}
 		target := ref.target(cfg.Slug, key)
-		vars, err := prov.Vars()
+		vars, err := provider.Vars()
 		if err != nil {
 			return err
 		}
@@ -50,8 +50,8 @@ func runEnvRef(ctx context.Context, dependencies Dependencies, cwd, key string, 
 }
 
 func runEnvRefs(ctx context.Context, dependencies Dependencies, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
-	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env refs", stderr, func(ctx context.Context, _ *run.Run, prov *providerprocess.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
-		vars, err := prov.Vars()
+	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env refs", stderr, func(ctx context.Context, _ *run.Run, provider *providerprocess.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
+		vars, err := provider.Vars()
 		if err != nil {
 			return err
 		}

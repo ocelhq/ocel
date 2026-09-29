@@ -21,12 +21,12 @@ import (
 )
 
 func runEnvList(ctx context.Context, dependencies Dependencies, cwd string, opts envOptions, stdout, stderr io.Writer) error {
-	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env ls", stderr, func(ctx context.Context, run *run.Run, prov *providerprocess.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
-		definitions, groups, err := declaredVariables(ctx, dependencies, cfg, prov, "", opts, run)
+	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env ls", stderr, func(ctx context.Context, run *run.Run, provider *providerprocess.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
+		definitions, groups, err := declaredVariables(ctx, dependencies, cfg, provider, "", opts, run)
 		if err != nil {
 			return err
 		}
-		vars, err := prov.Vars()
+		vars, err := provider.Vars()
 		if err != nil {
 			return err
 		}
@@ -39,7 +39,7 @@ func runEnvList(ctx context.Context, dependencies Dependencies, cwd string, opts
 		}
 		var environments []string
 		if opts.preview && overridden(resp.GetValues()) {
-			if environments, err = valuestore.ListEnvironmentNames(ctx, prov, cfg.Slug); err != nil {
+			if environments, err = valuestore.ListEnvironmentNames(ctx, provider, cfg.Slug); err != nil {
 				return err
 			}
 		}

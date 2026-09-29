@@ -217,16 +217,16 @@ func TestAddRelaysWhatTheProviderSaysWhileItInstallsThroughItsRun(t *testing.T) 
 		t.Fatalf("runAdd err = %v\n%s", err, stream.String())
 	}
 
-	evs := clitest.RunEvents(t, stream.String())
-	if !slices.ContainsFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetMessage() == "wrote the connector" }) {
+	events := clitest.RunEvents(t, stream.String())
+	if !slices.ContainsFunc(events, func(event *streamv1.RunEvent) bool { return event.GetMessage() == "wrote the connector" }) {
 		t.Errorf("stream = %s, want the line the provider said while installing", stream.String())
 	}
-	result := evs[len(evs)-1].GetSummary()
+	result := events[len(events)-1].GetSummary()
 	if !result.GetSuccess() || !strings.Contains(result.GetHeadline(), fingerprint) || strings.Contains(result.GetHeadline(), "envvars") {
 		t.Errorf("result = %v, want a success that names the paired target and leaves the grants to their own line", result)
 	}
-	if !slices.ContainsFunc(evs, func(ev *streamv1.RunEvent) bool {
-		return ev.GetBody() == nil && ev.GetMessage() == "The console may use this connector for envvars.read and envvars.write"
+	if !slices.ContainsFunc(events, func(event *streamv1.RunEvent) bool {
+		return event.GetBody() == nil && event.GetMessage() == "The console may use this connector for envvars.read and envvars.write"
 	}) {
 		t.Errorf("stream = %s, want the grants said on a line of their own", stream.String())
 	}
@@ -594,11 +594,11 @@ func newJSONDependencies() Dependencies {
 
 func failure(t *testing.T, stream string) string {
 	t.Helper()
-	evs := clitest.RunEvents(t, stream)
-	if len(evs) == 0 || evs[len(evs)-1].GetSummary() == nil {
+	events := clitest.RunEvents(t, stream)
+	if len(events) == 0 || events[len(events)-1].GetSummary() == nil {
 		t.Fatalf("stream = %s, want it to end with the run's result", stream)
 	}
-	result := evs[len(evs)-1].GetSummary()
+	result := events[len(events)-1].GetSummary()
 	if result.GetSuccess() {
 		t.Fatalf("result = %v, want the run to fail", result)
 	}
@@ -622,11 +622,11 @@ func TestStatusForAConfigReadsItsTargetInTheCheckPhaseOfItsRunAndPrintsWhatTheCo
 		t.Fatalf("runStatus err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
-	evs := clitest.RunEvents(t, stderr.String())
-	if len(evs) == 0 || evs[0].GetStarted() == nil || evs[0].GetPhase() != progressv1.Phase_PHASE_CHECK {
+	events := clitest.RunEvents(t, stderr.String())
+	if len(events) == 0 || events[0].GetStarted() == nil || events[0].GetPhase() != progressv1.Phase_PHASE_CHECK {
 		t.Fatalf("stream = %s, want a run that opens with the check phase that starts the provider", stderr.String())
 	}
-	if result := evs[len(evs)-1].GetSummary(); !result.GetSuccess() {
+	if result := events[len(events)-1].GetSummary(); !result.GetSuccess() {
 		t.Errorf("result = %v, want the status run to succeed", result)
 	}
 	if !strings.Contains(stdout.String(), fingerprint) || strings.Contains(stderr.String(), "container over dial") {

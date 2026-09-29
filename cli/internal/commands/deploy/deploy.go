@@ -112,14 +112,14 @@ func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts 
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, resp, err := dependencies.OpenProvider(ctx, check, cfg, productionOpenOptions(opts.dry, policy.Interactive, cfg))
+	provider, resp, err := dependencies.OpenProvider(ctx, check, cfg, productionOpenOptions(opts.dry, policy.Interactive, cfg))
 	if err != nil {
 		check.End(err)
 		return err
 	}
-	defer prov.Close()
+	defer provider.Close()
 
-	facts, err := preflightDeploy(ctx, dependencies, policy, check, prov, cfg, resp, opts.prebuilt, stdout, stdin)
+	facts, err := preflightDeploy(ctx, dependencies, policy, check, provider, cfg, resp, opts.prebuilt, stdout, stdin)
 	check.End(err)
 	if err != nil {
 		return err
@@ -136,13 +136,13 @@ func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts 
 	recovery := variablesRecovery{
 		dependencies: dependencies,
 		cfg:          cfg,
-		prov:         prov,
+		provider:     provider,
 		tier:         environmentv1.Tier_TIER_PRODUCTION,
 		newDeclarations: func(synced variables.EnvSource) *variables.Declarations {
 			scope := scope
 			scope.EnvSource = synced
 			return variables.NewDeclarations(valuestore.Store{
-				Provider: prov,
+				Provider: provider,
 				Project:  cfg,
 				Tier:     environmentv1.Tier_TIER_PRODUCTION,
 			}, scope)
@@ -185,10 +185,10 @@ func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts 
 	}
 
 	if opts.dry {
-		return showDeployPlan(ctx, run, prov, req, "Proposed changes to production", cfg.Slug, "production")
+		return showDeployPlan(ctx, run, provider, req, "Proposed changes to production", cfg.Slug, "production")
 	}
 
-	out, err := streamDeploy(ctx, prov, req)
+	out, err := streamDeploy(ctx, provider, req)
 	if err != nil {
 		return err
 	}

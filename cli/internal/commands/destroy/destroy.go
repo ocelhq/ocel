@@ -153,12 +153,12 @@ func destroyProject(ctx context.Context, invocation commands.Invocation, cfg *pr
 	if bypassNotice != "" {
 		check.Warn(bypassNotice)
 	}
-	prov, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{Pinning: executables.ChoosePinning(policy.DryRun), Tier: tier, Require: readiness.Features})
+	provider, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{Pinning: executables.ChoosePinning(policy.DryRun), Tier: tier, Require: readiness.Features})
 	check.End(err)
 	if err != nil {
 		return err
 	}
-	defer prov.Close()
+	defer provider.Close()
 
 	preview := tier == environmentv1.Tier_TIER_PREVIEW
 	var env *environmentv1.Environment
@@ -173,7 +173,7 @@ func destroyProject(ctx context.Context, invocation commands.Invocation, cfg *pr
 	planning := run.Phase(progressv1.Phase_PHASE_PLAN)
 	unit := planning.Unit(cfg.Slug, progress.Enumerating.Title(fmt.Sprintf("what %s has in %s to destroy", cfg.Slug, place)))
 	var plan *planv1.ChangePlan
-	err = prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
+	err = provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		plan, err = client.PlanRemoveProject(ctx, &contractv1.ProjectRequest{
 			Slug:        cfg.Slug,
 			Environment: env,
@@ -212,7 +212,7 @@ func destroyProject(ctx context.Context, invocation commands.Invocation, cfg *pr
 		Edge:        cfg.EdgeSelection(),
 		Consented:   consented,
 	}
-	if _, err := providerprocess.Stream(ctx, prov, "RemoveProject", req, contractv1connect.ProviderServiceClient.RemoveProject); err != nil {
+	if _, err := providerprocess.Stream(ctx, provider, "RemoveProject", req, contractv1connect.ProviderServiceClient.RemoveProject); err != nil {
 		return err
 	}
 	if preview {

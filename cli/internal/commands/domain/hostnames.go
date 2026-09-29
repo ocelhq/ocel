@@ -115,12 +115,12 @@ func changeHostnames(ctx context.Context, invocation commands.Invocation, cfg *p
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: readiness.Features})
+	provider, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: readiness.Features})
 	check.End(err)
 	if err != nil {
 		return err
 	}
-	defer prov.Close()
+	defer provider.Close()
 
 	if change.asks != nil {
 		planning := run.Phase(progressv1.Phase_PHASE_PLAN)
@@ -136,7 +136,7 @@ func changeHostnames(ctx context.Context, invocation commands.Invocation, cfg *p
 		}
 	}
 
-	if _, err := providerprocess.Stream(ctx, prov, change.rpc, change.req, change.call); err != nil {
+	if _, err := providerprocess.Stream(ctx, provider, change.rpc, change.req, change.call); err != nil {
 		return err
 	}
 	run.Succeed(change.headline)

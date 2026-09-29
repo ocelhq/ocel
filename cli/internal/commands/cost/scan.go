@@ -101,15 +101,15 @@ func Run(ctx context.Context, dependencies Dependencies, cwd string, opts Option
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, _, err := dependencies.OpenProvider(ctx, check, cfg, commands.OpenOptions{})
+	opened, _, err := dependencies.OpenProvider(ctx, check, cfg, commands.OpenOptions{})
 	check.End(err)
 	if err != nil {
 		return err
 	}
-	defer prov.Close()
+	defer opened.Close()
 
 	pricing := run.Phase(progressv1.Phase_PHASE_PLAN).Unit(cfg.Slug, progress.Pricing.Title("what a deploy would provision"))
-	set, estimates, assumptions, err := price(ctx, dependencies, prov, cfg, env, overrides, pricing.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED))
+	set, estimates, assumptions, err := price(ctx, dependencies, opened, cfg, env, overrides, pricing.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED))
 	pricing.End(err)
 	if err != nil {
 		return err
@@ -120,11 +120,11 @@ func Run(ctx context.Context, dependencies Dependencies, cwd string, opts Option
 	return render(stdout, cfg.Slug, set, estimates, profile, assumptions)
 }
 
-func price(ctx context.Context, dependencies Dependencies, prov *providerprocess.Provider, cfg *project.Project, env *environmentv1.Environment, overrides map[string]*structpb.Struct, out io.Writer) (*costv1.ResourceSet, map[costv1.Profile]*costv1.Estimate, []string, error) {
-	if !prov.Facts().GetPricesDeploys() {
-		return nil, nil, nil, fmt.Errorf("%s does not price a deploy, so there is nothing to scan", prov.Name())
+func price(ctx context.Context, dependencies Dependencies, opened *providerprocess.Provider, cfg *project.Project, env *environmentv1.Environment, overrides map[string]*structpb.Struct, out io.Writer) (*costv1.ResourceSet, map[costv1.Profile]*costv1.Estimate, []string, error) {
+	if !opened.Facts().GetPricesDeploys() {
+		return nil, nil, nil, fmt.Errorf("%s does not price a deploy, so there is nothing to scan", opened.Name())
 	}
-	resolved, err := readiness.ResolveComputes(ctx, prov, cfg)
+	resolved, err := readiness.ResolveComputes(ctx, opened, cfg)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -133,7 +133,7 @@ func price(ctx context.Context, dependencies Dependencies, prov *providerprocess
 		return nil, nil, nil, err
 	}
 	var set *costv1.ResourceSet
-	err = prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
+	err = opened.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		set, err = client.Shape(ctx, &contractv1.ShapeRequest{
 			Manifest:    manifest,
 			Environment: env,
@@ -144,7 +144,7 @@ func price(ctx context.Context, dependencies Dependencies, prov *providerprocess
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	costs, err := prov.Cost()
+	costs, err := opened.Cost()
 	if err != nil {
 		return nil, nil, nil, err
 	}

@@ -104,9 +104,9 @@ func TestTheBootstrapGapHoldsOnlyWhatIsMissingOrStale(t *testing.T) {
 
 func TestTheRepairRequestSendsTheEdgeTheProjectChose(t *testing.T) {
 	gap := Gap{Features: []string{"isr"}, Missing: []string{"isr"}}
-	front := &contractv1.EdgeSelection{Kind: "relay"}
+	edge := &contractv1.EdgeSelection{Kind: "relay"}
 
-	req := gap.BootstrapRequest(environmentv1.Tier_TIER_PREVIEW, front)
+	req := gap.BootstrapRequest(environmentv1.Tier_TIER_PREVIEW, edge)
 	if req.GetEdge().GetKind() != "relay" {
 		t.Errorf("request edge = %q, want the edge the project chose", req.GetEdge().GetKind())
 	}

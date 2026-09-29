@@ -13,10 +13,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
-func promotionHistory(ctx context.Context, check *run.Span, prov *providerprocess.Provider, cfg *project.Project) ([]*contractv1.PromotionHistoryEntry, error) {
+func promotionHistory(ctx context.Context, check *run.Span, provider *providerprocess.Provider, cfg *project.Project) ([]*contractv1.PromotionHistoryEntry, error) {
 	unit := check.Unit(cfg.Slug, progress.Reading.Title("the promotion history of production"))
 	var listed *contractv1.ListPromotionsResponse
-	err := prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
+	err := provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		listed, err = client.ListPromotions(ctx, &contractv1.ListPromotionsRequest{
 			Slug: cfg.Slug,
 			Edge: cfg.EdgeSelection(),

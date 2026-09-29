@@ -16,7 +16,7 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
-func declaredVariables(ctx context.Context, dependencies Dependencies, cfg *project.Project, prov *providerprocess.Provider, key string, opts envOptions, run *run.Run) ([]*resourcesv1.VariableDefinition, []*resourcesv1.GroupDefinition, error) {
+func declaredVariables(ctx context.Context, dependencies Dependencies, cfg *project.Project, provider *providerprocess.Provider, key string, opts envOptions, run *run.Run) ([]*resourcesv1.VariableDefinition, []*resourcesv1.GroupDefinition, error) {
 	prepared, err := declaration.Prepare(cfg)
 	if err != nil {
 		return nil, nil, err
@@ -35,7 +35,7 @@ func declaredVariables(ctx context.Context, dependencies Dependencies, cfg *proj
 		}
 	}
 
-	declarations := projectDeclarations(cfg, prov, opts)
+	declarations := projectDeclarations(cfg, provider, opts)
 	err = collecting(run, cfg, func(output io.Writer) error {
 		_, err := declaration.CollectPrepared(ctx, cfg, declarations, prepared, io.Discard, output)
 		return err
@@ -64,8 +64,8 @@ func withImpliedDeclarations(cfg *project.Project, opts envOptions, definitions 
 	return append(definitions, implied...), append(groups, impliedGroups...), nil
 }
 
-func discoverVariables(ctx context.Context, cfg *project.Project, prov *providerprocess.Provider, opts envOptions, run *run.Run) (*variables.Declarations, error) {
-	declarations := projectDeclarations(cfg, prov, opts)
+func discoverVariables(ctx context.Context, cfg *project.Project, provider *providerprocess.Provider, opts envOptions, run *run.Run) (*variables.Declarations, error) {
+	declarations := projectDeclarations(cfg, provider, opts)
 	err := collecting(run, cfg, func(output io.Writer) error {
 		_, err := declaration.Collect(ctx, cfg, declarations, io.Discard, output)
 		return err
@@ -76,9 +76,9 @@ func discoverVariables(ctx context.Context, cfg *project.Project, prov *provider
 	return declarations, nil
 }
 
-func projectDeclarations(cfg *project.Project, prov *providerprocess.Provider, opts envOptions) *variables.Declarations {
+func projectDeclarations(cfg *project.Project, provider *providerprocess.Provider, opts envOptions) *variables.Declarations {
 	return variables.NewDeclarations(valuestore.Store{
-		Provider: prov,
+		Provider: provider,
 		Project:  cfg,
 		Tier:     opts.tier(),
 	}, variablescope.Of(cfg, opts.tier(), ""))

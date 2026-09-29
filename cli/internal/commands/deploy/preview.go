@@ -206,14 +206,14 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, resp, err := dependencies.OpenProvider(ctx, check, cfg, previewOpenOptions(opts.dry, cfg))
+	provider, resp, err := dependencies.OpenProvider(ctx, check, cfg, previewOpenOptions(opts.dry, cfg))
 	if err != nil {
 		check.End(err)
 		return err
 	}
-	defer prov.Close()
+	defer provider.Close()
 
-	facts, err := preflightPreviewUp(ctx, dependencies, policy, check, prov, cfg, resp, opts.prebuilt, env.GetIdentity(), stdout, stdin)
+	facts, err := preflightPreviewUp(ctx, dependencies, policy, check, provider, cfg, resp, opts.prebuilt, env.GetIdentity(), stdout, stdin)
 	check.End(err)
 	if err != nil {
 		return err
@@ -230,13 +230,13 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 	recovery := variablesRecovery{
 		dependencies: dependencies,
 		cfg:          cfg,
-		prov:         prov,
+		provider:     provider,
 		tier:         environmentv1.Tier_TIER_PREVIEW,
 		newDeclarations: func(synced variables.EnvSource) *variables.Declarations {
 			scope := scope
 			scope.EnvSource = synced
 			return variables.NewDeclarations(valuestore.Store{
-				Provider: prov,
+				Provider: provider,
 				Project:  cfg,
 				Tier:     environmentv1.Tier_TIER_PREVIEW,
 			}, scope)
@@ -274,10 +274,10 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 	}
 
 	if opts.dry {
-		return showDeployPlan(ctx, run, prov, req, fmt.Sprintf("Proposed changes to preview %s", env.GetIdentity()), cfg.Slug, "preview "+env.GetIdentity())
+		return showDeployPlan(ctx, run, provider, req, fmt.Sprintf("Proposed changes to preview %s", env.GetIdentity()), cfg.Slug, "preview "+env.GetIdentity())
 	}
 
-	out, err := streamDeploy(ctx, prov, req)
+	out, err := streamDeploy(ctx, provider, req)
 	if err != nil {
 		return err
 	}
@@ -381,12 +381,12 @@ func runPreviewRemove(ctx context.Context, dependencies Dependencies, cwd string
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, _, err := dependencies.OpenProvider(ctx, check, cfg, commands.OpenOptions{Tier: environmentv1.Tier_TIER_PREVIEW, Require: readiness.Features})
+	provider, _, err := dependencies.OpenProvider(ctx, check, cfg, commands.OpenOptions{Tier: environmentv1.Tier_TIER_PREVIEW, Require: readiness.Features})
 	if err != nil {
 		check.End(err)
 		return err
 	}
-	defer prov.Close()
+	defer provider.Close()
 
 	if env.GetLifecycle() == environmentv1.Lifecycle_LIFECYCLE_PERSISTENT {
 		proceed, err := policy.Confirm(ctx, check, fmt.Sprintf("Tear down the named preview %q?", env.GetIdentity()))
@@ -406,7 +406,7 @@ func runPreviewRemove(ctx context.Context, dependencies Dependencies, cwd string
 		Slug:        cfg.Slug,
 		Edge:        cfg.EdgeSelection(),
 	}
-	if _, err := providerprocess.Stream(ctx, prov, "RemoveEnvironment", req, contractv1connect.ProviderServiceClient.RemoveEnvironment); err != nil {
+	if _, err := providerprocess.Stream(ctx, provider, "RemoveEnvironment", req, contractv1connect.ProviderServiceClient.RemoveEnvironment); err != nil {
 		return err
 	}
 	run.Succeed(fmt.Sprintf("Tore down preview %s of %s", env.GetIdentity(), cfg.Slug))
@@ -438,15 +438,15 @@ func listPreviews(ctx context.Context, dependencies Dependencies, cfg *project.P
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, _, err := dependencies.OpenProvider(ctx, check, cfg, commands.OpenOptions{})
+	provider, _, err := dependencies.OpenProvider(ctx, check, cfg, commands.OpenOptions{})
 	check.End(err)
 	if err != nil {
 		return nil, err
 	}
-	defer prov.Close()
+	defer provider.Close()
 
 	var listed *contractv1.ListEnvironmentsResponse
-	err = prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
+	err = provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		listed, err = client.ListEnvironments(ctx, &contractv1.ListEnvironmentsRequest{Slug: cfg.Slug})
 		return err
 	})
@@ -475,12 +475,12 @@ func runPreviewPrune(ctx context.Context, dependencies Dependencies, cwd string,
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, _, err := dependencies.OpenProvider(ctx, check, cfg, commands.OpenOptions{Tier: environmentv1.Tier_TIER_PREVIEW, Require: readiness.Features})
+	provider, _, err := dependencies.OpenProvider(ctx, check, cfg, commands.OpenOptions{Tier: environmentv1.Tier_TIER_PREVIEW, Require: readiness.Features})
 	check.End(err)
 	if err != nil {
 		return err
 	}
-	defer prov.Close()
+	defer provider.Close()
 
 	req := &contractv1.RemoveStalePromotionsRequest{
 		Slug:        cfg.Slug,
@@ -488,7 +488,7 @@ func runPreviewPrune(ctx context.Context, dependencies Dependencies, cwd string,
 		Environment: env,
 		Edge:        cfg.EdgeSelection(),
 	}
-	if _, err := providerprocess.Stream(ctx, prov, "RemoveStalePromotions", req, contractv1connect.ProviderServiceClient.RemoveStalePromotions); err != nil {
+	if _, err := providerprocess.Stream(ctx, provider, "RemoveStalePromotions", req, contractv1connect.ProviderServiceClient.RemoveStalePromotions); err != nil {
 		return err
 	}
 	run.Succeed(fmt.Sprintf("Pruned the promotions of preview %s down to the newest %d", env.GetIdentity(), opts.keep))

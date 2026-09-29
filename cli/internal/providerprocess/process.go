@@ -393,11 +393,11 @@ func (r *Process) driveStream(rpc string, stream *connect.ServerStreamForClient[
 
 	refused := false
 	for stream.Receive() {
-		ev := stream.Msg()
+		event := stream.Msg()
 		if onEvent != nil {
-			onEvent(ev)
+			onEvent(event)
 		}
-		result := ev.GetResult()
+		result := event.GetResult()
 		refused = refused || result.GetRefused()
 		if result != nil && !result.GetRefused() {
 			if result.GetSuccess() {

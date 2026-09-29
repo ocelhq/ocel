@@ -54,8 +54,8 @@ type editorSessions struct {
 func captureEditorSessions(dependencies *Dependencies) *editorSessions {
 	sessions := &editorSessions{}
 	prev := dependencies.ServeVariableEditor
-	dependencies.ServeVariableEditor = func(ctx context.Context, cfg *project.Project, prov *providerprocess.Provider, tier environmentv1.Tier, declarations *variables.Declarations, recovery *variableeditor.Recovery) (*variableeditor.Session, error) {
-		session, err := prev(ctx, cfg, prov, tier, declarations, recovery)
+	dependencies.ServeVariableEditor = func(ctx context.Context, cfg *project.Project, provider *providerprocess.Provider, tier environmentv1.Tier, declarations *variables.Declarations, recovery *variableeditor.Recovery) (*variableeditor.Session, error) {
+		session, err := prev(ctx, cfg, provider, tier, declarations, recovery)
 		if err == nil {
 			sessions.mu.Lock()
 			sessions.all = append(sessions.all, session)
@@ -202,26 +202,26 @@ func TestAMissingVariableHoldsTheRunWithTheWaitingEventAndResumesIt(t *testing.T
 		t.Fatal("runDeploy never returned after the matrix was marked done")
 	}
 
-	evs := envelopes(t, out.String())
-	waiting := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetWaiting() != nil })
+	events := envelopes(t, out.String())
+	waiting := slices.IndexFunc(events, func(event *streamv1.RunEvent) bool { return event.GetWaiting() != nil })
 	if waiting < 0 {
 		t.Fatalf("the run was never held for the missing variable: %s", out.String())
 	}
-	held := evs[waiting]
+	held := events[waiting]
 	if held.GetPhase() != progressv1.Phase_PHASE_BUILD || !strings.HasPrefix(held.GetWaiting().GetUrl(), address) {
 		t.Errorf("waiting in %s at %q, want the build held at the variables page %s", held.GetPhase(), held.GetWaiting().GetUrl(), address)
 	}
 	if missing := held.GetWaiting().GetMissing().GetCells(); len(missing) != 1 || missing[0].GetKey() != "STRIPE_API_KEY" {
 		t.Errorf("waiting names %v missing, want STRIPE_API_KEY", missing)
 	}
-	resumed := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetResumed() != nil })
-	if resumed < waiting || !bytes.Equal(evs[resumed].GetSpanId(), held.GetSpanId()) {
+	resumed := slices.IndexFunc(events, func(event *streamv1.RunEvent) bool { return event.GetResumed() != nil })
+	if resumed < waiting || !bytes.Equal(events[resumed].GetSpanId(), held.GetSpanId()) {
 		t.Fatalf("resumed at event %d, waiting at %d: want the same scope resumed after the hold: %s", resumed, waiting, out.String())
 	}
-	built := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool {
-		return ev.GetEnded() != nil && bytes.Equal(ev.GetSpanId(), held.GetSpanId())
+	built := slices.IndexFunc(events, func(event *streamv1.RunEvent) bool {
+		return event.GetEnded() != nil && bytes.Equal(event.GetSpanId(), held.GetSpanId())
 	})
-	if built < resumed || evs[built].GetEnded().GetStatus() != progressv1.SpanStatus_SPAN_STATUS_OK {
+	if built < resumed || events[built].GetEnded().GetStatus() != progressv1.SpanStatus_SPAN_STATUS_OK {
 		t.Errorf("the held build ended at event %d (resumed at %d), want it to finish OK after it resumed", built, resumed)
 	}
 }
