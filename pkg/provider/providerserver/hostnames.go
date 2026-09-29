@@ -189,7 +189,7 @@ func (d *hostnames) bindOrigin(ctx context.Context, target ConfiguredHost, hostS
 }
 
 func (d *hostnames) refreshOriginClaim(ctx context.Context, target ConfiguredHost, hostState *stackrecords.HostnameState, progress progress.Progress) (bool, error) {
-	if !d.front.Facts().ProxiesRecords {
+	if d.routerOrigin() == nil {
 		return false, nil
 	}
 	changed, err := clientCertificatesChanged(ctx, d.front, target.Hostname, hostState.ClientCertificateDigests)
@@ -209,7 +209,7 @@ func (d *hostnames) refreshOriginClaim(ctx context.Context, target ConfiguredHos
 }
 
 func (d *hostnames) claimRouterOrigin(ctx context.Context, target ConfiguredHost, certificate string) (originClaim, error) {
-	if !d.front.Facts().ProxiesRecords {
+	if d.routerOrigin() == nil {
 		return originClaim{}, nil
 	}
 	routed, err := d.openRouterStack()
@@ -222,7 +222,7 @@ func (d *hostnames) claimRouterOrigin(ctx context.Context, target ConfiguredHost
 }
 
 func (d *hostnames) disclaim(ctx context.Context, hostname string) error {
-	if !d.front.Facts().ProxiesRecords {
+	if d.routerOrigin() == nil {
 		return nil
 	}
 	routed, err := d.openRouterStack()

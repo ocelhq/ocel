@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -162,6 +163,15 @@ func (r Router) Kind() router.Kind { return r.edge.routedBy }
 
 func (r Router) Facts() router.Facts { return r.edge.routerFacts() }
 
+func (r Router) Hooks() router.Hooks {
+	return router.Hooks{Origin: &router.OriginHooks{
+		PlanProjectRemoval:      r.planProjectRemoval,
+		ClaimPreviewEntry:       r.claimPreviewEntry,
+		DisclaimPreviewEntry:    r.disclaimPreviewEntry,
+		PlanPreviewEntryRemoval: r.planPreviewEntryRemoval,
+	}}
+}
+
 func (e *Edge) routerFacts() router.Facts {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -179,7 +189,7 @@ func (e *Edge) routerFacts() router.Facts {
 
 const ClaimKind = "Fake::Claim"
 
-func (r Router) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
+func (r Router) planProjectRemoval(scope edge.ProjectScope) []edge.PlanGroup {
 	held := r.edge.heldClaims()
 	var changes []edge.PlanChange
 	for _, hostname := range scope.Hostnames {
@@ -198,18 +208,21 @@ func (r Router) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
 	}}
 }
 
-func (r Router) ClaimPreviewEntry(_ context.Context, claim router.Claim) (edge.Origin, error) {
+func (r Router) claimPreviewEntry(_ context.Context, claim router.Claim) (edge.Origin, error) {
+	if !strings.HasPrefix(claim.Hostname, "*.") {
+		return edge.Origin{}, refusal.Refuse(refusal.CodeInvalid, "a preview entry is a wildcard, and %q is none", claim.Hostname)
+	}
 	return r.edge.recordPreviewEntryClaim(claim)
 }
 
-func (r Router) DisclaimPreviewEntry(_ context.Context, baseDomain string) error {
+func (r Router) disclaimPreviewEntry(_ context.Context, baseDomain string) error {
 	r.edge.recordPreviewEntryDisclaim(baseDomain)
 	return nil
 }
 
 const PreviewEntryClaimKind = "Fake::PreviewEntryClaim"
 
-func (r Router) PreviewEntryRemovals(wildcard string) []edge.PlanGroup {
+func (r Router) planPreviewEntryRemoval(wildcard string) []edge.PlanGroup {
 	return []edge.PlanGroup{{
 		Kind:    edge.EdgeGroupKind,
 		Name:    edge.OriginGroupName,

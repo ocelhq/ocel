@@ -15,11 +15,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
-func forwardsToRouter(front edge.Edge) bool {
-	facts := front.Facts()
-	return facts.ProxiesRecords && !facts.RunsCode
-}
-
 type originTake func(ctx context.Context, claim router.Claim) (edge.Origin, error)
 
 type originReservation func(ctx context.Context, issued edge.OriginCertificate) (release func(context.Context) error, err error)

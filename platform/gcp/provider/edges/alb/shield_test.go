@@ -266,7 +266,7 @@ func TestTheALBRoutersRemovalPlanNamesTheHostRuleOfEveryHostnameAnEdgeForwardsTo
 
 	front, _ := shielding(t)
 	var rules []string
-	for _, group := range NewRouter(front).ProjectRemovals(edge.ProjectScope{
+	for _, group := range NewRouter(front).Hooks().Origin.PlanProjectRemoval(edge.ProjectScope{
 		Slug: "shop", Tier: environment.TierProduction, Hostnames: []string{"shop.example.com"},
 	}) {
 		for _, change := range group.Changes {
@@ -296,7 +296,7 @@ func TestThePreviewEntryAnEdgeForwardsIsServedByTheShieldedFrontAlone(t *testing
 	w.outputs[ShieldedFrontStack(environment.TierPreview)] = shieldedPreviewFront()
 	ctx := context.Background()
 
-	origin, err := NewRouter(front).ClaimPreviewEntry(ctx, router.Claim{Hostname: "*.preview.example.com", Certificate: "certs/preview", ClientCertificates: []string{zonePull}})
+	origin, err := NewRouter(front).Hooks().Origin.ClaimPreviewEntry(ctx, router.Claim{Hostname: "*.preview.example.com", Certificate: "certs/preview", ClientCertificates: []string{zonePull}})
 	if err != nil {
 		t.Fatalf("ClaimPreviewEntry: %v", err)
 	}
@@ -316,7 +316,7 @@ func TestThePreviewEntryAnEdgeForwardsIsServedByTheShieldedFrontAlone(t *testing
 		t.Error("the front browsers reach declares the wildcard too, so a preview that skips the edge is answered")
 	}
 
-	if err := NewRouter(front).DisclaimPreviewEntry(ctx, "preview.example.com"); err != nil {
+	if err := NewRouter(front).Hooks().Origin.DisclaimPreviewEntry(ctx, "preview.example.com"); err != nil {
 		t.Fatalf("DisclaimPreviewEntry: %v", err)
 	}
 	if _, routed := w.hosts("ocel-alb-shielded-preview-routes")["*.preview.example.com"]; routed {

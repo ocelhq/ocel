@@ -4,10 +4,8 @@ import (
 	"context"
 	"maps"
 	"slices"
-	"strings"
 
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/environment"
 
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -30,6 +28,15 @@ func (r Router) Facts() router.Facts {
 	}
 }
 
+func (r Router) Hooks() router.Hooks {
+	return router.Hooks{Origin: &router.OriginHooks{
+		PlanProjectRemoval:      r.planProjectRemoval,
+		ClaimPreviewEntry:       r.claimPreviewEntry,
+		DisclaimPreviewEntry:    r.disclaimPreviewEntry,
+		PlanPreviewEntryRemoval: r.planPreviewEntryRemoval,
+	}}
+}
+
 func (r Router) Reconcile(_ context.Context, spec router.StackSpec, prior router.StackState) (router.Stack, error) {
 	if spec.Slug == "" {
 		return nil, refusal.Refuse(refusal.CodeInvalid, "the %q edge serves a project by slug, and this stack names none", Kind)
@@ -43,48 +50,6 @@ func (r Router) Open(state router.StackState) (router.Stack, error) {
 		return nil, err
 	}
 	return routerStack{s: s}, nil
-}
-
-func (r Router) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
-	return r.e.ProjectRemovals(scope)
-}
-
-func (r Router) ClaimPreviewEntry(ctx context.Context, claim router.Claim) (edge.Origin, error) {
-	base, wild := strings.CutPrefix(claim.Hostname, "*.")
-	if !wild {
-		return edge.Origin{}, refusal.Refuse(refusal.CodeInvalid, "a preview entry is a wildcard, and %q is none", claim.Hostname)
-	}
-	fronted := r.e.frontFor(claim)
-	if len(claim.ClientCertificates) > 0 {
-		if _, err := fronted.trustClaim(ctx, environment.TierPreview, claim.Hostname, claim.ClientCertificates); err != nil {
-			return edge.Origin{}, err
-		}
-	}
-	address, err := fronted.ReconcilePreviewWildcard(ctx, edge.PreviewWildcardSpec{BaseDomain: base, Certificate: claim.Certificate})
-	if err != nil {
-		return edge.Origin{}, err
-	}
-	return edge.Origin{Address: address, Certified: true}, nil
-}
-
-func (r Router) DisclaimPreviewEntry(ctx context.Context, baseDomain string) error {
-	recorded, err := r.e.recordedPreview(ctx)
-	if err != nil || recorded.BaseDomain != baseDomain {
-		return err
-	}
-	if !recorded.Shielded {
-		return r.e.DestroyPreviewWildcard(ctx, baseDomain)
-	}
-	shielded := r.e.Shielded()
-	if err := shielded.DestroyPreviewWildcard(ctx, baseDomain); err != nil {
-		return err
-	}
-	return shielded.withdrawClaims(ctx, environment.TierPreview, edge.PreviewWildcard(baseDomain))
-}
-
-func (r Router) PreviewEntryRemovals(wildcard string) []edge.PlanGroup {
-	removed, _ := r.e.PreviewWildcardRemovals(wildcard)
-	return []edge.PlanGroup{removed}
 }
 
 type routerStack struct{ s *stack }

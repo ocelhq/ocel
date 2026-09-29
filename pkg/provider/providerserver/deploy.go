@@ -491,13 +491,13 @@ func (r *deployRun) reconcileEdge(ctx context.Context, progress progress.Progres
 }
 
 func (r *deployRun) forwardPreviews(ctx context.Context, progress progress.Progress) error {
-	if !forwardsToRouter(r.front) {
+	if r.routerOrigin() == nil || r.front.Facts().RunsCode {
 		return nil
 	}
 	switch r.hostingMode() {
 	case hostingGlobalPreview:
 		shared := &wildcards{provider: r.provider, keyValues: r.provider.KeyValues(), recorded: r.wildcard}
-		return shared.reclaimEntry(ctx, r.front, progress)
+		return shared.refreshEntryClaim(ctx, r.front, progress)
 	case hostingProjectPreview:
 		if r.previewOn == "" || len(r.spec.Apps) == 0 {
 			return nil

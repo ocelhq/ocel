@@ -57,6 +57,8 @@ func TestTheALBRouterBehavesAsEveryRouterMust(t *testing.T) {
 	routerconformance.Run(t, routerconformance.Suite{
 		New: func(t *testing.T) routerconformance.Fixture {
 			front, w, stack := reconciled(t)
+			w.outputs[ShieldedFrontStack(environment.TierProduction)] = shieldedFront()
+			w.outputs[ShieldedFrontStack(environment.TierPreview)] = shieldedPreviewFront()
 			state := stack.State()
 			return routerconformance.Fixture{
 				Router: NewRouter(front),
@@ -68,7 +70,8 @@ func TestTheALBRouterBehavesAsEveryRouterMust(t *testing.T) {
 				FailNextFlip: w.refusePins,
 			}
 		},
-		Hostname: "shop.example.com",
+		Hostname:    "shop.example.com",
+		PreviewBase: "preview.example.com",
 		Record: func(app, build string) router.DeploymentRecord {
 			return router.DeploymentRecord{App: app, Build: build, Revisions: map[string]string{conformanceService: "rev-" + build}}
 		},

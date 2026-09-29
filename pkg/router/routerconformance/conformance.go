@@ -2,11 +2,20 @@ package routerconformance
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
+	"math/big"
 	"testing"
+	"time"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
@@ -25,11 +34,12 @@ type Fixture struct {
 }
 
 type Suite struct {
-	New      func(t *testing.T) Fixture
-	Previews func(t *testing.T) Fixture
-	Pointer  string
-	Hostname string
-	Record   func(app, build string) router.DeploymentRecord
+	New         func(t *testing.T) Fixture
+	Previews    func(t *testing.T) Fixture
+	Pointer     string
+	Hostname    string
+	PreviewBase string
+	Record      func(app, build string) router.DeploymentRecord
 }
 
 var errDisplaced = errors.New("conformance: another promotion displaced this one while it flipped")
@@ -216,6 +226,145 @@ func Run(t *testing.T, suite Suite) {
 	})
 
 	runPreviews(t, suite, record)
+	runOrigin(t, suite)
+}
+
+const conformanceCertificate = "conformance-certificate"
+
+func runOrigin(t *testing.T, suite Suite) {
+	t.Run("a router an edge forwards to answers a claim trusting the edge's client certificate with the certificate the edge issued", func(t *testing.T) {
+		ctx := context.Background()
+		fixture := suite.New(t)
+		origin := fixture.Router.Hooks().Origin
+		if origin == nil {
+			t.Skip("no edge forwards to this router as its origin")
+		}
+		stack := reconciled(t, fixture)
+		claim := router.Claim{
+			Hostname: suite.Hostname, App: App, Certificate: conformanceCertificate,
+			ClientCertificates: []string{mintClientCertificate(t)},
+			OriginCertificate:  mintOriginCertificate(t, suite.Hostname),
+		}
+		first, err := stack.Claim(ctx, claim)
+		if err != nil {
+			t.Fatalf("Claim(%q) trusting a client certificate: %v", suite.Hostname, err)
+		}
+		if first.Address == "" || !first.Certified {
+			t.Errorf("Claim(%q) with an origin certificate names origin %+v, want an address that answers with a certificate covering it", suite.Hostname, first)
+		}
+		claim.OriginCertificate = edge.OriginCertificate{}
+		again, err := stack.Claim(ctx, claim)
+		if err != nil {
+			t.Fatalf("Claim(%q) again: %v", suite.Hostname, err)
+		}
+		if again != first {
+			t.Errorf("Claim(%q) again with no origin certificate names %+v, want the %+v it named: the origin keeps answering with the certificate it holds", suite.Hostname, again, first)
+		}
+		requirePlan(t, "PlanProjectRemoval", origin.PlanProjectRemoval(edge.ProjectScope{
+			Slug: fixture.Spec.Slug, Tier: fixture.Spec.Tier, Hostnames: []string{suite.Hostname},
+		}))
+		for range 2 {
+			if err := stack.Disclaim(ctx, suite.Hostname); err != nil {
+				t.Fatalf("Disclaim(%q): %v", suite.Hostname, err)
+			}
+		}
+	})
+
+	t.Run("a router an edge forwards previews to claims the preview entry and gives it back", func(t *testing.T) {
+		ctx := context.Background()
+		fixture := suite.New(t)
+		origin := fixture.Router.Hooks().Origin
+		switch {
+		case origin == nil:
+			t.Skip("no edge forwards to this router as its origin")
+		case suite.PreviewBase == "":
+			t.Skip("the suite names no preview base domain")
+		}
+		wildcard := edge.PreviewWildcard(suite.PreviewBase)
+		if _, err := origin.ClaimPreviewEntry(ctx, router.Claim{Hostname: suite.Hostname, Certificate: conformanceCertificate}); err == nil {
+			t.Errorf("ClaimPreviewEntry(%q) = nil, want it refused: a preview entry is a wildcard", suite.Hostname)
+		}
+		claim := router.Claim{
+			Hostname: wildcard, Certificate: conformanceCertificate,
+			ClientCertificates: []string{mintClientCertificate(t)},
+			OriginCertificate:  mintOriginCertificate(t, wildcard),
+		}
+		first, err := origin.ClaimPreviewEntry(ctx, claim)
+		if err != nil {
+			t.Fatalf("ClaimPreviewEntry(%q): %v", wildcard, err)
+		}
+		if first.Address == "" || !first.Certified {
+			t.Errorf("ClaimPreviewEntry(%q) names origin %+v, want an address that answers with a certificate covering it", wildcard, first)
+		}
+		again, err := origin.ClaimPreviewEntry(ctx, claim)
+		if err != nil {
+			t.Fatalf("ClaimPreviewEntry(%q) again: %v", wildcard, err)
+		}
+		if again != first {
+			t.Errorf("ClaimPreviewEntry(%q) again names %+v, want the %+v it named", wildcard, again, first)
+		}
+		requirePlan(t, "PlanPreviewEntryRemoval", origin.PlanPreviewEntryRemoval(wildcard))
+		for range 2 {
+			if err := origin.DisclaimPreviewEntry(ctx, suite.PreviewBase); err != nil {
+				t.Fatalf("DisclaimPreviewEntry(%q): %v", suite.PreviewBase, err)
+			}
+		}
+	})
+}
+
+func requirePlan(t *testing.T, named string, groups []edge.PlanGroup) {
+	t.Helper()
+	if len(groups) == 0 {
+		t.Errorf("%s = none, want what the router takes down: a plan names everything the removal deletes", named)
+	}
+	for _, group := range groups {
+		if group.Kind == "" || group.Name == "" {
+			t.Errorf("%s names group %+v with no kind or name", named, group)
+		}
+		for _, change := range group.Changes {
+			if change.Kind == "" || change.Name == "" {
+				t.Errorf("%s names change %+v with no kind or name", named, change)
+			}
+		}
+	}
+}
+
+func mintClientCertificate(t *testing.T) string {
+	t.Helper()
+	certificate, _ := mintCertificate(t, "conformance.invalid", x509.ExtKeyUsageClientAuth)
+	return certificate
+}
+
+func mintOriginCertificate(t *testing.T, hostname string) edge.OriginCertificate {
+	t.Helper()
+	certificate, key := mintCertificate(t, hostname, x509.ExtKeyUsageServerAuth)
+	return edge.OriginCertificate{ID: "conformance-origin-certificate", Certificate: certificate, Key: key, ExpiresAt: time.Now().Add(365 * 24 * time.Hour)}
+}
+
+func mintCertificate(t *testing.T, hostname string, usage x509.ExtKeyUsage) (certificate, key string) {
+	t.Helper()
+	private, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: hostname},
+		DNSNames:     []string{hostname},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(365 * 24 * time.Hour),
+		ExtKeyUsage:  []x509.ExtKeyUsage{usage},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &private.PublicKey, private)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyDER, err := x509.MarshalPKCS8PrivateKey(private)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})),
+		string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER}))
 }
 
 func runPreviews(t *testing.T, suite Suite, record func(app, build string) router.DeploymentRecord) {
