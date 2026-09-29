@@ -487,10 +487,9 @@ func TestRunBindingsJSONOutput(t *testing.T) {
 func TestEveryBindingsSubcommandAddressesABootstrapAndOnlySetTakesAnOwner(t *testing.T) {
 	t.Parallel()
 
-	bindings := NewCommand(clitest.NewInvocation())
 	subcommand := func(t *testing.T, name string) *cobra.Command {
 		t.Helper()
-		cmd, _, err := bindings.Find([]string{name})
+		cmd, _, err := NewCommand(clitest.NewInvocation()).Find([]string{name})
 		if err != nil || cmd.Name() != name {
 			t.Fatalf("`ocel bindings %s` is not a subcommand: %v", name, err)
 		}
