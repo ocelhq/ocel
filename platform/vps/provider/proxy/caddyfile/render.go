@@ -19,7 +19,7 @@ func (c Caddyfile) upstream() string {
 
 func (c Caddyfile) render(hostnames []string) []byte {
 	if len(hostnames) == 0 {
-		return []byte{}
+		return []byte("\n")
 	}
 	if c.Container == "" {
 		return []byte(strings.Join(hostnames, ", ") + " {\n\treverse_proxy " + c.upstream() + "\n}\n")
