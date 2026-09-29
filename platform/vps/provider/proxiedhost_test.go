@@ -34,8 +34,8 @@ func TestAHostnameCloudflareForwardsPassesWhenTheSwitchboardAnswersThroughIt(t *
 	if check.Verdict != provider.HostPass {
 		t.Fatalf("verdict = %v (%q), want a pass: the name resolves to Cloudflare, which forwards it to this box", check.Verdict, check.Finding)
 	}
-	if !strings.Contains(check.Finding, string(switchboard.RouterKind)) {
-		t.Errorf("finding = %q, want it to say the switchboard answered", check.Finding)
+	if strings.Contains(check.Finding, string(switchboard.RouterKind)) || !strings.Contains(check.Finding, "this box") {
+		t.Errorf("finding = %q, want it to say this box answered, naming no router: the router is never yours to configure", check.Finding)
 	}
 }
 
@@ -52,6 +52,9 @@ func TestAHostnameCloudflareForwardsFailsWhenNothingOnThisBoxAnswersThroughIt(t 
 		}
 		if check.Fix == "" || !strings.Contains(check.Fix, boxAddress) {
 			t.Errorf("fix over %s = %q, want the address the proxied record should forward to", what, check.Fix)
+		}
+		if strings.Contains(check.Finding, string(serving.router)) && serving.router != "" || strings.Contains(check.Finding, string(switchboard.RouterKind)) {
+			t.Errorf("finding over %s = %q, want no router named: the router is never yours to configure", what, check.Finding)
 		}
 		if serving.failure != "" && !strings.Contains(check.Finding, serving.failure) {
 			t.Errorf("finding over %s = %q, want the last failure named", what, check.Finding)

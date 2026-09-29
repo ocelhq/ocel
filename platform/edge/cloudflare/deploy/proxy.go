@@ -76,7 +76,7 @@ func (x *Proxy) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewW
 	}
 	if spec.Origin == nil {
 		return "", refusal.Refuse(refusal.CodeInvalid,
-			"the %q edge forwards %s to an origin, and this reconcile names none: the router this provider pairs it with claims the preview entry and names where it answers",
+			"the %q edge forwards %s to an origin, and this reconcile names none: it answers no preview itself",
 			Kind, wildcard)
 	}
 	accountID := x.p.accountID()
@@ -184,7 +184,7 @@ func (s *proxyStack) BindDomain(ctx context.Context, binding edge.DomainBinding)
 	}
 	if binding.Origin == nil {
 		return refusal.Refuse(refusal.CodeInvalid,
-			"the %q edge forwards %s to an origin, and this binding names none: the router this provider pairs it with claims the hostname and names where it answers",
+			"the %q edge forwards %s to an origin, and this binding names none: it answers no hostname itself",
 			Kind, binding.Hostname)
 	}
 	return s.x.p.bindOrigin(ctx, &s.state, s.owner(), binding)
