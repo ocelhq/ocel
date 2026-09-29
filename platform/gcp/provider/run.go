@@ -185,12 +185,17 @@ type release struct {
 	revision string
 }
 
-func (p *Provider) deployService(ctx context.Context, s serving, progress progress.Progress) (release, error) {
+func (p *Provider) openRun(ctx context.Context) (*clients, *run.Service, error) {
 	clients, err := p.openClients(ctx)
 	if err != nil {
-		return release{}, err
+		return nil, nil, err
 	}
 	services, err := clients.Run()
+	return clients, services, err
+}
+
+func (p *Provider) deployService(ctx context.Context, s serving, progress progress.Progress) (release, error) {
+	clients, services, err := p.openRun(ctx)
 	if err != nil {
 		return release{}, err
 	}
@@ -256,11 +261,7 @@ func (p *Provider) Pin(ctx context.Context, service, revision string, stillActiv
 		return refusal.Refuse(refusal.CodeInvalid,
 			"%s is asked to serve a revision nothing named, and traffic is pinned to one revision by name", service)
 	}
-	clients, err := p.openClients(ctx)
-	if err != nil {
-		return err
-	}
-	services, err := clients.Run()
+	clients, services, err := p.openRun(ctx)
 	if err != nil {
 		return err
 	}
@@ -398,11 +399,7 @@ func (p *Provider) await(ctx context.Context, services *run.Service, call func(.
 }
 
 func (p *Provider) tearDown(ctx context.Context, service string, progress progress.Progress) error {
-	clients, err := p.openClients(ctx)
-	if err != nil {
-		return err
-	}
-	services, err := clients.Run()
+	clients, services, err := p.openRun(ctx)
 	if err != nil {
 		return err
 	}
@@ -420,11 +417,7 @@ func (p *Provider) removeRevision(ctx context.Context, service, revision string,
 	if service == "" || revision == "" {
 		return nil
 	}
-	clients, err := p.openClients(ctx)
-	if err != nil {
-		return err
-	}
-	services, err := clients.Run()
+	clients, services, err := p.openRun(ctx)
 	if err != nil {
 		return err
 	}
