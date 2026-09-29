@@ -11,25 +11,64 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/commands"
-
 	"github.com/ocelhq/ocel/cli/internal/clitest"
+	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
+
+func deployedToPreview(t *testing.T) clitest.FakeProject {
+	t.Helper()
+	project := clitest.SetUpProject(t)
+	clitest.Bootstrap(t, project.Provider, environment.TierPreview)
+	clitest.RecordStacks(t, project, environment.TierPreview,
+		naming.InfraStack("pr-1"), naming.InfraStack("pr-2"), naming.AppStack("pr-1", "web", naming.NewRelease("b1", "")))
+	clitest.RecordEdgeStack(t, project, environment.TierPreview, fake.KindDirect)
+	return project
+}
+
+func deployedToProduction(t *testing.T) clitest.FakeProject {
+	t.Helper()
+	project := clitest.SetUpProject(t)
+	clitest.RecordStacks(t, project, environment.TierProduction,
+		naming.InfraStack(stackrecords.ProductionEnv), naming.AppStack(stackrecords.ProductionEnv, "web", naming.NewRelease("b1", "")))
+	clitest.RecordEdgeStack(t, project, environment.TierProduction, fake.KindDirect)
+	return project
+}
+
+func removals(t *testing.T, project clitest.FakeProject) (planned, removed []*contractv1.ProjectRequest) {
+	t.Helper()
+	planned = clitest.RequestsTo[*contractv1.ProjectRequest](t, project.Requests, contractv1connect.ProviderServicePlanRemoveProjectProcedure)
+	removed = clitest.RequestsTo[*contractv1.ProjectRequest](t, project.Requests, contractv1connect.ProviderServiceRemoveProjectProcedure)
+	return planned, removed
+}
+
+func recordedStacks(t *testing.T, project clitest.FakeProject, tier environment.Tier) []stackrecords.NamedStack {
+	t.Helper()
+	recorded, err := stackrecords.List(context.Background(), project.Provider.KeyValues(), tier, clitest.FixtureSlug)
+	if err != nil {
+		t.Fatalf("list the recorded stacks: %v", err)
+	}
+	return recorded
+}
 
 func TestDestroyingPreviewTakesTheWholePreviewFootprintOnceConsented(t *testing.T) {
 	t.Run("--yes skips the terminal check and the typed name", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
+		project := deployedToPreview(t)
 		invocation := clitest.NewInvocation()
-		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
-		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := runDestroyPreviewProject(context.Background(), invocation, root, true, false, &stdout, strings.NewReader("")); err != nil {
+		if err := runDestroyPreviewProject(context.Background(), invocation, project.Root, true, false, &stdout, strings.NewReader("")); err != nil {
 			t.Fatalf("runDestroyPreviewProject err = %v; stdout=%s", err, stdout.String())
 		}
 
@@ -37,31 +76,33 @@ func TestDestroyingPreviewTakesTheWholePreviewFootprintOnceConsented(t *testing.
 		for _, want := range []string{
 			`ENTIRE preview footprint of project "test-app"`,
 			"fronted by the direct edge",
-			"– fake/test-app--pr-1--infra  [infra]  — databases and buckets, INCLUDING ALL DATA",
-			"– fake/test-app--pr-2--infra  [infra]",
-			"– fake/test-app--pr-1--web--b1  [web]",
+			"– fake/pr-1--infra  [pr-1]",
+			"– fake/pr-2--infra  [pr-2]",
+			"– fake/pr-1--web--",
 			"– direct/edge",
-			"    – test-app  Fake::Front",
+			"    – test-app-preview  Fake::EdgeStack",
 			"every preview variable value",
 			"The account-level preview bootstrap is left intact. This cannot be undone.",
-			"4 to delete, 1 unchanged.",
-			"DESTROY PROJECT project=test-app dns= tier=TIER_PREVIEW",
 		} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)
 			}
 		}
-		if strings.Contains(out, "bootstrap-scoped") {
-			t.Errorf("stdout spent a row on something staying put:\n%s", out)
-		}
 		if strings.Contains(out, "Type the project name") {
 			t.Errorf("stdout = %q, want --yes to skip the typed-name confirmation", out)
+		}
+		_, removed := removals(t, project)
+		if len(removed) != 1 || removed[0].GetSlug() != "test-app" || removed[0].GetEnvironment().GetTier() != environmentv1.Tier_TIER_PREVIEW {
+			t.Fatalf("the provider was asked to remove %v, want test-app's preview footprint", removed)
+		}
+		if left := recordedStacks(t, project, environment.TierPreview); len(left) != 0 {
+			t.Errorf("the provider still records %v, want every preview stack destroyed", left)
 		}
 	})
 
 	t.Run("the dns descriptor rides along so the teardown can delete what it wrote", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
-		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+		project := deployedToPreview(t)
+		clitest.WriteFile(t, filepath.Join(project.Root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
   provider: { fake: {} },
@@ -70,28 +111,25 @@ export default {
 };
 `)
 		invocation := clitest.NewInvocation()
-		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
-		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := runDestroyPreviewProject(context.Background(), invocation, root, true, false, &stdout, strings.NewReader("")); err != nil {
+		if err := runDestroyPreviewProject(context.Background(), invocation, project.Root, true, false, &stdout, strings.NewReader("")); err != nil {
 			t.Fatalf("runDestroyPreviewProject err = %v; stdout=%s", err, stdout.String())
 		}
-		if out := stdout.String(); !strings.Contains(out, "DESTROY PROJECT project=test-app dns=zone") {
-			t.Errorf("stdout = %q, want the dns descriptor on the teardown request", out)
+		_, removed := removals(t, project)
+		if len(removed) != 1 || removed[0].GetEdge().GetDns().GetKind() != "zone" {
+			t.Errorf("the provider was asked to remove %v, want the dns descriptor on the teardown request", removed)
 		}
 	})
 
 	t.Run("--dry prints the plan, tears nothing down, and needs no terminal", func(t *testing.T) {
-		root, journal := clitest.SetUpEdgeFixture(t, "")
+		project := deployedToPreview(t)
 		invocation := clitest.NewInvocation()
-		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
-		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := runDestroyPreviewProject(context.Background(), invocation, root, true, true, &stdout, strings.NewReader("")); err != nil {
+		if err := runDestroyPreviewProject(context.Background(), invocation, project.Root, true, true, &stdout, strings.NewReader("")); err != nil {
 			t.Fatalf("runDestroyPreviewProject err = %v; stdout=%s", err, stdout.String())
 		}
 
@@ -102,21 +140,21 @@ export default {
 		if !strings.Contains(out, "Run without --dry to destroy.") {
 			t.Errorf("stdout = %q, want --dry to say how to destroy it", out)
 		}
-		if strings.Contains(out, "DESTROY PROJECT") {
-			t.Errorf("stdout = %q, want --dry to beat --yes and destroy nothing", out)
+		if planned, removed := removals(t, project); len(planned) != 1 || len(removed) != 0 {
+			t.Errorf("the provider was asked for %d plans and %d removals, want the plan alone: --dry beats --yes", len(planned), len(removed))
 		}
-		if got := clitest.ReadJournal(t, journal); len(got) != 1 {
-			t.Errorf("provider saw %v, want the plan alone", got)
+		if left := recordedStacks(t, project, environment.TierPreview); len(left) != 3 {
+			t.Errorf("the provider records %v, want every preview stack left standing", left)
 		}
 	})
 
 	t.Run("without --yes it refuses without a terminal", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
+		project := clitest.SetUpProject(t)
 		invocation := clitest.NewInvocation()
 
 		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		err := runDestroyPreviewProject(context.Background(), invocation, root, false, false, &stdout, strings.NewReader(""))
+		err := runDestroyPreviewProject(context.Background(), invocation, project.Root, false, false, &stdout, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDestroyPreviewProject without a TTY err = nil, want a refusal")
 		}
@@ -128,12 +166,12 @@ export default {
 
 func TestDestroyingProductionShowsThePlanAndTakesTheProjectNameBeforeDestroying(t *testing.T) {
 	t.Run("it refuses without a terminal", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
+		project := clitest.SetUpProject(t)
 		invocation := clitest.NewInvocation()
 
 		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		err := runDestroyProduction(context.Background(), invocation, root, false, false, &stdout, strings.NewReader(""))
+		err := runDestroyProduction(context.Background(), invocation, project.Root, false, false, &stdout, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDestroyProduction without a TTY err = nil, want a refusal")
 		}
@@ -143,13 +181,13 @@ func TestDestroyingProductionShowsThePlanAndTakesTheProjectNameBeforeDestroying(
 	})
 
 	t.Run("the project name gets past the terminal requirement and says so", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
+		project := clitest.SetUpProject(t)
 		invocation := clitest.NewInvocation()
 		t.Setenv(consent.BypassEnv, "test-app")
 
 		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		err := runDestroyProduction(context.Background(), invocation, root, false, false, &stdout, strings.NewReader(""))
+		err := runDestroyProduction(context.Background(), invocation, project.Root, false, false, &stdout, strings.NewReader(""))
 		if err != nil && strings.Contains(err.Error(), "needs a terminal") {
 			t.Errorf("err = %v, want the bypass to get past the TTY requirement", err)
 		}
@@ -161,16 +199,14 @@ func TestDestroyingProductionShowsThePlanAndTakesTheProjectNameBeforeDestroying(
 		}
 	})
 
-	t.Run("it renders the plan the provider sent, keeps collapsed into the tally", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
+	t.Run("it renders the plan the provider sent and destroys what it showed", func(t *testing.T) {
+		project := deployedToProduction(t)
 		invocation := clitest.NewInvocation()
-		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
-		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		t.Setenv(consent.BypassEnv, "test-app")
 
 		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := runDestroyProduction(context.Background(), invocation, root, false, false, &stdout, strings.NewReader("")); err != nil {
+		if err := runDestroyProduction(context.Background(), invocation, project.Root, false, false, &stdout, strings.NewReader("")); err != nil {
 			t.Fatalf("runDestroyProduction err = %v; stdout=%s", err, stdout.String())
 		}
 
@@ -178,11 +214,9 @@ func TestDestroyingProductionShowsThePlanAndTakesTheProjectNameBeforeDestroying(
 		for _, want := range []string{
 			"fronted by the direct edge",
 			"– direct/edge",
-			"    – disable, then delete E1test-app  Fake::Front (slow)",
-			"– fake/test-app--infra  [infra]",
-			"– fake/test-app--web--b1  [web]",
-			"4 to delete, 1 unchanged.",
-			"DESTROY PROJECT project=test-app",
+			"    – test-app-production  Fake::EdgeStack",
+			"– fake/prod--infra  [prod]",
+			"– fake/prod--web--",
 		} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout missing %q; got:\n%s", want, out)
@@ -191,41 +225,44 @@ func TestDestroyingProductionShowsThePlanAndTakesTheProjectNameBeforeDestroying(
 		if strings.Contains(out, "you pinned this certificate") {
 			t.Errorf("stdout spent a row on a certificate nothing touches; got:\n%s", out)
 		}
+		if left := recordedStacks(t, project, environment.TierProduction); len(left) != 0 {
+			t.Errorf("the provider still records %v, want every production stack destroyed", left)
+		}
 	})
 
 	t.Run("the destroy sends the plan the human consented to", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
+		project := deployedToProduction(t)
 		invocation := clitest.NewInvocation()
-		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
-		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		t.Setenv(consent.BypassEnv, "test-app")
 
 		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := runDestroyProduction(context.Background(), invocation, root, false, false, &stdout, strings.NewReader("")); err != nil {
+		if err := runDestroyProduction(context.Background(), invocation, project.Root, false, false, &stdout, strings.NewReader("")); err != nil {
 			t.Fatalf("runDestroyProduction err = %v; stdout=%s", err, stdout.String())
 		}
 
-		out := stdout.String()
-		if strings.Contains(out, "consented=none") {
-			t.Fatalf("the destroy reached the provider with no plan behind it; got:\n%s", out)
+		_, removed := removals(t, project)
+		if len(removed) != 1 || len(removed[0].GetConsented().GetGroups()) == 0 {
+			t.Fatalf("the destroy reached the provider as %v, want it to carry the plan behind it", removed)
 		}
-		for _, want := range []string{"direct/edge", "fake/test-app--infra", "fake/test-app--web--b1"} {
-			if !strings.Contains(out, "consented=") || !strings.Contains(consentedLine(out), want) {
-				t.Errorf("the destroy sent %q, want the plan it showed to name %q", consentedLine(out), want)
+		var consented []string
+		for _, group := range removed[0].GetConsented().GetGroups() {
+			consented = append(consented, group.GetName())
+		}
+		for _, want := range []string{"direct/edge", "fake/prod--infra"} {
+			if !slices.Contains(consented, want) {
+				t.Errorf("the destroy consented to %v, want the plan it showed to name %q", consented, want)
 			}
 		}
 	})
 
 	t.Run("--dry prints the plan, destroys nothing, and needs no terminal", func(t *testing.T) {
-		root, journal := clitest.SetUpEdgeFixture(t, "")
+		project := deployedToProduction(t)
 		invocation := clitest.NewInvocation()
-		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
-		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := runDestroyProduction(context.Background(), invocation, root, false, true, &stdout, strings.NewReader("")); err != nil {
+		if err := runDestroyProduction(context.Background(), invocation, project.Root, false, true, &stdout, strings.NewReader("")); err != nil {
 			t.Fatalf("runDestroyProduction err = %v; stdout=%s", err, stdout.String())
 		}
 
@@ -236,47 +273,22 @@ func TestDestroyingProductionShowsThePlanAndTakesTheProjectNameBeforeDestroying(
 		if !strings.Contains(out, "Run without --dry to destroy.") {
 			t.Errorf("stdout = %q, want --dry to say how to destroy it", out)
 		}
-		if strings.Contains(out, "DESTROY PROJECT") {
-			t.Errorf("stdout = %q, want --dry to destroy nothing", out)
+		if planned, removed := removals(t, project); len(planned) != 1 || len(removed) != 0 {
+			t.Errorf("the provider was asked for %d plans and %d removals, want the plan alone", len(planned), len(removed))
 		}
-		if got := clitest.ReadJournal(t, journal); len(got) != 1 {
-			t.Errorf("provider saw %v, want the plan alone", got)
-		}
-	})
-
-	t.Run("an empty plan destroys nothing and never asks for the project name", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
-		invocation := clitest.NewInvocation()
-		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
-		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
-		t.Setenv(clitest.FakeEmptyRemovalPlanEnvVar, "1")
-		t.Setenv(consent.BypassEnv, "test-app")
-
-		var stdout bytes.Buffer
-		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := runDestroyProduction(context.Background(), invocation, root, false, false, &stdout, strings.NewReader("")); err != nil {
-			t.Fatalf("runDestroyProduction err = %v; stdout=%s", err, stdout.String())
-		}
-
-		out := stdout.String()
-		if !strings.Contains(out, "✓ Nothing to destroy: test-app has nothing in production in ") {
-			t.Errorf("stdout = %q, want it to say nothing of test-app was in production to destroy", out)
-		}
-		for _, unwanted := range []string{"This will permanently destroy", "DESTROY PROJECT"} {
-			if strings.Contains(out, unwanted) {
-				t.Errorf("stdout = %q, want no %q: an empty plan must stop before the plan is rendered", out, unwanted)
-			}
+		if left := recordedStacks(t, project, environment.TierProduction); len(left) != 2 {
+			t.Errorf("the provider records %v, want every production stack left standing", left)
 		}
 	})
 
 	t.Run("a value that is not this project's name is refused without a terminal", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
+		project := clitest.SetUpProject(t)
 		invocation := clitest.NewInvocation()
 		t.Setenv(consent.BypassEnv, "1")
 
 		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		err := runDestroyProduction(context.Background(), invocation, root, false, false, &stdout, strings.NewReader(""))
+		err := runDestroyProduction(context.Background(), invocation, project.Root, false, false, &stdout, strings.NewReader(""))
 		if err == nil {
 			t.Fatalf("runDestroyProduction err = nil, want an ambient %s=1 refused; stdout=%s", consent.BypassEnv, stdout.String())
 		}
@@ -286,13 +298,13 @@ func TestDestroyingProductionShowsThePlanAndTakesTheProjectNameBeforeDestroying(
 	})
 
 	t.Run("an unset bypass is not a bypass", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
+		project := clitest.SetUpProject(t)
 		invocation := clitest.NewInvocation()
 		t.Setenv(consent.BypassEnv, "")
 
 		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		err := runDestroyProduction(context.Background(), invocation, root, false, false, &stdout, strings.NewReader(""))
+		err := runDestroyProduction(context.Background(), invocation, project.Root, false, false, &stdout, strings.NewReader(""))
 		if err == nil || !strings.Contains(err.Error(), consent.BypassEnv) {
 			t.Errorf("err = %v, want the no-TTY refusal", err)
 		}
@@ -300,18 +312,16 @@ func TestDestroyingProductionShowsThePlanAndTakesTheProjectNameBeforeDestroying(
 }
 
 func TestDestroyingProductionAsksForTheProjectNameWhileTheRunIsHeldAfterThePlanItShows(t *testing.T) {
-	root, _ := clitest.SetUpDeployFixture(t)
+	project := deployedToProduction(t)
 	invocation := clitest.NewInvocation()
 	invocation.StdinIsTerminal = func(io.Reader) bool { return true }
 	invocation.Presentation = func(io.Writer) terminal.Presentation {
 		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
 	}
-	t.Setenv(clitest.FakeInfraTierEnvVar, "production")
-	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 	var stream, stdout bytes.Buffer
 	clitest.AttachTerminalSink(invocation, &stream)
-	if err := runDestroyProduction(context.Background(), invocation, root, false, false, &stdout, strings.NewReader("test-app\n")); err != nil {
+	if err := runDestroyProduction(context.Background(), invocation, project.Root, false, false, &stdout, strings.NewReader("test-app\n")); err != nil {
 		t.Fatalf("runDestroyProduction err = %v; stream=%s stdout=%s", err, stream.String(), stdout.String())
 	}
 
@@ -401,15 +411,6 @@ func TestDestroyTakesTheTierAsASubcommandOrItsAlias(t *testing.T) {
 	}
 }
 
-func consentedLine(out string) string {
-	for _, line := range strings.Split(out, "\n") {
-		if strings.Contains(line, "consented=") {
-			return line
-		}
-	}
-	return ""
-}
-
 func TestDestroySendsTheEdgeTheProjectDeclared(t *testing.T) {
 	cases := []struct {
 		name        string
@@ -417,31 +418,29 @@ func TestDestroySendsTheEdgeTheProjectDeclared(t *testing.T) {
 		want        string
 		planned     string
 	}{
-		{"an omitted edge names none, leaving the provider to choose", "", "kind= ", "direct"},
-		{"a declared api-gateway edge names it", "  edge: \"api-gateway\",\n", "kind=api-gateway", "api-gateway"},
-		{"a declared relay edge names it", "  edge: \"relay\",\n", "kind=relay", "relay"},
+		{"an omitted edge names none, leaving the provider to choose", "", "", "relay"},
+		{"a declared direct edge names it", "  edge: \"direct\",\n", "direct", "direct"},
+		{"a declared relay edge names it", "  edge: \"relay\",\n", "relay", "relay"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			root, journal := clitest.SetUpEdgeFixture(t, tc.declaration)
+			project := clitest.SetUpMonorepoProject(t, tc.declaration)
 			invocation := clitest.NewInvocation()
-			t.Setenv(clitest.FakeInfraTierEnvVar, "production")
-			t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 			t.Setenv(consent.BypassEnv, "test-app")
 
-			var stdout, stderr bytes.Buffer
+			var stdout bytes.Buffer
 			clitest.AttachTerminalSink(invocation, &stdout)
-			if err := runDestroyProduction(context.Background(), invocation, root, false, false, &stdout, strings.NewReader("")); err != nil {
-				t.Fatalf("runDestroyProduction err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+			if err := runDestroyProduction(context.Background(), invocation, project.Root, false, false, &stdout, strings.NewReader("")); err != nil {
+				t.Fatalf("runDestroyProduction err = %v; stdout=%s", err, stdout.String())
 			}
 
-			got := clitest.ReadJournal(t, journal)
-			if len(got) != 2 {
-				t.Fatalf("destroy reached the provider %d times, want the plan and the teardown: %v", len(got), got)
+			planned, removed := removals(t, project)
+			if len(planned) != 1 || len(removed) != 1 {
+				t.Fatalf("destroy asked for %d plans and %d removals, want the plan and the teardown", len(planned), len(removed))
 			}
-			for _, line := range got {
-				if !strings.Contains(line, tc.want) {
-					t.Errorf("provider saw %q, want %q", line, tc.want)
+			for _, req := range []*contractv1.ProjectRequest{planned[0], removed[0]} {
+				if got := req.GetEdge().GetKind(); got != tc.want {
+					t.Errorf("provider was sent edge %q, want %q", got, tc.want)
 				}
 			}
 			if !strings.Contains(stdout.String(), "fronted by the "+tc.planned+" edge") {

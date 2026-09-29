@@ -172,7 +172,7 @@ export default {
 }
 
 func TestBuildRefusesAFunctionAppWhoseDirectorySaysNothingAboutWhatItIsBuiltWith(t *testing.T) {
-	root, sockPath := clitest.SetUpDeployFixture(t)
+	root := clitest.SetUpProject(t).Root
 	writeBuildConfig(t, root, `[{ name: "web", path: "web" }]`)
 	clitest.WriteFile(t, filepath.Join(root, "web", "main.rb"), "puts 1\n")
 
@@ -190,12 +190,12 @@ func TestBuildRefusesAFunctionAppWhoseDirectorySaysNothingAboutWhatItIsBuiltWith
 			t.Errorf("output = %q, missing %q", out.String(), want)
 		}
 	}
-	clitest.WaitForNoStaleSocket(t, sockPath)
 }
 
 func TestBuildAsksTheProviderWhichComputeAnAppNamingNoneRunsOn(t *testing.T) {
-	root, sockPath := clitest.SetUpDeployFixture(t)
-	t.Setenv(clitest.FakeComputesEnvVar, "container")
+	fixture := clitest.SetUpProject(t)
+	fixture.Provider.WithFacts(func(facts *provider.Facts) { facts.Computes = []provider.Compute{provider.ComputeContainer} })
+	root := fixture.Root
 	writeBuildConfig(t, root, `[{ name: "web", path: "web" }]`)
 	clitest.WriteFile(t, filepath.Join(root, "web", "package.json"), "{}\n")
 
@@ -212,7 +212,6 @@ func TestBuildAsksTheProviderWhichComputeAnAppNamingNoneRunsOn(t *testing.T) {
 	if built == nil || !built.Apps[0].RunsOn(provider.ComputeContainer) {
 		t.Fatalf("built = %+v, want web built for the container compute its provider runs, as a deploy would", built)
 	}
-	clitest.WaitForNoStaleSocket(t, sockPath)
 }
 
 func TestBuildRefusesAnAppNamingNoComputeWhenNoProviderCanChooseOne(t *testing.T) {

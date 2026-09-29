@@ -85,14 +85,15 @@ func aTerminal(t *testing.T, term string, columns uint16) (tty *os.File, screen 
 
 const liveFrame = "\x1b[?2026h"
 
-func inDeployFixture(t *testing.T) {
+func inADeployedProject(t *testing.T) {
 	t.Helper()
-	root, _ := clitest.SetUpDeployFixture(t)
-	t.Chdir(root)
+	project := clitest.SetUpProject(t)
+	clitest.RecordPromotions(t, project, "promo-1", "promo-2")
+	t.Chdir(project.Root)
 }
 
 func TestLogFormatJSONAttachesOnlyTheJSONSink(t *testing.T) {
-	inDeployFixture(t)
+	inADeployedProject(t)
 
 	stdout, stderr := executeRoot(t, "--log-format", "json", "deployments", "prune", "--yes")
 
@@ -113,7 +114,7 @@ func TestLogFormatJSONAttachesOnlyTheJSONSink(t *testing.T) {
 }
 
 func TestTheHumanLogFormatAttachesOnlyTheGroupedSink(t *testing.T) {
-	inDeployFixture(t)
+	inADeployedProject(t)
 
 	stdout, _ := executeRoot(t, "deployments", "prune", "--yes")
 
@@ -128,7 +129,7 @@ func TestTheHumanLogFormatAttachesOnlyTheGroupedSink(t *testing.T) {
 }
 
 func TestATerminalFortyColumnsWideGetsTheLiveLineView(t *testing.T) {
-	inDeployFixture(t)
+	inADeployedProject(t)
 	tty, screen := aTerminal(t, "xterm-256color", 40)
 
 	executeRootOn(t, tty, &bytes.Buffer{}, "deployments", "prune", "--yes")
@@ -139,7 +140,7 @@ func TestATerminalFortyColumnsWideGetsTheLiveLineView(t *testing.T) {
 }
 
 func TestADumbTerminalGetsTheGroupedView(t *testing.T) {
-	inDeployFixture(t)
+	inADeployedProject(t)
 	tty, screen := aTerminal(t, "dumb", 80)
 
 	executeRootOn(t, tty, &bytes.Buffer{}, "deployments", "prune", "--yes")
@@ -150,7 +151,7 @@ func TestADumbTerminalGetsTheGroupedView(t *testing.T) {
 }
 
 func TestATerminalNarrowerThanFortyColumnsGetsTheGroupedView(t *testing.T) {
-	inDeployFixture(t)
+	inADeployedProject(t)
 	tty, screen := aTerminal(t, "xterm-256color", 39)
 
 	executeRootOn(t, tty, &bytes.Buffer{}, "deployments", "prune", "--yes")
@@ -161,7 +162,7 @@ func TestATerminalNarrowerThanFortyColumnsGetsTheGroupedView(t *testing.T) {
 }
 
 func TestATerminalThatReportsNoWidthGetsTheGroupedViewWhateverColumnsSays(t *testing.T) {
-	inDeployFixture(t)
+	inADeployedProject(t)
 	t.Setenv("COLUMNS", "120")
 	tty, screen := aTerminal(t, "xterm-256color", 0)
 
@@ -173,7 +174,7 @@ func TestATerminalThatReportsNoWidthGetsTheGroupedViewWhateverColumnsSays(t *tes
 }
 
 func TestAPipedStdoutGetsTheGroupedViewEvenWithATerminalOnStderr(t *testing.T) {
-	inDeployFixture(t)
+	inADeployedProject(t)
 	tty, screen := aTerminal(t, "xterm-256color", 80)
 	var stdout bytes.Buffer
 
@@ -188,7 +189,7 @@ func TestAPipedStdoutGetsTheGroupedViewEvenWithATerminalOnStderr(t *testing.T) {
 }
 
 func TestACommandWhoseStdoutIsItsDataDrawsTheLiveLineOnAStderrTerminal(t *testing.T) {
-	inDeployFixture(t)
+	inADeployedProject(t)
 	tty, screen := aTerminal(t, "xterm-256color", 80)
 	var stdout bytes.Buffer
 
@@ -203,7 +204,7 @@ func TestACommandWhoseStdoutIsItsDataDrawsTheLiveLineOnAStderrTerminal(t *testin
 }
 
 func TestACommandWhoseStdoutIsItsDataDrawsTheGroupedViewOnAPipedStderr(t *testing.T) {
-	inDeployFixture(t)
+	inADeployedProject(t)
 	tty, screen := aTerminal(t, "xterm-256color", 80)
 	var stderr bytes.Buffer
 
@@ -218,7 +219,7 @@ func TestACommandWhoseStdoutIsItsDataDrawsTheGroupedViewOnAPipedStderr(t *testin
 }
 
 func TestACommandWhoseStdoutIsItsDataDrawsItsRunOnStderr(t *testing.T) {
-	inDeployFixture(t)
+	inADeployedProject(t)
 
 	stdout, stderr := executeRoot(t, "--log-format", "json", "deployments", "ls")
 
@@ -273,7 +274,7 @@ func TestEveryCommandThatReportsThroughItsRunIsMarkedToDrawItOnStdout(t *testing
 }
 
 func TestACommandWhoseDataAndRunShareOneTerminalDrawsTheGroupedViewSoNoLineOfDataLandsOnTheLiveRow(t *testing.T) {
-	inDeployFixture(t)
+	inADeployedProject(t)
 	tty, screen := aTerminal(t, "xterm-256color", 80)
 
 	executeRootOn(t, tty, tty, "deployments", "ls")
@@ -288,7 +289,7 @@ func TestACommandWhoseDataAndRunShareOneTerminalDrawsTheGroupedViewSoNoLineOfDat
 }
 
 func TestTheLiveLineIsErasedWhenTheRunsResultIsDrawnNotWhenTheCommandExits(t *testing.T) {
-	inDeployFixture(t)
+	inADeployedProject(t)
 	tty, screen := aTerminal(t, "xterm-256color", 80)
 
 	executeRootOn(t, &bytes.Buffer{}, tty, "deployments", "ls")

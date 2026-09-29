@@ -27,8 +27,8 @@ func runRootSubprocess(args []string) int {
 
 func TestMain(m *testing.M) {
 	clitest.AddFakeProviderIDs()
-	if os.Getenv(clitest.FakeProviderEnvVar) == "1" {
-		os.Exit(clitest.RunFakeProvider())
+	if clitest.IsFakeSession() {
+		os.Exit(clitest.RunFakeSession())
 	}
 	if os.Getenv(procTreeSessionHarnessEnvVar) == "1" {
 		os.Exit(runProcessTreeSessionHarness())
