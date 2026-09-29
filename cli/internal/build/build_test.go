@@ -13,7 +13,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/build/toolchain"
 	"github.com/ocelhq/ocel/cli/internal/fixturetest"
-	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/node"
 	"github.com/ocelhq/ocel/pkg/appbuild"
@@ -58,7 +57,7 @@ func writeFuncConfig(t *testing.T, outDir, app, funcRel string, cfg appbuild.Fun
 	}
 }
 
-func assertFunctions(t *testing.T, label string, got, want []manifestbuilder.Function) {
+func assertFunctions(t *testing.T, label string, got, want []Function) {
 	t.Helper()
 	if len(got) != len(want) {
 		t.Fatalf("%s returned %d functions, want %d: %+v", label, len(got), len(want), got)
@@ -155,9 +154,9 @@ func TestBuild(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ReadFunctions: %v", err)
 		}
-		assertFunctions(t, "ReadFunctions", fns, []manifestbuilder.Function{
-			{Route: "index", Framework: manifestbuilder.Framework{Name: "next"}, EntryFile: "index.handler", ArtifactPath: "apps/docs/functions/index.func", App: "docs"},
-			{Route: "index", Framework: manifestbuilder.Framework{Name: "next"}, EntryFile: "index.handler", ArtifactPath: "apps/web/functions/index.func", App: "web"},
+		assertFunctions(t, "ReadFunctions", fns, []Function{
+			{Route: "index", Framework: appbuild.Framework{Name: "next"}, EntryFile: "index.handler", ArtifactPath: "apps/docs/functions/index.func", App: "docs"},
+			{Route: "index", Framework: appbuild.Framework{Name: "next"}, EntryFile: "index.handler", ArtifactPath: "apps/web/functions/index.func", App: "web"},
 		})
 	})
 
@@ -295,8 +294,8 @@ func TestBuild(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ReadFunctions: %v", err)
 		}
-		assertFunctions(t, "ReadFunctions", fns, []manifestbuilder.Function{
-			{Route: "index", Framework: manifestbuilder.Framework{Name: "node"}, EntryFile: "index.mjs", ArtifactPath: "apps/api/functions/index.func", RouteID: "/", App: "api"},
+		assertFunctions(t, "ReadFunctions", fns, []Function{
+			{Route: "index", Framework: appbuild.Framework{Name: "node"}, EntryFile: "index.mjs", ArtifactPath: "apps/api/functions/index.func", RouteID: "/", App: "api"},
 		})
 		if got, err := BuildID(root, "api"); err != nil || len(got) != 16 {
 			t.Errorf("BuildID = %q, %v, want the artifact hash the bundle wrote", got, err)
@@ -342,8 +341,8 @@ func TestBuild(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ReadFunctions: %v", err)
 		}
-		assertFunctions(t, "ReadFunctions", fns, []manifestbuilder.Function{
-			{Route: "index", Framework: manifestbuilder.Framework{Name: "node"}, EntryFile: "index.mjs", ArtifactPath: "apps/api/functions/index.func", RouteID: "/", App: "api"},
+		assertFunctions(t, "ReadFunctions", fns, []Function{
+			{Route: "index", Framework: appbuild.Framework{Name: "node"}, EntryFile: "index.mjs", ArtifactPath: "apps/api/functions/index.func", RouteID: "/", App: "api"},
 		})
 	})
 
@@ -404,8 +403,8 @@ func TestBuildTracesANodeAppWhenTracingIsPreferred(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ReadFunctions: %v", err)
 		}
-		assertFunctions(t, "ReadFunctions", fns, []manifestbuilder.Function{
-			{Route: "index", Framework: manifestbuilder.Framework{Name: "node", Arch: "arm64"}, EntryFile: "src/server.js", ArtifactPath: "apps/api/functions/index.func", RouteID: "/", App: "api"},
+		assertFunctions(t, "ReadFunctions", fns, []Function{
+			{Route: "index", Framework: appbuild.Framework{Name: "node", Arch: "arm64"}, EntryFile: "src/server.js", ArtifactPath: "apps/api/functions/index.func", RouteID: "/", App: "api"},
 		})
 		desc, found, err := appbuild.ReadServeDescriptor(appbuild.ArtifactRoot(root), "api")
 		if err != nil || !found {
@@ -456,8 +455,8 @@ func TestBuildTracesANodeAppWhenTracingIsPreferred(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ReadFunctions: %v", err)
 		}
-		assertFunctions(t, "ReadFunctions", fns, []manifestbuilder.Function{
-			{Route: "index", Framework: manifestbuilder.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "apps/api/functions/index.func", RouteID: "/", App: "api"},
+		assertFunctions(t, "ReadFunctions", fns, []Function{
+			{Route: "index", Framework: appbuild.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "apps/api/functions/index.func", RouteID: "/", App: "api"},
 		})
 		funcDir := filepath.Join(appbuild.AppArtifactRoot(appbuild.ArtifactRoot(fixtureRoot), "api"), functionsDirName, entryFuncDirName)
 		for _, rel := range []string{"src/server.js", "node_modules/express/package.json"} {

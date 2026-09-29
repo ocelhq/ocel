@@ -1,9 +1,11 @@
-package manifestbuilder
+package manifest
 
 import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/build"
+	"github.com/ocelhq/ocel/pkg/appbuild"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
@@ -33,12 +35,12 @@ func containerApps(m *contractv1.Manifest) []string {
 func TestAContainerAppCarriesItsImageAsItsArtifact(t *testing.T) {
 	t.Parallel()
 
-	manifest, err := Build("proj-1", nil, []App{
+	manifest, err := assemble("proj-1", nil, []app{
 		{Name: "api", Compute: "container", Image: "ocel/api@" + fakeDigest},
 		{Name: "web", Compute: "serverless"},
 	}, "serverless", nil, nil, nil, nil)
 	if err != nil {
-		t.Fatalf("Build: %v", err)
+		t.Fatalf("assemble: %v", err)
 	}
 
 	if got := containerApps(manifest); len(got) != 1 {
@@ -53,11 +55,11 @@ func TestAContainerAppCarriesItsImageAsItsArtifact(t *testing.T) {
 func TestAContainerNamesTheHealthPathTheAppAsksFor(t *testing.T) {
 	t.Parallel()
 
-	manifest, err := Build("proj-1", nil, []App{
+	manifest, err := assemble("proj-1", nil, []app{
 		{Name: "api", Compute: "container", Image: "ocel/api@" + fakeDigest, HealthCheckPath: "/healthz"},
 	}, "container", nil, nil, nil, nil)
 	if err != nil {
-		t.Fatalf("Build: %v", err)
+		t.Fatalf("assemble: %v", err)
 	}
 
 	if got, want := containerOf(t, manifest, "api").GetHealthCheckPath(), "/healthz"; got != want {
@@ -68,11 +70,11 @@ func TestAContainerNamesTheHealthPathTheAppAsksFor(t *testing.T) {
 func TestAContainerNamesTheArchitectureItsAppDeclares(t *testing.T) {
 	t.Parallel()
 
-	manifest, err := Build("proj-1", nil, []App{
-		{Name: "api", Compute: "container", Image: "ocel/api@" + fakeDigest, Framework: Framework{Arch: "arm64"}},
+	manifest, err := assemble("proj-1", nil, []app{
+		{Name: "api", Compute: "container", Image: "ocel/api@" + fakeDigest, Framework: appbuild.Framework{Arch: "arm64"}},
 	}, "container", nil, nil, nil, nil)
 	if err != nil {
-		t.Fatalf("Build: %v", err)
+		t.Fatalf("assemble: %v", err)
 	}
 
 	if got := containerOf(t, manifest, "api").GetArch(); got != "arm64" {
@@ -83,14 +85,14 @@ func TestAContainerNamesTheArchitectureItsAppDeclares(t *testing.T) {
 func TestAContainerThatAsksForNoHealthPathIsWrittenWithTheDefaultOne(t *testing.T) {
 	t.Parallel()
 
-	manifest, err := Build("proj-1", nil, []App{
+	manifest, err := assemble("proj-1", nil, []app{
 		{Name: "api", Compute: "container", Image: "ocel/api@" + fakeDigest},
 	}, "container", nil, nil, nil, nil)
 	if err != nil {
-		t.Fatalf("Build: %v", err)
+		t.Fatalf("assemble: %v", err)
 	}
 
-	if got, want := containerOf(t, manifest, "api").GetHealthCheckPath(), DefaultHealthCheckPath; got != want {
+	if got, want := containerOf(t, manifest, "api").GetHealthCheckPath(), defaultHealthCheckPath; got != want {
 		t.Errorf("health_check_path = %q, want the default resolved here so no provider resolves one of its own", got)
 	}
 }
@@ -98,15 +100,15 @@ func TestAContainerThatAsksForNoHealthPathIsWrittenWithTheDefaultOne(t *testing.
 func TestAnAppOnlyTheBuildNamesCannotLandOnContainerCompute(t *testing.T) {
 	t.Parallel()
 
-	_, err := Build("proj-1", nil, nil, "container", nil, nil, []Function{
-		{App: "api", Route: "index", Framework: Framework{Name: "node"}, EntryFile: "index.handler", ArtifactPath: "apps/api/functions/index"},
+	_, err := assemble("proj-1", nil, nil, "container", nil, nil, []build.Function{
+		{App: "api", Route: "index", Framework: appbuild.Framework{Name: "node"}, EntryFile: "index.handler", ArtifactPath: "apps/api/functions/index"},
 	}, nil)
 	if err == nil {
-		t.Fatal("Build() landed an app the config never names on container compute, and nothing would have told a provider what image to run")
+		t.Fatal("assemble() landed an app the config never names on container compute, and nothing would have told a provider what image to run")
 	}
 	for _, want := range []string{`"api"`, "apps"} {
 		if !strings.Contains(err.Error(), want) {
-			t.Errorf("Build() error = %q, want it to name %s", err, want)
+			t.Errorf("assemble() error = %q, want it to name %s", err, want)
 		}
 	}
 }
@@ -114,12 +116,12 @@ func TestAnAppOnlyTheBuildNamesCannotLandOnContainerCompute(t *testing.T) {
 func TestAContainerAppWithNoImageRefusesTheManifest(t *testing.T) {
 	t.Parallel()
 
-	_, err := Build("proj-1", nil, []App{{Name: "api", Compute: "container"}}, "container", nil, nil, nil, nil)
+	_, err := assemble("proj-1", nil, []app{{Name: "api", Compute: "container"}}, "container", nil, nil, nil, nil)
 	if err == nil {
-		t.Fatal("Build() included a container app with no image, so a provider would be handed an app it has nothing to run")
+		t.Fatal("assemble() included a container app with no image, so a provider would be handed an app it has nothing to run")
 	}
 	if !strings.Contains(err.Error(), `"api"`) {
-		t.Errorf("Build() error = %q, want it to name the app", err)
+		t.Errorf("assemble() error = %q, want it to name the app", err)
 	}
 }
 
@@ -127,9 +129,9 @@ func TestAnImageNamesADigestAndNeverATag(t *testing.T) {
 	t.Parallel()
 
 	for _, ref := range []string{"ocel/api:latest", "ocel/api", "ocel/api@sha256:short"} {
-		_, err := Build("proj-1", nil, []App{{Name: "api", Compute: "container", Image: ref}}, "container", nil, nil, nil, nil)
+		_, err := assemble("proj-1", nil, []app{{Name: "api", Compute: "container", Image: ref}}, "container", nil, nil, nil, nil)
 		if err == nil {
-			t.Errorf("Build() kept %q as an image identity, want only a digest-pinned ref, since a tag is repointable and a release is not", ref)
+			t.Errorf("assemble() kept %q as an image identity, want only a digest-pinned ref, since a tag is repointable and a release is not", ref)
 		}
 	}
 }
@@ -137,42 +139,42 @@ func TestAnImageNamesADigestAndNeverATag(t *testing.T) {
 func TestAServerlessAppIsWrittenAsNoContainerAtAll(t *testing.T) {
 	t.Parallel()
 
-	manifest, err := Build("proj-1", nil, []App{{Name: "web"}}, "serverless", nil, nil, []Function{
-		{App: "web", Route: "index", Framework: Framework{Name: "node"}, EntryFile: "index.handler", ArtifactPath: "apps/web/functions/index"},
+	manifest, err := assemble("proj-1", nil, []app{{Name: "web"}}, "serverless", nil, nil, []build.Function{
+		{App: "web", Route: "index", Framework: appbuild.Framework{Name: "node"}, EntryFile: "index.handler", ArtifactPath: "apps/web/functions/index"},
 	}, nil)
 	if err != nil {
-		t.Fatalf("Build: %v", err)
+		t.Fatalf("assemble: %v", err)
 	}
 	if got := containerApps(manifest); len(got) != 0 {
 		t.Errorf("manifest carries containers for %v, want no container for an app that runs serverless", got)
 	}
 }
 
-func TestACallerThatPacksAContainerAppIsRefusedByTheBuilder(t *testing.T) {
+func TestAContainerAppPackedIntoFunctionsIsRefused(t *testing.T) {
 	t.Parallel()
 
-	_, err := Build("proj-1", nil, []App{
+	_, err := assemble("proj-1", nil, []app{
 		{Name: "api", Compute: "container", Image: "ocel/api@" + fakeDigest},
-	}, "container", nil, nil, []Function{
-		{App: "api", Route: "index", Framework: Framework{Name: "node"}, EntryFile: "index.handler", ArtifactPath: "apps/api/functions/index"},
+	}, "container", nil, nil, []build.Function{
+		{App: "api", Route: "index", Framework: appbuild.Framework{Name: "node"}, EntryFile: "index.handler", ArtifactPath: "apps/api/functions/index"},
 	}, nil)
 	if err == nil {
-		t.Fatal("Build() included both a container and a function for one app, so routing would have two answers for the same request")
+		t.Fatal("assemble() included both a container and a function for one app, so routing would have two answers for the same request")
 	}
 	if !strings.Contains(err.Error(), `"api"`) {
-		t.Errorf("Build() error = %q, want it to name the app", err)
+		t.Errorf("assemble() error = %q, want it to name the app", err)
 	}
 }
 
 func TestContainersAreOrderedByTheAppTheyServe(t *testing.T) {
 	t.Parallel()
 
-	manifest, err := Build("proj-1", nil, []App{
+	manifest, err := assemble("proj-1", nil, []app{
 		{Name: "web", Compute: "container", Image: "ocel/web@" + fakeDigest},
 		{Name: "api", Compute: "container", Image: "ocel/api@" + fakeDigest},
 	}, "container", nil, nil, nil, nil)
 	if err != nil {
-		t.Fatalf("Build: %v", err)
+		t.Fatalf("assemble: %v", err)
 	}
 
 	order := containerApps(manifest)

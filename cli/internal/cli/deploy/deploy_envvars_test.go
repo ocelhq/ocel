@@ -1,12 +1,10 @@
 package deploy
 
 import (
-	"reflect"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/attribution"
 	"github.com/ocelhq/ocel/cli/internal/build"
-	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
+	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
@@ -133,92 +131,15 @@ func TestAppVariables(t *testing.T) {
 func TestTheRootStandInIsBuiltUnderNoAppName(t *testing.T) {
 	t.Parallel()
 
-	variables := map[string][]manifestbuilder.Variable{
+	variables := map[string][]variables.Variable{
 		variablescope.RootApp: {{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-123"}},
 	}
 
-	env := build.Env(clientApps(appSpecs(&projectconfig.Config{Dir: t.TempDir()}, variables)))
+	env := build.Env(clientenv.AppsOf(&projectconfig.Config{Dir: t.TempDir()}, variables))
 	if _, ok := env[variablescope.RootApp]; ok {
 		t.Errorf("env = %v, still keyed by a placeholder name no build knows", env)
 	}
 	if got, want := env[""]["POSTHOG_ID"], "ph-123"; got != want {
 		t.Errorf("root env POSTHOG_ID = %q, want %q", got, want)
 	}
-}
-
-func TestVariablesByApp(t *testing.T) {
-	t.Parallel()
-
-	t.Run("root resolution reaches the app nothing configured", func(t *testing.T) {
-		t.Parallel()
-
-		root := []manifestbuilder.Variable{
-			{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-123"},
-		}
-		functions := []manifestbuilder.Function{{Route: "index", App: "storefront"}}
-
-		got := variablesByApp(map[string][]manifestbuilder.Variable{variablescope.RootApp: root}, functions)
-		if len(got[variablescope.RootApp]) != 0 {
-			t.Errorf("variables are still keyed by the placeholder root name: %v", got)
-		}
-		if len(got["storefront"]) != 1 || got["storefront"][0].Value != "ph-123" {
-			t.Fatalf("storefront = %v, want the root resolution", got["storefront"])
-		}
-	})
-
-	t.Run("configured apps keep their own resolution", func(t *testing.T) {
-		t.Parallel()
-
-		resolved := map[string][]manifestbuilder.Variable{
-			"admin":      {{Key: "POSTHOG_ID", Value: "ph-admin"}},
-			"storefront": {{Key: "POSTHOG_ID", Value: "ph-store"}},
-		}
-		functions := []manifestbuilder.Function{{Route: "index", App: "storefront"}}
-
-		got := variablesByApp(resolved, functions)
-		if len(got["admin"]) != 1 || got["admin"][0].Value != "ph-admin" {
-			t.Fatalf("admin = %v, want its own resolution", got["admin"])
-		}
-		if got["storefront"][0].Value != "ph-store" {
-			t.Fatalf("storefront = %v, want its own resolution", got["storefront"])
-		}
-	})
-}
-
-func TestToApps(t *testing.T) {
-	t.Parallel()
-
-	t.Run("passes the folder binding into the manifest", func(t *testing.T) {
-		t.Parallel()
-
-		got := toApps(t.TempDir(), []projectconfig.App{
-			{Name: "admin", Folder: "/admin"},
-			{Name: "web"},
-		}, nil, "serverless", nil, nil)
-
-		want := []manifestbuilder.App{
-			{Name: "admin", Folder: "/admin"},
-			{Name: "web"},
-		}
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("toApps() = %+v, want %+v", got, want)
-		}
-	})
-
-	t.Run("hands each app only the usage edges attributed to it", func(t *testing.T) {
-		t.Parallel()
-
-		got := toApps(t.TempDir(), []projectconfig.App{{Name: "admin"}, {Name: "web"}}, []attribution.Usage{
-			{App: "web", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main", Files: []string{"apps/web/src/server.ts"}},
-			{App: "admin", Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: "uploads", Files: []string{"apps/admin/src/upload.ts"}},
-		}, "serverless", nil, nil)
-
-		want := []manifestbuilder.App{
-			{Name: "admin", Usages: []manifestbuilder.Usage{{Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: "uploads", Files: []string{"apps/admin/src/upload.ts"}}}},
-			{Name: "web", Usages: []manifestbuilder.Usage{{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main", Files: []string{"apps/web/src/server.ts"}}}},
-		}
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("toApps() = %+v, want %+v", got, want)
-		}
-	})
 }

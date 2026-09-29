@@ -16,7 +16,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
-	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/runui"
@@ -116,7 +115,7 @@ func (emptyValues) Reveal(context.Context, []variables.Coordinate) (map[variable
 }
 
 func recordedClientValue() clientenv.App {
-	return clientenv.App{Name: "api", Variables: []manifestbuilder.Variable{{
+	return clientenv.App{Name: "api", Variables: []variables.Variable{{
 		Key:              "PUBLIC_SITE_URL",
 		Class:            resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN,
 		Value:            "https://example.com",
@@ -133,9 +132,9 @@ func TestCollectAndBuildManifest(t *testing.T) {
 
 		s, out := newBuildSpan(t)
 		cfg := prebuiltConfig(root)
-		manifest, _, err := collectAndBuildManifest(context.Background(), deps, cfg, emptyDeclarations(cfg), true, false, s, s, "serverless", nil, nil)
+		manifest, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: cfg, declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s, compute: "serverless"})
 		if err != nil {
-			t.Fatalf("collectAndBuildManifest: %v", err)
+			t.Fatalf("collectBuildAndAssemble: %v", err)
 		}
 		if *ran {
 			t.Error("the app build ran under --prebuilt, want it skipped")
@@ -164,8 +163,8 @@ func TestCollectAndBuildManifest(t *testing.T) {
 
 		s, _ := newBuildSpan(t)
 		cfg := prebuiltConfig(root)
-		if _, _, err := collectAndBuildManifest(context.Background(), deps, cfg, emptyDeclarations(cfg), false, false, s, s, "serverless", nil, nil); err != nil {
-			t.Fatalf("collectAndBuildManifest: %v", err)
+		if _, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: cfg, declarations: emptyDeclarations(cfg), phase: s, span: s, compute: "serverless"}); err != nil {
+			t.Fatalf("collectBuildAndAssemble: %v", err)
 		}
 		if !*ran {
 			t.Error("the app build was skipped without --prebuilt, want it to run")
@@ -178,9 +177,9 @@ func TestCollectAndBuildManifest(t *testing.T) {
 
 		s, _ := newBuildSpan(t)
 		cfg := prebuiltConfig(t.TempDir())
-		_, _, err := collectAndBuildManifest(context.Background(), deps, cfg, emptyDeclarations(cfg), true, false, s, s, "serverless", nil, nil)
+		_, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: cfg, declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s, compute: "serverless"})
 		if err == nil {
-			t.Fatal("collectAndBuildManifest succeeded with no build output, want error")
+			t.Fatal("collectBuildAndAssemble succeeded with no build output, want error")
 		}
 		if !strings.Contains(err.Error(), "ocel build") {
 			t.Errorf("error = %q, want it to point at `ocel build`", err)
@@ -196,9 +195,9 @@ func TestCollectAndBuildManifest(t *testing.T) {
 
 		s, _ := newBuildSpan(t)
 		cfg := prebuiltConfig(root)
-		manifest, _, err := collectAndBuildManifest(context.Background(), deps, cfg, emptyDeclarations(cfg), true, false, s, s, "serverless", nil, nil)
+		manifest, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: cfg, declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s, compute: "serverless"})
 		if err != nil {
-			t.Fatalf("collectAndBuildManifest: %v", err)
+			t.Fatalf("collectBuildAndAssemble: %v", err)
 		}
 		apps := manifest.GetApps()
 		if len(apps) != 1 || apps[0].GetDeploymentId() != recorded {
@@ -217,9 +216,9 @@ func TestCollectAndBuildManifest(t *testing.T) {
 
 		s, _ := newBuildSpan(t)
 		cfg := prebuiltConfig(root)
-		_, _, err := collectAndBuildManifest(context.Background(), deps, cfg, emptyDeclarations(cfg), true, false, s, s, "serverless", nil, nil)
+		_, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: cfg, declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s, compute: "serverless"})
 		if err == nil {
-			t.Fatal("collectAndBuildManifest succeeded for an app no build stamped, want error")
+			t.Fatal("collectBuildAndAssemble succeeded for an app no build stamped, want error")
 		}
 		if !strings.Contains(err.Error(), "ocel build") || !strings.Contains(err.Error(), "api") {
 			t.Errorf("error = %q, want it to name the app and point at `ocel build`", err)
@@ -243,8 +242,8 @@ func TestCollectAndBuildManifest(t *testing.T) {
 
 		s, _ := newBuildSpan(t)
 		cfg := prebuiltConfig(root)
-		if _, _, err := collectAndBuildManifest(context.Background(), deps, cfg, declarationsWithClientValue(t, cfg, "https://example.com"), false, false, s, s, "serverless", nil, nil); err != nil {
-			t.Fatalf("collectAndBuildManifest: %v", err)
+		if _, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: cfg, declarations: declarationsWithClientValue(t, cfg, "https://example.com"), phase: s, span: s, compute: "serverless"}); err != nil {
+			t.Fatalf("collectBuildAndAssemble: %v", err)
 		}
 
 		if !strings.Contains(generated, `PUBLIC_SITE_URL: inlined(schema, "PUBLIC_SITE_URL", process.env.PUBLIC_SITE_URL)`) {
@@ -268,9 +267,9 @@ func TestCollectAndBuildManifest(t *testing.T) {
 
 		s, _ := newBuildSpan(t)
 		declarations := declarationsWithClientValue(t, cfg, "https://rotated.example.com")
-		_, _, err := collectAndBuildManifest(context.Background(), deps, cfg, declarations, true, false, s, s, "serverless", nil, nil)
+		_, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: cfg, declarations: declarations, prebuilt: true, phase: s, span: s, compute: "serverless"})
 		if err == nil {
-			t.Fatal("collectAndBuildManifest = nil for a build predating the client value, want a refusal")
+			t.Fatal("collectBuildAndAssemble = nil for a build predating the client value, want a refusal")
 		}
 		if !strings.Contains(err.Error(), "PUBLIC_SITE_URL") {
 			t.Errorf("error = %q, want it to name the changed key", err)
@@ -291,9 +290,9 @@ func TestCollectAndBuildManifest(t *testing.T) {
 		}
 
 		s, _ := newBuildSpan(t)
-		_, _, err := collectAndBuildManifest(context.Background(), deps, cfg, declarationsWithClientValue(t, cfg, "https://example.com"), true, false, s, s, "serverless", nil, nil)
+		_, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: cfg, declarations: declarationsWithClientValue(t, cfg, "https://example.com"), prebuilt: true, phase: s, span: s, compute: "serverless"})
 		if err == nil {
-			t.Fatal("collectAndBuildManifest = nil for an `ocel build` output, want a refusal")
+			t.Fatal("collectBuildAndAssemble = nil for an `ocel build` output, want a refusal")
 		}
 		for _, want := range []string{"PUBLIC_SITE_URL", "never inlined", "`ocel build`, which resolves no values"} {
 			if !strings.Contains(err.Error(), want) {
@@ -318,8 +317,8 @@ func TestCollectAndBuildManifest(t *testing.T) {
 
 		s, _ := newBuildSpan(t)
 		declarations := declarationsWithClientValue(t, cfg, "https://example.com")
-		if _, _, err := collectAndBuildManifest(context.Background(), deps, cfg, declarations, true, false, s, s, "serverless", nil, nil); err != nil {
-			t.Fatalf("collectAndBuildManifest: %v", err)
+		if _, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: cfg, declarations: declarations, prebuilt: true, phase: s, span: s, compute: "serverless"}); err != nil {
+			t.Fatalf("collectBuildAndAssemble: %v", err)
 		}
 	})
 }
@@ -396,9 +395,9 @@ func TestPrebuiltDeploysTheImageTheBuildRecordedRatherThanBuildingOne(t *testing
 		Apps: []projectconfig.App{{Name: "api", Path: ".", Compute: "container"}},
 	}
 	archs := map[string]string{"api": "arm64"}
-	manifest, _, err := collectAndBuildManifest(context.Background(), deps, cfg, emptyDeclarations(cfg), true, false, s, s, "container", archs, nil)
+	manifest, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: cfg, declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s, compute: "container", containerArchs: archs})
 	if err != nil {
-		t.Fatalf("collectAndBuildManifest: %v", err)
+		t.Fatalf("collectBuildAndAssemble: %v", err)
 	}
 	if *ran {
 		t.Error("--prebuilt built the apps again, want the image the build recorded deployed as it is")

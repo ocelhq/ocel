@@ -52,7 +52,7 @@ on:
       - "cli/internal/cli/env/**"
       - "cli/internal/envgate/**"
       - "cli/internal/discovery/**"
-      - "cli/internal/manifestbuilder/**"
+      - "cli/internal/manifest/**"
       - "cli/internal/projectconfig/**"
       - "packages/ocel/**"
       - "proto/**"

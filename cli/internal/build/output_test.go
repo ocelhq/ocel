@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -185,9 +184,9 @@ func TestReadFunctions(t *testing.T) {
 			t.Fatalf("CollectFunctions: %v", err)
 		}
 
-		assertFunctions(t, "ReadFunctions", fns, []manifestbuilder.Function{
-			{Route: "api/todos/[id]", Framework: manifestbuilder.Framework{Name: "next"}, EntryFile: "index.handler", ArtifactPath: "apps/web/functions/api/todos/[id].func", App: "web"},
-			{Route: "index", Framework: manifestbuilder.Framework{Name: "next"}, EntryFile: "index.handler", ArtifactPath: "apps/web/functions/index.func", App: "web"},
+		assertFunctions(t, "ReadFunctions", fns, []Function{
+			{Route: "api/todos/[id]", Framework: appbuild.Framework{Name: "next"}, EntryFile: "index.handler", ArtifactPath: "apps/web/functions/api/todos/[id].func", App: "web"},
+			{Route: "index", Framework: appbuild.Framework{Name: "next"}, EntryFile: "index.handler", ArtifactPath: "apps/web/functions/index.func", App: "web"},
 		})
 	})
 
@@ -206,7 +205,7 @@ func TestReadFunctions(t *testing.T) {
 	trees := []struct {
 		name  string
 		setup func(t *testing.T, outDir string)
-		want  []manifestbuilder.Function
+		want  []Function
 	}{
 		{
 			name: "nested routes are collected without descending into a function's own tree",
@@ -219,9 +218,9 @@ func TestReadFunctions(t *testing.T) {
 					t.Fatal(err)
 				}
 			},
-			want: []manifestbuilder.Function{
-				{Route: "api/todos/[id]", Framework: manifestbuilder.Framework{Name: "next"}, EntryFile: "index.handler", ArtifactPath: "apps/web/functions/api/todos/[id].func", App: "web"},
-				{Route: "index", Framework: manifestbuilder.Framework{Name: "next"}, EntryFile: "index.handler", ArtifactPath: "apps/web/functions/index.func", App: "web"},
+			want: []Function{
+				{Route: "api/todos/[id]", Framework: appbuild.Framework{Name: "next"}, EntryFile: "index.handler", ArtifactPath: "apps/web/functions/api/todos/[id].func", App: "web"},
+				{Route: "index", Framework: appbuild.Framework{Name: "next"}, EntryFile: "index.handler", ArtifactPath: "apps/web/functions/index.func", App: "web"},
 			},
 		},
 		{
@@ -232,9 +231,9 @@ func TestReadFunctions(t *testing.T) {
 						appbuild.FunctionConfig{Framework: appbuild.Framework{Name: "next"}, Handler: "route.js", ID: "/api/documents", App: app})
 				}
 			},
-			want: []manifestbuilder.Function{
-				{Route: "api/documents", Framework: manifestbuilder.Framework{Name: "next"}, EntryFile: "route.js", ArtifactPath: "apps/admin/functions/api/documents.func", RouteID: "/api/documents", App: "admin"},
-				{Route: "api/documents", Framework: manifestbuilder.Framework{Name: "next"}, EntryFile: "route.js", ArtifactPath: "apps/storefront/functions/api/documents.func", RouteID: "/api/documents", App: "storefront"},
+			want: []Function{
+				{Route: "api/documents", Framework: appbuild.Framework{Name: "next"}, EntryFile: "route.js", ArtifactPath: "apps/admin/functions/api/documents.func", RouteID: "/api/documents", App: "admin"},
+				{Route: "api/documents", Framework: appbuild.Framework{Name: "next"}, EntryFile: "route.js", ArtifactPath: "apps/storefront/functions/api/documents.func", RouteID: "/api/documents", App: "storefront"},
 			},
 		},
 	}

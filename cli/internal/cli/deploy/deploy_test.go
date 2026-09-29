@@ -13,9 +13,9 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/pkg/appbuild"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
@@ -102,10 +102,10 @@ export default {
 	t.Run("an app builds its functions into the manifest", func(t *testing.T) {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, []manifestbuilder.Function{
+		clitest.StubBuild(&deps, []build.Function{
 			{
 				Route:        "api",
-				Framework:    manifestbuilder.Framework{Name: "node"},
+				Framework:    appbuild.Framework{Name: "node"},
 				EntryFile:    "src/server.js",
 				ArtifactPath: "output/api",
 				App:          "api",
@@ -486,8 +486,8 @@ export default {
 	t.Run("a single app produces exactly one attributed app", func(t *testing.T) {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, []manifestbuilder.Function{
-			{Route: "api", Framework: manifestbuilder.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
+		clitest.StubBuild(&deps, []build.Function{
+			{Route: "api", Framework: appbuild.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
 		})
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
@@ -525,9 +525,9 @@ export default {
 	t.Run("two apps attribute their functions to their own app", func(t *testing.T) {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, []manifestbuilder.Function{
-			{Route: "web", Framework: manifestbuilder.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/web", App: "web"},
-			{Route: "admin", Framework: manifestbuilder.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/admin", App: "admin"},
+		clitest.StubBuild(&deps, []build.Function{
+			{Route: "web", Framework: appbuild.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/web", App: "web"},
+			{Route: "admin", Framework: appbuild.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/admin", App: "admin"},
 		})
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
@@ -585,8 +585,8 @@ export default {
 	t.Run("a detected app appears in the manifest", func(t *testing.T) {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, []manifestbuilder.Function{
-			{Route: "index", Framework: manifestbuilder.Framework{Name: "next"}, EntryFile: "h.js", ArtifactPath: "output/index", App: "express-app"},
+		clitest.StubBuild(&deps, []build.Function{
+			{Route: "index", Framework: appbuild.Framework{Name: "next"}, EntryFile: "h.js", ArtifactPath: "output/index", App: "express-app"},
 		})
 		root, sockPath := clitest.SetUpDeployFixture(t)
 

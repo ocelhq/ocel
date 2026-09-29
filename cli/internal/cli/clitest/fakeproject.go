@@ -4,8 +4,9 @@ import (
 	"context"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
+	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
@@ -42,8 +43,8 @@ func SetUpMonorepoProject(t *testing.T, declaration string) (FakeProject, cmddep
 
 	deps := NewDeps()
 	SetLoggedIn(&deps)
-	StubBuild(&deps, []manifestbuilder.Function{
-		{Route: "api", Framework: manifestbuilder.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
+	StubBuild(&deps, []build.Function{
+		{Route: "api", Framework: appbuild.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
 	})
 	return project, deps
 }

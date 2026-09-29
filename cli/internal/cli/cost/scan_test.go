@@ -14,8 +14,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/pkg/appbuild"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
@@ -31,8 +31,8 @@ func scanFixture(t *testing.T) (string, *fake.Provider, cmddeps.Deps) {
 	root, p := project.Root, project.Provider
 	clitest.WriteUsageMonorepo(t, root)
 	deps := clitest.NewDeps()
-	clitest.StubBuild(&deps, []manifestbuilder.Function{
-		{Route: "api", Framework: manifestbuilder.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
+	clitest.StubBuild(&deps, []build.Function{
+		{Route: "api", Framework: appbuild.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
 	})
 	return root, p, deps
 }
@@ -106,7 +106,7 @@ func TestScan(t *testing.T) {
 
 	t.Run("it prices one function per app when nothing is built", func(t *testing.T) {
 		root, _, deps := scanFixture(t)
-		deps.ReadFunctions = func(string) ([]manifestbuilder.Function, error) {
+		deps.ReadFunctions = func(string) ([]build.Function, error) {
 			return nil, build.ErrNoBuildOutput
 		}
 
@@ -134,7 +134,7 @@ func TestScan(t *testing.T) {
 			t.Errorf("assumptions with a build = %v, want none", built.Assumptions)
 		}
 
-		deps.ReadFunctions = func(string) ([]manifestbuilder.Function, error) {
+		deps.ReadFunctions = func(string) ([]build.Function, error) {
 			return nil, build.ErrNoBuildOutput
 		}
 		var unbuilt scanJSON
@@ -157,7 +157,7 @@ export default {
 `)
 		clitest.WriteFile(t, filepath.Join(root, "apps", "api", "package.json"), `{}`)
 		p.WithFacts(func(facts *provider.Facts) { facts.Computes = []provider.Compute{provider.ComputeContainer} })
-		deps.ReadFunctions = func(string) ([]manifestbuilder.Function, error) {
+		deps.ReadFunctions = func(string) ([]build.Function, error) {
 			return nil, build.ErrNoBuildOutput
 		}
 

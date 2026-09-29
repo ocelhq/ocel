@@ -8,8 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
-	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
+	"github.com/ocelhq/ocel/pkg/appbuild"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 )
@@ -55,8 +56,8 @@ func (r inlineRun) deploy(t *testing.T, opts deployOptions) (string, error) {
 	t.Helper()
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
-	clitest.StubBuild(&deps, []manifestbuilder.Function{
-		{Route: "api", Framework: manifestbuilder.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
+	clitest.StubBuild(&deps, []build.Function{
+		{Route: "api", Framework: appbuild.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
 	})
 	opts.yes = true
 	var stdout, stderr bytes.Buffer

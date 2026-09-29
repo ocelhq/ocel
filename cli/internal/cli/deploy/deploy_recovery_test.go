@@ -15,13 +15,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
-	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/variableeditor"
 	"github.com/ocelhq/ocel/cli/internal/variables"
+	"github.com/ocelhq/ocel/pkg/appbuild"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -282,8 +283,8 @@ func TestADeployMissingVariablesOpensTheEditorAndResumesOnceTheyAreSet(t *testin
 		var mu sync.Mutex
 		var opened []string
 		recordBrowser(&deps, &opened, &mu)
-		clitest.StubBuild(&deps, []manifestbuilder.Function{
-			{Route: "api", Framework: manifestbuilder.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
+		clitest.StubBuild(&deps, []build.Function{
+			{Route: "api", Framework: appbuild.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
 		})
 
 		var out syncBuffer

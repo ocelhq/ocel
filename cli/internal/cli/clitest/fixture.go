@@ -20,7 +20,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
-	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/projecteditor"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
@@ -28,6 +27,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/version"
+	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/configdoc"
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
@@ -198,14 +198,14 @@ func InstallProvider(t *testing.T, name string, place func(dest string) error) s
 	return dest
 }
 
-func StubBuild(deps *cmddeps.Deps, functions []manifestbuilder.Function) {
+func StubBuild(deps *cmddeps.Deps, functions []build.Function) {
 	deps.BuildApps = func(context.Context, *projectconfig.Config, map[string]map[string]string, map[string]string, build.Log) (build.Output, error) {
 		return build.Output{Functions: functions}, nil
 	}
 	deps.ReadPrebuilt = func(context.Context, *projectconfig.Config, map[string]string) (build.Output, error) {
 		return build.Output{Functions: functions}, nil
 	}
-	deps.ReadFunctions = func(string) ([]manifestbuilder.Function, error) {
+	deps.ReadFunctions = func(string) ([]build.Function, error) {
 		return functions, nil
 	}
 	StubRecordedDeploymentIDs(deps)
@@ -359,8 +359,8 @@ func SetUpEdgeFixture(t *testing.T, declaration string) (root, journal string, d
 
 	deps = NewDeps()
 	SetLoggedIn(&deps)
-	StubBuild(&deps, []manifestbuilder.Function{
-		{Route: "api", Framework: manifestbuilder.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
+	StubBuild(&deps, []build.Function{
+		{Route: "api", Framework: appbuild.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
 	})
 	return root, journal, deps
 }

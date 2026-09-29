@@ -4,12 +4,12 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
-	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
 func TestTheBuildEnvironmentHoldsEveryPlaintextValueUnderItsOwnNameAndNothingElse(t *testing.T) {
-	env := Env([]clientenv.App{{Name: "storefront", Variables: []manifestbuilder.Variable{
+	env := Env([]clientenv.App{{Name: "storefront", Variables: []variables.Variable{
 		{Key: "NEXT_PUBLIC_SITE_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "https://example.com", ClientAccessible: true},
 		{Key: "INTERNAL_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "http://internal"},
 		{Key: "STRIPE_API_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Value: "sk-live"},
@@ -28,8 +28,8 @@ func TestTheBuildEnvironmentHoldsEveryPlaintextValueUnderItsOwnNameAndNothingEls
 
 func TestEachAppIsBuiltWithItsOwnValueForADivergedKey(t *testing.T) {
 	env := Env([]clientenv.App{
-		{Name: "storefront", Variables: []manifestbuilder.Variable{{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-store"}}},
-		{Name: "admin", Variables: []manifestbuilder.Variable{{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-admin"}}},
+		{Name: "storefront", Variables: []variables.Variable{{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-store"}}},
+		{Name: "admin", Variables: []variables.Variable{{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-admin"}}},
 	})
 
 	if got, want := env["storefront"]["POSTHOG_ID"], "ph-store"; got != want {

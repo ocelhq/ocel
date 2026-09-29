@@ -1,19 +1,20 @@
-package declaration
+package manifest
 
 import (
 	"path/filepath"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/declaration"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
-func TestToManifestCarriesEachResourceAndWhereItWasDeclared(t *testing.T) {
+func TestADeclaredResourceCarriesItsFieldsAndWhereItWasDeclared(t *testing.T) {
 	t.Parallel()
 
 	t.Run("maps resource fields", func(t *testing.T) {
 		t.Parallel()
 
-		resources := []Resource{
+		resources := []declaration.Resource{
 			{
 				Name:     "main",
 				Type:     resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
@@ -21,7 +22,7 @@ func TestToManifestCarriesEachResourceAndWhereItWasDeclared(t *testing.T) {
 			},
 		}
 
-		decls := ToManifest(t.TempDir(), resources)
+		decls := declaredResources(t.TempDir(), resources)
 
 		if len(decls) != 1 {
 			t.Fatalf("len(decls) = %d, want 1", len(decls))
@@ -42,13 +43,13 @@ func TestToManifestCarriesEachResourceAndWhereItWasDeclared(t *testing.T) {
 		t.Parallel()
 
 		configDir := t.TempDir()
-		resources := []Resource{{
+		resources := []declaration.Resource{{
 			Name:   "main",
 			Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 			Source: filepath.Join(configDir, "shared", "db.ts") + ":3",
 		}}
 
-		decls := ToManifest(configDir, resources)
+		decls := declaredResources(configDir, resources)
 
 		if len(decls) != 1 {
 			t.Fatalf("len(decls) = %d, want 1", len(decls))

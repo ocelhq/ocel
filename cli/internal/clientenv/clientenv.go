@@ -12,7 +12,10 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
+	"github.com/ocelhq/ocel/cli/internal/language"
+	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/variables"
+	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -30,7 +33,24 @@ type App struct {
 	Name         string
 	Dir          string
 	ClientBundle bool
-	Variables    []manifestbuilder.Variable
+	Variables    []variables.Variable
+}
+
+func AppsOf(cfg *projectconfig.Config, values map[string][]variables.Variable) []App {
+	if len(cfg.Apps) == 0 {
+		return []App{{Dir: cfg.Dir, ClientBundle: language.HasClientBundle(appbuild.FrameworkNode, cfg.Dir), Variables: values[variablescope.RootApp]}}
+	}
+	apps := make([]App, 0, len(cfg.Apps))
+	for _, a := range cfg.Apps {
+		dir := filepath.Join(cfg.Dir, a.Path)
+		apps = append(apps, App{
+			Name:         a.Name,
+			Dir:          dir,
+			ClientBundle: language.HasClientBundle(a.Framework.Name, dir),
+			Variables:    values[a.Name],
+		})
+	}
+	return apps
 }
 
 type Key struct {
@@ -251,7 +271,7 @@ func readRecord(projectDir string) (buildRecord, error) {
 	return record, nil
 }
 
-func Keys(variables []manifestbuilder.Variable) ([]Key, error) {
+func Keys(variables []variables.Variable) ([]Key, error) {
 	keys := make([]Key, 0, len(variables))
 	for _, v := range variables {
 		if !isClient(v) {
@@ -296,7 +316,7 @@ func Offered(keys []Key, clientBundle bool) []Key {
 	return slices.CompactFunc(keys, func(a, b Key) bool { return a.Name == b.Name })
 }
 
-func isClient(v manifestbuilder.Variable) bool {
+func isClient(v variables.Variable) bool {
 	return v.ClientAccessible && v.Class == resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN
 }
 

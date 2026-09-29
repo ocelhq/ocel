@@ -1,12 +1,12 @@
-package deploy
+package manifest
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/language"
-	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 )
 
@@ -17,12 +17,12 @@ func TestADetectedAppIsReadInTheLanguageOfTheProjectItSitsIn(t *testing.T) {
 	}
 
 	cfg := &projectconfig.Config{Dir: root}
-	apps, err := toAttributionApps(cfg, []manifestbuilder.Function{{App: "web"}}, "", "ocel.config.ts")
+	apps, err := attributionApps(cfg, []build.Function{{App: "web"}}, "")
 	if err != nil {
-		t.Fatalf("toAttributionApps: %v", err)
+		t.Fatalf("attributionApps: %v", err)
 	}
 	if len(apps) != 1 {
-		t.Fatalf("toAttributionApps returned %d apps, want 1", len(apps))
+		t.Fatalf("attributionApps returned %d apps, want 1", len(apps))
 	}
 	if apps[0].Language != language.Go {
 		t.Errorf("Language = %q, want %q", apps[0].Language, language.Go)
@@ -42,9 +42,9 @@ func TestANamedRuntimeTellsOcelWhichLanguageAnAppIs(t *testing.T) {
 		Dir:  root,
 		Apps: []projectconfig.App{{Name: "web", Path: "server", Framework: projectconfig.Framework{Name: "python"}}},
 	}
-	apps, err := toAttributionApps(cfg, []manifestbuilder.Function{{App: "web"}}, "", "ocel.config.ts")
+	apps, err := attributionApps(cfg, []build.Function{{App: "web"}}, "")
 	if err != nil {
-		t.Fatalf("toAttributionApps: %v", err)
+		t.Fatalf("attributionApps: %v", err)
 	}
 	if apps[0].Language != language.Python {
 		t.Errorf("Language = %q, want %q", apps[0].Language, language.Python)
@@ -52,7 +52,7 @@ func TestANamedRuntimeTellsOcelWhichLanguageAnAppIs(t *testing.T) {
 }
 
 func TestTheFixturePythonAppIsReadAsPython(t *testing.T) {
-	root, err := filepath.Abs(filepath.Join("..", "..", "..", "..", "tests", "fixtures", "sdk", "python"))
+	root, err := filepath.Abs(filepath.Join("..", "..", "..", "tests", "fixtures", "sdk", "python"))
 	if err != nil {
 		t.Fatalf("locate the fixture: %v", err)
 	}
@@ -61,9 +61,9 @@ func TestTheFixturePythonAppIsReadAsPython(t *testing.T) {
 		Dir:  root,
 		Apps: []projectconfig.App{{Name: "web", Path: "server", Framework: projectconfig.Framework{Name: "python"}}},
 	}
-	apps, err := toAttributionApps(cfg, []manifestbuilder.Function{{App: "web"}}, "", "ocel.config.ts")
+	apps, err := attributionApps(cfg, []build.Function{{App: "web"}}, "")
 	if err != nil {
-		t.Fatalf("toAttributionApps: %v", err)
+		t.Fatalf("attributionApps: %v", err)
 	}
 	if apps[0].Language != language.Python {
 		t.Errorf("Language = %q, want %q", apps[0].Language, language.Python)
@@ -86,9 +86,9 @@ func TestAContainerAppWithACrateBesideItsPackageJSONIsReadAsJS(t *testing.T) {
 		Dir:  root,
 		Apps: []projectconfig.App{{Name: "web", Path: "web", Compute: "container"}},
 	}
-	apps, err := toAttributionApps(cfg, nil, "container", "ocel.config.ts")
+	apps, err := attributionApps(cfg, nil, "container")
 	if err != nil {
-		t.Fatalf("toAttributionApps: %v", err)
+		t.Fatalf("attributionApps: %v", err)
 	}
 	if apps[0].Language != language.JS {
 		t.Errorf("Language = %q, want %q: the crate beside a package.json is the node app's native addon", apps[0].Language, language.JS)

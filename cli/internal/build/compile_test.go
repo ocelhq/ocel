@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/constants"
 )
@@ -56,9 +56,9 @@ func TestAGoAppIsCompiledHereRatherThanHandedToTheNodeBuildScript(t *testing.T) 
 	if err != nil {
 		t.Fatalf("CollectFunctions: %v", err)
 	}
-	assertFunctions(t, "ReadFunctions", fns, []manifestbuilder.Function{{
+	assertFunctions(t, "ReadFunctions", fns, []Function{{
 		Route:        "index",
-		Framework:    manifestbuilder.Framework{Name: "go", Arch: arch.X8664},
+		Framework:    appbuild.Framework{Name: "go", Arch: arch.X8664},
 		EntryFile:    "api",
 		ArtifactPath: "apps/api/functions/index.func",
 		RouteID:      "/",
@@ -109,9 +109,9 @@ func TestAPythonAppIsVendoredHereRatherThanHandedToTheNodeBuilder(t *testing.T) 
 	if err != nil {
 		t.Fatalf("CollectFunctions: %v", err)
 	}
-	assertFunctions(t, "ReadFunctions", fns, []manifestbuilder.Function{{
+	assertFunctions(t, "ReadFunctions", fns, []Function{{
 		Route:        "index",
-		Framework:    manifestbuilder.Framework{Name: "python", Arch: arch.X8664},
+		Framework:    appbuild.Framework{Name: "python", Arch: arch.X8664},
 		EntryFile:    "main.py",
 		ArtifactPath: "apps/api/functions/index.func",
 		RouteID:      "/",
@@ -165,9 +165,9 @@ func TestARustAppIsCompiledHereRatherThanHandedToTheNodeBuilder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CollectFunctions: %v", err)
 	}
-	assertFunctions(t, "ReadFunctions", fns, []manifestbuilder.Function{{
+	assertFunctions(t, "ReadFunctions", fns, []Function{{
 		Route:        "index",
-		Framework:    manifestbuilder.Framework{Name: "rust", Arch: arch.X8664},
+		Framework:    appbuild.Framework{Name: "rust", Arch: arch.X8664},
 		EntryFile:    "api",
 		ArtifactPath: "apps/api/functions/index.func",
 		RouteID:      "/",

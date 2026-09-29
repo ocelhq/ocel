@@ -13,7 +13,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
-	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/run"
@@ -31,7 +30,7 @@ type Deps struct {
 	BuildApps               func(ctx context.Context, cfg *projectconfig.Config, env map[string]map[string]string, archs map[string]string, log build.Log) (build.Output, error)
 	RefuseUnbuildableImages func(ctx context.Context, span *run.Span, cfg *projectconfig.Config, archs map[string]string) error
 	ReadPrebuilt            func(ctx context.Context, cfg *projectconfig.Config, archs map[string]string) (build.Output, error)
-	ReadFunctions           func(projectDir string) ([]manifestbuilder.Function, error)
+	ReadFunctions           func(projectDir string) ([]build.Function, error)
 	DeploymentID            func(projectDir, app string) (string, error)
 	CollectDeclarations     func(ctx context.Context, cfg *projectconfig.Config, declarations *variables.Declarations, stdout, stderr io.Writer) ([]declaration.Resource, error)
 	OpenBrowser             func(url string) error

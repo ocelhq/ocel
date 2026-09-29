@@ -19,13 +19,13 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
-	"github.com/ocelhq/ocel/cli/internal/declaration"
-	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
+	"github.com/ocelhq/ocel/cli/internal/manifest"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
+	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -235,49 +235,50 @@ func scanManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Con
 	if err != nil {
 		return nil, nil, err
 	}
-	var assumptions []string
-	functions, err := deps.ReadFunctions(cfg.Dir)
-	if errors.Is(err, build.ErrNoBuildOutput) {
-		functions = unbuiltFunctions(cfg)
-		assumptions = append(assumptions, unbuiltAssumption)
-	} else if err != nil {
-		return nil, nil, err
-	}
-	manifest, err := manifestbuilder.Build(cfg.Slug, cfg.Domains, scannedApps(cfg), compute, declaration.ToManifest(cfg.Dir, resources), manifestBindings(cfg.BindingsFor(env.GetTier())), functions, nil)
+	built, assumptions, err := scannedOutput(deps, cfg)
 	if err != nil {
 		return nil, nil, err
 	}
-	return manifest, assumptions, nil
+	scanned, err := manifest.Assemble(manifest.Input{
+		Config:    cfg,
+		Tier:      env.GetTier(),
+		Compute:   compute,
+		Resources: resources,
+		Built:     built,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	return scanned, assumptions, nil
 }
 
-func scannedApps(cfg *projectconfig.Config) []manifestbuilder.App {
-	apps := make([]manifestbuilder.App, 0, len(cfg.Apps))
+func scannedOutput(deps cmddeps.Deps, cfg *projectconfig.Config) (build.Output, []string, error) {
+	images := make(map[string]string, len(cfg.Apps))
 	for _, a := range cfg.Apps {
-		app := manifestbuilder.App{
-			Name:      a.Name,
-			Framework: manifestbuilder.Framework{Name: a.Framework.Name, Arch: a.Framework.Arch},
-			Compute:   a.Compute,
-			Domains:   a.Domains,
-			Folder:    a.Folder,
-		}
 		if a.RunsOn(provider.ComputeContainer) {
-			app.Image = cfg.Slug + "/" + a.Name + "@sha256:" + unbuiltDigest
+			images[a.Name] = cfg.Slug + "/" + a.Name + "@sha256:" + unbuiltDigest
 		}
-		apps = append(apps, app)
 	}
-	return apps
+	functions, err := deps.ReadFunctions(cfg.Dir)
+	if errors.Is(err, build.ErrNoBuildOutput) {
+		return build.Output{Functions: unbuiltFunctions(cfg), Images: images}, []string{unbuiltAssumption}, nil
+	}
+	if err != nil {
+		return build.Output{}, nil, err
+	}
+	return build.Output{Functions: functions, Images: images}, nil, nil
 }
 
-func unbuiltFunctions(cfg *projectconfig.Config) []manifestbuilder.Function {
+func unbuiltFunctions(cfg *projectconfig.Config) []build.Function {
 	if len(cfg.Apps) == 0 {
-		return []manifestbuilder.Function{{Route: cfg.Slug, App: cfg.Slug}}
+		return []build.Function{{Route: cfg.Slug, App: cfg.Slug}}
 	}
-	functions := make([]manifestbuilder.Function, 0, len(cfg.Apps))
+	functions := make([]build.Function, 0, len(cfg.Apps))
 	for _, a := range cfg.Apps {
 		if a.RunsOn(provider.ComputeContainer) {
 			continue
 		}
-		functions = append(functions, manifestbuilder.Function{Route: a.Name, App: a.Name, Framework: manifestbuilder.Framework{Name: a.Framework.Name, Arch: a.Framework.Arch}})
+		functions = append(functions, build.Function{Route: a.Name, App: a.Name, Framework: appbuild.Framework{Name: a.Framework.Name, Arch: a.Framework.Arch}})
 	}
 	return functions
 }
@@ -304,12 +305,4 @@ func writeJSON(stdout io.Writer, set *costv1.ResourceSet, estimate *costv1.Estim
 	}
 	_, err = fmt.Fprintln(stdout, string(encoded))
 	return err
-}
-
-func manifestBindings(bindings []projectconfig.Binding) []manifestbuilder.Binding {
-	out := make([]manifestbuilder.Binding, 0, len(bindings))
-	for _, b := range bindings {
-		out = append(out, manifestbuilder.Binding{Type: b.Type, Name: b.Name, External: b.RecordName()})
-	}
-	return out
 }

@@ -12,12 +12,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/pkg/appbuild"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -75,10 +76,10 @@ func TestRunPreviewUp(t *testing.T) {
 		stubGit(&deps, "feature/login", "")
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
-		clitest.StubBuild(&deps, []manifestbuilder.Function{
+		clitest.StubBuild(&deps, []build.Function{
 			{
 				Route:        "api",
-				Framework:    manifestbuilder.Framework{Name: "node"},
+				Framework:    appbuild.Framework{Name: "node"},
 				EntryFile:    "index.handler",
 				ArtifactPath: "output/api",
 				App:          "api",

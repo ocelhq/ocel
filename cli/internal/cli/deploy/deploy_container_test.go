@@ -11,9 +11,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/pkg/appbuild"
 )
 
 func registryProject(t *testing.T, registry string) (cmddeps.Deps, string, func() bool) {
@@ -118,8 +118,8 @@ func containerProject(t *testing.T, health string) (cmddeps.Deps, string, string
 
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
-	clitest.StubBuild(&deps, []manifestbuilder.Function{
-		{Route: "index", Framework: manifestbuilder.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
+	clitest.StubBuild(&deps, []build.Function{
+		{Route: "index", Framework: appbuild.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
 	})
 	clitest.StubAppImages(&deps, "api")
 
@@ -226,8 +226,8 @@ func TestAServerlessOnlyDeployStillSendsTheRegistryItsFunctionsMayBeRunFrom(t *t
 	t.Setenv("OCEL_TEST_REGISTRY_TOKEN", "hunter2")
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
-	clitest.StubBuild(&deps, []manifestbuilder.Function{
-		{Route: "index", Framework: manifestbuilder.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
+	clitest.StubBuild(&deps, []build.Function{
+		{Route: "index", Framework: appbuild.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
 	})
 	root, _ := clitest.SetUpDeployFixture(t)
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `

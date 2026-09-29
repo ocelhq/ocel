@@ -153,7 +153,10 @@ func (r variablesRecovery) createInEnvSource(ctx context.Context, span *run.Span
 
 func (r variablesRecovery) attempt(ctx context.Context, phase, unit *run.Span, declarations *variables.Declarations, prebuilt bool, retry int) (*contractv1.Manifest, []inlinebinding.Record, error) {
 	attempt := unit.Trace(r.cfg.Slug, "build", progress.Attr{Key: progress.AttrKeyRetryCount, Value: strconv.Itoa(retry)})
-	manifest, inline, err := collectAndBuildManifest(run.ContextWithSpan(ctx, attempt), r.deps, r.cfg, declarations, prebuilt, r.dry, phase, unit, r.compute, r.containerArchs, r.urls)
+	manifest, inline, err := collectBuildAndAssemble(run.ContextWithSpan(ctx, attempt), r.deps, assembly{
+		cfg: r.cfg, declarations: declarations, prebuilt: prebuilt, dry: r.dry, phase: phase, span: unit,
+		compute: r.compute, containerArchs: r.containerArchs, urls: r.urls,
+	})
 	attempt.End(err)
 	return manifest, inline, err
 }

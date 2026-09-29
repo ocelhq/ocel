@@ -51,9 +51,9 @@ func TestTheDeploymentURLReachesEveryDeliverySite(t *testing.T) {
 	s, _ := newBuildSpan(t)
 	cfg := prebuiltConfig(root)
 	urls := map[string]string{"api": "https://api.acme.com"}
-	manifest, _, err := collectAndBuildManifest(context.Background(), deps, cfg, emptyDeclarations(cfg), false, false, s, s, "serverless", nil, urls)
+	manifest, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: cfg, declarations: emptyDeclarations(cfg), phase: s, span: s, compute: "serverless", urls: urls})
 	if err != nil {
-		t.Fatalf("collectAndBuildManifest: %v", err)
+		t.Fatalf("collectBuildAndAssemble: %v", err)
 	}
 
 	t.Run("the build is handed it", func(t *testing.T) {
@@ -93,16 +93,14 @@ func TestPrebuiltRefusesAnOutputBuiltForAnotherURL(t *testing.T) {
 	cfg := prebuiltConfig(root)
 
 	s, _ := newBuildSpan(t)
-	if _, _, err := collectAndBuildManifest(context.Background(), deps, cfg, emptyDeclarations(cfg), false, false, s, s, "serverless", nil,
-		map[string]string{"api": "https://api.acme.com"}); err != nil {
-		t.Fatalf("collectAndBuildManifest: %v", err)
+	if _, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: cfg, declarations: emptyDeclarations(cfg), phase: s, span: s, compute: "serverless", urls: map[string]string{"api": "https://api.acme.com"}}); err != nil {
+		t.Fatalf("collectBuildAndAssemble: %v", err)
 	}
 
 	s, _ = newBuildSpan(t)
-	_, _, err := collectAndBuildManifest(context.Background(), deps, cfg, emptyDeclarations(cfg), true, false, s, s, "serverless", nil,
-		map[string]string{"api": "https://pr-1.preview.acme.com"})
+	_, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: cfg, declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s, compute: "serverless", urls: map[string]string{"api": "https://pr-1.preview.acme.com"}})
 	if err == nil {
-		t.Fatal("collectAndBuildManifest = nil for output built against another hostname, want a refusal: the url is inlined into the browser bundle, so this deploy would serve the wrong one")
+		t.Fatal("collectBuildAndAssemble = nil for output built against another hostname, want a refusal: the url is inlined into the browser bundle, so this deploy would serve the wrong one")
 	}
 	if !strings.Contains(err.Error(), appbuild.ClientURLEnvName) {
 		t.Errorf("error = %q, want it to name the key whose value changed", err)

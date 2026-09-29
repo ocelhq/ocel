@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/appurl"
-	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
@@ -108,14 +108,14 @@ func TestPrepend(t *testing.T) {
 		{Name: "api", Framework: projectconfig.Framework{Name: appbuild.FrameworkGo}},
 		{Name: "docs"},
 	}}
-	byApp := map[string][]manifestbuilder.Variable{
+	byApp := map[string][]variables.Variable{
 		"web":  {{Key: "LOG_LEVEL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "info"}},
 		"api":  nil,
 		"docs": nil,
 	}
 	appurl.Prepend(cfg, byApp, map[string]string{"web": "https://acme.com", "api": "https://api.acme.com"})
 
-	variables := map[string]manifestbuilder.Variable{}
+	variables := map[string]variables.Variable{}
 	for _, v := range byApp["web"] {
 		variables[v.Key] = v
 	}
@@ -142,7 +142,7 @@ func TestPrepend(t *testing.T) {
 	}
 }
 
-func keys(variables []manifestbuilder.Variable) []string {
+func keys(variables []variables.Variable) []string {
 	out := make([]string, 0, len(variables))
 	for _, v := range variables {
 		out = append(out, v.Key)

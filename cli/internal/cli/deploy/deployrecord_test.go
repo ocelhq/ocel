@@ -11,8 +11,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/deployrecord"
-	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
+	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/edge"
 
@@ -23,8 +24,8 @@ func TestADeployRecordsWhatItDeployed(t *testing.T) {
 	t.Run("a successful deploy records the promotion, the tag and every app", func(t *testing.T) {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, []manifestbuilder.Function{{
-			Route: "api", Framework: manifestbuilder.Framework{Name: "node"}, EntryFile: "src/server.js",
+		clitest.StubBuild(&deps, []build.Function{{
+			Route: "api", Framework: appbuild.Framework{Name: "node"}, EntryFile: "src/server.js",
 			ArtifactPath: "output/api", App: "api",
 		}})
 		root, _ := clitest.SetUpDeployFixture(t)
@@ -89,8 +90,8 @@ func TestADeployRecordsWhatItDeployed(t *testing.T) {
 	t.Run("a successful preview up records the named preview", func(t *testing.T) {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, []manifestbuilder.Function{{
-			Route: "api", Framework: manifestbuilder.Framework{Name: "node"}, EntryFile: "src/server.js",
+		clitest.StubBuild(&deps, []build.Function{{
+			Route: "api", Framework: appbuild.Framework{Name: "node"}, EntryFile: "src/server.js",
 			ArtifactPath: "output/api", App: "api",
 		}})
 		root, _ := clitest.SetUpDeployFixture(t)

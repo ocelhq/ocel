@@ -14,14 +14,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/deployrecord"
-	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/variableeditor"
 	"github.com/ocelhq/ocel/cli/internal/variables"
+	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
@@ -30,8 +31,8 @@ func dryDeps(t *testing.T) cmddeps.Deps {
 	t.Helper()
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
-	clitest.StubBuild(&deps, []manifestbuilder.Function{{
-		Route: "api", Framework: manifestbuilder.Framework{Name: "node"}, EntryFile: "src/server.js",
+	clitest.StubBuild(&deps, []build.Function{{
+		Route: "api", Framework: appbuild.Framework{Name: "node"}, EntryFile: "src/server.js",
 		ArtifactPath: "output/api", App: "api",
 	}})
 	return deps

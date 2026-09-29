@@ -9,13 +9,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/constants"
 )
 
 func generate(t *testing.T, dir string) error {
 	t.Helper()
-	apps := []App{{Dir: dir, Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}}
+	apps := []App{{Dir: dir, Variables: []variables.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}}
 	if err := Generate(dir, apps); err != nil {
 		return err
 	}

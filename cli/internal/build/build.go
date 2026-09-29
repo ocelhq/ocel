@@ -10,7 +10,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/build/image"
 	"github.com/ocelhq/ocel/cli/internal/build/toolchain"
-	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/node"
 	"github.com/ocelhq/ocel/pkg/appbuild"
@@ -37,7 +36,7 @@ func (l Log) App(name string) (io.Writer, func(error)) {
 }
 
 type Output struct {
-	Functions []manifestbuilder.Function
+	Functions []Function
 	Images    map[string]string
 }
 

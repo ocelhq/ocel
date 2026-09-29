@@ -10,7 +10,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/edge"
 )
@@ -23,7 +22,16 @@ const entryFuncDirName = "index" + funcDirSuffix
 
 var ErrNoBuildOutput = errors.New("no build output")
 
-func ReadFunctions(projectDir string) ([]manifestbuilder.Function, error) {
+type Function struct {
+	App          string
+	Route        string
+	RouteID      string
+	Framework    appbuild.Framework
+	EntryFile    string
+	ArtifactPath string
+}
+
+func ReadFunctions(projectDir string) ([]Function, error) {
 	outputDir := appbuild.ArtifactRoot(projectDir)
 	if _, err := os.Stat(outputDir); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -79,13 +87,13 @@ func builtApps(root string) ([]string, error) {
 	return apps, nil
 }
 
-func readFunctions(outputDir string) ([]manifestbuilder.Function, error) {
+func readFunctions(outputDir string) ([]Function, error) {
 	apps, err := builtApps(outputDir)
 	if err != nil {
 		return nil, err
 	}
 
-	var functions []manifestbuilder.Function
+	var functions []Function
 	for _, app := range apps {
 		appFunctions, err := readAppFunctions(outputDir, appbuild.AppArtifactRoot(outputDir, app))
 		if err != nil {
@@ -94,7 +102,7 @@ func readFunctions(outputDir string) ([]manifestbuilder.Function, error) {
 		functions = append(functions, appFunctions...)
 	}
 
-	slices.SortFunc(functions, func(a, b manifestbuilder.Function) int {
+	slices.SortFunc(functions, func(a, b Function) int {
 		if byApp := strings.Compare(a.App, b.App); byApp != 0 {
 			return byApp
 		}
@@ -103,7 +111,7 @@ func readFunctions(outputDir string) ([]manifestbuilder.Function, error) {
 	return functions, nil
 }
 
-func readAppFunctions(outputDir, appDir string) ([]manifestbuilder.Function, error) {
+func readAppFunctions(outputDir, appDir string) ([]Function, error) {
 	functionsDir := filepath.Join(appDir, functionsDirName)
 	if _, err := os.Stat(functionsDir); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -112,7 +120,7 @@ func readAppFunctions(outputDir, appDir string) ([]manifestbuilder.Function, err
 		return nil, err
 	}
 
-	var functions []manifestbuilder.Function
+	var functions []Function
 	walkErr := filepath.WalkDir(functionsDir, func(dir string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -134,14 +142,14 @@ func readAppFunctions(outputDir, appDir string) ([]manifestbuilder.Function, err
 	return functions, nil
 }
 
-func readFunction(outputDir, functionsDir, funcDir string) (manifestbuilder.Function, error) {
+func readFunction(outputDir, functionsDir, funcDir string) (Function, error) {
 	routeRel, err := filepath.Rel(functionsDir, funcDir)
 	if err != nil {
-		return manifestbuilder.Function{}, err
+		return Function{}, err
 	}
 	artifactRel, err := filepath.Rel(outputDir, funcDir)
 	if err != nil {
-		return manifestbuilder.Function{}, err
+		return Function{}, err
 	}
 	route := strings.TrimSuffix(filepath.ToSlash(routeRel), funcDirSuffix)
 
@@ -149,22 +157,22 @@ func readFunction(outputDir, functionsDir, funcDir string) (manifestbuilder.Func
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return manifestbuilder.Function{}, fmt.Errorf("%s: missing %s", funcDir, appbuild.FunctionConfigFile)
+			return Function{}, fmt.Errorf("%s: missing %s", funcDir, appbuild.FunctionConfigFile)
 		}
-		return manifestbuilder.Function{}, err
+		return Function{}, err
 	}
 
 	var fc appbuild.FunctionConfig
 	if err := json.Unmarshal(data, &fc); err != nil {
-		return manifestbuilder.Function{}, fmt.Errorf("%s: invalid %s: %w", configPath, appbuild.FunctionConfigFile, err)
+		return Function{}, fmt.Errorf("%s: invalid %s: %w", configPath, appbuild.FunctionConfigFile, err)
 	}
 	if fc.Framework.Name == "" || fc.Handler == "" || fc.App == "" {
-		return manifestbuilder.Function{}, fmt.Errorf("%s: %s requires framework, handler, and app", configPath, appbuild.FunctionConfigFile)
+		return Function{}, fmt.Errorf("%s: %s requires framework, handler, and app", configPath, appbuild.FunctionConfigFile)
 	}
 
-	return manifestbuilder.Function{
+	return Function{
 		Route:        route,
-		Framework:    manifestbuilder.Framework{Name: fc.Framework.Name, Arch: fc.Framework.Arch},
+		Framework:    fc.Framework,
 		EntryFile:    fc.Handler,
 		ArtifactPath: filepath.ToSlash(artifactRel),
 		RouteID:      fc.ID,

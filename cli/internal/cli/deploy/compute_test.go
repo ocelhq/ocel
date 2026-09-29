@@ -2,42 +2,14 @@ package deploy
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/attribution"
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
-	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/pkg/appbuild"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
-
-func TestAnAppOnlyItsUsagesNameGetsTheRuntimeItsURLIsWrittenFor(t *testing.T) {
-	t.Parallel()
-	usages := []attribution.Usage{{App: "web", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main"}}
-
-	t.Run("the node builder's runtime where no function names one", func(t *testing.T) {
-		t.Parallel()
-		got := toApps(t.TempDir(), nil, usages, "container", nil, nil)
-		if len(got) != 1 || got[0].Framework.Name != appbuild.FrameworkNode {
-			t.Errorf("toApps() = %+v, want web on %q: the CLI writes %s for this project's unnamed app, so the provider must read the same runtime or record ocel's copy as declared", got, appbuild.FrameworkNode, appbuild.ClientURLEnvName)
-		}
-	})
-
-	t.Run("the runtime its own functions name", func(t *testing.T) {
-		t.Parallel()
-		functions := []manifestbuilder.Function{{App: "web", Framework: manifestbuilder.Framework{Name: appbuild.FrameworkNext}}}
-		got := toApps(t.TempDir(), nil, usages, "serverless", nil, functions)
-		if len(got) != 1 || got[0].Framework.Name != appbuild.FrameworkNext {
-			t.Errorf("toApps() = %+v, want web on %q: a next app keeps the runtime that serves its cache", got, appbuild.FrameworkNext)
-		}
-	})
-}
 
 func TestTheManifestNamesEveryAppsCompute(t *testing.T) {
 	t.Run("an app the config names has the compute resolved onto it", func(t *testing.T) {
@@ -53,9 +25,9 @@ func TestTheManifestNamesEveryAppsCompute(t *testing.T) {
 			Apps: []projectconfig.App{{Name: "api", Path: ".", Compute: "container"}},
 		}
 		clitest.StubAppImages(&deps, "api")
-		manifest, _, err := collectAndBuildManifest(context.Background(), deps, cfg, emptyDeclarations(cfg), true, false, s, s, "serverless", nil, nil)
+		manifest, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: cfg, declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s, compute: "serverless"})
 		if err != nil {
-			t.Fatalf("collectAndBuildManifest: %v", err)
+			t.Fatalf("collectBuildAndAssemble: %v", err)
 		}
 		if got := computeOf(t, manifest, "api"); got != "container" {
 			t.Errorf("manifest app %q compute = %q, want %q", "api", got, "container")
@@ -70,26 +42,14 @@ func TestTheManifestNamesEveryAppsCompute(t *testing.T) {
 
 		s, _ := newBuildSpan(t)
 		cfg := &projectconfig.Config{Dir: root, Slug: "prebuilt"}
-		_, _, err := collectAndBuildManifest(context.Background(), deps, cfg, emptyDeclarations(cfg), true, false, s, s, "container", nil, nil)
+		_, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: cfg, declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s, compute: "container"})
 		if err == nil {
-			t.Fatal("collectAndBuildManifest() landed an app the config never names on container compute, so a provider would be handed an app with no image")
+			t.Fatal("collectBuildAndAssemble() landed an app the config never names on container compute, so a provider would be handed an app with no image")
 		}
 		if !strings.Contains(err.Error(), `"api"`) {
-			t.Errorf("collectAndBuildManifest() error = %q, want it to name the app", err)
+			t.Errorf("collectBuildAndAssemble() error = %q, want it to name the app", err)
 		}
 	})
-}
-
-func TestAnAppOnlyItsUsagesNameTakesTheProvidersDefaultCompute(t *testing.T) {
-	t.Parallel()
-
-	got := toApps(t.TempDir(), nil, []attribution.Usage{
-		{App: "web", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main"},
-	}, "container", nil, nil)
-
-	if len(got) != 1 || got[0].Compute != "container" {
-		t.Errorf("toApps() = %+v, want the one attributed app with %q", got, "container")
-	}
 }
 
 func computeOf(t *testing.T, manifest *contractv1.Manifest, app string) string {
@@ -121,46 +81,11 @@ func TestAContainerAppThatNamesNoRuntimeStillReachesTheProvider(t *testing.T) {
 	}
 	clitest.StubAppImages(&deps, "api")
 
-	manifest, _, err := collectAndBuildManifest(context.Background(), deps, cfg, emptyDeclarations(cfg), true, false, s, s, "container", nil, nil)
+	manifest, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: cfg, declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s, compute: "container"})
 	if err != nil {
-		t.Fatalf("collectAndBuildManifest over a container app with no runtime: %v", err)
+		t.Fatalf("collectBuildAndAssemble over a container app with no runtime: %v", err)
 	}
 	if got := computeOf(t, manifest, "api"); got != "container" {
 		t.Errorf("manifest app %q compute = %q, want %q", "api", got, "container")
-	}
-}
-
-func TestTheManifestNamesWhichAppsBundleReadsTheClientURL(t *testing.T) {
-	t.Parallel()
-	for _, tc := range []struct {
-		name     string
-		app      projectconfig.App
-		manifest string
-		want     bool
-	}{
-		{name: "a next app", app: projectconfig.App{Name: "web", Framework: projectconfig.Framework{Name: appbuild.FrameworkNext}}, want: true},
-		{name: "a go app", app: projectconfig.App{Name: "api", Framework: projectconfig.Framework{Name: appbuild.FrameworkGo}}, manifest: "go.mod"},
-		{name: "a container app containing a package.json", app: projectconfig.App{Name: "store", Compute: string(provider.ComputeContainer)}, manifest: "package.json", want: true},
-		{name: "a container app containing a go.mod", app: projectconfig.App{Name: "worker", Compute: string(provider.ComputeContainer)}, manifest: "go.mod"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			root := t.TempDir()
-			tc.app.Path = tc.app.Name
-			dir := filepath.Join(root, tc.app.Path)
-			if err := os.MkdirAll(dir, 0o755); err != nil {
-				t.Fatalf("create %s: %v", dir, err)
-			}
-			if tc.manifest != "" {
-				if err := os.WriteFile(filepath.Join(dir, tc.manifest), nil, 0o644); err != nil {
-					t.Fatalf("write %s: %v", tc.manifest, err)
-				}
-			}
-
-			got := toApps(root, []projectconfig.App{tc.app}, nil, "serverless", nil, nil)
-			if len(got) != 1 || got[0].ClientBundle != tc.want {
-				t.Errorf("toApps() = %+v, want ClientBundle %v: the provider reads it off the manifest, and a container app has no runtime to read instead", got, tc.want)
-			}
-		})
 	}
 }

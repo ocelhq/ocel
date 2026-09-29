@@ -1,8 +1,8 @@
 package appurl
 
 import (
-	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
@@ -43,12 +43,12 @@ func byApp(cfg *projectconfig.Config, project []string, declared func(projectcon
 	return urls
 }
 
-func Variables(clientBundle bool, url string) []manifestbuilder.Variable {
+func Variables(clientBundle bool, url string) []variables.Variable {
 	if url == "" {
 		return nil
 	}
-	var written []manifestbuilder.Variable
-	for _, v := range []manifestbuilder.Variable{
+	var written []variables.Variable
+	for _, v := range []variables.Variable{
 		{Key: constants.AppURLEnvName, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: url},
 		{Key: appbuild.ClientURLEnvName, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: url, ClientAccessible: true},
 	} {
@@ -68,7 +68,7 @@ func clientBundles(cfg *projectconfig.Config) map[string]bool {
 	return byName
 }
 
-func Prepend(cfg *projectconfig.Config, byApp map[string][]manifestbuilder.Variable, byURL map[string]string) {
+func Prepend(cfg *projectconfig.Config, byApp map[string][]variables.Variable, byURL map[string]string) {
 	bundles := clientBundles(cfg)
 	for app, variables := range byApp {
 		byApp[app] = append(Variables(bundles[app], byURL[app]), variables...)

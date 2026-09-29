@@ -9,13 +9,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
-func clientVar(key, value string) manifestbuilder.Variable {
-	return manifestbuilder.Variable{
+func clientVar(key, value string) variables.Variable {
+	return variables.Variable{
 		Key:              key,
 		Class:            resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN,
 		Value:            value,
@@ -23,8 +23,8 @@ func clientVar(key, value string) manifestbuilder.Variable {
 	}
 }
 
-func serverVar(key, value string) manifestbuilder.Variable {
-	return manifestbuilder.Variable{
+func serverVar(key, value string) variables.Variable {
+	return variables.Variable{
 		Key:   key,
 		Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE,
 		Value: value,
@@ -78,7 +78,7 @@ func TestGenerate(t *testing.T) {
 
 		dir := appDir(t)
 
-		if err := Generate(dir, []App{{Dir: dir, ClientBundle: true, Variables: []manifestbuilder.Variable{clientVar("NEXT_PUBLIC_SITE_URL", "https://example.com")}}}); err != nil {
+		if err := Generate(dir, []App{{Dir: dir, ClientBundle: true, Variables: []variables.Variable{clientVar("NEXT_PUBLIC_SITE_URL", "https://example.com")}}}); err != nil {
 			t.Fatalf("Generate: %v", err)
 		}
 
@@ -110,7 +110,7 @@ func TestGenerate(t *testing.T) {
 		site := clientVar("NEXT_PUBLIC_SITE_URL", "https://example.com")
 		site.Source, site.SchemaSource = envModule, schemaModule
 
-		if err := Generate(dir, []App{{Dir: dir, ClientBundle: true, Variables: []manifestbuilder.Variable{site, port}}}); err != nil {
+		if err := Generate(dir, []App{{Dir: dir, ClientBundle: true, Variables: []variables.Variable{site, port}}}); err != nil {
 			t.Fatalf("Generate: %v", err)
 		}
 
@@ -145,7 +145,7 @@ func TestGenerate(t *testing.T) {
 		b.SchemaSource, b.Schema = local, true
 		c.SchemaSource = shared
 
-		if err := Generate(dir, []App{{Dir: dir, Variables: []manifestbuilder.Variable{a, b, c}}}); err != nil {
+		if err := Generate(dir, []App{{Dir: dir, Variables: []variables.Variable{a, b, c}}}); err != nil {
 			t.Fatalf("Generate: %v", err)
 		}
 
@@ -180,7 +180,7 @@ func TestGenerate(t *testing.T) {
 				port := clientVar("NEXT_PUBLIC_PORT", "8080")
 				port.Source, port.SchemaSource, port.Schema = tc.source, tc.schema, true
 
-				err := Generate(dir, []App{{Dir: dir, Variables: []manifestbuilder.Variable{port}}})
+				err := Generate(dir, []App{{Dir: dir, Variables: []variables.Variable{port}}})
 				if err == nil {
 					t.Fatal("Generate = nil, want a refusal: the browser bundle has no side-effect-free module to take the schema from")
 				}
@@ -198,7 +198,7 @@ func TestGenerate(t *testing.T) {
 
 		dir := appDir(t)
 
-		err := Generate(dir, []App{{Dir: dir, Variables: []manifestbuilder.Variable{
+		err := Generate(dir, []App{{Dir: dir, Variables: []variables.Variable{
 			clientVar("NEXT_PUBLIC_APP_ID", "app_1"),
 			clientVar("VITE_APP_ID", "app_2"),
 		}}})
@@ -222,7 +222,7 @@ func TestGenerate(t *testing.T) {
 
 		dir := appDir(t)
 
-		err := Generate(dir, []App{{Dir: dir, Variables: []manifestbuilder.Variable{
+		err := Generate(dir, []App{{Dir: dir, Variables: []variables.Variable{
 			clientVar("PUBLIC_SITE_URL", "https://example.com"),
 			serverVar("STRIPE_API_KEY", "sk-live"),
 		}}})
@@ -244,7 +244,7 @@ func TestGenerate(t *testing.T) {
 
 		dir := appDir(t)
 
-		if err := generateAndMap(dir, []App{{Dir: dir, Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}}); err != nil {
+		if err := generateAndMap(dir, []App{{Dir: dir, Variables: []variables.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}}); err != nil {
 			t.Fatalf("generateAndMap: %v", err)
 		}
 
@@ -264,7 +264,7 @@ func TestGenerate(t *testing.T) {
 		source := "{\n  // the compiler options this project has always had\n  \"compilerOptions\": {\n    \"paths\": {\n      \"@/*\": [\"./src/*\"] // app aliases\n    }\n  }\n}\n"
 		write(t, filepath.Join(dir, "tsconfig.json"), source)
 
-		if err := generateAndMap(dir, []App{{Dir: dir, Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}}); err != nil {
+		if err := generateAndMap(dir, []App{{Dir: dir, Variables: []variables.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}}); err != nil {
 			t.Fatalf("generateAndMap: %v", err)
 		}
 
@@ -295,7 +295,7 @@ func TestGenerate(t *testing.T) {
 				dir := t.TempDir()
 				write(t, filepath.Join(dir, "tsconfig.json"), source)
 
-				if err := generateAndMap(dir, []App{{Dir: dir, Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}}); err != nil {
+				if err := generateAndMap(dir, []App{{Dir: dir, Variables: []variables.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}}); err != nil {
 					t.Fatalf("generateAndMap: %v", err)
 				}
 
@@ -323,7 +323,7 @@ func TestGenerate(t *testing.T) {
 		t.Parallel()
 
 		dir := appDir(t)
-		apps := []App{{Dir: dir, Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}}
+		apps := []App{{Dir: dir, Variables: []variables.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}}
 
 		if err := Generate(dir, apps); err != nil {
 			t.Fatalf("Generate: %v", err)
@@ -347,7 +347,7 @@ func TestGenerate(t *testing.T) {
 
 		dir := appDir(t)
 
-		if err := Generate(dir, []App{{Dir: dir, ClientBundle: true, Variables: []manifestbuilder.Variable{serverVar("STRIPE_API_KEY", "sk-live")}}}); err != nil {
+		if err := Generate(dir, []App{{Dir: dir, ClientBundle: true, Variables: []variables.Variable{serverVar("STRIPE_API_KEY", "sk-live")}}}); err != nil {
 			t.Fatalf("Generate: %v", err)
 		}
 
@@ -392,8 +392,8 @@ func TestGenerate(t *testing.T) {
 		store, admin := nestedApp(t, root, "storefront"), nestedApp(t, root, "admin")
 
 		err := Generate(root, []App{
-			{Name: "storefront", Dir: store, Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://store.example.com")}},
-			{Name: "admin", Dir: admin, Variables: []manifestbuilder.Variable{clientVar("PUBLIC_ADMIN_URL", "https://admin.example.com")}},
+			{Name: "storefront", Dir: store, Variables: []variables.Variable{clientVar("PUBLIC_SITE_URL", "https://store.example.com")}},
+			{Name: "admin", Dir: admin, Variables: []variables.Variable{clientVar("PUBLIC_ADMIN_URL", "https://admin.example.com")}},
 		})
 		if err != nil {
 			t.Fatalf("Generate: %v", err)
@@ -420,7 +420,7 @@ func TestGenerate(t *testing.T) {
 		root := t.TempDir()
 		dir := nestedApp(t, root, "storefront")
 
-		app := App{Name: "storefront", Dir: dir, Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://store.example.com")}}
+		app := App{Name: "storefront", Dir: dir, Variables: []variables.Variable{clientVar("PUBLIC_SITE_URL", "https://store.example.com")}}
 		if err := generateAndMap(root, []App{app}); err != nil {
 			t.Fatalf("generateAndMap: %v", err)
 		}
@@ -440,7 +440,7 @@ func TestGenerate(t *testing.T) {
 		site := clientVar("PUBLIC_SITE_URL", "https://store.example.com")
 		site.SchemaSource = filepath.Join(dir, "src", "env.schema.ts")
 
-		app := App{Name: "storefront", Dir: dir, Variables: []manifestbuilder.Variable{site}}
+		app := App{Name: "storefront", Dir: dir, Variables: []variables.Variable{site}}
 		if err := Generate(root, []App{app}); err != nil {
 			t.Fatalf("Generate: %v", err)
 		}
@@ -459,12 +459,12 @@ func TestCheckFresh(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
-		built := []App{{Name: "storefront", Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}}
+		built := []App{{Name: "storefront", Variables: []variables.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}}
 		if err := Record(root, built); err != nil {
 			t.Fatalf("Record: %v", err)
 		}
 
-		rotated := []App{{Name: "storefront", Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://rotated.example.com")}}}
+		rotated := []App{{Name: "storefront", Variables: []variables.Variable{clientVar("PUBLIC_SITE_URL", "https://rotated.example.com")}}}
 		err := CheckFresh(root, rotated)
 		if err == nil {
 			t.Fatal("CheckFresh = nil for a build that predates the value, want a refusal")
@@ -481,7 +481,7 @@ func TestCheckFresh(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
-		built := []App{{Name: "storefront", Variables: []manifestbuilder.Variable{
+		built := []App{{Name: "storefront", Variables: []variables.Variable{
 			clientVar("PUBLIC_SITE_URL", "https://example.com"),
 			serverVar("STRIPE_API_KEY", "sk-live"),
 		}}}
@@ -489,7 +489,7 @@ func TestCheckFresh(t *testing.T) {
 			t.Fatalf("Record: %v", err)
 		}
 
-		rotated := []App{{Name: "storefront", Variables: []manifestbuilder.Variable{
+		rotated := []App{{Name: "storefront", Variables: []variables.Variable{
 			clientVar("PUBLIC_SITE_URL", "https://example.com"),
 			serverVar("STRIPE_API_KEY", "sk-rotated"),
 		}}}
@@ -506,7 +506,7 @@ func TestCheckFresh(t *testing.T) {
 			t.Fatalf("Record: %v", err)
 		}
 
-		err := CheckFresh(root, []App{{Name: "storefront", Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}})
+		err := CheckFresh(root, []App{{Name: "storefront", Variables: []variables.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}})
 		if err == nil {
 			t.Fatal("CheckFresh = nil for an output that inlined no client value, want a refusal")
 		}
@@ -524,11 +524,11 @@ func TestCheckFresh(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
-		if err := Record(root, []App{{Name: "storefront", Variables: []manifestbuilder.Variable{serverVar("STRIPE_API_KEY", "sk-live")}}}); err != nil {
+		if err := Record(root, []App{{Name: "storefront", Variables: []variables.Variable{serverVar("STRIPE_API_KEY", "sk-live")}}}); err != nil {
 			t.Fatalf("Record: %v", err)
 		}
 
-		err := CheckFresh(root, []App{{Name: "storefront", Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}})
+		err := CheckFresh(root, []App{{Name: "storefront", Variables: []variables.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}})
 		if err == nil {
 			t.Fatal("CheckFresh = nil for a key the build never inlined, want a refusal")
 		}
@@ -544,7 +544,7 @@ func TestCheckFresh(t *testing.T) {
 
 		root := t.TempDir()
 
-		apps := []App{{Name: "storefront", Variables: []manifestbuilder.Variable{serverVar("STRIPE_API_KEY", "sk-live")}}}
+		apps := []App{{Name: "storefront", Variables: []variables.Variable{serverVar("STRIPE_API_KEY", "sk-live")}}}
 		if err := CheckFresh(root, apps); err != nil {
 			t.Errorf("CheckFresh = %v, want nothing to check", err)
 		}
@@ -559,7 +559,7 @@ func TestRecord(t *testing.T) {
 
 		root := t.TempDir()
 
-		err := Record(root, []App{{Name: "storefront", Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}})
+		err := Record(root, []App{{Name: "storefront", Variables: []variables.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}})
 		if err != nil {
 			t.Fatalf("Record: %v", err)
 		}

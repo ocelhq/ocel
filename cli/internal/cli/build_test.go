@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/build"
-	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
@@ -39,7 +38,7 @@ export default {
 		deps := newDeps()
 		deps.BuildApps = func(_ context.Context, cfg *projectconfig.Config, _ map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
 			built = cfg
-			return build.Output{Functions: []manifestbuilder.Function{{Route: "index", App: "api"}}}, nil
+			return build.Output{Functions: []build.Function{{Route: "index", App: "api"}}}, nil
 		}
 
 		var stdout bytes.Buffer
@@ -86,7 +85,7 @@ export default {
 		deps.BuildApps = func(_ context.Context, _ *projectconfig.Config, _ map[string]map[string]string, asked map[string]string, _ build.Log) (build.Output, error) {
 			archs = asked
 			return build.Output{
-				Functions: []manifestbuilder.Function{{Route: "index", App: "api"}},
+				Functions: []build.Function{{Route: "index", App: "api"}},
 				Images:    map[string]string{"web": clitest.FixtureImage("web")},
 			}, nil
 		}
