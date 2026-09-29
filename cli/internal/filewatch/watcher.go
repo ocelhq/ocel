@@ -1,4 +1,4 @@
-package watcher
+package filewatch
 
 import (
 	"context"
@@ -10,22 +10,22 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
-type Set struct {
+type Paths struct {
 	Dirs  []string
 	Files []string
 }
 
-func (s Set) covers(path string) bool {
-	for _, file := range s.Files {
+func (p Paths) covers(path string) bool {
+	for _, file := range p.Files {
 		if path == file {
 			return true
 		}
 	}
-	return s.coversTree(path)
+	return p.coversTree(path)
 }
 
-func (s Set) coversTree(path string) bool {
-	for _, dir := range s.Dirs {
+func (p Paths) coversTree(path string) bool {
+	for _, dir := range p.Dirs {
 		if strings.HasPrefix(path, dir+string(filepath.Separator)) {
 			return true
 		}
@@ -34,7 +34,7 @@ func (s Set) coversTree(path string) bool {
 }
 
 type Config struct {
-	Set      Set
+	Paths    Paths
 	Debounce time.Duration
 	OnChange func()
 	OnError  func(error)
@@ -61,7 +61,7 @@ type Watcher struct {
 	done chan struct{}
 }
 
-func (w *Watcher) Paths() []string { return w.fsw.WatchList() }
+func (w *Watcher) WatchList() []string { return w.fsw.WatchList() }
 
 func (w *Watcher) Done() <-chan struct{} { return w.done }
 
@@ -75,13 +75,13 @@ func Start(ctx context.Context, cfg Config) (*Watcher, error) {
 		return nil, err
 	}
 
-	for _, dir := range cfg.Set.Dirs {
+	for _, dir := range cfg.Paths.Dirs {
 		if err := fsw.Add(dir); err != nil {
 			fsw.Close()
 			return nil, err
 		}
 	}
-	for _, file := range cfg.Set.Files {
+	for _, file := range cfg.Paths.Files {
 		if err := fsw.Add(filepath.Dir(file)); err != nil {
 			fsw.Close()
 			return nil, err
@@ -113,12 +113,12 @@ func run(ctx context.Context, fsw *fsnotify.Watcher, cfg Config) {
 			if !ok {
 				return
 			}
-			if event.Has(fsnotify.Create) && cfg.Set.coversTree(event.Name) {
+			if event.Has(fsnotify.Create) && cfg.Paths.coversTree(event.Name) {
 				if info, err := os.Stat(event.Name); err == nil && info.IsDir() {
 					_ = fsw.Add(event.Name)
 				}
 			}
-			if !cfg.Set.covers(event.Name) {
+			if !cfg.Paths.covers(event.Name) {
 				continue
 			}
 			if armed && !t.Stop() {

@@ -25,11 +25,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devresources"
 	"github.com/ocelhq/ocel/cli/internal/devresources/binding"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
-	"github.com/ocelhq/ocel/cli/internal/dotenv"
+	"github.com/ocelhq/ocel/cli/internal/dotfile"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
+	"github.com/ocelhq/ocel/cli/internal/filewatch"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/cli/internal/watcher"
 	"github.com/ocelhq/ocel/pkg/constants"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
@@ -181,7 +181,7 @@ func TestRunDev(t *testing.T) {
 		}
 
 		for _, frame := range []string{
-			"github.com/ocelhq/ocel/cli/internal/watcher.run",
+			"github.com/ocelhq/ocel/cli/internal/filewatch.run",
 		} {
 			if stacks := goroutineStacks(t); strings.Contains(stacks, frame) {
 				t.Errorf("%s still running after runDev returned; it can still write into the project directory:\n%s", frame, stacks)
@@ -392,7 +392,7 @@ export default { slug: "test-app" };
 export default { slug: "test-app" };
 `)
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"API_TOKEN","class":"VARIABLE_CLASS_PLAIN","required":true}`))
-		clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "API_TOKEN=first\n")
+		clitest.WriteFile(t, filepath.Join(root, dotfile.FileName), "API_TOKEN=first\n")
 
 		leaderCtx, cancelLeader := context.WithCancel(context.Background())
 		defer cancelLeader()
@@ -418,7 +418,7 @@ export default { slug: "test-app" };
 
 		waitForEnvValue(t, envDumpPath, "API_TOKEN", "first")
 
-		clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "API_TOKEN=second\n")
+		clitest.WriteFile(t, filepath.Join(root, dotfile.FileName), "API_TOKEN=second\n")
 
 		waitForEnvValue(t, envDumpPath, "API_TOKEN", "second")
 
@@ -450,7 +450,7 @@ export default { slug: "test-app" };
 export default { slug: "test-app" };
 `)
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"API_TOKEN","class":"VARIABLE_CLASS_PLAIN","required":true}`))
-		clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "API_TOKEN=first\n")
+		clitest.WriteFile(t, filepath.Join(root, dotfile.FileName), "API_TOKEN=first\n")
 
 		envDumpPath := filepath.Join(root, "leader-env.out")
 		leaderAppArgs := []string{"sh", "-c", "while true; do env > " + envDumpPath + "; sleep 0.02; done"}
@@ -466,7 +466,7 @@ export default { slug: "test-app" };
 
 		waitForEnvValue(t, envDumpPath, "API_TOKEN", "first")
 
-		clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "API_TOKEN=second\n")
+		clitest.WriteFile(t, filepath.Join(root, dotfile.FileName), "API_TOKEN=second\n")
 
 		waitForEnvValue(t, envDumpPath, "API_TOKEN", "second")
 
@@ -491,7 +491,7 @@ export default { slug: "test-app" };
 export default { slug: "test-app" };
 `)
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"API_TOKEN","class":"VARIABLE_CLASS_PLAIN","required":true}`))
-		clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "API_TOKEN=first\n")
+		clitest.WriteFile(t, filepath.Join(root, dotfile.FileName), "API_TOKEN=first\n")
 
 		leaderCtx, cancelLeader := context.WithCancel(context.Background())
 		defer cancelLeader()
@@ -517,13 +517,13 @@ export default { slug: "test-app" };
 
 		waitForEnvValue(t, envDumpPath, "API_TOKEN", "first")
 
-		clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "# the value the run needs, deleted\n")
+		clitest.WriteFile(t, filepath.Join(root, dotfile.FileName), "# the value the run needs, deleted\n")
 		waitForOutput(t, &leaderStderr, "API_TOKEN")
-		if got := leaderStderr.String(); !strings.Contains(got, dotenv.FileName) {
-			t.Errorf("stderr = %q, want the mid-session refusal to name %s", got, dotenv.FileName)
+		if got := leaderStderr.String(); !strings.Contains(got, dotfile.FileName) {
+			t.Errorf("stderr = %q, want the mid-session refusal to name %s", got, dotfile.FileName)
 		}
 
-		clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "API_TOKEN=restored\n")
+		clitest.WriteFile(t, filepath.Join(root, dotfile.FileName), "API_TOKEN=restored\n")
 		waitForEnvValue(t, envDumpPath, "API_TOKEN", "restored")
 
 		cancelFollower()
@@ -547,7 +547,7 @@ export default { slug: "test-app" };
 		}
 
 		stalled := startWatching
-		startWatching = func(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, run invocation, stdout, stderr io.Writer, onResolved func(map[string]string)) (*watcher.Watcher, error) {
+		startWatching = func(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, run invocation, stdout, stderr io.Writer, onResolved func(map[string]string)) (*filewatch.Watcher, error) {
 			time.Sleep(300 * time.Millisecond)
 			return stalled(ctx, srv, cfg, run, stdout, stderr, onResolved)
 		}
@@ -561,7 +561,7 @@ export default { slug: "test-app" };
 export default { slug: "test-app" };
 `)
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"API_TOKEN","class":"VARIABLE_CLASS_PLAIN","required":true}`))
-		clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "API_TOKEN=first\n")
+		clitest.WriteFile(t, filepath.Join(root, dotfile.FileName), "API_TOKEN=first\n")
 
 		leaderCtx, cancelLeader := context.WithCancel(context.Background())
 		defer cancelLeader()
@@ -587,7 +587,7 @@ export default { slug: "test-app" };
 
 		waitForEnvValue(t, envDumpPath, "API_TOKEN", "first")
 
-		clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "API_TOKEN=second\n")
+		clitest.WriteFile(t, filepath.Join(root, dotfile.FileName), "API_TOKEN=second\n")
 		waitForEnvValue(t, envDumpPath, "API_TOKEN", "second")
 
 		cancelFollower()
@@ -618,7 +618,7 @@ export default { slug: "test-app" };
 export default { slug: "test-app" };
 `)
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"API_TOKEN","class":"VARIABLE_CLASS_PLAIN","required":true}`))
-		clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "API_TOKEN=first\n")
+		clitest.WriteFile(t, filepath.Join(root, dotfile.FileName), "API_TOKEN=first\n")
 
 		leaderCtx, cancelLeader := context.WithCancel(context.Background())
 		defer cancelLeader()
@@ -632,7 +632,7 @@ export default { slug: "test-app" };
 		waitForLeaderRecord(t, root)
 
 		waitForOutputAfter(t, &leaderStdout, "line 2", func() {
-			clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "API_TOKEN=first\nnot a pair\n")
+			clitest.WriteFile(t, filepath.Join(root, dotfile.FileName), "API_TOKEN=first\nnot a pair\n")
 		})
 
 		cancelLeader()
@@ -917,11 +917,11 @@ func TestTheAppsOriginsFollowThePortInTheDotfile(t *testing.T) {
 	root := t.TempDir()
 	origins := devAppOrigins(root, devSource{id: "dotenv"})
 
-	clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "PORT=4100\n")
+	clitest.WriteFile(t, filepath.Join(root, dotfile.FileName), "PORT=4100\n")
 	if got := origins(); !slices.Contains(got, "http://localhost:4100") || !slices.Contains(got, "http://127.0.0.1:4100") {
 		t.Fatalf("origins = %v, want the app on port 4100", got)
 	}
-	clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "PORT=4200\n")
+	clitest.WriteFile(t, filepath.Join(root, dotfile.FileName), "PORT=4200\n")
 	if got := origins(); !slices.Contains(got, "http://localhost:4200") || slices.Contains(got, "http://localhost:4100") {
 		t.Fatalf("origins = %v after the port moved to 4200", got)
 	}

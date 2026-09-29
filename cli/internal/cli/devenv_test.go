@@ -20,7 +20,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/dev/leader"
 	"github.com/ocelhq/ocel/cli/internal/devresources/binding"
-	"github.com/ocelhq/ocel/cli/internal/dotenv"
+	"github.com/ocelhq/ocel/cli/internal/dotfile"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/variables"
@@ -58,12 +58,12 @@ func TestResolvedEnv(t *testing.T) {
 
 		base := []string{"PATH=/bin", "CONTESTED=shell", "SHELL_ONLY=s"}
 		live := map[string]string{"CONTESTED": "live"}
-		dotfile := map[string]string{"CONTESTED": "dotfile", "DOTFILE_ONLY": "d"}
+		fileValues := map[string]string{"CONTESTED": "dotfile", "DOTFILE_ONLY": "d"}
 		resources := []binding.Resolved{
 			{Name: "main", Env: map[string]string{"OCEL_RESOURCE_POSTGRES_main": "conn"}},
 		}
 
-		got := toMap(mergeEnv(base, live, dotfile, resources, runtimeAccess{}, "", variables.Scope{}))
+		got := toMap(mergeEnv(base, live, fileValues, resources, runtimeAccess{}, "", variables.Scope{}))
 
 		cases := map[string]string{
 			"PATH":                        "/bin",
@@ -173,7 +173,7 @@ func TestDevRefusal(t *testing.T) {
 			"no value is set",
 			"expected a URL",
 			"DATABASE_URL=<VALUE>",
-			dotenv.FileName,
+			dotfile.FileName,
 		} {
 			if !strings.Contains(got, want) {
 				t.Errorf("refusal = %q, want it to mention %q", got, want)
@@ -187,12 +187,12 @@ func TestDevRefusal(t *testing.T) {
 		}
 	})
 
-	t.Run("under another dev source it names that source and "+dotenv.LocalFileName, func(t *testing.T) {
+	t.Run("under another dev source it names that source and "+dotfile.LocalFileName, func(t *testing.T) {
 		refusal := &variables.MissingError{Problems: []*resourcesv1.VariableProblem{{Key: "DATABASE_URL", Kind: resourcesv1.VariableProblem_KIND_MISSING}}}
 
 		got := devRefusal(refusal, nil, invocation{name: "dev", source: devSource{id: "infisical:p-1/dev", values: map[string]string{}}}).Error()
 
-		for _, want := range []string{"set DATABASE_URL in infisical:p-1/dev", "DATABASE_URL=<VALUE> to " + dotenv.LocalFileName, "Set the values above in infisical:p-1/dev and " + dotenv.LocalFileName} {
+		for _, want := range []string{"set DATABASE_URL in infisical:p-1/dev", "DATABASE_URL=<VALUE> to " + dotfile.LocalFileName, "Set the values above in infisical:p-1/dev and " + dotfile.LocalFileName} {
 			if !strings.Contains(got, want) {
 				t.Errorf("refusal = %q, want it to say %q", got, want)
 			}
@@ -245,16 +245,16 @@ func TestDevRefusal(t *testing.T) {
 				{Key: "API_TOKEN", Kind: resourcesv1.VariableProblem_KIND_INVALID, Detail: "expected a token"},
 			},
 		}
-		dotfile := map[string]string{
+		fileValues := map[string]string{
 			"DATABASE_URL": "postgres://must-not-appear",
 			"API_TOKEN":    "sk-live-must-not-appear",
 		}
 
-		got := devRefusal(refusal, dotfileValues(dotfile).keys(), invocation{name: "dev", source: devSource{id: "dotenv"}}).Error()
+		got := devRefusal(refusal, dotfileValues(fileValues).keys(), invocation{name: "dev", source: devSource{id: "dotenv"}}).Error()
 
-		for _, value := range dotfile {
+		for _, value := range fileValues {
 			if strings.Contains(got, value) {
-				t.Errorf("refusal = %q, want it to disclose no value from %s", got, dotenv.FileName)
+				t.Errorf("refusal = %q, want it to disclose no value from %s", got, dotfile.FileName)
 			}
 		}
 	})
@@ -282,7 +282,7 @@ func TestRefusalsNameTheCommandThatRan(t *testing.T) {
 }
 
 func dotfileValues(values map[string]string) devValues {
-	return devValues{{from: dotenv.FileName, file: true, values: values}}
+	return devValues{{from: dotfile.FileName, file: true, values: values}}
 }
 
 func TestTheDevValueReportNamesWhereEachKeyCameFromAndNeverAValue(t *testing.T) {
@@ -306,7 +306,7 @@ func TestTheDevValueReportNamesWhereEachKeyCameFromAndNeverAValue(t *testing.T) 
 		reportDevValues(&out, dir, dotfileValues(map[string]string{"API_TOKEN": "sk-live-must-not-appear", "DATABASE_URL": "postgres://secret"}), true)
 		got := out.String()
 
-		for _, want := range []string{"API_TOKEN", "DATABASE_URL", dotenv.FileName} {
+		for _, want := range []string{"API_TOKEN", "DATABASE_URL", dotfile.FileName} {
 			if !strings.Contains(got, want) {
 				t.Errorf("notice = %q, want it to mention %q", got, want)
 			}
@@ -348,7 +348,7 @@ func TestTheDevValueReportNamesWhereEachKeyCameFromAndNeverAValue(t *testing.T) 
 		}
 	})
 
-	t.Run("it names where each value came from, and checks "+dotenv.LocalFileName+" against .gitignore on its own", func(t *testing.T) {
+	t.Run("it names where each value came from, and checks "+dotfile.LocalFileName+" against .gitignore on its own", func(t *testing.T) {
 		t.Parallel()
 
 		dir := gitRepository(t)
@@ -358,11 +358,11 @@ func TestTheDevValueReportNamesWhereEachKeyCameFromAndNeverAValue(t *testing.T) 
 		var out bytes.Buffer
 		reportDevValues(&out, dir, devValues{
 			{from: "infisical:p-1/dev", values: map[string]string{"API_TOKEN": "sk-live-must-not-appear"}},
-			{from: dotenv.LocalFileName, file: true, values: map[string]string{"LOG_LEVEL": "debug"}},
+			{from: dotfile.LocalFileName, file: true, values: map[string]string{"LOG_LEVEL": "debug"}},
 		}, true)
 		got := out.String()
 
-		for _, want := range []string{"API_TOKEN from infisical:p-1/dev", "LOG_LEVEL from " + dotenv.LocalFileName, dotenv.LocalFileName + " is not ignored by git", "editing " + dotenv.LocalFileName + " re-resolves"} {
+		for _, want := range []string{"API_TOKEN from infisical:p-1/dev", "LOG_LEVEL from " + dotfile.LocalFileName, dotfile.LocalFileName + " is not ignored by git", "editing " + dotfile.LocalFileName + " re-resolves"} {
 			if !strings.Contains(got, want) {
 				t.Errorf("notice = %q, want it to say %q", got, want)
 			}
@@ -375,7 +375,7 @@ func TestTheDevValueReportNamesWhereEachKeyCameFromAndNeverAValue(t *testing.T) 
 			t.Fatalf("write .gitignore: %v", err)
 		}
 		var ignored bytes.Buffer
-		reportDevValues(&ignored, dir, devValues{{from: dotenv.LocalFileName, file: true, values: map[string]string{"LOG_LEVEL": "debug"}}}, false)
+		reportDevValues(&ignored, dir, devValues{{from: dotfile.LocalFileName, file: true, values: map[string]string{"LOG_LEVEL": "debug"}}}, false)
 		if strings.Contains(ignored.String(), ".gitignore") {
 			t.Errorf("notice = %q, want no warning for a file a glob ignores", ignored.String())
 		}
@@ -421,7 +421,7 @@ func TestTheDevValueReportAsksGitWhetherItIgnoresEachFile(t *testing.T) {
 
 		var out bytes.Buffer
 		reportDevValues(&out, dir, dotfileValues(map[string]string{"API_TOKEN": "x"}), true)
-		if got := out.String(); !strings.Contains(got, "cannot tell whether git ignores "+dotenv.FileName) {
+		if got := out.String(); !strings.Contains(got, "cannot tell whether git ignores "+dotfile.FileName) {
 			t.Errorf("notice = %q, want it to say it cannot tell", got)
 		}
 	})
@@ -434,10 +434,10 @@ func TestReportUnreadableLines(t *testing.T) {
 		t.Parallel()
 
 		var out bytes.Buffer
-		reportUnreadableLines(&out, devValues{{from: dotenv.FileName, file: true, unreadable: []int{2, 5}}})
+		reportUnreadableLines(&out, devValues{{from: dotfile.FileName, file: true, unreadable: []int{2, 5}}})
 		got := out.String()
 
-		for _, want := range []string{dotenv.FileName, "2, 5"} {
+		for _, want := range []string{dotfile.FileName, "2, 5"} {
 			if !strings.Contains(got, want) {
 				t.Errorf("notice = %q, want it to mention %q", got, want)
 			}
@@ -448,8 +448,8 @@ func TestReportUnreadableLines(t *testing.T) {
 		t.Parallel()
 
 		var one bytes.Buffer
-		reportUnreadableLines(&one, devValues{{from: dotenv.LocalFileName, file: true, unreadable: []int{4}}})
-		if !strings.Contains(one.String(), dotenv.LocalFileName) {
+		reportUnreadableLines(&one, devValues{{from: dotfile.LocalFileName, file: true, unreadable: []int{4}}})
+		if !strings.Contains(one.String(), dotfile.LocalFileName) {
 			t.Errorf("notice = %q, want the file named", one.String())
 		}
 		if !strings.Contains(one.String(), "line 4 is") {
@@ -483,7 +483,7 @@ func TestADevRunRefusesAScopedValueNoChildItStartsCouldRead(t *testing.T) {
 			t.Fatal("checkStatableBinding = nil, want a refusal: no child of this run could read API_BASE")
 		}
 		got := err.Error()
-		for _, want := range []string{"API_BASE", "web binds /web", "api binds /api", "the project root", dotenv.FileName, "ocel.json"} {
+		for _, want := range []string{"API_BASE", "web binds /web", "api binds /api", "the project root", dotfile.FileName, "ocel.json"} {
 			if !strings.Contains(got, want) {
 				t.Errorf("refusal = %q, want it to mention %q", got, want)
 			}
@@ -551,7 +551,7 @@ func TestADevRunRefusesAScopedValueNoChildItStartsCouldRead(t *testing.T) {
 		want := "A_KEY, B_KEY, C_KEY, D_KEY are scoped to a folder this run cannot state — the app has not been started.\n" +
 			"\n  web binds /web\n  api binds /api\n\n" +
 			"`ocel dev` and `ocel run` spawn one child for the whole project and nothing tells it which app that child is, " +
-			"so the binding they state is the project root. A scoped read refuses under it, even with the value in " + dotenv.FileName + ".\n\n" +
+			"so the binding they state is the project root. A scoped read refuses under it, even with the value in " + dotfile.FileName + ".\n\n" +
 			"fix: bind every app to the same folder in ocel.json, or drop `folders:` from those declarations"
 
 		for range 50 {
@@ -621,7 +621,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 			if !strings.Contains(stdout.String(), "NEXT_PUBLIC_SITE_URL") {
 				t.Errorf("stdout = %q, want a declarable key accounted for", stdout.String())
 			}
-			if !strings.Contains(stdout.String(), devValues{{from: dotenv.FileName, file: true}, {from: dotenv.LocalFileName, file: true}}.advice(true)) {
+			if !strings.Contains(stdout.String(), devValues{{from: dotfile.FileName, file: true}, {from: dotfile.LocalFileName, file: true}}.advice(true)) {
 				t.Errorf("stdout = %q, want the advice for a run that re-resolves on save", stdout.String())
 			}
 		})
@@ -647,8 +647,8 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		if err == nil {
 			t.Fatal("runDev = nil, want a refusal")
 		}
-		if !strings.Contains(err.Error(), "DATABASE_URL") || !strings.Contains(err.Error(), dotenv.FileName) {
-			t.Errorf("err = %q, want it to name DATABASE_URL and %s", err.Error(), dotenv.FileName)
+		if !strings.Contains(err.Error(), "DATABASE_URL") || !strings.Contains(err.Error(), dotfile.FileName) {
+			t.Errorf("err = %q, want it to name DATABASE_URL and %s", err.Error(), dotfile.FileName)
 		}
 		if _, statErr := os.Stat(startedPath); statErr == nil {
 			t.Error("the app was started despite the refusal")
@@ -768,7 +768,7 @@ export default {
 		}
 	})
 
-	t.Run(dotenv.LocalFileName+" outranks the dev source", func(t *testing.T) {
+	t.Run(dotfile.LocalFileName+" outranks the dev source", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("uses a POSIX shell fixture command")
 		}
@@ -777,19 +777,19 @@ export default {
 		t.Cleanup(func() { _ = leader.Release(root) })
 
 		writeDevSource(t, root, `{ exec: { command: ["sh", "-c", "printf 'STRIPE_API_KEY=sk_from_source\\nLOG_LEVEL=info'"], format: "dotenv" } }`)
-		clitest.WriteFile(t, filepath.Join(root, dotenv.LocalFileName), "STRIPE_API_KEY=sk_mine\n")
+		clitest.WriteFile(t, filepath.Join(root, dotfile.LocalFileName), "STRIPE_API_KEY=sk_mine\n")
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`))
 
 		env, stdout := dumpDevEnv(t, devDeps(), root)
 		if env["STRIPE_API_KEY"] != "sk_mine" || env["LOG_LEVEL"] != "info" {
-			t.Errorf("STRIPE_API_KEY = %q, LOG_LEVEL = %q, want %s over the source and the source beneath it", env["STRIPE_API_KEY"], env["LOG_LEVEL"], dotenv.LocalFileName)
+			t.Errorf("STRIPE_API_KEY = %q, LOG_LEVEL = %q, want %s over the source and the source beneath it", env["STRIPE_API_KEY"], env["LOG_LEVEL"], dotfile.LocalFileName)
 		}
-		if !strings.Contains(stdout, dotenv.LocalFileName) {
-			t.Errorf("stdout = %q, want it to say what came from %s", stdout, dotenv.LocalFileName)
+		if !strings.Contains(stdout, dotfile.LocalFileName) {
+			t.Errorf("stdout = %q, want it to say what came from %s", stdout, dotfile.LocalFileName)
 		}
 	})
 
-	t.Run(dotenv.LocalFileName+" outranks .env under the default source", func(t *testing.T) {
+	t.Run(dotfile.LocalFileName+" outranks .env under the default source", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("uses a POSIX shell fixture command")
 		}
@@ -797,13 +797,13 @@ export default {
 		root := t.TempDir()
 		t.Cleanup(func() { _ = leader.Release(root) })
 
-		clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "STRIPE_API_KEY=sk_shared\nLOG_LEVEL=info\n")
-		clitest.WriteFile(t, filepath.Join(root, dotenv.LocalFileName), "STRIPE_API_KEY=sk_mine\n")
+		clitest.WriteFile(t, filepath.Join(root, dotfile.FileName), "STRIPE_API_KEY=sk_shared\nLOG_LEVEL=info\n")
+		clitest.WriteFile(t, filepath.Join(root, dotfile.LocalFileName), "STRIPE_API_KEY=sk_mine\n")
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`))
 
 		env, _ := dumpDevEnv(t, devDeps(), root)
 		if env["STRIPE_API_KEY"] != "sk_mine" || env["LOG_LEVEL"] != "info" {
-			t.Errorf("STRIPE_API_KEY = %q, LOG_LEVEL = %q, want %s over %s", env["STRIPE_API_KEY"], env["LOG_LEVEL"], dotenv.LocalFileName, dotenv.FileName)
+			t.Errorf("STRIPE_API_KEY = %q, LOG_LEVEL = %q, want %s over %s", env["STRIPE_API_KEY"], env["LOG_LEVEL"], dotfile.LocalFileName, dotfile.FileName)
 		}
 	})
 
@@ -1028,7 +1028,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		if env[constants.AppFolderEnvName] != "/web" {
 			t.Errorf("%s = %q, want the folder the only app binds", constants.AppFolderEnvName, env[constants.AppFolderEnvName])
 		}
-		if !strings.Contains(stdout.String(), devValues{{from: dotenv.FileName, file: true}, {from: dotenv.LocalFileName, file: true}}.advice(false)) {
+		if !strings.Contains(stdout.String(), devValues{{from: dotfile.FileName, file: true}, {from: dotfile.LocalFileName, file: true}}.advice(false)) {
 			t.Errorf("stdout = %q, want the advice for a run that reads the file once", stdout.String())
 		}
 	})
@@ -1053,8 +1053,8 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		if err == nil {
 			t.Fatal("runRun = nil, want the same refusal `ocel dev` gives")
 		}
-		if !strings.Contains(err.Error(), "DATABASE_URL") || !strings.Contains(err.Error(), dotenv.FileName) {
-			t.Errorf("err = %q, want it to name DATABASE_URL and %s", err.Error(), dotenv.FileName)
+		if !strings.Contains(err.Error(), "DATABASE_URL") || !strings.Contains(err.Error(), dotfile.FileName) {
+			t.Errorf("err = %q, want it to name DATABASE_URL and %s", err.Error(), dotfile.FileName)
 		}
 		if strings.Contains(err.Error(), "ocel env set") {
 			t.Errorf("err = %q, want no `ocel env set`: it needs the cloud account this path does without", err.Error())

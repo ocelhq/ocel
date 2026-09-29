@@ -10,7 +10,7 @@ import (
 
 	"github.com/tailscale/hujson"
 
-	"github.com/ocelhq/ocel/cli/internal/dotenv"
+	"github.com/ocelhq/ocel/cli/internal/dotfile"
 	"github.com/ocelhq/ocel/pkg/configdoc"
 	"github.com/ocelhq/ocel/pkg/envsource"
 )
@@ -234,7 +234,7 @@ func readJSON(_ context.Context, configPath string) ([]byte, error) {
 }
 
 func EnvLookup(dir string) (configdoc.Lookup, error) {
-	file, err := dotenv.Load(dir)
+	file, err := dotfile.Load(dir)
 	if err != nil {
 		return nil, err
 	}

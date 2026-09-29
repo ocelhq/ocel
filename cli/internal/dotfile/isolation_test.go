@@ -1,4 +1,4 @@
-package dotenv_test
+package dotfile_test
 
 import (
 	"os/exec"
@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-const self = "github.com/ocelhq/ocel/cli/internal/dotenv"
+const self = "github.com/ocelhq/ocel/cli/internal/dotfile"
 
 func TestDeployPathIsolation(t *testing.T) {
 	t.Parallel()

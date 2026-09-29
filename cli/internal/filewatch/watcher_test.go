@@ -1,4 +1,4 @@
-package watcher
+package filewatch
 
 import (
 	"context"
@@ -20,7 +20,7 @@ func TestWatch(t *testing.T) {
 
 		dir := t.TempDir()
 		clock := newFakeClock()
-		start(t, clock, Set{Dirs: []string{dir}})
+		start(t, clock, Paths{Dirs: []string{dir}})
 
 		const writes = 5
 		for i := range writes {
@@ -43,7 +43,7 @@ func TestWatch(t *testing.T) {
 
 		dir := t.TempDir()
 		clock := newFakeClock()
-		w := start(t, clock, Set{Dirs: []string{dir}})
+		w := start(t, clock, Paths{Dirs: []string{dir}})
 
 		sub := filepath.Join(dir, "sub")
 		if err := os.Mkdir(sub, 0o755); err != nil {
@@ -59,7 +59,7 @@ func TestWatch(t *testing.T) {
 		if got := clock.calls(); got != 2 {
 			t.Fatalf("calls = %d, want 2 (the directory, then the file inside it)", got)
 		}
-		if paths := w.Paths(); !slices.Contains(paths, sub) {
+		if paths := w.WatchList(); !slices.Contains(paths, sub) {
 			t.Fatalf("watching %v, want %s among them", paths, sub)
 		}
 	})
@@ -70,7 +70,7 @@ func TestWatch(t *testing.T) {
 		dir := t.TempDir()
 		dotfile := filepath.Join(dir, ".env")
 		clock := newFakeClock()
-		start(t, clock, Set{Files: []string{dotfile}})
+		start(t, clock, Paths{Files: []string{dotfile}})
 
 		writeFile(t, filepath.Join(dir, "package.json"), "{}")
 		time.Sleep(200 * time.Millisecond)
@@ -92,7 +92,7 @@ func TestWatch(t *testing.T) {
 		root := t.TempDir()
 		dotfile := filepath.Join(root, ".env")
 		clock := newFakeClock()
-		w := start(t, clock, Set{Files: []string{dotfile}})
+		w := start(t, clock, Paths{Files: []string{dotfile}})
 
 		sub := filepath.Join(root, "node_modules")
 		if err := os.Mkdir(sub, 0o755); err != nil {
@@ -102,7 +102,7 @@ func TestWatch(t *testing.T) {
 		writeFile(t, dotfile, "API_TOKEN=first")
 		clock.waitArmed(t, 1)
 
-		if paths := w.Paths(); slices.Contains(paths, sub) {
+		if paths := w.WatchList(); slices.Contains(paths, sub) {
 			t.Fatalf("watching %s, want only the file's own directory", sub)
 		}
 	})
@@ -115,7 +115,7 @@ func TestWatch(t *testing.T) {
 		clock := newFakeClock()
 
 		w, err := Start(ctx, Config{
-			Set:      Set{Dirs: []string{dir}},
+			Paths:    Paths{Dirs: []string{dir}},
 			OnChange: clock.onChange,
 			newTimer: clock.newTimer,
 		})
@@ -138,11 +138,11 @@ func TestWatch(t *testing.T) {
 	})
 }
 
-func start(t *testing.T, clock *fakeClock, set Set) *Watcher {
+func start(t *testing.T, clock *fakeClock, paths Paths) *Watcher {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 
-	w, err := Start(ctx, Config{Set: set, OnChange: clock.onChange, newTimer: clock.newTimer})
+	w, err := Start(ctx, Config{Paths: paths, OnChange: clock.onChange, newTimer: clock.newTimer})
 	if err != nil {
 		cancel()
 		t.Fatalf("Start: %v", err)

@@ -8,18 +8,18 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/imagebuild"
-	"github.com/ocelhq/ocel/cli/internal/livemachine"
+	"github.com/ocelhq/ocel/cli/internal/incustest"
 )
 
 const leaked = "a value the build must never see"
 
 func TestLiveARailpackBuildLandsAWorkingImageInTheDaemon(t *testing.T) {
-	vm := livemachine.Require(t)
+	vm := incustest.Require(t)
 	vm.Engine(t)
 	vm.Forward(t)
 	t.Setenv("OCEL_LIVE_LEAK", leaked)
 
-	image, err := imagebuild.Builder{Progress: livemachine.Progress{T: t}}.Build(context.Background(), imagebuild.App{Slug: "Shop Live", Name: "Web API", Workspace: located(t, "testdata/plainserver")})
+	image, err := imagebuild.Builder{Progress: incustest.Progress{T: t}}.Build(context.Background(), imagebuild.App{Slug: "Shop Live", Name: "Web API", Workspace: located(t, "testdata/plainserver")})
 	if err != nil {
 		t.Fatalf("Build() against a real daemon = %v", err)
 	}
@@ -46,7 +46,7 @@ func TestLiveARailpackBuildLandsAWorkingImageInTheDaemon(t *testing.T) {
 	}
 }
 
-func addresses(t *testing.T, vm livemachine.Machine, image imagebuild.Image, repository string) {
+func addresses(t *testing.T, vm incustest.Machine, image imagebuild.Image, repository string) {
 	t.Helper()
 	if image.Repository != repository {
 		t.Errorf("the image's repository is %q, want %q, derived from the app's name", image.Repository, repository)
@@ -65,7 +65,7 @@ func addresses(t *testing.T, vm livemachine.Machine, image imagebuild.Image, rep
 	}
 }
 
-func serves(t *testing.T, vm livemachine.Machine, image imagebuild.Image, port int) string {
+func serves(t *testing.T, vm incustest.Machine, image imagebuild.Image, port int) string {
 	t.Helper()
 	name := fmt.Sprintf("ocel-live-%d", port)
 	vm.SSH(t, "docker rm -f "+name+" >/dev/null 2>&1 || true")
@@ -86,11 +86,11 @@ func serves(t *testing.T, vm livemachine.Machine, image imagebuild.Image, port i
 }
 
 func TestLiveADockerfileBuildLandsTheSameCoordinateAsARailpackOne(t *testing.T) {
-	vm := livemachine.Require(t)
+	vm := incustest.Require(t)
 	vm.Engine(t)
 	vm.Forward(t)
 
-	image, err := imagebuild.Builder{Progress: livemachine.Progress{T: t}}.Build(context.Background(), imagebuild.App{Slug: "Shop Live", Name: "Docs Site", Workspace: located(t, "testdata/dockerfileapp")})
+	image, err := imagebuild.Builder{Progress: incustest.Progress{T: t}}.Build(context.Background(), imagebuild.App{Slug: "Shop Live", Name: "Docs Site", Workspace: located(t, "testdata/dockerfileapp")})
 	if err != nil {
 		t.Fatalf("Build() of an app with a Dockerfile against a real daemon = %v", err)
 	}

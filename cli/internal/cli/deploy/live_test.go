@@ -9,11 +9,11 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
-	"github.com/ocelhq/ocel/cli/internal/livemachine"
+	"github.com/ocelhq/ocel/cli/internal/incustest"
 )
 
 func TestLiveADryRunOfAContainerAppSendsTheDigestTheDaemonBuilt(t *testing.T) {
-	vm := livemachine.Require(t)
+	vm := incustest.Require(t)
 	vm.Engine(t)
 	vm.Forward(t)
 

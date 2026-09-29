@@ -12,7 +12,7 @@ import (
 	"github.com/evanw/esbuild/pkg/api"
 
 	"github.com/ocelhq/ocel/cli/internal/childprocess"
-	"github.com/ocelhq/ocel/cli/internal/dotenv"
+	"github.com/ocelhq/ocel/cli/internal/dotfile"
 	"github.com/ocelhq/ocel/pkg/constants"
 )
 
@@ -91,7 +91,7 @@ try {
 }
 
 func configEnv(dir string) ([]string, error) {
-	file, err := dotenv.Load(dir)
+	file, err := dotfile.Load(dir)
 	if err != nil {
 		return nil, err
 	}

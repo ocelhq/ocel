@@ -13,7 +13,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
-	"github.com/ocelhq/ocel/cli/internal/dotenv"
+	"github.com/ocelhq/ocel/cli/internal/dotfile"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/envsource"
@@ -57,23 +57,23 @@ func (s devSource) isDotenv() bool { return s.id == string(envsource.Dotenv) }
 
 func (s devSource) files() []string {
 	if s.isDotenv() {
-		return []string{dotenv.FileName, dotenv.LocalFileName}
+		return []string{dotfile.FileName, dotfile.LocalFileName}
 	}
-	return []string{dotenv.LocalFileName}
+	return []string{dotfile.LocalFileName}
 }
 
 func (s devSource) where() string {
 	if s.isDotenv() {
-		return dotenv.FileName
+		return dotfile.FileName
 	}
-	return s.id + " and " + dotenv.LocalFileName
+	return s.id + " and " + dotfile.LocalFileName
 }
 
 func (s devSource) remedy(key string) string {
 	if s.isDotenv() {
-		return fmt.Sprintf("add %s=<VALUE> to %s", key, dotenv.FileName)
+		return fmt.Sprintf("add %s=<VALUE> to %s", key, dotfile.FileName)
 	}
-	return fmt.Sprintf("set %s in %s, or add %s=<VALUE> to %s", key, s.id, key, dotenv.LocalFileName)
+	return fmt.Sprintf("set %s in %s, or add %s=<VALUE> to %s", key, s.id, key, dotfile.LocalFileName)
 }
 
 type devLayer struct {
@@ -88,19 +88,19 @@ type devValues []devLayer
 func (s devSource) read(dir string) (devValues, error) {
 	var layers devValues
 	if s.isDotenv() {
-		shared, err := dotenv.Load(dir)
+		shared, err := dotfile.Load(dir)
 		if err != nil {
 			return nil, err
 		}
-		layers = append(layers, devLayer{from: dotenv.FileName, file: true, values: shared.Values, unreadable: shared.Unreadable})
+		layers = append(layers, devLayer{from: dotfile.FileName, file: true, values: shared.Values, unreadable: shared.Unreadable})
 	} else {
 		layers = append(layers, devLayer{from: s.id, values: s.values})
 	}
-	local, err := dotenv.LoadLocal(dir)
+	local, err := dotfile.LoadLocal(dir)
 	if err != nil {
 		return nil, err
 	}
-	return append(layers, devLayer{from: dotenv.LocalFileName, file: true, values: local.Values, unreadable: local.Unreadable}), nil
+	return append(layers, devLayer{from: dotfile.LocalFileName, file: true, values: local.Values, unreadable: local.Unreadable}), nil
 }
 
 func (v devValues) merged() map[string]string {

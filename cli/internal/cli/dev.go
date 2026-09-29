@@ -27,10 +27,10 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
+	"github.com/ocelhq/ocel/cli/internal/filewatch"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
-	"github.com/ocelhq/ocel/cli/internal/watcher"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/constants"
@@ -299,7 +299,7 @@ func reportLiveValues(stdout io.Writer, liveKeys []string) {
 	fmt.Fprintf(stdout, "resolved %s the way dev resolves every other value. Deployed, a rotated value is picked up within a bounded window.\n", strings.Join(keys, ", "))
 }
 
-func watchAndReResolve(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, run invocation, stdout, stderr io.Writer, onResolved func(map[string]string)) (*watcher.Watcher, error) {
+func watchAndReResolve(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, run invocation, stdout, stderr io.Writer, onResolved func(map[string]string)) (*filewatch.Watcher, error) {
 	roots, err := discovery.RootsOf(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("resolve watch directories: %w", err)
@@ -310,12 +310,12 @@ func watchAndReResolve(ctx context.Context, srv *devserver.Server, cfg *projectc
 		return nil, fmt.Errorf("resolve watch directories: %w", err)
 	}
 
-	set := watcher.Set{Dirs: dirs}
+	paths := filewatch.Paths{Dirs: dirs}
 	for _, name := range run.source.files() {
-		set.Files = append(set.Files, filepath.Join(cfg.Dir, name))
+		paths.Files = append(paths.Files, filepath.Join(cfg.Dir, name))
 	}
 
-	return watcher.Start(ctx, watcher.Config{Set: set, Debounce: watchDebounce, OnChange: func() {
+	return filewatch.Start(ctx, filewatch.Config{Paths: paths, Debounce: watchDebounce, OnChange: func() {
 		srv.ResetManifest()
 		resolved, err := resolveOnce(ctx, srv, cfg, run, stdout, stderr)
 		if err != nil {

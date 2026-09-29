@@ -1,4 +1,4 @@
-package livemachine
+package incustest
 
 import (
 	"context"
@@ -15,30 +15,30 @@ import (
 )
 
 type Machine struct {
-	addr  string
-	user  string
-	key   string
-	known string
+	address string
+	user    string
+	key     string
+	known   string
 }
 
 func Require(t *testing.T) Machine {
 	t.Helper()
 	vm := Machine{
-		addr: os.Getenv("OCEL_INCUS_ADDR"),
-		user: os.Getenv("OCEL_INCUS_USER"),
-		key:  os.Getenv("OCEL_INCUS_KEY"),
+		address: os.Getenv("OCEL_INCUS_ADDR"),
+		user:    os.Getenv("OCEL_INCUS_USER"),
+		key:     os.Getenv("OCEL_INCUS_KEY"),
 	}
-	if vm.addr == "" || vm.user == "" || vm.key == "" {
+	if vm.address == "" || vm.user == "" || vm.key == "" {
 		t.Skip("no incus VM in the environment; run under `scripts/incus.sh run <name> -- go test ./...`")
 	}
 
 	vm.known = filepath.Join(t.TempDir(), "known_hosts")
-	scanned, err := exec.Command("ssh-keyscan", "-T", "10", vm.addr).Output()
+	scanned, err := exec.Command("ssh-keyscan", "-T", "10", vm.address).Output()
 	if err != nil {
-		t.Fatalf("ssh-keyscan %s: %v", vm.addr, err)
+		t.Fatalf("ssh-keyscan %s: %v", vm.address, err)
 	}
 	if len(strings.TrimSpace(string(scanned))) == 0 {
-		t.Fatalf("ssh-keyscan %s offered no host key", vm.addr)
+		t.Fatalf("ssh-keyscan %s offered no host key", vm.address)
 	}
 	if err := os.WriteFile(vm.known, scanned, 0o600); err != nil {
 		t.Fatal(err)
@@ -67,7 +67,7 @@ func (vm Machine) SSH(t *testing.T, command string) string {
 }
 
 func (vm Machine) Attempt(command string) (string, error) {
-	cmd := exec.Command("ssh", append(vm.opts(), vm.user+"@"+vm.addr, command)...)
+	cmd := exec.Command("ssh", append(vm.opts(), vm.user+"@"+vm.address, command)...)
 	said, err := cmd.CombinedOutput()
 	return strings.TrimSpace(string(said)), err
 }
@@ -112,7 +112,7 @@ func (vm Machine) Forward(t *testing.T) {
 	socket := filepath.Join(dir, "docker.sock")
 
 	tunnel := exec.Command("ssh", append(vm.opts(),
-		"-N", "-L", socket+":/var/run/docker.sock", vm.user+"@"+vm.addr)...)
+		"-N", "-L", socket+":/var/run/docker.sock", vm.user+"@"+vm.address)...)
 	if err := tunnel.Start(); err != nil {
 		t.Fatal(err)
 	}
