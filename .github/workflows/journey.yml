@@ -788,6 +788,7 @@ jobs:
     env:
       REGISTRY_PUSHES: ${{ needs.binary.outputs.real == 'true' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository) }}
       OCEL_TARGET: vps
+      OCEL_VPS_OFFICIAL_IMAGES_MIRROR: ${{ needs.binary.outputs.real != 'true' && 'mirror.gcr.io/library' || '' }}
       OCEL_JOURNEY_CONCERN: ${{ needs.binary.outputs.concern }}
       OCEL_JOURNEY_FIXTURES: ${{ needs.binary.outputs.fixtures }}
       OCEL_JOURNEY_SEED: ${{ needs.binary.outputs.seed }}
@@ -880,6 +881,7 @@ jobs:
       id-token: write
     env:
       OCEL_TARGET: vps
+      OCEL_VPS_OFFICIAL_IMAGES_MIRROR: ${{ needs.binary.outputs.real != 'true' && 'mirror.gcr.io/library' || '' }}
       OCEL_VPS_FRONT: ${{ matrix.front }}
       OCEL_JOURNEY_CONCERN: deploy lifecycle
       OCEL_JOURNEY_FIXTURES: deploy/node,lifecycle/next
@@ -937,6 +939,7 @@ jobs:
       id-token: write
     env:
       OCEL_TARGET: vps
+      OCEL_VPS_OFFICIAL_IMAGES_MIRROR: ${{ needs.binary.outputs.real != 'true' && 'mirror.gcr.io/library' || '' }}
       OCEL_VPS_DOCKER: "28.0"
       OCEL_JOURNEY_CONCERN: deploy
       OCEL_JOURNEY_FIXTURES: deploy/node

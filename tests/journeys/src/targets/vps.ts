@@ -58,8 +58,8 @@ const STAMP = "/etc/ocel/production/stamp.json";
 const ENV_FILES = "sudo find /var/lib/ocel -maxdepth 2 -type f -name '*.env'";
 const DECOY = "ocel-journey-decoy";
 const DECOY_DATA = "/var/lib/ocel-journey-decoy";
-const DECOY_RUN_IMAGE = "public.ecr.aws/docker/library/busybox:stable";
-const DECOY_PULLED_IMAGE = "public.ecr.aws/docker/library/alpine:3.20";
+const DECOY_RUN_IMAGE = "mirror.gcr.io/library/busybox:stable";
+const DECOY_PULLED_IMAGE = "mirror.gcr.io/library/alpine:3.20";
 const PLANT_DECOY = [
   `sudo docker rm -f ${DECOY} >/dev/null 2>&1 || true`,
   `sudo install -d -m 0755 ${DECOY_DATA}`,

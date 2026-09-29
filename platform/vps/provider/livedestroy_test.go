@@ -19,7 +19,7 @@ import (
 
 const (
 	workload        = "ocel-live-workload"
-	decoyRepository = "public.ecr.aws/docker/library/busybox"
+	decoyRepository = "mirror.gcr.io/library/busybox"
 	decoyImage      = decoyRepository + ":stable"
 )
 
