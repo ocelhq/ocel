@@ -631,6 +631,46 @@ func TestARollbackWhoseDroppedBuildCannotBeReclaimedServesAndWarns(t *testing.T)
 	}
 }
 
+func TestARollbackReclaimsTheDroppedBuildsBesideARecordNamingNoBuildAndWarnsOfIt(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	edgeProvisioned(t, vendor, environment.TierProduction, "shop")
+	releases := ledger.New(vendor.KeyValues(), environment.TierProduction, "shop")
+	ctx := context.Background()
+	replaces := ""
+	for i := range ledger.KeptPromotions {
+		builds := map[string]string{"web": buildIdentity(i)}
+		if i == 0 {
+			builds["api"] = "garbage"
+		}
+		for app, build := range builds {
+			if err := releases.PutStaged(ctx, router.DeploymentRecord{App: app, Build: build}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		promotion := router.Promotion{PromotionID: fmt.Sprintf("p%02d", i), Ts: int64(i + 1), Builds: builds}
+		if _, err := releases.Promote(ctx, promotion, "", replaces); err != nil {
+			t.Fatal(err)
+		}
+		replaces = promotion.PromotionID
+	}
+
+	rolled, err := client.Rollback(ctx, &contractv1.RollbackRequest{Slug: "shop"})
+	if err != nil {
+		t.Fatalf("Rollback() error = %v", err)
+	}
+
+	if _, found, err := releases.Record(ctx, "web", buildIdentity(0)); err != nil || found {
+		t.Errorf("the record of p00's web build = found %v, %v, want it reclaimed beside the record it could not read", found, err)
+	}
+	if _, found, err := releases.Record(ctx, "api", "garbage"); err != nil || !found {
+		t.Errorf("the record naming no build = found %v, %v, want it kept: nothing names the stack it would free", found, err)
+	}
+	if warned := strings.Join(rolled.GetWarnings(), "\n"); !strings.Contains(warned, "garbage") {
+		t.Errorf("Rollback() warned %q, want the record it could not reclaim named", warned)
+	}
+}
+
 func TestARollbackPastTheRetainedPromotionsLeavesTheContainerBuildItDroppedToTheBox(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")

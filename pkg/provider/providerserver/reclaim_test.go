@@ -1,6 +1,7 @@
 package providerserver
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -23,7 +24,7 @@ func TestReclaimTargetsKeepAssetsARemainingReleaseStillServes(t *testing.T) {
 
 	shared, gone := reclaimedBuild(t, "shared"), reclaimedBuild(t, "gone")
 
-	targets, err := ReclaimTargets("shop", stackrecords.ProductionEnv,
+	targets, _, err := ReclaimTargets("shop", stackrecords.ProductionEnv,
 		[]router.DeploymentRecord{{App: "web", Build: gone.String()}, {App: "web", Build: shared.String()}},
 		[]string{"record:web/" + shared.String()},
 		nil)
@@ -48,12 +49,21 @@ func TestReclaimTargetsKeepAssetsARemainingReleaseStillServes(t *testing.T) {
 	}
 }
 
-func TestReclaimTargetsRefuseARecordNamingNoBuild(t *testing.T) {
+func TestReclaimTargetsRefuseARecordNamingNoBuildAndStillTargetTheRest(t *testing.T) {
 	t.Parallel()
 
+	kept := reclaimedBuild(t, "kept")
 	for _, build := range []string{"", "garbage", "ocel/web@sha256:" + strings.Repeat("a", 64)} {
-		if _, err := ReclaimTargets("shop", stackrecords.ProductionEnv, []router.DeploymentRecord{{App: "web", Build: build}}, nil, nil); err == nil {
+		targets, refused, err := ReclaimTargets("shop", stackrecords.ProductionEnv,
+			[]router.DeploymentRecord{{App: "web", Build: build}, {App: "api", Build: kept.String()}}, nil, nil)
+		if err == nil {
 			t.Errorf("ReclaimTargets() over a record of build %q returned no refusal, want one: a record whose build names no stack is corrupt", build)
+		}
+		if want := []string{"record:web/" + build}; !slices.Equal(refused, want) {
+			t.Errorf("ReclaimTargets() refused %v, want %v", refused, want)
+		}
+		if len(targets) != 1 || targets[0].App != "api" {
+			t.Errorf("ReclaimTargets() over a record of build %q targeted %+v, want the api build beside it still reclaimed", build, targets)
 		}
 	}
 }
@@ -62,7 +72,7 @@ func TestReclaimTargetsLeaveAContainerReleaseToTheBoxThatRunsIt(t *testing.T) {
 	t.Parallel()
 
 	container, function := reclaimedBuild(t, "container"), reclaimedBuild(t, "function")
-	targets, err := ReclaimTargets("shop", stackrecords.ProductionEnv,
+	targets, _, err := ReclaimTargets("shop", stackrecords.ProductionEnv,
 		[]router.DeploymentRecord{
 			{App: "web", Build: container.String(), Image: "ghcr.io/acme/web@sha256:" + strings.Repeat("a", 64)},
 			{App: "api", Build: function.String()},
