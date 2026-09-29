@@ -8,7 +8,6 @@ import (
 	"slices"
 	"text/tabwriter"
 
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/run"
@@ -34,11 +33,11 @@ func staleCell(err error, key string, opts envOptions) error {
 		describeCell(key, opts), key)
 }
 
-func runEnvSet(ctx context.Context, deps cmddeps.Deps, cwd, key, value string, opts envOptions, stdin io.Reader, stdout, stderr io.Writer) error {
-	return runEnvSetPairs(ctx, deps, cwd, []envSetPair{{key: key, value: value}}, opts, stdin, stdout, stderr)
+func runEnvSet(ctx context.Context, dependencies Dependencies, cwd, key, value string, opts envOptions, stdin io.Reader, stdout, stderr io.Writer) error {
+	return runEnvSetPairs(ctx, dependencies, cwd, []envSetPair{{key: key, value: value}}, opts, stdin, stdout, stderr)
 }
 
-func runEnvSetPairs(ctx context.Context, deps cmddeps.Deps, cwd string, pairs []envSetPair, opts envOptions, stdin io.Reader, stdout, stderr io.Writer) error {
+func runEnvSetPairs(ctx context.Context, dependencies Dependencies, cwd string, pairs []envSetPair, opts envOptions, stdin io.Reader, stdout, stderr io.Writer) error {
 	if opts.folder != "" {
 		if err := variables.ValidateFolder(opts.folder); err != nil {
 			return err
@@ -48,8 +47,8 @@ func runEnvSetPairs(ctx context.Context, deps cmddeps.Deps, cwd string, pairs []
 	if len(pairs) > 0 {
 		key = pairs[0].key
 	}
-	return withEnvProviderOfferingVariablesKey(ctx, deps, cwd, opts, "ocel env set", stdin, stderr, func(ctx context.Context, run *run.Run, prov *providerclient.Provider, cfg *project.Project, status *contractv1.PreflightResponse) error {
-		definitions, groups, err := declaredVariables(ctx, deps, cfg, prov, key, opts, run)
+	return withEnvProviderOfferingVariablesKey(ctx, dependencies, cwd, opts, "ocel env set", stdin, stderr, func(ctx context.Context, run *run.Run, prov *providerclient.Provider, cfg *project.Project, status *contractv1.PreflightResponse) error {
+		definitions, groups, err := declaredVariables(ctx, dependencies, cfg, prov, key, opts, run)
 		if err != nil {
 			return err
 		}
@@ -118,9 +117,9 @@ func setInEnvSource(ctx context.Context, values valuestore.Store, id string, at 
 	return nil
 }
 
-func runEnvGet(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
-	return withEnvProvider(ctx, deps, cwd, opts, "ocel env get", stderr, func(ctx context.Context, run *run.Run, prov *providerclient.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
-		definitions, _, err := declaredVariables(ctx, deps, cfg, prov, key, opts, run)
+func runEnvGet(ctx context.Context, dependencies Dependencies, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
+	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env get", stderr, func(ctx context.Context, run *run.Run, prov *providerclient.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
+		definitions, _, err := declaredVariables(ctx, dependencies, cfg, prov, key, opts, run)
 		if err != nil {
 			return err
 		}
@@ -180,8 +179,8 @@ func consentToReveal(definitions []*resourcesv1.VariableDefinition, key string, 
 	return nil
 }
 
-func runEnvRm(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
-	return withEnvProvider(ctx, deps, cwd, opts, "ocel env rm", stderr, func(ctx context.Context, run *run.Run, prov *providerclient.Provider, cfg *project.Project, status *contractv1.PreflightResponse) error {
+func runEnvRemove(ctx context.Context, dependencies Dependencies, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
+	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env rm", stderr, func(ctx context.Context, run *run.Run, prov *providerclient.Provider, cfg *project.Project, status *contractv1.PreflightResponse) error {
 		vars, err := prov.Vars()
 		if err != nil {
 			return err
@@ -201,7 +200,7 @@ func runEnvRm(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts envO
 			return nil
 		}
 		fmt.Fprintf(stdout, "Removed %s.\n", describeCell(key, opts))
-		definitions, groups, err := declaredVariables(ctx, deps, cfg, prov, key, opts, run)
+		definitions, groups, err := declaredVariables(ctx, dependencies, cfg, prov, key, opts, run)
 		if err != nil {
 			return err
 		}
@@ -212,8 +211,8 @@ func runEnvRm(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts envO
 	})
 }
 
-func runEnvHistory(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
-	return withEnvProvider(ctx, deps, cwd, opts, "ocel env history", stderr, func(ctx context.Context, _ *run.Run, prov *providerclient.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
+func runEnvHistory(ctx context.Context, dependencies Dependencies, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
+	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env history", stderr, func(ctx context.Context, _ *run.Run, prov *providerclient.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
 		vars, err := prov.Vars()
 		if err != nil {
 			return err

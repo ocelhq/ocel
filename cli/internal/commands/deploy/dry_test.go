@@ -16,7 +16,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/deployrecord"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
@@ -27,15 +26,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
-func dryDeps(t *testing.T) cmddeps.Deps {
+func newDryRunDependencies(t *testing.T) Dependencies {
 	t.Helper()
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
-	clitest.StubBuild(&deps, []build.Function{{
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, []build.Function{{
 		Route: "api", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js",
 		ArtifactPath: "output/api", App: "api",
 	}})
-	return deps
+	return dependencies
 }
 
 var planRows = []string{
@@ -54,14 +52,14 @@ func absent(t *testing.T, path string) bool {
 }
 
 func TestADryDeployShowsThePlanAndWritesNothing(t *testing.T) {
-	deps := dryDeps(t)
+	dependencies := newDryRunDependencies(t)
 	root, _ := clitest.SetUpDeployFixture(t)
 	addAppToFixtureConfig(t, root)
 	writeServeDescriptor(t, root, "api", "bld_api_1")
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stdout)
-	err := runDeploy(context.Background(), deps, root, deployOptions{dry: true}, &stdout, &stderr, strings.NewReader(""))
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	err := runDeploy(context.Background(), dependencies, root, deployOptions{dry: true}, &stdout, &stderr, strings.NewReader(""))
 	if err != nil {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
@@ -84,15 +82,15 @@ func TestADryDeployShowsThePlanAndWritesNothing(t *testing.T) {
 }
 
 func TestADryPreviewUpShowsThePlanAndWritesNothing(t *testing.T) {
-	deps := dryDeps(t)
+	dependencies := newDryRunDependencies(t)
 	root, _ := clitest.SetUpDeployFixture(t)
 	addAppToFixtureConfig(t, root)
 	writeServeDescriptor(t, root, "api", "bld_api_1")
 	t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stdout)
-	err := runPreviewUp(context.Background(), deps, root, previewUpOptions{name: "staging", dry: true}, &stdout, &stderr, strings.NewReader(""))
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	err := runPreviewUp(context.Background(), dependencies, root, previewUpOptions{name: "staging", dry: true}, &stdout, &stderr, strings.NewReader(""))
 	if err != nil {
 		t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
@@ -114,34 +112,34 @@ func TestADryPreviewUpShowsThePlanAndWritesNothing(t *testing.T) {
 func TestADryRunRefusesOnAnUnbootstrappedAccount(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
-		run    func(deps cmddeps.Deps, root string, stdout, stderr *bytes.Buffer) error
+		run    func(dependencies Dependencies, root string, stdout, stderr *bytes.Buffer) error
 		remedy string
 	}{
 		{
 			name: "deploy",
-			run: func(deps cmddeps.Deps, root string, stdout, stderr *bytes.Buffer) error {
-				clitest.AttachTerminalSink(deps, stdout)
-				return runDeploy(context.Background(), deps, root, deployOptions{dry: true}, stdout, stderr, strings.NewReader(""))
+			run: func(dependencies Dependencies, root string, stdout, stderr *bytes.Buffer) error {
+				clitest.AttachTerminalSink(dependencies.Invocation, stdout)
+				return runDeploy(context.Background(), dependencies, root, deployOptions{dry: true}, stdout, stderr, strings.NewReader(""))
 			},
 			remedy: "ocel bootstrap production",
 		},
 		{
 			name: "preview up",
-			run: func(deps cmddeps.Deps, root string, stdout, stderr *bytes.Buffer) error {
-				clitest.AttachTerminalSink(deps, stdout)
-				return runPreviewUp(context.Background(), deps, root, previewUpOptions{name: "staging", dry: true}, stdout, stderr, strings.NewReader(""))
+			run: func(dependencies Dependencies, root string, stdout, stderr *bytes.Buffer) error {
+				clitest.AttachTerminalSink(dependencies.Invocation, stdout)
+				return runPreviewUp(context.Background(), dependencies, root, previewUpOptions{name: "staging", dry: true}, stdout, stderr, strings.NewReader(""))
 			},
 			remedy: "ocel bootstrap preview",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			deps := dryDeps(t)
+			dependencies := newDryRunDependencies(t)
 			root, _ := clitest.SetUpDeployFixture(t)
 			addAppToFixtureConfig(t, root)
 			t.Setenv(clitest.FakeInfraPresentEnvVar, "0")
 
 			var stdout, stderr bytes.Buffer
-			err := tc.run(deps, root, &stdout, &stderr)
+			err := tc.run(dependencies, root, &stdout, &stderr)
 			if err == nil {
 				t.Fatalf("run err = nil, want a refusal; stdout=%s", stdout.String())
 			}
@@ -156,16 +154,16 @@ func TestADryRunRefusesOnAnUnbootstrappedAccount(t *testing.T) {
 }
 
 func TestADryRunRefusesABootstrapThatIsBehindTheBuild(t *testing.T) {
-	deps := dryDeps(t)
-	deps.StdinIsTerminal = func(io.Reader) bool { return true }
+	dependencies := newDryRunDependencies(t)
+	dependencies.StdinIsTerminal = func(io.Reader) bool { return true }
 	root, _ := clitest.SetUpDeployFixture(t)
 	addAppToFixtureConfig(t, root)
 	writeServeDescriptor(t, root, "api", "bld_api_1")
 	t.Setenv(clitest.FakeBootstrapEnvVar, "stale")
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stdout)
-	err := runDeploy(context.Background(), deps, root, deployOptions{dry: true}, &stdout, &stderr, strings.NewReader(""))
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	err := runDeploy(context.Background(), dependencies, root, deployOptions{dry: true}, &stdout, &stderr, strings.NewReader(""))
 	if err == nil {
 		t.Fatalf("runDeploy err = nil, want a refusal; stdout=%s", stdout.String())
 	}
@@ -184,21 +182,21 @@ func TestADryRunNeverOpensTheVariableEditor(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		preview bool
-		run     func(deps cmddeps.Deps, root string, stdout, stderr *bytes.Buffer) error
+		run     func(dependencies Dependencies, root string, stdout, stderr *bytes.Buffer) error
 	}{
 		{
 			name: "deploy",
-			run: func(deps cmddeps.Deps, root string, stdout, stderr *bytes.Buffer) error {
-				clitest.AttachTerminalSink(deps, stdout)
-				return runDeploy(context.Background(), deps, root, deployOptions{dry: true}, stdout, stderr, strings.NewReader(""))
+			run: func(dependencies Dependencies, root string, stdout, stderr *bytes.Buffer) error {
+				clitest.AttachTerminalSink(dependencies.Invocation, stdout)
+				return runDeploy(context.Background(), dependencies, root, deployOptions{dry: true}, stdout, stderr, strings.NewReader(""))
 			},
 		},
 		{
 			name:    "preview up",
 			preview: true,
-			run: func(deps cmddeps.Deps, root string, stdout, stderr *bytes.Buffer) error {
-				clitest.AttachTerminalSink(deps, stdout)
-				return runPreviewUp(context.Background(), deps, root, previewUpOptions{name: "staging", dry: true}, stdout, stderr, strings.NewReader(""))
+			run: func(dependencies Dependencies, root string, stdout, stderr *bytes.Buffer) error {
+				clitest.AttachTerminalSink(dependencies.Invocation, stdout)
+				return runPreviewUp(context.Background(), dependencies, root, previewUpOptions{name: "staging", dry: true}, stdout, stderr, strings.NewReader(""))
 			},
 		},
 	} {
@@ -208,16 +206,16 @@ func TestADryRunNeverOpensTheVariableEditor(t *testing.T) {
 			if tc.preview {
 				t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 			}
-			deps := clitest.NewDeps()
-			terminalStdin(&deps)
+			dependencies := newTestDependencies()
+			terminalStdin(&dependencies)
 			served := 0
-			deps.ServeVariableEditor = func(context.Context, *project.Project, *providerclient.Provider, environmentv1.Tier, *variables.Declarations, *variableeditor.Recovery) (*variableeditor.Session, error) {
+			dependencies.ServeVariableEditor = func(context.Context, *project.Project, *providerclient.Provider, environmentv1.Tier, *variables.Declarations, *variableeditor.Recovery) (*variableeditor.Session, error) {
 				served++
 				return nil, errors.New("a dry run must never serve the variables UI")
 			}
 
 			var stdout, stderr bytes.Buffer
-			err := tc.run(deps, root, &stdout, &stderr)
+			err := tc.run(dependencies, root, &stdout, &stderr)
 			if err == nil {
 				t.Fatalf("run err = nil, want the declarations to refuse; stdout=%s", stdout.String())
 			}
@@ -232,15 +230,15 @@ func TestADryRunNeverOpensTheVariableEditor(t *testing.T) {
 }
 
 func TestADryRunRefusesWhenTheBootstrapLacksWhatTheProjectNeeds(t *testing.T) {
-	deps := dryDeps(t)
-	deps.StdinIsTerminal = func(io.Reader) bool { return true }
+	dependencies := newDryRunDependencies(t)
+	dependencies.StdinIsTerminal = func(io.Reader) bool { return true }
 	root, _ := clitest.SetUpDeployFixture(t)
 	addAppToFixtureConfig(t, root)
 	t.Setenv(clitest.FakeBootstrapEnvVar, "missing")
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stdout)
-	err := runDeploy(context.Background(), deps, root, deployOptions{dry: true}, &stdout, &stderr, strings.NewReader(""))
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	err := runDeploy(context.Background(), dependencies, root, deployOptions{dry: true}, &stdout, &stderr, strings.NewReader(""))
 	if err == nil {
 		t.Fatalf("runDeploy err = nil, want a refusal; stdout=%s", stdout.String())
 	}
@@ -311,7 +309,7 @@ func writeAppTSConfig(t *testing.T, root, app string) string {
 }
 
 func TestADryDeployLeavesEveryFileTheProjectOwnsAsItFoundIt(t *testing.T) {
-	deps := dryDeps(t)
+	dependencies := newDryRunDependencies(t)
 	root, _ := clitest.SetUpDeployFixture(t)
 	addAppToFixtureConfig(t, root)
 	writeServeDescriptor(t, root, "api", "bld_api_1")
@@ -320,8 +318,8 @@ func TestADryDeployLeavesEveryFileTheProjectOwnsAsItFoundIt(t *testing.T) {
 	before := projectFiles(t, root)
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stdout)
-	err := runDeploy(context.Background(), deps, root, deployOptions{dry: true}, &stdout, &stderr, strings.NewReader(""))
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	err := runDeploy(context.Background(), dependencies, root, deployOptions{dry: true}, &stdout, &stderr, strings.NewReader(""))
 	if err != nil {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
@@ -335,15 +333,15 @@ func TestADryDeployLeavesEveryFileTheProjectOwnsAsItFoundIt(t *testing.T) {
 }
 
 func TestADeployPointsEachAppsImportsAtItsClientAccessor(t *testing.T) {
-	deps := dryDeps(t)
+	dependencies := newDryRunDependencies(t)
 	root, _ := clitest.SetUpDeployFixture(t)
 	addAppToFixtureConfig(t, root)
 	writeServeDescriptor(t, root, "api", "bld_api_1")
 	tsconfig := writeAppTSConfig(t, root, "api")
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stdout)
-	err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 	if err != nil {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}

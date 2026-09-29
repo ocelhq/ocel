@@ -29,11 +29,11 @@ func TestSettingAValueForAContainerAppTheProviderReadsLivePromisesNoDeploy(t *te
 	}
 }
 
-func envRm(t *testing.T, root, key string, opts envOptions) string {
+func envRemove(t *testing.T, root, key string, opts envOptions) string {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
-	if err := runEnvRm(context.Background(), streamedDeps(&stderr), root, key, opts, &stdout, &stderr); err != nil {
-		t.Fatalf("runEnvRm(%s) err = %v; stdout=%s stderr=%s", key, err, stdout.String(), stderr.String())
+	if err := runEnvRemove(context.Background(), newStreamedDependencies(&stderr), root, key, opts, &stdout, &stderr); err != nil {
+		t.Fatalf("runEnvRemove(%s) err = %v; stdout=%s stderr=%s", key, err, stdout.String(), stderr.String())
 	}
 	return stdout.String()
 }
@@ -43,7 +43,7 @@ func TestRemovingAValueForAnAppOnALiveComputePromisesNoDeploy(t *testing.T) {
 	t.Setenv(clitest.FakeComputesEnvVar, "serverless")
 	envSet(t, root, "API_TOKEN", "sk-live", envOptions{})
 
-	said := envRm(t, root, "API_TOKEN", envOptions{})
+	said := envRemove(t, root, "API_TOKEN", envOptions{})
 	if strings.Contains(said, "next deploy") {
 		t.Errorf("`ocel env rm` against an app on a compute the provider bakes nothing into said\n%s\nand a removed value stops being read there without one", said)
 	}
@@ -54,7 +54,7 @@ func TestRemovingAValueForAContainerAppTheProviderReadsLivePromisesNoDeploy(t *t
 	t.Setenv(clitest.FakeComputesEnvVar, "container")
 	envSet(t, root, "API_TOKEN", "sk-live", envOptions{})
 
-	said := envRm(t, root, "API_TOKEN", envOptions{})
+	said := envRemove(t, root, "API_TOKEN", envOptions{})
 	if strings.Contains(said, "next deploy") {
 		t.Errorf("`ocel env rm` against a container app said\n%s\nand this provider names no compute it bakes values into, so the running container stops reading this one without a deploy", said)
 	}

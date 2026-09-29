@@ -38,12 +38,12 @@ func TestInitWritesAConfigTheLoaderAccepts(t *testing.T) {
 	for language, want := range manifests {
 		t.Run(language, func(t *testing.T) {
 			dir := manifestDir(t, want.manifest)
-			deps := initDeps()
-			argv := stubPackageManager(&deps, nil)
+			dependencies := newTestDependencies()
+			argv := stubPackageManager(&dependencies, nil)
 
 			var stdout bytes.Buffer
-			clitest.AttachTerminalSink(deps, &stdout)
-			if err := runInit(context.Background(), deps, dir, "acme", initOptions{provider: "aws"}); err != nil {
+			clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+			if err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "aws"}); err != nil {
 				t.Fatalf("runInit: %v — %s", err, stdout.String())
 			}
 
@@ -63,10 +63,10 @@ func TestInitWritesAConfigTheLoaderAccepts(t *testing.T) {
 
 func TestInitWritesTheSchemaThisCLIShipsWith(t *testing.T) {
 	dir := manifestDir(t, "go.mod")
-	deps := initDeps()
-	stubPackageManager(&deps, nil)
+	dependencies := newTestDependencies()
+	stubPackageManager(&dependencies, nil)
 
-	if err := runInit(context.Background(), deps, dir, "acme", initOptions{provider: "aws"}); err != nil {
+	if err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "aws"}); err != nil {
 		t.Fatalf("runInit: %v", err)
 	}
 
@@ -87,10 +87,10 @@ func TestInitWritesTheSchemaThisCLIShipsWith(t *testing.T) {
 
 func TestInitWritesTypeScriptOnRequest(t *testing.T) {
 	dir := manifestDir(t, "package.json")
-	deps := initDeps()
-	stubPackageManager(&deps, nil)
+	dependencies := newTestDependencies()
+	stubPackageManager(&dependencies, nil)
 
-	if err := runInit(context.Background(), deps, dir, "acme", initOptions{provider: "aws", ts: true}); err != nil {
+	if err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "aws", ts: true}); err != nil {
 		t.Fatalf("runInit: %v", err)
 	}
 
@@ -108,10 +108,10 @@ func TestInitWritesTypeScriptOnRequest(t *testing.T) {
 
 func TestInitWritesYAMLOnRequest(t *testing.T) {
 	dir := manifestDir(t, "go.mod")
-	deps := initDeps()
-	stubPackageManager(&deps, nil)
+	dependencies := newTestDependencies()
+	stubPackageManager(&dependencies, nil)
 
-	if err := runInit(context.Background(), deps, dir, "007", initOptions{provider: "aws", yaml: true}); err != nil {
+	if err := runInit(context.Background(), dependencies, dir, "007", initOptions{provider: "aws", yaml: true}); err != nil {
 		t.Fatalf("runInit: %v", err)
 	}
 
@@ -151,10 +151,10 @@ func TestInitRefusesToWriteASecondFormOfTheConfig(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(dir, tc.existing), []byte("{}\n"), 0o644); err != nil {
 				t.Fatalf("write %s: %v", tc.existing, err)
 			}
-			deps := initDeps()
-			stubPackageManager(&deps, nil)
+			dependencies := newTestDependencies()
+			stubPackageManager(&dependencies, nil)
 
-			err := runInit(context.Background(), deps, dir, "acme", tc.opts)
+			err := runInit(context.Background(), dependencies, dir, "acme", tc.opts)
 			if err == nil || !strings.Contains(err.Error(), tc.existing) {
 				t.Fatalf("error %v does not name the %s already there", err, tc.existing)
 			}
@@ -177,11 +177,11 @@ func TestInitRefusesAFormFlagTheExplicitPathContradicts(t *testing.T) {
 	} {
 		t.Run(tc.path, func(t *testing.T) {
 			dir := manifestDir(t, "go.mod")
-			deps := initDeps()
-			stubPackageManager(&deps, nil)
+			dependencies := newTestDependencies()
+			stubPackageManager(&dependencies, nil)
 			tc.opts.configPath = tc.path
 
-			err := runInit(context.Background(), deps, dir, "acme", tc.opts)
+			err := runInit(context.Background(), dependencies, dir, "acme", tc.opts)
 			if err == nil || !strings.Contains(err.Error(), tc.want) || !strings.Contains(err.Error(), tc.path) {
 				t.Fatalf("error %v names neither %s nor %s", err, tc.want, tc.path)
 			}
@@ -194,11 +194,11 @@ func TestInitRefusesAFormFlagTheExplicitPathContradicts(t *testing.T) {
 
 func TestInitWritesYAMLToAnExplicitYAMLPath(t *testing.T) {
 	dir := manifestDir(t, "go.mod")
-	deps := initDeps()
-	stubPackageManager(&deps, nil)
+	dependencies := newTestDependencies()
+	stubPackageManager(&dependencies, nil)
 
 	opts := initOptions{provider: "aws", yaml: true, configPath: "ocel.aws.yml"}
-	if err := runInit(context.Background(), deps, dir, "acme", opts); err != nil {
+	if err := runInit(context.Background(), dependencies, dir, "acme", opts); err != nil {
 		t.Fatalf("runInit: %v", err)
 	}
 	cfg, err := project.Load(context.Background(), dir, "ocel.aws.yml")
@@ -215,10 +215,10 @@ func TestInitRefusesADirectoryOfSeveralLanguages(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "Cargo.toml"), []byte("\n"), 0o644); err != nil {
 		t.Fatalf("write Cargo.toml: %v", err)
 	}
-	deps := initDeps()
-	stubPackageManager(&deps, nil)
+	dependencies := newTestDependencies()
+	stubPackageManager(&dependencies, nil)
 
-	err := runInit(context.Background(), deps, dir, "acme", initOptions{provider: "aws"})
+	err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "aws"})
 	if err == nil {
 		t.Fatal("init picked a language from two manifests")
 	}
@@ -234,10 +234,10 @@ func TestInitReadsACrateBesideAPackageJSONAsANodeProject(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "Cargo.toml"), []byte("\n"), 0o644); err != nil {
 		t.Fatalf("write Cargo.toml: %v", err)
 	}
-	deps := initDeps()
-	argv := stubPackageManager(&deps, nil)
+	dependencies := newTestDependencies()
+	argv := stubPackageManager(&dependencies, nil)
 
-	if err := runInit(context.Background(), deps, dir, "acme", initOptions{provider: "aws"}); err != nil {
+	if err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "aws"}); err != nil {
 		t.Fatalf("runInit: %v", err)
 	}
 	if want := "npm install ocel"; strings.Join(*argv, " ") != want {
@@ -250,10 +250,10 @@ func TestInitTakesTheLanguageItIsGiven(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "Cargo.toml"), []byte("\n"), 0o644); err != nil {
 		t.Fatalf("write Cargo.toml: %v", err)
 	}
-	deps := initDeps()
-	argv := stubPackageManager(&deps, nil)
+	dependencies := newTestDependencies()
+	argv := stubPackageManager(&dependencies, nil)
 
-	if err := runInit(context.Background(), deps, dir, "acme", initOptions{provider: "aws", language: "rust"}); err != nil {
+	if err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "aws", language: "rust"}); err != nil {
 		t.Fatalf("runInit: %v", err)
 	}
 	if strings.Join(*argv, " ") != "cargo add ocel-sdk" {
@@ -263,10 +263,10 @@ func TestInitTakesTheLanguageItIsGiven(t *testing.T) {
 
 func TestInitWritesOnlyTheConfigWhenNoManifestNamesALanguage(t *testing.T) {
 	dir := manifestDir(t, "")
-	deps := initDeps()
-	argv := stubPackageManager(&deps, nil)
+	dependencies := newTestDependencies()
+	argv := stubPackageManager(&dependencies, nil)
 
-	if err := runInit(context.Background(), deps, dir, "acme", initOptions{provider: "aws"}); err != nil {
+	if err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "aws"}); err != nil {
 		t.Fatalf("runInit: %v", err)
 	}
 	if len(*argv) != 0 {
@@ -294,10 +294,10 @@ func TestInitNamesTheProviderAloneWhereItNeedsNoOptionsAndKeysItElsewhere(t *tes
 	} {
 		t.Run(tc.opts.provider+" in "+tc.written, func(t *testing.T) {
 			dir := manifestDir(t, "")
-			deps := initDeps()
-			stubPackageManager(&deps, nil)
+			dependencies := newTestDependencies()
+			stubPackageManager(&dependencies, nil)
 
-			if err := runInit(context.Background(), deps, dir, "acme", tc.opts); err != nil {
+			if err := runInit(context.Background(), dependencies, dir, "acme", tc.opts); err != nil {
 				t.Fatalf("runInit: %v", err)
 			}
 			written, err := os.ReadFile(filepath.Join(dir, tc.written))
@@ -313,10 +313,10 @@ func TestInitNamesTheProviderAloneWhereItNeedsNoOptionsAndKeysItElsewhere(t *tes
 
 func TestInitRefusesAProviderOcelDoesNotShip(t *testing.T) {
 	dir := manifestDir(t, "go.mod")
-	deps := initDeps()
-	stubPackageManager(&deps, nil)
+	dependencies := newTestDependencies()
+	stubPackageManager(&dependencies, nil)
 
-	err := runInit(context.Background(), deps, dir, "acme", initOptions{provider: "azure"})
+	err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "azure"})
 	if err == nil {
 		t.Fatal("init wrote a config naming a provider nothing ships")
 	}

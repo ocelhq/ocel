@@ -15,8 +15,8 @@ func TestTheManifestNamesEveryAppsCompute(t *testing.T) {
 	t.Run("an app the config names has the compute resolved onto it", func(t *testing.T) {
 		root := t.TempDir()
 		clitest.WritePrebuiltFunction(t, root, "api", "index")
-		deps := clitest.NewDeps()
-		recordBuildApp(&deps)
+		dependencies := newTestDependencies()
+		recordBuildApp(&dependencies)
 
 		s, _ := newBuildSpan(t)
 		cfg := &project.Project{
@@ -24,8 +24,9 @@ func TestTheManifestNamesEveryAppsCompute(t *testing.T) {
 			Slug: "prebuilt",
 			Apps: []project.App{{Name: "api", Path: ".", Compute: "container"}},
 		}
-		clitest.StubAppImages(&deps, "api")
-		manifest, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: onCompute(cfg, "serverless"), declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s})
+		stubPrebuiltFromDisk(&dependencies)
+		stubAppImages(&dependencies, "api")
+		manifest, _, err := collectBuildAndAssemble(context.Background(), dependencies, assembly{cfg: onCompute(cfg, "serverless"), declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s})
 		if err != nil {
 			t.Fatalf("collectBuildAndAssemble: %v", err)
 		}
@@ -37,12 +38,12 @@ func TestTheManifestNamesEveryAppsCompute(t *testing.T) {
 	t.Run("an app only the build names cannot land on the provider's container default", func(t *testing.T) {
 		root := t.TempDir()
 		clitest.WritePrebuiltFunction(t, root, "api", "index")
-		deps := clitest.NewDeps()
-		recordBuildApp(&deps)
+		dependencies := newTestDependencies()
+		recordBuildApp(&dependencies)
 
 		s, _ := newBuildSpan(t)
 		cfg := &project.Project{Dir: root, Slug: "prebuilt"}
-		_, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: onCompute(cfg, "container"), declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s})
+		_, _, err := collectBuildAndAssemble(context.Background(), dependencies, assembly{cfg: onCompute(cfg, "container"), declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s})
 		if err == nil {
 			t.Fatal("collectBuildAndAssemble() landed an app the config never names on container compute, so a provider would be handed an app with no image")
 		}
@@ -82,8 +83,8 @@ func computeOf(t *testing.T, manifest *contractv1.Manifest, app string) string {
 func TestAContainerAppThatNamesNoRuntimeStillReachesTheProvider(t *testing.T) {
 	root := t.TempDir()
 	clitest.WritePrebuiltFunction(t, root, "api", "index")
-	deps := clitest.NewDeps()
-	recordBuildApp(&deps)
+	dependencies := newTestDependencies()
+	recordBuildApp(&dependencies)
 
 	s, _ := newBuildSpan(t)
 	cfg := &project.Project{
@@ -91,9 +92,10 @@ func TestAContainerAppThatNamesNoRuntimeStillReachesTheProvider(t *testing.T) {
 		Slug: "prebuilt",
 		Apps: []project.App{{Name: "api", Path: ".", Compute: "container"}},
 	}
-	clitest.StubAppImages(&deps, "api")
+	stubPrebuiltFromDisk(&dependencies)
+	stubAppImages(&dependencies, "api")
 
-	manifest, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: onCompute(cfg, "container"), declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s})
+	manifest, _, err := collectBuildAndAssemble(context.Background(), dependencies, assembly{cfg: onCompute(cfg, "container"), declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s})
 	if err != nil {
 		t.Fatalf("collectBuildAndAssemble over a container app with no runtime: %v", err)
 	}

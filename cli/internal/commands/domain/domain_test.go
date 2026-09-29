@@ -90,8 +90,7 @@ func TestRunDomainStatusJSON(t *testing.T) {
 	root, sockPath := clitest.SetUpDeployFixture(t)
 	writeProductionConfig(t, root)
 	useJSONOutput(t)
-	deps := newTestDeps()
-	clitest.SetLoggedIn(&deps)
+	invocation := newTestInvocation()
 	t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 	t.Setenv(clitest.FakeDomainCertEnvVar, "ISSUED fake-certificate/abcd-1234")
@@ -99,8 +98,8 @@ func TestRunDomainStatusJSON(t *testing.T) {
 	t.Setenv(clitest.FakeGlobalDomainManualRecordsEnvVar, "_ocel.shop.app.com CNAME _target.validations.fake.example")
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stderr)
-	if err := runDomainStatus(context.Background(), deps, root, domainOptions{}, &stdout, &stderr); err != nil {
+	clitest.AttachTerminalSink(invocation, &stderr)
+	if err := runDomainStatus(context.Background(), invocation, root, domainOptions{}, &stdout, &stderr); err != nil {
 		t.Fatalf("runDomainStatus err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	report := clitest.DecodeJSON(t, stdout.String())
@@ -144,14 +143,13 @@ func TestRunDomainStatusJSON(t *testing.T) {
 func TestRunDomain(t *testing.T) {
 	t.Run("the bootstrap-wide subcommands refuse without --preview", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		deps := newTestDeps()
-		clitest.SetLoggedIn(&deps)
+		invocation := newTestInvocation()
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
+		clitest.AttachTerminalSink(invocation, &stdout)
 		runs := map[string]error{
-			"use":     runDomainUse(context.Background(), deps, root, "*.preview.acme.com", domainOptions{}, &stdout, &stderr),
-			"release": runDomainRelease(context.Background(), deps, root, domainOptions{}, &stdout, &stderr, strings.NewReader("")),
+			"use":     runDomainUse(context.Background(), invocation, root, "*.preview.acme.com", domainOptions{}, &stdout, &stderr),
+			"release": runDomainRelease(context.Background(), invocation, root, domainOptions{}, &stdout, &stderr, strings.NewReader("")),
 		}
 		for name, err := range runs {
 			if err == nil {
@@ -166,14 +164,13 @@ func TestRunDomain(t *testing.T) {
 
 	t.Run("use claims the wildcard's base domain", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
-		deps := newTestDeps()
-		clitest.SetLoggedIn(&deps)
+		invocation := newTestInvocation()
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDomainUse(context.Background(), deps, root, "*.preview.acme.com", domainOptions{preview: true}, &stdout, &stderr); err != nil {
+		clitest.AttachTerminalSink(invocation, &stdout)
+		if err := runDomainUse(context.Background(), invocation, root, "*.preview.acme.com", domainOptions{preview: true}, &stdout, &stderr); err != nil {
 			t.Fatalf("runDomainUse err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
@@ -187,14 +184,13 @@ func TestRunDomain(t *testing.T) {
 
 	t.Run("use without a dns prints the record to add", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
-		deps := newTestDeps()
-		clitest.SetLoggedIn(&deps)
+		invocation := newTestInvocation()
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDomainUse(context.Background(), deps, root, "*.preview.acme.com", domainOptions{preview: true}, &stdout, &stderr); err != nil {
+		clitest.AttachTerminalSink(invocation, &stdout)
+		if err := runDomainUse(context.Background(), invocation, root, "*.preview.acme.com", domainOptions{preview: true}, &stdout, &stderr); err != nil {
 			t.Fatalf("runDomainUse err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
@@ -219,14 +215,13 @@ export default {
   dns: "zone",
 };
 `)
-		deps := newTestDeps()
-		clitest.SetLoggedIn(&deps)
+		invocation := newTestInvocation()
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDomainUse(context.Background(), deps, root, "*.preview.acme.com", domainOptions{preview: true}, &stdout, &stderr); err != nil {
+		clitest.AttachTerminalSink(invocation, &stdout)
+		if err := runDomainUse(context.Background(), invocation, root, "*.preview.acme.com", domainOptions{preview: true}, &stdout, &stderr); err != nil {
 			t.Fatalf("runDomainUse err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
@@ -240,12 +235,11 @@ export default {
 
 	t.Run("use refuses an argument that is not a leading wildcard", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		deps := newTestDeps()
-		clitest.SetLoggedIn(&deps)
+		invocation := newTestInvocation()
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		err := runDomainUse(context.Background(), deps, root, "preview.acme.com", domainOptions{preview: true}, &stdout, &stderr)
+		clitest.AttachTerminalSink(invocation, &stdout)
+		err := runDomainUse(context.Background(), invocation, root, "preview.acme.com", domainOptions{preview: true}, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runDomainUse err = nil, want a wildcard refusal")
 		}
@@ -256,8 +250,7 @@ export default {
 
 	t.Run("ls names the domain and the projects served on it", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
-		deps := newTestDeps()
-		clitest.SetLoggedIn(&deps)
+		invocation := newTestInvocation()
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.acme.com")
@@ -265,8 +258,8 @@ export default {
 		t.Setenv(clitest.FakeGlobalDomainProjectsEnvVar, "shop,blog")
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stderr)
-		if err := runDomainList(context.Background(), deps, root, domainOptions{preview: true}, &stdout, &stderr); err != nil {
+		clitest.AttachTerminalSink(invocation, &stderr)
+		if err := runDomainList(context.Background(), invocation, root, domainOptions{preview: true}, &stdout, &stderr); err != nil {
 			t.Fatalf("runDomainList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
@@ -280,8 +273,7 @@ export default {
 
 	t.Run("ls shows the certificate, the records and the last probe", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
-		deps := newTestDeps()
-		clitest.SetLoggedIn(&deps)
+		invocation := newTestInvocation()
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.acme.com")
@@ -293,8 +285,8 @@ export default {
 		t.Setenv(clitest.FakeGlobalDomainExpiresEnvVar, "1755500000")
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stderr)
-		if err := runDomainList(context.Background(), deps, root, domainOptions{preview: true}, &stdout, &stderr); err != nil {
+		clitest.AttachTerminalSink(invocation, &stderr)
+		if err := runDomainList(context.Background(), invocation, root, domainOptions{preview: true}, &stdout, &stderr); err != nil {
 			t.Fatalf("runDomainList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
@@ -314,15 +306,14 @@ export default {
 
 	t.Run("ls says an unprobed domain has never been probed", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
-		deps := newTestDeps()
-		clitest.SetLoggedIn(&deps)
+		invocation := newTestInvocation()
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.acme.com")
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stderr)
-		if err := runDomainList(context.Background(), deps, root, domainOptions{preview: true}, &stdout, &stderr); err != nil {
+		clitest.AttachTerminalSink(invocation, &stderr)
+		if err := runDomainList(context.Background(), invocation, root, domainOptions{preview: true}, &stdout, &stderr); err != nil {
 			t.Fatalf("runDomainList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
@@ -342,14 +333,13 @@ export default {
 
 	t.Run("ls says so when no global domain is configured", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
-		deps := newTestDeps()
-		clitest.SetLoggedIn(&deps)
+		invocation := newTestInvocation()
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stderr)
-		if err := runDomainList(context.Background(), deps, root, domainOptions{preview: true}, &stdout, &stderr); err != nil {
+		clitest.AttachTerminalSink(invocation, &stderr)
+		if err := runDomainList(context.Background(), invocation, root, domainOptions{preview: true}, &stdout, &stderr); err != nil {
 			t.Fatalf("runDomainList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
@@ -363,16 +353,15 @@ export default {
 
 	t.Run("release refuses while projects still have previews on the wildcard", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
-		deps := newTestDeps()
-		clitest.SetLoggedIn(&deps)
+		invocation := newTestInvocation()
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.acme.com")
 		t.Setenv(clitest.FakeServedPreviewsEnvVar, "shop, blog")
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		err := runDomainRelease(context.Background(), deps, root, domainOptions{preview: true, yes: true}, &stdout, &stderr, strings.NewReader(""))
+		clitest.AttachTerminalSink(invocation, &stdout)
+		err := runDomainRelease(context.Background(), invocation, root, domainOptions{preview: true, yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatalf("runDomainRelease err = nil, want the release refused; stdout=%s", stdout.String())
 		}
@@ -389,15 +378,14 @@ export default {
 
 	t.Run("release plans, then releases with --yes once nothing is served", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
-		deps := newTestDeps()
-		clitest.SetLoggedIn(&deps)
+		invocation := newTestInvocation()
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.acme.com")
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDomainRelease(context.Background(), deps, root, domainOptions{preview: true, yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		clitest.AttachTerminalSink(invocation, &stdout)
+		if err := runDomainRelease(context.Background(), invocation, root, domainOptions{preview: true, yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDomainRelease err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
@@ -430,14 +418,13 @@ export default {
   dns: "zone",
 };
 `)
-		deps := newTestDeps()
-		clitest.SetLoggedIn(&deps)
+		invocation := newTestInvocation()
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDomainAdd(context.Background(), deps, root, "", &stdout, &stderr); err != nil {
+		clitest.AttachTerminalSink(invocation, &stdout)
+		if err := runDomainAdd(context.Background(), invocation, root, "", &stdout, &stderr); err != nil {
 			t.Fatalf("runDomainAdd err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
@@ -466,14 +453,13 @@ export default {
   domains: { production: ["shop.app.com", "www.app.com"] },
 };
 `)
-		deps := newTestDeps()
-		clitest.SetLoggedIn(&deps)
+		invocation := newTestInvocation()
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDomainAdd(context.Background(), deps, root, "www.app.com", &stdout, &stderr); err != nil {
+		clitest.AttachTerminalSink(invocation, &stdout)
+		if err := runDomainAdd(context.Background(), invocation, root, "www.app.com", &stdout, &stderr); err != nil {
 			t.Fatalf("runDomainAdd err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
@@ -497,15 +483,14 @@ export default {
   domains: { production: "shop.app.com" },
 };
 `)
-		deps := newTestDeps()
-		clitest.SetLoggedIn(&deps)
+		invocation := newTestInvocation()
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		t.Setenv(clitest.FakeDomainTimeoutEnvVar, "add a DNS record at shop.app.com proxied through the edge")
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		err := runDomainAdd(context.Background(), deps, root, "", &stdout, &stderr)
+		clitest.AttachTerminalSink(invocation, &stdout)
+		err := runDomainAdd(context.Background(), invocation, root, "", &stdout, &stderr)
 		if err == nil {
 			t.Fatalf("runDomainAdd err = nil, want the timeout surfaced; stdout=%s", stdout.String())
 		}
@@ -527,12 +512,11 @@ export default {
   domains: { production: "shop.app.com" },
 };
 `)
-		deps := newTestDeps()
-		clitest.SetLoggedIn(&deps)
+		invocation := newTestInvocation()
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		err := runDomainAdd(context.Background(), deps, root, "other.app.com", &stdout, &stderr)
+		clitest.AttachTerminalSink(invocation, &stdout)
+		err := runDomainAdd(context.Background(), invocation, root, "other.app.com", &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runDomainAdd err = nil, want a refusal: no command edits the config")
 		}
@@ -546,12 +530,11 @@ export default {
 
 	t.Run("add refuses a project that declares no production hostname", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		deps := newTestDeps()
-		clitest.SetLoggedIn(&deps)
+		invocation := newTestInvocation()
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		err := runDomainAdd(context.Background(), deps, root, "", &stdout, &stderr)
+		clitest.AttachTerminalSink(invocation, &stdout)
+		err := runDomainAdd(context.Background(), invocation, root, "", &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runDomainAdd err = nil, want a refusal with nothing declared")
 		}
@@ -570,14 +553,13 @@ export default {
   dns: "zone",
 };
 `)
-		deps := newTestDeps()
-		clitest.SetLoggedIn(&deps)
+		invocation := newTestInvocation()
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDomainRemove(context.Background(), deps, root, "", domainOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		clitest.AttachTerminalSink(invocation, &stdout)
+		if err := runDomainRemove(context.Background(), invocation, root, "", domainOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDomainRemove err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
@@ -594,14 +576,13 @@ export default {
 
 	t.Run("rm with a host unbinds it", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
-		deps := newTestDeps()
-		clitest.SetLoggedIn(&deps)
+		invocation := newTestInvocation()
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDomainRemove(context.Background(), deps, root, "old.app.com", domainOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		clitest.AttachTerminalSink(invocation, &stdout)
+		if err := runDomainRemove(context.Background(), invocation, root, "old.app.com", domainOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDomainRemove err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
@@ -615,14 +596,13 @@ export default {
 
 	t.Run("rm refuses without a terminal or --yes and removes nothing", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		deps := newTestDeps()
-		clitest.SetLoggedIn(&deps)
+		invocation := newTestInvocation()
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		err := runDomainRemove(context.Background(), deps, root, "old.app.com", domainOptions{}, &stdout, &stderr, strings.NewReader(""))
+		clitest.AttachTerminalSink(invocation, &stdout)
+		err := runDomainRemove(context.Background(), invocation, root, "old.app.com", domainOptions{}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil || !strings.Contains(err.Error(), "pass --yes") {
 			t.Fatalf("runDomainRemove without a terminal err = %v, want a refusal naming --yes", err)
 		}
@@ -633,15 +613,14 @@ export default {
 
 	t.Run("rm behind a declined confirmation removes nothing", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		deps := newTestDeps()
-		clitest.SetLoggedIn(&deps)
-		deps.StdinIsTerminal = func(io.Reader) bool { return true }
+		invocation := newTestInvocation()
+		invocation.StdinIsTerminal = func(io.Reader) bool { return true }
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDomainRemove(context.Background(), deps, root, "old.app.com", domainOptions{}, &stdout, &stderr, strings.NewReader("n\n")); err != nil {
+		clitest.AttachTerminalSink(invocation, &stdout)
+		if err := runDomainRemove(context.Background(), invocation, root, "old.app.com", domainOptions{}, &stdout, &stderr, strings.NewReader("n\n")); err != nil {
 			t.Fatalf("runDomainRemove err = %v; stdout=%s", err, stdout.String())
 		}
 		out := stdout.String()
@@ -656,8 +635,7 @@ export default {
 	t.Run("status shows the certificate, the records, the probe and what serves each host", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		writeProductionConfig(t, root)
-		deps := newTestDeps()
-		clitest.SetLoggedIn(&deps)
+		invocation := newTestInvocation()
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		t.Setenv(clitest.FakeDomainCertEnvVar, "ISSUED fake-certificate/abcd-1234")
@@ -665,8 +643,8 @@ export default {
 		t.Setenv(clitest.FakeGlobalDomainManualRecordsEnvVar, "_ocel.shop.app.com CNAME _target.validations.fake.example")
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stderr)
-		if err := runDomainStatus(context.Background(), deps, root, domainOptions{}, &stdout, &stderr); err != nil {
+		clitest.AttachTerminalSink(invocation, &stderr)
+		if err := runDomainStatus(context.Background(), invocation, root, domainOptions{}, &stdout, &stderr); err != nil {
 			t.Fatalf("runDomainStatus err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
@@ -689,16 +667,15 @@ export default {
 	t.Run("status --wait polls until every hostname is ready", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		writeProductionConfig(t, root)
-		deps := newTestDeps()
-		clitest.SetLoggedIn(&deps)
+		invocation := newTestInvocation()
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		t.Setenv(clitest.FakeDomainReadyAfterEnvVar, "2")
 		quickDomainWait(t)
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stderr)
-		if err := runDomainStatus(context.Background(), deps, root, domainOptions{wait: true}, &stdout, &stderr); err != nil {
+		clitest.AttachTerminalSink(invocation, &stderr)
+		if err := runDomainStatus(context.Background(), invocation, root, domainOptions{wait: true}, &stdout, &stderr); err != nil {
 			t.Fatalf("runDomainStatus --wait err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
@@ -714,15 +691,14 @@ export default {
 	t.Run("status without --wait renders what is outstanding and does not poll", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		writeProductionConfig(t, root)
-		deps := newTestDeps()
-		clitest.SetLoggedIn(&deps)
+		invocation := newTestInvocation()
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		t.Setenv(clitest.FakeDomainReadyAfterEnvVar, "5")
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stderr)
-		if err := runDomainStatus(context.Background(), deps, root, domainOptions{}, &stdout, &stderr); err != nil {
+		clitest.AttachTerminalSink(invocation, &stderr)
+		if err := runDomainStatus(context.Background(), invocation, root, domainOptions{}, &stdout, &stderr); err != nil {
 			t.Fatalf("runDomainStatus err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
@@ -736,14 +712,13 @@ export default {
 
 	t.Run("status says so when the project declares no production hostname", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
-		deps := newTestDeps()
-		clitest.SetLoggedIn(&deps)
+		invocation := newTestInvocation()
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stderr)
-		if err := runDomainStatus(context.Background(), deps, root, domainOptions{}, &stdout, &stderr); err != nil {
+		clitest.AttachTerminalSink(invocation, &stderr)
+		if err := runDomainStatus(context.Background(), invocation, root, domainOptions{}, &stdout, &stderr); err != nil {
 			t.Fatalf("runDomainStatus err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "declares no domains.production") {
@@ -755,8 +730,7 @@ export default {
 	t.Run("status --wait rides out a provider that is briefly unreachable", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		writeProductionConfig(t, root)
-		deps := newTestDeps()
-		clitest.SetLoggedIn(&deps)
+		invocation := newTestInvocation()
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		t.Setenv(clitest.FakeDomainReadyAfterEnvVar, "3")
@@ -764,8 +738,8 @@ export default {
 		quickDomainWait(t)
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stderr)
-		if err := runDomainStatus(context.Background(), deps, root, domainOptions{wait: true}, &stdout, &stderr); err != nil {
+		clitest.AttachTerminalSink(invocation, &stderr)
+		if err := runDomainStatus(context.Background(), invocation, root, domainOptions{wait: true}, &stdout, &stderr); err != nil {
 			t.Fatalf("runDomainStatus --wait err = %v, want a wait that outlasts a couple of failed checks; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "shop.app.com  READY") {
@@ -777,8 +751,7 @@ export default {
 	t.Run("status --wait gives up once the provider keeps failing", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		writeProductionConfig(t, root)
-		deps := newTestDeps()
-		clitest.SetLoggedIn(&deps)
+		invocation := newTestInvocation()
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		t.Setenv(clitest.FakeDomainReadyAfterEnvVar, "99")
@@ -786,8 +759,8 @@ export default {
 		quickDomainWait(t)
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stderr)
-		err := runDomainStatus(context.Background(), deps, root, domainOptions{wait: true}, &stdout, &stderr)
+		clitest.AttachTerminalSink(invocation, &stderr)
+		err := runDomainStatus(context.Background(), invocation, root, domainOptions{wait: true}, &stdout, &stderr)
 		if err == nil || !strings.Contains(stderr.String(), "failed checks in a row") {
 			t.Fatalf("runDomainStatus --wait err = %v; stderr=%s, want it to give up naming the repeated failures", err, stderr.String())
 		}
@@ -796,15 +769,14 @@ export default {
 
 	t.Run("status --wait fails fast when the project declares no production hostname", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
-		deps := newTestDeps()
-		clitest.SetLoggedIn(&deps)
+		invocation := newTestInvocation()
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		quickDomainWait(t)
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stderr)
-		err := runDomainStatus(context.Background(), deps, root, domainOptions{wait: true}, &stdout, &stderr)
+		clitest.AttachTerminalSink(invocation, &stderr)
+		err := runDomainStatus(context.Background(), invocation, root, domainOptions{wait: true}, &stdout, &stderr)
 		if err == nil || !strings.Contains(stderr.String(), "nothing to wait for") {
 			t.Fatalf("runDomainStatus --wait err = %v; stderr=%s, want it to refuse at once with nothing declared", err, stderr.String())
 		}
@@ -813,12 +785,11 @@ export default {
 
 	t.Run("release refuses non-interactively without --yes", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		deps := newTestDeps()
-		clitest.SetLoggedIn(&deps)
+		invocation := newTestInvocation()
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		err := runDomainRelease(context.Background(), deps, root, domainOptions{preview: true}, &stdout, &stderr, strings.NewReader(""))
+		clitest.AttachTerminalSink(invocation, &stdout)
+		err := runDomainRelease(context.Background(), invocation, root, domainOptions{preview: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDomainRelease err = nil, want it to refuse without a terminal")
 		}
@@ -895,18 +866,17 @@ func TestDomainStatusSaysNothingAboutExpiryForACertificateSomethingElseRenews(t 
 	}
 }
 
-func TestDomainLsListsThisProjectsOwnHostnamesWithoutPreview(t *testing.T) {
+func TestDomainListListsThisProjectsOwnHostnamesWithoutPreview(t *testing.T) {
 	root, sockPath := clitest.SetUpDeployFixture(t)
 	writeProductionConfig(t, root)
-	deps := newTestDeps()
-	clitest.SetLoggedIn(&deps)
+	invocation := newTestInvocation()
 	t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 	t.Setenv(clitest.FakeDomainCertEnvVar, "ISSUED proxy:shop.app.com")
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stderr)
-	if err := runDomainList(context.Background(), deps, root, domainOptions{}, &stdout, &stderr); err != nil {
+	clitest.AttachTerminalSink(invocation, &stderr)
+	if err := runDomainList(context.Background(), invocation, root, domainOptions{}, &stdout, &stderr); err != nil {
 		t.Fatalf("runDomainList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	out := stdout.String()
@@ -918,19 +888,18 @@ func TestDomainLsListsThisProjectsOwnHostnamesWithoutPreview(t *testing.T) {
 	clitest.WaitForNoStaleSocket(t, sockPath)
 }
 
-func TestDomainLsReadsStateWhileStatusChecksTheEdgeLive(t *testing.T) {
+func TestDomainListReadsStateWhileStatusChecksTheEdgeLive(t *testing.T) {
 	root, sockPath := clitest.SetUpDeployFixture(t)
 	writeProductionConfig(t, root)
 	journal := filepath.Join(t.TempDir(), "hostname.journal")
 	t.Setenv(clitest.FakeHostnameJournalEnvVar, journal)
-	deps := newTestDeps()
-	clitest.SetLoggedIn(&deps)
+	invocation := newTestInvocation()
 	t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stderr)
-	if err := runDomainList(context.Background(), deps, root, domainOptions{}, &stdout, &stderr); err != nil {
+	clitest.AttachTerminalSink(invocation, &stderr)
+	if err := runDomainList(context.Background(), invocation, root, domainOptions{}, &stdout, &stderr); err != nil {
 		t.Fatalf("runDomainList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	if asked := readJournal(t, journal); len(asked) != 1 || !strings.Contains(asked[0], "probe=false") {
@@ -939,7 +908,7 @@ func TestDomainLsReadsStateWhileStatusChecksTheEdgeLive(t *testing.T) {
 
 	stdout.Reset()
 	stderr.Reset()
-	if err := runDomainStatus(context.Background(), deps, root, domainOptions{}, &stdout, &stderr); err != nil {
+	if err := runDomainStatus(context.Background(), invocation, root, domainOptions{}, &stdout, &stderr); err != nil {
 		t.Fatalf("runDomainStatus err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	asked := readJournal(t, journal)
@@ -960,10 +929,9 @@ func readJournal(t *testing.T, path string) []string {
 
 func TestReleasingThePreviewDomainAsksForItsNameWhileTheRunIsHeldAfterThePlanItShows(t *testing.T) {
 	root, _ := clitest.SetUpDeployFixture(t)
-	deps := newTestDeps()
-	clitest.SetLoggedIn(&deps)
-	deps.StdinIsTerminal = func(io.Reader) bool { return true }
-	deps.Presentation = func(io.Writer) terminal.Presentation {
+	invocation := newTestInvocation()
+	invocation.StdinIsTerminal = func(io.Reader) bool { return true }
+	invocation.Presentation = func(io.Writer) terminal.Presentation {
 		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
 	}
 	t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
@@ -971,8 +939,8 @@ func TestReleasingThePreviewDomainAsksForItsNameWhileTheRunIsHeldAfterThePlanItS
 	t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.acme.com")
 
 	var stream, stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stream)
-	if err := runDomainRelease(context.Background(), deps, root, domainOptions{preview: true}, &stdout, &stderr, strings.NewReader("preview.acme.com\n")); err != nil {
+	clitest.AttachTerminalSink(invocation, &stream)
+	if err := runDomainRelease(context.Background(), invocation, root, domainOptions{preview: true}, &stdout, &stderr, strings.NewReader("preview.acme.com\n")); err != nil {
 		t.Fatalf("runDomainRelease err = %v; stream=%s stdout=%s stderr=%s", err, stream.String(), stdout.String(), stderr.String())
 	}
 

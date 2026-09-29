@@ -117,18 +117,18 @@ func rootSpan(t *testing.T, spans []traceSpan) traceSpan {
 func TestVariablesRecoveryTracesEachAttemptAndTheHumanWait(t *testing.T) {
 	root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 	problems := problemsFile(t, missingStripeKey)
-	deps := clitest.NewDeps()
-	terminalStdin(&deps)
+	dependencies := newTestDependencies()
+	terminalStdin(&dependencies)
 	var mu sync.Mutex
 	var opened []string
-	recordBrowser(&deps, &opened, &mu)
+	recordBrowser(&dependencies, &opened, &mu)
 
 	var out syncBuffer
 	var stderr bytes.Buffer
 	done := make(chan error, 1)
 	go func() {
-		clitest.AttachTerminalSink(deps, &out)
-		done <- runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
+		clitest.AttachTerminalSink(dependencies.Invocation, &out)
+		done <- runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 	}()
 
 	address, token := awaitEditorURL(t, &out, 1)

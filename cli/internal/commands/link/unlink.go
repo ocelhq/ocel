@@ -10,11 +10,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console"
 )
 
-func NewUnlinkCommand(deps cmddeps.Deps) *cobra.Command {
+func NewUnlinkCommand(dependencies Dependencies) *cobra.Command {
 	return &cobra.Command{
 		Use:     "unlink",
 		Short:   "Unlink this directory from its console project",
@@ -25,7 +24,7 @@ func NewUnlinkCommand(deps cmddeps.Deps) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
-			dir, err := projectDir(cmd.Context(), deps, cwd)
+			dir, err := projectDir(cmd.Context(), dependencies, cwd)
 			if err != nil {
 				return err
 			}
@@ -34,8 +33,8 @@ func NewUnlinkCommand(deps cmddeps.Deps) *cobra.Command {
 	}
 }
 
-func projectDir(ctx context.Context, deps cmddeps.Deps, cwd string) (string, error) {
-	cfg, err := deps.LoadOptionalProject(ctx, cwd)
+func projectDir(ctx context.Context, dependencies Dependencies, cwd string) (string, error) {
+	cfg, err := dependencies.LoadOptionalProject(ctx, cwd)
 	if err != nil {
 		return "", err
 	}

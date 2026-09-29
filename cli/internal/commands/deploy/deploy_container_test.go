@@ -10,22 +10,20 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 )
 
-func registryProject(t *testing.T, registry string) (cmddeps.Deps, string, func() bool) {
+func registryProject(t *testing.T, registry string) (Dependencies, string, func() bool) {
 	t.Helper()
 
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
-	clitest.StubBuild(&deps, nil)
-	clitest.StubAppImages(&deps, "api")
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, nil)
+	stubAppImages(&dependencies, "api")
 	built := false
-	buildApps := deps.BuildApps
-	deps.BuildApps = func(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, log build.Log) (build.Output, error) {
+	buildApps := dependencies.BuildApps
+	dependencies.BuildApps = func(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, log build.Log) (build.Output, error) {
 		built = true
 		return buildApps(ctx, cfg, env, archs, log)
 	}
@@ -41,16 +39,16 @@ export default {
 };
 `)
 	clitest.WriteFile(t, filepath.Join(root, "apps", "api", "src", "server.ts"), "export {};\n")
-	return deps, root, func() bool { return built }
+	return dependencies, root, func() bool { return built }
 }
 
 func TestARegistryWhoseVariableIsUnsetStopsTheDeployBeforeAnythingIsBuilt(t *testing.T) {
-	deps, root, built := registryProject(t, `
+	dependencies, root, built := registryProject(t, `
   registry: { server: "ghcr.io", password: "${OCEL_TEST_REGISTRY_TOKEN}" },`)
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stdout)
-	err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 	if err == nil {
 		t.Fatal("runDeploy() built and deployed a project whose registry password is nowhere to be read, want it refused at the plan")
 	}
@@ -67,12 +65,12 @@ func TestARegistryWhoseVariableIsUnsetStopsTheDeployBeforeAnythingIsBuilt(t *tes
 
 func TestARegistryPasswordPastedAsATokenIsRefusedWithoutEchoingIt(t *testing.T) {
 	const token = "ghp_16C7e42F292c6912E7710c838347Ae178B4a"
-	deps, root, built := registryProject(t, `
+	dependencies, root, built := registryProject(t, `
   registry: { server: "ghcr.io", password: "`+token+`" },`)
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stdout)
-	err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 	if err == nil {
 		t.Fatal("runDeploy() took a pasted token as the name of an environment variable, and would authenticate as nobody")
 	}
@@ -90,12 +88,12 @@ func TestARegistryPasswordPastedAsATokenIsRefusedWithoutEchoingIt(t *testing.T) 
 
 func TestARegistryWhoseVariableIsSetDeploysAsUsual(t *testing.T) {
 	t.Setenv("OCEL_TEST_REGISTRY_TOKEN", "hunter2")
-	deps, root, _ := registryProject(t, `
+	dependencies, root, _ := registryProject(t, `
   registry: { server: "ghcr.io", password: "${OCEL_TEST_REGISTRY_TOKEN}" },`)
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stdout)
-	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy() err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	if said := stdout.String() + stderr.String(); strings.Contains(said, "hunter2") {
@@ -104,24 +102,23 @@ func TestARegistryWhoseVariableIsSetDeploysAsUsual(t *testing.T) {
 }
 
 func TestAProjectThatNamesNoRegistryDemandsNoSecret(t *testing.T) {
-	deps, root, _ := registryProject(t, "")
+	dependencies, root, _ := registryProject(t, "")
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stdout)
-	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy() err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 }
 
-func containerProject(t *testing.T, health string) (cmddeps.Deps, string, string) {
+func containerProject(t *testing.T, health string) (Dependencies, string, string) {
 	t.Helper()
 
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
-	clitest.StubBuild(&deps, []build.Function{
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, []build.Function{
 		{Route: "index", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
 	})
-	clitest.StubAppImages(&deps, "api")
+	stubAppImages(&dependencies, "api")
 
 	root, sockPath := clitest.SetUpDeployFixture(t)
 	t.Setenv(clitest.FakeComputesEnvVar, "container,serverless")
@@ -134,16 +131,16 @@ export default {
 };
 `)
 	clitest.WriteFile(t, filepath.Join(root, "apps", "api", "src", "server.ts"), "export {};\n")
-	return deps, root, sockPath
+	return dependencies, root, sockPath
 }
 
 func deployContainerProject(t *testing.T, health string) string {
 	t.Helper()
 
-	deps, root, sockPath := containerProject(t, health)
+	dependencies, root, sockPath := containerProject(t, health)
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stdout)
-	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	clitest.WaitForNoStaleSocket(t, sockPath)
@@ -176,11 +173,11 @@ func TestAContainersHealthPathIsTheOneTheAppNames(t *testing.T) {
 }
 
 func TestAContainerAppRendersADigestPinnedManifestUnderDry(t *testing.T) {
-	deps, root, sockPath := containerProject(t, "")
+	dependencies, root, sockPath := containerProject(t, "")
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stdout)
-	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true, dry: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true, dry: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy --dry err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
@@ -194,12 +191,12 @@ func TestAContainerAppRendersADigestPinnedManifestUnderDry(t *testing.T) {
 
 func TestTheRegistryTheProjectNamesRidesTheDeployWithItsSecretResolved(t *testing.T) {
 	t.Setenv("OCEL_TEST_REGISTRY_TOKEN", "hunter2")
-	deps, root, _ := registryProject(t, `
+	dependencies, root, _ := registryProject(t, `
   registry: { server: "ghcr.io", username: "acme-bot", password: "${OCEL_TEST_REGISTRY_TOKEN}" },`)
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stdout)
-	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy() err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
@@ -210,11 +207,11 @@ func TestTheRegistryTheProjectNamesRidesTheDeployWithItsSecretResolved(t *testin
 }
 
 func TestADeployThatNamesNoRegistrySendsNone(t *testing.T) {
-	deps, root, _ := registryProject(t, "")
+	dependencies, root, _ := registryProject(t, "")
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stdout)
-	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy() err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	if strings.Contains(stdout.String(), "REGISTRY ") {
@@ -224,9 +221,8 @@ func TestADeployThatNamesNoRegistrySendsNone(t *testing.T) {
 
 func TestAServerlessOnlyDeployStillSendsTheRegistryItsFunctionsMayBeRunFrom(t *testing.T) {
 	t.Setenv("OCEL_TEST_REGISTRY_TOKEN", "hunter2")
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
-	clitest.StubBuild(&deps, []build.Function{
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, []build.Function{
 		{Route: "index", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
 	})
 	root, _ := clitest.SetUpDeployFixture(t)
@@ -242,8 +238,8 @@ export default {
 	clitest.WriteFile(t, filepath.Join(root, "apps", "api", "src", "server.ts"), "export {};\n")
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stdout)
-	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy() err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	want := "REGISTRY server=ghcr.io"
@@ -253,22 +249,22 @@ export default {
 }
 
 func TestTheImageIsBuiltForTheArchitectureTheProviderSaysItsContainersRunOn(t *testing.T) {
-	deps, root, _ := registryProject(t, "")
+	dependencies, root, _ := registryProject(t, "")
 	t.Setenv(clitest.FakeContainerArchEnvVar, "arm64")
 	var required, built map[string]string
-	deps.RefuseUnbuildableImages = func(_ context.Context, _ *run.Span, _ *project.Project, archs map[string]string) error {
+	dependencies.RefuseUnbuildableImages = func(_ context.Context, _ *run.Span, _ *project.Project, archs map[string]string) error {
 		required = archs
 		return nil
 	}
-	buildApps := deps.BuildApps
-	deps.BuildApps = func(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, log build.Log) (build.Output, error) {
+	buildApps := dependencies.BuildApps
+	dependencies.BuildApps = func(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, log build.Log) (build.Output, error) {
 		built = archs
 		return buildApps(ctx, cfg, env, archs, log)
 	}
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stdout)
-	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy() err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	want := map[string]string{"api": "arm64"}
@@ -281,7 +277,7 @@ func TestTheImageIsBuiltForTheArchitectureTheProviderSaysItsContainersRunOn(t *t
 }
 
 func TestAnAppThatFallsBackToContainerIsBuiltForTheArchitectureTheProviderNames(t *testing.T) {
-	deps, root, _ := registryProject(t, "")
+	dependencies, root, _ := registryProject(t, "")
 	t.Setenv(clitest.FakeComputesEnvVar, "container")
 	t.Setenv(clitest.FakeContainerArchEnvVar, "arm64")
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
@@ -293,19 +289,19 @@ export default {
 };
 `)
 	var required, built map[string]string
-	deps.RefuseUnbuildableImages = func(_ context.Context, _ *run.Span, _ *project.Project, archs map[string]string) error {
+	dependencies.RefuseUnbuildableImages = func(_ context.Context, _ *run.Span, _ *project.Project, archs map[string]string) error {
 		required = archs
 		return nil
 	}
-	buildApps := deps.BuildApps
-	deps.BuildApps = func(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, log build.Log) (build.Output, error) {
+	buildApps := dependencies.BuildApps
+	dependencies.BuildApps = func(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, log build.Log) (build.Output, error) {
 		built = archs
 		return buildApps(ctx, cfg, env, archs, log)
 	}
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stdout)
-	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy() err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	want := map[string]string{"api": "arm64"}
@@ -318,16 +314,16 @@ export default {
 }
 
 func TestAPrebuiltDeployDoesNotAskWhetherThisMachineCanBuildImages(t *testing.T) {
-	deps, root, built := registryProject(t, "")
+	dependencies, root, built := registryProject(t, "")
 	asked := false
-	deps.RefuseUnbuildableImages = func(context.Context, *run.Span, *project.Project, map[string]string) error {
+	dependencies.RefuseUnbuildableImages = func(context.Context, *run.Span, *project.Project, map[string]string) error {
 		asked = true
 		return nil
 	}
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stdout)
-	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true, prebuilt: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true, prebuilt: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy() err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	if asked {

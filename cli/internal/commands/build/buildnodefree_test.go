@@ -20,12 +20,12 @@ func TestBuildingAGoProjectUnpacksNoNodeBundle(t *testing.T) {
 }
 `)
 
-	deps := clitest.NewDeps()
-	clitest.StubBuild(&deps, nil)
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, nil)
 
 	var out bytes.Buffer
-	clitest.AttachTerminalSink(deps, &out)
-	if err := runBuild(context.Background(), deps, root); err != nil {
+	clitest.AttachTerminalSink(dependencies.Invocation, &out)
+	if err := runBuild(context.Background(), dependencies, root); err != nil {
 		t.Fatalf("runBuild err = %v; out=%s", err, out.String())
 	}
 	if _, err := os.Stat(node.DistDir(root)); err == nil {

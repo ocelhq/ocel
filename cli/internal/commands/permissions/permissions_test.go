@@ -10,7 +10,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/edge"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
@@ -32,7 +32,7 @@ func TestPermissionsNeedsATier(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			cmd := NewCommand(cmddeps.Deps{})
+			cmd := NewCommand(commands.Invocation{})
 			var out bytes.Buffer
 			cmd.SetOut(&out)
 			cmd.SetErr(&out)
@@ -76,12 +76,11 @@ func TestPermissionsPurposeArg(t *testing.T) {
 func TestRunPermissions(t *testing.T) {
 	t.Run("it writes the document the provider renders for the purpose", func(t *testing.T) {
 		project := clitest.SetUpProject(t)
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
+		invocation := clitest.NewInvocation()
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stderr)
-		if err := Run(context.Background(), deps, project.Root, contractv1.CredentialPurpose_CREDENTIAL_PURPOSE_DEPLOY, &stdout); err != nil {
+		clitest.AttachTerminalSink(invocation, &stderr)
+		if err := Run(context.Background(), invocation, project.Root, contractv1.CredentialPurpose_CREDENTIAL_PURPOSE_DEPLOY, &stdout); err != nil {
 			t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "fake permissions for deploy") {
@@ -94,12 +93,11 @@ func TestRunPermissions(t *testing.T) {
 
 	t.Run("it writes the bootstrap document when the bootstrap purpose is asked for", func(t *testing.T) {
 		project := clitest.SetUpProject(t)
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
+		invocation := clitest.NewInvocation()
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stderr)
-		if err := Run(context.Background(), deps, project.Root, contractv1.CredentialPurpose_CREDENTIAL_PURPOSE_BOOTSTRAP, &stdout); err != nil {
+		clitest.AttachTerminalSink(invocation, &stderr)
+		if err := Run(context.Background(), invocation, project.Root, contractv1.CredentialPurpose_CREDENTIAL_PURPOSE_BOOTSTRAP, &stdout); err != nil {
 			t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "fake permissions for bootstrap") {
@@ -113,12 +111,11 @@ func TestRunPermissions(t *testing.T) {
 			Heading:  "relay token",
 			Document: "Account · Relay Scripts · Edit",
 		})
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
+		invocation := clitest.NewInvocation()
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stderr)
-		if err := Run(context.Background(), deps, project.Root, contractv1.CredentialPurpose_CREDENTIAL_PURPOSE_DEPLOY, &stdout); err != nil {
+		clitest.AttachTerminalSink(invocation, &stderr)
+		if err := Run(context.Background(), invocation, project.Root, contractv1.CredentialPurpose_CREDENTIAL_PURPOSE_DEPLOY, &stdout); err != nil {
 			t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		for _, want := range []string{
@@ -136,15 +133,14 @@ func TestRunPermissions(t *testing.T) {
 
 func TestPermissionsStartsTheProviderInTheCheckPhaseOfItsRunAndPrintsTheDocumentAloneOnStdout(t *testing.T) {
 	root := clitest.SetUpProject(t).Root
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
-	deps.Presentation = func(io.Writer) terminal.Presentation {
+	invocation := clitest.NewInvocation()
+	invocation.Presentation = func(io.Writer) terminal.Presentation {
 		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
 	}
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stderr)
-	if err := Run(context.Background(), deps, root, contractv1.CredentialPurpose_CREDENTIAL_PURPOSE_DEPLOY, &stdout); err != nil {
+	clitest.AttachTerminalSink(invocation, &stderr)
+	if err := Run(context.Background(), invocation, root, contractv1.CredentialPurpose_CREDENTIAL_PURPOSE_DEPLOY, &stdout); err != nil {
 		t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 

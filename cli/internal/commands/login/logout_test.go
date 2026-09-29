@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/console"
 )
 
@@ -21,17 +20,17 @@ func TestLogoutSignsOutAtTheStoredConsoleAndDeletesTheStoredCredentials(t *testi
 	}))
 	t.Cleanup(srv.Close)
 
-	deps := clitest.NewDeps()
-	deps.LoadCredentials = func() (console.Credentials, error) {
+	dependencies := newTestDependencies()
+	dependencies.LoadCredentials = func() (console.Credentials, error) {
 		return console.Credentials{AccessToken: "tok", APIURL: srv.URL + "/"}, nil
 	}
 	deleted := false
-	deps.DeleteCredentials = func() error {
+	dependencies.DeleteCredentials = func() error {
 		deleted = true
 		return nil
 	}
 
-	if err := runLogout(context.Background(), deps, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+	if err := runLogout(context.Background(), dependencies, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
 		t.Fatalf("runLogout err = %v", err)
 	}
 	if signedOut != "POST /api/auth/sign-out Bearer tok" {

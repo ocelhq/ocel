@@ -12,11 +12,19 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/console"
 )
 
-func NewCommand(deps cmddeps.Deps) *cobra.Command {
+type Dependencies struct {
+	commands.Invocation
+	LoadCredentials   func() (console.Credentials, error)
+	SaveCredentials   func(console.Credentials) (console.CredentialStore, error)
+	DeleteCredentials func() error
+	OpenBrowser       func(url string) error
+}
+
+func NewCommand(dependencies Dependencies) *cobra.Command {
 	var force bool
 	cmd := &cobra.Command{
 		Use:   "login",
@@ -26,15 +34,15 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 			"  $ OCEL_CONSOLE_URL=https://console.example.com ocel login",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return run(cmd.Context(), deps, force, cmd.InOrStdin(), cmd.OutOrStdout())
+			return run(cmd.Context(), dependencies, force, cmd.InOrStdin(), cmd.OutOrStdout())
 		},
 	}
 	cmd.Flags().BoolVar(&force, "force", false, "Log in again even if already logged in")
 	return cmd
 }
 
-func run(ctx context.Context, deps cmddeps.Deps, force bool, stdin io.Reader, out io.Writer) error {
-	existing, loadErr := deps.LoadCredentials()
+func run(ctx context.Context, dependencies Dependencies, force bool, stdin io.Reader, out io.Writer) error {
+	existing, loadErr := dependencies.LoadCredentials()
 	apiURL := console.BaseURL(existing.APIURL)
 
 	if loadErr == nil && !force && sameConsole(existing.APIURL, apiURL) {
@@ -60,8 +68,8 @@ func run(ctx context.Context, deps cmddeps.Deps, force bool, stdin io.Reader, ou
 	p := terminal.PaletteFor(out)
 	fmt.Fprintf(out, "Code     %s\n", p.Bold(code))
 	fmt.Fprintf(out, "Confirm  %s\n\n", p.Link(confirmURL))
-	if deps.BrowserReachable(stdin) {
-		_ = deps.OpenBrowser(confirmURL)
+	if dependencies.BrowserReachable(stdin) {
+		_ = dependencies.OpenBrowser(confirmURL)
 	}
 	fmt.Fprintln(out, p.Faint("Waiting for you to confirm the code…"))
 
@@ -79,7 +87,7 @@ func run(ctx context.Context, deps cmddeps.Deps, force bool, stdin io.Reader, ou
 		creds.Email = session.User.Email
 	}
 
-	store, err := deps.SaveCredentials(creds)
+	store, err := dependencies.SaveCredentials(creds)
 	if err != nil {
 		return fmt.Errorf("logged in, but failed to save credentials: %w", err)
 	}

@@ -107,8 +107,8 @@ func nameWidth(names []string) int {
 func featureRow(stdout io.Writer, catalogue []*contractv1.Feature, name string, width int) string {
 	f := catalogueEntry(catalogue, name)
 	row := fmt.Sprintf("%-*s   %s", width, name, f.GetSummary())
-	if deps := f.GetDependsOn(); len(deps) > 0 {
-		row += "  " + terminal.PaletteFor(stdout).Warning("(needs "+strings.Join(deps, ", ")+")")
+	if dependsOn := f.GetDependsOn(); len(dependsOn) > 0 {
+		row += "  " + terminal.PaletteFor(stdout).Warning("(needs "+strings.Join(dependsOn, ", ")+")")
 	}
 	return row
 }

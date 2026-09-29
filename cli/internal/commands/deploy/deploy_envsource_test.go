@@ -56,9 +56,9 @@ func TestADeployReadsItsTiersEnvSourceBeforeCheckingItsVariables(t *testing.T) {
 		})
 
 		var stdout, stderr bytes.Buffer
-		deps := clitest.NewDeps()
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		dependencies := newTestDependencies()
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "Deployed") {
@@ -70,9 +70,9 @@ func TestADeployReadsItsTiersEnvSourceBeforeCheckingItsVariables(t *testing.T) {
 		root := setUpInfisicalFixture(t, infisicalProduction, clitest.FakeEnvSource{URLs: infisicalURLs})
 
 		var stdout, stderr bytes.Buffer
-		deps := clitest.NewDeps()
-		clitest.AttachTerminalSink(deps, &stdout)
-		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		dependencies := newTestDependencies()
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDeploy err = nil, want the variables check to refuse")
 		}
@@ -93,9 +93,9 @@ func TestADeployReadsItsTiersEnvSourceBeforeCheckingItsVariables(t *testing.T) {
 		})
 
 		var stdout, stderr bytes.Buffer
-		deps := clitest.NewDeps()
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		dependencies := newTestDependencies()
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s", err, stdout.String())
 		}
 		if out := stdout.String(); !strings.Contains(out, "OLD_TOKEN") || !strings.Contains(out, "nothing this project declares") {
@@ -105,13 +105,13 @@ func TestADeployReadsItsTiersEnvSourceBeforeCheckingItsVariables(t *testing.T) {
 
 	t.Run("an env source that cannot be read stops the deploy before anything is built", func(t *testing.T) {
 		root := setUpInfisicalFixture(t, infisicalProduction, clitest.FakeEnvSource{ReadError: "Infisical answered 503"})
-		deps := clitest.NewDeps()
+		dependencies := newTestDependencies()
 		built := false
-		stubAppBuildRecorder(&deps, &built)
+		stubAppBuildRecorder(&dependencies, &built)
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil || built {
 			t.Fatalf("runDeploy err = %v, built = %v, want an unreadable env source to stop the deploy first", err, built)
 		}
@@ -127,9 +127,9 @@ func TestADeployReadsItsTiersEnvSourceBeforeCheckingItsVariables(t *testing.T) {
 		useFakeEnvSource(t, clitest.FakeEnvSource{})
 
 		var stdout, stderr bytes.Buffer
-		deps := clitest.NewDeps()
-		clitest.AttachTerminalSink(deps, &stdout)
-		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		dependencies := newTestDependencies()
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		out := stdout.String()
 		if err == nil || !strings.Contains(out, "1 variable is not ready") || !strings.Contains(out, "INFISICAL_CLIENT_SECRET  root  no value") {
 			t.Fatalf("runDeploy err = %v; stdout=%s, want the variables check to refuse the unset credential alone", err, out)
@@ -145,18 +145,18 @@ func TestADeployReadsItsTiersEnvSourceBeforeCheckingItsVariables(t *testing.T) {
 		useFakeEnvSource(t, clitest.FakeEnvSource{
 			Values: []clitest.FakeEnvSourceValue{{Key: "STRIPE_API_KEY", Value: "sk_live_from_infisical"}},
 		})
-		deps := clitest.NewDeps()
-		terminalStdin(&deps)
+		dependencies := newTestDependencies()
+		terminalStdin(&dependencies)
 		var mu sync.Mutex
 		var opened []string
-		recordBrowser(&deps, &opened, &mu)
+		recordBrowser(&dependencies, &opened, &mu)
 
 		var out syncBuffer
 		var stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &out)
+		clitest.AttachTerminalSink(dependencies.Invocation, &out)
 		done := make(chan error, 1)
 		go func() {
-			done <- runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
+			done <- runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 		}()
 
 		address, token := awaitEditorURL(t, &out, 1)
@@ -181,9 +181,9 @@ func TestADeployReadsItsTiersEnvSourceBeforeCheckingItsVariables(t *testing.T) {
 		root := setUpInfisicalFixture(t, strings.Replace(infisicalProduction, `environment: "prod",`, `environment: "prod", write: "missing",`, 1), clitest.FakeEnvSource{})
 
 		var stdout, stderr bytes.Buffer
-		deps := clitest.NewDeps()
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err == nil {
+		dependencies := newTestDependencies()
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err == nil {
 			t.Fatal("runDeploy err = nil, want the variables check to refuse: an empty key is still unset")
 		}
 		registrations, err := clitest.LoadFakeRegistrations()
@@ -203,9 +203,9 @@ func TestADeployReadsItsTiersEnvSourceBeforeCheckingItsVariables(t *testing.T) {
 		root := setUpInfisicalFixture(t, strings.Replace(infisicalProduction, `environment: "prod",`, `environment: "prod", write: "missing",`, 1), clitest.FakeEnvSource{})
 
 		var stdout, stderr bytes.Buffer
-		deps := clitest.NewDeps()
-		clitest.AttachTerminalSink(deps, &stdout)
-		_ = runDeploy(context.Background(), deps, root, deployOptions{yes: true, dry: true}, &stdout, &stderr, strings.NewReader(""))
+		dependencies := newTestDependencies()
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		_ = runDeploy(context.Background(), dependencies, root, deployOptions{yes: true, dry: true}, &stdout, &stderr, strings.NewReader(""))
 		registrations, err := clitest.LoadFakeRegistrations()
 		if err != nil {
 			t.Fatal(err)
@@ -226,9 +226,9 @@ func TestADeployReadsItsTiersEnvSourceBeforeCheckingItsVariables(t *testing.T) {
 			`production: { exec: { command: ["sh", "-c", "printf 'STRIPE_API_KEY=sk_from_exec'"], format: "dotenv" } },`, 1))
 
 		var stdout, stderr bytes.Buffer
-		deps := clitest.NewDeps()
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		dependencies := newTestDependencies()
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s", err, stdout.String())
 		}
 		store, err := clitest.LoadFakeStore()
@@ -250,9 +250,9 @@ func TestADeployReadsItsTiersEnvSourceBeforeCheckingItsVariables(t *testing.T) {
 			Values: []clitest.FakeEnvSourceValue{{Key: "STRIPE_API_KEY", Value: "sk"}},
 		})
 		var first, stderr bytes.Buffer
-		deps := clitest.NewDeps()
-		clitest.AttachTerminalSink(deps, &first)
-		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &first, &stderr, strings.NewReader("")); err != nil {
+		dependencies := newTestDependencies()
+		clitest.AttachTerminalSink(dependencies.Invocation, &first)
+		if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &first, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s", err, first.String())
 		}
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
@@ -264,9 +264,9 @@ export default {
 `)
 
 		var second bytes.Buffer
-		deps = clitest.NewDeps()
-		clitest.AttachTerminalSink(deps, &second)
-		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &second, &stderr, strings.NewReader("")); err != nil {
+		dependencies = newTestDependencies()
+		clitest.AttachTerminalSink(dependencies.Invocation, &second)
+		if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &second, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s", err, second.String())
 		}
 		registrations, err := clitest.LoadFakeRegistrations()

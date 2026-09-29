@@ -7,11 +7,22 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
+	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/variableeditor"
+	"github.com/ocelhq/ocel/cli/internal/variables"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
 
-func NewCommand(deps cmddeps.Deps) *cobra.Command {
+type Dependencies struct {
+	commands.Invocation
+	OpenBrowser         func(url string) error
+	ServeVariableEditor func(ctx context.Context, cfg *project.Project, provider *providerclient.Provider, tier environmentv1.Tier, declarations *variables.Declarations, recovery *variableeditor.Recovery) (*variableeditor.Session, error)
+}
+
+func NewCommand(dependencies Dependencies) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "env <command>",
 		Short:   "Manage this project's variable values",
@@ -22,21 +33,21 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 		},
 	}
 	cmd.AddCommand(
-		newLsCommand(deps),
-		newSetCommand(deps),
-		newGetCommand(deps),
-		newRmCommand(deps),
-		newRefCommand(deps),
-		newRefsCommand(deps),
-		newHistoryCommand(deps),
-		newUICommand(deps),
-		newEnvSourceCommand(deps),
-		newSyncCommand(deps),
+		newListCommand(dependencies),
+		newSetCommand(dependencies),
+		newGetCommand(dependencies),
+		newRemoveCommand(dependencies),
+		newRefCommand(dependencies),
+		newRefsCommand(dependencies),
+		newHistoryCommand(dependencies),
+		newUICommand(dependencies),
+		newEnvSourceCommand(dependencies),
+		newSyncCommand(dependencies),
 	)
-	return cmddeps.ReserveStdout(cmd)
+	return commands.ReserveStdout(cmd)
 }
 
-func newLsCommand(deps cmddeps.Deps) *cobra.Command {
+func newListCommand(dependencies Dependencies) *cobra.Command {
 	var opts envOptions
 	cmd := &cobra.Command{
 		Use:     "ls",
@@ -45,15 +56,15 @@ func newLsCommand(deps cmddeps.Deps) *cobra.Command {
 		Args:    cobra.NoArgs,
 	}
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
-		return withCommand(cmd, deps, func(ctx context.Context, cwd string) error {
-			return runEnvLs(ctx, deps, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return withCommand(cmd, dependencies, func(ctx context.Context, cwd string) error {
+			return runEnvList(ctx, dependencies, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		})
 	}
 	previewFlag(cmd, &opts)
 	return cmd
 }
 
-func newSetCommand(deps cmddeps.Deps) *cobra.Command {
+func newSetCommand(dependencies Dependencies) *cobra.Command {
 	var opts envOptions
 	cmd := &cobra.Command{
 		Use:     "set <KEY=VALUE>...",
@@ -66,8 +77,8 @@ func newSetCommand(deps cmddeps.Deps) *cobra.Command {
 		if err != nil {
 			return err
 		}
-		return withCommand(cmd, deps, func(ctx context.Context, cwd string) error {
-			return runEnvSetPairs(ctx, deps, cwd, pairs, opts, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return withCommand(cmd, dependencies, func(ctx context.Context, cwd string) error {
+			return runEnvSetPairs(ctx, dependencies, cwd, pairs, opts, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
 		})
 	}
 	valueFlags(cmd, &opts)
@@ -95,7 +106,7 @@ func parseEnvSetPairs(args []string) ([]envSetPair, error) {
 	return pairs, nil
 }
 
-func newGetCommand(deps cmddeps.Deps) *cobra.Command {
+func newGetCommand(dependencies Dependencies) *cobra.Command {
 	var opts envOptions
 	cmd := &cobra.Command{
 		Use:     "get <KEY>",
@@ -104,18 +115,18 @@ func newGetCommand(deps cmddeps.Deps) *cobra.Command {
 		Args:    cobra.ExactArgs(1),
 	}
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		return withCommand(cmd, deps, func(ctx context.Context, cwd string) error {
-			return runEnvGet(ctx, deps, cwd, args[0], opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return withCommand(cmd, dependencies, func(ctx context.Context, cwd string) error {
+			return runEnvGet(ctx, dependencies, cwd, args[0], opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		})
 	}
 	valueFlags(cmd, &opts)
 	environmentFlag(cmd, &opts)
 	cmd.Flags().BoolVar(&opts.reveal, "reveal", false, "Print the value")
-	cmddeps.Yes(cmd, &opts.yes)
+	commands.AddYesFlag(cmd, &opts.yes)
 	return cmd
 }
 
-func newRmCommand(deps cmddeps.Deps) *cobra.Command {
+func newRemoveCommand(dependencies Dependencies) *cobra.Command {
 	var opts envOptions
 	cmd := &cobra.Command{
 		Use:     "rm <KEY>",
@@ -124,8 +135,8 @@ func newRmCommand(deps cmddeps.Deps) *cobra.Command {
 		Args:    cobra.ExactArgs(1),
 	}
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		return withCommand(cmd, deps, func(ctx context.Context, cwd string) error {
-			return runEnvRm(ctx, deps, cwd, args[0], opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return withCommand(cmd, dependencies, func(ctx context.Context, cwd string) error {
+			return runEnvRemove(ctx, dependencies, cwd, args[0], opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		})
 	}
 	valueFlags(cmd, &opts)
@@ -133,7 +144,7 @@ func newRmCommand(deps cmddeps.Deps) *cobra.Command {
 	return cmd
 }
 
-func newRefCommand(deps cmddeps.Deps) *cobra.Command {
+func newRefCommand(dependencies Dependencies) *cobra.Command {
 	var opts envOptions
 	var ref envRefOptions
 	cmd := &cobra.Command{
@@ -144,8 +155,8 @@ func newRefCommand(deps cmddeps.Deps) *cobra.Command {
 		Args:    cobra.ExactArgs(1),
 	}
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		return withCommand(cmd, deps, func(ctx context.Context, cwd string) error {
-			return runEnvRef(ctx, deps, cwd, args[0], opts, ref, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return withCommand(cmd, dependencies, func(ctx context.Context, cwd string) error {
+			return runEnvRef(ctx, dependencies, cwd, args[0], opts, ref, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		})
 	}
 	valueFlags(cmd, &opts)
@@ -156,7 +167,7 @@ func newRefCommand(deps cmddeps.Deps) *cobra.Command {
 	return cmd
 }
 
-func newRefsCommand(deps cmddeps.Deps) *cobra.Command {
+func newRefsCommand(dependencies Dependencies) *cobra.Command {
 	var opts envOptions
 	cmd := &cobra.Command{
 		Use:     "refs <KEY>",
@@ -165,15 +176,15 @@ func newRefsCommand(deps cmddeps.Deps) *cobra.Command {
 		Args:    cobra.ExactArgs(1),
 	}
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		return withCommand(cmd, deps, func(ctx context.Context, cwd string) error {
-			return runEnvRefs(ctx, deps, cwd, args[0], opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return withCommand(cmd, dependencies, func(ctx context.Context, cwd string) error {
+			return runEnvRefs(ctx, dependencies, cwd, args[0], opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		})
 	}
 	valueFlags(cmd, &opts)
 	return cmd
 }
 
-func newHistoryCommand(deps cmddeps.Deps) *cobra.Command {
+func newHistoryCommand(dependencies Dependencies) *cobra.Command {
 	var opts envOptions
 	cmd := &cobra.Command{
 		Use:     "history <KEY>",
@@ -182,8 +193,8 @@ func newHistoryCommand(deps cmddeps.Deps) *cobra.Command {
 		Args:    cobra.ExactArgs(1),
 	}
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		return withCommand(cmd, deps, func(ctx context.Context, cwd string) error {
-			return runEnvHistory(ctx, deps, cwd, args[0], opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return withCommand(cmd, dependencies, func(ctx context.Context, cwd string) error {
+			return runEnvHistory(ctx, dependencies, cwd, args[0], opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		})
 	}
 	valueFlags(cmd, &opts)

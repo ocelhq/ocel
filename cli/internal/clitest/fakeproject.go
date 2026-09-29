@@ -4,9 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/build"
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
-	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
@@ -34,17 +31,11 @@ func Bootstrap(t *testing.T, p *fake.Provider, tier environment.Tier, features .
 	}
 }
 
-func SetUpMonorepoProject(t *testing.T, declaration string) (FakeProject, cmddeps.Deps) {
+func SetUpMonorepoProject(t *testing.T, declaration string) FakeProject {
 	t.Helper()
 
 	project := SetUpProject(t)
 	WriteUsageMonorepo(t, project.Root)
 	writeEdgeConfig(t, project.Root, declaration)
-
-	deps := NewDeps()
-	SetLoggedIn(&deps)
-	StubBuild(&deps, []build.Function{
-		{Route: "api", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
-	})
-	return project, deps
+	return project
 }

@@ -7,8 +7,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/commands/bootstrap"
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/run"
@@ -24,7 +24,7 @@ type domainOptions struct {
 	wait    bool
 }
 
-func NewCommand(deps cmddeps.Deps) *cobra.Command {
+func NewCommand(invocation commands.Invocation) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "domain",
 		Short: "Manage this project's production hostnames, and the domain every project's previews are served on",
@@ -36,12 +36,12 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 		Args: cobra.NoArgs,
 	}
 	cmd.AddCommand(
-		cmddeps.ReserveStdout(newStatusCommand(deps)),
-		newAddCommand(deps),
-		newRemoveCommand(deps),
-		newUseCommand(deps),
-		cmddeps.ReserveStdout(newListCommand(deps)),
-		newReleaseCommand(deps),
+		commands.ReserveStdout(newStatusCommand(invocation)),
+		newAddCommand(invocation),
+		newRemoveCommand(invocation),
+		newUseCommand(invocation),
+		commands.ReserveStdout(newListCommand(invocation)),
+		newReleaseCommand(invocation),
 	)
 	return cmd
 }
@@ -69,8 +69,8 @@ func globalPreviewBaseDomain(wildcard string) (string, error) {
 	return project.PreviewBaseDomain(host), nil
 }
 
-func startReadyProvider(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, check *run.Span, tier environmentv1.Tier) (*providerclient.Provider, error) {
-	prov, err := providerclient.Start(ctx, cfg, check, deps.Questions, providerclient.PinToLock)
+func startReadyProvider(ctx context.Context, invocation commands.Invocation, cfg *project.Project, check *run.Span, tier environmentv1.Tier) (*providerclient.Provider, error) {
+	prov, err := providerclient.Start(ctx, cfg, check, invocation.Questions, providerclient.PinToLock)
 	if err != nil {
 		return nil, err
 	}
@@ -81,19 +81,19 @@ func startReadyProvider(ctx context.Context, deps cmddeps.Deps, cfg *project.Pro
 	return prov, nil
 }
 
-func readDomain(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, command string, tier environmentv1.Tier, reading progress.Title, read func(context.Context, contractv1connect.ProviderServiceClient) error) (err error) {
+func readDomain(ctx context.Context, invocation commands.Invocation, cfg *project.Project, command string, tier environmentv1.Tier, reading progress.Title, read func(context.Context, contractv1connect.ProviderServiceClient) error) (err error) {
 	if _, err := cfg.RequireProvider(); err != nil {
 		return err
 	}
 
-	ctx, run, err := deps.Events.Begin(ctx, command, cfg.Dir)
+	ctx, run, err := invocation.Events.Begin(ctx, command, cfg.Dir)
 	if err != nil {
 		return err
 	}
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := startReadyProvider(ctx, deps, cfg, check, tier)
+	prov, err := startReadyProvider(ctx, invocation, cfg, check, tier)
 	if err != nil {
 		return err
 	}

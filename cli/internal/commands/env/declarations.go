@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
@@ -17,7 +16,7 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
-func declaredVariables(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, prov *providerclient.Provider, key string, opts envOptions, run *run.Run) ([]*resourcesv1.VariableDefinition, []*resourcesv1.GroupDefinition, error) {
+func declaredVariables(ctx context.Context, dependencies Dependencies, cfg *project.Project, prov *providerclient.Provider, key string, opts envOptions, run *run.Run) ([]*resourcesv1.VariableDefinition, []*resourcesv1.GroupDefinition, error) {
 	prepared, err := declaration.Prepare(cfg)
 	if err != nil {
 		return nil, nil, err

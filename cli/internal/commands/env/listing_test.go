@@ -25,8 +25,8 @@ func TestTheListingShowsMetadataButNeverValues(t *testing.T) {
 		envSet(t, root, "POSTHOG_ID", "ph_public_id", envOptions{folder: "/web"})
 
 		var stdout, stderr bytes.Buffer
-		if err := runEnvLs(context.Background(), streamedDeps(&stderr), root, envOptions{}, &stdout, &stderr); err != nil {
-			t.Fatalf("runEnvLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		if err := runEnvList(context.Background(), newStreamedDependencies(&stderr), root, envOptions{}, &stdout, &stderr); err != nil {
+			t.Fatalf("runEnvList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
 		out := stdout.String()
@@ -46,8 +46,8 @@ func TestTheListingShowsMetadataButNeverValues(t *testing.T) {
 		root := setUpEnvFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		if err := runEnvLs(context.Background(), streamedDeps(&stderr), root, envOptions{}, &stdout, &stderr); err != nil {
-			t.Fatalf("runEnvLs err = %v; stderr=%s", err, stderr.String())
+		if err := runEnvList(context.Background(), newStreamedDependencies(&stderr), root, envOptions{}, &stdout, &stderr); err != nil {
+			t.Fatalf("runEnvList err = %v; stderr=%s", err, stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "ocel env set") {
 			t.Errorf("ls on an empty store = %q, want it to name the command that fills it", stdout.String())
@@ -61,8 +61,8 @@ func TestTheListingShowsMetadataButNeverValues(t *testing.T) {
 		t.Setenv(clitest.FakeEnvironmentsEnvVar, "staging")
 
 		var ls bytes.Buffer
-		if err := runEnvLs(context.Background(), streamedDeps(&ls), root, envOptions{}, &ls, &ls); err != nil {
-			t.Fatalf("runEnvLs err = %v; out=%s", err, ls.String())
+		if err := runEnvList(context.Background(), newStreamedDependencies(&ls), root, envOptions{}, &ls, &ls); err != nil {
+			t.Fatalf("runEnvList err = %v; out=%s", err, ls.String())
 		}
 		if !strings.Contains(ls.String(), "orphaned") {
 			t.Errorf("ls = %q, want the production row marked orphaned: no production function reads a named environment", ls.String())
@@ -143,15 +143,15 @@ func TestTheListingNamesFoldersOrphansAndDescriptions(t *testing.T) {
 func TestListingValuesSaysWhoItActsAsInTheCheckPhaseOfItsRunAndPrintsTheListingAloneOnStdout(t *testing.T) {
 	root := setUpEnvFixture(t)
 	envSet(t, root, "LOG_LEVEL", "debug", envOptions{})
-	deps := clitest.NewDeps()
-	deps.Presentation = func(io.Writer) terminal.Presentation {
+	dependencies := newTestDependencies()
+	dependencies.Presentation = func(io.Writer) terminal.Presentation {
 		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
 	}
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stderr)
-	if err := runEnvLs(context.Background(), deps, root, envOptions{}, &stdout, &stderr); err != nil {
-		t.Fatalf("runEnvLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	clitest.AttachTerminalSink(dependencies.Invocation, &stderr)
+	if err := runEnvList(context.Background(), dependencies, root, envOptions{}, &stdout, &stderr); err != nil {
+		t.Fatalf("runEnvList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
 	evs := clitest.RunEvents(t, stderr.String())

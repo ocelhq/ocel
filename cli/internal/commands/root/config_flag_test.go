@@ -62,7 +62,7 @@ export default { slug: "test-app" };
 `)
 
 	configFlag = filepath.Join(".", "nope.ts")
-	_, err := newDeps().LoadProject(context.Background(), root)
+	_, err := newInvocation().LoadProject(context.Background(), root)
 	if err == nil {
 		t.Fatal("LoadProject err = nil, want a refusal for a --config path that names nothing")
 	}

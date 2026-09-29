@@ -13,7 +13,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/appurl"
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
 	"github.com/ocelhq/ocel/cli/internal/manifest"
@@ -40,11 +39,11 @@ type assembly struct {
 	urls           map[string]string
 }
 
-func collectBuildAndAssemble(ctx context.Context, deps cmddeps.Deps, a assembly) (*contractv1.Manifest, []*bindingsv1.Binding, error) {
+func collectBuildAndAssemble(ctx context.Context, dependencies Dependencies, a assembly) (*contractv1.Manifest, []*bindingsv1.Binding, error) {
 	cfg, declarations, span := a.cfg, a.declarations, a.span
 	captured := &boundedCapture{}
 	tee := io.MultiWriter(span.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED), captured)
-	resources, err := deps.CollectDeclarations(ctx, cfg, declarations, tee, tee)
+	resources, err := dependencies.CollectDeclarations(ctx, cfg, declarations, tee, tee)
 	if err != nil {
 		return nil, nil, captured.annotate(err)
 	}
@@ -76,14 +75,14 @@ func collectBuildAndAssemble(ctx context.Context, deps cmddeps.Deps, a assembly)
 		return nil, nil, err
 	}
 	steps := newBuildSteps(a.phase)
-	built, err := buildApps(ctx, deps, a, steps, clientenv.AppsOf(cfg, values))
+	built, err := buildApps(ctx, dependencies, a, steps, clientenv.AppsOf(cfg, values))
 	if err != nil {
 		return nil, nil, err
 	}
 
 	var assembled *contractv1.Manifest
 	if err := steps.run(cfg.Slug, progress.Assembling.Title("the deploy manifest of "+cfg.Slug), func() (err error) {
-		assembled, err = assembleManifest(ctx, deps, a, resources, values, built)
+		assembled, err = assembleManifest(ctx, dependencies, a, resources, values, built)
 		return err
 	}); err != nil || assembled == nil {
 		return nil, nil, err
@@ -91,13 +90,13 @@ func collectBuildAndAssemble(ctx context.Context, deps cmddeps.Deps, a assembly)
 	return assembled, inline, nil
 }
 
-func buildApps(ctx context.Context, deps cmddeps.Deps, a assembly, steps *buildSteps, clients []clientenv.App) (build.Output, error) {
+func buildApps(ctx context.Context, dependencies Dependencies, a assembly, steps *buildSteps, clients []clientenv.App) (build.Output, error) {
 	cfg, span := a.cfg, a.span
 	if a.prebuilt {
 		if err := clientenv.CheckFresh(cfg.Dir, clients); err != nil {
 			return build.Output{}, err
 		}
-		built, err := deps.ReadPrebuilt(ctx, cfg, a.containerArchs)
+		built, err := dependencies.ReadPrebuilt(ctx, cfg, a.containerArchs)
 		if err != nil {
 			return build.Output{}, err
 		}
@@ -116,7 +115,7 @@ func buildApps(ctx context.Context, deps cmddeps.Deps, a assembly, steps *buildS
 	span.End(nil)
 	var built build.Output
 	err := steps.run(cfg.Slug, progress.Building.Title(appList(cfg)), func() (err error) {
-		built, err = deps.BuildApps(ctx, cfg, build.Env(clients), a.containerArchs, steps.log())
+		built, err = dependencies.BuildApps(ctx, cfg, build.Env(clients), a.containerArchs, steps.log())
 		if err != nil {
 			return err
 		}
@@ -125,7 +124,7 @@ func buildApps(ctx context.Context, deps cmddeps.Deps, a assembly, steps *buildS
 	return built, err
 }
 
-func assembleManifest(ctx context.Context, deps cmddeps.Deps, a assembly, resources []declaration.Resource, values map[string][]variables.Variable, built build.Output) (*contractv1.Manifest, error) {
+func assembleManifest(ctx context.Context, dependencies Dependencies, a assembly, resources []declaration.Resource, values map[string][]variables.Variable, built build.Output) (*contractv1.Manifest, error) {
 	cfg := a.cfg
 	onEdge, err := build.EdgeApps(cfg.Dir)
 	if err != nil {
@@ -157,7 +156,7 @@ func assembleManifest(ctx context.Context, deps cmddeps.Deps, a assembly, resour
 		Variables:    values,
 		Built:        built,
 		Usages:       usages,
-		DeploymentID: deps.DeploymentID,
+		DeploymentID: dependencies.DeploymentID,
 	})
 }
 

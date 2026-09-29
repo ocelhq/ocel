@@ -8,10 +8,16 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/build"
+	"github.com/ocelhq/ocel/cli/internal/commands"
+	"github.com/ocelhq/ocel/cli/internal/consent"
+	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/deployrecord"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/valuestore"
+	"github.com/ocelhq/ocel/cli/internal/variableeditor"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -29,7 +35,20 @@ type deployOptions struct {
 	prebuilt bool
 }
 
-func NewCommand(deps cmddeps.Deps) *cobra.Command {
+type Dependencies struct {
+	commands.Invocation
+	BuildApps               func(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, log build.Log) (build.Output, error)
+	RefuseUnbuildableImages func(ctx context.Context, span *run.Span, cfg *project.Project, archs map[string]string) error
+	ReadPrebuilt            func(ctx context.Context, cfg *project.Project, archs map[string]string) (build.Output, error)
+	DeploymentID            func(projectDir, app string) (string, error)
+	CollectDeclarations     func(ctx context.Context, cfg *project.Project, declarations *variables.Declarations, stdout, stderr io.Writer) ([]declaration.Resource, error)
+	OpenBrowser             func(url string) error
+	ServeVariableEditor     func(ctx context.Context, cfg *project.Project, provider *providerclient.Provider, tier environmentv1.Tier, declarations *variables.Declarations, recovery *variableeditor.Recovery) (*variableeditor.Session, error)
+	ReadGitBranch           func(dir string) (string, error)
+	DiscoverPRNumber        func() string
+}
+
+func NewCommand(dependencies Dependencies) *cobra.Command {
 	var opts deployOptions
 
 	cmd := &cobra.Command{
@@ -53,11 +72,11 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 			}
 
 			opts := opts
-			return runDeploy(cmd.Context(), deps, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+			return runDeploy(cmd.Context(), dependencies, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 		},
 	}
 
-	cmddeps.Yes(cmd, &opts.yes)
+	commands.AddYesFlag(cmd, &opts.yes)
 	cmd.Flags().StringVar(&opts.tag, "tag", "", "Mark this deploy with an immutable `label` to roll back to by name (ocel rollback --tag)")
 	cmd.Flags().BoolVar(&opts.prebuilt, "prebuilt", false, prebuiltFlagUsage)
 	cmd.Flags().BoolVar(&opts.dry, "dry", false, dryFlagUsage)
@@ -65,8 +84,8 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 	return cmd
 }
 
-func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOptions, stdout, stderr io.Writer, stdin io.Reader) (err error) {
-	cfg, err := deps.LoadProject(ctx, cwd)
+func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts deployOptions, stdout, stderr io.Writer, stdin io.Reader) (err error) {
+	cfg, err := dependencies.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}
@@ -80,26 +99,26 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 	if _, err := cfg.RequireProvider(); err != nil {
 		return err
 	}
-	policy := deps.ConsentPolicy("ocel deploy", opts.yes, stdout, stdin)
+	policy := consent.NewPolicy("ocel deploy", opts.yes, dependencies.StdinIsTerminal(stdin), stdout, stdin)
 	policy.DryRun = opts.dry
 	if err := policy.Refuse(); err != nil {
 		return err
 	}
 
-	ctx, run, err := deps.Events.Begin(ctx, "ocel deploy", cfg.Dir)
+	ctx, run, err := dependencies.Events.Begin(ctx, "ocel deploy", cfg.Dir)
 	if err != nil {
 		return err
 	}
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := providerclient.Start(ctx, cfg, check, deps.Questions, providerclient.ChoosePinning(opts.dry))
+	prov, err := providerclient.Start(ctx, cfg, check, dependencies.Questions, providerclient.ChoosePinning(opts.dry))
 	if err != nil {
 		return err
 	}
 	defer prov.Close()
 
-	facts, err := preflightDeploy(ctx, deps, policy, check, prov, cfg, opts.prebuilt, stdout, stdin)
+	facts, err := preflightDeploy(ctx, dependencies, policy, check, prov, cfg, opts.prebuilt, stdout, stdin)
 	check.End(err)
 	if err != nil {
 		return err
@@ -110,14 +129,14 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 	}
 	cfg = facts.project
 
-	browser := deps.BrowserReachable(stdin)
+	browser := dependencies.BrowserReachable(stdin)
 	scope := variablescope.Of(cfg, environmentv1.Tier_TIER_PRODUCTION, "")
 	scope.Browser = browser
 	recovery := variablesRecovery{
-		deps: deps,
-		cfg:  cfg,
-		prov: prov,
-		tier: environmentv1.Tier_TIER_PRODUCTION,
+		dependencies: dependencies,
+		cfg:          cfg,
+		prov:         prov,
+		tier:         environmentv1.Tier_TIER_PRODUCTION,
 		newDeclarations: func(synced variables.EnvSource) *variables.Declarations {
 			scope := scope
 			scope.EnvSource = synced

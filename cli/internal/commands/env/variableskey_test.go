@@ -18,7 +18,7 @@ func TestAWriteWithoutTheVariablesKeyOffersTheBootstrapThatAddsIt(t *testing.T) 
 		root := setUpEnvFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvSet(context.Background(), streamedDeps(&stderr), root, "LOG_LEVEL", "debug", envOptions{}, nil, &stdout, &stderr)
+		err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), root, "LOG_LEVEL", "debug", envOptions{}, nil, &stdout, &stderr)
 		if err == nil {
 			t.Fatalf("runEnvSet err = nil, want it refused for want of a key; stdout=%s stderr=%s", stdout.String(), stderr.String())
 		}
@@ -35,8 +35,8 @@ func TestAWriteWithoutTheVariablesKeyOffersTheBootstrapThatAddsIt(t *testing.T) 
 		root := setUpEnvFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		if err := runEnvLs(context.Background(), streamedDeps(&stderr), root, envOptions{}, &stdout, &stderr); err != nil {
-			t.Fatalf("runEnvLs err = %v, want a read to go through a bootstrap with no key; stderr=%s", err, stderr.String())
+		if err := runEnvList(context.Background(), newStreamedDependencies(&stderr), root, envOptions{}, &stdout, &stderr); err != nil {
+			t.Fatalf("runEnvList err = %v, want a read to go through a bootstrap with no key; stderr=%s", err, stderr.String())
 		}
 	})
 
@@ -45,7 +45,7 @@ func TestAWriteWithoutTheVariablesKeyOffersTheBootstrapThatAddsIt(t *testing.T) 
 		root := setUpEnvFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		if err := runEnvSet(context.Background(), streamedDeps(&stderr), root, "LOG_LEVEL", "debug", envOptions{}, nil, &stdout, &stderr); err != nil {
+		if err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), root, "LOG_LEVEL", "debug", envOptions{}, nil, &stdout, &stderr); err != nil {
 			t.Fatalf("runEnvSet err = %v, want the write to land; stderr=%s", err, stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "Set LOG_LEVEL") {
@@ -58,7 +58,7 @@ func TestAWriteWithoutTheVariablesKeyOffersTheBootstrapThatAddsIt(t *testing.T) 
 		root := setUpEnvFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvSet(context.Background(), streamedDeps(&stderr), root, "LOG_LEVEL", "debug", envOptions{}, nil, &stdout, &stderr)
+		err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), root, "LOG_LEVEL", "debug", envOptions{}, nil, &stdout, &stderr)
 		if err == nil {
 			t.Fatalf("runEnvSet err = nil, want it refused for want of a key; stdout=%s stderr=%s", stdout.String(), stderr.String())
 		}
@@ -75,8 +75,8 @@ func TestAWriteWithoutTheVariablesKeyOffersTheBootstrapThatAddsIt(t *testing.T) 
 		root := setUpEnvFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		if err := runEnvRm(context.Background(), streamedDeps(&stderr), root, "STRIPE_API_KEY", envOptions{}, &stdout, &stderr); err != nil {
-			t.Fatalf("runEnvRm err = %v, want a removal to go through a bootstrap with no key; stderr=%s", err, stderr.String())
+		if err := runEnvRemove(context.Background(), newStreamedDependencies(&stderr), root, "STRIPE_API_KEY", envOptions{}, &stdout, &stderr); err != nil {
+			t.Fatalf("runEnvRemove err = %v, want a removal to go through a bootstrap with no key; stderr=%s", err, stderr.String())
 		}
 	})
 
@@ -86,7 +86,7 @@ func TestAWriteWithoutTheVariablesKeyOffersTheBootstrapThatAddsIt(t *testing.T) 
 
 		var stdout, stderr bytes.Buffer
 		ref := envRefOptions{project: "platform"}
-		if err := runEnvRef(context.Background(), streamedDeps(&stderr), root, "STRIPE_API_KEY", envOptions{}, ref, &stdout, &stderr); err != nil {
+		if err := runEnvRef(context.Background(), newStreamedDependencies(&stderr), root, "STRIPE_API_KEY", envOptions{}, ref, &stdout, &stderr); err != nil {
 			t.Fatalf("runEnvRef err = %v, want a reference to go through a bootstrap with no key; stderr=%s", err, stderr.String())
 		}
 	})
@@ -96,11 +96,11 @@ func TestAWriteWithoutTheVariablesKeyOffersTheBootstrapThatAddsIt(t *testing.T) 
 		journal := filepath.Join(t.TempDir(), "edge.journal")
 		t.Setenv(clitest.FakeEdgeJournalEnvVar, journal)
 		root := setUpEnvFixture(t)
-		deps := clitest.NewDeps()
-		deps.StdinIsTerminal = func(io.Reader) bool { return true }
+		dependencies := newTestDependencies()
+		dependencies.StdinIsTerminal = func(io.Reader) bool { return true }
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvSet(context.Background(), deps, root, "LOG_LEVEL", "debug", envOptions{}, strings.NewReader("y\n"), &stdout, &stderr)
+		err := runEnvSet(context.Background(), dependencies, root, "LOG_LEVEL", "debug", envOptions{}, strings.NewReader("y\n"), &stdout, &stderr)
 		if err != nil {
 			t.Fatalf("runEnvSet err = %v, want the offer taken and the write landed; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -127,7 +127,7 @@ func TestAProviderWithoutTheVariablesKeyFeatureIsOfferedNothing(t *testing.T) {
 		root := setUpEnvFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		if err := runEnvSet(context.Background(), streamedDeps(&stderr), root, "LOG_LEVEL", "debug", envOptions{}, nil, &stdout, &stderr); err != nil {
+		if err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), root, "LOG_LEVEL", "debug", envOptions{}, nil, &stdout, &stderr); err != nil {
 			t.Fatalf("runEnvSet err = %v, want a provider that has no such feature never asked for it; stderr=%s", err, stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "Set LOG_LEVEL") {
@@ -141,11 +141,11 @@ func TestAProviderWithoutTheVariablesKeyFeatureIsOfferedNothing(t *testing.T) {
 		journal := filepath.Join(t.TempDir(), "edge.journal")
 		t.Setenv(clitest.FakeEdgeJournalEnvVar, journal)
 		root := setUpEnvFixture(t)
-		deps := clitest.NewDeps()
-		deps.StdinIsTerminal = func(io.Reader) bool { return true }
+		dependencies := newTestDependencies()
+		dependencies.StdinIsTerminal = func(io.Reader) bool { return true }
 
 		var stdout, stderr bytes.Buffer
-		if err := runEnvSet(context.Background(), deps, root, "LOG_LEVEL", "debug", envOptions{}, strings.NewReader("y\n"), &stdout, &stderr); err != nil {
+		if err := runEnvSet(context.Background(), dependencies, root, "LOG_LEVEL", "debug", envOptions{}, strings.NewReader("y\n"), &stdout, &stderr); err != nil {
 			t.Fatalf("runEnvSet err = %v, want the write to land unbidden; stderr=%s", err, stderr.String())
 		}
 		if strings.Contains(stderr.String(), "Run `ocel bootstrap") {

@@ -16,7 +16,6 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/ocelhq/ocel/cli/internal/build"
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/manifest"
 	"github.com/ocelhq/ocel/cli/internal/preflight"
 	"github.com/ocelhq/ocel/cli/internal/project"
@@ -72,7 +71,7 @@ type Options struct {
 	Usage   string
 }
 
-func Run(ctx context.Context, deps cmddeps.Deps, cwd string, opts Options, stdout io.Writer) (err error) {
+func Run(ctx context.Context, dependencies Dependencies, cwd string, opts Options, stdout io.Writer) (err error) {
 	env, err := environmentOf(opts.Env)
 	if err != nil {
 		return err
@@ -85,7 +84,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, opts Options, stdou
 	if err != nil {
 		return err
 	}
-	cfg, err := deps.LoadProject(ctx, cwd)
+	cfg, err := dependencies.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}
@@ -94,14 +93,14 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, opts Options, stdou
 		return err
 	}
 
-	ctx, run, err := deps.Events.Begin(ctx, "ocel cost scan", cfg.Dir)
+	ctx, run, err := dependencies.Events.Begin(ctx, "ocel cost scan", cfg.Dir)
 	if err != nil {
 		return err
 	}
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := providerclient.Start(ctx, cfg, check, deps.Questions, providerclient.PinToLock)
+	prov, err := providerclient.Start(ctx, cfg, check, dependencies.Questions, providerclient.PinToLock)
 	check.End(err)
 	if err != nil {
 		return err
@@ -109,18 +108,18 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, opts Options, stdou
 	defer prov.Close()
 
 	pricing := run.Phase(progressv1.Phase_PHASE_PLAN).Unit(cfg.Slug, progress.Pricing.Title("what a deploy would provision"))
-	set, estimates, assumptions, err := price(ctx, deps, prov, cfg, env, overrides, pricing.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED))
+	set, estimates, assumptions, err := price(ctx, dependencies, prov, cfg, env, overrides, pricing.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED))
 	pricing.End(err)
 	if err != nil {
 		return err
 	}
-	if deps.Presentation(stdout).Format == terminal.FormatJSON {
+	if dependencies.Presentation(stdout).Format == terminal.FormatJSON {
 		return writeJSON(stdout, set, estimates[profile], assumptions)
 	}
 	return render(stdout, cfg.Slug, set, estimates, profile, assumptions)
 }
 
-func price(ctx context.Context, deps cmddeps.Deps, prov *providerclient.Provider, cfg *project.Project, env *environmentv1.Environment, overrides map[string]*structpb.Struct, out io.Writer) (*costv1.ResourceSet, map[costv1.Profile]*costv1.Estimate, []string, error) {
+func price(ctx context.Context, dependencies Dependencies, prov *providerclient.Provider, cfg *project.Project, env *environmentv1.Environment, overrides map[string]*structpb.Struct, out io.Writer) (*costv1.ResourceSet, map[costv1.Profile]*costv1.Estimate, []string, error) {
 	if !prov.Facts().GetPricesDeploys() {
 		return nil, nil, nil, fmt.Errorf("%s does not price a deploy, so there is nothing to scan", prov.Name())
 	}
@@ -128,7 +127,7 @@ func price(ctx context.Context, deps cmddeps.Deps, prov *providerclient.Provider
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	manifest, assumptions, err := scanManifest(ctx, deps, resolved, env, out)
+	manifest, assumptions, err := scanManifest(ctx, dependencies, resolved, env, out)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -221,13 +220,13 @@ func (unread) Reveal(context.Context, []variables.Coordinate) (map[variables.Coo
 
 const unbuiltDigest = "0000000000000000000000000000000000000000000000000000000000000000"
 
-func scanManifest(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, env *environmentv1.Environment, out io.Writer) (*contractv1.Manifest, []string, error) {
+func scanManifest(ctx context.Context, dependencies Dependencies, cfg *project.Project, env *environmentv1.Environment, out io.Writer) (*contractv1.Manifest, []string, error) {
 	declarations := variables.NewDeclarations(unread{}, variablescope.Of(cfg, env.GetTier(), ""))
-	resources, err := deps.CollectDeclarations(ctx, cfg, declarations, out, out)
+	resources, err := dependencies.CollectDeclarations(ctx, cfg, declarations, out, out)
 	if err != nil {
 		return nil, nil, err
 	}
-	built, assumptions, err := scannedOutput(deps, cfg)
+	built, assumptions, err := scannedOutput(dependencies, cfg)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -243,14 +242,14 @@ func scanManifest(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, 
 	return scanned, assumptions, nil
 }
 
-func scannedOutput(deps cmddeps.Deps, cfg *project.Project) (build.Output, []string, error) {
+func scannedOutput(dependencies Dependencies, cfg *project.Project) (build.Output, []string, error) {
 	images := make(map[string]string, len(cfg.Apps))
 	for _, a := range cfg.Apps {
 		if a.RunsOn(provider.ComputeContainer) {
 			images[a.Name] = cfg.Slug + "/" + a.Name + "@sha256:" + unbuiltDigest
 		}
 	}
-	functions, err := deps.ReadFunctions(cfg.Dir)
+	functions, err := dependencies.ReadFunctions(cfg.Dir)
 	if errors.Is(err, build.ErrNoBuildOutput) {
 		return build.Output{Functions: unbuiltFunctions(cfg), Images: images}, []string{unbuiltAssumption}, nil
 	}

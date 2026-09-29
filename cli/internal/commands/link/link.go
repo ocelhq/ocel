@@ -14,7 +14,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
@@ -29,7 +29,12 @@ type options struct {
 	apiURL string
 }
 
-func NewCommand(deps cmddeps.Deps) *cobra.Command {
+type Dependencies struct {
+	commands.Invocation
+	LoadCredentials func() (console.Credentials, error)
+}
+
+func NewCommand(dependencies Dependencies) *cobra.Command {
 	var opts options
 	cmd := &cobra.Command{
 		Use:   "link [project]",
@@ -44,7 +49,7 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
-			dir, err := projectDir(cmd.Context(), deps, cwd)
+			dir, err := projectDir(cmd.Context(), dependencies, cwd)
 			if err != nil {
 				return err
 			}
@@ -53,9 +58,9 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 				projectRef = args[0]
 			}
 			opts := opts
-			creds, _ := deps.LoadCredentials()
+			creds, _ := dependencies.LoadCredentials()
 			opts.apiURL = console.BaseURL(creds.APIURL)
-			return runLink(cmd.Context(), deps, dir, projectRef, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+			return runLink(cmd.Context(), dependencies, dir, projectRef, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 		},
 	}
 	cmd.Flags().StringVar(&opts.org, "org", "", "Organization `slug`, instead of picking one")
@@ -63,13 +68,13 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 	return cmd
 }
 
-func runLink(ctx context.Context, deps cmddeps.Deps, projectDir, projectRef string, opts options, stdout, stderr io.Writer, stdin io.Reader) (err error) {
-	creds, err := console.RequireLogin(deps.LoadCredentials, stderr)
+func runLink(ctx context.Context, dependencies Dependencies, projectDir, projectRef string, opts options, stdout, stderr io.Writer, stdin io.Reader) (err error) {
+	creds, err := console.RequireLogin(dependencies.LoadCredentials, stderr)
 	if err != nil {
 		return err
 	}
 
-	ctx, linking, err := deps.Events.Begin(ctx, "ocel link", "")
+	ctx, linking, err := dependencies.Events.Begin(ctx, "ocel link", "")
 	if err != nil {
 		return err
 	}

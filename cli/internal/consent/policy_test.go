@@ -301,7 +301,7 @@ func TestYesTakesTheCommandOutOfTheAskingBusinessAltogether(t *testing.T) {
 		{"no terminal", false, false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			g := consent.Policy{Yes: tc.yes, Interactive: tc.interactive}
+			g := consent.NewPolicy("ocel test", tc.yes, tc.interactive, &bytes.Buffer{}, strings.NewReader(""))
 			if got := g.IsAsking(); got != tc.want {
 				t.Errorf("IsAsking() = %v, want %v", got, tc.want)
 			}

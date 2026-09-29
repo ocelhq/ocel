@@ -18,3 +18,7 @@ func TestMain(m *testing.M) {
 	done()
 	os.Exit(code)
 }
+
+func newTestDependencies() Dependencies {
+	return Dependencies{Invocation: clitest.NewInvocation()}
+}

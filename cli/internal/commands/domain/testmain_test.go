@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 )
 
@@ -31,10 +31,10 @@ func useJSONOutput(t *testing.T) {
 	testLogFormat = terminal.FormatJSON
 }
 
-func newTestDeps() cmddeps.Deps {
-	deps := clitest.NewDeps()
-	deps.Presentation = func(io.Writer) terminal.Presentation {
+func newTestInvocation() commands.Invocation {
+	invocation := clitest.NewInvocation()
+	invocation.Presentation = func(io.Writer) terminal.Presentation {
 		return terminal.Resolve(terminal.Conditions{LogFormat: testLogFormat})
 	}
-	return deps
+	return invocation
 }

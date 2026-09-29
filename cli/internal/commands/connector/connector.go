@@ -12,7 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/project"
@@ -45,7 +45,12 @@ func (o options) grants() []string {
 	return capabilities
 }
 
-func NewCommand(deps cmddeps.Deps) *cobra.Command {
+type Dependencies struct {
+	commands.Invocation
+	LoadCredentials func() (console.Credentials, error)
+}
+
+func NewCommand(dependencies Dependencies) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "connector <command>",
 		Short:   "Manage the connector the console reads this target's variables through",
@@ -55,11 +60,11 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 			return &exitcode.ExitError{Code: 1}
 		},
 	}
-	cmd.AddCommand(newAddCommand(deps), newRemoveCommand(deps), newStatusCommand(deps))
+	cmd.AddCommand(newAddCommand(dependencies), newRemoveCommand(dependencies), newStatusCommand(dependencies))
 	return cmd
 }
 
-func newAddCommand(deps cmddeps.Deps) *cobra.Command {
+func newAddCommand(dependencies Dependencies) *cobra.Command {
 	var opts options
 	cmd := &cobra.Command{
 		Use:     "add",
@@ -67,8 +72,8 @@ func newAddCommand(deps cmddeps.Deps) *cobra.Command {
 		Example: "  $ ocel connector add --config ocel.staging.json\n  $ ocel connector add --config ocel.staging.json --allow-reveal",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return withOptions(cmd, deps, &opts, func(ctx context.Context, cfg *project.Project, link *console.Link) error {
-				return runAdd(ctx, deps, cfg, link, opts)
+			return withOptions(cmd, dependencies, &opts, func(ctx context.Context, cfg *project.Project, link *console.Link) error {
+				return runAdd(ctx, dependencies, cfg, link, opts)
 			})
 		},
 	}
@@ -78,7 +83,7 @@ func newAddCommand(deps cmddeps.Deps) *cobra.Command {
 	return cmd
 }
 
-func newRemoveCommand(deps cmddeps.Deps) *cobra.Command {
+func newRemoveCommand(dependencies Dependencies) *cobra.Command {
 	var opts options
 	cmd := &cobra.Command{
 		Use:     "rm",
@@ -86,8 +91,8 @@ func newRemoveCommand(deps cmddeps.Deps) *cobra.Command {
 		Example: "  $ ocel connector rm --config ocel.staging.json\n  $ ocel connector rm --target <fingerprint>",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return withOptions(cmd, deps, &opts, func(ctx context.Context, cfg *project.Project, link *console.Link) error {
-				return runRemove(ctx, deps, cfg, link, opts)
+			return withOptions(cmd, dependencies, &opts, func(ctx context.Context, cfg *project.Project, link *console.Link) error {
+				return runRemove(ctx, dependencies, cfg, link, opts)
 			})
 		},
 	}
@@ -95,7 +100,7 @@ func newRemoveCommand(deps cmddeps.Deps) *cobra.Command {
 	return cmd
 }
 
-func newStatusCommand(deps cmddeps.Deps) *cobra.Command {
+func newStatusCommand(dependencies Dependencies) *cobra.Command {
 	var opts options
 	cmd := &cobra.Command{
 		Use:     "status",
@@ -103,26 +108,26 @@ func newStatusCommand(deps cmddeps.Deps) *cobra.Command {
 		Example: "  $ ocel connector status\n  $ ocel connector status --config ocel.staging.json",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return withOptions(cmd, deps, &opts, func(ctx context.Context, cfg *project.Project, link *console.Link) error {
-				return runStatus(ctx, deps, cfg, link, opts, cmd.OutOrStdout())
+			return withOptions(cmd, dependencies, &opts, func(ctx context.Context, cfg *project.Project, link *console.Link) error {
+				return runStatus(ctx, dependencies, cfg, link, opts, cmd.OutOrStdout())
 			})
 		},
 	}
-	return cmddeps.ReserveStdout(cmd)
+	return commands.ReserveStdout(cmd)
 }
 
-func withOptions(cmd *cobra.Command, deps cmddeps.Deps, opts *options,
+func withOptions(cmd *cobra.Command, dependencies Dependencies, opts *options,
 	run func(context.Context, *project.Project, *console.Link) error) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("determine working directory: %w", err)
 	}
 	ctx := cmd.Context()
-	cfg, err := deps.LoadProject(ctx, cwd)
+	cfg, err := dependencies.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}
-	creds, err := console.RequireLogin(deps.LoadCredentials, cmd.ErrOrStderr())
+	creds, err := console.RequireLogin(dependencies.LoadCredentials, cmd.ErrOrStderr())
 	if err != nil {
 		return err
 	}
@@ -140,8 +145,8 @@ func withOptions(cmd *cobra.Command, deps cmddeps.Deps, opts *options,
 	return run(ctx, cfg, link)
 }
 
-func reachTarget(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, check *run.Span) (*providerclient.Provider, *contractv1.DescribeConnectorTargetResponse, error) {
-	prov, err := providerclient.Start(ctx, cfg, check, deps.Questions, providerclient.PinToLock)
+func reachTarget(ctx context.Context, dependencies Dependencies, cfg *project.Project, check *run.Span) (*providerclient.Provider, *contractv1.DescribeConnectorTargetResponse, error) {
+	prov, err := providerclient.Start(ctx, cfg, check, dependencies.Questions, providerclient.PinToLock)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -157,8 +162,8 @@ func reachTarget(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, c
 	return prov, described, nil
 }
 
-func token(deps cmddeps.Deps) (string, error) {
-	creds, err := deps.LoadCredentials()
+func token(dependencies Dependencies) (string, error) {
+	creds, err := dependencies.LoadCredentials()
 	if err != nil {
 		return "", err
 	}

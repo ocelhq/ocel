@@ -9,8 +9,9 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/commands/bootstrap"
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
@@ -20,16 +21,16 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
-func NewDeploymentsCommand(deps cmddeps.Deps) *cobra.Command {
+func NewDeploymentsCommand(invocation commands.Invocation) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "deployments",
 		Short: "Manage production deployments",
 	}
-	cmd.AddCommand(cmddeps.ReserveStdout(newListCommand(deps)), newPruneCommand(deps))
+	cmd.AddCommand(commands.ReserveStdout(newListCommand(invocation)), newPruneCommand(invocation))
 	return cmd
 }
 
-func newListCommand(deps cmddeps.Deps) *cobra.Command {
+func newListCommand(invocation commands.Invocation) *cobra.Command {
 	return &cobra.Command{
 		Use:   "ls",
 		Short: "List production promotions",
@@ -39,7 +40,7 @@ func newListCommand(deps cmddeps.Deps) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
-			return runPromotionsList(cmd.Context(), deps, cwd, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return runPromotionsList(cmd.Context(), invocation, cwd, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		},
 	}
 }
@@ -51,7 +52,7 @@ type pruneOptions struct {
 	yes  bool
 }
 
-func newPruneCommand(deps cmddeps.Deps) *cobra.Command {
+func newPruneCommand(invocation commands.Invocation) *cobra.Command {
 	var opts pruneOptions
 	cmd := &cobra.Command{
 		Use:   "prune",
@@ -62,21 +63,21 @@ func newPruneCommand(deps cmddeps.Deps) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
-			return runPromotionsPrune(cmd.Context(), deps, cwd, opts, cmd.OutOrStdout(), cmd.InOrStdin())
+			return runPromotionsPrune(cmd.Context(), invocation, cwd, opts, cmd.OutOrStdout(), cmd.InOrStdin())
 		},
 	}
 	cmd.Flags().IntVar(&opts.keep, "keep", defaultPruneKeepN, "Number of most recent promotions to keep, always additionally pinning the active one")
-	cmddeps.Yes(cmd, &opts.yes)
+	commands.AddYesFlag(cmd, &opts.yes)
 	return cmd
 }
 
-func runPromotionsList(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr io.Writer) error {
-	cfg, err := deps.LoadProject(ctx, cwd)
+func runPromotionsList(ctx context.Context, invocation commands.Invocation, cwd string, stdout, stderr io.Writer) error {
+	cfg, err := invocation.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}
 
-	promotions, err := listPromotions(ctx, deps, cfg)
+	promotions, err := listPromotions(ctx, invocation, cfg)
 	if err != nil {
 		return err
 	}
@@ -84,19 +85,19 @@ func runPromotionsList(ctx context.Context, deps cmddeps.Deps, cwd string, stdou
 	return nil
 }
 
-func listPromotions(ctx context.Context, deps cmddeps.Deps, cfg *project.Project) (promotions []*contractv1.PromotionHistoryEntry, err error) {
+func listPromotions(ctx context.Context, invocation commands.Invocation, cfg *project.Project) (promotions []*contractv1.PromotionHistoryEntry, err error) {
 	if _, err := cfg.RequireProvider(); err != nil {
 		return nil, err
 	}
 
-	ctx, run, err := deps.Events.Begin(ctx, "ocel deployments ls", cfg.Dir)
+	ctx, run, err := invocation.Events.Begin(ctx, "ocel deployments ls", cfg.Dir)
 	if err != nil {
 		return nil, err
 	}
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := providerclient.Start(ctx, cfg, check, deps.Questions, providerclient.PinToLock)
+	prov, err := providerclient.Start(ctx, cfg, check, invocation.Questions, providerclient.PinToLock)
 	if err != nil {
 		return nil, err
 	}
@@ -119,8 +120,8 @@ func listPromotions(ctx context.Context, deps cmddeps.Deps, cfg *project.Project
 	return listed.GetPromotions(), err
 }
 
-func runPromotionsPrune(ctx context.Context, deps cmddeps.Deps, cwd string, opts pruneOptions, stdout io.Writer, stdin io.Reader) (err error) {
-	cfg, err := deps.LoadProject(ctx, cwd)
+func runPromotionsPrune(ctx context.Context, invocation commands.Invocation, cwd string, opts pruneOptions, stdout io.Writer, stdin io.Reader) (err error) {
+	cfg, err := invocation.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}
@@ -128,20 +129,20 @@ func runPromotionsPrune(ctx context.Context, deps cmddeps.Deps, cwd string, opts
 	if _, err := cfg.RequireProvider(); err != nil {
 		return err
 	}
-	policy := deps.ConsentPolicy("ocel deployments prune", opts.yes, stdout, stdin)
+	policy := consent.NewPolicy("ocel deployments prune", opts.yes, invocation.StdinIsTerminal(stdin), stdout, stdin)
 	policy.ConfirmsPlan = true
 	if err := policy.Refuse(); err != nil {
 		return err
 	}
 
-	ctx, run, err := deps.Events.Begin(ctx, "ocel deployments prune", cfg.Dir)
+	ctx, run, err := invocation.Events.Begin(ctx, "ocel deployments prune", cfg.Dir)
 	if err != nil {
 		return err
 	}
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := providerclient.Start(ctx, cfg, check, deps.Questions, providerclient.PinToLock)
+	prov, err := providerclient.Start(ctx, cfg, check, invocation.Questions, providerclient.PinToLock)
 	if err != nil {
 		return err
 	}

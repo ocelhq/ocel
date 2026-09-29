@@ -10,7 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/preflight"
@@ -36,7 +36,7 @@ type Options struct {
 	Repair           bool
 }
 
-func NewCommand(deps cmddeps.Deps) *cobra.Command {
+func NewCommand(invocation commands.Invocation) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "bootstrap <command>",
 		Short: "Set up the shared infrastructure deploys run on",
@@ -50,15 +50,15 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 	}
 
 	cmd.AddCommand(
-		newProvisionCommand(deps, environmentv1.Tier_TIER_PRODUCTION, []string{"prod"}),
-		newProvisionCommand(deps, environmentv1.Tier_TIER_PREVIEW, nil),
-		newDestroyCommand(deps),
+		newProvisionCommand(invocation, environmentv1.Tier_TIER_PRODUCTION, []string{"prod"}),
+		newProvisionCommand(invocation, environmentv1.Tier_TIER_PREVIEW, nil),
+		newDestroyCommand(invocation),
 	)
 
 	return cmd
 }
 
-func newProvisionCommand(deps cmddeps.Deps, tier environmentv1.Tier, aliases []string) *cobra.Command {
+func newProvisionCommand(invocation commands.Invocation, tier environmentv1.Tier, aliases []string) *cobra.Command {
 	var opts Options
 
 	name := Name(tier)
@@ -86,11 +86,11 @@ func newProvisionCommand(deps cmddeps.Deps, tier environmentv1.Tier, aliases []s
 			opts.FeaturesDeclared = cmd.Flags().Changed("features")
 			opts.RepairDeclared = cmd.Flags().Changed("repair")
 
-			return Run(cmd.Context(), deps, cwd, tier, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+			return Run(cmd.Context(), invocation, cwd, tier, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 		},
 	}
 
-	cmddeps.Yes(cmd, &opts.Yes)
+	commands.AddYesFlag(cmd, &opts.Yes)
 	cmd.Flags().BoolVar(&opts.Dry, "dry", false, "Print the changes and stop, applying nothing")
 	cmd.Flags().StringVar(&opts.Features, "features", "", "Comma-separated `set` of features to add or refresh; whatever else is installed is left alone (also: all, none)")
 	cmd.Flags().StringVar(&opts.Remove, "remove", "", "Comma-separated `set` of features to tear down; nothing goes unless it is named here")
@@ -100,7 +100,7 @@ func newProvisionCommand(deps cmddeps.Deps, tier environmentv1.Tier, aliases []s
 	return cmd
 }
 
-func newDestroyCommand(deps cmddeps.Deps) *cobra.Command {
+func newDestroyCommand(invocation commands.Invocation) *cobra.Command {
 	var opts Options
 
 	cmd := &cobra.Command{
@@ -125,11 +125,11 @@ func newDestroyCommand(deps cmddeps.Deps) *cobra.Command {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
 
-			return RunDestroy(cmd.Context(), deps, cwd, tier, opts, cmd.OutOrStdout(), cmd.InOrStdin())
+			return RunDestroy(cmd.Context(), invocation, cwd, tier, opts, cmd.OutOrStdout(), cmd.InOrStdin())
 		},
 	}
 
-	cmddeps.Yes(cmd, &opts.Yes)
+	commands.AddYesFlag(cmd, &opts.Yes)
 	cmd.Flags().BoolVar(&opts.Dry, "dry", false, "Print what would be removed and stop, removing nothing")
 
 	return cmd
@@ -150,8 +150,8 @@ func environmentArg(args []string) (environmentv1.Tier, error) {
 	}
 }
 
-func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.Tier, opts Options, stdout, stderr io.Writer, stdin io.Reader) (err error) {
-	cfg, err := resolveProject(ctx, deps, cwd)
+func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier environmentv1.Tier, opts Options, stdout, stderr io.Writer, stdin io.Reader) (err error) {
+	cfg, err := resolveProject(ctx, invocation, cwd)
 	if err != nil {
 		return err
 	}
@@ -160,21 +160,21 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 		return err
 	}
 	command := "ocel bootstrap " + Name(tier)
-	policy := deps.ConsentPolicy(command, opts.Yes, stdout, stdin)
+	policy := consent.NewPolicy(command, opts.Yes, invocation.StdinIsTerminal(stdin), stdout, stdin)
 	policy.ConfirmsPlan = true
 	policy.DryRun = opts.Dry
 	if err := policy.Refuse(); err != nil {
 		return err
 	}
 
-	ctx, run, err := deps.Events.Begin(ctx, command, cfg.Dir)
+	ctx, run, err := invocation.Events.Begin(ctx, command, cfg.Dir)
 	if err != nil {
 		return err
 	}
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := providerclient.Start(ctx, cfg, check, deps.Questions, providerclient.ChoosePinning(opts.Dry))
+	prov, err := providerclient.Start(ctx, cfg, check, invocation.Questions, providerclient.ChoosePinning(opts.Dry))
 	if err != nil {
 		return err
 	}
@@ -324,8 +324,8 @@ func describeBootstrap(ctx context.Context, check *run.Span, prov *providerclien
 	return planned, err
 }
 
-func resolveProject(ctx context.Context, deps cmddeps.Deps, cwd string) (*project.Project, error) {
-	cfg, err := deps.LoadProject(ctx, cwd)
+func resolveProject(ctx context.Context, invocation commands.Invocation, cwd string) (*project.Project, error) {
+	cfg, err := invocation.LoadProject(ctx, cwd)
 	if err != nil {
 		return nil, err
 	}

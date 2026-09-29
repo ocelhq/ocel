@@ -9,13 +9,20 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/commands"
+	"github.com/ocelhq/ocel/cli/internal/declaration"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/cli/node"
 )
 
-func NewCommand(deps cmddeps.Deps) *cobra.Command {
+type Dependencies struct {
+	commands.Invocation
+	CollectDeclarations func(ctx context.Context, cfg *project.Project, declarations *variables.Declarations, stdout, stderr io.Writer) ([]declaration.Resource, error)
+}
+
+func NewCommand(dependencies Dependencies) *cobra.Command {
 	return &cobra.Command{
 		Use:   "generate",
 		Short: "Generate the app-side files ocel derives from your declarations",
@@ -30,13 +37,13 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
 
-			return runGenerate(cmd.Context(), deps, cwd, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return runGenerate(cmd.Context(), dependencies, cwd, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		},
 	}
 }
 
-func runGenerate(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr io.Writer) error {
-	cfg, err := deps.LoadProject(ctx, cwd)
+func runGenerate(ctx context.Context, dependencies Dependencies, cwd string, stdout, stderr io.Writer) error {
+	cfg, err := dependencies.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}
@@ -46,7 +53,7 @@ func runGenerate(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, std
 	}
 
 	declarations := variables.NewDeclarations(noValues{}, variables.Scope{Apps: variablescope.Apps(cfg)})
-	if _, err := deps.CollectDeclarations(ctx, cfg, declarations, stderr, stderr); err != nil {
+	if _, err := dependencies.CollectDeclarations(ctx, cfg, declarations, stderr, stderr); err != nil {
 		return err
 	}
 

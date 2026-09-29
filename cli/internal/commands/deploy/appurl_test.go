@@ -39,19 +39,19 @@ func manifestVariable(t *testing.T, manifest *contractv1.Manifest, app, key stri
 func TestTheDeploymentURLReachesEveryDeliverySite(t *testing.T) {
 	root := t.TempDir()
 	clitest.WritePrebuiltFunction(t, root, "api", "index")
-	deps := clitest.NewDeps()
-	clitest.StubRecordedDeploymentIDs(&deps)
+	dependencies := newTestDependencies()
+	stubRecordedDeploymentIDs(&dependencies)
 
 	var built map[string]map[string]string
-	deps.BuildApps = func(_ context.Context, cfg *project.Project, env map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, env map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
 		built = env
-		return functionsOnDisk(&deps, cfg)
+		return functionsOnDisk(cfg)
 	}
 
 	s, _ := newBuildSpan(t)
 	cfg := prebuiltConfig(root)
 	urls := map[string]string{"api": "https://api.acme.com"}
-	manifest, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: onCompute(cfg, "serverless"), declarations: emptyDeclarations(cfg), phase: s, span: s, urls: urls})
+	manifest, _, err := collectBuildAndAssemble(context.Background(), dependencies, assembly{cfg: onCompute(cfg, "serverless"), declarations: emptyDeclarations(cfg), phase: s, span: s, urls: urls})
 	if err != nil {
 		t.Fatalf("collectBuildAndAssemble: %v", err)
 	}
@@ -88,17 +88,17 @@ func TestTheDeploymentURLReachesEveryDeliverySite(t *testing.T) {
 func TestPrebuiltRefusesAnOutputBuiltForAnotherURL(t *testing.T) {
 	root := t.TempDir()
 	clitest.WritePrebuiltFunction(t, root, "api", "index")
-	deps := clitest.NewDeps()
-	recordBuildApp(&deps)
+	dependencies := newTestDependencies()
+	recordBuildApp(&dependencies)
 	cfg := prebuiltConfig(root)
 
 	s, _ := newBuildSpan(t)
-	if _, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: onCompute(cfg, "serverless"), declarations: emptyDeclarations(cfg), phase: s, span: s, urls: map[string]string{"api": "https://api.acme.com"}}); err != nil {
+	if _, _, err := collectBuildAndAssemble(context.Background(), dependencies, assembly{cfg: onCompute(cfg, "serverless"), declarations: emptyDeclarations(cfg), phase: s, span: s, urls: map[string]string{"api": "https://api.acme.com"}}); err != nil {
 		t.Fatalf("collectBuildAndAssemble: %v", err)
 	}
 
 	s, _ = newBuildSpan(t)
-	_, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: onCompute(cfg, "serverless"), declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s, urls: map[string]string{"api": "https://pr-1.preview.acme.com"}})
+	_, _, err := collectBuildAndAssemble(context.Background(), dependencies, assembly{cfg: onCompute(cfg, "serverless"), declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s, urls: map[string]string{"api": "https://pr-1.preview.acme.com"}})
 	if err == nil {
 		t.Fatal("collectBuildAndAssemble = nil for output built against another hostname, want a refusal: the url is inlined into the browser bundle, so this deploy would serve the wrong one")
 	}

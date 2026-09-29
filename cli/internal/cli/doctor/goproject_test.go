@@ -35,12 +35,11 @@ func TestDoctorPassesOnAGoProjectWithNoNode(t *testing.T) {
 	t.Setenv(providerclient.ReadyTimeoutEnvVar, "5s")
 	t.Setenv("PATH", t.TempDir())
 
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
+	invocation := clitest.NewInvocation()
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stderr)
-	if err := Run(context.Background(), deps, root, &stdout); err != nil {
+	clitest.AttachTerminalSink(invocation, &stderr)
+	if err := Run(context.Background(), invocation, root, &stdout); err != nil {
 		t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	if strings.Contains(stdout.String(), "node") {

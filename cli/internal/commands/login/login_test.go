@@ -8,8 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/clitest"
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console"
 )
 
@@ -19,12 +17,12 @@ func TestRun(t *testing.T) {
 	}))
 	t.Cleanup(unreachable.Close)
 
-	loggedInAt := func(apiURL string) cmddeps.Deps {
-		deps := clitest.NewDeps()
-		deps.LoadCredentials = func() (console.Credentials, error) {
+	loggedInAt := func(apiURL string) Dependencies {
+		dependencies := newTestDependencies()
+		dependencies.LoadCredentials = func() (console.Credentials, error) {
 			return console.Credentials{AccessToken: "tok", APIURL: apiURL, Email: "ada@example.com"}, nil
 		}
-		return deps
+		return dependencies
 	}
 
 	t.Run("a login to the console in effect is kept", func(t *testing.T) {

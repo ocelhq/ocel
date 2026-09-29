@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -13,7 +15,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
@@ -37,7 +39,12 @@ type initOptions struct {
 	configPath string
 }
 
-func NewCommand(deps cmddeps.Deps) *cobra.Command {
+type Dependencies struct {
+	commands.Invocation
+	RunPackageManager func(ctx context.Context, dir string, argv []string, output io.Writer) error
+}
+
+func NewCommand(dependencies Dependencies) *cobra.Command {
 	var flags initOptions
 	cmd := &cobra.Command{
 		Use:   "init [slug]",
@@ -61,9 +68,9 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 			}
 
 			opts := flags
-			opts.configPath = deps.ConfigPath()
+			opts.configPath = dependencies.ConfigPath()
 
-			return runInit(cmd.Context(), deps, cwd, slug, opts)
+			return runInit(cmd.Context(), dependencies, cwd, slug, opts)
 		},
 	}
 	cmd.Flags().StringVar(&flags.provider, "provider", "", "Provider this project deploys through")
@@ -132,7 +139,7 @@ func detectLanguage(dir string) (sdkLanguage, bool, error) {
 	}
 }
 
-func runInit(ctx context.Context, deps cmddeps.Deps, cwd, slug string, opts initOptions) error {
+func runInit(ctx context.Context, dependencies Dependencies, cwd, slug string, opts initOptions) error {
 	configPath, err := initConfigPath(cwd, opts)
 	if err != nil {
 		return err
@@ -168,11 +175,11 @@ func runInit(ctx context.Context, deps cmddeps.Deps, cwd, slug string, opts init
 		return fmt.Errorf("%s already contains %s, and one project reads one config: keep it, or delete it before writing %s", projectDir, strings.Join(others, " and "), name)
 	}
 
-	ctx, initializing, err := deps.Events.Begin(ctx, "ocel init", "")
+	ctx, initializing, err := dependencies.Events.Begin(ctx, "ocel init", "")
 	if err != nil {
 		return err
 	}
-	err = writeProject(ctx, deps, initializing.Phase(progressv1.Phase_PHASE_BUILD), configPath, slug, provider, lang, detected)
+	err = writeProject(ctx, dependencies, initializing.Phase(progressv1.Phase_PHASE_BUILD), configPath, slug, provider, lang, detected)
 	if err == nil {
 		initializing.Succeed("Initialized project " + slug)
 	}
@@ -180,7 +187,7 @@ func runInit(ctx context.Context, deps cmddeps.Deps, cwd, slug string, opts init
 	return err
 }
 
-func writeProject(ctx context.Context, deps cmddeps.Deps, build *run.Span, configPath, slug, provider string, lang sdkLanguage, detected bool) error {
+func writeProject(ctx context.Context, dependencies Dependencies, build *run.Span, configPath, slug, provider string, lang sdkLanguage, detected bool) error {
 	projectDir, name := filepath.Dir(configPath), filepath.Base(configPath)
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {
 		return fmt.Errorf("create directory for %s: %w", name, err)
@@ -191,7 +198,7 @@ func writeProject(ctx context.Context, deps cmddeps.Deps, build *run.Span, confi
 	build.Say(fmt.Sprintf("Wrote %s for project %s", name, slug))
 
 	if detected {
-		addSDK(ctx, deps, build, projectDir, lang)
+		addSDK(ctx, dependencies, build, projectDir, lang)
 	} else {
 		build.Warn(fmt.Sprintf("No %s here — add the ocel SDK once this directory contains one.", strings.Join(language.ManifestNames(), ", ")))
 	}
@@ -345,14 +352,22 @@ func addCommand(dir string, lang sdkLanguage) []string {
 	return []string{pm.name, pm.addCommand, sdkPackage}
 }
 
-func addSDK(ctx context.Context, deps cmddeps.Deps, build *run.Span, dir string, lang sdkLanguage) {
+func addSDK(ctx context.Context, dependencies Dependencies, build *run.Span, dir string, lang sdkLanguage) {
 	argv := addCommand(dir, lang)
 	command := strings.Join(argv, " ")
 
 	unit := build.Unit(sdkPackage, progress.Adding.Title(fmt.Sprintf("the SDK to this project with `%s`", command)))
-	err := deps.RunPackageManager(ctx, dir, argv, unit.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_STDERR))
+	err := dependencies.RunPackageManager(ctx, dir, argv, unit.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_STDERR))
 	if err != nil {
 		unit.Warn(fmt.Sprintf("Could not add %s — run `%s` yourself.", sdkPackage, command))
 	}
 	unit.End(err)
+}
+
+func RunPackageManager(ctx context.Context, dir string, argv []string, output io.Writer) error {
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	cmd.Dir = dir
+	cmd.Stdout = output
+	cmd.Stderr = output
+	return cmd.Run()
 }

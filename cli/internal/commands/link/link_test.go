@@ -22,7 +22,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 )
@@ -94,13 +93,13 @@ func TestRunLink(t *testing.T) {
 	t.Run("not logged in returns an exit error pointing at `ocel login`", func(t *testing.T) {
 		t.Parallel()
 
-		deps := clitest.NewDeps()
-		deps.LoadCredentials = func() (console.Credentials, error) {
+		dependencies := newTestDependencies()
+		dependencies.LoadCredentials = func() (console.Credentials, error) {
 			return console.Credentials{}, console.ErrNotLoggedIn
 		}
 
 		var stderr bytes.Buffer
-		err := runLink(context.Background(), deps, t.TempDir(), "", options{}, &bytes.Buffer{}, &stderr, strings.NewReader(""))
+		err := runLink(context.Background(), dependencies, t.TempDir(), "", options{}, &bytes.Buffer{}, &stderr, strings.NewReader(""))
 
 		var exitErr *exitcode.ExitError
 		if !errors.As(err, &exitErr) {
@@ -114,13 +113,13 @@ func TestRunLink(t *testing.T) {
 	t.Run("it selects an existing project by slug", func(t *testing.T) {
 		t.Parallel()
 
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
+		dependencies := newTestDependencies()
+		dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
 		srv := newCloudServer(t, projectRow("p1", "My App", "my-app"), projectRow("p2", "Other", "other"))
 		dir := t.TempDir()
 
 		opts := options{apiURL: srv.URL}
-		if err := runLink(context.Background(), deps, dir, "other", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader("")); err != nil {
+		if err := runLink(context.Background(), dependencies, dir, "other", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader("")); err != nil {
 			t.Fatalf("run err = %v", err)
 		}
 
@@ -143,11 +142,11 @@ func TestRunLink(t *testing.T) {
 	t.Run("an unknown slug errors listing the available projects", func(t *testing.T) {
 		t.Parallel()
 
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
+		dependencies := newTestDependencies()
+		dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
 		srv := newCloudServer(t, projectRow("p1", "My App", "my-app"))
 
-		out := failedLink(t, deps, t.TempDir(), "nope", options{apiURL: srv.URL})
+		out := failedLink(t, dependencies, t.TempDir(), "nope", options{apiURL: srv.URL})
 		if !strings.Contains(out, "my-app") {
 			t.Fatalf("output = %q, want it to list the available slugs", out)
 		}
@@ -156,12 +155,12 @@ func TestRunLink(t *testing.T) {
 	t.Run("without a terminal and without a project or --create it errors about the flags", func(t *testing.T) {
 		t.Parallel()
 
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
+		dependencies := newTestDependencies()
+		dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
 		srv := newCloudServer(t, projectRow("p1", "My App", "my-app"))
 
 		dir := t.TempDir()
-		out := failedLink(t, deps, dir, "", options{apiURL: srv.URL})
+		out := failedLink(t, dependencies, dir, "", options{apiURL: srv.URL})
 		if !strings.Contains(out, "--create") {
 			t.Fatalf("output = %q, want it to mention --create", out)
 		}
@@ -173,8 +172,8 @@ func TestRunLink(t *testing.T) {
 	t.Run("--create without a name uses the directory name", func(t *testing.T) {
 		t.Parallel()
 
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
+		dependencies := newTestDependencies()
+		dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
 		srv := newCloudServer(t)
 
 		dir := filepath.Join(t.TempDir(), "my-fresh-app")
@@ -183,7 +182,7 @@ func TestRunLink(t *testing.T) {
 		}
 
 		opts := options{apiURL: srv.URL, create: true}
-		if err := runLink(context.Background(), deps, dir, "", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader("")); err != nil {
+		if err := runLink(context.Background(), dependencies, dir, "", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader("")); err != nil {
 			t.Fatalf("run err = %v", err)
 		}
 
@@ -199,12 +198,12 @@ func TestRunLink(t *testing.T) {
 	t.Run("--create with a name slugifies it", func(t *testing.T) {
 		t.Parallel()
 
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
+		dependencies := newTestDependencies()
+		dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
 		srv := newCloudServer(t)
 
 		opts := options{apiURL: srv.URL, create: true}
-		if err := runLink(context.Background(), deps, t.TempDir(), "My Cool App", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader("")); err != nil {
+		if err := runLink(context.Background(), dependencies, t.TempDir(), "My Cool App", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader("")); err != nil {
 			t.Fatalf("run err = %v", err)
 		}
 		if len(srv.created) != 1 || srv.created[0]["slug"] != "my-cool-app" || srv.created[0]["name"] != "My Cool App" {
@@ -215,12 +214,12 @@ func TestRunLink(t *testing.T) {
 	t.Run("a create conflict points at linking to the existing project", func(t *testing.T) {
 		t.Parallel()
 
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
+		dependencies := newTestDependencies()
+		dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
 		srv := newCloudServer(t)
 		srv.createConflict = true
 
-		out := failedLink(t, deps, t.TempDir(), "My App", options{apiURL: srv.URL, create: true})
+		out := failedLink(t, dependencies, t.TempDir(), "My App", options{apiURL: srv.URL, create: true})
 		if !strings.Contains(out, "ocel link my-app") {
 			t.Fatalf("output = %q, want it to suggest `ocel link my-app`", out)
 		}
@@ -229,12 +228,12 @@ func TestRunLink(t *testing.T) {
 	t.Run("several organizations without a terminal require --org", func(t *testing.T) {
 		t.Parallel()
 
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
+		dependencies := newTestDependencies()
+		dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
 		srv := newCloudServer(t)
 		srv.orgs = append(srv.orgs, map[string]string{"id": "org_2", "name": "Other Co", "slug": "other-co"})
 
-		out := failedLink(t, deps, t.TempDir(), "My App", options{apiURL: srv.URL, create: true})
+		out := failedLink(t, dependencies, t.TempDir(), "My App", options{apiURL: srv.URL, create: true})
 		if !strings.Contains(out, "--org") {
 			t.Fatalf("output = %q, want it to mention --org", out)
 		}
@@ -243,14 +242,14 @@ func TestRunLink(t *testing.T) {
 	t.Run("--org selects among several", func(t *testing.T) {
 		t.Parallel()
 
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
+		dependencies := newTestDependencies()
+		dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
 		srv := newCloudServer(t)
 		srv.orgs = append(srv.orgs, map[string]string{"id": "org_2", "name": "Other Co", "slug": "other-co"})
 
 		dir := t.TempDir()
 		opts := options{apiURL: srv.URL, create: true, org: "other-co"}
-		if err := runLink(context.Background(), deps, dir, "My App", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader("")); err != nil {
+		if err := runLink(context.Background(), dependencies, dir, "My App", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader("")); err != nil {
 			t.Fatalf("run err = %v", err)
 		}
 		record := readLink(t, dir, srv.URL)
@@ -262,11 +261,11 @@ func TestRunLink(t *testing.T) {
 	t.Run("an unknown --org errors listing the available org slugs", func(t *testing.T) {
 		t.Parallel()
 
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
+		dependencies := newTestDependencies()
+		dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
 		srv := newCloudServer(t)
 
-		out := failedLink(t, deps, t.TempDir(), "My App", options{apiURL: srv.URL, create: true, org: "nope"})
+		out := failedLink(t, dependencies, t.TempDir(), "My App", options{apiURL: srv.URL, create: true, org: "nope"})
 		if !strings.Contains(out, "acme-inc") {
 			t.Fatalf("output = %q, want it to list the available org slugs", out)
 		}
@@ -275,8 +274,8 @@ func TestRunLink(t *testing.T) {
 	t.Run("relinking reports the previous link and replaces it", func(t *testing.T) {
 		t.Parallel()
 
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
+		dependencies := newTestDependencies()
+		dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
 		srv := newCloudServer(t, projectRow("p1", "My App", "my-app"), projectRow("p2", "Other", "other"))
 
 		dir := t.TempDir()
@@ -287,9 +286,9 @@ func TestRunLink(t *testing.T) {
 		}
 
 		var stdout bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
 		opts := options{apiURL: srv.URL}
-		if err := runLink(context.Background(), deps, dir, "other", opts, &stdout, &bytes.Buffer{}, strings.NewReader("")); err != nil {
+		if err := runLink(context.Background(), dependencies, dir, "other", opts, &stdout, &bytes.Buffer{}, strings.NewReader("")); err != nil {
 			t.Fatalf("run err = %v", err)
 		}
 		if !strings.Contains(stdout.String(), "INFO  [check] This directory is linked to My App now; linking it again\n") {
@@ -303,8 +302,8 @@ func TestRunLink(t *testing.T) {
 	t.Run("it ignores a record from another control plane", func(t *testing.T) {
 		t.Parallel()
 
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
+		dependencies := newTestDependencies()
+		dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
 		srv := newCloudServer(t, projectRow("p1", "My App", "my-app"))
 
 		dir := t.TempDir()
@@ -315,9 +314,9 @@ func TestRunLink(t *testing.T) {
 		}
 
 		var stdout bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
 		opts := options{apiURL: srv.URL}
-		if err := runLink(context.Background(), deps, dir, "my-app", opts, &stdout, &bytes.Buffer{}, strings.NewReader("")); err != nil {
+		if err := runLink(context.Background(), dependencies, dir, "my-app", opts, &stdout, &bytes.Buffer{}, strings.NewReader("")); err != nil {
 			t.Fatalf("run err = %v", err)
 		}
 		if strings.Contains(stdout.String(), "Elsewhere") {
@@ -335,17 +334,17 @@ func TestRunLink(t *testing.T) {
 func TestLinkingShowsEachConsoleWaitAsAUnitOnItsRunAndNothingElseWritesTheTerminal(t *testing.T) {
 	t.Parallel()
 
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
-	deps.Presentation = func(io.Writer) terminal.Presentation {
+	dependencies := newTestDependencies()
+	dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
+	dependencies.Presentation = func(io.Writer) terminal.Presentation {
 		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON, TTY: true, Width: 80})
 	}
 	var stdout safeBuffer
-	clitest.AttachTerminalSink(deps, &stdout)
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
 	srv := newCloudServer(t, projectRow("p1", "My App", "my-app"), projectRow("p2", "Other", "other"))
 	srv.slow = 300 * time.Millisecond
 
-	if err := runLink(context.Background(), deps, t.TempDir(), "other", options{apiURL: srv.URL}, &stdout, &bytes.Buffer{}, strings.NewReader("")); err != nil {
+	if err := runLink(context.Background(), dependencies, t.TempDir(), "other", options{apiURL: srv.URL}, &stdout, &bytes.Buffer{}, strings.NewReader("")); err != nil {
 		t.Fatalf("run err = %v", err)
 	}
 
@@ -375,11 +374,11 @@ func TestLinkingShowsEachConsoleWaitAsAUnitOnItsRunAndNothingElseWritesTheTermin
 	}
 }
 
-func failedLink(t *testing.T, deps cmddeps.Deps, dir, projectRef string, opts options) string {
+func failedLink(t *testing.T, dependencies Dependencies, dir, projectRef string, opts options) string {
 	t.Helper()
 	var out bytes.Buffer
-	clitest.AttachTerminalSink(deps, &out)
-	err := runLink(context.Background(), deps, dir, projectRef, opts, &out, &bytes.Buffer{}, strings.NewReader(""))
+	clitest.AttachTerminalSink(dependencies.Invocation, &out)
+	err := runLink(context.Background(), dependencies, dir, projectRef, opts, &out, &bytes.Buffer{}, strings.NewReader(""))
 	var exitErr *exitcode.ExitError
 	if !errors.As(err, &exitErr) || exitErr.Code != 1 {
 		t.Fatalf("run err = %v, want the run to fail with exit code 1", err)
@@ -475,9 +474,9 @@ func TestProjectDir(t *testing.T) {
 			t.Fatalf("mkdir: %v", err)
 		}
 
-		deps := clitest.NewDeps()
-		deps.ConfigPath = func() string { return "" }
-		got, err := projectDir(context.Background(), deps, nested)
+		dependencies := newTestDependencies()
+		dependencies.ConfigPath = func() string { return "" }
+		got, err := projectDir(context.Background(), dependencies, nested)
 		if err != nil {
 			t.Fatalf("projectDir err = %v", err)
 		}

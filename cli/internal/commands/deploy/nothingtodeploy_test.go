@@ -12,18 +12,17 @@ import (
 
 func nothingToDeployHeadline(t *testing.T, config string) string {
 	t.Helper()
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
-	clitest.StubBuild(&deps, nil)
-	useJSONLogFormat(t, &deps)
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, nil)
+	useJSONLogFormat(t, &dependencies)
 	root, _ := clitest.SetUpDeployFixture(t)
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), config)
 	clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), "export {};\n")
 	writeAppSource(t, root, "web", "api")
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stdout)
-	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy err = %v; stdout=%s", err, stdout.String())
 	}
 	evs := envelopes(t, stdout.String())

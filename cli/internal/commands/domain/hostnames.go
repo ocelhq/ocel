@@ -11,7 +11,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/preflight"
 	"github.com/ocelhq/ocel/cli/internal/project"
@@ -23,21 +23,21 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
-func runDomainList(ctx context.Context, deps cmddeps.Deps, cwd string, opts domainOptions, stdout, stderr io.Writer) error {
-	cfg, err := deps.LoadProject(ctx, cwd)
+func runDomainList(ctx context.Context, invocation commands.Invocation, cwd string, opts domainOptions, stdout, stderr io.Writer) error {
+	cfg, err := invocation.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}
 
 	if !opts.preview {
-		resp, err := listProductionHostnames(ctx, deps, cfg)
+		resp, err := listProductionHostnames(ctx, invocation, cfg)
 		if err != nil {
 			return err
 		}
 		renderBoundHostnames(stdout, resp, filepath.Base(cfg.Path))
 		return nil
 	}
-	resp, err := listGlobalPreviewDomain(ctx, deps, cfg)
+	resp, err := listGlobalPreviewDomain(ctx, invocation, cfg)
 	if err != nil {
 		return err
 	}
@@ -45,8 +45,8 @@ func runDomainList(ctx context.Context, deps cmddeps.Deps, cwd string, opts doma
 	return nil
 }
 
-func listProductionHostnames(ctx context.Context, deps cmddeps.Deps, cfg *project.Project) (resp *contractv1.GetHostnameStatusResponse, err error) {
-	err = readDomain(ctx, deps, cfg, "ocel domain ls", environmentv1.Tier_TIER_PRODUCTION, progress.Reading.Title("the hostnames this project serves"),
+func listProductionHostnames(ctx context.Context, invocation commands.Invocation, cfg *project.Project) (resp *contractv1.GetHostnameStatusResponse, err error) {
+	err = readDomain(ctx, invocation, cfg, "ocel domain ls", environmentv1.Tier_TIER_PRODUCTION, progress.Reading.Title("the hostnames this project serves"),
 		func(ctx context.Context, client contractv1connect.ProviderServiceClient) (err error) {
 			resp, err = client.GetHostnameStatus(ctx, &contractv1.HostnameRequest{
 				Slug:       cfg.Slug,
@@ -58,8 +58,8 @@ func listProductionHostnames(ctx context.Context, deps cmddeps.Deps, cfg *projec
 	return resp, err
 }
 
-func runDomainAdd(ctx context.Context, deps cmddeps.Deps, cwd, host string, stdout, stderr io.Writer) error {
-	cfg, err := deps.LoadProject(ctx, cwd)
+func runDomainAdd(ctx context.Context, invocation commands.Invocation, cwd, host string, stdout, stderr io.Writer) error {
+	cfg, err := invocation.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}
@@ -74,7 +74,7 @@ func runDomainAdd(ctx context.Context, deps cmddeps.Deps, cwd, host string, stdo
 		Host:       host,
 		Edge:       cfg.EdgeSelection(),
 	}
-	return changeHostnames(ctx, deps, cfg, hostnameChange{
+	return changeHostnames(ctx, invocation, cfg, hostnameChange{
 		command:  "ocel domain add",
 		rpc:      "AddHostname",
 		req:      req,
@@ -99,7 +99,7 @@ type hostnameConsent struct {
 	declined string
 }
 
-func changeHostnames(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, change hostnameChange) (err error) {
+func changeHostnames(ctx context.Context, invocation commands.Invocation, cfg *project.Project, change hostnameChange) (err error) {
 	if _, err := cfg.RequireProvider(); err != nil {
 		return err
 	}
@@ -109,14 +109,14 @@ func changeHostnames(ctx context.Context, deps cmddeps.Deps, cfg *project.Projec
 		}
 	}
 
-	ctx, run, err := deps.Events.Begin(ctx, change.command, cfg.Dir)
+	ctx, run, err := invocation.Events.Begin(ctx, change.command, cfg.Dir)
 	if err != nil {
 		return err
 	}
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := startReadyProvider(ctx, deps, cfg, check, environmentv1.Tier_TIER_PRODUCTION)
+	prov, err := startReadyProvider(ctx, invocation, cfg, check, environmentv1.Tier_TIER_PRODUCTION)
 	check.End(err)
 	if err != nil {
 		return err
@@ -151,8 +151,8 @@ func addedHosts(configured []string, host string) []string {
 	return []string{host}
 }
 
-func runDomainRemove(ctx context.Context, deps cmddeps.Deps, cwd, host string, opts domainOptions, stdout, stderr io.Writer, stdin io.Reader) error {
-	cfg, err := deps.LoadProject(ctx, cwd)
+func runDomainRemove(ctx context.Context, invocation commands.Invocation, cwd, host string, opts domainOptions, stdout, stderr io.Writer, stdin io.Reader) error {
+	cfg, err := invocation.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}
@@ -168,9 +168,9 @@ func runDomainRemove(ctx context.Context, deps cmddeps.Deps, cwd, host string, o
 		headline = fmt.Sprintf("Removed %s", host)
 		plan = fmt.Sprintf("This will unbind %s from production of project %q, and remove the certificate and DNS records ocel created for it", host, cfg.Slug)
 	}
-	policy := deps.ConsentPolicy("ocel domain rm", opts.yes, stdout, stdin)
+	policy := consent.NewPolicy("ocel domain rm", opts.yes, invocation.StdinIsTerminal(stdin), stdout, stdin)
 	policy.ConfirmsPlan = true
-	return changeHostnames(ctx, deps, cfg, hostnameChange{
+	return changeHostnames(ctx, invocation, cfg, hostnameChange{
 		command:  "ocel domain rm",
 		rpc:      "RemoveHostname",
 		req:      req,
@@ -185,8 +185,8 @@ func runDomainRemove(ctx context.Context, deps cmddeps.Deps, cwd, host string, o
 	})
 }
 
-func listGlobalPreviewDomain(ctx context.Context, deps cmddeps.Deps, cfg *project.Project) (resp *contractv1.GetPreviewWildcardResponse, err error) {
-	err = readDomain(ctx, deps, cfg, "ocel domain ls", environmentv1.Tier_TIER_PREVIEW, progress.Reading.Title("the global preview domain"),
+func listGlobalPreviewDomain(ctx context.Context, invocation commands.Invocation, cfg *project.Project) (resp *contractv1.GetPreviewWildcardResponse, err error) {
+	err = readDomain(ctx, invocation, cfg, "ocel domain ls", environmentv1.Tier_TIER_PREVIEW, progress.Reading.Title("the global preview domain"),
 		func(ctx context.Context, client contractv1connect.ProviderServiceClient) (err error) {
 			resp, err = client.GetPreviewWildcard(ctx, &contractv1.PreviewWildcardRequest{Tier: environmentv1.Tier_TIER_PREVIEW})
 			return err
@@ -194,7 +194,7 @@ func listGlobalPreviewDomain(ctx context.Context, deps cmddeps.Deps, cfg *projec
 	return resp, err
 }
 
-func newListCommand(deps cmddeps.Deps) *cobra.Command {
+func newListCommand(invocation commands.Invocation) *cobra.Command {
 	var opts domainOptions
 	cmd := &cobra.Command{
 		Use:   "ls",
@@ -205,14 +205,14 @@ func newListCommand(deps cmddeps.Deps) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
-			return runDomainList(cmd.Context(), deps, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return runDomainList(cmd.Context(), invocation, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		},
 	}
 	cmd.Flags().BoolVar(&opts.preview, "preview", false, "List the global preview domain and the projects served on it instead of this project's own hostnames")
 	return cmd
 }
 
-func newAddCommand(deps cmddeps.Deps) *cobra.Command {
+func newAddCommand(invocation commands.Invocation) *cobra.Command {
 	return &cobra.Command{
 		Use:   "add [host]",
 		Short: "Provision the certificate, the edge surface and the DNS for this project's production hostnames",
@@ -222,12 +222,12 @@ func newAddCommand(deps cmddeps.Deps) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
-			return runDomainAdd(cmd.Context(), deps, cwd, firstArg(args), cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return runDomainAdd(cmd.Context(), invocation, cwd, firstArg(args), cmd.OutOrStdout(), cmd.ErrOrStderr())
 		},
 	}
 }
 
-func newRemoveCommand(deps cmddeps.Deps) *cobra.Command {
+func newRemoveCommand(invocation commands.Invocation) *cobra.Command {
 	var opts domainOptions
 	cmd := &cobra.Command{
 		Use:   "rm [host]",
@@ -238,9 +238,9 @@ func newRemoveCommand(deps cmddeps.Deps) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
-			return runDomainRemove(cmd.Context(), deps, cwd, firstArg(args), opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+			return runDomainRemove(cmd.Context(), invocation, cwd, firstArg(args), opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 		},
 	}
-	cmddeps.Yes(cmd, &opts.yes)
+	commands.AddYesFlag(cmd, &opts.yes)
 	return cmd
 }

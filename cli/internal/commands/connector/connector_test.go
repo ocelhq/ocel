@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/project"
@@ -121,13 +120,13 @@ func TestAddPairsTheTargetWithTheConsoleAndInstallsTheAsset(t *testing.T) {
 	srv := newConsoleServer(t)
 	linked(t, root, srv.URL)
 
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
-	deps.ConfigPath = func() string { return filepath.Join(root, "ocel.fake.json") }
+	dependencies := newTestDependencies()
+	dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
+	dependencies.ConfigPath = func() string { return filepath.Join(root, "ocel.fake.json") }
 
 	var stdout bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stdout)
-	if err := runAdd(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv)); err != nil {
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runAdd(context.Background(), dependencies, resolved(t, root), read(t, root, srv.URL), opened(t, srv)); err != nil {
 		t.Fatalf("runAdd err = %v\n%s", err, stdout.String())
 	}
 
@@ -187,13 +186,13 @@ func TestAddInstallsTheConnectorBuiltForThePlatformTheProviderNames(t *testing.T
 	srv := newConsoleServer(t)
 	linked(t, root, srv.URL)
 
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
-	deps.ConfigPath = func() string { return filepath.Join(root, "ocel.fake.json") }
+	dependencies := newTestDependencies()
+	dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
+	dependencies.ConfigPath = func() string { return filepath.Join(root, "ocel.fake.json") }
 
 	var stdout bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stdout)
-	if err := runAdd(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv)); err != nil {
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runAdd(context.Background(), dependencies, resolved(t, root), read(t, root, srv.URL), opened(t, srv)); err != nil {
 		t.Fatalf("runAdd err = %v\n%s", err, stdout.String())
 	}
 
@@ -209,12 +208,12 @@ func TestAddRelaysWhatTheProviderSaysWhileItInstallsThroughItsRun(t *testing.T) 
 	srv := newConsoleServer(t)
 	linked(t, root, srv.URL)
 
-	deps := jsonDeps()
-	deps.ConfigPath = func() string { return filepath.Join(root, "ocel.fake.json") }
+	dependencies := newJSONDependencies()
+	dependencies.ConfigPath = func() string { return filepath.Join(root, "ocel.fake.json") }
 
 	var stream bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stream)
-	if err := runAdd(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv)); err != nil {
+	clitest.AttachTerminalSink(dependencies.Invocation, &stream)
+	if err := runAdd(context.Background(), dependencies, resolved(t, root), read(t, root, srv.URL), opened(t, srv)); err != nil {
 		t.Fatalf("runAdd err = %v\n%s", err, stream.String())
 	}
 
@@ -239,13 +238,13 @@ func TestAddGrantsRevealOnlyWhenItIsAskedFor(t *testing.T) {
 	srv := newConsoleServer(t)
 	linked(t, root, srv.URL)
 
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
+	dependencies := newTestDependencies()
+	dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
 
 	opts := opened(t, srv)
 	opts.reveal = true
 	opts.write = false
-	if err := runAdd(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opts); err != nil {
+	if err := runAdd(context.Background(), dependencies, resolved(t, root), read(t, root, srv.URL), opts); err != nil {
 		t.Fatalf("runAdd err = %v", err)
 	}
 
@@ -274,11 +273,11 @@ func TestAConnectorOverTheChannelCeilingIsRefusedBeforeItIsSent(t *testing.T) {
 		t.Fatalf("grow the connector past the ceiling: %v", err)
 	}
 
-	deps := jsonDeps()
+	dependencies := newJSONDependencies()
 	var stream bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stream)
+	clitest.AttachTerminalSink(dependencies.Invocation, &stream)
 
-	err := runAdd(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv))
+	err := runAdd(context.Background(), dependencies, resolved(t, root), read(t, root, srv.URL), opened(t, srv))
 	if err == nil {
 		t.Fatal("runAdd err = nil, want a connector over the ceiling refused")
 	}
@@ -300,11 +299,11 @@ func TestAFailedAddSaysRunningItAgainFinishesIt(t *testing.T) {
 	srv.refusePatch = true
 	linked(t, root, srv.URL)
 
-	deps := jsonDeps()
+	dependencies := newJSONDependencies()
 	var stream bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stream)
+	clitest.AttachTerminalSink(dependencies.Invocation, &stream)
 
-	err := runAdd(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv))
+	err := runAdd(context.Background(), dependencies, resolved(t, root), read(t, root, srv.URL), opened(t, srv))
 	if err == nil {
 		t.Fatal("a console that refused the address answered no error")
 	}
@@ -326,12 +325,12 @@ func TestRemoveTakesTheConnectorOffTheBoxAndForgetsTheRow(t *testing.T) {
 	})
 	linked(t, root, srv.URL)
 
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
+	dependencies := newTestDependencies()
+	dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
 
 	var stdout bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stdout)
-	if err := runRemove(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv)); err != nil {
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runRemove(context.Background(), dependencies, resolved(t, root), read(t, root, srv.URL), opened(t, srv)); err != nil {
 		t.Fatalf("runRemove err = %v", err)
 	}
 
@@ -352,11 +351,11 @@ func TestAnUnreachableMachineIsPointedAtRmTarget(t *testing.T) {
 	})
 	linked(t, root, srv.URL)
 
-	deps := jsonDeps()
+	dependencies := newJSONDependencies()
 	var stream bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stream)
+	clitest.AttachTerminalSink(dependencies.Invocation, &stream)
 
-	err := runRemove(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv))
+	err := runRemove(context.Background(), dependencies, resolved(t, root), read(t, root, srv.URL), opened(t, srv))
 	if err == nil {
 		t.Fatal("runRemove err = nil, want the unreachable machine reported")
 	}
@@ -378,15 +377,15 @@ func TestRmTargetForgetsTheRowWithoutTouchingTheTarget(t *testing.T) {
 	})
 	linked(t, root, srv.URL)
 
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
+	dependencies := newTestDependencies()
+	dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
 
 	opts := opened(t, srv)
 	opts.target = fingerprint
 
 	var stdout bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stdout)
-	if err := runRemove(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opts); err != nil {
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runRemove(context.Background(), dependencies, resolved(t, root), read(t, root, srv.URL), opts); err != nil {
 		t.Fatalf("runRemove err = %v", err)
 	}
 	if len(srv.deleted) != 1 || srv.deleted[0] != "con_1" {
@@ -400,21 +399,21 @@ func TestRmTargetForgetsTheRowWithoutTouchingTheTarget(t *testing.T) {
 	}
 }
 
-func TestRmTargetSaysSoWhenTheConsoleHasNoSuchTarget(t *testing.T) {
+func TestRemovingATargetSaysSoWhenTheConsoleHasNoSuchTarget(t *testing.T) {
 	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
 	root := project.Root
 	srv := newConsoleServer(t)
 	linked(t, root, srv.URL)
 
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
+	dependencies := newTestDependencies()
+	dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
 
 	opts := opened(t, srv)
 	opts.target = fingerprint
 
 	var stdout bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stdout)
-	if err := runRemove(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opts); err != nil {
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runRemove(context.Background(), dependencies, resolved(t, root), read(t, root, srv.URL), opts); err != nil {
 		t.Fatalf("runRemove err = %v", err)
 	}
 	if len(srv.deleted) != 0 {
@@ -436,12 +435,12 @@ func TestStatusSaysWhatTheConsoleHasRegistered(t *testing.T) {
 	})
 	linked(t, root, srv.URL)
 
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
-	deps.ConfigPath = func() string { return "" }
+	dependencies := newTestDependencies()
+	dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
+	dependencies.ConfigPath = func() string { return "" }
 
 	var stdout bytes.Buffer
-	if err := runStatus(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv), &stdout); err != nil {
+	if err := runStatus(context.Background(), dependencies, resolved(t, root), read(t, root, srv.URL), opened(t, srv), &stdout); err != nil {
 		t.Fatalf("runStatus err = %v", err)
 	}
 	for _, want := range []string{fingerprint, "container over dial", "online", "envvars.read, envvars.write"} {
@@ -457,12 +456,12 @@ func TestStatusSaysSoWhenTheOrganizationHasNoConnector(t *testing.T) {
 	srv := newConsoleServer(t)
 	linked(t, root, srv.URL)
 
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
-	deps.ConfigPath = func() string { return "" }
+	dependencies := newTestDependencies()
+	dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
+	dependencies.ConfigPath = func() string { return "" }
 
 	var stdout bytes.Buffer
-	if err := runStatus(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv), &stdout); err != nil {
+	if err := runStatus(context.Background(), dependencies, resolved(t, root), read(t, root, srv.URL), opened(t, srv), &stdout); err != nil {
 		t.Fatalf("runStatus err = %v", err)
 	}
 	if !strings.Contains(stdout.String(), "ocel connector add") {
@@ -474,11 +473,11 @@ func TestAnUnlinkedTreeIsPointedAtOcelLink(t *testing.T) {
 	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
 	root := project.Root
 
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
-	deps.ConfigPath = func() string { return filepath.Join(root, "ocel.fake.json") }
+	dependencies := newTestDependencies()
+	dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
+	dependencies.ConfigPath = func() string { return filepath.Join(root, "ocel.fake.json") }
 
-	cmd := NewCommand(deps)
+	cmd := NewCommand(dependencies)
 	cmd.SetArgs([]string{"status"})
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -495,13 +494,13 @@ func TestBeingLoggedOutIsPointedAtOcelLogin(t *testing.T) {
 	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
 	root := project.Root
 
-	deps := clitest.NewDeps()
-	deps.LoadCredentials = func() (console.Credentials, error) {
+	dependencies := newTestDependencies()
+	dependencies.LoadCredentials = func() (console.Credentials, error) {
 		return console.Credentials{}, console.ErrNotLoggedIn
 	}
-	deps.ConfigPath = func() string { return filepath.Join(root, "ocel.fake.json") }
+	dependencies.ConfigPath = func() string { return filepath.Join(root, "ocel.fake.json") }
 
-	cmd := NewCommand(deps)
+	cmd := NewCommand(dependencies)
 	cmd.SetArgs([]string{"status"})
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -538,13 +537,13 @@ func TestTheComputeGoesToTheProviderUntouched(t *testing.T) {
 	srv := newConsoleServer(t)
 	linked(t, root, srv.URL)
 
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
+	dependencies := newTestDependencies()
+	dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
 
 	project.Provider.FakeConnector().RunsOn(provider.ComputeContainer, provider.ComputeServerless)
 	opts := opened(t, srv)
 	opts.compute = "serverless"
-	if err := runAdd(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opts); err != nil {
+	if err := runAdd(context.Background(), dependencies, resolved(t, root), read(t, root, srv.URL), opts); err != nil {
 		t.Fatalf("runAdd err = %v", err)
 	}
 
@@ -584,13 +583,13 @@ func chdir(t *testing.T, dir string, run func() error) error {
 	return run()
 }
 
-func jsonDeps() cmddeps.Deps {
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
-	deps.Presentation = func(io.Writer) terminal.Presentation {
+func newJSONDependencies() Dependencies {
+	dependencies := newTestDependencies()
+	dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
+	dependencies.Presentation = func(io.Writer) terminal.Presentation {
 		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
 	}
-	return deps
+	return dependencies
 }
 
 func failure(t *testing.T, stream string) string {
@@ -614,12 +613,12 @@ func TestStatusForAConfigReadsItsTargetInTheCheckPhaseOfItsRunAndPrintsWhatTheCo
 	})
 	linked(t, root, srv.URL)
 
-	deps := jsonDeps()
-	deps.ConfigPath = func() string { return filepath.Join(root, "ocel.fake.json") }
+	dependencies := newJSONDependencies()
+	dependencies.ConfigPath = func() string { return filepath.Join(root, "ocel.fake.json") }
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stderr)
-	if err := runStatus(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv), &stdout); err != nil {
+	clitest.AttachTerminalSink(dependencies.Invocation, &stderr)
+	if err := runStatus(context.Background(), dependencies, resolved(t, root), read(t, root, srv.URL), opened(t, srv), &stdout); err != nil {
 		t.Fatalf("runStatus err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 

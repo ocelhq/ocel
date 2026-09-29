@@ -13,7 +13,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
@@ -28,23 +27,23 @@ import (
 
 const apiFunction = "environment:prod/app:api/fake_function:fn--api--api"
 
-func scanFixture(t *testing.T) (string, *fake.Provider, cmddeps.Deps) {
+func scanFixture(t *testing.T) (string, *fake.Provider, Dependencies) {
 	t.Helper()
 	project := clitest.SetUpProject(t)
 	root, p := project.Root, project.Provider
 	clitest.WriteUsageMonorepo(t, root)
-	deps := clitest.NewDeps()
-	clitest.StubBuild(&deps, []build.Function{
+	dependencies := newTestDependencies()
+	stubFunctions(&dependencies, []build.Function{
 		{Route: "api", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
 	})
-	return root, p, deps
+	return root, p, dependencies
 }
 
-func scan(t *testing.T, deps cmddeps.Deps, root string, opts Options) string {
+func scan(t *testing.T, dependencies Dependencies, root string, opts Options) string {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stderr)
-	if err := Run(context.Background(), deps, root, opts, &stdout); err != nil {
+	clitest.AttachTerminalSink(dependencies.Invocation, &stderr)
+	if err := Run(context.Background(), dependencies, root, opts, &stdout); err != nil {
 		t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	return stdout.String()
@@ -58,9 +57,9 @@ type scanJSON struct {
 
 func TestScan(t *testing.T) {
 	t.Run("it tables every resource under its scope with the fixed and moderate cost beside it", func(t *testing.T) {
-		root, _, deps := scanFixture(t)
+		root, _, dependencies := scanFixture(t)
 
-		out := scan(t, deps, root, Options{})
+		out := scan(t, dependencies, root, Options{})
 
 		for _, want := range []string{
 			"prod",
@@ -84,9 +83,9 @@ func TestScan(t *testing.T) {
 	})
 
 	t.Run("it prices the rows under the profile asked for", func(t *testing.T) {
-		root, _, deps := scanFixture(t)
+		root, _, dependencies := scanFixture(t)
 
-		out := scan(t, deps, root, Options{Profile: "heavy"})
+		out := scan(t, dependencies, root, Options{Profile: "heavy"})
 
 		row := lineNaming(out, "fn--api--api")
 		if !strings.Contains(row, "10.00") {
@@ -95,11 +94,11 @@ func TestScan(t *testing.T) {
 	})
 
 	t.Run("a usage file overrides the profile for the resource it names", func(t *testing.T) {
-		root, _, deps := scanFixture(t)
+		root, _, dependencies := scanFixture(t)
 		usage := filepath.Join(t.TempDir(), "usage.yaml")
 		clitest.WriteFile(t, usage, apiFunction+":\n  monthly_requests: 5000000\n")
 
-		out := scan(t, deps, root, Options{Usage: usage})
+		out := scan(t, dependencies, root, Options{Usage: usage})
 
 		row := lineNaming(out, "fn--api--api")
 		if !strings.Contains(row, "5.00") {
@@ -108,12 +107,12 @@ func TestScan(t *testing.T) {
 	})
 
 	t.Run("it prices one function per app when nothing is built", func(t *testing.T) {
-		root, _, deps := scanFixture(t)
-		deps.ReadFunctions = func(string) ([]build.Function, error) {
+		root, _, dependencies := scanFixture(t)
+		dependencies.ReadFunctions = func(string) ([]build.Function, error) {
 			return nil, build.ErrNoBuildOutput
 		}
 
-		out := scan(t, deps, root, Options{})
+		out := scan(t, dependencies, root, Options{})
 
 		if !strings.Contains(out, "fake_function") {
 			t.Errorf("stdout = %q, want the api app priced as one function without a build", out)
@@ -124,24 +123,24 @@ func TestScan(t *testing.T) {
 	})
 
 	t.Run("it includes the unbuilt assumption in the JSON envelope and none when the build is read", func(t *testing.T) {
-		root, _, deps := scanFixture(t)
-		deps.Presentation = func(io.Writer) terminal.Presentation {
+		root, _, dependencies := scanFixture(t)
+		dependencies.Presentation = func(io.Writer) terminal.Presentation {
 			return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
 		}
 
 		var built scanJSON
-		if err := json.Unmarshal([]byte(scan(t, deps, root, Options{})), &built); err != nil {
+		if err := json.Unmarshal([]byte(scan(t, dependencies, root, Options{})), &built); err != nil {
 			t.Fatal(err)
 		}
 		if len(built.Assumptions) != 0 {
 			t.Errorf("assumptions with a build = %v, want none", built.Assumptions)
 		}
 
-		deps.ReadFunctions = func(string) ([]build.Function, error) {
+		dependencies.ReadFunctions = func(string) ([]build.Function, error) {
 			return nil, build.ErrNoBuildOutput
 		}
 		var unbuilt scanJSON
-		if err := json.Unmarshal([]byte(scan(t, deps, root, Options{})), &unbuilt); err != nil {
+		if err := json.Unmarshal([]byte(scan(t, dependencies, root, Options{})), &unbuilt); err != nil {
 			t.Fatal(err)
 		}
 		if len(unbuilt.Assumptions) != 1 || !strings.Contains(unbuilt.Assumptions[0], "one function") {
@@ -150,7 +149,7 @@ func TestScan(t *testing.T) {
 	})
 
 	t.Run("an app naming no compute is priced on the compute its provider runs first", func(t *testing.T) {
-		root, p, deps := scanFixture(t)
+		root, p, dependencies := scanFixture(t)
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "`+clitest.FixtureSlug+`",
@@ -160,11 +159,11 @@ export default {
 `)
 		clitest.WriteFile(t, filepath.Join(root, "apps", "api", "package.json"), `{}`)
 		p.WithFacts(func(facts *provider.Facts) { facts.Computes = []provider.Compute{provider.ComputeContainer} })
-		deps.ReadFunctions = func(string) ([]build.Function, error) {
+		dependencies.ReadFunctions = func(string) ([]build.Function, error) {
 			return nil, build.ErrNoBuildOutput
 		}
 
-		out := scan(t, deps, root, Options{})
+		out := scan(t, dependencies, root, Options{})
 
 		if !strings.Contains(out, "fake_container") || strings.Contains(out, "fake_function") {
 			t.Errorf("stdout = %q, want the api app priced as the container its provider runs, not as a serverless function", out)
@@ -172,9 +171,9 @@ export default {
 	})
 
 	t.Run("it prices the preview environment when asked", func(t *testing.T) {
-		root, _, deps := scanFixture(t)
+		root, _, dependencies := scanFixture(t)
 
-		out := scan(t, deps, root, Options{Env: "preview"})
+		out := scan(t, dependencies, root, Options{Env: "preview"})
 
 		if !strings.Contains(out, "preview") || strings.Contains(out, "prod") {
 			t.Errorf("stdout = %q, want the preview environment scoped and prod absent", out)
@@ -182,24 +181,24 @@ export default {
 	})
 
 	t.Run("it refuses an environment or profile it does not know", func(t *testing.T) {
-		root, _, deps := scanFixture(t)
+		root, _, dependencies := scanFixture(t)
 
 		var stdout bytes.Buffer
-		if err := Run(context.Background(), deps, root, Options{Env: "staging"}, &stdout); err == nil || !strings.Contains(err.Error(), "staging") {
+		if err := Run(context.Background(), dependencies, root, Options{Env: "staging"}, &stdout); err == nil || !strings.Contains(err.Error(), "staging") {
 			t.Errorf("Run(env=staging) err = %v, want a refusal naming what was typed", err)
 		}
-		if err := Run(context.Background(), deps, root, Options{Profile: "extreme"}, &stdout); err == nil || !strings.Contains(err.Error(), "extreme") {
+		if err := Run(context.Background(), dependencies, root, Options{Profile: "extreme"}, &stdout); err == nil || !strings.Contains(err.Error(), "extreme") {
 			t.Errorf("Run(profile=extreme) err = %v, want a refusal naming what was typed", err)
 		}
 	})
 
 	t.Run("it writes the resource set and the estimate as JSON under --log-format json", func(t *testing.T) {
-		root, _, deps := scanFixture(t)
-		deps.Presentation = func(io.Writer) terminal.Presentation {
+		root, _, dependencies := scanFixture(t)
+		dependencies.Presentation = func(io.Writer) terminal.Presentation {
 			return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
 		}
 
-		out := scan(t, deps, root, Options{})
+		out := scan(t, dependencies, root, Options{})
 
 		var got scanJSON
 		if err := json.Unmarshal([]byte(out), &got); err != nil {
@@ -232,18 +231,18 @@ func lineNaming(out, name string) string {
 }
 
 func TestAScanAgainstAProviderThatPricesNothingSaysSoBeforeScanning(t *testing.T) {
-	root, p, deps := scanFixture(t)
+	root, p, dependencies := scanFixture(t)
 	p.WithHooks(func(hooks *provider.Hooks) { hooks.Cost = nil })
 	scanned := false
-	collect := deps.CollectDeclarations
-	deps.CollectDeclarations = func(ctx context.Context, cfg *project.Project, declarations *variables.Declarations, stdout, stderr io.Writer) ([]declaration.Resource, error) {
+	collect := dependencies.CollectDeclarations
+	dependencies.CollectDeclarations = func(ctx context.Context, cfg *project.Project, declarations *variables.Declarations, stdout, stderr io.Writer) ([]declaration.Resource, error) {
 		scanned = true
 		return collect(ctx, cfg, declarations, stdout, stderr)
 	}
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stderr)
-	err := Run(context.Background(), deps, root, Options{}, &stdout)
+	clitest.AttachTerminalSink(dependencies.Invocation, &stderr)
+	err := Run(context.Background(), dependencies, root, Options{}, &stdout)
 	if err == nil || !strings.Contains(stderr.String(), "fake does not price a deploy") {
 		t.Fatalf("Run err = %v, want it to say the provider does not price a deploy\n%s", err, stderr.String())
 	}
@@ -253,14 +252,14 @@ func TestAScanAgainstAProviderThatPricesNothingSaysSoBeforeScanning(t *testing.T
 }
 
 func TestAScanStartsTheProviderInTheCheckPhaseOfItsRunAndPrintsItsEstimateAloneOnStdout(t *testing.T) {
-	root, _, deps := scanFixture(t)
-	deps.Presentation = func(io.Writer) terminal.Presentation {
+	root, _, dependencies := scanFixture(t)
+	dependencies.Presentation = func(io.Writer) terminal.Presentation {
 		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
 	}
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stderr)
-	if err := Run(context.Background(), deps, root, Options{}, &stdout); err != nil {
+	clitest.AttachTerminalSink(dependencies.Invocation, &stderr)
+	if err := Run(context.Background(), dependencies, root, Options{}, &stdout); err != nil {
 		t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 

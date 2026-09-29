@@ -9,7 +9,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/commands"
+	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/run"
@@ -27,7 +28,7 @@ type rollbackOptions struct {
 	dry bool
 }
 
-func NewRollbackCommand(deps cmddeps.Deps) *cobra.Command {
+func NewRollbackCommand(invocation commands.Invocation) *cobra.Command {
 	var opts rollbackOptions
 	cmd := &cobra.Command{
 		Use:   "rollback",
@@ -41,21 +42,21 @@ func NewRollbackCommand(deps cmddeps.Deps) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
-			return runRollback(cmd.Context(), deps, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+			return runRollback(cmd.Context(), invocation, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 		},
 	}
 	cmd.Flags().StringVar(&opts.to, "to", "", "Roll back to a specific promotion id instead of the immediately previous one")
 	cmd.Flags().StringVar(&opts.tag, "tag", "", "Roll back to the promotion with this tag (mutually exclusive with --to)")
 	cmd.Flags().BoolVar(&opts.dry, "dry", false, "Print what would be rolled back and stop, rolling back nothing")
-	cmddeps.Yes(cmd, &opts.yes)
+	commands.AddYesFlag(cmd, &opts.yes)
 	return cmd
 }
 
-func runRollback(ctx context.Context, deps cmddeps.Deps, cwd string, opts rollbackOptions, stdout, stderr io.Writer, stdin io.Reader) (err error) {
+func runRollback(ctx context.Context, invocation commands.Invocation, cwd string, opts rollbackOptions, stdout, stderr io.Writer, stdin io.Reader) (err error) {
 	if opts.to != "" && opts.tag != "" {
 		return fmt.Errorf("--to and --tag are mutually exclusive; pass just one")
 	}
-	cfg, err := deps.LoadProject(ctx, cwd)
+	cfg, err := invocation.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}
@@ -63,21 +64,21 @@ func runRollback(ctx context.Context, deps cmddeps.Deps, cwd string, opts rollba
 	if _, err := cfg.RequireProvider(); err != nil {
 		return err
 	}
-	policy := deps.ConsentPolicy("ocel rollback", opts.yes, stdout, stdin)
+	policy := consent.NewPolicy("ocel rollback", opts.yes, invocation.StdinIsTerminal(stdin), stdout, stdin)
 	policy.ConfirmsPlan = true
 	policy.DryRun = opts.dry
 	if err := policy.Refuse(); err != nil {
 		return err
 	}
 
-	ctx, run, err := deps.Events.Begin(ctx, "ocel rollback", cfg.Dir)
+	ctx, run, err := invocation.Events.Begin(ctx, "ocel rollback", cfg.Dir)
 	if err != nil {
 		return err
 	}
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := providerclient.Start(ctx, cfg, check, deps.Questions, providerclient.ChoosePinning(opts.dry))
+	prov, err := providerclient.Start(ctx, cfg, check, invocation.Questions, providerclient.ChoosePinning(opts.dry))
 	if err != nil {
 		return err
 	}

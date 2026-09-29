@@ -12,7 +12,7 @@ import (
 	"github.com/creack/pty"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 )
 
@@ -249,7 +249,7 @@ func TestEveryCommandWhoseStdoutIsItsDataIsMarkedToDrawItsRunOnStderr(t *testing
 		cmd.SetOut(&stdout)
 		cmd.SetErr(&stderr)
 		t.Cleanup(func() { cmd.SetOut(nil); cmd.SetErr(nil) })
-		if got := cmddeps.ChooseRunOutput(cmd); got != &stderr {
+		if got := commands.ChooseRunOutput(cmd); got != &stderr {
 			t.Errorf("ocel %s draws its run on stdout, want stderr so stdout holds only its data", strings.Join(path, " "))
 		}
 	}
@@ -265,7 +265,7 @@ func TestEveryCommandThatReportsThroughItsRunIsMarkedToDrawItOnStdout(t *testing
 		cmd.SetOut(&stdout)
 		cmd.SetErr(&stderr)
 		t.Cleanup(func() { cmd.SetOut(nil); cmd.SetErr(nil) })
-		if got := cmddeps.ChooseRunOutput(cmd); got != &stdout {
+		if got := commands.ChooseRunOutput(cmd); got != &stdout {
 			t.Errorf("ocel %s draws its run on stderr, want stdout", strings.Join(path, " "))
 		}
 	}

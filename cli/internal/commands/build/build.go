@@ -14,7 +14,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/appurl"
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/preflight"
 	"github.com/ocelhq/ocel/cli/internal/project"
@@ -27,7 +27,12 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
-func NewCommand(deps cmddeps.Deps) *cobra.Command {
+type Dependencies struct {
+	commands.Invocation
+	BuildApps func(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, log build.Log) (build.Output, error)
+}
+
+func NewCommand(dependencies Dependencies) *cobra.Command {
 	return &cobra.Command{
 		Use:   "build",
 		Short: "Build every app in your project without deploying",
@@ -45,13 +50,13 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
 
-			return runBuild(cmd.Context(), deps, cwd)
+			return runBuild(cmd.Context(), dependencies, cwd)
 		},
 	}
 }
 
-func runBuild(ctx context.Context, deps cmddeps.Deps, cwd string) (err error) {
-	declared, err := deps.LoadProject(ctx, cwd)
+func runBuild(ctx context.Context, dependencies Dependencies, cwd string) (err error) {
+	declared, err := dependencies.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}
@@ -71,19 +76,19 @@ func runBuild(ctx context.Context, deps cmddeps.Deps, cwd string) (err error) {
 		}
 	}
 
-	ctx, building, err := deps.Events.Begin(ctx, "ocel build", declared.Dir)
+	ctx, building, err := dependencies.Events.Begin(ctx, "ocel build", declared.Dir)
 	if err != nil {
 		return err
 	}
 	defer building.End(&err)
-	cfg, err := resolveBuiltComputes(ctx, deps, building, declared)
+	cfg, err := resolveBuiltComputes(ctx, dependencies, building, declared)
 	if err != nil {
 		return err
 	}
 	phase := building.Phase(progressv1.Phase_PHASE_BUILD)
 
 	clients := builtInClients(cfg, appurl.Production(cfg))
-	built, err := deps.BuildApps(run.ContextWithSpan(ctx, phase), cfg, build.Env(clients), declaredArchs(cfg), appBuildLog(phase))
+	built, err := dependencies.BuildApps(run.ContextWithSpan(ctx, phase), cfg, build.Env(clients), declaredArchs(cfg), appBuildLog(phase))
 	if err != nil {
 		return err
 	}
@@ -98,13 +103,13 @@ func runBuild(ctx context.Context, deps cmddeps.Deps, cwd string) (err error) {
 	return nil
 }
 
-func resolveBuiltComputes(ctx context.Context, deps cmddeps.Deps, building *run.Run, declared *project.Project) (resolved *project.Project, err error) {
+func resolveBuiltComputes(ctx context.Context, dependencies Dependencies, building *run.Run, declared *project.Project) (resolved *project.Project, err error) {
 	if len(declared.UnresolvedApps()) == 0 {
 		return declared.ResolveDeclaredComputes()
 	}
 	check := building.Phase(progressv1.Phase_PHASE_CHECK)
 	defer func() { check.End(err) }()
-	prov, err := providerclient.Start(ctx, declared, check, deps.Questions, providerclient.PinToLock)
+	prov, err := providerclient.Start(ctx, declared, check, dependencies.Questions, providerclient.PinToLock)
 	if err != nil {
 		return nil, err
 	}

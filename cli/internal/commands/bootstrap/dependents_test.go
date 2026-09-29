@@ -15,11 +15,11 @@ import (
 
 func TestOnlyWhatRendersDependentsPaysForThem(t *testing.T) {
 	t.Run("bootstrap reads the catalogue, then plans the apply it is about to send", func(t *testing.T) {
-		project, deps := bootstrapProject(t, "", featureISR)
+		project, invocation := bootstrapProject(t, "", featureISR)
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := Run(context.Background(), deps, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		clitest.AttachTerminalSink(invocation, &stdout)
+		if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stderr=%s", err, stderr.String())
 		}
 		described := clitest.RequestsTo[*contractv1.DescribeBootstrapRequest](t, project.Requests, contractv1connect.ProviderServiceDescribeBootstrapProcedure)

@@ -22,9 +22,8 @@ import (
 
 func TestADeployRecordsWhatItDeployed(t *testing.T) {
 	t.Run("a successful deploy records the promotion, the tag and every app", func(t *testing.T) {
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, []build.Function{{
+		dependencies := newTestDependencies()
+		stubBuild(&dependencies, []build.Function{{
 			Route: "api", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js",
 			ArtifactPath: "output/api", App: "api",
 		}})
@@ -33,8 +32,8 @@ func TestADeployRecordsWhatItDeployed(t *testing.T) {
 		writeServeDescriptor(t, root, "api", "bld_api_1")
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true, tag: "v9"}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true, tag: "v9"}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -66,9 +65,8 @@ func TestADeployRecordsWhatItDeployed(t *testing.T) {
 	})
 
 	t.Run("a failed deploy leaves no stale result behind", func(t *testing.T) {
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, nil)
+		dependencies := newTestDependencies()
+		stubBuild(&dependencies, nil)
 		root, _ := clitest.SetUpDeployFixture(t)
 		if err := deployrecord.Write(root, deployrecord.Record{PromotionID: "prm_previous_run"}); err != nil {
 			t.Fatalf("seed stale result: %v", err)
@@ -76,8 +74,8 @@ func TestADeployRecordsWhatItDeployed(t *testing.T) {
 		t.Setenv(clitest.FakeProviderModeEnvVar, "fail")
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatalf("runDeploy err = nil, want the simulated failure; stdout=%s", stdout.String())
 		}
@@ -88,9 +86,8 @@ func TestADeployRecordsWhatItDeployed(t *testing.T) {
 	})
 
 	t.Run("a successful preview up records the named preview", func(t *testing.T) {
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, []build.Function{{
+		dependencies := newTestDependencies()
+		stubBuild(&dependencies, []build.Function{{
 			Route: "api", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js",
 			ArtifactPath: "output/api", App: "api",
 		}})
@@ -100,8 +97,8 @@ func TestADeployRecordsWhatItDeployed(t *testing.T) {
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runPreviewUp(context.Background(), deps, root, previewUpOptions{name: "e2e-42"}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		if err := runPreviewUp(context.Background(), dependencies, root, previewUpOptions{name: "e2e-42"}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 

@@ -12,13 +12,15 @@ import (
 )
 
 func TestDeployYesNeverStopsToAsk(t *testing.T) {
-	root, journal, deps := clitest.SetUpEdgeFixture(t, "")
+	root, journal := clitest.SetUpEdgeFixture(t, "")
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, clitest.UsageMonorepoFunctions())
 	t.Setenv(clitest.FakeBootstrapEnvVar, "missing")
-	deps.StdinIsTerminal = func(io.Reader) bool { return true }
+	dependencies.StdinIsTerminal = func(io.Reader) bool { return true }
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stdout)
-	err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 	if err == nil {
 		t.Fatal("an unattended deploy against a bootstrap missing a feature it needs was allowed through")
 	}
@@ -39,12 +41,14 @@ func TestDeployWithoutATerminalRefusesTheBootstrapItCannotOffer(t *testing.T) {
 		{name: "with --yes", opts: deployOptions{yes: true}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			root, journal, deps := clitest.SetUpEdgeFixture(t, "")
+			root, journal := clitest.SetUpEdgeFixture(t, "")
+			dependencies := newTestDependencies()
+			stubBuild(&dependencies, clitest.UsageMonorepoFunctions())
 			t.Setenv(clitest.FakeBootstrapEnvVar, "missing")
 
 			var stdout, stderr bytes.Buffer
-			clitest.AttachTerminalSink(deps, &stdout)
-			err := runDeploy(context.Background(), deps, root, tc.opts, &stdout, &stderr, strings.NewReader(""))
+			clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+			err := runDeploy(context.Background(), dependencies, root, tc.opts, &stdout, &stderr, strings.NewReader(""))
 			if err == nil {
 				t.Fatal("a deploy against a bootstrap missing a feature it needs was allowed through")
 			}

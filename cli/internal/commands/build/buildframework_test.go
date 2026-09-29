@@ -28,12 +28,12 @@ func TestBuildRefusesAFunctionAppWhoseDirectorySaysNothingAboutWhatItIsBuiltWith
 	writeBuildConfig(t, root, `[{ name: "web", path: "web" }]`)
 	clitest.WriteFile(t, filepath.Join(root, "web", "main.rb"), "puts 1\n")
 
-	deps := clitest.NewDeps()
-	clitest.StubBuild(&deps, nil)
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, nil)
 	var out strings.Builder
-	clitest.AttachTerminalSink(deps, &out)
+	clitest.AttachTerminalSink(dependencies.Invocation, &out)
 
-	err := runBuild(context.Background(), deps, root)
+	err := runBuild(context.Background(), dependencies, root)
 	if err == nil {
 		t.Fatal("runBuild = nil error, want the app refused: its provider runs it serverless, and nothing says what web's functions are built with")
 	}
@@ -51,14 +51,14 @@ func TestBuildAsksTheProviderWhichComputeAnAppNamingNoneRunsOn(t *testing.T) {
 	writeBuildConfig(t, root, `[{ name: "web", path: "web" }]`)
 	clitest.WriteFile(t, filepath.Join(root, "web", "package.json"), "{}\n")
 
-	deps := clitest.NewDeps()
+	dependencies := newTestDependencies()
 	var built *project.Project
-	deps.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
 		built = cfg
 		return build.Output{}, nil
 	}
 
-	if err := runBuild(context.Background(), deps, root); err != nil {
+	if err := runBuild(context.Background(), dependencies, root); err != nil {
 		t.Fatalf("runBuild: %v", err)
 	}
 	if built == nil || !built.Apps[0].RunsOn(provider.ComputeContainer) {
@@ -78,14 +78,14 @@ export default {
 };
 `)
 
-	deps := clitest.NewDeps()
+	dependencies := newTestDependencies()
 	built := false
-	deps.BuildApps = func(context.Context, *project.Project, map[string]map[string]string, map[string]string, build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(context.Context, *project.Project, map[string]map[string]string, map[string]string, build.Log) (build.Output, error) {
 		built = true
 		return build.Output{}, nil
 	}
 
-	err := runBuild(context.Background(), deps, root)
+	err := runBuild(context.Background(), dependencies, root)
 	if err == nil {
 		t.Fatal("runBuild = nil error, want web refused: nothing says whether it deploys as functions or as an image")
 	}

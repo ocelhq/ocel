@@ -9,7 +9,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/commands/bootstrap"
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/preflight"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
@@ -19,7 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-func withCommand(cmd *cobra.Command, deps cmddeps.Deps, run func(context.Context, string) error) error {
+func withCommand(cmd *cobra.Command, dependencies Dependencies, run func(context.Context, string) error) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("determine working directory: %w", err)
@@ -29,19 +28,19 @@ func withCommand(cmd *cobra.Command, deps cmddeps.Deps, run func(context.Context
 
 type variablesKeyOffer struct{ stdin io.Reader }
 
-func withEnvProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, command string, stderr io.Writer, drive func(context.Context, *run.Run, *providerclient.Provider, *project.Project, *contractv1.PreflightResponse) error) error {
-	return runWithEnvProvider(ctx, deps, cwd, opts, command, nil, stderr, drive)
+func withEnvProvider(ctx context.Context, dependencies Dependencies, cwd string, opts envOptions, command string, stderr io.Writer, drive func(context.Context, *run.Run, *providerclient.Provider, *project.Project, *contractv1.PreflightResponse) error) error {
+	return runWithEnvProvider(ctx, dependencies, cwd, opts, command, nil, stderr, drive)
 }
 
-func withEnvProviderOfferingVariablesKey(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, command string, stdin io.Reader, stderr io.Writer, drive func(context.Context, *run.Run, *providerclient.Provider, *project.Project, *contractv1.PreflightResponse) error) error {
-	return runWithEnvProvider(ctx, deps, cwd, opts, command, &variablesKeyOffer{stdin: stdin}, stderr, drive)
+func withEnvProviderOfferingVariablesKey(ctx context.Context, dependencies Dependencies, cwd string, opts envOptions, command string, stdin io.Reader, stderr io.Writer, drive func(context.Context, *run.Run, *providerclient.Provider, *project.Project, *contractv1.PreflightResponse) error) error {
+	return runWithEnvProvider(ctx, dependencies, cwd, opts, command, &variablesKeyOffer{stdin: stdin}, stderr, drive)
 }
 
-func runWithEnvProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, command string, keyOffer *variablesKeyOffer, stderr io.Writer, drive func(context.Context, *run.Run, *providerclient.Provider, *project.Project, *contractv1.PreflightResponse) error) (err error) {
+func runWithEnvProvider(ctx context.Context, dependencies Dependencies, cwd string, opts envOptions, command string, keyOffer *variablesKeyOffer, stderr io.Writer, drive func(context.Context, *run.Run, *providerclient.Provider, *project.Project, *contractv1.PreflightResponse) error) (err error) {
 	if err := opts.checkEnvironment(); err != nil {
 		return err
 	}
-	cfg, err := deps.LoadProject(ctx, cwd)
+	cfg, err := dependencies.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}
@@ -49,20 +48,20 @@ func runWithEnvProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opts
 		return err
 	}
 
-	ctx, run, err := deps.Events.Begin(ctx, command, cfg.Dir)
+	ctx, run, err := dependencies.Events.Begin(ctx, command, cfg.Dir)
 	if err != nil {
 		return err
 	}
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := providerclient.Start(ctx, cfg, check, deps.Questions, providerclient.PinToLock)
+	prov, err := providerclient.Start(ctx, cfg, check, dependencies.Questions, providerclient.PinToLock)
 	if err != nil {
 		return err
 	}
 	defer prov.Close()
 
-	status, err := preflightEnvProvider(ctx, deps, check, prov, cfg, opts, keyOffer, stderr)
+	status, err := preflightEnvProvider(ctx, dependencies, check, prov, cfg, opts, keyOffer, stderr)
 	check.End(err)
 	if err != nil {
 		return err
@@ -70,15 +69,15 @@ func runWithEnvProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opts
 	return drive(ctx, run, prov, cfg, status)
 }
 
-func preflightEnvProvider(ctx context.Context, deps cmddeps.Deps, check *run.Span, prov *providerclient.Provider, cfg *project.Project, opts envOptions, keyOffer *variablesKeyOffer, stderr io.Writer) (*contractv1.PreflightResponse, error) {
+func preflightEnvProvider(ctx context.Context, dependencies Dependencies, check *run.Span, prov *providerclient.Provider, cfg *project.Project, opts envOptions, keyOffer *variablesKeyOffer, stderr io.Writer) (*contractv1.PreflightResponse, error) {
 	status, err := preflight.Run(ctx, check, prov, cfg, opts.tier(), "", nil, nil, "ocel bootstrap "+bootstrap.Name(opts.tier()))
 	if err != nil || keyOffer == nil {
 		return status, err
 	}
-	return status, offerVariablesKey(ctx, deps, check, prov, cfg, opts, status.GetBootstrap(), keyOffer.stdin, stderr)
+	return status, offerVariablesKey(ctx, dependencies, check, prov, cfg, opts, status.GetBootstrap(), keyOffer.stdin, stderr)
 }
 
-func offerVariablesKey(ctx context.Context, deps cmddeps.Deps, check *run.Span, prov *providerclient.Provider, cfg *project.Project, opts envOptions, status *contractv1.BootstrapStatus, stdin io.Reader, stderr io.Writer) error {
+func offerVariablesKey(ctx context.Context, dependencies Dependencies, check *run.Span, prov *providerclient.Provider, cfg *project.Project, opts envOptions, status *contractv1.BootstrapStatus, stdin io.Reader, stderr io.Writer) error {
 	front := cfg.EdgeSelection()
 	offered, err := bootstrap.Offers(ctx, prov, opts.tier(), front, provider.FeatureVarsKey)
 	if err != nil || !offered {
@@ -86,5 +85,5 @@ func offerVariablesKey(ctx context.Context, deps cmddeps.Deps, check *run.Span, 
 	}
 	plan := bootstrap.PlanOnly(status, provider.FeatureVarsKey)
 	return bootstrap.OfferPlan(ctx, check, prov, plan, opts.tier(), front,
-		deps.StdinIsTerminal(stdin), stderr, stdin)
+		dependencies.StdinIsTerminal(stdin), stderr, stdin)
 }

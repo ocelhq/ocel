@@ -7,12 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 )
 
 func TestCommandHelp(t *testing.T) {
-	cmd := NewCommand(clitest.NewDeps())
+	cmd := NewCommand(newTestDependencies())
 	if got := cmd.Use; got != "env <command>" {
 		t.Errorf("Use = %q, want %q", got, "env <command>")
 	}
@@ -35,7 +34,7 @@ func TestCommandHelp(t *testing.T) {
 }
 
 func TestCommandNeedsSubcommand(t *testing.T) {
-	cmd := NewCommand(clitest.NewDeps())
+	cmd := NewCommand(newTestDependencies())
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
@@ -50,7 +49,7 @@ func TestCommandNeedsSubcommand(t *testing.T) {
 }
 
 func TestCommandFlags(t *testing.T) {
-	cmd := NewCommand(clitest.NewDeps())
+	cmd := NewCommand(newTestDependencies())
 	cases := map[string]map[string]string{
 		"ls":  {"preview": "Use preview values"},
 		"set": {"preview": "Use preview values", "folder": "Use the value in this `folder`", "environment": "Use this named preview `environment`; requires --preview"},
@@ -72,7 +71,7 @@ func TestCommandFlags(t *testing.T) {
 }
 
 func TestNoEnvCommandAddressesDevValues(t *testing.T) {
-	cmd := NewCommand(clitest.NewDeps())
+	cmd := NewCommand(newTestDependencies())
 	for _, name := range []string{"ls", "set", "get", "rm"} {
 		sub, _, err := cmd.Find([]string{name})
 		if err != nil {
@@ -85,7 +84,7 @@ func TestNoEnvCommandAddressesDevValues(t *testing.T) {
 }
 
 func TestCommandArguments(t *testing.T) {
-	cmd := NewCommand(clitest.NewDeps())
+	cmd := NewCommand(newTestDependencies())
 	for _, test := range []struct {
 		name string
 		args []string

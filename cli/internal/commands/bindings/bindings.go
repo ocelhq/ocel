@@ -20,8 +20,8 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
+	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/commands/bootstrap"
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/preflight"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
@@ -62,7 +62,7 @@ func (o bindingsOptions) ownerOrDefault() string {
 	return o.owner
 }
 
-func NewCommand(deps cmddeps.Deps) *cobra.Command {
+func NewCommand(invocation commands.Invocation) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "bindings",
 		Short: "Manage the bindings this project's apps resolve",
@@ -71,8 +71,8 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 			"permissions that go with it — published under a name apps bind to. Records live in " +
 			"your own provider account and are reached through the provider, never by the CLI directly.",
 	}
-	cmd.AddCommand(newSetCommand(deps), newRemoveCommand(deps), newListCommand(deps), newGenerateCommand(deps))
-	return cmddeps.ReserveStdout(cmd)
+	cmd.AddCommand(newSetCommand(invocation), newRemoveCommand(invocation), newListCommand(invocation), newGenerateCommand(invocation))
+	return commands.ReserveStdout(cmd)
 }
 
 func addCoordinateFlags(cmd *cobra.Command, opts *bindingsOptions) {
@@ -80,7 +80,7 @@ func addCoordinateFlags(cmd *cobra.Command, opts *bindingsOptions) {
 	cmd.Flags().StringVar(&opts.environment, "environment", "", "Address the binding this named preview environment has instead of the one bound to all environments")
 }
 
-func newSetCommand(deps cmddeps.Deps) *cobra.Command {
+func newSetCommand(invocation commands.Invocation) *cobra.Command {
 	var opts bindingsOptions
 	cmd := &cobra.Command{
 		Use:   "set",
@@ -95,7 +95,7 @@ func newSetCommand(deps cmddeps.Deps) *cobra.Command {
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return withBindingCommand(cmd, func(ctx context.Context, cwd string) error {
-				return runBindingsSet(ctx, deps, cwd, cmd.InOrStdin(), opts, cmd.OutOrStdout())
+				return runBindingsSet(ctx, invocation, cwd, cmd.InOrStdin(), opts, cmd.OutOrStdout())
 			})
 		},
 	}
@@ -104,7 +104,7 @@ func newSetCommand(deps cmddeps.Deps) *cobra.Command {
 	return cmd
 }
 
-func newRemoveCommand(deps cmddeps.Deps) *cobra.Command {
+func newRemoveCommand(invocation commands.Invocation) *cobra.Command {
 	var opts bindingsOptions
 	cmd := &cobra.Command{
 		Use:   "rm <NAME>",
@@ -112,7 +112,7 @@ func newRemoveCommand(deps cmddeps.Deps) *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return withBindingCommand(cmd, func(ctx context.Context, cwd string) error {
-				return runBindingsRemove(ctx, deps, cwd, args[0], opts, cmd.OutOrStdout())
+				return runBindingsRemove(ctx, invocation, cwd, args[0], opts, cmd.OutOrStdout())
 			})
 		},
 	}
@@ -120,7 +120,7 @@ func newRemoveCommand(deps cmddeps.Deps) *cobra.Command {
 	return cmd
 }
 
-func newListCommand(deps cmddeps.Deps) *cobra.Command {
+func newListCommand(invocation commands.Invocation) *cobra.Command {
 	var opts bindingsOptions
 	cmd := &cobra.Command{
 		Use:   "ls",
@@ -128,7 +128,7 @@ func newListCommand(deps cmddeps.Deps) *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return withBindingCommand(cmd, func(ctx context.Context, cwd string) error {
-				return runBindingsList(ctx, deps, cwd, opts, cmd.OutOrStdout())
+				return runBindingsList(ctx, invocation, cwd, opts, cmd.OutOrStdout())
 			})
 		},
 	}
@@ -136,7 +136,7 @@ func newListCommand(deps cmddeps.Deps) *cobra.Command {
 	return cmd
 }
 
-func newGenerateCommand(deps cmddeps.Deps) *cobra.Command {
+func newGenerateCommand(invocation commands.Invocation) *cobra.Command {
 	var opts bindingsOptions
 	cmd := &cobra.Command{
 		Use:   "generate",
@@ -151,7 +151,7 @@ func newGenerateCommand(deps cmddeps.Deps) *cobra.Command {
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return withBindingCommand(cmd, func(ctx context.Context, cwd string) error {
-				return runBindingsGenerate(ctx, deps, cwd, opts, cmd.OutOrStdout())
+				return runBindingsGenerate(ctx, invocation, cwd, opts, cmd.OutOrStdout())
 			})
 		},
 	}
@@ -167,11 +167,11 @@ func withBindingCommand(cmd *cobra.Command, run func(context.Context, string) er
 	return run(cmd.Context(), cwd)
 }
 
-func withBindingProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opts bindingsOptions, command string, drive func(context.Context, *providerclient.Provider, *project.Project) (string, error)) (err error) {
+func withBindingProvider(ctx context.Context, invocation commands.Invocation, cwd string, opts bindingsOptions, command string, drive func(context.Context, *providerclient.Provider, *project.Project) (string, error)) (err error) {
 	if err := opts.checkEnvironment(); err != nil {
 		return err
 	}
-	cfg, err := deps.LoadProject(ctx, cwd)
+	cfg, err := invocation.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}
@@ -179,14 +179,14 @@ func withBindingProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opt
 		return err
 	}
 
-	ctx, run, err := deps.Events.Begin(ctx, command, cfg.Dir)
+	ctx, run, err := invocation.Events.Begin(ctx, command, cfg.Dir)
 	if err != nil {
 		return err
 	}
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := providerclient.Start(ctx, cfg, check, deps.Questions, providerclient.PinToLock)
+	prov, err := providerclient.Start(ctx, cfg, check, invocation.Questions, providerclient.PinToLock)
 	if err != nil {
 		return err
 	}
@@ -204,7 +204,7 @@ func withBindingProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opt
 	return err
 }
 
-func runBindingsSet(ctx context.Context, deps cmddeps.Deps, cwd string, stdin io.Reader, opts bindingsOptions, stdout io.Writer) error {
+func runBindingsSet(ctx context.Context, invocation commands.Invocation, cwd string, stdin io.Reader, opts bindingsOptions, stdout io.Writer) error {
 	binding, err := decodeBinding(stdin)
 	if err != nil {
 		return err
@@ -213,7 +213,7 @@ func runBindingsSet(ctx context.Context, deps cmddeps.Deps, cwd string, stdin io
 	if owner == naming.InlineRecordOwner {
 		return fmt.Errorf("publisher %q is the one ocel writes an inline binding's record as, at deploy, from the config; publish as your own tool with --owner", owner)
 	}
-	return withBindingProvider(ctx, deps, cwd, opts, "ocel bindings set", func(ctx context.Context, prov *providerclient.Provider, cfg *project.Project) (string, error) {
+	return withBindingProvider(ctx, invocation, cwd, opts, "ocel bindings set", func(ctx context.Context, prov *providerclient.Provider, cfg *project.Project) (string, error) {
 		client, err := prov.Vars()
 		if err != nil {
 			return "", err
@@ -229,7 +229,7 @@ func runBindingsSet(ctx context.Context, deps cmddeps.Deps, cwd string, stdin io
 			return "", err
 		}
 		headline := fmt.Sprintf("Published %s as %s (version %d)", describeBinding(binding.GetName(), opts), owner, resp.GetVersion())
-		if deps.Presentation(stdout).Format == terminal.FormatJSON {
+		if invocation.Presentation(stdout).Format == terminal.FormatJSON {
 			return headline, writeBindingJSON(stdout, bindingSetReport{Name: binding.GetName(), Owner: owner, Version: resp.GetVersion()})
 		}
 		return headline, nil
@@ -328,11 +328,11 @@ func mismatchedValue(field protoreflect.FieldDescriptor, value any, at string) s
 	return ""
 }
 
-func runBindingsRemove(ctx context.Context, deps cmddeps.Deps, cwd, name string, opts bindingsOptions, stdout io.Writer) error {
+func runBindingsRemove(ctx context.Context, invocation commands.Invocation, cwd, name string, opts bindingsOptions, stdout io.Writer) error {
 	if naming.IsInlineRecord(name) {
 		return fmt.Errorf("%s is the record ocel keeps for a binding written inline in `bindings`, and the next deploy writes it again: remove that binding from the config, and the deploy after removes the record", name)
 	}
-	return withBindingProvider(ctx, deps, cwd, opts, "ocel bindings rm", func(ctx context.Context, prov *providerclient.Provider, cfg *project.Project) (string, error) {
+	return withBindingProvider(ctx, invocation, cwd, opts, "ocel bindings rm", func(ctx context.Context, prov *providerclient.Provider, cfg *project.Project) (string, error) {
 		client, err := prov.Vars()
 		if err != nil {
 			return "", err
@@ -350,15 +350,15 @@ func runBindingsRemove(ctx context.Context, deps cmddeps.Deps, cwd, name string,
 		if !resp.GetRemoved() {
 			headline = fmt.Sprintf("No binding named %s is published", describeBinding(name, opts))
 		}
-		if deps.Presentation(stdout).Format == terminal.FormatJSON {
+		if invocation.Presentation(stdout).Format == terminal.FormatJSON {
 			return headline, writeBindingJSON(stdout, bindingRemoveReport{Name: name, Removed: resp.GetRemoved()})
 		}
 		return headline, nil
 	})
 }
 
-func runBindingsList(ctx context.Context, deps cmddeps.Deps, cwd string, opts bindingsOptions, stdout io.Writer) error {
-	return withBindingProvider(ctx, deps, cwd, opts, "ocel bindings ls", func(ctx context.Context, prov *providerclient.Provider, cfg *project.Project) (string, error) {
+func runBindingsList(ctx context.Context, invocation commands.Invocation, cwd string, opts bindingsOptions, stdout io.Writer) error {
+	return withBindingProvider(ctx, invocation, cwd, opts, "ocel bindings ls", func(ctx context.Context, prov *providerclient.Provider, cfg *project.Project) (string, error) {
 		client, err := prov.Vars()
 		if err != nil {
 			return "", err
@@ -371,7 +371,7 @@ func runBindingsList(ctx context.Context, deps cmddeps.Deps, cwd string, opts bi
 		if err != nil {
 			return "", err
 		}
-		if deps.Presentation(stdout).Format == terminal.FormatJSON {
+		if invocation.Presentation(stdout).Format == terminal.FormatJSON {
 			return "", writeBindingJSON(stdout, bindingListReport{Bindings: bindingReports(resp.GetBindings())})
 		}
 		renderBindings(stdout, resp.GetBindings())
@@ -379,8 +379,8 @@ func runBindingsList(ctx context.Context, deps cmddeps.Deps, cwd string, opts bi
 	})
 }
 
-func runBindingsGenerate(ctx context.Context, deps cmddeps.Deps, cwd string, opts bindingsOptions, stdout io.Writer) error {
-	return withBindingProvider(ctx, deps, cwd, opts, "ocel bindings generate", func(ctx context.Context, prov *providerclient.Provider, cfg *project.Project) (string, error) {
+func runBindingsGenerate(ctx context.Context, invocation commands.Invocation, cwd string, opts bindingsOptions, stdout io.Writer) error {
+	return withBindingProvider(ctx, invocation, cwd, opts, "ocel bindings generate", func(ctx context.Context, prov *providerclient.Provider, cfg *project.Project) (string, error) {
 		client, err := prov.Vars()
 		if err != nil {
 			return "", err
@@ -403,7 +403,7 @@ func runBindingsGenerate(ctx context.Context, deps cmddeps.Deps, cwd string, opt
 		if len(resp.GetBindings()) == 0 {
 			headline = fmt.Sprintf("Nothing is published to %s; wrote %s, which names no record and so leaves no binding name open", describeBindingCoordinate(opts), path)
 		}
-		if deps.Presentation(stdout).Format == terminal.FormatJSON {
+		if invocation.Presentation(stdout).Format == terminal.FormatJSON {
 			return headline, writeBindingJSON(stdout, bindingGenerateReport{Path: path, Bindings: bindingReports(resp.GetBindings())})
 		}
 		return headline, nil

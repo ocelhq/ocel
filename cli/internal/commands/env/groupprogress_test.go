@@ -95,7 +95,7 @@ func TestSettingAGroupMemberNamesWhatTheGroupStillLacks(t *testing.T) {
 		root := setUpGroupedFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvSetPairs(context.Background(), clitest.NewDeps(), root, []envSetPair{
+		err := runEnvSetPairs(context.Background(), newTestDependencies(), root, []envSetPair{
 			{key: "STRIPE_KEY", value: "sk"},
 			{key: "GITHUB_CLIENT_ID", value: "id"},
 		}, envOptions{}, nil, &stdout, &stderr)
@@ -119,7 +119,7 @@ func TestRemovingAGroupMemberNamesWhatTheGroupStillLacks(t *testing.T) {
 		seedProductionValue(t, "GITHUB_CLIENT_ID", "", "id")
 		seedProductionValue(t, "GITHUB_CLIENT_SECRET", "", "secret")
 
-		out := envRm(t, root, "GITHUB_CLIENT_ID", envOptions{})
+		out := envRemove(t, root, "GITHUB_CLIENT_ID", envOptions{})
 		want := "github: 1 of 2 set. Set together: GITHUB_CLIENT_ID"
 		if !strings.Contains(out, want) {
 			t.Errorf("rm stdout = %q, want %q", out, want)
@@ -130,7 +130,7 @@ func TestRemovingAGroupMemberNamesWhatTheGroupStillLacks(t *testing.T) {
 		root := setUpGroupedFixture(t)
 		seedProductionValue(t, "GITHUB_CLIENT_ID", "", "id")
 
-		out := envRm(t, root, "GITHUB_CLIENT_ID", envOptions{})
+		out := envRemove(t, root, "GITHUB_CLIENT_ID", envOptions{})
 		if strings.Contains(out, "Set together") {
 			t.Errorf("rm stdout = %q, want an emptied optional group to fall silent: it is off", out)
 		}
@@ -140,7 +140,7 @@ func TestRemovingAGroupMemberNamesWhatTheGroupStillLacks(t *testing.T) {
 		root := setUpGroupedFixture(t)
 		seedProductionValue(t, "STRIPE_KEY", "", "sk")
 
-		out := envRm(t, root, "STRIPE_KEY", envOptions{})
+		out := envRemove(t, root, "STRIPE_KEY", envOptions{})
 		want := "stripe: 0 of 2 set. Set together: STRIPE_KEY, STRIPE_WEBHOOK_SECRET"
 		if !strings.Contains(out, want) {
 			t.Errorf("rm stdout = %q, want %q: a required group needs every member whatever is set", out, want)
@@ -148,12 +148,12 @@ func TestRemovingAGroupMemberNamesWhatTheGroupStillLacks(t *testing.T) {
 	})
 }
 
-func TestEnvRmLeavesTheProjectUnbuiltWhenNothingWasRemoved(t *testing.T) {
+func TestEnvRemoveLeavesTheProjectUnbuiltWhenNothingWasRemoved(t *testing.T) {
 	root := setUpGroupedFixture(t)
 	log := filepath.Join(t.TempDir(), "discovery.log")
 	t.Setenv("OCEL_TEST_DISCOVERY_LOG", log)
 
-	envRm(t, root, "GITHUB_CLIENT_ID", envOptions{})
+	envRemove(t, root, "GITHUB_CLIENT_ID", envOptions{})
 
 	if runs := discoveryRuns(t, log); runs != 0 {
 		t.Errorf("discovery ran %d times, want none: no value was removed, so nothing needs the declarations", runs)
@@ -167,8 +167,8 @@ func TestTheListingGathersEachGroupsMembers(t *testing.T) {
 	seedProductionValue(t, "GITHUB_CLIENT_SECRET", "", "secret")
 
 	var stdout, stderr bytes.Buffer
-	if err := runEnvLs(context.Background(), streamedDeps(&stderr), root, envOptions{}, &stdout, &stderr); err != nil {
-		t.Fatalf("runEnvLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	if err := runEnvList(context.Background(), newStreamedDependencies(&stderr), root, envOptions{}, &stdout, &stderr); err != nil {
+		t.Fatalf("runEnvList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
 	out := stdout.String()

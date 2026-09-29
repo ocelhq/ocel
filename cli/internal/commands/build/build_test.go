@@ -35,16 +35,16 @@ export default {
 `)
 
 		var built *project.Project
-		deps := clitest.NewDeps()
-		deps.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
+		dependencies := newTestDependencies()
+		dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
 			built = cfg
 			return build.Output{Functions: []build.Function{{Route: "index", App: "api"}}}, nil
 		}
 
 		var stdout bytes.Buffer
-		deps.Events = run.NewBus(time.Now)
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runBuild(context.Background(), deps, root); err != nil {
+		dependencies.Events = run.NewBus(time.Now)
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		if err := runBuild(context.Background(), dependencies, root); err != nil {
 			t.Fatalf("runBuild: %v", err)
 		}
 
@@ -81,8 +81,8 @@ export default {
 		clitest.WriteFile(t, filepath.Join(root, "web", "server.js"), "export {};\n")
 
 		var archs map[string]string
-		deps := clitest.NewDeps()
-		deps.BuildApps = func(_ context.Context, _ *project.Project, _ map[string]map[string]string, asked map[string]string, _ build.Log) (build.Output, error) {
+		dependencies := newTestDependencies()
+		dependencies.BuildApps = func(_ context.Context, _ *project.Project, _ map[string]map[string]string, asked map[string]string, _ build.Log) (build.Output, error) {
 			archs = asked
 			return build.Output{
 				Functions: []build.Function{{Route: "index", App: "api"}},
@@ -91,9 +91,9 @@ export default {
 		}
 
 		var stdout bytes.Buffer
-		deps.Events = run.NewBus(time.Now)
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runBuild(context.Background(), deps, root); err != nil {
+		dependencies.Events = run.NewBus(time.Now)
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		if err := runBuild(context.Background(), dependencies, root); err != nil {
 			t.Fatalf("runBuild: %v", err)
 		}
 
@@ -119,14 +119,14 @@ export default {
 `)
 
 		var env map[string]map[string]string
-		deps := clitest.NewDeps()
-		deps.BuildApps = func(_ context.Context, _ *project.Project, handed map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
+		dependencies := newTestDependencies()
+		dependencies.BuildApps = func(_ context.Context, _ *project.Project, handed map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
 			env = handed
 			return build.Output{}, nil
 		}
 
-		deps.Events = run.NewBus(time.Now)
-		if err := runBuild(context.Background(), deps, root); err != nil {
+		dependencies.Events = run.NewBus(time.Now)
+		if err := runBuild(context.Background(), dependencies, root); err != nil {
 			t.Fatalf("runBuild: %v", err)
 		}
 		if got, want := env["web"][processenv.ClientURLEnvVar], "https://shop.acme.com"; got != want {
@@ -142,15 +142,15 @@ export default {
 export default { slug: "test-app" };
 `)
 
-		deps := clitest.NewDeps()
-		deps.BuildApps = func(context.Context, *project.Project, map[string]map[string]string, map[string]string, build.Log) (build.Output, error) {
+		dependencies := newTestDependencies()
+		dependencies.BuildApps = func(context.Context, *project.Project, map[string]map[string]string, map[string]string, build.Log) (build.Output, error) {
 			return build.Output{}, errors.New("boom: app build failed")
 		}
 
 		var stdout bytes.Buffer
-		deps.Events = run.NewBus(time.Now)
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runBuild(context.Background(), deps, root); err == nil {
+		dependencies.Events = run.NewBus(time.Now)
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		if err := runBuild(context.Background(), dependencies, root); err == nil {
 			t.Fatal("runBuild err = nil, want the build to fail")
 		}
 		if !strings.Contains(stdout.String(), "✗ Build failed in ") || !strings.Contains(stdout.String(), "boom: app build failed") {

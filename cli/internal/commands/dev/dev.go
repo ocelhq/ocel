@@ -8,11 +8,17 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/dev"
+	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 )
 
-func NewCommand(deps cmddeps.Deps) *cobra.Command {
+type Dependencies struct {
+	commands.Invocation
+	OpenDocker docker.OpenFunc
+}
+
+func NewCommand(dependencies Dependencies) *cobra.Command {
 	var reset bool
 	cmd := &cobra.Command{
 		Use:   "dev -- <command> [args...]",
@@ -23,7 +29,7 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
-			opts, err := loadOptions(cmd.Context(), deps, cwd, args, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+			opts, err := loadOptions(cmd.Context(), dependencies, cwd, args, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 			if err != nil {
 				return err
 			}
@@ -34,18 +40,18 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 	return cmd
 }
 
-func loadOptions(ctx context.Context, deps cmddeps.Deps, cwd string, command []string, stdout, stderr io.Writer, stdin io.Reader) (dev.Options, error) {
-	cfg, err := deps.LoadOptionalProject(ctx, cwd)
+func loadOptions(ctx context.Context, dependencies Dependencies, cwd string, command []string, stdout, stderr io.Writer, stdin io.Reader) (dev.Options, error) {
+	cfg, err := dependencies.LoadOptionalProject(ctx, cwd)
 	if err != nil {
 		return dev.Options{}, err
 	}
 	return dev.Options{
 		Project:         cfg,
 		Command:         command,
-		OpenDocker:      deps.OpenDocker,
+		OpenDocker:      dependencies.OpenDocker,
 		Stdin:           stdin,
 		Stdout:          stdout,
 		Stderr:          stderr,
-		StdinIsTerminal: deps.StdinIsTerminal(stdin),
+		StdinIsTerminal: dependencies.StdinIsTerminal(stdin),
 	}, nil
 }

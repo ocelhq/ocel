@@ -8,7 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/commands"
+	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -18,11 +19,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
-func runDomainRelease(ctx context.Context, deps cmddeps.Deps, cwd string, opts domainOptions, stdout, stderr io.Writer, stdin io.Reader) (err error) {
+func runDomainRelease(ctx context.Context, invocation commands.Invocation, cwd string, opts domainOptions, stdout, stderr io.Writer, stdin io.Reader) (err error) {
 	if err := requirePreviewTier("ocel domain release", opts.preview); err != nil {
 		return err
 	}
-	cfg, err := deps.LoadProject(ctx, cwd)
+	cfg, err := invocation.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}
@@ -30,20 +31,20 @@ func runDomainRelease(ctx context.Context, deps cmddeps.Deps, cwd string, opts d
 		return err
 	}
 
-	policy := deps.ConsentPolicy("ocel domain release", opts.yes, stdout, stdin)
+	policy := consent.NewPolicy("ocel domain release", opts.yes, invocation.StdinIsTerminal(stdin), stdout, stdin)
 	policy.ConfirmsPlan = true
 	if err := policy.Refuse(); err != nil {
 		return err
 	}
 
-	ctx, run, err := deps.Events.Begin(ctx, policy.Command, cfg.Dir)
+	ctx, run, err := invocation.Events.Begin(ctx, policy.Command, cfg.Dir)
 	if err != nil {
 		return err
 	}
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := startReadyProvider(ctx, deps, cfg, check, environmentv1.Tier_TIER_PREVIEW)
+	prov, err := startReadyProvider(ctx, invocation, cfg, check, environmentv1.Tier_TIER_PREVIEW)
 	check.End(err)
 	if err != nil {
 		return err
@@ -89,7 +90,7 @@ func runDomainRelease(ctx context.Context, deps cmddeps.Deps, cwd string, opts d
 	return nil
 }
 
-func newReleaseCommand(deps cmddeps.Deps) *cobra.Command {
+func newReleaseCommand(invocation commands.Invocation) *cobra.Command {
 	var opts domainOptions
 	cmd := &cobra.Command{
 		Use:   "release",
@@ -100,10 +101,10 @@ func newReleaseCommand(deps cmddeps.Deps) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
-			return runDomainRelease(cmd.Context(), deps, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+			return runDomainRelease(cmd.Context(), invocation, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 		},
 	}
 	cmd.Flags().BoolVar(&opts.preview, "preview", false, "Act on the preview tier (required)")
-	cmddeps.Yes(cmd, &opts.yes)
+	commands.AddYesFlag(cmd, &opts.yes)
 	return cmd
 }

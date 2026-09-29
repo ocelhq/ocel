@@ -19,7 +19,6 @@ import (
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
 )
 
 func setUpEnvFixture(t *testing.T) string {
@@ -34,16 +33,16 @@ const fixtureDefinitions = `[
   {"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true}
 ]`
 
-func streamedDeps(stream io.Writer) cmddeps.Deps {
-	deps := clitest.NewDeps()
-	clitest.AttachTerminalSink(deps, stream)
-	return deps
+func newStreamedDependencies(stream io.Writer) Dependencies {
+	dependencies := newTestDependencies()
+	clitest.AttachTerminalSink(dependencies.Invocation, stream)
+	return dependencies
 }
 
 func envSet(t *testing.T, root, key, value string, opts envOptions) string {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
-	if err := runEnvSet(context.Background(), streamedDeps(&stderr), root, key, value, opts, nil, &stdout, &stderr); err != nil {
+	if err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), root, key, value, opts, nil, &stdout, &stderr); err != nil {
 		t.Fatalf("runEnvSet(%s) err = %v; stdout=%s stderr=%s", key, err, stdout.String(), stderr.String())
 	}
 	return stdout.String()
@@ -115,7 +114,7 @@ func TestSettingAValueStoresItOnlyWhereADeclarationReadsIt(t *testing.T) {
 		root := setUpEnvFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvSet(context.Background(), streamedDeps(&stderr), root, "SITE_HOSTNAME", "acme.example", envOptions{}, nil, &stdout, &stderr)
+		err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), root, "SITE_HOSTNAME", "acme.example", envOptions{}, nil, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runEnvSet(SITE_HOSTNAME) err = nil, want a key nothing declares refused: the declarations deliver declared keys only, so the value would sit in the store and reach no build and no function")
 		}
@@ -135,7 +134,7 @@ func TestSettingAValueStoresItOnlyWhereADeclarationReadsIt(t *testing.T) {
 
 		t.Run("the value is withheld without --reveal", func(t *testing.T) {
 			var plain bytes.Buffer
-			if err := runEnvGet(context.Background(), streamedDeps(&plain), root, "STRIPE_API_KEY", envOptions{}, &plain, &plain); err != nil {
+			if err := runEnvGet(context.Background(), newStreamedDependencies(&plain), root, "STRIPE_API_KEY", envOptions{}, &plain, &plain); err != nil {
 				t.Fatalf("runEnvGet err = %v; out=%s", err, plain.String())
 			}
 			if strings.Contains(plain.String(), "sk_live_secret") {
@@ -149,7 +148,7 @@ func TestSettingAValueStoresItOnlyWhereADeclarationReadsIt(t *testing.T) {
 		t.Run("--reveal prints exactly the value so it is scriptable", func(t *testing.T) {
 			var revealed bytes.Buffer
 			var chatter bytes.Buffer
-			if err := runEnvGet(context.Background(), streamedDeps(&chatter), root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true}, &revealed, &chatter); err != nil {
+			if err := runEnvGet(context.Background(), newStreamedDependencies(&chatter), root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true}, &revealed, &chatter); err != nil {
 				t.Fatalf("runEnvGet --reveal err = %v; out=%s", err, revealed.String())
 			}
 			if strings.TrimSpace(revealed.String()) != "sk_live_secret" {
@@ -179,7 +178,7 @@ func TestSettingAValueStoresItOnlyWhereADeclarationReadsIt(t *testing.T) {
 				opts.reveal, opts.yes = true, true
 				var stdout bytes.Buffer
 				var chatter bytes.Buffer
-				if err := runEnvGet(context.Background(), streamedDeps(&chatter), root, "STRIPE_API_KEY", opts, &stdout, &chatter); err != nil {
+				if err := runEnvGet(context.Background(), newStreamedDependencies(&chatter), root, "STRIPE_API_KEY", opts, &stdout, &chatter); err != nil {
 					t.Fatalf("runEnvGet err = %v; out=%s", err, stdout.String())
 				}
 				if got := strings.TrimSpace(stdout.String()); got != tc.want {
@@ -194,7 +193,7 @@ func TestSettingAValueStoresItOnlyWhereADeclarationReadsIt(t *testing.T) {
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvSet(context.Background(), streamedDeps(&stderr), root, "STRIPE_API_KEY", "sk_typo", envOptions{preview: true, environment: "stagng"}, nil, &stdout, &stderr)
+		err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), root, "STRIPE_API_KEY", "sk_typo", envOptions{preview: true, environment: "stagng"}, nil, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runEnvSet against an environment that does not exist err = nil, want a refusal")
 		}
@@ -203,7 +202,7 @@ func TestSettingAValueStoresItOnlyWhereADeclarationReadsIt(t *testing.T) {
 		}
 
 		var get bytes.Buffer
-		if err := runEnvGet(context.Background(), streamedDeps(&get), root, "STRIPE_API_KEY", envOptions{preview: true, environment: "stagng", reveal: true, yes: true}, &get, &get); err == nil {
+		if err := runEnvGet(context.Background(), newStreamedDependencies(&get), root, "STRIPE_API_KEY", envOptions{preview: true, environment: "stagng", reveal: true, yes: true}, &get, &get); err == nil {
 			t.Errorf("the refused write landed anyway: get = %q", get.String())
 		}
 	})
@@ -212,7 +211,7 @@ func TestSettingAValueStoresItOnlyWhereADeclarationReadsIt(t *testing.T) {
 		root := setUpEnvFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvSet(context.Background(), streamedDeps(&stderr), root, "STRIPE_API_KEY", "sk_live", envOptions{environment: "staging"}, nil, &stdout, &stderr)
+		err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), root, "STRIPE_API_KEY", "sk_live", envOptions{environment: "staging"}, nil, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runEnvSet --environment against production err = nil, want a refusal")
 		}
@@ -226,7 +225,7 @@ func TestSettingAValueStoresItOnlyWhereADeclarationReadsIt(t *testing.T) {
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvSet(context.Background(), streamedDeps(&stderr), root, "STRIPE_API_KEY", "sk_live_secret", envOptions{}, nil, &stdout, &stderr)
+		err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), root, "STRIPE_API_KEY", "sk_live_secret", envOptions{}, nil, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runEnvSet against preview infrastructure err = nil, want a tier-mismatch refusal")
 		}
@@ -236,7 +235,7 @@ func TestSettingAValueStoresItOnlyWhereADeclarationReadsIt(t *testing.T) {
 		root := clitest.SetUpVariablesFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web","/admin"]}]`)
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvSet(context.Background(), streamedDeps(&stderr), root, "POSTHOG_ID", "ph_root", envOptions{}, nil, &stdout, &stderr)
+		err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), root, "POSTHOG_ID", "ph_root", envOptions{}, nil, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runEnvSet err = nil, want a root value for a scoped key refused: nothing could ever read it")
 		}
@@ -251,7 +250,7 @@ func TestSettingAValueStoresItOnlyWhereADeclarationReadsIt(t *testing.T) {
 		root := clitest.SetUpVariablesFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`)
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvSet(context.Background(), streamedDeps(&stderr), root, "POSTHOG_ID", "ph", envOptions{folder: "/admin"}, nil, &stdout, &stderr)
+		err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), root, "POSTHOG_ID", "ph", envOptions{folder: "/admin"}, nil, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runEnvSet err = nil, want a folder outside the key's scope refused")
 		}
@@ -287,7 +286,7 @@ func TestSettingAValueStoresItOnlyWhereADeclarationReadsIt(t *testing.T) {
 
 		var out bytes.Buffer
 		var chatter bytes.Buffer
-		if err := runEnvGet(context.Background(), streamedDeps(&chatter), root, "POSTHOG_ID", envOptions{folder: "/web", reveal: true}, &out, &chatter); err != nil {
+		if err := runEnvGet(context.Background(), newStreamedDependencies(&chatter), root, "POSTHOG_ID", envOptions{folder: "/web", reveal: true}, &out, &chatter); err != nil {
 			t.Fatalf("runEnvGet err = %v; out=%s", err, out.String())
 		}
 		if strings.TrimSpace(out.String()) != "ph_two" {
@@ -304,7 +303,7 @@ func TestSettingAValueStoresItOnlyWhereADeclarationReadsIt(t *testing.T) {
 			envDeclaringScript(`[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`))
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvSet(context.Background(), streamedDeps(&stderr), root, "POSTHOG_ID", "ph_root_again", envOptions{}, nil, &stdout, &stderr)
+		err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), root, "POSTHOG_ID", "ph_root_again", envOptions{}, nil, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runEnvSet err = nil, want the scope the code now declares to refuse a root write")
 		}
@@ -325,7 +324,7 @@ func TestSettingAValueStoresItOnlyWhereADeclarationReadsIt(t *testing.T) {
 		t.Setenv("OCEL_TEST_ENV_DEFINITIONS", `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`)
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvSet(context.Background(), streamedDeps(&stderr), root, "POSTHOG_ID", "ph_root", envOptions{}, nil, &stdout, &stderr)
+		err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), root, "POSTHOG_ID", "ph_root", envOptions{}, nil, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runEnvSet err = nil, want a root value for a scoped key refused: a cached set that never mentioned the key cannot say it is unscoped")
 		}
@@ -334,7 +333,7 @@ func TestSettingAValueStoresItOnlyWhereADeclarationReadsIt(t *testing.T) {
 		}
 
 		var out bytes.Buffer
-		if err := runEnvGet(context.Background(), streamedDeps(&out), root, "POSTHOG_ID", envOptions{reveal: true}, &out, &out); err == nil {
+		if err := runEnvGet(context.Background(), newStreamedDependencies(&out), root, "POSTHOG_ID", envOptions{reveal: true}, &out, &out); err == nil {
 			t.Errorf("runEnvGet at root err = nil (out=%q), want no root cell written", out.String())
 		}
 	})
@@ -342,15 +341,13 @@ func TestSettingAValueStoresItOnlyWhereADeclarationReadsIt(t *testing.T) {
 
 func TestEnvAsksTheBootstrapOnlyWhetherThisCLICanSpeakToIt(t *testing.T) {
 	root, _ := clitest.SetUpDeployFixture(t)
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
-	clitest.StubBuild(&deps, nil)
+	dependencies := newTestDependencies()
 	t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 	t.Setenv(clitest.FakeBootstrapEnvVar, "missing")
 
 	var stdout, stderr bytes.Buffer
-	if err := runEnvLs(context.Background(), deps, root, envOptions{}, &stdout, &stderr); err != nil {
+	if err := runEnvList(context.Background(), dependencies, root, envOptions{}, &stdout, &stderr); err != nil {
 		t.Fatalf("a variable this bootstrap stores was refused over a feature no variable needs: %v", err)
 	}
 }
@@ -360,7 +357,7 @@ func TestGettingAValueReadsOneCellOfOneTier(t *testing.T) {
 		root := setUpEnvFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvGet(context.Background(), streamedDeps(&stderr), root, "NEVER_SET", envOptions{reveal: true}, &stdout, &stderr)
+		err := runEnvGet(context.Background(), newStreamedDependencies(&stderr), root, "NEVER_SET", envOptions{reveal: true}, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runEnvGet on an unset key err = nil, want a failure rather than an empty value")
 		}
@@ -374,13 +371,13 @@ func TestGettingAValueReadsOneCellOfOneTier(t *testing.T) {
 		envSet(t, root, "POSTHOG_ID", "web-id", envOptions{folder: "/web"})
 
 		var stdout, stderr bytes.Buffer
-		if err := runEnvGet(context.Background(), streamedDeps(&stderr), root, "POSTHOG_ID", envOptions{reveal: true}, &stdout, &stderr); err == nil {
+		if err := runEnvGet(context.Background(), newStreamedDependencies(&stderr), root, "POSTHOG_ID", envOptions{reveal: true}, &stdout, &stderr); err == nil {
 			t.Fatalf("runEnvGet at root err = nil (out=%q), want the root cell to be unset", stdout.String())
 		}
 
 		var folder bytes.Buffer
 		var chatter bytes.Buffer
-		if err := runEnvGet(context.Background(), streamedDeps(&chatter), root, "POSTHOG_ID", envOptions{folder: "/web", reveal: true}, &folder, &chatter); err != nil {
+		if err := runEnvGet(context.Background(), newStreamedDependencies(&chatter), root, "POSTHOG_ID", envOptions{folder: "/web", reveal: true}, &folder, &chatter); err != nil {
 			t.Fatalf("runEnvGet in /web err = %v", err)
 		}
 		if strings.TrimSpace(folder.String()) != "web-id" {
@@ -395,13 +392,13 @@ func TestGettingAValueReadsOneCellOfOneTier(t *testing.T) {
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 
 		var get bytes.Buffer
-		if err := runEnvGet(context.Background(), streamedDeps(&get), root, "STRIPE_API_KEY", envOptions{preview: true, reveal: true, yes: true}, &get, &get); err == nil {
+		if err := runEnvGet(context.Background(), newStreamedDependencies(&get), root, "STRIPE_API_KEY", envOptions{preview: true, reveal: true, yes: true}, &get, &get); err == nil {
 			t.Errorf("preview get err = nil (out=%q), want the production value unreadable from preview", get.String())
 		}
 
 		var ls bytes.Buffer
-		if err := runEnvLs(context.Background(), streamedDeps(&ls), root, envOptions{preview: true}, &ls, &ls); err != nil {
-			t.Fatalf("runEnvLs --preview err = %v; out=%s", err, ls.String())
+		if err := runEnvList(context.Background(), newStreamedDependencies(&ls), root, envOptions{preview: true}, &ls, &ls); err != nil {
+			t.Fatalf("runEnvList --preview err = %v; out=%s", err, ls.String())
 		}
 		if strings.Contains(ls.String(), "STRIPE_API_KEY") {
 			t.Errorf("preview ls = %q, want no production value listed", ls.String())
@@ -413,7 +410,7 @@ func TestGettingAValueReadsOneCellOfOneTier(t *testing.T) {
 
 		var production bytes.Buffer
 		var chatter bytes.Buffer
-		if err := runEnvGet(context.Background(), streamedDeps(&chatter), root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true}, &production, &chatter); err != nil {
+		if err := runEnvGet(context.Background(), newStreamedDependencies(&chatter), root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true}, &production, &chatter); err != nil {
 			t.Fatalf("runEnvGet err = %v; out=%s", err, production.String())
 		}
 		if got := strings.TrimSpace(production.String()); got != "sk_live_secret" {
@@ -428,16 +425,16 @@ func TestRemovingAValueDeletesItsCell(t *testing.T) {
 		envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
 
 		var stdout, stderr bytes.Buffer
-		if err := runEnvRm(context.Background(), streamedDeps(&stderr), root, "STRIPE_API_KEY", envOptions{}, &stdout, &stderr); err != nil {
-			t.Fatalf("runEnvRm err = %v; stderr=%s", err, stderr.String())
+		if err := runEnvRemove(context.Background(), newStreamedDependencies(&stderr), root, "STRIPE_API_KEY", envOptions{}, &stdout, &stderr); err != nil {
+			t.Fatalf("runEnvRemove err = %v; stderr=%s", err, stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "STRIPE_API_KEY") {
 			t.Errorf("rm stdout = %q, want it to name the removed key", stdout.String())
 		}
 
 		var after bytes.Buffer
-		if err := runEnvLs(context.Background(), streamedDeps(&after), root, envOptions{}, &after, &after); err != nil {
-			t.Fatalf("runEnvLs err = %v", err)
+		if err := runEnvList(context.Background(), newStreamedDependencies(&after), root, envOptions{}, &after, &after); err != nil {
+			t.Fatalf("runEnvList err = %v", err)
 		}
 		if strings.Contains(after.String(), "STRIPE_API_KEY") {
 			t.Errorf("ls after rm = %q, want the value gone", after.String())
@@ -448,8 +445,8 @@ func TestRemovingAValueDeletesItsCell(t *testing.T) {
 		root := setUpEnvFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		if err := runEnvRm(context.Background(), streamedDeps(&stderr), root, "NEVER_SET", envOptions{}, &stdout, &stderr); err != nil {
-			t.Fatalf("runEnvRm err = %v; stderr=%s", err, stderr.String())
+		if err := runEnvRemove(context.Background(), newStreamedDependencies(&stderr), root, "NEVER_SET", envOptions{}, &stdout, &stderr); err != nil {
+			t.Fatalf("runEnvRemove err = %v; stderr=%s", err, stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "No value") {
 			t.Errorf("rm of an unset key = %q, want it to say there was nothing set", stdout.String())
@@ -464,24 +461,24 @@ func TestRemovingAValueDeletesItsCell(t *testing.T) {
 		t.Setenv(clitest.FakeEnvironmentsEnvVar, "none")
 
 		var ls bytes.Buffer
-		if err := runEnvLs(context.Background(), streamedDeps(&ls), root, envOptions{preview: true}, &ls, &ls); err != nil {
-			t.Fatalf("runEnvLs err = %v; out=%s", err, ls.String())
+		if err := runEnvList(context.Background(), newStreamedDependencies(&ls), root, envOptions{preview: true}, &ls, &ls); err != nil {
+			t.Fatalf("runEnvList err = %v; out=%s", err, ls.String())
 		}
 		if !strings.Contains(ls.String(), "orphaned") {
 			t.Errorf("ls = %q, want the override marked orphaned once its environment is gone", ls.String())
 		}
 
 		var rm bytes.Buffer
-		if err := runEnvRm(context.Background(), streamedDeps(&rm), root, "STRIPE_API_KEY", envOptions{preview: true, environment: "staging"}, &rm, &rm); err != nil {
-			t.Fatalf("runEnvRm err = %v; out=%s", err, rm.String())
+		if err := runEnvRemove(context.Background(), newStreamedDependencies(&rm), root, "STRIPE_API_KEY", envOptions{preview: true, environment: "staging"}, &rm, &rm); err != nil {
+			t.Fatalf("runEnvRemove err = %v; out=%s", err, rm.String())
 		}
 		if !strings.Contains(rm.String(), "Removed") {
 			t.Errorf("rm = %q, want the orphan removed rather than reported unset", rm.String())
 		}
 
 		var after bytes.Buffer
-		if err := runEnvLs(context.Background(), streamedDeps(&after), root, envOptions{preview: true}, &after, &after); err != nil {
-			t.Fatalf("runEnvLs err = %v; out=%s", err, after.String())
+		if err := runEnvList(context.Background(), newStreamedDependencies(&after), root, envOptions{preview: true}, &after, &after); err != nil {
+			t.Fatalf("runEnvList err = %v; out=%s", err, after.String())
 		}
 		if strings.Contains(after.String(), "STRIPE_API_KEY") {
 			t.Errorf("ls = %q, want the removed orphan gone from the listing", after.String())
@@ -504,7 +501,7 @@ func TestAValuesHistoryShowsMetadataNewestFirst(t *testing.T) {
 			t.Run(name, func(t *testing.T) {
 				var stdout bytes.Buffer
 				var chatter bytes.Buffer
-				if err := runEnvHistory(context.Background(), streamedDeps(&chatter), root, "STRIPE_API_KEY", opts, &stdout, &chatter); err != nil {
+				if err := runEnvHistory(context.Background(), newStreamedDependencies(&chatter), root, "STRIPE_API_KEY", opts, &stdout, &chatter); err != nil {
 					t.Fatalf("runEnvHistory(reveal=%v) err = %v; out=%s", opts.reveal, err, stdout.String())
 				}
 				out := stdout.String()
@@ -536,7 +533,7 @@ func TestSettingSeveralPairsValidatesEveryPairBeforeWritingAny(t *testing.T) {
 	t.Run("sets every declared pair", func(t *testing.T) {
 		root := setUpEnvFixture(t)
 		var stdout, stderr bytes.Buffer
-		err := runEnvSetPairs(context.Background(), clitest.NewDeps(), root, []envSetPair{
+		err := runEnvSetPairs(context.Background(), newTestDependencies(), root, []envSetPair{
 			{key: "STRIPE_API_KEY", value: "sk_live_secret"},
 			{key: "LOG_LEVEL", value: "debug"},
 		}, envOptions{}, nil, &stdout, &stderr)
@@ -553,7 +550,7 @@ func TestSettingSeveralPairsValidatesEveryPairBeforeWritingAny(t *testing.T) {
 	t.Run("validates every pair before writing any", func(t *testing.T) {
 		root := setUpEnvFixture(t)
 		var stdout, stderr bytes.Buffer
-		err := runEnvSetPairs(context.Background(), clitest.NewDeps(), root, []envSetPair{
+		err := runEnvSetPairs(context.Background(), newTestDependencies(), root, []envSetPair{
 			{key: "STRIPE_API_KEY", value: "sk_live_secret"},
 			{key: "SITE_HOSTNAME", value: "acme.example"},
 		}, envOptions{}, nil, &stdout, &stderr)
@@ -576,7 +573,7 @@ func TestTheEnvCommandsOfferOnlyTheFlagsTheyHonour(t *testing.T) {
 	t.Run("history offers no --reveal flag where get still does", func(t *testing.T) {
 		t.Parallel()
 
-		cmd := NewCommand(clitest.NewDeps())
+		cmd := NewCommand(newTestDependencies())
 		history, _, _ := cmd.Find([]string{"history"})
 		get, _, _ := cmd.Find([]string{"get"})
 		if f := history.Flags().Lookup("reveal"); f != nil {
@@ -590,7 +587,7 @@ func TestTheEnvCommandsOfferOnlyTheFlagsTheyHonour(t *testing.T) {
 	t.Run("address a named environment", func(t *testing.T) {
 		t.Parallel()
 
-		cmd := NewCommand(clitest.NewDeps())
+		cmd := NewCommand(newTestDependencies())
 		for _, name := range []string{"set", "get", "rm", "history"} {
 			c, _, _ := cmd.Find([]string{name})
 			if c.Flags().Lookup("environment") == nil {
@@ -606,7 +603,7 @@ func TestRevealingASecretNeedsAnExplicitYes(t *testing.T) {
 		envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvGet(context.Background(), streamedDeps(&stderr), root, "STRIPE_API_KEY", envOptions{reveal: true}, &stdout, &stderr)
+		err := runEnvGet(context.Background(), newStreamedDependencies(&stderr), root, "STRIPE_API_KEY", envOptions{reveal: true}, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runEnvGet --reveal on a secret err = nil, want it refused: a secret must not reach stdout on a flag the operator passes out of habit")
 		}
@@ -625,7 +622,7 @@ func TestRevealingASecretNeedsAnExplicitYes(t *testing.T) {
 		envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
 
 		var stdout, stderr bytes.Buffer
-		if err := runEnvGet(context.Background(), streamedDeps(&stderr), root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true}, &stdout, &stderr); err != nil {
+		if err := runEnvGet(context.Background(), newStreamedDependencies(&stderr), root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true}, &stdout, &stderr); err != nil {
 			t.Fatalf("runEnvGet --reveal --yes err = %v; stderr=%s", err, stderr.String())
 		}
 		if got := strings.TrimSpace(stdout.String()); got != "sk_live_secret" {
@@ -644,7 +641,7 @@ func TestRevealingASecretNeedsAnExplicitYes(t *testing.T) {
 		envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
 
 		var stdout, stderr, stream bytes.Buffer
-		if err := runEnvGet(context.Background(), streamedDeps(&stream), root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true}, &stdout, &stderr); err != nil {
+		if err := runEnvGet(context.Background(), newStreamedDependencies(&stream), root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true}, &stdout, &stderr); err != nil {
 			t.Fatalf("runEnvGet --reveal --yes err = %v; stream=%s", err, stream.String())
 		}
 		if stderr.Len() != 0 {
@@ -660,7 +657,7 @@ func TestRevealingASecretNeedsAnExplicitYes(t *testing.T) {
 		envSet(t, root, "LOG_LEVEL", "debug", envOptions{})
 
 		var stdout, stderr bytes.Buffer
-		if err := runEnvGet(context.Background(), streamedDeps(&stderr), root, "LOG_LEVEL", envOptions{reveal: true}, &stdout, &stderr); err != nil {
+		if err := runEnvGet(context.Background(), newStreamedDependencies(&stderr), root, "LOG_LEVEL", envOptions{reveal: true}, &stdout, &stderr); err != nil {
 			t.Fatalf("runEnvGet --reveal on a plain value err = %v; stderr=%s", err, stderr.String())
 		}
 		if got := strings.TrimSpace(stdout.String()); got != "debug" {
@@ -679,7 +676,7 @@ func TestEnvWritesQuoteTheVersionTheyRead(t *testing.T) {
 		t.Setenv(clitest.FakeRacingWriteEnvVar, "LOG_LEVEL")
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvSet(context.Background(), streamedDeps(&stderr), root, "LOG_LEVEL", "debug", envOptions{}, nil, &stdout, &stderr)
+		err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), root, "LOG_LEVEL", "debug", envOptions{}, nil, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runEnvSet over a value somebody else moved err = nil, want a refusal: two operators racing must not overwrite each other silently")
 		}
@@ -701,9 +698,9 @@ func TestEnvWritesQuoteTheVersionTheyRead(t *testing.T) {
 		t.Setenv(clitest.FakeRacingWriteEnvVar, "LOG_LEVEL")
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvRm(context.Background(), streamedDeps(&stderr), root, "LOG_LEVEL", envOptions{}, &stdout, &stderr)
+		err := runEnvRemove(context.Background(), newStreamedDependencies(&stderr), root, "LOG_LEVEL", envOptions{}, &stdout, &stderr)
 		if err == nil {
-			t.Fatal("runEnvRm over a value somebody else moved err = nil, want a refusal: the operator would be deleting a value they never saw")
+			t.Fatal("runEnvRemove over a value somebody else moved err = nil, want a refusal: the operator would be deleting a value they never saw")
 		}
 		if !strings.Contains(stderr.String(), "LOG_LEVEL") {
 			t.Errorf("stream = %q, want it to name the key", stderr.String())
@@ -723,8 +720,8 @@ func TestEnvWritesQuoteTheVersionTheyRead(t *testing.T) {
 		}
 
 		var stdout, stderr bytes.Buffer
-		if err := runEnvRm(context.Background(), streamedDeps(&stderr), root, "LOG_LEVEL", envOptions{}, &stdout, &stderr); err != nil {
-			t.Fatalf("runEnvRm err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		if err := runEnvRemove(context.Background(), newStreamedDependencies(&stderr), root, "LOG_LEVEL", envOptions{}, &stdout, &stderr); err != nil {
+			t.Fatalf("runEnvRemove err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "Removed LOG_LEVEL") {
 			t.Errorf("rm stdout = %q, want the removal reported", stdout.String())
@@ -734,15 +731,15 @@ func TestEnvWritesQuoteTheVersionTheyRead(t *testing.T) {
 
 func TestWhatTheDeclarationCollectorPrintsReachesTheRunAsOutputAndNeverRawStderr(t *testing.T) {
 	root := clitest.SetUpVariablesFixtureWith(t, "[]", `console.error("collecting the declared variables");`+envDeclaringScript(fixtureDefinitions))
-	deps := clitest.NewDeps()
-	deps.Presentation = func(io.Writer) terminal.Presentation {
+	dependencies := newTestDependencies()
+	dependencies.Presentation = func(io.Writer) terminal.Presentation {
 		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
 	}
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stderr)
-	if err := runEnvLs(context.Background(), deps, root, envOptions{}, &stdout, &stderr); err != nil {
-		t.Fatalf("runEnvLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	clitest.AttachTerminalSink(dependencies.Invocation, &stderr)
+	if err := runEnvList(context.Background(), dependencies, root, envOptions{}, &stdout, &stderr); err != nil {
+		t.Fatalf("runEnvList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
 	evs := clitest.RunEvents(t, stderr.String())

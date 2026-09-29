@@ -6,7 +6,6 @@ import (
 	"io"
 	"text/tabwriter"
 
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/run"
@@ -15,7 +14,7 @@ import (
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 )
 
-func runEnvRef(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts envOptions, ref envRefOptions, stdout, stderr io.Writer) error {
+func runEnvRef(ctx context.Context, dependencies Dependencies, cwd, key string, opts envOptions, ref envRefOptions, stdout, stderr io.Writer) error {
 	for _, folder := range []string{opts.folder, ref.folder} {
 		if folder == "" {
 			continue
@@ -24,8 +23,8 @@ func runEnvRef(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts env
 			return err
 		}
 	}
-	return withEnvProvider(ctx, deps, cwd, opts, "ocel env ref", stderr, func(ctx context.Context, run *run.Run, prov *providerclient.Provider, cfg *project.Project, status *contractv1.PreflightResponse) error {
-		definitions, _, err := declaredVariables(ctx, deps, cfg, prov, key, opts, run)
+	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env ref", stderr, func(ctx context.Context, run *run.Run, prov *providerclient.Provider, cfg *project.Project, status *contractv1.PreflightResponse) error {
+		definitions, _, err := declaredVariables(ctx, dependencies, cfg, prov, key, opts, run)
 		if err != nil {
 			return err
 		}
@@ -50,8 +49,8 @@ func runEnvRef(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts env
 	})
 }
 
-func runEnvRefs(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
-	return withEnvProvider(ctx, deps, cwd, opts, "ocel env refs", stderr, func(ctx context.Context, _ *run.Run, prov *providerclient.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
+func runEnvRefs(ctx context.Context, dependencies Dependencies, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
+	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env refs", stderr, func(ctx context.Context, _ *run.Run, prov *providerclient.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
 		vars, err := prov.Vars()
 		if err != nil {
 			return err

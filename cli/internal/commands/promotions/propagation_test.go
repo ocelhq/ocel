@@ -38,16 +38,14 @@ func TestPropagationOnTheRollbackPromotionLine(t *testing.T) {
 	for _, tc := range propagationCases {
 		t.Run(tc.name, func(t *testing.T) {
 			root, sockPath := clitest.SetUpDeployFixture(t)
-			deps := clitest.NewDeps()
-			clitest.SetLoggedIn(&deps)
-			clitest.StubBuild(&deps, nil)
+			invocation := clitest.NewInvocation()
 			t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 			t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 			t.Setenv(clitest.FakePropagationEnvVar, tc.spec)
 
 			var stdout, stderr bytes.Buffer
-			clitest.AttachTerminalSink(deps, &stdout)
-			if err := runRollback(context.Background(), deps, root, rollbackOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+			clitest.AttachTerminalSink(invocation, &stdout)
+			if err := runRollback(context.Background(), invocation, root, rollbackOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 				t.Fatalf("runRollback err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 			}
 
@@ -70,16 +68,14 @@ func TestPropagationOnTheRollbackPromotionLine(t *testing.T) {
 
 func TestPropagationIsAbsentFromThePromotionList(t *testing.T) {
 	root, sockPath := clitest.SetUpDeployFixture(t)
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
-	clitest.StubBuild(&deps, nil)
+	invocation := clitest.NewInvocation()
 	t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 	t.Setenv(clitest.FakePropagationEnvVar, "5000")
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stdout)
-	if err := runPromotionsList(context.Background(), deps, root, &stdout, &stderr); err != nil {
+	clitest.AttachTerminalSink(invocation, &stdout)
+	if err := runPromotionsList(context.Background(), invocation, root, &stdout, &stderr); err != nil {
 		t.Fatalf("runPromotionsList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 

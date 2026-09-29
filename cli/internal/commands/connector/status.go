@@ -8,15 +8,14 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
-func runStatus(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, _ *console.Link,
+func runStatus(ctx context.Context, dependencies Dependencies, cfg *project.Project, _ *console.Link,
 	opts options, stdout io.Writer) error {
-	access, err := token(deps)
+	access, err := token(dependencies)
 	if err != nil {
 		return err
 	}
@@ -25,8 +24,8 @@ func runStatus(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, _ *
 		return err
 	}
 
-	if deps.ConfigPath() != "" {
-		fingerprint, err := fingerprinted(ctx, deps, cfg)
+	if dependencies.ConfigPath() != "" {
+		fingerprint, err := fingerprinted(ctx, dependencies, cfg)
 		if err != nil {
 			return err
 		}
@@ -59,19 +58,19 @@ func runStatus(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, _ *
 	return nil
 }
 
-func fingerprinted(ctx context.Context, deps cmddeps.Deps, cfg *project.Project) (fingerprint string, err error) {
+func fingerprinted(ctx context.Context, dependencies Dependencies, cfg *project.Project) (fingerprint string, err error) {
 	if _, err := cfg.RequireProvider(); err != nil {
 		return "", err
 	}
 
-	ctx, run, err := deps.Events.Begin(ctx, "ocel connector status", cfg.Dir)
+	ctx, run, err := dependencies.Events.Begin(ctx, "ocel connector status", cfg.Dir)
 	if err != nil {
 		return "", err
 	}
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, described, err := reachTarget(ctx, deps, cfg, check)
+	prov, described, err := reachTarget(ctx, dependencies, cfg, check)
 	check.End(err)
 	if err != nil {
 		return "", err

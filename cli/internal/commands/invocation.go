@@ -1,0 +1,47 @@
+package commands
+
+import (
+	"context"
+	"io"
+	"os"
+
+	"github.com/spf13/cobra"
+
+	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
+)
+
+const NoBrowserEnvVar = "OCEL_NO_BROWSER"
+
+const ConfigEnvVar = "OCEL_CONFIG"
+
+const DebugEnvVar = "OCEL_DEBUG"
+
+type Invocation struct {
+	Events          *run.Bus
+	Presentation    func(w io.Writer) terminal.Presentation
+	StdinIsTerminal func(r io.Reader) bool
+	Questions       providerclient.Questions
+	ConfigPath      func() string
+}
+
+func (i Invocation) LoadProject(ctx context.Context, cwd string) (*project.Project, error) {
+	return project.Load(ctx, cwd, i.ConfigPath())
+}
+
+func (i Invocation) LoadOptionalProject(ctx context.Context, cwd string) (*project.Project, error) {
+	return project.LoadOptional(ctx, cwd, i.ConfigPath())
+}
+
+func (i Invocation) BrowserReachable(stdin io.Reader) bool {
+	return os.Getenv(NoBrowserEnvVar) == "" && i.StdinIsTerminal(stdin)
+}
+
+func (i Invocation) AttachCommandSink(cmd *cobra.Command) {
+	w := ChooseRunOutput(cmd)
+	present := i.Presentation(w)
+	present.SharedTerminal = isStdoutReserved(cmd) && terminal.IsTerminal(cmd.OutOrStdout())
+	i.Events.Attach(terminal.NewSink(present, w))
+}

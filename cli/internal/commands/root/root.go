@@ -3,11 +3,8 @@ package root
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"os"
-	"os/exec"
-	"strings"
 	"time"
 
 	"github.com/pkg/browser"
@@ -15,10 +12,10 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/cli/doctor"
+	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/commands/bindings"
 	"github.com/ocelhq/ocel/cli/internal/commands/bootstrap"
 	buildcommand "github.com/ocelhq/ocel/cli/internal/commands/build"
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/commands/connector"
 	"github.com/ocelhq/ocel/cli/internal/commands/cost"
 	"github.com/ocelhq/ocel/cli/internal/commands/deploy"
@@ -51,14 +48,14 @@ func explicitConfigPath() string {
 	if configFlag != "" {
 		return configFlag
 	}
-	return os.Getenv(cmddeps.ConfigEnvVar)
+	return os.Getenv(commands.ConfigEnvVar)
 }
 
 func verboseEnabled() bool {
 	if verboseFlag {
 		return true
 	}
-	_, ok := os.LookupEnv(cmddeps.DebugEnvVar)
+	_, ok := os.LookupEnv(commands.DebugEnvVar)
 	return ok
 }
 
@@ -96,9 +93,9 @@ func handleInterrupts(cmd *cobra.Command) {
 var devCmd, runCmd *cobra.Command
 
 func init() {
-	s := newDeps()
+	invocation := newInvocation()
 	rootCmd.PersistentPreRun = func(cmd *cobra.Command, _ []string) {
-		s.AttachCommandSink(cmd)
+		invocation.AttachCommandSink(cmd)
 		handleInterrupts(cmd)
 	}
 
@@ -106,106 +103,68 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&configFlag, "config", "c", "", "Project config `file` (default: $OCEL_CONFIG, else the nearest ocel.json, ocel.yaml, ocel.yml or ocel.config.ts)")
 	rootCmd.PersistentFlags().StringVar(&logFormatFlag, "log-format", string(terminal.FormatHuman), "Log output format: human or json")
 
-	devCmd, runCmd = dev.NewCommand(s), dev.NewRunCommand(s)
+	devDependencies := dev.Dependencies{Invocation: invocation, OpenDocker: docker.Open}
+	devCmd, runCmd = dev.NewCommand(devDependencies), dev.NewRunCommand(devDependencies)
 	rootCmd.AddCommand(devCmd)
 	rootCmd.AddCommand(runCmd)
-	rootCmd.AddCommand(projectinit.NewCommand(s))
-	rootCmd.AddCommand(generate.NewCommand(s))
-	rootCmd.AddCommand(buildcommand.NewCommand(s))
-	rootCmd.AddCommand(lock.NewCommand(s))
-	rootCmd.AddCommand(deploy.NewCommand(s))
-	rootCmd.AddCommand(deploy.NewPreviewCommand(s))
-	rootCmd.AddCommand(env.NewCommand(s))
-	rootCmd.AddCommand(promotions.NewRollbackCommand(s))
-	rootCmd.AddCommand(promotions.NewDeploymentsCommand(s))
-	rootCmd.AddCommand(domain.NewCommand(s))
-	rootCmd.AddCommand(bindings.NewCommand(s))
-	rootCmd.AddCommand(destroy.NewCommand(s))
+	rootCmd.AddCommand(projectinit.NewCommand(projectinit.Dependencies{Invocation: invocation, RunPackageManager: projectinit.RunPackageManager}))
+	rootCmd.AddCommand(generate.NewCommand(generate.Dependencies{Invocation: invocation, CollectDeclarations: declaration.Collect}))
+	rootCmd.AddCommand(buildcommand.NewCommand(buildcommand.Dependencies{Invocation: invocation, BuildApps: build.Apps}))
+	rootCmd.AddCommand(lock.NewCommand(invocation))
+	deployDependencies := deploy.Dependencies{
+		Invocation:              invocation,
+		BuildApps:               build.Apps,
+		RefuseUnbuildableImages: build.RefuseUnbuildableImages,
+		ReadPrebuilt:            build.ReadPrebuilt,
+		DeploymentID:            build.DeploymentID,
+		CollectDeclarations:     declaration.Collect,
+		OpenBrowser:             browser.OpenURL,
+		ServeVariableEditor:     projecteditor.Serve,
+		ReadGitBranch:           deploy.ReadGitBranch,
+		DiscoverPRNumber:        deploy.DiscoverPRNumber,
+	}
+	rootCmd.AddCommand(deploy.NewCommand(deployDependencies))
+	rootCmd.AddCommand(deploy.NewPreviewCommand(deployDependencies))
+	rootCmd.AddCommand(env.NewCommand(env.Dependencies{Invocation: invocation, OpenBrowser: browser.OpenURL, ServeVariableEditor: projecteditor.Serve}))
+	rootCmd.AddCommand(promotions.NewRollbackCommand(invocation))
+	rootCmd.AddCommand(promotions.NewDeploymentsCommand(invocation))
+	rootCmd.AddCommand(domain.NewCommand(invocation))
+	rootCmd.AddCommand(bindings.NewCommand(invocation))
+	rootCmd.AddCommand(destroy.NewCommand(invocation))
 
-	rootCmd.AddCommand(bootstrap.NewCommand(s))
-	rootCmd.AddCommand(permissions.NewCommand(s))
-	rootCmd.AddCommand(cost.NewCommand(s))
-	rootCmd.AddCommand(doctor.NewCommand(s))
+	rootCmd.AddCommand(bootstrap.NewCommand(invocation))
+	rootCmd.AddCommand(permissions.NewCommand(invocation))
+	rootCmd.AddCommand(cost.NewCommand(cost.Dependencies{Invocation: invocation, ReadFunctions: build.ReadFunctions, CollectDeclarations: declaration.Collect}))
+	rootCmd.AddCommand(doctor.NewCommand(invocation))
 
 	rootCmd.AddGroup(
 		&cobra.Group{ID: coreGroup, Title: "CORE COMMANDS"},
 		&cobra.Group{ID: consoleGroup, Title: "CONSOLE COMMANDS"},
 	)
-	loginCmd, logoutCmd, linkCmd := login.NewCommand(s), login.NewLogoutCommand(s), link.NewCommand(s)
-	connectorCmd := connector.NewCommand(s)
+	loginDependencies := login.Dependencies{
+		Invocation:        invocation,
+		LoadCredentials:   console.LoadCredentials,
+		SaveCredentials:   console.SaveCredentials,
+		DeleteCredentials: console.DeleteCredentials,
+		OpenBrowser:       browser.OpenURL,
+	}
+	linkDependencies := link.Dependencies{Invocation: invocation, LoadCredentials: console.LoadCredentials}
+	loginCmd, logoutCmd, linkCmd := login.NewCommand(loginDependencies), login.NewLogoutCommand(loginDependencies), link.NewCommand(linkDependencies)
+	connectorCmd := connector.NewCommand(connector.Dependencies{Invocation: invocation, LoadCredentials: console.LoadCredentials})
 	readsConsoleURL(rootCmd, loginCmd, logoutCmd, linkCmd, connectorCmd)
-	addConsoleCommands(rootCmd, loginCmd, logoutCmd, linkCmd, link.NewUnlinkCommand(s), connectorCmd)
+	addConsoleCommands(rootCmd, loginCmd, logoutCmd, linkCmd, link.NewUnlinkCommand(linkDependencies), connectorCmd)
 
 	installHelpStyle(rootCmd)
 }
 
-func newDeps() cmddeps.Deps {
-	return cmddeps.Deps{
-		LoadCredentials:         console.LoadCredentials,
-		SaveCredentials:         console.SaveCredentials,
-		DeleteCredentials:       console.DeleteCredentials,
-		OpenDocker:              docker.Open,
-		BuildApps:               build.Apps,
-		RefuseUnbuildableImages: build.RefuseUnbuildableImages,
-		ReadPrebuilt:            build.ReadPrebuilt,
-		ReadFunctions:           build.ReadFunctions,
-		DeploymentID:            build.DeploymentID,
-		CollectDeclarations:     declaration.Collect,
-		OpenBrowser:             browser.OpenURL,
-		ServeVariableEditor:     projecteditor.Serve,
-		CurrentGitBranch:        gitBranch,
-		DiscoverPRNumber:        prNumberFromEnv,
-		RunPackageManager:       runPackageManagerCommand,
-		Questions:               providerclient.Questions{Prompt: terminal.NewPrompt(os.Stderr, os.Stdin), Out: os.Stderr},
-		StdinIsTerminal:         func(in io.Reader) bool { return terminal.IsTerminal(in) },
-		ConfigPath:              explicitConfigPath,
-		Presentation:            presentation,
-		Events:                  bus,
+func newInvocation() commands.Invocation {
+	return commands.Invocation{
+		Events:          bus,
+		Presentation:    presentation,
+		StdinIsTerminal: func(in io.Reader) bool { return terminal.IsTerminal(in) },
+		Questions:       providerclient.Questions{Prompt: terminal.NewPrompt(os.Stderr, os.Stdin), Out: os.Stderr},
+		ConfigPath:      explicitConfigPath,
 	}
-}
-
-func gitBranch(dir string) (string, error) {
-	out, err := exec.Command("git", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD").Output()
-	if err != nil {
-		return "", fmt.Errorf("determine current git branch: %w", err)
-	}
-	branch := strings.TrimSpace(string(out))
-	if branch == "" {
-		return "", errors.New("determine current git branch: empty ref")
-	}
-	return branch, nil
-}
-
-func prNumberFromEnv() string {
-	if n := os.Getenv(cmddeps.PRNumberEnvVar); n != "" {
-		return n
-	}
-	return prNumberFromRef(os.Getenv("GITHUB_REF"))
-}
-
-func prNumberFromRef(ref string) string {
-	rest, ok := strings.CutPrefix(ref, "refs/pull/")
-	if !ok {
-		return ""
-	}
-	number, suffix, ok := strings.Cut(rest, "/")
-	if !ok || number == "" || (suffix != "merge" && suffix != "head") {
-		return ""
-	}
-	for _, r := range number {
-		if r < '0' || r > '9' {
-			return ""
-		}
-	}
-	return number
-}
-
-func runPackageManagerCommand(ctx context.Context, dir string, argv []string, output io.Writer) error {
-	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
-	cmd.Dir = dir
-	cmd.Stdout = output
-	cmd.Stderr = output
-	return cmd.Run()
 }
 
 func presentation(w io.Writer) terminal.Presentation {

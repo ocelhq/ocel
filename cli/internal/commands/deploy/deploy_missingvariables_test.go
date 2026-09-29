@@ -11,17 +11,16 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/build"
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/project"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 )
 
-func stubAppBuildRecorder(deps *cmddeps.Deps, built *bool) {
-	deps.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
+func stubAppBuildRecorder(dependencies *Dependencies, built *bool) {
+	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
 		*built = true
-		return functionsOnDisk(deps, cfg)
+		return functionsOnDisk(cfg)
 	}
 }
 
@@ -30,12 +29,12 @@ func writeRootApp(t *testing.T, root string) {
 	clitest.WriteFile(t, filepath.Join(root, "package.json"), "{}\n")
 }
 
-func captureBuildEnv(deps *cmddeps.Deps) *map[string]map[string]string {
-	clitest.StubRecordedDeploymentIDs(deps)
+func captureBuildEnv(dependencies *Dependencies) *map[string]map[string]string {
+	stubRecordedDeploymentIDs(dependencies)
 	var got map[string]map[string]string
-	deps.BuildApps = func(_ context.Context, cfg *project.Project, envByApp map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, envByApp map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
 		got = envByApp
-		return functionsOnDisk(deps, cfg)
+		return functionsOnDisk(cfg)
 	}
 	return &got
 }
@@ -55,13 +54,13 @@ func TestADeployIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 	t.Run("a missing value refuses before anything is built", func(t *testing.T) {
 		root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		t.Setenv("OCEL_TEST_ENV_PROBLEMS", `[{"key":"STRIPE_API_KEY","folder":"","kind":"KIND_MISSING"}]`)
-		deps := clitest.NewDeps()
+		dependencies := newTestDependencies()
 		built := false
-		stubAppBuildRecorder(&deps, &built)
+		stubAppBuildRecorder(&dependencies, &built)
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDeploy err = nil, want the declarations to refuse")
 		}
@@ -87,13 +86,13 @@ func TestADeployIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 	t.Run("a client value that fails its schema refuses before anything is built, naming the key and the complaint", func(t *testing.T) {
 		root := clitest.SetUpVariablesFixture(t, `[{"key":"NEXT_PUBLIC_PORT","class":"VARIABLE_CLASS_PLAIN","required":true,"clientAccessible":true,"hasSchema":true,"schemaSource":"/app/env.schema.ts","source":"/app/env.ts"}]`)
 		t.Setenv("OCEL_TEST_ENV_PROBLEMS", `[{"key":"NEXT_PUBLIC_PORT","folder":"","kind":"KIND_INVALID","detail":"expected a number"}]`)
-		deps := clitest.NewDeps()
+		dependencies := newTestDependencies()
 		built := false
-		stubAppBuildRecorder(&deps, &built)
+		stubAppBuildRecorder(&dependencies, &built)
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDeploy err = nil, want the declarations to refuse")
 		}
@@ -112,13 +111,13 @@ func TestADeployIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 		root := clitest.SetUpVariablesFixtureWith(t,
 			`[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`,
 			clitest.EnvDeclareOnlyScript)
-		deps := clitest.NewDeps()
+		dependencies := newTestDependencies()
 		built := false
-		stubAppBuildRecorder(&deps, &built)
+		stubAppBuildRecorder(&dependencies, &built)
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDeploy err = nil, want the declarations to refuse on what it knows itself")
 		}
@@ -138,9 +137,9 @@ func TestADeployIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 		envSet(t, root, "STRIPE_API_KEY", "sk_live_value", envOptions{})
 
 		var stdout, stderr bytes.Buffer
-		deps := clitest.NewDeps()
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		dependencies := newTestDependencies()
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "Deployed") {
@@ -154,9 +153,9 @@ func TestADeployIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 		t.Setenv(clitest.FakeRevealFailureEnvVar, "the store is unreachable")
 
 		var stdout, stderr bytes.Buffer
-		deps := clitest.NewDeps()
-		clitest.AttachTerminalSink(deps, &stdout)
-		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		dependencies := newTestDependencies()
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDeploy err = nil, want a store it cannot read to stop the deploy")
 		}
@@ -176,9 +175,9 @@ func TestADeployIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 		t.Setenv("OCEL_TEST_ENV_CELLS_OUT", cellsPath)
 
 		var stdout, stderr bytes.Buffer
-		deps := clitest.NewDeps()
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		dependencies := newTestDependencies()
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -214,12 +213,12 @@ func TestADeployIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 		writeAppsConfig(t, root, `{ name: "api", path: "apps/api", framework: "node" }`)
 		writeAppSource(t, root, "api")
 		envSet(t, root, "POSTHOG_ID", "ph_web", envOptions{folder: "/web"})
-		deps := clitest.NewDeps()
-		clitest.StubBuild(&deps, nil)
+		dependencies := newTestDependencies()
+		stubBuild(&dependencies, nil)
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v, want a dead scope to warn, not stop the deploy; stdout=%s", err, stdout.String())
 		}
 		out := stdout.String() + stderr.String()
@@ -237,12 +236,12 @@ func TestADeployIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 		envSet(t, root, "POSTHOG_ID", "ph_web", envOptions{folder: "/web"})
 		envSet(t, root, "POSTHOG_ID", "ph_admin", envOptions{folder: "/admin"})
 
-		deps := clitest.NewDeps()
-		got := captureBuildEnv(&deps)
+		dependencies := newTestDependencies()
+		got := captureBuildEnv(&dependencies)
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s", err, stdout.String())
 		}
 		if (*got)["web"]["POSTHOG_ID"] != "ph_web" || (*got)["admin"]["POSTHOG_ID"] != "ph_admin" {
@@ -258,13 +257,13 @@ func TestADeployIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 		envSet(t, root, "POSTHOG_ID", "ph_web", envOptions{folder: "/web"})
 		envSet(t, root, "POSTHOG_ID", "ph_admin", envOptions{folder: "/admin"})
 
-		deps := clitest.NewDeps()
+		dependencies := newTestDependencies()
 		built := false
-		stubAppBuildRecorder(&deps, &built)
+		stubAppBuildRecorder(&dependencies, &built)
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDeploy err = nil, want a half-finished folder rename to stop the deploy")
 		}
@@ -285,12 +284,12 @@ func TestADeployIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 		envRef(t, root, "POSTHOG_ID", envOptions{}, envRefOptions{project: "platform"})
 		writeRootApp(t, root)
 
-		deps := clitest.NewDeps()
-		got := captureBuildEnv(&deps)
+		dependencies := newTestDependencies()
+		got := captureBuildEnv(&dependencies)
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if (*got)[clitest.FixtureSlug]["POSTHOG_ID"] != "ph_owned_by_platform" {
@@ -304,13 +303,13 @@ func TestAPreviewIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 		root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
-		deps := clitest.NewDeps()
+		dependencies := newTestDependencies()
 		built := false
-		stubAppBuildRecorder(&deps, &built)
+		stubAppBuildRecorder(&dependencies, &built)
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		err := runPreviewUp(context.Background(), deps, root, previewUpOptions{name: "staging"}, &stdout, &stderr, strings.NewReader(""))
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		err := runPreviewUp(context.Background(), dependencies, root, previewUpOptions{name: "staging"}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runPreviewUp err = nil, want the preview declarations to refuse: the production store is not the preview one")
 		}
@@ -338,19 +337,19 @@ func TestAPreviewIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 			t.Run(name, func(t *testing.T) {
 				root := clitest.SetUpVariablesFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
 				writeRootApp(t, root)
-				deps := clitest.NewDeps()
-				stubGit(&deps, "feature/login", "")
+				dependencies := newTestDependencies()
+				stubGit(&dependencies, "feature/login", "")
 				t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 				t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 				envSet(t, root, "POSTHOG_ID", "ph_shared", envOptions{preview: true})
 				envSet(t, root, "POSTHOG_ID", "ph_staging", envOptions{preview: true, environment: "staging"})
 
-				got := captureBuildEnv(&deps)
+				got := captureBuildEnv(&dependencies)
 
 				var stdout, stderr bytes.Buffer
-				clitest.AttachTerminalSink(deps, &stdout)
-				if err := runPreviewUp(context.Background(), deps, root, previewUpOptions{name: tc.deploying}, &stdout, &stderr, strings.NewReader("")); err != nil {
+				clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+				if err := runPreviewUp(context.Background(), dependencies, root, previewUpOptions{name: tc.deploying}, &stdout, &stderr, strings.NewReader("")); err != nil {
 					t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 				}
 				for app, env := range *got {
@@ -368,18 +367,18 @@ func TestAPreviewIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 	t.Run("an override is the only value its own environment needs", func(t *testing.T) {
 		root := clitest.SetUpVariablesFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
 		writeRootApp(t, root)
-		deps := clitest.NewDeps()
-		stubGit(&deps, "feature/login", "")
+		dependencies := newTestDependencies()
+		stubGit(&dependencies, "feature/login", "")
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		envSet(t, root, "POSTHOG_ID", "ph_staging", envOptions{preview: true, environment: "staging"})
 
-		got := captureBuildEnv(&deps)
+		got := captureBuildEnv(&dependencies)
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runPreviewUp(context.Background(), deps, root, previewUpOptions{name: "staging"}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		if err := runPreviewUp(context.Background(), dependencies, root, previewUpOptions{name: "staging"}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewUp err = %v, want staging's own override to satisfy the declarations; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if len(*got) == 0 {
@@ -395,22 +394,22 @@ func TestAPreviewIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 	t.Run("a redeployed branch finds the override it already had", func(t *testing.T) {
 		root := clitest.SetUpVariablesFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
 		writeRootApp(t, root)
-		deps := clitest.NewDeps()
-		stubGit(&deps, "feature/login", "")
+		dependencies := newTestDependencies()
+		stubGit(&dependencies, "feature/login", "")
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		envSet(t, root, "POSTHOG_ID", "ph_shared", envOptions{preview: true})
 		envSet(t, root, "POSTHOG_ID", "ph_staging", envOptions{preview: true, environment: "staging"})
 
-		got := captureBuildEnv(&deps)
+		got := captureBuildEnv(&dependencies)
 
 		up := func(when string) {
 			t.Helper()
 			*got = nil
 			var stdout, stderr bytes.Buffer
-			clitest.AttachTerminalSink(deps, &stdout)
-			if err := runPreviewUp(context.Background(), deps, root, previewUpOptions{name: "staging"}, &stdout, &stderr, strings.NewReader("")); err != nil {
+			clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+			if err := runPreviewUp(context.Background(), dependencies, root, previewUpOptions{name: "staging"}, &stdout, &stderr, strings.NewReader("")); err != nil {
 				t.Fatalf("runPreviewUp %s err = %v; stdout=%s stderr=%s", when, err, stdout.String(), stderr.String())
 			}
 			if len(*got) == 0 {
@@ -426,9 +425,9 @@ func TestAPreviewIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 		up("before the teardown")
 
 		var rm bytes.Buffer
-		clitest.AttachTerminalSink(deps, &rm)
-		if err := runPreviewRm(context.Background(), deps, root, previewRmOptions{name: "staging", yes: true}, &rm, &rm, strings.NewReader("")); err != nil {
-			t.Fatalf("runPreviewRm err = %v; out=%s", err, rm.String())
+		clitest.AttachTerminalSink(dependencies.Invocation, &rm)
+		if err := runPreviewRemove(context.Background(), dependencies, root, previewRemoveOptions{name: "staging", yes: true}, &rm, &rm, strings.NewReader("")); err != nil {
+			t.Fatalf("runPreviewRemove err = %v; out=%s", err, rm.String())
 		}
 
 		up("after the branch was rebuilt")

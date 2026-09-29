@@ -21,11 +21,13 @@ func TestDeploySendsTheEdgeTheProjectDeclared(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			root, journal, deps := clitest.SetUpEdgeFixture(t, tc.declaration)
+			root, journal := clitest.SetUpEdgeFixture(t, tc.declaration)
+			dependencies := newTestDependencies()
+			stubBuild(&dependencies, clitest.UsageMonorepoFunctions())
 
 			var stdout, stderr bytes.Buffer
-			clitest.AttachTerminalSink(deps, &stdout)
-			if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+			clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+			if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 				t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 			}
 
@@ -41,11 +43,13 @@ func TestDeploySendsTheEdgeTheProjectDeclared(t *testing.T) {
 }
 
 func TestDeploySendsTheEdgeSettingsUnchanged(t *testing.T) {
-	root, journal, deps := clitest.SetUpEdgeFixture(t, "  edge: \"relay\",\n  dns: { zone: { zone: \"acme.com\" } },\n  allowDegraded: [\"streaming\", \"edge-cache\"],\n")
+	root, journal := clitest.SetUpEdgeFixture(t, "  edge: \"relay\",\n  dns: { zone: { zone: \"acme.com\" } },\n  allowDegraded: [\"streaming\", \"edge-cache\"],\n")
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, clitest.UsageMonorepoFunctions())
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stdout)
-	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
@@ -63,12 +67,14 @@ func TestDeploySendsTheEdgeSettingsUnchanged(t *testing.T) {
 func TestDeployRendersAnEdgeTheOriginRefuses(t *testing.T) {
 	const refusal = `this provider cannot front deployments with the "alb" edge; it supports api-gateway, relay, direct`
 
-	root, _, deps := clitest.SetUpEdgeFixture(t, "")
+	root, _ := clitest.SetUpEdgeFixture(t, "")
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, clitest.UsageMonorepoFunctions())
 	t.Setenv(clitest.FakeEdgeRefusalEnvVar, refusal)
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stdout)
-	err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 	if err == nil {
 		t.Fatalf("runDeploy err = nil, want the refused edge to fail the deploy; stdout=%s stderr=%s", stdout.String(), stderr.String())
 	}

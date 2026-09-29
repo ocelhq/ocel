@@ -21,6 +21,10 @@ type Policy struct {
 	Out              io.Writer
 }
 
+func NewPolicy(command string, yes, interactive bool, out io.Writer, in io.Reader) Policy {
+	return Policy{Command: command, Yes: yes, Interactive: interactive, In: in, Out: out}
+}
+
 func (p Policy) IsAsking() bool { return p.Interactive && !p.Yes }
 
 func (p Policy) Refuse() error {

@@ -108,15 +108,15 @@ export default {
   domains: { preview: "*.preview.acme.com" },
 };
 `)
-		deps := clitest.NewDeps()
-		stubGit(&deps, "feature/login", "")
+		dependencies := newTestDependencies()
+		stubGit(&dependencies, "feature/login", "")
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		t.Setenv(clitest.FakeDomainOwnerEnvVar, "ocel-other-preview")
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		err := runPreviewUp(context.Background(), deps, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader(""))
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		err := runPreviewUp(context.Background(), dependencies, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runPreviewUp err = nil, want a domain-claim refusal")
 		}
@@ -147,9 +147,9 @@ export default {
 		t.Setenv(clitest.FakeDomainOwnerEnvVar, "ocel-other-production-web")
 
 		var stdout, stderr bytes.Buffer
-		deps := clitest.NewDeps()
-		clitest.AttachTerminalSink(deps, &stdout)
-		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		dependencies := newTestDependencies()
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDeploy err = nil, want a domain-claim refusal")
 		}
@@ -179,12 +179,12 @@ export default {
 };
 `)
 		writeAppSource(t, root, "api")
-		deps := clitest.NewDeps()
-		clitest.StubBuild(&deps, nil)
+		dependencies := newTestDependencies()
+		stubBuild(&dependencies, nil)
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "PREFLIGHT slug=test-app domains=acme.com,api.acme.com") {

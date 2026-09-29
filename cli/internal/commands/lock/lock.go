@@ -6,12 +6,12 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/lockfile"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 )
 
-func NewCommand(deps cmddeps.Deps) *cobra.Command {
+func NewCommand(invocation commands.Invocation) *cobra.Command {
 	return &cobra.Command{
 		Use:   "lock",
 		Short: "Pin the provider binaries this CLI version runs",
@@ -28,7 +28,7 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 
 			ctx := cmd.Context()
 
-			cfg, err := deps.LoadProject(ctx, cwd)
+			cfg, err := invocation.LoadProject(ctx, cwd)
 			if err != nil {
 				return err
 			}

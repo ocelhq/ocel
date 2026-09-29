@@ -1,8 +1,8 @@
-package root
+package deploy
 
 import "testing"
 
-func TestPRNumberFromRef(t *testing.T) {
+func TestOnlyAPullRequestMergeOrHeadRefNamesAPRNumber(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -30,20 +30,20 @@ func TestPRNumberFromRef(t *testing.T) {
 	}
 }
 
-func TestPRNumberFromEnvPrefersOcelVar(t *testing.T) {
-	t.Setenv("OCEL_PR_NUMBER", "42")
+func TestTheOcelPRNumberWinsOverTheGitHubRef(t *testing.T) {
+	t.Setenv(PRNumberEnvVar, "42")
 	t.Setenv("GITHUB_REF", "refs/pull/123/merge")
 
-	if got := prNumberFromEnv(); got != "42" {
-		t.Errorf("prNumberFromEnv() = %q, want %q", got, "42")
+	if got := DiscoverPRNumber(); got != "42" {
+		t.Errorf("DiscoverPRNumber() = %q, want %q", got, "42")
 	}
 }
 
-func TestPRNumberFromEnvFallsBackToRef(t *testing.T) {
-	t.Setenv("OCEL_PR_NUMBER", "")
+func TestTheGitHubRefNamesThePRNumberWhenTheOcelOneIsUnset(t *testing.T) {
+	t.Setenv(PRNumberEnvVar, "")
 	t.Setenv("GITHUB_REF", "refs/pull/123/merge")
 
-	if got := prNumberFromEnv(); got != "123" {
-		t.Errorf("prNumberFromEnv() = %q, want %q", got, "123")
+	if got := DiscoverPRNumber(); got != "123" {
+		t.Errorf("DiscoverPRNumber() = %q, want %q", got, "123")
 	}
 }

@@ -15,7 +15,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
@@ -43,18 +42,18 @@ func newBuildSpan(t *testing.T) (*run.Span, *bytes.Buffer) {
 	return run.Phase(progressv1.Phase_PHASE_BUILD), &out
 }
 
-func recordBuildApp(deps *cmddeps.Deps) *bool {
-	clitest.StubRecordedDeploymentIDs(deps)
+func recordBuildApp(dependencies *Dependencies) *bool {
+	stubRecordedDeploymentIDs(dependencies)
 	ran := false
-	deps.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
 		ran = true
-		return functionsOnDisk(deps, cfg)
+		return functionsOnDisk(cfg)
 	}
 	return &ran
 }
 
-func functionsOnDisk(deps *cmddeps.Deps, cfg *project.Project) (build.Output, error) {
-	functions, err := deps.ReadFunctions(cfg.Dir)
+func functionsOnDisk(cfg *project.Project) (build.Output, error) {
+	functions, err := build.ReadFunctions(cfg.Dir)
 	if errors.Is(err, build.ErrNoBuildOutput) {
 		return build.Output{}, nil
 	}
@@ -127,12 +126,12 @@ func TestCollectAndBuildManifest(t *testing.T) {
 	t.Run("--prebuilt skips the build and deploys the prebuilt tree's function", func(t *testing.T) {
 		root := t.TempDir()
 		clitest.WritePrebuiltFunction(t, root, "api", "index")
-		deps := clitest.NewDeps()
-		ran := recordBuildApp(&deps)
+		dependencies := newTestDependencies()
+		ran := recordBuildApp(&dependencies)
 
 		s, out := newBuildSpan(t)
 		cfg := prebuiltConfig(root)
-		manifest, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: onCompute(cfg, "serverless"), declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s})
+		manifest, _, err := collectBuildAndAssemble(context.Background(), dependencies, assembly{cfg: onCompute(cfg, "serverless"), declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s})
 		if err != nil {
 			t.Fatalf("collectBuildAndAssemble: %v", err)
 		}
@@ -158,12 +157,12 @@ func TestCollectAndBuildManifest(t *testing.T) {
 	t.Run("without --prebuilt the build runs", func(t *testing.T) {
 		root := t.TempDir()
 		clitest.WritePrebuiltFunction(t, root, "api", "index")
-		deps := clitest.NewDeps()
-		ran := recordBuildApp(&deps)
+		dependencies := newTestDependencies()
+		ran := recordBuildApp(&dependencies)
 
 		s, _ := newBuildSpan(t)
 		cfg := prebuiltConfig(root)
-		if _, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: onCompute(cfg, "serverless"), declarations: emptyDeclarations(cfg), phase: s, span: s}); err != nil {
+		if _, _, err := collectBuildAndAssemble(context.Background(), dependencies, assembly{cfg: onCompute(cfg, "serverless"), declarations: emptyDeclarations(cfg), phase: s, span: s}); err != nil {
 			t.Fatalf("collectBuildAndAssemble: %v", err)
 		}
 		if !*ran {
@@ -172,12 +171,12 @@ func TestCollectAndBuildManifest(t *testing.T) {
 	})
 
 	t.Run("--prebuilt with no build output errors", func(t *testing.T) {
-		deps := clitest.NewDeps()
-		recordBuildApp(&deps)
+		dependencies := newTestDependencies()
+		recordBuildApp(&dependencies)
 
 		s, _ := newBuildSpan(t)
 		cfg := prebuiltConfig(t.TempDir())
-		_, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: onCompute(cfg, "serverless"), declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s})
+		_, _, err := collectBuildAndAssemble(context.Background(), dependencies, assembly{cfg: onCompute(cfg, "serverless"), declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s})
 		if err == nil {
 			t.Fatal("collectBuildAndAssemble succeeded with no build output, want error")
 		}
@@ -191,11 +190,11 @@ func TestCollectAndBuildManifest(t *testing.T) {
 		clitest.WritePrebuiltFunction(t, root, "api", "index")
 		recorded := "d1a2b3c4d5e6f708192a3b4c5d6e7f80"
 		clitest.WriteFile(t, filepath.Join(root, statedir.Name, "output", "apps", "api", "deployment-id"), recorded+"\n")
-		deps := clitest.NewDeps()
+		dependencies := newTestDependencies()
 
 		s, _ := newBuildSpan(t)
 		cfg := prebuiltConfig(root)
-		manifest, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: onCompute(cfg, "serverless"), declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s})
+		manifest, _, err := collectBuildAndAssemble(context.Background(), dependencies, assembly{cfg: onCompute(cfg, "serverless"), declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s})
 		if err != nil {
 			t.Fatalf("collectBuildAndAssemble: %v", err)
 		}
@@ -212,11 +211,11 @@ func TestCollectAndBuildManifest(t *testing.T) {
 	t.Run("--prebuilt refuses an app the output tree recorded no id for", func(t *testing.T) {
 		root := t.TempDir()
 		clitest.WritePrebuiltFunction(t, root, "api", "index")
-		deps := clitest.NewDeps()
+		dependencies := newTestDependencies()
 
 		s, _ := newBuildSpan(t)
 		cfg := prebuiltConfig(root)
-		_, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: onCompute(cfg, "serverless"), declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s})
+		_, _, err := collectBuildAndAssemble(context.Background(), dependencies, assembly{cfg: onCompute(cfg, "serverless"), declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s})
 		if err == nil {
 			t.Fatal("collectBuildAndAssemble succeeded for an app no build stamped, want error")
 		}
@@ -229,20 +228,20 @@ func TestCollectAndBuildManifest(t *testing.T) {
 		root := t.TempDir()
 		clitest.WritePrebuiltFunction(t, root, "api", "index")
 		generated := ""
-		deps := clitest.NewDeps()
-		clitest.StubRecordedDeploymentIDs(&deps)
-		deps.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
+		dependencies := newTestDependencies()
+		stubRecordedDeploymentIDs(&dependencies)
+		dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
 			data, err := os.ReadFile(filepath.Join(root, statedir.Name, "env-client.ts"))
 			if err != nil {
 				return build.Output{}, err
 			}
 			generated = string(data)
-			return functionsOnDisk(&deps, cfg)
+			return functionsOnDisk(cfg)
 		}
 
 		s, _ := newBuildSpan(t)
 		cfg := prebuiltConfig(root)
-		if _, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: onCompute(cfg, "serverless"), declarations: declarationsWithClientValue(t, cfg, "https://example.com"), phase: s, span: s}); err != nil {
+		if _, _, err := collectBuildAndAssemble(context.Background(), dependencies, assembly{cfg: onCompute(cfg, "serverless"), declarations: declarationsWithClientValue(t, cfg, "https://example.com"), phase: s, span: s}); err != nil {
 			t.Fatalf("collectBuildAndAssemble: %v", err)
 		}
 
@@ -257,8 +256,8 @@ func TestCollectAndBuildManifest(t *testing.T) {
 	t.Run("--prebuilt refuses a stale client value", func(t *testing.T) {
 		root := t.TempDir()
 		clitest.WritePrebuiltFunction(t, root, "api", "index")
-		deps := clitest.NewDeps()
-		recordBuildApp(&deps)
+		dependencies := newTestDependencies()
+		recordBuildApp(&dependencies)
 		cfg := prebuiltConfig(root)
 
 		if err := clientenv.Record(root, []clientenv.App{recordedClientValue()}); err != nil {
@@ -267,7 +266,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 
 		s, _ := newBuildSpan(t)
 		declarations := declarationsWithClientValue(t, cfg, "https://rotated.example.com")
-		_, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: onCompute(cfg, "serverless"), declarations: declarations, prebuilt: true, phase: s, span: s})
+		_, _, err := collectBuildAndAssemble(context.Background(), dependencies, assembly{cfg: onCompute(cfg, "serverless"), declarations: declarations, prebuilt: true, phase: s, span: s})
 		if err == nil {
 			t.Fatal("collectBuildAndAssemble = nil for a build predating the client value, want a refusal")
 		}
@@ -282,15 +281,15 @@ func TestCollectAndBuildManifest(t *testing.T) {
 	t.Run("--prebuilt names an `ocel build` output for what it is", func(t *testing.T) {
 		root := t.TempDir()
 		clitest.WritePrebuiltFunction(t, root, "api", "index")
-		deps := clitest.NewDeps()
-		recordBuildApp(&deps)
+		dependencies := newTestDependencies()
+		recordBuildApp(&dependencies)
 		cfg := prebuiltConfig(root)
 		if err := clientenv.Record(root, []clientenv.App{{Name: "api"}}); err != nil {
 			t.Fatal(err)
 		}
 
 		s, _ := newBuildSpan(t)
-		_, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: onCompute(cfg, "serverless"), declarations: declarationsWithClientValue(t, cfg, "https://example.com"), prebuilt: true, phase: s, span: s})
+		_, _, err := collectBuildAndAssemble(context.Background(), dependencies, assembly{cfg: onCompute(cfg, "serverless"), declarations: declarationsWithClientValue(t, cfg, "https://example.com"), prebuilt: true, phase: s, span: s})
 		if err == nil {
 			t.Fatal("collectBuildAndAssemble = nil for an `ocel build` output, want a refusal")
 		}
@@ -307,8 +306,8 @@ func TestCollectAndBuildManifest(t *testing.T) {
 	t.Run("--prebuilt proceeds when the client value is unchanged", func(t *testing.T) {
 		root := t.TempDir()
 		clitest.WritePrebuiltFunction(t, root, "api", "index")
-		deps := clitest.NewDeps()
-		recordBuildApp(&deps)
+		dependencies := newTestDependencies()
+		recordBuildApp(&dependencies)
 		cfg := prebuiltConfig(root)
 
 		if err := clientenv.Record(root, []clientenv.App{recordedClientValue()}); err != nil {
@@ -317,7 +316,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 
 		s, _ := newBuildSpan(t)
 		declarations := declarationsWithClientValue(t, cfg, "https://example.com")
-		if _, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: onCompute(cfg, "serverless"), declarations: declarations, prebuilt: true, phase: s, span: s}); err != nil {
+		if _, _, err := collectBuildAndAssemble(context.Background(), dependencies, assembly{cfg: onCompute(cfg, "serverless"), declarations: declarations, prebuilt: true, phase: s, span: s}); err != nil {
 			t.Fatalf("collectBuildAndAssemble: %v", err)
 		}
 	})
@@ -335,8 +334,8 @@ func TestPrebuiltFlag(t *testing.T) {
 		t.Run("`ocel "+cmd.name+"` accepts --prebuilt", func(t *testing.T) {
 			parts := strings.Fields(cmd.want)
 			commands := map[string]*cobra.Command{
-				"deploy":  NewCommand(cmddeps.Deps{}),
-				"preview": NewPreviewCommand(cmddeps.Deps{}),
+				"deploy":  NewCommand(Dependencies{}),
+				"preview": NewPreviewCommand(Dependencies{}),
 			}
 			target := commands[parts[0]]
 			for _, part := range parts[1:] {
@@ -360,12 +359,12 @@ func TestPrebuiltDeploy(t *testing.T) {
 		if err := os.RemoveAll(filepath.Join(root, statedir.Name, "output")); err != nil {
 			t.Fatalf("drop the fixture's build output: %v", err)
 		}
-		deps := clitest.NewDeps()
-		recordBuildApp(&deps)
+		dependencies := newTestDependencies()
+		recordBuildApp(&dependencies)
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true, prebuilt: true}, &stdout, &stderr, strings.NewReader(""))
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true, prebuilt: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDeploy err = nil, want the missing build output reported")
 		}
@@ -380,10 +379,10 @@ func TestPrebuiltDeploy(t *testing.T) {
 
 func TestPrebuiltDeploysTheImageTheBuildRecordedRatherThanBuildingOne(t *testing.T) {
 	root := t.TempDir()
-	deps := clitest.NewDeps()
-	ran := recordBuildApp(&deps)
+	dependencies := newTestDependencies()
+	ran := recordBuildApp(&dependencies)
 	var asked map[string]string
-	deps.ReadPrebuilt = func(_ context.Context, _ *project.Project, archs map[string]string) (build.Output, error) {
+	dependencies.ReadPrebuilt = func(_ context.Context, _ *project.Project, archs map[string]string) (build.Output, error) {
 		asked = archs
 		return build.Output{Images: map[string]string{"api": clitest.FixtureImage("api")}}, nil
 	}
@@ -395,7 +394,7 @@ func TestPrebuiltDeploysTheImageTheBuildRecordedRatherThanBuildingOne(t *testing
 		Apps: []project.App{{Name: "api", Path: ".", Compute: "container"}},
 	}
 	archs := map[string]string{"api": "arm64"}
-	manifest, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: onCompute(cfg, "container"), declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s, containerArchs: archs})
+	manifest, _, err := collectBuildAndAssemble(context.Background(), dependencies, assembly{cfg: onCompute(cfg, "container"), declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s, containerArchs: archs})
 	if err != nil {
 		t.Fatalf("collectBuildAndAssemble: %v", err)
 	}
@@ -412,5 +411,12 @@ func TestPrebuiltDeploysTheImageTheBuildRecordedRatherThanBuildingOne(t *testing
 			deployed = append(deployed, a.GetName()+" on "+a.GetContainer().GetImage())
 		}
 		t.Errorf("the manifest deploys %v, want api on the prebuilt %q", deployed, clitest.FixtureImage("api"))
+	}
+}
+
+func stubPrebuiltFromDisk(dependencies *Dependencies) {
+	dependencies.ReadPrebuilt = func(_ context.Context, cfg *project.Project, _ map[string]string) (build.Output, error) {
+		functions, err := build.ReadFunctions(cfg.Dir)
+		return build.Output{Functions: functions}, err
 	}
 }

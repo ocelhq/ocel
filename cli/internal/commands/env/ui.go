@@ -8,7 +8,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/run"
@@ -18,7 +17,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-func newUICommand(deps cmddeps.Deps) *cobra.Command {
+func newUICommand(dependencies Dependencies) *cobra.Command {
 	var opts envOptions
 	cmd := &cobra.Command{
 		Use:     "ui",
@@ -27,22 +26,22 @@ func newUICommand(deps cmddeps.Deps) *cobra.Command {
 		Args:    cobra.NoArgs,
 	}
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
-		return withCommand(cmd, deps, func(ctx context.Context, cwd string) error {
-			return runEnvUI(ctx, deps, cwd, opts, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return withCommand(cmd, dependencies, func(ctx context.Context, cwd string) error {
+			return runEnvUI(ctx, dependencies, cwd, opts, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
 		})
 	}
 	previewFlag(cmd, &opts)
 	return cmd
 }
 
-func runEnvUI(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, stdin io.Reader, stdout, stderr io.Writer) error {
-	return withEnvProviderOfferingVariablesKey(ctx, deps, cwd, opts, "ocel env ui", stdin, stderr, func(ctx context.Context, run *run.Run, prov *providerclient.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
+func runEnvUI(ctx context.Context, dependencies Dependencies, cwd string, opts envOptions, stdin io.Reader, stdout, stderr io.Writer) error {
+	return withEnvProviderOfferingVariablesKey(ctx, dependencies, cwd, opts, "ocel env ui", stdin, stderr, func(ctx context.Context, run *run.Run, prov *providerclient.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
 		declarations, err := discoverVariables(ctx, cfg, prov, opts, run)
 		if err != nil {
 			return err
 		}
 
-		editor, err := serveAndOpenEditor(deps, ctx, cfg, prov, opts.tier(), declarations, stdin, stdout)
+		editor, err := serveAndOpenEditor(dependencies, ctx, cfg, prov, opts.tier(), declarations, stdin, stdout)
 		if err != nil {
 			return err
 		}
@@ -57,7 +56,7 @@ func runEnvUI(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOption
 }
 
 func serveAndOpenEditor(
-	deps cmddeps.Deps,
+	dependencies Dependencies,
 	ctx context.Context,
 	cfg *project.Project,
 	prov *providerclient.Provider,
@@ -66,16 +65,16 @@ func serveAndOpenEditor(
 	stdin io.Reader,
 	stdout io.Writer,
 ) (*variableeditor.Session, error) {
-	editor, err := deps.ServeVariableEditor(ctx, cfg, prov, tier, declarations, nil)
+	editor, err := dependencies.ServeVariableEditor(ctx, cfg, prov, tier, declarations, nil)
 	if err != nil {
 		return nil, err
 	}
 
 	fmt.Fprintf(stdout, "\nVariables for %s are at:\n\n  %s\n\n", cfg.Slug, editor.URL)
-	if !deps.BrowserReachable(stdin) {
+	if !dependencies.BrowserReachable(stdin) {
 		return editor, nil
 	}
-	if err := deps.OpenBrowser(editor.URL); err != nil {
+	if err := dependencies.OpenBrowser(editor.URL); err != nil {
 		fmt.Fprintln(stdout, "Couldn't open your browser automatically — open the link above manually.")
 	}
 	return editor, nil

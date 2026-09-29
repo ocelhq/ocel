@@ -9,8 +9,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/commands/bootstrap"
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
@@ -23,7 +23,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
-func NewCommand(deps cmddeps.Deps) *cobra.Command {
+func NewCommand(invocation commands.Invocation) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "destroy",
 		Short: "Permanently destroy this project's deployment of one tier",
@@ -44,11 +44,11 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 			return errors.New("destroy acts on one tier at a time: production or preview")
 		},
 	}
-	cmd.AddCommand(newProductionCommand(deps), newPreviewCommand(deps))
+	cmd.AddCommand(newProductionCommand(invocation), newPreviewCommand(invocation))
 	return cmd
 }
 
-func newProductionCommand(deps cmddeps.Deps) *cobra.Command {
+func newProductionCommand(invocation commands.Invocation) *cobra.Command {
 	var yes, dry bool
 	cmd := &cobra.Command{
 		Use:     "production",
@@ -64,15 +64,15 @@ func newProductionCommand(deps cmddeps.Deps) *cobra.Command {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
 
-			return runDestroyProduction(cmd.Context(), deps, cwd, yes, dry, cmd.OutOrStdout(), cmd.InOrStdin())
+			return runDestroyProduction(cmd.Context(), invocation, cwd, yes, dry, cmd.OutOrStdout(), cmd.InOrStdin())
 		},
 	}
-	cmddeps.Yes(cmd, &yes)
+	commands.AddYesFlag(cmd, &yes)
 	cmd.Flags().BoolVar(&dry, "dry", false, "Print what would be destroyed and stop, destroying nothing")
 	return cmd
 }
 
-func newPreviewCommand(deps cmddeps.Deps) *cobra.Command {
+func newPreviewCommand(invocation commands.Invocation) *cobra.Command {
 	var yes, dry bool
 	cmd := &cobra.Command{
 		Use:   "preview",
@@ -88,16 +88,16 @@ func newPreviewCommand(deps cmddeps.Deps) *cobra.Command {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
 
-			return runDestroyPreviewProject(cmd.Context(), deps, cwd, yes, dry, cmd.OutOrStdout(), cmd.InOrStdin())
+			return runDestroyPreviewProject(cmd.Context(), invocation, cwd, yes, dry, cmd.OutOrStdout(), cmd.InOrStdin())
 		},
 	}
-	cmddeps.Yes(cmd, &yes)
+	commands.AddYesFlag(cmd, &yes)
 	cmd.Flags().BoolVar(&dry, "dry", false, "Print what would be destroyed and stop, destroying nothing")
 	return cmd
 }
 
-func runDestroyProduction(ctx context.Context, deps cmddeps.Deps, cwd string, yes, dry bool, stdout io.Writer, stdin io.Reader) error {
-	cfg, err := deps.LoadProject(ctx, cwd)
+func runDestroyProduction(ctx context.Context, invocation commands.Invocation, cwd string, yes, dry bool, stdout io.Writer, stdin io.Reader) error {
+	cfg, err := invocation.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}
@@ -109,32 +109,32 @@ func runDestroyProduction(ctx context.Context, deps cmddeps.Deps, cwd string, ye
 		Verb:    "destroyed",
 		Yes:     yes,
 		DryRun:  dry,
-		TTY:     deps.StdinIsTerminal(stdin),
+		TTY:     invocation.StdinIsTerminal(stdin),
 	}.Granted()
 	if err != nil {
 		return err
 	}
 
-	policy := deps.ConsentPolicy("ocel destroy production", yes || bypass, stdout, stdin)
+	policy := consent.NewPolicy("ocel destroy production", yes || bypass, invocation.StdinIsTerminal(stdin), stdout, stdin)
 	policy.ConfirmsPlan = true
 	policy.DryRun = dry
 	policy.UnattendedRemedy = fmt.Sprintf("pass --yes, or set %s to the project name", consent.BypassEnv)
-	return destroyProject(ctx, deps, cfg, policy, environmentv1.Tier_TIER_PRODUCTION, notice)
+	return destroyProject(ctx, invocation, cfg, policy, environmentv1.Tier_TIER_PRODUCTION, notice)
 }
 
-func runDestroyPreviewProject(ctx context.Context, deps cmddeps.Deps, cwd string, yes, dry bool, stdout io.Writer, stdin io.Reader) error {
-	cfg, err := deps.LoadProject(ctx, cwd)
+func runDestroyPreviewProject(ctx context.Context, invocation commands.Invocation, cwd string, yes, dry bool, stdout io.Writer, stdin io.Reader) error {
+	cfg, err := invocation.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}
 
-	policy := deps.ConsentPolicy("ocel destroy preview", yes, stdout, stdin)
+	policy := consent.NewPolicy("ocel destroy preview", yes, invocation.StdinIsTerminal(stdin), stdout, stdin)
 	policy.ConfirmsPlan = true
 	policy.DryRun = dry
-	return destroyProject(ctx, deps, cfg, policy, environmentv1.Tier_TIER_PREVIEW, "")
+	return destroyProject(ctx, invocation, cfg, policy, environmentv1.Tier_TIER_PREVIEW, "")
 }
 
-func destroyProject(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, policy consent.Policy, tier environmentv1.Tier, bypassNotice string) (err error) {
+func destroyProject(ctx context.Context, invocation commands.Invocation, cfg *project.Project, policy consent.Policy, tier environmentv1.Tier, bypassNotice string) (err error) {
 	if _, err := cfg.RequireProvider(); err != nil {
 		return err
 	}
@@ -142,7 +142,7 @@ func destroyProject(ctx context.Context, deps cmddeps.Deps, cfg *project.Project
 		return err
 	}
 
-	ctx, run, err := deps.Events.Begin(ctx, policy.Command, cfg.Dir)
+	ctx, run, err := invocation.Events.Begin(ctx, policy.Command, cfg.Dir)
 	if err != nil {
 		return err
 	}
@@ -152,7 +152,7 @@ func destroyProject(ctx context.Context, deps cmddeps.Deps, cfg *project.Project
 	if bypassNotice != "" {
 		check.Warn(bypassNotice)
 	}
-	prov, err := providerclient.Start(ctx, cfg, check, deps.Questions, providerclient.ChoosePinning(policy.DryRun))
+	prov, err := providerclient.Start(ctx, cfg, check, invocation.Questions, providerclient.ChoosePinning(policy.DryRun))
 	if err != nil {
 		return err
 	}

@@ -14,7 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/commands"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
@@ -47,25 +47,25 @@ func postgresBindingJSON(name, host string) string {
 func bindingSet(t *testing.T, root, body string, opts bindingsOptions) string {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
-	if err := runBindingsSet(context.Background(), bindingDeps(&stderr), root, strings.NewReader(body), opts, &stdout); err != nil {
+	if err := runBindingsSet(context.Background(), newStreamedInvocation(&stderr), root, strings.NewReader(body), opts, &stdout); err != nil {
 		t.Fatalf("runBindingsSet err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	return stderr.String()
 }
 
-func bindingLs(t *testing.T, root string, opts bindingsOptions) string {
+func bindingList(t *testing.T, root string, opts bindingsOptions) string {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
-	if err := runBindingsList(context.Background(), bindingDeps(&stderr), root, opts, &stdout); err != nil {
+	if err := runBindingsList(context.Background(), newStreamedInvocation(&stderr), root, opts, &stdout); err != nil {
 		t.Fatalf("runBindingsList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	return stdout.String()
 }
 
-func bindingDeps(stderr io.Writer) cmddeps.Deps {
-	deps := newTestDeps()
-	clitest.AttachTerminalSink(deps, stderr)
-	return deps
+func newStreamedInvocation(stderr io.Writer) commands.Invocation {
+	invocation := newTestInvocation()
+	clitest.AttachTerminalSink(invocation, stderr)
+	return invocation
 }
 
 func TestABindingOnStdinThatCannotBeReadIsRefusedNamingWhereWithoutItsValue(t *testing.T) {
@@ -104,7 +104,7 @@ func TestRunBindingsSet(t *testing.T) {
 			t.Errorf("set stdout = %q, want it to name the binding it published", out)
 		}
 
-		listed := bindingLs(t, root, bindingsOptions{})
+		listed := bindingList(t, root, bindingsOptions{})
 		for _, want := range []string{"main", "postgres", "fake:postgres:main", defaultBindingOwner} {
 			if !strings.Contains(listed, want) {
 				t.Errorf("ls stdout = %q, want it to show %q", listed, want)
@@ -112,14 +112,14 @@ func TestRunBindingsSet(t *testing.T) {
 		}
 
 		var rm, stderr bytes.Buffer
-		if err := runBindingsRemove(context.Background(), bindingDeps(&stderr), root, "main", bindingsOptions{}, &rm); err != nil {
+		if err := runBindingsRemove(context.Background(), newStreamedInvocation(&stderr), root, "main", bindingsOptions{}, &rm); err != nil {
 			t.Fatalf("runBindingsRemove err = %v; stderr=%s", err, stderr.String())
 		}
 		if !strings.Contains(stderr.String(), "Removed main") {
 			t.Errorf("rm summary = %q, want it to name the binding it removed", stderr.String())
 		}
 
-		if after := bindingLs(t, root, bindingsOptions{}); strings.Contains(after, "main") {
+		if after := bindingList(t, root, bindingsOptions{}); strings.Contains(after, "main") {
 			t.Errorf("ls after rm = %q, want the binding gone", after)
 		}
 	})
@@ -129,7 +129,7 @@ func TestRunBindingsSet(t *testing.T) {
 		bindingSet(t, root, postgresBindingJSON("main", "db.internal"), bindingsOptions{owner: "terraform"})
 
 		var stdout, stderr bytes.Buffer
-		err := runBindingsSet(context.Background(), bindingDeps(&stderr), root,
+		err := runBindingsSet(context.Background(), newStreamedInvocation(&stderr), root,
 			strings.NewReader(postgresBindingJSON("main", "other.internal")), bindingsOptions{owner: "cli"}, &stdout)
 		if err == nil {
 			t.Fatal("runBindingsSet over another publisher's binding err = nil, want a refusal")
@@ -145,7 +145,7 @@ func TestRunBindingsSet(t *testing.T) {
 		root := setUpBindingFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		err := runBindingsSet(context.Background(), bindingDeps(&stderr), root,
+		err := runBindingsSet(context.Background(), newStreamedInvocation(&stderr), root,
 			strings.NewReader(postgresBindingJSON("main", "db.internal")), bindingsOptions{owner: "OCEL"}, &stdout)
 		if err == nil {
 			t.Fatal("runBindingsSet --owner OCEL err = nil, want a refusal")
@@ -153,7 +153,7 @@ func TestRunBindingsSet(t *testing.T) {
 		if !strings.Contains(stderr.String(), "OCEL") {
 			t.Errorf("stderr = %q, want the refusal to name the publisher it refused", stderr.String())
 		}
-		if listed := bindingLs(t, root, bindingsOptions{}); strings.Contains(listed, "main") {
+		if listed := bindingList(t, root, bindingsOptions{}); strings.Contains(listed, "main") {
 			t.Errorf("ls = %q, want the refused binding never published", listed)
 		}
 	})
@@ -162,7 +162,7 @@ func TestRunBindingsSet(t *testing.T) {
 		root := setUpBindingFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		err := runBindingsSet(context.Background(), bindingDeps(&stderr), root,
+		err := runBindingsSet(context.Background(), newStreamedInvocation(&stderr), root,
 			strings.NewReader(postgresBindingJSON("ocel:postgres.orders", "db.internal")), bindingsOptions{owner: "ocel-config"}, &stdout)
 		if err == nil {
 			t.Fatal("runBindingsSet --owner ocel-config err = nil, want a refusal")
@@ -176,7 +176,7 @@ func TestRunBindingsSet(t *testing.T) {
 		root := setUpBindingFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		err := runBindingsRemove(context.Background(), bindingDeps(&stderr), root, "ocel:postgres.orders", bindingsOptions{}, &stdout)
+		err := runBindingsRemove(context.Background(), newStreamedInvocation(&stderr), root, "ocel:postgres.orders", bindingsOptions{}, &stdout)
 		if err == nil {
 			t.Fatal("runBindingsRemove ocel:postgres.orders err = nil, want a refusal")
 		}
@@ -193,7 +193,7 @@ func TestRunBindingsSet(t *testing.T) {
 			t.Errorf("second set stdout = %q, want version 2", out)
 		}
 
-		listed := bindingLs(t, root, bindingsOptions{})
+		listed := bindingList(t, root, bindingsOptions{})
 		if !strings.Contains(listed, "terraform") {
 			t.Errorf("ls stdout = %q, want the publisher that owns the name", listed)
 		}
@@ -204,10 +204,10 @@ func TestRunBindingsSet(t *testing.T) {
 		bindingSet(t, root, postgresBindingJSON("main", "db.internal"), bindingsOptions{owner: "terraform"})
 
 		var stdout, stderr bytes.Buffer
-		if err := runBindingsRemove(context.Background(), bindingDeps(&stderr), root, "main", bindingsOptions{}, &stdout); err != nil {
+		if err := runBindingsRemove(context.Background(), newStreamedInvocation(&stderr), root, "main", bindingsOptions{}, &stdout); err != nil {
 			t.Fatalf("runBindingsRemove over another publisher's binding err = %v; stderr=%s", err, stderr.String())
 		}
-		if after := bindingLs(t, root, bindingsOptions{}); strings.Contains(after, "main") {
+		if after := bindingList(t, root, bindingsOptions{}); strings.Contains(after, "main") {
 			t.Errorf("ls after rm = %q, want the binding gone", after)
 		}
 	})
@@ -216,7 +216,7 @@ func TestRunBindingsSet(t *testing.T) {
 		root := setUpBindingFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		if err := runBindingsRemove(context.Background(), bindingDeps(&stderr), root, "never-published", bindingsOptions{}, &stdout); err != nil {
+		if err := runBindingsRemove(context.Background(), newStreamedInvocation(&stderr), root, "never-published", bindingsOptions{}, &stdout); err != nil {
 			t.Fatalf("runBindingsRemove err = %v; stderr=%s", err, stderr.String())
 		}
 		if !strings.Contains(stderr.String(), "never-published") {
@@ -236,11 +236,11 @@ func TestRunBindingsSet(t *testing.T) {
 		} {
 			t.Run(name, func(t *testing.T) {
 				var stdout, stderr bytes.Buffer
-				err := runBindingsSet(context.Background(), bindingDeps(&stderr), root, strings.NewReader(body), bindingsOptions{}, &stdout)
+				err := runBindingsSet(context.Background(), newStreamedInvocation(&stderr), root, strings.NewReader(body), bindingsOptions{}, &stdout)
 				if err == nil {
 					t.Fatalf("runBindingsSet(%q) err = nil, want a refusal", body)
 				}
-				if listed := bindingLs(t, root, bindingsOptions{}); strings.Contains(listed, "main") {
+				if listed := bindingList(t, root, bindingsOptions{}); strings.Contains(listed, "main") {
 					t.Errorf("ls = %q, want the refused binding never published", listed)
 				}
 			})
@@ -254,10 +254,10 @@ func TestRunBindingsLs(t *testing.T) {
 		bindingSet(t, root, postgresBindingJSON("main", "db.internal"), bindingsOptions{})
 
 		for name, run := range map[string]func() string{
-			"human": func() string { return bindingLs(t, root, bindingsOptions{}) },
+			"human": func() string { return bindingList(t, root, bindingsOptions{}) },
 			"json": func() string {
 				useJSONOutput(t)
-				return bindingLs(t, root, bindingsOptions{})
+				return bindingList(t, root, bindingsOptions{})
 			},
 		} {
 			t.Run(name, func(t *testing.T) {
@@ -273,7 +273,7 @@ func TestRunBindingsLs(t *testing.T) {
 
 	t.Run("reports an empty listing", func(t *testing.T) {
 		root := setUpBindingFixture(t)
-		if out := bindingLs(t, root, bindingsOptions{}); !strings.Contains(out, "ocel bindings set") {
+		if out := bindingList(t, root, bindingsOptions{}); !strings.Contains(out, "ocel bindings set") {
 			t.Errorf("ls with nothing published = %q, want it to name the command that publishes one", out)
 		}
 	})
@@ -290,7 +290,7 @@ func customBindingJSON(name string) string {
 func bindingGenerate(t *testing.T, root string, opts bindingsOptions) (string, string) {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
-	if err := runBindingsGenerate(context.Background(), bindingDeps(&stderr), root, opts, &stdout); err != nil {
+	if err := runBindingsGenerate(context.Background(), newStreamedInvocation(&stderr), root, opts, &stdout); err != nil {
 		t.Fatalf("runBindingsGenerate err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	written, err := os.ReadFile(filepath.Join(root, bindingTypesFileName))
@@ -384,7 +384,7 @@ func TestRunBindingsGenerate(t *testing.T) {
 		root := setUpBindingFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		err := runBindingsGenerate(context.Background(), bindingDeps(&stderr), root, bindingsOptions{environment: "staging"}, &stdout)
+		err := runBindingsGenerate(context.Background(), newStreamedInvocation(&stderr), root, bindingsOptions{environment: "staging"}, &stdout)
 		if err == nil {
 			t.Fatal("runBindingsGenerate --environment against production err = nil, want a refusal")
 		}
@@ -415,9 +415,9 @@ func TestBindingBootstrap(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		for name, err := range map[string]error{
-			"set": runBindingsSet(context.Background(), bindingDeps(&stderr), root, strings.NewReader(postgresBindingJSON("main", "db.internal")), bindingsOptions{environment: "staging"}, &stdout),
-			"rm":  runBindingsRemove(context.Background(), bindingDeps(&stderr), root, "main", bindingsOptions{environment: "staging"}, &stdout),
-			"ls":  runBindingsList(context.Background(), bindingDeps(&stderr), root, bindingsOptions{environment: "staging"}, &stdout),
+			"set": runBindingsSet(context.Background(), newStreamedInvocation(&stderr), root, strings.NewReader(postgresBindingJSON("main", "db.internal")), bindingsOptions{environment: "staging"}, &stdout),
+			"rm":  runBindingsRemove(context.Background(), newStreamedInvocation(&stderr), root, "main", bindingsOptions{environment: "staging"}, &stdout),
+			"ls":  runBindingsList(context.Background(), newStreamedInvocation(&stderr), root, bindingsOptions{environment: "staging"}, &stdout),
 		} {
 			if err == nil {
 				t.Errorf("`ocel bindings %s --environment` against production err = nil, want a refusal", name)
@@ -434,17 +434,17 @@ func TestBindingBootstrap(t *testing.T) {
 		bindingSet(t, root, postgresBindingJSON("main", "prod.internal"), bindingsOptions{})
 
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
-		if out := bindingLs(t, root, bindingsOptions{preview: true}); strings.Contains(out, "main") {
+		if out := bindingList(t, root, bindingsOptions{preview: true}); strings.Contains(out, "main") {
 			t.Errorf("preview ls = %q, want no production binding listed", out)
 		}
 
 		bindingSet(t, root, postgresBindingJSON("staged", "staging.internal"), bindingsOptions{preview: true, environment: "staging"})
-		if out := bindingLs(t, root, bindingsOptions{preview: true, environment: "staging"}); !strings.Contains(out, "staged") {
+		if out := bindingList(t, root, bindingsOptions{preview: true, environment: "staging"}); !strings.Contains(out, "staged") {
 			t.Errorf("ls --preview --environment staging = %q, want the binding that environment has", out)
 		}
 
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
-		if out := bindingLs(t, root, bindingsOptions{}); strings.Contains(out, "staged") {
+		if out := bindingList(t, root, bindingsOptions{}); strings.Contains(out, "staged") {
 			t.Errorf("production ls = %q, want no preview binding listed", out)
 		}
 	})
@@ -455,7 +455,7 @@ func TestRunBindingsJSONOutput(t *testing.T) {
 	useJSONOutput(t)
 
 	var published, setLog bytes.Buffer
-	if err := runBindingsSet(context.Background(), bindingDeps(&setLog), root, strings.NewReader(postgresBindingJSON("main", "db.internal")), bindingsOptions{}, &published); err != nil {
+	if err := runBindingsSet(context.Background(), newStreamedInvocation(&setLog), root, strings.NewReader(postgresBindingJSON("main", "db.internal")), bindingsOptions{}, &published); err != nil {
 		t.Fatalf("runBindingsSet err = %v; stderr=%s", err, setLog.String())
 	}
 	set := clitest.DecodeJSON(t, published.String())
@@ -463,7 +463,7 @@ func TestRunBindingsJSONOutput(t *testing.T) {
 		t.Errorf("set json = %v, want the name and version it published", set)
 	}
 
-	listed := clitest.DecodeJSON(t, bindingLs(t, root, bindingsOptions{}))
+	listed := clitest.DecodeJSON(t, bindingList(t, root, bindingsOptions{}))
 	bindings, ok := listed["bindings"].([]any)
 	if !ok || len(bindings) != 1 {
 		t.Fatalf("ls json = %v, want one binding", listed)
@@ -476,7 +476,7 @@ func TestRunBindingsJSONOutput(t *testing.T) {
 	}
 
 	var rm, stderr bytes.Buffer
-	if err := runBindingsRemove(context.Background(), bindingDeps(&stderr), root, "main", bindingsOptions{}, &rm); err != nil {
+	if err := runBindingsRemove(context.Background(), newStreamedInvocation(&stderr), root, "main", bindingsOptions{}, &rm); err != nil {
 		t.Fatalf("runBindingsRemove err = %v; stderr=%s", err, stderr.String())
 	}
 	removed := clitest.DecodeJSON(t, rm.String())
@@ -488,7 +488,7 @@ func TestRunBindingsJSONOutput(t *testing.T) {
 func TestBindingCommands(t *testing.T) {
 	t.Parallel()
 
-	bindings := NewCommand(clitest.NewDeps())
+	bindings := NewCommand(clitest.NewInvocation())
 	subcommand := func(t *testing.T, name string) *cobra.Command {
 		t.Helper()
 		cmd, _, err := bindings.Find([]string{name})
@@ -541,11 +541,11 @@ func TestListingBindingsAsJSONSaysWhoItActsAsOnItsRunAndPrintsOneJSONDocumentAlo
 	root := setUpBindingFixture(t)
 	bindingSet(t, root, postgresBindingJSON("main", "db.internal"), bindingsOptions{})
 	useJSONOutput(t)
-	deps := newTestDeps()
+	invocation := newTestInvocation()
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stderr)
-	if err := runBindingsList(context.Background(), deps, root, bindingsOptions{}, &stdout); err != nil {
+	clitest.AttachTerminalSink(invocation, &stderr)
+	if err := runBindingsList(context.Background(), invocation, root, bindingsOptions{}, &stdout); err != nil {
 		t.Fatalf("runBindingsList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 

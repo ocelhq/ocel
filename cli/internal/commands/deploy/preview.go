@@ -10,7 +10,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/commands"
+	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/deployrecord"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/project"
@@ -35,7 +36,7 @@ type previewUpOptions struct {
 	dry      bool
 }
 
-type previewRmOptions struct {
+type previewRemoveOptions struct {
 	ref  string
 	name string
 	yes  bool
@@ -50,7 +51,7 @@ type previewPruneOptions struct {
 
 const defaultPreviewPruneKeepN = 3
 
-func NewPreviewCommand(deps cmddeps.Deps) *cobra.Command {
+func NewPreviewCommand(dependencies Dependencies) *cobra.Command {
 	var upOpts previewUpOptions
 
 	cmd := &cobra.Command{
@@ -64,7 +65,7 @@ func NewPreviewCommand(deps cmddeps.Deps) *cobra.Command {
 			"  $ ocel preview ls\n" +
 			"  $ ocel preview rm",
 		Args: cobra.NoArgs,
-		RunE: previewUpRunE(deps, &upOpts),
+		RunE: previewUpRunE(dependencies, &upOpts),
 	}
 	previewUpFlags(cmd, &upOpts)
 
@@ -81,11 +82,11 @@ func NewPreviewCommand(deps cmddeps.Deps) *cobra.Command {
 			"  $ ocel preview up --ref feature/checkout\n" +
 			"  $ ocel preview up --dry",
 		Args: cobra.NoArgs,
-		RunE: previewUpRunE(deps, &upOpts),
+		RunE: previewUpRunE(dependencies, &upOpts),
 	}
 	previewUpFlags(up, &upOpts)
 
-	var rmOpts previewRmOptions
+	var rmOpts previewRemoveOptions
 	rm := &cobra.Command{
 		Use:   "rm",
 		Short: "Tear down a preview",
@@ -102,12 +103,12 @@ func NewPreviewCommand(deps cmddeps.Deps) *cobra.Command {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
 			opts := rmOpts
-			return runPreviewRm(cmd.Context(), deps, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+			return runPreviewRemove(cmd.Context(), dependencies, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 		},
 	}
 	rm.Flags().StringVar(&rmOpts.ref, "ref", "", "Tear down the preview for this git `ref` instead of the current branch")
 	rm.Flags().StringVar(&rmOpts.name, "name", "", "Tear down the named preview")
-	cmddeps.Yes(rm, &rmOpts.yes)
+	commands.AddYesFlag(rm, &rmOpts.yes)
 
 	ls := &cobra.Command{
 		Use:     "ls",
@@ -119,7 +120,7 @@ func NewPreviewCommand(deps cmddeps.Deps) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
-			return runPreviewLs(cmd.Context(), deps, cwd, cmd.OutOrStdout())
+			return runPreviewList(cmd.Context(), dependencies, cwd, cmd.OutOrStdout())
 		},
 	}
 
@@ -140,15 +141,15 @@ func NewPreviewCommand(deps cmddeps.Deps) *cobra.Command {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
 			opts := pruneOpts
-			return runPreviewPrune(cmd.Context(), deps, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+			return runPreviewPrune(cmd.Context(), dependencies, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 		},
 	}
 	prune.Flags().StringVar(&pruneOpts.ref, "ref", "", "Prune the preview for this git `ref` instead of the current branch")
 	prune.Flags().StringVar(&pruneOpts.name, "name", "", "Prune the named preview")
 	prune.Flags().IntVar(&pruneOpts.keep, "keep", defaultPreviewPruneKeepN, "How many recent deployments to keep (the live one always stays)")
-	cmddeps.Yes(prune, &pruneOpts.yes)
+	commands.AddYesFlag(prune, &pruneOpts.yes)
 
-	cmd.AddCommand(up, rm, cmddeps.ReserveStdout(ls), prune)
+	cmd.AddCommand(up, rm, commands.ReserveStdout(ls), prune)
 	return cmd
 }
 
@@ -157,27 +158,27 @@ func previewUpFlags(cmd *cobra.Command, opts *previewUpOptions) {
 	cmd.Flags().StringVar(&opts.ref, "ref", "", "Deploy the preview for this git `ref` instead of the current branch")
 	cmd.Flags().BoolVar(&opts.prebuilt, "prebuilt", false, prebuiltFlagUsage)
 	cmd.Flags().BoolVar(&opts.dry, "dry", false, dryFlagUsage)
-	cmddeps.Yes(cmd, &opts.yes)
+	commands.AddYesFlag(cmd, &opts.yes)
 }
 
-func previewUpRunE(deps cmddeps.Deps, upOpts *previewUpOptions) func(cmd *cobra.Command, args []string) error {
+func previewUpRunE(dependencies Dependencies, upOpts *previewUpOptions) func(cmd *cobra.Command, args []string) error {
 	return func(cmd *cobra.Command, args []string) error {
 		cwd, err := os.Getwd()
 		if err != nil {
 			return fmt.Errorf("determine working directory: %w", err)
 		}
 		opts := *upOpts
-		return runPreviewUp(cmd.Context(), deps, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		return runPreviewUp(cmd.Context(), dependencies, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	}
 }
 
-func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previewUpOptions, stdout, stderr io.Writer, stdin io.Reader) (err error) {
-	cfg, err := deps.LoadProject(ctx, cwd)
+func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, opts previewUpOptions, stdout, stderr io.Writer, stdin io.Reader) (err error) {
+	cfg, err := dependencies.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}
 
-	env, err := resolveUpEnvironment(deps, cwd, opts)
+	env, err := resolveUpEnvironment(dependencies, cwd, opts)
 	if err != nil {
 		return err
 	}
@@ -191,26 +192,26 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 	if _, err := cfg.RequireProvider(); err != nil {
 		return err
 	}
-	policy := deps.ConsentPolicy("ocel preview up", opts.yes, stdout, stdin)
+	policy := consent.NewPolicy("ocel preview up", opts.yes, dependencies.StdinIsTerminal(stdin), stdout, stdin)
 	policy.DryRun = opts.dry
 	if err := policy.Refuse(); err != nil {
 		return err
 	}
 
-	ctx, run, err := deps.Events.Begin(ctx, "ocel preview up", cfg.Dir)
+	ctx, run, err := dependencies.Events.Begin(ctx, "ocel preview up", cfg.Dir)
 	if err != nil {
 		return err
 	}
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := providerclient.Start(ctx, cfg, check, deps.Questions, providerclient.ChoosePinning(opts.dry))
+	prov, err := providerclient.Start(ctx, cfg, check, dependencies.Questions, providerclient.ChoosePinning(opts.dry))
 	if err != nil {
 		return err
 	}
 	defer prov.Close()
 
-	facts, err := preflightPreviewUp(ctx, deps, policy, check, prov, cfg, opts.prebuilt, env.GetIdentity(), stdout, stdin)
+	facts, err := preflightPreviewUp(ctx, dependencies, policy, check, prov, cfg, opts.prebuilt, env.GetIdentity(), stdout, stdin)
 	check.End(err)
 	if err != nil {
 		return err
@@ -221,14 +222,14 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 	}
 	cfg = facts.project
 
-	browser := deps.BrowserReachable(stdin)
+	browser := dependencies.BrowserReachable(stdin)
 	scope := variablescope.Of(cfg, environmentv1.Tier_TIER_PREVIEW, env.GetIdentity())
 	scope.Browser = browser
 	recovery := variablesRecovery{
-		deps: deps,
-		cfg:  cfg,
-		prov: prov,
-		tier: environmentv1.Tier_TIER_PREVIEW,
+		dependencies: dependencies,
+		cfg:          cfg,
+		prov:         prov,
+		tier:         environmentv1.Tier_TIER_PREVIEW,
 		newDeclarations: func(synced variables.EnvSource) *variables.Declarations {
 			scope := scope
 			scope.EnvSource = synced
@@ -355,13 +356,13 @@ func checkGlobalPreviewDomain(wildcard *contractv1.PreviewWildcard, id *contract
 	return nil
 }
 
-func runPreviewRm(ctx context.Context, deps cmddeps.Deps, cwd string, opts previewRmOptions, stdout, stderr io.Writer, stdin io.Reader) (err error) {
-	cfg, err := deps.LoadProject(ctx, cwd)
+func runPreviewRemove(ctx context.Context, dependencies Dependencies, cwd string, opts previewRemoveOptions, stdout, stderr io.Writer, stdin io.Reader) (err error) {
+	cfg, err := dependencies.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}
 
-	env, err := resolvePreviewEnvironment(deps, cwd, opts.name, opts.ref)
+	env, err := resolvePreviewEnvironment(dependencies, cwd, opts.name, opts.ref)
 	if err != nil {
 		return err
 	}
@@ -369,16 +370,16 @@ func runPreviewRm(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 	if _, err := cfg.RequireProvider(); err != nil {
 		return err
 	}
-	policy := deps.ConsentPolicy("ocel preview rm", opts.yes, stdout, stdin)
+	policy := consent.NewPolicy("ocel preview rm", opts.yes, dependencies.StdinIsTerminal(stdin), stdout, stdin)
 
-	ctx, run, err := deps.Events.Begin(ctx, "ocel preview rm", cfg.Dir)
+	ctx, run, err := dependencies.Events.Begin(ctx, "ocel preview rm", cfg.Dir)
 	if err != nil {
 		return err
 	}
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := providerclient.Start(ctx, cfg, check, deps.Questions, providerclient.PinToLock)
+	prov, err := providerclient.Start(ctx, cfg, check, dependencies.Questions, providerclient.PinToLock)
 	if err != nil {
 		return err
 	}
@@ -413,12 +414,12 @@ func runPreviewRm(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 	return nil
 }
 
-func runPreviewLs(ctx context.Context, deps cmddeps.Deps, cwd string, stdout io.Writer) error {
-	cfg, err := deps.LoadProject(ctx, cwd)
+func runPreviewList(ctx context.Context, dependencies Dependencies, cwd string, stdout io.Writer) error {
+	cfg, err := dependencies.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}
-	previews, err := listPreviews(ctx, deps, cfg)
+	previews, err := listPreviews(ctx, dependencies, cfg)
 	if err != nil {
 		return err
 	}
@@ -426,19 +427,19 @@ func runPreviewLs(ctx context.Context, deps cmddeps.Deps, cwd string, stdout io.
 	return nil
 }
 
-func listPreviews(ctx context.Context, deps cmddeps.Deps, cfg *project.Project) (previews []*contractv1.PreviewEnvironment, err error) {
+func listPreviews(ctx context.Context, dependencies Dependencies, cfg *project.Project) (previews []*contractv1.PreviewEnvironment, err error) {
 	if _, err := cfg.RequireProvider(); err != nil {
 		return nil, err
 	}
 
-	ctx, run, err := deps.Events.Begin(ctx, "ocel preview ls", cfg.Dir)
+	ctx, run, err := dependencies.Events.Begin(ctx, "ocel preview ls", cfg.Dir)
 	if err != nil {
 		return nil, err
 	}
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := providerclient.Start(ctx, cfg, check, deps.Questions, providerclient.PinToLock)
+	prov, err := providerclient.Start(ctx, cfg, check, dependencies.Questions, providerclient.PinToLock)
 	check.End(err)
 	if err != nil {
 		return nil, err
@@ -453,13 +454,13 @@ func listPreviews(ctx context.Context, deps cmddeps.Deps, cfg *project.Project) 
 	return listed.GetEnvironments(), err
 }
 
-func runPreviewPrune(ctx context.Context, deps cmddeps.Deps, cwd string, opts previewPruneOptions, stdout, stderr io.Writer, stdin io.Reader) (err error) {
-	env, err := resolvePreviewEnvironment(deps, cwd, opts.name, opts.ref)
+func runPreviewPrune(ctx context.Context, dependencies Dependencies, cwd string, opts previewPruneOptions, stdout, stderr io.Writer, stdin io.Reader) (err error) {
+	env, err := resolvePreviewEnvironment(dependencies, cwd, opts.name, opts.ref)
 	if err != nil {
 		return err
 	}
 
-	cfg, err := deps.LoadProject(ctx, cwd)
+	cfg, err := dependencies.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}
@@ -468,14 +469,14 @@ func runPreviewPrune(ctx context.Context, deps cmddeps.Deps, cwd string, opts pr
 		return err
 	}
 
-	ctx, run, err := deps.Events.Begin(ctx, "ocel preview prune", cfg.Dir)
+	ctx, run, err := dependencies.Events.Begin(ctx, "ocel preview prune", cfg.Dir)
 	if err != nil {
 		return err
 	}
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := providerclient.Start(ctx, cfg, check, deps.Questions, providerclient.PinToLock)
+	prov, err := providerclient.Start(ctx, cfg, check, dependencies.Questions, providerclient.PinToLock)
 	if err != nil {
 		return err
 	}
@@ -511,7 +512,7 @@ func persistentPreviewEnvironment(name string) (*environmentv1.Environment, erro
 	}, nil
 }
 
-func resolveUpEnvironment(deps cmddeps.Deps, cwd string, opts previewUpOptions) (*environmentv1.Environment, error) {
+func resolveUpEnvironment(dependencies Dependencies, cwd string, opts previewUpOptions) (*environmentv1.Environment, error) {
 	if opts.name != "" && opts.ref != "" {
 		return nil, fmt.Errorf("pass --name or --ref, not both: a preview is either named or a branch's")
 	}
@@ -521,11 +522,11 @@ func resolveUpEnvironment(deps cmddeps.Deps, cwd string, opts previewUpOptions) 
 
 	ref, prNumber := opts.ref, ""
 	if ref == "" {
-		branch, err := deps.CurrentGitBranch(cwd)
+		branch, err := dependencies.ReadGitBranch(cwd)
 		if err != nil {
 			return nil, err
 		}
-		ref, prNumber = branch, deps.DiscoverPRNumber()
+		ref, prNumber = branch, dependencies.DiscoverPRNumber()
 	}
 	id, err := previewid.Resolve(ref, prNumber)
 	if err != nil {
@@ -539,7 +540,7 @@ func resolveUpEnvironment(deps cmddeps.Deps, cwd string, opts previewUpOptions) 
 	}, nil
 }
 
-func resolvePreviewEnvironment(deps cmddeps.Deps, cwd, name, ref string) (*environmentv1.Environment, error) {
+func resolvePreviewEnvironment(dependencies Dependencies, cwd, name, ref string) (*environmentv1.Environment, error) {
 	if name != "" && ref != "" {
 		return nil, fmt.Errorf("pass --name or --ref, not both: a preview is either named or a branch's")
 	}
@@ -548,7 +549,7 @@ func resolvePreviewEnvironment(deps cmddeps.Deps, cwd, name, ref string) (*envir
 	}
 
 	if ref == "" {
-		branch, err := deps.CurrentGitBranch(cwd)
+		branch, err := dependencies.ReadGitBranch(cwd)
 		if err != nil {
 			return nil, err
 		}

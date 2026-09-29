@@ -13,8 +13,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/commands/bootstrap"
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/preflight"
@@ -30,8 +30,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
-func NewCommand(deps cmddeps.Deps) *cobra.Command {
-	return cmddeps.ReserveStdout(&cobra.Command{
+func NewCommand(invocation commands.Invocation) *cobra.Command {
+	return commands.ReserveStdout(&cobra.Command{
 		Use:   "doctor",
 		Short: "Check that everything is good to go",
 		Long: "Check that everything is good to go.\n\n" +
@@ -45,13 +45,13 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
-			return Run(cmd.Context(), deps, cwd, cmd.OutOrStdout())
+			return Run(cmd.Context(), invocation, cwd, cmd.OutOrStdout())
 		},
 	})
 }
 
-func Run(ctx context.Context, deps cmddeps.Deps, cwd string, stdout io.Writer) error {
-	found := diagnose(ctx, deps, cwd)
+func Run(ctx context.Context, invocation commands.Invocation, cwd string, stdout io.Writer) error {
+	found := diagnose(ctx, invocation, cwd)
 	found.render(stdout, terminal.PaletteFor(stdout))
 	if found.failures() > 0 {
 		return &exitcode.ExitError{Code: 1}
@@ -123,11 +123,11 @@ func (r report) count(want verdict) int {
 
 var tiers = []environmentv1.Tier{environmentv1.Tier_TIER_PRODUCTION, environmentv1.Tier_TIER_PREVIEW}
 
-func diagnose(ctx context.Context, deps cmddeps.Deps, cwd string) report {
+func diagnose(ctx context.Context, invocation commands.Invocation, cwd string) report {
 	var found report
 	checked := section{name: "Project"}
 
-	cfg, err := deps.LoadProject(ctx, cwd)
+	cfg, err := invocation.LoadProject(ctx, cwd)
 	if err != nil {
 		checked.fail(configFailure(err))
 		found.add(checked)
@@ -163,7 +163,7 @@ func diagnose(ctx context.Context, deps cmddeps.Deps, cwd string) report {
 		return found
 	}
 
-	answers := gather(ctx, deps, cfg)
+	answers := gather(ctx, invocation, cfg)
 	found.add(credentialSections(cfg, answers)...)
 	for _, tier := range tiers {
 		found.add(tierSection(tier, hosts[tier], answers))
@@ -325,16 +325,16 @@ func hostCheckDomains(asking bool, cfg *project.Project) []string {
 	return named
 }
 
-func gather(ctx context.Context, deps cmddeps.Deps, cfg *project.Project) *answers {
+func gather(ctx context.Context, invocation commands.Invocation, cfg *project.Project) *answers {
 	got := &answers{tiers: map[environmentv1.Tier]*tierAnswer{}}
-	if err := checkSetup(ctx, deps, cfg, got); err != nil && got.problem == "" {
+	if err := checkSetup(ctx, invocation, cfg, got); err != nil && got.problem == "" {
 		got.problem = strings.TrimSpace(err.Error())
 	}
 	return got
 }
 
-func checkSetup(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, got *answers) error {
-	ctx, run, err := deps.Events.Begin(ctx, "ocel doctor", cfg.Dir)
+func checkSetup(ctx context.Context, invocation commands.Invocation, cfg *project.Project, got *answers) error {
+	ctx, run, err := invocation.Events.Begin(ctx, "ocel doctor", cfg.Dir)
 	if err != nil {
 		return err
 	}
@@ -345,13 +345,13 @@ func checkSetup(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, go
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
 	unit := check.Unit(cfg.Slug, progress.Checking.Title("your setup"))
-	err = askProvider(ctx, deps, cfg, unit, got)
+	err = askProvider(ctx, invocation, cfg, unit, got)
 	unit.End(err)
 	return err
 }
 
-func askProvider(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, unit *run.Span, got *answers) error {
-	prov, err := providerclient.Start(ctx, cfg, unit, deps.Questions, providerclient.PinToLock)
+func askProvider(ctx context.Context, invocation commands.Invocation, cfg *project.Project, unit *run.Span, got *answers) error {
+	prov, err := providerclient.Start(ctx, cfg, unit, invocation.Questions, providerclient.PinToLock)
 	if err != nil {
 		return err
 	}

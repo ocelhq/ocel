@@ -12,7 +12,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/ocelhq/ocel/cli/internal/build"
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
@@ -22,7 +21,7 @@ import (
 
 func TestRunDeploy(t *testing.T) {
 	t.Run("a missing config errors before any spawn", func(t *testing.T) {
-		err := runDeploy(context.Background(), clitest.NewDeps(), t.TempDir(), deployOptions{yes: true}, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
+		err := runDeploy(context.Background(), newTestDependencies(), t.TempDir(), deployOptions{yes: true}, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDeploy err = nil, want error")
 		}
@@ -35,7 +34,7 @@ func TestRunDeploy(t *testing.T) {
 		root := t.TempDir()
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `this is not valid TypeScript {{{`)
 
-		err := runDeploy(context.Background(), clitest.NewDeps(), root, deployOptions{yes: true}, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
+		err := runDeploy(context.Background(), newTestDependencies(), root, deployOptions{yes: true}, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDeploy err = nil, want error")
 		}
@@ -52,7 +51,7 @@ export default {
 };
 `)
 
-		err := runDeploy(context.Background(), clitest.NewDeps(), root, deployOptions{yes: true}, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
+		err := runDeploy(context.Background(), newTestDependencies(), root, deployOptions{yes: true}, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDeploy err = nil, want error")
 		}
@@ -62,14 +61,13 @@ export default {
 	})
 
 	t.Run("the happy path discovers, builds, spawns and deploys to success", func(t *testing.T) {
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, nil)
+		dependencies := newTestDependencies()
+		stubBuild(&dependencies, nil)
 		root, sockPath := clitest.SetUpDeployFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -100,9 +98,8 @@ export default {
 	})
 
 	t.Run("an app builds its functions into the manifest", func(t *testing.T) {
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, []build.Function{
+		dependencies := newTestDependencies()
+		stubBuild(&dependencies, []build.Function{
 			{
 				Route:        "api",
 				Framework:    buildoutput.Framework{Name: "node"},
@@ -115,8 +112,8 @@ export default {
 		addAppToFixtureConfig(t, root)
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -136,14 +133,13 @@ export default {
 	})
 
 	t.Run("no apps warns and deploys resources only", func(t *testing.T) {
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, nil)
+		dependencies := newTestDependencies()
+		stubBuild(&dependencies, nil)
 		root, sockPath := clitest.SetUpDeployFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -169,18 +165,17 @@ export default {
 	})
 
 	t.Run("an app build failure aborts before spawn", func(t *testing.T) {
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, nil)
-		deps.BuildApps = func(context.Context, *project.Project, map[string]map[string]string, map[string]string, build.Log) (build.Output, error) {
+		dependencies := newTestDependencies()
+		stubBuild(&dependencies, nil)
+		dependencies.BuildApps = func(context.Context, *project.Project, map[string]map[string]string, map[string]string, build.Log) (build.Output, error) {
 			return build.Output{}, errors.New("boom: app build failed")
 		}
 		root, _ := clitest.SetUpDeployFixture(t)
 		addAppToFixtureConfig(t, root)
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDeploy err = nil, want the app-build failure")
 		}
@@ -210,17 +205,16 @@ export default {
 	}
 	for _, tc := range refusals {
 		t.Run(tc.name, func(t *testing.T) {
-			deps := clitest.NewDeps()
-			clitest.SetLoggedIn(&deps)
-			clitest.StubBuild(&deps, nil)
+			dependencies := newTestDependencies()
+			stubBuild(&dependencies, nil)
 			root, _ := clitest.SetUpDeployFixture(t)
 			for key, value := range tc.env {
 				t.Setenv(key, value)
 			}
 
 			var stdout, stderr bytes.Buffer
-			clitest.AttachTerminalSink(deps, &stdout)
-			err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+			clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+			err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 			if err == nil {
 				t.Fatal("runDeploy err = nil, want a refusal")
 			}
@@ -234,14 +228,13 @@ export default {
 	}
 
 	t.Run("stdin that is not a terminal proceeds without prompting", func(t *testing.T) {
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, nil)
+		dependencies := newTestDependencies()
+		stubBuild(&dependencies, nil)
 		root, sockPath := clitest.SetUpDeployFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		err := runDeploy(context.Background(), deps, root, deployOptions{yes: false}, &stdout, &stderr, strings.NewReader(""))
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: false}, &stdout, &stderr, strings.NewReader(""))
 		if err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -257,9 +250,8 @@ export default {
 	})
 
 	t.Run("declared domains pass the slug to the preflight", func(t *testing.T) {
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, nil)
+		dependencies := newTestDependencies()
+		stubBuild(&dependencies, nil)
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
@@ -270,8 +262,8 @@ export default {
 `)
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "PREFLIGHT slug=test-app") {
@@ -282,16 +274,15 @@ export default {
 	})
 
 	t.Run("--yes asks the provider exactly what the same run without it would", func(t *testing.T) {
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, nil)
-		deps.StdinIsTerminal = func(io.Reader) bool { return true }
+		dependencies := newTestDependencies()
+		stubBuild(&dependencies, nil)
+		dependencies.StdinIsTerminal = func(io.Reader) bool { return true }
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		t.Setenv(clitest.FakeKnownSlugsEnvVar, "my-application,billing")
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -310,15 +301,14 @@ export default {
 	})
 
 	t.Run("a non-TTY stdin leaves the slug out", func(t *testing.T) {
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, nil)
+		dependencies := newTestDependencies()
+		stubBuild(&dependencies, nil)
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		t.Setenv(clitest.FakeKnownSlugsEnvVar, "my-application,billing")
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: false}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: false}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "PREFLIGHT slug= ") {
@@ -329,16 +319,15 @@ export default {
 	})
 
 	t.Run("an interactive deploy warns about other projects", func(t *testing.T) {
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, nil)
-		deps.StdinIsTerminal = func(io.Reader) bool { return true }
+		dependencies := newTestDependencies()
+		stubBuild(&dependencies, nil)
+		dependencies.StdinIsTerminal = func(io.Reader) bool { return true }
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		t.Setenv(clitest.FakeKnownSlugsEnvVar, "my-application,billing")
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDeploy(context.Background(), deps, root, deployOptions{}, &stdout, &stderr, strings.NewReader("y\n")); err != nil {
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		if err := runDeploy(context.Background(), dependencies, root, deployOptions{}, &stdout, &stderr, strings.NewReader("y\n")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -360,15 +349,14 @@ export default {
 	})
 
 	t.Run("--yes bypasses the slug drift guard", func(t *testing.T) {
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, nil)
+		dependencies := newTestDependencies()
+		stubBuild(&dependencies, nil)
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		t.Setenv(clitest.FakeKnownSlugsEnvVar, "my-application,billing")
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -384,10 +372,9 @@ export default {
 	})
 
 	t.Run("the identity banner prints before the build and the deploy", func(t *testing.T) {
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, nil)
-		pretendStdoutIsTerminal(&deps)
+		dependencies := newTestDependencies()
+		stubBuild(&dependencies, nil)
+		pretendStdoutIsTerminal(&dependencies)
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		t.Setenv(clitest.FakeIDProviderEnvVar, "fake")
 		t.Setenv(clitest.FakeIDAccountEnvVar, "123456789012")
@@ -395,8 +382,8 @@ export default {
 		t.Setenv(clitest.FakeIDEdgeScopeEnvVar, "abcd1234")
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -420,9 +407,8 @@ export default {
 	})
 
 	t.Run("the identity banner prints with no terminal to print it to", func(t *testing.T) {
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, nil)
+		dependencies := newTestDependencies()
+		stubBuild(&dependencies, nil)
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		t.Setenv(clitest.FakeIDProviderEnvVar, "fake")
 		t.Setenv(clitest.FakeIDAccountEnvVar, "123456789012")
@@ -430,8 +416,8 @@ export default {
 		t.Setenv(clitest.FakeIDEdgeScopeEnvVar, "abcd1234")
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -452,18 +438,17 @@ export default {
 	})
 
 	t.Run("a credential problem aborts before the build and the deploy", func(t *testing.T) {
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, nil)
-		pretendStdoutIsTerminal(&deps)
+		dependencies := newTestDependencies()
+		stubBuild(&dependencies, nil)
+		pretendStdoutIsTerminal(&dependencies)
 		root, _ := clitest.SetUpDeployFixture(t)
 		t.Setenv(clitest.FakeIDAccountEnvVar, "123456789012")
 		t.Setenv(clitest.FakeIDProfileEnvVar, "default")
 		t.Setenv(clitest.FakeCredProblemEnvVar, "Relay")
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDeploy err = nil, want a credential-check error")
 		}
@@ -484,9 +469,8 @@ export default {
 	})
 
 	t.Run("a single app produces exactly one attributed app", func(t *testing.T) {
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, []build.Function{
+		dependencies := newTestDependencies()
+		stubBuild(&dependencies, []build.Function{
 			{Route: "api", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
 		})
 		root, sockPath := clitest.SetUpDeployFixture(t)
@@ -500,8 +484,8 @@ export default {
 		writeAppSource(t, root, "api")
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -523,9 +507,8 @@ export default {
 	})
 
 	t.Run("two apps attribute their functions to their own app", func(t *testing.T) {
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, []build.Function{
+		dependencies := newTestDependencies()
+		stubBuild(&dependencies, []build.Function{
 			{Route: "web", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/web", App: "web"},
 			{Route: "admin", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/admin", App: "admin"},
 		})
@@ -543,8 +526,8 @@ export default {
 		writeAppSource(t, root, "web", "admin")
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -583,17 +566,16 @@ export default {
 	})
 
 	t.Run("the app at the root of a project naming none appears in the manifest under its slug", func(t *testing.T) {
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, []build.Function{
+		dependencies := newTestDependencies()
+		stubBuild(&dependencies, []build.Function{
 			{Route: "index", Framework: buildoutput.Framework{Name: "next"}, EntryFile: "h.js", ArtifactPath: "output/index", App: clitest.FixtureSlug},
 		})
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		writeRootApp(t, root)
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -609,8 +591,8 @@ export default {
 	})
 }
 
-func pretendStdoutIsTerminal(deps *cmddeps.Deps) {
-	deps.Presentation = func(io.Writer) terminal.Presentation {
+func pretendStdoutIsTerminal(dependencies *Dependencies) {
+	dependencies.Presentation = func(io.Writer) terminal.Presentation {
 		return terminal.Resolve(terminal.Conditions{TTY: true})
 	}
 }
@@ -640,9 +622,8 @@ export function handler() {
 }
 
 func TestRunDeployRefusesAComputeTheProviderDoesNotRun(t *testing.T) {
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
-	clitest.StubBuild(&deps, nil)
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, nil)
 	root, sockPath := clitest.SetUpDeployFixture(t)
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
@@ -655,8 +636,8 @@ export default {
 	writeAppSource(t, root, "api")
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stdout)
-	err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 	if err == nil {
 		t.Fatalf("runDeploy err = nil, want the deploy refused; stdout=%s stderr=%s", stdout.String(), stderr.String())
 	}
@@ -671,15 +652,14 @@ export default {
 }
 
 func TestADeploysResultNamesTheProjectAndProduction(t *testing.T) {
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
-	clitest.StubBuild(&deps, nil)
-	useJSONLogFormat(t, &deps)
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, nil)
+	useJSONLogFormat(t, &dependencies)
 	root, _ := clitest.SetUpDeployFixture(t)
 
 	var stream, stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stream)
-	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+	clitest.AttachTerminalSink(dependencies.Invocation, &stream)
+	if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy err = %v; stream=%s stderr=%s", err, stream.String(), stderr.String())
 	}
 

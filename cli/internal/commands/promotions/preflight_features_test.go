@@ -11,16 +11,14 @@ import (
 
 func TestACommandThatReadsTheBootstrapNamesTheFeatureItLacks(t *testing.T) {
 	root, _ := clitest.SetUpDeployFixture(t)
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
-	clitest.StubBuild(&deps, nil)
+	invocation := clitest.NewInvocation()
 	t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 	t.Setenv(clitest.FakeBootstrapEnvVar, "missing")
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stdout)
-	err := runPromotionsList(context.Background(), deps, root, &stdout, &stderr)
+	clitest.AttachTerminalSink(invocation, &stdout)
+	err := runPromotionsList(context.Background(), invocation, root, &stdout, &stderr)
 	if err == nil {
 		t.Fatal("a command reading a bootstrap that lacks a feature this project needs ran on regardless")
 	}

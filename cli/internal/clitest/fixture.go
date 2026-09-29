@@ -1,7 +1,6 @@
 package clitest
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -17,12 +16,9 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/build"
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/console"
-	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
-	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/cli/internal/projecteditor"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/providers"
 	"github.com/ocelhq/ocel/cli/internal/run"
@@ -39,27 +35,16 @@ func DiscoveryDir(root string) string {
 	return filepath.Join(root, discovery.DefaultRootDirName)
 }
 
-func AttachTerminalSink(deps cmddeps.Deps, w io.Writer) {
-	deps.Events.Attach(terminal.NewSink(deps.Presentation(w), w))
+func AttachTerminalSink(invocation commands.Invocation, w io.Writer) {
+	invocation.Events.Attach(terminal.NewSink(invocation.Presentation(w), w))
 }
 
-func NewDeps() cmddeps.Deps {
-	return cmddeps.Deps{
-		LoadCredentials:         console.LoadCredentials,
-		SaveCredentials:         console.SaveCredentials,
-		DeleteCredentials:       console.DeleteCredentials,
-		BuildApps:               build.Apps,
-		RefuseUnbuildableImages: build.RefuseUnbuildableImages,
-		ReadPrebuilt:            build.ReadPrebuilt,
-		ReadFunctions:           build.ReadFunctions,
-		DeploymentID:            build.DeploymentID,
-		CollectDeclarations:     declaration.Collect,
-		ServeVariableEditor:     projecteditor.Serve,
-		DiscoverPRNumber:        func() string { return os.Getenv(cmddeps.PRNumberEnvVar) },
-		StdinIsTerminal:         func(io.Reader) bool { return false },
-		ConfigPath:              func() string { return os.Getenv(cmddeps.ConfigEnvVar) },
-		Presentation:            func(io.Writer) terminal.Presentation { return terminal.Resolve(terminal.Conditions{}) },
-		Events:                  run.NewBus(time.Now),
+func NewInvocation() commands.Invocation {
+	return commands.Invocation{
+		Events:          run.NewBus(time.Now),
+		Presentation:    func(io.Writer) terminal.Presentation { return terminal.Resolve(terminal.Conditions{}) },
+		StdinIsTerminal: func(io.Reader) bool { return false },
+		ConfigPath:      func() string { return os.Getenv(commands.ConfigEnvVar) },
 	}
 }
 
@@ -103,7 +88,7 @@ func IsolateConfigHome() func() {
 		panic(err)
 	}
 	os.Setenv("XDG_CONFIG_HOME", dir)
-	os.Unsetenv(cmddeps.ConfigEnvVar)
+	os.Unsetenv(commands.ConfigEnvVar)
 	return func() { os.RemoveAll(dir) }
 }
 
@@ -198,19 +183,6 @@ func InstallProvider(t *testing.T, name string, place func(dest string) error) s
 	return dest
 }
 
-func StubBuild(deps *cmddeps.Deps, functions []build.Function) {
-	deps.BuildApps = func(context.Context, *project.Project, map[string]map[string]string, map[string]string, build.Log) (build.Output, error) {
-		return build.Output{Functions: functions}, nil
-	}
-	deps.ReadPrebuilt = func(context.Context, *project.Project, map[string]string) (build.Output, error) {
-		return build.Output{Functions: functions}, nil
-	}
-	deps.ReadFunctions = func(string) ([]build.Function, error) {
-		return functions, nil
-	}
-	StubRecordedDeploymentIDs(deps)
-}
-
 const FixtureSlug = "test-app"
 
 func AddFakeProviderIDs() {
@@ -220,30 +192,6 @@ func AddFakeProviderIDs() {
 func FixtureImage(app string) string {
 	sum := sha256.Sum256([]byte("ocel-test-image/" + app))
 	return "ocel/" + FixtureSlug + "/" + app + "@sha256:" + hex.EncodeToString(sum[:])
-}
-
-func StubAppImages(deps *cmddeps.Deps, apps ...string) {
-	refs := make(map[string]string, len(apps))
-	for _, app := range apps {
-		refs[app] = FixtureImage(app)
-	}
-	deps.RefuseUnbuildableImages = func(context.Context, *run.Span, *project.Project, map[string]string) error {
-		return nil
-	}
-	buildApps := deps.BuildApps
-	deps.BuildApps = func(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, log build.Log) (build.Output, error) {
-		built, err := buildApps(ctx, cfg, env, archs, log)
-		built.Images = refs
-		return built, err
-	}
-	deps.ReadPrebuilt = func(_ context.Context, cfg *project.Project, _ map[string]string) (build.Output, error) {
-		functions, err := deps.ReadFunctions(cfg.Dir)
-		return build.Output{Functions: functions, Images: refs}, err
-	}
-}
-
-func StubRecordedDeploymentIDs(deps *cmddeps.Deps) {
-	deps.DeploymentID = func(_, app string) (string, error) { return FixtureDeploymentID(app), nil }
 }
 
 func WriteFile(t *testing.T, path, contents string) {
@@ -347,7 +295,7 @@ func ReadJournal(t *testing.T, path string) []string {
 	return lines
 }
 
-func SetUpEdgeFixture(t *testing.T, declaration string) (root, journal string, deps cmddeps.Deps) {
+func SetUpEdgeFixture(t *testing.T, declaration string) (root, journal string) {
 	t.Helper()
 
 	root, _ = SetUpDeployFixture(t)
@@ -356,17 +304,15 @@ func SetUpEdgeFixture(t *testing.T, declaration string) (root, journal string, d
 
 	journal = filepath.Join(t.TempDir(), "edge.journal")
 	t.Setenv(FakeEdgeJournalEnvVar, journal)
-
-	deps = NewDeps()
-	SetLoggedIn(&deps)
-	StubBuild(&deps, []build.Function{
-		{Route: "api", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
-	})
-	return root, journal, deps
+	return root, journal
 }
 
-func SetLoggedIn(deps *cmddeps.Deps) {
-	deps.LoadCredentials = func() (console.Credentials, error) {
-		return console.Credentials{APIURL: "https://api.example.com", AccessToken: "tok"}, nil
+func UsageMonorepoFunctions() []build.Function {
+	return []build.Function{
+		{Route: "api", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
 	}
+}
+
+func LoadLoggedInCredentials() (console.Credentials, error) {
+	return console.Credentials{APIURL: "https://api.example.com", AccessToken: "tok"}, nil
 }

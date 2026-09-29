@@ -22,12 +22,13 @@ func TestBootstrapDestroySendsTheEdgeTheProjectDeclared(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			root, journal, deps := clitest.SetUpEdgeFixture(t, tc.declaration)
+			root, journal := clitest.SetUpEdgeFixture(t, tc.declaration)
+			invocation := clitest.NewInvocation()
 
 			var stdout, stderr bytes.Buffer
 			opts := Options{Yes: true}
-			clitest.AttachTerminalSink(deps, &stdout)
-			if err := RunDestroy(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, strings.NewReader("")); err != nil {
+			clitest.AttachTerminalSink(invocation, &stdout)
+			if err := RunDestroy(context.Background(), invocation, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, strings.NewReader("")); err != nil {
 				t.Fatalf("RunDestroy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 			}
 

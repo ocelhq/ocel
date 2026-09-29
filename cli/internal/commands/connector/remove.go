@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
@@ -14,22 +13,22 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
-func runRemove(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, _ *console.Link, opts options) (err error) {
+func runRemove(ctx context.Context, dependencies Dependencies, cfg *project.Project, _ *console.Link, opts options) (err error) {
 	if _, err := vendored(cfg); err != nil {
 		return err
 	}
-	access, err := token(deps)
+	access, err := token(dependencies)
 	if err != nil {
 		return err
 	}
 
-	ctx, run, err := deps.Events.Begin(ctx, "ocel connector rm", cfg.Dir)
+	ctx, run, err := dependencies.Events.Begin(ctx, "ocel connector rm", cfg.Dir)
 	if err != nil {
 		return err
 	}
 	defer run.End(&err)
 
-	fingerprint, unreached := taken(ctx, deps, run, cfg, opts)
+	fingerprint, unreached := taken(ctx, dependencies, run, cfg, opts)
 	if fingerprint == "" {
 		if opts.target == "" {
 			return fmt.Errorf("%w\n\nThe console still has this target registered; nothing was forgotten. Reach the machine and run this again, or read the fingerprint with `ocel connector status` and run `ocel connector rm --target <fingerprint>` to forget it in the console alone", unreached)
@@ -72,12 +71,12 @@ func forgotten(ctx context.Context, run *run.Run, opts options, access, fingerpr
 	return nil
 }
 
-func taken(ctx context.Context, deps cmddeps.Deps, run *run.Run, cfg *project.Project, opts options) (string, error) {
+func taken(ctx context.Context, dependencies Dependencies, run *run.Run, cfg *project.Project, opts options) (string, error) {
 	if opts.target != "" {
 		return "", fmt.Errorf("this run names a target, so the machine behind %s was never asked", opts.target)
 	}
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, described, err := reachTarget(ctx, deps, cfg, check)
+	prov, described, err := reachTarget(ctx, dependencies, cfg, check)
 	check.End(err)
 	if err != nil {
 		return "", err

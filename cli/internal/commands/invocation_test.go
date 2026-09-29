@@ -1,14 +1,14 @@
-package cmddeps_test
+package commands_test
 
 import (
 	"io"
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/commands"
 )
 
-func TestBrowserReachable(t *testing.T) {
+func TestTheBrowserIsReachableOnlyFromAnInteractiveTerminalThatHasNotOptedOut(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
 		terminal  bool
@@ -20,9 +20,9 @@ func TestBrowserReachable(t *testing.T) {
 		{name: "an opted-out terminal", terminal: true, noBrowser: "1", want: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv(cmddeps.NoBrowserEnvVar, tc.noBrowser)
-			deps := cmddeps.Deps{StdinIsTerminal: func(io.Reader) bool { return tc.terminal }}
-			if got := deps.BrowserReachable(strings.NewReader("")); got != tc.want {
+			t.Setenv(commands.NoBrowserEnvVar, tc.noBrowser)
+			invocation := commands.Invocation{StdinIsTerminal: func(io.Reader) bool { return tc.terminal }}
+			if got := invocation.BrowserReachable(strings.NewReader("")); got != tc.want {
 				t.Errorf("BrowserReachable() = %v, want %v", got, tc.want)
 			}
 		})

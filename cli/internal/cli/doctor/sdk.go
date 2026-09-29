@@ -58,8 +58,8 @@ func npmSDK(dir string) (declaredSDK, bool) {
 	if json.Unmarshal(raw, &manifest) != nil {
 		return declaredSDK{}, false
 	}
-	for _, deps := range []map[string]string{manifest.Dependencies, manifest.DevDependencies} {
-		if spec, ok := deps["ocel"]; ok {
+	for _, dependencies := range []map[string]string{manifest.Dependencies, manifest.DevDependencies} {
+		if spec, ok := dependencies["ocel"]; ok {
 			return declaredSDK{language: language.JS, manifest: path, spec: spec}, true
 		}
 	}
@@ -115,8 +115,8 @@ func rustSDK(dir string) (declaredSDK, bool) {
 	for _, target := range crate.Target {
 		tables = append(tables, target.Dependencies)
 	}
-	for _, deps := range tables {
-		for name, spec := range deps {
+	for _, dependencies := range tables {
+		for name, spec := range dependencies {
 			if crate, ok := crateSpec(name, spec); ok {
 				return declaredSDK{language: language.Rust, manifest: path, spec: crate}, true
 			}

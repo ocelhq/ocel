@@ -10,7 +10,6 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -22,9 +21,9 @@ const needsRefusal = "app web needs edge-middleware and the \"direct\" edge does
 
 const degradedDetail = "web: middleware runs in the origin's Node server the way `next start` runs it, so every request pays the round trip to the origin before it is routed. It affects routes /dashboard"
 
-func useJSONLogFormat(t *testing.T, deps *cmddeps.Deps) {
+func useJSONLogFormat(t *testing.T, dependencies *Dependencies) {
 	t.Helper()
-	deps.Presentation = func(io.Writer) terminal.Presentation {
+	dependencies.Presentation = func(io.Writer) terminal.Presentation {
 		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
 	}
 }
@@ -47,12 +46,14 @@ func envelopes(t *testing.T, out string) []*streamv1.RunEvent {
 }
 
 func TestDeployRendersTheNeedsRefusalInHumanMode(t *testing.T) {
-	root, _, deps := clitest.SetUpEdgeFixture(t, "")
+	root, _ := clitest.SetUpEdgeFixture(t, "")
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, clitest.UsageMonorepoFunctions())
 	t.Setenv(clitest.FakeNeedsRefusalEnvVar, needsRefusal)
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stdout)
-	err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 	if err == nil {
 		t.Fatalf("runDeploy err = nil, want the unsupported need to fail the deploy; stdout=%s stderr=%s", stdout.String(), stderr.String())
 	}
@@ -66,13 +67,15 @@ func TestDeployRendersTheNeedsRefusalInHumanMode(t *testing.T) {
 }
 
 func TestDeployRendersTheNeedsRefusalInJSONMode(t *testing.T) {
-	root, _, deps := clitest.SetUpEdgeFixture(t, "")
-	useJSONLogFormat(t, &deps)
+	root, _ := clitest.SetUpEdgeFixture(t, "")
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, clitest.UsageMonorepoFunctions())
+	useJSONLogFormat(t, &dependencies)
 	t.Setenv(clitest.FakeNeedsRefusalEnvVar, needsRefusal)
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stdout)
-	err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 	if err == nil {
 		t.Fatalf("runDeploy err = nil, want the unsupported need to fail the deploy; stdout=%s", stdout.String())
 	}
@@ -97,12 +100,14 @@ func TestDeployRendersTheNeedsRefusalInJSONMode(t *testing.T) {
 }
 
 func TestDeployRendersADegradedNeedInHumanMode(t *testing.T) {
-	root, _, deps := clitest.SetUpEdgeFixture(t, "  allowDegraded: [\"edge-middleware\"],\n")
+	root, _ := clitest.SetUpEdgeFixture(t, "  allowDegraded: [\"edge-middleware\"],\n")
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, clitest.UsageMonorepoFunctions())
 	t.Setenv(clitest.FakeDegradedEnvVar, "edge-middleware="+degradedDetail)
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stdout)
-	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
@@ -115,13 +120,15 @@ func TestDeployRendersADegradedNeedInHumanMode(t *testing.T) {
 }
 
 func TestDeployRendersADegradedNeedAsACheckPhaseWarningInJSON(t *testing.T) {
-	root, _, deps := clitest.SetUpEdgeFixture(t, "  allowDegraded: [\"edge-middleware\", \"ppr-resume\"],\n")
-	useJSONLogFormat(t, &deps)
+	root, _ := clitest.SetUpEdgeFixture(t, "  allowDegraded: [\"edge-middleware\", \"ppr-resume\"],\n")
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, clitest.UsageMonorepoFunctions())
+	useJSONLogFormat(t, &dependencies)
 	t.Setenv(clitest.FakeDegradedEnvVar, "edge-middleware="+degradedDetail+";ppr-resume=web: the shell comes from the origin. It affects routes /")
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stdout)
-	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
@@ -144,11 +151,13 @@ func TestDeployRendersADegradedNeedAsACheckPhaseWarningInJSON(t *testing.T) {
 
 func TestDeploySaysNothingAboutNeedsForAnAppThatDeclaresNone(t *testing.T) {
 	t.Run("human", func(t *testing.T) {
-		root, _, deps := clitest.SetUpEdgeFixture(t, "")
+		root, _ := clitest.SetUpEdgeFixture(t, "")
+		dependencies := newTestDependencies()
+		stubBuild(&dependencies, clitest.UsageMonorepoFunctions())
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		rendered := stdout.String() + stderr.String()
@@ -160,12 +169,14 @@ func TestDeploySaysNothingAboutNeedsForAnAppThatDeclaresNone(t *testing.T) {
 	})
 
 	t.Run("json", func(t *testing.T) {
-		root, _, deps := clitest.SetUpEdgeFixture(t, "")
-		useJSONLogFormat(t, &deps)
+		root, _ := clitest.SetUpEdgeFixture(t, "")
+		dependencies := newTestDependencies()
+		stubBuild(&dependencies, clitest.UsageMonorepoFunctions())
+		useJSONLogFormat(t, &dependencies)
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		for _, ev := range envelopes(t, stdout.String()) {

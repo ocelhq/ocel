@@ -18,15 +18,13 @@ import (
 func TestRunDeploymentsLs(t *testing.T) {
 	t.Run("it renders promotions newest first with the active marker", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, nil)
+		invocation := clitest.NewInvocation()
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runPromotionsList(context.Background(), deps, root, &stdout, &stderr); err != nil {
+		clitest.AttachTerminalSink(invocation, &stdout)
+		if err := runPromotionsList(context.Background(), invocation, root, &stdout, &stderr); err != nil {
 			t.Fatalf("runPromotionsList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -48,15 +46,13 @@ func TestRunDeploymentsLs(t *testing.T) {
 
 	t.Run("it shows each app's shipped identity under an aligned column", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, nil)
+		invocation := clitest.NewInvocation()
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runPromotionsList(context.Background(), deps, root, &stdout, &stderr); err != nil {
+		clitest.AttachTerminalSink(invocation, &stdout)
+		if err := runPromotionsList(context.Background(), invocation, root, &stdout, &stderr); err != nil {
 			t.Fatalf("runPromotionsList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -86,15 +82,13 @@ func TestRunDeploymentsLs(t *testing.T) {
 
 	t.Run("it refuses on preview infrastructure", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, nil)
+		invocation := clitest.NewInvocation()
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		err := runPromotionsList(context.Background(), deps, root, &stdout, &stderr)
+		clitest.AttachTerminalSink(invocation, &stdout)
+		err := runPromotionsList(context.Background(), invocation, root, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runPromotionsList err = nil, want a tier-mismatch error")
 		}
@@ -115,15 +109,13 @@ func runeIndex(line, substr string) int {
 func TestRunDeploymentsPrune(t *testing.T) {
 	t.Run("it reports the reclaimed and the kept promotions", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, nil)
+		invocation := clitest.NewInvocation()
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runPromotionsPrune(context.Background(), deps, root, pruneOptions{keep: 10, yes: true}, &stdout, strings.NewReader("")); err != nil {
+		clitest.AttachTerminalSink(invocation, &stdout)
+		if err := runPromotionsPrune(context.Background(), invocation, root, pruneOptions{keep: 10, yes: true}, &stdout, strings.NewReader("")); err != nil {
 			t.Fatalf("runPromotionsPrune err = %v; stdout=%s", err, stdout.String())
 		}
 
@@ -137,14 +129,13 @@ func TestRunDeploymentsPrune(t *testing.T) {
 
 	t.Run("it refuses without a terminal or --yes and reclaims nothing", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
+		invocation := clitest.NewInvocation()
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		err := runPromotionsPrune(context.Background(), deps, root, pruneOptions{keep: 10}, &stdout, strings.NewReader(""))
+		clitest.AttachTerminalSink(invocation, &stdout)
+		err := runPromotionsPrune(context.Background(), invocation, root, pruneOptions{keep: 10}, &stdout, strings.NewReader(""))
 		if err == nil || !strings.Contains(err.Error(), "pass --yes") {
 			t.Fatalf("runPromotionsPrune without a terminal err = %v, want a refusal naming --yes", err)
 		}
@@ -155,15 +146,14 @@ func TestRunDeploymentsPrune(t *testing.T) {
 
 	t.Run("a declined confirmation reclaims nothing", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		deps.StdinIsTerminal = func(io.Reader) bool { return true }
+		invocation := clitest.NewInvocation()
+		invocation.StdinIsTerminal = func(io.Reader) bool { return true }
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runPromotionsPrune(context.Background(), deps, root, pruneOptions{keep: 10}, &stdout, strings.NewReader("n\n")); err != nil {
+		clitest.AttachTerminalSink(invocation, &stdout)
+		if err := runPromotionsPrune(context.Background(), invocation, root, pruneOptions{keep: 10}, &stdout, strings.NewReader("n\n")); err != nil {
 			t.Fatalf("runPromotionsPrune err = %v; stdout=%s", err, stdout.String())
 		}
 		out := stdout.String()
@@ -177,15 +167,13 @@ func TestRunDeploymentsPrune(t *testing.T) {
 
 	t.Run("it refuses on preview infrastructure", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, nil)
+		invocation := clitest.NewInvocation()
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		err := runPromotionsPrune(context.Background(), deps, root, pruneOptions{keep: 10, yes: true}, &stdout, strings.NewReader(""))
+		clitest.AttachTerminalSink(invocation, &stdout)
+		err := runPromotionsPrune(context.Background(), invocation, root, pruneOptions{keep: 10, yes: true}, &stdout, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runPromotionsPrune err = nil, want a tier-mismatch failure")
 		}
@@ -201,17 +189,16 @@ func TestRunDeploymentsPrune(t *testing.T) {
 
 func TestListingDeploymentsSaysWhoItActsAsInTheCheckPhaseAndPrintsItsTableBesideTheStream(t *testing.T) {
 	root, _ := clitest.SetUpDeployFixture(t)
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
-	deps.Presentation = func(io.Writer) terminal.Presentation {
+	invocation := clitest.NewInvocation()
+	invocation.Presentation = func(io.Writer) terminal.Presentation {
 		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
 	}
 	t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 	var stream, stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stream)
-	if err := runPromotionsList(context.Background(), deps, root, &stdout, &stderr); err != nil {
+	clitest.AttachTerminalSink(invocation, &stream)
+	if err := runPromotionsList(context.Background(), invocation, root, &stdout, &stderr); err != nil {
 		t.Fatalf("runPromotionsList err = %v; stream=%s stdout=%s stderr=%s", err, stream.String(), stdout.String(), stderr.String())
 	}
 
@@ -233,17 +220,16 @@ func TestListingDeploymentsSaysWhoItActsAsInTheCheckPhaseAndPrintsItsTableBeside
 
 func TestPruningReportsWhatItReclaimedThroughTheRunsEvents(t *testing.T) {
 	root, _ := clitest.SetUpDeployFixture(t)
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
-	deps.Presentation = func(io.Writer) terminal.Presentation {
+	invocation := clitest.NewInvocation()
+	invocation.Presentation = func(io.Writer) terminal.Presentation {
 		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
 	}
 	t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 	var stream bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stream)
-	if err := runPromotionsPrune(context.Background(), deps, root, pruneOptions{keep: 10, yes: true}, &stream, strings.NewReader("")); err != nil {
+	clitest.AttachTerminalSink(invocation, &stream)
+	if err := runPromotionsPrune(context.Background(), invocation, root, pruneOptions{keep: 10, yes: true}, &stream, strings.NewReader("")); err != nil {
 		t.Fatalf("runPromotionsPrune err = %v; stream=%s", err, stream.String())
 	}
 

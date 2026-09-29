@@ -13,15 +13,14 @@ import (
 )
 
 func TestDeployChecksCredentialsAndTheProjectsBootstrapAsACheckUnitNamedForItsProviderThenSaysWhoItActsAs(t *testing.T) {
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
-	clitest.StubBuild(&deps, nil)
-	useJSONLogFormat(t, &deps)
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, nil)
+	useJSONLogFormat(t, &dependencies)
 	root, _ := clitest.SetUpDeployFixture(t)
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stdout)
-	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
@@ -52,16 +51,15 @@ func TestDeployChecksCredentialsAndTheProjectsBootstrapAsACheckUnitNamedForItsPr
 }
 
 func TestAnUnbootstrappedProductionFailsTheCheckUnitWithTheCommandThatBootstrapsIt(t *testing.T) {
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
-	clitest.StubBuild(&deps, nil)
-	useJSONLogFormat(t, &deps)
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, nil)
+	useJSONLogFormat(t, &dependencies)
 	root, _ := clitest.SetUpDeployFixture(t)
 	t.Setenv(clitest.FakeInfraPresentEnvVar, "0")
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stdout)
-	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err == nil {
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err == nil {
 		t.Fatalf("runDeploy succeeded against no bootstrap: %s", stdout.String())
 	}
 
@@ -81,15 +79,14 @@ func TestAnUnbootstrappedProductionFailsTheCheckUnitWithTheCommandThatBootstraps
 }
 
 func TestDeploysEventsAreInTheCheckPhaseThenBuildThenTheProvidersDeployPhases(t *testing.T) {
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
-	clitest.StubBuild(&deps, nil)
-	useJSONLogFormat(t, &deps)
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, nil)
+	useJSONLogFormat(t, &dependencies)
 	root, _ := clitest.SetUpDeployFixture(t)
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stdout)
-	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 

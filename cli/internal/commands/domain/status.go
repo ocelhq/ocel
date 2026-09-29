@@ -13,7 +13,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/preflight"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
@@ -32,35 +32,35 @@ type domainWaitSchedule struct {
 
 var domainWait = domainWaitSchedule{initialInterval: 2 * time.Second, maxInterval: 30 * time.Second, deadline: 15 * time.Minute}
 
-func runDomainStatus(ctx context.Context, deps cmddeps.Deps, cwd string, opts domainOptions, stdout, stderr io.Writer) error {
-	cfg, err := deps.LoadProject(ctx, cwd)
+func runDomainStatus(ctx context.Context, invocation commands.Invocation, cwd string, opts domainOptions, stdout, stderr io.Writer) error {
+	cfg, err := invocation.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}
-	resp, err := readDomainStatus(ctx, deps, cfg, opts.wait)
+	resp, err := readDomainStatus(ctx, invocation, cfg, opts.wait)
 	if err != nil {
 		return err
 	}
-	if deps.Presentation(stdout).Format == terminal.FormatJSON {
+	if invocation.Presentation(stdout).Format == terminal.FormatJSON {
 		return writeDomainStatusJSON(stdout, resp)
 	}
 	renderDomainStatus(stdout, resp, filepath.Base(cfg.Path))
 	return nil
 }
 
-func readDomainStatus(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, wait bool) (resp *contractv1.GetHostnameStatusResponse, err error) {
+func readDomainStatus(ctx context.Context, invocation commands.Invocation, cfg *project.Project, wait bool) (resp *contractv1.GetHostnameStatusResponse, err error) {
 	if _, err := cfg.RequireProvider(); err != nil {
 		return nil, err
 	}
 
-	ctx, run, err := deps.Events.Begin(ctx, "ocel domain status", cfg.Dir)
+	ctx, run, err := invocation.Events.Begin(ctx, "ocel domain status", cfg.Dir)
 	if err != nil {
 		return nil, err
 	}
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := startReadyProvider(ctx, deps, cfg, check, environmentv1.Tier_TIER_PRODUCTION)
+	prov, err := startReadyProvider(ctx, invocation, cfg, check, environmentv1.Tier_TIER_PRODUCTION)
 	if err != nil {
 		return nil, err
 	}
@@ -243,7 +243,7 @@ func epochRFC3339(unix int64) string {
 	return time.Unix(unix, 0).UTC().Format(time.RFC3339)
 }
 
-func newStatusCommand(deps cmddeps.Deps) *cobra.Command {
+func newStatusCommand(invocation commands.Invocation) *cobra.Command {
 	var opts domainOptions
 	cmd := &cobra.Command{
 		Use:   "status",
@@ -254,7 +254,7 @@ func newStatusCommand(deps cmddeps.Deps) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
-			return runDomainStatus(cmd.Context(), deps, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return runDomainStatus(cmd.Context(), invocation, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		},
 	}
 	cmd.Flags().BoolVar(&opts.wait, "wait", false, "Keep polling until every declared hostname is served, or give up")

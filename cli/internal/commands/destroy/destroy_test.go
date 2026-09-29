@@ -11,7 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/commands"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/consent"
@@ -23,15 +23,13 @@ import (
 func TestRunDestroyPreviewProject(t *testing.T) {
 	t.Run("--yes skips the terminal check and the typed name", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, nil)
+		invocation := clitest.NewInvocation()
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDestroyPreviewProject(context.Background(), deps, root, true, false, &stdout, strings.NewReader("")); err != nil {
+		clitest.AttachTerminalSink(invocation, &stdout)
+		if err := runDestroyPreviewProject(context.Background(), invocation, root, true, false, &stdout, strings.NewReader("")); err != nil {
 			t.Fatalf("runDestroyPreviewProject err = %v; stdout=%s", err, stdout.String())
 		}
 
@@ -71,15 +69,13 @@ export default {
   dns: "zone",
 };
 `)
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, nil)
+		invocation := clitest.NewInvocation()
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDestroyPreviewProject(context.Background(), deps, root, true, false, &stdout, strings.NewReader("")); err != nil {
+		clitest.AttachTerminalSink(invocation, &stdout)
+		if err := runDestroyPreviewProject(context.Background(), invocation, root, true, false, &stdout, strings.NewReader("")); err != nil {
 			t.Fatalf("runDestroyPreviewProject err = %v; stdout=%s", err, stdout.String())
 		}
 		if out := stdout.String(); !strings.Contains(out, "DESTROY PROJECT project=test-app dns=zone") {
@@ -88,13 +84,14 @@ export default {
 	})
 
 	t.Run("--dry prints the plan, tears nothing down, and needs no terminal", func(t *testing.T) {
-		root, journal, deps := clitest.SetUpEdgeFixture(t, "")
+		root, journal := clitest.SetUpEdgeFixture(t, "")
+		invocation := clitest.NewInvocation()
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDestroyPreviewProject(context.Background(), deps, root, true, true, &stdout, strings.NewReader("")); err != nil {
+		clitest.AttachTerminalSink(invocation, &stdout)
+		if err := runDestroyPreviewProject(context.Background(), invocation, root, true, true, &stdout, strings.NewReader("")); err != nil {
 			t.Fatalf("runDestroyPreviewProject err = %v; stdout=%s", err, stdout.String())
 		}
 
@@ -115,12 +112,11 @@ export default {
 
 	t.Run("without --yes it refuses without a terminal", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
+		invocation := clitest.NewInvocation()
 
 		var stdout bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		err := runDestroyPreviewProject(context.Background(), deps, root, false, false, &stdout, strings.NewReader(""))
+		clitest.AttachTerminalSink(invocation, &stdout)
+		err := runDestroyPreviewProject(context.Background(), invocation, root, false, false, &stdout, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDestroyPreviewProject without a TTY err = nil, want a refusal")
 		}
@@ -133,12 +129,11 @@ export default {
 func TestRunDestroy(t *testing.T) {
 	t.Run("it refuses without a terminal", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
+		invocation := clitest.NewInvocation()
 
 		var stdout bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		err := runDestroyProduction(context.Background(), deps, root, false, false, &stdout, strings.NewReader(""))
+		clitest.AttachTerminalSink(invocation, &stdout)
+		err := runDestroyProduction(context.Background(), invocation, root, false, false, &stdout, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDestroyProduction without a TTY err = nil, want a refusal")
 		}
@@ -149,14 +144,12 @@ func TestRunDestroy(t *testing.T) {
 
 	t.Run("the project name gets past the terminal requirement and says so", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, nil)
+		invocation := clitest.NewInvocation()
 		t.Setenv(consent.BypassEnv, "test-app")
 
 		var stdout bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		err := runDestroyProduction(context.Background(), deps, root, false, false, &stdout, strings.NewReader(""))
+		clitest.AttachTerminalSink(invocation, &stdout)
+		err := runDestroyProduction(context.Background(), invocation, root, false, false, &stdout, strings.NewReader(""))
 		if err != nil && strings.Contains(err.Error(), "needs a terminal") {
 			t.Errorf("err = %v, want the bypass to get past the TTY requirement", err)
 		}
@@ -170,16 +163,14 @@ func TestRunDestroy(t *testing.T) {
 
 	t.Run("it renders the plan the provider sent, keeps collapsed into the tally", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, nil)
+		invocation := clitest.NewInvocation()
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		t.Setenv(consent.BypassEnv, "test-app")
 
 		var stdout bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDestroyProduction(context.Background(), deps, root, false, false, &stdout, strings.NewReader("")); err != nil {
+		clitest.AttachTerminalSink(invocation, &stdout)
+		if err := runDestroyProduction(context.Background(), invocation, root, false, false, &stdout, strings.NewReader("")); err != nil {
 			t.Fatalf("runDestroyProduction err = %v; stdout=%s", err, stdout.String())
 		}
 
@@ -204,16 +195,14 @@ func TestRunDestroy(t *testing.T) {
 
 	t.Run("the destroy sends the plan the human consented to", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, nil)
+		invocation := clitest.NewInvocation()
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		t.Setenv(consent.BypassEnv, "test-app")
 
 		var stdout bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDestroyProduction(context.Background(), deps, root, false, false, &stdout, strings.NewReader("")); err != nil {
+		clitest.AttachTerminalSink(invocation, &stdout)
+		if err := runDestroyProduction(context.Background(), invocation, root, false, false, &stdout, strings.NewReader("")); err != nil {
 			t.Fatalf("runDestroyProduction err = %v; stdout=%s", err, stdout.String())
 		}
 
@@ -229,13 +218,14 @@ func TestRunDestroy(t *testing.T) {
 	})
 
 	t.Run("--dry prints the plan, destroys nothing, and needs no terminal", func(t *testing.T) {
-		root, journal, deps := clitest.SetUpEdgeFixture(t, "")
+		root, journal := clitest.SetUpEdgeFixture(t, "")
+		invocation := clitest.NewInvocation()
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDestroyProduction(context.Background(), deps, root, false, true, &stdout, strings.NewReader("")); err != nil {
+		clitest.AttachTerminalSink(invocation, &stdout)
+		if err := runDestroyProduction(context.Background(), invocation, root, false, true, &stdout, strings.NewReader("")); err != nil {
 			t.Fatalf("runDestroyProduction err = %v; stdout=%s", err, stdout.String())
 		}
 
@@ -256,17 +246,15 @@ func TestRunDestroy(t *testing.T) {
 
 	t.Run("an empty plan destroys nothing and never asks for the project name", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, nil)
+		invocation := clitest.NewInvocation()
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		t.Setenv(clitest.FakeEmptyRemovalPlanEnvVar, "1")
 		t.Setenv(consent.BypassEnv, "test-app")
 
 		var stdout bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDestroyProduction(context.Background(), deps, root, false, false, &stdout, strings.NewReader("")); err != nil {
+		clitest.AttachTerminalSink(invocation, &stdout)
+		if err := runDestroyProduction(context.Background(), invocation, root, false, false, &stdout, strings.NewReader("")); err != nil {
 			t.Fatalf("runDestroyProduction err = %v; stdout=%s", err, stdout.String())
 		}
 
@@ -283,14 +271,12 @@ func TestRunDestroy(t *testing.T) {
 
 	t.Run("a value that is not this project's name is refused without a terminal", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, nil)
+		invocation := clitest.NewInvocation()
 		t.Setenv(consent.BypassEnv, "1")
 
 		var stdout bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		err := runDestroyProduction(context.Background(), deps, root, false, false, &stdout, strings.NewReader(""))
+		clitest.AttachTerminalSink(invocation, &stdout)
+		err := runDestroyProduction(context.Background(), invocation, root, false, false, &stdout, strings.NewReader(""))
 		if err == nil {
 			t.Fatalf("runDestroyProduction err = nil, want an ambient %s=1 refused; stdout=%s", consent.BypassEnv, stdout.String())
 		}
@@ -301,13 +287,12 @@ func TestRunDestroy(t *testing.T) {
 
 	t.Run("an unset bypass is not a bypass", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
+		invocation := clitest.NewInvocation()
 		t.Setenv(consent.BypassEnv, "")
 
 		var stdout bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		err := runDestroyProduction(context.Background(), deps, root, false, false, &stdout, strings.NewReader(""))
+		clitest.AttachTerminalSink(invocation, &stdout)
+		err := runDestroyProduction(context.Background(), invocation, root, false, false, &stdout, strings.NewReader(""))
 		if err == nil || !strings.Contains(err.Error(), consent.BypassEnv) {
 			t.Errorf("err = %v, want the no-TTY refusal", err)
 		}
@@ -316,18 +301,17 @@ func TestRunDestroy(t *testing.T) {
 
 func TestDestroyingProductionAsksForTheProjectNameWhileTheRunIsHeldAfterThePlanItShows(t *testing.T) {
 	root, _ := clitest.SetUpDeployFixture(t)
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
-	deps.StdinIsTerminal = func(io.Reader) bool { return true }
-	deps.Presentation = func(io.Writer) terminal.Presentation {
+	invocation := clitest.NewInvocation()
+	invocation.StdinIsTerminal = func(io.Reader) bool { return true }
+	invocation.Presentation = func(io.Writer) terminal.Presentation {
 		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
 	}
 	t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 	var stream, stdout bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stream)
-	if err := runDestroyProduction(context.Background(), deps, root, false, false, &stdout, strings.NewReader("test-app\n")); err != nil {
+	clitest.AttachTerminalSink(invocation, &stream)
+	if err := runDestroyProduction(context.Background(), invocation, root, false, false, &stdout, strings.NewReader("test-app\n")); err != nil {
 		t.Fatalf("runDestroyProduction err = %v; stream=%s stdout=%s", err, stream.String(), stdout.String())
 	}
 
@@ -350,7 +334,7 @@ func TestDestroyingProductionAsksForTheProjectNameWhileTheRunIsHeldAfterThePlanI
 }
 
 func TestDestroyNeedsATier(t *testing.T) {
-	command := NewCommand(clitest.NewDeps())
+	command := NewCommand(clitest.NewInvocation())
 	var out bytes.Buffer
 	command.SetOut(&out)
 	command.SetErr(&out)
@@ -367,7 +351,7 @@ func TestDestroyNeedsATier(t *testing.T) {
 }
 
 func TestDestroyNamesATierItDoesNotKnow(t *testing.T) {
-	command := NewCommand(clitest.NewDeps())
+	command := NewCommand(clitest.NewInvocation())
 	var out bytes.Buffer
 	command.SetOut(&out)
 	command.SetErr(&out)
@@ -386,7 +370,7 @@ func TestDestroyNamesATierItDoesNotKnow(t *testing.T) {
 }
 
 func TestDestroyTierCommands(t *testing.T) {
-	command := NewCommand(clitest.NewDeps())
+	command := NewCommand(clitest.NewInvocation())
 	for typed, want := range map[string]string{
 		"production": "production",
 		"prod":       "production",
@@ -411,7 +395,7 @@ func TestDestroyTierCommands(t *testing.T) {
 		if yes == nil {
 			t.Fatalf("destroy %s has no --yes; one flag grants consent on every command", cmd.Name())
 		}
-		if yes.Usage != cmddeps.YesUsage {
+		if yes.Usage != commands.YesUsage {
 			t.Errorf("destroy %s --yes usage = %q, want the one line every command shows", cmd.Name(), yes.Usage)
 		}
 	}
@@ -439,14 +423,15 @@ func TestDestroySendsTheEdgeTheProjectDeclared(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			root, journal, deps := clitest.SetUpEdgeFixture(t, tc.declaration)
+			root, journal := clitest.SetUpEdgeFixture(t, tc.declaration)
+			invocation := clitest.NewInvocation()
 			t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 			t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 			t.Setenv(consent.BypassEnv, "test-app")
 
 			var stdout, stderr bytes.Buffer
-			clitest.AttachTerminalSink(deps, &stdout)
-			if err := runDestroyProduction(context.Background(), deps, root, false, false, &stdout, strings.NewReader("")); err != nil {
+			clitest.AttachTerminalSink(invocation, &stdout)
+			if err := runDestroyProduction(context.Background(), invocation, root, false, false, &stdout, strings.NewReader("")); err != nil {
 				t.Fatalf("runDestroyProduction err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 			}
 

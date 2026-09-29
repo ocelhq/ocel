@@ -9,7 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -17,8 +17,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
-func NewCommand(deps cmddeps.Deps) *cobra.Command {
-	return cmddeps.ReserveStdout(&cobra.Command{
+func NewCommand(invocation commands.Invocation) *cobra.Command {
+	return commands.ReserveStdout(&cobra.Command{
 		Use:     "permissions <bootstrap|deploy>",
 		Aliases: []string{"perms"},
 		Short:   "Print the permissions bootstrap or deploy credentials need",
@@ -39,17 +39,17 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
 
-			return Run(cmd.Context(), deps, cwd, purpose, cmd.OutOrStdout())
+			return Run(cmd.Context(), invocation, cwd, purpose, cmd.OutOrStdout())
 		},
 	})
 }
 
-func Run(ctx context.Context, deps cmddeps.Deps, cwd string, purpose contractv1.CredentialPurpose, stdout io.Writer) error {
-	cfg, err := deps.LoadProject(ctx, cwd)
+func Run(ctx context.Context, invocation commands.Invocation, cwd string, purpose contractv1.CredentialPurpose, stdout io.Writer) error {
+	cfg, err := invocation.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}
-	groups, err := credentialPermissions(ctx, deps, cfg, purpose)
+	groups, err := credentialPermissions(ctx, invocation, cfg, purpose)
 	if err != nil {
 		return err
 	}
@@ -70,19 +70,19 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, purpose contractv1.
 	return nil
 }
 
-func credentialPermissions(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, purpose contractv1.CredentialPurpose) (groups []*contractv1.CredentialGroup, err error) {
+func credentialPermissions(ctx context.Context, invocation commands.Invocation, cfg *project.Project, purpose contractv1.CredentialPurpose) (groups []*contractv1.CredentialGroup, err error) {
 	if _, err := cfg.RequireProvider(); err != nil {
 		return nil, err
 	}
 
-	ctx, run, err := deps.Events.Begin(ctx, "ocel permissions", cfg.Dir)
+	ctx, run, err := invocation.Events.Begin(ctx, "ocel permissions", cfg.Dir)
 	if err != nil {
 		return nil, err
 	}
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := providerclient.Start(ctx, cfg, check, deps.Questions, providerclient.PinToLock)
+	prov, err := providerclient.Start(ctx, cfg, check, invocation.Questions, providerclient.PinToLock)
 	check.End(err)
 	if err != nil {
 		return nil, err

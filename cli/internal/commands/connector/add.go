@@ -9,7 +9,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/english"
 
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
@@ -25,24 +24,24 @@ func unfinished(err error) error {
 	return fmt.Errorf("%w; the console already has this target registered, so running ocel connector add again finishes it", err)
 }
 
-func runAdd(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, link *console.Link, opts options) (err error) {
+func runAdd(ctx context.Context, dependencies Dependencies, cfg *project.Project, link *console.Link, opts options) (err error) {
 	vendor, err := vendored(cfg)
 	if err != nil {
 		return err
 	}
-	access, err := token(deps)
+	access, err := token(dependencies)
 	if err != nil {
 		return err
 	}
 
-	ctx, run, err := deps.Events.Begin(ctx, "ocel connector add", cfg.Dir)
+	ctx, run, err := dependencies.Events.Begin(ctx, "ocel connector add", cfg.Dir)
 	if err != nil {
 		return err
 	}
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, described, err := reachTarget(ctx, deps, cfg, check)
+	prov, described, err := reachTarget(ctx, dependencies, cfg, check)
 	check.End(err)
 	if err != nil {
 		return err

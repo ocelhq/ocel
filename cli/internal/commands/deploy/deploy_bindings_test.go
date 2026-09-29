@@ -30,16 +30,15 @@ export default {
 func deployBound(t *testing.T, bindings string) (root string, stdout, stderr bytes.Buffer, err error) {
 	t.Helper()
 
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
-	clitest.StubBuild(&deps, []build.Function{
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, []build.Function{
 		{Route: "api", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
 	})
 	root, _ = clitest.SetUpDeployFixture(t)
 	writeBoundMonorepo(t, root, bindings)
 
-	clitest.AttachTerminalSink(deps, &stdout)
-	err = runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	err = runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 	return root, stdout, stderr, err
 }
 

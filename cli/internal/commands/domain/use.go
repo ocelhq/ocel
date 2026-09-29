@@ -8,7 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -16,7 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
-func runDomainUse(ctx context.Context, deps cmddeps.Deps, cwd, wildcard string, opts domainOptions, stdout, stderr io.Writer) (err error) {
+func runDomainUse(ctx context.Context, invocation commands.Invocation, cwd, wildcard string, opts domainOptions, stdout, stderr io.Writer) (err error) {
 	if err := requirePreviewTier("ocel domain use", opts.preview); err != nil {
 		return err
 	}
@@ -25,7 +25,7 @@ func runDomainUse(ctx context.Context, deps cmddeps.Deps, cwd, wildcard string, 
 		return err
 	}
 
-	cfg, err := deps.LoadProject(ctx, cwd)
+	cfg, err := invocation.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}
@@ -33,14 +33,14 @@ func runDomainUse(ctx context.Context, deps cmddeps.Deps, cwd, wildcard string, 
 		return err
 	}
 
-	ctx, run, err := deps.Events.Begin(ctx, "ocel domain use", cfg.Dir)
+	ctx, run, err := invocation.Events.Begin(ctx, "ocel domain use", cfg.Dir)
 	if err != nil {
 		return err
 	}
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := startReadyProvider(ctx, deps, cfg, check, environmentv1.Tier_TIER_PREVIEW)
+	prov, err := startReadyProvider(ctx, invocation, cfg, check, environmentv1.Tier_TIER_PREVIEW)
 	check.End(err)
 	if err != nil {
 		return err
@@ -59,7 +59,7 @@ func runDomainUse(ctx context.Context, deps cmddeps.Deps, cwd, wildcard string, 
 	return nil
 }
 
-func newUseCommand(deps cmddeps.Deps) *cobra.Command {
+func newUseCommand(invocation commands.Invocation) *cobra.Command {
 	var opts domainOptions
 	cmd := &cobra.Command{
 		Use:   "use <wildcard>",
@@ -70,7 +70,7 @@ func newUseCommand(deps cmddeps.Deps) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
-			return runDomainUse(cmd.Context(), deps, cwd, args[0], opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return runDomainUse(cmd.Context(), invocation, cwd, args[0], opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		},
 	}
 	cmd.Flags().BoolVar(&opts.preview, "preview", false, "Act on the preview tier (required)")

@@ -6,11 +6,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/dev"
 )
 
-func NewRunCommand(deps cmddeps.Deps) *cobra.Command {
+func NewRunCommand(dependencies Dependencies) *cobra.Command {
 	return &cobra.Command{
 		Use:   "run -- <command> [args...]",
 		Short: "Run a one-off command with your project's resource connections",
@@ -20,7 +19,7 @@ func NewRunCommand(deps cmddeps.Deps) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
-			opts, err := loadOptions(cmd.Context(), deps, cwd, args, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+			opts, err := loadOptions(cmd.Context(), dependencies, cwd, args, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 			if err != nil {
 				return err
 			}

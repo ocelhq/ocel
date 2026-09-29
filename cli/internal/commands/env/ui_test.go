@@ -29,7 +29,7 @@ import (
 
 func withProviderValues(t *testing.T, root string, opts envOptions, drive func(ctx context.Context, slug string, prov *providerclient.Provider, values valuestore.Store) error) {
 	t.Helper()
-	err := withEnvProvider(context.Background(), clitest.NewDeps(), root, opts, "ocel env", io.Discard, func(ctx context.Context, _ *run.Run, prov *providerclient.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
+	err := withEnvProvider(context.Background(), newTestDependencies(), root, opts, "ocel env", io.Discard, func(ctx context.Context, _ *run.Run, prov *providerclient.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
 		return drive(ctx, cfg.Slug, prov, valuestore.Store{
 			Provider: prov,
 			Project:  cfg,
@@ -204,7 +204,7 @@ func syncedEnvSourceFixture(t *testing.T, descriptor envsource.Descriptor) strin
 	setCredentials(t, root)
 	registerFakeEnvSource(t, environmentv1.Tier_TIER_PRODUCTION, descriptor)
 	var synced bytes.Buffer
-	if err := runEnvSync(context.Background(), clitest.NewDeps(), root, envOptions{}, &synced, &synced); err != nil {
+	if err := runEnvSync(context.Background(), newTestDependencies(), root, envOptions{}, &synced, &synced); err != nil {
 		t.Fatalf("runEnvSync err = %v; out=%s", err, synced.String())
 	}
 	return root
@@ -212,7 +212,7 @@ func syncedEnvSourceFixture(t *testing.T, descriptor envsource.Descriptor) strin
 
 func withEditor(t *testing.T, root string, drive func(s *variableeditor.Session)) {
 	t.Helper()
-	err := withEnvProvider(context.Background(), clitest.NewDeps(), root, envOptions{}, "ocel env ui", io.Discard, func(ctx context.Context, run *run.Run, prov *providerclient.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
+	err := withEnvProvider(context.Background(), newTestDependencies(), root, envOptions{}, "ocel env ui", io.Discard, func(ctx context.Context, run *run.Run, prov *providerclient.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
 		declarations, err := discoverVariables(ctx, cfg, prov, envOptions{}, run)
 		if err != nil {
 			return err

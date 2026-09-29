@@ -17,9 +17,8 @@ func TestLiveADryRunOfAContainerAppSendsTheDigestTheDaemonBuilt(t *testing.T) {
 	vm.Engine(t)
 	vm.Forward(t)
 
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
-	clitest.StubBuild(&deps, nil)
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, nil)
 
 	root, sockPath := clitest.SetUpDeployFixture(t)
 	t.Setenv(clitest.FakeComputesEnvVar, "container,serverless")
@@ -33,8 +32,8 @@ export default {
 	copyFixtureApp(t, "../../build/image/testdata/dockerfileapp", filepath.Join(root, "apps", "api"))
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stdout)
-	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true, dry: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true, dry: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy --dry err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 

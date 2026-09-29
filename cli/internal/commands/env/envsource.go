@@ -9,7 +9,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/dotfile"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
@@ -22,7 +21,7 @@ import (
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 )
 
-func newEnvSourceCommand(deps cmddeps.Deps) *cobra.Command {
+func newEnvSourceCommand(dependencies Dependencies) *cobra.Command {
 	var opts envOptions
 	cmd := &cobra.Command{
 		Use:     "source",
@@ -31,15 +30,15 @@ func newEnvSourceCommand(deps cmddeps.Deps) *cobra.Command {
 		Args:    cobra.NoArgs,
 	}
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
-		return withCommand(cmd, deps, func(ctx context.Context, cwd string) error {
-			return runEnvSource(ctx, deps, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return withCommand(cmd, dependencies, func(ctx context.Context, cwd string) error {
+			return runEnvSource(ctx, dependencies, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		})
 	}
 	previewFlag(cmd, &opts)
 	return cmd
 }
 
-func newSyncCommand(deps cmddeps.Deps) *cobra.Command {
+func newSyncCommand(dependencies Dependencies) *cobra.Command {
 	var opts envOptions
 	cmd := &cobra.Command{
 		Use:     "sync",
@@ -48,8 +47,8 @@ func newSyncCommand(deps cmddeps.Deps) *cobra.Command {
 		Args:    cobra.NoArgs,
 	}
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
-		return withCommand(cmd, deps, func(ctx context.Context, cwd string) error {
-			return runEnvSync(ctx, deps, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return withCommand(cmd, dependencies, func(ctx context.Context, cwd string) error {
+			return runEnvSync(ctx, dependencies, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		})
 	}
 	previewFlag(cmd, &opts)
@@ -70,8 +69,8 @@ func deployCommand(opts envOptions) string {
 	return "ocel deploy"
 }
 
-func runEnvSync(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, stdout, stderr io.Writer) error {
-	return withEnvProvider(ctx, deps, cwd, opts, "ocel env sync", stderr, func(ctx context.Context, _ *run.Run, prov *providerclient.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
+func runEnvSync(ctx context.Context, dependencies Dependencies, cwd string, opts envOptions, stdout, stderr io.Writer) error {
+	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env sync", stderr, func(ctx context.Context, _ *run.Run, prov *providerclient.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
 		synced, err := valuestore.Store{Provider: prov, Project: cfg, Tier: opts.tier()}.SyncRegisteredEnvSource(ctx)
 		if err != nil {
 			return err
@@ -91,8 +90,8 @@ func runEnvSync(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOpti
 	})
 }
 
-func runEnvSource(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, stdout, stderr io.Writer) error {
-	return withEnvProvider(ctx, deps, cwd, opts, "ocel env source", stderr, func(ctx context.Context, _ *run.Run, prov *providerclient.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
+func runEnvSource(ctx context.Context, dependencies Dependencies, cwd string, opts envOptions, stdout, stderr io.Writer) error {
+	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env source", stderr, func(ctx context.Context, _ *run.Run, prov *providerclient.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
 		vars, err := prov.Vars()
 		if err != nil {
 			return err

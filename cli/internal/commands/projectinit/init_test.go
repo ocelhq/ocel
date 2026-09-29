@@ -17,48 +17,40 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 )
 
-func stubPackageManager(deps *cmddeps.Deps, result error) *[]string {
+func stubPackageManager(dependencies *Dependencies, result error) *[]string {
 	var argv []string
-	deps.RunPackageManager = func(_ context.Context, _ string, cmd []string, _ io.Writer) error {
+	dependencies.RunPackageManager = func(_ context.Context, _ string, cmd []string, _ io.Writer) error {
 		argv = cmd
 		return result
 	}
 	return &argv
 }
 
-func initDeps() cmddeps.Deps {
-	deps := clitest.NewDeps()
-	deps.Events = run.NewBus(time.Now)
-	return deps
-}
-
 func TestAddingTheSDKIsAUnitOnTheInitRunAndThePackageManagerSpeaksThroughIt(t *testing.T) {
 	t.Parallel()
 
-	deps := initDeps()
-	deps.Presentation = func(io.Writer) terminal.Presentation {
+	dependencies := newTestDependencies()
+	dependencies.Presentation = func(io.Writer) terminal.Presentation {
 		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON, TTY: true, Width: 80})
 	}
-	deps.RunPackageManager = func(_ context.Context, _ string, _ []string, output io.Writer) error {
+	dependencies.RunPackageManager = func(_ context.Context, _ string, _ []string, output io.Writer) error {
 		time.Sleep(300 * time.Millisecond)
 		fmt.Fprintln(output, "added 1 package in 2s")
 		return nil
 	}
 	var stdout, stderr syncBuffer
-	clitest.AttachTerminalSink(deps, &stdout)
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
 	dir := initTestDir(t, "proj")
 	if err := os.WriteFile(filepath.Join(dir, "pnpm-lock.yaml"), nil, 0o644); err != nil {
 		t.Fatalf("write lockfile: %v", err)
 	}
 
-	if err := runInit(context.Background(), deps, dir, "my-app", initOptions{provider: "aws"}); err != nil {
+	if err := runInit(context.Background(), dependencies, dir, "my-app", initOptions{provider: "aws"}); err != nil {
 		t.Fatalf("runInit err = %v", err)
 	}
 
@@ -115,13 +107,13 @@ func TestRunInit(t *testing.T) {
 	t.Run("no argument defaults the slug to the directory name", func(t *testing.T) {
 		t.Parallel()
 
-		deps := initDeps()
-		stubPackageManager(&deps, nil)
+		dependencies := newTestDependencies()
+		stubPackageManager(&dependencies, nil)
 		dir := initTestDir(t, "My Cool App")
 
 		var stdout bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runInit(context.Background(), deps, dir, "", initOptions{provider: "aws"}); err != nil {
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		if err := runInit(context.Background(), dependencies, dir, "", initOptions{provider: "aws"}); err != nil {
 			t.Fatalf("runInit err = %v; stdout=%s", err, stdout.String())
 		}
 
@@ -134,13 +126,13 @@ func TestRunInit(t *testing.T) {
 	t.Run("an explicit slug writes a deployable config", func(t *testing.T) {
 		t.Parallel()
 
-		deps := initDeps()
-		stubPackageManager(&deps, nil)
+		dependencies := newTestDependencies()
+		stubPackageManager(&dependencies, nil)
 		dir := initTestDir(t, "ignored-dir-name")
 
 		var stdout bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runInit(context.Background(), deps, dir, "my-app", initOptions{provider: "aws"}); err != nil {
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		if err := runInit(context.Background(), dependencies, dir, "my-app", initOptions{provider: "aws"}); err != nil {
 			t.Fatalf("runInit err = %v; stdout=%s", err, stdout.String())
 		}
 
@@ -159,11 +151,11 @@ func TestRunInit(t *testing.T) {
 			t.Run(slug, func(t *testing.T) {
 				t.Parallel()
 
-				deps := initDeps()
-				argv := stubPackageManager(&deps, nil)
+				dependencies := newTestDependencies()
+				argv := stubPackageManager(&dependencies, nil)
 				dir := initTestDir(t, "proj")
 
-				err := runInit(context.Background(), deps, dir, slug, initOptions{provider: "aws"})
+				err := runInit(context.Background(), dependencies, dir, slug, initOptions{provider: "aws"})
 				if err == nil {
 					t.Fatal("runInit err = nil, want error")
 				}
@@ -180,11 +172,11 @@ func TestRunInit(t *testing.T) {
 	t.Run("an unslugifiable directory name errors asking for a slug", func(t *testing.T) {
 		t.Parallel()
 
-		deps := initDeps()
-		stubPackageManager(&deps, nil)
+		dependencies := newTestDependencies()
+		stubPackageManager(&dependencies, nil)
 		dir := initTestDir(t, "!!!")
 
-		err := runInit(context.Background(), deps, dir, "", initOptions{provider: "aws"})
+		err := runInit(context.Background(), dependencies, dir, "", initOptions{provider: "aws"})
 		if err == nil || !strings.Contains(err.Error(), "ocel init my-app") {
 			t.Fatalf("err = %v, want it to ask for a slug", err)
 		}
@@ -193,15 +185,15 @@ func TestRunInit(t *testing.T) {
 	t.Run("an existing config is never overwritten", func(t *testing.T) {
 		t.Parallel()
 
-		deps := initDeps()
-		argv := stubPackageManager(&deps, nil)
+		dependencies := newTestDependencies()
+		argv := stubPackageManager(&dependencies, nil)
 		dir := initTestDir(t, "proj")
 		configPath := filepath.Join(dir, project.DefaultFileName)
 		if err := os.WriteFile(configPath, []byte("existing"), 0o644); err != nil {
 			t.Fatalf("write existing config: %v", err)
 		}
 
-		err := runInit(context.Background(), deps, dir, "my-app", initOptions{provider: "aws"})
+		err := runInit(context.Background(), dependencies, dir, "my-app", initOptions{provider: "aws"})
 		if err == nil || !strings.Contains(err.Error(), project.DefaultFileName) {
 			t.Fatalf("err = %v, want it to name the config already there", err)
 		}
@@ -217,12 +209,12 @@ func TestRunInit(t *testing.T) {
 	t.Run("--provider names the provider the config is scaffolded with, with options for it to fill in", func(t *testing.T) {
 		t.Parallel()
 
-		deps := initDeps()
-		stubPackageManager(&deps, nil)
+		dependencies := newTestDependencies()
+		stubPackageManager(&dependencies, nil)
 		dir := initTestDir(t, "proj")
 
 		opts := initOptions{provider: "gcp"}
-		if err := runInit(context.Background(), deps, dir, "my-app", opts); err != nil {
+		if err := runInit(context.Background(), dependencies, dir, "my-app", opts); err != nil {
 			t.Fatalf("runInit err = %v", err)
 		}
 
@@ -235,11 +227,11 @@ func TestRunInit(t *testing.T) {
 	t.Run("no provider is refused, naming the flag, and nothing is written", func(t *testing.T) {
 		t.Parallel()
 
-		deps := initDeps()
-		argv := stubPackageManager(&deps, nil)
+		dependencies := newTestDependencies()
+		argv := stubPackageManager(&dependencies, nil)
 		dir := initTestDir(t, "proj")
 
-		err := runInit(context.Background(), deps, dir, "my-app", initOptions{})
+		err := runInit(context.Background(), dependencies, dir, "my-app", initOptions{})
 		if err == nil || !strings.Contains(err.Error(), "--provider") {
 			t.Fatalf("err = %v, want it to ask for --provider", err)
 		}
@@ -267,14 +259,14 @@ func TestRunInit(t *testing.T) {
 			t.Run(name, func(t *testing.T) {
 				t.Parallel()
 
-				deps := initDeps()
-				argv := stubPackageManager(&deps, nil)
+				dependencies := newTestDependencies()
+				argv := stubPackageManager(&dependencies, nil)
 				dir := initTestDir(t, "proj")
 				if err := os.WriteFile(filepath.Join(dir, name), nil, 0o644); err != nil {
 					t.Fatalf("write lockfile: %v", err)
 				}
 
-				if err := runInit(context.Background(), deps, dir, "my-app", initOptions{provider: "aws"}); err != nil {
+				if err := runInit(context.Background(), dependencies, dir, "my-app", initOptions{provider: "aws"}); err != nil {
 					t.Fatalf("runInit err = %v", err)
 				}
 				if got := *argv; !slices.Equal(got, want) {
@@ -287,16 +279,16 @@ func TestRunInit(t *testing.T) {
 	t.Run("a failing package manager keeps the config and prints the command", func(t *testing.T) {
 		t.Parallel()
 
-		deps := initDeps()
-		stubPackageManager(&deps, errors.New("exec: \"pnpm\": executable file not found in $PATH"))
+		dependencies := newTestDependencies()
+		stubPackageManager(&dependencies, errors.New("exec: \"pnpm\": executable file not found in $PATH"))
 		dir := initTestDir(t, "proj")
 		if err := os.WriteFile(filepath.Join(dir, "pnpm-lock.yaml"), nil, 0o644); err != nil {
 			t.Fatalf("write lockfile: %v", err)
 		}
 
 		var stdout bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runInit(context.Background(), deps, dir, "my-app", initOptions{provider: "aws"}); err != nil {
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		if err := runInit(context.Background(), dependencies, dir, "my-app", initOptions{provider: "aws"}); err != nil {
 			t.Fatalf("runInit err = %v, want the failed install to be non-fatal", err)
 		}
 		if !strings.Contains(readConfig(t, dir), `"slug": "my-app"`) {
@@ -325,13 +317,13 @@ func TestRunInit(t *testing.T) {
 			}
 		}
 
-		deps := initDeps()
-		argv := stubPackageManager(&deps, nil)
+		dependencies := newTestDependencies()
+		argv := stubPackageManager(&dependencies, nil)
 		opts := initOptions{provider: "aws", configPath: filepath.Join("..", "project", project.DefaultFileName)}
 
 		var stdout bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runInit(context.Background(), deps, cwd, "", opts); err != nil {
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		if err := runInit(context.Background(), dependencies, cwd, "", opts); err != nil {
 			t.Fatalf("runInit err = %v; stdout=%s", err, stdout.String())
 		}
 
@@ -353,12 +345,12 @@ func TestRunInit(t *testing.T) {
 	t.Run("--config creates the directories leading to the path", func(t *testing.T) {
 		t.Parallel()
 
-		deps := initDeps()
-		stubPackageManager(&deps, nil)
+		dependencies := newTestDependencies()
+		stubPackageManager(&dependencies, nil)
 		dir := initTestDir(t, "proj")
 
 		opts := initOptions{provider: "aws", configPath: filepath.Join("nested", "deep", project.DefaultFileName)}
-		if err := runInit(context.Background(), deps, dir, "my-app", opts); err != nil {
+		if err := runInit(context.Background(), dependencies, dir, "my-app", opts); err != nil {
 			t.Fatalf("runInit err = %v", err)
 		}
 		if _, err := os.Stat(filepath.Join(dir, "nested", "deep", project.DefaultFileName)); err != nil {

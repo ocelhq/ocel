@@ -9,7 +9,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/english"
 
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/run"
@@ -27,10 +26,10 @@ import (
 )
 
 type variablesRecovery struct {
-	deps cmddeps.Deps
-	cfg  *project.Project
-	prov *providerclient.Provider
-	tier environmentv1.Tier
+	dependencies Dependencies
+	cfg          *project.Project
+	prov         *providerclient.Provider
+	tier         environmentv1.Tier
 
 	newDeclarations func(variables.EnvSource) *variables.Declarations
 
@@ -153,7 +152,7 @@ func (r variablesRecovery) createInEnvSource(ctx context.Context, span *run.Span
 
 func (r variablesRecovery) attempt(ctx context.Context, phase, unit *run.Span, declarations *variables.Declarations, prebuilt bool, retry int) (*contractv1.Manifest, []*bindingsv1.Binding, error) {
 	attempt := unit.Trace(r.cfg.Slug, "build", progress.Attr{Key: progress.AttrKeyRetryCount, Value: strconv.Itoa(retry)})
-	manifest, inline, err := collectBuildAndAssemble(run.ContextWithSpan(ctx, attempt), r.deps, assembly{
+	manifest, inline, err := collectBuildAndAssemble(run.ContextWithSpan(ctx, attempt), r.dependencies, assembly{
 		cfg: r.cfg, declarations: declarations, prebuilt: prebuilt, dry: r.dry, phase: phase, span: unit,
 		containerArchs: r.containerArchs, urls: r.urls,
 	})
@@ -162,14 +161,14 @@ func (r variablesRecovery) attempt(ctx context.Context, phase, unit *run.Span, d
 }
 
 func (r variablesRecovery) fill(ctx context.Context, span *run.Span, declarations *variables.Declarations, refusal *variables.MissingError) error {
-	editor, err := r.deps.ServeVariableEditor(ctx, r.cfg, r.prov, r.tier, declarations, r.recovery(refusal))
+	editor, err := r.dependencies.ServeVariableEditor(ctx, r.cfg, r.prov, r.tier, declarations, r.recovery(refusal))
 	if err != nil {
 		return err
 	}
 	defer editor.Close()
 
 	resume := span.Hold(&streamv1.WaitingEvent{Missing: refusal.Variables(), Url: editor.URL})
-	if err := r.deps.OpenBrowser(editor.URL); err != nil {
+	if err := r.dependencies.OpenBrowser(editor.URL); err != nil {
 		span.Warn("Couldn't open your browser automatically — open the link above yourself.")
 	}
 

@@ -26,9 +26,9 @@ func TestDeployE2E(t *testing.T) {
 		root, binPath := setUpRealProviderFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		deps := clitest.NewDeps()
-		clitest.AttachTerminalSink(deps, &stdout)
-		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		dependencies := newTestDependencies()
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -49,9 +49,9 @@ func TestDeployE2E(t *testing.T) {
 		root, binPath, fnName := setUpRealProviderExpressFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		deps := clitest.NewDeps()
-		clitest.AttachTerminalSink(deps, &stdout)
-		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		dependencies := newTestDependencies()
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}

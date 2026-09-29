@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/build"
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
@@ -31,12 +31,12 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 )
 
-func terminalStdin(deps *cmddeps.Deps) {
-	deps.StdinIsTerminal = func(io.Reader) bool { return true }
+func terminalStdin(dependencies *Dependencies) {
+	dependencies.StdinIsTerminal = func(io.Reader) bool { return true }
 }
 
-func recordBrowser(deps *cmddeps.Deps, opened *[]string, mu *sync.Mutex) {
-	deps.OpenBrowser = func(url string) error {
+func recordBrowser(dependencies *Dependencies, opened *[]string, mu *sync.Mutex) {
+	dependencies.OpenBrowser = func(url string) error {
 		mu.Lock()
 		defer mu.Unlock()
 		*opened = append(*opened, url)
@@ -49,10 +49,10 @@ type editorSessions struct {
 	all []*variableeditor.Session
 }
 
-func captureEditorSessions(deps *cmddeps.Deps) *editorSessions {
+func captureEditorSessions(dependencies *Dependencies) *editorSessions {
 	sessions := &editorSessions{}
-	prev := deps.ServeVariableEditor
-	deps.ServeVariableEditor = func(ctx context.Context, cfg *project.Project, prov *providerclient.Provider, tier environmentv1.Tier, declarations *variables.Declarations, recovery *variableeditor.Recovery) (*variableeditor.Session, error) {
+	prev := dependencies.ServeVariableEditor
+	dependencies.ServeVariableEditor = func(ctx context.Context, cfg *project.Project, prov *providerclient.Provider, tier environmentv1.Tier, declarations *variables.Declarations, recovery *variableeditor.Recovery) (*variableeditor.Session, error) {
 		session, err := prev(ctx, cfg, prov, tier, declarations, recovery)
 		if err == nil {
 			sessions.mu.Lock()
@@ -171,19 +171,19 @@ const missingStripeKey = `[{"key":"STRIPE_API_KEY","folder":"","kind":"KIND_MISS
 func TestAMissingVariableHoldsTheRunWithTheWaitingEventAndResumesIt(t *testing.T) {
 	root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 	problems := problemsFile(t, missingStripeKey)
-	deps := clitest.NewDeps()
-	terminalStdin(&deps)
-	useJSONLogFormat(t, &deps)
+	dependencies := newTestDependencies()
+	terminalStdin(&dependencies)
+	useJSONLogFormat(t, &dependencies)
 	var mu sync.Mutex
 	var opened []string
-	recordBrowser(&deps, &opened, &mu)
+	recordBrowser(&dependencies, &opened, &mu)
 
 	var out syncBuffer
 	var stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &out)
+	clitest.AttachTerminalSink(dependencies.Invocation, &out)
 	done := make(chan error, 1)
 	go func() {
-		done <- runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
+		done <- runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 	}()
 
 	address, token := awaitEditorURL(t, &out, 1)
@@ -228,21 +228,21 @@ func TestADeployMissingVariablesOpensTheEditorAndResumesOnceTheyAreSet(t *testin
 	t.Run("a declarations refusal in a terminal opens the UI and resumes into the build", func(t *testing.T) {
 		root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		problems := problemsFile(t, missingStripeKey)
-		deps := clitest.NewDeps()
-		terminalStdin(&deps)
+		dependencies := newTestDependencies()
+		terminalStdin(&dependencies)
 		var mu sync.Mutex
 		var opened []string
-		recordBrowser(&deps, &opened, &mu)
+		recordBrowser(&dependencies, &opened, &mu)
 
 		built := false
-		stubAppBuildRecorder(&deps, &built)
+		stubAppBuildRecorder(&dependencies, &built)
 
 		var out syncBuffer
 		var stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
-			clitest.AttachTerminalSink(deps, &out)
-			done <- runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
+			clitest.AttachTerminalSink(dependencies.Invocation, &out)
+			done <- runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 		}()
 
 		address, token := awaitEditorURL(t, &out, 1)
@@ -279,12 +279,12 @@ func TestADeployMissingVariablesOpensTheEditorAndResumesOnceTheyAreSet(t *testin
 		root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
 		writeRootApp(t, root)
 		problems := problemsFile(t, missingStripeKey)
-		deps := clitest.NewDeps()
-		terminalStdin(&deps)
+		dependencies := newTestDependencies()
+		terminalStdin(&dependencies)
 		var mu sync.Mutex
 		var opened []string
-		recordBrowser(&deps, &opened, &mu)
-		clitest.StubBuild(&deps, []build.Function{
+		recordBrowser(&dependencies, &opened, &mu)
+		stubBuild(&dependencies, []build.Function{
 			{Route: "api", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: clitest.FixtureSlug},
 		})
 
@@ -292,8 +292,8 @@ func TestADeployMissingVariablesOpensTheEditorAndResumesOnceTheyAreSet(t *testin
 		var stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
-			clitest.AttachTerminalSink(deps, &out)
-			done <- runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
+			clitest.AttachTerminalSink(dependencies.Invocation, &out)
+			done <- runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 		}()
 
 		address, token := awaitEditorURL(t, &out, 1)
@@ -322,13 +322,13 @@ func TestADeployMissingVariablesOpensTheEditorAndResumesOnceTheyAreSet(t *testin
 	t.Run("the waiting state says how to abort", func(t *testing.T) {
 		root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		problemsFile(t, missingStripeKey)
-		deps := clitest.NewDeps()
-		terminalStdin(&deps)
+		dependencies := newTestDependencies()
+		terminalStdin(&dependencies)
 		var mu sync.Mutex
 		var opened []string
-		recordBrowser(&deps, &opened, &mu)
+		recordBrowser(&dependencies, &opened, &mu)
 		built := false
-		stubAppBuildRecorder(&deps, &built)
+		stubAppBuildRecorder(&dependencies, &built)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -336,8 +336,8 @@ func TestADeployMissingVariablesOpensTheEditorAndResumesOnceTheyAreSet(t *testin
 		var stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
-			clitest.AttachTerminalSink(deps, &out)
-			done <- runDeploy(ctx, deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
+			clitest.AttachTerminalSink(dependencies.Invocation, &out)
+			done <- runDeploy(ctx, dependencies, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 		}()
 
 		awaitEditorURL(t, &out, 1)
@@ -357,13 +357,13 @@ func TestADeployMissingVariablesOpensTheEditorAndResumesOnceTheyAreSet(t *testin
 	t.Run("interrupting while waiting aborts with nothing built", func(t *testing.T) {
 		root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		problemsFile(t, missingStripeKey)
-		deps := clitest.NewDeps()
-		terminalStdin(&deps)
+		dependencies := newTestDependencies()
+		terminalStdin(&dependencies)
 		var mu sync.Mutex
 		var opened []string
-		recordBrowser(&deps, &opened, &mu)
+		recordBrowser(&dependencies, &opened, &mu)
 		built := false
-		stubAppBuildRecorder(&deps, &built)
+		stubAppBuildRecorder(&dependencies, &built)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -371,8 +371,8 @@ func TestADeployMissingVariablesOpensTheEditorAndResumesOnceTheyAreSet(t *testin
 		var stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
-			clitest.AttachTerminalSink(deps, &out)
-			done <- runDeploy(ctx, deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
+			clitest.AttachTerminalSink(dependencies.Invocation, &out)
+			done <- runDeploy(ctx, dependencies, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 		}()
 
 		awaitEditorURL(t, &out, 1)
@@ -402,21 +402,21 @@ func TestADeployMissingVariablesOpensTheEditorAndResumesOnceTheyAreSet(t *testin
 	t.Run("closing the UI still names the keys that are missing", func(t *testing.T) {
 		root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		problemsFile(t, missingStripeKey)
-		deps := clitest.NewDeps()
-		terminalStdin(&deps)
+		dependencies := newTestDependencies()
+		terminalStdin(&dependencies)
 		var mu sync.Mutex
 		var opened []string
-		recordBrowser(&deps, &opened, &mu)
-		sessions := captureEditorSessions(&deps)
+		recordBrowser(&dependencies, &opened, &mu)
+		sessions := captureEditorSessions(&dependencies)
 		built := false
-		stubAppBuildRecorder(&deps, &built)
+		stubAppBuildRecorder(&dependencies, &built)
 
 		var out syncBuffer
 		var stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
-			clitest.AttachTerminalSink(deps, &out)
-			done <- runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
+			clitest.AttachTerminalSink(dependencies.Invocation, &out)
+			done <- runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 		}()
 
 		awaitEditorURL(t, &out, 1)
@@ -448,20 +448,20 @@ func TestADeployMissingVariablesOpensTheEditorAndResumesOnceTheyAreSet(t *testin
 		root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		envSet(t, root, "STRIPE_API_KEY", "nope", envOptions{})
 		problemsFile(t, `[{"key":"STRIPE_API_KEY","folder":"","kind":"KIND_INVALID","detail":"must start with sk_"}]`)
-		deps := clitest.NewDeps()
-		terminalStdin(&deps)
+		dependencies := newTestDependencies()
+		terminalStdin(&dependencies)
 		var mu sync.Mutex
 		var opened []string
-		recordBrowser(&deps, &opened, &mu)
+		recordBrowser(&dependencies, &opened, &mu)
 		built := false
-		stubAppBuildRecorder(&deps, &built)
+		stubAppBuildRecorder(&dependencies, &built)
 
 		var out syncBuffer
 		var stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
-			clitest.AttachTerminalSink(deps, &out)
-			done <- runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
+			clitest.AttachTerminalSink(dependencies.Invocation, &out)
+			done <- runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 		}()
 
 		address, token := awaitEditorURL(t, &out, 1)
@@ -499,20 +499,20 @@ func TestADeployMissingVariablesOpensTheEditorAndResumesOnceTheyAreSet(t *testin
 	t.Run("returning with a cell still missing is refused, and abandoning fails the deploy once", func(t *testing.T) {
 		root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true},{"key":"DATABASE_URL","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		problemsFile(t, `[{"key":"STRIPE_API_KEY","folder":"","kind":"KIND_MISSING"},{"key":"DATABASE_URL","folder":"","kind":"KIND_MISSING"}]`)
-		deps := clitest.NewDeps()
-		terminalStdin(&deps)
+		dependencies := newTestDependencies()
+		terminalStdin(&dependencies)
 		var mu sync.Mutex
 		var opened []string
-		recordBrowser(&deps, &opened, &mu)
+		recordBrowser(&dependencies, &opened, &mu)
 		built := false
-		stubAppBuildRecorder(&deps, &built)
+		stubAppBuildRecorder(&dependencies, &built)
 
 		var out syncBuffer
 		var stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
-			clitest.AttachTerminalSink(deps, &out)
-			done <- runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
+			clitest.AttachTerminalSink(dependencies.Invocation, &out)
+			done <- runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 		}()
 
 		address, token := awaitEditorURL(t, &out, 1)
@@ -586,28 +586,28 @@ func TestADeployMissingVariablesOpensTheEditorAndResumesOnceTheyAreSet(t *testin
 		}{
 			{name: "off a terminal", opts: deployOptions{}},
 			{name: "off a terminal with --yes", opts: deployOptions{yes: true}},
-			{name: cmddeps.NoBrowserEnvVar, terminal: true, opts: deployOptions{}, env: "1"},
-			{name: cmddeps.NoBrowserEnvVar + "=anything", terminal: true, opts: deployOptions{yes: true}, env: "true"},
+			{name: commands.NoBrowserEnvVar, terminal: true, opts: deployOptions{}, env: "1"},
+			{name: commands.NoBrowserEnvVar + "=anything", terminal: true, opts: deployOptions{yes: true}, env: "true"},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 				t.Setenv("OCEL_TEST_ENV_PROBLEMS", missingStripeKey)
-				t.Setenv(cmddeps.NoBrowserEnvVar, tc.env)
-				deps := clitest.NewDeps()
+				t.Setenv(commands.NoBrowserEnvVar, tc.env)
+				dependencies := newTestDependencies()
 				if tc.terminal {
-					terminalStdin(&deps)
+					terminalStdin(&dependencies)
 				}
 				var mu sync.Mutex
 				var opened []string
-				recordBrowser(&deps, &opened, &mu)
+				recordBrowser(&dependencies, &opened, &mu)
 				built := false
-				stubAppBuildRecorder(&deps, &built)
+				stubAppBuildRecorder(&dependencies, &built)
 
 				ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 				defer cancel()
 				var stdout, stderr bytes.Buffer
-				clitest.AttachTerminalSink(deps, &stdout)
-				err := runDeploy(ctx, deps, root, tc.opts, &stdout, &stderr, strings.NewReader(""))
+				clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+				err := runDeploy(ctx, dependencies, root, tc.opts, &stdout, &stderr, strings.NewReader(""))
 				if err == nil {
 					t.Fatal("runDeploy err = nil, want the vars requirement to be terminal")
 				}
@@ -637,20 +637,20 @@ func TestAPreviewMissingVariablesOpensTheEditorAndResumesOnceTheyAreSet(t *testi
 		root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		problems := problemsFile(t, missingStripeKey)
-		deps := clitest.NewDeps()
-		terminalStdin(&deps)
+		dependencies := newTestDependencies()
+		terminalStdin(&dependencies)
 		var mu sync.Mutex
 		var opened []string
-		recordBrowser(&deps, &opened, &mu)
+		recordBrowser(&dependencies, &opened, &mu)
 		built := false
-		stubAppBuildRecorder(&deps, &built)
+		stubAppBuildRecorder(&dependencies, &built)
 
 		var out syncBuffer
 		var stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
-			clitest.AttachTerminalSink(deps, &out)
-			done <- runPreviewUp(context.Background(), deps, root, previewUpOptions{name: "staging"}, &out, &stderr, strings.NewReader(""))
+			clitest.AttachTerminalSink(dependencies.Invocation, &out)
+			done <- runPreviewUp(context.Background(), dependencies, root, previewUpOptions{name: "staging"}, &out, &stderr, strings.NewReader(""))
 		}()
 
 		address, token := awaitEditorURL(t, &out, 1)
@@ -687,21 +687,21 @@ func TestAPreviewMissingVariablesOpensTheEditorAndResumesOnceTheyAreSet(t *testi
 				root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 				t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 				t.Setenv("OCEL_TEST_ENV_PROBLEMS", missingStripeKey)
-				deps := clitest.NewDeps()
+				dependencies := newTestDependencies()
 				if tc.terminal {
-					terminalStdin(&deps)
+					terminalStdin(&dependencies)
 				}
 				var mu sync.Mutex
 				var opened []string
-				recordBrowser(&deps, &opened, &mu)
+				recordBrowser(&dependencies, &opened, &mu)
 				built := false
-				stubAppBuildRecorder(&deps, &built)
+				stubAppBuildRecorder(&dependencies, &built)
 
 				ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 				defer cancel()
 				var stdout, stderr bytes.Buffer
-				clitest.AttachTerminalSink(deps, &stdout)
-				err := runPreviewUp(ctx, deps, root, tc.opts, &stdout, &stderr, strings.NewReader(""))
+				clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+				err := runPreviewUp(ctx, dependencies, root, tc.opts, &stdout, &stderr, strings.NewReader(""))
 				if err == nil {
 					t.Fatal("runPreviewUp err = nil, want the hard refusal kept")
 				}

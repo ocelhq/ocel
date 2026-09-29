@@ -38,14 +38,13 @@ func TestPropagationOnTheProductionDeployPromotionLine(t *testing.T) {
 	for _, tc := range propagationCases {
 		t.Run(tc.name, func(t *testing.T) {
 			root, sockPath := clitest.SetUpDeployFixture(t)
-			deps := clitest.NewDeps()
-			clitest.SetLoggedIn(&deps)
-			clitest.StubBuild(&deps, nil)
+			dependencies := newTestDependencies()
+			stubBuild(&dependencies, nil)
 			t.Setenv(clitest.FakePropagationEnvVar, tc.spec)
 
 			var stdout, stderr bytes.Buffer
-			clitest.AttachTerminalSink(deps, &stdout)
-			if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+			clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+			if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 				t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 			}
 
@@ -59,17 +58,16 @@ func TestPropagationOnThePreviewDeployPromotionLine(t *testing.T) {
 	for _, tc := range propagationCases {
 		t.Run(tc.name, func(t *testing.T) {
 			root, sockPath := clitest.SetUpDeployFixture(t)
-			deps := clitest.NewDeps()
-			clitest.SetLoggedIn(&deps)
-			clitest.StubBuild(&deps, nil)
-			stubGit(&deps, "feature/login", "")
+			dependencies := newTestDependencies()
+			stubBuild(&dependencies, nil)
+			stubGit(&dependencies, "feature/login", "")
 			t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 			t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 			t.Setenv(clitest.FakePropagationEnvVar, tc.spec)
 
 			var stdout, stderr bytes.Buffer
-			clitest.AttachTerminalSink(deps, &stdout)
-			if err := runPreviewUp(context.Background(), deps, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
+			clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+			if err := runPreviewUp(context.Background(), dependencies, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
 				t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 			}
 

@@ -145,11 +145,11 @@ func TestDoctorNamesWhatIsStale(t *testing.T) {
 
 func TestRunDoctorWithoutAConfig(t *testing.T) {
 	root := t.TempDir()
-	deps := clitest.NewDeps()
+	invocation := clitest.NewInvocation()
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stderr)
-	err := Run(context.Background(), deps, root, &stdout)
+	clitest.AttachTerminalSink(invocation, &stderr)
+	err := Run(context.Background(), invocation, root, &stdout)
 	if code := exitCode(t, err); code != 1 {
 		t.Fatalf("exit code = %d, want 1; stdout=%s", code, stdout.String())
 	}
@@ -209,12 +209,11 @@ func recordPreviewWildcard(t *testing.T, p *fake.Provider, baseDomain string) {
 func TestRunDoctorOnAHealthyProject(t *testing.T) {
 	project := healthyProject(t)
 
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
+	invocation := clitest.NewInvocation()
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stderr)
-	if err := Run(context.Background(), deps, project.Root, &stdout); err != nil {
+	clitest.AttachTerminalSink(invocation, &stderr)
+	if err := Run(context.Background(), invocation, project.Root, &stdout); err != nil {
 		t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
@@ -255,11 +254,10 @@ export default {
 };
 `)
 
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
+	invocation := clitest.NewInvocation()
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stderr)
-	if err := Run(context.Background(), deps, project.Root, &stdout); err != nil {
+	clitest.AttachTerminalSink(invocation, &stderr)
+	if err := Run(context.Background(), invocation, project.Root, &stdout); err != nil {
 		t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
@@ -278,12 +276,11 @@ func TestRunDoctorReportsACredentialProblem(t *testing.T) {
 	project := healthyProject(t)
 	project.Provider.Edges().(*fake.Edges).Verifies(fake.KindRelay, edge.CredentialIdentity{}, refusal.Refuse(refusal.CodeDenied, "configure the credential and re-run"))
 
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
+	invocation := clitest.NewInvocation()
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stderr)
-	err := Run(context.Background(), deps, project.Root, &stdout)
+	clitest.AttachTerminalSink(invocation, &stderr)
+	err := Run(context.Background(), invocation, project.Root, &stdout)
 	if code := exitCode(t, err); code != 1 {
 		t.Fatalf("exit code = %d, want 1; stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
@@ -305,12 +302,11 @@ func TestRunDoctorWarnsAboutAStaleStackNoFeatureRequires(t *testing.T) {
 	clitest.Bootstrap(t, project.Provider, environment.TierProduction, fake.FeatureCache)
 	project.Provider.FakeBootstrap().MarkStale(fake.FeatureCache)
 
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
+	invocation := clitest.NewInvocation()
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stderr)
-	err := Run(context.Background(), deps, project.Root, &stdout)
+	clitest.AttachTerminalSink(invocation, &stderr)
+	err := Run(context.Background(), invocation, project.Root, &stdout)
 	if code := exitCode(t, err); code != 0 {
 		t.Fatalf("exit code = %d, want warnings alone to pass; stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
@@ -331,12 +327,11 @@ func TestRunDoctorFailsAnUnfinishedBootstrap(t *testing.T) {
 	project := healthyProject(t)
 	project.Provider.FakeBootstrap().MarkUnfinished()
 
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
+	invocation := clitest.NewInvocation()
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stderr)
-	err := Run(context.Background(), deps, project.Root, &stdout)
+	clitest.AttachTerminalSink(invocation, &stderr)
+	err := Run(context.Background(), invocation, project.Root, &stdout)
 	if code := exitCode(t, err); code != 1 {
 		t.Fatalf("exit code = %d, want an unfinished apply to fail; stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
@@ -356,12 +351,11 @@ func TestRunDoctorWarnsAboutAStaleBootstrap(t *testing.T) {
 	project := healthyProject(t)
 	project.Provider.FakeBootstrap().MarkStale("")
 
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
+	invocation := clitest.NewInvocation()
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stderr)
-	err := Run(context.Background(), deps, project.Root, &stdout)
+	clitest.AttachTerminalSink(invocation, &stderr)
+	err := Run(context.Background(), invocation, project.Root, &stdout)
 	if code := exitCode(t, err); code != 0 {
 		t.Fatalf("exit code = %d, want warnings alone to pass; stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
@@ -380,12 +374,11 @@ func TestRunDoctorWarnsAboutAStaleBootstrap(t *testing.T) {
 func TestDoctorReadsTheBootstrapAndNothingThatGrowsWithTheAccount(t *testing.T) {
 	project := healthyProject(t)
 
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
+	invocation := clitest.NewInvocation()
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stderr)
-	if err := Run(context.Background(), deps, project.Root, &stdout); err != nil {
+	clitest.AttachTerminalSink(invocation, &stderr)
+	if err := Run(context.Background(), invocation, project.Root, &stdout); err != nil {
 		t.Fatalf("Run err = %v; stderr=%s", err, stderr.String())
 	}
 	asked := clitest.RequestsTo[*contractv1.DescribeBootstrapRequest](t, project.Requests, contractv1connect.ProviderServiceDescribeBootstrapProcedure)
@@ -414,12 +407,11 @@ export default {
 `)
 	recordPreviewWildcard(t, project.Provider, "preview.ocel.app")
 
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
+	invocation := clitest.NewInvocation()
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stderr)
-	if err := Run(context.Background(), deps, project.Root, &stdout); err != nil {
+	clitest.AttachTerminalSink(invocation, &stderr)
+	if err := Run(context.Background(), invocation, project.Root, &stdout); err != nil {
 		t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
@@ -438,12 +430,11 @@ func TestRunDoctorNotesAProjectPreviewDomainShadowingTheGlobalOne(t *testing.T) 
 	project := healthyProject(t)
 	recordPreviewWildcard(t, project.Provider, "preview.ocel.app")
 
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
+	invocation := clitest.NewInvocation()
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stderr)
-	if err := Run(context.Background(), deps, project.Root, &stdout); err != nil {
+	clitest.AttachTerminalSink(invocation, &stderr)
+	if err := Run(context.Background(), invocation, project.Root, &stdout); err != nil {
 		t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
@@ -465,12 +456,11 @@ export default {
 };
 `)
 
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
+	invocation := clitest.NewInvocation()
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stderr)
-	err := Run(context.Background(), deps, project.Root, &stdout)
+	clitest.AttachTerminalSink(invocation, &stderr)
+	err := Run(context.Background(), invocation, project.Root, &stdout)
 	if code := exitCode(t, err); code != 0 {
 		t.Fatalf("exit code = %d, want a tier nobody asked for to pass; stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
@@ -510,12 +500,11 @@ func TestRunDoctorPrintsTheHostCheckFindingsAndTheCertificatesAndRefusesNothing(
 	record(t, p, stackrecords.EdgeStackKey(environment.TierProduction, "my-shop"), edgeState)
 	p.ReportCertificateFor("shop.example.com", provider.CertificateHealth{Renewal: "SUCCESS", ExpiresAt: 4102444800})
 
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
+	invocation := clitest.NewInvocation()
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stderr)
-	err := Run(context.Background(), deps, project.Root, &stdout)
+	clitest.AttachTerminalSink(invocation, &stderr)
+	err := Run(context.Background(), invocation, project.Root, &stdout)
 	out := rendered(t, stdout.String())
 
 	if !strings.Contains(out, "Host checks") || !strings.Contains(out, "Certificates") {
@@ -550,12 +539,11 @@ func TestRunDoctorWarnsThatNothingRenewsAPinnedWildcardAboutToExpire(t *testing.
 		ExpiringSoon: true,
 	})
 
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
+	invocation := clitest.NewInvocation()
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stderr)
-	err := Run(context.Background(), deps, project.Root, &stdout)
+	clitest.AttachTerminalSink(invocation, &stderr)
+	err := Run(context.Background(), invocation, project.Root, &stdout)
 	if code := exitCode(t, err); code != 0 {
 		t.Fatalf("exit code = %d, want a warning rather than a refusal; stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
@@ -574,15 +562,14 @@ func TestRunDoctorWarnsThatNothingRenewsAPinnedWildcardAboutToExpire(t *testing.
 func TestDoctorChecksTheSetupInTheCheckPhaseOfItsRunAndPrintsItsReportAloneOnStdout(t *testing.T) {
 	project := healthyProject(t)
 
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
-	deps.Presentation = func(io.Writer) terminal.Presentation {
+	invocation := clitest.NewInvocation()
+	invocation.Presentation = func(io.Writer) terminal.Presentation {
 		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
 	}
 
 	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(deps, &stderr)
-	if err := Run(context.Background(), deps, project.Root, &stdout); err != nil {
+	clitest.AttachTerminalSink(invocation, &stderr)
+	if err := Run(context.Background(), invocation, project.Root, &stdout); err != nil {
 		t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 

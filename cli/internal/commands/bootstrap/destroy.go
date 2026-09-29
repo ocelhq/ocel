@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/preflight"
 	"github.com/ocelhq/ocel/cli/internal/project"
@@ -18,15 +18,15 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
-func RunDestroy(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.Tier, opts Options, stdout io.Writer, stdin io.Reader) error {
-	cfg, err := resolveProject(ctx, deps, cwd)
+func RunDestroy(ctx context.Context, invocation commands.Invocation, cwd string, tier environmentv1.Tier, opts Options, stdout io.Writer, stdin io.Reader) error {
+	cfg, err := resolveProject(ctx, invocation, cwd)
 	if err != nil {
 		return err
 	}
-	return runDestroy(ctx, deps, cfg, tier, opts, stdout, stdin)
+	return runDestroy(ctx, invocation, cfg, tier, opts, stdout, stdin)
 }
 
-func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, tier environmentv1.Tier, opts Options, stdout io.Writer, stdin io.Reader) (err error) {
+func runDestroy(ctx context.Context, invocation commands.Invocation, cfg *project.Project, tier environmentv1.Tier, opts Options, stdout io.Writer, stdin io.Reader) (err error) {
 	name := Name(tier)
 	bypass, notice, err := consent.Bypass{
 		Noun:         "bootstrap",
@@ -36,7 +36,7 @@ func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, ti
 		Yes:          opts.Yes,
 		DryRun:       opts.Dry,
 		GrantsDryRun: true,
-		TTY:          deps.StdinIsTerminal(stdin),
+		TTY:          invocation.StdinIsTerminal(stdin),
 	}.Granted()
 	if err != nil {
 		return err
@@ -45,7 +45,7 @@ func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, ti
 	if _, err := cfg.RequireProvider(); err != nil {
 		return err
 	}
-	policy := deps.ConsentPolicy(destroyCommand(tier), opts.Yes || bypass, stdout, stdin)
+	policy := consent.NewPolicy(destroyCommand(tier), opts.Yes || bypass, invocation.StdinIsTerminal(stdin), stdout, stdin)
 	policy.ConfirmsPlan = true
 	policy.DryRun = opts.Dry
 	policy.UnattendedRemedy = fmt.Sprintf("pass --yes, or set %s to %q", consent.BypassEnv, name)
@@ -53,7 +53,7 @@ func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, ti
 		return err
 	}
 
-	ctx, run, err := deps.Events.Begin(ctx, destroyCommand(tier), cfg.Dir)
+	ctx, run, err := invocation.Events.Begin(ctx, destroyCommand(tier), cfg.Dir)
 	if err != nil {
 		return err
 	}
@@ -63,7 +63,7 @@ func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, ti
 	if notice != "" {
 		check.Warn(notice)
 	}
-	prov, err := providerclient.Start(ctx, cfg, check, deps.Questions, providerclient.ChoosePinning(opts.Dry))
+	prov, err := providerclient.Start(ctx, cfg, check, invocation.Questions, providerclient.ChoosePinning(opts.Dry))
 	if err != nil {
 		return err
 	}

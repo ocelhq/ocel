@@ -1,16 +1,28 @@
 package cost
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/build"
+	"github.com/ocelhq/ocel/cli/internal/commands"
+	"github.com/ocelhq/ocel/cli/internal/declaration"
+	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 )
 
-func NewCommand(deps cmddeps.Deps) *cobra.Command {
+type Dependencies struct {
+	commands.Invocation
+	ReadFunctions       func(projectDir string) ([]build.Function, error)
+	CollectDeclarations func(ctx context.Context, cfg *project.Project, declarations *variables.Declarations, stdout, stderr io.Writer) ([]declaration.Resource, error)
+}
+
+func NewCommand(dependencies Dependencies) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "cost <command>",
 		Short: "Estimate what this project costs to run",
@@ -19,11 +31,11 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 			return cmd.Help()
 		},
 	}
-	cmd.AddCommand(newScanCommand(deps))
-	return cmddeps.ReserveStdout(cmd)
+	cmd.AddCommand(newScanCommand(dependencies))
+	return commands.ReserveStdout(cmd)
 }
 
-func newScanCommand(deps cmddeps.Deps) *cobra.Command {
+func newScanCommand(dependencies Dependencies) *cobra.Command {
 	var opts Options
 	cmd := &cobra.Command{
 		Use:   "scan",
@@ -44,7 +56,7 @@ func newScanCommand(deps cmddeps.Deps) *cobra.Command {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
 
-			return Run(cmd.Context(), deps, cwd, opts, cmd.OutOrStdout())
+			return Run(cmd.Context(), dependencies, cwd, opts, cmd.OutOrStdout())
 		},
 	}
 	cmd.Flags().StringVar(&opts.Env, "env", envProduction, "Environment to price: production or preview")
