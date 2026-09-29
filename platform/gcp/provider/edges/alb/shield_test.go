@@ -408,3 +408,39 @@ func TestAClaimWhoseRaiseOverlapsAnotherLeavesTheLoadBalancerTrustingBoth(t *tes
 		t.Errorf("the shielded load balancer trusts %v after two claims raised it at once, want %v: the raise that finished last must not leave out what the other recorded", got, want)
 	}
 }
+
+func TestTheShieldedLoadBalancerRedirectsPlainHTTPToHTTPSAndForwardsItNowhere(t *testing.T) {
+	t.Parallel()
+
+	seen, err := declared(loadBalancerProgram(loadBalancerSpec{Names: loadBalancerNames(environment.TierProduction, true), ClientCertificates: []string{zonePull}}))
+	if err != nil {
+		t.Fatalf("the shielded balancer program = %v", err)
+	}
+	redirect := seen["ocel-alb-shielded-production-redirect"]
+	if redirect.Token != "gcp:compute/uRLMap:URLMap" || redirect.Args["defaultService"] != nil || redirect.Args["hostRules"] != nil {
+		t.Fatalf("the redirect url map is %+v, want a url map that names no backend: plain http carries no client certificate", redirect)
+	}
+	answer, _ := redirect.Args["defaultUrlRedirect"].(map[string]any)
+	if answer["httpsRedirect"] != true || answer["redirectResponseCode"] != "PERMANENT_REDIRECT" || answer["stripQuery"] != false {
+		t.Errorf("the redirect url map answers %v, want a 308 to the same URL over https: Cloudflare reaches the origin over plain http when the visitor did", answer)
+	}
+	proxy := seen["ocel-alb-shielded-production-http"]
+	if proxy.Token != "gcp:compute/targetHttpProxy:TargetHttpProxy" || !strings.Contains(fmt.Sprint(proxy.Args["urlMap"]), "ocel-alb-shielded-production-redirect") {
+		t.Errorf("the http proxy is %+v, want a target http proxy onto the redirect url map", proxy)
+	}
+	rule := seen["ocel-alb-shielded-production-forward-http"]
+	https := seen["ocel-alb-shielded-production-forward"]
+	if rule.Args["portRange"] != "80" || !strings.Contains(fmt.Sprint(rule.Args["target"]), "ocel-alb-shielded-production-http") || rule.Args["ipAddress"] != https.Args["ipAddress"] {
+		t.Errorf("the http forwarding rule is %+v, want port 80 onto the http proxy, on the address the https rule answers", rule.Args)
+	}
+
+	plain, err := declared(loadBalancerProgram(loadBalancerSpec{Names: loadBalancerNames(environment.TierProduction, false)}))
+	if err != nil {
+		t.Fatalf("the balancer program = %v", err)
+	}
+	for name := range plain {
+		if strings.HasSuffix(name, "-redirect") || strings.HasSuffix(name, "-forward-http") {
+			t.Errorf("the balancer no edge proxies declares %s, want no plain http listener: nothing forwards http to it", name)
+		}
+	}
+}

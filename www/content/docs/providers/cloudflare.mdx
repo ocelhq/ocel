@@ -35,7 +35,12 @@ To rotate the certificate, or retire a leaked key, upload the new one to the zon
 certificate uploaded last at once, so until the next step origins refuse it. Deploy one
 project on each VPS box and on each Google Cloud tier the zone forwards to: each origin
 then trusts both. Delete the old certificate from the zone, and deploy once more on each of
-them to stop trusting it.
+them to stop trusting it. An origin keeps trusting the old certificate for a hostname until
+that hostname's own project deploys, so deploy every project with a hostname in the zone.
+
+Cloudflare reaches the origin over plain http when the visitor used it, and the origin
+answers that with a redirect to https without forwarding it, so ocel changes neither Always
+Use HTTPS nor any redirect rule in your zone.
 
 A promote purges what Cloudflare cached for the hostnames it flipped. The zone's SSL mode
 must be Full (strict). The token needs Zone Read, Zone Settings Read, DNS Edit, SSL and

@@ -17,6 +17,8 @@ const (
 	externalManaged    = "EXTERNAL_MANAGED"
 	premiumTier        = "PREMIUM"
 	httpsPortRange     = "443"
+	httpPortRange      = "80"
+	permanentRedirect  = "PERMANENT_REDIRECT"
 	cacheOnOrigin      = "USE_ORIGIN_HEADERS"
 	serverlessNEG      = "SERVERLESS"
 	servicePlaceholder = "<service>"
@@ -34,6 +36,9 @@ type names struct {
 	Rule           string
 	Trust          string
 	Policy         string
+	RedirectURLMap string
+	HTTPProxy      string
+	HTTPRule       string
 }
 
 func dashed(parts ...string) string { return strings.Join(parts, "-") }
@@ -52,6 +57,9 @@ func loadBalancerNames(tier environment.Tier, shielded bool) names {
 		Rule:           stem + "-forward",
 		Trust:          stem + "-trust",
 		Policy:         stem + "-mtls",
+		RedirectURLMap: stem + "-redirect",
+		HTTPProxy:      stem + "-http",
+		HTTPRule:       stem + "-forward-http",
 	}
 }
 
@@ -178,6 +186,40 @@ func clientValidation(ctx *pulumi.Context, spec loadBalancerSpec, project string
 	return policy, nil
 }
 
+func redirectToHTTPS(ctx *pulumi.Context, spec loadBalancerSpec, project string, address pulumi.StringOutput) error {
+	projectID := pulumi.String(project)
+	redirect, err := compute.NewURLMap(ctx, spec.Names.RedirectURLMap, &compute.URLMapArgs{
+		Name:    pulumi.String(spec.Names.RedirectURLMap),
+		Project: projectID,
+		DefaultUrlRedirect: &compute.URLMapDefaultUrlRedirectArgs{
+			HttpsRedirect:        pulumi.Bool(true),
+			RedirectResponseCode: pulumi.String(permanentRedirect),
+			StripQuery:           pulumi.Bool(false),
+		},
+	})
+	if err != nil {
+		return err
+	}
+	proxy, err := compute.NewTargetHttpProxy(ctx, spec.Names.HTTPProxy, &compute.TargetHttpProxyArgs{
+		Name:    pulumi.String(spec.Names.HTTPProxy),
+		Project: projectID,
+		UrlMap:  redirect.SelfLink,
+	})
+	if err != nil {
+		return err
+	}
+	_, err = compute.NewGlobalForwardingRule(ctx, spec.Names.HTTPRule, &compute.GlobalForwardingRuleArgs{
+		Name:                pulumi.String(spec.Names.HTTPRule),
+		Project:             projectID,
+		Target:              proxy.SelfLink,
+		IpAddress:           address,
+		PortRange:           pulumi.String(httpPortRange),
+		LoadBalancingScheme: pulumi.String(externalManaged),
+		NetworkTier:         pulumi.String(premiumTier),
+	})
+	return err
+}
+
 func loadBalancerProgram(spec loadBalancerSpec) Program {
 	return func(ctx *pulumi.Context, project string) error {
 		projectID := pulumi.String(project)
@@ -248,6 +290,11 @@ func loadBalancerProgram(spec loadBalancerSpec) Program {
 			NetworkTier:         pulumi.String(premiumTier),
 		}); err != nil {
 			return err
+		}
+		if len(spec.ClientCertificates) > 0 {
+			if err := redirectToHTTPS(ctx, spec, project, address.Address); err != nil {
+				return err
+			}
 		}
 		if err := previewWildcardResources(ctx, spec, project); err != nil {
 			return err
