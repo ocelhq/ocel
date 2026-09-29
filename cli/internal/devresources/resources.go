@@ -22,7 +22,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devresources/bucket"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 	"github.com/ocelhq/ocel/cli/internal/devresources/postgres"
-	"github.com/ocelhq/ocel/cli/internal/slug"
+	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
@@ -116,7 +116,7 @@ func New(project string, opts Options) *Resources {
 
 func ProjectName(dir string) string {
 	sum := sha256.Sum256([]byte(filepath.Clean(dir)))
-	return strings.Trim(slug.From(filepath.Base(dir)), "-") + "-" + hex.EncodeToString(sum[:4])
+	return strings.Trim(projectconfig.DeriveSlug(filepath.Base(dir)), "-") + "-" + hex.EncodeToString(sum[:4])
 }
 
 func (r *Resources) Routes(mux *http.ServeMux, guard func(http.Handler) http.Handler, options ...connect.HandlerOption) {

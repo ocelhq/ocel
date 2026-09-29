@@ -310,20 +310,6 @@ func normalizeAllowDegraded(raw []string) ([]string, error) {
 
 var dnsLabelPattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
-func ValidSlug(s string) bool {
-	return ValidateSlug(s) == nil
-}
-
-func ValidateSlug(s string) error {
-	if !dnsLabelPattern.MatchString(s) {
-		return fmt.Errorf("%q must be a DNS label: lowercase letters, digits and hyphens, 1–63 characters, not starting or ending with a hyphen", s)
-	}
-	if strings.Contains(s, naming.FieldSeparator) {
-		return fmt.Errorf("%q may not contain %q: it separates the fields of every name this project deploys, and separates the project from the preview in the hostname a preview is served on (\"<slug>%s<preview>[%s<app>].<domain>\") — use a single hyphen", s, naming.FieldSeparator, naming.FieldSeparator, naming.FieldSeparator)
-	}
-	return nil
-}
-
 func validAppName(name string) bool {
 	return dnsLabelPattern.MatchString(name)
 }

@@ -1592,42 +1592,6 @@ export default {
 	}
 }
 
-func TestValidSlug(t *testing.T) {
-	t.Parallel()
-
-	t.Run("accepts well formed slugs", func(t *testing.T) {
-		t.Parallel()
-
-		for _, s := range []string{"a", "acme", "acme-web-1", "1", strings.Repeat("a", 63)} {
-			if !ValidSlug(s) {
-				t.Errorf("ValidSlug(%q) = false, want true", s)
-			}
-		}
-	})
-
-	t.Run("rejects malformed slugs", func(t *testing.T) {
-		t.Parallel()
-
-		invalid := []string{
-			"",
-			"UPPER",
-			"Has_Underscore",
-			"-leading",
-			"trailing-",
-			"has space",
-			"has.dot",
-			"a--b",
-			"double--separator--everywhere",
-			strings.Repeat("a", 64),
-		}
-		for _, s := range invalid {
-			if ValidSlug(s) {
-				t.Errorf("ValidSlug(%q) = true, want false", s)
-			}
-		}
-	})
-}
-
 func TestConfigRequireProvider(t *testing.T) {
 	t.Parallel()
 

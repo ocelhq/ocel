@@ -16,7 +16,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/slug"
 	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/configdoc"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -247,7 +246,7 @@ func resolveSlug(projectDir, requested string) (string, error) {
 	requested = strings.TrimSpace(requested)
 	if requested == "" {
 		dir := filepath.Base(projectDir)
-		derived := slug.From(dir)
+		derived := projectconfig.DeriveSlug(dir)
 		if derived == "" {
 			return "", fmt.Errorf("could not derive a slug from directory %q — pass one, e.g. `ocel init my-app`", dir)
 		}
@@ -306,7 +305,7 @@ export default defineConfig({
 }
 
 func providerIdentifier(provider string) string {
-	name := slug.From(provider)
+	name := projectconfig.DeriveSlug(provider)
 	if name == "" || (name[0] >= '0' && name[0] <= '9') {
 		return "provider"
 	}

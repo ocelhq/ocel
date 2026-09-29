@@ -18,8 +18,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/events"
+	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/prompt"
-	"github.com/ocelhq/ocel/cli/internal/slug"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
@@ -255,7 +255,7 @@ func createProject(ctx context.Context, lr linkRun, client *console.Client, acce
 	if name == "" {
 		return nil, errors.New("project name required — pass it as an argument, e.g. `ocel link --create my-app`")
 	}
-	projectSlug := slug.From(name)
+	projectSlug := projectconfig.DeriveSlug(name)
 	if projectSlug == "" {
 		return nil, fmt.Errorf("could not derive a valid slug from %q — try a name with at least one alphanumeric character", name)
 	}
