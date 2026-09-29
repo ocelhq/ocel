@@ -920,19 +920,14 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 				return nil
 			}
 			r.recordProvisioning(entry.App)
+			if err := r.recordAppStack(ctx, entry, provider.StackResult{}); err != nil {
+				return err
+			}
 			result, err := r.provider.Stacks().Provision(ctx, spec, progress)
 			if err != nil {
 				return err
 			}
-			if err := stackrecords.Write(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, entry.Stack, stackrecords.Stack{
-				Kind:       provider.StackApp,
-				App:        entry.App,
-				Release:    entry.Build.Release().String(),
-				Build:      entry.Build.String(),
-				Functions:  result.Functions,
-				Containers: result.Containers,
-				WrittenBy:  provider.WrittenByVersion(""),
-			}); err != nil {
+			if err := r.recordAppStack(ctx, entry, result); err != nil {
 				return err
 			}
 			r.recordFunctions(entry.App, result.Functions)
@@ -944,6 +939,18 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 			}
 			return r.recordStagedDeployment(ctx, entry, facts, images, values, result)
 		})
+	})
+}
+
+func (r *deployRun) recordAppStack(ctx context.Context, entry provider.AppEntry, result provider.StackResult) error {
+	return stackrecords.Write(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, entry.Stack, stackrecords.Stack{
+		Kind:       provider.StackApp,
+		App:        entry.App,
+		Release:    entry.Build.Release().String(),
+		Build:      entry.Build.String(),
+		Functions:  result.Functions,
+		Containers: result.Containers,
+		WrittenBy:  provider.WrittenByVersion(""),
 	})
 }
 

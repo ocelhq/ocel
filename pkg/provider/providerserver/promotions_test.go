@@ -336,6 +336,71 @@ func TestADeployWhosePromotionTheLedgerStillNamesKeepsItsStacksWhenItFails(t *te
 	}
 }
 
+func TestADeployWhoseProvisionFailsAndCannotBeReclaimedKeepsItsStackOnRecord(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	vendor.FakeStacks().Entering(func(spec provider.StackSpec) error {
+		if spec.App == nil {
+			return nil
+		}
+		return errors.New("the stack half provisioned before the cloud refused the rest")
+	})
+	vendor.FakeStacks().RefuseNextDestroy(errors.New("the stack is locked by another run"))
+
+	result, _ := deploy(t, client, deployRequest())
+
+	if result.GetSuccess() || !strings.Contains(result.GetError(), "half provisioned") {
+		t.Fatalf("Deploy() = %v, %q, want the provision's failure", result.GetSuccess(), result.GetError())
+	}
+	if left := appStacksRecorded(t, vendor); len(left) != 1 || !strings.HasPrefix(left[0], "prod--web--") {
+		t.Errorf("the deploy left stack records %v, want the web stack it began to provision kept on record, so a teardown still destroys what it half made", left)
+	}
+}
+
+func TestADeployWhoseSharedProvisionFailsRemovesWhatItsVendorNamed(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	var mu sync.Mutex
+	var removed []string
+	vendor.ResourceStacks(resources.Hooks{Functions: &resources.FunctionHooks{
+		Provision: func(context.Context, provider.StackSpec, progress.Progress) ([]provider.Function, error) {
+			return nil, errors.New("the revision never became ready")
+		},
+		Remove: func(_ context.Context, _ provider.StackRef, functions []provider.Function, _ progress.Progress) error {
+			mu.Lock()
+			defer mu.Unlock()
+			for _, function := range functions {
+				removed = append(removed, function.Physical)
+			}
+			return nil
+		},
+		Shared: &resources.SharedHooks[provider.Function]{
+			Name: func(context.Context, provider.StackSpec) ([]provider.Function, error) {
+				return []provider.Function{{Name: "server", Physical: "shop-web-server"}}, nil
+			},
+			RemoveRevisions: func(context.Context, provider.StackRef, []provider.Function, progress.Progress) ([]provider.Function, error) {
+				return nil, nil
+			},
+		},
+	}})
+	req := deployRequest()
+	req.Manifest.Resources, req.Manifest.Usages = nil, nil
+
+	result, _ := deploy(t, client, req)
+
+	if result.GetSuccess() {
+		t.Fatal("Deploy() whose provision failed = success, want it failed")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if !slices.Equal(removed, []string{"shop-web-server"}) {
+		t.Errorf("the failed deploy removed %v, want the service its vendor named before provisioning: nothing else holds it", removed)
+	}
+	if left := appStacksRecorded(t, vendor); len(left) != 0 {
+		t.Errorf("the failed deploy left stack records %v, want none", left)
+	}
+}
+
 func TestTheRollbackFlipIsHandedProgressThatDiscards(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
