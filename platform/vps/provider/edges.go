@@ -2,6 +2,7 @@ package vps
 
 import (
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	"github.com/ocelhq/ocel/platform/vps/provider/box"
@@ -16,7 +17,11 @@ func (e edges) Open(kind edge.Kind) (edge.Edge, error) {
 	case edge.None:
 		return e.provider.box(), nil
 	case cloudflare.Kind:
-		return cloudflare.NewProxy(e.provider.options.SSH.session().Destination()), nil
+		namespace, err := provider.NamespaceFromEnv()
+		if err != nil {
+			return nil, err
+		}
+		return cloudflare.NewProxy(namespace.String()), nil
 	}
 	return nil, refusal.Refuse(refusal.CodeInvalid,
 		"edge %q is not supported: leave `edge` out, and the proxy on the box answers the project's hostnames, or name %s to front it", kind, cloudflare.Kind)
