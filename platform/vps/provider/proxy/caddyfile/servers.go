@@ -11,7 +11,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
-const adminServers = "http://127.0.0.1:2019/config/apps/http/servers"
+const (
+	adminServers = "http://127.0.0.1:2019/config/apps/http/servers"
+	curl         = "curl"
+)
 
 type server struct {
 	Routes []route `json:"routes"`
@@ -62,7 +65,7 @@ func hostSet(hosts []string) []string {
 
 func (c Caddyfile) adminReading() []string {
 	if c.Container == "" {
-		return []string{"curl", "-fsS", adminServers}
+		return []string{curl, "-fsS", adminServers}
 	}
 	return []string{"docker", "exec", c.Container, "wget", "-qO-", adminServers}
 }

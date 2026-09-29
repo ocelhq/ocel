@@ -36,6 +36,25 @@ func TestACaddyContainerOnANetworkIsNotAskedForItsNetworkMode(t *testing.T) {
 	}
 }
 
+func TestACaddyServiceOnABoxWithoutCurlIsRefusedNamingCurl(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{said: map[string]string{caddyfile.AdminServers: "{}"}, refused: map[string]string{"curl --version": "sh: 1: curl: not found"}}
+	err := (caddyfile.Caddyfile{Box: machine, Port: 8480}).RefuseUnreachable(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "install curl") || strings.Contains(err.Error(), "admin off") {
+		t.Errorf("RefuseUnreachable() = %v, want it refused naming curl, which reads your Caddy's admin endpoint on the host, and not admin off", err)
+	}
+}
+
+func TestACaddyContainerIsNotAskedForCurl(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{said: map[string]string{caddyfile.AdminServers: "{}"}, refused: map[string]string{"curl --version": "sh: 1: curl: not found"}}
+	if err := (caddyfile.Caddyfile{Box: machine, Container: "caddy", Network: "web"}).RefuseUnreachable(context.Background()); err != nil {
+		t.Errorf("RefuseUnreachable() = %v, want a Caddy in a container read with its own wget, whatever the host has", err)
+	}
+}
+
 func TestACaddyWithItsAdminEndpointOffIsRefused(t *testing.T) {
 	t.Parallel()
 

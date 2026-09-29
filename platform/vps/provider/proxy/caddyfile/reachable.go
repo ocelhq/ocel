@@ -23,6 +23,13 @@ func (c Caddyfile) RefuseUnreachable(ctx context.Context) error {
 				c.named(), mode, c.Port, c.Container)
 		}
 	}
+	if c.Container == "" {
+		if _, err := c.Box.Ran(ctx, "find "+curl+" to read "+c.named()+" with", []string{curl, "--version"}); err != nil {
+			return refusal.Refuse(refusal.CodeNotReady,
+				"ocel reads what %s serves from its admin endpoint with %s, which this box does not run: %v\n"+
+					"install curl on the box, then run bootstrap again", c.named(), curl, err)
+		}
+	}
 	_, err := c.sites(ctx)
 	return err
 }
