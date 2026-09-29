@@ -129,3 +129,23 @@ func TestAnAppWhoseComputeNoRouterIsPairedForDeploysThroughItsEdgeAsBefore(t *te
 		t.Errorf("the edge state pairs web with %q, and this provider pairs no router for serverless apps", kind)
 	}
 }
+
+func TestAHostnameOfAnAppWhoseComputeNoRouterIsPairedForIsServedThroughTheRouterItsEdgeOpened(t *testing.T) {
+	builtProject(t)
+	p := fake.NewProvider(fake.Options{})
+	client := servedBy(t, pairedForContainersOnly{p})
+	bootstrappedOverRPC(t, client)
+
+	req := deployRequest()
+	req.Edge = writtenBy("shop.example")
+	result, _ := deploy(t, client, req)
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+	if !slices.Equal(servedURLs(result), []string{"https://shop.example"}) {
+		t.Errorf("the deploy served %v, want shop.example: web flips through %s, the router its edge opened, so that router answering the hostname serves it", servedURLs(result), fake.RouterRelay)
+	}
+	if host := readStack(t, p, environment.TierProduction, "shop").Host("shop.example"); !host.Probe.OK || host.Probe.Router != fake.RouterRelay {
+		t.Errorf("shop.example is recorded %+v, want it answered by %s", host, fake.RouterRelay)
+	}
+}
