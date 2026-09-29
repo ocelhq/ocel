@@ -43,7 +43,7 @@ type Presentation struct {
 	SharedTerminal bool
 }
 
-const minLiveWidth = 40
+const minLiveColumns = 40
 
 func Resolve(o Conditions) Presentation {
 	p := Presentation{
@@ -60,13 +60,13 @@ func Resolve(o Conditions) Presentation {
 		p.Format = FormatJSON
 	}
 	if p.Width <= 0 {
-		p.Width = defaultWidth
+		p.Width = defaultColumns
 	}
 	return p
 }
 
 func (p Presentation) Live() bool {
-	return p.Format == FormatHuman && !p.Verbose && p.TTY && !p.Dumb && !p.SharedTerminal && p.WidthMeasured && p.Width >= minLiveWidth
+	return p.Format == FormatHuman && !p.Verbose && p.TTY && !p.Dumb && !p.SharedTerminal && p.WidthMeasured && p.Width >= minLiveColumns
 }
 
 func Detect(logFormat Format, verbose bool, w io.Writer) Presentation {

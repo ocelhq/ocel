@@ -336,7 +336,7 @@ func TestProcessorCapsTheAppLength(t *testing.T) {
 	_, run := newRun(t)
 	p := &Processor{Span: run.build}
 
-	longApp := strings.Repeat("a", maxAppLen*2)
+	longApp := strings.Repeat("a", maxAppBytes*2)
 	send(p, record{Type: typeSpanStart, ID: "1", App: longApp, Stage: "build"})
 	ok := true
 	send(p, record{Type: typeSpanEnd, ID: "1", OK: &ok})
@@ -346,7 +346,7 @@ func TestProcessorCapsTheAppLength(t *testing.T) {
 	}
 	trace := readTrace(t, run)
 	if strings.Contains(trace, longApp) {
-		t.Errorf("trace = %s, want the app attribute capped at %d bytes", trace, maxAppLen)
+		t.Errorf("trace = %s, want the app attribute capped at %d bytes", trace, maxAppBytes)
 	}
 }
 

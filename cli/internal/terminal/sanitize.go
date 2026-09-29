@@ -8,7 +8,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-const tabStop = 8
+const tabStopColumns = 8
 
 var boxDrawing = &unicode.RangeTable{R16: []unicode.Range16{{Lo: 0x2500, Hi: 0x257f, Stride: 1}}}
 
@@ -31,7 +31,7 @@ func stripInvisible(draft string) string {
 	for _, r := range ansi.Strip(draft) {
 		switch {
 		case r == '\t':
-			b.WriteString(strings.Repeat(" ", tabStop-ansi.StringWidth(b.String())%tabStop))
+			b.WriteString(strings.Repeat(" ", tabStopColumns-ansi.StringWidth(b.String())%tabStopColumns))
 		case unicode.IsControl(r), unicode.In(r, unicode.Cf, unicode.Zl, unicode.Zp, unicode.Variation_Selector):
 		default:
 			b.WriteRune(r)

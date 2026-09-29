@@ -10,7 +10,7 @@ import (
 	"golang.org/x/term"
 )
 
-const defaultWidth = 80
+const defaultColumns = 80
 
 func IsTerminal(v any) bool {
 	f, ok := v.(*os.File)
@@ -27,7 +27,7 @@ func termWidth(w io.Writer) int {
 	if n, ok := positiveEnvInt("COLUMNS"); ok {
 		return n
 	}
-	return defaultWidth
+	return defaultColumns
 }
 
 func liveWidth(w io.Writer) (int, bool) {

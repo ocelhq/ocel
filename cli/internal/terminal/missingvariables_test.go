@@ -24,8 +24,8 @@ func TestMissingVariablesArePaintedOnlyWhenColourIsOn(t *testing.T) {
 		}},
 	}}}
 
-	painted := drawn(ev, Presentation{Color: true, Width: defaultWidth})
-	plain := drawn(ev, Presentation{Width: defaultWidth})
+	painted := drawn(ev, Presentation{Color: true, Width: defaultColumns})
+	plain := drawn(ev, Presentation{Width: defaultColumns})
 
 	for _, want := range []string{"\x1b[31m✗\x1b[0m DATABASE_URL", "\x1b[31m✗\x1b[0m PORT", "\x1b[90m/web\x1b[0m"} {
 		if !strings.Contains(painted, want) {
@@ -60,7 +60,7 @@ func TestTheDeployTUIHeadsAGroupOnce(t *testing.T) {
 		},
 	}}}
 
-	got := drawn(ev, Presentation{Width: defaultWidth})
+	got := drawn(ev, Presentation{Width: defaultColumns})
 	want := strings.Join([]string{
 		"  github — set together (Sign in with GitHub)",
 		"    ✗ GITHUB_CLIENT_ID      root  no value",

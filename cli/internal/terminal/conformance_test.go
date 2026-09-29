@@ -60,7 +60,7 @@ func golden(t *testing.T, name, ext, got string) {
 func projectPlain(t *testing.T, events []*streamv1.RunEvent) string {
 	t.Helper()
 	var out bytes.Buffer
-	s := newTranscript(&out, Presentation{Format: FormatHuman, Width: defaultWidth}, nil)
+	s := newTranscript(&out, Presentation{Format: FormatHuman, Width: defaultColumns}, nil)
 	for _, ev := range events {
 		s.Receive(ev)
 	}

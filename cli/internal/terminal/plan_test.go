@@ -9,7 +9,7 @@ import (
 
 func projectPlan(t *testing.T, plan *planv1.ChangePlan) string {
 	t.Helper()
-	return "\n" + strings.Join(planLines(Presentation{Width: defaultWidth}, plan), "\n") + "\n"
+	return "\n" + strings.Join(planLines(Presentation{Width: defaultColumns}, plan), "\n") + "\n"
 }
 
 func mixedPlan() *planv1.ChangePlan {
@@ -99,7 +99,7 @@ func TestAnActionThisCLIDoesNotKnowReadsAsASentence(t *testing.T) {
 func TestAPlanPaintsTheSigilAndDimsWhatSaysWhy(t *testing.T) {
 	t.Parallel()
 
-	got := strings.Join(planLines(Presentation{Color: true, Width: defaultWidth}, &planv1.ChangePlan{
+	got := strings.Join(planLines(Presentation{Color: true, Width: defaultColumns}, &planv1.ChangePlan{
 		Headline: "Proposed changes to the production bootstrap",
 		Groups: []*planv1.ChangeGroup{
 			{

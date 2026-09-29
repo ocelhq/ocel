@@ -24,7 +24,7 @@ var validStages = map[string]bool{
 	"discovery": true,
 }
 
-const maxAppLen = 128
+const maxAppBytes = 128
 
 type syncWriter struct {
 	mu *sync.Mutex
@@ -37,11 +37,6 @@ func (s syncWriter) Write(p []byte) (int, error) {
 	return s.w.Write(p)
 }
 
-// SyncPair wraps a and b, which may or may not be the same underlying
-// writer, so that concurrent writes through either one are mutually
-// exclusive. A subprocess's own stderr-draining goroutine and the goroutine
-// running Scan can otherwise write to what turns out to be one writer at
-// once.
 func SyncPair(a, b io.Writer) (io.Writer, io.Writer) {
 	mu := &sync.Mutex{}
 	wrap := func(w io.Writer) io.Writer {
@@ -159,8 +154,8 @@ func (p *Processor) line(line string) {
 		p.forward(line)
 		return
 	}
-	if len(rec.App) > maxAppLen {
-		rec.App = rec.App[:maxAppLen]
+	if len(rec.App) > maxAppBytes {
+		rec.App = rec.App[:maxAppBytes]
 	}
 	p.apply(rec)
 }

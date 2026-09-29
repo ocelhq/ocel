@@ -105,7 +105,7 @@ func dnsOutput(t *testing.T, present Presentation, headline string, records []*p
 func TestDNSManualRecordsProjection(t *testing.T) {
 	t.Parallel()
 
-	human := Presentation{Format: FormatHuman, Width: defaultWidth}
+	human := Presentation{Format: FormatHuman, Width: defaultColumns}
 
 	t.Run("names what the records are for and prints every field", func(t *testing.T) {
 		t.Parallel()
@@ -153,7 +153,7 @@ func TestDNSManualRecordsProjection(t *testing.T) {
 
 	t.Run("json sends the records as fields, not prose", func(t *testing.T) {
 		t.Parallel()
-		raw := dnsOutput(t, Presentation{Format: FormatJSON, Width: defaultWidth}, "Prove you own prev.ocel.site", []*progressv1.DnsRecord{validation}, nil)
+		raw := dnsOutput(t, Presentation{Format: FormatJSON, Width: defaultColumns}, "Prove you own prev.ocel.site", []*progressv1.DnsRecord{validation}, nil)
 		got := parseNDJSON(t, raw)
 		if len(got) != 1 {
 			t.Fatalf("recorded %d envelopes, want 1", len(got))

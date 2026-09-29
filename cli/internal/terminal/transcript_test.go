@@ -1158,7 +1158,7 @@ func TestAPlanIsAGateSetApartByBlankLinesTheMomentItLands(t *testing.T) {
 func TestRecordsToAddAtTheDNSProviderAreAGateHeadedByTheirLevelAndPhase(t *testing.T) {
 	t.Parallel()
 
-	run, out, _ := groupedRun(t, Presentation{Width: defaultWidth})
+	run, out, _ := groupedRun(t, Presentation{Width: defaultColumns})
 	provision := run.Phase(progressv1.Phase_PHASE_PROVISION)
 	provision.Forward(&progressv1.OperationEvent{
 		Level:   progressv1.Level_LEVEL_WARN,

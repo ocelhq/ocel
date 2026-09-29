@@ -142,8 +142,8 @@ func TestDetectReadsTheTerminalTheCommandWasGiven(t *testing.T) {
 }
 
 func TestAnUnknownWidthFallsBackToEightyColumns(t *testing.T) {
-	if got := Resolve(Conditions{TTY: true}).Width; got != defaultWidth {
-		t.Errorf("Width = %d, want %d when the terminal reports none", got, defaultWidth)
+	if got := Resolve(Conditions{TTY: true}).Width; got != defaultColumns {
+		t.Errorf("Width = %d, want %d when the terminal reports none", got, defaultColumns)
 	}
 	if got := Resolve(Conditions{TTY: true, Width: 120}).Width; got != 120 {
 		t.Errorf("Width = %d, want the 120 the terminal reported", got)
