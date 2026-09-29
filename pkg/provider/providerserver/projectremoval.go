@@ -300,7 +300,7 @@ func (r *projectRemoval) run(ctx context.Context, progress progress.Progress) er
 func (r *projectRemoval) originCertificates() []string {
 	var ids []string
 	for _, hostname := range r.state.Hostnames() {
-		if id := r.state.Host(hostname).OriginCertificate; id != "" {
+		if id := r.state.Host(hostname).OriginCertificateID; id != "" {
 			ids = append(ids, id)
 		}
 	}
