@@ -24,6 +24,22 @@ func TestAMasterThatHasAlreadyIdledOutIsClosedWithoutComplaint(t *testing.T) {
 	}
 }
 
+func TestACommandOverAConnectionTheHostStoppedAnsweringEndsInsteadOfHanging(t *testing.T) {
+	t.Parallel()
+
+	for _, session := range []*Session{
+		{dest: Destination{Written: "203.0.113.10"}},
+		{dest: Destination{Written: "203.0.113.10"}, control: filepath.Join(t.TempDir(), "master")},
+	} {
+		args := strings.Join(session.args(), " ")
+		for _, option := range []string{"-o ServerAliveInterval=15", "-o ServerAliveCountMax=4"} {
+			if !strings.Contains(args, option) {
+				t.Errorf("ssh runs with %q, want %s: without it a connection the host stopped answering holds a command open until the kernel gives up on it, hours later", args, option)
+			}
+		}
+	}
+}
+
 func TestTheControlPathIsShortEnoughForAUnixSocket(t *testing.T) {
 	t.Parallel()
 

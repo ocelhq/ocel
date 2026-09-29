@@ -21,8 +21,10 @@ import (
 )
 
 const (
-	reach      = 10 * time.Second
-	masterIdle = "60s"
+	reach         = 10 * time.Second
+	aliveInterval = 15 * time.Second
+	aliveProbes   = 4
+	masterIdle    = "60s"
 )
 
 type Session struct {
@@ -134,6 +136,8 @@ func (s *Session) args() []string {
 		"-o", "BatchMode=yes",
 		"-o", "StrictHostKeyChecking=yes",
 		"-o", "ConnectTimeout="+strconv.Itoa(int(reach.Seconds())),
+		"-o", "ServerAliveInterval="+strconv.Itoa(int(aliveInterval.Seconds())),
+		"-o", "ServerAliveCountMax="+strconv.Itoa(aliveProbes),
 	)
 	if s.control != "" {
 		args = append(args,
