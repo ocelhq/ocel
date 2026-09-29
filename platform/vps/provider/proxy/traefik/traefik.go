@@ -56,7 +56,9 @@ func routerName(hostname string) string {
 	return "ocel-" + strings.ReplaceAll(hostname, ".", "-") + "-" + hex.EncodeToString(sum[:])[:8]
 }
 
-func (t Traefik) file() string { return filepath.Join(filepath.Clean(t.Directory), FileName) }
+func (t Traefik) directory() string { return filepath.Clean(t.Directory) }
+
+func (t Traefik) file() string { return filepath.Join(t.directory(), FileName) }
 
 func (t Traefik) upstream() string {
 	if t.Network != "" {

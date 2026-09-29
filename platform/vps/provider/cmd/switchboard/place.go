@@ -139,8 +139,12 @@ func beside(argv []string, out, errs io.Writer) int {
 	})
 }
 
+func openUnfollowed(path string) (*os.File, error) {
+	return os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+}
+
 func regularContent(path string) ([]byte, error) {
-	file, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	file, err := openUnfollowed(path)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +153,7 @@ func regularContent(path string) ([]byte, error) {
 }
 
 func regularSum(path string) (string, error) {
-	file, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	file, err := openUnfollowed(path)
 	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ELOOP) {
 		return "", nil
 	}

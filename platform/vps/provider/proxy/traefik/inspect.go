@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -35,9 +36,9 @@ func (t Traefik) inspect(ctx context.Context) (proxy.Checks, error) {
 		return nil, err
 	}
 	checks = append(checks, placed)
-	var diagnosis *string
+	diagnosis := sync.OnceValue(func() string { return t.diagnose(ctx) })
 	for _, hostname := range spec.Hostnames {
-		routing, err := t.routingCheck(ctx, hostname, &diagnosis)
+		routing, err := t.routingCheck(ctx, hostname, diagnosis)
 		if err != nil {
 			return nil, err
 		}
@@ -79,7 +80,7 @@ func (t Traefik) switchboardChecks(ctx context.Context) (proxy.Checks, error) {
 			networks = append(networks, network)
 		}
 	}
-	dir := filepath.Clean(t.Directory)
+	dir := t.directory()
 	mounted := provider.HostCheck{Subject: switchboard.Name + " mounts " + dir, Verdict: provider.HostPass,
 		Finding: switchboard.Name + " has " + dir + " mounted to place ocel.yml in"}
 	if !slices.Contains(mounts, dir) {
@@ -123,21 +124,17 @@ func (t Traefik) placedCheck(ctx context.Context, spec proxy.Spec) (provider.Hos
 	return check, nil
 }
 
-func (t Traefik) routingCheck(ctx context.Context, hostname string, diagnosis **string) (provider.HostCheck, error) {
-	failure, err := t.routed(ctx, hostname)
+func (t Traefik) routingCheck(ctx context.Context, hostname string, diagnosis func() string) (provider.HostCheck, error) {
+	routed, reason, err := t.probeRoute(ctx, hostname)
 	if err != nil {
 		return provider.HostCheck{}, err
 	}
-	if failure == "" {
+	if routed {
 		return provider.HostCheck{Subject: hostname, Verdict: provider.HostPass,
 			Finding: "your Traefik routes " + hostname + " to ocel's switchboard"}, nil
 	}
-	if *diagnosis == nil {
-		said := t.diagnosed(ctx)
-		*diagnosis = &said
-	}
-	return provider.HostCheck{Subject: hostname, Verdict: provider.HostFail, Finding: failure + **diagnosis,
-		Fix: "check your Traefik reads " + filepath.Clean(t.Directory) + " and runs its " + t.HTTPS + " entry point on 443"}, nil
+	return provider.HostCheck{Subject: hostname, Verdict: provider.HostFail, Finding: reason + diagnosis(),
+		Fix: "check your Traefik reads " + t.directory() + " and runs its " + t.HTTPS + " entry point on 443"}, nil
 }
 
 func (t Traefik) outranked(ctx context.Context, hostnames []string) (proxy.Checks, error) {
