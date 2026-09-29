@@ -161,6 +161,26 @@ func TestEntrypointPath(t *testing.T) {
 	}
 }
 
+func TestNodeChildRunsTheAppInProductionUnlessTheAppSetsItsOwnNodeEnv(t *testing.T) {
+	for set, want := range map[string]string{"": "production", "development": "development"} {
+		t.Run("NODE_ENV="+set, func(t *testing.T) {
+			t.Setenv("NODE_ENV", set)
+			if set == "" {
+				os.Unsetenv("NODE_ENV")
+			}
+			child := exec.Command("sh", "-c", `printf %s "$NODE_ENV"`)
+			child.Env = nodeChildEnv("/tmp/ocel-control.sock", nil)
+			got, err := child.Output()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(got) != want {
+				t.Errorf("the child sees NODE_ENV=%q, want %q", got, want)
+			}
+		})
+	}
+}
+
 func TestBoundReadiness(t *testing.T) {
 	t.Run("an invocation that has no deadline still bounds the wait", func(t *testing.T) {
 		ctx, cancel := boundReadiness(t.Context())

@@ -56,7 +56,7 @@ func FunctionImage(base v1.Image, framework appbuild.Framework, dir string, over
 	config.WorkingDir = FunctionImageRoot
 	config.Env = boundPort(config.Env)
 	if BootsThroughRuntime(framework) {
-		config.Env = append(config.Env, servedHandler(staged))
+		config.Env = ensureNodeEnv(append(config.Env, servedHandler(staged)))
 	}
 	return mutate.Config(appended, config)
 }
@@ -79,12 +79,23 @@ const NodeRuntimePath = NodeRuntimeRoot + "/entrypoint.mjs"
 
 const HandlerName = "OCEL_HANDLER"
 
+const nodeEnvName = "NODE_ENV"
+
 func BootsThroughRuntime(framework appbuild.Framework) bool {
 	return framework.Name == appbuild.FrameworkNode || framework.Name == appbuild.FrameworkNext
 }
 
 func servedHandler(staged appbuild.FunctionConfig) string {
 	return HandlerName + "=" + path.Join(FunctionImageRoot, staged.Handler)
+}
+
+func ensureNodeEnv(env []string) []string {
+	for _, entry := range env {
+		if name, _, _ := strings.Cut(entry, "="); name == nodeEnvName {
+			return env
+		}
+	}
+	return append(env, nodeEnvName+"=production")
 }
 
 func boundPort(env []string) []string {

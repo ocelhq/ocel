@@ -425,7 +425,8 @@ func handshake(ln net.Listener, log *lastLog, onControl func(io.Writer)) (*nodeR
 }
 
 func nodeChildEnv(sockPath string, extraEnv []string) []string {
-	env := append(os.Environ(),
+	env := append([]string{"NODE_ENV=production"}, os.Environ()...)
+	env = append(env,
 		"OCEL_CONTROL_SOCKET="+sockPath,
 		"OCEL_HANDLER="+os.Getenv("OCEL_HANDLER"),
 	)

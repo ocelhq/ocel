@@ -295,6 +295,36 @@ func TestFunctionImageTellsTheRuntimeWhichHandlerToServe(t *testing.T) {
 	}
 }
 
+func TestFunctionImageRunsANodeFunctionInProductionUnlessTheBaseNamesItsOwnNodeEnv(t *testing.T) {
+	dir := stagedFunc(t, map[string]string{
+		"index.mjs":   "export default () => {}",
+		"config.json": functionConfig(t, nil),
+	})
+	staging, err := mutate.Config(empty.Image, v1.Config{Env: []string{"NODE_ENV=staging"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for base, want := range map[v1.Image][]string{
+		empty.Image: {"NODE_ENV=production"},
+		staging:     {"NODE_ENV=staging"},
+	} {
+		image, err := images.FunctionImage(base, nodeRuntime, dir, nil)
+		if err != nil {
+			t.Fatalf("FunctionImage() error = %v", err)
+		}
+		var got []string
+		for _, entry := range configOf(t, image).Env {
+			if strings.HasPrefix(entry, "NODE_ENV=") {
+				got = append(got, entry)
+			}
+		}
+		if !slices.Equal(got, want) {
+			t.Errorf("the image names %v, want %v", got, want)
+		}
+	}
+}
+
 func TestFunctionImageRefusesAnOverlayThatWritesOutsideTheFunctionAndItsRuntime(t *testing.T) {
 	dir := stagedFunc(t, map[string]string{
 		"index.mjs":   "export default () => {}",
