@@ -158,18 +158,25 @@ func Run(t *testing.T, suite Suite) {
 		ctx := context.Background()
 		fixture := suite.New(t)
 		stack := reconciled(t, fixture)
+		claim := router.Claim{Hostname: suite.Hostname, App: App}
 		if !fixture.Router.Facts().AnswersHostnames {
-			err := stack.Claim(ctx, suite.Hostname, App)
+			_, err := stack.Claim(ctx, claim)
 			var refused refusal.Refusal
 			if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 				t.Errorf("Claim on a router that answers no hostname = %v, want a refusal with code %s", err, refusal.CodeInvalid)
 			}
 			return
 		}
-		for range 2 {
-			if err := stack.Claim(ctx, suite.Hostname, App); err != nil {
-				t.Fatalf("Claim(%q): %v", suite.Hostname, err)
-			}
+		first, err := stack.Claim(ctx, claim)
+		if err != nil {
+			t.Fatalf("Claim(%q): %v", suite.Hostname, err)
+		}
+		again, err := stack.Claim(ctx, claim)
+		if err != nil {
+			t.Fatalf("Claim(%q) again: %v", suite.Hostname, err)
+		}
+		if again != first {
+			t.Errorf("Claim(%q) again names origin %+v, want the %+v the first claim named: an edge forwarding to that origin keeps forwarding there across deploys", suite.Hostname, again, first)
 		}
 		for range 2 {
 			if err := stack.Disclaim(ctx, suite.Hostname); err != nil {

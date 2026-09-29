@@ -28,7 +28,7 @@ func TestSpecStampShape(t *testing.T) {
 		{
 			typ: reflect.TypeFor[edge.StackSpec](),
 			want: []string{
-				"DomainApps", "Domains", "Origin", "Program", "PruneOnly", "PruneRoutes", "Slug", "Tier", "Values", "Version", "Warn",
+				"DomainApps", "Domains", "Program", "PruneOnly", "PruneRoutes", "Slug", "Tier", "Values", "Version", "Warn",
 			},
 		},
 		{

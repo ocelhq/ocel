@@ -32,11 +32,6 @@ type StackSpec struct {
 	PruneRoutes bool
 	Warn        func(string)
 	Program     *ProgramSpec
-	Origin      Origin
-}
-
-type Origin struct {
-	Address string
 }
 
 type ProgramSpec struct {

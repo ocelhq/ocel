@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/progress"
 )
 
@@ -48,10 +49,16 @@ type Router interface {
 	Open(state StackState) (Stack, error)
 }
 
+type Claim struct {
+	Hostname          string
+	App               string
+	ClientCertificate string
+}
+
 type Stack interface {
 	State() StackState
 
-	Claim(ctx context.Context, hostname, app string) error
+	Claim(ctx context.Context, claim Claim) (edge.Origin, error)
 
 	Disclaim(ctx context.Context, hostname string) error
 
