@@ -20,9 +20,10 @@ func (f *envFanout) push(env map[string]string) {
 	f.hasLatest = true
 	for ch := range f.subscribers {
 		select {
-		case ch <- env:
+		case <-ch:
 		default:
 		}
+		ch <- env
 	}
 }
 
