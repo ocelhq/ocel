@@ -23,7 +23,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
-	"github.com/ocelhq/ocel/pkg/channel"
+	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/statedir"
@@ -104,12 +104,12 @@ func TestResolvedEnv(t *testing.T) {
 		t.Parallel()
 
 		reached := resolvedEnv(nil, nil, nil, runtimeAccess{url: "http://127.0.0.1:4242", token: "app-token"}, "", variables.Scope{})
-		if reached[processenv.RuntimeAddressEnvVar] != "http://127.0.0.1:4242" || reached[channel.SessionTokenEnvVar] != "app-token" {
-			t.Errorf("env = %v, want %s and %s stated together", reached, processenv.RuntimeAddressEnvVar, channel.SessionTokenEnvVar)
+		if reached[processenv.RuntimeAddressEnvVar] != "http://127.0.0.1:4242" || reached[localrpc.SessionTokenEnvVar] != "app-token" {
+			t.Errorf("env = %v, want %s and %s stated together", reached, processenv.RuntimeAddressEnvVar, localrpc.SessionTokenEnvVar)
 		}
 
 		unreached := resolvedEnv(nil, nil, nil, runtimeAccess{}, "", variables.Scope{})
-		for _, name := range []string{processenv.RuntimeAddressEnvVar, channel.SessionTokenEnvVar} {
+		for _, name := range []string{processenv.RuntimeAddressEnvVar, localrpc.SessionTokenEnvVar} {
 			if _, ok := unreached[name]; ok {
 				t.Errorf("%s stated for an app with no runtime to reach", name)
 			}

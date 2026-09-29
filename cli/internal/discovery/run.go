@@ -14,7 +14,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/nodeprotocol"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/pkg/channel"
+	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/processenv"
 )
 
@@ -180,7 +180,7 @@ func postSync(ctx context.Context, server Server) error {
 	if err != nil {
 		return fmt.Errorf("discovery: sync failed: %w", err)
 	}
-	req.Header.Set("Authorization", channel.FormatAuthHeader(server.Token))
+	req.Header.Set("Authorization", localrpc.FormatAuthHeader(server.Token))
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("discovery: sync failed: %w", err)

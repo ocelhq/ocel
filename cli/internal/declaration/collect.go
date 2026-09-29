@@ -10,7 +10,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/pkg/channel"
+	"github.com/ocelhq/ocel/pkg/localrpc"
 )
 
 func Prepare(cfg *project.Project) (discovery.Programs, error) {
@@ -39,8 +39,8 @@ func CollectPrepared(ctx context.Context, cfg *project.Project, declarations *va
 	if err != nil {
 		return nil, fmt.Errorf("start the declaration server: %w", err)
 	}
-	address, token := listener.Addr().String(), channel.NewSessionToken()
-	httpSrv := &http.Server{Handler: channel.LoopbackGuard(address, token, collectionMux(service))}
+	address, token := listener.Addr().String(), localrpc.NewSessionToken()
+	httpSrv := &http.Server{Handler: localrpc.LoopbackGuard(address, token, collectionMux(service))}
 	go httpSrv.Serve(listener)
 	defer httpSrv.Close()
 

@@ -7,7 +7,7 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/ocelhq/ocel/pkg/channel"
+	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
 )
@@ -43,7 +43,7 @@ func Serve(svc bucketv1connect.BucketServiceHandler) (Served, error) {
 	return Served{
 		Env: []string{
 			processenv.RuntimeAddressEnvVar + "=http://" + ln.Addr().String(),
-			channel.SessionTokenEnvVar + "=" + token,
+			localrpc.SessionTokenEnvVar + "=" + token,
 		},
 		Errs:   errs,
 		server: srv,

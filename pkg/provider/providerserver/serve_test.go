@@ -9,17 +9,17 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/pkg/channel"
+	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 func TestServeNeedsAConstructor(t *testing.T) {
-	identity, err := channel.NewIdentity()
+	identity, err := localrpc.NewIdentity()
 	if err != nil {
 		t.Fatalf("NewIdentity() error = %v", err)
 	}
-	t.Setenv(channel.ClientCertEnvVar, identity.CertificatePEM())
+	t.Setenv(localrpc.ClientCertEnvVar, identity.CertificatePEM())
 
 	if err := Serve(Config{Version: "test"}); err == nil {
 		t.Fatal("Serve() with no constructor returned nil, want a refusal to start")
@@ -35,10 +35,10 @@ func TestServeNeedsTheClientCertificate(t *testing.T) {
 		{"something that is not a certificate", "not-a-pem-block"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv(channel.ClientCertEnvVar, tc.cert)
+			t.Setenv(localrpc.ClientCertEnvVar, tc.cert)
 
 			err := Serve(Config{Version: "test", New: func(context.Context, provider.Settings) (provider.Provider, error) { return nil, nil }})
-			if err == nil || !strings.Contains(err.Error(), channel.ClientCertEnvVar) {
+			if err == nil || !strings.Contains(err.Error(), localrpc.ClientCertEnvVar) {
 				t.Fatalf("Serve() error = %v, want it to name the environment variable the CLI must set", err)
 			}
 		})

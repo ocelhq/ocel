@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/version"
-	"github.com/ocelhq/ocel/pkg/channel"
+	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
@@ -26,7 +26,7 @@ import (
 const fakeSessionsEnvVar = "OCEL_TEST_FAKE_SESSIONS"
 
 func IsFakeSession() bool {
-	return os.Getenv(fakeSessionsEnvVar) != "" && os.Getenv(channel.ClientCertEnvVar) != ""
+	return os.Getenv(fakeSessionsEnvVar) != "" && os.Getenv(localrpc.ClientCertEnvVar) != ""
 }
 
 func RunFakeSession() int {
@@ -37,7 +37,7 @@ func RunFakeSession() int {
 			return d.DialContext(ctx, "unix", control)
 		},
 	}}
-	resp, err := client.Post("http://fake/session", "application/x-pem-file", strings.NewReader(os.Getenv(channel.ClientCertEnvVar)))
+	resp, err := client.Post("http://fake/session", "application/x-pem-file", strings.NewReader(os.Getenv(localrpc.ClientCertEnvVar)))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "fake provider: open a session:", err)
 		return 1
@@ -111,11 +111,11 @@ func (s *fakeSessions) open(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *fakeSessions) serve(clientPEM string) (string, error) {
-	client, err := channel.ParseCertificatePEM(clientPEM)
+	client, err := localrpc.ParseCertificatePEM(clientPEM)
 	if err != nil {
 		return "", err
 	}
-	identity, err := channel.NewIdentity()
+	identity, err := localrpc.NewIdentity()
 	if err != nil {
 		return "", err
 	}
@@ -143,7 +143,7 @@ func (s *fakeSessions) serve(clientPEM string) (string, error) {
 			fmt.Fprintln(os.Stderr, "fake provider session:", err)
 		}
 	}()
-	return channel.FormatReadinessLine(version.Version, channel.FormatUnixAddr(path), identity.CertificateDER()), nil
+	return localrpc.FormatReadinessLine(version.Version, localrpc.FormatUnixAddress(path), identity.CertificateDER()), nil
 }
 
 func (s *fakeSessions) close() {

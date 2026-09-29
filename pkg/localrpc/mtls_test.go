@@ -1,4 +1,4 @@
-package channel
+package localrpc
 
 import (
 	"crypto/ecdsa"
@@ -154,8 +154,8 @@ func TestReadinessLineIncludesTheServerCertificate(t *testing.T) {
 			if got.Version != "0.1.2-alpha.3" {
 				t.Fatalf("ParseReadinessLine(%q) version = %q, want %q", line, got.Version, "0.1.2-alpha.3")
 			}
-			if got.Addr != addr {
-				t.Fatalf("ParseReadinessLine(%q) addr = %q, want %q", line, got.Addr, addr)
+			if got.Address != addr {
+				t.Fatalf("ParseReadinessLine(%q) addr = %q, want %q", line, got.Address, addr)
 			}
 			if !got.Cert.Equal(identity.Leaf()) {
 				t.Fatalf("ParseReadinessLine(%q) returned a different certificate", line)

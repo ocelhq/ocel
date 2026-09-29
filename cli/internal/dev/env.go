@@ -7,7 +7,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/devresources/binding"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/pkg/channel"
+	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/processenv"
 )
 
@@ -36,7 +36,7 @@ func resolvedEnv(secretValues, values map[string]string, resources []binding.Res
 	}
 	if runtime.url != "" {
 		merged[processenv.RuntimeAddressEnvVar] = runtime.url
-		merged[channel.SessionTokenEnvVar] = runtime.token
+		merged[localrpc.SessionTokenEnvVar] = runtime.token
 	}
 	merged[processenv.AppFolderEnvVar] = appFolder
 	merged[processenv.AppURLEnvVar] = localURL(merged[portEnv])

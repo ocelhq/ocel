@@ -19,7 +19,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/childprocess"
 	"github.com/ocelhq/ocel/cli/internal/version"
-	"github.com/ocelhq/ocel/pkg/channel"
+	"github.com/ocelhq/ocel/pkg/localrpc"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -106,7 +106,7 @@ func (e *OperationFailedError) Error() string {
 
 type Runner struct {
 	cmd             *exec.Cmd
-	identity        *channel.Identity
+	identity        *localrpc.Identity
 	providerConfig  *contractv1.ProviderConfig
 	providerName    string
 	stdout          io.Writer
@@ -116,7 +116,7 @@ type Runner struct {
 	reapTimeout     time.Duration
 	maxMessageBytes int
 
-	readyCh chan channel.Readiness
+	readyCh chan localrpc.Readiness
 	scanErr chan error
 	done    chan struct{}
 	waitErr error
@@ -141,7 +141,7 @@ func Spawn(ctx context.Context, cfg Config) (*Runner, error) {
 		return nil, errors.New("provider: BinaryPath is required")
 	}
 
-	identity, err := channel.NewIdentity()
+	identity, err := localrpc.NewIdentity()
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +152,7 @@ func Spawn(ctx context.Context, cfg Config) (*Runner, error) {
 	}
 	env := make([]string, 0, len(base)+1)
 	env = append(env, base...)
-	env = append(env, channel.ClientCertEnvVar+"="+identity.CertificatePEM())
+	env = append(env, localrpc.ClientCertEnvVar+"="+identity.CertificatePEM())
 
 	cmd := exec.Command(cfg.BinaryPath, cfg.Args...)
 	cmd.Env = env
@@ -182,7 +182,7 @@ func Spawn(ctx context.Context, cfg Config) (*Runner, error) {
 		gracePeriod:     resolveDuration(cfg.GracePeriod, DefaultGracePeriod),
 		reapTimeout:     resolveDuration(cfg.ReapTimeout, DefaultReapTimeout),
 		maxMessageBytes: resolveBytes(cfg.MaxMessageBytes, MaxMessageBytes),
-		readyCh:         make(chan channel.Readiness, 1),
+		readyCh:         make(chan localrpc.Readiness, 1),
 		scanErr:         make(chan error, 1),
 		done:            make(chan struct{}),
 	}
@@ -269,7 +269,7 @@ func (r *Runner) Ready(ctx context.Context) error {
 	}
 }
 
-func (r *Runner) open(ctx context.Context, ready channel.Readiness) error {
+func (r *Runner) open(ctx context.Context, ready localrpc.Readiness) error {
 	if ready.Version != version.Version {
 		return &VersionMismatchError{Name: r.providerName, Announced: ready.Version, Expected: version.Version}
 	}
@@ -310,8 +310,8 @@ func (r *Runner) Facts() *contractv1.ProviderFacts {
 	return r.facts
 }
 
-func (r *Runner) dial(ready channel.Readiness) error {
-	network, address, err := channel.ParseAddr(ready.Addr)
+func (r *Runner) dial(ready localrpc.Readiness) error {
+	network, address, err := localrpc.ParseAddress(ready.Address)
 	if err != nil {
 		return fmt.Errorf("provider: parse readiness address: %w", err)
 	}
@@ -320,7 +320,7 @@ func (r *Runner) dial(ready channel.Readiness) error {
 	if err != nil {
 		return fmt.Errorf("provider: pin the provider certificate: %w", err)
 	}
-	httpClient := channel.HTTPClient(network, address, config)
+	httpClient := localrpc.HTTPClient(network, address, config)
 
 	opts := connect.WithClientOptions(
 		connect.WithInterceptors(traceParentInterceptor{}, validate.NewInterceptor()),
@@ -557,7 +557,7 @@ func (r *Runner) drainStdout(stdout io.Reader) {
 	for scanner.Scan() {
 		line := scanner.Text()
 		if !ready {
-			if signalled, ok := channel.ParseReadinessLine(line); ok {
+			if signalled, ok := localrpc.ParseReadinessLine(line); ok {
 				ready = true
 				r.readyCh <- signalled
 				continue
@@ -603,8 +603,8 @@ type traceParentInterceptor struct{}
 
 func (traceParentInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		if traceparent, ok := channel.TraceParentFromContext(ctx); ok {
-			req.Header().Set(channel.TraceParentHeader, traceparent)
+		if traceparent, ok := localrpc.TraceParentFromContext(ctx); ok {
+			req.Header().Set(localrpc.TraceParentHeader, traceparent)
 		}
 		return next(ctx, req)
 	}
@@ -613,8 +613,8 @@ func (traceParentInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFun
 func (traceParentInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
 	return func(ctx context.Context, spec connect.Spec) connect.StreamingClientConn {
 		conn := next(ctx, spec)
-		if traceparent, ok := channel.TraceParentFromContext(ctx); ok {
-			conn.RequestHeader().Set(channel.TraceParentHeader, traceparent)
+		if traceparent, ok := localrpc.TraceParentFromContext(ctx); ok {
+			conn.RequestHeader().Set(localrpc.TraceParentHeader, traceparent)
 		}
 		return conn
 	}

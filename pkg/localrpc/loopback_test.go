@@ -1,4 +1,4 @@
-package channel
+package localrpc
 
 import (
 	"encoding/base64"

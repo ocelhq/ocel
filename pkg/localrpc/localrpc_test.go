@@ -1,33 +1,33 @@
-package channel
+package localrpc
 
 import (
 	"context"
 	"testing"
 )
 
-func TestFormatAddr(t *testing.T) {
+func TestAnAddressNamesItsNetworkAndWhereOnIt(t *testing.T) {
 	t.Parallel()
 
 	t.Run("a unix socket path", func(t *testing.T) {
 		t.Parallel()
-		got := FormatUnixAddr("/tmp/ocel-provider-abc123.sock")
+		got := FormatUnixAddress("/tmp/ocel-provider-abc123.sock")
 		want := "unix:/tmp/ocel-provider-abc123.sock"
 		if got != want {
-			t.Fatalf("FormatUnixAddr() = %q, want %q", got, want)
+			t.Fatalf("FormatUnixAddress() = %q, want %q", got, want)
 		}
 	})
 
 	t.Run("a loopback port", func(t *testing.T) {
 		t.Parallel()
-		got := FormatTCPAddr(54321)
+		got := FormatTCPAddress(54321)
 		want := "tcp:127.0.0.1:54321"
 		if got != want {
-			t.Fatalf("FormatTCPAddr() = %q, want %q", got, want)
+			t.Fatalf("FormatTCPAddress() = %q, want %q", got, want)
 		}
 	})
 }
 
-func TestParseAddr(t *testing.T) {
+func TestParsingAnAddressSplitsItsNetworkFromWhereOnIt(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -57,18 +57,18 @@ func TestParseAddr(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			network, address, err := ParseAddr(tc.addr)
+			network, address, err := ParseAddress(tc.addr)
 			if tc.wantErr {
 				if err == nil {
-					t.Fatalf("ParseAddr(%q) error = nil, want error", tc.addr)
+					t.Fatalf("ParseAddress(%q) error = nil, want error", tc.addr)
 				}
 				return
 			}
 			if err != nil {
-				t.Fatalf("ParseAddr(%q) error = %v", tc.addr, err)
+				t.Fatalf("ParseAddress(%q) error = %v", tc.addr, err)
 			}
 			if network != tc.wantNetwork || address != tc.wantAddress {
-				t.Fatalf("ParseAddr(%q) = (%q, %q), want (%q, %q)", tc.addr, network, address, tc.wantNetwork, tc.wantAddress)
+				t.Fatalf("ParseAddress(%q) = (%q, %q), want (%q, %q)", tc.addr, network, address, tc.wantNetwork, tc.wantAddress)
 			}
 		})
 	}
@@ -159,7 +159,7 @@ func TestTraceParentContext(t *testing.T) {
 	})
 }
 
-func TestValidTraceParent(t *testing.T) {
+func TestOnlyAWellFormedTraceParentIsValid(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -182,8 +182,8 @@ func TestValidTraceParent(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if got := ValidTraceParent(tc.value); got != tc.want {
-				t.Errorf("ValidTraceParent(%q) = %v, want %v", tc.value, got, tc.want)
+			if got := IsValidTraceParent(tc.value); got != tc.want {
+				t.Errorf("IsValidTraceParent(%q) = %v, want %v", tc.value, got, tc.want)
 			}
 		})
 	}

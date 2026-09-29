@@ -16,7 +16,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/pkg/channel"
+	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/statedir"
 )
@@ -50,7 +50,7 @@ func serving(t *testing.T, handler http.Handler) Server {
 	t.Helper()
 	server := httptest.NewUnstartedServer(nil)
 	address := server.Listener.Addr().String()
-	server.Config.Handler = channel.LoopbackGuard(address, testToken, handler)
+	server.Config.Handler = localrpc.LoopbackGuard(address, testToken, handler)
 	server.Start()
 	t.Cleanup(server.Close)
 	return Server{URL: server.URL, Token: testToken}

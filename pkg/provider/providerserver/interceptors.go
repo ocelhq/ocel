@@ -6,7 +6,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/pkg/channel"
+	"github.com/ocelhq/ocel/pkg/localrpc"
 )
 
 func traceInterceptor() connect.Interceptor {
@@ -32,5 +32,5 @@ func (t *tracecontext) WrapStreamingHandler(next connect.StreamingHandlerFunc) c
 }
 
 func extractTraceParent(ctx context.Context, header http.Header) context.Context {
-	return channel.WithTraceParent(ctx, header.Get(channel.TraceParentHeader))
+	return localrpc.WithTraceParent(ctx, header.Get(localrpc.TraceParentHeader))
 }

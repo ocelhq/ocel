@@ -9,7 +9,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/pkg/channel"
+	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
@@ -86,9 +86,9 @@ func TestServeProxy(t *testing.T) {
 		if !strings.HasPrefix(addr, "http://127.0.0.1:") {
 			t.Fatalf("%s = %q, want a loopback address the sandbox alone can reach", processenv.RuntimeAddressEnvVar, addr)
 		}
-		token := proxyEnvValue(t, env, channel.SessionTokenEnvVar)
+		token := proxyEnvValue(t, env, localrpc.SessionTokenEnvVar)
 		if token == "" {
-			t.Fatalf("%s is empty, so the proxy is open to anything in the sandbox", channel.SessionTokenEnvVar)
+			t.Fatalf("%s is empty, so the proxy is open to anything in the sandbox", localrpc.SessionTokenEnvVar)
 		}
 
 		client := bucketv1connect.NewBucketServiceClient(http.DefaultClient, addr)
@@ -121,7 +121,7 @@ func TestABucketBoundToAStoreIsSignedForThatStore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("serveProxy: %v", err)
 	}
-	client := bucketv1connect.NewBucketServiceClient(&http.Client{Transport: bearerToken(proxyEnvValue(t, env, channel.SessionTokenEnvVar))}, proxyEnvValue(t, env, processenv.RuntimeAddressEnvVar))
+	client := bucketv1connect.NewBucketServiceClient(&http.Client{Transport: bearerToken(proxyEnvValue(t, env, localrpc.SessionTokenEnvVar))}, proxyEnvValue(t, env, processenv.RuntimeAddressEnvVar))
 	signed, err := client.Sign(context.Background(), &bucketv1.SignRequest{
 		Bucket: "OCEL_RESOURCE_BUCKET_uploads", Key: "a.png",
 		Operation: bucketv1.SignedOperation_SIGNED_OPERATION_GET,
@@ -141,6 +141,6 @@ func TestABucketBoundToAStoreIsSignedForThatStore(t *testing.T) {
 type bearerToken string
 
 func (b bearerToken) RoundTrip(req *http.Request) (*http.Response, error) {
-	req.Header.Set("Authorization", channel.FormatAuthHeader(string(b)))
+	req.Header.Set("Authorization", localrpc.FormatAuthHeader(string(b)))
 	return http.DefaultTransport.RoundTrip(req)
 }

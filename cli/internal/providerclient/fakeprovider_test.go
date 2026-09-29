@@ -19,7 +19,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/childprocess"
 	"github.com/ocelhq/ocel/cli/internal/version"
-	"github.com/ocelhq/ocel/pkg/channel"
+	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/naming"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -124,12 +124,12 @@ func runFakeProvider() int {
 	mux.Handle(path, handler)
 
 	if mode == "plaintext" {
-		decoy, err := channel.NewIdentity()
+		decoy, err := localrpc.NewIdentity()
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "fake provider: decoy identity:", err)
 			return 1
 		}
-		fmt.Println(channel.FormatReadinessLine(fakeProviderVersion(), channel.FormatUnixAddr(sockPath), decoy.CertificateDER()))
+		fmt.Println(localrpc.FormatReadinessLine(fakeProviderVersion(), localrpc.FormatUnixAddress(sockPath), decoy.CertificateDER()))
 		srv := &http.Server{Handler: mux}
 		if err := srv.Serve(bound); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			return 1
@@ -137,7 +137,7 @@ func runFakeProvider() int {
 		return 0
 	}
 
-	ln, identity, err := channel.SecureListener(bound)
+	ln, identity, err := localrpc.SecureListener(bound)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "fake provider:", err)
 		return 1
@@ -146,14 +146,14 @@ func runFakeProvider() int {
 
 	announced := identity
 	if mode == "impostor-cert" {
-		announced, err = channel.NewIdentity()
+		announced, err = localrpc.NewIdentity()
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "fake provider: impostor identity:", err)
 			return 1
 		}
 	}
 
-	fmt.Println(channel.FormatReadinessLine(fakeProviderVersion(), channel.FormatUnixAddr(sockPath), announced.CertificateDER()))
+	fmt.Println(localrpc.FormatReadinessLine(fakeProviderVersion(), localrpc.FormatUnixAddress(sockPath), announced.CertificateDER()))
 
 	srv := &http.Server{Handler: mux}
 	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {

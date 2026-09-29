@@ -210,7 +210,7 @@ const specs = [
       "platform/aws/provider/cmd/deploy/main.go",
       "platform/aws/runtime/cmd/runtime/proxyserver.go",
       "platform/aws/provider/channelauth/interceptor.go",
-      "pkg/channel/channel.go"
+      "pkg/localrpc/localrpc.go"
     ],
     "patterns": [
       {

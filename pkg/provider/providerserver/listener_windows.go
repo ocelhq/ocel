@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/ocelhq/ocel/pkg/channel"
+	"github.com/ocelhq/ocel/pkg/localrpc"
 )
 
 func listen() (net.Listener, string, error) {
@@ -16,5 +16,5 @@ func listen() (net.Listener, string, error) {
 	}
 
 	port := ln.Addr().(*net.TCPAddr).Port
-	return ln, channel.FormatTCPAddr(port), nil
+	return ln, localrpc.FormatTCPAddress(port), nil
 }

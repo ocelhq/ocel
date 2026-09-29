@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/pkg/channel"
+	"github.com/ocelhq/ocel/pkg/localrpc"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
@@ -99,7 +99,7 @@ func Serve(ctx context.Context, opts Options) (*Session, error) {
 		opts.AbandonAfter = DefaultAbandonAfter
 	}
 	s := &Session{
-		Token:    channel.NewSessionToken(),
+		Token:    localrpc.NewSessionToken(),
 		opts:     opts,
 		listener: listener,
 		done:     make(chan struct{}),
@@ -167,7 +167,7 @@ func (s *Session) handler() http.Handler {
 }
 
 func (s *Session) guard(next http.Handler) http.Handler {
-	return channel.LoopbackGuard(s.listener.Addr().String(), s.Token, next)
+	return localrpc.LoopbackGuard(s.listener.Addr().String(), s.Token, next)
 }
 
 func (s *Session) handlePage(w http.ResponseWriter, r *http.Request) {

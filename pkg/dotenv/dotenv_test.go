@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/channel"
+	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/processenv"
 )
 
@@ -111,12 +111,12 @@ export EXPORTED=sourced
 		},
 		{
 			name:     "reads a resource entry and no other reserved name",
-			contents: "OCEL_RESOURCE_POSTGRES_main={\"name\":\"main\"}\nOCEL_RESOURCE_BUCKET_uploads={\"name\":\"uploads\"}\n" + processenv.RuntimeAddressEnvVar + "=hijacked\n" + channel.SessionTokenEnvVar + "=hijacked\nOCEL_RESOURCE_=short\n",
+			contents: "OCEL_RESOURCE_POSTGRES_main={\"name\":\"main\"}\nOCEL_RESOURCE_BUCKET_uploads={\"name\":\"uploads\"}\n" + processenv.RuntimeAddressEnvVar + "=hijacked\n" + localrpc.SessionTokenEnvVar + "=hijacked\nOCEL_RESOURCE_=short\n",
 			want: map[string]string{
 				"OCEL_RESOURCE_POSTGRES_main":  `{"name":"main"}`,
 				"OCEL_RESOURCE_BUCKET_uploads": `{"name":"uploads"}`,
 			},
-			absent:     []string{processenv.RuntimeAddressEnvVar, channel.SessionTokenEnvVar, "OCEL_RESOURCE_"},
+			absent:     []string{processenv.RuntimeAddressEnvVar, localrpc.SessionTokenEnvVar, "OCEL_RESOURCE_"},
 			exhaustive: true,
 			note:       "a run with no console resolves its resources from these entries, and nothing else under OCEL_ is the file's to set",
 		},

@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/channel"
+	"github.com/ocelhq/ocel/pkg/localrpc"
 )
 
 type EnvStream struct {
@@ -22,7 +22,7 @@ func Subscribe(ctx context.Context, leader Leader) (*EnvStream, error) {
 		return nil, err
 	}
 	req.Header.Set("Accept", "text/event-stream")
-	req.Header.Set("Authorization", channel.FormatAuthHeader(leader.Token))
+	req.Header.Set("Authorization", localrpc.FormatAuthHeader(leader.Token))
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

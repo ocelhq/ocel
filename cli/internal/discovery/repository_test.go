@@ -15,7 +15,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/fixturetest"
 	"github.com/ocelhq/ocel/cli/internal/sdkversion"
-	"github.com/ocelhq/ocel/pkg/channel"
+	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/statedir"
 )
@@ -270,7 +270,7 @@ func TestGoSDKWireNamesMatchConstants(t *testing.T) {
 		"appURLEnv":         processenv.AppURLEnvVar,
 		"runtimeAddressEnv": processenv.RuntimeAddressEnvVar,
 		"liveDirEnv":        processenv.LiveDirEnvVar,
-		"sessionTokenEnv":   channel.SessionTokenEnvVar,
+		"sessionTokenEnv":   localrpc.SessionTokenEnvVar,
 		"sdkVersionHeader":  sdkversion.Header,
 	}
 	for name, value := range want {

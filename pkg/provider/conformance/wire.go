@@ -18,7 +18,7 @@ import (
 	connect "connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	"github.com/ocelhq/ocel/pkg/channel"
+	"github.com/ocelhq/ocel/pkg/localrpc"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -85,14 +85,14 @@ const providerURL = "https://localhost"
 func (s *spawned) refusesAnUnpairedClient(t *testing.T) {
 	t.Helper()
 
-	stranger, err := channel.NewIdentity()
+	stranger, err := localrpc.NewIdentity()
 	if err != nil {
 		t.Fatalf("NewIdentity() error = %v", err)
 	}
 
 	for _, tc := range []struct {
 		name     string
-		identity *channel.Identity
+		identity *localrpc.Identity
 		bare     bool
 	}{
 		{name: "a client the provider was never paired with", identity: stranger},
@@ -106,7 +106,7 @@ func (s *spawned) refusesAnUnpairedClient(t *testing.T) {
 			if tc.bare {
 				config.Certificates = nil
 			}
-			unpaired := client(channel.HTTPClient(s.network, s.address, config), providerURL)
+			unpaired := client(localrpc.HTTPClient(s.network, s.address, config), providerURL)
 			if _, err := unpaired.Configure(context.Background(), &contractv1.ConfigureRequest{}); err == nil {
 				t.Error("Configure() over an unpaired connection succeeded, want the provider to refuse the handshake")
 			}
@@ -265,12 +265,12 @@ type spawned struct {
 func spawn(t *testing.T, binary string) *spawned {
 	t.Helper()
 
-	identity, err := channel.NewIdentity()
+	identity, err := localrpc.NewIdentity()
 	if err != nil {
 		t.Fatalf("NewIdentity() error = %v", err)
 	}
 	cmd := exec.Command(binary)
-	cmd.Env = append(os.Environ(), channel.ClientCertEnvVar+"="+identity.CertificatePEM())
+	cmd.Env = append(os.Environ(), localrpc.ClientCertEnvVar+"="+identity.CertificatePEM())
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -293,12 +293,12 @@ func spawn(t *testing.T, binary string) *spawned {
 		child.wait(readyTimeout)
 	})
 
-	ready := make(chan channel.Readiness, 1)
+	ready := make(chan localrpc.Readiness, 1)
 	go func() {
 		defer close(ready)
 		scanner := bufio.NewScanner(stdout)
 		for scanner.Scan() {
-			if signalled, ok := channel.ParseReadinessLine(scanner.Text()); ok {
+			if signalled, ok := localrpc.ParseReadinessLine(scanner.Text()); ok {
 				ready <- signalled
 				return
 			}
@@ -310,9 +310,9 @@ func spawn(t *testing.T, binary string) *spawned {
 		if !ok {
 			t.Fatalf("%s exited before signalling readiness\n%s", binary, stderr.String())
 		}
-		network, address, err := channel.ParseAddr(signalled.Addr)
+		network, address, err := localrpc.ParseAddress(signalled.Address)
 		if err != nil {
-			t.Fatalf("ParseAddr(%q) error = %v", signalled.Addr, err)
+			t.Fatalf("ParseAddress(%q) error = %v", signalled.Address, err)
 		}
 		config, err := identity.ClientConfig(signalled.Cert)
 		if err != nil {
@@ -320,7 +320,7 @@ func spawn(t *testing.T, binary string) *spawned {
 		}
 		child.serverCert = signalled.Cert
 		child.network, child.address = network, address
-		child.http = channel.HTTPClient(network, address, config)
+		child.http = localrpc.HTTPClient(network, address, config)
 	case <-time.After(readyTimeout):
 		t.Fatalf("%s did not signal readiness within %s", binary, readyTimeout)
 	}

@@ -13,7 +13,7 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 
-	"github.com/ocelhq/ocel/pkg/channel"
+	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
@@ -117,7 +117,7 @@ func TestTheRuntimeFrontsAProxiedBindingAndKeepsTheStoreCredentialToItself(t *te
 		switch name {
 		case processenv.RuntimeAddressEnvVar:
 			address = value
-		case channel.SessionTokenEnvVar:
+		case localrpc.SessionTokenEnvVar:
 			token = value
 		}
 	}

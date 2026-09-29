@@ -9,7 +9,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/pkg/channel"
+	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
@@ -40,7 +40,7 @@ func envValue(t *testing.T, env []string, key string) string {
 type bearer string
 
 func (b bearer) RoundTrip(req *http.Request) (*http.Response, error) {
-	req.Header.Set("Authorization", channel.FormatAuthHeader(string(b)))
+	req.Header.Set("Authorization", localrpc.FormatAuthHeader(string(b)))
 	return http.DefaultTransport.RoundTrip(req)
 }
 
@@ -58,9 +58,9 @@ func TestServe(t *testing.T) {
 	if !strings.HasPrefix(addr, "http://127.0.0.1:") {
 		t.Fatalf("%s = %q, want a loopback address nothing off the host can reach", processenv.RuntimeAddressEnvVar, addr)
 	}
-	token := envValue(t, served.Env, channel.SessionTokenEnvVar)
+	token := envValue(t, served.Env, localrpc.SessionTokenEnvVar)
 	if len(token) < 32 {
-		t.Fatalf("%s = %q, want a token long enough not to be guessed", channel.SessionTokenEnvVar, token)
+		t.Fatalf("%s = %q, want a token long enough not to be guessed", localrpc.SessionTokenEnvVar, token)
 	}
 
 	_, err = bucketv1connect.NewBucketServiceClient(http.DefaultClient, addr).
@@ -102,7 +102,7 @@ func TestServeMintsAFreshTokenEachTime(t *testing.T) {
 	}
 	t.Cleanup(func() { second.Close() })
 
-	if envValue(t, first.Env, channel.SessionTokenEnvVar) == envValue(t, second.Env, channel.SessionTokenEnvVar) {
+	if envValue(t, first.Env, localrpc.SessionTokenEnvVar) == envValue(t, second.Env, localrpc.SessionTokenEnvVar) {
 		t.Fatal("two proxies were handed the same token, so one deployment's credential opens the other")
 	}
 }

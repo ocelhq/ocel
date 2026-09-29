@@ -9,7 +9,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/pkg/channel"
+	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/naming"
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
@@ -40,7 +40,7 @@ type bearer struct{ token string }
 
 func (b bearer) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		req.Header().Set("Authorization", channel.FormatAuthHeader(b.token))
+		req.Header().Set("Authorization", localrpc.FormatAuthHeader(b.token))
 		return next(ctx, req)
 	}
 }

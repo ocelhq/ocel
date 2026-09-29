@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/channel"
+	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 )
@@ -279,7 +279,7 @@ func TestTheChildIsHandedTheLiveDeclarationTheProjectionAndTheProxy(t *testing.T
 	t.Run("hands the child the proxy it must reach and the token that opens it", func(t *testing.T) {
 		proxyEnv := []string{
 			processenv.RuntimeAddressEnvVar + "=http://127.0.0.1:41000",
-			channel.SessionTokenEnvVar + "=deadbeef",
+			localrpc.SessionTokenEnvVar + "=deadbeef",
 		}
 		l := &stubValues{env: []string{"OCEL_LIVE_KEYS=DB_PASSWORD"}}
 

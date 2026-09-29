@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/channel"
+	"github.com/ocelhq/ocel/pkg/localrpc"
 )
 
 func TestExtractTraceParent(t *testing.T) {
@@ -14,9 +14,9 @@ func TestExtractTraceParent(t *testing.T) {
 	t.Run("stores a traceparent header into the context", func(t *testing.T) {
 		t.Parallel()
 		header := http.Header{}
-		header.Set(channel.TraceParentHeader, "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+		header.Set(localrpc.TraceParentHeader, "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
 		ctx := extractTraceParent(context.Background(), header)
-		got, ok := channel.TraceParentFromContext(ctx)
+		got, ok := localrpc.TraceParentFromContext(ctx)
 		if !ok {
 			t.Fatalf("TraceParentFromContext() ok = false, want true")
 		}
@@ -28,7 +28,7 @@ func TestExtractTraceParent(t *testing.T) {
 	t.Run("a request with no traceparent header leaves the context untouched", func(t *testing.T) {
 		t.Parallel()
 		ctx := extractTraceParent(context.Background(), http.Header{})
-		if _, ok := channel.TraceParentFromContext(ctx); ok {
+		if _, ok := localrpc.TraceParentFromContext(ctx); ok {
 			t.Fatalf("TraceParentFromContext() ok = true, want false")
 		}
 	})
@@ -36,9 +36,9 @@ func TestExtractTraceParent(t *testing.T) {
 	t.Run("a malformed traceparent header is rejected rather than propagated", func(t *testing.T) {
 		t.Parallel()
 		header := http.Header{}
-		header.Set(channel.TraceParentHeader, "not-a-traceparent")
+		header.Set(localrpc.TraceParentHeader, "not-a-traceparent")
 		ctx := extractTraceParent(context.Background(), header)
-		if _, ok := channel.TraceParentFromContext(ctx); ok {
+		if _, ok := localrpc.TraceParentFromContext(ctx); ok {
 			t.Fatalf("TraceParentFromContext() ok = true, want false")
 		}
 	})

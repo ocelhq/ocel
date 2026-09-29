@@ -14,8 +14,8 @@ import (
 	"connectrpc.com/validate"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
-	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/envvarsserver"
+	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
@@ -37,7 +37,7 @@ func Serve(config Config) error {
 	if err != nil {
 		return fmt.Errorf("bind provider listener: %w", err)
 	}
-	ln, identity, err := channel.SecureListener(bound)
+	ln, identity, err := localrpc.SecureListener(bound)
 	if err != nil {
 		bound.Close()
 		return err
@@ -56,7 +56,7 @@ func Serve(config Config) error {
 	served := make(chan error, 1)
 	go func() { served <- srv.Serve(ln) }()
 
-	fmt.Println(channel.FormatReadinessLine(config.Version, addr, identity.CertificateDER()))
+	fmt.Println(localrpc.FormatReadinessLine(config.Version, addr, identity.CertificateDER()))
 
 	select {
 	case <-ctx.Done():

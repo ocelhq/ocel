@@ -1,4 +1,4 @@
-package channel
+package localrpc
 
 import (
 	"context"
@@ -38,13 +38,13 @@ func VerifyAuthHeader(value, token string) bool {
 
 const readinessSentinelPrefix = "OCEL_READY"
 
-func FormatReadinessLine(version, addr string, certDER []byte) string {
-	return readinessSentinelPrefix + " " + version + " " + addr + " " + base64.StdEncoding.EncodeToString(certDER)
+func FormatReadinessLine(version, address string, certDER []byte) string {
+	return readinessSentinelPrefix + " " + version + " " + address + " " + base64.StdEncoding.EncodeToString(certDER)
 }
 
 type Readiness struct {
 	Version string
-	Addr    string
+	Address string
 	Cert    *x509.Certificate
 }
 
@@ -62,8 +62,8 @@ func ParseReadinessLine(line string) (Readiness, bool) {
 	if split <= 0 {
 		return Readiness{}, false
 	}
-	addr, encoded := rest[:split], rest[split+1:]
-	if addr == "" || encoded == "" {
+	address, encoded := rest[:split], rest[split+1:]
+	if address == "" || encoded == "" {
 		return Readiness{}, false
 	}
 	der, err := base64.StdEncoding.DecodeString(encoded)
@@ -74,14 +74,14 @@ func ParseReadinessLine(line string) (Readiness, bool) {
 	if err != nil {
 		return Readiness{}, false
 	}
-	return Readiness{Version: version, Addr: addr, Cert: cert}, true
+	return Readiness{Version: version, Address: address, Cert: cert}, true
 }
 
-func FormatUnixAddr(path string) string {
+func FormatUnixAddress(path string) string {
 	return "unix:" + path
 }
 
-func FormatTCPAddr(port int) string {
+func FormatTCPAddress(port int) string {
 	return fmt.Sprintf("tcp:127.0.0.1:%d", port)
 }
 
@@ -90,7 +90,7 @@ const TraceParentHeader = "traceparent"
 type traceParentKey struct{}
 
 func WithTraceParent(ctx context.Context, traceparent string) context.Context {
-	if !ValidTraceParent(traceparent) {
+	if !IsValidTraceParent(traceparent) {
 		return ctx
 	}
 	return context.WithValue(ctx, traceParentKey{}, traceparent)
@@ -101,7 +101,7 @@ func TraceParentFromContext(ctx context.Context) (string, bool) {
 	return traceparent, ok
 }
 
-func ValidTraceParent(value string) bool {
+func IsValidTraceParent(value string) bool {
 	fields := strings.Split(value, "-")
 	if len(fields) != 4 {
 		return false
@@ -143,25 +143,25 @@ func isAllZero(s string) bool {
 	return true
 }
 
-func ParseAddr(addr string) (network, address string, err error) {
+func ParseAddress(formatted string) (network, address string, err error) {
 	switch {
-	case strings.HasPrefix(addr, "unix:"):
-		address = strings.TrimPrefix(addr, "unix:")
+	case strings.HasPrefix(formatted, "unix:"):
+		address = strings.TrimPrefix(formatted, "unix:")
 		if address == "" {
-			return "", "", fmt.Errorf("channel: empty unix socket path in addr %q", addr)
+			return "", "", fmt.Errorf("localrpc: empty unix socket path in address %q", formatted)
 		}
 		return "unix", address, nil
-	case strings.HasPrefix(addr, "tcp:"):
-		address = strings.TrimPrefix(addr, "tcp:")
+	case strings.HasPrefix(formatted, "tcp:"):
+		address = strings.TrimPrefix(formatted, "tcp:")
 		host, port, found := strings.Cut(address, ":")
 		if !found || host == "" || port == "" {
-			return "", "", fmt.Errorf("channel: malformed tcp addr %q", addr)
+			return "", "", fmt.Errorf("localrpc: malformed tcp address %q", formatted)
 		}
 		if _, err := strconv.Atoi(port); err != nil {
-			return "", "", fmt.Errorf("channel: malformed tcp port in addr %q: %w", addr, err)
+			return "", "", fmt.Errorf("localrpc: malformed tcp port in address %q: %w", formatted, err)
 		}
 		return "tcp", address, nil
 	default:
-		return "", "", fmt.Errorf("channel: unknown address scheme in %q", addr)
+		return "", "", fmt.Errorf("localrpc: unknown address scheme in %q", formatted)
 	}
 }

@@ -16,7 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devresources/binding"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/pkg/channel"
+	"github.com/ocelhq/ocel/pkg/localrpc"
 )
 
 type SyncResult struct {
@@ -51,8 +51,8 @@ func New(url string, resources Resources) *Server {
 		declarations:   declaration.NewService(env),
 		resources:      resources,
 		url:            url,
-		discoveryToken: channel.NewSessionToken(),
-		appToken:       channel.NewSessionToken(),
+		discoveryToken: localrpc.NewSessionToken(),
+		appToken:       localrpc.NewSessionToken(),
 		syncResults:    make(chan SyncResult, 1),
 		env:            env,
 		fanout:         newEnvFanout(),
@@ -123,7 +123,7 @@ func (s *Server) TakeSDKRefusal() error { return s.declarations.TakeSDKRefusal()
 func (s *Server) AppToken() string { return s.appToken }
 
 func (s *Server) guard(token string, next http.Handler) http.Handler {
-	return channel.LoopbackGuard(strings.TrimPrefix(s.url, "http://"), token, next)
+	return localrpc.LoopbackGuard(strings.TrimPrefix(s.url, "http://"), token, next)
 }
 
 func (s *Server) Mux() *http.ServeMux {

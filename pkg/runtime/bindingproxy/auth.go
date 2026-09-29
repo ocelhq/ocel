@@ -7,7 +7,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/pkg/channel"
+	"github.com/ocelhq/ocel/pkg/localrpc"
 )
 
 type tokenGate struct{ token string }
@@ -35,7 +35,7 @@ func (a *tokenGate) WrapStreamingHandler(next connect.StreamingHandlerFunc) conn
 }
 
 func (a *tokenGate) check(header http.Header) error {
-	if !channel.VerifyAuthHeader(header.Get("Authorization"), a.token) {
+	if !localrpc.VerifyAuthHeader(header.Get("Authorization"), a.token) {
 		return connect.NewError(connect.CodeUnauthenticated, errors.New("missing or invalid session token"))
 	}
 	return nil

@@ -1,4 +1,4 @@
-package channel
+package localrpc
 
 import (
 	"context"
@@ -32,12 +32,12 @@ type Identity struct {
 func NewIdentity() (*Identity, error) {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		return nil, fmt.Errorf("channel: generate channel key: %w", err)
+		return nil, fmt.Errorf("localrpc: generate the connection key: %w", err)
 	}
 
 	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
 	if err != nil {
-		return nil, fmt.Errorf("channel: draw a certificate serial: %w", err)
+		return nil, fmt.Errorf("localrpc: draw a certificate serial: %w", err)
 	}
 
 	now := time.Now()
@@ -55,11 +55,11 @@ func NewIdentity() (*Identity, error) {
 
 	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
 	if err != nil {
-		return nil, fmt.Errorf("channel: self-sign the channel certificate: %w", err)
+		return nil, fmt.Errorf("localrpc: self-sign the connection certificate: %w", err)
 	}
 	leaf, err := x509.ParseCertificate(der)
 	if err != nil {
-		return nil, fmt.Errorf("channel: parse the channel certificate: %w", err)
+		return nil, fmt.Errorf("localrpc: parse the connection certificate: %w", err)
 	}
 
 	return &Identity{cert: tls.Certificate{
@@ -79,7 +79,7 @@ func (i *Identity) CertificatePEM() string {
 
 func pin(peer *x509.Certificate) (*x509.CertPool, error) {
 	if peer == nil {
-		return nil, errors.New("channel: no peer certificate to pin")
+		return nil, errors.New("localrpc: no peer certificate to pin")
 	}
 	anchor := x509.NewCertPool()
 	anchor.AddCert(peer)
@@ -117,14 +117,14 @@ func (i *Identity) ClientConfig(server *x509.Certificate) (*tls.Config, error) {
 func ParseCertificatePEM(encoded string) (*x509.Certificate, error) {
 	block, _ := pem.Decode([]byte(encoded))
 	if block == nil {
-		return nil, errors.New("channel: no PEM block found")
+		return nil, errors.New("localrpc: no PEM block found")
 	}
 	if block.Type != "CERTIFICATE" {
-		return nil, fmt.Errorf("channel: PEM block is a %q, want a CERTIFICATE", block.Type)
+		return nil, fmt.Errorf("localrpc: PEM block is a %q, want a CERTIFICATE", block.Type)
 	}
 	cert, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
-		return nil, fmt.Errorf("channel: parse certificate: %w", err)
+		return nil, fmt.Errorf("localrpc: parse certificate: %w", err)
 	}
 	return cert, nil
 }
@@ -132,11 +132,11 @@ func ParseCertificatePEM(encoded string) (*x509.Certificate, error) {
 func SecureListener(ln net.Listener) (net.Listener, *Identity, error) {
 	encoded := os.Getenv(ClientCertEnvVar)
 	if encoded == "" {
-		return nil, nil, fmt.Errorf("channel: %s must be set by the launching CLI", ClientCertEnvVar)
+		return nil, nil, fmt.Errorf("localrpc: %s must be set by the launching CLI", ClientCertEnvVar)
 	}
 	clientCert, err := ParseCertificatePEM(encoded)
 	if err != nil {
-		return nil, nil, fmt.Errorf("channel: %s does not contain a certificate: %w", ClientCertEnvVar, err)
+		return nil, nil, fmt.Errorf("localrpc: %s does not contain a certificate: %w", ClientCertEnvVar, err)
 	}
 
 	identity, err := NewIdentity()

@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/ocelhq/ocel/pkg/channel"
+	"github.com/ocelhq/ocel/pkg/localrpc"
 )
 
 func listen() (net.Listener, string, error) {
@@ -22,5 +22,5 @@ func listen() (net.Listener, string, error) {
 		return nil, "", fmt.Errorf("listen on %s: %w", path, err)
 	}
 
-	return ln, channel.FormatUnixAddr(path), nil
+	return ln, localrpc.FormatUnixAddress(path), nil
 }

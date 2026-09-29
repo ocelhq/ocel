@@ -25,8 +25,8 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/ocelhq/ocel/cli/internal/version"
-	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -154,7 +154,7 @@ func RunFakeProvider() int {
 	}
 	defer bound.Close()
 
-	ln, identity, err := channel.SecureListener(bound)
+	ln, identity, err := localrpc.SecureListener(bound)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "fake provider:", err)
 		return 1
@@ -163,7 +163,7 @@ func RunFakeProvider() int {
 
 	fake := &deployFakeProviderServer{mode: os.Getenv(FakeProviderModeEnvVar)}
 
-	fmt.Println(channel.FormatReadinessLine(version.Version, channel.FormatUnixAddr(sockPath), identity.CertificateDER()))
+	fmt.Println(localrpc.FormatReadinessLine(version.Version, localrpc.FormatUnixAddress(sockPath), identity.CertificateDER()))
 
 	srv := &http.Server{Handler: fakeProviderRoutes(fake)}
 	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
