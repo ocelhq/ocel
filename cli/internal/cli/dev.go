@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"os"
@@ -131,7 +132,14 @@ func runLeader(ctx context.Context, deps cmddeps.Deps, result election.Result, r
 	if err != nil {
 		return err
 	}
-	watching, err := startWatching(background, srv, cfg, run, stdout, stderr)
+	updates := make(chan map[string]string, 1)
+	watching, err := startWatching(background, srv, cfg, run, stdout, stderr, func(env map[string]string) {
+		select {
+		case <-updates:
+		default:
+		}
+		updates <- env
+	})
 	if err != nil {
 		return fmt.Errorf("watch discovery paths: %w", err)
 	}
@@ -141,16 +149,26 @@ func runLeader(ctx context.Context, deps cmddeps.Deps, result election.Result, r
 	}()
 	srv.PushEnv(resolved)
 
-	appCmd := exec.CommandContext(ctx, appArgs[0], appArgs[1:]...)
-	appCmd.Env = applyEnv(os.Environ(), resolved)
-	appCmd.Stdin = stdin
-	appCmd.Stdout = stdout
-	appCmd.Stderr = stderr
-	child, err := spawnAppChild(ctx, appCmd, stdin, deps.StdinIsTerminal(stdin))
+	child, err := startAppChild(ctx, deps, appArgs, resolved, stdin, stdout, stderr)
 	if err != nil {
 		return err
 	}
-	return appExitError(ctx, child.wait())
+	for {
+		select {
+		case err := <-child.err:
+			return appExitError(ctx, err)
+		case env := <-updates:
+			if maps.Equal(env, resolved) {
+				continue
+			}
+			resolved = env
+			child.stop()
+			child, err = startAppChild(ctx, deps, appArgs, resolved, stdin, stdout, stderr)
+			if err != nil {
+				return err
+			}
+		}
+	}
 }
 
 func resolveOnce(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, run invocation, stdout, stderr io.Writer) (map[string]string, error) {
@@ -282,7 +300,7 @@ func reportLiveValues(stdout io.Writer, liveKeys []string) {
 	fmt.Fprintf(stdout, "resolved %s the way dev resolves every other value. Deployed, a rotated value is picked up within a bounded window.\n", strings.Join(keys, ", "))
 }
 
-func watchAndReResolve(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, run invocation, stdout, stderr io.Writer) (*watcher.Watcher, error) {
+func watchAndReResolve(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, run invocation, stdout, stderr io.Writer, onResolved func(map[string]string)) (*watcher.Watcher, error) {
 	roots, err := discovery.RootsOf(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("resolve watch directories: %w", err)
@@ -308,6 +326,7 @@ func watchAndReResolve(ctx context.Context, srv *devserver.Server, cfg *projectc
 			return
 		}
 		srv.PushEnv(resolved)
+		onResolved(resolved)
 	}, OnError: func(err error) {
 		fmt.Fprintln(stderr, "watch error:", err)
 	}})
@@ -328,7 +347,7 @@ func runFollower(ctx context.Context, deps cmddeps.Deps, leader devlock.Lease, a
 		return fmt.Errorf("connect to leader: %w", err)
 	}
 
-	child, err := startFollowerChild(ctx, deps, appArgs, first, stdin, stdout, stderr)
+	child, err := startAppChild(ctx, deps, appArgs, first, stdin, stdout, stderr)
 	if err != nil {
 		return err
 	}
@@ -356,7 +375,7 @@ func runFollower(ctx context.Context, deps cmddeps.Deps, leader devlock.Lease, a
 			return appExitError(ctx, err)
 		case env := <-updates:
 			child.stop()
-			child, err = startFollowerChild(ctx, deps, appArgs, env, stdin, stdout, stderr)
+			child, err = startAppChild(ctx, deps, appArgs, env, stdin, stdout, stderr)
 			if err != nil {
 				return err
 			}
@@ -371,7 +390,7 @@ func runFollower(ctx context.Context, deps cmddeps.Deps, leader devlock.Lease, a
 	}
 }
 
-func startFollowerChild(ctx context.Context, deps cmddeps.Deps, appArgs []string, env map[string]string, stdin io.Reader, stdout, stderr io.Writer) (*appChild, error) {
+func startAppChild(ctx context.Context, deps cmddeps.Deps, appArgs []string, env map[string]string, stdin io.Reader, stdout, stderr io.Writer) (*appChild, error) {
 	appCmd := exec.CommandContext(ctx, appArgs[0], appArgs[1:]...)
 	appCmd.Env = applyEnv(os.Environ(), env)
 	appCmd.Stdin = stdin

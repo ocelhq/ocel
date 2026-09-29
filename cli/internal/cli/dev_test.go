@@ -435,6 +435,47 @@ export default { slug: "test-app" };
 		}
 	})
 
+	t.Run("editing the dotfile restarts the leader's own app with the new value", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("uses a POSIX shell fixture command")
+		}
+
+		root := t.TempDir()
+		t.Cleanup(func() { _ = devlock.Remove(root) })
+
+		deps := devDeps()
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default { slug: "test-app" };
+`)
+		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"API_TOKEN","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+		clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "API_TOKEN=first\n")
+
+		envDumpPath := filepath.Join(root, "leader-env.out")
+		leaderAppArgs := []string{"sh", "-c", "while true; do env > " + envDumpPath + "; sleep 0.02; done"}
+
+		leaderCtx, cancelLeader := context.WithCancel(context.Background())
+		defer cancelLeader()
+
+		var leaderStdout, leaderStderr syncBuffer
+		leaderDone := make(chan error, 1)
+		go func() {
+			leaderDone <- runDev(leaderCtx, deps, false, root, leaderAppArgs, &leaderStdout, &leaderStderr, strings.NewReader(""))
+		}()
+
+		waitForEnvValue(t, envDumpPath, "API_TOKEN", "first")
+
+		clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "API_TOKEN=second\n")
+
+		waitForEnvValue(t, envDumpPath, "API_TOKEN", "second")
+
+		cancelLeader()
+		select {
+		case <-leaderDone:
+		case <-time.After(5 * time.Second):
+			t.Fatal("leader runDev did not exit after cancellation")
+		}
+	})
+
 	t.Run("a refusal the edit fixes stops refusing", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("uses a POSIX shell fixture command")
@@ -504,9 +545,9 @@ export default { slug: "test-app" };
 		}
 
 		stalled := startWatching
-		startWatching = func(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, run invocation, stdout, stderr io.Writer) (*watcher.Watcher, error) {
+		startWatching = func(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, run invocation, stdout, stderr io.Writer, onResolved func(map[string]string)) (*watcher.Watcher, error) {
 			time.Sleep(300 * time.Millisecond)
-			return stalled(ctx, srv, cfg, run, stdout, stderr)
+			return stalled(ctx, srv, cfg, run, stdout, stderr, onResolved)
 		}
 		t.Cleanup(func() { startWatching = stalled })
 
