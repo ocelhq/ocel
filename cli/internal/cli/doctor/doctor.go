@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
+	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -246,7 +247,7 @@ func configFailure(err error) (string, string) {
 	message := firstLine(err.Error())
 	var missing projectconfig.NoConfigError
 	if errors.As(err, &missing) {
-		return "no " + missing.Listed() + " found in this directory or any parent",
+		return "no " + english.Or(missing.Names) + " found in this directory or any parent",
 			"run `ocel init` to set up this project"
 	}
 	if head, hint, ok := splitHint(message); ok {

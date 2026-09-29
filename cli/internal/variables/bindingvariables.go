@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	"slices"
-	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/english"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
@@ -95,10 +95,7 @@ func sites(readers []string) string {
 	for i, site := range readers {
 		quoted[i] = "`" + site + "`"
 	}
-	if len(quoted) < 2 {
-		return strings.Join(quoted, "")
-	}
-	return strings.Join(quoted[:len(quoted)-1], ", ") + " and " + quoted[len(quoted)-1]
+	return english.And(quoted)
 }
 
 func collision(definitions []*resourcesv1.VariableDefinition, scope Scope) error {

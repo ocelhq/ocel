@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
@@ -49,19 +49,19 @@ func detectFramework(dir string) (string, error) {
 	case 0:
 		return "", fmt.Errorf(
 			"nothing in %s says what this app is built with: it contains no %s, so set \"framework\" to one of %s",
-			dir, strings.Join(language.ManifestNames(), ", "), quoted(appbuild.Frameworks()),
+			dir, english.Or(language.ManifestNames()), english.Or(english.Quoted(appbuild.Frameworks())),
 		)
 	default:
 		return "", fmt.Errorf(
 			"%s contains the manifests of %s at once, and one app is built one way: set \"framework\" to the one this app is",
-			dir, quoted(named),
+			dir, english.And(english.Quoted(named)),
 		)
 	}
 }
 
 func IsNextApp(dir string) (bool, error) {
 	for _, name := range nextConfigNames {
-		if regularFile(filepath.Join(dir, name)) {
+		if isRegularFile(filepath.Join(dir, name)) {
 			return true, nil
 		}
 	}
@@ -82,24 +82,14 @@ func IsNextApp(dir string) (bool, error) {
 	return dep || devDep, nil
 }
 
-func regularFile(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && info.Mode().IsRegular()
-}
-
-func directory(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && info.IsDir()
-}
-
 func frameworkOf(app string, dir string, named string, compute string) (string, error) {
 	if named != "" {
 		if !appbuild.KnownFramework(named) {
-			return "", fmt.Errorf("app %q declares framework %q, which nothing builds: the frameworks are %s", app, named, quoted(appbuild.Frameworks()))
+			return "", fmt.Errorf("app %q declares framework %q, which nothing builds: the frameworks are %s", app, named, english.And(english.Quoted(appbuild.Frameworks())))
 		}
 		return named, nil
 	}
-	if compute == string(provider.ComputeContainer) || !directory(dir) {
+	if compute == string(provider.ComputeContainer) || !isDir(dir) {
 		return "", nil
 	}
 	framework, err := detectFramework(dir)
@@ -114,15 +104,4 @@ func architectureOf(app string, declared string) (string, error) {
 		return declared, nil
 	}
 	return "", fmt.Errorf("app %q declares arch %q, which names no architecture: the architectures are %q and %q", app, declared, arch.X8664, arch.ARM64)
-}
-
-func quoted(values []string) string {
-	said := make([]string, 0, len(values))
-	for _, value := range values {
-		said = append(said, fmt.Sprintf("%q", value))
-	}
-	if len(said) < 2 {
-		return strings.Join(said, "")
-	}
-	return strings.Join(said[:len(said)-1], ", ") + " and " + said[len(said)-1]
 }

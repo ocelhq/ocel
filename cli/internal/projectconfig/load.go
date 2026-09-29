@@ -11,6 +11,7 @@ import (
 	"github.com/tailscale/hujson"
 
 	"github.com/ocelhq/ocel/cli/internal/dotfile"
+	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/pkg/configdoc"
 	"github.com/ocelhq/ocel/pkg/envsource"
 )
@@ -58,14 +59,7 @@ type NoConfigError struct {
 }
 
 func (e NoConfigError) Error() string {
-	return fmt.Sprintf("no %s found in %s or any parent directory — %s", e.Listed(), e.StartDir, initHint)
-}
-
-func (e NoConfigError) Listed() string {
-	if len(e.Names) < 2 {
-		return strings.Join(e.Names, "")
-	}
-	return strings.Join(e.Names[:len(e.Names)-1], ", ") + " or " + e.Names[len(e.Names)-1]
+	return fmt.Sprintf("no %s found in %s or any parent directory — %s", english.Or(e.Names), e.StartDir, initHint)
 }
 
 type form struct {
@@ -124,7 +118,7 @@ func Counterparts(configPath string) []string {
 	var found []string
 	for _, other := range forms() {
 		name := fileName(target, other)
-		if other.suffix != mine.suffix && isFile(filepath.Join(dir, name)) {
+		if other.suffix != mine.suffix && isRegularFile(filepath.Join(dir, name)) {
 			found = append(found, name)
 		}
 	}
@@ -166,7 +160,7 @@ func resolve(ctx context.Context, startDir, explicitPath string, optional bool) 
 func defaultConfigFile(dir string) string {
 	for _, f := range forms() {
 		path := filepath.Join(dir, fileName("", f))
-		if isFile(path) {
+		if isRegularFile(path) {
 			return path
 		}
 	}
@@ -185,7 +179,7 @@ func explicitConfigFile(startDir, explicitPath string) (string, error) {
 	if isDir(abs) {
 		return "", fmt.Errorf("config file %s (from --config / OCEL_CONFIG) is a directory, not a config file", abs)
 	}
-	if !isFile(abs) {
+	if !isRegularFile(abs) {
 		return "", fmt.Errorf("config file %s (from --config / OCEL_CONFIG) not found", abs)
 	}
 	return abs, nil
@@ -265,9 +259,9 @@ func findProjectRoot(startDir string) (string, error) {
 	}
 }
 
-func isFile(path string) bool {
+func isRegularFile(path string) bool {
 	info, err := os.Stat(path)
-	return err == nil && !info.IsDir()
+	return err == nil && info.Mode().IsRegular()
 }
 
 func isDir(path string) bool {
