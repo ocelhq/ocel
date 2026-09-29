@@ -361,6 +361,27 @@ func TestARunsLogAndTraceAreReadableByTheirOwnerAlone(t *testing.T) {
 	}
 }
 
+func TestTheTraceFileIsWrittenOnceWhenTheRunCloses(t *testing.T) {
+	ctx, r, err := Start(context.Background(), t.TempDir(), "ocel deploy")
+	if err != nil {
+		t.Fatalf("Start() = %v", err)
+	}
+	tracePath := strings.TrimSuffix(r.LogPath(), ".ndjson") + ".otlp.json"
+	for range 3 {
+		_, span := r.StartSpan(ctx, "building")
+		span.End()
+	}
+	if _, err := os.Stat(tracePath); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("stat trace before Close = %v, want no file: rewriting it per span grows with the square of the run", err)
+	}
+	if err := r.Close(); err != nil {
+		t.Fatalf("Close() = %v", err)
+	}
+	if got := len(readTraceDoc(t, r)); got != 4 {
+		t.Errorf("trace holds %d spans, want the root and all 3 ended ones", got)
+	}
+}
+
 func readLines(t *testing.T, path string) []string {
 	t.Helper()
 	raw, err := os.ReadFile(path)

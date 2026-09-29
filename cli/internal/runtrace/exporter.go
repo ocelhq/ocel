@@ -55,19 +55,12 @@ func (e *fileExporter) ExportSpans(_ context.Context, spans []sdktrace.ReadOnlyS
 	for _, s := range spans {
 		e.spans = append(e.spans, convertSpan(s))
 	}
-	return e.flushLocked()
-}
-
-func (e *fileExporter) Shutdown(context.Context) error {
 	return nil
 }
 
-// flushLocked rewrites the whole trace document on every export.
-// TODO: this is O(n^2) over the run once per-resource provider spans land
-// (#241) — each ingested span re-marshals every span that came before it.
-// Append-only NDJSON (like the run's own log) would fix it; left as JSON
-// array output for now since nothing has hit the cost yet.
-func (e *fileExporter) flushLocked() error {
+func (e *fileExporter) Shutdown(context.Context) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	doc := otlpTracesData{
 		ResourceSpans: []otlpResourceSpans{{
 			Resource: otlpResource{
