@@ -83,6 +83,13 @@ func MissingVariablesRemedy(remedy string) string {
 	return missingIndent + "Fill them in: " + remedy
 }
 
+func VariableDescriptionLine(description string) string {
+	if description == "" {
+		return ""
+	}
+	return "\n" + missingIndent + description
+}
+
 func VariableFolderName(folder string) string {
 	if folder == "" {
 		return "root"

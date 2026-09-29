@@ -12,7 +12,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
-func TestWritingWithoutTheVarsKey(t *testing.T) {
+func TestAWriteWithoutTheVariablesKeyOffersTheBootstrapThatAddsIt(t *testing.T) {
 	t.Run("a write with no key to seal under names the bootstrap that adds one", func(t *testing.T) {
 		t.Setenv(clitest.FakeBootstrapEnvVar, "current")
 		root := setUpEnvFixture(t)
@@ -120,7 +120,7 @@ func TestWritingWithoutTheVarsKey(t *testing.T) {
 	})
 }
 
-func TestAProviderWithoutTheVarsKeyFeature(t *testing.T) {
+func TestAProviderWithoutTheVariablesKeyFeatureIsOfferedNothing(t *testing.T) {
 	t.Run("a write against a catalogue that never lists the key goes straight through", func(t *testing.T) {
 		t.Setenv(clitest.FakeBootstrapEnvVar, "current")
 		t.Setenv(clitest.FakeCatalogueEnvVar, clitest.FakeCatalogueNone)

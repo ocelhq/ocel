@@ -37,7 +37,7 @@ func seedProductionValue(t *testing.T, key, folder, value string) {
 		&envvarsv1.Coordinate{Slug: clitest.FixtureSlug, Key: key, Folder: folder}, value)
 }
 
-func TestGroupProgressOnSet(t *testing.T) {
+func TestSettingAGroupMemberNamesWhatTheGroupStillLacks(t *testing.T) {
 	t.Run("a half-filled group names what is still missing", func(t *testing.T) {
 		root := setUpGroupedFixture(t)
 
@@ -113,7 +113,7 @@ func TestGroupProgressOnSet(t *testing.T) {
 	})
 }
 
-func TestGroupProgressOnRm(t *testing.T) {
+func TestRemovingAGroupMemberNamesWhatTheGroupStillLacks(t *testing.T) {
 	t.Run("removing one member leaves the group partial", func(t *testing.T) {
 		root := setUpGroupedFixture(t)
 		seedProductionValue(t, "GITHUB_CLIENT_ID", "", "id")
@@ -160,7 +160,7 @@ func TestEnvRmLeavesTheProjectUnbuiltWhenNothingWasRemoved(t *testing.T) {
 	}
 }
 
-func TestEnvLsGathersGroups(t *testing.T) {
+func TestTheListingGathersEachGroupsMembers(t *testing.T) {
 	root := setUpGroupedFixture(t)
 	seedProductionValue(t, "LOG_LEVEL", "", "debug")
 	seedProductionValue(t, "GITHUB_CLIENT_ID", "", "id")

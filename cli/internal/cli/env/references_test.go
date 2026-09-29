@@ -42,7 +42,7 @@ func envGet(t *testing.T, root, key string, opts envOptions) string {
 	return stdout.String()
 }
 
-func TestRunEnvRef(t *testing.T) {
+func TestAReferenceReadsAValueAnotherProjectOwns(t *testing.T) {
 	t.Run("reads a value another project owns and keeps reading it", func(t *testing.T) {
 		root := setUpEnvFixture(t)
 		ownedElsewhere(t, "STRIPE_API_KEY", "sk_live_first")
@@ -101,7 +101,7 @@ func TestRunEnvRef(t *testing.T) {
 	})
 }
 
-func TestRunEnvRefs(t *testing.T) {
+func TestListingReferencesNamesWhatReadsAValue(t *testing.T) {
 	t.Run("lists what reads a value, and says so plainly when nothing does", func(t *testing.T) {
 		root := setUpEnvFixture(t)
 		envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
@@ -141,7 +141,7 @@ func TestRunEnvRefs(t *testing.T) {
 	})
 }
 
-func TestEnvReferences(t *testing.T) {
+func TestEveryEnvCommandTreatsAReferenceAsAPointer(t *testing.T) {
 	t.Run("get says a cell is a reference and where its value is edited", func(t *testing.T) {
 		root := setUpEnvFixture(t)
 		ownedElsewhere(t, "STRIPE_API_KEY", "sk_live_secret")
