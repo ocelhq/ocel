@@ -1,3 +1,4 @@
+import { SHIELDED_BOX_CHECKS, SHIELDED_ORIGIN_CHECKS } from "../checks/originShield";
 import { JOURNEY_REGISTRY, REGISTRY_TOKEN_ENV } from "../registry/settings";
 import { DEFAULT_VARIANT, TARGETS, type Variant, variant } from "./types";
 
@@ -14,8 +15,20 @@ export const apiGateway = variant("api-gateway", {
 });
 
 export const cloudflare = variant("cloudflare", {
-  offeredOn: ["aws", "vps", "gcp"],
+  offeredOn: ["aws"],
   config: { edge: "cloudflare" },
+});
+
+export const cloudflareOnABox = variant("cloudflare", {
+  offeredOn: ["vps"],
+  config: { edge: "cloudflare" },
+  checks: SHIELDED_BOX_CHECKS,
+});
+
+export const cloudflareOnGoogleCloud = variant("cloudflare", {
+  offeredOn: ["gcp"],
+  config: { edge: "cloudflare" },
+  checks: SHIELDED_ORIGIN_CHECKS,
 });
 
 export const registry = variant("registry", {

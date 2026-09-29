@@ -17,7 +17,15 @@ import { PulumiStack } from "../targets/aws/stacks/pulumi";
 import { SstStack } from "../targets/aws/stacks/sst";
 import { awsWorld } from "../targets/aws/world";
 import { type Fixture, fixture } from "./types";
-import { apiGateway, cloudflare, container, defaults, registry } from "./variants";
+import {
+  apiGateway,
+  cloudflare,
+  cloudflareOnABox,
+  cloudflareOnGoogleCloud,
+  container,
+  defaults,
+  registry,
+} from "./variants";
 
 const RUNTIME_NEUTRAL_CHECKS = [...healthChecks, ...staticChecks, ...httpProbeChecks];
 const NODE_CHECKS = [...RUNTIME_NEUTRAL_CHECKS, ...nativeModuleChecks, ...nodeRuntimeChecks];
@@ -41,8 +49,8 @@ export const deploy = {
     on: {
       dev: [defaults],
       aws: [container, apiGateway],
-      vps: [defaults, registry, cloudflare],
-      gcp: [defaults, container, cloudflare],
+      vps: [defaults, registry, cloudflareOnABox],
+      gcp: [defaults, container, cloudflareOnGoogleCloud],
     },
     sample: { group: "node-http" },
   }),
@@ -107,7 +115,7 @@ export const lifecycle = {
     ],
     on: {
       aws: [defaults, container, cloudflare],
-      vps: [defaults, cloudflare],
+      vps: [defaults, cloudflareOnABox],
     },
   }),
 };
