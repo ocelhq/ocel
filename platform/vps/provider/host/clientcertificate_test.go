@@ -111,9 +111,22 @@ func TestMergingAShieldCarriesItsCertificatesToEveryHostnameThatTrustedOneOfThem
 	}
 
 	retired := MergeShield(rotated, Shield{Hostname: "shop.example.com", Owner: "ocel-shop-production", ClientCertificates: []string{"new"}})
+	retired = MergeShield(retired, Shield{Hostname: "blog.example.com", Owner: "ocel-blog-production", ClientCertificates: []string{"new"}})
 	for _, shield := range retired {
 		if shield.Hostname == "blog.example.com" && !slices.Equal(shield.ClientCertificates, []string{"new"}) {
-			t.Errorf("blog.example.com trusts %v once the old certificate is retired, want the successor alone", shield.ClientCertificates)
+			t.Errorf("blog.example.com trusts %v once its own claim retired the old certificate, want the successor alone", shield.ClientCertificates)
+		}
+	}
+}
+
+func TestMergingAShieldFromOneZoneKeepsEveryCertificateAnotherZoneStillPresents(t *testing.T) {
+	t.Parallel()
+
+	shields := []Shield{{Hostname: "shop.example.org", Owner: "ocel-org-production", ClientCertificates: []string{"uploaded to both", "org's own"}}}
+	merged := MergeShield(shields, Shield{Hostname: "shop.example.com", Owner: "ocel-com-production", ClientCertificates: []string{"uploaded to both"}})
+	for _, shield := range merged {
+		if shield.Hostname == "shop.example.org" && !slices.Contains(shield.ClientCertificates, "org's own") {
+			t.Errorf("shop.example.org trusts %v once example.com was shielded, want its own zone's certificate still: example.org presents it, and dropping it refuses every request forwarded there", shield.ClientCertificates)
 		}
 	}
 }

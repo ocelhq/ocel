@@ -55,7 +55,7 @@ func MergeShield(shields []Shield, merged Shield) []Shield {
 			continue
 		}
 		if slices.ContainsFunc(shield.ClientCertificates, func(certificate string) bool { return slices.Contains(merged.ClientCertificates, certificate) }) {
-			shield.ClientCertificates = slices.Clone(merged.ClientCertificates)
+			shield.ClientCertificates = slices.Compact(slices.Sorted(slices.Values(slices.Concat(shield.ClientCertificates, merged.ClientCertificates))))
 		}
 		kept = append(kept, shield)
 	}
