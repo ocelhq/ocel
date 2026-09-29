@@ -23,12 +23,12 @@ const (
 )
 
 func placeable(path string) error {
-	dir := os.Getenv(switchboard.PlaceEnv)
-	if dir == "" {
-		return fmt.Errorf("no directory is mounted to place files in: %s is unset", switchboard.PlaceEnv)
+	dir, err := placeDir()
+	if err != nil {
+		return err
 	}
 	name := filepath.Base(path)
-	if !filepath.IsAbs(path) || filepath.Clean(path) != path || filepath.Dir(path) != filepath.Clean(dir) || strings.HasPrefix(name, ".") {
+	if !filepath.IsAbs(path) || filepath.Clean(path) != path || filepath.Dir(path) != dir || strings.HasPrefix(name, ".") {
 		return fmt.Errorf("%s is not a file directly in %s, the one directory mounted to place files in", path, dir)
 	}
 	return nil

@@ -353,7 +353,7 @@ func TestEveryPathOutsideTheMountedDirectoryIsRefusedAndNothingIsTouched(t *test
 		"the directory's parent":  filepath.Dir(dir),
 		"nothing but a separator": "/",
 	} {
-		for _, verb := range []string{"place", "unplace", "placed", "beside"} {
+		for _, verb := range []string{"place", "unplace", "placed", "beside", "place-origin", "unplace-origins"} {
 			code, out, errs := fed(t, strings.NewReader("ocel's routes\n"), verb, path)
 			if code != exitRefused || out != "" {
 				t.Errorf("%s of %s (%s) = %d, %q, want refused with nothing said", verb, what, path, code, out)
@@ -375,7 +375,7 @@ func TestASwitchboardWithNoDirectoryMountedPlacesNothing(t *testing.T) {
 	t.Setenv(switchboard.PlaceEnv, "")
 	at := filepath.Join(t.TempDir(), "ocel.yml")
 
-	for _, verb := range []string{"place", "unplace", "placed", "beside"} {
+	for _, verb := range []string{"place", "unplace", "placed", "beside", "place-origin", "unplace-origins"} {
 		if code, _, errs := fed(t, strings.NewReader("ocel's routes\n"), verb, at); code != exitRefused || !strings.Contains(errs, switchboard.PlaceEnv) {
 			t.Errorf("%s with no directory mounted = %d, %q, want refused naming %s", verb, code, errs, switchboard.PlaceEnv)
 		}
