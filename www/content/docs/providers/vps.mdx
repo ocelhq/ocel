@@ -55,6 +55,28 @@ changes anything: stop it, or run ocel [behind it](#behind-your-own-proxy).
 | `ocel-envsourcesync@<tier>.service` | Once a minute, copies each env source a deploy registered into the tier's values. It runs as root, and may write `/var/lib/ocel/<tier>/keyvalues` and nothing else. |
 | `ocel-backups.timer` | Dumps every resource once a day, and at boot if a day was missed. |
 
+## Behind Cloudflare
+
+Name the `cloudflare` edge and each hostname is forwarded to the box through Cloudflare: ocel
+writes a proxied record pointing at the box, and a deploy flips which release answers it on
+the box, with no DNS change. The proxy on the box answers that hostname only to a client
+presenting the certificate your Cloudflare zone presents to origins, so a request that
+skips Cloudflare is refused. Set the zone's SSL mode to Full (strict). Previews are not
+forwarded through Cloudflare yet.
+
+```json title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/0.0.0/ocel.schema.json",
+  "slug": "my-app",
+  "provider": { "vps": { "ssh": "my-box" } },
+  "edge": "cloudflare",
+  "apps": [{ "name": "web", "path": ".", "domains": { "production": "shop.example.com" } }]
+}
+```
+
+`ocel doctor` checks a hostname Cloudflare forwards by asking which router answers it, since
+it resolves to Cloudflare rather than to the box.
+
 ## Behind your own proxy
 
 If the machine already runs a proxy on ports 80 and 443, ocel can sit behind it instead of

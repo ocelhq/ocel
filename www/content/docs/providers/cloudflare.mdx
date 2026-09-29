@@ -17,6 +17,15 @@ Cloudflare is an edge, not an origin: it fronts whichever provider runs your app
 
 The token and the account id come from `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in the environment, not from the config.
 
+On a [VPS](/docs/providers/vps) or [Google Cloud](/docs/providers/gcp), Cloudflare runs no
+worker: it forwards each hostname to the origin through a proxied record. The origin answers
+only what arrives with the certificate your zone presents to origins (zone-level
+authenticated origin pulls, with a certificate of your own rather than Cloudflare's shared
+one). ocel uploads one to the zone if it has none and turns zone-level pulls on, and a
+promote purges what Cloudflare cached for the hostnames it flipped. The zone's SSL mode must
+be Full or Full (strict). The token needs Zone Read, Zone Settings Read, DNS Edit, SSL and
+Certificates Edit and Cache Purge on the zone, and Account Settings Read.
+
 Hostname records go into the origin provider's own DNS unless you say otherwise. Write
 them into Cloudflare instead:
 

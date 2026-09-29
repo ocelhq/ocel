@@ -72,6 +72,31 @@ project-level `domains.preview` is not served here, because that hostname leaves
 project out of the label every service in the tier is named by.
 
 [`cloudflare`](/docs/providers/cloudflare) is the edge bought independently of Google.
+Name it and a hostname is forwarded through Cloudflare to a load balancer of its own, which
+`ocel bootstrap` provisions per tier at the same price as the `alb` one. That load balancer
+refuses any client that does not present the certificate your Cloudflare zone presents to
+origins, so a request that skips Cloudflare is turned away. Previews are not forwarded
+through Cloudflare yet.
+
+```json title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/0.0.0/ocel.schema.json",
+  "slug": "my-app",
+  "provider": {
+    "gcp": { "project": "my-project", "region": "europe-west1" }
+  },
+  "edge": "cloudflare",
+  "dns": "cloudflare",
+  "apps": [{ "name": "web", "path": ".", "domains": { "production": "shop.example.com" } }]
+}
+```
+
+That load balancer needs one more service on, and a bootstrap credential that also holds
+`roles/compute.networkAdmin` and `roles/compute.securityAdmin`:
+
+```bash
+gcloud services enable networksecurity.googleapis.com --project my-project
+```
 
 Provisioning the load balancer needs two more services on:
 
