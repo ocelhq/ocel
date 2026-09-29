@@ -12,7 +12,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
-	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
@@ -64,9 +63,9 @@ func (p *Provider) CheckHost(ctx context.Context, req provider.HostCheckRequest)
 			Fix:     "check the machine answers over ssh",
 		}}, nil
 	}
-	checks := dnsVerdicts(ctx, p.lookup(), req.Hostnames, address)
-	if req.Edge == cloudflare.Kind {
-		checks = proxiedVerdicts(ctx, p.lookup(), p.Liveness(), req.Hostnames, address)
+	checks, err := p.hostnameVerdicts(ctx, req, address)
+	if err != nil {
+		return nil, err
 	}
 	if p.host.FrontProxy().Guarantees().OwnsPorts {
 		checks = append(checks, reachVerdict(ctx, p.reach(), address))
@@ -77,6 +76,17 @@ func (p *Provider) CheckHost(ctx context.Context, req provider.HostCheckRequest)
 	}
 	checks = append(checks, front...)
 	return append(checks, p.host.CheckSwitchboard(ctx, req.Tier)), nil
+}
+
+func (p *Provider) hostnameVerdicts(ctx context.Context, req provider.HostCheckRequest, address string) ([]provider.HostCheck, error) {
+	front, err := p.Edges().Open(req.Edge)
+	if err != nil {
+		return nil, err
+	}
+	if front.Facts().ProxiesRecords {
+		return proxiedVerdicts(ctx, p.lookup(), p.Liveness(), req.Hostnames, address), nil
+	}
+	return dnsVerdicts(ctx, p.lookup(), req.Hostnames, address), nil
 }
 
 func askedHostnames(hostnames []string) []string {
