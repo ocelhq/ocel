@@ -78,7 +78,7 @@ func (e *Edge) Bootstrap(ctx context.Context, tier environment.Tier) (edge.Boots
 
 func (e *Edge) raise(ctx context.Context, tier environment.Tier, progress progress.Progress) (Front, error) {
 	var preview previewEntry
-	if tier == environment.TierPreview {
+	if tier == environment.TierPreview && !e.deps.Shielded {
 		recorded, err := e.recordedPreview(ctx)
 		if err != nil {
 			return Front{}, err
