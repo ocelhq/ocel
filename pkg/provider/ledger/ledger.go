@@ -88,6 +88,24 @@ func (l *Ledger) Record(ctx context.Context, app, build string) (router.Deployme
 	return record, true, nil
 }
 
+func (l *Ledger) ReadRecords(ctx context.Context, keys []string) ([]router.DeploymentRecord, error) {
+	records := make([]router.DeploymentRecord, 0, len(keys))
+	for _, key := range keys {
+		app, build, ok := splitRecordKey(key)
+		if !ok {
+			return nil, fmt.Errorf("read the deployment record %q: it names no app and build", key)
+		}
+		record, staged, err := l.Record(ctx, app, build)
+		if err != nil {
+			return nil, err
+		}
+		if staged {
+			records = append(records, record)
+		}
+	}
+	return records, nil
+}
+
 func (l *Ledger) Read(ctx context.Context, pointer string) (Pointer, error) {
 	read, _, err := l.read(ctx, router.ResolvePointer(pointer))
 	return read, err

@@ -54,7 +54,7 @@ func buildDeploySpec(req *contractv1.DeployRequest, promotionID string) (provide
 		return provider.DeploySpec{}, err
 	}
 	for _, app := range manifest.GetApps() {
-		entry, err := appEntry(app, name)
+		entry, err := appEntry(app, name, promotionID)
 		if err != nil {
 			return provider.DeploySpec{}, err
 		}
@@ -62,10 +62,8 @@ func buildDeploySpec(req *contractv1.DeployRequest, promotionID string) (provide
 			entry.Image = container.GetImage()
 			entry.HealthCheckPath = container.GetHealthCheckPath()
 			entry.Arch = container.GetArch()
-			spec.Builds[entry.App] = entry.Image
-		} else {
-			spec.Builds[entry.App] = entry.Build.String()
 		}
+		spec.Builds[entry.App] = entry.Build.String()
 		spec.Apps = append(spec.Apps, entry)
 	}
 	if err := refuseOrphanFunctions(manifest, spec.Builds); err != nil {
@@ -129,7 +127,7 @@ func refuseOrphanFunctions(manifest *contractv1.Manifest, declared map[string]st
 	return nil
 }
 
-func appEntry(app *contractv1.ManifestApp, env string) (provider.AppEntry, error) {
+func appEntry(app *contractv1.ManifestApp, env, promotionID string) (provider.AppEntry, error) {
 	name := app.GetName()
 	if name == "" {
 		return provider.AppEntry{}, refusal.Refuse(refusal.CodeInvalid, "this manifest declares an app with no name, and a stack is named after the app it serves")
@@ -141,7 +139,7 @@ func appEntry(app *contractv1.ManifestApp, env string) (provider.AppEntry, error
 	if err := naming.Validate("app name", name); err != nil {
 		return provider.AppEntry{}, refusal.Refuse(refusal.CodeInvalid, "%s", err.Error())
 	}
-	identity, err := provider.NewBuild(app.GetDeploymentId(), env, fingerprintVariables(app.GetVariables()))
+	identity, err := provider.NewBuild(app.GetDeploymentId(), promotionID, env, fingerprintVariables(app.GetVariables()))
 	if err != nil {
 		return provider.AppEntry{}, err
 	}

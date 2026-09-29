@@ -11,13 +11,19 @@ import (
 const (
 	deploymentID      = "0123456789abcdef0123456789abcdef"
 	otherDeploymentID = "fedcba9876543210fedcba9876543210"
+	promotionID       = "p1"
 )
 
 func built(t *testing.T, deploymentID, environment, values string) provider.Build {
 	t.Helper()
-	build, err := provider.NewBuild(deploymentID, environment, values)
+	return builtUnder(t, promotionID, deploymentID, environment, values)
+}
+
+func builtUnder(t *testing.T, promotionID, deploymentID, environment, values string) provider.Build {
+	t.Helper()
+	build, err := provider.NewBuild(deploymentID, promotionID, environment, values)
 	if err != nil {
-		t.Fatalf("NewBuild(%q, %q, %q) = %v", deploymentID, environment, values, err)
+		t.Fatalf("NewBuild(%q, %q, %q, %q) = %v", deploymentID, promotionID, environment, values, err)
 	}
 	return build
 }
@@ -69,7 +75,7 @@ func TestABuildCannotBeForgedByStructLiteral(t *testing.T) {
 	}
 }
 
-func TestTheSameDeploymentEnvironmentAndValuesAreTheSameBuild(t *testing.T) {
+func TestTheSameDeploymentPromotionEnvironmentAndValuesAreTheSameBuild(t *testing.T) {
 	t.Parallel()
 
 	if a, b := built(t, deploymentID, "prod", "abc"), built(t, deploymentID, "prod", "abc"); a != b {
@@ -77,7 +83,7 @@ func TestTheSameDeploymentEnvironmentAndValuesAreTheSameBuild(t *testing.T) {
 	}
 }
 
-func TestBuildsThatDifferInValuesEnvironmentOrDeploymentNeverShareARelease(t *testing.T) {
+func TestBuildsThatDifferInValuesEnvironmentDeploymentOrPromotionNeverShareARelease(t *testing.T) {
 	t.Parallel()
 
 	for name, pair := range map[string][2]provider.Build{
@@ -86,6 +92,7 @@ func TestBuildsThatDifferInValuesEnvironmentOrDeploymentNeverShareARelease(t *te
 		"production against preview":  {built(t, deploymentID, "prod", ""), built(t, deploymentID, "pr-7", "")},
 		"preview against preview":     {built(t, deploymentID, "pr-7", ""), built(t, deploymentID, "pr-8", "")},
 		"deployment against another":  {built(t, deploymentID, "prod", ""), built(t, otherDeploymentID, "prod", "")},
+		"promotion against another":   {builtUnder(t, "p1", deploymentID, "prod", ""), builtUnder(t, "p2", deploymentID, "prod", "")},
 	} {
 		if pair[0].String() == pair[1].String() {
 			t.Errorf("%s: both render the build %q", name, pair[0])
@@ -111,7 +118,7 @@ func TestNewBuildRefusesPartsNothingCanName(t *testing.T) {
 		{deploymentID + "\n", "prod", ""},
 		{"../" + deploymentID, "prod", ""},
 	} {
-		if _, err := provider.NewBuild(c.deploymentID, c.environment, c.values); err == nil {
+		if _, err := provider.NewBuild(c.deploymentID, promotionID, c.environment, c.values); err == nil {
 			t.Errorf("NewBuild(%q, %q, %q) succeeded, want a refusal", c.deploymentID, c.environment, c.values)
 		}
 	}

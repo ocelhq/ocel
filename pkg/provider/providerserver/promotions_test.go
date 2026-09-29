@@ -14,6 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -554,5 +555,84 @@ func TestARollbackWhoseDroppedBuildCannotBeReclaimedServesAndWarns(t *testing.T)
 	}
 	if warned := strings.Join(rolled.GetWarnings(), "\n"); !strings.Contains(warned, "the stack is locked by another run") {
 		t.Errorf("Rollback() warned %q, want the destroy that failed named", warned)
+	}
+}
+
+func TestARollbackPastTheRetainedPromotionsLeavesTheContainerBuildItDroppedToTheBox(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	edgeProvisioned(t, vendor, environment.TierProduction, "shop")
+	releases := ledger.New(vendor.KeyValues(), environment.TierProduction, "shop")
+	ctx := context.Background()
+	replaces := ""
+	for i := range ledger.KeptPromotions {
+		record := router.DeploymentRecord{App: "web", Build: buildIdentity(i), Image: containerTestImage, Physical: fmt.Sprintf("web-%02d", i)}
+		if err := releases.PutStaged(ctx, record); err != nil {
+			t.Fatal(err)
+		}
+		promotion := router.Promotion{PromotionID: fmt.Sprintf("p%02d", i), Ts: int64(i + 1), Builds: map[string]string{"web": record.Build}}
+		if _, err := releases.Promote(ctx, promotion, "", replaces); err != nil {
+			t.Fatal(err)
+		}
+		replaces = promotion.PromotionID
+	}
+
+	if _, err := client.Rollback(ctx, &contractv1.RollbackRequest{Slug: "shop"}); err != nil {
+		t.Fatalf("Rollback() error = %v", err)
+	}
+
+	if slices.ContainsFunc(vendor.Journal(), func(entry string) bool { return strings.HasPrefix(entry, "destroy ") }) {
+		t.Errorf("the journal reads %v, want the container build the rollback dropped left to the box that runs its image", vendor.Journal())
+	}
+	if _, found, err := releases.Record(ctx, "web", buildIdentity(0)); err != nil || found {
+		t.Errorf("the record of p00's container build = found %v, %v, want it removed once no promotion names it", found, err)
+	}
+}
+
+func TestRollingBackToAnEarlierDeployOfTheSameImageServesTheOriginThatDeployProvisioned(t *testing.T) {
+	daemonWithTheBuiltImage(t, "amd64")
+	builtProject(t)
+	client, vendor := deployServed(t)
+	releases := ledger.New(vendor.KeyValues(), environment.TierProduction, "shop")
+	ctx := context.Background()
+
+	served := func() (string, string) {
+		t.Helper()
+		active, found, err := releases.ReadActive(ctx, "")
+		if err != nil || !found {
+			t.Fatalf("ReadActive() = %v, %v, want a promotion", found, err)
+		}
+		record, staged, err := releases.Record(ctx, "web", active.Builds["web"])
+		if err != nil || !staged {
+			t.Fatalf("the record of web build %s = %v, %v, want it staged", active.Builds["web"], staged, err)
+		}
+		return active.Builds["web"], record.Origin
+	}
+	var builds, origins []string
+	for version := range int64(2) {
+		req := registryDeployRequest()
+		req.Manifest.Apps[0].Variables = []*contractv1.ManifestVariable{{
+			Key: "GREETING", Value: "hello", Version: version + 1, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN,
+		}}
+		result, _ := deploy(t, client, req)
+		if result == nil || !result.GetSuccess() {
+			t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+		}
+		build, origin := served()
+		builds, origins = append(builds, build), append(origins, origin)
+	}
+	if builds[0] == builds[1] {
+		t.Fatalf("both deploys of one image promoted build %s, want each deploy's record under its own build", builds[0])
+	}
+	if origins[0] == origins[1] {
+		t.Fatalf("both deploys provisioned origin %s, so nothing tells their records apart", origins[0])
+	}
+
+	if _, err := client.Rollback(ctx, &contractv1.RollbackRequest{Slug: "shop"}); err != nil {
+		t.Fatalf("Rollback() error = %v", err)
+	}
+
+	if build, origin := served(); build != builds[0] || origin != origins[0] {
+		t.Errorf("after the rollback web serves build %s at %s, want build %s at %s, the origin the first deploy provisioned", build, origin, builds[0], origins[0])
 	}
 }

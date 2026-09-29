@@ -57,7 +57,7 @@ func fingerprinted(deploymentID, values string) provider.Build {
 }
 
 func deployedInto(environment, deploymentID, values string) provider.Build {
-	id, err := provider.NewBuild(deploymentIDFor(deploymentID), environment, values)
+	id, err := provider.NewBuild(deploymentIDFor(deploymentID), "p1", environment, values)
 	if err != nil {
 		panic(err)
 	}

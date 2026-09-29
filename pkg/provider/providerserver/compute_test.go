@@ -168,17 +168,22 @@ func TestTheLedgerRecordAContainerDeployStagesIsTheOneItsPromotionLooksUp(t *tes
 	}
 
 	releases := ledger.New(vendor.KeyValues(), environment.TierProduction, "shop")
-	record, found, err := releases.Record(context.Background(), "web", containerTestImage)
+	active, promoted, err := releases.ReadActive(context.Background(), "")
+	if err != nil || !promoted {
+		t.Fatalf("ReadActive() = %v, %v, want the promotion the deploy made", promoted, err)
+	}
+	build := active.Builds["web"]
+	record, found, err := releases.Record(context.Background(), "web", build)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !found {
-		t.Fatalf("the deployments ledger has no record under %q, which is what a promotion names for a container app: a promotion reads promotion.Builds and finds nothing, so every rollback and every re-point refuses by name", containerTestImage)
+		t.Fatalf("the deployments ledger has no record under %q, which is what the promotion names for the container app: every rollback and every re-point would refuse by name", build)
 	}
-	if record.Image == "" {
-		t.Errorf("the record under %q names no image, so a promotion reading it has nothing to put in front of the app", containerTestImage)
+	if record.Image != pushedCoordinate {
+		t.Errorf("the record under %q names image %q, want %q, the image a promotion reading it puts in front of the app", build, record.Image, pushedCoordinate)
 	}
 	if record.Origin == "" || record.Origin != "https://"+record.Physical+".ctr.fake.invalid" {
-		t.Errorf("the record under %q names origin %q for container %q, want the URL the provider serves the container on: an edge that fronts a container by URL has nothing else to reach", containerTestImage, record.Origin, record.Physical)
+		t.Errorf("the record under %q names origin %q for container %q, want the URL the provider serves the container on: an edge that fronts a container by URL has nothing else to reach", build, record.Origin, record.Physical)
 	}
 }

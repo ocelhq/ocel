@@ -79,7 +79,7 @@ type ReclaimTarget struct {
 	Prefixes []string
 }
 
-func ReclaimTargets(slug, env string, removed, surviving, servingHere []string) ([]ReclaimTarget, error) {
+func ReclaimTargets(slug, env string, removed []router.DeploymentRecord, surviving, servingHere []string) ([]ReclaimTarget, error) {
 	if len(removed) == 0 {
 		return nil, nil
 	}
@@ -87,20 +87,20 @@ func ReclaimTargets(slug, env string, removed, surviving, servingHere []string) 
 	here := releasesOf(servingHere)
 
 	targets := make([]ReclaimTarget, 0, len(removed))
-	for _, key := range removed {
-		app, identity, ok := splitRecordKey(key)
-		if !ok {
-			if containerRelease(key) {
-				continue
-			}
-			return nil, refusal.Refuse(refusal.CodeInvalid, "malformed removed record key %q, want %q", key, recordKeyPrefix+"app/identity")
+	for _, record := range removed {
+		identity, err := provider.ParseBuild(record.Build)
+		if err != nil {
+			return nil, refusal.Refuse(refusal.CodeInvalid, "the record of %s names no build its stack is named for: %s", record.App, err.Error())
+		}
+		if record.Image != "" {
+			continue
 		}
 		release := identity.Release()
 		targets = append(targets, ReclaimTarget{
-			App:      app,
+			App:      record.App,
 			Build:    identity,
-			Stack:    naming.AppStack(env, app, release),
-			Prefixes: reclaimedPrefixes(slug, env, app, release, elsewhere, here),
+			Stack:    naming.AppStack(env, record.App, release),
+			Prefixes: reclaimedPrefixes(slug, env, record.App, release, elsewhere, here),
 		})
 	}
 	return targets, nil
@@ -124,21 +124,6 @@ type appRelease struct {
 	app     string
 	release string
 }
-
-func containerRelease(key string) bool {
-	app, identity, split := strings.Cut(strings.TrimPrefix(key, recordKeyPrefix), "/")
-	if !split || app == "" {
-		return false
-	}
-	repository, digest, pinned := strings.Cut(identity, "@")
-	if !pinned || repository == "" {
-		return false
-	}
-	hex, sha256 := strings.CutPrefix(digest, "sha256:")
-	return sha256 && len(hex) == 64 && strings.IndexFunc(hex, notHex) < 0
-}
-
-func notHex(r rune) bool { return !strings.ContainsRune("0123456789abcdef", r) }
 
 func splitRecordKey(key string) (string, provider.Build, bool) {
 	app, rendered, split := strings.Cut(strings.TrimPrefix(key, recordKeyPrefix), "/")
@@ -181,7 +166,11 @@ func unreclaimedWarning(promotionID string, err error) string {
 }
 
 func reclaimUnnamed(ctx context.Context, p provider.Provider, l projectLedger, pointer string, unnamed router.PruneResult, progress progress.Progress) error {
-	targets, err := ReclaimTargets(l.slug, envFor(l.tier, pointer), unnamed.UnnamedRecordKeys, unnamed.SurvivingRecordKeys, unnamed.SurvivingPointerRecordKeys)
+	removed, err := l.ReadRecords(ctx, unnamed.UnnamedRecordKeys)
+	if err != nil {
+		return err
+	}
+	targets, err := ReclaimTargets(l.slug, envFor(l.tier, pointer), removed, unnamed.SurvivingRecordKeys, unnamed.SurvivingPointerRecordKeys)
 	if err != nil {
 		return err
 	}
