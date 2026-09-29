@@ -84,6 +84,9 @@ func TestGoCodeNamesSharedPathsThroughConstants(t *testing.T) {
 		"pkg/provider/pulumi/runtime.go": {
 			statedir.Name: true,
 		},
+		"platform/aws/provider/deploy_awslive_test.go": {
+			DefaultRootDirName: true,
+		},
 		"tests/fixtures/sdk/go/server/main.go": {
 			"example.com/web/" + DefaultRootDirName: true,
 		},
