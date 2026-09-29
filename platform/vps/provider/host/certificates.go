@@ -207,6 +207,10 @@ func (b frontBox) Routed(ctx context.Context, hostname string) (string, string, 
 
 func (b frontBox) Pause(ctx context.Context, wait time.Duration) error { return b.h.pause(ctx, wait) }
 
+func (b frontBox) Leaf(ctx context.Context, hostname string) ([]byte, error) {
+	return b.h.ServedCertificate(ctx, hostname)
+}
+
 func (b frontBox) Beside(ctx context.Context, path string) ([]switchboard.Neighbour, error) {
 	elevation, err := b.h.reachDocker(ctx)
 	if err != nil {

@@ -24,8 +24,12 @@ func (t Traefik) Validate(_ context.Context, rendered []byte) error { return t.v
 
 func (t Traefik) Reload(ctx context.Context) error { return t.reload(ctx) }
 
-func (Traefik) Inspect(context.Context) (proxy.Checks, error) { return nil, nil }
+func (t Traefik) Inspect(ctx context.Context) (proxy.Checks, error) { return t.inspect(ctx) }
 
-func (Traefik) Certificate(context.Context, string) (proxy.Certificate, error) {
-	return proxy.Certificate{}, nil
+func (t Traefik) Certificate(ctx context.Context, hostname string) (proxy.Certificate, error) {
+	spec, err := t.Box.Spec(ctx)
+	if err != nil {
+		return proxy.Certificate{}, err
+	}
+	return t.certificate(ctx, spec, hostname)
 }

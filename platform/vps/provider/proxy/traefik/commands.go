@@ -1,11 +1,24 @@
 package traefik
 
+import "github.com/ocelhq/ocel/platform/vps/provider/switchboard"
+
 const labelled = `{{json .Name}} {{json .Config.Labels}}`
 
 const serviceLabelled = `{{json .Spec.Name}} {{json .Spec.Labels}}`
 
 func containerLabels() []string {
 	return []string{"sh", "-c", "docker ps --quiet | xargs -r docker inspect --type container --format '" + labelled + "'"}
+}
+
+const (
+	mountFact   = "mount="
+	networkFact = "network="
+)
+
+func switchboardFacts() []string {
+	return []string{"docker", "inspect", "--type", "container", "--format",
+		"{{range .Mounts}}" + mountFact + "{{.Destination}} {{end}}{{range $name, $_ := .NetworkSettings.Networks}}" + networkFact + "{{$name}} {{end}}",
+		switchboard.Name}
 }
 
 func coolifyProxyImage() []string {
