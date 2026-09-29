@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/gofrs/flock"
 )
 
 const dirName = "dev-locks"
@@ -53,18 +55,34 @@ func Create(root string, lease Lease) error {
 	if err != nil {
 		return err
 	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	writing, err := os.CreateTemp(filepath.Dir(path), ".writing-*")
 	if err != nil {
 		return fmt.Errorf("create the dev lock: %w", err)
 	}
-	if _, err := f.WriteString(lease.Addr + "\n" + lease.Token + "\n"); err != nil {
-		f.Close()
+	defer func() { _ = os.Remove(writing.Name()) }()
+	if _, err := writing.WriteString(lease.Addr + "\n" + lease.Token + "\n"); err != nil {
+		_ = writing.Close()
 		return fmt.Errorf("write the dev lock: %w", err)
 	}
-	if err := f.Close(); err != nil {
+	if err := writing.Close(); err != nil {
 		return fmt.Errorf("write the dev lock: %w", err)
+	}
+	if err := os.Link(writing.Name(), path); err != nil {
+		return fmt.Errorf("create the dev lock: %w", err)
 	}
 	return nil
+}
+
+func Lock(root string) (*flock.Flock, error) {
+	path, err := Path(root)
+	if err != nil {
+		return nil, err
+	}
+	lock := flock.New(strings.TrimSuffix(path, ".lock") + ".election")
+	if err := lock.Lock(); err != nil {
+		return nil, fmt.Errorf("wait for another ocel dev to finish electing a leader: %w", err)
+	}
+	return lock, nil
 }
 
 func Remove(root string) error {

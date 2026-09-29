@@ -5,6 +5,8 @@ import (
 	"io/fs"
 	"net"
 	"os"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/devlock"
@@ -113,6 +115,101 @@ func TestElect(t *testing.T) {
 		result := elect(t, here)
 		if result.Role != Leader {
 			t.Fatalf("Role = %v, want leader (a leader in %q must not be inherited by %q)", result.Role, elsewhere, here)
+		}
+	})
+}
+
+func TestElectConcurrently(t *testing.T) {
+	t.Parallel()
+
+	t.Run("of many processes electing at once over a dead leader's lockfile, exactly one claims the lock", func(t *testing.T) {
+		t.Parallel()
+
+		for range 100 {
+			root := root(t)
+			if err := devlock.Create(root, devlock.Lease{Addr: deadAddr(t), Token: "dead"}); err != nil {
+				t.Fatalf("devlock.Create: %v", err)
+			}
+
+			var (
+				wg      sync.WaitGroup
+				claimed atomic.Int32
+			)
+			for range 8 {
+				wg.Go(func() {
+					for range 3 {
+						result, err := Elect(root)
+						if err != nil {
+							t.Errorf("Elect: %v", err)
+							return
+						}
+						if result.Role == Follower {
+							return
+						}
+						err = result.Claim(devlock.Lease{Addr: liveAddr(t), Token: "app-token"})
+						if errors.Is(err, ErrLost) {
+							continue
+						}
+						if err != nil {
+							t.Errorf("Claim: %v", err)
+							return
+						}
+						claimed.Add(1)
+						return
+					}
+				})
+			}
+			wg.Wait()
+			if got := claimed.Load(); got != 1 {
+				t.Fatalf("%d processes claimed the lock, want exactly one leader", got)
+			}
+		}
+	})
+}
+
+func TestFindLeader(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a lockfile whose address answers is found as the leader", func(t *testing.T) {
+		t.Parallel()
+
+		root := root(t)
+		lease := devlock.Lease{Addr: liveAddr(t), Token: "app-token"}
+		if err := devlock.Create(root, lease); err != nil {
+			t.Fatalf("devlock.Create: %v", err)
+		}
+
+		got, found, err := FindLeader(root)
+		if err != nil {
+			t.Fatalf("FindLeader: %v", err)
+		}
+		if !found || got != lease {
+			t.Fatalf("FindLeader = %+v, %v, want %+v found", got, found, lease)
+		}
+	})
+
+	t.Run("looking for a leader leaves a lockfile whose address is dead in place", func(t *testing.T) {
+		t.Parallel()
+
+		root := root(t)
+		lease := devlock.Lease{Addr: deadAddr(t), Token: "app-token"}
+		if err := devlock.Create(root, lease); err != nil {
+			t.Fatalf("devlock.Create: %v", err)
+		}
+
+		if _, found, err := FindLeader(root); err != nil || found {
+			t.Fatalf("FindLeader found = %v, err = %v, want no leader and no error", found, err)
+		}
+		if got, err := devlock.Read(root); err != nil || got != lease {
+			t.Fatalf("devlock.Read after FindLeader = %+v, %v, want the lockfile untouched", got, err)
+		}
+	})
+
+	t.Run("no lockfile finds no leader", func(t *testing.T) {
+		t.Parallel()
+
+		if _, found, err := FindLeader(root(t)); err != nil || found {
+			t.Fatalf("FindLeader found = %v, err = %v, want no leader and no error", found, err)
 		}
 	})
 }

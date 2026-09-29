@@ -39,23 +39,15 @@ func runRun(ctx context.Context, deps cmddeps.Deps, cwd string, appArgs []string
 		return err
 	}
 
-	leader, found, err := runningDevServer(cfg.Dir)
+	leader, found, err := election.FindLeader(cfg.Dir)
 	if err != nil {
-		return err
+		return fmt.Errorf("look for a running dev server: %w", err)
 	}
 	if found {
 		return runOnceAsFollower(ctx, deps, leader, appArgs, stdout, stderr, stdin)
 	}
 
 	return runStandalone(ctx, deps, cfg, targetScope(cfg, cwd), appArgs, stdout, stderr, stdin)
-}
-
-func runningDevServer(root string) (devlock.Lease, bool, error) {
-	result, err := election.Elect(root)
-	if err != nil {
-		return devlock.Lease{}, false, fmt.Errorf("look for a running dev server: %w", err)
-	}
-	return result.Leader, result.Role == election.Follower, nil
 }
 
 func runOnceAsFollower(ctx context.Context, deps cmddeps.Deps, leader devlock.Lease, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {

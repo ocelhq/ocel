@@ -51,6 +51,28 @@ func TestCreate(t *testing.T) {
 		}
 	})
 
+	t.Run("a dev lock read while it is being created is either absent or whole", func(t *testing.T) {
+		t.Parallel()
+
+		for range 200 {
+			root := uniqueRoot(t)
+			created := make(chan error, 1)
+			go func() { created <- Create(root, Lease{Addr: "127.0.0.1:1", Token: "app-token"}) }()
+			for {
+				_, err := Read(root)
+				if errors.Is(err, ErrMalformed) {
+					t.Fatalf("Read during Create = %v, want the lock absent or whole", err)
+				}
+				if err == nil {
+					break
+				}
+			}
+			if err := <-created; err != nil {
+				t.Fatalf("Create: %v", err)
+			}
+		}
+	})
+
 	t.Run("the dev lock is readable only by its owner", func(t *testing.T) {
 		t.Parallel()
 
