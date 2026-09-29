@@ -50,7 +50,7 @@ func (s site) String() string {
 	return fmt.Sprintf("server %s, route %d (%s)", s.server, s.route, strings.Join(s.hosts, ", "))
 }
 
-func (s site) isOcels(placed []string) bool {
+func (s site) isPlacedBlock(placed []string) bool {
 	return s.reachesSwitchboard && len(placed) > 0 && slices.Equal(hostSet(s.hosts), hostSet(placed))
 }
 
@@ -141,7 +141,7 @@ func (s site) covering(hostname string) (string, bool) {
 
 func collision(sites []site, placed []string, hostname string) (site, string, bool) {
 	for _, each := range sites {
-		if each.isOcels(placed) {
+		if each.isPlacedBlock(placed) {
 			continue
 		}
 		if host, covered := each.covering(hostname); covered {

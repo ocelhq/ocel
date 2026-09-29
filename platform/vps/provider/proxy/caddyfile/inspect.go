@@ -29,7 +29,7 @@ func (c Caddyfile) imported(sites []site, claimed []string) provider.HostCheck {
 		Finding: fmt.Sprintf("%s serves every hostname %s names", c.named(), FileName)}
 	var served []string
 	for _, each := range sites {
-		if each.isOcels(claimed) {
+		if each.isPlacedBlock(claimed) {
 			served = append(served, each.hosts...)
 		}
 	}
