@@ -13,6 +13,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/ocelhq/ocel/cli/internal/run"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 )
 
@@ -199,5 +200,6 @@ func spanTitle(ev *streamv1.RunEvent) string {
 	if ev.GetMessage() != "" {
 		return ev.GetMessage()
 	}
-	return "[" + phases[ev.GetPhase()].name + "]"
+	described, _ := run.DescribePhase(ev.GetPhase())
+	return "[" + described.Name + "]"
 }

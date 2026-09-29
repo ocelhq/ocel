@@ -180,11 +180,10 @@ func TestEachPhaseNameHasAColourOfItsOwnAmongThePhasesOneRunPasses(t *testing.T)
 	for _, passed := range runs {
 		seen := map[color.Attribute]progressv1.Phase{}
 		for _, phase := range passed {
-			words, ok := phases[phase]
+			painted, ok := phaseColors[phase]
 			if !ok {
 				t.Fatalf("%v has no colour", phase)
 			}
-			painted := words.color
 			if other, dup := seen[painted]; dup {
 				t.Errorf("%v is painted the same as %v", phase, other)
 			}

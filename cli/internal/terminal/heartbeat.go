@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ocelhq/ocel/cli/internal/run"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
@@ -45,7 +46,8 @@ func (s *Transcript) printHeartbeat(at time.Time) {
 	}
 	for _, phase := range running {
 		tally := s.spans.tallies[phase]
-		doing := cmp.Or(phases[phase].gerund, "running:")
+		described, _ := run.DescribePhase(phase)
+		doing := cmp.Or(described.Gerund, "running:")
 		message := fmt.Sprintf("Still %s %s — %d/%d done, %s elapsed",
 			doing, strings.Join(names[phase], ", "), tally.done, tally.units, formatDuration(at.Sub(tally.since)))
 		s.print(blockLine{text: line{level: progressv1.Level_LEVEL_INFO, phase: phase, message: message, dim: true}.render(s.present)})

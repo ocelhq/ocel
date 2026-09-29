@@ -3,6 +3,7 @@ package terminal
 import (
 	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/run"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
@@ -52,8 +53,8 @@ func (l line) annotation() string {
 	if l.subject != "" {
 		text = l.subject + ": " + text
 	}
-	if words, ok := phases[l.phase]; ok {
-		text = "[" + words.name + "] " + text
+	if described, ok := run.DescribePhase(l.phase); ok {
+		text = "[" + described.Name + "] " + text
 	}
 	return text
 }

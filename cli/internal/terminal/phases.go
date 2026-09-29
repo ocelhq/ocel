@@ -3,30 +3,25 @@ package terminal
 import (
 	"github.com/fatih/color"
 
+	"github.com/ocelhq/ocel/cli/internal/run"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
-type phaseWords struct {
-	name   string
-	gerund string
-	color  color.Attribute
-}
-
-var phases = map[progressv1.Phase]phaseWords{
-	progressv1.Phase_PHASE_CHECK:     {name: "check", gerund: "checking", color: color.FgBlue},
-	progressv1.Phase_PHASE_BUILD:     {name: "build", gerund: "building", color: color.FgMagenta},
-	progressv1.Phase_PHASE_PLAN:      {name: "plan", gerund: "planning", color: color.FgHiCyan},
-	progressv1.Phase_PHASE_PROVISION: {name: "provision", gerund: "provisioning", color: color.FgHiBlue},
-	progressv1.Phase_PHASE_DEPLOY:    {name: "deploy", gerund: "deploying", color: color.FgHiMagenta},
-	progressv1.Phase_PHASE_PROMOTE:   {name: "promote", gerund: "promoting", color: color.FgCyan},
-	progressv1.Phase_PHASE_DESTROY:   {name: "destroy", gerund: "destroying", color: color.FgHiMagenta},
+var phaseColors = map[progressv1.Phase]color.Attribute{
+	progressv1.Phase_PHASE_CHECK:     color.FgBlue,
+	progressv1.Phase_PHASE_BUILD:     color.FgMagenta,
+	progressv1.Phase_PHASE_PLAN:      color.FgHiCyan,
+	progressv1.Phase_PHASE_PROVISION: color.FgHiBlue,
+	progressv1.Phase_PHASE_DEPLOY:    color.FgHiMagenta,
+	progressv1.Phase_PHASE_PROMOTE:   color.FgCyan,
+	progressv1.Phase_PHASE_DESTROY:   color.FgHiMagenta,
 }
 
 func phaseTag(present Presentation, phase progressv1.Phase) (string, bool) {
-	words, ok := phases[phase]
+	description, ok := run.DescribePhase(phase)
 	if !ok {
 		return "", false
 	}
 	p := present.palette()
-	return p.Muted("[") + p.paint(words.name, words.color) + p.Muted("]"), true
+	return p.Muted("[") + p.paint(description.Name, phaseColors[phase]) + p.Muted("]"), true
 }

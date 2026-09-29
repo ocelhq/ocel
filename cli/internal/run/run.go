@@ -250,13 +250,6 @@ func (r *Run) failureLevel() progressv1.Level {
 	return progressv1.Level_LEVEL_ERROR
 }
 
-var changingPhases = map[progressv1.Phase]bool{
-	progressv1.Phase_PHASE_PROVISION: true,
-	progressv1.Phase_PHASE_DEPLOY:    true,
-	progressv1.Phase_PHASE_PROMOTE:   true,
-	progressv1.Phase_PHASE_DESTROY:   true,
-}
-
 func (r *Run) enter(phase progressv1.Phase) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -264,7 +257,7 @@ func (r *Run) enter(phase progressv1.Phase) {
 }
 
 func (r *Run) enterLocked(phase progressv1.Phase) {
-	r.changed = r.changed || changingPhases[phase]
+	r.changed = r.changed || phases[phase].ChangesResources
 }
 
 func (r *Run) mayHaveChanged() bool {
