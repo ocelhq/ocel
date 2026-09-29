@@ -70,7 +70,7 @@ func init() {
 }
 
 func runPromotionsLs(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr io.Writer) error {
-	cfg, err := project.Resolve(ctx, cwd, explicitConfigPath())
+	cfg, err := deps.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}
@@ -119,7 +119,7 @@ func listPromotions(ctx context.Context, deps cmddeps.Deps, cfg *project.Project
 }
 
 func runPromotionsPrune(ctx context.Context, deps cmddeps.Deps, cwd string, opts pruneOptions, stdout io.Writer, stdin io.Reader) (err error) {
-	cfg, err := project.Resolve(ctx, cwd, explicitConfigPath())
+	cfg, err := deps.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}

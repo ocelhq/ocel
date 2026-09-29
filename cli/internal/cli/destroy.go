@@ -97,7 +97,7 @@ func init() {
 }
 
 func runDestroyProduction(ctx context.Context, deps cmddeps.Deps, cwd string, yes, dry bool, stdout io.Writer, stdin io.Reader) error {
-	cfg, err := project.Resolve(ctx, cwd, explicitConfigPath())
+	cfg, err := deps.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}
@@ -123,7 +123,7 @@ func runDestroyProduction(ctx context.Context, deps cmddeps.Deps, cwd string, ye
 }
 
 func runDestroyPreviewProject(ctx context.Context, deps cmddeps.Deps, cwd string, yes, dry bool, stdout io.Writer, stdin io.Reader) error {
-	cfg, err := project.Resolve(ctx, cwd, explicitConfigPath())
+	cfg, err := deps.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}

@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestResolveReadsYAMLWithoutNode(t *testing.T) {
+func TestLoadReadsYAMLWithoutNode(t *testing.T) {
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, YAMLFileName), `# the provider this project deploys into
 slug: yaml-only
@@ -22,7 +22,7 @@ apps:
 `)
 	t.Setenv("PATH", "")
 
-	cfg, err := Resolve(context.Background(), dir, "")
+	cfg, err := Load(context.Background(), dir, "")
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
@@ -43,11 +43,11 @@ apps:
 	}
 }
 
-func TestResolveReadsTheShortYAMLSuffix(t *testing.T) {
+func TestLoadReadsTheShortYAMLSuffix(t *testing.T) {
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, "ocel.yml"), "slug: acme\n")
 
-	cfg, err := Resolve(context.Background(), dir, "")
+	cfg, err := Load(context.Background(), dir, "")
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
@@ -56,12 +56,12 @@ func TestResolveReadsTheShortYAMLSuffix(t *testing.T) {
 	}
 }
 
-func TestResolveReadsAYAMLVariantByName(t *testing.T) {
+func TestLoadReadsAYAMLVariantByName(t *testing.T) {
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, DefaultFileName), `{"slug":"acme"}`)
 	write(t, filepath.Join(dir, "ocel.vps.yaml"), "slug: acme-vps\n")
 
-	cfg, err := Resolve(context.Background(), dir, "ocel.vps.yaml")
+	cfg, err := Load(context.Background(), dir, "ocel.vps.yaml")
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
@@ -70,14 +70,14 @@ func TestResolveReadsAYAMLVariantByName(t *testing.T) {
 	}
 }
 
-func TestResolveRefusesYAMLBesideAnotherFormOfOneBaseName(t *testing.T) {
+func TestLoadRefusesYAMLBesideAnotherFormOfOneBaseName(t *testing.T) {
 	for _, other := range []string{DefaultFileName, "ocel.yml", TSFileName} {
 		t.Run(other, func(t *testing.T) {
 			dir := t.TempDir()
 			write(t, filepath.Join(dir, YAMLFileName), "slug: acme\n")
 			write(t, filepath.Join(dir, other), "slug: acme\n")
 
-			_, err := Resolve(context.Background(), dir, YAMLFileName)
+			_, err := Load(context.Background(), dir, YAMLFileName)
 			if err == nil {
 				t.Fatalf("resolved a directory containing %s and %s", YAMLFileName, other)
 			}
@@ -90,7 +90,7 @@ func TestResolveRefusesYAMLBesideAnotherFormOfOneBaseName(t *testing.T) {
 	}
 }
 
-func TestResolveExpandsAnchorsAndMergeKeysInYAML(t *testing.T) {
+func TestLoadExpandsAnchorsAndMergeKeysInYAML(t *testing.T) {
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, YAMLFileName), `slug: acme
 apps:
@@ -102,7 +102,7 @@ apps:
     name: worker
 `)
 
-	cfg, err := Resolve(context.Background(), dir, "")
+	cfg, err := Load(context.Background(), dir, "")
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
@@ -111,11 +111,11 @@ apps:
 	}
 }
 
-func TestResolveNamesTheKeyPathOfATypoInYAML(t *testing.T) {
+func TestLoadNamesTheKeyPathOfATypoInYAML(t *testing.T) {
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, YAMLFileName), "slug: acme\napps:\n  - name: web\n    path: .\n    runtim: go\n")
 
-	_, err := Resolve(context.Background(), dir, "")
+	_, err := Load(context.Background(), dir, "")
 	if err == nil {
 		t.Fatal("resolved a config with a typo key")
 	}
@@ -124,12 +124,12 @@ func TestResolveNamesTheKeyPathOfATypoInYAML(t *testing.T) {
 	}
 }
 
-func TestResolveReadsVariablesInYAML(t *testing.T) {
+func TestLoadReadsVariablesInYAML(t *testing.T) {
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, YAMLFileName), "slug: ${SLUG}\n")
 	write(t, filepath.Join(dir, ".env"), "SLUG=from-dotenv\n")
 
-	cfg, err := Resolve(context.Background(), dir, "")
+	cfg, err := Load(context.Background(), dir, "")
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
@@ -138,7 +138,7 @@ func TestResolveReadsVariablesInYAML(t *testing.T) {
 	}
 }
 
-func TestResolveRefusesYAMLItCannotReadAsOneDocument(t *testing.T) {
+func TestLoadRefusesYAMLItCannotReadAsOneDocument(t *testing.T) {
 	for name, tc := range map[string]struct{ source, want string }{
 		"malformed":        {"slug: [acme\n", "not valid YAML"},
 		"two documents":    {"slug: acme\n---\nslug: other\n", "more than one YAML document"},
@@ -153,7 +153,7 @@ func TestResolveRefusesYAMLItCannotReadAsOneDocument(t *testing.T) {
 			dir := t.TempDir()
 			write(t, filepath.Join(dir, YAMLFileName), tc.source)
 
-			_, err := Resolve(context.Background(), dir, "")
+			_, err := Load(context.Background(), dir, "")
 			if err == nil {
 				t.Fatal("resolved it")
 			}
@@ -164,8 +164,8 @@ func TestResolveRefusesYAMLItCannotReadAsOneDocument(t *testing.T) {
 	}
 }
 
-func TestResolveNamesTheYAMLFormsWhenNoConfigIsFound(t *testing.T) {
-	_, err := Resolve(context.Background(), t.TempDir(), "")
+func TestLoadNamesTheYAMLFormsWhenNoConfigIsFound(t *testing.T) {
+	_, err := Load(context.Background(), t.TempDir(), "")
 	var missing NoConfigError
 	if !errors.As(err, &missing) {
 		t.Fatalf("error = %v, want a NoConfigError", err)
@@ -177,7 +177,7 @@ func TestResolveNamesTheYAMLFormsWhenNoConfigIsFound(t *testing.T) {
 	}
 }
 
-func TestResolveKeepsTheSourceTextOfWhatJSONHasNoTypeFor(t *testing.T) {
+func TestLoadKeepsTheSourceTextOfWhatJSONHasNoTypeFor(t *testing.T) {
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, YAMLFileName), `slug: 2024-01-01
 provider:
@@ -194,7 +194,7 @@ provider:
     2024-06-01: dated
 `)
 
-	cfg, err := Resolve(context.Background(), dir, "")
+	cfg, err := Load(context.Background(), dir, "")
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
@@ -224,16 +224,16 @@ provider:
 	}
 }
 
-func TestResolveReadsAYAMLNumberAsTheSameJSONNumberWouldBeRead(t *testing.T) {
+func TestLoadReadsAYAMLNumberAsTheSameJSONNumberWouldBeRead(t *testing.T) {
 	yamlDir, jsonDir := t.TempDir(), t.TempDir()
 	write(t, filepath.Join(yamlDir, YAMLFileName), "slug: acme\nprovider:\n  vps: { version: 1.10, port: 22 }\n")
 	write(t, filepath.Join(jsonDir, DefaultFileName), `{"slug":"acme","provider":{"vps":{"version":1.10,"port":22}}}`)
 
-	fromYAML, err := Resolve(context.Background(), yamlDir, "")
+	fromYAML, err := Load(context.Background(), yamlDir, "")
 	if err != nil {
 		t.Fatalf("resolve yaml: %v", err)
 	}
-	fromJSON, err := Resolve(context.Background(), jsonDir, "")
+	fromJSON, err := Load(context.Background(), jsonDir, "")
 	if err != nil {
 		t.Fatalf("resolve json: %v", err)
 	}
@@ -242,7 +242,7 @@ func TestResolveReadsAYAMLNumberAsTheSameJSONNumberWouldBeRead(t *testing.T) {
 	}
 }
 
-func TestResolveReadsAYAMLFileWithEmptyDocumentsAroundItsOne(t *testing.T) {
+func TestLoadReadsAYAMLFileWithEmptyDocumentsAroundItsOne(t *testing.T) {
 	for name, source := range map[string]string{
 		"trailing separator": "slug: acme\nprovider: aws\n---\n",
 		"leading separator":  "---\nslug: acme\n",
@@ -252,7 +252,7 @@ func TestResolveReadsAYAMLFileWithEmptyDocumentsAroundItsOne(t *testing.T) {
 			dir := t.TempDir()
 			write(t, filepath.Join(dir, YAMLFileName), source)
 
-			cfg, err := Resolve(context.Background(), dir, "")
+			cfg, err := Load(context.Background(), dir, "")
 			if err != nil {
 				t.Fatalf("resolve: %v", err)
 			}
@@ -263,7 +263,7 @@ func TestResolveReadsAYAMLFileWithEmptyDocumentsAroundItsOne(t *testing.T) {
 	}
 }
 
-func TestResolveReportsTheSameYAMLErrorOnEveryRun(t *testing.T) {
+func TestLoadReportsTheSameYAMLErrorOnEveryRun(t *testing.T) {
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, YAMLFileName), `slug: acme
 provider:
@@ -273,18 +273,18 @@ provider:
     m: -.inf
 `)
 
-	_, first := Resolve(context.Background(), dir, "")
+	_, first := Load(context.Background(), dir, "")
 	if first == nil || !strings.Contains(first.Error(), `sets "provider.vps.a" to NaN`) {
 		t.Fatalf("error %v does not name the first bad key in order", first)
 	}
 	for range 50 {
-		if _, err := Resolve(context.Background(), dir, ""); err == nil || err.Error() != first.Error() {
+		if _, err := Load(context.Background(), dir, ""); err == nil || err.Error() != first.Error() {
 			t.Fatalf("error %v differs from the first run's %v", err, first)
 		}
 	}
 }
 
-func TestResolveReadsYAMLSelectorsNamedAloneOrKeyed(t *testing.T) {
+func TestLoadReadsYAMLSelectorsNamedAloneOrKeyed(t *testing.T) {
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, YAMLFileName), `slug: acme
 provider: aws
@@ -294,7 +294,7 @@ dns:
     zone: example.com
 `)
 
-	cfg, err := Resolve(context.Background(), dir, "")
+	cfg, err := Load(context.Background(), dir, "")
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
@@ -309,11 +309,11 @@ dns:
 	}
 }
 
-func TestResolveRefusesAYAMLProviderKeyedWithNoValue(t *testing.T) {
+func TestLoadRefusesAYAMLProviderKeyedWithNoValue(t *testing.T) {
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, YAMLFileName), "slug: acme\nprovider:\n  aws:\n")
 
-	_, err := Resolve(context.Background(), dir, "")
+	_, err := Load(context.Background(), dir, "")
 	if err == nil || !strings.Contains(err.Error(), `"provider.aws" must be an object of options`) {
 		t.Fatalf("error %v, want aws with no value refused as options that are not an object", err)
 	}

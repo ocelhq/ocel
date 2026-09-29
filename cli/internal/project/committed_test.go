@@ -352,7 +352,7 @@ func TestTheGoFixtureDeploysFromJSONAlone(t *testing.T) {
 	}
 
 	t.Setenv("PATH", "")
-	cfg, err := project.Resolve(t.Context(), dir, "")
+	cfg, err := project.Load(t.Context(), dir, "")
 	if err != nil {
 		t.Fatalf("resolve the go fixture with no node on PATH: %v", err)
 	}
@@ -376,7 +376,7 @@ func TestTheRustFixtureDeploysFromJSONAlone(t *testing.T) {
 	}
 
 	t.Setenv("PATH", "")
-	cfg, err := project.Resolve(t.Context(), dir, "")
+	cfg, err := project.Load(t.Context(), dir, "")
 	if err != nil {
 		t.Fatalf("resolve the rust fixture with no node on PATH: %v", err)
 	}

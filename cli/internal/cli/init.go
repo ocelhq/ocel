@@ -61,7 +61,7 @@ var initCmd = &cobra.Command{
 		}
 
 		opts := initOpts
-		opts.configPath = explicitConfigPath()
+		opts.configPath = newDeps().ConfigPath()
 
 		return runInit(cmd.Context(), newDeps(), cwd, slug, opts)
 	},

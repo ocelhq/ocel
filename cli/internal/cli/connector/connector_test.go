@@ -104,7 +104,7 @@ func linked(t *testing.T, dir, apiURL string) {
 func resolved(t *testing.T, root string) *project.Project {
 	t.Helper()
 
-	cfg, err := project.Resolve(context.Background(), root, filepath.Join(root, "ocel.fake.json"))
+	cfg, err := project.Load(context.Background(), root, filepath.Join(root, "ocel.fake.json"))
 	if err != nil {
 		t.Fatalf("project.Resolve: %v", err)
 	}

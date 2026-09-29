@@ -847,7 +847,7 @@ func devDeps() testDeps {
 }
 
 func options(ctx context.Context, deps testDeps, cwd string, command []string, stdout, stderr io.Writer, stdin io.Reader) (Options, error) {
-	cfg, err := project.ResolveOptional(ctx, cwd, "")
+	cfg, err := project.LoadOptional(ctx, cwd, "")
 	if err != nil {
 		return Options{}, err
 	}

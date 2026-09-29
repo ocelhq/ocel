@@ -103,7 +103,7 @@ func TestFindProjectRoot(t *testing.T) {
 	}
 }
 
-func TestResolve(t *testing.T) {
+func TestAConfigLoadsIntoTheProjectItDescribes(t *testing.T) {
 	t.Parallel()
 
 	accepted := []struct {
@@ -785,9 +785,9 @@ export default {
 			root := t.TempDir()
 			writeConfig(t, root, tc.config)
 
-			cfg, err := Resolve(context.Background(), root, "")
+			cfg, err := Load(context.Background(), root, "")
 			if err != nil {
-				t.Fatalf("Resolve: %v", err)
+				t.Fatalf("Load: %v", err)
 			}
 			tc.check(t, root, cfg)
 		})
@@ -1204,9 +1204,9 @@ export default {
 			root := t.TempDir()
 			writeConfig(t, root, tc.config)
 
-			_, err := Resolve(context.Background(), root, "")
+			_, err := Load(context.Background(), root, "")
 			if err == nil {
-				t.Fatalf("Resolve: expected error, got nil — %s", tc.name)
+				t.Fatalf("Load: expected error, got nil — %s", tc.name)
 			}
 			for _, want := range tc.wantErr {
 				if !strings.Contains(err.Error(), want) {
@@ -1233,9 +1233,9 @@ throw new BuildEnvError("'VPS_HOST' missing — set it");
 export default { slug: "test-app" };
 `)
 
-		_, err := Resolve(context.Background(), root, "")
+		_, err := Load(context.Background(), root, "")
 		if err == nil {
-			t.Fatal("Resolve: expected error, got nil")
+			t.Fatal("Load: expected error, got nil")
 		}
 		message := err.Error()
 		for _, want := range []string{"failed to evaluate", "BuildEnvError: 'VPS_HOST' missing"} {
@@ -1259,9 +1259,9 @@ throw new RangeError("boom");
 export default { slug: "test-app" };
 `)
 
-		_, err := Resolve(context.Background(), root, "")
+		_, err := Load(context.Background(), root, "")
 		if err == nil {
-			t.Fatal("Resolve: expected error, got nil")
+			t.Fatal("Load: expected error, got nil")
 		}
 		message := err.Error()
 		if !strings.Contains(message, "boom") {
@@ -1281,9 +1281,9 @@ throw "plain string";
 export default { slug: "test-app" };
 `)
 
-		_, err := Resolve(context.Background(), root, "")
+		_, err := Load(context.Background(), root, "")
 		if err == nil {
-			t.Fatal("Resolve: expected error, got nil")
+			t.Fatal("Load: expected error, got nil")
 		}
 		if !strings.Contains(err.Error(), "plain string") {
 			t.Errorf("err = %q, want it to contain %q", err.Error(), "plain string")
@@ -1295,9 +1295,9 @@ export default { slug: "test-app" };
 
 		root := t.TempDir()
 
-		_, err := Resolve(context.Background(), root, "")
+		_, err := Load(context.Background(), root, "")
 		if err == nil {
-			t.Fatal("Resolve: expected error, got nil")
+			t.Fatal("Load: expected error, got nil")
 		}
 		if !strings.Contains(err.Error(), "ocel init") {
 			t.Fatalf("err = %q, want it to mention `ocel init`", err.Error())
@@ -1312,9 +1312,9 @@ export default { slug: "test-app" };
 			t.Fatalf("mkdir scratch: %v", err)
 		}
 
-		_, err := Resolve(context.Background(), nestedDir(t, root), "")
+		_, err := Load(context.Background(), nestedDir(t, root), "")
 		if err == nil {
-			t.Fatal("Resolve: expected error, got nil")
+			t.Fatal("Load: expected error, got nil")
 		}
 		if !strings.Contains(err.Error(), "ocel init") {
 			t.Fatalf("err = %q, want it to mention `ocel init`", err.Error())
@@ -1334,9 +1334,9 @@ export default {
   slug: "`+bad+`",
 };
 `)
-				_, err := Resolve(context.Background(), root, "")
+				_, err := Load(context.Background(), root, "")
 				if err == nil || !strings.Contains(err.Error(), "slug") {
-					t.Fatalf("Resolve(slug=%q) err = %v, want a slug validation error", bad, err)
+					t.Fatalf("Load(slug=%q) err = %v, want a slug validation error", bad, err)
 				}
 			})
 		}
@@ -1351,9 +1351,9 @@ export default {
   slug: "shop--web",
 };
 `)
-		_, err := Resolve(context.Background(), root, "")
+		_, err := Load(context.Background(), root, "")
 		if err == nil {
-			t.Fatal("Resolve(slug=shop--web) err = nil, want a refusal")
+			t.Fatal("Load(slug=shop--web) err = nil, want a refusal")
 		}
 		for _, want := range []string{"shop--web", `"--"`, "single hyphen"} {
 			if !strings.Contains(err.Error(), want) {
@@ -1377,9 +1377,9 @@ export default {
 };
 `)
 
-				_, err := Resolve(context.Background(), root, "")
+				_, err := Load(context.Background(), root, "")
 				if err == nil {
-					t.Fatal("Resolve: expected error, got nil")
+					t.Fatal("Load: expected error, got nil")
 				}
 				if !strings.Contains(err.Error(), "invalid app name") {
 					t.Fatalf("err = %q, want it to reject the app name", err.Error())
@@ -1403,9 +1403,9 @@ export default {
 };
 `)
 
-				_, err := Resolve(context.Background(), root, "")
+				_, err := Load(context.Background(), root, "")
 				if err == nil {
-					t.Fatal("Resolve: expected error, got nil")
+					t.Fatal("Load: expected error, got nil")
 				}
 				if !strings.Contains(err.Error(), "invalid app name") {
 					t.Fatalf("err = %q, want it to reject the app name", err.Error())
@@ -1432,9 +1432,9 @@ export default {
 };
 `)
 
-				cfg, err := Resolve(context.Background(), root, "")
+				cfg, err := Load(context.Background(), root, "")
 				if err != nil {
-					t.Fatalf("Resolve: %v", err)
+					t.Fatalf("Load: %v", err)
 				}
 				if len(cfg.Apps) != 1 || cfg.Apps[0].Name != name {
 					t.Fatalf("Apps = %v, want the app named %q", cfg.Apps, name)
@@ -1464,9 +1464,9 @@ export default {
 };
 `)
 
-				_, err := Resolve(context.Background(), root, "")
+				_, err := Load(context.Background(), root, "")
 				if err == nil {
-					t.Fatalf("Resolve(folder=%q) err = nil, want a rejection", folder)
+					t.Fatalf("Load(folder=%q) err = nil, want a rejection", folder)
 				}
 				if !strings.Contains(err.Error(), folder) || !strings.Contains(err.Error(), want) {
 					t.Errorf("err = %v, want it to name %q and say %q", err, folder, want)
@@ -1476,7 +1476,7 @@ export default {
 	})
 }
 
-func TestResolveOptional(t *testing.T) {
+func TestAProjectWithNoConfigStillLoadsForTheCommandsThatNeedNone(t *testing.T) {
 	t.Parallel()
 
 	t.Run("no config yields defaults rooted at the project root", func(t *testing.T) {
@@ -1484,9 +1484,9 @@ func TestResolveOptional(t *testing.T) {
 
 		root := t.TempDir()
 
-		cfg, err := ResolveOptional(context.Background(), root, "")
+		cfg, err := LoadOptional(context.Background(), root, "")
 		if err != nil {
-			t.Fatalf("ResolveOptional: %v", err)
+			t.Fatalf("LoadOptional: %v", err)
 		}
 		if cfg.Dir != root {
 			t.Fatalf("Dir = %q, want %q", cfg.Dir, root)
@@ -1508,9 +1508,9 @@ func TestResolveOptional(t *testing.T) {
 		}
 		start := nestedDir(t, root)
 
-		cfg, err := ResolveOptional(context.Background(), start, "")
+		cfg, err := LoadOptional(context.Background(), start, "")
 		if err != nil {
-			t.Fatalf("ResolveOptional: %v", err)
+			t.Fatalf("LoadOptional: %v", err)
 		}
 		if cfg.Dir != start {
 			t.Fatalf("Dir = %q, want %q", cfg.Dir, start)
@@ -1528,9 +1528,9 @@ export default {
 };
 `)
 
-		cfg, err := ResolveOptional(context.Background(), nestedDir(t, root), "")
+		cfg, err := LoadOptional(context.Background(), nestedDir(t, root), "")
 		if err != nil {
-			t.Fatalf("ResolveOptional: %v", err)
+			t.Fatalf("LoadOptional: %v", err)
 		}
 		if cfg.Dir != root {
 			t.Fatalf("Dir = %q, want %q", cfg.Dir, root)
@@ -1546,13 +1546,13 @@ export default {
 		root := t.TempDir()
 		writeConfig(t, root, `export default { this is not valid typescript +++`)
 
-		if _, err := ResolveOptional(context.Background(), root, ""); err == nil {
-			t.Fatal("ResolveOptional: expected error, got nil")
+		if _, err := LoadOptional(context.Background(), root, ""); err == nil {
+			t.Fatal("LoadOptional: expected error, got nil")
 		}
 	})
 }
 
-func TestResolveReturnsPromptlyOnCancellation(t *testing.T) {
+func TestLoadReturnsPromptlyOnCancellation(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a POSIX shell fake node")
 	}
@@ -1575,7 +1575,7 @@ export default {
 
 	done := make(chan error, 1)
 	go func() {
-		_, err := Resolve(ctx, root, "")
+		_, err := Load(ctx, root, "")
 		done <- err
 	}()
 
@@ -1585,14 +1585,14 @@ export default {
 	select {
 	case err := <-done:
 		if !errors.Is(err, context.Canceled) {
-			t.Fatalf("Resolve() err = %v, want context.Canceled — a cancelled node run must not read as \"run `ocel init`\"", err)
+			t.Fatalf("Load() err = %v, want context.Canceled — a cancelled node run must not read as \"run `ocel init`\"", err)
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("Resolve did not return promptly after the context was cancelled")
+		t.Fatal("Load did not return promptly after the context was cancelled")
 	}
 }
 
-func TestConfigRequireProvider(t *testing.T) {
+func TestAProjectRequiresTheProviderItsConfigNames(t *testing.T) {
 	t.Parallel()
 
 	t.Run("errors when the provider is absent", func(t *testing.T) {
@@ -1699,7 +1699,7 @@ func TestNormalizeProductionDomains(t *testing.T) {
 	})
 }
 
-func TestResolveExplicitPath(t *testing.T) {
+func TestLoadReadsTheConfigAnExplicitPathNames(t *testing.T) {
 	t.Parallel()
 
 	const contents = `
@@ -1722,9 +1722,9 @@ export default {
 			t.Fatalf("write config: %v", err)
 		}
 
-		cfg, err := Resolve(context.Background(), t.TempDir(), configPath)
+		cfg, err := Load(context.Background(), t.TempDir(), configPath)
 		if err != nil {
-			t.Fatalf("Resolve: %v", err)
+			t.Fatalf("Load: %v", err)
 		}
 		if cfg.Slug != "test-app" {
 			t.Fatalf("Slug = %q, want %q", cfg.Slug, "test-app")
@@ -1746,9 +1746,9 @@ export default {
 			t.Fatalf("write config: %v", err)
 		}
 
-		cfg, err := Resolve(context.Background(), root, filepath.Join(".", "ocel.custom.config.ts"))
+		cfg, err := Load(context.Background(), root, filepath.Join(".", "ocel.custom.config.ts"))
 		if err != nil {
-			t.Fatalf("Resolve: %v", err)
+			t.Fatalf("Load: %v", err)
 		}
 		if cfg.Path != configPath {
 			t.Fatalf("Path = %q, want %q", cfg.Path, configPath)
@@ -1764,12 +1764,12 @@ export default {
 		root := t.TempDir()
 		writeConfig(t, root, contents)
 
-		_, err := Resolve(context.Background(), root, "nope.ts")
+		_, err := Load(context.Background(), root, "nope.ts")
 		if err == nil {
-			t.Fatal("Resolve: expected an error for a config path that names nothing")
+			t.Fatal("Load: expected an error for a config path that names nothing")
 		}
 		if !strings.Contains(err.Error(), filepath.Join(root, "nope.ts")) {
-			t.Fatalf("Resolve err = %v, want it to name the path asked for", err)
+			t.Fatalf("Load err = %v, want it to name the path asked for", err)
 		}
 	})
 
@@ -1777,29 +1777,29 @@ export default {
 		t.Parallel()
 
 		root := t.TempDir()
-		_, err := Resolve(context.Background(), root, ".")
+		_, err := Load(context.Background(), root, ".")
 		if err == nil {
-			t.Fatal("Resolve: expected an error for a directory")
+			t.Fatal("Load: expected an error for a directory")
 		}
 		if !strings.Contains(err.Error(), "is a directory") {
-			t.Fatalf("Resolve err = %v, want it to say the path is a directory", err)
+			t.Fatalf("Load err = %v, want it to say the path is a directory", err)
 		}
 	})
 
-	t.Run("ResolveOptional refuses a missing explicit path rather than defaulting", func(t *testing.T) {
+	t.Run("LoadOptional refuses a missing explicit path rather than defaulting", func(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
-		_, err := ResolveOptional(context.Background(), root, "nope.ts")
+		_, err := LoadOptional(context.Background(), root, "nope.ts")
 		if err == nil {
-			t.Fatal("ResolveOptional: expected an error, got the synthetic default")
+			t.Fatal("LoadOptional: expected an error, got the synthetic default")
 		}
 		if !strings.Contains(err.Error(), "nope.ts") {
-			t.Fatalf("ResolveOptional err = %v, want it to name the path asked for", err)
+			t.Fatalf("LoadOptional err = %v, want it to name the path asked for", err)
 		}
 	})
 
-	t.Run("ResolveOptional loads an explicit path", func(t *testing.T) {
+	t.Run("LoadOptional loads an explicit path", func(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
@@ -1808,9 +1808,9 @@ export default {
 			t.Fatalf("write config: %v", err)
 		}
 
-		cfg, err := ResolveOptional(context.Background(), t.TempDir(), configPath)
+		cfg, err := LoadOptional(context.Background(), t.TempDir(), configPath)
 		if err != nil {
-			t.Fatalf("ResolveOptional: %v", err)
+			t.Fatalf("LoadOptional: %v", err)
 		}
 		if cfg.Path != configPath {
 			t.Fatalf("Path = %q, want %q", cfg.Path, configPath)
@@ -1853,7 +1853,7 @@ func TestTwoConfigsInOneDirDoNotShareABundle(t *testing.T) {
 	results := make(chan result, len(slugs))
 	for name := range slugs {
 		go func() {
-			cfg, err := Resolve(context.Background(), root, name)
+			cfg, err := Load(context.Background(), root, name)
 			results <- result{name: name, cfg: cfg, err: err}
 		}()
 	}
@@ -1861,10 +1861,10 @@ func TestTwoConfigsInOneDirDoNotShareABundle(t *testing.T) {
 	for range slugs {
 		got := <-results
 		if got.err != nil {
-			t.Fatalf("Resolve(%q) err = %v", got.name, got.err)
+			t.Fatalf("Load(%q) err = %v", got.name, got.err)
 		}
 		if got.cfg.Slug != slugs[got.name] {
-			t.Fatalf("Resolve(%q).Slug = %q, want %q — the two configs shared one bundle outfile", got.name, got.cfg.Slug, slugs[got.name])
+			t.Fatalf("Load(%q).Slug = %q, want %q — the two configs shared one bundle outfile", got.name, got.cfg.Slug, slugs[got.name])
 		}
 	}
 }
@@ -1899,41 +1899,41 @@ func writeDotenv(t *testing.T, dir, contents string) {
 
 const slugFromEnv = "export default { slug: process.env.FROM_DOTENV ?? \"unset\" };"
 
-func TestConfigEvalReadsDotenv(t *testing.T) {
+func TestATypeScriptConfigReadsTheDotenvBesideIt(t *testing.T) {
 	root := t.TempDir()
 	writeConfig(t, root, slugFromEnv)
 	writeDotenv(t, root, "FROM_DOTENV=from-file\n")
 
-	cfg, err := Resolve(context.Background(), root, "")
+	cfg, err := Load(context.Background(), root, "")
 	if err != nil {
-		t.Fatalf("Resolve() err = %v", err)
+		t.Fatalf("Load() err = %v", err)
 	}
 	if cfg.Slug != "from-file" {
 		t.Errorf("Slug = %q, want the value the .env supplies", cfg.Slug)
 	}
 }
 
-func TestConfigEvalPrefersProcessEnvOverDotenv(t *testing.T) {
+func TestATypeScriptConfigPrefersTheProcessEnvironmentOverDotenv(t *testing.T) {
 	root := t.TempDir()
 	writeConfig(t, root, slugFromEnv)
 	writeDotenv(t, root, "FROM_DOTENV=from-file\n")
 	t.Setenv("FROM_DOTENV", "from-process")
 
-	cfg, err := Resolve(context.Background(), root, "")
+	cfg, err := Load(context.Background(), root, "")
 	if err != nil {
-		t.Fatalf("Resolve() err = %v", err)
+		t.Fatalf("Load() err = %v", err)
 	}
 	if cfg.Slug != "from-process" {
 		t.Errorf("Slug = %q, want the real environment to win over the .env", cfg.Slug)
 	}
 }
 
-func TestResolveLeavesEveryTierOnItsDefaultEnvSource(t *testing.T) {
+func TestLoadLeavesEveryTierOnItsDefaultEnvSource(t *testing.T) {
 	for _, config := range []string{
 		`{"slug":"acme"}`,
 		`{"slug":"acme","envSource":{"production":"builtin","preview":"builtin","dev":"dotenv"}}`,
 	} {
-		cfg := mustResolveJSON(t, config)
+		cfg := mustLoadJSON(t, config)
 		if !reflect.DeepEqual(cfg.EnvSource, envsource.DefaultTiers()) {
 			t.Errorf("envSource from %s = %+v, want every tier on its default", config, cfg.EnvSource)
 		}
@@ -1941,17 +1941,17 @@ func TestResolveLeavesEveryTierOnItsDefaultEnvSource(t *testing.T) {
 }
 
 func TestAProjectWithNoConfigFileLeavesEveryTierOnItsDefaultEnvSource(t *testing.T) {
-	cfg, err := ResolveOptional(context.Background(), t.TempDir(), "")
+	cfg, err := LoadOptional(context.Background(), t.TempDir(), "")
 	if err != nil {
-		t.Fatalf("ResolveOptional: %v", err)
+		t.Fatalf("LoadOptional: %v", err)
 	}
 	if !reflect.DeepEqual(cfg.EnvSource, envsource.DefaultTiers()) {
 		t.Errorf("envSource with no config file = %+v, want every tier on its default", cfg.EnvSource)
 	}
 }
 
-func TestResolveReadsEachTiersEnvSourceFromTheConfig(t *testing.T) {
-	cfg := mustResolveJSON(t, `{"slug":"acme","envSource":{
+func TestLoadReadsEachTiersEnvSourceFromTheConfig(t *testing.T) {
+	cfg := mustLoadJSON(t, `{"slug":"acme","envSource":{
 		"preview":{"infisical":{"project":"p-1","environment":"staging","auth":{"identity":{"identityId":"ident"}}}},
 		"dev":{"exec":{"command":["op","run"],"format":"json"}}
 	}}`)

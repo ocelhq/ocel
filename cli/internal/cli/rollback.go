@@ -58,7 +58,7 @@ func runRollback(ctx context.Context, deps cmddeps.Deps, cwd string, opts rollba
 	if opts.to != "" && opts.tag != "" {
 		return fmt.Errorf("--to and --tag are mutually exclusive; pass just one")
 	}
-	cfg, err := project.Resolve(ctx, cwd, explicitConfigPath())
+	cfg, err := deps.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}

@@ -54,15 +54,15 @@ func (e NoConfigError) Error() string {
 
 type form struct {
 	suffix string
-	read   func(ctx context.Context, path string) ([]byte, error)
+	load   func(ctx context.Context, path string, env environment) ([]byte, error)
 }
 
 func forms() []form {
 	return []form{
-		{suffix: jsonSuffix, read: readJSON},
-		{suffix: yamlSuffix, read: readYAML},
-		{suffix: ymlSuffix, read: readYAML},
-		{suffix: tsSuffix, read: evaluateTypeScript},
+		{suffix: jsonSuffix, load: readJSON},
+		{suffix: yamlSuffix, load: readYAML},
+		{suffix: ymlSuffix, load: readYAML},
+		{suffix: tsSuffix, load: evaluateTypeScript},
 	}
 }
 
@@ -161,7 +161,7 @@ func findProjectRoot(startDir string) (string, error) {
 	}
 }
 
-func readJSON(_ context.Context, configPath string) ([]byte, error) {
+func readJSON(_ context.Context, configPath string, _ environment) ([]byte, error) {
 	read, err := os.ReadFile(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", configPath, err)

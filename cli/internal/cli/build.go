@@ -49,7 +49,7 @@ var buildCmd = &cobra.Command{
 }
 
 func runBuild(ctx context.Context, deps cmddeps.Deps, cwd string) (err error) {
-	declared, err := project.Resolve(ctx, cwd, explicitConfigPath())
+	declared, err := deps.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}

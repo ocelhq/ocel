@@ -12,7 +12,6 @@ import (
 	"github.com/evanw/esbuild/pkg/api"
 
 	"github.com/ocelhq/ocel/cli/internal/childprocess"
-	"github.com/ocelhq/ocel/cli/internal/dotfile"
 	"github.com/ocelhq/ocel/pkg/constants"
 )
 
@@ -26,7 +25,7 @@ func recognizedErrorKinds() string {
 	return string(encoded)
 }
 
-func evaluateTypeScript(ctx context.Context, configPath string) ([]byte, error) {
+func evaluateTypeScript(ctx context.Context, configPath string, env environment) ([]byte, error) {
 	dir := filepath.Dir(configPath)
 	outDir := filepath.Join(dir, constants.ProjectStateDirName)
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
@@ -69,13 +68,8 @@ try {
 		return nil, fmt.Errorf("%s is a TypeScript config, and node is not on PATH: %w — write %s instead, which needs no node", configPath, err, DefaultFileName)
 	}
 
-	environment, err := configEnv(dir)
-	if err != nil {
-		return nil, err
-	}
-
 	cmd := exec.CommandContext(ctx, "node", outfile)
-	cmd.Env = environment
+	cmd.Env = env.environ()
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
 	childprocess.KillGroupOnCancel(cmd)
@@ -88,22 +82,6 @@ try {
 	}
 
 	return stdout, nil
-}
-
-func configEnv(dir string) ([]string, error) {
-	file, err := dotfile.Load(dir)
-	if err != nil {
-		return nil, err
-	}
-
-	environment := os.Environ()
-	for key, value := range file.Values {
-		if _, set := os.LookupEnv(key); set {
-			continue
-		}
-		environment = append(environment, key+"="+value)
-	}
-	return environment, nil
 }
 
 func bundleName(configPath string) string {

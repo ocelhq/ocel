@@ -20,7 +20,7 @@ func write(t *testing.T, path, contents string) {
 	}
 }
 
-func TestResolveReadsJSONWithoutNode(t *testing.T) {
+func TestLoadReadsJSONWithoutNode(t *testing.T) {
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, DefaultFileName), `{
   // the provider this project deploys into
@@ -29,7 +29,7 @@ func TestResolveReadsJSONWithoutNode(t *testing.T) {
   "apps": [{ "name": "web", "path": "./server", "framework": "go" }],
 }`)
 
-	cfg, err := Resolve(context.Background(), dir, "")
+	cfg, err := Load(context.Background(), dir, "")
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
@@ -50,12 +50,12 @@ func TestResolveReadsJSONWithoutNode(t *testing.T) {
 	}
 }
 
-func TestResolveRefusesBothFormsOfOneBaseName(t *testing.T) {
+func TestLoadRefusesBothFormsOfOneBaseName(t *testing.T) {
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, DefaultFileName), `{"slug":"acme"}`)
 	write(t, filepath.Join(dir, TSFileName), `export default { slug: "acme" };`)
 
-	_, err := Resolve(context.Background(), dir, "")
+	_, err := Load(context.Background(), dir, "")
 	if err == nil {
 		t.Fatal("resolved a directory containing both forms")
 	}
@@ -66,12 +66,12 @@ func TestResolveRefusesBothFormsOfOneBaseName(t *testing.T) {
 	}
 }
 
-func TestResolveAllowsAJSONDefaultBesideATSVariant(t *testing.T) {
+func TestLoadAllowsAJSONDefaultBesideATSVariant(t *testing.T) {
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, DefaultFileName), `{"slug":"acme"}`)
 	write(t, filepath.Join(dir, "ocel.aws.config.ts"), `export default { slug: "acme-aws" };`)
 
-	cfg, err := Resolve(context.Background(), dir, "")
+	cfg, err := Load(context.Background(), dir, "")
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
@@ -80,12 +80,12 @@ func TestResolveAllowsAJSONDefaultBesideATSVariant(t *testing.T) {
 	}
 }
 
-func TestResolveReadsAJSONVariantByName(t *testing.T) {
+func TestLoadReadsAJSONVariantByName(t *testing.T) {
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, DefaultFileName), `{"slug":"acme"}`)
 	write(t, filepath.Join(dir, "ocel.vps.json"), `{"slug":"acme-vps"}`)
 
-	cfg, err := Resolve(context.Background(), dir, "ocel.vps.json")
+	cfg, err := Load(context.Background(), dir, "ocel.vps.json")
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
@@ -94,11 +94,11 @@ func TestResolveReadsAJSONVariantByName(t *testing.T) {
 	}
 }
 
-func TestResolveRefusesAFileNoLoaderReads(t *testing.T) {
+func TestLoadRefusesAFileNoLoaderReads(t *testing.T) {
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, "ocel.jsonc"), `{"slug":"acme"}`)
 
-	_, err := Resolve(context.Background(), dir, "ocel.jsonc")
+	_, err := Load(context.Background(), dir, "ocel.jsonc")
 	if err == nil {
 		t.Fatal("resolved a file no loader reads")
 	}
@@ -107,11 +107,11 @@ func TestResolveRefusesAFileNoLoaderReads(t *testing.T) {
 	}
 }
 
-func TestResolveNamesTheKeyPathOfATypo(t *testing.T) {
+func TestLoadNamesTheKeyPathOfATypo(t *testing.T) {
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, DefaultFileName), `{"slug":"acme","apps":[{"name":"web","path":".","runtim":"go"}]}`)
 
-	_, err := Resolve(context.Background(), dir, "")
+	_, err := Load(context.Background(), dir, "")
 	if err == nil {
 		t.Fatal("resolved a config with a typo key")
 	}
@@ -120,11 +120,11 @@ func TestResolveNamesTheKeyPathOfATypo(t *testing.T) {
 	}
 }
 
-func TestResolveNamesTheKeyPathOfAMissingVariable(t *testing.T) {
+func TestLoadNamesTheKeyPathOfAMissingVariable(t *testing.T) {
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, DefaultFileName), `{"slug":"acme","apps":[{"name":"web","path":"${APP_DIR}"}]}`)
 
-	_, err := Resolve(context.Background(), dir, "")
+	_, err := Load(context.Background(), dir, "")
 	if err == nil {
 		t.Fatal("resolved a config reading an unset variable")
 	}
@@ -133,13 +133,13 @@ func TestResolveNamesTheKeyPathOfAMissingVariable(t *testing.T) {
 	}
 }
 
-func TestResolveReadsVariablesFromTheEnvironmentOverDotenv(t *testing.T) {
+func TestLoadReadsVariablesFromTheEnvironmentOverDotenv(t *testing.T) {
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, DefaultFileName), `{"slug":"${SLUG}","apps":[{"name":"web","path":"${APP_DIR}"}]}`)
 	write(t, filepath.Join(dir, ".env"), "SLUG=from-dotenv\nAPP_DIR=./web\n")
 	t.Setenv("SLUG", "from-environment")
 
-	cfg, err := Resolve(context.Background(), dir, "")
+	cfg, err := Load(context.Background(), dir, "")
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
@@ -185,7 +185,7 @@ func TestFindProjectRootIgnoresTheScratchDirectory(t *testing.T) {
 	}
 }
 
-func TestResolveRefusesTheSameSelectorsInEveryForm(t *testing.T) {
+func TestLoadRefusesTheSameSelectorsInEveryForm(t *testing.T) {
 	cases := []struct {
 		name string
 		json string
@@ -221,7 +221,7 @@ func TestResolveRefusesTheSameSelectorsInEveryForm(t *testing.T) {
 				dir := t.TempDir()
 				write(t, filepath.Join(dir, name), contents)
 
-				_, err := Resolve(context.Background(), dir, "")
+				_, err := Load(context.Background(), dir, "")
 				if err == nil || !strings.Contains(err.Error(), c.want) {
 					t.Fatalf("error %v, want %q", err, c.want)
 				}

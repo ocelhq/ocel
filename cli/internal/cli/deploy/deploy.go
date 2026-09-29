@@ -10,7 +10,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/deployrecord"
-	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/valuestore"
 	"github.com/ocelhq/ocel/cli/internal/variables"
@@ -67,7 +66,7 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 }
 
 func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOptions, stdout, stderr io.Writer, stdin io.Reader) (err error) {
-	cfg, err := project.Resolve(ctx, cwd, deps.ConfigPath())
+	cfg, err := deps.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}

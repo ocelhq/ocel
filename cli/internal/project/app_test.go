@@ -18,9 +18,9 @@ func TestAProjectNamingNoAppsHasTheNodeAppAtItsRootNamedAfterItsSlug(t *testing.
 	write(t, filepath.Join(dir, DefaultFileName), `{"slug":"shop"}`)
 	write(t, filepath.Join(dir, nodeManifest), `{"dependencies":{"express":"5"}}`)
 
-	cfg, err := Resolve(context.Background(), dir, "")
+	cfg, err := Load(context.Background(), dir, "")
 	if err != nil {
-		t.Fatalf("Resolve: %v", err)
+		t.Fatalf("Load: %v", err)
 	}
 	if len(cfg.Apps) != 1 {
 		t.Fatalf("Apps = %+v, want the one app at the project root", cfg.Apps)
@@ -37,9 +37,9 @@ func TestTheRootAppOfANextProjectIsBuiltWithNext(t *testing.T) {
 	write(t, filepath.Join(dir, DefaultFileName), `{"slug":"shop"}`)
 	write(t, filepath.Join(dir, nodeManifest), `{"dependencies":{"next":"15"}}`)
 
-	cfg, err := Resolve(context.Background(), dir, "")
+	cfg, err := Load(context.Background(), dir, "")
 	if err != nil {
-		t.Fatalf("Resolve: %v", err)
+		t.Fatalf("Load: %v", err)
 	}
 	if len(cfg.Apps) != 1 || cfg.Apps[0].Framework() != appbuild.FrameworkNext {
 		t.Errorf("Apps = %+v, want one next app", cfg.Apps)
@@ -49,7 +49,7 @@ func TestTheRootAppOfANextProjectIsBuiltWithNext(t *testing.T) {
 func TestAProjectWithNoPackageJSONAtItsRootAndNoAppsDeploysNoApp(t *testing.T) {
 	t.Parallel()
 
-	cfg := mustResolveJSON(t, `{"slug":"shop"}`)
+	cfg := mustLoadJSON(t, `{"slug":"shop"}`)
 	if len(cfg.Apps) != 0 {
 		t.Errorf("Apps = %+v, want none: nothing at the root says an app is there", cfg.Apps)
 	}
@@ -61,9 +61,9 @@ func TestAProjectWithNoConfigHasTheRootAppNamedAsInitWouldNameTheProject(t *test
 	dir := filepath.Join(t.TempDir(), "My Shop")
 	write(t, filepath.Join(dir, nodeManifest), `{}`)
 
-	cfg, err := ResolveOptional(context.Background(), dir, "")
+	cfg, err := LoadOptional(context.Background(), dir, "")
 	if err != nil {
-		t.Fatalf("ResolveOptional: %v", err)
+		t.Fatalf("LoadOptional: %v", err)
 	}
 	if len(cfg.Apps) != 1 || cfg.Apps[0].Name != "my-shop" {
 		t.Errorf("Apps = %+v, want one app named %q", cfg.Apps, "my-shop")
@@ -73,9 +73,9 @@ func TestAProjectWithNoConfigHasTheRootAppNamedAsInitWouldNameTheProject(t *test
 func TestAnAppTakingTheInfrastructureStacksNameIsRefusedAtLoad(t *testing.T) {
 	t.Parallel()
 
-	_, err := resolveJSON(t, `{"slug":"shop","apps":[{"name":"`+naming.InfraApp+`","path":"."}]}`)
+	_, err := loadJSON(t, `{"slug":"shop","apps":[{"name":"`+naming.InfraApp+`","path":"."}]}`)
 	if err == nil || !strings.Contains(err.Error(), strconv.Quote(naming.InfraApp)+" is reserved") {
-		t.Fatalf("Resolve err = %v, want the reserved name refused", err)
+		t.Fatalf("Load err = %v, want the reserved name refused", err)
 	}
 }
 
@@ -86,18 +86,18 @@ func TestASlugTakingTheInfrastructureStacksNameIsRefusedWhenItWouldNameTheRootAp
 	write(t, filepath.Join(dir, DefaultFileName), `{"slug":"`+naming.InfraApp+`"}`)
 	write(t, filepath.Join(dir, nodeManifest), `{}`)
 
-	_, err := Resolve(context.Background(), dir, "")
+	_, err := Load(context.Background(), dir, "")
 	if err == nil || !strings.Contains(err.Error(), strconv.Quote(naming.InfraApp)+" is reserved") {
-		t.Fatalf("Resolve err = %v, want the root app's reserved name refused", err)
+		t.Fatalf("Load err = %v, want the root app's reserved name refused", err)
 	}
 }
 
 func TestAnAppDeclaringContainerComputeAndAFrameworkIsRefusedAtLoad(t *testing.T) {
 	t.Parallel()
 
-	_, err := resolveJSON(t, `{"slug":"shop","apps":[{"name":"api","path":"api","compute":"container","framework":"node"}]}`)
+	_, err := loadJSON(t, `{"slug":"shop","apps":[{"name":"api","path":"api","compute":"container","framework":"node"}]}`)
 	if err == nil || !strings.Contains(err.Error(), "`framework`") {
-		t.Fatalf("Resolve err = %v, want the framework refused on an app that runs the image it is given", err)
+		t.Fatalf("Load err = %v, want the framework refused on an app that runs the image it is given", err)
 	}
 }
 
@@ -111,9 +111,9 @@ func TestAnAppDeclaringServerlessComputeAndContainerConfigIsRefusedAtLoad(t *tes
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := resolveJSON(t, `{"slug":"shop","apps":[{"name":"api","path":"api","compute":"serverless","framework":"node",`+config+`}]}`)
+			_, err := loadJSON(t, `{"slug":"shop","apps":[{"name":"api","path":"api","compute":"serverless","framework":"node",`+config+`}]}`)
 			if err == nil || !strings.Contains(err.Error(), "`"+name+"`") {
-				t.Fatalf("Resolve err = %v, want the %s refused on an app that runs as functions", err, name)
+				t.Fatalf("Load err = %v, want the %s refused on an app that runs as functions", err, name)
 			}
 		})
 	}
@@ -122,7 +122,7 @@ func TestAnAppDeclaringServerlessComputeAndContainerConfigIsRefusedAtLoad(t *tes
 func TestAnAppDeclaringAComputeHasOnlyThatComputesShape(t *testing.T) {
 	t.Parallel()
 
-	cfg := mustResolveJSON(t, `{"slug":"shop","apps":[
+	cfg := mustLoadJSON(t, `{"slug":"shop","apps":[
 		{"name":"api","path":"api","compute":"container","build":{"command":"make"}},
 		{"name":"web","path":"web","compute":"serverless","framework":"node"}
 	]}`)

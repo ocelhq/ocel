@@ -128,7 +128,7 @@ func diagnose(ctx context.Context, deps cmddeps.Deps, cwd string) report {
 	var found report
 	checked := section{name: "Project"}
 
-	cfg, err := project.Resolve(ctx, cwd, deps.ConfigPath())
+	cfg, err := deps.LoadProject(ctx, cwd)
 	if err != nil {
 		checked.fail(configFailure(err))
 		found.add(checked)

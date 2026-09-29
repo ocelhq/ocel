@@ -3,24 +3,22 @@ package project
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/ocelhq/ocel/cli/internal/dotfile"
 	"github.com/ocelhq/ocel/pkg/configdoc"
 	"github.com/ocelhq/ocel/pkg/envsource"
 )
 
-func Resolve(ctx context.Context, startDir, explicitPath string) (*Project, error) {
-	return resolve(ctx, startDir, explicitPath, false)
+func Load(ctx context.Context, startDir, explicitPath string) (*Project, error) {
+	return find(ctx, startDir, explicitPath, false)
 }
 
-func ResolveOptional(ctx context.Context, startDir, explicitPath string) (*Project, error) {
-	return resolve(ctx, startDir, explicitPath, true)
+func LoadOptional(ctx context.Context, startDir, explicitPath string) (*Project, error) {
+	return find(ctx, startDir, explicitPath, true)
 }
 
-func resolve(ctx context.Context, startDir, explicitPath string, optional bool) (*Project, error) {
+func find(ctx context.Context, startDir, explicitPath string, optional bool) (*Project, error) {
 	if explicitPath != "" {
 		configPath, err := explicitConfigFile(startDir, explicitPath)
 		if err != nil {
@@ -59,7 +57,11 @@ func load(ctx context.Context, configPath string) (*Project, error) {
 		return nil, fmt.Errorf("%s contains %s, and one project reads one config: delete all but the one you author", dir, strings.Join(append([]string{base}, others...), " and "))
 	}
 
-	data, err := f.read(ctx, configPath)
+	env, err := readEnvironment(dir)
+	if err != nil {
+		return nil, err
+	}
+	data, err := f.load(ctx, configPath, env)
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
@@ -67,27 +69,9 @@ func load(ctx context.Context, configPath string) (*Project, error) {
 		return nil, err
 	}
 
-	lookup, err := EnvLookup(dir)
-	if err != nil {
-		return nil, err
-	}
-	doc, err := configdoc.Decode(data, lookup)
+	doc, err := configdoc.Decode(data, env.lookup)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", configPath, err)
 	}
 	return normalize(doc, configPath)
-}
-
-func EnvLookup(dir string) (configdoc.Lookup, error) {
-	file, err := dotfile.Load(dir)
-	if err != nil {
-		return nil, err
-	}
-	return func(name string) (string, bool) {
-		if value, set := os.LookupEnv(name); set {
-			return value, true
-		}
-		value, set := file.Values[name]
-		return value, set
-	}, nil
 }

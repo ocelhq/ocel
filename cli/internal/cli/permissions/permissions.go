@@ -46,7 +46,7 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 }
 
 func Run(ctx context.Context, deps cmddeps.Deps, cwd string, purpose contractv1.CredentialPurpose, stdout io.Writer) error {
-	cfg, err := project.Resolve(ctx, cwd, deps.ConfigPath())
+	cfg, err := deps.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}

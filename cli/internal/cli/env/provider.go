@@ -41,7 +41,7 @@ func runWithEnvProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opts
 	if err := opts.checkEnvironment(); err != nil {
 		return err
 	}
-	cfg, err := project.Resolve(ctx, cwd, deps.ConfigPath())
+	cfg, err := deps.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}

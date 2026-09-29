@@ -17,7 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/configdoc"
 )
 
-func readYAML(_ context.Context, configPath string) ([]byte, error) {
+func readYAML(_ context.Context, configPath string, _ environment) ([]byte, error) {
 	read, err := os.ReadFile(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", configPath, err)

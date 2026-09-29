@@ -118,7 +118,7 @@ func withOptions(cmd *cobra.Command, deps cmddeps.Deps, opts *options,
 		return fmt.Errorf("determine working directory: %w", err)
 	}
 	ctx := cmd.Context()
-	cfg, err := project.Resolve(ctx, cwd, deps.ConfigPath())
+	cfg, err := deps.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}

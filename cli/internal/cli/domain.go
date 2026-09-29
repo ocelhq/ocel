@@ -177,7 +177,7 @@ func runDomainUse(ctx context.Context, deps cmddeps.Deps, cwd, wildcard string, 
 		return err
 	}
 
-	cfg, err := project.Resolve(ctx, cwd, explicitConfigPath())
+	cfg, err := deps.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}
@@ -224,7 +224,7 @@ func startReadyProvider(ctx context.Context, deps cmddeps.Deps, cfg *project.Pro
 }
 
 func runDomainLs(ctx context.Context, deps cmddeps.Deps, cwd string, opts domainOptions, stdout, stderr io.Writer) error {
-	cfg, err := project.Resolve(ctx, cwd, explicitConfigPath())
+	cfg, err := deps.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}
@@ -305,7 +305,7 @@ func runDomainRelease(ctx context.Context, deps cmddeps.Deps, cwd string, opts d
 	if err := requirePreviewTier("ocel domain release", opts.preview); err != nil {
 		return err
 	}
-	cfg, err := project.Resolve(ctx, cwd, explicitConfigPath())
+	cfg, err := deps.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}
@@ -373,7 +373,7 @@ func runDomainRelease(ctx context.Context, deps cmddeps.Deps, cwd string, opts d
 }
 
 func runDomainAdd(ctx context.Context, deps cmddeps.Deps, cwd, host string, stdout, stderr io.Writer) error {
-	cfg, err := project.Resolve(ctx, cwd, explicitConfigPath())
+	cfg, err := deps.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}
@@ -466,7 +466,7 @@ func addedHosts(configured []string, host string) []string {
 }
 
 func runDomainRm(ctx context.Context, deps cmddeps.Deps, cwd, host string, opts domainOptions, stdout, stderr io.Writer, stdin io.Reader) error {
-	cfg, err := project.Resolve(ctx, cwd, explicitConfigPath())
+	cfg, err := deps.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}
@@ -591,7 +591,7 @@ type domainWaitSchedule struct {
 var domainWait = domainWaitSchedule{initialInterval: 2 * time.Second, maxInterval: 30 * time.Second, deadline: 15 * time.Minute}
 
 func runDomainStatus(ctx context.Context, deps cmddeps.Deps, cwd string, opts domainOptions, stdout, stderr io.Writer) error {
-	cfg, err := project.Resolve(ctx, cwd, explicitConfigPath())
+	cfg, err := deps.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}

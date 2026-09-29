@@ -172,7 +172,7 @@ func previewUpRunE(deps cmddeps.Deps, upOpts *previewUpOptions) func(cmd *cobra.
 }
 
 func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previewUpOptions, stdout, stderr io.Writer, stdin io.Reader) (err error) {
-	cfg, err := project.Resolve(ctx, cwd, deps.ConfigPath())
+	cfg, err := deps.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}
@@ -356,7 +356,7 @@ func checkGlobalPreviewDomain(wildcard *contractv1.PreviewWildcard, id *contract
 }
 
 func runPreviewRm(ctx context.Context, deps cmddeps.Deps, cwd string, opts previewRmOptions, stdout, stderr io.Writer, stdin io.Reader) (err error) {
-	cfg, err := project.Resolve(ctx, cwd, deps.ConfigPath())
+	cfg, err := deps.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}
@@ -414,7 +414,7 @@ func runPreviewRm(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 }
 
 func runPreviewLs(ctx context.Context, deps cmddeps.Deps, cwd string, stdout io.Writer) error {
-	cfg, err := project.Resolve(ctx, cwd, deps.ConfigPath())
+	cfg, err := deps.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}
@@ -459,7 +459,7 @@ func runPreviewPrune(ctx context.Context, deps cmddeps.Deps, cwd string, opts pr
 		return err
 	}
 
-	cfg, err := project.Resolve(ctx, cwd, deps.ConfigPath())
+	cfg, err := deps.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}

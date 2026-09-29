@@ -44,6 +44,14 @@ type Deps struct {
 	Events                  *run.Bus
 }
 
+func (d Deps) LoadProject(ctx context.Context, cwd string) (*project.Project, error) {
+	return project.Load(ctx, cwd, d.ConfigPath())
+}
+
+func (d Deps) LoadOptionalProject(ctx context.Context, cwd string) (*project.Project, error) {
+	return project.LoadOptional(ctx, cwd, d.ConfigPath())
+}
+
 const NoBrowserEnvVar = "OCEL_NO_BROWSER"
 
 func (d Deps) BrowserReachable(stdin io.Reader) bool {

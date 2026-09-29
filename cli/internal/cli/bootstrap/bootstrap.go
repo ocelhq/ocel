@@ -329,7 +329,7 @@ func describeBootstrap(ctx context.Context, check *run.Span, prov *providerclien
 }
 
 func resolveProject(ctx context.Context, deps cmddeps.Deps, cwd string) (*project.Project, error) {
-	cfg, err := project.Resolve(ctx, cwd, deps.ConfigPath())
+	cfg, err := deps.LoadProject(ctx, cwd)
 	if err != nil {
 		return nil, err
 	}

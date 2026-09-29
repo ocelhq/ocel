@@ -47,7 +47,7 @@ func TestInitWritesAConfigTheLoaderAccepts(t *testing.T) {
 				t.Fatalf("runInit: %v — %s", err, stdout.String())
 			}
 
-			cfg, err := project.Resolve(context.Background(), dir, "")
+			cfg, err := project.Load(context.Background(), dir, "")
 			if err != nil {
 				t.Fatalf("the config init wrote does not load: %v", err)
 			}
@@ -118,7 +118,7 @@ func TestInitWritesYAMLOnRequest(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, project.DefaultFileName)); err == nil {
 		t.Fatal("--yaml wrote a JSON config as well")
 	}
-	cfg, err := project.Resolve(context.Background(), dir, "")
+	cfg, err := project.Load(context.Background(), dir, "")
 	if err != nil {
 		t.Fatalf("the config init wrote does not load: %v", err)
 	}
@@ -201,7 +201,7 @@ func TestInitWritesYAMLToAnExplicitYAMLPath(t *testing.T) {
 	if err := runInit(context.Background(), deps, dir, "acme", opts); err != nil {
 		t.Fatalf("runInit: %v", err)
 	}
-	cfg, err := project.Resolve(context.Background(), dir, "ocel.aws.yml")
+	cfg, err := project.Load(context.Background(), dir, "ocel.aws.yml")
 	if err != nil {
 		t.Fatalf("the config init wrote does not load: %v", err)
 	}
@@ -275,7 +275,7 @@ func TestInitWritesOnlyTheConfigWhenNoManifestNamesALanguage(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "package.json")); err == nil {
 		t.Fatal("init wrote a package.json into a directory that had none")
 	}
-	if _, err := project.Resolve(context.Background(), dir, ""); err != nil {
+	if _, err := project.Load(context.Background(), dir, ""); err != nil {
 		t.Fatalf("the config init wrote does not load: %v", err)
 	}
 }

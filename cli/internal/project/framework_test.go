@@ -202,7 +202,7 @@ func TestDetectFrameworkRefusals(t *testing.T) {
 
 const nextManifest = `{"dependencies":{"next":"15.0.0"}}`
 
-func TestResolveReadsTheFrameworkOffTheAppItself(t *testing.T) {
+func TestLoadReadsTheFrameworkOffTheAppItself(t *testing.T) {
 	t.Parallel()
 
 	t.Run("an app naming no framework is read from its own directory", func(t *testing.T) {
@@ -217,9 +217,9 @@ export default {
 `)
 		writeFile(t, filepath.Join(root, "services", "web", "package.json"), nextManifest)
 
-		cfg, err := Resolve(context.Background(), root, "")
+		cfg, err := Load(context.Background(), root, "")
 		if err != nil {
-			t.Fatalf("Resolve: %v", err)
+			t.Fatalf("Load: %v", err)
 		}
 		if got, want := cfg.Apps[0].Serverless, (&Serverless{Framework: "next", Detected: true}); *got != *want {
 			t.Fatalf("Apps[0].Serverless = %+v, want %+v: the app's own manifest says what it is, and the config never named it", got, want)
@@ -238,9 +238,9 @@ export default {
 `)
 		writeFile(t, filepath.Join(root, "services", "web", "package.json"), nextManifest)
 
-		cfg, err := Resolve(context.Background(), root, "")
+		cfg, err := Load(context.Background(), root, "")
 		if err != nil {
-			t.Fatalf("Resolve: %v", err)
+			t.Fatalf("Load: %v", err)
 		}
 		if got, want := cfg.Apps[0].Serverless, (&Serverless{Framework: "node"}); *got != *want {
 			t.Fatalf("Apps[0].Serverless = %+v, want %+v: a named framework decides it", got, want)
@@ -259,9 +259,9 @@ export default {
 `)
 		writeFile(t, filepath.Join(root, "services", "web", "main.rb"), "puts 1\n")
 
-		_, err := Resolve(context.Background(), root, "")
+		_, err := Load(context.Background(), root, "")
 		if err == nil {
-			t.Fatal("Resolve = nil error, want the config refused: nothing in the app's directory says what it is")
+			t.Fatal("Load = nil error, want the config refused: nothing in the app's directory says what it is")
 		}
 		for _, want := range []string{`app "web"`, "framework"} {
 			if !strings.Contains(err.Error(), want) {
@@ -282,9 +282,9 @@ export default {
 `)
 		writeFile(t, filepath.Join(root, "services", "web", "Dockerfile"), "FROM scratch\n")
 
-		cfg, err := Resolve(context.Background(), root, "")
+		cfg, err := Load(context.Background(), root, "")
 		if err != nil {
-			t.Fatalf("Resolve: %v — the provider may run web as a container, which needs no framework", err)
+			t.Fatalf("Load: %v — the provider may run web as a container, which needs no framework", err)
 		}
 		if framework := cfg.Apps[0].Framework(); framework != "" {
 			t.Fatalf("Apps[0].Framework() = %q, want none", framework)
@@ -311,9 +311,9 @@ export default {
 };
 `)
 
-		cfg, err := Resolve(context.Background(), root, "")
+		cfg, err := Load(context.Background(), root, "")
 		if err != nil {
-			t.Fatalf("Resolve: %v", err)
+			t.Fatalf("Load: %v", err)
 		}
 		if cfg.Apps[0].Serverless != nil {
 			t.Fatalf("Apps[0].Serverless = %+v, want none: nothing exists at the path to be read", cfg.Apps[0].Serverless)
@@ -332,9 +332,9 @@ export default {
 `)
 		writeFile(t, filepath.Join(root, "services", "web", "main.rb"), "puts 1\n")
 
-		cfg, err := Resolve(context.Background(), root, "")
+		cfg, err := Load(context.Background(), root, "")
 		if err != nil {
-			t.Fatalf("Resolve: %v", err)
+			t.Fatalf("Load: %v", err)
 		}
 		if cfg.Apps[0].Serverless != nil || cfg.Apps[0].Container == nil {
 			t.Fatalf("Apps[0] = %+v, want a container shape and no framework: a container runs the image it is given", cfg.Apps[0])
