@@ -43,7 +43,7 @@ func TestIdentityEvent(t *testing.T) {
 		t.Parallel()
 
 		got := IdentityEvent(cfg, environmentv1.Tier_TIER_PREVIEW, &contractv1.Identity{
-			Provider: "vps",
+			Provider: "fake",
 			Account:  "srv1.example.com",
 		})
 		if got.GetEdge() != nil {

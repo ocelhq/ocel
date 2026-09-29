@@ -11,8 +11,8 @@ import (
 )
 
 const inlineBucket = `bucket: { uploads: {
-  endpoint: "https://abc.r2.relaystorage.com", region: "auto", bucket: "acme", prefix: "uploads/",
-  accessKeyId: { $env: "R2_KEY" }, secretAccessKey: { $env: "R2_SECRET" },
+  endpoint: "https://abc.storage.example.com", region: "auto", bucket: "acme", prefix: "uploads/",
+  accessKeyId: { $env: "R2_KEY" }, secretAccessKey: { $env: "BUCKET_SECRET" },
 } }`
 
 func declareUploads(t *testing.T, root string) {
@@ -40,7 +40,7 @@ func TestDeployBindsAnInlineBucket(t *testing.T) {
 		run := setUpInline(t, inlineBucket)
 		declareUploads(t, run.root)
 		seedProduction(t, "R2_KEY", "AKIDEXAMPLE")
-		seedProduction(t, "R2_SECRET", "r2-s3cret")
+		seedProduction(t, "BUCKET_SECRET", "bucket-s3cret")
 
 		out, err := run.deploy(t, deployOptions{})
 		if err != nil {
@@ -50,7 +50,7 @@ func TestDeployBindsAnInlineBucket(t *testing.T) {
 		if len(published) != 1 || published[0].Name != "ocel:bucket.uploads" || published[0].Tier != environmentv1.Tier_TIER_PRODUCTION {
 			t.Fatalf("records = %+v, want the inline bucket's record", published)
 		}
-		for _, want := range []string{`"endpoint":"https://abc.r2.relaystorage.com"`, `"prefix":"uploads/"`, `"secretAccessKey":"r2-s3cret"`} {
+		for _, want := range []string{`"endpoint":"https://abc.storage.example.com"`, `"prefix":"uploads/"`, `"secretAccessKey":"bucket-s3cret"`} {
 			if !strings.Contains(published[0].Wire, want) {
 				t.Errorf("record = %s, want it to contain %s", published[0].Wire, want)
 			}
@@ -59,7 +59,7 @@ func TestDeployBindsAnInlineBucket(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if strings.Contains(string(sent), "r2-s3cret") {
+		if strings.Contains(string(sent), "bucket-s3cret") {
 			t.Errorf("the deploy request contains the store's secret key: %s", sent)
 		}
 	})
@@ -68,7 +68,7 @@ func TestDeployBindsAnInlineBucket(t *testing.T) {
 		run := setUpInline(t, inlineBucket)
 		declareUploads(t, run.root)
 		seedProduction(t, "R2_KEY", "AKIDEXAMPLE")
-		seedProduction(t, "R2_SECRET", "r2-s3cret")
+		seedProduction(t, "BUCKET_SECRET", "bucket-s3cret")
 		t.Setenv(clitest.FakeBucketRefusalEnvVar, "its CORS rules allow no request from https://acme.com")
 
 		out, err := run.deploy(t, deployOptions{})
@@ -87,7 +87,7 @@ func TestDeployBindsAnInlineBucket(t *testing.T) {
 		run := setUpInline(t, inlineBucket)
 		declareUploads(t, run.root)
 		seedProduction(t, "R2_KEY", "AKIDEXAMPLE")
-		seedProduction(t, "R2_SECRET", "r2-s3cret")
+		seedProduction(t, "BUCKET_SECRET", "bucket-s3cret")
 		t.Setenv(clitest.FakeBucketWarningEnvVar, "could not read the bucket's CORS rules (AccessDenied)")
 
 		out, err := run.deploy(t, deployOptions{})
