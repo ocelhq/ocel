@@ -52,9 +52,13 @@ func New(_ context.Context, settings provider.Settings) (provider.Provider, erro
 	if err != nil {
 		return nil, err
 	}
-	p := NewProvider(decoded)
-	p.stacks.artifactRoot = appbuild.ArtifactRoot(settings.ProjectDir)
-	return p.WithHooks(p.everyHook), nil
+	return NewForProject(decoded, settings.ProjectDir), nil
+}
+
+func NewForProject(options Options, projectDir string) *Provider {
+	p := NewProvider(options)
+	p.stacks.artifactRoot = appbuild.ArtifactRoot(projectDir)
+	return p.WithHooks(p.everyHook)
 }
 
 func NewProvider(options Options) *Provider {

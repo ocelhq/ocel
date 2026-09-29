@@ -19,26 +19,29 @@ import (
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 )
 
-const apiFunction = "project:" + clitest.FixtureSlug + "/environment:prod/app:api/fake_function:fn--api--api"
+const apiFunction = "environment:prod/app:api/fake_function:fn--api--api"
 
-func scanFixture(t *testing.T) (string, cmddeps.Deps) {
+func scanFixture(t *testing.T) (string, *fake.Provider, cmddeps.Deps) {
 	t.Helper()
-	root, _ := clitest.SetUpDeployFixture(t)
+	root, p := clitest.SetUpProject(t)
 	clitest.WriteUsageMonorepo(t, root)
 	deps := clitest.NewDeps()
 	clitest.StubBuild(&deps, []manifestbuilder.Function{
 		{Route: "api", Framework: manifestbuilder.Framework{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/api", App: "api"},
 	})
-	return root, deps
+	return root, p, deps
 }
 
 func scan(t *testing.T, deps cmddeps.Deps, root string, opts Options) string {
 	t.Helper()
-	var stdout bytes.Buffer
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(deps, &stderr)
 	if err := Run(context.Background(), deps, root, opts, &stdout); err != nil {
-		t.Fatalf("Run err = %v; stdout=%s", err, stdout.String())
+		t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	return stdout.String()
 }
@@ -51,7 +54,7 @@ type scanJSON struct {
 
 func TestScan(t *testing.T) {
 	t.Run("it tables every resource under its scope with the fixed and moderate cost beside it", func(t *testing.T) {
-		root, deps := scanFixture(t)
+		root, _, deps := scanFixture(t)
 
 		out := scan(t, deps, root, Options{})
 
@@ -77,7 +80,7 @@ func TestScan(t *testing.T) {
 	})
 
 	t.Run("it prices the rows under the profile asked for", func(t *testing.T) {
-		root, deps := scanFixture(t)
+		root, _, deps := scanFixture(t)
 
 		out := scan(t, deps, root, Options{Profile: "heavy"})
 
@@ -88,7 +91,7 @@ func TestScan(t *testing.T) {
 	})
 
 	t.Run("a usage file overrides the profile for the resource it names", func(t *testing.T) {
-		root, deps := scanFixture(t)
+		root, _, deps := scanFixture(t)
 		usage := filepath.Join(t.TempDir(), "usage.yaml")
 		clitest.WriteFile(t, usage, apiFunction+":\n  monthly_requests: 5000000\n")
 
@@ -101,7 +104,7 @@ func TestScan(t *testing.T) {
 	})
 
 	t.Run("it prices one function per app when nothing is built", func(t *testing.T) {
-		root, deps := scanFixture(t)
+		root, _, deps := scanFixture(t)
 		deps.CollectAppFunctions = func(string) ([]manifestbuilder.Function, error) {
 			return nil, appbuilder.ErrNoBuildOutput
 		}
@@ -117,7 +120,7 @@ func TestScan(t *testing.T) {
 	})
 
 	t.Run("it includes the unbuilt assumption in the JSON envelope and none when the build is read", func(t *testing.T) {
-		root, deps := scanFixture(t)
+		root, _, deps := scanFixture(t)
 		deps.Presentation = func(io.Writer) runui.Presentation {
 			return runui.Resolve(runui.Origin{LogFormat: runui.FormatJSON})
 		}
@@ -143,7 +146,7 @@ func TestScan(t *testing.T) {
 	})
 
 	t.Run("an app naming no compute is priced on the compute its provider runs first", func(t *testing.T) {
-		root, deps := scanFixture(t)
+		root, p, deps := scanFixture(t)
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "`+clitest.FixtureSlug+`",
@@ -152,7 +155,7 @@ export default {
 };
 `)
 		clitest.WriteFile(t, filepath.Join(root, "apps", "api", "package.json"), `{}`)
-		t.Setenv(clitest.FakeComputesEnvVar, "container")
+		p.WithFacts(func(facts *provider.Facts) { facts.Computes = []provider.Compute{provider.ComputeContainer} })
 		deps.CollectAppFunctions = func(string) ([]manifestbuilder.Function, error) {
 			return nil, appbuilder.ErrNoBuildOutput
 		}
@@ -165,7 +168,7 @@ export default {
 	})
 
 	t.Run("it prices the preview environment when asked", func(t *testing.T) {
-		root, deps := scanFixture(t)
+		root, _, deps := scanFixture(t)
 
 		out := scan(t, deps, root, Options{Env: "preview"})
 
@@ -175,7 +178,7 @@ export default {
 	})
 
 	t.Run("it refuses an environment or profile it does not know", func(t *testing.T) {
-		root, deps := scanFixture(t)
+		root, _, deps := scanFixture(t)
 
 		var stdout bytes.Buffer
 		if err := Run(context.Background(), deps, root, Options{Env: "staging"}, &stdout); err == nil || !strings.Contains(err.Error(), "staging") {
@@ -187,7 +190,7 @@ export default {
 	})
 
 	t.Run("it writes the resource set and the estimate as JSON under --log-format json", func(t *testing.T) {
-		root, deps := scanFixture(t)
+		root, _, deps := scanFixture(t)
 		deps.Presentation = func(io.Writer) runui.Presentation {
 			return runui.Resolve(runui.Origin{LogFormat: runui.FormatJSON})
 		}
@@ -225,7 +228,7 @@ func lineNaming(out, name string) string {
 }
 
 func TestAScanStartsTheProviderInTheCheckPhaseOfItsRunAndPrintsItsEstimateAloneOnStdout(t *testing.T) {
-	root, deps := scanFixture(t)
+	root, _, deps := scanFixture(t)
 	deps.Presentation = func(io.Writer) runui.Presentation {
 		return runui.Resolve(runui.Origin{LogFormat: runui.FormatJSON})
 	}

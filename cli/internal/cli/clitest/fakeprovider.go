@@ -33,7 +33,6 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
-	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
@@ -186,9 +185,6 @@ func fakeProviderRoutes(fake *deployFakeProviderServer) *http.ServeMux {
 	mux.Handle(path, handler)
 
 	path, handler = envvarsv1connect.NewEnvVarsServiceHandler(fake)
-	mux.Handle(path, handler)
-
-	path, handler = costv1connect.NewCostServiceHandler(fake)
 	mux.Handle(path, handler)
 	return mux
 }
