@@ -16,7 +16,7 @@ import (
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 )
 
-type Want struct {
+type declaration struct {
 	Public  bool
 	Origins []string
 }
@@ -27,24 +27,24 @@ type inspectAPI interface {
 	GetBucketPolicy(context.Context, *s3.GetBucketPolicyInput, ...func(*s3.Options)) (*s3.GetBucketPolicyOutput, error)
 }
 
-func Check(ctx context.Context, record *bindingsv1.BucketProperties, want Want) ([]string, error) {
-	return check(ctx, storeOf(record).Client(), record, want)
+func Check(ctx context.Context, record *bindingsv1.BucketProperties, public bool, origins []string) ([]string, error) {
+	return check(ctx, storeOf(record).Client(), record, declaration{Public: public, Origins: origins})
 }
 
-func check(ctx context.Context, api inspectAPI, record *bindingsv1.BucketProperties, want Want) ([]string, error) {
+func check(ctx context.Context, api inspectAPI, record *bindingsv1.BucketProperties, declared declaration) ([]string, error) {
 	bucket := aws.String(record.GetBucket())
 	if _, err := api.HeadBucket(ctx, &s3.HeadBucketInput{Bucket: bucket}); err != nil {
 		return nil, fmt.Errorf("bucket %s did not answer: %s", record.GetBucket(), scrubbed(err, record))
 	}
 	var warnings []string
-	if len(want.Origins) > 0 {
-		warning, err := checkOrigins(ctx, api, record, want.Origins)
+	if len(declared.Origins) > 0 {
+		warning, err := checkOrigins(ctx, api, record, declared.Origins)
 		if err != nil {
 			return nil, err
 		}
 		warnings = append(warnings, warning...)
 	}
-	if want.Public {
+	if declared.Public {
 		warning, err := checkPublic(ctx, api, record)
 		if err != nil {
 			return nil, err

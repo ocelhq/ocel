@@ -50,8 +50,6 @@ func NewDeps() cmddeps.Deps {
 		RefuseUnbuildableImages: build.RefuseUnbuildableImages,
 		ReadPrebuilt:            build.ReadPrebuilt,
 		ReadFunctions:           build.ReadFunctions,
-		ProbePostgres:           fakeProbePostgres,
-		ProbeBucket:             fakeProbeBucket,
 		DeploymentID:            build.DeploymentID,
 		CollectDeclarations:     declaration.Collect,
 		ServeVariableEditor:     projecteditor.Serve,

@@ -10,7 +10,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/english"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/run"
@@ -21,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
@@ -43,7 +43,7 @@ type variablesRecovery struct {
 	enabled bool
 }
 
-func (r variablesRecovery) buildManifest(ctx context.Context, phase *run.Span, prebuilt bool) (*contractv1.Manifest, []inlinebinding.Record, error) {
+func (r variablesRecovery) buildManifest(ctx context.Context, phase *run.Span, prebuilt bool) (*contractv1.Manifest, []*bindingsv1.Binding, error) {
 	unit := phase.Unit(r.cfg.Slug, buildTitle(r.cfg, prebuilt))
 	manifest, inline, err := r.build(ctx, phase, unit, prebuilt)
 	unit.End(err)
@@ -81,7 +81,7 @@ func appList(cfg *project.Project) string {
 	}
 }
 
-func (r variablesRecovery) build(ctx context.Context, phase, span *run.Span, prebuilt bool) (*contractv1.Manifest, []inlinebinding.Record, error) {
+func (r variablesRecovery) build(ctx context.Context, phase, span *run.Span, prebuilt bool) (*contractv1.Manifest, []*bindingsv1.Binding, error) {
 	declarations, err := r.declarations(ctx)
 	var refusal *variables.MissingError
 	if errors.As(err, &refusal) && r.enabled {
@@ -152,7 +152,7 @@ func (r variablesRecovery) createInEnvSource(ctx context.Context, span *run.Span
 	}
 }
 
-func (r variablesRecovery) attempt(ctx context.Context, phase, unit *run.Span, declarations *variables.Declarations, prebuilt bool, retry int) (*contractv1.Manifest, []inlinebinding.Record, error) {
+func (r variablesRecovery) attempt(ctx context.Context, phase, unit *run.Span, declarations *variables.Declarations, prebuilt bool, retry int) (*contractv1.Manifest, []*bindingsv1.Binding, error) {
 	attempt := unit.Trace(r.cfg.Slug, "build", progress.Attr{Key: progress.AttrKeyRetryCount, Value: strconv.Itoa(retry)})
 	manifest, inline, err := collectBuildAndAssemble(run.ContextWithSpan(ctx, attempt), r.deps, assembly{
 		cfg: r.cfg, declarations: declarations, prebuilt: prebuilt, dry: r.dry, phase: phase, span: unit,

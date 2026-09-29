@@ -27,7 +27,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
-	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
 	"github.com/ocelhq/ocel/cli/internal/projecteditor"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/run"
@@ -135,8 +134,6 @@ func newDeps() cmddeps.Deps {
 		RefuseUnbuildableImages: build.RefuseUnbuildableImages,
 		ReadPrebuilt:            build.ReadPrebuilt,
 		ReadFunctions:           build.ReadFunctions,
-		ProbePostgres:           inlinebinding.ProbePostgres,
-		ProbeBucket:             inlinebinding.ProbeBucket,
 		DeploymentID:            build.DeploymentID,
 		CollectDeclarations:     declaration.Collect,
 		OpenBrowser:             browser.OpenURL,

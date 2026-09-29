@@ -168,6 +168,9 @@ type deployRun struct {
 	scope     envvars.Scope
 	published *publishedBindings
 
+	inline         []inlineBinding
+	inlineVersions map[string]int64
+
 	registry provider.RegistryTarget
 	images   provider.ImageStore
 
@@ -226,6 +229,10 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 	if err != nil {
 		return nil, err
 	}
+	inline, err := readInlineBindings(req)
+	if err != nil {
+		return nil, err
+	}
 	front, err := h.edgeFor(p, req.GetEdge())
 	if err != nil {
 		return nil, err
@@ -258,6 +265,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 		artifacts:      map[string]provider.ArtifactRef{},
 		functionImages: map[string]string{},
 		provisioning:   map[string]bool{},
+		inline:         inline,
 
 		dry:           req.GetDry(),
 		allowDegraded: req.GetEdge().GetAllowDegraded(),
@@ -315,11 +323,19 @@ func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, er
 }
 
 func (r *deployRun) prepare(ctx context.Context, progress progress.Log) error {
+	if err := r.checkInlineBindings(ctx, progress); err != nil {
+		return err
+	}
 	if err := r.ensureBootstrap(ctx, progress); err != nil {
 		return err
 	}
 	if err := r.resolveServingDomains(ctx); err != nil {
 		return err
+	}
+	if !r.dry {
+		if err := r.publishInlineBindings(ctx); err != nil {
+			return err
+		}
 	}
 	if err := r.admitBindings(ctx, progress); err != nil {
 		return err
@@ -1340,6 +1356,7 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 			if err := r.reclaimDropped(ctx, r.spec.Pointer, dropped, progress); err != nil {
 				progress.Warn(unreclaimedWarning(promotion.PromotionID, err))
 			}
+			r.pruneInlineBindings(ctx, progress)
 			if r.spec.Tier != environment.TierPreview {
 				return nil
 			}

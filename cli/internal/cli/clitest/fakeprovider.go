@@ -379,12 +379,12 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *contractv1.D
 		}
 	}
 
-	for _, message := range consumeFakeBindings(req.GetManifest(), req.GetEnvironment()) {
+	for _, message := range consumeFakeBindings(req) {
 		if err := stream.Send(fakeProgress(message)); err != nil {
 			return err
 		}
 	}
-	if refusal := refuseUnpublishedFakeBindings(req.GetManifest(), req.GetEnvironment(), req.GetDry()); refusal != "" {
+	if refusal := refuseUnpublishedFakeBindings(req); refusal != "" {
 		return stream.Send(&progressv1.OperationEvent{
 			Body: &progressv1.OperationEvent_Result{Result: &progressv1.OperationResult{Success: false, Error: refusal}},
 		})
@@ -504,14 +504,20 @@ func fakePublishedBindings() []string {
 	return out
 }
 
-func consumeFakeBindings(m *contractv1.Manifest, env *environmentv1.Environment) []string {
+func carriesFakeInline(req *contractv1.DeployRequest, name string) bool {
+	return slices.ContainsFunc(req.GetInlineBindings(), func(b *bindingsv1.Binding) bool { return b.GetName() == name })
+}
+
+func consumeFakeBindings(req *contractv1.DeployRequest) []string {
 	published := fakePublishedBindings()
 	var out []string
-	for _, r := range m.GetResources() {
+	for _, r := range req.GetManifest().GetResources() {
 		id := r.GetResource().GetName()
 		if r.GetBinding() != "" {
 			line := "BINDING bound=" + r.GetLogicalName() + " name=" + id
-			if stored := storedFakeBinding(env, r.GetBinding()); stored != nil {
+			if carriesFakeInline(req, r.GetBinding()) {
+				line += " record=" + r.GetBinding() + " carried"
+			} else if stored := storedFakeBinding(req.GetEnvironment(), r.GetBinding()); stored != nil {
 				line += " record=" + stored.Name + " owner=" + stored.Owner
 			}
 			out = append(out, line)
@@ -537,14 +543,14 @@ func storedFakeBinding(env *environmentv1.Environment, name string) *fakeBinding
 	return nil
 }
 
-func refuseUnpublishedFakeBindings(m *contractv1.Manifest, env *environmentv1.Environment, dry bool) string {
+func refuseUnpublishedFakeBindings(req *contractv1.DeployRequest) string {
 	published := fakePublishedBindings()
 	var missing []string
-	for _, r := range m.GetResources() {
-		if dry && naming.IsInlineRecord(r.GetBinding()) {
+	for _, r := range req.GetManifest().GetResources() {
+		if carriesFakeInline(req, r.GetBinding()) {
 			continue
 		}
-		if r.GetBinding() != "" && !slices.Contains(published, r.GetResource().GetName()) && storedFakeBinding(env, r.GetBinding()) == nil {
+		if r.GetBinding() != "" && !slices.Contains(published, r.GetResource().GetName()) && storedFakeBinding(req.GetEnvironment(), r.GetBinding()) == nil {
 			missing = append(missing, r.GetResource().GetName())
 		}
 	}

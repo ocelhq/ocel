@@ -56,7 +56,7 @@ func (r *deployRun) admitBindings(ctx context.Context, progress progress.Log) er
 
 func (r *deployRun) writtenByTheDeploy(name string, published map[string]provider.Binding) bool {
 	_, taken := published[name]
-	return r.dry && !taken && naming.IsInlineRecord(name)
+	return r.dry && !taken && r.carriesInline(name)
 }
 
 func proxied(kind provider.BindingType) bool {

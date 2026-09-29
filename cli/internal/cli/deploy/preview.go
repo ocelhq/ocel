@@ -267,13 +267,14 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 		Dry:         opts.dry,
 
 		ProjectRegistry: registry,
+		InlineBindings:  inline,
 	}
 
 	if opts.dry {
 		return showDeployPlan(ctx, run, prov, req, fmt.Sprintf("Proposed changes to preview %s", env.GetIdentity()), cfg.Slug, "preview "+env.GetIdentity())
 	}
 
-	out, err := streamDeploy(ctx, prov, cfg.Slug, req, inline)
+	out, err := streamDeploy(ctx, prov, req)
 	if err != nil {
 		return err
 	}

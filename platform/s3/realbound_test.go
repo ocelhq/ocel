@@ -29,12 +29,12 @@ func TestABoundBucketIsCheckedAndServedOnARealStore(t *testing.T) {
 		Prefix:          "app/",
 	}
 
-	if _, err := Check(ctx, record, Want{}); err != nil {
+	if _, err := Check(ctx, record, false, nil); err != nil {
 		t.Fatalf("Check = %v, want a bucket that answers passed", err)
 	}
 	absent := proto.CloneOf(record)
 	absent.Bucket = "never-made"
-	if _, err := Check(ctx, absent, Want{}); err == nil {
+	if _, err := Check(ctx, absent, false, nil); err == nil {
 		t.Error("Check = nil, want a bucket the store does not have refused")
 	}
 
@@ -44,7 +44,7 @@ func TestABoundBucketIsCheckedAndServedOnARealStore(t *testing.T) {
 			AllowedOrigins: []string{"https://acme.com"}, AllowedMethods: []string{"PUT", "POST", "GET"},
 		}}},
 	}); err == nil {
-		_, err := Check(ctx, record, Want{Origins: []string{"https://acme.com", "https://admin.acme.com"}})
+		_, err := Check(ctx, record, false, []string{"https://acme.com", "https://admin.acme.com"})
 		if err == nil || !strings.Contains(err.Error(), "https://admin.acme.com") {
 			t.Errorf("Check = %v, want the origin the store's CORS rules lack named", err)
 		}

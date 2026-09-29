@@ -9,12 +9,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/progress"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 )
 
 type Hooks struct {
 	PreflightDeploy     func(ctx context.Context, pre DeployPreflight) error
 	VerifyGrants        func(ctx context.Context, binding Binding) error
+	CheckBucket         func(ctx context.Context, record *bindingsv1.BucketProperties, public bool, origins []string) ([]string, error)
 	InspectStack        func(ctx context.Context, ref StackRef) (InspectedStack, error)
 	PackApp             func(ctx context.Context, req PackAppRequest, progress progress.Log) (PackAppResult, error)
 	EmbedCode           func(ctx context.Context, function string, artifact ArtifactRef, progress progress.Log) error

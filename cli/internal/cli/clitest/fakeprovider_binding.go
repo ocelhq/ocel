@@ -8,7 +8,6 @@ import (
 	"maps"
 	"os"
 	"slices"
-	"strconv"
 
 	connect "connectrpc.com/connect"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -20,34 +19,6 @@ import (
 )
 
 const FakeBindingsStoreEnvVar = "OCEL_TEST_FAKE_BINDINGS_STORE"
-
-const FakePostgresVersionEnvVar = "OCEL_TEST_FAKE_POSTGRES_VERSION"
-
-const FakePostgresUnreachableEnvVar = "OCEL_TEST_FAKE_POSTGRES_UNREACHABLE"
-
-const FakeBucketRefusalEnvVar = "OCEL_TEST_FAKE_BUCKET_REFUSAL"
-
-const FakeBucketWarningEnvVar = "OCEL_TEST_FAKE_BUCKET_WARNING"
-
-func fakeProbeBucket(_ context.Context, props *bindingsv1.BucketProperties, _ bool, _ []string) ([]string, error) {
-	if refusal := os.Getenv(FakeBucketRefusalEnvVar); refusal != "" {
-		return nil, fmt.Errorf("bucket %s: %s", props.GetBucket(), refusal)
-	}
-	if warning := os.Getenv(FakeBucketWarningEnvVar); warning != "" {
-		return []string{warning}, nil
-	}
-	return nil, nil
-}
-
-func fakeProbePostgres(_ context.Context, props *bindingsv1.PostgresProperties) (int, error) {
-	if reason := os.Getenv(FakePostgresUnreachableEnvVar); reason != "" {
-		return 0, fmt.Errorf("dial %s as %s with password %s: %s", props.GetHost(), props.GetUsername(), props.GetPassword(), reason)
-	}
-	if version := os.Getenv(FakePostgresVersionEnvVar); version != "" {
-		return strconv.Atoi(version)
-	}
-	return 170000, nil
-}
 
 const fakeBindingOwnerOcel = "OCEL"
 

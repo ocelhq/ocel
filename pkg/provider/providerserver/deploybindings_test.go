@@ -222,10 +222,10 @@ func TestDeployBindsByTheExternalName(t *testing.T) {
 }
 
 func TestADryRunAdmitsTheRecordAnInlineBindingWritesOnlyAtDeploy(t *testing.T) {
-	t.Run("a dry run plans without it", func(t *testing.T) {
+	t.Run("a dry run plans with the record the request carries", func(t *testing.T) {
 		builtProject(t)
 		client, _ := deployServed(t)
-		req := externalBindingRequest("orders", naming.InlineRecordName(resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, "orders"), bindingsv1.BindingType_BINDING_TYPE_POSTGRES)
+		req := inlinePostgresRequest(servePostgres(t, "170004", 0).url(), "17")
 		req.Dry = true
 
 		result, _ := deploy(t, client, req)

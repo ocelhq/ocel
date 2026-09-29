@@ -24,6 +24,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/progress"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
@@ -40,7 +41,7 @@ type assembly struct {
 	urls           map[string]string
 }
 
-func collectBuildAndAssemble(ctx context.Context, deps cmddeps.Deps, a assembly) (*contractv1.Manifest, []inlinebinding.Record, error) {
+func collectBuildAndAssemble(ctx context.Context, deps cmddeps.Deps, a assembly) (*contractv1.Manifest, []*bindingsv1.Binding, error) {
 	cfg, declarations, span := a.cfg, a.declarations, a.span
 	captured := &boundedCapture{}
 	tee := io.MultiWriter(span.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED), captured)
@@ -61,7 +62,7 @@ func collectBuildAndAssemble(ctx context.Context, deps cmddeps.Deps, a assembly)
 	if err := declarations.RefuseIncomplete(); err != nil {
 		return nil, nil, err
 	}
-	inline, err := inlineRecords(ctx, deps, cfg, declarations, resources, span)
+	inline, err := inlineBindings(ctx, cfg, declarations)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -227,29 +228,12 @@ func (b *buildSteps) run(subject string, title progress.Title, step func() error
 	return err
 }
 
-func inlineRecords(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, declarations *variables.Declarations, resources []declaration.Resource, span *run.Span) ([]inlinebinding.Record, error) {
+func inlineBindings(ctx context.Context, cfg *project.Project, declarations *variables.Declarations) ([]*bindingsv1.Binding, error) {
 	values, err := declarations.ResolveBindingVariables(ctx)
 	if err != nil {
 		return nil, err
 	}
-	records, err := inlinebinding.Build(cfg.BindingsFor(declarations.Scope().Tier), values, filepath.Base(cfg.Path))
-	if err != nil || len(records) == 0 {
-		return records, err
-	}
-	declared := inlinebinding.Declared{Postgres: map[string]string{}, Buckets: map[string]*resourcesv1.BucketConfig{}}
-	for _, resource := range resources {
-		if resource.Postgres != nil {
-			declared.Postgres[resource.Name] = resource.Postgres.GetVersion()
-		}
-		if resource.Bucket != nil {
-			declared.Buckets[resource.Name] = resource.Bucket
-		}
-	}
-	warnings, err := inlinebinding.Verify(ctx, records, declared, inlinebinding.Probes{Postgres: deps.ProbePostgres, Bucket: deps.ProbeBucket})
-	for _, warning := range warnings {
-		span.Warn(warning)
-	}
-	return records, err
+	return inlinebinding.Build(cfg.BindingsFor(declarations.Scope().Tier), values, filepath.Base(cfg.Path))
 }
 
 const maxCapturedDiscoveryOutput = 4096

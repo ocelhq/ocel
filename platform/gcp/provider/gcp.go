@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/cloudrun"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
+	s3store "github.com/ocelhq/ocel/platform/s3"
 )
 
 const Vendor provider.Vendor = "gcp"
@@ -101,6 +102,7 @@ func (p *Provider) Hooks() provider.Hooks {
 	return provider.Hooks{
 		EnsureImageRegistry: p.EnsureImageRegistry,
 		OpenDirectImages:    p.OpenDirectImages,
+		CheckBucket:         s3store.Check,
 		ProveIdentity:       ports.ProveIdentity,
 		Cost:                &provider.CostHooks{Shape: p.ShapeCost, Estimate: p.EstimateCost},
 		FunctionImages:      &provider.FunctionImageHooks{ResolveBase: p.ResolveFunctionBase, ReadRuntime: p.ReadFunctionRuntime},

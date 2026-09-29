@@ -12,7 +12,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
-	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/run"
@@ -34,8 +33,6 @@ type Deps struct {
 	DeploymentID            func(projectDir, app string) (string, error)
 	CollectDeclarations     func(ctx context.Context, cfg *project.Project, declarations *variables.Declarations, stdout, stderr io.Writer) ([]declaration.Resource, error)
 	OpenBrowser             func(url string) error
-	ProbePostgres           inlinebinding.PostgresProbe
-	ProbeBucket             inlinebinding.BucketProbe
 	ServeVariableEditor     func(ctx context.Context, cfg *project.Project, prov *providerclient.Provider, tier environmentv1.Tier, declarations *variables.Declarations, recovery *variableeditor.Recovery) (*variableeditor.Session, error)
 	CurrentGitBranch        func(dir string) (string, error)
 	DiscoverPRNumber        func() string

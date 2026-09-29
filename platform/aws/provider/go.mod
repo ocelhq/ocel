@@ -27,6 +27,7 @@ require (
 	github.com/ocelhq/ocel/pkg v0.0.0
 	github.com/ocelhq/ocel/pkg/provider/pulumi v0.0.0
 	github.com/ocelhq/ocel/platform/edge/cloudflare/deploy v0.0.0
+	github.com/ocelhq/ocel/platform/s3 v0.0.0
 	github.com/pulumi/pulumi-aws/sdk/v7 v7.36.0
 	github.com/pulumi/pulumi-go-provider v1.6.0
 	github.com/pulumi/pulumi/sdk/v3 v3.259.0
@@ -112,6 +113,9 @@ require (
 	github.com/hashicorp/hcl/v2 v2.24.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/iwdgo/sigintwindows v0.2.2 // indirect
+	github.com/jackc/pgpassfile v1.0.0 // indirect
+	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
+	github.com/jackc/pgx/v5 v5.11.0 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kevinburke/ssh_config v1.6.0 // indirect
@@ -204,3 +208,5 @@ replace github.com/ocelhq/ocel/platform/edge/cloudflare/deploy => ../../edge/clo
 replace github.com/ocelhq/ocel/pkg => ../../../pkg
 
 replace github.com/ocelhq/ocel/pkg/provider/pulumi => ../../../pkg/provider/pulumi
+
+replace github.com/ocelhq/ocel/platform/s3 => ../../s3

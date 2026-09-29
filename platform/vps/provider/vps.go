@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
+	s3store "github.com/ocelhq/ocel/platform/s3"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
@@ -95,6 +96,7 @@ func (p *Provider) Hooks() provider.Hooks {
 		OpenRegistryImages: p.OpenRegistryImages,
 		OpenDirectImages:   p.OpenDirectImages,
 		CheckHost:          p.CheckHost,
+		CheckBucket:        s3store.Check,
 	}
 }
 

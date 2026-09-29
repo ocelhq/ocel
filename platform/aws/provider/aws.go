@@ -21,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
+	s3store "github.com/ocelhq/ocel/platform/s3"
 )
 
 const Vendor provider.Vendor = "aws"
@@ -84,6 +85,7 @@ func (p *Provider) Hooks() provider.Hooks {
 	return provider.Hooks{
 		PreflightDeploy:     p.PreflightDeploy,
 		VerifyGrants:        p.VerifyGrants,
+		CheckBucket:         s3store.Check,
 		InspectStack:        p.InspectStack,
 		PackApp:             p.PackApp,
 		EmbedCode:           p.EmbedCode,

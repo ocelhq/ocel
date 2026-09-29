@@ -162,13 +162,14 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 		Dry:         opts.dry,
 
 		ProjectRegistry: registry,
+		InlineBindings:  inline,
 	}
 
 	if opts.dry {
 		return showDeployPlan(ctx, run, prov, req, "Proposed changes to production", cfg.Slug, "production")
 	}
 
-	out, err := streamDeploy(ctx, prov, cfg.Slug, req, inline)
+	out, err := streamDeploy(ctx, prov, req)
 	if err != nil {
 		return err
 	}

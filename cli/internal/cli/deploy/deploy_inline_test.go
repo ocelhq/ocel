@@ -8,10 +8,14 @@ import (
 	"strings"
 	"testing"
 
+	"google.golang.org/protobuf/encoding/protojson"
+
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/pkg/appbuild"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 )
 
@@ -66,17 +70,29 @@ func (r inlineRun) deploy(t *testing.T, opts deployOptions) (string, error) {
 	return stdout.String() + stderr.String(), err
 }
 
-func records(t *testing.T) []clitest.FakeBindingRecord {
+func sentRequest(t *testing.T, journal string) *contractv1.DeployRequest {
 	t.Helper()
-	published, err := clitest.FakeBindingRecords()
+	raw, err := os.ReadFile(journal)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("read the deploy request: %v", err)
 	}
-	return published
+	req := &contractv1.DeployRequest{}
+	if err := protojson.Unmarshal(raw, req); err != nil {
+		t.Fatalf("decode the deploy request: %v", err)
+	}
+	return req
+}
+
+func carriedNames(carried []*bindingsv1.Binding) []string {
+	names := make([]string, 0, len(carried))
+	for _, binding := range carried {
+		names = append(names, binding.GetName()+" from "+binding.GetSource())
+	}
+	return names
 }
 
 func TestDeployBindsAnInlineRecord(t *testing.T) {
-	t.Run("the record is kept for the deploy and the manifest names it, never its secret", func(t *testing.T) {
+	t.Run("the request carries the record whole and the manifest names it, never its secret", func(t *testing.T) {
 		run := setUpInline(t, inlineByURL)
 		seedProduction(t, "MAIN_DATABASE_URL", inlineURL)
 
@@ -84,22 +100,23 @@ func TestDeployBindsAnInlineRecord(t *testing.T) {
 		if err != nil {
 			t.Fatalf("deploy: %v\n%s", err, out)
 		}
-		if !strings.Contains(out, "BINDING bound=db--main name=main record=ocel:postgres.main owner=ocel-config") {
-			t.Errorf("output = %q, want main bound to the record ocel keeps for it", out)
+		if !strings.Contains(out, "BINDING bound=db--main name=main record=ocel:postgres.main carried") {
+			t.Errorf("output = %q, want main bound to the record the request carries", out)
 		}
-		published := records(t)
-		if len(published) != 1 || published[0].Name != "ocel:postgres.main" || published[0].Tier != environmentv1.Tier_TIER_PRODUCTION {
-			t.Fatalf("records = %+v, want the one inline record in production", published)
+		req := sentRequest(t, run.journal)
+		carried := req.GetInlineBindings()
+		if len(carried) != 1 || carried[0].GetName() != "ocel:postgres.main" || carried[0].GetSource() != "ocel.config.ts" {
+			t.Fatalf("inline bindings = %v, want the one record, sourced from the config", carriedNames(carried))
 		}
-		if !strings.Contains(published[0].Wire, "s3cret-pw") || !strings.Contains(published[0].Wire, `"source":"ocel.config.ts"`) {
-			t.Errorf("record = %s, want the url whole and the config named as its source", published[0].Wire)
+		if carried[0].GetPostgres().GetUrl() != inlineURL {
+			t.Error("the carried record lost the url the app connects with")
 		}
-		sent, err := os.ReadFile(run.journal)
+		manifest, err := protojson.Marshal(req.GetManifest())
 		if err != nil {
-			t.Fatalf("read the deploy request: %v", err)
+			t.Fatal(err)
 		}
-		if strings.Contains(string(sent), "s3cret-pw") {
-			t.Errorf("the deploy request contains the database password: %s", sent)
+		if strings.Contains(string(manifest), "s3cret-pw") {
+			t.Errorf("the manifest contains the database password: %s", manifest)
 		}
 		if strings.Contains(out, "s3cret-pw") {
 			t.Errorf("the deploy printed the database password: %s", out)
@@ -116,63 +133,25 @@ func TestDeployBindsAnInlineRecord(t *testing.T) {
 		if said := err.Error() + out; !strings.Contains(said, "ocel env set MAIN_DATABASE_URL=<VALUE>") {
 			t.Errorf("refusal = %q, want the command that sets it", said)
 		}
-		if published := records(t); len(published) != 0 {
-			t.Errorf("records = %+v, want nothing kept for a refused deploy", published)
-		}
-	})
-
-	t.Run("a server of another major version is refused before anything is deployed", func(t *testing.T) {
-		run := setUpInline(t, inlineByURL)
-		seedProduction(t, "MAIN_DATABASE_URL", inlineURL)
-		t.Setenv(clitest.FakePostgresVersionEnvVar, "150004")
-
-		out, err := run.deploy(t, deployOptions{})
-		if err == nil {
-			t.Fatalf("deploy succeeded against postgres 15 for a resource declaring 17\n%s", out)
-		}
-		for _, want := range []string{"declares postgres 17", "serves postgres 15", "bindings.postgres.main"} {
-			if !strings.Contains(err.Error()+out, want) {
-				t.Errorf("refusal = %q, want it to name %s", err.Error()+out, want)
-			}
-		}
 		if _, statErr := os.Stat(run.journal); statErr == nil {
-			t.Error("the deploy reached the provider after the check refused it")
-		}
-		if published := records(t); len(published) != 0 {
-			t.Errorf("records = %+v, want nothing kept", published)
+			t.Error("the deploy reached the provider without the record's value")
 		}
 	})
 
-	t.Run("an unreachable server is refused without the password", func(t *testing.T) {
-		run := setUpInline(t, `postgres: { main: { host: "db.example.com", database: "main", username: "app", password: { $env: "MAIN_PASSWORD" } } }`)
-		seedProduction(t, "MAIN_PASSWORD", "s3cret-pw")
-		t.Setenv(clitest.FakePostgresUnreachableEnvVar, "connection refused")
-
-		out, err := run.deploy(t, deployOptions{})
-		if err == nil {
-			t.Fatalf("deploy succeeded against an unreachable server\n%s", out)
-		}
-		if strings.Contains(err.Error()+out, "s3cret-pw") {
-			t.Errorf("refusal = %q, repeats the password", err)
-		}
-		if !strings.Contains(err.Error()+out, "connection refused") {
-			t.Errorf("refusal = %q, want the cause", err.Error()+out)
-		}
-	})
-
-	t.Run("a dry run checks the record and keeps nothing", func(t *testing.T) {
+	t.Run("a dry run hands the provider the record to plan with", func(t *testing.T) {
 		run := setUpInline(t, inlineByURL)
 		seedProduction(t, "MAIN_DATABASE_URL", inlineURL)
 
 		if out, err := run.deploy(t, deployOptions{dry: true}); err != nil {
 			t.Fatalf("dry deploy: %v\n%s", err, out)
 		}
-		if published := records(t); len(published) != 0 {
-			t.Errorf("records = %+v, want a dry run to write nothing", published)
+		req := sentRequest(t, run.journal)
+		if !req.GetDry() || len(req.GetInlineBindings()) != 1 {
+			t.Errorf("request dry = %v with %d inline bindings, want the dry plan to carry the record", req.GetDry(), len(req.GetInlineBindings()))
 		}
 	})
 
-	t.Run("dropping the binding removes the record on the next deploy", func(t *testing.T) {
+	t.Run("dropping the binding leaves the request carrying no record", func(t *testing.T) {
 		run := setUpInline(t, inlineByURL)
 		seedProduction(t, "MAIN_DATABASE_URL", inlineURL)
 		if out, err := run.deploy(t, deployOptions{}); err != nil {
@@ -183,8 +162,8 @@ func TestDeployBindsAnInlineRecord(t *testing.T) {
 		if out, err := run.deploy(t, deployOptions{}); err != nil {
 			t.Fatalf("second deploy: %v\n%s", err, out)
 		}
-		if published := records(t); len(published) != 0 {
-			t.Errorf("records = %+v, want the record no binding keeps removed", published)
+		if carried := sentRequest(t, run.journal).GetInlineBindings(); len(carried) != 0 {
+			t.Errorf("inline bindings = %v, want none: the provider prunes what the request no longer carries", carriedNames(carried))
 		}
 	})
 }
