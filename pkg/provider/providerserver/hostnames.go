@@ -46,7 +46,7 @@ func (h *handlers) hostnames(ctx context.Context, req *contractv1.HostnameReques
 }
 
 func (h *handlers) AddHostname(ctx context.Context, req *contractv1.HostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	title := "Attaching " + namedList("production hostname", "production hostnames", requestedHosts(req))
+	title := progress.Attaching.Title(namedList("production hostname", "production hostnames", requestedHosts(req)))
 	unit := UnitSpan(naming.UnitEdge, req.GetSlug(), title, progressv1.Phase_PHASE_PROVISION)
 	return streamed(ctx, stream, unit, func(sender *eventStream, progress progress.Log) error {
 		session, err := h.hostnames(ctx, req)
@@ -297,9 +297,9 @@ func (d *hostnames) unbindPreviousEdge(ctx context.Context, host string, previou
 }
 
 func (h *handlers) RemoveHostname(ctx context.Context, req *contractv1.HostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	title := "Detaching every production hostname no longer declared"
+	title := progress.Detaching.Title("every production hostname no longer declared")
 	if req.GetHost() != "" {
-		title = "Detaching " + req.GetHost() + " from production"
+		title = progress.Detaching.Title(req.GetHost() + " from production")
 	}
 	unit := UnitSpan(naming.UnitEdge, req.GetSlug(), title, progressv1.Phase_PHASE_DESTROY)
 	return streamed(ctx, stream, unit, func(_ *eventStream, progress progress.Log) error {

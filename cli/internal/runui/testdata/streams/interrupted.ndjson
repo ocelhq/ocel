@@ -1,6 +1,6 @@
 {"time":"2026-09-27T10:00:00Z","level":"LEVEL_INFO","spanId":"AQAAAAAAAAA=","phase":"PHASE_BUILD","started":{}}
 {"time":"2026-09-27T10:00:00Z","level":"LEVEL_INFO","spanId":"AgAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","message":"Collecting the resources acme declares","started":{"parentSpanId":"AQAAAAAAAAA="}}
-{"time":"2026-09-27T10:00:00Z","level":"LEVEL_INFO","spanId":"AgAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503200000000000"}}
+{"time":"2026-09-27T10:00:00Z","level":"LEVEL_INFO","spanId":"AgAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","ended":{"title":"Collected the resources acme declares","status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503200000000000"}}
 {"time":"2026-09-27T10:00:00Z","level":"LEVEL_INFO","spanId":"AwAAAAAAAAA=","phase":"PHASE_BUILD","subject":"web","message":"Building app web","started":{"parentSpanId":"AQAAAAAAAAA="}}
 {"time":"2026-09-27T10:00:01Z","level":"LEVEL_INFO","spanId":"AwAAAAAAAAA=","phase":"PHASE_BUILD","subject":"web","message":"Bundling web","output":{"stream":"STREAM_STDOUT"}}
 {"time":"2026-09-27T10:00:04Z","level":"LEVEL_WARN","result":{"interrupted":true,"headline":"Deploy cancelled","durationMs":"4000"}}

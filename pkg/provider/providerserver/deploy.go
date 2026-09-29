@@ -64,24 +64,24 @@ type deploySpans struct {
 func (r *deployRun) newSpans() deploySpans {
 	env, kind := environmentSubject(r.spec.Tier, r.spec.Env), string(r.front.Kind())
 	where := environmentPhrase(r.spec.Tier, r.spec.Env)
-	routes, infra, app := "Reconciling the routes for %s in %s", "Provisioning %s", "Deploying the %s to %s"
+	routes, infra, app, onto := progress.Reconciling, progress.Provisioning, progress.Deploying, "to"
 	if r.dry {
-		routes, infra, app = "Reading the routes for %s in %s", "Planning %s", "Planning the %s for %s"
+		routes, infra, app, onto = progress.Reading, progress.Planning, progress.Planning, "for"
 	}
 	s := deploySpans{
 		Environment: UnitSpan(naming.UnitEnvironment, env,
-			"Checking the bootstrap, domains and bindings for "+r.spec.Slug, progressv1.Phase_PHASE_PROVISION),
-		Infra: UnitSpan(r.spec.Infra.String(), env, fmt.Sprintf(infra, r.describeInfra()), progressv1.Phase_PHASE_PROVISION),
-		Edge:  UnitSpan(naming.UnitEdge, kind, fmt.Sprintf(routes, r.spec.Slug, where), progressv1.Phase_PHASE_PROVISION),
+			progress.Checking.Title("the bootstrap, domains and bindings for "+r.spec.Slug), progressv1.Phase_PHASE_PROVISION),
+		Infra: UnitSpan(r.spec.Infra.String(), env, infra.Title(r.describeInfra()), progressv1.Phase_PHASE_PROVISION),
+		Edge:  UnitSpan(naming.UnitEdge, kind, routes.Title(fmt.Sprintf("the routes for %s in %s", r.spec.Slug, where)), progressv1.Phase_PHASE_PROVISION),
 		Hostnames: UnitSpan(naming.UnitHostnames, kind,
-			"Attaching "+namedList("production hostname", "production hostnames", r.hostnames()), progressv1.Phase_PHASE_PROVISION),
+			progress.Attaching.Title(namedList("production hostname", "production hostnames", r.hostnames())), progressv1.Phase_PHASE_PROVISION),
 		Promotion: UnitSpan(naming.UnitPromotion, env,
-			"Switching traffic to promotion "+r.spec.PromotionID, progressv1.Phase_PHASE_PROMOTE),
+			progress.Switching.Title("traffic to promotion "+r.spec.PromotionID), progressv1.Phase_PHASE_PROMOTE),
 		Apps: make(map[string]Span, len(r.spec.Apps)),
 	}
 	for _, entry := range r.spec.Apps {
 		s.Apps[entry.App] = UnitSpan(entry.Stack.String(), entry.App,
-			fmt.Sprintf(app, appNoun(entry), where), progressv1.Phase_PHASE_DEPLOY)
+			app.Title(fmt.Sprintf("the %s %s %s", appNoun(entry), onto, where)), progressv1.Phase_PHASE_DEPLOY)
 	}
 	return s
 }

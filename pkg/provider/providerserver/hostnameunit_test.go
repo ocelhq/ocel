@@ -63,8 +63,8 @@ func TestAHostnameAnotherEdgeServesLeavesTheAttachingUnitAtAWarningNamingOnlyThe
 	if unit.ended.GetLevel() != progressv1.Level_LEVEL_WARN || unit.ended.GetEnded().GetStatus() != progressv1.SpanStatus_SPAN_STATUS_OK {
 		t.Errorf("the unit ended %s at %s, want OK at WARN: the release succeeded, one hostname did not move", unit.ended.GetEnded().GetStatus(), unit.ended.GetLevel())
 	}
-	if want := "Attached production hostname www.shop.example but not shop.example"; unit.ended.GetMessage() != want {
-		t.Errorf("the unit ended saying %q, want %q", unit.ended.GetMessage(), want)
+	if want := "Attached production hostname www.shop.example but not shop.example"; unit.ended.GetEnded().GetTitle() != want {
+		t.Errorf("the unit ended titled %q, want %q", unit.ended.GetEnded().GetTitle(), want)
 	}
 	if len(unit.warnings) != 1 || !strings.HasPrefix(unit.warnings[0], "shop.example is still served through the relay edge") {
 		t.Errorf("the unit warned %q, want one warning naming shop.example and the edge still serving it", unit.warnings)
@@ -88,8 +88,8 @@ func TestAHostnameWhoseCertificateIsStillIssuingLeavesTheAttachingUnitAtAWarning
 	if unit.ended.GetLevel() != progressv1.Level_LEVEL_WARN {
 		t.Errorf("the unit ended at %s, want WARN: its one hostname is not served yet", unit.ended.GetLevel())
 	}
-	if want := "Did not attach production hostname shop.example"; unit.ended.GetMessage() != want {
-		t.Errorf("the unit ended saying %q, want %q", unit.ended.GetMessage(), want)
+	if want := "Did not attach production hostname shop.example"; unit.ended.GetEnded().GetTitle() != want {
+		t.Errorf("the unit ended titled %q, want %q", unit.ended.GetEnded().GetTitle(), want)
 	}
 	if want := "shop.example is not served yet: the certificate is still validating"; !slices.Contains(unit.warnings, want) {
 		t.Errorf("the unit warned %q, want %q among them", unit.warnings, want)
@@ -107,7 +107,8 @@ func TestAHostnameUnitThatAttachesEveryHostnameEndsWithoutAWarning(t *testing.T)
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 	unit := hostnameUnitOf(t, events)
-	if unit.ended.GetLevel() != progressv1.Level_LEVEL_INFO || unit.ended.GetMessage() != "" || len(unit.warnings) != 0 {
-		t.Errorf("the unit ended at %s saying %q after warning %q, want INFO, no message and no warning", unit.ended.GetLevel(), unit.ended.GetMessage(), unit.warnings)
+	title := unit.ended.GetEnded().GetTitle()
+	if unit.ended.GetLevel() != progressv1.Level_LEVEL_INFO || title != "Attached production hostname shop.example" || len(unit.warnings) != 0 {
+		t.Errorf("the unit ended at %s titled %q after warning %q, want INFO, the finished title and no warning", unit.ended.GetLevel(), title, unit.warnings)
 	}
 }

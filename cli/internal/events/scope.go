@@ -22,6 +22,7 @@ type Scope struct {
 	subject string
 	spanID  []byte
 	start   time.Time
+	title   string
 
 	mu      sync.Mutex
 	writers []*lineWriter
@@ -137,10 +138,11 @@ func (s *Scope) End(err error) {
 		ended := &progressv1.Ended{
 			Status:            progressv1.SpanStatus_SPAN_STATUS_OK,
 			StartTimeUnixNano: s.start.UnixNano(),
+			Title:             s.title,
 		}
 		ev := &streamv1.RunEvent{Level: progressv1.Level_LEVEL_INFO, Body: &streamv1.RunEvent_Ended{Ended: ended}}
 		if err != nil {
-			ended.Status = progressv1.SpanStatus_SPAN_STATUS_ERROR
+			ended.Status, ended.Title = progressv1.SpanStatus_SPAN_STATUS_ERROR, ""
 			ev.Level, ev.Message = s.run.failureLevel(), err.Error()
 		}
 		s.run.close(s)

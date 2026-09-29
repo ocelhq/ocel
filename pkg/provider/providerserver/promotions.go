@@ -146,13 +146,13 @@ func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.Re
 	})
 }
 
-func pruneTitle(req *contractv1.RemoveStalePromotionsRequest) string {
+func pruneTitle(req *contractv1.RemoveStalePromotionsRequest) progress.Title {
 	env := req.GetEnvironment()
 	where := "production"
 	if env.GetTier() == environmentv1.Tier_TIER_PREVIEW {
 		where = environmentPhrase(environment.TierPreview, env.GetIdentity())
 	}
-	return fmt.Sprintf("Pruning the promotions of %s beyond the newest %d", where, req.GetKeepN())
+	return progress.Pruning.Title(fmt.Sprintf("the promotions of %s beyond the newest %d", where, req.GetKeepN()))
 }
 
 func undeployed(err error) bool {

@@ -627,6 +627,7 @@ type Ended struct {
 	Status            SpanStatus             `protobuf:"varint,1,opt,name=status,proto3,enum=common.progress.v1.SpanStatus" json:"status,omitempty"`
 	StartTimeUnixNano int64                  `protobuf:"varint,2,opt,name=start_time_unix_nano,json=startTimeUnixNano,proto3" json:"start_time_unix_nano,omitempty"`
 	Attributes        []*SpanAttribute       `protobuf:"bytes,3,rep,name=attributes,proto3" json:"attributes,omitempty"`
+	Title             string                 `protobuf:"bytes,4,opt,name=title,proto3" json:"title,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -680,6 +681,13 @@ func (x *Ended) GetAttributes() []*SpanAttribute {
 		return x.Attributes
 	}
 	return nil
+}
+
+func (x *Ended) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
 }
 
 type Output struct {
@@ -1221,13 +1229,14 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\x04body\";\n" +
 	"\aStarted\x120\n" +
 	"\x0eparent_span_id\x18\x01 \x01(\fB\n" +
-	"\xbaH\a\xd8\x01\x01z\x02h\bR\fparentSpanId\"\xb3\x01\n" +
+	"\xbaH\a\xd8\x01\x01z\x02h\bR\fparentSpanId\"\xc9\x01\n" +
 	"\x05Ended\x126\n" +
 	"\x06status\x18\x01 \x01(\x0e2\x1e.common.progress.v1.SpanStatusR\x06status\x12/\n" +
 	"\x14start_time_unix_nano\x18\x02 \x01(\x03R\x11startTimeUnixNano\x12A\n" +
 	"\n" +
 	"attributes\x18\x03 \x03(\v2!.common.progress.v1.SpanAttributeR\n" +
-	"attributes\"<\n" +
+	"attributes\x12\x14\n" +
+	"\x05title\x18\x04 \x01(\tR\x05title\"<\n" +
 	"\x06Output\x122\n" +
 	"\x06stream\x18\x01 \x01(\x0e2\x1a.common.progress.v1.StreamR\x06stream\"Y\n" +
 	"\rSpanAttribute\x122\n" +

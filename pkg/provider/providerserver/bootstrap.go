@@ -66,7 +66,7 @@ func (h *handlers) Bootstrap(ctx context.Context, req *contractv1.BootstrapReque
 		if req.GetDry() {
 			return okResult(), nil
 		}
-		unit := UnitSpan(naming.UnitEnvironment, string(tier), bootstrapTitle("Updating", plan), progressv1.Phase_PHASE_PROVISION)
+		unit := UnitSpan(naming.UnitEnvironment, string(tier), bootstrapTitle(progress.Updating, plan), progressv1.Phase_PHASE_PROVISION)
 		err = inSpan(sender, unit,
 			func(_ *eventStream, progress progress.Log) error {
 				return gate.Apply(ctx, plan, tier, intent, progress)
@@ -276,7 +276,7 @@ func (h *handlers) RemoveBootstrap(ctx context.Context, req *contractv1.Bootstra
 	}
 
 	shown, shownErr := PlanFromProto(req.GetConsented())
-	unit := UnitSpan(naming.UnitEnvironment, string(tier), bootstrapTitle("Removing", shown), progressv1.Phase_PHASE_DESTROY)
+	unit := UnitSpan(naming.UnitEnvironment, string(tier), bootstrapTitle(progress.Removing, shown), progressv1.Phase_PHASE_DESTROY)
 	return streamed(ctx, stream, unit, func(_ *eventStream, progress progress.Log) error {
 		if shownErr != nil {
 			return shownErr
@@ -285,7 +285,7 @@ func (h *handlers) RemoveBootstrap(ctx context.Context, req *contractv1.Bootstra
 	})
 }
 
-func bootstrapTitle(verb string, plan provider.Plan) string {
+func bootstrapTitle(verb progress.Verb, plan provider.Plan) progress.Title {
 	var stacks []string
 	for _, group := range plan.Groups {
 		if group.Action.Writes() {
@@ -293,9 +293,9 @@ func bootstrapTitle(verb string, plan provider.Plan) string {
 		}
 	}
 	if len(stacks) == 0 {
-		return verb + " the bootstrap"
+		return verb.Title("the bootstrap")
 	}
-	return verb + " " + namedList("bootstrap stack", "bootstrap stacks", stacks)
+	return verb.Title(namedList("bootstrap stack", "bootstrap stacks", stacks))
 }
 
 func edgeKind(p provider.Provider, requested string) edge.Kind {

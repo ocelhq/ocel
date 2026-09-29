@@ -136,7 +136,7 @@ func TestAnEndedScopeWithoutAUsableEndRunsUntilItReachedTheBus(t *testing.T) {
 			deploy := run.Phase(progressv1.Phase_PHASE_DEPLOY)
 			deploy.Forward(&progressv1.OperationEvent{Phase: progressv1.Phase_PHASE_DEPLOY, Subject: "web", SpanId: stage, Message: "deploying web", Body: &progressv1.OperationEvent_Started{Started: &progressv1.Started{}}})
 			deploy.Forward(&progressv1.OperationEvent{TimeUnixNano: tc.end, Phase: progressv1.Phase_PHASE_DEPLOY, Subject: "web", SpanId: stage, Body: &progressv1.OperationEvent_Ended{
-				Ended: &progressv1.Ended{Status: progressv1.SpanStatus_SPAN_STATUS_OK, StartTimeUnixNano: start.UnixNano()},
+				Ended: &progressv1.Ended{Status: progressv1.SpanStatus_SPAN_STATUS_OK, StartTimeUnixNano: start.UnixNano(), Title: "deploying web"},
 			}})
 
 			if want := "INFO  [deploy] ✓ web: deploying web in 2m00s\n"; out.String() != want {

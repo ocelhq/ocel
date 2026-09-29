@@ -253,12 +253,9 @@ func (s *GroupedSink) end(span string, ev *streamv1.RunEvent) {
 	head := line{
 		level:   ev.GetLevel(),
 		ends:    ended.GetStatus(),
-		message: pastTense(unit.opened.GetMessage()),
+		message: ended.GetTitle(),
 		timing:  " in " + took + tally.finished(),
 		outcome: unit.resources.summary(),
-	}
-	if partial && ev.GetMessage() != "" {
-		head.message = ev.GetMessage()
 	}
 	if failed {
 		head.message, head.timing = unit.opened.GetMessage()+" failed", " after "+took+tally.finished()

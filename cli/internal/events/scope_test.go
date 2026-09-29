@@ -50,6 +50,25 @@ func TestAUnitsEventsCarryItsPhaseSubjectAndSpanAndItsParentIsThePhaseScope(t *t
 	}
 }
 
+func TestAUnitThatSucceedsEndsTitledWithWhatItDidAndOneThatFailsWithNoTitle(t *testing.T) {
+	sink := &recording{}
+	run, _ := begin(t, sink)
+	build := run.Phase(progressv1.Phase_PHASE_BUILD)
+
+	build.Unit("web", "Building web").End(nil)
+	build.Unit("api", "Building api").End(errors.New("the bundle is too large"))
+
+	var titles []string
+	for _, ev := range sink.received() {
+		if ended := ev.GetEnded(); ended != nil && ev.GetSubject() != "" {
+			titles = append(titles, ended.GetTitle())
+		}
+	}
+	if want := []string{"Built web", ""}; strings.Join(titles, "|") != strings.Join(want, "|") {
+		t.Fatalf("ended titles = %q, want %q", titles, want)
+	}
+}
+
 func TestEndReportsTheErrorOnTheEndedEventAndTheDurationFromItsStart(t *testing.T) {
 	sink := &recording{}
 	run, clock := begin(t, sink)

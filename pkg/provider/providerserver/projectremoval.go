@@ -223,14 +223,14 @@ func (h *handlers) RemoveProject(ctx context.Context, req *contractv1.ProjectReq
 	})
 }
 
-func removalTitle(env *environmentv1.Environment) string {
+func removalTitle(env *environmentv1.Environment) progress.Title {
 	switch {
 	case env.GetTier() != environmentv1.Tier_TIER_PREVIEW:
-		return "Destroying the production footprint"
+		return progress.Destroying.Title("the production footprint")
 	case env.GetIdentity() == EveryPreview:
-		return "Destroying the footprint of every preview"
+		return progress.Destroying.Title("the footprint of every preview")
 	default:
-		return "Destroying the footprint of preview " + env.GetIdentity()
+		return progress.Destroying.Title("the footprint of preview " + env.GetIdentity())
 	}
 }
 

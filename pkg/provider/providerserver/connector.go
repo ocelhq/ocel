@@ -75,22 +75,22 @@ func (h *handlers) RemoveConnector(ctx context.Context, _ *contractv1.RemoveConn
 	if err != nil {
 		return err
 	}
-	unit := UnitSpan(naming.UnitConnector, naming.UnitConnector, "Removing the connector from this account", progressv1.Phase_PHASE_DESTROY)
+	unit := UnitSpan(naming.UnitConnector, naming.UnitConnector, progress.Removing.Title("the connector from this account"), progressv1.Phase_PHASE_DESTROY)
 	return streamed(ctx, stream, unit, func(sender *eventStream, progress progress.Log) error {
 		sender.refusing(connect.CodeUnimplemented)
 		return connector.Remove(ctx, progress)
 	})
 }
 
-func connectorInstallTitle(req *contractv1.InstallConnectorRequest) string {
-	title := "Installing the connector"
+func connectorInstallTitle(req *contractv1.InstallConnectorRequest) progress.Title {
+	title := "the connector"
 	if version := req.GetVersion(); version != "" {
 		title += " " + version
 	}
 	if compute := req.GetCompute(); compute != "" {
 		title += " on " + compute + " compute"
 	}
-	return title + " in this account"
+	return progress.Installing.Title(title + " in this account")
 }
 
 func connectorResult(at provider.ConnectorAddress) *progressv1.OperationEvent {

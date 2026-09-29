@@ -1,9 +1,9 @@
 {"time":"2026-09-27T10:00:00Z","level":"LEVEL_INFO","spanId":"AQAAAAAAAAA=","phase":"PHASE_BUILD","started":{}}
 {"time":"2026-09-27T10:00:00Z","level":"LEVEL_INFO","spanId":"AgAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","message":"Collecting the resources acme declares","started":{"parentSpanId":"AQAAAAAAAAA="}}
-{"time":"2026-09-27T10:00:01Z","level":"LEVEL_INFO","spanId":"AgAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503200000000000"}}
+{"time":"2026-09-27T10:00:01Z","level":"LEVEL_INFO","spanId":"AgAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","ended":{"title":"Collected the resources acme declares","status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503200000000000"}}
 {"time":"2026-09-27T10:00:01Z","level":"LEVEL_INFO","spanId":"AwAAAAAAAAA=","phase":"PHASE_BUILD","subject":"api","message":"Building app api","started":{"parentSpanId":"AQAAAAAAAAA="}}
 {"time":"2026-09-27T10:00:01Z","level":"LEVEL_INFO","spanId":"AwAAAAAAAAA=","phase":"PHASE_BUILD","subject":"api","message":"go: downloading ocel.dev v0.4.1","output":{"stream":"STREAM_STDOUT"}}
-{"time":"2026-09-27T10:00:05Z","level":"LEVEL_INFO","spanId":"AwAAAAAAAAA=","phase":"PHASE_BUILD","subject":"api","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503201000000000"}}
+{"time":"2026-09-27T10:00:05Z","level":"LEVEL_INFO","spanId":"AwAAAAAAAAA=","phase":"PHASE_BUILD","subject":"api","ended":{"title":"Built app api","status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503201000000000"}}
 {"time":"2026-09-27T10:00:05Z","level":"LEVEL_INFO","spanId":"AQAAAAAAAAA=","phase":"PHASE_BUILD","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503200000000000"}}
 {"time":"2026-09-27T10:00:05Z","level":"LEVEL_INFO","spanId":"FAAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"api","message":"Deploying the serverless app to production","started":{}}
 {"time":"2026-09-27T10:00:05Z","level":"LEVEL_INFO","spanId":"FAAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"api","message":"Uploading function api's artifact (1.2 MiB)"}

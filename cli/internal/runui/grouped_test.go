@@ -91,7 +91,7 @@ func providerOutput(span byte, subject, text string) *progressv1.OperationEvent 
 	})
 }
 
-func providerEnded(span byte, subject string, status progressv1.SpanStatus, start, at time.Time) *progressv1.OperationEvent {
+func providerEnded(span byte, subject, title string, status progressv1.SpanStatus, start, at time.Time) *progressv1.OperationEvent {
 	level := progressv1.Level_LEVEL_INFO
 	if status == progressv1.SpanStatus_SPAN_STATUS_ERROR {
 		level = progressv1.Level_LEVEL_ERROR
@@ -99,7 +99,7 @@ func providerEnded(span byte, subject string, status progressv1.SpanStatus, star
 	return providerEvent(span, subject, &progressv1.OperationEvent{
 		TimeUnixNano: at.UnixNano(),
 		Level:        level,
-		Body:         &progressv1.OperationEvent_Ended{Ended: &progressv1.Ended{Status: status, StartTimeUnixNano: start.UnixNano()}},
+		Body:         &progressv1.OperationEvent_Ended{Ended: &progressv1.Ended{Status: status, StartTimeUnixNano: start.UnixNano(), Title: title}},
 	})
 }
 
@@ -115,8 +115,8 @@ func TestTwoParallelUnitsNeverInterleaveAndTheFirstToEndPrintsFirst(t *testing.T
 	deploy.Forward(providerOutput(2, "api", "api line 1"))
 	deploy.Forward(providerOutput(1, "web", "web line 2"))
 	deploy.Forward(providerOutput(2, "api", "api line 2"))
-	deploy.Forward(providerEnded(2, "api", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(5*time.Second)))
-	deploy.Forward(providerEnded(1, "web", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(9*time.Second)))
+	deploy.Forward(providerEnded(2, "api", "deployed 9 resources", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(5*time.Second)))
+	deploy.Forward(providerEnded(1, "web", "deployed 12 resources", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(9*time.Second)))
 
 	want := "INFO  [deploy] ✓ api: deployed 9 resources in 5s (1/2)\n" +
 		"\n" +
@@ -140,8 +140,8 @@ func TestAUnitEndingBesideOthersInItsPhaseSaysHowManyOfThemHaveFinished(t *testi
 	start := c.now()
 	deploy.Forward(providerStarted(1, "web", "Deploying the serverless app to production", start))
 	deploy.Forward(providerStarted(2, "api", "Deploying the container app to production", start))
-	deploy.Forward(providerEnded(2, "api", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(5*time.Second)))
-	deploy.Forward(providerEnded(1, "web", progressv1.SpanStatus_SPAN_STATUS_ERROR, start, start.Add(9*time.Second)))
+	deploy.Forward(providerEnded(2, "api", "Deployed the container app to production", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(5*time.Second)))
+	deploy.Forward(providerEnded(1, "web", "", progressv1.SpanStatus_SPAN_STATUS_ERROR, start, start.Add(9*time.Second)))
 
 	want := "INFO  [deploy] ✓ api: Deployed the container app to production in 5s (1/2)\n" +
 		"ERROR [deploy] ✗ web: Deploying the serverless app to production failed after 9s (2/2)\n"
@@ -173,11 +173,11 @@ func TestASuccessfulUnitsHeaderSaysWhatItDidInThePastTenseAndAFailedOneWhatItWas
 	deploy := run.Phase(progressv1.Phase_PHASE_DEPLOY)
 	start := c.now()
 	deploy.Forward(providerStarted(1, "web", "Deploying the serverless app to production", start))
-	deploy.Forward(providerEnded(1, "web", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(48*time.Second)))
+	deploy.Forward(providerEnded(1, "web", "Deployed the serverless app to production", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(48*time.Second)))
 	deploy.Forward(providerStarted(2, "relay", "Attaching production hostname shop.example", start))
-	deploy.Forward(providerEnded(2, "relay", progressv1.SpanStatus_SPAN_STATUS_ERROR, start, start.Add(3*time.Second)))
+	deploy.Forward(providerEnded(2, "relay", "", progressv1.SpanStatus_SPAN_STATUS_ERROR, start, start.Add(3*time.Second)))
 	deploy.Forward(providerStarted(3, "api", "Sending api's image to the registry", start))
-	deploy.Forward(providerEnded(3, "api", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(time.Second)))
+	deploy.Forward(providerEnded(3, "api", "Sent api's image to the registry", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(time.Second)))
 
 	want := "INFO  [deploy] ✓ web: Deployed the serverless app to production in 48s\n" +
 		"ERROR [deploy] ✗ relay: Attaching production hostname shop.example failed after 3s\n" +
@@ -194,8 +194,8 @@ func TestAUnitThatDidOnlyPartOfItsWorkEndsAtAWarningWithoutACheckmarkAndSaysWhat
 	provision := run.Phase(progressv1.Phase_PHASE_DEPLOY)
 	start := c.now()
 	provision.Forward(providerStarted(1, "relay", "Attaching production hostnames shop.example and www.shop.example", start))
-	ended := providerEnded(1, "relay", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(3*time.Second))
-	ended.Level, ended.Message = progressv1.Level_LEVEL_WARN, "Attached production hostname www.shop.example but not shop.example"
+	ended := providerEnded(1, "relay", "Attached production hostnames shop.example and www.shop.example", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(3*time.Second))
+	ended.Level, ended.GetEnded().Title = progressv1.Level_LEVEL_WARN, "Attached production hostname www.shop.example but not shop.example"
 	provision.Forward(ended)
 
 	want := "WARN  [deploy] relay: Attached production hostname www.shop.example but not shop.example in 3s\n"
@@ -351,11 +351,11 @@ func TestWhatAUnitsChildScopesSayBelongsToTheUnitsBlock(t *testing.T) {
 	child.GetStarted().ParentSpanId = []byte{1, 0, 0, 0, 0, 0, 0, 1}
 	deploy.Forward(child)
 	deploy.Forward(providerOutput(2, "web", "creating bucket assets"))
-	deploy.Forward(providerEnded(2, "web", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(time.Second)))
+	deploy.Forward(providerEnded(2, "web", "Uploaded", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(time.Second)))
 	if got := out.String(); got != "" {
 		t.Fatalf("printed before the unit ended: %q", got)
 	}
-	deploy.Forward(providerEnded(1, "web", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(2*time.Second)))
+	deploy.Forward(providerEnded(1, "web", "deployed 4 resources", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(2*time.Second)))
 
 	want := "INFO  [deploy] ✓ web: deployed 4 resources in 2s\n" +
 		"\n" +
@@ -692,7 +692,7 @@ func providerChild(span, parent byte, subject, message string, at time.Time) *pr
 
 func forwardResource(scope *events.Scope, span, parent byte, subject string, action provider.ChangeAction, typ, name string, status progressv1.SpanStatus, at time.Time) {
 	scope.Forward(providerChild(span, parent, subject, "resource operation", at))
-	ended := providerEnded(span, subject, status, at, at.Add(time.Second))
+	ended := providerEnded(span, subject, "resource operation", status, at, at.Add(time.Second))
 	ended.GetEnded().Attributes = []*progressv1.SpanAttribute{
 		{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_DURATION_MS, Value: "1000"},
 		{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_TYPE, Value: typ},
@@ -718,9 +718,9 @@ func TestADeployBlockCountsAndListsTheResourcesItChangedAndNeverOneItLeftAlone(t
 	forwardResource(deploy, 7, 2, "web", provider.ActionReplace, "aws:lambda/function:Function", "handler", ok, start)
 	slow := providerChild(8, 2, "web", "resource operation", start)
 	deploy.Forward(slow)
-	deploy.Forward(providerEnded(8, "web", ok, start, start.Add(40*time.Second)))
-	deploy.Forward(providerEnded(2, "web", ok, start, start.Add(41*time.Second)))
-	deploy.Forward(providerEnded(1, "web", ok, start, start.Add(42*time.Second)))
+	deploy.Forward(providerEnded(8, "web", "resource operation", ok, start, start.Add(40*time.Second)))
+	deploy.Forward(providerEnded(2, "web", "Deployed", ok, start, start.Add(41*time.Second)))
+	deploy.Forward(providerEnded(1, "web", "Deployed web", ok, start, start.Add(42*time.Second)))
 
 	want := "INFO  [deploy] ✓ web: Deployed web in 42s — 5 resources: 2 created, 1 updated, 1 replaced, 1 deleted\n" +
 		"      + assets (aws:s3/bucket:Bucket) created\n" +
@@ -742,8 +742,8 @@ func TestWithColourABlockGraysItsTimingItsDetailAndWhatEachResourceIsButNotItsSi
 	deploy.Forward(providerStarted(1, "web", "Deploying web", start))
 	deploy.Forward(providerChild(2, 1, "web", "Deploying", start))
 	forwardResource(deploy, 3, 2, "web", provider.ActionCreate, "aws:s3/bucket:Bucket", "assets", progressv1.SpanStatus_SPAN_STATUS_OK, start)
-	deploy.Forward(providerEnded(2, "web", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(time.Second)))
-	deploy.Forward(providerEnded(1, "web", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(8*time.Second)))
+	deploy.Forward(providerEnded(2, "web", "Deployed", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(time.Second)))
+	deploy.Forward(providerEnded(1, "web", "Deployed web", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(8*time.Second)))
 
 	for _, want := range []string{
 		" \x1b[1mweb\x1b[22m: Deployed web\x1b[90m in 8s\x1b[0m — 1 resource created\n",
@@ -784,8 +784,8 @@ func TestAResourceThatFailedWithoutChangingIsListedAndCountedAsFailed(t *testing
 	deploy.Forward(providerChild(2, 1, "web", "Deploying", start))
 	forwardResource(deploy, 3, 2, "web", "", "aws:ssm/parameter:Parameter", "config", progressv1.SpanStatus_SPAN_STATUS_OK, start)
 	forwardResource(deploy, 4, 2, "web", "", "aws:iam/role:Role", "runner", progressv1.SpanStatus_SPAN_STATUS_ERROR, start)
-	deploy.Forward(providerEnded(2, "web", progressv1.SpanStatus_SPAN_STATUS_ERROR, start, start.Add(4*time.Second)))
-	deploy.Forward(providerEnded(1, "web", progressv1.SpanStatus_SPAN_STATUS_ERROR, start, start.Add(5*time.Second)))
+	deploy.Forward(providerEnded(2, "web", "", progressv1.SpanStatus_SPAN_STATUS_ERROR, start, start.Add(4*time.Second)))
+	deploy.Forward(providerEnded(1, "web", "", progressv1.SpanStatus_SPAN_STATUS_ERROR, start, start.Add(5*time.Second)))
 
 	want := "ERROR [deploy] ✗ web: Deploying web failed after 5s — 1 resource failed\n" +
 		"      ✗ runner (aws:iam/role:Role) failed\n"
@@ -811,8 +811,8 @@ func failedDeploy(t *testing.T, present Presentation) string {
 		Level:   progressv1.Level_LEVEL_ERROR,
 		Message: "logs (aws:s3/bucket:Bucket): creating S3 Bucket (logs): BucketAlreadyExists",
 	}))
-	deploy.Forward(providerEnded(2, "", progressv1.SpanStatus_SPAN_STATUS_ERROR, start, start.Add(9*time.Second)))
-	deploy.Forward(providerEnded(1, "", progressv1.SpanStatus_SPAN_STATUS_ERROR, start, start.Add(10*time.Second)))
+	deploy.Forward(providerEnded(2, "", "", progressv1.SpanStatus_SPAN_STATUS_ERROR, start, start.Add(9*time.Second)))
+	deploy.Forward(providerEnded(1, "", "", progressv1.SpanStatus_SPAN_STATUS_ERROR, start, start.Add(10*time.Second)))
 	return out.String()
 }
 

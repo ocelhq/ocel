@@ -34,7 +34,7 @@ func derivedSpanID(raw []byte) SpanID {
 type Span struct {
 	ID       SpanID
 	ParentID SpanID
-	Title    string
+	Title    progress.Title
 	Phase    progressv1.Phase
 	Subject  string
 }
@@ -62,8 +62,12 @@ func stripControlChars(s string, capLen int) string {
 	return strings.TrimSpace(b.String())
 }
 
-func sanitizeTitle(title string) string {
-	out := stripControlChars(title, maxSpanTitleLen)
+func sanitizeTitle(title progress.Title) progress.Title {
+	return progress.Title{Started: sanitizeName(title.Started), Ended: sanitizeName(title.Ended)}
+}
+
+func sanitizeName(name string) string {
+	out := stripControlChars(name, maxSpanTitleLen)
 	if out == "" {
 		return "span"
 	}
@@ -74,7 +78,7 @@ func sanitizeMessage(msg string) string {
 	return stripControlChars(msg, 0)
 }
 
-func UnitSpan(name, subject, title string, phase progressv1.Phase) Span {
+func UnitSpan(name, subject string, title progress.Title, phase progressv1.Phase) Span {
 	return Span{
 		ID:      derivedSpanID(naming.UnitID(name)),
 		Title:   sanitizeTitle(title),
@@ -83,8 +87,9 @@ func UnitSpan(name, subject, title string, phase progressv1.Phase) Span {
 	}
 }
 
-func NewSpan(parent Span, title string) Span {
-	return Span{ID: newSpanID(), ParentID: parent.ID, Title: sanitizeTitle(title), Phase: parent.Phase, Subject: parent.Subject}
+func NewSpan(parent Span, name string) Span {
+	name = sanitizeName(name)
+	return Span{ID: newSpanID(), ParentID: parent.ID, Title: progress.Title{Started: name, Ended: name}, Phase: parent.Phase, Subject: parent.Subject}
 }
 
 var attributeKeys = map[string]progressv1.AttributeKey{
@@ -147,7 +152,7 @@ func (t *spanEvents) Start(at time.Time, spans ...Span) {
 	for _, s := range spans {
 		t.sender.send(s.event(&progressv1.OperationEvent{
 			TimeUnixNano: at.UnixNano(),
-			Message:      s.Title,
+			Message:      s.Title.Started,
 			Body: &progressv1.OperationEvent_Started{Started: &progressv1.Started{
 				ParentSpanId: nonZeroSpanID(s.ParentID),
 			}},
@@ -156,19 +161,19 @@ func (t *spanEvents) Start(at time.Time, spans ...Span) {
 }
 
 func (t *spanEvents) End(span Span, start, end time.Time, err error, attrs ...progress.Attr) {
-	status, level := progressv1.SpanStatus_SPAN_STATUS_OK, progressv1.Level_LEVEL_INFO
 	if err != nil {
-		status, level = progressv1.SpanStatus_SPAN_STATUS_ERROR, progressv1.Level_LEVEL_ERROR
 		attrs = append(attrs, progress.Attr{Key: provider.AttrKeyErrorKind, Value: provider.ClassifyError(err)})
+		t.ended(span, start, end, progressv1.SpanStatus_SPAN_STATUS_ERROR, progressv1.Level_LEVEL_ERROR, "", attrs)
+		return
 	}
-	t.ended(span, start, end, status, level, "", attrs)
+	t.ended(span, start, end, progressv1.SpanStatus_SPAN_STATUS_OK, progressv1.Level_LEVEL_INFO, span.Title.Ended, attrs)
 }
 
 func (t *spanEvents) EndPartial(span Span, start, end time.Time, result string) {
-	t.ended(span, start, end, progressv1.SpanStatus_SPAN_STATUS_OK, progressv1.Level_LEVEL_WARN, result, nil)
+	t.ended(span, start, end, progressv1.SpanStatus_SPAN_STATUS_OK, progressv1.Level_LEVEL_WARN, sanitizeName(result), nil)
 }
 
-func (t *spanEvents) ended(span Span, start, end time.Time, status progressv1.SpanStatus, level progressv1.Level, message string, attrs []progress.Attr) {
+func (t *spanEvents) ended(span Span, start, end time.Time, status progressv1.SpanStatus, level progressv1.Level, title string, attrs []progress.Attr) {
 	pbAttrs := make([]*progressv1.SpanAttribute, len(attrs))
 	for i, a := range attrs {
 		pbAttrs[i] = &progressv1.SpanAttribute{Key: attributeKeys[a.Key], Value: a.Value}
@@ -179,12 +184,12 @@ func (t *spanEvents) ended(span Span, start, end time.Time, status progressv1.Sp
 		Level:        level,
 		Phase:        span.Phase,
 		Subject:      span.Subject,
-		Message:      message,
 		SpanId:       span.ID[:],
 		Body: &progressv1.OperationEvent_Ended{Ended: &progressv1.Ended{
 			Status:            status,
 			StartTimeUnixNano: start.UnixNano(),
 			Attributes:        pbAttrs,
+			Title:             title,
 		}},
 	})
 }

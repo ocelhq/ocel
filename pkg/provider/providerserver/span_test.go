@@ -18,7 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-const environmentTitle = "Checking the bootstrap, domains and bindings for shop"
+var environmentTitle = progress.Checking.Title("the bootstrap, domains and bindings for shop")
 
 func environmentUnit(phase progressv1.Phase) Span {
 	return UnitSpan(naming.UnitEnvironment, "production", environmentTitle, phase)
@@ -47,8 +47,8 @@ func TestAStartedSpanIsTitledUnderItsParent(t *testing.T) {
 	if opened.GetStarted() == nil || nested.GetStarted() == nil {
 		t.Fatalf("bodies = %T, %T, want both started", opened.GetBody(), nested.GetBody())
 	}
-	if opened.GetMessage() != environmentTitle || opened.GetSubject() != "production" || SpanID(opened.GetSpanId()) != unit.ID {
-		t.Errorf("the unit starts as %q: %q %x, want \"production\": %q %x", opened.GetSubject(), opened.GetMessage(), opened.GetSpanId(), environmentTitle, unit.ID)
+	if opened.GetMessage() != environmentTitle.Started || opened.GetSubject() != "production" || SpanID(opened.GetSpanId()) != unit.ID {
+		t.Errorf("the unit starts as %q: %q %x, want \"production\": %q %x", opened.GetSubject(), opened.GetMessage(), opened.GetSpanId(), environmentTitle.Started, unit.ID)
 	}
 	if len(opened.GetStarted().GetParentSpanId()) != 0 {
 		t.Errorf("unit parent = %x, want none (a unit is a root)", opened.GetStarted().GetParentSpanId())
@@ -79,8 +79,8 @@ func TestUnitIDsAreTheSharedNamingDigests(t *testing.T) {
 
 	tracer.Start(time.Now(),
 		environmentUnit(progressv1.Phase_PHASE_PROVISION),
-		UnitSpan(naming.UnitEdge, "cloudflare", "Reconciling the routes for shop in production", progressv1.Phase_PHASE_DEPLOY),
-		UnitSpan(naming.UnitPromotion, "production", "Switching traffic to promotion p1", progressv1.Phase_PHASE_PROMOTE),
+		UnitSpan(naming.UnitEdge, "cloudflare", progress.Reconciling.Title("the routes for shop in production"), progressv1.Phase_PHASE_DEPLOY),
+		UnitSpan(naming.UnitPromotion, "production", progress.Switching.Title("traffic to promotion p1"), progressv1.Phase_PHASE_PROMOTE),
 	)
 
 	if err := sender.close(); err != nil {
@@ -104,7 +104,7 @@ func TestUnitIDsAreTheSharedNamingDigests(t *testing.T) {
 func TestDetailSpansMintTheirOwnIDUnderTheirUnit(t *testing.T) {
 	t.Parallel()
 
-	unit := UnitSpan(naming.UnitPromotion, "production", "Switching traffic to promotion p1", progressv1.Phase_PHASE_PROMOTE)
+	unit := UnitSpan(naming.UnitPromotion, "production", progress.Switching.Title("traffic to promotion p1"), progressv1.Phase_PHASE_PROMOTE)
 	first := NewSpan(unit, "detail")
 	second := NewSpan(unit, "detail")
 
@@ -234,17 +234,41 @@ func TestAFailedSpanEndsAtErrorLevelAndASucceededOneAtInfo(t *testing.T) {
 	}
 }
 
+func TestASucceededSpanEndsTitledWithWhatItDidAndAFailedOneWithNoTitle(t *testing.T) {
+	t.Parallel()
+
+	stream := &recordingStream{}
+	sender := newEventStream(context.Background(), stream.send)
+	tracer := newSpanEvents(sender)
+
+	span := environmentUnit(progressv1.Phase_PHASE_PROVISION)
+	tracer.End(span, time.Now(), time.Now(), errors.New("the stack refused"))
+	tracer.End(span, time.Now(), time.Now(), nil)
+
+	if err := sender.close(); err != nil {
+		t.Fatalf("close() error = %v", err)
+	}
+	events := stream.recorded()
+	if got := events[0].GetEnded().GetTitle(); got != "" {
+		t.Errorf("a failed span ends titled %q, want no title", got)
+	}
+	if got, want := events[1].GetEnded().GetTitle(), "Checked the bootstrap, domains and bindings for shop"; got != want {
+		t.Errorf("a succeeded span ends titled %q, want %q", got, want)
+	}
+}
+
 func TestSpanTitlesAreSanitized(t *testing.T) {
 	t.Parallel()
 
-	if got := UnitSpan(naming.UnitEnvironment, "production", "\x1b[2J", progressv1.Phase_PHASE_PROVISION).Title; got != "[2J" {
+	if got := UnitSpan(naming.UnitEnvironment, "production", progress.Title{Started: "\x1b[2J", Ended: "\x1b[2J"}, progressv1.Phase_PHASE_PROVISION).Title; got.Started != "[2J" || got.Ended != "[2J" {
 		t.Errorf("UnitSpan() title = %q, want the control characters gone", got)
 	}
-	if got := UnitSpan(naming.UnitEnvironment, "production", "   ", progressv1.Phase_PHASE_PROVISION).Title; got != "span" {
+	if got := UnitSpan(naming.UnitEnvironment, "production", progress.Title{Started: "   ", Ended: "   "}, progressv1.Phase_PHASE_PROVISION).Title; got.Started != "span" || got.Ended != "span" {
 		t.Errorf("UnitSpan() title = %q, want a fallback title", got)
 	}
-	if got := UnitSpan(naming.UnitEnvironment, "production", strings.Repeat("a", maxSpanTitleLen*2), progressv1.Phase_PHASE_PROVISION).Title; len(got) > maxSpanTitleLen {
-		t.Errorf("UnitSpan() title is %d long, want it capped at %d", len(got), maxSpanTitleLen)
+	long := strings.Repeat("a", maxSpanTitleLen*2)
+	if got := UnitSpan(naming.UnitEnvironment, "production", progress.Title{Started: long, Ended: long}, progressv1.Phase_PHASE_PROVISION).Title; len(got.Started) > maxSpanTitleLen || len(got.Ended) > maxSpanTitleLen {
+		t.Errorf("UnitSpan() title is %d and %d long, want each capped at %d", len(got.Started), len(got.Ended), maxSpanTitleLen)
 	}
 }
 
@@ -272,7 +296,7 @@ func TestAFailedUnitSaysWhyAtErrorInItsUnitOnceBeforeTheUnitEnds(t *testing.T) {
 
 	stream := &recordingStream{}
 	sender := newEventStream(context.Background(), stream.send)
-	unit := UnitSpan("web", "web", "Deploying the serverless app to production", progressv1.Phase_PHASE_DEPLOY)
+	unit := UnitSpan("web", "web", progress.Deploying.Title("the serverless app to production"), progressv1.Phase_PHASE_DEPLOY)
 	_ = newSpanEvents(sender).run(unit, func(u *spanRun) error {
 		return u.phase(func(progress.Log) error {
 			return errors.New("the web stack could not be provisioned\x1b[0m")
@@ -312,7 +336,7 @@ func TestAUnitsWorkSpeaksInTheUnitsOwnSpanWithNoSpanOfItsOwn(t *testing.T) {
 
 	stream := &recordingStream{}
 	sender := newEventStream(context.Background(), stream.send)
-	unit := UnitSpan("web", "web", "Deploying the serverless app to production", progressv1.Phase_PHASE_DEPLOY)
+	unit := UnitSpan("web", "web", progress.Deploying.Title("the serverless app to production"), progressv1.Phase_PHASE_DEPLOY)
 	_ = newSpanEvents(sender).run(unit, func(u *spanRun) error {
 		return u.phase(func(progress progress.Log) error {
 			progress.Say("Uploading function web's artifact (1.2 MiB)")
@@ -342,7 +366,7 @@ func TestAUnitThatFailsOutsideItsPhaseSaysWhyInItsOwnSpan(t *testing.T) {
 
 	stream := &recordingStream{}
 	sender := newEventStream(context.Background(), stream.send)
-	unit := UnitSpan("web", "web", "Deploying the serverless app to production", progressv1.Phase_PHASE_DEPLOY)
+	unit := UnitSpan("web", "web", progress.Deploying.Title("the serverless app to production"), progressv1.Phase_PHASE_DEPLOY)
 	_ = newSpanEvents(sender).run(unit, func(*spanRun) error {
 		return errors.New("the web stack is locked")
 	})

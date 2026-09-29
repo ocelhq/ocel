@@ -166,7 +166,7 @@ func (r *Run) beginLocked(phase progressv1.Phase, parent *Scope, subject, messag
 }
 
 func (r *Run) beginLockedAt(phase progressv1.Phase, parent *Scope, subject, message string, start time.Time) *Scope {
-	s := &Scope{run: r, parent: parent, phase: phase, subject: subject, spanID: newSpanID(), start: start}
+	s := &Scope{run: r, parent: parent, phase: phase, subject: subject, spanID: newSpanID(), start: start, title: pastTense(message)}
 	r.enterLocked(phase)
 	var parentID []byte
 	if parent != nil {
