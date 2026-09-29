@@ -1,0 +1,9 @@
+{
+  "proxy": {
+    "caddy": {
+      "directory": "/etc/ocel-front-caddy/ocel.d",
+      "container": "ocel-front-caddy",
+      "network": "ocel-front-caddy"
+    }
+  }
+}
