@@ -2,6 +2,7 @@ package manual
 
 import (
 	"context"
+	"slices"
 
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
@@ -29,8 +30,22 @@ func (m Manual) Inspect(ctx context.Context) (proxy.Checks, error) {
 	if err != nil {
 		return nil, err
 	}
+	shielded, err := m.Box.Shielded(ctx)
+	if err != nil {
+		return nil, err
+	}
 	for _, hostname := range claimed {
+		if slices.Contains(shielded, hostname) {
+			continue
+		}
 		check, err := m.routing(ctx, hostname)
+		if err != nil {
+			return nil, err
+		}
+		checks = append(checks, check)
+	}
+	for _, hostname := range shielded {
+		check, err := m.shielding(ctx, hostname)
 		if err != nil {
 			return nil, err
 		}

@@ -35,6 +35,7 @@ type Machine interface {
 	ClaimHosts(ctx context.Context, claims []host.HostClaim) error
 	ShieldHost(ctx context.Context, shield host.Shield) (host.Shield, error)
 	UnshieldHost(ctx context.Context, hostname, owner string) error
+	RefuseUnshielded(ctx context.Context, hostname string) error
 	DisclaimHost(ctx context.Context, hostname, owner string) error
 	DisclaimPointer(ctx context.Context, owner, pointer string) error
 	DisclaimSurface(ctx context.Context, owner string) error

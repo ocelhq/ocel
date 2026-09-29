@@ -235,6 +235,10 @@ func (m *machine) ShieldHost(_ context.Context, shield host.Shield) (host.Shield
 	return m.shields[len(m.shields)-1], nil
 }
 
+func (m *machine) RefuseUnshielded(context.Context, string) error {
+	return m.refuse("RefuseUnshielded")
+}
+
 func (m *machine) UnshieldHost(_ context.Context, hostname, owner string) error {
 	m.calls = append(m.calls, "unshield "+hostname)
 	if err := m.refuse("UnshieldHost"); err != nil {

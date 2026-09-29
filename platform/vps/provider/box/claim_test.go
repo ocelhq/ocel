@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"math/big"
 	"reflect"
 	"slices"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -181,5 +183,19 @@ func TestTheBoxSaysACertificateDueForRenewalCertifiesNothing(t *testing.T) {
 	}
 	if origin.Certified {
 		t.Error("the box says a certificate expiring tomorrow certifies shop.example.com, so no renewal is ever issued")
+	}
+}
+
+func TestTheBoxRefusesAShieldedClaimItsProxyAnswersToAClientWithNoCertificate(t *testing.T) {
+	m, routed := routedOn(t)
+	m.refuseOn("RefuseUnshielded", refusal.Refuse(refusal.CodeNotReady, "your proxy answers shop.example.com to a client that presents no certificate"))
+
+	_, err := routed.Claim(context.Background(), router.Claim{Hostname: "shop.example.com", App: "web", ClientCertificates: []string{pulled}})
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
+		t.Fatalf("Claim = %v, want refused not ready: the edge would forward a hostname the box answers to anyone", err)
+	}
+	if !slices.Contains(m.visited, "RefuseUnshielded") {
+		t.Errorf("the box never asked whether its proxy refuses a client with no certificate")
 	}
 }

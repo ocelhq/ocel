@@ -15,6 +15,7 @@ type Box interface {
 	Listening(ctx context.Context) ([]listeners.Listener, error)
 	Publishing(ctx context.Context, port string) ([]string, error)
 	Claimed(ctx context.Context) ([]string, error)
+	Shielded(ctx context.Context) ([]string, error)
 	Probe(ctx context.Context, hostname string) (answered router.Kind, failure string, err error)
 }
 

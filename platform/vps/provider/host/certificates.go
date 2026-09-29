@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
@@ -16,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/manual"
 )
 
 const proxyNotServingYet = 3
@@ -185,6 +187,31 @@ func (b frontBox) Claimed(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 	return state.hostnames(), nil
+}
+
+func (b frontBox) Shielded(ctx context.Context) ([]string, error) {
+	state, err := b.h.routingTable(ctx)
+	if err != nil {
+		return nil, err
+	}
+	shielded := make([]string, 0, len(state.Shields))
+	for _, shield := range state.Shields {
+		shielded = append(shielded, shield.Hostname)
+	}
+	return shielded, nil
+}
+
+func (h *Host) RefuseUnshielded(ctx context.Context, hostname string) error {
+	if h.front.Guarantees().OwnsPorts {
+		return nil
+	}
+	said, err := h.ServedRouter(ctx, edge.ProbeHostname(hostname))
+	if err != nil || said.Router == "" {
+		return err
+	}
+	return refusal.Refuse(refusal.CodeNotReady,
+		"your proxy answers %s to a client that presents no certificate, so the edge in front would forward a hostname anyone reaches without it\n%s, then run this again",
+		hostname, manual.RequireClientCertificate(hostname))
 }
 
 func (b frontBox) Probe(ctx context.Context, hostname string) (router.Kind, string, error) {

@@ -1,17 +1,22 @@
 package host
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
+	"errors"
 	"math/big"
 	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
 func pulledCertificate(t *testing.T) (string, string) {
@@ -99,5 +104,44 @@ func TestShieldingAHostnameAgainKeepsTheOriginCertificateItAlreadyHolds(t *testi
 	again := Shielding(held, Shield{Hostname: "shop.example.com", Owner: "ocel-shop-production", ClientCertificates: []string{"zone", "successor"}})
 	if len(again) != 1 || again[0].Certificate != "ORIGIN" || again[0].Key != "KEY" {
 		t.Errorf("shielding shop.example.com again leaves %+v, want the origin certificate it holds kept: a claim carries one only when the origin needs a new one", again)
+	}
+}
+
+func TestABoxBehindYourProxyRefusesToShieldAHostnameYourProxyAnswersWithoutACertificate(t *testing.T) {
+	t.Parallel()
+
+	box := machine(nil)
+	probed := 0
+	answers := "switchboard\n"
+	box.answer = func(command string) (session.Result, bool) {
+		if strings.Contains(command, quoted("probe")) {
+			probed++
+			return session.Result{Stdout: answers}, true
+		}
+		return session.Result{}, false
+	}
+	yours := box.fronted(Front{Manual: &ManualFront{Port: 8480}})
+
+	err := yours.RefuseUnshielded(context.Background(), "shop.example.com")
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady || !strings.Contains(refused.Message, "client certificate") {
+		t.Errorf("RefuseUnshielded over a proxy that answers without a certificate = %v, want refused naming the client certificate to require", err)
+	}
+
+	answers = ""
+	box.answer = func(command string) (session.Result, bool) {
+		if strings.Contains(command, quoted("probe")) {
+			probed++
+			return session.Result{Code: 3, Stderr: "shop.example.com at 127.0.0.1:443: remote error: tls: certificate required\n"}, true
+		}
+		return session.Result{}, false
+	}
+	if err := yours.RefuseUnshielded(context.Background(), "shop.example.com"); err != nil {
+		t.Errorf("RefuseUnshielded over a proxy that refuses a client with no certificate = %v, want nil", err)
+	}
+
+	before := probed
+	if err := box.host().RefuseUnshielded(context.Background(), "shop.example.com"); err != nil || probed != before {
+		t.Errorf("RefuseUnshielded over ocel's own proxy = %v after %d probes, want nil and no probe: ocel renders the shield itself", err, probed-before)
 	}
 }
