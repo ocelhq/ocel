@@ -198,7 +198,9 @@ func (s *RouterStack) State() router.StackState {
 	return router.NewStackState(state)
 }
 
-func (s *RouterStack) Claim(context.Context, string, string) error { return nil }
+func (s *RouterStack) Claim(context.Context, router.Claim) (edge.Origin, error) {
+	return edge.Origin{}, nil
+}
 
 func (s *RouterStack) Disclaim(context.Context, string) error { return nil }
 

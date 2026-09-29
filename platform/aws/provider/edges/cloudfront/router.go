@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
@@ -49,7 +51,9 @@ func (r routerStack) State() router.StackState {
 	return router.NewStackState(state)
 }
 
-func (r routerStack) Claim(context.Context, string, string) error { return nil }
+func (r routerStack) Claim(context.Context, router.Claim) (edge.Origin, error) {
+	return edge.Origin{}, nil
+}
 
 func (r routerStack) Disclaim(context.Context, string) error { return nil }
 

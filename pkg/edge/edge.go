@@ -112,6 +112,10 @@ type EdgeStack interface {
 	Destroy(ctx context.Context) error
 }
 
+type Origin struct {
+	Address string
+}
+
 type DomainBinding struct {
 	Hostname    string
 	Certificate string

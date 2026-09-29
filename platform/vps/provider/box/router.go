@@ -5,6 +5,8 @@ import (
 	"maps"
 	"slices"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
@@ -39,7 +41,9 @@ func (r routerStack) State() router.StackState {
 	return router.NewStackState(r.s.State())
 }
 
-func (r routerStack) Claim(context.Context, string, string) error { return nil }
+func (r routerStack) Claim(context.Context, router.Claim) (edge.Origin, error) {
+	return edge.Origin{}, nil
+}
 
 func (r routerStack) Disclaim(context.Context, string) error { return nil }
 
