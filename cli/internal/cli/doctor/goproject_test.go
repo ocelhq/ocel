@@ -22,7 +22,7 @@ func TestDoctorPassesOnAGoProjectWithNoNode(t *testing.T) {
 	clitest.WriteFile(t, filepath.Join(root, "go.mod"), "module fixture\n\ngo 1.24\n")
 	clitest.WriteFile(t, filepath.Join(root, "ocel.json"), `{
   "slug": "go-shop",
-  "provider": { "aws": {} },
+  "provider": { "fake": {} },
   "domains": { "production": "shop.example.com", "preview": "*.preview.acme.com" }
 }
 `)
@@ -31,12 +31,12 @@ func TestDoctorPassesOnAGoProjectWithNoNode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve test binary path: %v", err)
 	}
-	clitest.InstallProvider(t, "aws", func(dest string) error { return os.Symlink(testBinary, dest) })
+	clitest.InstallProvider(t, "fake", func(dest string) error { return os.Symlink(testBinary, dest) })
 
 	t.Setenv(providerclient.ReadyTimeoutEnvVar, "5s")
 	t.Setenv(clitest.FakeProviderEnvVar, "1")
 	t.Setenv("OCEL_TEST_DEPLOY_FAKE_PROVIDER_SOCK", filepath.Join(t.TempDir(), "deploy-provider.sock"))
-	t.Setenv(clitest.FakeIDProviderEnvVar, "aws")
+	t.Setenv(clitest.FakeIDProviderEnvVar, "fake")
 	t.Setenv(clitest.FakeIDAccountEnvVar, "123456789012")
 	t.Setenv(clitest.FakeBootstrapEnvVar, "current")
 	t.Setenv(clitest.FakePreviewBootstrapEnvVar, "current")

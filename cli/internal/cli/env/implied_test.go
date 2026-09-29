@@ -16,7 +16,7 @@ func setUpInlineBindingFixture(t *testing.T) string {
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "`+clitest.FixtureSlug+`",
-  provider: { aws: {} },
+  provider: { fake: {} },
   domains: { preview: "*.preview.acme.com" },
   bindings: { postgres: { main: { url: { $env: "MAIN_DATABASE_URL" } } } },
 };

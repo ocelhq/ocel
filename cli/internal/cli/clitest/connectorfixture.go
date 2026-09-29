@@ -23,9 +23,9 @@ func SetUpConnectorFixture(t *testing.T, fingerprint, hostname string) string {
 	t.Setenv(providerclient.ReadyTimeoutEnvVar, "5s")
 
 	root := t.TempDir()
-	WriteFile(t, filepath.Join(root, "ocel.vps.json"), `{
+	WriteFile(t, filepath.Join(root, "ocel.fake.json"), `{
   "slug": "`+FixtureSlug+`",
-  "provider": { "vps": { "ssh": "`+hostname+`" } }
+  "provider": { "fake": { "ssh": "`+hostname+`" } }
 }
 `)
 
@@ -33,8 +33,8 @@ func SetUpConnectorFixture(t *testing.T, fingerprint, hostname string) string {
 	if err != nil {
 		t.Fatalf("resolve test binary path: %v", err)
 	}
-	InstallProvider(t, "vps", func(dest string) error { return os.Symlink(testBinary, dest) })
-	InstallConnector(t, "vps", providers.Platform{GOOS: "linux", GOARCH: "amd64"}, []byte(FakeConnectorBinary))
+	InstallProvider(t, "fake", func(dest string) error { return os.Symlink(testBinary, dest) })
+	InstallConnector(t, "fake", providers.Platform{GOOS: "linux", GOARCH: "amd64"}, []byte(FakeConnectorBinary))
 
 	t.Setenv(FakeProviderEnvVar, "1")
 	t.Setenv(fakeProviderSockEnvVar, filepath.Join(t.TempDir(), "connector-provider.sock"))

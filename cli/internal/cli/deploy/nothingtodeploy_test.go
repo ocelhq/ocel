@@ -34,7 +34,7 @@ func TestAProjectWithoutAppsOrResourcesHasNothingToDeploy(t *testing.T) {
 	headline := nothingToDeployHeadline(t, `
 export default {
   slug: "test-app",
-  provider: { aws: { region: "eu-west-2" } },
+  provider: { fake: { location: "zone-b" } },
 };
 `)
 	if want := "Nothing to deploy: test-app declares no apps or resources"; headline != want {
@@ -46,7 +46,7 @@ func TestAppsThatBuildNoFunctionOrImageAreNamedWhenNothingIsLeftToDeploy(t *test
 	headline := nothingToDeployHeadline(t, `
 export default {
   slug: "test-app",
-  provider: { aws: { region: "eu-west-2" } },
+  provider: { fake: { location: "zone-b" } },
   apps: [
     { name: "web", path: "apps/web", framework: "node" },
     { name: "api", path: "apps/api", framework: "node" },

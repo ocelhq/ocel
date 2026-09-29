@@ -26,6 +26,7 @@ func runRootSubprocess(args []string) int {
 }
 
 func TestMain(m *testing.M) {
+	clitest.AddFakeProviderIDs()
 	if os.Getenv(clitest.FakeProviderEnvVar) == "1" {
 		os.Exit(clitest.RunFakeProvider())
 	}

@@ -38,12 +38,12 @@ func TestRunDestroyPreviewProject(t *testing.T) {
 		out := stdout.String()
 		for _, want := range []string{
 			`ENTIRE preview footprint of project "test-app"`,
-			"fronted by the cloudfront edge",
-			"– aws/test-app--pr-1--infra  [infra]  — databases and buckets, INCLUDING ALL DATA",
-			"– aws/test-app--pr-2--infra  [infra]",
-			"– aws/test-app--pr-1--web--b1  [web]",
-			"– cloudfront/edge",
-			"    – test-app  AWS::CloudFront::Distribution",
+			"fronted by the direct edge",
+			"– fake/test-app--pr-1--infra  [infra]  — databases and buckets, INCLUDING ALL DATA",
+			"– fake/test-app--pr-2--infra  [infra]",
+			"– fake/test-app--pr-1--web--b1  [web]",
+			"– direct/edge",
+			"    – test-app  Fake::Front",
 			"every preview variable value",
 			"The account-level preview bootstrap is left intact. This cannot be undone.",
 			"4 to delete, 1 unchanged.",
@@ -66,9 +66,9 @@ func TestRunDestroyPreviewProject(t *testing.T) {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { aws: {} },
+  provider: { fake: {} },
   domains: { preview: "*.preview.acme.com" },
-  dns: "route53",
+  dns: "zone",
 };
 `)
 		deps := newTestDeps()
@@ -82,7 +82,7 @@ export default {
 		if err := runDestroyPreviewProject(context.Background(), deps, root, true, false, &stdout, strings.NewReader("")); err != nil {
 			t.Fatalf("runDestroyPreviewProject err = %v; stdout=%s", err, stdout.String())
 		}
-		if out := stdout.String(); !strings.Contains(out, "DESTROY PROJECT project=test-app dns=route53") {
+		if out := stdout.String(); !strings.Contains(out, "DESTROY PROJECT project=test-app dns=zone") {
 			t.Errorf("stdout = %q, want the dns descriptor on the teardown request", out)
 		}
 	})
@@ -185,11 +185,11 @@ func TestRunDestroy(t *testing.T) {
 
 		out := stdout.String()
 		for _, want := range []string{
-			"fronted by the cloudfront edge",
-			"– cloudfront/edge",
-			"    – disable, then delete E1test-app  AWS::CloudFront::Distribution (slow)",
-			"– aws/test-app--infra  [infra]",
-			"– aws/test-app--web--b1  [web]",
+			"fronted by the direct edge",
+			"– direct/edge",
+			"    – disable, then delete E1test-app  Fake::Front (slow)",
+			"– fake/test-app--infra  [infra]",
+			"– fake/test-app--web--b1  [web]",
 			"4 to delete, 1 unchanged.",
 			"DESTROY PROJECT project=test-app",
 		} {
@@ -221,7 +221,7 @@ func TestRunDestroy(t *testing.T) {
 		if strings.Contains(out, "consented=none") {
 			t.Fatalf("the destroy reached the provider with no plan behind it; got:\n%s", out)
 		}
-		for _, want := range []string{"cloudfront/edge", "aws/test-app--infra", "aws/test-app--web--b1"} {
+		for _, want := range []string{"direct/edge", "fake/test-app--infra", "fake/test-app--web--b1"} {
 			if !strings.Contains(out, "consented=") || !strings.Contains(consentedLine(out), want) {
 				t.Errorf("the destroy sent %q, want the plan it showed to name %q", consentedLine(out), want)
 			}

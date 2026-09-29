@@ -469,7 +469,7 @@ func TestProjectDir(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
-		clitest.WriteFile(t, filepath.Join(root, "ocel.json"), `{"slug": "my-app", "provider": { "aws": {} }}`)
+		clitest.WriteFile(t, filepath.Join(root, "ocel.json"), `{"slug": "my-app", "provider": { "fake": {} }}`)
 		nested := filepath.Join(root, "apps", "web")
 		if err := os.MkdirAll(nested, 0o755); err != nil {
 			t.Fatalf("mkdir: %v", err)

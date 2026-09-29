@@ -19,7 +19,7 @@ func writeBoundMonorepo(t *testing.T, root string, bindings string) {
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { aws: {} },
+  provider: { fake: {} },
   domains: { preview: "*.preview.acme.com" },
   bindings: {`+bindings+`},
   apps: [{ name: "api", path: "apps/api", framework: "node" }],

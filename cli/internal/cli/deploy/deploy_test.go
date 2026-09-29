@@ -264,7 +264,7 @@ export default {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { aws: {} },
+  provider: { fake: {} },
   domains: { production: "app.acme.com" },
 };
 `)
@@ -389,9 +389,9 @@ export default {
 		clitest.StubBuild(&deps, nil)
 		pretendStdoutIsTerminal(&deps)
 		root, sockPath := clitest.SetUpDeployFixture(t)
-		t.Setenv(clitest.FakeIDProviderEnvVar, "aws")
+		t.Setenv(clitest.FakeIDProviderEnvVar, "fake")
 		t.Setenv(clitest.FakeIDAccountEnvVar, "123456789012")
-		t.Setenv(clitest.FakeIDRegionEnvVar, "us-east-1")
+		t.Setenv(clitest.FakeIDLocationEnvVar, "zone-a")
 		t.Setenv(clitest.FakeIDEdgeScopeEnvVar, "abcd1234")
 
 		var stdout, stderr bytes.Buffer
@@ -401,7 +401,7 @@ export default {
 		}
 
 		out := ansi.Strip(stdout.String())
-		for _, want := range []string{"ocel", "test-app › production", "aws", "123456789012", "us-east-1", "edge", "abcd1234"} {
+		for _, want := range []string{"ocel", "test-app › production", "fake", "123456789012", "zone-a", "edge", "abcd1234"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout missing %q:\n%s", want, out)
 			}
@@ -424,9 +424,9 @@ export default {
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, nil)
 		root, sockPath := clitest.SetUpDeployFixture(t)
-		t.Setenv(clitest.FakeIDProviderEnvVar, "aws")
+		t.Setenv(clitest.FakeIDProviderEnvVar, "fake")
 		t.Setenv(clitest.FakeIDAccountEnvVar, "123456789012")
-		t.Setenv(clitest.FakeIDRegionEnvVar, "us-east-1")
+		t.Setenv(clitest.FakeIDLocationEnvVar, "zone-a")
 		t.Setenv(clitest.FakeIDEdgeScopeEnvVar, "abcd1234")
 
 		var stdout, stderr bytes.Buffer
@@ -439,7 +439,7 @@ export default {
 		if !strings.Contains(out, "Deployed") {
 			t.Fatalf("stdout = %q, want the deploy to have proceeded", out)
 		}
-		for _, want := range []string{"ocel  dev  test-app › production", "  aws   123456789012 · us-east-1\n  edge  abcd1234"} {
+		for _, want := range []string{"ocel  dev  test-app › production", "  fake  123456789012 · zone-a\n  edge  abcd1234"} {
 			if !strings.Contains(out, want+"\n") {
 				t.Errorf("stdout missing %q with no terminal attached:\n%s", want, out)
 			}
@@ -459,7 +459,7 @@ export default {
 		root, _ := clitest.SetUpDeployFixture(t)
 		t.Setenv(clitest.FakeIDAccountEnvVar, "123456789012")
 		t.Setenv(clitest.FakeIDProfileEnvVar, "default")
-		t.Setenv(clitest.FakeCredProblemEnvVar, "Cloudflare")
+		t.Setenv(clitest.FakeCredProblemEnvVar, "Relay")
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(deps, &stdout)
@@ -472,8 +472,8 @@ export default {
 		if !strings.Contains(out, "123456789012") {
 			t.Errorf("stdout = %q, want the resolved identity still shown", out)
 		}
-		if !strings.Contains(out, "Cloudflare") {
-			t.Errorf("stdout = %q, want the Cloudflare credential problem surfaced", out)
+		if !strings.Contains(out, "Relay") {
+			t.Errorf("stdout = %q, want the Relay credential problem surfaced", out)
 		}
 		if strings.Contains(out, "[build]") {
 			t.Errorf("stdout = %q, want the build to be skipped on a credential failure", out)
@@ -493,7 +493,7 @@ export default {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { aws: {} },
+  provider: { fake: {} },
   apps: [{ name: "api", path: "apps/api", framework: "node", domains: { production: "Api.Acme.com" } }],
 };
 `)
@@ -533,7 +533,7 @@ export default {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { aws: {} },
+  provider: { fake: {} },
   apps: [
     { name: "web", path: "apps/web", framework: "node", domains: { production: "acme.com" } },
     { name: "admin", path: "apps/admin", framework: "node" },
@@ -619,7 +619,7 @@ func addAppToFixtureConfig(t *testing.T, root string) {
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { aws: { region: "eu-west-2" } },
+  provider: { fake: { location: "zone-b" } },
   domains: { preview: "*.preview.acme.com" },
   apps: [{ name: "api", path: "apps/api", framework: "node" }],
 };
@@ -646,7 +646,7 @@ func TestRunDeployRefusesAComputeTheProviderDoesNotRun(t *testing.T) {
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { aws: {} },
+  provider: { fake: {} },
   domains: { preview: "*.preview.acme.com" },
   apps: [{ name: "api", path: "apps/api", framework: "node", compute: "container" }],
 };
@@ -660,7 +660,7 @@ export default {
 		t.Fatalf("runDeploy err = nil, want the deploy refused; stdout=%s stderr=%s", stdout.String(), stderr.String())
 	}
 	out := stdout.String()
-	for _, want := range []string{`"api"`, `"container"`, "aws", "serverless"} {
+	for _, want := range []string{`"api"`, `"container"`, "fake", "serverless"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("stdout = %q, want the refusal to name %s", out, want)
 		}

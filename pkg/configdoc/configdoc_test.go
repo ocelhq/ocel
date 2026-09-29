@@ -289,3 +289,21 @@ func TestDecodeRefusesASecretFieldThatIsNotOnePlaceholder(t *testing.T) {
 		})
 	}
 }
+
+func TestAddedKnownIDsDecodeUntilRestored(t *testing.T) {
+	document := []byte(`{"slug":"acme","provider":{"reference":{}},"edge":"front","dns":"zone"}`)
+
+	restore := AddKnownIDs("reference", []string{"front"}, []string{"zone"})
+	doc, err := Decode(document, env(nil))
+	if err != nil {
+		t.Fatalf("decode with the ids added: %v", err)
+	}
+	if doc.Provider.ID != "reference" || doc.Edge.ID != "front" || doc.DNS.ID != "zone" {
+		t.Errorf("decoded provider %q edge %q dns %q, want the added ids", doc.Provider.ID, doc.Edge.ID, doc.DNS.ID)
+	}
+
+	restore()
+	if _, err := Decode(document, env(nil)); err == nil || !strings.Contains(err.Error(), "knows no such") {
+		t.Errorf("decode after restore err = %v, want the added ids unknown again", err)
+	}
+}

@@ -37,6 +37,16 @@ func mustSelections(data []byte) selections {
 
 func ProviderIDs() []string { return slices.Clone(known.Provider.IDs) }
 
+func AddKnownIDs(provider string, edges, dns []string) (restore func()) {
+	previous := known
+	known = selections{
+		Provider: selection{IDs: append(slices.Clone(previous.Provider.IDs), provider), Shorthand: previous.Provider.Shorthand},
+		Edge:     selection{IDs: slices.Concat(previous.Edge.IDs, edges), Shorthand: slices.Concat(previous.Edge.Shorthand, edges)},
+		DNS:      selection{IDs: slices.Concat(previous.DNS.IDs, dns), Shorthand: slices.Concat(previous.DNS.Shorthand, dns)},
+	}
+	return func() { known = previous }
+}
+
 func ProviderNamedAlone(id string) bool { return slices.Contains(known.Provider.Shorthand, id) }
 
 type Selector[O any, K selectorKind] struct {

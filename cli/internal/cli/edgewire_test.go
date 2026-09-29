@@ -20,8 +20,8 @@ func TestBootstrapSendsTheFeatureSetAndNoEdge(t *testing.T) {
 		features    string
 		want        string
 	}{
-		{"a named set reaches the provider whole", "  edge: \"cloudflare\",\n", "isr,image-optimization", "features=isr,image-optimization force=false acceptReplacements=true"},
-		{"all names every feature the provider offers", "", "all", "features=isr,image-optimization,vars-key,cloudflare-edge,cloudfront-edge force=false acceptReplacements=true"},
+		{"a named set reaches the provider whole", "  edge: \"relay\",\n", "isr,image-optimization", "features=isr,image-optimization force=false acceptReplacements=true"},
+		{"all names every feature the provider offers", "", "all", "features=isr,image-optimization,vars-key,relay-edge,direct-edge force=false acceptReplacements=true"},
 		{"none leaves the core alone", "", "none", "features= force=false acceptReplacements=true"},
 	}
 	for _, tc := range cases {
@@ -43,7 +43,7 @@ func TestBootstrapSendsTheFeatureSetAndNoEdge(t *testing.T) {
 				t.Errorf("provider saw %q, want %q", got[0], tc.want)
 			}
 			if strings.Contains(got[0], "kind=") {
-				t.Errorf("provider saw %q; bootstrap no longer includes an edge, the cloudflare-edge feature does", got[0])
+				t.Errorf("provider saw %q; bootstrap no longer includes an edge, the relay-edge feature does", got[0])
 			}
 		})
 	}
@@ -105,7 +105,7 @@ func TestBootstrapDestroySendsTheEdgeTheProjectDeclared(t *testing.T) {
 	}{
 		{"an omitted edge names none, leaving the provider to choose", "", "kind= "},
 		{"a declared api-gateway edge names it", "  edge: \"api-gateway\",\n", "kind=api-gateway"},
-		{"a declared cloudflare edge names it", "  edge: \"cloudflare\",\n", "kind=cloudflare"},
+		{"a declared relay edge names it", "  edge: \"relay\",\n", "kind=relay"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -127,7 +127,7 @@ func TestBootstrapDestroySendsTheEdgeTheProjectDeclared(t *testing.T) {
 					t.Errorf("provider saw %q, want %q", line, tc.want)
 				}
 			}
-			if !strings.Contains(stdout.String(), "fronted by the cloudflare edge") {
+			if !strings.Contains(stdout.String(), "fronted by the relay edge") {
 				t.Errorf("stdout = %q, want the plan to name the edge left installed in the account, not the one this run selected", stdout.String())
 			}
 		})
@@ -141,9 +141,9 @@ func TestDestroySendsTheEdgeTheProjectDeclared(t *testing.T) {
 		want        string
 		planned     string
 	}{
-		{"an omitted edge names none, leaving the provider to choose", "", "kind= ", "cloudfront"},
+		{"an omitted edge names none, leaving the provider to choose", "", "kind= ", "direct"},
 		{"a declared api-gateway edge names it", "  edge: \"api-gateway\",\n", "kind=api-gateway", "api-gateway"},
-		{"a declared cloudflare edge names it", "  edge: \"cloudflare\",\n", "kind=cloudflare", "cloudflare"},
+		{"a declared relay edge names it", "  edge: \"relay\",\n", "kind=relay", "relay"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

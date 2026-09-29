@@ -30,7 +30,7 @@ func twoAppFixture(t *testing.T) (cmddeps.Deps, string) {
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { aws: { region: "eu-west-2" } },
+  provider: { fake: { location: "zone-b" } },
   apps: [
     { name: "web", path: "apps/web", framework: "node" },
     { name: "api", path: "apps/api", framework: "node" },

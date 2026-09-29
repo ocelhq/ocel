@@ -30,7 +30,7 @@ func setUpBindingFixture(t *testing.T) string {
 export default {
   slug: "`+clitest.FixtureSlug+`",
   bindings: { postgres: { orders: "@orders" } },
-  provider: { aws: {} },
+  provider: { fake: {} },
   domains: { preview: "*.preview.acme.com" },
 };
 `)
@@ -41,7 +41,7 @@ export default {
 func postgresBindingJSON(name, host string) string {
 	return fmt.Sprintf(`{
   "name": %q,
-  "source": "aws:rds:%s",
+  "source": "fake:postgres:%s",
   "postgres": {"host": %q, "port": 5432, "database": "app", "username": "app", "password": %q}
 }`, name, name, host, fakeBindingPassword)
 }
@@ -123,7 +123,7 @@ func TestRunBindingsSet(t *testing.T) {
 		}
 
 		listed := bindingLs(t, root, bindingsOptions{})
-		for _, want := range []string{"main", "postgres", "aws:rds:main", defaultBindingOwner} {
+		for _, want := range []string{"main", "postgres", "fake:postgres:main", defaultBindingOwner} {
 			if !strings.Contains(listed, want) {
 				t.Errorf("ls stdout = %q, want it to show %q", listed, want)
 			}
@@ -483,7 +483,7 @@ func TestRunBindingsJSONOutput(t *testing.T) {
 		t.Fatalf("ls json = %v, want one binding", listed)
 	}
 	binding, _ := bindings[0].(map[string]any)
-	for field, want := range map[string]any{"name": "main", "type": "postgres", "source": "aws:rds:main", "owner": defaultBindingOwner, "version": float64(1)} {
+	for field, want := range map[string]any{"name": "main", "type": "postgres", "source": "fake:postgres:main", "owner": defaultBindingOwner, "version": float64(1)} {
 		if binding[field] != want {
 			t.Errorf("ls json binding %s = %v, want %v", field, binding[field], want)
 		}

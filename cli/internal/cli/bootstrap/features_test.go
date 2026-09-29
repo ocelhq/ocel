@@ -15,8 +15,8 @@ import (
 const (
 	featureISR               = "isr"
 	featureImageOptimization = "image-optimization"
-	featureCloudflareEdge    = "cloudflare-edge"
-	featureCloudFrontEdge    = "cloudfront-edge"
+	featureRelayEdge         = "relay-edge"
+	featureDirectEdge        = "direct-edge"
 )
 
 func testCatalogue(enabled ...string) []*contractv1.Feature {
@@ -31,10 +31,10 @@ func testCatalogue(enabled ...string) []*contractv1.Feature {
 	return []*contractv1.Feature{
 		{Name: featureISR, Summary: "incremental static regeneration", Enabled: on(featureISR)},
 		{Name: featureImageOptimization, Summary: "on-demand image optimization", Enabled: on(featureImageOptimization)},
-		{Name: featureCloudflareEdge, Summary: "a Cloudflare front", DependsOn: []string{featureISR},
-			Needs: []string{provider.NeedsEdgePrefix + "cloudflare"}, Enabled: on(featureCloudflareEdge)},
-		{Name: featureCloudFrontEdge, Summary: "a CloudFront front",
-			Needs: []string{provider.NeedsEdgePrefix + "cloudfront"}, Enabled: on(featureCloudFrontEdge)},
+		{Name: featureRelayEdge, Summary: "a relay front", DependsOn: []string{featureISR},
+			Needs: []string{provider.NeedsEdgePrefix + "relay"}, Enabled: on(featureRelayEdge)},
+		{Name: featureDirectEdge, Summary: "a direct front",
+			Needs: []string{provider.NeedsEdgePrefix + "direct"}, Enabled: on(featureDirectEdge)},
 	}
 }
 
@@ -46,9 +46,9 @@ func TestParseFeatureFlag(t *testing.T) {
 		raw  string
 		want []string
 	}{
-		{"all takes everything the provider offers", "all", []string{featureISR, featureImageOptimization, featureCloudflareEdge, featureCloudFrontEdge}},
+		{"all takes everything the provider offers", "all", []string{featureISR, featureImageOptimization, featureRelayEdge, featureDirectEdge}},
 		{"none takes the core alone", "none", nil},
-		{"a list keeps the provider's order", "cloudflare-edge,isr", []string{featureISR, featureCloudflareEdge}},
+		{"a list keeps the provider's order", "relay-edge,isr", []string{featureISR, featureRelayEdge}},
 		{"space around a name is ignored", " isr , image-optimization ", []string{featureISR, featureImageOptimization}},
 		{"a repeat collapses", "isr,isr", []string{featureISR}},
 	} {
@@ -82,11 +82,11 @@ func TestParseFeatureFlag(t *testing.T) {
 	t.Run("a set that leaves out a dependency names the whole one", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := parseFeatureFlag(featureCloudflareEdge, testCatalogue())
+		_, err := parseFeatureFlag(featureRelayEdge, testCatalogue())
 		if err == nil {
 			t.Fatal("parseFeatureFlag accepted a feature without what it depends on")
 		}
-		if !strings.Contains(err.Error(), "--features isr,cloudflare-edge") {
+		if !strings.Contains(err.Error(), "--features isr,relay-edge") {
 			t.Errorf("error %q does not name the full set to pass instead", err)
 		}
 	})
@@ -95,11 +95,11 @@ func TestParseFeatureFlag(t *testing.T) {
 func TestParseRemoveFlag(t *testing.T) {
 	t.Parallel()
 
-	got, err := parseRemoveFlag(" cloudflare-edge , isr ", testCatalogue())
+	got, err := parseRemoveFlag(" relay-edge , isr ", testCatalogue())
 	if err != nil {
 		t.Fatalf("parseRemoveFlag: %v", err)
 	}
-	if want := []string{featureISR, featureCloudflareEdge}; !reflect.DeepEqual(got, want) {
+	if want := []string{featureISR, featureRelayEdge}; !reflect.DeepEqual(got, want) {
 		t.Errorf("parseRemoveFlag = %v, want %v", got, want)
 	}
 	if _, err := parseRemoveFlag("quantum-edge", testCatalogue()); err == nil {
@@ -110,9 +110,9 @@ func TestParseRemoveFlag(t *testing.T) {
 func TestGoingFeatures(t *testing.T) {
 	t.Parallel()
 
-	installed := []string{featureISR, featureImageOptimization, featureCloudflareEdge}
+	installed := []string{featureISR, featureImageOptimization, featureRelayEdge}
 	got := goingFeatures(testCatalogue(), installed, []string{featureISR})
-	if want := []string{featureISR, featureCloudflareEdge}; !reflect.DeepEqual(got, want) {
+	if want := []string{featureISR, featureRelayEdge}; !reflect.DeepEqual(got, want) {
 		t.Errorf("goingFeatures = %v, want what depends on the named feature to go with it", got)
 	}
 	if got := goingFeatures(testCatalogue(), []string{featureISR}, []string{featureImageOptimization}); got != nil {
@@ -142,12 +142,12 @@ func TestThePickerOffersOnlyWhatIsNotAlreadyThere(t *testing.T) {
 
 	catalogue := testCatalogue(featureISR)
 	got := addableFeatures(catalogue, []string{featureISR}, "")
-	if want := []string{featureImageOptimization, featureCloudflareEdge, featureCloudFrontEdge}; !reflect.DeepEqual(got, want) {
+	if want := []string{featureImageOptimization, featureRelayEdge, featureDirectEdge}; !reflect.DeepEqual(got, want) {
 		t.Errorf("addableFeatures = %v, want %v — an included feature is shown, never offered as a toggle", got, want)
 	}
 
-	got = addableFeatures(catalogue, []string{featureISR}, featureCloudflareEdge)
-	if want := []string{featureImageOptimization, featureCloudFrontEdge}; !reflect.DeepEqual(got, want) {
+	got = addableFeatures(catalogue, []string{featureISR}, featureRelayEdge)
+	if want := []string{featureImageOptimization, featureDirectEdge}; !reflect.DeepEqual(got, want) {
 		t.Errorf("addableFeatures = %v, want %v — what the project requires is applied, never offered", got, want)
 	}
 }
@@ -155,8 +155,8 @@ func TestThePickerOffersOnlyWhatIsNotAlreadyThere(t *testing.T) {
 func TestAFeatureForAnotherEdgeIsStillOffered(t *testing.T) {
 	t.Parallel()
 
-	got := addableFeatures(testCatalogue(), nil, featureCloudFrontEdge)
-	if !slices.Contains(got, featureCloudflareEdge) {
+	got := addableFeatures(testCatalogue(), nil, featureDirectEdge)
+	if !slices.Contains(got, featureRelayEdge) {
 		t.Errorf("addableFeatures = %v, want a feature fronting a different edge left on offer: installing one for a future project is the user's call", got)
 	}
 }
@@ -189,12 +189,12 @@ func TestPrintRequired(t *testing.T) {
 
 	catalogue := testCatalogue()
 	var out strings.Builder
-	printRequired(&out, catalogue, requiredFeature(catalogue, nil, "cloudfront"), "cloudfront")
+	printRequired(&out, catalogue, requiredFeature(catalogue, nil, "direct"), "direct")
 	got := out.String()
 	for _, want := range []string{
 		"Required by this project:",
-		"✓ " + featureCloudFrontEdge + "   a CloudFront front",
-		"Your edge is cloudfront. Change it in ocel.json.",
+		"✓ " + featureDirectEdge + "   a direct front",
+		"Your edge is direct. Change it in ocel.json.",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("printRequired = %q, want it to contain %q", got, want)
@@ -208,7 +208,7 @@ func TestPrintRequired(t *testing.T) {
 	}{
 		{"no edge kind", nil, ""},
 		{"a kind no feature fronts", nil, "quantum"},
-		{"a kind whose feature is already included", []string{featureCloudFrontEdge}, "cloudfront"},
+		{"a kind whose feature is already included", []string{featureDirectEdge}, "direct"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -226,17 +226,17 @@ func TestTheInteractivePathAppliesWhatTheEdgeRequires(t *testing.T) {
 	t.Parallel()
 
 	var out strings.Builder
-	names := []string{featureISR, featureImageOptimization, featureCloudflareEdge}
-	applied, selected, err := pickFeatures(context.Background(), testCatalogue(names...), names, nil, "cloudfront",
+	names := []string{featureISR, featureImageOptimization, featureRelayEdge}
+	applied, selected, err := pickFeatures(context.Background(), testCatalogue(names...), names, nil, "direct",
 		environmentv1.Tier_TIER_PRODUCTION, &out)
 	if err != nil || !selected {
 		t.Fatalf("pickFeatures = %v, %v, want the only feature left to add applied without a prompt", selected, err)
 	}
-	want := append(slices.Clone(names), featureCloudFrontEdge)
+	want := append(slices.Clone(names), featureDirectEdge)
 	if !reflect.DeepEqual(applied, inCatalogueOrder(testCatalogue(), want)) {
 		t.Errorf("pickFeatures = %v, want the edge's feature applied on top of what is included", applied)
 	}
-	if !strings.Contains(out.String(), "✓ Adding "+featureCloudFrontEdge) {
+	if !strings.Contains(out.String(), "✓ Adding "+featureDirectEdge) {
 		t.Errorf("pickFeatures said %q, want the required feature named as added", out.String())
 	}
 }
@@ -245,7 +245,7 @@ func TestThePickerSaysWhenThereIsNothingLeft(t *testing.T) {
 	t.Parallel()
 
 	var out strings.Builder
-	names := []string{featureISR, featureImageOptimization, featureCloudflareEdge, featureCloudFrontEdge}
+	names := []string{featureISR, featureImageOptimization, featureRelayEdge, featureDirectEdge}
 	applied, selected, err := pickFeatures(context.Background(), testCatalogue(names...), names, nil, "",
 		environmentv1.Tier_TIER_PRODUCTION, &out)
 	if err != nil || !selected {
@@ -262,8 +262,8 @@ func TestThePickerSaysWhenThereIsNothingLeft(t *testing.T) {
 func TestWithDependencies(t *testing.T) {
 	t.Parallel()
 
-	got := withDependencies(testCatalogue(), []string{featureCloudflareEdge})
-	if want := []string{featureISR, featureCloudflareEdge}; !reflect.DeepEqual(got, want) {
+	got := withDependencies(testCatalogue(), []string{featureRelayEdge})
+	if want := []string{featureISR, featureRelayEdge}; !reflect.DeepEqual(got, want) {
 		t.Errorf("withDependencies = %v, want %v", got, want)
 	}
 }
@@ -272,12 +272,12 @@ func TestPrintAdded(t *testing.T) {
 	t.Parallel()
 
 	var out strings.Builder
-	printAdded(&out, testCatalogue(), []string{featureISR, featureCloudflareEdge}, nil, []string{featureCloudflareEdge})
+	printAdded(&out, testCatalogue(), []string{featureISR, featureRelayEdge}, nil, []string{featureRelayEdge})
 	got := out.String()
-	if want := "✓ Adding " + featureCloudflareEdge + "\n"; !strings.HasPrefix(got, want) {
+	if want := "✓ Adding " + featureRelayEdge + "\n"; !strings.HasPrefix(got, want) {
 		t.Errorf("printAdded = %q, want it to open with %q — only what was picked", got, want)
 	}
-	if want := "  + " + featureISR + " — " + featureCloudflareEdge + " needs it\n"; !strings.Contains(got, want) {
+	if want := "  + " + featureISR + " — " + featureRelayEdge + " needs it\n"; !strings.Contains(got, want) {
 		t.Errorf("printAdded = %q, want the pulled-in dependency named by what needs it", got)
 	}
 	if strings.HasPrefix(got, "\x1b[") {
@@ -287,17 +287,17 @@ func TestPrintAdded(t *testing.T) {
 	var shared strings.Builder
 	catalogue := []*contractv1.Feature{
 		{Name: featureISR},
-		{Name: featureCloudflareEdge, DependsOn: []string{featureISR}},
-		{Name: featureCloudFrontEdge, DependsOn: []string{featureISR}},
+		{Name: featureRelayEdge, DependsOn: []string{featureISR}},
+		{Name: featureDirectEdge, DependsOn: []string{featureISR}},
 	}
-	picked := []string{featureCloudflareEdge, featureCloudFrontEdge}
+	picked := []string{featureRelayEdge, featureDirectEdge}
 	printAdded(&shared, catalogue, withDependencies(catalogue, picked), nil, picked)
-	if want := "  + " + featureISR + " — " + featureCloudflareEdge + ", " + featureCloudFrontEdge + " need it\n"; !strings.Contains(shared.String(), want) {
+	if want := "  + " + featureISR + " — " + featureRelayEdge + ", " + featureDirectEdge + " need it\n"; !strings.Contains(shared.String(), want) {
 		t.Errorf("printAdded = %q, want %q", shared.String(), want)
 	}
 
 	var included strings.Builder
-	printAdded(&included, testCatalogue(featureISR), []string{featureISR, featureCloudflareEdge}, []string{featureISR}, []string{featureCloudflareEdge})
+	printAdded(&included, testCatalogue(featureISR), []string{featureISR, featureRelayEdge}, []string{featureISR}, []string{featureRelayEdge})
 	if strings.Contains(included.String(), "  + "+featureISR) {
 		t.Errorf("printAdded = %q, want an already-included feature left out of the block", included.String())
 	}

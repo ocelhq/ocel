@@ -37,7 +37,7 @@ func setUpProviderFixtureWith(t *testing.T, options string, transforms []string)
 export default {
   slug: "test-app",
   transforms: `+mustJSON(t, transforms)+`,
-  provider: { aws: `+options+` },
+  provider: { fake: `+options+` },
   domains: { preview: "*.preview.acme.com" },
   apps: [{ name: "api", path: "apps/api", framework: "node" }],
 };
@@ -56,7 +56,7 @@ export default {
 
 func TestDeployConfiguresTheProviderOnceAtSessionSetup(t *testing.T) {
 	root, journal, deps := setUpProviderFixtureWith(t,
-		`{ region: "eu-west-2", certificates: { "app.acme.com": "arn:aws:acm:eu-west-2:1:certificate/x" } }`,
+		`{ location: "zone-b", certificates: { "app.acme.com": "fake-certificate/x" } }`,
 		[]string{"./transforms/net.transform.ts"})
 
 	var stdout, stderr bytes.Buffer
@@ -69,14 +69,14 @@ func TestDeployConfiguresTheProviderOnceAtSessionSetup(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("the provider was configured %d times, want exactly 1 for the session: %v", len(got), got)
 	}
-	want := "region=eu-west-2 transforms=./transforms/net.transform.ts certificates=map[app.acme.com:arn:aws:acm:eu-west-2:1:certificate/x]"
+	want := "location=zone-b transforms=./transforms/net.transform.ts certificates=map[app.acme.com:fake-certificate/x]"
 	if got[0] != want {
 		t.Errorf("provider saw %q, want %q", got[0], want)
 	}
 }
 
 func TestDeployRendersTheProviderRefusalAgainstTheConfigFile(t *testing.T) {
-	root, _, deps := setUpProviderFixture(t, `{ regionn: "eu-west-2" }`)
+	root, _, deps := setUpProviderFixture(t, `{ locationn: "zone-b" }`)
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(deps, &stdout)
@@ -86,8 +86,8 @@ func TestDeployRendersTheProviderRefusalAgainstTheConfigFile(t *testing.T) {
 	}
 	rendered := stdout.String() + stderr.String()
 	for _, want := range []string{
-		`configures provider "aws" with options it does not accept`,
-		`"provider.aws.regionn"`,
+		`configures provider "fake" with options it does not accept`,
+		`"provider.fake.locationn"`,
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Errorf("rendered output = %q, want it to contain %q", rendered, want)

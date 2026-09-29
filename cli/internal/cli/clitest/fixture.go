@@ -29,7 +29,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/providers"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/version"
+	"github.com/ocelhq/ocel/pkg/configdoc"
 	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 )
 
 func DiscoveryDir(root string) string {
@@ -115,6 +117,26 @@ func UnsetColorEnv() {
 func SetUpDeployFixture(t *testing.T) (root, sockPath string) {
 	t.Helper()
 
+	root = writeProject(t)
+	testBinary, err := filepath.Abs(os.Args[0])
+	if err != nil {
+		t.Fatalf("resolve test binary path: %v", err)
+	}
+	InstallProvider(t, string(fake.Vendor), func(dest string) error { return os.Symlink(testBinary, dest) })
+
+	sockPath = filepath.Join(t.TempDir(), "deploy-provider.sock")
+	t.Setenv(FakeProviderEnvVar, "1")
+	t.Setenv(fakeProviderSockEnvVar, sockPath)
+
+	t.Setenv(FakeInfraTierEnvVar, "production")
+	t.Setenv(FakeInfraPresentEnvVar, "1")
+
+	return root, sockPath
+}
+
+func writeProject(t *testing.T) string {
+	t.Helper()
+
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a Unix-domain-socket fake provider and POSIX symlinks")
 	}
@@ -124,11 +146,11 @@ func SetUpDeployFixture(t *testing.T) (root, sockPath string) {
 
 	t.Setenv(providerclient.ReadyTimeoutEnvVar, "5s")
 
-	root = t.TempDir()
+	root := t.TempDir()
 	WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "`+FixtureSlug+`",
-  provider: { aws: {} },
+  provider: { fake: {} },
   domains: { preview: "*.preview.acme.com" },
 };
 `)
@@ -155,21 +177,7 @@ function declarationSite(): string {
 }
 export {};
 `)
-
-	testBinary, err := filepath.Abs(os.Args[0])
-	if err != nil {
-		t.Fatalf("resolve test binary path: %v", err)
-	}
-	InstallProvider(t, "aws", func(dest string) error { return os.Symlink(testBinary, dest) })
-
-	sockPath = filepath.Join(t.TempDir(), "deploy-provider.sock")
-	t.Setenv(FakeProviderEnvVar, "1")
-	t.Setenv(fakeProviderSockEnvVar, sockPath)
-
-	t.Setenv(FakeInfraTierEnvVar, "production")
-	t.Setenv(FakeInfraPresentEnvVar, "1")
-
-	return root, sockPath
+	return root
 }
 
 func InstallProvider(t *testing.T, name string, place func(dest string) error) string {
@@ -202,6 +210,10 @@ func StubBuild(deps *cmddeps.Deps, functions []manifestbuilder.Function) {
 }
 
 const FixtureSlug = "test-app"
+
+func AddFakeProviderIDs() {
+	configdoc.AddKnownIDs(string(fake.Vendor), []string{string(fake.KindRelay), string(fake.KindDirect)}, []string{string(fake.KindZone)})
+}
 
 func FixtureImage(app string) string {
 	sum := sha256.Sum256([]byte("ocel-test-image/" + app))
@@ -241,7 +253,7 @@ func WriteUsageMonorepo(t *testing.T, root string) {
 	WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "`+FixtureSlug+`",
-  provider: { aws: {} },
+  provider: { fake: {} },
   domains: { preview: "*.preview.acme.com" },
   apps: [{ name: "api", path: "apps/api", framework: "node" }],
 };
@@ -303,7 +315,7 @@ func writeEdgeConfig(t *testing.T, root, declaration string) {
 	WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "`+FixtureSlug+`",
-  provider: { aws: {} },
+  provider: { fake: {} },
   domains: { preview: "*.preview.acme.com" },
   apps: [{ name: "api", path: "apps/api", framework: "node" }],
 `+declaration+`};

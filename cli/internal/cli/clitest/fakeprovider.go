@@ -55,7 +55,7 @@ const (
 	FakeIDProviderEnvVar  = "OCEL_TEST_FAKE_ID_PROVIDER"
 	FakeIDAccountEnvVar   = "OCEL_TEST_FAKE_ID_ACCOUNT"
 	FakeIDProfileEnvVar   = "OCEL_TEST_FAKE_ID_PROFILE"
-	FakeIDRegionEnvVar    = "OCEL_TEST_FAKE_ID_REGION"
+	FakeIDLocationEnvVar  = "OCEL_TEST_FAKE_ID_LOCATION"
 	FakeIDEdgeScopeEnvVar = "OCEL_TEST_FAKE_ID_EDGE_SCOPE"
 	FakeCredProblemEnvVar = "OCEL_TEST_FAKE_CRED_PROBLEM"
 )
@@ -444,7 +444,7 @@ func fakeDeployPlan(req *contractv1.DeployRequest) *planv1.ChangePlan {
 	manifest := req.GetManifest()
 	tier := strings.ToLower(strings.TrimPrefix(req.GetEnvironment().GetTier().String(), "TIER_"))
 
-	infra := &planv1.ChangeGroup{Kind: "stack", Name: "aws/" + manifest.GetSlug() + "--infra", Action: planv1.Change_ACTION_CREATE}
+	infra := &planv1.ChangeGroup{Kind: "stack", Name: "fake/" + manifest.GetSlug() + "--infra", Action: planv1.Change_ACTION_CREATE}
 	values := &planv1.ChangeGroup{Kind: "parameters", Name: "values", Action: planv1.Change_ACTION_CREATE}
 	for _, r := range manifest.GetResources() {
 		name := r.GetResource().GetName()
@@ -461,7 +461,7 @@ func fakeDeployPlan(req *contractv1.DeployRequest) *planv1.ChangePlan {
 	for _, app := range manifest.GetApps() {
 		group := &planv1.ChangeGroup{
 			Kind:   "stack",
-			Name:   "aws/" + manifest.GetSlug() + "--" + app.GetName(),
+			Name:   "fake/" + manifest.GetSlug() + "--" + app.GetName(),
 			Action: planv1.Change_ACTION_CREATE,
 		}
 		for _, fn := range manifest.GetFunctions() {
@@ -632,8 +632,8 @@ func (s *deployFakeProviderServer) DescribeBootstrap(ctx context.Context, req *c
 			feature("isr", "incremental static regeneration"),
 			feature("image-optimization", "on-demand image optimization"),
 			feature(provider.FeatureVarsKey, "a key the variables are sealed under"),
-			fronting("cloudflare-edge", "a Cloudflare front", "cloudflare", "isr"),
-			fronting("cloudfront-edge", "a CloudFront front", "cloudfront"),
+			fronting("relay-edge", "a relay front", "relay", "isr"),
+			fronting("direct-edge", "a direct front", "direct"),
 		}
 	}
 	return &contractv1.DescribeBootstrapResponse{
@@ -648,7 +648,7 @@ func fakeChangePlan(req *contractv1.BootstrapRequest) *planv1.ChangePlan {
 		return nil
 	}
 	tier := strings.ToLower(strings.TrimPrefix(req.GetTier().String(), "TIER_"))
-	core := &planv1.ChangeGroup{Kind: "stack", Name: "aws/ocel-" + tier + "-core"}
+	core := &planv1.ChangeGroup{Kind: "stack", Name: "fake/ocel-" + tier + "-core"}
 	plan := &planv1.ChangePlan{
 		Subject:  tier,
 		EdgeKind: resolvedEdgeKind(req.GetEdge().GetKind()),
@@ -665,33 +665,33 @@ func fakeChangePlan(req *contractv1.BootstrapRequest) *planv1.ChangePlan {
 	}
 	core.Action = planv1.Change_ACTION_UPDATE
 	core.Changes = []*planv1.Change{
-		{Kind: "AWS::Lambda::Function", Name: "OcelDispatchFunction", Action: planv1.Change_ACTION_UPDATE},
-		{Kind: "AWS::SecretsManager::Secret", Name: "OcelOriginSecret", Action: planv1.Change_ACTION_REPLACE, Reason: "rotation forces replacement"},
+		{Kind: "Fake::Function", Name: "OcelDispatchFunction", Action: planv1.Change_ACTION_UPDATE},
+		{Kind: "Fake::Secret", Name: "OcelOriginSecret", Action: planv1.Change_ACTION_REPLACE, Reason: "rotation forces replacement"},
 	}
 	plan.Groups = append(plan.Groups,
 		&planv1.ChangeGroup{
 			Kind:    "stack",
-			Name:    "aws/ocel-" + tier + "-image-optimization",
+			Name:    "fake/ocel-" + tier + "-image-optimization",
 			Feature: "image-optimization",
 			Action:  planv1.Change_ACTION_CREATE,
 			Changes: []*planv1.Change{
-				{Kind: "AWS::Lambda::Function", Name: "OcelImageFunction", Action: planv1.Change_ACTION_CREATE},
+				{Kind: "Fake::Function", Name: "OcelImageFunction", Action: planv1.Change_ACTION_CREATE},
 			},
 		},
 		&planv1.ChangeGroup{
 			Kind:    "stack",
-			Name:    "aws/ocel-" + tier + "-isr",
+			Name:    "fake/ocel-" + tier + "-isr",
 			Feature: "isr",
 			Action:  planv1.Change_ACTION_DELETE,
 			Reason:  "web, api were deployed against it",
 			Slow:    true,
 			Changes: []*planv1.Change{
-				{Kind: "AWS::DynamoDB::Table", Name: "OcelRevalidationTable", Action: planv1.Change_ACTION_DELETE},
+				{Kind: "Fake::Table", Name: "OcelRevalidationTable", Action: planv1.Change_ACTION_DELETE},
 			},
 		},
 		&planv1.ChangeGroup{
 			Kind:    "stack",
-			Name:    "aws/ocel-" + tier + "-secrets",
+			Name:    "fake/ocel-" + tier + "-secrets",
 			Feature: "secrets",
 			Action:  planv1.Change_ACTION_KEEP,
 			Reason:  reasonCurrent,
@@ -704,7 +704,7 @@ func fakeChangePlan(req *contractv1.BootstrapRequest) *planv1.ChangePlan {
 }
 
 func fakeEdgeGroup(req *contractv1.BootstrapRequest, tier string) *planv1.ChangeGroup {
-	if resolvedEdgeKind(req.GetEdge().GetKind()) != "cloudflare" {
+	if resolvedEdgeKind(req.GetEdge().GetKind()) != "relay" {
 		return nil
 	}
 	store := "ocel-deployments-store"
@@ -713,12 +713,12 @@ func fakeEdgeGroup(req *contractv1.BootstrapRequest, tier string) *planv1.Change
 	}
 	return &planv1.ChangeGroup{
 		Kind:    "edge",
-		Name:    "cloudflare/edge",
-		Feature: "cloudflare-edge",
+		Name:    "relay/edge",
+		Feature: "relay-edge",
 		Action:  planv1.Change_ACTION_CREATE,
 		Changes: []*planv1.Change{
-			{Kind: "Cloudflare::R2Bucket", Name: "ocel-edge-cache", Action: planv1.Change_ACTION_CREATE},
-			{Kind: "Cloudflare::Worker", Name: store, Action: planv1.Change_ACTION_CREATE},
+			{Kind: "Fake::EdgeBucket", Name: "ocel-edge-cache", Action: planv1.Change_ACTION_CREATE},
+			{Kind: "Fake::EdgeScript", Name: store, Action: planv1.Change_ACTION_CREATE},
 		},
 	}
 }
@@ -728,7 +728,7 @@ func refuseToDrawThePlan() error {
 		return nil
 	}
 	return connect.NewError(connect.CodeInvalidArgument, errors.New(
-		"plan the cloudflare edge bootstrap: CLOUDFLARE_ACCOUNT_ID is not set; export it and re-run"))
+		"plan the relay edge bootstrap: FAKE_RELAY_ACCOUNT is not set; export it and re-run"))
 }
 
 func journalIntent(req *contractv1.BootstrapRequest) {
@@ -799,13 +799,13 @@ func fakeBootstrap(tier environmentv1.Tier) *contractv1.BootstrapStatus {
 
 func (s *deployFakeProviderServer) GetCredentialPermissions(ctx context.Context, req *contractv1.CredentialPermissionsRequest) (*contractv1.CredentialPermissionsResponse, error) {
 	groups := []*contractv1.CredentialGroup{{
-		Heading:  "AWS credentials",
-		Document: fmt.Sprintf(`{"Version":"2012-10-17","Statement":[{"Sid":%q}]}`, req.GetPurpose().String()),
+		Heading:  "fake credentials",
+		Document: fmt.Sprintf(`{"purpose":%q}`, req.GetPurpose().String()),
 	}}
-	if resolvedEdgeKind(req.GetEdge().GetKind()) == "cloudflare" {
+	if resolvedEdgeKind(req.GetEdge().GetKind()) == "relay" {
 		groups = append(groups, &contractv1.CredentialGroup{
-			Heading:  "Cloudflare API token",
-			Document: "Account · Workers Scripts · Edit",
+			Heading:  "relay token",
+			Document: "Account · Relay Scripts · Edit",
 		})
 	}
 	return &contractv1.CredentialPermissionsResponse{Groups: groups}, nil
@@ -842,26 +842,26 @@ func (s *deployFakeProviderServer) PlanRemoveBootstrap(ctx context.Context, req 
 		return &planv1.ChangePlan{Subject: tier}, nil
 	}
 	return &planv1.ChangePlan{
-		EdgeKind: "cloudflare",
+		EdgeKind: "relay",
 		Subject:  tier,
 		Groups: []*planv1.ChangeGroup{
 			{
 				Kind:    "stack",
-				Name:    "aws/ocel-" + tier + "-isr",
+				Name:    "fake/ocel-" + tier + "-isr",
 				Feature: "isr",
 				Action:  planv1.Change_ACTION_DELETE,
 				Changes: []*planv1.Change{
-					{Kind: "AWS::DynamoDB::Table", Name: "RevalidationTable", Action: planv1.Change_ACTION_DELETE},
+					{Kind: "Fake::Table", Name: "RevalidationTable", Action: planv1.Change_ACTION_DELETE},
 				},
 			},
 			{
 				Kind:   "stack",
-				Name:   "aws/ocel-" + tier,
+				Name:   "fake/ocel-" + tier,
 				Action: planv1.Change_ACTION_DELETE,
 				Changes: []*planv1.Change{
-					{Kind: "AWS::DynamoDB::Table", Name: "StateTable", Action: planv1.Change_ACTION_DELETE},
+					{Kind: "Fake::Table", Name: "StateTable", Action: planv1.Change_ACTION_DELETE},
 					{
-						Kind:   "AWS::S3::Bucket",
+						Kind:   "Fake::Bucket",
 						Name:   "StateBucket",
 						Action: planv1.Change_ACTION_DELETE,
 						Reason: "the Pulumi state of every stack this bootstrap deployed",
@@ -871,12 +871,12 @@ func (s *deployFakeProviderServer) PlanRemoveBootstrap(ctx context.Context, req 
 			},
 			{
 				Kind:   "parameters",
-				Name:   "aws/parameters",
+				Name:   "fake/parameters",
 				Action: planv1.Change_ACTION_DELETE,
 				Changes: []*planv1.Change{
-					{Kind: "AWS::SSM::Parameter", Name: "/ocel/origin/secret", Action: planv1.Change_ACTION_DELETE},
+					{Kind: "Fake::Parameter", Name: "/ocel/origin/secret", Action: planv1.Change_ACTION_DELETE},
 					{
-						Kind:   "AWS::SSM::Parameter",
+						Kind:   "Fake::Parameter",
 						Name:   "/ocel/pulumi/passphrase",
 						Action: planv1.Change_ACTION_KEEP,
 						Reason: "the production bootstrap is still provisioned and its Pulumi state is encrypted under it",
@@ -885,11 +885,11 @@ func (s *deployFakeProviderServer) PlanRemoveBootstrap(ctx context.Context, req 
 			},
 			{
 				Kind:    "edge",
-				Name:    "cloudflare/edge",
-				Feature: "cloudflare-edge",
+				Name:    "relay/edge",
+				Feature: "relay-edge",
 				Action:  planv1.Change_ACTION_DELETE,
 				Changes: []*planv1.Change{
-					{Kind: "Cloudflare::Worker", Name: "ocel-deployments-store", Action: planv1.Change_ACTION_DELETE},
+					{Kind: "Fake::EdgeScript", Name: "ocel-deployments-store", Action: planv1.Change_ACTION_DELETE},
 				},
 			},
 		},
@@ -936,7 +936,7 @@ func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *contractv
 			Provider:  os.Getenv(FakeIDProviderEnvVar),
 			Account:   os.Getenv(FakeIDAccountEnvVar),
 			EdgeScope: os.Getenv(FakeIDEdgeScopeEnvVar),
-			Location:  os.Getenv(FakeIDRegionEnvVar),
+			Location:  os.Getenv(FakeIDLocationEnvVar),
 			Details: []*contractv1.Detail{
 				{Label: "profile", Value: os.Getenv(FakeIDProfileEnvVar)},
 			},
@@ -1016,16 +1016,16 @@ func journalPreflight(req *contractv1.PreflightRequest) {
 
 func resolvedEdgeKind(kind string) string {
 	if kind == "" {
-		return "cloudfront"
+		return "direct"
 	}
 	return kind
 }
 
 func edgeRowKind(kind string) string {
-	if resolvedEdgeKind(kind) == "cloudflare" {
-		return "Cloudflare::Worker"
+	if resolvedEdgeKind(kind) == "relay" {
+		return "Fake::EdgeScript"
 	}
-	return "AWS::CloudFront::Distribution"
+	return "Fake::Front"
 }
 
 func journalEdge(kind string, dns *contractv1.Dns, allowDegraded []string) {
@@ -1043,7 +1043,7 @@ func journalEdge(kind string, dns *contractv1.Dns, allowDegraded []string) {
 }
 
 func (s *deployFakeProviderServer) Configure(ctx context.Context, req *contractv1.ConfigureRequest) (*contractv1.ConfigureResponse, error) {
-	aws, err := decodeFakeProviderOptions(req.GetConfig())
+	options, err := decodeFakeProviderOptions(req.GetConfig())
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
@@ -1056,18 +1056,18 @@ func (s *deployFakeProviderServer) Configure(ctx context.Context, req *contractv
 		return nil, err
 	}
 	defer f.Close()
-	fmt.Fprintf(f, "region=%s transforms=%s certificates=%v\n", aws.Region, strings.Join(req.GetConfig().GetTransforms(), ","), aws.Certificates)
+	fmt.Fprintf(f, "location=%s transforms=%s certificates=%v\n", options.Location, strings.Join(req.GetConfig().GetTransforms(), ","), options.Certificates)
 	return &contractv1.ConfigureResponse{}, nil
 }
 
 type fakeProviderOptions struct {
-	Region       string            `json:"region"`
+	Location     string            `json:"location"`
 	Certificates map[string]string `json:"certificates"`
 	SSH          json.RawMessage   `json:"ssh"`
 }
 
 func decodeFakeProviderOptions(config *contractv1.ProviderConfig) (fakeProviderOptions, error) {
-	return provider.Decode[fakeProviderOptions]("aws", provider.Options(config.GetOptions().AsMap()))
+	return provider.Decode[fakeProviderOptions]("fake", provider.Options(config.GetOptions().AsMap()))
 }
 
 func journalBootstrap(req *contractv1.BootstrapRequest) {
@@ -1207,7 +1207,7 @@ func (s *deployFakeProviderServer) UsePreviewWildcard(ctx context.Context, req *
 	if err := stream.Send(fakeProgress("USE DOMAIN tier=" + req.GetTier().String() + " base=" + req.GetBaseDomain() + " dns=" + req.GetEdge().GetDns().GetKind())); err != nil {
 		return err
 	}
-	records, err := edge.RecordsFor(edge.DNSTarget{Kind: "cloudflare", ServesUnbound: true}, []string{"*." + req.GetBaseDomain()})
+	records, err := edge.RecordsFor(edge.DNSTarget{Kind: "relay", ServesUnbound: true}, []string{"*." + req.GetBaseDomain()})
 	if err != nil {
 		return err
 	}
@@ -1241,14 +1241,14 @@ func (s *deployFakeProviderServer) PlanRemovePreviewWildcard(ctx context.Context
 		))
 	}
 	return &planv1.ChangePlan{
-		EdgeKind: "cloudflare",
+		EdgeKind: "relay",
 		Subject:  base,
 		Groups: []*planv1.ChangeGroup{
 			{
-				Kind:   "preview entry worker",
+				Kind:   "preview entry router",
 				Name:   "*." + base,
 				Action: planv1.Change_ACTION_DELETE,
-				Reason: "the shared entry worker serving this wildcard",
+				Reason: "the shared entry router serving this wildcard",
 			},
 			{
 				Kind:   "DNS record",
@@ -1293,14 +1293,14 @@ func (s *deployFakeProviderServer) AddHostname(ctx context.Context, req *contrac
 	if err := say(fmt.Sprintf("DOMAIN ADD slug=%s hosts=%s dns=%s edge=%s", req.GetSlug(), strings.Join(hosts, ","), req.GetEdge().GetDns().GetKind(), resolvedEdgeKind(req.GetEdge().GetKind()))); err != nil {
 		return err
 	}
-	if err := say(fmt.Sprintf("Requesting a certificate for %s in us-east-1", strings.Join(hosts, ", "))); err != nil {
+	if err := say(fmt.Sprintf("Requesting a certificate for %s", strings.Join(hosts, ", "))); err != nil {
 		return err
 	}
 	for _, host := range hosts {
-		if err := say(fmt.Sprintf("Binding %s to the cloudflare edge", host)); err != nil {
+		if err := say(fmt.Sprintf("Binding %s to the relay edge", host)); err != nil {
 			return err
 		}
-		records, err := edge.RecordsFor(edge.DNSTarget{Kind: "cloudflare", ServesUnbound: true}, []string{host})
+		records, err := edge.RecordsFor(edge.DNSTarget{Kind: "relay", ServesUnbound: true}, []string{host})
 		if err != nil {
 			return err
 		}
@@ -1317,11 +1317,11 @@ func (s *deployFakeProviderServer) AddHostname(ctx context.Context, req *contrac
 			return stream.Send(&progressv1.OperationEvent{
 				Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{
 					Success: false,
-					Error:   fmt.Sprintf("gave up after 5m0s waiting for https://%s/ to answer through the cloudflare edge; still outstanding: %s", host, outstanding),
+					Error:   fmt.Sprintf("gave up after 5m0s waiting for https://%s/ to answer through the relay edge; still outstanding: %s", host, outstanding),
 				}},
 			})
 		}
-		if err := say(fmt.Sprintf("%s is served through the cloudflare edge", host)); err != nil {
+		if err := say(fmt.Sprintf("%s is served through the relay edge", host)); err != nil {
 			return err
 		}
 	}
@@ -1341,7 +1341,7 @@ func (s *deployFakeProviderServer) RemoveHostname(ctx context.Context, req *cont
 		return err
 	}
 	for _, host := range fakeDomainTargets(nil, req.GetHost()) {
-		if err := say(fmt.Sprintf("Unbinding %s from the cloudflare edge", host)); err != nil {
+		if err := say(fmt.Sprintf("Unbinding %s from the relay edge", host)); err != nil {
 			return err
 		}
 	}
@@ -1404,11 +1404,11 @@ func (s *deployFakeProviderServer) GetHostnameStatus(ctx context.Context, req *c
 			RenewalStatus:  os.Getenv(FakeDomainRenewalEnvVar),
 			ExpiresAt:      expires,
 			ExpiringSoon:   expires != 0 && os.Getenv(FakeDomainRenewalEnvVar) != "SUCCESS",
-			ServingPointer: "cloudflare",
+			ServingPointer: "relay",
 			Ready:          ready,
 		}
 		if !ready {
-			row.Pending = fmt.Sprintf("%s does not answer through the %s edge yet", host, edge.Kind("cloudflare"))
+			row.Pending = fmt.Sprintf("%s does not answer through the %s edge yet", host, edge.Kind("relay"))
 		}
 		resp.Hostnames = append(resp.Hostnames, row)
 	}
@@ -1483,12 +1483,12 @@ func (s *deployFakeProviderServer) PlanRemoveProject(ctx context.Context, req *c
 				Action: planv1.Change_ACTION_DELETE,
 				Changes: []*planv1.Change{
 					{
-						Kind:   "AWS::CloudFront::Distribution",
+						Kind:   "Fake::Front",
 						Name:   "E1" + slug,
 						Action: planv1.Change_ACTION_DISABLE_THEN_DELETE,
 						Slow:   true,
 					},
-					{Kind: "AWS::CloudFront::KeyValueStore", Name: slug + ".example.com", Action: planv1.Change_ACTION_DELETE},
+					{Kind: "Fake::KeyValueStore", Name: slug + ".example.com", Action: planv1.Change_ACTION_DELETE},
 				},
 			},
 			{
@@ -1504,7 +1504,7 @@ func (s *deployFakeProviderServer) PlanRemoveProject(ctx context.Context, req *c
 func fakeInfraStackGroup(name string) *planv1.ChangeGroup {
 	return &planv1.ChangeGroup{
 		Kind:    "stack",
-		Name:    "aws/" + name,
+		Name:    "fake/" + name,
 		Feature: "infra",
 		Action:  planv1.Change_ACTION_DELETE,
 		Reason:  "databases and buckets, INCLUDING ALL DATA",
@@ -1514,7 +1514,7 @@ func fakeInfraStackGroup(name string) *planv1.ChangeGroup {
 func fakeAppStackGroup(name, app string) *planv1.ChangeGroup {
 	return &planv1.ChangeGroup{
 		Kind:    "stack",
-		Name:    "aws/" + name,
+		Name:    "fake/" + name,
 		Feature: app,
 		Action:  planv1.Change_ACTION_DELETE,
 	}

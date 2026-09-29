@@ -115,10 +115,10 @@ func TestPlanBootstrap(t *testing.T) {
 
 func TestOfferedBootstrapSendsTheEdgeTheProjectChose(t *testing.T) {
 	plan := Plan{Features: []string{"isr"}, Missing: []string{"isr"}}
-	front := &contractv1.EdgeSelection{Kind: "cloudflare"}
+	front := &contractv1.EdgeSelection{Kind: "relay"}
 
 	req := plan.Request(environmentv1.Tier_TIER_PREVIEW, front)
-	if req.GetEdge().GetKind() != "cloudflare" {
+	if req.GetEdge().GetKind() != "relay" {
 		t.Errorf("request edge = %q, want the edge the project chose", req.GetEdge().GetKind())
 	}
 	if req.GetTier() != environmentv1.Tier_TIER_PREVIEW || !slices.Equal(req.GetFeatures(), plan.Features) {

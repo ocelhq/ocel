@@ -47,8 +47,8 @@ func TestDeployResult(t *testing.T) {
 		if got.Environment.Tier != "production" {
 			t.Errorf("environment.tier = %q, want %q", got.Environment.Tier, "production")
 		}
-		if got.Provider.Name != "aws" || got.Provider.Region != "eu-west-2" {
-			t.Errorf("provider = %+v, want the config's provider and region", got.Provider)
+		if got.Provider.Name != "fake" {
+			t.Errorf("provider = %+v, want the config's provider", got.Provider)
 		}
 		if got.PromotionID != clitest.FakePromotionID {
 			t.Errorf("promotionId = %q, want the provider's %q", got.PromotionID, clitest.FakePromotionID)

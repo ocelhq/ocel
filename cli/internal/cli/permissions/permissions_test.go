@@ -86,7 +86,7 @@ func TestRunPermissions(t *testing.T) {
 		if !strings.Contains(stdout.String(), "CREDENTIAL_PURPOSE_DEPLOY") {
 			t.Errorf("stdout = %q, want the deploy purpose's document", stdout.String())
 		}
-		if strings.Contains(stdout.String(), "AWS credentials") {
+		if strings.Contains(stdout.String(), "fake credentials") {
 			t.Errorf("stdout = %q, want a lone group to print pipeable, without its heading", stdout.String())
 		}
 	})
@@ -108,7 +108,7 @@ func TestRunPermissions(t *testing.T) {
 	})
 
 	t.Run("it heads each group where the edge has credentials of its own", func(t *testing.T) {
-		root, _, deps := clitest.SetUpEdgeFixture(t, "  edge: \"cloudflare\",\n")
+		root, _, deps := clitest.SetUpEdgeFixture(t, "  edge: \"relay\",\n")
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(deps, &stderr)
@@ -116,10 +116,10 @@ func TestRunPermissions(t *testing.T) {
 			t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		for _, want := range []string{
-			"AWS credentials",
+			"fake credentials",
 			"CREDENTIAL_PURPOSE_DEPLOY",
-			"Cloudflare API token",
-			"Account · Workers Scripts · Edit",
+			"relay token",
+			"Account · Relay Scripts · Edit",
 		} {
 			if !strings.Contains(stdout.String(), want) {
 				t.Errorf("stdout = %q, want it to include %q", stdout.String(), want)

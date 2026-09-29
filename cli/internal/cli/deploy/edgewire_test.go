@@ -17,7 +17,7 @@ func TestDeploySendsTheEdgeTheProjectDeclared(t *testing.T) {
 	}{
 		{"an omitted edge names none, leaving the provider to choose", "", "kind= "},
 		{"a declared api-gateway edge names it", "  edge: \"api-gateway\",\n", "kind=api-gateway"},
-		{"a declared cloudflare edge names it", "  edge: \"cloudflare\",\n", "kind=cloudflare"},
+		{"a declared relay edge names it", "  edge: \"relay\",\n", "kind=relay"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -41,7 +41,7 @@ func TestDeploySendsTheEdgeTheProjectDeclared(t *testing.T) {
 }
 
 func TestDeploySendsTheEdgeSettingsUnchanged(t *testing.T) {
-	root, journal, deps := clitest.SetUpEdgeFixture(t, "  edge: \"cloudflare\",\n  dns: { cloudflare: { zone: \"acme.com\" } },\n  allowDegraded: [\"streaming\", \"edge-cache\"],\n")
+	root, journal, deps := clitest.SetUpEdgeFixture(t, "  edge: \"relay\",\n  dns: { zone: { zone: \"acme.com\" } },\n  allowDegraded: [\"streaming\", \"edge-cache\"],\n")
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(deps, &stdout)
@@ -53,7 +53,7 @@ func TestDeploySendsTheEdgeSettingsUnchanged(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("deploy reached the provider %d times, want exactly 1: %v", len(got), got)
 	}
-	for _, want := range []string{"dns=cloudflare/acme.com", "allowDegraded=streaming,edge-cache"} {
+	for _, want := range []string{"dns=zone/acme.com", "allowDegraded=streaming,edge-cache"} {
 		if !strings.Contains(got[0], want) {
 			t.Errorf("provider saw %q, want it to include %q", got[0], want)
 		}
@@ -61,7 +61,7 @@ func TestDeploySendsTheEdgeSettingsUnchanged(t *testing.T) {
 }
 
 func TestDeployRendersAnEdgeTheOriginRefuses(t *testing.T) {
-	const refusal = `this provider cannot front deployments with the "alb" edge; it supports api-gateway, cloudflare, cloudfront`
+	const refusal = `this provider cannot front deployments with the "alb" edge; it supports api-gateway, relay, direct`
 
 	root, _, deps := clitest.SetUpEdgeFixture(t, "")
 	t.Setenv(clitest.FakeEdgeRefusalEnvVar, refusal)

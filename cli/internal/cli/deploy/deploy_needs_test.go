@@ -16,7 +16,7 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
-const needsRefusal = "app web needs edge-middleware and the \"cloudfront\" edge does not serve it: middleware runs in the origin's Node server the way `next start` runs it, so every request pays the round trip to the origin before it is routed. " +
+const needsRefusal = "app web needs edge-middleware and the \"direct\" edge does not serve it: middleware runs in the origin's Node server the way `next start` runs it, so every request pays the round trip to the origin before it is routed. " +
 	"It affects routes /dashboard, /admin. " +
 	"Add \"edge-middleware\" to `allowDegraded` in ocel.config.ts to deploy it degraded, or move the app to an edge that serves edge-middleware"
 

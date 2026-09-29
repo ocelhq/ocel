@@ -33,8 +33,8 @@ func TestDeployChecksCredentialsAndTheProjectsBootstrapAsACheckUnitNamedForItsPr
 		t.Fatalf("no unit started for the credential check: %s", stdout.String())
 	}
 	unit := evs[started]
-	if unit.GetPhase() != progressv1.Phase_PHASE_CHECK || unit.GetSubject() != "aws" {
-		t.Errorf("credential check started in %s naming %q, want the check phase naming the provider %q", unit.GetPhase(), unit.GetSubject(), "aws")
+	if unit.GetPhase() != progressv1.Phase_PHASE_CHECK || unit.GetSubject() != "fake" {
+		t.Errorf("credential check started in %s naming %q, want the check phase naming the provider %q", unit.GetPhase(), unit.GetSubject(), "fake")
 	}
 	ended := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool {
 		return ev.GetEnded() != nil && bytes.Equal(ev.GetSpanId(), unit.GetSpanId())

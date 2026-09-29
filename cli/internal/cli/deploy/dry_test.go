@@ -42,7 +42,7 @@ var planRows = []string{
 	"main  postgres",
 	"values",
 	"artifact",
-	"cloudfront/edge",
+	"direct/edge",
 	"promotion",
 	"Run without --dry to apply.",
 }

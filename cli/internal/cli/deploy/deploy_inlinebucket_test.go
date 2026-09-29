@@ -11,7 +11,7 @@ import (
 )
 
 const inlineBucket = `bucket: { uploads: {
-  endpoint: "https://abc.r2.cloudflarestorage.com", region: "auto", bucket: "acme", prefix: "uploads/",
+  endpoint: "https://abc.r2.relaystorage.com", region: "auto", bucket: "acme", prefix: "uploads/",
   accessKeyId: { $env: "R2_KEY" }, secretAccessKey: { $env: "R2_SECRET" },
 } }`
 
@@ -50,7 +50,7 @@ func TestDeployBindsAnInlineBucket(t *testing.T) {
 		if len(published) != 1 || published[0].Name != "ocel:bucket.uploads" || published[0].Tier != environmentv1.Tier_TIER_PRODUCTION {
 			t.Fatalf("records = %+v, want the inline bucket's record", published)
 		}
-		for _, want := range []string{`"endpoint":"https://abc.r2.cloudflarestorage.com"`, `"prefix":"uploads/"`, `"secretAccessKey":"r2-s3cret"`} {
+		for _, want := range []string{`"endpoint":"https://abc.r2.relaystorage.com"`, `"prefix":"uploads/"`, `"secretAccessKey":"r2-s3cret"`} {
 			if !strings.Contains(published[0].Wire, want) {
 				t.Errorf("record = %s, want it to contain %s", published[0].Wire, want)
 			}

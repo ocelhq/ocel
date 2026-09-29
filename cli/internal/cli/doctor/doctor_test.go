@@ -49,7 +49,7 @@ func TestDoctorRendersEveryVerdict(t *testing.T) {
 	project.pass("config loads — 2 apps (web, api)")
 	found.add(project)
 
-	edge := section{name: "Cloudflare"}
+	edge := section{name: "Relay"}
 	edge.fail("CLOUDFLARE_API_TOKEN rejected", "create a token with the scopes from `ocel permissions deploy`")
 	found.add(edge)
 
@@ -65,7 +65,7 @@ func TestDoctorRendersEveryVerdict(t *testing.T) {
 		"Project  my-shop · ocel.config.ts",
 		"  ✓ config loads — 2 apps (web, api)",
 		"",
-		"Cloudflare",
+		"Relay",
 		"  ✗ CLOUDFLARE_API_TOKEN rejected",
 		"    → create a token with the scopes from `ocel permissions deploy`",
 		"",
@@ -168,7 +168,7 @@ func healthyProject(t *testing.T) string {
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "my-shop",
-  provider: { aws: {} },
+  provider: { fake: {} },
   domains: { production: "shop.example.com", preview: "*.preview.example.com" },
   apps: [
     { name: "web", path: "apps/web", framework: "node" },
@@ -179,9 +179,9 @@ export default {
 	clitest.WriteFile(t, filepath.Join(root, "apps", "web", "src", "server.ts"), "export function handler() {}\n")
 	clitest.WriteFile(t, filepath.Join(root, "apps", "api", "src", "server.ts"), "export function handler() {}\n")
 
-	t.Setenv(clitest.FakeIDProviderEnvVar, "aws")
+	t.Setenv(clitest.FakeIDProviderEnvVar, "fake")
 	t.Setenv(clitest.FakeIDAccountEnvVar, "123456789012")
-	t.Setenv(clitest.FakeIDRegionEnvVar, "eu-west-1")
+	t.Setenv(clitest.FakeIDLocationEnvVar, "zone-c")
 	t.Setenv(clitest.FakeIDProfileEnvVar, "shop")
 	return root
 }
@@ -204,10 +204,10 @@ func TestRunDoctorOnAHealthyProject(t *testing.T) {
 		"Project  my-shop · ocel.config.ts",
 		"  ✓ node is needed — ocel.config.ts is TypeScript, this project contains JavaScript — node vX on PATH",
 		"  ✓ config loads — 2 apps (web, api)",
-		"  ✓ provider aws " + version.Version + "",
+		"  ✓ provider fake " + version.Version + "",
 		"  ✓ provider default edge",
 		"",
-		"AWS  123456789012 · eu-west-1 · profile shop",
+		"Fake  123456789012 · zone-c · profile shop",
 		"  ✓ credentials valid",
 		"",
 		"Production  shop.example.com",
@@ -229,7 +229,7 @@ func TestDoctorAsksTheProviderAboutTheContainerAppsADeployWould(t *testing.T) {
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "my-shop",
-  provider: { aws: {} },
+  provider: { fake: {} },
   apps: [
     { name: "web", path: "apps/web", framework: "node" },
     { name: "api", path: "apps/api", compute: "container" },
@@ -268,7 +268,7 @@ func TestRunDoctorReportsACredentialProblem(t *testing.T) {
 	root := healthyProject(t)
 	t.Setenv(clitest.FakeBootstrapEnvVar, "current")
 	t.Setenv(clitest.FakePreviewBootstrapEnvVar, "current")
-	t.Setenv(clitest.FakeCredProblemEnvVar, "cloudflare")
+	t.Setenv(clitest.FakeCredProblemEnvVar, "relay")
 
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
@@ -282,8 +282,8 @@ func TestRunDoctorReportsACredentialProblem(t *testing.T) {
 
 	out := rendered(t, stdout.String())
 	for _, want := range []string{
-		"AWS  123456789012 · eu-west-1 · profile shop\n  ✓ credentials valid",
-		"Cloudflare\n  ✗ could not authenticate\n    → configure the credential and re-run",
+		"Fake  123456789012 · zone-c · profile shop\n  ✓ credentials valid",
+		"Relay\n  ✗ could not authenticate\n    → configure the credential and re-run",
 		"1 problem.",
 	} {
 		if !strings.Contains(out, want) {
@@ -404,7 +404,7 @@ func TestRunDoctorServesPreviewsOnTheGlobalWildcardWithoutAWarning(t *testing.T)
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "my-shop",
-  provider: { aws: {} },
+  provider: { fake: {} },
   domains: { production: "shop.example.com" },
   apps: [
     { name: "web", path: "apps/web", framework: "node" },
@@ -464,7 +464,7 @@ func TestRunDoctorLeavesAnUnwantedTierAlone(t *testing.T) {
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "my-shop",
-  provider: { aws: {} },
+  provider: { fake: {} },
   domains: { production: "shop.example.com" },
 };
 `)

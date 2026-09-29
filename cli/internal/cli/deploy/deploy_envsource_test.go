@@ -17,7 +17,7 @@ import (
 const infisicalProduction = `
 export default {
   slug: "` + clitest.FixtureSlug + `",
-  provider: { aws: {} },
+  provider: { fake: {} },
   domains: { preview: "*.preview.acme.com" },
   envSource: {
     production: { infisical: { project: "p-1", environment: "prod", auth: { universal: { clientId: { $env: "INFISICAL_CLIENT_ID" }, clientSecret: { $env: "INFISICAL_CLIENT_SECRET" } } } } },
@@ -258,7 +258,7 @@ func TestADeployReadsItsTiersEnvSourceBeforeCheckingItsVariables(t *testing.T) {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "`+clitest.FixtureSlug+`",
-  provider: { aws: {} },
+  provider: { fake: {} },
   domains: { preview: "*.preview.acme.com" },
 };
 `)

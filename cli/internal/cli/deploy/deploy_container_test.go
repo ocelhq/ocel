@@ -34,7 +34,7 @@ func registryProject(t *testing.T, registry string) (cmddeps.Deps, string, func(
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { aws: {} },
+  provider: { fake: {} },
   domains: { preview: "*.preview.acme.com" },
   apps: [{ name: "api", path: "apps/api", compute: "container" }],`+registry+`
 };
@@ -127,7 +127,7 @@ func containerProject(t *testing.T, health string) (cmddeps.Deps, string, string
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { aws: {} },
+  provider: { fake: {} },
   domains: { preview: "*.preview.acme.com" },
   apps: [{ name: "api", path: "apps/api", compute: "container"`+health+` }],
 };
@@ -232,7 +232,7 @@ func TestAServerlessOnlyDeployStillSendsTheRegistryItsFunctionsMayBeRunFrom(t *t
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { aws: {} },
+  provider: { fake: {} },
   domains: { preview: "*.preview.acme.com" },
   apps: [{ name: "api", path: "apps/api", compute: "serverless", framework: "node" }],
   registry: { server: "ghcr.io", password: "${OCEL_TEST_REGISTRY_TOKEN}" },

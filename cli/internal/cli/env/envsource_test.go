@@ -18,7 +18,7 @@ import (
 const infisicalConfig = `
 export default {
   slug: "` + clitest.FixtureSlug + `",
-  provider: { aws: {} },
+  provider: { fake: {} },
   domains: { preview: "*.preview.acme.com" },
   envSource: {
     production: { infisical: { project: "p-1", environment: "prod", auth: { universal: { clientId: { $env: "INFISICAL_CLIENT_ID" }, clientSecret: { $env: "INFISICAL_CLIENT_SECRET" } } } } },

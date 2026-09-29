@@ -72,9 +72,9 @@ func writeProductionConfig(t *testing.T, root string) {
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { aws: {} },
+  provider: { fake: {} },
   domains: { production: "shop.app.com" },
-  dns: "cloudflare",
+  dns: "zone",
 };
 `)
 }
@@ -94,9 +94,9 @@ func TestRunDomainStatusJSON(t *testing.T) {
 	clitest.SetLoggedIn(&deps)
 	t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
-	t.Setenv(clitest.FakeDomainCertEnvVar, "ISSUED arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234")
+	t.Setenv(clitest.FakeDomainCertEnvVar, "ISSUED fake-certificate/abcd-1234")
 	t.Setenv(clitest.FakeDomainExpiresEnvVar, "1757000000")
-	t.Setenv(clitest.FakeGlobalDomainManualRecordsEnvVar, "_ocel.shop.app.com CNAME _target.acm-validations.aws")
+	t.Setenv(clitest.FakeGlobalDomainManualRecordsEnvVar, "_ocel.shop.app.com CNAME _target.validations.fake.example")
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(deps, &stderr)
@@ -107,7 +107,7 @@ func TestRunDomainStatusJSON(t *testing.T) {
 	if report["ready"] != true {
 		t.Errorf("json = %v, want it to report the project ready", report)
 	}
-	if owned, _ := report["manualRecords"].([]any); len(owned) != 1 || owned[0] != "_ocel.shop.app.com CNAME _target.acm-validations.aws" {
+	if owned, _ := report["manualRecords"].([]any); len(owned) != 1 || owned[0] != "_ocel.shop.app.com CNAME _target.validations.fake.example" {
 		t.Errorf("json manualRecords = %v, want the project's records the user has to write", report["manualRecords"])
 	}
 	hosts, ok := report["hosts"].([]any)
@@ -119,12 +119,12 @@ func TestRunDomainStatusJSON(t *testing.T) {
 		"hostname":          "shop.app.com",
 		"declared":          true,
 		"ready":             true,
-		"certificate":       "arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234",
+		"certificate":       "fake-certificate/abcd-1234",
 		"certificateStatus": "ISSUED",
 		"expiresAt":         "2025-09-04T15:33:20Z",
 		"lastProbeAt":       "2025-08-18T06:53:20Z",
 		"lastProbeOk":       true,
-		"servingPointer":    "cloudflare",
+		"servingPointer":    "relay",
 	} {
 		if host[field] != want {
 			t.Errorf("json host %s = %v, want %v", field, host[field], want)
@@ -135,7 +135,7 @@ func TestRunDomainStatusJSON(t *testing.T) {
 		t.Errorf("json recordsWritten = %v, want the record ocel wrote", host["recordsWritten"])
 	}
 	manual, _ := host["manualRecords"].([]any)
-	if len(manual) != 1 || manual[0] != "_ocel.shop.app.com CNAME _target.acm-validations.aws" {
+	if len(manual) != 1 || manual[0] != "_ocel.shop.app.com CNAME _target.validations.fake.example" {
 		t.Errorf("json manualRecords = %v, want the record the user has to write", host["manualRecords"])
 	}
 	clitest.WaitForNoStaleSocket(t, sockPath)
@@ -209,14 +209,14 @@ func TestRunDomain(t *testing.T) {
 		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
-	t.Run("use with cloudflareDns writes the record", func(t *testing.T) {
+	t.Run("use with a dns writes the record", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { aws: {} },
+  provider: { fake: {} },
   domains: { preview: "*.preview.acme.com" },
-  dns: "cloudflare",
+  dns: "zone",
 };
 `)
 		deps := newTestDeps()
@@ -230,7 +230,7 @@ export default {
 			t.Fatalf("runDomainUse err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
-		for _, want := range []string{"dns=cloudflare", "Writing *.preview.acme.com AAAA 100::"} {
+		for _, want := range []string{"dns=zone", "Writing *.preview.acme.com AAAA 100::"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)
 			}
@@ -285,9 +285,9 @@ export default {
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.acme.com")
-		t.Setenv(clitest.FakeGlobalDomainCertEnvVar, "ISSUED arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234")
+		t.Setenv(clitest.FakeGlobalDomainCertEnvVar, "ISSUED fake-certificate/abcd-1234")
 		t.Setenv(clitest.FakeGlobalDomainRecordsEnvVar, "*.preview.acme.com AAAA 100::")
-		t.Setenv(clitest.FakeGlobalDomainManualRecordsEnvVar, "_ocel.preview.acme.com CNAME _target.acm-validations.aws")
+		t.Setenv(clitest.FakeGlobalDomainManualRecordsEnvVar, "_ocel.preview.acme.com CNAME _target.validations.fake.example")
 		t.Setenv(clitest.FakeGlobalDomainProbeEnvVar, "1755500000")
 		t.Setenv(clitest.FakeGlobalDomainRenewalEnvVar, "you placed it on this box and you renew it")
 		t.Setenv(clitest.FakeGlobalDomainExpiresEnvVar, "1755500000")
@@ -299,10 +299,10 @@ export default {
 		}
 		out := stdout.String()
 		for _, want := range []string{
-			"Certificate          ISSUED  arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234",
+			"Certificate          ISSUED  fake-certificate/abcd-1234",
 			"Renewal              expires 2025-08-18T06:53:20Z, you placed it on this box and you renew it — EXPIRING SOON",
 			"Records ocel wrote   *.preview.acme.com AAAA 100::",
-			"Records you own      _ocel.preview.acme.com CNAME _target.acm-validations.aws",
+			"Records you own      _ocel.preview.acme.com CNAME _target.validations.fake.example",
 			"Last probe           2025-08-18T06:53:20Z  answered",
 		} {
 			if !strings.Contains(out, want) {
@@ -403,8 +403,8 @@ export default {
 		out := stdout.String()
 		for _, want := range []string{
 			"This will release *.preview.acme.com",
-			"fronted by the cloudflare edge",
-			"– preview entry worker *.preview.acme.com",
+			"fronted by the relay edge",
+			"– preview entry router *.preview.acme.com",
 			"This cannot be undone.",
 			"1 to delete, 1 unchanged.",
 			"RELEASE DOMAIN tier=TIER_PREVIEW",
@@ -425,9 +425,9 @@ export default {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { aws: {} },
+  provider: { fake: {} },
   domains: { production: ["shop.app.com", "www.app.com"] },
-  dns: "cloudflare",
+  dns: "zone",
 };
 `)
 		deps := newTestDeps()
@@ -442,12 +442,12 @@ export default {
 		}
 		out := stdout.String()
 		for _, want := range []string{
-			"DOMAIN ADD slug=test-app hosts=shop.app.com,www.app.com dns=cloudflare edge=cloudfront",
+			"DOMAIN ADD slug=test-app hosts=shop.app.com,www.app.com dns=zone edge=direct",
 			"Requesting a certificate for shop.app.com, www.app.com",
-			"Binding shop.app.com to the cloudflare edge",
+			"Binding shop.app.com to the relay edge",
 			"Writing shop.app.com AAAA 100::",
-			"shop.app.com is served through the cloudflare edge",
-			"Binding www.app.com to the cloudflare edge",
+			"shop.app.com is served through the relay edge",
+			"Binding www.app.com to the relay edge",
 			"Serving shop.app.com, www.app.com",
 		} {
 			if !strings.Contains(out, want) {
@@ -462,7 +462,7 @@ export default {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { aws: {} },
+  provider: { fake: {} },
   domains: { production: ["shop.app.com", "www.app.com"] },
 };
 `)
@@ -493,7 +493,7 @@ export default {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { aws: {} },
+  provider: { fake: {} },
   domains: { production: "shop.app.com" },
 };
 `)
@@ -523,7 +523,7 @@ export default {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { aws: {} },
+  provider: { fake: {} },
   domains: { production: "shop.app.com" },
 };
 `)
@@ -565,9 +565,9 @@ export default {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { aws: {} },
+  provider: { fake: {} },
   domains: { production: "shop.app.com" },
-  dns: "cloudflare",
+  dns: "zone",
 };
 `)
 		deps := newTestDeps()
@@ -582,7 +582,7 @@ export default {
 		}
 		out := stdout.String()
 		for _, want := range []string{
-			"DOMAIN RM slug=test-app host= configured=shop.app.com dns=cloudflare edge=cloudfront",
+			"DOMAIN RM slug=test-app host= configured=shop.app.com dns=zone edge=direct",
 			"Removed every hostname this project no longer declares",
 		} {
 			if !strings.Contains(out, want) {
@@ -605,7 +605,7 @@ export default {
 			t.Fatalf("runDomainRm err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
-		for _, want := range []string{"Unbinding old.app.com from the cloudflare edge", "Removed old.app.com"} {
+		for _, want := range []string{"Unbinding old.app.com from the relay edge", "Removed old.app.com"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)
 			}
@@ -660,9 +660,9 @@ export default {
 		clitest.SetLoggedIn(&deps)
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
-		t.Setenv(clitest.FakeDomainCertEnvVar, "ISSUED arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234")
+		t.Setenv(clitest.FakeDomainCertEnvVar, "ISSUED fake-certificate/abcd-1234")
 		t.Setenv(clitest.FakeDomainExpiresEnvVar, "1757000000")
-		t.Setenv(clitest.FakeGlobalDomainManualRecordsEnvVar, "_ocel.shop.app.com CNAME _target.acm-validations.aws")
+		t.Setenv(clitest.FakeGlobalDomainManualRecordsEnvVar, "_ocel.shop.app.com CNAME _target.validations.fake.example")
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(deps, &stderr)
@@ -672,12 +672,12 @@ export default {
 		out := stdout.String()
 		for _, want := range []string{
 			"shop.app.com  READY",
-			"Certificate          ISSUED  arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234",
+			"Certificate          ISSUED  fake-certificate/abcd-1234",
 			"Renewal              expires 2025-09-04T15:33:20Z",
 			"Records ocel wrote   shop.app.com AAAA 100::",
-			"Records you own      _ocel.shop.app.com CNAME _target.acm-validations.aws",
+			"Records you own      _ocel.shop.app.com CNAME _target.validations.fake.example",
 			"Last probe           2025-08-18T06:53:20Z  answered",
-			"Served by            cloudflare",
+			"Served by            relay",
 		} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)
@@ -726,7 +726,7 @@ export default {
 			t.Fatalf("runDomainStatus err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
-		for _, want := range []string{"shop.app.com  PENDING", "Outstanding", "does not answer through the cloudflare edge yet"} {
+		for _, want := range []string{"shop.app.com  PENDING", "Outstanding", "does not answer through the relay edge yet"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)
 			}

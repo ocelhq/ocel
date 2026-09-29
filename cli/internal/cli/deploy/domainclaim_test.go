@@ -104,7 +104,7 @@ func TestDomainClaims(t *testing.T) {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { aws: {} },
+  provider: { fake: {} },
   domains: { preview: "*.preview.acme.com" },
 };
 `)
@@ -140,7 +140,7 @@ export default {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { aws: {} },
+  provider: { fake: {} },
   domains: { production: "acme.com" },
 };
 `)
@@ -173,7 +173,7 @@ export default {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { aws: {} },
+  provider: { fake: {} },
   domains: { production: "acme.com" },
   apps: [{ name: "api", path: "apps/api", framework: "node", domains: { production: "api.acme.com" } }],
 };

@@ -1210,7 +1210,7 @@ func TestDevNeedsNoValueADeployedTierAlone(t *testing.T) {
 			clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { aws: {} },
+  provider: { fake: {} },
   bindings: { postgres: { main: { url: { $env: "MAIN_DATABASE_URL" } } } },
   envSource: {
     production: { infisical: { project: "p-1", environment: "prod", auth: { universal: { clientId: { $env: "INFISICAL_CLIENT_ID" }, clientSecret: { $env: "INFISICAL_CLIENT_SECRET" } } } } },

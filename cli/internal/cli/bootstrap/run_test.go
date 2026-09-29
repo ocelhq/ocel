@@ -101,14 +101,14 @@ func TestRunBootstrapDestroy(t *testing.T) {
 		out := stdout.String()
 		for _, want := range []string{
 			"This will permanently remove the production bootstrap",
-			"– aws/ocel-production-isr  [isr]",
-			"    – RevalidationTable  AWS::DynamoDB::Table",
-			"– aws/ocel-production  [core]",
-			"    – StateBucket  AWS::S3::Bucket   — the Pulumi state of every stack this bootstrap deployed (slow)",
-			"– aws/parameters",
-			"    – /ocel/origin/secret  AWS::SSM::Parameter",
-			"– cloudflare/edge  [cloudflare-edge]",
-			"    – ocel-deployments-store  Cloudflare::Worker",
+			"– fake/ocel-production-isr  [isr]",
+			"    – RevalidationTable  Fake::Table",
+			"– fake/ocel-production  [core]",
+			"    – StateBucket  Fake::Bucket   — the Pulumi state of every stack this bootstrap deployed (slow)",
+			"– fake/parameters",
+			"    – /ocel/origin/secret  Fake::Parameter",
+			"– relay/edge  [relay-edge]",
+			"    – ocel-deployments-store  Fake::EdgeScript",
 			"5 to delete, 1 unchanged.",
 		} {
 			if !strings.Contains(out, want) {
@@ -276,19 +276,19 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 		out := stdout.String()
 		for _, want := range []string{
 			"Proposed changes to the production bootstrap",
-			"~ aws/ocel-production-core  [core]",
-			"    ~ OcelDispatchFunction  AWS::Lambda::Function",
-			"    ± OcelOriginSecret      AWS::SecretsManager::Secret   — rotation forces replacement",
-			"+ aws/ocel-production-image-optimization  [image-optimization]",
-			"– aws/ocel-production-isr  [isr]  — web, api were deployed against it (slow)",
-			"    – OcelRevalidationTable  AWS::DynamoDB::Table",
+			"~ fake/ocel-production-core  [core]",
+			"    ~ OcelDispatchFunction  Fake::Function",
+			"    ± OcelOriginSecret      Fake::Secret   — rotation forces replacement",
+			"+ fake/ocel-production-image-optimization  [image-optimization]",
+			"– fake/ocel-production-isr  [isr]  — web, api were deployed against it (slow)",
+			"    – OcelRevalidationTable  Fake::Table",
 			"1 to create, 1 to update, 1 to replace, 1 to delete, 1 unchanged.",
 		} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout missing %q; got:\n%s", want, out)
 			}
 		}
-		if strings.Contains(out, "aws/ocel-production-secrets") {
+		if strings.Contains(out, "fake/ocel-production-secrets") {
 			t.Errorf("a group that keeps everything took a row; got:\n%s", out)
 		}
 		if got := clitest.ReadJournal(t, journal); len(got) != 1 {
@@ -297,7 +297,7 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 	})
 
 	t.Run("the selected edge is listed beside the stacks, in its own vocabulary", func(t *testing.T) {
-		root, journal, deps := clitest.SetUpEdgeFixture(t, "  edge: \"cloudflare\",\n")
+		root, journal, deps := clitest.SetUpEdgeFixture(t, "  edge: \"relay\",\n")
 		t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr")
 		t.Setenv(clitest.FakeBootstrapPlanEnvVar, "mixed")
 
@@ -308,17 +308,17 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 		}
 		out := stdout.String()
 		for _, want := range []string{
-			"Proposed changes to the production bootstrap, fronted by the cloudflare edge:",
-			"+ cloudflare/edge  [cloudflare-edge]",
-			"    + ocel-edge-cache         Cloudflare::R2Bucket",
-			"    + ocel-deployments-store  Cloudflare::Worker",
+			"Proposed changes to the production bootstrap, fronted by the relay edge:",
+			"+ relay/edge  [relay-edge]",
+			"    + ocel-edge-cache         Fake::EdgeBucket",
+			"    + ocel-deployments-store  Fake::EdgeScript",
 			"3 to create, 1 to update, 1 to replace, 1 to delete, 1 unchanged.",
 		} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout missing %q; got:\n%s", want, out)
 			}
 		}
-		if strings.Contains(out, "edge cloudflare/edge") {
+		if strings.Contains(out, "edge relay/edge") {
 			t.Errorf("the group named its kind on top of its vendor prefix; got:\n%s", out)
 		}
 		if got := clitest.ReadJournal(t, journal); len(got) == 0 {
@@ -327,7 +327,7 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 	})
 
 	t.Run("credentials the plan cannot reach stop the run before it prints half a plan", func(t *testing.T) {
-		root, journal, deps := clitest.SetUpEdgeFixture(t, "  edge: \"cloudflare\",\n")
+		root, journal, deps := clitest.SetUpEdgeFixture(t, "  edge: \"relay\",\n")
 		t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr")
 		t.Setenv(clitest.FakeBootstrapPlanEnvVar, "edge-credentials")
 
@@ -339,7 +339,7 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 			t.Fatalf("runBootstrap err = nil, want the missing credential to stop the plan; stdout=%s", stdout.String())
 		}
 		out := stdout.String()
-		if !strings.Contains(out, "CLOUDFLARE_ACCOUNT_ID is not set") {
+		if !strings.Contains(out, "FAKE_RELAY_ACCOUNT is not set") {
 			t.Errorf("stdout = %q, want the failure to name the variable that is missing", out)
 		}
 		if strings.Contains(out, "Proposed changes") {
@@ -424,7 +424,7 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
-		if !strings.Contains(stdout.String(), "– aws/ocel-production-isr") {
+		if !strings.Contains(stdout.String(), "– fake/ocel-production-isr") {
 			t.Errorf("stdout = %q, want the deletion shown before it is applied", stdout.String())
 		}
 		got := clitest.ReadJournal(t, journal)
@@ -542,7 +542,7 @@ func TestBootstrapYesMeansYes(t *testing.T) {
 		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("y\n")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
-		if !strings.Contains(stdout.String(), "– aws/ocel-production-isr") {
+		if !strings.Contains(stdout.String(), "– fake/ocel-production-isr") {
 			t.Fatalf("stdout = %q, want the delete shown before the confirm that covers it", stdout.String())
 		}
 		if strings.Contains(stdout.String(), "Remove it anyway?") {
@@ -704,9 +704,9 @@ func TestUnderJSONWhatABootstrapSaysRidesItsRunAndStdoutIsOnlyTheStream(t *testi
 		},
 		{
 			name:  "features the edge pulls in",
-			edge:  "  edge: \"cloudflare\",\n",
+			edge:  "  edge: \"relay\",\n",
 			opts:  Options{Yes: true, Dry: true, Features: noFeatures, FeaturesDeclared: true},
-			wants: []string{"Also adding feature cloudflare-edge to the production bootstrap: this project's edge needs it", "Also adding feature isr to the production bootstrap: cloudflare-edge needs it"},
+			wants: []string{"Also adding feature relay-edge to the production bootstrap: this project's edge needs it", "Also adding feature isr to the production bootstrap: relay-edge needs it"},
 		},
 		{
 			name: "content going backwards",
@@ -759,7 +759,7 @@ func TestBootstrapDryPreviewsEverything(t *testing.T) {
 		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
-		if !strings.Contains(stdout.String(), "– aws/ocel-production-isr") {
+		if !strings.Contains(stdout.String(), "– fake/ocel-production-isr") {
 			t.Errorf("stdout = %q, want --dry to show what the removal takes", stdout.String())
 		}
 		if _, err := os.Stat(journal); err == nil {
@@ -833,8 +833,8 @@ func TestBootstrapSendsAutoHeal(t *testing.T) {
 }
 
 func TestBootstrapSaysWhatItAppliedBeyondWhatWasAsked(t *testing.T) {
-	t.Run("a cloudflare project told to apply nothing is told what its edge pulls in", func(t *testing.T) {
-		root, _, deps := clitest.SetUpEdgeFixture(t, "  edge: \"cloudflare\",\n")
+	t.Run("a relay project told to apply nothing is told what its edge pulls in", func(t *testing.T) {
+		root, _, deps := clitest.SetUpEdgeFixture(t, "  edge: \"relay\",\n")
 
 		var stdout, stderr bytes.Buffer
 		opts := Options{Yes: true, Dry: true, Features: noFeatures, FeaturesDeclared: true}
@@ -842,7 +842,7 @@ func TestBootstrapSaysWhatItAppliedBeyondWhatWasAsked(t *testing.T) {
 		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
-		want := "INFO  [plan] Also adding feature cloudflare-edge to the production bootstrap: this project's edge needs it\nINFO  [plan] Also adding feature isr to the production bootstrap: cloudflare-edge needs it\n"
+		want := "INFO  [plan] Also adding feature relay-edge to the production bootstrap: this project's edge needs it\nINFO  [plan] Also adding feature isr to the production bootstrap: relay-edge needs it\n"
 		if !strings.Contains(stdout.String(), want) {
 			t.Errorf("stdout = %q, want it to contain %q", stdout.String(), want)
 		}
@@ -857,17 +857,17 @@ func TestBootstrapSaysWhatItAppliedBeyondWhatWasAsked(t *testing.T) {
 		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
-		want := "Also adding feature cloudfront-edge to the production bootstrap: this project's edge needs it\n"
+		want := "Also adding feature direct-edge to the production bootstrap: this project's edge needs it\n"
 		if !strings.Contains(stdout.String(), want) {
 			t.Errorf("stdout = %q, want it to contain %q", stdout.String(), want)
 		}
 	})
 
 	t.Run("a set that names everything applied says nothing", func(t *testing.T) {
-		root, _, deps := clitest.SetUpEdgeFixture(t, "  edge: \"cloudflare\",\n")
+		root, _, deps := clitest.SetUpEdgeFixture(t, "  edge: \"relay\",\n")
 
 		var stdout, stderr bytes.Buffer
-		opts := Options{Yes: true, Dry: true, Features: "isr,cloudflare-edge", FeaturesDeclared: true}
+		opts := Options{Yes: true, Dry: true, Features: "isr,relay-edge", FeaturesDeclared: true}
 		clitest.AttachTerminalSink(deps, &stdout)
 		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())

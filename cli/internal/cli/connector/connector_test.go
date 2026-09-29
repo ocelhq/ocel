@@ -31,7 +31,7 @@ import (
 )
 
 const (
-	fingerprint = "vps/sha256:aaaa/ocel"
+	fingerprint = "fake/sha256:aaaa/ocel"
 	hostname    = "box.example.com"
 )
 
@@ -70,7 +70,7 @@ func newConsoleServer(t *testing.T, rows ...map[string]any) *consoleServer {
 			var body map[string]any
 			_ = json.NewDecoder(r.Body).Decode(&body)
 			c.patched = append(c.patched, body)
-			registered := map[string]any{"id": "con_1", "target": fingerprint, "vendor": "vps", "compute": "container", "reach": "dial"}
+			registered := map[string]any{"id": "con_1", "target": fingerprint, "vendor": "fake", "compute": "container", "reach": "dial"}
 			for key, value := range body {
 				registered[key] = value
 			}
@@ -102,7 +102,7 @@ func linked(t *testing.T, dir, apiURL string) {
 func resolved(t *testing.T, root string) *projectconfig.Config {
 	t.Helper()
 
-	cfg, err := projectconfig.Resolve(context.Background(), root, filepath.Join(root, "ocel.vps.json"))
+	cfg, err := projectconfig.Resolve(context.Background(), root, filepath.Join(root, "ocel.fake.json"))
 	if err != nil {
 		t.Fatalf("projectconfig.Resolve: %v", err)
 	}
@@ -122,7 +122,7 @@ func TestAddPairsTheTargetWithTheConsoleAndInstallsTheAsset(t *testing.T) {
 
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
-	deps.ConfigPath = func() string { return filepath.Join(root, "ocel.vps.json") }
+	deps.ConfigPath = func() string { return filepath.Join(root, "ocel.fake.json") }
 
 	var stdout bytes.Buffer
 	clitest.AttachTerminalSink(deps, &stdout)
@@ -133,7 +133,7 @@ func TestAddPairsTheTargetWithTheConsoleAndInstallsTheAsset(t *testing.T) {
 	if len(srv.upserted) != 1 {
 		t.Fatalf("upserts = %v, want one", srv.upserted)
 	}
-	want := map[string]any{"target": fingerprint, "vendor": "vps", "reach": "dial"}
+	want := map[string]any{"target": fingerprint, "vendor": "fake", "reach": "dial"}
 	for key, value := range want {
 		if srv.upserted[0][key] != value {
 			t.Errorf("upsert %s = %v, want %v", key, srv.upserted[0][key], value)
@@ -183,14 +183,14 @@ func TestAddPairsTheTargetWithTheConsoleAndInstallsTheAsset(t *testing.T) {
 
 func TestAddInstallsTheConnectorBuiltForThePlatformTheProviderNames(t *testing.T) {
 	root := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
-	clitest.InstallConnector(t, "vps", providers.Platform{GOOS: "freebsd", GOARCH: "amd64"}, []byte("freebsd connector"))
+	clitest.InstallConnector(t, "fake", providers.Platform{GOOS: "freebsd", GOARCH: "amd64"}, []byte("freebsd connector"))
 	t.Setenv(clitest.FakeConnectorOSEnvVar, "freebsd")
 	srv := newConsoleServer(t)
 	linked(t, root, srv.URL)
 
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
-	deps.ConfigPath = func() string { return filepath.Join(root, "ocel.vps.json") }
+	deps.ConfigPath = func() string { return filepath.Join(root, "ocel.fake.json") }
 
 	var stdout bytes.Buffer
 	clitest.AttachTerminalSink(deps, &stdout)
@@ -213,7 +213,7 @@ func TestAddRelaysWhatTheProviderSaysWhileItInstallsThroughItsRun(t *testing.T) 
 	linked(t, root, srv.URL)
 
 	deps := jsonDeps()
-	deps.ConfigPath = func() string { return filepath.Join(root, "ocel.vps.json") }
+	deps.ConfigPath = func() string { return filepath.Join(root, "ocel.fake.json") }
 
 	var stream bytes.Buffer
 	clitest.AttachTerminalSink(deps, &stream)
@@ -270,7 +270,7 @@ func TestAConnectorOverTheChannelCeilingIsRefusedBeforeItIsSent(t *testing.T) {
 	srv := newConsoleServer(t)
 	linked(t, root, srv.URL)
 
-	binary := clitest.InstallConnector(t, "vps", providers.Platform{GOOS: "linux", GOARCH: "amd64"}, []byte(clitest.FakeConnectorBinary))
+	binary := clitest.InstallConnector(t, "fake", providers.Platform{GOOS: "linux", GOARCH: "amd64"}, []byte(clitest.FakeConnectorBinary))
 	if err := os.Truncate(binary, providerclient.MaxMessageBytes+1); err != nil {
 		t.Fatalf("grow the connector past the ceiling: %v", err)
 	}
@@ -284,7 +284,7 @@ func TestAConnectorOverTheChannelCeilingIsRefusedBeforeItIsSent(t *testing.T) {
 		t.Fatal("runAdd err = nil, want a connector over the ceiling refused")
 	}
 	said := failure(t, stream.String())
-	for _, want := range []string{"vps connector", "over the"} {
+	for _, want := range []string{"fake connector", "over the"} {
 		if !strings.Contains(said, want) {
 			t.Errorf("runAdd err = %q, want it to contain %q", said, want)
 		}
@@ -320,7 +320,7 @@ func TestAFailedAddSaysRunningItAgainFinishesIt(t *testing.T) {
 func TestRemoveTakesTheConnectorOffTheBoxAndForgetsTheRow(t *testing.T) {
 	root := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
 	srv := newConsoleServer(t, map[string]any{
-		"id": "con_1", "target": fingerprint, "vendor": "vps", "compute": "container", "reach": "dial",
+		"id": "con_1", "target": fingerprint, "vendor": "fake", "compute": "container", "reach": "dial",
 		"capabilities": []string{"envvars.read"},
 	})
 	linked(t, root, srv.URL)
@@ -350,7 +350,7 @@ func TestAnUnreachableMachineIsPointedAtRmTarget(t *testing.T) {
 	root := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
 	t.Setenv(clitest.FakeConnectorRefuseEnvVar, "this machine is not reachable")
 	srv := newConsoleServer(t, map[string]any{
-		"id": "con_1", "target": fingerprint, "vendor": "vps", "compute": "container", "reach": "dial",
+		"id": "con_1", "target": fingerprint, "vendor": "fake", "compute": "container", "reach": "dial",
 	})
 	linked(t, root, srv.URL)
 
@@ -375,7 +375,7 @@ func TestRmTargetForgetsTheRowWithoutTouchingTheTarget(t *testing.T) {
 	root := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
 	t.Setenv(clitest.FakeConnectorRefuseEnvVar, "this machine is not reachable")
 	srv := newConsoleServer(t, map[string]any{
-		"id": "con_1", "target": fingerprint, "vendor": "vps", "compute": "container", "reach": "dial",
+		"id": "con_1", "target": fingerprint, "vendor": "fake", "compute": "container", "reach": "dial",
 	})
 	linked(t, root, srv.URL)
 
@@ -429,7 +429,7 @@ func TestStatusSaysWhatTheConsoleHasRegistered(t *testing.T) {
 	root := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
 	seen := time.Now().Add(-10 * time.Second)
 	srv := newConsoleServer(t, map[string]any{
-		"id": "con_1", "target": fingerprint, "vendor": "vps", "compute": "container", "reach": "dial",
+		"id": "con_1", "target": fingerprint, "vendor": "fake", "compute": "container", "reach": "dial",
 		"url": "https://" + hostname + "/" + constants.ProjectStateDirName + "/connector", "capabilities": []string{"envvars.read", "envvars.write"},
 		"connectedAt": seen, "lastSeenAt": seen, "online": true,
 	})
@@ -473,7 +473,7 @@ func TestAnUnlinkedTreeIsPointedAtOcelLink(t *testing.T) {
 
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
-	deps.ConfigPath = func() string { return filepath.Join(root, "ocel.vps.json") }
+	deps.ConfigPath = func() string { return filepath.Join(root, "ocel.fake.json") }
 
 	cmd := NewCommand(deps)
 	cmd.SetArgs([]string{"status"})
@@ -495,7 +495,7 @@ func TestBeingLoggedOutIsPointedAtOcelLogin(t *testing.T) {
 	deps.LoadCredentials = func() (console.Credentials, error) {
 		return console.Credentials{}, console.ErrNotLoggedIn
 	}
-	deps.ConfigPath = func() string { return filepath.Join(root, "ocel.vps.json") }
+	deps.ConfigPath = func() string { return filepath.Join(root, "ocel.fake.json") }
 
 	cmd := NewCommand(deps)
 	cmd.SetArgs([]string{"status"})
@@ -513,7 +513,7 @@ func TestBeingLoggedOutIsPointedAtOcelLogin(t *testing.T) {
 func TestTheVendorIsWhateverTheConfigPointsAtAndNoTableGatesIt(t *testing.T) {
 	t.Parallel()
 
-	for _, vendor := range []string{"aws", "gcp", "vps", "nowhere"} {
+	for _, vendor := range []string{"fake", "elsewhere", "nowhere"} {
 		cfg := &projectconfig.Config{
 			Path:     "ocel." + vendor + ".json",
 			Provider: &projectconfig.ProviderDescriptor{ID: vendor},
@@ -622,12 +622,12 @@ func runEvents(t *testing.T, out string) []*streamv1.RunEvent {
 func TestStatusForAConfigReadsItsTargetInTheCheckPhaseOfItsRunAndPrintsWhatTheConsoleHasAloneOnStdout(t *testing.T) {
 	root := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
 	srv := newConsoleServer(t, map[string]any{
-		"id": "con_1", "target": fingerprint, "vendor": "vps", "compute": "container", "reach": "dial",
+		"id": "con_1", "target": fingerprint, "vendor": "fake", "compute": "container", "reach": "dial",
 	})
 	linked(t, root, srv.URL)
 
 	deps := jsonDeps()
-	deps.ConfigPath = func() string { return filepath.Join(root, "ocel.vps.json") }
+	deps.ConfigPath = func() string { return filepath.Join(root, "ocel.fake.json") }
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(deps, &stderr)
