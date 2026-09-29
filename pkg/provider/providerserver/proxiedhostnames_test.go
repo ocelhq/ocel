@@ -36,12 +36,13 @@ func TestAHostnameAnEdgeProxiesIsClaimedOnTheRouterAndForwardedToTheOriginTheCla
 	client, vendor := contractServed(t, "1.0.0")
 	relay := vendor.Edges().(*fake.Edges).Edge(fake.KindRelay)
 	relay.ProxiesRecords()
+	vendor.PinServingCertificate("app.acme.com", "pinned-app-certificate")
 	deployed(t, vendor, environment.TierProduction, "shop")
 
 	addWebHostname(t, client, "app.acme.com", nil)
 
 	claims := relay.Claims()
-	want := router.Claim{Hostname: "app.acme.com", App: "web", ClientCertificate: fake.ClientCertificate(fake.KindRelay)}
+	want := router.Claim{Hostname: "app.acme.com", App: "web", Certificate: "pinned-app-certificate", ClientCertificate: fake.ClientCertificate(fake.KindRelay)}
 	if len(claims) != 1 || claims[0] != want {
 		t.Fatalf("the router took claims %+v, want the one %+v: an edge that proxies records forwards to an origin, and the router is what answers there", claims, want)
 	}
