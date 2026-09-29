@@ -509,7 +509,7 @@ func (r *deployRun) forwardPreviews(ctx context.Context, progress progress.Progr
 	forwarding := &hostnames{edgeSession: r.edgeSession}
 	hostState := r.state.Host(target.Hostname)
 	if slices.Contains(r.edgeStack().State().Bound, target.Hostname) {
-		_, err := forwarding.reclaimShielded(ctx, target, &hostState, progress)
+		_, err := forwarding.refreshOriginClaim(ctx, target, &hostState, progress)
 		return err
 	}
 	return forwarding.bindOrigin(ctx, target, &hostState, progress)
@@ -531,7 +531,7 @@ func (r *deployRun) attachHostnames(ctx context.Context) error {
 			for _, host := range r.configured {
 				if r.state.Ready(host.Hostname, r.front.Kind(), r.readAppRouter(host.App)) {
 					hostState := r.state.Host(host.Hostname)
-					if _, err := attaching.reclaimShielded(ctx, host, &hostState, progress); err != nil {
+					if _, err := attaching.refreshOriginClaim(ctx, host, &hostState, progress); err != nil {
 						return err
 					}
 					attached = append(attached, host.Hostname)
