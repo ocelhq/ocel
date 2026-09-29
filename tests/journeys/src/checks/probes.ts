@@ -432,9 +432,10 @@ export const httpProbeChecks: Check[] = [
       const cookie = `ocel-fat=${"c".repeat(OVERSIZED_COOKIE_BYTES)}`;
       const fat = await ctx.fetch(`${ctx.baseUrl}/api/probes/echo`, { headers: { cookie } });
       await fat.text();
+      const refusedAheadOfOcel = fat.status === 400 && fat.headers.get("x-ocel-edge") === null;
       assert.ok(
-        fat.status === 200 || fat.status === 413 || fat.status === 431,
-        `twelve kilobytes of cookie answered ${fat.status}`,
+        fat.status === 200 || fat.status === 413 || fat.status === 431 || refusedAheadOfOcel,
+        `twelve kilobytes of cookie answered ${fat.status} from ${fat.headers.get("x-ocel-edge") ?? "a front"}`,
       );
 
       const pad = "u".repeat(OVERSIZED_URL_BYTES);
