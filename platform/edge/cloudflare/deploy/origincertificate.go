@@ -19,7 +19,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 )
 
-const originCertificateValidity = ssl.RequestValidity365
+const (
+	originCertificateValidity     = ssl.RequestValidity365
+	originCertificateOrganization = "ocel"
+)
 
 func (p *cloudflare) issueOriginCertificate(ctx context.Context, hostname string) (edge.OriginCertificate, error) {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -27,7 +30,7 @@ func (p *cloudflare) issueOriginCertificate(ctx context.Context, hostname string
 		return edge.OriginCertificate{}, fmt.Errorf("generate the key %s's origin certificate is issued for: %w", hostname, err)
 	}
 	request, err := x509.CreateCertificateRequest(rand.Reader, &x509.CertificateRequest{
-		Subject:  pkix.Name{CommonName: hostname},
+		Subject:  pkix.Name{CommonName: hostname, Organization: []string{originCertificateOrganization}},
 		DNSNames: []string{hostname},
 	}, key)
 	if err != nil {

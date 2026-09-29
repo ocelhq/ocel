@@ -496,6 +496,17 @@ func TestTheCloudflareProxyIssuesAnOriginCertificateForAHostnameAndRevokesIt(t *
 	if len(m.originRequests) != 1 || !slices.Equal(m.originRequests[0], []string{"shop.app.com"}) {
 		t.Errorf("asked Cloudflare's origin CA for %v, want a certificate for shop.app.com alone", m.originRequests)
 	}
+	block, _ := pem.Decode([]byte(m.originCSRs[0]))
+	if block == nil {
+		t.Fatalf("the request %q is no PEM", m.originCSRs[0])
+	}
+	request, err := x509.ParseCertificateRequest(block.Bytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(request.Subject.Organization, []string{"ocel"}) {
+		t.Errorf("the request names organization %v, want ocel: the certificate lists nothing else that says ocel asked for it, and a sweep revokes only what ocel asked for", request.Subject.Organization)
+	}
 	leaf := parsedLeaf(t, issued.Certificate)
 	if !issued.ExpiresAt.Equal(leaf.NotAfter) {
 		t.Errorf("the certificate is read as expiring %s, want %s, the moment its leaf says", issued.ExpiresAt, leaf.NotAfter)

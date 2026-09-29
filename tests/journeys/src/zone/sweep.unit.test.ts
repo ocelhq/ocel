@@ -41,12 +41,23 @@ const RECORDS: DnsRecord[] = [
   record("mine", host("444"), { comment: owned("444") }),
 ];
 
+function requestFrom(organization: string): string {
+  const printable = 0x13;
+  const der = Buffer.concat([
+    Buffer.from([0x30, 0x0d, 0x31, 0x0b, 0x30, 0x09, 0x06, 0x03, 0x55, 0x04, 0x0a]),
+    Buffer.from([printable, organization.length]),
+    Buffer.from(organization, "ascii"),
+  ]);
+  return `-----BEGIN CERTIFICATE REQUEST-----\n${der.toString("base64")}\n-----END CERTIFICATE REQUEST-----\n`;
+}
+
 function certificate(
   id: string,
   hostnames: string[],
   requestType = "origin-ecc",
+  csr = requestFrom("ocel"),
 ): OriginCertificate {
-  return { id, hostnames, request_type: requestType };
+  return { id, hostnames, request_type: requestType, csr };
 }
 
 const CERTIFICATES: OriginCertificate[] = [
@@ -56,6 +67,7 @@ const CERTIFICATES: OriginCertificate[] = [
   certificate("rsa", [host("111")], "origin-rsa"),
   certificate("apex", [`www.${ZONE.name}`]),
   certificate("mine", [host("444")]),
+  certificate("theirs", [host("111")], "origin-ecc", requestFrom("acme")),
 ];
 
 type Asked = { method: string; url: URL; authorization: string | null };

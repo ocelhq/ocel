@@ -15,7 +15,12 @@ export type DnsRecord = {
   comment: string | null;
 };
 
-export type OriginCertificate = { id: string; hostnames: string[]; request_type: string };
+export type OriginCertificate = {
+  id: string;
+  hostnames: string[];
+  request_type: string;
+  csr: string;
+};
 
 export type NameFilter = { exact: string } | { endsWith: string };
 
