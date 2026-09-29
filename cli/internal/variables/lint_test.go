@@ -1,12 +1,67 @@
-package envgate_test
+package variables_test
 
 import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/envgate"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
+
+func TestAFolderScopeNoAppBindsIsAWarningAndAHalfBoundOneAnError(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a folder no app binds is a warning", func(t *testing.T) {
+		t.Parallel()
+		warnings, err := variables.LintFolders(
+			[]*resourcesv1.VariableDefinition{scoped("POSTHOG_ID", "/web", "/admin")},
+			[]variables.App{{Name: "api"}},
+			"ocel.config.ts",
+		)
+		if err != nil {
+			t.Fatalf("LintFolders err = %v, want a scope no app reads to be a warning, not a failure", err)
+		}
+		joined := strings.Join(warnings, "\n")
+		for _, want := range []string{"POSTHOG_ID", "/web", "/admin"} {
+			if !strings.Contains(joined, want) {
+				t.Errorf("warnings = %q, want %q named", joined, want)
+			}
+		}
+	})
+
+	t.Run("a half-completed rename is an error naming both files", func(t *testing.T) {
+		t.Parallel()
+		definition := scoped("POSTHOG_ID", "/web", "/admin")
+		definition.Source = "apps/web/env.ts"
+
+		_, err := variables.LintFolders(
+			[]*resourcesv1.VariableDefinition{definition},
+			[]variables.App{{Name: "web", Folder: "/web"}, {Name: "admin", Folder: "/administration"}},
+			"ocel.config.ts",
+		)
+		if err == nil {
+			t.Fatal("LintFolders err = nil, want a partly-bound scope refused as a half-finished rename")
+		}
+		for _, want := range []string{"POSTHOG_ID", "/admin", "apps/web/env.ts", "ocel.config.ts"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("err = %v, want %q named", err, want)
+			}
+		}
+	})
+
+	t.Run("a fully bound scope is silent", func(t *testing.T) {
+		t.Parallel()
+		warnings, err := variables.LintFolders(
+			[]*resourcesv1.VariableDefinition{scoped("POSTHOG_ID", "/web", "/admin")},
+			[]variables.App{{Name: "web", Folder: "/web"}, {Name: "admin", Folder: "/admin"}},
+			"ocel.config.ts",
+		)
+		if err != nil || len(warnings) != 0 {
+			t.Errorf("LintFolders = %q, %v; want nothing said about a scope every app covers", warnings, err)
+		}
+	})
+
+}
 
 func secret(key string, folders ...string) *resourcesv1.VariableDefinition {
 	d := def(key, resourcesv1.VariableClass_VARIABLE_CLASS_SECRET)
@@ -14,16 +69,16 @@ func secret(key string, folders ...string) *resourcesv1.VariableDefinition {
 	return d
 }
 
-func TestLintEdge(t *testing.T) {
+func TestASecretAnEdgeEntryWouldReadIsAWarning(t *testing.T) {
 	t.Parallel()
 
-	apps := []envgate.App{{Name: "web", Folder: "/web"}, {Name: "admin", Folder: "/admin"}}
+	apps := []variables.App{{Name: "web", Folder: "/web"}, {Name: "admin", Folder: "/admin"}}
 
 	t.Run("a secret and an app shipping edge entries is a warning naming both", func(t *testing.T) {
 		t.Parallel()
 		definition := secret("STRIPE_KEY")
 		definition.Source = "web/env.ts"
-		warnings, err := envgate.LintEdge(
+		warnings, err := variables.LintEdgeSecrets(
 			[]*resourcesv1.VariableDefinition{definition},
 			apps,
 			[]string{"web"},
@@ -49,7 +104,7 @@ func TestLintEdge(t *testing.T) {
 
 	t.Run("a warning per secret, not per app", func(t *testing.T) {
 		t.Parallel()
-		warnings, err := envgate.LintEdge(
+		warnings, err := variables.LintEdgeSecrets(
 			[]*resourcesv1.VariableDefinition{secret("STRIPE_KEY"), secret("DB_PASSWORD")},
 			apps,
 			[]string{"admin", "web"},
@@ -67,7 +122,7 @@ func TestLintEdge(t *testing.T) {
 
 	t.Run("an edge app this project does not declare fails rather than reading an empty folder", func(t *testing.T) {
 		t.Parallel()
-		warnings, err := envgate.LintEdge(
+		warnings, err := variables.LintEdgeSecrets(
 			[]*resourcesv1.VariableDefinition{secret("STRIPE_KEY", "/web")},
 			apps,
 			[]string{"storefront"},
@@ -82,7 +137,7 @@ func TestLintEdge(t *testing.T) {
 
 	t.Run("the readable classes are silent", func(t *testing.T) {
 		t.Parallel()
-		warnings, err := envgate.LintEdge(
+		warnings, err := variables.LintEdgeSecrets(
 			[]*resourcesv1.VariableDefinition{
 				def("PUBLIC_URL", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
 				def("API_TOKEN", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE),
@@ -100,7 +155,7 @@ func TestLintEdge(t *testing.T) {
 
 	t.Run("a secret is silent when no app ships edge entries", func(t *testing.T) {
 		t.Parallel()
-		warnings, err := envgate.LintEdge(
+		warnings, err := variables.LintEdgeSecrets(
 			[]*resourcesv1.VariableDefinition{secret("STRIPE_KEY")},
 			apps,
 			nil,
@@ -115,7 +170,7 @@ func TestLintEdge(t *testing.T) {
 
 	t.Run("a secret out of the edge app's folder scope is silent", func(t *testing.T) {
 		t.Parallel()
-		warnings, err := envgate.LintEdge(
+		warnings, err := variables.LintEdgeSecrets(
 			[]*resourcesv1.VariableDefinition{secret("STRIPE_KEY", "/admin")},
 			apps,
 			[]string{"web"},
@@ -130,7 +185,7 @@ func TestLintEdge(t *testing.T) {
 
 	t.Run("names every edge app that reads the secret", func(t *testing.T) {
 		t.Parallel()
-		warnings, err := envgate.LintEdge(
+		warnings, err := variables.LintEdgeSecrets(
 			[]*resourcesv1.VariableDefinition{secret("STRIPE_KEY")},
 			apps,
 			[]string{"admin", "web"},

@@ -6,16 +6,16 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/ocelhq/ocel/cli/internal/envgate"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
 type envState struct {
 	mu     sync.Mutex
 	values map[string]string
-	scope  envgate.Scope
+	scope  variables.Scope
 	store  *flatValues
-	gate   *envgate.Gate
+	gate   *variables.Declarations
 
 	declaring sync.Mutex
 }
@@ -24,13 +24,13 @@ func newEnvState() *envState {
 	return &envState{}
 }
 
-func (e *envState) use(values map[string]string, scope envgate.Scope) {
+func (e *envState) use(values map[string]string, scope variables.Scope) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.values = values
 	e.scope = scope
 	e.store = newFlatValues(values)
-	e.gate = envgate.New(e.store, scope)
+	e.gate = variables.NewDeclarations(e.store, scope)
 }
 
 func (e *envState) snapshot() map[string]string {
@@ -39,7 +39,7 @@ func (e *envState) snapshot() map[string]string {
 	return maps.Clone(e.values)
 }
 
-func (e *envState) current() (*flatValues, *envgate.Gate) {
+func (e *envState) current() (*flatValues, *variables.Declarations) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.store, e.gate
@@ -52,7 +52,7 @@ func (e *envState) forgetDeclarations() {
 		return
 	}
 	e.store = newFlatValues(e.values)
-	e.gate = envgate.New(e.store, e.scope)
+	e.gate = variables.NewDeclarations(e.store, e.scope)
 }
 
 func (e *envState) declare(ctx context.Context, req *resourcesv1.DeclareEnvRequest) (*resourcesv1.DeclareEnvResponse, error) {

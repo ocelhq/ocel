@@ -16,11 +16,11 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/varsui"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
@@ -50,7 +50,7 @@ type varsUISessions struct {
 func captureVarsUI(deps *cmddeps.Deps) *varsUISessions {
 	sessions := &varsUISessions{}
 	prev := deps.ServeVarsUI
-	deps.ServeVarsUI = func(ctx context.Context, cfg *projectconfig.Config, prov *providerclient.Provider, preview bool, gate *envgate.Gate, recovery *varsui.Recovery) (*varsui.Session, error) {
+	deps.ServeVarsUI = func(ctx context.Context, cfg *projectconfig.Config, prov *providerclient.Provider, preview bool, gate *variables.Declarations, recovery *varsui.Recovery) (*varsui.Session, error) {
 		session, err := prev(ctx, cfg, prov, preview, gate, recovery)
 		if err == nil {
 			sessions.mu.Lock()
@@ -724,7 +724,7 @@ func TestAbandonedRefusal(t *testing.T) {
 	t.Run("matches both the refusal and the abandonment", func(t *testing.T) {
 		t.Parallel()
 
-		refusal := &envgate.Refusal{Problems: []*resourcesv1.VariableProblem{
+		refusal := &variables.MissingError{Problems: []*resourcesv1.VariableProblem{
 			{Key: "STRIPE_API_KEY", Kind: resourcesv1.VariableProblem_KIND_MISSING},
 		}}
 		var err error = &abandonedRefusal{refusal: refusal}
@@ -732,9 +732,9 @@ func TestAbandonedRefusal(t *testing.T) {
 		if !errors.Is(err, varsui.ErrAbandoned) {
 			t.Error("errors.Is(err, ErrAbandoned) = false, want an abandonment the caller can match")
 		}
-		var got *envgate.Refusal
+		var got *variables.MissingError
 		if !errors.As(err, &got) || got != refusal {
-			t.Error("errors.As(err, *envgate.Refusal) did not recover the original refusal")
+			t.Error("errors.As(err, *variables.MissingError) did not recover the original refusal")
 		}
 		if !strings.Contains(err.Error(), "STRIPE_API_KEY") {
 			t.Errorf("err = %q, want the keys that are missing named", err)

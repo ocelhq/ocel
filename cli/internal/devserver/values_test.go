@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/envgate"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/resources/v1/resourcesv1connect"
 )
@@ -30,7 +30,7 @@ func reportProblems(t *testing.T, url string, problems ...*resourcesv1.VariableP
 	}
 }
 
-func serveValues(t *testing.T, values map[string]string, scope envgate.Scope) (*Server, string) {
+func serveValues(t *testing.T, values map[string]string, scope variables.Scope) (*Server, string) {
 	t.Helper()
 	s := newDevServer(&fakeStack{})
 	if values != nil {
@@ -44,7 +44,7 @@ func TestDeclareEnv(t *testing.T) {
 
 	t.Run("answers a root key with its plaintext", func(t *testing.T) {
 		t.Parallel()
-		s, url := serveValues(t, map[string]string{"DATABASE_URL": "postgres://localhost/app"}, envgate.Scope{})
+		s, url := serveValues(t, map[string]string{"DATABASE_URL": "postgres://localhost/app"}, variables.Scope{})
 
 		msg := declareEnv(t, url, &resourcesv1.VariableDefinition{
 			Key: "DATABASE_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Required: true,
@@ -67,7 +67,7 @@ func TestDeclareEnv(t *testing.T) {
 
 	t.Run("never reveals a live value", func(t *testing.T) {
 		t.Parallel()
-		_, url := serveValues(t, map[string]string{"WEBHOOK_SECRET": "whsec_must_not_appear"}, envgate.Scope{})
+		_, url := serveValues(t, map[string]string{"WEBHOOK_SECRET": "whsec_must_not_appear"}, variables.Scope{})
 
 		msg := declareEnv(t, url, &resourcesv1.VariableDefinition{
 			Key: "WEBHOOK_SECRET", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, Required: true,
@@ -84,8 +84,8 @@ func TestDeclareEnv(t *testing.T) {
 
 	t.Run("a root line broadcasts to every folder a scoped key names", func(t *testing.T) {
 		t.Parallel()
-		s, url := serveValues(t, map[string]string{"API_BASE": "http://localhost:3000"}, envgate.Scope{
-			Apps: []envgate.App{{Name: "web", Folder: "/web"}, {Name: "admin", Folder: "/admin"}},
+		s, url := serveValues(t, map[string]string{"API_BASE": "http://localhost:3000"}, variables.Scope{
+			Apps: []variables.App{{Name: "web", Folder: "/web"}, {Name: "admin", Folder: "/admin"}},
 		})
 
 		msg := declareEnv(t, url, &resourcesv1.VariableDefinition{
@@ -111,8 +111,8 @@ func TestDeclareEnv(t *testing.T) {
 
 	t.Run("keeps every declaration's folders for one key", func(t *testing.T) {
 		t.Parallel()
-		s, url := serveValues(t, map[string]string{"API_BASE": "http://localhost:3000"}, envgate.Scope{
-			Apps: []envgate.App{{Name: "web", Folder: "/web"}, {Name: "admin", Folder: "/admin"}},
+		s, url := serveValues(t, map[string]string{"API_BASE": "http://localhost:3000"}, variables.Scope{
+			Apps: []variables.App{{Name: "web", Folder: "/web"}, {Name: "admin", Folder: "/admin"}},
 		})
 
 		declareEnv(t, url, &resourcesv1.VariableDefinition{
@@ -143,7 +143,7 @@ func TestCheckEnv(t *testing.T) {
 
 	t.Run("gates nothing when no values are installed", func(t *testing.T) {
 		t.Parallel()
-		s, url := serveValues(t, nil, envgate.Scope{})
+		s, url := serveValues(t, nil, variables.Scope{})
 
 		msg := declareEnv(t, url, &resourcesv1.VariableDefinition{
 			Key: "DATABASE_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Required: true,
@@ -158,16 +158,16 @@ func TestCheckEnv(t *testing.T) {
 
 	t.Run("refuses a required key the values do not contain", func(t *testing.T) {
 		t.Parallel()
-		s, url := serveValues(t, map[string]string{}, envgate.Scope{Apps: []envgate.App{{Name: "web"}}})
+		s, url := serveValues(t, map[string]string{}, variables.Scope{Apps: []variables.App{{Name: "web"}}})
 
 		declareEnv(t, url, &resourcesv1.VariableDefinition{
 			Key: "DATABASE_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Required: true,
 		})
 
 		err := s.CheckEnv(context.Background())
-		var refusal *envgate.Refusal
+		var refusal *variables.MissingError
 		if !errors.As(err, &refusal) {
-			t.Fatalf("CheckEnv = %v (%T), want *envgate.Refusal", err, err)
+			t.Fatalf("CheckEnv = %v (%T), want *variables.MissingError", err, err)
 		}
 		if len(refusal.Problems) != 1 || refusal.Problems[0].GetKey() != "DATABASE_URL" {
 			t.Fatalf("problems = %v, want one naming DATABASE_URL", refusal.Problems)
@@ -179,7 +179,7 @@ func TestCheckEnv(t *testing.T) {
 
 	t.Run("keeps the problems the declaring process reports", func(t *testing.T) {
 		t.Parallel()
-		s, url := serveValues(t, map[string]string{"PORT": "not-a-number"}, envgate.Scope{})
+		s, url := serveValues(t, map[string]string{"PORT": "not-a-number"}, variables.Scope{})
 
 		declareEnv(t, url, &resourcesv1.VariableDefinition{
 			Key: "PORT", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Required: true,
@@ -198,8 +198,8 @@ func TestCheckEnv(t *testing.T) {
 		t.Parallel()
 		ctx := context.Background()
 		s := newDevServer(&fakeStack{})
-		s.UseValues(map[string]string{"API_BASE": "http://localhost:3000"}, envgate.Scope{
-			Apps: []envgate.App{{Name: "web", Folder: "/web"}},
+		s.UseValues(map[string]string{"API_BASE": "http://localhost:3000"}, variables.Scope{
+			Apps: []variables.App{{Name: "web", Folder: "/web"}},
 		})
 
 		store, gate := s.env.current()
@@ -223,7 +223,7 @@ func TestCheckEnv(t *testing.T) {
 	t.Run("states presence for a live key it has no value for", func(t *testing.T) {
 		t.Parallel()
 		ctx := context.Background()
-		s, url := serveValues(t, map[string]string{}, envgate.Scope{Apps: []envgate.App{{Name: "web"}}})
+		s, url := serveValues(t, map[string]string{}, variables.Scope{Apps: []variables.App{{Name: "web"}}})
 
 		msg := declareEnv(t, url, &resourcesv1.VariableDefinition{
 			Key: "DB_PASSWORD", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, Required: true,
@@ -237,7 +237,7 @@ func TestCheckEnv(t *testing.T) {
 		}
 
 		store, _ := s.env.current()
-		found, err := store.Reveal(ctx, []envgate.Address{{Cell: envgate.Cell{Key: "DB_PASSWORD"}}})
+		found, err := store.Reveal(ctx, []variables.Coordinate{{Cell: variables.Cell{Key: "DB_PASSWORD"}}})
 		if err != nil {
 			t.Fatalf("Reveal: %v", err)
 		}
@@ -248,7 +248,7 @@ func TestCheckEnv(t *testing.T) {
 
 	t.Run("still refuses a plain key beside an exempt live one", func(t *testing.T) {
 		t.Parallel()
-		s, url := serveValues(t, map[string]string{}, envgate.Scope{Apps: []envgate.App{{Name: "web"}}})
+		s, url := serveValues(t, map[string]string{}, variables.Scope{Apps: []variables.App{{Name: "web"}}})
 
 		declareEnv(t, url,
 			&resourcesv1.VariableDefinition{Key: "DB_PASSWORD", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, Required: true},
@@ -256,9 +256,9 @@ func TestCheckEnv(t *testing.T) {
 		)
 
 		err := s.CheckEnv(context.Background())
-		var refusal *envgate.Refusal
+		var refusal *variables.MissingError
 		if !errors.As(err, &refusal) {
-			t.Fatalf("CheckEnv = %v (%T), want *envgate.Refusal", err, err)
+			t.Fatalf("CheckEnv = %v (%T), want *variables.MissingError", err, err)
 		}
 		if len(refusal.Problems) != 1 || refusal.Problems[0].GetKey() != "DATABASE_URL" {
 			t.Fatalf("problems = %v, want exactly the plain key named", refusal.Problems)
@@ -267,8 +267,8 @@ func TestCheckEnv(t *testing.T) {
 
 	t.Run("states presence for every folder a live key is scoped to", func(t *testing.T) {
 		t.Parallel()
-		s, url := serveValues(t, map[string]string{}, envgate.Scope{
-			Apps: []envgate.App{{Name: "web", Folder: "/web"}, {Name: "admin", Folder: "/admin"}},
+		s, url := serveValues(t, map[string]string{}, variables.Scope{
+			Apps: []variables.App{{Name: "web", Folder: "/web"}, {Name: "admin", Folder: "/admin"}},
 		})
 
 		msg := declareEnv(t, url, &resourcesv1.VariableDefinition{
@@ -295,7 +295,7 @@ func TestResetManifest(t *testing.T) {
 
 	t.Run("forgets the prior run's verdict", func(t *testing.T) {
 		t.Parallel()
-		s, url := serveValues(t, map[string]string{}, envgate.Scope{})
+		s, url := serveValues(t, map[string]string{}, variables.Scope{})
 
 		declareEnv(t, url, &resourcesv1.VariableDefinition{
 			Key: "GONE", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Required: true,
@@ -313,8 +313,8 @@ func TestResetManifest(t *testing.T) {
 
 	t.Run("forgets the prior run's scopes", func(t *testing.T) {
 		t.Parallel()
-		s, url := serveValues(t, map[string]string{"API_BASE": "http://localhost:3000"}, envgate.Scope{
-			Apps: []envgate.App{{Name: "web"}},
+		s, url := serveValues(t, map[string]string{"API_BASE": "http://localhost:3000"}, variables.Scope{
+			Apps: []variables.App{{Name: "web"}},
 		})
 
 		declareEnv(t, url, &resourcesv1.VariableDefinition{
@@ -341,7 +341,7 @@ func TestScopedFolders(t *testing.T) {
 
 	t.Run("lists every folder every declaration names", func(t *testing.T) {
 		t.Parallel()
-		s, url := serveValues(t, map[string]string{}, envgate.Scope{})
+		s, url := serveValues(t, map[string]string{}, variables.Scope{})
 
 		declareEnv(t, url,
 			&resourcesv1.VariableDefinition{Key: "API_BASE", Folders: []string{"/web"}},

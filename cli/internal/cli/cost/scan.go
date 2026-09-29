@@ -19,13 +19,13 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
-	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/manifestwire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -216,16 +216,16 @@ func usageFile(path string) (map[string]*structpb.Struct, error) {
 
 type unread struct{}
 
-func (unread) List(context.Context) ([]envgate.Stored, error) { return nil, nil }
+func (unread) List(context.Context) ([]variables.ValueMetadata, error) { return nil, nil }
 
-func (unread) Reveal(context.Context, []envgate.Address) (map[envgate.Cell]string, error) {
-	return map[envgate.Cell]string{}, nil
+func (unread) Reveal(context.Context, []variables.Coordinate) (map[variables.Coordinate]string, error) {
+	return map[variables.Coordinate]string{}, nil
 }
 
 const unbuiltDigest = "0000000000000000000000000000000000000000000000000000000000000000"
 
 func scanManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, env *environmentv1.Environment, out io.Writer) (*contractv1.Manifest, []string, error) {
-	gate := envgate.New(unread{}, envwire.Scope(cfg, env.GetTier() == environmentv1.Tier_TIER_PREVIEW, ""))
+	gate := variables.NewDeclarations(unread{}, envwire.Scope(cfg, env.GetTier() == environmentv1.Tier_TIER_PREVIEW, ""))
 	resources, err := deps.CollectDeclarations(ctx, cfg, gate, out, out)
 	if err != nil {
 		return nil, nil, err

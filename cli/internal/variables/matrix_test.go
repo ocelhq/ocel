@@ -1,4 +1,4 @@
-package envgate_test
+package variables_test
 
 import (
 	"encoding/json"
@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/envgate"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
@@ -17,7 +17,7 @@ func optional(key string) *resourcesv1.VariableDefinition {
 	return d
 }
 
-func row(t *testing.T, m envgate.Matrix, key string) envgate.MatrixRow {
+func row(t *testing.T, m variables.Matrix, key string) variables.MatrixRow {
 	t.Helper()
 	for _, r := range m.Rows {
 		if r.Key == key {
@@ -25,10 +25,10 @@ func row(t *testing.T, m envgate.Matrix, key string) envgate.MatrixRow {
 		}
 	}
 	t.Fatalf("matrix has no row for %q; rows are %+v", key, m.Rows)
-	return envgate.MatrixRow{}
+	return variables.MatrixRow{}
 }
 
-func cell(t *testing.T, r envgate.MatrixRow, folder string) envgate.MatrixCell {
+func cell(t *testing.T, r variables.MatrixRow, folder string) variables.MatrixCell {
 	t.Helper()
 	for _, c := range r.Cells {
 		if c.Folder == folder {
@@ -36,10 +36,10 @@ func cell(t *testing.T, r envgate.MatrixRow, folder string) envgate.MatrixCell {
 		}
 	}
 	t.Fatalf("row %q has no cell for folder %q; cells are %+v", r.Key, folder, r.Cells)
-	return envgate.MatrixCell{}
+	return variables.MatrixCell{}
 }
 
-func app(t *testing.T, m envgate.Matrix, name string) envgate.AppResolution {
+func app(t *testing.T, m variables.Matrix, name string) variables.AppResolution {
 	t.Helper()
 	for _, a := range m.Apps {
 		if a.Name == name {
@@ -47,12 +47,12 @@ func app(t *testing.T, m envgate.Matrix, name string) envgate.AppResolution {
 		}
 	}
 	t.Fatalf("matrix has no readout for app %q; apps are %+v", name, m.Apps)
-	return envgate.AppResolution{}
+	return variables.AppResolution{}
 }
 
 func TestAnEmptyMatrixEncodesEmptyListsNotNull(t *testing.T) {
 	t.Parallel()
-	g := prefetched(t, newFakeValues(), envgate.Scope{})
+	g := prefetched(t, newFakeValues(), variables.Scope{})
 
 	doc, err := json.Marshal(g.Matrix(nil))
 	if err != nil {
@@ -65,12 +65,12 @@ func TestAnEmptyMatrixEncodesEmptyListsNotNull(t *testing.T) {
 	}
 }
 
-func TestMatrix(t *testing.T) {
+func TestTheMatrixShowsWhatEachCellNeedsAndHolds(t *testing.T) {
 	t.Parallel()
 
 	t.Run("columns are the root plus every folder declared or bound", func(t *testing.T) {
 		t.Parallel()
-		g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{
+		g := prefetched(t, newFakeValues(), variables.Scope{Apps: []variables.App{
 			{Name: "web", Folder: "/web"},
 			{Name: "api"},
 		}})
@@ -84,21 +84,21 @@ func TestMatrix(t *testing.T) {
 
 	t.Run("an unscoped key is required at the root and an override in every folder", func(t *testing.T) {
 		t.Parallel()
-		g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "web", Folder: "/web"}}})
+		g := prefetched(t, newFakeValues(), variables.Scope{Apps: []variables.App{{Name: "web", Folder: "/web"}}})
 		declare(t, g, def("API_URL", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
 
 		r := row(t, g.Matrix(nil), "API_URL")
-		if got := cell(t, r, "").State; got != envgate.CellRequired {
-			t.Errorf("API_URL at the root is %q, want %q", got, envgate.CellRequired)
+		if got := cell(t, r, "").State; got != variables.CellRequired {
+			t.Errorf("API_URL at the root is %q, want %q", got, variables.CellRequired)
 		}
-		if got := cell(t, r, "/web").State; got != envgate.CellOptional {
-			t.Errorf("API_URL in /web is %q, want %q — a folder value is an override the root still backs", got, envgate.CellOptional)
+		if got := cell(t, r, "/web").State; got != variables.CellOptional {
+			t.Errorf("API_URL in /web is %q, want %q — a folder value is an override the root still backs", got, variables.CellOptional)
 		}
 	})
 
 	t.Run("includes a variable description", func(t *testing.T) {
 		t.Parallel()
-		g := prefetched(t, newFakeValues(), envgate.Scope{})
+		g := prefetched(t, newFakeValues(), variables.Scope{})
 		definition := def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE)
 		definition.Description = "Used to call Stripe"
 		declare(t, g, definition)
@@ -110,17 +110,17 @@ func TestMatrix(t *testing.T) {
 
 	t.Run("a key with a default is never required", func(t *testing.T) {
 		t.Parallel()
-		g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "web"}}})
+		g := prefetched(t, newFakeValues(), variables.Scope{Apps: []variables.App{{Name: "web"}}})
 		declare(t, g, optional("LOG_LEVEL"))
 
-		if got := cell(t, row(t, g.Matrix(nil), "LOG_LEVEL"), "").State; got != envgate.CellOptional {
-			t.Errorf("LOG_LEVEL at the root is %q, want %q — its schema supplies the value", got, envgate.CellOptional)
+		if got := cell(t, row(t, g.Matrix(nil), "LOG_LEVEL"), "").State; got != variables.CellOptional {
+			t.Errorf("LOG_LEVEL at the root is %q, want %q — its schema supplies the value", got, variables.CellOptional)
 		}
 	})
 
 	t.Run("a scoped key is required in every folder it names and forbidden everywhere else", func(t *testing.T) {
 		t.Parallel()
-		g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{
+		g := prefetched(t, newFakeValues(), variables.Scope{Apps: []variables.App{
 			{Name: "web", Folder: "/web"},
 			{Name: "admin", Folder: "/admin"},
 			{Name: "jobs", Folder: "/jobs"},
@@ -129,21 +129,21 @@ func TestMatrix(t *testing.T) {
 
 		r := row(t, g.Matrix(nil), "POSTHOG_ID")
 		for _, folder := range []string{"/web", "/admin"} {
-			if got := cell(t, r, folder).State; got != envgate.CellRequired {
-				t.Errorf("POSTHOG_ID in %s is %q, want %q", folder, got, envgate.CellRequired)
+			if got := cell(t, r, folder).State; got != variables.CellRequired {
+				t.Errorf("POSTHOG_ID in %s is %q, want %q", folder, got, variables.CellRequired)
 			}
 		}
-		if got := cell(t, r, "").State; got != envgate.CellForbidden {
-			t.Errorf("POSTHOG_ID at the root is %q, want %q — a scoped key has no root value at all", got, envgate.CellForbidden)
+		if got := cell(t, r, "").State; got != variables.CellForbidden {
+			t.Errorf("POSTHOG_ID at the root is %q, want %q — a scoped key has no root value at all", got, variables.CellForbidden)
 		}
-		if got := cell(t, r, "/jobs").State; got != envgate.CellForbidden {
-			t.Errorf("POSTHOG_ID in /jobs is %q, want %q — /jobs is outside its scope", got, envgate.CellForbidden)
+		if got := cell(t, r, "/jobs").State; got != variables.CellForbidden {
+			t.Errorf("POSTHOG_ID in /jobs is %q, want %q — /jobs is outside its scope", got, variables.CellForbidden)
 		}
 	})
 
 	t.Run("a forbidden cell is exactly one the write path refuses", func(t *testing.T) {
 		t.Parallel()
-		g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{
+		g := prefetched(t, newFakeValues(), variables.Scope{Apps: []variables.App{
 			{Name: "web", Folder: "/web"},
 			{Name: "admin", Folder: "/admin"},
 		}})
@@ -157,8 +157,8 @@ func TestMatrix(t *testing.T) {
 		checked := 0
 		for _, r := range m.Rows {
 			for _, c := range r.Cells {
-				writable := envgate.CheckWritable(g.Definitions(), r.Key, c.Folder) == nil
-				if writable == (c.State == envgate.CellForbidden) {
+				writable := variables.RefuseUnwritable(g.Definitions(), r.Key, c.Folder) == nil
+				if writable == (c.State == variables.CellForbidden) {
 					t.Errorf("%s in %q is %q but the write path writable=%v", r.Key, c.Folder, c.State, writable)
 				}
 				checked++
@@ -174,7 +174,7 @@ func TestMatrix(t *testing.T) {
 		values := newFakeValues()
 		values.set("API_URL", "", "https://root.example")
 
-		g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "web", Folder: "/web"}}})
+		g := prefetched(t, values, variables.Scope{Apps: []variables.App{{Name: "web", Folder: "/web"}}})
 		declare(t, g, def("API_URL", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
 
 		r := row(t, g.Matrix(nil), "API_URL")
@@ -191,7 +191,7 @@ func TestMatrix(t *testing.T) {
 		values := newFakeValues()
 		values.set("API_URL", "", "not-a-url")
 
-		g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "web"}}})
+		g := prefetched(t, values, variables.Scope{Apps: []variables.App{{Name: "web"}}})
 		declare(t, g, def("API_URL", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
 		report(t, g, &resourcesv1.VariableProblem{
 			Key:    "API_URL",
@@ -214,14 +214,14 @@ func TestMatrix(t *testing.T) {
 		values.override("STRIPE_API_KEY", "", "pr-7", "override")
 		values.override("STRIPE_API_KEY", "", "pr-42", "override")
 
-		g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "api"}}})
+		g := prefetched(t, values, variables.Scope{Apps: []variables.App{{Name: "api"}}})
 		declare(t, g, def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET))
 
 		c := cell(t, row(t, g.Matrix([]string{"pr-7", "pr-42"}), "STRIPE_API_KEY"), "")
 		if c.Set {
 			t.Error("the cell reports filled, want it empty — an override is not the value every environment reads")
 		}
-		want := []envgate.Override{
+		want := []variables.Override{
 			{Environment: "pr-42", Version: 1},
 			{Environment: "pr-7", Version: 1},
 		}
@@ -236,11 +236,11 @@ func TestMatrix(t *testing.T) {
 		values.override("STRIPE_API_KEY", "", "pr-7", "override")
 		values.override("STRIPE_API_KEY", "", "staging", "override")
 
-		g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "api"}}})
+		g := prefetched(t, values, variables.Scope{Apps: []variables.App{{Name: "api"}}})
 		declare(t, g, def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET))
 
 		c := cell(t, row(t, g.Matrix([]string{"staging"}), "STRIPE_API_KEY"), "")
-		want := []envgate.Override{
+		want := []variables.Override{
 			{Environment: "pr-7", Version: 1, Orphaned: true},
 			{Environment: "staging", Version: 1},
 		}
@@ -255,18 +255,18 @@ func TestMatrix(t *testing.T) {
 		values.override("STRIPE_API_KEY", "", "pr-7", "override")
 		values.override("STRIPE_API_KEY", "", "pr-42", "override")
 
-		g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "api"}}})
+		g := prefetched(t, values, variables.Scope{Apps: []variables.App{{Name: "api"}}})
 		declare(t, g, def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET))
 
 		environments := []string{"pr-7", "pr-42"}
 		cell(t, row(t, g.Matrix(environments), "STRIPE_API_KEY"), "").Overrides[0].Environment = "clobbered"
 
-		want := []envgate.Override{
+		want := []variables.Override{
 			{Environment: "pr-42", Version: 1},
 			{Environment: "pr-7", Version: 1},
 		}
 		if got := cell(t, row(t, g.Matrix(environments), "STRIPE_API_KEY"), "").Overrides; !reflect.DeepEqual(got, want) {
-			t.Errorf("overrides = %+v, want %+v — one caller's edit reached the gate's own record", got, want)
+			t.Errorf("overrides = %+v, want %+v — one caller's edit reached the declarations' own record", got, want)
 		}
 	})
 
@@ -275,7 +275,7 @@ func TestMatrix(t *testing.T) {
 		values := newFakeValues()
 		values.override("STRIPE_API_KEY", "/worker", "pr-42", "override")
 
-		g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "api"}}})
+		g := prefetched(t, values, variables.Scope{Apps: []variables.App{{Name: "api"}}})
 		declare(t, g, def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET))
 
 		m := g.Matrix([]string{"pr-42"})
@@ -287,22 +287,22 @@ func TestMatrix(t *testing.T) {
 		if c.Set {
 			t.Error("the /worker cell reports filled, want it empty — no deploy resolves a named environment's value")
 		}
-		if c.State != envgate.CellOptional {
-			t.Errorf("the /worker cell is %q, want %q — a column drawn for an override is required of nobody", c.State, envgate.CellOptional)
+		if c.State != variables.CellOptional {
+			t.Errorf("the /worker cell is %q, want %q — a column drawn for an override is required of nobody", c.State, variables.CellOptional)
 		}
-		if want := []envgate.Override{{Environment: "pr-42", Version: 1}}; !reflect.DeepEqual(c.Overrides, want) {
+		if want := []variables.Override{{Environment: "pr-42", Version: 1}}; !reflect.DeepEqual(c.Overrides, want) {
 			t.Errorf("overrides = %+v, want %+v — the column exists to show exactly this", c.Overrides, want)
 		}
 
-		var refusal *envgate.Refusal
-		if !errors.As(g.Check(), &refusal) {
-			t.Fatal("Check err is not an *envgate.Refusal — the root cell is still missing")
+		var refusal *variables.MissingError
+		if !errors.As(g.RefuseIncomplete(), &refusal) {
+			t.Fatal("RefuseIncomplete() err is not an *variables.MissingError — the root cell is still missing")
 		}
-		var missing []envgate.Cell
+		var missing []variables.Cell
 		for _, problem := range refusal.Problems {
-			missing = append(missing, envgate.Cell{Key: problem.GetKey(), Folder: problem.GetFolder()})
+			missing = append(missing, variables.Cell{Key: problem.GetKey(), Folder: problem.GetFolder()})
 		}
-		if want := []envgate.Cell{{Key: "STRIPE_API_KEY"}}; !reflect.DeepEqual(missing, want) {
+		if want := []variables.Cell{{Key: "STRIPE_API_KEY"}}; !reflect.DeepEqual(missing, want) {
 			t.Errorf("the deploy is refused over %+v, want %+v — a column drawn for an override must not reach the verdict", missing, want)
 		}
 	})
@@ -312,7 +312,7 @@ func TestMatrix(t *testing.T) {
 		values := newFakeValues()
 		values.setAt("API_URL", "", "https://root.example", 4)
 
-		g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "web", Folder: "/web"}}})
+		g := prefetched(t, values, variables.Scope{Apps: []variables.App{{Name: "web", Folder: "/web"}}})
 		declare(t, g, def("API_URL", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
 
 		r := row(t, g.Matrix(nil), "API_URL")
@@ -324,13 +324,13 @@ func TestMatrix(t *testing.T) {
 		}
 	})
 
-	t.Run("an app resolves only when both its hops find every required key", func(t *testing.T) {
+	t.Run("an app resolves only when both its lookups find every required key", func(t *testing.T) {
 		t.Parallel()
 		values := newFakeValues()
 		values.set("API_URL", "", "https://root.example")
 		values.set("POSTHOG_ID", "/web", "ph_web")
 
-		g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{
+		g := prefetched(t, values, variables.Scope{Apps: []variables.App{
 			{Name: "web", Folder: "/web"},
 			{Name: "admin", Folder: "/admin"},
 		}})
@@ -343,7 +343,7 @@ func TestMatrix(t *testing.T) {
 		if got := app(t, m, "web").Missing; len(got) != 0 {
 			t.Errorf("web is missing %+v, want it to resolve — the root backs API_URL and /web sets POSTHOG_ID", got)
 		}
-		want := []envgate.Cell{{Key: "POSTHOG_ID", Folder: "/admin"}}
+		want := []variables.Cell{{Key: "POSTHOG_ID", Folder: "/admin"}}
 		if got := app(t, m, "admin").Missing; !reflect.DeepEqual(got, want) {
 			t.Errorf("admin is missing %+v, want %+v — the cell it needs, named where it needs it", got, want)
 		}
@@ -351,7 +351,7 @@ func TestMatrix(t *testing.T) {
 
 	t.Run("an app resolves without a key whose schema supplies the value", func(t *testing.T) {
 		t.Parallel()
-		g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "web"}}})
+		g := prefetched(t, newFakeValues(), variables.Scope{Apps: []variables.App{{Name: "web"}}})
 		declare(t, g, optional("LOG_LEVEL"))
 
 		if got := app(t, g.Matrix(nil), "web").Missing; len(got) != 0 {
@@ -361,7 +361,7 @@ func TestMatrix(t *testing.T) {
 
 	t.Run("an app is not blamed for a key scoped away from its folder", func(t *testing.T) {
 		t.Parallel()
-		g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{
+		g := prefetched(t, newFakeValues(), variables.Scope{Apps: []variables.App{
 			{Name: "web", Folder: "/web"},
 			{Name: "jobs", Folder: "/jobs"},
 		}})
@@ -374,10 +374,10 @@ func TestMatrix(t *testing.T) {
 
 	t.Run("an unbound app needs the root cell it could not read", func(t *testing.T) {
 		t.Parallel()
-		g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "api"}}})
+		g := prefetched(t, newFakeValues(), variables.Scope{Apps: []variables.App{{Name: "api"}}})
 		declare(t, g, def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET))
 
-		want := []envgate.Cell{{Key: "STRIPE_API_KEY"}}
+		want := []variables.Cell{{Key: "STRIPE_API_KEY"}}
 		if got := app(t, g.Matrix(nil), "api").Missing; !reflect.DeepEqual(got, want) {
 			t.Errorf("api is missing %+v, want %+v", got, want)
 		}
@@ -385,7 +385,7 @@ func TestMatrix(t *testing.T) {
 
 	t.Run("rows include the class and scope that decide their cells", func(t *testing.T) {
 		t.Parallel()
-		g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "web", Folder: "/web"}}})
+		g := prefetched(t, newFakeValues(), variables.Scope{Apps: []variables.App{{Name: "web", Folder: "/web"}}})
 		declare(t, g, def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET), scoped("POSTHOG_ID", "/web"))
 
 		m := g.Matrix(nil)
@@ -398,7 +398,7 @@ func TestMatrix(t *testing.T) {
 	})
 }
 
-func TestForget(t *testing.T) {
+func TestClearingACellsProblemsDropsWhatDiscoveryReportedAboutIt(t *testing.T) {
 	t.Parallel()
 
 	t.Run("dropping a cell drops what discovery said about the value it had", func(t *testing.T) {
@@ -406,7 +406,7 @@ func TestForget(t *testing.T) {
 		values := newFakeValues()
 		values.set("API_URL", "", "not-a-url")
 
-		g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "web"}}})
+		g := prefetched(t, values, variables.Scope{Apps: []variables.App{{Name: "web"}}})
 		declare(t, g, def("API_URL", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
 		report(t, g, &resourcesv1.VariableProblem{
 			Key:    "API_URL",
@@ -414,13 +414,13 @@ func TestForget(t *testing.T) {
 			Detail: "must be a URL",
 		})
 
-		g.Forget(envgate.Cell{Key: "API_URL"})
+		g.ClearProblems(variables.Cell{Key: "API_URL"})
 
 		if got := cell(t, row(t, g.Matrix(nil), "API_URL"), "").Problem; got != "" {
 			t.Errorf("cell still complains %q, want it cleared — the value it described has been replaced", got)
 		}
-		if err := g.Check(); err != nil {
-			t.Errorf("Check = %v, want nil — the only problem was about a value that is gone", err)
+		if err := g.RefuseIncomplete(); err != nil {
+			t.Errorf("RefuseIncomplete() = %v, want nil — the only problem was about a value that is gone", err)
 		}
 	})
 }

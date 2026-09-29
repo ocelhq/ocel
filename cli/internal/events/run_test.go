@@ -13,10 +13,10 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 
-	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
@@ -114,7 +114,7 @@ func TestAFailedRunForMissingVariablesCarriesThemOnItsResult(t *testing.T) {
 	sink := &recording{}
 	run, _ := begin(t, sink)
 
-	var err error = &envgate.Refusal{Problems: []*resourcesv1.VariableProblem{{
+	var err error = &variables.MissingError{Problems: []*resourcesv1.VariableProblem{{
 		Key:  "DATABASE_URL",
 		Kind: resourcesv1.VariableProblem_KIND_MISSING,
 	}}}

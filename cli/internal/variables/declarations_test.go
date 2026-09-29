@@ -1,4 +1,4 @@
-package envgate_test
+package variables_test
 
 import (
 	"context"
@@ -6,69 +6,70 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/envgate"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
 
 type fakeValues struct {
-	cells     map[envgate.Cell]string
-	versions  map[envgate.Cell]int64
-	overrides []envgate.Stored
-	values    map[envgate.Address]string
-	revealed  []envgate.Address
-	copied    map[envgate.Cell]string
+	cells     map[variables.Cell]string
+	versions  map[variables.Cell]int64
+	overrides []variables.ValueMetadata
+	values    map[variables.Coordinate]string
+	revealed  []variables.Coordinate
+	copied    map[variables.Cell]string
 }
 
 func newFakeValues() *fakeValues {
-	return &fakeValues{cells: map[envgate.Cell]string{}, versions: map[envgate.Cell]int64{}, values: map[envgate.Address]string{}}
+	return &fakeValues{cells: map[variables.Cell]string{}, versions: map[variables.Cell]int64{}, values: map[variables.Coordinate]string{}}
 }
 
 func (v *fakeValues) set(key, folder, value string) {
-	v.cells[envgate.Cell{Key: key, Folder: folder}] = value
-	v.values[envgate.Address{Cell: envgate.Cell{Key: key, Folder: folder}}] = value
+	v.cells[variables.Cell{Key: key, Folder: folder}] = value
+	v.values[variables.Coordinate{Cell: variables.Cell{Key: key, Folder: folder}}] = value
 }
 
 func (v *fakeValues) setAt(key, folder, value string, version int64) {
 	v.set(key, folder, value)
-	v.versions[envgate.Cell{Key: key, Folder: folder}] = version
+	v.versions[variables.Cell{Key: key, Folder: folder}] = version
 }
 
 func (v *fakeValues) copyFrom(envSource, key, folder, value string) {
 	v.set(key, folder, value)
 	if v.copied == nil {
-		v.copied = map[envgate.Cell]string{}
+		v.copied = map[variables.Cell]string{}
 	}
-	v.copied[envgate.Cell{Key: key, Folder: folder}] = envSource
+	v.copied[variables.Cell{Key: key, Folder: folder}] = envSource
 }
 
 func (v *fakeValues) override(key, folder, environment, value string) {
-	cell := envgate.Cell{Key: key, Folder: folder}
-	v.overrides = append(v.overrides, envgate.Stored{Address: envgate.Address{Cell: cell, Environment: environment}, Version: 1})
-	v.values[envgate.Address{Cell: cell, Environment: environment}] = value
+	cell := variables.Cell{Key: key, Folder: folder}
+	v.overrides = append(v.overrides, variables.ValueMetadata{Coordinate: variables.Coordinate{Cell: cell, Environment: environment}, Version: 1})
+	v.values[variables.Coordinate{Cell: cell, Environment: environment}] = value
 }
 
-func (v *fakeValues) List(context.Context) ([]envgate.Stored, error) {
-	out := make([]envgate.Stored, 0, len(v.cells)+len(v.overrides))
+func (v *fakeValues) List(context.Context) ([]variables.ValueMetadata, error) {
+	out := make([]variables.ValueMetadata, 0, len(v.cells)+len(v.overrides))
 	for c := range v.cells {
-		out = append(out, envgate.Stored{Address: envgate.Address{Cell: c}, Version: v.versions[c], EnvSource: v.copied[c]})
+		out = append(out, variables.ValueMetadata{Coordinate: variables.Coordinate{Cell: c}, Version: v.versions[c], EnvSource: v.copied[c]})
 	}
 	return append(out, v.overrides...), nil
 }
 
-func (v *fakeValues) Reveal(_ context.Context, rows []envgate.Address) (map[envgate.Cell]string, error) {
+func (v *fakeValues) Reveal(_ context.Context, rows []variables.Coordinate) (map[variables.Coordinate]string, error) {
 	v.revealed = append(v.revealed, rows...)
-	found := map[envgate.Cell]string{}
+	found := map[variables.Coordinate]string{}
 	for _, row := range rows {
 		if value, ok := v.values[row]; ok {
-			found[row.Cell] = value
+			found[row] = value
 		}
 	}
 	return found, nil
 }
 
-func declare(t *testing.T, g *envgate.Gate, definitions ...*resourcesv1.VariableDefinition) *resourcesv1.DeclareEnvResponse {
+func declare(t *testing.T, g *variables.Declarations, definitions ...*resourcesv1.VariableDefinition) *resourcesv1.DeclareEnvResponse {
 	t.Helper()
 	resp, err := g.DeclareEnv(context.Background(), &resourcesv1.DeclareEnvRequest{Definitions: definitions})
 	if err != nil {
@@ -77,16 +78,16 @@ func declare(t *testing.T, g *envgate.Gate, definitions ...*resourcesv1.Variable
 	return resp
 }
 
-func report(t *testing.T, g *envgate.Gate, problems ...*resourcesv1.VariableProblem) {
+func report(t *testing.T, g *variables.Declarations, problems ...*resourcesv1.VariableProblem) {
 	t.Helper()
 	if _, err := g.ReportEnvProblems(context.Background(), &resourcesv1.ReportEnvProblemsRequest{Problems: problems}); err != nil {
 		t.Fatalf("ReportEnvProblems: %v", err)
 	}
 }
 
-func first(scopes []envgate.Scope) envgate.Scope {
+func first(scopes []variables.Scope) variables.Scope {
 	if len(scopes) == 0 {
-		return envgate.Scope{}
+		return variables.Scope{}
 	}
 	return scopes[0]
 }
@@ -95,27 +96,27 @@ func def(key string, class resourcesv1.VariableClass) *resourcesv1.VariableDefin
 	return &resourcesv1.VariableDefinition{Key: key, Class: class, Required: true}
 }
 
-func prefetched(t *testing.T, values envgate.Values, scope ...envgate.Scope) *envgate.Gate {
+func prefetched(t *testing.T, values variables.Values, scope ...variables.Scope) *variables.Declarations {
 	t.Helper()
-	g := envgate.New(values, first(scope))
+	g := variables.NewDeclarations(values, first(scope))
 	if err := g.Prefetch(context.Background()); err != nil {
 		t.Fatalf("Prefetch: %v", err)
 	}
 	return g
 }
 
-func TestCheck(t *testing.T) {
+func TestADeployIsRefusedUntilEveryVariableItReadsIsReady(t *testing.T) {
 	t.Parallel()
 
 	t.Run("a missing cell names the key and the command that fixes it", func(t *testing.T) {
 		t.Parallel()
-		g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "api"}, {Name: "web"}}})
+		g := prefetched(t, newFakeValues(), variables.Scope{Apps: []variables.App{{Name: "api"}, {Name: "web"}}})
 		declare(t, g, def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE))
 		report(t, g, &resourcesv1.VariableProblem{Key: "STRIPE_API_KEY", Kind: resourcesv1.VariableProblem_KIND_MISSING})
 
-		err := g.Check()
+		err := g.RefuseIncomplete()
 		if err == nil {
-			t.Fatal("Check err = nil, want a refusal")
+			t.Fatal("RefuseIncomplete() err = nil, want a refusal")
 		}
 		msg := err.Error()
 		for _, want := range []string{"STRIPE_API_KEY", "ocel env set STRIPE_API_KEY=<VALUE>"} {
@@ -137,9 +138,9 @@ func TestCheck(t *testing.T) {
 			Detail: "invalid url",
 		})
 
-		err := g.Check()
+		err := g.RefuseIncomplete()
 		if err == nil {
-			t.Fatal("Check err = nil, want a refusal")
+			t.Fatal("RefuseIncomplete() err = nil, want a refusal")
 		}
 		for _, want := range []string{"WEBHOOK_URL", "invalid url", "ocel env set WEBHOOK_URL=<VALUE>"} {
 			if !strings.Contains(err.Error(), want) {
@@ -156,9 +157,9 @@ func TestCheck(t *testing.T) {
 		declare(t, g, def("POSTHOG_ID", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
 		report(t, g, &resourcesv1.VariableProblem{Key: "POSTHOG_ID", Folder: "/checkout", Kind: resourcesv1.VariableProblem_KIND_INVALID, Detail: "too small"})
 
-		err := g.Check()
+		err := g.RefuseIncomplete()
 		if err == nil {
-			t.Fatal("Check err = nil, want a refusal")
+			t.Fatal("RefuseIncomplete() err = nil, want a refusal")
 		}
 		for _, want := range []string{"POSTHOG_ID  /checkout  set, but too small", "ocel env set <KEY>=<VALUE> --folder <FOLDER>"} {
 			if !strings.Contains(err.Error(), want) {
@@ -169,13 +170,13 @@ func TestCheck(t *testing.T) {
 
 	t.Run("a preview refusal names the preview bootstrap", func(t *testing.T) {
 		t.Parallel()
-		g := prefetched(t, newFakeValues(), envgate.Scope{Preview: true})
+		g := prefetched(t, newFakeValues(), variables.Scope{Tier: environmentv1.Tier_TIER_PREVIEW})
 		declare(t, g, def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
 		report(t, g, &resourcesv1.VariableProblem{Key: "STRIPE_API_KEY", Kind: resourcesv1.VariableProblem_KIND_MISSING})
 
-		err := g.Check()
+		err := g.RefuseIncomplete()
 		if err == nil {
-			t.Fatal("Check err = nil, want a refusal")
+			t.Fatal("RefuseIncomplete() err = nil, want a refusal")
 		}
 		if !strings.Contains(err.Error(), "ocel env set STRIPE_API_KEY=<VALUE> --preview") {
 			t.Errorf("refusal = %q, want the preview-scoped fixing command", err.Error())
@@ -186,7 +187,7 @@ func TestCheck(t *testing.T) {
 		t.Parallel()
 		values := newFakeValues()
 		values.set("POSTHOG_ID", "/admin", "ph_admin")
-		g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{
+		g := prefetched(t, values, variables.Scope{Apps: []variables.App{
 			{Name: "web", Folder: "/web"},
 			{Name: "admin", Folder: "/admin"},
 			{Name: "api"},
@@ -196,7 +197,7 @@ func TestCheck(t *testing.T) {
 			Key: "POSTHOG_ID", Folder: "/web", Kind: resourcesv1.VariableProblem_KIND_MISSING,
 		})
 
-		message := g.Check().Error()
+		message := g.RefuseIncomplete().Error()
 		if !strings.Contains(message, "web") {
 			t.Errorf("refusal = %q, want it to name the app bound to /web", message)
 		}
@@ -212,19 +213,19 @@ func TestCheck(t *testing.T) {
 		g := prefetched(t, values)
 		declare(t, g, def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
 
-		if err := g.Check(); err != nil {
-			t.Fatalf("Check err = %v, want a complete matrix to proceed", err)
+		if err := g.RefuseIncomplete(); err != nil {
+			t.Fatalf("RefuseIncomplete() err = %v, want a complete matrix to proceed", err)
 		}
 	})
 
 	t.Run("a required cell with no value refuses though discovery reported nothing", func(t *testing.T) {
 		t.Parallel()
-		g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "api"}}})
+		g := prefetched(t, newFakeValues(), variables.Scope{Apps: []variables.App{{Name: "api"}}})
 		declare(t, g, def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE))
 
-		err := g.Check()
+		err := g.RefuseIncomplete()
 		if err == nil {
-			t.Fatal("Check err = nil, want a required value nothing sets to refuse without being told")
+			t.Fatal("RefuseIncomplete() err = nil, want a required value nothing sets to refuse without being told")
 		}
 		for _, want := range []string{"STRIPE_API_KEY", "no value", "ocel env set STRIPE_API_KEY=<VALUE>"} {
 			if !strings.Contains(err.Error(), want) {
@@ -237,7 +238,7 @@ func TestCheck(t *testing.T) {
 		t.Parallel()
 		values := newFakeValues()
 		values.set("POSTHOG_ID", "/web", "ph_web")
-		g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{
+		g := prefetched(t, values, variables.Scope{Apps: []variables.App{
 			{Name: "web", Folder: "/web"},
 			{Name: "admin", Folder: "/admin"},
 		}})
@@ -248,9 +249,9 @@ func TestCheck(t *testing.T) {
 			Folders:  []string{"/web", "/admin"},
 		})
 
-		err := g.Check()
+		err := g.RefuseIncomplete()
 		if err == nil {
-			t.Fatal("Check err = nil, want the folder with no value to refuse")
+			t.Fatal("RefuseIncomplete() err = nil, want the folder with no value to refuse")
 		}
 		if !strings.Contains(err.Error(), "ocel env set POSTHOG_ID=<VALUE> --folder /admin") {
 			t.Errorf("refusal = %q, want it to address the folder that needs the value", err.Error())
@@ -262,26 +263,26 @@ func TestCheck(t *testing.T) {
 
 	t.Run("an unset optional value is not a refusal", func(t *testing.T) {
 		t.Parallel()
-		g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "api"}}})
+		g := prefetched(t, newFakeValues(), variables.Scope{Apps: []variables.App{{Name: "api"}}})
 		declare(t, g, &resourcesv1.VariableDefinition{
 			Key:   "ANALYTICS_ID",
 			Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN,
 		})
 
-		if err := g.Check(); err != nil {
-			t.Fatalf("Check err = %v, want an optional value nothing set to proceed", err)
+		if err := g.RefuseIncomplete(); err != nil {
+			t.Fatalf("RefuseIncomplete() err = %v, want an optional value nothing set to proceed", err)
 		}
 	})
 
-	t.Run("a reported problem is not doubled by the gate's own verdict", func(t *testing.T) {
+	t.Run("a reported problem is not doubled by the declarations' own verdict", func(t *testing.T) {
 		t.Parallel()
-		g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "api"}}})
+		g := prefetched(t, newFakeValues(), variables.Scope{Apps: []variables.App{{Name: "api"}}})
 		declare(t, g, def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
 		report(t, g, &resourcesv1.VariableProblem{Key: "STRIPE_API_KEY", Kind: resourcesv1.VariableProblem_KIND_MISSING})
 
-		var refusal *envgate.Refusal
-		if !errors.As(g.Check(), &refusal) {
-			t.Fatal("Check err is not an *envgate.Refusal")
+		var refusal *variables.MissingError
+		if !errors.As(g.RefuseIncomplete(), &refusal) {
+			t.Fatal("RefuseIncomplete() err is not an *variables.MissingError")
 		}
 		if len(refusal.Problems) != 1 {
 			t.Errorf("refusal lists %d problems, want the one cell named once: %+v", len(refusal.Problems), refusal.Problems)
@@ -292,30 +293,30 @@ func TestCheck(t *testing.T) {
 		t.Parallel()
 		values := newFakeValues()
 		values.set("WEBHOOK_URL", "", "not-a-url")
-		g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "api"}}})
+		g := prefetched(t, values, variables.Scope{Apps: []variables.App{{Name: "api"}}})
 		declare(t, g, def("WEBHOOK_URL", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
 		report(t, g, &resourcesv1.VariableProblem{Key: "WEBHOOK_URL", Kind: resourcesv1.VariableProblem_KIND_INVALID, Detail: "invalid url"})
 
-		err := g.Check()
+		err := g.RefuseIncomplete()
 		if err == nil {
-			t.Fatal("Check err = nil, want the schema complaint to refuse")
+			t.Fatal("RefuseIncomplete() err = nil, want the schema complaint to refuse")
 		}
 		if !strings.Contains(err.Error(), "invalid url") {
 			t.Errorf("refusal = %q, want the schema's own complaint", err.Error())
 		}
 	})
 
-	t.Run("an override-only key does not satisfy the deploy gate", func(t *testing.T) {
+	t.Run("an override-only key does not satisfy a deploy", func(t *testing.T) {
 		t.Parallel()
 		values := newFakeValues()
 		values.override("STRIPE_API_KEY", "", "pr-42", "override")
 
-		g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "api"}}})
+		g := prefetched(t, values, variables.Scope{Apps: []variables.App{{Name: "api"}}})
 		declare(t, g, def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET))
 
-		err := g.Check()
+		err := g.RefuseIncomplete()
 		if err == nil {
-			t.Fatal("Check err = nil, want a refusal — pr-42 has a value the deploy never resolves, so the cell every environment reads is still empty")
+			t.Fatal("RefuseIncomplete() err = nil, want a refusal — pr-42 has a value the deploy never resolves, so the cell every environment reads is still empty")
 		}
 		for _, want := range []string{"STRIPE_API_KEY", "no value"} {
 			if !strings.Contains(err.Error(), want) {
@@ -324,20 +325,20 @@ func TestCheck(t *testing.T) {
 		}
 	})
 
-	t.Run("an override satisfies the gate for the run that is that environment", func(t *testing.T) {
+	t.Run("an override satisfies a deploy for the run that is that environment", func(t *testing.T) {
 		t.Parallel()
 		values := newFakeValues()
 		values.override("STRIPE_API_KEY", "", "staging", "sk_staging")
 
-		g := prefetched(t, values, envgate.Scope{
-			Apps:        []envgate.App{{Name: "api"}},
-			Preview:     true,
+		g := prefetched(t, values, variables.Scope{
+			Apps:        []variables.App{{Name: "api"}},
+			Tier:        environmentv1.Tier_TIER_PREVIEW,
 			Environment: "staging",
 		})
 		resp := declare(t, g, def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
 
-		if err := g.Check(); err != nil {
-			t.Fatalf("Check err = %v, want staging's own override to satisfy the gate for staging", err)
+		if err := g.RefuseIncomplete(); err != nil {
+			t.Fatalf("RefuseIncomplete() err = %v, want staging's own override to satisfy a deploy for staging", err)
 		}
 		cells := resp.GetCells()
 		if len(cells) != 1 || cells[0].GetValue() != "sk_staging" {
@@ -354,9 +355,9 @@ func TestCheck(t *testing.T) {
 			&resourcesv1.VariableProblem{Key: "A_KEY", Folder: "/web", Kind: resourcesv1.VariableProblem_KIND_MISSING},
 		)
 
-		var refusal *envgate.Refusal
-		if !errors.As(g.Check(), &refusal) {
-			t.Fatal("Check err is not an *envgate.Refusal")
+		var refusal *variables.MissingError
+		if !errors.As(g.RefuseIncomplete(), &refusal) {
+			t.Fatal("RefuseIncomplete() err is not an *variables.MissingError")
 		}
 		if len(refusal.Problems) != 2 {
 			t.Errorf("refusal lists %d problems, want both cells", len(refusal.Problems))
@@ -364,7 +365,7 @@ func TestCheck(t *testing.T) {
 	})
 }
 
-func TestDeclareEnv(t *testing.T) {
+func TestDeclaringVariablesAnswersTheCellsThatHoldTheirValues(t *testing.T) {
 	t.Parallel()
 
 	t.Run("a live-class cell is never revealed but is still reported present", func(t *testing.T) {
@@ -432,7 +433,7 @@ func TestDeclareEnv(t *testing.T) {
 		} {
 			t.Run(tc.key+" for "+tc.name, func(t *testing.T) {
 				t.Parallel()
-				g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "api", ClientBundle: tc.clientBundle}}})
+				g := prefetched(t, newFakeValues(), variables.Scope{Apps: []variables.App{{Name: "api", ClientBundle: tc.clientBundle}}})
 
 				_, err := g.DeclareEnv(context.Background(), &resourcesv1.DeclareEnvRequest{
 					Definitions: []*resourcesv1.VariableDefinition{def(tc.key, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN)},
@@ -446,7 +447,7 @@ func TestDeclareEnv(t *testing.T) {
 
 	t.Run("refuses the browser's deployment url only where the declaration reaches an app whose bundle reads it", func(t *testing.T) {
 		t.Parallel()
-		mixed := envgate.Scope{Apps: []envgate.App{
+		mixed := variables.Scope{Apps: []variables.App{
 			{Name: "web", Folder: "/web", ClientBundle: true},
 			{Name: "api", Folder: "/api"},
 		}}
@@ -530,7 +531,7 @@ func TestDeclareEnv(t *testing.T) {
 			values.set("ANALYTICS_ID", "", "base")
 			values.override("ANALYTICS_ID", "", "pr-42", "override")
 
-			g := prefetched(t, values, envgate.Scope{Preview: true, Environment: tc.environment})
+			g := prefetched(t, values, variables.Scope{Tier: environmentv1.Tier_TIER_PREVIEW, Environment: tc.environment})
 			resp := declare(t, g, def("ANALYTICS_ID", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
 
 			cells := resp.GetCells()

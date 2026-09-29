@@ -20,10 +20,10 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/devlock"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
-	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/constants"
@@ -63,7 +63,7 @@ func TestResolvedEnv(t *testing.T) {
 			{Name: "main", Env: map[string]string{"OCEL_RESOURCE_POSTGRES_main": "conn"}},
 		}
 
-		got := toMap(mergeEnv(base, live, dotfile, resources, runtimeAccess{}, "", envgate.Scope{}))
+		got := toMap(mergeEnv(base, live, dotfile, resources, runtimeAccess{}, "", variables.Scope{}))
 
 		cases := map[string]string{
 			"PATH":                        "/bin",
@@ -88,7 +88,7 @@ func TestResolvedEnv(t *testing.T) {
 			{Name: "main", Env: map[string]string{"OCEL_RESOURCE_POSTGRES_main": "conn"}},
 		}
 
-		got := resolvedEnv(live, values, resources, runtimeAccess{}, "", envgate.Scope{})
+		got := resolvedEnv(live, values, resources, runtimeAccess{}, "", variables.Scope{})
 
 		cases := map[string]string{
 			"VALUE_ONLY":                  "v",
@@ -105,12 +105,12 @@ func TestResolvedEnv(t *testing.T) {
 	t.Run("the runtime address travels with the token its routes answer to, and neither alone", func(t *testing.T) {
 		t.Parallel()
 
-		reached := resolvedEnv(nil, nil, nil, runtimeAccess{address: "http://127.0.0.1:4242", token: "app-token"}, "", envgate.Scope{})
+		reached := resolvedEnv(nil, nil, nil, runtimeAccess{address: "http://127.0.0.1:4242", token: "app-token"}, "", variables.Scope{})
 		if reached[constants.RuntimeAddressEnvName] != "http://127.0.0.1:4242" || reached[channel.SessionTokenEnvVar] != "app-token" {
 			t.Errorf("env = %v, want %s and %s stated together", reached, constants.RuntimeAddressEnvName, channel.SessionTokenEnvVar)
 		}
 
-		unreached := resolvedEnv(nil, nil, nil, runtimeAccess{}, "", envgate.Scope{})
+		unreached := resolvedEnv(nil, nil, nil, runtimeAccess{}, "", variables.Scope{})
 		for _, name := range []string{constants.RuntimeAddressEnvName, channel.SessionTokenEnvVar} {
 			if _, ok := unreached[name]; ok {
 				t.Errorf("%s stated for an app with no runtime to reach", name)
@@ -121,12 +121,12 @@ func TestResolvedEnv(t *testing.T) {
 	t.Run("the app folder is always stated", func(t *testing.T) {
 		t.Parallel()
 
-		bound := resolvedEnv(nil, nil, nil, runtimeAccess{}, "/web", envgate.Scope{})
+		bound := resolvedEnv(nil, nil, nil, runtimeAccess{}, "/web", variables.Scope{})
 		if bound[constants.AppFolderEnvName] != "/web" {
 			t.Errorf("%s = %q, want %q", constants.AppFolderEnvName, bound[constants.AppFolderEnvName], "/web")
 		}
 
-		unbound := resolvedEnv(nil, nil, nil, runtimeAccess{}, "", envgate.Scope{})
+		unbound := resolvedEnv(nil, nil, nil, runtimeAccess{}, "", variables.Scope{})
 		folder, ok := unbound[constants.AppFolderEnvName]
 		if !ok {
 			t.Fatalf("resolvedEnv = %v, want %s written even for an unbound app", unbound, constants.AppFolderEnvName)
@@ -135,7 +135,7 @@ func TestResolvedEnv(t *testing.T) {
 			t.Errorf("%s = %q, want the project root spelled as the empty string", constants.AppFolderEnvName, folder)
 		}
 
-		stale := toMap(mergeEnv([]string{constants.AppFolderEnvName + "=/stale"}, nil, nil, nil, runtimeAccess{}, "", envgate.Scope{}))
+		stale := toMap(mergeEnv([]string{constants.AppFolderEnvName + "=/stale"}, nil, nil, nil, runtimeAccess{}, "", variables.Scope{}))
 		if stale[constants.AppFolderEnvName] != "" {
 			t.Errorf("%s = %q, want the shell's stale binding overwritten", constants.AppFolderEnvName, stale[constants.AppFolderEnvName])
 		}
@@ -146,7 +146,7 @@ func TestResolvedEnv(t *testing.T) {
 			[]resolve.Resource{{Name: "main", Env: map[string]string{constants.AppFolderEnvName: "/from-resource"}}},
 			runtimeAccess{},
 			"/web",
-			envgate.Scope{},
+			variables.Scope{},
 		)
 		if contested[constants.AppFolderEnvName] != "/web" {
 			t.Errorf("%s = %q, want the binding dev states to outrank every source it merges", constants.AppFolderEnvName, contested[constants.AppFolderEnvName])
@@ -156,12 +156,12 @@ func TestResolvedEnv(t *testing.T) {
 
 func TestDevRefusal(t *testing.T) {
 	t.Run("it names the dotfile rather than a store command", func(t *testing.T) {
-		refusal := &envgate.Refusal{
+		refusal := &variables.MissingError{
 			Problems: []*resourcesv1.VariableProblem{
 				{Key: "DATABASE_URL", Kind: resourcesv1.VariableProblem_KIND_MISSING},
 				{Key: "API_BASE", Folder: "/web", Kind: resourcesv1.VariableProblem_KIND_INVALID, Detail: "expected a URL"},
 			},
-			Scope: envgate.Scope{Apps: []envgate.App{{Name: "web", Folder: "/web"}}},
+			Scope: variables.Scope{Apps: []variables.App{{Name: "web", Folder: "/web"}}},
 		}
 
 		got := devRefusal(refusal, nil, invocation{name: "dev", source: devSource{id: "dotenv"}}).Error()
@@ -188,7 +188,7 @@ func TestDevRefusal(t *testing.T) {
 	})
 
 	t.Run("under another dev source it names that source and "+dotenv.LocalFileName, func(t *testing.T) {
-		refusal := &envgate.Refusal{Problems: []*resourcesv1.VariableProblem{{Key: "DATABASE_URL", Kind: resourcesv1.VariableProblem_KIND_MISSING}}}
+		refusal := &variables.MissingError{Problems: []*resourcesv1.VariableProblem{{Key: "DATABASE_URL", Kind: resourcesv1.VariableProblem_KIND_MISSING}}}
 
 		got := devRefusal(refusal, nil, invocation{name: "dev", source: devSource{id: "infisical:p-1/dev", values: map[string]string{}}}).Error()
 
@@ -202,7 +202,7 @@ func TestDevRefusal(t *testing.T) {
 	t.Run("it says so when the key is only in the shell", func(t *testing.T) {
 		t.Setenv("DATABASE_URL", "postgres://from-the-shell")
 
-		refusal := &envgate.Refusal{
+		refusal := &variables.MissingError{
 			Problems: []*resourcesv1.VariableProblem{
 				{Key: "DATABASE_URL", Kind: resourcesv1.VariableProblem_KIND_MISSING},
 			},
@@ -224,7 +224,7 @@ func TestDevRefusal(t *testing.T) {
 	})
 
 	t.Run("an invalid value the gate kept no detail for ends at its schema", func(t *testing.T) {
-		refusal := &envgate.Refusal{Problems: []*resourcesv1.VariableProblem{{Key: "API_TOKEN", Kind: resourcesv1.VariableProblem_KIND_INVALID}}}
+		refusal := &variables.MissingError{Problems: []*resourcesv1.VariableProblem{{Key: "API_TOKEN", Kind: resourcesv1.VariableProblem_KIND_INVALID}}}
 
 		got := devRefusal(refusal, nil, invocation{name: "dev", source: devSource{id: "dotenv"}}).Error()
 
@@ -239,7 +239,7 @@ func TestDevRefusal(t *testing.T) {
 			t.Fatalf("devRefusal is %s, want %s: any wider parameter puts a dotfile value in reach of the message", got, want)
 		}
 
-		refusal := &envgate.Refusal{
+		refusal := &variables.MissingError{
 			Problems: []*resourcesv1.VariableProblem{
 				{Key: "DATABASE_URL", Kind: resourcesv1.VariableProblem_KIND_MISSING},
 				{Key: "API_TOKEN", Kind: resourcesv1.VariableProblem_KIND_INVALID, Detail: "expected a token"},
@@ -261,7 +261,7 @@ func TestDevRefusal(t *testing.T) {
 }
 
 func TestRefusalsNameTheCommandThatRan(t *testing.T) {
-	refusal := &envgate.Refusal{
+	refusal := &variables.MissingError{
 		Problems: []*resourcesv1.VariableProblem{
 			{Key: "DATABASE_URL", Kind: resourcesv1.VariableProblem_KIND_MISSING},
 		},
@@ -1108,7 +1108,7 @@ func dumpDevEnv(t *testing.T, deps cmddeps.Deps, root string) (map[string]string
 }
 
 func TestDevGivesEveryAppItsURL(t *testing.T) {
-	node := envgate.Scope{Apps: []envgate.App{{Name: "web", ClientBundle: true}}}
+	node := variables.Scope{Apps: []variables.App{{Name: "web", ClientBundle: true}}}
 
 	t.Run("localhost on the default port where nothing names one", func(t *testing.T) {
 		t.Setenv("PORT", "")
@@ -1125,7 +1125,7 @@ func TestDevGivesEveryAppItsURL(t *testing.T) {
 		t.Setenv("PORT", "")
 		dotfile := map[string]string{appbuild.ClientURLEnvName: "https://mine.example"}
 
-		got := resolvedEnv(nil, dotfile, nil, runtimeAccess{}, "", envgate.Scope{Apps: []envgate.App{{Name: "api"}}})
+		got := resolvedEnv(nil, dotfile, nil, runtimeAccess{}, "", variables.Scope{Apps: []variables.App{{Name: "api"}}})
 		if want := "http://localhost:3000"; got[constants.AppURLEnvName] != want {
 			t.Errorf("%s = %q, want %q for every app", constants.AppURLEnvName, got[constants.AppURLEnvName], want)
 		}

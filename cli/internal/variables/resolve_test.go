@@ -1,11 +1,10 @@
-package envgate_test
+package variables_test
 
 import (
 	"context"
-	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/envgate"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
@@ -15,7 +14,7 @@ func scoped(key string, folders ...string) *resourcesv1.VariableDefinition {
 	return d
 }
 
-func resolve(t *testing.T, g *envgate.Gate, app string) map[string]envgate.Resolved {
+func resolve(t *testing.T, g *variables.Declarations, app string) map[string]variables.Resolved {
 	t.Helper()
 	resolved, err := g.Resolve(context.Background(), app)
 	if err != nil {
@@ -24,7 +23,7 @@ func resolve(t *testing.T, g *envgate.Gate, app string) map[string]envgate.Resol
 	return resolved
 }
 
-func TestResolve(t *testing.T) {
+func TestAnAppResolvesEachKeyFromItsOwnFolderOrTheRoot(t *testing.T) {
 	t.Parallel()
 
 	t.Run("two apps bound to different folders resolve different values", func(t *testing.T) {
@@ -33,7 +32,7 @@ func TestResolve(t *testing.T) {
 		values.set("POSTHOG_ID", "/web", "ph_web")
 		values.set("POSTHOG_ID", "/admin", "ph_admin")
 
-		g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{
+		g := prefetched(t, values, variables.Scope{Apps: []variables.App{
 			{Name: "web", Folder: "/web"},
 			{Name: "admin", Folder: "/admin"},
 		}})
@@ -52,7 +51,7 @@ func TestResolve(t *testing.T) {
 		values := newFakeValues()
 		values.set("API_URL", "", "https://root.example")
 
-		g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "api"}}})
+		g := prefetched(t, values, variables.Scope{Apps: []variables.App{{Name: "api"}}})
 		declare(t, g, def("API_URL", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
 
 		got := resolve(t, g, "api")["API_URL"]
@@ -68,7 +67,7 @@ func TestResolve(t *testing.T) {
 		values.set("LOG_LEVEL", "", "info")
 		values.set("LOG_LEVEL", "/web", "debug")
 
-		g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "web", Folder: "/web"}}})
+		g := prefetched(t, values, variables.Scope{Apps: []variables.App{{Name: "web", Folder: "/web"}}})
 		declare(t, g,
 			def("API_URL", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
 			def("LOG_LEVEL", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
@@ -89,11 +88,11 @@ func TestResolve(t *testing.T) {
 		values.set("LOG_LEVEL", "", "info")
 		values.set("LOG_LEVEL", "/web", "debug")
 
-		g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "admin", Folder: "/web/admin"}}})
+		g := prefetched(t, values, variables.Scope{Apps: []variables.App{{Name: "admin", Folder: "/web/admin"}}})
 		declare(t, g, def("LOG_LEVEL", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
 
 		if got := resolve(t, g, "admin")["LOG_LEVEL"]; got.Value != "info" || got.Folder != "" {
-			t.Errorf("LOG_LEVEL = %+v, want root — /web is not a hop for /web/admin", got)
+			t.Errorf("LOG_LEVEL = %+v, want root — /web is not a lookup for /web/admin", got)
 		}
 	})
 
@@ -104,7 +103,7 @@ func TestResolve(t *testing.T) {
 		values.set("POSTHOG_ID", "/admin", "ph_leftover")
 		values.set("POSTHOG_ID", "", "ph_root")
 
-		g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{
+		g := prefetched(t, values, variables.Scope{Apps: []variables.App{
 			{Name: "web", Folder: "/web"},
 			{Name: "admin", Folder: "/admin"},
 			{Name: "api"},
@@ -120,7 +119,7 @@ func TestResolve(t *testing.T) {
 
 	t.Run("refuses an app that is not in the project", func(t *testing.T) {
 		t.Parallel()
-		g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "web", Folder: "/web"}}})
+		g := prefetched(t, newFakeValues(), variables.Scope{Apps: []variables.App{{Name: "web", Folder: "/web"}}})
 
 		if _, err := g.Resolve(context.Background(), "ghost"); err == nil {
 			t.Fatal("Resolve(ghost) err = nil, want an unknown app refused rather than silently resolved from root")
@@ -132,7 +131,7 @@ func TestResolve(t *testing.T) {
 		values := newFakeValues()
 		values.set("SESSION_SECRET", "", "sk_live_do_not_leak")
 
-		g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "api"}}})
+		g := prefetched(t, values, variables.Scope{Apps: []variables.App{{Name: "api"}}})
 		declare(t, g, def("SESSION_SECRET", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET))
 
 		got, ok := resolve(t, g, "api")["SESSION_SECRET"]
@@ -150,7 +149,7 @@ func TestResolve(t *testing.T) {
 		values.setAt("KEY", "", "root", 3)
 		values.setAt("KEY", "/api", "api", 7)
 
-		g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{
+		g := prefetched(t, values, variables.Scope{Apps: []variables.App{
 			{Name: "api", Folder: "/api"},
 			{Name: "web"},
 		}})
@@ -169,103 +168,12 @@ func TestResolve(t *testing.T) {
 		values := newFakeValues()
 		values.setAt("SESSION_SECRET", "", "sk_live_do_not_leak", 5)
 
-		g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "api"}}})
+		g := prefetched(t, values, variables.Scope{Apps: []variables.App{{Name: "api"}}})
 		declare(t, g, def("SESSION_SECRET", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET))
 
 		got := resolve(t, g, "api")["SESSION_SECRET"]
 		if got.Value != "" || got.Version != 5 {
 			t.Errorf("SESSION_SECRET = %+v, want no plaintext but the cell's version 5", got)
-		}
-	})
-}
-
-func TestLint(t *testing.T) {
-	t.Parallel()
-
-	t.Run("a folder no app binds is a warning", func(t *testing.T) {
-		t.Parallel()
-		warnings, err := envgate.Lint(
-			[]*resourcesv1.VariableDefinition{scoped("POSTHOG_ID", "/web", "/admin")},
-			[]envgate.App{{Name: "api"}},
-			"ocel.config.ts",
-		)
-		if err != nil {
-			t.Fatalf("Lint err = %v, want a scope no app reads to be a warning, not a failure", err)
-		}
-		joined := strings.Join(warnings, "\n")
-		for _, want := range []string{"POSTHOG_ID", "/web", "/admin"} {
-			if !strings.Contains(joined, want) {
-				t.Errorf("warnings = %q, want %q named", joined, want)
-			}
-		}
-	})
-
-	t.Run("a half-completed rename is an error naming both files", func(t *testing.T) {
-		t.Parallel()
-		definition := scoped("POSTHOG_ID", "/web", "/admin")
-		definition.Source = "apps/web/env.ts"
-
-		_, err := envgate.Lint(
-			[]*resourcesv1.VariableDefinition{definition},
-			[]envgate.App{{Name: "web", Folder: "/web"}, {Name: "admin", Folder: "/administration"}},
-			"ocel.config.ts",
-		)
-		if err == nil {
-			t.Fatal("Lint err = nil, want a partly-bound scope refused as a half-finished rename")
-		}
-		for _, want := range []string{"POSTHOG_ID", "/admin", "apps/web/env.ts", "ocel.config.ts"} {
-			if !strings.Contains(err.Error(), want) {
-				t.Errorf("err = %v, want %q named", err, want)
-			}
-		}
-	})
-
-	t.Run("a fully bound scope is silent", func(t *testing.T) {
-		t.Parallel()
-		warnings, err := envgate.Lint(
-			[]*resourcesv1.VariableDefinition{scoped("POSTHOG_ID", "/web", "/admin")},
-			[]envgate.App{{Name: "web", Folder: "/web"}, {Name: "admin", Folder: "/admin"}},
-			"ocel.config.ts",
-		)
-		if err != nil || len(warnings) != 0 {
-			t.Errorf("Lint = %q, %v; want nothing said about a scope every app covers", warnings, err)
-		}
-	})
-
-}
-
-func TestCheckWritable(t *testing.T) {
-	t.Parallel()
-
-	definitions := []*resourcesv1.VariableDefinition{
-		def("API_URL", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
-		scoped("POSTHOG_ID", "/web"),
-	}
-
-	t.Run("a declared key is writable", func(t *testing.T) {
-		t.Parallel()
-		if err := envgate.CheckWritable(definitions, "API_URL", ""); err != nil {
-			t.Fatalf("CheckWritable(API_URL) = %v, want a declared key writable", err)
-		}
-	})
-
-	t.Run("a key no app declares is refused", func(t *testing.T) {
-		t.Parallel()
-		err := envgate.CheckWritable(definitions, "SITE_HOSTNAME", "")
-		if err == nil {
-			t.Fatal("CheckWritable(SITE_HOSTNAME) = nil, want a key nothing declares refused rather than stored where nothing reads it")
-		}
-		for _, want := range []string{"SITE_HOSTNAME", "defineEnv"} {
-			if !strings.Contains(err.Error(), want) {
-				t.Errorf("err = %v, want %q named", err, want)
-			}
-		}
-	})
-
-	t.Run("a key no app declares is refused in a folder too", func(t *testing.T) {
-		t.Parallel()
-		if err := envgate.CheckWritable(definitions, "SITE_HOSTNAME", "/web"); err == nil {
-			t.Fatal("CheckWritable(SITE_HOSTNAME, /web) = nil, want a folder to be no way around an undeclared key")
 		}
 	})
 }

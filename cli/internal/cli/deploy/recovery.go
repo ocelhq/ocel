@@ -10,7 +10,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
@@ -18,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/varsui"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
@@ -31,7 +31,7 @@ type gateRecovery struct {
 	prov    *providerclient.Provider
 	preview bool
 
-	newGate func(envgate.EnvSource) *envgate.Gate
+	newGate func(variables.EnvSource) *variables.Declarations
 
 	command        string
 	compute        string
@@ -82,7 +82,7 @@ func appList(cfg *projectconfig.Config) string {
 
 func (r gateRecovery) build(ctx context.Context, phase, scope *events.Scope, prebuilt bool) (*contractv1.Manifest, []inlinebinding.Record, error) {
 	gate, err := r.gate(ctx)
-	var refusal *envgate.Refusal
+	var refusal *variables.MissingError
 	if errors.As(err, &refusal) && r.enabled {
 		if err := r.fill(ctx, scope, gate, refusal); err != nil {
 			return nil, nil, err
@@ -110,7 +110,7 @@ func (r gateRecovery) build(ctx context.Context, phase, scope *events.Scope, pre
 	return r.attempt(ctx, phase, scope, gate, prebuilt, 1)
 }
 
-func (r gateRecovery) gate(ctx context.Context) (*envgate.Gate, error) {
+func (r gateRecovery) gate(ctx context.Context) (*variables.Declarations, error) {
 	synced, err := envwire.SyncEnvSource(ctx, r.prov, r.cfg, r.preview)
 	if problems := envwire.CredentialProblems(err); len(problems) > 0 {
 		gate := r.newGate(envwire.ConfiguredEnvSource(r.cfg, r.preview))
@@ -122,7 +122,7 @@ func (r gateRecovery) gate(ctx context.Context) (*envgate.Gate, error) {
 	return r.newGate(envwire.EnvSourceOf(synced)), nil
 }
 
-func (r gateRecovery) createInEnvSource(ctx context.Context, scope *events.Scope, gate *envgate.Gate, refusal *envgate.Refusal) {
+func (r gateRecovery) createInEnvSource(ctx context.Context, scope *events.Scope, gate *variables.Declarations, refusal *variables.MissingError) {
 	source := gate.Scope().EnvSource
 	if !source.CanCreate || r.dry {
 		return
@@ -136,7 +136,7 @@ func (r gateRecovery) createInEnvSource(ctx context.Context, scope *events.Scope
 			continue
 		}
 		resp, err := vars.SetEnvSourceValue(ctx, &envvarsv1.SetEnvSourceValueRequest{
-			Tier:        gate.Scope().Tier(),
+			Tier:        gate.Scope().Tier,
 			Coordinate:  &envvarsv1.Coordinate{Slug: r.cfg.Slug, Folder: problem.GetFolder(), Key: problem.GetKey()},
 			Description: refusal.Description(problem.GetKey()),
 		})
@@ -151,7 +151,7 @@ func (r gateRecovery) createInEnvSource(ctx context.Context, scope *events.Scope
 	}
 }
 
-func (r gateRecovery) attempt(ctx context.Context, phase, scope *events.Scope, gate *envgate.Gate, prebuilt bool, retry int) (*contractv1.Manifest, []inlinebinding.Record, error) {
+func (r gateRecovery) attempt(ctx context.Context, phase, scope *events.Scope, gate *variables.Declarations, prebuilt bool, retry int) (*contractv1.Manifest, []inlinebinding.Record, error) {
 	attemptCtx := ctx
 	var span trace.Span
 	if run := runtrace.FromContext(ctx); run != nil {
@@ -162,14 +162,14 @@ func (r gateRecovery) attempt(ctx context.Context, phase, scope *events.Scope, g
 	return manifest, inline, err
 }
 
-func (r gateRecovery) fill(ctx context.Context, scope *events.Scope, gate *envgate.Gate, refusal *envgate.Refusal) error {
+func (r gateRecovery) fill(ctx context.Context, scope *events.Scope, gate *variables.Declarations, refusal *variables.MissingError) error {
 	varsSession, err := r.deps.ServeVarsUI(ctx, r.cfg, r.prov, r.preview, gate, r.recovery(refusal))
 	if err != nil {
 		return err
 	}
 	defer varsSession.Close()
 
-	resume := scope.Hold(&streamv1.WaitingEvent{Missing: refusal.Missing(), Url: varsSession.URL})
+	resume := scope.Hold(&streamv1.WaitingEvent{Missing: refusal.Variables(), Url: varsSession.URL})
 	if err := r.deps.OpenBrowser(varsSession.URL); err != nil {
 		scope.Warn("Couldn't open your browser automatically — open the link above yourself.")
 	}
@@ -194,10 +194,10 @@ func (r gateRecovery) fill(ctx context.Context, scope *events.Scope, gate *envga
 	}
 }
 
-func (r gateRecovery) recovery(refusal *envgate.Refusal) *varsui.Recovery {
-	missing := make([]envgate.Cell, 0, len(refusal.Problems))
+func (r gateRecovery) recovery(refusal *variables.MissingError) *varsui.Recovery {
+	missing := make([]variables.Cell, 0, len(refusal.Problems))
 	for _, problem := range refusal.Problems {
-		missing = append(missing, envgate.Cell{Key: problem.GetKey(), Folder: problem.GetFolder()})
+		missing = append(missing, variables.Cell{Key: problem.GetKey(), Folder: problem.GetFolder()})
 	}
 	return &varsui.Recovery{Deploy: r.command, Missing: missing}
 }
@@ -215,7 +215,7 @@ func endAttemptSpan(span trace.Span, err error) {
 }
 
 type abandonedRefusal struct {
-	refusal *envgate.Refusal
+	refusal *variables.MissingError
 }
 
 func (e *abandonedRefusal) Error() string {

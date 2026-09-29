@@ -25,11 +25,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devstack"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/election"
-	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/watcher"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/channel"
@@ -181,7 +181,7 @@ func resolveOnce(ctx context.Context, srv *devserver.Server, cfg *projectconfig.
 	return discoverAndSync(ctx, srv, cfg, values, envwire.DevScope(cfg), run, stdout, stderr)
 }
 
-func targetScope(cfg *projectconfig.Config, cwd string) envgate.Scope {
+func targetScope(cfg *projectconfig.Config, cwd string) variables.Scope {
 	scope := envwire.DevScope(cfg)
 	target, deepest := -1, -1
 	for i, app := range cfg.Apps {
@@ -194,12 +194,12 @@ func targetScope(cfg *projectconfig.Config, cwd string) envgate.Scope {
 		}
 	}
 	if target >= 0 {
-		scope.Apps = []envgate.App{scope.Apps[target]}
+		scope.Apps = []variables.App{scope.Apps[target]}
 	}
 	return scope
 }
 
-func discoverAndSync(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, values devValues, scope envgate.Scope, run invocation, stdout, stderr io.Writer) (map[string]string, error) {
+func discoverAndSync(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, values devValues, scope variables.Scope, run invocation, stdout, stderr io.Writer) (map[string]string, error) {
 	if err := srv.Discover(ctx, cfg, stdout, stderr); err != nil {
 		return nil, refusedSync(srv, err)
 	}
@@ -421,11 +421,11 @@ type runtimeAccess struct {
 	token   string
 }
 
-func mergeEnv(base []string, liveValues, values map[string]string, resources []resolve.Resource, runtime runtimeAccess, appFolder string, scope envgate.Scope) []string {
+func mergeEnv(base []string, liveValues, values map[string]string, resources []resolve.Resource, runtime runtimeAccess, appFolder string, scope variables.Scope) []string {
 	return applyEnv(base, resolvedEnv(liveValues, values, resources, runtime, appFolder, scope))
 }
 
-func resolvedEnv(liveValues, values map[string]string, resources []resolve.Resource, runtime runtimeAccess, appFolder string, scope envgate.Scope) map[string]string {
+func resolvedEnv(liveValues, values map[string]string, resources []resolve.Resource, runtime runtimeAccess, appFolder string, scope variables.Scope) map[string]string {
 	merged := make(map[string]string, len(liveValues)+len(values)+1)
 	for k, v := range liveValues {
 		merged[k] = v
@@ -444,7 +444,7 @@ func resolvedEnv(liveValues, values map[string]string, resources []resolve.Resou
 	}
 	merged[constants.AppFolderEnvName] = appFolder
 	merged[constants.AppURLEnvName] = localURL(merged[portEnv])
-	if scope.OcelWrites(appbuild.ClientURLEnvName, nil) {
+	if scope.IsWrittenByOcel(appbuild.ClientURLEnvName, nil) {
 		merged[appbuild.ClientURLEnvName] = merged[constants.AppURLEnvName]
 	}
 	return merged

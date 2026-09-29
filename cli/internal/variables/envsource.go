@@ -1,4 +1,4 @@
-package envgate
+package variables
 
 import (
 	"cmp"
@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
@@ -25,7 +26,7 @@ func (s EnvSource) OwnsValues() bool {
 	return s.ID != "" && s.ID != string(envsource.Builtin)
 }
 
-func (s EnvSource) CanSet(at Address) bool {
+func (s EnvSource) CanSet(at Coordinate) bool {
 	return at.Environment == "" && s.OwnsValues() && (s.CanCreate || s.CanUpdate) && !s.isCredential(at.Cell.Key)
 }
 
@@ -76,7 +77,7 @@ func (s EnvSource) remedy(problems []*resourcesv1.VariableProblem, scope Scope) 
 	var where []string
 	for _, folder := range folders {
 		if url := s.URLs[folder]; url != "" {
-			where = append(where, folderName(folder)+" "+url)
+			where = append(where, runui.VariableFolderName(folder)+" "+url)
 		}
 	}
 	out := remedyVerb(problems) + " in " + s.ID
@@ -84,7 +85,7 @@ func (s EnvSource) remedy(problems []*resourcesv1.VariableProblem, scope Scope) 
 		out += " (" + strings.Join(where, ", ") + ")"
 	}
 	out += ", then deploy again"
-	if scope.Preview && scope.Environment != "" {
+	if scope.isPreview() && scope.Environment != "" {
 		key := "<KEY>"
 		if len(problems) == 1 {
 			key = problems[0].GetKey()
@@ -116,7 +117,7 @@ func remedyVerb(problems []*resourcesv1.VariableProblem) string {
 	return verb + " them"
 }
 
-func Undeclared(declared []*resourcesv1.VariableDefinition, source EnvSource) []string {
+func ListUndeclared(declared []*resourcesv1.VariableDefinition, source EnvSource) []string {
 	if !source.OwnsValues() {
 		return nil
 	}
@@ -128,7 +129,7 @@ func Undeclared(declared []*resourcesv1.VariableDefinition, source EnvSource) []
 			continue
 		}
 		out = append(out, fmt.Sprintf("%s has %s in %s, and nothing this project declares reads it there: declare it, or remove it from %s",
-			source.ID, cell.Key, folderName(cell.Folder), source.ID))
+			source.ID, cell.Key, runui.VariableFolderName(cell.Folder), source.ID))
 	}
 	return out
 }

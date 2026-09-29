@@ -10,8 +10,6 @@ import (
 
 	"github.com/fatih/color"
 
-	"github.com/ocelhq/ocel/cli/internal/envgate"
-
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -69,7 +67,7 @@ func (s summary) succeeded(took string) []string {
 func (s summary) failed(took string) []string {
 	result := s.result
 	if missing := result.GetMissing(); missing != nil {
-		out := append(envgate.Lines(missing, missingPaint(s.present)), "", envgate.RemedyLine(missing.GetRemedy()))
+		out := append(MissingVariablesLines(missing, s.present), "", MissingVariablesRemedy(missing.GetRemedy()))
 		return append(out, detailLines(result.GetDetail())...)
 	}
 	detail := strings.Split(strings.TrimRight(result.GetDetail(), "\n"), "\n")
@@ -133,13 +131,6 @@ func (s summary) unpromoted() []string {
 	}
 }
 
-func missingPaint(present Presentation) envgate.Paint {
-	return envgate.Paint{
-		Fail:  func(text string) string { return colorFor(present, color.FgRed).Sprint(text) },
-		Faint: func(text string) string { return muted(present, text) },
-	}
-}
-
 func servedPlace(tier environmentv1.Tier) string {
 	switch tier {
 	case environmentv1.Tier_TIER_PRODUCTION:
@@ -187,8 +178,8 @@ func (s *GroupedSink) conclude(ev *streamv1.RunEvent) {
 func (s summary) annotation() string {
 	result := s.result
 	if missing := result.GetMissing(); missing != nil {
-		text := headlineOr(result, "Failed") + ": " + envgate.Headline(len(missing.GetCells())) +
-			"\n" + strings.TrimLeft(envgate.RemedyLine(missing.GetRemedy()), " ")
+		text := headlineOr(result, "Failed") + ": " + MissingVariablesHeadline(len(missing.GetCells())) +
+			"\n" + strings.TrimLeft(MissingVariablesRemedy(missing.GetRemedy()), " ")
 		if detail := strings.TrimRight(result.GetDetail(), "\n"); detail != "" {
 			text += "\n" + detail
 		}

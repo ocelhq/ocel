@@ -13,8 +13,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/devstack"
-	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 )
 
 func TestDevserverDiscover(t *testing.T) {
@@ -27,7 +27,7 @@ func TestDevserverDiscover(t *testing.T) {
 			"PORT":            "80",
 			"DB_PASSWORD":     "hunter2",
 			"POSTHOG_ID":      "ph_everywhere",
-		}, envgate.Scope{Apps: []envgate.App{
+		}, variables.Scope{Apps: []variables.App{
 			{Name: "web", Folder: "/web"},
 			{Name: "admin", Folder: "/admin"},
 		}})
@@ -70,7 +70,7 @@ func TestDevserverDiscover(t *testing.T) {
 
 		t.Run("the verdict is exactly the cells dev's store leaves short", func(t *testing.T) {
 			err := srv.CheckEnv(context.Background())
-			refusal := &envgate.Refusal{}
+			refusal := &variables.MissingError{}
 			ok := errors.As(err, &refusal)
 			if !ok {
 				t.Fatalf("CheckEnv() = %v, want a *Refusal", err)

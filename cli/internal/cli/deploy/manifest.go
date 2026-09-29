@@ -21,13 +21,13 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
-	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/manifestwire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/workspace"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
@@ -37,24 +37,24 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, gate *envgate.Gate, prebuilt, dry bool, phase, scope *events.Scope, compute string, containerArchs map[string]string, urls map[string]string) (*contractv1.Manifest, []inlinebinding.Record, error) {
+func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, gate *variables.Declarations, prebuilt, dry bool, phase, scope *events.Scope, compute string, containerArchs map[string]string, urls map[string]string) (*contractv1.Manifest, []inlinebinding.Record, error) {
 	captured := &boundedCapture{}
 	tee := io.MultiWriter(scope.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED), captured)
 	resources, err := deps.CollectDeclarations(ctx, cfg, gate, tee, tee)
 	if err != nil {
 		return nil, nil, captured.annotate(err)
 	}
-	warnings, err := envgate.Lint(gate.Definitions(), envwire.Apps(cfg), cfg.Path)
+	warnings, err := variables.LintFolders(gate.Definitions(), envwire.Apps(cfg), cfg.Path)
 	if err != nil {
 		return nil, nil, err
 	}
 	for _, warning := range warnings {
 		scope.Warn(warning)
 	}
-	for _, warning := range envgate.Undeclared(gate.Declared(), gate.Scope().EnvSource) {
+	for _, warning := range variables.ListUndeclared(gate.Declared(), gate.Scope().EnvSource) {
 		scope.Warn(warning)
 	}
-	if err := gate.Check(); err != nil {
+	if err := gate.RefuseIncomplete(); err != nil {
 		return nil, nil, err
 	}
 	inline, err := inlineRecords(ctx, deps, cfg, gate, resources, scope)
@@ -119,14 +119,14 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 	return manifest, inline, nil
 }
 
-func assembleManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, gate *envgate.Gate, phase *events.Scope, resources []declare.Resource, variables map[string][]manifestbuilder.Variable, images map[string]string, compute, configName string) (*contractv1.Manifest, error) {
+func assembleManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, gate *variables.Declarations, phase *events.Scope, resources []declare.Resource, appValues map[string][]manifestbuilder.Variable, images map[string]string, compute, configName string) (*contractv1.Manifest, error) {
 	functions, err := deps.CollectAppFunctions(cfg.Dir)
 	if err != nil {
 		return nil, err
 	}
 	functions = servedByFunctions(functions, cfg)
 
-	edgeWarnings, err := envgate.LintEdge(gate.Definitions(), envwire.Apps(cfg), edgeApps(cfg))
+	edgeWarnings, err := variables.LintEdgeSecrets(gate.Definitions(), envwire.Apps(cfg), edgeApps(cfg))
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +150,7 @@ func assembleManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig
 		return nil, err
 	}
 
-	manifest, err := manifestbuilder.Build(cfg.Slug, cfg.Domains, toApps(cfg.Dir, cfg.Apps, usages, compute, images, functions), compute, manifestwire.Declarations(cfg.Dir, resources), manifestwire.Bindings(cfg.BindingsFor(gate.Scope().Tier())), functions, variablesByApp(variables, functions))
+	manifest, err := manifestbuilder.Build(cfg.Slug, cfg.Domains, toApps(cfg.Dir, cfg.Apps, usages, compute, images, functions), compute, manifestwire.Declarations(cfg.Dir, resources), manifestwire.Bindings(cfg.BindingsFor(gate.Scope().Tier)), functions, variablesByApp(appValues, functions))
 	if err != nil {
 		return nil, err
 	}
@@ -229,12 +229,12 @@ func (b *buildSteps) run(subject, title string, step func() error) error {
 	return err
 }
 
-func inlineRecords(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, gate *envgate.Gate, resources []declare.Resource, scope *events.Scope) ([]inlinebinding.Record, error) {
+func inlineRecords(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, gate *variables.Declarations, resources []declare.Resource, scope *events.Scope) ([]inlinebinding.Record, error) {
 	values, err := gate.ResolveBindingVariables(ctx)
 	if err != nil {
 		return nil, err
 	}
-	records, err := inlinebinding.Build(cfg.BindingsFor(gate.Scope().Tier()), values, filepath.Base(cfg.Path))
+	records, err := inlinebinding.Build(cfg.BindingsFor(gate.Scope().Tier), values, filepath.Base(cfg.Path))
 	if err != nil || len(records) == 0 {
 		return records, err
 	}
@@ -283,7 +283,7 @@ func (c *boundedCapture) annotate(err error) error {
 	return fmt.Errorf("%w\n%s", err, text)
 }
 
-func resolveVariables(ctx context.Context, gate *envgate.Gate, cfg *projectconfig.Config) (map[string][]manifestbuilder.Variable, error) {
+func resolveVariables(ctx context.Context, gate *variables.Declarations, cfg *projectconfig.Config) (map[string][]manifestbuilder.Variable, error) {
 	definitions := gate.Definitions()
 	variables := make(map[string][]manifestbuilder.Variable, len(cfg.Apps))
 	for _, app := range envwire.Apps(cfg) {
@@ -296,7 +296,7 @@ func resolveVariables(ctx context.Context, gate *envgate.Gate, cfg *projectconfi
 	return variables, nil
 }
 
-func appVariables(definitions []*resourcesv1.VariableDefinition, resolved map[string]envgate.Resolved) []manifestbuilder.Variable {
+func appVariables(definitions []*resourcesv1.VariableDefinition, resolved map[string]variables.Resolved) []manifestbuilder.Variable {
 	variables := make([]manifestbuilder.Variable, 0, len(definitions))
 	for _, definition := range definitions {
 		cell, ok := resolved[definition.GetKey()]

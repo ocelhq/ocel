@@ -1,4 +1,4 @@
-package envgate
+package variables
 
 import (
 	"context"
@@ -15,25 +15,12 @@ type BindingVariables struct {
 	Keys  []string
 }
 
-func Declarations(scope Scope) ([]*resourcesv1.VariableDefinition, []*resourcesv1.GroupDefinition) {
+func ImpliedDeclarations(scope Scope) ([]*resourcesv1.VariableDefinition, []*resourcesv1.GroupDefinition) {
 	return scope.impliedDefinitions(), scope.impliedGroups()
 }
 
-func (g *Gate) Declared() []*resourcesv1.VariableDefinition {
-	return append(g.Definitions(), g.scope.impliedDefinitions()...)
-}
-
-func CheckImpliedWritable(scope Scope, key, folder string) error {
-	if folder == "" {
-		return nil
-	}
-	if readers := scope.readers(key); len(readers) > 0 {
-		return fmt.Errorf("%s is read by %s, and a binding serves the whole project, so it reads the value at the project root and a value in %s would reach nothing: set it without --folder", key, sites(readers), folder)
-	}
-	if scope.EnvSource.isCredential(key) {
-		return fmt.Errorf("%s is what ocel logs in to %s with, and ocel reads it at the project root alone, so a value in %s would reach nothing: set it without --folder", key, scope.EnvSource.ID, folder)
-	}
-	return nil
+func (d *Declarations) Declared() []*resourcesv1.VariableDefinition {
+	return append(d.Definitions(), d.scope.impliedDefinitions()...)
 }
 
 func (s Scope) impliedDefinitions() []*resourcesv1.VariableDefinition {
@@ -47,7 +34,7 @@ func (s Scope) impliedDefinitions() []*resourcesv1.VariableDefinition {
 }
 
 func (s Scope) envSourceSite() string {
-	if s.Preview {
+	if s.isPreview() {
 		return "envSource.preview"
 	}
 	return "envSource.production"
@@ -155,12 +142,12 @@ func unsetBindingVariables(definitions []*resourcesv1.VariableDefinition, presen
 	return problems
 }
 
-func (g *Gate) ResolveBindingVariables(ctx context.Context) (map[string]string, error) {
+func (d *Declarations) ResolveBindingVariables(ctx context.Context) (map[string]string, error) {
 	var cells []Cell
-	for _, definition := range g.scope.bindingDefinitions() {
+	for _, definition := range d.scope.bindingDefinitions() {
 		cells = append(cells, Cell{Key: definition.GetKey()})
 	}
-	plaintext, err := g.reveal(ctx, cells)
+	plaintext, err := d.reveal(ctx, cells)
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +155,7 @@ func (g *Gate) ResolveBindingVariables(ctx context.Context) (map[string]string, 
 	for _, cell := range cells {
 		revealedValue := plaintext[cell]
 		if !revealedValue.found {
-			return nil, fmt.Errorf("%s, which %s reads, has no value here", cell.Key, sites(g.scope.readers(cell.Key)))
+			return nil, fmt.Errorf("%s, which %s reads, has no value here", cell.Key, sites(d.scope.readers(cell.Key)))
 		}
 		out[cell.Key] = revealedValue.value
 	}

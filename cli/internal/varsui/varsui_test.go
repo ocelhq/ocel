@@ -17,58 +17,58 @@ import (
 	"testing/fstest"
 	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/envgate"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/varsui"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
 type fakeStore struct {
-	cells     map[envgate.Cell]string
-	versions  map[envgate.Cell]int64
-	values    map[envgate.Address]string
-	overrides []envgate.Stored
+	cells     map[variables.Cell]string
+	versions  map[variables.Cell]int64
+	values    map[variables.Coordinate]string
+	overrides []variables.ValueMetadata
 
 	environments []string
 	expected     []*int64
 	deletes      int
 
-	read       []envgate.Address
+	read       []variables.Coordinate
 	unreadable string
-	references map[envgate.Cell]*envgate.Reference
+	references map[variables.Cell]*variables.Reference
 }
 
 func newFakeStore() *fakeStore {
-	return &fakeStore{cells: map[envgate.Cell]string{}, versions: map[envgate.Cell]int64{}, values: map[envgate.Address]string{}}
+	return &fakeStore{cells: map[variables.Cell]string{}, versions: map[variables.Cell]int64{}, values: map[variables.Coordinate]string{}}
 }
 
-func (s *fakeStore) override(cell envgate.Cell, environment string) {
-	s.overrides = append(s.overrides, envgate.Stored{Address: envgate.Address{Cell: cell, Environment: environment}, Version: 1})
-	s.values[envgate.Address{Cell: cell, Environment: environment}] = "override"
+func (s *fakeStore) override(cell variables.Cell, environment string) {
+	s.overrides = append(s.overrides, variables.ValueMetadata{Coordinate: variables.Coordinate{Cell: cell, Environment: environment}, Version: 1})
+	s.values[variables.Coordinate{Cell: cell, Environment: environment}] = "override"
 }
 
-func (s *fakeStore) List(context.Context) ([]envgate.Stored, error) {
-	out := make([]envgate.Stored, 0, len(s.cells)+len(s.overrides))
+func (s *fakeStore) List(context.Context) ([]variables.ValueMetadata, error) {
+	out := make([]variables.ValueMetadata, 0, len(s.cells)+len(s.overrides))
 	for cell := range s.cells {
-		out = append(out, envgate.Stored{Address: envgate.Address{Cell: cell}, Version: s.versions[cell], Reference: s.references[cell]})
+		out = append(out, variables.ValueMetadata{Coordinate: variables.Coordinate{Cell: cell}, Version: s.versions[cell], Reference: s.references[cell]})
 	}
 	return append(out, s.overrides...), nil
 }
 
-func (s *fakeStore) Reveal(_ context.Context, rows []envgate.Address) (map[envgate.Cell]string, error) {
-	found := map[envgate.Cell]string{}
+func (s *fakeStore) Reveal(_ context.Context, rows []variables.Coordinate) (map[variables.Coordinate]string, error) {
+	found := map[variables.Coordinate]string{}
 	for _, row := range rows {
 		if value, ok := s.cells[row.Cell]; ok {
-			found[row.Cell] = value
+			found[row] = value
 		}
 	}
 	return found, nil
 }
 
-func (s *fakeStore) Read(_ context.Context, rows []envgate.Address) (map[envgate.Address]string, error) {
+func (s *fakeStore) Read(_ context.Context, rows []variables.Coordinate) (map[variables.Coordinate]string, error) {
 	if s.unreadable != "" {
 		return nil, errors.New(s.unreadable)
 	}
-	found := map[envgate.Address]string{}
+	found := map[variables.Coordinate]string{}
 	for _, at := range rows {
 		s.read = append(s.read, at)
 		if at.Environment == "" {
@@ -84,7 +84,7 @@ func (s *fakeStore) Read(_ context.Context, rows []envgate.Address) (map[envgate
 	return found, nil
 }
 
-func (s *fakeStore) version(at envgate.Address) int64 {
+func (s *fakeStore) version(at variables.Coordinate) int64 {
 	if at.Environment == "" {
 		return s.versions[at.Cell]
 	}
@@ -96,25 +96,25 @@ func (s *fakeStore) version(at envgate.Address) int64 {
 	return 0
 }
 
-func (s *fakeStore) stale(at envgate.Address, expected *int64) bool {
+func (s *fakeStore) stale(at variables.Coordinate, expected *int64) bool {
 	return expected != nil && *expected != s.version(at)
 }
 
-func (s *fakeStore) Set(_ context.Context, at envgate.Address, value string, expected *int64) error {
+func (s *fakeStore) Set(_ context.Context, at variables.Coordinate, value string, expected *int64) error {
 	s.expected = append(s.expected, expected)
 	if s.stale(at, expected) {
 		return varsui.ErrStaleValue
 	}
 	s.values[at] = value
 	if at.Environment != "" {
-		s.overrides = append(s.overrides, envgate.Stored{Address: at, Version: 1})
+		s.overrides = append(s.overrides, variables.ValueMetadata{Coordinate: at, Version: 1})
 		return nil
 	}
 	s.cells[at.Cell] = value
 	return nil
 }
 
-func (s *fakeStore) Delete(_ context.Context, at envgate.Address, expected *int64) error {
+func (s *fakeStore) Delete(_ context.Context, at variables.Coordinate, expected *int64) error {
 	s.expected = append(s.expected, expected)
 	if s.stale(at, expected) {
 		return varsui.ErrStaleValue
@@ -122,7 +122,7 @@ func (s *fakeStore) Delete(_ context.Context, at envgate.Address, expected *int6
 	s.deletes++
 	delete(s.values, at)
 	if at.Environment != "" {
-		s.overrides = slices.DeleteFunc(s.overrides, func(row envgate.Stored) bool {
+		s.overrides = slices.DeleteFunc(s.overrides, func(row variables.ValueMetadata) bool {
 			return row.Cell == at.Cell && row.Environment == at.Environment
 		})
 		return nil
@@ -132,7 +132,7 @@ func (s *fakeStore) Delete(_ context.Context, at envgate.Address, expected *int6
 	return nil
 }
 
-func (s *fakeStore) History(_ context.Context, at envgate.Address) ([]varsui.Version, error) {
+func (s *fakeStore) History(_ context.Context, at variables.Coordinate) ([]varsui.Version, error) {
 	_, ok := s.values[at]
 	if _, base := s.cells[at.Cell]; !ok && (!base || at.Environment != "") {
 		return nil, nil
@@ -155,9 +155,9 @@ func def(key string, folders ...string) *resourcesv1.VariableDefinition {
 	}
 }
 
-func discovered(t *testing.T, store *fakeStore, definitions ...*resourcesv1.VariableDefinition) *envgate.Gate {
+func discovered(t *testing.T, store *fakeStore, definitions ...*resourcesv1.VariableDefinition) *variables.Declarations {
 	t.Helper()
-	gate := envgate.New(store, envgate.Scope{Apps: []envgate.App{{Name: "web", Folder: "/web"}, {Name: "api"}}})
+	gate := variables.NewDeclarations(store, variables.Scope{Apps: []variables.App{{Name: "web", Folder: "/web"}, {Name: "api"}}})
 	if err := gate.Prefetch(context.Background()); err != nil {
 		t.Fatalf("Prefetch: %v", err)
 	}
@@ -172,12 +172,12 @@ func session(t *testing.T, store *fakeStore, definitions ...*resourcesv1.Variabl
 	return serve(t, store, discovered(t, store, definitions...))
 }
 
-func serve(t *testing.T, store *fakeStore, gate *envgate.Gate) *varsui.Session {
+func serve(t *testing.T, store *fakeStore, gate *variables.Declarations) *varsui.Session {
 	t.Helper()
 	return serveUnder(t, context.Background(), store, gate)
 }
 
-func serveUnder(t *testing.T, ctx context.Context, store *fakeStore, gate *envgate.Gate) *varsui.Session {
+func serveUnder(t *testing.T, ctx context.Context, store *fakeStore, gate *variables.Declarations) *varsui.Session {
 	t.Helper()
 	return serveWith(t, ctx, varsui.Options{Gate: gate, Store: store, Environments: store.environments})
 }
@@ -254,7 +254,7 @@ func state(t *testing.T, s *varsui.Session) varsui.State {
 	return out
 }
 
-func cellState(t *testing.T, s varsui.State, key, folder string) envgate.MatrixCell {
+func cellState(t *testing.T, s varsui.State, key, folder string) variables.MatrixCell {
 	t.Helper()
 	for _, row := range s.Matrix.Rows {
 		if row.Key != key {
@@ -267,7 +267,7 @@ func cellState(t *testing.T, s varsui.State, key, folder string) envgate.MatrixC
 		}
 	}
 	t.Fatalf("state has no cell for %q in %q", key, folder)
-	return envgate.MatrixCell{}
+	return variables.MatrixCell{}
 }
 
 func format(expected []*int64) []string {
@@ -449,14 +449,14 @@ func TestGetState(t *testing.T) {
 		t.Parallel()
 		store := newFakeStore()
 		store.environments = []string{"pr-42"}
-		store.override(envgate.Cell{Key: "API_URL"}, "pr-42")
+		store.override(variables.Cell{Key: "API_URL"}, "pr-42")
 		s := session(t, store, def("API_URL"))
 
 		c := cellState(t, state(t, s), "API_URL", "")
 		if c.Set {
 			t.Error("the matrix reports API_URL filled, want it empty — pr-42's value is what pr-42 reads, not what the cell stores")
 		}
-		want := []envgate.Override{{Environment: "pr-42", Version: 1}}
+		want := []variables.Override{{Environment: "pr-42", Version: 1}}
 		if !reflect.DeepEqual(c.Overrides, want) {
 			t.Errorf("overrides = %+v, want %+v — a surviving override the page cannot see is one it lies about", c.Overrides, want)
 		}
@@ -476,7 +476,7 @@ func TestGetState(t *testing.T) {
 	t.Run("an orphaned override is marked and still removable", func(t *testing.T) {
 		t.Parallel()
 		store := newFakeStore()
-		store.override(envgate.Cell{Key: "API_URL"}, "pr-42")
+		store.override(variables.Cell{Key: "API_URL"}, "pr-42")
 		s := session(t, store, def("API_URL"))
 
 		c := cellState(t, state(t, s), "API_URL", "")
@@ -538,9 +538,9 @@ func TestPutValue(t *testing.T) {
 	t.Run("a variable a binding reads is written at the root and refused in a folder", func(t *testing.T) {
 		t.Parallel()
 		store := newFakeStore()
-		gate := envgate.New(store, envgate.Scope{
-			Apps:     []envgate.App{{Name: "web", Folder: "/web"}},
-			Bindings: []envgate.BindingVariables{{Group: "postgres.orders", Site: "bindings.postgres.orders", Keys: []string{"ORDERS_URL"}}},
+		gate := variables.NewDeclarations(store, variables.Scope{
+			Apps:     []variables.App{{Name: "web", Folder: "/web"}},
+			Bindings: []variables.BindingVariables{{Group: "postgres.orders", Site: "bindings.postgres.orders", Keys: []string{"ORDERS_URL"}}},
 		})
 		if err := gate.Prefetch(context.Background()); err != nil {
 			t.Fatalf("Prefetch: %v", err)
@@ -555,7 +555,7 @@ func TestPutValue(t *testing.T) {
 		if root.StatusCode != http.StatusOK {
 			t.Fatalf("PUT at the root = %d: %s", root.StatusCode, bodyOf(t, root))
 		}
-		if got := store.cells[envgate.Cell{Key: "ORDERS_URL"}]; got != "postgres://db/orders" {
+		if got := store.cells[variables.Cell{Key: "ORDERS_URL"}]; got != "postgres://db/orders" {
 			t.Errorf("store has %q for ORDERS_URL, want the value written", got)
 		}
 	})
@@ -570,7 +570,7 @@ func TestPutValue(t *testing.T) {
 			t.Fatalf("PUT = %d: %s", resp.StatusCode, bodyOf(t, resp))
 		}
 
-		if got := store.cells[envgate.Cell{Key: "POSTHOG_ID", Folder: "/web"}]; got != "ph_web" {
+		if got := store.cells[variables.Cell{Key: "POSTHOG_ID", Folder: "/web"}]; got != "ph_web" {
 			t.Errorf("store has %q for POSTHOG_ID in /web, want %q", got, "ph_web")
 		}
 		if !cellState(t, state(t, s), "POSTHOG_ID", "/web").Set {
@@ -581,7 +581,7 @@ func TestPutValue(t *testing.T) {
 	t.Run("a write clears the complaint about the value it replaced", func(t *testing.T) {
 		t.Parallel()
 		store := newFakeStore()
-		store.cells[envgate.Cell{Key: "API_URL"}] = "not-a-url"
+		store.cells[variables.Cell{Key: "API_URL"}] = "not-a-url"
 		gate := discovered(t, store, def("API_URL"))
 		if _, err := gate.ReportEnvProblems(context.Background(), &resourcesv1.ReportEnvProblemsRequest{
 			Problems: []*resourcesv1.VariableProblem{{Key: "API_URL", Kind: resourcesv1.VariableProblem_KIND_INVALID, Detail: "must be a URL"}},
@@ -607,7 +607,7 @@ func TestPutValue(t *testing.T) {
 		t.Parallel()
 		store := newFakeStore()
 		store.environments = []string{"staging"}
-		store.cells[envgate.Cell{Key: "API_URL"}] = "https://shared.example"
+		store.cells[variables.Cell{Key: "API_URL"}] = "https://shared.example"
 		s := session(t, store, def("API_URL"))
 
 		resp := request(t, s, http.MethodPut, "/api/value", map[string]any{
@@ -617,11 +617,11 @@ func TestPutValue(t *testing.T) {
 			t.Fatalf("PUT = %d: %s", resp.StatusCode, bodyOf(t, resp))
 		}
 
-		at := envgate.Address{Cell: envgate.Cell{Key: "API_URL"}, Environment: "staging"}
+		at := variables.Coordinate{Cell: variables.Cell{Key: "API_URL"}, Environment: "staging"}
 		if got := store.values[at]; got != "https://staging.example" {
 			t.Errorf("staging has %q, want the override that was written", got)
 		}
-		if got := store.cells[envgate.Cell{Key: "API_URL"}]; got != "https://shared.example" {
+		if got := store.cells[variables.Cell{Key: "API_URL"}]; got != "https://shared.example" {
 			t.Errorf("the value bound to all environments is %q, want it untouched", got)
 		}
 	})
@@ -645,7 +645,7 @@ func TestPutValue(t *testing.T) {
 
 	t.Run("an override write expects the version rendered for its own environment", func(t *testing.T) {
 		t.Parallel()
-		at := envgate.Address{Cell: envgate.Cell{Key: "API_URL"}, Environment: "staging"}
+		at := variables.Coordinate{Cell: variables.Cell{Key: "API_URL"}, Environment: "staging"}
 
 		for _, tc := range []struct {
 			name       string
@@ -659,8 +659,8 @@ func TestPutValue(t *testing.T) {
 				t.Parallel()
 				store := newFakeStore()
 				store.environments = []string{"staging"}
-				store.cells[envgate.Cell{Key: "API_URL"}] = "https://shared.example"
-				store.versions[envgate.Cell{Key: "API_URL"}] = 9
+				store.cells[variables.Cell{Key: "API_URL"}] = "https://shared.example"
+				store.versions[variables.Cell{Key: "API_URL"}] = 9
 				store.override(at.Cell, at.Environment)
 				s := session(t, store, def("API_URL"))
 
@@ -686,8 +686,8 @@ func TestPutValue(t *testing.T) {
 	t.Run("a write expects the version the page rendered", func(t *testing.T) {
 		t.Parallel()
 		store := newFakeStore()
-		store.cells[envgate.Cell{Key: "API_URL"}] = "https://old.example"
-		store.versions[envgate.Cell{Key: "API_URL"}] = 3
+		store.cells[variables.Cell{Key: "API_URL"}] = "https://old.example"
+		store.versions[variables.Cell{Key: "API_URL"}] = 3
 		s := session(t, store, def("API_URL"))
 
 		resp := request(t, s, http.MethodPut, "/api/value", map[string]any{
@@ -737,8 +737,8 @@ func TestPutValue(t *testing.T) {
 	t.Run("a write against a version that is no longer current is refused as a conflict", func(t *testing.T) {
 		t.Parallel()
 		store := newFakeStore()
-		store.cells[envgate.Cell{Key: "API_URL"}] = "https://someone-elses.example"
-		store.versions[envgate.Cell{Key: "API_URL"}] = 4
+		store.cells[variables.Cell{Key: "API_URL"}] = "https://someone-elses.example"
+		store.versions[variables.Cell{Key: "API_URL"}] = 4
 		s := session(t, store, def("API_URL"))
 
 		resp := request(t, s, http.MethodPut, "/api/value", map[string]any{
@@ -748,7 +748,7 @@ func TestPutValue(t *testing.T) {
 		if resp.StatusCode != http.StatusConflict {
 			t.Errorf("stale PUT = %d, want %d — a refused write is a conflict, not a failed store", resp.StatusCode, http.StatusConflict)
 		}
-		if got := store.cells[envgate.Cell{Key: "API_URL"}]; got != "https://someone-elses.example" {
+		if got := store.cells[variables.Cell{Key: "API_URL"}]; got != "https://someone-elses.example" {
 			t.Errorf("store has %q, want the value already there — a stale write must not be applied", got)
 		}
 	})
@@ -775,7 +775,7 @@ func TestDeleteValue(t *testing.T) {
 	t.Run("deleting a cell empties it in the store and the matrix", func(t *testing.T) {
 		t.Parallel()
 		store := newFakeStore()
-		store.cells[envgate.Cell{Key: "API_URL"}] = "https://root.example"
+		store.cells[variables.Cell{Key: "API_URL"}] = "https://root.example"
 		s := session(t, store, def("API_URL"))
 
 		resp := request(t, s, http.MethodDelete, "/api/value?key=API_URL&folder=", nil)
@@ -794,8 +794,8 @@ func TestDeleteValue(t *testing.T) {
 	t.Run("a delete against a version that is no longer current is refused as a conflict", func(t *testing.T) {
 		t.Parallel()
 		store := newFakeStore()
-		store.cells[envgate.Cell{Key: "API_URL"}] = "https://someone-elses.example"
-		store.versions[envgate.Cell{Key: "API_URL"}] = 4
+		store.cells[variables.Cell{Key: "API_URL"}] = "https://someone-elses.example"
+		store.versions[variables.Cell{Key: "API_URL"}] = 4
 		s := session(t, store, def("API_URL"))
 
 		resp := request(t, s, http.MethodDelete, "/api/value?key=API_URL&folder=&version=3", nil)
@@ -803,7 +803,7 @@ func TestDeleteValue(t *testing.T) {
 		if resp.StatusCode != http.StatusConflict {
 			t.Errorf("stale DELETE = %d, want %d — a refused delete is a conflict, not a failed store", resp.StatusCode, http.StatusConflict)
 		}
-		if got := store.cells[envgate.Cell{Key: "API_URL"}]; got != "https://someone-elses.example" {
+		if got := store.cells[variables.Cell{Key: "API_URL"}]; got != "https://someone-elses.example" {
 			t.Errorf("store has %q, want the value already there — a stale delete must not be applied", got)
 		}
 	})
@@ -811,8 +811,8 @@ func TestDeleteValue(t *testing.T) {
 	t.Run("a delete expects the version the page rendered", func(t *testing.T) {
 		t.Parallel()
 		store := newFakeStore()
-		store.cells[envgate.Cell{Key: "API_URL"}] = "https://old.example"
-		store.versions[envgate.Cell{Key: "API_URL"}] = 3
+		store.cells[variables.Cell{Key: "API_URL"}] = "https://old.example"
+		store.versions[variables.Cell{Key: "API_URL"}] = 3
 		s := session(t, store, def("API_URL"))
 
 		resp := request(t, s, http.MethodDelete, "/api/value?key=API_URL&folder=&version=3", nil)
@@ -828,7 +828,7 @@ func TestDeleteValue(t *testing.T) {
 	t.Run("a delete quoting an unreadable version is refused and never reaches the store", func(t *testing.T) {
 		t.Parallel()
 		store := newFakeStore()
-		store.cells[envgate.Cell{Key: "API_URL"}] = "https://old.example"
+		store.cells[variables.Cell{Key: "API_URL"}] = "https://old.example"
 		s := session(t, store, def("API_URL"))
 
 		resp := request(t, s, http.MethodDelete, "/api/value?key=API_URL&folder=&version=soon", nil)
@@ -848,7 +848,7 @@ func TestGetHistory(t *testing.T) {
 	t.Run("history is readable newest first", func(t *testing.T) {
 		t.Parallel()
 		store := newFakeStore()
-		store.cells[envgate.Cell{Key: "API_URL"}] = "https://root.example"
+		store.cells[variables.Cell{Key: "API_URL"}] = "https://root.example"
 		s := session(t, store, def("API_URL"))
 
 		resp := request(t, s, http.MethodGet, "/api/history?key=API_URL&folder=", nil)
@@ -992,8 +992,8 @@ func TestReveal(t *testing.T) {
 		t.Parallel()
 		store := newFakeStore()
 		store.environments = []string{"staging"}
-		store.cells[envgate.Cell{Key: "API_URL"}] = "https://root.example"
-		store.override(envgate.Cell{Key: "API_URL"}, "staging")
+		store.cells[variables.Cell{Key: "API_URL"}] = "https://root.example"
+		store.override(variables.Cell{Key: "API_URL"}, "staging")
 		s := session(t, store, def("API_URL"))
 
 		resp := request(t, s, http.MethodPost, "/api/reveal", map[string]any{"cells": []map[string]string{
@@ -1016,8 +1016,8 @@ func TestReveal(t *testing.T) {
 	t.Run("a secret is never sent to the browser", func(t *testing.T) {
 		t.Parallel()
 		store := newFakeStore()
-		store.cells[envgate.Cell{Key: "STRIPE_KEY"}] = "sk_live"
-		store.cells[envgate.Cell{Key: "API_URL"}] = "https://root.example"
+		store.cells[variables.Cell{Key: "STRIPE_KEY"}] = "sk_live"
+		store.cells[variables.Cell{Key: "API_URL"}] = "https://root.example"
 		s := session(t, store, secretDef("STRIPE_KEY"), def("API_URL"))
 
 		resp := request(t, s, http.MethodPost, "/api/reveal", map[string]any{"cells": []map[string]string{
@@ -1042,7 +1042,7 @@ func TestReveal(t *testing.T) {
 	t.Run("a credential the env source logs in with is never sent to the browser", func(t *testing.T) {
 		t.Parallel()
 		source := &fakeEnvSource{store: newFakeStore(), described: infisical}
-		source.store.cells[envgate.Cell{Key: "INFISICAL_CLIENT_ID"}] = "machine-identity"
+		source.store.cells[variables.Cell{Key: "INFISICAL_CLIENT_ID"}] = "machine-identity"
 		s := envSourceSession(t, source, nil)
 
 		resp := request(t, s, http.MethodPost, "/api/reveal", map[string]any{"cells": []map[string]string{{"key": "INFISICAL_CLIENT_ID"}}})
@@ -1055,7 +1055,7 @@ func TestReveal(t *testing.T) {
 	t.Run("a store that cannot read reports every cell asked for", func(t *testing.T) {
 		t.Parallel()
 		store := newFakeStore()
-		store.cells[envgate.Cell{Key: "API_URL"}] = "https://root.example"
+		store.cells[variables.Cell{Key: "API_URL"}] = "https://root.example"
 		store.unreadable = "the target project no longer exists"
 		s := session(t, store, def("API_URL"))
 
@@ -1073,8 +1073,8 @@ func TestReferences(t *testing.T) {
 	t.Run("the matrix names the source a referenced cell reads", func(t *testing.T) {
 		t.Parallel()
 		store := newFakeStore()
-		store.cells[envgate.Cell{Key: "LOG_LEVEL"}] = "debug"
-		store.references = map[envgate.Cell]*envgate.Reference{{Key: "LOG_LEVEL"}: {Slug: "shared", Key: "LOG_LEVEL"}}
+		store.cells[variables.Cell{Key: "LOG_LEVEL"}] = "debug"
+		store.references = map[variables.Cell]*variables.Reference{{Key: "LOG_LEVEL"}: {Slug: "shared", Key: "LOG_LEVEL"}}
 		s := session(t, store, def("LOG_LEVEL"), def("API_URL"))
 
 		got := cellState(t, state(t, s), "LOG_LEVEL", "")
@@ -1113,10 +1113,10 @@ func TestOtherTierStore(t *testing.T) {
 		t.Parallel()
 		here := newFakeStore()
 		other := newFakeStore()
-		other.cells[envgate.Cell{Key: "API_URL"}] = "https://preview.example"
-		other.cells[envgate.Cell{Key: "STRIPE_KEY"}] = "sk_test"
-		other.cells[envgate.Cell{Key: "UNDECLARED"}] = "nobody reads this"
-		other.versions[envgate.Cell{Key: "API_URL"}] = 4
+		other.cells[variables.Cell{Key: "API_URL"}] = "https://preview.example"
+		other.cells[variables.Cell{Key: "STRIPE_KEY"}] = "sk_test"
+		other.cells[variables.Cell{Key: "UNDECLARED"}] = "nobody reads this"
+		other.versions[variables.Cell{Key: "API_URL"}] = 4
 		s := serveWith(t, context.Background(), varsui.Options{
 			Gate:  discovered(t, here, def("API_URL"), secretDef("STRIPE_KEY")),
 			Store: here,
@@ -1159,11 +1159,11 @@ func TestOtherTierStore(t *testing.T) {
 	t.Run("a copy writes each value through the store with the version the page expected", func(t *testing.T) {
 		t.Parallel()
 		here := newFakeStore()
-		here.cells[envgate.Cell{Key: "API_URL"}] = "https://old.example"
-		here.versions[envgate.Cell{Key: "API_URL"}] = 2
+		here.cells[variables.Cell{Key: "API_URL"}] = "https://old.example"
+		here.versions[variables.Cell{Key: "API_URL"}] = 2
 		other := newFakeStore()
-		other.cells[envgate.Cell{Key: "API_URL"}] = "https://preview.example"
-		other.cells[envgate.Cell{Key: "STRIPE_KEY"}] = "sk_test"
+		other.cells[variables.Cell{Key: "API_URL"}] = "https://preview.example"
+		other.cells[variables.Cell{Key: "STRIPE_KEY"}] = "sk_test"
 		s := serveWith(t, context.Background(), varsui.Options{
 			Gate:  discovered(t, here, def("API_URL"), secretDef("STRIPE_KEY"), def("MISSING")),
 			Store: here,
@@ -1185,10 +1185,10 @@ func TestOtherTierStore(t *testing.T) {
 		if r := got.Results[0]; !r.Conflict || r.Saved {
 			t.Errorf("API_URL = %+v, want a conflict against version 1 when version 2 is stored", r)
 		}
-		if here.cells[envgate.Cell{Key: "API_URL"}] != "https://old.example" {
+		if here.cells[variables.Cell{Key: "API_URL"}] != "https://old.example" {
 			t.Error("the conflicting copy overwrote the stored value")
 		}
-		if r := got.Results[1]; !r.Saved || here.cells[envgate.Cell{Key: "STRIPE_KEY"}] != "sk_test" {
+		if r := got.Results[1]; !r.Saved || here.cells[variables.Cell{Key: "STRIPE_KEY"}] != "sk_test" {
 			t.Errorf("STRIPE_KEY = %+v, want the secret copied server-side without entering the browser", r)
 		}
 		if r := got.Results[2]; r.Saved || r.Error == "" {
@@ -1214,7 +1214,7 @@ func TestRecovery(t *testing.T) {
 	t.Run("the state includes the deploy that is waiting and the cells it is missing", func(t *testing.T) {
 		t.Parallel()
 		store := newFakeStore()
-		missing := []envgate.Cell{{Key: "API_URL"}}
+		missing := []variables.Cell{{Key: "API_URL"}}
 		s := serveWith(t, context.Background(), varsui.Options{
 			Gate:     discovered(t, store, def("API_URL")),
 			Store:    store,
@@ -1235,7 +1235,7 @@ func TestRecovery(t *testing.T) {
 		s := serveWith(t, context.Background(), varsui.Options{
 			Gate:     discovered(t, store, def("API_URL")),
 			Store:    store,
-			Recovery: &varsui.Recovery{Deploy: "ocel deploy", Missing: []envgate.Cell{{Key: "API_URL"}}},
+			Recovery: &varsui.Recovery{Deploy: "ocel deploy", Missing: []variables.Cell{{Key: "API_URL"}}},
 		})
 
 		resp := request(t, s, http.MethodPost, "/api/done", nil)
@@ -1278,7 +1278,7 @@ func shortContext(t *testing.T) context.Context {
 
 type fakeEnvSource struct {
 	store     *fakeStore
-	described envgate.EnvSource
+	described variables.EnvSource
 	awaiting  bool
 	refusal   error
 	syncError error
@@ -1286,16 +1286,16 @@ type fakeEnvSource struct {
 	describes int
 	syncs     int
 	created   []createdValue
-	pending   map[envgate.Cell]string
+	pending   map[variables.Cell]string
 }
 
 type createdValue struct {
-	at          envgate.Cell
+	at          variables.Cell
 	value       string
 	description string
 }
 
-func (f *fakeEnvSource) Describe(context.Context) (envgate.EnvSource, error) {
+func (f *fakeEnvSource) Describe(context.Context) (variables.EnvSource, error) {
 	f.describes++
 	return f.described, nil
 }
@@ -1311,7 +1311,7 @@ func (f *fakeEnvSource) Sync(context.Context) error {
 	return nil
 }
 
-func (f *fakeEnvSource) Set(_ context.Context, at envgate.Cell, value, description string) (bool, error) {
+func (f *fakeEnvSource) Set(_ context.Context, at variables.Cell, value, description string) (bool, error) {
 	if f.refusal != nil {
 		return false, f.refusal
 	}
@@ -1322,7 +1322,7 @@ func (f *fakeEnvSource) Set(_ context.Context, at envgate.Cell, value, descripti
 	return f.awaiting, nil
 }
 
-var infisical = envgate.EnvSource{
+var infisical = variables.EnvSource{
 	ID:          "infisical:p-1/prod",
 	CanCreate:   true,
 	URLs:        map[string]string{"": "https://infisical.example/root"},
@@ -1333,9 +1333,9 @@ func envSourceSession(t *testing.T, source *fakeEnvSource, recovery *varsui.Reco
 	t.Helper()
 	described := def("API_URL")
 	described.Description = "where the API lives"
-	gate := envgate.New(source.store, envgate.Scope{
-		Apps:      []envgate.App{{Name: "web", Folder: "/web"}, {Name: "api"}},
-		EnvSource: envgate.EnvSource{ID: infisical.ID, Credentials: infisical.Credentials},
+	gate := variables.NewDeclarations(source.store, variables.Scope{
+		Apps:      []variables.App{{Name: "web", Folder: "/web"}, {Name: "api"}},
+		EnvSource: variables.EnvSource{ID: infisical.ID, Credentials: infisical.Credentials},
 	})
 	if err := gate.Prefetch(context.Background()); err != nil {
 		t.Fatalf("Prefetch: %v", err)
@@ -1403,7 +1403,7 @@ func TestAValueTheEnvSourceLacksIsCreatedThere(t *testing.T) {
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("POST = %d: %s", resp.StatusCode, bodyOf(t, resp))
 		}
-		want := []createdValue{{at: envgate.Cell{Key: "API_URL"}, value: "https://api.example", description: "where the API lives"}}
+		want := []createdValue{{at: variables.Cell{Key: "API_URL"}, value: "https://api.example", description: "where the API lives"}}
 		if !reflect.DeepEqual(source.created, want) {
 			t.Errorf("created %+v, want %+v", source.created, want)
 		}
@@ -1477,8 +1477,8 @@ func TestResumingADeploySyncsTheEnvSourceFirst(t *testing.T) {
 	t.Run("so a value set in the env source's own dashboard counts", func(t *testing.T) {
 		t.Parallel()
 		store := newFakeStore()
-		source := &fakeEnvSource{store: store, described: infisical, pending: map[envgate.Cell]string{{Key: "API_URL"}: "https://set-there.example"}}
-		s := envSourceSession(t, source, &varsui.Recovery{Deploy: "ocel deploy", Missing: []envgate.Cell{{Key: "API_URL"}}})
+		source := &fakeEnvSource{store: store, described: infisical, pending: map[variables.Cell]string{{Key: "API_URL"}: "https://set-there.example"}}
+		s := envSourceSession(t, source, &varsui.Recovery{Deploy: "ocel deploy", Missing: []variables.Cell{{Key: "API_URL"}}})
 
 		if resp := request(t, s, http.MethodPost, "/api/done", nil); resp.StatusCode != http.StatusOK {
 			t.Fatalf("POST /api/done = %d: %s", resp.StatusCode, bodyOf(t, resp))
@@ -1491,7 +1491,7 @@ func TestResumingADeploySyncsTheEnvSourceFirst(t *testing.T) {
 	t.Run("and a failed sync keeps the deploy waiting", func(t *testing.T) {
 		t.Parallel()
 		source := &fakeEnvSource{store: newFakeStore(), described: infisical, syncError: errors.New("infisical:p-1/prod: 503")}
-		s := envSourceSession(t, source, &varsui.Recovery{Deploy: "ocel deploy", Missing: []envgate.Cell{{Key: "API_URL"}}})
+		s := envSourceSession(t, source, &varsui.Recovery{Deploy: "ocel deploy", Missing: []variables.Cell{{Key: "API_URL"}}})
 
 		if resp := request(t, s, http.MethodPost, "/api/done", nil); resp.StatusCode != http.StatusBadGateway {
 			t.Fatalf("POST /api/done = %d, want %d", resp.StatusCode, http.StatusBadGateway)

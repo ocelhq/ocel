@@ -10,11 +10,11 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
-	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/varsui"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
@@ -63,7 +63,7 @@ func serveAndOpenVarsUI(
 	cfg *projectconfig.Config,
 	prov *providerclient.Provider,
 	preview bool,
-	gate *envgate.Gate,
+	gate *variables.Declarations,
 	stdin io.Reader,
 	stdout io.Writer,
 ) (*varsui.Session, error) {
@@ -82,7 +82,7 @@ func serveAndOpenVarsUI(
 	return varsSession, nil
 }
 
-func discoverVariables(ctx context.Context, cfg *projectconfig.Config, prov *providerclient.Provider, opts envOptions, run *events.Run) (*envgate.Gate, error) {
+func discoverVariables(ctx context.Context, cfg *projectconfig.Config, prov *providerclient.Provider, opts envOptions, run *events.Run) (*variables.Declarations, error) {
 	gate := envGate(cfg, prov, opts)
 	err := collecting(run, cfg, func(output io.Writer) error {
 		_, err := deploycollector.PrepareAndCollect(ctx, cfg, gate, io.Discard, output)
@@ -94,8 +94,8 @@ func discoverVariables(ctx context.Context, cfg *projectconfig.Config, prov *pro
 	return gate, nil
 }
 
-func envGate(cfg *projectconfig.Config, prov *providerclient.Provider, opts envOptions) *envgate.Gate {
-	return envgate.New(envwire.Values{
+func envGate(cfg *projectconfig.Config, prov *providerclient.Provider, opts envOptions) *variables.Declarations {
+	return variables.NewDeclarations(envwire.Values{
 		Provider: prov,
 		Slug:     cfg.Slug,
 		Tier:     envTier(opts),

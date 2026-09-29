@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/envgate"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/channel"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
@@ -27,15 +27,15 @@ const AbandonedMessage = "the variables UI closed before the matrix was complete
 const DefaultAbsence = 5 * time.Second
 
 type Reader interface {
-	List(ctx context.Context) ([]envgate.Stored, error)
-	Read(ctx context.Context, rows []envgate.Address) (map[envgate.Address]string, error)
+	List(ctx context.Context) ([]variables.ValueMetadata, error)
+	Read(ctx context.Context, rows []variables.Coordinate) (map[variables.Coordinate]string, error)
 }
 
 type Store interface {
 	Reader
-	Set(ctx context.Context, at envgate.Address, value string, expected *int64) error
-	Delete(ctx context.Context, at envgate.Address, expected *int64) error
-	History(ctx context.Context, at envgate.Address) ([]Version, error)
+	Set(ctx context.Context, at variables.Coordinate, value string, expected *int64) error
+	Delete(ctx context.Context, at variables.Coordinate, expected *int64) error
+	History(ctx context.Context, at variables.Coordinate) ([]Version, error)
 }
 
 type Version struct {
@@ -45,18 +45,18 @@ type Version struct {
 }
 
 type Recovery struct {
-	Deploy  string         `json:"deploy"`
-	Missing []envgate.Cell `json:"missing"`
+	Deploy  string           `json:"deploy"`
+	Missing []variables.Cell `json:"missing"`
 }
 
 type State struct {
-	Slug         string         `json:"slug"`
-	Tier         string         `json:"tier"`
-	Other        string         `json:"other"`
-	Environments []string       `json:"environments"`
-	Matrix       envgate.Matrix `json:"matrix"`
-	Recovery     *Recovery      `json:"recovery,omitempty"`
-	EnvSource    *EnvSource     `json:"envSource,omitempty"`
+	Slug         string           `json:"slug"`
+	Tier         string           `json:"tier"`
+	Other        string           `json:"other"`
+	Environments []string         `json:"environments"`
+	Matrix       variables.Matrix `json:"matrix"`
+	Recovery     *Recovery        `json:"recovery,omitempty"`
+	EnvSource    *EnvSource       `json:"envSource,omitempty"`
 }
 
 type EnvSource struct {
@@ -68,15 +68,15 @@ type EnvSource struct {
 }
 
 type EnvSourceClient interface {
-	Describe(ctx context.Context) (envgate.EnvSource, error)
+	Describe(ctx context.Context) (variables.EnvSource, error)
 	Sync(ctx context.Context) error
-	Set(ctx context.Context, at envgate.Cell, value, description string) (awaitingApproval bool, err error)
+	Set(ctx context.Context, at variables.Cell, value, description string) (awaitingApproval bool, err error)
 }
 
 type Options struct {
 	Assets fs.FS
 
-	Gate *envgate.Gate
+	Gate *variables.Declarations
 
 	Store     Store
 	Other     Reader
@@ -200,11 +200,11 @@ type addressRequest struct {
 	Environment string `json:"environment"`
 }
 
-func (a addressRequest) address() envgate.Address {
-	return envgate.Address{Cell: envgate.Cell{Key: a.Key, Folder: a.Folder}, Environment: a.Environment}
+func (a addressRequest) address() variables.Coordinate {
+	return variables.Coordinate{Cell: variables.Cell{Key: a.Key, Folder: a.Folder}, Environment: a.Environment}
 }
 
-func addressOf(at envgate.Address) addressRequest {
+func addressOf(at variables.Coordinate) addressRequest {
 	return addressRequest{Key: at.Cell.Key, Folder: at.Cell.Folder, Environment: at.Environment}
 }
 
@@ -262,7 +262,7 @@ func (s *Session) handleSetInEnvSource(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]bool{"awaitingApproval": awaiting})
 }
 
-func (s *Session) settableInEnvSource(at envgate.Address) error {
+func (s *Session) settableInEnvSource(at variables.Coordinate) error {
 	if at.Environment != "" {
 		return fmt.Errorf("a value for %s alone is stored by ocel, never by the env source: save it as an override for %s instead", at.Environment, at.Environment)
 	}
@@ -304,14 +304,14 @@ func (s *Session) handleDelete(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, struct{}{})
 }
 
-func (s *Session) writable(at envgate.Address) error {
+func (s *Session) writable(at variables.Coordinate) error {
 	if err := addressable(at.Cell.Folder); err != nil {
 		return err
 	}
-	if err := envgate.CheckImpliedWritable(s.opts.Gate.Scope(), at.Cell.Key, at.Cell.Folder); err != nil {
+	if err := variables.RefuseImpliedInFolder(s.opts.Gate.Scope(), at.Cell.Key, at.Cell.Folder); err != nil {
 		return err
 	}
-	if err := envgate.CheckWritable(s.opts.Gate.Declared(), at.Cell.Key, at.Cell.Folder); err != nil {
+	if err := variables.RefuseUnwritable(s.opts.Gate.Declared(), at.Cell.Key, at.Cell.Folder); err != nil {
 		return err
 	}
 	if at.Environment == "" || slices.Contains(s.opts.Environments, at.Environment) {
@@ -320,9 +320,9 @@ func (s *Session) writable(at envgate.Address) error {
 	return fmt.Errorf("no environment named %q exists, so nothing would ever read that value", at.Environment)
 }
 
-func (s *Session) forget(at envgate.Address) {
+func (s *Session) forget(at variables.Coordinate) {
 	if at.Environment == "" {
-		s.opts.Gate.Forget(at.Cell)
+		s.opts.Gate.ClearProblems(at.Cell)
 	}
 }
 
@@ -352,7 +352,7 @@ func (s *Session) handleReveal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	secrets := s.secrets()
-	rows := make([]envgate.Address, 0, len(req.Cells))
+	rows := make([]variables.Coordinate, 0, len(req.Cells))
 	for _, cell := range req.Cells {
 		if secrets[cell.Key] {
 			fail(w, http.StatusBadRequest, fmt.Errorf("%s is a secret, and a secret's value never reaches a browser; overwrite it here or read it with ocel env get --reveal", cell.Key))
@@ -363,7 +363,7 @@ func (s *Session) handleReveal(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, s.read(r.Context(), s.opts.Store, rows))
 }
 
-func (s *Session) read(ctx context.Context, from Reader, rows []envgate.Address) revealResponse {
+func (s *Session) read(ctx context.Context, from Reader, rows []variables.Coordinate) revealResponse {
 	out := revealResponse{Values: []revealedValue{}, Errors: []cellError{}}
 	if len(rows) == 0 {
 		return out
@@ -406,11 +406,11 @@ func (s *Session) handleHistory(w http.ResponseWriter, r *http.Request) {
 
 type otherValue struct {
 	addressRequest
-	Version   int64              `json:"version"`
-	Class     string             `json:"class"`
-	Reference *envgate.Reference `json:"reference,omitempty"`
-	Value     *string            `json:"value,omitempty"`
-	Error     string             `json:"error,omitempty"`
+	Version   int64                `json:"version"`
+	Class     string               `json:"class"`
+	Reference *variables.Reference `json:"reference,omitempty"`
+	Value     *string              `json:"value,omitempty"`
+	Error     string               `json:"error,omitempty"`
 }
 
 type otherResponse struct {
@@ -431,28 +431,28 @@ func (s *Session) handleOther(w http.ResponseWriter, r *http.Request) {
 
 	classes := s.classes()
 	out := otherResponse{Tier: s.otherTier(), Values: []otherValue{}}
-	var readable []envgate.Address
+	var readable []variables.Coordinate
 	for _, row := range stored {
 		class, declared := classes[row.Cell.Key]
 		if !declared || row.Reference != nil {
 			continue
 		}
 		out.Values = append(out.Values, otherValue{
-			addressRequest: addressOf(row.Address),
+			addressRequest: addressOf(row.Coordinate),
 			Version:        row.Version,
 			Class:          class,
 		})
 		if class != "secret" {
-			readable = append(readable, row.Address)
+			readable = append(readable, row.Coordinate)
 		}
 	}
 
 	read := s.read(r.Context(), s.opts.Other, readable)
-	values := make(map[envgate.Address]string, len(read.Values))
+	values := make(map[variables.Coordinate]string, len(read.Values))
 	for _, v := range read.Values {
 		values[v.address()] = v.Value
 	}
-	problems := make(map[envgate.Address]string, len(read.Errors))
+	problems := make(map[variables.Coordinate]string, len(read.Errors))
 	for _, e := range read.Errors {
 		problems[e.address()] = e.Error
 	}
@@ -504,16 +504,16 @@ func (s *Session) handleCopy(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, fmt.Errorf("read this request: %w", err))
 		return
 	}
-	rows := make([]envgate.Address, 0, len(req.Cells))
+	rows := make([]variables.Coordinate, 0, len(req.Cells))
 	for _, cell := range req.Cells {
 		rows = append(rows, cell.address())
 	}
 	read := s.read(r.Context(), s.opts.Other, rows)
-	values := make(map[envgate.Address]string, len(read.Values))
+	values := make(map[variables.Coordinate]string, len(read.Values))
 	for _, v := range read.Values {
 		values[v.address()] = v.Value
 	}
-	problems := make(map[envgate.Address]string, len(read.Errors))
+	problems := make(map[variables.Coordinate]string, len(read.Errors))
 	for _, e := range read.Errors {
 		problems[e.address()] = e.Error
 	}
@@ -560,7 +560,7 @@ func (s *Session) handleDone(w http.ResponseWriter, r *http.Request) {
 			fail(w, http.StatusBadGateway, err)
 			return
 		}
-		if err := s.opts.Gate.Check(); err != nil {
+		if err := s.opts.Gate.RefuseIncomplete(); err != nil {
 			fail(w, http.StatusConflict, fmt.Errorf("the deploy cannot resume yet: %w", err))
 			return
 		}
@@ -625,12 +625,12 @@ func addressable(folder string) error {
 	if folder == "" {
 		return nil
 	}
-	return envgate.ValidateFolder(folder)
+	return variables.ValidateFolder(folder)
 }
 
-func queryAddress(r *http.Request) envgate.Address {
-	return envgate.Address{
-		Cell:        envgate.Cell{Key: r.URL.Query().Get("key"), Folder: r.URL.Query().Get("folder")},
+func queryAddress(r *http.Request) variables.Coordinate {
+	return variables.Coordinate{
+		Cell:        variables.Cell{Key: r.URL.Query().Get("key"), Folder: r.URL.Query().Get("folder")},
 		Environment: r.URL.Query().Get("environment"),
 	}
 }

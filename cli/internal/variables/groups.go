@@ -1,4 +1,4 @@
-package envgate
+package variables
 
 import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -47,7 +47,7 @@ func needsValue(definition *resourcesv1.VariableDefinition, definitions []*resou
 }
 
 func resolves(definition *resourcesv1.VariableDefinition, binding string, present presentCells) bool {
-	_, ok := hop(definition, binding, present)
+	_, ok := resolveCell(definition, binding, present)
 	return ok
 }
 

@@ -11,9 +11,9 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/sdkversion"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -31,7 +31,7 @@ func TestCollect(t *testing.T) {
 		}
 
 		var stdout, stderr bytes.Buffer
-		resources, err := PrepareAndCollect(context.Background(), cfg, envgate.New(emptyValues{}, envgate.Scope{}), &stdout, &stderr)
+		resources, err := PrepareAndCollect(context.Background(), cfg, variables.NewDeclarations(emptyValues{}, variables.Scope{}), &stdout, &stderr)
 		if err != nil {
 			t.Fatalf("Collect: %v; stderr=%s", err, stderr.String())
 		}
@@ -80,7 +80,7 @@ export {};
 		}
 
 		var stdout, stderr bytes.Buffer
-		resources, err := PrepareAndCollect(context.Background(), cfg, envgate.New(emptyValues{}, envgate.Scope{}), &stdout, &stderr)
+		resources, err := PrepareAndCollect(context.Background(), cfg, variables.NewDeclarations(emptyValues{}, variables.Scope{}), &stdout, &stderr)
 		if err != nil {
 			t.Fatalf("Collect: %v; stderr=%s", err, stderr.String())
 		}
@@ -157,7 +157,7 @@ export {};
 	}
 
 	var stdout, stderr bytes.Buffer
-	resources, err := PrepareAndCollect(context.Background(), cfg, envgate.New(emptyValues{}, envgate.Scope{}), &stdout, &stderr)
+	resources, err := PrepareAndCollect(context.Background(), cfg, variables.NewDeclarations(emptyValues{}, variables.Scope{}), &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("Collect: %v; stderr=%s", err, stderr.String())
 	}
@@ -207,7 +207,7 @@ await fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.`+c
 `)
 
 	var stdout, stderr bytes.Buffer
-	resources, err := Collect(context.Background(), cfg, envgate.New(emptyValues{}, envgate.Scope{}), prepared, &stdout, &stderr)
+	resources, err := Collect(context.Background(), cfg, variables.NewDeclarations(emptyValues{}, variables.Scope{}), prepared, &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("Collect: %v; stderr=%s", err, stderr.String())
 	}
@@ -253,7 +253,7 @@ export {};
 	}
 
 	var stdout, stderr bytes.Buffer
-	resources, err := PrepareAndCollect(context.Background(), cfg, envgate.New(emptyValues{}, envgate.Scope{}), &stdout, &stderr)
+	resources, err := PrepareAndCollect(context.Background(), cfg, variables.NewDeclarations(emptyValues{}, variables.Scope{}), &stdout, &stderr)
 	var mismatch *sdkversion.MismatchError
 	if !errors.As(err, &mismatch) {
 		t.Fatalf("Collect() = %+v, %v; want the SDK refused for its version; stderr=%s", resources, err, stderr.String())
@@ -276,8 +276,8 @@ func writeFile(t *testing.T, path, contents string) {
 
 type emptyValues struct{}
 
-func (emptyValues) List(context.Context) ([]envgate.Stored, error) { return nil, nil }
+func (emptyValues) List(context.Context) ([]variables.ValueMetadata, error) { return nil, nil }
 
-func (emptyValues) Reveal(context.Context, []envgate.Address) (map[envgate.Cell]string, error) {
+func (emptyValues) Reveal(context.Context, []variables.Coordinate) (map[variables.Coordinate]string, error) {
 	return nil, nil
 }

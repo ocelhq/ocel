@@ -11,12 +11,16 @@ import (
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
+
+type missingVariablesError interface {
+	error
+	Variables() *streamv1.MissingVariables
+}
 
 type Run struct {
 	ctx     context.Context
@@ -84,10 +88,10 @@ func (r *Run) result(err error) (*streamv1.RunResultEvent, int) {
 		return result, exitsig.InterruptCode
 	}
 	result := &streamv1.RunResultEvent{Headline: r.verdict("failed"), Detail: err.Error()}
-	var refusal *envgate.Refusal
-	if errors.As(err, &refusal) {
-		result.Missing = refusal.Missing()
-		result.Detail = strings.TrimLeft(strings.TrimPrefix(err.Error(), refusal.Error()), "\n")
+	var missing missingVariablesError
+	if errors.As(err, &missing) {
+		result.Missing = missing.Variables()
+		result.Detail = strings.TrimLeft(strings.TrimPrefix(err.Error(), missing.Error()), "\n")
 	}
 	return result, 1
 }

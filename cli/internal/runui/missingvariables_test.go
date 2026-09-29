@@ -88,3 +88,26 @@ func stripANSI(s string) string {
 	}
 	return b.String()
 }
+
+func TestColourTouchesOnlyTheMarkAndTheFolderOfAMissingVariable(t *testing.T) {
+	t.Parallel()
+	missing := &streamv1.MissingVariables{Cells: []*streamv1.MissingVariable{
+		{Key: "DATABASE_URL", Reason: "no value"},
+		{Key: "PORT", Folder: "/web", Reason: "set, but not a number"},
+	}}
+	tagged := strings.NewReplacer("\x1b[31m", "<red>", "\x1b[90m", "<dim>", "\x1b[0m", "</>")
+	got := tagged.Replace(strings.Join(MissingVariablesLines(missing, Presentation{Color: true}), "\n"))
+	want := strings.Join([]string{
+		"<red>✗</> 2 variables are not ready — nothing has been built.",
+		"",
+		"  <red>✗</> DATABASE_URL  <dim>root</>  no value",
+		"  <red>✗</> PORT          <dim>/web</>  set, but not a number",
+	}, "\n")
+	if got != want {
+		t.Errorf("MissingVariablesLines() =\n%s\nwant\n%s", got, want)
+	}
+	stripped := strings.NewReplacer("<red>", "", "<dim>", "", "</>", "").Replace(got)
+	if plain := strings.Join(MissingVariablesLines(missing, Presentation{}), "\n"); stripped != plain {
+		t.Errorf("coloured minus codes =\n%s\nwant the plain form\n%s", stripped, plain)
+	}
+}

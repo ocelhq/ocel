@@ -17,11 +17,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/deployresult"
-	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/servicemap"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/varsui"
 	"github.com/ocelhq/ocel/pkg/constants"
 )
@@ -216,7 +216,7 @@ func TestADryRunNeverOpensTheVarsUI(t *testing.T) {
 			deps := clitest.NewDeps()
 			terminalStdin(&deps)
 			served := 0
-			deps.ServeVarsUI = func(context.Context, *projectconfig.Config, *providerclient.Provider, bool, *envgate.Gate, *varsui.Recovery) (*varsui.Session, error) {
+			deps.ServeVarsUI = func(context.Context, *projectconfig.Config, *providerclient.Provider, bool, *variables.Declarations, *varsui.Recovery) (*varsui.Session, error) {
 				served++
 				return nil, errors.New("a dry run must never serve the variables UI")
 			}

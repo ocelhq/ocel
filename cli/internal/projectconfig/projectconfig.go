@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/ocelhq/ocel/cli/internal/envgate"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/configdoc"
@@ -352,7 +352,7 @@ func normalizeApps(raw []configdoc.AppConfig, dir string) ([]App, error) {
 		}
 
 		if a.Folder != "" {
-			if err := envgate.ValidateFolder(a.Folder); err != nil {
+			if err := variables.ValidateFolder(a.Folder); err != nil {
 				return nil, fmt.Errorf("app %q: %w", a.Name, err)
 			}
 			if other, taken := boundFolders[a.Folder]; taken {

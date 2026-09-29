@@ -4,8 +4,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/edge"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -27,7 +27,7 @@ func lintEdgeWarnings(t *testing.T, cfg *projectconfig.Config) []string {
 		Class:  resourcesv1.VariableClass_VARIABLE_CLASS_SECRET,
 		Source: "env.ts",
 	}
-	warnings, err := envgate.LintEdge(
+	warnings, err := variables.LintEdgeSecrets(
 		[]*resourcesv1.VariableDefinition{definition},
 		envwire.Apps(cfg),
 		edgeApps(cfg),

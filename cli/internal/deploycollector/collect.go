@@ -10,8 +10,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/declcache"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
-	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/channel"
 )
 
@@ -43,7 +43,7 @@ func Prepare(cfg *projectconfig.Config) (Prepared, error) {
 	return Prepared{discovery: prepared, fingerprint: fingerprint}, nil
 }
 
-func PrepareAndCollect(ctx context.Context, cfg *projectconfig.Config, gate *envgate.Gate, stdout, stderr io.Writer) ([]declare.Resource, error) {
+func PrepareAndCollect(ctx context.Context, cfg *projectconfig.Config, gate *variables.Declarations, stdout, stderr io.Writer) ([]declare.Resource, error) {
 	prepared, err := Prepare(cfg)
 	if err != nil {
 		return nil, err
@@ -51,7 +51,7 @@ func PrepareAndCollect(ctx context.Context, cfg *projectconfig.Config, gate *env
 	return Collect(ctx, cfg, gate, prepared, stdout, stderr)
 }
 
-func Collect(ctx context.Context, cfg *projectconfig.Config, gate *envgate.Gate, prepared Prepared, stdout, stderr io.Writer) ([]declare.Resource, error) {
+func Collect(ctx context.Context, cfg *projectconfig.Config, gate *variables.Declarations, prepared Prepared, stdout, stderr io.Writer) ([]declare.Resource, error) {
 	c := New(gate)
 
 	if err := gate.Prefetch(ctx); err != nil {

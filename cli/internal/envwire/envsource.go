@@ -8,9 +8,9 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/envsourcewire"
 	"github.com/ocelhq/ocel/pkg/envvars"
@@ -26,9 +26,9 @@ func DeployedEnvSource(cfg *projectconfig.Config, preview bool) envsource.Descri
 	return cfg.EnvSource.Production
 }
 
-func ConfiguredEnvSource(cfg *projectconfig.Config, preview bool) envgate.EnvSource {
+func ConfiguredEnvSource(cfg *projectconfig.Config, preview bool) variables.EnvSource {
 	descriptor := DeployedEnvSource(cfg, preview)
-	return envgate.EnvSource{ID: descriptor.ID(), Credentials: descriptor.CredentialVariables()}
+	return variables.EnvSource{ID: descriptor.ID(), Credentials: descriptor.CredentialVariables()}
 }
 
 func Folders(cfg *projectconfig.Config) []string {
@@ -103,16 +103,16 @@ func CredentialProblems(err error) []*resourcesv1.VariableProblem {
 	return out
 }
 
-func EnvSourceOf(resp *envvarsv1.SyncEnvSourceResponse) envgate.EnvSource {
+func EnvSourceOf(resp *envvarsv1.SyncEnvSourceResponse) variables.EnvSource {
 	out := EnvSourceOfStatus(resp.GetStatus())
 	for _, cell := range resp.GetPresent() {
-		out.Present = append(out.Present, envgate.Cell{Key: cell.GetKey(), Folder: cell.GetFolder()})
+		out.Present = append(out.Present, variables.Cell{Key: cell.GetKey(), Folder: cell.GetFolder()})
 	}
 	return out
 }
 
-func EnvSourceOfStatus(status *envvarsv1.EnvSourceStatus) envgate.EnvSource {
-	out := envgate.EnvSource{ID: status.GetEnvSource(), CanCreate: status.GetCanCreate(), CanUpdate: status.GetCanUpdate(), Credentials: status.GetCredentials()}
+func EnvSourceOfStatus(status *envvarsv1.EnvSourceStatus) variables.EnvSource {
+	out := variables.EnvSource{ID: status.GetEnvSource(), CanCreate: status.GetCanCreate(), CanUpdate: status.GetCanUpdate(), Credentials: status.GetCredentials()}
 	for _, link := range status.GetLinks() {
 		if out.URLs == nil {
 			out.URLs = map[string]string{}
@@ -128,14 +128,14 @@ type EnvSourceClient struct {
 	Preview  bool
 }
 
-func (c EnvSourceClient) Describe(ctx context.Context) (envgate.EnvSource, error) {
+func (c EnvSourceClient) Describe(ctx context.Context) (variables.EnvSource, error) {
 	vars, err := c.Provider.Vars()
 	if err != nil {
-		return envgate.EnvSource{}, err
+		return variables.EnvSource{}, err
 	}
 	resp, err := vars.DescribeEnvSource(ctx, &envvarsv1.DescribeEnvSourceRequest{Tier: tierOf(c.Preview), Slug: c.Config.Slug})
 	if err != nil {
-		return envgate.EnvSource{}, err
+		return variables.EnvSource{}, err
 	}
 	return EnvSourceOfStatus(resp.GetStatus()), nil
 }
@@ -145,7 +145,7 @@ func (c EnvSourceClient) Sync(ctx context.Context) error {
 	return err
 }
 
-func (c EnvSourceClient) Set(ctx context.Context, at envgate.Cell, value, description string) (bool, error) {
+func (c EnvSourceClient) Set(ctx context.Context, at variables.Cell, value, description string) (bool, error) {
 	vars, err := c.Provider.Vars()
 	if err != nil {
 		return false, err

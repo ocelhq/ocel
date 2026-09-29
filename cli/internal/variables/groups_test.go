@@ -1,4 +1,4 @@
-package envgate_test
+package variables_test
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/envgate"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
@@ -25,13 +25,13 @@ func groupOf(key string, required bool, description string) *resourcesv1.GroupDe
 	return &resourcesv1.GroupDefinition{Key: key, Required: required, Description: description}
 }
 
-func declareGrouped(t *testing.T, g *envgate.Gate, groups []*resourcesv1.GroupDefinition, definitions ...*resourcesv1.VariableDefinition) error {
+func declareGrouped(t *testing.T, g *variables.Declarations, groups []*resourcesv1.GroupDefinition, definitions ...*resourcesv1.VariableDefinition) error {
 	t.Helper()
 	_, err := g.DeclareEnv(context.Background(), &resourcesv1.DeclareEnvRequest{Definitions: definitions, Groups: groups})
 	return err
 }
 
-func missingKeys(t *testing.T, g *envgate.Gate, appName string) []string {
+func missingKeys(t *testing.T, g *variables.Declarations, appName string) []string {
 	t.Helper()
 	var keys []string
 	for _, cell := range app(t, g.Matrix(nil), appName).Missing {
@@ -112,16 +112,16 @@ func TestDeclareEnvRefusesOneGroupKeyClaimedTwice(t *testing.T) {
 		t.Errorf("err = %v, want it to say the group is declared twice", err)
 	}
 	if got := g.Groups(); len(got) != 1 {
-		t.Errorf("groups = %+v, want the refused declaration left out of the gate", got)
+		t.Errorf("groups = %+v, want the refused declaration left out of the declarations", got)
 	}
 }
 
-func TestGroupPresenceGatesWhatIsMissing(t *testing.T) {
+func TestAGroupWithAMemberSetNeedsItsRequiredMembers(t *testing.T) {
 	t.Parallel()
 
 	t.Run("an optional group nothing has delivered needs nothing", func(t *testing.T) {
 		t.Parallel()
-		g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "web"}}})
+		g := prefetched(t, newFakeValues(), variables.Scope{Apps: []variables.App{{Name: "web"}}})
 		if err := declareGrouped(t, g, []*resourcesv1.GroupDefinition{groupOf("github", false, "")},
 			member("GITHUB_CLIENT_ID", "github", true),
 			member("GITHUB_CLIENT_SECRET", "github", true),
@@ -137,7 +137,7 @@ func TestGroupPresenceGatesWhatIsMissing(t *testing.T) {
 		t.Parallel()
 		values := newFakeValues()
 		values.set("GITHUB_CLIENT_ID", "", "id")
-		g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "web"}}})
+		g := prefetched(t, values, variables.Scope{Apps: []variables.App{{Name: "web"}}})
 		if err := declareGrouped(t, g, []*resourcesv1.GroupDefinition{groupOf("github", false, "")},
 			member("GITHUB_CLIENT_ID", "github", true),
 			member("GITHUB_CLIENT_SECRET", "github", true),
@@ -151,7 +151,7 @@ func TestGroupPresenceGatesWhatIsMissing(t *testing.T) {
 
 	t.Run("a required group needs its required members with nothing set", func(t *testing.T) {
 		t.Parallel()
-		g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "web"}}})
+		g := prefetched(t, newFakeValues(), variables.Scope{Apps: []variables.App{{Name: "web"}}})
 		if err := declareGrouped(t, g, []*resourcesv1.GroupDefinition{groupOf("github", true, "")},
 			member("GITHUB_CLIENT_ID", "github", true),
 			member("GITHUB_CLIENT_SECRET", "github", true),
@@ -165,7 +165,7 @@ func TestGroupPresenceGatesWhatIsMissing(t *testing.T) {
 
 	t.Run("a member spelled optional is never missing, however the group is filled", func(t *testing.T) {
 		t.Parallel()
-		g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "web"}}})
+		g := prefetched(t, newFakeValues(), variables.Scope{Apps: []variables.App{{Name: "web"}}})
 		if err := declareGrouped(t, g, []*resourcesv1.GroupDefinition{groupOf("github", true, "")},
 			member("GITHUB_CLIENT_ID", "github", true),
 			member("GITHUB_SCOPES", "github", false),
@@ -181,7 +181,7 @@ func TestGroupPresenceGatesWhatIsMissing(t *testing.T) {
 		t.Parallel()
 		values := newFakeValues()
 		values.set("GITHUB_ENABLED", "", "1")
-		g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "web"}}})
+		g := prefetched(t, values, variables.Scope{Apps: []variables.App{{Name: "web"}}})
 		if err := declareGrouped(t, g, []*resourcesv1.GroupDefinition{groupOf("github", false, "")},
 			member("GITHUB_ENABLED", "github", true),
 			member("GITHUB_CLIENT_ID", "github", true),
@@ -196,7 +196,7 @@ func TestGroupPresenceGatesWhatIsMissing(t *testing.T) {
 
 	t.Run("a group of members all spelled optional never blocks", func(t *testing.T) {
 		t.Parallel()
-		g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "web"}}})
+		g := prefetched(t, newFakeValues(), variables.Scope{Apps: []variables.App{{Name: "web"}}})
 		if err := declareGrouped(t, g, []*resourcesv1.GroupDefinition{groupOf("github", true, "")},
 			member("GITHUB_CLIENT_ID", "github", false),
 			member("GITHUB_SCOPES", "github", false),
@@ -214,7 +214,7 @@ func TestGroupPresenceFollowsFolderInheritance(t *testing.T) {
 
 	values := newFakeValues()
 	values.set("GITHUB_CLIENT_ID", "", "id")
-	g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "web", Folder: "/web"}}})
+	g := prefetched(t, values, variables.Scope{Apps: []variables.App{{Name: "web", Folder: "/web"}}})
 	if err := declareGrouped(t, g, []*resourcesv1.GroupDefinition{groupOf("github", false, "")},
 		member("GITHUB_CLIENT_ID", "github", true),
 		member("GITHUB_CLIENT_SECRET", "github", true),
@@ -227,7 +227,7 @@ func TestGroupPresenceFollowsFolderInheritance(t *testing.T) {
 	}
 }
 
-func TestGroupStates(t *testing.T) {
+func TestGroupStatesListWhatEachGroupHasSetAndMissing(t *testing.T) {
 	t.Parallel()
 
 	groups := []*resourcesv1.GroupDefinition{groupOf("github", false, "Sign in with GitHub"), groupOf("stripe", true, "")}
@@ -240,7 +240,7 @@ func TestGroupStates(t *testing.T) {
 
 	t.Run("the groups come back in declaration order", func(t *testing.T) {
 		t.Parallel()
-		states := envgate.GroupStates(definitions, groups, nil, "")
+		states := variables.GroupStates(definitions, groups, nil, "")
 		if len(states) != 2 {
 			t.Fatalf("states = %+v, want one per group", states)
 		}
@@ -251,7 +251,7 @@ func TestGroupStates(t *testing.T) {
 
 	t.Run("nothing set leaves an optional group needing nothing and a required one needing", func(t *testing.T) {
 		t.Parallel()
-		states := envgate.GroupStates(definitions, groups, nil, "")
+		states := variables.GroupStates(definitions, groups, nil, "")
 		if len(states[0].Set) != 0 || len(states[0].Missing) != 0 {
 			t.Errorf("github = %+v, want an off group needing nothing", states[0])
 		}
@@ -262,7 +262,7 @@ func TestGroupStates(t *testing.T) {
 
 	t.Run("one member set leaves the rest missing, in declaration order", func(t *testing.T) {
 		t.Parallel()
-		states := envgate.GroupStates(definitions, groups, []envgate.Cell{{Key: "GITHUB_CLIENT_ID"}}, "")
+		states := variables.GroupStates(definitions, groups, []variables.Cell{{Key: "GITHUB_CLIENT_ID"}}, "")
 		if !reflect.DeepEqual(states[0].Set, []string{"GITHUB_CLIENT_ID"}) || !reflect.DeepEqual(states[0].Missing, []string{"GITHUB_CLIENT_SECRET"}) {
 			t.Errorf("github = %+v, want the set and the missing named", states[0])
 		}
@@ -271,7 +271,7 @@ func TestGroupStates(t *testing.T) {
 	t.Run("a member spelled optional is neither set nor missing until it has a value", func(t *testing.T) {
 		t.Parallel()
 		optional := append(slices.Clone(definitions), member("GITHUB_SCOPES", "github", false))
-		states := envgate.GroupStates(optional, groups, []envgate.Cell{{Key: "GITHUB_CLIENT_ID"}}, "")
+		states := variables.GroupStates(optional, groups, []variables.Cell{{Key: "GITHUB_CLIENT_ID"}}, "")
 		if len(states[0].Set)+len(states[0].Missing) != 2 {
 			t.Errorf("github = %+v, want the optional member out of the count: it is never missing", states[0])
 		}
@@ -279,20 +279,20 @@ func TestGroupStates(t *testing.T) {
 
 	t.Run("a value at the root completes a group read from a folder", func(t *testing.T) {
 		t.Parallel()
-		present := []envgate.Cell{{Key: "GITHUB_CLIENT_ID"}, {Key: "GITHUB_CLIENT_SECRET", Folder: "/web"}}
-		states := envgate.GroupStates(definitions, groups, present, "/web")
+		present := []variables.Cell{{Key: "GITHUB_CLIENT_ID"}, {Key: "GITHUB_CLIENT_SECRET", Folder: "/web"}}
+		states := variables.GroupStates(definitions, groups, present, "/web")
 		if len(states[0].Missing) != 0 {
 			t.Errorf("github = %+v, want nothing missing: /web inherits the root value", states[0])
 		}
 	})
 }
 
-func TestRefusalGathersGroupedMembersInDeclarationOrder(t *testing.T) {
+func TestAMissingErrorGathersGroupedMembersInDeclarationOrder(t *testing.T) {
 	t.Parallel()
 
 	values := newFakeValues()
 	values.set("GITHUB_CLIENT_ID", "", "id")
-	g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "web"}}})
+	g := prefetched(t, values, variables.Scope{Apps: []variables.App{{Name: "web"}}})
 	if err := declareGrouped(t, g, []*resourcesv1.GroupDefinition{groupOf("github", false, "Sign in with GitHub")},
 		member("GITHUB_CLIENT_ID", "github", true),
 		member("GITHUB_REDIRECT_URL", "github", true),
@@ -304,9 +304,9 @@ func TestRefusalGathersGroupedMembersInDeclarationOrder(t *testing.T) {
 		t.Fatalf("DeclareEnv: %v", err)
 	}
 
-	err := g.Check()
+	err := g.RefuseIncomplete()
 	if err == nil {
-		t.Fatal("Check err = nil, want a refusal")
+		t.Fatal("RefuseIncomplete() err = nil, want a refusal")
 	}
 	want := strings.Join([]string{
 		"✗ 3 variables are not ready — nothing has been built.",
@@ -326,7 +326,7 @@ func TestRefusalGathersGroupedMembersInDeclarationOrder(t *testing.T) {
 func TestMatrixListsGroupsOnce(t *testing.T) {
 	t.Parallel()
 
-	g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "web"}}})
+	g := prefetched(t, newFakeValues(), variables.Scope{Apps: []variables.App{{Name: "web"}}})
 	if err := declareGrouped(t, g, []*resourcesv1.GroupDefinition{groupOf("github", false, "Sign in with GitHub"), groupOf("stripe", true, "")},
 		member("GITHUB_CLIENT_ID", "github", true),
 		member("STRIPE_KEY", "stripe", true),
@@ -335,7 +335,7 @@ func TestMatrixListsGroupsOnce(t *testing.T) {
 	}
 
 	m := g.Matrix(nil)
-	want := []envgate.MatrixGroup{
+	want := []variables.MatrixGroup{
 		{Key: "github", Description: "Sign in with GitHub"},
 		{Key: "stripe", Required: true},
 	}

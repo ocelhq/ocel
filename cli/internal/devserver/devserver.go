@@ -15,11 +15,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
-	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
 	"github.com/ocelhq/ocel/cli/internal/resourceregistry"
 	"github.com/ocelhq/ocel/cli/internal/sdkversion"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/channel"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -90,7 +90,7 @@ func (s *Server) Declare(_ context.Context, req *resourcesv1.DeclareRequest) (*r
 	return &resourcesv1.DeclareResponse{}, nil
 }
 
-func (s *Server) UseValues(values map[string]string, scope envgate.Scope) {
+func (s *Server) UseValues(values map[string]string, scope variables.Scope) {
 	s.env.use(values, scope)
 }
 
@@ -107,7 +107,7 @@ func (s *Server) CheckEnv(ctx context.Context) error {
 	if err := gate.Prefetch(ctx); err != nil {
 		return err
 	}
-	return gate.Check()
+	return gate.RefuseIncomplete()
 }
 
 func (s *Server) ScopedFolders() map[string][]string {

@@ -14,11 +14,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
-	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -51,10 +51,10 @@ func recordBuildApp(deps *cmddeps.Deps) *bool {
 	return &ran
 }
 
-func clientValueGate(t *testing.T, cfg *projectconfig.Config, value string) *envgate.Gate {
+func clientValueGate(t *testing.T, cfg *projectconfig.Config, value string) *variables.Declarations {
 	t.Helper()
-	cell := envgate.Cell{Key: "PUBLIC_SITE_URL"}
-	gate := envgate.New(oneValue{cell: cell, value: value}, envwire.Scope(cfg, false, ""))
+	cell := variables.Cell{Key: "PUBLIC_SITE_URL"}
+	gate := variables.NewDeclarations(oneValue{cell: cell, value: value}, envwire.Scope(cfg, false, ""))
 	if err := gate.Prefetch(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -72,16 +72,16 @@ func clientValueGate(t *testing.T, cfg *projectconfig.Config, value string) *env
 }
 
 type oneValue struct {
-	cell  envgate.Cell
+	cell  variables.Cell
 	value string
 }
 
-func (v oneValue) List(context.Context) ([]envgate.Stored, error) {
-	return []envgate.Stored{{Address: envgate.Address{Cell: v.cell}}}, nil
+func (v oneValue) List(context.Context) ([]variables.ValueMetadata, error) {
+	return []variables.ValueMetadata{{Coordinate: variables.Coordinate{Cell: v.cell}}}, nil
 }
 
-func (v oneValue) Reveal(context.Context, []envgate.Address) (map[envgate.Cell]string, error) {
-	return map[envgate.Cell]string{v.cell: v.value}, nil
+func (v oneValue) Reveal(context.Context, []variables.Coordinate) (map[variables.Coordinate]string, error) {
+	return map[variables.Coordinate]string{{Cell: v.cell}: v.value}, nil
 }
 
 func prebuiltConfig(root string) *projectconfig.Config {
@@ -92,15 +92,15 @@ func prebuiltConfig(root string) *projectconfig.Config {
 	}
 }
 
-func noGate(cfg *projectconfig.Config) *envgate.Gate {
-	return envgate.New(emptyValues{}, envwire.Scope(cfg, false, ""))
+func noGate(cfg *projectconfig.Config) *variables.Declarations {
+	return variables.NewDeclarations(emptyValues{}, envwire.Scope(cfg, false, ""))
 }
 
 type emptyValues struct{}
 
-func (emptyValues) List(context.Context) ([]envgate.Stored, error) { return nil, nil }
+func (emptyValues) List(context.Context) ([]variables.ValueMetadata, error) { return nil, nil }
 
-func (emptyValues) Reveal(context.Context, []envgate.Address) (map[envgate.Cell]string, error) {
+func (emptyValues) Reveal(context.Context, []variables.Coordinate) (map[variables.Coordinate]string, error) {
 	return nil, nil
 }
 

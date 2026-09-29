@@ -1,12 +1,14 @@
-package envgate_test
+package variables_test
 
 import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/envgate"
+	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -18,20 +20,20 @@ func invalid(key, folder, detail string) *resourcesv1.VariableProblem {
 	return &resourcesv1.VariableProblem{Key: key, Folder: folder, Kind: resourcesv1.VariableProblem_KIND_INVALID, Detail: detail}
 }
 
-func TestRefusalIsOneLinePerCell(t *testing.T) {
+func TestAMissingErrorIsOneLinePerCell(t *testing.T) {
 	t.Parallel()
 
-	apps := []envgate.App{{Name: "web", Folder: "/web"}, {Name: "api"}}
+	apps := []variables.App{{Name: "web", Folder: "/web"}, {Name: "api"}}
 	for _, tc := range []struct {
 		name     string
 		problems []*resourcesv1.VariableProblem
-		scope    envgate.Scope
+		scope    variables.Scope
 		want     string
 	}{
 		{
 			name:     "one missing cell",
 			problems: []*resourcesv1.VariableProblem{missing("STRIPE_API_KEY", "")},
-			scope:    envgate.Scope{Apps: apps},
+			scope:    variables.Scope{Apps: apps},
 			want: strings.Join([]string{
 				"✗ 1 variable is not ready — nothing has been built.",
 				"",
@@ -47,7 +49,7 @@ func TestRefusalIsOneLinePerCell(t *testing.T) {
 				missing("STRIPE_KEY", "/web"),
 				missing("SENTRY_DSN", "/services/api"),
 			},
-			scope: envgate.Scope{Apps: apps},
+			scope: variables.Scope{Apps: apps},
 			want: strings.Join([]string{
 				"✗ 3 variables are not ready — nothing has been built.",
 				"",
@@ -65,7 +67,7 @@ func TestRefusalIsOneLinePerCell(t *testing.T) {
 				invalid("PORT", "", "not a number"),
 				invalid("API_BASE", "/web", ""),
 			},
-			scope: envgate.Scope{Apps: apps, Preview: true},
+			scope: variables.Scope{Apps: apps, Tier: environmentv1.Tier_TIER_PREVIEW},
 			want: strings.Join([]string{
 				"✗ 3 variables are not ready — nothing has been built.",
 				"",
@@ -79,7 +81,7 @@ func TestRefusalIsOneLinePerCell(t *testing.T) {
 		{
 			name:     "one cell in a folder on a preview",
 			problems: []*resourcesv1.VariableProblem{missing("STRIPE_KEY", "/web")},
-			scope:    envgate.Scope{Apps: apps, Preview: true},
+			scope:    variables.Scope{Apps: apps, Tier: environmentv1.Tier_TIER_PREVIEW},
 			want: strings.Join([]string{
 				"✗ 1 variable is not ready — nothing has been built.",
 				"",
@@ -91,7 +93,7 @@ func TestRefusalIsOneLinePerCell(t *testing.T) {
 		{
 			name:     "a named preview environment is named in the command",
 			problems: []*resourcesv1.VariableProblem{missing("STRIPE_KEY", "")},
-			scope:    envgate.Scope{Apps: apps, Preview: true, Environment: "pr-12"},
+			scope:    variables.Scope{Apps: apps, Tier: environmentv1.Tier_TIER_PREVIEW, Environment: "pr-12"},
 			want: strings.Join([]string{
 				"✗ 1 variable is not ready — nothing has been built.",
 				"",
@@ -103,7 +105,7 @@ func TestRefusalIsOneLinePerCell(t *testing.T) {
 		{
 			name:     "a reachable browser is sent to the editor",
 			problems: []*resourcesv1.VariableProblem{missing("DATABASE_URL", ""), missing("STRIPE_KEY", "/web")},
-			scope:    envgate.Scope{Apps: apps, Browser: true},
+			scope:    variables.Scope{Apps: apps, Browser: true},
 			want: strings.Join([]string{
 				"✗ 2 variables are not ready — nothing has been built.",
 				"",
@@ -116,7 +118,7 @@ func TestRefusalIsOneLinePerCell(t *testing.T) {
 		{
 			name:     "the editor remedy includes the preview flag",
 			problems: []*resourcesv1.VariableProblem{missing("DATABASE_URL", "")},
-			scope:    envgate.Scope{Apps: apps, Browser: true, Preview: true},
+			scope:    variables.Scope{Apps: apps, Browser: true, Tier: environmentv1.Tier_TIER_PREVIEW},
 			want: strings.Join([]string{
 				"✗ 1 variable is not ready — nothing has been built.",
 				"",
@@ -128,7 +130,7 @@ func TestRefusalIsOneLinePerCell(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			refusal := &envgate.Refusal{Problems: tc.problems, Scope: tc.scope}
+			refusal := &variables.MissingError{Problems: tc.problems, Scope: tc.scope}
 			if got := refusal.Error(); got != tc.want {
 				t.Errorf("Error() =\n%s\nwant\n%s", got, tc.want)
 			}
@@ -144,31 +146,31 @@ func TestRefusalIsOneLinePerCell(t *testing.T) {
 	}
 }
 
-func TestRefusalMissingIsTheStreamFormOfError(t *testing.T) {
+func TestAMissingErrorsVariablesAreTheStreamFormOfItsMessage(t *testing.T) {
 	t.Parallel()
-	refusal := &envgate.Refusal{
+	refusal := &variables.MissingError{
 		Problems: []*resourcesv1.VariableProblem{missing("DATABASE_URL", ""), invalid("PORT", "/web", "not a number")},
-		Scope:    envgate.Scope{Browser: true},
+		Scope:    variables.Scope{Browser: true},
 	}
-	missing := refusal.Missing()
+	missing := refusal.Variables()
 	if len(missing.GetCells()) != 2 {
-		t.Fatalf("Missing().Cells = %+v, want one per problem", missing.GetCells())
+		t.Fatalf("Variables().Cells = %+v, want one per problem", missing.GetCells())
 	}
 	if got := missing.GetCells()[1]; got.GetKey() != "PORT" || got.GetFolder() != "/web" || got.GetReason() != "set, but not a number" {
-		t.Errorf("Missing().Cells[1] = %+v, want the key, folder and reason of the invalid cell", got)
+		t.Errorf("Variables().Cells[1] = %+v, want the key, folder and reason of the invalid cell", got)
 	}
 	if missing.GetRemedy() != "ocel env ui" {
-		t.Errorf("Missing().Remedy = %q, want the editor", missing.GetRemedy())
+		t.Errorf("Variables().Remedy = %q, want the editor", missing.GetRemedy())
 	}
-	plain := strings.Join(append(envgate.Lines(missing, envgate.Plain), "", envgate.RemedyLine(missing.GetRemedy())), "\n")
+	plain := strings.Join(append(runui.MissingVariablesLines(missing, runui.Presentation{}), "", runui.MissingVariablesRemedy(missing.GetRemedy())), "\n")
 	if plain != refusal.Error() {
-		t.Errorf("Lines(Missing()) =\n%s\nwant Error()\n%s", plain, refusal.Error())
+		t.Errorf("MissingVariablesLines(Variables()) =\n%s\nwant Error()\n%s", plain, refusal.Error())
 	}
 }
 
-func TestRefusalPrintsTheVariableDescription(t *testing.T) {
+func TestAMissingErrorPrintsTheVariableDescription(t *testing.T) {
 	t.Parallel()
-	refusal := &envgate.Refusal{
+	refusal := &variables.MissingError{
 		Problems: []*resourcesv1.VariableProblem{missing("STRIPE_API_KEY", "")},
 		Definitions: []*resourcesv1.VariableDefinition{{
 			Key:         "STRIPE_API_KEY",
@@ -178,14 +180,14 @@ func TestRefusalPrintsTheVariableDescription(t *testing.T) {
 	if got := refusal.Error(); !strings.Contains(got, "Used to call Stripe") {
 		t.Errorf("Error() = %q, want the variable description", got)
 	}
-	if got := refusal.Missing().GetCells()[0].GetDescription(); got != "Used to call Stripe" {
-		t.Errorf("Missing().Cells[0].Description = %q, want %q", got, "Used to call Stripe")
+	if got := refusal.Variables().GetCells()[0].GetDescription(); got != "Used to call Stripe" {
+		t.Errorf("Variables().Cells[0].Description = %q, want %q", got, "Used to call Stripe")
 	}
 }
 
-func TestMissingSendsGroupingOverTheWire(t *testing.T) {
+func TestMissingVariablesCarryTheirGroupingOverTheWire(t *testing.T) {
 	t.Parallel()
-	refusal := &envgate.Refusal{
+	refusal := &variables.MissingError{
 		Problems: []*resourcesv1.VariableProblem{
 			missing("GITHUB_CLIENT_ID", ""),
 			missing("GITHUB_CLIENT_SECRET", ""),
@@ -199,7 +201,7 @@ func TestMissingSendsGroupingOverTheWire(t *testing.T) {
 		Groups: []*resourcesv1.GroupDefinition{{Key: "github", Description: "Sign in with GitHub"}},
 	}
 
-	encoded, err := proto.Marshal(refusal.Missing())
+	encoded, err := proto.Marshal(refusal.Variables())
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
@@ -208,37 +210,12 @@ func TestMissingSendsGroupingOverTheWire(t *testing.T) {
 		t.Fatalf("Unmarshal: %v", err)
 	}
 
-	got := strings.Join(append(envgate.Lines(wire, envgate.Plain), "", envgate.RemedyLine(wire.GetRemedy())), "\n")
+	got := strings.Join(append(runui.MissingVariablesLines(wire, runui.Presentation{}), "", runui.MissingVariablesRemedy(wire.GetRemedy())), "\n")
 	if got != refusal.Error() {
-		t.Errorf("Lines(wire) =\n%s\nwant Error()\n%s", got, refusal.Error())
+		t.Errorf("MissingVariablesLines(wire) =\n%s\nwant Error()\n%s", got, refusal.Error())
 	}
 	if !strings.Contains(got, "github — set together (Sign in with GitHub)") {
-		t.Errorf("Lines(wire) =\n%s\nwant the group header", got)
-	}
-}
-
-func TestPaintTouchesOnlyTheMarkAndTheFolder(t *testing.T) {
-	t.Parallel()
-	refusal := &envgate.Refusal{
-		Problems: []*resourcesv1.VariableProblem{missing("DATABASE_URL", ""), invalid("PORT", "/web", "not a number")},
-	}
-	paint := envgate.Paint{
-		Fail:  func(s string) string { return "<red>" + s + "</red>" },
-		Faint: func(s string) string { return "<dim>" + s + "</dim>" },
-	}
-	got := envgate.Lines(refusal.Missing(), paint)
-	want := []string{
-		"<red>✗</red> 2 variables are not ready — nothing has been built.",
-		"",
-		"  <red>✗</red> DATABASE_URL  <dim>root</dim>  no value",
-		"  <red>✗</red> PORT          <dim>/web</dim>  set, but not a number",
-	}
-	if strings.Join(got, "\n") != strings.Join(want, "\n") {
-		t.Errorf("Lines() =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
-	}
-	stripped := strings.NewReplacer("<red>", "", "</red>", "", "<dim>", "", "</dim>", "").Replace(strings.Join(got, "\n"))
-	if plain := strings.Join(envgate.Lines(refusal.Missing(), envgate.Plain), "\n"); stripped != plain {
-		t.Errorf("painted minus codes =\n%s\nwant the plain form\n%s", stripped, plain)
+		t.Errorf("MissingVariablesLines(wire) =\n%s\nwant the group header", got)
 	}
 }
 
@@ -250,13 +227,13 @@ func TestASchemaComplaintAboutAValueThatIsNotPlainQuotesNothingTheSDKSaid(t *tes
 			t.Parallel()
 			values := newFakeValues()
 			values.set("STRIPE_KEY", "", "sk_live_leaked")
-			g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "web"}}})
+			g := prefetched(t, values, variables.Scope{Apps: []variables.App{{Name: "web"}}})
 			declare(t, g, def("STRIPE_KEY", class))
 			report(t, g, invalid("STRIPE_KEY", "", `expected "sk_test_", received "sk_live_leaked"`))
 
-			err := g.Check()
+			err := g.RefuseIncomplete()
 			if err == nil {
-				t.Fatal("Check = nil, want the invalid value refused")
+				t.Fatal("RefuseIncomplete() = nil, want the invalid value refused")
 			}
 			if strings.Contains(err.Error(), "sk_live_leaked") || !strings.Contains(err.Error(), "does not satisfy its schema") {
 				t.Errorf("refusal = %q, want the generic reason and nothing the schema said", err)
@@ -270,12 +247,12 @@ func TestASchemaComplaintAboutAValueThatIsNotPlainQuotesNothingTheSDKSaid(t *tes
 
 	t.Run("a complaint about a key not yet declared plain keeps nothing the SDK said", func(t *testing.T) {
 		t.Parallel()
-		g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "web"}}})
+		g := prefetched(t, newFakeValues(), variables.Scope{Apps: []variables.App{{Name: "web"}}})
 		report(t, g, invalid("UNDECLARED", "", "received hunter2"))
 		declare(t, g, def("UNDECLARED", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET))
 
-		if err := g.Check(); err == nil || strings.Contains(err.Error(), "hunter2") {
-			t.Errorf("Check = %v, want a refusal quoting nothing the schema said", err)
+		if err := g.RefuseIncomplete(); err == nil || strings.Contains(err.Error(), "hunter2") {
+			t.Errorf("RefuseIncomplete() = %v, want a refusal quoting nothing the schema said", err)
 		}
 	})
 }

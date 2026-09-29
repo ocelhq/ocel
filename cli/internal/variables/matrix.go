@@ -1,4 +1,4 @@
-package envgate
+package variables
 
 import (
 	"cmp"
@@ -74,38 +74,38 @@ var className = map[resourcesv1.VariableClass]string{
 	resourcesv1.VariableClass_VARIABLE_CLASS_SECRET:    "secret",
 }
 
-func (g *Gate) Matrix(environments []string) Matrix {
-	g.mu.Lock()
-	definitions := slices.Clone(g.definitions)
-	groups := slices.Clone(g.groups)
-	apps := slices.Clone(g.scope.Apps)
-	base := g.baseCells()
-	resolved := g.resolvedCells()
-	references := maps.Clone(g.references)
+func (d *Declarations) Matrix(environments []string) Matrix {
+	d.mu.Lock()
+	definitions := slices.Clone(d.definitions)
+	groups := slices.Clone(d.groups)
+	apps := slices.Clone(d.scope.Apps)
+	base := d.baseCells()
+	resolved := d.resolvedCells()
+	references := maps.Clone(d.references)
 	copied := map[Cell]string{}
-	for _, stored := range g.cells {
+	for _, stored := range d.cells {
 		if stored.EnvSource != "" && stored.EnvSource != string(envsource.Builtin) {
 			copied[stored.Cell] = stored.EnvSource
 		}
 	}
-	overrides := make(map[Cell][]Override, len(g.overrides))
-	for cell, forCell := range g.overrides {
+	overrides := make(map[Cell][]Override, len(d.overrides))
+	for cell, forCell := range d.overrides {
 		for _, override := range forCell {
-			override.Orphaned = Orphaned(environments, override.Environment)
+			override.Orphaned = IsOrphaned(environments, override.Environment)
 			overrides[cell] = append(overrides[cell], override)
 		}
 	}
 	complaints := map[Cell]string{}
-	for _, problem := range g.problems {
+	for _, problem := range d.problems {
 		if problem.GetKind() == resourcesv1.VariableProblem_KIND_INVALID {
 			complaints[Cell{Key: problem.GetKey(), Folder: problem.GetFolder()}] = cmp.Or(problem.GetDetail(), "it does not satisfy its schema")
 		}
 	}
-	g.mu.Unlock()
+	d.mu.Unlock()
 
 	appDefinitions, appGroups := definitions, groups
-	definitions = append(slices.Clone(definitions), g.scope.impliedDefinitions()...)
-	groups = append(slices.Clone(groups), g.scope.impliedGroups()...)
+	definitions = append(slices.Clone(definitions), d.scope.impliedDefinitions()...)
+	groups = append(slices.Clone(groups), d.scope.impliedGroups()...)
 	columns := columns(definitions, apps, base, overrides)
 	m := Matrix{
 		Columns: columns,
@@ -228,16 +228,16 @@ func columns(definitions []*resourcesv1.VariableDefinition, apps []App, present 
 	return append([]string{""}, folders...)
 }
 
-func (g *Gate) Forget(cell Cell) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
+func (d *Declarations) ClearProblems(cell Cell) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
 
-	kept := g.problems[:0]
-	for _, problem := range g.problems {
+	kept := d.problems[:0]
+	for _, problem := range d.problems {
 		if problem.GetKey() == cell.Key && problem.GetFolder() == cell.Folder {
 			continue
 		}
 		kept = append(kept, problem)
 	}
-	g.problems = kept
+	d.problems = kept
 }

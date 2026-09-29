@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/events"
 
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
@@ -333,7 +332,7 @@ func (s *GroupedSink) wait(waiting *streamv1.WaitingEvent) {
 		return
 	}
 	s.gated = true
-	lines := envgate.Lines(waiting.GetMissing(), missingPaint(s.present))
+	lines := MissingVariablesLines(waiting.GetMissing(), s.present)
 	s.gate(append(lines,
 		"",
 		blockIndent+"Fill them in at:",

@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/envgate"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
@@ -16,7 +16,7 @@ func TestCollector(t *testing.T) {
 	t.Run("declare records the full typed config", func(t *testing.T) {
 		t.Parallel()
 
-		c := New(envgate.New(emptyValues{}, envgate.Scope{}))
+		c := New(variables.NewDeclarations(emptyValues{}, variables.Scope{}))
 
 		_, err := c.Declare(context.Background(), &resourcesv1.DeclareRequest{
 			Resource: &resourcesv1.ResourceIdentifier{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES},
@@ -44,7 +44,7 @@ func TestCollector(t *testing.T) {
 	t.Run("declare rejects an invalid declare", func(t *testing.T) {
 		t.Parallel()
 
-		c := New(envgate.New(emptyValues{}, envgate.Scope{}))
+		c := New(variables.NewDeclarations(emptyValues{}, variables.Scope{}))
 
 		_, err := c.Declare(context.Background(), &resourcesv1.DeclareRequest{})
 		if err == nil {
@@ -58,7 +58,7 @@ func TestCollector(t *testing.T) {
 	t.Run("the mux acks sync without provisioning", func(t *testing.T) {
 		t.Parallel()
 
-		c := New(envgate.New(emptyValues{}, envgate.Scope{}))
+		c := New(variables.NewDeclarations(emptyValues{}, variables.Scope{}))
 		server := httptest.NewServer(c.Mux())
 		defer server.Close()
 

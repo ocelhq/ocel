@@ -8,23 +8,23 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/cli/internal/declare"
-	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/sdkversion"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/version"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/resources/v1/resourcesv1connect"
 )
 
 type Collector struct {
-	*envgate.Gate
+	*variables.Declarations
 	sdk *sdkversion.Gate
 
 	mu        sync.Mutex
 	resources []declare.Resource
 }
 
-func New(gate *envgate.Gate) *Collector {
-	return &Collector{Gate: gate, sdk: sdkversion.NewGate(version.Version)}
+func New(gate *variables.Declarations) *Collector {
+	return &Collector{Declarations: gate, sdk: sdkversion.NewGate(version.Version)}
 }
 
 func (c *Collector) Declare(_ context.Context, req *resourcesv1.DeclareRequest) (*resourcesv1.DeclareResponse, error) {

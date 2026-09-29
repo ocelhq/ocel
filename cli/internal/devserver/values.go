@@ -5,7 +5,7 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/ocelhq/ocel/cli/internal/envgate"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
@@ -36,7 +36,7 @@ func (v *flatValues) Declare(definitions []*resourcesv1.VariableDefinition) {
 	}
 }
 
-func (v *flatValues) List(context.Context) ([]envgate.Stored, error) {
+func (v *flatValues) List(context.Context) ([]variables.ValueMetadata, error) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
@@ -51,27 +51,27 @@ func (v *flatValues) List(context.Context) ([]envgate.Stored, error) {
 	}
 	slices.Sort(keys)
 
-	var stored []envgate.Stored
+	var stored []variables.ValueMetadata
 	for _, key := range keys {
 		folders := slices.Sorted(slices.Values(v.scopes[key]))
 		if len(folders) == 0 {
-			stored = append(stored, envgate.Stored{Address: envgate.Address{Cell: envgate.Cell{Key: key}}})
+			stored = append(stored, variables.ValueMetadata{Coordinate: variables.Coordinate{Cell: variables.Cell{Key: key}}})
 			continue
 		}
 		for _, folder := range folders {
-			stored = append(stored, envgate.Stored{Address: envgate.Address{Cell: envgate.Cell{Key: key, Folder: folder}}})
+			stored = append(stored, variables.ValueMetadata{Coordinate: variables.Coordinate{Cell: variables.Cell{Key: key, Folder: folder}}})
 		}
 	}
 	return stored, nil
 }
 
-func (v *flatValues) Reveal(_ context.Context, rows []envgate.Address) (map[envgate.Cell]string, error) {
+func (v *flatValues) Reveal(_ context.Context, rows []variables.Coordinate) (map[variables.Coordinate]string, error) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	found := make(map[envgate.Cell]string, len(rows))
+	found := make(map[variables.Coordinate]string, len(rows))
 	for _, row := range rows {
 		if value, ok := v.values[row.Cell.Key]; ok {
-			found[row.Cell] = value
+			found[row] = value
 		}
 	}
 	return found, nil

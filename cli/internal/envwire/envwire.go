@@ -8,9 +8,9 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/cli/internal/discovery"
-	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/varsui"
 	"github.com/ocelhq/ocel/cli/node"
 	"github.com/ocelhq/ocel/pkg/appbuild"
@@ -23,7 +23,7 @@ import (
 
 const RootApp = "this project's app"
 
-func ServeVarsUI(ctx context.Context, cfg *projectconfig.Config, prov *providerclient.Provider, preview bool, gate *envgate.Gate, recovery *varsui.Recovery) (*varsui.Session, error) {
+func ServeVarsUI(ctx context.Context, cfg *projectconfig.Config, prov *providerclient.Provider, preview bool, gate *variables.Declarations, recovery *varsui.Recovery) (*varsui.Session, error) {
 	assets, err := node.VarsUI()
 	if err != nil {
 		return nil, fmt.Errorf("read the bundled variables UI: %w", err)
@@ -79,14 +79,14 @@ func NamedEnvironments(ctx context.Context, prov *providerclient.Provider, slug 
 	return names, nil
 }
 
-func Scope(cfg *projectconfig.Config, preview bool, environment string) envgate.Scope {
+func Scope(cfg *projectconfig.Config, preview bool, environment string) variables.Scope {
 	tier, other := environmentv1.Tier_TIER_PRODUCTION, environmentv1.Tier_TIER_PREVIEW
 	if preview {
 		tier, other = other, tier
 	}
-	return envgate.Scope{
+	return variables.Scope{
 		Apps:        Apps(cfg),
-		Preview:     preview,
+		Tier:        tier,
 		Environment: environment,
 		Bindings:    BindingVariables(cfg, tier),
 		OtherTiers:  BindingVariables(cfg, other),
@@ -94,13 +94,13 @@ func Scope(cfg *projectconfig.Config, preview bool, environment string) envgate.
 	}
 }
 
-func BindingVariables(cfg *projectconfig.Config, tier environmentv1.Tier) []envgate.BindingVariables {
-	var out []envgate.BindingVariables
+func BindingVariables(cfg *projectconfig.Config, tier environmentv1.Tier) []variables.BindingVariables {
+	var out []variables.BindingVariables
 	for _, binding := range cfg.BindingsFor(tier) {
 		if binding.Inline == nil {
 			continue
 		}
-		out = append(out, envgate.BindingVariables{
+		out = append(out, variables.BindingVariables{
 			Group: binding.Group(),
 			Site:  "bindings." + binding.Group(),
 			Keys:  binding.Inline.Variables(),
@@ -109,17 +109,17 @@ func BindingVariables(cfg *projectconfig.Config, tier environmentv1.Tier) []envg
 	return out
 }
 
-func DevScope(cfg *projectconfig.Config) envgate.Scope {
-	return envgate.Scope{Apps: Apps(cfg)}
+func DevScope(cfg *projectconfig.Config) variables.Scope {
+	return variables.Scope{Apps: Apps(cfg)}
 }
 
-func Apps(cfg *projectconfig.Config) []envgate.App {
+func Apps(cfg *projectconfig.Config) []variables.App {
 	if len(cfg.Apps) == 0 {
-		return []envgate.App{{Name: RootApp, ClientBundle: discovery.ClientBundle(appbuild.FrameworkNode, cfg.Dir)}}
+		return []variables.App{{Name: RootApp, ClientBundle: discovery.ClientBundle(appbuild.FrameworkNode, cfg.Dir)}}
 	}
-	apps := make([]envgate.App, 0, len(cfg.Apps))
+	apps := make([]variables.App, 0, len(cfg.Apps))
 	for _, a := range cfg.Apps {
-		apps = append(apps, envgate.App{
+		apps = append(apps, variables.App{
 			Name:         a.Name,
 			Folder:       a.Folder,
 			ClientBundle: discovery.ClientBundle(a.Framework.Name, filepath.Join(cfg.Dir, a.Path)),
@@ -134,7 +134,7 @@ type Values struct {
 	Tier     environmentv1.Tier
 }
 
-func (v Values) List(ctx context.Context) ([]envgate.Stored, error) {
+func (v Values) List(ctx context.Context) ([]variables.ValueMetadata, error) {
 	vars, err := v.Provider.Vars()
 	if err != nil {
 		return nil, err
@@ -147,12 +147,12 @@ func (v Values) List(ctx context.Context) ([]envgate.Stored, error) {
 		return nil, err
 	}
 
-	var stored []envgate.Stored
+	var stored []variables.ValueMetadata
 	for _, value := range resp.GetValues() {
 		c := value.GetCoordinate()
-		stored = append(stored, envgate.Stored{
-			Address: envgate.Address{
-				Cell:        envgate.Cell{Key: c.GetKey(), Folder: c.GetFolder()},
+		stored = append(stored, variables.ValueMetadata{
+			Coordinate: variables.Coordinate{
+				Cell:        variables.Cell{Key: c.GetKey(), Folder: c.GetFolder()},
 				Environment: c.GetEnvironment(),
 			},
 			Version:   value.GetVersion(),
@@ -163,27 +163,27 @@ func (v Values) List(ctx context.Context) ([]envgate.Stored, error) {
 	return stored, nil
 }
 
-func referenceOf(target *envvarsv1.Coordinate) *envgate.Reference {
+func referenceOf(target *envvarsv1.Coordinate) *variables.Reference {
 	if target == nil {
 		return nil
 	}
-	return &envgate.Reference{Slug: target.GetSlug(), Folder: target.GetFolder(), Key: target.GetKey()}
+	return &variables.Reference{Slug: target.GetSlug(), Folder: target.GetFolder(), Key: target.GetKey()}
 }
 
-func (v Values) Read(ctx context.Context, rows []envgate.Address) (map[envgate.Address]string, error) {
+func (v Values) Read(ctx context.Context, rows []variables.Coordinate) (map[variables.Coordinate]string, error) {
 	resp, err := v.reveal(ctx, rows)
 	if err != nil {
 		return nil, err
 	}
-	found := make(map[envgate.Address]string, len(resp.GetValues()))
+	found := make(map[variables.Coordinate]string, len(resp.GetValues()))
 	for _, value := range resp.GetValues() {
 		c := value.GetMetadata().GetCoordinate()
-		found[envgate.Address{Cell: envgate.Cell{Key: c.GetKey(), Folder: c.GetFolder()}, Environment: c.GetEnvironment()}] = value.GetValue()
+		found[variables.Coordinate{Cell: variables.Cell{Key: c.GetKey(), Folder: c.GetFolder()}, Environment: c.GetEnvironment()}] = value.GetValue()
 	}
 	return found, nil
 }
 
-func (v Values) reveal(ctx context.Context, rows []envgate.Address) (*envvarsv1.RevealValuesResponse, error) {
+func (v Values) reveal(ctx context.Context, rows []variables.Coordinate) (*envvarsv1.RevealValuesResponse, error) {
 	named := make([]*envvarsv1.Coordinate, 0, len(rows))
 	for _, row := range rows {
 		named = append(named, v.coordinate(row))
@@ -203,25 +203,15 @@ func (v Values) reveal(ctx context.Context, rows []envgate.Address) (*envvarsv1.
 	return resp, nil
 }
 
-func (v Values) Reveal(ctx context.Context, rows []envgate.Address) (map[envgate.Cell]string, error) {
-	resp, err := v.reveal(ctx, rows)
-	if err != nil {
-		return nil, err
-	}
-
-	found := make(map[envgate.Cell]string, len(resp.GetValues()))
-	for _, value := range resp.GetValues() {
-		c := value.GetMetadata().GetCoordinate()
-		found[envgate.Cell{Key: c.GetKey(), Folder: c.GetFolder()}] = value.GetValue()
-	}
-	return found, nil
+func (v Values) Reveal(ctx context.Context, rows []variables.Coordinate) (map[variables.Coordinate]string, error) {
+	return v.Read(ctx, rows)
 }
 
-func (v Values) coordinate(at envgate.Address) *envvarsv1.Coordinate {
+func (v Values) coordinate(at variables.Coordinate) *envvarsv1.Coordinate {
 	return &envvarsv1.Coordinate{Slug: v.Slug, Folder: at.Cell.Folder, Key: at.Cell.Key, Environment: at.Environment}
 }
 
-func (v Values) Version(ctx context.Context, at envgate.Address) (int64, error) {
+func (v Values) Version(ctx context.Context, at variables.Coordinate) (int64, error) {
 	vars, err := v.Provider.Vars()
 	if err != nil {
 		return 0, err
@@ -236,7 +226,7 @@ func (v Values) Version(ctx context.Context, at envgate.Address) (int64, error) 
 	return resp.GetMetadata().GetVersion(), nil
 }
 
-func (v Values) Write(ctx context.Context, at envgate.Address, value string, expected *int64) (*envvarsv1.ValueMetadata, error) {
+func (v Values) Write(ctx context.Context, at variables.Coordinate, value string, expected *int64) (*envvarsv1.ValueMetadata, error) {
 	vars, err := v.Provider.Vars()
 	if err != nil {
 		return nil, err
@@ -253,7 +243,7 @@ func (v Values) Write(ctx context.Context, at envgate.Address, value string, exp
 	return resp.GetMetadata(), nil
 }
 
-func (v Values) Remove(ctx context.Context, at envgate.Address, expected *int64) (bool, error) {
+func (v Values) Remove(ctx context.Context, at variables.Coordinate, expected *int64) (bool, error) {
 	vars, err := v.Provider.Vars()
 	if err != nil {
 		return false, err
@@ -269,12 +259,12 @@ func (v Values) Remove(ctx context.Context, at envgate.Address, expected *int64)
 	return resp.GetDeleted(), nil
 }
 
-func (v Values) Set(ctx context.Context, at envgate.Address, value string, expected *int64) error {
+func (v Values) Set(ctx context.Context, at variables.Coordinate, value string, expected *int64) error {
 	_, err := v.Write(ctx, at, value, expected)
 	return err
 }
 
-func (v Values) Delete(ctx context.Context, at envgate.Address, expected *int64) error {
+func (v Values) Delete(ctx context.Context, at variables.Coordinate, expected *int64) error {
 	_, err := v.Remove(ctx, at, expected)
 	return err
 }
@@ -289,7 +279,7 @@ func staleOrBroken(err error) error {
 	return varsui.ErrStaleValue
 }
 
-func (v Values) History(ctx context.Context, at envgate.Address) ([]varsui.Version, error) {
+func (v Values) History(ctx context.Context, at variables.Coordinate) ([]varsui.Version, error) {
 	vars, err := v.Provider.Vars()
 	if err != nil {
 		return nil, err

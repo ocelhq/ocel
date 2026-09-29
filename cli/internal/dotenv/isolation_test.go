@@ -13,7 +13,7 @@ func TestDeployPathIsolation(t *testing.T) {
 	t.Parallel()
 
 	for _, pkg := range []string{
-		"github.com/ocelhq/ocel/cli/internal/envgate",
+		"github.com/ocelhq/ocel/cli/internal/variables",
 		"github.com/ocelhq/ocel/cli/internal/varsui",
 	} {
 		t.Run(path.Base(pkg)+" cannot reach the dotfile", func(t *testing.T) {

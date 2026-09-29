@@ -1,4 +1,4 @@
-package envgate_test
+package variables_test
 
 import (
 	"context"
@@ -7,29 +7,30 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/envgate"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
 
-var ordersBinding = envgate.BindingVariables{
+var ordersBinding = variables.BindingVariables{
 	Group: "postgres.orders",
 	Site:  "bindings.postgres.orders",
 	Keys:  []string{"ORDERS_HOST", "ORDERS_PASSWORD"},
 }
 
-func TestBindingVariables(t *testing.T) {
+func TestTheVariablesABindingReadsAreDeclaredForIt(t *testing.T) {
 	t.Parallel()
 
 	t.Run("a variable a binding reads and nobody set refuses the deploy with the command that sets it", func(t *testing.T) {
 		t.Parallel()
 		values := newFakeValues()
 		values.set("ORDERS_HOST", "", "db.example.com")
-		g := prefetched(t, values, envgate.Scope{Preview: true, Environment: "pr-12", Bindings: []envgate.BindingVariables{ordersBinding}})
+		g := prefetched(t, values, variables.Scope{Tier: environmentv1.Tier_TIER_PREVIEW, Environment: "pr-12", Bindings: []variables.BindingVariables{ordersBinding}})
 
-		err := g.Check()
-		var refusal *envgate.Refusal
+		err := g.RefuseIncomplete()
+		var refusal *variables.MissingError
 		if !errors.As(err, &refusal) {
-			t.Fatalf("Check = %v, want a refusal", err)
+			t.Fatalf("RefuseIncomplete() = %v, want a refusal", err)
 		}
 		message := err.Error()
 		for _, want := range []string{"ORDERS_PASSWORD", "postgres.orders", "ocel env set ORDERS_PASSWORD=<VALUE> --preview --environment pr-12"} {
@@ -47,10 +48,10 @@ func TestBindingVariables(t *testing.T) {
 		values := newFakeValues()
 		values.set("ORDERS_HOST", "", "db.example.com")
 		values.override("ORDERS_PASSWORD", "", "pr-12", "hunter2")
-		g := prefetched(t, values, envgate.Scope{Preview: true, Environment: "pr-12", Bindings: []envgate.BindingVariables{ordersBinding}})
+		g := prefetched(t, values, variables.Scope{Tier: environmentv1.Tier_TIER_PREVIEW, Environment: "pr-12", Bindings: []variables.BindingVariables{ordersBinding}})
 
-		if err := g.Check(); err != nil {
-			t.Fatalf("Check = %v, want the override to satisfy the binding", err)
+		if err := g.RefuseIncomplete(); err != nil {
+			t.Fatalf("RefuseIncomplete() = %v, want the override to satisfy the binding", err)
 		}
 		resolved, err := g.ResolveBindingVariables(context.Background())
 		if err != nil {
@@ -66,11 +67,11 @@ func TestBindingVariables(t *testing.T) {
 		values := newFakeValues()
 		values.set("ORDERS_HOST", "/web", "db.example.com")
 		values.set("ORDERS_PASSWORD", "", "hunter2")
-		g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "web", Folder: "/web"}}, Bindings: []envgate.BindingVariables{ordersBinding}})
+		g := prefetched(t, values, variables.Scope{Apps: []variables.App{{Name: "web", Folder: "/web"}}, Bindings: []variables.BindingVariables{ordersBinding}})
 
-		err := g.Check()
+		err := g.RefuseIncomplete()
 		if err == nil || !strings.Contains(err.Error(), "ORDERS_HOST") {
-			t.Fatalf("Check = %v, want ORDERS_HOST missing at the root", err)
+			t.Fatalf("RefuseIncomplete() = %v, want ORDERS_HOST missing at the root", err)
 		}
 		if strings.Contains(err.Error(), "--folder") {
 			t.Errorf("refusal = %q, want the root-level command", err)
@@ -82,7 +83,7 @@ func TestBindingVariables(t *testing.T) {
 		values := newFakeValues()
 		values.set("ORDERS_HOST", "", "db.example.com")
 		values.set("ORDERS_PASSWORD", "", "hunter2")
-		g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "api"}}, Bindings: []envgate.BindingVariables{ordersBinding}})
+		g := prefetched(t, values, variables.Scope{Apps: []variables.App{{Name: "api"}}, Bindings: []variables.BindingVariables{ordersBinding}})
 		declare(t, g, def("LOG_LEVEL", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
 		values.set("LOG_LEVEL", "", "debug")
 
@@ -105,14 +106,14 @@ func TestBindingVariables(t *testing.T) {
 		values := newFakeValues()
 		values.set("ORDERS_HOST", "", "db.example.com")
 		values.set("ORDERS_PASSWORD", "", "hunter2")
-		g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "api"}}, Bindings: []envgate.BindingVariables{ordersBinding}})
+		g := prefetched(t, values, variables.Scope{Apps: []variables.App{{Name: "api"}}, Bindings: []variables.BindingVariables{ordersBinding}})
 		_, err := g.DeclareEnv(context.Background(), &resourcesv1.DeclareEnvRequest{Definitions: []*resourcesv1.VariableDefinition{{
 			Key: "ORDERS_PASSWORD", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, Required: true, Source: "resources/env.ts",
 		}}})
 		if err == nil {
 			t.Fatal("DeclareEnv = nil, want the collision refused")
 		}
-		var refusal *envgate.Refusal
+		var refusal *variables.MissingError
 		if errors.As(err, &refusal) {
 			t.Errorf("DeclareEnv = %v, a collision is no missing value the vars editor can fill", err)
 		}
@@ -128,7 +129,7 @@ func TestBindingVariables(t *testing.T) {
 		values := newFakeValues()
 		values.set("ORDERS_HOST", "", "db.example.com")
 		values.set("ORDERS_PASSWORD", "", "hunter2")
-		g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "api"}}, Bindings: []envgate.BindingVariables{ordersBinding}})
+		g := prefetched(t, values, variables.Scope{Apps: []variables.App{{Name: "api"}}, Bindings: []variables.BindingVariables{ordersBinding}})
 		resp, err := g.DeclareEnv(context.Background(), &resourcesv1.DeclareEnvRequest{Definitions: []*resourcesv1.VariableDefinition{
 			def("ORDERS_PASSWORD", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
 		}})
@@ -145,9 +146,9 @@ func TestBindingVariables(t *testing.T) {
 
 	t.Run("a key the app declares and a binding reads in another tier is refused, though this tier does not need it", func(t *testing.T) {
 		t.Parallel()
-		g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "api"}}, Preview: true, OtherTiers: []envgate.BindingVariables{ordersBinding}})
-		if err := g.Check(); err != nil {
-			t.Fatalf("Check = %v, want nothing missing for a binding this tier does not take", err)
+		g := prefetched(t, newFakeValues(), variables.Scope{Apps: []variables.App{{Name: "api"}}, Tier: environmentv1.Tier_TIER_PREVIEW, OtherTiers: []variables.BindingVariables{ordersBinding}})
+		if err := g.RefuseIncomplete(); err != nil {
+			t.Fatalf("RefuseIncomplete() = %v, want nothing missing for a binding this tier does not take", err)
 		}
 		_, err := g.DeclareEnv(context.Background(), &resourcesv1.DeclareEnvRequest{Definitions: []*resourcesv1.VariableDefinition{{
 			Key: "ORDERS_PASSWORD", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, Required: false, Source: "resources/env.ts",
@@ -164,7 +165,7 @@ func TestBindingVariables(t *testing.T) {
 
 	t.Run("the variables editor shows a binding's variables as its group", func(t *testing.T) {
 		t.Parallel()
-		g := prefetched(t, newFakeValues(), envgate.Scope{Bindings: []envgate.BindingVariables{ordersBinding}})
+		g := prefetched(t, newFakeValues(), variables.Scope{Bindings: []variables.BindingVariables{ordersBinding}})
 		matrix := g.Matrix(nil)
 
 		grouped := map[string]string{}
@@ -187,11 +188,11 @@ func TestBindingVariables(t *testing.T) {
 
 	t.Run("a variable two bindings read names both readers and leaves no group empty", func(t *testing.T) {
 		t.Parallel()
-		first := envgate.BindingVariables{Group: "bucket.first", Site: "bindings.bucket.first", Keys: []string{"FIRST_BUCKET", "R2_ACCESS_KEY_ID"}}
-		second := envgate.BindingVariables{Group: "bucket.second", Site: "bindings.bucket.second", Keys: []string{"R2_ACCESS_KEY_ID"}}
-		bound := []envgate.BindingVariables{first, second}
+		first := variables.BindingVariables{Group: "bucket.first", Site: "bindings.bucket.first", Keys: []string{"FIRST_BUCKET", "R2_ACCESS_KEY_ID"}}
+		second := variables.BindingVariables{Group: "bucket.second", Site: "bindings.bucket.second", Keys: []string{"R2_ACCESS_KEY_ID"}}
+		bound := []variables.BindingVariables{first, second}
 
-		definitions, groups := envgate.Declarations(envgate.Scope{Bindings: bound})
+		definitions, groups := variables.ImpliedDeclarations(variables.Scope{Bindings: bound})
 		for _, group := range groups {
 			members := 0
 			for _, definition := range definitions {
@@ -209,10 +210,10 @@ func TestBindingVariables(t *testing.T) {
 			}
 		}
 
-		err := envgate.CheckImpliedWritable(envgate.Scope{Bindings: bound}, "R2_ACCESS_KEY_ID", "/web")
+		err := variables.RefuseImpliedInFolder(variables.Scope{Bindings: bound}, "R2_ACCESS_KEY_ID", "/web")
 		for _, site := range []string{first.Site, second.Site} {
 			if err == nil || !strings.Contains(err.Error(), site) {
-				t.Errorf("CheckImpliedWritable = %v, want it to name %s", err, site)
+				t.Errorf("RefuseImpliedInFolder = %v, want it to name %s", err, site)
 			}
 		}
 	})

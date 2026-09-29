@@ -23,10 +23,10 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/devstack"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
-	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/watcher"
 	"github.com/ocelhq/ocel/pkg/constants"
 
@@ -52,7 +52,7 @@ func TestMergeEnv(t *testing.T) {
 			{Name: "main", Env: map[string]string{"SHARED": "resource", "OCEL_RESOURCE_POSTGRES_main": "conn"}},
 		}
 
-		got := toMap(mergeEnv(base, nil, values, resources, runtimeAccess{}, "", envgate.Scope{}))
+		got := toMap(mergeEnv(base, nil, values, resources, runtimeAccess{}, "", variables.Scope{}))
 
 		cases := map[string]string{
 			"PATH":                        "/bin",
@@ -72,7 +72,7 @@ func TestMergeEnv(t *testing.T) {
 
 		live := map[string]string{"WEBHOOK_SECRET": "whsec_live"}
 
-		got := mergeEnv([]string{"PATH=/usr/bin"}, live, map[string]string{"PROJECT_ONLY": "p"}, nil, runtimeAccess{}, "", envgate.Scope{})
+		got := mergeEnv([]string{"PATH=/usr/bin"}, live, map[string]string{"PROJECT_ONLY": "p"}, nil, runtimeAccess{}, "", variables.Scope{})
 
 		for _, kv := range got {
 			if strings.HasPrefix(kv, "OCEL_LIVE_KEYS=") {

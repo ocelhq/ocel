@@ -16,8 +16,8 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/cli/internal/declare"
-	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/channel"
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
@@ -343,7 +343,7 @@ func TestSync(t *testing.T) {
 	t.Run("serves a live-class value from the values it was given, like every other value", func(t *testing.T) {
 		t.Parallel()
 		s := newDevServer(&fakeStack{})
-		s.UseValues(map[string]string{"WEBHOOK_SECRET": "whsec_from_the_dotfile", "POSTHOG_ID": "ph_1"}, envgate.Scope{})
+		s.UseValues(map[string]string{"WEBHOOK_SECRET": "whsec_from_the_dotfile", "POSTHOG_ID": "ph_1"}, variables.Scope{})
 		url := serve(t, s)
 
 		declareEnv(t, url,
@@ -372,7 +372,7 @@ func TestSync(t *testing.T) {
 	t.Run("names a live key it has no value for rather than resolving it", func(t *testing.T) {
 		t.Parallel()
 		s := newDevServer(&fakeStack{})
-		s.UseValues(map[string]string{}, envgate.Scope{})
+		s.UseValues(map[string]string{}, variables.Scope{})
 		url := serve(t, s)
 
 		declareEnv(t, url, &resourcesv1.VariableDefinition{
@@ -395,7 +395,7 @@ func TestSync(t *testing.T) {
 	t.Run("forgets live keys a declaration no longer names after a reset", func(t *testing.T) {
 		t.Parallel()
 		s := newDevServer(&fakeStack{})
-		s.UseValues(map[string]string{"GONE": "a", "KEPT": "b"}, envgate.Scope{})
+		s.UseValues(map[string]string{"GONE": "a", "KEPT": "b"}, variables.Scope{})
 		url := serve(t, s)
 
 		declareEnv(t, url, &resourcesv1.VariableDefinition{

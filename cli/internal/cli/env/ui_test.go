@@ -14,11 +14,11 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
-	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/varsui"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -55,16 +55,16 @@ func storeValue(t *testing.T, ctx context.Context, prov *providerclient.Provider
 	}
 }
 
-func revealOne(ctx context.Context, values envwire.Values, cell envgate.Cell) (string, bool, error) {
-	found, err := values.Reveal(ctx, []envgate.Address{{Cell: cell}})
+func revealOne(ctx context.Context, values envwire.Values, cell variables.Cell) (string, bool, error) {
+	found, err := values.Reveal(ctx, []variables.Coordinate{{Cell: cell}})
 	if err != nil {
 		return "", false, err
 	}
-	value, ok := found[cell]
+	value, ok := found[variables.Coordinate{Cell: cell}]
 	return value, ok, nil
 }
 
-func stored(t *testing.T, rows []envgate.Stored, key string) envgate.Stored {
+func stored(t *testing.T, rows []variables.ValueMetadata, key string) variables.ValueMetadata {
 	t.Helper()
 	for _, row := range rows {
 		if row.Cell.Key == key {
@@ -72,7 +72,7 @@ func stored(t *testing.T, rows []envgate.Stored, key string) envgate.Stored {
 		}
 	}
 	t.Fatalf("List has no row for %q; rows are %+v", key, rows)
-	return envgate.Stored{}
+	return variables.ValueMetadata{}
 }
 
 func TestTheValuesTheVariablesPageShowsAndChangesAreTheProvidersAnswers(t *testing.T) {
@@ -127,7 +127,7 @@ func TestTheValuesTheVariablesPageShowsAndChangesAreTheProvidersAnswers(t *testi
 				Cells: []*envvarsv1.Coordinate{{Slug: slug, Key: "STRIPE_API_KEY"}},
 			})
 
-			_, _, err = revealOne(ctx, values, envgate.Cell{Key: "STRIPE_API_KEY"})
+			_, _, err = revealOne(ctx, values, variables.Cell{Key: "STRIPE_API_KEY"})
 			var wire *connect.Error
 			if !errors.As(err, &wire) {
 				t.Fatalf("Reveal over a reference to nothing err = %v, want a *connect.Error a caller can read the code off", err)
@@ -144,7 +144,7 @@ func TestTheValuesTheVariablesPageShowsAndChangesAreTheProvidersAnswers(t *testi
 
 		withProviderValues(t, root, envOptions{}, func(ctx context.Context, slug string, prov *providerclient.Provider, values envwire.Values) error {
 			storeValue(t, ctx, prov, envTier(envOptions{}), &envvarsv1.Coordinate{Slug: slug, Key: "API_URL"}, "https://someone-elses.example")
-			at := envgate.Address{Cell: envgate.Cell{Key: "API_URL"}}
+			at := variables.Coordinate{Cell: variables.Cell{Key: "API_URL"}}
 
 			unset := int64(0)
 			if err := values.Set(ctx, at, "https://mine.example", &unset); !errors.Is(err, varsui.ErrStaleValue) {
@@ -172,7 +172,7 @@ func TestTheValuesTheVariablesPageShowsAndChangesAreTheProvidersAnswers(t *testi
 			coordinate := &envvarsv1.Coordinate{Slug: slug, Key: "API_URL"}
 			storeValue(t, ctx, prov, envTier(envOptions{}), coordinate, "https://first.example")
 			storeValue(t, ctx, prov, envTier(envOptions{}), coordinate, "https://someone-elses.example")
-			at := envgate.Address{Cell: envgate.Cell{Key: "API_URL"}}
+			at := variables.Coordinate{Cell: variables.Cell{Key: "API_URL"}}
 
 			rendered := int64(1)
 			if err := values.Delete(ctx, at, &rendered); !errors.Is(err, varsui.ErrStaleValue) {
@@ -264,10 +264,10 @@ func varsUIState(t *testing.T, s *varsui.Session) varsui.State {
 	return out
 }
 
-func matrixRow(state varsui.State, key string) (envgate.MatrixRow, bool) {
-	i := slices.IndexFunc(state.Matrix.Rows, func(row envgate.MatrixRow) bool { return row.Key == key })
+func matrixRow(state varsui.State, key string) (variables.MatrixRow, bool) {
+	i := slices.IndexFunc(state.Matrix.Rows, func(row variables.MatrixRow) bool { return row.Key == key })
 	if i < 0 {
-		return envgate.MatrixRow{}, false
+		return variables.MatrixRow{}, false
 	}
 	return state.Matrix.Rows[i], true
 }
@@ -287,10 +287,10 @@ func TestEnvUINamesTheEnvSourceAndWhatItCopied(t *testing.T) {
 			t.Errorf("STRIPE_API_KEY = %+v, want its value's env source named", stripe)
 		}
 		credential, declared := matrixRow(state, "INFISICAL_CLIENT_SECRET")
-		if !declared || credential.Group != envgate.EnvSourceGroup || credential.Class != "secret" {
-			t.Errorf("INFISICAL_CLIENT_SECRET = %+v (declared %v), want a secret in the %q group", credential, declared, envgate.EnvSourceGroup)
+		if !declared || credential.Group != variables.EnvSourceGroup || credential.Class != "secret" {
+			t.Errorf("INFISICAL_CLIENT_SECRET = %+v (declared %v), want a secret in the %q group", credential, declared, variables.EnvSourceGroup)
 		}
-		want := envgate.UndeclaredCell{Cell: envgate.Cell{Key: "RETIRED"}, EnvSource: "infisical:p-1/prod"}
+		want := variables.UndeclaredCell{Cell: variables.Cell{Key: "RETIRED"}, EnvSource: "infisical:p-1/prod"}
 		if !slices.Contains(state.Matrix.Undeclared, want) {
 			t.Errorf("undeclared = %+v, want RETIRED, which nothing declares", state.Matrix.Undeclared)
 		}

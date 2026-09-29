@@ -12,9 +12,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
-	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/node"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 )
@@ -47,7 +47,7 @@ func runGenerate(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, std
 		return err
 	}
 
-	gate := envgate.New(noValues{}, envgate.Scope{Apps: envwire.Apps(cfg)})
+	gate := variables.NewDeclarations(noValues{}, variables.Scope{Apps: envwire.Apps(cfg)})
 	if _, err := deps.CollectDeclarations(ctx, cfg, gate, stderr, stderr); err != nil {
 		return err
 	}
@@ -97,8 +97,8 @@ func generateClientAccessor(projectDir string, app clientenv.App, keys []cliente
 
 type noValues struct{}
 
-func (noValues) List(context.Context) ([]envgate.Stored, error) { return nil, nil }
+func (noValues) List(context.Context) ([]variables.ValueMetadata, error) { return nil, nil }
 
-func (noValues) Reveal(context.Context, []envgate.Address) (map[envgate.Cell]string, error) {
+func (noValues) Reveal(context.Context, []variables.Coordinate) (map[variables.Coordinate]string, error) {
 	return nil, nil
 }

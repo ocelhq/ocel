@@ -19,12 +19,12 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/declcache"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
-	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/varsui"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -149,8 +149,8 @@ func envCoordinate(slug, key string, opts envOptions) *envvarsv1.Coordinate {
 	return &envvarsv1.Coordinate{Slug: slug, Folder: opts.folder, Key: key, Environment: opts.environment}
 }
 
-func envAddress(key string, opts envOptions) envgate.Address {
-	return envgate.Address{Cell: envgate.Cell{Key: key, Folder: opts.folder}, Environment: opts.environment}
+func envAddress(key string, opts envOptions) variables.Coordinate {
+	return variables.Coordinate{Cell: variables.Cell{Key: key, Folder: opts.folder}, Environment: opts.environment}
 }
 
 func envValues(prov *providerclient.Provider, slug string, opts envOptions) envwire.Values {
@@ -171,7 +171,7 @@ func runEnvSet(ctx context.Context, deps cmddeps.Deps, cwd, key, value string, o
 
 func runEnvSetPairs(ctx context.Context, deps cmddeps.Deps, cwd string, pairs []envSetPair, opts envOptions, stdin io.Reader, stdout, stderr io.Writer) error {
 	if opts.folder != "" {
-		if err := envgate.ValidateFolder(opts.folder); err != nil {
+		if err := variables.ValidateFolder(opts.folder); err != nil {
 			return err
 		}
 	}
@@ -185,10 +185,10 @@ func runEnvSetPairs(ctx context.Context, deps cmddeps.Deps, cwd string, pairs []
 			return err
 		}
 		for _, pair := range pairs {
-			if err := envgate.CheckImpliedWritable(envwire.Scope(cfg, opts.preview, ""), pair.key, opts.folder); err != nil {
+			if err := variables.RefuseImpliedInFolder(envwire.Scope(cfg, opts.preview, ""), pair.key, opts.folder); err != nil {
 				return err
 			}
-			if err := envgate.CheckWritable(definitions, pair.key, opts.folder); err != nil {
+			if err := variables.RefuseUnwritable(definitions, pair.key, opts.folder); err != nil {
 				return err
 			}
 		}
@@ -197,7 +197,7 @@ func runEnvSetPairs(ctx context.Context, deps cmddeps.Deps, cwd string, pairs []
 			return err
 		}
 		envSource := envwire.EnvSourceClient{Provider: prov, Config: cfg, Preview: opts.preview}
-		var owner envgate.EnvSource
+		var owner variables.EnvSource
 		if opts.environment == "" {
 			if owner, err = envSource.Describe(ctx); err != nil {
 				return err
@@ -229,7 +229,7 @@ func runEnvSetPairs(ctx context.Context, deps cmddeps.Deps, cwd string, pairs []
 	})
 }
 
-func setInEnvSource(ctx context.Context, envSource envwire.EnvSourceClient, id string, at envgate.Address, value string, definitions []*resourcesv1.VariableDefinition, stdout io.Writer) error {
+func setInEnvSource(ctx context.Context, envSource envwire.EnvSourceClient, id string, at variables.Coordinate, value string, definitions []*resourcesv1.VariableDefinition, stdout io.Writer) error {
 	description := ""
 	if i := slices.IndexFunc(definitions, func(definition *resourcesv1.VariableDefinition) bool { return definition.GetKey() == at.Cell.Key }); i >= 0 {
 		description = definitions[i].GetDescription()
@@ -289,7 +289,7 @@ func collecting(run *events.Run, cfg *projectconfig.Config, collect func(output 
 }
 
 func withImpliedDeclarations(cfg *projectconfig.Config, opts envOptions, definitions []*resourcesv1.VariableDefinition, groups []*resourcesv1.GroupDefinition) ([]*resourcesv1.VariableDefinition, []*resourcesv1.GroupDefinition, error) {
-	implied, impliedGroups := envgate.Declarations(envwire.Scope(cfg, opts.preview, ""))
+	implied, impliedGroups := variables.ImpliedDeclarations(envwire.Scope(cfg, opts.preview, ""))
 	return append(definitions, implied...), append(groups, impliedGroups...), nil
 }
 
@@ -438,7 +438,7 @@ func printGroupProgress(ctx context.Context, vars envvarsv1connect.EnvVarsServic
 		return err
 	}
 	present := presentCells(listed.GetValues(), opts.environment)
-	for _, state := range envgate.GroupStates(definitions, groups, present, opts.folder) {
+	for _, state := range variables.GroupStates(definitions, groups, present, opts.folder) {
 		if !touched[state.Key] || len(state.Missing) == 0 {
 			continue
 		}
@@ -448,14 +448,14 @@ func printGroupProgress(ctx context.Context, vars envvarsv1connect.EnvVarsServic
 	return nil
 }
 
-func presentCells(values []*envvarsv1.ValueMetadata, environment string) []envgate.Cell {
-	var out []envgate.Cell
+func presentCells(values []*envvarsv1.ValueMetadata, environment string) []variables.Cell {
+	var out []variables.Cell
 	for _, value := range values {
 		coordinate := value.GetCoordinate()
 		if coordinate.GetEnvironment() != "" && coordinate.GetEnvironment() != environment {
 			continue
 		}
-		out = append(out, envgate.Cell{Key: coordinate.GetKey(), Folder: coordinate.GetFolder()})
+		out = append(out, variables.Cell{Key: coordinate.GetKey(), Folder: coordinate.GetFolder()})
 	}
 	return out
 }
@@ -465,7 +465,7 @@ func runEnvRef(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts env
 		if folder == "" {
 			continue
 		}
-		if err := envgate.ValidateFolder(folder); err != nil {
+		if err := variables.ValidateFolder(folder); err != nil {
 			return err
 		}
 	}
@@ -474,7 +474,7 @@ func runEnvRef(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts env
 		if err != nil {
 			return err
 		}
-		if err := envgate.CheckWritable(definitions, key, opts.folder); err != nil {
+		if err := variables.RefuseUnwritable(definitions, key, opts.folder); err != nil {
 			return err
 		}
 		target := ref.target(cfg.Slug, key)
@@ -592,7 +592,7 @@ func renderValues(stdout io.Writer, values []*envvarsv1.ValueMetadata, environme
 		if len(members) == 0 {
 			continue
 		}
-		rows = append(rows, listingRow{}, listingRow{headline: envgate.GroupHeadline(group.GetKey(), group.GetDescription())})
+		rows = append(rows, listingRow{}, listingRow{headline: runui.VariableGroupHeadline(group.GetKey(), group.GetDescription())})
 		for _, v := range members {
 			row, orphaned := valueRow(v, listingIndent, described, environments)
 			rows = append(rows, row)
@@ -617,7 +617,7 @@ type listingRow struct {
 func valueRow(v *envvarsv1.ValueMetadata, lead string, descriptions map[string]string, environments []string) (listingRow, bool) {
 	c := v.GetCoordinate()
 	environment := environmentOrAll(c.GetEnvironment())
-	orphaned := envgate.Orphaned(environments, c.GetEnvironment())
+	orphaned := variables.IsOrphaned(environments, c.GetEnvironment())
 	if orphaned {
 		environment += " (orphaned)"
 	}

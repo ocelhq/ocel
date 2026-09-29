@@ -12,9 +12,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/devlock"
 	"github.com/ocelhq/ocel/cli/internal/election"
-	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 )
 
 var runCmd = &cobra.Command{
@@ -65,7 +65,7 @@ func runOnceAsFollower(ctx context.Context, deps cmddeps.Deps, leader devlock.Le
 	return runChildOnce(ctx, deps, appArgs, env, stdin, stdout, stderr)
 }
 
-func runStandalone(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, scope envgate.Scope, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
+func runStandalone(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, scope variables.Scope, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
 	source, err := readDevSource(ctx, cfg)
 	if err != nil {
 		return err

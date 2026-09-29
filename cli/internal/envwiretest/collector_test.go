@@ -12,8 +12,8 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
-	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
@@ -21,13 +21,13 @@ func TestDefineEnv(t *testing.T) {
 	t.Run("declares through the real wire into the gate", func(t *testing.T) {
 		root := setUpFixture(t, envFixture)
 
-		values := &fakeValues{plaintext: map[envgate.Cell]string{
+		values := &fakeValues{plaintext: map[variables.Cell]string{
 			{Key: "PUBLIC_SITE_URL"}:            "https://example.com",
 			{Key: "PORT"}:                       "80",
 			{Key: "DB_PASSWORD"}:                "hunter2",
 			{Key: "POSTHOG_ID", Folder: "/web"}: "ph_web",
 		}}
-		gate := envgate.New(values, envgate.Scope{Apps: []envgate.App{
+		gate := variables.NewDeclarations(values, variables.Scope{Apps: []variables.App{
 			{Name: "web", Folder: "/web"},
 			{Name: "admin", Folder: "/admin"},
 		}})
@@ -133,17 +133,17 @@ func TestDefineEnv(t *testing.T) {
 		})
 
 		t.Run("a secret value is never revealed to the declaring process", func(t *testing.T) {
-			if values.revealed(envgate.Cell{Key: "DB_PASSWORD"}) {
+			if values.revealed(variables.Cell{Key: "DB_PASSWORD"}) {
 				t.Fatal("Reveal was called for the secret-class cell")
 			}
-			if !values.revealed(envgate.Cell{Key: "PORT"}) {
+			if !values.revealed(variables.Cell{Key: "PORT"}) {
 				t.Fatal("Reveal was never called for a plain cell, so the check above proves nothing")
 			}
 		})
 	})
 }
 
-func runDiscovery(t *testing.T, root string, gate *envgate.Gate) {
+func runDiscovery(t *testing.T, root string, gate *variables.Declarations) {
 	t.Helper()
 
 	cfg := &projectconfig.Config{
@@ -158,10 +158,10 @@ func runDiscovery(t *testing.T, root string, gate *envgate.Gate) {
 	}
 }
 
-func refuse(t *testing.T, gate *envgate.Gate) *envgate.Refusal {
+func refuse(t *testing.T, gate *variables.Declarations) *variables.MissingError {
 	t.Helper()
-	err := gate.Check()
-	refusal := &envgate.Refusal{}
+	err := gate.RefuseIncomplete()
+	refusal := &variables.MissingError{}
 	ok := errors.As(err, &refusal)
 	if !ok {
 		t.Fatalf("Check() = %v, want a *Refusal", err)
@@ -182,18 +182,18 @@ func byKey(t *testing.T, definitions []*resourcesv1.VariableDefinition) map[stri
 }
 
 type fakeValues struct {
-	plaintext map[envgate.Cell]string
+	plaintext map[variables.Cell]string
 
 	mu    sync.Mutex
-	reads []envgate.Cell
+	reads []variables.Cell
 }
 
-func (v *fakeValues) List(context.Context) ([]envgate.Stored, error) {
-	var stored []envgate.Stored
+func (v *fakeValues) List(context.Context) ([]variables.ValueMetadata, error) {
+	var stored []variables.ValueMetadata
 	for cell := range v.plaintext {
-		stored = append(stored, envgate.Stored{Address: envgate.Address{Cell: cell}, Version: 1})
+		stored = append(stored, variables.ValueMetadata{Coordinate: variables.Coordinate{Cell: cell}, Version: 1})
 	}
-	slices.SortFunc(stored, func(a, b envgate.Stored) int {
+	slices.SortFunc(stored, func(a, b variables.ValueMetadata) int {
 		if c := cmp.Compare(a.Cell.Key, b.Cell.Key); c != 0 {
 			return c
 		}
@@ -202,24 +202,23 @@ func (v *fakeValues) List(context.Context) ([]envgate.Stored, error) {
 	return stored, nil
 }
 
-func (v *fakeValues) Reveal(_ context.Context, rows []envgate.Address) (map[envgate.Cell]string, error) {
+func (v *fakeValues) Reveal(_ context.Context, rows []variables.Coordinate) (map[variables.Coordinate]string, error) {
 	v.mu.Lock()
 	for _, row := range rows {
 		v.reads = append(v.reads, row.Cell)
 	}
 	v.mu.Unlock()
 
-	found := map[envgate.Cell]string{}
+	found := map[variables.Coordinate]string{}
 	for _, row := range rows {
-		cell := row.Cell
-		if value, ok := v.plaintext[cell]; ok {
-			found[cell] = value
+		if value, ok := v.plaintext[row.Cell]; ok {
+			found[row] = value
 		}
 	}
 	return found, nil
 }
 
-func (v *fakeValues) revealed(cell envgate.Cell) bool {
+func (v *fakeValues) revealed(cell variables.Cell) bool {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	for _, read := range v.reads {

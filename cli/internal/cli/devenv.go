@@ -14,8 +14,8 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
-	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
@@ -131,7 +131,7 @@ func (i invocation) command() string {
 }
 
 func devRefusal(err error, dotfileKeys map[string]struct{}, run invocation) error {
-	var refusal *envgate.Refusal
+	var refusal *variables.MissingError
 	if !errors.As(err, &refusal) {
 		return err
 	}
@@ -139,7 +139,7 @@ func devRefusal(err error, dotfileKeys map[string]struct{}, run invocation) erro
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s not ready — the app has not been started.\n", devPlural(len(refusal.Problems)))
 	for _, problem := range refusal.Problems {
-		cell := envgate.Cell{Key: problem.GetKey(), Folder: problem.GetFolder()}
+		cell := variables.Cell{Key: problem.GetKey(), Folder: problem.GetFolder()}
 		fmt.Fprintf(&b, "\n  %s%s\n    %s\n    fix: %s\n",
 			devCellLabel(cell), devReadBy(refusal.Scope.Apps, cell.Folder), whyUnready(problem), run.source.remedy(cell.Key))
 		if hint := shellHint(cell.Key, dotfileKeys, run); hint != "" {
@@ -177,14 +177,14 @@ func whyUnready(problem *resourcesv1.VariableProblem) string {
 	return "set, but it does not satisfy its schema"
 }
 
-func devCellLabel(cell envgate.Cell) string {
+func devCellLabel(cell variables.Cell) string {
 	if cell.Folder == "" {
 		return cell.Key + " (project root)"
 	}
 	return cell.Key + " (" + cell.Folder + ")"
 }
 
-func devReadBy(apps []envgate.App, folder string) string {
+func devReadBy(apps []variables.App, folder string) string {
 	var names []string
 	for _, app := range apps {
 		if folder == "" || app.Folder == folder {
