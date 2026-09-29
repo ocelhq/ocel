@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
@@ -181,32 +182,13 @@ func (s *stack) claimHostname(ctx context.Context, taken router.Claim) (address 
 	if address, err = s.e.machine.Address(ctx); err != nil {
 		return "", false, err
 	}
-	certified = true
-	if len(taken.ClientCertificates) > 0 {
-		held, err := s.e.machine.ShieldHost(ctx, host.Shield{
-			Hostname: taken.Hostname, Owner: s.surface(), ClientCertificates: taken.ClientCertificates,
-			Certificate: taken.OriginCertificate.Certificate, Key: taken.OriginCertificate.Key,
-		})
-		if err != nil {
+	if certified, err = s.e.shield(ctx, taken, s.surface()); err != nil {
+		return "", false, err
+	}
+	if _, wild := strings.CutPrefix(taken.Hostname, "*."); !wild {
+		if err := s.claimServed(ctx, taken); err != nil {
 			return "", false, err
 		}
-		certified = certifies(held, time.Now())
-	}
-	claims := []host.HostClaim{{
-		Hostname: taken.Hostname, Owner: s.surface(), Pointer: router.DefaultPointer, App: taken.App,
-	}}
-	stores, err := s.stores(ctx, router.DefaultPointer)
-	if err != nil {
-		return "", false, err
-	}
-	if stores {
-		claims = append(claims, host.HostClaim{
-			Hostname: live.StoreHostname(taken.Hostname), Owner: s.surface(),
-			Pointer: router.DefaultPointer, App: switchboard.StoreLabel,
-		})
-	}
-	if err := s.claim(ctx, claims); err != nil {
-		return "", false, err
 	}
 	if len(taken.ClientCertificates) > 0 {
 		if err := s.e.machine.RefuseUnshielded(ctx, taken.Hostname); err != nil {
@@ -214,6 +196,37 @@ func (s *stack) claimHostname(ctx context.Context, taken router.Claim) (address 
 		}
 	}
 	return address, certified, nil
+}
+
+func (s *stack) claimServed(ctx context.Context, taken router.Claim) error {
+	claims := []host.HostClaim{{
+		Hostname: taken.Hostname, Owner: s.surface(), Pointer: router.DefaultPointer, App: taken.App,
+	}}
+	stores, err := s.stores(ctx, router.DefaultPointer)
+	if err != nil {
+		return err
+	}
+	if stores {
+		claims = append(claims, host.HostClaim{
+			Hostname: live.StoreHostname(taken.Hostname), Owner: s.surface(),
+			Pointer: router.DefaultPointer, App: switchboard.StoreLabel,
+		})
+	}
+	return s.claim(ctx, claims)
+}
+
+func (e *Edge) shield(ctx context.Context, taken router.Claim, owner string) (bool, error) {
+	if len(taken.ClientCertificates) == 0 {
+		return true, nil
+	}
+	held, err := e.machine.ShieldHost(ctx, host.Shield{
+		Hostname: taken.Hostname, Owner: owner, ClientCertificates: taken.ClientCertificates,
+		Certificate: taken.OriginCertificate.Certificate, Key: taken.OriginCertificate.Key,
+	})
+	if err != nil {
+		return false, err
+	}
+	return certifies(held, time.Now()), nil
 }
 
 func certifies(shield host.Shield, now time.Time) bool {

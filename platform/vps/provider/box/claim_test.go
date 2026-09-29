@@ -199,3 +199,51 @@ func TestTheBoxRefusesAShieldedClaimItsProxyAnswersToAClientWithNoCertificate(t 
 		t.Errorf("the box never asked whether its proxy refuses a client with no certificate")
 	}
 }
+
+func TestThePreviewEntryAnEdgeForwardsIsInstalledOnTheBoxShieldedByTheClientCertificate(t *testing.T) {
+	m, front, _ := reconciled(t)
+	previews := box.NewRouter(front.Edge)
+	ctx := context.Background()
+
+	origin, err := previews.ClaimPreviewEntry(ctx, router.Claim{
+		Hostname: "*.preview.example.com", ClientCertificates: []string{pulled},
+		OriginCertificate: originCertificate(t, "*.preview.example.com", 365*24*time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("ClaimPreviewEntry: %v", err)
+	}
+	if origin.Address != address || !origin.Certified {
+		t.Errorf("ClaimPreviewEntry named origin %+v, want the box at %s holding the wildcard's certificate", origin, address)
+	}
+	if m.previewBase != "preview.example.com" {
+		t.Errorf("the box answers previews on %q, want preview.example.com", m.previewBase)
+	}
+	if len(m.shields) != 1 || m.shields[0].Hostname != "*.preview.example.com" || m.shields[0].Owner != edge.PreviewEntryOwner {
+		t.Errorf("the box shields %+v, want every preview under *.preview.example.com answered only to the edge in front", m.shields)
+	}
+
+	if err := previews.DisclaimPreviewEntry(ctx, "preview.example.com"); err != nil {
+		t.Fatalf("DisclaimPreviewEntry: %v", err)
+	}
+	if m.previewBase != "" || len(m.shields) != 0 {
+		t.Errorf("the box still answers previews on %q shielded by %+v, want the entry and its shield gone", m.previewBase, m.shields)
+	}
+}
+
+func TestAProjectsOwnPreviewWildcardAnEdgeForwardsIsShieldedOnTheBoxAndClaimsNoHostname(t *testing.T) {
+	m, routed := routedOn(t)
+
+	origin, err := routed.Claim(context.Background(), router.Claim{Hostname: "*.preview.example.com", ClientCertificates: []string{pulled}})
+	if err != nil {
+		t.Fatalf("Claim(*.preview.example.com): %v", err)
+	}
+	if origin.Address != address {
+		t.Errorf("Claim named origin %+v, want the box", origin)
+	}
+	if len(m.claims) != 0 {
+		t.Errorf("the box claims %+v, want nothing yet: each preview claims its own hostname when it is promoted", m.claims)
+	}
+	if len(m.shields) != 1 || m.shields[0].Hostname != "*.preview.example.com" || m.shields[0].Owner != box.Surface(slug, environment.TierProduction) {
+		t.Errorf("the box shields %+v, want the project's wildcard shielded for the project", m.shields)
+	}
+}

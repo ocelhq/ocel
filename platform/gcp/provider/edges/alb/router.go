@@ -2,8 +2,10 @@ package alb
 
 import (
 	"context"
+	"strings"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -43,6 +45,42 @@ func (r Router) Open(state router.StackState) (router.Stack, error) {
 
 func (r Router) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
 	return r.e.ProjectRemovals(scope)
+}
+
+func (r Router) ClaimPreviewEntry(ctx context.Context, claim router.Claim) (edge.Origin, error) {
+	base, wild := strings.CutPrefix(claim.Hostname, "*.")
+	if !wild {
+		return edge.Origin{}, refusal.Refuse(refusal.CodeInvalid, "a preview entry is a wildcard, and %q is none", claim.Hostname)
+	}
+	fronted := r.e
+	if len(claim.ClientCertificates) > 0 {
+		fronted = r.e.Shielded()
+		if _, err := fronted.shield(ctx, environment.TierPreview, claim.ClientCertificates); err != nil {
+			return edge.Origin{}, err
+		}
+	}
+	address, err := fronted.ReconcilePreviewWildcard(ctx, edge.PreviewWildcardSpec{BaseDomain: base, Certificate: claim.Certificate})
+	if err != nil {
+		return edge.Origin{}, err
+	}
+	return edge.Origin{Address: address, Certified: true}, nil
+}
+
+func (r Router) DisclaimPreviewEntry(ctx context.Context, baseDomain string) error {
+	recorded, err := r.e.recordedPreview(ctx)
+	if err != nil || recorded.BaseDomain != baseDomain {
+		return err
+	}
+	fronted := r.e
+	if recorded.Shielded {
+		fronted = r.e.Shielded()
+	}
+	return fronted.DestroyPreviewWildcard(ctx, baseDomain)
+}
+
+func (r Router) PreviewEntryRemovals(wildcard string) []edge.PlanGroup {
+	removed, _ := r.e.PreviewWildcardRemovals(wildcard)
+	return []edge.PlanGroup{removed}
 }
 
 type routerStack struct{ s *stack }

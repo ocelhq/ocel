@@ -484,7 +484,35 @@ func (r *deployRun) reconcileEdge(ctx context.Context, progress progress.Progres
 		return err
 	}
 	r.setEdgeStack(stack)
-	return r.checkpoint(ctx)
+	if err := r.checkpoint(ctx); err != nil {
+		return err
+	}
+	return r.forwardPreviews(ctx, progress)
+}
+
+func (r *deployRun) forwardPreviews(ctx context.Context, progress progress.Progress) error {
+	if !forwardsToRouter(r.front) {
+		return nil
+	}
+	switch r.hostingMode() {
+	case hostingGlobalPreview:
+		shared := &wildcards{provider: r.provider, keyValues: r.provider.KeyValues(), recorded: r.wildcard}
+		return shared.reclaimEntry(ctx, r.front, progress)
+	case hostingProjectPreview:
+		if r.previewOn == "" || len(r.spec.Apps) == 0 {
+			return nil
+		}
+	default:
+		return nil
+	}
+	target := ConfiguredHost{Hostname: edge.PreviewWildcard(r.previewOn)}
+	forwarding := &hostnames{edgeSession: r.edgeSession}
+	hostState := r.state.Host(target.Hostname)
+	if slices.Contains(r.edgeStack().State().Bound, target.Hostname) {
+		_, err := forwarding.reclaimShielded(ctx, target, &hostState, progress)
+		return err
+	}
+	return forwarding.bindOrigin(ctx, target, &hostState, progress)
 }
 
 func (r *deployRun) attachHostnames(ctx context.Context) error {

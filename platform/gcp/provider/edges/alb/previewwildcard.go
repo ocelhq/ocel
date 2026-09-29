@@ -18,6 +18,7 @@ import (
 type previewEntry struct {
 	BaseDomain  string `json:"baseDomain"`
 	Certificate string `json:"certificate,omitempty"`
+	Shielded    bool   `json:"shielded,omitempty"`
 }
 
 func (e *Edge) previewKey() keyvalue.Key {
@@ -64,7 +65,7 @@ func (e *Edge) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewWi
 			"the %q edge terminates TLS for %s at the load balancer, so its certificate map needs the wildcard certificate, and this reconcile names none",
 			Kind, wildcard)
 	}
-	entry := previewEntry{BaseDomain: spec.BaseDomain, Certificate: spec.Certificate}
+	entry := previewEntry{BaseDomain: spec.BaseDomain, Certificate: spec.Certificate, Shielded: e.deps.Shielded}
 	front, err := e.raiseServing(ctx, environment.TierPreview, entry, progress.DiscardProgress())
 	if err != nil {
 		return "", err
@@ -93,7 +94,7 @@ func (e *Edge) DestroyPreviewWildcard(ctx context.Context, baseDomain string) er
 				"answering a 404 from the load balancer: take those previews down with `ocel destroy preview` in each project first",
 			wildcard, strings.Join(served, ", "), Kind, environment.TierPreview)
 	}
-	outputs, err := e.deps.Stacks.Outputs(ctx, Target{Tier: environment.TierPreview})
+	outputs, err := e.deps.Stacks.Outputs(ctx, e.frontTarget(environment.TierPreview))
 	if err != nil {
 		return err
 	}

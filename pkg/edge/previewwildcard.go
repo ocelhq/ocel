@@ -20,6 +20,7 @@ type PreviewWildcardSpec struct {
 	Values      map[string]string
 	Warn        func(string)
 	Program     *ProgramSpec
+	Origin      *Origin
 }
 
 func PreviewWildcard(baseDomain string) string {

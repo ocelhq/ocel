@@ -35,6 +35,8 @@ type cfMock struct {
 	existingRecords       []map[string]any
 	existingCustomDomains []map[string]any
 	certificatePacks      []map[string]any
+	orderedPacks          [][]string
+	refusesPackOrders     bool
 	existingScripts       []string
 	refuseScriptDeletes   map[string]bool
 	existingBuckets       []string
@@ -326,6 +328,26 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 			return
 		}
 		writeResult(w, m.certificatePacks)
+	})
+
+	mux.HandleFunc("POST /zones/"+m.zoneID+"/ssl/certificate_packs/order", func(w http.ResponseWriter, r *http.Request) {
+		if m.refusesPackOrders {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"success": false, "messages": []any{}, "result": nil,
+				"errors": []any{map[string]any{"code": 1450, "message": "Advanced Certificate Manager is not enabled on this zone"}},
+			})
+			return
+		}
+		var body struct {
+			Hosts []string `json:"hosts"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		m.orderedPacks = append(m.orderedPacks, body.Hosts)
+		ordered := map[string]any{"id": fmt.Sprintf("pack-%d", len(m.orderedPacks)), "type": "advanced", "status": "initializing", "hosts": body.Hosts}
+		m.certificatePacks = append(m.certificatePacks, ordered)
+		writeResult(w, ordered)
 	})
 
 	mux.HandleFunc("GET /zones/"+m.zoneID+"/settings/ssl", func(w http.ResponseWriter, _ *http.Request) {

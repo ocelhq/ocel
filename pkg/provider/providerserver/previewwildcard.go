@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	connect "connectrpc.com/connect"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -122,36 +124,20 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progr
 	}
 
 	progress.Say("Reconciling the shared preview entry on " + wildcard)
-	program, err := edgeProgramFor(ctx, w.provider, front, provider.EdgeProgramRequest{
-		Tier:              environment.TierPreview,
-		PreviewBaseDomain: base,
-	})
+	published, err := w.reconcileEntry(ctx, front, answering, progress)
 	if err != nil {
-		return err
-	}
-	published, err := front.ReconcilePreviewWildcard(ctx, edge.PreviewWildcardSpec{
-		BaseDomain:  base,
-		Certificate: w.recorded.Host.Certificate.ID,
-		GrammarMin:  edge.PreviewGrammarMin,
-		GrammarMax:  edge.PreviewGrammarMax,
-		Warn:        progress.Warn,
-		Program:     program.Spec,
-		Values:      program.Values,
-	})
-	if err != nil {
-		return err
-	}
-	if err := w.save(ctx); err != nil {
 		return err
 	}
 	if err := certifying.discardSuperseded(ctx, progress); err != nil {
 		return err
 	}
 
-	target := edge.DNSTarget{Kind: front.Kind(), ServesUnbound: front.Facts().ServesUnbound, ProxiesRecords: front.Facts().ProxiesRecords, Front: published}
-	dnsRecords, err := edge.RecordsFor(target, []string{wildcard})
-	if err != nil {
-		return err
+	var dnsRecords []edge.Record
+	if !forwardsToRouter(front) {
+		target := edge.DNSTarget{Kind: front.Kind(), ServesUnbound: front.Facts().ServesUnbound, ProxiesRecords: front.Facts().ProxiesRecords, Front: published}
+		if dnsRecords, err = edge.RecordsFor(target, []string{wildcard}); err != nil {
+			return err
+		}
 	}
 	written, werr := cutover.write(ctx, dnsRecords,
 		fmt.Sprintf("Point %s at %s", wildcard, describeFront(front.Kind())), progress.Say,
@@ -174,6 +160,86 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progr
 	}
 	progress.Say(fmt.Sprintf("Previews are served on %s through %s", wildcard, describeFront(front.Kind())))
 	return nil
+}
+
+func (w *wildcards) reconcileEntry(ctx context.Context, front edge.Edge, answering router.Kind, runProgress progress.Progress) (string, error) {
+	base := w.recorded.BaseDomain
+	spec := edge.PreviewWildcardSpec{
+		BaseDomain:  base,
+		Certificate: w.recorded.Host.Certificate.ID,
+		GrammarMin:  edge.PreviewGrammarMin,
+		GrammarMax:  edge.PreviewGrammarMax,
+		Warn:        runProgress.Warn,
+	}
+	var claimed originClaim
+	if forwardsToRouter(front) {
+		var err error
+		if claimed, err = w.claimEntry(ctx, front, answering); err != nil {
+			return "", err
+		}
+		spec.Origin = claimed.origin
+	} else {
+		program, err := edgeProgramFor(ctx, w.provider, front, provider.EdgeProgramRequest{
+			Tier:              environment.TierPreview,
+			PreviewBaseDomain: base,
+		})
+		if err != nil {
+			return "", err
+		}
+		spec.Program, spec.Values = program.Spec, program.Values
+	}
+	published, err := front.ReconcilePreviewWildcard(ctx, spec)
+	if err != nil {
+		return "", err
+	}
+	w.recorded.Host.ClientCertificateDigests = digestClientCertificates(claimed.trusted)
+	superseded := claimed.recordIssued(&w.recorded.Host)
+	if err := w.save(ctx); err != nil {
+		return "", err
+	}
+	revokeOriginCertificate(ctx, front, superseded, runProgress)
+	return published, nil
+}
+
+func (w *wildcards) claimEntry(ctx context.Context, front edge.Edge, answering router.Kind) (originClaim, error) {
+	entry, err := w.provider.Routers().Open(answering)
+	if err != nil {
+		return originClaim{}, err
+	}
+	wildcard := w.recorded.Hostname()
+	claimed := originClaim{}
+	origin, trusted, err := claimShielded(ctx, front, wildcard, func(ctx context.Context, clientCertificates []string) (edge.Origin, error) {
+		claim := router.Claim{Hostname: wildcard, Certificate: w.recorded.Host.Certificate.ID, ClientCertificates: clientCertificates}
+		return claimCertified(ctx, front, claim, &claimed.issued, entry.ClaimPreviewEntry)
+	})
+	claimed.trusted = trusted
+	if err != nil {
+		return claimed, err
+	}
+	if origin.Address != "" {
+		claimed.origin = &origin
+	}
+	return claimed, nil
+}
+
+func (w *wildcards) reclaimEntry(ctx context.Context, front edge.Edge, runProgress progress.Progress) error {
+	if !forwardsToRouter(front) || !w.recorded.IsRecorded() || w.recorded.Edge != front.Kind() {
+		return nil
+	}
+	changed, err := stagedClientCertificatesChanged(ctx, front, w.recorded.Hostname(), w.recorded.Host.ClientCertificateDigests)
+	if err != nil {
+		return err
+	}
+	if !changed && !originCertificateDue(&w.recorded.Host, time.Now()) {
+		return nil
+	}
+	answering, err := findPairedRouter(w.provider, front.Kind())
+	if err != nil {
+		return err
+	}
+	runProgress.Say("Claiming the shared preview entry on " + w.recorded.Hostname() + " again: what its origin trusts or answers with is due to change")
+	_, err = w.reconcileEntry(ctx, front, answering, runProgress)
+	return err
 }
 
 func (w *wildcards) hostCertificates(cutover dnsCutover, notes ...string) hostCertificates {
@@ -314,6 +380,25 @@ func (w *wildcards) owningEdge() (edge.Edge, error) {
 	return w.provider.Edges().Open(w.recorded.Edge)
 }
 
+func (w *wildcards) disclaimEntry(ctx context.Context, front edge.Edge, runProgress progress.Progress) error {
+	if !forwardsToRouter(front) {
+		return nil
+	}
+	answering, err := findPairedRouter(w.provider, front.Kind())
+	if err != nil {
+		return err
+	}
+	entry, err := w.provider.Routers().Open(answering)
+	if err != nil {
+		return err
+	}
+	if err := entry.DisclaimPreviewEntry(ctx, w.recorded.BaseDomain); err != nil {
+		return err
+	}
+	revokeOriginCertificate(ctx, front, w.recorded.Host.OriginCertificate, runProgress)
+	return nil
+}
+
 func (h *handlers) PlanRemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest) (*planv1.ChangePlan, error) {
 	w, err := h.wildcard(ctx, req.GetEdge())
 	if err != nil {
@@ -347,6 +432,23 @@ func (w *wildcards) releaseGroups(front edge.Edge) ([]*planv1.ChangeGroup, error
 		return nil, err
 	}
 	groups := []*planv1.ChangeGroup{removedGroup}
+	if forwardsToRouter(front) {
+		answering, err := findPairedRouter(w.provider, front.Kind())
+		if err != nil {
+			return nil, err
+		}
+		entry, err := w.provider.Routers().Open(answering)
+		if err != nil {
+			return nil, err
+		}
+		for _, group := range entry.PreviewEntryRemovals(w.recorded.Hostname()) {
+			converted, err := edgeGroupProto(group)
+			if err != nil {
+				return nil, err
+			}
+			groups = append(groups, converted)
+		}
+	}
 	for _, cert := range w.recorded.Host.Certificates() {
 		groups = append(groups, certificateGroup(cert))
 	}
@@ -410,6 +512,9 @@ func (w *wildcards) release(ctx context.Context, progress progress.Progress) err
 	}
 	progress.Say("Removing the shared preview entry on " + w.recorded.Hostname())
 	if err := front.DestroyPreviewWildcard(ctx, w.recorded.BaseDomain); err != nil {
+		return err
+	}
+	if err := w.disclaimEntry(ctx, front, progress); err != nil {
 		return err
 	}
 	if err := cutover.release(ctx, w.recorded.Host.WrittenRecords(), progress.Say); err != nil {

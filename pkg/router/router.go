@@ -49,6 +49,12 @@ type Router interface {
 	Open(state StackState) (Stack, error)
 
 	ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup
+
+	ClaimPreviewEntry(ctx context.Context, claim Claim) (edge.Origin, error)
+
+	DisclaimPreviewEntry(ctx context.Context, baseDomain string) error
+
+	PreviewEntryRemovals(wildcard string) []edge.PlanGroup
 }
 
 type Claim struct {

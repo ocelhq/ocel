@@ -174,3 +174,20 @@ func TestAShieldedHostnameIsAnsweredWithTheOriginCertificateTheEdgeIssuedForIt(t
 		t.Errorf("shop.example.com is handed %+v, want the origin certificate the edge trusts rather than the pin or one ordered on demand", shop)
 	}
 }
+
+func TestAShieldedPreviewWildcardIsMatchedAfterEveryHostnameShieldedByName(t *testing.T) {
+	t.Parallel()
+
+	client, _ := clientCertificate(t)
+	spec := specified()
+	spec.Shields = []proxy.Shield{
+		{Hostname: "*.preview.example.com", ClientCertificates: []string{client}},
+		{Hostname: "shop.preview.example.com", ClientCertificates: []string{client}},
+	}
+	written, _ := render(t, spec)
+	policies, _ := shieldingPolicies(t, written)
+
+	if len(policies) != 3 || policies[0].Match["sni"][0] != "shop.preview.example.com" || policies[1].Match["sni"][0] != "*.preview.example.com" || policies[1].Client == nil {
+		t.Errorf("connection policies %+v, want shop.preview.example.com, then the wildcard every preview under it matches, then the catch-all: caddy takes the first policy that matches", policies)
+	}
+}

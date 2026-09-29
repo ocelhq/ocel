@@ -45,3 +45,15 @@ them into Cloudflare instead:
 ```
 
 Dev mode starts the resources the app declares on your machine, linked or not, and reads its values from `.env`, or from the env source the config names for dev, with `.env.local` on top.
+
+## Previews behind Cloudflare
+
+A preview wildcard is forwarded to the origin through one proxied `*.<base>` record, and
+the origin answers each preview under it only to Cloudflare. Cloudflare's Universal SSL
+covers the zone apex and the names one label below it, so a preview domain at a zone apex
+(`*.acme-previews.com`, with `acme-previews.com` a zone of its own) needs nothing more.
+Deeper than that (`*.preview.acme.com` in the `acme.com` zone), Cloudflare answers a preview
+only with an advanced certificate: ocel orders one and stops, and running the same command
+again once Cloudflare has issued it, usually within minutes, finishes. Ordering one needs [Advanced Certificate
+Manager](https://developers.cloudflare.com/ssl/edge-certificates/advanced-certificate-manager/),
+a paid add-on to the zone; without it ocel refuses the wildcard and says so.

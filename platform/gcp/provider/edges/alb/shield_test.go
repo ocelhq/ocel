@@ -268,3 +268,47 @@ func TestTheALBRoutersRemovalPlanNamesTheHostRuleOfEveryHostnameAnEdgeForwardsTo
 		t.Errorf("the alb router plans to delete host rules %v, want shop.example.com: an edge in front lists only what it forwards, and the plan must name what the load balancer takes down", rules)
 	}
 }
+
+func shieldedPreviewFront() map[string]string {
+	return map[string]string{
+		"address":        shieldedAddress,
+		"certificateMap": "ocel-alb-shielded-preview-certs",
+		"urlMap":         "ocel-alb-shielded-preview-routes",
+		"notFound":       "ocel-alb-shielded-preview-notfound",
+	}
+}
+
+func TestThePreviewEntryAnEdgeForwardsIsServedByTheShieldedFrontAlone(t *testing.T) {
+	t.Parallel()
+
+	front, w := fronting(t)
+	w.outputs[ShieldedFrontStack(environment.TierPreview)] = shieldedPreviewFront()
+	ctx := context.Background()
+
+	origin, err := NewRouter(front).ClaimPreviewEntry(ctx, router.Claim{Hostname: "*.preview.example.com", Certificate: "certs/preview", ClientCertificates: []string{zonePull}})
+	if err != nil {
+		t.Fatalf("ClaimPreviewEntry: %v", err)
+	}
+	if origin != (edge.Origin{Address: shieldedAddress, Certified: true}) {
+		t.Errorf("ClaimPreviewEntry named origin %+v, want the shielded preview front at %s", origin, shieldedAddress)
+	}
+	if _, declared := w.declarations(ShieldedFrontStack(environment.TierPreview))[previewNEGName("preview.example.com")]; !declared {
+		t.Error("the shielded preview front declares no network endpoint group for the wildcard, so no preview is answered through the edge")
+	}
+	if _, routed := w.hosts("ocel-alb-shielded-preview-routes")["*.preview.example.com"]; !routed {
+		t.Errorf("the shielded front routes %v, want *.preview.example.com", w.hosts("ocel-alb-shielded-preview-routes"))
+	}
+	if _, err := front.Bootstrap(ctx, environment.TierPreview); err != nil {
+		t.Fatalf("Bootstrap of the front browsers reach: %v", err)
+	}
+	if _, declared := w.declarations(FrontStack(environment.TierPreview))[previewNEGName("preview.example.com")]; declared {
+		t.Error("the front browsers reach declares the wildcard too, so a preview that skips the edge is answered")
+	}
+
+	if err := NewRouter(front).DisclaimPreviewEntry(ctx, "preview.example.com"); err != nil {
+		t.Fatalf("DisclaimPreviewEntry: %v", err)
+	}
+	if _, routed := w.hosts("ocel-alb-shielded-preview-routes")["*.preview.example.com"]; routed {
+		t.Error("the shielded front still routes *.preview.example.com once the entry was given back")
+	}
+}
