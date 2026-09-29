@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"slices"
 	"sync"
 
 	connect "connectrpc.com/connect"
@@ -14,9 +15,12 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
+const maxPendingQuestions = 16
+
 type questions struct {
 	mu      sync.Mutex
 	pending map[string]provider.Question
+	order   []string
 }
 
 func newQuestions() *questions {
@@ -56,6 +60,11 @@ func (q *questions) pose(err error) error {
 	}
 	q.mu.Lock()
 	q.pending[id] = question
+	q.order = append(q.order, id)
+	for len(q.order) > maxPendingQuestions {
+		delete(q.pending, q.order[0])
+		q.order = q.order[1:]
+	}
 	q.mu.Unlock()
 	rpcErr.AddDetail(detail)
 	return err
@@ -65,6 +74,7 @@ func (q *questions) confirm(ctx context.Context, id string) error {
 	q.mu.Lock()
 	question, asked := q.pending[id]
 	delete(q.pending, id)
+	q.order = slices.DeleteFunc(q.order, func(pending string) bool { return pending == id })
 	q.mu.Unlock()
 	if !asked || question.Confirm == nil {
 		return refusal.Refuse(refusal.CodeInvalid, "this provider is waiting on no question %q", id)
