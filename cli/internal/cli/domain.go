@@ -111,7 +111,7 @@ var domainRmCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("determine working directory: %w", err)
 		}
-		return runDomainRm(cmd.Context(), newDeps(), cwd, firstArg(args), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return runDomainRm(cmd.Context(), newDeps(), cwd, firstArg(args), domainOpts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
 }
 
@@ -141,6 +141,7 @@ func init() {
 	}
 	domainLsCmd.Flags().BoolVar(&domainOpts.preview, "preview", false, "List the global preview domain and the projects served on it instead of this project's own hostnames")
 	cmddeps.Yes(domainReleaseCmd, &domainOpts.yes)
+	cmddeps.Yes(domainRmCmd, &domainOpts.yes)
 	domainStatusCmd.Flags().BoolVar(&domainOpts.wait, "wait", false, "Keep polling until every declared hostname is served, or give up")
 
 	domainCmd.AddCommand(cmddeps.ReserveStdout(domainStatusCmd))
@@ -388,16 +389,42 @@ func runDomainAdd(ctx context.Context, deps cmddeps.Deps, cwd, host string, stdo
 		Host:       host,
 		Edge:       edgewire.Selection(cfg),
 	}
-	return changeHostnames(ctx, deps, cfg, "ocel domain add", "AddHostname", req, contractv1connect.ProviderServiceClient.AddHostname,
-		fmt.Sprintf("Serving %s", strings.Join(addedHosts(configured, host), ", ")))
+	return changeHostnames(ctx, deps, cfg, hostnameChange{
+		command:  "ocel domain add",
+		rpc:      "AddHostname",
+		req:      req,
+		call:     contractv1connect.ProviderServiceClient.AddHostname,
+		headline: fmt.Sprintf("Serving %s", strings.Join(addedHosts(configured, host), ", ")),
+	})
 }
 
-func changeHostnames(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, command, rpc string, req *contractv1.HostnameRequest, call func(contractv1connect.ProviderServiceClient, context.Context, *contractv1.HostnameRequest) (*connect.ServerStreamForClient[progressv1.OperationEvent], error), headline string) (err error) {
+type hostnameChange struct {
+	command  string
+	rpc      string
+	req      *contractv1.HostnameRequest
+	call     func(contractv1connect.ProviderServiceClient, context.Context, *contractv1.HostnameRequest) (*connect.ServerStreamForClient[progressv1.OperationEvent], error)
+	headline string
+	asks     *hostnameConsent
+}
+
+type hostnameConsent struct {
+	gate     consent.Gate
+	plan     string
+	question string
+	declined string
+}
+
+func changeHostnames(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, change hostnameChange) (err error) {
 	if _, err := cfg.RequireProvider(); err != nil {
 		return err
 	}
+	if change.asks != nil {
+		if err := change.asks.gate.Refuse(); err != nil {
+			return err
+		}
+	}
 
-	ctx, run, err := deps.Events.Begin(ctx, command, cfg.Dir)
+	ctx, run, err := deps.Events.Begin(ctx, change.command, cfg.Dir)
 	if err != nil {
 		return err
 	}
@@ -411,10 +438,24 @@ func changeHostnames(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.
 	}
 	defer prov.Close()
 
-	if _, err := providerclient.Stream(ctx, prov, rpc, req, call); err != nil {
+	if change.asks != nil {
+		planning := run.Phase(progressv1.Phase_PHASE_PLAN)
+		planning.Say(change.asks.plan)
+		granted, err := change.asks.gate.Consent(ctx, planning, nil, change.asks.question)
+		planning.End(err)
+		if err != nil {
+			return err
+		}
+		if !granted {
+			run.Finish(change.asks.declined)
+			return nil
+		}
+	}
+
+	if _, err := providerclient.Stream(ctx, prov, change.rpc, change.req, change.call); err != nil {
 		return err
 	}
-	run.Finish(headline)
+	run.Finish(change.headline)
 	return nil
 }
 
@@ -425,7 +466,7 @@ func addedHosts(configured []string, host string) []string {
 	return []string{host}
 }
 
-func runDomainRm(ctx context.Context, deps cmddeps.Deps, cwd, host string, stdout, stderr io.Writer) error {
+func runDomainRm(ctx context.Context, deps cmddeps.Deps, cwd, host string, opts domainOptions, stdout, stderr io.Writer, stdin io.Reader) error {
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
@@ -437,10 +478,24 @@ func runDomainRm(ctx context.Context, deps cmddeps.Deps, cwd, host string, stdou
 		Edge:       edgewire.Selection(cfg),
 	}
 	headline := "Removed every hostname this project no longer declares"
+	plan := fmt.Sprintf("This will unbind every production hostname project %q no longer declares, and remove the certificates and DNS records ocel created for them", cfg.Slug)
 	if host != "" {
 		headline = fmt.Sprintf("Removed %s", host)
+		plan = fmt.Sprintf("This will unbind %s from production of project %q, and remove the certificate and DNS records ocel created for it", host, cfg.Slug)
 	}
-	return changeHostnames(ctx, deps, cfg, "ocel domain rm", "RemoveHostname", req, contractv1connect.ProviderServiceClient.RemoveHostname, headline)
+	return changeHostnames(ctx, deps, cfg, hostnameChange{
+		command:  "ocel domain rm",
+		rpc:      "RemoveHostname",
+		req:      req,
+		call:     contractv1connect.ProviderServiceClient.RemoveHostname,
+		headline: headline,
+		asks: &hostnameConsent{
+			gate:     deps.Gate(consent.PlanFirst, "ocel domain rm", opts.yes, stdout, stdin),
+			plan:     plan,
+			question: "Remove them?",
+			declined: "Nothing removed: every production hostname stays as it is",
+		},
+	})
 }
 
 func listGlobalPreviewDomain(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config) (resp *contractv1.GetPreviewWildcardResponse, err error) {

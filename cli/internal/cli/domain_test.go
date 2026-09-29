@@ -577,7 +577,7 @@ export default {
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDomainRm(context.Background(), deps, root, "", &stdout, &stderr); err != nil {
+		if err := runDomainRm(context.Background(), deps, root, "", domainOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDomainRm err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
@@ -601,7 +601,7 @@ export default {
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runDomainRm(context.Background(), deps, root, "old.app.com", &stdout, &stderr); err != nil {
+		if err := runDomainRm(context.Background(), deps, root, "old.app.com", domainOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDomainRm err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
@@ -611,6 +611,46 @@ export default {
 			}
 		}
 		clitest.WaitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("rm refuses without a terminal or --yes and removes nothing", func(t *testing.T) {
+		root, _ := clitest.SetUpDeployFixture(t)
+		deps := newTestDeps()
+		clitest.SetLoggedIn(&deps)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+
+		var stdout, stderr bytes.Buffer
+		clitest.AttachTerminalSink(deps, &stdout)
+		err := runDomainRm(context.Background(), deps, root, "old.app.com", domainOptions{}, &stdout, &stderr, strings.NewReader(""))
+		if err == nil || !strings.Contains(err.Error(), "pass --yes") {
+			t.Fatalf("runDomainRm without a terminal err = %v, want a refusal naming --yes", err)
+		}
+		if strings.Contains(stdout.String(), "Unbinding") {
+			t.Errorf("stdout = %q, want nothing unbound without consent", stdout.String())
+		}
+	})
+
+	t.Run("rm behind a declined confirmation removes nothing", func(t *testing.T) {
+		root, _ := clitest.SetUpDeployFixture(t)
+		deps := newTestDeps()
+		clitest.SetLoggedIn(&deps)
+		deps.StdinIsTerminal = func(io.Reader) bool { return true }
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+
+		var stdout, stderr bytes.Buffer
+		clitest.AttachTerminalSink(deps, &stdout)
+		if err := runDomainRm(context.Background(), deps, root, "old.app.com", domainOptions{}, &stdout, &stderr, strings.NewReader("n\n")); err != nil {
+			t.Fatalf("runDomainRm err = %v; stdout=%s", err, stdout.String())
+		}
+		out := stdout.String()
+		if !strings.Contains(out, "Not confirmed, so this run changes nothing") {
+			t.Errorf("stdout = %q, want a declined confirmation to say so", out)
+		}
+		if strings.Contains(out, "Unbinding") || strings.Contains(out, "Removed old.app.com") {
+			t.Errorf("stdout = %q, want nothing removed behind a declined confirmation", out)
+		}
 	})
 
 	t.Run("status shows the certificate, the records, the probe and what serves each host", func(t *testing.T) {
