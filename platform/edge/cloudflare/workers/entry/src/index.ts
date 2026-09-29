@@ -205,7 +205,7 @@ function routedDeps(
               env: record.env,
               envelope: record.envelope,
               envelopeKey: edgeRuntime.envelopeKey,
-              valueFingerprint: record.valueFingerprint,
+              buildFingerprint: record.buildFingerprint,
             },
           )
         : undefined,

@@ -17,7 +17,7 @@ export interface DeploymentRecord {
   edgeWorkers?: EdgeWorkers;
   env?: Record<string, string>;
   envelope?: string;
-  valueFingerprint?: string;
+  buildFingerprint?: string;
 }
 
 export type PointerRecordResult =

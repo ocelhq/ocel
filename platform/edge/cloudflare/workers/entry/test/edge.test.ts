@@ -1782,13 +1782,13 @@ describe("the variables a deployment declares", () => {
     expect(reads.filter((key) => key.endsWith("/sealed.bin"))).toEqual([]);
   });
 
-  it("reloads the isolate when only the values changed", async () => {
-    const deployment = (valueFingerprint: string) =>
+  it("reloads the isolate when only the build changed", async () => {
+    const deployment = (buildFingerprint: string) =>
       varsInvoker({
         handler: COUNTER,
         id: "shared-bundle-vars",
         cache: { rpc: remoteStub(), scope: "prod/p/app/b1" },
-        variables: { valueFingerprint },
+        variables: { buildFingerprint },
       }).edge;
     const served = async (edge: EdgeInvoker) => (await edge("e", new Request("https://x/"))).text();
 
