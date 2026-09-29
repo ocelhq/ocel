@@ -20,21 +20,21 @@ func TestOutputSplitsWritesIntoLinesAndKeepsOnlyTheLastCarriageReturnRewrite(t *
 
 	var lines []string
 	for _, ev := range sink.received() {
-		if ev.GetOutput() == nil {
+		if ev.GetOperation().GetOutput() == nil {
 			continue
 		}
-		if ev.GetOutput().GetStream() != progressv1.Stream_STREAM_STDOUT || ev.GetLevel() != progressv1.Level_LEVEL_INFO ||
-			ev.GetPhase() != progressv1.Phase_PHASE_BUILD {
+		if ev.GetOperation().GetOutput().GetStream() != progressv1.Stream_STREAM_STDOUT || ev.GetOperation().GetLevel() != progressv1.Level_LEVEL_INFO ||
+			ev.GetOperation().GetPhase() != progressv1.Phase_PHASE_BUILD {
 			t.Fatalf("line %q = stream %s level %s phase %s, want stdout INFO in build",
-				ev.GetMessage(), ev.GetOutput().GetStream(), ev.GetLevel(), ev.GetPhase())
+				ev.GetOperation().GetMessage(), ev.GetOperation().GetOutput().GetStream(), ev.GetOperation().GetLevel(), ev.GetOperation().GetPhase())
 		}
-		lines = append(lines, ev.GetMessage())
+		lines = append(lines, ev.GetOperation().GetMessage())
 	}
 	want := []string{"compiling", "progress 100%", "done"}
 	if strings.Join(lines, "|") != strings.Join(want, "|") {
 		t.Fatalf("lines = %q, want %q", lines, want)
 	}
-	if last := sink.received()[len(sink.received())-1]; last.GetEnded() == nil {
+	if last := sink.received()[len(sink.received())-1]; last.GetOperation().GetEnded() == nil {
 		t.Fatal("the span ended before its last line")
 	}
 }
@@ -47,7 +47,7 @@ func TestOutputEmitsALineThatNeverEndsOnceItPassesSixtyFourKiB(t *testing.T) {
 	fmt.Fprint(out, strings.Repeat("x", 64<<10+1))
 
 	got := sink.received()
-	if last := got[len(got)-1]; last.GetOutput() == nil || len(last.GetMessage()) != 64<<10+1 {
-		t.Fatalf("last event = %d bytes of output %v, want the whole unterminated line", len(last.GetMessage()), last.GetOutput() != nil)
+	if last := got[len(got)-1]; last.GetOperation().GetOutput() == nil || len(last.GetOperation().GetMessage()) != 64<<10+1 {
+		t.Fatalf("last event = %d bytes of output %v, want the whole unterminated line", len(last.GetOperation().GetMessage()), last.GetOperation().GetOutput() != nil)
 	}
 }

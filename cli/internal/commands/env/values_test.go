@@ -789,13 +789,13 @@ func TestWhatTheDeclarationCollectorPrintsReachesTheRunAsOutputAndNeverRawStderr
 
 	evs := clitest.RunEvents(t, stderr.String())
 	said := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool {
-		return ev.GetOutput() != nil && strings.Contains(ev.GetMessage(), "collecting the declared variables")
+		return ev.GetOperation().GetOutput() != nil && strings.Contains(ev.GetOperation().GetMessage(), "collecting the declared variables")
 	})
 	if said < 0 {
 		t.Fatalf("the collector's line never reached the run as output: %s", stderr.String())
 	}
-	if evs[said].GetPhase() != progressv1.Phase_PHASE_BUILD {
-		t.Errorf("the collector's line is in %v, want the build phase that ran it", evs[said].GetPhase())
+	if evs[said].GetOperation().GetPhase() != progressv1.Phase_PHASE_BUILD {
+		t.Errorf("the collector's line is in %v, want the build phase that ran it", evs[said].GetOperation().GetPhase())
 	}
 }
 

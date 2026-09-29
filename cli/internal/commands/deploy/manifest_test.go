@@ -28,7 +28,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/envvarsserver"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -1007,27 +1006,27 @@ func buildScopes(t *testing.T, stream string) ([]*buildScope, []string) {
 	bySpan := map[string]*buildScope{}
 	var phaseOutput []string
 	for i, ev := range envelopes(t, stream) {
-		if ev.GetPhase() != progressv1.Phase_PHASE_BUILD {
+		if ev.GetOperation().GetPhase() != progressv1.Phase_PHASE_BUILD {
 			continue
 		}
-		span := string(ev.GetSpanId())
-		switch body := ev.GetBody().(type) {
-		case *streamv1.RunEvent_Started:
-			if ev.GetSubject() == "" || ev.GetLevel() == progressv1.Level_LEVEL_DEBUG {
+		span := string(ev.GetOperation().GetSpanId())
+		switch body := ev.GetOperation().GetBody().(type) {
+		case *progressv1.OperationEvent_Started:
+			if ev.GetOperation().GetSubject() == "" || ev.GetOperation().GetLevel() == progressv1.Level_LEVEL_DEBUG {
 				continue
 			}
-			scope := &buildScope{subject: ev.GetSubject(), message: ev.GetMessage(), started: i}
+			scope := &buildScope{subject: ev.GetOperation().GetSubject(), message: ev.GetOperation().GetMessage(), started: i}
 			bySpan[span] = scope
 			scopes = append(scopes, scope)
-		case *streamv1.RunEvent_Ended:
+		case *progressv1.OperationEvent_Ended:
 			if scope, ok := bySpan[span]; ok {
 				scope.ended, scope.status = i, body.Ended.GetStatus()
 			}
-		case *streamv1.RunEvent_Output:
+		case *progressv1.OperationEvent_Output:
 			if scope, ok := bySpan[span]; ok {
-				scope.output = append(scope.output, ev.GetMessage())
+				scope.output = append(scope.output, ev.GetOperation().GetMessage())
 			} else {
-				phaseOutput = append(phaseOutput, ev.GetMessage())
+				phaseOutput = append(phaseOutput, ev.GetOperation().GetMessage())
 			}
 		}
 	}

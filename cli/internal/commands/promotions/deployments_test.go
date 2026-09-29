@@ -263,7 +263,7 @@ func TestListingDeploymentsSaysWhoItActsAsInTheCheckPhaseAndPrintsItsTableBeside
 		t.Fatalf("the run reported nothing on its stream; stdout=%s", stdout.String())
 	}
 	identity := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetIdentity() != nil })
-	if identity < 0 || evs[identity].GetPhase() != progressv1.Phase_PHASE_CHECK {
+	if identity < 0 || evs[identity].GetOperation().GetPhase() != progressv1.Phase_PHASE_CHECK {
 		t.Fatalf("the listing never said who it acts as in the check phase: %s", stream.String())
 	}
 	if result := evs[len(evs)-1].GetSummary(); !result.GetSuccess() {
@@ -292,7 +292,7 @@ func TestPruningReportsWhatItReclaimedThroughTheRunsEvents(t *testing.T) {
 		t.Fatal("the run reported nothing on its stream")
 	}
 	if !slices.ContainsFunc(evs, func(ev *streamv1.RunEvent) bool {
-		return strings.Contains(ev.GetMessage(), "Reclaimed promotion promo-1")
+		return strings.Contains(ev.GetOperation().GetMessage(), "Reclaimed promotion promo-1")
 	}) {
 		t.Errorf("the stream never said what was reclaimed: %s", stream.String())
 	}

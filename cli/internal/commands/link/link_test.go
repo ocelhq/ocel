@@ -353,10 +353,10 @@ func TestLinkingShowsEachConsoleWaitAsAUnitOnItsRunAndNothingElseWritesTheTermin
 	ended := map[string]bool{}
 	for _, ev := range evs {
 		switch {
-		case ev.GetStarted() != nil && ev.GetMessage() != "":
-			units = append(units, ev.GetSubject()+": "+ev.GetMessage())
-		case ev.GetEnded() != nil:
-			ended[string(ev.GetSpanId())] = true
+		case ev.GetOperation().GetStarted() != nil && ev.GetOperation().GetMessage() != "":
+			units = append(units, ev.GetOperation().GetSubject()+": "+ev.GetOperation().GetMessage())
+		case ev.GetOperation().GetEnded() != nil:
+			ended[string(ev.GetOperation().GetSpanId())] = true
 		}
 	}
 	want := []string{"127.0.0.1: Loading your organizations", "acme-inc: Loading the projects in Acme Inc"}
@@ -364,8 +364,8 @@ func TestLinkingShowsEachConsoleWaitAsAUnitOnItsRunAndNothingElseWritesTheTermin
 		t.Fatalf("units = %q, want %q", units, want)
 	}
 	for _, ev := range evs {
-		if ev.GetStarted() != nil && !ended[string(ev.GetSpanId())] {
-			t.Errorf("scope %q never ended", ev.GetMessage())
+		if ev.GetOperation().GetStarted() != nil && !ended[string(ev.GetOperation().GetSpanId())] {
+			t.Errorf("scope %q never ended", ev.GetOperation().GetMessage())
 		}
 	}
 	result := evs[len(evs)-1].GetSummary()

@@ -12,9 +12,9 @@ import (
 func (t *Trace) Receive(ev *streamv1.RunEvent) {
 	t.record(ev)
 	switch {
-	case ev.GetStarted() != nil:
+	case ev.GetOperation().GetStarted() != nil:
 		t.remember(ev)
-	case ev.GetEnded() != nil:
+	case ev.GetOperation().GetEnded() != nil:
 		t.ingestEnded(ev)
 	}
 }

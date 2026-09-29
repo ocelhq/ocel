@@ -69,7 +69,7 @@ func TestWhatTheNetworkExporterSendsCarriesNoFreeFormText(t *testing.T) {
 	r.Receive(started(build, nil, "build"))
 	failed := ended(build, now, now.Add(time.Second), progressv1.SpanStatus_SPAN_STATUS_ERROR,
 		&progressv1.SpanAttribute{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_SPAN_NAME, Value: "build"})
-	failed.Message = "status-describes-sk_live_status"
+	failed.Operation.Message = "status-describes-sk_live_status"
 	r.Receive(failed)
 	r.Receive(started(id, nil, "orders-db-password-in-a-message"))
 	r.Receive(ended(id, now, now.Add(time.Second), progressv1.SpanStatus_SPAN_STATUS_OK))

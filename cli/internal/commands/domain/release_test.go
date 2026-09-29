@@ -102,8 +102,8 @@ func TestReleasingThePreviewDomainAsksForItsNameWhileTheRunIsHeldAfterThePlanItS
 	}
 
 	evs := clitest.RunEvents(t, stream.String())
-	shown := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetPlan() != nil })
-	if shown < 0 || evs[shown].GetPhase() != progressv1.Phase_PHASE_PLAN {
+	shown := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetOperation().GetPlan() != nil })
+	if shown < 0 || evs[shown].GetOperation().GetPhase() != progressv1.Phase_PHASE_PLAN {
 		t.Fatalf("the release plan was not shown in the plan phase: %s", stream.String())
 	}
 	waiting := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetWaiting() != nil })

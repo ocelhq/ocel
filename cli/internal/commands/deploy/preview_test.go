@@ -385,10 +385,12 @@ func TestTearingDownANamedPreviewAsksThroughConsentWhileTheRunIsHeld(t *testing.
 		t.Fatalf("the run was never held while it asked: %s", stream.String())
 	}
 	resumed := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetResumed() != nil })
-	if resumed < waiting || evs[resumed].GetResumed().GetReason() != "answered" || !bytes.Equal(evs[resumed].GetSpanId(), evs[waiting].GetSpanId()) {
+	if resumed < waiting || evs[resumed].GetResumed().GetReason() != "answered" || !bytes.Equal(evs[resumed].GetOperation().GetSpanId(), evs[waiting].GetOperation().GetSpanId()) {
 		t.Fatalf("resumed at event %d, waiting at %d: want the held span resumed once answered: %s", resumed, waiting, stream.String())
 	}
-	destroyed := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetPhase() == progressv1.Phase_PHASE_DESTROY })
+	destroyed := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool {
+		return ev.GetOperation().GetPhase() == progressv1.Phase_PHASE_DESTROY
+	})
 	if destroyed < resumed {
 		t.Errorf("teardown at event %d, resumed at %d: want nothing torn down until the question is answered: %s", destroyed, resumed, stream.String())
 	}
@@ -490,8 +492,8 @@ func TestListingPreviewsStartsTheProviderInTheCheckPhaseOfItsRunAndPrintsTheList
 	}
 
 	evs := envelopes(t, stderr.String())
-	opened := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetStarted() != nil })
-	if opened < 0 || evs[opened].GetPhase() != progressv1.Phase_PHASE_CHECK {
+	opened := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetOperation().GetStarted() != nil })
+	if opened < 0 || evs[opened].GetOperation().GetPhase() != progressv1.Phase_PHASE_CHECK {
 		t.Fatalf("the listing's run never opened the check phase that starts the provider: %s", stderr.String())
 	}
 	if result := evs[len(evs)-1].GetSummary(); !result.GetSuccess() {

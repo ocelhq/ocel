@@ -9,15 +9,23 @@ import (
 )
 
 func (b *Bus) stamp(ev *streamv1.RunEvent) {
-	if ev.GetTime() == nil {
-		ev.Time = timestamppb.New(b.now())
+	op := operationOf(ev)
+	if op.GetTime() == nil {
+		op.Time = timestamppb.New(b.now())
 	}
-	if ended := ev.GetEnded(); ended != nil && ev.GetTime().AsTime().UnixNano() < ended.GetStartTimeUnixNano() {
-		ev.Time = timestamppb.New(b.now())
+	if ended := op.GetEnded(); ended != nil && op.GetTime().AsTime().UnixNano() < ended.GetStartTimeUnixNano() {
+		op.Time = timestamppb.New(b.now())
 	}
-	if ev.GetLevel() == progressv1.Level_LEVEL_UNSPECIFIED {
-		ev.Level = progressv1.Level_LEVEL_INFO
+	if op.GetLevel() == progressv1.Level_LEVEL_UNSPECIFIED {
+		op.Level = progressv1.Level_LEVEL_INFO
 	}
+}
+
+func operationOf(ev *streamv1.RunEvent) *progressv1.OperationEvent {
+	if ev.Operation == nil {
+		ev.Operation = &progressv1.OperationEvent{}
+	}
+	return ev.Operation
 }
 
 func collapse(m protoreflect.Message) {

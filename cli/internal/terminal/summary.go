@@ -159,7 +159,7 @@ func (s *Transcript) printSummary(ev *streamv1.RunEvent) {
 		s.print(blockLine{text: text})
 	}
 	if !result.result.GetSuccess() {
-		s.annotate(ev.GetLevel(), result.annotation())
+		s.annotate(ev.GetOperation().GetLevel(), result.annotation())
 	}
 }
 

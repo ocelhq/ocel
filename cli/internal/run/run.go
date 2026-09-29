@@ -61,7 +61,7 @@ func (r *Run) End(errp *error) {
 		if r.trace != nil {
 			result.LogPath = r.trace.LogPath()
 		}
-		r.bus.send(&streamv1.RunEvent{Level: resultLevel(result), Body: &streamv1.RunEvent_Summary{Summary: result}})
+		r.bus.send(&streamv1.RunEvent{Operation: &progressv1.OperationEvent{Level: resultLevel(result)}, Cli: &streamv1.RunEvent_Summary{Summary: result}})
 		if r.trace != nil {
 			r.bus.detach(r.trace)
 			_ = r.trace.Close()
@@ -148,11 +148,11 @@ func askHolding(hold func(*streamv1.WaitingEvent) func(reason string), ask func(
 }
 
 func (r *Run) holdOn(onSpan func(*streamv1.RunEvent) *streamv1.RunEvent, waiting *streamv1.WaitingEvent) (resume func(reason string)) {
-	r.bus.send(onSpan(&streamv1.RunEvent{Body: &streamv1.RunEvent_Waiting{Waiting: waiting}}))
+	r.bus.send(onSpan(&streamv1.RunEvent{Cli: &streamv1.RunEvent_Waiting{Waiting: waiting}}))
 	var once sync.Once
 	return func(reason string) {
 		once.Do(func() {
-			r.bus.send(onSpan(&streamv1.RunEvent{Body: &streamv1.RunEvent_Resumed{
+			r.bus.send(onSpan(&streamv1.RunEvent{Cli: &streamv1.RunEvent_Resumed{
 				Resumed: &streamv1.ResumedEvent{Reason: reason},
 			}}))
 		})
@@ -195,14 +195,12 @@ func (r *Run) openLocked(s *Span) *Span {
 		parentID = s.parent.spanID
 	}
 	r.open = append(r.open, s)
-	r.bus.send(&streamv1.RunEvent{
-		Time:    timestamppb.New(s.start),
+	r.bus.send(&streamv1.RunEvent{Operation: &progressv1.OperationEvent{Time: timestamppb.New(s.start),
 		Level:   s.level,
 		Phase:   s.phase,
 		Subject: s.subject,
 		Message: s.title.Started,
-		SpanId:  s.spanID,
-		Body:    &streamv1.RunEvent_Started{Started: &progressv1.Started{ParentSpanId: parentID}},
+		SpanId:  s.spanID, Body: &progressv1.OperationEvent_Started{Started: &progressv1.Started{ParentSpanId: parentID}}},
 	})
 	return s
 }

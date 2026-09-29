@@ -365,8 +365,8 @@ func TestProcessorParentsALogRecordToItsOpenSpan(t *testing.T) {
 
 	var spanID string
 	for _, ev := range loggedEvents(t, run) {
-		if ev.GetMessage() == "installing dependencies" {
-			spanID = hex.EncodeToString(ev.GetSpanId())
+		if ev.GetOperation().GetMessage() == "installing dependencies" {
+			spanID = hex.EncodeToString(ev.GetOperation().GetSpanId())
 		}
 	}
 	if spanID == "" {
@@ -382,8 +382,8 @@ func TestProcessorParentsALogRecordToItsOpenSpan(t *testing.T) {
 func buildSpanID(t *testing.T, run *tracedRun) []byte {
 	t.Helper()
 	for _, ev := range loggedEvents(t, run) {
-		if ev.GetStarted() != nil && ev.GetPhase() == progressv1.Phase_PHASE_BUILD && ev.GetMessage() == "" {
-			return ev.GetSpanId()
+		if ev.GetOperation().GetStarted() != nil && ev.GetOperation().GetPhase() == progressv1.Phase_PHASE_BUILD && ev.GetOperation().GetMessage() == "" {
+			return ev.GetOperation().GetSpanId()
 		}
 	}
 	t.Fatal("the log holds no build phase span")
@@ -419,7 +419,7 @@ func TestANodeBuildLogRecordWithNoOpenSpanIsDebugDetailOfTheProcessorsSpan(t *te
 	}
 	var logged []*streamv1.RunEvent
 	for _, ev := range loggedEvents(t, run) {
-		if ev.GetMessage() == "installing dependencies" {
+		if ev.GetOperation().GetMessage() == "installing dependencies" {
 			logged = append(logged, ev)
 		}
 	}
@@ -427,10 +427,10 @@ func TestANodeBuildLogRecordWithNoOpenSpanIsDebugDetailOfTheProcessorsSpan(t *te
 		t.Fatalf("the log holds the record %d times, want once", len(logged))
 	}
 	ev := logged[0]
-	if ev.GetPhase() != progressv1.Phase_PHASE_BUILD || ev.GetLevel() != progressv1.Level_LEVEL_DEBUG || !bytes.Equal(ev.GetSpanId(), buildSpanID(t, run)) {
-		t.Errorf("logged %s [%s] on span %x, want DEBUG [PHASE_BUILD] on the build phase's span", ev.GetLevel(), ev.GetPhase(), ev.GetSpanId())
+	if ev.GetOperation().GetPhase() != progressv1.Phase_PHASE_BUILD || ev.GetOperation().GetLevel() != progressv1.Level_LEVEL_DEBUG || !bytes.Equal(ev.GetOperation().GetSpanId(), buildSpanID(t, run)) {
+		t.Errorf("logged %s [%s] on span %x, want DEBUG [PHASE_BUILD] on the build phase's span", ev.GetOperation().GetLevel(), ev.GetOperation().GetPhase(), ev.GetOperation().GetSpanId())
 	}
-	if ev.GetTime() == nil {
+	if ev.GetOperation().GetTime() == nil {
 		t.Error("the logged event has no time")
 	}
 }

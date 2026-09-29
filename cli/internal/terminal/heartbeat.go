@@ -38,11 +38,11 @@ func (s *Transcript) printHeartbeat(at time.Time) {
 	names := map[progressv1.Phase][]string{}
 	for _, span := range s.spans.running {
 		opened := s.spans.opened[span]
-		phase := opened.GetPhase()
+		phase := opened.GetOperation().GetPhase()
 		if names[phase] == nil {
 			running = append(running, phase)
 		}
-		names[phase] = append(names[phase], cmp.Or(opened.GetSubject(), opened.GetMessage()))
+		names[phase] = append(names[phase], cmp.Or(opened.GetOperation().GetSubject(), opened.GetOperation().GetMessage()))
 	}
 	for _, phase := range running {
 		tally := s.spans.tallies[phase]
@@ -57,6 +57,6 @@ func (s *Transcript) printHeartbeat(at time.Time) {
 
 func (s *Transcript) postponeHeartbeat(ev *streamv1.RunEvent) {
 	if s.shownForEvent || s.nextHeartbeat.IsZero() {
-		s.nextHeartbeat = ev.GetTime().AsTime().Add(heartbeatAfter)
+		s.nextHeartbeat = ev.GetOperation().GetTime().AsTime().Add(heartbeatAfter)
 	}
 }

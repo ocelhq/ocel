@@ -167,17 +167,19 @@ var writingActions = map[string]bool{
 }
 
 type plannedEvent struct {
-	Phase string `json:"phase"`
-	Plan  *struct {
-		Groups []struct {
-			Name    string `json:"name"`
-			Action  string `json:"action"`
-			Changes []struct {
-				Name   string `json:"name"`
-				Action string `json:"action"`
-			} `json:"changes"`
-		} `json:"groups"`
-	} `json:"plan"`
+	Operation struct {
+		Phase string `json:"phase"`
+		Plan  *struct {
+			Groups []struct {
+				Name    string `json:"name"`
+				Action  string `json:"action"`
+				Changes []struct {
+					Name   string `json:"name"`
+					Action string `json:"action"`
+				} `json:"changes"`
+			} `json:"groups"`
+		} `json:"plan"`
+	} `json:"operation"`
 }
 
 func plannedWrites(t *testing.T, stream string) []string {
@@ -189,11 +191,11 @@ func plannedWrites(t *testing.T, stream string) []string {
 		if json.Unmarshal([]byte(line), &ev) != nil {
 			continue
 		}
-		planned = planned || ev.Phase == "PHASE_PLAN"
-		if ev.Plan == nil {
+		planned = planned || ev.Operation.Phase == "PHASE_PLAN"
+		if ev.Operation.Plan == nil {
 			continue
 		}
-		for _, group := range ev.Plan.Groups {
+		for _, group := range ev.Operation.Plan.Groups {
 			acting := false
 			for _, change := range group.Changes {
 				if change.Action != "ACTION_KEEP" {
@@ -217,14 +219,14 @@ func plannedWrites(t *testing.T, stream string) []string {
 func TestAPlanStreamWritesOnlyWhereAGroupOrOneOfItsChangesWrites(t *testing.T) {
 	kept := strings.Join([]string{
 		`INFO  [plan] a line a human reads`,
-		`{"time":"2026-09-27T10:00:01Z","level":"LEVEL_INFO","phase":"PHASE_PLAN","subject":"","message":"","started":{}}`,
-		`{"time":"2026-09-27T10:00:02Z","level":"LEVEL_INFO","phase":"PHASE_PLAN","subject":"","message":"","plan":{"subject":"production","groups":[{"kind":"stack","name":"aws/ocel-bootstrap","action":"ACTION_KEEP"},{"kind":"stack","name":"aws/ocel-bootstrap-isr","action":"ACTION_KEEP","changes":[{"name":"OcelDispatchFunction","action":"ACTION_KEEP"},{"name":"OcelOriginSecret","action":"ACTION_ADOPT"}]},{"kind":"edge","name":"cloudfront/edge","action":"ACTION_ADOPT"}]}}`,
+		`{"operation":{"time":"2026-09-27T10:00:01Z","level":"LEVEL_INFO","phase":"PHASE_PLAN","subject":"","message":"","started":{}}}`,
+		`{"operation":{"time":"2026-09-27T10:00:02Z","level":"LEVEL_INFO","phase":"PHASE_PLAN","subject":"","message":"","plan":{"subject":"production","groups":[{"kind":"stack","name":"aws/ocel-bootstrap","action":"ACTION_KEEP"},{"kind":"stack","name":"aws/ocel-bootstrap-isr","action":"ACTION_KEEP","changes":[{"name":"OcelDispatchFunction","action":"ACTION_KEEP"},{"name":"OcelOriginSecret","action":"ACTION_ADOPT"}]},{"kind":"edge","name":"cloudfront/edge","action":"ACTION_ADOPT"}]}}}`,
 	}, "\n")
 	if writes := plannedWrites(t, kept); len(writes) > 0 {
 		t.Errorf("a plan that keeps and adopts reads as writing %v", writes)
 	}
 
-	mixed := `{"time":"2026-09-27T10:00:02Z","level":"LEVEL_INFO","phase":"PHASE_PLAN","subject":"","message":"","plan":{"subject":"production","groups":[{"kind":"stack","name":"aws/ocel-bootstrap-isr","action":"ACTION_KEEP"},{"kind":"stack","name":"aws/ocel-bootstrap","action":"ACTION_UPDATE","changes":[{"name":"OcelDispatchFunction","action":"ACTION_UPDATE"},{"name":"OcelOriginSecret","action":"ACTION_KEEP"}]},{"kind":"edge","name":"cloudflare/edge","action":"ACTION_CREATE"}]}}`
+	mixed := `{"operation":{"time":"2026-09-27T10:00:02Z","level":"LEVEL_INFO","phase":"PHASE_PLAN","subject":"","message":"","plan":{"subject":"production","groups":[{"kind":"stack","name":"aws/ocel-bootstrap-isr","action":"ACTION_KEEP"},{"kind":"stack","name":"aws/ocel-bootstrap","action":"ACTION_UPDATE","changes":[{"name":"OcelDispatchFunction","action":"ACTION_UPDATE"},{"name":"OcelOriginSecret","action":"ACTION_KEEP"}]},{"kind":"edge","name":"cloudflare/edge","action":"ACTION_CREATE"}]}}}`
 	want := []string{"aws/ocel-bootstrap/OcelDispatchFunction ACTION_UPDATE", "cloudflare/edge ACTION_CREATE"}
 	if writes := plannedWrites(t, mixed); !slices.Equal(writes, want) {
 		t.Errorf("a plan that updates one change and creates one group reads as writing %v, want %v", writes, want)

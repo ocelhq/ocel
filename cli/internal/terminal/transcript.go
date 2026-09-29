@@ -74,12 +74,12 @@ func (s *Transcript) Receive(ev *streamv1.RunEvent) {
 	defer s.mu.Unlock()
 	s.shownForEvent = false
 	defer s.postponeHeartbeat(ev)
-	span := spanKey(ev.GetSpanId())
+	span := spanKey(ev.GetOperation().GetSpanId())
 	switch {
 	case isTraceOnly(ev):
-	case ev.GetStarted() != nil:
-		s.spans.open(span, ev, ev.GetTime().AsTime(), &unitBlock{opened: ev})
-	case ev.GetEnded() != nil:
+	case ev.GetOperation().GetStarted() != nil:
+		s.spans.open(span, ev, ev.GetOperation().GetTime().AsTime(), &unitBlock{opened: ev})
+	case ev.GetOperation().GetEnded() != nil:
 		s.end(span, ev)
 	case ev.GetWaiting() != nil:
 		s.held = true
@@ -90,16 +90,16 @@ func (s *Transcript) Receive(ev *streamv1.RunEvent) {
 		s.resume(ev)
 	case ev.GetIdentity() != nil:
 		s.printBlock(identityLines(s.present, ev.GetIdentity()))
-	case ev.GetPlan() != nil:
-		s.printBlock(planLines(s.present, ev.GetPlan()))
-	case ev.GetDnsManualRecords() != nil:
+	case ev.GetOperation().GetPlan() != nil:
+		s.printBlock(planLines(s.present, ev.GetOperation().GetPlan()))
+	case ev.GetOperation().GetDnsManualRecords() != nil:
 		s.dnsRecords(ev)
 	case ev.GetSummary() != nil:
 		s.printSummary(ev)
-	case ev.GetLevel() == progressv1.Level_LEVEL_DEBUG && !s.present.Verbose:
-	case ev.GetOutput() != nil:
-		s.within(span, blockLine{text: ev.GetMessage(), raw: true}, blockLine{text: ev.GetMessage(), raw: true})
-	case ev.GetBody() == nil && ev.GetMessage() != "":
+	case ev.GetOperation().GetLevel() == progressv1.Level_LEVEL_DEBUG && !s.present.Verbose:
+	case ev.GetOperation().GetOutput() != nil:
+		s.within(span, blockLine{text: ev.GetOperation().GetMessage(), raw: true}, blockLine{text: ev.GetOperation().GetMessage(), raw: true})
+	case ev.GetOperation().GetBody() == nil && ev.GetCli() == nil && ev.GetOperation().GetMessage() != "":
 		s.within(span, s.detail(ev), s.standalone(ev))
 	}
 }
@@ -117,13 +117,13 @@ func (s *Transcript) standalone(ev *streamv1.RunEvent) blockLine {
 }
 
 func (s *Transcript) detail(ev *streamv1.RunEvent) blockLine {
-	text := ev.GetMessage()
-	if ev.GetLevel() == progressv1.Level_LEVEL_INFO {
+	text := ev.GetOperation().GetMessage()
+	if ev.GetOperation().GetLevel() == progressv1.Level_LEVEL_INFO {
 		text = s.present.palette().Muted(text)
 	}
 	text = strings.ReplaceAll(text, "\n", "\n"+continuationIndent)
-	if ev.GetLevel() != progressv1.Level_LEVEL_INFO {
-		text = levelLabels[ev.GetLevel()].render(s.present) + " " + text
+	if ev.GetOperation().GetLevel() != progressv1.Level_LEVEL_INFO {
+		text = levelLabels[ev.GetOperation().GetLevel()].render(s.present) + " " + text
 	}
 	return blockLine{text: continuationIndent + text, from: lineOf(ev)}
 }
@@ -134,20 +134,20 @@ func (s *Transcript) end(span string, ev *streamv1.RunEvent) {
 		s.endResource(span, ev)
 		return
 	}
-	ended := ev.GetEnded()
+	ended := ev.GetOperation().GetEnded()
 	took := formatDuration(endedDuration(ev, ended))
 	failed := ended.GetStatus() == progressv1.SpanStatus_SPAN_STATUS_ERROR
-	partial := !failed && ev.GetLevel() >= progressv1.Level_LEVEL_WARN
+	partial := !failed && ev.GetOperation().GetLevel() >= progressv1.Level_LEVEL_WARN
 	head := line{
-		level:   ev.GetLevel(),
+		level:   ev.GetOperation().GetLevel(),
 		status:  ended.GetStatus(),
 		message: ended.GetTitle(),
 		timing:  " in " + took + tally.finished(),
 		outcome: unit.resources.summary(),
 	}
 	if failed {
-		head.message, head.timing = unit.opened.GetMessage()+" failed", " after "+took+tally.finished()
-		if reason := ev.GetMessage(); reason != "" {
+		head.message, head.timing = unit.opened.GetOperation().GetMessage()+" failed", " after "+took+tally.finished()
+		if reason := ev.GetOperation().GetMessage(); reason != "" {
 			head.outcome += ": " + reason
 		}
 	}
@@ -181,7 +181,7 @@ func (s *Transcript) endResource(span string, ev *streamv1.RunEvent) {
 }
 
 func (s *Transcript) dnsRecords(ev *streamv1.RunEvent) {
-	records := ev.GetDnsManualRecords()
+	records := ev.GetOperation().GetDnsManualRecords()
 	if len(records.GetRecords()) == 0 {
 		return
 	}
@@ -259,11 +259,11 @@ func (s *Transcript) print(lines ...blockLine) {
 }
 
 func lineOf(ev *streamv1.RunEvent) line {
-	return line{level: ev.GetLevel(), phase: ev.GetPhase(), subject: ev.GetSubject(), message: ev.GetMessage()}
+	return line{level: ev.GetOperation().GetLevel(), phase: ev.GetOperation().GetPhase(), subject: ev.GetOperation().GetSubject(), message: ev.GetOperation().GetMessage()}
 }
 
 func (u *unitBlock) header(ended line, present Presentation) blockLine {
-	ended.phase, ended.subject, ended.header = u.opened.GetPhase(), u.opened.GetSubject(), true
+	ended.phase, ended.subject, ended.header = u.opened.GetOperation().GetPhase(), u.opened.GetOperation().GetSubject(), true
 	return blockLine{text: ended.render(present), from: ended}
 }
 
@@ -284,16 +284,16 @@ func (s *Transcript) Close() error {
 func (s *Transcript) printUnfinished() {
 	for _, span := range slices.Clone(s.spans.running) {
 		unit, _, _ := s.spans.close(span)
-		s.print(unit.header(line{level: progressv1.Level_LEVEL_WARN, message: unit.opened.GetMessage() + " did not finish"}, s.present))
+		s.print(unit.header(line{level: progressv1.Level_LEVEL_WARN, message: unit.opened.GetOperation().GetMessage() + " did not finish"}, s.present))
 		s.print(unit.body...)
 	}
 }
 
 func endedDuration(ev *streamv1.RunEvent, ended *progressv1.Ended) time.Duration {
-	if ev.GetTime() == nil {
+	if ev.GetOperation().GetTime() == nil {
 		return 0
 	}
-	return elapsed(ended.GetStartTimeUnixNano(), ev.GetTime().AsTime().UnixNano())
+	return elapsed(ended.GetStartTimeUnixNano(), ev.GetOperation().GetTime().AsTime().UnixNano())
 }
 
 func elapsed(start, end int64) time.Duration {

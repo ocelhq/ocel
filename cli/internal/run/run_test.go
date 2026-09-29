@@ -39,13 +39,13 @@ func TestEverySpanARunOpensEndsExactlyOnceBeforeItsResultWhenTheRunFails(t *test
 	var order []string
 	got := sink.received()
 	for i, ev := range got {
-		id := fmt.Sprintf("%x", ev.GetSpanId())
+		id := fmt.Sprintf("%x", ev.GetOperation().GetSpanId())
 		switch {
-		case ev.GetStarted() != nil:
+		case ev.GetOperation().GetStarted() != nil:
 			opened[id] = true
-		case ev.GetEnded() != nil:
+		case ev.GetOperation().GetEnded() != nil:
 			ended[id]++
-			order = append(order, ev.GetSubject())
+			order = append(order, ev.GetOperation().GetSubject())
 			if i == len(got)-1 {
 				t.Fatal("a span ended after the run's result")
 			}
@@ -60,8 +60,8 @@ func TestEverySpanARunOpensEndsExactlyOnceBeforeItsResultWhenTheRunFails(t *test
 		t.Fatalf("ended subjects in order = %q, want fake, check, then web before its deploy phase", order)
 	}
 	web := got[len(got)-3]
-	if web.GetSubject() != "web" || web.GetLevel() != progressv1.Level_LEVEL_ERROR || web.GetMessage() != "the upload was refused" {
-		t.Fatalf("the open unit ended with level %s message %q, want the run's error", web.GetLevel(), web.GetMessage())
+	if web.GetOperation().GetSubject() != "web" || web.GetOperation().GetLevel() != progressv1.Level_LEVEL_ERROR || web.GetOperation().GetMessage() != "the upload was refused" {
+		t.Fatalf("the open unit ended with level %s message %q, want the run's error", web.GetOperation().GetLevel(), web.GetOperation().GetMessage())
 	}
 }
 
@@ -78,7 +78,7 @@ func TestAUnitOpenedOnAnEndedSpanStillEndsOnceWhenTheRunEnds(t *testing.T) {
 	ended := 0
 	got := sink.received()
 	for _, ev := range got[:len(got)-1] {
-		if ev.GetEnded() != nil && ev.GetSubject() == "fake" {
+		if ev.GetOperation().GetEnded() != nil && ev.GetOperation().GetSubject() == "fake" {
 			ended++
 		}
 	}
@@ -97,9 +97,9 @@ func TestAFailedRunEndsWithAnErrorResultAndExitsWithOne(t *testing.T) {
 
 	ev := sink.received()[len(sink.received())-1]
 	result := ev.GetSummary()
-	if result.GetSuccess() || result.GetDetail() != "the upload was refused" || ev.GetLevel() != progressv1.Level_LEVEL_ERROR {
+	if result.GetSuccess() || result.GetDetail() != "the upload was refused" || ev.GetOperation().GetLevel() != progressv1.Level_LEVEL_ERROR {
 		t.Fatalf("result = success %v detail %q level %s, want a failure carrying the error at ERROR",
-			result.GetSuccess(), result.GetDetail(), ev.GetLevel())
+			result.GetSuccess(), result.GetDetail(), ev.GetOperation().GetLevel())
 	}
 	if result.GetDurationMs() != 1500 {
 		t.Fatalf("duration = %dms, want 1500ms", result.GetDurationMs())
@@ -186,9 +186,9 @@ func TestAnInterruptedRunEndsCancelledAtWarnAndExitsAsInterrupted(t *testing.T) 
 	run.End(&err)
 
 	ev := sink.received()[len(sink.received())-1]
-	if !ev.GetSummary().GetInterrupted() || ev.GetSummary().GetHeadline() != "Deploy cancelled" || ev.GetLevel() != progressv1.Level_LEVEL_WARN {
+	if !ev.GetSummary().GetInterrupted() || ev.GetSummary().GetHeadline() != "Deploy cancelled" || ev.GetOperation().GetLevel() != progressv1.Level_LEVEL_WARN {
 		t.Fatalf("result = interrupted %v headline %q level %s, want Deploy cancelled at WARN",
-			ev.GetSummary().GetInterrupted(), ev.GetSummary().GetHeadline(), ev.GetLevel())
+			ev.GetSummary().GetInterrupted(), ev.GetSummary().GetHeadline(), ev.GetOperation().GetLevel())
 	}
 	var exit *exitcode.ExitError
 	if !errors.As(err, &exit) || exit.Code != exitcode.Interrupt {
@@ -247,16 +247,16 @@ func TestASuccessfulRunEndsWithASuccessResultAndNoError(t *testing.T) {
 	run.End(&err)
 
 	got := sink.received()
-	if ev := got[len(got)-1]; !ev.GetSummary().GetSuccess() || ev.GetLevel() != progressv1.Level_LEVEL_INFO {
-		t.Fatalf("result = success %v level %s, want success at INFO", ev.GetSummary().GetSuccess(), ev.GetLevel())
+	if ev := got[len(got)-1]; !ev.GetSummary().GetSuccess() || ev.GetOperation().GetLevel() != progressv1.Level_LEVEL_INFO {
+		t.Fatalf("result = success %v level %s, want success at INFO", ev.GetSummary().GetSuccess(), ev.GetOperation().GetLevel())
 	}
-	if ended := got[len(got)-2]; ended.GetEnded().GetStatus() != progressv1.SpanStatus_SPAN_STATUS_OK {
-		t.Fatalf("the deploy phase ended %s, want OK", ended.GetEnded().GetStatus())
+	if ended := got[len(got)-2]; ended.GetOperation().GetEnded().GetStatus() != progressv1.SpanStatus_SPAN_STATUS_OK {
+		t.Fatalf("the deploy phase ended %s, want OK", ended.GetOperation().GetEnded().GetStatus())
 	}
 	if err != nil {
 		t.Fatalf("err = %v, want nil", err)
 	}
-	if !bytes.Equal(got[len(got)-2].GetSpanId(), got[0].GetSpanId()) {
+	if !bytes.Equal(got[len(got)-2].GetOperation().GetSpanId(), got[0].GetOperation().GetSpanId()) {
 		t.Fatal("the run ended some other span than its deploy phase")
 	}
 }
@@ -313,11 +313,11 @@ func TestAForwardedProviderEventReachesTheSinksAsARunEventWithItsEnvelope(t *tes
 	})
 
 	ev := sink.received()[1]
-	if !ev.GetTime().AsTime().Equal(at) || ev.GetLevel() != progressv1.Level_LEVEL_WARN || ev.GetPhase() != progressv1.Phase_PHASE_PROVISION ||
-		ev.GetSubject() != "web" || ev.GetMessage() != "Provisioning web" || string(ev.GetSpanId()) != "unit-web" ||
-		string(ev.GetStarted().GetParentSpanId()) != "phase-01" {
+	if !ev.GetOperation().GetTime().AsTime().Equal(at) || ev.GetOperation().GetLevel() != progressv1.Level_LEVEL_WARN || ev.GetOperation().GetPhase() != progressv1.Phase_PHASE_PROVISION ||
+		ev.GetOperation().GetSubject() != "web" || ev.GetOperation().GetMessage() != "Provisioning web" || string(ev.GetOperation().GetSpanId()) != "unit-web" ||
+		string(ev.GetOperation().GetStarted().GetParentSpanId()) != "phase-01" {
 		t.Fatalf("forwarded = time %s level %s phase %s subject %q message %q span %q parent %q, want the provider's envelope and body",
-			ev.GetTime().AsTime(), ev.GetLevel(), ev.GetPhase(), ev.GetSubject(), ev.GetMessage(), ev.GetSpanId(), ev.GetStarted().GetParentSpanId())
+			ev.GetOperation().GetTime().AsTime(), ev.GetOperation().GetLevel(), ev.GetOperation().GetPhase(), ev.GetOperation().GetSubject(), ev.GetOperation().GetMessage(), ev.GetOperation().GetSpanId(), ev.GetOperation().GetStarted().GetParentSpanId())
 	}
 }
 
@@ -329,8 +329,8 @@ func TestAnEventWithNoTimeOrLevelOfItsOwnLandsStampedWithTheMomentItArrivedAtInf
 	run.Phase(progressv1.Phase_PHASE_DEPLOY).Forward(&progressv1.OperationEvent{Message: "no functions to deploy; deploying infrastructure only"})
 
 	ev := sink.received()[1]
-	if !ev.GetTime().AsTime().Equal(c.read()) || ev.GetLevel() != progressv1.Level_LEVEL_INFO {
-		t.Fatalf("the event landed at %s level %s, want %s at INFO", ev.GetTime().AsTime(), ev.GetLevel(), c.read())
+	if !ev.GetOperation().GetTime().AsTime().Equal(c.read()) || ev.GetOperation().GetLevel() != progressv1.Level_LEVEL_INFO {
+		t.Fatalf("the event landed at %s level %s, want %s at INFO", ev.GetOperation().GetTime().AsTime(), ev.GetOperation().GetLevel(), c.read())
 	}
 }
 
@@ -347,11 +347,11 @@ func TestAProviderLineRewrittenWithCarriageReturnsReachesEverySinkAsTheLastThing
 	got := sink.received()[1:]
 	want := []string{"uploaded", "carriage returned", "first of two\nsecond of two"}
 	for i, message := range want {
-		if got[i].GetMessage() != message {
-			t.Errorf("line %d reached the sink as %q, want %q, the last thing it said", i, got[i].GetMessage(), message)
+		if got[i].GetOperation().GetMessage() != message {
+			t.Errorf("line %d reached the sink as %q, want %q, the last thing it said", i, got[i].GetOperation().GetMessage(), message)
 		}
 	}
-	if outcome := got[3].GetResult().GetError(); outcome != "gave up" {
+	if outcome := got[3].GetOperation().GetResult().GetError(); outcome != "gave up" {
 		t.Errorf("the outcome's error reached the sink as %q, want the rewrite collapsed wherever it sits", outcome)
 	}
 }
@@ -367,7 +367,7 @@ func TestAForwardedSpanThatEndsBeforeItStartedEndsWhenItArrives(t *testing.T) {
 		Body:   &progressv1.OperationEvent_Ended{Ended: &progressv1.Ended{StartTimeUnixNano: started.UnixNano()}},
 	})
 
-	if at := sink.received()[1].GetTime().AsTime(); !at.Equal(c.read()) {
+	if at := sink.received()[1].GetOperation().GetTime().AsTime(); !at.Equal(c.read()) {
 		t.Errorf("the span ended at %s, want the time it reached the bus, %s, not before it started", at, c.read())
 	}
 }
@@ -383,7 +383,7 @@ func TestTheAppsAProvidersOutcomeReportsAreOnTheRunsResult(t *testing.T) {
 	run.End(&err)
 
 	got := sink.received()
-	if got[1].GetResult() == nil {
+	if got[1].GetOperation().GetResult() == nil {
 		t.Fatalf("the provider's result reached the sinks as %v, want an outcome", bodies(got[1:2]))
 	}
 	if apps := got[len(got)-1].GetSummary().GetApps(); len(apps) != 1 || apps[0].GetApp() != "web" {
@@ -442,7 +442,7 @@ func TestARunInAProjectLogsEveryEventDebugIncludedUpToItsResultAndNothingAfter(t
 		if err := protojson.Unmarshal([]byte(line), ev); err != nil {
 			t.Fatalf("log line %q is not a run event: %v", line, err)
 		}
-		got = append(got, bodies([]*streamv1.RunEvent{ev})[0]+" "+ev.GetLevel().String())
+		got = append(got, bodies([]*streamv1.RunEvent{ev})[0]+" "+ev.GetOperation().GetLevel().String())
 	}
 	want := []string{"started LEVEL_INFO", "message LEVEL_DEBUG", "ended LEVEL_INFO", "summary LEVEL_INFO"}
 	if strings.Join(got, ", ") != strings.Join(want, ", ") {

@@ -104,13 +104,13 @@ func (h *heard) said() string {
 	defer h.mu.Unlock()
 	var b strings.Builder
 	for _, event := range h.events {
-		if event.GetBody() != nil {
+		if event.GetOperation().GetBody() != nil || event.GetCli() != nil {
 			continue
 		}
-		if event.GetLevel() == progressv1.Level_LEVEL_WARN {
+		if event.GetOperation().GetLevel() == progressv1.Level_LEVEL_WARN {
 			b.WriteString("⚠ ")
 		}
-		b.WriteString(event.GetMessage() + "\n")
+		b.WriteString(event.GetOperation().GetMessage() + "\n")
 	}
 	return b.String()
 }
@@ -125,9 +125,9 @@ func (h *heard) shape() []string {
 			out = append(out, "waiting")
 		case event.GetResumed() != nil:
 			out = append(out, "resumed")
-		case event.GetBody() == nil && event.GetLevel() == progressv1.Level_LEVEL_WARN:
+		case event.GetOperation().GetBody() == nil && event.GetCli() == nil && event.GetOperation().GetLevel() == progressv1.Level_LEVEL_WARN:
 			out = append(out, "warn")
-		case event.GetBody() == nil:
+		case event.GetOperation().GetBody() == nil && event.GetCli() == nil:
 			out = append(out, "say")
 		}
 	}

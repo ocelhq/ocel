@@ -108,7 +108,7 @@ func TestTheNDJSONProjectionIsOneProtojsonLinePerEnvelopeWrittenAsItLands(t *tes
 					t.Fatalf("line %d %q is not protojson: %v", i, lines[i], err)
 				}
 				want := proto.CloneOf(ev)
-				want.Time = got.GetTime()
+				want.Operation.Time = got.GetOperation().GetTime()
 				if !proto.Equal(got, want) {
 					t.Fatalf("line %d is not the protojson of its envelope.\n--- got ---\n%s\n--- want ---\n%s", i, lines[i], protojson.Format(want))
 				}
@@ -134,8 +134,8 @@ func reconstruct(events []*streamv1.RunEvent) reconstruction {
 	var order []string
 	for _, ev := range events {
 		switch {
-		case ev.GetPlan() != nil:
-			for _, g := range ev.GetPlan().GetGroups() {
+		case ev.GetOperation().GetPlan() != nil:
+			for _, g := range ev.GetOperation().GetPlan().GetGroups() {
 				for _, c := range g.GetChanges() {
 					r.plan = append(r.plan, fmt.Sprintf("%s/%s %s %s", g.GetKind(), g.GetName(), c.GetAction(), c.GetKind()+"/"+c.GetName()))
 				}
@@ -148,13 +148,13 @@ func reconstruct(events []*streamv1.RunEvent) reconstruction {
 			res := ev.GetSummary()
 			r.results = append(r.results, fmt.Sprintf("success=%v interrupted=%v headline=%q detail=%q duration_ms=%d",
 				res.GetSuccess(), res.GetInterrupted(), res.GetHeadline(), res.GetDetail(), res.GetDurationMs()))
-		case ev.GetStarted() != nil:
-			id := hex.EncodeToString(ev.GetSpanId())
+		case ev.GetOperation().GetStarted() != nil:
+			id := hex.EncodeToString(ev.GetOperation().GetSpanId())
 			if _, seen := titles[id]; seen {
 				continue
 			}
 			titles[id] = spanTitle(ev)
-			parents[id] = hex.EncodeToString(ev.GetStarted().GetParentSpanId())
+			parents[id] = hex.EncodeToString(ev.GetOperation().GetStarted().GetParentSpanId())
 			order = append(order, id)
 		}
 	}
@@ -197,9 +197,9 @@ func TestTheScopeTreePlanWaitsAndResultsComeBackFromNDJSONAlone(t *testing.T) {
 }
 
 func spanTitle(ev *streamv1.RunEvent) string {
-	if ev.GetMessage() != "" {
-		return ev.GetMessage()
+	if ev.GetOperation().GetMessage() != "" {
+		return ev.GetOperation().GetMessage()
 	}
-	described, _ := run.DescribePhase(ev.GetPhase())
+	described, _ := run.DescribePhase(ev.GetOperation().GetPhase())
 	return "[" + described.Name + "]"
 }

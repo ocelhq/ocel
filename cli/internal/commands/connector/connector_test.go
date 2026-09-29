@@ -218,7 +218,7 @@ func TestAddRelaysWhatTheProviderSaysWhileItInstallsThroughItsRun(t *testing.T) 
 	}
 
 	events := clitest.RunEvents(t, stream.String())
-	if !slices.ContainsFunc(events, func(event *streamv1.RunEvent) bool { return event.GetMessage() == "wrote the connector" }) {
+	if !slices.ContainsFunc(events, func(event *streamv1.RunEvent) bool { return event.GetOperation().GetMessage() == "wrote the connector" }) {
 		t.Errorf("stream = %s, want the line the provider said while installing", stream.String())
 	}
 	result := events[len(events)-1].GetSummary()
@@ -226,7 +226,7 @@ func TestAddRelaysWhatTheProviderSaysWhileItInstallsThroughItsRun(t *testing.T) 
 		t.Errorf("result = %v, want a success that names the paired target and leaves the grants to their own line", result)
 	}
 	if !slices.ContainsFunc(events, func(event *streamv1.RunEvent) bool {
-		return event.GetBody() == nil && event.GetMessage() == "The console may use this connector for envvars.read and envvars.write"
+		return event.GetOperation().GetBody() == nil && event.GetCli() == nil && event.GetOperation().GetMessage() == "The console may use this connector for envvars.read and envvars.write"
 	}) {
 		t.Errorf("stream = %s, want the grants said on a line of their own", stream.String())
 	}
@@ -623,7 +623,7 @@ func TestStatusForAConfigReadsItsTargetInTheCheckPhaseOfItsRunAndPrintsWhatTheCo
 	}
 
 	events := clitest.RunEvents(t, stderr.String())
-	if len(events) == 0 || events[0].GetStarted() == nil || events[0].GetPhase() != progressv1.Phase_PHASE_CHECK {
+	if len(events) == 0 || events[0].GetOperation().GetStarted() == nil || events[0].GetOperation().GetPhase() != progressv1.Phase_PHASE_CHECK {
 		t.Fatalf("stream = %s, want a run that opens with the check phase that starts the provider", stderr.String())
 	}
 	if result := events[len(events)-1].GetSummary(); !result.GetSuccess() {

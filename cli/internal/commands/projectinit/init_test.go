@@ -63,13 +63,13 @@ func TestAddingTheSDKIsAUnitOnTheInitRunAndThePackageManagerSpeaksThroughIt(t *t
 			t.Fatalf("line %q is not a protojson RunEvent: %v", line, err)
 		}
 		switch {
-		case ev.GetStarted() != nil && ev.GetSubject() == sdkPackage:
-			unit = ev.GetSpanId()
-			said = append(said, "started: "+ev.GetMessage())
-		case ev.GetOutput() != nil && bytes.Equal(ev.GetSpanId(), unit):
-			said = append(said, "output: "+ev.GetMessage())
-		case ev.GetEnded() != nil && bytes.Equal(ev.GetSpanId(), unit):
-			said = append(said, "ended: "+ev.GetEnded().GetStatus().String())
+		case ev.GetOperation().GetStarted() != nil && ev.GetOperation().GetSubject() == sdkPackage:
+			unit = ev.GetOperation().GetSpanId()
+			said = append(said, "started: "+ev.GetOperation().GetMessage())
+		case ev.GetOperation().GetOutput() != nil && bytes.Equal(ev.GetOperation().GetSpanId(), unit):
+			said = append(said, "output: "+ev.GetOperation().GetMessage())
+		case ev.GetOperation().GetEnded() != nil && bytes.Equal(ev.GetOperation().GetSpanId(), unit):
+			said = append(said, "ended: "+ev.GetOperation().GetEnded().GetStatus().String())
 		}
 	}
 	want := []string{"started: Adding the SDK to this project with `pnpm add " + sdkPackage + "`", "output: added 1 package in 2s", "ended: SPAN_STATUS_OK"}

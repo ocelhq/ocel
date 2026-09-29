@@ -270,8 +270,8 @@ func TestAScanStartsTheProviderInTheCheckPhaseOfItsRunAndPrintsItsEstimateAloneO
 		if err := protojson.Unmarshal([]byte(line), ev); err != nil {
 			t.Fatalf("stream line %q is not a protojson RunEvent: %v", line, err)
 		}
-		if ev.GetStarted() != nil && len(ev.GetStarted().GetParentSpanId()) == 0 {
-			phases = append(phases, ev.GetPhase())
+		if ev.GetOperation().GetStarted() != nil && len(ev.GetOperation().GetStarted().GetParentSpanId()) == 0 {
+			phases = append(phases, ev.GetOperation().GetPhase())
 		}
 		if ev.GetSummary() != nil {
 			result = ev.GetSummary()

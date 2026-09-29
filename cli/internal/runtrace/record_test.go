@@ -39,9 +39,9 @@ func TestEveryEventDebugIncludedLandsInTheRunsNDJSONFileAsARunEvent(t *testing.T
 	r := startRun(t)
 	at := timestamppb.New(time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC))
 	sent := []*streamv1.RunEvent{
-		{Time: at, Level: progressv1.Level_LEVEL_INFO, Phase: progressv1.Phase_PHASE_BUILD, Message: "Building project"},
-		{Time: at, Level: progressv1.Level_LEVEL_DEBUG, Subject: "fake", Message: "engine line", Body: &streamv1.RunEvent_Output{Output: &progressv1.Output{Stream: progressv1.Stream_STREAM_STDERR}}},
-		{Time: at, Level: progressv1.Level_LEVEL_ERROR, Body: &streamv1.RunEvent_Summary{Summary: &streamv1.RunSummary{Detail: "boom"}}},
+		{Operation: &progressv1.OperationEvent{Time: at, Level: progressv1.Level_LEVEL_INFO, Phase: progressv1.Phase_PHASE_BUILD, Message: "Building project"}},
+		{Operation: &progressv1.OperationEvent{Time: at, Level: progressv1.Level_LEVEL_DEBUG, Subject: "fake", Message: "engine line", Body: &progressv1.OperationEvent_Output{Output: &progressv1.Output{Stream: progressv1.Stream_STREAM_STDERR}}}},
+		{Operation: &progressv1.OperationEvent{Time: at, Level: progressv1.Level_LEVEL_ERROR}, Cli: &streamv1.RunEvent_Summary{Summary: &streamv1.RunSummary{Detail: "boom"}}},
 	}
 	for _, ev := range sent {
 		r.Receive(ev)
@@ -62,26 +62,22 @@ func TestEveryEventDebugIncludedLandsInTheRunsNDJSONFileAsARunEvent(t *testing.T
 }
 
 func started(id, parent []byte, message string) *streamv1.RunEvent {
-	return &streamv1.RunEvent{
-		Level:   progressv1.Level_LEVEL_INFO,
+	return &streamv1.RunEvent{Operation: &progressv1.OperationEvent{Level: progressv1.Level_LEVEL_INFO,
 		Phase:   progressv1.Phase_PHASE_PROVISION,
 		SpanId:  id,
-		Message: message,
-		Body:    &streamv1.RunEvent_Started{Started: &progressv1.Started{ParentSpanId: parent}},
+		Message: message, Body: &progressv1.OperationEvent_Started{Started: &progressv1.Started{ParentSpanId: parent}}},
 	}
 }
 
 func ended(id []byte, start, end time.Time, status progressv1.SpanStatus, attrs ...*progressv1.SpanAttribute) *streamv1.RunEvent {
-	return &streamv1.RunEvent{
-		Time:   timestamppb.New(end),
+	return &streamv1.RunEvent{Operation: &progressv1.OperationEvent{Time: timestamppb.New(end),
 		Level:  progressv1.Level_LEVEL_INFO,
 		Phase:  progressv1.Phase_PHASE_PROVISION,
-		SpanId: id,
-		Body: &streamv1.RunEvent_Ended{Ended: &progressv1.Ended{
+		SpanId: id, Body: &progressv1.OperationEvent_Ended{Ended: &progressv1.Ended{
 			Status:            status,
 			StartTimeUnixNano: start.UnixNano(),
 			Attributes:        attrs,
-		}},
+		}}},
 	}
 }
 
@@ -137,7 +133,7 @@ func TestAnEndedScopeBecomesASpanInTheTraceWithItsAttributes(t *testing.T) {
 func TestAWaitNeverPersistsTheSessionTokenInItsAddress(t *testing.T) {
 	const token = "s3cr3t-session-token"
 	r := startRun(t)
-	waiting := &streamv1.RunEvent{Body: &streamv1.RunEvent_Waiting{Waiting: &streamv1.WaitingEvent{Url: "http://127.0.0.1:41234/#t=" + token}}}
+	waiting := &streamv1.RunEvent{Cli: &streamv1.RunEvent_Waiting{Waiting: &streamv1.WaitingEvent{Url: "http://127.0.0.1:41234/#t=" + token}}}
 	r.Receive(waiting)
 	if err := r.Close(); err != nil {
 		t.Fatalf("Close() = %v", err)

@@ -282,8 +282,10 @@ func TestARollbackAsksWhileTheRunIsHeldAfterThePlanItShows(t *testing.T) {
 	}
 
 	evs := clitest.RunEvents(t, stream.String())
-	shown := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return strings.Contains(ev.GetMessage(), "– target  promo-1") })
-	if shown < 0 || evs[shown].GetPhase() != progressv1.Phase_PHASE_PLAN {
+	shown := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool {
+		return strings.Contains(ev.GetOperation().GetMessage(), "– target  promo-1")
+	})
+	if shown < 0 || evs[shown].GetOperation().GetPhase() != progressv1.Phase_PHASE_PLAN {
 		t.Fatalf("the rollback plan was not shown in the plan phase: %s", stream.String())
 	}
 	waiting := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetWaiting() != nil })

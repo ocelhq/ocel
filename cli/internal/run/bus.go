@@ -78,7 +78,7 @@ func (b *Bus) send(ev *streamv1.RunEvent) *streamv1.RunEvent {
 	b.stamp(ev)
 	shown := proto.CloneOf(ev)
 	collapse(shown.ProtoReflect())
-	orderPlan(shown.GetPlan())
+	orderPlan(shown.GetOperation().GetPlan())
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	for _, s := range b.sinks {

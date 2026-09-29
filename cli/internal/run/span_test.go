@@ -31,23 +31,23 @@ func TestAUnitsEventsCarryItsPhaseSubjectAndSpanAndItsParentIsThePhaseSpan(t *te
 		t.Fatalf("got %d events, want 5", len(got))
 	}
 	phase, unit := got[0], got[1]
-	if !bytes.Equal(unit.GetStarted().GetParentSpanId(), phase.GetSpanId()) || len(phase.GetSpanId()) != 8 {
-		t.Fatalf("unit parent = %x, want the phase span %x", unit.GetStarted().GetParentSpanId(), phase.GetSpanId())
+	if !bytes.Equal(unit.GetOperation().GetStarted().GetParentSpanId(), phase.GetOperation().GetSpanId()) || len(phase.GetOperation().GetSpanId()) != 8 {
+		t.Fatalf("unit parent = %x, want the phase span %x", unit.GetOperation().GetStarted().GetParentSpanId(), phase.GetOperation().GetSpanId())
 	}
-	if unit.GetMessage() != "Building web" {
-		t.Fatalf("unit started message = %q, want %q", unit.GetMessage(), "Building web")
+	if unit.GetOperation().GetMessage() != "Building web" {
+		t.Fatalf("unit started message = %q, want %q", unit.GetOperation().GetMessage(), "Building web")
 	}
 	levels := []progressv1.Level{progressv1.Level_LEVEL_INFO, progressv1.Level_LEVEL_DEBUG, progressv1.Level_LEVEL_ERROR}
 	for i, ev := range got[1:] {
-		if ev.GetPhase() != progressv1.Phase_PHASE_BUILD || ev.GetSubject() != "web" || !bytes.Equal(ev.GetSpanId(), unit.GetSpanId()) {
+		if ev.GetOperation().GetPhase() != progressv1.Phase_PHASE_BUILD || ev.GetOperation().GetSubject() != "web" || !bytes.Equal(ev.GetOperation().GetSpanId(), unit.GetOperation().GetSpanId()) {
 			t.Fatalf("event %d = phase %s subject %q span %x, want the build phase, web and the unit's span %x",
-				i+1, ev.GetPhase(), ev.GetSubject(), ev.GetSpanId(), unit.GetSpanId())
+				i+1, ev.GetOperation().GetPhase(), ev.GetOperation().GetSubject(), ev.GetOperation().GetSpanId(), unit.GetOperation().GetSpanId())
 		}
-		if i > 0 && ev.GetLevel() != levels[i-1] {
-			t.Fatalf("event %d level = %s, want %s", i+1, ev.GetLevel(), levels[i-1])
+		if i > 0 && ev.GetOperation().GetLevel() != levels[i-1] {
+			t.Fatalf("event %d level = %s, want %s", i+1, ev.GetOperation().GetLevel(), levels[i-1])
 		}
 	}
-	if bytes.Equal(unit.GetSpanId(), phase.GetSpanId()) {
+	if bytes.Equal(unit.GetOperation().GetSpanId(), phase.GetOperation().GetSpanId()) {
 		t.Fatal("the unit shares its phase's span id")
 	}
 }
@@ -62,7 +62,7 @@ func TestAUnitThatSucceedsEndsTitledWithWhatItDidAndOneThatFailsWithNoTitle(t *t
 
 	var titles []string
 	for _, ev := range sink.received() {
-		if ended := ev.GetEnded(); ended != nil && ev.GetSubject() != "" {
+		if ended := ev.GetOperation().GetEnded(); ended != nil && ev.GetOperation().GetSubject() != "" {
 			titles = append(titles, ended.GetTitle())
 		}
 	}
@@ -81,18 +81,18 @@ func TestEndReportsTheErrorOnTheEndedEventAndTheDurationFromItsStart(t *testing.
 	web.End(errors.New("the upload was refused"))
 
 	ended := sink.received()[2]
-	if ended.GetEnded().GetStatus() != progressv1.SpanStatus_SPAN_STATUS_ERROR || ended.GetLevel() != progressv1.Level_LEVEL_ERROR {
-		t.Fatalf("ended = status %s level %s, want an error", ended.GetEnded().GetStatus(), ended.GetLevel())
+	if ended.GetOperation().GetEnded().GetStatus() != progressv1.SpanStatus_SPAN_STATUS_ERROR || ended.GetOperation().GetLevel() != progressv1.Level_LEVEL_ERROR {
+		t.Fatalf("ended = status %s level %s, want an error", ended.GetOperation().GetEnded().GetStatus(), ended.GetOperation().GetLevel())
 	}
-	if ended.GetMessage() != "the upload was refused" {
-		t.Fatalf("ended message = %q, want the error", ended.GetMessage())
+	if ended.GetOperation().GetMessage() != "the upload was refused" {
+		t.Fatalf("ended message = %q, want the error", ended.GetOperation().GetMessage())
 	}
-	if !bytes.Equal(ended.GetSpanId(), sink.received()[1].GetSpanId()) || ended.GetSubject() != "web" {
-		t.Fatalf("ended span %x subject %q, want the unit's", ended.GetSpanId(), ended.GetSubject())
+	if !bytes.Equal(ended.GetOperation().GetSpanId(), sink.received()[1].GetOperation().GetSpanId()) || ended.GetOperation().GetSubject() != "web" {
+		t.Fatalf("ended span %x subject %q, want the unit's", ended.GetOperation().GetSpanId(), ended.GetOperation().GetSubject())
 	}
-	took := ended.GetTime().AsTime().Sub(time.Unix(0, ended.GetEnded().GetStartTimeUnixNano()))
-	if !started.Equal(time.Unix(0, ended.GetEnded().GetStartTimeUnixNano())) || took != 3*time.Second {
-		t.Fatalf("ended start %d took %s, want %s and 3s", ended.GetEnded().GetStartTimeUnixNano(), took, started)
+	took := ended.GetOperation().GetTime().AsTime().Sub(time.Unix(0, ended.GetOperation().GetEnded().GetStartTimeUnixNano()))
+	if !started.Equal(time.Unix(0, ended.GetOperation().GetEnded().GetStartTimeUnixNano())) || took != 3*time.Second {
+		t.Fatalf("ended start %d took %s, want %s and 3s", ended.GetOperation().GetEnded().GetStartTimeUnixNano(), took, started)
 	}
 }
 
@@ -115,13 +115,13 @@ func TestAReservedUnitAnnouncesNothingUntilOpenedAndThenStartsWhenItWasReserved(
 	if len(got) != 2 {
 		t.Fatalf("opening and ending the unit sent %d events, want 2", len(got))
 	}
-	if got[0].GetMessage() != "Building 2 apps (web and api)" || got[0].GetSubject() != "shop" {
-		t.Fatalf("the unit opened as %s: %q, want shop: %q", got[0].GetSubject(), got[0].GetMessage(), "Building 2 apps (web and api)")
+	if got[0].GetOperation().GetMessage() != "Building 2 apps (web and api)" || got[0].GetOperation().GetSubject() != "shop" {
+		t.Fatalf("the unit opened as %s: %q, want shop: %q", got[0].GetOperation().GetSubject(), got[0].GetOperation().GetMessage(), "Building 2 apps (web and api)")
 	}
-	if !got[0].GetTime().AsTime().Equal(reservedAt) || got[1].GetEnded().GetStartTimeUnixNano() != reservedAt.UnixNano() {
-		t.Errorf("the unit started at %s, want %s: when it was reserved", got[0].GetTime().AsTime(), reservedAt)
+	if !got[0].GetOperation().GetTime().AsTime().Equal(reservedAt) || got[1].GetOperation().GetEnded().GetStartTimeUnixNano() != reservedAt.UnixNano() {
+		t.Errorf("the unit started at %s, want %s: when it was reserved", got[0].GetOperation().GetTime().AsTime(), reservedAt)
 	}
-	if took := got[1].GetTime().AsTime().Sub(reservedAt); took != 4*time.Second {
+	if took := got[1].GetOperation().GetTime().AsTime().Sub(reservedAt); took != 4*time.Second {
 		t.Errorf("the unit took %s, want 4s", took)
 	}
 }
@@ -138,9 +138,9 @@ func TestASpanThatSucceedsEndsOnceWithAnOKStatus(t *testing.T) {
 	if len(got) != 3 {
 		t.Fatalf("got %d events, want started, started, ended", len(got))
 	}
-	if got[2].GetEnded().GetStatus() != progressv1.SpanStatus_SPAN_STATUS_OK || got[2].GetLevel() != progressv1.Level_LEVEL_INFO || got[2].GetMessage() != "" {
+	if got[2].GetOperation().GetEnded().GetStatus() != progressv1.SpanStatus_SPAN_STATUS_OK || got[2].GetOperation().GetLevel() != progressv1.Level_LEVEL_INFO || got[2].GetOperation().GetMessage() != "" {
 		t.Fatalf("ended = status %s level %s message %q, want OK, INFO and no message",
-			got[2].GetEnded().GetStatus(), got[2].GetLevel(), got[2].GetMessage())
+			got[2].GetOperation().GetEnded().GetStatus(), got[2].GetOperation().GetLevel(), got[2].GetOperation().GetMessage())
 	}
 }
 
@@ -154,8 +154,8 @@ func TestASpanEndedByAnInterruptIsAWarningNotAnError(t *testing.T) {
 	web.End(context.Canceled)
 
 	ended := sink.received()[2]
-	if ended.GetLevel() != progressv1.Level_LEVEL_WARN || ended.GetEnded().GetStatus() != progressv1.SpanStatus_SPAN_STATUS_ERROR {
-		t.Fatalf("ended = level %s status %s, want WARN and an error status", ended.GetLevel(), ended.GetEnded().GetStatus())
+	if ended.GetOperation().GetLevel() != progressv1.Level_LEVEL_WARN || ended.GetOperation().GetEnded().GetStatus() != progressv1.SpanStatus_SPAN_STATUS_ERROR {
+		t.Fatalf("ended = level %s status %s, want WARN and an error status", ended.GetOperation().GetLevel(), ended.GetOperation().GetEnded().GetStatus())
 	}
 }
 
@@ -173,8 +173,8 @@ func TestHoldEmitsWaitingThenResumedAroundTheInteraction(t *testing.T) {
 		got[2].GetResumed().GetReason() != "the page was answered" {
 		t.Fatalf("events = %v, want waiting, the message, then resumed", bodies(got))
 	}
-	if got[0].GetPhase() != progressv1.Phase_PHASE_BUILD || got[2].GetPhase() != progressv1.Phase_PHASE_BUILD {
-		t.Fatalf("hold phases = %s and %s, want the span's", got[0].GetPhase(), got[2].GetPhase())
+	if got[0].GetOperation().GetPhase() != progressv1.Phase_PHASE_BUILD || got[2].GetOperation().GetPhase() != progressv1.Phase_PHASE_BUILD {
+		t.Fatalf("hold phases = %s and %s, want the span's", got[0].GetOperation().GetPhase(), got[2].GetOperation().GetPhase())
 	}
 }
 
@@ -191,8 +191,8 @@ func TestARunHeldOutsideAnySpanWaitsAndResumesInNoPhaseAndOnNoSpan(t *testing.T)
 		t.Fatalf("events = %v, want waiting then resumed", bodies(got))
 	}
 	for _, ev := range got {
-		if ev.GetPhase() != progressv1.Phase_PHASE_UNSPECIFIED || len(ev.GetSpanId()) != 0 {
-			t.Errorf("%v arrived in %s on span %x, want the run's, in no phase and on no span", bodies([]*streamv1.RunEvent{ev}), ev.GetPhase(), ev.GetSpanId())
+		if ev.GetOperation().GetPhase() != progressv1.Phase_PHASE_UNSPECIFIED || len(ev.GetOperation().GetSpanId()) != 0 {
+			t.Errorf("%v arrived in %s on span %x, want the run's, in no phase and on no span", bodies([]*streamv1.RunEvent{ev}), ev.GetOperation().GetPhase(), ev.GetOperation().GetSpanId())
 		}
 	}
 }
@@ -201,8 +201,12 @@ func bodies(evs []*streamv1.RunEvent) []string {
 	var out []string
 	for _, ev := range evs {
 		name := "message"
-		if body := ev.ProtoReflect().WhichOneof(ev.ProtoReflect().Descriptor().Oneofs().ByName("body")); body != nil {
-			name = string(body.Name())
+		if cli := ev.ProtoReflect().WhichOneof(ev.ProtoReflect().Descriptor().Oneofs().ByName("cli")); cli != nil {
+			name = string(cli.Name())
+		} else if op := ev.GetOperation(); op != nil {
+			if body := op.ProtoReflect().WhichOneof(op.ProtoReflect().Descriptor().Oneofs().ByName("body")); body != nil {
+				name = string(body.Name())
+			}
 		}
 		out = append(out, name)
 	}
@@ -217,9 +221,9 @@ func TestAPlanIsDrawnWithItsHeadlineAndNotesInItsSpansPhaseLeavingTheCallersPlan
 	drawn := run.Phase(progressv1.Phase_PHASE_PLAN).Plan("Deploy to production", plan, &planv1.Note{Text: "2 resources change"})
 
 	ev := sink.received()[1]
-	if !proto.Equal(ev.GetPlan(), drawn) || drawn.GetHeadline() != "Deploy to production" || len(drawn.GetNotes()) != 1 ||
-		ev.GetPhase() != progressv1.Phase_PHASE_PLAN {
-		t.Fatalf("plan event = %q notes %q phase %s, want the drawn plan in the plan phase", drawn.GetHeadline(), drawn.GetNotes(), ev.GetPhase())
+	if !proto.Equal(ev.GetOperation().GetPlan(), drawn) || drawn.GetHeadline() != "Deploy to production" || len(drawn.GetNotes()) != 1 ||
+		ev.GetOperation().GetPhase() != progressv1.Phase_PHASE_PLAN {
+		t.Fatalf("plan event = %q notes %q phase %s, want the drawn plan in the plan phase", drawn.GetHeadline(), drawn.GetNotes(), ev.GetOperation().GetPhase())
 	}
 	if plan.GetHeadline() != "from the provider" {
 		t.Fatalf("the caller's plan headline became %q", plan.GetHeadline())
@@ -239,7 +243,7 @@ func TestThePlanASpanDrawsIsThePlanEverySinkShowsInGroupOrder(t *testing.T) {
 
 	drawn := run.Phase(progressv1.Phase_PHASE_PLAN).Plan("Proposed changes", plan)
 
-	shown := sink.received()[1].GetPlan()
+	shown := sink.received()[1].GetOperation().GetPlan()
 	if !proto.Equal(drawn, shown) {
 		t.Fatalf("the plan the span hands back is\n%v\nand the plan the sinks show is\n%v", drawn, shown)
 	}
@@ -256,7 +260,7 @@ func drawn(t *testing.T, groups ...*planv1.ChangeGroup) *planv1.ChangePlan {
 	sink := &recording{}
 	run, _ := begin(t, sink)
 	run.Phase(progressv1.Phase_PHASE_PLAN).Plan("Proposed changes", &planv1.ChangePlan{Subject: "production", Groups: groups})
-	return sink.received()[1].GetPlan()
+	return sink.received()[1].GetOperation().GetPlan()
 }
 
 func TestPlanRowsReachEverySinkInOneOrderWhateverOrderTheyArriveIn(t *testing.T) {
@@ -324,8 +328,8 @@ func TestIdentityReachesTheSinksInItsSpansPhase(t *testing.T) {
 
 	run.Phase(progressv1.Phase_PHASE_CHECK).Identity(&streamv1.IdentityEvent{Project: "shop"})
 
-	if ev := sink.received()[1]; ev.GetIdentity().GetProject() != "shop" || ev.GetPhase() != progressv1.Phase_PHASE_CHECK {
-		t.Fatalf("identity = %q in %s, want shop in the check phase", ev.GetIdentity().GetProject(), ev.GetPhase())
+	if ev := sink.received()[1]; ev.GetIdentity().GetProject() != "shop" || ev.GetOperation().GetPhase() != progressv1.Phase_PHASE_CHECK {
+		t.Fatalf("identity = %q in %s, want shop in the check phase", ev.GetIdentity().GetProject(), ev.GetOperation().GetPhase())
 	}
 }
 
@@ -339,29 +343,13 @@ func TestEndingAPhaseEndsItsOpenUnitsFirstWithTheSameError(t *testing.T) {
 	deploy.End(errors.New("the stack is locked"))
 
 	opened, got := sink.received()[:5], sink.received()[5:]
-	want := [][]byte{opened[2].GetSpanId(), opened[1].GetSpanId(), opened[0].GetSpanId()}
+	want := [][]byte{opened[2].GetOperation().GetSpanId(), opened[1].GetOperation().GetSpanId(), opened[0].GetOperation().GetSpanId()}
 	if len(got) != len(want) {
 		t.Fatalf("got %v after the api unit ended, want three ended events", bodies(got))
 	}
 	for i, ev := range got {
-		if !bytes.Equal(ev.GetSpanId(), want[i]) || ev.GetEnded() == nil || ev.GetMessage() != "the stack is locked" {
-			t.Fatalf("ended %d = span %x message %q, want span %x with the phase's error", i, ev.GetSpanId(), ev.GetMessage(), want[i])
-		}
-	}
-}
-
-func TestEveryFieldOfAProviderEventIsTheSameFieldOfARunEvent(t *testing.T) {
-	operation := (&progressv1.OperationEvent{}).ProtoReflect().Descriptor()
-	run := (&streamv1.RunEvent{}).ProtoReflect().Descriptor()
-	fields := operation.Fields()
-	for i := range fields.Len() {
-		want := fields.Get(i)
-		got := run.Fields().ByNumber(want.Number())
-		if got == nil || got.Name() != want.Name() || got.Kind() != want.Kind() ||
-			(want.Message() != nil && got.Message().FullName() != want.Message().FullName()) ||
-			(want.Enum() != nil && got.Enum().FullName() != want.Enum().FullName()) ||
-			(want.ContainingOneof() == nil) != (got.ContainingOneof() == nil) {
-			t.Errorf("OperationEvent field %d %s has no identical RunEvent field (got %v): the CLI forwards a provider's event by its wire bytes", want.Number(), want.Name(), got)
+		if !bytes.Equal(ev.GetOperation().GetSpanId(), want[i]) || ev.GetOperation().GetEnded() == nil || ev.GetOperation().GetMessage() != "the stack is locked" {
+			t.Fatalf("ended %d = span %x message %q, want span %x with the phase's error", i, ev.GetOperation().GetSpanId(), ev.GetOperation().GetMessage(), want[i])
 		}
 	}
 }
@@ -385,16 +373,7 @@ func TestAForwardedProviderEventKeepsEveryFieldItCarried(t *testing.T) {
 	run.Phase(progressv1.Phase_PHASE_DEPLOY).Forward(op)
 
 	got := sink.received()[len(sink.received())-1]
-	want := &streamv1.RunEvent{
-		Time:    op.GetTime(),
-		Level:   op.GetLevel(),
-		Phase:   op.GetPhase(),
-		Subject: op.GetSubject(),
-		Message: op.GetMessage(),
-		SpanId:  op.GetSpanId(),
-		Body:    &streamv1.RunEvent_Ended{Ended: op.GetEnded()},
-	}
-	if !proto.Equal(got, want) {
+	if want := (&streamv1.RunEvent{Operation: op}); !proto.Equal(got, want) {
 		t.Errorf("the forwarded event is not span %s's end carried over field for field", op.GetSpanId())
 	}
 }

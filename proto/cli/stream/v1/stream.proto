@@ -5,25 +5,12 @@ option go_package = "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1;streamv1";
 
 import "buf/validate/validate.proto";
 import "common/environment/v1/environment.proto";
-import "common/plan/v1/plan.proto";
 import "common/progress/v1/progress.proto";
-import "google/protobuf/timestamp.proto";
 
 message RunEvent {
-  google.protobuf.Timestamp time = 9;
-  common.progress.v1.Level level = 10;
-  common.progress.v1.Phase phase = 11;
-  string subject = 12;
-  string message = 13;
-  bytes span_id = 14 [(buf.validate.field).bytes.len = 8, (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
+  common.progress.v1.OperationEvent operation = 1;
 
-  oneof body {
-    common.progress.v1.Started started = 15;
-    common.progress.v1.Ended ended = 16;
-    common.progress.v1.Output output = 17;
-    common.plan.v1.ChangePlan plan = 8;
-    common.progress.v1.DnsManualRecordsEvent dns_manual_records = 7;
-    common.progress.v1.OperationResult result = 3;
+  oneof cli {
     WaitingEvent waiting = 20;
     ResumedEvent resumed = 21;
     RunSummary summary = 22;

@@ -37,13 +37,13 @@ type resourceTally struct {
 
 func resourceChangeOf(ev *streamv1.RunEvent) (resourceChange, bool) {
 	attrs := map[progressv1.AttributeKey]string{}
-	for _, a := range ev.GetEnded().GetAttributes() {
+	for _, a := range ev.GetOperation().GetEnded().GetAttributes() {
 		attrs[a.GetKey()] = a.GetValue()
 	}
 	action := provider.ActionProto(provider.ChangeAction(attrs[progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_ACTION]))
 	wording := wordingOf(action)
 	name, typ := attrs[progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_NAME], attrs[progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_TYPE]
-	failed := ev.GetEnded().GetStatus() == progressv1.SpanStatus_SPAN_STATUS_ERROR
+	failed := ev.GetOperation().GetEnded().GetStatus() == progressv1.SpanStatus_SPAN_STATUS_ERROR
 	if _, changes := resourceChangesDone[wording.tallyAs]; !changes {
 		if !failed || name+typ == "" {
 			return resourceChange{}, false

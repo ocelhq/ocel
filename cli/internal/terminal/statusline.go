@@ -57,20 +57,20 @@ func (l *statusLine) observe(ev *streamv1.RunEvent) {
 	if l.startedAt.IsZero() {
 		l.startedAt = at
 	}
-	span := spanKey(ev.GetSpanId())
+	span := spanKey(ev.GetOperation().GetSpanId())
 	switch {
 	case isTraceOnly(ev):
-	case ev.GetStarted() != nil:
+	case ev.GetOperation().GetStarted() != nil:
 		l.open(span, ev, at)
-	case ev.GetEnded() != nil:
+	case ev.GetOperation().GetEnded() != nil:
 		l.end(span)
-	case ev.GetLevel() == progressv1.Level_LEVEL_DEBUG:
-	case ev.GetOutput() != nil:
-		if text, ok := sanitize(ev.GetMessage()); ok {
+	case ev.GetOperation().GetLevel() == progressv1.Level_LEVEL_DEBUG:
+	case ev.GetOperation().GetOutput() != nil:
+		if text, ok := sanitize(ev.GetOperation().GetMessage()); ok {
 			l.record(span, at, func(u *statusUnit) { u.output = text })
 		}
-	case ev.GetBody() == nil:
-		first, _, _ := strings.Cut(ev.GetMessage(), "\n")
+	case ev.GetOperation().GetBody() == nil && ev.GetCli() == nil:
+		first, _, _ := strings.Cut(ev.GetOperation().GetMessage(), "\n")
 		if text, ok := sanitize(first); ok {
 			l.record(span, at, func(u *statusUnit) { u.progress = text })
 		}
@@ -79,7 +79,7 @@ func (l *statusLine) observe(ev *streamv1.RunEvent) {
 
 func (l *statusLine) open(span string, ev *streamv1.RunEvent, at time.Time) {
 	if !l.spans.joins(ev) {
-		l.phase = ev.GetPhase()
+		l.phase = ev.GetOperation().GetPhase()
 	}
 	l.spans.open(span, ev, at, &statusUnit{opened: ev})
 }
@@ -145,16 +145,16 @@ func (l *statusLine) render(width int) string {
 
 func (l *statusLine) naming(unit *statusUnit) string {
 	said := unit.latest()
-	subject := unit.opened.GetSubject()
+	subject := unit.opened.GetOperation().GetSubject()
 	if subject == "" {
-		named := unit.opened.GetMessage()
+		named := unit.opened.GetOperation().GetMessage()
 		if said != "" {
 			named += liveGutter + l.present.palette().Muted(said)
 		}
 		return named
 	}
 	if said == "" {
-		title, _, _ := strings.Cut(unit.opened.GetMessage(), "\n")
+		title, _, _ := strings.Cut(unit.opened.GetOperation().GetMessage(), "\n")
 		said, _ = sanitize(title)
 	}
 	named := l.present.palette().Bold(subject) + ":"

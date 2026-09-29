@@ -44,7 +44,7 @@ func (r *recording) received() []*streamv1.RunEvent {
 func (r *recording) messages() []string {
 	var out []string
 	for _, ev := range r.received() {
-		out = append(out, ev.GetMessage())
+		out = append(out, ev.GetOperation().GetMessage())
 	}
 	return out
 }
@@ -190,7 +190,7 @@ func TestASecondInterruptEndsTheOpenRunAsInterruptedOnEverySinkAndClosesThem(t *
 			t.Fatalf("%s sink got %d results (first interrupted: %t), want one interrupted result", name, len(results), len(results) > 0 && results[0].GetInterrupted())
 		}
 		if received[len(received)-1].GetSummary() == nil {
-			t.Fatalf("%s sink's last event is a %T, want the result after every span ended", name, received[len(received)-1].GetBody())
+			t.Fatalf("%s sink's last event is a %T, want the result after every span ended", name, received[len(received)-1].GetCli())
 		}
 		if !sink.closed {
 			t.Fatalf("%s sink was not closed, want the interrupt to flush it", name)
@@ -216,15 +216,15 @@ func TestATraceSpansDebugDetailReachesEverySinkAsDetailOfItsSubjectAndTheRunsLog
 
 	var heard []*streamv1.RunEvent
 	for _, ev := range sink.received() {
-		if ev.GetMessage() == "installing dependencies" {
+		if ev.GetOperation().GetMessage() == "installing dependencies" {
 			heard = append(heard, ev)
 		}
 	}
 	if len(heard) != 1 {
 		t.Fatalf("the sink heard the log %d times, want once", len(heard))
 	}
-	if ev := heard[0]; ev.GetLevel() != progressv1.Level_LEVEL_DEBUG || ev.GetPhase() != progressv1.Phase_PHASE_BUILD || ev.GetSubject() != "web" {
-		t.Errorf("the log reads %s [%s] %q, want DEBUG [PHASE_BUILD] \"web\"", ev.GetLevel(), ev.GetPhase(), ev.GetSubject())
+	if ev := heard[0]; ev.GetOperation().GetLevel() != progressv1.Level_LEVEL_DEBUG || ev.GetOperation().GetPhase() != progressv1.Phase_PHASE_BUILD || ev.GetOperation().GetSubject() != "web" {
+		t.Errorf("the log reads %s [%s] %q, want DEBUG [PHASE_BUILD] \"web\"", ev.GetOperation().GetLevel(), ev.GetOperation().GetPhase(), ev.GetOperation().GetSubject())
 	}
 	logged, readErr := os.ReadFile(logPath)
 	if readErr != nil {

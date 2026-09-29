@@ -640,8 +640,8 @@ func TestDoctorChecksTheSetupInTheCheckPhaseOfItsRunAndPrintsItsReportAloneOnStd
 		if err := protojson.Unmarshal([]byte(line), event); err != nil {
 			t.Fatalf("stream line %q is not a protojson RunEvent: %v", line, err)
 		}
-		if event.GetStarted() != nil && len(event.GetStarted().GetParentSpanId()) > 0 {
-			units = append(units, event.GetPhase())
+		if event.GetOperation().GetStarted() != nil && len(event.GetOperation().GetStarted().GetParentSpanId()) > 0 {
+			units = append(units, event.GetOperation().GetPhase())
 		}
 		if event.GetSummary() != nil {
 			result = event.GetSummary()

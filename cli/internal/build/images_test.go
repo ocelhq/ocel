@@ -82,12 +82,12 @@ type heard struct {
 }
 
 func (h *heard) Receive(ev *streamv1.RunEvent) {
-	if ev.GetBody() != nil {
+	if ev.GetOperation().GetBody() != nil || ev.GetCli() != nil {
 		return
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.said.WriteString(ev.GetMessage() + "\n")
+	h.said.WriteString(ev.GetOperation().GetMessage() + "\n")
 }
 
 func (h *heard) Close() error { return nil }

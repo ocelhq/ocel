@@ -50,18 +50,19 @@ func TestEveryNDJSONLineCarriesTimeLevelPhaseSubjectAndMessageEvenWhenEmpty(t *t
 	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &rec); err != nil {
 		t.Fatalf("line %q is not JSON: %v", lines[len(lines)-1], err)
 	}
+	envelope, _ := rec["operation"].(map[string]any)
 	for key, want := range map[string]any{
 		"level":   "LEVEL_INFO",
 		"phase":   "PHASE_UNSPECIFIED",
 		"subject": "",
 		"message": "",
 	} {
-		if got, ok := rec[key]; !ok || got != want {
+		if got, ok := envelope[key]; !ok || got != want {
 			t.Errorf("%q = %v (present %v), want %q on a line %q", key, got, ok, want, out.String())
 		}
 	}
-	if stamp, _ := rec["time"].(string); stamp == "" {
-		t.Errorf("time = %v, want the moment the event landed on a line %q", rec["time"], out.String())
+	if stamp, _ := envelope["time"].(string); stamp == "" {
+		t.Errorf("time = %v, want the moment the event landed on a line %q", envelope["time"], out.String())
 	}
 	if reason := rec["resumed"].(map[string]any)["reason"]; reason != "the page was answered" {
 		t.Errorf("resumed.reason = %v, want the body beside the envelope", reason)
@@ -72,12 +73,12 @@ func TestADebugLineReachesNDJSONAtItsLevel(t *testing.T) {
 	t.Parallel()
 
 	var out safeBuffer
-	NewJSONLines(&out).Receive(&streamv1.RunEvent{Level: progressv1.Level_LEVEL_DEBUG, Message: "+  fake:bucket assets creating (0s)"})
+	NewJSONLines(&out).Receive(&streamv1.RunEvent{Operation: &progressv1.OperationEvent{Level: progressv1.Level_LEVEL_DEBUG, Message: "+  fake:bucket assets creating (0s)"}})
 	got := parseNDJSON(t, out.String())
-	if len(got) != 1 || got[0].GetLevel() != progressv1.Level_LEVEL_DEBUG || got[0].GetMessage() != "+  fake:bucket assets creating (0s)" {
+	if len(got) != 1 || got[0].GetOperation().GetLevel() != progressv1.Level_LEVEL_DEBUG || got[0].GetOperation().GetMessage() != "+  fake:bucket assets creating (0s)" {
 		var lines []string
 		for _, ev := range got {
-			lines = append(lines, ev.GetLevel().String()+" "+ev.GetMessage())
+			lines = append(lines, ev.GetOperation().GetLevel().String()+" "+ev.GetOperation().GetMessage())
 		}
 		t.Errorf("ndjson = %q, want the one debug line at DEBUG", lines)
 	}
@@ -91,14 +92,14 @@ func TestTheJSONSinkWritesEachEventAsOneLineTheMomentItLands(t *testing.T) {
 	t.Cleanup(func() { _ = sink.Close() })
 
 	span := []byte{1, 0, 0, 0, 0, 0, 0, 0}
-	sink.Receive(&streamv1.RunEvent{SpanId: span, Message: "web", Body: &streamv1.RunEvent_Started{Started: &progressv1.Started{}}})
+	sink.Receive(&streamv1.RunEvent{Operation: &progressv1.OperationEvent{SpanId: span, Message: "web", Body: &progressv1.OperationEvent_Started{Started: &progressv1.Started{}}}})
 	if got := out.String(); strings.Count(got, "\n") != 1 || !strings.HasSuffix(got, "\n") {
 		t.Fatalf("after one event the sink wrote %q, want exactly one whole line", got)
 	}
 
-	sink.Receive(&streamv1.RunEvent{SpanId: span, Message: "uploading"})
+	sink.Receive(&streamv1.RunEvent{Operation: &progressv1.OperationEvent{SpanId: span, Message: "uploading"}})
 	lines := parseNDJSON(t, out.String())
-	if len(lines) != 2 || lines[1].GetMessage() != "uploading" {
+	if len(lines) != 2 || lines[1].GetOperation().GetMessage() != "uploading" {
 		t.Errorf("after two events the sink wrote %q, want the second as its own line", out.String())
 	}
 }

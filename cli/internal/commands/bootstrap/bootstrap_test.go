@@ -437,8 +437,8 @@ func TestRemovingABootstrapAsksForItsNameWhileTheRunIsHeldAfterThePlanItShows(t 
 	}
 
 	evs := clitest.RunEvents(t, stream.String())
-	shown := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetPlan() != nil })
-	if shown < 0 || evs[shown].GetPhase() != progressv1.Phase_PHASE_PLAN {
+	shown := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetOperation().GetPlan() != nil })
+	if shown < 0 || evs[shown].GetOperation().GetPhase() != progressv1.Phase_PHASE_PLAN {
 		t.Fatalf("the removal plan was not shown in the plan phase: %s", stream.String())
 	}
 	waiting := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetWaiting() != nil })
@@ -818,8 +818,8 @@ func TestTheBootstrapPlanIsAPlanPhaseEventBeforeTheConsentPrompt(t *testing.T) {
 	}
 
 	evs := clitest.RunEvents(t, stream.String())
-	shown := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetPlan() != nil })
-	if shown < 0 || evs[shown].GetPhase() != progressv1.Phase_PHASE_PLAN {
+	shown := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetOperation().GetPlan() != nil })
+	if shown < 0 || evs[shown].GetOperation().GetPhase() != progressv1.Phase_PHASE_PLAN {
 		t.Fatalf("the bootstrap plan was not shown in the plan phase: %s", stream.String())
 	}
 	waiting := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetWaiting() != nil })
@@ -845,11 +845,15 @@ func streamMessages(t *testing.T, out string) []string {
 		if line == "" {
 			continue
 		}
-		var ev map[string]any
+		var ev struct {
+			Operation struct {
+				Message string `json:"message"`
+			} `json:"operation"`
+		}
 		if err := json.Unmarshal([]byte(line), &ev); err != nil {
 			continue
 		}
-		if message, ok := ev["message"].(string); ok && message != "" {
+		if message := ev.Operation.Message; message != "" {
 			said = append(said, message)
 		}
 	}

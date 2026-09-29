@@ -211,20 +211,20 @@ func TestAMissingVariableHoldsTheRunWithTheWaitingEventAndResumesIt(t *testing.T
 		t.Fatalf("the run was never held for the missing variable: %s", out.String())
 	}
 	held := events[waiting]
-	if held.GetPhase() != progressv1.Phase_PHASE_BUILD || !strings.HasPrefix(held.GetWaiting().GetUrl(), address) {
-		t.Errorf("waiting in %s at %q, want the build held at the variables page %s", held.GetPhase(), held.GetWaiting().GetUrl(), address)
+	if held.GetOperation().GetPhase() != progressv1.Phase_PHASE_BUILD || !strings.HasPrefix(held.GetWaiting().GetUrl(), address) {
+		t.Errorf("waiting in %s at %q, want the build held at the variables page %s", held.GetOperation().GetPhase(), held.GetWaiting().GetUrl(), address)
 	}
 	if missing := held.GetWaiting().GetMissing().GetCells(); len(missing) != 1 || missing[0].GetKey() != "STRIPE_API_KEY" {
 		t.Errorf("waiting names %v missing, want STRIPE_API_KEY", missing)
 	}
 	resumed := slices.IndexFunc(events, func(event *streamv1.RunEvent) bool { return event.GetResumed() != nil })
-	if resumed < waiting || !bytes.Equal(events[resumed].GetSpanId(), held.GetSpanId()) {
+	if resumed < waiting || !bytes.Equal(events[resumed].GetOperation().GetSpanId(), held.GetOperation().GetSpanId()) {
 		t.Fatalf("resumed at event %d, waiting at %d: want the same scope resumed after the hold: %s", resumed, waiting, out.String())
 	}
 	built := slices.IndexFunc(events, func(event *streamv1.RunEvent) bool {
-		return event.GetEnded() != nil && bytes.Equal(event.GetSpanId(), held.GetSpanId())
+		return event.GetOperation().GetEnded() != nil && bytes.Equal(event.GetOperation().GetSpanId(), held.GetOperation().GetSpanId())
 	})
-	if built < resumed || events[built].GetEnded().GetStatus() != progressv1.SpanStatus_SPAN_STATUS_OK {
+	if built < resumed || events[built].GetOperation().GetEnded().GetStatus() != progressv1.SpanStatus_SPAN_STATUS_OK {
 		t.Errorf("the held build ended at event %d (resumed at %d), want it to finish OK after it resumed", built, resumed)
 	}
 }

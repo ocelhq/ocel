@@ -35,7 +35,7 @@ func (b *safeBuffer) String() string {
 }
 
 func resultEvent(result *streamv1.RunSummary) *streamv1.RunEvent {
-	return &streamv1.RunEvent{Level: progressv1.Level_LEVEL_INFO, Body: &streamv1.RunEvent_Summary{Summary: result}}
+	return &streamv1.RunEvent{Operation: &progressv1.OperationEvent{Level: progressv1.Level_LEVEL_INFO}, Cli: &streamv1.RunEvent_Summary{Summary: result}}
 }
 
 func missingStripeKey() *streamv1.MissingVariables {
@@ -65,9 +65,9 @@ func TestProviderProcessOutputShowsOnlyWhenVerbose(t *testing.T) {
 			sink := newTranscript(&out, Presentation{Verbose: verbose}, nil)
 
 			const marker = "raw subprocess output"
-			sink.Receive(&streamv1.RunEvent{Level: progressv1.Level_LEVEL_DEBUG, Phase: progressv1.Phase_PHASE_CHECK, Subject: "fake", Message: marker, Body: &streamv1.RunEvent_Output{
+			sink.Receive(&streamv1.RunEvent{Operation: &progressv1.OperationEvent{Level: progressv1.Level_LEVEL_DEBUG, Phase: progressv1.Phase_PHASE_CHECK, Subject: "fake", Message: marker, Body: &progressv1.OperationEvent_Output{
 				Output: &progressv1.Output{Stream: progressv1.Stream_STREAM_STDOUT},
-			}})
+			}}})
 
 			if shown := strings.Contains(out.String(), marker+"\n"); shown != verbose {
 				t.Errorf("stdout = %q, shows the provider process output = %v, want %v: it is debug output", out.String(), shown, verbose)
@@ -108,7 +108,7 @@ func TestAMessageWithNoScopeAlwaysReachesTheTerminalRegardlessOfVerbosity(t *tes
 			var out bytes.Buffer
 			sink := newTranscript(&out, Presentation{Verbose: verbose}, nil)
 
-			sink.Receive(&streamv1.RunEvent{Level: progressv1.Level_LEVEL_INFO, Message: "no functions to deploy; deploying infrastructure only"})
+			sink.Receive(&streamv1.RunEvent{Operation: &progressv1.OperationEvent{Level: progressv1.Level_LEVEL_INFO, Message: "no functions to deploy; deploying infrastructure only"}})
 
 			if want := "INFO  no functions to deploy; deploying infrastructure only\n"; out.String() != want {
 				t.Errorf("stdout = %q, want %q", out.String(), want)

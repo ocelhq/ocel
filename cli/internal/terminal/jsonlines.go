@@ -12,6 +12,7 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
 type JSONLines struct {
@@ -33,14 +34,31 @@ func (s *JSONLines) Receive(ev *streamv1.RunEvent) {
 func (s *JSONLines) Close() error { return nil }
 
 func envelopeJSON(ev *streamv1.RunEvent) (string, error) {
-	body := proto.CloneOf(ev)
+	operation, err := operationJSON(ev.GetOperation())
+	if err != nil {
+		return "", err
+	}
+	cli := proto.CloneOf(ev)
+	cli.Operation = nil
+	rest, err := protojson.Marshal(cli)
+	if err != nil {
+		return "", err
+	}
+	return compactObject([]string{`"operation":` + operation}, rest)
+}
+
+func operationJSON(op *progressv1.OperationEvent) (string, error) {
+	body := proto.CloneOf(op)
+	if body == nil {
+		body = &progressv1.OperationEvent{}
+	}
 	body.Time, body.Level, body.Phase, body.Subject, body.Message = nil, 0, 0, "", ""
 	fields := []proto.Message{
-		ev.GetTime(),
-		wrapperspb.String(ev.GetLevel().String()),
-		wrapperspb.String(ev.GetPhase().String()),
-		wrapperspb.String(ev.GetSubject()),
-		wrapperspb.String(ev.GetMessage()),
+		op.GetTime(),
+		wrapperspb.String(op.GetLevel().String()),
+		wrapperspb.String(op.GetPhase().String()),
+		wrapperspb.String(op.GetSubject()),
+		wrapperspb.String(op.GetMessage()),
 	}
 	parts := make([]string, 0, 6)
 	for i, key := range []string{"time", "level", "phase", "subject", "message"} {
@@ -54,6 +72,10 @@ func envelopeJSON(ev *streamv1.RunEvent) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	return compactObject(parts, rest)
+}
+
+func compactObject(parts []string, rest []byte) (string, error) {
 	if inner := bytes.TrimSpace(bytes.TrimSuffix(bytes.TrimPrefix(bytes.TrimSpace(rest), []byte("{")), []byte("}"))); len(inner) > 0 {
 		parts = append(parts, string(inner))
 	}

@@ -96,9 +96,9 @@ func dnsOutput(t *testing.T, present Presentation, headline string, records []*p
 		s = newTranscript(&out, present, nil)
 	}
 	t.Cleanup(func() { _ = s.Close() })
-	s.Receive(&streamv1.RunEvent{Level: progressv1.Level_LEVEL_INFO, Body: &streamv1.RunEvent_DnsManualRecords{
+	s.Receive(&streamv1.RunEvent{Operation: &progressv1.OperationEvent{Level: progressv1.Level_LEVEL_INFO, Body: &progressv1.OperationEvent_DnsManualRecords{
 		DnsManualRecords: &progressv1.DnsManualRecordsEvent{Headline: headline, Records: records, Notes: notes},
-	}})
+	}}})
 	return out.String()
 }
 
@@ -158,7 +158,7 @@ func TestDNSManualRecordsProjection(t *testing.T) {
 		if len(got) != 1 {
 			t.Fatalf("recorded %d envelopes, want 1", len(got))
 		}
-		records := got[0].GetDnsManualRecords().GetRecords()
+		records := got[0].GetOperation().GetDnsManualRecords().GetRecords()
 		if len(records) != 1 {
 			t.Fatalf("envelope names %v, want one record", records)
 		}

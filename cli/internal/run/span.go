@@ -71,15 +71,13 @@ func (s *Span) Debug(message string) { s.say(progressv1.Level_LEVEL_DEBUG, messa
 func (s *Span) Error(message string) { s.say(progressv1.Level_LEVEL_ERROR, message) }
 
 func (s *Span) say(level progressv1.Level, message string) {
-	s.run.bus.send(s.onSpan(&streamv1.RunEvent{Level: level, Message: message}))
+	s.run.bus.send(s.onSpan(&streamv1.RunEvent{Operation: &progressv1.OperationEvent{Level: level, Message: message}}))
 }
 
 func (s *Span) Output(level progressv1.Level, stream progressv1.Stream) io.Writer {
 	w := &lineWriter{emit: func(line string) {
-		s.run.bus.send(s.onSpan(&streamv1.RunEvent{
-			Level:   level,
-			Message: line,
-			Body:    &streamv1.RunEvent_Output{Output: &progressv1.Output{Stream: stream}},
+		s.run.bus.send(s.onSpan(&streamv1.RunEvent{Operation: &progressv1.OperationEvent{Level: level,
+			Message: line, Body: &progressv1.OperationEvent_Output{Output: &progressv1.Output{Stream: stream}}},
 		}))
 	}}
 	s.mu.Lock()
@@ -112,34 +110,21 @@ func (s *Span) Phase() progressv1.Phase { return s.phase }
 func (s *Span) Plan(headline string, plan *planv1.ChangePlan, notes ...*planv1.Note) *planv1.ChangePlan {
 	drawn := proto.CloneOf(plan)
 	drawn.Headline, drawn.Notes = headline, notes
-	shown := s.run.bus.send(s.onSpan(&streamv1.RunEvent{Body: &streamv1.RunEvent_Plan{Plan: drawn}}))
-	return proto.CloneOf(shown.GetPlan())
+	shown := s.run.bus.send(s.onSpan(&streamv1.RunEvent{Operation: &progressv1.OperationEvent{Body: &progressv1.OperationEvent_Plan{Plan: drawn}}}))
+	return proto.CloneOf(shown.GetOperation().GetPlan())
 }
 
 func (s *Span) Identity(identity *streamv1.IdentityEvent) {
 	s.run.identify(identity)
-	s.run.bus.send(s.onSpan(&streamv1.RunEvent{Body: &streamv1.RunEvent_Identity{Identity: identity}}))
+	s.run.bus.send(s.onSpan(&streamv1.RunEvent{Cli: &streamv1.RunEvent_Identity{Identity: identity}}))
 }
 
 func (s *Span) Forward(op *progressv1.OperationEvent) {
-	ev := runEventOf(op)
-	s.run.enter(ev.GetPhase())
-	if result := ev.GetResult(); result != nil {
+	s.run.enter(op.GetPhase())
+	if result := op.GetResult(); result != nil {
 		s.run.record(result)
 	}
-	s.run.bus.send(ev)
-}
-
-func runEventOf(op *progressv1.OperationEvent) *streamv1.RunEvent {
-	ev := &streamv1.RunEvent{}
-	wire, err := proto.Marshal(op)
-	if err == nil {
-		err = proto.Unmarshal(wire, ev)
-	}
-	if err != nil {
-		return &streamv1.RunEvent{Level: progressv1.Level_LEVEL_ERROR, Message: "the provider sent an event this CLI cannot read: " + err.Error()}
-	}
-	return ev
+	s.run.bus.send(&streamv1.RunEvent{Operation: proto.CloneOf(op)})
 }
 
 func (s *Span) End(err error) {
@@ -156,12 +141,12 @@ func (s *Span) End(err error) {
 			Attributes:        s.attributes,
 		}
 		s.mu.Unlock()
-		ev := &streamv1.RunEvent{Level: s.level, Body: &streamv1.RunEvent_Ended{Ended: ended}}
+		ev := &streamv1.RunEvent{Operation: &progressv1.OperationEvent{Level: s.level, Body: &progressv1.OperationEvent_Ended{Ended: ended}}}
 		if err != nil {
 			ended.Status, ended.Title = progressv1.SpanStatus_SPAN_STATUS_ERROR, ""
-			ev.Message = err.Error()
+			ev.Operation.Message = err.Error()
 			if s.level != progressv1.Level_LEVEL_DEBUG {
-				ev.Level = s.run.failureLevel()
+				ev.Operation.Level = s.run.failureLevel()
 			}
 		}
 		s.run.close(s)
@@ -179,7 +164,8 @@ func (s *Span) flush() {
 }
 
 func (s *Span) onSpan(ev *streamv1.RunEvent) *streamv1.RunEvent {
-	ev.Phase, ev.Subject, ev.SpanId = s.phase, s.subject, s.spanID
+	op := operationOf(ev)
+	op.Phase, op.Subject, op.SpanId = s.phase, s.subject, s.spanID
 	return ev
 }
 

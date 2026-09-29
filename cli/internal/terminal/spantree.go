@@ -42,18 +42,18 @@ func newSpanTree[U any]() spanTree[U] {
 }
 
 func (t *spanTree[U]) joins(ev *streamv1.RunEvent) bool {
-	return t.owners[spanKey(ev.GetStarted().GetParentSpanId())] != ""
+	return t.owners[spanKey(ev.GetOperation().GetStarted().GetParentSpanId())] != ""
 }
 
 func (t *spanTree[U]) open(span string, ev *streamv1.RunEvent, since time.Time, unit *U) {
 	if t.joins(ev) {
-		t.owners[span] = t.owners[spanKey(ev.GetStarted().GetParentSpanId())]
+		t.owners[span] = t.owners[spanKey(ev.GetOperation().GetStarted().GetParentSpanId())]
 		return
 	}
-	tally := t.tallies[ev.GetPhase()]
+	tally := t.tallies[ev.GetOperation().GetPhase()]
 	if tally == nil {
 		tally = &phaseTally{since: since}
-		t.tallies[ev.GetPhase()] = tally
+		t.tallies[ev.GetOperation().GetPhase()] = tally
 	}
 	if isPhaseSpan(ev) {
 		return
@@ -72,7 +72,7 @@ func (t *spanTree[U]) close(span string) (*U, *streamv1.RunEvent, *phaseTally) {
 		return nil, nil, nil
 	}
 	opened := t.opened[span]
-	tally := t.tallies[opened.GetPhase()]
+	tally := t.tallies[opened.GetOperation().GetPhase()]
 	tally.done++
 	delete(t.units, span)
 	delete(t.opened, span)
@@ -93,9 +93,9 @@ func spanKey(id []byte) string {
 }
 
 func isPhaseSpan(ev *streamv1.RunEvent) bool {
-	return len(ev.GetStarted().GetParentSpanId()) == 0 && ev.GetSubject() == "" && ev.GetMessage() == ""
+	return len(ev.GetOperation().GetStarted().GetParentSpanId()) == 0 && ev.GetOperation().GetSubject() == "" && ev.GetOperation().GetMessage() == ""
 }
 
 func isTraceOnly(ev *streamv1.RunEvent) bool {
-	return ev.GetLevel() == progressv1.Level_LEVEL_DEBUG && (ev.GetStarted() != nil || ev.GetEnded() != nil)
+	return ev.GetOperation().GetLevel() == progressv1.Level_LEVEL_DEBUG && (ev.GetOperation().GetStarted() != nil || ev.GetOperation().GetEnded() != nil)
 }

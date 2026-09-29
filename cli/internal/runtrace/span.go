@@ -22,17 +22,17 @@ type startedSpan struct {
 }
 
 func (t *Trace) remember(ev *streamv1.RunEvent) {
-	id, ok := spanID(ev.GetSpanId())
+	id, ok := spanID(ev.GetOperation().GetSpanId())
 	if !ok {
 		return
 	}
-	parentID, _ := spanID(ev.GetStarted().GetParentSpanId())
-	phase := strings.ToLower(strings.TrimPrefix(ev.GetPhase().String(), "PHASE_"))
-	name := ev.GetMessage()
+	parentID, _ := spanID(ev.GetOperation().GetStarted().GetParentSpanId())
+	phase := strings.ToLower(strings.TrimPrefix(ev.GetOperation().GetPhase().String(), "PHASE_"))
+	name := ev.GetOperation().GetMessage()
 	if name == "" {
 		name = phase + " phase"
 	}
-	if ev.GetPhase() == progressv1.Phase_PHASE_UNSPECIFIED {
+	if ev.GetOperation().GetPhase() == progressv1.Phase_PHASE_UNSPECIFIED {
 		phase = ""
 	}
 	t.startedMu.Lock()
@@ -41,7 +41,7 @@ func (t *Trace) remember(ev *streamv1.RunEvent) {
 }
 
 func (t *Trace) ingestEnded(ev *streamv1.RunEvent) {
-	id, ok := spanID(ev.GetSpanId())
+	id, ok := spanID(ev.GetOperation().GetSpanId())
 	if !ok {
 		return
 	}
@@ -50,8 +50,8 @@ func (t *Trace) ingestEnded(ev *streamv1.RunEvent) {
 	delete(t.started, id)
 	t.startedMu.Unlock()
 
-	ended := ev.GetEnded()
-	end := ev.GetTime().AsTime().UTC()
+	ended := ev.GetOperation().GetEnded()
+	end := ev.GetOperation().GetTime().AsTime().UTC()
 	start := end
 	if ns := ended.GetStartTimeUnixNano(); ns > 0 && !time.Unix(0, ns).After(end) {
 		start = time.Unix(0, ns).UTC()

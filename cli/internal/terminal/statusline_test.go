@@ -272,11 +272,9 @@ func TestAUnitOutsideAnyPhaseIsShownWithoutABracket(t *testing.T) {
 
 	c := &clock{at: time.Unix(1_700_000_000, 0)}
 	live := newStatusLine(c.now, Presentation{})
-	live.observe(&streamv1.RunEvent{
-		SpanId:  []byte{1, 2, 3, 4, 5, 6, 7, 8},
+	live.observe(&streamv1.RunEvent{Operation: &progressv1.OperationEvent{SpanId: []byte{1, 2, 3, 4, 5, 6, 7, 8},
 		Subject: "fake",
-		Message: "Checking credentials",
-		Body:    &streamv1.RunEvent_Started{Started: &progressv1.Started{}},
+		Message: "Checking credentials", Body: &progressv1.OperationEvent_Started{Started: &progressv1.Started{}}},
 	})
 
 	if got, want := shownText(t, live, 80), "      ⠋ fake: Checking credentials"; got != want {

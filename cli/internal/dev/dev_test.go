@@ -1048,7 +1048,7 @@ func TestDevReportsThroughItsRun(t *testing.T) {
 		}
 		var resolved, summarized bool
 		for _, ev := range clitest.RunEvents(t, readTestFile(t, logs[0])) {
-			resolved = resolved || ev.GetEnded().GetTitle() == environmentTitle.Ended
+			resolved = resolved || ev.GetOperation().GetEnded().GetTitle() == environmentTitle.Ended
 			summarized = summarized || ev.GetSummary().GetSuccess()
 		}
 		if !resolved || !summarized {
@@ -1088,7 +1088,7 @@ export default { slug: "test-app" };
 
 		var failed bool
 		for _, ev := range clitest.RunEvents(t, stderr.String()) {
-			if ev.GetEnded().GetStatus() == progressv1.SpanStatus_SPAN_STATUS_ERROR && strings.Contains(ev.GetMessage(), "API_TOKEN") {
+			if ev.GetOperation().GetEnded().GetStatus() == progressv1.SpanStatus_SPAN_STATUS_ERROR && strings.Contains(ev.GetOperation().GetMessage(), "API_TOKEN") {
 				failed = true
 			}
 		}

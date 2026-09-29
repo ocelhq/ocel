@@ -62,8 +62,8 @@ func shape(evs []*streamv1.RunEvent) []string {
 			out = append(out, "waiting")
 		case ev.GetResumed() != nil:
 			out = append(out, "resumed")
-		case ev.GetBody() == nil:
-			out = append(out, ev.GetMessage())
+		case ev.GetOperation().GetBody() == nil && ev.GetCli() == nil:
+			out = append(out, ev.GetOperation().GetMessage())
 		default:
 			out = append(out, "event")
 		}
@@ -235,7 +235,7 @@ func TestADeclinedConfirmationSaysSoOnTheStreamOnceTheStreamIsResumed(t *testing
 	}
 	got := term.received()
 	last := got[len(got)-1]
-	if last.GetMessage() != "Not confirmed, so this run changes nothing" || last.GetBody() != nil || got[len(got)-2].GetResumed() == nil {
+	if last.GetOperation().GetMessage() != "Not confirmed, so this run changes nothing" || (last.GetOperation().GetBody() != nil || last.GetCli() != nil) || got[len(got)-2].GetResumed() == nil {
 		t.Errorf("stream = %q, want the refusal sent as a message event after the resume, not written past the stream", shape(got))
 	}
 }
@@ -284,7 +284,7 @@ func TestPlanConsentIsWithheldWhenTheNameIsNotTypedBack(t *testing.T) {
 	if err != nil || granted {
 		t.Errorf("ConfirmPlanByName() = %v, %v, want a mistyped name to withhold it", granted, err)
 	}
-	if got := term.received(); got[len(got)-1].GetMessage() != "Not confirmed, so this run changes nothing" {
+	if got := term.received(); got[len(got)-1].GetOperation().GetMessage() != "Not confirmed, so this run changes nothing" {
 		t.Errorf("stream = %q, want a withheld consent to say the command stopped", shape(got))
 	}
 }

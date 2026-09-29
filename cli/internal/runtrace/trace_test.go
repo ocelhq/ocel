@@ -76,7 +76,7 @@ func TestAFailedSpansReasonStaysInTheLogAndNeverReachesTheTraceFile(t *testing.T
 	now := time.Now()
 	r.Receive(started(id, nil, "provisioning"))
 	failed := ended(id, now, now.Add(time.Second), progressv1.SpanStatus_SPAN_STATUS_ERROR)
-	failed.Message = "dial " + secret + " failed"
+	failed.Operation.Message = "dial " + secret + " failed"
 	r.Receive(failed)
 	if err := r.Close(); err != nil {
 		t.Fatalf("Close() = %v", err)

@@ -578,10 +578,9 @@ func TestInGitHubActionsAWarningIsMirroredAsAnAnnotationWithItsNewlinesAndPercen
 
 	var out bytes.Buffer
 	sink := newTranscript(&out, Presentation{GitHubActions: true}, nil)
-	sink.Receive(&streamv1.RunEvent{
-		Level:   progressv1.Level_LEVEL_WARN,
+	sink.Receive(&streamv1.RunEvent{Operation: &progressv1.OperationEvent{Level: progressv1.Level_LEVEL_WARN,
 		Phase:   progressv1.Phase_PHASE_CHECK,
-		Message: "the zone is 100% over quota\r\n::error::forged",
+		Message: "the zone is 100% over quota\r\n::error::forged"},
 	})
 	if err := sink.Close(); err != nil {
 		t.Fatalf("Close() = %v", err)
@@ -676,7 +675,7 @@ func TestInGitHubActionsARunRefusedForMissingVariablesIsAnErrorAnnotationNamingH
 
 	var out bytes.Buffer
 	sink := newTranscript(&out, Presentation{GitHubActions: true}, nil)
-	sink.Receive(&streamv1.RunEvent{Level: progressv1.Level_LEVEL_ERROR, Body: &streamv1.RunEvent_Summary{Summary: &streamv1.RunSummary{
+	sink.Receive(&streamv1.RunEvent{Operation: &progressv1.OperationEvent{Level: progressv1.Level_LEVEL_ERROR}, Cli: &streamv1.RunEvent_Summary{Summary: &streamv1.RunSummary{
 		Headline: "Deploy failed", DurationMs: 3000, Missing: missingStripeKey(),
 	}}})
 

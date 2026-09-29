@@ -80,8 +80,8 @@ func TestAStartedProvidersStreamEventsReachTheSpan(t *testing.T) {
 
 	var said, outcome bool
 	for _, event := range seen.received() {
-		said = said || event.GetMessage() == "step 1"
-		outcome = outcome || event.GetResult().GetSuccess()
+		said = said || event.GetOperation().GetMessage() == "step 1"
+		outcome = outcome || event.GetOperation().GetResult().GetSuccess()
 	}
 	if !said {
 		t.Error("the span never saw the provider's \"step 1\" line")
@@ -110,8 +110,8 @@ func TestAPlanningStreamHandsBackThePlanAndForwardsEveryOtherEvent(t *testing.T)
 
 	var said bool
 	for _, event := range seen.received() {
-		said = said || event.GetMessage() == "step 1"
-		if event.GetPlan() != nil {
+		said = said || event.GetOperation().GetMessage() == "step 1"
+		if event.GetOperation().GetPlan() != nil {
 			t.Error("the span saw the plan, want it handed back for the command to draw")
 		}
 	}
@@ -128,13 +128,13 @@ func TestALineTheProviderWritesToStderrReachesTheRunAtDebugNamingTheProviderInTh
 	p.Close()
 
 	for _, event := range seen.received() {
-		if event.GetMessage() != fakeChattyLine {
+		if event.GetOperation().GetMessage() != fakeChattyLine {
 			continue
 		}
-		if event.GetLevel() != progressv1.Level_LEVEL_DEBUG || event.GetSubject() != "fake" || event.GetOutput().GetStream() != progressv1.Stream_STREAM_STDERR ||
-			event.GetPhase() != progressv1.Phase_PHASE_DEPLOY {
+		if event.GetOperation().GetLevel() != progressv1.Level_LEVEL_DEBUG || event.GetOperation().GetSubject() != "fake" || event.GetOperation().GetOutput().GetStream() != progressv1.Stream_STREAM_STDERR ||
+			event.GetOperation().GetPhase() != progressv1.Phase_PHASE_DEPLOY {
 			t.Errorf("the stderr line arrived as %s from %q on %s in %s, want DEBUG output from \"fake\" on stderr in the deploy phase it started in",
-				event.GetLevel(), event.GetSubject(), event.GetOutput().GetStream(), event.GetPhase())
+				event.GetOperation().GetLevel(), event.GetOperation().GetSubject(), event.GetOperation().GetOutput().GetStream(), event.GetOperation().GetPhase())
 		}
 		return
 	}
@@ -213,8 +213,8 @@ func TestAQuestionAskedAfterTheStartingPhaseEndedHoldsTheRunNotThatPhase(t *test
 			continue
 		}
 		held++
-		if event.GetPhase() != progressv1.Phase_PHASE_UNSPECIFIED || len(event.GetSpanId()) != 0 {
-			t.Errorf("the prompt's hold arrived in %s on span %x, want it on the run, not the check phase that had ended", event.GetPhase(), event.GetSpanId())
+		if event.GetOperation().GetPhase() != progressv1.Phase_PHASE_UNSPECIFIED || len(event.GetOperation().GetSpanId()) != 0 {
+			t.Errorf("the prompt's hold arrived in %s on span %x, want it on the run, not the check phase that had ended", event.GetOperation().GetPhase(), event.GetOperation().GetSpanId())
 		}
 	}
 	if held != 2 {

@@ -12,7 +12,7 @@ type PlannedChange = { name?: string; action?: string };
 
 type PlannedGroup = { name?: string; action?: string; changes?: PlannedChange[] };
 
-type RunEvent = { phase?: string; plan?: { groups?: PlannedGroup[] } };
+type RunEvent = { operation?: { phase?: string; plan?: { groups?: PlannedGroup[] } } };
 
 function eventOf(line: string): RunEvent | undefined {
   try {
@@ -31,8 +31,8 @@ export function plannedWrites(stream: string): string[] {
     if (!event) {
       continue;
     }
-    planned ||= event.phase === "PHASE_PLAN";
-    for (const group of event.plan?.groups ?? []) {
+    planned ||= event.operation?.phase === "PHASE_PLAN";
+    for (const group of event.operation?.plan?.groups ?? []) {
       const changes = group.changes ?? [];
       for (const change of changes) {
         if (WRITING_ACTIONS.has(change.action ?? "")) {
