@@ -135,6 +135,7 @@ type Edge struct {
 	events     []string
 	claims     []router.Claim
 	entries    []router.Claim
+	holding    []string
 	released   []string
 	disclaimed []string
 	purged     [][]string
@@ -258,6 +259,9 @@ func (e *Edge) recordClaim(claim router.Claim) edge.Origin {
 	defer e.mu.Unlock()
 	e.events = append(e.events, "claim")
 	e.claims = append(e.claims, claim)
+	if !slices.Contains(e.holding, claim.Hostname) {
+		e.holding = append(e.holding, claim.Hostname)
+	}
 	return e.certifiedOrigin(claim)
 }
 
@@ -303,18 +307,13 @@ func (e *Edge) recordDisclaim(hostname string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.disclaimed = append(e.disclaimed, hostname)
+	e.holding = slices.DeleteFunc(e.holding, func(held string) bool { return held == hostname })
 }
 
 func (e *Edge) heldClaims() []string {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	var held []string
-	for _, claim := range e.claims {
-		if !slices.Contains(held, claim.Hostname) {
-			held = append(held, claim.Hostname)
-		}
-	}
-	return slices.DeleteFunc(held, func(hostname string) bool { return slices.Contains(e.disclaimed, hostname) })
+	return slices.Clone(e.holding)
 }
 
 func (e *Edge) Claims() []router.Claim {

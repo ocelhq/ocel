@@ -241,3 +241,36 @@ func TestRemovingAProjectRevokesTheOriginCertificatesItsHostnamesWereAnsweredWit
 		t.Errorf("the edge revoked %v, want origin-certificate-1: nothing answers with it once the project is gone", revoked)
 	}
 }
+
+func TestTheRemovalPlanNamesAClaimGivenBackAndTakenAgain(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	relay := vendor.Edges().(*fake.Edges).Edge(fake.KindRelay)
+	relay.ProxiesRecords()
+	deployed(t, vendor, environment.TierProduction, "shop")
+	addWebHostname(t, client, "app.acme.com", nil)
+	remove, err := client.RemoveHostname(context.Background(), &contractv1.HostnameRequest{Slug: "shop", Host: "app.acme.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result, err := drain(remove); err != nil || !result.GetSuccess() {
+		t.Fatalf("RemoveHostname() = %q, %v", result.GetError(), err)
+	}
+	addWebHostname(t, client, "app.acme.com", nil)
+
+	plan, err := client.PlanRemoveProject(context.Background(), projectRequest())
+	if err != nil {
+		t.Fatalf("PlanRemoveProject() error = %v", err)
+	}
+	var claimed []string
+	for _, group := range plan.GetGroups() {
+		for _, change := range group.GetChanges() {
+			if change.GetKind() == fake.ClaimKind {
+				claimed = append(claimed, change.GetName())
+			}
+		}
+	}
+	if !slices.Equal(claimed, []string{"app.acme.com"}) {
+		t.Errorf("the removal plan names claims %v, want app.acme.com, which the router holds again", claimed)
+	}
+}
