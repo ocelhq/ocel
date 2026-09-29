@@ -47,6 +47,8 @@ type Router interface {
 	Reconcile(ctx context.Context, spec StackSpec, prior StackState) (Stack, error)
 
 	Open(state StackState) (Stack, error)
+
+	ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup
 }
 
 type Claim struct {

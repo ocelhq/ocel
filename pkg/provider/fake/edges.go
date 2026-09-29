@@ -179,6 +179,18 @@ func (e *Edge) recordDisclaim(hostname string) {
 	e.disclaimed = append(e.disclaimed, hostname)
 }
 
+func (e *Edge) heldClaims() []string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	var held []string
+	for _, claim := range e.claims {
+		if !slices.Contains(held, claim.Hostname) {
+			held = append(held, claim.Hostname)
+		}
+	}
+	return slices.DeleteFunc(held, func(hostname string) bool { return slices.Contains(e.disclaimed, hostname) })
+}
+
 func (e *Edge) Claims() []router.Claim {
 	e.mu.Lock()
 	defer e.mu.Unlock()

@@ -79,3 +79,21 @@ func TestDestroyingTheBoxRouterLeavesNothingClaimedRoutedOrNetworked(t *testing.
 		}
 	}
 }
+
+func TestTheBoxRoutersRemovalPlanNamesTheRouteOfEveryHostnameAnEdgeForwardsToIt(t *testing.T) {
+	_, front, _ := reconciled(t)
+
+	var routes []string
+	for _, group := range box.NewRouter(front.Edge).ProjectRemovals(edge.ProjectScope{
+		Slug: slug, Tier: environment.TierProduction, Hostnames: []string{"shop.example.com"}, Front: address,
+	}) {
+		for _, change := range group.Changes {
+			if change.Kind == box.RouteKind && change.Action == edge.PlanDelete {
+				routes = append(routes, change.Name)
+			}
+		}
+	}
+	if !slices.Equal(routes, []string{"shop.example.com"}) {
+		t.Errorf("the box router plans to delete routes %v, want shop.example.com: an edge in front lists only what it forwards, and the plan must name what the box takes down", routes)
+	}
+}

@@ -101,3 +101,28 @@ func TestRemovingAHostnameAnEdgeProxiesGivesTheClaimBackToTheRouter(t *testing.T
 		t.Errorf("the edge still binds %v", bound)
 	}
 }
+
+func TestTheRemovalPlanOfAProjectAnEdgeProxiesNamesWhatItsRouterTakesDown(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	relay := vendor.Edges().(*fake.Edges).Edge(fake.KindRelay)
+	relay.ProxiesRecords()
+	deployed(t, vendor, environment.TierProduction, "shop")
+	addWebHostname(t, client, "app.acme.com", nil)
+
+	plan, err := client.PlanRemoveProject(context.Background(), projectRequest())
+	if err != nil {
+		t.Fatalf("PlanRemoveProject() error = %v", err)
+	}
+	var claimed []string
+	for _, group := range plan.GetGroups() {
+		for _, change := range group.GetChanges() {
+			if change.GetKind() == fake.ClaimKind {
+				claimed = append(claimed, change.GetName())
+			}
+		}
+	}
+	if !slices.Equal(claimed, []string{"app.acme.com"}) {
+		t.Errorf("the removal plan names claims %v, want app.acme.com: the router the edge forwards to takes its claim down with the project, and a plan names everything the removal deletes", claimed)
+	}
+}

@@ -211,3 +211,22 @@ func TestDestroyingTheALBRouterTakesDownWhatItsClaimsBound(t *testing.T) {
 		t.Errorf("stacks torn down %v, want the project's binding stack: an edge in front of the router takes none of it down", w.torn())
 	}
 }
+
+func TestTheALBRoutersRemovalPlanNamesTheHostRuleOfEveryHostnameAnEdgeForwardsToIt(t *testing.T) {
+	t.Parallel()
+
+	front, _ := shielding(t)
+	var rules []string
+	for _, group := range NewRouter(front).ProjectRemovals(edge.ProjectScope{
+		Slug: "shop", Tier: environment.TierProduction, Hostnames: []string{"shop.example.com"},
+	}) {
+		for _, change := range group.Changes {
+			if change.Kind == "compute.URLMap host rule" && change.Action == edge.PlanDelete {
+				rules = append(rules, change.Name)
+			}
+		}
+	}
+	if !slices.Equal(rules, []string{"shop.example.com"}) {
+		t.Errorf("the alb router plans to delete host rules %v, want shop.example.com: an edge in front lists only what it forwards, and the plan must name what the load balancer takes down", rules)
+	}
+}
