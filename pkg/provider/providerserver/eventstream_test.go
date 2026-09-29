@@ -168,7 +168,7 @@ func TestEventStreamFailPassesAQuestionBackToTheCallerAndReportsNoResult(t *test
 		t.Fatalf("close() error = %v", err)
 	}
 	if events := stream.recorded(); len(events) != 0 {
-		t.Errorf("got %v, want no result: a question is not the run's verdict", events)
+		t.Errorf("got %d events, want no result: a question is not the run's verdict", len(events))
 	}
 }
 
