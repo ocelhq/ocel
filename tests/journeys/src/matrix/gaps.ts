@@ -2,10 +2,19 @@ import {
   bindingCheck,
   bindingQueryCheck,
   clientAddressCheck,
+  corsCheck,
   emptyBodyCheck,
+  encodedSlashCheck,
+  inflateCheck,
+  malformedQueryCheck,
   nextCacheChecks,
   nextDataCacheChecks,
   nodeRuntimeChecks,
+  publicOriginCheck,
+  rewrittenQueryCheck,
+  sseCheck,
+  sseSilenceCheck,
+  streamCheck,
 } from "../checks";
 import { REGISTRY_TOKEN_ENV, REGISTRY_USER_ENV } from "../registry/settings";
 import { check, step } from "../steps";
@@ -17,8 +26,60 @@ const DEPLOY_NEXT_BEARING = [deploy.next, deploy.workspace];
 const SDK_NEXT_BEARING = [sdk.next, sdk.workspace];
 const EVERY_NEXT_BEARING = [...DEPLOY_NEXT_BEARING, lifecycle.next, ...SDK_NEXT_BEARING];
 const NEXT_CACHE = [...nextCacheChecks, ...nextDataCacheChecks];
+const RUNTIME_NEUTRAL_DEPLOYS = [deploy.node, deploy.go, deploy.python, deploy.rust];
+const TIMED_STREAMS = [streamCheck, sseCheck, sseSilenceCheck];
 
 export const gaps: Gap[] = [
+  {
+    id: "rest-api-reorders-the-query",
+    reason:
+      "the api-gateway edge is a REST API, whose proxy event carries no raw query string and whose documentation says the order of request parameters is not preserved",
+    where: [
+      {
+        on: ["aws", "aws.floci"],
+        fixtures: RUNTIME_NEUTRAL_DEPLOYS,
+        variants: [apiGateway],
+        fails: [check(rewrittenQueryCheck)],
+      },
+    ],
+  },
+  {
+    id: "floci-api-gateway-buffers-and-rewrites",
+    reason:
+      "floci's API Gateway invokes lambda synchronously and answers one buffered body, rejects a malformed escape itself, hands the path decoded, sets no forwarded client or scheme, and sends a gzip body as text",
+    where: [
+      {
+        on: ["aws.floci"],
+        fixtures: RUNTIME_NEUTRAL_DEPLOYS,
+        variants: [apiGateway],
+        fails: [
+          check(TIMED_STREAMS),
+          check(malformedQueryCheck),
+          check(encodedSlashCheck),
+          check(clientAddressCheck),
+          check(publicOriginCheck),
+          check(inflateCheck),
+        ],
+      },
+    ],
+  },
+  {
+    id: "floci-cloud-run-buffers-and-rewrites",
+    reason:
+      "floci-gcp reads a Cloud Run body whole before answering, rejects a malformed escape itself, answers every preflight from its storage CORS filter, and drops the Host the client asked for",
+    where: [
+      {
+        on: ["gcp.floci"],
+        fixtures: RUNTIME_NEUTRAL_DEPLOYS,
+        fails: [
+          check(TIMED_STREAMS),
+          check(malformedQueryCheck),
+          check(corsCheck),
+          check(publicOriginCheck),
+        ],
+      },
+    ],
+  },
   {
     id: "dev-runs-as-development",
     reason:
