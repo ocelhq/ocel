@@ -573,6 +573,7 @@ func shellPlacing(t *testing.T) *placingShell {
 		t.Fatal(err)
 	}
 	executable(t, filepath.Join(box.bin, "docker"), "#!/bin/sh\n"+
+		"case \"$*\" in *unplace-origins*) exit 0;; esac\n"+
 		"printf '%s\\n' \"$*\" > "+quoted(box.asked)+"\n"+
 		"cat > "+quoted(box.fed)+"\n"+
 		"if [ -f "+quoted(box.refusing)+" ]; then echo 'no space left on device' >&2; exit 2; fi\n")

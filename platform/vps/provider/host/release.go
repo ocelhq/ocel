@@ -504,13 +504,17 @@ func originReading(paths []string) []string {
 }
 
 func originPlacing(paths []string) []string {
-	steps := make([]string, 0, len(paths)+1)
+	steps := make([]string, 0, len(paths))
 	for at, path := range paths {
 		steps = append(steps, `if ! printf '%s' "$origin`+strconv.Itoa(at)+`" | base64 -d | `+words(switchboardFed("place-origin", path))+
 			`; then exit `+strconv.Itoa(routingPlaceFailed)+`; fi`)
 	}
-	return append(steps, `if ! `+words(switchboardCommand(append([]string{"unplace-origins"}, paths...)...))+
-		` </dev/null; then exit `+strconv.Itoa(routingPlaceFailed)+`; fi`)
+	return steps
+}
+
+func originUnplacing(kept []string) string {
+	return `if ! ` + words(switchboardCommand(append([]string{"unplace-origins"}, kept...)...)) +
+		` </dev/null; then exit ` + strconv.Itoa(routingPlaceFailed) + `; fi`
 }
 
 func (h *Host) writePair(ctx context.Context, expected tableDigest, pair routingPair, placing bool) (tableDigest, error, error) {
@@ -583,7 +587,7 @@ func stagedWrite(expected tableDigest, file string, origins []string) string {
 	}
 	if file != "" && file != ProxyConfig {
 		reading = originReading(origins)
-		placing = append(originPlacing(origins), placeStep(`printf '%s' "$rendering" | base64 -d | `, file))
+		placing = slices.Concat(originPlacing(origins), []string{placeStep(`printf '%s' "$rendering" | base64 -d | `, file), originUnplacing(origins)})
 	}
 	return strings.Join(slices.Concat(
 		[]string{"set -e"},
@@ -622,7 +626,7 @@ func replacement(expected tableDigest, at string, origins []string) string {
 		[]string{strings.TrimSuffix(routingLocked("-x"), "\n")},
 		comparedUnder(expected),
 		originPlacing(origins),
-		[]string{placeStep("", at)},
+		[]string{placeStep("", at), originUnplacing(origins)},
 	), "\n")
 }
 

@@ -56,11 +56,11 @@ func wantPlacedOrigins(t *testing.T, box *loggingShell, rendering string) {
 	want := []string{
 		switchboardSaid("place-origin", shieldedOrigins[0].Path),
 		switchboardSaid("place-origin", shieldedOrigins[1].Path),
-		switchboardAsked(append([]string{"unplace-origins"}, originPaths(shieldedOrigins)...)...),
 		switchboardSaid("place", coolifyFile),
+		switchboardAsked(append([]string{"unplace-origins"}, originPaths(shieldedOrigins)...)...),
 	}
 	if got := box.called(t); !slices.Equal(got, want) {
-		t.Errorf("docker was asked\n%q\nwant\n%q\nEach origin certificate is placed before the file naming it, and the ones no file names are unplaced", got, want)
+		t.Errorf("docker was asked\n%q\nwant\n%q\nEach origin certificate is placed before the file naming it, and the ones it no longer names are unplaced only once it is placed", got, want)
 	}
 	fed := []string{string(shieldedOrigins[0].Bundle), string(shieldedOrigins[1].Bundle), rendering}
 	if got := box.fedEach(t); !slices.Equal(got, fed) {
@@ -105,7 +105,7 @@ func TestAWriteWithNoOriginCertificateUnplacesTheOnesAnEarlierRenderingNamed(t *
 	if code, _, errs := box.run(t, stagedWrite(tableDigest(digested(before)), coolifyFile, nil), fed); code != 0 {
 		t.Fatalf("the write = %d: %s", code, errs)
 	}
-	want := []string{switchboardAsked("unplace-origins"), switchboardSaid("place", coolifyFile)}
+	want := []string{switchboardSaid("place", coolifyFile), switchboardAsked("unplace-origins")}
 	if got := box.called(t); !slices.Equal(got, want) {
 		t.Errorf("docker was asked %q, want %q", got, want)
 	}
