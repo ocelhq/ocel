@@ -2,18 +2,23 @@ package cli
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
@@ -217,11 +222,88 @@ func decodeBinding(stdin io.Reader) (*bindingsv1.Binding, error) {
 	if len(bytes.TrimSpace(raw)) == 0 {
 		return nil, errors.New("nothing came in on stdin; `ocel bindings set` reads one binding as protobuf JSON, so pipe it in: `ocel bindings set < binding.json`")
 	}
+	var shape any
+	if err := json.Unmarshal(raw, &shape); err != nil {
+		var syntax *json.SyntaxError
+		if errors.As(err, &syntax) {
+			return nil, fmt.Errorf("the binding on stdin is not JSON: it breaks at line %d", bytes.Count(raw[:syntax.Offset], []byte("\n"))+1)
+		}
+		return nil, errors.New("the binding on stdin is not JSON")
+	}
 	binding := &bindingsv1.Binding{}
 	if err := protojson.Unmarshal(raw, binding); err != nil {
-		return nil, fmt.Errorf("read the binding on stdin: %w", err)
+		if at := mismatchedField(binding.ProtoReflect().Descriptor(), shape, ""); at != "" {
+			return nil, fmt.Errorf("the binding on stdin does not have the shape of a binding: %s", at)
+		}
+		return nil, errors.New("the binding on stdin does not have the shape of a binding")
 	}
 	return binding, nil
+}
+
+func mismatchedField(message protoreflect.MessageDescriptor, value any, path string) string {
+	if message.FullName().Parent() == "google.protobuf" {
+		return ""
+	}
+	object, ok := value.(map[string]any)
+	if !ok {
+		return cmp.Or(path, "the binding") + " is not an object"
+	}
+	for _, key := range slices.Sorted(maps.Keys(object)) {
+		field := message.Fields().ByJSONName(key)
+		if field == nil {
+			field = message.Fields().ByTextName(key)
+		}
+		at := strings.TrimPrefix(path+"."+key, ".")
+		switch {
+		case field == nil:
+			return fmt.Sprintf("%s is not a field of %s", at, message.Name())
+		case field.IsMap() || object[key] == nil:
+			continue
+		case field.IsList():
+			items, ok := object[key].([]any)
+			if !ok {
+				return at + " is not a list"
+			}
+			for i, item := range items {
+				if problem := mismatchedValue(field, item, fmt.Sprintf("%s[%d]", at, i)); problem != "" {
+					return problem
+				}
+			}
+		default:
+			if problem := mismatchedValue(field, object[key], at); problem != "" {
+				return problem
+			}
+		}
+	}
+	return ""
+}
+
+func mismatchedValue(field protoreflect.FieldDescriptor, value any, at string) string {
+	switch field.Kind() {
+	case protoreflect.MessageKind, protoreflect.GroupKind:
+		return mismatchedField(field.Message(), value, at)
+	case protoreflect.StringKind, protoreflect.BytesKind:
+		if _, ok := value.(string); !ok {
+			return at + " is not a string"
+		}
+	case protoreflect.BoolKind:
+		if _, ok := value.(bool); !ok {
+			return at + " is not true or false"
+		}
+	case protoreflect.EnumKind:
+		return ""
+	default:
+		switch number := value.(type) {
+		case float64:
+			return ""
+		case string:
+			if _, err := strconv.ParseFloat(number, 64); err == nil {
+				return ""
+			}
+		}
+		return at + " is not a number"
+	}
+	return ""
 }
 
 func runBindingsRm(ctx context.Context, deps cmddeps.Deps, cwd, name string, opts bindingsOptions, stdout io.Writer) error {

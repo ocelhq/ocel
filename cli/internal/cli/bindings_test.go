@@ -86,6 +86,34 @@ func jsonOutput(t *testing.T) {
 	logFormatFlag = string(runui.FormatJSON)
 }
 
+func TestABindingOnStdinThatCannotBeReadIsRefusedNamingWhereWithoutItsValue(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"malformed JSON", `{"name": "main", "postgres": {"password": hunter2}}`, "line 1"},
+		{"a value of the wrong type", `{"name": "main", "postgres": {"port": "hunter2"}}`, "postgres.port"},
+		{"a number where a string field wants one", `{"name": "main", "postgres": {"password": 20250101}}`, "postgres.password"},
+		{"a field the binding does not have", `{"name": "main", "postgres": {"hunter2": "x"}}`, "postgres"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := decodeBinding(strings.NewReader(tc.input))
+			if err == nil {
+				t.Fatal("decodeBinding = nil, want a refusal")
+			}
+			for _, value := range []string{"hunter2", "20250101"} {
+				if tc.name != "a field the binding does not have" && strings.Contains(err.Error(), value) {
+					t.Errorf("decodeBinding = %q, want it to quote no value", err)
+				}
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("decodeBinding = %q, want it to name %q", err, tc.want)
+			}
+		})
+	}
+}
+
 func TestRunBindingsSet(t *testing.T) {
 	t.Run("the record it publishes is what ls shows, and rm takes it away", func(t *testing.T) {
 		root := setUpBindingFixture(t)
