@@ -7,41 +7,35 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 const (
-	nodeManifest       = "package.json"
-	goModule           = "go.mod"
-	pythonProject      = "pyproject.toml"
-	pythonRequirements = "requirements.txt"
-	rustManifest       = "Cargo.toml"
-	nextDependency     = "next"
+	nodeManifest   = "package.json"
+	nextDependency = "next"
 )
 
 var nextConfigNames = []string{"next.config.js", "next.config.mjs", "next.config.ts"}
 
+var languageFrameworks = map[language.Language]string{
+	language.JS:     appbuild.FrameworkNode,
+	language.Go:     appbuild.FrameworkGo,
+	language.Python: appbuild.FrameworkPython,
+	language.Rust:   appbuild.FrameworkRust,
+}
+
 func detectFramework(dir string) (string, error) {
-	node := regularFile(filepath.Join(dir, nodeManifest))
-	named := make([]string, 0, 4)
-	if node {
-		named = append(named, appbuild.FrameworkNode)
-	}
-	if regularFile(filepath.Join(dir, goModule)) {
-		named = append(named, appbuild.FrameworkGo)
-	}
-	python := regularFile(filepath.Join(dir, pythonProject)) || regularFile(filepath.Join(dir, pythonRequirements))
-	if python {
-		named = append(named, appbuild.FrameworkPython)
-	}
-	if !node && !python && regularFile(filepath.Join(dir, rustManifest)) {
-		named = append(named, appbuild.FrameworkRust)
+	found := language.Manifested(dir)
+	named := make([]string, 0, len(found))
+	for _, written := range found {
+		named = append(named, languageFrameworks[written])
 	}
 	switch len(named) {
 	case 1:
-		if !node {
+		if found[0] != language.JS {
 			return named[0], nil
 		}
 		next, err := nextApp(dir)
@@ -54,8 +48,8 @@ func detectFramework(dir string) (string, error) {
 		return appbuild.FrameworkNode, nil
 	case 0:
 		return "", fmt.Errorf(
-			"nothing in %s says what this app is built with: it contains no %s, %s, %s, %s or %s, so set \"framework\" to one of %s",
-			dir, nodeManifest, goModule, pythonProject, pythonRequirements, rustManifest, quoted(appbuild.Frameworks()),
+			"nothing in %s says what this app is built with: it contains no %s, so set \"framework\" to one of %s",
+			dir, strings.Join(language.ManifestNames(), ", "), quoted(appbuild.Frameworks()),
 		)
 	default:
 		return "", fmt.Errorf(

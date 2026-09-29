@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/discovery"
+	"github.com/ocelhq/ocel/cli/internal/language"
 )
 
 //go:embed reach.py
@@ -64,7 +65,7 @@ func (pythonReach) Entries(ctx context.Context, root string, app App) (map[strin
 func pythonSearchDirs(roots []discovery.Root) []string {
 	var dirs []string
 	for _, r := range roots {
-		if r.Language == discovery.Python {
+		if r.Language == language.Python {
 			dirs = append(dirs, filepath.Dir(r.Dir))
 		}
 	}

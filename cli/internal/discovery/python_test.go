@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
@@ -22,9 +23,9 @@ func pythonFixture(t *testing.T) string {
 
 func TestThePythonLauncherDerivesTheImportedPackageFromTheRoot(t *testing.T) {
 	configDir := pythonFixture(t)
-	root := Root{Dir: filepath.Join(configDir, "declarations"), Language: Python}
+	root := Root{Dir: filepath.Join(configDir, "declarations"), Language: language.Python}
 
-	cmd, err := launchers[Python].Command(context.Background(), configDir, root, testServer)
+	cmd, err := launchers[language.Python].Command(context.Background(), configDir, root, testServer)
 	if err != nil {
 		t.Fatalf("Command: %v", err)
 	}
@@ -56,7 +57,7 @@ func TestThePythonLauncherRunsFromTheNearestProjectFileAboveTheRoot(t *testing.T
 	write(t, filepath.Join(configDir, "server", "requirements.txt"), "")
 	write(t, filepath.Join(configDir, "server", "declarations", "__init__.py"), "")
 
-	cmd, err := launchers[Python].Command(context.Background(), configDir, Root{Dir: filepath.Join(configDir, "server", "declarations"), Language: Python}, testServer)
+	cmd, err := launchers[language.Python].Command(context.Background(), configDir, Root{Dir: filepath.Join(configDir, "server", "declarations"), Language: language.Python}, testServer)
 	if err != nil {
 		t.Fatalf("Command: %v", err)
 	}
@@ -71,7 +72,7 @@ func TestThePythonLauncherRefusesARootTooDeepToNameAPackage(t *testing.T) {
 	root := filepath.Join(configDir, "server", "declarations")
 	write(t, filepath.Join(root, "__init__.py"), "")
 
-	_, err := launchers[Python].Command(context.Background(), configDir, Root{Dir: root, Language: Python}, testServer)
+	_, err := launchers[language.Python].Command(context.Background(), configDir, Root{Dir: root, Language: language.Python}, testServer)
 	if err == nil {
 		t.Fatal("Command succeeded on a root nested under the project file, want error")
 	}
@@ -94,7 +95,7 @@ func TestRunDeclaresWhatThePythonFixtureDeclares(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Roots: %v", err)
 	}
-	if len(roots) != 1 || roots[0].Language != Python || roots[0].Dir != filepath.Join(configDir, constants.DefaultDiscoveryDirName) {
+	if len(roots) != 1 || roots[0].Language != language.Python || roots[0].Dir != filepath.Join(configDir, constants.DefaultDiscoveryDirName) {
 		t.Fatalf("roots = %+v, want the python infra folder of the project", roots)
 	}
 

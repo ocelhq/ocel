@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
@@ -23,9 +24,9 @@ func goFixture(t *testing.T, module string) string {
 
 func TestTheGoLauncherDerivesTheImportedPackageFromTheRoot(t *testing.T) {
 	configDir := goFixture(t, "example.com/web")
-	root := Root{Dir: filepath.Join(configDir, "declarations"), Language: Go}
+	root := Root{Dir: filepath.Join(configDir, "declarations"), Language: language.Go}
 
-	cmd, err := launchers[Go].Command(context.Background(), configDir, root, testServer)
+	cmd, err := launchers[language.Go].Command(context.Background(), configDir, root, testServer)
 	if err != nil {
 		t.Fatalf("Command: %v", err)
 	}
@@ -56,7 +57,7 @@ func TestTheGoLauncherRefusesARootWithNoModuleAboveIt(t *testing.T) {
 	configDir := t.TempDir()
 	write(t, filepath.Join(configDir, "declarations", "declarations.go"), "package declarations\n")
 
-	_, err := launchers[Go].Command(context.Background(), configDir, Root{Dir: filepath.Join(configDir, "declarations"), Language: Go}, testServer)
+	_, err := launchers[language.Go].Command(context.Background(), configDir, Root{Dir: filepath.Join(configDir, "declarations"), Language: language.Go}, testServer)
 	if err == nil {
 		t.Fatal("Command succeeded with no go.mod above the root, want error")
 	}
@@ -91,7 +92,7 @@ func TestRunDeclaresWhatTheGoFixtureDeclares(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Roots: %v", err)
 	}
-	if len(roots) != 1 || roots[0].Language != Go || roots[0].Dir != filepath.Join(configDir, constants.DefaultDiscoveryDirName) {
+	if len(roots) != 1 || roots[0].Language != language.Go || roots[0].Dir != filepath.Join(configDir, constants.DefaultDiscoveryDirName) {
 		t.Fatalf("roots = %+v, want the go infra folder of the project", roots)
 	}
 

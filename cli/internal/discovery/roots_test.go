@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
 )
 
@@ -35,8 +35,8 @@ func TestRoots(t *testing.T) {
 		if got := rootDirs(t, roots, root); len(got) != 1 || got[0] != constants.DefaultDiscoveryDirName {
 			t.Fatalf("roots = %v, want [%s]", got, constants.DefaultDiscoveryDirName)
 		}
-		if roots[0].Language != JS {
-			t.Errorf("Language = %q, want %q", roots[0].Language, JS)
+		if roots[0].Language != language.JS {
+			t.Errorf("Language = %q, want %q", roots[0].Language, language.JS)
 		}
 	})
 
@@ -98,11 +98,11 @@ func TestRoots(t *testing.T) {
 	t.Run("the source files in a folder name its language", func(t *testing.T) {
 		for _, tc := range []struct {
 			file string
-			want Language
+			want language.Language
 		}{
-			{"main.ts", JS},
-			{"infra.go", Go},
-			{"infra.py", Python},
+			{"main.ts", language.JS},
+			{"infra.go", language.Go},
+			{"infra.py", language.Python},
 		} {
 			t.Run(tc.file, func(t *testing.T) {
 				root := t.TempDir()
@@ -144,7 +144,7 @@ func TestRoots(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Roots: %v", err)
 		}
-		if len(roots) != 1 || roots[0].Language != Go {
+		if len(roots) != 1 || roots[0].Language != language.Go {
 			t.Fatalf("roots = %v, want one go root", roots)
 		}
 	})
@@ -158,7 +158,7 @@ func TestRoots(t *testing.T) {
 		if err == nil {
 			t.Fatal("Roots succeeded on a folder of two languages, want an error")
 		}
-		for _, want := range []string{"mixes", string(Go), string(JS)} {
+		for _, want := range []string{"mixes", string(language.Go), string(language.JS)} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("err = %v, want it to contain %q", err, want)
 			}
@@ -176,35 +176,6 @@ func TestRoots(t *testing.T) {
 		}
 		if len(roots) != 0 {
 			t.Fatalf("roots = %v, want none", rootDirs(t, roots, root))
-		}
-	})
-}
-
-func TestHasJS(t *testing.T) {
-	t.Run("a declaration root written in JS contains JS", func(t *testing.T) {
-		root := t.TempDir()
-		write(t, filepath.Join(root, constants.DefaultDiscoveryDirName, "main.ts"), "export {};")
-
-		hasJS, err := HasJS(&projectconfig.Config{Dir: root})
-		if err != nil {
-			t.Fatalf("HasJS: %v", err)
-		}
-		if !hasJS {
-			t.Error("HasJS = false, want the ts declaration root read as JS")
-		}
-	})
-
-	t.Run("a discovery path that is not there is an error, not a JS project", func(t *testing.T) {
-		root := t.TempDir()
-		cfg := &projectconfig.Config{Dir: root}
-		cfg.Discovery.Paths = []string{"nowhere"}
-
-		hasJS, err := HasJS(cfg)
-		if err == nil {
-			t.Fatalf("HasJS = %v, nil error, want the unreadable roots reported", hasJS)
-		}
-		if hasJS {
-			t.Error("HasJS = true for roots it could not read")
 		}
 	})
 }
@@ -237,8 +208,8 @@ func TestRootsOfAddsTheCratesAProjectDeclaresFrom(t *testing.T) {
 			t.Fatalf("roots = %v, want %v", got, want)
 		}
 		for _, r := range roots {
-			if r.Language != Rust {
-				t.Errorf("Language = %q, want %q", r.Language, Rust)
+			if r.Language != language.Rust {
+				t.Errorf("Language = %q, want %q", r.Language, language.Rust)
 			}
 		}
 	})
@@ -337,101 +308,4 @@ func TestRootsOfAddsTheCratesAProjectDeclaresFrom(t *testing.T) {
 			t.Fatalf("roots = %v, want [%s]", got, constants.DefaultDiscoveryDirName)
 		}
 	})
-}
-
-func TestLanguageOfTakesTheRuntimeAnAppNamesOverTheManifestBesideIt(t *testing.T) {
-	for _, tc := range []struct {
-		framework string
-		want      Language
-	}{
-		{appbuild.FrameworkNode, JS},
-		{appbuild.FrameworkNext, JS},
-		{appbuild.FrameworkGo, Go},
-		{appbuild.FrameworkPython, Python},
-		{appbuild.FrameworkRust, Rust},
-	} {
-		t.Run(tc.framework, func(t *testing.T) {
-			dir := t.TempDir()
-			write(t, filepath.Join(dir, "package.json"), "{}")
-
-			if got := LanguageOf(tc.framework, dir); got != tc.want {
-				t.Errorf("LanguageOf(%q) = %q, want %q — every runtime an app may declare says which language attribution reads it in, and a package.json beside it contains only what its tooling reads", tc.framework, got, tc.want)
-			}
-		})
-	}
-
-	t.Run("no framework named", func(t *testing.T) {
-		dir := t.TempDir()
-		write(t, filepath.Join(dir, "Cargo.toml"), "")
-
-		if got := LanguageOf("", dir); got != Rust {
-			t.Errorf("LanguageOf(\"\") = %q, want %q — a container app names no framework and is read in the language of the manifest beside it", got, Rust)
-		}
-	})
-}
-
-func TestLanguageOfApp(t *testing.T) {
-	for _, tc := range []struct {
-		manifest string
-		want     Language
-	}{
-		{"Cargo.toml", Rust},
-		{"go.mod", Go},
-		{"pyproject.toml", Python},
-		{"requirements.txt", Python},
-		{"package.json", JS},
-		{"", JS},
-	} {
-		name := tc.manifest
-		if name == "" {
-			name = "no manifest at all"
-		}
-		t.Run(name, func(t *testing.T) {
-			dir := t.TempDir()
-			if tc.manifest != "" {
-				write(t, filepath.Join(dir, tc.manifest), "")
-			}
-
-			if got := LanguageOfApp(dir); got != tc.want {
-				t.Errorf("LanguageOfApp = %q, want %q", got, tc.want)
-			}
-		})
-	}
-
-	t.Run("a manifest above the app dir does not name the app's language", func(t *testing.T) {
-		root := t.TempDir()
-		write(t, filepath.Join(root, "go.mod"), "module example.com/web")
-		write(t, filepath.Join(root, "apps", "web", "keep"), "")
-
-		if got := LanguageOfApp(filepath.Join(root, "apps", "web")); got != JS {
-			t.Errorf("LanguageOfApp = %q, want %q", got, JS)
-		}
-	})
-}
-
-func TestClientBundle(t *testing.T) {
-	for _, tc := range []struct {
-		name      string
-		framework string
-		manifest  string
-		want      bool
-	}{
-		{name: "a next app", framework: appbuild.FrameworkNext, want: true},
-		{name: "a node app", framework: appbuild.FrameworkNode, want: true},
-		{name: "a go app", framework: appbuild.FrameworkGo, manifest: "go.mod"},
-		{name: "a container app with a package.json", manifest: "package.json", want: true},
-		{name: "a container app with a go.mod", manifest: "go.mod"},
-		{name: "a container app naming no language at all", manifest: ""},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			dir := t.TempDir()
-			if tc.manifest != "" {
-				write(t, filepath.Join(dir, tc.manifest), "")
-			}
-
-			if got := ClientBundle(tc.framework, dir); got != tc.want {
-				t.Errorf("ClientBundle = %v, want %v: %s is written for an app whose bundle reads it", got, tc.want, appbuild.ClientURLEnvName)
-			}
-		})
-	}
 }

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/discovery"
+	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 )
@@ -24,8 +24,8 @@ func TestADetectedAppIsReadInTheLanguageOfTheProjectItSitsIn(t *testing.T) {
 	if len(apps) != 1 {
 		t.Fatalf("toAttributionApps returned %d apps, want 1", len(apps))
 	}
-	if apps[0].Language != discovery.Go {
-		t.Errorf("Language = %q, want %q", apps[0].Language, discovery.Go)
+	if apps[0].Language != language.Go {
+		t.Errorf("Language = %q, want %q", apps[0].Language, language.Go)
 	}
 }
 
@@ -46,8 +46,8 @@ func TestANamedRuntimeTellsOcelWhichLanguageAnAppIs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("toAttributionApps: %v", err)
 	}
-	if apps[0].Language != discovery.Python {
-		t.Errorf("Language = %q, want %q", apps[0].Language, discovery.Python)
+	if apps[0].Language != language.Python {
+		t.Errorf("Language = %q, want %q", apps[0].Language, language.Python)
 	}
 }
 
@@ -65,7 +65,32 @@ func TestTheFixturePythonAppIsReadAsPython(t *testing.T) {
 	if err != nil {
 		t.Fatalf("toAttributionApps: %v", err)
 	}
-	if apps[0].Language != discovery.Python {
-		t.Errorf("Language = %q, want %q", apps[0].Language, discovery.Python)
+	if apps[0].Language != language.Python {
+		t.Errorf("Language = %q, want %q", apps[0].Language, language.Python)
+	}
+}
+
+func TestAContainerAppWithACrateBesideItsPackageJSONIsReadAsJS(t *testing.T) {
+	root := t.TempDir()
+	app := filepath.Join(root, "web")
+	if err := os.MkdirAll(app, 0o755); err != nil {
+		t.Fatalf("make the app directory: %v", err)
+	}
+	for name, body := range map[string]string{"package.json": `{"name":"web"}`, "Cargo.toml": "[package]\nname = \"web-addon\"\n"} {
+		if err := os.WriteFile(filepath.Join(app, name), []byte(body), 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+
+	cfg := &projectconfig.Config{
+		Dir:  root,
+		Apps: []projectconfig.App{{Name: "web", Path: "web", Compute: "container"}},
+	}
+	apps, err := toAttributionApps(cfg, nil, "container", "ocel.config.ts")
+	if err != nil {
+		t.Fatalf("toAttributionApps: %v", err)
+	}
+	if apps[0].Language != language.JS {
+		t.Errorf("Language = %q, want %q: the crate beside a package.json is the node app's native addon", apps[0].Language, language.JS)
 	}
 }

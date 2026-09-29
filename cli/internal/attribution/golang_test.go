@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/discovery"
+	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
@@ -34,7 +34,7 @@ func goApp(t *testing.T) string {
 
 func TestGoReachGrantsAResourceTheAppsMainImports(t *testing.T) {
 	root := goApp(t)
-	apps := []App{{Name: "web", Path: "server", Language: discovery.Go}}
+	apps := []App{{Name: "web", Path: "server", Language: language.Go}}
 	declarations := []Declaration{{
 		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
@@ -55,7 +55,7 @@ func TestGoReachGrantsAResourceTheAppsMainImports(t *testing.T) {
 
 func TestGoReachGrantsNothingFromAPackageNoMainImports(t *testing.T) {
 	root := goApp(t)
-	apps := []App{{Name: "web", Path: "server", Language: discovery.Go}}
+	apps := []App{{Name: "web", Path: "server", Language: language.Go}}
 	declarations := []Declaration{{
 		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
@@ -82,7 +82,7 @@ func TestGoReachReportsWhatGoListSaid(t *testing.T) {
 		Source: filepath.Join(root, "server", "main.go") + ":1",
 	}}
 
-	_, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: discovery.Go}}, declarations)
+	_, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: language.Go}}, declarations)
 	if err == nil {
 		t.Fatal("Compute succeeded on a module that does not build, want error")
 	}
@@ -97,7 +97,7 @@ func TestGoReachGrantsTheFixtureResourceToItsApp(t *testing.T) {
 		t.Fatalf("locate the fixture: %v", err)
 	}
 
-	usages, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: discovery.Go}}, []Declaration{{
+	usages, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: language.Go}}, []Declaration{{
 		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, constants.DefaultDiscoveryDirName, "infra.go") + ":5",
@@ -121,7 +121,7 @@ func TestGoReachStopsAtTheModuleTheAppLivesIn(t *testing.T) {
 	write(t, filepath.Join(root, "shared", "go.mod"), "module example.com/shared\n\ngo 1.27.0\n")
 	write(t, filepath.Join(root, "shared", constants.DefaultDiscoveryDirName, "declarations.go"), "package "+constants.DefaultDiscoveryDirName+"\n")
 
-	usages, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: discovery.Go}}, []Declaration{{
+	usages, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: language.Go}}, []Declaration{{
 		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, "shared", constants.DefaultDiscoveryDirName, "declarations.go") + ":1",

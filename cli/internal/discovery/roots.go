@@ -8,47 +8,27 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
-)
-
-type Language string
-
-const (
-	JS     Language = "js"
-	Go     Language = "go"
-	Python Language = "python"
-	Rust   Language = "rust"
 )
 
 type Root struct {
 	Dir      string
-	Language Language
+	Language language.Language
 }
 
-var manifestLanguages = []struct {
-	file     string
-	language Language
-}{
-	{"Cargo.toml", Rust},
-	{"go.mod", Go},
-	{"pyproject.toml", Python},
-	{"requirements.txt", Python},
-	{"package.json", JS},
-}
-
-var languageExtensions = map[string]Language{
-	".go":  Go,
-	".py":  Python,
-	".rs":  Rust,
-	".ts":  JS,
-	".tsx": JS,
-	".cts": JS,
-	".js":  JS,
-	".jsx": JS,
-	".mjs": JS,
-	".cjs": JS,
+var languageExtensions = map[string]language.Language{
+	".go":  language.Go,
+	".py":  language.Python,
+	".rs":  language.Rust,
+	".ts":  language.JS,
+	".tsx": language.JS,
+	".cts": language.JS,
+	".js":  language.JS,
+	".jsx": language.JS,
+	".mjs": language.JS,
+	".cjs": language.JS,
 }
 
 func RootsOf(cfg *projectconfig.Config) ([]Root, error) {
@@ -73,7 +53,7 @@ func crateRoots(cfg *projectconfig.Config) []Root {
 		if slices.ContainsFunc(roots, func(r Root) bool { return r.Dir == dir }) {
 			continue
 		}
-		roots = append(roots, Root{Dir: dir, Language: Rust})
+		roots = append(roots, Root{Dir: dir, Language: language.Rust})
 	}
 	return roots
 }
@@ -86,17 +66,17 @@ func Roots(configDir string, paths []string) ([]Root, error) {
 
 	roots := make([]Root, 0, len(dirs))
 	for _, dir := range dirs {
-		language, err := languageOf(dir)
+		found, err := languageOf(dir)
 		if err != nil {
 			return nil, err
 		}
-		if language == "" {
+		if found == "" {
 			continue
 		}
-		if language == Rust {
+		if found == language.Rust {
 			return nil, fmt.Errorf("discovery: %s contains rust files, and a rust app declares from its own crate: delete the folder and derive ocel::Resources or ocel::Env on a struct in the crate", dir)
 		}
-		roots = append(roots, Root{Dir: dir, Language: language})
+		roots = append(roots, Root{Dir: dir, Language: found})
 	}
 	return roots, nil
 }
@@ -137,58 +117,8 @@ func defaultRootDirs(configDir string) []string {
 	return []string{dir}
 }
 
-func HasJS(cfg *projectconfig.Config) (bool, error) {
-	if _, err := os.Stat(filepath.Join(cfg.Dir, "package.json")); err == nil {
-		return true, nil
-	}
-	roots, err := RootsOf(cfg)
-	if err != nil {
-		return false, err
-	}
-	return slices.ContainsFunc(roots, func(root Root) bool { return root.Language == JS }), nil
-}
-
-var frameworkLanguages = map[string]Language{
-	appbuild.FrameworkNode:   JS,
-	appbuild.FrameworkNext:   JS,
-	appbuild.FrameworkGo:     Go,
-	appbuild.FrameworkPython: Python,
-	appbuild.FrameworkRust:   Rust,
-}
-
-func LanguageOf(framework, dir string) Language {
-	if language, ok := frameworkLanguages[framework]; ok {
-		return language
-	}
-	return LanguageOfApp(dir)
-}
-
-func ClientBundle(framework, dir string) bool {
-	if framework != "" {
-		return appbuild.FrameworkBundlesClient(framework)
-	}
-	language, manifested := languageOfManifest(dir)
-	return manifested && language == JS
-}
-
-func LanguageOfApp(dir string) Language {
-	if language, manifested := languageOfManifest(dir); manifested {
-		return language
-	}
-	return JS
-}
-
-func languageOfManifest(dir string) (Language, bool) {
-	for _, m := range manifestLanguages {
-		if _, err := os.Stat(filepath.Join(dir, m.file)); err == nil {
-			return m.language, true
-		}
-	}
-	return "", false
-}
-
-func languageOf(dir string) (Language, error) {
-	var found []Language
+func languageOf(dir string) (language.Language, error) {
+	var found []language.Language
 	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -199,11 +129,11 @@ func languageOf(dir string) (Language, error) {
 			}
 			return nil
 		}
-		language, ok := languageExtensions[filepath.Ext(path)]
-		if !ok || slices.Contains(found, language) {
+		written, ok := languageExtensions[filepath.Ext(path)]
+		if !ok || slices.Contains(found, written) {
 			return nil
 		}
-		found = append(found, language)
+		found = append(found, written)
 		if len(found) > 1 {
 			return fmt.Errorf("discovery: %s mixes %s and %s files, and a discovery folder contains one language", dir, found[0], found[1])
 		}

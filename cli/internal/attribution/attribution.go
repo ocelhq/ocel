@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/discovery"
+	"github.com/ocelhq/ocel/cli/internal/language"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
@@ -26,7 +27,7 @@ type Declaration struct {
 type App struct {
 	Name      string
 	Path      string
-	Language  discovery.Language
+	Language  language.Language
 	Roots     []discovery.Root
 	Container bool
 	Members   []string
@@ -38,7 +39,7 @@ type Reach interface {
 	Entries(ctx context.Context, root string, app App) (map[string]Reachability, error)
 }
 
-var reaches = map[discovery.Language]Reach{discovery.JS: jsReach{}, discovery.Go: goReach{}, discovery.Python: pythonReach{}, discovery.Rust: rustReach{}}
+var reaches = map[language.Language]Reach{language.JS: jsReach{}, language.Go: goReach{}, language.Python: pythonReach{}, language.Rust: rustReach{}}
 
 type Usage struct {
 	App   string

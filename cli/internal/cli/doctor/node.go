@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ocelhq/ocel/cli/internal/discovery"
+	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 )
 
@@ -15,7 +15,7 @@ func nodeReasons(cfg *projectconfig.Config) []string {
 	if strings.HasSuffix(cfg.Path, ".ts") {
 		reasons = append(reasons, filepath.Base(cfg.Path)+" is TypeScript")
 	}
-	if hasJS, err := discovery.HasJS(cfg); err != nil || hasJS {
+	if hasJS, err := build.HasJS(cfg); err != nil || hasJS {
 		reasons = append(reasons, "this project contains JavaScript")
 	}
 	if len(cfg.Transforms) > 0 {

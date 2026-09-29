@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/nodeprotocol"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/pkg/channel"
@@ -33,7 +34,7 @@ type Launcher interface {
 	Command(ctx context.Context, configDir string, root Root, server Server) (*exec.Cmd, error)
 }
 
-var launchers = map[Language]Launcher{Go: goLauncher{}, Python: pythonLauncher{}, Rust: rustLauncher{}}
+var launchers = map[language.Language]Launcher{language.Go: goLauncher{}, language.Python: pythonLauncher{}, language.Rust: rustLauncher{}}
 
 type Prepared struct {
 	Roots []Root
@@ -72,7 +73,7 @@ func commandsFor(ctx context.Context, configDir string, roots []Root, entry stri
 	}
 
 	for _, root := range roots {
-		if root.Language == JS {
+		if root.Language == language.JS {
 			continue
 		}
 		launcher, ok := launchers[root.Language]
@@ -89,9 +90,9 @@ func commandsFor(ctx context.Context, configDir string, roots []Root, entry stri
 }
 
 func discoverable() string {
-	languages := []string{string(JS)}
-	for language := range launchers {
-		languages = append(languages, string(language))
+	languages := []string{string(language.JS)}
+	for written := range launchers {
+		languages = append(languages, string(written))
 	}
 	slices.Sort(languages)
 	return listed(languages)
@@ -108,7 +109,7 @@ func BundleRoots(configDir string, roots []Root) (string, error) {
 	var files []string
 	var js bool
 	for _, root := range roots {
-		if root.Language != JS {
+		if root.Language != language.JS {
 			continue
 		}
 		js = true

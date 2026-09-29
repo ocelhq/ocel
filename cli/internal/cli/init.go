@@ -15,6 +15,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/events"
+	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/configdoc"
@@ -73,58 +74,60 @@ func init() {
 	initCmd.MarkFlagsMutuallyExclusive("ts", "yaml")
 }
 
-type language struct {
+type sdkLanguage struct {
 	name     string
-	manifest string
+	language language.Language
 	add      []string
 }
 
-var languages = []language{
-	{name: "go", manifest: "go.mod", add: []string{"go", "get", goSDKModule}},
-	{name: "rust", manifest: "Cargo.toml", add: []string{"cargo", "add", rustSDKCrate}},
-	{name: "python", manifest: "pyproject.toml", add: []string{"uv", "add", sdkPackage}},
-	{name: "node", manifest: "package.json"},
+var sdkLanguages = []sdkLanguage{
+	{name: "go", language: language.Go, add: []string{"go", "get", goSDKModule}},
+	{name: "rust", language: language.Rust, add: []string{"cargo", "add", rustSDKCrate}},
+	{name: "python", language: language.Python, add: []string{"uv", "add", sdkPackage}},
+	{name: "node", language: language.JS},
 }
 
 func languageNames() []string {
-	names := make([]string, 0, len(languages))
-	for _, l := range languages {
+	names := make([]string, 0, len(sdkLanguages))
+	for _, l := range sdkLanguages {
 		names = append(names, l.name)
 	}
 	return names
 }
 
-func languageNamed(name string) (language, error) {
-	for _, l := range languages {
+func languageNamed(name string) (sdkLanguage, error) {
+	for _, l := range sdkLanguages {
 		if l.name == name {
 			return l, nil
 		}
 	}
-	return language{}, fmt.Errorf("%q is no language ocel ships an SDK for — name one of %s", name, strings.Join(languageNames(), ", "))
+	return sdkLanguage{}, fmt.Errorf("%q is no language ocel ships an SDK for — name one of %s", name, strings.Join(languageNames(), ", "))
 }
 
-func detectLanguage(dir string) (language, bool, error) {
-	var found []language
-	for _, l := range languages {
-		if _, err := os.Stat(filepath.Join(dir, l.manifest)); err == nil {
-			found = append(found, l)
+func sdkLanguageOf(written language.Language) sdkLanguage {
+	for _, l := range sdkLanguages {
+		if l.language == written {
+			return l
 		}
 	}
+	return sdkLanguage{}
+}
+
+func detectLanguage(dir string) (sdkLanguage, bool, error) {
+	found := language.Manifested(dir)
 	switch len(found) {
 	case 0:
-		return language{}, false, nil
+		return sdkLanguage{}, false, nil
 	case 1:
-		return found[0], true, nil
+		return sdkLanguageOf(found[0]), true, nil
 	default:
 		names := make([]string, 0, len(found))
-		manifests := make([]string, 0, len(found))
 		for _, l := range found {
-			names = append(names, l.name)
-			manifests = append(manifests, l.manifest)
+			names = append(names, sdkLanguageOf(l).name)
 		}
-		return language{}, false, fmt.Errorf(
-			"this directory contains %s, so it could be a %s project: name the one this is with `--lang %s`",
-			strings.Join(manifests, " and "), strings.Join(names, " or "), names[0],
+		return sdkLanguage{}, false, fmt.Errorf(
+			"this directory contains the manifests of %s at once, so it could be a %s project: name the one this is with `--lang %s`",
+			strings.Join(names, " and "), strings.Join(names, " or "), names[0],
 		)
 	}
 }
@@ -177,7 +180,7 @@ func runInit(ctx context.Context, deps cmddeps.Deps, cwd, slug string, opts init
 	return err
 }
 
-func writeProject(ctx context.Context, deps cmddeps.Deps, build *events.Scope, configPath, slug, provider string, lang language, detected bool) error {
+func writeProject(ctx context.Context, deps cmddeps.Deps, build *events.Scope, configPath, slug, provider string, lang sdkLanguage, detected bool) error {
 	projectDir, name := filepath.Dir(configPath), filepath.Base(configPath)
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {
 		return fmt.Errorf("create directory for %s: %w", name, err)
@@ -190,21 +193,13 @@ func writeProject(ctx context.Context, deps cmddeps.Deps, build *events.Scope, c
 	if detected {
 		addSDK(ctx, deps, build, projectDir, lang)
 	} else {
-		build.Warn(fmt.Sprintf("No %s here — add the ocel SDK once this directory contains one.", strings.Join(manifestNames(), ", ")))
+		build.Warn(fmt.Sprintf("No %s here — add the ocel SDK once this directory contains one.", strings.Join(language.ManifestNames(), ", ")))
 	}
 	build.Say("Run `ocel deploy` to deploy to your own infrastructure, or `ocel dev` to develop against the Ocel console.")
 	return nil
 }
 
-func manifestNames() []string {
-	names := make([]string, 0, len(languages))
-	for _, l := range languages {
-		names = append(names, l.manifest)
-	}
-	return names
-}
-
-func languageOfProject(projectDir string, opts initOptions) (language, bool, error) {
+func languageOfProject(projectDir string, opts initOptions) (sdkLanguage, bool, error) {
 	if opts.language != "" {
 		lang, err := languageNamed(opts.language)
 		return lang, err == nil, err
@@ -342,7 +337,7 @@ func detectPackageManager(dir string) packageManager {
 	return npmPackageManager
 }
 
-func addCommand(dir string, lang language) []string {
+func addCommand(dir string, lang sdkLanguage) []string {
 	if len(lang.add) > 0 {
 		return slices.Clone(lang.add)
 	}
@@ -350,7 +345,7 @@ func addCommand(dir string, lang language) []string {
 	return []string{pm.name, pm.addCommand, sdkPackage}
 }
 
-func addSDK(ctx context.Context, deps cmddeps.Deps, build *events.Scope, dir string, lang language) {
+func addSDK(ctx context.Context, deps cmddeps.Deps, build *events.Scope, dir string, lang sdkLanguage) {
 	argv := addCommand(dir, lang)
 	command := strings.Join(argv, " ")
 

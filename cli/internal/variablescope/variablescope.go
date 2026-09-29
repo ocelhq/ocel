@@ -3,7 +3,7 @@ package variablescope
 import (
 	"path/filepath"
 
-	"github.com/ocelhq/ocel/cli/internal/discovery"
+	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/appbuild"
@@ -52,14 +52,14 @@ func BindingVariables(cfg *projectconfig.Config, tier environmentv1.Tier) []vari
 
 func Apps(cfg *projectconfig.Config) []variables.App {
 	if len(cfg.Apps) == 0 {
-		return []variables.App{{Name: RootApp, ClientBundle: discovery.ClientBundle(appbuild.FrameworkNode, cfg.Dir)}}
+		return []variables.App{{Name: RootApp, ClientBundle: language.HasClientBundle(appbuild.FrameworkNode, cfg.Dir)}}
 	}
 	apps := make([]variables.App, 0, len(cfg.Apps))
 	for _, a := range cfg.Apps {
 		apps = append(apps, variables.App{
 			Name:         a.Name,
 			Folder:       a.Folder,
-			ClientBundle: discovery.ClientBundle(a.Framework.Name, filepath.Join(cfg.Dir, a.Path)),
+			ClientBundle: language.HasClientBundle(a.Framework.Name, filepath.Join(cfg.Dir, a.Path)),
 		})
 	}
 	return apps

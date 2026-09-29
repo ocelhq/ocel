@@ -22,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
+	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/variables"
@@ -337,7 +338,7 @@ type appSpec struct {
 
 func appSpecs(cfg *projectconfig.Config, variables map[string][]manifestbuilder.Variable) []appSpec {
 	if len(cfg.Apps) == 0 {
-		return []appSpec{{dir: cfg.Dir, clientBundle: discovery.ClientBundle(appbuild.FrameworkNode, cfg.Dir), variables: variables[variablescope.RootApp]}}
+		return []appSpec{{dir: cfg.Dir, clientBundle: language.HasClientBundle(appbuild.FrameworkNode, cfg.Dir), variables: variables[variablescope.RootApp]}}
 	}
 	specs := make([]appSpec, 0, len(cfg.Apps))
 	for _, a := range cfg.Apps {
@@ -345,7 +346,7 @@ func appSpecs(cfg *projectconfig.Config, variables map[string][]manifestbuilder.
 		specs = append(specs, appSpec{
 			name:         a.Name,
 			dir:          dir,
-			clientBundle: discovery.ClientBundle(a.Framework.Name, dir),
+			clientBundle: language.HasClientBundle(a.Framework.Name, dir),
 			variables:    variables[a.Name],
 		})
 	}
@@ -400,7 +401,7 @@ func toApps(projectDir string, apps []projectconfig.App, usages []attribution.Us
 		out = append(out, manifestbuilder.App{
 			Name:            a.Name,
 			Framework:       manifestbuilder.Framework{Name: a.Framework.Name, Arch: a.Framework.Arch},
-			ClientBundle:    discovery.ClientBundle(a.Framework.Name, filepath.Join(projectDir, a.Path)),
+			ClientBundle:    language.HasClientBundle(a.Framework.Name, filepath.Join(projectDir, a.Path)),
 			Compute:         a.Compute,
 			Domains:         a.Domains,
 			Folder:          a.Folder,
@@ -472,7 +473,7 @@ func toAttributionApps(cfg *projectconfig.Config, functions []manifestbuilder.Fu
 			out = append(out, attribution.App{
 				Name:      name,
 				Path:      ".",
-				Language:  discovery.LanguageOfApp(cfg.Dir),
+				Language:  language.OfApp("", cfg.Dir),
 				Roots:     roots,
 				Container: container,
 				Members:   workspaceMembers(container, cfg.Dir),
@@ -490,7 +491,7 @@ func toAttributionApps(cfg *projectconfig.Config, functions []manifestbuilder.Fu
 		out = append(out, attribution.App{
 			Name:      a.Name,
 			Path:      a.Path,
-			Language:  discovery.LanguageOf(a.Framework.Name, appDir),
+			Language:  language.OfApp(a.Framework.Name, appDir),
 			Roots:     roots,
 			Container: inAnImage,
 			Members:   workspaceMembers(inAnImage, appDir),

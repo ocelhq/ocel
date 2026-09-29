@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/discovery"
+	"github.com/ocelhq/ocel/cli/internal/language"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
@@ -34,7 +35,7 @@ func rustApp(t *testing.T) string {
 
 func rustUsages(t *testing.T, root, source string) []Usage {
 	t.Helper()
-	app := App{Name: "web", Path: "app", Language: discovery.Rust}
+	app := App{Name: "web", Path: "app", Language: language.Rust}
 	usages, err := Compute(t.Context(), root, []App{app}, []Declaration{{
 		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
@@ -94,7 +95,7 @@ func TestRustReachGrantsTheFixtureResourceToItsApp(t *testing.T) {
 	}
 	fetched(t, root)
 
-	app := App{Name: "web", Path: ".", Language: discovery.Rust}
+	app := App{Name: "web", Path: ".", Language: language.Rust}
 	usages, err := Compute(t.Context(), root, []App{app}, []Declaration{{
 		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
@@ -120,8 +121,8 @@ func TestRustReachGrantsASharedCrateResourceToEveryAppThatLinksIt(t *testing.T) 
 	fetched(t, root)
 
 	apps := []App{
-		{Name: "api", Path: "apps/api", Language: discovery.Rust},
-		{Name: "web", Path: "apps/web", Language: discovery.Rust},
+		{Name: "api", Path: "apps/api", Language: language.Rust},
+		{Name: "web", Path: "apps/web", Language: language.Rust},
 	}
 	usages, err := Compute(t.Context(), root, apps, []Declaration{{
 		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
@@ -154,7 +155,7 @@ func TestRustReachReadsCargoMetadataWithoutReachingTheRegistry(t *testing.T) {
 
 	root := t.TempDir()
 	write(t, filepath.Join(root, "Cargo.toml"), "[package]\nname = \"web\"\nversion = \"0.1.0\"\nedition = \"2021\"\n")
-	_, _ = rustReach{}.Entries(t.Context(), root, App{Name: "web", Path: ".", Language: discovery.Rust})
+	_, _ = rustReach{}.Entries(t.Context(), root, App{Name: "web", Path: ".", Language: language.Rust})
 
 	args, err := os.ReadFile(recorded)
 	if err != nil {
@@ -174,9 +175,9 @@ func TestRustReachGrantsNothingFromASiblingCrateUnderTheConfigDir(t *testing.T) 
 	write(t, filepath.Join(root, "apps", "web", "Cargo.toml"), "[package]\nname = \"web\"\nversion = \"0.1.0\"\nedition = \"2021\"\n")
 	write(t, filepath.Join(root, "apps", "web", "src", "main.rs"), "fn main() {}\n")
 
-	app := App{Name: "api", Path: "apps/api", Language: discovery.Rust, Roots: []discovery.Root{
-		{Dir: root, Language: discovery.Rust},
-		{Dir: filepath.Join(root, "apps", "api"), Language: discovery.Rust},
+	app := App{Name: "api", Path: "apps/api", Language: language.Rust, Roots: []discovery.Root{
+		{Dir: root, Language: language.Rust},
+		{Dir: filepath.Join(root, "apps", "api"), Language: language.Rust},
 	}}
 	usages, err := Compute(t.Context(), root, []App{app}, []Declaration{{
 		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
@@ -198,7 +199,7 @@ func TestRustReachRefusesAnAppThatBuildsSeveralBinaries(t *testing.T) {
 	write(t, filepath.Join(root, "src", "main.rs"), "fn main() {}\n")
 	write(t, filepath.Join(root, "src", "worker.rs"), "fn main() {}\n")
 
-	_, err := rustReach{}.Entries(t.Context(), root, App{Name: "web", Path: ".", Language: discovery.Rust})
+	_, err := rustReach{}.Entries(t.Context(), root, App{Name: "web", Path: ".", Language: language.Rust})
 	if err == nil {
 		t.Fatal("Entries succeeded on an app with two binaries, want an error")
 	}

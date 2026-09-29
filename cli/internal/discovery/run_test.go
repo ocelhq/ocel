@@ -11,6 +11,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/constants"
@@ -187,7 +188,7 @@ export {};
 
 func TestRunRefusesARootThisBuildCannotDiscover(t *testing.T) {
 	root := t.TempDir()
-	unknown := Root{Dir: filepath.Join(root, "unknown"), Language: Language("ruby")}
+	unknown := Root{Dir: filepath.Join(root, "unknown"), Language: language.Language("ruby")}
 
 	var stdout, stderr bytes.Buffer
 	err := Run(context.Background(), root, Prepared{Roots: []Root{unknown}}, okServer(t), &stdout, &stderr)

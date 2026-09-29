@@ -15,7 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
-	"github.com/ocelhq/ocel/cli/internal/discovery"
+	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
@@ -51,7 +51,7 @@ func runBuild(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr
 		return err
 	}
 
-	hasJS, err := discovery.HasJS(cfg)
+	hasJS, err := build.HasJS(cfg)
 	if err != nil {
 		return err
 	}
@@ -105,13 +105,13 @@ func reportBuilt(stdout io.Writer, built build.Output) {
 
 func builtInClients(cfg *projectconfig.Config, urls map[string]string) []clientenv.App {
 	if len(cfg.Apps) == 0 {
-		bundle := discovery.ClientBundle(appbuild.FrameworkNode, cfg.Dir)
+		bundle := language.HasClientBundle(appbuild.FrameworkNode, cfg.Dir)
 		return []clientenv.App{{Dir: cfg.Dir, ClientBundle: bundle, Variables: appurl.Variables(bundle, urls[variablescope.RootApp])}}
 	}
 	apps := make([]clientenv.App, 0, len(cfg.Apps))
 	for _, a := range cfg.Apps {
 		dir := filepath.Join(cfg.Dir, a.Path)
-		bundle := discovery.ClientBundle(a.Framework.Name, dir)
+		bundle := language.HasClientBundle(a.Framework.Name, dir)
 		apps = append(apps, clientenv.App{
 			Name:         a.Name,
 			Dir:          dir,

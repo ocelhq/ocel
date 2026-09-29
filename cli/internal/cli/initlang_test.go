@@ -229,6 +229,22 @@ func TestInitRefusesADirectoryOfSeveralLanguages(t *testing.T) {
 	}
 }
 
+func TestInitReadsACrateBesideAPackageJSONAsANodeProject(t *testing.T) {
+	dir := manifestDir(t, "package.json")
+	if err := os.WriteFile(filepath.Join(dir, "Cargo.toml"), []byte("\n"), 0o644); err != nil {
+		t.Fatalf("write Cargo.toml: %v", err)
+	}
+	deps := initDeps()
+	argv := stubPackageManager(&deps, nil)
+
+	if err := runInit(context.Background(), deps, dir, "acme", initOptions{provider: "aws"}); err != nil {
+		t.Fatalf("runInit: %v", err)
+	}
+	if want := "npm install ocel"; strings.Join(*argv, " ") != want {
+		t.Fatalf("added the sdk with %v, want %q: the crate is the node app's native addon", *argv, want)
+	}
+}
+
 func TestInitTakesTheLanguageItIsGiven(t *testing.T) {
 	dir := manifestDir(t, "go.mod")
 	if err := os.WriteFile(filepath.Join(dir, "Cargo.toml"), []byte("\n"), 0o644); err != nil {

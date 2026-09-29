@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 
 	"github.com/ocelhq/ocel/cli/internal/build/image"
-	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/node"
@@ -135,7 +134,7 @@ func (t tools) functions(ctx context.Context, cfg *projectconfig.Config, envByAp
 		if len(cfg.Apps) > 0 {
 			return nil
 		}
-		hasJS, err := discovery.HasJS(cfg)
+		hasJS, err := HasJS(cfg)
 		if err != nil {
 			return err
 		}

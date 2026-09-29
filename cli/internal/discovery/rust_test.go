@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -35,9 +36,9 @@ const rustBinManifest = "[package]\nname = \"web\"\nversion = \"0.1.0\"\nedition
 func TestTheRustLauncherRunsTheCratesBinaryFromTheWorkspaceRoot(t *testing.T) {
 	needsCargo(t)
 	configDir := rustFixture(t, rustBinManifest)
-	root := Root{Dir: configDir, Language: Rust}
+	root := Root{Dir: configDir, Language: language.Rust}
 
-	cmd, err := launchers[Rust].Command(context.Background(), configDir, root, testServer)
+	cmd, err := launchers[language.Rust].Command(context.Background(), configDir, root, testServer)
 	if err != nil {
 		t.Fatalf("Command: %v", err)
 	}
@@ -64,7 +65,7 @@ func TestTheRustLauncherRunsTheAppCrateAndNotTheProjectAroundIt(t *testing.T) {
 	write(t, filepath.Join(crate, "Cargo.toml"), rustBinManifest)
 	write(t, filepath.Join(crate, "src", "main.rs"), "fn main() {}\n")
 
-	cmd, err := launchers[Rust].Command(context.Background(), configDir, Root{Dir: crate, Language: Rust}, testServer)
+	cmd, err := launchers[language.Rust].Command(context.Background(), configDir, Root{Dir: crate, Language: language.Rust}, testServer)
 	if err != nil {
 		t.Fatalf("Command: %v", err)
 	}
@@ -79,7 +80,7 @@ func TestTheRustLauncherRefusesADirThatIsNoCrate(t *testing.T) {
 	root := filepath.Join(configDir, "server")
 	write(t, filepath.Join(root, "src", "main.rs"), "fn main() {}\n")
 
-	_, err := launchers[Rust].Command(context.Background(), configDir, Root{Dir: root, Language: Rust}, testServer)
+	_, err := launchers[language.Rust].Command(context.Background(), configDir, Root{Dir: root, Language: language.Rust}, testServer)
 	if err == nil {
 		t.Fatal("Command succeeded on a dir with no Cargo.toml, want an error")
 	}
@@ -94,7 +95,7 @@ func TestTheRustLauncherRefusesACrateThatBuildsNoBinary(t *testing.T) {
 	write(t, filepath.Join(configDir, "Cargo.toml"), rustBinManifest)
 	write(t, filepath.Join(configDir, "src", "lib.rs"), "")
 
-	_, err := launchers[Rust].Command(context.Background(), configDir, Root{Dir: configDir, Language: Rust}, testServer)
+	_, err := launchers[language.Rust].Command(context.Background(), configDir, Root{Dir: configDir, Language: language.Rust}, testServer)
 	if err == nil {
 		t.Fatal("Command succeeded on a crate with no binary, want an error")
 	}
@@ -110,7 +111,7 @@ func TestTheRustLauncherRefusesACrateThatBuildsSeveralBinaries(t *testing.T) {
 	write(t, filepath.Join(configDir, "src", "main.rs"), "fn main() {}\n")
 	write(t, filepath.Join(configDir, "src", "worker.rs"), "fn main() {}\n")
 
-	_, err := launchers[Rust].Command(context.Background(), configDir, Root{Dir: configDir, Language: Rust}, testServer)
+	_, err := launchers[language.Rust].Command(context.Background(), configDir, Root{Dir: configDir, Language: language.Rust}, testServer)
 	if err == nil {
 		t.Fatal("Command succeeded on a crate with two binaries, want an error")
 	}
@@ -128,7 +129,7 @@ func TestRunDeclaresWhatTheRustFixtureDeclares(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RootsOf: %v", err)
 	}
-	if len(roots) != 1 || roots[0].Language != Rust || roots[0].Dir != configDir {
+	if len(roots) != 1 || roots[0].Language != language.Rust || roots[0].Dir != configDir {
 		t.Fatalf("roots = %+v, want the app crate of the project", roots)
 	}
 
@@ -195,8 +196,8 @@ func TestRunDeclaresWhatASharedRustCrateDeclares(t *testing.T) {
 		t.Fatalf("RootsOf: %v", err)
 	}
 	want := []Root{
-		{Dir: filepath.Join(configDir, "apps", "api"), Language: Rust},
-		{Dir: filepath.Join(configDir, "apps", "web"), Language: Rust},
+		{Dir: filepath.Join(configDir, "apps", "api"), Language: language.Rust},
+		{Dir: filepath.Join(configDir, "apps", "web"), Language: language.Rust},
 	}
 	if !slices.Equal(roots, want) {
 		t.Fatalf("roots = %+v, want the two app crates %+v", roots, want)
@@ -271,7 +272,7 @@ func TestTheRustLauncherRunsACrateReachedThroughASymlink(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cmd, err := launchers[Rust].Command(context.Background(), link, Root{Dir: link, Language: Rust}, testServer)
+	cmd, err := launchers[language.Rust].Command(context.Background(), link, Root{Dir: link, Language: language.Rust}, testServer)
 	if err != nil {
 		t.Fatalf("Command: %v", err)
 	}

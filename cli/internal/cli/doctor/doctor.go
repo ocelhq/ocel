@@ -51,7 +51,7 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 }
 
 func Run(ctx context.Context, deps cmddeps.Deps, cwd string, stdout io.Writer) error {
-	found := build(ctx, deps, cwd)
+	found := diagnose(ctx, deps, cwd)
 	found.render(stdout, newPaint(stdout))
 	if found.failures() > 0 {
 		return &exitcode.ExitError{Code: 1}
@@ -130,7 +130,7 @@ func (r report) count(want verdict) int {
 
 var tiers = []environmentv1.Tier{environmentv1.Tier_TIER_PRODUCTION, environmentv1.Tier_TIER_PREVIEW}
 
-func build(ctx context.Context, deps cmddeps.Deps, cwd string) report {
+func diagnose(ctx context.Context, deps cmddeps.Deps, cwd string) report {
 	var found report
 	project := section{name: "Project"}
 

@@ -7,6 +7,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/build/toolchain"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
+	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 )
@@ -43,7 +44,7 @@ func discoveryRootsFor(cfg *projectconfig.Config, framework string) ([]string, e
 	}
 	var dirs []string
 	for _, root := range roots {
-		if root.Language == discovery.Python {
+		if root.Language == language.Python {
 			dirs = append(dirs, root.Dir)
 		}
 	}
