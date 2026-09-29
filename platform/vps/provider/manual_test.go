@@ -62,6 +62,25 @@ func TestACertificateYourCaddyServesSaysYourCaddyRenewsIt(t *testing.T) {
 	}
 }
 
+func TestACertificateYourTraefikServesIsRenewedThroughTheResolverThatOrderedIt(t *testing.T) {
+	t.Parallel()
+
+	served := selfSigned(t, []string{"shop.example.com"}, 60*24*time.Hour)
+	machine := &box{leaf: string(served)}
+	p := vps.ProviderOver(
+		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}, Proxy: &vps.Proxy{Traefik: &vps.Traefik{Directory: "/etc/traefik/dynamic", Resolver: "le"}}},
+		func(context.Context) (host.Conn, error) { return machine, nil },
+	)
+	cert := certificateFor(t, p, "shop.example.com")
+	health, err := p.Certificates().Inspect(context.Background(), edge.None, "shop.example.com", cert)
+	if err != nil {
+		t.Fatalf("InspectCertificate() = %v", err)
+	}
+	if want := "your Traefik renews it through le, for as long as its acme.json holds it"; health.Renewal != want || !health.Issued || !health.Covers {
+		t.Errorf("InspectCertificate() = %+v, want the leaf your Traefik serves read as issued and renewed %q", health, want)
+	}
+}
+
 func TestAHostnameOnABoxYourProxyFrontsIsProbedFromTheBoxItself(t *testing.T) {
 	t.Parallel()
 

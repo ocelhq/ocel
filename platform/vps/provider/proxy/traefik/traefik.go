@@ -36,6 +36,8 @@ type Box interface {
 	Spec(ctx context.Context) (proxy.Spec, error)
 	Routed(ctx context.Context, hostname string) (answered, failure string, err error)
 	Pause(ctx context.Context, wait time.Duration) error
+	PlacedSum(ctx context.Context, path string) (string, error)
+	Leaf(ctx context.Context, hostname string) ([]byte, error)
 }
 
 type Traefik struct {

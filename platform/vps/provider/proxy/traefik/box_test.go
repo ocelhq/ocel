@@ -2,6 +2,13 @@ package traefik_test
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
+	"math/big"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,6 +31,43 @@ type box struct {
 	routes     map[string][]string
 	failures   map[string]string
 	paused     []time.Duration
+	placed     map[string]string
+	leaves     map[string][]byte
+	board      string
+}
+
+func (b *box) PlacedSum(_ context.Context, path string) (string, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.asked = append(b.asked, "placed "+path)
+	return b.placed[path], nil
+}
+
+func (b *box) Leaf(_ context.Context, hostname string) ([]byte, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.asked = append(b.asked, "leaf "+hostname)
+	return b.leaves[hostname], nil
+}
+
+func certificate(t *testing.T, names ...string) []byte {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: names[0]},
+		DNSNames:     names,
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(60 * 24 * time.Hour),
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 }
 
 func (b *box) Ran(_ context.Context, _ string, argv []string) (string, error) {
@@ -38,6 +82,8 @@ func (b *box) Ran(_ context.Context, _ string, argv []string) (string, error) {
 		return b.containers, nil
 	case strings.Contains(command, "coolify-proxy"):
 		return b.coolify, nil
+	case strings.Contains(command, switchboard.Name):
+		return b.board, nil
 	default:
 		return "", nil
 	}
