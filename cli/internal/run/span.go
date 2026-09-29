@@ -11,6 +11,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/progresswire"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -43,9 +44,7 @@ func (s *Span) Trace(subject, name string, attrs ...progress.Attr) *Span {
 func (s *Span) SetAttributes(attrs ...progress.Attr) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, a := range attrs {
-		s.attributes = append(s.attributes, &progressv1.SpanAttribute{Key: a.Key.Wire, Value: a.Value})
-	}
+	s.attributes = append(s.attributes, progresswire.EncodeAttrs(attrs)...)
 }
 
 type ReservedUnit struct {

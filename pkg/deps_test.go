@@ -28,6 +28,7 @@ var providerBuildsOn = []string{
 	"github.com/ocelhq/ocel/pkg/naming",
 	"github.com/ocelhq/ocel/pkg/pricing",
 	"github.com/ocelhq/ocel/pkg/progress",
+	"github.com/ocelhq/ocel/pkg/progresswire",
 	"github.com/ocelhq/ocel/pkg/proto",
 	"github.com/ocelhq/ocel/pkg/refusal",
 	"github.com/ocelhq/ocel/pkg/router",

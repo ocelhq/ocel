@@ -10,6 +10,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/progresswire"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
@@ -113,7 +114,7 @@ func spanAttributes(attrs []*progressv1.SpanAttribute) []attribute.KeyValue {
 	}
 	out := make([]attribute.KeyValue, 0, len(attrs))
 	for _, a := range attrs {
-		key, ok := progress.FindAttrKey(a.GetKey())
+		key, ok := progresswire.DecodeAttrKey(a.GetKey())
 		if !ok {
 			continue
 		}

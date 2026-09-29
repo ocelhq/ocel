@@ -9,6 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/progresswire"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
@@ -134,11 +135,6 @@ func (t *spanEvents) EndPartial(span Span, start, end time.Time, result string) 
 }
 
 func (t *spanEvents) ended(span Span, start, end time.Time, status progressv1.SpanStatus, level progressv1.Level, title string, attrs []progress.Attr) {
-	pbAttrs := make([]*progressv1.SpanAttribute, len(attrs))
-	for i, a := range attrs {
-		pbAttrs[i] = &progressv1.SpanAttribute{Key: a.Key.Wire, Value: a.Value}
-	}
-
 	t.sender.send(&progressv1.OperationEvent{
 		Time:    timestamppb.New(end),
 		Level:   level,
@@ -148,7 +144,7 @@ func (t *spanEvents) ended(span Span, start, end time.Time, status progressv1.Sp
 		Body: &progressv1.OperationEvent_Ended{Ended: &progressv1.Ended{
 			Status:            status,
 			StartTimeUnixNano: start.UnixNano(),
-			Attributes:        pbAttrs,
+			Attributes:        progresswire.EncodeAttrs(attrs),
 			Title:             title,
 		}},
 	})
