@@ -55,6 +55,15 @@ func Run(t *testing.T, suite Suite) {
 		}
 	})
 
+	t.Run("an edge whose records are proxied says what its proxied records need", func(t *testing.T) {
+		e, _ := suite.New(t)
+		facts := e.Facts()
+		proxied := facts.ServesUnbound || facts.ProxiesRecords
+		if names := facts.ProxiedRecordNote != ""; proxied != names {
+			t.Errorf("Facts().ServesUnbound = %v and Facts().ProxiesRecords = %v, but Facts().ProxiedRecordNote is set = %v; the records such an edge asks for are proxied, and only the edge can say how to turn that on", facts.ServesUnbound, facts.ProxiesRecords, names)
+		}
+	})
+
 	t.Run("every declared need is a need, and declared once", func(t *testing.T) {
 		e, _ := suite.New(t)
 		supported := e.Facts().Supported

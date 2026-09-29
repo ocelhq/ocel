@@ -33,7 +33,7 @@ func (r Record) String() string {
 
 func (r Record) Instruction() string {
 	if r.Proxied {
-		return fmt.Sprintf("add a proxied (orange cloud) DNS record at %s", r.Name)
+		return fmt.Sprintf("add a DNS record at %s proxied through the edge", r.Name)
 	}
 	return fmt.Sprintf("add %s at %s pointing to %s", recordPhrase(r.Type), r.Name, r.Value)
 }

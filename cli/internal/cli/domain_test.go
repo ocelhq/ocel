@@ -198,7 +198,7 @@ func TestRunDomain(t *testing.T) {
 			t.Fatalf("runDomainUse err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
-		for _, want := range []string{"dns=", "add a proxied (orange cloud) DNS record at *.preview.acme.com"} {
+		for _, want := range []string{"dns=", "add a DNS record at *.preview.acme.com proxied through the edge"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)
 			}
@@ -477,7 +477,7 @@ export default {
 			t.Fatalf("runDomainAdd err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
-		for _, want := range []string{"hosts=www.app.com", "add a proxied (orange cloud) DNS record at www.app.com", "Serving www.app.com"} {
+		for _, want := range []string{"hosts=www.app.com", "add a DNS record at www.app.com proxied through the edge", "Serving www.app.com"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)
 			}
@@ -501,7 +501,7 @@ export default {
 		clitest.SetLoggedIn(&deps)
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
-		t.Setenv(clitest.FakeDomainTimeoutEnvVar, "add a proxied (orange cloud) DNS record at shop.app.com")
+		t.Setenv(clitest.FakeDomainTimeoutEnvVar, "add a DNS record at shop.app.com proxied through the edge")
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(deps, &stdout)

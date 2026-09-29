@@ -68,6 +68,7 @@ func (f *recordingEdge) Facts() edge.Facts {
 		Entry:                 edge.WorkerModule{Name: "index.js", ContentType: "application/javascript+module", Content: []byte("export default {}")},
 		ServesUnbound:         declared.ServesUnbound,
 		ProxiesRecords:        declared.ProxiesRecords,
+		ProxiedRecordNote:     declared.ProxiedRecordNote,
 		InvalidatesByCacheTag: declared.InvalidatesByCacheTag,
 	}
 }

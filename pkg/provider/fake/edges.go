@@ -484,6 +484,9 @@ func (e *Edge) Facts() edge.Facts {
 		ProxiesRecords:  e.proxies,
 		CredentialScope: "fake-account",
 	}
+	if e.proxies {
+		facts.ProxiedRecordNote = "Turn the fake edge's proxy on for these records."
+	}
 	if e.serves != nil {
 		facts.Supported = slices.Clone(*e.serves)
 	}

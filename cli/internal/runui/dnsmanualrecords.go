@@ -52,7 +52,7 @@ func dnsTable(ev *progressv1.DnsManualRecordsEvent, width int) []string {
 	if head != "" {
 		out = append([]string{head}, rows...)
 	}
-	for i, note := range dnsNotes(records, ev.GetNotes()) {
+	for i, note := range ev.GetNotes() {
 		if i == 0 {
 			out = append(out, "")
 		}
@@ -123,13 +123,6 @@ func dnsStack(records []*progressv1.DnsRecord) []string {
 		}
 	}
 	return lines
-}
-
-func dnsNotes(records []*progressv1.DnsRecord, notes []string) []string {
-	if !anyProxied(records) {
-		return notes
-	}
-	return append([]string{"Turn the proxy (orange cloud) on: the value is a placeholder the proxy answers behind."}, notes...)
 }
 
 func title(head string) string {

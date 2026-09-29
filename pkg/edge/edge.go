@@ -62,6 +62,7 @@ type Facts struct {
 	Entry                 WorkerModule
 	ServesUnbound         bool
 	ProxiesRecords        bool
+	ProxiedRecordNote     string
 	ShieldsOrigin         bool
 	InvalidatesByCacheTag bool
 	CredentialScope       string

@@ -113,6 +113,9 @@ func (s dnsCutover) write(ctx context.Context, records []edge.Record, headline s
 			say(note)
 		}
 	}
+	if s.facts.ProxiedRecordNote != "" && slices.ContainsFunc(records, func(rec edge.Record) bool { return rec.Proxied }) {
+		notes = append([]string{s.facts.ProxiedRecordNote}, notes...)
+	}
 	if s.dns == nil {
 		result.Manual = records
 		if s.manual.report != nil {

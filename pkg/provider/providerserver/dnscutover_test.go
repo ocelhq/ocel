@@ -3,6 +3,7 @@ package providerserver
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -402,5 +403,36 @@ func TestAStatusLineForAHostnameThatWillNotAnswerNamesWhatStoppedTheProbe(t *tes
 	if !strings.Contains(pending, cause) {
 		t.Errorf("`domain status` reports %q, and never what stopped the probe: the operator is told the hostname does not answer yet and left to guess between a firewall, a record that has not propagated and a chain nothing trusts",
 			pending)
+	}
+}
+
+func TestManualRecordsTheEdgeProxiesCarryTheEdgesOwnNoteOnThem(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name   string
+		record edge.Record
+		want   bool
+	}{
+		{"a proxied record", edge.Record{Name: "shop.app.com", Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}, true},
+		{"a record pointing at a front", edge.Record{Name: "shop.app.com", Type: edge.RecordTypeCNAME, Value: "front.example.net"}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var reported []string
+			cutover := dnsCutover{
+				facts: edge.Facts{ProxiedRecordNote: "the edge's own word on proxied records"},
+				manual: manualRecordPolicy{report: func(_ string, _ []edge.Record, notes ...string) {
+					reported = notes
+				}},
+			}
+			if _, err := cutover.write(context.Background(), []edge.Record{tc.record}, "add these", func(string) {}); err != nil {
+				t.Fatalf("write() = %v", err)
+			}
+			if got := slices.Contains(reported, cutover.facts.ProxiedRecordNote); got != tc.want {
+				t.Errorf("notes = %q, carrying the edge's proxied-record note = %v, want %v", reported, got, tc.want)
+			}
+		})
 	}
 }

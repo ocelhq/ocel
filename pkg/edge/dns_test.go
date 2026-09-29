@@ -93,7 +93,7 @@ func TestRecordsFor(t *testing.T) {
 				t.Errorf("RecordsFor = %v, want %v", got, want)
 			}
 			if got[0].Proxied {
-				t.Errorf("record is proxied, want grey cloud")
+				t.Errorf("record is proxied, want it pointed at the front")
 			}
 		})
 	}
@@ -186,6 +186,10 @@ func TestRecordInstruction(t *testing.T) {
 		{
 			record: Record{Name: "shop.app.com", Type: RecordTypeAAAA, Value: "2001:db8::1"},
 			want:   "add an AAAA record at shop.app.com pointing to 2001:db8::1",
+		},
+		{
+			record: Record{Name: "shop.app.com", Type: RecordTypeAAAA, Value: ProxyPlaceholder, Proxied: true},
+			want:   "add a DNS record at shop.app.com proxied through the edge",
 		},
 		{
 			record: Record{Name: "shop.app.com", Type: RecordTypeCNAME, Value: "front.example.net"},

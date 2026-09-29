@@ -132,12 +132,15 @@ func TestDNSManualRecordsProjection(t *testing.T) {
 		}
 	})
 
-	t.Run("a proxied record says the value is a placeholder", func(t *testing.T) {
+	t.Run("a proxied record is explained by the provider's notes alone", func(t *testing.T) {
 		t.Parallel()
 		proxied := &progressv1.DnsRecord{Name: "shop.app.com", Type: "AAAA", Value: "100::", Proxied: true}
-		got := dnsOutput(t, human, "Point shop.app.com at the edge", []*progressv1.DnsRecord{proxied}, nil)
-		if !strings.Contains(got, "orange cloud") {
-			t.Errorf("output = %q, want the proxy toggle spelled out", got)
+		if got := dnsOutput(t, human, "Point shop.app.com at the edge", []*progressv1.DnsRecord{proxied}, nil); strings.Contains(got, "placeholder") {
+			t.Errorf("output = %q, want no note the provider did not send", got)
+		}
+		note := "Turn the edge's proxy on for these records."
+		if got := dnsOutput(t, human, "Point shop.app.com at the edge", []*progressv1.DnsRecord{proxied}, []string{note}); !strings.Contains(got, note) {
+			t.Errorf("output = %q, want the provider's note %q", got, note)
 		}
 	})
 
