@@ -3,8 +3,10 @@ package providerserver
 import (
 	"context"
 	"slices"
+	"strings"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/naming"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
@@ -18,6 +20,8 @@ const (
 
 	reasonEdgeReconcile = "reconciled to serve this release"
 	reasonPromote       = "the release this pointer would serve"
+
+	releaseMintedAtDeploy = "<release minted at deploy>"
 )
 
 type dryRunPlan struct {
@@ -39,6 +43,20 @@ func (d *dryRunPlan) plan() provider.Plan {
 	}
 	plan.Groups = append(plan.Groups, d.edge, d.promotion)
 	return plan
+}
+
+func withReleaseMintedAtDeploy(plan provider.Plan, release naming.Release) provider.Plan {
+	minted := func(name string) string { return strings.ReplaceAll(name, release.String(), releaseMintedAtDeploy) }
+	groups := make([]provider.ChangeGroup, len(plan.Groups))
+	for i, group := range plan.Groups {
+		group.Name, group.Reason = minted(group.Name), minted(group.Reason)
+		group.Changes = slices.Clone(group.Changes)
+		for j, change := range group.Changes {
+			group.Changes[j].Name, group.Changes[j].Reason = minted(change.Name), minted(change.Reason)
+		}
+		groups[i] = group
+	}
+	return provider.Plan{Groups: groups}
 }
 
 func (r *deployRun) planValuesGroup(ctx context.Context) (provider.ChangeGroup, error) {
