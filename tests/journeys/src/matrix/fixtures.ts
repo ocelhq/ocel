@@ -8,6 +8,7 @@ import {
   nextDataCacheChecks,
   nextRoutingChecks,
   nextStateChecks,
+  nodeRuntimeChecks,
   staticChecks,
   todoAndDocumentChecks,
   vendoredDependencyChecks,
@@ -19,12 +20,13 @@ import { type Fixture, fixture } from "./types";
 import { apiGateway, cloudflare, container, defaults, registry } from "./variants";
 
 const RUNTIME_NEUTRAL_CHECKS = [...healthChecks, ...staticChecks, ...httpProbeChecks];
-const NODE_CHECKS = [...RUNTIME_NEUTRAL_CHECKS, ...nativeModuleChecks];
+const NODE_CHECKS = [...RUNTIME_NEUTRAL_CHECKS, ...nativeModuleChecks, ...nodeRuntimeChecks];
 const NODE_SDK_CHECKS = [
   ...healthChecks,
   ...staticChecks,
   ...todoAndDocumentChecks,
   ...nativeModuleChecks,
+  ...nodeRuntimeChecks,
   ...httpProbeChecks,
   ...envChecks,
 ];

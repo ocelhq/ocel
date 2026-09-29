@@ -40,6 +40,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_DELETE(self):
         self.serve("DELETE")
 
+    def do_OPTIONS(self):
+        self.serve("OPTIONS")
+
     def serve(self, method):
         self.headless = method == "HEAD"
         self.body_taken = False
@@ -90,27 +93,24 @@ class Handler(BaseHTTPRequestHandler):
         self.close_connection = True
         return None
 
-    def write_json(self, status, body):
-        self.write_bytes(status, "application/json", json.dumps(body).encode())
+    def write_json(self, status, body, extra=()):
+        self.write_bytes(status, "application/json", json.dumps(body).encode(), extra)
 
-    def write_bytes(self, status, content_type, body, extra=None):
-        headers = {"content-type": content_type, "content-length": str(len(body))}
-        headers.update(extra or {})
+    def write_bytes(self, status, content_type, body, extra=()):
+        headers = [("content-type", content_type), ("content-length", str(len(body))), *extra]
         self.write_status(status, headers)
         if not self.headless:
             self.wfile.write(body)
 
-    def write_status(self, status, extra=None):
+    def write_status(self, status, extra=()):
         self.send_response(status)
-        for name, value in (extra or {}).items():
+        for name, value in extra:
             self.send_header(name, value)
         self.end_headers()
 
-    def start_chunks(self, extra=None):
-        headers = dict(extra or {})
-        if not self.headless:
-            headers["transfer-encoding"] = "chunked"
-        self.write_status(200, headers)
+    def start_chunks(self, extra=()):
+        chunked = () if self.headless else [("transfer-encoding", "chunked")]
+        self.write_status(200, [*extra, *chunked])
 
     def write_chunk(self, chunk):
         if self.headless:

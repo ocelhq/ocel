@@ -26,6 +26,14 @@ export default function proxy(request: NextRequest) {
     return NextResponse.next({ request: { headers: forwarded } });
   }
 
+  if (pathname === "/mw/cookies") {
+    const response = NextResponse.next();
+    for (const i of [1, 2, 3]) {
+      response.cookies.set(`ocel-mw-${i}`, `value-${i}`, { path: "/" });
+    }
+    return response;
+  }
+
   const response = NextResponse.next();
   response.cookies.set("ocel-proxy", "fell-through", { path: "/" });
   return response;
