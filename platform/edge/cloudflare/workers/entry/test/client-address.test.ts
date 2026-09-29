@@ -1,4 +1,5 @@
 import { createExecutionContext } from "cloudflare:test";
+import { CLIENT_ADDRESS_HEADER } from "@platform/edge-contract/client-address";
 import { describe, expect, it } from "vitest";
 import { withClientAddress } from "../src/client-address";
 import type { DeploymentsBinding } from "../src/deployments";
@@ -19,7 +20,7 @@ const env: Env = {
   OCEL_EDGE_SECRET_KEY: "secretkey",
 };
 
-async function forwardedFor(headers: Record<string, string>): Promise<string | null> {
+async function carried(headers: Record<string, string>): Promise<Headers> {
   const wire = capturing();
   await withGlobalFetch(wire.fetch, () =>
     worker.fetch(
@@ -28,18 +29,18 @@ async function forwardedFor(headers: Record<string, string>): Promise<string | n
       createExecutionContext(),
     ),
   );
-  return wire.calls[0]!.headers.get("x-forwarded-for");
+  return wire.calls[0]!.headers;
 }
 
 describe("the client's address", () => {
-  it("reaches the origin appended to the chain the client sent", async () => {
-    expect(
-      await forwardedFor({ "cf-connecting-ip": "203.0.113.9", "x-forwarded-for": "6.6.6.6" }),
-    ).toBe("6.6.6.6, 203.0.113.9");
+  it("reaches the origin in the carrier, whatever chain the client forged", async () => {
+    const sent = await carried({ "cf-connecting-ip": "203.0.113.9", "x-forwarded-for": "6.6.6.6" });
+    expect(sent.get(CLIENT_ADDRESS_HEADER)).toBe("203.0.113.9");
   });
 
-  it("starts the chain when the client sent none", async () => {
-    expect(await forwardedFor({ "cf-connecting-ip": "203.0.113.9" })).toBe("203.0.113.9");
+  it("drops a carrier the client sent", async () => {
+    const sent = await carried({ [CLIENT_ADDRESS_HEADER]: "6.6.6.6" });
+    expect(sent.get(CLIENT_ADDRESS_HEADER)).toBeNull();
   });
 
   it("keeps the request's cf properties", () => {

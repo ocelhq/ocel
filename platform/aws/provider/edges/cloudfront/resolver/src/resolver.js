@@ -13,12 +13,14 @@ var CONTAINER_HEADER = 'x-ocel-container';
 var CONTAINER_ORIGIN_ID = 'containers';
 var CONTROL_PREFIX = 'x-middleware-';
 var CLIENT_AUTHORIZATION_HEADER = 'x-ocel-client-authorization';
+var CLIENT_ADDRESS_HEADER = 'x-ocel-client-address';
 var CONTROL_HEADERS = [
   'x-ocel-entry',
   'next-resume',
   ORIGIN_SECRET_HEADER,
   CONTAINER_HEADER,
   CLIENT_AUTHORIZATION_HEADER,
+  CLIENT_ADDRESS_HEADER,
 ];
 var ORIGIN_READ_TIMEOUT_SECONDS = 60;
 

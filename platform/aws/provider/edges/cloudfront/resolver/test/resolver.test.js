@@ -229,6 +229,7 @@ describe("the headers a viewer cannot forge past the resolver", () => {
         "x-ocel-origin-secret": "forged",
         "x-middleware-skip": "1",
         "x-ocel-client-authorization": "Bearer forged",
+        "x-ocel-client-address": "6.6.6.6",
       }),
     );
 
@@ -238,6 +239,7 @@ describe("the headers a viewer cannot forge past the resolver", () => {
       "x-ocel-origin-secret",
       "x-middleware-skip",
       "x-ocel-client-authorization",
+      "x-ocel-client-address",
     ]) {
       expect(answered.headers[name]).toBeUndefined();
     }

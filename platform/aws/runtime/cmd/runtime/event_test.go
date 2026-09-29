@@ -504,3 +504,45 @@ func TestTheAppNeverHearsTheEdgesOwnSignatureWhenTheClientSentNoAuthorization(t 
 		t.Errorf("Authorization = %q, want none: the signature on an IAM-signed call is the edge's, not the client's", got)
 	}
 }
+
+func TestTheAppHearsTheClientAddressASigningEdgeCarriedAppendedToTheChain(t *testing.T) {
+	ev, err := parseEvent([]byte(`{
+		"rawPath": "/",
+		"headers": {"x-forwarded-for": "203.0.113.9", "x-ocel-client-address": "198.51.100.7"},
+		"requestContext": {"http": {"method": "GET"}, "authorizer": {"iam": {"accessKey": "AKIAEXAMPLE"}}}
+	}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, err := buildLoopbackRequest(t.Context(), 4321, ev)
+	if err != nil {
+		t.Fatalf("buildLoopbackRequest: %v", err)
+	}
+	if got := req.Header.Get("X-Forwarded-For"); got != "203.0.113.9, 198.51.100.7" {
+		t.Errorf("X-Forwarded-For = %q, want the edge's client appended to the chain", got)
+	}
+	if got := req.Header.Values(edge.HeaderClientAddress); len(got) != 0 {
+		t.Errorf("%s = %q, want the carrier consumed", edge.HeaderClientAddress, got)
+	}
+}
+
+func TestTheAppIgnoresAClientAddressOnACallNoSigningEdgeMade(t *testing.T) {
+	ev, err := parseEvent([]byte(`{
+		"rawPath": "/",
+		"headers": {"x-forwarded-for": "203.0.113.9", "x-ocel-client-address": "6.6.6.6"},
+		"requestContext": {"http": {"method": "GET"}}
+	}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, err := buildLoopbackRequest(t.Context(), 4321, ev)
+	if err != nil {
+		t.Fatalf("buildLoopbackRequest: %v", err)
+	}
+	if got := req.Header.Get("X-Forwarded-For"); got != "203.0.113.9" {
+		t.Errorf("X-Forwarded-For = %q, want a client-sent carrier ignored on an unsigned call", got)
+	}
+	if got := req.Header.Values(edge.HeaderClientAddress); len(got) != 0 {
+		t.Errorf("%s = %q, want the carrier dropped", edge.HeaderClientAddress, got)
+	}
+}
