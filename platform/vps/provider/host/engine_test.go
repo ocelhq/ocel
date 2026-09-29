@@ -123,7 +123,7 @@ func aLiveProxy(t *testing.T) liveProxy {
 }
 
 var pinnable = sync.OnceValue(func() bool {
-	said, err := exec.Command(dockerEngine, "run", "--rm", "--security-opt", noNewPrivileges, "--entrypoint", "/bin/true", caddy.Image).CombinedOutput()
+	said, err := exec.Command(dockerEngine, "run", "--rm", "--security-opt", noNewPrivileges, "--entrypoint", "/bin/true", caddy.Image()).CombinedOutput()
 	return err == nil || !strings.Contains(string(said), "operation not permitted")
 })
 
@@ -303,7 +303,7 @@ func (p liveProxy) runsApp(t *testing.T, upstream, body string) {
 	name, _, _ := strings.Cut(upstream, ":")
 	exec.Command(dockerEngine, "rm", "--force", name).Run()
 	run := append([]string{"run", "--rm", "--detach", "--name", name}, enginetest.RunLabelArgs(t)...)
-	out, err := exec.Command(dockerEngine, append(run, "--network", p.network, caddy.Image,
+	out, err := exec.Command(dockerEngine, append(run, "--network", p.network, caddy.Image(),
 		"caddy", "respond", "--listen", ":"+appbuild.InjectedPortText, body)...).CombinedOutput()
 	if err != nil {
 		t.Skipf("this machine's engine will not run the app the proxy forwards to: %s", out)
@@ -463,7 +463,7 @@ func (p liveProxy) runsSlowApp(t *testing.T, upstream string, slow time.Duration
 	answer := fmt.Sprintf(`while read -r line && [ "$line" != "$(printf '\r')" ]; do :; done; sleep %d; printf 'HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n'`,
 		int(slow.Seconds()))
 	out, err := exec.Command(dockerEngine, "run", "--rm", "--detach", "--name", name,
-		"--network", p.network, "--entrypoint", "nc", caddy.Image,
+		"--network", p.network, "--entrypoint", "nc", caddy.Image(),
 		"-lk", "-p", appbuild.InjectedPortText, "-e", "sh", "-c", answer).CombinedOutput()
 	if err != nil {
 		t.Skipf("this machine's engine will not run the app the proxy forwards to: %s", out)

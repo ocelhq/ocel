@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -15,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/officialimages"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
@@ -350,6 +352,20 @@ func TestAVolumeIsLabelledWithTheMajorThatInitialisedIt(t *testing.T) {
 	kept := machine.commands()[machine.at("'docker' 'volume' 'create'")]
 	if !strings.Contains(kept, "'"+host.LabelGeneration+"=17'") {
 		t.Errorf("the volume was created as %q, and the next deploy cannot tell which major wrote what is on it", kept)
+	}
+}
+
+func TestAPostgresIsPulledFromTheOfficialImagesMirrorByItsPinnedDigest(t *testing.T) {
+	t.Setenv(officialimages.MirrorEnv, "mirror.gcr.io/library")
+
+	machine := &box{}
+	if _, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "17"), nil); err != nil {
+		t.Fatalf("Postgres() = %v", err)
+	}
+	image, _ := constants.PostgresImage("17")
+	runCommand := machine.commands()[machine.at("'docker' 'run'")]
+	if want := "'mirror.gcr.io/library/" + image + "'"; !strings.Contains(runCommand, want) {
+		t.Errorf("with %s set, the postgres was started as:\n%s\nwant it run as %s", officialimages.MirrorEnv, runCommand, want)
 	}
 }
 

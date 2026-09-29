@@ -187,21 +187,21 @@ func TestAProxyThatIsGoneIsPlannedBackAndARunningOneIsLeftAlone(t *testing.T) {
 func TestTheProxyIsPinnedByDigestAndNamedByNoTagAnywhere(t *testing.T) {
 	t.Parallel()
 
-	repo, hashed, split := strings.Cut(caddy.Image, "@sha256:")
+	repo, hashed, split := strings.Cut(caddy.Image(), "@sha256:")
 	if !split || len(hashed) != 64 || strings.Trim(hashed, "0123456789abcdef") != "" {
-		t.Fatalf("the proxy is pulled as %q, want a repository and a sha256 digest: a tag is a name its owner can repoint", caddy.Image)
+		t.Fatalf("the proxy is pulled as %q, want a repository and a sha256 digest: a tag is a name its owner can repoint", caddy.Image())
 	}
 	if strings.Contains(repo, ":") {
-		t.Errorf("the proxy is pulled as %q, and the tag in it is what the digest was written to replace", caddy.Image)
+		t.Errorf("the proxy is pulled as %q, and the tag in it is what the digest was written to replace", caddy.Image())
 	}
 	for what, written := range map[string]string{
 		"the run command":  containerCommand(),
 		"the item's facts": string(frontItem().Content),
 	} {
-		if strings.Count(written, caddy.Image) == 0 {
-			t.Errorf("%s never names %s", what, caddy.Image)
+		if strings.Count(written, caddy.Image()) == 0 {
+			t.Errorf("%s never names %s", what, caddy.Image())
 		}
-		if strings.Contains(strings.ReplaceAll(written, caddy.Image, ""), "caddy:") {
+		if strings.Contains(strings.ReplaceAll(written, caddy.Image(), ""), "caddy:") {
 			t.Errorf("%s includes a tag reference beside the digest:\n%s", what, written)
 		}
 	}
@@ -210,17 +210,17 @@ func TestTheProxyIsPinnedByDigestAndNamedByNoTagAnywhere(t *testing.T) {
 func TestTheProxyImageIsPulledOffTheAnonymousHubCeilingAndRetriedBeforeTheRun(t *testing.T) {
 	t.Parallel()
 
-	if strings.HasPrefix(caddy.Image, "docker.io/") || !strings.Contains(caddy.Image, "/") {
-		t.Errorf("the proxy is pulled as %q, from Docker Hub, whose anonymous per-IP ceiling is shared by every tenant behind a NAT and is what took a fresh box down mid-bootstrap", caddy.Image)
+	if strings.HasPrefix(caddy.Image(), "docker.io/") || !strings.Contains(caddy.Image(), "/") {
+		t.Errorf("the proxy is pulled as %q, from Docker Hub, whose anonymous per-IP ceiling is shared by every tenant behind a NAT and is what took a fresh box down mid-bootstrap", caddy.Image())
 	}
 	command := containerCommand()
-	pull := strings.Index(command, "docker pull "+quoted(caddy.Image))
+	pull := strings.Index(command, "docker pull "+quoted(caddy.Image()))
 	run := strings.Index(command, quoted("--name")+" "+quoted(caddy.Container))
 	if pull < 0 || run < 0 || pull > run {
 		t.Fatalf("the proxy is run without an explicit pull ahead of it, so a registry hiccup is `docker run`'s one unretried attempt:\n%s", command)
 	}
 	for _, want := range []string{
-		"docker image inspect " + quoted(caddy.Image),
+		"docker image inspect " + quoted(caddy.Image()),
 		fmt.Sprintf("-ge %d", containerPulls),
 		scriptPullBackoff.start(),
 		scriptPullBackoff.again(),
