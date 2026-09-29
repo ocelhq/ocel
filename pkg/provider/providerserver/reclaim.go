@@ -78,20 +78,24 @@ type ReclaimTarget struct {
 	Prefixes []string
 }
 
-func ReclaimTargets(slug, env string, removed []router.DeploymentRecord, surviving, servingHere []string) ([]ReclaimTarget, error) {
+func ReclaimTargets(slug, env string, removed []router.DeploymentRecord, surviving, servingHere []string) ([]ReclaimTarget, []string, error) {
 	if len(removed) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 	elsewhere := releasesOf(surviving)
 	here := releasesOf(servingHere)
 
 	targets := make([]ReclaimTarget, 0, len(removed))
+	var refused []string
+	var errs []error
 	for _, record := range removed {
+		if record.Image != "" {
+			continue
+		}
 		identity, err := provider.ParseBuild(record.Build)
 		if err != nil {
-			return nil, refusal.Refuse(refusal.CodeInvalid, "the record of %s names no build its stack is named for: %s", record.App, err.Error())
-		}
-		if record.Image != "" {
+			refused = append(refused, ledger.RecordKey(record.App, record.Build))
+			errs = append(errs, refusal.Refuse(refusal.CodeInvalid, "the record of %s names no build its stack is named for, so it is kept: %s", record.App, err.Error()))
 			continue
 		}
 		release := identity.Release()
@@ -102,7 +106,7 @@ func ReclaimTargets(slug, env string, removed []router.DeploymentRecord, survivi
 			Prefixes: reclaimedPrefixes(slug, env, record.App, release, elsewhere, here),
 		})
 	}
-	return targets, nil
+	return targets, refused, errors.Join(errs...)
 }
 
 func reclaimedPrefixes(slug, env, app string, release naming.Release, elsewhere, here map[appRelease]bool) []string {
@@ -159,12 +163,12 @@ func reclaimUnnamed(ctx context.Context, p provider.Provider, l projectLedger, p
 	if err != nil {
 		return err
 	}
-	targets, err := ReclaimTargets(l.slug, envFor(l.tier, pointer), removed, unnamed.SurvivingRecordKeys, unnamed.SurvivingPointerRecordKeys)
-	if err != nil {
-		return err
-	}
-	var errs []error
+	targets, refused, err := ReclaimTargets(l.slug, envFor(l.tier, pointer), removed, unnamed.SurvivingRecordKeys, unnamed.SurvivingPointerRecordKeys)
+	errs := []error{err}
 	unreclaimed := map[string]bool{}
+	for _, key := range refused {
+		unreclaimed[key] = true
+	}
 	for i, target := range targets {
 		progress.Say(fmt.Sprintf("Destroying the stack of %s build %s (%d of %d)", target.App, target.Build, i+1, len(targets)))
 		if err := destroyReclaimTarget(ctx, p, l.slug, l.tier, target, progress); err != nil {
