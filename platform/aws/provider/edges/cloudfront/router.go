@@ -44,15 +44,7 @@ func (r Router) Open(state router.StackState) (router.Stack, error) {
 	return routerStack{s: s}, nil
 }
 
-func (r Router) ProjectRemovals(edge.ProjectScope) []edge.PlanGroup { return nil }
-
-func (r Router) ClaimPreviewEntry(context.Context, router.Claim) (edge.Origin, error) {
-	return edge.Origin{}, nil
-}
-
-func (r Router) DisclaimPreviewEntry(context.Context, string) error { return nil }
-
-func (r Router) PreviewEntryRemovals(string) []edge.PlanGroup { return nil }
+func (r Router) Hooks() router.Hooks { return router.Hooks{} }
 
 type routerStack struct{ s *stack }
 

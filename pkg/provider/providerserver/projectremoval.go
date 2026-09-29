@@ -141,8 +141,8 @@ func (r *projectRemoval) plan() (*planv1.ChangePlan, error) {
 		Front:     r.state.Edge.Front,
 	}
 	groups := r.front.ProjectRemovals(scope)
-	if r.front.Facts().ProxiesRecords {
-		groups = append(groups, r.router.ProjectRemovals(scope)...)
+	if origin := r.routerOrigin(); origin != nil {
+		groups = append(groups, origin.PlanProjectRemoval(scope)...)
 	}
 	for _, group := range groups {
 		converted, err := edgeGroupProto(group)

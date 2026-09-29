@@ -123,8 +123,12 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progr
 		return err
 	}
 
+	origin, err := w.entryOrigin(front)
+	if err != nil {
+		return err
+	}
 	progress.Say("Reconciling the shared preview entry on " + wildcard)
-	published, err := w.reconcileEntry(ctx, front, answering, progress)
+	published, err := w.reconcileEntry(ctx, front, origin, progress)
 	if err != nil {
 		return err
 	}
@@ -133,7 +137,7 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progr
 	}
 
 	var dnsRecords []edge.Record
-	if !forwardsToRouter(front) {
+	if origin == nil {
 		target := edge.DNSTarget{Kind: front.Kind(), ServesUnbound: front.Facts().ServesUnbound, ProxiesRecords: front.Facts().ProxiesRecords, Front: published}
 		if dnsRecords, err = edge.RecordsFor(target, []string{wildcard}); err != nil {
 			return err
@@ -162,7 +166,18 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progr
 	return nil
 }
 
-func (w *wildcards) reconcileEntry(ctx context.Context, front edge.Edge, answering router.Kind, runProgress progress.Progress) (string, error) {
+func (w *wildcards) entryOrigin(front edge.Edge) (*router.OriginHooks, error) {
+	if facts := front.Facts(); !facts.ProxiesRecords || facts.RunsCode {
+		return nil, nil
+	}
+	paired, err := openPairedRouter(w.provider, front.Kind())
+	if err != nil {
+		return nil, err
+	}
+	return routerOriginBehind(front, paired), nil
+}
+
+func (w *wildcards) reconcileEntry(ctx context.Context, front edge.Edge, origin *router.OriginHooks, runProgress progress.Progress) (string, error) {
 	base := w.recorded.BaseDomain
 	spec := edge.PreviewWildcardSpec{
 		BaseDomain:  base,
@@ -172,9 +187,10 @@ func (w *wildcards) reconcileEntry(ctx context.Context, front edge.Edge, answeri
 		Warn:        runProgress.Warn,
 	}
 	var claimed originClaim
-	if forwardsToRouter(front) {
+	if origin != nil {
 		var err error
-		if claimed, err = w.claimEntry(ctx, front, answering); err != nil {
+		claim := router.Claim{Hostname: w.recorded.Hostname(), Certificate: w.recorded.Host.Certificate.ID}
+		if claimed, err = claimOrigin(ctx, front, claim, origin.ClaimPreviewEntry, w.reserveOriginCertificate); err != nil {
 			return "", err
 		}
 		spec.Origin = claimed.origin
@@ -198,15 +214,6 @@ func (w *wildcards) reconcileEntry(ctx context.Context, front edge.Edge, answeri
 	}
 	revokeOriginCertificate(ctx, front, superseded, runProgress)
 	return published, nil
-}
-
-func (w *wildcards) claimEntry(ctx context.Context, front edge.Edge, answering router.Kind) (originClaim, error) {
-	entry, err := w.provider.Routers().Open(answering)
-	if err != nil {
-		return originClaim{}, err
-	}
-	claim := router.Claim{Hostname: w.recorded.Hostname(), Certificate: w.recorded.Host.Certificate.ID}
-	return claimOrigin(ctx, front, claim, entry.ClaimPreviewEntry, w.reserveOriginCertificate)
 }
 
 var errPreviewEntryRenewing = errors.New("another run is renewing the certificate the shared preview entry is answered with")
@@ -255,9 +262,13 @@ func (w *wildcards) swapOriginCertificate(ctx context.Context, from, to string, 
 	return fmt.Errorf("%w on %s: its record changed under every one of %d attempts", errPreviewEntryRenewing, w.recorded.Hostname(), reservationAttempts)
 }
 
-func (w *wildcards) reclaimEntry(ctx context.Context, front edge.Edge, runProgress progress.Progress) error {
-	if !forwardsToRouter(front) || !w.recorded.IsRecorded() || w.recorded.Edge != front.Kind() {
+func (w *wildcards) refreshEntryClaim(ctx context.Context, front edge.Edge, runProgress progress.Progress) error {
+	if !w.recorded.IsRecorded() || w.recorded.Edge != front.Kind() {
 		return nil
+	}
+	origin, err := w.entryOrigin(front)
+	if err != nil || origin == nil {
+		return err
 	}
 	changed, err := clientCertificatesChanged(ctx, front, w.recorded.Hostname(), w.recorded.Host.ClientCertificateDigests)
 	if err != nil {
@@ -266,12 +277,8 @@ func (w *wildcards) reclaimEntry(ctx context.Context, front edge.Edge, runProgre
 	if !changed && !isOriginCertificateDue(&w.recorded.Host, time.Now()) {
 		return nil
 	}
-	answering, err := findPairedRouter(w.provider, front.Kind())
-	if err != nil {
-		return err
-	}
 	runProgress.Say("Claiming the shared preview entry on " + w.recorded.Hostname() + " again: what its origin trusts or answers with is due to change")
-	_, err = w.reconcileEntry(ctx, front, answering, runProgress)
+	_, err = w.reconcileEntry(ctx, front, origin, runProgress)
 	if errors.Is(err, errPreviewEntryRenewing) {
 		runProgress.Say(err.Error())
 		return nil
@@ -418,18 +425,11 @@ func (w *wildcards) owningEdge() (edge.Edge, error) {
 }
 
 func (w *wildcards) disclaimEntry(ctx context.Context, front edge.Edge, runProgress progress.Progress) error {
-	if !forwardsToRouter(front) {
-		return nil
-	}
-	answering, err := findPairedRouter(w.provider, front.Kind())
-	if err != nil {
+	origin, err := w.entryOrigin(front)
+	if err != nil || origin == nil {
 		return err
 	}
-	entry, err := w.provider.Routers().Open(answering)
-	if err != nil {
-		return err
-	}
-	if err := entry.DisclaimPreviewEntry(ctx, w.recorded.BaseDomain); err != nil {
+	if err := origin.DisclaimPreviewEntry(ctx, w.recorded.BaseDomain); err != nil {
 		return err
 	}
 	revokeOriginCertificate(ctx, front, w.recorded.Host.OriginCertificateID, runProgress)
@@ -469,16 +469,12 @@ func (w *wildcards) releaseGroups(front edge.Edge) ([]*planv1.ChangeGroup, error
 		return nil, err
 	}
 	groups := []*planv1.ChangeGroup{removedGroup}
-	if forwardsToRouter(front) {
-		answering, err := findPairedRouter(w.provider, front.Kind())
-		if err != nil {
-			return nil, err
-		}
-		entry, err := w.provider.Routers().Open(answering)
-		if err != nil {
-			return nil, err
-		}
-		for _, group := range entry.PreviewEntryRemovals(w.recorded.Hostname()) {
+	origin, err := w.entryOrigin(front)
+	if err != nil {
+		return nil, err
+	}
+	if origin != nil {
+		for _, group := range origin.PlanPreviewEntryRemoval(w.recorded.Hostname()) {
 			converted, err := edgeGroupProto(group)
 			if err != nil {
 				return nil, err

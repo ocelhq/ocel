@@ -44,17 +44,22 @@ type Router interface {
 
 	Facts() Facts
 
+	Hooks() Hooks
+
 	Reconcile(ctx context.Context, spec StackSpec, prior StackState) (Stack, error)
 
 	Open(state StackState) (Stack, error)
+}
 
-	ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup
+type Hooks struct {
+	Origin *OriginHooks
+}
 
-	ClaimPreviewEntry(ctx context.Context, claim Claim) (edge.Origin, error)
-
-	DisclaimPreviewEntry(ctx context.Context, baseDomain string) error
-
-	PreviewEntryRemovals(wildcard string) []edge.PlanGroup
+type OriginHooks struct {
+	PlanProjectRemoval      func(scope edge.ProjectScope) []edge.PlanGroup
+	ClaimPreviewEntry       func(ctx context.Context, claim Claim) (edge.Origin, error)
+	DisclaimPreviewEntry    func(ctx context.Context, baseDomain string) error
+	PlanPreviewEntryRemoval func(wildcard string) []edge.PlanGroup
 }
 
 type Claim struct {

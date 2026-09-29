@@ -15,8 +15,9 @@ func TestEveryFakeRouterBehavesAsEveryRouterMust(t *testing.T) {
 	for kind, routedBy := range map[edge.Kind]router.Kind{fake.KindRelay: fake.RouterRelay, fake.KindDirect: fake.RouterDirect} {
 		t.Run(string(kind), func(t *testing.T) {
 			routerconformance.Run(t, routerconformance.Suite{
-				New:      func(t *testing.T) routerconformance.Fixture { return fakeFixture(t, kind, routedBy) },
-				Hostname: "shop.example.com",
+				New:         func(t *testing.T) routerconformance.Fixture { return fakeFixture(t, kind, routedBy) },
+				Hostname:    "shop.example.com",
+				PreviewBase: "preview.example.com",
 			})
 		})
 	}

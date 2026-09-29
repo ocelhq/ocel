@@ -32,12 +32,27 @@ func findPairedRouter(p provider.Provider, front edge.Kind) (router.Kind, error)
 	return kinds[0], nil
 }
 
-func openSharedStack(p provider.Provider, front edge.Edge, tier environment.Tier, slug string) (*sharedStack, error) {
-	kind, err := findPairedRouter(p, front.Kind())
+func openPairedRouter(p provider.Provider, front edge.Kind) (router.Router, error) {
+	kind, err := findPairedRouter(p, front)
 	if err != nil {
 		return nil, err
 	}
-	paired, err := p.Routers().Open(kind)
+	return p.Routers().Open(kind)
+}
+
+func routerOriginBehind(front edge.Edge, paired router.Router) *router.OriginHooks {
+	if !front.Facts().ProxiesRecords {
+		return nil
+	}
+	return paired.Hooks().Origin
+}
+
+func (s *sharedStack) routerOrigin() *router.OriginHooks {
+	return routerOriginBehind(s.front, s.router)
+}
+
+func openSharedStack(p provider.Provider, front edge.Edge, tier environment.Tier, slug string) (*sharedStack, error) {
+	paired, err := openPairedRouter(p, front.Kind())
 	if err != nil {
 		return nil, err
 	}

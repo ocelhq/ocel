@@ -336,7 +336,8 @@ func TestTheBoxEdgeBehavesAsEveryEdgeMust(t *testing.T) {
 
 func TestTheBoxRouterBehavesAsEveryRouterMust(t *testing.T) {
 	routerconformance.Run(t, routerconformance.Suite{
-		Hostname: "shop.example.com",
+		Hostname:    "shop.example.com",
+		PreviewBase: "preview.example.com",
 		New: func(t *testing.T) routerconformance.Fixture {
 			m, front, stack := reconciled(t)
 			return boxFixture(m, front, stack)

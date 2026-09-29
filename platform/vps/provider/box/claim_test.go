@@ -101,7 +101,7 @@ func TestTheBoxRoutersRemovalPlanNamesTheRouteOfEveryHostnameAnEdgeForwardsToIt(
 	_, front, _ := reconciled(t)
 
 	var routes []string
-	for _, group := range box.NewRouter(front.Edge).ProjectRemovals(edge.ProjectScope{
+	for _, group := range box.NewRouter(front.Edge).Hooks().Origin.PlanProjectRemoval(edge.ProjectScope{
 		Slug: slug, Tier: environment.TierProduction, Hostnames: []string{"shop.example.com"}, Front: address,
 	}) {
 		for _, change := range group.Changes {
@@ -205,7 +205,7 @@ func TestThePreviewEntryAnEdgeForwardsIsInstalledOnTheBoxShieldedByTheClientCert
 	previews := box.NewRouter(front.Edge)
 	ctx := context.Background()
 
-	origin, err := previews.ClaimPreviewEntry(ctx, router.Claim{
+	origin, err := previews.Hooks().Origin.ClaimPreviewEntry(ctx, router.Claim{
 		Hostname: "*.preview.example.com", ClientCertificates: []string{pulled},
 		OriginCertificate: originCertificate(t, "*.preview.example.com", 365*24*time.Hour),
 	})
@@ -222,7 +222,7 @@ func TestThePreviewEntryAnEdgeForwardsIsInstalledOnTheBoxShieldedByTheClientCert
 		t.Errorf("the box shields %+v, want every preview under *.preview.example.com answered only to the edge in front", m.shields)
 	}
 
-	if err := previews.DisclaimPreviewEntry(ctx, "preview.example.com"); err != nil {
+	if err := previews.Hooks().Origin.DisclaimPreviewEntry(ctx, "preview.example.com"); err != nil {
 		t.Fatalf("DisclaimPreviewEntry: %v", err)
 	}
 	if m.previewBase != "" || len(m.shields) != 0 {
