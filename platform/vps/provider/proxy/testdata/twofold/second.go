@@ -20,6 +20,8 @@ func (Second) Unrendered([]byte, proxy.Permission) string { return "" }
 
 func (Second) Unrouted(context.Context, []string) error { return nil }
 
+func (Second) Validate(context.Context, []byte) error { return nil }
+
 func (Second) Reload(context.Context) error { return nil }
 
 func (Second) Inspect(context.Context) (proxy.Checks, error) { return nil, nil }

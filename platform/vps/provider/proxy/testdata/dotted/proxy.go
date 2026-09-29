@@ -18,6 +18,8 @@ func (Dotted) Unrendered([]byte, proxy.Permission) string { return "" }
 
 func (Dotted) Unrouted(context.Context, []string) error { return nil }
 
+func (Dotted) Validate(context.Context, []byte) error { return nil }
+
 func (Dotted) Reload(context.Context) error { return nil }
 
 func (Dotted) Inspect(context.Context) (Checks, error) { return nil, nil }

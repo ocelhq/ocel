@@ -435,6 +435,9 @@ func (h *Host) composeRouting(ctx context.Context, compose func(RoutingTable) (R
 			return shaped, nil
 		}
 		if bytes.Equal(before, after) && at != "" {
+			if err := h.front.Validate(ctx, rendered); err != nil {
+				return shaped, err
+			}
 			shaped.reloading = true
 			err = h.replace(ctx, pair.digest(), at, rendered)
 		} else {
@@ -443,6 +446,11 @@ func (h *Host) composeRouting(ctx context.Context, compose func(RoutingTable) (R
 				return shaped, err
 			}
 			shaped.reloading = !bytes.Equal(shaped.restoring.config, admitted) || at != "" && !fresh
+			if at != "" && shaped.reloading {
+				if err := h.front.Validate(ctx, admitted); err != nil {
+					return shaped, err
+				}
+			}
 			shaped.written, shaped.failedPlace, err = h.writePair(ctx, pair.digest(), routingPair{table: after, config: admitted}, shaped.reloading)
 			shaped.changed = true
 		}

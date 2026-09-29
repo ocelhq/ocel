@@ -18,6 +18,8 @@ func (c *Crowded) Unrendered([]byte, proxy.Permission) string { return "" }
 
 func (c *Crowded) Unrouted(context.Context, []string) error { return nil }
 
+func (c *Crowded) Validate(context.Context, []byte) error { return nil }
+
 func (c *Crowded) Reload(context.Context) error { return nil }
 
 func (c *Crowded) Inspect(context.Context) (proxy.Checks, error) { return nil, nil }
