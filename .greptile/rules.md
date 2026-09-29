@@ -161,7 +161,7 @@ table:
 | Number | its name or its type states the unit | `timeout int` |
 | Error | names the condition | `ErrBad` |
 | Word | the literal word; no metaphor or coined word | `standing` for current, `carried` for recorded |
-| Abbreviation | only the idioms every reader predicts: `ctx`, `err`, `id`, `req`, `res`, `resp`, `opts`, `cfg`, `fn`, `buf`, `msg`, `src`, `dst`, loop indices `i` `j` `k` `n`, test params `t` `b` `f`, a one-letter method receiver, and acronyms (`URL`, `DNS`, `HTTP`, `TLS`, `API`, `CLI`, `SDK`, `JSON`, `ID`); a PR to this file extends the list | `svc`, `mgr`, `impl` |
+| Abbreviation | only the idioms every reader predicts: `ctx`, `err`, `env`, `id`, `req`, `res`, `resp`, `opts`, `cfg`, `fn`, `buf`, `msg`, `src`, `dst`, loop indices `i` `j` `k` `n`, test params `t` `b` `f`, a one-letter method receiver, and acronyms (`URL`, `DNS`, `HTTP`, `TLS`, `API`, `CLI`, `SDK`, `JSON`, `ID`); a PR to this file extends the list | `svc`, `mgr`, `impl` |
 | File | named after its main type or concept; its test file mirrors the name | `release.go` holding `Stacks` |
 | Test | a behaviour sentence | `TestFoo2` |
 
