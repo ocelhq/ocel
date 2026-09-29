@@ -44,8 +44,8 @@ func TestChangeGroupsNamesTheStacksTheVendorDescribed(t *testing.T) {
 		Tier:    environment.TierPreview,
 		Present: true,
 		Stacks: []provider.BootstrapStack{
-			{Name: "core", Present: true, Schema: provider.BootstrapSchema, DigestCurrent: true},
-			{Name: "cache-stack", Feature: fake.FeatureCache, Present: true, Schema: provider.BootstrapSchema},
+			{Name: "core", Present: true, DigestCurrent: true},
+			{Name: "cache-stack", Feature: fake.FeatureCache, Present: true},
 		},
 	}
 	groups := bootstrapplan.ChangeGroups(described, fake.NewBootstrap().Catalogue(), provider.BootstrapRequest{

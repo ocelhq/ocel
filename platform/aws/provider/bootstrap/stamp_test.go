@@ -57,30 +57,18 @@ func TestStampTags(t *testing.T) {
 	t.Run("round trip", func(t *testing.T) {
 		t.Parallel()
 
-		want := Stamp{Schema: 3, Digest: "abc", WrittenBy: "1.2.3"}
+		want := Stamp{Digest: "abc", WrittenBy: "1.2.3"}
 		if got := readStamp(stampTags(defaultNamespace, want)); got != want {
 			t.Fatalf("readStamp(stampTags(defaultNamespace, %+v)) = %+v", want, got)
 		}
 	})
 
-	t.Run("missing schema tag reads as zero", func(t *testing.T) {
+	t.Run("unrelated tags read as the zero stamp", func(t *testing.T) {
 		t.Parallel()
 
 		got := readStamp([]cfntypes.Tag{{Key: aws.String("unrelated"), Value: aws.String("9")}})
-		if got.Schema != 0 {
-			t.Fatalf("Schema = %d, want 0 when the tag is absent", got.Schema)
-		}
 		if got.Digest != "" || got.WrittenBy != "" {
 			t.Fatalf("readStamp of unrelated tags = %+v, want the zero stamp", got)
-		}
-	})
-
-	t.Run("unreadable schema tag reads as zero", func(t *testing.T) {
-		t.Parallel()
-
-		got := readStamp([]cfntypes.Tag{{Key: aws.String(TagSchema), Value: aws.String("twelve")}})
-		if got.Schema != 0 {
-			t.Fatalf("Schema = %d, want 0 when the tag cannot be read as a number", got.Schema)
 		}
 	})
 }

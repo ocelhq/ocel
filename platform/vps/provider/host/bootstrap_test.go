@@ -25,7 +25,7 @@ func currentHost() Reading {
 		Tier:     tier,
 		Present:  true,
 		Keys:     keys,
-		Stamp:    Stamp{Schema: provider.BootstrapSchema, State: StateComplete, Digests: digests(Items(tier, keys, ArchAMD64, Front{}))},
+		Stamp:    Stamp{State: StateComplete, Digests: digests(Items(tier, keys, ArchAMD64, Front{}))},
 		Observed: digests(Items(tier, keys, ArchAMD64, Front{})),
 	}
 }

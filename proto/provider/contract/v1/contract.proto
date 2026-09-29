@@ -349,13 +349,11 @@ message BootstrapStack {
 
   bool present = 3;
 
-  uint32 schema = 4;
+  bool digest_current = 4;
 
-  bool digest_current = 5;
+  string written_by = 5;
 
-  string written_by = 6;
-
-  bool required = 7;
+  bool required = 6;
 }
 
 message BootstrapStatus {
@@ -363,19 +361,15 @@ message BootstrapStatus {
 
   bool present = 2;
 
-  uint32 schema = 3;
+  bool repair_on_deploy = 3;
 
-  uint32 required_schema = 4;
+  repeated BootstrapStack stacks = 4;
 
-  bool repair_on_deploy = 5;
+  string writer = 5;
 
-  repeated BootstrapStack stacks = 6;
+  bool downgrade = 6;
 
-  string writer = 7;
-
-  bool downgrade = 8;
-
-  bool unfinished = 9;
+  bool unfinished = 7;
 }
 
 enum CredentialPurpose {

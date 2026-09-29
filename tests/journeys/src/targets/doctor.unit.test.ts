@@ -40,7 +40,7 @@ const BOOTSTRAPPED = [
   PROJECT,
   "",
   "Production",
-  "  ✓ bootstrapped — schema 3, current",
+  "  ✓ bootstrapped, current",
   "",
   PREVIEW,
   "",

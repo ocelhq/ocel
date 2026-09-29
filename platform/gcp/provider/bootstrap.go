@@ -149,7 +149,6 @@ func (b bootstrap) described(ctx context.Context, read survey) (provider.Bootstr
 	stacks := []provider.BootstrapStack{{
 		Name:          read.Project + "/" + string(read.Tier),
 		Present:       read.Present,
-		Schema:        uint32(read.Stamp.Schema),
 		DigestCurrent: read.Stamp.Digest == digestOf(read.Names.Namespace(), items) && read.current(items),
 		WrittenBy:     read.Stamp.Writer,
 	}}
@@ -162,7 +161,6 @@ func (b bootstrap) described(ctx context.Context, read survey) (provider.Bootstr
 			Name:          read.Project + "/" + string(read.Tier) + "/" + feature,
 			Feature:       feature,
 			Present:       installed,
-			Schema:        uint32(read.Stamp.Schema),
 			DigestCurrent: installed,
 			WrittenBy:     read.Stamp.Writer,
 		})
@@ -258,7 +256,6 @@ func (b bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 	}
 
 	written := stamp{
-		Schema:   provider.BootstrapSchema,
 		State:    stateApplying,
 		Writer:   req.WrittenBy.String(),
 		Digest:   digestOf(read.Names.Namespace(), items),

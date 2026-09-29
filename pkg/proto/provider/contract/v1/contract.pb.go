@@ -2193,10 +2193,9 @@ type BootstrapStack struct {
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Feature       string                 `protobuf:"bytes,2,opt,name=feature,proto3" json:"feature,omitempty"`
 	Present       bool                   `protobuf:"varint,3,opt,name=present,proto3" json:"present,omitempty"`
-	Schema        uint32                 `protobuf:"varint,4,opt,name=schema,proto3" json:"schema,omitempty"`
-	DigestCurrent bool                   `protobuf:"varint,5,opt,name=digest_current,json=digestCurrent,proto3" json:"digest_current,omitempty"`
-	WrittenBy     string                 `protobuf:"bytes,6,opt,name=written_by,json=writtenBy,proto3" json:"written_by,omitempty"`
-	Required      bool                   `protobuf:"varint,7,opt,name=required,proto3" json:"required,omitempty"`
+	DigestCurrent bool                   `protobuf:"varint,4,opt,name=digest_current,json=digestCurrent,proto3" json:"digest_current,omitempty"`
+	WrittenBy     string                 `protobuf:"bytes,5,opt,name=written_by,json=writtenBy,proto3" json:"written_by,omitempty"`
+	Required      bool                   `protobuf:"varint,6,opt,name=required,proto3" json:"required,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2252,13 +2251,6 @@ func (x *BootstrapStack) GetPresent() bool {
 	return false
 }
 
-func (x *BootstrapStack) GetSchema() uint32 {
-	if x != nil {
-		return x.Schema
-	}
-	return 0
-}
-
 func (x *BootstrapStack) GetDigestCurrent() bool {
 	if x != nil {
 		return x.DigestCurrent
@@ -2284,13 +2276,11 @@ type BootstrapStatus struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Tier           v1.Tier                `protobuf:"varint,1,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
 	Present        bool                   `protobuf:"varint,2,opt,name=present,proto3" json:"present,omitempty"`
-	Schema         uint32                 `protobuf:"varint,3,opt,name=schema,proto3" json:"schema,omitempty"`
-	RequiredSchema uint32                 `protobuf:"varint,4,opt,name=required_schema,json=requiredSchema,proto3" json:"required_schema,omitempty"`
-	RepairOnDeploy bool                   `protobuf:"varint,5,opt,name=repair_on_deploy,json=repairOnDeploy,proto3" json:"repair_on_deploy,omitempty"`
-	Stacks         []*BootstrapStack      `protobuf:"bytes,6,rep,name=stacks,proto3" json:"stacks,omitempty"`
-	Writer         string                 `protobuf:"bytes,7,opt,name=writer,proto3" json:"writer,omitempty"`
-	Downgrade      bool                   `protobuf:"varint,8,opt,name=downgrade,proto3" json:"downgrade,omitempty"`
-	Unfinished     bool                   `protobuf:"varint,9,opt,name=unfinished,proto3" json:"unfinished,omitempty"`
+	RepairOnDeploy bool                   `protobuf:"varint,3,opt,name=repair_on_deploy,json=repairOnDeploy,proto3" json:"repair_on_deploy,omitempty"`
+	Stacks         []*BootstrapStack      `protobuf:"bytes,4,rep,name=stacks,proto3" json:"stacks,omitempty"`
+	Writer         string                 `protobuf:"bytes,5,opt,name=writer,proto3" json:"writer,omitempty"`
+	Downgrade      bool                   `protobuf:"varint,6,opt,name=downgrade,proto3" json:"downgrade,omitempty"`
+	Unfinished     bool                   `protobuf:"varint,7,opt,name=unfinished,proto3" json:"unfinished,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -2337,20 +2327,6 @@ func (x *BootstrapStatus) GetPresent() bool {
 		return x.Present
 	}
 	return false
-}
-
-func (x *BootstrapStatus) GetSchema() uint32 {
-	if x != nil {
-		return x.Schema
-	}
-	return 0
-}
-
-func (x *BootstrapStatus) GetRequiredSchema() uint32 {
-	if x != nil {
-		return x.RequiredSchema
-	}
-	return 0
 }
 
 func (x *BootstrapStatus) GetRepairOnDeploy() bool {
@@ -4831,27 +4807,24 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x04edge\x18\x03 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\"\x9b\x01\n" +
 	"\x19DescribeBootstrapResponse\x129\n" +
 	"\bfeatures\x18\x01 \x03(\v2\x1d.provider.contract.v1.FeatureR\bfeatures\x12C\n" +
-	"\tbootstrap\x18\x02 \x01(\v2%.provider.contract.v1.BootstrapStatusR\tbootstrap\"\xd2\x01\n" +
+	"\tbootstrap\x18\x02 \x01(\v2%.provider.contract.v1.BootstrapStatusR\tbootstrap\"\xba\x01\n" +
 	"\x0eBootstrapStack\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\afeature\x18\x02 \x01(\tR\afeature\x12\x18\n" +
-	"\apresent\x18\x03 \x01(\bR\apresent\x12\x16\n" +
-	"\x06schema\x18\x04 \x01(\rR\x06schema\x12%\n" +
-	"\x0edigest_current\x18\x05 \x01(\bR\rdigestCurrent\x12\x1d\n" +
+	"\apresent\x18\x03 \x01(\bR\apresent\x12%\n" +
+	"\x0edigest_current\x18\x04 \x01(\bR\rdigestCurrent\x12\x1d\n" +
 	"\n" +
-	"written_by\x18\x06 \x01(\tR\twrittenBy\x12\x1a\n" +
-	"\brequired\x18\a \x01(\bR\brequired\"\xdb\x02\n" +
+	"written_by\x18\x05 \x01(\tR\twrittenBy\x12\x1a\n" +
+	"\brequired\x18\x06 \x01(\bR\brequired\"\x9a\x02\n" +
 	"\x0fBootstrapStatus\x12/\n" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierR\x04tier\x12\x18\n" +
-	"\apresent\x18\x02 \x01(\bR\apresent\x12\x16\n" +
-	"\x06schema\x18\x03 \x01(\rR\x06schema\x12'\n" +
-	"\x0frequired_schema\x18\x04 \x01(\rR\x0erequiredSchema\x12(\n" +
-	"\x10repair_on_deploy\x18\x05 \x01(\bR\x0erepairOnDeploy\x12<\n" +
-	"\x06stacks\x18\x06 \x03(\v2$.provider.contract.v1.BootstrapStackR\x06stacks\x12\x16\n" +
-	"\x06writer\x18\a \x01(\tR\x06writer\x12\x1c\n" +
-	"\tdowngrade\x18\b \x01(\bR\tdowngrade\x12\x1e\n" +
+	"\apresent\x18\x02 \x01(\bR\apresent\x12(\n" +
+	"\x10repair_on_deploy\x18\x03 \x01(\bR\x0erepairOnDeploy\x12<\n" +
+	"\x06stacks\x18\x04 \x03(\v2$.provider.contract.v1.BootstrapStackR\x06stacks\x12\x16\n" +
+	"\x06writer\x18\x05 \x01(\tR\x06writer\x12\x1c\n" +
+	"\tdowngrade\x18\x06 \x01(\bR\tdowngrade\x12\x1e\n" +
 	"\n" +
-	"unfinished\x18\t \x01(\bR\n" +
+	"unfinished\x18\a \x01(\bR\n" +
 	"unfinished\"\xa4\x01\n" +
 	"\x1cCredentialPermissionsRequest\x12K\n" +
 	"\apurpose\x18\x01 \x01(\x0e2'.provider.contract.v1.CredentialPurposeB\b\xbaH\x05\x82\x01\x02\x10\x01R\apurpose\x127\n" +

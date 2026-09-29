@@ -36,8 +36,6 @@ type BootstrapStack struct {
 	Feature string
 	Present bool
 
-	Schema uint32
-
 	DigestCurrent bool
 
 	WrittenBy string
@@ -70,8 +68,6 @@ type BootstrapRequest struct {
 
 	VendorState any
 }
-
-const BootstrapSchema = 1
 
 const FeatureVarsKey = "vars-key"
 

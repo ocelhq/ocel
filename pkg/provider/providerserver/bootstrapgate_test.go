@@ -102,9 +102,6 @@ func TestStateReadsWhatTheVendorDescribes(t *testing.T) {
 	if want := []string{fake.FeatureCache}; !slices.Equal(status.Features, want) {
 		t.Errorf("Status().Features = %v, want %v", status.Features, want)
 	}
-	if status.Schema != provider.BootstrapSchema {
-		t.Errorf("Status().Schema = %d, want %d", status.Schema, provider.BootstrapSchema)
-	}
 	if status.WrittenBy != "1.0.0" {
 		t.Errorf("Status().WrittenBy = %q, want the writer the core stack records", status.WrittenBy)
 	}
@@ -153,23 +150,6 @@ func TestEnsureReadyRefusesABootstrapThatIsNotThere(t *testing.T) {
 	}
 	if !strings.Contains(refused.Message, "`ocel bootstrap preview`") {
 		t.Errorf("EnsureReady() = %q, want it to name the command that creates the preview bootstrap", refused.Message)
-	}
-}
-
-func TestEnsureReadyRefusesASchemaThisBuildCannotRead(t *testing.T) {
-	t.Parallel()
-
-	gate, p := gated(t, "2.0.0")
-	bootstrapped(t, p, environment.TierProduction)
-	p.FakeBootstrap().AtSchema(provider.BootstrapSchema + 1)
-
-	_, err := gate.EnsureReady(context.Background(), environment.TierProduction, nil, true, &recorder{})
-	var refused refusal.Refusal
-	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
-		t.Fatalf("EnsureReady() = %v, want a %s refusal", err, refusal.CodeNotReady)
-	}
-	if !strings.Contains(refused.Message, "Upgrade the Ocel CLI") {
-		t.Errorf("EnsureReady() = %q, want it to say the CLI is behind the account", refused.Message)
 	}
 }
 
@@ -476,28 +456,6 @@ func TestBootstrapUsersRefuseWhileAnythingDependsOnTheBootstrap(t *testing.T) {
 		if !strings.Contains(refused.Message, want) {
 			t.Errorf("Refuse() = %q, want it to contain %q", refused.Message, want)
 		}
-	}
-}
-
-func TestASchemaNewerThanThisBuildIsRefusedWithNoEscapeHatch(t *testing.T) {
-	t.Parallel()
-
-	err := providerserver.RefuseSchemaAhead(provider.BootstrapSchema+1, true, environment.TierProduction)
-	var refused refusal.Refusal
-	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
-		t.Fatalf("RefuseSchemaAhead() = %v, want a %s refusal", err, refusal.CodeNotReady)
-	}
-	if !strings.Contains(refused.Message, "ocel bootstrap destroy") {
-		t.Errorf("RefuseSchemaAhead() = %q, want it to name what drops the bootstrap", refused.Message)
-	}
-	if strings.Contains(refused.Message, "--force") {
-		t.Errorf("RefuseSchemaAhead() = %q, want no escape hatch offered", refused.Message)
-	}
-	if got := strings.Count(refused.Message, "\n"); got != 1 {
-		t.Errorf("RefuseSchemaAhead() = %q, want exactly two lines", refused.Message)
-	}
-	if err := providerserver.RefuseSchemaAhead(provider.BootstrapSchema, true, environment.TierProduction); err != nil {
-		t.Errorf("RefuseSchemaAhead() at the schema this build writes = %v, want it admitted", err)
 	}
 }
 

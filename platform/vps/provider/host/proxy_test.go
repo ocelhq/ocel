@@ -1202,8 +1202,8 @@ func TestAProxyConfiguredAsWrittenButNotRunningIsPlannedBackAndNeverCalledUpToDa
 			Tier: tier, Present: true, Keys: keys, Arch: ArchAMD64, Observed: observed,
 			Seal: Seal{Fingerprint: contentSum(minted)},
 			Stamp: Stamp{
-				Schema: provider.BootstrapSchema, State: StateComplete,
-				Seal: Seal{Fingerprint: contentSum(minted)}, Digests: digests(items),
+				State: StateComplete,
+				Seal:  Seal{Fingerprint: contentSum(minted)}, Digests: digests(items),
 			},
 		}
 

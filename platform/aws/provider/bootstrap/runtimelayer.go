@@ -148,7 +148,7 @@ func applyRuntimeLayers(ctx context.Context, apis APIs, target spec, req Request
 	}
 	stackName := target.ns.runtimeStackName(target.tier)
 	body := runtimeLayerTemplate(target.ns, target.tier, code)
-	tags := stampTags(target.ns, Stamp{Schema: provider.BootstrapSchema, Digest: cfn.TemplateDigest(body), WrittenBy: req.Writer.String()})
+	tags := stampTags(target.ns, Stamp{Digest: cfn.TemplateDigest(body), WrittenBy: req.Writer.String()})
 	if err := cfn.Upsert(ctx, apis.CFN, target.ns.ChangeSetNameFor, stackName, body, nil, nil, tags, nil); err != nil {
 		return err
 	}

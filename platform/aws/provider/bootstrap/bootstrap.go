@@ -47,7 +47,6 @@ const (
 
 type Deployed struct {
 	Present            bool
-	Schema             int
 	Stacks             []StackStamp
 	Features           FeatureSet
 	StateBucket        string
@@ -148,7 +147,6 @@ func readBootstrap(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier en
 		return Deployed{}, stackRefs{}, err
 	}
 	coreStamp := readStamp(core.Tags)
-	d.Schema = coreStamp.Schema
 
 	if err := readRuntimeLayers(ctx, api, &d, &refs, ns, tier); err != nil {
 		return Deployed{}, stackRefs{}, err
@@ -179,7 +177,6 @@ func readBootstrap(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier en
 	d.Stacks = append(d.Stacks, StackStamp{
 		Name:      target.stackName,
 		Present:   true,
-		Schema:    coreStamp.Schema,
 		Digest:    coreStamp.Digest,
 		Intended:  cfn.TemplateDigest(target.core(broughtVarsKey(d.Outputs))),
 		WrittenBy: coreStamp.WrittenBy,
@@ -190,12 +187,10 @@ func readBootstrap(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier en
 			continue
 		}
 		stamp := stamps[f.name]
-		d.Schema = min(d.Schema, stamp.Schema)
 		d.Stacks = append(d.Stacks, StackStamp{
 			Name:    f.stackName(ns, tier),
 			Feature: f.name,
 			Present: true,
-			Schema:  stamp.Schema,
 			Digest:  stamp.Digest,
 			Intended: cfn.TemplateDigest(f.planned(featureInputs{
 				ns:             ns,
@@ -229,7 +224,7 @@ func readRuntimeLayers(ctx context.Context, api cfn.StacksAPI, d *Deployed, refs
 	}
 	stamp := readStamp(stack.Tags)
 	d.RuntimeStack.Present = true
-	d.RuntimeStack.Schema, d.RuntimeStack.Digest, d.RuntimeStack.WrittenBy = stamp.Schema, stamp.Digest, stamp.WrittenBy
+	d.RuntimeStack.Digest, d.RuntimeStack.WrittenBy = stamp.Digest, stamp.WrittenBy
 	return nil
 }
 
@@ -408,7 +403,7 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress prog
 	namedIAM := []cfntypes.Capability{cfntypes.CapabilityCapabilityNamedIam}
 	review := AdmitReplacements(target.ns, req.AcceptReplacements, progress)
 	coreBody := target.core(coreVarsKey(alongside, req.VarsKey))
-	coreTags := stampTags(target.ns, Stamp{Schema: provider.BootstrapSchema, Digest: cfn.TemplateDigest(coreBody), WrittenBy: req.Writer.String()})
+	coreTags := stampTags(target.ns, Stamp{Digest: cfn.TemplateDigest(coreBody), WrittenBy: req.Writer.String()})
 	if err := cfn.Upsert(ctx, apis.CFN, target.ns.ChangeSetNameFor, target.stackName, coreBody, nil, namedIAM, coreTags, review); err != nil {
 		return err
 	}
@@ -462,7 +457,7 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress prog
 				if err != nil {
 					return fmt.Errorf("%s: %w", name, err)
 				}
-				tags := stampTags(target.ns, Stamp{Schema: provider.BootstrapSchema, Digest: cfn.TemplateDigest(stack.body), WrittenBy: req.Writer.String()})
+				tags := stampTags(target.ns, Stamp{Digest: cfn.TemplateDigest(stack.body), WrittenBy: req.Writer.String()})
 				if err := cfn.Upsert(gctx, apis.CFN, target.ns.ChangeSetNameFor, stackName, stack.body, stack.params, namedIAM, tags, review); err != nil {
 					return fmt.Errorf("%s: %w", name, err)
 				}

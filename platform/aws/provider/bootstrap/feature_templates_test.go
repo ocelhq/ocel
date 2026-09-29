@@ -17,9 +17,6 @@ type declaredTemplate struct {
 		Description string `yaml:"Description"`
 	} `yaml:"Parameters"`
 	Resources map[string]yaml.Node `yaml:"Resources"`
-	Outputs   map[string]struct {
-		Value string `yaml:"Value"`
-	} `yaml:"Outputs"`
 }
 
 var (
@@ -93,12 +90,6 @@ func TestFeatureTemplates(t *testing.T) {
 						if !slices.Contains(known, ref) {
 							t.Errorf("template references %q, which is neither a parameter it declares nor a resource it defines", ref)
 						}
-					}
-				})
-
-				t.Run("no version output", func(t *testing.T) {
-					if _, ok := tmpl.Outputs["BootstrapVersion"]; ok {
-						t.Error("the bootstrap's shape is recorded in the ocel:schema tag; no stack Output restates it")
 					}
 				})
 			})

@@ -316,20 +316,6 @@ func TestPreflightFallsBackToTheSiblingTier(t *testing.T) {
 	}
 }
 
-func TestPreflightRefusesABootstrapThisBuildCannotRead(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	client, p := contractServed(t, "1.2.3")
-	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
-	p.FakeBootstrap().AtSchema(provider.BootstrapSchema + 1)
-
-	_, err := client.Preflight(ctx, &contractv1.PreflightRequest{RequiredTier: environmentv1.Tier_TIER_PRODUCTION})
-	if got := connect.CodeOf(err); got != connect.CodeFailedPrecondition {
-		t.Fatalf("Preflight() over a newer bootstrap: code = %v, want %v (%v)", got, connect.CodeFailedPrecondition, err)
-	}
-}
-
 func TestPreflightNamesWhoAlreadyServesEachHostnameThisProjectDeclares(t *testing.T) {
 	t.Parallel()
 

@@ -64,7 +64,7 @@ func bootstrapStackAction(stack provider.BootstrapStack, described bool) (provid
 	switch {
 	case !described || !stack.Present:
 		return provider.ActionCreate, ""
-	case behind(stack):
+	case !stack.DigestCurrent:
 		return provider.ActionUpdate, ""
 	default:
 		return provider.ActionKeep, provider.ReasonCurrent
@@ -86,10 +86,6 @@ func FeatureNeedingEdge(catalogue []provider.Feature, kind edge.Kind) string {
 		}
 	}
 	return ""
-}
-
-func behind(stack provider.BootstrapStack) bool {
-	return !stack.DigestCurrent || int(stack.Schema) < provider.BootstrapSchema
 }
 
 func stackName(stack provider.BootstrapStack, fallback string) string {

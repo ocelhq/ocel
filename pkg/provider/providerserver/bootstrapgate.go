@@ -30,7 +30,6 @@ type BootstrapStatus struct {
 	Present        bool
 	Stacks         []provider.BootstrapStack
 	Features       []string
-	Schema         int
 	WrittenBy      provider.WrittenBy
 	RepairOnDeploy bool
 	Unfinished     bool
@@ -47,7 +46,6 @@ func (g Gate) Status(ctx context.Context, tier environment.Tier) (BootstrapStatu
 	var present []string
 	for _, stack := range described.Stacks {
 		if stack.Feature == "" {
-			status.Schema = int(stack.Schema)
 			status.WrittenBy = provider.WrittenBy(stack.WrittenBy)
 			continue
 		}
@@ -114,10 +112,6 @@ type featureChange struct {
 
 func (g Gate) resolveFeatureChange(status BootstrapStatus, req ApplyRequest) (featureChange, error) {
 	catalogue := g.Bootstrap.Catalogue()
-	tier := status.Tier
-	if err := RefuseSchemaAhead(status.Schema, status.Present, tier); err != nil {
-		return featureChange{}, err
-	}
 	asked, err := bootstrapplan.FeaturesWithDependencies(catalogue, req.Features)
 	if err != nil {
 		return featureChange{}, err
@@ -342,8 +336,8 @@ func (g Gate) EnsureReady(ctx context.Context, tier environment.Tier, required [
 		return BootstrapStatus{}, err
 	}
 	command := provider.BootstrapCommand(tier)
-	if err := CheckSchema(status.Schema, status.Present, tier); err != nil {
-		return status, err
+	if !status.Present {
+		return status, refusal.Refuse(refusal.CodeNotReady, "this account has no Ocel bootstrap.\nRun `%s` to create it, then try again", command)
 	}
 	if err := status.lacking(required, command); err != nil {
 		return status, err
@@ -494,61 +488,6 @@ func (u BootstrapUsers) Refuse(tier environment.Tier) error {
 	}
 	return refusal.Refuse(refusal.CodeNotReady, "the %s bootstrap is still in use, so `%s` will not remove it: %s",
 		tier, bootstrapDestroyCommand(tier), strings.Join(reasons, "; "))
-}
-
-type compatibility int
-
-const (
-	compatible compatibility = iota
-	needsBootstrapInit
-	needsBootstrapUpgrade
-	needsCLIUpgrade
-)
-
-func checkCompat(deployed int, present bool, required int) compatibility {
-	switch {
-	case !present:
-		return needsBootstrapInit
-	case deployed < required:
-		return needsBootstrapUpgrade
-	case deployed > required:
-		return needsCLIUpgrade
-	default:
-		return compatible
-	}
-}
-
-func (c compatibility) explain(deployed, required int, command string) error {
-	switch c {
-	case needsBootstrapInit:
-		return refusal.Refuse(refusal.CodeNotReady, "this account has no Ocel bootstrap.\nRun `%s` to create it, then try again", command)
-	case needsBootstrapUpgrade:
-		if deployed == 0 {
-			return refusal.Refuse(refusal.CodeNotReady, "this account's Ocel bootstrap predates schema tracking; this provider requires schema %d.\nRun `%s` to upgrade it, then try again", required, command)
-		}
-		return refusal.Refuse(refusal.CodeNotReady, "this account's Ocel bootstrap is out of date: the account is at schema %d, this provider requires schema %d.\nRun `%s` to upgrade it, then try again", deployed, required, command)
-	case needsCLIUpgrade:
-		return refusal.Refuse(refusal.CodeNotReady, "this account's Ocel bootstrap is newer than this provider understands: the account is at schema %d, this provider supports up to schema %d.\nUpgrade the Ocel CLI and try again", deployed, required)
-	default:
-		return nil
-	}
-}
-
-func CheckSchema(deployed int, present bool, tier environment.Tier) error {
-	return checkCompat(deployed, present, provider.BootstrapSchema).explain(deployed, provider.BootstrapSchema, provider.BootstrapCommand(tier))
-}
-
-func RefuseSchemaAhead(deployed int, present bool, tier environment.Tier) error {
-	if checkCompat(deployed, present, provider.BootstrapSchema) != needsCLIUpgrade {
-		return nil
-	}
-	return schemaAhead(deployed, tier)
-}
-
-func schemaAhead(deployed int, tier environment.Tier) error {
-	return refusal.Refuse(refusal.CodeNotReady,
-		"this account's Ocel bootstrap is newer than this provider understands: the account is at schema %d, this provider supports up to schema %d.\nUpgrade the Ocel CLI, or run `%s` and bootstrap it afresh — there is no way to write an older shape over a newer one",
-		deployed, provider.BootstrapSchema, bootstrapDestroyCommand(tier))
 }
 
 func bootstrapDestroyCommand(tier environment.Tier) string {

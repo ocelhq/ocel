@@ -2,7 +2,7 @@ import { stripVTControlCharacters } from "node:util";
 
 const REFUSED = "✗";
 const PRODUCTION_ABSENT = "– not set up — run `ocel bootstrap production` to set it up";
-const PRODUCTION_CURRENT = /^ {2}✓ bootstrapped — schema \d+, current$/m;
+const PRODUCTION_CURRENT = /^ {2}✓ bootstrapped, current$/m;
 const BUILTIN_PROXY_VERDICTS = [
   "✓ port 80 answers from this machine",
   "✓ nothing listens on tcp 2019 inside ocel-proxy",

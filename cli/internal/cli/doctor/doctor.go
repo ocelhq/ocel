@@ -310,8 +310,6 @@ func (a *answers) addHostChecks(checks []*contractv1.HostCheck) {
 	}
 }
 
-const upgradeProvider = "upgrade the provider pinned in this project"
-
 func hostCheckDomains(asking bool, cfg *project.Project) []string {
 	if !asking {
 		return nil
@@ -536,7 +534,7 @@ func tierSection(tier environmentv1.Tier, hosts []string, got *answers) section 
 		s.neutral("skipped — the provider did not answer")
 		return s
 	case answer.status == nil:
-		s.fail("the provider said nothing about the "+name+" bootstrap", upgradeProvider)
+		s.fail("the provider answered with no "+name+" bootstrap status", "")
 		return s
 	}
 
@@ -563,7 +561,7 @@ func tierSection(tier environmentv1.Tier, hosts []string, got *answers) section 
 	plan := bootstrap.PlanFor(status)
 	stale := staleStacks(status)
 	if len(plan.Missing) == 0 && len(stale) == 0 {
-		s.pass(fmt.Sprintf("bootstrapped — schema %d, current", status.GetSchema()))
+		s.pass("bootstrapped, current")
 		return s
 	}
 	if len(plan.Missing) > 0 {

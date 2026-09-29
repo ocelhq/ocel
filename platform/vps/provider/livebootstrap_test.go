@@ -117,9 +117,6 @@ func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 	if stamp.State != host.StateComplete {
 		t.Errorf("the stamp reads state %q after an apply that finished, want %q", stamp.State, host.StateComplete)
 	}
-	if stamp.Schema != provider.BootstrapSchema {
-		t.Errorf("the stamp reads schema %d, want %d", stamp.Schema, provider.BootstrapSchema)
-	}
 	if stamp.Writer != "live-suite" {
 		t.Errorf("the stamp reads writer %q, want the writer that applied it", stamp.Writer)
 	}

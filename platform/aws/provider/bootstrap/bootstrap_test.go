@@ -96,11 +96,6 @@ type parsedTemplate struct {
 	} `yaml:"Outputs"`
 }
 
-func parseTemplate(t *testing.T) parsedTemplate {
-	t.Helper()
-	return parseTemplateStr(t, coreStackTemplate(defaultNamespace, environment.TierProduction, ""))
-}
-
 func parseTemplateStr(t *testing.T, template string) parsedTemplate {
 	t.Helper()
 	var tmpl parsedTemplate
@@ -184,13 +179,6 @@ func TestStackTemplate(t *testing.T) {
 					t.Error("SessionsTable is superseded by StateTable and must not be provisioned")
 				}
 			})
-		}
-	})
-
-	t.Run("no version output", func(t *testing.T) {
-		tmpl := parseTemplate(t)
-		if _, ok := tmpl.Outputs["BootstrapVersion"]; ok {
-			t.Error("the bootstrap's shape is recorded in the ocel:schema tag; no stack Output restates it")
 		}
 	})
 }
@@ -381,7 +369,7 @@ func TestCheckDeployed(t *testing.T) {
 			outputAssetBucket:    "assets-xyz",
 			outputInfraTier:      string(environment.TierProduction),
 		}
-		api := stubStacksAPI{coreStackName: outputs(core).stamped(Stamp{Schema: 3, Digest: "written-digest", WrittenBy: "1.4.0"})}
+		api := stubStacksAPI{coreStackName: outputs(core).stamped(Stamp{Digest: "written-digest", WrittenBy: "1.4.0"})}
 
 		got, err := CheckDeployed(context.Background(), api, defaultNamespace)
 		if err != nil {
@@ -389,7 +377,6 @@ func TestCheckDeployed(t *testing.T) {
 		}
 		want := Deployed{
 			Present:        true,
-			Schema:         3,
 			Features:       FeatureSet{},
 			StateBucket:    "bucket-123",
 			StateTable:     "state-abc",
@@ -406,7 +393,6 @@ func TestCheckDeployed(t *testing.T) {
 				{
 					Name:      coreStackName,
 					Present:   true,
-					Schema:    3,
 					Digest:    "written-digest",
 					Intended:  cfn.TemplateDigest(coreStackTemplate(defaultNamespace, environment.TierProduction, "")),
 					WrittenBy: "1.4.0",
@@ -438,10 +424,10 @@ func TestCheckDeployed(t *testing.T) {
 
 	t.Run("a feature stack is what says the feature is on", func(t *testing.T) {
 		api := stubStacksAPI{
-			coreStackName: outputs(map[string]string{outputInfraTier: string(environment.TierProduction)}).stamped(Stamp{Schema: provider.BootstrapSchema}),
+			coreStackName: outputs(map[string]string{outputInfraTier: string(environment.TierProduction)}).stamped(Stamp{}),
 			coreStackName + "-" + FeatureImageOptimization: outputs(map[string]string{
 				outputImageOptimizerURL: "https://optimizer.lambda-url.test/",
-			}).stamped(Stamp{Schema: provider.BootstrapSchema}),
+			}).stamped(Stamp{}),
 		}
 
 		got, err := CheckDeployed(context.Background(), api, defaultNamespace)
@@ -459,36 +445,9 @@ func TestCheckDeployed(t *testing.T) {
 		}
 	})
 
-	t.Run("the oldest stack decides the schema", func(t *testing.T) {
-		api := stubStacksAPI{
-			coreStackName:                    outputs(nil).stamped(Stamp{Schema: provider.BootstrapSchema + 1}),
-			coreStackName + "-" + FeatureISR: outputs(nil).stamped(Stamp{Schema: provider.BootstrapSchema}),
-		}
-
-		got, err := CheckDeployed(context.Background(), api, defaultNamespace)
-		if err != nil {
-			t.Fatalf("CheckDeployed: %v", err)
-		}
-		if got.Schema != provider.BootstrapSchema {
-			t.Errorf("Schema = %d, want %d: a feature stack left behind by a half-finished bootstrap must read as out of date", got.Schema, provider.BootstrapSchema)
-		}
-	})
-
-	t.Run("an untagged bootstrap reads as schema zero", func(t *testing.T) {
-		api := stubStacksAPI{coreStackName: outputs(map[string]string{outputInfraTier: string(environment.TierProduction)})}
-
-		got, err := CheckDeployed(context.Background(), api, defaultNamespace)
-		if err != nil {
-			t.Fatalf("CheckDeployed: %v", err)
-		}
-		if got.Schema != 0 {
-			t.Errorf("Schema = %d, want 0 for a bootstrap written before the tag existed", got.Schema)
-		}
-	})
-
 	t.Run("a stack whose digest moved reads as stale", func(t *testing.T) {
 		api := stubStacksAPI{coreStackName: outputs(map[string]string{outputInfraTier: string(environment.TierProduction)}).
-			stamped(Stamp{Schema: provider.BootstrapSchema, Digest: "stale"})}
+			stamped(Stamp{Digest: "stale"})}
 
 		got, err := CheckDeployed(context.Background(), api, defaultNamespace)
 		if err != nil {
@@ -501,7 +460,7 @@ func TestCheckDeployed(t *testing.T) {
 
 	t.Run("a stack written from this build reads as current", func(t *testing.T) {
 		api := stubStacksAPI{coreStackName: outputs(map[string]string{outputInfraTier: string(environment.TierProduction)}).
-			stamped(Stamp{Schema: provider.BootstrapSchema, Digest: cfn.TemplateDigest(coreStackTemplate(defaultNamespace, environment.TierProduction, ""))})}
+			stamped(Stamp{Digest: cfn.TemplateDigest(coreStackTemplate(defaultNamespace, environment.TierProduction, ""))})}
 
 		got, err := CheckDeployed(context.Background(), api, defaultNamespace)
 		if err != nil {

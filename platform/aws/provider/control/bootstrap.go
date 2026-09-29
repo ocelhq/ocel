@@ -101,7 +101,6 @@ func described(tier environment.Tier, deployed bootstrap.Deployed) provider.Boot
 			Name:          stack.Name,
 			Feature:       stack.Feature,
 			Present:       stack.Present,
-			Schema:        uint32(stack.Schema),
 			DigestCurrent: stack.Current(),
 			WrittenBy:     stack.WrittenBy,
 		})

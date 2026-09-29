@@ -8,7 +8,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 )
 
@@ -40,7 +39,7 @@ func TestTheCoreIsTheSameWhicheverEdgeFrontsIt(t *testing.T) {
 }
 
 func TestReadingABootstrapSeesEveryInstalledEdge(t *testing.T) {
-	stamp := Stamp{Schema: provider.BootstrapSchema}
+	stamp := Stamp{}
 	api := stubStacksAPI{
 		coreStackName: outputs(map[string]string{
 			outputInfraTier:   string(environment.TierProduction),

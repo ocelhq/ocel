@@ -61,9 +61,6 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 
 	if status.Present {
 		resp.InfraTier, resp.InfrastructurePresent = encodeTier(tier), true
-		if err := checkCompat(status.Schema, true, provider.BootstrapSchema).explain(status.Schema, provider.BootstrapSchema, provider.BootstrapCommand(tier)); err != nil {
-			return nil, provider.RefusalError(err)
-		}
 		resp.KnownSlugs, err = slugsBesides(ctx, gate, tier, req.GetSlug())
 		if err != nil {
 			return nil, provider.RefusalError(err)

@@ -209,8 +209,6 @@ func BootstrapStatusProto(current BootstrapStatus, writing provider.WrittenBy, t
 	status := &contractv1.BootstrapStatus{
 		Tier:           tier,
 		Present:        current.Present,
-		Schema:         uint32(current.Schema),
-		RequiredSchema: provider.BootstrapSchema,
 		RepairOnDeploy: current.RepairOnDeploy,
 		Writer:         writing.String(),
 		Downgrade:      current.Downgrade(writing),
@@ -221,7 +219,6 @@ func BootstrapStatusProto(current BootstrapStatus, writing provider.WrittenBy, t
 			Name:          stack.Name,
 			Feature:       stack.Feature,
 			Present:       stack.Present,
-			Schema:        stack.Schema,
 			DigestCurrent: stack.DigestCurrent,
 			WrittenBy:     stack.WrittenBy,
 			Required:      stack.Feature == "" || slices.Contains(required, stack.Feature),

@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
@@ -109,7 +108,6 @@ func stampedBy(t *testing.T, conn *sudoless, change func(map[string]string)) {
 	written := digests(append(Items(environment.TierProduction, keys, ArchAMD64, Front{}), record))
 	change(written)
 	stamp, err := json.Marshal(Stamp{
-		Schema:  provider.BootstrapSchema,
 		State:   StateComplete,
 		Seal:    Seal{Fingerprint: "abc"},
 		Digests: written,

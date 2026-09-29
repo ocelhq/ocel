@@ -326,11 +326,8 @@ func TestDescribeBootstrapAnswersTheCatalogueAndTheCurrentStatus(t *testing.T) {
 	}
 
 	status := planned.GetBootstrap()
-	if !status.GetPresent() || status.GetSchema() != provider.BootstrapSchema {
-		t.Errorf("DescribeBootstrap() status = %+v, want it present at schema %d", status, provider.BootstrapSchema)
-	}
-	if status.GetRequiredSchema() != provider.BootstrapSchema {
-		t.Errorf("required_schema = %d, want %d", status.GetRequiredSchema(), provider.BootstrapSchema)
+	if !status.GetPresent() {
+		t.Errorf("DescribeBootstrap() status = %+v, want it present", status)
 	}
 	if status.GetWriter() != "1.2.3" {
 		t.Errorf("writer = %q, want the version this provider was built as", status.GetWriter())

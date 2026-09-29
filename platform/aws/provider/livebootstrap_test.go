@@ -71,9 +71,6 @@ func TestLiveBootstrapProvisionsTheAccountAndASecondRunPlansNothing(t *testing.T
 	if stack.WrittenBy != string(liveWriter) {
 		t.Errorf("the core stack records writer %q, want the writer that applied it", stack.WrittenBy)
 	}
-	if stack.Schema != uint32(provider.BootstrapSchema) {
-		t.Errorf("the core stack records schema %d, want %d", stack.Schema, provider.BootstrapSchema)
-	}
 
 	if status := a.stackStatus(t, coreStackName); status != "CREATE_COMPLETE" {
 		t.Errorf("%s is in state %q in CloudFormation, want CREATE_COMPLETE", coreStackName, status)

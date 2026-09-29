@@ -22,7 +22,6 @@ type Bootstrap struct {
 	applied     map[environment.Tier][]string
 	stale       map[string]bool
 	writer      string
-	schema      uint32
 	refusal     error
 	requests    []provider.BootstrapRequest
 	front       edge.Kind
@@ -39,7 +38,6 @@ func NewBootstrap() *Bootstrap {
 		applied: map[environment.Tier][]string{},
 		stale:   map[string]bool{},
 		writer:  "1.0.0",
-		schema:  provider.BootstrapSchema,
 	}
 }
 
@@ -121,12 +119,6 @@ func (b *Bootstrap) SetWriter(writer string) {
 	b.writer = writer
 }
 
-func (b *Bootstrap) AtSchema(schema uint32) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.schema = schema
-}
-
 func (b *Bootstrap) MarkUnfinished() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -173,7 +165,6 @@ func (b *Bootstrap) stack(tier environment.Tier, feature string) provider.Bootst
 		Name:          stackNameOf(tier, feature),
 		Feature:       feature,
 		Present:       true,
-		Schema:        b.schema,
 		DigestCurrent: !b.stale[feature],
 		WrittenBy:     b.writer,
 	}

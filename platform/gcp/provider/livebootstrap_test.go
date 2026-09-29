@@ -324,7 +324,7 @@ func interrupt(t *testing.T, p *gcp.Provider, tier environment.Tier) {
 	t.Cleanup(func() { client.Close() })
 
 	writer := client.Bucket(liveNames(t).Bucket(tier)).Object(gcp.StampObject).NewWriter(ctx)
-	if _, err := writer.Write([]byte(`{"schema":1,"state":"applying","writer":"live-suite","digest":"halfway"}`)); err != nil {
+	if _, err := writer.Write([]byte(`{"state":"applying","writer":"live-suite","digest":"halfway"}`)); err != nil {
 		t.Fatal(err)
 	}
 	if err := writer.Close(); err != nil {
@@ -577,7 +577,7 @@ func TestLiveAnApplyRefusesRatherThanWriteOverAnotherRunsStamp(t *testing.T) {
 			return
 		}
 		written = true
-		stamped(t, tier, `{"schema":1,"state":"applying","writer":"the-other-run","digest":"elsewhere"}`)
+		stamped(t, tier, `{"state":"applying","writer":"the-other-run","digest":"elsewhere"}`)
 	}}
 
 	var refused refusal.Refusal

@@ -61,7 +61,6 @@ func (b Bootstrap) described(ctx context.Context, read Reading) (provider.Bootst
 		Stacks: []provider.BootstrapStack{{
 			Name:          principal,
 			Present:       read.Present,
-			Schema:        uint32(read.Stamp.Schema),
 			DigestCurrent: read.upToDate(),
 			WrittenBy:     read.Stamp.Writer,
 		}},
@@ -194,7 +193,6 @@ func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 	}
 
 	stamp := Stamp{
-		Schema:  provider.BootstrapSchema,
 		State:   StateApplying,
 		Writer:  req.WrittenBy.String(),
 		Digests: digests(items),

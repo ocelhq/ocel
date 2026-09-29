@@ -16,7 +16,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
-	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
@@ -257,7 +256,7 @@ func surveyed(items []Item) string {
 
 func bootstrapped(t *testing.T, tier environment.Tier) []Item {
 	t.Helper()
-	stamp, err := Stamp{Schema: provider.BootstrapSchema, State: StateComplete}.item(tier)
+	stamp, err := Stamp{State: StateComplete}.item(tier)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -306,7 +305,6 @@ func bootstrappedWith(t *testing.T, tier environment.Tier, table, config *string
 		t.Fatal(err)
 	}
 	stamp, err := Stamp{
-		Schema:  provider.BootstrapSchema,
 		State:   StateComplete,
 		Writer:  "the-suite",
 		Seal:    Seal{Fingerprint: contentSum(minted), Algorithm: SealAlgorithm, CreatedAt: "2026-01-01T00:00:00Z"},

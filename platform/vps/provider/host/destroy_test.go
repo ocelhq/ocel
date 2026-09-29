@@ -115,7 +115,7 @@ func TestAHostWhoseStampIsUnreadableCanStillBeDestroyed(t *testing.T) {
 
 	tier, beside := environment.TierProduction, environment.TierPreview
 	truncated := func(tier environment.Tier) Item {
-		return Item{Kind: KindFile, Name: StampPath(tier), Mode: 0o644, Owner: rootOwner, Content: []byte(`{"schema": 2, "sta`)}
+		return Item{Kind: KindFile, Name: StampPath(tier), Mode: 0o644, Owner: rootOwner, Content: []byte(`{"state": "compl`)}
 	}
 	box := machine(map[environment.Tier][]Item{
 		tier:   append(Items(tier, []byte(aKey+"\n"), ArchAMD64, Front{}), truncated(tier)),

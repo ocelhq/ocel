@@ -21,9 +21,6 @@ func TestRunStamps(t *testing.T) {
 		}
 		for _, name := range stacks.stacks() {
 			stamp := stacks.stampOf(name)
-			if stamp.Schema != provider.BootstrapSchema {
-				t.Errorf("%s is stamped with schema %d, want %d", name, stamp.Schema, provider.BootstrapSchema)
-			}
 			if want := cfn.TemplateDigest(stacks.template(name)); stamp.Digest != want {
 				t.Errorf("%s is stamped with digest %q, want the sha256 of its own body %q", name, stamp.Digest, want)
 			}
