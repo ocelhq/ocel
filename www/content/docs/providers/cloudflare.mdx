@@ -36,8 +36,7 @@ certificate uploaded last at once, so until the next step origins refuse it. Dep
 project on each VPS box and on each Google Cloud tier the zone forwards to: each origin
 then trusts both. Delete the old certificate from the zone, then deploy every project with a
 hostname in the zone once more: an origin stops trusting the old certificate for a hostname
-once that hostname's own project deploys, since another zone may still present it. An origin keeps trusting the old certificate for a hostname until
-that hostname's own project deploys, so deploy every project with a hostname in the zone.
+once that hostname's own project deploys, since another zone may still present it.
 
 Cloudflare reaches the origin over plain http when the visitor used it, and the origin
 answers that with a redirect to https without forwarding it, so ocel changes neither Always
