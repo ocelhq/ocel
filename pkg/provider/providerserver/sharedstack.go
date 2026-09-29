@@ -3,8 +3,10 @@ package providerserver
 import (
 	"context"
 	"errors"
+	"fmt"
 	"maps"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -82,7 +84,23 @@ func (s *sharedStack) promote(ctx context.Context, req promoteRequest, progress 
 	}
 	apps := slices.Sorted(maps.Keys(req.promotion.Builds))
 	dropped, err := promote(ctx, s.ledger, req, []appRouter{{stack: routed, apps: apps}}, progress)
-	return dropped, errors.Join(err, s.adopt(routed))
+	if err := errors.Join(err, s.adopt(routed)); err != nil {
+		return dropped, err
+	}
+	s.purgeFlipped(ctx, req.pointer, progress)
+	return dropped, nil
+}
+
+func (s *sharedStack) purgeFlipped(ctx context.Context, pointer string, progress progress.Progress) {
+	purge := s.front.Hooks().PurgeHostnames
+	bound := s.edgeStack().State().Bound
+	if purge == nil || !router.IsDefaultPointer(pointer) || len(bound) == 0 {
+		return
+	}
+	if err := purge(ctx, bound); err != nil {
+		progress.Warn(fmt.Sprintf("%s may keep answering %s from what it cached of the release this promote replaced until that cache expires: purging it failed: %v",
+			describeFront(s.front.Kind()), strings.Join(bound, ", "), err))
+	}
 }
 
 func (s *sharedStack) removePointer(ctx context.Context, pointer string, progress progress.Progress) (router.PruneResult, error) {

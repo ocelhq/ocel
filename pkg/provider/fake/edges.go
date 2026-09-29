@@ -126,6 +126,30 @@ type Edge struct {
 	proxies    bool
 	claims     []router.Claim
 	disclaimed []string
+	purged     [][]string
+	purgeError error
+}
+
+func (e *Edge) RefusePurges(err error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.purgeError = err
+}
+
+func (e *Edge) Purged() [][]string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return slices.Clone(e.purged)
+}
+
+func (e *Edge) purge(_ context.Context, hostnames []string) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.purgeError != nil {
+		return e.purgeError
+	}
+	e.purged = append(e.purged, slices.Clone(hostnames))
+	return nil
 }
 
 func (e *Edge) ProxiesRecords() {
@@ -297,6 +321,7 @@ func (e *Edge) Hooks() edge.Hooks {
 	hooks := edge.Hooks{VerifyCredentials: e.verify}
 	if e.proxies {
 		hooks.EnsureClientCertificate = func(context.Context, string) (string, error) { return ClientCertificate(e.kind), nil }
+		hooks.PurgeHostnames = e.purge
 	}
 	if e.entitlement != nil {
 		granted := *e.entitlement
