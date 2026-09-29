@@ -295,7 +295,7 @@ func (r *projectRemoval) unbind(ctx context.Context, runProgress progress.Progre
 	}
 	var errs []error
 	for _, hostname := range stack.State().Bound {
-		runProgress.Say(fmt.Sprintf("Unbinding %s from %s", hostname, frontPhrase(r.front.Kind())))
+		runProgress.Say(fmt.Sprintf("Unbinding %s from %s", hostname, describeFront(r.front.Kind())))
 		if err := progress.Heeded(stack.UnbindDomain(ctx, hostname), runProgress); err != nil {
 			errs = append(errs, fmt.Errorf("unbind %q before the origin it fronts is destroyed: %w", hostname, err))
 		}
@@ -344,7 +344,7 @@ func (r *projectRemoval) tearDownEdge(ctx context.Context, progress progress.Pro
 	if stack := r.edgeStack(); stack == nil || stack.State().Empty() {
 		return nil
 	}
-	progress.Say(fmt.Sprintf("Destroying the stack that serves %s through %s", r.slug, frontPhrase(r.front.Kind())))
+	progress.Say(fmt.Sprintf("Destroying the stack that serves %s through %s", r.slug, describeFront(r.front.Kind())))
 	if err := r.destroy(ctx); err != nil {
 		return fmt.Errorf("destroy the edge stack: %w", err)
 	}

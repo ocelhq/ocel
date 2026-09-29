@@ -113,8 +113,8 @@ func (d *hostnames) addTargets() []ConfiguredHost {
 func (d *hostnames) attachHostname(ctx context.Context, target ConfiguredHost, progress progress.Progress) (bool, error) {
 	host := target.Hostname
 	hostState := d.state.Host(host)
-	previous, served := hostState.Serving()
-	answering := d.routerFor(target.App)
+	previous, served := hostState.ServedEdge()
+	answering := d.readAppRouter(target.App)
 	priorCertID := hostState.Certificate.ID
 	certifying := d.hostCertificates(host, &hostState)
 
@@ -125,7 +125,7 @@ func (d *hostnames) attachHostname(ctx context.Context, target ConfiguredHost, p
 		return false, certifying.discardSuperseded(ctx, progress)
 	}
 
-	progress.Say(fmt.Sprintf("Binding %s to %s", host, frontPhrase(d.front.Kind())))
+	progress.Say(fmt.Sprintf("Binding %s to %s", host, describeFront(d.front.Kind())))
 	if err := d.edgeStack().BindDomain(ctx, edge.DomainBinding{Hostname: host, Certificate: hostState.Certificate.ID, App: target.App, Say: progress.Say}); err != nil {
 		return true, err
 	}
@@ -143,7 +143,7 @@ func (d *hostnames) attachHostname(ctx context.Context, target ConfiguredHost, p
 		return true, err
 	}
 	written, err := d.cutover.write(ctx, records,
-		fmt.Sprintf("Point %s at %s", host, frontPhrase(d.front.Kind())), progress.Say)
+		fmt.Sprintf("Point %s at %s", host, describeFront(d.front.Kind())), progress.Say)
 	hostState.Written, hostState.Manual = written.Written, written.Manual
 	d.state.SetHost(host, hostState)
 	if cerr := d.checkpoint(ctx); cerr != nil {
@@ -162,7 +162,7 @@ func (d *hostnames) attachHostname(ctx context.Context, target ConfiguredHost, p
 	if err != nil {
 		return true, err
 	}
-	progress.Say(fmt.Sprintf("%s is served through %s", host, frontPhrase(d.front.Kind())))
+	progress.Say(fmt.Sprintf("%s is served through %s", host, describeFront(d.front.Kind())))
 	if !served || previous == d.front.Kind() {
 		return true, nil
 	}
@@ -187,7 +187,7 @@ func (d *hostnames) unbindPreviousEdge(ctx context.Context, host string, previou
 	if err != nil {
 		return err
 	}
-	runProgress.Say(fmt.Sprintf("Unbinding %s from %s it moved off", host, frontPhrase(previous)))
+	runProgress.Say(fmt.Sprintf("Unbinding %s from %s it moved off", host, describeFront(previous)))
 	if err := progress.Heeded(stack.UnbindDomain(ctx, host), runProgress); err != nil {
 		return err
 	}
@@ -225,7 +225,7 @@ func (d *hostnames) remove(ctx context.Context, runProgress progress.Progress) e
 		return nil
 	}
 	for _, host := range targets {
-		runProgress.Say(fmt.Sprintf("Unbinding %s from %s", host, frontPhrase(d.front.Kind())))
+		runProgress.Say(fmt.Sprintf("Unbinding %s from %s", host, describeFront(d.front.Kind())))
 		if err := progress.Heeded(d.edgeStack().UnbindDomain(ctx, host), runProgress); err != nil {
 			return err
 		}
@@ -331,7 +331,7 @@ func (d *hostnames) statusOf(ctx context.Context, host string) (*contractv1.Prod
 
 	probe := hostState.Probe
 	if bound && d.live {
-		probe = d.probe(ctx, host, d.routerFor(d.appOf(host)))
+		probe = d.probe(ctx, host, d.readAppRouter(d.findApp(host)))
 	}
 	health, err := d.provider.Certificates().Inspect(ctx, d.cutover.kind, host, hostState.Certificate)
 	if err != nil {
@@ -351,7 +351,7 @@ func (d *hostnames) statusOf(ctx context.Context, host string) (*contractv1.Prod
 	return row, nil
 }
 
-func (d *hostnames) appOf(host string) string {
+func (d *hostnames) findApp(host string) string {
 	for _, configured := range d.configured {
 		if configured.Hostname == host {
 			return configured.App
@@ -377,15 +377,15 @@ func (d *hostnames) hostnameBlocker(host string, cert provider.Certificate, heal
 		return fmt.Sprintf("certificate %s covers %s, which does not include %s",
 			cert.ID, strings.Join(health.Domains, ", "), host)
 	case !bound:
-		return fmt.Sprintf("%s is not bound to %s yet; run `ocel domain add`", host, frontPhrase(d.cutover.kind))
+		return fmt.Sprintf("%s is not bound to %s yet; run `ocel domain add`", host, describeFront(d.cutover.kind))
 	case !probe.OK:
-		return fmt.Sprintf("%s does not answer through %s yet%s", host, frontPhrase(d.cutover.kind), d.cutover.lastProbeFailure(host))
+		return fmt.Sprintf("%s does not answer through %s yet%s", host, describeFront(d.cutover.kind), d.cutover.lastProbeFailure(host))
 	}
 	return ""
 }
 
 func servingPointer(host stackrecords.HostnameState, front edge.Kind) string {
-	if bound, served := host.Serving(); served {
+	if bound, served := host.ServedEdge(); served {
 		return string(bound)
 	}
 	return string(front)

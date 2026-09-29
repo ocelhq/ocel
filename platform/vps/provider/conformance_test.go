@@ -63,8 +63,8 @@ func TestAProjectThatNamesNoEdgeIsAnsweredByTheSwitchboardOnTheBox(t *testing.T)
 	if got := p.Facts().DefaultEdge; got != edge.None {
 		t.Errorf("Facts().DefaultEdge = %q, want no edge: a deploy that names none reaches the box's own proxy", got)
 	}
-	if got := p.Facts().PairedRouters(edge.None); !slices.Equal(got, []router.Kind{switchboard.RouterKind}) {
-		t.Errorf("PairedRouters(no edge) = %v, want the switchboard alone", got)
+	if got := p.Facts().ListPairedRouters(edge.None); !slices.Equal(got, []router.Kind{switchboard.RouterKind}) {
+		t.Errorf("ListPairedRouters(no edge) = %v, want the switchboard alone", got)
 	}
 
 	for _, named := range []edge.Kind{"cloudflare", "box"} {

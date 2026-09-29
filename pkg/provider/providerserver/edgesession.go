@@ -72,7 +72,7 @@ func (h *handlers) removalEdge(p provider.Provider, state stackrecords.EdgeState
 	return p.Edges().Open(state.Kind)
 }
 
-func frontPhrase(kind edge.Kind) string {
+func describeFront(kind edge.Kind) string {
 	if kind == edge.None {
 		return "the origin"
 	}
@@ -140,7 +140,7 @@ func (s *edgeSession) promoted(ctx context.Context) (bool, error) {
 	return active != "", err
 }
 
-func (s *edgeSession) routerFor(app string) router.Kind {
+func (s *edgeSession) readAppRouter(app string) router.Kind {
 	if kind, paired := s.state.Apps[app]; paired {
 		return kind
 	}
