@@ -24,7 +24,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
-	"github.com/ocelhq/ocel/cli/internal/manifestwire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
@@ -150,7 +149,7 @@ func assembleManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig
 		return nil, err
 	}
 
-	manifest, err := manifestbuilder.Build(cfg.Slug, cfg.Domains, toApps(cfg.Dir, cfg.Apps, usages, compute, images, functions), compute, manifestwire.Declarations(cfg.Dir, resources), manifestwire.Bindings(cfg.BindingsFor(declarations.Scope().Tier)), functions, variablesByApp(appValues, functions))
+	manifest, err := manifestbuilder.Build(cfg.Slug, cfg.Domains, toApps(cfg.Dir, cfg.Apps, usages, compute, images, functions), compute, declaration.ToManifest(cfg.Dir, resources), manifestBindings(cfg.BindingsFor(declarations.Scope().Tier)), functions, variablesByApp(appValues, functions))
 	if err != nil {
 		return nil, err
 	}
@@ -414,7 +413,7 @@ func toApps(projectDir string, apps []projectconfig.App, usages []attribution.Us
 		named[a.Name] = true
 		out = append(out, manifestbuilder.App{
 			Name:            a.Name,
-			Framework:       manifestwire.Framework(a.Framework),
+			Framework:       manifestbuilder.Framework{Name: a.Framework.Name, Arch: a.Framework.Arch},
 			ClientBundle:    discovery.ClientBundle(a.Framework.Name, filepath.Join(projectDir, a.Path)),
 			Compute:         a.Compute,
 			Domains:         a.Domains,
@@ -563,4 +562,12 @@ func countOf(n int, noun string) string {
 		return "1 " + noun
 	}
 	return fmt.Sprintf("%d %ss", n, noun)
+}
+
+func manifestBindings(bindings []projectconfig.Binding) []manifestbuilder.Binding {
+	out := make([]manifestbuilder.Binding, 0, len(bindings))
+	for _, b := range bindings {
+		out = append(out, manifestbuilder.Binding{Type: b.Type, Name: b.Name, External: b.RecordName()})
+	}
+	return out
 }

@@ -1,20 +1,19 @@
-package manifestwire
+package declaration
 
 import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/declaration"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
-func TestDeclarations(t *testing.T) {
+func TestToManifestCarriesEachResourceAndWhereItWasDeclared(t *testing.T) {
 	t.Parallel()
 
 	t.Run("maps resource fields", func(t *testing.T) {
 		t.Parallel()
 
-		resources := []declaration.Resource{
+		resources := []Resource{
 			{
 				Name:     "main",
 				Type:     resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
@@ -22,7 +21,7 @@ func TestDeclarations(t *testing.T) {
 			},
 		}
 
-		decls := Declarations(t.TempDir(), resources)
+		decls := ToManifest(t.TempDir(), resources)
 
 		if len(decls) != 1 {
 			t.Fatalf("len(decls) = %d, want 1", len(decls))
@@ -43,13 +42,13 @@ func TestDeclarations(t *testing.T) {
 		t.Parallel()
 
 		configDir := t.TempDir()
-		resources := []declaration.Resource{{
+		resources := []Resource{{
 			Name:   "main",
 			Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 			Source: filepath.Join(configDir, "shared", "db.ts") + ":3",
 		}}
 
-		decls := Declarations(configDir, resources)
+		decls := ToManifest(configDir, resources)
 
 		if len(decls) != 1 {
 			t.Fatalf("len(decls) = %d, want 1", len(decls))

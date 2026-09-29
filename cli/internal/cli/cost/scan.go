@@ -19,8 +19,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
+	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
-	"github.com/ocelhq/ocel/cli/internal/manifestwire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runui"
@@ -242,7 +242,7 @@ func scanManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Con
 	} else if err != nil {
 		return nil, nil, err
 	}
-	manifest, err := manifestbuilder.Build(cfg.Slug, cfg.Domains, scannedApps(cfg), compute, manifestwire.Declarations(cfg.Dir, resources), manifestwire.Bindings(cfg.BindingsFor(env.GetTier())), functions, nil)
+	manifest, err := manifestbuilder.Build(cfg.Slug, cfg.Domains, scannedApps(cfg), compute, declaration.ToManifest(cfg.Dir, resources), manifestBindings(cfg.BindingsFor(env.GetTier())), functions, nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -254,7 +254,7 @@ func scannedApps(cfg *projectconfig.Config) []manifestbuilder.App {
 	for _, a := range cfg.Apps {
 		app := manifestbuilder.App{
 			Name:      a.Name,
-			Framework: manifestwire.Framework(a.Framework),
+			Framework: manifestbuilder.Framework{Name: a.Framework.Name, Arch: a.Framework.Arch},
 			Compute:   a.Compute,
 			Domains:   a.Domains,
 			Folder:    a.Folder,
@@ -276,7 +276,7 @@ func unbuiltFunctions(cfg *projectconfig.Config) []manifestbuilder.Function {
 		if a.Compute == string(provider.ComputeContainer) {
 			continue
 		}
-		functions = append(functions, manifestbuilder.Function{Route: a.Name, App: a.Name, Framework: manifestwire.Framework(a.Framework)})
+		functions = append(functions, manifestbuilder.Function{Route: a.Name, App: a.Name, Framework: manifestbuilder.Framework{Name: a.Framework.Name, Arch: a.Framework.Arch}})
 	}
 	return functions
 }
@@ -303,4 +303,12 @@ func writeJSON(stdout io.Writer, set *costv1.ResourceSet, estimate *costv1.Estim
 	}
 	_, err = fmt.Fprintln(stdout, string(encoded))
 	return err
+}
+
+func manifestBindings(bindings []projectconfig.Binding) []manifestbuilder.Binding {
+	out := make([]manifestbuilder.Binding, 0, len(bindings))
+	for _, b := range bindings {
+		out = append(out, manifestbuilder.Binding{Type: b.Type, Name: b.Name, External: b.RecordName()})
+	}
+	return out
 }
