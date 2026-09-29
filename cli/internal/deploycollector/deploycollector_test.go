@@ -2,13 +2,38 @@ package deploycollector
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"connectrpc.com/connect"
+
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	"github.com/ocelhq/ocel/pkg/proto/app/resources/v1/resourcesv1connect"
 )
+
+func TestTheDeployCollectorRefusesADeclarationItsSchemaForbidsAsTheDevServerDoes(t *testing.T) {
+	t.Parallel()
+
+	c := New(variables.NewDeclarations(emptyValues{}, variables.Scope{}))
+	server := httptest.NewServer(c.Mux())
+	t.Cleanup(server.Close)
+
+	_, err := resourcesv1connect.NewResourceServiceClient(server.Client(), server.URL).DeclareEnv(context.Background(), &resourcesv1.DeclareEnvRequest{
+		Definitions: []*resourcesv1.VariableDefinition{{
+			Key:     "POSTHOG_ID",
+			Class:   resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN,
+			Folders: []string{"web"},
+		}},
+	})
+
+	var connectErr *connect.Error
+	if !errors.As(err, &connectErr) || connectErr.Code() != connect.CodeInvalidArgument {
+		t.Fatalf("DeclareEnv with an unanchored folder err = %v, want %v: deploy admits only what dev admits", err, connect.CodeInvalidArgument)
+	}
+}
 
 func TestCollector(t *testing.T) {
 	t.Parallel()

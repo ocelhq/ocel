@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"connectrpc.com/connect"
+	"connectrpc.com/validate"
 
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/sdkversion"
@@ -50,7 +51,7 @@ func (c *Collector) Snapshot() []declare.Resource {
 
 func (c *Collector) Mux() *http.ServeMux {
 	mux := http.NewServeMux()
-	path, handler := resourcesv1connect.NewResourceServiceHandler(c, connect.WithInterceptors(c.sdk.Interceptor()))
+	path, handler := resourcesv1connect.NewResourceServiceHandler(c, connect.WithInterceptors(validate.NewInterceptor(), c.sdk.Interceptor()))
 	mux.Handle(path, handler)
 	mux.HandleFunc("/sync", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
