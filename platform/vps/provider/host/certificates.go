@@ -3,6 +3,7 @@ package host
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"slices"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 const proxyNotServingYet = 3
@@ -155,7 +157,7 @@ func (b frontBox) RanWithStdin(ctx context.Context, what string, argv []string, 
 }
 
 func (b frontBox) elevation(ctx context.Context, argv []string) (string, error) {
-	if len(argv) == 0 || argv[0] != "docker" {
+	if len(argv) == 0 || argv[0] != "docker" && argv[0] != "sh" {
 		return "", nil
 	}
 	return b.h.reachDocker(ctx)
@@ -184,6 +186,22 @@ func (b frontBox) Claimed(ctx context.Context) ([]string, error) {
 func (b frontBox) Probe(ctx context.Context, hostname string) (router.Kind, string, error) {
 	said, err := b.h.ServedRouter(ctx, hostname)
 	return said.Router, said.Failure, err
+}
+
+func (b frontBox) Beside(ctx context.Context, path string) ([]switchboard.Neighbour, error) {
+	elevation, err := b.h.reachDocker(ctx)
+	if err != nil {
+		return nil, err
+	}
+	said, err := b.h.ran(ctx, "read what your proxy reads beside "+path, words(switchboardCommand("beside", path)), nil, elevation)
+	if err != nil {
+		return nil, err
+	}
+	var beside []switchboard.Neighbour
+	if err := json.Unmarshal([]byte(said), &beside); err != nil {
+		return nil, unread("what "+SwitchboardContainer+" read beside "+path, said)
+	}
+	return beside, nil
 }
 
 func (b frontBox) Said(ctx context.Context, argv []string) (string, error) {

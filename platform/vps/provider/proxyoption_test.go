@@ -26,6 +26,12 @@ func TestTheProxyOptionReadsEveryFormItTakes(t *testing.T) {
 		"manual as an object with no port":     {options: proxied(map[string]any{"manual": map[string]any{}}), want: &vps.Proxy{Manual: &vps.Manual{}}},
 		"manual as an object naming a port":    {options: proxied(map[string]any{"manual": map[string]any{"port": 9000}}), want: &vps.Proxy{Manual: &vps.Manual{Port: 9000}}},
 		"manual set to null inside its object": {options: proxied(map[string]any{"manual": nil}), want: &vps.Proxy{Manual: &vps.Manual{}}},
+		"Coolify's Traefik":                    {options: proxied(map[string]any{"traefik": map[string]any{"preset": "coolify"}}), want: &vps.Proxy{Traefik: &vps.Traefik{Preset: "coolify"}}},
+		"Dokploy's Traefik on a port":          {options: proxied(map[string]any{"traefik": map[string]any{"preset": "dokploy", "port": 9000}}), want: &vps.Proxy{Traefik: &vps.Traefik{Preset: "dokploy", Port: 9000}}},
+		"a Traefik spelled out": {
+			options: proxied(map[string]any{"traefik": map[string]any{"directory": "/etc/traefik/dynamic", "resolver": "le", "previewResolver": "dns"}}),
+			want:    &vps.Proxy{Traefik: &vps.Traefik{Directory: "/etc/traefik/dynamic", Resolver: "le", PreviewResolver: "dns"}},
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -91,12 +97,9 @@ func TestTheProxyOptionRefusesWhatThisOcelDoesNotServe(t *testing.T) {
 			options: proxied(map[string]any{"manual": map[string]any{"port": 70000}}),
 			mention: []string{`"proxy.manual.port"`, "70000", "outside 1-65535"},
 		},
-		"coolify, which runs a proxy and is none":     {options: proxied("coolify"), mention: []string{`"provider.vps.proxy"`, `must be one of "manual", or`, "traefik, caddy, manual"}},
-		"dokploy, which runs a proxy and is none":     {options: proxied("dokploy"), mention: []string{`"provider.vps.proxy"`, `must be one of "manual", or`, "traefik, caddy, manual"}},
-		"traefik, not served yet":                     {options: proxied(map[string]any{"traefik": map[string]any{"directory": "/d", "resolver": "le"}}), mention: []string{`"traefik"`, "not supported yet"}},
-		"Coolify's Traefik, not served yet":           {options: proxied(map[string]any{"traefik": map[string]any{"preset": "coolify"}}), mention: []string{`"traefik"`, "not supported yet"}},
-		"Coolify's Traefik on a port, not served yet": {options: proxied(map[string]any{"traefik": map[string]any{"preset": "coolify", "port": 9000}}), mention: []string{`"traefik"`, "not supported yet"}},
-		"certificates with manual":                    {options: provider.Options{"ssh": "prod", "proxy": "manual", "certificates": map[string]any{"shop.example.com": "/etc/ocel/certs/shop"}}, mention: []string{"your proxy serves certificates; configure them there"}},
+		"coolify, which runs a proxy and is none": {options: proxied("coolify"), mention: []string{`"provider.vps.proxy"`, `must be one of "manual", or`, "traefik, caddy, manual"}},
+		"dokploy, which runs a proxy and is none": {options: proxied("dokploy"), mention: []string{`"provider.vps.proxy"`, `must be one of "manual", or`, "traefik, caddy, manual"}},
+		"certificates with manual":                {options: provider.Options{"ssh": "prod", "proxy": "manual", "certificates": map[string]any{"shop.example.com": "/etc/ocel/certs/shop"}}, mention: []string{"your proxy serves certificates; configure them there"}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

@@ -2,14 +2,11 @@ package host
 
 import (
 	"cmp"
-	"context"
 	"slices"
 	"strconv"
 
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/refusal"
 
-	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/manual"
@@ -57,8 +54,8 @@ func openFront(front Front, box frontBox) proxy.Proxy {
 		return manual.Manual{Box: box, Port: front.Manual.Port}
 	case front.Caddy != nil:
 		return front.caddyfile(box)
-	case front.adopted():
-		return unservedFront{named: front.named()}
+	case front.Traefik != nil:
+		return front.traefik(box)
 	default:
 		return caddy.Builtin{Box: box}
 	}
@@ -69,33 +66,6 @@ func destination(front proxy.Proxy) string {
 		return file
 	}
 	return ""
-}
-
-type unservedFront struct{ named string }
-
-func (u unservedFront) refused() error {
-	return refusal.Refuse(refusal.CodeInvalid,
-		"%s is not supported yet as the proxy fronting this box; route to ocel yourself with `\"proxy\": \"manual\"`", u.named)
-}
-
-func (unservedFront) Guarantees() proxy.Guarantees { return proxy.Guarantees{} }
-
-func (u unservedFront) Render(proxy.Spec) ([]byte, error) { return nil, u.refused() }
-
-func (unservedFront) File() string { return "" }
-
-func (unservedFront) Unrendered([]byte, proxy.Permission) string { return "" }
-
-func (u unservedFront) RefuseRouted(context.Context, []string) error { return u.refused() }
-
-func (u unservedFront) Validate(context.Context, []byte) error { return u.refused() }
-
-func (u unservedFront) Reload(context.Context) error { return u.refused() }
-
-func (u unservedFront) Inspect(context.Context) (proxy.Checks, error) { return nil, u.refused() }
-
-func (unservedFront) Certificate(context.Context, string) (proxy.Certificate, error) {
-	return proxy.Certificate{Renewal: certs.AdoptedRenewal}, nil
 }
 
 func (state RoutingTable) hostnames() []string {
@@ -138,6 +108,8 @@ func (f Front) joined() []userNetwork {
 		return []userNetwork{{name: f.Manual.Network, option: "proxy.manual.network"}}
 	case f.Caddy != nil && f.Caddy.Network != "" && f.Caddy.Network != ProxyNetwork:
 		return []userNetwork{{name: f.Caddy.Network, option: "proxy.caddy.network"}}
+	case f.Traefik != nil && f.Traefik.Network != "" && f.Traefik.Network != ProxyNetwork:
+		return []userNetwork{{name: f.Traefik.Network, option: "proxy.traefik.network"}}
 	default:
 		return nil
 	}
@@ -149,6 +121,8 @@ func (f Front) published() []publish {
 		return []publish{{addr: loopbackAddr, port: strconv.Itoa(f.Manual.Port), target: switchboardPort}}
 	case f.Caddy != nil && f.Caddy.Network == "":
 		return []publish{{addr: loopbackAddr, port: strconv.Itoa(f.Caddy.Port), target: switchboard.HTTPSListenPort}}
+	case f.Traefik != nil && f.Traefik.Network == "":
+		return []publish{{addr: loopbackAddr, port: strconv.Itoa(f.Traefik.Port), target: switchboard.HTTPSListenPort}}
 	default:
 		return nil
 	}
@@ -164,6 +138,8 @@ func (f Front) listening() []string {
 		return relaying
 	case f.Caddy != nil:
 		return []string{"--https-listen", cmp.Or(f.Caddy.Network, ProxyNetwork) + ":" + switchboard.HTTPSListenPort}
+	case f.Traefik != nil:
+		return []string{"--https-listen", cmp.Or(f.Traefik.Network, ProxyNetwork) + ":" + switchboard.HTTPSListenPort}
 	default:
 		return nil
 	}

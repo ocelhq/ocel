@@ -150,11 +150,6 @@ func (c *Caddy) written() host.CaddyFront {
 	}
 }
 
-func unsupported(key string) error {
-	return refusal.Refuse(refusal.CodeInvalid,
-		"option `\"proxy\": { %q: … }` is not supported yet; route to ocel yourself with `\"proxy\": %q`", key, proxyManual)
-}
-
 func (p *Proxy) usable(certificates map[string]string) error {
 	if p == nil {
 		return nil
@@ -165,10 +160,7 @@ func (p *Proxy) usable(certificates map[string]string) error {
 	}
 	switch {
 	case p.Traefik != nil:
-		if err := p.Traefik.usable(); err != nil {
-			return err
-		}
-		return unsupported(proxyTraefik)
+		return p.Traefik.usable()
 	case p.Caddy != nil:
 		return p.Caddy.usable()
 	}

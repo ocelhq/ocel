@@ -362,17 +362,3 @@ func TestABoxHasNoCertificateForThePreviewWildcardItself(t *testing.T) {
 		t.Errorf("Inspect() = %+v over a wildcard bearing no certificate, want nothing to report", health)
 	}
 }
-
-func TestACertificateBehindAProxyThisOcelDoesNotServeYetIsStillRenewedByYourProxy(t *testing.T) {
-	t.Parallel()
-
-	served := selfSigned(t, []string{"shop.example.com"}, 60*24*time.Hour)
-	p := vps.ProviderOver(
-		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}, Proxy: &vps.Proxy{Traefik: &vps.Traefik{Preset: "coolify"}}},
-		func(context.Context) (host.Conn, error) { return &box{leaf: string(served)}, nil },
-	)
-	health, err := p.Certificates().Inspect(context.Background(), edge.None, "shop.example.com", certificateFor(t, p, "shop.example.com"))
-	if err != nil || health.Renewal != certs.AdoptedRenewal {
-		t.Errorf("InspectCertificate() = %+v, %v; want renewal %q, as for every proxy of yours without a sentence of its own", health, err, certs.AdoptedRenewal)
-	}
-}
