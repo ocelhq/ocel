@@ -153,17 +153,12 @@ func destroyProject(ctx context.Context, invocation commands.Invocation, cfg *pr
 	if bypassNotice != "" {
 		check.Warn(bypassNotice)
 	}
-	prov, err := providerprocess.Start(ctx, cfg, check, invocation.Questions, executables.ChoosePinning(policy.DryRun))
-	if err != nil {
-		return err
-	}
-	defer prov.Close()
-
-	_, err = readiness.Check(ctx, check, prov, cfg, readiness.Request{Tier: tier, Require: readiness.Features})
+	prov, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{Pinning: executables.ChoosePinning(policy.DryRun), Tier: tier, Require: readiness.Features})
 	check.End(err)
 	if err != nil {
 		return err
 	}
+	defer prov.Close()
 
 	preview := tier == environmentv1.Tier_TIER_PREVIEW
 	var env *environmentv1.Environment

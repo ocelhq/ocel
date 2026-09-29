@@ -7,18 +7,13 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
-	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/progress"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
 func promotionHistory(ctx context.Context, check *run.Span, prov *providerprocess.Provider, cfg *project.Project) ([]*contractv1.PromotionHistoryEntry, error) {
-	if _, err := readiness.Check(ctx, check, prov, cfg, readiness.Request{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: readiness.Features}); err != nil {
-		return nil, err
-	}
 	unit := check.Unit(cfg.Slug, progress.Reading.Title("the promotion history of production"))
 	var listed *contractv1.ListPromotionsResponse
 	err := prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {

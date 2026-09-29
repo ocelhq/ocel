@@ -16,7 +16,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/ocelhq/ocel/cli/internal/build"
-	"github.com/ocelhq/ocel/cli/internal/executables"
+	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/manifest"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
@@ -101,7 +101,7 @@ func Run(ctx context.Context, dependencies Dependencies, cwd string, opts Option
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := providerprocess.Start(ctx, cfg, check, dependencies.Questions, executables.PinToLock)
+	prov, _, err := dependencies.OpenProvider(ctx, check, cfg, commands.OpenOptions{})
 	check.End(err)
 	if err != nil {
 		return err

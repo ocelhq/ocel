@@ -11,7 +11,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/consent"
-	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/readiness"
@@ -98,17 +97,12 @@ func listPromotions(ctx context.Context, invocation commands.Invocation, cfg *pr
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := providerprocess.Start(ctx, cfg, check, invocation.Questions, executables.PinToLock)
-	if err != nil {
-		return nil, err
-	}
-	defer prov.Close()
-
-	_, err = readiness.Check(ctx, check, prov, cfg, readiness.Request{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: readiness.Features})
+	prov, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: readiness.Features})
 	check.End(err)
 	if err != nil {
 		return nil, err
 	}
+	defer prov.Close()
 
 	var listed *contractv1.ListPromotionsResponse
 	err = prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
@@ -143,17 +137,12 @@ func runPromotionsPrune(ctx context.Context, invocation commands.Invocation, cwd
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := providerprocess.Start(ctx, cfg, check, invocation.Questions, executables.PinToLock)
-	if err != nil {
-		return err
-	}
-	defer prov.Close()
-
-	_, err = readiness.Check(ctx, check, prov, cfg, readiness.Request{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: readiness.Features})
+	prov, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: readiness.Features})
 	check.End(err)
 	if err != nil {
 		return err
 	}
+	defer prov.Close()
 
 	plan := run.Phase(progressv1.Phase_PHASE_PLAN)
 	plan.Say(fmt.Sprintf("This will reclaim every production promotion of project %q but the newest %d and the live one; none of them can be rolled back to afterwards", cfg.Slug, opts.keep))

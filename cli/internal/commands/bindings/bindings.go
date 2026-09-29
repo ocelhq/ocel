@@ -21,7 +21,6 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"github.com/ocelhq/ocel/cli/internal/commands"
-	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/readiness"
@@ -186,17 +185,12 @@ func withBindingProvider(ctx context.Context, invocation commands.Invocation, cw
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := providerprocess.Start(ctx, cfg, check, invocation.Questions, executables.PinToLock)
-	if err != nil {
-		return err
-	}
-	defer prov.Close()
-
-	_, err = readiness.Check(ctx, check, prov, cfg, readiness.Request{Tier: opts.tier(), Require: readiness.Infrastructure})
+	prov, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{Tier: opts.tier(), Require: readiness.Infrastructure})
 	check.End(err)
 	if err != nil {
 		return err
 	}
+	defer prov.Close()
 	headline, err := drive(ctx, prov, cfg)
 	if err == nil && headline != "" {
 		run.Succeed(headline)

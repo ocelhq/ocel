@@ -15,10 +15,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/commands"
-	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/node"
@@ -110,7 +108,7 @@ func resolveBuiltComputes(ctx context.Context, dependencies Dependencies, buildi
 	}
 	check := building.Phase(progressv1.Phase_PHASE_CHECK)
 	defer func() { check.End(err) }()
-	prov, err := providerprocess.Start(ctx, declared, check, dependencies.Questions, executables.PinToLock)
+	prov, _, err := dependencies.OpenProvider(ctx, check, declared, commands.OpenOptions{})
 	if err != nil {
 		return nil, err
 	}

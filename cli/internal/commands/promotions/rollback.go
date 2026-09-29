@@ -14,9 +14,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
+	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/progress"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -79,8 +81,13 @@ func runRollback(ctx context.Context, invocation commands.Invocation, cwd string
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := providerprocess.Start(ctx, cfg, check, invocation.Questions, executables.ChoosePinning(opts.dry))
+	prov, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{
+		Pinning: executables.ChoosePinning(opts.dry),
+		Tier:    environmentv1.Tier_TIER_PRODUCTION,
+		Require: readiness.Features,
+	})
 	if err != nil {
+		check.End(err)
 		return err
 	}
 	defer prov.Close()

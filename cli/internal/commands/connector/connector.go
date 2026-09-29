@@ -8,7 +8,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 
 	"github.com/spf13/cobra"
@@ -147,7 +146,7 @@ func withOptions(cmd *cobra.Command, dependencies Dependencies, opts *options,
 }
 
 func reachTarget(ctx context.Context, dependencies Dependencies, cfg *project.Project, check *run.Span) (*providerprocess.Provider, *contractv1.DescribeConnectorTargetResponse, error) {
-	prov, err := providerprocess.Start(ctx, cfg, check, dependencies.Questions, executables.PinToLock)
+	prov, _, err := dependencies.OpenProvider(ctx, check, cfg, commands.OpenOptions{})
 	if err != nil {
 		return nil, nil, err
 	}

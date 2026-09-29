@@ -8,11 +8,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/commands"
-	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/readiness"
-	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -70,18 +67,6 @@ func globalPreviewBaseDomain(wildcard string) (string, error) {
 	return project.PreviewBaseDomain(host), nil
 }
 
-func startReadyProvider(ctx context.Context, invocation commands.Invocation, cfg *project.Project, check *run.Span, tier environmentv1.Tier) (*providerprocess.Provider, error) {
-	prov, err := providerprocess.Start(ctx, cfg, check, invocation.Questions, executables.PinToLock)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := readiness.Check(ctx, check, prov, cfg, readiness.Request{Tier: tier, Require: readiness.Features}); err != nil {
-		prov.Close()
-		return nil, err
-	}
-	return prov, nil
-}
-
 func readDomain(ctx context.Context, invocation commands.Invocation, cfg *project.Project, command string, tier environmentv1.Tier, reading progress.Title, read func(context.Context, contractv1connect.ProviderServiceClient) error) (err error) {
 	if _, err := cfg.RequireProvider(); err != nil {
 		return err
@@ -94,7 +79,7 @@ func readDomain(ctx context.Context, invocation commands.Invocation, cfg *projec
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := startReadyProvider(ctx, invocation, cfg, check, tier)
+	prov, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{Tier: tier, Require: readiness.Features})
 	if err != nil {
 		return err
 	}
