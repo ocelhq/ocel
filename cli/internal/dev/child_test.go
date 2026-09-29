@@ -139,14 +139,14 @@ export default { slug: "test-app" };
 		if err != nil {
 			t.Fatalf("listen: %v", err)
 		}
-		srv := devserver.New("http://"+listener.Addr().String(), devresources.New("a-leader", devresources.Options{}))
-		srv.PushEnv(map[string]string{"OCEL_RESOURCE_POSTGRES_main": `{"name":"main","postgres":{"host":"resolved","port":5432,"database":"main","username":"u","password":"p"}}`})
+		server := devserver.New("http://"+listener.Addr().String(), devresources.New("a-leader", devresources.Options{}))
+		server.PushEnv(map[string]string{"OCEL_RESOURCE_POSTGRES_main": `{"name":"main","postgres":{"host":"resolved","port":5432,"database":"main","username":"u","password":"p"}}`})
 
-		httpSrv := &http.Server{Handler: srv.Mux()}
-		go httpSrv.Serve(listener)
-		defer httpSrv.Close()
+		httpServer := &http.Server{Handler: server.Mux()}
+		go httpServer.Serve(listener)
+		defer httpServer.Close()
 
-		if err := leader.Claim(root, leader.Leader{Address: listener.Addr().String(), Token: srv.AppToken()}); err != nil {
+		if err := leader.Claim(root, leader.Leader{Address: listener.Addr().String(), Token: server.AppToken()}); err != nil {
 			t.Fatalf("leader.Claim: %v", err)
 		}
 

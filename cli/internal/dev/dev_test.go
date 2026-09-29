@@ -471,9 +471,9 @@ export default { slug: "test-app" };
 		}
 
 		stalled := startWatching
-		startWatching = func(ctx context.Context, srv *devserver.Server, cfg *project.Project, invoked invocation, session *run.Span, onResolved func(map[string]string)) (*filewatch.Watcher, error) {
+		startWatching = func(ctx context.Context, server *devserver.Server, cfg *project.Project, invoked invocation, session *run.Span, onResolved func(map[string]string)) (*filewatch.Watcher, error) {
 			time.Sleep(300 * time.Millisecond)
-			return stalled(ctx, srv, cfg, invoked, session, onResolved)
+			return stalled(ctx, server, cfg, invoked, session, onResolved)
 		}
 		t.Cleanup(func() { startWatching = stalled })
 
@@ -581,13 +581,13 @@ export default { slug: "test-app" };
 		if err != nil {
 			t.Fatalf("listen: %v", err)
 		}
-		srv := devserver.New("http://"+listener.Addr().String(), devresources.New("a-leader", devresources.Options{}))
-		srv.PushEnv(map[string]string{"OCEL_RESOURCE_POSTGRES_main": `{"name":"main","postgres":{"host":"resolved","port":5432,"database":"main","username":"u","password":"p"}}`})
+		server := devserver.New("http://"+listener.Addr().String(), devresources.New("a-leader", devresources.Options{}))
+		server.PushEnv(map[string]string{"OCEL_RESOURCE_POSTGRES_main": `{"name":"main","postgres":{"host":"resolved","port":5432,"database":"main","username":"u","password":"p"}}`})
 
-		httpSrv := &http.Server{Handler: srv.Mux()}
-		go httpSrv.Serve(listener)
+		httpServer := &http.Server{Handler: server.Mux()}
+		go httpServer.Serve(listener)
 
-		if err := leader.Claim(root, leader.Leader{Address: listener.Addr().String(), Token: srv.AppToken()}); err != nil {
+		if err := leader.Claim(root, leader.Leader{Address: listener.Addr().String(), Token: server.AppToken()}); err != nil {
 			t.Fatalf("leader.Claim: %v", err)
 		}
 
@@ -606,7 +606,7 @@ export default { slug: "test-app" };
 
 		childprocesstest.WaitForFile(t, startedPath)
 
-		if err := httpSrv.Close(); err != nil {
+		if err := httpServer.Close(); err != nil {
 			t.Fatalf("close fake leader: %v", err)
 		}
 

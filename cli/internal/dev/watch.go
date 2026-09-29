@@ -18,7 +18,7 @@ var (
 	startWatching = watchAndResolve
 )
 
-func watchAndResolve(ctx context.Context, srv *devserver.Server, cfg *project.Project, invoked invocation, session *run.Span, onResolved func(map[string]string)) (*filewatch.Watcher, error) {
+func watchAndResolve(ctx context.Context, server *devserver.Server, cfg *project.Project, invoked invocation, session *run.Span, onResolved func(map[string]string)) (*filewatch.Watcher, error) {
 	roots, err := discovery.RootsOf(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("resolve watch directories: %w", err)
@@ -35,14 +35,14 @@ func watchAndResolve(ctx context.Context, srv *devserver.Server, cfg *project.Pr
 	}
 
 	return filewatch.Start(ctx, filewatch.Config{Paths: paths, Debounce: watchDebounce, OnChange: func() {
-		srv.ResetDeclarations()
+		server.ResetDeclarations()
 		change := session.Unit("", changeTitle)
-		resolved, err := resolveOnce(ctx, srv, cfg, invoked, change)
+		resolved, err := resolveOnce(ctx, server, cfg, invoked, change)
 		change.End(err)
 		if err != nil {
 			return
 		}
-		srv.PushEnv(resolved)
+		server.PushEnv(resolved)
 		onResolved(resolved)
 	}, OnError: func(err error) {
 		session.Warn(fmt.Sprintf("Watching for changes failed: %v", err))

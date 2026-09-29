@@ -104,26 +104,26 @@ func lead(ctx context.Context, opts Options, reset bool) (err error) {
 	defer func() {
 		host.close()
 		if claimed {
-			_ = leader.Release(cfg.Dir, host.srv.AppToken())
+			_ = leader.Release(cfg.Dir, host.server.AppToken())
 		}
 	}()
-	srv := host.srv
+	server := host.server
 	invoked := invocation{name: "dev", source: source}
 
 	background, stopBackground := context.WithCancel(ctx)
 	defer stopBackground()
 
-	if err := leader.Claim(cfg.Dir, leader.Leader{Address: host.address, Token: srv.AppToken()}); err != nil {
+	if err := leader.Claim(cfg.Dir, leader.Leader{Address: host.address, Token: server.AppToken()}); err != nil {
 		return err
 	}
 	claimed = true
 
-	resolved, err := resolveOnce(ctx, srv, cfg, invoked, startup)
+	resolved, err := resolveOnce(ctx, server, cfg, invoked, startup)
 	if err != nil {
 		return err
 	}
 	updates := make(chan map[string]string, 1)
-	watching, err := startWatching(background, srv, cfg, invoked, opts.session(), func(env map[string]string) {
+	watching, err := startWatching(background, server, cfg, invoked, opts.session(), func(env map[string]string) {
 		select {
 		case <-updates:
 		default:
@@ -137,7 +137,7 @@ func lead(ctx context.Context, opts Options, reset bool) (err error) {
 		stopBackground()
 		<-watching.Done()
 	}()
-	srv.PushEnv(resolved)
+	server.PushEnv(resolved)
 	startup.End(nil)
 
 	child, err := startChild(ctx, opts, resolved)
@@ -248,9 +248,9 @@ func runStandalone(ctx context.Context, opts Options, cwd string) error {
 		return err
 	}
 	defer host.close()
-	host.srv.UseValues(values.merged(), variablescope.ForDev(cfg))
+	host.server.UseValues(values.merged(), variablescope.ForDev(cfg))
 
-	resolved, err := discoverAndSync(ctx, host.srv, cfg, values, targetScope(cfg, cwd), invocation{name: "run", source: source}, startup)
+	resolved, err := discoverAndSync(ctx, host.server, cfg, values, targetScope(cfg, cwd), invocation{name: "run", source: source}, startup)
 	if err != nil {
 		return err
 	}

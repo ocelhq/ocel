@@ -65,26 +65,25 @@ func (c *Backend) Resolve(ctx context.Context, project string, resources []decla
 		if err != nil {
 			return nil, err
 		}
-		srv, err := c.server(ctx, engine, project, version)
+		server, err := c.ensureServer(ctx, engine, project, version)
 		if err != nil {
 			return nil, err
 		}
-		if err := ensureDatabase(ctx, engine, srv, resource.Name); err != nil {
+		if err := ensureDatabase(ctx, engine, server, resource.Name); err != nil {
 			return nil, err
 		}
-		bound, err := bind(resource, srv)
+		bound, err := bind(resource, server)
 		if err != nil {
 			return nil, err
 		}
-		bound.Origin = fmt.Sprintf("postgres:%s @ %s", version, srv.container.Address)
+		bound.Origin = fmt.Sprintf("postgres:%s @ %s", version, server.container.Address)
 		out = append(out, bound)
 	}
 	return out, nil
 }
 
-func (c *Backend) server(ctx context.Context, engine docker.Engine, project, version string) (*server, error) {
-	srv, running := c.servers[version]
-	if !running {
+func (c *Backend) ensureServer(ctx context.Context, engine docker.Engine, project, version string) (*server, error) {
+	if _, found := c.servers[version]; !found {
 		password, err := c.password()
 		if err != nil {
 			return nil, err
@@ -103,29 +102,29 @@ func (c *Backend) server(ctx context.Context, engine docker.Engine, project, ver
 		if err != nil {
 			return nil, err
 		}
-		srv = &server{container: container, password: password}
-		c.servers[version] = srv
+		c.servers[version] = &server{container: container, password: password}
 	}
-	if !srv.prepared {
-		if err := prepare(ctx, engine, srv, version); err != nil {
+	server := c.servers[version]
+	if !server.prepared {
+		if err := prepare(ctx, engine, server, version); err != nil {
 			return nil, err
 		}
-		srv.prepared = true
+		server.prepared = true
 	}
-	return srv, nil
+	return server, nil
 }
 
-func prepare(ctx context.Context, engine docker.Engine, srv *server, version string) error {
+func prepare(ctx context.Context, engine docker.Engine, server *server, version string) error {
 	err := docker.WaitReady(ctx, readyIn, func(ctx context.Context) error {
-		_, err := engine.Exec(ctx, srv.container.ID, "pg_isready", "-h", "127.0.0.1", "-U", superuser)
+		_, err := engine.Exec(ctx, server.container.ID, "pg_isready", "-h", "127.0.0.1", "-U", superuser)
 		return err
 	})
 	if err != nil {
 		return fmt.Errorf("postgres %s never accepted a connection: %w", version, err)
 	}
-	statement := "ALTER USER " + superuser + " PASSWORD '" + srv.password + "';\n"
-	if _, err := engine.ExecInput(ctx, srv.container.ID, statement, "psql", "-U", superuser, "-v", "ON_ERROR_STOP=1"); err != nil {
-		return fmt.Errorf("set this project's postgres password: %s", strings.ReplaceAll(err.Error(), srv.password, "<password>"))
+	statement := "ALTER USER " + superuser + " PASSWORD '" + server.password + "';\n"
+	if _, err := engine.ExecInput(ctx, server.container.ID, statement, "psql", "-U", superuser, "-v", "ON_ERROR_STOP=1"); err != nil {
+		return fmt.Errorf("set this project's postgres password: %s", strings.ReplaceAll(err.Error(), server.password, "<password>"))
 	}
 	return nil
 }
@@ -134,22 +133,22 @@ func (c *Backend) password() (string, error) {
 	return secret.Ensure(filepath.Join(c.secretsDir, passwordFile), secret.Purpose{Owner: "postgres", Noun: "password"})
 }
 
-func ensureDatabase(ctx context.Context, engine docker.Engine, srv *server, name string) error {
-	listed, err := engine.Exec(ctx, srv.container.ID, "psql", "-U", superuser, "-tA", "-c", "SELECT datname FROM pg_database")
+func ensureDatabase(ctx context.Context, engine docker.Engine, server *server, name string) error {
+	listed, err := engine.Exec(ctx, server.container.ID, "psql", "-U", superuser, "-tA", "-c", "SELECT datname FROM pg_database")
 	if err != nil {
 		return fmt.Errorf("list postgres databases: %w", err)
 	}
 	if slices.Contains(strings.Split(strings.TrimSpace(listed), "\n"), name) {
 		return nil
 	}
-	if _, err := engine.Exec(ctx, srv.container.ID, "createdb", "-U", superuser, "--", name); err != nil {
+	if _, err := engine.Exec(ctx, server.container.ID, "createdb", "-U", superuser, "--", name); err != nil {
 		return fmt.Errorf("create the database for postgres %q: %w", name, err)
 	}
 	return nil
 }
 
-func bind(resource declaration.Resource, srv *server) (binding.Resolved, error) {
-	host, rawPort, err := net.SplitHostPort(srv.container.Address)
+func bind(resource declaration.Resource, server *server) (binding.Resolved, error) {
+	host, rawPort, err := net.SplitHostPort(server.container.Address)
 	if err != nil {
 		return binding.Resolved{}, err
 	}
@@ -160,7 +159,7 @@ func bind(resource declaration.Resource, srv *server) (binding.Resolved, error) 
 	return binding.Encode(resource.Type, &bindingsv1.Binding{
 		Name: resource.Name,
 		Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{
-			Host: host, Port: int32(port), Database: resource.Name, Username: superuser, Password: srv.password,
+			Host: host, Port: int32(port), Database: resource.Name, Username: superuser, Password: server.password,
 		}},
 	})
 }

@@ -17,7 +17,7 @@ import (
 )
 
 type host struct {
-	srv     *devserver.Server
+	server     *devserver.Server
 	address string
 	close   func()
 }
@@ -37,17 +37,17 @@ func startHost(ctx context.Context, opts Options, source valueSource) (*host, er
 		Announce:   opts.session().Say,
 	})
 
-	srv := devserver.New("http://"+address, resources)
-	httpSrv := &http.Server{Handler: srv.Mux()}
-	go httpSrv.Serve(listener)
+	server := devserver.New("http://"+address, resources)
+	httpServer := &http.Server{Handler: server.Mux()}
+	go httpServer.Serve(listener)
 
-	return &host{srv: srv, address: address, close: func() {
+	return &host{server: server, address: address, close: func() {
 		stopping, cancel := context.WithTimeout(context.WithoutCancel(ctx), docker.StopsWithin)
 		defer cancel()
 		if err := resources.Close(stopping); err != nil {
 			opts.session().Warn(fmt.Sprintf("Stopping the dev resources failed: %v", err))
 		}
-		_ = httpSrv.Close()
+		_ = httpServer.Close()
 	}}, nil
 }
 
