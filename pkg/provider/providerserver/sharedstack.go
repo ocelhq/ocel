@@ -102,11 +102,11 @@ func (s *sharedStack) promote(ctx context.Context, req promoteRequest, progress 
 	if err := errors.Join(err, s.adopt(routed)); err != nil {
 		return dropped, err
 	}
-	s.purgeFlipped(ctx, req.pointer, progress)
+	s.purgePromotedHostnames(ctx, req.pointer, progress)
 	return dropped, nil
 }
 
-func (s *sharedStack) purgeFlipped(ctx context.Context, pointer string, progress progress.Log) {
+func (s *sharedStack) purgePromotedHostnames(ctx context.Context, pointer string, progress progress.Log) {
 	purge := s.front.Hooks().PurgeHostnames
 	bound := s.edgeStack().State().Bound
 	if purge == nil || !router.IsDefaultPointer(pointer) || len(bound) == 0 {
