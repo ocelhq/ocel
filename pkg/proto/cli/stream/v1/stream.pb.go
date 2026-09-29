@@ -716,6 +716,10 @@ type RunSummary struct {
 	Interrupted   bool                   `protobuf:"varint,9,opt,name=interrupted,proto3" json:"interrupted,omitempty"`
 	Apps          []*v1.AppResult        `protobuf:"bytes,10,rep,name=apps,proto3" json:"apps,omitempty"`
 	Missing       *MissingVariables      `protobuf:"bytes,11,opt,name=missing,proto3" json:"missing,omitempty"`
+	ChangeStarted bool                   `protobuf:"varint,12,opt,name=change_started,json=changeStarted,proto3" json:"change_started,omitempty"`
+	Tier          v12.Tier               `protobuf:"varint,13,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
+	Origin        *Party                 `protobuf:"bytes,14,opt,name=origin,proto3" json:"origin,omitempty"`
+	PromotionId   string                 `protobuf:"bytes,15,opt,name=promotion_id,json=promotionId,proto3" json:"promotion_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -820,6 +824,34 @@ func (x *RunSummary) GetMissing() *MissingVariables {
 	return nil
 }
 
+func (x *RunSummary) GetChangeStarted() bool {
+	if x != nil {
+		return x.ChangeStarted
+	}
+	return false
+}
+
+func (x *RunSummary) GetTier() v12.Tier {
+	if x != nil {
+		return x.Tier
+	}
+	return v12.Tier(0)
+}
+
+func (x *RunSummary) GetOrigin() *Party {
+	if x != nil {
+		return x.Origin
+	}
+	return nil
+}
+
+func (x *RunSummary) GetPromotionId() string {
+	if x != nil {
+		return x.PromotionId
+	}
+	return ""
+}
+
 var File_cli_stream_v1_stream_proto protoreflect.FileDescriptor
 
 const file_cli_stream_v1_stream_proto_rawDesc = "" +
@@ -872,7 +904,7 @@ const file_cli_stream_v1_stream_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$R\x03key\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\"&\n" +
 	"\fResumedEvent\x12\x16\n" +
-	"\x06reason\x18\x01 \x01(\tR\x06reason\"\x86\x03\n" +
+	"\x06reason\x18\x01 \x01(\tR\x06reason\"\xaf\x04\n" +
 	"\n" +
 	"RunSummary\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x16\n" +
@@ -886,7 +918,11 @@ const file_cli_stream_v1_stream_proto_rawDesc = "" +
 	"\vinterrupted\x18\t \x01(\bR\vinterrupted\x121\n" +
 	"\x04apps\x18\n" +
 	" \x03(\v2\x1d.common.progress.v1.AppResultR\x04apps\x129\n" +
-	"\amissing\x18\v \x01(\v2\x1f.cli.stream.v1.MissingVariablesR\amissingB9Z7github.com/ocelhq/ocel/pkg/proto/cli/stream/v1;streamv1b\x06proto3"
+	"\amissing\x18\v \x01(\v2\x1f.cli.stream.v1.MissingVariablesR\amissing\x12%\n" +
+	"\x0echange_started\x18\f \x01(\bR\rchangeStarted\x12/\n" +
+	"\x04tier\x18\r \x01(\x0e2\x1b.common.environment.v1.TierR\x04tier\x12,\n" +
+	"\x06origin\x18\x0e \x01(\v2\x14.cli.stream.v1.PartyR\x06origin\x12!\n" +
+	"\fpromotion_id\x18\x0f \x01(\tR\vpromotionIdB9Z7github.com/ocelhq/ocel/pkg/proto/cli/stream/v1;streamv1b\x06proto3"
 
 var (
 	file_cli_stream_v1_stream_proto_rawDescOnce sync.Once
@@ -947,11 +983,13 @@ var file_cli_stream_v1_stream_proto_depIdxs = []int32{
 	19, // 19: cli.stream.v1.RunSummary.propagation:type_name -> common.progress.v1.Propagation
 	20, // 20: cli.stream.v1.RunSummary.apps:type_name -> common.progress.v1.AppResult
 	4,  // 21: cli.stream.v1.RunSummary.missing:type_name -> cli.stream.v1.MissingVariables
-	22, // [22:22] is the sub-list for method output_type
-	22, // [22:22] is the sub-list for method input_type
-	22, // [22:22] is the sub-list for extension type_name
-	22, // [22:22] is the sub-list for extension extendee
-	0,  // [0:22] is the sub-list for field type_name
+	18, // 22: cli.stream.v1.RunSummary.tier:type_name -> common.environment.v1.Tier
+	2,  // 23: cli.stream.v1.RunSummary.origin:type_name -> cli.stream.v1.Party
+	24, // [24:24] is the sub-list for method output_type
+	24, // [24:24] is the sub-list for method input_type
+	24, // [24:24] is the sub-list for extension type_name
+	24, // [24:24] is the sub-list for extension extendee
+	0,  // [0:24] is the sub-list for field type_name
 }
 
 func init() { file_cli_stream_v1_stream_proto_init() }

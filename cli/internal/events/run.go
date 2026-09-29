@@ -29,12 +29,14 @@ type Run struct {
 	start   time.Time
 	trace   *runtrace.Run
 
-	mu      sync.Mutex
-	phases  map[progressv1.Phase]*Scope
-	open    []*Scope
-	changed bool
-	apps    []*progressv1.AppResult
-	success *streamv1.RunSummary
+	mu        sync.Mutex
+	phases    map[progressv1.Phase]*Scope
+	open      []*Scope
+	changed   bool
+	apps      []*progressv1.AppResult
+	identity  *streamv1.IdentityEvent
+	promotion string
+	success   *streamv1.RunSummary
 
 	endOnce sync.Once
 }
@@ -47,7 +49,8 @@ func (r *Run) End(errp *error) {
 		}
 		result, code := r.result(err)
 		r.mu.Lock()
-		result.Apps = r.apps
+		result.Apps, result.ChangeStarted, result.PromotionId = r.apps, r.changed, r.promotion
+		result.Tier, result.Origin = r.identity.GetTier(), r.identity.GetOrigin()
 		r.mu.Unlock()
 		result.DurationMs = r.bus.now().Sub(r.start).Milliseconds()
 		if r.trace != nil {
@@ -225,8 +228,6 @@ var changingPhases = map[progressv1.Phase]bool{
 	progressv1.Phase_PHASE_DESTROY:   true,
 }
 
-func IsChanging(phase progressv1.Phase) bool { return changingPhases[phase] }
-
 func (r *Run) enter(phase progressv1.Phase) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -243,8 +244,19 @@ func (r *Run) mayHaveChanged() bool {
 	return r.changed
 }
 
-func (r *Run) record(apps []*progressv1.AppResult) {
+func (r *Run) record(result *progressv1.OperationResult) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.apps = apps
+	if apps := result.GetApps(); len(apps) > 0 {
+		r.apps = apps
+	}
+	if promotion := result.GetPromotionId(); promotion != "" {
+		r.promotion = promotion
+	}
+}
+
+func (r *Run) identify(identity *streamv1.IdentityEvent) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.identity = identity
 }

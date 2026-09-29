@@ -107,4 +107,12 @@ message RunSummary {
   repeated common.progress.v1.AppResult apps = 10;
 
   MissingVariables missing = 11;
+
+  bool change_started = 12;
+
+  common.environment.v1.Tier tier = 13;
+
+  Party origin = 14;
+
+  string promotion_id = 15;
 }

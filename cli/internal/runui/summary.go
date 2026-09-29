@@ -21,12 +21,8 @@ const (
 )
 
 type summary struct {
-	result        *streamv1.RunSummary
-	tier          environmentv1.Tier
-	origin        *streamv1.Party
-	promotion     string
-	changeStarted bool
-	present       Presentation
+	result  *streamv1.RunSummary
+	present Presentation
 }
 
 func (s summary) lines() []string {
@@ -48,11 +44,11 @@ func (s summary) succeeded(took string) []string {
 	result := s.result
 	head := colorFor(s.present, color.FgGreen, color.Bold).Sprintf("%s %s in %s", okMark, headlineOr(result, "Done"), took)
 	out := []string{head}
-	if target := targetLine(s.present, s.origin); target != "" {
+	if target := targetLine(s.present, result.GetOrigin()); target != "" {
 		out = append(out, target)
 	}
-	if place := servedPlace(s.tier); place != "" && s.promotion != "" {
-		out = append(out, blockIndent+place+" now serves promotion "+s.promotion)
+	if place := servedPlace(result.GetTier()); place != "" && result.GetPromotionId() != "" {
+		out = append(out, blockIndent+place+" now serves promotion "+result.GetPromotionId())
 	}
 	out = append(out, s.appURLs()...)
 	for _, note := range result.GetUrlNotes() {
@@ -79,20 +75,20 @@ func (s summary) failed(took string) []string {
 	for _, line := range detail[1:] {
 		out = append(out, blockIndent+line)
 	}
-	if target := targetLine(s.present, s.origin); target != "" {
+	if target := targetLine(s.present, result.GetOrigin()); target != "" {
 		out = append(out, target)
 	}
 	if unpromoted := s.unpromoted(); len(unpromoted) > 0 {
 		return append(out, unpromoted...)
 	}
-	if place := servedPlace(s.tier); place != "" && !s.changeStarted {
+	if place := servedPlace(result.GetTier()); place != "" && !result.GetChangeStarted() {
 		out = append(out, blockIndent+"nothing was changed; "+place+" still serves what it served before this run")
 	}
 	return out
 }
 
 func (s summary) unpromoted() []string {
-	place := servedPlace(s.tier)
+	place := servedPlace(s.result.GetTier())
 	var deployed, failed, notRun []string
 	for _, app := range s.result.GetApps() {
 		switch app.GetOutcome() {
@@ -166,7 +162,7 @@ func (s summary) appURLs() []string {
 func (s *GroupedSink) conclude(ev *streamv1.RunEvent) {
 	s.unfinished()
 	s.gap()
-	result := summary{result: ev.GetSummary(), tier: s.tier, origin: s.origin, promotion: s.promotion, changeStarted: s.changeStarted, present: s.present}
+	result := summary{result: ev.GetSummary(), present: s.present}
 	for _, text := range result.lines() {
 		s.print(blockLine{text: text})
 	}

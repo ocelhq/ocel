@@ -88,14 +88,15 @@ func (s *Scope) Plan(headline string, plan *planv1.ChangePlan, notes ...*planv1.
 }
 
 func (s *Scope) Identity(identity *streamv1.IdentityEvent) {
+	s.run.identify(identity)
 	s.run.bus.send(s.scoped(&streamv1.RunEvent{Body: &streamv1.RunEvent_Identity{Identity: identity}}))
 }
 
 func (s *Scope) Forward(op *progressv1.OperationEvent) {
 	ev := lift(op)
 	s.run.enter(ev.GetPhase())
-	if apps := ev.GetResult().GetApps(); len(apps) > 0 {
-		s.run.record(apps)
+	if result := ev.GetResult(); result != nil {
+		s.run.record(result)
 	}
 	s.run.bus.send(ev)
 }

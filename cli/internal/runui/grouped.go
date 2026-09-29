@@ -12,10 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/events"
-
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
@@ -51,23 +48,19 @@ type GroupedSink struct {
 	present      Presentation
 	verbatimText func(string) string
 
-	mu            sync.Mutex
-	units         map[string]*unitBlock
-	started       []string
-	owners        map[string]string
-	verbatim      bool
-	failed        bool
-	tallies       map[progressv1.Phase]*phaseTally
-	beatAt        time.Time
-	silenceBroke  bool
-	held          bool
-	wrote         bool
-	blank         bool
-	gated         bool
-	tier          environmentv1.Tier
-	origin        *streamv1.Party
-	promotion     string
-	changeStarted bool
+	mu           sync.Mutex
+	units        map[string]*unitBlock
+	started      []string
+	owners       map[string]string
+	verbatim     bool
+	failed       bool
+	tallies      map[progressv1.Phase]*phaseTally
+	beatAt       time.Time
+	silenceBroke bool
+	held         bool
+	wrote        bool
+	blank        bool
+	gated        bool
 
 	stopBeats func()
 	stopTicks func()
@@ -158,7 +151,6 @@ func (s *GroupedSink) Receive(ev *streamv1.RunEvent) {
 	defer s.mu.Unlock()
 	s.silenceBroke = false
 	defer s.heard(ev)
-	s.changeStarted = s.changeStarted || events.IsChanging(ev.GetPhase())
 	span := stageKey(ev.GetSpanId())
 	switch {
 	case ev.GetStarted() != nil:
@@ -173,14 +165,11 @@ func (s *GroupedSink) Receive(ev *streamv1.RunEvent) {
 		s.silenceBroke = true
 		s.resume(ev)
 	case ev.GetIdentity() != nil:
-		s.tier, s.origin = ev.GetIdentity().GetTier(), ev.GetIdentity().GetOrigin()
 		s.gate(identityLines(s.present, ev.GetIdentity()))
 	case ev.GetPlan() != nil:
 		s.gate(planLines(s.present, ev.GetPlan()))
 	case ev.GetDnsManualRecords() != nil:
 		s.dnsRecords(ev)
-	case ev.GetResult() != nil:
-		s.promotion = ev.GetResult().GetPromotionId()
 	case ev.GetSummary() != nil:
 		s.conclude(ev)
 	case ev.GetLevel() == progressv1.Level_LEVEL_DEBUG && !s.present.Verbose:

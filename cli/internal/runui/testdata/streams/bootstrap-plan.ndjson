@@ -19,4 +19,4 @@
 {"time":"2026-09-27T10:00:10Z","level":"LEVEL_DEBUG","spanId":"BQAAAAAAAAA=","phase":"PHASE_PROVISION","subject":"production","message":"Reused the existing Pulumi passphrase"}
 {"time":"2026-09-27T10:00:10Z","level":"LEVEL_INFO","spanId":"BQAAAAAAAAA=","phase":"PHASE_PROVISION","subject":"production","ended":{"title":"Updated bootstrap stacks ocel-bootstrap and ocel-bootstrap-isr","status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503204000000000"}}
 {"time":"2026-09-27T10:00:11Z","level":"LEVEL_INFO","result":{"success":true}}
-{"time":"2026-09-27T10:00:11Z","level":"LEVEL_INFO","summary":{"success":true,"headline":"Bootstrapped the production environment","durationMs":"11000"}}
+{"time":"2026-09-27T10:00:11Z","level":"LEVEL_INFO","summary":{"success":true,"headline":"Bootstrapped the production environment","durationMs":"11000","changeStarted":true,"tier":"TIER_PRODUCTION","origin":{"vendor":"aws","account":"123456789012","principal":"deploy","location":"us-east-1"}}}
