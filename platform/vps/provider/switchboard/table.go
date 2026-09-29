@@ -55,6 +55,8 @@ type claim struct {
 	Hostname string `json:"hostname"`
 	Pointer  string `json:"pointer"`
 	App      string `json:"app,omitempty"`
+
+	ClientCertificate string `json:"clientCertificate,omitempty"`
 }
 
 type route struct {

@@ -159,27 +159,8 @@ func (s *stack) previewClaims(ctx context.Context, pointer string, apps []string
 }
 
 func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) error {
-	if binding.Hostname == "" {
-		return refusal.Refuse(refusal.CodeInvalid, "this binding names no hostname for %s to claim", s.surface())
-	}
-	address, err := s.e.machine.Address(ctx)
+	address, err := s.claimHostname(ctx, router.Claim{Hostname: binding.Hostname, App: binding.App})
 	if err != nil {
-		return err
-	}
-	claims := []host.HostClaim{{
-		Hostname: binding.Hostname, Owner: s.surface(), Pointer: router.DefaultPointer, App: binding.App,
-	}}
-	stores, err := s.stores(ctx, router.DefaultPointer)
-	if err != nil {
-		return err
-	}
-	if stores {
-		claims = append(claims, host.HostClaim{
-			Hostname: live.StoreHostname(binding.Hostname), Owner: s.surface(),
-			Pointer: router.DefaultPointer, App: switchboard.StoreLabel,
-		})
-	}
-	if err := s.claim(ctx, claims); err != nil {
 		return err
 	}
 	s.state.Bind(binding.Hostname)
@@ -188,6 +169,31 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 		binding.Say(route)
 	}
 	return nil
+}
+
+func (s *stack) claimHostname(ctx context.Context, taken router.Claim) (string, error) {
+	if taken.Hostname == "" {
+		return "", refusal.Refuse(refusal.CodeInvalid, "this binding names no hostname for %s to claim", s.surface())
+	}
+	address, err := s.e.machine.Address(ctx)
+	if err != nil {
+		return "", err
+	}
+	claims := []host.HostClaim{{
+		Hostname: taken.Hostname, Owner: s.surface(), Pointer: router.DefaultPointer, App: taken.App,
+		ClientCertificate: taken.ClientCertificate,
+	}}
+	stores, err := s.stores(ctx, router.DefaultPointer)
+	if err != nil {
+		return "", err
+	}
+	if stores {
+		claims = append(claims, host.HostClaim{
+			Hostname: live.StoreHostname(taken.Hostname), Owner: s.surface(),
+			Pointer: router.DefaultPointer, App: switchboard.StoreLabel,
+		})
+	}
+	return address, s.claim(ctx, claims)
 }
 
 func (s *stack) claim(ctx context.Context, claims []host.HostClaim) error {
@@ -210,10 +216,7 @@ func (s *stack) stores(ctx context.Context, pointer string) (bool, error) {
 }
 
 func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
-	if err := s.e.machine.DisclaimHost(ctx, hostname, s.surface()); err != nil {
-		return err
-	}
-	if err := s.e.machine.DisclaimHost(ctx, live.StoreHostname(hostname), s.surface()); err != nil {
+	if err := s.disclaimHostname(ctx, hostname); err != nil {
 		return err
 	}
 	s.state.Release(hostname)
@@ -222,6 +225,13 @@ func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
 		return progress.Warned(s.released(hostname, err))
 	}
 	return nil
+}
+
+func (s *stack) disclaimHostname(ctx context.Context, hostname string) error {
+	if err := s.e.machine.DisclaimHost(ctx, hostname, s.surface()); err != nil {
+		return err
+	}
+	return s.e.machine.DisclaimHost(ctx, live.StoreHostname(hostname), s.surface())
 }
 
 func (s *stack) released(what string, err error) error {

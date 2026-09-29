@@ -41,11 +41,23 @@ func (r routerStack) State() router.StackState {
 	return router.NewStackState(r.s.State())
 }
 
-func (r routerStack) Claim(context.Context, router.Claim) (edge.Origin, error) {
-	return edge.Origin{}, nil
+func (r routerStack) Claim(ctx context.Context, claim router.Claim) (edge.Origin, error) {
+	address, err := r.s.claimHostname(ctx, claim)
+	if err != nil {
+		return edge.Origin{}, err
+	}
+	return edge.Origin{Address: address}, nil
 }
 
-func (r routerStack) Disclaim(context.Context, string) error { return nil }
+func (r routerStack) Disclaim(ctx context.Context, hostname string) error {
+	if err := r.s.disclaimHostname(ctx, hostname); err != nil {
+		return err
+	}
+	if err := r.s.applyOrigins(ctx); err != nil {
+		return progress.Warned(r.s.released(hostname, err))
+	}
+	return nil
+}
 
 func (r routerStack) Flip(ctx context.Context, flip router.Flip, progress progress.Progress) error {
 	s := r.s
@@ -73,4 +85,4 @@ func (r routerStack) RemovePointer(ctx context.Context, pointer string, progress
 	return s.e.machine.UnroutePointer(ctx, s.surface(), router.ResolvePointer(pointer))
 }
 
-func (r routerStack) Destroy(context.Context) error { return nil }
+func (r routerStack) Destroy(ctx context.Context) error { return r.s.Destroy(ctx) }
