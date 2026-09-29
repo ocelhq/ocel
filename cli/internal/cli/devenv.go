@@ -1,15 +1,13 @@
 package cli
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"maps"
 	"os"
-	"path"
-	"path/filepath"
+	"os/exec"
 	"slices"
 	"strconv"
 	"strings"
@@ -302,27 +300,29 @@ func reportDevValues(stdout io.Writer, dir string, values devValues, watched boo
 	fmt.Fprintf(stdout, "dev delivers every value to the app in plaintext under its own name; a deploy keeps a sensitive value out of the function environment and a live one out of the artifact.\n")
 	fmt.Fprintln(stdout, values.advice(watched))
 	for _, layer := range values {
-		if layer.file && len(layer.values) > 0 && !gitIgnores(dir, layer.from) {
-			fmt.Fprintf(stdout, "%s is not matched by this project's .gitignore. Add it before committing — it contains values nothing else may see.\n", layer.from)
+		if !layer.file || len(layer.values) == 0 {
+			continue
+		}
+		switch ignored, err := readGitIgnored(dir, layer.from); {
+		case err != nil:
+			fmt.Fprintf(stdout, "ocel cannot tell whether git ignores %s (%v). Keep it out of version control — it contains values nothing else may see.\n", layer.from, err)
+		case !ignored:
+			fmt.Fprintf(stdout, "%s is not ignored by git. Add it to .gitignore before committing — it contains values nothing else may see.\n", layer.from)
 		}
 	}
 }
 
-func gitIgnores(dir, name string) bool {
-	file, err := os.Open(filepath.Join(dir, ".gitignore"))
-	if err != nil {
-		return false
+func readGitIgnored(dir, name string) (bool, error) {
+	err := exec.Command("git", "-C", dir, "check-ignore", "--quiet", "--", name).Run()
+	var exit *exec.ExitError
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.As(err, &exit) && exit.ExitCode() == 1:
+		return false, nil
+	case errors.As(err, &exit):
+		return false, fmt.Errorf("%s is not in a git repository", dir)
+	default:
+		return false, fmt.Errorf("git did not run: %w", err)
 	}
-	defer file.Close()
-
-	ignored := false
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		pattern := strings.TrimPrefix(strings.TrimSuffix(strings.TrimSpace(scanner.Text()), "/"), "/")
-		reincluded := strings.HasPrefix(pattern, "!")
-		if matched, _ := path.Match(strings.TrimPrefix(pattern, "!"), name); matched {
-			ignored = !reincluded
-		}
-	}
-	return ignored
 }

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"runtime"
@@ -296,7 +297,7 @@ func TestTheDevValueReportNamesWhereEachKeyCameFromAndNeverAValue(t *testing.T) 
 			t.Errorf("reportDevValues wrote %q for a run with no dotfile values, want nothing", quiet.String())
 		}
 
-		dir := t.TempDir()
+		dir := gitRepository(t)
 		if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(".env\n"), 0o644); err != nil {
 			t.Fatalf("write .gitignore: %v", err)
 		}
@@ -330,13 +331,13 @@ func TestTheDevValueReportNamesWhereEachKeyCameFromAndNeverAValue(t *testing.T) 
 		t.Parallel()
 
 		var out bytes.Buffer
-		reportDevValues(&out, t.TempDir(), dotfileValues(map[string]string{"API_TOKEN": "x"}), true)
+		reportDevValues(&out, gitRepository(t), dotfileValues(map[string]string{"API_TOKEN": "x"}), true)
 
 		if got := out.String(); !strings.Contains(got, ".gitignore") {
 			t.Errorf("notice = %q, want it to say the file is not ignored by git", got)
 		}
 
-		dir := t.TempDir()
+		dir := gitRepository(t)
 		if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(".env*\n!.env\n"), 0o644); err != nil {
 			t.Fatalf("write .gitignore: %v", err)
 		}
@@ -350,7 +351,7 @@ func TestTheDevValueReportNamesWhereEachKeyCameFromAndNeverAValue(t *testing.T) 
 	t.Run("it names where each value came from, and checks "+dotenv.LocalFileName+" against .gitignore on its own", func(t *testing.T) {
 		t.Parallel()
 
-		dir := t.TempDir()
+		dir := gitRepository(t)
 		if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(".env\n"), 0o644); err != nil {
 			t.Fatalf("write .gitignore: %v", err)
 		}
@@ -361,7 +362,7 @@ func TestTheDevValueReportNamesWhereEachKeyCameFromAndNeverAValue(t *testing.T) 
 		}, true)
 		got := out.String()
 
-		for _, want := range []string{"API_TOKEN from infisical:p-1/dev", "LOG_LEVEL from " + dotenv.LocalFileName, dotenv.LocalFileName + " is not matched by this project's .gitignore", "editing " + dotenv.LocalFileName + " re-resolves"} {
+		for _, want := range []string{"API_TOKEN from infisical:p-1/dev", "LOG_LEVEL from " + dotenv.LocalFileName, dotenv.LocalFileName + " is not ignored by git", "editing " + dotenv.LocalFileName + " re-resolves"} {
 			if !strings.Contains(got, want) {
 				t.Errorf("notice = %q, want it to say %q", got, want)
 			}
@@ -377,6 +378,51 @@ func TestTheDevValueReportNamesWhereEachKeyCameFromAndNeverAValue(t *testing.T) 
 		reportDevValues(&ignored, dir, devValues{{from: dotenv.LocalFileName, file: true, values: map[string]string{"LOG_LEVEL": "debug"}}}, false)
 		if strings.Contains(ignored.String(), ".gitignore") {
 			t.Errorf("notice = %q, want no warning for a file a glob ignores", ignored.String())
+		}
+	})
+}
+
+func gitRepository(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if out, err := exec.Command("git", "init", "-q", dir).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v: %s", err, out)
+	}
+	return dir
+}
+
+func TestTheDevValueReportAsksGitWhetherItIgnoresEachFile(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a pattern in the repository's root .gitignore covers a project in a subdirectory", func(t *testing.T) {
+		t.Parallel()
+		repository := gitRepository(t)
+		if err := os.WriteFile(filepath.Join(repository, ".gitignore"), []byte("**/.env\n"), 0o644); err != nil {
+			t.Fatalf("write .gitignore: %v", err)
+		}
+		project := filepath.Join(repository, "apps", "web")
+		if err := os.MkdirAll(project, 0o755); err != nil {
+			t.Fatal(err)
+		}
+
+		var out bytes.Buffer
+		reportDevValues(&out, project, dotfileValues(map[string]string{"API_TOKEN": "x"}), true)
+		if strings.Contains(out.String(), ".gitignore") {
+			t.Errorf("notice = %q, want no warning for a file git ignores", out.String())
+		}
+	})
+
+	t.Run("outside a git repository it says it cannot tell", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(".env\n"), 0o644); err != nil {
+			t.Fatalf("write .gitignore: %v", err)
+		}
+
+		var out bytes.Buffer
+		reportDevValues(&out, dir, dotfileValues(map[string]string{"API_TOKEN": "x"}), true)
+		if got := out.String(); !strings.Contains(got, "cannot tell whether git ignores "+dotenv.FileName) {
+			t.Errorf("notice = %q, want it to say it cannot tell", got)
 		}
 	})
 }
