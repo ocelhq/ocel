@@ -30,7 +30,7 @@ const (
 
 	StopsWithin = stopGrace + 3*time.Second
 
-	winnerStartsWithin = 10 * time.Second
+	concurrentStartWithin = 10 * time.Second
 )
 
 type Spec struct {
@@ -44,8 +44,8 @@ type Spec struct {
 }
 
 type Container struct {
-	ID   string
-	Addr string
+	ID      string
+	Address string
 }
 
 type Engine interface {
@@ -57,15 +57,15 @@ type Engine interface {
 	Close() error
 }
 
-type Opener func(ctx context.Context) (Engine, error)
+type OpenFunc func(ctx context.Context) (Engine, error)
 
 const (
-	LabelProject   = "dev.ocel.project"
-	LabelComponent = "dev.ocel.component"
+	LabelProject = "dev.ocel.project"
+	LabelBackend = "dev.ocel.backend"
 )
 
-func Labels(project, component string) map[string]string {
-	return map[string]string{LabelProject: project, LabelComponent: component}
+func Labels(project, backend string) map[string]string {
+	return map[string]string{LabelProject: project, LabelBackend: backend}
 }
 
 func ProjectLabels(project string) map[string]string {
@@ -163,10 +163,10 @@ func (d *daemon) Run(ctx context.Context, spec Spec) (Container, error) {
 	case err != nil:
 		return Container{}, fmt.Errorf("look for the container %s: %w", spec.Name, err)
 	case existing.Container.State != nil && existing.Container.State.Running:
-		if !runs(existing.Container, spec) {
+		if !isFromSpec(existing.Container, spec) {
 			return Container{}, fmt.Errorf("a container named %s is running and is not the %s this project asks for, so it may be in use: stop what started it, or remove it with `docker rm -f %s`", spec.Name, spec.Image, spec.Name)
 		}
-		return d.reachable(existing.Container, spec.Name, port)
+		return readPublishedAddress(existing.Container, spec.Name, port)
 	default:
 		if _, err := d.api.ContainerRemove(ctx, existing.Container.ID, client.ContainerRemoveOptions{Force: true}); err != nil && !cerrdefs.IsNotFound(err) {
 			return Container{}, fmt.Errorf("replace the stopped container %s left by an earlier run: %w", spec.Name, err)
@@ -195,7 +195,7 @@ func (d *daemon) Run(ctx context.Context, spec Spec) (Container, error) {
 		HostConfig: hostConfig,
 	})
 	if cerrdefs.IsConflict(err) {
-		return d.adoptWinner(ctx, spec, port)
+		return d.waitForConcurrentStart(ctx, spec, port)
 	}
 	if err != nil {
 		return Container{}, fmt.Errorf("create the container %s: %w", spec.Name, err)
@@ -209,33 +209,33 @@ func (d *daemon) Run(ctx context.Context, spec Spec) (Container, error) {
 		d.discard(ctx, created.ID)
 		return Container{}, fmt.Errorf("read the port docker published for %s: %w", spec.Name, err)
 	}
-	running, err := d.reachable(inspected.Container, spec.Name, port)
+	running, err := readPublishedAddress(inspected.Container, spec.Name, port)
 	if err != nil {
 		d.discard(ctx, created.ID)
 	}
 	return running, err
 }
 
-func (d *daemon) adoptWinner(ctx context.Context, spec Spec, port network.Port) (Container, error) {
-	var winner container.InspectResponse
-	err := WaitReady(ctx, winnerStartsWithin, func(ctx context.Context) error {
+func (d *daemon) waitForConcurrentStart(ctx context.Context, spec Spec, port network.Port) (Container, error) {
+	var started container.InspectResponse
+	err := WaitReady(ctx, concurrentStartWithin, func(ctx context.Context) error {
 		inspected, err := d.api.ContainerInspect(ctx, spec.Name, client.ContainerInspectOptions{})
 		if err != nil {
 			return err
 		}
-		if inspected.Container.State == nil || !inspected.Container.State.Running || !runs(inspected.Container, spec) {
+		if inspected.Container.State == nil || !inspected.Container.State.Running || !isFromSpec(inspected.Container, spec) {
 			return fmt.Errorf("the container %s another process created is not running %s", spec.Name, spec.Image)
 		}
-		winner = inspected.Container
+		started = inspected.Container
 		return nil
 	})
 	if err != nil {
 		return Container{}, err
 	}
-	return d.reachable(winner, spec.Name, port)
+	return readPublishedAddress(started, spec.Name, port)
 }
 
-func runs(inspected container.InspectResponse, spec Spec) bool {
+func isFromSpec(inspected container.InspectResponse, spec Spec) bool {
 	if inspected.Config == nil || inspected.Config.Image != spec.Image {
 		return false
 	}
@@ -247,7 +247,7 @@ func runs(inspected container.InspectResponse, spec Spec) bool {
 	return true
 }
 
-func (d *daemon) reachable(inspected container.InspectResponse, name string, port network.Port) (Container, error) {
+func readPublishedAddress(inspected container.InspectResponse, name string, port network.Port) (Container, error) {
 	var bindings []network.PortBinding
 	if settings := inspected.NetworkSettings; settings != nil {
 		bindings = settings.Ports[port]
@@ -255,7 +255,7 @@ func (d *daemon) reachable(inspected container.InspectResponse, name string, por
 	if len(bindings) == 0 {
 		return Container{}, fmt.Errorf("docker published no host port for %s", name)
 	}
-	return Container{ID: inspected.ID, Addr: net.JoinHostPort(loopback.String(), bindings[0].HostPort)}, nil
+	return Container{ID: inspected.ID, Address: net.JoinHostPort(loopback.String(), bindings[0].HostPort)}, nil
 }
 
 func (d *daemon) discard(ctx context.Context, id string) {

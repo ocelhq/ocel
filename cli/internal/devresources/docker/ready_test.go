@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/devstack/docker"
+	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 )
 
 func TestWaitReady(t *testing.T) {

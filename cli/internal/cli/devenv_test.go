@@ -19,10 +19,10 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/dev/leader"
+	"github.com/ocelhq/ocel/cli/internal/devresources/binding"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/resolve"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/channel"
@@ -59,7 +59,7 @@ func TestResolvedEnv(t *testing.T) {
 		base := []string{"PATH=/bin", "CONTESTED=shell", "SHELL_ONLY=s"}
 		live := map[string]string{"CONTESTED": "live"}
 		dotfile := map[string]string{"CONTESTED": "dotfile", "DOTFILE_ONLY": "d"}
-		resources := []resolve.Resource{
+		resources := []binding.Resolved{
 			{Name: "main", Env: map[string]string{"OCEL_RESOURCE_POSTGRES_main": "conn"}},
 		}
 
@@ -84,7 +84,7 @@ func TestResolvedEnv(t *testing.T) {
 
 		values := map[string]string{"VALUE_ONLY": "v"}
 		live := map[string]string{"WEBHOOK_SECRET": "whsec_live"}
-		resources := []resolve.Resource{
+		resources := []binding.Resolved{
 			{Name: "main", Env: map[string]string{"OCEL_RESOURCE_POSTGRES_main": "conn"}},
 		}
 
@@ -143,7 +143,7 @@ func TestResolvedEnv(t *testing.T) {
 		contested := resolvedEnv(
 			map[string]string{constants.AppFolderEnvName: "/from-live"},
 			map[string]string{constants.AppFolderEnvName: "/from-dotfile"},
-			[]resolve.Resource{{Name: "main", Env: map[string]string{constants.AppFolderEnvName: "/from-resource"}}},
+			[]binding.Resolved{{Name: "main", Env: map[string]string{constants.AppFolderEnvName: "/from-resource"}}},
 			runtimeAccess{},
 			"/web",
 			variables.Scope{},

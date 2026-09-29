@@ -2,13 +2,10 @@ package postgres
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"io/fs"
 	"net"
-	"os"
+	"net/http"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -16,15 +13,18 @@ import (
 	"sync"
 	"time"
 
+	"connectrpc.com/connect"
+
 	"github.com/ocelhq/ocel/cli/internal/declare"
-	"github.com/ocelhq/ocel/cli/internal/devstack/docker"
-	"github.com/ocelhq/ocel/cli/internal/resolve"
+	"github.com/ocelhq/ocel/cli/internal/devresources/binding"
+	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
+	"github.com/ocelhq/ocel/cli/internal/devresources/secret"
 	"github.com/ocelhq/ocel/pkg/constants"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 )
 
 const (
-	component    = "postgres"
+	backend      = "postgres"
 	passwordFile = "postgres-password"
 	superuser    = "postgres"
 	serverPort   = 5432
@@ -38,19 +38,19 @@ type server struct {
 	prepared  bool
 }
 
-type Component struct {
-	open     docker.Opener
-	stateDir string
+type Backend struct {
+	open       docker.OpenFunc
+	secretsDir string
 
 	mu      sync.Mutex
 	servers map[string]*server
 }
 
-func New(open docker.Opener, stateDir string) *Component {
-	return &Component{open: open, stateDir: stateDir, servers: map[string]*server{}}
+func New(open docker.OpenFunc, secretsDir string) *Backend {
+	return &Backend{open: open, secretsDir: secretsDir, servers: map[string]*server{}}
 }
 
-func (c *Component) Resolve(ctx context.Context, project string, resources []declare.Resource) ([]resolve.Resource, error) {
+func (c *Backend) Resolve(ctx context.Context, project string, resources []declare.Resource) ([]binding.Resolved, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -60,7 +60,7 @@ func (c *Component) Resolve(ctx context.Context, project string, resources []dec
 		}
 	}
 
-	out := make([]resolve.Resource, 0, len(resources))
+	out := make([]binding.Resolved, 0, len(resources))
 	for _, resource := range resources {
 		version := resource.Postgres.GetVersion()
 		engine, err := c.open(ctx)
@@ -78,20 +78,20 @@ func (c *Component) Resolve(ctx context.Context, project string, resources []dec
 		if err != nil {
 			return nil, err
 		}
-		bound.Origin = fmt.Sprintf("postgres:%s @ %s", version, srv.container.Addr)
+		bound.Origin = fmt.Sprintf("postgres:%s @ %s", version, srv.container.Address)
 		out = append(out, bound)
 	}
 	return out, nil
 }
 
-func (c *Component) server(ctx context.Context, engine docker.Engine, project, version string) (*server, error) {
+func (c *Backend) server(ctx context.Context, engine docker.Engine, project, version string) (*server, error) {
 	srv, running := c.servers[version]
 	if !running {
 		password, err := c.password()
 		if err != nil {
 			return nil, err
 		}
-		name := docker.Name(project, component, version)
+		name := docker.Name(project, backend, version)
 		image, _ := constants.PostgresImage(version)
 		container, err := engine.Run(ctx, docker.Spec{
 			Name:       name,
@@ -100,7 +100,7 @@ func (c *Component) server(ctx context.Context, engine docker.Engine, project, v
 			Port:       serverPort,
 			Volume:     name,
 			VolumePath: dataPath,
-			Labels:     docker.Labels(project, component),
+			Labels:     docker.Labels(project, backend),
 		})
 		if err != nil {
 			return nil, err
@@ -132,49 +132,8 @@ func prepare(ctx context.Context, engine docker.Engine, srv *server, version str
 	return nil
 }
 
-func (c *Component) password() (string, error) {
-	path := filepath.Join(c.stateDir, passwordFile)
-	for {
-		kept, err := os.ReadFile(path)
-		if err == nil && len(kept) == 0 {
-			return "", fmt.Errorf("%s contains no password: run `ocel dev --reset` to start this project's postgres over", path)
-		}
-		if err == nil {
-			return string(kept), nil
-		}
-		if !errors.Is(err, fs.ErrNotExist) {
-			return "", fmt.Errorf("read this project's postgres password: %w", err)
-		}
-		if err := keepNewPassword(path); err != nil && !errors.Is(err, fs.ErrExist) {
-			return "", err
-		}
-	}
-}
-
-func keepNewPassword(path string) error {
-	raw := make([]byte, 24)
-	if _, err := rand.Read(raw); err != nil {
-		return fmt.Errorf("generate a postgres password: %w", err)
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("keep this project's postgres password: %w", err)
-	}
-	writing, err := os.CreateTemp(filepath.Dir(path), ".writing-*")
-	if err != nil {
-		return fmt.Errorf("keep this project's postgres password: %w", err)
-	}
-	defer func() { _ = os.Remove(writing.Name()) }()
-	if _, err := writing.WriteString(hex.EncodeToString(raw)); err != nil {
-		_ = writing.Close()
-		return fmt.Errorf("keep this project's postgres password: %w", err)
-	}
-	if err := writing.Close(); err != nil {
-		return fmt.Errorf("keep this project's postgres password: %w", err)
-	}
-	if err := os.Link(writing.Name(), path); err != nil {
-		return fmt.Errorf("keep this project's postgres password: %w", err)
-	}
-	return nil
+func (c *Backend) password() (string, error) {
+	return secret.Ensure(filepath.Join(c.secretsDir, passwordFile), secret.Purpose{Owner: "postgres", Noun: "password"})
 }
 
 func ensureDatabase(ctx context.Context, engine docker.Engine, srv *server, name string) error {
@@ -191,16 +150,16 @@ func ensureDatabase(ctx context.Context, engine docker.Engine, srv *server, name
 	return nil
 }
 
-func bind(resource declare.Resource, srv *server) (resolve.Resource, error) {
-	host, rawPort, err := net.SplitHostPort(srv.container.Addr)
+func bind(resource declare.Resource, srv *server) (binding.Resolved, error) {
+	host, rawPort, err := net.SplitHostPort(srv.container.Address)
 	if err != nil {
-		return resolve.Resource{}, err
+		return binding.Resolved{}, err
 	}
 	port, err := strconv.ParseInt(rawPort, 10, 32)
 	if err != nil {
-		return resolve.Resource{}, err
+		return binding.Resolved{}, err
 	}
-	return resolve.Bound(resource.Type, &bindingsv1.Binding{
+	return binding.Encode(resource.Type, &bindingsv1.Binding{
 		Name: resource.Name,
 		Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{
 			Host: host, Port: int32(port), Database: resource.Name, Username: superuser, Password: srv.password,
@@ -208,13 +167,15 @@ func bind(resource declare.Resource, srv *server) (resolve.Resource, error) {
 	})
 }
 
-func (c *Component) Close(ctx context.Context, stop bool) error {
+func (c *Backend) Routes(*http.ServeMux, func(http.Handler) http.Handler, ...connect.HandlerOption) {}
+
+func (c *Backend) Close(ctx context.Context, stopContainers bool) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	servers := c.servers
 	c.servers = map[string]*server{}
-	if !stop || len(servers) == 0 {
+	if !stopContainers || len(servers) == 0 {
 		return nil
 	}
 	engine, err := c.open(ctx)

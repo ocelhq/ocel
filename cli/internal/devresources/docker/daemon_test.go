@@ -12,7 +12,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/devstack/docker"
+	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 )
 
 type fakeDaemon struct {
@@ -188,7 +188,7 @@ func TestRunStartsWhatIsNotThereOnLoopback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run = %v", err)
 	}
-	if running.ID != "created" || running.Addr != "127.0.0.1:49153" {
+	if running.ID != "created" || running.Address != "127.0.0.1:49153" {
 		t.Fatalf("Run = %+v, want the created container on the loopback port docker chose", running)
 	}
 	bindings, _ := json.Marshal(daemon.created[0]["HostConfig"].(map[string]any)["PortBindings"])
@@ -207,7 +207,7 @@ func TestRunAdoptsARunningContainerOfTheSameSpec(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run = %v", err)
 	}
-	if running.ID != "theirs" || running.Addr != "127.0.0.1:49153" {
+	if running.ID != "theirs" || running.Address != "127.0.0.1:49153" {
 		t.Fatalf("Run = %+v, want the container another process already runs", running)
 	}
 	if len(daemon.created) != 0 || daemon.saw("DELETE /containers/"+spec.Name) {

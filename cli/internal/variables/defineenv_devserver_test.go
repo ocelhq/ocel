@@ -11,8 +11,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
+	"github.com/ocelhq/ocel/cli/internal/devresources"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
-	"github.com/ocelhq/ocel/cli/internal/devstack"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 )
@@ -94,7 +94,7 @@ func serveDevServer(t *testing.T) *devserver.Server {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := devserver.New("http://"+listener.Addr().String(), devstack.New("defineenv", devstack.Env{}))
+	srv := devserver.New("http://"+listener.Addr().String(), devresources.New("defineenv", devresources.Options{}))
 	httpSrv := &http.Server{Handler: srv.Mux()}
 	go httpSrv.Serve(listener)
 	t.Cleanup(func() { httpSrv.Close() })

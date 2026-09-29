@@ -14,9 +14,9 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/declare"
+	"github.com/ocelhq/ocel/cli/internal/devresources/binding"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/resolve"
 	"github.com/ocelhq/ocel/cli/internal/resourceregistry"
 	"github.com/ocelhq/ocel/cli/internal/sdkversion"
 	"github.com/ocelhq/ocel/cli/internal/variables"
@@ -27,7 +27,7 @@ import (
 )
 
 type SyncResult struct {
-	Resources        []resolve.Resource
+	Resources        []binding.Resolved
 	DevServerAddress string
 	AppToken         string
 	LiveValues       map[string]string
@@ -36,7 +36,7 @@ type SyncResult struct {
 }
 
 type Stack interface {
-	Resolve(ctx context.Context, resources []declare.Resource) ([]resolve.Resource, error)
+	Resolve(ctx context.Context, resources []declare.Resource) ([]binding.Resolved, error)
 	Routes(mux *http.ServeMux, guard func(http.Handler) http.Handler, options ...connect.HandlerOption)
 }
 

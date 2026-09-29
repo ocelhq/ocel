@@ -22,12 +22,12 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/childprocess"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/dev/leader"
+	"github.com/ocelhq/ocel/cli/internal/devresources"
+	"github.com/ocelhq/ocel/cli/internal/devresources/binding"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
-	"github.com/ocelhq/ocel/cli/internal/devstack"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/resolve"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/cli/internal/watcher"
@@ -101,7 +101,7 @@ func runLeader(ctx context.Context, deps cmddeps.Deps, reset bool, cfg *projectc
 	reportDevValues(stdout, cfg.Dir, values, true)
 
 	if reset {
-		if err := devstack.Reset(ctx, deps.OpenDocker, devStateDir(cfg), devstack.ProjectName(cfg.Dir)); err != nil {
+		if err := devresources.Reset(ctx, deps.OpenDocker, devStateDir(cfg), devresources.ProjectName(cfg.Dir)); err != nil {
 			return err
 		}
 	}
@@ -254,29 +254,29 @@ func startDevHost(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Con
 	}
 	addr := listener.Addr().String()
 
-	stack := devstack.New(devstack.ProjectName(cfg.Dir), devstack.Env{
+	resources := devresources.New(devresources.ProjectName(cfg.Dir), devresources.Options{
 		Open:       deps.OpenDocker,
 		StateDir:   devStateDir(cfg),
 		AppOrigins: devAppOrigins(cfg.Dir, source),
 		Stdout:     stdout,
 	})
 
-	srv := devserver.New("http://"+addr, stack)
+	srv := devserver.New("http://"+addr, resources)
 	httpSrv := &http.Server{Handler: srv.Mux()}
 	go httpSrv.Serve(listener)
 
 	return &devHost{srv: srv, addr: addr, close: func() {
 		_ = httpSrv.Close()
-		stopping, cancel := context.WithTimeout(context.WithoutCancel(ctx), devStackStopsWithin)
+		stopping, cancel := context.WithTimeout(context.WithoutCancel(ctx), devresources.StopsWithin)
 		defer cancel()
-		if err := stack.Close(stopping); err != nil {
+		if err := resources.Close(stopping); err != nil {
 			fmt.Fprintln(stderr, "stop dev resources:", err)
 		}
 	}}, nil
 }
 
 func devStateDir(cfg *projectconfig.Config) string {
-	return filepath.Join(cfg.Dir, constants.ProjectStateDirName, "devstack")
+	return filepath.Join(cfg.Dir, constants.ProjectStateDirName, "devresources")
 }
 
 func devAppOrigins(dir string, source devSource) func() []string {
@@ -421,11 +421,11 @@ type runtimeAccess struct {
 	token   string
 }
 
-func mergeEnv(base []string, liveValues, values map[string]string, resources []resolve.Resource, runtime runtimeAccess, appFolder string, scope variables.Scope) []string {
+func mergeEnv(base []string, liveValues, values map[string]string, resources []binding.Resolved, runtime runtimeAccess, appFolder string, scope variables.Scope) []string {
 	return applyEnv(base, resolvedEnv(liveValues, values, resources, runtime, appFolder, scope))
 }
 
-func resolvedEnv(liveValues, values map[string]string, resources []resolve.Resource, runtime runtimeAccess, appFolder string, scope variables.Scope) map[string]string {
+func resolvedEnv(liveValues, values map[string]string, resources []binding.Resolved, runtime runtimeAccess, appFolder string, scope variables.Scope) map[string]string {
 	merged := make(map[string]string, len(liveValues)+len(values)+1)
 	for k, v := range liveValues {
 		merged[k] = v

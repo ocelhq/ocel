@@ -27,7 +27,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/permissions"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
-	"github.com/ocelhq/ocel/cli/internal/devstack/docker"
+	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
 	"github.com/ocelhq/ocel/cli/internal/projecteditor"

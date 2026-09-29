@@ -1,4 +1,4 @@
-package devstack_test
+package devresources_test
 
 import (
 	"context"
@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/declare"
-	"github.com/ocelhq/ocel/cli/internal/devstack"
-	"github.com/ocelhq/ocel/cli/internal/devstack/docker"
+	"github.com/ocelhq/ocel/cli/internal/devresources"
+	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 )
 
 const liveEnv = "OCEL_LIVE_DOCKER"
@@ -17,7 +17,7 @@ func TestDockerTwoProcessesOfOneProjectShareOnePostgres(t *testing.T) {
 		t.Skipf("no docker daemon promised to this run; set %s=1 where one is running", liveEnv)
 	}
 	ctx := context.Background()
-	const project = "devstack-live-shared-test"
+	const project = "devresources-live-shared-test"
 	state := t.TempDir()
 	engine, err := docker.Open(ctx)
 	if err != nil {
@@ -28,8 +28,8 @@ func TestDockerTwoProcessesOfOneProjectShareOnePostgres(t *testing.T) {
 		_ = engine.Close()
 	})
 
-	first := devstack.New(project, devstack.Env{Open: docker.Open, StateDir: state})
-	second := devstack.New(project, devstack.Env{Open: docker.Open, StateDir: state})
+	first := devresources.New(project, devresources.Options{Open: docker.Open, StateDir: state})
+	second := devresources.New(project, devresources.Options{Open: docker.Open, StateDir: state})
 	t.Cleanup(func() {
 		_ = first.Close(ctx)
 		_ = second.Close(ctx)

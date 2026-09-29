@@ -15,8 +15,8 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/dev/leader"
+	"github.com/ocelhq/ocel/cli/internal/devresources"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
-	"github.com/ocelhq/ocel/cli/internal/devstack"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
@@ -200,7 +200,7 @@ export default { slug: "test-app" };
 		if err != nil {
 			t.Fatalf("listen: %v", err)
 		}
-		srv := devserver.New("http://"+listener.Addr().String(), devstack.New("a-leader", devstack.Env{}))
+		srv := devserver.New("http://"+listener.Addr().String(), devresources.New("a-leader", devresources.Options{}))
 		srv.PushEnv(map[string]string{"OCEL_RESOURCE_POSTGRES_main": `{"name":"main","postgres":{"host":"resolved","port":5432,"database":"main","username":"u","password":"p"}}`})
 
 		httpSrv := &http.Server{Handler: srv.Mux()}

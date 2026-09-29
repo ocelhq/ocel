@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ocelhq/ocel/cli/internal/devstack/docker"
+	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 )
 
 type Engine struct {
@@ -29,7 +29,7 @@ func (e *Engine) Run(_ context.Context, spec docker.Spec) (docker.Container, err
 		return docker.Container{}, e.RunError
 	}
 	e.Specs = append(e.Specs, spec)
-	return docker.Container{ID: spec.Name, Addr: fmt.Sprintf("127.0.0.1:%d", 54000+len(e.Specs))}, nil
+	return docker.Container{ID: spec.Name, Address: fmt.Sprintf("127.0.0.1:%d", 54000+len(e.Specs))}, nil
 }
 
 func (e *Engine) Exec(ctx context.Context, id string, argv ...string) (string, error) {
@@ -83,7 +83,7 @@ func (e *Engine) Ran(program string) [][]string {
 	return ran
 }
 
-func (e *Engine) Opener() docker.Opener {
+func (e *Engine) OpenFunc() docker.OpenFunc {
 	return func(context.Context) (docker.Engine, error) { return e, nil }
 }
 

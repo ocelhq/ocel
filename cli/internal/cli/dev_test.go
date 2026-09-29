@@ -22,20 +22,20 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/childprocess"
 
 	"github.com/ocelhq/ocel/cli/internal/dev/leader"
+	"github.com/ocelhq/ocel/cli/internal/devresources"
+	"github.com/ocelhq/ocel/cli/internal/devresources/binding"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
-	"github.com/ocelhq/ocel/cli/internal/devstack"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/resolve"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/watcher"
 	"github.com/ocelhq/ocel/pkg/constants"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/devstack/docker"
-	"github.com/ocelhq/ocel/cli/internal/devstack/docker/dockertest"
+	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
+	"github.com/ocelhq/ocel/cli/internal/devresources/docker/dockertest"
 )
 
 func init() {
@@ -50,7 +50,7 @@ func TestMergeEnv(t *testing.T) {
 
 		base := []string{"PATH=/bin", "SHARED=base"}
 		values := map[string]string{"SHARED": "project", "PROJECT_ONLY": "p"}
-		resources := []resolve.Resource{
+		resources := []binding.Resolved{
 			{Name: "main", Env: map[string]string{"SHARED": "resource", "OCEL_RESOURCE_POSTGRES_main": "conn"}},
 		}
 
@@ -657,7 +657,7 @@ export default { slug: "test-app" };
 		if err != nil {
 			t.Fatalf("listen: %v", err)
 		}
-		srv := devserver.New("http://"+listener.Addr().String(), devstack.New("a-leader", devstack.Env{}))
+		srv := devserver.New("http://"+listener.Addr().String(), devresources.New("a-leader", devresources.Options{}))
 		srv.PushEnv(map[string]string{"OCEL_RESOURCE_POSTGRES_main": `{"name":"main","postgres":{"host":"resolved","port":5432,"database":"main","username":"u","password":"p"}}`})
 
 		httpSrv := &http.Server{Handler: srv.Mux()}
@@ -709,14 +709,14 @@ func TestDevSuppliesDeclaredResourcesItself(t *testing.T) {
 		t.Skip("uses a POSIX shell fixture command")
 	}
 
-	t.Run("a declared postgres comes from the dev stack, says where it landed, and stops with the run", func(t *testing.T) {
+	t.Run("a declared postgres comes from the dev resources, says where it landed, and stops with the run", func(t *testing.T) {
 		root := t.TempDir()
 		t.Cleanup(func() { _ = leader.Release(root) })
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
 
 		engine := &dockertest.Engine{}
 		deps := devDeps()
-		deps.OpenDocker = engine.Opener()
+		deps.OpenDocker = engine.OpenFunc()
 
 		envDumpPath := filepath.Join(root, "env.out")
 		var stdout, stderr syncBuffer
@@ -792,7 +792,7 @@ func TestDevSuppliesDeclaredResourcesItself(t *testing.T) {
 
 		engine := &dockertest.Engine{}
 		deps := devDeps()
-		deps.OpenDocker = engine.Opener()
+		deps.OpenDocker = engine.OpenFunc()
 
 		var stdout, stderr syncBuffer
 		err := runDev(context.Background(), deps, true, root, []string{"sh", "-c", "exit 0"}, &stdout, &stderr, strings.NewReader(""))
@@ -811,7 +811,7 @@ func TestDevSuppliesDeclaredResourcesItself(t *testing.T) {
 
 		engine := &dockertest.Engine{}
 		deps := devDeps()
-		deps.OpenDocker = engine.Opener()
+		deps.OpenDocker = engine.OpenFunc()
 
 		envDumpPath := filepath.Join(root, "env.out")
 		var stdout, stderr syncBuffer
@@ -861,7 +861,7 @@ func TestDevLeavesNothingBehind(t *testing.T) {
 			return "", nil
 		}
 		deps := devDeps()
-		deps.OpenDocker = engine.Opener()
+		deps.OpenDocker = engine.OpenFunc()
 
 		var stdout, stderr syncBuffer
 		if err := runDev(ctx, deps, false, root, []string{"sh", "-c", "exit 0"}, &stdout, &stderr, strings.NewReader("")); err == nil {
@@ -901,11 +901,11 @@ func TestDevLeavesNothingBehind(t *testing.T) {
 		if docker.StopsWithin != 6*time.Second {
 			t.Errorf("docker.StopsWithin = %s, want 6s: a 3s grace, then docker's kill and the removal", docker.StopsWithin)
 		}
-		if devStackStopsWithin < docker.StopsWithin {
-			t.Errorf("the stack is given %s to stop and one container may take %s", devStackStopsWithin, docker.StopsWithin)
+		if devresources.StopsWithin < docker.StopsWithin {
+			t.Errorf("dev resources are given %s to stop and one container may take %s", devresources.StopsWithin, docker.StopsWithin)
 		}
-		if spent := childprocess.WaitDelay + devStackStopsWithin; devShutdownWindow < spent+time.Second {
-			t.Errorf("the hard exit lands %s after the interrupt, and the app child then the stack may take %s", devShutdownWindow, spent)
+		if spent := childprocess.WaitDelay + devresources.StopsWithin; devShutdownWindow < spent+time.Second {
+			t.Errorf("the hard exit lands %s after the interrupt, and the app child then the dev resources may take %s", devShutdownWindow, spent)
 		}
 		if devShutdownWindow != 14*time.Second {
 			t.Errorf("devShutdownWindow = %s, want 14s", devShutdownWindow)
@@ -948,7 +948,7 @@ func toMap(env []string) map[string]string {
 
 func devDeps() cmddeps.Deps {
 	deps := newDeps()
-	deps.OpenDocker = (&dockertest.Engine{}).Opener()
+	deps.OpenDocker = (&dockertest.Engine{}).OpenFunc()
 	return deps
 }
 

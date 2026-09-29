@@ -1,4 +1,4 @@
-package devstack_test
+package devresources_test
 
 import (
 	"bytes"
@@ -8,9 +8,9 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/declare"
-	"github.com/ocelhq/ocel/cli/internal/devstack"
-	"github.com/ocelhq/ocel/cli/internal/devstack/docker"
-	"github.com/ocelhq/ocel/cli/internal/devstack/docker/dockertest"
+	"github.com/ocelhq/ocel/cli/internal/devresources"
+	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
+	"github.com/ocelhq/ocel/cli/internal/devresources/docker/dockertest"
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
@@ -19,7 +19,7 @@ func postgres(name string) declare.Resource {
 	return declare.Resource{Name: name, Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Postgres: &resourcesv1.PostgresConfig{Version: "17"}}
 }
 
-func TestEveryBindableResourceTypeHasAComponent(t *testing.T) {
+func TestEveryBindableResourceTypeHasABackend(t *testing.T) {
 	t.Parallel()
 
 	interrupted, interrupt := context.WithCancel(context.Background())
@@ -29,10 +29,10 @@ func TestEveryBindableResourceTypeHasAComponent(t *testing.T) {
 		if _, bindable := naming.BindableAs(kind); !bindable {
 			continue
 		}
-		stack := devstack.New("shop", devstack.Env{Open: (&dockertest.Engine{}).Opener(), StateDir: t.TempDir()})
+		stack := devresources.New("shop", devresources.Options{Open: (&dockertest.Engine{}).OpenFunc(), StateDir: t.TempDir()})
 		_, err := stack.Resolve(interrupted, []declare.Resource{{Name: "declared", Type: kind}})
 		if err != nil && strings.Contains(err.Error(), "serves no") {
-			t.Errorf("%s can be declared and no component serves it in dev: %v", kind, err)
+			t.Errorf("%s can be declared and no backend serves it in dev: %v", kind, err)
 		}
 	}
 }
@@ -44,7 +44,7 @@ func TestResolve(t *testing.T) {
 		t.Parallel()
 
 		opened := false
-		stack := devstack.New("shop", devstack.Env{StateDir: t.TempDir(), Open: func(context.Context) (docker.Engine, error) {
+		stack := devresources.New("shop", devresources.Options{StateDir: t.TempDir(), Open: func(context.Context) (docker.Engine, error) {
 			opened = true
 			return nil, errors.New("no daemon")
 		}})
@@ -63,7 +63,7 @@ func TestResolve(t *testing.T) {
 
 		engine := &dockertest.Engine{}
 		var out bytes.Buffer
-		stack := devstack.New("shop", devstack.Env{Open: engine.Opener(), StateDir: t.TempDir(), Stdout: &out})
+		stack := devresources.New("shop", devresources.Options{Open: engine.OpenFunc(), StateDir: t.TempDir(), Stdout: &out})
 
 		for range 2 {
 			resolved, err := stack.Resolve(context.Background(), []declare.Resource{postgres("main")})
@@ -83,7 +83,7 @@ func TestResolve(t *testing.T) {
 	t.Run("a missing daemon is refused by naming the resource that needed it", func(t *testing.T) {
 		t.Parallel()
 
-		stack := devstack.New("shop", devstack.Env{StateDir: t.TempDir(), Open: func(context.Context) (docker.Engine, error) {
+		stack := devresources.New("shop", devresources.Options{StateDir: t.TempDir(), Open: func(context.Context) (docker.Engine, error) {
 			return nil, &docker.Unreachable{Address: "unix:///var/run/docker.sock", Err: errors.New("connect: no such file or directory")}
 		}})
 
@@ -102,7 +102,7 @@ func TestResolve(t *testing.T) {
 		t.Parallel()
 
 		engine := &dockertest.Engine{}
-		stack := devstack.New("shop", devstack.Env{Open: engine.Opener(), StateDir: t.TempDir()})
+		stack := devresources.New("shop", devresources.Options{Open: engine.OpenFunc(), StateDir: t.TempDir()})
 		if _, err := stack.Resolve(context.Background(), []declare.Resource{postgres("main")}); err != nil {
 			t.Fatalf("Resolve = %v", err)
 		}
@@ -120,9 +120,9 @@ func TestTwoProcessesOfOneProjectShareTheStackAndTheLastOneOutStopsIt(t *testing
 
 	state := t.TempDir()
 	engine := &dockertest.Engine{}
-	first := devstack.New("shop", devstack.Env{Open: engine.Opener(), StateDir: state})
-	second := devstack.New("shop", devstack.Env{Open: engine.Opener(), StateDir: state})
-	for _, stack := range []*devstack.Stack{first, second} {
+	first := devresources.New("shop", devresources.Options{Open: engine.OpenFunc(), StateDir: state})
+	second := devresources.New("shop", devresources.Options{Open: engine.OpenFunc(), StateDir: state})
+	for _, stack := range []*devresources.Resources{first, second} {
 		if _, err := stack.Resolve(context.Background(), []declare.Resource{postgres("main")}); err != nil {
 			t.Fatalf("Resolve = %v", err)
 		}
@@ -150,7 +150,7 @@ func TestReset(t *testing.T) {
 
 		state := t.TempDir()
 		engine := &dockertest.Engine{}
-		stack := devstack.New("shop-1a2b", devstack.Env{Open: engine.Opener(), StateDir: state})
+		stack := devresources.New("shop-1a2b", devresources.Options{Open: engine.OpenFunc(), StateDir: state})
 		first, err := stack.Resolve(context.Background(), []declare.Resource{postgres("main")})
 		if err != nil {
 			t.Fatalf("Resolve = %v", err)
@@ -159,14 +159,14 @@ func TestReset(t *testing.T) {
 			t.Fatalf("Close = %v", err)
 		}
 
-		if err := devstack.Reset(context.Background(), engine.Opener(), state, "shop-1a2b"); err != nil {
+		if err := devresources.Reset(context.Background(), engine.OpenFunc(), state, "shop-1a2b"); err != nil {
 			t.Fatalf("Reset = %v", err)
 		}
 		if len(engine.Wiped) != 1 || engine.Wiped[0]["dev.ocel.project"] != "shop-1a2b" || len(engine.Wiped[0]) != 1 {
 			t.Fatalf("wiped %v, want exactly what is labelled with this project", engine.Wiped)
 		}
 
-		again, err := devstack.New("shop-1a2b", devstack.Env{Open: engine.Opener(), StateDir: state}).Resolve(context.Background(), []declare.Resource{postgres("main")})
+		again, err := devresources.New("shop-1a2b", devresources.Options{Open: engine.OpenFunc(), StateDir: state}).Resolve(context.Background(), []declare.Resource{postgres("main")})
 		if err != nil {
 			t.Fatalf("Resolve after Reset = %v", err)
 		}
@@ -180,13 +180,13 @@ func TestReset(t *testing.T) {
 
 		state := t.TempDir()
 		engine := &dockertest.Engine{}
-		stack := devstack.New("shop", devstack.Env{Open: engine.Opener(), StateDir: state})
+		stack := devresources.New("shop", devresources.Options{Open: engine.OpenFunc(), StateDir: state})
 		if _, err := stack.Resolve(context.Background(), []declare.Resource{postgres("main")}); err != nil {
 			t.Fatalf("Resolve = %v", err)
 		}
 		t.Cleanup(func() { _ = stack.Close(context.Background()) })
 
-		err := devstack.Reset(context.Background(), engine.Opener(), state, "shop")
+		err := devresources.Reset(context.Background(), engine.OpenFunc(), state, "shop")
 		if err == nil || !strings.Contains(err.Error(), "ocel dev --reset") {
 			t.Fatalf("Reset = %v, want a refusal saying to stop the other command first", err)
 		}
@@ -199,10 +199,10 @@ func TestReset(t *testing.T) {
 func TestProjectNamesAreReadableAndDistinctPerDirectory(t *testing.T) {
 	t.Parallel()
 
-	if got := devstack.ProjectName("/work/trees/sdk-node/My Shop"); got != "my-shop-2d2cdb07" {
+	if got := devresources.ProjectName("/work/trees/sdk-node/My Shop"); got != "my-shop-2d2cdb07" {
 		t.Fatalf("ProjectName = %q, want my-shop-2d2cdb07, the name the journey harness looks containers up by", got)
 	}
-	a, b := devstack.ProjectName("/home/ada/work/My Shop"), devstack.ProjectName("/home/ada/play/My Shop")
+	a, b := devresources.ProjectName("/home/ada/work/My Shop"), devresources.ProjectName("/home/ada/play/My Shop")
 	if !strings.HasPrefix(a, "my-shop-") || a == b {
 		t.Fatalf("ProjectName = %q and %q, want a readable name that differs between two directories called the same", a, b)
 	}

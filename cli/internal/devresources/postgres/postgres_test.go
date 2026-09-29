@@ -11,9 +11,9 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/ocelhq/ocel/cli/internal/declare"
-	"github.com/ocelhq/ocel/cli/internal/devstack/docker"
-	"github.com/ocelhq/ocel/cli/internal/devstack/docker/dockertest"
-	"github.com/ocelhq/ocel/cli/internal/devstack/postgres"
+	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
+	"github.com/ocelhq/ocel/cli/internal/devresources/docker/dockertest"
+	"github.com/ocelhq/ocel/cli/internal/devresources/postgres"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 )
@@ -42,9 +42,9 @@ func TestResolve(t *testing.T) {
 		t.Parallel()
 
 		engine := &dockertest.Engine{}
-		component := postgres.New(engine.Opener(), t.TempDir())
+		backend := postgres.New(engine.OpenFunc(), t.TempDir())
 
-		resolved, err := component.Resolve(context.Background(), "shop-1a2b", []declare.Resource{declared("main", "17"), declared("audit", "17")})
+		resolved, err := backend.Resolve(context.Background(), "shop-1a2b", []declare.Resource{declared("main", "17"), declared("audit", "17")})
 		if err != nil {
 			t.Fatalf("Resolve = %v", err)
 		}
@@ -56,8 +56,8 @@ func TestResolve(t *testing.T) {
 		if !strings.HasPrefix(spec.Image, "postgres:17.") || !strings.Contains(spec.Image, "@sha256:") {
 			t.Errorf("Image = %q, want a postgres 17 tag pinned by digest", spec.Image)
 		}
-		if spec.Labels["dev.ocel.project"] != "shop-1a2b" || spec.Labels["dev.ocel.component"] != "postgres" {
-			t.Errorf("Labels = %v, want the project and the component", spec.Labels)
+		if spec.Labels["dev.ocel.project"] != "shop-1a2b" || spec.Labels["dev.ocel.backend"] != "postgres" {
+			t.Errorf("Labels = %v, want the project and the backend", spec.Labels)
 		}
 		if spec.Volume == "" || !strings.Contains(spec.Volume, "shop-1a2b") || !strings.HasSuffix(spec.Volume, "17") {
 			t.Errorf("Volume = %q, want one named for the project and the major version", spec.Volume)
@@ -88,7 +88,7 @@ func TestResolve(t *testing.T) {
 		t.Parallel()
 
 		engine := &dockertest.Engine{}
-		if _, err := postgres.New(engine.Opener(), t.TempDir()).Resolve(context.Background(), "shop", []declare.Resource{declared("main", "17"), declared("legacy", "15")}); err != nil {
+		if _, err := postgres.New(engine.OpenFunc(), t.TempDir()).Resolve(context.Background(), "shop", []declare.Resource{declared("main", "17"), declared("legacy", "15")}); err != nil {
 			t.Fatalf("Resolve = %v", err)
 		}
 		if len(engine.Specs) != 2 {
@@ -106,12 +106,12 @@ func TestResolve(t *testing.T) {
 			}
 			return "", nil
 		}
-		component := postgres.New(engine.Opener(), t.TempDir())
-		first, err := component.Resolve(context.Background(), "shop", []declare.Resource{declared("main", "17")})
+		backend := postgres.New(engine.OpenFunc(), t.TempDir())
+		first, err := backend.Resolve(context.Background(), "shop", []declare.Resource{declared("main", "17")})
 		if err != nil {
 			t.Fatalf("Resolve = %v", err)
 		}
-		second, err := component.Resolve(context.Background(), "shop", []declare.Resource{declared("main", "17")})
+		second, err := backend.Resolve(context.Background(), "shop", []declare.Resource{declared("main", "17")})
 		if err != nil {
 			t.Fatalf("second Resolve = %v", err)
 		}
@@ -130,7 +130,7 @@ func TestResolve(t *testing.T) {
 		t.Parallel()
 
 		engine := &dockertest.Engine{}
-		_, err := postgres.New(engine.Opener(), t.TempDir()).Resolve(context.Background(), "shop", []declare.Resource{declared("main", "9")})
+		_, err := postgres.New(engine.OpenFunc(), t.TempDir()).Resolve(context.Background(), "shop", []declare.Resource{declared("main", "9")})
 		if err == nil || !strings.Contains(err.Error(), `"main"`) || !strings.Contains(err.Error(), "17") {
 			t.Fatalf("Resolve = %v, want a refusal naming the resource and the versions dev can run", err)
 		}
@@ -143,11 +143,11 @@ func TestResolve(t *testing.T) {
 		t.Parallel()
 
 		engine := &dockertest.Engine{}
-		component := postgres.New(engine.Opener(), t.TempDir())
-		if _, err := component.Resolve(context.Background(), "shop", []declare.Resource{declared("main", "17"), declared("legacy", "15")}); err != nil {
+		backend := postgres.New(engine.OpenFunc(), t.TempDir())
+		if _, err := backend.Resolve(context.Background(), "shop", []declare.Resource{declared("main", "17"), declared("legacy", "15")}); err != nil {
 			t.Fatalf("Resolve = %v", err)
 		}
-		if err := component.Close(context.Background(), true); err != nil {
+		if err := backend.Close(context.Background(), true); err != nil {
 			t.Fatalf("Close = %v", err)
 		}
 		if len(engine.Stopped) != 2 {
@@ -168,12 +168,12 @@ func TestAnInterruptWhilePostgresComesUpLeavesAContainerCloseStillStops(t *testi
 		}
 		return "", nil
 	}
-	component := postgres.New(engine.Opener(), t.TempDir())
+	backend := postgres.New(engine.OpenFunc(), t.TempDir())
 
-	if _, err := component.Resolve(ctx, "shop", []declare.Resource{declared("main", "17")}); err == nil {
+	if _, err := backend.Resolve(ctx, "shop", []declare.Resource{declared("main", "17")}); err == nil {
 		t.Fatal("Resolve = nil for a startup that was interrupted")
 	}
-	if err := component.Close(context.Background(), true); err != nil {
+	if err := backend.Close(context.Background(), true); err != nil {
 		t.Fatalf("Close = %v", err)
 	}
 	if len(engine.Stopped) != 1 {
@@ -192,13 +192,13 @@ func TestAPostgresThatWasNotReadyIsPreparedAgainOnTheNextSync(t *testing.T) {
 		}
 		return "", nil
 	}
-	component := postgres.New(engine.Opener(), t.TempDir())
+	backend := postgres.New(engine.OpenFunc(), t.TempDir())
 
-	if _, err := component.Resolve(context.Background(), "shop", []declare.Resource{declared("main", "17")}); err == nil {
+	if _, err := backend.Resolve(context.Background(), "shop", []declare.Resource{declared("main", "17")}); err == nil {
 		t.Fatal("Resolve = nil though the password could not be set")
 	}
 	failing = false
-	if _, err := component.Resolve(context.Background(), "shop", []declare.Resource{declared("main", "17")}); err != nil {
+	if _, err := backend.Resolve(context.Background(), "shop", []declare.Resource{declared("main", "17")}); err != nil {
 		t.Fatalf("second Resolve = %v", err)
 	}
 	if len(engine.Specs) != 1 {
@@ -227,7 +227,7 @@ func TestThePasswordNeverReachesArgvOrAnError(t *testing.T) {
 		return "", nil
 	}
 
-	_, err := postgres.New(engine.Opener(), state).Resolve(context.Background(), "shop", []declare.Resource{declared("main", "17")})
+	_, err := postgres.New(engine.OpenFunc(), state).Resolve(context.Background(), "shop", []declare.Resource{declared("main", "17")})
 	if err == nil {
 		t.Fatal("Resolve = nil though the statement failed")
 	}
@@ -270,7 +270,7 @@ func TestTwoProcessesOfOneProjectHandOutTheSamePassword(t *testing.T) {
 	var passwords []string
 	for range 2 {
 		engine := &dockertest.Engine{}
-		resolved, err := postgres.New(engine.Opener(), state).Resolve(context.Background(), "shop", []declare.Resource{declared("main", "17")})
+		resolved, err := postgres.New(engine.OpenFunc(), state).Resolve(context.Background(), "shop", []declare.Resource{declared("main", "17")})
 		if err != nil {
 			t.Fatalf("Resolve = %v", err)
 		}
@@ -285,11 +285,11 @@ func TestCloseLeavesContainersAnotherProcessStillUses(t *testing.T) {
 	t.Parallel()
 
 	engine := &dockertest.Engine{}
-	component := postgres.New(engine.Opener(), t.TempDir())
-	if _, err := component.Resolve(context.Background(), "shop", []declare.Resource{declared("main", "17")}); err != nil {
+	backend := postgres.New(engine.OpenFunc(), t.TempDir())
+	if _, err := backend.Resolve(context.Background(), "shop", []declare.Resource{declared("main", "17")}); err != nil {
 		t.Fatalf("Resolve = %v", err)
 	}
-	if err := component.Close(context.Background(), false); err != nil {
+	if err := backend.Close(context.Background(), false); err != nil {
 		t.Fatalf("Close = %v", err)
 	}
 	if len(engine.Stopped) != 0 {

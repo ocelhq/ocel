@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/declare"
-	"github.com/ocelhq/ocel/cli/internal/devstack/docker"
-	"github.com/ocelhq/ocel/cli/internal/devstack/postgres"
+	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
+	"github.com/ocelhq/ocel/cli/internal/devresources/postgres"
 )
 
 const liveEnv = "OCEL_LIVE_DOCKER"

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/devstack/docker"
+	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 )
 
 const liveEnv = "OCEL_LIVE_DOCKER"
@@ -32,7 +32,7 @@ func requireDocker(t *testing.T) docker.Engine {
 func TestDockerAContainerRunsOnALoopbackPortAndItsVolumeOutlivesIt(t *testing.T) {
 	engine := requireDocker(t)
 	ctx := context.Background()
-	labels := map[string]string{"dev.ocel.project": "docker-live-test", "dev.ocel.component": "postgres"}
+	labels := map[string]string{"dev.ocel.project": "docker-live-test", "dev.ocel.backend": "postgres"}
 	spec := docker.Spec{
 		Name:       "ocel-dev-docker-live-test",
 		Image:      liveImage,
@@ -48,8 +48,8 @@ func TestDockerAContainerRunsOnALoopbackPortAndItsVolumeOutlivesIt(t *testing.T)
 	if err != nil {
 		t.Fatalf("Run = %v", err)
 	}
-	if !strings.HasPrefix(running.Addr, "127.0.0.1:") {
-		t.Fatalf("Addr = %q, want a loopback address docker chose", running.Addr)
+	if !strings.HasPrefix(running.Address, "127.0.0.1:") {
+		t.Fatalf("Addr = %q, want a loopback address docker chose", running.Address)
 	}
 	err = docker.WaitReady(ctx, time.Minute, func(ctx context.Context) error {
 		_, err := engine.Exec(ctx, running.ID, "pg_isready", "-h", "127.0.0.1")
@@ -58,9 +58,9 @@ func TestDockerAContainerRunsOnALoopbackPortAndItsVolumeOutlivesIt(t *testing.T)
 	if err != nil {
 		t.Fatalf("the container never became ready: %v", err)
 	}
-	conn, err := net.DialTimeout("tcp", running.Addr, time.Second)
+	conn, err := net.DialTimeout("tcp", running.Address, time.Second)
 	if err != nil {
-		t.Fatalf("nothing answers on the published port %s: %v", running.Addr, err)
+		t.Fatalf("nothing answers on the published port %s: %v", running.Address, err)
 	}
 	_ = conn.Close()
 

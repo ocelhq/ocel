@@ -14,8 +14,8 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/ocelhq/ocel/cli/internal/declare"
-	"github.com/ocelhq/ocel/cli/internal/devstack/bucket"
-	"github.com/ocelhq/ocel/cli/internal/devstack/docker"
+	"github.com/ocelhq/ocel/cli/internal/devresources/bucket"
+	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 )
@@ -23,7 +23,7 @@ import (
 const liveEnv = "OCEL_LIVE_DOCKER"
 
 type liveBucket struct {
-	component *bucket.Component
+	backend   *bucket.Backend
 	project   string
 	name      string
 	endpoint  string
@@ -49,9 +49,9 @@ func startLive(t *testing.T, project string) liveBucket {
 	t.Cleanup(app.Close)
 
 	origins := []string{app.URL}
-	component := bucket.New(docker.Open, t.TempDir(), func() []string { return origins })
+	backend := bucket.New(docker.Open, t.TempDir(), func() []string { return origins })
 	t.Cleanup(func() {
-		_ = component.Close(ctx, true)
+		_ = backend.Close(ctx, true)
 		engine, err := docker.Open(ctx)
 		if err != nil {
 			return
@@ -60,7 +60,7 @@ func startLive(t *testing.T, project string) liveBucket {
 		_ = engine.Close()
 	})
 
-	resolved, err := component.Resolve(ctx, project, []declare.Resource{declared("User Uploads")})
+	resolved, err := backend.Resolve(ctx, project, []declare.Resource{declared("User Uploads")})
 	if err != nil {
 		t.Fatalf("Resolve = %v", err)
 	}
@@ -69,7 +69,7 @@ func startLive(t *testing.T, project string) liveBucket {
 		t.Fatalf("the binding is not the JSON the SDKs read: %v (%v)", err, resolved[0].Env)
 	}
 	_, endpoint, _ := strings.Cut(resolved[0].Origin, " @ ")
-	return liveBucket{component: component, project: project, name: bound.GetBucket().GetBucket(), endpoint: "http://" + endpoint, callbacks: callbacks, app: app, origins: &origins}
+	return liveBucket{backend: backend, project: project, name: bound.GetBucket().GetBucket(), endpoint: "http://" + endpoint, callbacks: callbacks, app: app, origins: &origins}
 }
 
 func send(t *testing.T, method, url string, headers map[string]string, body string) *http.Response {
@@ -101,7 +101,7 @@ func put(t *testing.T, target *bucketv1.PresignedTarget, contentType, body strin
 
 func (l liveBucket) presign(t *testing.T, callbackBase string, files ...*bucketv1.PresignFile) *bucketv1.PresignUploadResponse {
 	t.Helper()
-	presigned, err := l.component.PresignUpload(context.Background(), &bucketv1.PresignUploadRequest{
+	presigned, err := l.backend.PresignUpload(context.Background(), &bucketv1.PresignUploadRequest{
 		Bucket:          l.name,
 		CallbackBaseUrl: callbackBase,
 		Files:           files,
@@ -134,7 +134,7 @@ func TestDockerACompletedUploadCallsTheAppBackWithTheSignedFile(t *testing.T) {
 		t.Fatalf("PUT to the presigned url answered %s", resp.Status)
 	}
 
-	completed, err := live.component.CompleteUpload(context.Background(), &bucketv1.CompleteUploadRequest{SessionId: presigned.GetSessionId()})
+	completed, err := live.backend.CompleteUpload(context.Background(), &bucketv1.CompleteUploadRequest{SessionId: presigned.GetSessionId()})
 	if err != nil {
 		t.Fatalf("CompleteUpload = %v", err)
 	}
@@ -150,7 +150,7 @@ func TestDockerACompletedUploadCallsTheAppBackWithTheSignedFile(t *testing.T) {
 		t.Fatal("a completed upload never called the app back")
 	}
 
-	status, err := live.component.GetUploadStatus(context.Background(), &bucketv1.GetUploadStatusRequest{SessionId: presigned.GetSessionId()})
+	status, err := live.backend.GetUploadStatus(context.Background(), &bucketv1.GetUploadStatusRequest{SessionId: presigned.GetSessionId()})
 	if err != nil {
 		t.Fatalf("GetUploadStatus = %v", err)
 	}
@@ -167,7 +167,7 @@ func TestDockerAnUploadCallbackToAnOriginNoBucketAllowsIsRefused(t *testing.T) {
 		t.Fatalf("PUT to the presigned url answered %s", resp.Status)
 	}
 
-	_, err := live.component.CompleteUpload(context.Background(), &bucketv1.CompleteUploadRequest{SessionId: presigned.GetSessionId()})
+	_, err := live.backend.CompleteUpload(context.Background(), &bucketv1.CompleteUploadRequest{SessionId: presigned.GetSessionId()})
 	if err == nil || !strings.Contains(err.Error(), "http://127.0.0.1:1") {
 		t.Fatalf("CompleteUpload = %v, want the callback to a foreign origin refused", err)
 	}
@@ -177,7 +177,7 @@ func TestDockerAnObjectSignedForIsListedReadAndDeleted(t *testing.T) {
 	live := startLive(t, "bucket-live-objects-test")
 	ctx := context.Background()
 	sign := func(operation bucketv1.SignedOperation) *bucketv1.PresignedTarget {
-		signed, err := live.component.Sign(ctx, &bucketv1.SignRequest{
+		signed, err := live.backend.Sign(ctx, &bucketv1.SignRequest{
 			Bucket:      live.name,
 			Key:         "notes/hello.txt",
 			Operation:   operation,
@@ -193,7 +193,7 @@ func TestDockerAnObjectSignedForIsListedReadAndDeleted(t *testing.T) {
 	if resp := put(t, sign(bucketv1.SignedOperation_SIGNED_OPERATION_PUT), "text/plain", "hello"); resp.StatusCode != http.StatusOK {
 		t.Fatalf("PUT to the signed url answered %s", resp.Status)
 	}
-	listed, err := live.component.List(ctx, &bucketv1.ListRequest{Bucket: live.name, Prefix: "notes/"})
+	listed, err := live.backend.List(ctx, &bucketv1.ListRequest{Bucket: live.name, Prefix: "notes/"})
 	if err != nil {
 		t.Fatalf("List = %v", err)
 	}
@@ -204,10 +204,10 @@ func TestDockerAnObjectSignedForIsListedReadAndDeleted(t *testing.T) {
 	if body, _ := io.ReadAll(got.Body); string(body) != "hello" {
 		t.Errorf("GET of the signed url = %s %q, want the object put", got.Status, body)
 	}
-	if _, err := live.component.Delete(ctx, &bucketv1.DeleteRequest{Bucket: live.name, Keys: []string{"notes/hello.txt"}}); err != nil {
+	if _, err := live.backend.Delete(ctx, &bucketv1.DeleteRequest{Bucket: live.name, Keys: []string{"notes/hello.txt"}}); err != nil {
 		t.Fatalf("Delete = %v", err)
 	}
-	head, err := live.component.Head(ctx, &bucketv1.HeadRequest{Bucket: live.name, Key: "notes/hello.txt"})
+	head, err := live.backend.Head(ctx, &bucketv1.HeadRequest{Bucket: live.name, Key: "notes/hello.txt"})
 	if err != nil {
 		t.Fatalf("Head = %v", err)
 	}
@@ -232,7 +232,7 @@ func TestDockerTheAppsOriginIsReadAgainOnEverySync(t *testing.T) {
 		t.Fatalf("%s may upload before the app ever ran there", moved)
 	}
 	*live.origins = []string{moved}
-	if _, err := live.component.Resolve(context.Background(), live.project, []declare.Resource{declared("User Uploads")}); err != nil {
+	if _, err := live.backend.Resolve(context.Background(), live.project, []declare.Resource{declared("User Uploads")}); err != nil {
 		t.Fatalf("Resolve = %v", err)
 	}
 	if got := allowed(moved); got != moved {

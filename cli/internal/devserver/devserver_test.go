@@ -16,7 +16,7 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/cli/internal/declare"
-	"github.com/ocelhq/ocel/cli/internal/resolve"
+	"github.com/ocelhq/ocel/cli/internal/devresources/binding"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/channel"
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
@@ -28,20 +28,20 @@ import (
 type fakeStack struct {
 	mu      sync.Mutex
 	asked   [][]declare.Resource
-	resolve func([]declare.Resource) ([]resolve.Resource, error)
+	resolve func([]declare.Resource) ([]binding.Resolved, error)
 	mounted bool
 }
 
-func (f *fakeStack) Resolve(_ context.Context, resources []declare.Resource) ([]resolve.Resource, error) {
+func (f *fakeStack) Resolve(_ context.Context, resources []declare.Resource) ([]binding.Resolved, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.asked = append(f.asked, resources)
 	if f.resolve != nil {
 		return f.resolve(resources)
 	}
-	out := make([]resolve.Resource, 0, len(resources))
+	out := make([]binding.Resolved, 0, len(resources))
 	for _, r := range resources {
-		out = append(out, resolve.Resource{Name: r.Name, Type: r.Type, Env: map[string]string{"BOUND_" + r.Name: "yes"}})
+		out = append(out, binding.Resolved{Name: r.Name, Type: r.Type, Env: map[string]string{"BOUND_" + r.Name: "yes"}})
 	}
 	return out, nil
 }
@@ -325,7 +325,7 @@ func TestSync(t *testing.T) {
 
 	t.Run("propagates what the stack refused", func(t *testing.T) {
 		t.Parallel()
-		s := newDevServer(&fakeStack{resolve: func([]declare.Resource) ([]resolve.Resource, error) {
+		s := newDevServer(&fakeStack{resolve: func([]declare.Resource) ([]binding.Resolved, error) {
 			return nil, errors.New("boom")
 		}})
 		url := serve(t, s)
