@@ -169,7 +169,7 @@ func (l *Ledger) Rollback(ctx context.Context, target string, promotion router.P
 	return dropped, err
 }
 
-func (l *Ledger) changeDropping(ctx context.Context, pointer string, apply func(Pointer) (Pointer, []RecordedPromotion, error)) (router.PruneResult, error) {
+func (l *Ledger) changeAndReadUnnamed(ctx context.Context, pointer string, apply func(Pointer) (Pointer, []RecordedPromotion, error)) (router.PruneResult, error) {
 	name := router.ResolvePointer(pointer)
 	_, dropped, err := l.change(ctx, name, apply)
 	if err != nil {
@@ -214,14 +214,14 @@ func (l *Ledger) ReadActive(ctx context.Context, pointer string) (router.Promoti
 }
 
 func (l *Ledger) Prune(ctx context.Context, keep int, pointer string) (router.PruneResult, error) {
-	return l.changeDropping(ctx, pointer, func(current Pointer) (Pointer, []RecordedPromotion, error) {
+	return l.changeAndReadUnnamed(ctx, pointer, func(current Pointer) (Pointer, []RecordedPromotion, error) {
 		kept, dropped := current.Retain(keep)
 		return kept, dropped, nil
 	})
 }
 
 func (l *Ledger) RemovePointer(ctx context.Context, pointer string) (router.PruneResult, error) {
-	return l.changeDropping(ctx, pointer, func(current Pointer) (Pointer, []RecordedPromotion, error) {
+	return l.changeAndReadUnnamed(ctx, pointer, func(current Pointer) (Pointer, []RecordedPromotion, error) {
 		return Pointer{Name: current.Name}, current.Promotions, nil
 	})
 }
