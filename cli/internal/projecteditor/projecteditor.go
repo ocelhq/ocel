@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/valuestore"
 	"github.com/ocelhq/ocel/cli/internal/variableeditor"
 	"github.com/ocelhq/ocel/cli/internal/variables"
+	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/cli/node"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
@@ -19,10 +20,6 @@ func Serve(ctx context.Context, cfg *projectconfig.Config, prov *providerclient.
 		return nil, fmt.Errorf("read the bundled variables UI: %w", err)
 	}
 
-	other := environmentv1.Tier_TIER_PREVIEW
-	if tier == environmentv1.Tier_TIER_PREVIEW {
-		other = environmentv1.Tier_TIER_PRODUCTION
-	}
 	store := valuestore.Store{Provider: prov, Config: cfg, Tier: tier}
 
 	var environments []string
@@ -36,7 +33,7 @@ func Serve(ctx context.Context, cfg *projectconfig.Config, prov *providerclient.
 		Assets:       assets,
 		Declarations: declarations,
 		Values:       store,
-		OtherValues:  valuestore.Store{Provider: prov, Config: cfg, Tier: other},
+		OtherValues:  valuestore.Store{Provider: prov, Config: cfg, Tier: variablescope.OtherTier(tier)},
 		EnvSource:    store,
 		Slug:         cfg.Slug,
 		Tier:         tier,

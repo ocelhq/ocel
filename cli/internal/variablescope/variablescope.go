@@ -19,7 +19,7 @@ func Of(cfg *projectconfig.Config, tier environmentv1.Tier, environment string) 
 		Tier:        tier,
 		Environment: environment,
 		Bindings:    BindingVariables(cfg, tier),
-		OtherTiers:  BindingVariables(cfg, otherTier(tier)),
+		OtherTiers:  BindingVariables(cfg, OtherTier(tier)),
 		EnvSource:   ConfiguredEnvSource(cfg, tier),
 	}
 }
@@ -28,7 +28,7 @@ func ForDev(cfg *projectconfig.Config) variables.Scope {
 	return variables.Scope{Apps: Apps(cfg)}
 }
 
-func otherTier(tier environmentv1.Tier) environmentv1.Tier {
+func OtherTier(tier environmentv1.Tier) environmentv1.Tier {
 	if tier == environmentv1.Tier_TIER_PREVIEW {
 		return environmentv1.Tier_TIER_PRODUCTION
 	}
