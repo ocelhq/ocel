@@ -1,6 +1,7 @@
 package run
 
 import (
+	"context"
 	"crypto/rand"
 	"io"
 	"slices"
@@ -23,14 +24,28 @@ type Span struct {
 	spanID  []byte
 	start   time.Time
 	title   progress.Title
+	level   progressv1.Level
 
-	mu      sync.Mutex
-	writers []*lineWriter
-	endOnce sync.Once
+	mu         sync.Mutex
+	writers    []*lineWriter
+	attributes []*progressv1.SpanAttribute
+	endOnce    sync.Once
 }
 
 func (s *Span) Unit(subject string, title progress.Title) *Span {
 	return s.run.begin(s, subject, title)
+}
+
+func (s *Span) Trace(subject, name string, attrs ...progress.Attr) *Span {
+	return s.run.beginTrace(s, subject, name, attrs)
+}
+
+func (s *Span) SetAttributes(attrs ...progress.Attr) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, a := range attrs {
+		s.attributes = append(s.attributes, &progressv1.SpanAttribute{Key: a.Key.Wire, Value: a.Value})
+	}
 }
 
 type ReservedUnit struct {
@@ -134,15 +149,21 @@ func (s *Span) End(err error) {
 			child.End(err)
 		}
 		s.flush()
+		s.mu.Lock()
 		ended := &progressv1.Ended{
 			Status:            progressv1.SpanStatus_SPAN_STATUS_OK,
 			StartTimeUnixNano: s.start.UnixNano(),
 			Title:             s.title.Ended,
+			Attributes:        s.attributes,
 		}
-		ev := &streamv1.RunEvent{Level: progressv1.Level_LEVEL_INFO, Body: &streamv1.RunEvent_Ended{Ended: ended}}
+		s.mu.Unlock()
+		ev := &streamv1.RunEvent{Level: s.level, Body: &streamv1.RunEvent_Ended{Ended: ended}}
 		if err != nil {
 			ended.Status, ended.Title = progressv1.SpanStatus_SPAN_STATUS_ERROR, ""
-			ev.Level, ev.Message = s.run.failureLevel(), err.Error()
+			ev.Message = err.Error()
+			if s.level != progressv1.Level_LEVEL_DEBUG {
+				ev.Level = s.run.failureLevel()
+			}
 		}
 		s.run.close(s)
 		s.run.bus.send(s.onSpan(ev))
@@ -167,4 +188,15 @@ func newSpanID() []byte {
 	id := make([]byte, 8)
 	_, _ = rand.Read(id)
 	return id
+}
+
+type spanKey struct{}
+
+func ContextWithSpan(ctx context.Context, s *Span) context.Context {
+	return context.WithValue(ctx, spanKey{}, s)
+}
+
+func SpanFromContext(ctx context.Context) *Span {
+	s, _ := ctx.Value(spanKey{}).(*Span)
+	return s
 }

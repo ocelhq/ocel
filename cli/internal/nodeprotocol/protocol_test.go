@@ -14,22 +14,45 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 
-	"github.com/ocelhq/ocel/cli/internal/runtrace"
+	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/pkg/constants"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
-func newRun(t *testing.T) (context.Context, *runtrace.Run) {
-	t.Helper()
-	ctx, run, err := runtrace.Start(context.Background(), t.TempDir(), "ocel build")
-	if err != nil {
-		t.Fatalf("runtrace.Start: %v", err)
-	}
-	t.Cleanup(func() { _ = run.Close() })
-	return ctx, run
+type tracedRun struct {
+	dir   string
+	run   *run.Run
+	build *run.Span
 }
 
-func readTrace(t *testing.T, run *runtrace.Run) string {
+func newRun(t *testing.T) (context.Context, *tracedRun) {
+	t.Helper()
+	dir := t.TempDir()
+	ctx, building, err := run.NewBus(time.Now).Begin(context.Background(), "ocel build", dir)
+	if err != nil {
+		t.Fatalf("Begin: %v", err)
+	}
+	traced := &tracedRun{dir: dir, run: building, build: building.Phase(progressv1.Phase_PHASE_BUILD)}
+	t.Cleanup(func() { _ = traced.Close() })
+	return ctx, traced
+}
+
+func (r *tracedRun) Close() error {
+	var err error
+	r.run.End(&err)
+	return err
+}
+
+func (r *tracedRun) LogPath() string {
+	found, _ := filepath.Glob(filepath.Join(r.dir, constants.ProjectStateDirName, "runs", "*.ndjson"))
+	if len(found) != 1 {
+		return ""
+	}
+	return found[0]
+}
+
+func readTrace(t *testing.T, run *tracedRun) string {
 	t.Helper()
 	raw, err := os.ReadFile(strings.TrimSuffix(run.LogPath(), ".ndjson") + ".otlp.json")
 	if err != nil {
@@ -38,7 +61,7 @@ func readTrace(t *testing.T, run *runtrace.Run) string {
 	return string(raw)
 }
 
-func loggedEvents(t *testing.T, run *runtrace.Run) []*streamv1.RunEvent {
+func loggedEvents(t *testing.T, run *tracedRun) []*streamv1.RunEvent {
 	t.Helper()
 	var out []*streamv1.RunEvent
 	for _, line := range strings.Split(strings.TrimSpace(readLog(t, run)), "\n") {
@@ -54,7 +77,7 @@ func loggedEvents(t *testing.T, run *runtrace.Run) []*streamv1.RunEvent {
 	return out
 }
 
-func readLog(t *testing.T, run *runtrace.Run) string {
+func readLog(t *testing.T, run *tracedRun) string {
 	t.Helper()
 	raw, err := os.ReadFile(run.LogPath())
 	if err != nil {
@@ -66,7 +89,7 @@ func readLog(t *testing.T, run *runtrace.Run) string {
 func TestProcessorForwardsNonProtocolOutput(t *testing.T) {
 	ctx, run := newRun(t)
 	var out strings.Builder
-	p := &Processor{Run: run, Forward: &out}
+	p := &Processor{Span: run.build, Forward: &out}
 
 	p.Scan(ctx, strings.NewReader("Compiled successfully\n{\"unrelated\":\"json\"}\n"))
 
@@ -78,7 +101,7 @@ func TestProcessorForwardsNonProtocolOutput(t *testing.T) {
 func TestProcessorForwardsAMalformedProtocolLineVerbatim(t *testing.T) {
 	ctx, run := newRun(t)
 	var out strings.Builder
-	p := &Processor{Run: run, Forward: &out}
+	p := &Processor{Span: run.build, Forward: &out}
 
 	line := Prefix + "{not json"
 	p.Scan(ctx, strings.NewReader(line+"\n"))
@@ -89,14 +112,14 @@ func TestProcessorForwardsAMalformedProtocolLineVerbatim(t *testing.T) {
 }
 
 func TestProcessorEmitsASpanPerApp(t *testing.T) {
-	ctx, run := newRun(t)
-	p := &Processor{Run: run}
+	_, run := newRun(t)
+	p := &Processor{Span: run.build}
 
-	send(p, ctx, record{Type: typeSpanStart, ID: "1", App: "api", Stage: "build"})
-	send(p, ctx, record{Type: typeSpanStart, ID: "2", App: "worker", Stage: "build"})
+	send(p, record{Type: typeSpanStart, ID: "1", App: "api", Stage: "build"})
+	send(p, record{Type: typeSpanStart, ID: "2", App: "worker", Stage: "build"})
 	ok := true
-	send(p, ctx, record{Type: typeSpanEnd, ID: "1", OK: &ok})
-	send(p, ctx, record{Type: typeSpanEnd, ID: "2", OK: &ok})
+	send(p, record{Type: typeSpanEnd, ID: "1", OK: &ok})
+	send(p, record{Type: typeSpanEnd, ID: "2", OK: &ok})
 
 	if err := run.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
@@ -112,13 +135,13 @@ func TestProcessorEmitsASpanPerApp(t *testing.T) {
 }
 
 func TestProcessorMarksAFailedSpanWithoutLeakingTheErrorText(t *testing.T) {
-	ctx, run := newRun(t)
-	p := &Processor{Run: run}
+	_, run := newRun(t)
+	p := &Processor{Span: run.build}
 
-	send(p, ctx, record{Type: typeSpanStart, ID: "1", App: "api", Stage: "build"})
-	send(p, ctx, record{Type: typeError, App: "api", Stage: "build", Message: "sk_live_topsecret build failed"})
+	send(p, record{Type: typeSpanStart, ID: "1", App: "api", Stage: "build"})
+	send(p, record{Type: typeError, App: "api", Stage: "build", Message: "sk_live_topsecret build failed"})
 	notOK := false
-	send(p, ctx, record{Type: typeSpanEnd, ID: "1", OK: &notOK})
+	send(p, record{Type: typeSpanEnd, ID: "1", OK: &notOK})
 
 	if err := run.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
@@ -139,10 +162,10 @@ func TestProcessorMarksAFailedSpanWithoutLeakingTheErrorText(t *testing.T) {
 }
 
 func TestProcessorAbortEndsAnyOpenSpan(t *testing.T) {
-	ctx, run := newRun(t)
-	p := &Processor{Run: run}
+	_, run := newRun(t)
+	p := &Processor{Span: run.build}
 
-	send(p, ctx, record{Type: typeSpanStart, ID: "1", App: "api", Stage: "build"})
+	send(p, record{Type: typeSpanStart, ID: "1", App: "api", Stage: "build"})
 	p.Abort(context.Background())
 
 	if err := run.Close(); err != nil {
@@ -192,7 +215,7 @@ func TestABuildStillOpenWhenTheBuildersOutputCannotBeReadEndsWithTheReadError(t 
 func TestABuildStillOpenWhenTheRunIsCancelledEndsSayingItWasCancelled(t *testing.T) {
 	var ended error
 	p := &Processor{AppBuild: func(string) func(error) { return func(err error) { ended = err } }}
-	send(p, context.Background(), record{Type: typeSpanStart, ID: "1", App: "web", Stage: "build"})
+	send(p, record{Type: typeSpanStart, ID: "1", App: "web", Stage: "build"})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -204,18 +227,18 @@ func TestABuildStillOpenWhenTheRunIsCancelledEndsSayingItWasCancelled(t *testing
 
 func TestAbortReportsNothingWhenNoBuildIsOpen(t *testing.T) {
 	p := &Processor{AppBuild: func(string) func(error) { return func(error) {} }}
-	send(p, context.Background(), record{Type: typeSpanStart, ID: "1", App: "web", Stage: "build"})
-	send(p, context.Background(), record{Type: typeSpanEnd, ID: "1", OK: new(true)})
+	send(p, record{Type: typeSpanStart, ID: "1", App: "web", Stage: "build"})
+	send(p, record{Type: typeSpanEnd, ID: "1", OK: new(true)})
 	if err := p.Abort(context.Background()); err != nil {
 		t.Errorf("Abort() = %v, want nil: every build ended", err)
 	}
 }
 
 func TestProcessorErrReturnsTheLastErrorRecord(t *testing.T) {
-	ctx, run := newRun(t)
-	p := &Processor{Run: run}
+	_, run := newRun(t)
+	p := &Processor{Span: run.build}
 
-	send(p, ctx, record{Type: typeError, App: "api", Stage: "build", Message: "no entrypoint resolved"})
+	send(p, record{Type: typeError, App: "api", Stage: "build", Message: "no entrypoint resolved"})
 
 	if got, want := p.Failure(), "no entrypoint resolved"; got != want {
 		t.Errorf("Err() = %q, want %q", got, want)
@@ -272,7 +295,7 @@ func TestScanNeverHangsOnALineLargerThanTheBuffer(t *testing.T) {
 func TestProcessorRecoversARecordGluedToAPrecedingUnterminatedLine(t *testing.T) {
 	ctx, run := newRun(t)
 	var out strings.Builder
-	p := &Processor{Run: run, Forward: &out}
+	p := &Processor{Span: run.build, Forward: &out}
 
 	raw, err := json.Marshal(record{Type: typeError, App: "api", Stage: "build", Message: "no entrypoint resolved"})
 	if err != nil {
@@ -291,7 +314,7 @@ func TestProcessorRecoversARecordGluedToAPrecedingUnterminatedLine(t *testing.T)
 func TestProcessorRejectsARecordWithAnUnrecognisedStage(t *testing.T) {
 	ctx, run := newRun(t)
 	var out strings.Builder
-	p := &Processor{Run: run, Forward: &out}
+	p := &Processor{Span: run.build, Forward: &out}
 
 	line := Prefix + `{"type":"span_start","id":"1","app":"api","stage":"pwned; </trace-span-injection>"}`
 	p.Scan(ctx, strings.NewReader(line+"\n"))
@@ -310,13 +333,13 @@ func TestProcessorRejectsARecordWithAnUnrecognisedStage(t *testing.T) {
 }
 
 func TestProcessorCapsTheAppLength(t *testing.T) {
-	ctx, run := newRun(t)
-	p := &Processor{Run: run}
+	_, run := newRun(t)
+	p := &Processor{Span: run.build}
 
 	longApp := strings.Repeat("a", maxAppLen*2)
-	send(p, ctx, record{Type: typeSpanStart, ID: "1", App: longApp, Stage: "build"})
+	send(p, record{Type: typeSpanStart, ID: "1", App: longApp, Stage: "build"})
 	ok := true
-	send(p, ctx, record{Type: typeSpanEnd, ID: "1", OK: &ok})
+	send(p, record{Type: typeSpanEnd, ID: "1", OK: &ok})
 
 	if err := run.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
@@ -328,13 +351,13 @@ func TestProcessorCapsTheAppLength(t *testing.T) {
 }
 
 func TestProcessorParentsALogRecordToItsOpenSpan(t *testing.T) {
-	ctx, run := newRun(t)
-	p := &Processor{Run: run}
+	_, run := newRun(t)
+	p := &Processor{Span: run.build}
 
-	send(p, ctx, record{Type: typeSpanStart, ID: "1", App: "api", Stage: "build"})
-	send(p, ctx, record{Type: typeLog, App: "api", Stage: "build", Level: "info", Message: "installing dependencies"})
+	send(p, record{Type: typeSpanStart, ID: "1", App: "api", Stage: "build"})
+	send(p, record{Type: typeLog, App: "api", Stage: "build", Level: "info", Message: "installing dependencies"})
 	ok := true
-	send(p, ctx, record{Type: typeSpanEnd, ID: "1", OK: &ok})
+	send(p, record{Type: typeSpanEnd, ID: "1", OK: &ok})
 
 	if err := run.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
@@ -356,6 +379,17 @@ func TestProcessorParentsALogRecordToItsOpenSpan(t *testing.T) {
 	}
 }
 
+func buildSpanID(t *testing.T, run *tracedRun) []byte {
+	t.Helper()
+	for _, ev := range loggedEvents(t, run) {
+		if ev.GetStarted() != nil && ev.GetPhase() == progressv1.Phase_PHASE_BUILD && ev.GetMessage() == "" {
+			return ev.GetSpanId()
+		}
+	}
+	t.Fatal("the log holds no build phase span")
+	return nil
+}
+
 func TestProcessorWorksWithNoRun(t *testing.T) {
 	var out strings.Builder
 	p := &Processor{Forward: &out}
@@ -369,10 +403,10 @@ func TestProcessorWorksWithNoRun(t *testing.T) {
 	}
 }
 
-func TestANodeBuildLogRecordIsADebugRunEventInTheBuildPhaseNamingItsApp(t *testing.T) {
+func TestANodeBuildLogRecordWithNoOpenSpanIsDebugDetailOfTheProcessorsSpan(t *testing.T) {
 	ctx, run := newRun(t)
 	var out strings.Builder
-	p := &Processor{Run: run, Forward: &out}
+	p := &Processor{Span: run.build, Forward: &out}
 
 	raw, err := json.Marshal(record{Type: typeLog, App: "api", Stage: "build", Level: "warn", Message: "installing dependencies"})
 	if err != nil {
@@ -383,22 +417,27 @@ func TestANodeBuildLogRecordIsADebugRunEventInTheBuildPhaseNamingItsApp(t *testi
 	if err := run.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
-	logged := loggedEvents(t, run)
+	var logged []*streamv1.RunEvent
+	for _, ev := range loggedEvents(t, run) {
+		if ev.GetMessage() == "installing dependencies" {
+			logged = append(logged, ev)
+		}
+	}
 	if len(logged) != 1 {
-		t.Fatalf("the log holds %d events, want the one record", len(logged))
+		t.Fatalf("the log holds the record %d times, want once", len(logged))
 	}
 	ev := logged[0]
-	if ev.GetPhase() != progressv1.Phase_PHASE_BUILD || ev.GetSubject() != "api" || ev.GetLevel() != progressv1.Level_LEVEL_DEBUG || ev.GetMessage() != "installing dependencies" {
-		t.Errorf("logged %s [%s] %s: %q, want DEBUG [PHASE_BUILD] api: \"installing dependencies\"", ev.GetLevel(), ev.GetPhase(), ev.GetSubject(), ev.GetMessage())
+	if ev.GetPhase() != progressv1.Phase_PHASE_BUILD || ev.GetLevel() != progressv1.Level_LEVEL_DEBUG || !bytes.Equal(ev.GetSpanId(), buildSpanID(t, run)) {
+		t.Errorf("logged %s [%s] on span %x, want DEBUG [PHASE_BUILD] on the build phase's span", ev.GetLevel(), ev.GetPhase(), ev.GetSpanId())
 	}
 	if ev.GetTime() == nil {
 		t.Error("the logged event has no time")
 	}
 }
 
-func send(p *Processor, ctx context.Context, rec record) {
+func send(p *Processor, rec record) {
 	raw, _ := json.Marshal(rec)
-	p.line(ctx, Prefix+string(raw))
+	p.line(Prefix + string(raw))
 }
 
 func TestArtifactsLandUnderRunsDir(t *testing.T) {

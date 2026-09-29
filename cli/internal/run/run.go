@@ -29,7 +29,7 @@ type Run struct {
 	bus     *Bus
 	command string
 	start   time.Time
-	trace   *runtrace.Run
+	trace   *runtrace.Trace
 
 	mu          sync.Mutex
 	phases      map[progressv1.Phase]*Span
@@ -180,22 +180,35 @@ func (r *Run) beginLocked(phase progressv1.Phase, parent *Span, subject string, 
 }
 
 func (r *Run) beginLockedAt(phase progressv1.Phase, parent *Span, subject string, title progress.Title, start time.Time) *Span {
-	s := &Span{run: r, parent: parent, phase: phase, subject: subject, spanID: newSpanID(), start: start, title: title}
-	r.enterLocked(phase)
+	return r.openLocked(&Span{run: r, parent: parent, phase: phase, subject: subject, spanID: newSpanID(), start: start, title: title, level: progressv1.Level_LEVEL_INFO})
+}
+
+func (r *Run) openLocked(s *Span) *Span {
+	r.enterLocked(s.phase)
 	var parentID []byte
-	if parent != nil {
-		parentID = parent.spanID
+	if s.parent != nil {
+		parentID = s.parent.spanID
 	}
 	r.open = append(r.open, s)
 	r.bus.send(&streamv1.RunEvent{
 		Time:    timestamppb.New(s.start),
-		Phase:   phase,
-		Subject: subject,
-		Message: title.Started,
+		Level:   s.level,
+		Phase:   s.phase,
+		Subject: s.subject,
+		Message: s.title.Started,
 		SpanId:  s.spanID,
 		Body:    &streamv1.RunEvent_Started{Started: &progressv1.Started{ParentSpanId: parentID}},
 	})
 	return s
+}
+
+func (r *Run) beginTrace(parent *Span, subject, name string, attrs []progress.Attr) *Span {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	title := progress.Title{Started: name, Ended: name}
+	s := &Span{run: r, parent: parent, phase: parent.phase, subject: subject, spanID: newSpanID(), start: r.bus.now(), title: title, level: progressv1.Level_LEVEL_DEBUG}
+	s.SetAttributes(append([]progress.Attr{{Key: progress.AttrKeySpanName, Value: name}}, attrs...)...)
+	return r.openLocked(s)
 }
 
 func (r *Run) close(s *Span) {

@@ -7,7 +7,7 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
-func TestAScopeStartedWithNoParentIsASpanUnderTheRunsRootSpan(t *testing.T) {
+func TestASpanStartedWithNoParentIsASpanUnderTheRunsRootSpan(t *testing.T) {
 	r := startRun(t)
 	id := []byte{1, 2, 3, 4, 5, 6, 7, 8}
 	now := time.Now()
@@ -34,13 +34,14 @@ func TestAScopeStartedWithNoParentIsASpanUnderTheRunsRootSpan(t *testing.T) {
 	}
 }
 
-func TestAPhaseScopeIsASpanNamedForItsPhaseApartFromTheWorkNamedInsideIt(t *testing.T) {
+func TestAPhaseSpanIsNamedForItsPhaseApartFromTheWorkNamedInsideIt(t *testing.T) {
 	r := startRun(t)
 	phase := []byte{1, 2, 3, 4, 5, 6, 7, 8}
 	now := time.Now()
+	attempt := []byte{2, 2, 2, 2, 2, 2, 2, 2}
 	r.Receive(started(phase, nil, ""))
-	_, attempt := r.StartSpan(t.Context(), "provision")
-	attempt.End()
+	r.Receive(started(attempt, phase, "provision"))
+	r.Receive(ended(attempt, now, now.Add(time.Second), progressv1.SpanStatus_SPAN_STATUS_OK))
 	r.Receive(ended(phase, now, now.Add(time.Second), progressv1.SpanStatus_SPAN_STATUS_OK))
 	if err := r.Close(); err != nil {
 		t.Fatalf("Close() = %v", err)

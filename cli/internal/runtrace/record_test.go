@@ -1,7 +1,6 @@
 package runtrace
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -13,17 +12,17 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
-func startRun(t *testing.T) *Run {
+func startRun(t *testing.T) *Trace {
 	t.Helper()
-	_, r, err := Start(context.Background(), t.TempDir(), "ocel deploy")
+	r, err := Open(t.TempDir(), "ocel deploy")
 	if err != nil {
-		t.Fatalf("Start() = %v", err)
+		t.Fatalf("Open() = %v", err)
 	}
 	t.Cleanup(func() { _ = r.Close() })
 	return r
 }
 
-func loggedEvents(t *testing.T, r *Run) []*streamv1.RunEvent {
+func loggedEvents(t *testing.T, r *Trace) []*streamv1.RunEvent {
 	t.Helper()
 	var out []*streamv1.RunEvent
 	for _, line := range readLines(t, r.LogPath()) {

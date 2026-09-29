@@ -5,9 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/ocelhq/ocel/pkg/progress"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -18,9 +16,8 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/progress"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -354,21 +351,17 @@ func TestARunInAProjectTracesItselfAndPointsItsResultAtItsLog(t *testing.T) {
 	bus.Attach(sink)
 	dir := t.TempDir()
 
-	ctx, run, err := bus.Begin(context.Background(), "ocel deploy", dir)
+	_, run, err := bus.Begin(context.Background(), "ocel deploy", dir)
 	if err != nil {
 		t.Fatal(err)
-	}
-	traced := runtrace.FromContext(ctx)
-	if traced == nil {
-		t.Fatal("the run's context carries no trace")
 	}
 	run.End(&err)
 
 	logPath := sink.received()[0].GetSummary().GetLogPath()
-	if logPath != traced.LogPath() || !strings.HasPrefix(logPath, filepath.Join(dir, constants.ProjectStateDirName, "runs")) {
-		t.Fatalf("log path = %q, want the trace's log %q under the project", logPath, traced.LogPath())
+	if logPath != runFile(t, dir, ".ndjson") {
+		t.Fatalf("log path = %q, want the trace's log under the project", logPath)
 	}
-	spans, readErr := os.ReadFile(filepath.Join(filepath.Dir(logPath), traced.TraceID()+".otlp.json"))
+	spans, readErr := os.ReadFile(strings.TrimSuffix(logPath, ".ndjson") + ".otlp.json")
 	if readErr != nil || !strings.Contains(string(spans), "ocel deploy") {
 		t.Fatalf("trace file = %q (%v), want the run's root span", spans, readErr)
 	}
@@ -377,11 +370,12 @@ func TestARunInAProjectTracesItselfAndPointsItsResultAtItsLog(t *testing.T) {
 func TestARunInAProjectLogsEveryEventDebugIncludedUpToItsResultAndNothingAfter(t *testing.T) {
 	bus := run.NewBus(time.Now)
 	bus.Attach(&recording{})
-	ctx, run, err := bus.Begin(context.Background(), "ocel deploy", t.TempDir())
+	dir := t.TempDir()
+	_, run, err := bus.Begin(context.Background(), "ocel deploy", dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	logPath := runtrace.FromContext(ctx).LogPath()
+	logPath := runFile(t, dir, ".ndjson")
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
 	build.Debug("engine chatter")
 	build.End(nil)

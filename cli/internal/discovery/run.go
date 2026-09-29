@@ -13,7 +13,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/nodeprotocol"
-	"github.com/ocelhq/ocel/cli/internal/runtrace"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/constants"
 )
@@ -154,7 +154,7 @@ func runOne(ctx context.Context, cmd *exec.Cmd, stdout, stderr io.Writer) error 
 		return fmt.Errorf("discovery failed: %w", err)
 	}
 
-	proc := &nodeprotocol.Processor{Run: runtrace.FromContext(ctx), Forward: stdout}
+	proc := &nodeprotocol.Processor{Span: run.SpanFromContext(ctx), Forward: stdout}
 
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("discovery failed: %w", err)

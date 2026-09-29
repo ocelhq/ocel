@@ -8,9 +8,9 @@ import (
 	"time"
 )
 
-const RunRetention = 10
+const retainedRuns = 10
 
-func Prune(dir string, keep int, cutoff time.Time) error {
+func prune(dir string, keep int, cutoff time.Time) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {

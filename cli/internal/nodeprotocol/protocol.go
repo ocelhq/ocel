@@ -11,11 +11,7 @@ import (
 	"strings"
 	"sync"
 
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
-
-	"github.com/ocelhq/ocel/cli/internal/runtrace"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/progress"
 )
 
@@ -77,22 +73,21 @@ type record struct {
 }
 
 type openSpan struct {
-	ctx  context.Context
-	span trace.Span
+	span *run.Span
 	app  string
 }
 
 type Processor struct {
-	Run      *runtrace.Run
+	Span     *run.Span
 	Forward  io.Writer
 	AppBuild func(app string) (ended func(error))
 
-	mu           sync.Mutex
-	spans        map[string]openSpan
-	spanCtxByApp map[string]context.Context
-	builds       map[string]func(error)
-	err          string
-	unread       error
+	mu        sync.Mutex
+	spans     map[string]openSpan
+	spanByApp map[string]*run.Span
+	builds    map[string]func(error)
+	err       string
+	unread    error
 }
 
 const buildStage = "build"
@@ -103,12 +98,16 @@ var errBuildCancelled = errors.New("cancelled before this app's build ended")
 
 var errBuildFailed = errors.New("the node builder reported this app's build failed")
 
+var errStageFailed = errors.New("the node builder reported this stage failed")
+
+var errStageAbandoned = errors.New("the node builder never ended this stage")
+
 func (p *Processor) Scan(ctx context.Context, r io.Reader) {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64*1024), maxLineBytes+64*1024)
 	scanner.Split(splitLines)
 	for scanner.Scan() {
-		p.line(ctx, scanner.Text())
+		p.line(scanner.Text())
 	}
 	if err := scanner.Err(); err != nil {
 		p.mu.Lock()
@@ -141,7 +140,7 @@ func (p *Processor) forwardWriter() io.Writer {
 	return p.Forward
 }
 
-func (p *Processor) line(ctx context.Context, line string) {
+func (p *Processor) line(line string) {
 	if len(line) >= maxLineBytes {
 		p.forward(line)
 		return
@@ -163,7 +162,7 @@ func (p *Processor) line(ctx context.Context, line string) {
 	if len(rec.App) > maxAppLen {
 		rec.App = rec.App[:maxAppLen]
 	}
-	p.apply(ctx, rec)
+	p.apply(rec)
 }
 
 func (p *Processor) forward(line string) {
@@ -178,15 +177,13 @@ func (p *Processor) forward(line string) {
 	_, _ = io.WriteString(p.Forward, line+"\n")
 }
 
-func (p *Processor) apply(ctx context.Context, rec record) {
+func (p *Processor) apply(rec record) {
 	switch rec.Type {
 	case typeLog:
-		if p.Run != nil {
-			p.Run.Log(p.logContext(ctx, rec.App), rec.App, rec.Message)
-		}
+		p.log(rec)
 	case typeSpanStart:
 		p.startBuild(rec)
-		p.startSpan(ctx, rec)
+		p.startSpan(rec)
 	case typeSpanEnd:
 		p.endBuild(rec)
 		p.endSpan(rec)
@@ -194,23 +191,20 @@ func (p *Processor) apply(ctx context.Context, rec record) {
 		p.mu.Lock()
 		p.err = rec.Message
 		p.mu.Unlock()
-		if p.Run != nil {
-			p.Run.Log(p.logContext(ctx, rec.App), rec.App, rec.Message)
-		}
+		p.log(rec)
 	}
 }
 
-func (p *Processor) logContext(ctx context.Context, app string) context.Context {
-	if app == "" {
-		return ctx
-	}
+func (p *Processor) log(rec record) {
 	p.mu.Lock()
-	spanCtx, found := p.spanCtxByApp[app]
+	span, found := p.spanByApp[rec.App]
 	p.mu.Unlock()
-	if !found {
-		return ctx
+	switch {
+	case found:
+		span.Debug(rec.Message)
+	case p.Span != nil:
+		p.Span.Debug(rec.Message)
 	}
-	return spanCtx
 }
 
 func (p *Processor) startBuild(rec record) {
@@ -246,26 +240,26 @@ func (p *Processor) endBuild(rec record) {
 	}
 }
 
-func (p *Processor) startSpan(ctx context.Context, rec record) {
-	if p.Run == nil || rec.ID == "" {
+func (p *Processor) startSpan(rec record) {
+	if p.Span == nil || rec.ID == "" {
 		return
 	}
-	var attrs []attribute.KeyValue
+	var attrs []progress.Attr
 	if rec.App != "" {
-		attrs = append(attrs, runtrace.Attribute(progress.AttrKeyApp, rec.App))
+		attrs = append(attrs, progress.Attr{Key: progress.AttrKeyApp, Value: rec.App})
 	}
-	spanCtx, span := p.Run.StartSpan(ctx, rec.Stage, attrs...)
+	span := p.Span.Trace(rec.App, rec.Stage, attrs...)
 
 	p.mu.Lock()
 	if p.spans == nil {
 		p.spans = make(map[string]openSpan)
 	}
-	p.spans[rec.ID] = openSpan{ctx: spanCtx, span: span, app: rec.App}
+	p.spans[rec.ID] = openSpan{span: span, app: rec.App}
 	if rec.App != "" {
-		if p.spanCtxByApp == nil {
-			p.spanCtxByApp = make(map[string]context.Context)
+		if p.spanByApp == nil {
+			p.spanByApp = make(map[string]*run.Span)
 		}
-		p.spanCtxByApp[rec.App] = spanCtx
+		p.spanByApp[rec.App] = span
 	}
 	p.mu.Unlock()
 }
@@ -275,8 +269,8 @@ func (p *Processor) endSpan(rec record) {
 	s, found := p.spans[rec.ID]
 	if found {
 		delete(p.spans, rec.ID)
-		if s.app != "" && p.spanCtxByApp[s.app] == s.ctx {
-			delete(p.spanCtxByApp, s.app)
+		if s.app != "" && p.spanByApp[s.app] == s.span {
+			delete(p.spanByApp, s.app)
 		}
 	}
 	p.mu.Unlock()
@@ -284,9 +278,10 @@ func (p *Processor) endSpan(rec record) {
 		return
 	}
 	if rec.OK != nil && !*rec.OK {
-		s.span.SetStatus(codes.Error, "")
+		s.span.End(errStageFailed)
+		return
 	}
-	s.span.End()
+	s.span.End(nil)
 }
 
 func (p *Processor) Abort(ctx context.Context) error {
@@ -295,12 +290,11 @@ func (p *Processor) Abort(ctx context.Context) error {
 	builds := p.builds
 	cause := p.unread
 	p.spans = nil
-	p.spanCtxByApp = nil
+	p.spanByApp = nil
 	p.builds = nil
 	p.mu.Unlock()
 	for _, s := range spans {
-		s.span.SetStatus(codes.Error, "")
-		s.span.End()
+		s.span.End(errStageAbandoned)
 	}
 	if len(builds) == 0 {
 		return nil

@@ -23,9 +23,10 @@ func TestBuildingAGoProjectUnpacksNoNodeBundle(t *testing.T) {
 	deps := clitest.NewDeps()
 	clitest.StubBuild(&deps, nil)
 
-	var stdout, stderr bytes.Buffer
-	if err := runBuild(context.Background(), deps, root, &stdout, &stderr); err != nil {
-		t.Fatalf("runBuild err = %v; stderr=%s", err, stderr.String())
+	var out bytes.Buffer
+	clitest.AttachTerminalSink(deps, &out)
+	if err := runBuild(context.Background(), deps, root); err != nil {
+		t.Fatalf("runBuild err = %v; out=%s", err, out.String())
 	}
 	if _, err := os.Stat(node.DistDir(root)); err == nil {
 		t.Fatalf("%s was unpacked for a project with no JavaScript", node.DistDir(root))

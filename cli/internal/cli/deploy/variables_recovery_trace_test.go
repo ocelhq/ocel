@@ -165,9 +165,10 @@ func TestVariablesRecoveryTracesEachAttemptAndTheHumanWait(t *testing.T) {
 	}
 
 	root0 := rootSpan(t, spans)
+	collecting := builds[0].ParentSpanID
 	for _, s := range append(append([]traceSpan{}, builds...), waits[0]) {
-		if s.ParentSpanID != root0.SpanID {
-			t.Errorf("span %q parent = %q, want the root span %q — a sibling of the build attempts, not nested in one", s.Name, s.ParentSpanID, root0.SpanID)
+		if s.ParentSpanID != collecting || s.ParentSpanID == root0.SpanID {
+			t.Errorf("span %q parent = %q, want the unit %q that collects the resources — a sibling of the build attempts, not nested in one", s.Name, s.ParentSpanID, collecting)
 		}
 	}
 

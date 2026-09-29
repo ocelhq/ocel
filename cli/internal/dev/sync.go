@@ -74,8 +74,8 @@ func discoverAndSync(ctx context.Context, srv *devserver.Server, cfg *projectcon
 	return resolvedEnv(result.SecretValues, values.merged(), result.Resources, runtimeAccess{url: result.DevServerURL, token: result.AppToken}, appFolder, scope), nil
 }
 
-// TODO: unlike build/deploy, ocel dev and ocel run never call runtrace.Start, so
-// discovery here produces no spans or logs and nothing else says so.
+// TODO: unlike build/deploy, ocel dev and ocel run begin no run on the bus, so
+// discovery here has no span to trace under and records no spans or logs.
 func discover(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, stdout, stderr io.Writer) error {
 	roots, err := discovery.RootsOf(cfg)
 	if err != nil {

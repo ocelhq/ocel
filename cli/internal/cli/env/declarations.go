@@ -2,7 +2,6 @@ package env
 
 import (
 	"context"
-	"github.com/ocelhq/ocel/pkg/progress"
 	"io"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
@@ -13,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/valuestore"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
+	"github.com/ocelhq/ocel/pkg/progress"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )

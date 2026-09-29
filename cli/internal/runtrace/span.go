@@ -14,13 +14,13 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
-type startedScope struct {
+type startedSpan struct {
 	parentID trace.SpanID
 	name     string
 	phase    string
 }
 
-func (r *Run) remember(ev *streamv1.RunEvent) {
+func (t *Trace) remember(ev *streamv1.RunEvent) {
 	id, ok := spanID(ev.GetSpanId())
 	if !ok {
 		return
@@ -34,20 +34,20 @@ func (r *Run) remember(ev *streamv1.RunEvent) {
 	if ev.GetPhase() == progressv1.Phase_PHASE_UNSPECIFIED {
 		phase = ""
 	}
-	r.scopesMu.Lock()
-	defer r.scopesMu.Unlock()
-	r.scopes[id] = startedScope{parentID: parentID, name: name, phase: phase}
+	t.startedMu.Lock()
+	defer t.startedMu.Unlock()
+	t.started[id] = startedSpan{parentID: parentID, name: name, phase: phase}
 }
 
-func (r *Run) ingestEnded(ev *streamv1.RunEvent) {
+func (t *Trace) ingestEnded(ev *streamv1.RunEvent) {
 	id, ok := spanID(ev.GetSpanId())
 	if !ok {
 		return
 	}
-	r.scopesMu.Lock()
-	scope := r.scopes[id]
-	delete(r.scopes, id)
-	r.scopesMu.Unlock()
+	t.startedMu.Lock()
+	span := t.started[id]
+	delete(t.started, id)
+	t.startedMu.Unlock()
 
 	ended := ev.GetEnded()
 	end := ev.GetTime().AsTime().UTC()
@@ -56,10 +56,10 @@ func (r *Run) ingestEnded(ev *streamv1.RunEvent) {
 		start = time.Unix(0, ns).UTC()
 	}
 	attrs := spanAttributes(ended.GetAttributes())
-	if scope.phase != "" {
-		attrs = append([]attribute.KeyValue{Attribute(progress.AttrKeyPhase, scope.phase)}, attrs...)
+	if span.phase != "" {
+		attrs = append([]attribute.KeyValue{Attribute(progress.AttrKeyPhase, span.phase)}, attrs...)
 	}
-	r.ingestSpan(id, scope.parentID, scope.name, start, end, ended.GetStatus(), attrs)
+	t.ingestSpan(id, span.parentID, span.name, start, end, ended.GetStatus(), attrs)
 }
 
 func spanID(raw []byte) (trace.SpanID, bool) {
@@ -71,12 +71,12 @@ func spanID(raw []byte) (trace.SpanID, bool) {
 	return id, id.IsValid()
 }
 
-func (r *Run) ingestSpan(id, parentID trace.SpanID, name string, start, end time.Time, status progressv1.SpanStatus, attrs []attribute.KeyValue) {
+func (t *Trace) ingestSpan(id, parentID trace.SpanID, name string, start, end time.Time, status progressv1.SpanStatus, attrs []attribute.KeyValue) {
 	ctx := context.Background()
-	parent := r.rootSpan.SpanContext()
+	parent := t.rootSpan.SpanContext()
 	if parentID.IsValid() {
 		parent = trace.NewSpanContext(trace.SpanContextConfig{
-			TraceID:    r.traceID,
+			TraceID:    t.traceID,
 			SpanID:     parentID,
 			TraceFlags: trace.FlagsSampled,
 			Remote:     true,
@@ -89,7 +89,7 @@ func (r *Run) ingestSpan(id, parentID trace.SpanID, name string, start, end time
 	if len(attrs) > 0 {
 		opts = append(opts, trace.WithAttributes(attrs...))
 	}
-	_, span := r.tracer.Start(ctx, progress.SanitizeSpanName(name), opts...)
+	_, span := t.tracer.Start(ctx, progress.SanitizeSpanName(name), opts...)
 	if code, ok := spanStatusCode(status); ok {
 		span.SetStatus(code, "")
 	}

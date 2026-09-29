@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"io"
 	"maps"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
+	"github.com/ocelhq/ocel/cli/internal/run"
 )
 
 func TestRunBuild(t *testing.T) {
@@ -41,16 +42,18 @@ export default {
 			return build.Output{Functions: []manifestbuilder.Function{{Route: "index", App: "api"}}}, nil
 		}
 
-		var stdout, stderr bytes.Buffer
-		if err := runBuild(context.Background(), deps, root, &stdout, &stderr); err != nil {
+		var stdout bytes.Buffer
+		deps.Events = run.NewBus(time.Now)
+		clitest.AttachTerminalSink(deps, &stdout)
+		if err := runBuild(context.Background(), deps, root); err != nil {
 			t.Fatalf("runBuild: %v", err)
 		}
 
 		if built == nil {
 			t.Fatal("runBuild did not build the project")
 		}
-		if got, want := stdout.String(), "Built 1 function into "+constants.ProjectStateDirName+"/output\n"; got != want {
-			t.Errorf("stdout = %q, want %q", got, want)
+		if want := "✓ Built 1 function into " + constants.ProjectStateDirName + "/output in "; !strings.Contains(stdout.String(), want) {
+			t.Errorf("stdout = %q, want the summary %q", stdout.String(), want)
 		}
 
 		record, err := os.ReadFile(filepath.Join(root, constants.ProjectStateDirName, "output", "client-digests.json"))
@@ -89,7 +92,9 @@ export default {
 		}
 
 		var stdout bytes.Buffer
-		if err := runBuild(context.Background(), deps, root, &stdout, io.Discard); err != nil {
+		deps.Events = run.NewBus(time.Now)
+		clitest.AttachTerminalSink(deps, &stdout)
+		if err := runBuild(context.Background(), deps, root); err != nil {
 			t.Fatalf("runBuild: %v", err)
 		}
 
@@ -121,7 +126,8 @@ export default {
 			return build.Output{}, nil
 		}
 
-		if err := runBuild(context.Background(), deps, root, io.Discard, io.Discard); err != nil {
+		deps.Events = run.NewBus(time.Now)
+		if err := runBuild(context.Background(), deps, root); err != nil {
 			t.Fatalf("runBuild: %v", err)
 		}
 		if got, want := env["web"][appbuild.ClientURLEnvName], "https://shop.acme.com"; got != want {
@@ -142,9 +148,14 @@ export default { slug: "test-app" };
 			return build.Output{}, errors.New("boom: app build failed")
 		}
 
-		err := runBuild(context.Background(), deps, root, io.Discard, io.Discard)
-		if err == nil || !strings.Contains(err.Error(), "boom: app build failed") {
-			t.Fatalf("runBuild err = %v, want the build failure surfaced", err)
+		var stdout bytes.Buffer
+		deps.Events = run.NewBus(time.Now)
+		clitest.AttachTerminalSink(deps, &stdout)
+		if err := runBuild(context.Background(), deps, root); err == nil {
+			t.Fatal("runBuild err = nil, want the build to fail")
+		}
+		if !strings.Contains(stdout.String(), "✗ Build failed in ") || !strings.Contains(stdout.String(), "boom: app build failed") {
+			t.Fatalf("stdout = %q, want the build failure surfaced in the run's summary", stdout.String())
 		}
 	})
 }

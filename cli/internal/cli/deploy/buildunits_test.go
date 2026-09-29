@@ -76,7 +76,7 @@ func buildScopes(t *testing.T, stream string) ([]*buildScope, []string) {
 		span := string(ev.GetSpanId())
 		switch body := ev.GetBody().(type) {
 		case *streamv1.RunEvent_Started:
-			if ev.GetSubject() == "" {
+			if ev.GetSubject() == "" || ev.GetLevel() == progressv1.Level_LEVEL_DEBUG {
 				continue
 			}
 			scope := &buildScope{subject: ev.GetSubject(), message: ev.GetMessage(), started: i}

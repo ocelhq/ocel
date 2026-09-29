@@ -39,10 +39,9 @@ func (b *Bus) Begin(ctx context.Context, command, projectDir string) (context.Co
 	r := &Run{bus: b, command: command, start: b.now(), phases: map[progressv1.Phase]*Span{}}
 	if projectDir != "" {
 		var err error
-		if ctx, r.trace, err = runtrace.Start(ctx, projectDir, command); err != nil {
+		if r.trace, err = runtrace.Open(projectDir, command); err != nil {
 			return ctx, nil, err
 		}
-		r.trace.LogThrough(func(ev *streamv1.RunEvent) { b.send(ev) })
 		b.Attach(r.trace)
 	}
 	r.ctx = ctx

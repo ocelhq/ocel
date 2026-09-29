@@ -10,9 +10,12 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
+
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 
 	"github.com/ocelhq/ocel/cli/internal/language"
-	"github.com/ocelhq/ocel/cli/internal/runtrace"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/constants"
 )
@@ -114,20 +117,20 @@ export {};
 `)
 
 	dir := t.TempDir()
-	ctx, run, err := runtrace.Start(context.Background(), dir, "ocel dev")
+	ctx, deploying, err := run.NewBus(time.Now).Begin(context.Background(), "ocel deploy", dir)
 	if err != nil {
-		t.Fatalf("runtrace.Start: %v", err)
+		t.Fatalf("Begin: %v", err)
 	}
+	ctx = run.ContextWithSpan(ctx, deploying.Phase(progressv1.Phase_PHASE_BUILD))
 
 	var stdout, stderr bytes.Buffer
 	if err := Run(ctx, root, prepared, okServer(t), &stdout, &stderr); err != nil {
 		t.Fatalf("Run: %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
-	if err := run.Close(); err != nil {
-		t.Fatalf("run.Close: %v", err)
-	}
+	var ended error
+	deploying.End(&ended)
 
-	trace := readTraceFile(t, run)
+	trace := readTraceFile(t, dir)
 	if !strings.Contains(trace, `"name": "discovery"`) {
 		t.Errorf("trace = %s, want a span named discovery", trace)
 	}
@@ -136,10 +139,13 @@ export {};
 	}
 }
 
-func readTraceFile(t *testing.T, run *runtrace.Run) string {
+func readTraceFile(t *testing.T, projectDir string) string {
 	t.Helper()
-	path := strings.TrimSuffix(run.LogPath(), ".ndjson") + ".otlp.json"
-	raw, err := os.ReadFile(path)
+	traces, err := filepath.Glob(filepath.Join(projectDir, constants.ProjectStateDirName, "runs", "*.otlp.json"))
+	if err != nil || len(traces) != 1 {
+		t.Fatalf("traces = %v, %v, want the run's one trace", traces, err)
+	}
+	raw, err := os.ReadFile(traces[0])
 	if err != nil {
 		t.Fatalf("read trace: %v", err)
 	}

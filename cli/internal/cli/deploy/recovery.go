@@ -7,15 +7,11 @@ import (
 	"strconv"
 	"strings"
 
-	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
-
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/valuestore"
 	"github.com/ocelhq/ocel/cli/internal/variableeditor"
@@ -47,9 +43,9 @@ type variablesRecovery struct {
 }
 
 func (r variablesRecovery) buildManifest(ctx context.Context, phase *run.Span, prebuilt bool) (*contractv1.Manifest, []inlinebinding.Record, error) {
-	scope := phase.Unit(r.cfg.Slug, buildTitle(r.cfg, prebuilt))
-	manifest, inline, err := r.build(ctx, phase, scope, prebuilt)
-	scope.End(err)
+	unit := phase.Unit(r.cfg.Slug, buildTitle(r.cfg, prebuilt))
+	manifest, inline, err := r.build(ctx, phase, unit, prebuilt)
+	unit.End(err)
 	return manifest, inline, err
 }
 
@@ -84,11 +80,11 @@ func appList(cfg *projectconfig.Config) string {
 	}
 }
 
-func (r variablesRecovery) build(ctx context.Context, phase, scope *run.Span, prebuilt bool) (*contractv1.Manifest, []inlinebinding.Record, error) {
+func (r variablesRecovery) build(ctx context.Context, phase, span *run.Span, prebuilt bool) (*contractv1.Manifest, []inlinebinding.Record, error) {
 	declarations, err := r.declarations(ctx)
 	var refusal *variables.MissingError
 	if errors.As(err, &refusal) && r.enabled {
-		if err := r.fill(ctx, scope, declarations, refusal); err != nil {
+		if err := r.fill(ctx, span, declarations, refusal); err != nil {
 			return nil, nil, err
 		}
 		declarations, err = r.declarations(ctx)
@@ -96,22 +92,22 @@ func (r variablesRecovery) build(ctx context.Context, phase, scope *run.Span, pr
 	if err != nil {
 		return nil, nil, err
 	}
-	manifest, inline, err := r.attempt(ctx, phase, scope, declarations, prebuilt, 0)
+	manifest, inline, err := r.attempt(ctx, phase, span, declarations, prebuilt, 0)
 
 	if !errors.As(err, &refusal) {
 		return manifest, inline, err
 	}
 	if !r.enabled {
-		r.createInEnvSource(ctx, scope, declarations, refusal)
+		r.createInEnvSource(ctx, span, declarations, refusal)
 		return manifest, inline, err
 	}
-	if err := r.fill(ctx, scope, declarations, refusal); err != nil {
+	if err := r.fill(ctx, span, declarations, refusal); err != nil {
 		return nil, nil, err
 	}
 	if declarations, err = r.declarations(ctx); err != nil {
 		return nil, nil, err
 	}
-	return r.attempt(ctx, phase, scope, declarations, prebuilt, 1)
+	return r.attempt(ctx, phase, span, declarations, prebuilt, 1)
 }
 
 func (r variablesRecovery) declarations(ctx context.Context) (*variables.Declarations, error) {
@@ -126,7 +122,7 @@ func (r variablesRecovery) declarations(ctx context.Context) (*variables.Declara
 	return r.newDeclarations(synced), nil
 }
 
-func (r variablesRecovery) createInEnvSource(ctx context.Context, scope *run.Span, declarations *variables.Declarations, refusal *variables.MissingError) {
+func (r variablesRecovery) createInEnvSource(ctx context.Context, span *run.Span, declarations *variables.Declarations, refusal *variables.MissingError) {
 	source := declarations.Scope().EnvSource
 	if !source.CanCreate || r.dry {
 		return
@@ -146,46 +142,37 @@ func (r variablesRecovery) createInEnvSource(ctx context.Context, scope *run.Spa
 		})
 		switch {
 		case err != nil:
-			scope.Warn(fmt.Sprintf("Could not create %s empty in %s, which lacks it: %v", problem.GetKey(), source.ID, err))
+			span.Warn(fmt.Sprintf("Could not create %s empty in %s, which lacks it: %v", problem.GetKey(), source.ID, err))
 		case resp.GetAwaitingApproval():
-			scope.Warn(fmt.Sprintf("Asked %s to create %s empty: the change waits for approval there, then for you to fill it in", source.ID, problem.GetKey()))
+			span.Warn(fmt.Sprintf("Asked %s to create %s empty: the change waits for approval there, then for you to fill it in", source.ID, problem.GetKey()))
 		default:
-			scope.Warn(fmt.Sprintf("Created %s empty in %s, for you to fill in there", problem.GetKey(), source.ID))
+			span.Warn(fmt.Sprintf("Created %s empty in %s, for you to fill in there", problem.GetKey(), source.ID))
 		}
 	}
 }
 
-func (r variablesRecovery) attempt(ctx context.Context, phase, scope *run.Span, declarations *variables.Declarations, prebuilt bool, retry int) (*contractv1.Manifest, []inlinebinding.Record, error) {
-	attemptCtx := ctx
-	var span trace.Span
-	if run := runtrace.FromContext(ctx); run != nil {
-		attemptCtx, span = run.StartSpan(ctx, "build", runtrace.Attribute(progress.AttrKeyRetryCount, strconv.Itoa(retry)))
-	}
-	manifest, inline, err := collectAndBuildManifest(attemptCtx, r.deps, r.cfg, declarations, prebuilt, r.dry, phase, scope, r.compute, r.containerArchs, r.urls)
-	endAttemptSpan(span, err)
+func (r variablesRecovery) attempt(ctx context.Context, phase, unit *run.Span, declarations *variables.Declarations, prebuilt bool, retry int) (*contractv1.Manifest, []inlinebinding.Record, error) {
+	attempt := unit.Trace(r.cfg.Slug, "build", progress.Attr{Key: progress.AttrKeyRetryCount, Value: strconv.Itoa(retry)})
+	manifest, inline, err := collectAndBuildManifest(run.ContextWithSpan(ctx, attempt), r.deps, r.cfg, declarations, prebuilt, r.dry, phase, unit, r.compute, r.containerArchs, r.urls)
+	attempt.End(err)
 	return manifest, inline, err
 }
 
-func (r variablesRecovery) fill(ctx context.Context, scope *run.Span, declarations *variables.Declarations, refusal *variables.MissingError) error {
+func (r variablesRecovery) fill(ctx context.Context, span *run.Span, declarations *variables.Declarations, refusal *variables.MissingError) error {
 	editor, err := r.deps.ServeVariableEditor(ctx, r.cfg, r.prov, r.tier, declarations, r.recovery(refusal))
 	if err != nil {
 		return err
 	}
 	defer editor.Close()
 
-	resume := scope.Hold(&streamv1.WaitingEvent{Missing: refusal.Variables(), Url: editor.URL})
+	resume := span.Hold(&streamv1.WaitingEvent{Missing: refusal.Variables(), Url: editor.URL})
 	if err := r.deps.OpenBrowser(editor.URL); err != nil {
-		scope.Warn("Couldn't open your browser automatically — open the link above yourself.")
+		span.Warn("Couldn't open your browser automatically — open the link above yourself.")
 	}
 
-	run := runtrace.FromContext(ctx)
-	waitCtx := ctx
-	var span trace.Span
-	if run != nil {
-		waitCtx, span = run.StartSpan(ctx, "await_human_input")
-	}
-	waitErr := editor.Wait(waitCtx)
-	endAttemptSpan(span, waitErr)
+	waiting := span.Trace(r.cfg.Slug, "await_human_input")
+	waitErr := editor.Wait(ctx)
+	waiting.End(waitErr)
 
 	switch {
 	case waitErr == nil:
@@ -204,18 +191,6 @@ func (r variablesRecovery) recovery(refusal *variables.MissingError) *variableed
 		missing = append(missing, variables.Cell{Key: problem.GetKey(), Folder: problem.GetFolder()})
 	}
 	return &variableeditor.Recovery{Deploy: r.command, Missing: missing}
-}
-
-func endAttemptSpan(span trace.Span, err error) {
-	if span == nil {
-		return
-	}
-	if err != nil {
-		span.SetStatus(codes.Error, "")
-	} else {
-		span.SetStatus(codes.Ok, "")
-	}
-	span.End()
 }
 
 type abandonedRefusal struct {

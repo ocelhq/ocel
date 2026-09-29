@@ -67,6 +67,7 @@ func (l *liveLine) observe(ev *streamv1.RunEvent) {
 	}
 	span := stageKey(ev.GetSpanId())
 	switch {
+	case isTraceOnly(ev):
 	case ev.GetStarted() != nil:
 		l.open(span, ev, at)
 	case ev.GetEnded() != nil:
@@ -196,6 +197,10 @@ func (l *liveLine) naming(unit *liveUnit) string {
 		named += " " + muted(l.present, said)
 	}
 	return named
+}
+
+func isTraceOnly(ev *streamv1.RunEvent) bool {
+	return ev.GetLevel() == progressv1.Level_LEVEL_DEBUG && (ev.GetStarted() != nil || ev.GetEnded() != nil)
 }
 
 func isBareScope(ev *streamv1.RunEvent) bool {

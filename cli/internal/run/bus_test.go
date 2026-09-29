@@ -2,8 +2,8 @@ package run_test
 
 import (
 	"context"
-	"github.com/ocelhq/ocel/pkg/progress"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -13,7 +13,8 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/cli/internal/runtrace"
+	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/progress"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -69,6 +70,15 @@ func (c *clock) advance(d time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.now = c.now.Add(d)
+}
+
+func runFile(t *testing.T, projectDir, extension string) string {
+	t.Helper()
+	found, err := filepath.Glob(filepath.Join(projectDir, constants.ProjectStateDirName, "runs", "*"+extension))
+	if err != nil || len(found) != 1 {
+		t.Fatalf("run files = %v, %v, want the run's one %s file", found, err, extension)
+	}
+	return found[0]
 }
 
 func begin(t *testing.T, sinks ...run.Sink) (*run.Run, *clock) {
@@ -174,11 +184,12 @@ func TestNoSinkReceivesASecretABindingInTheOutcomeCarries(t *testing.T) {
 	sink := &recording{}
 	bus := run.NewBus(time.Now)
 	bus.Attach(sink)
-	ctx, run, err := bus.Begin(context.Background(), "ocel deploy", t.TempDir())
+	dir := t.TempDir()
+	_, run, err := bus.Begin(context.Background(), "ocel deploy", dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	logPath := runtrace.FromContext(ctx).LogPath()
+	logPath := runFile(t, dir, ".ndjson")
 
 	run.Phase(progressv1.Phase_PHASE_DEPLOY).Forward(&progressv1.OperationEvent{Body: &progressv1.OperationEvent_Result{Result: outcome}})
 	run.End(&err)
@@ -246,18 +257,20 @@ func TestASecondInterruptEndsTheOpenRunAsInterruptedOnEverySinkAndClosesThem(t *
 	}
 }
 
-func TestANodeBuilderLogReachesEverySinkAsDebugDetailOfItsAppAndTheRunsLogOnce(t *testing.T) {
+func TestATraceSpansDebugDetailReachesEverySinkAsDetailOfItsSubjectAndTheRunsLogOnce(t *testing.T) {
 	sink := &recording{}
 	bus := run.NewBus(time.Now)
 	bus.Attach(sink)
-	ctx, run, err := bus.Begin(context.Background(), "ocel deploy", t.TempDir())
+	dir := t.TempDir()
+	_, run, err := bus.Begin(context.Background(), "ocel deploy", dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	trace := runtrace.FromContext(ctx)
-	logPath := trace.LogPath()
+	logPath := runFile(t, dir, ".ndjson")
 
-	trace.Log(ctx, "web", "installing dependencies")
+	traced := run.Phase(progressv1.Phase_PHASE_BUILD).Trace("web", "build")
+	traced.Debug("installing dependencies")
+	traced.End(nil)
 	run.End(&err)
 
 	var heard []*streamv1.RunEvent

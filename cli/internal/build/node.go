@@ -12,7 +12,7 @@ import (
 	"unicode"
 
 	"github.com/ocelhq/ocel/cli/internal/nodeprotocol"
-	"github.com/ocelhq/ocel/cli/internal/runtrace"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/constants"
 )
 
@@ -114,7 +114,7 @@ func runNode(ctx context.Context, scriptPath string, request []byte, log Log) er
 	}
 	cmd.Stdout, cmd.Stderr = writer, writer
 
-	proc := &nodeprotocol.Processor{Run: runtrace.FromContext(ctx), Forward: io.MultiWriter(routing, &captured), AppBuild: routing.begin}
+	proc := &nodeprotocol.Processor{Span: run.SpanFromContext(ctx), Forward: io.MultiWriter(routing, &captured), AppBuild: routing.begin}
 
 	startErr := cmd.Start()
 	_ = writer.Close()

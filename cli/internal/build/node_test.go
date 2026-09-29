@@ -10,10 +10,14 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/ocelhq/ocel/pkg/constants"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 
 	"github.com/ocelhq/ocel/cli/internal/nodeprotocol"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/runtrace"
+	"github.com/ocelhq/ocel/cli/internal/run"
 )
 
 func TestAProjectWithNoJavaScriptNeverRunsTheNodeBuildScript(t *testing.T) {
@@ -219,10 +223,11 @@ for (let i = 0; i < 4000; i++) {
 		t.Parallel()
 
 		dir := t.TempDir()
-		ctx, run, err := runtrace.Start(context.Background(), dir, "ocel build")
+		ctx, building, err := run.NewBus(time.Now).Begin(context.Background(), "ocel build", dir)
 		if err != nil {
-			t.Fatalf("runtrace.Start: %v", err)
+			t.Fatalf("Begin: %v", err)
 		}
+		ctx = run.ContextWithSpan(ctx, building.Phase(progressv1.Phase_PHASE_BUILD))
 
 		script := fmt.Sprintf(`const emit = (r) => console.log(%s + JSON.stringify(r));
 emit({type:"span_start",id:"1",app:"api",stage:"build"});
@@ -239,11 +244,14 @@ emit({type:"span_end",id:"1",ok:true});
 		if err := runNode(ctx, path, []byte(`{"apps":[]}`), Log{}); err != nil {
 			t.Fatalf("runNode: %v", err)
 		}
-		if err := run.Close(); err != nil {
-			t.Fatalf("run.Close: %v", err)
-		}
+		var ended error
+		building.End(&ended)
 
-		raw, err := os.ReadFile(strings.TrimSuffix(run.LogPath(), ".ndjson") + ".otlp.json")
+		traces, err := filepath.Glob(filepath.Join(dir, constants.ProjectStateDirName, "runs", "*.otlp.json"))
+		if err != nil || len(traces) != 1 {
+			t.Fatalf("traces = %v, %v, want the run's one trace", traces, err)
+		}
+		raw, err := os.ReadFile(traces[0])
 		if err != nil {
 			t.Fatalf("read trace: %v", err)
 		}

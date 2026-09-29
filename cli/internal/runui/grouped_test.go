@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"github.com/ocelhq/ocel/pkg/progress"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +11,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/pkg/progress"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
@@ -42,6 +42,22 @@ func TestAPhaseLevelLinePrintsTheMomentItLands(t *testing.T) {
 	want := "WARN  [check] the zone example.com has no Workers entitlement\n"
 	if got := out.String(); got != want {
 		t.Fatalf("got  %q\nwant %q", got, want)
+	}
+}
+
+func TestASpanOnlyTheTraceRecordsIsNeverDrawn(t *testing.T) {
+	t.Parallel()
+
+	run, out, _ := groupedRun(t, Presentation{})
+	build := run.Phase(progressv1.Phase_PHASE_BUILD)
+	build.Trace("web", "build").End(errors.New("the node builder reported this stage failed"))
+	web := build.Unit("web", progress.Building.Title("app web"))
+	web.Trace("web", "await_human_input").End(nil)
+	web.End(nil)
+
+	want := "INFO  [build] ✓ web: Built app web in 0s\n"
+	if got := out.String(); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}
 }
 

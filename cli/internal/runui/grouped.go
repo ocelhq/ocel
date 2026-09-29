@@ -153,6 +153,7 @@ func (s *GroupedSink) Receive(ev *streamv1.RunEvent) {
 	defer s.heard(ev)
 	span := stageKey(ev.GetSpanId())
 	switch {
+	case isTraceOnly(ev):
 	case ev.GetStarted() != nil:
 		s.open(span, ev)
 	case ev.GetEnded() != nil:

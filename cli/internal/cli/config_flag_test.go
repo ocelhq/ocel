@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"io"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -63,7 +62,7 @@ export default { slug: "test-app" };
 `)
 
 	configFlag = filepath.Join(".", "nope.ts")
-	err := runBuild(context.Background(), newDeps(), root, io.Discard, io.Discard)
+	err := runBuild(context.Background(), newDeps(), root)
 	if err == nil {
 		t.Fatal("runBuild err = nil, want a refusal for a --config path that names nothing")
 	}

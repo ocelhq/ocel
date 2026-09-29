@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"io"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -23,7 +22,7 @@ func TestBuildRefusesAFunctionAppWhoseDirectorySaysNothingAboutWhatItIsBuiltWith
 	deps := clitest.NewDeps()
 	clitest.StubBuild(&deps, nil)
 
-	err := runBuild(context.Background(), deps, root, io.Discard, io.Discard)
+	err := runBuild(context.Background(), deps, root)
 	if err == nil {
 		t.Fatal("runBuild = nil error, want the app refused: ocel build builds an app naming no compute as functions, and nothing says what web's are built with")
 	}

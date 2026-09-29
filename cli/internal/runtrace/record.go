@@ -9,26 +9,26 @@ import (
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 )
 
-func (r *Run) Receive(ev *streamv1.RunEvent) {
-	r.record(ev)
+func (t *Trace) Receive(ev *streamv1.RunEvent) {
+	t.record(ev)
 	switch {
 	case ev.GetStarted() != nil:
-		r.remember(ev)
+		t.remember(ev)
 	case ev.GetEnded() != nil:
-		r.ingestEnded(ev)
+		t.ingestEnded(ev)
 	}
 }
 
-func (r *Run) record(ev *streamv1.RunEvent) {
+func (t *Trace) record(ev *streamv1.RunEvent) {
 	raw, err := protojson.Marshal(persisted(ev))
 	if err != nil {
 		return
 	}
 	raw = append(raw, '\n')
 
-	r.logMu.Lock()
-	defer r.logMu.Unlock()
-	_, _ = r.logFile.Write(raw)
+	t.logMu.Lock()
+	defer t.logMu.Unlock()
+	_, _ = t.logFile.Write(raw)
 }
 
 func persisted(ev *streamv1.RunEvent) *streamv1.RunEvent {

@@ -17,11 +17,13 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/runtrace"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/cli/node"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/progress"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
 var buildCmd = &cobra.Command{
@@ -41,11 +43,11 @@ var buildCmd = &cobra.Command{
 			return fmt.Errorf("determine working directory: %w", err)
 		}
 
-		return runBuild(cmd.Context(), newDeps(), cwd, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return runBuild(cmd.Context(), newDeps(), cwd)
 	},
 }
 
-func runBuild(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr io.Writer) error {
+func runBuild(ctx context.Context, deps cmddeps.Deps, cwd string) (err error) {
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
@@ -66,22 +68,37 @@ func runBuild(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr
 		}
 	}
 
-	ctx, run, err := runtrace.Start(ctx, cfg.Dir, "ocel build")
+	ctx, building, err := deps.Events.Begin(ctx, "ocel build", cfg.Dir)
 	if err != nil {
 		return err
 	}
-	defer run.Close()
+	defer building.End(&err)
+	phase := building.Phase(progressv1.Phase_PHASE_BUILD)
 
 	clients := builtInClients(cfg, appurl.Production(cfg))
-	built, err := deps.BuildApps(ctx, cfg, build.Env(clients), declaredArchs(cfg), build.Log{Shared: stderr})
+	built, err := deps.BuildApps(run.ContextWithSpan(ctx, phase), cfg, build.Env(clients), declaredArchs(cfg), appBuildLog(phase))
 	if err != nil {
 		return err
 	}
 	if err := clientenv.Record(cfg.Dir, clients); err != nil {
 		return err
 	}
-	reportBuilt(stdout, built)
+	phase.End(nil)
+	for _, line := range builtLines(built) {
+		phase.Say(line)
+	}
+	building.Succeed(builtHeadline(built))
 	return nil
+}
+
+func appBuildLog(phase *run.Span) build.Log {
+	return build.Log{
+		Shared: phase.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED),
+		Unit: func(app string) (io.Writer, func(error)) {
+			unit := phase.Unit(app, progress.Building.Title("app "+app))
+			return unit.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED), unit.End
+		},
+	}
 }
 
 func declaredArchs(cfg *projectconfig.Config) map[string]string {
@@ -95,17 +112,26 @@ func declaredArchs(cfg *projectconfig.Config) map[string]string {
 	return archs
 }
 
-func reportBuilt(stdout io.Writer, built build.Output) {
-	if len(built.Functions) > 0 || len(built.Images) == 0 {
-		noun := "functions"
-		if len(built.Functions) == 1 {
-			noun = "function"
-		}
-		fmt.Fprintf(stdout, "Built %d %s into %s\n", len(built.Functions), noun, appbuild.ArtifactRootDir)
+func builtHeadline(built build.Output) string {
+	if len(built.Functions) == 0 && len(built.Images) > 0 {
+		return fmt.Sprintf("Built %d %s", len(built.Images), plural(len(built.Images), "image", "images"))
 	}
+	return fmt.Sprintf("Built %d %s into %s", len(built.Functions), plural(len(built.Functions), "function", "functions"), appbuild.ArtifactRootDir)
+}
+
+func builtLines(built build.Output) []string {
+	lines := make([]string, 0, len(built.Images))
 	for _, app := range slices.Sorted(maps.Keys(built.Images)) {
-		fmt.Fprintf(stdout, "Built the image of %s as %s\n", app, built.Images[app])
+		lines = append(lines, fmt.Sprintf("Built the image of %s as %s", app, built.Images[app]))
 	}
+	return lines
+}
+
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
 }
 
 func builtInClients(cfg *projectconfig.Config, urls map[string]string) []clientenv.App {

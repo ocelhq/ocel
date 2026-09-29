@@ -7,10 +7,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-func NewTraceID() string {
-	return newTraceID().String()
-}
-
 func newTraceID() trace.TraceID {
 	var b [16]byte
 	_, _ = rand.Read(b[:])

@@ -28,8 +28,8 @@ func TestPruneKeepsOnlyTheNewestRuns(t *testing.T) {
 		}
 	}
 
-	if err := Prune(dir, keep, time.Now()); err != nil {
-		t.Fatalf("Prune() = %v", err)
+	if err := prune(dir, keep, time.Now()); err != nil {
+		t.Fatalf("prune() = %v", err)
 	}
 
 	entries, err := os.ReadDir(dir)
@@ -62,8 +62,8 @@ func TestPruneIsANoOpUnderTheLimit(t *testing.T) {
 			t.Fatalf("write: %v", err)
 		}
 	}
-	if err := Prune(dir, RunRetention, time.Now()); err != nil {
-		t.Fatalf("Prune() = %v", err)
+	if err := prune(dir, retainedRuns, time.Now()); err != nil {
+		t.Fatalf("prune() = %v", err)
 	}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -75,8 +75,8 @@ func TestPruneIsANoOpUnderTheLimit(t *testing.T) {
 }
 
 func TestPruneOnAMissingDirIsANoOp(t *testing.T) {
-	if err := Prune(filepath.Join(t.TempDir(), "does-not-exist"), RunRetention, time.Now()); err != nil {
-		t.Errorf("Prune() on a missing dir = %v, want nil", err)
+	if err := prune(filepath.Join(t.TempDir(), "does-not-exist"), retainedRuns, time.Now()); err != nil {
+		t.Errorf("prune() on a missing dir = %v, want nil", err)
 	}
 }
 
@@ -97,8 +97,8 @@ func TestPruneNeverRemovesAnEntryAsNewAsTheCutoff(t *testing.T) {
 		}
 	}
 
-	if err := Prune(dir, keep, cutoff); err != nil {
-		t.Fatalf("Prune() = %v", err)
+	if err := prune(dir, keep, cutoff); err != nil {
+		t.Fatalf("prune() = %v", err)
 	}
 
 	entries, err := os.ReadDir(dir)
@@ -133,8 +133,8 @@ func TestPruneRemovesOnlyEntriesOlderThanTheCutoff(t *testing.T) {
 		t.Fatalf("chtimes %s: %v", fresh, err)
 	}
 
-	if err := Prune(dir, 10, cutoff); err != nil {
-		t.Fatalf("Prune() = %v", err)
+	if err := prune(dir, 10, cutoff); err != nil {
+		t.Fatalf("prune() = %v", err)
 	}
 
 	if _, err := os.Stat(fresh); err != nil {
