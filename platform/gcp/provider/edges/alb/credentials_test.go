@@ -1,6 +1,7 @@
 package alb
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -28,5 +29,15 @@ func TestTheAlbEdgeDocumentsTheCertificateManagerAndComputeRolesEachPurposeNeeds
 	}
 	if _, err := balancer.Hooks().DescribeCredentialPermissions(edge.CredentialPurpose("runtime")); err == nil {
 		t.Error("CredentialPermissions(runtime) rendered a document for a purpose nothing defines")
+	}
+}
+
+func TestABootstrapOfTheShieldedLoadBalancerChecksItMayCreateThePlainHTTPRedirect(t *testing.T) {
+	t.Parallel()
+
+	for _, permission := range []string{"compute.targetHttpProxies.create", "compute.targetHttpProxies.delete"} {
+		if !slices.Contains(ShieldedPermissions, permission) {
+			t.Errorf("the shielded load balancer's preflight checks %v, want %s: it answers plain http with a redirect through a target http proxy", ShieldedPermissions, permission)
+		}
 	}
 }

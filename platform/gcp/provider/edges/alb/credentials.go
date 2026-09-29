@@ -33,6 +33,8 @@ var ShieldedPermissions = slices.Concat(Permissions, []string{
 	"networksecurity.serverTlsPolicies.get",
 	"networksecurity.serverTlsPolicies.use",
 	"compute.targetHttpsProxies.update",
+	"compute.targetHttpProxies.create",
+	"compute.targetHttpProxies.delete",
 })
 
 var Permissions = []string{

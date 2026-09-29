@@ -75,7 +75,11 @@ project out of the label every service in the tier is named by.
 Name it and a hostname is forwarded through Cloudflare to a load balancer of its own, which
 `ocel bootstrap` provisions per tier at the same price as the `alb` one. That load balancer
 refuses any client that does not present the certificate your Cloudflare zone presents to
-origins, so a request that skips Cloudflare is turned away. The wildcard `ocel domain use
+origins, so a request that skips Cloudflare is turned away. On port 80 it answers every
+hostname with a redirect to https and forwards nothing, so a visitor who opens `http://`
+lands on https through Cloudflare, which reaches the load balancer over plain http whenever
+the visitor did. That port 80 listener is a second forwarding rule, which costs nothing more
+while the project holds five or fewer. The wildcard `ocel domain use
 --preview` names is forwarded the same way, to a host rule on that load balancer; see
 [previews behind Cloudflare](/docs/providers/cloudflare#previews-behind-cloudflare).
 
