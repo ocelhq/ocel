@@ -12,24 +12,20 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 )
 
-const SchemaVersion = 1
-
 const fileName = "deploy-result.json"
 
 type Result struct {
-	SchemaVersion int         `json:"schemaVersion"`
-	Slug          string      `json:"slug"`
-	Environment   Environment `json:"environment"`
-	Provider      Provider    `json:"provider"`
-	PromotionID   string      `json:"promotionId"`
-	Tag           string      `json:"tag,omitempty"`
-	Apps          []App       `json:"apps"`
-	DeployedAt    time.Time   `json:"deployedAt"`
+	Slug        string      `json:"slug"`
+	Environment Environment `json:"environment"`
+	Provider    Provider    `json:"provider"`
+	PromotionID string      `json:"promotionId"`
+	Tag         string      `json:"tag,omitempty"`
+	Apps        []App       `json:"apps"`
+	DeployedAt  time.Time   `json:"deployedAt"`
 }
 
 type Provider struct {
-	Name   string `json:"name"`
-	Region string `json:"region,omitempty"`
+	Name string `json:"name"`
 }
 
 type Environment struct {
@@ -49,7 +45,6 @@ func Path(projectDir string) string {
 }
 
 func Write(projectDir string, r Result) error {
-	r.SchemaVersion = SchemaVersion
 	if r.DeployedAt.IsZero() {
 		r.DeployedAt = time.Now().UTC()
 	}

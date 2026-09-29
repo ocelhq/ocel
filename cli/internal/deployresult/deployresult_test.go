@@ -22,7 +22,7 @@ func TestWrite(t *testing.T) {
 		err := Write(dir, Result{
 			Slug:        "proj-123",
 			Environment: Environment{Tier: "preview", Identity: "e2e-42"},
-			Provider:    Provider{Name: "aws", Region: "eu-west-2"},
+			Provider:    Provider{Name: "fake"},
 			PromotionID: "dep_abc",
 			Tag:         "v1",
 			Apps:        []App{{Name: "web", BuildID: "bld_1", DeploymentID: "3f7c1b9a5e2d4c8f", URLs: []string{"https://app.example.com"}}},
@@ -42,14 +42,13 @@ func TestWrite(t *testing.T) {
 		}
 
 		want := map[string]any{
-			"schemaVersion": float64(SchemaVersion),
-			"slug":          "proj-123",
-			"environment":   map[string]any{"tier": "preview", "identity": "e2e-42"},
-			"provider":      map[string]any{"name": "aws", "region": "eu-west-2"},
-			"promotionId":   "dep_abc",
-			"tag":           "v1",
-			"apps":          []any{map[string]any{"name": "web", "buildId": "bld_1", "deploymentId": "3f7c1b9a5e2d4c8f", "urls": []any{"https://app.example.com"}}},
-			"deployedAt":    "2026-07-25T10:30:00Z",
+			"slug":        "proj-123",
+			"environment": map[string]any{"tier": "preview", "identity": "e2e-42"},
+			"provider":    map[string]any{"name": "fake"},
+			"promotionId": "dep_abc",
+			"tag":         "v1",
+			"apps":        []any{map[string]any{"name": "web", "buildId": "bld_1", "deploymentId": "3f7c1b9a5e2d4c8f", "urls": []any{"https://app.example.com"}}},
+			"deployedAt":  "2026-07-25T10:30:00Z",
 		}
 		for key, wantVal := range want {
 			if gotVal, ok := got[key]; !ok {

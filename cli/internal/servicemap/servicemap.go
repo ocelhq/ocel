@@ -16,19 +16,16 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-const SchemaVersion = 1
-
 const fileName = "service-map.json"
 
 type Record struct {
-	SchemaVersion int         `json:"schemaVersion"`
-	Slug          string      `json:"slug"`
-	Environment   Environment `json:"environment"`
-	PromotionID   string      `json:"promotionId"`
-	Tag           string      `json:"tag,omitempty"`
-	Bindings      []Binding   `json:"bindings"`
-	Usages        []Usage     `json:"usages"`
-	DeployedAt    time.Time   `json:"deployedAt"`
+	Slug        string      `json:"slug"`
+	Environment Environment `json:"environment"`
+	PromotionID string      `json:"promotionId"`
+	Tag         string      `json:"tag,omitempty"`
+	Bindings    []Binding   `json:"bindings"`
+	Usages      []Usage     `json:"usages"`
+	DeployedAt  time.Time   `json:"deployedAt"`
 }
 
 type Environment struct {
@@ -109,7 +106,6 @@ func Path(projectDir string) string {
 }
 
 func Write(projectDir string, r Record) error {
-	r.SchemaVersion = SchemaVersion
 	if r.DeployedAt.IsZero() {
 		r.DeployedAt = time.Now().UTC()
 	}

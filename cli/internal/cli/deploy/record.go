@@ -1,7 +1,6 @@
 package deploy
 
 import (
-	"encoding/json"
 	"fmt"
 
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
@@ -45,11 +44,7 @@ func providerOf(cfg *projectconfig.Config) deployresult.Provider {
 	if cfg.Provider == nil {
 		return deployresult.Provider{}
 	}
-	var options struct {
-		Region string `json:"region"`
-	}
-	_ = json.Unmarshal(cfg.Provider.Options, &options)
-	return deployresult.Provider{Name: cfg.Provider.ID, Region: options.Region}
+	return deployresult.Provider{Name: cfg.Provider.ID}
 }
 
 func appURLs(results []*progressv1.AppResult, name string) []string {

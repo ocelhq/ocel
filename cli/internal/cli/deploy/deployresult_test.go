@@ -38,9 +38,6 @@ func TestDeployResult(t *testing.T) {
 		}
 
 		got := readDeployResult(t, root)
-		if got.SchemaVersion != deployresult.SchemaVersion {
-			t.Errorf("schemaVersion = %d, want %d", got.SchemaVersion, deployresult.SchemaVersion)
-		}
 		if got.Slug != "test-app" {
 			t.Errorf("slug = %q, want the resolved config's", got.Slug)
 		}

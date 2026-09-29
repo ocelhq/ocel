@@ -202,9 +202,6 @@ func TestWrite(t *testing.T) {
 		if err := json.Unmarshal(raw, &got); err != nil {
 			t.Fatalf("service map is not valid JSON: %v", err)
 		}
-		if got.SchemaVersion != SchemaVersion {
-			t.Errorf("schemaVersion = %d, want %d", got.SchemaVersion, SchemaVersion)
-		}
 		if got.DeployedAt.IsZero() {
 			t.Error("deployedAt is zero, want the publication time")
 		}

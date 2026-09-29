@@ -39,9 +39,6 @@ func TestServiceMap(t *testing.T) {
 		if !reflect.DeepEqual(got.Usages, want) {
 			t.Errorf("usages = %+v, want %+v", got.Usages, want)
 		}
-		if got.SchemaVersion != servicemap.SchemaVersion {
-			t.Errorf("schemaVersion = %d, want %d", got.SchemaVersion, servicemap.SchemaVersion)
-		}
 		if got.Slug != "test-app" || got.Environment.Tier != "production" || got.PromotionID != clitest.FakePromotionID || got.Tag != "v9" {
 			t.Errorf("record = %+v, want the deploy's own context", got)
 		}
