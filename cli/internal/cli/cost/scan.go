@@ -16,7 +16,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 	"gopkg.in/yaml.v3"
 
-	"github.com/ocelhq/ocel/cli/internal/appbuilder"
+	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
@@ -235,8 +235,8 @@ func scanManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Con
 		return nil, nil, err
 	}
 	var assumptions []string
-	functions, err := deps.CollectAppFunctions(cfg.Dir)
-	if errors.Is(err, appbuilder.ErrNoBuildOutput) {
+	functions, err := deps.ReadFunctions(cfg.Dir)
+	if errors.Is(err, build.ErrNoBuildOutput) {
 		functions = unbuiltFunctions(cfg)
 		assumptions = append(assumptions, unbuiltAssumption)
 	} else if err != nil {
@@ -259,7 +259,7 @@ func scannedApps(cfg *projectconfig.Config) []manifestbuilder.App {
 			Domains:   a.Domains,
 			Folder:    a.Folder,
 		}
-		if a.Compute == string(provider.ComputeContainer) {
+		if a.RunsOn(provider.ComputeContainer) {
 			app.Image = cfg.Slug + "/" + a.Name + "@sha256:" + unbuiltDigest
 		}
 		apps = append(apps, app)
@@ -273,7 +273,7 @@ func unbuiltFunctions(cfg *projectconfig.Config) []manifestbuilder.Function {
 	}
 	functions := make([]manifestbuilder.Function, 0, len(cfg.Apps))
 	for _, a := range cfg.Apps {
-		if a.Compute == string(provider.ComputeContainer) {
+		if a.RunsOn(provider.ComputeContainer) {
 			continue
 		}
 		functions = append(functions, manifestbuilder.Function{Route: a.Name, App: a.Name, Framework: manifestbuilder.Framework{Name: a.Framework.Name, Arch: a.Framework.Arch}})

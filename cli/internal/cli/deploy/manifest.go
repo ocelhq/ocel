@@ -13,10 +13,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ocelhq/ocel/cli/internal/appbuilder"
-	"github.com/ocelhq/ocel/cli/internal/appimages"
 	"github.com/ocelhq/ocel/cli/internal/appurl"
 	"github.com/ocelhq/ocel/cli/internal/attribution"
+	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
@@ -29,7 +28,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/cli/internal/workspace"
 	"github.com/ocelhq/ocel/pkg/appbuild"
-	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -74,11 +72,17 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 	specs := appSpecs(cfg, variables)
 	clients := clientApps(specs)
 	steps := newBuildSteps(phase)
+	var built build.Output
 	if prebuilt {
 		if err := clientenv.CheckFresh(cfg.Dir, clients); err != nil {
 			return nil, nil, err
 		}
-		scope.Say("Using the prebuilt output in " + constants.ProjectStateDirName + "/output instead of building")
+		var err error
+		built, err = deps.ReadPrebuilt(ctx, cfg, containerArchs)
+		if err != nil {
+			return nil, nil, err
+		}
+		scope.Say("Using the prebuilt output in " + appbuild.ArtifactRootDir + " instead of building")
 		scope.End(nil)
 	} else {
 		if err := clientenv.Generate(cfg.Dir, clients); err != nil {
@@ -90,8 +94,9 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 			}
 		}
 		scope.End(nil)
-		if err := steps.run(cfg.Slug, "Building "+appList(cfg), func() error {
-			if err := deps.BuildApp(ctx, cfg, buildEnv(specs), steps.output("Building app ")); err != nil {
+		if err := steps.run(cfg.Slug, "Building "+appList(cfg), func() (err error) {
+			built, err = deps.BuildApps(ctx, cfg, buildEnv(specs), containerArchs, steps.log("Building app "))
+			if err != nil {
 				return err
 			}
 			return clientenv.Record(cfg.Dir, clients)
@@ -100,17 +105,9 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 		}
 	}
 
-	var images map[string]string
-	if err := steps.run(cfg.Slug, "Building the container images of "+cfg.Slug, func() (err error) {
-		images, err = deps.BuildAppImages(ctx, cfg, containerArchs, steps.output("Building the image of app "))
-		return err
-	}); err != nil {
-		return nil, nil, err
-	}
-
 	var manifest *contractv1.Manifest
 	if err := steps.run(cfg.Slug, "Assembling the deploy manifest of "+cfg.Slug, func() (err error) {
-		manifest, err = assembleManifest(ctx, deps, cfg, declarations, phase, resources, variables, images, compute, configName)
+		manifest, err = assembleManifest(ctx, deps, cfg, declarations, phase, resources, variables, built, compute, configName)
 		return err
 	}); err != nil || manifest == nil {
 		return nil, nil, err
@@ -118,14 +115,15 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 	return manifest, inline, nil
 }
 
-func assembleManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, declarations *variables.Declarations, phase *events.Scope, resources []declaration.Resource, appValues map[string][]manifestbuilder.Variable, images map[string]string, compute, configName string) (*contractv1.Manifest, error) {
-	functions, err := deps.CollectAppFunctions(cfg.Dir)
+func assembleManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, declarations *variables.Declarations, phase *events.Scope, resources []declaration.Resource, appValues map[string][]manifestbuilder.Variable, built build.Output, compute, configName string) (*contractv1.Manifest, error) {
+	functions := servedByFunctions(built.Functions, cfg)
+	images := built.Images
+
+	onEdge, err := edgeApps(cfg)
 	if err != nil {
 		return nil, err
 	}
-	functions = servedByFunctions(functions, cfg)
-
-	edgeWarnings, err := variables.LintEdgeSecrets(declarations.Definitions(), variablescope.Apps(cfg), edgeApps(cfg))
+	edgeWarnings, err := variables.LintEdgeSecrets(declarations.Definitions(), variablescope.Apps(cfg), onEdge)
 	if err != nil {
 		return nil, err
 	}
@@ -190,8 +188,8 @@ func (b *buildSteps) takeLoose() []byte {
 	return taken
 }
 
-func (b *buildSteps) output(title string) appbuilder.Output {
-	return appbuilder.Output{
+func (b *buildSteps) log(title string) build.Log {
+	return build.Log{
 		Shared: b,
 		Unit: func(app string) (io.Writer, func(error)) {
 			_, _ = b.shared.Write(b.takeLoose())
@@ -377,20 +375,23 @@ func clientApps(specs []appSpec) []clientenv.App {
 	return apps
 }
 
-func edgeApps(cfg *projectconfig.Config) []string {
-	built := appbuilder.EdgeApps(cfg.Dir)
+func edgeApps(cfg *projectconfig.Config) ([]string, error) {
+	built, err := build.EdgeApps(cfg.Dir)
+	if err != nil {
+		return nil, err
+	}
 	if len(cfg.Apps) > 0 {
-		return built
+		return built, nil
 	}
 	if len(built) == 0 {
-		return nil
+		return nil, nil
 	}
-	return []string{variablescope.RootApp}
+	return []string{variablescope.RootApp}, nil
 }
 
 func servedByFunctions(functions []manifestbuilder.Function, cfg *projectconfig.Config) []manifestbuilder.Function {
 	containers := make(map[string]bool, len(cfg.Apps))
-	for _, app := range appimages.Apps(cfg) {
+	for _, app := range build.ImageApps(cfg.Apps) {
 		containers[app.Name] = true
 	}
 	if len(containers) == 0 {

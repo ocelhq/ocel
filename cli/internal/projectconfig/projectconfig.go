@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/naming"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 type Discovery struct {
@@ -71,6 +72,21 @@ type App struct {
 	Build      *Build
 	Health     *Health
 	Folder     string
+}
+
+func (a App) RunsOn(compute provider.Compute) bool { return a.Compute == string(compute) }
+
+func SharedFolder(apps []App) string {
+	if len(apps) == 0 {
+		return ""
+	}
+	folder := apps[0].Folder
+	for _, app := range apps[1:] {
+		if app.Folder != folder {
+			return ""
+		}
+	}
+	return folder
 }
 
 type Config struct {

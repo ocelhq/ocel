@@ -6,7 +6,6 @@ import (
 	"maps"
 	"os"
 
-	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/dotfile"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/pkg/envsource"
@@ -27,7 +26,7 @@ func readValueSource(ctx context.Context, cfg *projectconfig.Config) (valueSourc
 		return valueSource{}, err
 	}
 	folders := []string{""}
-	if folder := appbuilder.AppFolder(cfg.Apps); folder != "" {
+	if folder := projectconfig.SharedFolder(cfg.Apps); folder != "" {
 		folders = append(folders, folder)
 	}
 	read, err := source.Read(ctx, folders)

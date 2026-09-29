@@ -4,13 +4,15 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/appurl"
+	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
@@ -19,17 +21,19 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/cli/node"
 	"github.com/ocelhq/ocel/pkg/appbuild"
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/arch"
 )
 
 var buildCmd = &cobra.Command{
 	Use:   "build",
-	Short: "Build your project's apps into " + constants.ProjectStateDirName + "/output without deploying",
-	Long: "Build your project's apps into " + constants.ProjectStateDirName + "/output without deploying.\n\n" +
-		"Express, Fastify and Hono apps are bundled, so only what the entrypoint imports\n" +
-		"reaches the artifact: static directories, view templates and files read at run\n" +
+	Short: "Build every app in your project without deploying",
+	Long: "Build every app in your project without deploying: a serverless app's functions\n" +
+		"into " + appbuild.ArtifactRootDir + ", and a container app's image into the local docker daemon.\n" +
+		"`ocel deploy --prebuilt` deploys what this built.\n\n" +
+		"Express, Fastify and Hono servers are bundled, so only what the entrypoint imports\n" +
+		"reaches the function: static directories, view templates and files read at run\n" +
 		"time are left behind. Set OCEL_BUILD_PREFER_TRACING=1 to copy the dependency\n" +
-		"tree instead, at the cost of a slower cold start.",
+		"tree instead.",
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cwd, err := os.Getwd()
@@ -64,24 +68,39 @@ func runBuild(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr
 	defer run.Close()
 
 	urls := appurl.Production(cfg)
-	if err := deps.BuildApp(ctx, cfg, appurl.BuildEnv(cfg, urls), appbuilder.Output{Shared: stderr}); err != nil {
+	built, err := deps.BuildApps(ctx, cfg, appurl.BuildEnv(cfg, urls), declaredArchs(cfg), build.Log{Shared: stderr})
+	if err != nil {
 		return err
 	}
 	if err := clientenv.Record(cfg.Dir, builtInClients(cfg, urls)); err != nil {
 		return err
 	}
-
-	functions, err := deps.CollectAppFunctions(cfg.Dir)
-	if err != nil {
-		return err
-	}
-
-	noun := "functions"
-	if len(functions) == 1 {
-		noun = "function"
-	}
-	fmt.Fprintf(stdout, "Built %d %s into %s/output\n", len(functions), noun, constants.ProjectStateDirName)
+	reportBuilt(stdout, built)
 	return nil
+}
+
+func declaredArchs(cfg *projectconfig.Config) map[string]string {
+	archs := map[string]string{}
+	for _, a := range build.ImageApps(cfg.Apps) {
+		archs[a.Name] = ""
+		if a.Framework.Arch != "" {
+			archs[a.Name], _ = arch.GoArch(a.Framework.Arch)
+		}
+	}
+	return archs
+}
+
+func reportBuilt(stdout io.Writer, built build.Output) {
+	if len(built.Functions) > 0 || len(built.Images) == 0 {
+		noun := "functions"
+		if len(built.Functions) == 1 {
+			noun = "function"
+		}
+		fmt.Fprintf(stdout, "Built %d %s into %s\n", len(built.Functions), noun, appbuild.ArtifactRootDir)
+	}
+	for _, app := range slices.Sorted(maps.Keys(built.Images)) {
+		fmt.Fprintf(stdout, "Built the image of %s as %s\n", app, built.Images[app])
+	}
 }
 
 func builtInClients(cfg *projectconfig.Config, urls map[string]string) []clientenv.App {

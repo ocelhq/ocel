@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
@@ -14,7 +15,6 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
-	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 func Run(ctx context.Context, scope *events.Scope, prov *providerclient.Provider, cfg *projectconfig.Config, required environmentv1.Tier, slug string, domains []string, frameworks []string, bootstrapHint string) (*contractv1.PreflightResponse, error) {
@@ -102,10 +102,8 @@ func Frameworks(cfg *projectconfig.Config) []string {
 
 func Containers(cfg *projectconfig.Config) []*contractv1.ContainerApp {
 	var containers []*contractv1.ContainerApp
-	for _, app := range cfg.Apps {
-		if app.Compute == string(provider.ComputeContainer) {
-			containers = append(containers, &contractv1.ContainerApp{App: app.Name, Arch: app.Framework.Arch})
-		}
+	for _, app := range build.ImageApps(cfg.Apps) {
+		containers = append(containers, &contractv1.ContainerApp{App: app.Name, Arch: app.Framework.Arch})
 	}
 	return containers
 }

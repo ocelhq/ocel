@@ -10,10 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/appbuilder"
+	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
@@ -41,8 +40,8 @@ export default {
 	return deps, root
 }
 
-func buildingEach(failing string) func(context.Context, *projectconfig.Config, map[string]map[string]string, appbuilder.Output) error {
-	return func(_ context.Context, cfg *projectconfig.Config, _ map[string]map[string]string, out appbuilder.Output) error {
+func buildingEach(failing string) func(context.Context, *projectconfig.Config, map[string]map[string]string, map[string]string, build.Log) (build.Output, error) {
+	return func(_ context.Context, cfg *projectconfig.Config, _ map[string]map[string]string, _ map[string]string, out build.Log) (build.Output, error) {
 		_, _ = io.WriteString(out.Shared, "the builder started\n")
 		for _, app := range cfg.Apps {
 			log, ended := out.App(app.Name)
@@ -50,11 +49,11 @@ func buildingEach(failing string) func(context.Context, *projectconfig.Config, m
 			if app.Name == failing {
 				err := errors.New(app.Name + " did not compile")
 				ended(err)
-				return err
+				return build.Output{}, err
 			}
 			ended(nil)
 		}
-		return nil
+		return build.Output{}, nil
 	}
 }
 
@@ -100,7 +99,7 @@ func buildScopes(t *testing.T, stream string) ([]*buildScope, []string) {
 
 func TestEachAppBuildsAsAUnitOfItsOwnInTheBuildPhaseOnceTheDeclarationsAreCollected(t *testing.T) {
 	deps, root := twoAppFixture(t)
-	deps.BuildApp = buildingEach("")
+	deps.BuildApps = buildingEach("")
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(deps, &stdout)
@@ -141,7 +140,7 @@ func TestEachAppBuildsAsAUnitOfItsOwnInTheBuildPhaseOnceTheDeclarationsAreCollec
 
 func TestAnAppWhoseBuildFailsEndsItsOwnUnitInFailureAndTheDeployWithIt(t *testing.T) {
 	deps, root := twoAppFixture(t)
-	deps.BuildApp = buildingEach("api")
+	deps.BuildApps = buildingEach("api")
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(deps, &stdout)
@@ -165,7 +164,7 @@ func TestAnAppWhoseBuildFailsEndsItsOwnUnitInFailureAndTheDeployWithIt(t *testin
 func TestEachAppsBuildPrintsAsABlockOfItsOwnWhenThatAppFinishes(t *testing.T) {
 	deps, root := twoAppFixture(t)
 	deps.Presentation = func(io.Writer) runui.Presentation { return runui.Resolve(runui.Origin{}) }
-	deps.BuildApp = buildingEach("")
+	deps.BuildApps = buildingEach("")
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(deps, &stdout)
@@ -187,9 +186,9 @@ func TestEachAppsBuildPrintsAsABlockOfItsOwnWhenThatAppFinishes(t *testing.T) {
 
 func TestABuilderFailureOutsideEveryAppsBuildEndsAUnitOfItsOwnHoldingWhatTheBuilderSaid(t *testing.T) {
 	deps, root := twoAppFixture(t)
-	deps.BuildApp = func(_ context.Context, _ *projectconfig.Config, _ map[string]map[string]string, out appbuilder.Output) error {
+	deps.BuildApps = func(_ context.Context, _ *projectconfig.Config, _ map[string]map[string]string, _ map[string]string, out build.Log) (build.Output, error) {
 		_, _ = io.WriteString(out.Shared, "Error: Cannot find module 'esbuild'\n")
-		return errors.New("node-builder failed (exit status 1): Error: Cannot find module 'esbuild'")
+		return build.Output{}, errors.New("node-builder failed (exit status 1): Error: Cannot find module 'esbuild'")
 	}
 
 	var stdout, stderr bytes.Buffer
@@ -213,7 +212,7 @@ func TestABuilderFailureOutsideEveryAppsBuildEndsAUnitOfItsOwnHoldingWhatTheBuil
 
 func TestAnAppsOwnBuildFailureEndsNoSecondUnit(t *testing.T) {
 	deps, root := twoAppFixture(t)
-	deps.BuildApp = buildingEach("web")
+	deps.BuildApps = buildingEach("web")
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(deps, &stdout)
@@ -237,9 +236,9 @@ func TestAnAppsOwnBuildFailureEndsNoSecondUnit(t *testing.T) {
 
 func TestAFailureAssemblingTheManifestAfterTheBuildsEndsAUnitOfItsOwn(t *testing.T) {
 	deps, root := twoAppFixture(t)
-	deps.BuildApp = buildingEach("")
-	deps.CollectAppFunctions = func(string) ([]manifestbuilder.Function, error) {
-		return nil, errors.New("read the build plan: unexpected end of JSON input")
+	deps.BuildApps = buildingEach("")
+	deps.DeploymentID = func(string, string) (string, error) {
+		return "", errors.New("no deployment id for app \"web\"; run `ocel build`")
 	}
 
 	var stdout, stderr bytes.Buffer

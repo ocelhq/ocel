@@ -1,4 +1,4 @@
-package appbuilder
+package build
 
 import (
 	"crypto/rand"
@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/naming"
 )
 
@@ -27,7 +27,7 @@ func mintDeploymentID() (string, error) {
 }
 
 func deploymentIDRel(app string) string {
-	return filepath.Join(constants.ProjectStateDirName, outputDirName, appsDirName, app, deploymentIDFileName)
+	return filepath.Join(appbuild.AppArtifactRoot(filepath.FromSlash(appbuild.ArtifactRootDir), app), deploymentIDFileName)
 }
 
 func deploymentIDPath(projectDir, app string) string {

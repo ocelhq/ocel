@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/appbuilder"
+	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/pkg/constants"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -48,9 +48,13 @@ type App struct {
 func New(cfg *projectconfig.Config, manifest *contractv1.Manifest, env *environmentv1.Environment, tag, promotionID string, results []*progressv1.AppResult) (Record, error) {
 	apps := make([]App, 0, len(manifest.GetApps()))
 	for _, a := range manifest.GetApps() {
+		buildID, err := build.BuildID(cfg.Dir, a.GetName())
+		if err != nil {
+			return Record{}, err
+		}
 		apps = append(apps, App{
 			Name:         a.GetName(),
-			BuildID:      appbuilder.BuildID(cfg.Dir, a.GetName()),
+			BuildID:      buildID,
 			DeploymentID: a.GetDeploymentId(),
 			URLs:         appURLs(results, a.GetName()),
 		})

@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
@@ -53,7 +52,7 @@ func discoverAndSync(ctx context.Context, srv *devserver.Server, cfg *projectcon
 		return nil, describeRefusal(err, values.keys(), run)
 	}
 
-	appFolder := appbuilder.AppFolder(cfg.Apps)
+	appFolder := projectconfig.SharedFolder(cfg.Apps)
 	if err := refuseUnstatableBinding(run.source, cfg.Apps, appFolder, filepath.Base(cfg.Path), srv.ScopedFolders()); err != nil {
 		return nil, err
 	}

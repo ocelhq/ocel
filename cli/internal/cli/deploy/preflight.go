@@ -44,7 +44,7 @@ func preflightPreviewUp(ctx context.Context, deps cmddeps.Deps, gate consent.Gat
 	if err := appregistry.RequireSecret(cfg); err != nil {
 		return preflightFacts{}, err
 	}
-	if err := deps.RequireImageBuilder(ctx, check, cfg, resp.GetContainerArchs()); err != nil {
+	if err := deps.RefuseUnbuildableImages(ctx, check, cfg, resp.GetContainerArchs()); err != nil {
 		return preflightFacts{}, err
 	}
 	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path), check.Warn); err != nil {
@@ -84,7 +84,7 @@ func preflightDeploy(ctx context.Context, deps cmddeps.Deps, gate consent.Gate, 
 	if err := appregistry.RequireSecret(cfg); err != nil {
 		return preflightFacts{}, err
 	}
-	if err := deps.RequireImageBuilder(ctx, check, cfg, resp.GetContainerArchs()); err != nil {
+	if err := deps.RefuseUnbuildableImages(ctx, check, cfg, resp.GetContainerArchs()); err != nil {
 		return preflightFacts{}, err
 	}
 	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path), check.Warn); err != nil {

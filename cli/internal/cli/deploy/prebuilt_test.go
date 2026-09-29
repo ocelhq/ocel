@@ -3,6 +3,8 @@ package deploy
 import (
 	"bytes"
 	"context"
+	"errors"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,7 +13,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/appbuilder"
+	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/events"
@@ -45,11 +47,19 @@ func newBuildScope(t *testing.T) (*events.Scope, *bytes.Buffer) {
 func recordBuildApp(deps *cmddeps.Deps) *bool {
 	clitest.StubRecordedDeploymentIDs(deps)
 	ran := false
-	deps.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, appbuilder.Output) error {
+	deps.BuildApps = func(_ context.Context, cfg *projectconfig.Config, _ map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
 		ran = true
-		return nil
+		return functionsOnDisk(deps, cfg)
 	}
 	return &ran
+}
+
+func functionsOnDisk(deps *cmddeps.Deps, cfg *projectconfig.Config) (build.Output, error) {
+	functions, err := deps.ReadFunctions(cfg.Dir)
+	if errors.Is(err, build.ErrNoBuildOutput) {
+		return build.Output{}, nil
+	}
+	return build.Output{Functions: functions}, err
 }
 
 func declarationsWithClientValue(t *testing.T, cfg *projectconfig.Config, value string) *variables.Declarations {
@@ -222,13 +232,13 @@ func TestCollectAndBuildManifest(t *testing.T) {
 		generated := ""
 		deps := clitest.NewDeps()
 		clitest.StubRecordedDeploymentIDs(&deps)
-		deps.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, appbuilder.Output) error {
+		deps.BuildApps = func(_ context.Context, cfg *projectconfig.Config, _ map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
 			data, err := os.ReadFile(filepath.Join(root, constants.ProjectStateDirName, "env-client.ts"))
 			if err != nil {
-				return err
+				return build.Output{}, err
 			}
 			generated = string(data)
-			return nil
+			return functionsOnDisk(&deps, cfg)
 		}
 
 		s, _ := newBuildScope(t)
@@ -367,4 +377,37 @@ func TestPrebuiltDeploy(t *testing.T) {
 			t.Errorf("stdout = %q, want no Deploy to have been driven", stdout.String())
 		}
 	})
+}
+
+func TestPrebuiltDeploysTheImageTheBuildRecordedRatherThanBuildingOne(t *testing.T) {
+	root := t.TempDir()
+	deps := clitest.NewDeps()
+	ran := recordBuildApp(&deps)
+	var asked map[string]string
+	deps.ReadPrebuilt = func(_ context.Context, _ *projectconfig.Config, archs map[string]string) (build.Output, error) {
+		asked = archs
+		return build.Output{Images: map[string]string{"api": clitest.FixtureImage("api")}}, nil
+	}
+
+	s, _ := newBuildScope(t)
+	cfg := &projectconfig.Config{
+		Dir:  root,
+		Slug: "prebuilt",
+		Apps: []projectconfig.App{{Name: "api", Path: ".", Compute: "container"}},
+	}
+	archs := map[string]string{"api": "arm64"}
+	manifest, _, err := collectAndBuildManifest(context.Background(), deps, cfg, emptyDeclarations(cfg), true, false, s, s, "container", archs, nil)
+	if err != nil {
+		t.Fatalf("collectAndBuildManifest: %v", err)
+	}
+	if *ran {
+		t.Error("--prebuilt built the apps again, want the image the build recorded deployed as it is")
+	}
+	if !maps.Equal(asked, archs) {
+		t.Errorf("the prebuilt image was checked against %v, want the %v the provider runs", asked, archs)
+	}
+	containers := manifest.GetContainers()
+	if len(containers) != 1 || containers[0].GetImage() != clitest.FixtureImage("api") {
+		t.Errorf("the manifest deploys the containers %v, want api on the prebuilt %q", containers, clitest.FixtureImage("api"))
+	}
 }

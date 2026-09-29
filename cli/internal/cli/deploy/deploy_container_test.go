@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/appbuilder"
+	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/events"
@@ -24,9 +24,10 @@ func registryProject(t *testing.T, registry string) (cmddeps.Deps, string, func(
 	clitest.StubBuild(&deps, nil)
 	clitest.StubAppImages(&deps, "api")
 	built := false
-	deps.BuildAppImages = func(context.Context, *projectconfig.Config, map[string]string, appbuilder.Output) (map[string]string, error) {
+	buildApps := deps.BuildApps
+	deps.BuildApps = func(ctx context.Context, cfg *projectconfig.Config, env map[string]map[string]string, archs map[string]string, log build.Log) (build.Output, error) {
 		built = true
-		return map[string]string{"api": clitest.FixtureImage("api")}, nil
+		return buildApps(ctx, cfg, env, archs, log)
 	}
 
 	root, _ := clitest.SetUpDeployFixture(t)
@@ -255,13 +256,14 @@ func TestTheImageIsBuiltForTheArchitectureTheProviderSaysItsContainersRunOn(t *t
 	deps, root, _ := registryProject(t, "")
 	t.Setenv(clitest.FakeContainerArchEnvVar, "arm64")
 	var required, built map[string]string
-	deps.RequireImageBuilder = func(_ context.Context, _ *events.Scope, _ *projectconfig.Config, archs map[string]string) error {
+	deps.RefuseUnbuildableImages = func(_ context.Context, _ *events.Scope, _ *projectconfig.Config, archs map[string]string) error {
 		required = archs
 		return nil
 	}
-	deps.BuildAppImages = func(_ context.Context, _ *projectconfig.Config, archs map[string]string, _ appbuilder.Output) (map[string]string, error) {
+	buildApps := deps.BuildApps
+	deps.BuildApps = func(ctx context.Context, cfg *projectconfig.Config, env map[string]map[string]string, archs map[string]string, log build.Log) (build.Output, error) {
 		built = archs
-		return map[string]string{"api": clitest.FixtureImage("api")}, nil
+		return buildApps(ctx, cfg, env, archs, log)
 	}
 
 	var stdout, stderr bytes.Buffer

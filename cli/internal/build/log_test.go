@@ -1,4 +1,4 @@
-package appbuilder
+package build
 
 import (
 	"context"
@@ -35,8 +35,8 @@ func (l lockedWriter) Write(p []byte) (int, error) {
 	return l.w.Write(p)
 }
 
-func (u *appUnits) output() Output {
-	return Output{
+func (u *appUnits) output() Log {
+	return Log{
 		Shared: lockedWriter{&u.mu, &u.shared},
 		Unit: func(name string) (io.Writer, func(error)) {
 			u.mu.Lock()
@@ -102,7 +102,7 @@ for (const app of req.apps) {
 `)
 
 	var units appUnits
-	if err := Build(context.Background(), cfg, nil, units.output()); err != nil {
+	if err := (nodeOnly{node: runNode}).Build(context.Background(), cfg, nil, units.output()); err != nil {
 		t.Fatalf("Build: %v", err)
 	}
 
@@ -135,7 +135,7 @@ process.exitCode = 1;
 `)
 
 	var units appUnits
-	if err := Build(context.Background(), cfg, nil, units.output()); err == nil {
+	if err := (nodeOnly{node: runNode}).Build(context.Background(), cfg, nil, units.output()); err == nil {
 		t.Fatal("Build succeeded, want the builder's failure")
 	}
 	err, ok := units.ended["web"]
@@ -155,7 +155,7 @@ process.exit(9);
 `)
 
 	var units appUnits
-	if err := Build(context.Background(), cfg, nil, units.output()); err == nil {
+	if err := (nodeOnly{node: runNode}).Build(context.Background(), cfg, nil, units.output()); err == nil {
 		t.Fatal("Build succeeded, want the builder's exit")
 	}
 	if err, ok := units.ended["web"]; !ok || err == nil {
@@ -171,7 +171,7 @@ process.exit(0);
 `)
 
 	var units appUnits
-	if err := Build(context.Background(), cfg, nil, units.output()); err == nil {
+	if err := (nodeOnly{node: runNode}).Build(context.Background(), cfg, nil, units.output()); err == nil {
 		t.Fatal("Build succeeded, want it failed: web's build never ended")
 	}
 	if err, ok := units.ended["web"]; !ok || err == nil {
@@ -194,7 +194,7 @@ func TestAGoAppCompiledHereBuildsInAUnitOfItsOwnThatEndsWithItsCompileError(t *t
 	}
 
 	var units appUnits
-	err := Builder{Exec: func(context.Context, string, []string, []byte, Output) error { return nil }}.Build(context.Background(), cfg, nil, units.output())
+	err := nodeOnly{node: func(context.Context, string, []string, []byte, Log) error { return nil }}.Build(context.Background(), cfg, nil, units.output())
 	if err == nil {
 		t.Fatal("Build succeeded, want the compile error")
 	}

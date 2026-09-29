@@ -11,7 +11,7 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 
-	"github.com/ocelhq/ocel/cli/internal/appbuilder"
+	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
@@ -106,8 +106,8 @@ func TestScan(t *testing.T) {
 
 	t.Run("it prices one function per app when nothing is built", func(t *testing.T) {
 		root, _, deps := scanFixture(t)
-		deps.CollectAppFunctions = func(string) ([]manifestbuilder.Function, error) {
-			return nil, appbuilder.ErrNoBuildOutput
+		deps.ReadFunctions = func(string) ([]manifestbuilder.Function, error) {
+			return nil, build.ErrNoBuildOutput
 		}
 
 		out := scan(t, deps, root, Options{})
@@ -134,8 +134,8 @@ func TestScan(t *testing.T) {
 			t.Errorf("assumptions with a build = %v, want none", built.Assumptions)
 		}
 
-		deps.CollectAppFunctions = func(string) ([]manifestbuilder.Function, error) {
-			return nil, appbuilder.ErrNoBuildOutput
+		deps.ReadFunctions = func(string) ([]manifestbuilder.Function, error) {
+			return nil, build.ErrNoBuildOutput
 		}
 		var unbuilt scanJSON
 		if err := json.Unmarshal([]byte(scan(t, deps, root, Options{})), &unbuilt); err != nil {
@@ -157,8 +157,8 @@ export default {
 `)
 		clitest.WriteFile(t, filepath.Join(root, "apps", "api", "package.json"), `{}`)
 		p.WithFacts(func(facts *provider.Facts) { facts.Computes = []provider.Compute{provider.ComputeContainer} })
-		deps.CollectAppFunctions = func(string) ([]manifestbuilder.Function, error) {
-			return nil, appbuilder.ErrNoBuildOutput
+		deps.ReadFunctions = func(string) ([]manifestbuilder.Function, error) {
+			return nil, build.ErrNoBuildOutput
 		}
 
 		out := scan(t, deps, root, Options{})

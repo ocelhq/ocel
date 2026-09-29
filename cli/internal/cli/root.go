@@ -13,8 +13,7 @@ import (
 	"github.com/pkg/browser"
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/appbuilder"
-	"github.com/ocelhq/ocel/cli/internal/appimages"
+	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/connector"
@@ -129,28 +128,28 @@ func init() {
 
 func newDeps() cmddeps.Deps {
 	return cmddeps.Deps{
-		LoadCredentials:     console.LoadCredentials,
-		SaveCredentials:     console.SaveCredentials,
-		DeleteCredentials:   console.DeleteCredentials,
-		OpenDocker:          docker.Open,
-		BuildApp:            appbuilder.Build,
-		RequireImageBuilder: appimages.RequireBuilder,
-		BuildAppImages:      appimages.Build,
-		CollectAppFunctions: appbuilder.CollectFunctions,
-		ProbePostgres:       inlinebinding.ProbePostgres,
-		ProbeBucket:         inlinebinding.ProbeBucket,
-		DeploymentID:        appbuilder.DeploymentID,
-		CollectDeclarations: declaration.Collect,
-		OpenBrowser:         browser.OpenURL,
-		ServeVariableEditor: projecteditor.Serve,
-		CurrentGitBranch:    gitBranch,
-		DiscoverPRNumber:    prNumberFromEnv,
-		RunPackageManager:   runPackageManagerCommand,
-		HostTrust:           providerclient.Trust{Ask: prompt.New(os.Stderr, os.Stdin), Out: os.Stderr},
-		StdinIsTerminal:     prompt.Interactive,
-		ConfigPath:          explicitConfigPath,
-		Presentation:        presentation,
-		Events:              bus,
+		LoadCredentials:         console.LoadCredentials,
+		SaveCredentials:         console.SaveCredentials,
+		DeleteCredentials:       console.DeleteCredentials,
+		OpenDocker:              docker.Open,
+		BuildApps:               build.Apps,
+		RefuseUnbuildableImages: build.RefuseUnbuildableImages,
+		ReadPrebuilt:            build.ReadPrebuilt,
+		ReadFunctions:           build.ReadFunctions,
+		ProbePostgres:           inlinebinding.ProbePostgres,
+		ProbeBucket:             inlinebinding.ProbeBucket,
+		DeploymentID:            build.DeploymentID,
+		CollectDeclarations:     declaration.Collect,
+		OpenBrowser:             browser.OpenURL,
+		ServeVariableEditor:     projecteditor.Serve,
+		CurrentGitBranch:        gitBranch,
+		DiscoverPRNumber:        prNumberFromEnv,
+		RunPackageManager:       runPackageManagerCommand,
+		HostTrust:               providerclient.Trust{Ask: prompt.New(os.Stderr, os.Stdin), Out: os.Stderr},
+		StdinIsTerminal:         prompt.Interactive,
+		ConfigPath:              explicitConfigPath,
+		Presentation:            presentation,
+		Events:                  bus,
 	}
 }
 

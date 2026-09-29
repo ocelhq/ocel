@@ -11,7 +11,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/ocelhq/ocel/cli/internal/appbuilder"
+	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -172,8 +172,8 @@ export default {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, nil)
-		deps.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, appbuilder.Output) error {
-			return errors.New("boom: app build failed")
+		deps.BuildApps = func(context.Context, *projectconfig.Config, map[string]map[string]string, map[string]string, build.Log) (build.Output, error) {
+			return build.Output{}, errors.New("boom: app build failed")
 		}
 		root, _ := clitest.SetUpDeployFixture(t)
 		addAppToFixtureConfig(t, root)

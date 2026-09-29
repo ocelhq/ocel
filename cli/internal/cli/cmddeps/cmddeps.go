@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/appbuilder"
+	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
@@ -24,28 +24,28 @@ import (
 )
 
 type Deps struct {
-	LoadCredentials     func() (console.Credentials, error)
-	SaveCredentials     func(console.Credentials) (console.CredentialStore, error)
-	DeleteCredentials   func() error
-	OpenDocker          docker.OpenFunc
-	BuildApp            func(ctx context.Context, cfg *projectconfig.Config, envByApp map[string]map[string]string, out appbuilder.Output) error
-	RequireImageBuilder func(ctx context.Context, scope *events.Scope, cfg *projectconfig.Config, archs map[string]string) error
-	BuildAppImages      func(ctx context.Context, cfg *projectconfig.Config, archs map[string]string, out appbuilder.Output) (map[string]string, error)
-	CollectAppFunctions func(projectDir string) ([]manifestbuilder.Function, error)
-	DeploymentID        func(projectDir, app string) (string, error)
-	CollectDeclarations func(ctx context.Context, cfg *projectconfig.Config, declarations *variables.Declarations, stdout, stderr io.Writer) ([]declaration.Resource, error)
-	OpenBrowser         func(url string) error
-	ProbePostgres       inlinebinding.PostgresProbe
-	ProbeBucket         inlinebinding.BucketProbe
-	ServeVariableEditor func(ctx context.Context, cfg *projectconfig.Config, prov *providerclient.Provider, tier environmentv1.Tier, declarations *variables.Declarations, recovery *variableeditor.Recovery) (*variableeditor.Session, error)
-	CurrentGitBranch    func(dir string) (string, error)
-	DiscoverPRNumber    func() string
-	RunPackageManager   func(ctx context.Context, dir string, argv []string, output io.Writer) error
-	HostTrust           providerclient.Trust
-	StdinIsTerminal     func(r io.Reader) bool
-	ConfigPath          func() string
-	Presentation        func(w io.Writer) runui.Presentation
-	Events              *events.Bus
+	LoadCredentials         func() (console.Credentials, error)
+	SaveCredentials         func(console.Credentials) (console.CredentialStore, error)
+	DeleteCredentials       func() error
+	OpenDocker              docker.OpenFunc
+	BuildApps               func(ctx context.Context, cfg *projectconfig.Config, env map[string]map[string]string, archs map[string]string, log build.Log) (build.Output, error)
+	RefuseUnbuildableImages func(ctx context.Context, scope *events.Scope, cfg *projectconfig.Config, archs map[string]string) error
+	ReadPrebuilt            func(ctx context.Context, cfg *projectconfig.Config, archs map[string]string) (build.Output, error)
+	ReadFunctions           func(projectDir string) ([]manifestbuilder.Function, error)
+	DeploymentID            func(projectDir, app string) (string, error)
+	CollectDeclarations     func(ctx context.Context, cfg *projectconfig.Config, declarations *variables.Declarations, stdout, stderr io.Writer) ([]declaration.Resource, error)
+	OpenBrowser             func(url string) error
+	ProbePostgres           inlinebinding.PostgresProbe
+	ProbeBucket             inlinebinding.BucketProbe
+	ServeVariableEditor     func(ctx context.Context, cfg *projectconfig.Config, prov *providerclient.Provider, tier environmentv1.Tier, declarations *variables.Declarations, recovery *variableeditor.Recovery) (*variableeditor.Session, error)
+	CurrentGitBranch        func(dir string) (string, error)
+	DiscoverPRNumber        func() string
+	RunPackageManager       func(ctx context.Context, dir string, argv []string, output io.Writer) error
+	HostTrust               providerclient.Trust
+	StdinIsTerminal         func(r io.Reader) bool
+	ConfigPath              func() string
+	Presentation            func(w io.Writer) runui.Presentation
+	Events                  *events.Bus
 }
 
 const NoBrowserEnvVar = "OCEL_NO_BROWSER"

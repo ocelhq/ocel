@@ -1,0 +1,320 @@
+package build
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/ocelhq/ocel/cli/internal/nodeprotocol"
+	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/runtrace"
+	"github.com/ocelhq/ocel/pkg/constants"
+)
+
+func TestAProjectWithNoJavaScriptNeverReachesForTheNodeBuilder(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeGoApp(t, root, "declarations")
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module fixture\n\ngo 1.24\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &projectconfig.Config{Dir: root}
+
+	ran := false
+	builder := nodeOnly{node: func(context.Context, string, []string, []byte, Log) error {
+		ran = true
+		return nil
+	}}
+	if err := builder.Build(context.Background(), cfg, nil, Log{}); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if ran {
+		t.Fatal("the node builder ran for a project with no JavaScript")
+	}
+}
+
+func TestAJavaScriptProjectStillReachesTheNodeBuilderWithNoAppsDeclared(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeBuilder(t, root)
+	cfg := &projectconfig.Config{Dir: root}
+
+	ran := false
+	builder := nodeOnly{node: func(context.Context, string, []string, []byte, Log) error {
+		ran = true
+		writePlan(t, filepath.Join(root, constants.ProjectStateDirName, "output"))
+		return nil
+	}}
+	if err := builder.Build(context.Background(), cfg, nil, Log{}); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if !ran {
+		t.Fatal("the node builder was skipped for a project the builder is what detects")
+	}
+}
+
+func TestBuilderEnv(t *testing.T) {
+	t.Parallel()
+
+	t.Run("adds resolved values without losing the builder's own", func(t *testing.T) {
+		t.Parallel()
+
+		env := builderEnv("/adapters/next.js", map[string]string{"POSTHOG_ID": "ph-123"})
+
+		if got, _ := lookup(env, "NEXT_ADAPTER_PATH"); got != "/adapters/next.js" {
+			t.Errorf("NEXT_ADAPTER_PATH = %q, want the adapter path the builder needs", got)
+		}
+		if got, _ := lookup(env, "POSTHOG_ID"); got != "ph-123" {
+			t.Errorf("POSTHOG_ID = %q, want the resolved value", got)
+		}
+		if len(env) <= 3 {
+			t.Errorf("env has %d entries, want the inherited environment as well", len(env))
+		}
+	})
+
+	t.Run("what the build owns is applied last", func(t *testing.T) {
+		t.Parallel()
+
+		env := builderEnv("/adapters/next.js", map[string]string{
+			"NEXT_ADAPTER_PATH":        "/evil/adapter.js",
+			constants.AppFolderEnvName: "/admin",
+		})
+
+		if got, _ := lookup(env, "NEXT_ADAPTER_PATH"); got != "/adapters/next.js" {
+			t.Errorf("NEXT_ADAPTER_PATH = %q, want the builder's own adapter", got)
+		}
+		if got, _ := lookup(env, constants.AppFolderEnvName); got != "" {
+			t.Errorf("%s = %q, want the project root the builder process runs under", constants.AppFolderEnvName, got)
+		}
+	})
+}
+
+func TestFailureSummary(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		output string
+		want   string
+	}{
+		{
+			name: "leading warnings do not headline the failure",
+			output: ` ⚠ The "middleware" file convention is deprecated. Please use "proxy" instead.
+The "id" argument must be of type string. Received undefined
+Next.js build worker exited with code: 1 and signal: null
+`,
+			want: "The \"id\" argument must be of type string. Received undefined\nNext.js build worker exited with code: 1 and signal: null",
+		},
+		{
+			name:   "single line",
+			output: "no entrypoint resolved for app \"api\"\n",
+			want:   "no entrypoint resolved for app \"api\"",
+		},
+		{
+			name:   "empty output",
+			output: "   \n\n",
+			want:   "",
+		},
+		{
+			name:   "decorative lines never take the tail",
+			output: "Error: adapter threw\n────────────\n   ▲   \n===\n",
+			want:   "Error: adapter threw",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := failureSummary(tt.output)
+			if got != tt.want {
+				t.Errorf("failureSummary() = %q, want %q", got, tt.want)
+			}
+			if first, _, _ := strings.Cut(got, "\n"); strings.Contains(first, "deprecated") {
+				t.Errorf("summary headlines a deprecation warning: %q", first)
+			}
+		})
+	}
+}
+
+func runNodeScript(t *testing.T, source string) error {
+	t.Helper()
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not on PATH")
+	}
+	path := filepath.Join(t.TempDir(), "builder.mjs")
+	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return runNode(context.Background(), path, os.Environ(), []byte("{}"), Log{})
+}
+
+func TestRunNode(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a stdout-only failure is not dropped", func(t *testing.T) {
+		t.Parallel()
+
+		err := runNodeScript(t, "console.log('adapter could not resolve the entrypoint');process.exit(1);")
+		if err == nil {
+			t.Fatal("runNode succeeded on a non-zero exit, want error")
+		}
+		if !strings.Contains(err.Error(), "adapter could not resolve the entrypoint") {
+			t.Errorf("error = %q, want it to include the failure the builder reported on stdout", err)
+		}
+	})
+
+	t.Run("names the exit code", func(t *testing.T) {
+		t.Parallel()
+
+		err := runNodeScript(t, "console.error('boom');process.exit(3);")
+		if err == nil {
+			t.Fatal("runNode succeeded on a non-zero exit, want error")
+		}
+		if !strings.Contains(err.Error(), "3") || !strings.Contains(err.Error(), "boom") {
+			t.Errorf("error = %q, want it to name exit status 3 and the failure", err)
+		}
+	})
+
+	t.Run("a large error record set via process.exitCode is not truncated", func(t *testing.T) {
+		t.Parallel()
+
+		message := strings.Repeat("x", 400*1024)
+		script := fmt.Sprintf(`console.log(%s + JSON.stringify({type:"error",app:"api",stage:"build",message:%s}));
+process.exitCode = 1;
+`, jsString(nodeprotocol.Prefix), jsString(message))
+
+		err := runNodeScript(t, script)
+		if err == nil {
+			t.Fatal("runNode succeeded on a non-zero exit, want error")
+		}
+		if !strings.Contains(err.Error(), message) {
+			t.Errorf("error has %d bytes, want the full %d-byte record (process.exitCode must not truncate stdout, unlike process.exit)", len(err.Error()), len(message))
+		}
+	})
+
+	t.Run("a silent failure still errors", func(t *testing.T) {
+		t.Parallel()
+
+		err := runNodeScript(t, "process.exit(1);")
+		if err == nil {
+			t.Fatal("runNode succeeded on a non-zero exit, want error")
+		}
+		if !strings.Contains(err.Error(), "node-builder failed") {
+			t.Errorf("error = %q, want it to name the failing builder", err)
+		}
+	})
+
+	t.Run("a protocol error record wins over the trailing-lines heuristic", func(t *testing.T) {
+		t.Parallel()
+
+		script := fmt.Sprintf(
+			`console.log("noise that would otherwise headline the failure");
+console.log(%s + JSON.stringify({type:"error",app:"api",stage:"build",message:%s}));
+process.exit(1);
+`,
+			jsString(nodeprotocol.Prefix), jsString(`no entrypoint resolved for app "api"`))
+
+		err := runNodeScript(t, script)
+		if err == nil {
+			t.Fatal("runNode succeeded on a non-zero exit, want error")
+		}
+		if !strings.Contains(err.Error(), `no entrypoint resolved for app "api"`) {
+			t.Errorf("error = %q, want the protocol error record's message, not the trailing noise", err)
+		}
+		if strings.Contains(err.Error(), "noise that would otherwise headline") {
+			t.Errorf("error = %q, want the actual error, not the last non-blank lines", err)
+		}
+	})
+
+	t.Run("a protocol-prefixed line that fails to parse is still forwarded, not swallowed", func(t *testing.T) {
+		t.Parallel()
+
+		script := fmt.Sprintf(`console.log(%s + "{not valid json");
+process.exit(1);
+`, jsString(nodeprotocol.Prefix))
+
+		if _, err := exec.LookPath("node"); err != nil {
+			t.Skip("node not on PATH")
+		}
+		path := filepath.Join(t.TempDir(), "builder.mjs")
+		if err := os.WriteFile(path, []byte(script), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		var stderr bytes.Buffer
+		err := runNode(context.Background(), path, os.Environ(), []byte("{}"), Log{Shared: &stderr})
+		if err == nil {
+			t.Fatal("runNode succeeded on a non-zero exit, want error")
+		}
+		if !strings.Contains(stderr.String(), nodeprotocol.Prefix+"{not valid json") {
+			t.Errorf("stderr = %q, want the malformed protocol line forwarded verbatim", stderr.String())
+		}
+	})
+
+	t.Run("stdout and stderr write concurrently without racing on the shared writer", func(t *testing.T) {
+		t.Parallel()
+
+		script := `
+for (let i = 0; i < 4000; i++) {
+  process.stdout.write("out " + i + "\n");
+  process.stderr.write("err " + i + "\n");
+}
+`
+		if err := runNodeScript(t, script); err != nil {
+			t.Fatalf("runNode: %v", err)
+		}
+	})
+
+	t.Run("a span_start/span_end pair for an app produces a span on the run", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		ctx, run, err := runtrace.Start(context.Background(), dir, "ocel build")
+		if err != nil {
+			t.Fatalf("runtrace.Start: %v", err)
+		}
+
+		script := fmt.Sprintf(`const emit = (r) => console.log(%s + JSON.stringify(r));
+emit({type:"span_start",id:"1",app:"api",stage:"build"});
+emit({type:"span_end",id:"1",ok:true});
+`, jsString(nodeprotocol.Prefix))
+
+		if _, lookErr := exec.LookPath("node"); lookErr != nil {
+			t.Skip("node not on PATH")
+		}
+		path := filepath.Join(t.TempDir(), "builder.mjs")
+		if writeErr := os.WriteFile(path, []byte(script), 0o644); writeErr != nil {
+			t.Fatal(writeErr)
+		}
+		if err := runNode(ctx, path, os.Environ(), []byte("{}"), Log{}); err != nil {
+			t.Fatalf("runNode: %v", err)
+		}
+		if err := run.Close(); err != nil {
+			t.Fatalf("run.Close: %v", err)
+		}
+
+		raw, err := os.ReadFile(strings.TrimSuffix(run.LogPath(), ".ndjson") + ".otlp.json")
+		if err != nil {
+			t.Fatalf("read trace: %v", err)
+		}
+		if !strings.Contains(string(raw), `"name": "build"`) || !strings.Contains(string(raw), `"stringValue": "api"`) {
+			t.Errorf("trace = %s, want a build span attributed to app api", raw)
+		}
+	})
+}
+
+func jsString(s string) string {
+	raw, err := json.Marshal(s)
+	if err != nil {
+		panic(err)
+	}
+	return string(raw)
+}

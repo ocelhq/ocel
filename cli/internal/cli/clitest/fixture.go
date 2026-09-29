@@ -16,8 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/appbuilder"
-	"github.com/ocelhq/ocel/cli/internal/appimages"
+	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
@@ -44,23 +43,23 @@ func AttachTerminalSink(deps cmddeps.Deps, w io.Writer) {
 
 func NewDeps() cmddeps.Deps {
 	return cmddeps.Deps{
-		LoadCredentials:     console.LoadCredentials,
-		SaveCredentials:     console.SaveCredentials,
-		DeleteCredentials:   console.DeleteCredentials,
-		BuildApp:            appbuilder.Build,
-		RequireImageBuilder: appimages.RequireBuilder,
-		BuildAppImages:      appimages.Build,
-		CollectAppFunctions: appbuilder.CollectFunctions,
-		ProbePostgres:       fakeProbePostgres,
-		ProbeBucket:         fakeProbeBucket,
-		DeploymentID:        appbuilder.DeploymentID,
-		CollectDeclarations: declaration.Collect,
-		ServeVariableEditor: projecteditor.Serve,
-		DiscoverPRNumber:    func() string { return os.Getenv("OCEL_PR_NUMBER") },
-		StdinIsTerminal:     func(io.Reader) bool { return false },
-		ConfigPath:          func() string { return os.Getenv("OCEL_CONFIG") },
-		Presentation:        func(io.Writer) runui.Presentation { return runui.Resolve(runui.Origin{}) },
-		Events:              events.NewBus(time.Now),
+		LoadCredentials:         console.LoadCredentials,
+		SaveCredentials:         console.SaveCredentials,
+		DeleteCredentials:       console.DeleteCredentials,
+		BuildApps:               build.Apps,
+		RefuseUnbuildableImages: build.RefuseUnbuildableImages,
+		ReadPrebuilt:            build.ReadPrebuilt,
+		ReadFunctions:           build.ReadFunctions,
+		ProbePostgres:           fakeProbePostgres,
+		ProbeBucket:             fakeProbeBucket,
+		DeploymentID:            build.DeploymentID,
+		CollectDeclarations:     declaration.Collect,
+		ServeVariableEditor:     projecteditor.Serve,
+		DiscoverPRNumber:        func() string { return os.Getenv("OCEL_PR_NUMBER") },
+		StdinIsTerminal:         func(io.Reader) bool { return false },
+		ConfigPath:              func() string { return os.Getenv("OCEL_CONFIG") },
+		Presentation:            func(io.Writer) runui.Presentation { return runui.Resolve(runui.Origin{}) },
+		Events:                  events.NewBus(time.Now),
 	}
 }
 
@@ -200,10 +199,13 @@ func InstallProvider(t *testing.T, name string, place func(dest string) error) s
 }
 
 func StubBuild(deps *cmddeps.Deps, functions []manifestbuilder.Function) {
-	deps.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, appbuilder.Output) error {
-		return nil
+	deps.BuildApps = func(context.Context, *projectconfig.Config, map[string]map[string]string, map[string]string, build.Log) (build.Output, error) {
+		return build.Output{Functions: functions}, nil
 	}
-	deps.CollectAppFunctions = func(string) ([]manifestbuilder.Function, error) {
+	deps.ReadPrebuilt = func(context.Context, *projectconfig.Config, map[string]string) (build.Output, error) {
+		return build.Output{Functions: functions}, nil
+	}
+	deps.ReadFunctions = func(string) ([]manifestbuilder.Function, error) {
 		return functions, nil
 	}
 	StubRecordedDeploymentIDs(deps)
@@ -225,11 +227,18 @@ func StubAppImages(deps *cmddeps.Deps, apps ...string) {
 	for _, app := range apps {
 		refs[app] = FixtureImage(app)
 	}
-	deps.RequireImageBuilder = func(context.Context, *events.Scope, *projectconfig.Config, map[string]string) error {
+	deps.RefuseUnbuildableImages = func(context.Context, *events.Scope, *projectconfig.Config, map[string]string) error {
 		return nil
 	}
-	deps.BuildAppImages = func(context.Context, *projectconfig.Config, map[string]string, appbuilder.Output) (map[string]string, error) {
-		return refs, nil
+	buildApps := deps.BuildApps
+	deps.BuildApps = func(ctx context.Context, cfg *projectconfig.Config, env map[string]map[string]string, archs map[string]string, log build.Log) (build.Output, error) {
+		built, err := buildApps(ctx, cfg, env, archs, log)
+		built.Images = refs
+		return built, err
+	}
+	deps.ReadPrebuilt = func(_ context.Context, cfg *projectconfig.Config, _ map[string]string) (build.Output, error) {
+		functions, err := deps.ReadFunctions(cfg.Dir)
+		return build.Output{Functions: functions, Images: refs}, err
 	}
 }
 

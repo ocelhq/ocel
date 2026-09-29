@@ -13,16 +13,18 @@ import (
 )
 
 const (
-	artifactRootDir = constants.ProjectStateDirName + "/output"
+	ArtifactRootDir = constants.ProjectStateDirName + "/output"
 
 	appsDir = "apps"
 )
 
 func ArtifactRoot(projectDir string) string {
-	return filepath.Join(projectDir, filepath.FromSlash(artifactRootDir))
+	return filepath.Join(projectDir, filepath.FromSlash(ArtifactRootDir))
 }
 
-func AppArtifactRoot(root, app string) string { return filepath.Join(root, appsDir, app) }
+func AppsRoot(root string) string { return filepath.Join(root, appsDir) }
+
+func AppArtifactRoot(root, app string) string { return filepath.Join(AppsRoot(root), app) }
 
 func ReadServeDescriptor(root, app string) (edge.ServeDescriptor, bool, error) {
 	raw, err := os.ReadFile(filepath.Join(AppArtifactRoot(root, app), edge.ServeDescriptorFile))
