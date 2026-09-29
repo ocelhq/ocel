@@ -149,7 +149,7 @@ func withBindingCommand(cmd *cobra.Command, run func(context.Context, string) er
 	return run(cmd.Context(), cwd)
 }
 
-func withBindingProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opts bindingsOptions, command string, drive func(context.Context, *providerclient.Provider, *projectconfig.Config) error) (err error) {
+func withBindingProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opts bindingsOptions, command string, drive func(context.Context, *providerclient.Provider, *projectconfig.Config) (string, error)) (err error) {
 	if err := opts.checkEnvironment(); err != nil {
 		return err
 	}
@@ -179,7 +179,11 @@ func withBindingProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opt
 	if err != nil {
 		return err
 	}
-	return drive(ctx, prov, cfg)
+	headline, err := drive(ctx, prov, cfg)
+	if err == nil && headline != "" {
+		run.Succeed(headline)
+	}
+	return err
 }
 
 func runBindingsSet(ctx context.Context, deps cmddeps.Deps, cwd string, stdin io.Reader, opts bindingsOptions, stdout io.Writer) error {
@@ -191,10 +195,10 @@ func runBindingsSet(ctx context.Context, deps cmddeps.Deps, cwd string, stdin io
 	if owner == naming.InlineRecordOwner {
 		return fmt.Errorf("publisher %q is the one ocel writes an inline binding's record as, at deploy, from the config; publish as your own tool with --owner", owner)
 	}
-	return withBindingProvider(ctx, deps, cwd, opts, "ocel bindings set", func(ctx context.Context, prov *providerclient.Provider, cfg *projectconfig.Config) error {
+	return withBindingProvider(ctx, deps, cwd, opts, "ocel bindings set", func(ctx context.Context, prov *providerclient.Provider, cfg *projectconfig.Config) (string, error) {
 		client, err := prov.Vars()
 		if err != nil {
-			return err
+			return "", err
 		}
 		resp, err := client.SetBinding(ctx, &envvarsv1.SetBindingRequest{
 			Slug:        cfg.Slug,
@@ -204,13 +208,13 @@ func runBindingsSet(ctx context.Context, deps cmddeps.Deps, cwd string, stdin io
 			Owner:       owner,
 		})
 		if err != nil {
-			return err
+			return "", err
 		}
+		headline := fmt.Sprintf("Published %s as %s (version %d)", describeBinding(binding.GetName(), opts), owner, resp.GetVersion())
 		if deps.Presentation(stdout).Format == terminal.FormatJSON {
-			return writeBindingJSON(stdout, bindingSetReport{Name: binding.GetName(), Owner: owner, Version: resp.GetVersion()})
+			return headline, writeBindingJSON(stdout, bindingSetReport{Name: binding.GetName(), Owner: owner, Version: resp.GetVersion()})
 		}
-		fmt.Fprintf(stdout, "Published %s as %s (version %d).\n", describeBinding(binding.GetName(), opts), owner, resp.GetVersion())
-		return nil
+		return headline, nil
 	})
 }
 
@@ -310,10 +314,10 @@ func runBindingsRm(ctx context.Context, deps cmddeps.Deps, cwd, name string, opt
 	if naming.IsInlineRecord(name) {
 		return fmt.Errorf("%s is the record ocel keeps for a binding written inline in `bindings`, and the next deploy writes it again: remove that binding from the config, and the deploy after removes the record", name)
 	}
-	return withBindingProvider(ctx, deps, cwd, opts, "ocel bindings rm", func(ctx context.Context, prov *providerclient.Provider, cfg *projectconfig.Config) error {
+	return withBindingProvider(ctx, deps, cwd, opts, "ocel bindings rm", func(ctx context.Context, prov *providerclient.Provider, cfg *projectconfig.Config) (string, error) {
 		client, err := prov.Vars()
 		if err != nil {
-			return err
+			return "", err
 		}
 		resp, err := client.RemoveBinding(ctx, &envvarsv1.RemoveBindingRequest{
 			Slug:        cfg.Slug,
@@ -322,25 +326,24 @@ func runBindingsRm(ctx context.Context, deps cmddeps.Deps, cwd, name string, opt
 			Name:        name,
 		})
 		if err != nil {
-			return err
+			return "", err
+		}
+		headline := "Removed " + describeBinding(name, opts)
+		if !resp.GetRemoved() {
+			headline = fmt.Sprintf("No binding named %s is published", describeBinding(name, opts))
 		}
 		if deps.Presentation(stdout).Format == terminal.FormatJSON {
-			return writeBindingJSON(stdout, bindingRemoveReport{Name: name, Removed: resp.GetRemoved()})
+			return headline, writeBindingJSON(stdout, bindingRemoveReport{Name: name, Removed: resp.GetRemoved()})
 		}
-		if !resp.GetRemoved() {
-			fmt.Fprintf(stdout, "No binding named %s is published.\n", describeBinding(name, opts))
-			return nil
-		}
-		fmt.Fprintf(stdout, "Removed %s.\n", describeBinding(name, opts))
-		return nil
+		return headline, nil
 	})
 }
 
 func runBindingsLs(ctx context.Context, deps cmddeps.Deps, cwd string, opts bindingsOptions, stdout io.Writer) error {
-	return withBindingProvider(ctx, deps, cwd, opts, "ocel bindings ls", func(ctx context.Context, prov *providerclient.Provider, cfg *projectconfig.Config) error {
+	return withBindingProvider(ctx, deps, cwd, opts, "ocel bindings ls", func(ctx context.Context, prov *providerclient.Provider, cfg *projectconfig.Config) (string, error) {
 		client, err := prov.Vars()
 		if err != nil {
-			return err
+			return "", err
 		}
 		resp, err := client.ListBindings(ctx, &envvarsv1.ListBindingsRequest{
 			Slug:        cfg.Slug,
@@ -348,21 +351,21 @@ func runBindingsLs(ctx context.Context, deps cmddeps.Deps, cwd string, opts bind
 			Environment: opts.environment,
 		})
 		if err != nil {
-			return err
+			return "", err
 		}
 		if deps.Presentation(stdout).Format == terminal.FormatJSON {
-			return writeBindingJSON(stdout, bindingListReport{Bindings: bindingReports(resp.GetBindings())})
+			return "", writeBindingJSON(stdout, bindingListReport{Bindings: bindingReports(resp.GetBindings())})
 		}
 		renderBindings(stdout, resp.GetBindings())
-		return nil
+		return "", nil
 	})
 }
 
 func runBindingsGenerate(ctx context.Context, deps cmddeps.Deps, cwd string, opts bindingsOptions, stdout io.Writer) error {
-	return withBindingProvider(ctx, deps, cwd, opts, "ocel bindings generate", func(ctx context.Context, prov *providerclient.Provider, cfg *projectconfig.Config) error {
+	return withBindingProvider(ctx, deps, cwd, opts, "ocel bindings generate", func(ctx context.Context, prov *providerclient.Provider, cfg *projectconfig.Config) (string, error) {
 		client, err := prov.Vars()
 		if err != nil {
-			return err
+			return "", err
 		}
 		resp, err := client.ListBindings(ctx, &envvarsv1.ListBindingsRequest{
 			Slug:        cfg.Slug,
@@ -370,23 +373,22 @@ func runBindingsGenerate(ctx context.Context, deps cmddeps.Deps, cwd string, opt
 			Environment: opts.environment,
 		})
 		if err != nil {
-			return err
+			return "", err
 		}
 
 		path := filepath.Join(cfg.Dir, bindingTypesFileName)
 		if err := os.WriteFile(path, []byte(renderBindingTypes(describeBindingCoordinate(opts), cfg.BindingsFor(opts.tier()), resp.GetBindings())), 0o644); err != nil {
-			return fmt.Errorf("write %s: %w", bindingTypesFileName, err)
+			return "", fmt.Errorf("write %s: %w", bindingTypesFileName, err)
 		}
 
-		if deps.Presentation(stdout).Format == terminal.FormatJSON {
-			return writeBindingJSON(stdout, bindingGenerateReport{Path: path, Bindings: bindingReports(resp.GetBindings())})
-		}
+		headline := fmt.Sprintf("Wrote %s from the %d bindings published to %s", path, len(resp.GetBindings()), describeBindingCoordinate(opts))
 		if len(resp.GetBindings()) == 0 {
-			fmt.Fprintf(stdout, "Nothing is published to %s; wrote %s, which names no record and so leaves no binding name open.\n", describeBindingCoordinate(opts), path)
-			return nil
+			headline = fmt.Sprintf("Nothing is published to %s; wrote %s, which names no record and so leaves no binding name open", describeBindingCoordinate(opts), path)
 		}
-		fmt.Fprintf(stdout, "Wrote %s from the %d bindings published to %s.\n", path, len(resp.GetBindings()), describeBindingCoordinate(opts))
-		return nil
+		if deps.Presentation(stdout).Format == terminal.FormatJSON {
+			return headline, writeBindingJSON(stdout, bindingGenerateReport{Path: path, Bindings: bindingReports(resp.GetBindings())})
+		}
+		return headline, nil
 	})
 }
 

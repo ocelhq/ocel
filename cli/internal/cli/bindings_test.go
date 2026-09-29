@@ -52,7 +52,7 @@ func bindingSet(t *testing.T, root, body string, opts bindingsOptions) string {
 	if err := runBindingsSet(context.Background(), bindingDeps(&stderr), root, strings.NewReader(body), opts, &stdout); err != nil {
 		t.Fatalf("runBindingsSet err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
-	return stdout.String()
+	return stderr.String()
 }
 
 func bindingLs(t *testing.T, root string, opts bindingsOptions) string {
@@ -133,8 +133,8 @@ func TestRunBindingsSet(t *testing.T) {
 		if err := runBindingsRm(context.Background(), bindingDeps(&stderr), root, "main", bindingsOptions{}, &rm); err != nil {
 			t.Fatalf("runBindingsRm err = %v; stderr=%s", err, stderr.String())
 		}
-		if !strings.Contains(rm.String(), "main") {
-			t.Errorf("rm stdout = %q, want it to name the binding it removed", rm.String())
+		if !strings.Contains(stderr.String(), "Removed main") {
+			t.Errorf("rm summary = %q, want it to name the binding it removed", stderr.String())
 		}
 
 		if after := bindingLs(t, root, bindingsOptions{}); strings.Contains(after, "main") {
@@ -237,8 +237,8 @@ func TestRunBindingsSet(t *testing.T) {
 		if err := runBindingsRm(context.Background(), bindingDeps(&stderr), root, "never-published", bindingsOptions{}, &stdout); err != nil {
 			t.Fatalf("runBindingsRm err = %v; stderr=%s", err, stderr.String())
 		}
-		if !strings.Contains(stdout.String(), "never-published") {
-			t.Errorf("rm of a binding that was never published = %q, want it to name what it looked for", stdout.String())
+		if !strings.Contains(stderr.String(), "never-published") {
+			t.Errorf("rm of a binding that was never published = %q, want it to name what it looked for", stderr.String())
 		}
 	})
 
@@ -315,7 +315,7 @@ func bindingGenerate(t *testing.T, root string, opts bindingsOptions) (string, s
 	if err != nil {
 		t.Fatalf("read the generated types: %v", err)
 	}
-	return stdout.String(), string(written)
+	return stderr.String(), string(written)
 }
 
 func renderedPropertyTypes(t *testing.T, written string) []string {
@@ -422,7 +422,7 @@ func TestRunBindingsGenerate(t *testing.T) {
 			t.Errorf("generated file =\n%s\nwant it to mark itself generated, so an empty coordinate still closes every name", written)
 		}
 		if !strings.Contains(out, "Nothing is published") || !strings.Contains(out, "no binding name open") {
-			t.Errorf("generate stdout = %q, want it to say nothing was published and that no name stays open", out)
+			t.Errorf("generate summary = %q, want it to say nothing was published and that no name stays open", out)
 		}
 	})
 }
@@ -472,7 +472,11 @@ func TestRunBindingsJSONOutput(t *testing.T) {
 	root := setUpBindingFixture(t)
 	jsonOutput(t)
 
-	set := asJSON(t, bindingSet(t, root, postgresBindingJSON("main", "db.internal"), bindingsOptions{}))
+	var published, setLog bytes.Buffer
+	if err := runBindingsSet(context.Background(), bindingDeps(&setLog), root, strings.NewReader(postgresBindingJSON("main", "db.internal")), bindingsOptions{}, &published); err != nil {
+		t.Fatalf("runBindingsSet err = %v; stderr=%s", err, setLog.String())
+	}
+	set := asJSON(t, published.String())
 	if set["name"] != "main" || set["version"] != float64(1) {
 		t.Errorf("set json = %v, want the name and version it published", set)
 	}

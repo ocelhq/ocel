@@ -1,11 +1,11 @@
 package main
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/ocelhq/ocel/cli/internal/cli"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 )
 
 func main() {
@@ -13,7 +13,7 @@ func main() {
 		if code, ok := exitcode.Of(err); ok {
 			os.Exit(code)
 		}
-		fmt.Fprintln(os.Stderr, "Error:", err)
+		terminal.PrintFailure(os.Stderr, err)
 		os.Exit(1)
 	}
 }

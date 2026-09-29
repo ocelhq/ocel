@@ -66,15 +66,7 @@ func (s summary) failed(took string) []string {
 		out := append(MissingVariablesLines(missing, s.present), "", MissingVariablesRemedy(missing.GetRemedy()))
 		return append(out, detailLines(result.GetDetail())...)
 	}
-	detail := strings.Split(strings.TrimRight(result.GetDetail(), "\n"), "\n")
-	head := fmt.Sprintf("%s %s in %s", failGlyph, headlineOr(result, "Failed"), took)
-	if detail[0] != "" {
-		head += " — " + detail[0]
-	}
-	out := []string{s.present.palette().FailureBold(head)}
-	for _, line := range detail[1:] {
-		out = append(out, blockIndent+line)
-	}
+	out := failureLines(s.present.palette(), headlineOr(result, "Failed")+" in "+took, result.GetDetail())
 	if target := targetLine(s.present, result.GetOrigin()); target != "" {
 		out = append(out, target)
 	}
