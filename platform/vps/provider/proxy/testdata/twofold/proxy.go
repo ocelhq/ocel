@@ -27,3 +27,5 @@ func (f *First) Inspect(context.Context) (proxy.Checks, error) { return nil, nil
 func (f *First) Certificate(context.Context, string) (proxy.Certificate, error) {
 	return proxy.Certificate{}, nil
 }
+
+func (f *First) RefuseUnshielded(context.Context, string) error { return nil }

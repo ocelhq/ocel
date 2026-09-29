@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
@@ -17,7 +16,6 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
-	"github.com/ocelhq/ocel/platform/vps/provider/proxy/manual"
 )
 
 const proxyNotServingYet = 3
@@ -126,10 +124,14 @@ type Answer struct {
 }
 
 func (h *Host) ServedRouter(ctx context.Context, hostname string) (Answer, error) {
-	return h.probed(ctx, hostname)
+	return h.probed(ctx, "probe "+hostname+" on this box's own https port", hostname)
 }
 
-func (h *Host) probed(ctx context.Context, hostname string, flags ...string) (Answer, error) {
+func (h *Host) ServedRouterOverPlainHTTP(ctx context.Context, hostname string) (Answer, error) {
+	return h.probed(ctx, "probe "+hostname+" on this box's own http port", hostname, "--plain")
+}
+
+func (h *Host) probed(ctx context.Context, what, hostname string, flags ...string) (Answer, error) {
 	result, err := h.stream(ctx, words(slices.Concat([]string{SwitchboardBinary, "probe"}, flags, []string{hostname})), nil, "")
 	if err != nil {
 		return Answer{}, err
@@ -140,7 +142,7 @@ func (h *Host) probed(ctx context.Context, hostname string, flags ...string) (An
 	case proxyNotServingYet:
 		return Answer{Failure: spoken(result)}, nil
 	default:
-		return Answer{}, h.refuse("probe "+hostname+" on this box's own https port", result, "")
+		return Answer{}, h.refuse(what, result, "")
 	}
 }
 
@@ -202,16 +204,7 @@ func (b frontBox) Shielded(ctx context.Context) ([]string, error) {
 }
 
 func (h *Host) RefuseUnshielded(ctx context.Context, hostname string) error {
-	if h.front.Guarantees().OwnsPorts {
-		return nil
-	}
-	said, err := h.ServedRouter(ctx, edge.ProbeHostname(hostname))
-	if err != nil || said.Router == "" {
-		return err
-	}
-	return refusal.Refuse(refusal.CodeNotReady,
-		"your proxy answers %s to a client that presents no certificate, so the edge in front would forward a hostname anyone reaches without it\n%s, then run this again",
-		hostname, manual.RequireClientCertificate(hostname))
+	return h.front.RefuseUnshielded(ctx, hostname)
 }
 
 func (b frontBox) Probe(ctx context.Context, hostname string) (router.Kind, string, error) {
@@ -228,7 +221,7 @@ func (b frontBox) ReadSpec(ctx context.Context) (proxy.Spec, error) {
 }
 
 func (b frontBox) ProbeAnyCertificate(ctx context.Context, hostname string) (string, string, error) {
-	said, err := b.h.probed(ctx, hostname, "--any-certificate")
+	said, err := b.h.probed(ctx, "probe "+hostname+" on this box's own https port accepting any certificate", hostname, "--any-certificate")
 	return string(said.Router), said.Failure, err
 }
 
@@ -252,6 +245,11 @@ func (b frontBox) ReadBeside(ctx context.Context, path string) ([]switchboard.Si
 		return nil, unread("what "+SwitchboardContainer+" read beside "+path, said)
 	}
 	return beside, nil
+}
+
+func (b frontBox) ProbePlainHTTP(ctx context.Context, hostname string) (router.Kind, string, error) {
+	said, err := b.h.ServedRouterOverPlainHTTP(ctx, hostname)
+	return said.Router, said.Failure, err
 }
 
 func (b frontBox) Said(ctx context.Context, argv []string) (string, error) {

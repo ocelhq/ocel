@@ -17,6 +17,7 @@ type Box interface {
 	Claimed(ctx context.Context) ([]string, error)
 	Shielded(ctx context.Context) ([]string, error)
 	Probe(ctx context.Context, hostname string) (answered router.Kind, failure string, err error)
+	ProbePlainHTTP(ctx context.Context, hostname string) (answered router.Kind, failure string, err error)
 }
 
 type Manual struct {

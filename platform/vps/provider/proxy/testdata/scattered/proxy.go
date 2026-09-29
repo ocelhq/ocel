@@ -23,3 +23,5 @@ func (s *Scattered) Validate(context.Context, []byte) error { return nil }
 func (s *Scattered) Reload(context.Context, proxy.Spec) error { return nil }
 
 func (s *Scattered) Inspect(context.Context) (proxy.Checks, error) { return nil, nil }
+
+func (s *Scattered) RefuseUnshielded(context.Context, string) error { return nil }

@@ -27,3 +27,5 @@ func (c *Conforming) Inspect(context.Context) (proxy.Checks, error) { return nil
 func (c *Conforming) Certificate(context.Context, string) (proxy.Certificate, error) {
 	return proxy.Certificate{}, nil
 }
+
+func (c *Conforming) RefuseUnshielded(context.Context, string) error { return nil }

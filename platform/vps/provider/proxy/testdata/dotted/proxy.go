@@ -27,3 +27,5 @@ func (Dotted) Inspect(context.Context) (Checks, error) { return nil, nil }
 func (Dotted) Certificate(context.Context, string) (Certificate, error) {
 	return Certificate{}, nil
 }
+
+func (Dotted) RefuseUnshielded(context.Context, string) error { return nil }

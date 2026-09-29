@@ -23,6 +23,8 @@ func (Builtin) Render(spec proxy.Spec) ([]byte, error) { return render(spec) }
 
 func (Builtin) File() string { return live.ProxyConfig }
 
+func (Builtin) RefuseUnshielded(context.Context, string) error { return nil }
+
 func (Builtin) Unrendered(config []byte, permission proxy.Permission) string {
 	return unrendered(config, permission)
 }

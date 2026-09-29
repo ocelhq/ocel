@@ -9,24 +9,36 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
-func (m Manual) shielding(ctx context.Context, hostname string) (provider.HostCheck, error) {
-	answered, failure, err := m.Box.Probe(ctx, edge.ProbeHostname(hostname))
+func (m Manual) checkShield(ctx context.Context, hostname string) (provider.HostCheck, error) {
+	probed := edge.ProbeHostname(hostname)
+	answered, failure, err := m.Box.Probe(ctx, probed)
 	if err != nil {
 		return provider.HostCheck{}, err
 	}
-	if answered == "" {
+	if answered != "" {
 		return provider.HostCheck{
-			Subject: hostname, Verdict: provider.HostPass,
-			Finding: fmt.Sprintf("your proxy refuses %s to a client that presents no certificate (%s)", hostname, failure),
+			Subject: hostname, Verdict: provider.HostFail,
+			Finding: fmt.Sprintf("your proxy answers %s to a client that presents no certificate", hostname),
+			Fix:     clientCertificateFix(hostname),
+		}, nil
+	}
+	plainAnswered, _, err := m.Box.ProbePlainHTTP(ctx, probed)
+	if err != nil {
+		return provider.HostCheck{}, err
+	}
+	if plainAnswered != "" {
+		return provider.HostCheck{
+			Subject: hostname, Verdict: provider.HostFail,
+			Finding: fmt.Sprintf("your proxy forwards %s over plain http, where no client certificate is ever presented", hostname),
+			Fix:     fmt.Sprintf("in your proxy, stop forwarding %s on port 80: refuse it there or redirect it to https", hostname),
 		}, nil
 	}
 	return provider.HostCheck{
-		Subject: hostname, Verdict: provider.HostFail,
-		Finding: fmt.Sprintf("your proxy answers %s to a client that presents no certificate, and the edge in front forwards it: a request that skips the edge reaches it", hostname),
-		Fix:     RequireClientCertificate(hostname),
+		Subject: hostname, Verdict: provider.HostPass,
+		Finding: fmt.Sprintf("your proxy refuses %s to a client that presents no certificate (%s), and forwards it nowhere over plain http", hostname, failure),
 	}, nil
 }
 
-func RequireClientCertificate(hostname string) string {
-	return fmt.Sprintf("in your proxy, require a client certificate for %s and trust only the ones its shield lists under \"shields\" in %s", hostname, live.RoutingTable)
+func clientCertificateFix(hostname string) string {
+	return fmt.Sprintf("in your proxy, require a client certificate for %s and trust only the ones listed for it under \"shields\" in %s", hostname, live.RoutingTable)
 }

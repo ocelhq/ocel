@@ -27,3 +27,5 @@ func (*Generic[T]) Inspect(context.Context) (proxy.Checks, error) { return nil, 
 func (*Generic[T]) Certificate(context.Context, string) (proxy.Certificate, error) {
 	return proxy.Certificate{}, nil
 }
+
+func (*Generic[T]) RefuseUnshielded(context.Context, string) error { return nil }

@@ -75,6 +75,8 @@ func (y userProxy) Reload(_ context.Context, served proxy.Spec) error {
 
 func (userProxy) Inspect(context.Context) (proxy.Checks, error) { return nil, nil }
 
+func (userProxy) RefuseUnshielded(context.Context, string) error { return nil }
+
 func (userProxy) Certificate(context.Context, string) (proxy.Certificate, error) {
 	return proxy.Certificate{}, nil
 }
