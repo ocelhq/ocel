@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	cloudwatch "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/cloudwatch"
 	iam "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
@@ -16,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/naming"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
 const (
@@ -30,7 +32,7 @@ const (
 	defaultFunctionEntry = "src/server.js"
 
 	defaultFunctionMemoryMB       = 1024
-	defaultFunctionTimeoutSeconds = 30
+	defaultFunctionTimeoutSeconds = int(awsports.RequestTimeout / time.Second)
 
 	nextBundleFunctionMemoryMB = 1769
 

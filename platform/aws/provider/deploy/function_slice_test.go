@@ -8,7 +8,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
@@ -69,6 +68,17 @@ func TestTranslateFunctionSpec(t *testing.T) {
 		}
 	})
 
+	t.Run("an app still answering a request keeps answering for a minute", func(t *testing.T) {
+		t.Parallel()
+		got, err := translateFunctionSpec("", provider.FunctionSpec{})
+		if err != nil {
+			t.Fatalf("translateFunctionSpec: %v", err)
+		}
+		if got.TimeoutSeconds != 60 {
+			t.Errorf("TimeoutSeconds = %d, want 60, the minute every AWS edge waits on the function", got.TimeoutSeconds)
+		}
+	})
+
 	t.Run("Next gets the bundle memory default", func(t *testing.T) {
 		t.Parallel()
 		got, err := translateFunctionSpec(appbuild.FrameworkNext, provider.FunctionSpec{})
@@ -91,17 +101,14 @@ func TestTranslateFunctionSpec(t *testing.T) {
 		}
 	})
 
-	t.Run("what the spec asks for wins over both defaults", func(t *testing.T) {
+	t.Run("the memory the spec asks for wins over both defaults", func(t *testing.T) {
 		t.Parallel()
-		got, err := translateFunctionSpec(appbuild.FrameworkNext, provider.FunctionSpec{Memory: 3008, Timeout: 45 * time.Second})
+		got, err := translateFunctionSpec(appbuild.FrameworkNext, provider.FunctionSpec{Memory: 3008})
 		if err != nil {
 			t.Fatalf("translateFunctionSpec: %v", err)
 		}
 		if got.MemorySizeMB != 3008 {
 			t.Errorf("MemorySizeMB = %d, want the spec's own 3008", got.MemorySizeMB)
-		}
-		if got.TimeoutSeconds != 45 {
-			t.Errorf("TimeoutSeconds = %d, want the spec's own 45", got.TimeoutSeconds)
 		}
 	})
 }

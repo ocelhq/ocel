@@ -13,6 +13,7 @@ var CONTAINER_HEADER = 'x-ocel-container';
 var CONTAINER_ORIGIN_ID = 'containers';
 var CONTROL_PREFIX = 'x-middleware-';
 var CONTROL_HEADERS = ['x-ocel-entry', 'next-resume', ORIGIN_SECRET_HEADER, CONTAINER_HEADER];
+var ORIGIN_READ_TIMEOUT_SECONDS = 60;
 
 function headerValue(headers, name) {
   var entry = headers[name];
@@ -147,6 +148,7 @@ async function handler(event) {
     originAccessControlConfig: { enabled: false },
     customOriginConfig: { port: 443, protocol: 'https', sslProtocols: ['TLSv1.2'] },
     customHeaders: originHeaders,
+    timeouts: { readTimeout: ORIGIN_READ_TIMEOUT_SECONDS },
   });
   return request;
 }

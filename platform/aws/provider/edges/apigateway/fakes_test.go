@@ -118,6 +118,7 @@ type fakeMethod struct {
 	open                bool
 	integration         agtypes.IntegrationType
 	transfer            agtypes.ResponseTransferMode
+	timeoutMillis       int32
 	uri                 string
 	credentials         string
 	requestTemplates    map[string]string
@@ -381,6 +382,7 @@ func (f *fakeGateway) PutIntegration(_ context.Context, in *apigateway.PutIntegr
 	m := f.method(api, aws.ToString(in.ResourceId), aws.ToString(in.HttpMethod))
 	m.integration = in.Type
 	m.transfer = in.ResponseTransferMode
+	m.timeoutMillis = aws.ToInt32(in.TimeoutInMillis)
 	m.uri = aws.ToString(in.Uri)
 	m.credentials = aws.ToString(in.Credentials)
 	m.requestTemplates = in.RequestTemplates

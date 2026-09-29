@@ -110,18 +110,14 @@ func translateFunctionSpec(appFramework string, spec provider.FunctionSpec) (fun
 	if spec.Memory > 0 {
 		memoryMB = spec.Memory
 	}
-	args := functionArgs{
+	return functionArgs{
 		Runtime:        execution.Runtime,
 		Handler:        handler,
 		Arch:           execution.Arch,
 		MemorySizeMB:   memoryMB,
 		TimeoutSeconds: defaultFunctionTimeoutSeconds,
 		InvokeMode:     functionURLInvokeModeStream,
-	}
-	if spec.Timeout > 0 {
-		args.TimeoutSeconds = int(spec.Timeout.Seconds())
-	}
-	return args, nil
+	}, nil
 }
 
 type execution struct {

@@ -8,6 +8,7 @@ import (
 	"os"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -818,5 +819,33 @@ func TestResolverCodeShipsInline(t *testing.T) {
 		if !strings.Contains(code, want) {
 			t.Errorf("the resolver does not contain %q", want)
 		}
+	}
+}
+
+func TestEveryOriginServingTheAppWaitsOnItForTheRequestTimeout(t *testing.T) {
+	t.Parallel()
+
+	want := int32(awsports.RequestTimeout / time.Second)
+
+	origins := distributionSpec{front: awsports.ContainerFront{VPCOrigin: "vo-1", Host: "front.internal"}}.origins()
+	var container *cftypes.Origin
+	for i := range origins.Items {
+		if aws.ToString(origins.Items[i].Id) == containerOriginID {
+			container = &origins.Items[i]
+		}
+	}
+	if container == nil || container.VpcOriginConfig == nil {
+		t.Fatalf("the distribution names no container origin; it has %v", origins.Items)
+	}
+	if got := aws.ToInt32(container.VpcOriginConfig.OriginReadTimeout); got != want {
+		t.Errorf("the container origin waits %ds, want %ds", got, want)
+	}
+
+	named := regexp.MustCompile(`var ORIGIN_READ_TIMEOUT_SECONDS = (\d+);`).FindSubmatch(resolver.Code())
+	if named == nil {
+		t.Fatal("the resolver names no read timeout for the function origin, so CloudFront cuts a function at its own 30s default")
+	}
+	if got := string(named[1]); got != strconv.Itoa(int(want)) {
+		t.Errorf("the resolver waits %ss on a function origin, want %ds", got, want)
 	}
 }
