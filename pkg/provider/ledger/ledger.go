@@ -98,37 +98,56 @@ func (l *Ledger) read(ctx context.Context, name string) (Pointer, keyvalue.Entry
 	return read, stored, nil
 }
 
-func (l *Ledger) change(ctx context.Context, name string, apply func(Pointer) (Pointer, error)) (Pointer, error) {
+func (l *Ledger) change(ctx context.Context, name string, apply func(Pointer) (Pointer, []RecordedPromotion, error)) (Pointer, []RecordedPromotion, error) {
 	for range casAttempts {
 		current, stored, err := l.read(ctx, name)
 		if err != nil {
-			return Pointer{}, err
+			return Pointer{}, nil, err
 		}
-		next, err := apply(current)
+		next, dropped, err := apply(current)
 		if err != nil {
-			return Pointer{}, err
+			return Pointer{}, nil, err
 		}
-		if stored.Value, err = json.Marshal(next); err != nil {
-			return Pointer{}, fmt.Errorf("encode the pointer %s: %w", name, err)
-		}
-		_, err = l.keyValues.Write(ctx, stored)
+		err = l.write(ctx, stored, next)
 		if errors.Is(err, keyvalue.ErrStale) {
 			continue
 		}
 		if err != nil {
-			return Pointer{}, fmt.Errorf("write the pointer %s: %w", name, err)
+			return Pointer{}, nil, err
 		}
-		return next, nil
+		return next, dropped, nil
 	}
-	return Pointer{}, fmt.Errorf("write the pointer %s: it moved under %d attempts", name, casAttempts)
+	return Pointer{}, nil, fmt.Errorf("write the pointer %s: it moved under %d attempts", name, casAttempts)
+}
+
+func (l *Ledger) write(ctx context.Context, stored keyvalue.Entry, next Pointer) error {
+	if next.Active == "" && len(next.Promotions) == 0 {
+		if len(stored.Value) == 0 {
+			return nil
+		}
+		err := l.keyValues.Remove(ctx, stored.Key, stored.Revision)
+		if errors.Is(err, keyvalue.ErrNotFound) {
+			return keyvalue.ErrStale
+		}
+		if err != nil && !errors.Is(err, keyvalue.ErrStale) {
+			return fmt.Errorf("remove the pointer %s: %w", next.Name, err)
+		}
+		return err
+	}
+	var err error
+	if stored.Value, err = json.Marshal(next); err != nil {
+		return fmt.Errorf("encode the pointer %s: %w", next.Name, err)
+	}
+	_, err = l.keyValues.Write(ctx, stored)
+	if err != nil && !errors.Is(err, keyvalue.ErrStale) {
+		return fmt.Errorf("write the pointer %s: %w", next.Name, err)
+	}
+	return err
 }
 
 func (l *Ledger) Promote(ctx context.Context, promotion router.Promotion, pointer, replaces string) (router.PruneResult, error) {
-	var dropped []RecordedPromotion
-	kept, err := l.change(ctx, router.ResolvePointer(pointer), func(current Pointer) (Pointer, error) {
-		next, lost, err := current.Promote(promotion, replaces, KeptPromotions)
-		dropped = lost
-		return next, err
+	kept, dropped, err := l.change(ctx, router.ResolvePointer(pointer), func(current Pointer) (Pointer, []RecordedPromotion, error) {
+		return current.Promote(promotion, replaces, KeptPromotions)
 	})
 	if err != nil {
 		return router.PruneResult{}, err
@@ -139,11 +158,20 @@ func (l *Ledger) Promote(ctx context.Context, promotion router.Promotion, pointe
 	return l.removeDropped(ctx, kept, dropped)
 }
 
+func (l *Ledger) changeDropping(ctx context.Context, pointer string, apply func(Pointer) (Pointer, []RecordedPromotion, error)) (router.PruneResult, error) {
+	kept, dropped, err := l.change(ctx, router.ResolvePointer(pointer), apply)
+	if err != nil {
+		return router.PruneResult{}, err
+	}
+	return l.removeDropped(ctx, kept, dropped)
+}
+
 func (l *Ledger) Unpromote(ctx context.Context, promotionID, pointer string) error {
 	ctx, stop := context.WithTimeout(context.WithoutCancel(ctx), unpromoteWindow)
 	defer stop()
-	_, err := l.change(ctx, router.ResolvePointer(pointer), func(current Pointer) (Pointer, error) {
-		return current.Unpromote(promotionID)
+	_, _, err := l.change(ctx, router.ResolvePointer(pointer), func(current Pointer) (Pointer, []RecordedPromotion, error) {
+		next, err := current.Unpromote(promotionID)
+		return next, nil, err
 	})
 	return err
 }
@@ -173,38 +201,17 @@ func (l *Ledger) ReadActive(ctx context.Context, pointer string) (router.Promoti
 	return read.Promotions[at].Promotion, true, nil
 }
 
-func (l *Ledger) Prune(ctx context.Context, keepN int, pointer string) (router.PruneResult, error) {
-	var dropped []RecordedPromotion
-	kept, err := l.change(ctx, router.ResolvePointer(pointer), func(current Pointer) (Pointer, error) {
-		next, lost := current.Retain(keepN)
-		dropped = lost
-		return next, nil
+func (l *Ledger) Prune(ctx context.Context, keep int, pointer string) (router.PruneResult, error) {
+	return l.changeDropping(ctx, pointer, func(current Pointer) (Pointer, []RecordedPromotion, error) {
+		kept, dropped := current.Retain(keep)
+		return kept, dropped, nil
 	})
-	if err != nil {
-		return router.PruneResult{}, err
-	}
-	return l.removeDropped(ctx, kept, dropped)
 }
 
 func (l *Ledger) RemovePointer(ctx context.Context, pointer string) (router.PruneResult, error) {
-	name := router.ResolvePointer(pointer)
-	for range casAttempts {
-		current, stored, err := l.read(ctx, name)
-		if err != nil {
-			return router.PruneResult{}, err
-		}
-		if len(stored.Value) > 0 {
-			err = l.keyValues.Remove(ctx, stored.Key, stored.Revision)
-		}
-		if errors.Is(err, keyvalue.ErrStale) {
-			continue
-		}
-		if err != nil && !errors.Is(err, keyvalue.ErrNotFound) {
-			return router.PruneResult{}, fmt.Errorf("remove the pointer %s: %w", name, err)
-		}
-		return l.removeDropped(ctx, Pointer{Name: name}, current.Promotions)
-	}
-	return router.PruneResult{}, fmt.Errorf("remove the pointer %s: it moved under %d attempts", name, casAttempts)
+	return l.changeDropping(ctx, pointer, func(current Pointer) (Pointer, []RecordedPromotion, error) {
+		return Pointer{Name: current.Name}, current.Promotions, nil
+	})
 }
 
 func (l *Ledger) removeDropped(ctx context.Context, kept Pointer, dropped []RecordedPromotion) (router.PruneResult, error) {
