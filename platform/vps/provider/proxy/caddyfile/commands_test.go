@@ -28,7 +28,7 @@ func TestTheSnippetIsAdaptedByTheHostsCaddyWhenCaddyRunsAsAService(t *testing.T)
 	t.Parallel()
 
 	machine := &box{}
-	rendered := []byte(golden(t, "loopback.caddy"))
+	rendered := []byte(golden(t, "service.caddy"))
 	if err := (caddyfile.Caddyfile{Box: machine, Port: 8480}).Validate(context.Background(), rendered); err != nil {
 		t.Fatalf("Validate() = %v", err)
 	}

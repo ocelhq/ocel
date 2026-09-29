@@ -209,9 +209,16 @@ bare port:
 
 ```txt title="ocel.caddy"
 shop.example.com, ocel-edge-probe.preview.example.com, pr-12--web.preview.example.com {
-	reverse_proxy ocel-switchboard:8443
+	reverse_proxy ocel-switchboard:8443 {
+		stream_close_delay 30s
+	}
 }
 ```
+
+`stream_close_delay` keeps a WebSocket or other stream open for 30s across a reload. It needs
+Caddy 2.7 or later, which the official image and Coolify's Caddy are. A Caddy that runs as
+`caddy.service` gets the block without it, because the Debian and Ubuntu package is 2.6.2 on
+noble and refuses it.
 
 Your Caddy reaches the switchboard by name on `network`, or on `127.0.0.1:<port>` without one. A
 Caddy in a container with no `network` must run with `network_mode: host`, because the loopback of
@@ -232,8 +239,9 @@ your Caddy in its own environment, where `{$VAR}` placeholders in your Caddyfile
 
 A reload your Caddy refuses leaves its old config running. Ocel puts the previous `ocel.caddy`
 back and refuses the claim with Caddy's error, which can come from your own Caddyfile. Ocel
-reloads only when the hostnames change, never on a release. A reload closes the WebSocket and
-other streaming connections your Caddy is proxying, and can drop about one request under load.
+reloads only when the hostnames change, never on a release. A reload can drop about one request
+under load, and as `caddy.service` it also closes the WebSocket and other streaming connections
+your Caddy is proxying.
 
 `caddy reload` needs the admin endpoint, so bootstrap refuses a Caddy run with `admin off`.
 Ocel also reads what your Caddy serves from it (`GET /config/apps/http/servers` on
