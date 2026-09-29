@@ -143,6 +143,45 @@ func TestDestroyUnplacesOcelCaddyReloadsYourCaddyAndTakesTheSudoersLine(t *testi
 	}
 }
 
+func TestDestroyReloadsYourCaddyOnlyWhenOcelCaddyWasThereToTake(t *testing.T) {
+	t.Parallel()
+
+	for name, placed := range map[string]bool{"placed": true, "never placed": false} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			dir, bin := t.TempDir(), t.TempDir()
+			ran := filepath.Join(bin, "ran")
+			docker := "#!/bin/sh\nprintf '%s\\n' \"$*\" >> " + quoted(ran) + "\n[ \"$1\" = inspect ] && echo true\n[ \"$2\" = " + SwitchboardContainer + " ] && exit 1\nexit 0\n"
+			if err := os.WriteFile(filepath.Join(bin, "docker"), []byte(docker), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if placed {
+				if err := os.WriteFile(filepath.Join(dir, caddyfile.FileName), []byte("shop.example.com {\n}\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			filled := CaddyFront{Directory: dir, Container: "caddy", Network: "web"}.Filled()
+			taken := Front{Caddy: &filled}.placedRemovals()[0]
+			run := exec.Command("sh", "-c", taken.command())
+			run.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"))
+			said, err := run.CombinedOutput()
+			if err != nil {
+				t.Fatalf("the removal failed: %v\n%s", err, said)
+			}
+			calls, _ := os.ReadFile(ran)
+			if reloaded := strings.Contains(string(calls), "caddy reload"); reloaded != placed {
+				t.Errorf("with ocel.caddy %s the destroy ran docker %q, want your Caddy reloaded = %v: a destroy that took nothing has nothing for your Caddy to drop", name, calls, placed)
+			}
+			if placed {
+				if _, err := os.Stat(filepath.Join(dir, caddyfile.FileName)); !os.IsNotExist(err) {
+					t.Errorf("%s is still there after the destroy: %v", caddyfile.FileName, err)
+				}
+			}
+		})
+	}
+}
+
 func TestBootstrapRefusesACaddyWhoseAdminEndpointIsOff(t *testing.T) {
 	t.Parallel()
 
