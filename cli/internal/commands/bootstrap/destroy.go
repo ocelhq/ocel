@@ -8,9 +8,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/executables"
-	"github.com/ocelhq/ocel/cli/internal/preflight"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
+	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
@@ -28,7 +28,7 @@ func RunDestroy(ctx context.Context, invocation commands.Invocation, cwd string,
 }
 
 func runDestroy(ctx context.Context, invocation commands.Invocation, cfg *project.Project, tier environmentv1.Tier, opts Options, stdout io.Writer, stdin io.Reader) (err error) {
-	name := Name(tier)
+	name := readiness.TierName(tier)
 	bypass, notice, err := consent.Bypass{
 		Noun:         "bootstrap",
 		Subject:      name,
@@ -70,7 +70,7 @@ func runDestroy(ctx context.Context, invocation commands.Invocation, cfg *projec
 	}
 	defer prov.Close()
 
-	err = preflight.Announce(ctx, check, prov, cfg, tier)
+	_, err = readiness.Check(ctx, check, prov, cfg, readiness.Request{Tier: tier, Require: readiness.Credentials, Slug: cfg.Slug})
 	check.End(err)
 	if err != nil {
 		return err
@@ -124,5 +124,5 @@ func runDestroy(ctx context.Context, invocation commands.Invocation, cfg *projec
 }
 
 func destroyCommand(tier environmentv1.Tier) string {
-	return "ocel bootstrap destroy " + Name(tier)
+	return "ocel bootstrap destroy " + readiness.TierName(tier)
 }

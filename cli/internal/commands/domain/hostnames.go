@@ -13,7 +13,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/consent"
-	"github.com/ocelhq/ocel/cli/internal/preflight"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -50,7 +49,7 @@ func listProductionHostnames(ctx context.Context, invocation commands.Invocation
 		func(ctx context.Context, client contractv1connect.ProviderServiceClient) (err error) {
 			resp, err = client.GetHostnameStatus(ctx, &contractv1.HostnameRequest{
 				Slug:       cfg.Slug,
-				Configured: preflight.Configured(preflight.Hostnames(cfg, environmentv1.Tier_TIER_PRODUCTION)),
+				Configured: cfg.ConfiguredHostnames(environmentv1.Tier_TIER_PRODUCTION),
 				Edge:       cfg.EdgeSelection(),
 			})
 			return err
@@ -63,14 +62,13 @@ func runDomainAdd(ctx context.Context, invocation commands.Invocation, cwd, host
 	if err != nil {
 		return err
 	}
-	declared := preflight.Hostnames(cfg, environmentv1.Tier_TIER_PRODUCTION)
-	configured := preflight.Names(declared)
+	configured := cfg.HostnameNames(environmentv1.Tier_TIER_PRODUCTION)
 	if len(configured) == 0 {
 		return fmt.Errorf("this project declares no domains.production in %s, so there is no production hostname to add: declare one and run `ocel domain add` again — no command edits the config", filepath.Base(cfg.Path))
 	}
 	req := &contractv1.HostnameRequest{
 		Slug:       cfg.Slug,
-		Configured: preflight.Configured(declared),
+		Configured: cfg.ConfiguredHostnames(environmentv1.Tier_TIER_PRODUCTION),
 		Host:       host,
 		Edge:       cfg.EdgeSelection(),
 	}
@@ -158,7 +156,7 @@ func runDomainRemove(ctx context.Context, invocation commands.Invocation, cwd, h
 	}
 	req := &contractv1.HostnameRequest{
 		Slug:       cfg.Slug,
-		Configured: preflight.Configured(preflight.Hostnames(cfg, environmentv1.Tier_TIER_PRODUCTION)),
+		Configured: cfg.ConfiguredHostnames(environmentv1.Tier_TIER_PRODUCTION),
 		Host:       host,
 		Edge:       cfg.EdgeSelection(),
 	}

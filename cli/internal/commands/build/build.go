@@ -17,9 +17,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/language"
-	"github.com/ocelhq/ocel/cli/internal/preflight"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
+	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/node"
 	"github.com/ocelhq/ocel/pkg/arch"
@@ -115,7 +115,7 @@ func resolveBuiltComputes(ctx context.Context, dependencies Dependencies, buildi
 		return nil, err
 	}
 	defer prov.Close()
-	return preflight.ResolveComputesFromProvider(ctx, prov, declared)
+	return readiness.ResolveComputes(ctx, prov, declared)
 }
 
 func appBuildLog(phase *run.Span) build.Log {

@@ -14,7 +14,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/commands"
-	"github.com/ocelhq/ocel/cli/internal/preflight"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
@@ -68,7 +67,7 @@ func readDomainStatus(ctx context.Context, invocation commands.Invocation, cfg *
 
 	req := &contractv1.HostnameRequest{
 		Slug:       cfg.Slug,
-		Configured: preflight.Configured(preflight.Hostnames(cfg, environmentv1.Tier_TIER_PRODUCTION)),
+		Configured: cfg.ConfiguredHostnames(environmentv1.Tier_TIER_PRODUCTION),
 		Edge:       cfg.EdgeSelection(),
 		Probe:      true,
 	}

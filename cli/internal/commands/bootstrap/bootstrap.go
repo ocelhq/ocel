@@ -14,9 +14,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
-	"github.com/ocelhq/ocel/cli/internal/preflight"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
+	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -62,7 +62,7 @@ func NewCommand(invocation commands.Invocation) *cobra.Command {
 func newProvisionCommand(invocation commands.Invocation, tier environmentv1.Tier, aliases []string) *cobra.Command {
 	var opts Options
 
-	name := Name(tier)
+	name := readiness.TierName(tier)
 	cmd := &cobra.Command{
 		Use:     name,
 		Aliases: aliases,
@@ -160,7 +160,7 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier e
 	if _, err := cfg.RequireProvider(); err != nil {
 		return err
 	}
-	command := "ocel bootstrap " + Name(tier)
+	command := readiness.BootstrapCommand(tier)
 	policy := consent.NewPolicy(command, opts.Yes, invocation.StdinIsTerminal(stdin), stdout, stdin)
 	policy.ConfirmsPlan = true
 	policy.DryRun = opts.Dry
@@ -196,7 +196,7 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier e
 	going := goingFeatures(catalogue, installed, named)
 	planning := run.Phase(progressv1.Phase_PHASE_PLAN)
 	if absent := without(named, installed); len(absent) > 0 {
-		planning.Say(fmt.Sprintf("%s is not in the %s bootstrap, so there is nothing to remove.", strings.Join(absent, ", "), Name(tier)))
+		planning.Say(fmt.Sprintf("%s is not in the %s bootstrap, so there is nothing to remove.", strings.Join(absent, ", "), readiness.TierName(tier)))
 	}
 	if len(named) > 0 && len(going) == 0 && !opts.FeaturesDeclared {
 		return nil
@@ -210,7 +210,7 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier e
 	}
 	if !selected {
 		planning.Say("No feature was picked")
-		run.Succeed(fmt.Sprintf("Left the %s bootstrap as it is", Name(tier)))
+		run.Succeed(fmt.Sprintf("Left the %s bootstrap as it is", readiness.TierName(tier)))
 		return nil
 	}
 	if err := bothWays(requested, named); err != nil {
@@ -232,7 +232,7 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier e
 		return req
 	}
 
-	unit := planning.Unit(Name(tier), progress.Planning.Title(fmt.Sprintf("the changes to the %s bootstrap", Name(tier))))
+	unit := planning.Unit(readiness.TierName(tier), progress.Planning.Title(fmt.Sprintf("the changes to the %s bootstrap", readiness.TierName(tier))))
 	plan, err := providerprocess.Plan(ctx, prov, "Bootstrap", request(true), contractv1connect.ProviderServiceClient.Bootstrap)
 	unit.End(err)
 	if err != nil {
@@ -246,9 +246,9 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier e
 		if !consent.Mutates(plan) {
 			notes = append(notes, &planv1.Note{Text: unchanged(tier)})
 		}
-		consented = planning.Plan(fmt.Sprintf("Proposed changes to the %s bootstrap", Name(tier)), plan, notes...)
+		consented = planning.Plan(fmt.Sprintf("Proposed changes to the %s bootstrap", readiness.TierName(tier)), plan, notes...)
 	case len(going) > 0:
-		planning.Warn(fmt.Sprintf("Removing %s from the %s bootstrap tears down what it installed.", strings.Join(going, ", "), Name(tier)))
+		planning.Warn(fmt.Sprintf("Removing %s from the %s bootstrap tears down what it installed.", strings.Join(going, ", "), readiness.TierName(tier)))
 		if dependents := dependentProjects(catalogue, going); len(dependents) > 0 {
 			planning.Warn(fmt.Sprintf("These projects were deployed against it and break when it goes: %s", strings.Join(dependents, ", ")))
 		}
@@ -268,7 +268,7 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier e
 	}
 	if opts.Dry {
 		planning.Say("Run without --dry to apply.")
-		run.Succeed(fmt.Sprintf("Planned the %s bootstrap", Name(tier)))
+		run.Succeed(fmt.Sprintf("Planned the %s bootstrap", readiness.TierName(tier)))
 		return nil
 	}
 
@@ -278,12 +278,12 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier e
 			return err
 		}
 		if !proceed {
-			run.Succeed(fmt.Sprintf("Left the %s bootstrap as it is", Name(tier)))
+			run.Succeed(fmt.Sprintf("Left the %s bootstrap as it is", readiness.TierName(tier)))
 			return nil
 		}
 	}
 
-	title := fmt.Sprintf("Bootstrap %s infrastructure with %s?", Name(tier), prov.Name())
+	title := fmt.Sprintf("Bootstrap %s infrastructure with %s?", readiness.TierName(tier), prov.Name())
 	if rendered {
 		title = fmt.Sprintf("%s with %s?", consent.ConfirmVerb(consented), prov.Name())
 	}
@@ -292,7 +292,7 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier e
 		return err
 	}
 	if !granted {
-		run.Succeed(fmt.Sprintf("Left the %s bootstrap as it is", Name(tier)))
+		run.Succeed(fmt.Sprintf("Left the %s bootstrap as it is", readiness.TierName(tier)))
 		return nil
 	}
 	planning.End(nil)
@@ -305,12 +305,12 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier e
 	if _, err := providerprocess.Stream(ctx, prov, "Bootstrap", req, contractv1connect.ProviderServiceClient.Bootstrap); err != nil {
 		return err
 	}
-	run.Succeed(fmt.Sprintf("Bootstrapped the %s environment", Name(tier)))
+	run.Succeed(fmt.Sprintf("Bootstrapped the %s environment", readiness.TierName(tier)))
 	return nil
 }
 
 func describeBootstrap(ctx context.Context, check *run.Span, prov *providerprocess.Provider, cfg *project.Project, tier environmentv1.Tier) (*contractv1.DescribeBootstrapResponse, error) {
-	if err := preflight.Announce(ctx, check, prov, cfg, tier); err != nil {
+	if _, err := readiness.Check(ctx, check, prov, cfg, readiness.Request{Tier: tier, Require: readiness.Credentials, Slug: cfg.Slug}); err != nil {
 		return nil, err
 	}
 	var planned *contractv1.DescribeBootstrapResponse
@@ -342,17 +342,10 @@ func downgradeWarning(tier environmentv1.Tier, status *contractv1.BootstrapStatu
 	}
 	return fmt.Sprintf(
 		"The %s bootstrap was last written by %s and this one is %s: the same shape, older content.\nEvery stack it writes goes back to what this build has.",
-		Name(tier), wroteIt, status.GetWriter(),
+		readiness.TierName(tier), wroteIt, status.GetWriter(),
 	)
 }
 
-func Name(tier environmentv1.Tier) string {
-	if tier == environmentv1.Tier_TIER_PREVIEW {
-		return "preview"
-	}
-	return "production"
-}
-
 func unchanged(tier environmentv1.Tier) string {
-	return fmt.Sprintf("Nothing in the %s bootstrap's infrastructure changes: applying only refreshes its seals and records", Name(tier))
+	return fmt.Sprintf("Nothing in the %s bootstrap's infrastructure changes: applying only refreshes its seals and records", readiness.TierName(tier))
 }

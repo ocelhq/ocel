@@ -14,13 +14,12 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/commands"
-	"github.com/ocelhq/ocel/cli/internal/commands/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
-	"github.com/ocelhq/ocel/cli/internal/preflight"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
+	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/version"
@@ -152,14 +151,14 @@ func diagnose(ctx context.Context, invocation commands.Invocation, cwd string) r
 
 	hosts := map[environmentv1.Tier][]string{}
 	for _, tier := range tiers {
-		hosts[tier] = preflight.Names(preflight.Hostnames(cfg, tier))
+		hosts[tier] = cfg.HostnameNames(tier)
 	}
 	found.add(checked)
 
 	if providerErr != nil {
 		found.add(skippedSection("Credentials"))
 		for _, tier := range tiers {
-			found.add(skippedSection(title(bootstrap.Name(tier))))
+			found.add(skippedSection(title(readiness.TierName(tier))))
 		}
 		return found
 	}
@@ -317,7 +316,7 @@ func hostCheckDomains(asking bool, cfg *project.Project) []string {
 	}
 	var named []string
 	for _, tier := range tiers {
-		for _, hostname := range preflight.Names(preflight.Hostnames(cfg, tier)) {
+		for _, hostname := range cfg.HostnameNames(tier) {
 			if !slices.Contains(named, hostname) {
 				named = append(named, hostname)
 			}
@@ -361,13 +360,12 @@ func askProvider(ctx context.Context, invocation commands.Invocation, cfg *proje
 
 	for _, tier := range tiers {
 		checkHosts := tier == environmentv1.Tier_TIER_PRODUCTION
-		var resp *contractv1.PreflightResponse
-		err := prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
-			req := preflight.NewRequest(cfg, tier, cfg.Slug, preflight.Names(preflight.Hostnames(cfg, tier)), preflight.Frameworks(cfg))
-			req.CheckHosts = checkHosts
-			req.HostCheckDomains = hostCheckDomains(checkHosts, cfg)
-			resp, err = client.Preflight(ctx, req)
-			return err
+		resp, err := readiness.Read(ctx, prov, cfg, readiness.Request{
+			Tier:             tier,
+			Slug:             cfg.Slug,
+			Domains:          cfg.HostnameNames(tier),
+			CheckHosts:       checkHosts,
+			HostCheckDomains: hostCheckDomains(checkHosts, cfg),
 		})
 		if err != nil {
 			return err
@@ -393,7 +391,7 @@ func askProvider(ctx context.Context, invocation commands.Invocation, cfg *proje
 		if tier != environmentv1.Tier_TIER_PRODUCTION || !planned.GetBootstrap().GetPresent() {
 			continue
 		}
-		configured := preflight.Configured(preflight.Hostnames(cfg, tier))
+		configured := cfg.ConfiguredHostnames(tier)
 		if len(configured) == 0 {
 			continue
 		}
@@ -523,7 +521,7 @@ func identityText(identity *contractv1.Identity) string {
 }
 
 func tierSection(tier environmentv1.Tier, hosts []string, got *answers) section {
-	name := bootstrap.Name(tier)
+	name := readiness.TierName(tier)
 	s := section{name: title(name), identity: strings.Join(hosts, ", ")}
 
 	answer := got.tiers[tier]
@@ -549,27 +547,27 @@ func tierSection(tier environmentv1.Tier, hosts []string, got *answers) section 
 			s.neutral(absentText(tier))
 			return s
 		}
-		s.warn("not bootstrapped", "run `ocel bootstrap "+name+"`")
+		s.warn("not bootstrapped", "run `"+readiness.BootstrapCommand(tier)+"`")
 		return s
 	}
 
 	if status.GetUnfinished() {
 		s.fail("an apply never finished, so nothing recorded is a claim about what is provisioned",
-			"run `ocel bootstrap "+name+"` to plan the work that is left and finish it")
+			"run `"+readiness.BootstrapCommand(tier)+"` to plan the work that is left and finish it")
 		return s
 	}
 
-	plan := bootstrap.PlanFor(status)
+	gap := readiness.NewGap(status)
 	stale := staleStacks(status)
-	if len(plan.Missing) == 0 && len(stale) == 0 {
+	if len(gap.Missing) == 0 && len(stale) == 0 {
 		s.pass("bootstrapped, current")
 		return s
 	}
-	if len(plan.Missing) > 0 {
-		s.warn(listText(plan.Missing, "missing"), "run `"+plan.Command(tier)+"`")
+	if len(gap.Missing) > 0 {
+		s.warn(listText(gap.Missing, "missing"), "run `"+gap.RepairCommand(tier)+"`")
 	}
 	if len(stale) > 0 {
-		s.warn(listText(stale, "stale"), "run `ocel bootstrap "+name+"` to refresh "+them(len(stale)))
+		s.warn(listText(stale, "stale"), "run `"+readiness.BootstrapCommand(tier)+"` to refresh "+them(len(stale)))
 	}
 	return s
 }
@@ -596,10 +594,11 @@ func previewDomain(s *section, hosts []string, global string) {
 }
 
 func absentText(tier environmentv1.Tier) string {
+	purpose := "set it up"
 	if tier == environmentv1.Tier_TIER_PREVIEW {
-		return "not set up — run `ocel bootstrap preview` to add previews"
+		purpose = "add previews"
 	}
-	return "not set up — run `ocel bootstrap production` to set it up"
+	return "not set up — run `" + readiness.BootstrapCommand(tier) + "` to " + purpose
 }
 
 func listText(names []string, state string) string {

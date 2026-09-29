@@ -42,7 +42,7 @@ on:
       - "cli/internal/providerprocess/**"
       - "cli/internal/terminal/**"
       - "cli/internal/commands/bootstrap/**"
-      - "cli/internal/preflight/**"
+      - "cli/internal/readiness/**"
       - "cli/internal/commands/doctor/**"
       - "cli/internal/build/**"
       - "cli/internal/incustest/**"

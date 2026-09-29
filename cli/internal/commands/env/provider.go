@@ -8,11 +8,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/commands/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/executables"
-	"github.com/ocelhq/ocel/cli/internal/preflight"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
+	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -71,7 +70,7 @@ func runWithEnvProvider(ctx context.Context, dependencies Dependencies, cwd stri
 }
 
 func preflightEnvProvider(ctx context.Context, dependencies Dependencies, check *run.Span, prov *providerprocess.Provider, cfg *project.Project, opts envOptions, keyOffer *variablesKeyOffer, stderr io.Writer) (*contractv1.PreflightResponse, error) {
-	status, err := preflight.Run(ctx, check, prov, cfg, opts.tier(), "", nil, nil, "ocel bootstrap "+bootstrap.Name(opts.tier()))
+	status, err := readiness.Check(ctx, check, prov, cfg, readiness.Request{Tier: opts.tier(), Require: readiness.Infrastructure})
 	if err != nil || keyOffer == nil {
 		return status, err
 	}
@@ -80,11 +79,11 @@ func preflightEnvProvider(ctx context.Context, dependencies Dependencies, check 
 
 func offerVariablesKey(ctx context.Context, dependencies Dependencies, check *run.Span, prov *providerprocess.Provider, cfg *project.Project, opts envOptions, status *contractv1.BootstrapStatus, stdin io.Reader, stderr io.Writer) error {
 	front := cfg.EdgeSelection()
-	offered, err := bootstrap.Offers(ctx, prov, opts.tier(), front, provider.FeatureVarsKey)
+	offered, err := readiness.HasOffer(ctx, prov, opts.tier(), front, provider.FeatureVarsKey)
 	if err != nil || !offered {
 		return err
 	}
-	plan := bootstrap.PlanOnly(status, provider.FeatureVarsKey)
-	return bootstrap.OfferPlan(ctx, check, prov, plan, opts.tier(), front,
+	gap := readiness.NewFeatureGap(status, provider.FeatureVarsKey)
+	return readiness.OfferRepair(ctx, check, prov, gap, opts.tier(), front,
 		dependencies.StdinIsTerminal(stdin), stderr, stdin)
 }

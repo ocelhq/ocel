@@ -18,9 +18,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/manifest"
-	"github.com/ocelhq/ocel/cli/internal/preflight"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
+	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
@@ -124,7 +124,7 @@ func price(ctx context.Context, dependencies Dependencies, prov *providerprocess
 	if !prov.Facts().GetPricesDeploys() {
 		return nil, nil, nil, fmt.Errorf("%s does not price a deploy, so there is nothing to scan", prov.Name())
 	}
-	resolved, err := preflight.ResolveComputesFromProvider(ctx, prov, cfg)
+	resolved, err := readiness.ResolveComputes(ctx, prov, cfg)
 	if err != nil {
 		return nil, nil, nil, err
 	}

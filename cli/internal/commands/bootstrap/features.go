@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -124,8 +125,8 @@ func catalogueEntry(catalogue []*contractv1.Feature, name string) *contractv1.Fe
 
 func printIncluded(stdout io.Writer, catalogue []*contractv1.Feature, included []string, tier environmentv1.Tier) {
 	printSection(stdout, catalogue, included,
-		fmt.Sprintf("Included in the %s bootstrap:", Name(tier)),
-		fmt.Sprintf("To take one down: ocel bootstrap %s --remove <name>", Name(tier)))
+		fmt.Sprintf("Included in the %s bootstrap:", readiness.TierName(tier)),
+		fmt.Sprintf("To take one down: ocel bootstrap %s --remove <name>", readiness.TierName(tier)))
 }
 
 func printRequired(stdout io.Writer, catalogue []*contractv1.Feature, required, kind string) {
@@ -210,7 +211,7 @@ func featureNeedingEdge(catalogue []*contractv1.Feature, kind string) string {
 
 func sayImplied(span *run.Span, tier environmentv1.Tier, pulled []implication) {
 	for _, p := range pulled {
-		span.Say(fmt.Sprintf("Also adding feature %s to the %s bootstrap: %s", p.name, Name(tier), p.reason))
+		span.Say(fmt.Sprintf("Also adding feature %s to the %s bootstrap: %s", p.name, readiness.TierName(tier), p.reason))
 	}
 }
 

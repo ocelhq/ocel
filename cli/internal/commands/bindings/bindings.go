@@ -21,11 +21,10 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"github.com/ocelhq/ocel/cli/internal/commands"
-	"github.com/ocelhq/ocel/cli/internal/commands/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/executables"
-	"github.com/ocelhq/ocel/cli/internal/preflight"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
+	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -193,7 +192,7 @@ func withBindingProvider(ctx context.Context, invocation commands.Invocation, cw
 	}
 	defer prov.Close()
 
-	err = preflight.Credentials(ctx, check, prov, cfg, opts.tier(), "ocel bootstrap "+bootstrap.Name(opts.tier()))
+	_, err = readiness.Check(ctx, check, prov, cfg, readiness.Request{Tier: opts.tier(), Require: readiness.Infrastructure})
 	check.End(err)
 	if err != nil {
 		return err

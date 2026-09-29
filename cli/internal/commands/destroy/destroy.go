@@ -10,11 +10,11 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/commands"
-	"github.com/ocelhq/ocel/cli/internal/commands/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
+	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -159,7 +159,7 @@ func destroyProject(ctx context.Context, invocation commands.Invocation, cfg *pr
 	}
 	defer prov.Close()
 
-	err = bootstrap.Ready(ctx, check, prov, cfg, tier, "ocel bootstrap "+bootstrap.Name(tier))
+	_, err = readiness.Check(ctx, check, prov, cfg, readiness.Request{Tier: tier, Require: readiness.Features})
 	check.End(err)
 	if err != nil {
 		return err
