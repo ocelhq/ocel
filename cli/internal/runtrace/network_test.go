@@ -82,7 +82,7 @@ func TestWhatTheNetworkExporterSendsCarriesNoFreeFormText(t *testing.T) {
 	body := sent.String()
 	mu.Unlock()
 	if !strings.Contains(body, "build") || !strings.Contains(body, "provision phase") {
-		t.Errorf("sent = %q, want spans named for their stage and phase", body)
+		t.Errorf("sent = %q, want spans named for their span name and phase", body)
 	}
 	for _, text := range []string{"sk_live_status", "sk_live_event", "orders-db-password-in-a-message"} {
 		if strings.Contains(body, text) {

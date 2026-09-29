@@ -13,16 +13,16 @@ const (
 	UnitPromotion   = "promotion"
 	UnitConnector   = "connector"
 
-	StageIDLen = 8
+	SpanIDLen = 8
 )
 
 func UnitID(unit string) []byte {
 	h := sha256.New()
-	writeStageField(h, unit)
-	return h.Sum(nil)[:StageIDLen]
+	writeSpanField(h, unit)
+	return h.Sum(nil)[:SpanIDLen]
 }
 
-func writeStageField(h hash.Hash, value string) {
+func writeSpanField(h hash.Hash, value string) {
 	var size [8]byte
 	binary.BigEndian.PutUint64(size[:], uint64(len(value)))
 	h.Write(size[:])

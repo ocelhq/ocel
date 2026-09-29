@@ -12,41 +12,41 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-type StageID [naming.StageIDLen]byte
+type SpanID [naming.SpanIDLen]byte
 
-func newStageID() StageID {
-	var id StageID
+func newSpanID() SpanID {
+	var id SpanID
 	if _, err := rand.Read(id[:]); err != nil {
-		panic("mint stage id: " + err.Error())
+		panic("mint span id: " + err.Error())
 	}
-	if id == (StageID{}) {
-		return newStageID()
+	if id == (SpanID{}) {
+		return newSpanID()
 	}
 	return id
 }
 
-func derivedStageID(raw []byte) StageID {
-	var id StageID
+func derivedSpanID(raw []byte) SpanID {
+	var id SpanID
 	copy(id[:], raw)
 	return id
 }
 
-type Stage struct {
-	ID       StageID
-	ParentID StageID
+type Span struct {
+	ID       SpanID
+	ParentID SpanID
 	Title    string
 	Phase    progressv1.Phase
 	Subject  string
 }
 
-func (s Stage) scoped(ev *progressv1.OperationEvent) *progressv1.OperationEvent {
+func (s Span) event(ev *progressv1.OperationEvent) *progressv1.OperationEvent {
 	ev.Phase = s.Phase
 	ev.Subject = s.Subject
 	ev.SpanId = s.ID[:]
 	return ev
 }
 
-const maxStageTitleLen = 200
+const maxSpanTitleLen = 200
 
 func stripControlChars(s string, capLen int) string {
 	var b strings.Builder
@@ -63,9 +63,9 @@ func stripControlChars(s string, capLen int) string {
 }
 
 func sanitizeTitle(title string) string {
-	out := stripControlChars(title, maxStageTitleLen)
+	out := stripControlChars(title, maxSpanTitleLen)
 	if out == "" {
-		return "stage"
+		return "span"
 	}
 	return out
 }
@@ -74,17 +74,17 @@ func sanitizeMessage(msg string) string {
 	return stripControlChars(msg, 0)
 }
 
-func UnitStage(name, subject, title string, phase progressv1.Phase) Stage {
-	return Stage{
-		ID:      derivedStageID(naming.UnitID(name)),
+func UnitSpan(name, subject, title string, phase progressv1.Phase) Span {
+	return Span{
+		ID:      derivedSpanID(naming.UnitID(name)),
 		Title:   sanitizeTitle(title),
 		Phase:   phase,
 		Subject: subject,
 	}
 }
 
-func NewStage(parent Stage, title string) Stage {
-	return Stage{ID: newStageID(), ParentID: parent.ID, Title: sanitizeTitle(title), Phase: parent.Phase, Subject: parent.Subject}
+func NewSpan(parent Span, title string) Span {
+	return Span{ID: newSpanID(), ParentID: parent.ID, Title: sanitizeTitle(title), Phase: parent.Phase, Subject: parent.Subject}
 }
 
 var attributeKeys = map[string]progressv1.AttributeKey{
@@ -100,42 +100,17 @@ var attributeKeys = map[string]progressv1.AttributeKey{
 
 func AttributeKey(key string) progressv1.AttributeKey { return attributeKeys[key] }
 
-type stageScope struct {
-	sender *eventStream
-	trace  *eventTrace
-}
-
-func newStageScope(sender *eventStream) *stageScope {
-	return &stageScope{sender: sender, trace: newEventTrace(sender)}
-}
-
-func (s *stageScope) unit(stage Stage, do func(*unitRun) error) error {
-	start := time.Now()
-	s.trace.Start(start, stage)
-	run := &unitRun{scope: s, stage: stage}
-	err := do(run)
-	if err != nil && !errors.Is(err, run.said) {
-		newProgress(s.sender, stage).Error(err.Error())
-	}
-	if err == nil && run.partial != "" {
-		s.trace.EndPartial(stage, start, time.Now(), run.partial)
-		return nil
-	}
-	s.trace.End(stage, start, time.Now(), err)
-	return err
-}
-
-type unitRun struct {
-	scope   *stageScope
-	stage   Stage
+type spanRun struct {
+	events  *spanEvents
+	span    Span
 	said    error
 	partial string
 }
 
-func (u *unitRun) recordPartial(result string) { u.partial = result }
+func (u *spanRun) recordPartial(result string) { u.partial = result }
 
-func (u *unitRun) phase(do func(progress.Progress) error) error {
-	progress := newProgress(u.scope.sender, u.stage)
+func (u *spanRun) phase(do func(progress.Progress) error) error {
+	progress := newProgress(u.events.sender, u.span)
 	err := do(progress)
 	if err != nil {
 		progress.Error(err.Error())
@@ -144,40 +119,56 @@ func (u *unitRun) phase(do func(progress.Progress) error) error {
 	return err
 }
 
-type eventTrace struct {
+type spanEvents struct {
 	sender *eventStream
 }
 
-func newEventTrace(sender *eventStream) *eventTrace {
-	return &eventTrace{sender: sender}
+func newSpanEvents(sender *eventStream) *spanEvents {
+	return &spanEvents{sender: sender}
 }
 
-func (t *eventTrace) Start(at time.Time, stages ...Stage) {
-	for _, s := range stages {
-		t.sender.send(s.scoped(&progressv1.OperationEvent{
+func (t *spanEvents) run(span Span, do func(*spanRun) error) error {
+	start := time.Now()
+	t.Start(start, span)
+	run := &spanRun{events: t, span: span}
+	err := do(run)
+	if err != nil && !errors.Is(err, run.said) {
+		newProgress(t.sender, span).Error(err.Error())
+	}
+	if err == nil && run.partial != "" {
+		t.EndPartial(span, start, time.Now(), run.partial)
+		return nil
+	}
+	t.End(span, start, time.Now(), err)
+	return err
+}
+
+func (t *spanEvents) Start(at time.Time, spans ...Span) {
+	for _, s := range spans {
+		t.sender.send(s.event(&progressv1.OperationEvent{
 			TimeUnixNano: at.UnixNano(),
 			Message:      s.Title,
 			Body: &progressv1.OperationEvent_Started{Started: &progressv1.Started{
-				ParentSpanId: nonZeroStageID(s.ParentID),
+				ParentSpanId: nonZeroSpanID(s.ParentID),
 			}},
 		}))
 	}
 }
 
-func (t *eventTrace) End(stage Stage, start, end time.Time, err error, attrs ...progress.Attr) {
+func (t *spanEvents) End(span Span, start, end time.Time, err error, attrs ...progress.Attr) {
 	status, level := progressv1.SpanStatus_SPAN_STATUS_OK, progressv1.Level_LEVEL_INFO
 	if err != nil {
 		status, level = progressv1.SpanStatus_SPAN_STATUS_ERROR, progressv1.Level_LEVEL_ERROR
 		attrs = append(attrs, progress.Attr{Key: provider.AttrKeyErrorKind, Value: provider.ClassifyError(err)})
 	}
-	t.ended(stage, start, end, status, level, "", attrs)
+	t.ended(span, start, end, status, level, "", attrs)
 }
 
-func (t *eventTrace) EndPartial(stage Stage, start, end time.Time, result string) {
-	t.ended(stage, start, end, progressv1.SpanStatus_SPAN_STATUS_OK, progressv1.Level_LEVEL_WARN, result, nil)
+func (t *spanEvents) EndPartial(span Span, start, end time.Time, result string) {
+	t.ended(span, start, end, progressv1.SpanStatus_SPAN_STATUS_OK, progressv1.Level_LEVEL_WARN, result, nil)
 }
 
-func (t *eventTrace) ended(stage Stage, start, end time.Time, status progressv1.SpanStatus, level progressv1.Level, message string, attrs []progress.Attr) {
+func (t *spanEvents) ended(span Span, start, end time.Time, status progressv1.SpanStatus, level progressv1.Level, message string, attrs []progress.Attr) {
 	pbAttrs := make([]*progressv1.SpanAttribute, len(attrs))
 	for i, a := range attrs {
 		pbAttrs[i] = &progressv1.SpanAttribute{Key: attributeKeys[a.Key], Value: a.Value}
@@ -186,10 +177,10 @@ func (t *eventTrace) ended(stage Stage, start, end time.Time, status progressv1.
 	t.sender.send(&progressv1.OperationEvent{
 		TimeUnixNano: end.UnixNano(),
 		Level:        level,
-		Phase:        stage.Phase,
-		Subject:      stage.Subject,
+		Phase:        span.Phase,
+		Subject:      span.Subject,
 		Message:      message,
-		SpanId:       stage.ID[:],
+		SpanId:       span.ID[:],
 		Body: &progressv1.OperationEvent_Ended{Ended: &progressv1.Ended{
 			Status:            status,
 			StartTimeUnixNano: start.UnixNano(),
@@ -198,8 +189,8 @@ func (t *eventTrace) ended(stage Stage, start, end time.Time, status progressv1.
 	})
 }
 
-func nonZeroStageID(id StageID) []byte {
-	if id == (StageID{}) {
+func nonZeroSpanID(id SpanID) []byte {
+	if id == (SpanID{}) {
 		return nil
 	}
 	return id[:]

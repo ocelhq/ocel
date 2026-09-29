@@ -116,7 +116,7 @@ func TestAttributesOutsideTheAllowlistNeverReachEitherArtifact(t *testing.T) {
 
 	spanCtx, span := r.StartSpan(ctx, "provisioning",
 		attribute.String("credential", secret),
-		attribute.String("ocel.stage", "provisioning"),
+		attribute.String("ocel.span_name", "provisioning"),
 	)
 	span.SetAttributes(attribute.String("env.DATABASE_URL", varValue))
 	r.Log(spanCtx, "web", "provisioning resources")
@@ -254,15 +254,15 @@ func TestSpanStatusCodeMapsToTheCorrectOTLPEnum(t *testing.T) {
 		t.Fatalf("Start() = %v", err)
 	}
 
-	_, ok := r.StartSpan(ctx, "ok-stage")
+	_, ok := r.StartSpan(ctx, "ok-span")
 	ok.SetStatus(codes.Ok, "")
 	ok.End()
 
-	_, failed := r.StartSpan(ctx, "err-stage")
+	_, failed := r.StartSpan(ctx, "err-span")
 	failed.SetStatus(codes.Error, "boom")
 	failed.End()
 
-	_, unset := r.StartSpan(ctx, "unset-stage")
+	_, unset := r.StartSpan(ctx, "unset-span")
 	unset.End()
 
 	if err := r.Close(); err != nil {
@@ -271,19 +271,19 @@ func TestSpanStatusCodeMapsToTheCorrectOTLPEnum(t *testing.T) {
 
 	spans := readTraceDoc(t, r)
 
-	okSpan := spanNamed(t, spans, "ok-stage")
+	okSpan := spanNamed(t, spans, "ok-span")
 	if okSpan.Status == nil || okSpan.Status.Code != "STATUS_CODE_OK" {
-		t.Errorf("ok-stage status = %+v, want STATUS_CODE_OK", okSpan.Status)
+		t.Errorf("ok-span status = %+v, want STATUS_CODE_OK", okSpan.Status)
 	}
 
-	errSpan := spanNamed(t, spans, "err-stage")
+	errSpan := spanNamed(t, spans, "err-span")
 	if errSpan.Status == nil || errSpan.Status.Code != "STATUS_CODE_ERROR" {
-		t.Errorf("err-stage status = %+v, want STATUS_CODE_ERROR", errSpan.Status)
+		t.Errorf("err-span status = %+v, want STATUS_CODE_ERROR", errSpan.Status)
 	}
 
-	unsetSpan := spanNamed(t, spans, "unset-stage")
+	unsetSpan := spanNamed(t, spans, "unset-span")
 	if unsetSpan.Status != nil {
-		t.Errorf("unset-stage status = %+v, want no status object", unsetSpan.Status)
+		t.Errorf("unset-span status = %+v, want no status object", unsetSpan.Status)
 	}
 }
 

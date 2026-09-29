@@ -52,35 +52,35 @@ func (h *handlers) Deploy(ctx context.Context, req *contractv1.DeployRequest, st
 	})
 }
 
-type deployStages struct {
-	Environment Stage
-	Infra       Stage
-	Apps        map[string]Stage
-	Edge        Stage
-	Hostnames   Stage
-	Promotion   Stage
+type deploySpans struct {
+	Environment Span
+	Infra       Span
+	Apps        map[string]Span
+	Edge        Span
+	Hostnames   Span
+	Promotion   Span
 }
 
-func (r *deployRun) newStages() deployStages {
+func (r *deployRun) newSpans() deploySpans {
 	env, kind := environmentSubject(r.spec.Tier, r.spec.Env), string(r.front.Kind())
 	where := environmentPhrase(r.spec.Tier, r.spec.Env)
 	routes, infra, app := "Reconciling the routes for %s in %s", "Provisioning %s", "Deploying the %s to %s"
 	if r.dry {
 		routes, infra, app = "Reading the routes for %s in %s", "Planning %s", "Planning the %s for %s"
 	}
-	s := deployStages{
-		Environment: UnitStage(naming.UnitEnvironment, env,
+	s := deploySpans{
+		Environment: UnitSpan(naming.UnitEnvironment, env,
 			"Checking the bootstrap, domains and bindings for "+r.spec.Slug, progressv1.Phase_PHASE_PROVISION),
-		Infra: UnitStage(r.spec.Infra.String(), env, fmt.Sprintf(infra, r.describeInfra()), progressv1.Phase_PHASE_PROVISION),
-		Edge:  UnitStage(naming.UnitEdge, kind, fmt.Sprintf(routes, r.spec.Slug, where), progressv1.Phase_PHASE_PROVISION),
-		Hostnames: UnitStage(naming.UnitHostnames, kind,
+		Infra: UnitSpan(r.spec.Infra.String(), env, fmt.Sprintf(infra, r.describeInfra()), progressv1.Phase_PHASE_PROVISION),
+		Edge:  UnitSpan(naming.UnitEdge, kind, fmt.Sprintf(routes, r.spec.Slug, where), progressv1.Phase_PHASE_PROVISION),
+		Hostnames: UnitSpan(naming.UnitHostnames, kind,
 			"Attaching "+namedList("production hostname", "production hostnames", r.hostnames()), progressv1.Phase_PHASE_PROVISION),
-		Promotion: UnitStage(naming.UnitPromotion, env,
+		Promotion: UnitSpan(naming.UnitPromotion, env,
 			"Switching traffic to promotion "+r.spec.PromotionID, progressv1.Phase_PHASE_PROMOTE),
-		Apps: make(map[string]Stage, len(r.spec.Apps)),
+		Apps: make(map[string]Span, len(r.spec.Apps)),
 	}
 	for _, entry := range r.spec.Apps {
-		s.Apps[entry.App] = UnitStage(entry.Stack.String(), entry.App,
+		s.Apps[entry.App] = UnitSpan(entry.Stack.String(), entry.App,
 			fmt.Sprintf(app, appNoun(entry), where), progressv1.Phase_PHASE_DEPLOY)
 	}
 	return s
@@ -153,10 +153,10 @@ type deployRun struct {
 	transforms   []string
 	artifactRoot string
 	sender       *eventStream
-	tracked      *stageScope
+	spanEvents   *spanEvents
 	manifest     *contractv1.Manifest
 	spec         provider.DeploySpec
-	stages       deployStages
+	spans        deploySpans
 
 	wildcard   stackrecords.Wildcard
 	previewOn  string
@@ -256,7 +256,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 		transforms:     h.session.transforms(),
 		artifactRoot:   h.session.artifactRoot(),
 		sender:         sender,
-		tracked:        newStageScope(sender),
+		spanEvents:     newSpanEvents(sender),
 		manifest:       req.GetManifest(),
 		spec:           spec,
 		selection:      req.GetEdge(),
@@ -277,7 +277,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 	if run.state, err = run.store.read(ctx); err != nil {
 		return nil, err
 	}
-	run.stages = run.newStages()
+	run.spans = run.newSpans()
 	run.outcomes = pendingOutcomes(spec.Apps)
 	run.dryRunPlan.apps = make([]provider.Plan, len(spec.Apps))
 	sender.detailing(run.reportApps)
@@ -297,7 +297,7 @@ func (r *deployRun) reportApps(result *progressv1.ResultEvent) {
 }
 
 func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, error) {
-	if err := r.tracked.unit(r.stages.Environment, func(env *unitRun) error {
+	if err := r.spanEvents.run(r.spans.Environment, func(env *spanRun) error {
 		return env.phase(func(progress progress.Progress) error {
 			return r.prepare(ctx, progress)
 		})
@@ -398,7 +398,7 @@ func (r *deployRun) resolveServingDomains(ctx context.Context) error {
 		return err
 	}
 	r.installDNSCutover(writer, r.selection.GetDns().GetZone())
-	r.cutover.manual = failOnManualRecords(r.sender, r.stages.Hostnames)
+	r.cutover.manual = failOnManualRecords(r.sender, r.spans.Hostnames)
 	return nil
 }
 
@@ -436,7 +436,7 @@ func (r *deployRun) hostingMode() hostingMode {
 }
 
 func (r *deployRun) reconcileEdgeUnit(ctx context.Context) error {
-	return r.tracked.unit(r.stages.Edge, func(u *unitRun) error {
+	return r.spanEvents.run(r.spans.Edge, func(u *spanRun) error {
 		return u.phase(func(progress progress.Progress) error {
 			if r.dry {
 				r.dryRunPlan.edge = r.planEdgeGroup()
@@ -521,7 +521,7 @@ func (r *deployRun) attachHostnames(ctx context.Context) error {
 	if r.dry || r.hostingMode() != hostingProduction {
 		return nil
 	}
-	return r.tracked.unit(r.stages.Hostnames, func(u *unitRun) error {
+	return r.spanEvents.run(r.spans.Hostnames, func(u *spanRun) error {
 		var attached, missed []string
 		err := u.phase(func(progress progress.Progress) error {
 			attaching := &hostnames{edgeSession: r.edgeSession}
@@ -839,7 +839,7 @@ func (r *deployRun) provisionInfra(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return r.tracked.unit(r.stages.Infra, func(u *unitRun) error {
+	return r.spanEvents.run(r.spans.Infra, func(u *spanRun) error {
 		return u.phase(func(progress progress.Progress) error {
 			if err := r.refuseToAdopt(ctx, r.spec.Infra); err != nil {
 				return err
@@ -884,7 +884,7 @@ func (r *deployRun) provisionInfra(ctx context.Context) error {
 }
 
 func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.AppEntry) error {
-	return r.tracked.unit(r.stages.Apps[entry.App], func(u *unitRun) error {
+	return r.spanEvents.run(r.spans.Apps[entry.App], func(u *spanRun) error {
 		return u.phase(func(progress progress.Progress) error {
 			if err := r.refuseToAdopt(ctx, entry.Stack); err != nil {
 				return err
@@ -1343,7 +1343,7 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 		Tag:         r.spec.Tag,
 		Flip:        &flip,
 	}
-	if err := r.tracked.unit(r.stages.Promotion, func(u *unitRun) error {
+	if err := r.spanEvents.run(r.spans.Promotion, func(u *spanRun) error {
 		return u.phase(func(progress progress.Progress) error {
 			dropped, err := r.sharedStack.promote(ctx, promoteRequest{pointer: r.spec.Pointer, replaces: r.replaces, promotion: promotion}, progress)
 			if err != nil {

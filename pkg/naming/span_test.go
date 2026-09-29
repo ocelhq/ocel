@@ -22,10 +22,10 @@ func TestUnitIDIsTheGoldenDigestOfTheCanonicalName(t *testing.T) {
 	}
 }
 
-func TestStageIDsAreEightBytesAndUnambiguousAcrossFieldBoundaries(t *testing.T) {
+func TestSpanIDsAreEightBytesAndUnambiguousAcrossFieldBoundaries(t *testing.T) {
 	t.Run("every id is eight bytes", func(t *testing.T) {
-		if n := len(UnitID(UnitEnvironment)); n != StageIDLen {
-			t.Errorf("UnitID length = %d, want %d", n, StageIDLen)
+		if n := len(UnitID(UnitEnvironment)); n != SpanIDLen {
+			t.Errorf("UnitID length = %d, want %d", n, SpanIDLen)
 		}
 	})
 

@@ -121,7 +121,7 @@ func relayPlane(provider *fake.Provider) *fake.DataPlane {
 	return provider.Routers().(*fake.Routers).DataPlane(fake.RouterRelay)
 }
 
-func TestTheDeployFlipSpeaksThroughThePromotionStagesOwnProgress(t *testing.T) {
+func TestTheDeployFlipSpeaksThroughThePromotionSpansOwnProgress(t *testing.T) {
 	builtProject(t)
 	client, provider := deployServed(t)
 	const marker = "the flip said this through the reporter it was handed"
@@ -137,13 +137,13 @@ func TestTheDeployFlipSpeaksThroughThePromotionStagesOwnProgress(t *testing.T) {
 		t.Fatal("the deploy never reached the router's flip, so nothing was reported from it")
 	}
 	if flipped == progress.DiscardProgress() {
-		t.Fatal("the deploy handed the flip a discarding reporter, want the Promotion stage's own")
+		t.Fatal("the deploy handed the flip a discarding reporter, want the Promotion span's own")
 	}
 
 	titles := map[string]string{}
 	parents := map[string]string{}
 	var spoke string
-	for _, scope := range startedScopes(events) {
+	for _, scope := range startedSpans(events) {
 		titles[scope.id] = scope.title
 		parents[scope.id] = scope.parent
 	}
@@ -157,7 +157,7 @@ func TestTheDeployFlipSpeaksThroughThePromotionStagesOwnProgress(t *testing.T) {
 	}
 	promotion := "Switching traffic to promotion " + result.GetPromotionId()
 	if titles[spoke] != promotion || parents[spoke] != "" {
-		t.Errorf("the flip spoke on stage %q, want the unit %q", titles[spoke], promotion)
+		t.Errorf("the flip spoke on span %q, want the unit %q", titles[spoke], promotion)
 	}
 }
 

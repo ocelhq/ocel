@@ -16,7 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 )
 
-func assertStagesClose(t *testing.T, events []*progressv1.OperationEvent) {
+func assertSpansClose(t *testing.T, events []*progressv1.OperationEvent) {
 	t.Helper()
 
 	titles := map[string]string{}
@@ -26,7 +26,7 @@ func assertStagesClose(t *testing.T, events []*progressv1.OperationEvent) {
 		key := string(event.GetSpanId())
 		if event.GetStarted() != nil {
 			if _, seen := titles[key]; seen {
-				t.Errorf("scope %q is started twice", event.GetMessage())
+				t.Errorf("span %q is started twice", event.GetMessage())
 				continue
 			}
 			titles[key] = event.GetMessage()
@@ -40,12 +40,12 @@ func assertStagesClose(t *testing.T, events []*progressv1.OperationEvent) {
 		}
 	}
 	if len(order) == 0 {
-		t.Fatal("the run started no scope at all")
+		t.Fatal("the run started no span at all")
 	}
 
 	for _, key := range order {
 		if ended[key] != 1 {
-			t.Errorf("scope %q is ended %d times, want every scope a run opens ended exactly once", titles[key], ended[key])
+			t.Errorf("span %q is ended %d times, want every span a run opens ended exactly once", titles[key], ended[key])
 		}
 	}
 }
@@ -57,16 +57,16 @@ func saidLine(event *progressv1.OperationEvent) string {
 	return event.GetMessage()
 }
 
-type startedScope struct {
+type startedSpan struct {
 	id, parent, title string
 	phase             progressv1.Phase
 }
 
-func startedScopes(events []*progressv1.OperationEvent) []startedScope {
-	var out []startedScope
+func startedSpans(events []*progressv1.OperationEvent) []startedSpan {
+	var out []startedSpan
 	for _, event := range events {
 		if started := event.GetStarted(); started != nil {
-			out = append(out, startedScope{
+			out = append(out, startedSpan{
 				id:     string(event.GetSpanId()),
 				parent: string(started.GetParentSpanId()),
 				title:  event.GetMessage(),
@@ -86,7 +86,7 @@ func recorded(stream *connect.ServerStreamForClient[progressv1.OperationEvent]) 
 	return events
 }
 
-func TestEveryScopeADeployOpensIsEndedExactlyOnce(t *testing.T) {
+func TestEverySpanADeployOpensIsEndedExactlyOnce(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		preview  bool
@@ -122,7 +122,7 @@ func TestEveryScopeADeployOpensIsEndedExactlyOnce(t *testing.T) {
 			if result.GetSuccess() != tc.succeeds {
 				t.Fatalf("Deploy() success = %v (%q), want %v", result.GetSuccess(), result.GetError(), tc.succeeds)
 			}
-			assertStagesClose(t, events)
+			assertSpansClose(t, events)
 		})
 	}
 }
@@ -154,7 +154,7 @@ func TestAUnitStartsWhenItRunsNotWhenTheDeployBegins(t *testing.T) {
 	}
 }
 
-func TestEveryScopeADeployOpensStartsAndEndsInTheSamePhase(t *testing.T) {
+func TestEverySpanADeployOpensStartsAndEndsInTheSamePhase(t *testing.T) {
 	builtProject(t)
 	client, _ := deployServed(t)
 
@@ -172,16 +172,16 @@ func TestEveryScopeADeployOpensStartsAndEndsInTheSamePhase(t *testing.T) {
 			continue
 		}
 		if opened.GetPhase() != event.GetPhase() {
-			t.Errorf("scope %q starts in %v and ends in %v, want one phase for the whole scope", opened.GetMessage(), opened.GetPhase(), event.GetPhase())
+			t.Errorf("span %q starts in %v and ends in %v, want one phase for the whole span", opened.GetMessage(), opened.GetPhase(), event.GetPhase())
 		}
 	}
 }
 
 func unitPhases(events []*progressv1.OperationEvent, title string) []progressv1.Phase {
 	var phases []progressv1.Phase
-	for _, scope := range startedScopes(events) {
-		if scope.parent == "" && strings.HasPrefix(scope.title, title) {
-			phases = append(phases, scope.phase)
+	for _, span := range startedSpans(events) {
+		if span.parent == "" && strings.HasPrefix(span.title, title) {
+			phases = append(phases, span.phase)
 		}
 	}
 	return phases
@@ -214,9 +214,9 @@ func TestAnAppUnitsEventsNameTheAppAsSubjectInTheDeployPhase(t *testing.T) {
 	}
 
 	app := map[string]bool{}
-	for _, scope := range startedScopes(events) {
-		if strings.HasPrefix(scope.title, "Deploying the serverless app") || app[scope.parent] {
-			app[scope.id] = true
+	for _, span := range startedSpans(events) {
+		if strings.HasPrefix(span.title, "Deploying the serverless app") || app[span.parent] {
+			app[span.id] = true
 		}
 	}
 	var scoped int
@@ -244,9 +244,9 @@ func TestTheEdgeUnitsEventsNameTheEdgeKindAsSubject(t *testing.T) {
 	}
 
 	unit := map[string]bool{}
-	for _, scope := range startedScopes(events) {
-		if strings.HasPrefix(scope.title, "Reconciling the routes") || unit[scope.parent] {
-			unit[scope.id] = true
+	for _, span := range startedSpans(events) {
+		if strings.HasPrefix(span.title, "Reconciling the routes") || unit[span.parent] {
+			unit[span.id] = true
 		}
 	}
 	var scoped int
@@ -282,7 +282,7 @@ func TestARemovalRunsInTheDestroyPhase(t *testing.T) {
 	}
 }
 
-func TestBootstrapEndsEveryScopeItStarts(t *testing.T) {
+func TestBootstrapEndsEverySpanItStarts(t *testing.T) {
 	t.Run("when the work succeeds", func(t *testing.T) {
 		t.Parallel()
 		client, _ := contractServed(t, "1.0.0")
@@ -293,7 +293,7 @@ func TestBootstrapEndsEveryScopeItStarts(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Bootstrap() error = %v", err)
 		}
-		assertStagesClose(t, recorded(stream))
+		assertSpansClose(t, recorded(stream))
 	})
 
 	t.Run("when the work fails", func(t *testing.T) {
@@ -311,11 +311,11 @@ func TestBootstrapEndsEveryScopeItStarts(t *testing.T) {
 		if len(events) == 0 {
 			t.Fatal("a failed Bootstrap() streamed nothing at all")
 		}
-		assertStagesClose(t, events)
+		assertSpansClose(t, events)
 
 		titles := map[string]string{}
-		for _, scope := range startedScopes(events) {
-			titles[scope.id] = scope.title
+		for _, span := range startedSpans(events) {
+			titles[span.id] = span.title
 		}
 		for _, event := range events {
 			ended := event.GetEnded()
@@ -323,7 +323,7 @@ func TestBootstrapEndsEveryScopeItStarts(t *testing.T) {
 				continue
 			}
 			if ended.GetStatus() != progressv1.SpanStatus_SPAN_STATUS_ERROR {
-				t.Errorf("the scope %q ends %v, want ERROR: the work under it failed", titles[string(event.GetSpanId())], ended.GetStatus())
+				t.Errorf("the span %q ends %v, want ERROR: the work under it failed", titles[string(event.GetSpanId())], ended.GetStatus())
 			}
 		}
 	})

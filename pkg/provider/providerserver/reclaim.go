@@ -227,10 +227,10 @@ func (r *deployRun) reclaimOwnRelease(ctx context.Context) {
 	}
 	ctx, stop := context.WithTimeout(context.WithoutCancel(ctx), ownReclaimWindow)
 	defer stop()
-	stage := UnitStage("reclaim/"+r.spec.PromotionID, environmentSubject(r.spec.Tier, r.spec.Env),
+	span := UnitSpan("reclaim/"+r.spec.PromotionID, environmentSubject(r.spec.Tier, r.spec.Env),
 		"Reclaiming what this failed deploy provisioned", progressv1.Phase_PHASE_DESTROY)
-	_ = r.tracked.unit(stage, func(*unitRun) error {
-		progress := newProgress(r.sender, stage)
+	_ = r.spanEvents.run(span, func(*spanRun) error {
+		progress := newProgress(r.sender, span)
 		if err := r.reclaimProvisioned(ctx, progress); err != nil {
 			progress.Warn(fmt.Sprintf("Promotion %s did not land, and reclaiming what its deploy provisioned failed, so what was not reclaimed stays until this environment is destroyed: %v",
 				r.spec.PromotionID, err))

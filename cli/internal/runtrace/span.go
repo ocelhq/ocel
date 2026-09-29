@@ -163,8 +163,8 @@ func attributeKey(k progressv1.AttributeKey) (attribute.Key, bool) {
 	switch k {
 	case progressv1.AttributeKey_ATTRIBUTE_KEY_COMMAND:
 		return AttrCommand, true
-	case progressv1.AttributeKey_ATTRIBUTE_KEY_STAGE:
-		return AttrStage, true
+	case progressv1.AttributeKey_ATTRIBUTE_KEY_SPAN_NAME:
+		return AttrSpanName, true
 	case progressv1.AttributeKey_ATTRIBUTE_KEY_APP:
 		return AttrApp, true
 	case progressv1.AttributeKey_ATTRIBUTE_KEY_PHASE:

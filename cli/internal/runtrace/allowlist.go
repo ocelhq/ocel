@@ -4,7 +4,7 @@ import "go.opentelemetry.io/otel/attribute"
 
 const (
 	AttrCommand        = attribute.Key("ocel.command")
-	AttrStage          = attribute.Key("ocel.stage")
+	AttrSpanName       = attribute.Key("ocel.span_name")
 	AttrApp            = attribute.Key("ocel.app")
 	AttrPhase          = attribute.Key("ocel.phase")
 	AttrProvider       = attribute.Key("ocel.provider")
@@ -22,7 +22,7 @@ const (
 
 var allowedAttributes = map[attribute.Key]struct{}{
 	AttrCommand:        {},
-	AttrStage:          {},
+	AttrSpanName:       {},
 	AttrApp:            {},
 	AttrPhase:          {},
 	AttrProvider:       {},

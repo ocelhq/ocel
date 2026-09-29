@@ -112,12 +112,12 @@ func (r *Run) Tracer() trace.Tracer {
 	return r.tracer
 }
 
-func (r *Run) StartSpan(ctx context.Context, stage string, attrs ...attribute.KeyValue) (context.Context, trace.Span) {
-	opts := []trace.SpanStartOption{trace.WithAttributes(attribute.KeyValue{Key: AttrStage, Value: attribute.StringValue(stage)})}
+func (r *Run) StartSpan(ctx context.Context, name string, attrs ...attribute.KeyValue) (context.Context, trace.Span) {
+	opts := []trace.SpanStartOption{trace.WithAttributes(attribute.KeyValue{Key: AttrSpanName, Value: attribute.StringValue(name)})}
 	if len(attrs) > 0 {
 		opts = append(opts, trace.WithAttributes(attrs...))
 	}
-	return r.tracer.Start(ctx, stage, opts...)
+	return r.tracer.Start(ctx, name, opts...)
 }
 
 func (r *Run) LogThrough(send func(*streamv1.RunEvent)) {

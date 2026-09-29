@@ -66,8 +66,8 @@ func (h *handlers) Bootstrap(ctx context.Context, req *contractv1.BootstrapReque
 		if req.GetDry() {
 			return okResult(), nil
 		}
-		unit := UnitStage(naming.UnitEnvironment, string(tier), bootstrapTitle("Updating", plan), progressv1.Phase_PHASE_PROVISION)
-		err = inUnit(sender, unit,
+		unit := UnitSpan(naming.UnitEnvironment, string(tier), bootstrapTitle("Updating", plan), progressv1.Phase_PHASE_PROVISION)
+		err = inSpan(sender, unit,
 			func(_ *eventStream, progress progress.Progress) error {
 				return gate.Apply(ctx, plan, tier, intent, progress)
 			})
@@ -276,7 +276,7 @@ func (h *handlers) RemoveBootstrap(ctx context.Context, req *contractv1.Bootstra
 	}
 
 	shown, shownErr := PlanFromProto(req.GetConsented())
-	unit := UnitStage(naming.UnitEnvironment, string(tier), bootstrapTitle("Removing", shown), progressv1.Phase_PHASE_DESTROY)
+	unit := UnitSpan(naming.UnitEnvironment, string(tier), bootstrapTitle("Removing", shown), progressv1.Phase_PHASE_DESTROY)
 	return streamed(ctx, stream, unit, func(_ *eventStream, progress progress.Progress) error {
 		if shownErr != nil {
 			return shownErr

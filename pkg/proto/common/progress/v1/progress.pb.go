@@ -246,7 +246,7 @@ type AttributeKey int32
 const (
 	AttributeKey_ATTRIBUTE_KEY_UNSPECIFIED     AttributeKey = 0
 	AttributeKey_ATTRIBUTE_KEY_COMMAND         AttributeKey = 1
-	AttributeKey_ATTRIBUTE_KEY_STAGE           AttributeKey = 2
+	AttributeKey_ATTRIBUTE_KEY_SPAN_NAME       AttributeKey = 2
 	AttributeKey_ATTRIBUTE_KEY_APP             AttributeKey = 3
 	AttributeKey_ATTRIBUTE_KEY_PHASE           AttributeKey = 4
 	AttributeKey_ATTRIBUTE_KEY_PROVIDER        AttributeKey = 5
@@ -267,7 +267,7 @@ var (
 	AttributeKey_name = map[int32]string{
 		0:  "ATTRIBUTE_KEY_UNSPECIFIED",
 		1:  "ATTRIBUTE_KEY_COMMAND",
-		2:  "ATTRIBUTE_KEY_STAGE",
+		2:  "ATTRIBUTE_KEY_SPAN_NAME",
 		3:  "ATTRIBUTE_KEY_APP",
 		4:  "ATTRIBUTE_KEY_PHASE",
 		5:  "ATTRIBUTE_KEY_PROVIDER",
@@ -285,7 +285,7 @@ var (
 	AttributeKey_value = map[string]int32{
 		"ATTRIBUTE_KEY_UNSPECIFIED":     0,
 		"ATTRIBUTE_KEY_COMMAND":         1,
-		"ATTRIBUTE_KEY_STAGE":           2,
+		"ATTRIBUTE_KEY_SPAN_NAME":       2,
 		"ATTRIBUTE_KEY_APP":             3,
 		"ATTRIBUTE_KEY_PHASE":           4,
 		"ATTRIBUTE_KEY_PROVIDER":        5,
@@ -1358,11 +1358,11 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"SpanStatus\x12\x1b\n" +
 	"\x17SPAN_STATUS_UNSPECIFIED\x10\x00\x12\x12\n" +
 	"\x0eSPAN_STATUS_OK\x10\x01\x12\x15\n" +
-	"\x11SPAN_STATUS_ERROR\x10\x02*\xe0\x03\n" +
+	"\x11SPAN_STATUS_ERROR\x10\x02*\xe4\x03\n" +
 	"\fAttributeKey\x12\x1d\n" +
 	"\x19ATTRIBUTE_KEY_UNSPECIFIED\x10\x00\x12\x19\n" +
-	"\x15ATTRIBUTE_KEY_COMMAND\x10\x01\x12\x17\n" +
-	"\x13ATTRIBUTE_KEY_STAGE\x10\x02\x12\x15\n" +
+	"\x15ATTRIBUTE_KEY_COMMAND\x10\x01\x12\x1b\n" +
+	"\x17ATTRIBUTE_KEY_SPAN_NAME\x10\x02\x12\x15\n" +
 	"\x11ATTRIBUTE_KEY_APP\x10\x03\x12\x17\n" +
 	"\x13ATTRIBUTE_KEY_PHASE\x10\x04\x12\x1a\n" +
 	"\x16ATTRIBUTE_KEY_PROVIDER\x10\x05\x12\x1b\n" +

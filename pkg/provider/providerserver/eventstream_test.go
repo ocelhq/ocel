@@ -271,15 +271,15 @@ func TestAnUnimplementedFailureIsARefusalOnlyOnAStreamThatSaysSo(t *testing.T) {
 	}
 }
 
-var testStage = environmentUnit(progressv1.Phase_PHASE_PROVISION)
+var testSpan = environmentUnit(progressv1.Phase_PHASE_PROVISION)
 
-func TestAStageSaysAMessageOnlyLineWritesOutputAndOpensAndEndsItsDetailScopes(t *testing.T) {
+func TestASpanSaysAMessageOnlyLineWritesOutputAndOpensAndEndsItsDetailSpans(t *testing.T) {
 	t.Parallel()
 
 	stream := &recordingStream{}
 	sender := newEventStream(context.Background(), stream.send)
-	stage := environmentUnit(progressv1.Phase_PHASE_PROVISION)
-	progress := newProgress(sender, stage)
+	span := environmentUnit(progressv1.Phase_PHASE_PROVISION)
+	progress := newProgress(sender, span)
 
 	progress.Say("provisioning the infra stack")
 	progress.Detail("engine said something")
@@ -290,24 +290,24 @@ func TestAStageSaysAMessageOnlyLineWritesOutputAndOpensAndEndsItsDetailScopes(t 
 	}
 	events := stream.recorded()
 	if len(events) != 4 {
-		t.Fatalf("got %d events, want a message, an output line, and a detail scope's start and end", len(events))
+		t.Fatalf("got %d events, want a message, an output line, and a detail span's start and end", len(events))
 	}
 
 	said, wrote, opened, closed := events[0], events[1], events[2], events[3]
-	if said.GetBody() != nil || said.GetMessage() != "provisioning the infra stack" || StageID(said.GetSpanId()) != stage.ID {
-		t.Errorf("Say() = %T %q in %x, want a message-only line in the stage %x", said.GetBody(), said.GetMessage(), said.GetSpanId(), stage.ID)
+	if said.GetBody() != nil || said.GetMessage() != "provisioning the infra stack" || SpanID(said.GetSpanId()) != span.ID {
+		t.Errorf("Say() = %T %q in %x, want a message-only line in the span %x", said.GetBody(), said.GetMessage(), said.GetSpanId(), span.ID)
 	}
-	if wrote.GetOutput() == nil || wrote.GetMessage() != "engine said something" || StageID(wrote.GetSpanId()) != stage.ID {
-		t.Errorf("Detail() = %T %q in %x, want an output line in the stage %x", wrote.GetBody(), wrote.GetMessage(), wrote.GetSpanId(), stage.ID)
+	if wrote.GetOutput() == nil || wrote.GetMessage() != "engine said something" || SpanID(wrote.GetSpanId()) != span.ID {
+		t.Errorf("Detail() = %T %q in %x, want an output line in the span %x", wrote.GetBody(), wrote.GetMessage(), wrote.GetSpanId(), span.ID)
 	}
-	if opened.GetStarted() == nil || opened.GetMessage() != "dns records" || StageID(opened.GetStarted().GetParentSpanId()) != stage.ID {
-		t.Errorf("Span() opens %T %q under %x, want the detail scope \"dns records\" under the stage %x", opened.GetBody(), opened.GetMessage(), opened.GetStarted().GetParentSpanId(), stage.ID)
+	if opened.GetStarted() == nil || opened.GetMessage() != "dns records" || SpanID(opened.GetStarted().GetParentSpanId()) != span.ID {
+		t.Errorf("Span() opens %T %q under %x, want the detail span \"dns records\" under the span %x", opened.GetBody(), opened.GetMessage(), opened.GetStarted().GetParentSpanId(), span.ID)
 	}
 	if closed.GetEnded() == nil || string(closed.GetSpanId()) != string(opened.GetSpanId()) {
-		t.Errorf("Span() closes %T %x, want the scope it opened, %x", closed.GetBody(), closed.GetSpanId(), opened.GetSpanId())
+		t.Errorf("Span() closes %T %x, want the span it opened, %x", closed.GetBody(), closed.GetSpanId(), opened.GetSpanId())
 	}
 	if opened.GetTimeUnixNano() != time.Unix(1000, 0).UnixNano() || closed.GetTimeUnixNano() != time.Unix(1005, 0).UnixNano() {
-		t.Errorf("the detail scope runs %d to %d, want its own start and end", opened.GetTimeUnixNano(), closed.GetTimeUnixNano())
+		t.Errorf("the detail span runs %d to %d, want its own start and end", opened.GetTimeUnixNano(), closed.GetTimeUnixNano())
 	}
 	for i, event := range events {
 		if err := protovalidate.Validate(event); err != nil {
@@ -316,13 +316,13 @@ func TestAStageSaysAMessageOnlyLineWritesOutputAndOpensAndEndsItsDetailScopes(t 
 	}
 }
 
-func TestEveryEventAStageSendsCarriesATimeALevelAndTheStagesPhase(t *testing.T) {
+func TestEveryEventASpanSendsCarriesATimeALevelAndTheSpansPhase(t *testing.T) {
 	t.Parallel()
 
 	stream := &recordingStream{}
 	sender := newEventStream(context.Background(), stream.send)
-	stage := environmentUnit(progressv1.Phase_PHASE_PROVISION)
-	progress := newProgress(sender, stage)
+	span := environmentUnit(progressv1.Phase_PHASE_PROVISION)
+	progress := newProgress(sender, span)
 
 	before := time.Now().UnixNano()
 	progress.Say("provisioning the infra stack")
@@ -341,8 +341,8 @@ func TestEveryEventAStageSendsCarriesATimeALevelAndTheStagesPhase(t *testing.T) 
 		if at := event.GetTimeUnixNano(); at < before || at > after {
 			t.Errorf("event %d is stamped %d, want the time it was sent, between %d and %d", i, at, before, after)
 		}
-		if string(event.GetSpanId()) != string(stage.ID[:]) {
-			t.Errorf("event %d span id = %x, want the stage's id %x", i, event.GetSpanId(), stage.ID)
+		if string(event.GetSpanId()) != string(span.ID[:]) {
+			t.Errorf("event %d span id = %x, want the span's id %x", i, event.GetSpanId(), span.ID)
 		}
 	}
 	for i, event := range events {
@@ -350,17 +350,17 @@ func TestEveryEventAStageSendsCarriesATimeALevelAndTheStagesPhase(t *testing.T) 
 			t.Errorf("event %d level = %v, want INFO", i, event.GetLevel())
 		}
 		if event.GetPhase() != progressv1.Phase_PHASE_PROVISION {
-			t.Errorf("event %d phase = %v, want the stage's provision phase", i, event.GetPhase())
+			t.Errorf("event %d phase = %v, want the span's provision phase", i, event.GetPhase())
 		}
 	}
 }
 
-func TestAStagesWarningIsAMessageOnlyWarnScopedToTheStage(t *testing.T) {
+func TestASpansWarningIsAMessageOnlyWarnInTheSpan(t *testing.T) {
 	t.Parallel()
 
 	stream := &recordingStream{}
 	sender := newEventStream(context.Background(), stream.send)
-	progress := newProgress(sender, testStage)
+	progress := newProgress(sender, testSpan)
 
 	progress.Warn("the old binding outlived its release\x1b[2J")
 
@@ -381,20 +381,20 @@ func TestAStagesWarningIsAMessageOnlyWarnScopedToTheStage(t *testing.T) {
 	if warned.GetBody() != nil {
 		t.Errorf("body = %v, want a message-only event", warned.GetBody())
 	}
-	if warned.GetPhase() != testStage.Phase || StageID(warned.GetSpanId()) != testStage.ID {
-		t.Errorf("scope = %v %x, want the stage's %v %x", warned.GetPhase(), warned.GetSpanId(), testStage.Phase, testStage.ID)
+	if warned.GetPhase() != testSpan.Phase || SpanID(warned.GetSpanId()) != testSpan.ID {
+		t.Errorf("span = %v %x, want the span's %v %x", warned.GetPhase(), warned.GetSpanId(), testSpan.Phase, testSpan.ID)
 	}
 	if err := protovalidate.Validate(warned); err != nil {
 		t.Errorf("the warning fails the wire's own rules: %v", err)
 	}
 }
 
-func TestAStagesErrorIsAMessageOnlyErrorScopedToTheStage(t *testing.T) {
+func TestASpansErrorIsAMessageOnlyErrorInTheSpan(t *testing.T) {
 	t.Parallel()
 
 	stream := &recordingStream{}
 	sender := newEventStream(context.Background(), stream.send)
-	progress := newProgress(sender, testStage)
+	progress := newProgress(sender, testSpan)
 
 	progress.Error("logs (aws:s3/bucket:Bucket): BucketAlreadyExists\x1b[2J")
 
@@ -415,20 +415,20 @@ func TestAStagesErrorIsAMessageOnlyErrorScopedToTheStage(t *testing.T) {
 	if failed.GetBody() != nil {
 		t.Errorf("body = %v, want a message-only event", failed.GetBody())
 	}
-	if failed.GetPhase() != testStage.Phase || StageID(failed.GetSpanId()) != testStage.ID {
-		t.Errorf("scope = %v %x, want the stage's %v %x", failed.GetPhase(), failed.GetSpanId(), testStage.Phase, testStage.ID)
+	if failed.GetPhase() != testSpan.Phase || SpanID(failed.GetSpanId()) != testSpan.ID {
+		t.Errorf("span = %v %x, want the span's %v %x", failed.GetPhase(), failed.GetSpanId(), testSpan.Phase, testSpan.ID)
 	}
 	if err := protovalidate.Validate(failed); err != nil {
 		t.Errorf("the error fails the wire's own rules: %v", err)
 	}
 }
 
-func TestAStagesDebugLineIsADebugOutputLineScopedToTheStage(t *testing.T) {
+func TestASpansDebugLineIsADebugOutputLineInTheSpan(t *testing.T) {
 	t.Parallel()
 
 	stream := &recordingStream{}
 	sender := newEventStream(context.Background(), stream.send)
-	progress := newProgress(sender, testStage)
+	progress := newProgress(sender, testSpan)
 
 	progress.Debug("+  aws:s3:Bucket assets creating (0s)")
 
@@ -446,8 +446,8 @@ func TestAStagesDebugLineIsADebugOutputLineScopedToTheStage(t *testing.T) {
 	if line.GetOutput() == nil || line.GetMessage() != "+  aws:s3:Bucket assets creating (0s)" {
 		t.Errorf("Debug() = %T %q, want the line as output", line.GetBody(), line.GetMessage())
 	}
-	if line.GetPhase() != testStage.Phase || StageID(line.GetSpanId()) != testStage.ID {
-		t.Errorf("scope = %v %x, want the stage's %v %x", line.GetPhase(), line.GetSpanId(), testStage.Phase, testStage.ID)
+	if line.GetPhase() != testSpan.Phase || SpanID(line.GetSpanId()) != testSpan.ID {
+		t.Errorf("span = %v %x, want the span's %v %x", line.GetPhase(), line.GetSpanId(), testSpan.Phase, testSpan.ID)
 	}
 }
 
@@ -456,7 +456,7 @@ func TestProgressMessagesTravelOnTheEnvelope(t *testing.T) {
 
 	stream := &recordingStream{}
 	sender := newEventStream(context.Background(), stream.send)
-	progress := newProgress(sender, testStage)
+	progress := newProgress(sender, testSpan)
 
 	progress.Say("provisioning the infra stack")
 	progress.Detail("engine said something")
@@ -471,12 +471,12 @@ func TestProgressMessagesTravelOnTheEnvelope(t *testing.T) {
 	}
 }
 
-func TestStageProgressStripsControlCharacters(t *testing.T) {
+func TestSpanProgressStripsControlCharacters(t *testing.T) {
 	t.Parallel()
 
 	stream := &recordingStream{}
 	sender := newEventStream(context.Background(), stream.send)
-	progress := newProgress(sender, testStage)
+	progress := newProgress(sender, testSpan)
 
 	progress.Say("clearing the screen\x1b[2J now")
 

@@ -56,8 +56,8 @@ func (s networkSpan) Name() string {
 		values[a.Key] = a.Value.AsString()
 	}
 	switch {
-	case values[AttrStage] != "":
-		return values[AttrStage]
+	case values[AttrSpanName] != "":
+		return values[AttrSpanName]
 	case values[AttrCommand] != "":
 		return values[AttrCommand]
 	case values[AttrPhase] != "":
