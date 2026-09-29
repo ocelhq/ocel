@@ -362,7 +362,9 @@ func (d *hostnames) findApp(host string) string {
 
 func (d *hostnames) probe(ctx context.Context, host string, answering router.Kind) stackrecords.ServeProbe {
 	serving, err := d.cutover.attempt(ctx, host)
-	return stackrecords.ServeProbe{At: d.cutover.now().Unix(), OK: err == nil && serving != "" && serving == answering, Router: serving}
+	probe := stackrecords.ServeProbe{At: d.cutover.now().Unix(), Router: serving}
+	probe.OK = err == nil && probe.IsAnsweredBy(answering)
+	return probe
 }
 
 func (d *hostnames) hostnameBlocker(host string, cert provider.Certificate, health provider.CertificateHealth, bound bool, probe stackrecords.ServeProbe) string {
