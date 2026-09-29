@@ -1,10 +1,10 @@
 package leader
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
-	"net"
 	"time"
 )
 
@@ -15,7 +15,7 @@ type Leader struct {
 
 var ErrAlreadyRunning = errors.New("another ocel dev already leads this project")
 
-const dialTimeout = 500 * time.Millisecond
+const probeTimeout = 2 * time.Second
 
 func Find(root string) (Leader, bool, error) {
 	leader, err := Read(root)
@@ -61,15 +61,32 @@ func Claim(root string, leader Leader) error {
 	return nil
 }
 
-func Release(root string) error {
+func Release(root, token string) error {
+	lock, err := lockRecord(root)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = lock.Unlock() }()
+
+	current, err := Read(root)
+	switch {
+	case errors.Is(err, fs.ErrNotExist), errors.Is(err, ErrMalformed):
+		return nil
+	case err != nil:
+		return fmt.Errorf("read the dev leader record: %w", err)
+	case current.Token != token:
+		return nil
+	}
 	return removeRecord(root)
 }
 
 func isAnswering(leader Leader) bool {
-	conn, err := net.DialTimeout("tcp", leader.Address, dialTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
+	defer cancel()
+	stream, err := Subscribe(ctx, leader)
 	if err != nil {
 		return false
 	}
-	_ = conn.Close()
+	stream.Close()
 	return true
 }

@@ -128,7 +128,7 @@ func TestRelease(t *testing.T) {
 		if err := writeRecord(root, Leader{Address: "127.0.0.1:1", Token: "app-token"}); err != nil {
 			t.Fatalf("writeRecord: %v", err)
 		}
-		if err := Release(root); err != nil {
+		if err := Release(root, "app-token"); err != nil {
 			t.Fatalf("Release: %v", err)
 		}
 		if _, err := Read(root); !errors.Is(err, fs.ErrNotExist) {
@@ -136,10 +136,26 @@ func TestRelease(t *testing.T) {
 		}
 	})
 
+	t.Run("releasing with another leader's token leaves that leader's record", func(t *testing.T) {
+		t.Parallel()
+
+		root := uniqueRoot(t)
+		recorded := Leader{Address: "127.0.0.1:1", Token: "app-token"}
+		if err := writeRecord(root, recorded); err != nil {
+			t.Fatalf("writeRecord: %v", err)
+		}
+		if err := Release(root, "an-earlier-leader"); err != nil {
+			t.Fatalf("Release: %v", err)
+		}
+		if got, err := Read(root); err != nil || got != recorded {
+			t.Fatalf("Read after a stranger's Release = %+v, %v, want %+v untouched", got, err, recorded)
+		}
+	})
+
 	t.Run("releasing a record that was never written is not an error", func(t *testing.T) {
 		t.Parallel()
 
-		if err := Release(t.TempDir()); err != nil {
+		if err := Release(t.TempDir(), "app-token"); err != nil {
 			t.Fatalf("Release on a missing record: %v", err)
 		}
 	})
@@ -238,7 +254,11 @@ func TestRecordDir(t *testing.T) {
 func uniqueRoot(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
-	t.Cleanup(func() { _ = Release(root) })
+	t.Cleanup(func() {
+		if leader, err := Read(root); err == nil {
+			_ = Release(root, leader.Token)
+		}
+	})
 	return root
 }
 

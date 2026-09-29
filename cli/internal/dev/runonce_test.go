@@ -31,7 +31,7 @@ func TestRunRun(t *testing.T) {
 		deps := devDeps()
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = leader.Release(root) })
+		t.Cleanup(func() { releaseLeader(root) })
 
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
@@ -85,7 +85,7 @@ export default { slug: "test-app" };
 		deps := devDeps()
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = leader.Release(root) })
+		t.Cleanup(func() { releaseLeader(root) })
 
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
@@ -147,7 +147,7 @@ export default { slug: "test-app" };
 		deps := devDeps()
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = leader.Release(root) })
+		t.Cleanup(func() { releaseLeader(root) })
 
 		listener, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {

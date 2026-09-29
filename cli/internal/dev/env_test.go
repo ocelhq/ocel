@@ -16,7 +16,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/dev/leader"
 	"github.com/ocelhq/ocel/cli/internal/devresources/binding"
 	"github.com/ocelhq/ocel/cli/internal/dotfile"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
@@ -159,7 +158,7 @@ func TestRunDevEnvironment(t *testing.T) {
 		}
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = leader.Release(root) })
+		t.Cleanup(func() { releaseLeader(root) })
 
 		deps := devDeps()
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
@@ -219,7 +218,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		}
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = leader.Release(root) })
+		t.Cleanup(func() { releaseLeader(root) })
 
 		deps := devDeps()
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"DATABASE_URL","class":"VARIABLE_CLASS_PLAIN","required":true}`))
@@ -247,7 +246,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		}
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = leader.Release(root) })
+		t.Cleanup(func() { releaseLeader(root) })
 
 		deps := devDeps()
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
@@ -279,7 +278,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		}
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = leader.Release(root) })
+		t.Cleanup(func() { releaseLeader(root) })
 
 		deps := devDeps()
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
@@ -309,7 +308,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		}
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = leader.Release(root) })
+		t.Cleanup(func() { releaseLeader(root) })
 
 		counted := filepath.Join(root, "reads")
 		writeDevSource(t, root, `{ exec: { command: ["sh", "-c", "echo read >> `+counted+`; printf 'STRIPE_API_KEY=sk_from_source'"], format: "dotenv" } }`)
@@ -337,7 +336,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		}
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = leader.Release(root) })
+		t.Cleanup(func() { releaseLeader(root) })
 
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
@@ -360,7 +359,7 @@ export default {
 		}
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = leader.Release(root) })
+		t.Cleanup(func() { releaseLeader(root) })
 
 		writeDevSource(t, root, `{ exec: { command: ["sh", "-c", "printf 'STRIPE_API_KEY=sk_from_source\\nLOG_LEVEL=info'"], format: "dotenv" } }`)
 		clitest.WriteFile(t, filepath.Join(root, dotfile.LocalFileName), "STRIPE_API_KEY=sk_mine\n")
@@ -381,7 +380,7 @@ export default {
 		}
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = leader.Release(root) })
+		t.Cleanup(func() { releaseLeader(root) })
 
 		clitest.WriteFile(t, filepath.Join(root, dotfile.FileName), "STRIPE_API_KEY=sk_shared\nLOG_LEVEL=info\n")
 		clitest.WriteFile(t, filepath.Join(root, dotfile.LocalFileName), "STRIPE_API_KEY=sk_mine\n")
@@ -399,7 +398,7 @@ export default {
 		}
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = leader.Release(root) })
+		t.Cleanup(func() { releaseLeader(root) })
 
 		writeDevSource(t, root, `{ exec: { command: ["sh", "-c", "echo 'vault is sealed' >&2; exit 3"], format: "json" } }`)
 		startedPath := filepath.Join(root, "started")
@@ -416,7 +415,7 @@ export default {
 
 	t.Run("an Infisical dev source with no way in says how to sign in", func(t *testing.T) {
 		root := t.TempDir()
-		t.Cleanup(func() { _ = leader.Release(root) })
+		t.Cleanup(func() { releaseLeader(root) })
 
 		clitest.WriteFile(t, filepath.Join(root, project.DefaultFileName), `{"slug":"test-app","envSource":{"dev":{"infisical":{"project":"p-1","environment":"dev"}}}}`)
 		t.Setenv("PATH", t.TempDir())
@@ -446,7 +445,7 @@ export default {
 		t.Cleanup(server.Close)
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = leader.Release(root) })
+		t.Cleanup(func() { releaseLeader(root) })
 
 		t.Setenv("INFISICAL_TOKEN", "developer-token")
 		writeDevSource(t, root, `{ infisical: { project: "p-1", environment: "dev", host: "`+server.URL+`" } }`)
@@ -467,7 +466,7 @@ export default {
 		}
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = leader.Release(root) })
+		t.Cleanup(func() { releaseLeader(root) })
 
 		deps := devDeps()
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"DB_PASSWORD","class":"VARIABLE_CLASS_SECRET","required":true}`))
@@ -496,7 +495,7 @@ export default {
 		}
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = leader.Release(root) })
+		t.Cleanup(func() { releaseLeader(root) })
 
 		deps := devDeps()
 		clitest.WriteFile(t, filepath.Join(root, "package.json"), "{}\n")
@@ -553,7 +552,7 @@ func TestRunRunEnvironment(t *testing.T) {
 		}
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = leader.Release(root) })
+		t.Cleanup(func() { releaseLeader(root) })
 
 		deps := devDeps()
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
@@ -583,7 +582,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		}
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = leader.Release(root) })
+		t.Cleanup(func() { releaseLeader(root) })
 
 		deps := devDeps()
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
@@ -626,7 +625,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		}
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = leader.Release(root) })
+		t.Cleanup(func() { releaseLeader(root) })
 
 		deps := devDeps()
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"DATABASE_URL","class":"VARIABLE_CLASS_PLAIN","required":true}`))
@@ -657,7 +656,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		}
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = leader.Release(root) })
+		t.Cleanup(func() { releaseLeader(root) })
 
 		writeDevSource(t, root, `{ exec: { command: ["sh", "-c", "printf '{\"STRIPE_API_KEY\":\"sk_from_source\"}'"], format: "json" } }`)
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`))
@@ -792,7 +791,7 @@ func TestDevNeedsNoValueADeployedTierAlone(t *testing.T) {
 	} {
 		t.Run(command.name+" starts without a production binding's variables or env source credentials", func(t *testing.T) {
 			root := t.TempDir()
-			t.Cleanup(func() { _ = leader.Release(root) })
+			t.Cleanup(func() { releaseLeader(root) })
 
 			clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {

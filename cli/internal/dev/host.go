@@ -41,12 +41,12 @@ func startHost(ctx context.Context, opts Options, source valueSource) (*host, er
 	go httpSrv.Serve(listener)
 
 	return &host{srv: srv, address: address, close: func() {
-		_ = httpSrv.Close()
 		stopping, cancel := context.WithTimeout(context.WithoutCancel(ctx), devresources.StopsWithin)
 		defer cancel()
 		if err := resources.Close(stopping); err != nil {
 			opts.session().Warn(fmt.Sprintf("Stopping the dev resources failed: %v", err))
 		}
+		_ = httpSrv.Close()
 	}}, nil
 }
 

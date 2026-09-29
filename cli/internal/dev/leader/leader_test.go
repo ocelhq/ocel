@@ -4,9 +4,12 @@ import (
 	"errors"
 	"io/fs"
 	"net"
+	"net/http"
 	"sync"
 	"sync/atomic"
 	"testing"
+
+	"github.com/ocelhq/ocel/pkg/localrpc"
 )
 
 func TestFind(t *testing.T) {
@@ -16,7 +19,7 @@ func TestFind(t *testing.T) {
 		t.Parallel()
 
 		root := uniqueRoot(t)
-		leader := Leader{Address: liveAddress(t), Token: "app-token"}
+		leader := answeringLeader(t)
 		if err := writeRecord(root, leader); err != nil {
 			t.Fatalf("writeRecord: %v", err)
 		}
@@ -47,11 +50,38 @@ func TestFind(t *testing.T) {
 		}
 	})
 
+	t.Run("a record whose address answers without accepting its token finds no leader", func(t *testing.T) {
+		t.Parallel()
+
+		root := uniqueRoot(t)
+		stranger := answeringLeader(t)
+		if err := writeRecord(root, Leader{Address: stranger.Address, Token: "another-session"}); err != nil {
+			t.Fatalf("writeRecord: %v", err)
+		}
+
+		if _, found, err := Find(root); err != nil || found {
+			t.Fatalf("Find found = %v, err = %v, want no leader: a reused port is not the leader that recorded it", found, err)
+		}
+	})
+
+	t.Run("a record whose address accepts connections but speaks no HTTP finds no leader", func(t *testing.T) {
+		t.Parallel()
+
+		root := uniqueRoot(t)
+		if err := writeRecord(root, Leader{Address: silentAddress(t), Token: "app-token"}); err != nil {
+			t.Fatalf("writeRecord: %v", err)
+		}
+
+		if _, found, err := Find(root); err != nil || found {
+			t.Fatalf("Find found = %v, err = %v, want no leader", found, err)
+		}
+	})
+
 	t.Run("a record with no token finds no leader", func(t *testing.T) {
 		t.Parallel()
 
 		root := uniqueRoot(t)
-		writeBareAddress(t, root, liveAddress(t))
+		writeBareAddress(t, root, answeringLeader(t).Address)
 
 		if _, found, err := Find(root); err != nil || found {
 			t.Fatalf("Find found = %v, err = %v, want no leader: a record no follower can authenticate with is worth nothing", found, err)
@@ -70,7 +100,7 @@ func TestFind(t *testing.T) {
 		t.Parallel()
 
 		elsewhere, here := uniqueRoot(t), uniqueRoot(t)
-		if err := writeRecord(elsewhere, Leader{Address: liveAddress(t), Token: "app-token"}); err != nil {
+		if err := writeRecord(elsewhere, answeringLeader(t)); err != nil {
 			t.Fatalf("writeRecord: %v", err)
 		}
 
@@ -104,7 +134,7 @@ func TestClaim(t *testing.T) {
 		t.Parallel()
 
 		root := uniqueRoot(t)
-		running := Leader{Address: liveAddress(t), Token: "app-token"}
+		running := answeringLeader(t)
 		if err := Claim(root, running); err != nil {
 			t.Fatalf("first Claim: %v", err)
 		}
@@ -138,7 +168,7 @@ func TestClaim(t *testing.T) {
 		t.Parallel()
 
 		root := uniqueRoot(t)
-		writeBareAddress(t, root, liveAddress(t))
+		writeBareAddress(t, root, answeringLeader(t).Address)
 
 		leader := Leader{Address: "127.0.0.1:4242", Token: "app-token"}
 		if err := Claim(root, leader); err != nil {
@@ -156,7 +186,7 @@ func TestClaim(t *testing.T) {
 			root := uniqueRoot(t)
 			claimants := make([]Leader, 8)
 			for i := range claimants {
-				claimants[i] = Leader{Address: liveAddress(t), Token: "app-token"}
+				claimants[i] = answeringLeader(t)
 			}
 			if err := writeRecord(root, Leader{Address: deadAddress(t), Token: "dead"}); err != nil {
 				t.Fatalf("writeRecord: %v", err)
@@ -194,28 +224,82 @@ func TestReleaseAfterClaim(t *testing.T) {
 		t.Parallel()
 
 		root := uniqueRoot(t)
-		if err := Claim(root, Leader{Address: liveAddress(t), Token: "first"}); err != nil {
+		first := answeringLeader(t)
+		if err := Claim(root, first); err != nil {
 			t.Fatalf("Claim: %v", err)
 		}
-		if err := Release(root); err != nil {
+		if err := Release(root, first.Token); err != nil {
 			t.Fatalf("Release: %v", err)
 		}
 		if _, err := Read(root); !errors.Is(err, fs.ErrNotExist) {
 			t.Fatalf("Read after Release err = %v, want a not-exist error", err)
 		}
-		if err := Claim(root, Leader{Address: liveAddress(t), Token: "second"}); err != nil {
+		if err := Claim(root, answeringLeader(t)); err != nil {
 			t.Fatalf("Claim after Release: %v", err)
+		}
+	})
+
+	t.Run("a leader that stopped answering and releases late leaves its successor's record", func(t *testing.T) {
+		t.Parallel()
+
+		root := uniqueRoot(t)
+		first := Leader{Address: deadAddress(t), Token: "first"}
+		if err := Claim(root, first); err != nil {
+			t.Fatalf("Claim: %v", err)
+		}
+		second := answeringLeader(t)
+		if err := Claim(root, second); err != nil {
+			t.Fatalf("Claim over a leader that stopped answering: %v", err)
+		}
+
+		if err := Release(root, first.Token); err != nil {
+			t.Fatalf("Release: %v", err)
+		}
+		if got, err := Read(root); err != nil || got != second {
+			t.Fatalf("record after the first leader's release = %+v, %v, want the second leader %+v", got, err, second)
+		}
+		if err := Claim(root, answeringLeader(t)); !errors.Is(err, ErrAlreadyRunning) {
+			t.Fatalf("third Claim err = %v, want ErrAlreadyRunning while the second leader answers", err)
 		}
 	})
 }
 
-func liveAddress(t *testing.T) string {
+func answeringLeader(t *testing.T) Leader {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	leader := Leader{Address: ln.Addr().String(), Token: localrpc.NewSessionToken()}
+	mux := http.NewServeMux()
+	mux.Handle("/env", localrpc.LoopbackGuard(leader.Address, leader.Token, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
+		<-r.Context().Done()
+	})))
+	server := &http.Server{Handler: mux}
+	go server.Serve(ln)
+	t.Cleanup(func() { _ = server.Close() })
+	return leader
+}
+
+func silentAddress(t *testing.T) string {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
 	t.Cleanup(func() { _ = ln.Close() })
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			_ = conn.Close()
+		}
+	}()
 	return ln.Addr().String()
 }
 

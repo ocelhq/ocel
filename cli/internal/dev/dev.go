@@ -104,7 +104,7 @@ func lead(ctx context.Context, opts Options, reset bool) (err error) {
 	defer func() {
 		host.close()
 		if claimed {
-			_ = leader.Release(cfg.Dir)
+			_ = leader.Release(cfg.Dir, host.srv.AppToken())
 		}
 	}()
 	srv := host.srv
