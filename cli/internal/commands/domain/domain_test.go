@@ -3,7 +3,6 @@ package domain
 import (
 	"bytes"
 	"context"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -59,28 +58,16 @@ func TestTheGlobalPreviewDomainIsASingleLeadingWildcard(t *testing.T) {
 	})
 }
 
-func writeProductionConfig(t *testing.T, root string) {
-	t.Helper()
-	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
-export default {
-  slug: "test-app",
-  provider: { fake: {} },
-  domains: { production: "shop.app.com" },
-  dns: "zone",
-};
-`)
-}
-
 func TestTheBootstrapWideDomainCommandsRefuseWithoutPreview(t *testing.T) {
 	t.Run("the bootstrap-wide subcommands refuse without --preview", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
+		project := previewProject(t)
 		invocation := newTestInvocation()
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
 		runs := map[string]error{
-			"use":     runDomainUse(context.Background(), invocation, root, "*.preview.acme.com", domainOptions{}, &stdout, &stderr),
-			"release": runDomainRelease(context.Background(), invocation, root, domainOptions{}, &stdout, &stderr, strings.NewReader("")),
+			"use":     runDomainUse(context.Background(), invocation, project.Root, "*.preview.acme.com", domainOptions{}, &stdout, &stderr),
+			"release": runDomainRelease(context.Background(), invocation, project.Root, domainOptions{}, &stdout, &stderr, strings.NewReader("")),
 		}
 		for name, err := range runs {
 			if err == nil {

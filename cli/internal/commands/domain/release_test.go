@@ -16,16 +16,15 @@ import (
 
 func TestDomainReleaseTearsDownTheGlobalDomainOnlyOnceNothingIsServedOnIt(t *testing.T) {
 	t.Run("release refuses while projects still have previews on the wildcard", func(t *testing.T) {
-		root, sockPath := clitest.SetUpDeployFixture(t)
+		project := previewProject(t)
+		useWildcard(t, project)
+		servedOnWildcard(t, project, "shop", "pr-7")
+		servedOnWildcard(t, project, "blog", "pr-9")
 		invocation := newTestInvocation()
-		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
-		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
-		t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.acme.com")
-		t.Setenv(clitest.FakeServedPreviewsEnvVar, "shop, blog")
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		err := runDomainRelease(context.Background(), invocation, root, domainOptions{preview: true, yes: true}, &stdout, &stderr, strings.NewReader(""))
+		err := runDomainRelease(context.Background(), invocation, project.Root, domainOptions{preview: true, yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatalf("runDomainRelease err = nil, want the release refused; stdout=%s", stdout.String())
 		}
@@ -34,32 +33,29 @@ func TestDomainReleaseTearsDownTheGlobalDomainOnlyOnceNothingIsServedOnIt(t *tes
 				t.Errorf("stdout = %q, want the refusal to contain %q", stdout.String(), want)
 			}
 		}
-		if strings.Contains(stdout.String(), "RELEASE DOMAIN") {
-			t.Errorf("stdout = %q, want nothing released while previews are still served", stdout.String())
+		if raised := relayEdge(project).Wildcard(); raised != "preview.acme.com" {
+			t.Errorf("the edge serves the wildcard of %q, want nothing released while previews are still served", raised)
 		}
-		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
 	t.Run("release plans, then releases with --yes once nothing is served", func(t *testing.T) {
-		root, sockPath := clitest.SetUpDeployFixture(t)
+		project := previewProject(t)
+		useWildcard(t, project)
 		invocation := newTestInvocation()
-		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
-		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
-		t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.acme.com")
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := runDomainRelease(context.Background(), invocation, root, domainOptions{preview: true, yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runDomainRelease(context.Background(), invocation, project.Root, domainOptions{preview: true, yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDomainRelease err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
 		for _, want := range []string{
 			"This will release *.preview.acme.com",
 			"fronted by the relay edge",
-			"– preview entry router *.preview.acme.com",
+			"– *.preview.acme.com  Fake::PreviewEntry",
 			"This cannot be undone.",
-			"1 to delete, 1 unchanged.",
-			"RELEASE DOMAIN tier=TIER_PREVIEW",
+			"1 to delete, 2 unchanged.",
+			"Removing the shared preview entry on *.preview.acme.com",
 			"Released *.preview.acme.com",
 		} {
 			if !strings.Contains(out, want) {
@@ -69,16 +65,18 @@ func TestDomainReleaseTearsDownTheGlobalDomainOnlyOnceNothingIsServedOnIt(t *tes
 		if strings.Contains(out, "you created it yourself") {
 			t.Errorf("stdout spent a row on a record nothing touches:\n%s", out)
 		}
-		clitest.WaitForNoStaleSocket(t, sockPath)
+		if raised := relayEdge(project).Wildcard(); raised != "" {
+			t.Errorf("the edge still serves the wildcard of %q, want it released", raised)
+		}
 	})
 
 	t.Run("release refuses non-interactively without --yes", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
+		project := previewProject(t)
 		invocation := newTestInvocation()
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		err := runDomainRelease(context.Background(), invocation, root, domainOptions{preview: true}, &stdout, &stderr, strings.NewReader(""))
+		err := runDomainRelease(context.Background(), invocation, project.Root, domainOptions{preview: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDomainRelease err = nil, want it to refuse without a terminal")
 		}
@@ -89,19 +87,17 @@ func TestDomainReleaseTearsDownTheGlobalDomainOnlyOnceNothingIsServedOnIt(t *tes
 }
 
 func TestReleasingThePreviewDomainAsksForItsNameWhileTheRunIsHeldAfterThePlanItShows(t *testing.T) {
-	root, _ := clitest.SetUpDeployFixture(t)
+	project := previewProject(t)
+	useWildcard(t, project)
 	invocation := newTestInvocation()
 	invocation.StdinIsTerminal = func(io.Reader) bool { return true }
 	invocation.Presentation = func(io.Writer) terminal.Presentation {
 		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
 	}
-	t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
-	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
-	t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.acme.com")
 
 	var stream, stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(invocation, &stream)
-	if err := runDomainRelease(context.Background(), invocation, root, domainOptions{preview: true}, &stdout, &stderr, strings.NewReader("preview.acme.com\n")); err != nil {
+	if err := runDomainRelease(context.Background(), invocation, project.Root, domainOptions{preview: true}, &stdout, &stderr, strings.NewReader("preview.acme.com\n")); err != nil {
 		t.Fatalf("runDomainRelease err = %v; stream=%s stdout=%s stderr=%s", err, stream.String(), stdout.String(), stderr.String())
 	}
 

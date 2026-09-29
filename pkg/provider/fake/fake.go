@@ -24,6 +24,8 @@ type Provider struct {
 	pending               error
 	health                *provider.CertificateHealth
 	healthFor             map[string]provider.CertificateHealth
+	inspections           inspectionFailures
+	probes                probeFailures
 
 	preflightRefusal error
 	preflighted      []provider.DeployPreflight

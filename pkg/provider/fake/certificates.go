@@ -107,6 +107,9 @@ func (p *Provider) ReportCertificateFor(hostname string, health provider.Certifi
 }
 
 func (p certificates) Inspect(_ context.Context, _ edge.Kind, hostname string, cert provider.Certificate) (provider.CertificateHealth, error) {
+	if err := p.inspections.next(); err != nil {
+		return provider.CertificateHealth{}, err
+	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if health, reported := p.healthFor[hostname]; reported {

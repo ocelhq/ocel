@@ -3,28 +3,33 @@ package promotions
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
+	"github.com/ocelhq/ocel/pkg/environment"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/provider/ledger"
+	"github.com/ocelhq/ocel/pkg/router"
 )
 
 func TestRollbackMovesProductionToTheChosenPromotionOnceConsented(t *testing.T) {
 	t.Run("with no argument it rolls back to the immediately previous promotion", func(t *testing.T) {
-		root, sockPath := clitest.SetUpDeployFixture(t)
+		project := promotedTwice(t)
 		invocation := clitest.NewInvocation()
-		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
-		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := runRollback(context.Background(), invocation, root, rollbackOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runRollback(context.Background(), invocation, project.Root, rollbackOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runRollback err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -36,26 +41,29 @@ func TestRollbackMovesProductionToTheChosenPromotionOnceConsented(t *testing.T) 
 			"tag v1.0.0",
 			"web=build-1",
 			"Rolled back to promotion promo-1",
-			"as promotion " + clitest.FakeRollbackPromotionID,
+			"as promotion " + activePromotionID(t, project),
 		} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout missing %q; got:\n%s", want, out)
 			}
 		}
-
-		clitest.WaitForNoStaleSocket(t, sockPath)
+		active, _, err := productionLedger(project).ReadActive(context.Background(), "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if active.PromotionID == "promo-2" || active.Builds["web"] != "build-1~fp1" {
+			t.Errorf("production serves %+v after the rollback, want a new promotion of promo-1's builds", active)
+		}
 	})
 
 	t.Run("--yes rolls back without asking", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
+		project := promotedTwice(t)
 		invocation := clitest.NewInvocation()
 		invocation.StdinIsTerminal = func(io.Reader) bool { return true }
-		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
-		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := runRollback(context.Background(), invocation, root, rollbackOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runRollback(context.Background(), invocation, project.Root, rollbackOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runRollback err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -69,15 +77,13 @@ func TestRollbackMovesProductionToTheChosenPromotionOnceConsented(t *testing.T) 
 	})
 
 	t.Run("--to rolls back to the named promotion once consented to", func(t *testing.T) {
-		root, sockPath := clitest.SetUpDeployFixture(t)
+		project := promotedTwice(t)
 		invocation := clitest.NewInvocation()
 		invocation.StdinIsTerminal = func(io.Reader) bool { return true }
-		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
-		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := runRollback(context.Background(), invocation, root, rollbackOptions{to: "promo-1"}, &stdout, &stderr, strings.NewReader("y\n")); err != nil {
+		if err := runRollback(context.Background(), invocation, project.Root, rollbackOptions{to: "promo-1"}, &stdout, &stderr, strings.NewReader("y\n")); err != nil {
 			t.Fatalf("runRollback err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -88,20 +94,16 @@ func TestRollbackMovesProductionToTheChosenPromotionOnceConsented(t *testing.T) 
 		if !strings.Contains(out, "Rolled back to promotion promo-1") {
 			t.Errorf("stdout = %q, want it to report rolling back to promo-1", out)
 		}
-
-		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
 	t.Run("a declined confirmation rolls nothing back", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
+		project := promotedTwice(t)
 		invocation := clitest.NewInvocation()
 		invocation.StdinIsTerminal = func(io.Reader) bool { return true }
-		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
-		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := runRollback(context.Background(), invocation, root, rollbackOptions{}, &stdout, &stderr, strings.NewReader("n\n")); err != nil {
+		if err := runRollback(context.Background(), invocation, project.Root, rollbackOptions{}, &stdout, &stderr, strings.NewReader("n\n")); err != nil {
 			t.Fatalf("runRollback err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -115,14 +117,12 @@ func TestRollbackMovesProductionToTheChosenPromotionOnceConsented(t *testing.T) 
 	})
 
 	t.Run("--dry reads the history, prints the plan and rolls nothing back", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
+		project := promotedTwice(t)
 		invocation := clitest.NewInvocation()
-		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
-		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := runRollback(context.Background(), invocation, root, rollbackOptions{dry: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runRollback(context.Background(), invocation, project.Root, rollbackOptions{dry: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runRollback err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -138,14 +138,12 @@ func TestRollbackMovesProductionToTheChosenPromotionOnceConsented(t *testing.T) 
 	})
 
 	t.Run("--tag rolls back to the tagged promotion and echoes the tag", func(t *testing.T) {
-		root, sockPath := clitest.SetUpDeployFixture(t)
+		project := promotedTwice(t)
 		invocation := clitest.NewInvocation()
-		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
-		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := runRollback(context.Background(), invocation, root, rollbackOptions{tag: "v1.0.0", yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runRollback(context.Background(), invocation, project.Root, rollbackOptions{tag: "v1.0.0", yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runRollback err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -156,17 +154,15 @@ func TestRollbackMovesProductionToTheChosenPromotionOnceConsented(t *testing.T) 
 		if !strings.Contains(out, "tag v1.0.0") {
 			t.Errorf("stdout = %q, want it to echo the target's tag", out)
 		}
-
-		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
 	t.Run("--to and --tag are mutually exclusive", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
+		project := promotedTwice(t)
 		invocation := clitest.NewInvocation()
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		err := runRollback(context.Background(), invocation, root, rollbackOptions{to: "promo-1", tag: "v1.0.0"}, &stdout, &stderr, strings.NewReader(""))
+		err := runRollback(context.Background(), invocation, project.Root, rollbackOptions{to: "promo-1", tag: "v1.0.0"}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runRollback err = nil, want an error when both --to and --tag are set")
 		}
@@ -176,14 +172,12 @@ func TestRollbackMovesProductionToTheChosenPromotionOnceConsented(t *testing.T) 
 	})
 
 	t.Run("a tag no promotion has is refused before anything is rolled back", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
+		project := promotedTwice(t)
 		invocation := clitest.NewInvocation()
-		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
-		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		err := runRollback(context.Background(), invocation, root, rollbackOptions{tag: "v9.9.9", yes: true}, &stdout, &stderr, strings.NewReader(""))
+		err := runRollback(context.Background(), invocation, project.Root, rollbackOptions{tag: "v9.9.9", yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runRollback err = nil, want an error for a tag nothing has")
 		}
@@ -198,14 +192,12 @@ func TestRollbackMovesProductionToTheChosenPromotionOnceConsented(t *testing.T) 
 	})
 
 	t.Run("an unlisted --to is refused before the rollback is asked for", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
+		project := promotedTwice(t)
 		invocation := clitest.NewInvocation()
-		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
-		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		err := runRollback(context.Background(), invocation, root, rollbackOptions{to: "no-such-promotion", yes: true}, &stdout, &stderr, strings.NewReader(""))
+		err := runRollback(context.Background(), invocation, project.Root, rollbackOptions{to: "no-such-promotion", yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runRollback err = nil, want an error for an unknown promotion id")
 		}
@@ -221,14 +213,13 @@ func TestRollbackMovesProductionToTheChosenPromotionOnceConsented(t *testing.T) 
 	})
 
 	t.Run("it refuses on preview infrastructure", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
+		project := promotedTwice(t)
+		bootstrappedOnlyForPreview(t, project)
 		invocation := clitest.NewInvocation()
-		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
-		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		err := runRollback(context.Background(), invocation, root, rollbackOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		err := runRollback(context.Background(), invocation, project.Root, rollbackOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runRollback err = nil, want a tier-mismatch error")
 		}
@@ -241,14 +232,15 @@ func TestRollbackMovesProductionToTheChosenPromotionOnceConsented(t *testing.T) 
 	})
 
 	t.Run("it refuses when the infrastructure is absent", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
+		project := promotedTwice(t)
+		if err := project.Provider.FakeBootstrap().Remove(context.Background(), environment.TierProduction, nil); err != nil {
+			t.Fatal(err)
+		}
 		invocation := clitest.NewInvocation()
-		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
-		t.Setenv(clitest.FakeInfraPresentEnvVar, "0")
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		err := runRollback(context.Background(), invocation, root, rollbackOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		err := runRollback(context.Background(), invocation, project.Root, rollbackOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runRollback err = nil, want a missing-infrastructure error")
 		}
@@ -261,12 +253,12 @@ func TestRollbackMovesProductionToTheChosenPromotionOnceConsented(t *testing.T) 
 	})
 
 	t.Run("without --yes it refuses without a terminal", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
+		project := promotedTwice(t)
 		invocation := clitest.NewInvocation()
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		err := runRollback(context.Background(), invocation, root, rollbackOptions{}, &stdout, &stderr, strings.NewReader(""))
+		err := runRollback(context.Background(), invocation, project.Root, rollbackOptions{}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runRollback without a TTY err = nil, want a refusal")
 		}
@@ -277,18 +269,16 @@ func TestRollbackMovesProductionToTheChosenPromotionOnceConsented(t *testing.T) 
 }
 
 func TestARollbackAsksWhileTheRunIsHeldAfterThePlanItShows(t *testing.T) {
-	root, _ := clitest.SetUpDeployFixture(t)
+	project := promotedTwice(t)
 	invocation := clitest.NewInvocation()
 	invocation.StdinIsTerminal = func(io.Reader) bool { return true }
 	invocation.Presentation = func(io.Writer) terminal.Presentation {
 		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
 	}
-	t.Setenv(clitest.FakeInfraTierEnvVar, "production")
-	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 	var stream, stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(invocation, &stream)
-	if err := runRollback(context.Background(), invocation, root, rollbackOptions{}, &stdout, &stderr, strings.NewReader("y\n")); err != nil {
+	if err := runRollback(context.Background(), invocation, project.Root, rollbackOptions{}, &stdout, &stderr, strings.NewReader("y\n")); err != nil {
 		t.Fatalf("runRollback err = %v; stream=%s stdout=%s stderr=%s", err, stream.String(), stdout.String(), stderr.String())
 	}
 
@@ -391,62 +381,60 @@ func TestARollbackPassesOverAPromotionTakenBackAndRefusesToNameOne(t *testing.T)
 }
 
 func TestARollbackShowsTheWarningsTheProviderReturned(t *testing.T) {
-	root, sockPath := clitest.SetUpDeployFixture(t)
-	invocation := clitest.NewInvocation()
-	t.Setenv(clitest.FakeInfraTierEnvVar, "production")
-	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+	project := clitest.SetUpProject(t)
+	kept := make([]router.Promotion, ledger.KeptPromotions)
+	for i := range kept {
+		kept[i] = router.Promotion{PromotionID: fmt.Sprintf("p%02d", i), Ts: int64(i + 1), Builds: map[string]string{"web": fmt.Sprintf("build-%02d~fp%02d", i, i)}}
+	}
+	recordPromotions(t, project, kept...)
 	const warned = "the stack of an old build is still provisioned"
-	t.Setenv(clitest.FakeRollbackWarningEnvVar, warned)
+	project.Provider.FakeStacks().RefuseNextDestroy(errors.New(warned))
+	invocation := clitest.NewInvocation()
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(invocation, &stdout)
-	if err := runRollback(context.Background(), invocation, root, rollbackOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+	if err := runRollback(context.Background(), invocation, project.Root, rollbackOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runRollback err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
-	if out := stdout.String(); !strings.Contains(out, warned) || !strings.Contains(out, "Rolled back to promotion promo-1") {
+	if out := stdout.String(); !strings.Contains(out, warned) || !strings.Contains(out, "Rolled back to promotion p18") {
 		t.Errorf("stdout = %q, want the rollback reported with the provider's warning %q", out, warned)
 	}
-
-	clitest.WaitForNoStaleSocket(t, sockPath)
 }
 
 var propagationCases = []struct {
-	name  string
-	spec  string
-	want  string
-	other []string
+	name        string
+	propagation router.Propagation
+	want        string
+	other       []string
 }{
 	{
 		name:  "instant",
-		spec:  "0",
 		other: []string{"propagates"},
 	},
 	{
-		name:  "published",
-		spec:  "5000:published",
-		want:  "propagates within ~5 s",
-		other: []string{"typical, not guaranteed"},
+		name:        "published",
+		propagation: router.Propagation{Typical: 5 * time.Second, Published: true},
+		want:        "propagates within ~5 s",
+		other:       []string{"typical, not guaranteed"},
 	},
 	{
-		name:  "unpublished",
-		spec:  "5000",
-		want:  "propagates in ~5 s (typical, not guaranteed)",
-		other: []string{"propagates within"},
+		name:        "unpublished",
+		propagation: router.Propagation{Typical: 5 * time.Second},
+		want:        "propagates in ~5 s (typical, not guaranteed)",
+		other:       []string{"propagates within"},
 	},
 }
 
 func TestPropagationOnTheRollbackPromotionLine(t *testing.T) {
 	for _, tc := range propagationCases {
 		t.Run(tc.name, func(t *testing.T) {
-			root, sockPath := clitest.SetUpDeployFixture(t)
+			project := promotedTwice(t)
+			project.Provider.Routers().(*fake.Routers).DataPlane(fake.RouterRelay).Propagates(tc.propagation)
 			invocation := clitest.NewInvocation()
-			t.Setenv(clitest.FakeInfraTierEnvVar, "production")
-			t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
-			t.Setenv(clitest.FakePropagationEnvVar, tc.spec)
 
 			var stdout, stderr bytes.Buffer
 			clitest.AttachTerminalSink(invocation, &stdout)
-			if err := runRollback(context.Background(), invocation, root, rollbackOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+			if err := runRollback(context.Background(), invocation, project.Root, rollbackOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 				t.Fatalf("runRollback err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 			}
 
@@ -461,8 +449,6 @@ func TestPropagationOnTheRollbackPromotionLine(t *testing.T) {
 				t.Fatalf("stdout = %q, want a rolled-back line", out)
 			}
 			assertPropagationNote(t, line, tc.want, tc.other)
-
-			clitest.WaitForNoStaleSocket(t, sockPath)
 		})
 	}
 }

@@ -57,13 +57,14 @@ func (r *Routers) Open(kind router.Kind) (router.Router, error) {
 func (r *Routers) DataPlane(kind router.Kind) *DataPlane { return r.planes[kind] }
 
 type DataPlane struct {
-	mu       sync.Mutex
-	failure  error
-	before   func()
-	says     string
-	progress progress.Log
-	served   map[projectPointer]map[string]string
-	writes   map[projectPointer]int
+	mu         sync.Mutex
+	failure    error
+	before     func()
+	says       string
+	progress   progress.Log
+	propagates *router.Propagation
+	served     map[projectPointer]map[string]string
+	writes     map[projectPointer]int
 }
 
 type projectPointer struct {
@@ -161,7 +162,13 @@ type Router struct {
 
 func (r Router) Kind() router.Kind { return r.edge.routedBy }
 
-func (r Router) Facts() router.Facts { return r.edge.routerFacts() }
+func (r Router) Facts() router.Facts {
+	facts := r.edge.routerFacts()
+	if propagation, set := r.plane.propagation(); set {
+		facts.Propagation = propagation
+	}
+	return facts
+}
 
 func (r Router) Hooks() router.Hooks {
 	return router.Hooks{Origin: &router.OriginHooks{
