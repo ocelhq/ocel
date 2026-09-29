@@ -13,10 +13,10 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console"
-	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/connectorserver"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -141,7 +141,7 @@ func withOptions(cmd *cobra.Command, deps cmddeps.Deps, opts *options,
 	return run(ctx, cfg, link)
 }
 
-func reachTarget(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, check *events.Scope) (*providerclient.Provider, *contractv1.DescribeConnectorTargetResponse, error) {
+func reachTarget(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, check *run.Span) (*providerclient.Provider, *contractv1.DescribeConnectorTargetResponse, error) {
 	prov, err := providerclient.Start(ctx, cfg, check, deps.HostTrust, providerclient.PinToLock)
 	if err != nil {
 		return nil, nil, err

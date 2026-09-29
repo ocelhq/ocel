@@ -48,7 +48,7 @@ func TestTheDeploymentURLReachesEveryDeliverySite(t *testing.T) {
 		return functionsOnDisk(&deps, cfg)
 	}
 
-	s, _ := newBuildScope(t)
+	s, _ := newBuildSpan(t)
 	cfg := prebuiltConfig(root)
 	urls := map[string]string{"api": "https://api.acme.com"}
 	manifest, _, err := collectAndBuildManifest(context.Background(), deps, cfg, emptyDeclarations(cfg), false, false, s, s, "serverless", nil, urls)
@@ -92,13 +92,13 @@ func TestPrebuiltRefusesAnOutputBuiltForAnotherURL(t *testing.T) {
 	recordBuildApp(&deps)
 	cfg := prebuiltConfig(root)
 
-	s, _ := newBuildScope(t)
+	s, _ := newBuildSpan(t)
 	if _, _, err := collectAndBuildManifest(context.Background(), deps, cfg, emptyDeclarations(cfg), false, false, s, s, "serverless", nil,
 		map[string]string{"api": "https://api.acme.com"}); err != nil {
 		t.Fatalf("collectAndBuildManifest: %v", err)
 	}
 
-	s, _ = newBuildScope(t)
+	s, _ = newBuildSpan(t)
 	_, _, err := collectAndBuildManifest(context.Background(), deps, cfg, emptyDeclarations(cfg), true, false, s, s, "serverless", nil,
 		map[string]string{"api": "https://pr-1.preview.acme.com"})
 	if err == nil {

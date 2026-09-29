@@ -14,10 +14,10 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/deployrecord"
-	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/valuestore"
 	"github.com/ocelhq/ocel/cli/internal/variables"
@@ -218,7 +218,7 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 		return err
 	}
 	if facts.declined {
-		run.Finish("Nothing deployed to preview " + env.GetIdentity())
+		run.Succeed("Nothing deployed to preview " + env.GetIdentity())
 		return nil
 	}
 
@@ -253,7 +253,7 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 		return err
 	}
 	if manifest == nil {
-		run.Finish(nothingToDeploy(cfg))
+		run.Succeed(nothingToDeploy(cfg))
 		return nil
 	}
 
@@ -287,11 +287,11 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 	if err := deployrecord.Write(cfg.Dir, record); err != nil {
 		return err
 	}
-	run.Deployed(fmt.Sprintf("Deployed %s to preview %s", cfg.Slug, env.GetIdentity()), out.urlNotes, out.propagation)
+	run.Succeed(fmt.Sprintf("Deployed %s to preview %s", cfg.Slug, env.GetIdentity()))
 	return nil
 }
 
-func requirePreviewDomain(cfg *projectconfig.Config, wildcard *contractv1.PreviewWildcard, id *contractv1.Identity, pointer string, check *events.Scope) (edge.PreviewSite, error) {
+func requirePreviewDomain(cfg *projectconfig.Config, wildcard *contractv1.PreviewWildcard, id *contractv1.Identity, pointer string, check *run.Span) (edge.PreviewSite, error) {
 	declared := ""
 	if hosts := preflight.Hostnames(cfg, "preview"); len(hosts) > 0 {
 		declared = hosts[0].Name
@@ -394,7 +394,7 @@ func runPreviewRm(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 			return err
 		}
 		if !proceed {
-			run.Finish(fmt.Sprintf("Nothing torn down: preview %s stays", env.GetIdentity()))
+			run.Succeed(fmt.Sprintf("Nothing torn down: preview %s stays", env.GetIdentity()))
 			return nil
 		}
 	}
@@ -413,7 +413,7 @@ func runPreviewRm(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 	if _, err := providerclient.Stream(ctx, prov, "RemoveEnvironment", req, contractv1connect.ProviderServiceClient.RemoveEnvironment); err != nil {
 		return err
 	}
-	run.Finish(fmt.Sprintf("Tore down preview %s of %s", env.GetIdentity(), cfg.Slug))
+	run.Succeed(fmt.Sprintf("Tore down preview %s of %s", env.GetIdentity(), cfg.Slug))
 	return nil
 }
 
@@ -500,7 +500,7 @@ func runPreviewPrune(ctx context.Context, deps cmddeps.Deps, cwd string, opts pr
 	if _, err := providerclient.Stream(ctx, prov, "RemoveStalePromotions", req, contractv1connect.ProviderServiceClient.RemoveStalePromotions); err != nil {
 		return err
 	}
-	run.Finish(fmt.Sprintf("Pruned the promotions of preview %s down to the newest %d", env.GetIdentity(), opts.keep))
+	run.Succeed(fmt.Sprintf("Pruned the promotions of preview %s down to the newest %d", env.GetIdentity(), opts.keep))
 	return nil
 }
 

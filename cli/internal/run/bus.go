@@ -1,4 +1,4 @@
-package events
+package run
 
 import (
 	"context"
@@ -36,7 +36,7 @@ func (b *Bus) Attach(s Sink) {
 }
 
 func (b *Bus) Begin(ctx context.Context, command, projectDir string) (context.Context, *Run, error) {
-	r := &Run{bus: b, command: command, start: b.now(), phases: map[progressv1.Phase]*Scope{}}
+	r := &Run{bus: b, command: command, start: b.now(), phases: map[progressv1.Phase]*Span{}}
 	if projectDir != "" {
 		var err error
 		if ctx, r.trace, err = runtrace.Start(ctx, projectDir, command); err != nil {

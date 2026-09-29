@@ -12,8 +12,8 @@ import (
 	"github.com/fatih/color"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/style"
-	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -46,7 +46,7 @@ func needsNote(stdout io.Writer, note string) string {
 	return gated(stdout, color.RGB(0xff, 0xb8, 0x6c)).Sprint(note)
 }
 
-func chooseFeatures(ctx context.Context, scope *events.Scope, opts Options, catalogue []*contractv1.Feature, installed, going []string, kind string, tier environmentv1.Tier, interactive bool, stdout io.Writer) ([]string, bool, error) {
+func chooseFeatures(ctx context.Context, span *run.Span, opts Options, catalogue []*contractv1.Feature, installed, going []string, kind string, tier environmentv1.Tier, interactive bool, stdout io.Writer) ([]string, bool, error) {
 	if opts.FeaturesDeclared {
 		requested, err := parseFeatureFlag(opts.Features, catalogue)
 		return requested, err == nil, err
@@ -54,7 +54,7 @@ func chooseFeatures(ctx context.Context, scope *events.Scope, opts Options, cata
 	if !interactive {
 		return without(installed, going), true, nil
 	}
-	resume := scope.Hold(&streamv1.WaitingEvent{})
+	resume := span.Hold(&streamv1.WaitingEvent{})
 	defer resume("answered")
 	return pickFeatures(ctx, catalogue, installed, going, kind, tier, stdout)
 }
@@ -244,9 +244,9 @@ func featureNeedingEdge(catalogue []*contractv1.Feature, kind string) string {
 	return ""
 }
 
-func sayImplied(scope *events.Scope, tier environmentv1.Tier, pulled []implication) {
+func sayImplied(span *run.Span, tier environmentv1.Tier, pulled []implication) {
 	for _, p := range pulled {
-		scope.Say(fmt.Sprintf("Also adding feature %s to the %s bootstrap: %s", p.name, Name(tier), p.reason))
+		span.Say(fmt.Sprintf("Also adding feature %s to the %s bootstrap: %s", p.name, Name(tier), p.reason))
 	}
 }
 

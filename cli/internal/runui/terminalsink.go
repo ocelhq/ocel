@@ -3,10 +3,10 @@ package runui
 import (
 	"io"
 
-	"github.com/ocelhq/ocel/cli/internal/events"
+	"github.com/ocelhq/ocel/cli/internal/run"
 )
 
-func NewTerminalSink(present Presentation, w io.Writer) events.Sink {
+func NewTerminalSink(present Presentation, w io.Writer) run.Sink {
 	switch {
 	case present.Format == FormatJSON:
 		return NewJSONSink(w)

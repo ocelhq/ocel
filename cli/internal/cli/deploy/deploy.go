@@ -107,7 +107,7 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 		return err
 	}
 	if facts.declined {
-		run.Finish("Nothing deployed to production")
+		run.Succeed("Nothing deployed to production")
 		return nil
 	}
 
@@ -142,7 +142,7 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 		return err
 	}
 	if manifest == nil {
-		run.Finish(nothingToDeploy(cfg))
+		run.Succeed(nothingToDeploy(cfg))
 		return nil
 	}
 
@@ -181,6 +181,6 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 	if err := deployrecord.Write(cfg.Dir, record); err != nil {
 		return err
 	}
-	run.Deployed(fmt.Sprintf("Deployed %s to production", cfg.Slug), out.urlNotes, out.propagation)
+	run.Succeed(fmt.Sprintf("Deployed %s to production", cfg.Slug))
 	return nil
 }

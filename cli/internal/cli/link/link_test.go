@@ -100,7 +100,7 @@ func TestRunLink(t *testing.T) {
 		}
 
 		var stderr bytes.Buffer
-		err := run(context.Background(), deps, t.TempDir(), "", options{}, &bytes.Buffer{}, &stderr, strings.NewReader(""))
+		err := runLink(context.Background(), deps, t.TempDir(), "", options{}, &bytes.Buffer{}, &stderr, strings.NewReader(""))
 
 		var exitErr *exitcode.ExitError
 		if !errors.As(err, &exitErr) {
@@ -120,7 +120,7 @@ func TestRunLink(t *testing.T) {
 		dir := t.TempDir()
 
 		opts := options{apiURL: srv.URL}
-		if err := run(context.Background(), deps, dir, "other", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader("")); err != nil {
+		if err := runLink(context.Background(), deps, dir, "other", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader("")); err != nil {
 			t.Fatalf("run err = %v", err)
 		}
 
@@ -183,7 +183,7 @@ func TestRunLink(t *testing.T) {
 		}
 
 		opts := options{apiURL: srv.URL, create: true}
-		if err := run(context.Background(), deps, dir, "", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader("")); err != nil {
+		if err := runLink(context.Background(), deps, dir, "", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader("")); err != nil {
 			t.Fatalf("run err = %v", err)
 		}
 
@@ -204,7 +204,7 @@ func TestRunLink(t *testing.T) {
 		srv := newCloudServer(t)
 
 		opts := options{apiURL: srv.URL, create: true}
-		if err := run(context.Background(), deps, t.TempDir(), "My Cool App", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader("")); err != nil {
+		if err := runLink(context.Background(), deps, t.TempDir(), "My Cool App", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader("")); err != nil {
 			t.Fatalf("run err = %v", err)
 		}
 		if len(srv.created) != 1 || srv.created[0]["slug"] != "my-cool-app" || srv.created[0]["name"] != "My Cool App" {
@@ -250,7 +250,7 @@ func TestRunLink(t *testing.T) {
 
 		dir := t.TempDir()
 		opts := options{apiURL: srv.URL, create: true, org: "other-co"}
-		if err := run(context.Background(), deps, dir, "My App", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader("")); err != nil {
+		if err := runLink(context.Background(), deps, dir, "My App", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader("")); err != nil {
 			t.Fatalf("run err = %v", err)
 		}
 		record := readLink(t, dir, srv.URL)
@@ -289,7 +289,7 @@ func TestRunLink(t *testing.T) {
 		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(deps, &stdout)
 		opts := options{apiURL: srv.URL}
-		if err := run(context.Background(), deps, dir, "other", opts, &stdout, &bytes.Buffer{}, strings.NewReader("")); err != nil {
+		if err := runLink(context.Background(), deps, dir, "other", opts, &stdout, &bytes.Buffer{}, strings.NewReader("")); err != nil {
 			t.Fatalf("run err = %v", err)
 		}
 		if !strings.Contains(stdout.String(), "INFO  [check] This directory is linked to My App now; linking it again\n") {
@@ -317,7 +317,7 @@ func TestRunLink(t *testing.T) {
 		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(deps, &stdout)
 		opts := options{apiURL: srv.URL}
-		if err := run(context.Background(), deps, dir, "my-app", opts, &stdout, &bytes.Buffer{}, strings.NewReader("")); err != nil {
+		if err := runLink(context.Background(), deps, dir, "my-app", opts, &stdout, &bytes.Buffer{}, strings.NewReader("")); err != nil {
 			t.Fatalf("run err = %v", err)
 		}
 		if strings.Contains(stdout.String(), "Elsewhere") {
@@ -345,7 +345,7 @@ func TestLinkingShowsEachConsoleWaitAsAUnitOnItsRunAndNothingElseWritesTheTermin
 	srv := newCloudServer(t, projectRow("p1", "My App", "my-app"), projectRow("p2", "Other", "other"))
 	srv.slow = 300 * time.Millisecond
 
-	if err := run(context.Background(), deps, t.TempDir(), "other", options{apiURL: srv.URL}, &stdout, &bytes.Buffer{}, strings.NewReader("")); err != nil {
+	if err := runLink(context.Background(), deps, t.TempDir(), "other", options{apiURL: srv.URL}, &stdout, &bytes.Buffer{}, strings.NewReader("")); err != nil {
 		t.Fatalf("run err = %v", err)
 	}
 
@@ -379,7 +379,7 @@ func failedLink(t *testing.T, deps cmddeps.Deps, dir, projectRef string, opts op
 	t.Helper()
 	var out bytes.Buffer
 	clitest.AttachTerminalSink(deps, &out)
-	err := run(context.Background(), deps, dir, projectRef, opts, &out, &bytes.Buffer{}, strings.NewReader(""))
+	err := runLink(context.Background(), deps, dir, projectRef, opts, &out, &bytes.Buffer{}, strings.NewReader(""))
 	var exitErr *exitcode.ExitError
 	if !errors.As(err, &exitErr) || exitErr.Code != 1 {
 		t.Fatalf("run err = %v, want the run to fail with exit code 1", err)

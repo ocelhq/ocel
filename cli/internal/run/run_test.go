@@ -1,10 +1,11 @@
-package events_test
+package run_test
 
 import (
 	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,8 +16,8 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 
-	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/constants"
@@ -25,13 +26,13 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
-func TestEveryScopeARunOpensEndsExactlyOnceBeforeItsResultWhenTheRunFails(t *testing.T) {
+func TestEverySpanARunOpensEndsExactlyOnceBeforeItsResultWhenTheRunFails(t *testing.T) {
 	sink := &recording{}
 	run, _ := begin(t, sink)
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	check.Unit("aws", "Checking credentials").End(nil)
+	check.Unit("aws", progress.Checking.Title("credentials")).End(nil)
 	deploy := run.Phase(progressv1.Phase_PHASE_DEPLOY)
-	deploy.Unit("web", "Deploying web")
+	deploy.Unit("web", progress.Deploying.Title("web"))
 	check.End(nil)
 
 	err := errors.New("the upload was refused")
@@ -49,13 +50,13 @@ func TestEveryScopeARunOpensEndsExactlyOnceBeforeItsResultWhenTheRunFails(t *tes
 			ended[id]++
 			order = append(order, ev.GetSubject())
 			if i == len(got)-1 {
-				t.Fatal("a scope ended after the run's result")
+				t.Fatal("a span ended after the run's result")
 			}
 		}
 	}
 	for id := range opened {
 		if ended[id] != 1 {
-			t.Fatalf("scope %s ended %d times, want once", id, ended[id])
+			t.Fatalf("span %s ended %d times, want once", id, ended[id])
 		}
 	}
 	if strings.Join(order, ",") != "aws,,web," {
@@ -67,12 +68,12 @@ func TestEveryScopeARunOpensEndsExactlyOnceBeforeItsResultWhenTheRunFails(t *tes
 	}
 }
 
-func TestAUnitOpenedOnAnEndedScopeStillEndsOnceWhenTheRunEnds(t *testing.T) {
+func TestAUnitOpenedOnAnEndedSpanStillEndsOnceWhenTheRunEnds(t *testing.T) {
 	sink := &recording{}
 	run, _ := begin(t, sink)
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
 	check.End(nil)
-	check.Unit("aws", "Checking credentials").Say("still here")
+	check.Unit("aws", progress.Checking.Title("credentials")).Say("still here")
 
 	var err error
 	run.End(&err)
@@ -156,20 +157,20 @@ func TestAnInterruptedRunWarnsOfPartlyCreatedResourcesOnlyOnceAPhaseThatChangesT
 	const partly = "Resources may be partially created.\nRe-run `ocel deploy` to reconcile."
 	for _, tc := range []struct {
 		name   string
-		work   func(run *events.Run)
+		work   func(run *run.Run)
 		detail string
 	}{
-		{name: "checking and building", work: func(run *events.Run) {
+		{name: "checking and building", work: func(run *run.Run) {
 			run.Phase(progressv1.Phase_PHASE_CHECK).End(nil)
 			run.Phase(progressv1.Phase_PHASE_BUILD).Hold(&streamv1.WaitingEvent{})
 		}},
-		{name: "planning", work: func(run *events.Run) {
-			run.Phase(progressv1.Phase_PHASE_PLAN).Unit("shop", "Planning changes")
+		{name: "planning", work: func(run *run.Run) {
+			run.Phase(progressv1.Phase_PHASE_PLAN).Unit("shop", progress.Planning.Title("changes"))
 		}},
-		{name: "a phase the command opened to promote", detail: partly, work: func(run *events.Run) {
-			run.Phase(progressv1.Phase_PHASE_PROMOTE).Unit("shop", "Promoting d-1")
+		{name: "a phase the command opened to promote", detail: partly, work: func(run *run.Run) {
+			run.Phase(progressv1.Phase_PHASE_PROMOTE).Unit("shop", progress.Title{Started: "Promoting d-1", Ended: "Promoting d-1"})
 		}},
-		{name: "a phase the provider reported destroying in", detail: partly, work: func(run *events.Run) {
+		{name: "a phase the provider reported destroying in", detail: partly, work: func(run *run.Run) {
 			run.Phase(progressv1.Phase_PHASE_CHECK).Forward(&progressv1.OperationEvent{
 				Phase:  progressv1.Phase_PHASE_DESTROY,
 				SpanId: []byte("unit-env"),
@@ -213,15 +214,21 @@ func TestASuccessfulRunEndsWithASuccessResultAndNoError(t *testing.T) {
 		t.Fatalf("err = %v, want nil", err)
 	}
 	if !bytes.Equal(got[len(got)-2].GetSpanId(), got[0].GetSpanId()) {
-		t.Fatal("the run ended some other scope than its deploy phase")
+		t.Fatal("the run ended some other span than its deploy phase")
 	}
 }
 
-func TestADeployedRunsSuccessResultCarriesItsHeadlineURLNotesAndPropagation(t *testing.T) {
+func TestASucceededRunsSummaryCarriesItsHeadlineAndTheURLNotesAndPropagationItsProviderReported(t *testing.T) {
 	sink := &recording{}
 	run, _ := begin(t, sink)
-	flip := &progressv1.Propagation{TypicalMs: 3000, Published: true}
-	run.Deployed("Deployed", []string{"web: https://web.example.com"}, flip)
+	deploy := run.Phase(progressv1.Phase_PHASE_DEPLOY)
+	deploy.Forward(&progressv1.OperationEvent{Phase: progressv1.Phase_PHASE_DEPLOY, Body: &progressv1.OperationEvent_Result{Result: &progressv1.OperationResult{
+		Success:     true,
+		UrlNotes:    []string{"web: https://web.example.com"},
+		Propagation: &progressv1.Propagation{TypicalMs: 3000, Published: true},
+	}}})
+	deploy.End(nil)
+	run.Succeed("Deployed")
 
 	var err error
 	run.End(&err)
@@ -236,7 +243,7 @@ func TestADeployedRunsSuccessResultCarriesItsHeadlineURLNotesAndPropagation(t *t
 func TestARunThatFailsAfterReportingAHeadlineEndsWithTheFailureInstead(t *testing.T) {
 	sink := &recording{}
 	run, _ := begin(t, sink)
-	run.Finish("Nothing to deploy")
+	run.Succeed("Nothing to deploy")
 
 	err := errors.New("the service map could not be written")
 	run.End(&err)
@@ -306,7 +313,7 @@ func TestAProviderLineRewrittenWithCarriageReturnsReachesEverySinkAsTheLastThing
 	}
 }
 
-func TestAForwardedScopeThatEndsBeforeItStartedEndsWhenItArrives(t *testing.T) {
+func TestAForwardedSpanThatEndsBeforeItStartedEndsWhenItArrives(t *testing.T) {
 	sink := &recording{}
 	run, c := begin(t, sink)
 	started := c.read().Add(-time.Minute)
@@ -318,7 +325,7 @@ func TestAForwardedScopeThatEndsBeforeItStartedEndsWhenItArrives(t *testing.T) {
 	})
 
 	if at := sink.received()[1].GetTime().AsTime(); !at.Equal(c.read()) {
-		t.Errorf("the scope ended at %s, want the time it reached the bus, %s, not before it started", at, c.read())
+		t.Errorf("the span ended at %s, want the time it reached the bus, %s, not before it started", at, c.read())
 	}
 }
 
@@ -343,7 +350,7 @@ func TestTheAppsAProvidersOutcomeReportsAreOnTheRunsResult(t *testing.T) {
 
 func TestARunInAProjectTracesItselfAndPointsItsResultAtItsLog(t *testing.T) {
 	sink := &recording{}
-	bus := events.NewBus(time.Now)
+	bus := run.NewBus(time.Now)
 	bus.Attach(sink)
 	dir := t.TempDir()
 
@@ -368,7 +375,7 @@ func TestARunInAProjectTracesItselfAndPointsItsResultAtItsLog(t *testing.T) {
 }
 
 func TestARunInAProjectLogsEveryEventDebugIncludedUpToItsResultAndNothingAfter(t *testing.T) {
-	bus := events.NewBus(time.Now)
+	bus := run.NewBus(time.Now)
 	bus.Attach(&recording{})
 	ctx, run, err := bus.Begin(context.Background(), "ocel deploy", t.TempDir())
 	if err != nil {
@@ -419,7 +426,7 @@ func TestAFailedOrCancelledRunsHeadlineNamesTheCommandItEnded(t *testing.T) {
 			sink := &recording{}
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			bus := events.NewBus(newClock().read)
+			bus := run.NewBus(newClock().read)
 			bus.Attach(sink)
 			_, run, err := bus.Begin(ctx, tc.command, "")
 			if err != nil {
@@ -441,7 +448,7 @@ func TestAFailedOrCancelledRunsHeadlineNamesTheCommandItEnded(t *testing.T) {
 
 func TestASuccessfulRunThatReportedNoHeadlineIsHeadedByTheCommandItFinished(t *testing.T) {
 	sink := &recording{}
-	bus := events.NewBus(newClock().read)
+	bus := run.NewBus(newClock().read)
 	bus.Attach(sink)
 	_, run, err := bus.Begin(context.Background(), "ocel env ls", "")
 	if err != nil {

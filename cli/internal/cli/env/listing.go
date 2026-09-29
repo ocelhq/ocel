@@ -9,9 +9,9 @@ import (
 	"unicode/utf8"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/valuestore"
 	"github.com/ocelhq/ocel/cli/internal/variables"
@@ -22,7 +22,7 @@ import (
 )
 
 func runEnvLs(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, stdout, stderr io.Writer) error {
-	return withEnvProvider(ctx, deps, cwd, opts, "ocel env ls", stderr, func(ctx context.Context, run *events.Run, prov *providerclient.Provider, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
+	return withEnvProvider(ctx, deps, cwd, opts, "ocel env ls", stderr, func(ctx context.Context, run *run.Run, prov *providerclient.Provider, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
 		definitions, groups, err := declaredVariables(ctx, deps, cfg, prov, "", opts, run)
 		if err != nil {
 			return err

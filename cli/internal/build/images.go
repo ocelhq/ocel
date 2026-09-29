@@ -12,8 +12,8 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/build/image"
-	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/images"
@@ -110,7 +110,7 @@ func readImageRef(projectDir, app string) (string, error) {
 	return ref, nil
 }
 
-func RefuseUnbuildableImages(ctx context.Context, scope *events.Scope, cfg *projectconfig.Config, archs map[string]string) error {
+func RefuseUnbuildableImages(ctx context.Context, span *run.Span, cfg *projectconfig.Config, archs map[string]string) error {
 	var recipes []image.Recipe
 	for _, app := range ImageApps(cfg.Apps) {
 		described, err := image.Describe(cfg, app)
@@ -130,7 +130,7 @@ func RefuseUnbuildableImages(ctx context.Context, scope *events.Scope, cfg *proj
 	for i, recipe := range recipes {
 		containers[i] = recipe.App.Name
 		if notice := recipe.Notice(); notice != "" {
-			scope.Say(notice)
+			span.Say(notice)
 		}
 	}
 	if err := image.RefuseUnusableDaemon(ctx, slices.Sorted(maps.Values(archs))...); err != nil {

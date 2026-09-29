@@ -1,4 +1,4 @@
-package events
+package run
 
 import (
 	"google.golang.org/protobuf/proto"

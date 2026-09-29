@@ -1,4 +1,4 @@
-package events
+package run
 
 import (
 	"bytes"
@@ -6,7 +6,7 @@ import (
 	"sync"
 )
 
-const maxBufferedLine = 64 << 10
+const maxBufferedLineBytes = 64 << 10
 
 type lineWriter struct {
 	emit func(string)
@@ -41,7 +41,7 @@ func (w *lineWriter) take(p []byte) []string {
 	if i := bytes.LastIndexByte(w.pending, '\r'); i >= 0 {
 		w.pending = w.pending[i:]
 	}
-	if len(w.pending) > maxBufferedLine {
+	if len(w.pending) > maxBufferedLineBytes {
 		ready = append(ready, collapseRewrites(string(w.pending)))
 		w.pending = nil
 	}

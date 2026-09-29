@@ -11,10 +11,10 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/valuestore"
@@ -46,18 +46,18 @@ type variablesRecovery struct {
 	enabled bool
 }
 
-func (r variablesRecovery) buildManifest(ctx context.Context, phase *events.Scope, prebuilt bool) (*contractv1.Manifest, []inlinebinding.Record, error) {
+func (r variablesRecovery) buildManifest(ctx context.Context, phase *run.Span, prebuilt bool) (*contractv1.Manifest, []inlinebinding.Record, error) {
 	scope := phase.Unit(r.cfg.Slug, buildTitle(r.cfg, prebuilt))
 	manifest, inline, err := r.build(ctx, phase, scope, prebuilt)
 	scope.End(err)
 	return manifest, inline, err
 }
 
-func buildTitle(cfg *projectconfig.Config, prebuilt bool) string {
+func buildTitle(cfg *projectconfig.Config, prebuilt bool) progress.Title {
 	if !prebuilt || len(cfg.Apps) == 0 {
-		return "Collecting the resources " + cfg.Slug + " declares"
+		return progress.Collecting.Title("the resources " + cfg.Slug + " declares")
 	}
-	return "Reading the prebuilt output of " + appList(cfg)
+	return progress.Reading.Title("the prebuilt output of " + appList(cfg))
 }
 
 func nothingToDeploy(cfg *projectconfig.Config) string {
@@ -84,7 +84,7 @@ func appList(cfg *projectconfig.Config) string {
 	}
 }
 
-func (r variablesRecovery) build(ctx context.Context, phase, scope *events.Scope, prebuilt bool) (*contractv1.Manifest, []inlinebinding.Record, error) {
+func (r variablesRecovery) build(ctx context.Context, phase, scope *run.Span, prebuilt bool) (*contractv1.Manifest, []inlinebinding.Record, error) {
 	declarations, err := r.declarations(ctx)
 	var refusal *variables.MissingError
 	if errors.As(err, &refusal) && r.enabled {
@@ -126,7 +126,7 @@ func (r variablesRecovery) declarations(ctx context.Context) (*variables.Declara
 	return r.newDeclarations(synced), nil
 }
 
-func (r variablesRecovery) createInEnvSource(ctx context.Context, scope *events.Scope, declarations *variables.Declarations, refusal *variables.MissingError) {
+func (r variablesRecovery) createInEnvSource(ctx context.Context, scope *run.Span, declarations *variables.Declarations, refusal *variables.MissingError) {
 	source := declarations.Scope().EnvSource
 	if !source.CanCreate || r.dry {
 		return
@@ -155,7 +155,7 @@ func (r variablesRecovery) createInEnvSource(ctx context.Context, scope *events.
 	}
 }
 
-func (r variablesRecovery) attempt(ctx context.Context, phase, scope *events.Scope, declarations *variables.Declarations, prebuilt bool, retry int) (*contractv1.Manifest, []inlinebinding.Record, error) {
+func (r variablesRecovery) attempt(ctx context.Context, phase, scope *run.Span, declarations *variables.Declarations, prebuilt bool, retry int) (*contractv1.Manifest, []inlinebinding.Record, error) {
 	attemptCtx := ctx
 	var span trace.Span
 	if run := runtrace.FromContext(ctx); run != nil {
@@ -166,7 +166,7 @@ func (r variablesRecovery) attempt(ctx context.Context, phase, scope *events.Sco
 	return manifest, inline, err
 }
 
-func (r variablesRecovery) fill(ctx context.Context, scope *events.Scope, declarations *variables.Declarations, refusal *variables.MissingError) error {
+func (r variablesRecovery) fill(ctx context.Context, scope *run.Span, declarations *variables.Declarations, refusal *variables.MissingError) error {
 	editor, err := r.deps.ServeVariableEditor(ctx, r.cfg, r.prov, r.tier, declarations, r.recovery(refusal))
 	if err != nil {
 		return err

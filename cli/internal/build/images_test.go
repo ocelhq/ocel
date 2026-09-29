@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/build/image"
-	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/images"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
@@ -98,10 +98,10 @@ func (h *heard) String() string {
 	return h.said.String()
 }
 
-func said(t *testing.T) (*events.Scope, *heard) {
+func said(t *testing.T) (*run.Span, *heard) {
 	t.Helper()
 	h := &heard{}
-	bus := events.NewBus(time.Now)
+	bus := run.NewBus(time.Now)
 	bus.Attach(h)
 	_, run, err := bus.Begin(context.Background(), "ocel deploy", "")
 	if err != nil {

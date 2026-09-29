@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/progress"
+
 	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
 
@@ -18,9 +20,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/consent"
-	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
@@ -206,11 +208,11 @@ func runDomainUse(ctx context.Context, deps cmddeps.Deps, cwd, wildcard string, 
 	if _, err := providerclient.Stream(ctx, prov, "UsePreviewWildcard", req, contractv1connect.ProviderServiceClient.UsePreviewWildcard); err != nil {
 		return err
 	}
-	run.Finish(fmt.Sprintf("Previews are served on %s", wildcardOf(base)))
+	run.Succeed(fmt.Sprintf("Previews are served on %s", wildcardOf(base)))
 	return nil
 }
 
-func startReadyProvider(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, check *events.Scope, tier environmentv1.Tier) (*providerclient.Provider, error) {
+func startReadyProvider(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, check *run.Span, tier environmentv1.Tier) (*providerclient.Provider, error) {
 	prov, err := providerclient.Start(ctx, cfg, check, deps.HostTrust, providerclient.PinToLock)
 	if err != nil {
 		return nil, err
@@ -245,7 +247,7 @@ func runDomainLs(ctx context.Context, deps cmddeps.Deps, cwd string, opts domain
 }
 
 func listProductionHostnames(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config) (resp *contractv1.GetHostnameStatusResponse, err error) {
-	err = readDomain(ctx, deps, cfg, "ocel domain ls", environmentv1.Tier_TIER_PRODUCTION, "Reading the hostnames this project serves",
+	err = readDomain(ctx, deps, cfg, "ocel domain ls", environmentv1.Tier_TIER_PRODUCTION, progress.Reading.Title("the hostnames this project serves"),
 		func(ctx context.Context, client contractv1connect.ProviderServiceClient) (err error) {
 			resp, err = client.GetHostnameStatus(ctx, &contractv1.HostnameRequest{
 				Slug:       cfg.Slug,
@@ -257,7 +259,7 @@ func listProductionHostnames(ctx context.Context, deps cmddeps.Deps, cfg *projec
 	return resp, err
 }
 
-func readDomain(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, command string, tier environmentv1.Tier, reading string, read func(context.Context, contractv1connect.ProviderServiceClient) error) (err error) {
+func readDomain(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, command string, tier environmentv1.Tier, reading progress.Title, read func(context.Context, contractv1connect.ProviderServiceClient) error) (err error) {
 	if _, err := cfg.RequireProvider(); err != nil {
 		return err
 	}
@@ -333,7 +335,7 @@ func runDomainRelease(ctx context.Context, deps cmddeps.Deps, cwd string, opts d
 	defer prov.Close()
 
 	planning := run.Phase(progressv1.Phase_PHASE_PLAN)
-	unit := planning.Unit(cfg.Slug, "Enumerating what releasing the global preview domain would remove")
+	unit := planning.Unit(cfg.Slug, progress.Enumerating.Title("what releasing the global preview domain would remove"))
 	var plan *planv1.ChangePlan
 	err = prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		plan, err = client.PlanRemovePreviewWildcard(ctx, &contractv1.PreviewWildcardRequest{
@@ -347,7 +349,7 @@ func runDomainRelease(ctx context.Context, deps cmddeps.Deps, cwd string, opts d
 	}
 	base := plan.GetSubject()
 	if base == "" {
-		run.Finish("No global preview domain is configured")
+		run.Succeed("No global preview domain is configured")
 		return nil
 	}
 
@@ -359,7 +361,7 @@ func runDomainRelease(ctx context.Context, deps cmddeps.Deps, cwd string, opts d
 		return err
 	}
 	if !granted {
-		run.Finish(fmt.Sprintf("Nothing released: previews stay on %s", wildcardOf(base)))
+		run.Succeed(fmt.Sprintf("Nothing released: previews stay on %s", wildcardOf(base)))
 		return nil
 	}
 
@@ -367,7 +369,7 @@ func runDomainRelease(ctx context.Context, deps cmddeps.Deps, cwd string, opts d
 	if _, err := providerclient.Stream(ctx, prov, "RemovePreviewWildcard", req, contractv1connect.ProviderServiceClient.RemovePreviewWildcard); err != nil {
 		return err
 	}
-	run.Finish(fmt.Sprintf("Released %s", wildcardOf(base)))
+	run.Succeed(fmt.Sprintf("Released %s", wildcardOf(base)))
 	return nil
 }
 
@@ -445,7 +447,7 @@ func changeHostnames(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.
 			return err
 		}
 		if !granted {
-			run.Finish(change.asks.declined)
+			run.Succeed(change.asks.declined)
 			return nil
 		}
 	}
@@ -453,7 +455,7 @@ func changeHostnames(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.
 	if _, err := providerclient.Stream(ctx, prov, change.rpc, change.req, change.call); err != nil {
 		return err
 	}
-	run.Finish(change.headline)
+	run.Succeed(change.headline)
 	return nil
 }
 
@@ -497,7 +499,7 @@ func runDomainRm(ctx context.Context, deps cmddeps.Deps, cwd, host string, opts 
 }
 
 func listGlobalPreviewDomain(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config) (resp *contractv1.GetPreviewWildcardResponse, err error) {
-	err = readDomain(ctx, deps, cfg, "ocel domain ls", environmentv1.Tier_TIER_PREVIEW, "Reading the global preview domain",
+	err = readDomain(ctx, deps, cfg, "ocel domain ls", environmentv1.Tier_TIER_PREVIEW, progress.Reading.Title("the global preview domain"),
 		func(ctx context.Context, client contractv1connect.ProviderServiceClient) (err error) {
 			resp, err = client.GetPreviewWildcard(ctx, &contractv1.PreviewWildcardRequest{Tier: environmentv1.Tier_TIER_PREVIEW})
 			return err
@@ -644,7 +646,7 @@ func hostnameStatus(prov *providerclient.Provider, req *contractv1.HostnameReque
 
 const domainWaitFailures = 4
 
-func awaitDomainStatus(ctx context.Context, check *events.Scope, slug string, read func(context.Context) (*contractv1.GetHostnameStatusResponse, error), wait bool) (*contractv1.GetHostnameStatusResponse, error) {
+func awaitDomainStatus(ctx context.Context, check *run.Span, slug string, read func(context.Context) (*contractv1.GetHostnameStatusResponse, error), wait bool) (*contractv1.GetHostnameStatusResponse, error) {
 	resp, err := read(ctx)
 	if err != nil || !wait || resp.GetReady() {
 		return resp, err
@@ -701,11 +703,11 @@ func declaredHosts(resp *contractv1.GetHostnameStatusResponse) int {
 	return declared
 }
 
-func awaiting(declared int) string {
+func awaiting(declared int) progress.Title {
 	if declared == 1 {
-		return "Waiting for the one declared production hostname to answer"
+		return progress.Waiting.Title("for the one declared production hostname to answer")
 	}
-	return fmt.Sprintf("Waiting for the %d declared production hostnames to answer", declared)
+	return progress.Waiting.Title(fmt.Sprintf("for the %d declared production hostnames to answer", declared))
 }
 
 func jittered(every time.Duration) time.Duration {

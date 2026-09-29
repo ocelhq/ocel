@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"math"
 	"os"
 	"strconv"
@@ -13,13 +14,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/events"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
 type lineRig struct {
-	run     *events.Run
+	run     *run.Run
 	sink    *LineSink
 	out     *bytes.Buffer
 	clock   *clock
@@ -28,7 +29,7 @@ type lineRig struct {
 	width   *atomic.Int64
 }
 
-func newLineRig(t *testing.T, present Presentation, also ...events.Sink) *lineRig {
+func newLineRig(t *testing.T, present Presentation, also ...run.Sink) *lineRig {
 	t.Helper()
 	r := &lineRig{
 		out:     &bytes.Buffer{},
@@ -44,7 +45,7 @@ func newLineRig(t *testing.T, present Presentation, also ...events.Sink) *lineRi
 		resized: r.resized,
 		width:   func() int { return int(r.width.Load()) },
 	})
-	bus := events.NewBus(r.clock.now)
+	bus := run.NewBus(r.clock.now)
 	bus.Attach(r.sink)
 	for _, sink := range also {
 		bus.Attach(sink)
@@ -189,8 +190,8 @@ func TestTheScreenAfterALineRunHoldsExactlyTheGroupedTranscript(t *testing.T) {
 	grouped := newGroupedSink(&transcript, present, nil)
 	rig := newLineRig(t, present, grouped)
 	build := rig.run.Phase(progressv1.Phase_PHASE_BUILD)
-	web := build.Unit("web", "Building web")
-	api := build.Unit("api", "Building api")
+	web := build.Unit("web", progress.Building.Title("web"))
+	api := build.Unit("api", progress.Building.Title("api"))
 	say(t, web, "> next build\nCompiled successfully\n")
 	rig.clock.pass(3 * time.Second)
 	say(t, api, "=> [builder 1/6] FROM node:22-alpine\n")
@@ -215,7 +216,7 @@ func TestACommitErasesTheLivePrintsTheBlockAndRedrawsTheLiveLineInOneSynchronize
 
 	rig := newLineRig(t, Presentation{Width: 32})
 	build := rig.run.Phase(progressv1.Phase_PHASE_BUILD)
-	web := build.Unit("web", "Building web")
+	web := build.Unit("web", progress.Building.Title("web"))
 	rig.clock.pass(2 * time.Second)
 	web.End(nil)
 
@@ -232,7 +233,7 @@ func TestATickRedrawsTheLiveLineOnlyWhenItsFrameChanged(t *testing.T) {
 	t.Parallel()
 
 	rig := newLineRig(t, Presentation{Width: 32})
-	rig.run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", "Building web")
+	rig.run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", progress.Building.Title("web"))
 	before := rig.out.String()
 	rig.clock.pass(100 * time.Millisecond)
 	rig.tick()
@@ -250,7 +251,7 @@ func TestAHoldLeavesNoLiveLineOnScreenAndNoTickDrawsOneWhileItLasts(t *testing.T
 	t.Parallel()
 
 	rig := newLineRig(t, Presentation{Width: 32})
-	web := rig.run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", "Building web")
+	web := rig.run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", progress.Building.Title("web"))
 	before := rig.out.String()
 	rig.run.Hold(&streamv1.WaitingEvent{})
 	web.Say("Collected 12 routes")
@@ -269,7 +270,7 @@ func TestTheLiveLineComesBackWhenTheRunResumes(t *testing.T) {
 	t.Parallel()
 
 	rig := newLineRig(t, Presentation{Width: 32})
-	rig.run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", "Building web")
+	rig.run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", progress.Building.Title("web"))
 	resume := rig.run.Hold(&streamv1.WaitingEvent{})
 	before := rig.out.String()
 	rig.clock.pass(100 * time.Millisecond)
@@ -285,7 +286,7 @@ func TestAResizeToHalfTheWidthClearsBothRowsTheLiveLineWrappedInto(t *testing.T)
 	t.Parallel()
 
 	rig := newLineRig(t, Presentation{Width: 80})
-	rig.run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", "Building web")
+	rig.run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", progress.Building.Title("web"))
 	before := rig.out.String()
 	if !strings.HasSuffix(before, "      [build] ⠋ web: Building web"+strings.Repeat(" ", 38)+"0/1 · 0s\x1b[?2026l") {
 		t.Fatalf("before the resize the live line is not 79 columns: %q", before)
@@ -304,7 +305,7 @@ func TestAResizeWiderThanTheLiveLineOnlyRedrawsItAtTheNewWidth(t *testing.T) {
 	t.Parallel()
 
 	rig := newLineRig(t, Presentation{Width: 32})
-	rig.run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", "Building web")
+	rig.run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", progress.Building.Title("web"))
 	before := rig.out.String()
 	rig.resize(60)
 
@@ -320,7 +321,7 @@ func TestWithColourTheLiveLinesSpinnerIsCyanItsSubjectBoldAndWhatItSaysAndItsTal
 	t.Parallel()
 
 	rig := newLineRig(t, Presentation{Width: 48, Color: true})
-	rig.run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", "Building web")
+	rig.run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", progress.Building.Title("web"))
 
 	tag := "\x1b[90m[\x1b[0m\x1b[35mbuild\x1b[0m\x1b[90m]\x1b[0m"
 	want := "\x1b[?2026h\r\x1b[K      " + tag + " \x1b[36m⠋\x1b[0m" + strings.Repeat(" ", 30) + "\x1b[90m0s\x1b[0m\x1b[?2026l" +
@@ -339,7 +340,7 @@ func TestALineSinkOnTheRealClockLeavesOnlyTheTranscriptOnceClosed(t *testing.T) 
 	grouped := newGroupedSink(&transcript, Presentation{Width: 60}, nil)
 	bus, run := onABus(t, context.Background(), time.Now, sink)
 	bus.Attach(grouped)
-	web := run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", "Building web")
+	web := run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", progress.Building.Title("web"))
 	say(t, web, "Compiled successfully\n")
 	web.End(nil)
 	if err := bus.Close(); err != nil {
@@ -358,7 +359,7 @@ func TestTheRunsResultErasesTheLiveLineAndNoTickDrawsItAgain(t *testing.T) {
 	present := Presentation{Width: 32}
 	rig := newLineRig(t, present, newGroupedSink(&transcript, present, nil))
 	build := rig.run.Phase(progressv1.Phase_PHASE_BUILD)
-	build.Unit("web", "Building web").End(nil)
+	build.Unit("web", progress.Building.Title("web")).End(nil)
 	build.End(nil)
 	var err error
 	rig.run.End(&err)
@@ -387,7 +388,7 @@ func TestAResizeClearsEveryRowTheLiveLineAndItsCursorWrappedInto(t *testing.T) {
 			rig := newLineRig(t, present, grouped)
 			build := rig.run.Phase(progressv1.Phase_PHASE_BUILD)
 			build.Say("Resolved 3 apps")
-			build.Unit("web", "Building web")
+			build.Unit("web", progress.Building.Title("web"))
 			before := rig.out.String()
 			rig.resize(tc.to)
 			written := rig.closed(t)
@@ -415,7 +416,7 @@ func TestATickAfterAShrinkNotYetSignalledStillClearsTheRowsTheLineWrappedInto(t 
 	rig := newLineRig(t, present, grouped)
 	build := rig.run.Phase(progressv1.Phase_PHASE_BUILD)
 	build.Say("Resolved 3 apps")
-	build.Unit("web", "Building web")
+	build.Unit("web", progress.Building.Title("web"))
 	before := rig.out.String()
 	rig.width.Store(40)
 	rig.clock.pass(100 * time.Millisecond)
@@ -440,7 +441,7 @@ func TestOnATerminalAToolLineKeepsItsColourButNothingThatMovesTheCursorOrTalksTo
 	t.Parallel()
 
 	rig := newLineRig(t, Presentation{Width: 80})
-	web := rig.run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", "Building web")
+	web := rig.run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", progress.Building.Title("web"))
 	output(t, web, cursorMovingToolLine)
 	web.End(nil)
 
@@ -459,7 +460,7 @@ func TestWithColourAToolLineIsGrayWhereverItsOwnColourIsReset(t *testing.T) {
 	t.Parallel()
 
 	rig := newLineRig(t, Presentation{Width: 80, Color: true})
-	web := rig.run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", "Building web")
+	web := rig.run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", progress.Building.Title("web"))
 	output(t, web, "warn \x1b[31mred\x1b[0m then \x1b[1;38;5;0mbold black\x1b[22m still black \x1b[39mplain")
 	web.End(nil)
 
@@ -475,7 +476,7 @@ func TestOffATerminalAToolLineIsWrittenByteForByte(t *testing.T) {
 	var out bytes.Buffer
 	sink := newGroupedSink(&out, Presentation{}, nil)
 	_, piped := onABus(t, context.Background(), time.Now, sink)
-	web := piped.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", "Building web")
+	web := piped.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", progress.Building.Title("web"))
 	output(t, web, cursorMovingToolLine)
 	web.End(nil)
 

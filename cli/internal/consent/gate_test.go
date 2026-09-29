@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/consent"
-	"github.com/ocelhq/ocel/cli/internal/events"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
@@ -71,9 +71,9 @@ func shape(evs []*streamv1.RunEvent) []string {
 	return out
 }
 
-func scopeOn(t *testing.T, term *terminal) *events.Scope {
+func spanOn(t *testing.T, term *terminal) *run.Span {
 	t.Helper()
-	bus := events.NewBus(time.Now)
+	bus := run.NewBus(time.Now)
 	bus.Attach(term)
 	_, run, err := bus.Begin(context.Background(), "ocel test", "")
 	if err != nil {
@@ -88,9 +88,9 @@ func askingGate(term *terminal, answer string) consent.Gate {
 
 func TestAnInteractionHoldsTheStreamWhileItAsks(t *testing.T) {
 	term := &terminal{}
-	scope := scopeOn(t, term)
+	span := spanOn(t, term)
 
-	granted, err := askingGate(term, "y\n").Guard(context.Background(), scope, `Tear down the named preview "staging"?`)
+	granted, err := askingGate(term, "y\n").Guard(context.Background(), span, `Tear down the named preview "staging"?`)
 	if err != nil || !granted {
 		t.Fatalf("Guard() = %v, %v, want the answered yes to grant it", granted, err)
 	}
@@ -178,7 +178,7 @@ func TestAConvergentGuardIsGrantedInAdvanceByYes(t *testing.T) {
 	g := askingGate(term, "n\n")
 	g.Yes = true
 
-	granted, err := g.Guard(context.Background(), scopeOn(t, term), teardown)
+	granted, err := g.Guard(context.Background(), spanOn(t, term), teardown)
 	if err != nil || !granted {
 		t.Errorf("Guard() = %v, %v, want --yes to answer it in advance", granted, err)
 	}
@@ -192,7 +192,7 @@ func TestAConvergentDryRunAsksNothing(t *testing.T) {
 	g := askingGate(term, "n\n")
 	g.Dry = true
 
-	granted, err := g.Guard(context.Background(), scopeOn(t, term), teardown)
+	granted, err := g.Guard(context.Background(), spanOn(t, term), teardown)
 	if err != nil || !granted {
 		t.Errorf("Guard() = %v, %v, want a run that changes nothing to need no guard", granted, err)
 	}
@@ -206,7 +206,7 @@ func TestAConvergentGuardSkipsWhenThereIsNoTerminalToAskOn(t *testing.T) {
 	g := askingGate(term, "")
 	g.Interactive = false
 
-	granted, err := g.Guard(context.Background(), scopeOn(t, term), teardown)
+	granted, err := g.Guard(context.Background(), spanOn(t, term), teardown)
 	if err != nil || !granted {
 		t.Errorf("Guard() = %v, %v, want a guard to skip and proceed off a terminal", granted, err)
 	}
@@ -218,7 +218,7 @@ func TestAConvergentGuardSkipsWhenThereIsNoTerminalToAskOn(t *testing.T) {
 func TestAConvergentGuardIsAskedOnATerminalAndANoStopsTheCommand(t *testing.T) {
 	term := &terminal{}
 
-	granted, err := askingGate(term, "n\n").Guard(context.Background(), scopeOn(t, term), teardown)
+	granted, err := askingGate(term, "n\n").Guard(context.Background(), spanOn(t, term), teardown)
 	if err != nil || granted {
 		t.Errorf("Guard() = %v, %v, want the answered no to withhold it", granted, err)
 	}
@@ -230,7 +230,7 @@ func TestAConvergentGuardIsAskedOnATerminalAndANoStopsTheCommand(t *testing.T) {
 func TestADeclinedGuardSaysSoOnTheStreamOnceTheStreamIsResumed(t *testing.T) {
 	term := &terminal{}
 
-	if _, err := askingGate(term, "n\n").Guard(context.Background(), scopeOn(t, term), teardown); err != nil {
+	if _, err := askingGate(term, "n\n").Guard(context.Background(), spanOn(t, term), teardown); err != nil {
 		t.Fatal(err)
 	}
 	got := term.received()
@@ -245,7 +245,7 @@ func TestPlanConsentIsGrantedInAdvanceByYesWithoutAskingAgain(t *testing.T) {
 	g := askingGate(term, "")
 	g.Class, g.Yes, g.Interactive = consent.PlanFirst, true, false
 
-	granted, err := g.ConsentByName(context.Background(), scopeOn(t, term), nil, "project name", "acme")
+	granted, err := g.ConsentByName(context.Background(), spanOn(t, term), nil, "project name", "acme")
 	if err != nil || !granted {
 		t.Errorf("ConsentByName() = %v, %v, want --yes to grant the gate this class raises", granted, err)
 	}
@@ -259,7 +259,7 @@ func TestPlanConsentOffATerminalIsRefusedWithTheRemedy(t *testing.T) {
 	g := planFirst()
 	g.Out = term
 
-	granted, err := g.ConsentByName(context.Background(), scopeOn(t, term), nil, "project name", "acme")
+	granted, err := g.ConsentByName(context.Background(), spanOn(t, term), nil, "project name", "acme")
 	if granted || err == nil || !strings.Contains(err.Error(), "--yes") {
 		t.Errorf("ConsentByName() = %v, %v, want a refusal naming --yes where nothing can answer", granted, err)
 	}
@@ -268,7 +268,7 @@ func TestPlanConsentOffATerminalIsRefusedWithTheRemedy(t *testing.T) {
 func TestPlanConsentOnATerminalIsTheTypedNameCeremony(t *testing.T) {
 	term := &terminal{}
 
-	granted, err := askingGate(term, "acme\n").ConsentByName(context.Background(), scopeOn(t, term), nil, "project name", "acme")
+	granted, err := askingGate(term, "acme\n").ConsentByName(context.Background(), spanOn(t, term), nil, "project name", "acme")
 	if err != nil || !granted {
 		t.Errorf("ConsentByName() = %v, %v, want the typed name to grant it", granted, err)
 	}
@@ -280,7 +280,7 @@ func TestPlanConsentOnATerminalIsTheTypedNameCeremony(t *testing.T) {
 func TestPlanConsentIsWithheldWhenTheNameIsNotTypedBack(t *testing.T) {
 	term := &terminal{}
 
-	granted, err := askingGate(term, "something else\n").ConsentByName(context.Background(), scopeOn(t, term), nil, "project name", "acme")
+	granted, err := askingGate(term, "something else\n").ConsentByName(context.Background(), spanOn(t, term), nil, "project name", "acme")
 	if err != nil || granted {
 		t.Errorf("ConsentByName() = %v, %v, want a mistyped name to withhold it", granted, err)
 	}

@@ -11,9 +11,9 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/dotfile"
-	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/valuestore"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
@@ -71,7 +71,7 @@ func deployCommand(opts envOptions) string {
 }
 
 func runEnvSync(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, stdout, stderr io.Writer) error {
-	return withEnvProvider(ctx, deps, cwd, opts, "ocel env sync", stderr, func(ctx context.Context, _ *events.Run, prov *providerclient.Provider, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
+	return withEnvProvider(ctx, deps, cwd, opts, "ocel env sync", stderr, func(ctx context.Context, _ *run.Run, prov *providerclient.Provider, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
 		synced, err := valuestore.Store{Provider: prov, Config: cfg, Tier: opts.tier()}.SyncRegisteredEnvSource(ctx)
 		if err != nil {
 			return err
@@ -92,7 +92,7 @@ func runEnvSync(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOpti
 }
 
 func runEnvSource(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, stdout, stderr io.Writer) error {
-	return withEnvProvider(ctx, deps, cwd, opts, "ocel env source", stderr, func(ctx context.Context, _ *events.Run, prov *providerclient.Provider, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
+	return withEnvProvider(ctx, deps, cwd, opts, "ocel env source", stderr, func(ctx context.Context, _ *run.Run, prov *providerclient.Provider, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
 		vars, err := prov.Vars()
 		if err != nil {
 			return err

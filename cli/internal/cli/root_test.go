@@ -14,7 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/events"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 )
 
@@ -35,7 +35,7 @@ func TestTheRootFlagsFeedTheOneResolver(t *testing.T) {
 
 func newTestDeps() cmddeps.Deps {
 	deps := newDeps()
-	deps.Events = events.NewBus(time.Now)
+	deps.Events = run.NewBus(time.Now)
 	return deps
 }
 

@@ -6,8 +6,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -17,7 +17,7 @@ import (
 
 type Provider struct {
 	ctx    context.Context
-	scope  *events.Scope
+	span   *run.Span
 	trust  Trust
 	config Config
 
@@ -25,19 +25,19 @@ type Provider struct {
 	runner *Runner
 }
 
-func Start(ctx context.Context, cfg *projectconfig.Config, scope *events.Scope, trust Trust, pins Pinning) (*Provider, error) {
+func Start(ctx context.Context, cfg *projectconfig.Config, span *run.Span, trust Trust, pins Pinning) (*Provider, error) {
 	config, err := prepareLaunch(ctx, cfg, pins)
 	if err != nil {
 		return nil, err
 	}
-	return start(ctx, scope, trust, config)
+	return start(ctx, span, trust, config)
 }
 
-func start(ctx context.Context, scope *events.Scope, trust Trust, config Config) (*Provider, error) {
-	config.Stdout = processLines{scope: scope, subject: config.ProviderName, stream: progressv1.Stream_STREAM_STDOUT}
-	config.Stderr = processLines{scope: scope, subject: config.ProviderName, stream: progressv1.Stream_STREAM_STDERR}
-	trust.Hold = scope.Run().Hold
-	p := &Provider{ctx: ctx, scope: scope, trust: trust, config: config}
+func start(ctx context.Context, span *run.Span, trust Trust, config Config) (*Provider, error) {
+	config.Stdout = processLines{span: span, subject: config.ProviderName, stream: progressv1.Stream_STREAM_STDOUT}
+	config.Stderr = processLines{span: span, subject: config.ProviderName, stream: progressv1.Stream_STREAM_STDERR}
+	trust.Hold = span.Run().Hold
+	p := &Provider{ctx: ctx, span: span, trust: trust, config: config}
 	runner, err := p.spawn()
 	if err != nil {
 		return nil, err
@@ -103,7 +103,7 @@ func (p *Provider) Call(ctx context.Context, call func(contractv1connect.Provide
 }
 
 func Stream[Req any](ctx context.Context, p *Provider, rpc string, req *Req, call streamCall[Req]) (*progressv1.OperationResult, error) {
-	return forward(ctx, p, rpc, req, call, p.scope.Forward)
+	return forward(ctx, p, rpc, req, call, p.span.Forward)
 }
 
 func Plan[Req any](ctx context.Context, p *Provider, rpc string, req *Req, call streamCall[Req]) (*planv1.ChangePlan, error) {
@@ -113,7 +113,7 @@ func Plan[Req any](ctx context.Context, p *Provider, rpc string, req *Req, call 
 			plan = shown
 			return
 		}
-		p.scope.Forward(ev)
+		p.span.Forward(ev)
 	})
 	return plan, err
 }
@@ -137,15 +137,15 @@ func (p *Provider) Cost() (costv1connect.CostServiceClient, error) {
 }
 
 type processLines struct {
-	scope   *events.Scope
+	span    *run.Span
 	subject string
 	stream  progressv1.Stream
 }
 
 func (w processLines) Write(line []byte) (int, error) {
-	w.scope.Forward(&progressv1.OperationEvent{
+	w.span.Forward(&progressv1.OperationEvent{
 		Level:   progressv1.Level_LEVEL_DEBUG,
-		Phase:   w.scope.Phase(),
+		Phase:   w.span.Phase(),
 		Subject: w.subject,
 		Message: strings.TrimSuffix(string(line), "\n"),
 		Body:    &progressv1.OperationEvent_Output{Output: &progressv1.Output{Stream: w.stream}},

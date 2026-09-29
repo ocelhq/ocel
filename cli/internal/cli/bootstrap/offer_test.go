@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/events"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -134,8 +134,8 @@ func TestOfferBootstrapWithoutATerminal(t *testing.T) {
 			&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true, DigestCurrent: true, Required: true},
 			&contractv1.BootstrapStack{Name: "ocel-bootstrap-image-optimization", Feature: "image-optimization", Required: true},
 		)
-		scope, _ := checkScope(t)
-		err := Offer(context.Background(), scope, nil, status, environmentv1.Tier_TIER_PRODUCTION, nil, false, io.Discard, nil)
+		span, _ := checkSpan(t)
+		err := Offer(context.Background(), span, nil, status, environmentv1.Tier_TIER_PRODUCTION, nil, false, io.Discard, nil)
 		if err == nil {
 			t.Fatal("a deploy against a bootstrap missing a feature it needs was allowed through")
 		}
@@ -148,8 +148,8 @@ func TestOfferBootstrapWithoutATerminal(t *testing.T) {
 		status := bootstrapOf(core,
 			&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true, Required: true},
 		)
-		scope, seen := checkScope(t)
-		if err := Offer(context.Background(), scope, nil, status, environmentv1.Tier_TIER_PREVIEW, nil, false, io.Discard, nil); err != nil {
+		span, seen := checkSpan(t)
+		if err := Offer(context.Background(), span, nil, status, environmentv1.Tier_TIER_PREVIEW, nil, false, io.Discard, nil); err != nil {
 			t.Fatalf("a bootstrap that is merely behind stopped the deploy: %v", err)
 		}
 		for _, want := range []string{"⚠ ", "ocel-bootstrap-isr", "ocel bootstrap preview --features isr"} {
@@ -163,8 +163,8 @@ func TestOfferBootstrapWithoutATerminal(t *testing.T) {
 		status := bootstrapOf(core,
 			&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true, DigestCurrent: true, Required: true},
 		)
-		scope, seen := checkScope(t)
-		if err := Offer(context.Background(), scope, nil, status, environmentv1.Tier_TIER_PRODUCTION, nil, false, io.Discard, nil); err != nil {
+		span, seen := checkSpan(t)
+		if err := Offer(context.Background(), span, nil, status, environmentv1.Tier_TIER_PRODUCTION, nil, false, io.Discard, nil); err != nil {
 			t.Fatalf("offerBootstrap err = %v", err)
 		}
 		if said := seen.said(); said != "" {
@@ -178,10 +178,10 @@ func TestAHealingPromptHoldsTheRunWhileItAsks(t *testing.T) {
 	status := bootstrapOf(core,
 		&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true, Required: true},
 	)
-	scope, seen := checkScope(t)
+	span, seen := checkSpan(t)
 	var out bytes.Buffer
 
-	if err := Offer(context.Background(), scope, nil, status, environmentv1.Tier_TIER_PREVIEW, nil, true, &out, strings.NewReader("n\n")); err != nil {
+	if err := Offer(context.Background(), span, nil, status, environmentv1.Tier_TIER_PREVIEW, nil, true, &out, strings.NewReader("n\n")); err != nil {
 		t.Fatalf("declining to heal a bootstrap that is merely behind stopped the deploy: %v", err)
 	}
 
@@ -243,10 +243,10 @@ func (h *heard) shape() []string {
 	return out
 }
 
-func checkScope(t *testing.T) (*events.Scope, *heard) {
+func checkSpan(t *testing.T) (*run.Span, *heard) {
 	t.Helper()
 	seen := &heard{}
-	bus := events.NewBus(time.Now)
+	bus := run.NewBus(time.Now)
 	bus.Attach(seen)
 	_, run, err := bus.Begin(context.Background(), "ocel deploy", "")
 	if err != nil {

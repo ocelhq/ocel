@@ -16,9 +16,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
-	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/appbuild"
@@ -31,10 +31,10 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
 
-func newBuildScope(t *testing.T) (*events.Scope, *bytes.Buffer) {
+func newBuildSpan(t *testing.T) (*run.Span, *bytes.Buffer) {
 	t.Helper()
 	var out bytes.Buffer
-	bus := events.NewBus(time.Now)
+	bus := run.NewBus(time.Now)
 	bus.Attach(runui.NewTerminalSink(runui.Resolve(runui.Origin{Verbose: true}), &out))
 	t.Cleanup(func() { _ = bus.Close() })
 	_, run, err := bus.Begin(context.Background(), "ocel deploy", "")
@@ -131,7 +131,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 		deps := clitest.NewDeps()
 		ran := recordBuildApp(&deps)
 
-		s, out := newBuildScope(t)
+		s, out := newBuildSpan(t)
 		cfg := prebuiltConfig(root)
 		manifest, _, err := collectAndBuildManifest(context.Background(), deps, cfg, emptyDeclarations(cfg), true, false, s, s, "serverless", nil, nil)
 		if err != nil {
@@ -162,7 +162,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 		deps := clitest.NewDeps()
 		ran := recordBuildApp(&deps)
 
-		s, _ := newBuildScope(t)
+		s, _ := newBuildSpan(t)
 		cfg := prebuiltConfig(root)
 		if _, _, err := collectAndBuildManifest(context.Background(), deps, cfg, emptyDeclarations(cfg), false, false, s, s, "serverless", nil, nil); err != nil {
 			t.Fatalf("collectAndBuildManifest: %v", err)
@@ -176,7 +176,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 		deps := clitest.NewDeps()
 		recordBuildApp(&deps)
 
-		s, _ := newBuildScope(t)
+		s, _ := newBuildSpan(t)
 		cfg := prebuiltConfig(t.TempDir())
 		_, _, err := collectAndBuildManifest(context.Background(), deps, cfg, emptyDeclarations(cfg), true, false, s, s, "serverless", nil, nil)
 		if err == nil {
@@ -194,7 +194,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 		clitest.WriteFile(t, filepath.Join(root, constants.ProjectStateDirName, "output", "apps", "api", "deployment-id"), recorded+"\n")
 		deps := clitest.NewDeps()
 
-		s, _ := newBuildScope(t)
+		s, _ := newBuildSpan(t)
 		cfg := prebuiltConfig(root)
 		manifest, _, err := collectAndBuildManifest(context.Background(), deps, cfg, emptyDeclarations(cfg), true, false, s, s, "serverless", nil, nil)
 		if err != nil {
@@ -215,7 +215,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 		clitest.WritePrebuiltFunction(t, root, "api", "index")
 		deps := clitest.NewDeps()
 
-		s, _ := newBuildScope(t)
+		s, _ := newBuildSpan(t)
 		cfg := prebuiltConfig(root)
 		_, _, err := collectAndBuildManifest(context.Background(), deps, cfg, emptyDeclarations(cfg), true, false, s, s, "serverless", nil, nil)
 		if err == nil {
@@ -241,7 +241,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 			return functionsOnDisk(&deps, cfg)
 		}
 
-		s, _ := newBuildScope(t)
+		s, _ := newBuildSpan(t)
 		cfg := prebuiltConfig(root)
 		if _, _, err := collectAndBuildManifest(context.Background(), deps, cfg, declarationsWithClientValue(t, cfg, "https://example.com"), false, false, s, s, "serverless", nil, nil); err != nil {
 			t.Fatalf("collectAndBuildManifest: %v", err)
@@ -266,7 +266,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		s, _ := newBuildScope(t)
+		s, _ := newBuildSpan(t)
 		declarations := declarationsWithClientValue(t, cfg, "https://rotated.example.com")
 		_, _, err := collectAndBuildManifest(context.Background(), deps, cfg, declarations, true, false, s, s, "serverless", nil, nil)
 		if err == nil {
@@ -290,7 +290,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		s, _ := newBuildScope(t)
+		s, _ := newBuildSpan(t)
 		_, _, err := collectAndBuildManifest(context.Background(), deps, cfg, declarationsWithClientValue(t, cfg, "https://example.com"), true, false, s, s, "serverless", nil, nil)
 		if err == nil {
 			t.Fatal("collectAndBuildManifest = nil for an `ocel build` output, want a refusal")
@@ -316,7 +316,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		s, _ := newBuildScope(t)
+		s, _ := newBuildSpan(t)
 		declarations := declarationsWithClientValue(t, cfg, "https://example.com")
 		if _, _, err := collectAndBuildManifest(context.Background(), deps, cfg, declarations, true, false, s, s, "serverless", nil, nil); err != nil {
 			t.Fatalf("collectAndBuildManifest: %v", err)
@@ -389,7 +389,7 @@ func TestPrebuiltDeploysTheImageTheBuildRecordedRatherThanBuildingOne(t *testing
 		return build.Output{Images: map[string]string{"api": clitest.FixtureImage("api")}}, nil
 	}
 
-	s, _ := newBuildScope(t)
+	s, _ := newBuildSpan(t)
 	cfg := &projectconfig.Config{
 		Dir:  root,
 		Slug: "prebuilt",

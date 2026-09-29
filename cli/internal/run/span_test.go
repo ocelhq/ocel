@@ -1,9 +1,10 @@
-package events_test
+package run_test
 
 import (
 	"bytes"
 	"context"
 	"errors"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"strings"
 	"testing"
 	"time"
@@ -16,11 +17,11 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
-func TestAUnitsEventsCarryItsPhaseSubjectAndSpanAndItsParentIsThePhaseScope(t *testing.T) {
+func TestAUnitsEventsCarryItsPhaseSubjectAndSpanAndItsParentIsThePhaseSpan(t *testing.T) {
 	sink := &recording{}
 	run, _ := begin(t, sink)
 
-	web := run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", "Building web")
+	web := run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", progress.Building.Title("web"))
 	web.Say("Bundling")
 	web.Debug("esbuild 0.25")
 	web.Error("the bundle is too large")
@@ -56,8 +57,8 @@ func TestAUnitThatSucceedsEndsTitledWithWhatItDidAndOneThatFailsWithNoTitle(t *t
 	run, _ := begin(t, sink)
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
 
-	build.Unit("web", "Building web").End(nil)
-	build.Unit("api", "Building api").End(errors.New("the bundle is too large"))
+	build.Unit("web", progress.Building.Title("web")).End(nil)
+	build.Unit("api", progress.Building.Title("api")).End(errors.New("the bundle is too large"))
 
 	var titles []string
 	for _, ev := range sink.received() {
@@ -73,7 +74,7 @@ func TestAUnitThatSucceedsEndsTitledWithWhatItDidAndOneThatFailsWithNoTitle(t *t
 func TestEndReportsTheErrorOnTheEndedEventAndTheDurationFromItsStart(t *testing.T) {
 	sink := &recording{}
 	run, clock := begin(t, sink)
-	web := run.Phase(progressv1.Phase_PHASE_DEPLOY).Unit("web", "Deploying web")
+	web := run.Phase(progressv1.Phase_PHASE_DEPLOY).Unit("web", progress.Deploying.Title("web"))
 	started := clock.read()
 
 	clock.advance(3 * time.Second)
@@ -99,7 +100,7 @@ func TestAReservedUnitAnnouncesNothingUntilOpenedAndThenStartsWhenItWasReserved(
 	sink := &recording{}
 	run, clock := begin(t, sink)
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	reserved := build.ReserveUnit("shop", "Building 2 apps (web and api)")
+	reserved := build.ReserveUnit("shop", progress.Building.Title("2 apps (web and api)"))
 	reservedAt := clock.read()
 	before := len(sink.received())
 
@@ -125,10 +126,10 @@ func TestAReservedUnitAnnouncesNothingUntilOpenedAndThenStartsWhenItWasReserved(
 	}
 }
 
-func TestAScopeThatSucceedsEndsOnceWithAnOKStatus(t *testing.T) {
+func TestASpanThatSucceedsEndsOnceWithAnOKStatus(t *testing.T) {
 	sink := &recording{}
 	run, _ := begin(t, sink)
-	web := run.Phase(progressv1.Phase_PHASE_DEPLOY).Unit("web", "Deploying web")
+	web := run.Phase(progressv1.Phase_PHASE_DEPLOY).Unit("web", progress.Deploying.Title("web"))
 
 	web.End(nil)
 	web.End(errors.New("too late"))
@@ -143,11 +144,11 @@ func TestAScopeThatSucceedsEndsOnceWithAnOKStatus(t *testing.T) {
 	}
 }
 
-func TestAScopeEndedByAnInterruptIsAWarningNotAnError(t *testing.T) {
+func TestASpanEndedByAnInterruptIsAWarningNotAnError(t *testing.T) {
 	sink := &recording{}
 	ctx, cancel := context.WithCancel(context.Background())
 	run, _ := beginIn(t, ctx, sink)
-	web := run.Phase(progressv1.Phase_PHASE_DEPLOY).Unit("web", "Deploying web")
+	web := run.Phase(progressv1.Phase_PHASE_DEPLOY).Unit("web", progress.Deploying.Title("web"))
 
 	cancel()
 	web.End(context.Canceled)
@@ -173,11 +174,11 @@ func TestHoldEmitsWaitingThenResumedAroundTheInteraction(t *testing.T) {
 		t.Fatalf("events = %v, want waiting, the message, then resumed", bodies(got))
 	}
 	if got[0].GetPhase() != progressv1.Phase_PHASE_BUILD || got[2].GetPhase() != progressv1.Phase_PHASE_BUILD {
-		t.Fatalf("hold phases = %s and %s, want the scope's", got[0].GetPhase(), got[2].GetPhase())
+		t.Fatalf("hold phases = %s and %s, want the span's", got[0].GetPhase(), got[2].GetPhase())
 	}
 }
 
-func TestARunHeldOutsideAnyScopeWaitsAndResumesInNoPhaseAndOnNoSpan(t *testing.T) {
+func TestARunHeldOutsideAnySpanWaitsAndResumesInNoPhaseAndOnNoSpan(t *testing.T) {
 	sink := &recording{}
 	run, _ := begin(t, sink)
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
@@ -208,7 +209,7 @@ func bodies(evs []*streamv1.RunEvent) []string {
 	return out
 }
 
-func TestAPlanIsDrawnWithItsHeadlineAndNotesInItsScopesPhaseLeavingTheCallersPlanUntouched(t *testing.T) {
+func TestAPlanIsDrawnWithItsHeadlineAndNotesInItsSpansPhaseLeavingTheCallersPlanUntouched(t *testing.T) {
 	sink := &recording{}
 	run, _ := begin(t, sink)
 	plan := &planv1.ChangePlan{Headline: "from the provider"}
@@ -225,7 +226,7 @@ func TestAPlanIsDrawnWithItsHeadlineAndNotesInItsScopesPhaseLeavingTheCallersPla
 	}
 }
 
-func TestThePlanAScopeDrawsIsThePlanEverySinkShowsInSpineOrder(t *testing.T) {
+func TestThePlanASpanDrawsIsThePlanEverySinkShowsInGroupOrder(t *testing.T) {
 	sink := &recording{}
 	run, _ := begin(t, sink)
 	plan := &planv1.ChangePlan{Groups: []*planv1.ChangeGroup{
@@ -240,7 +241,7 @@ func TestThePlanAScopeDrawsIsThePlanEverySinkShowsInSpineOrder(t *testing.T) {
 
 	shown := sink.received()[1].GetPlan()
 	if !proto.Equal(drawn, shown) {
-		t.Fatalf("the plan the scope hands back is\n%v\nand the plan the sinks show is\n%v", drawn, shown)
+		t.Fatalf("the plan the span hands back is\n%v\nand the plan the sinks show is\n%v", drawn, shown)
 	}
 	if first := drawn.GetGroups()[0].GetKind(); first != "stack" {
 		t.Fatalf("the drawn plan opens on a %q group, want the spine order: stack before edge", first)
@@ -283,7 +284,7 @@ func TestPlanRowsReachEverySinkInOneOrderWhateverOrderTheyArriveIn(t *testing.T)
 	}
 }
 
-func TestPlanGroupsReachEverySinkInSpineOrderWhateverOrderTheyArriveIn(t *testing.T) {
+func TestPlanGroupsReachEverySinkInGroupOrderWhateverOrderTheyArriveIn(t *testing.T) {
 	spine := []*planv1.ChangeGroup{
 		{Kind: "stack", Name: "aws/ocel-production-core"},
 		{Kind: "parameters", Name: "aws/parameters"},
@@ -317,7 +318,7 @@ func TestPlanGroupsReachEverySinkInSpineOrderWhateverOrderTheyArriveIn(t *testin
 	}
 }
 
-func TestIdentityReachesTheSinksInItsScopesPhase(t *testing.T) {
+func TestIdentityReachesTheSinksInItsSpansPhase(t *testing.T) {
 	sink := &recording{}
 	run, _ := begin(t, sink)
 
@@ -332,8 +333,8 @@ func TestEndingAPhaseEndsItsOpenUnitsFirstWithTheSameError(t *testing.T) {
 	sink := &recording{}
 	run, _ := begin(t, sink)
 	deploy := run.Phase(progressv1.Phase_PHASE_DEPLOY)
-	deploy.Unit("web", "Deploying web").Unit("web", "Uploading web")
-	deploy.Unit("api", "Deploying api").End(nil)
+	deploy.Unit("web", progress.Deploying.Title("web")).Unit("web", progress.Title{Started: "Uploading web", Ended: "Uploading web"})
+	deploy.Unit("api", progress.Deploying.Title("api")).End(nil)
 
 	deploy.End(errors.New("the stack is locked"))
 

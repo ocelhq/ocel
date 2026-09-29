@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"strings"
 	"sync"
 	"testing"
@@ -11,7 +12,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/ocelhq/ocel/cli/internal/events"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
@@ -44,9 +45,9 @@ func missingStripeKey() *streamv1.MissingVariables {
 	}
 }
 
-func onABus(t *testing.T, ctx context.Context, now func() time.Time, sink events.Sink) (*events.Bus, *events.Run) {
+func onABus(t *testing.T, ctx context.Context, now func() time.Time, sink run.Sink) (*run.Bus, *run.Run) {
 	t.Helper()
-	bus := events.NewBus(now)
+	bus := run.NewBus(now)
 	bus.Attach(sink)
 	_, run, err := bus.Begin(ctx, "ocel deploy", "")
 	if err != nil {
@@ -80,7 +81,7 @@ func TestAUnitRepaintingOneLineShowsOnlyTheDraftItLeft(t *testing.T) {
 	run, out, _ := groupedRun(t, Presentation{})
 
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	unit := build.Unit("shop", "Building project")
+	unit := build.Unit("shop", progress.Building.Title("project"))
 	w := unit.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED)
 	for i := 1; i <= 500; i++ {
 		if _, err := fmt.Fprintf(w, "\rProgress: resolved %d", i); err != nil {
@@ -154,7 +155,7 @@ func TestAUnitsOutputKeepsItsRightHandWhitespace(t *testing.T) {
 
 	const padded = "Route (app)                     Size     First Load JS   "
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	web := build.Unit("web", "Building web")
+	web := build.Unit("web", progress.Building.Title("web"))
 	output(t, web, padded)
 	web.End(nil)
 

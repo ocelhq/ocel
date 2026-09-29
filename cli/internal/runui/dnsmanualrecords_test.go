@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/events"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
@@ -91,7 +91,7 @@ func TestDNSStack(t *testing.T) {
 func dnsOutput(t *testing.T, present Presentation, headline string, records []*progressv1.DnsRecord, notes []string) string {
 	t.Helper()
 	var out safeBuffer
-	var s events.Sink = NewJSONSink(&out)
+	var s run.Sink = NewJSONSink(&out)
 	if present.Format == FormatHuman {
 		s = newGroupedSink(&out, present, nil)
 	}

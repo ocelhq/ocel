@@ -6,9 +6,9 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console"
-	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -42,37 +42,37 @@ func runRemove(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config
 		return err
 	}
 	if registered == nil {
-		run.Finish(fmt.Sprintf("The console has no connector registered for %s", fingerprint))
+		run.Succeed(fmt.Sprintf("The console has no connector registered for %s", fingerprint))
 		return nil
 	}
 	if err := opts.console.RemoveConnector(ctx, access, registered.ID); err != nil {
 		return fmt.Errorf("forget this connector in the console: %w", err)
 	}
 	if unreached != nil {
-		run.Finish(fmt.Sprintf("The console has forgotten %s; the machine did not finish taking the connector off, so what is on it stays: %v", fingerprint, unreached))
+		run.Succeed(fmt.Sprintf("The console has forgotten %s; the machine did not finish taking the connector off, so what is on it stays: %v", fingerprint, unreached))
 		return nil
 	}
-	run.Finish(fmt.Sprintf("Connector off %s, and the console has forgotten it", fingerprint))
+	run.Succeed(fmt.Sprintf("Connector off %s, and the console has forgotten it", fingerprint))
 	return nil
 }
 
-func forgotten(ctx context.Context, run *events.Run, opts options, access, fingerprint string) error {
+func forgotten(ctx context.Context, run *run.Run, opts options, access, fingerprint string) error {
 	registered, err := opts.console.FindConnector(ctx, access, fingerprint)
 	if err != nil {
 		return err
 	}
 	if registered == nil {
-		run.Finish(fmt.Sprintf("The console has no connector registered for %s", fingerprint))
+		run.Succeed(fmt.Sprintf("The console has no connector registered for %s", fingerprint))
 		return nil
 	}
 	if err := opts.console.RemoveConnector(ctx, access, registered.ID); err != nil {
 		return fmt.Errorf("forget this connector in the console: %w", err)
 	}
-	run.Finish(fmt.Sprintf("The console has forgotten %s; the target itself was never reached, so what is on it stays", fingerprint))
+	run.Succeed(fmt.Sprintf("The console has forgotten %s; the target itself was never reached, so what is on it stays", fingerprint))
 	return nil
 }
 
-func taken(ctx context.Context, deps cmddeps.Deps, run *events.Run, cfg *projectconfig.Config, opts options) (string, error) {
+func taken(ctx context.Context, deps cmddeps.Deps, run *run.Run, cfg *projectconfig.Config, opts options) (string, error) {
 	if opts.target != "" {
 		return "", fmt.Errorf("this run names a target, so the machine behind %s was never asked", opts.target)
 	}

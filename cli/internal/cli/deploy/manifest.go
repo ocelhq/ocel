@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/ocelhq/ocel/pkg/progress"
+
 	"github.com/ocelhq/ocel/cli/internal/appurl"
 	"github.com/ocelhq/ocel/cli/internal/attribution"
 	"github.com/ocelhq/ocel/cli/internal/build"
@@ -20,11 +22,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
-	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/cli/internal/workspace"
@@ -35,9 +37,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, declarations *variables.Declarations, prebuilt, dry bool, phase, scope *events.Scope, compute string, containerArchs map[string]string, urls map[string]string) (*contractv1.Manifest, []inlinebinding.Record, error) {
+func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, declarations *variables.Declarations, prebuilt, dry bool, phase, span *run.Span, compute string, containerArchs map[string]string, urls map[string]string) (*contractv1.Manifest, []inlinebinding.Record, error) {
 	captured := &boundedCapture{}
-	tee := io.MultiWriter(scope.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED), captured)
+	tee := io.MultiWriter(span.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED), captured)
 	resources, err := deps.CollectDeclarations(ctx, cfg, declarations, tee, tee)
 	if err != nil {
 		return nil, nil, captured.annotate(err)
@@ -47,15 +49,15 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 		return nil, nil, err
 	}
 	for _, warning := range warnings {
-		scope.Warn(warning)
+		span.Warn(warning)
 	}
 	for _, warning := range variables.ListUndeclared(declarations.Declared(), declarations.Scope().EnvSource) {
-		scope.Warn(warning)
+		span.Warn(warning)
 	}
 	if err := declarations.RefuseIncomplete(); err != nil {
 		return nil, nil, err
 	}
-	inline, err := inlineRecords(ctx, deps, cfg, declarations, resources, scope)
+	inline, err := inlineRecords(ctx, deps, cfg, declarations, resources, span)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -83,8 +85,8 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 		if err != nil {
 			return nil, nil, err
 		}
-		scope.Say("Using the prebuilt output in " + appbuild.ArtifactRootDir + " instead of building")
-		scope.End(nil)
+		span.Say("Using the prebuilt output in " + appbuild.ArtifactRootDir + " instead of building")
+		span.End(nil)
 	} else {
 		if err := clientenv.Generate(cfg.Dir, clients); err != nil {
 			return nil, nil, err
@@ -94,9 +96,9 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 				return nil, nil, err
 			}
 		}
-		scope.End(nil)
-		if err := steps.run(cfg.Slug, "Building "+appList(cfg), func() (err error) {
-			built, err = deps.BuildApps(ctx, cfg, build.Env(clients), containerArchs, steps.log("Building app "))
+		span.End(nil)
+		if err := steps.run(cfg.Slug, progress.Building.Title(appList(cfg)), func() (err error) {
+			built, err = deps.BuildApps(ctx, cfg, build.Env(clients), containerArchs, steps.log())
 			if err != nil {
 				return err
 			}
@@ -107,7 +109,7 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 	}
 
 	var manifest *contractv1.Manifest
-	if err := steps.run(cfg.Slug, "Assembling the deploy manifest of "+cfg.Slug, func() (err error) {
+	if err := steps.run(cfg.Slug, progress.Assembling.Title("the deploy manifest of "+cfg.Slug), func() (err error) {
 		manifest, err = assembleManifest(ctx, deps, cfg, declarations, phase, resources, variables, built, compute, configName)
 		return err
 	}); err != nil || manifest == nil {
@@ -116,7 +118,7 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 	return manifest, inline, nil
 }
 
-func assembleManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, declarations *variables.Declarations, phase *events.Scope, resources []declaration.Resource, appValues map[string][]manifestbuilder.Variable, built build.Output, compute, configName string) (*contractv1.Manifest, error) {
+func assembleManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, declarations *variables.Declarations, phase *run.Span, resources []declaration.Resource, appValues map[string][]manifestbuilder.Variable, built build.Output, compute, configName string) (*contractv1.Manifest, error) {
 	functions := servedByFunctions(built.Functions, cfg)
 	images := built.Images
 
@@ -163,7 +165,7 @@ func assembleManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig
 }
 
 type buildSteps struct {
-	phase  *events.Scope
+	phase  *run.Span
 	shared io.Writer
 
 	mu     sync.Mutex
@@ -171,7 +173,7 @@ type buildSteps struct {
 	failed bool
 }
 
-func newBuildSteps(phase *events.Scope) *buildSteps {
+func newBuildSteps(phase *run.Span) *buildSteps {
 	return &buildSteps{phase: phase, shared: phase.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED)}
 }
 
@@ -189,12 +191,12 @@ func (b *buildSteps) takeLoose() []byte {
 	return taken
 }
 
-func (b *buildSteps) log(title string) build.Log {
+func (b *buildSteps) log() build.Log {
 	return build.Log{
 		Shared: b,
 		Unit: func(app string) (io.Writer, func(error)) {
 			_, _ = b.shared.Write(b.takeLoose())
-			unit := b.phase.Unit(app, title+app)
+			unit := b.phase.Unit(app, progress.Building.Title("app "+app))
 			return unit.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED), func(err error) {
 				if err != nil {
 					b.mu.Lock()
@@ -207,7 +209,7 @@ func (b *buildSteps) log(title string) build.Log {
 	}
 }
 
-func (b *buildSteps) run(subject, title string, step func() error) error {
+func (b *buildSteps) run(subject string, title progress.Title, step func() error) error {
 	reserved := b.phase.ReserveUnit(subject, title)
 	b.mu.Lock()
 	b.failed = false
@@ -227,7 +229,7 @@ func (b *buildSteps) run(subject, title string, step func() error) error {
 	return err
 }
 
-func inlineRecords(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, declarations *variables.Declarations, resources []declaration.Resource, scope *events.Scope) ([]inlinebinding.Record, error) {
+func inlineRecords(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, declarations *variables.Declarations, resources []declaration.Resource, span *run.Span) ([]inlinebinding.Record, error) {
 	values, err := declarations.ResolveBindingVariables(ctx)
 	if err != nil {
 		return nil, err
@@ -247,7 +249,7 @@ func inlineRecords(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Co
 	}
 	warnings, err := inlinebinding.Verify(ctx, records, declared, inlinebinding.Probes{Postgres: deps.ProbePostgres, Bucket: deps.ProbeBucket})
 	for _, warning := range warnings {
-		scope.Warn(warning)
+		span.Warn(warning)
 	}
 	return records, err
 }

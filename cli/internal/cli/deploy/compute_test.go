@@ -46,7 +46,7 @@ func TestTheManifestNamesEveryAppsCompute(t *testing.T) {
 		deps := clitest.NewDeps()
 		recordBuildApp(&deps)
 
-		s, _ := newBuildScope(t)
+		s, _ := newBuildSpan(t)
 		cfg := &projectconfig.Config{
 			Dir:  root,
 			Slug: "prebuilt",
@@ -68,7 +68,7 @@ func TestTheManifestNamesEveryAppsCompute(t *testing.T) {
 		deps := clitest.NewDeps()
 		recordBuildApp(&deps)
 
-		s, _ := newBuildScope(t)
+		s, _ := newBuildSpan(t)
 		cfg := &projectconfig.Config{Dir: root, Slug: "prebuilt"}
 		_, _, err := collectAndBuildManifest(context.Background(), deps, cfg, emptyDeclarations(cfg), true, false, s, s, "container", nil, nil)
 		if err == nil {
@@ -113,7 +113,7 @@ func TestAContainerAppThatNamesNoRuntimeStillReachesTheProvider(t *testing.T) {
 	deps := clitest.NewDeps()
 	recordBuildApp(&deps)
 
-	s, _ := newBuildScope(t)
+	s, _ := newBuildSpan(t)
 	cfg := &projectconfig.Config{
 		Dir:  root,
 		Slug: "prebuilt",

@@ -12,11 +12,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
-	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/variableeditor"
 	"github.com/ocelhq/ocel/cli/internal/variables"
@@ -29,7 +29,7 @@ type Deps struct {
 	DeleteCredentials       func() error
 	OpenDocker              docker.OpenFunc
 	BuildApps               func(ctx context.Context, cfg *projectconfig.Config, env map[string]map[string]string, archs map[string]string, log build.Log) (build.Output, error)
-	RefuseUnbuildableImages func(ctx context.Context, scope *events.Scope, cfg *projectconfig.Config, archs map[string]string) error
+	RefuseUnbuildableImages func(ctx context.Context, span *run.Span, cfg *projectconfig.Config, archs map[string]string) error
 	ReadPrebuilt            func(ctx context.Context, cfg *projectconfig.Config, archs map[string]string) (build.Output, error)
 	ReadFunctions           func(projectDir string) ([]manifestbuilder.Function, error)
 	DeploymentID            func(projectDir, app string) (string, error)
@@ -45,7 +45,7 @@ type Deps struct {
 	StdinIsTerminal         func(r io.Reader) bool
 	ConfigPath              func() string
 	Presentation            func(w io.Writer) runui.Presentation
-	Events                  *events.Bus
+	Events                  *run.Bus
 }
 
 const NoBrowserEnvVar = "OCEL_NO_BROWSER"

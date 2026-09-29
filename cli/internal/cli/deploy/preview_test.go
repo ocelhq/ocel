@@ -13,10 +13,10 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -475,7 +475,7 @@ func TestTearingDownANamedPreviewAsksThroughConsentWhileTheRunIsHeld(t *testing.
 	}
 	resumed := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetResumed() != nil })
 	if resumed < waiting || evs[resumed].GetResumed().GetReason() != "answered" || !bytes.Equal(evs[resumed].GetSpanId(), evs[waiting].GetSpanId()) {
-		t.Fatalf("resumed at event %d, waiting at %d: want the held scope resumed once answered: %s", resumed, waiting, stream.String())
+		t.Fatalf("resumed at event %d, waiting at %d: want the held span resumed once answered: %s", resumed, waiting, stream.String())
 	}
 	destroyed := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool {
 		return strings.Contains(ev.GetMessage(), "DESTROY project=test-app")
@@ -825,9 +825,9 @@ func readPreflightJournal(t *testing.T, path string) []preflightRecord {
 	return records
 }
 
-func checkScope(t *testing.T, w io.Writer) *events.Scope {
+func checkSpan(t *testing.T, w io.Writer) *run.Span {
 	t.Helper()
-	bus := events.NewBus(time.Now)
+	bus := run.NewBus(time.Now)
 	bus.Attach(runui.NewTerminalSink(runui.Presentation{}, w))
 	_, run, err := bus.Begin(context.Background(), "ocel preview up", "")
 	if err != nil {
@@ -852,7 +852,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 		t.Parallel()
 
 		var out bytes.Buffer
-		_, err := requirePreviewDomain(bare, nil, nil, "pr-1", checkScope(t, &out))
+		_, err := requirePreviewDomain(bare, nil, nil, "pr-1", checkSpan(t, &out))
 		if err == nil {
 			t.Fatal("requirePreviewDomain err = nil, want a refusal")
 		}
@@ -867,7 +867,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 		t.Parallel()
 
 		var out bytes.Buffer
-		if _, err := requirePreviewDomain(bare, global, nil, "pr-1", checkScope(t, &out)); err != nil {
+		if _, err := requirePreviewDomain(bare, global, nil, "pr-1", checkSpan(t, &out)); err != nil {
 			t.Fatalf("requirePreviewDomain err = %v, want nil", err)
 		}
 		for _, want := range []string{"Serving previews on global *.preview.ocel.app"} {
@@ -882,7 +882,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 
 		cfg := &projectconfig.Config{Slug: "acme", Apps: []projectconfig.App{{Name: "admin"}, {Name: "web"}}}
 		var out bytes.Buffer
-		_, err := requirePreviewDomain(cfg, global, nil, strings.Repeat("b", 60), checkScope(t, &out))
+		_, err := requirePreviewDomain(cfg, global, nil, strings.Repeat("b", 60), checkSpan(t, &out))
 		if err == nil {
 			t.Fatal("requirePreviewDomain err = nil, want a refusal")
 		}
@@ -899,7 +899,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 		cfg := &projectconfig.Config{Slug: "acme"}
 		pointer := strings.Repeat("b", 63)
 		var out bytes.Buffer
-		_, err := requirePreviewDomain(cfg, global, nil, pointer, checkScope(t, &out))
+		_, err := requirePreviewDomain(cfg, global, nil, pointer, checkSpan(t, &out))
 		if err == nil {
 			t.Fatal("requirePreviewDomain err = nil, want a refusal")
 		}
@@ -919,7 +919,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 		}
 		broken := &contractv1.PreviewWildcard{BaseDomain: "preview.ocel.app", GrammarMin: 1, GrammarMax: 1}
 		var out bytes.Buffer
-		if _, err := requirePreviewDomain(cfg, broken, nil, "pr-1", checkScope(t, &out)); err != nil {
+		if _, err := requirePreviewDomain(cfg, broken, nil, "pr-1", checkSpan(t, &out)); err != nil {
 			t.Fatalf("requirePreviewDomain err = %v, want nil", err)
 		}
 		if !strings.Contains(out.String(), "*.preview.acme.com") {
@@ -936,7 +936,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 			Domains: map[string][]string{"preview": {"*.preview.acme.com"}},
 		}
 		var out bytes.Buffer
-		if _, err := requirePreviewDomain(cfg, nil, nil, strings.Repeat("b", 55), checkScope(t, &out)); err != nil {
+		if _, err := requirePreviewDomain(cfg, nil, nil, strings.Repeat("b", 55), checkSpan(t, &out)); err != nil {
 			t.Fatalf("requirePreviewDomain err = %v, want nil", err)
 		}
 	})
@@ -945,7 +945,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 		t.Parallel()
 
 		var out bytes.Buffer
-		if _, err := requirePreviewDomain(declared, nil, nil, "pr-1", checkScope(t, &out)); err != nil {
+		if _, err := requirePreviewDomain(declared, nil, nil, "pr-1", checkSpan(t, &out)); err != nil {
 			t.Fatalf("requirePreviewDomain err = %v, want nil", err)
 		}
 		if out.String() != "" {
@@ -957,7 +957,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 		t.Parallel()
 
 		var out bytes.Buffer
-		if _, err := requirePreviewDomain(declared, global, nil, "pr-1", checkScope(t, &out)); err != nil {
+		if _, err := requirePreviewDomain(declared, global, nil, "pr-1", checkSpan(t, &out)); err != nil {
 			t.Fatalf("requirePreviewDomain err = %v, want nil", err)
 		}
 		for _, want := range []string{"*.preview.acme.com", "*.preview.ocel.app", "ignored"} {
@@ -972,7 +972,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 
 		same := &projectconfig.Config{Slug: "acme", Domains: map[string][]string{"preview": {"*.preview.ocel.app"}}}
 		var out bytes.Buffer
-		if _, err := requirePreviewDomain(same, global, nil, "pr-1", checkScope(t, &out)); err != nil {
+		if _, err := requirePreviewDomain(same, global, nil, "pr-1", checkSpan(t, &out)); err != nil {
 			t.Fatalf("requirePreviewDomain err = %v, want nil", err)
 		}
 		if got := out.String(); !strings.Contains(got, "Serving previews on project-level *.preview.ocel.app, also the global preview domain") || strings.Contains(got, "ignored") {
@@ -980,7 +980,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 		}
 
 		var over bytes.Buffer
-		_, err := requirePreviewDomain(same, global, nil, strings.Repeat("b", 60), checkScope(t, &over))
+		_, err := requirePreviewDomain(same, global, nil, strings.Repeat("b", 60), checkSpan(t, &over))
 		if err != nil {
 			t.Errorf("err = %v, want a 60-character label admitted: the hostnames are the project's own, so no slug segment counts against the cap", err)
 		}
@@ -991,7 +991,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 
 		elsewhere := &contractv1.PreviewWildcard{BaseDomain: "preview.ocel.app", EdgeScope: "cf-owner", GrammarMin: 1, GrammarMax: 1, RouteInstalled: true}
 		var out bytes.Buffer
-		_, err := requirePreviewDomain(bare, elsewhere, &contractv1.Identity{EdgeScope: "cf-other"}, "pr-1", checkScope(t, &out))
+		_, err := requirePreviewDomain(bare, elsewhere, &contractv1.Identity{EdgeScope: "cf-other"}, "pr-1", checkSpan(t, &out))
 		if err == nil {
 			t.Fatal("requirePreviewDomain err = nil, want an account refusal")
 		}
@@ -1007,7 +1007,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 
 		uninstalled := &contractv1.PreviewWildcard{BaseDomain: "preview.ocel.app", GrammarMin: 1, GrammarMax: 1}
 		var out bytes.Buffer
-		_, err := requirePreviewDomain(bare, uninstalled, nil, "pr-1", checkScope(t, &out))
+		_, err := requirePreviewDomain(bare, uninstalled, nil, "pr-1", checkSpan(t, &out))
 		if err == nil {
 			t.Fatal("requirePreviewDomain err = nil, want a route refusal")
 		}
@@ -1026,7 +1026,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 			{BaseDomain: "preview.ocel.app", GrammarMin: 0, GrammarMax: 0, RouteInstalled: true},
 		} {
 			var out bytes.Buffer
-			_, err := requirePreviewDomain(bare, g, nil, "pr-1", checkScope(t, &out))
+			_, err := requirePreviewDomain(bare, g, nil, "pr-1", checkSpan(t, &out))
 			if err == nil {
 				t.Fatalf("requirePreviewDomain with grammar %d–%d = nil, want a refusal", g.GetGrammarMin(), g.GetGrammarMax())
 			}

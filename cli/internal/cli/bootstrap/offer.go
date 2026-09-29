@@ -10,10 +10,10 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
-	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/prompt"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -104,11 +104,11 @@ func (p Plan) Insist(tier environmentv1.Tier) error {
 	)
 }
 
-func (p Plan) Advise(tier environmentv1.Tier, scope *events.Scope) error {
+func (p Plan) Advise(tier environmentv1.Tier, span *run.Span) error {
 	if err := p.Refusal(tier); err != nil {
 		return err
 	}
-	scope.Warn(fmt.Sprintf("The %s bootstrap is behind what this build has: %s.\nRun `%s` to refresh it.",
+	span.Warn(fmt.Sprintf("The %s bootstrap is behind what this build has: %s.\nRun `%s` to refresh it.",
 		Name(tier), strings.Join(p.Stale, ", "), p.Command(tier)))
 	return nil
 }
@@ -145,38 +145,38 @@ func PlanOnly(status *contractv1.BootstrapStatus, feature string) Plan {
 	return plan
 }
 
-func Offer(ctx context.Context, scope *events.Scope, prov *providerclient.Provider, status *contractv1.BootstrapStatus, tier environmentv1.Tier, front *contractv1.EdgeSelection, interactive bool, out io.Writer, in io.Reader) error {
-	return OfferPlan(ctx, scope, prov, PlanFor(status), tier, front, interactive, out, in)
+func Offer(ctx context.Context, span *run.Span, prov *providerclient.Provider, status *contractv1.BootstrapStatus, tier environmentv1.Tier, front *contractv1.EdgeSelection, interactive bool, out io.Writer, in io.Reader) error {
+	return OfferPlan(ctx, span, prov, PlanFor(status), tier, front, interactive, out, in)
 }
 
-func OfferPlan(ctx context.Context, scope *events.Scope, prov *providerclient.Provider, plan Plan, tier environmentv1.Tier, front *contractv1.EdgeSelection, interactive bool, out io.Writer, in io.Reader) error {
+func OfferPlan(ctx context.Context, span *run.Span, prov *providerclient.Provider, plan Plan, tier environmentv1.Tier, front *contractv1.EdgeSelection, interactive bool, out io.Writer, in io.Reader) error {
 	if plan.Empty() {
 		return nil
 	}
 	if !interactive {
-		return plan.Advise(tier, scope)
+		return plan.Advise(tier, span)
 	}
 
-	scope.Warn(fmt.Sprintf("The %s bootstrap is not what this project needs: %s.", Name(tier), plan.summary()))
-	proceed, err := confirmHealing(ctx, plan, tier, scope, out, in)
+	span.Warn(fmt.Sprintf("The %s bootstrap is not what this project needs: %s.", Name(tier), plan.summary()))
+	proceed, err := confirmHealing(ctx, plan, tier, span, out, in)
 	if err != nil {
 		return err
 	}
 	if !proceed {
-		return plan.Advise(tier, scope)
+		return plan.Advise(tier, span)
 	}
 	_, err = providerclient.Stream(ctx, prov, "Bootstrap", plan.Request(tier, front), contractv1connect.ProviderServiceClient.Bootstrap)
 	return err
 }
 
-func confirmHealing(ctx context.Context, plan Plan, tier environmentv1.Tier, scope *events.Scope, out io.Writer, in io.Reader) (bool, error) {
-	resume := scope.Hold(&streamv1.WaitingEvent{})
+func confirmHealing(ctx context.Context, plan Plan, tier environmentv1.Tier, span *run.Span, out io.Writer, in io.Reader) (bool, error) {
+	resume := span.Hold(&streamv1.WaitingEvent{})
 	defer resume("answered")
 	return prompt.New(out, in).Confirm(ctx, fmt.Sprintf("Run `%s` now?", plan.Command(tier)))
 }
 
-func Ready(ctx context.Context, scope *events.Scope, prov *providerclient.Provider, cfg *projectconfig.Config, required environmentv1.Tier, hint string) error {
-	resp, err := preflight.Run(ctx, scope, prov, cfg, required, "", nil, preflight.Frameworks(cfg), hint)
+func Ready(ctx context.Context, span *run.Span, prov *providerclient.Provider, cfg *projectconfig.Config, required environmentv1.Tier, hint string) error {
+	resp, err := preflight.Run(ctx, span, prov, cfg, required, "", nil, preflight.Frameworks(cfg), hint)
 	if err != nil {
 		return err
 	}

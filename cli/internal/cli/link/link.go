@@ -17,10 +17,10 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console"
-	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/prompt"
-	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/pkg/progress"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
@@ -56,7 +56,7 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 			opts := opts
 			creds, _ := deps.LoadCredentials()
 			opts.apiURL = console.BaseURL(creds.APIURL)
-			return run(cmd.Context(), deps, dir, projectRef, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+			return runLink(cmd.Context(), deps, dir, projectRef, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 		},
 	}
 	cmd.Flags().StringVar(&opts.org, "org", "", "Organization `slug`, instead of picking one")
@@ -66,7 +66,7 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 
 var check = color.New(color.FgGreen).Sprint("✓")
 
-func run(ctx context.Context, deps cmddeps.Deps, projectDir, projectRef string, opts options, stdout, stderr io.Writer, stdin io.Reader) (err error) {
+func runLink(ctx context.Context, deps cmddeps.Deps, projectDir, projectRef string, opts options, stdout, stderr io.Writer, stdin io.Reader) (err error) {
 	creds, err := console.RequireLogin(deps.LoadCredentials, stderr)
 	if err != nil {
 		return err
@@ -100,7 +100,7 @@ func run(ctx context.Context, deps cmddeps.Deps, projectDir, projectRef string, 
 	}
 
 	var projects []console.Project
-	err = lr.wait(progressv1.Phase_PHASE_CHECK, org.Slug, fmt.Sprintf("Loading the projects in %s", org.Name), func() error {
+	err = lr.wait(progressv1.Phase_PHASE_CHECK, org.Slug, progress.Loading.Title("the projects in "+org.Name), func() error {
 		list, listErr := client.ListProjects(ctx, creds.AccessToken)
 		projects = list
 		return listErr
@@ -123,44 +123,46 @@ func run(ctx context.Context, deps cmddeps.Deps, projectDir, projectRef string, 
 		return err
 	}
 
-	linking.Finish(fmt.Sprintf("Linked this directory to %s (%s)", selected.Slug, org.Name))
+	linking.Succeed(fmt.Sprintf("Linked this directory to %s (%s)", selected.Slug, org.Name))
 	return nil
 }
 
 type linkRun struct {
-	run     *events.Run
+	run     *run.Run
 	stdout  io.Writer
 	stdin   io.Reader
 	scanner *bufio.Scanner
 }
 
-func (c linkRun) wait(phase progressv1.Phase, subject, message string, fn func() error) error {
-	scope := c.run.Phase(phase)
-	unit := scope.Unit(subject, message)
+func (c linkRun) wait(phase progressv1.Phase, subject string, title progress.Title, fn func() error) error {
+	span := c.run.Phase(phase)
+	unit := span.Unit(subject, title)
 	err := fn()
 	unit.End(err)
-	scope.End(err)
+	span.End(err)
 	return err
 }
 
 func (c linkRun) ask(ctx context.Context, question func(stdout io.Writer)) (string, error) {
-	resume := c.run.Hold(&streamv1.WaitingEvent{})
-	defer resume("answered")
-	question(c.stdout)
-	answered := make(chan string, 1)
-	go func() {
-		answer := ""
-		if c.scanner.Scan() {
-			answer = strings.TrimSpace(c.scanner.Text())
+	var answer string
+	err := c.run.Ask(func() error {
+		question(c.stdout)
+		answered := make(chan string, 1)
+		go func() {
+			line := ""
+			if c.scanner.Scan() {
+				line = strings.TrimSpace(c.scanner.Text())
+			}
+			answered <- line
+		}()
+		select {
+		case answer = <-answered:
+			return c.scanner.Err()
+		case <-ctx.Done():
+			return ctx.Err()
 		}
-		answered <- answer
-	}()
-	select {
-	case answer := <-answered:
-		return answer, c.scanner.Err()
-	case <-ctx.Done():
-		return "", ctx.Err()
-	}
+	})
+	return answer, err
 }
 
 func consoleHost(apiURL string) string {
@@ -261,7 +263,7 @@ func createProject(ctx context.Context, lr linkRun, client *console.Client, acce
 	}
 
 	var created *console.Project
-	err := lr.wait(progressv1.Phase_PHASE_PROVISION, projectSlug, fmt.Sprintf("Creating the project in %s", org.Name), func() error {
+	err := lr.wait(progressv1.Phase_PHASE_PROVISION, projectSlug, progress.Creating.Title("the project in "+org.Name), func() error {
 		p, createErr := client.CreateProject(ctx, accessToken, name, projectSlug)
 		created = p
 		return createErr
@@ -299,7 +301,7 @@ func promptProjectName(ctx context.Context, lr linkRun, projectDir, lead string)
 
 func pickOrganization(ctx context.Context, lr linkRun, client *console.Client, accessToken, apiURL string, opts options) (*console.Organization, error) {
 	var orgs []console.Organization
-	err := lr.wait(progressv1.Phase_PHASE_CHECK, consoleHost(apiURL), "Loading your organizations", func() error {
+	err := lr.wait(progressv1.Phase_PHASE_CHECK, consoleHost(apiURL), progress.Loading.Title("your organizations"), func() error {
 		list, listErr := client.ListOrganizations(ctx, accessToken)
 		orgs = list
 		return listErr

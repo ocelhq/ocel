@@ -104,7 +104,7 @@ func runAdd(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, l
 	granting := run.Phase(progressv1.Phase_PHASE_PROVISION)
 	granting.Say(grantsLine(opts.grants()))
 	granting.End(nil)
-	run.Finish(fmt.Sprintf("Installed the connector on %s, which the console dials at %s", paired.Target, at.GetUrl()))
+	run.Succeed(fmt.Sprintf("Installed the connector on %s, which the console dials at %s", paired.Target, at.GetUrl()))
 	return nil
 }
 

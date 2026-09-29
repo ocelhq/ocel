@@ -9,7 +9,7 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 
-	"github.com/ocelhq/ocel/cli/internal/events"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
@@ -34,7 +34,7 @@ func TestEveryNDJSONLineCarriesTimeLevelPhaseSubjectAndMessageEvenWhenEmpty(t *t
 	t.Parallel()
 
 	var out safeBuffer
-	bus := events.NewBus(time.Now)
+	bus := run.NewBus(time.Now)
 	bus.Attach(NewJSONSink(&out))
 	_, run, err := bus.Begin(context.Background(), "ocel deploy", "")
 	if err != nil {
@@ -87,7 +87,7 @@ func TestTheJSONSinkWritesEachEventAsOneLineTheMomentItLands(t *testing.T) {
 	t.Parallel()
 
 	var out safeBuffer
-	var sink events.Sink = NewJSONSink(&out)
+	var sink run.Sink = NewJSONSink(&out)
 	t.Cleanup(func() { _ = sink.Close() })
 
 	span := []byte{1, 0, 0, 0, 0, 0, 0, 0}

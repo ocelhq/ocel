@@ -1,7 +1,8 @@
-package events_test
+package run_test
 
 import (
 	"context"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"os"
 	"strings"
 	"sync"
@@ -11,7 +12,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	"github.com/ocelhq/ocel/cli/internal/events"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -70,15 +71,15 @@ func (c *clock) advance(d time.Duration) {
 	c.now = c.now.Add(d)
 }
 
-func begin(t *testing.T, sinks ...events.Sink) (*events.Run, *clock) {
+func begin(t *testing.T, sinks ...run.Sink) (*run.Run, *clock) {
 	t.Helper()
 	return beginIn(t, context.Background(), sinks...)
 }
 
-func beginIn(t *testing.T, ctx context.Context, sinks ...events.Sink) (*events.Run, *clock) {
+func beginIn(t *testing.T, ctx context.Context, sinks ...run.Sink) (*run.Run, *clock) {
 	t.Helper()
 	c := newClock()
-	bus := events.NewBus(c.read)
+	bus := run.NewBus(c.read)
 	for _, s := range sinks {
 		bus.Attach(s)
 	}
@@ -112,7 +113,7 @@ func TestEveryAttachedSinkSeesEveryEventInOrder(t *testing.T) {
 	}
 }
 
-func TestSinksSeeEventsFromConcurrentScopesInTheSameOrder(t *testing.T) {
+func TestSinksSeeEventsFromConcurrentSpansInTheSameOrder(t *testing.T) {
 	first, second := &recording{}, &recording{}
 	run, _ := begin(t, first, second)
 	deploy := run.Phase(progressv1.Phase_PHASE_DEPLOY)
@@ -120,7 +121,7 @@ func TestSinksSeeEventsFromConcurrentScopesInTheSameOrder(t *testing.T) {
 	var wg sync.WaitGroup
 	for _, app := range []string{"web", "api", "worker"} {
 		wg.Go(func() {
-			unit := deploy.Unit(app, "Deploying "+app)
+			unit := deploy.Unit(app, progress.Deploying.Title(app))
 			for range 50 {
 				unit.Say("uploading " + app)
 			}
@@ -142,7 +143,7 @@ func TestSinksSeeEventsFromConcurrentScopesInTheSameOrder(t *testing.T) {
 
 func TestClosingTheBusClosesEverySink(t *testing.T) {
 	first, second := &recording{}, &recording{}
-	bus := events.NewBus(time.Now)
+	bus := run.NewBus(time.Now)
 	bus.Attach(first)
 	bus.Attach(second)
 
@@ -171,7 +172,7 @@ func TestNoSinkReceivesASecretABindingInTheOutcomeCarries(t *testing.T) {
 		{Name: "payments", Properties: &bindingsv1.Binding_Custom{Custom: custom}},
 	}}
 	sink := &recording{}
-	bus := events.NewBus(time.Now)
+	bus := run.NewBus(time.Now)
 	bus.Attach(sink)
 	ctx, run, err := bus.Begin(context.Background(), "ocel deploy", t.TempDir())
 	if err != nil {
@@ -211,7 +212,7 @@ func TestNoSinkReceivesASecretABindingInTheOutcomeCarries(t *testing.T) {
 
 func TestASecondInterruptEndsTheOpenRunAsInterruptedOnEverySinkAndClosesThem(t *testing.T) {
 	first, second := &recording{}, &recording{}
-	bus := events.NewBus(newClock().read)
+	bus := run.NewBus(newClock().read)
 	bus.Attach(first)
 	bus.Attach(second)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -219,7 +220,7 @@ func TestASecondInterruptEndsTheOpenRunAsInterruptedOnEverySinkAndClosesThem(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	run.Phase(progressv1.Phase_PHASE_DEPLOY).Unit("web", "Deploying web")
+	run.Phase(progressv1.Phase_PHASE_DEPLOY).Unit("web", progress.Deploying.Title("web"))
 	cancel()
 
 	bus.Interrupt()
@@ -237,7 +238,7 @@ func TestASecondInterruptEndsTheOpenRunAsInterruptedOnEverySinkAndClosesThem(t *
 			t.Fatalf("%s sink got %d results (first interrupted: %t), want one interrupted result", name, len(results), len(results) > 0 && results[0].GetInterrupted())
 		}
 		if received[len(received)-1].GetSummary() == nil {
-			t.Fatalf("%s sink's last event is a %T, want the result after every scope ended", name, received[len(received)-1].GetBody())
+			t.Fatalf("%s sink's last event is a %T, want the result after every span ended", name, received[len(received)-1].GetBody())
 		}
 		if !sink.closed {
 			t.Fatalf("%s sink was not closed, want the interrupt to flush it", name)
@@ -247,7 +248,7 @@ func TestASecondInterruptEndsTheOpenRunAsInterruptedOnEverySinkAndClosesThem(t *
 
 func TestANodeBuilderLogReachesEverySinkAsDebugDetailOfItsAppAndTheRunsLogOnce(t *testing.T) {
 	sink := &recording{}
-	bus := events.NewBus(time.Now)
+	bus := run.NewBus(time.Now)
 	bus.Attach(sink)
 	ctx, run, err := bus.Begin(context.Background(), "ocel deploy", t.TempDir())
 	if err != nil {

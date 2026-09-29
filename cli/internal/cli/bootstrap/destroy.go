@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"fmt"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"io"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
@@ -74,7 +75,7 @@ func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Confi
 	}
 
 	planning := run.Phase(progressv1.Phase_PHASE_PLAN)
-	unit := planning.Unit(name, fmt.Sprintf("Enumerating what removing the %s bootstrap would delete", name))
+	unit := planning.Unit(name, progress.Enumerating.Title(fmt.Sprintf("what removing the %s bootstrap would delete", name)))
 	var plan *planv1.ChangePlan
 	err = prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		plan, err = client.PlanRemoveBootstrap(ctx, &contractv1.BootstrapScope{
@@ -88,14 +89,14 @@ func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Confi
 		return err
 	}
 	if len(plan.GetGroups()) == 0 {
-		run.Finish(fmt.Sprintf("Nothing to destroy: the %s environment is not bootstrapped", name))
+		run.Succeed(fmt.Sprintf("Nothing to destroy: the %s environment is not bootstrapped", name))
 		return nil
 	}
 	consented := planning.Plan(fmt.Sprintf("This will permanently remove the %s bootstrap", name), plan,
 		&planv1.Note{Text: "Every app already deployed from it keeps running and nothing can describe, update or remove it again. This cannot be undone."})
 	if opts.Dry {
 		planning.Say("Run without --dry to destroy.")
-		run.Finish(fmt.Sprintf("Planned the removal of the %s bootstrap", name))
+		run.Succeed(fmt.Sprintf("Planned the removal of the %s bootstrap", name))
 		return nil
 	}
 	granted, err := gate.ConsentByName(ctx, planning, consented, "environment name", plan.GetSubject())
@@ -104,7 +105,7 @@ func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Confi
 		return err
 	}
 	if !granted {
-		run.Finish(fmt.Sprintf("Nothing removed: the %s bootstrap stays", name))
+		run.Succeed(fmt.Sprintf("Nothing removed: the %s bootstrap stays", name))
 		return nil
 	}
 
@@ -116,7 +117,7 @@ func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Confi
 	if _, err := providerclient.Stream(ctx, prov, "RemoveBootstrap", req, contractv1connect.ProviderServiceClient.RemoveBootstrap); err != nil {
 		return err
 	}
-	run.Finish(fmt.Sprintf("Removed the %s bootstrap", name))
+	run.Succeed(fmt.Sprintf("Removed the %s bootstrap", name))
 	return nil
 }
 

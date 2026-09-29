@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"io"
 	"os"
 	"path/filepath"
@@ -19,10 +20,10 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/english"
-	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/version"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -356,13 +357,13 @@ func checkSetup(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Confi
 	}()
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	unit := check.Unit(cfg.Slug, "Checking your setup")
+	unit := check.Unit(cfg.Slug, progress.Checking.Title("your setup"))
 	err = askProvider(ctx, deps, cfg, unit, got)
 	unit.End(err)
 	return err
 }
 
-func askProvider(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, unit *events.Scope, got *answers) error {
+func askProvider(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, unit *run.Span, got *answers) error {
 	prov, err := providerclient.Start(ctx, cfg, unit, deps.HostTrust, providerclient.PinToLock)
 	if err != nil {
 		return err

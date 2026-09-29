@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"io"
 	"os"
 	"strings"
@@ -12,9 +13,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/consent"
-	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -111,7 +112,7 @@ func runRollback(ctx context.Context, deps cmddeps.Deps, cwd string, opts rollba
 		return err
 	}
 	if !granted {
-		run.Finish(fmt.Sprintf("Nothing rolled back: production of %s stays on its live promotion", cfg.Slug))
+		run.Succeed(fmt.Sprintf("Nothing rolled back: production of %s stays on its live promotion", cfg.Slug))
 		return nil
 	}
 
@@ -133,16 +134,16 @@ func runRollback(ctx context.Context, deps cmddeps.Deps, cwd string, opts rollba
 	if note := runui.PropagationNote(promoted.GetPropagation()); note != "" {
 		flipSuffix = "; " + note
 	}
-	run.Finish(fmt.Sprintf("Rolled back to promotion %s (created %s%s) as promotion %s%s",
+	run.Succeed(fmt.Sprintf("Rolled back to promotion %s (created %s%s) as promotion %s%s",
 		target.GetPromotionId(), runui.EpochDate(target.GetTs()), tagSuffix, promoted.GetPromotionId(), flipSuffix))
 	return nil
 }
 
-func promotionHistory(ctx context.Context, check *events.Scope, prov *providerclient.Provider, cfg *projectconfig.Config) ([]*contractv1.PromotionHistoryEntry, error) {
+func promotionHistory(ctx context.Context, check *run.Span, prov *providerclient.Provider, cfg *projectconfig.Config) ([]*contractv1.PromotionHistoryEntry, error) {
 	if err := bootstrap.Ready(ctx, check, prov, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production"); err != nil {
 		return nil, err
 	}
-	unit := check.Unit(cfg.Slug, "Reading the promotion history of production")
+	unit := check.Unit(cfg.Slug, progress.Reading.Title("the promotion history of production"))
 	var listed *contractv1.ListPromotionsResponse
 	err := prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		listed, err = client.ListPromotions(ctx, &contractv1.ListPromotionsRequest{
@@ -155,8 +156,8 @@ func promotionHistory(ctx context.Context, check *events.Scope, prov *providercl
 	return listed.GetPromotions(), err
 }
 
-func promote(ctx context.Context, phase *events.Scope, prov *providerclient.Provider, cfg *projectconfig.Config, target *contractv1.Promotion) (*contractv1.RollbackResponse, error) {
-	unit := phase.Unit(cfg.Slug, fmt.Sprintf("Switching production traffic back to promotion %s", target.GetPromotionId()))
+func promote(ctx context.Context, phase *run.Span, prov *providerclient.Provider, cfg *projectconfig.Config, target *contractv1.Promotion) (*contractv1.RollbackResponse, error) {
+	unit := phase.Unit(cfg.Slug, progress.Switching.Title("production traffic back to promotion "+target.GetPromotionId()))
 	var resp *contractv1.RollbackResponse
 	err := prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		resp, err = client.Rollback(ctx, &contractv1.RollbackRequest{
@@ -225,7 +226,7 @@ func rollbackTarget(history []*contractv1.PromotionHistoryEntry, to, tag string)
 	return nil, fmt.Errorf("no promotion in this project's production history is live, so there is nothing to roll back from: pass --to with the promotion id to serve")
 }
 
-func showRollbackPlan(plan *events.Scope, slug string, live, target *contractv1.Promotion) {
+func showRollbackPlan(plan *run.Span, slug string, live, target *contractv1.Promotion) {
 	lines := []string{fmt.Sprintf("This will roll production of project %q back to an earlier deployment", slug)}
 	if live != nil {
 		lines = append(lines, "– live    "+promotionLine(live))

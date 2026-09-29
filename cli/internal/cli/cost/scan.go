@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"io"
 	"maps"
 	"os"
@@ -108,7 +109,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, opts Options, stdou
 	}
 	defer prov.Close()
 
-	pricing := run.Phase(progressv1.Phase_PHASE_PLAN).Unit(cfg.Slug, "Pricing what a deploy would provision")
+	pricing := run.Phase(progressv1.Phase_PHASE_PLAN).Unit(cfg.Slug, progress.Pricing.Title("what a deploy would provision"))
 	set, estimates, assumptions, err := price(ctx, deps, prov, cfg, env, overrides, pricing.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED))
 	pricing.End(err)
 	if err != nil {

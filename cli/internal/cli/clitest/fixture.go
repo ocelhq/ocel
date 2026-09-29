@@ -20,12 +20,12 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
-	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/projecteditor"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/providers"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/configdoc"
@@ -59,7 +59,7 @@ func NewDeps() cmddeps.Deps {
 		StdinIsTerminal:         func(io.Reader) bool { return false },
 		ConfigPath:              func() string { return os.Getenv("OCEL_CONFIG") },
 		Presentation:            func(io.Writer) runui.Presentation { return runui.Resolve(runui.Origin{}) },
-		Events:                  events.NewBus(time.Now),
+		Events:                  run.NewBus(time.Now),
 	}
 }
 
@@ -227,7 +227,7 @@ func StubAppImages(deps *cmddeps.Deps, apps ...string) {
 	for _, app := range apps {
 		refs[app] = FixtureImage(app)
 	}
-	deps.RefuseUnbuildableImages = func(context.Context, *events.Scope, *projectconfig.Config, map[string]string) error {
+	deps.RefuseUnbuildableImages = func(context.Context, *run.Span, *projectconfig.Config, map[string]string) error {
 		return nil
 	}
 	buildApps := deps.BuildApps

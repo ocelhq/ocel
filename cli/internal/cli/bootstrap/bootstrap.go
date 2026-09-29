@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"io"
 	"os"
 	"strings"
@@ -14,10 +15,10 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/consent"
-	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -209,7 +210,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 	}
 	if !selected {
 		planning.Say("No feature was picked")
-		run.Finish(fmt.Sprintf("Left the %s bootstrap as it is", Name(tier)))
+		run.Succeed(fmt.Sprintf("Left the %s bootstrap as it is", Name(tier)))
 		return nil
 	}
 	if err := bothWays(requested, named); err != nil {
@@ -231,7 +232,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 		return req
 	}
 
-	unit := planning.Unit(Name(tier), fmt.Sprintf("Planning the changes to the %s bootstrap", Name(tier)))
+	unit := planning.Unit(Name(tier), progress.Planning.Title(fmt.Sprintf("the changes to the %s bootstrap", Name(tier))))
 	plan, err := providerclient.Plan(ctx, prov, "Bootstrap", request(true), contractv1connect.ProviderServiceClient.Bootstrap)
 	unit.End(err)
 	if err != nil {
@@ -267,7 +268,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 	}
 	if opts.Dry {
 		planning.Say("Run without --dry to apply.")
-		run.Finish(fmt.Sprintf("Planned the %s bootstrap", Name(tier)))
+		run.Succeed(fmt.Sprintf("Planned the %s bootstrap", Name(tier)))
 		return nil
 	}
 
@@ -277,7 +278,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 			return err
 		}
 		if !proceed {
-			run.Finish(fmt.Sprintf("Left the %s bootstrap as it is", Name(tier)))
+			run.Succeed(fmt.Sprintf("Left the %s bootstrap as it is", Name(tier)))
 			return nil
 		}
 	}
@@ -291,7 +292,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 		return err
 	}
 	if !granted {
-		run.Finish(fmt.Sprintf("Left the %s bootstrap as it is", Name(tier)))
+		run.Succeed(fmt.Sprintf("Left the %s bootstrap as it is", Name(tier)))
 		return nil
 	}
 	planning.End(nil)
@@ -304,11 +305,11 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 	if _, err := providerclient.Stream(ctx, prov, "Bootstrap", req, contractv1connect.ProviderServiceClient.Bootstrap); err != nil {
 		return err
 	}
-	run.Finish(fmt.Sprintf("Bootstrapped the %s environment", Name(tier)))
+	run.Succeed(fmt.Sprintf("Bootstrapped the %s environment", Name(tier)))
 	return nil
 }
 
-func describeBootstrap(ctx context.Context, check *events.Scope, prov *providerclient.Provider, cfg *projectconfig.Config, tier environmentv1.Tier) (*contractv1.DescribeBootstrapResponse, error) {
+func describeBootstrap(ctx context.Context, check *run.Span, prov *providerclient.Provider, cfg *projectconfig.Config, tier environmentv1.Tier) (*contractv1.DescribeBootstrapResponse, error) {
 	if err := preflight.Announce(ctx, check, prov, cfg, tier); err != nil {
 		return nil, err
 	}

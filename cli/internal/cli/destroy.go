@@ -7,14 +7,16 @@ import (
 	"io"
 	"os"
 
+	"github.com/ocelhq/ocel/pkg/progress"
+
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/consent"
-	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -173,7 +175,7 @@ func destroyProject(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.C
 		place = "any preview"
 	}
 	planning := run.Phase(progressv1.Phase_PHASE_PLAN)
-	unit := planning.Unit(cfg.Slug, fmt.Sprintf("Enumerating what %s has in %s to destroy", cfg.Slug, place))
+	unit := planning.Unit(cfg.Slug, progress.Enumerating.Title(fmt.Sprintf("what %s has in %s to destroy", cfg.Slug, place)))
 	var plan *planv1.ChangePlan
 	err = prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		plan, err = client.PlanRemoveProject(ctx, &contractv1.ProjectRequest{
@@ -188,14 +190,14 @@ func destroyProject(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.C
 		return err
 	}
 	if len(plan.GetGroups()) == 0 {
-		run.Finish(fmt.Sprintf("Nothing to destroy: %s has nothing in %s", cfg.Slug, place))
+		run.Succeed(fmt.Sprintf("Nothing to destroy: %s has nothing in %s", cfg.Slug, place))
 		return nil
 	}
 
 	consented := showDestroyPlan(planning, cfg.Slug, preview, plan)
 	if gate.Dry {
 		planning.Say("Run without --dry to destroy.")
-		run.Finish(fmt.Sprintf("Planned the destroy of what %s has in %s", cfg.Slug, place))
+		run.Succeed(fmt.Sprintf("Planned the destroy of what %s has in %s", cfg.Slug, place))
 		return nil
 	}
 	granted, err := gate.ConsentByName(ctx, planning, consented, "project name", plan.GetSubject())
@@ -204,7 +206,7 @@ func destroyProject(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.C
 		return err
 	}
 	if !granted {
-		run.Finish(fmt.Sprintf("Nothing destroyed: what %s has in %s stays", cfg.Slug, place))
+		run.Succeed(fmt.Sprintf("Nothing destroyed: what %s has in %s stays", cfg.Slug, place))
 		return nil
 	}
 
@@ -218,14 +220,14 @@ func destroyProject(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.C
 		return err
 	}
 	if preview {
-		run.Finish(fmt.Sprintf("Destroyed preview footprint of project %s", cfg.Slug))
+		run.Succeed(fmt.Sprintf("Destroyed preview footprint of project %s", cfg.Slug))
 		return nil
 	}
-	run.Finish(fmt.Sprintf("Destroyed project %s", cfg.Slug))
+	run.Succeed(fmt.Sprintf("Destroyed project %s", cfg.Slug))
 	return nil
 }
 
-func showDestroyPlan(planning *events.Scope, slug string, preview bool, plan *planv1.ChangePlan) *planv1.ChangePlan {
+func showDestroyPlan(planning *run.Span, slug string, preview bool, plan *planv1.ChangePlan) *planv1.ChangePlan {
 	if preview {
 		return planning.Plan(fmt.Sprintf("This will permanently destroy the ENTIRE preview footprint of project %q", slug), plan,
 			&planv1.Note{Action: planv1.Change_ACTION_DELETE, Text: "all stored preview assets belonging to this project"},

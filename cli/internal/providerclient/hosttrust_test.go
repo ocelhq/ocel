@@ -57,8 +57,8 @@ func newHostTrustFake(t *testing.T, mode string) hostTrustFake {
 func (f hostTrustFake) call(t *testing.T, trust Trust) error {
 	t.Helper()
 
-	ctx, scope, _ := deployScope(t)
-	p := startFake(t, ctx, f.mode, scope, trust, f.env()...)
+	ctx, span, _ := deploySpan(t)
+	p := startFake(t, ctx, f.mode, span, trust, f.env()...)
 	_, err := Stream(ctx, p, "Bootstrap", &contractv1.BootstrapRequest{}, contractv1connect.ProviderServiceClient.Bootstrap)
 	return err
 }
@@ -66,8 +66,8 @@ func (f hostTrustFake) call(t *testing.T, trust Trust) error {
 func callRefusing(t *testing.T, trust Trust, call func() error) error {
 	t.Helper()
 
-	ctx, scope, _ := deployScope(t)
-	p := startFake(t, ctx, "success", scope, trust)
+	ctx, span, _ := deploySpan(t)
+	p := startFake(t, ctx, "success", span, trust)
 	return p.callTrusting(ctx, func(*Runner) error { return call() })
 }
 

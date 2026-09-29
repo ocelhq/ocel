@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"strings"
 	"testing"
 	"time"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/ocelhq/ocel/cli/internal/events"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
@@ -24,7 +25,7 @@ func (c *clock) now() time.Time { return c.at }
 
 func (c *clock) pass(d time.Duration) { c.at = c.at.Add(d) }
 
-func groupedRun(t *testing.T, present Presentation) (*events.Run, *bytes.Buffer, *clock) {
+func groupedRun(t *testing.T, present Presentation) (*run.Run, *bytes.Buffer, *clock) {
 	t.Helper()
 	var out bytes.Buffer
 	c := &clock{at: time.Unix(1_700_000_000, 0)}
@@ -49,7 +50,7 @@ func TestAUnitsOutputPrintsWithItsHeaderWhenTheUnitEndsIndentedFourSpaces(t *tes
 
 	run, out, c := groupedRun(t, Presentation{})
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	web := build.Unit("web", "built 12 routes")
+	web := build.Unit("web", progress.Title{Started: "built 12 routes", Ended: "built 12 routes"})
 	w := web.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_STDOUT)
 	if _, err := w.Write([]byte("> next build\nCompiled successfully\n")); err != nil {
 		t.Fatalf("Write() = %v", err)
@@ -157,9 +158,9 @@ func TestUnitsThatRanOneAfterAnotherCarryNoCount(t *testing.T) {
 
 	run, out, c := groupedRun(t, Presentation{})
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	check.Unit("console.ocel.dev", "loading your organizations").End(nil)
+	check.Unit("console.ocel.dev", progress.Title{Started: "loading your organizations", Ended: "loading your organizations"}).End(nil)
 	c.pass(time.Second)
-	check.Unit("acme-inc", "loading the projects in Acme Inc").End(nil)
+	check.Unit("acme-inc", progress.Title{Started: "loading the projects in Acme Inc", Ended: "loading the projects in Acme Inc"}).End(nil)
 
 	want := "INFO  [check] ✓ console.ocel.dev: loading your organizations in 0s\n" +
 		"INFO  [check] ✓ acme-inc: loading the projects in Acme Inc in 0s\n"
@@ -211,8 +212,8 @@ func TestOnceAUnitHasFailedALaterSuccessfulUnitShowsOnlyItsHeader(t *testing.T) 
 
 	run, out, c := groupedRun(t, Presentation{})
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	web := build.Unit("web", "Building web")
-	api := build.Unit("api", "Building api")
+	web := build.Unit("web", progress.Building.Title("web"))
+	api := build.Unit("api", progress.Building.Title("api"))
 	output(t, web, "web compiled")
 	output(t, api, "api: missing module")
 	c.pass(3 * time.Second)
@@ -235,8 +236,8 @@ func TestASuccessfulUnitAfterAFailureKeepsItsWarningsAndErrorsUnderItsHeader(t *
 
 	run, out, c := groupedRun(t, Presentation{})
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	web := build.Unit("web", "Building web")
-	api := build.Unit("api", "Building api")
+	web := build.Unit("web", progress.Building.Title("web"))
+	api := build.Unit("api", progress.Building.Title("api"))
 	output(t, web, "web compiled")
 	web.Say("bundled 12 routes")
 	web.Warn("next.config.js sets images.unoptimized")
@@ -259,7 +260,7 @@ func TestAFailureReasonThatRunsOverLinesContinuesDeeperThanTheBlocksDetailLines(
 	t.Parallel()
 
 	run, out, c := groupedRun(t, Presentation{})
-	api := run.Phase(progressv1.Phase_PHASE_BUILD).Unit("api", "Building api")
+	api := run.Phase(progressv1.Phase_PHASE_BUILD).Unit("api", progress.Building.Title("api"))
 	api.Warn("tsconfig.json has no strict mode")
 	c.pass(time.Second)
 	api.End(errors.New("npm run build exited with status 1\nsee the build log above"))
@@ -272,7 +273,7 @@ func TestAFailureReasonThatRunsOverLinesContinuesDeeperThanTheBlocksDetailLines(
 	}
 }
 
-func output(t *testing.T, unit *events.Scope, text string) {
+func output(t *testing.T, unit *run.Span, text string) {
 	t.Helper()
 	if _, err := unit.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_STDOUT).Write([]byte(text + "\n")); err != nil {
 		t.Fatalf("Write() = %v", err)
@@ -284,7 +285,7 @@ func debugAndInfoInAUnit(t *testing.T, present Presentation) string {
 	run, out, c := groupedRun(t, present)
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
 	build.Debug("resolved the node toolchain at /usr/bin/node")
-	web := build.Unit("web", "Building web")
+	web := build.Unit("web", progress.Building.Title("web"))
 	web.Debug("reusing 3 cached layers")
 	web.Say("bundled 12 routes")
 	if _, err := web.Output(progressv1.Level_LEVEL_DEBUG, progressv1.Stream_STREAM_STDERR).Write([]byte("npm timing ok\n")); err != nil {
@@ -367,7 +368,7 @@ func TestWhatAUnitsChildScopesSayBelongsToTheUnitsBlock(t *testing.T) {
 	}
 }
 
-func heartbeatRun(t *testing.T) (*events.Run, *GroupedSink, chan<- time.Time, *bytes.Buffer, *clock) {
+func heartbeatRun(t *testing.T) (*run.Run, *GroupedSink, chan<- time.Time, *bytes.Buffer, *clock) {
 	t.Helper()
 	var out bytes.Buffer
 	ticks := make(chan time.Time)
@@ -390,8 +391,8 @@ func TestThirtySecondsOfSilencePrintsAHeartbeatNamingWhatIsStillRunning(t *testi
 
 	run, sink, ticks, out, c := heartbeatRun(t)
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	build.Unit("web", "Building web")
-	build.Unit("api", "Building api")
+	build.Unit("web", progress.Building.Title("web"))
+	build.Unit("api", progress.Building.Title("api"))
 	start := c.now()
 	ticks <- start.Add(29 * time.Second)
 	ticks <- start.Add(30 * time.Second)
@@ -408,7 +409,7 @@ func TestTheNextHeartbeatComesSixtySecondsLater(t *testing.T) {
 	t.Parallel()
 
 	run, sink, ticks, out, c := heartbeatRun(t)
-	run.Phase(progressv1.Phase_PHASE_DEPLOY).Unit("api", "deploying api")
+	run.Phase(progressv1.Phase_PHASE_DEPLOY).Unit("api", progress.Title{Started: "deploying api", Ended: "deploying api"})
 	start := c.now()
 	ticks <- start.Add(30 * time.Second)
 	ticks <- start.Add(89 * time.Second)
@@ -427,8 +428,8 @@ func TestAPrintedLineRestartsTheSilence(t *testing.T) {
 
 	run, sink, ticks, out, c := heartbeatRun(t)
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	web := build.Unit("web", "Building web")
-	build.Unit("api", "Building api")
+	web := build.Unit("web", progress.Building.Title("web"))
+	build.Unit("api", progress.Building.Title("api"))
 	start := c.now()
 	c.pass(30 * time.Second)
 	web.End(nil)
@@ -447,7 +448,7 @@ func TestSilenceWithNothingRunningPrintsNoHeartbeat(t *testing.T) {
 	t.Parallel()
 
 	run, sink, ticks, out, c := heartbeatRun(t)
-	web := run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", "Building web")
+	web := run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", progress.Building.Title("web"))
 	c.pass(time.Second)
 	web.End(nil)
 	ticks <- c.now().Add(5 * time.Minute)
@@ -462,7 +463,7 @@ func TestNoHeartbeatPrintsWhileTheRunWaitsOnSomeone(t *testing.T) {
 	t.Parallel()
 
 	run, sink, ticks, out, c := heartbeatRun(t)
-	run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", "Building web")
+	run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", progress.Building.Title("web"))
 	run.Hold(&streamv1.WaitingEvent{})
 	ticks <- c.now().Add(5 * time.Minute)
 
@@ -476,7 +477,7 @@ func TestTheSilenceRestartsWhenTheRunResumes(t *testing.T) {
 	t.Parallel()
 
 	run, sink, ticks, out, c := heartbeatRun(t)
-	run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", "Building web")
+	run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", progress.Building.Title("web"))
 	resume := run.Hold(&streamv1.WaitingEvent{})
 	start := c.now()
 	c.pass(2 * time.Minute)
@@ -496,7 +497,7 @@ func TestInGitHubActionsASuccessfulBlockIsACollapsedGroup(t *testing.T) {
 
 	run, out, c := groupedRun(t, Presentation{GitHubActions: true})
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	web := build.Unit("web", "built 12 routes")
+	web := build.Unit("web", progress.Title{Started: "built 12 routes", Ended: "built 12 routes"})
 	output(t, web, "Compiled successfully")
 	c.pass(34 * time.Second)
 	web.End(nil)
@@ -517,7 +518,7 @@ func TestInGitHubActionsWithColourAGroupTitleIsStillPlainText(t *testing.T) {
 	t.Parallel()
 
 	run, out, c := groupedRun(t, Presentation{GitHubActions: true, Color: true})
-	web := run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", "built 12 routes")
+	web := run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", progress.Title{Started: "built 12 routes", Ended: "built 12 routes"})
 	output(t, web, "Compiled successfully")
 	c.pass(34 * time.Second)
 	web.End(nil)
@@ -532,8 +533,8 @@ func TestInGitHubActionsAFailedBlockStaysExpandedAndALaterSuccessKeepsItsBodyFol
 
 	run, out, c := groupedRun(t, Presentation{GitHubActions: true})
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	web := build.Unit("web", "Building web")
-	api := build.Unit("api", "Building api")
+	web := build.Unit("web", progress.Building.Title("web"))
+	api := build.Unit("api", progress.Building.Title("api"))
 	output(t, web, "web compiled")
 	output(t, api, "api: missing module")
 	c.pass(3 * time.Second)
@@ -583,7 +584,7 @@ func TestInGitHubActionsNoLineOfAMessageCanStartAWorkflowCommandButVerbatimToolO
 
 	run, out, c := groupedRun(t, Presentation{GitHubActions: true})
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	web := build.Unit("web", "Building web")
+	web := build.Unit("web", progress.Building.Title("web"))
 	web.Warn("tsc reported\n\t::error::forged in a detail\n##[error]forged the old way")
 	output(t, web, "::error file=app.ts,line=3::Type 'string' is not assignable")
 	c.pass(time.Second)
@@ -608,7 +609,7 @@ func TestInGitHubActionsAGroupTitleCannotStartAWorkflowCommand(t *testing.T) {
 	t.Parallel()
 
 	run, out, c := groupedRun(t, Presentation{GitHubActions: true})
-	web := run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", "built 100% of routes\n::error::forged")
+	web := run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", progress.Title{Started: "built 100% of routes\n::error::forged", Ended: "built 100% of routes\n::error::forged"})
 	output(t, web, "Compiled successfully")
 	c.pass(time.Second)
 	web.End(nil)
@@ -692,7 +693,7 @@ func providerChild(span, parent byte, subject, message string, at time.Time) *pr
 	return started
 }
 
-func forwardResource(scope *events.Scope, span, parent byte, subject string, action provider.ChangeAction, typ, name string, status progressv1.SpanStatus, at time.Time) {
+func forwardResource(scope *run.Span, span, parent byte, subject string, action provider.ChangeAction, typ, name string, status progressv1.SpanStatus, at time.Time) {
 	scope.Forward(providerChild(span, parent, subject, "resource operation", at))
 	ended := providerEnded(span, subject, "resource operation", status, at, at.Add(time.Second))
 	ended.GetEnded().Attributes = []*progressv1.SpanAttribute{
@@ -761,7 +762,7 @@ func TestWithColourAUnitsProgressMessageIsGrayUnderItsHeader(t *testing.T) {
 	t.Parallel()
 
 	run, out, _ := groupedRun(t, Presentation{Color: true})
-	web := run.Phase(progressv1.Phase_PHASE_DEPLOY).Unit("web", "Deploying web")
+	web := run.Phase(progressv1.Phase_PHASE_DEPLOY).Unit("web", progress.Deploying.Title("web"))
 	web.Say("Uploading function web's artifact (1.2 MiB)")
 	web.Warn("the bundle is over 50 MiB")
 	web.End(nil)
@@ -840,18 +841,18 @@ func TestVerboseShowsTheEngineOutputInTheFailedBlockToo(t *testing.T) {
 
 const productionHead = "ocel  dev  acme › production\n\n"
 
-func productionRun(t *testing.T) (*events.Run, *bytes.Buffer, *clock) {
+func productionRun(t *testing.T) (*run.Run, *bytes.Buffer, *clock) {
 	t.Helper()
 	run, out, c := groupedRun(t, Presentation{})
 	run.Phase(progressv1.Phase_PHASE_CHECK).Identity(&streamv1.IdentityEvent{Project: "acme", Tier: environmentv1.Tier_TIER_PRODUCTION})
 	return run, out, c
 }
 
-func forwardOutcome(run *events.Run, outcome *progressv1.OperationResult) {
+func forwardOutcome(run *run.Run, outcome *progressv1.OperationResult) {
 	run.Phase(progressv1.Phase_PHASE_DEPLOY).Forward(&progressv1.OperationEvent{Body: &progressv1.OperationEvent_Result{Result: outcome}})
 }
 
-func ended(run *events.Run, err error) {
+func ended(run *run.Run, err error) {
 	run.End(&err)
 }
 
@@ -863,7 +864,7 @@ func TestASuccessfulDeployNamesWhatProductionServesNowAndWhereEachAppIs(t *testi
 		{App: "web", Outcome: progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED, Urls: []string{"https://acme.example.com"}},
 		{App: "api", Outcome: progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED, Urls: []string{"https://api.acme.example.com"}},
 	}})
-	run.Deployed("Deployed acme to production", nil, nil)
+	run.Succeed("Deployed acme to production")
 	c.pass(3*time.Minute + 29*time.Second)
 	ended(run, nil)
 
@@ -959,7 +960,7 @@ func TestACancelledRunsSummarySaysSoAndWhatToRerunAfterAVerbatimBlockWithOneBlan
 	c := &clock{at: time.Unix(1_700_000_000, 0)}
 	_, run := onABus(t, ctx, c.now, newGroupedSink(&out, Presentation{}, nil))
 	deploy := run.Phase(progressv1.Phase_PHASE_DEPLOY)
-	web := deploy.Unit("web", "deploying web")
+	web := deploy.Unit("web", progress.Title{Started: "deploying web", Ended: "deploying web"})
 	output(t, web, "creating function web")
 	web.End(nil)
 	c.pass(12 * time.Second)
@@ -1174,7 +1175,7 @@ func TestTheVariablesGateIsSetApartByBlankLinesAndTheResumeIsALineNamingItsUnit(
 	run, out, _ := groupedRun(t, Presentation{})
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
 	build.Say("building 1 app")
-	unit := build.Unit("acme", "Building project")
+	unit := build.Unit("acme", progress.Building.Title("project"))
 	resume := unit.Hold(&streamv1.WaitingEvent{Url: "http://127.0.0.1:5555/#t=abc", Missing: missingStripeKey()})
 	resume("the page was answered")
 	unit.End(nil)
@@ -1220,7 +1221,7 @@ func TestARunThatFailedBeforeAnyChangingPhaseSaysNothingChangedAndWhatProduction
 
 	run, out, _ := productionRun(t)
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	build.Unit("web", "Building web").End(errors.New("npm run build exited with status 1"))
+	build.Unit("web", progress.Building.Title("web")).End(errors.New("npm run build exited with status 1"))
 	ended(run, errors.New("building web: npm run build exited with status 1"))
 
 	want := "ERROR [build] ✗ web: Building web failed after 0s: npm run build exited with status 1\n" +
@@ -1236,7 +1237,7 @@ func TestARunThatFailedOnceAChangingPhaseStartedClaimsNothingChanged(t *testing.
 	t.Parallel()
 
 	run, out, _ := productionRun(t)
-	run.Phase(progressv1.Phase_PHASE_PROVISION).Unit("", "Environment").End(errors.New("the stack is locked"))
+	run.Phase(progressv1.Phase_PHASE_PROVISION).Unit("", progress.Title{Started: "Environment", Ended: "Environment"}).End(errors.New("the stack is locked"))
 	ended(run, errors.New("the stack is locked"))
 
 	if got := out.String(); strings.Contains(got, "nothing was changed") || strings.Contains(got, "still serves") {

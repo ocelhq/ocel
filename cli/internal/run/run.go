@@ -1,6 +1,7 @@
-package events
+package run
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
+	"github.com/ocelhq/ocel/pkg/progress"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
@@ -29,14 +31,16 @@ type Run struct {
 	start   time.Time
 	trace   *runtrace.Run
 
-	mu        sync.Mutex
-	phases    map[progressv1.Phase]*Scope
-	open      []*Scope
-	changed   bool
-	apps      []*progressv1.AppResult
-	identity  *streamv1.IdentityEvent
-	promotion string
-	success   *streamv1.RunSummary
+	mu          sync.Mutex
+	phases      map[progressv1.Phase]*Span
+	open        []*Span
+	changed     bool
+	apps        []*progressv1.AppResult
+	identity    *streamv1.IdentityEvent
+	promotion   string
+	urlNotes    []string
+	propagation *progressv1.Propagation
+	headline    string
 
 	endOnce sync.Once
 }
@@ -78,11 +82,12 @@ func (r *Run) result(err error) (*streamv1.RunSummary, int) {
 	case err == nil:
 		r.mu.Lock()
 		defer r.mu.Unlock()
-		result := &streamv1.RunSummary{Success: true, Headline: r.verdict("finished")}
-		if r.success != nil {
-			result = r.success
-		}
-		return result, 0
+		return &streamv1.RunSummary{
+			Success:     true,
+			Headline:    cmp.Or(r.headline, r.verdict("finished")),
+			UrlNotes:    r.urlNotes,
+			Propagation: r.propagation,
+		}, 0
 	case r.ctx.Err() != nil:
 		result := &streamv1.RunSummary{Interrupted: true, Headline: r.verdict("cancelled")}
 		if r.mayHaveChanged() {
@@ -107,14 +112,10 @@ func (r *Run) verdict(outcome string) string {
 	return strings.ToUpper(name[:1]) + name[1:] + " " + outcome
 }
 
-func (r *Run) Finish(headline string) {
-	r.Deployed(headline, nil, nil)
-}
-
-func (r *Run) Deployed(headline string, urlNotes []string, propagation *progressv1.Propagation) {
+func (r *Run) Succeed(headline string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.success = &streamv1.RunSummary{Success: true, Headline: headline, UrlNotes: urlNotes, Propagation: propagation}
+	r.headline = headline
 }
 
 func resultLevel(result *streamv1.RunSummary) progressv1.Level {
@@ -131,45 +132,55 @@ func (r *Run) Hold(waiting *streamv1.WaitingEvent) (resume func(reason string)) 
 	return r.holdOn(func(ev *streamv1.RunEvent) *streamv1.RunEvent { return ev }, waiting)
 }
 
-func (r *Run) holdOn(scoped func(*streamv1.RunEvent) *streamv1.RunEvent, waiting *streamv1.WaitingEvent) (resume func(reason string)) {
-	r.bus.send(scoped(&streamv1.RunEvent{Body: &streamv1.RunEvent_Waiting{Waiting: waiting}}))
+func (r *Run) Ask(ask func() error) error {
+	return askHolding(r.Hold, ask)
+}
+
+func askHolding(hold func(*streamv1.WaitingEvent) func(reason string), ask func() error) error {
+	resume := hold(&streamv1.WaitingEvent{})
+	defer resume("answered")
+	return ask()
+}
+
+func (r *Run) holdOn(onSpan func(*streamv1.RunEvent) *streamv1.RunEvent, waiting *streamv1.WaitingEvent) (resume func(reason string)) {
+	r.bus.send(onSpan(&streamv1.RunEvent{Body: &streamv1.RunEvent_Waiting{Waiting: waiting}}))
 	var once sync.Once
 	return func(reason string) {
 		once.Do(func() {
-			r.bus.send(scoped(&streamv1.RunEvent{Body: &streamv1.RunEvent_Resumed{
+			r.bus.send(onSpan(&streamv1.RunEvent{Body: &streamv1.RunEvent_Resumed{
 				Resumed: &streamv1.ResumedEvent{Reason: reason},
 			}}))
 		})
 	}
 }
 
-func (r *Run) Phase(phase progressv1.Phase) *Scope {
+func (r *Run) Phase(phase progressv1.Phase) *Span {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if s, ok := r.phases[phase]; ok {
 		return s
 	}
-	s := r.beginLocked(phase, nil, "", "")
+	s := r.beginLocked(phase, nil, "", progress.Title{})
 	r.phases[phase] = s
 	return s
 }
 
-func (r *Run) begin(parent *Scope, subject, message string) *Scope {
-	return r.beginAt(parent, subject, message, r.bus.now())
+func (r *Run) begin(parent *Span, subject string, title progress.Title) *Span {
+	return r.beginAt(parent, subject, title, r.bus.now())
 }
 
-func (r *Run) beginAt(parent *Scope, subject, message string, start time.Time) *Scope {
+func (r *Run) beginAt(parent *Span, subject string, title progress.Title, start time.Time) *Span {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.beginLockedAt(parent.phase, parent, subject, message, start)
+	return r.beginLockedAt(parent.phase, parent, subject, title, start)
 }
 
-func (r *Run) beginLocked(phase progressv1.Phase, parent *Scope, subject, message string) *Scope {
-	return r.beginLockedAt(phase, parent, subject, message, r.bus.now())
+func (r *Run) beginLocked(phase progressv1.Phase, parent *Span, subject string, title progress.Title) *Span {
+	return r.beginLockedAt(phase, parent, subject, title, r.bus.now())
 }
 
-func (r *Run) beginLockedAt(phase progressv1.Phase, parent *Scope, subject, message string, start time.Time) *Scope {
-	s := &Scope{run: r, parent: parent, phase: phase, subject: subject, spanID: newSpanID(), start: start, title: pastTense(message)}
+func (r *Run) beginLockedAt(phase progressv1.Phase, parent *Span, subject string, title progress.Title, start time.Time) *Span {
+	s := &Span{run: r, parent: parent, phase: phase, subject: subject, spanID: newSpanID(), start: start, title: title}
 	r.enterLocked(phase)
 	var parentID []byte
 	if parent != nil {
@@ -180,32 +191,32 @@ func (r *Run) beginLockedAt(phase progressv1.Phase, parent *Scope, subject, mess
 		Time:    timestamppb.New(s.start),
 		Phase:   phase,
 		Subject: subject,
-		Message: message,
+		Message: title.Started,
 		SpanId:  s.spanID,
 		Body:    &streamv1.RunEvent_Started{Started: &progressv1.Started{ParentSpanId: parentID}},
 	})
 	return s
 }
 
-func (r *Run) close(s *Scope) {
+func (r *Run) close(s *Span) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.phases[s.phase] == s {
 		delete(r.phases, s.phase)
 	}
-	r.open = slices.DeleteFunc(r.open, func(o *Scope) bool { return o == s })
+	r.open = slices.DeleteFunc(r.open, func(o *Span) bool { return o == s })
 }
 
-func (r *Run) stillOpen() []*Scope {
+func (r *Run) stillOpen() []*Span {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return slices.Clone(r.open)
 }
 
-func (r *Run) children(parent *Scope) []*Scope {
+func (r *Run) children(parent *Span) []*Span {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	var children []*Scope
+	var children []*Span
 	for _, s := range r.open {
 		if s.parent == parent {
 			children = append(children, s)
@@ -252,6 +263,12 @@ func (r *Run) record(result *progressv1.OperationResult) {
 	}
 	if promotion := result.GetPromotionId(); promotion != "" {
 		r.promotion = promotion
+	}
+	if notes := result.GetUrlNotes(); len(notes) > 0 {
+		r.urlNotes = notes
+	}
+	if propagation := result.GetPropagation(); propagation != nil {
+		r.propagation = propagation
 	}
 }
 

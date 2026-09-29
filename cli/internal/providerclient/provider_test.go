@@ -12,7 +12,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"github.com/ocelhq/ocel/cli/internal/events"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -39,11 +39,11 @@ func (r *recording) received() []*streamv1.RunEvent {
 	return append([]*streamv1.RunEvent(nil), r.events...)
 }
 
-func deployScope(t *testing.T) (context.Context, *events.Scope, *recording) {
+func deploySpan(t *testing.T) (context.Context, *run.Span, *recording) {
 	t.Helper()
 
 	seen := &recording{}
-	bus := events.NewBus(time.Now)
+	bus := run.NewBus(time.Now)
 	bus.Attach(seen)
 	ctx, run, err := bus.Begin(context.Background(), "ocel deploy", "")
 	if err != nil {
@@ -52,10 +52,10 @@ func deployScope(t *testing.T) (context.Context, *events.Scope, *recording) {
 	return ctx, run.Phase(progressv1.Phase_PHASE_DEPLOY), seen
 }
 
-func startFake(t *testing.T, ctx context.Context, mode string, scope *events.Scope, trust Trust, env ...string) *Provider {
+func startFake(t *testing.T, ctx context.Context, mode string, span *run.Span, trust Trust, env ...string) *Provider {
 	t.Helper()
 
-	p, err := start(ctx, scope, trust, fakeConfig(t, mode, Config{ProviderName: "fake", Env: env}))
+	p, err := start(ctx, span, trust, fakeConfig(t, mode, Config{ProviderName: "fake", Env: env}))
 	if err != nil {
 		t.Fatalf("start() error = %v", err)
 	}
@@ -63,11 +63,11 @@ func startFake(t *testing.T, ctx context.Context, mode string, scope *events.Sco
 	return p
 }
 
-func TestAStartedProvidersStreamEventsReachTheScope(t *testing.T) {
+func TestAStartedProvidersStreamEventsReachTheSpan(t *testing.T) {
 	t.Parallel()
 
-	ctx, scope, seen := deployScope(t)
-	p := startFake(t, ctx, "success", scope, Trust{})
+	ctx, span, seen := deploySpan(t)
+	p := startFake(t, ctx, "success", span, Trust{})
 
 	result, err := Stream(ctx, p, "Deploy", &contractv1.DeployRequest{
 		Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"},
@@ -85,18 +85,18 @@ func TestAStartedProvidersStreamEventsReachTheScope(t *testing.T) {
 		outcome = outcome || ev.GetResult().GetSuccess()
 	}
 	if !said {
-		t.Error("the scope never saw the provider's \"step 1\" line")
+		t.Error("the span never saw the provider's \"step 1\" line")
 	}
 	if !outcome {
-		t.Error("the scope never saw the provider's result as the run's outcome")
+		t.Error("the span never saw the provider's result as the run's outcome")
 	}
 }
 
 func TestAPlanningStreamHandsBackThePlanAndForwardsEveryOtherEvent(t *testing.T) {
 	t.Parallel()
 
-	ctx, scope, seen := deployScope(t)
-	p := startFake(t, ctx, "success", scope, Trust{})
+	ctx, span, seen := deploySpan(t)
+	p := startFake(t, ctx, "success", span, Trust{})
 
 	plan, err := Plan(ctx, p, "Deploy", &contractv1.DeployRequest{
 		Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"},
@@ -113,19 +113,19 @@ func TestAPlanningStreamHandsBackThePlanAndForwardsEveryOtherEvent(t *testing.T)
 	for _, ev := range seen.received() {
 		said = said || ev.GetMessage() == "step 1"
 		if ev.GetPlan() != nil {
-			t.Error("the scope saw the plan, want it handed back for the command to draw")
+			t.Error("the span saw the plan, want it handed back for the command to draw")
 		}
 	}
 	if !said {
-		t.Error("the scope never saw the provider's \"step 1\" line")
+		t.Error("the span never saw the provider's \"step 1\" line")
 	}
 }
 
 func TestALineTheProviderWritesToStderrReachesTheRunAtDebugNamingTheProviderInThePhaseItStartedIn(t *testing.T) {
 	t.Parallel()
 
-	ctx, scope, seen := deployScope(t)
-	p := startFake(t, ctx, "chatty", scope, Trust{})
+	ctx, span, seen := deploySpan(t)
+	p := startFake(t, ctx, "chatty", span, Trust{})
 	p.Close()
 
 	for _, ev := range seen.received() {
@@ -139,7 +139,7 @@ func TestALineTheProviderWritesToStderrReachesTheRunAtDebugNamingTheProviderInTh
 		}
 		return
 	}
-	t.Errorf("the scope never saw the provider's stderr line %q", fakeChattyLine)
+	t.Errorf("the span never saw the provider's stderr line %q", fakeChattyLine)
 }
 
 func bodies(seen *recording) []string {
@@ -158,11 +158,11 @@ func bodies(seen *recording) []string {
 func TestAnUnknownHostKeyOnAStreamIsAskedOnceUnderAHoldRecordedAndThatCallRetriedOnAFreshProcess(t *testing.T) {
 	t.Parallel()
 
-	ctx, scope, seen := deployScope(t)
+	ctx, span, seen := deploySpan(t)
 	fake := newHostTrustFake(t, "unknown-host-key")
 	asker := &scriptedAsker{attended: true, answer: true}
 	var out bytes.Buffer
-	p := startFake(t, ctx, "unknown-host-key", scope, trustAsking(asker, &out), fake.env()...)
+	p := startFake(t, ctx, "unknown-host-key", span, trustAsking(asker, &out), fake.env()...)
 
 	result, err := Stream(ctx, p, "Bootstrap", &contractv1.BootstrapRequest{}, contractv1connect.ProviderServiceClient.Bootstrap)
 	if err != nil {
@@ -185,7 +185,7 @@ func TestAnUnknownHostKeyOnAStreamIsAskedOnceUnderAHoldRecordedAndThatCallRetrie
 		t.Errorf("the call ran in processes %v, want it once and then once more in a restarted provider", drivenBy)
 	}
 	if got := bodies(seen); !slices.Equal(got, []string{"waiting", "resumed answered"}) {
-		t.Errorf("the scope saw %v around the prompt, want the run held while it asked", got)
+		t.Errorf("the span saw %v around the prompt, want the run held while it asked", got)
 	}
 }
 
@@ -193,7 +193,7 @@ func TestAHostKeyPromptAfterTheStartingPhaseEndedHoldsTheRunNotThatPhase(t *test
 	t.Parallel()
 
 	seen := &recording{}
-	bus := events.NewBus(time.Now)
+	bus := run.NewBus(time.Now)
 	bus.Attach(seen)
 	ctx, run, err := bus.Begin(context.Background(), "ocel deploy", "")
 	if err != nil {
@@ -226,10 +226,10 @@ func TestAHostKeyPromptAfterTheStartingPhaseEndedHoldsTheRunNotThatPhase(t *test
 func TestAnUnknownHostKeyOnAUnaryCallIsAskedOnceRecordedAndThatCallRetried(t *testing.T) {
 	t.Parallel()
 
-	ctx, scope, _ := deployScope(t)
+	ctx, span, _ := deploySpan(t)
 	fake := newHostTrustFake(t, "unknown-host-key")
 	asker := &scriptedAsker{attended: true, answer: true}
-	p := startFake(t, ctx, "unknown-host-key", scope, trustAsking(asker, io.Discard), fake.env()...)
+	p := startFake(t, ctx, "unknown-host-key", span, trustAsking(asker, io.Discard), fake.env()...)
 
 	err := p.Call(ctx, func(client contractv1connect.ProviderServiceClient) error {
 		_, err := client.Preflight(ctx, &contractv1.PreflightRequest{})
@@ -252,10 +252,10 @@ func TestAnUnknownHostKeyOnAUnaryCallIsAskedOnceRecordedAndThatCallRetried(t *te
 func TestAHostKeyRefusedAtThePromptLeavesTheCallsErrorStandingAndRetriesNothing(t *testing.T) {
 	t.Parallel()
 
-	ctx, scope, seen := deployScope(t)
+	ctx, span, seen := deploySpan(t)
 	fake := newHostTrustFake(t, "unknown-host-key")
 	asker := &scriptedAsker{attended: true, answer: false}
-	p := startFake(t, ctx, "unknown-host-key", scope, trustAsking(asker, io.Discard), fake.env()...)
+	p := startFake(t, ctx, "unknown-host-key", span, trustAsking(asker, io.Discard), fake.env()...)
 
 	_, err := Stream(ctx, p, "Bootstrap", &contractv1.BootstrapRequest{}, contractv1connect.ProviderServiceClient.Bootstrap)
 	if trust, ok := provider.HostTrustOf(err); !ok || trust.Reason != provider.UnknownHostKey {
@@ -268,6 +268,6 @@ func TestAHostKeyRefusedAtThePromptLeavesTheCallsErrorStandingAndRetriesNothing(
 		t.Errorf("known_hosts = %q, want nothing recorded", got)
 	}
 	if got := bodies(seen); !slices.Equal(got, []string{"waiting", "resumed answered"}) {
-		t.Errorf("the scope saw %v around the prompt, want the run held while it asked", got)
+		t.Errorf("the span saw %v around the prompt, want the run held while it asked", got)
 	}
 }

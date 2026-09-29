@@ -18,8 +18,8 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 )
@@ -35,7 +35,7 @@ func stubPackageManager(deps *cmddeps.Deps, result error) *[]string {
 
 func initDeps() cmddeps.Deps {
 	deps := newDeps()
-	deps.Events = events.NewBus(time.Now)
+	deps.Events = run.NewBus(time.Now)
 	return deps
 }
 

@@ -11,9 +11,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
-	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -29,15 +29,15 @@ func withCommand(cmd *cobra.Command, deps cmddeps.Deps, run func(context.Context
 
 type variablesKeyOffer struct{ stdin io.Reader }
 
-func withEnvProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, command string, stderr io.Writer, drive func(context.Context, *events.Run, *providerclient.Provider, *projectconfig.Config, *contractv1.PreflightResponse) error) error {
+func withEnvProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, command string, stderr io.Writer, drive func(context.Context, *run.Run, *providerclient.Provider, *projectconfig.Config, *contractv1.PreflightResponse) error) error {
 	return runWithEnvProvider(ctx, deps, cwd, opts, command, nil, stderr, drive)
 }
 
-func withEnvProviderOfferingVariablesKey(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, command string, stdin io.Reader, stderr io.Writer, drive func(context.Context, *events.Run, *providerclient.Provider, *projectconfig.Config, *contractv1.PreflightResponse) error) error {
+func withEnvProviderOfferingVariablesKey(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, command string, stdin io.Reader, stderr io.Writer, drive func(context.Context, *run.Run, *providerclient.Provider, *projectconfig.Config, *contractv1.PreflightResponse) error) error {
 	return runWithEnvProvider(ctx, deps, cwd, opts, command, &variablesKeyOffer{stdin: stdin}, stderr, drive)
 }
 
-func runWithEnvProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, command string, keyOffer *variablesKeyOffer, stderr io.Writer, drive func(context.Context, *events.Run, *providerclient.Provider, *projectconfig.Config, *contractv1.PreflightResponse) error) (err error) {
+func runWithEnvProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, command string, keyOffer *variablesKeyOffer, stderr io.Writer, drive func(context.Context, *run.Run, *providerclient.Provider, *projectconfig.Config, *contractv1.PreflightResponse) error) (err error) {
 	if err := opts.checkEnvironment(); err != nil {
 		return err
 	}
@@ -70,7 +70,7 @@ func runWithEnvProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opts
 	return drive(ctx, run, prov, cfg, status)
 }
 
-func preflightEnvProvider(ctx context.Context, deps cmddeps.Deps, check *events.Scope, prov *providerclient.Provider, cfg *projectconfig.Config, opts envOptions, keyOffer *variablesKeyOffer, stderr io.Writer) (*contractv1.PreflightResponse, error) {
+func preflightEnvProvider(ctx context.Context, deps cmddeps.Deps, check *run.Span, prov *providerclient.Provider, cfg *projectconfig.Config, opts envOptions, keyOffer *variablesKeyOffer, stderr io.Writer) (*contractv1.PreflightResponse, error) {
 	status, err := preflight.Run(ctx, check, prov, cfg, opts.tier(), "", nil, nil, "ocel bootstrap "+bootstrap.Name(opts.tier()))
 	if err != nil || keyOffer == nil {
 		return status, err
@@ -78,7 +78,7 @@ func preflightEnvProvider(ctx context.Context, deps cmddeps.Deps, check *events.
 	return status, offerVariablesKey(ctx, deps, check, prov, cfg, opts, status.GetBootstrap(), keyOffer.stdin, stderr)
 }
 
-func offerVariablesKey(ctx context.Context, deps cmddeps.Deps, check *events.Scope, prov *providerclient.Provider, cfg *projectconfig.Config, opts envOptions, status *contractv1.BootstrapStatus, stdin io.Reader, stderr io.Writer) error {
+func offerVariablesKey(ctx context.Context, deps cmddeps.Deps, check *run.Span, prov *providerclient.Provider, cfg *projectconfig.Config, opts envOptions, status *contractv1.BootstrapStatus, stdin io.Reader, stderr io.Writer) error {
 	front := cfg.EdgeSelection()
 	offered, err := bootstrap.Offers(ctx, prov, opts.tier(), front, provider.FeatureVarsKey)
 	if err != nil || !offered {

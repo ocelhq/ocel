@@ -161,7 +161,7 @@ func runPromotionsPrune(ctx context.Context, deps cmddeps.Deps, cwd string, opts
 		return err
 	}
 	if !granted {
-		run.Finish(fmt.Sprintf("Nothing reclaimed: production of %s keeps every promotion", cfg.Slug))
+		run.Succeed(fmt.Sprintf("Nothing reclaimed: production of %s keeps every promotion", cfg.Slug))
 		return nil
 	}
 
@@ -173,7 +173,7 @@ func runPromotionsPrune(ctx context.Context, deps cmddeps.Deps, cwd string, opts
 	if _, err := providerclient.Stream(ctx, prov, "RemoveStalePromotions", req, contractv1connect.ProviderServiceClient.RemoveStalePromotions); err != nil {
 		return err
 	}
-	run.Finish(fmt.Sprintf("Pruned the production promotions of %s down to the newest %d", cfg.Slug, opts.keep))
+	run.Succeed(fmt.Sprintf("Pruned the production promotions of %s down to the newest %d", cfg.Slug, opts.keep))
 	return nil
 }
 

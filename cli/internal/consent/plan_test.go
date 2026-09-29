@@ -27,7 +27,7 @@ func TestAPlanThatChangesNothingRaisesNoGateToConsentTo(t *testing.T) {
 	g := askingGate(term, "n\n")
 	g.Class = consent.PlanFirst
 
-	granted, err := g.Consent(context.Background(), scopeOn(t, term), keepingPlan(), "Apply these changes?")
+	granted, err := g.Consent(context.Background(), spanOn(t, term), keepingPlan(), "Apply these changes?")
 	if err != nil || !granted {
 		t.Errorf("Consent() = %v, %v, want a plan of nothing but keeps to have nothing to consent to", granted, err)
 	}
@@ -41,7 +41,7 @@ func TestAPlanThatChangesSomethingStillRaisesTheGate(t *testing.T) {
 	g := askingGate(term, "n\n")
 	g.Class = consent.PlanFirst
 
-	granted, err := g.Consent(context.Background(), scopeOn(t, term), mutatingPlan(), "Apply these changes?")
+	granted, err := g.Consent(context.Background(), spanOn(t, term), mutatingPlan(), "Apply these changes?")
 	if err != nil || granted {
 		t.Errorf("Consent() = %v, %v, want one create among the keeps to keep the gate up and the no to withhold it", granted, err)
 	}

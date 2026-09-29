@@ -1,4 +1,4 @@
-package events_test
+package run_test
 
 import (
 	"fmt"
@@ -35,7 +35,7 @@ func TestOutputSplitsWritesIntoLinesAndKeepsOnlyTheLastCarriageReturnRewrite(t *
 		t.Fatalf("lines = %q, want %q", lines, want)
 	}
 	if last := sink.received()[len(sink.received())-1]; last.GetEnded() == nil {
-		t.Fatal("the scope ended before its last line")
+		t.Fatal("the span ended before its last line")
 	}
 }
 

@@ -11,9 +11,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/run"
 )
 
 func registryProject(t *testing.T, registry string) (cmddeps.Deps, string, func() bool) {
@@ -256,7 +256,7 @@ func TestTheImageIsBuiltForTheArchitectureTheProviderSaysItsContainersRunOn(t *t
 	deps, root, _ := registryProject(t, "")
 	t.Setenv(clitest.FakeContainerArchEnvVar, "arm64")
 	var required, built map[string]string
-	deps.RefuseUnbuildableImages = func(_ context.Context, _ *events.Scope, _ *projectconfig.Config, archs map[string]string) error {
+	deps.RefuseUnbuildableImages = func(_ context.Context, _ *run.Span, _ *projectconfig.Config, archs map[string]string) error {
 		required = archs
 		return nil
 	}

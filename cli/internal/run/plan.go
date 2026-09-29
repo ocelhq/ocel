@@ -1,4 +1,4 @@
-package events
+package run
 
 import (
 	"fmt"
@@ -10,22 +10,22 @@ import (
 )
 
 const (
-	rankSpineHead = iota
-	rankSpineEdge
-	rankOffSpine
+	rankStack = iota
+	rankEdge
+	rankOther
 )
 
-var spineRanks = map[string]int{
-	provider.StackGroupKind:     rankSpineHead,
-	provider.ParameterGroupKind: rankSpineHead,
-	edge.EdgeGroupKind:          rankSpineEdge,
+var groupRanks = map[string]int{
+	provider.StackGroupKind:     rankStack,
+	provider.ParameterGroupKind: rankStack,
+	edge.EdgeGroupKind:          rankEdge,
 }
 
-func spineRank(kind string) int {
-	if rank, named := spineRanks[kind]; named {
+func groupRank(kind string) int {
+	if rank, named := groupRanks[kind]; named {
 		return rank
 	}
-	return rankOffSpine
+	return rankOther
 }
 
 func orderPlan(plan *planv1.ChangePlan) {
@@ -33,7 +33,7 @@ func orderPlan(plan *planv1.ChangePlan) {
 		return
 	}
 	sort.SliceStable(plan.Groups, func(i, j int) bool {
-		return spineRank(plan.Groups[i].GetKind()) < spineRank(plan.Groups[j].GetKind())
+		return groupRank(plan.Groups[i].GetKind()) < groupRank(plan.Groups[j].GetKind())
 	})
 	for _, group := range plan.GetGroups() {
 		sort.SliceStable(group.Changes, func(i, j int) bool {

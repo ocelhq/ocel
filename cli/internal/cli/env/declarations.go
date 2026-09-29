@@ -2,13 +2,14 @@ package env
 
 import (
 	"context"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"io"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
-	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/valuestore"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
@@ -16,7 +17,7 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
-func declaredVariables(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, prov *providerclient.Provider, key string, opts envOptions, run *events.Run) ([]*resourcesv1.VariableDefinition, []*resourcesv1.GroupDefinition, error) {
+func declaredVariables(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, prov *providerclient.Provider, key string, opts envOptions, run *run.Run) ([]*resourcesv1.VariableDefinition, []*resourcesv1.GroupDefinition, error) {
 	prepared, err := declaration.Prepare(cfg)
 	if err != nil {
 		return nil, nil, err
@@ -51,9 +52,9 @@ func declaredVariables(ctx context.Context, deps cmddeps.Deps, cfg *projectconfi
 	return withImpliedDeclarations(cfg, opts, definitions, groups)
 }
 
-func collecting(run *events.Run, cfg *projectconfig.Config, collect func(output io.Writer) error) error {
+func collecting(run *run.Run, cfg *projectconfig.Config, collect func(output io.Writer) error) error {
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	unit := build.Unit(cfg.Slug, "Collecting the variables this project declares")
+	unit := build.Unit(cfg.Slug, progress.Collecting.Title("the variables this project declares"))
 	err := collect(unit.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_STDERR))
 	build.End(err)
 	return err
@@ -64,7 +65,7 @@ func withImpliedDeclarations(cfg *projectconfig.Config, opts envOptions, definit
 	return append(definitions, implied...), append(groups, impliedGroups...), nil
 }
 
-func discoverVariables(ctx context.Context, cfg *projectconfig.Config, prov *providerclient.Provider, opts envOptions, run *events.Run) (*variables.Declarations, error) {
+func discoverVariables(ctx context.Context, cfg *projectconfig.Config, prov *providerclient.Provider, opts envOptions, run *run.Run) (*variables.Declarations, error) {
 	declarations := projectDeclarations(cfg, prov, opts)
 	err := collecting(run, cfg, func(output io.Writer) error {
 		_, err := declaration.Collect(ctx, cfg, declarations, io.Discard, output)

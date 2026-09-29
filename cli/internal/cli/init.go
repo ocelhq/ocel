@@ -11,12 +11,14 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/progress"
+
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/configdoc"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -174,13 +176,13 @@ func runInit(ctx context.Context, deps cmddeps.Deps, cwd, slug string, opts init
 	}
 	err = writeProject(ctx, deps, initializing.Phase(progressv1.Phase_PHASE_BUILD), configPath, slug, provider, lang, detected)
 	if err == nil {
-		initializing.Finish("Initialized project " + slug)
+		initializing.Succeed("Initialized project " + slug)
 	}
 	initializing.End(&err)
 	return err
 }
 
-func writeProject(ctx context.Context, deps cmddeps.Deps, build *events.Scope, configPath, slug, provider string, lang sdkLanguage, detected bool) error {
+func writeProject(ctx context.Context, deps cmddeps.Deps, build *run.Span, configPath, slug, provider string, lang sdkLanguage, detected bool) error {
 	projectDir, name := filepath.Dir(configPath), filepath.Base(configPath)
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {
 		return fmt.Errorf("create directory for %s: %w", name, err)
@@ -345,11 +347,11 @@ func addCommand(dir string, lang sdkLanguage) []string {
 	return []string{pm.name, pm.addCommand, sdkPackage}
 }
 
-func addSDK(ctx context.Context, deps cmddeps.Deps, build *events.Scope, dir string, lang sdkLanguage) {
+func addSDK(ctx context.Context, deps cmddeps.Deps, build *run.Span, dir string, lang sdkLanguage) {
 	argv := addCommand(dir, lang)
 	command := strings.Join(argv, " ")
 
-	unit := build.Unit(sdkPackage, fmt.Sprintf("Adding the SDK to this project with `%s`", command))
+	unit := build.Unit(sdkPackage, progress.Adding.Title(fmt.Sprintf("the SDK to this project with `%s`", command)))
 	err := deps.RunPackageManager(ctx, dir, argv, unit.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_STDERR))
 	if err != nil {
 		unit.Warn(fmt.Sprintf("Could not add %s — run `%s` yourself.", sdkPackage, command))
