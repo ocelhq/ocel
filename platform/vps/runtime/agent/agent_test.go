@@ -353,7 +353,7 @@ func containerRuntime(t *testing.T, dir string) string {
 	return binary
 }
 
-const testImage = "public.ecr.aws/docker/library/alpine:3.21"
+const testImage = "mirror.gcr.io/library/alpine:3.21"
 
 func pulled(t *testing.T, image string) {
 	t.Helper()

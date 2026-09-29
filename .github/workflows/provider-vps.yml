@@ -80,6 +80,7 @@ permissions:
 
 env:
   SHARDS: 4
+  OCEL_VPS_OFFICIAL_IMAGES_MIRROR: mirror.gcr.io/library
   ENGINE_TEST: TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted
 
 jobs:

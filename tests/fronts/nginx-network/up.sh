@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-image=public.ecr.aws/nginx/nginx:stable-alpine
+image=mirror.gcr.io/library/nginx:stable-alpine
 network=ocel-front
 conf=/etc/ocel-front-network
 state=/var/lib/ocel-front/nginx-network
