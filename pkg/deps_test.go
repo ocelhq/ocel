@@ -94,19 +94,31 @@ const repo = "github.com/ocelhq/ocel/"
 var providerTestSupport = []string{
 	repo + "pkg/provider/fake",
 	repo + "pkg/provider/enginetest",
+	repo + "pkg/provider/providerserver",
 }
 
 func TestNothingButAProviderImportsAPackageBeneathPkgProvider(t *testing.T) {
 	t.Parallel()
 
 	pkgs := depstest.Workspace(t)
+	testOnly := importedOnlyByTests(pkgs)
 	for _, c := range []struct {
 		name    string
 		imports func(depstest.Package) []string
 		open    []string
 	}{
-		{name: "build", imports: func(p depstest.Package) []string { return p.Imports }},
-		{name: "test", imports: func(p depstest.Package) []string { return slices.Concat(p.TestImports, p.XTestImports) }, open: providerTestSupport},
+		{name: "build", imports: func(p depstest.Package) []string {
+			if testOnly[p.ImportPath] {
+				return nil
+			}
+			return p.Imports
+		}},
+		{name: "test", imports: func(p depstest.Package) []string {
+			if testOnly[p.ImportPath] {
+				return slices.Concat(p.Imports, p.TestImports, p.XTestImports)
+			}
+			return slices.Concat(p.TestImports, p.XTestImports)
+		}, open: providerTestSupport},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
@@ -122,6 +134,26 @@ func TestNothingButAProviderImportsAPackageBeneathPkgProvider(t *testing.T) {
 			}
 		})
 	}
+}
+
+func importedOnlyByTests(pkgs []depstest.Package) map[string]bool {
+	built := map[string]bool{}
+	tested := map[string]bool{}
+	for _, p := range pkgs {
+		for _, imported := range p.Imports {
+			built[imported] = true
+		}
+		for _, imported := range slices.Concat(p.TestImports, p.XTestImports) {
+			tested[imported] = true
+		}
+	}
+	only := map[string]bool{}
+	for imported := range tested {
+		if !built[imported] {
+			only[imported] = true
+		}
+	}
+	return only
 }
 
 func TestAPackageOnlyProvidersImportSitsBeneathPkgProvider(t *testing.T) {
