@@ -38,15 +38,6 @@ func TestTheSnippetIsAdaptedByTheHostsCaddyWhenCaddyRunsAsAService(t *testing.T)
 	}
 }
 
-func TestAnEmptySnippetIsNotAdaptedBecauseThereIsNothingInItToRefuse(t *testing.T) {
-	t.Parallel()
-
-	machine := &box{}
-	if err := (caddyfile.Caddyfile{Box: machine}).Validate(context.Background(), nil); err != nil || len(machine.ran) != 0 {
-		t.Errorf("Validate(nothing) = %v and ran %q, want nothing run: caddy adapt refuses an empty file with EOF, and your Caddy imports one with a warning", err, machine.argvs())
-	}
-}
-
 func TestASnippetYourCaddyCannotAdaptIsRefusedWithWhatYourCaddySaid(t *testing.T) {
 	t.Parallel()
 

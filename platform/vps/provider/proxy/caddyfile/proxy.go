@@ -39,9 +39,6 @@ func (c Caddyfile) RefuseRouted(ctx context.Context, hostnames []string) error {
 }
 
 func (c Caddyfile) Validate(ctx context.Context, rendered []byte) error {
-	if len(rendered) == 0 {
-		return nil
-	}
 	if _, err := c.Box.RanWithStdin(ctx, "adapt "+FileName+" with "+c.named(), c.adapting(), rendered); err != nil {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"%s cannot adapt the %s ocel rendered, so it was not placed: %v", c.named(), FileName, err)

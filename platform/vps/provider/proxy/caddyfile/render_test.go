@@ -50,12 +50,22 @@ func TestTheSnippetIsOneSiteBlockOverEveryHostnameInEachWayYourCaddyRuns(t *test
 	}
 }
 
-func TestABoxServingNoHostnameRendersAnEmptySnippetAndNeverABarePort(t *testing.T) {
+func TestABoxServingNoHostnameRendersABlankLineAndNeverABarePortOrAnEmptyFile(t *testing.T) {
 	t.Parallel()
 
-	rendered, err := caddyfile.Caddyfile{Network: "coolify"}.Render(proxy.Spec{})
-	if err != nil || rendered == nil || len(rendered) != 0 {
-		t.Errorf("Render() = %#v, %v; want an empty file: a site block with no hostname is a bare port, and :80 clashes with Coolify's own fallback", rendered, err)
+	for name, front := range map[string]caddyfile.Caddyfile{
+		"Coolify's Caddy":   {Preset: "coolify", Container: "coolify-proxy", Network: "coolify"},
+		"the caddy package": {Port: 8480},
+		"a Caddy container": {Container: "caddy", Port: 8480},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			rendered, err := front.Render(proxy.Spec{})
+			if err != nil || string(rendered) != "\n" {
+				t.Errorf("Render() = %q, %v; want a blank line: a site block with no hostname is a bare port, and the caddy 2.6 package refuses to import an empty file with EOF", rendered, err)
+			}
+		})
 	}
 }
 
