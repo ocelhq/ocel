@@ -19,27 +19,27 @@ type sharedPhysical struct {
 	Revisions map[string]string `json:"revisions"`
 }
 
-type heldRemoval[T any] struct {
+type computeRemoval[T any] struct {
 	remove          func(context.Context, provider.StackRef, []T, progress.Progress) error
 	removeRevisions func(context.Context, provider.StackRef, []T, progress.Progress) error
-	held            func(T) (physical, revision string)
+	physicalOf      func(T) (physical, revision string)
 }
 
 func sharedPhysicalKey(ref provider.StackRef, physical string) keyvalue.Key {
 	return keyvalue.Partition{Tier: ref.Tier, Root: keyvalue.RootSharedPhysicals, Path: []string{ref.Project}}.Key(physical)
 }
 
-func heldFunction(function provider.Function) (string, string) {
+func functionPhysical(function provider.Function) (string, string) {
 	return function.Physical, function.Revision
 }
 
-func heldContainer(container provider.AppContainer) (string, string) {
+func containerPhysical(container provider.AppContainer) (string, string) {
 	return container.Physical, container.Revision
 }
 
-func recordHeld[T any](ctx context.Context, f *hookStacks, ref provider.StackRef, provisioned []T, held func(T) (physical, revision string)) error {
+func recordHolders[T any](ctx context.Context, f *hookStacks, ref provider.StackRef, provisioned []T, physicalOf func(T) (physical, revision string)) error {
 	for _, each := range provisioned {
-		physical, revision := held(each)
+		physical, revision := physicalOf(each)
 		if physical == "" {
 			continue
 		}
@@ -106,13 +106,13 @@ func (f *hookStacks) writeHolders(ctx context.Context, stored keyvalue.Entry, ho
 	return err
 }
 
-func removeHeld[T any](ctx context.Context, f *hookStacks, ref provider.StackRef, going []T, removal heldRemoval[T], progress progress.Progress) error {
+func removeCompute[T any](ctx context.Context, f *hookStacks, ref provider.StackRef, going []T, removal computeRemoval[T], progress progress.Progress) error {
 	if removal.removeRevisions == nil {
 		return removeAll(ctx, ref, going, removal.remove, progress)
 	}
 	var whole, revisions []T
 	for _, each := range going {
-		physical, revision := removal.held(each)
+		physical, revision := removal.physicalOf(each)
 		if physical == "" {
 			whole = append(whole, each)
 			continue

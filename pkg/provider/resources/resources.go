@@ -163,7 +163,7 @@ func (f *hookStacks) computeProvisioner(spec provider.StackSpec) (computeProvisi
 		return func(ctx context.Context, progress progress.Progress) (provider.StackResult, error) {
 			functions, err := f.hooks.Functions.Provision(ctx, spec, progress)
 			if err == nil && f.hooks.Functions.RemoveRevisions != nil {
-				err = recordHeld(ctx, f, spec.Ref, functions, heldFunction)
+				err = recordHolders(ctx, f, spec.Ref, functions, functionPhysical)
 			}
 			return provider.StackResult{Functions: functions}, err
 		}, nil
@@ -174,7 +174,7 @@ func (f *hookStacks) computeProvisioner(spec provider.StackSpec) (computeProvisi
 		return func(ctx context.Context, progress progress.Progress) (provider.StackResult, error) {
 			containers, err := f.hooks.Containers.Provision(ctx, spec, progress)
 			if err == nil && f.hooks.Containers.RemoveRevisions != nil {
-				err = recordHeld(ctx, f, spec.Ref, containers, heldContainer)
+				err = recordHolders(ctx, f, spec.Ref, containers, containerPhysical)
 			}
 			return provider.StackResult{Containers: containers}, err
 		}, nil
@@ -288,10 +288,10 @@ func (f *hookStacks) removeFunctions(ctx context.Context, ref provider.StackRef,
 	if f.hooks.Functions == nil {
 		return refuseOrphans(ref, len(going), "function", because, "Functions")
 	}
-	return removeHeld(ctx, f, ref, going, heldRemoval[provider.Function]{
+	return removeCompute(ctx, f, ref, going, computeRemoval[provider.Function]{
 		remove:          f.hooks.Functions.Remove,
 		removeRevisions: f.hooks.Functions.RemoveRevisions,
-		held:            heldFunction,
+		physicalOf:      functionPhysical,
 	}, progress)
 }
 
@@ -302,10 +302,10 @@ func (f *hookStacks) removeContainers(ctx context.Context, ref provider.StackRef
 	if f.hooks.Containers == nil {
 		return refuseOrphans(ref, len(going), "container", because, "Containers")
 	}
-	return removeHeld(ctx, f, ref, going, heldRemoval[provider.AppContainer]{
+	return removeCompute(ctx, f, ref, going, computeRemoval[provider.AppContainer]{
 		remove:          f.hooks.Containers.Remove,
 		removeRevisions: f.hooks.Containers.RemoveRevisions,
-		held:            heldContainer,
+		physicalOf:      containerPhysical,
 	}, progress)
 }
 
