@@ -20,3 +20,25 @@ func ResolveComputesFromProvider(ctx context.Context, prov *providerclient.Provi
 	}
 	return cfg.ResolveComputes(resp.GetComputes(), prov.Name())
 }
+
+func ContainerArchs(ctx context.Context, prov *providerclient.Provider, resolved *project.Project, announced map[string]string) (map[string]string, error) {
+	containers := Containers(resolved)
+	missing := false
+	for _, container := range containers {
+		if _, ok := announced[container.GetApp()]; !ok {
+			missing = true
+		}
+	}
+	if !missing {
+		return announced, nil
+	}
+	var resp *contractv1.PreflightResponse
+	err := prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
+		resp, err = client.Preflight(ctx, &contractv1.PreflightRequest{Edge: resolved.EdgeSelection(), Containers: containers})
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return resp.GetContainerArchs(), nil
+}

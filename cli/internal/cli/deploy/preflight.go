@@ -95,7 +95,10 @@ func resolveContainers(ctx context.Context, deps cmddeps.Deps, check *run.Span, 
 	if err := requireProjectRegistryPassword(resolved); err != nil {
 		return nil, nil, err
 	}
-	archs := resp.GetContainerArchs()
+	archs, err := preflight.ContainerArchs(ctx, prov, resolved, resp.GetContainerArchs())
+	if err != nil {
+		return nil, nil, err
+	}
 	if err := deps.RefuseUnbuildableImages(ctx, check, resolved, archs); err != nil {
 		return nil, nil, err
 	}

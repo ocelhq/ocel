@@ -279,3 +279,40 @@ func TestTheImageIsBuiltForTheArchitectureTheProviderSaysItsContainersRunOn(t *t
 		t.Errorf("the image was built for %v, want %v, what the provider names for the app: left to this machine's own architecture, the target may not run it", built, want)
 	}
 }
+
+func TestAnAppThatFallsBackToContainerIsBuiltForTheArchitectureTheProviderNames(t *testing.T) {
+	deps, root, _ := registryProject(t, "")
+	t.Setenv(clitest.FakeComputesEnvVar, "container")
+	t.Setenv(clitest.FakeContainerArchEnvVar, "arm64")
+	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  slug: "test-app",
+  provider: { fake: {} },
+  domains: { preview: "*.preview.acme.com" },
+  apps: [{ name: "api", path: "apps/api" }],
+};
+`)
+	var required, built map[string]string
+	deps.RefuseUnbuildableImages = func(_ context.Context, _ *run.Span, _ *project.Project, archs map[string]string) error {
+		required = archs
+		return nil
+	}
+	buildApps := deps.BuildApps
+	deps.BuildApps = func(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, log build.Log) (build.Output, error) {
+		built = archs
+		return buildApps(ctx, cfg, env, archs, log)
+	}
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(deps, &stdout)
+	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runDeploy() err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	want := map[string]string{"api": "arm64"}
+	if !maps.Equal(required, want) {
+		t.Errorf("the builder was checked for %v, want %v: an app the provider runs in a container is one whether or not the config says so", required, want)
+	}
+	if !maps.Equal(built, want) {
+		t.Errorf("the image was built for %v, want %v, what the provider names for an app that falls back to its container compute", built, want)
+	}
+}
