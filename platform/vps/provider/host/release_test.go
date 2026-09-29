@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"os"
@@ -1646,5 +1647,27 @@ func TestAFlipConfigurationThatLandedAndReportedFailurePutsEveryAppBack(t *testi
 		if box.at("docker rm --force "+quoted(container)) < 0 {
 			t.Errorf("the put-back left %s running with nothing routing to it: %v", container, box.commands())
 		}
+	}
+}
+
+func TestARoutingTableThatReadsBackTornIsRefusedWithoutQuotingIt(t *testing.T) {
+	t.Parallel()
+
+	const key = "-----BEGIN PRIVATE KEY-----\nsecret\n-----END PRIVATE KEY-----\n"
+	table := base64.StdEncoding.EncodeToString([]byte(`{"shields":[{"hostname":"shop.example.com","key":"` + key + `"}]}`))
+	box := machine(nil)
+	box.answer = func(command string) (session.Result, bool) {
+		if strings.Contains(command, "base64 <") {
+			return session.Result{Stdout: "+" + table}, true
+		}
+		return session.Result{}, false
+	}
+
+	_, err := frontBox{box.host()}.Shielded(context.Background())
+	if err == nil {
+		t.Fatal("reading a routing table that came back as one line = nil, want it refused")
+	}
+	if strings.Contains(err.Error(), table) || strings.Contains(err.Error(), "secret") {
+		t.Errorf("the refusal quotes what was read: %v, want it described without its content: the table holds the private keys of the origin certificates it serves", err)
 	}
 }

@@ -348,7 +348,7 @@ func (h *Host) currentPair(ctx context.Context) (routingPair, error) {
 	lines := strings.SplitN(said, "\n", 3)
 	if len(lines) < 3 {
 		return routingPair{}, refusal.Refuse(refusal.CodeNotReady,
-			"%s and %s on %s read back as %q, not one line for each", live.RoutingTable, ProxyConfig, h.named(), said)
+			"%s and %s on %s read back as %d lines (%d bytes), not one line for each", live.RoutingTable, ProxyConfig, h.named(), strings.Count(said, "\n"), len(said))
 	}
 	var read [2][]byte
 	for at, line := range lines[:2] {
