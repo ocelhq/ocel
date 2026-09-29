@@ -2,6 +2,7 @@ package cloudflare
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -9,6 +10,7 @@ import (
 
 	cf "github.com/cloudflare/cloudflare-go/v4"
 	"github.com/cloudflare/cloudflare-go/v4/dns"
+	"github.com/cloudflare/cloudflare-go/v4/zones"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -61,6 +63,9 @@ func (p *cloudflare) bindOrigin(ctx context.Context, state *edge.StackState, own
 	if err := p.requireTLSCover(ctx, zoneID, zoneName, binding.Hostname); err != nil {
 		return err
 	}
+	if err := p.requireEncryptedOrigin(ctx, zoneID, zoneName); err != nil {
+		return err
+	}
 	want, err := proxiedRecord(binding.Hostname, *binding.Origin)
 	if err != nil {
 		return err
@@ -89,6 +94,25 @@ func (p *cloudflare) unbindOrigin(ctx context.Context, state *edge.StackState, o
 	state.Release(hostname)
 	state.PublishFront(hostname, "")
 	state.RecordWrites(recordsBesides(state.Records, hostname))
+	return nil
+}
+
+var plainOriginModes = []string{"off", "flexible"}
+
+func (p *cloudflare) requireEncryptedOrigin(ctx context.Context, zoneID, zoneName string) error {
+	setting, err := p.client.Zones.Settings.Get(ctx, "ssl", zones.SettingGetParams{ZoneID: cf.F(zoneID)})
+	if err != nil {
+		return fmt.Errorf("read the SSL mode of zone %s: %w", zoneName, err)
+	}
+	var read struct {
+		Value string `json:"value"`
+	}
+	if err := json.Unmarshal([]byte(setting.JSON.RawJSON()), &read); err != nil {
+		return fmt.Errorf("read the SSL mode of zone %s: %w", zoneName, err)
+	}
+	if slices.Contains(plainOriginModes, read.Value) {
+		return fmt.Errorf("zone %s reaches origins with SSL mode %q, which forwards over plain HTTP, and the origin answers only TLS carrying the client certificate the zone presents: set the zone's SSL mode to Full (strict) and bind it again", zoneName, read.Value)
+	}
 	return nil
 }
 

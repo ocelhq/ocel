@@ -60,6 +60,7 @@ type cfMock struct {
 	originPulls        bool
 	originPullWrites   []bool
 	purges             [][]string
+	sslMode            string
 }
 
 type putSecret struct {
@@ -312,6 +313,14 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 			return
 		}
 		writeResult(w, m.certificatePacks)
+	})
+
+	mux.HandleFunc("GET /zones/"+m.zoneID+"/settings/ssl", func(w http.ResponseWriter, _ *http.Request) {
+		mode := m.sslMode
+		if mode == "" {
+			mode = "strict"
+		}
+		writeResult(w, map[string]any{"id": "ssl", "value": mode, "editable": true})
 	})
 
 	mux.HandleFunc("GET /zones/"+m.zoneID+"/origin_tls_client_auth", func(w http.ResponseWriter, r *http.Request) {
