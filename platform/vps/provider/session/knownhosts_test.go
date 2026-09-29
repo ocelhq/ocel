@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -148,5 +149,33 @@ func TestKnownHostsStoreFallsBackToTheUsersOwnFile(t *testing.T) {
 	}
 	if want := filepath.Join(home, ".ssh", "known_hosts"); got != want {
 		t.Errorf("knownHostsStore() = %q, want %q", got, want)
+	}
+}
+
+func TestConcurrentRunsRecordAHostKeyOnce(t *testing.T) {
+	t.Parallel()
+
+	store := filepath.Join(t.TempDir(), "known_hosts")
+	existing := "other.example.com ssh-ed25519 " + otherRecordableKey
+	if err := os.WriteFile(store, []byte(existing), 0o600); err != nil {
+		t.Fatalf("seed known_hosts: %v", err)
+	}
+
+	const runs = 50
+	var wg sync.WaitGroup
+	errs := make([]error, runs)
+	for i := range runs {
+		wg.Go(func() { errs[i] = record(store, wantedLine()) })
+	}
+	wg.Wait()
+	for _, err := range errs {
+		if err != nil {
+			t.Fatalf("record() error = %v", err)
+		}
+	}
+
+	lines := recordedLines(t, store)
+	if len(lines) != 2 || lines[0] != existing {
+		t.Errorf("known_hosts = %q, want the existing entry and the host's key recorded once", lines)
 	}
 }

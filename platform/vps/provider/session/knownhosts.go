@@ -3,6 +3,7 @@ package session
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,23 +35,25 @@ func writable(store string) (string, error) {
 }
 
 func record(store, line string) error {
-	known, err := os.ReadFile(store)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err := os.MkdirAll(filepath.Dir(store), 0o700); err != nil {
+		return err
+	}
+	file, err := os.OpenFile(store, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0o600)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	if err := lockExclusive(file); err != nil {
+		return fmt.Errorf("lock %s: %w", store, err)
+	}
+
+	known, err := io.ReadAll(file)
+	if err != nil {
 		return err
 	}
 	if hasLine(string(known), line) {
 		return nil
 	}
-
-	if err := os.MkdirAll(filepath.Dir(store), 0o700); err != nil {
-		return err
-	}
-	file, err := os.OpenFile(store, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
 	if len(known) > 0 && !strings.HasSuffix(string(known), "\n") {
 		line = "\n" + line
 	}
