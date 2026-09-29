@@ -20,14 +20,16 @@ import (
 func seedPromotions(t *testing.T, provider *fake.Provider, tier environment.Tier, slug, pointer string, ids ...string) *ledger.Ledger {
 	t.Helper()
 	releases := ledger.New(provider.KeyValues(), tier, slug)
+	over := ""
 	for i, id := range ids {
 		if err := releases.PutStaged(context.Background(), router.DeploymentRecord{App: "web", Build: buildIdentity(i)}); err != nil {
 			t.Fatal(err)
 		}
 		promotion := router.Promotion{PromotionID: id, Ts: int64(i + 1), Builds: map[string]string{"web": buildIdentity(i)}}
-		if err := releases.Promote(context.Background(), promotion, pointer, progress.DiscardProgress()); err != nil {
+		if _, err := releases.Promote(context.Background(), promotion, pointer, over); err != nil {
 			t.Fatal(err)
 		}
+		over = id
 	}
 	return releases
 }
@@ -39,7 +41,7 @@ func buildIdentity(seq int) string {
 func TestListPromotionsReadsTheProjectsLedger(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
-	deployed(t, provider, environment.TierProduction, "shop")
+	edgeProvisioned(t, provider, environment.TierProduction, "shop")
 	seedPromotions(t, provider, environment.TierProduction, "shop", "", "p1", "p2")
 
 	listed, err := client.ListPromotions(context.Background(), &contractv1.ListPromotionsRequest{Slug: "shop"})
@@ -67,20 +69,24 @@ func TestListPromotionsIsEmptyForAProjectThatHasNeverDeployed(t *testing.T) {
 	}
 }
 
-func TestRollbackFlipsThePointerToTheEarlierPromotion(t *testing.T) {
+func TestRollbackPromotesTheBuildsOfTheEarlierPromotionAsANewOne(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
-	deployed(t, provider, environment.TierProduction, "shop")
+	edgeProvisioned(t, provider, environment.TierProduction, "shop")
 	seedPromotions(t, provider, environment.TierProduction, "shop", "", "p1", "p2")
 
 	rolled, err := client.Rollback(context.Background(), &contractv1.RollbackRequest{Slug: "shop"})
 	if err != nil {
 		t.Fatalf("Rollback() error = %v", err)
 	}
-	if rolled.GetPromoted().GetPromotionId() != "p1" {
-		t.Errorf("Rollback() promoted %q, want the promotion before the active one", rolled.GetPromoted().GetPromotionId())
+	promoted := rolled.GetPromoted()
+	if id := promoted.GetPromotionId(); id == "p1" || id == "p2" {
+		t.Errorf("Rollback() promoted %q, want a new promotion rather than one the history already records", id)
 	}
-	if rolled.GetPromoted().GetFlipBound() == nil {
+	if build := promoted.GetBuilds()["web"]; build != buildIdentity(0) {
+		t.Errorf("Rollback() promoted web build %q, want %q, the build p1 promoted", build, buildIdentity(0))
+	}
+	if promoted.GetFlipBound() == nil {
 		t.Error("Rollback() reported no flip bound, so nothing tells the user how long the flip takes")
 	}
 
@@ -88,8 +94,15 @@ func TestRollbackFlipsThePointerToTheEarlierPromotion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if id := listed.GetPromotions()[0].GetPromotion().GetPromotionId(); id != "p1" {
-		t.Errorf("after the rollback the pointer names %q, want p1", id)
+	var ids []string
+	for _, entry := range listed.GetPromotions() {
+		ids = append(ids, entry.GetPromotion().GetPromotionId())
+	}
+	if want := []string{promoted.GetPromotionId(), "p2", "p1"}; !slices.Equal(ids, want) {
+		t.Errorf("after the rollback the history reads %v, want %v", ids, want)
+	}
+	if !listed.GetPromotions()[0].GetActive() {
+		t.Error("after the rollback the pointer does not name the promotion it made")
 	}
 }
 
@@ -140,7 +153,7 @@ func TestTheDeployFlipSpeaksThroughThePromotionStagesOwnProgress(t *testing.T) {
 func TestTheRollbackFlipIsHandedProgressThatDiscards(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
-	deployed(t, provider, environment.TierProduction, "shop")
+	edgeProvisioned(t, provider, environment.TierProduction, "shop")
 	seedPromotions(t, provider, environment.TierProduction, "shop", "", "p1", "p2")
 	plane := relayPlane(provider)
 	plane.SayOnFlip("the flip said this into a rollback that streams nothing")
@@ -160,7 +173,7 @@ func TestTheRollbackFlipIsHandedProgressThatDiscards(t *testing.T) {
 func TestRollbackRefusesAPromotionTheHistoryDoesNotContain(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
-	deployed(t, provider, environment.TierProduction, "shop")
+	edgeProvisioned(t, provider, environment.TierProduction, "shop")
 	seedPromotions(t, provider, environment.TierProduction, "shop", "", "p1")
 
 	_, err := client.Rollback(context.Background(), &contractv1.RollbackRequest{Slug: "shop", To: "p9"})
@@ -169,25 +182,25 @@ func TestRollbackRefusesAPromotionTheHistoryDoesNotContain(t *testing.T) {
 	}
 }
 
-func TestAContendedFlipLosesExactlyOnceAndTheRetryWins(t *testing.T) {
+func TestARollbackWhosePointerWriteLostToAChangeThatLeftItsPromotionActiveLands(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
-	deployed(t, provider, environment.TierProduction, "shop")
+	edgeProvisioned(t, provider, environment.TierProduction, "shop")
 	seedPromotions(t, provider, environment.TierProduction, "shop", "", "p1", "p2")
 
 	pointer := ledger.Partition(environment.TierProduction, "shop").Key("pointers", router.DefaultPointer)
 	provider.KeyValues().(*fake.KeyValues).MoveBeforeNextWrite(pointer)
 
-	if _, err := client.Rollback(context.Background(), &contractv1.RollbackRequest{Slug: "shop", To: "p1"}); connect.CodeOf(err) != connect.CodeAborted {
-		t.Fatalf("Rollback() against a pointer another promotion moved = %v, want it refused as busy", err)
-	}
-
 	rolled, err := client.Rollback(context.Background(), &contractv1.RollbackRequest{Slug: "shop", To: "p1"})
 	if err != nil {
-		t.Fatalf("the second Rollback() = %v, want the flip to win once the contention is gone", err)
+		t.Fatalf("Rollback() against a pointer rewritten with p2 still active = %v, want it to land", err)
 	}
-	if rolled.GetPromoted().GetPromotionId() != "p1" {
-		t.Errorf("Rollback() promoted %q, want p1", rolled.GetPromoted().GetPromotionId())
+	active, err := ledger.New(provider.KeyValues(), environment.TierProduction, "shop").ActivePromotionID(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if active != rolled.GetPromoted().GetPromotionId() {
+		t.Errorf("the pointer names %q, want %q, the promotion the rollback made", active, rolled.GetPromoted().GetPromotionId())
 	}
 }
 
@@ -226,7 +239,7 @@ func TestChangingAProjectsEdgeKeepsItsPromotionHistory(t *testing.T) {
 func TestRemoveStalePromotionsKeepsTheNewestN(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
-	deployed(t, provider, environment.TierProduction, "shop")
+	edgeProvisioned(t, provider, environment.TierProduction, "shop")
 	seedPromotions(t, provider, environment.TierProduction, "shop", "", "p1", "p2", "p3")
 
 	stream, err := client.RemoveStalePromotions(context.Background(), &contractv1.RemoveStalePromotionsRequest{
@@ -266,7 +279,7 @@ func TestAPruneSaysWhichPromotionsItReclaimedAndHowManyItKept(t *testing.T) {
 			t.Parallel()
 			client, provider := contractServed(t, "1.0.0")
 			if tc.seed {
-				deployed(t, provider, environment.TierProduction, "shop")
+				edgeProvisioned(t, provider, environment.TierProduction, "shop")
 				seedPromotions(t, provider, environment.TierProduction, "shop", "", "p1", "p2", "p3")
 			}
 

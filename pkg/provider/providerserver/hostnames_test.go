@@ -14,7 +14,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
-	"github.com/ocelhq/ocel/pkg/progress"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -28,16 +27,21 @@ import (
 
 func deployed(t *testing.T, vendor *fake.Provider, tier environment.Tier, slug string) {
 	t.Helper()
+	edgeProvisioned(t, vendor, tier, slug)
+	promoted(t, vendor, tier, slug)
+}
+
+func edgeProvisioned(t *testing.T, vendor *fake.Provider, tier environment.Tier, slug string) {
+	t.Helper()
 	seedStack(t, vendor, tier, slug, stackrecords.EdgeState{
 		Edge: edge.StackState{Slug: slug, Tier: tier, Endpoint: "https://" + slug + ".fake.invalid"},
 	})
-	promoted(t, vendor, tier, slug)
 }
 
 func promoted(t *testing.T, vendor *fake.Provider, tier environment.Tier, slug string) {
 	t.Helper()
 	promotion := router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "d1"}}
-	if err := ledger.New(vendor.KeyValues(), tier, slug).Promote(context.Background(), promotion, "", progress.DiscardProgress()); err != nil {
+	if _, err := ledger.New(vendor.KeyValues(), tier, slug).Promote(context.Background(), promotion, "", ""); err != nil {
 		t.Fatal(err)
 	}
 }

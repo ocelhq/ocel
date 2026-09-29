@@ -482,8 +482,8 @@ func TestRollbackMovesTheStageOnce(t *testing.T) {
 	}
 
 	before := w.gateway.count("UpdateStage")
-	if err := openRouter(stack).Flip(ctx, router.Flip{Promotion: router.Promotion{PromotionID: "p1", Ts: 3, Builds: map[string]string{"web": first.Build}}}, progress.DiscardProgress()); err != nil {
-		t.Fatalf("rollback to p1: %v", err)
+	if err := openRouter(stack).Flip(ctx, router.Flip{Promotion: router.Promotion{PromotionID: "p3", Ts: 3, Builds: map[string]string{"web": first.Build}}}, progress.DiscardProgress()); err != nil {
+		t.Fatalf("rollback to p1's build: %v", err)
 	}
 	if got := w.gateway.count("UpdateStage") - before; got != 1 {
 		t.Errorf("UpdateStage calls for the rollback = %d, want exactly one", got)
@@ -497,8 +497,8 @@ func TestRollbackMovesTheStageOnce(t *testing.T) {
 	if err != nil {
 		t.Fatalf("History: %v", err)
 	}
-	if len(history) != 2 || history[0].PromotionID != "p1" || !history[0].Active {
-		t.Errorf("history = %v, want p1 back in effect over two promotions", history)
+	if len(history) != 3 || history[0].PromotionID != "p3" || !history[0].Active || history[0].Builds["web"] != first.Build {
+		t.Errorf("history = %v, want p3 in effect with p1's build over the two promotions before it", history)
 	}
 }
 

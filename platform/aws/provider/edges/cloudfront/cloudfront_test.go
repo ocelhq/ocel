@@ -195,7 +195,11 @@ func stagedContainer(t *testing.T, stack edge.EdgeStack) router.DeploymentRecord
 }
 
 func promotion() router.Promotion {
-	return router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "d1.f1"}}
+	return promotionOf("p1")
+}
+
+func promotionOf(id string) router.Promotion {
+	return router.Promotion{PromotionID: id, Ts: 1, Builds: map[string]string{"web": "d1.f1"}}
 }
 
 func routeOn(t *testing.T, w *world, stack edge.EdgeStack, hostname string) route {
@@ -474,7 +478,7 @@ func TestPromote(t *testing.T) {
 		}
 
 		w.front.calls = nil
-		if err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: promotion()}, progress.DiscardProgress()); err != nil {
+		if err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: promotionOf("p2")}, progress.DiscardProgress()); err != nil {
 			t.Fatalf("Promote (again): %v", err)
 		}
 		if made := w.front.mutations(); len(made) != 0 {
@@ -538,7 +542,7 @@ func TestPromote(t *testing.T) {
 		if err := openRouter(stack).Ledger.PutStaged(context.Background(), record); err != nil {
 			t.Fatalf("PutStaged: %v", err)
 		}
-		if err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: promotion()}, progress.DiscardProgress()); err != nil {
+		if err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: promotionOf("p2")}, progress.DiscardProgress()); err != nil {
 			t.Fatalf("Promote: %v", err)
 		}
 		if published := routeOn(t, w, stack, boundHost); published.Secret != fakeSecret {

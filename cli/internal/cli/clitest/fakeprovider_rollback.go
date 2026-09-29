@@ -31,14 +31,14 @@ func (s *deployFakeProviderServer) Rollback(ctx context.Context, req *contractv1
 	return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no promotion %q in this project's history", to))
 }
 
+const FakeRollbackPromotionID = "promo-rollback"
+
 func rollbackResponseFor(entry *contractv1.PromotionHistoryEntry) *contractv1.RollbackResponse {
-	p := entry.GetPromotion()
 	return &contractv1.RollbackResponse{
 		Promoted: &contractv1.Promotion{
-			PromotionId: p.GetPromotionId(),
+			PromotionId: FakeRollbackPromotionID,
 			Ts:          9999,
-			Builds:      p.GetBuilds(),
-			Tag:         p.GetTag(),
+			Builds:      entry.GetPromotion().GetBuilds(),
 			FlipBound:   fakeFlipBound(),
 		},
 	}

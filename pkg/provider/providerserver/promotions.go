@@ -42,24 +42,27 @@ func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	history, err := session.ledger.History(ctx, "")
+	current, err := session.ledger.Read(ctx, "")
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	target, err := rollbackTarget(history, req.GetTo(), req.GetTag())
+	target, err := rollbackTarget(current.History(), req.GetTo(), req.GetTag())
+	if err != nil {
+		return nil, provider.RefusalError(err)
+	}
+	promotionID, err := newPromotionID()
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
 
 	flip := session.router.Facts().FlipBound
 	promoted := router.Promotion{
-		PromotionID: target.PromotionID,
+		PromotionID: promotionID,
 		Ts:          time.Now().Unix(),
 		Builds:      target.Builds,
-		Tag:         target.Tag,
 		Flip:        &flip,
 	}
-	if err := session.promote(ctx, "", promoted, progress.DiscardProgress()); err != nil {
+	if _, err := session.promote(ctx, "", current.Active, promoted, progress.DiscardProgress()); err != nil {
 		return nil, provider.RefusalError(err)
 	}
 	if err := session.checkpoint(ctx); err != nil {

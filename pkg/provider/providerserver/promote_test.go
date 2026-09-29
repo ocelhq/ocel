@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
@@ -66,7 +67,13 @@ func (w *promoteWorld) staged(t *testing.T, id string) router.Promotion {
 
 func (w *promoteWorld) promotes(t *testing.T, id string) error {
 	t.Helper()
-	return promote(context.Background(), w.ledger, "", w.staged(t, id), w.appRouters(), progress.DiscardProgress())
+	return w.promotesOver(t, context.Background(), w.active(t), id)
+}
+
+func (w *promoteWorld) promotesOver(t *testing.T, ctx context.Context, over, id string) error {
+	t.Helper()
+	_, err := promote(ctx, w.ledger, "", over, w.staged(t, id), w.appRouters(), progress.DiscardProgress())
+	return err
 }
 
 func (w *promoteWorld) serves(kind edge.Kind, app string) string {
@@ -205,7 +212,7 @@ func TestAPromoteInterruptedWhileItFlipsStillTakesItsPromotionBack(t *testing.T)
 	direct := w.routers.DataPlane(router.Kind(fake.KindDirect))
 	direct.BeforeNextFlip(cancel)
 	direct.FailNextFlip(errors.New("the flip was interrupted"))
-	if err := promote(ctx, w.ledger, "", w.staged(t, "p2"), w.appRouters(), progress.DiscardProgress()); err == nil {
+	if err := w.promotesOver(t, ctx, "p1", "p2"); err == nil {
 		t.Fatal("promote(p2) interrupted while it flipped = nil, want it unserved")
 	}
 
@@ -217,83 +224,61 @@ func TestAPromoteInterruptedWhileItFlipsStillTakesItsPromotionBack(t *testing.T)
 	}
 }
 
-type sequenceInterleaving struct {
+type overtaking struct {
 	keyvalue.Store
 	mu     sync.Mutex
 	before func()
 }
 
-func (s *sequenceInterleaving) Read(ctx context.Context, key keyvalue.Key) (keyvalue.Entry, error) {
-	s.mu.Lock()
-	before := s.before
-	if slices.Equal(key.Path, []string{"seq"}) {
-		s.before = nil
+func (o *overtaking) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
+	o.mu.Lock()
+	before := o.before
+	if slices.Equal(entry.Key.Path, []string{"pointers", router.DefaultPointer}) {
+		o.before = nil
 	} else {
 		before = nil
 	}
-	s.mu.Unlock()
+	o.mu.Unlock()
 	if before != nil {
 		before()
 	}
-	return s.Store.Read(ctx, key)
+	return o.Store.Write(ctx, entry)
 }
 
-func (w *promoteWorld) interleaveBeforeTheNextSequence(t *testing.T) *sequenceInterleaving {
-	t.Helper()
+func TestAPromoteAnotherOvertookBeforeItsLedgerWriteIsRefusedBusyAndFlipsNothing(t *testing.T) {
+	w := newPromoteWorld(t)
 	vendor := fake.NewProvider(fake.Options{})
-	interleaving := &sequenceInterleaving{Store: vendor.KeyValues()}
+	store := &overtaking{Store: vendor.KeyValues()}
 	w.ledger = projectLedger{
-		Ledger: ledger.New(interleaving, environment.TierProduction, promotedSlug),
+		Ledger: ledger.New(store, environment.TierProduction, promotedSlug),
 		cipher: vendor.Cipher(),
 		tier:   environment.TierProduction,
 		slug:   promotedSlug,
 	}
-	return interleaving
-}
+	if err := w.promotes(t, "p1"); err != nil {
+		t.Fatalf("promote(p1) = %v", err)
+	}
 
-func TestAnUnservedPromoteRestoresTheRoutersItFlippedToWhatTheLedgerNamesOnceItIsTakenBack(t *testing.T) {
-	for _, tc := range []struct {
-		name  string
-		prior string
-	}{
-		{name: "over an earlier promotion", prior: "p1"},
-		{name: "as the first promotion", prior: ""},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			w := newPromoteWorld(t)
-			interleaving := w.interleaveBeforeTheNextSequence(t)
-			if tc.prior != "" {
-				if err := w.promotes(t, tc.prior); err != nil {
-					t.Fatalf("promote(%s) = %v", tc.prior, err)
-				}
-			}
+	var raced error
+	store.mu.Lock()
+	store.before = func() { raced = w.promotes(t, "p3") }
+	store.mu.Unlock()
+	err := w.promotesOver(t, context.Background(), "p1", "p2")
 
-			var raced error
-			earlier := w.staged(t, "p2")
-			interleaving.mu.Lock()
-			interleaving.before = func() {
-				raced = w.promotes(t, "p3")
-				w.routers.DataPlane(router.Kind(fake.KindDirect)).FailNextFlip(errors.New("the data plane refused the write"))
-			}
-			interleaving.mu.Unlock()
-			err := promote(context.Background(), w.ledger, "", earlier, w.appRouters(), progress.DiscardProgress())
-
-			if raced != nil {
-				t.Fatalf("the promote that landed while p2 began = %v, want it served", raced)
-			}
-			var unserved router.Unserved
-			if !errors.As(err, &unserved) {
-				t.Fatalf("promote(p2) with a router that refused = %v, want router.Unserved", err)
-			}
-			if active := w.active(t); active != "p3" {
-				t.Fatalf("the ledger names %q once p2 was taken back, want p3, the promotion p2 displaced", active)
-			}
-			if served := w.serves(fake.KindRelay, "web"); served != "web-p3" {
-				t.Errorf("the relay router serves web %q once p2 was taken back, want web-p3, the release the ledger names", served)
-			}
-			if served := w.serves(fake.KindDirect, "api"); served != "api-p3" {
-				t.Errorf("the direct router serves api %q, want api-p3, the release the ledger names", served)
-			}
-		})
+	if raced != nil {
+		t.Fatalf("the promote that overtook p2 = %v, want it served", raced)
+	}
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
+		t.Fatalf("promote(p2) over p1 once p3 had landed = %v, want a busy refusal", err)
+	}
+	if active := w.active(t); active != "p3" {
+		t.Errorf("the ledger names %q, want p3, the promote that won", active)
+	}
+	if served := w.serves(fake.KindRelay, "web"); served != "web-p3" {
+		t.Errorf("the relay router serves web %q, want web-p3", served)
+	}
+	if served := w.serves(fake.KindDirect, "api"); served != "api-p3" {
+		t.Errorf("the direct router serves api %q, want api-p3", served)
 	}
 }

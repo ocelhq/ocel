@@ -40,6 +40,7 @@ func TestRunRollback(t *testing.T) {
 			"tag v1.0.0",
 			"web=build-1",
 			"Rolled back to promotion promo-1",
+			"as promotion " + clitest.FakeRollbackPromotionID,
 		} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout missing %q; got:\n%s", want, out)

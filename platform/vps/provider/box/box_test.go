@@ -549,7 +549,7 @@ func TestAPromotionOvertakenWhileItGatedNeverFlipsTheBoxAwayFromTheOneThatOverto
 	m.releasing = func(rel host.Release) error {
 		m.releasing = nil
 		overtaking := ledger.New(store, environment.TierProduction, slug)
-		if err := overtaking.Promote(context.Background(), router.Promotion{PromotionID: "p3", Builds: map[string]string{"web": "b3"}}, "", progress.DiscardProgress()); err != nil {
+		if _, err := overtaking.Promote(context.Background(), router.Promotion{PromotionID: "p3", Builds: map[string]string{"web": "b3"}}, "", "p2"); err != nil {
 			t.Fatalf("Promote(p3): %v", err)
 		}
 		if rel.StillActive == nil {

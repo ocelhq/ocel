@@ -55,14 +55,14 @@ func (s *sharedStack) adopt(routed router.Stack) error {
 	return nil
 }
 
-func (s *sharedStack) promote(ctx context.Context, pointer string, promoted router.Promotion, progress progress.Progress) error {
+func (s *sharedStack) promote(ctx context.Context, pointer, over string, promoted router.Promotion, progress progress.Progress) (router.PruneResult, error) {
 	routed, err := s.openRouterStack()
 	if err != nil {
-		return err
+		return router.PruneResult{}, err
 	}
 	apps := slices.Sorted(maps.Keys(promoted.Builds))
-	err = promote(ctx, s.ledger, pointer, promoted, []appRouter{{stack: routed, apps: apps}}, progress)
-	return errors.Join(err, s.adopt(routed))
+	pruned, err := promote(ctx, s.ledger, pointer, over, promoted, []appRouter{{stack: routed, apps: apps}}, progress)
+	return pruned, errors.Join(err, s.adopt(routed))
 }
 
 func (s *sharedStack) removePointer(ctx context.Context, pointer string, progress progress.Progress) (router.PruneResult, error) {
