@@ -170,6 +170,9 @@ func (s *recordingStack) BindDomain(_ context.Context, binding edge.DomainBindin
 	s.state.Bind(binding.Hostname)
 	switch s.edge.Kind() {
 	case cloudflare.Kind:
+		if binding.Origin != nil {
+			s.state.PublishFront(binding.Hostname, binding.Origin.Address)
+		}
 	case apigateway.Kind:
 		s.state.PublishFront(binding.Hostname, "front-"+binding.Hostname+".fake")
 	default:

@@ -198,11 +198,14 @@ func (s *RouterStack) State() router.StackState {
 	return router.NewStackState(state)
 }
 
-func (s *RouterStack) Claim(context.Context, router.Claim) (edge.Origin, error) {
-	return edge.Origin{}, nil
+func (s *RouterStack) Claim(_ context.Context, claim router.Claim) (edge.Origin, error) {
+	return s.stack.front.claimed(claim), nil
 }
 
-func (s *RouterStack) Disclaim(context.Context, string) error { return nil }
+func (s *RouterStack) Disclaim(_ context.Context, hostname string) error {
+	s.stack.front.gaveBack(hostname)
+	return nil
+}
 
 func (s *RouterStack) Flip(ctx context.Context, flip router.Flip, progress progress.Progress) error {
 	s.plane.beginFlip(progress)

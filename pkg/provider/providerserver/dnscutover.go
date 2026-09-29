@@ -89,7 +89,11 @@ func (s dnsCutover) recordsFor(state edge.StackState, hostname string) ([]edge.R
 	if !edge.Pointable(target, state.Bound, hostname) {
 		return nil, nil
 	}
-	return edge.RecordsFor(target, []string{hostname})
+	records, err := edge.RecordsFor(target, []string{hostname})
+	if err != nil {
+		return nil, err
+	}
+	return edge.Unwritten(records, state.Records), nil
 }
 
 type recordSet struct {
