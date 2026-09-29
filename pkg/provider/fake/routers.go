@@ -198,6 +198,26 @@ func (r Router) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
 	}}
 }
 
+func (r Router) ClaimPreviewEntry(_ context.Context, claim router.Claim) (edge.Origin, error) {
+	return r.edge.recordPreviewEntryClaim(claim), nil
+}
+
+func (r Router) DisclaimPreviewEntry(_ context.Context, baseDomain string) error {
+	r.edge.recordPreviewEntryDisclaim(baseDomain)
+	return nil
+}
+
+const PreviewEntryClaimKind = "Fake::PreviewEntryClaim"
+
+func (r Router) PreviewEntryRemovals(wildcard string) []edge.PlanGroup {
+	return []edge.PlanGroup{{
+		Kind:    edge.EdgeGroupKind,
+		Name:    edge.OriginGroupName,
+		Action:  edge.PlanDelete,
+		Changes: []edge.PlanChange{{Kind: PreviewEntryClaimKind, Name: wildcard, Action: edge.PlanDelete}},
+	}}
+}
+
 func (r Router) Reconcile(_ context.Context, spec router.StackSpec, prior router.StackState) (router.Stack, error) {
 	return r.Open(prior.WithSpec(spec))
 }

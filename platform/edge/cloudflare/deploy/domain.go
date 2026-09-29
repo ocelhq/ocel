@@ -14,6 +14,7 @@ import (
 	"github.com/cloudflare/cloudflare-go/v4/workers"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) error {
@@ -136,38 +137,49 @@ func (p *cloudflare) requireTLSCover(ctx context.Context, zoneID, zoneName, host
 }
 
 func (p *cloudflare) certificatePackCovers(ctx context.Context, zoneID, hostname string) (bool, error) {
+	status, err := p.certificatePackCover(ctx, zoneID, hostname)
+	return status == string(ssl.StatusActive), err
+}
+
+var pendingPackStatuses = []string{"initializing", "pending_validation", "pending_issuance", "pending_deployment"}
+
+func (p *cloudflare) certificatePackCover(ctx context.Context, zoneID, hostname string) (string, error) {
 	packs := p.client.SSL.CertificatePacks.ListAutoPaging(ctx, ssl.CertificatePackListParams{ZoneID: cf.F(zoneID)})
+	cover := ""
 	for packs.Next() {
-		hosts, err := activeCertificatePackHosts(packs.Current())
+		status, hosts, err := certificatePackHosts(packs.Current())
 		if err != nil {
-			return false, fmt.Errorf("read a certificate pack in zone %s: %w", zoneID, err)
+			return "", fmt.Errorf("read a certificate pack in zone %s: %w", zoneID, err)
 		}
-		if slices.ContainsFunc(hosts, func(covered string) bool { return certificateCovers(covered, hostname) }) {
-			return true, nil
+		if !slices.ContainsFunc(hosts, func(covered string) bool { return certificateCovers(covered, hostname) }) {
+			continue
+		}
+		switch {
+		case status == string(ssl.StatusActive):
+			return status, nil
+		case slices.Contains(pendingPackStatuses, status):
+			cover = status
 		}
 	}
 	if err := packs.Err(); err != nil {
-		return false, fmt.Errorf("list certificate packs in zone %s: %w", zoneID, err)
+		return "", fmt.Errorf("list certificate packs in zone %s: %w", zoneID, err)
 	}
-	return false, nil
+	return cover, nil
 }
 
-func activeCertificatePackHosts(pack ssl.CertificatePackListResponse) ([]string, error) {
+func certificatePackHosts(pack ssl.CertificatePackListResponse) (string, []string, error) {
 	raw, err := json.Marshal(pack)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 	var decoded struct {
 		Hosts  []string `json:"hosts"`
 		Status string   `json:"status"`
 	}
 	if err := json.Unmarshal(raw, &decoded); err != nil {
-		return nil, err
+		return "", nil, err
 	}
-	if decoded.Status != string(ssl.StatusActive) {
-		return nil, nil
-	}
-	return decoded.Hosts, nil
+	return decoded.Status, decoded.Hosts, nil
 }
 
 func certificateCovers(covered, hostname string) bool {
@@ -180,4 +192,37 @@ func certificateCovers(covered, hostname string) bool {
 	}
 	label, ok := strings.CutSuffix(hostname, "."+under)
 	return ok && label != "" && !strings.Contains(label, ".")
+}
+
+func (p *cloudflare) ensureTLSCover(ctx context.Context, zoneID, zoneName, hostname string) error {
+	if coveredByUniversalSSL(hostname, zoneName) {
+		return nil
+	}
+	status, err := p.certificatePackCover(ctx, zoneID, hostname)
+	switch {
+	case err != nil:
+		return err
+	case status == string(ssl.StatusActive):
+		return nil
+	case status != "":
+		return refusal.Refuse(refusal.CodeNotReady,
+			"Cloudflare is still issuing the advanced certificate that covers %s (%s): forward it again once the certificate is active, which takes minutes on a zone Cloudflare's DNS serves",
+			hostname, status)
+	}
+	if _, err := p.client.SSL.CertificatePacks.New(ctx, ssl.CertificatePackNewParams{
+		ZoneID:               cf.F(zoneID),
+		Type:                 cf.F(ssl.CertificatePackNewParamsTypeAdvanced),
+		Hosts:                cf.F([]ssl.HostParam{zoneName, hostname}),
+		ValidationMethod:     cf.F(ssl.CertificatePackNewParamsValidationMethodTXT),
+		ValidityDays:         cf.F(ssl.CertificatePackNewParamsValidityDays90),
+		CertificateAuthority: cf.F(ssl.CertificatePackNewParamsCertificateAuthorityLetsEncrypt),
+	}); err != nil {
+		return refusal.Refuse(refusal.CodeInvalid,
+			"%s is more than one label below zone %s, so the zone's Universal SSL certificate does not cover it, and ordering an advanced certificate that does failed: %v\n"+
+				"Add Advanced Certificate Manager to zone %s, or serve it from a domain at a zone apex, whose names one label down Universal SSL covers: previews on `*.<zone>` of a zone of their own",
+			hostname, zoneName, err, zoneName)
+	}
+	return refusal.Refuse(refusal.CodeNotReady,
+		"ordered an advanced certificate covering %s from Cloudflare, since zone %s's Universal SSL certificate covers only one label below it: forward it again once the certificate is active, which takes minutes on a zone Cloudflare's DNS serves",
+		hostname, zoneName)
 }

@@ -134,6 +134,8 @@ type Edge struct {
 	staged     []string
 	events     []string
 	claims     []router.Claim
+	entries    []router.Claim
+	released   []string
 	disclaimed []string
 	purged     [][]string
 	purgeError error
@@ -256,6 +258,36 @@ func (e *Edge) recordClaim(claim router.Claim) edge.Origin {
 	defer e.mu.Unlock()
 	e.events = append(e.events, "claim")
 	e.claims = append(e.claims, claim)
+	return e.certifiedOrigin(claim)
+}
+
+func (e *Edge) recordPreviewEntryClaim(claim router.Claim) edge.Origin {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.events = append(e.events, "claim")
+	e.entries = append(e.entries, claim)
+	return e.certifiedOrigin(claim)
+}
+
+func (e *Edge) recordPreviewEntryDisclaim(baseDomain string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.released = append(e.released, baseDomain)
+}
+
+func (e *Edge) PreviewEntryClaims() []router.Claim {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return slices.Clone(e.entries)
+}
+
+func (e *Edge) DisclaimedPreviewEntries() []string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return slices.Clone(e.released)
+}
+
+func (e *Edge) certifiedOrigin(claim router.Claim) edge.Origin {
 	if claim.OriginCertificate.ID != "" {
 		if e.held == nil {
 			e.held = map[string]string{}

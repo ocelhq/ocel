@@ -63,8 +63,9 @@ the box, with no DNS change. The proxy on the box answers that hostname only to 
 presenting the certificate your Cloudflare zone presents to origins, so a request that
 skips Cloudflare is refused. It answers with a certificate from Cloudflare's origin CA, which
 ocel issues for the hostname and renews half way through its year, rather than one ordered
-from a public CA through Cloudflare. Set the zone's SSL mode to Full (strict). Previews are not
-forwarded through Cloudflare yet.
+from a public CA through Cloudflare. Set the zone's SSL mode to Full (strict). Previews are
+forwarded the same way, on a project's own `domains.preview` wildcard or the one
+`ocel domain use --preview` names; see [previews behind Cloudflare](/docs/providers/cloudflare#previews-behind-cloudflare).
 
 ```json title="ocel.json"
 {

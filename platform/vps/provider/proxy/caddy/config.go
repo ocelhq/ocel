@@ -329,7 +329,10 @@ func withOriginCertificates(loaded *certificates, shields []proxy.Shield) *certi
 }
 
 func byHostname(a, b proxy.Shield) int {
-	return strings.Compare(strings.ToLower(a.Hostname), strings.ToLower(b.Hostname))
+	return cmp.Or(
+		cmp.Compare(wildcarded(a.Hostname), wildcarded(b.Hostname)),
+		strings.Compare(strings.ToLower(a.Hostname), strings.ToLower(b.Hostname)),
+	)
 }
 
 func encodeLeafDER(certificate string) (string, error) {

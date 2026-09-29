@@ -14,6 +14,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
+func forwardsToRouter(front edge.Edge) bool {
+	facts := front.Facts()
+	return facts.ProxiesRecords && !facts.RunsCode
+}
+
 type shieldedClaim func(ctx context.Context, clientCertificates []string) (edge.Origin, error)
 
 func claimShielded(ctx context.Context, front edge.Edge, hostname string, claim shieldedClaim) (edge.Origin, []string, error) {

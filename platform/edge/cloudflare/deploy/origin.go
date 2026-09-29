@@ -56,21 +56,8 @@ func (p *cloudflare) bindOrigin(ctx context.Context, state *edge.StackState, own
 	if binding.Origin.Address == "" {
 		return fmt.Errorf("the origin %s is forwarded to names no address", binding.Hostname)
 	}
-	zoneID, zoneName, err := p.resolveZone(ctx, accountID, binding.Hostname)
+	want, err := p.forwardOrigin(ctx, accountID, owner, binding.Hostname, *binding.Origin)
 	if err != nil {
-		return err
-	}
-	if err := p.requireTLSCover(ctx, zoneID, zoneName, binding.Hostname); err != nil {
-		return err
-	}
-	if err := p.requireEncryptedOrigin(ctx, zoneID, zoneName); err != nil {
-		return err
-	}
-	want, err := proxiedRecord(binding.Hostname, *binding.Origin)
-	if err != nil {
-		return err
-	}
-	if err := p.forwardRecord(ctx, zoneID, owner, want); err != nil {
 		return err
 	}
 	state.Bind(binding.Hostname)
@@ -79,12 +66,33 @@ func (p *cloudflare) bindOrigin(ctx context.Context, state *edge.StackState, own
 	return nil
 }
 
+func (p *cloudflare) forwardOrigin(ctx context.Context, accountID, owner, hostname string, origin edge.Origin) (edge.Record, error) {
+	if origin.Address == "" {
+		return edge.Record{}, fmt.Errorf("the origin %s is forwarded to names no address", hostname)
+	}
+	zoneID, zoneName, err := p.resolveZone(ctx, accountID, routeBaseDomain(hostname))
+	if err != nil {
+		return edge.Record{}, err
+	}
+	if err := p.ensureTLSCover(ctx, zoneID, zoneName, hostname); err != nil {
+		return edge.Record{}, err
+	}
+	if err := p.requireEncryptedOrigin(ctx, zoneID, zoneName); err != nil {
+		return edge.Record{}, err
+	}
+	want, err := proxiedRecord(hostname, origin)
+	if err != nil {
+		return edge.Record{}, err
+	}
+	return want, p.forwardRecord(ctx, zoneID, owner, want)
+}
+
 func (p *cloudflare) unbindOrigin(ctx context.Context, state *edge.StackState, owner, hostname string) error {
 	accountID := p.accountID()
 	if accountID == "" {
 		return fmt.Errorf("%s is not set; it is required to stop forwarding %s through Cloudflare", envAccountID, hostname)
 	}
-	zoneID, _, err := p.resolveZone(ctx, accountID, hostname)
+	zoneID, _, err := p.resolveZone(ctx, accountID, routeBaseDomain(hostname))
 	if err != nil {
 		return err
 	}

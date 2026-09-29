@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/edge/edgeconformance"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 func proxyZoneMock() *cfMock {
@@ -46,6 +48,11 @@ func TestTheCloudflareProxyBehavesAsEveryEdgeMust(t *testing.T) {
 		},
 		Hostname: "shop.app.com",
 		Origin:   &edge.Origin{Address: "198.51.100.4"},
+		Previews: func(t *testing.T) (edge.Edge, edge.StackSpec, edge.PreviewWildcardSpec) {
+			m := proxyZoneMock()
+			m.certificatePacks = []map[string]any{activePack("app.com", "*.preview.app.com")}
+			return m.proxy(t), proxyPreviewSpec(), edge.PreviewWildcardSpec{BaseDomain: "preview.app.com", Origin: &edge.Origin{Address: "198.51.100.4"}}
+		},
 		Bootstrap: func(t *testing.T) (edge.Edge, environment.Tier) {
 			return proxyZoneMock().proxy(t), environment.TierProduction
 		},
@@ -154,16 +161,122 @@ func TestTheCloudflareProxyRefusesAHostnameAnotherProjectForwards(t *testing.T) 
 	}
 }
 
-func TestTheCloudflareProxyRefusesAPreviewWildcardItCannotServe(t *testing.T) {
-	front := proxyZoneMock().proxy(t)
+func proxyPreviewSpec() edge.StackSpec {
 	spec := proxySpec()
 	spec.Tier, spec.Domains = environment.TierPreview, []string{"*.preview.app.com"}
+	return spec
+}
 
-	if _, err := front.Reconcile(context.Background(), spec, edge.StackState{}); err == nil {
-		t.Error("Reconcile of a preview wildcard = nil, want a refusal: previews are not forwarded through the proxy yet")
+func activePack(hosts ...string) map[string]any {
+	return map[string]any{"id": "pack", "type": "advanced", "status": "active", "hosts": hosts}
+}
+
+func TestTheCloudflareProxyForwardsAProjectsPreviewWildcardToTheOriginItsRouterClaims(t *testing.T) {
+	m := proxyZoneMock()
+	m.certificatePacks = []map[string]any{activePack("app.com", "*.preview.app.com")}
+	stack, err := m.proxy(t).Reconcile(context.Background(), proxyPreviewSpec(), edge.StackState{})
+	if err != nil {
+		t.Fatalf("Reconcile of a preview wildcard: %v", err)
 	}
-	if _, err := front.ReconcilePreviewWildcard(context.Background(), edge.PreviewWildcardSpec{BaseDomain: "preview.app.com"}); err == nil {
-		t.Error("ReconcilePreviewWildcard = nil, want a refusal")
+	if base := stack.State().PreviewBase; base != "preview.app.com" {
+		t.Errorf("the stack serves previews on %q, want preview.app.com: the router behind the proxy answers each preview under it", base)
+	}
+
+	if err := stack.BindDomain(context.Background(), edge.DomainBinding{Hostname: "*.preview.app.com", Origin: &edge.Origin{Address: "198.51.100.4"}}); err != nil {
+		t.Fatalf("BindDomain(*.preview.app.com): %v", err)
+	}
+	if len(m.createdRecords) != 1 || m.createdRecords[0]["name"] != "*.preview.app.com" || m.createdRecords[0]["proxied"] != true {
+		t.Errorf("created records %v, want one proxied wildcard record forwarding every preview to the origin", m.createdRecords)
+	}
+}
+
+func TestTheCloudflareProxyOrdersAnAdvancedCertificateForAPreviewWildcardUniversalSSLDoesNotCover(t *testing.T) {
+	m := proxyZoneMock()
+	stack, err := m.proxy(t).Reconcile(context.Background(), proxyPreviewSpec(), edge.StackState{})
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+
+	err = stack.BindDomain(context.Background(), edge.DomainBinding{Hostname: "*.preview.app.com", Origin: &edge.Origin{Address: "198.51.100.4"}})
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
+		t.Fatalf("BindDomain before the zone covers the wildcard = %v, want refused not ready while Cloudflare issues its certificate", err)
+	}
+	if len(m.orderedPacks) != 1 || !slices.Equal(m.orderedPacks[0], []string{"app.com", "*.preview.app.com"}) {
+		t.Fatalf("ordered certificate packs %v, want one advanced certificate for app.com and *.preview.app.com", m.orderedPacks)
+	}
+	if len(m.createdRecords) != 0 {
+		t.Errorf("created %v before any certificate covers the wildcard, want nothing forwarded: every preview would fail its handshake at Cloudflare", m.createdRecords)
+	}
+
+	if err := stack.BindDomain(context.Background(), edge.DomainBinding{Hostname: "*.preview.app.com", Origin: &edge.Origin{Address: "198.51.100.4"}}); err == nil {
+		t.Error("BindDomain while the ordered certificate is pending = nil, want it still not ready")
+	}
+	if len(m.orderedPacks) != 1 {
+		t.Errorf("ordered %d certificate packs, want the one already pending left to finish", len(m.orderedPacks))
+	}
+
+	m.certificatePacks[0]["status"] = "active"
+	if err := stack.BindDomain(context.Background(), edge.DomainBinding{Hostname: "*.preview.app.com", Origin: &edge.Origin{Address: "198.51.100.4"}}); err != nil {
+		t.Errorf("BindDomain once the certificate is active: %v", err)
+	}
+}
+
+func TestTheCloudflareProxyRefusesAPreviewWildcardAZoneWithoutAdvancedCertificateManagerCannotCover(t *testing.T) {
+	m := proxyZoneMock()
+	m.refusesPackOrders = true
+	stack, err := m.proxy(t).Reconcile(context.Background(), proxyPreviewSpec(), edge.StackState{})
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+
+	err = stack.BindDomain(context.Background(), edge.DomainBinding{Hostname: "*.preview.app.com", Origin: &edge.Origin{Address: "198.51.100.4"}})
+	if err == nil || !strings.Contains(err.Error(), "Advanced Certificate Manager") || !strings.Contains(err.Error(), "zone apex") {
+		t.Errorf("BindDomain in a zone that cannot order an advanced certificate = %v, want a refusal naming Advanced Certificate Manager and a preview domain at a zone apex, which Universal SSL covers", err)
+	}
+}
+
+func TestTheCloudflareProxyNeedsNoAdvancedCertificateForAPreviewWildcardAtAZoneApex(t *testing.T) {
+	m := &cfMock{zoneID: "zone1", zoneName: "previews.app"}
+	spec := proxyPreviewSpec()
+	spec.Domains = []string{"*.previews.app"}
+	stack, err := m.proxy(t).Reconcile(context.Background(), spec, edge.StackState{})
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if err := stack.BindDomain(context.Background(), edge.DomainBinding{Hostname: "*.previews.app", Origin: &edge.Origin{Address: "198.51.100.4"}}); err != nil {
+		t.Fatalf("BindDomain(*.previews.app): %v", err)
+	}
+	if len(m.orderedPacks) != 0 {
+		t.Errorf("ordered %v, want nothing: Universal SSL covers every name one label below the zone", m.orderedPacks)
+	}
+}
+
+func TestTheCloudflareProxyForwardsTheSharedPreviewWildcardToTheOriginItsRouterClaims(t *testing.T) {
+	m := proxyZoneMock()
+	m.certificatePacks = []map[string]any{activePack("app.com", "*.preview.app.com")}
+	front := m.proxy(t)
+	ctx := context.Background()
+
+	if _, err := front.ReconcilePreviewWildcard(ctx, edge.PreviewWildcardSpec{BaseDomain: "preview.app.com"}); err == nil {
+		t.Error("ReconcilePreviewWildcard with no origin = nil, want a refusal: the proxy answers no preview itself")
+	}
+	published, err := front.ReconcilePreviewWildcard(ctx, edge.PreviewWildcardSpec{BaseDomain: "preview.app.com", Origin: &edge.Origin{Address: "198.51.100.4"}})
+	if err != nil {
+		t.Fatalf("ReconcilePreviewWildcard: %v", err)
+	}
+	if published != "198.51.100.4" {
+		t.Errorf("ReconcilePreviewWildcard published %q, want the origin it forwards to", published)
+	}
+	owner, err := front.DomainOwner(ctx, "*.preview.app.com")
+	if err != nil || owner != edge.PreviewEntryOwner {
+		t.Errorf("DomainOwner(*.preview.app.com) = %q, %v, want %q: the wildcard is every project's preview entry", owner, err, edge.PreviewEntryOwner)
+	}
+	if err := front.DestroyPreviewWildcard(ctx, "preview.app.com"); err != nil {
+		t.Fatalf("DestroyPreviewWildcard: %v", err)
+	}
+	if len(m.deletedRecords) != 1 {
+		t.Errorf("deleted %v, want the wildcard's proxied record", m.deletedRecords)
 	}
 }
 
