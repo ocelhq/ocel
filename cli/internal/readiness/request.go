@@ -6,6 +6,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 func newPreflightRequest(cfg *project.Project, req Request) *contractv1.PreflightRequest {
@@ -24,6 +25,9 @@ func newPreflightRequest(cfg *project.Project, req Request) *contractv1.Prefligh
 func frameworks(cfg *project.Project) []string {
 	var named []string
 	for _, app := range cfg.Apps {
+		if app.RunsOn(provider.ComputeContainer) {
+			continue
+		}
 		if framework := app.Framework(); framework != "" {
 			named = append(named, framework)
 		}

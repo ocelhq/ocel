@@ -11,7 +11,16 @@ import (
 )
 
 func Read(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project, req Request) (*contractv1.PreflightResponse, error) {
-	return preflight(ctx, provider, newPreflightRequest(cfg, req))
+	sent := newPreflightRequest(cfg, req)
+	resp, err := preflight(ctx, provider, sent)
+	if err != nil {
+		return nil, err
+	}
+	resent, differs := resolvedPreflightRequest(cfg, req, provider.Name(), sent, resp)
+	if !differs {
+		return resp, nil
+	}
+	return preflight(ctx, provider, resent)
 }
 
 func ResolveComputes(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project) (*project.Project, error) {
@@ -45,4 +54,19 @@ func preflight(ctx context.Context, provider *providerprocess.Provider, req *con
 		return err
 	})
 	return resp, err
+}
+
+func resolvedPreflightRequest(cfg *project.Project, req Request, vendor string, sent *contractv1.PreflightRequest, resp *contractv1.PreflightResponse) (*contractv1.PreflightRequest, bool) {
+	if len(resp.GetCredentialProblems()) > 0 {
+		return nil, false
+	}
+	resolved, err := cfg.ResolveComputes(resp.GetComputes(), vendor)
+	if err != nil {
+		return nil, false
+	}
+	resent := newPreflightRequest(resolved, req)
+	if slices.Equal(resent.GetFrameworks(), sent.GetFrameworks()) {
+		return nil, false
+	}
+	return resent, true
 }
