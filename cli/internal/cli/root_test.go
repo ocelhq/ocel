@@ -101,7 +101,7 @@ func inDeployFixture(t *testing.T) {
 func TestLogFormatJSONAttachesOnlyTheJSONSink(t *testing.T) {
 	inDeployFixture(t)
 
-	stdout, stderr := executeRoot(t, "--log-format", "json", "deployments", "prune")
+	stdout, stderr := executeRoot(t, "--log-format", "json", "deployments", "prune", "--yes")
 
 	var ended bool
 	for _, line := range strings.Split(strings.TrimSpace(stdout), "\n") {
@@ -122,7 +122,7 @@ func TestLogFormatJSONAttachesOnlyTheJSONSink(t *testing.T) {
 func TestTheHumanLogFormatAttachesOnlyTheGroupedSink(t *testing.T) {
 	inDeployFixture(t)
 
-	stdout, _ := executeRoot(t, "deployments", "prune")
+	stdout, _ := executeRoot(t, "deployments", "prune", "--yes")
 
 	for _, line := range strings.Split(strings.TrimSpace(stdout), "\n") {
 		if json.Valid([]byte(line)) {
@@ -138,7 +138,7 @@ func TestATerminalFortyColumnsWideGetsTheLiveLineView(t *testing.T) {
 	inDeployFixture(t)
 	tty, screen := aTerminal(t, "xterm-256color", 40)
 
-	executeRootOn(t, tty, &bytes.Buffer{}, "deployments", "prune")
+	executeRootOn(t, tty, &bytes.Buffer{}, "deployments", "prune", "--yes")
 
 	if got := screen(); !strings.Contains(got, liveFrame) || !strings.Contains(got, "Pruned") {
 		t.Errorf("the terminal shows %q, want the transcript drawn in live-line frames", got)
@@ -149,7 +149,7 @@ func TestADumbTerminalGetsTheGroupedView(t *testing.T) {
 	inDeployFixture(t)
 	tty, screen := aTerminal(t, "dumb", 80)
 
-	executeRootOn(t, tty, &bytes.Buffer{}, "deployments", "prune")
+	executeRootOn(t, tty, &bytes.Buffer{}, "deployments", "prune", "--yes")
 
 	if got := screen(); strings.Contains(got, liveFrame) || !strings.Contains(got, "Pruned") {
 		t.Errorf("the terminal shows %q, want the grouped transcript with no live line", got)
@@ -160,7 +160,7 @@ func TestATerminalNarrowerThanFortyColumnsGetsTheGroupedView(t *testing.T) {
 	inDeployFixture(t)
 	tty, screen := aTerminal(t, "xterm-256color", 39)
 
-	executeRootOn(t, tty, &bytes.Buffer{}, "deployments", "prune")
+	executeRootOn(t, tty, &bytes.Buffer{}, "deployments", "prune", "--yes")
 
 	if got := screen(); strings.Contains(got, liveFrame) || !strings.Contains(got, "Pruned") {
 		t.Errorf("the terminal shows %q, want the grouped transcript with no live line", got)
@@ -172,7 +172,7 @@ func TestATerminalThatReportsNoWidthGetsTheGroupedViewWhateverColumnsSays(t *tes
 	t.Setenv("COLUMNS", "120")
 	tty, screen := aTerminal(t, "xterm-256color", 0)
 
-	executeRootOn(t, tty, &bytes.Buffer{}, "deployments", "prune")
+	executeRootOn(t, tty, &bytes.Buffer{}, "deployments", "prune", "--yes")
 
 	if got := screen(); strings.Contains(got, liveFrame) || !strings.Contains(got, "Pruned") {
 		t.Errorf("the terminal shows %q, want the grouped transcript with no live line", got)
@@ -184,7 +184,7 @@ func TestAPipedStdoutGetsTheGroupedViewEvenWithATerminalOnStderr(t *testing.T) {
 	tty, screen := aTerminal(t, "xterm-256color", 80)
 	var stdout bytes.Buffer
 
-	executeRootOn(t, &stdout, tty, "deployments", "prune")
+	executeRootOn(t, &stdout, tty, "deployments", "prune", "--yes")
 
 	if got := stdout.String(); strings.Contains(got, liveFrame) || !strings.Contains(got, "Pruned") {
 		t.Errorf("stdout = %q, want the grouped transcript with no live line", got)
