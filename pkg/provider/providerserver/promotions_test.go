@@ -671,10 +671,8 @@ func TestARollbackReclaimsTheDroppedBuildsBesideARecordNamingNoBuildAndWarnsOfIt
 	}
 }
 
-func TestARollbackPastTheRetainedPromotionsLeavesTheContainerBuildItDroppedToTheBox(t *testing.T) {
-	t.Parallel()
-	client, vendor := contractServed(t, "1.0.0")
-	edgeProvisioned(t, vendor, environment.TierProduction, "shop")
+func seedKeptContainers(t *testing.T, vendor *fake.Provider) *ledger.Ledger {
+	t.Helper()
 	releases := ledger.New(vendor.KeyValues(), environment.TierProduction, "shop")
 	ctx := context.Background()
 	replaces := ""
@@ -689,13 +687,53 @@ func TestARollbackPastTheRetainedPromotionsLeavesTheContainerBuildItDroppedToThe
 		}
 		replaces = promotion.PromotionID
 	}
+	return releases
+}
+
+func destroyedStacks(vendor *fake.Provider) []string {
+	var destroyed []string
+	for _, entry := range vendor.Journal() {
+		if stack, found := strings.CutPrefix(entry, "destroy "); found {
+			destroyed = append(destroyed, stack)
+		}
+	}
+	return destroyed
+}
+
+func TestARollbackPastTheRetainedPromotionsReclaimsTheContainerBuildItDropped(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	edgeProvisioned(t, vendor, environment.TierProduction, "shop")
+	releases := seedKeptContainers(t, vendor)
+	ctx := context.Background()
 
 	if _, err := client.Rollback(ctx, &contractv1.RollbackRequest{Slug: "shop"}); err != nil {
 		t.Fatalf("Rollback() error = %v", err)
 	}
 
-	if slices.ContainsFunc(vendor.Journal(), func(entry string) bool { return strings.HasPrefix(entry, "destroy ") }) {
-		t.Errorf("the journal reads %v, want the container build the rollback dropped left to the box that runs its image", vendor.Journal())
+	want := naming.AppStack(stackrecords.ProductionEnv, "web", releaseOf(t, buildIdentity(0))).String()
+	if destroyed := destroyedStacks(vendor); !slices.Contains(destroyed, want) {
+		t.Errorf("the rollback destroyed %v, want %s: a container release this provider keeps no window of is reclaimed like any other", destroyed, want)
+	}
+	if _, found, err := releases.Record(ctx, "web", buildIdentity(0)); err != nil || found {
+		t.Errorf("the record of p00's container build = found %v, %v, want it removed once its stack is", found, err)
+	}
+}
+
+func TestARollbackPastTheRetainedPromotionsLeavesTheContainerBuildItDroppedToAProviderThatRetainsThem(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	vendor.WithFacts(func(facts *provider.Facts) { facts.RetainsContainerReleases = true })
+	edgeProvisioned(t, vendor, environment.TierProduction, "shop")
+	releases := seedKeptContainers(t, vendor)
+	ctx := context.Background()
+
+	if _, err := client.Rollback(ctx, &contractv1.RollbackRequest{Slug: "shop"}); err != nil {
+		t.Fatalf("Rollback() error = %v", err)
+	}
+
+	if destroyed := destroyedStacks(vendor); len(destroyed) != 0 {
+		t.Errorf("the rollback destroyed %v, want the container build it dropped left to the provider that keeps its own window of them", destroyed)
 	}
 	if _, found, err := releases.Record(ctx, "web", buildIdentity(0)); err != nil || found {
 		t.Errorf("the record of p00's container build = found %v, %v, want it removed once no promotion names it", found, err)

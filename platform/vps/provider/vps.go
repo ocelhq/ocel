@@ -82,8 +82,9 @@ func (p *Provider) Facts() provider.Facts {
 		Pairings: []provider.Pairing{
 			{Edge: box.Kind, Router: router.Kind(box.Kind), Computes: []provider.Compute{provider.ComputeContainer}},
 		},
-		DNSKinds:          []provider.DNSKind{dnsCloudflare},
-		RendersTransforms: true,
+		DNSKinds:                 []provider.DNSKind{dnsCloudflare},
+		RendersTransforms:        true,
+		RetainsContainerReleases: true,
 	}
 }
 

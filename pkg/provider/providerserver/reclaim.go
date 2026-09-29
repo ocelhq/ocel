@@ -78,7 +78,7 @@ type ReclaimTarget struct {
 	Prefixes []string
 }
 
-func ReclaimTargets(slug, env string, removed []router.DeploymentRecord, surviving, servingHere []string) ([]ReclaimTarget, []string, error) {
+func ReclaimTargets(slug, env string, removed []router.DeploymentRecord, surviving, servingHere []string, containersRetained bool) ([]ReclaimTarget, []string, error) {
 	if len(removed) == 0 {
 		return nil, nil, nil
 	}
@@ -89,7 +89,7 @@ func ReclaimTargets(slug, env string, removed []router.DeploymentRecord, survivi
 	var refused []string
 	var errs []error
 	for _, record := range removed {
-		if record.Image != "" {
+		if containersRetained && record.Image != "" {
 			continue
 		}
 		identity, err := provider.ParseBuild(record.Build)
@@ -163,7 +163,7 @@ func reclaimUnnamed(ctx context.Context, p provider.Provider, l projectLedger, p
 	if err != nil {
 		return err
 	}
-	targets, refused, err := ReclaimTargets(l.slug, envFor(l.tier, pointer), removed, unnamed.SurvivingRecordKeys, unnamed.SurvivingPointerRecordKeys)
+	targets, refused, err := ReclaimTargets(l.slug, envFor(l.tier, pointer), removed, unnamed.SurvivingRecordKeys, unnamed.SurvivingPointerRecordKeys, p.Facts().RetainsContainerReleases)
 	errs := []error{err}
 	unreclaimed := map[string]bool{}
 	for _, key := range refused {

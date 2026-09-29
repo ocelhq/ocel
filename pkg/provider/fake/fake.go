@@ -29,6 +29,7 @@ type Provider struct {
 	runtimeArch      string
 	runtimeBinary    []byte
 	hooks            provider.Hooks
+	setFacts         func(*provider.Facts)
 
 	journal        *Journal
 	options        Options
@@ -93,7 +94,7 @@ func (p *Provider) Hooks() provider.Hooks {
 }
 
 func (p *Provider) Facts() provider.Facts {
-	return provider.Facts{
+	facts := provider.Facts{
 		Vendor:          Vendor,
 		Bindings:        []provider.BindingType{provider.BindingPostgres, provider.BindingBucket},
 		Computes:        []provider.Compute{provider.ComputeServerless, provider.ComputeContainer},
@@ -103,6 +104,12 @@ func (p *Provider) Facts() provider.Facts {
 		DNSKinds:        []provider.DNSKind{KindZone},
 		StoresArtifacts: true,
 	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.setFacts != nil {
+		p.setFacts(&facts)
+	}
+	return facts
 }
 
 func (p *Provider) Bootstrap(kind edge.Kind) (provider.Bootstrap, error) {

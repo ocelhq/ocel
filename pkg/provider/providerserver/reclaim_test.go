@@ -27,7 +27,7 @@ func TestReclaimTargetsKeepAssetsARemainingReleaseStillServes(t *testing.T) {
 	targets, _, err := ReclaimTargets("shop", stackrecords.ProductionEnv,
 		[]router.DeploymentRecord{{App: "web", Build: gone.String()}, {App: "web", Build: shared.String()}},
 		[]string{"record:web/" + shared.String()},
-		nil)
+		nil, false)
 	if err != nil {
 		t.Fatalf("ReclaimTargets() error = %v", err)
 	}
@@ -55,7 +55,7 @@ func TestReclaimTargetsRefuseARecordNamingNoBuildAndStillTargetTheRest(t *testin
 	kept := reclaimedBuild(t, "kept")
 	for _, build := range []string{"", "garbage", "ocel/web@sha256:" + strings.Repeat("a", 64)} {
 		targets, refused, err := ReclaimTargets("shop", stackrecords.ProductionEnv,
-			[]router.DeploymentRecord{{App: "web", Build: build}, {App: "api", Build: kept.String()}}, nil, nil)
+			[]router.DeploymentRecord{{App: "web", Build: build}, {App: "api", Build: kept.String()}}, nil, nil, false)
 		if err == nil {
 			t.Errorf("ReclaimTargets() over a record of build %q returned no refusal, want one: a record whose build names no stack is corrupt", build)
 		}
@@ -68,20 +68,25 @@ func TestReclaimTargetsRefuseARecordNamingNoBuildAndStillTargetTheRest(t *testin
 	}
 }
 
-func TestReclaimTargetsLeaveAContainerReleaseToTheBoxThatRunsIt(t *testing.T) {
+func TestReclaimTargetsTargetAContainerReleaseUnlessTheProviderRetainsThem(t *testing.T) {
 	t.Parallel()
 
 	container, function := reclaimedBuild(t, "container"), reclaimedBuild(t, "function")
-	targets, _, err := ReclaimTargets("shop", stackrecords.ProductionEnv,
-		[]router.DeploymentRecord{
-			{App: "web", Build: container.String(), Image: "ghcr.io/acme/web@sha256:" + strings.Repeat("a", 64)},
-			{App: "api", Build: function.String()},
-		},
-		nil, nil)
-	if err != nil {
-		t.Fatalf("ReclaimTargets() over a record of a container release = %v, want the release the box keeps by image reference left to it: a container app puts nothing in the artifact store and its container comes down with the pointer", err)
+	removed := []router.DeploymentRecord{
+		{App: "web", Build: container.String(), Image: "ghcr.io/acme/web@sha256:" + strings.Repeat("a", 64)},
+		{App: "api", Build: function.String()},
 	}
-	if len(targets) != 1 || targets[0].App != "api" {
-		t.Fatalf("ReclaimTargets() returned %+v, want only the function release", targets)
+	for retained, want := range map[bool][]string{false: {"web", "api"}, true: {"api"}} {
+		targets, _, err := ReclaimTargets("shop", stackrecords.ProductionEnv, removed, nil, nil, retained)
+		if err != nil {
+			t.Fatalf("ReclaimTargets(retained %v) = %v", retained, err)
+		}
+		var apps []string
+		for _, target := range targets {
+			apps = append(apps, target.App)
+		}
+		if !slices.Equal(apps, want) {
+			t.Errorf("ReclaimTargets(retained %v) targeted %v, want %v", retained, apps, want)
+		}
 	}
 }
