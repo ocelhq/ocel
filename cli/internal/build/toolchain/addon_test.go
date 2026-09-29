@@ -36,7 +36,7 @@ func TestANativeAddonMatchesTheArchitectureTheAppDeclares(t *testing.T) {
 		if err := Bundle(context.Background(), on(l, arch.ARM64)); err != nil {
 			t.Fatalf("Bundle: %v", err)
 		}
-		if got := readFile(t, filepath.Join(l.funcDir, filepath.FromSlash(addonPath))); got != elfAddon(arch.ARM64, "aarch64") {
+		if got := readFile(t, filepath.Join(l.functionDir, filepath.FromSlash(addonPath))); got != elfAddon(arch.ARM64, "aarch64") {
 			t.Errorf("copied addon = %q, want the original bytes", got)
 		}
 	})
@@ -85,7 +85,7 @@ func TestANativeAddonMatchesTheArchitectureTheAppDeclares(t *testing.T) {
 					t.Fatalf("Bundle: %v", err)
 				}
 				for name, rel := range kept {
-					dest := filepath.Join(l.funcDir, filepath.FromSlash(rel))
+					dest := filepath.Join(l.functionDir, filepath.FromSlash(rel))
 					_, err := os.Stat(dest)
 					if name == architecture && err != nil {
 						t.Errorf("%s is not in the bundle: %v", rel, err)
@@ -94,7 +94,7 @@ func TestANativeAddonMatchesTheArchitectureTheAppDeclares(t *testing.T) {
 						t.Errorf("%s is in the bundle, want only what %s loads", rel, architecture)
 					}
 				}
-				if _, err := os.Stat(filepath.Join(l.funcDir, filepath.FromSlash(
+				if _, err := os.Stat(filepath.Join(l.functionDir, filepath.FromSlash(
 					"node_modules/multi-dep/prebuilds/darwin-arm64.node"))); err == nil {
 					t.Error("a mach-o prebuild is in the bundle, want only what linux loads")
 				}

@@ -139,11 +139,11 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, envByApp map
 					return err
 				}
 				req.Apps = append(req.Apps, nodeAppBuild{
-					Framework:  buildoutput.FrameworkNode,
-					Name:       a.Name,
-					Cwd:        target.Source,
-					Entrypoint: target.Entrypoint,
-					FuncDir:    target.FuncDir,
+					Framework:   buildoutput.FrameworkNode,
+					Name:        a.Name,
+					Cwd:         target.Source,
+					Entrypoint:  target.Entrypoint,
+					FunctionDir: target.FunctionDir,
 				})
 				traced = append(traced, target)
 				continue
@@ -189,11 +189,11 @@ func nodeTarget(cfg *project.Project, a project.App, outputDir string) (toolchai
 	}
 	appDir := buildoutput.AppRoot(outputDir, a.Name)
 	return toolchain.Target{
-		App:        a.Name,
-		Framework:  buildoutput.Framework{Name: buildoutput.FrameworkNode, Arch: a.Architecture()},
-		Source:     source,
-		Entrypoint: entrypoint,
-		FuncDir:    filepath.Join(appDir, functionsDirName, entryFuncDirName),
-		AppDir:     appDir,
+		App:         a.Name,
+		Framework:   buildoutput.Framework{Name: buildoutput.FrameworkNode, Arch: a.Architecture()},
+		Source:      source,
+		Entrypoint:  entrypoint,
+		FunctionDir: filepath.Join(appDir, functionsDirName, entryFunctionDirName),
+		AppDir:      appDir,
 	}, nil
 }

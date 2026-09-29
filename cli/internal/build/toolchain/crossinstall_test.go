@@ -95,7 +95,7 @@ func TestAPackageShippingOnePackagePerPlatformIsInstalledForTheDeclaredArchitect
 			if manifest.Dependencies["plat-dep"] != "1.2.3" || len(manifest.Dependencies) != 1 {
 				t.Errorf("npm installs %v, want only plat-dep at the version the app installed", manifest.Dependencies)
 			}
-			if got := runNode(t, l.funcDir); !strings.Contains(got, "target build") {
+			if got := runNode(t, l.functionDir); !strings.Contains(got, "target build") {
 				t.Errorf("bundle printed %q, want the package installed for the target to answer", got)
 			}
 		})
@@ -118,7 +118,7 @@ func TestADependencyThatDoesNotSplitByPlatformIsBundledWithoutAnInstall(t *testi
 	if _, err := os.Stat(npm.argv); err == nil {
 		t.Error("npm ran for an app whose dependencies install the same on every platform")
 	}
-	if got := runNode(t, l.funcDir); !strings.Contains(got, "bundled") {
+	if got := runNode(t, l.functionDir); !strings.Contains(got, "bundled") {
 		t.Errorf("bundle printed %q, want the bundled dependency to answer", got)
 	}
 }
@@ -233,7 +233,7 @@ func TestAPackageWhoseOnlyPlatformVariantIsForAnotherOSInstallsWithoutOne(t *tes
 	if err := Bundle(context.Background(), l.target("server.js")); err != nil {
 		t.Fatalf("Bundle: %v", err)
 	}
-	if got := runNode(t, l.funcDir); !strings.Contains(got, "target build") {
+	if got := runNode(t, l.functionDir); !strings.Contains(got, "target build") {
 		t.Errorf("bundle printed %q, want the package installed for the target to answer", got)
 	}
 }
@@ -252,7 +252,7 @@ func TestAPlatformPackageWhoseHostVariantWasNeverInstalledIsStillInstalledForThe
 	if _, err := os.Stat(npm.argv); err != nil {
 		t.Error("npm never ran: a host that installed with --omit=optional, or has no published variant, ships plat-dep with no binary")
 	}
-	if got := runNode(t, l.funcDir); !strings.Contains(got, "target build") {
+	if got := runNode(t, l.functionDir); !strings.Contains(got, "target build") {
 		t.Errorf("bundle printed %q, want the package installed for the target to answer", got)
 	}
 }
@@ -291,7 +291,7 @@ func TestAPlatformPackageImportedThroughAnAliasIsInstalledUnderTheAlias(t *testi
 	if manifest.Overrides["img"]["helper-dep"] != "2.1.0" || len(manifest.Overrides) != 1 {
 		t.Errorf("npm installs with overrides %v, want helper-dep pinned under img: npm applies an aliased edge's overrides only by its alias", manifest.Overrides)
 	}
-	if got := runNode(t, l.funcDir); !strings.Contains(got, "target build") {
+	if got := runNode(t, l.functionDir); !strings.Contains(got, "target build") {
 		t.Errorf("bundle printed %q, want the package installed for the target to answer", got)
 	}
 }
@@ -360,11 +360,11 @@ func TestAPlatformPackageKeepsItsOwnDotfilesAndLeavesNpmsBookkeepingBehind(t *te
 		t.Fatalf("Bundle: %v", err)
 	}
 	for _, left := range []string{".package-lock.json", ".bin"} {
-		if _, err := os.Stat(filepath.Join(l.funcDir, nodeModulesDir, left)); err == nil {
+		if _, err := os.Stat(filepath.Join(l.functionDir, nodeModulesDir, left)); err == nil {
 			t.Errorf("the function contains npm's %s", left)
 		}
 	}
-	if got := runNode(t, l.funcDir); !strings.Contains(got, "target build") {
+	if got := runNode(t, l.functionDir); !strings.Contains(got, "target build") {
 		t.Errorf("bundle printed %q, want plat-dep to load the dotfile it ships", got)
 	}
 }

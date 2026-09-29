@@ -64,14 +64,14 @@ func (c Compilation) compileRust(ctx context.Context) error {
 	}
 	c.report("compiling", said.String())
 
-	if err := os.MkdirAll(c.FuncDir, 0o755); err != nil {
+	if err := os.MkdirAll(c.FunctionDir, 0o755); err != nil {
 		return err
 	}
 	built := filepath.Join(workspace.Target, target, "release", bins[0].Name)
-	if err := copyFile(built, filepath.Join(c.FuncDir, c.App), 0o755); err != nil {
+	if err := copyFile(built, filepath.Join(c.FunctionDir, c.App), 0o755); err != nil {
 		return fmt.Errorf("app %q: cargo reported a build and left no binary at %s: %w", c.App, built, err)
 	}
-	return describeArtifact(c.App, c.Framework, c.App, []string{"./" + c.App}, c.FuncDir, c.AppDir)
+	return describeArtifact(c.App, c.Framework, c.App, []string{"./" + c.App}, c.FunctionDir, c.AppDir)
 }
 
 func cargoConfigNamesLinker(workspaceRoot, target string) bool {

@@ -33,13 +33,13 @@ func (c Compilation) vendorPython(ctx context.Context) error {
 	if !runs {
 		return fmt.Errorf("app %q asks to be vendored for %q, which names no architecture wheels are built for", c.App, c.Framework.Arch)
 	}
-	if err := os.RemoveAll(c.FuncDir); err != nil {
-		return fmt.Errorf("reset %s: %w", c.FuncDir, err)
+	if err := os.RemoveAll(c.FunctionDir); err != nil {
+		return fmt.Errorf("reset %s: %w", c.FunctionDir, err)
 	}
-	if err := os.MkdirAll(c.FuncDir, 0o755); err != nil {
+	if err := os.MkdirAll(c.FunctionDir, 0o755); err != nil {
 		return err
 	}
-	if err := copySourceTree(c.Source, c.FuncDir); err != nil {
+	if err := copySourceTree(c.Source, c.FunctionDir); err != nil {
 		return fmt.Errorf("copy app %q into its artifact: %w", c.App, err)
 	}
 	if err := c.copyDiscoveryRoots(); err != nil {
@@ -48,7 +48,7 @@ func (c Compilation) vendorPython(ctx context.Context) error {
 	if err := c.installRequirements(ctx, platform); err != nil {
 		return err
 	}
-	return describeArtifact(c.App, c.Framework, pythonEntryFile, []string{pythonRuntimeCommand, pythonEntryFile}, c.FuncDir, c.AppDir)
+	return describeArtifact(c.App, c.Framework, pythonEntryFile, []string{pythonRuntimeCommand, pythonEntryFile}, c.FunctionDir, c.AppDir)
 }
 
 func (c Compilation) copyDiscoveryRoots() error {
@@ -56,7 +56,7 @@ func (c Compilation) copyDiscoveryRoots() error {
 		if rel, err := filepath.Rel(c.Source, root); err == nil && rel != ".." && !strings.HasPrefix(rel, "../") {
 			continue
 		}
-		if err := copySourceTree(root, filepath.Join(c.FuncDir, filepath.Base(root))); err != nil {
+		if err := copySourceTree(root, filepath.Join(c.FunctionDir, filepath.Base(root))); err != nil {
 			return fmt.Errorf("copy the %s app %q imports into its artifact: %w", filepath.Base(root), c.App, err)
 		}
 	}
@@ -74,7 +74,7 @@ func (c Compilation) installRequirements(ctx context.Context, platform string) e
 	case !declared.Mode().IsRegular():
 		return fmt.Errorf("app %q has %s as %s, and pip reads the dependencies it vendors from a file", c.App, requirements, declared.Mode().Type())
 	}
-	cmd := exec.CommandContext(ctx, discovery.PythonInterpreter(c.Source), pipArgs(c.FuncDir, requirements, platform)...)
+	cmd := exec.CommandContext(ctx, discovery.PythonInterpreter(c.Source), pipArgs(c.FunctionDir, requirements, platform)...)
 	cmd.Dir = c.Source
 	var said bytes.Buffer
 	cmd.Stdout = &said

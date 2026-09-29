@@ -16,7 +16,7 @@ type Compilation struct {
 	Framework      buildoutput.Framework
 	Source         string
 	Entrypoint     string
-	FuncDir        string
+	FunctionDir    string
 	AppDir         string
 	DiscoveryRoots []string
 	Log            io.Writer
@@ -56,7 +56,7 @@ func (c Compilation) validate() error {
 		{"appDir", c.AppDir},
 		{"source", c.Source},
 		{"framework", c.Framework.Name},
-		{"funcDir", c.FuncDir},
+		{"functionDir", c.FunctionDir},
 	}); err != nil {
 		return err
 	}

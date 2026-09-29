@@ -46,15 +46,15 @@ func compileRust(t *testing.T, source, architecture string) (string, string, err
 	t.Helper()
 	out := t.TempDir()
 	appDir := filepath.Join(out, "apps", "web")
-	funcDir := filepath.Join(appDir, "functions", "index.func")
+	functionDir := filepath.Join(appDir, "functions", "index.func")
 	err := Compile(context.Background(), Compilation{
-		App:       "web",
-		Framework: buildoutput.Framework{Name: buildoutput.FrameworkRust, Arch: architecture},
-		Source:    source,
-		FuncDir:   funcDir,
-		AppDir:    appDir,
+		App:         "web",
+		Framework:   buildoutput.Framework{Name: buildoutput.FrameworkRust, Arch: architecture},
+		Source:      source,
+		FunctionDir: functionDir,
+		AppDir:      appDir,
 	})
-	return appDir, funcDir, err
+	return appDir, functionDir, err
 }
 
 func TestCompileWritesAStaticRustBinaryForTheArchitectureItWasAsked(t *testing.T) {
@@ -71,12 +71,12 @@ func TestCompileWritesAStaticRustBinaryForTheArchitectureItWasAsked(t *testing.T
 			t.Parallel()
 			needsRustTarget(t, platform.named)
 
-			_, funcDir, err := compileRust(t, rustCrate(t), platform.named)
+			_, functionDir, err := compileRust(t, rustCrate(t), platform.named)
 			if err != nil {
 				t.Fatalf("compile: %v", err)
 			}
 
-			binary := filepath.Join(funcDir, "web")
+			binary := filepath.Join(functionDir, "web")
 			info, err := os.Stat(binary)
 			if err != nil {
 				t.Fatalf("the compile wrote no binary named after the app: %v", err)
@@ -173,12 +173,12 @@ func TestCompileLinksTheCACrateBuildsForTheTargetIntoTheStaticBinary(t *testing.
 			target, _ := arch.RustTarget(platform.named)
 			t.Setenv("CC_"+strings.ReplaceAll(target, "-", "_"), muslCompilerFor(t, target))
 
-			_, funcDir, err := compileRust(t, cCrate(t), platform.named)
+			_, functionDir, err := compileRust(t, cCrate(t), platform.named)
 			if err != nil {
 				t.Fatalf("compile: %v — a crate that compiles C is built with the toolchain the docs name, and ocel links what it produces", err)
 			}
 
-			binary := filepath.Join(funcDir, "web")
+			binary := filepath.Join(functionDir, "web")
 			read, err := elf.Open(binary)
 			if err != nil {
 				t.Fatalf("the binary is no linux executable: %v", err)
@@ -210,13 +210,13 @@ func TestCompileDeclaresTheCommandARustArtifactIsServedBy(t *testing.T) {
 	t.Parallel()
 	needsRustTarget(t, arch.X8664)
 
-	appDir, funcDir, err := compileRust(t, rustCrate(t), arch.X8664)
+	appDir, functionDir, err := compileRust(t, rustCrate(t), arch.X8664)
 	if err != nil {
 		t.Fatalf("compile: %v", err)
 	}
 
 	var config buildoutput.FunctionDescriptor
-	readJSON(t, filepath.Join(funcDir, buildoutput.FunctionDescriptorFile), &config)
+	readJSON(t, filepath.Join(functionDir, buildoutput.FunctionDescriptorFile), &config)
 	if config.EntryFile != "web" {
 		t.Errorf("entryFile = %q, want the binary named after the app", config.EntryFile)
 	}
@@ -253,11 +253,11 @@ func TestCompileBuildsTheAppsCrateInsideTheCargoWorkspaceThatContainsIt(t *testi
 		"apps/worker/src/main.rs": "fn main() { undefined_call() }\n",
 	})
 
-	_, funcDir, err := compileRust(t, filepath.Join(workspace, "apps", "web"), arch.X8664)
+	_, functionDir, err := compileRust(t, filepath.Join(workspace, "apps", "web"), arch.X8664)
 	if err != nil {
 		t.Fatalf("compile: %v — only the app's own crate is built, and a sibling that does not compile is no concern of it", err)
 	}
-	if _, err := os.Stat(filepath.Join(funcDir, "web")); err != nil {
+	if _, err := os.Stat(filepath.Join(functionDir, "web")); err != nil {
 		t.Fatalf("the compile wrote no binary named after the app from the workspace's shared target directory: %v", err)
 	}
 }
@@ -320,12 +320,12 @@ func TestCompileRefusesAnEntrypointForARustApp(t *testing.T) {
 		t.Fatal(err)
 	}
 	err := Compile(context.Background(), Compilation{
-		App:        "web",
-		Framework:  buildoutput.Framework{Name: buildoutput.FrameworkRust},
-		Source:     source,
-		Entrypoint: "bin",
-		FuncDir:    filepath.Join(t.TempDir(), "index.func"),
-		AppDir:     t.TempDir(),
+		App:         "web",
+		Framework:   buildoutput.Framework{Name: buildoutput.FrameworkRust},
+		Source:      source,
+		Entrypoint:  "bin",
+		FunctionDir: filepath.Join(t.TempDir(), "index.func"),
+		AppDir:      t.TempDir(),
 	})
 	if err == nil || !strings.Contains(err.Error(), "bin") || !strings.Contains(err.Error(), "Cargo.toml") {
 		t.Fatalf("err = %v, want a refusal naming the entrypoint and the crate a rust app is built from", err)
@@ -391,11 +391,11 @@ func TestCompileLinksARustBinaryWhenTheCargoConfigNamesALinkerOnlyForAnotherTarg
 	source := rustCrate(t)
 	writeTree(t, source, map[string]string{".cargo/config.toml": "[target.aarch64-unknown-linux-musl]\nlinker = \"ocel-configured-linker\"\n"})
 
-	_, funcDir, err := compileRust(t, source, arch.X8664)
+	_, functionDir, err := compileRust(t, source, arch.X8664)
 	if err != nil {
 		t.Fatalf("compile: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(funcDir, "web")); err != nil {
+	if _, err := os.Stat(filepath.Join(functionDir, "web")); err != nil {
 		t.Fatalf("the compile wrote no binary: %v", err)
 	}
 }
@@ -409,11 +409,11 @@ func TestCompileBuildsACrateReachedThroughASymlink(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, funcDir, err := compileRust(t, link, arch.X8664)
+	_, functionDir, err := compileRust(t, link, arch.X8664)
 	if err != nil {
 		t.Fatalf("compile: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(funcDir, "web")); err != nil {
+	if _, err := os.Stat(filepath.Join(functionDir, "web")); err != nil {
 		t.Fatalf("the compile wrote no binary: %v", err)
 	}
 }

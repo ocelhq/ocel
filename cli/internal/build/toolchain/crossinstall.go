@@ -193,7 +193,7 @@ func installedGraph(root string, pkg manifest, path []string) map[string]any {
 	return pinned
 }
 
-func (p *crossInstall) installInto(ctx context.Context, app, source, funcDir string) error {
+func (p *crossInstall) installInto(ctx context.Context, app, source, functionDir string) error {
 	p.mu.Lock()
 	reached := p.wanted
 	p.mu.Unlock()
@@ -256,7 +256,7 @@ func (p *crossInstall) installInto(ctx context.Context, app, source, funcDir str
 		if slices.Contains(npmBookkeeping, entry.Name()) {
 			continue
 		}
-		if err := copyTree(filepath.Join(staged, entry.Name()), filepath.Join(funcDir, nodeModulesDir, entry.Name()), func(string) bool { return false }); err != nil {
+		if err := copyTree(filepath.Join(staged, entry.Name()), filepath.Join(functionDir, nodeModulesDir, entry.Name()), func(string) bool { return false }); err != nil {
 			return err
 		}
 	}

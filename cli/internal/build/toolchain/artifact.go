@@ -69,8 +69,8 @@ func fileHash(path string) (string, error) {
 	return hex.EncodeToString(digest.Sum(nil)), nil
 }
 
-func describeArtifact(app string, framework buildoutput.Framework, entryFile string, command []string, funcDir, appDir string) error {
-	if err := writeJSON(filepath.Join(funcDir, buildoutput.FunctionDescriptorFile), buildoutput.FunctionDescriptor{
+func describeArtifact(app string, framework buildoutput.Framework, entryFile string, command []string, functionDir, appDir string) error {
+	if err := writeJSON(filepath.Join(functionDir, buildoutput.FunctionDescriptorFile), buildoutput.FunctionDescriptor{
 		Framework: framework,
 		EntryFile: entryFile,
 		Command:   command,
@@ -80,7 +80,7 @@ func describeArtifact(app string, framework buildoutput.Framework, entryFile str
 		return err
 	}
 
-	buildID, err := artifactHash(funcDir)
+	buildID, err := artifactHash(functionDir)
 	if err != nil {
 		return err
 	}

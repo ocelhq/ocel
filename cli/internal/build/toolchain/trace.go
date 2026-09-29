@@ -32,7 +32,7 @@ func DescribeTrace(t Target) error {
 		{"app", t.App},
 		{"appDir", t.AppDir},
 		{"framework", t.Framework.Name},
-		{"funcDir", t.FuncDir},
+		{"functionDir", t.FunctionDir},
 	}); err != nil {
 		return err
 	}
@@ -40,5 +40,5 @@ func DescribeTrace(t Target) error {
 	if err != nil {
 		return err
 	}
-	return describeArtifact(t.App, t.Framework, handler, nil, t.FuncDir, t.AppDir)
+	return describeArtifact(t.App, t.Framework, handler, nil, t.FunctionDir, t.AppDir)
 }

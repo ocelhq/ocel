@@ -40,39 +40,39 @@ function scratch(prefix: string): string {
 }
 
 async function traceFixture(): Promise<string> {
-  const funcDir = path.join(scratch("nb-out-"), "index.func");
-  await traceFunction({ cwd: fixtureDir, entrypoint, funcDir });
-  return funcDir;
+  const functionDir = path.join(scratch("nb-out-"), "index.func");
+  await traceFunction({ cwd: fixtureDir, entrypoint, functionDir });
+  return functionDir;
 }
 
-function importsAsAnApp(funcDir: string): string {
+function importsAsAnApp(functionDir: string): string {
   const isolated = scratch("nb-func-");
-  cpSync(funcDir, isolated, { recursive: true });
+  cpSync(functionDir, isolated, { recursive: true });
   return importEntryInNode(path.join(isolated, "src", "server.js")).defaultType;
 }
 
 describe("traceFunction", () => {
-  let funcDir: string;
+  let functionDir: string;
   beforeAll(async () => {
-    funcDir = await traceFixture();
+    functionDir = await traceFixture();
   });
 
   it("emits the traced sources at their own paths, not one bundle and no config", () => {
-    expect(existsSync(path.join(funcDir, "index.mjs"))).toBe(false);
-    expect(existsSync(path.join(funcDir, "config.json"))).toBe(false);
-    expect(existsSync(path.join(funcDir, "src", "server.js"))).toBe(true);
-    expect(existsSync(path.join(funcDir, "src", "greeting.js"))).toBe(true);
+    expect(existsSync(path.join(functionDir, "index.mjs"))).toBe(false);
+    expect(existsSync(path.join(functionDir, "config.json"))).toBe(false);
+    expect(existsSync(path.join(functionDir, "src", "server.js"))).toBe(true);
+    expect(existsSync(path.join(functionDir, "src", "greeting.js"))).toBe(true);
   });
 
   it("preserves the module tree instead of emitting a single bundle", () => {
-    const server = readFileSync(path.join(funcDir, "src", "server.js"), "utf8");
+    const server = readFileSync(path.join(functionDir, "src", "server.js"), "utf8");
     expect(server).toContain('from "express"');
     expect(server).toContain("./greeting.js");
-    expect(existsSync(path.join(funcDir, "node_modules", "express"))).toBe(true);
+    expect(existsSync(path.join(functionDir, "node_modules", "express"))).toBe(true);
   });
 
   it("strips types but preserves modern syntax verbatim (no downleveling)", () => {
-    const server = readFileSync(path.join(funcDir, "src", "server.js"), "utf8");
+    const server = readFileSync(path.join(functionDir, "src", "server.js"), "utf8");
     expect(server).toContain("req.params?.name ?? ");
     expect(server).not.toContain("_optionalChain");
     expect(server).not.toContain("_nullishCoalesce");
@@ -80,7 +80,7 @@ describe("traceFunction", () => {
   });
 
   it("rewrites extensionless relative specifiers, leaving bare/extensioned alone", () => {
-    const server = readFileSync(path.join(funcDir, "src", "server.js"), "utf8");
+    const server = readFileSync(path.join(functionDir, "src", "server.js"), "utf8");
     expect(server).toContain('"./lib/db.js"');
     expect(server).not.toMatch(/["']\.\/lib\/db["']/);
     expect(server).toContain('"./config/index.js"');
@@ -88,35 +88,38 @@ describe("traceFunction", () => {
     expect(server).toContain('from "express"');
     expect(server).toContain('"./greeting.js"');
 
-    const db = readFileSync(path.join(funcDir, "src", "lib", "db.js"), "utf8");
+    const db = readFileSync(path.join(functionDir, "src", "lib", "db.js"), "utf8");
     expect(db).toContain('"../greeting.js"');
   });
 
   it("rewrites extensionless relative imports in copied ESM deps (ocel-dist class)", () => {
-    const dep = readFileSync(path.join(funcDir, "node_modules", "fake-dep", "index.js"), "utf8");
+    const dep = readFileSync(
+      path.join(functionDir, "node_modules", "fake-dep", "index.js"),
+      "utf8",
+    );
     expect(dep).toContain('"./helper.js"');
     expect(dep).not.toMatch(/["']\.\/helper["']/);
 
-    const cjs = readFileSync(path.join(funcDir, "node_modules", "cjs-dep", "index.js"), "utf8");
+    const cjs = readFileSync(path.join(functionDir, "node_modules", "cjs-dep", "index.js"), "utf8");
     expect(cjs).toContain('require("./impl")');
   });
 
   it("emits an entrypoint that imports as an app under raw Node, self-contained", () => {
-    expect(importsAsAnApp(funcDir)).toBe("function");
+    expect(importsAsAnApp(functionDir)).toBe("function");
   });
 
   it("places workspace/symlinked packages by identity, not in _external (Defect A)", () => {
     expect(
-      existsSync(path.join(funcDir, "node_modules", "workspace-pkg", "dist", "index.js")),
+      existsSync(path.join(functionDir, "node_modules", "workspace-pkg", "dist", "index.js")),
     ).toBe(true);
-    expect(existsSync(path.join(funcDir, "node_modules", "workspace-pkg", "package.json"))).toBe(
-      true,
-    );
-    expect(existsSync(path.join(funcDir, "_external"))).toBe(false);
+    expect(
+      existsSync(path.join(functionDir, "node_modules", "workspace-pkg", "package.json")),
+    ).toBe(true);
+    expect(existsSync(path.join(functionDir, "_external"))).toBe(false);
   });
 
   it("traces deps reached only through typed .ts files (Defect B)", () => {
-    expect(existsSync(path.join(funcDir, "node_modules", "typed-dep", "index.js"))).toBe(true);
+    expect(existsSync(path.join(functionDir, "node_modules", "typed-dep", "index.js"))).toBe(true);
   });
 
   it("replaces whatever an earlier build left in the function directory", async () => {
@@ -124,7 +127,7 @@ describe("traceFunction", () => {
     mkdirSync(stale, { recursive: true });
     writeFileSync(path.join(stale, "stale.js"), "");
 
-    await traceFunction({ cwd: fixtureDir, entrypoint, funcDir: stale });
+    await traceFunction({ cwd: fixtureDir, entrypoint, functionDir: stale });
 
     expect(existsSync(path.join(stale, "stale.js"))).toBe(false);
     expect(existsSync(path.join(stale, "src", "server.js"))).toBe(true);
@@ -278,7 +281,7 @@ describe("traceFunction with two versions of one dependency", () => {
     await traceFunction({
       cwd: project,
       entrypoint: path.join(project, "src", "server.mjs"),
-      funcDir: functionDir,
+      functionDir,
     });
 
     const script =

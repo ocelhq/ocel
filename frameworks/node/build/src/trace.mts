@@ -297,14 +297,10 @@ async function emitFile(absolutePath: string, dest: string): Promise<void> {
 export interface TraceRequest {
   cwd: string;
   entrypoint: string;
-  funcDir: string;
+  functionDir: string;
 }
 
-export async function traceFunction({
-  cwd,
-  entrypoint,
-  funcDir: functionDir,
-}: TraceRequest): Promise<void> {
+export async function traceFunction({ cwd, entrypoint, functionDir }: TraceRequest): Promise<void> {
   await rm(functionDir, { recursive: true, force: true });
   await mkdir(functionDir, { recursive: true });
 

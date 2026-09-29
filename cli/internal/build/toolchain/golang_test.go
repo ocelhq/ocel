@@ -30,18 +30,18 @@ func compiled(t *testing.T, pkg, arch string) (string, string) {
 	t.Helper()
 	out := t.TempDir()
 	appDir := filepath.Join(out, "apps", "web")
-	funcDir := filepath.Join(appDir, "functions", "index.func")
+	functionDir := filepath.Join(appDir, "functions", "index.func")
 	err := Compile(context.Background(), Compilation{
-		App:       "web",
-		Framework: buildoutput.Framework{Name: "go", Arch: arch},
-		Source:    pkg,
-		FuncDir:   funcDir,
-		AppDir:    appDir,
+		App:         "web",
+		Framework:   buildoutput.Framework{Name: "go", Arch: arch},
+		Source:      pkg,
+		FunctionDir: functionDir,
+		AppDir:      appDir,
 	})
 	if err != nil {
 		t.Fatalf("compile: %v", err)
 	}
-	return appDir, funcDir
+	return appDir, functionDir
 }
 
 func TestCompileWritesAnExecutableBootstrapForTheArchitectureItWasAsked(t *testing.T) {
@@ -56,9 +56,9 @@ func TestCompileWritesAnExecutableBootstrapForTheArchitectureItWasAsked(t *testi
 	} {
 		t.Run(arch.named, func(t *testing.T) {
 			t.Parallel()
-			_, funcDir := compiled(t, goModule(t), arch.named)
+			_, functionDir := compiled(t, goModule(t), arch.named)
 
-			binary := filepath.Join(funcDir, "web")
+			binary := filepath.Join(functionDir, "web")
 			info, err := os.Stat(binary)
 			if err != nil {
 				t.Fatalf("the compile wrote no binary named after the app: %v", err)
@@ -81,10 +81,10 @@ func TestCompileWritesAnExecutableBootstrapForTheArchitectureItWasAsked(t *testi
 
 func TestCompileDeclaresTheCommandTheArtifactIsServedBy(t *testing.T) {
 	t.Parallel()
-	appDir, funcDir := compiled(t, goModule(t), "x86_64")
+	appDir, functionDir := compiled(t, goModule(t), "x86_64")
 
 	var config buildoutput.FunctionDescriptor
-	readJSON(t, filepath.Join(funcDir, buildoutput.FunctionDescriptorFile), &config)
+	readJSON(t, filepath.Join(functionDir, buildoutput.FunctionDescriptorFile), &config)
 	if config.EntryFile != "web" {
 		t.Errorf("entryFile = %q, want the binary named after the app", config.EntryFile)
 	}
@@ -129,8 +129,8 @@ func TestCompileBuildsTheAppsOwnModuleWhateverWorkspaceEnclosesIt(t *testing.T) 
 		}
 	}
 
-	_, funcDir := compiled(t, pkg, "x86_64")
-	if _, err := os.Stat(filepath.Join(funcDir, "web")); err != nil {
+	_, functionDir := compiled(t, pkg, "x86_64")
+	if _, err := os.Stat(filepath.Join(functionDir, "web")); err != nil {
 		t.Fatalf("the compile wrote no binary: a go workspace above the app names modules a release never includes, and the app's own go.mod is what is built: %v", err)
 	}
 }
@@ -153,12 +153,12 @@ func TestCompileRefusesAnAppDirectoryThatIsNotItsOwnModuleRoot(t *testing.T) {
 	}
 
 	err := Compile(context.Background(), Compilation{
-		App:        "web",
-		Framework:  buildoutput.Framework{Name: "go", Arch: "x86_64"},
-		Source:     source,
-		Entrypoint: filepath.Join("cmd", "server"),
-		FuncDir:    filepath.Join(t.TempDir(), "index.func"),
-		AppDir:     t.TempDir(),
+		App:         "web",
+		Framework:   buildoutput.Framework{Name: "go", Arch: "x86_64"},
+		Source:      source,
+		Entrypoint:  filepath.Join("cmd", "server"),
+		FunctionDir: filepath.Join(t.TempDir(), "index.func"),
+		AppDir:      t.TempDir(),
 	})
 	if err == nil || !strings.Contains(err.Error(), source) || !strings.Contains(err.Error(), goModuleFile) {
 		t.Fatalf("err = %v, want a refusal naming %s and %s — the container path reads the app directory for a module and would plan this app as node", err, source, goModuleFile)
@@ -168,11 +168,11 @@ func TestCompileRefusesAnAppDirectoryThatIsNotItsOwnModuleRoot(t *testing.T) {
 func TestCompileRefusesAnArchitectureGoBuildsNothingFor(t *testing.T) {
 	t.Parallel()
 	err := Compile(context.Background(), Compilation{
-		App:       "web",
-		Framework: buildoutput.Framework{Name: "go", Arch: "riscv"},
-		Source:    goModule(t),
-		FuncDir:   filepath.Join(t.TempDir(), "index.func"),
-		AppDir:    t.TempDir(),
+		App:         "web",
+		Framework:   buildoutput.Framework{Name: "go", Arch: "riscv"},
+		Source:      goModule(t),
+		FunctionDir: filepath.Join(t.TempDir(), "index.func"),
+		AppDir:      t.TempDir(),
 	})
 	if err == nil || !strings.Contains(err.Error(), "riscv") {
 		t.Fatalf("err = %v, want a refusal naming riscv", err)
@@ -186,11 +186,11 @@ func TestCompileReportsWhatTheCompilerSaidWhenTheAppDoesNotBuild(t *testing.T) {
 		t.Fatal(err)
 	}
 	err := Compile(context.Background(), Compilation{
-		App:       "web",
-		Framework: buildoutput.Framework{Name: "go", Arch: "x86_64"},
-		Source:    pkg,
-		FuncDir:   filepath.Join(t.TempDir(), "index.func"),
-		AppDir:    t.TempDir(),
+		App:         "web",
+		Framework:   buildoutput.Framework{Name: "go", Arch: "x86_64"},
+		Source:      pkg,
+		FunctionDir: filepath.Join(t.TempDir(), "index.func"),
+		AppDir:      t.TempDir(),
 	})
 	if err == nil || !strings.Contains(err.Error(), "undefinedCall") {
 		t.Fatalf("err = %v, want the compiler's own account of what did not build", err)

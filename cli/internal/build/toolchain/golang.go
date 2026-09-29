@@ -25,10 +25,10 @@ func (c Compilation) compileGo(ctx context.Context) error {
 	if _, err := exec.LookPath("go"); err != nil {
 		return fmt.Errorf("app %q is built with go and no go toolchain is on PATH: %w", c.App, err)
 	}
-	if err := os.MkdirAll(c.FuncDir, 0o755); err != nil {
+	if err := os.MkdirAll(c.FunctionDir, 0o755); err != nil {
 		return err
 	}
-	binary := filepath.Join(c.FuncDir, c.App)
+	binary := filepath.Join(c.FunctionDir, c.App)
 	cmd := exec.CommandContext(ctx, "go", "build", "-trimpath", "-ldflags=-s -w", "-o", binary, ".")
 	cmd.Dir = c.pkg()
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOWORK=off", "GOOS=linux", "GOARCH="+goarch)
@@ -39,5 +39,5 @@ func (c Compilation) compileGo(ctx context.Context) error {
 		return fmt.Errorf("compile app %q in %s for linux/%s (%w):\n%s", c.App, c.pkg(), goarch, err, said.String())
 	}
 	c.report("compiling", said.String())
-	return describeArtifact(c.App, c.Framework, c.App, []string{"./" + c.App}, c.FuncDir, c.AppDir)
+	return describeArtifact(c.App, c.Framework, c.App, []string{"./" + c.App}, c.FunctionDir, c.AppDir)
 }

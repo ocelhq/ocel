@@ -27,7 +27,7 @@ func compile(ctx context.Context, cfg *project.Project, a project.App, outputDir
 		Framework:      buildoutput.Framework{Name: a.Framework(), Arch: a.Architecture()},
 		Source:         filepath.Join(cfg.Dir, a.Path),
 		Entrypoint:     a.Serverless.Entrypoint,
-		FuncDir:        filepath.Join(appDir, functionsDirName, entryFuncDirName),
+		FunctionDir:    filepath.Join(appDir, functionsDirName, entryFunctionDirName),
 		AppDir:         appDir,
 		DiscoveryRoots: roots,
 		Log:            log,

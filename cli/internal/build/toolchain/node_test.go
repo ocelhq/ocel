@@ -45,9 +45,9 @@ func writeTree(t *testing.T, root string, files tree) {
 }
 
 type layout struct {
-	appSrc  string
-	appDir  string
-	funcDir string
+	appSrc      string
+	appDir      string
+	functionDir string
 }
 
 func newLayout(t *testing.T, files tree) layout {
@@ -56,16 +56,16 @@ func newLayout(t *testing.T, files tree) layout {
 	appSrc := filepath.Join(root, "src")
 	writeTree(t, appSrc, files)
 	appDir := filepath.Join(root, "out", "apps", "api")
-	return layout{appSrc: appSrc, appDir: appDir, funcDir: filepath.Join(appDir, "functions", "index.func")}
+	return layout{appSrc: appSrc, appDir: appDir, functionDir: filepath.Join(appDir, "functions", "index.func")}
 }
 
 func (l layout) target(entry string) Target {
 	return Target{
-		App:        "api",
-		Framework:  buildoutput.Framework{Name: "node"},
-		Entrypoint: filepath.Join(l.appSrc, filepath.FromSlash(entry)),
-		FuncDir:    l.funcDir,
-		AppDir:     l.appDir,
+		App:         "api",
+		Framework:   buildoutput.Framework{Name: "node"},
+		Entrypoint:  filepath.Join(l.appSrc, filepath.FromSlash(entry)),
+		FunctionDir: l.functionDir,
+		AppDir:      l.appDir,
 	}
 }
 
@@ -78,12 +78,12 @@ func readFile(t *testing.T, path string) string {
 	return string(data)
 }
 
-func runNode(t *testing.T, funcDir string) string {
+func runNode(t *testing.T, functionDir string) string {
 	t.Helper()
 	if _, err := exec.LookPath("node"); err != nil {
 		t.Skip("node not on PATH")
 	}
-	out, err := exec.Command("node", filepath.Join(funcDir, handlerFile)).CombinedOutput()
+	out, err := exec.Command("node", filepath.Join(functionDir, handlerFile)).CombinedOutput()
 	if err != nil {
 		t.Fatalf("node %s: %v\n%s", handlerFile, err, out)
 	}
@@ -110,7 +110,7 @@ func TestBundle(t *testing.T) {
 			t.Fatalf("Bundle: %v", err)
 		}
 
-		entries, err := os.ReadDir(l.funcDir)
+		entries, err := os.ReadDir(l.functionDir)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -123,7 +123,7 @@ func TestBundle(t *testing.T) {
 		}
 
 		var cfg buildoutput.FunctionDescriptor
-		if err := json.Unmarshal([]byte(readFile(t, filepath.Join(l.funcDir, buildoutput.FunctionDescriptorFile))), &cfg); err != nil {
+		if err := json.Unmarshal([]byte(readFile(t, filepath.Join(l.functionDir, buildoutput.FunctionDescriptorFile))), &cfg); err != nil {
 			t.Fatal(err)
 		}
 		want := buildoutput.FunctionDescriptor{Framework: buildoutput.Framework{Name: "node"}, EntryFile: handlerFile, ID: entryRouteID, App: "api"}
@@ -148,11 +148,11 @@ func TestBundle(t *testing.T) {
 		if descriptor.Entry != cfg.ID {
 			t.Errorf("%s entry = %q, want the sole function's route id %q", edge.ServeDescriptorFile, descriptor.Entry, cfg.ID)
 		}
-		if _, err := os.Stat(filepath.Join(l.funcDir, edge.ServeDescriptorFile)); err == nil {
+		if _, err := os.Stat(filepath.Join(l.functionDir, edge.ServeDescriptorFile)); err == nil {
 			t.Errorf("%s landed inside the function directory, want it in the app artifact root", edge.ServeDescriptorFile)
 		}
 
-		if got := runNode(t, l.funcDir); !strings.Contains(got, "lib:cjs") {
+		if got := runNode(t, l.functionDir); !strings.Contains(got, "lib:cjs") {
 			t.Errorf("bundle printed %q, want the bundled dependency to answer", got)
 		}
 	})
@@ -171,7 +171,7 @@ func TestBundle(t *testing.T) {
 		if err := Bundle(context.Background(), l.target("server.js")); err != nil {
 			t.Fatalf("Bundle: %v", err)
 		}
-		if got, want := runNode(t, l.funcDir), "string:string:function"; !strings.Contains(got, want) {
+		if got, want := runNode(t, l.functionDir), "string:string:function"; !strings.Contains(got, want) {
 			t.Errorf("bundle printed %q, want %q", got, want)
 		}
 	})
@@ -191,11 +191,11 @@ func TestBundle(t *testing.T) {
 			t.Fatalf("Bundle: %v", err)
 		}
 
-		copied := filepath.Join(l.funcDir, "node_modules", "native-dep", "build", "Release", "addon.node")
+		copied := filepath.Join(l.functionDir, "node_modules", "native-dep", "build", "Release", "addon.node")
 		if got := readFile(t, copied); got != elfAddon(arch.X8664, "fake") {
 			t.Errorf("copied addon = %q, want the original bytes", got)
 		}
-		bundle := readFile(t, filepath.Join(l.funcDir, handlerFile))
+		bundle := readFile(t, filepath.Join(l.functionDir, handlerFile))
 		if !strings.Contains(bundle, `"./node_modules/native-dep/build/Release/addon.node"`) {
 			t.Errorf("bundle does not require the copied addon by its output path:\n%s", bundle)
 		}
@@ -224,7 +224,7 @@ func TestBundle(t *testing.T) {
 
 		for i := range count {
 			name := fmt.Sprintf("native-dep-%02d", i)
-			copied := filepath.Join(l.funcDir, "node_modules", name, "build", "Release", "addon.node")
+			copied := filepath.Join(l.functionDir, "node_modules", name, "build", "Release", "addon.node")
 			if got, want := readFile(t, copied), elfAddon(arch.X8664, name); got != want {
 				t.Errorf("copied addon = %q, want %q", got, want)
 			}
@@ -275,7 +275,7 @@ func TestBundle(t *testing.T) {
 		if err := Bundle(context.Background(), l.target("server.js")); err != nil {
 			t.Fatalf("Bundle: %v (a dependency the entrypoint never reaches must not block the build)", err)
 		}
-		if got := runNode(t, l.funcDir); !strings.Contains(got, "plain") {
+		if got := runNode(t, l.functionDir); !strings.Contains(got, "plain") {
 			t.Errorf("bundle printed %q, want the reachable dependency to answer", got)
 		}
 	})
@@ -293,7 +293,7 @@ func TestBundle(t *testing.T) {
 		if err := Bundle(context.Background(), l.target("server.js")); err != nil {
 			t.Fatalf("Bundle: %v", err)
 		}
-		if got := runNode(t, l.funcDir); !strings.Contains(got, "lite") {
+		if got := runNode(t, l.functionDir); !strings.Contains(got, "lite") {
 			t.Errorf("bundle printed %q, want the dependency to answer", got)
 		}
 	})

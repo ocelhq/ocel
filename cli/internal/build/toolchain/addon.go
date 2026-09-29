@@ -173,7 +173,7 @@ func describeAddon(traced addon) string {
 	return fmt.Sprintf("%s required by %s is built for %s", traced.source, traced.importer, traced.arch)
 }
 
-func (a *addons) copyInto(funcDir string) error {
+func (a *addons) copyInto(functionDir string) error {
 	a.mu.Lock()
 	all := append([]addon(nil), a.traced...)
 	a.mu.Unlock()
@@ -181,7 +181,7 @@ func (a *addons) copyInto(funcDir string) error {
 		if !placed.loadable {
 			continue
 		}
-		dest := filepath.Join(funcDir, filepath.FromSlash(placed.dest))
+		dest := filepath.Join(functionDir, filepath.FromSlash(placed.dest))
 		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 			return err
 		}

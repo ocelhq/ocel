@@ -29,7 +29,7 @@ const node: AppBuild = {
   name: "api",
   cwd: "/p/api",
   entrypoint: "/p/api/src/server.ts",
-  funcDir: "/p/.ocel/output/apps/api/functions/index.func",
+  functionDir: "/p/.ocel/output/apps/api/functions/index.func",
 };
 
 function recording(): Adapters & { calls: string[] } {
@@ -37,7 +37,7 @@ function recording(): Adapters & { calls: string[] } {
   return {
     calls,
     next: async (app) => void calls.push(`next:${app.name}`),
-    node: async (trace) => void calls.push(`node:${trace.funcDir}`),
+    node: async (trace) => void calls.push(`node:${trace.functionDir}`),
   };
 }
 
@@ -48,7 +48,7 @@ describe("buildApps", () => {
 
     await buildApps([next, node], adapters);
 
-    expect(adapters.calls).toEqual(["next:web", `node:${node.funcDir}`]);
+    expect(adapters.calls).toEqual(["next:web", `node:${node.functionDir}`]);
   });
 
   it("opens and ends a build span named for each app", async () => {

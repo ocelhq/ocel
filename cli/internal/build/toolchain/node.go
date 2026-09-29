@@ -74,24 +74,24 @@ const banner = `import { createRequire as __ocelCreateRequire } from "node:modul
 	`const __ocelDirname = __ocelPathDirname(__ocelFilename);`
 
 type Target struct {
-	App        string
-	Framework  buildoutput.Framework
-	Source     string
-	Entrypoint string
-	FuncDir    string
-	AppDir     string
-	Log        io.Writer
+	App         string
+	Framework   buildoutput.Framework
+	Source      string
+	Entrypoint  string
+	FunctionDir string
+	AppDir      string
+	Log         io.Writer
 }
 
 func Bundle(ctx context.Context, t Target) error {
 	if err := t.validate(); err != nil {
 		return err
 	}
-	if err := os.RemoveAll(t.FuncDir); err != nil {
-		return fmt.Errorf("reset %s: %w", t.FuncDir, err)
+	if err := os.RemoveAll(t.FunctionDir); err != nil {
+		return fmt.Errorf("reset %s: %w", t.FunctionDir, err)
 	}
-	if err := os.MkdirAll(t.FuncDir, 0o755); err != nil {
-		return fmt.Errorf("create %s: %w", t.FuncDir, err)
+	if err := os.MkdirAll(t.FunctionDir, 0o755); err != nil {
+		return fmt.Errorf("create %s: %w", t.FunctionDir, err)
 	}
 
 	native := &addons{arch: t.Framework.Arch}
@@ -106,7 +106,7 @@ func Bundle(ctx context.Context, t Target) error {
 		MinifyWhitespace:  true,
 		MinifyIdentifiers: true,
 		MinifySyntax:      true,
-		Outfile:           filepath.Join(t.FuncDir, handlerFile),
+		Outfile:           filepath.Join(t.FunctionDir, handlerFile),
 		Write:             true,
 		Metafile:          true,
 		LogLevel:          api.LogLevelSilent,
@@ -130,13 +130,13 @@ func Bundle(ctx context.Context, t Target) error {
 	if err := native.verify(); err != nil {
 		return err
 	}
-	if err := native.copyInto(t.FuncDir); err != nil {
+	if err := native.copyInto(t.FunctionDir); err != nil {
 		return err
 	}
-	if err := install.installInto(ctx, t.App, filepath.Dir(t.Entrypoint), t.FuncDir); err != nil {
+	if err := install.installInto(ctx, t.App, filepath.Dir(t.Entrypoint), t.FunctionDir); err != nil {
 		return err
 	}
-	return describeArtifact(t.App, t.Framework, handlerFile, nil, t.FuncDir, t.AppDir)
+	return describeArtifact(t.App, t.Framework, handlerFile, nil, t.FunctionDir, t.AppDir)
 }
 
 func (t Target) validate() error {
@@ -145,7 +145,7 @@ func (t Target) validate() error {
 		{"appDir", t.AppDir},
 		{"entrypoint", t.Entrypoint},
 		{"framework", t.Framework.Name},
-		{"funcDir", t.FuncDir},
+		{"functionDir", t.FunctionDir},
 	}); err != nil {
 		return err
 	}

@@ -142,7 +142,7 @@ func TestBuild(t *testing.T) {
 			if app.DeploymentID != recorded {
 				t.Errorf("%s builds under deployment id %q, want its recorded %q", want.Name, app.DeploymentID, recorded)
 			}
-			if app.Framework != want.Framework || app.Name != want.Name || app.Cwd != want.Cwd || app.OutputDir != want.OutputDir || app.Folder != want.Folder || app.Entrypoint != "" || app.FuncDir != "" {
+			if app.Framework != want.Framework || app.Name != want.Name || app.Cwd != want.Cwd || app.OutputDir != want.OutputDir || app.Folder != want.Folder || app.Entrypoint != "" || app.FunctionDir != "" {
 				t.Errorf("app[%d] = %+v, want %+v", i, app, want)
 			}
 			if app.Env["POSTHOG_ID"] != want.Env["POSTHOG_ID"] {
@@ -337,7 +337,7 @@ func TestBuildTracesANodeAppWhenTracingIsPreferred(t *testing.T) {
 			if err := json.Unmarshal(request, &got); err != nil {
 				return err
 			}
-			writeFile(t, filepath.Join(got.Apps[0].FuncDir, "src", "server.js"), "export default {};\n")
+			writeFile(t, filepath.Join(got.Apps[0].FunctionDir, "src", "server.js"), "export default {};\n")
 			return nil
 		}}
 		cfg := &project.Project{Dir: root, Apps: []project.App{{Name: "api", Path: "apps/api", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: "node"}, Arch: "arm64"}}}
@@ -345,9 +345,9 @@ func TestBuildTracesANodeAppWhenTracingIsPreferred(t *testing.T) {
 			t.Fatalf("Build: %v", err)
 		}
 
-		funcDir := filepath.Join(buildoutput.AppRoot(outputRoot(t, root), "api"), functionsDirName, entryFuncDirName)
-		want := nodeAppBuild{Framework: "node", Name: "api", Cwd: source, Entrypoint: filepath.Join(source, "src", "server.ts"), FuncDir: funcDir}
-		if len(got.Apps) != 1 || got.Apps[0].Framework != want.Framework || got.Apps[0].Name != want.Name || got.Apps[0].Cwd != want.Cwd || got.Apps[0].Entrypoint != want.Entrypoint || got.Apps[0].FuncDir != want.FuncDir {
+		functionDir := filepath.Join(buildoutput.AppRoot(outputRoot(t, root), "api"), functionsDirName, entryFunctionDirName)
+		want := nodeAppBuild{Framework: "node", Name: "api", Cwd: source, Entrypoint: filepath.Join(source, "src", "server.ts"), FunctionDir: functionDir}
+		if len(got.Apps) != 1 || got.Apps[0].Framework != want.Framework || got.Apps[0].Name != want.Name || got.Apps[0].Cwd != want.Cwd || got.Apps[0].Entrypoint != want.Entrypoint || got.Apps[0].FunctionDir != want.FunctionDir {
 			t.Fatalf("request apps = %+v, want [%+v]", got.Apps, want)
 		}
 
@@ -365,7 +365,7 @@ func TestBuildTracesANodeAppWhenTracingIsPreferred(t *testing.T) {
 		if desc.Framework != "node" || len(desc.BuildID) != 16 || desc.Entry != "/" || desc.Needs == nil || desc.EdgeRouting {
 			t.Errorf("serve descriptor = %+v, want a node app's descriptor", desc)
 		}
-		if _, err := os.Stat(filepath.Join(funcDir, edge.ServeDescriptorFile)); err == nil {
+		if _, err := os.Stat(filepath.Join(functionDir, edge.ServeDescriptorFile)); err == nil {
 			t.Error("the serve descriptor landed inside the function directory")
 		}
 	})
@@ -410,9 +410,9 @@ func TestBuildTracesANodeAppWhenTracingIsPreferred(t *testing.T) {
 		assertFunctions(t, "ReadFunctions", fns, []Function{
 			{Route: "index", Framework: buildoutput.Framework{Name: "node", Arch: arch.X8664}, EntryFile: "src/server.js", ArtifactPath: "apps/api/functions/index.func", RouteID: "/", App: "api"},
 		})
-		funcDir := filepath.Join(buildoutput.AppRoot(outputRoot(t, fixtureRoot), "api"), functionsDirName, entryFuncDirName)
+		functionDir := filepath.Join(buildoutput.AppRoot(outputRoot(t, fixtureRoot), "api"), functionsDirName, entryFunctionDirName)
 		for _, rel := range []string{"src/server.js", "node_modules/express/package.json"} {
-			if _, err := os.Stat(filepath.Join(funcDir, filepath.FromSlash(rel))); err != nil {
+			if _, err := os.Stat(filepath.Join(functionDir, filepath.FromSlash(rel))); err != nil {
 				t.Errorf("traced artifact lacks %s: %v", rel, err)
 			}
 		}

@@ -16,9 +16,9 @@ import (
 
 const functionsDirName = "functions"
 
-const funcDirSuffix = ".func"
+const functionDirSuffix = ".func"
 
-const entryFuncDirName = "index" + funcDirSuffix
+const entryFunctionDirName = "index" + functionDirSuffix
 
 var ErrNoBuildOutput = errors.New("no build output")
 
@@ -135,7 +135,7 @@ func readAppFunctions(outputDir, appDir string) ([]Function, error) {
 		if err != nil {
 			return err
 		}
-		if !d.IsDir() || dir == functionsDir || !strings.HasSuffix(d.Name(), funcDirSuffix) {
+		if !d.IsDir() || dir == functionsDir || !strings.HasSuffix(d.Name(), functionDirSuffix) {
 			return nil
 		}
 
@@ -152,22 +152,22 @@ func readAppFunctions(outputDir, appDir string) ([]Function, error) {
 	return functions, nil
 }
 
-func readFunction(outputDir, functionsDir, funcDir string) (Function, error) {
-	routeRel, err := filepath.Rel(functionsDir, funcDir)
+func readFunction(outputDir, functionsDir, functionDir string) (Function, error) {
+	routeRel, err := filepath.Rel(functionsDir, functionDir)
 	if err != nil {
 		return Function{}, err
 	}
-	artifactRel, err := filepath.Rel(outputDir, funcDir)
+	artifactRel, err := filepath.Rel(outputDir, functionDir)
 	if err != nil {
 		return Function{}, err
 	}
-	route := strings.TrimSuffix(filepath.ToSlash(routeRel), funcDirSuffix)
+	route := strings.TrimSuffix(filepath.ToSlash(routeRel), functionDirSuffix)
 
-	configPath := filepath.Join(funcDir, buildoutput.FunctionDescriptorFile)
+	configPath := filepath.Join(functionDir, buildoutput.FunctionDescriptorFile)
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return Function{}, fmt.Errorf("%s: missing %s", funcDir, buildoutput.FunctionDescriptorFile)
+			return Function{}, fmt.Errorf("%s: missing %s", functionDir, buildoutput.FunctionDescriptorFile)
 		}
 		return Function{}, err
 	}
