@@ -161,6 +161,29 @@ func TestTheOriginCertificateIsPlacedBesideOcelCaddyAsOneBundleNamedForItsHostna
 	}
 }
 
+func TestOcelCaddyNamesTheOriginCertificateWhereTheContainerYourCaddyRunsInMountsIt(t *testing.T) {
+	t.Parallel()
+
+	client, _ := clientCertificate(t)
+	front := caddyfile.Caddyfile{Directory: "/data/coolify/proxy/caddy/dynamic", ContainerDirectory: "/dynamic", Container: "coolify-proxy", Network: "coolify"}
+	spec := proxy.Spec{
+		Hostnames: []string{"shop.example.com"},
+		Shields:   []proxy.Shield{{Hostname: "shop.example.com", ClientCertificates: []string{client}, OriginCertificate: origin}},
+	}
+	placed := originFile(t, front, spec)
+	if filepath.Dir(placed.Path) != "/data/coolify/proxy/caddy/dynamic" {
+		t.Errorf("the origin certificate is placed at %s, want it in the directory on the box the switchboard mounts", placed.Path)
+	}
+	rendered, err := front.Render(spec)
+	if err != nil {
+		t.Fatalf("Render() = %v", err)
+	}
+	readAs := "/dynamic/" + filepath.Base(placed.Path)
+	if !strings.Contains(string(rendered), "\ttls "+readAs+" "+readAs+" {") {
+		t.Errorf("Render() =\n%s\nwant the bundle named %s, where your Caddy's container reads it", rendered, readAs)
+	}
+}
+
 func TestAShieldOverNoHostnameTheBoxServesPlacesNothing(t *testing.T) {
 	t.Parallel()
 

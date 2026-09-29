@@ -205,7 +205,7 @@ preset overrides it, for a proxy whose configuration you have edited.
 | --- | --- | --- | --- |
 | `preset` | `traefik`: `coolify`, `dokploy`; `caddy`: `coolify` | The tool that runs the proxy. Fills every other field. | |
 | `directory` | `traefik`, `caddy` | The directory on the box that the proxy reads ocel's file from, and that the switchboard mounts to write it. | Required, unless `preset` |
-| `containerDirectory` | `traefik` | Where `directory` is mounted in the container Traefik runs in: its `providers.file.directory`. `ocel.yml` names the origin certificates it places in `directory` by this path. | `directory` |
+| `containerDirectory` | `traefik`, `caddy` | Where `directory` is mounted in the container the proxy runs in: Traefik's `providers.file.directory`, or the directory Caddy imports. Ocel's file names the origin certificates it places in `directory` by this path. | `directory` |
 | `resolver` | `traefik` | The `certResolver` every hostname's router names. | Required, unless `preset` |
 | `previewResolver` | `traefik` | A resolver that can issue `*.<preview base>` over DNS-01. Set, previews share one wildcard certificate. | Each preview hostname gets its own from `resolver` |
 | `entrypoints.https` | `traefik` | The entry point ocel's hostname routers attach to. | `websecure` |
@@ -222,7 +222,7 @@ always published and `network` is joined as well.
 | | `traefik` + `coolify` | `traefik` + `dokploy` | `caddy` + `coolify` |
 | --- | --- | --- | --- |
 | `directory` | `/data/coolify/proxy/dynamic` | `/etc/dokploy/traefik/dynamic` | `/data/coolify/proxy/caddy/dynamic` |
-| `containerDirectory` | `/traefik/dynamic` | | |
+| `containerDirectory` | `/traefik/dynamic` | | `/dynamic` |
 | `resolver` | `letsencrypt` | `letsencrypt` | |
 | `entrypoints` | `http` / `https` | `web` / `websecure` | |
 | `network` | `coolify` | `dokploy-network` | `coolify` |

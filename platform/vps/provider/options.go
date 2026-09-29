@@ -48,12 +48,13 @@ type Entrypoints struct {
 }
 
 type Caddy struct {
-	Preset    string `json:"preset,omitempty" enum:"coolify" doc:"The host tool whose Caddy this is. It fills in every other field, and a field written beside it overrides."`
-	Directory string `json:"directory" unless:"preset" doc:"The directory the running Caddy imports site blocks from."`
-	Container string `json:"container,omitempty" doc:"The container Caddy runs in; left out, Caddy runs as the systemd caddy.service."`
-	Config    string `json:"config,omitempty" doc:"The config file caddy reload names inside the container; /etc/caddy/Caddyfile when left out."`
-	Network   string `json:"network,omitempty" doc:"A docker network ocel's switchboard joins, so Caddy reaches it by name. Not with port."`
-	Port      int    `json:"port,omitempty" doc:"The loopback port ocel's switchboard is published on for Caddy to reach, in place of the network a preset fills; 8480 when left out. Not with network."`
+	Preset             string `json:"preset,omitempty" enum:"coolify" doc:"The host tool whose Caddy this is. It fills in every other field, and a field written beside it overrides."`
+	Directory          string `json:"directory" unless:"preset" doc:"The directory the running Caddy imports site blocks from."`
+	ContainerDirectory string `json:"containerDirectory,omitempty" doc:"Where directory is mounted in the container Caddy runs in; ocel.caddy names the origin certificates it places in directory by this path. Left out, directory itself."`
+	Container          string `json:"container,omitempty" doc:"The container Caddy runs in; left out, Caddy runs as the systemd caddy.service."`
+	Config             string `json:"config,omitempty" doc:"The config file caddy reload names inside the container; /etc/caddy/Caddyfile when left out."`
+	Network            string `json:"network,omitempty" doc:"A docker network ocel's switchboard joins, so Caddy reaches it by name. Not with port."`
+	Port               int    `json:"port,omitempty" doc:"The loopback port ocel's switchboard is published on for Caddy to reach, in place of the network a preset fills; 8480 when left out. Not with network."`
 }
 
 type Manual struct {
@@ -143,12 +144,13 @@ func (t *Traefik) written() host.TraefikFront {
 
 func (c *Caddy) written() host.CaddyFront {
 	return host.CaddyFront{
-		Preset:    c.Preset,
-		Directory: c.Directory,
-		Container: c.Container,
-		Config:    c.Config,
-		Network:   c.Network,
-		Port:      c.Port,
+		Preset:             c.Preset,
+		Directory:          c.Directory,
+		ContainerDirectory: c.ContainerDirectory,
+		Container:          c.Container,
+		Config:             c.Config,
+		Network:            c.Network,
+		Port:               c.Port,
 	}
 }
 

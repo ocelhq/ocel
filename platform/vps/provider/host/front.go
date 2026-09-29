@@ -41,12 +41,13 @@ type Entrypoints struct {
 }
 
 type CaddyFront struct {
-	Preset    string `json:"preset,omitempty"`
-	Directory string `json:"directory"`
-	Container string `json:"container,omitempty"`
-	Config    string `json:"config"`
-	Network   string `json:"network,omitempty"`
-	Port      int    `json:"port,omitempty"`
+	Preset             string `json:"preset,omitempty"`
+	Directory          string `json:"directory"`
+	ContainerDirectory string `json:"containerDirectory,omitempty"`
+	Container          string `json:"container,omitempty"`
+	Config             string `json:"config"`
+	Network            string `json:"network,omitempty"`
+	Port               int    `json:"port,omitempty"`
 }
 
 func openFront(front Front, box frontBox) proxy.Proxy {

@@ -32,7 +32,7 @@ func TestACaddyOptionOpensTheCaddyfileProxyOverTheDirectoryItImports(t *testing.
 	if !ok {
 		t.Fatalf("openFront() = %T, want caddyfile.Caddyfile", openFront(coolifysCaddy(), frontBox{}))
 	}
-	want := caddyfile.Caddyfile{Box: frontBox{}, Preset: "coolify", Directory: "/data/coolify/proxy/caddy/dynamic",
+	want := caddyfile.Caddyfile{Box: frontBox{}, Preset: "coolify", Directory: "/data/coolify/proxy/caddy/dynamic", ContainerDirectory: "/dynamic",
 		Container: "coolify-proxy", Config: "/config/caddy/Caddyfile.autosave", Network: "coolify"}
 	if opened != want {
 		t.Errorf("openFront() = %+v, want %+v", opened, want)

@@ -25,10 +25,11 @@ var hostTools = map[string]hostTool{
 			Network:            "coolify",
 		},
 		caddy: &CaddyFront{
-			Directory: "/data/coolify/proxy/caddy/dynamic",
-			Container: "coolify-proxy",
-			Config:    "/config/caddy/Caddyfile.autosave",
-			Network:   "coolify",
+			Directory:          "/data/coolify/proxy/caddy/dynamic",
+			ContainerDirectory: "/dynamic",
+			Container:          "coolify-proxy",
+			Config:             "/config/caddy/Caddyfile.autosave",
+			Network:            "coolify",
 		},
 	},
 	"dokploy": {
@@ -90,7 +91,10 @@ func (c CaddyFront) Filled() CaddyFront {
 		filled = *tool
 	}
 	filled.Preset = c.Preset
-	filled.Directory = cmp.Or(c.Directory, filled.Directory)
+	if c.Directory != "" {
+		filled.Directory, filled.ContainerDirectory = c.Directory, ""
+	}
+	filled.ContainerDirectory = cmp.Or(c.ContainerDirectory, filled.ContainerDirectory)
 	filled.Container = cmp.Or(c.Container, filled.Container)
 	filled.Config = cmp.Or(c.Config, filled.Config, caddyConfig)
 	filled.Network, filled.Port = reached(c.Network, c.Port, filled.Network)
