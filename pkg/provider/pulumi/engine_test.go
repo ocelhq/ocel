@@ -19,17 +19,17 @@ type recordingEngine struct {
 	err       error
 }
 
-func (e *recordingEngine) Preview(_ context.Context, _ pulumi.WorkspaceSpec, op pulumi.Operation, _ progress.Progress) ([]provider.Change, error) {
+func (e *recordingEngine) Preview(_ context.Context, _ pulumi.WorkspaceSpec, op pulumi.Operation, _ progress.Log) ([]provider.Change, error) {
 	e.previewed = op
 	return e.rows, e.err
 }
 
-func (e *recordingEngine) Up(_ context.Context, setup pulumi.WorkspaceSpec, _ progress.Progress) (auto.OutputMap, error) {
+func (e *recordingEngine) Up(_ context.Context, setup pulumi.WorkspaceSpec, _ progress.Log) (auto.OutputMap, error) {
 	e.up = setup
 	return e.outputs, e.err
 }
 
-func (e *recordingEngine) Destroy(_ context.Context, setup pulumi.WorkspaceSpec, _ progress.Progress) error {
+func (e *recordingEngine) Destroy(_ context.Context, setup pulumi.WorkspaceSpec, _ progress.Log) error {
 	e.down = setup
 	return e.err
 }
@@ -49,7 +49,7 @@ func (decoding) Decode(_ context.Context, _ provider.StackSpec, outputs auto.Out
 }
 
 type sayings struct {
-	progress.Progress
+	progress.Log
 	said []string
 }
 

@@ -294,7 +294,7 @@ func TestLiveTheCertificateBehindAnUnboundHostnameStaysOnTheBox(t *testing.T) {
 	}
 
 	retained := provider.Certificate{ID: certs.ProxyHandle(hostname)}
-	if err := p.Certificates().Discard(context.Background(), retained, progress.DiscardProgress()); err != nil {
+	if err := p.Certificates().Discard(context.Background(), retained, progress.Discard()); err != nil {
 		t.Errorf("DiscardCertificate(%s) = %v, want nil: ocel places no key material on a box so it has authority to remove none, and the retained certificate is what makes a re-bind free against the CA's per-week ceiling",
 			retained.ID, err)
 	}

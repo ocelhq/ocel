@@ -14,7 +14,7 @@ type Pins interface {
 	Pin(ctx context.Context, service, revision string, stillActive router.StillActive) error
 }
 
-func Flip(ctx context.Context, pins Pins, flip router.Flip, progress progress.Progress) error {
+func Flip(ctx context.Context, pins Pins, flip router.Flip, progress progress.Log) error {
 	var pinning []router.DeploymentRecord
 	for _, app := range slices.Sorted(maps.Keys(flip.Records)) {
 		record := flip.Records[app]

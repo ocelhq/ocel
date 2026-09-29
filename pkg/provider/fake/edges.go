@@ -400,7 +400,7 @@ func (e *Edge) release(hostname string) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	delete(e.serving, hostname)
-	return progress.Warned(e.unbound)
+	return progress.MarkWarning(e.unbound)
 }
 
 func (e *Edge) answers(hostname string) bool {

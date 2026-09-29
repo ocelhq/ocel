@@ -22,34 +22,34 @@ type ProvisionRequest struct {
 }
 
 type Hooks struct {
-	ProvisionPostgres func(ctx context.Context, in ProvisionRequest, progress progress.Progress) (provider.Binding, error)
-	ProvisionBucket   func(ctx context.Context, in ProvisionRequest, progress progress.Progress) (provider.Binding, error)
-	RemoveResource    func(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Progress) error
+	ProvisionPostgres func(ctx context.Context, in ProvisionRequest, progress progress.Log) (provider.Binding, error)
+	ProvisionBucket   func(ctx context.Context, in ProvisionRequest, progress progress.Log) (provider.Binding, error)
+	RemoveResource    func(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error
 	Functions         *FunctionHooks
 	Containers        *ContainerHooks
 	Retention         *ImageRetentionHooks
 }
 
 type FunctionHooks struct {
-	Provision func(ctx context.Context, spec provider.StackSpec, progress progress.Progress) ([]provider.Function, error)
-	Remove    func(ctx context.Context, ref provider.StackRef, functions []provider.Function, progress progress.Progress) error
+	Provision func(ctx context.Context, spec provider.StackSpec, progress progress.Log) ([]provider.Function, error)
+	Remove    func(ctx context.Context, ref provider.StackRef, functions []provider.Function, progress progress.Log) error
 	Shared    *SharedHooks[provider.Function]
 }
 
 type ContainerHooks struct {
-	Provision func(ctx context.Context, spec provider.StackSpec, progress progress.Progress) ([]provider.AppContainer, error)
-	Remove    func(ctx context.Context, ref provider.StackRef, containers []provider.AppContainer, progress progress.Progress) error
+	Provision func(ctx context.Context, spec provider.StackSpec, progress progress.Log) ([]provider.AppContainer, error)
+	Remove    func(ctx context.Context, ref provider.StackRef, containers []provider.AppContainer, progress progress.Log) error
 	Shared    *SharedHooks[provider.AppContainer]
 }
 
 type SharedHooks[T any] struct {
 	Name            func(ctx context.Context, spec provider.StackSpec) ([]T, error)
-	RemoveRevisions func(ctx context.Context, ref provider.StackRef, going []T, progress progress.Progress) ([]T, error)
+	RemoveRevisions func(ctx context.Context, ref provider.StackRef, going []T, progress progress.Log) ([]T, error)
 }
 
 type ImageRetentionHooks struct {
-	Reconcile func(ctx context.Context, ref provider.StackRef, app, imageRef string, progress progress.Progress) error
-	Forget    func(ctx context.Context, ref provider.StackRef, app string, progress progress.Progress) error
+	Reconcile func(ctx context.Context, ref provider.StackRef, app, imageRef string, progress progress.Log) error
+	Forget    func(ctx context.Context, ref provider.StackRef, app string, progress progress.Log) error
 }
 
 func ServedBindingTypes(hooks Hooks) []provider.BindingType {
@@ -66,7 +66,7 @@ func NewHookStacks(store keyvalue.Store, artifacts provider.ArtifactStore, hooks
 	return &hookStacks{keyValues: store, artifacts: artifacts, hooks: hooks}
 }
 
-type provisionFunc func(ctx context.Context, in ProvisionRequest, progress progress.Progress) (provider.Binding, error)
+type provisionFunc func(ctx context.Context, in ProvisionRequest, progress progress.Log) (provider.Binding, error)
 
 type primitive struct {
 	kind provider.BindingType
@@ -84,7 +84,7 @@ type hookStacks struct {
 	hooks     Hooks
 }
 
-func (f *hookStacks) Plan(ctx context.Context, spec provider.StackSpec, _ progress.Progress) (provider.Plan, error) {
+func (f *hookStacks) Plan(ctx context.Context, spec provider.StackSpec, _ progress.Log) (provider.Plan, error) {
 	if err := f.refuseUnservedResources(spec); err != nil {
 		return provider.Plan{}, err
 	}
@@ -95,7 +95,7 @@ func (f *hookStacks) Plan(ctx context.Context, spec provider.StackSpec, _ progre
 	return SynthesizedPlan(ctx, f.artifacts, spec, recordedResult(recorded))
 }
 
-func (f *hookStacks) PlanDestroy(ctx context.Context, ref provider.StackRef, _ progress.Progress) (provider.Plan, error) {
+func (f *hookStacks) PlanDestroy(ctx context.Context, ref provider.StackRef, _ progress.Log) (provider.Plan, error) {
 	recorded, err := f.recorded(ctx, ref)
 	if err != nil {
 		return provider.Plan{}, err
@@ -107,7 +107,7 @@ func recordedResult(recorded stackrecords.Stack) provider.StackResult {
 	return provider.StackResult{Bindings: recorded.Bindings, Functions: recorded.Functions, Containers: recorded.Containers}
 }
 
-func (f *hookStacks) Provision(ctx context.Context, spec provider.StackSpec, progress progress.Progress) (provider.StackResult, error) {
+func (f *hookStacks) Provision(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.StackResult, error) {
 	if spec.App != nil {
 		defer func() { _ = f.reconcile(ctx, spec.Ref, spec.App.App, spec.App.Image, progress) }()
 	}
@@ -154,7 +154,7 @@ func (f *hookStacks) Provision(ctx context.Context, spec provider.StackSpec, pro
 	return result, nil
 }
 
-type computeProvisioner func(context.Context, progress.Progress) (provider.StackResult, error)
+type computeProvisioner func(context.Context, progress.Log) (provider.StackResult, error)
 
 func (f *hookStacks) computeProvisioner(spec provider.StackSpec) (computeProvisioner, error) {
 	if spec.App == nil {
@@ -165,7 +165,7 @@ func (f *hookStacks) computeProvisioner(spec provider.StackSpec) (computeProvisi
 		if f.hooks.Functions == nil {
 			return nil, refuseMissingComputeHooks(spec.App, "Functions")
 		}
-		return func(ctx context.Context, progress progress.Progress) (provider.StackResult, error) {
+		return func(ctx context.Context, progress progress.Log) (provider.StackResult, error) {
 			functions, err := provisionCompute(ctx, f, spec, functionCompute(f.hooks.Functions), f.hooks.Functions.Provision, progress)
 			return provider.StackResult{Functions: functions}, err
 		}, nil
@@ -173,7 +173,7 @@ func (f *hookStacks) computeProvisioner(spec provider.StackSpec) (computeProvisi
 		if f.hooks.Containers == nil {
 			return nil, refuseMissingComputeHooks(spec.App, "Containers")
 		}
-		return func(ctx context.Context, progress progress.Progress) (provider.StackResult, error) {
+		return func(ctx context.Context, progress progress.Log) (provider.StackResult, error) {
 			containers, err := provisionCompute(ctx, f, spec, containerCompute(f.hooks.Containers), f.hooks.Containers.Provision, progress)
 			return provider.StackResult{Containers: containers}, err
 		}, nil
@@ -190,7 +190,7 @@ func refuseMissingComputeHooks(app *provider.AppSpec, hook string) error {
 		app.App, app.Compute, hook)
 }
 
-func (f *hookStacks) provision(ctx context.Context, spec provider.StackSpec, resource provider.Resource, progress progress.Progress) (provider.Binding, error) {
+func (f *hookStacks) provision(ctx context.Context, spec provider.StackSpec, resource provider.Resource, progress progress.Log) (provider.Binding, error) {
 	provision, err := f.provisionerFor(resource)
 	if err != nil {
 		return provider.Binding{}, err
@@ -223,7 +223,7 @@ func (f *hookStacks) provisionerFor(resource provider.Resource) (provisionFunc, 
 		resource.Name, resource.Type, served(ServedBindingTypes(f.hooks)))
 }
 
-func (f *hookStacks) Destroy(ctx context.Context, ref provider.StackRef, progress progress.Progress) error {
+func (f *hookStacks) Destroy(ctx context.Context, ref provider.StackRef, progress progress.Log) error {
 	recorded, err := f.recorded(ctx, ref)
 	if err != nil {
 		return err
@@ -253,7 +253,7 @@ func (f *hookStacks) Destroy(ctx context.Context, ref provider.StackRef, progres
 	return stopped
 }
 
-func (f *hookStacks) forget(ctx context.Context, ref provider.StackRef, app string, progress progress.Progress) error {
+func (f *hookStacks) forget(ctx context.Context, ref provider.StackRef, app string, progress progress.Log) error {
 	if f.hooks.Retention == nil {
 		return nil
 	}
@@ -264,7 +264,7 @@ func (f *hookStacks) forget(ctx context.Context, ref provider.StackRef, app stri
 	return err
 }
 
-func (f *hookStacks) reconcile(ctx context.Context, ref provider.StackRef, app, imageRef string, progress progress.Progress) error {
+func (f *hookStacks) reconcile(ctx context.Context, ref provider.StackRef, app, imageRef string, progress progress.Log) error {
 	if f.hooks.Retention == nil || imageRef == "" {
 		return nil
 	}
@@ -280,7 +280,7 @@ const (
 	torn       = "this destroy would take down"
 )
 
-func (f *hookStacks) removeFunctions(ctx context.Context, ref provider.StackRef, going []provider.Function, because string, progress progress.Progress) error {
+func (f *hookStacks) removeFunctions(ctx context.Context, ref provider.StackRef, going []provider.Function, because string, progress progress.Log) error {
 	if len(going) == 0 {
 		return nil
 	}
@@ -290,7 +290,7 @@ func (f *hookStacks) removeFunctions(ctx context.Context, ref provider.StackRef,
 	return removeCompute(ctx, f, ref, going, functionCompute(f.hooks.Functions), progress)
 }
 
-func (f *hookStacks) removeContainers(ctx context.Context, ref provider.StackRef, going []provider.AppContainer, because string, progress progress.Progress) error {
+func (f *hookStacks) removeContainers(ctx context.Context, ref provider.StackRef, going []provider.AppContainer, because string, progress progress.Log) error {
 	if len(going) == 0 {
 		return nil
 	}
@@ -304,8 +304,8 @@ func removeAll[T any](
 	ctx context.Context,
 	ref provider.StackRef,
 	going []T,
-	remove func(context.Context, provider.StackRef, []T, progress.Progress) error,
-	progress progress.Progress,
+	remove func(context.Context, provider.StackRef, []T, progress.Log) error,
+	progress progress.Log,
 ) error {
 	if len(going) == 0 || remove == nil {
 		return nil
@@ -319,7 +319,7 @@ func refuseOrphans(ref provider.StackRef, going int, noun, because, hook string)
 		ref.Name, going, noun, because, hook)
 }
 
-func (f *hookStacks) removeOrphans(ctx context.Context, spec provider.StackSpec, recorded stackrecords.Stack, progress progress.Progress) error {
+func (f *hookStacks) removeOrphans(ctx context.Context, spec provider.StackSpec, recorded stackrecords.Stack, progress progress.Log) error {
 	for _, binding := range recorded.Bindings {
 		if slices.ContainsFunc(spec.Resources, func(resource provider.Resource) bool {
 			return resource.Name == binding.Name && resource.Type == binding.Type
@@ -337,7 +337,7 @@ func (f *hookStacks) removeOrphans(ctx context.Context, spec provider.StackSpec,
 	return f.removeOrphanContainers(ctx, spec, recorded, progress)
 }
 
-func (f *hookStacks) removeOrphanFunctions(ctx context.Context, spec provider.StackSpec, recorded stackrecords.Stack, progress progress.Progress) error {
+func (f *hookStacks) removeOrphanFunctions(ctx context.Context, spec provider.StackSpec, recorded stackrecords.Stack, progress progress.Log) error {
 	declared := DeclaredFunctions(spec)
 	var orphans []provider.Function
 	for _, function := range recorded.Functions {
@@ -350,7 +350,7 @@ func (f *hookStacks) removeOrphanFunctions(ctx context.Context, spec provider.St
 	return f.removeFunctions(ctx, spec.Ref, orphans, undeclared, progress)
 }
 
-func (f *hookStacks) removeOrphanContainers(ctx context.Context, spec provider.StackSpec, recorded stackrecords.Stack, progress progress.Progress) error {
+func (f *hookStacks) removeOrphanContainers(ctx context.Context, spec provider.StackSpec, recorded stackrecords.Stack, progress progress.Log) error {
 	declared := DeclaredContainers(spec)
 	var orphans []provider.AppContainer
 	for _, container := range recorded.Containers {
@@ -363,14 +363,14 @@ func (f *hookStacks) removeOrphanContainers(ctx context.Context, spec provider.S
 	return f.removeContainers(ctx, spec.Ref, orphans, undeclared, progress)
 }
 
-func reportUndeclared(progress progress.Progress, kind, name string) {
+func reportUndeclared(progress progress.Log, kind, name string) {
 	if progress == nil {
 		return
 	}
 	progress.Say(fmt.Sprintf("Removing %s %s: this release no longer declares it", kind, name))
 }
 
-func (f *hookStacks) remove(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Progress) error {
+func (f *hookStacks) remove(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error {
 	if f.hooks.RemoveResource == nil {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"binding %s is no longer declared and this provider removes no resource, so it would be left in place and unowned",

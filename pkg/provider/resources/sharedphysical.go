@@ -52,7 +52,7 @@ type heldItem struct {
 
 type compute[T any] struct {
 	kind   string
-	remove func(context.Context, provider.StackRef, []T, progress.Progress) error
+	remove func(context.Context, provider.StackRef, []T, progress.Log) error
 	shared *SharedHooks[T]
 	held   func(T) heldItem
 	item   func(heldItem) T
@@ -98,8 +98,8 @@ func provisionCompute[T any](
 	f *hookStacks,
 	spec provider.StackSpec,
 	c compute[T],
-	provision func(context.Context, provider.StackSpec, progress.Progress) ([]T, error),
-	progress progress.Progress,
+	provision func(context.Context, provider.StackSpec, progress.Log) ([]T, error),
+	progress progress.Log,
 ) ([]T, error) {
 	if c.shared == nil {
 		return provision(ctx, spec, progress)
@@ -169,7 +169,7 @@ func recordPlanned[T any](ctx context.Context, f *hookStacks, spec provider.Stac
 	return stackrecords.Write(ctx, f.keyValues, spec.Ref.Tier, spec.Ref.Project, spec.Ref.Name, recorded)
 }
 
-func removeCompute[T any](ctx context.Context, f *hookStacks, ref provider.StackRef, going []T, c compute[T], progress progress.Progress) error {
+func removeCompute[T any](ctx context.Context, f *hookStacks, ref provider.StackRef, going []T, c compute[T], progress progress.Log) error {
 	if c.shared == nil {
 		return removeAll(ctx, ref, going, c.remove, progress)
 	}
@@ -199,7 +199,7 @@ func removeCompute[T any](ctx context.Context, f *hookStacks, ref provider.Stack
 	return nil
 }
 
-func removeRevisions[T any](ctx context.Context, f *hookStacks, ref provider.StackRef, c compute[T], physical string, revisions []heldItem, progress progress.Progress) error {
+func removeRevisions[T any](ctx context.Context, f *hookStacks, ref provider.StackRef, c compute[T], physical string, revisions []heldItem, progress progress.Log) error {
 	if len(revisions) == 0 {
 		return nil
 	}

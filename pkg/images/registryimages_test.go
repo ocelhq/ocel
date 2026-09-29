@@ -336,7 +336,7 @@ func TestThePushShowsTheDaemonsLinesAsDockerPushPrintsThemWithoutATerminal(t *te
 		w.WriteHeader(http.StatusCreated)
 	})
 	store, push := pushTo(provider.RegistryTarget{Server: "ghcr.io", Namespace: "acme"})
-	progress := &fake.Progress{}
+	progress := &fake.Log{}
 
 	if err := store.Push(context.Background(), push, progress); err != nil {
 		t.Fatalf("Push() = %v", err)

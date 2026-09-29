@@ -63,7 +63,7 @@ func (s stubBootstrap) Plan(context.Context, provider.BootstrapRequest) (provide
 	return provider.Plan{}, s.err
 }
 
-func (s stubBootstrap) Apply(context.Context, provider.BootstrapRequest, progress.Progress) error {
+func (s stubBootstrap) Apply(context.Context, provider.BootstrapRequest, progress.Log) error {
 	return s.err
 }
 
@@ -71,7 +71,7 @@ func (stubBootstrap) PlanRemove(context.Context, environment.Tier) (provider.Pla
 	return provider.Plan{}, nil
 }
 
-func (s stubBootstrap) Remove(context.Context, environment.Tier, progress.Progress) error {
+func (s stubBootstrap) Remove(context.Context, environment.Tier, progress.Log) error {
 	return s.err
 }
 

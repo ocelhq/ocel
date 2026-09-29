@@ -298,7 +298,7 @@ func (r *deployRun) reportApps(result *progressv1.ResultEvent) {
 
 func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, error) {
 	if err := r.spanEvents.run(r.spans.Environment, func(env *spanRun) error {
-		return env.phase(func(progress progress.Progress) error {
+		return env.phase(func(progress progress.Log) error {
 			return r.prepare(ctx, progress)
 		})
 	}); err != nil {
@@ -322,7 +322,7 @@ func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, er
 	return result, err
 }
 
-func (r *deployRun) prepare(ctx context.Context, progress progress.Progress) error {
+func (r *deployRun) prepare(ctx context.Context, progress progress.Log) error {
 	if err := r.ensureBootstrap(ctx, progress); err != nil {
 		return err
 	}
@@ -352,7 +352,7 @@ func (r *deployRun) prepare(ctx context.Context, progress progress.Progress) err
 	return nil
 }
 
-func (r *deployRun) ensureBootstrap(ctx context.Context, progress progress.Progress) error {
+func (r *deployRun) ensureBootstrap(ctx context.Context, progress progress.Log) error {
 	_, err := r.gate.EnsureReady(ctx, r.spec.Tier, r.features, !r.dry, progress)
 	return err
 }
@@ -437,7 +437,7 @@ func (r *deployRun) hostingMode() hostingMode {
 
 func (r *deployRun) reconcileEdgeUnit(ctx context.Context) error {
 	return r.spanEvents.run(r.spans.Edge, func(u *spanRun) error {
-		return u.phase(func(progress progress.Progress) error {
+		return u.phase(func(progress progress.Log) error {
 			if r.dry {
 				r.dryRunPlan.edge = r.planEdgeGroup()
 				return nil
@@ -447,7 +447,7 @@ func (r *deployRun) reconcileEdgeUnit(ctx context.Context) error {
 	})
 }
 
-func (r *deployRun) reconcileEdge(ctx context.Context, progress progress.Progress) error {
+func (r *deployRun) reconcileEdge(ctx context.Context, progress progress.Log) error {
 	spec := edge.StackSpec{
 		Version:     stackVersion,
 		Tier:        r.spec.Tier,
@@ -492,7 +492,7 @@ func (r *deployRun) reconcileEdge(ctx context.Context, progress progress.Progres
 	return r.forwardPreviews(ctx, progress)
 }
 
-func (r *deployRun) forwardPreviews(ctx context.Context, progress progress.Progress) error {
+func (r *deployRun) forwardPreviews(ctx context.Context, progress progress.Log) error {
 	if r.routerOrigin() == nil || r.front.Facts().RunsCode {
 		return nil
 	}
@@ -523,7 +523,7 @@ func (r *deployRun) attachHostnames(ctx context.Context) error {
 	}
 	return r.spanEvents.run(r.spans.Hostnames, func(u *spanRun) error {
 		var attached, missed []string
-		err := u.phase(func(progress progress.Progress) error {
+		err := u.phase(func(progress progress.Log) error {
 			attaching := &hostnames{edgeSession: r.edgeSession}
 			skip := func(host, note string) {
 				progress.Warn(note)
@@ -720,7 +720,7 @@ func (r *deployRun) checkNeeds(ctx context.Context) error {
 	return nil
 }
 
-func (r *deployRun) preflight(ctx context.Context, progress progress.Progress) error {
+func (r *deployRun) preflight(ctx context.Context, progress progress.Log) error {
 	resources, err := manifestResources(r.manifest)
 	if err != nil {
 		return err
@@ -840,7 +840,7 @@ func (r *deployRun) provisionInfra(ctx context.Context) error {
 		return err
 	}
 	return r.spanEvents.run(r.spans.Infra, func(u *spanRun) error {
-		return u.phase(func(progress progress.Progress) error {
+		return u.phase(func(progress progress.Log) error {
 			if err := r.refuseToAdopt(ctx, r.spec.Infra); err != nil {
 				return err
 			}
@@ -885,7 +885,7 @@ func (r *deployRun) provisionInfra(ctx context.Context) error {
 
 func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.AppEntry) error {
 	return r.spanEvents.run(r.spans.Apps[entry.App], func(u *spanRun) error {
-		return u.phase(func(progress progress.Progress) error {
+		return u.phase(func(progress progress.Log) error {
 			if err := r.refuseToAdopt(ctx, entry.Stack); err != nil {
 				return err
 			}
@@ -1174,7 +1174,7 @@ func entryLogicalName(manifest *contractv1.Manifest, app, entry string) string {
 	return ""
 }
 
-func (r *deployRun) embedBytecodeCaches(ctx context.Context, entry provider.AppEntry, functions []provider.Function, progress progress.Progress) error {
+func (r *deployRun) embedBytecodeCaches(ctx context.Context, entry provider.AppEntry, functions []provider.Function, progress progress.Log) error {
 	embedCode := r.provider.Hooks().EmbedCode
 	if embedCode == nil {
 		return nil
@@ -1191,7 +1191,7 @@ func (r *deployRun) embedBytecodeCaches(ctx context.Context, entry provider.AppE
 	return nil
 }
 
-func (r *deployRun) warmFunctions(ctx context.Context, functions []provider.Function, progress progress.Progress) error {
+func (r *deployRun) warmFunctions(ctx context.Context, functions []provider.Function, progress progress.Log) error {
 	warmFunctions := r.provider.Hooks().WarmFunctions
 	if warmFunctions == nil || len(functions) == 0 {
 		return nil
@@ -1344,7 +1344,7 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 		Flip:        &flip,
 	}
 	if err := r.spanEvents.run(r.spans.Promotion, func(u *spanRun) error {
-		return u.phase(func(progress progress.Progress) error {
+		return u.phase(func(progress progress.Log) error {
 			dropped, err := r.sharedStack.promote(ctx, promoteRequest{pointer: r.spec.Pointer, replaces: r.replaces, promotion: promotion}, progress)
 			if err != nil {
 				return errors.Join(err, r.reclaimDropped(ctx, r.spec.Pointer, dropped, progress))

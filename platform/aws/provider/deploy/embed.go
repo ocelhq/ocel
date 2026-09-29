@@ -85,7 +85,7 @@ type embedPass struct {
 	targets    []embedTarget
 	budget     time.Duration
 	updateWait time.Duration
-	progress   progress.Progress
+	progress   progress.Log
 }
 
 func (p embedPass) run(ctx context.Context) {

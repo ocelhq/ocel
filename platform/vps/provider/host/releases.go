@@ -39,7 +39,7 @@ func (h *Host) Forget(ctx context.Context, tier environment.Tier, project, app s
 	return err
 }
 
-func (h *Host) Reconcile(ctx context.Context, project, app, imageRef string, progress progress.Progress) error {
+func (h *Host) Reconcile(ctx context.Context, project, app, imageRef string, progress progress.Log) error {
 	repository, named := Repository(imageRef)
 	if !named {
 		return refusal.Refuse(refusal.CodeInvalid,

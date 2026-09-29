@@ -194,7 +194,7 @@ func (p *Provider) openRun(ctx context.Context) (*clients, *run.Service, error) 
 	return clients, services, err
 }
 
-func (p *Provider) deployService(ctx context.Context, s serving, progress progress.Progress) (release, error) {
+func (p *Provider) deployService(ctx context.Context, s serving, progress progress.Log) (release, error) {
 	clients, services, err := p.openRun(ctx)
 	if err != nil {
 		return release{}, err
@@ -398,7 +398,7 @@ func (p *Provider) await(ctx context.Context, services *run.Service, call func(.
 	return nil
 }
 
-func (p *Provider) tearDown(ctx context.Context, service string, progress progress.Progress) error {
+func (p *Provider) tearDown(ctx context.Context, service string, progress progress.Log) error {
 	clients, services, err := p.openRun(ctx)
 	if err != nil {
 		return err
@@ -413,7 +413,7 @@ func (p *Provider) tearDown(ctx context.Context, service string, progress progre
 	return err
 }
 
-func (p *Provider) removeRevision(ctx context.Context, service, revision string, progress progress.Progress) (bool, error) {
+func (p *Provider) removeRevision(ctx context.Context, service, revision string, progress progress.Log) (bool, error) {
 	if service == "" || revision == "" {
 		return false, nil
 	}

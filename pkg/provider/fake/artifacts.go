@@ -60,7 +60,7 @@ func (a *Artifacts) Open(_ context.Context, ref provider.ArtifactRef) (io.ReadCl
 	return io.NopCloser(bytes.NewReader(slices.Clone(blob))), nil
 }
 
-func (a *Artifacts) RemovePrefix(_ context.Context, tier environment.Tier, prefix string, progress progress.Progress) error {
+func (a *Artifacts) RemovePrefix(_ context.Context, tier environment.Tier, prefix string, progress progress.Log) error {
 	a.journal.note("remove-prefix " + prefix)
 	a.mu.Lock()
 	defer a.mu.Unlock()

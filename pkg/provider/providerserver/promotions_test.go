@@ -136,7 +136,7 @@ func TestTheDeployFlipSpeaksThroughThePromotionSpansOwnProgress(t *testing.T) {
 	if flipped == nil {
 		t.Fatal("the deploy never reached the router's flip, so nothing was reported from it")
 	}
-	if flipped == progress.DiscardProgress() {
+	if flipped == progress.Discard() {
 		t.Fatal("the deploy handed the flip a discarding reporter, want the Promotion span's own")
 	}
 
@@ -270,7 +270,7 @@ func TestADeployThatFailsAfterProvisioningRemovesTheFunctionsItsStackHolds(t *te
 	var mu sync.Mutex
 	vendor.ResourceStacks(resources.Hooks{Functions: &resources.FunctionHooks{
 		Provision: vendor.ProvisionFunctions,
-		Remove: func(_ context.Context, _ provider.StackRef, functions []provider.Function, _ progress.Progress) error {
+		Remove: func(_ context.Context, _ provider.StackRef, functions []provider.Function, _ progress.Log) error {
 			mu.Lock()
 			defer mu.Unlock()
 			for _, function := range functions {
@@ -280,7 +280,7 @@ func TestADeployThatFailsAfterProvisioningRemovesTheFunctionsItsStackHolds(t *te
 		},
 	}})
 	vendor.WithHooks(func(hooks *provider.Hooks) {
-		hooks.WarmFunctions = func(context.Context, []string, progress.Progress) error {
+		hooks.WarmFunctions = func(context.Context, []string, progress.Log) error {
 			return errors.New("the function never answered its warm-up")
 		}
 	})
@@ -364,10 +364,10 @@ func TestADeployWhoseSharedProvisionFailsRemovesWhatItsVendorNamed(t *testing.T)
 	var mu sync.Mutex
 	var removed []string
 	vendor.ResourceStacks(resources.Hooks{Functions: &resources.FunctionHooks{
-		Provision: func(context.Context, provider.StackSpec, progress.Progress) ([]provider.Function, error) {
+		Provision: func(context.Context, provider.StackSpec, progress.Log) ([]provider.Function, error) {
 			return nil, errors.New("the revision never became ready")
 		},
-		Remove: func(_ context.Context, _ provider.StackRef, functions []provider.Function, _ progress.Progress) error {
+		Remove: func(_ context.Context, _ provider.StackRef, functions []provider.Function, _ progress.Log) error {
 			mu.Lock()
 			defer mu.Unlock()
 			for _, function := range functions {
@@ -379,7 +379,7 @@ func TestADeployWhoseSharedProvisionFailsRemovesWhatItsVendorNamed(t *testing.T)
 			Name: func(context.Context, provider.StackSpec) ([]provider.Function, error) {
 				return []provider.Function{{Name: "server", Physical: "shop-web-server"}}, nil
 			},
-			RemoveRevisions: func(context.Context, provider.StackRef, []provider.Function, progress.Progress) ([]provider.Function, error) {
+			RemoveRevisions: func(context.Context, provider.StackRef, []provider.Function, progress.Log) ([]provider.Function, error) {
 				return nil, nil
 			},
 		},
@@ -408,7 +408,7 @@ func TestADeployWhoseCallerHungUpStillReclaimsWhatItProvisioned(t *testing.T) {
 	removedUnder := make(chan error, 1)
 	vendor.ResourceStacks(resources.Hooks{Functions: &resources.FunctionHooks{
 		Provision: vendor.ProvisionFunctions,
-		Remove: func(ctx context.Context, _ provider.StackRef, _ []provider.Function, _ progress.Progress) error {
+		Remove: func(ctx context.Context, _ provider.StackRef, _ []provider.Function, _ progress.Log) error {
 			removedUnder <- ctx.Err()
 			return nil
 		},
@@ -416,7 +416,7 @@ func TestADeployWhoseCallerHungUpStillReclaimsWhatItProvisioned(t *testing.T) {
 	ctx, hangUp := context.WithCancel(context.Background())
 	defer hangUp()
 	vendor.WithHooks(func(hooks *provider.Hooks) {
-		hooks.WarmFunctions = func(ctx context.Context, _ []string, _ progress.Progress) error {
+		hooks.WarmFunctions = func(ctx context.Context, _ []string, _ progress.Log) error {
 			hangUp()
 			<-ctx.Done()
 			return ctx.Err()
@@ -457,7 +457,7 @@ func TestTheRollbackFlipIsHandedProgressThatDiscards(t *testing.T) {
 	if flipped == nil {
 		t.Fatal("the rollback never reached the router's flip")
 	}
-	if flipped != progress.DiscardProgress() {
+	if flipped != progress.Discard() {
 		t.Errorf("the rollback handed the flip %#v, want the discarding reporter: Rollback is a unary RPC that streams nothing", flipped)
 	}
 }
@@ -669,13 +669,13 @@ type serviceEveryReleaseRevises struct {
 
 func (s *serviceEveryReleaseRevises) hooks() resources.Hooks {
 	return resources.Hooks{Functions: &resources.FunctionHooks{
-		Provision: func(context.Context, provider.StackSpec, progress.Progress) ([]provider.Function, error) {
+		Provision: func(context.Context, provider.StackSpec, progress.Log) ([]provider.Function, error) {
 			s.mu.Lock()
 			defer s.mu.Unlock()
 			s.revisions++
 			return []provider.Function{{Name: "api", Physical: "shop-web-api", Revision: fmt.Sprintf("shop-web-api-%05d", s.revisions)}}, nil
 		},
-		Remove: func(_ context.Context, _ provider.StackRef, functions []provider.Function, _ progress.Progress) error {
+		Remove: func(_ context.Context, _ provider.StackRef, functions []provider.Function, _ progress.Log) error {
 			s.mu.Lock()
 			defer s.mu.Unlock()
 			for _, function := range functions {
@@ -687,7 +687,7 @@ func (s *serviceEveryReleaseRevises) hooks() resources.Hooks {
 			Name: func(context.Context, provider.StackSpec) ([]provider.Function, error) {
 				return []provider.Function{{Name: "api", Physical: "shop-web-api"}}, nil
 			},
-			RemoveRevisions: func(_ context.Context, _ provider.StackRef, functions []provider.Function, _ progress.Progress) ([]provider.Function, error) {
+			RemoveRevisions: func(_ context.Context, _ provider.StackRef, functions []provider.Function, _ progress.Log) ([]provider.Function, error) {
 				s.mu.Lock()
 				defer s.mu.Unlock()
 				for _, function := range functions {

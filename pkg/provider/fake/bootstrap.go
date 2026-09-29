@@ -213,7 +213,7 @@ func (b *Bootstrap) withDefaultStackNames(described provider.BootstrapDescriptio
 	})
 }
 
-func (b *Bootstrap) Apply(_ context.Context, req provider.BootstrapRequest, progress progress.Progress) error {
+func (b *Bootstrap) Apply(_ context.Context, req provider.BootstrapRequest, progress progress.Log) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.refusal != nil {
@@ -279,7 +279,7 @@ func (b *Bootstrap) raisedEdges() []edge.Kind {
 	return []edge.Kind{b.front}
 }
 
-func (b *Bootstrap) Remove(_ context.Context, tier environment.Tier, progress progress.Progress) error {
+func (b *Bootstrap) Remove(_ context.Context, tier environment.Tier, progress progress.Log) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	delete(b.applied, tier)

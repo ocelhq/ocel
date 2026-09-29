@@ -171,7 +171,7 @@ func (a Artifacts) Open(ctx context.Context, ref provider.ArtifactRef) (io.ReadC
 	return out.Body, nil
 }
 
-func (a Artifacts) RemovePrefix(ctx context.Context, tier environment.Tier, prefix string, progress progress.Progress) error {
+func (a Artifacts) RemovePrefix(ctx context.Context, tier environment.Tier, prefix string, progress progress.Log) error {
 	if prefix == "" {
 		return refusal.Refuse(refusal.CodeInvalid, "an empty prefix names every artifact this account keeps")
 	}

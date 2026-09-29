@@ -20,7 +20,7 @@ func (s holdingStore) Has(_ context.Context, push provider.ImagePush) (bool, err
 	return slices.Contains(s.held, push.App), nil
 }
 
-func (holdingStore) Push(context.Context, provider.ImagePush, progress.Progress) error { return nil }
+func (holdingStore) Push(context.Context, provider.ImagePush, progress.Log) error { return nil }
 
 func TestEachImageSentNamesItsAppWhereItGoesAndHowManyAreSent(t *testing.T) {
 	t.Parallel()
@@ -34,7 +34,7 @@ func TestEachImageSentNamesItsAppWhereItGoesAndHowManyAreSent(t *testing.T) {
 			{App: "worker", Wrap: wrap},
 		},
 	}
-	progress := &fake.Progress{}
+	progress := &fake.Log{}
 
 	if err := pushes.PushMissing(context.Background(), progress); err != nil {
 		t.Fatalf("PushMissing() = %v", err)

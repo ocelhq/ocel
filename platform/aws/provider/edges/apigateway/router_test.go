@@ -23,7 +23,7 @@ func TestAFlipWhosePromotionIsNoLongerActiveCreatesNoAPIForItsPointer(t *testing
 		Pointer:     previewPoint,
 		Promotion:   router.Promotion{PromotionID: "p-displaced", Ts: 1, Builds: map[string]string{"web": record.Build}},
 		StillActive: func(context.Context) error { return displaced },
-	}, progress.DiscardProgress())
+	}, progress.Discard())
 	if !errors.Is(err, displaced) {
 		t.Fatalf("Flip with a StillActive that refuses = %v, want that refusal", err)
 	}

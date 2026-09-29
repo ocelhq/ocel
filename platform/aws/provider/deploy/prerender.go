@@ -93,13 +93,13 @@ func prerenderAssetSet(cfg Config, app string, cache *isrConfig) (*assetSet, err
 		app:    app,
 		files:  manifest.files,
 		digest: manifest.digest(),
-		push: func(ctx context.Context, progress progress.Progress) error {
+		push: func(ctx context.Context, progress progress.Log) error {
 			return pushPrerenderAssets(ctx, cfg, app, cache, uploads, progress)
 		},
 	}, nil
 }
 
-func pushPrerenderAssets(ctx context.Context, cfg Config, app string, cache *isrConfig, uploads []prerenderUpload, progress progress.Progress) error {
+func pushPrerenderAssets(ctx context.Context, cfg Config, app string, cache *isrConfig, uploads []prerenderUpload, progress progress.Log) error {
 	if err := seedTagSnapshot(ctx, cfg, cache, time.Now()); err != nil {
 		return err
 	}

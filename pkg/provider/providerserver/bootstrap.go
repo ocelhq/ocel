@@ -68,7 +68,7 @@ func (h *handlers) Bootstrap(ctx context.Context, req *contractv1.BootstrapReque
 		}
 		unit := UnitSpan(naming.UnitEnvironment, string(tier), bootstrapTitle("Updating", plan), progressv1.Phase_PHASE_PROVISION)
 		err = inSpan(sender, unit,
-			func(_ *eventStream, progress progress.Progress) error {
+			func(_ *eventStream, progress progress.Log) error {
 				return gate.Apply(ctx, plan, tier, intent, progress)
 			})
 		if err != nil {
@@ -277,7 +277,7 @@ func (h *handlers) RemoveBootstrap(ctx context.Context, req *contractv1.Bootstra
 
 	shown, shownErr := PlanFromProto(req.GetConsented())
 	unit := UnitSpan(naming.UnitEnvironment, string(tier), bootstrapTitle("Removing", shown), progressv1.Phase_PHASE_DESTROY)
-	return streamed(ctx, stream, unit, func(_ *eventStream, progress progress.Progress) error {
+	return streamed(ctx, stream, unit, func(_ *eventStream, progress progress.Log) error {
 		if shownErr != nil {
 			return shownErr
 		}

@@ -103,7 +103,7 @@ func (g bootstrapGate) Plan(ctx context.Context, req provider.BootstrapRequest) 
 	return b.Plan(ctx, req)
 }
 
-func (g bootstrapGate) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Progress) error {
+func (g bootstrapGate) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
 	b, err := g.openBootstrap(ctx)
 	if err != nil {
 		return err
@@ -119,7 +119,7 @@ func (g bootstrapGate) PlanRemove(ctx context.Context, tier environment.Tier) (p
 	return b.PlanRemove(ctx, tier)
 }
 
-func (g bootstrapGate) Remove(ctx context.Context, tier environment.Tier, progress progress.Progress) error {
+func (g bootstrapGate) Remove(ctx context.Context, tier environment.Tier, progress progress.Log) error {
 	b, err := g.openBootstrap(ctx)
 	if err != nil {
 		return err
@@ -132,8 +132,8 @@ type bootstrap struct {
 	fronts  provider.Edges
 
 	pushBinary    func(ctx context.Context, tier environment.Tier, name, ref string, binary []byte, path string) error
-	deployService func(ctx context.Context, s serving, progress progress.Progress) (release, error)
-	tearDown      func(ctx context.Context, service string, progress progress.Progress) error
+	deployService func(ctx context.Context, s serving, progress progress.Log) (release, error)
+	tearDown      func(ctx context.Context, service string, progress progress.Log) error
 }
 
 func (b bootstrap) Describe(ctx context.Context, tier environment.Tier) (provider.BootstrapDescription, error) {
@@ -239,7 +239,7 @@ func sharedWith(tier environment.Tier) string {
 	return fmt.Sprintf(reasonShared, tier.Sibling())
 }
 
-func (b bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Progress) error {
+func (b bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
 	read, err := b.surveyFor(ctx, req)
 	if err != nil {
 		return err
@@ -291,7 +291,7 @@ func stampItem(items []item, stampBucket item) item {
 	return stampBucket
 }
 
-func (b bootstrap) provision(ctx context.Context, read survey, target item, progress progress.Progress) error {
+func (b bootstrap) provision(ctx context.Context, read survey, target item, progress progress.Log) error {
 	if mends := read.mends(target); mends != "" {
 		if err := b.mend(ctx, read, target); err != nil {
 			return err
@@ -889,7 +889,7 @@ func removing(read survey, target item) removal {
 	return taking
 }
 
-func (b bootstrap) Remove(ctx context.Context, tier environment.Tier, progress progress.Progress) error {
+func (b bootstrap) Remove(ctx context.Context, tier environment.Tier, progress progress.Log) error {
 	read, err := b.survey(ctx, tier)
 	if err != nil {
 		return err
@@ -930,7 +930,7 @@ func (b bootstrap) Remove(ctx context.Context, tier environment.Tier, progress p
 	return nil
 }
 
-func (r removal) report(progress progress.Progress) {
+func (r removal) report(progress progress.Log) {
 	progress = ensureProgress(progress)
 	switch {
 	case r.action == provider.ActionKeep && r.reason == reasonAbsent:

@@ -92,7 +92,7 @@ func (s *sharedStack) adopt(routed router.Stack) error {
 	return nil
 }
 
-func (s *sharedStack) promote(ctx context.Context, req promoteRequest, progress progress.Progress) ([]ledger.RecordedPromotion, error) {
+func (s *sharedStack) promote(ctx context.Context, req promoteRequest, progress progress.Log) ([]ledger.RecordedPromotion, error) {
 	routed, err := s.openRouterStack()
 	if err != nil {
 		return nil, err
@@ -106,7 +106,7 @@ func (s *sharedStack) promote(ctx context.Context, req promoteRequest, progress 
 	return dropped, nil
 }
 
-func (s *sharedStack) purgeFlipped(ctx context.Context, pointer string, progress progress.Progress) {
+func (s *sharedStack) purgeFlipped(ctx context.Context, pointer string, progress progress.Log) {
 	purge := s.front.Hooks().PurgeHostnames
 	bound := s.edgeStack().State().Bound
 	if purge == nil || !router.IsDefaultPointer(pointer) || len(bound) == 0 {
@@ -118,7 +118,7 @@ func (s *sharedStack) purgeFlipped(ctx context.Context, pointer string, progress
 	}
 }
 
-func (s *sharedStack) removePointer(ctx context.Context, pointer string, progress progress.Progress) (router.PruneResult, error) {
+func (s *sharedStack) removePointer(ctx context.Context, pointer string, progress progress.Log) (router.PruneResult, error) {
 	routed, err := s.openRouterStack()
 	if err != nil {
 		return router.PruneResult{}, err

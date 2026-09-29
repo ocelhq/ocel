@@ -56,7 +56,7 @@ type stepDeps struct {
 	tier     environment.Tier
 	ssm      SSMAPI
 	iam      IAMAPI
-	progress progress.Progress
+	progress progress.Log
 }
 
 type feature struct {

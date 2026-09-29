@@ -21,7 +21,7 @@ type CertificateRequest struct {
 	Hostname string
 	Current  Certificate
 	Prove    func(ctx context.Context, cert Certificate, records []edge.Record) (Certificate, error)
-	Progress progress.Progress
+	Progress progress.Log
 }
 
 type CertificateHealth struct {
@@ -40,5 +40,5 @@ type Certificates interface {
 
 	Inspect(ctx context.Context, kind edge.Kind, hostname string, cert Certificate) (CertificateHealth, error)
 
-	Discard(ctx context.Context, cert Certificate, progress progress.Progress) error
+	Discard(ctx context.Context, cert Certificate, progress progress.Log) error
 }

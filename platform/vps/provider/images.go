@@ -40,7 +40,7 @@ func (p pulled) Has(ctx context.Context, push provider.ImagePush) (bool, error) 
 	return p.host.HasImage(ctx, push.ImageRef)
 }
 
-func (p pulled) Push(ctx context.Context, push provider.ImagePush, progress progress.Progress) error {
+func (p pulled) Push(ctx context.Context, push provider.ImagePush, progress progress.Log) error {
 	present, err := p.from.Has(ctx, push)
 	if err != nil {
 		return err
@@ -66,7 +66,7 @@ func (p pulled) Push(ctx context.Context, push provider.ImagePush, progress prog
 	return nil
 }
 
-func echo(progress progress.Progress, said string) {
+func echo(progress progress.Log, said string) {
 	if progress == nil {
 		return
 	}

@@ -23,8 +23,8 @@ func (p *Provider) WithFacts(set func(*provider.Facts)) *Provider {
 }
 
 func (p *Provider) everyHook(hooks *provider.Hooks) {
-	hooks.WarmFunctions = func(context.Context, []string, progress.Progress) error { return nil }
-	hooks.EmbedCode = func(context.Context, string, provider.ArtifactRef, progress.Progress) error { return nil }
+	hooks.WarmFunctions = func(context.Context, []string, progress.Log) error { return nil }
+	hooks.EmbedCode = func(context.Context, string, provider.ArtifactRef, progress.Log) error { return nil }
 	hooks.InspectStack = p.InspectStack
 	hooks.VerifyGrants = func(context.Context, provider.Binding) error { return nil }
 	hooks.PreflightDeploy = p.PreflightDeploy

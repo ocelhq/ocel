@@ -414,7 +414,7 @@ func TestPromote(t *testing.T) {
 		bound(t, stack)
 		staged(t, stack, fakeEntryURL, fakeAssetPrefix+"/")
 
-		if err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: promotion()}, progress.DiscardProgress()); err != nil {
+		if err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: promotion()}, progress.Discard()); err != nil {
 			t.Fatalf("Promote: %v", err)
 		}
 
@@ -449,7 +449,7 @@ func TestPromote(t *testing.T) {
 		recordFront(t, w, environment.TierProduction)
 		w.front.calls = nil
 
-		if err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: promotion()}, progress.DiscardProgress()); err != nil {
+		if err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: promotion()}, progress.Discard()); err != nil {
 			t.Fatalf("Promote: %v", err)
 		}
 
@@ -479,7 +479,7 @@ func TestPromote(t *testing.T) {
 		}
 
 		w.front.calls = nil
-		if err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: promotionOf("p2")}, progress.DiscardProgress()); err != nil {
+		if err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: promotionOf("p2")}, progress.Discard()); err != nil {
 			t.Fatalf("Promote (again): %v", err)
 		}
 		if made := w.front.mutations(); len(made) != 0 {
@@ -509,7 +509,7 @@ func TestPromote(t *testing.T) {
 		bound(t, stack)
 		stagedContainer(t, stack)
 
-		err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: promotion()}, progress.DiscardProgress())
+		err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: promotion()}, progress.Discard())
 		if err == nil || !strings.Contains(err.Error(), "container front") {
 			t.Fatalf("Promote error = %v, want a refusal naming the missing front", err)
 		}
@@ -533,7 +533,7 @@ func TestPromote(t *testing.T) {
 		}
 		deployedBefore := router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": record.Build}}
 
-		if err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: deployedBefore}, progress.DiscardProgress()); err != nil {
+		if err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: deployedBefore}, progress.Discard()); err != nil {
 			t.Fatalf("Promote: %v", err)
 		}
 		if published := routeOn(t, w, stack, boundHost); published.Secret != w.ssm.secret.Previous {
@@ -545,7 +545,7 @@ func TestPromote(t *testing.T) {
 			t.Fatalf("PutStaged: %v", err)
 		}
 		deployedAfter := router.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": record.Build}}
-		if err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: deployedAfter}, progress.DiscardProgress()); err != nil {
+		if err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: deployedAfter}, progress.Discard()); err != nil {
 			t.Fatalf("Promote: %v", err)
 		}
 		if published := routeOn(t, w, stack, boundHost); published.Secret != fakeSecret {
@@ -565,7 +565,7 @@ func TestPromote(t *testing.T) {
 		err := openRouter(stack).Stack.Flip(context.Background(), router.Flip{
 			Promotion: promotion(),
 			Records:   map[string]router.DeploymentRecord{record.App: record},
-		}, progress.DiscardProgress())
+		}, progress.Discard())
 		var unserved router.Unserved
 		if !errors.As(err, &unserved) {
 			t.Fatalf("Flip = %v, want router.Unserved: the store never learned this release, so the ledger must take it back", err)
@@ -581,7 +581,7 @@ func TestPromote(t *testing.T) {
 		staged(t, stack, fakeEntryURL, fakeAssetPrefix)
 		w.store.conflicts = 2
 
-		if err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: promotion()}, progress.DiscardProgress()); err != nil {
+		if err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: promotion()}, progress.Discard()); err != nil {
 			t.Fatalf("Promote: %v", err)
 		}
 
@@ -604,7 +604,7 @@ func TestPromote(t *testing.T) {
 		bound(t, stack)
 		staged(t, stack, "", fakeAssetPrefix)
 
-		err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: promotion()}, progress.DiscardProgress())
+		err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: promotion()}, progress.Discard())
 		if err == nil {
 			t.Fatal("Promote error = nil, want a refusal: nothing names a URL the edge can reach")
 		}
@@ -620,7 +620,7 @@ func TestPromote(t *testing.T) {
 		stack := reconciled(t, w)
 		staged(t, stack, fakeEntryURL, fakeAssetPrefix)
 
-		if err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: promotion()}, progress.DiscardProgress()); err != nil {
+		if err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: promotion()}, progress.Discard()); err != nil {
 			t.Fatalf("Promote: %v", err)
 		}
 		if got := w.store.count("kvs.UpdateKeys"); got != 0 {
@@ -662,7 +662,7 @@ func TestUnbindDomainTakesTheRouteAndTheAlias(t *testing.T) {
 	stack := reconciled(t, w)
 	bound(t, stack)
 	staged(t, stack, fakeEntryURL, fakeAssetPrefix)
-	if err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: promotion()}, progress.DiscardProgress()); err != nil {
+	if err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: promotion()}, progress.Discard()); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
 

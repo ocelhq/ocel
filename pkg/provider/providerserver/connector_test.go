@@ -36,7 +36,7 @@ func (h *connectorHost) Target(context.Context) (provider.ConnectorTarget, error
 	}, nil
 }
 
-func (h *connectorHost) Install(_ context.Context, install provider.ConnectorInstall, progress progress.Progress) (provider.ConnectorAddress, error) {
+func (h *connectorHost) Install(_ context.Context, install provider.ConnectorInstall, progress progress.Log) (provider.ConnectorAddress, error) {
 	h.install = install
 	progress.Say("wrote the connector")
 	compute := install.Compute
@@ -50,7 +50,7 @@ func (h *connectorHost) Install(_ context.Context, install provider.ConnectorIns
 	}, nil
 }
 
-func (h *connectorHost) Remove(context.Context, progress.Progress) error {
+func (h *connectorHost) Remove(context.Context, progress.Log) error {
 	h.removed = true
 	return nil
 }

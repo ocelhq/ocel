@@ -211,7 +211,7 @@ func certificateGroup(cert provider.Certificate) *planv1.ChangeGroup {
 
 func (h *handlers) RemoveProject(ctx context.Context, req *contractv1.ProjectRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	unit := UnitSpan(naming.UnitEnvironment, req.GetSlug(), removalTitle(req.GetEnvironment()), progressv1.Phase_PHASE_DESTROY)
-	return streamed(ctx, stream, unit, func(_ *eventStream, progress progress.Progress) error {
+	return streamed(ctx, stream, unit, func(_ *eventStream, progress progress.Log) error {
 		removal, err := h.openRemoval(ctx, req)
 		if err != nil {
 			return err
@@ -253,7 +253,7 @@ func (r *projectRemoval) refuseIfPlanGrew(consented *planv1.ChangePlan) error {
 	return bootstrapplan.RefuseUnconsentedChanges(shown, drawn)
 }
 
-func (r *projectRemoval) run(ctx context.Context, progress progress.Progress) error {
+func (r *projectRemoval) run(ctx context.Context, progress progress.Log) error {
 	var errs []error
 
 	if err := r.unbind(ctx, progress); err != nil {
@@ -307,7 +307,7 @@ func (r *projectRemoval) originCertificates() []string {
 	return ids
 }
 
-func (r *projectRemoval) unbind(ctx context.Context, runProgress progress.Progress) error {
+func (r *projectRemoval) unbind(ctx context.Context, runProgress progress.Log) error {
 	stack := r.edgeStack()
 	if stack == nil || stack.State().Empty() {
 		return nil
@@ -315,7 +315,7 @@ func (r *projectRemoval) unbind(ctx context.Context, runProgress progress.Progre
 	var errs []error
 	for _, hostname := range stack.State().Bound {
 		runProgress.Say(fmt.Sprintf("Unbinding %s from %s", hostname, describeFront(r.front.Kind())))
-		if err := progress.Heeded(stack.UnbindDomain(ctx, hostname), runProgress); err != nil {
+		if err := progress.ReportWarning(runProgress, stack.UnbindDomain(ctx, hostname)); err != nil {
 			errs = append(errs, fmt.Errorf("unbind %q before the origin it fronts is destroyed: %w", hostname, err))
 		}
 	}
@@ -335,7 +335,7 @@ func (r *projectRemoval) pointers() []string {
 	return r.pointer
 }
 
-func (r *projectRemoval) destroyStack(ctx context.Context, stack naming.StackName, progress progress.Progress) error {
+func (r *projectRemoval) destroyStack(ctx context.Context, stack naming.StackName, progress progress.Log) error {
 	ref := provider.StackRef{Project: r.slug, Tier: r.tier, Name: stack}
 	if err := r.provider.Stacks().Destroy(ctx, ref, progress); err != nil {
 		return fmt.Errorf("destroy %s: %w", stack, err)
@@ -343,7 +343,7 @@ func (r *projectRemoval) destroyStack(ctx context.Context, stack naming.StackNam
 	return stackrecords.Forget(ctx, r.provider.KeyValues(), r.tier, r.slug, stack)
 }
 
-func (r *projectRemoval) destroyUnrecordedHolders(ctx context.Context, progress progress.Progress) error {
+func (r *projectRemoval) destroyUnrecordedHolders(ctx context.Context, progress progress.Log) error {
 	restored, err := resources.RecordUnrecordedHolders(ctx, r.provider.KeyValues(), r.tier, r.slug,
 		func(stack naming.StackName) bool { return isOfTier(stack, r.tier) })
 	if err != nil {
@@ -359,7 +359,7 @@ func (r *projectRemoval) destroyUnrecordedHolders(ctx context.Context, progress 
 	return errors.Join(errs...)
 }
 
-func (r *projectRemoval) tearDownEdge(ctx context.Context, progress progress.Progress) error {
+func (r *projectRemoval) tearDownEdge(ctx context.Context, progress progress.Log) error {
 	if stack := r.edgeStack(); stack == nil || stack.State().Empty() {
 		return nil
 	}
@@ -371,14 +371,14 @@ func (r *projectRemoval) tearDownEdge(ctx context.Context, progress progress.Pro
 	return r.store.write(ctx, r.state)
 }
 
-func (r *projectRemoval) releaseRecords(ctx context.Context, written []edge.Record, progress progress.Progress) error {
+func (r *projectRemoval) releaseRecords(ctx context.Context, written []edge.Record, progress progress.Log) error {
 	if err := r.cutover.release(ctx, written, progress.Say); err != nil {
 		return fmt.Errorf("remove the DNS records pointing at what this project served: %w", err)
 	}
 	return nil
 }
 
-func (r *projectRemoval) discardCertificates(ctx context.Context, certificates []provider.Certificate, progress progress.Progress) error {
+func (r *projectRemoval) discardCertificates(ctx context.Context, certificates []provider.Certificate, progress progress.Log) error {
 	var errs []error
 	for _, cert := range certificates {
 		if err := discardCertificateAndRecords(ctx, r.provider, r.cutover, cert, provider.Certificate{}, progress); err != nil {
@@ -388,7 +388,7 @@ func (r *projectRemoval) discardCertificates(ctx context.Context, certificates [
 	return errors.Join(errs...)
 }
 
-func (r *projectRemoval) purgeValues(ctx context.Context, progress progress.Progress) error {
+func (r *projectRemoval) purgeValues(ctx context.Context, progress progress.Log) error {
 	progress.Say(fmt.Sprintf("Removing the stored variable values of %s in %s", r.slug, r.tier))
 	store := envvars.Store{KeyValues: r.provider.KeyValues(), Cipher: r.provider.Cipher()}
 	if err := envsource.ForgetProject(ctx, store, r.tier, r.slug); err != nil {
@@ -400,7 +400,7 @@ func (r *projectRemoval) purgeValues(ctx context.Context, progress progress.Prog
 	return nil
 }
 
-func (r *projectRemoval) purgeObjects(ctx context.Context, progress progress.Progress) error {
+func (r *projectRemoval) purgeObjects(ctx context.Context, progress progress.Log) error {
 	var errs []error
 	for _, env := range r.environments() {
 		prefix := naming.Coordinate{Project: naming.Sanitize(r.slug), Env: env}.StoragePrefix()
@@ -423,7 +423,7 @@ func (r *projectRemoval) environments() []string {
 	return envs
 }
 
-func (r *projectRemoval) forgetProjectIfEmpty(ctx context.Context, progress progress.Progress) error {
+func (r *projectRemoval) forgetProjectIfEmpty(ctx context.Context, progress progress.Log) error {
 	remaining, err := stackrecords.List(ctx, r.provider.KeyValues(), r.tier, r.slug)
 	if err != nil {
 		return err

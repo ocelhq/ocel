@@ -77,9 +77,9 @@ type Stack interface {
 
 	Disclaim(ctx context.Context, hostname string) error
 
-	Flip(ctx context.Context, flip Flip, progress progress.Progress) error
+	Flip(ctx context.Context, flip Flip, progress progress.Log) error
 
-	RemovePointer(ctx context.Context, pointer string, progress progress.Progress) error
+	RemovePointer(ctx context.Context, pointer string, progress progress.Log) error
 
 	Destroy(ctx context.Context) error
 }

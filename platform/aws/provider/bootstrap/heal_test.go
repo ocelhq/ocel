@@ -201,7 +201,7 @@ func TestHealable(t *testing.T) {
 	}
 }
 
-type healLog struct{ fake.Progress }
+type healLog struct{ fake.Log }
 
 func (l *healLog) says(line string) bool {
 	return slices.ContainsFunc(l.Lines(), func(said string) bool { return strings.Contains(said, line) })

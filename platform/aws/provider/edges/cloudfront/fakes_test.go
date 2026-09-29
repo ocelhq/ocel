@@ -773,7 +773,7 @@ func openRouter(shared edge.EdgeStack) fake.PromotingStack {
 	return fake.PromotingStack{Stack: routerStack{s: s}, Ledger: s.openLedger(c)}
 }
 
-func removePointer(ctx context.Context, stack edge.EdgeStack, pointer string, progress progress.Progress) (router.PruneResult, error) {
+func removePointer(ctx context.Context, stack edge.EdgeStack, pointer string, progress progress.Log) (router.PruneResult, error) {
 	if err := openRouter(stack).RemovePointer(ctx, pointer, progress); err != nil {
 		return router.PruneResult{}, err
 	}

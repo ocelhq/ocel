@@ -234,7 +234,7 @@ func (e *Edge) applyTrust(ctx context.Context, tier environment.Tier, change fun
 
 func (e *Edge) raiseTrusting(ctx context.Context, tier environment.Tier) (LoadBalancer, error) {
 	for range trustAttempts {
-		balancer, err := e.raise(ctx, tier, progress.DiscardProgress())
+		balancer, err := e.raise(ctx, tier, progress.Discard())
 		if err != nil {
 			return LoadBalancer{}, err
 		}

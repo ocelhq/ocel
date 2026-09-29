@@ -304,7 +304,7 @@ func discarding(id string, current *certmanager.Certificate) string {
 	}
 }
 
-func (p certificates) Discard(ctx context.Context, cert provider.Certificate, progress progress.Progress) error {
+func (p certificates) Discard(ctx context.Context, cert provider.Certificate, progress progress.Log) error {
 	if !cert.Issued() {
 		return nil
 	}

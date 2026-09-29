@@ -60,7 +60,7 @@ type Wake struct {
 
 const WakeHeartbeat = "heartbeat"
 
-func reviewing(ns bootstrap.Namespace, progress progress.Progress) cfn.ChangeReview {
+func reviewing(ns bootstrap.Namespace, progress progress.Log) cfn.ChangeReview {
 	return bootstrap.AdmitReplacements(ns, false, progress)
 }
 
@@ -160,7 +160,7 @@ func varsKeys(ctx context.Context, api cfn.StacksAPI, ns bootstrap.Namespace) ([
 }
 
 func Install(ctx context.Context, apis APIs, ns bootstrap.Namespace, release Release,
-	writer provider.WrittenBy, progress progress.Progress) (Installation, error) {
+	writer provider.WrittenBy, progress progress.Log) (Installation, error) {
 	keys, err := varsKeys(ctx, apis.CFN, ns)
 	if err != nil {
 		return Installation{}, err
@@ -207,7 +207,7 @@ func Install(ctx context.Context, apis APIs, ns bootstrap.Namespace, release Rel
 	return installed, nil
 }
 
-func Remove(ctx context.Context, apis APIs, ns bootstrap.Namespace, progress progress.Progress) error {
+func Remove(ctx context.Context, apis APIs, ns bootstrap.Namespace, progress progress.Log) error {
 	stack, err := cfn.DescribeStack(ctx, apis.CFN, StackName(ns))
 	if err != nil {
 		return err
@@ -234,7 +234,7 @@ func Remove(ctx context.Context, apis APIs, ns bootstrap.Namespace, progress pro
 }
 
 func codeBucket(ctx context.Context, apis APIs, ns bootstrap.Namespace,
-	writer provider.WrittenBy, progress progress.Progress) (string, error) {
+	writer provider.WrittenBy, progress progress.Log) (string, error) {
 	stack, err := cfn.DescribeStack(ctx, apis.CFN, StackName(ns))
 	if err != nil {
 		return "", err

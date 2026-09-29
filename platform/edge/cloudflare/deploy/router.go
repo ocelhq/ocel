@@ -57,7 +57,7 @@ func (r routerStack) Claim(context.Context, router.Claim) (edge.Origin, error) {
 
 func (r routerStack) Disclaim(context.Context, string) error { return nil }
 
-func (r routerStack) Flip(ctx context.Context, flip router.Flip, _ progress.Progress) error {
+func (r routerStack) Flip(ctx context.Context, flip router.Flip, _ progress.Log) error {
 	records, err := r.s.wrapEnvelopes(flip.Records)
 	if err != nil {
 		return router.Unserved{Err: err}
@@ -88,7 +88,7 @@ func (r routerStack) Flip(ctx context.Context, flip router.Flip, _ progress.Prog
 	return router.Unserved{Err: fmt.Errorf("flip promotion %s: the deployments store served another promotion on every one of %d attempts, so this flip stopped rather than overwrite it", flip.Promotion.PromotionID, flipAttempts)}
 }
 
-func (r routerStack) RemovePointer(ctx context.Context, pointer string, _ progress.Progress) error {
+func (r routerStack) RemovePointer(ctx context.Context, pointer string, _ progress.Log) error {
 	return r.s.removePointerRecords(ctx, pointer)
 }
 

@@ -51,11 +51,11 @@ type Backend struct {
 }
 
 type Engine interface {
-	Preview(ctx context.Context, setup WorkspaceSpec, op Operation, progress progress.Progress) ([]provider.Change, error)
+	Preview(ctx context.Context, setup WorkspaceSpec, op Operation, progress progress.Log) ([]provider.Change, error)
 
-	Up(ctx context.Context, setup WorkspaceSpec, progress progress.Progress) (auto.OutputMap, error)
+	Up(ctx context.Context, setup WorkspaceSpec, progress progress.Log) (auto.OutputMap, error)
 
-	Destroy(ctx context.Context, setup WorkspaceSpec, progress progress.Progress) error
+	Destroy(ctx context.Context, setup WorkspaceSpec, progress progress.Log) error
 
 	Outputs(ctx context.Context, setup WorkspaceSpec) (auto.OutputMap, error)
 }
@@ -209,7 +209,7 @@ func (a *Automation) StackConfig(ctx context.Context, spec provider.StackSpec) (
 	return a.config.Configure(ctx, spec)
 }
 
-func (a *Automation) setup(ctx context.Context, spec provider.StackSpec, op Operation, progress progress.Progress) (WorkspaceSpec, error) {
+func (a *Automation) setup(ctx context.Context, spec provider.StackSpec, op Operation, progress progress.Log) (WorkspaceSpec, error) {
 	setup, err := a.workspace(spec, op)
 	if err != nil {
 		return WorkspaceSpec{}, err
@@ -235,15 +235,15 @@ func (a *Automation) engine() Engine {
 	return autoEngine{}
 }
 
-func (a *Automation) Preview(ctx context.Context, spec provider.StackSpec, progress progress.Progress) (provider.Plan, error) {
+func (a *Automation) Preview(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.Plan, error) {
 	return a.preview(ctx, spec, OperationProvision, progress)
 }
 
-func (a *Automation) PreviewDestroy(ctx context.Context, ref provider.StackRef, progress progress.Progress) (provider.Plan, error) {
+func (a *Automation) PreviewDestroy(ctx context.Context, ref provider.StackRef, progress progress.Log) (provider.Plan, error) {
 	return a.preview(ctx, provider.StackSpec{Ref: ref}, OperationDestroy, progress)
 }
 
-func (a *Automation) preview(ctx context.Context, spec provider.StackSpec, op Operation, progress progress.Progress) (provider.Plan, error) {
+func (a *Automation) preview(ctx context.Context, spec provider.StackSpec, op Operation, progress progress.Log) (provider.Plan, error) {
 	setup, err := a.setup(ctx, spec, op, progress)
 	if err != nil {
 		return provider.Plan{}, err
@@ -321,7 +321,7 @@ func plannedAction(op apitype.OpType) (provider.ChangeAction, bool) {
 	}
 }
 
-func (a *Automation) Run(ctx context.Context, spec provider.StackSpec, progress progress.Progress) (provider.StackResult, error) {
+func (a *Automation) Run(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.StackResult, error) {
 	setup, err := a.setup(ctx, spec, OperationProvision, progress)
 	if err != nil {
 		return provider.StackResult{}, err
@@ -336,7 +336,7 @@ func (a *Automation) Run(ctx context.Context, spec provider.StackSpec, progress 
 	return a.config.Decode(ctx, spec, outputs)
 }
 
-func (a *Automation) Destroy(ctx context.Context, ref provider.StackRef, progress progress.Progress) error {
+func (a *Automation) Destroy(ctx context.Context, ref provider.StackRef, progress progress.Log) error {
 	setup, err := a.setup(ctx, provider.StackSpec{Ref: ref}, OperationDestroy, progress)
 	if err != nil {
 		return err
@@ -347,7 +347,7 @@ func (a *Automation) Destroy(ctx context.Context, ref provider.StackRef, progres
 	return nil
 }
 
-func (a *Automation) Outputs(ctx context.Context, ref provider.StackRef, progress progress.Progress) (auto.OutputMap, error) {
+func (a *Automation) Outputs(ctx context.Context, ref provider.StackRef, progress progress.Log) (auto.OutputMap, error) {
 	setup, err := a.setup(ctx, provider.StackSpec{Ref: ref}, OperationProvision, progress)
 	if err != nil {
 		return nil, err
@@ -375,7 +375,7 @@ func busy(err error, setup WorkspaceSpec) error {
 
 type autoEngine struct{}
 
-func (autoEngine) Preview(ctx context.Context, setup WorkspaceSpec, op Operation, progress progress.Progress) ([]provider.Change, error) {
+func (autoEngine) Preview(ctx context.Context, setup WorkspaceSpec, op Operation, progress progress.Log) ([]provider.Change, error) {
 	stack, err := auto.UpsertStackInlineSource(ctx, setup.Stack, string(setup.Project.Name), setup.Program, setup.Options...)
 	if err != nil {
 		return nil, fmt.Errorf("prepare stack %s: %w", setup.Stack, err)
@@ -429,7 +429,7 @@ func awaitRows(drained <-chan []provider.Change, grace time.Duration) ([]provide
 	}
 }
 
-func (autoEngine) Up(ctx context.Context, setup WorkspaceSpec, progress progress.Progress) (auto.OutputMap, error) {
+func (autoEngine) Up(ctx context.Context, setup WorkspaceSpec, progress progress.Log) (auto.OutputMap, error) {
 	stack, err := auto.UpsertStackInlineSource(ctx, setup.Stack, string(setup.Project.Name), setup.Program, setup.Options...)
 	if err != nil {
 		return nil, fmt.Errorf("prepare stack %s: %w", setup.Stack, err)
@@ -468,7 +468,7 @@ func (autoEngine) Up(ctx context.Context, setup WorkspaceSpec, progress progress
 	return res.Outputs, nil
 }
 
-func (autoEngine) Destroy(ctx context.Context, setup WorkspaceSpec, progress progress.Progress) error {
+func (autoEngine) Destroy(ctx context.Context, setup WorkspaceSpec, progress progress.Log) error {
 	stack, err := auto.SelectStackInlineSource(ctx, setup.Stack, string(setup.Project.Name), nil, setup.Options...)
 	if auto.IsSelectStack404Error(err) {
 		if progress != nil {

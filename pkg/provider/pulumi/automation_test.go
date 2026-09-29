@@ -117,7 +117,7 @@ func TestEachPreviewSaysWhichStackItPlansAndWhetherItPlansItsTeardown(t *testing
 
 	stack := naming.InfraStack("prod").String()
 	automation := pulumi.New(pulumi.Config{Backend: backend(), Program: program{}.Run, Engine: &recordingEngine{}})
-	progress := &sayings{Progress: progress.DiscardProgress()}
+	progress := &sayings{Log: progress.Discard()}
 
 	if _, err := automation.Preview(context.Background(), spec(), progress); err != nil {
 		t.Fatalf("Preview() = %v", err)

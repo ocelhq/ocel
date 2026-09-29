@@ -2,9 +2,9 @@ package gcp
 
 import "github.com/ocelhq/ocel/pkg/progress"
 
-func ensureProgress(runProgress progress.Progress) progress.Progress {
+func ensureProgress(runProgress progress.Log) progress.Log {
 	if runProgress == nil {
-		return progress.DiscardProgress()
+		return progress.Discard()
 	}
 	return runProgress
 }

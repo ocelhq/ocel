@@ -161,7 +161,7 @@ func (b Bootstrap) read(ctx context.Context, tier environment.Tier) (Reading, er
 	return b.recorded(ctx, read)
 }
 
-func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Progress) error {
+func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
 	if req.Heal {
 		return b.heal(ctx, req, progress)
 	}
@@ -251,7 +251,7 @@ func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 	return b.host.Stamp(ctx, req.Tier, stamp)
 }
 
-func (b Bootstrap) heal(ctx context.Context, req provider.BootstrapRequest, progress progress.Progress) error {
+func (b Bootstrap) heal(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
 	read, err := b.host.Own(ctx, req.Tier)
 	if err != nil {
 		return err
@@ -386,7 +386,7 @@ func (r Reading) adopting() error {
 		StampPath(r.Tier), recorded, SealKeyPath(r.Tier), present)
 }
 
-func (b Bootstrap) write(ctx context.Context, read Reading, items []Item, progress progress.Progress) error {
+func (b Bootstrap) write(ctx context.Context, read Reading, items []Item, progress progress.Log) error {
 	return b.writing(ctx, read, items, progress, func(ctx context.Context, item Item) error {
 		if item.Kind == KindEngine {
 			return b.host.installEngine(ctx, progress)
@@ -395,7 +395,7 @@ func (b Bootstrap) write(ctx context.Context, read Reading, items []Item, progre
 	})
 }
 
-func (b Bootstrap) writing(ctx context.Context, read Reading, items []Item, progress progress.Progress,
+func (b Bootstrap) writing(ctx context.Context, read Reading, items []Item, progress progress.Log,
 	install func(context.Context, Item) error) error {
 	for _, item := range items {
 		if read.current(item) {
@@ -410,13 +410,13 @@ func (b Bootstrap) writing(ctx context.Context, read Reading, items []Item, prog
 	return nil
 }
 
-func say(progress progress.Progress, message string) {
+func say(progress progress.Log, message string) {
 	if progress != nil {
 		progress.Say(message)
 	}
 }
 
-func debug(progress progress.Progress, line string) {
+func debug(progress progress.Log, line string) {
 	if progress != nil {
 		progress.Debug(line)
 	}
@@ -449,7 +449,7 @@ func (b Bootstrap) PlanRemove(ctx context.Context, tier environment.Tier) (provi
 	return provider.Plan{Groups: bootstrapplan.PrefixWithVendor(b.vendor, []provider.ChangeGroup{group})}, nil
 }
 
-func (b Bootstrap) Remove(ctx context.Context, tier environment.Tier, progress progress.Progress) error {
+func (b Bootstrap) Remove(ctx context.Context, tier environment.Tier, progress progress.Log) error {
 	defer b.host.forgetTiers()
 	forget, err := b.host.forgetting(ctx)
 	if err != nil {

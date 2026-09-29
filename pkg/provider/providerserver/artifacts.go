@@ -23,7 +23,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
-func (r *deployRun) pack(ctx context.Context, entry provider.AppEntry, values provider.AppValues, progress progress.Progress) (provider.PackAppResult, error) {
+func (r *deployRun) pack(ctx context.Context, entry provider.AppEntry, values provider.AppValues, progress progress.Log) (provider.PackAppResult, error) {
 	packApp := r.provider.Hooks().PackApp
 	if packApp == nil {
 		return provider.PackAppResult{}, nil

@@ -95,7 +95,7 @@ func (p connector) Target(ctx context.Context) (provider.ConnectorTarget, error)
 	return described, nil
 }
 
-func (p connector) Install(ctx context.Context, install provider.ConnectorInstall, progress progress.Progress) (provider.ConnectorAddress, error) {
+func (p connector) Install(ctx context.Context, install provider.ConnectorInstall, progress progress.Log) (provider.ConnectorAddress, error) {
 	compute, err := provider.ConnectorCompute(install.Compute, connectorCompute)
 	if err != nil {
 		return provider.ConnectorAddress{}, err
@@ -119,7 +119,7 @@ func (p connector) Install(ctx context.Context, install provider.ConnectorInstal
 	}, nil
 }
 
-func (p connector) Remove(ctx context.Context, progress progress.Progress) error {
+func (p connector) Remove(ctx context.Context, progress progress.Log) error {
 	if _, err := p.Session(ctx); err != nil {
 		return err
 	}

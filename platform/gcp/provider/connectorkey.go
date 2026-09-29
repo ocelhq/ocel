@@ -73,7 +73,7 @@ func connectorPublicKeyOf(service *run.GoogleCloudRunV2Service) string {
 	return ""
 }
 
-func (p *Provider) connectorKey(ctx context.Context, progress progress.Progress) (string, error) {
+func (p *Provider) connectorKey(ctx context.Context, progress progress.Log) (string, error) {
 	clients, err := p.openClients(ctx)
 	if err != nil {
 		return "", err
@@ -167,7 +167,7 @@ func boundSecretMember(bindings []*secretmanager.Binding, role, member string, g
 	return append(bindings, &secretmanager.Binding{Role: role, Members: []string{member}}), true
 }
 
-func (p *Provider) takeConnectorKey(ctx context.Context, progress progress.Progress) error {
+func (p *Provider) takeConnectorKey(ctx context.Context, progress progress.Log) error {
 	clients, err := p.openClients(ctx)
 	if err != nil {
 		return err

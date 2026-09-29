@@ -54,7 +54,7 @@ func TestAnUploadSaysWhichAppAndHowManyFilesOrWhere(t *testing.T) {
 			if err != nil {
 				t.Fatalf("the %s set: %v", tc.name, err)
 			}
-			var progress fake.Progress
+			var progress fake.Log
 			if err := set.push(context.Background(), &progress); err != nil {
 				t.Fatalf("push: %v", err)
 			}

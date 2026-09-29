@@ -231,7 +231,7 @@ func TestAPromotionUnderTheLoadBalancerPinsCloudRunBecauseTheUrlMapNeverMoves(t 
 		}
 	}
 	for _, step := range []struct{ id, identity string }{{"p1", "b1"}, {"p2", "b2"}, {"p3", "b1"}} {
-		err := openRouter(stack).Flip(ctx, router.Flip{Promotion: router.Promotion{PromotionID: step.id, Builds: map[string]string{"web": step.identity}}}, progress.DiscardProgress())
+		err := openRouter(stack).Flip(ctx, router.Flip{Promotion: router.Promotion{PromotionID: step.id, Builds: map[string]string{"web": step.identity}}}, progress.Discard())
 		if err != nil {
 			t.Fatalf("Promote(%s) = %v", step.id, err)
 		}
@@ -477,7 +477,7 @@ func TestAPromotionOfAPreviewOnTheGlobalWildcardWritesNoHostRule(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("PutStaged = %v", err)
 	}
-	if err := openRouter(stack).Flip(ctx, router.Flip{Pointer: "pr-7", Promotion: router.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}}}, progress.DiscardProgress()); err != nil {
+	if err := openRouter(stack).Flip(ctx, router.Flip{Pointer: "pr-7", Promotion: router.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}}}, progress.Discard()); err != nil {
 		t.Fatalf("Promote = %v", err)
 	}
 
@@ -657,7 +657,7 @@ func TestTheFirstReleaseAfterABindTakesTheHostnameLive(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("PutStaged = %v", err)
 	}
-	if err := openRouter(stack).Flip(ctx, router.Flip{Promotion: router.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}}}, progress.DiscardProgress()); err != nil {
+	if err := openRouter(stack).Flip(ctx, router.Flip{Promotion: router.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}}}, progress.Discard()); err != nil {
 		t.Fatalf("Promote = %v", err)
 	}
 
@@ -682,7 +682,7 @@ func TestTheReleaseThatTakesAHostnameLiveSaysWhichServiceItRoutesTo(t *testing.T
 	}); err != nil {
 		t.Fatalf("PutStaged = %v", err)
 	}
-	progress := &fake.Progress{}
+	progress := &fake.Log{}
 	if err := openRouter(stack).Flip(ctx, router.Flip{Promotion: router.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}}}, progress); err != nil {
 		t.Fatalf("Promote = %v", err)
 	}
@@ -704,7 +704,7 @@ func TestAHostnameBoundAfterAReleaseIsRoutedToThePromotedService(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("PutStaged = %v", err)
 	}
-	if err := openRouter(stack).Flip(ctx, router.Flip{Promotion: router.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}}}, progress.DiscardProgress()); err != nil {
+	if err := openRouter(stack).Flip(ctx, router.Flip{Promotion: router.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}}}, progress.Discard()); err != nil {
 		t.Fatalf("Promote = %v", err)
 	}
 	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: "shop.example.com", App: "web"}); err != nil {
@@ -732,7 +732,7 @@ func TestAPromotionOfAnotherAppLeavesAHostnameServingNotFound(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("PutStaged = %v", err)
 	}
-	if err := openRouter(stack).Flip(ctx, router.Flip{Promotion: router.Promotion{PromotionID: "p1", Builds: map[string]string{"admin": "b1"}}}, progress.DiscardProgress()); err != nil {
+	if err := openRouter(stack).Flip(ctx, router.Flip{Promotion: router.Promotion{PromotionID: "p1", Builds: map[string]string{"admin": "b1"}}}, progress.Discard()); err != nil {
 		t.Fatalf("Promote = %v", err)
 	}
 

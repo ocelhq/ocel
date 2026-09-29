@@ -139,7 +139,7 @@ func TestAPrefixSweepReachesEveryStoreTheAccountKeeps(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	var progress fake.Progress
+	var progress fake.Log
 	if err := store.RemovePrefix(ctx, environment.TierProduction, "shop/prod/", &progress); err != nil {
 		t.Fatalf("RemovePrefix() = %v", err)
 	}

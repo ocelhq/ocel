@@ -81,7 +81,7 @@ func TestAPreviewFunctionIsNamedApartFromThePreviewItShipsIn(t *testing.T) {
 func TestAPreviewOnAnEdgeThatShieldsNothingIsSaidToBeOpenToAnyoneWithItsUrl(t *testing.T) {
 	server := &runServer{}
 	p := server.open(t)
-	progress := &fake.Progress{}
+	progress := &fake.Log{}
 
 	if _, err := p.ProvisionContainers(context.Background(), previewSpec(""), progress); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
@@ -92,7 +92,7 @@ func TestAPreviewOnAnEdgeThatShieldsNothingIsSaidToBeOpenToAnyoneWithItsUrl(t *t
 		t.Errorf("the release said %q, want it to warn the preview answers anyone with its url: Cloud Run has no invoker a browser could satisfy, so the reader has to know", progress.Lines())
 	}
 
-	production := &fake.Progress{}
+	production := &fake.Log{}
 	spec := previewSpec("")
 	spec.Ref.Tier = environment.TierProduction
 	spec.Ref.Name = naming.StackName{Env: stackrecords.ProductionEnv, App: "web"}
@@ -103,7 +103,7 @@ func TestAPreviewOnAnEdgeThatShieldsNothingIsSaidToBeOpenToAnyoneWithItsUrl(t *t
 		t.Errorf("a production release said %q, and production is meant to answer anyone", production.Lines())
 	}
 
-	shielded := &fake.Progress{}
+	shielded := &fake.Log{}
 	front, err := p.Edges().Open(alb.Kind)
 	if err != nil {
 		t.Fatal(err)

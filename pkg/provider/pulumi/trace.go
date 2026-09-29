@@ -237,7 +237,7 @@ func awaitTrace(result <-chan engineTrace, grace time.Duration) engineTrace {
 	}
 }
 
-func reportTrace(runProgress progress.Progress, trace engineTrace, runErr error) {
+func reportTrace(runProgress progress.Log, trace engineTrace, runErr error) {
 	if runProgress == nil || (trace.ResourceCount == 0 && runErr == nil) {
 		return
 	}

@@ -85,7 +85,7 @@ func provisioned(t *testing.T, p *vps.Provider, tag string) release {
 	return release{physical: started[0].Physical, address: started[0].Physical + ":" + appbuild.InjectedPortText}
 }
 
-func releasing(p *vps.Provider, next release, drain time.Duration, progress progress.Progress) error {
+func releasing(p *vps.Provider, next release, drain time.Duration, progress progress.Log) error {
 	return p.Host().Release(context.Background(), host.Release{
 		Apps: []host.AppRelease{{
 			RouteKey:   host.RouteKey{Owner: liveOwner, Pointer: livePointer, App: liveApp},

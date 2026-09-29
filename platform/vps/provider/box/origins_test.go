@@ -68,7 +68,7 @@ func TestAPreviewsHostnamesAreOriginsItsProjectsBucketsAnswer(t *testing.T) {
 		t.Errorf("the preview claimed its hostname and never applied it to its project's buckets: %v", m.calls)
 	}
 
-	if _, err := removePointer(context.Background(), stack, "pr-7", progress.DiscardProgress()); err != nil {
+	if _, err := removePointer(context.Background(), stack, "pr-7", progress.Discard()); err != nil {
 		t.Fatalf("RemovePointer: %v", err)
 	}
 	gone := slices.Index(m.calls, "disclaim "+"ocel--"+slug+"--preview/pr-7")
@@ -108,7 +108,7 @@ func TestAPreviewWhoseBucketOriginsCannotBeAppliedIsStillRemovedAndWarns(t *test
 	previewed(t, stack, "pr-7", "web")
 	m.refuseOn("ApplyOrigins", errors.New("the store answered 503"))
 
-	said := &fake.Progress{}
+	said := &fake.Log{}
 	if _, err := removePointer(context.Background(), stack, "pr-7", said); err != nil {
 		t.Fatalf("RemovePointer = %v, want the preview removed: its hostnames are already released, and a CORS rule the next deploy rewrites is no reason to leave its routes in place", err)
 	}

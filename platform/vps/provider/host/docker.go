@@ -137,7 +137,7 @@ tail -n ` + strconv.Itoa(engineTailLines) + ` "$log" >&2
 exit 1`
 }
 
-func (h *Host) installEngine(ctx context.Context, progress progress.Progress) error {
+func (h *Host) installEngine(ctx context.Context, progress progress.Log) error {
 	elevation, err := h.elevate(ctx)
 	if err != nil {
 		return err

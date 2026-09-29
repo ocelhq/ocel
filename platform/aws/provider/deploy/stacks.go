@@ -355,7 +355,7 @@ func (r *release) refuseHandover(ctx context.Context, spec provider.StackSpec) e
 	return &HandoverError{Bindings: handed, Stack: spec.Ref.Name.String()}
 }
 
-func (r *Stacks) PackApp(ctx context.Context, req provider.PackAppRequest, _ progress.Progress) (provider.PackAppResult, error) {
+func (r *Stacks) PackApp(ctx context.Context, req provider.PackAppRequest, _ progress.Log) (provider.PackAppResult, error) {
 	opened, err := r.at(ctx, req.Ref, req.Edge)
 	if err != nil {
 		return provider.PackAppResult{}, err
@@ -367,7 +367,7 @@ func (r *Stacks) PackApp(ctx context.Context, req provider.PackAppRequest, _ pro
 	return provider.PackAppResult{Overlay: bundle.overlay(), VendorState: bundle}, nil
 }
 
-func (r *Stacks) Plan(ctx context.Context, spec provider.StackSpec, progress progress.Progress) (provider.Plan, error) {
+func (r *Stacks) Plan(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.Plan, error) {
 	opened, err := r.at(ctx, spec.Ref, edgeKindOf(spec))
 	if err != nil {
 		return provider.Plan{}, err
@@ -375,7 +375,7 @@ func (r *Stacks) Plan(ctx context.Context, spec provider.StackSpec, progress pro
 	return opened.plan(ctx, spec, progress)
 }
 
-func (r *Stacks) PlanDestroy(ctx context.Context, ref provider.StackRef, progress progress.Progress) (provider.Plan, error) {
+func (r *Stacks) PlanDestroy(ctx context.Context, ref provider.StackRef, progress progress.Log) (provider.Plan, error) {
 	opened, err := r.at(ctx, ref, "")
 	if err != nil {
 		return provider.Plan{}, err
@@ -383,7 +383,7 @@ func (r *Stacks) PlanDestroy(ctx context.Context, ref provider.StackRef, progres
 	return opened.automation.PreviewDestroy(ctx, ref, progress)
 }
 
-func (r *Stacks) Provision(ctx context.Context, spec provider.StackSpec, progress progress.Progress) (provider.StackResult, error) {
+func (r *Stacks) Provision(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.StackResult, error) {
 	opened, err := r.at(ctx, spec.Ref, edgeKindOf(spec))
 	if err != nil {
 		return provider.StackResult{}, err
@@ -391,7 +391,7 @@ func (r *Stacks) Provision(ctx context.Context, spec provider.StackSpec, progres
 	return opened.provision(ctx, spec, progress)
 }
 
-func (r *release) provision(ctx context.Context, spec provider.StackSpec, progress progress.Progress) (provider.StackResult, error) {
+func (r *release) provision(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.StackResult, error) {
 	r.realized.mark(naming.Sanitize(spec.Ref.Project), spec.Ref.Name)
 	if runsContainer(spec) {
 		return r.provisionContainer(ctx, spec, progress)
@@ -417,7 +417,7 @@ func (r *release) provision(ctx context.Context, spec provider.StackSpec, progre
 	return result, nil
 }
 
-func (r *release) plan(ctx context.Context, spec provider.StackSpec, progress progress.Progress) (provider.Plan, error) {
+func (r *release) plan(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.Plan, error) {
 	if runsContainer(spec) {
 		return r.planContainer(ctx, spec, progress)
 	}
@@ -478,7 +478,7 @@ func (r *release) prepare(ctx context.Context, spec provider.StackSpec) (provide
 	return spec, work, nil
 }
 
-func (r *Stacks) Destroy(ctx context.Context, ref provider.StackRef, progress progress.Progress) error {
+func (r *Stacks) Destroy(ctx context.Context, ref provider.StackRef, progress progress.Log) error {
 	opened, err := r.at(ctx, ref, "")
 	if err != nil {
 		return err
@@ -502,7 +502,7 @@ func (r *Stacks) Inspect(ctx context.Context, ref provider.StackRef) (provider.I
 	return provider.InspectedStack{Present: len(outputs) > 0}, nil
 }
 
-func (r *Stacks) Outputs(ctx context.Context, ref provider.StackRef, progress progress.Progress) (auto.OutputMap, error) {
+func (r *Stacks) Outputs(ctx context.Context, ref provider.StackRef, progress progress.Log) (auto.OutputMap, error) {
 	opened, err := r.at(ctx, ref, "")
 	if err != nil {
 		return nil, err

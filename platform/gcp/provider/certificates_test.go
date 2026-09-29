@@ -22,7 +22,7 @@ func requested(t *testing.T, server *certServer, hostname string) (provider.Cert
 	cert, err := server.open(t).Certificates().Issue(context.Background(), provider.CertificateRequest{
 		Kind:     alb.Kind,
 		Hostname: hostname,
-		Progress: progress.DiscardProgress(),
+		Progress: progress.Discard(),
 		Prove: func(_ context.Context, cert provider.Certificate, records []edge.Record) (provider.Certificate, error) {
 			proved = records
 			cert.Written = records
@@ -123,7 +123,7 @@ func TestACertificateManagerRefusedToIssueIsReportedRatherThanWaitedOutForever(t
 	_, err := server.open(t).Certificates().Issue(context.Background(), provider.CertificateRequest{
 		Kind:     alb.Kind,
 		Hostname: "shop.example.com",
-		Progress: progress.DiscardProgress(),
+		Progress: progress.Discard(),
 		Prove: func(_ context.Context, cert provider.Certificate, _ []edge.Record) (provider.Certificate, error) {
 			return cert, nil
 		},
@@ -147,7 +147,7 @@ func TestACertificateStillProvisioningWhenThePatienceRunsOutIsLeftPending(t *tes
 	_, err := server.open(t).Certificates().Issue(context.Background(), provider.CertificateRequest{
 		Kind:     alb.Kind,
 		Hostname: "shop.example.com",
-		Progress: progress.DiscardProgress(),
+		Progress: progress.Discard(),
 		Prove: func(_ context.Context, cert provider.Certificate, _ []edge.Record) (provider.Certificate, error) {
 			return cert, nil
 		},
@@ -203,7 +203,7 @@ func TestDiscardingACertificateTakesTheAuthorizationItWasProvedThroughWithIt(t *
 	server := newCertServer()
 	cert, _ := requested(t, server, "shop.example.com")
 
-	if err := server.open(t).Certificates().Discard(context.Background(), cert, progress.DiscardProgress()); err != nil {
+	if err := server.open(t).Certificates().Discard(context.Background(), cert, progress.Discard()); err != nil {
 		t.Fatalf("DiscardCertificate(%s) = %v", cert.ID, err)
 	}
 	dropped := server.dropped()
@@ -226,7 +226,7 @@ func TestDiscardingACertificateSaysWhichHostnameItCovered(t *testing.T) {
 
 	server := newCertServer()
 	cert, _ := requested(t, server, "shop.example.com")
-	progress := &fake.Progress{}
+	progress := &fake.Log{}
 
 	if err := server.open(t).Certificates().Discard(context.Background(), cert, progress); err != nil {
 		t.Fatalf("DiscardCertificate(%s) = %v", cert.ID, err)
@@ -241,7 +241,7 @@ func TestACertificateNothingRequestedIsNotThisProvidersToDelete(t *testing.T) {
 	t.Parallel()
 
 	server := newCertServer()
-	if err := server.open(t).Certificates().Discard(context.Background(), provider.Certificate{}, progress.DiscardProgress()); err != nil {
+	if err := server.open(t).Certificates().Discard(context.Background(), provider.Certificate{}, progress.Discard()); err != nil {
 		t.Errorf("DiscardCertificate() of a binding naming no certificate = %v, want it tolerated", err)
 	}
 	if got := server.dropped(); len(got) != 0 {

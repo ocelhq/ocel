@@ -23,12 +23,12 @@ func (*heard) Debug(string) {}
 
 func (*heard) Span(string, time.Time, time.Time, error, ...Attr) {}
 
-func TestAHeededWarningIsAWarnAndNotAFailure(t *testing.T) {
+func TestAReportedWarningIsAWarnAndNotAFailure(t *testing.T) {
 	t.Parallel()
 
 	progress := &heard{}
-	if err := Heeded(Warned(errors.New("the old binding outlived its release")), progress); err != nil {
-		t.Fatalf("Heeded(a warning) = %v, want nil", err)
+	if err := ReportWarning(progress, MarkWarning(errors.New("the old binding outlived its release"))); err != nil {
+		t.Fatalf("ReportWarning(a warning) = %v, want nil", err)
 	}
 	if want := []string{"the old binding outlived its release"}; !slices.Equal(progress.warned, want) {
 		t.Errorf("warned %q, want %q", progress.warned, want)
@@ -38,13 +38,13 @@ func TestAHeededWarningIsAWarnAndNotAFailure(t *testing.T) {
 	}
 }
 
-func TestAHeededFailureIsReturnedUnspoken(t *testing.T) {
+func TestAReportedFailureIsReturnedUnspoken(t *testing.T) {
 	t.Parallel()
 
 	progress := &heard{}
 	failure := errors.New("the zone is gone")
-	if err := Heeded(failure, progress); !errors.Is(err, failure) {
-		t.Fatalf("Heeded(a failure) = %v, want %v", err, failure)
+	if err := ReportWarning(progress, failure); !errors.Is(err, failure) {
+		t.Fatalf("ReportWarning(a failure) = %v, want %v", err, failure)
 	}
 	if len(progress.said)+len(progress.warned) != 0 {
 		t.Errorf("a failure was spoken: said %q, warned %q", progress.said, progress.warned)

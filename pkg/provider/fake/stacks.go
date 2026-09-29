@@ -50,15 +50,15 @@ func (r *Stacks) Provisioned() []provider.StackSpec {
 	return slices.Clone(r.provisioned)
 }
 
-func (r *Stacks) Plan(ctx context.Context, spec provider.StackSpec, _ progress.Progress) (provider.Plan, error) {
+func (r *Stacks) Plan(ctx context.Context, spec provider.StackSpec, _ progress.Log) (provider.Plan, error) {
 	return resources.SynthesizedPlan(ctx, r.artifacts, spec, r.Inspect(spec.Ref).Result)
 }
 
-func (r *Stacks) PlanDestroy(_ context.Context, ref provider.StackRef, _ progress.Progress) (provider.Plan, error) {
+func (r *Stacks) PlanDestroy(_ context.Context, ref provider.StackRef, _ progress.Log) (provider.Plan, error) {
 	return resources.SynthesizedRemoval(ref, r.Inspect(ref).Result), nil
 }
 
-func (r *Stacks) Provision(ctx context.Context, spec provider.StackSpec, progress progress.Progress) (provider.StackResult, error) {
+func (r *Stacks) Provision(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.StackResult, error) {
 	if err := ctx.Err(); err != nil {
 		return provider.StackResult{}, err
 	}
@@ -112,7 +112,7 @@ func (r *Stacks) RefuseNextDestroy(err error) {
 	r.refusal = err
 }
 
-func (r *Stacks) Destroy(_ context.Context, ref provider.StackRef, progress progress.Progress) error {
+func (r *Stacks) Destroy(_ context.Context, ref provider.StackRef, progress progress.Log) error {
 	r.journal.note("destroy " + ref.Name.String())
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -206,22 +206,22 @@ func propertiesFor(t provider.BindingType, name string) map[string]string {
 	return properties
 }
 
-func (*Provider) ProvisionFunctions(_ context.Context, spec provider.StackSpec, _ progress.Progress) ([]provider.Function, error) {
+func (*Provider) ProvisionFunctions(_ context.Context, spec provider.StackSpec, _ progress.Log) ([]provider.Function, error) {
 	return ProvisionedFunctions(spec), nil
 }
 
-func (p *Provider) RemoveFunctions(_ context.Context, _ provider.StackRef, functions []provider.Function, _ progress.Progress) error {
+func (p *Provider) RemoveFunctions(_ context.Context, _ provider.StackRef, functions []provider.Function, _ progress.Log) error {
 	for _, function := range functions {
 		p.stacks.recordDestroyed(function.Name)
 	}
 	return nil
 }
 
-func (*Provider) ProvisionContainers(_ context.Context, spec provider.StackSpec, _ progress.Progress) ([]provider.AppContainer, error) {
+func (*Provider) ProvisionContainers(_ context.Context, spec provider.StackSpec, _ progress.Log) ([]provider.AppContainer, error) {
 	return ProvisionedContainers(spec), nil
 }
 
-func (p *Provider) RemoveContainers(_ context.Context, _ provider.StackRef, containers []provider.AppContainer, _ progress.Progress) error {
+func (p *Provider) RemoveContainers(_ context.Context, _ provider.StackRef, containers []provider.AppContainer, _ progress.Log) error {
 	for _, container := range containers {
 		p.stacks.recordDestroyed(container.Name)
 	}

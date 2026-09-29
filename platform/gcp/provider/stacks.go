@@ -27,14 +27,14 @@ func serviceFor(names Names, spec provider.StackSpec, app *provider.AppSpec, fun
 const previewOpenWarning = "is a preview and answers anyone who knows its Cloud Run url: nothing in front of it shields it, " +
 	"and Cloud Run's invoker check would shut browsers out too. Front previews with an edge that shields the origin, or keep their urls to yourselves"
 
-func warnPreviewOpen(spec provider.StackSpec, service string, progress progress.Progress) {
+func warnPreviewOpen(spec provider.StackSpec, service string, progress progress.Log) {
 	if spec.Ref.Tier != environment.TierPreview || factsOf(spec.Edge).ShieldsOrigin {
 		return
 	}
 	ensureProgress(progress).Warn("Cloud Run service " + service + " " + previewOpenWarning)
 }
 
-func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSpec, progress progress.Progress) ([]provider.Function, error) {
+func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSpec, progress progress.Log) ([]provider.Function, error) {
 	app := spec.App
 	if app == nil {
 		return nil, nil
@@ -89,7 +89,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 	return deployed, nil
 }
 
-func (p *Provider) RemoveFunctions(ctx context.Context, _ provider.StackRef, functions []provider.Function, progress progress.Progress) error {
+func (p *Provider) RemoveFunctions(ctx context.Context, _ provider.StackRef, functions []provider.Function, progress progress.Log) error {
 	return p.tearDownAll(ctx, functionRevisions(functions), progress)
 }
 
@@ -112,7 +112,7 @@ func (p *Provider) NameFunctions(ctx context.Context, spec provider.StackSpec) (
 	return functions, nil
 }
 
-func (p *Provider) RemoveFunctionRevisions(ctx context.Context, _ provider.StackRef, functions []provider.Function, progress progress.Progress) ([]provider.Function, error) {
+func (p *Provider) RemoveFunctionRevisions(ctx context.Context, _ provider.StackRef, functions []provider.Function, progress progress.Log) ([]provider.Function, error) {
 	kept, err := p.removeRevisions(ctx, functionRevisions(functions), progress)
 	if err != nil {
 		return nil, err
@@ -132,7 +132,7 @@ func functionRevisions(functions []provider.Function) []serviceRevision {
 	return revisions
 }
 
-func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackSpec, progress progress.Progress) ([]provider.AppContainer, error) {
+func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackSpec, progress progress.Log) ([]provider.AppContainer, error) {
 	app := spec.App
 	if app == nil {
 		return nil, nil
@@ -180,7 +180,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	}}, nil
 }
 
-func (p *Provider) RemoveContainers(ctx context.Context, _ provider.StackRef, containers []provider.AppContainer, progress progress.Progress) error {
+func (p *Provider) RemoveContainers(ctx context.Context, _ provider.StackRef, containers []provider.AppContainer, progress progress.Log) error {
 	return p.tearDownAll(ctx, containerRevisions(containers), progress)
 }
 
@@ -199,7 +199,7 @@ func (p *Provider) NameContainers(ctx context.Context, spec provider.StackSpec) 
 	return []provider.AppContainer{{Name: spec.App.App, Physical: service, Image: spec.App.Image}}, nil
 }
 
-func (p *Provider) RemoveContainerRevisions(ctx context.Context, _ provider.StackRef, containers []provider.AppContainer, progress progress.Progress) ([]provider.AppContainer, error) {
+func (p *Provider) RemoveContainerRevisions(ctx context.Context, _ provider.StackRef, containers []provider.AppContainer, progress progress.Log) ([]provider.AppContainer, error) {
 	kept, err := p.removeRevisions(ctx, containerRevisions(containers), progress)
 	if err != nil {
 		return nil, err
@@ -224,7 +224,7 @@ type serviceRevision struct {
 	revision string
 }
 
-func (p *Provider) tearDownAll(ctx context.Context, going []serviceRevision, progress progress.Progress) error {
+func (p *Provider) tearDownAll(ctx context.Context, going []serviceRevision, progress progress.Log) error {
 	for _, each := range going {
 		if each.service == "" {
 			continue
@@ -236,7 +236,7 @@ func (p *Provider) tearDownAll(ctx context.Context, going []serviceRevision, pro
 	return nil
 }
 
-func (p *Provider) removeRevisions(ctx context.Context, going []serviceRevision, progress progress.Progress) ([]int, error) {
+func (p *Provider) removeRevisions(ctx context.Context, going []serviceRevision, progress progress.Log) ([]int, error) {
 	var kept []int
 	for at, each := range going {
 		stays, err := p.removeRevision(ctx, each.service, each.revision, progress)

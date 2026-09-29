@@ -20,7 +20,7 @@ const cacheDirName = ".ocel"
 
 var pinned installation
 
-func Install(ctx context.Context, progress progress.Progress) error {
+func Install(ctx context.Context, progress progress.Log) error {
 	_, err := pinned.install(ctx, progress)
 	return err
 }
@@ -31,12 +31,12 @@ type installation struct {
 	err     error
 }
 
-func (i *installation) install(ctx context.Context, progress progress.Progress) (auto.PulumiCommand, error) {
+func (i *installation) install(ctx context.Context, progress progress.Log) (auto.PulumiCommand, error) {
 	i.once.Do(func() { i.command, i.err = install(ctx, progress) })
 	return i.command, i.err
 }
 
-func install(ctx context.Context, progress progress.Progress) (auto.PulumiCommand, error) {
+func install(ctx context.Context, progress progress.Log) (auto.PulumiCommand, error) {
 	version, err := semver.ParseTolerant(PinnedVersion)
 	if err != nil {
 		return nil, fmt.Errorf("parse pinned Pulumi version: %w", err)

@@ -274,7 +274,7 @@ func TestAFailedUnitSaysWhyAtErrorInItsUnitOnceBeforeTheUnitEnds(t *testing.T) {
 	sender := newEventStream(context.Background(), stream.send)
 	unit := UnitSpan("web", "web", "Deploying the serverless app to production", progressv1.Phase_PHASE_DEPLOY)
 	_ = newSpanEvents(sender).run(unit, func(u *spanRun) error {
-		return u.phase(func(progress.Progress) error {
+		return u.phase(func(progress.Log) error {
 			return errors.New("the web stack could not be provisioned\x1b[0m")
 		})
 	})
@@ -314,7 +314,7 @@ func TestAUnitsWorkSpeaksInTheUnitsOwnSpanWithNoSpanOfItsOwn(t *testing.T) {
 	sender := newEventStream(context.Background(), stream.send)
 	unit := UnitSpan("web", "web", "Deploying the serverless app to production", progressv1.Phase_PHASE_DEPLOY)
 	_ = newSpanEvents(sender).run(unit, func(u *spanRun) error {
-		return u.phase(func(progress progress.Progress) error {
+		return u.phase(func(progress progress.Log) error {
 			progress.Say("Uploading function web's artifact (1.2 MiB)")
 			return nil
 		})

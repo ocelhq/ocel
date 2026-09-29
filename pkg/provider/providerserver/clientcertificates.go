@@ -141,7 +141,7 @@ func isOriginCertificateDue(hostState *stackrecords.HostnameState, now time.Time
 		edge.OriginCertificate{ExpiresAt: hostState.OriginCertificateExpiresAt}.IsDue(now)
 }
 
-func revokeOriginCertificate(ctx context.Context, front edge.Edge, id string, runProgress progress.Progress) {
+func revokeOriginCertificate(ctx context.Context, front edge.Edge, id string, runProgress progress.Log) {
 	certificates := front.Hooks().OriginCertificates
 	if id == "" || certificates == nil {
 		return

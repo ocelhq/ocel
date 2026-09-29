@@ -198,7 +198,7 @@ func testState(endpoint, secret string) edge.StackState {
 
 func flips(t *testing.T, p *cloudflare, state edge.StackState, flip router.Flip) {
 	t.Helper()
-	if err := (routerStack{s: stackOn(p, state)}).Flip(t.Context(), flip, progress.DiscardProgress()); err != nil {
+	if err := (routerStack{s: stackOn(p, state)}).Flip(t.Context(), flip, progress.Discard()); err != nil {
 		t.Fatalf("Flip(%s): %v", flip.Promotion.PromotionID, err)
 	}
 }
@@ -250,7 +250,7 @@ func TestRemovingAPointerLeavesNothingServedOnIt(t *testing.T) {
 	state := testState(srv.URL, "s3cr3t")
 	flips(t, p, state, flipOf("promo-preview", "pr-42", router.DeploymentRecord{App: "web", Build: "b1"}))
 
-	if err := (routerStack{s: stackOn(p, state)}).RemovePointer(t.Context(), "pr-42", progress.DiscardProgress()); err != nil {
+	if err := (routerStack{s: stackOn(p, state)}).RemovePointer(t.Context(), "pr-42", progress.Discard()); err != nil {
 		t.Fatalf("RemovePointer: %v", err)
 	}
 	if served := store.serving("pr-42", "web"); served != "" {

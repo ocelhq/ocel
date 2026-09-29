@@ -16,7 +16,7 @@ type ArtifactStore interface {
 
 	Open(ctx context.Context, ref ArtifactRef) (io.ReadCloser, error)
 
-	RemovePrefix(ctx context.Context, tier environment.Tier, prefix string, progress progress.Progress) error
+	RemovePrefix(ctx context.Context, tier environment.Tier, prefix string, progress progress.Log) error
 }
 
 type ArtifactRef struct {

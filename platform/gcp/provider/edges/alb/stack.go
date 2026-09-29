@@ -31,7 +31,7 @@ func (s *stack) openLedger() *ledger.Ledger {
 	return ledgerFor(s.e.deps.KeyValues, s.state.Tier, s.state.Slug)
 }
 
-func (s *stack) released(ctx context.Context, records map[string]router.DeploymentRecord, progress progress.Progress) error {
+func (s *stack) released(ctx context.Context, records map[string]router.DeploymentRecord, progress progress.Log) error {
 	hosts := maps.Clone(s.recorded.Hosts)
 	var took []string
 	for _, hostname := range slices.Sorted(maps.Keys(hosts)) {
@@ -171,7 +171,7 @@ func (s *stack) target() Target { return Target{Tier: s.state.Tier, Slug: s.stat
 func (s *stack) raise(ctx context.Context, hosts map[string]Host) error {
 	target := s.target()
 	if len(hosts) == 0 {
-		return s.e.deps.Stacks.Destroy(ctx, target, progress.DiscardProgress())
+		return s.e.deps.Stacks.Destroy(ctx, target, progress.Discard())
 	}
 	_, err := s.e.deps.Stacks.Up(ctx, target, bindingProgram(bindingSpec{
 		Region:         s.e.deps.Region,
@@ -179,7 +179,7 @@ func (s *stack) raise(ctx context.Context, hosts map[string]Host) error {
 		Tier:           s.state.Tier,
 		CertificateMap: s.recorded.LoadBalancer.CertificateMap,
 		Hosts:          hosts,
-	}), progress.DiscardProgress())
+	}), progress.Discard())
 	return err
 }
 
@@ -270,7 +270,7 @@ func (s *stack) Destroy(ctx context.Context) error {
 		}
 	}
 	if len(s.recorded.Hosts) > 0 {
-		if err := s.e.deps.Stacks.Destroy(ctx, s.target(), progress.DiscardProgress()); err != nil {
+		if err := s.e.deps.Stacks.Destroy(ctx, s.target(), progress.Discard()); err != nil {
 			return err
 		}
 	}

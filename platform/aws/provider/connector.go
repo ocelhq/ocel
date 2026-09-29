@@ -57,7 +57,7 @@ func (p connector) Target(ctx context.Context) (provider.ConnectorTarget, error)
 }
 
 func (p connector) Install(ctx context.Context, install provider.ConnectorInstall,
-	progress progress.Progress) (provider.ConnectorAddress, error) {
+	progress progress.Log) (provider.ConnectorAddress, error) {
 	compute, err := provider.ConnectorCompute(install.Compute, connectorCompute)
 	if err != nil {
 		return provider.ConnectorAddress{}, err
@@ -73,7 +73,7 @@ func (p connector) Install(ctx context.Context, install provider.ConnectorInstal
 	return provider.ConnectorAddress{URL: installation.URL, PublicKey: installation.PublicKey, Compute: compute}, nil
 }
 
-func (p connector) Remove(ctx context.Context, progress progress.Progress) error {
+func (p connector) Remove(ctx context.Context, progress progress.Log) error {
 	return awsconnector.Remove(ctx, p.connectorAPIs(), p.namespace, progress)
 }
 

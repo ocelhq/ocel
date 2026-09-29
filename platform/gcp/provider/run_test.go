@@ -402,7 +402,7 @@ func TestAServiceThatKeepsChangingUnderAReleaseIsRefusedRatherThanRetriedForever
 func TestARunSaysWhichCloudRunServiceItCreatesReleasesAndDeletesAndInWhichRegion(t *testing.T) {
 	server := &runServer{}
 	p := server.open(t)
-	progress := &fake.Progress{}
+	progress := &fake.Log{}
 	ctx := context.Background()
 
 	if _, err := p.deployService(ctx, serves("ocel-shop-prod-app"), progress); err != nil {

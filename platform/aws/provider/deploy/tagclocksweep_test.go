@@ -20,17 +20,17 @@ type fakeEngine struct {
 
 var _ pulumi.Engine = (*fakeEngine)(nil)
 
-func (f *fakeEngine) Preview(_ context.Context, setup pulumi.WorkspaceSpec, op pulumi.Operation, _ progress.Progress) ([]provider.Change, error) {
+func (f *fakeEngine) Preview(_ context.Context, setup pulumi.WorkspaceSpec, op pulumi.Operation, _ progress.Log) ([]provider.Change, error) {
 	f.record("preview-" + string(op) + " " + setup.Stack)
 	return nil, nil
 }
 
-func (f *fakeEngine) Up(_ context.Context, setup pulumi.WorkspaceSpec, _ progress.Progress) (auto.OutputMap, error) {
+func (f *fakeEngine) Up(_ context.Context, setup pulumi.WorkspaceSpec, _ progress.Log) (auto.OutputMap, error) {
 	f.record("up-stack " + setup.Stack)
 	return auto.OutputMap{}, nil
 }
 
-func (f *fakeEngine) Destroy(_ context.Context, setup pulumi.WorkspaceSpec, _ progress.Progress) error {
+func (f *fakeEngine) Destroy(_ context.Context, setup pulumi.WorkspaceSpec, _ progress.Log) error {
 	f.record("destroy-stack " + setup.Stack)
 	return nil
 }

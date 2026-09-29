@@ -38,7 +38,7 @@ func (daemonStore) Has(ctx context.Context, push provider.ImagePush) (bool, erro
 	return true, nil
 }
 
-func (daemonStore) Push(ctx context.Context, push provider.ImagePush, _ progress.Progress) error {
+func (daemonStore) Push(ctx context.Context, push provider.ImagePush, _ progress.Log) error {
 	if push.Built == nil {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"%s's image is written straight into the local docker daemon, and this release has no image it was built into", push.App)

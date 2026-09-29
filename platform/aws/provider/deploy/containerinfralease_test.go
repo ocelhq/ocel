@@ -57,7 +57,7 @@ func TestTheLastContainerLeavingKeepsTheContainerInfraWhenAnotherDeployClaimsItM
 	shared := fake.NewKeyValues()
 	store := &interceptedRecords{Store: shared}
 	stacks, engine, shop := containerStacks(t, store)
-	if _, err := stacks.Provision(ctx, shop, progress.DiscardProgress()); err != nil {
+	if _, err := stacks.Provision(ctx, shop, progress.Discard()); err != nil {
 		t.Fatalf("Provision(shop) = %v", err)
 	}
 
@@ -69,12 +69,12 @@ func TestTheLastContainerLeavingKeepsTheContainerInfraWhenAnotherDeployClaimsItM
 			return
 		}
 		claimed = true
-		if _, err := other.Provision(ctx, blog, progress.DiscardProgress()); err != nil {
+		if _, err := other.Provision(ctx, blog, progress.Discard()); err != nil {
 			t.Errorf("Provision(blog) during shop's release = %v", err)
 		}
 	}
 
-	if err := stacks.Destroy(ctx, shop.Ref, progress.DiscardProgress()); err != nil {
+	if err := stacks.Destroy(ctx, shop.Ref, progress.Discard()); err != nil {
 		t.Fatalf("Destroy(shop) = %v", err)
 	}
 	if !claimed {
@@ -100,7 +100,7 @@ func TestAContainerDeployIsRefusedWhileTheContainerInfraIsGoingDown(t *testing.T
 	ctx := context.Background()
 	shared := fake.NewKeyValues()
 	stacks, engine, shop := containerStacks(t, shared)
-	if _, err := stacks.Provision(ctx, shop, progress.DiscardProgress()); err != nil {
+	if _, err := stacks.Provision(ctx, shop, progress.Discard()); err != nil {
 		t.Fatalf("Provision(shop) = %v", err)
 	}
 	leased, err := keyvalue.ReadOrEmpty(ctx, shared, leaseAt(environment.TierProduction))
@@ -113,7 +113,7 @@ func TestAContainerDeployIsRefusedWhileTheContainerInfraIsGoingDown(t *testing.T
 
 	other, _, blog := containerStacks(t, shared)
 	blog.Ref = provider.StackRef{Project: "blog", Tier: environment.TierProduction, Name: naming.AppStack("prod", "web", fixedRelease(t))}
-	_, err = other.Provision(ctx, blog, progress.DiscardProgress())
+	_, err = other.Provision(ctx, blog, progress.Discard())
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
 		t.Fatalf("Provision(blog) = %v, want the busy refusal shared container infrastructure on its way down earns", err)

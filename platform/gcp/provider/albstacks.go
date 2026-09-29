@@ -35,7 +35,7 @@ func (s albStacks) Up(
 	ctx context.Context,
 	target alb.Target,
 	program alb.Program,
-	progress progress.Progress,
+	progress progress.Log,
 ) (map[string]string, error) {
 	automation, spec, err := s.opened(ctx, target, program)
 	if err != nil {
@@ -47,7 +47,7 @@ func (s albStacks) Up(
 	return outputsOf(ctx, automation, spec.Ref)
 }
 
-func (s albStacks) Destroy(ctx context.Context, target alb.Target, progress progress.Progress) error {
+func (s albStacks) Destroy(ctx context.Context, target alb.Target, progress progress.Log) error {
 	automation, spec, err := s.opened(ctx, target, nil)
 	if err != nil {
 		return err
@@ -64,7 +64,7 @@ func (s albStacks) Outputs(ctx context.Context, target alb.Target) (map[string]s
 }
 
 func outputsOf(ctx context.Context, automation *pulumi.Automation, ref provider.StackRef) (map[string]string, error) {
-	outputs, err := automation.Outputs(ctx, ref, progress.DiscardProgress())
+	outputs, err := automation.Outputs(ctx, ref, progress.Discard())
 	if err != nil {
 		return nil, err
 	}

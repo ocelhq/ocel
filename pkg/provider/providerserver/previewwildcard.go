@@ -101,7 +101,7 @@ func (w *wildcards) readStored(ctx context.Context) (keyvalue.Entry, stackrecord
 func (h *handlers) UsePreviewWildcard(ctx context.Context, req *contractv1.UsePreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	unit := UnitSpan(naming.UnitEdge, string(environment.TierPreview),
 		"Serving every project's previews on "+edge.PreviewWildcard(req.GetBaseDomain()), progressv1.Phase_PHASE_PROVISION)
-	return streamed(ctx, stream, unit, func(sender *eventStream, progress progress.Progress) error {
+	return streamed(ctx, stream, unit, func(sender *eventStream, progress progress.Log) error {
 		base, err := previewBaseDomain(req.GetBaseDomain())
 		if err != nil {
 			return err
@@ -119,7 +119,7 @@ func (h *handlers) UsePreviewWildcard(ctx context.Context, req *contractv1.UsePr
 	})
 }
 
-func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progress progress.Progress) error {
+func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progress progress.Log) error {
 	if err := w.claimable(front, base); err != nil {
 		return err
 	}
@@ -201,7 +201,7 @@ func (w *wildcards) entryOrigin(front edge.Edge) (*router.OriginHooks, error) {
 	return routerOriginBehind(front, paired), nil
 }
 
-func (w *wildcards) reconcileEntry(ctx context.Context, front edge.Edge, origin *router.OriginHooks, runProgress progress.Progress) (string, error) {
+func (w *wildcards) reconcileEntry(ctx context.Context, front edge.Edge, origin *router.OriginHooks, runProgress progress.Log) (string, error) {
 	base := w.recorded.BaseDomain
 	spec := edge.PreviewWildcardSpec{
 		BaseDomain:  base,
@@ -280,7 +280,7 @@ func (w *wildcards) swapOriginCertificate(ctx context.Context, from, to string, 
 	return fmt.Errorf("%w on %s: its record changed under every one of %d attempts", errPreviewEntryRenewing, w.recorded.Hostname(), reservationAttempts)
 }
 
-func (w *wildcards) refreshEntryClaim(ctx context.Context, front edge.Edge, runProgress progress.Progress) error {
+func (w *wildcards) refreshEntryClaim(ctx context.Context, front edge.Edge, runProgress progress.Log) error {
 	if !w.recorded.IsRecorded() || w.recorded.Edge != front.Kind() {
 		return nil
 	}
@@ -442,7 +442,7 @@ func (w *wildcards) owningEdge() (edge.Edge, error) {
 	return w.provider.Edges().Open(w.recorded.Edge)
 }
 
-func (w *wildcards) disclaimEntry(ctx context.Context, front edge.Edge, runProgress progress.Progress) error {
+func (w *wildcards) disclaimEntry(ctx context.Context, front edge.Edge, runProgress progress.Log) error {
 	origin, err := w.entryOrigin(front)
 	if err != nil || origin == nil {
 		return err
@@ -536,7 +536,7 @@ func edgeGroupProto(group edge.PlanGroup) (*planv1.ChangeGroup, error) {
 
 func (h *handlers) RemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	unit := UnitSpan(naming.UnitEdge, string(environment.TierPreview), "Releasing the global preview domain", progressv1.Phase_PHASE_DESTROY)
-	return streamed(ctx, stream, unit, func(_ *eventStream, progress progress.Progress) error {
+	return streamed(ctx, stream, unit, func(_ *eventStream, progress progress.Log) error {
 		w, err := h.wildcard(ctx, req.GetEdge())
 		if err != nil {
 			return err
@@ -545,7 +545,7 @@ func (h *handlers) RemovePreviewWildcard(ctx context.Context, req *contractv1.Pr
 	})
 }
 
-func (w *wildcards) release(ctx context.Context, progress progress.Progress) error {
+func (w *wildcards) release(ctx context.Context, progress progress.Log) error {
 	if w.recorded.BaseDomain == "" {
 		progress.Say("Nothing to release: previews use no global preview domain")
 		return nil

@@ -79,7 +79,7 @@ func healableChange(ns Namespace, stackName string, changes []cfntypes.ResourceC
 	return nil
 }
 
-func AdmitReplacements(ns Namespace, accept bool, progress progress.Progress) cfn.ChangeReview {
+func AdmitReplacements(ns Namespace, accept bool, progress progress.Log) cfn.ChangeReview {
 	progress = ensureProgress(progress)
 	return func(stackName string, changes []cfntypes.ResourceChange) error {
 		var replaced []string
@@ -129,7 +129,7 @@ func RefusedWrite(err error) bool {
 	}
 }
 
-func Heal(ctx context.Context, apis APIs, ns Namespace, tier environment.Tier, req HealRequest, progress progress.Progress) (bool, error) {
+func Heal(ctx context.Context, apis APIs, ns Namespace, tier environment.Tier, req HealRequest, progress progress.Log) (bool, error) {
 	target, err := specFor(ns, tier)
 	if err != nil {
 		return false, err
@@ -137,7 +137,7 @@ func Heal(ctx context.Context, apis APIs, ns Namespace, tier environment.Tier, r
 	return heal(ctx, apis, target, req, ensureProgress(progress))
 }
 
-func heal(ctx context.Context, apis APIs, target spec, req HealRequest, progress progress.Progress) (bool, error) {
+func heal(ctx context.Context, apis APIs, target spec, req HealRequest, progress progress.Log) (bool, error) {
 	deployed, refs, err := readBootstrap(ctx, apis.CFN, target.ns, target.tier)
 	if err != nil {
 		return false, err
@@ -178,7 +178,7 @@ func heal(ctx context.Context, apis APIs, target spec, req HealRequest, progress
 	return healed, nil
 }
 
-func healStack(ctx context.Context, apis APIs, ns Namespace, tier environment.Tier, stale StackStamp, deployed Deployed, refs stackRefs, writer provider.WrittenBy, progress progress.Progress) (bool, error) {
+func healStack(ctx context.Context, apis APIs, ns Namespace, tier environment.Tier, stale StackStamp, deployed Deployed, refs stackRefs, writer provider.WrittenBy, progress progress.Log) (bool, error) {
 	f, ok := featureNamed(stale.Feature)
 	if !ok {
 		return false, fmt.Errorf("this provider has no feature named %q", stale.Feature)
@@ -212,7 +212,7 @@ func healStack(ctx context.Context, apis APIs, ns Namespace, tier environment.Ti
 	return true, nil
 }
 
-func waitOutRun(ctx context.Context, stacks cfn.API, stale StackStamp, progress progress.Progress) error {
+func waitOutRun(ctx context.Context, stacks cfn.API, stale StackStamp, progress progress.Log) error {
 	idle, err := awaitStackIdle(ctx, stacks, stale.Name, progress)
 	if err != nil {
 		return err
@@ -234,7 +234,7 @@ func waitOutRun(ctx context.Context, stacks cfn.API, stale StackStamp, progress 
 
 const idleAttempts = 6
 
-func awaitStackIdle(ctx context.Context, stacks cfn.API, stackName string, progress progress.Progress) (bool, error) {
+func awaitStackIdle(ctx context.Context, stacks cfn.API, stackName string, progress progress.Log) (bool, error) {
 	for attempt := 0; ; attempt++ {
 		stack, err := cfn.DescribeStack(ctx, stacks, stackName)
 		if err != nil {

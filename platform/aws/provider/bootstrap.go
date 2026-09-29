@@ -22,7 +22,7 @@ type forgetting struct {
 	keyValues keyvalue.Store
 }
 
-func (s forgetting) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Progress) error {
+func (s forgetting) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
 	sealing, err := s.key(ctx, req.Tier)
 	if err != nil {
 		return err
@@ -41,7 +41,7 @@ func (s forgetting) Apply(ctx context.Context, req provider.BootstrapRequest, pr
 	return envsource.ForgetDigestKey(ctx, s.keyValues, req.Tier)
 }
 
-func (s forgetting) Remove(ctx context.Context, tier environment.Tier, progress progress.Progress) error {
+func (s forgetting) Remove(ctx context.Context, tier environment.Tier, progress progress.Log) error {
 	if err := s.Bootstrap.Remove(ctx, tier, progress); err != nil {
 		return err
 	}

@@ -240,7 +240,7 @@ func TestInstallingAndDroppingAFrontSaysWhichFeatureAndEdgeForWhichTier(t *testi
 	t.Parallel()
 
 	b, _ := fronting(t)
-	progress := &fake.Progress{}
+	progress := &fake.Log{}
 	raising := provider.BootstrapRequest{Tier: environment.TierProduction, Features: []string{albFeature}}
 	if err := b.raiseFronts(context.Background(), raising, progress); err != nil {
 		t.Fatalf("raiseFronts = %v", err)

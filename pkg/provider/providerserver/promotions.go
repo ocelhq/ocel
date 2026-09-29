@@ -61,15 +61,15 @@ func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest
 		Builds:      target.Builds,
 		Flip:        &flip,
 	}
-	dropped, err := session.promote(ctx, promoteRequest{replaces: current.Active, rollsBackTo: target.PromotionID, promotion: promoted}, progress.DiscardProgress())
+	dropped, err := session.promote(ctx, promoteRequest{replaces: current.Active, rollsBackTo: target.PromotionID, promotion: promoted}, progress.Discard())
 	if err != nil {
-		return nil, provider.RefusalError(errors.Join(err, session.reclaimDropped(ctx, "", dropped, progress.DiscardProgress())))
+		return nil, provider.RefusalError(errors.Join(err, session.reclaimDropped(ctx, "", dropped, progress.Discard())))
 	}
 	if err := session.checkpoint(ctx); err != nil {
 		return nil, provider.RefusalError(err)
 	}
 	rolled := &contractv1.RollbackResponse{Promoted: promotionProto(promoted)}
-	if err := session.reclaimDropped(ctx, "", dropped, progress.DiscardProgress()); err != nil {
+	if err := session.reclaimDropped(ctx, "", dropped, progress.Discard()); err != nil {
 		rolled.Warnings = append(rolled.Warnings, unreclaimedWarning(promoted.PromotionID, err))
 	}
 	return rolled, nil
@@ -108,7 +108,7 @@ func rollbackTarget(history []router.HistoryEntry, to, tag string) (router.Promo
 
 func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.RemoveStalePromotionsRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	unit := UnitSpan(naming.UnitPromotion, req.GetSlug(), pruneTitle(req), progressv1.Phase_PHASE_DESTROY)
-	return streamed(ctx, stream, unit, func(_ *eventStream, progress progress.Progress) error {
+	return streamed(ctx, stream, unit, func(_ *eventStream, progress progress.Log) error {
 		tier, err := decodeTier(req.GetEnvironment().GetTier())
 		if err != nil {
 			return err

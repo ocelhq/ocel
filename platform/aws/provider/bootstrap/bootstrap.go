@@ -349,7 +349,7 @@ func bootstrapFor(ns Namespace, tier environment.Tier) (spec, error) {
 	}
 }
 
-func Run(ctx context.Context, apis APIs, ns Namespace, tier environment.Tier, req Request, progress progress.Progress) error {
+func Run(ctx context.Context, apis APIs, ns Namespace, tier environment.Tier, req Request, progress progress.Log) error {
 	target, err := specFor(ns, tier)
 	if err != nil {
 		return err
@@ -357,9 +357,9 @@ func Run(ctx context.Context, apis APIs, ns Namespace, tier environment.Tier, re
 	return run(ctx, apis, target, req, ensureProgress(progress))
 }
 
-func ensureProgress(runProgress progress.Progress) progress.Progress {
+func ensureProgress(runProgress progress.Log) progress.Log {
 	if runProgress == nil {
-		return progress.DiscardProgress()
+		return progress.Discard()
 	}
 	return runProgress
 }
@@ -375,7 +375,7 @@ func specFor(ns Namespace, tier environment.Tier) (spec, error) {
 	}
 }
 
-func run(ctx context.Context, apis APIs, target spec, req Request, progress progress.Progress) error {
+func run(ctx context.Context, apis APIs, target spec, req Request, progress progress.Log) error {
 	requested := req.Features
 	levels, err := featureLevels(requested)
 	if err != nil {

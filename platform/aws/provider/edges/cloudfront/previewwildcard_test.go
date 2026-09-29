@@ -102,7 +102,7 @@ func promotePreview(t *testing.T, stack edge.EdgeStack, pointer string) {
 		PromotionID: "preview-" + pointer,
 		Ts:          1,
 		Builds:      map[string]string{"web": "d1.f1"},
-	}}, progress.DiscardProgress()); err != nil {
+	}}, progress.Discard()); err != nil {
 		t.Fatalf("Promote(%s): %v", pointer, err)
 	}
 }
@@ -457,7 +457,7 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 			PromotionID: "preview-" + previewPointer,
 			Ts:          1,
 			Builds:      map[string]string{"web": "d1.f1"},
-		}}, progress.DiscardProgress()); err != nil {
+		}}, progress.Discard()); err != nil {
 			t.Fatalf("Promote(%s): %v", previewPointer, err)
 		}
 
@@ -512,7 +512,7 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 			Pointer:   previewPointer,
 			Promotion: router.Promotion{PromotionID: "refused", Ts: 1, Builds: map[string]string{"web": "d1.f1"}},
 			Records:   map[string]router.DeploymentRecord{record.App: record},
-		}, progress.DiscardProgress())
+		}, progress.Discard())
 		var unserved router.Unserved
 		if !errors.As(err, &unserved) {
 			t.Errorf("Flip = %v, want router.Unserved: the hostname was never published, so the ledger must take the promotion back", err)
@@ -524,7 +524,7 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 		_, stack := previewing(t, w)
 		promotePreview(t, stack, previewPointer)
 
-		if _, err := removePointer(context.Background(), stack, previewPointer, progress.DiscardProgress()); err != nil {
+		if _, err := removePointer(context.Background(), stack, previewPointer, progress.Discard()); err != nil {
 			t.Fatalf("RemovePointer: %v", err)
 		}
 		if routes := previewRoutes(t, w); len(routes) != 0 {
@@ -598,7 +598,7 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 			PromotionID: "orphan",
 			Ts:          1,
 			Builds:      map[string]string{"web": "d1.f1"},
-		}}, progress.DiscardProgress()); err == nil {
+		}}, progress.Discard()); err == nil {
 			t.Fatal("Promote err = nil, want the refusal from the deployments ledger")
 		}
 		if routes := previewRoutes(t, w); len(routes) != 0 {

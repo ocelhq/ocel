@@ -68,7 +68,7 @@ func (s *servedApps) warmed(physical string, reply warmReply) {
 	}
 }
 
-func (r *Stacks) Warm(ctx context.Context, targets []string, progress progress.Progress) error {
+func (r *Stacks) Warm(ctx context.Context, targets []string, progress progress.Log) error {
 	if !bytecodeCacheEnabled() {
 		return nil
 	}
@@ -89,7 +89,7 @@ func (r *Stacks) Warm(ctx context.Context, targets []string, progress progress.P
 	return nil
 }
 
-func (r *Stacks) EmbedCode(ctx context.Context, physical string, artifact provider.ArtifactRef, progress progress.Progress) error {
+func (r *Stacks) EmbedCode(ctx context.Context, physical string, artifact provider.ArtifactRef, progress progress.Log) error {
 	if !bytecodeEmbedRequested() {
 		return nil
 	}

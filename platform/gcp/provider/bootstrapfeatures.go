@@ -92,7 +92,7 @@ func (b bootstrap) eachFront(features []string, visit func(provider.Feature, edg
 	return nil
 }
 
-func (b bootstrap) raiseFronts(ctx context.Context, req provider.BootstrapRequest, progress progress.Progress) error {
+func (b bootstrap) raiseFronts(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
 	return b.eachFront(req.Features, func(feature provider.Feature, front edge.Edge) error {
 		ensureProgress(progress).Say("Installing feature " + feature.Name + " for " + string(req.Tier) + ": " + feature.Summary)
 		_, err := front.Bootstrap(ctx, req.Tier)
@@ -114,7 +114,7 @@ func (b bootstrap) dropFronts(
 	ctx context.Context,
 	read survey,
 	req provider.BootstrapRequest,
-	progress progress.Progress,
+	progress progress.Log,
 ) error {
 	dropping := droppedFeatures(read.Stamp.Features, req)
 	if err := b.frontsFree(ctx, req.Tier, dropping); err != nil {

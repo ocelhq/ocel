@@ -74,7 +74,7 @@ func (p connector) Target(ctx context.Context) (provider.ConnectorTarget, error)
 }
 
 func (p connector) Install(ctx context.Context, install provider.ConnectorInstall,
-	progress progress.Progress) (provider.ConnectorAddress, error) {
+	progress progress.Log) (provider.ConnectorAddress, error) {
 	compute, err := provider.ConnectorCompute(install.Compute, connectorCompute)
 	if err != nil {
 		return provider.ConnectorAddress{}, err
@@ -149,7 +149,7 @@ func (p connector) Install(ctx context.Context, install provider.ConnectorInstal
 	return provider.ConnectorAddress{URL: released.url, PublicKey: publicKey, Compute: compute}, nil
 }
 
-func (p connector) Remove(ctx context.Context, progress progress.Progress) error {
+func (p connector) Remove(ctx context.Context, progress progress.Log) error {
 	names, err := p.Names(ctx)
 	if err != nil {
 		return err
@@ -207,7 +207,7 @@ func connectorVersionOf(service *run.GoogleCloudRunV2Service) string {
 	return ""
 }
 
-func (p *Provider) pushedConnector(ctx context.Context, binary []byte, progress progress.Progress) (string, error) {
+func (p *Provider) pushedConnector(ctx context.Context, binary []byte, progress progress.Log) (string, error) {
 	if len(binary) == 0 {
 		return "", refusal.Refuse(refusal.CodeInvalid,
 			"this install includes no connector binary to put in an image")
@@ -236,7 +236,7 @@ func (p *Provider) pushedConnector(ctx context.Context, binary []byte, progress 
 	return ref, nil
 }
 
-func (p *Provider) ensureConnectorAccount(ctx context.Context, grants []string, progress progress.Progress) error {
+func (p *Provider) ensureConnectorAccount(ctx context.Context, grants []string, progress progress.Log) error {
 	names, err := p.openClients(ctx)
 	if err != nil {
 		return err
@@ -278,7 +278,7 @@ func keyRolesFor(grants []string) []string {
 	return roles
 }
 
-func (p *Provider) forgetConnectorGrants(ctx context.Context, progress progress.Progress) error {
+func (p *Provider) forgetConnectorGrants(ctx context.Context, progress progress.Log) error {
 	return everyStep(
 		func() error { return p.bindConnectorProject(ctx, false) },
 		func() error { return p.bindConnectorKeys(ctx, nil, progress) },
@@ -297,7 +297,7 @@ func (p *Provider) bindConnectorProject(ctx context.Context, granting bool) erro
 	return nil
 }
 
-func (p *Provider) bindConnectorKeys(ctx context.Context, wanted []string, progress progress.Progress) error {
+func (p *Provider) bindConnectorKeys(ctx context.Context, wanted []string, progress progress.Log) error {
 	clients, err := p.openClients(ctx)
 	if err != nil {
 		return err
@@ -333,7 +333,7 @@ func boundMembers(members []string, member string, granting bool) ([]string, boo
 	}
 }
 
-func (p *Provider) takeConnectorAccount(ctx context.Context, progress progress.Progress) error {
+func (p *Provider) takeConnectorAccount(ctx context.Context, progress progress.Log) error {
 	clients, err := p.openClients(ctx)
 	if err != nil {
 		return err
@@ -351,7 +351,7 @@ func (p *Provider) takeConnectorAccount(ctx context.Context, progress progress.P
 	return nil
 }
 
-func (p *Provider) takeConnectorImages(ctx context.Context, progress progress.Progress) error {
+func (p *Provider) takeConnectorImages(ctx context.Context, progress progress.Log) error {
 	clients, err := p.openClients(ctx)
 	if err != nil {
 		return err

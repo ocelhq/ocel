@@ -22,7 +22,7 @@ type buckets struct {
 	removed []provider.Binding
 }
 
-func (b *buckets) ProvisionBucket(_ context.Context, in resources.ProvisionRequest, _ progress.Progress) (provider.Binding, error) {
+func (b *buckets) ProvisionBucket(_ context.Context, in resources.ProvisionRequest, _ progress.Log) (provider.Binding, error) {
 	return provider.Binding{
 		Type:       provider.BindingBucket,
 		Name:       in.Resource.Name,
@@ -30,7 +30,7 @@ func (b *buckets) ProvisionBucket(_ context.Context, in resources.ProvisionReque
 	}, nil
 }
 
-func (b *buckets) RemoveResource(_ context.Context, _ provider.StackRef, binding provider.Binding, _ progress.Progress) error {
+func (b *buckets) RemoveResource(_ context.Context, _ provider.StackRef, binding provider.Binding, _ progress.Log) error {
 	b.removed = append(b.removed, binding)
 	return nil
 }
@@ -47,7 +47,7 @@ func (n neon) hooks() resources.Hooks {
 	return hooks
 }
 
-func (neon) ProvisionPostgres(_ context.Context, in resources.ProvisionRequest, _ progress.Progress) (provider.Binding, error) {
+func (neon) ProvisionPostgres(_ context.Context, in resources.ProvisionRequest, _ progress.Log) (provider.Binding, error) {
 	return provider.Binding{
 		Type: provider.BindingPostgres,
 		Name: in.Resource.Name,
@@ -67,7 +67,7 @@ func (h halfBinding) hooks() resources.Hooks {
 	return resources.Hooks{ProvisionPostgres: h.ProvisionPostgres}
 }
 
-func (halfBinding) ProvisionPostgres(_ context.Context, in resources.ProvisionRequest, _ progress.Progress) (provider.Binding, error) {
+func (halfBinding) ProvisionPostgres(_ context.Context, in resources.ProvisionRequest, _ progress.Log) (provider.Binding, error) {
 	return provider.Binding{
 		Type:       provider.BindingPostgres,
 		Name:       in.Resource.Name,
@@ -197,7 +197,7 @@ func TestHookStacksRemoveAResourceTheSpecNoLongerDeclares(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	progress := &fake.Progress{}
+	progress := &fake.Log{}
 	if _, err := stacks.Provision(ctx, provider.StackSpec{
 		Ref:       ref,
 		Kind:      provider.StackInfra,
@@ -212,7 +212,7 @@ func TestHookStacksRemoveAResourceTheSpecNoLongerDeclares(t *testing.T) {
 	saysRemoving(t, progress, "bucket exports")
 }
 
-func saysRemoving(t *testing.T, progress *fake.Progress, what string) {
+func saysRemoving(t *testing.T, progress *fake.Log, what string) {
 	t.Helper()
 	want := "INFO Removing " + what + ": this release no longer declares it"
 	if lines := progress.Lines(); !slices.Contains(lines, want) {
@@ -385,7 +385,7 @@ func (w *withFunctions) hooks() resources.Hooks {
 	return hooks
 }
 
-func (w *withFunctions) ProvisionFunctions(_ context.Context, spec provider.StackSpec, _ progress.Progress) ([]provider.Function, error) {
+func (w *withFunctions) ProvisionFunctions(_ context.Context, spec provider.StackSpec, _ progress.Log) ([]provider.Function, error) {
 	var functions []provider.Function
 	for _, fn := range spec.App.Functions {
 		functions = append(functions, function(spec.Ref, fn.Name))
@@ -393,7 +393,7 @@ func (w *withFunctions) ProvisionFunctions(_ context.Context, spec provider.Stac
 	return functions, nil
 }
 
-func (w *withFunctions) RemoveFunctions(_ context.Context, _ provider.StackRef, functions []provider.Function, _ progress.Progress) error {
+func (w *withFunctions) RemoveFunctions(_ context.Context, _ provider.StackRef, functions []provider.Function, _ progress.Log) error {
 	w.removed = append(w.removed, functions...)
 	return nil
 }
@@ -450,7 +450,7 @@ func TestTheFanOutTakesDownTheFunctionItsPlanShowsGoing(t *testing.T) {
 		t.Fatalf("legacy reads %q, want the function this release stopped declaring shown as going", rows["legacy"])
 	}
 
-	progress := &fake.Progress{}
+	progress := &fake.Log{}
 	if _, err := stacks.Provision(ctx, spec, progress); err != nil {
 		t.Fatalf("Provision() = %v", err)
 	}
@@ -502,12 +502,12 @@ func (w *withContainers) hooks() resources.Hooks {
 	return hooks
 }
 
-func (w *withContainers) ProvisionContainers(_ context.Context, spec provider.StackSpec, _ progress.Progress) ([]provider.AppContainer, error) {
+func (w *withContainers) ProvisionContainers(_ context.Context, spec provider.StackSpec, _ progress.Log) ([]provider.AppContainer, error) {
 	w.provisioned = append(w.provisioned, spec)
 	return []provider.AppContainer{container(spec.Ref, spec.App.App)}, nil
 }
 
-func (w *withContainers) RemoveContainers(_ context.Context, _ provider.StackRef, containers []provider.AppContainer, _ progress.Progress) error {
+func (w *withContainers) RemoveContainers(_ context.Context, _ provider.StackRef, containers []provider.AppContainer, _ progress.Log) error {
 	w.removed = append(w.removed, containers...)
 	return nil
 }
@@ -673,7 +673,7 @@ func TestTheFanOutTakesDownTheContainerItsPlanShowsGoing(t *testing.T) {
 		t.Errorf("web reads %q, want the container this release still declares kept", rows["web"])
 	}
 
-	progress := &fake.Progress{}
+	progress := &fake.Log{}
 	if _, err := stacks.Provision(ctx, spec, progress); err != nil {
 		t.Fatalf("Provision() = %v", err)
 	}
@@ -811,7 +811,7 @@ func (m misnaming) hooks() resources.Hooks {
 	return hooks
 }
 
-func (m misnaming) ProvisionContainers(_ context.Context, spec provider.StackSpec, _ progress.Progress) ([]provider.AppContainer, error) {
+func (m misnaming) ProvisionContainers(_ context.Context, spec provider.StackSpec, _ progress.Log) ([]provider.AppContainer, error) {
 	m.provisioned = append(m.provisioned, spec)
 	return []provider.AppContainer{container(spec.Ref, spec.App.App+"-svc")}, nil
 }
@@ -931,7 +931,7 @@ func (r *retaining) hooks() resources.Hooks {
 
 func (r *retaining) retains(imageRef string) bool { return r.retained[imageRef] }
 
-func (r *retaining) ProvisionContainers(_ context.Context, spec provider.StackSpec, _ progress.Progress) ([]provider.AppContainer, error) {
+func (r *retaining) ProvisionContainers(_ context.Context, spec provider.StackSpec, _ progress.Log) ([]provider.AppContainer, error) {
 	if r.provisioning != nil {
 		if err := r.provisioning(); err != nil {
 			return nil, err
@@ -941,14 +941,14 @@ func (r *retaining) ProvisionContainers(_ context.Context, spec provider.StackSp
 	return []provider.AppContainer{{Name: spec.App.App, Physical: spec.Ref.Name.String() + "-" + spec.App.App, Image: spec.App.Image}}, nil
 }
 
-func (r *retaining) RemoveContainers(_ context.Context, _ provider.StackRef, going []provider.AppContainer, _ progress.Progress) error {
+func (r *retaining) RemoveContainers(_ context.Context, _ provider.StackRef, going []provider.AppContainer, _ progress.Log) error {
 	for _, container := range going {
 		r.taken = append(r.taken, container.Physical)
 	}
 	return nil
 }
 
-func (r *retaining) ProvisionBucket(ctx context.Context, in resources.ProvisionRequest, progress progress.Progress) (provider.Binding, error) {
+func (r *retaining) ProvisionBucket(ctx context.Context, in resources.ProvisionRequest, progress progress.Log) (provider.Binding, error) {
 	if r.served != nil {
 		if err := r.served(in); err != nil {
 			return provider.Binding{}, err
@@ -957,7 +957,7 @@ func (r *retaining) ProvisionBucket(ctx context.Context, in resources.ProvisionR
 	return r.buckets.ProvisionBucket(ctx, in, progress)
 }
 
-func (r *retaining) ReconcileImages(_ context.Context, _ provider.StackRef, app, imageRef string, _ progress.Progress) error {
+func (r *retaining) ReconcileImages(_ context.Context, _ provider.StackRef, app, imageRef string, _ progress.Log) error {
 	r.swept = append(r.swept, app+" "+imageRef)
 	if r.sweeping != nil {
 		if err := r.sweeping(); err != nil {
@@ -972,7 +972,7 @@ func (r *retaining) ReconcileImages(_ context.Context, _ provider.StackRef, app,
 	return nil
 }
 
-func (r *retaining) ForgetReleases(_ context.Context, _ provider.StackRef, app string, _ progress.Progress) error {
+func (r *retaining) ForgetReleases(_ context.Context, _ provider.StackRef, app string, _ progress.Log) error {
 	if r.forgetting != nil {
 		if err := r.forgetting(); err != nil {
 			return err
@@ -988,7 +988,7 @@ func (r refusingImages) Has(context.Context, provider.ImagePush) (bool, error) {
 
 func (refusingImages) Destination() string { return "the refusing registry" }
 
-func (r refusingImages) Push(context.Context, provider.ImagePush, progress.Progress) error {
+func (r refusingImages) Push(context.Context, provider.ImagePush, progress.Log) error {
 	return r.err
 }
 
@@ -1196,7 +1196,7 @@ func TestATeardownThatStoppedReconcilingWarnsWhatItLeftInPlace(t *testing.T) {
 			own := &retaining{buckets: &buckets{}}
 			tc.breaking(own)
 			stacks := resources.NewHookStacks(store, fake.NewArtifacts(), own.hooks())
-			progress := &fake.Progress{}
+			progress := &fake.Log{}
 
 			if err := stacks.Destroy(ctx, ref, progress); !errors.Is(err, refused) {
 				t.Fatalf("Destroy() = %v, want %v", err, refused)

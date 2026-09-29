@@ -300,7 +300,7 @@ func registryScheme(server string) string {
 	return "https"
 }
 
-func (r registryStore) Push(ctx context.Context, push provider.ImagePush, progress progress.Progress) error {
+func (r registryStore) Push(ctx context.Context, push provider.ImagePush, progress progress.Log) error {
 	if push.Built != nil {
 		return r.pushBuilt(ctx, push)
 	}
@@ -357,7 +357,7 @@ func (r registryStore) pushBuilt(ctx context.Context, push provider.ImagePush) e
 	return nil
 }
 
-func (r registryStore) pushViaDaemon(ctx context.Context, client *http.Client, host DockerHost, named, tag string, progress progress.Progress) (again bool, after time.Duration, err error) {
+func (r registryStore) pushViaDaemon(ctx context.Context, client *http.Client, host DockerHost, named, tag string, progress progress.Log) (again bool, after time.Duration, err error) {
 	endpoint := "http://docker/images/" + named + "/push?" + url.Values{"tag": {tag}}.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, nil)
 	if err != nil {
@@ -421,7 +421,7 @@ type registryRefusal struct {
 
 func (e registryRefusal) Error() string { return "the registry refused the push: " + e.said }
 
-func drainPush(body io.Reader, progress progress.Progress) error {
+func drainPush(body io.Reader, progress progress.Log) error {
 	decoder := json.NewDecoder(body)
 	for {
 		var line struct {

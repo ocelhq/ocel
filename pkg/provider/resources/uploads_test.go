@@ -28,7 +28,7 @@ func artifactOf(t *testing.T, name string, size int) provider.Upload {
 func TestEachUploadNamesItsFunctionAndHowLargeItsArtifactIs(t *testing.T) {
 	t.Parallel()
 
-	progress := &fake.Progress{}
+	progress := &fake.Log{}
 	uploads := []provider.Upload{
 		artifactOf(t, "api", 3<<20+1<<19),
 		artifactOf(t, "cron", 2048),

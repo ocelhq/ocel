@@ -62,7 +62,7 @@ type DeployPreflight struct {
 	Resources []Resource
 	Grants    []Binding
 	Apps      []AppUsage
-	Progress  progress.Progress
+	Progress  progress.Log
 	WrittenBy WrittenBy
 	Dry       bool
 }

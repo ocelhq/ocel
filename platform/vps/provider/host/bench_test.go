@@ -75,7 +75,7 @@ func (b *bench) waits() []time.Duration {
 
 type recorder struct{ said *[]string }
 
-func saying(said *[]string) progress.Progress { return recorder{said: said} }
+func saying(said *[]string) progress.Log { return recorder{said: said} }
 
 func (r recorder) Say(message string) { *r.said = append(*r.said, message) }
 

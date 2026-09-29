@@ -95,14 +95,14 @@ func (r routerStack) Disclaim(ctx context.Context, hostname string) error {
 	return r.s.e.Shielded().withdrawClaims(ctx, r.s.state.Tier, hostname)
 }
 
-func (r routerStack) Flip(ctx context.Context, flip router.Flip, progress progress.Progress) error {
+func (r routerStack) Flip(ctx context.Context, flip router.Flip, progress progress.Log) error {
 	if err := pin.Flip(ctx, r.s.e.deps.Pins, flip, progress); err != nil {
 		return err
 	}
 	return r.s.released(ctx, flip.Records, progress)
 }
 
-func (r routerStack) RemovePointer(context.Context, string, progress.Progress) error { return nil }
+func (r routerStack) RemovePointer(context.Context, string, progress.Log) error { return nil }
 
 func (r routerStack) Destroy(ctx context.Context) error {
 	shielded, hostnames := r.s.recorded.LoadBalancer.Shielded, slices.Sorted(maps.Keys(r.s.recorded.Hosts))

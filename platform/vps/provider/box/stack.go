@@ -44,7 +44,7 @@ type promotable struct {
 	record router.DeploymentRecord
 }
 
-func (s *stack) serve(ctx context.Context, flip router.Flip, ready []promotable, progress progress.Progress) error {
+func (s *stack) serve(ctx context.Context, flip router.Flip, ready []promotable, progress progress.Log) error {
 	pointer := flip.Pointer
 	claims, err := s.previewClaims(ctx, pointer, slices.Sorted(maps.Keys(flip.Records)))
 	if err != nil {
@@ -106,7 +106,7 @@ func declaredBy(record router.DeploymentRecord) []string {
 	return declared
 }
 
-func (s *stack) rerun(ctx context.Context, release promotable, progress progress.Progress) error {
+func (s *stack) rerun(ctx context.Context, release promotable, progress progress.Log) error {
 	record := release.record
 	if progress != nil {
 		progress.Say("Starting " + release.app + "'s container " + record.Physical + " again")
@@ -269,7 +269,7 @@ func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
 	s.state.Release(hostname)
 	s.state.PublishAddress(hostname, "")
 	if err := s.applyOrigins(ctx); err != nil {
-		return progress.Warned(s.released(hostname, err))
+		return progress.MarkWarning(s.released(hostname, err))
 	}
 	return nil
 }

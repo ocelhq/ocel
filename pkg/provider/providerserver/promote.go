@@ -40,7 +40,7 @@ func (r promoteRequest) record(ctx context.Context, l projectLedger) ([]ledger.R
 	return l.Promote(ctx, r.promotion, r.pointer, r.replaces)
 }
 
-func promote(ctx context.Context, l projectLedger, req promoteRequest, routers []appRouter, progress progress.Progress) ([]ledger.RecordedPromotion, error) {
+func promote(ctx context.Context, l projectLedger, req promoteRequest, routers []appRouter, progress progress.Log) ([]ledger.RecordedPromotion, error) {
 	pointer, promoted := req.pointer, req.promotion
 	flips := make([]router.Flip, len(routers))
 	for i, routed := range routers {
@@ -92,7 +92,7 @@ func restore(ctx context.Context, l projectLedger, pointer string, routed appRou
 			return err
 		}
 		if !found {
-			if err := routed.stack.RemovePointer(ctx, pointer, progress.DiscardProgress()); err != nil {
+			if err := routed.stack.RemovePointer(ctx, pointer, progress.Discard()); err != nil {
 				return err
 			}
 			named, err := l.ActivePromotionID(ctx, pointer)
@@ -110,7 +110,7 @@ func restore(ctx context.Context, l projectLedger, pointer string, routed appRou
 			Promotion:   active,
 			Records:     records,
 			StillActive: newStillActive(l, pointer, active.PromotionID),
-		}, progress.DiscardProgress())
+		}, progress.Discard())
 		var inactive inactivePromotion
 		if !errors.As(err, &inactive) {
 			return err

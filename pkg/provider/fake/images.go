@@ -61,7 +61,7 @@ func (i *Images) Has(_ context.Context, push provider.ImagePush) (bool, error) {
 	return i.stored[push.ImageRef], nil
 }
 
-func (i *Images) Push(_ context.Context, push provider.ImagePush, _ progress.Progress) error {
+func (i *Images) Push(_ context.Context, push provider.ImagePush, _ progress.Log) error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	if i.failed != nil {

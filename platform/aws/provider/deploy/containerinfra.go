@@ -155,7 +155,7 @@ func (r *Stacks) readContainerInfra(ctx context.Context, tier environment.Tier) 
 	return decoded, err == nil, err
 }
 
-func (r *Stacks) ensureContainerInfra(ctx context.Context, ref provider.StackRef, progress progress.Progress) (containerInfra, error) {
+func (r *Stacks) ensureContainerInfra(ctx context.Context, ref provider.StackRef, progress progress.Log) (containerInfra, error) {
 	r.containerInfraLock.Lock()
 	defer r.containerInfraLock.Unlock()
 	tier := ref.Tier
@@ -251,7 +251,7 @@ func (r *Stacks) claimContainerInfra(ctx context.Context, ref provider.StackRef)
 		"the shared container infrastructure for the %s tier changed hands %d times while %s was claiming it; re-run this deploy", ref.Tier, leaseAttempts, ref.Name)
 }
 
-func (r *Stacks) releaseContainerInfra(ctx context.Context, store keyvalue.Store, ref provider.StackRef, progress progress.Progress) error {
+func (r *Stacks) releaseContainerInfra(ctx context.Context, store keyvalue.Store, ref provider.StackRef, progress progress.Log) error {
 	if store == nil {
 		return nil
 	}

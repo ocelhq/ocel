@@ -14,11 +14,11 @@ type Bootstrap interface {
 
 	Plan(ctx context.Context, req BootstrapRequest) (Plan, error)
 
-	Apply(ctx context.Context, req BootstrapRequest, progress progress.Progress) error
+	Apply(ctx context.Context, req BootstrapRequest, progress progress.Log) error
 
 	PlanRemove(ctx context.Context, tier environment.Tier) (Plan, error)
 
-	Remove(ctx context.Context, tier environment.Tier, progress progress.Progress) error
+	Remove(ctx context.Context, tier environment.Tier, progress progress.Log) error
 }
 
 type BootstrapDescription struct {

@@ -187,13 +187,13 @@ func (s *uploadBatchStats) snapshot() uploadBatchSnapshot {
 	}
 }
 
-func say(progress progress.Progress, line string) {
+func say(progress progress.Log, line string) {
 	if progress != nil {
 		progress.Say(line)
 	}
 }
 
-func emitUploadBatch(progress progress.Progress, k uploadKind, stats *uploadBatchStats, phaseErr error, phaseStart time.Time) {
+func emitUploadBatch(progress progress.Log, k uploadKind, stats *uploadBatchStats, phaseErr error, phaseStart time.Time) {
 	if progress == nil || stats == nil {
 		return
 	}

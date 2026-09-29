@@ -71,7 +71,7 @@ func (h *handlers) ListEnvironments(ctx context.Context, req *contractv1.ListEnv
 func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.RemoveEnvironmentRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	unit := UnitSpan(naming.UnitEnvironment, req.GetEnvironment().GetIdentity(),
 		"Removing the preview environment of "+req.GetSlug(), progressv1.Phase_PHASE_DESTROY)
-	return streamed(ctx, stream, unit, func(_ *eventStream, progress progress.Progress) error {
+	return streamed(ctx, stream, unit, func(_ *eventStream, progress progress.Log) error {
 		pointer, err := envName(req.GetEnvironment())
 		if err != nil {
 			return err

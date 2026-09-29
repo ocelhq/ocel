@@ -48,7 +48,7 @@ func certificateRefusal(t *testing.T, p *vps.Provider, hostname string) error {
 	t.Helper()
 
 	_, err := p.Certificates().Issue(context.Background(), provider.CertificateRequest{
-		Kind: edge.None, Hostname: hostname, Progress: progress.DiscardProgress(),
+		Kind: edge.None, Hostname: hostname, Progress: progress.Discard(),
 	})
 	return err
 }
@@ -106,7 +106,7 @@ func TestAProxyWithNothingToSayCertifiesAsItAlwaysDid(t *testing.T) {
 
 	machine := boxWhoseProxyWasRefused(`{"level":"info","msg":"certificate obtained successfully"}`)
 	cert, err := certifying(machine).Certificates().Issue(context.Background(), provider.CertificateRequest{
-		Kind: edge.None, Hostname: "pr-9.preview.acme.com", Progress: progress.DiscardProgress(),
+		Kind: edge.None, Hostname: "pr-9.preview.acme.com", Progress: progress.Discard(),
 	})
 	if err != nil {
 		t.Fatalf("Certificate() = %v", err)
@@ -126,7 +126,7 @@ func TestABoxWhoseEngineCannotBeReachedSaysSoInTheEnginesOwnWordsAndStillMintsTh
 		}
 		return session.Result{}, false
 	}
-	spoken := &fake.Progress{}
+	spoken := &fake.Log{}
 	cert, err := certifying(machine).Certificates().Issue(context.Background(), provider.CertificateRequest{
 		Kind: edge.None, Hostname: "pr-9.preview.acme.com", Progress: spoken,
 	})

@@ -81,7 +81,7 @@ func (c *Connector) Target(context.Context) (provider.ConnectorTarget, error) {
 	return c.reachable()
 }
 
-func (c *Connector) Install(_ context.Context, install provider.ConnectorInstall, progress progress.Progress) (provider.ConnectorAddress, error) {
+func (c *Connector) Install(_ context.Context, install provider.ConnectorInstall, progress progress.Log) (provider.ConnectorAddress, error) {
 	target, err := c.reachable()
 	if err != nil {
 		return provider.ConnectorAddress{}, err
@@ -103,7 +103,7 @@ func (c *Connector) Install(_ context.Context, install provider.ConnectorInstall
 	}, nil
 }
 
-func (c *Connector) Remove(context.Context, progress.Progress) error {
+func (c *Connector) Remove(context.Context, progress.Log) error {
 	if _, err := c.reachable(); err != nil {
 		return err
 	}

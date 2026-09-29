@@ -66,7 +66,7 @@ func (e *Edge) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewWi
 			Kind, wildcard)
 	}
 	entry := previewEntry{BaseDomain: spec.BaseDomain, Certificate: spec.Certificate, Shielded: e.deps.Shielded}
-	balancer, err := e.raiseServing(ctx, environment.TierPreview, entry, progress.DiscardProgress())
+	balancer, err := e.raiseServing(ctx, environment.TierPreview, entry, progress.Discard())
 	if err != nil {
 		return "", err
 	}
@@ -105,7 +105,7 @@ func (e *Edge) DestroyPreviewWildcard(ctx context.Context, baseDomain string) er
 		}
 	}
 	if balancer.provisioned() {
-		if _, err := e.raiseServing(ctx, environment.TierPreview, previewEntry{}, progress.DiscardProgress()); err != nil {
+		if _, err := e.raiseServing(ctx, environment.TierPreview, previewEntry{}, progress.Discard()); err != nil {
 			return err
 		}
 	}

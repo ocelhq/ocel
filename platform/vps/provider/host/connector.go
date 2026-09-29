@@ -126,7 +126,7 @@ func keyPathed(config []byte) ([]byte, error) {
 	return append(written, '\n'), nil
 }
 
-func (c *Connector) Install(ctx context.Context, hostname string, binary, config []byte, progress progress.Progress) (ConnectorState, error) {
+func (c *Connector) Install(ctx context.Context, hostname string, binary, config []byte, progress progress.Log) (ConnectorState, error) {
 	written, err := keyPathed(config)
 	if err != nil {
 		return ConnectorState{}, err
@@ -160,7 +160,7 @@ func (c *Connector) Install(ctx context.Context, hostname string, binary, config
 	return c.Describe(ctx)
 }
 
-func (c *Connector) Remove(ctx context.Context, progress progress.Progress) error {
+func (c *Connector) Remove(ctx context.Context, progress progress.Log) error {
 	if err := c.Route(ctx, ""); err != nil {
 		return err
 	}

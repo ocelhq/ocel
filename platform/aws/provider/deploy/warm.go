@@ -55,7 +55,7 @@ type warmPass struct {
 	invoker  InvokeAPI
 	targets  []warmTarget
 	budget   time.Duration
-	progress progress.Progress
+	progress progress.Log
 }
 
 func (p warmPass) run(ctx context.Context) []warmResult {
@@ -113,14 +113,14 @@ type warmResult struct {
 	Reply  warmReply
 }
 
-func bundleOutcome(progress progress.Progress, ok bool) func(string) {
+func bundleOutcome(progress progress.Log, ok bool) func(string) {
 	if ok {
 		return progress.Debug
 	}
 	return progress.Warn
 }
 
-func passOutcome(progress progress.Progress, done, of int) func(string) {
+func passOutcome(progress progress.Log, done, of int) func(string) {
 	if done == of {
 		return progress.Say
 	}

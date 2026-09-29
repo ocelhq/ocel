@@ -126,7 +126,7 @@ func TestTheReferenceProviderSaysWhatItDidAndToWhichStackTierOrPrefix(t *testing
 	t.Parallel()
 
 	ctx := context.Background()
-	progress := &fake.Progress{}
+	progress := &fake.Log{}
 	artifacts := fake.NewArtifacts()
 	stacks := fake.NewStacks(artifacts)
 	bootstrap := fake.NewBootstrap()

@@ -119,7 +119,7 @@ func (s *serviceEveryReleaseRevises) nameContainers(_ context.Context, spec prov
 func (s *serviceEveryReleaseRevises) hooks() resources.Hooks {
 	return resources.Hooks{
 		Functions: &resources.FunctionHooks{
-			Provision: func(ctx context.Context, spec provider.StackSpec, _ progress.Progress) ([]provider.Function, error) {
+			Provision: func(ctx context.Context, spec provider.StackSpec, _ progress.Log) ([]provider.Function, error) {
 				revision, err := s.provision(spec)
 				if err != nil {
 					return nil, err
@@ -130,7 +130,7 @@ func (s *serviceEveryReleaseRevises) hooks() resources.Hooks {
 				}
 				return functions, nil
 			},
-			Remove: func(_ context.Context, _ provider.StackRef, functions []provider.Function, _ progress.Progress) error {
+			Remove: func(_ context.Context, _ provider.StackRef, functions []provider.Function, _ progress.Log) error {
 				for _, function := range functions {
 					s.remove(function.Physical)
 				}
@@ -138,7 +138,7 @@ func (s *serviceEveryReleaseRevises) hooks() resources.Hooks {
 			},
 			Shared: &resources.SharedHooks[provider.Function]{
 				Name: s.nameFunctions,
-				RemoveRevisions: func(_ context.Context, _ provider.StackRef, functions []provider.Function, _ progress.Progress) ([]provider.Function, error) {
+				RemoveRevisions: func(_ context.Context, _ provider.StackRef, functions []provider.Function, _ progress.Log) ([]provider.Function, error) {
 					var kept []provider.Function
 					for _, function := range functions {
 						if !s.removeRevision(function.Revision) {
@@ -150,7 +150,7 @@ func (s *serviceEveryReleaseRevises) hooks() resources.Hooks {
 			},
 		},
 		Containers: &resources.ContainerHooks{
-			Provision: func(ctx context.Context, spec provider.StackSpec, _ progress.Progress) ([]provider.AppContainer, error) {
+			Provision: func(ctx context.Context, spec provider.StackSpec, _ progress.Log) ([]provider.AppContainer, error) {
 				revision, err := s.provision(spec)
 				if err != nil {
 					return nil, err
@@ -159,7 +159,7 @@ func (s *serviceEveryReleaseRevises) hooks() resources.Hooks {
 				containers[0].Revision = revision
 				return containers, nil
 			},
-			Remove: func(_ context.Context, _ provider.StackRef, containers []provider.AppContainer, _ progress.Progress) error {
+			Remove: func(_ context.Context, _ provider.StackRef, containers []provider.AppContainer, _ progress.Log) error {
 				for _, container := range containers {
 					s.remove(container.Physical)
 				}
@@ -167,7 +167,7 @@ func (s *serviceEveryReleaseRevises) hooks() resources.Hooks {
 			},
 			Shared: &resources.SharedHooks[provider.AppContainer]{
 				Name: s.nameContainers,
-				RemoveRevisions: func(_ context.Context, _ provider.StackRef, containers []provider.AppContainer, _ progress.Progress) ([]provider.AppContainer, error) {
+				RemoveRevisions: func(_ context.Context, _ provider.StackRef, containers []provider.AppContainer, _ progress.Log) ([]provider.AppContainer, error) {
 					var kept []provider.AppContainer
 					for _, container := range containers {
 						if !s.removeRevision(container.Revision) {

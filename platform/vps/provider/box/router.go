@@ -63,12 +63,12 @@ func (r routerStack) Disclaim(ctx context.Context, hostname string) error {
 		return err
 	}
 	if err := r.s.applyOrigins(ctx); err != nil {
-		return progress.Warned(r.s.released(hostname, err))
+		return progress.MarkWarning(r.s.released(hostname, err))
 	}
 	return nil
 }
 
-func (r routerStack) Flip(ctx context.Context, flip router.Flip, progress progress.Progress) error {
+func (r routerStack) Flip(ctx context.Context, flip router.Flip, progress progress.Log) error {
 	s := r.s
 	ready := make([]promotable, 0, len(flip.Records))
 	for _, app := range slices.Sorted(maps.Keys(flip.Records)) {
@@ -83,7 +83,7 @@ func (r routerStack) Flip(ctx context.Context, flip router.Flip, progress progre
 	return s.serve(ctx, flip, ready, progress)
 }
 
-func (r routerStack) RemovePointer(ctx context.Context, pointer string, progress progress.Progress) error {
+func (r routerStack) RemovePointer(ctx context.Context, pointer string, progress progress.Log) error {
 	s := r.s
 	if err := s.e.machine.DisclaimPointer(ctx, s.surface(), router.ResolvePointer(pointer)); err != nil {
 		return err

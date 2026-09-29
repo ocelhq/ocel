@@ -88,7 +88,7 @@ func (i ecrImages) Has(ctx context.Context, push provider.ImagePush) (bool, erro
 	return i.pushed.Has(ctx, push)
 }
 
-func (i ecrImages) Push(ctx context.Context, push provider.ImagePush, progress progress.Progress) error {
+func (i ecrImages) Push(ctx context.Context, push provider.ImagePush, progress progress.Log) error {
 	repository, err := repositoryOf(i.target, push.ImageRef)
 	if err != nil {
 		return err

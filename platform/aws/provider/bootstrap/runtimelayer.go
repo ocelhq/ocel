@@ -140,7 +140,7 @@ func runtimeStackDescription(tier environment.Tier) string {
 	return fmt.Sprintf("Ocel bootstrap runtime (%s) - one Lambda layer per architecture containing the runtime every function deployed from this bootstrap boots through, published once per account rather than once per release.", tier)
 }
 
-func applyRuntimeLayers(ctx context.Context, apis APIs, target spec, req Request, bucket string, progress progress.Progress) error {
+func applyRuntimeLayers(ctx context.Context, apis APIs, target spec, req Request, bucket string, progress progress.Log) error {
 	progress.Say(runtimeStackStep)
 	code, err := placeRuntimeLayers(ctx, apis.Store, bucket)
 	if err != nil {
@@ -161,7 +161,7 @@ type RuntimeLayerRequest struct {
 	Writer         provider.WrittenBy
 }
 
-func EnsureRuntimeLayers(ctx context.Context, apis APIs, ns Namespace, tier environment.Tier, req RuntimeLayerRequest, runProgress progress.Progress) (map[string]string, error) {
+func EnsureRuntimeLayers(ctx context.Context, apis APIs, ns Namespace, tier environment.Tier, req RuntimeLayerRequest, runProgress progress.Log) (map[string]string, error) {
 	runProgress = ensureProgress(runProgress)
 	stackName := ns.runtimeStackName(tier)
 	current, err := publishedRuntimeLayers(ctx, apis.CFN, ns, tier)
@@ -174,7 +174,7 @@ func EnsureRuntimeLayers(ctx context.Context, apis APIs, ns Namespace, tier envi
 	}
 
 	published := true
-	if err := applyRuntimeLayers(ctx, apis, target, Request{Writer: req.Writer}, req.ArtifactBucket, progress.DiscardProgress()); err != nil {
+	if err := applyRuntimeLayers(ctx, apis, target, Request{Writer: req.Writer}, req.ArtifactBucket, progress.Discard()); err != nil {
 		if !runtimeStackWrittenElsewhere(err) {
 			runProgress.Warn(fmt.Sprintf("Could not publish this build's runtime into stack %s: %v", stackName, err))
 			return current, nil
@@ -265,7 +265,7 @@ func removeRuntimeLayers(ctx context.Context, stacks cfn.API, read Reading) prov
 	return planDelete(ctx, stacks, group, body)
 }
 
-func deleteRuntimeLayerStack(ctx context.Context, stacks cfn.TeardownAPI, ns Namespace, tier environment.Tier, progress progress.Progress) error {
+func deleteRuntimeLayerStack(ctx context.Context, stacks cfn.TeardownAPI, ns Namespace, tier environment.Tier, progress progress.Log) error {
 	stackName := ns.runtimeStackName(tier)
 	stack, err := cfn.DescribeStack(ctx, stacks, stackName)
 	if err != nil || stack == nil {

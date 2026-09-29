@@ -124,7 +124,7 @@ func promoted(t *testing.T, stack fake.PromotingStack, id, identity string) erro
 	return stack.Flip(context.Background(), router.Flip{Promotion: router.Promotion{
 		PromotionID: id,
 		Builds:      map[string]string{"web": identity},
-	}}, progress.DiscardProgress())
+	}}, progress.Discard())
 }
 
 func TestARollbackPinsCloudRunBackToTheRevisionThePromotionRecorded(t *testing.T) {
@@ -152,7 +152,7 @@ func TestAPromotionSaysWhichRevisionItPinsEachAppsTrafficTo(t *testing.T) {
 
 	stack := fronting(t, &pinRecorder{})
 	staged(t, stack, "b1", "web-00001-abc")
-	progress := &fake.Progress{}
+	progress := &fake.Log{}
 
 	promotion := router.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}}
 	if err := stack.Flip(context.Background(), router.Flip{Promotion: promotion}, progress); err != nil {

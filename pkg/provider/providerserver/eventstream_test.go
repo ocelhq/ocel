@@ -279,7 +279,7 @@ func TestASpanSaysAMessageOnlyLineWritesOutputAndOpensAndEndsItsDetailSpans(t *t
 	stream := &recordingStream{}
 	sender := newEventStream(context.Background(), stream.send)
 	span := environmentUnit(progressv1.Phase_PHASE_PROVISION)
-	progress := newProgress(sender, span)
+	progress := newSpanLog(sender, span)
 
 	progress.Say("provisioning the infra stack")
 	progress.Detail("engine said something")
@@ -322,7 +322,7 @@ func TestEveryEventASpanSendsCarriesATimeALevelAndTheSpansPhase(t *testing.T) {
 	stream := &recordingStream{}
 	sender := newEventStream(context.Background(), stream.send)
 	span := environmentUnit(progressv1.Phase_PHASE_PROVISION)
-	progress := newProgress(sender, span)
+	progress := newSpanLog(sender, span)
 
 	before := time.Now().UnixNano()
 	progress.Say("provisioning the infra stack")
@@ -360,7 +360,7 @@ func TestASpansWarningIsAMessageOnlyWarnInTheSpan(t *testing.T) {
 
 	stream := &recordingStream{}
 	sender := newEventStream(context.Background(), stream.send)
-	progress := newProgress(sender, testSpan)
+	progress := newSpanLog(sender, testSpan)
 
 	progress.Warn("the old binding outlived its release\x1b[2J")
 
@@ -394,7 +394,7 @@ func TestASpansErrorIsAMessageOnlyErrorInTheSpan(t *testing.T) {
 
 	stream := &recordingStream{}
 	sender := newEventStream(context.Background(), stream.send)
-	progress := newProgress(sender, testSpan)
+	progress := newSpanLog(sender, testSpan)
 
 	progress.Error("logs (aws:s3/bucket:Bucket): BucketAlreadyExists\x1b[2J")
 
@@ -428,7 +428,7 @@ func TestASpansDebugLineIsADebugOutputLineInTheSpan(t *testing.T) {
 
 	stream := &recordingStream{}
 	sender := newEventStream(context.Background(), stream.send)
-	progress := newProgress(sender, testSpan)
+	progress := newSpanLog(sender, testSpan)
 
 	progress.Debug("+  aws:s3:Bucket assets creating (0s)")
 
@@ -456,7 +456,7 @@ func TestProgressMessagesTravelOnTheEnvelope(t *testing.T) {
 
 	stream := &recordingStream{}
 	sender := newEventStream(context.Background(), stream.send)
-	progress := newProgress(sender, testSpan)
+	progress := newSpanLog(sender, testSpan)
 
 	progress.Say("provisioning the infra stack")
 	progress.Detail("engine said something")
@@ -476,7 +476,7 @@ func TestSpanProgressStripsControlCharacters(t *testing.T) {
 
 	stream := &recordingStream{}
 	sender := newEventStream(context.Background(), stream.send)
-	progress := newProgress(sender, testSpan)
+	progress := newSpanLog(sender, testSpan)
 
 	progress.Say("clearing the screen\x1b[2J now")
 

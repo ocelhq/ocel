@@ -29,7 +29,7 @@ type ImageStore interface {
 
 	Has(ctx context.Context, push ImagePush) (bool, error)
 
-	Push(ctx context.Context, push ImagePush, progress progress.Progress) error
+	Push(ctx context.Context, push ImagePush, progress progress.Log) error
 }
 
 type ImagePushes struct {
@@ -62,7 +62,7 @@ func (p ImagePushes) Rows(ctx context.Context) ([]Change, error) {
 	return rows, nil
 }
 
-func (p ImagePushes) PushMissing(ctx context.Context, progress progress.Progress) error {
+func (p ImagePushes) PushMissing(ctx context.Context, progress progress.Log) error {
 	var missing []ImagePush
 	for _, push := range p.Pushes {
 		present, err := p.inStore(ctx, push)
@@ -85,7 +85,7 @@ func (p ImagePushes) PushMissing(ctx context.Context, progress progress.Progress
 	return nil
 }
 
-func (p ImagePushes) push(ctx context.Context, push ImagePush, progress progress.Progress) error {
+func (p ImagePushes) push(ctx context.Context, push ImagePush, progress progress.Log) error {
 	if push.Wrap != nil {
 		if progress != nil {
 			progress.Say("Wrapping " + push.App + "'s image in the ocel runtime")

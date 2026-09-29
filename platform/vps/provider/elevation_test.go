@@ -28,7 +28,7 @@ func (r *reached) Plan(context.Context, provider.BootstrapRequest) (provider.Pla
 	return provider.Plan{}, nil
 }
 
-func (r *reached) Apply(context.Context, provider.BootstrapRequest, progress.Progress) error {
+func (r *reached) Apply(context.Context, provider.BootstrapRequest, progress.Log) error {
 	r.applied++
 	return nil
 }
@@ -38,7 +38,7 @@ func (r *reached) PlanRemove(context.Context, environment.Tier) (provider.Plan, 
 	return provider.Plan{}, nil
 }
 
-func (r *reached) Remove(context.Context, environment.Tier, progress.Progress) error {
+func (r *reached) Remove(context.Context, environment.Tier, progress.Log) error {
 	r.removed++
 	return nil
 }

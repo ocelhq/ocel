@@ -7,7 +7,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 )
 
-func engineLines(progress progress.Progress) *lineLog {
+func engineLines(progress progress.Log) *lineLog {
 	if progress == nil {
 		return nil
 	}

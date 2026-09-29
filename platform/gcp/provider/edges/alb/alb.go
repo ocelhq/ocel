@@ -64,7 +64,7 @@ func (e *Edge) Bootstrap(ctx context.Context, tier environment.Tier) (edge.Boots
 		return edge.BootstrapOutput{}, refusal.Refuse(refusal.CodeInvalid,
 			"the %q edge provisions one load balancer per tier, and this bootstrap names none", Kind)
 	}
-	balancer, err := e.raise(ctx, tier, progress.DiscardProgress())
+	balancer, err := e.raise(ctx, tier, progress.Discard())
 	if err != nil {
 		return edge.BootstrapOutput{}, err
 	}
@@ -76,7 +76,7 @@ func (e *Edge) Bootstrap(ctx context.Context, tier environment.Tier) (edge.Boots
 	}}, nil
 }
 
-func (e *Edge) raise(ctx context.Context, tier environment.Tier, progress progress.Progress) (LoadBalancer, error) {
+func (e *Edge) raise(ctx context.Context, tier environment.Tier, progress progress.Log) (LoadBalancer, error) {
 	var preview previewEntry
 	if tier == environment.TierPreview {
 		recorded, err := e.recordedPreview(ctx)
@@ -90,7 +90,7 @@ func (e *Edge) raise(ctx context.Context, tier environment.Tier, progress progre
 	return e.raiseServing(ctx, tier, preview, progress)
 }
 
-func (e *Edge) raiseServing(ctx context.Context, tier environment.Tier, preview previewEntry, progress progress.Progress) (LoadBalancer, error) {
+func (e *Edge) raiseServing(ctx context.Context, tier environment.Tier, preview previewEntry, progress progress.Log) (LoadBalancer, error) {
 	spec := loadBalancerSpec{
 		Region:  e.deps.Region,
 		Names:   loadBalancerNames(tier, e.deps.Shielded),
@@ -151,7 +151,7 @@ func (e *Edge) Teardown(ctx context.Context, tier environment.Tier) error {
 				"release those hostnames with `ocel domain remove` in the projects that bound them, then take this bootstrap down",
 			Kind, tier, strings.Join(bound, ", "))
 	}
-	if err := e.deps.Stacks.Destroy(ctx, e.loadBalancerTarget(tier), progress.DiscardProgress()); err != nil {
+	if err := e.deps.Stacks.Destroy(ctx, e.loadBalancerTarget(tier), progress.Discard()); err != nil {
 		return err
 	}
 	if !e.deps.Shielded {

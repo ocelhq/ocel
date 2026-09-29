@@ -59,7 +59,7 @@ func (r routerStack) Claim(context.Context, router.Claim) (edge.Origin, error) {
 
 func (r routerStack) Disclaim(context.Context, string) error { return nil }
 
-func (r routerStack) Flip(ctx context.Context, flip router.Flip, _ progress.Progress) error {
+func (r routerStack) Flip(ctx context.Context, flip router.Flip, _ progress.Log) error {
 	s := r.s
 	c, err := s.clients(ctx)
 	if err != nil {
@@ -74,7 +74,7 @@ func (r routerStack) Flip(ctx context.Context, flip router.Flip, _ progress.Prog
 	return nil
 }
 
-func (r routerStack) RemovePointer(ctx context.Context, pointer string, _ progress.Progress) error {
+func (r routerStack) RemovePointer(ctx context.Context, pointer string, _ progress.Log) error {
 	s := r.s
 	c, err := s.clients(ctx)
 	if err != nil {

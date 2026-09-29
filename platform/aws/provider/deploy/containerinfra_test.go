@@ -148,7 +148,7 @@ func TestTheFirstContainerDeployProvisionsTheContainerInfraAndTheLastTakesItDown
 	ctx := context.Background()
 
 	shop := spec
-	if _, err := stacks.Provision(ctx, shop, progress.DiscardProgress()); err != nil {
+	if _, err := stacks.Provision(ctx, shop, progress.Discard()); err != nil {
 		t.Fatalf("Provision(shop) = %v", err)
 	}
 	ran := engine.stacks()
@@ -165,20 +165,20 @@ func TestTheFirstContainerDeployProvisionsTheContainerInfraAndTheLastTakesItDown
 
 	blog := spec
 	blog.Ref = provider.StackRef{Project: "blog", Tier: environment.TierProduction, Name: naming.AppStack("prod", "web", fixedRelease(t))}
-	if _, err := stacks.Provision(ctx, blog, progress.DiscardProgress()); err != nil {
+	if _, err := stacks.Provision(ctx, blog, progress.Discard()); err != nil {
 		t.Fatalf("Provision(blog) = %v", err)
 	}
 	if ran := engine.stacks(); len(ran) != 3 {
 		t.Fatalf("the second container deploy ran %v, want the shared container infrastructure reused rather than provisioned again", ran)
 	}
 
-	if err := stacks.Destroy(ctx, shop.Ref, progress.DiscardProgress()); err != nil {
+	if err := stacks.Destroy(ctx, shop.Ref, progress.Discard()); err != nil {
 		t.Fatalf("Destroy(shop) = %v", err)
 	}
 	if destroyed := engine.torn(); len(destroyed) != 1 {
 		t.Fatalf("destroying one of two container stacks tore down %v, want only its own: the other still answers behind the front", destroyed)
 	}
-	if err := stacks.Destroy(ctx, blog.Ref, progress.DiscardProgress()); err != nil {
+	if err := stacks.Destroy(ctx, blog.Ref, progress.Discard()); err != nil {
 		t.Fatalf("Destroy(blog) = %v", err)
 	}
 	destroyed := engine.torn()
@@ -205,7 +205,7 @@ func TestAContainerDeployThatFailsLeavesNoConsumerBehind(t *testing.T) {
 	stacks := stacksWith(cfg, engine)
 	ctx := context.Background()
 
-	if _, err := stacks.Provision(ctx, spec, progress.DiscardProgress()); err == nil {
+	if _, err := stacks.Provision(ctx, spec, progress.Discard()); err == nil {
 		t.Fatal("Provision succeeded with no container output, so a deploy would record a container with no origin")
 	}
 	remaining, err := listConsumers(ctx, cfg.KeyValues)
@@ -220,7 +220,7 @@ func TestAContainerDeployThatFailsLeavesNoConsumerBehind(t *testing.T) {
 	}
 
 	spec.App.HealthCheckPath = "not a path"
-	if _, err := stacks.Provision(ctx, spec, progress.DiscardProgress()); err == nil {
+	if _, err := stacks.Provision(ctx, spec, progress.Discard()); err == nil {
 		t.Fatal("Provision accepted a health check path a load balancer cannot probe")
 	}
 	if ran := engine.stacks(); len(ran) != 2 {

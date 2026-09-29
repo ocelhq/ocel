@@ -72,7 +72,7 @@ func (e *embedding) Hooks() provider.Hooks {
 	return hooks
 }
 
-func (e *embedding) EmbedCode(_ context.Context, function string, ref provider.ArtifactRef, _ progress.Progress) error {
+func (e *embedding) EmbedCode(_ context.Context, function string, ref provider.ArtifactRef, _ progress.Log) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.embedded = append(e.embedded, function+" "+ref.Key)
@@ -92,7 +92,7 @@ func (w *warming) Hooks() provider.Hooks {
 	return hooks
 }
 
-func (w *warming) WarmFunctions(_ context.Context, targets []string, _ progress.Progress) error {
+func (w *warming) WarmFunctions(_ context.Context, targets []string, _ progress.Log) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.warmed = append(w.warmed, targets...)

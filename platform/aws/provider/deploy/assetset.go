@@ -34,7 +34,7 @@ type assetSet struct {
 	app    string
 	files  int
 	digest string
-	push   func(ctx context.Context, progress progress.Progress) error
+	push   func(ctx context.Context, progress progress.Log) error
 }
 
 type setManifest struct {
@@ -55,7 +55,7 @@ func (m *setManifest) digest() string { return hex.EncodeToString(m.h.Sum(nil)) 
 
 type pendingSet struct {
 	set      assetSet
-	progress progress.Progress
+	progress progress.Log
 }
 
 type pendingSets struct {
@@ -65,7 +65,7 @@ type pendingSets struct {
 
 func newPendingSets() *pendingSets { return &pendingSets{pending: map[string]pendingSet{}} }
 
-func (p *pendingSets) add(stack string, sets []assetSet, progress progress.Progress) {
+func (p *pendingSets) add(stack string, sets []assetSet, progress progress.Log) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for _, set := range sets {

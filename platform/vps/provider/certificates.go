@@ -72,7 +72,7 @@ func (p certificates) Inspect(ctx context.Context, _ edge.Kind, hostname string,
 	return p.servedHealth(ctx, served, hostname, health)
 }
 
-func (p certificates) Discard(context.Context, provider.Certificate, progress.Progress) error {
+func (p certificates) Discard(context.Context, provider.Certificate, progress.Log) error {
 	return nil
 }
 

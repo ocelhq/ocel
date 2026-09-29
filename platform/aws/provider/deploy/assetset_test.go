@@ -197,7 +197,7 @@ func TestAPlannedAssetSetPushesNothing(t *testing.T) {
 	pushed := 0
 	pending.add("prod.web.rel-1", []assetSet{{
 		name: staticAssetSetName,
-		push: func(context.Context, progress.Progress) error { pushed++; return nil },
+		push: func(context.Context, progress.Log) error { pushed++; return nil },
 	}}, nil)
 
 	resource := &assetSetResource{pending: pending}

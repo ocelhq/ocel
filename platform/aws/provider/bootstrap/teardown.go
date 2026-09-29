@@ -87,7 +87,7 @@ func FeatureDeleteOrder(names []string) ([]string, error) {
 	return out, nil
 }
 
-func deleteFeatureStacks(ctx context.Context, stacks cfn.TeardownAPI, ns Namespace, tier environment.Tier, names []string, progress progress.Progress) error {
+func deleteFeatureStacks(ctx context.Context, stacks cfn.TeardownAPI, ns Namespace, tier environment.Tier, names []string, progress progress.Log) error {
 	order, err := FeatureDeleteOrder(names)
 	if err != nil {
 		return err
@@ -109,7 +109,7 @@ func deleteFeatureStacks(ctx context.Context, stacks cfn.TeardownAPI, ns Namespa
 	return nil
 }
 
-func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, tier environment.Tier, progress progress.Progress) error {
+func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, tier environment.Tier, progress progress.Log) error {
 	progress = ensureProgress(progress)
 
 	stackName, err := ns.StackNameFor(tier)
@@ -239,7 +239,7 @@ func deleteAccessKeys(ctx context.Context, iamClient IAMKeyAPI, userName string)
 	return nil
 }
 
-func releaseAppBoundary(ctx context.Context, iamClient IAMBoundaryAPI, policyARN string, progress progress.Progress) error {
+func releaseAppBoundary(ctx context.Context, iamClient IAMBoundaryAPI, policyARN string, progress progress.Log) error {
 	var marker *string
 	for {
 		out, err := iamClient.ListEntitiesForPolicy(ctx, &iam.ListEntitiesForPolicyInput{

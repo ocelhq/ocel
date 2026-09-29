@@ -225,7 +225,7 @@ func (g Gate) noteDependents(ctx context.Context, tier environment.Tier, groups 
 	return nil
 }
 
-func (g Gate) Apply(ctx context.Context, shown provider.Plan, tier environment.Tier, req ApplyRequest, progress progress.Progress) error {
+func (g Gate) Apply(ctx context.Context, shown provider.Plan, tier environment.Tier, req ApplyRequest, progress progress.Log) error {
 	status, err := g.Status(ctx, tier)
 	if err != nil {
 		return err
@@ -258,7 +258,7 @@ func (g Gate) Apply(ctx context.Context, shown provider.Plan, tier environment.T
 	return stackrecords.EnsureSchema(ctx, g.KeyValues, tier)
 }
 
-func (g Gate) Remove(ctx context.Context, shown provider.Plan, tier environment.Tier, progress progress.Progress) error {
+func (g Gate) Remove(ctx context.Context, shown provider.Plan, tier environment.Tier, progress progress.Log) error {
 	if err := g.RefuseIfInUse(ctx, tier); err != nil {
 		return err
 	}
@@ -336,7 +336,7 @@ func ProjectsDependingOn(recorded map[string][]string, dropped []string) []strin
 	return out
 }
 
-func (g Gate) EnsureReady(ctx context.Context, tier environment.Tier, required []string, heal bool, progress progress.Progress) (BootstrapStatus, error) {
+func (g Gate) EnsureReady(ctx context.Context, tier environment.Tier, required []string, heal bool, progress progress.Log) (BootstrapStatus, error) {
 	status, err := g.Status(ctx, tier)
 	if err != nil {
 		return BootstrapStatus{}, err
@@ -371,7 +371,7 @@ func (s BootstrapStatus) lacking(required []string, command string) error {
 		strings.Join(missing, ", "), command, strings.Join(missing, ","))
 }
 
-func (g Gate) heal(ctx context.Context, status BootstrapStatus, required []string, progress progress.Progress) bool {
+func (g Gate) heal(ctx context.Context, status BootstrapStatus, required []string, progress progress.Log) bool {
 	if !status.AutoHeal || len(status.healable(required)) == 0 {
 		return false
 	}
@@ -565,13 +565,13 @@ func destroyCommand(tier environment.Tier) string {
 	return "ocel destroy production"
 }
 
-func say(progress progress.Progress, message string) {
+func say(progress progress.Log, message string) {
 	if progress != nil {
 		progress.Say(message)
 	}
 }
 
-func warn(progress progress.Progress, message string) {
+func warn(progress progress.Log, message string) {
 	if progress != nil {
 		progress.Warn(message)
 	}

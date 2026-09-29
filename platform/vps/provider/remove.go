@@ -8,7 +8,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
-func (p *Provider) RemoveResource(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Progress) error {
+func (p *Provider) RemoveResource(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error {
 	switch binding.Type {
 	case provider.BindingPostgres:
 		name := host.ResourceName(ref.Project, ref.Name.String(), binding.Name, postgresKind)

@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-type Progress interface {
+type Log interface {
 	Say(message string)
 
 	Warn(message string)
@@ -26,7 +26,7 @@ type Attr struct {
 
 type discarded struct{}
 
-func DiscardProgress() Progress { return discarded{} }
+func Discard() Log { return discarded{} }
 
 func (discarded) Say(string) {}
 
@@ -46,17 +46,17 @@ func (w Warning) Error() string { return w.Cause.Error() }
 
 func (w Warning) Unwrap() error { return w.Cause }
 
-func Warned(err error) error {
+func MarkWarning(err error) error {
 	if err == nil {
 		return nil
 	}
 	return Warning{Cause: err}
 }
 
-func Heeded(err error, progress Progress) error {
-	var warned Warning
-	if errors.As(err, &warned) {
-		progress.Warn(warned.Error())
+func ReportWarning(log Log, err error) error {
+	var warning Warning
+	if errors.As(err, &warning) {
+		log.Warn(warning.Error())
 		return nil
 	}
 	return err

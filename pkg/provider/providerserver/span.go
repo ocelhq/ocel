@@ -109,8 +109,8 @@ type spanRun struct {
 
 func (u *spanRun) recordPartial(result string) { u.partial = result }
 
-func (u *spanRun) phase(do func(progress.Progress) error) error {
-	progress := newProgress(u.events.sender, u.span)
+func (u *spanRun) phase(do func(progress.Log) error) error {
+	progress := newSpanLog(u.events.sender, u.span)
 	err := do(progress)
 	if err != nil {
 		progress.Error(err.Error())
@@ -133,7 +133,7 @@ func (t *spanEvents) run(span Span, do func(*spanRun) error) error {
 	run := &spanRun{events: t, span: span}
 	err := do(run)
 	if err != nil && !errors.Is(err, run.said) {
-		newProgress(t.sender, span).Error(err.Error())
+		newSpanLog(t.sender, span).Error(err.Error())
 	}
 	if err == nil && run.partial != "" {
 		t.EndPartial(span, start, time.Now(), run.partial)

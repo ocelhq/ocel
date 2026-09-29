@@ -48,7 +48,7 @@ func (h *handlers) hostnames(ctx context.Context, req *contractv1.HostnameReques
 func (h *handlers) AddHostname(ctx context.Context, req *contractv1.HostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	title := "Attaching " + namedList("production hostname", "production hostnames", requestedHosts(req))
 	unit := UnitSpan(naming.UnitEdge, req.GetSlug(), title, progressv1.Phase_PHASE_PROVISION)
-	return streamed(ctx, stream, unit, func(sender *eventStream, progress progress.Progress) error {
+	return streamed(ctx, stream, unit, func(sender *eventStream, progress progress.Log) error {
 		session, err := h.hostnames(ctx, req)
 		if err != nil {
 			return err
@@ -69,7 +69,7 @@ func requestedHosts(req *contractv1.HostnameRequest) []string {
 	return hosts
 }
 
-func (d *hostnames) add(ctx context.Context, progress progress.Progress) error {
+func (d *hostnames) add(ctx context.Context, progress progress.Log) error {
 	if len(d.configured) == 0 {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"this project declares no domains.production, so there is no production hostname to add; declare one in the config and run this again — no command edits the config")
@@ -111,7 +111,7 @@ func (d *hostnames) addTargets() []ConfiguredHost {
 	return slices.DeleteFunc(slices.Clone(d.configured), func(configured ConfiguredHost) bool { return configured.Hostname != d.host })
 }
 
-func (d *hostnames) attachHostname(ctx context.Context, target ConfiguredHost, progress progress.Progress) (bool, error) {
+func (d *hostnames) attachHostname(ctx context.Context, target ConfiguredHost, progress progress.Log) (bool, error) {
 	host := target.Hostname
 	hostState := d.state.Host(host)
 	previous, served := hostState.ServedEdge()
@@ -168,7 +168,7 @@ func (d *hostnames) attachHostname(ctx context.Context, target ConfiguredHost, p
 	return true, d.unbindPreviousEdge(ctx, host, previous, progress)
 }
 
-func (d *hostnames) bindOrigin(ctx context.Context, target ConfiguredHost, hostState *stackrecords.HostnameState, progress progress.Progress) error {
+func (d *hostnames) bindOrigin(ctx context.Context, target ConfiguredHost, hostState *stackrecords.HostnameState, progress progress.Log) error {
 	host := target.Hostname
 	claimed, err := d.claimRouterOrigin(ctx, target, hostState)
 	if err == nil {
@@ -188,7 +188,7 @@ func (d *hostnames) bindOrigin(ctx context.Context, target ConfiguredHost, hostS
 	return nil
 }
 
-func (d *hostnames) settleUnboundClaim(ctx context.Context, target ConfiguredHost, claimed originClaim, hostState *stackrecords.HostnameState, progress progress.Progress) error {
+func (d *hostnames) settleUnboundClaim(ctx context.Context, target ConfiguredHost, claimed originClaim, hostState *stackrecords.HostnameState, progress progress.Log) error {
 	if hostState.Edge != "" {
 		if claimed.issued.ID == "" {
 			return nil
@@ -209,7 +209,7 @@ func (d *hostnames) settleUnboundClaim(ctx context.Context, target ConfiguredHos
 	return d.checkpoint(ctx)
 }
 
-func (d *hostnames) refreshOriginClaim(ctx context.Context, target ConfiguredHost, hostState *stackrecords.HostnameState, progress progress.Progress) (bool, error) {
+func (d *hostnames) refreshOriginClaim(ctx context.Context, target ConfiguredHost, hostState *stackrecords.HostnameState, progress progress.Log) (bool, error) {
 	if d.routerOrigin() == nil {
 		return false, nil
 	}
@@ -282,13 +282,13 @@ func (d *hostnames) hostCertificates(host string, hostState *stackrecords.Hostna
 	}
 }
 
-func (d *hostnames) unbindPreviousEdge(ctx context.Context, host string, previous edge.Kind, runProgress progress.Progress) error {
+func (d *hostnames) unbindPreviousEdge(ctx context.Context, host string, previous edge.Kind, runProgress progress.Log) error {
 	stack, err := d.on(previous)
 	if err != nil {
 		return err
 	}
 	runProgress.Say(fmt.Sprintf("Unbinding %s from %s it moved off", host, describeFront(previous)))
-	if err := progress.Heeded(stack.UnbindDomain(ctx, host), runProgress); err != nil {
+	if err := progress.ReportWarning(runProgress, stack.UnbindDomain(ctx, host)); err != nil {
 		return err
 	}
 	runProgress.Say(fmt.Sprintf("%s answers on both fronts until resolvers drop the record they cached: %s",
@@ -302,7 +302,7 @@ func (h *handlers) RemoveHostname(ctx context.Context, req *contractv1.HostnameR
 		title = "Detaching " + req.GetHost() + " from production"
 	}
 	unit := UnitSpan(naming.UnitEdge, req.GetSlug(), title, progressv1.Phase_PHASE_DESTROY)
-	return streamed(ctx, stream, unit, func(_ *eventStream, progress progress.Progress) error {
+	return streamed(ctx, stream, unit, func(_ *eventStream, progress progress.Log) error {
 		session, err := h.hostnames(ctx, req)
 		if err != nil {
 			return err
@@ -311,7 +311,7 @@ func (h *handlers) RemoveHostname(ctx context.Context, req *contractv1.HostnameR
 	})
 }
 
-func (d *hostnames) remove(ctx context.Context, runProgress progress.Progress) error {
+func (d *hostnames) remove(ctx context.Context, runProgress progress.Log) error {
 	targets, err := d.removeTargets()
 	if err != nil {
 		return err
@@ -326,7 +326,7 @@ func (d *hostnames) remove(ctx context.Context, runProgress progress.Progress) e
 	}
 	for _, host := range targets {
 		runProgress.Say(fmt.Sprintf("Unbinding %s from %s", host, describeFront(d.front.Kind())))
-		if err := progress.Heeded(d.edgeStack().UnbindDomain(ctx, host), runProgress); err != nil {
+		if err := progress.ReportWarning(runProgress, d.edgeStack().UnbindDomain(ctx, host)); err != nil {
 			return err
 		}
 		if err := d.disclaim(ctx, host); err != nil {

@@ -62,7 +62,7 @@ func installedOn(dir, command string) session.Result {
 	return session.Result{Stdout: stdout.String(), Stderr: stderr.String()}
 }
 
-func installsOn(dir string, progress *fake.Progress) (*bench, *[]int) {
+func installsOn(dir string, progress *fake.Log) (*bench, *[]int) {
 	box := machine(nil)
 	var toldBefore []int
 	box.answer = func(command string) (session.Result, bool) {
@@ -79,7 +79,7 @@ func TestAnInstallScriptThatFailedTwiceIsRunAgainRatherThanFailingTheApply(t *te
 	t.Parallel()
 
 	dir, attempts := installer(t, 2)
-	box, _ := installsOn(dir, &fake.Progress{})
+	box, _ := installsOn(dir, &fake.Log{})
 	if err := box.host().installEngine(context.Background(), nil); err != nil {
 		t.Fatalf("installEngine() = %v on a host whose install script failed twice and then succeeded", err)
 	}
@@ -96,7 +96,7 @@ func TestAnInstallScriptThatNeverSucceedsIsRefusedWithABound(t *testing.T) {
 	t.Parallel()
 
 	dir, attempts := installer(t, 99)
-	box, _ := installsOn(dir, &fake.Progress{})
+	box, _ := installsOn(dir, &fake.Log{})
 	refused := refusalOf(t, box.host().installEngine(context.Background(), nil), refusal.CodeNotReady)
 	ran, err := os.ReadFile(attempts)
 	if err != nil {
@@ -116,7 +116,7 @@ func TestTheWaitBetweenInstallAttemptsGrowsAndIsNotTheSameOnEveryHost(t *testing
 	spread := map[string]bool{}
 	for range 6 {
 		dir, _ := installer(t, 99)
-		box, _ := installsOn(dir, &fake.Progress{})
+		box, _ := installsOn(dir, &fake.Log{})
 		if err := box.host().installEngine(context.Background(), nil); err == nil {
 			t.Fatal("installEngine() succeeded on a host whose install script never succeeded")
 		}
@@ -147,7 +147,7 @@ func TestEveryFailedInstallTryIsToldBeforeTheNextOneRuns(t *testing.T) {
 
 	dir, _ := installerSaying(t, 99, `echo 'E: Failed to fetch http://us-east-1.ec2.archive.ubuntu.com/ubuntu/dists/noble-updates/InRelease  Could not connect' >&2
 echo 'E: Some index files failed to download.' >&2`)
-	progress := &fake.Progress{}
+	progress := &fake.Log{}
 	box, toldBefore := installsOn(dir, progress)
 	if err := box.host().installEngine(context.Background(), progress); err == nil {
 		t.Fatal("installEngine() succeeded on a host whose install script never succeeded")

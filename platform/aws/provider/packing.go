@@ -7,6 +7,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-func (p *Provider) PackApp(ctx context.Context, req provider.PackAppRequest, progress progress.Progress) (provider.PackAppResult, error) {
+func (p *Provider) PackApp(ctx context.Context, req provider.PackAppRequest, progress progress.Log) (provider.PackAppResult, error) {
 	return p.stacks.PackApp(ctx, req, progress)
 }

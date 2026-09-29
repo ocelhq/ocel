@@ -319,7 +319,7 @@ func TestIssuerDiscard(t *testing.T) {
 		t.Parallel()
 
 		api := &fakeACM{}
-		if err := testIssuer(api, 1).Discard(t.Context(), Certificate{ARN: testARN}, progress.DiscardProgress()); err != nil {
+		if err := testIssuer(api, 1).Discard(t.Context(), Certificate{ARN: testARN}, progress.Discard()); err != nil {
 			t.Fatalf("Discard: %v", err)
 		}
 		if len(api.deleted) != 1 || api.deleted[0] != testARN {
@@ -331,7 +331,7 @@ func TestIssuerDiscard(t *testing.T) {
 		t.Parallel()
 
 		api := &fakeACM{}
-		var progress fake.Progress
+		var progress fake.Log
 		if err := testIssuer(api, 1).Discard(t.Context(), Certificate{ARN: testARN, Adopted: true}, &progress); err != nil {
 			t.Fatalf("Discard: %v", err)
 		}
@@ -347,7 +347,7 @@ func TestIssuerDiscard(t *testing.T) {
 		t.Parallel()
 
 		api := &fakeACM{refusals: 2}
-		if err := testIssuer(api, 1).Discard(t.Context(), Certificate{ARN: testARN}, progress.DiscardProgress()); err != nil {
+		if err := testIssuer(api, 1).Discard(t.Context(), Certificate{ARN: testARN}, progress.Discard()); err != nil {
 			t.Fatalf("Discard: %v", err)
 		}
 		if api.deletes != 3 {
@@ -362,7 +362,7 @@ func TestIssuerDiscard(t *testing.T) {
 		t.Parallel()
 
 		api := &fakeACM{deleteErr: &acmtypes.ResourceInUseException{}}
-		var progress fake.Progress
+		var progress fake.Log
 		if err := testIssuer(api, 1).Discard(t.Context(), Certificate{ARN: testARN}, &progress); err != nil {
 			t.Fatalf("Discard: %v", err)
 		}
@@ -378,7 +378,7 @@ func TestIssuerDiscard(t *testing.T) {
 		t.Parallel()
 
 		api := &fakeACM{deleteErr: errors.New("AccessDeniedException")}
-		var progress fake.Progress
+		var progress fake.Log
 		err := testIssuer(api, 1).Discard(t.Context(), Certificate{ARN: testARN}, &progress)
 		if err == nil {
 			t.Fatal("Discard err = nil, want the refusal reported so nothing forgets the certificate")
@@ -391,7 +391,7 @@ func TestIssuerDiscard(t *testing.T) {
 	t.Run("an edge that needs no certificate has nothing to delete", func(t *testing.T) {
 		t.Parallel()
 
-		var progress fake.Progress
+		var progress fake.Log
 		if err := (ACM{}).Discard(t.Context(), Certificate{ARN: testARN}, &progress); err != nil {
 			t.Fatalf("Discard: %v", err)
 		}

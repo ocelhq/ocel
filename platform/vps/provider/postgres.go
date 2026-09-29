@@ -75,7 +75,7 @@ func mintPostgresSecret() (string, error) {
 	return hex.EncodeToString(raw), nil
 }
 
-func (p *Provider) ProvisionPostgres(ctx context.Context, in resources.ProvisionRequest, progress progress.Progress) (provider.Binding, error) {
+func (p *Provider) ProvisionPostgres(ctx context.Context, in resources.ProvisionRequest, progress progress.Log) (provider.Binding, error) {
 	spec, err := postgresContainer(in)
 	if err != nil {
 		return provider.Binding{}, err

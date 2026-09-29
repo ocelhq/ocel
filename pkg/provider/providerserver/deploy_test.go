@@ -412,15 +412,15 @@ func (r refusingStacks) Stacks() provider.Stacks { return r.stacks }
 
 type halfBindingStacks struct{}
 
-func (halfBindingStacks) Plan(ctx context.Context, spec provider.StackSpec, _ progress.Progress) (provider.Plan, error) {
+func (halfBindingStacks) Plan(ctx context.Context, spec provider.StackSpec, _ progress.Log) (provider.Plan, error) {
 	return resources.SynthesizedPlan(ctx, fake.NewArtifacts(), spec, provider.StackResult{})
 }
 
-func (halfBindingStacks) PlanDestroy(_ context.Context, ref provider.StackRef, _ progress.Progress) (provider.Plan, error) {
+func (halfBindingStacks) PlanDestroy(_ context.Context, ref provider.StackRef, _ progress.Log) (provider.Plan, error) {
 	return resources.SynthesizedRemoval(ref, provider.StackResult{}), nil
 }
 
-func (halfBindingStacks) Provision(_ context.Context, spec provider.StackSpec, _ progress.Progress) (provider.StackResult, error) {
+func (halfBindingStacks) Provision(_ context.Context, spec provider.StackSpec, _ progress.Log) (provider.StackResult, error) {
 	var result provider.StackResult
 	for _, resource := range spec.Resources {
 		result.Bindings = append(result.Bindings, provider.Binding{
@@ -432,7 +432,7 @@ func (halfBindingStacks) Provision(_ context.Context, spec provider.StackSpec, _
 	return result, nil
 }
 
-func (halfBindingStacks) Destroy(context.Context, provider.StackRef, progress.Progress) error {
+func (halfBindingStacks) Destroy(context.Context, provider.StackRef, progress.Log) error {
 	return nil
 }
 
@@ -526,15 +526,15 @@ func (r *resolvingStacks) Resolved() []provider.Binding {
 	return slices.Clone(r.resolved)
 }
 
-func (r *resolvingStacks) Plan(ctx context.Context, spec provider.StackSpec, progress progress.Progress) (provider.Plan, error) {
+func (r *resolvingStacks) Plan(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.Plan, error) {
 	return r.inner.Plan(ctx, spec, progress)
 }
 
-func (r *resolvingStacks) PlanDestroy(ctx context.Context, ref provider.StackRef, progress progress.Progress) (provider.Plan, error) {
+func (r *resolvingStacks) PlanDestroy(ctx context.Context, ref provider.StackRef, progress progress.Log) (provider.Plan, error) {
 	return r.inner.PlanDestroy(ctx, ref, progress)
 }
 
-func (r *resolvingStacks) Provision(ctx context.Context, spec provider.StackSpec, progress progress.Progress) (provider.StackResult, error) {
+func (r *resolvingStacks) Provision(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.StackResult, error) {
 	result, err := r.inner.Provision(ctx, spec, progress)
 	if err != nil {
 		return result, err
@@ -557,7 +557,7 @@ func (r *resolvingStacks) Provision(ctx context.Context, spec provider.StackSpec
 	return result, nil
 }
 
-func (r *resolvingStacks) Destroy(ctx context.Context, ref provider.StackRef, progress progress.Progress) error {
+func (r *resolvingStacks) Destroy(ctx context.Context, ref provider.StackRef, progress progress.Log) error {
 	return r.inner.Destroy(ctx, ref, progress)
 }
 

@@ -119,7 +119,7 @@ func streamed(
 	ctx context.Context,
 	stream *connect.ServerStream[progressv1.OperationEvent],
 	unit Span,
-	do func(*eventStream, progress.Progress) error,
+	do func(*eventStream, progress.Log) error,
 ) error {
 	return streamResult(ctx, stream, func(sender *eventStream) (*progressv1.OperationEvent, error) {
 		if err := inSpan(sender, unit, do); err != nil {
@@ -132,10 +132,10 @@ func streamed(
 func inSpan(
 	sender *eventStream,
 	unit Span,
-	do func(*eventStream, progress.Progress) error,
+	do func(*eventStream, progress.Log) error,
 ) error {
 	return newSpanEvents(sender).run(unit, func(u *spanRun) error {
-		return u.phase(func(progress progress.Progress) error {
+		return u.phase(func(progress progress.Log) error {
 			return do(sender, progress)
 		})
 	})
@@ -145,43 +145,43 @@ func planEvent(plan *planv1.ChangePlan) *progressv1.OperationEvent {
 	return &progressv1.OperationEvent{Body: &progressv1.OperationEvent_Plan{Plan: plan}}
 }
 
-type spanProgress struct {
+type spanLog struct {
 	sender *eventStream
 	trace  *spanEvents
 	span   Span
 }
 
-func newProgress(sender *eventStream, span Span) progress.Progress {
-	return &spanProgress{sender: sender, trace: newSpanEvents(sender), span: span}
+func newSpanLog(sender *eventStream, span Span) progress.Log {
+	return &spanLog{sender: sender, trace: newSpanEvents(sender), span: span}
 }
 
-func (r *spanProgress) Say(message string) {
+func (r *spanLog) Say(message string) {
 	r.sender.send(r.span.event(&progressv1.OperationEvent{Message: sanitizeMessage(message)}))
 }
 
-func (r *spanProgress) Warn(message string) {
+func (r *spanLog) Warn(message string) {
 	r.sender.send(r.span.event(&progressv1.OperationEvent{
 		Level:   progressv1.Level_LEVEL_WARN,
 		Message: sanitizeMessage(message),
 	}))
 }
 
-func (r *spanProgress) Error(message string) {
+func (r *spanLog) Error(message string) {
 	r.sender.send(r.span.event(&progressv1.OperationEvent{
 		Level:   progressv1.Level_LEVEL_ERROR,
 		Message: sanitizeMessage(message),
 	}))
 }
 
-func (r *spanProgress) Detail(message string) {
+func (r *spanLog) Detail(message string) {
 	r.sender.send(r.span.event(outputEvent(progressv1.Level_LEVEL_INFO, sanitizeMessage(message))))
 }
 
-func (r *spanProgress) Debug(line string) {
+func (r *spanLog) Debug(line string) {
 	r.sender.send(r.span.event(outputEvent(progressv1.Level_LEVEL_DEBUG, sanitizeMessage(line))))
 }
 
-func (r *spanProgress) Span(name string, start, end time.Time, err error, attrs ...progress.Attr) {
+func (r *spanLog) Span(name string, start, end time.Time, err error, attrs ...progress.Attr) {
 	detail := NewSpan(r.span, name)
 	r.trace.Start(start, detail)
 	r.trace.End(detail, start, end, err, attrs...)

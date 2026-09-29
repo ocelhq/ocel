@@ -516,7 +516,7 @@ func runsContainer(spec provider.StackSpec) bool {
 	return spec.App != nil && spec.App.Compute == provider.ComputeContainer
 }
 
-func (r *release) provisionContainer(ctx context.Context, spec provider.StackSpec, progress progress.Progress) (provider.StackResult, error) {
+func (r *release) provisionContainer(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.StackResult, error) {
 	work, err := r.checkContainer(spec)
 	if err != nil {
 		return provider.StackResult{}, err
@@ -539,7 +539,7 @@ func (r *release) provisionContainer(ctx context.Context, spec provider.StackSpe
 	return result, nil
 }
 
-func (r *release) runContainer(ctx context.Context, spec provider.StackSpec, work *containerWork, progress progress.Progress) (provider.StackResult, error) {
+func (r *release) runContainer(ctx context.Context, spec provider.StackSpec, work *containerWork, progress progress.Log) (provider.StackResult, error) {
 	var err error
 	for attempt := range rulePlacements {
 		if err = r.placeRule(ctx, work); err != nil {
@@ -560,14 +560,14 @@ func (r *release) runContainer(ctx context.Context, spec provider.StackSpec, wor
 	return provider.StackResult{}, fmt.Errorf("place %s's listener rule: every priority it picked was claimed by another deploy before it could take it, %d times over: %w", work.app, rulePlacements, err)
 }
 
-func (r *release) abandonContainer(ctx context.Context, ref provider.StackRef, progress progress.Progress) error {
+func (r *release) abandonContainer(ctx context.Context, ref provider.StackRef, progress progress.Log) error {
 	if err := r.automation.Destroy(ctx, ref, progress); err != nil {
 		return err
 	}
 	return r.releaseContainerInfra(ctx, r.cfg.KeyValues, ref, progress)
 }
 
-func (r *release) planContainer(ctx context.Context, spec provider.StackSpec, progress progress.Progress) (provider.Plan, error) {
+func (r *release) planContainer(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.Plan, error) {
 	infra, present, err := r.readContainerInfra(ctx, spec.Ref.Tier)
 	if err != nil {
 		return provider.Plan{}, err

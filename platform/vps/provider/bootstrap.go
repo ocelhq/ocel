@@ -22,7 +22,7 @@ type elevating struct {
 	elevated func(context.Context) error
 }
 
-func (e elevating) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Progress) error {
+func (e elevating) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
 	if !req.Heal {
 		if err := e.elevated(ctx); err != nil {
 			return err
@@ -31,7 +31,7 @@ func (e elevating) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 	return e.Bootstrap.Apply(ctx, req, progress)
 }
 
-func (e elevating) Remove(ctx context.Context, tier environment.Tier, progress progress.Progress) error {
+func (e elevating) Remove(ctx context.Context, tier environment.Tier, progress progress.Log) error {
 	if err := e.elevated(ctx); err != nil {
 		return err
 	}

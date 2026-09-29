@@ -113,7 +113,7 @@ func promotesRecord(t *testing.T, p *vps.Provider, stack edge.EdgeStack, pointer
 		Pointer:   pointer,
 		Promotion: promotion,
 		Records:   map[string]router.DeploymentRecord{record.App: record},
-	}, progress.DiscardProgress()); err != nil {
+	}, progress.Discard()); err != nil {
 		t.Fatalf("Flip(%s): %v", promotion.PromotionID, err)
 	}
 }
@@ -268,7 +268,7 @@ func TestLiveARollbackOntoAnImageTheBoxHasSweptIsRefusedAndLeavesTheSiteServing(
 	err := f.routes.Flip(context.Background(), router.Flip{
 		Promotion: router.Promotion{PromotionID: "p-rollback", Ts: 3, Builds: map[string]string{liveApp: "one"}},
 		Records:   map[string]router.DeploymentRecord{liveApp: liveRecord("one", one)},
-	}, progress.DiscardProgress())
+	}, progress.Discard())
 	if err == nil {
 		t.Fatal("a rollback onto an image this box no longer has succeeded, and docker run would then reach for a registry with no credentials on this path")
 	}

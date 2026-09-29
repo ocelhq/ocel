@@ -210,7 +210,7 @@ func TestTeardownReleasesTheAppBoundaryBeforeTheCoreStackGoes(t *testing.T) {
 	var coreDeletedWhenListed bool
 	iamc.onList = func() { coreDeletedWhenListed = slices.Contains(stacks.deleted, coreStackName) }
 
-	var progress fake.Progress
+	var progress fake.Log
 	if err := Teardown(context.Background(), apis, defaultNamespace, environment.TierProduction, &progress); err != nil {
 		t.Fatalf("Teardown: %v", err)
 	}

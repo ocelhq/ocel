@@ -585,7 +585,7 @@ func readTestZip(t *testing.T, path string) map[string]testZipEntry {
 func TestAnEmbedAskedForWithoutTheCompileCacheIsAWarning(t *testing.T) {
 	t.Setenv(bytecodeEmbedEnv, "1")
 	t.Setenv(bytecodeCacheEnv, "")
-	var progress fake.Progress
+	var progress fake.Log
 
 	if err := (&Stacks{}).EmbedCode(context.Background(), "ocel-web-1", provider.ArtifactRef{}, &progress); err != nil {
 		t.Fatalf("EmbedCode() = %v", err)

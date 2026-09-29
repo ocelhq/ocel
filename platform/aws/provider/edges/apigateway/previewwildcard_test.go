@@ -83,7 +83,7 @@ func promotePreview(t *testing.T, stack edge.EdgeStack, pointer string) {
 		t.Fatalf("PutStaged: %v", err)
 	}
 	promotion := router.Promotion{PromotionID: "p-" + pointer, Ts: 1, Builds: map[string]string{"web": record.Build}}
-	if err := openRouter(stack).Flip(ctx, router.Flip{Pointer: pointer, Promotion: promotion}, progress.DiscardProgress()); err != nil {
+	if err := openRouter(stack).Flip(ctx, router.Flip{Pointer: pointer, Promotion: promotion}, progress.Discard()); err != nil {
 		t.Fatalf("Promote(%s): %v", pointer, err)
 	}
 }
@@ -351,7 +351,7 @@ func TestRemovePointerTakesTheRuleAndTheAPI(t *testing.T) {
 	api := w.gateway.named(previewAPIName)
 	w.gateway.calls = nil
 
-	if _, err := removePointer(ctx, stack, previewPoint, progress.DiscardProgress()); err != nil {
+	if _, err := removePointer(ctx, stack, previewPoint, progress.Discard()); err != nil {
 		t.Fatalf("RemovePointer: %v", err)
 	}
 

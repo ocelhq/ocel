@@ -12,7 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-func (p *Provider) pushImage(ctx context.Context, tier environment.Tier, app, ref string, built v1.Image, progress progress.Progress) error {
+func (p *Provider) pushImage(ctx context.Context, tier environment.Tier, app, ref string, built v1.Image, progress progress.Log) error {
 	digest, err := built.Digest()
 	if err != nil {
 		return fmt.Errorf("read the digest of the %s image: %w", app, err)

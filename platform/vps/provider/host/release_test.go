@@ -171,7 +171,7 @@ func benched(t *testing.T, gate, cutover session.Result) *flipped {
 	return benchedOn(t, configFor(t, retired), gate, cutover)
 }
 
-func released(t *testing.T, rel Release, gate, cutover session.Result, progress progress.Progress) (*flipped, error) {
+func released(t *testing.T, rel Release, gate, cutover session.Result, progress progress.Log) (*flipped, error) {
 	t.Helper()
 	box := benched(t, gate, cutover)
 	return box, box.host().Release(context.Background(), rel, progress)
@@ -412,7 +412,7 @@ func TestATargetTheBoxAlreadyServesIsNeverRemovedByAFailedRelease(t *testing.T) 
 func TestTheOldContainerIsStoppedOnlyAfterTheFlipReturnsAndNothingReloadsTheProxyAfterIt(t *testing.T) {
 	t.Parallel()
 
-	box, err := released(t, aRelease(), session.Result{}, session.Result{}, &fake.Progress{})
+	box, err := released(t, aRelease(), session.Result{}, session.Result{}, &fake.Log{})
 	if err != nil {
 		t.Fatalf("Release() = %v", err)
 	}
@@ -650,7 +650,7 @@ func TestTheFlipConfigMovesOnlyTheRouteAndTheHelperIsToldToDrainTheRetiredUpstre
 func TestADrainThatReadZeroIsToldBeforeTheContainerItFreedIsStopped(t *testing.T) {
 	t.Parallel()
 
-	progress := &fake.Progress{}
+	progress := &fake.Log{}
 	_, err := released(t, aRelease(), session.Result{}, session.Result{Stdout: switchboard.Drained + " " + retired + "\n"}, progress)
 	if err != nil {
 		t.Fatalf("Release() over a drain that read zero = %v", err)
@@ -668,7 +668,7 @@ func TestADrainThatReadZeroIsToldBeforeTheContainerItFreedIsStopped(t *testing.T
 func TestADrainThatExpiresIsWarnedAboutRatherThanFailed(t *testing.T) {
 	t.Parallel()
 
-	progress := &fake.Progress{}
+	progress := &fake.Log{}
 	_, err := released(t, aRelease(), session.Result{}, session.Result{Stdout: switchboard.DrainExpired + " " + retired + " 2\n"}, progress)
 	if err != nil {
 		t.Fatalf("Release() over an expired drain = %v, want the new release serving", err)
@@ -683,7 +683,7 @@ func TestADrainThatExpiresIsWarnedAboutRatherThanFailed(t *testing.T) {
 func TestARetiringReleaseSaysWhatItWaitsForAndHowLongTheRetireeDrains(t *testing.T) {
 	t.Parallel()
 
-	progress := &fake.Progress{}
+	progress := &fake.Log{}
 	if _, err := released(t, aRelease(), session.Result{}, session.Result{}, progress); err != nil {
 		t.Fatalf("Release() = %v", err)
 	}
@@ -974,7 +974,7 @@ func TestAReleaseComposesItsRouteOntoWhatAConcurrentDeployLeftRatherThanRefusing
 func TestAFailureAfterTheFlipSaysTheReleaseIsServingAndNamesWhatIsLeftBehind(t *testing.T) {
 	t.Parallel()
 
-	progress := &fake.Progress{}
+	progress := &fake.Log{}
 	box := benched(t, session.Result{}, session.Result{Stdout: switchboard.DrainExpired + " " + retired + " 2\n"})
 	proxied := box.answer
 	box.answer = func(command string) (session.Result, bool) {
@@ -1243,7 +1243,7 @@ func TestAFlipConfigurationThatCannotBeWrittenBackEitherNamesTheFileARestartWoul
 func TestTheDrainContractIsStatedOnEveryReleaseThatRetiresSomething(t *testing.T) {
 	t.Parallel()
 
-	progress := &fake.Progress{}
+	progress := &fake.Log{}
 	if _, err := released(t, aRelease(), session.Result{}, session.Result{}, progress); err != nil {
 		t.Fatalf("Release() = %v", err)
 	}
@@ -1259,7 +1259,7 @@ func TestTheDrainContractIsStatedOnEveryReleaseThatRetiresSomething(t *testing.T
 		}
 	}
 
-	quiet := &fake.Progress{}
+	quiet := &fake.Log{}
 	first := benchedOn(t, documentOf(t, RoutingTable{Grace: 30 * time.Second}), session.Result{}, session.Result{})
 	if err := first.host().Release(context.Background(), aRelease(), quiet); err != nil {
 		t.Fatal(err)

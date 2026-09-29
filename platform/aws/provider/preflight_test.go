@@ -89,7 +89,7 @@ func TestAStaleEdgeKeyAndOriginSecretAreWarningsBeforeADeploy(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	var progress fake.Progress
+	var progress fake.Log
 	pre := provider.DeployPreflight{
 		Deploy:   provider.DeploySpec{Tier: environment.TierProduction},
 		Edge:     cloudflare.Kind,
@@ -113,7 +113,7 @@ func TestAStaleEdgeKeyAndOriginSecretAreWarningsBeforeADeploy(t *testing.T) {
 func TestACertificatePinTheEdgeIgnoresIsAWarning(t *testing.T) {
 	const host = "shop.app.com"
 	p := NewProvider(Options{Certificates: map[string]string{host: "arn:aws:acm:us-east-1:111122223333:certificate/pinned"}}, nil, aws.Config{}, defaultNamespace)
-	var progress fake.Progress
+	var progress fake.Log
 
 	if _, err := p.certificatesFor(cloudflare.Kind, host, &progress); err != nil {
 		t.Fatalf("certificatesFor() = %v", err)

@@ -340,22 +340,22 @@ type sweeper struct {
 	forgotten  []string
 }
 
-func (s *sweeper) ProvisionContainers(context.Context, provider.StackSpec, progress.Progress) ([]provider.AppContainer, error) {
+func (s *sweeper) ProvisionContainers(context.Context, provider.StackSpec, progress.Log) ([]provider.AppContainer, error) {
 	return nil, nil
 }
 
-func (s *sweeper) RemoveContainers(context.Context, provider.StackRef, []provider.AppContainer, progress.Progress) error {
+func (s *sweeper) RemoveContainers(context.Context, provider.StackRef, []provider.AppContainer, progress.Log) error {
 	return nil
 }
 
-func (s *sweeper) ReconcileImages(_ context.Context, _ provider.StackRef, app, imageRef string, _ progress.Progress) error {
+func (s *sweeper) ReconcileImages(_ context.Context, _ provider.StackRef, app, imageRef string, _ progress.Log) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.reconciled = append(s.reconciled, app+" "+imageRef)
 	return nil
 }
 
-func (s *sweeper) ForgetReleases(_ context.Context, _ provider.StackRef, app string, _ progress.Progress) error {
+func (s *sweeper) ForgetReleases(_ context.Context, _ provider.StackRef, app string, _ progress.Log) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.forgotten = append(s.forgotten, app)

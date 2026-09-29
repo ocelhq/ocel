@@ -88,7 +88,7 @@ func TestLiveTheProxyHandleIsReadOffAHandshakeAndAsksTheAdminApiNothing(t *testi
 
 	ctx := context.Background()
 	cert, err := pinned.Certificates().Issue(ctx, provider.CertificateRequest{
-		Kind: edge.None, Hostname: caddy.Container, Progress: progress.DiscardProgress(),
+		Kind: edge.None, Hostname: caddy.Container, Progress: progress.Discard(),
 	})
 	if err != nil {
 		t.Fatalf("Certificate(%s) = %v", caddy.Container, err)
@@ -136,7 +136,7 @@ func TestLiveAPinnedPairIsVerifiedFromTheCertificateAndTheKeyIsNeverRead(t *test
 
 	ctx := context.Background()
 	cert, err := pinned.Certificates().Issue(ctx, provider.CertificateRequest{
-		Kind: edge.None, Hostname: "pr-7.preview.example.invalid", Progress: progress.DiscardProgress(),
+		Kind: edge.None, Hostname: "pr-7.preview.example.invalid", Progress: progress.Discard(),
 	})
 	if err != nil {
 		t.Fatalf("Issue() over a pinned wildcard = %v", err)
@@ -152,7 +152,7 @@ func TestLiveAPinnedPairIsVerifiedFromTheCertificateAndTheKeyIsNeverRead(t *test
 		t.Errorf("Inspect().Renewal = %q, want %q", health.Renewal, certs.PinRenewal)
 	}
 
-	if err := pinned.Certificates().Discard(ctx, cert, progress.DiscardProgress()); err != nil {
+	if err := pinned.Certificates().Discard(ctx, cert, progress.Discard()); err != nil {
 		t.Errorf("Discard() = %v, want nil", err)
 	}
 	if !vm.exists(t, caddy.PinKey(at)) {

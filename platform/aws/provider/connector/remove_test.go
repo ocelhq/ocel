@@ -58,7 +58,7 @@ func (absentConnector) DescribeStacks(context.Context, *cloudformation.DescribeS
 func TestRemovingTheConnectorNamesTheBucketStackAndParameterItDeleted(t *testing.T) {
 	t.Parallel()
 
-	var progress fake.Progress
+	var progress fake.Log
 	apis := APIs{CFN: &installedConnector{}, Buckets: emptyBuckets{}, SSM: &keyStore{}}
 	if err := Remove(context.Background(), apis, defaultNamespace, &progress); err != nil {
 		t.Fatalf("Remove() = %v", err)
@@ -76,7 +76,7 @@ func TestRemovingTheConnectorNamesTheBucketStackAndParameterItDeleted(t *testing
 func TestRemovingAConnectorThatIsNotInstalledSaysThereIsNothingToRemove(t *testing.T) {
 	t.Parallel()
 
-	var progress fake.Progress
+	var progress fake.Log
 	if err := Remove(context.Background(), APIs{CFN: absentConnector{}}, defaultNamespace, &progress); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
@@ -89,7 +89,7 @@ func TestRemovingAConnectorThatIsNotInstalledSaysThereIsNothingToRemove(t *testi
 func TestAConnectorReleaseThatReplacesAResourceWarnsAndNamesIt(t *testing.T) {
 	t.Parallel()
 
-	var progress fake.Progress
+	var progress fake.Log
 	_ = reviewing(defaultNamespace, &progress)(StackName(defaultNamespace), []cfntypes.ResourceChange{{
 		LogicalResourceId: aws.String("CodeBucket"),
 		ResourceType:      aws.String("AWS::S3::Bucket"),

@@ -18,7 +18,7 @@ func TestABootstrapRunSaysWhatItWroteAndKeepsWhatItReusedAtDebug(t *testing.T) {
 	frontedBy(t, &fakeEdge{kind: "cloudflare"})
 	apis := apisOf(stacks, ssmc, iamc, preloadedStore())
 
-	var first, again fake.Progress
+	var first, again fake.Log
 	if err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction, everything(), &first); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -51,7 +51,7 @@ func TestABootstrapRunSaysWhatItWroteAndKeepsWhatItReusedAtDebug(t *testing.T) {
 
 func TestATeardownSaysWhatItRemovedInSentences(t *testing.T) {
 	apis, _, _, _ := teardownFakes(t)
-	var progress fake.Progress
+	var progress fake.Log
 
 	if err := Teardown(context.Background(), apis, defaultNamespace, environment.TierProduction, &progress); err != nil {
 		t.Fatalf("Teardown: %v", err)
@@ -63,7 +63,7 @@ func TestATeardownSaysWhatItRemovedInSentences(t *testing.T) {
 }
 
 func TestAWriteThatReplacesAResourceWarnsAndNamesIt(t *testing.T) {
-	var progress fake.Progress
+	var progress fake.Log
 	stack := isrStack(environment.TierProduction)
 
 	if err := AdmitReplacements(defaultNamespace, true, &progress)(stack, []cfntypes.ResourceChange{

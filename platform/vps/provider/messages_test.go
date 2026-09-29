@@ -16,7 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 )
 
-func heardAll(t *testing.T, progress *fake.Progress, want ...string) {
+func heardAll(t *testing.T, progress *fake.Log, want ...string) {
 	t.Helper()
 	lines := progress.Lines()
 	for _, line := range want {
@@ -29,7 +29,7 @@ func heardAll(t *testing.T, progress *fake.Progress, want ...string) {
 func TestProvisioningABucketNamesTheObjectStoreItLandsIn(t *testing.T) {
 	t.Parallel()
 
-	progress := &fake.Progress{}
+	progress := &fake.Log{}
 	if _, err := over(&box{}).ProvisionBucket(context.Background(), aBucket(t, "uploads", false), progress); err != nil {
 		t.Fatalf("ProvisionBucket() = %v", err)
 	}
@@ -41,7 +41,7 @@ func TestProvisioningAPostgresNamesTheContainerItRunsIn(t *testing.T) {
 
 	machine := &box{}
 	withRecordedPostgres(machine)
-	progress := &fake.Progress{}
+	progress := &fake.Log{}
 	if _, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "17"), progress); err != nil {
 		t.Fatalf("ProvisionPostgres() = %v", err)
 	}
@@ -51,7 +51,7 @@ func TestProvisioningAPostgresNamesTheContainerItRunsIn(t *testing.T) {
 func TestRemovingTheLastBucketSaysWhatItRemovedAndThatTheStoreGoesWithIt(t *testing.T) {
 	t.Parallel()
 
-	progress := &fake.Progress{}
+	progress := &fake.Log{}
 	err := over(&box{kept: sealedRootKey()}).RemoveResource(context.Background(),
 		provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: aStackName(t)}, bindingBucket(), progress)
 	if err != nil {
@@ -66,7 +66,7 @@ func TestRemovingTheLastBucketSaysWhatItRemovedAndThatTheStoreGoesWithIt(t *test
 func TestABucketWhoseStoreKeepsNoCredentialIsSaidToBeSkipped(t *testing.T) {
 	t.Parallel()
 
-	progress := &fake.Progress{}
+	progress := &fake.Log{}
 	err := over(&box{}).RemoveResource(context.Background(),
 		provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: aStackName(t)}, bindingBucket(), progress)
 	if err != nil {
@@ -79,7 +79,7 @@ func TestABucketWhoseStoreKeepsNoCredentialIsSaidToBeSkipped(t *testing.T) {
 func TestRemovingAPostgresNamesTheContainerAndTheDataItTakes(t *testing.T) {
 	t.Parallel()
 
-	progress := &fake.Progress{}
+	progress := &fake.Log{}
 	err := over(&box{}).RemoveResource(context.Background(),
 		provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: aStackName(t)},
 		provider.Binding{Type: provider.BindingPostgres, Name: "main"}, progress)
@@ -92,7 +92,7 @@ func TestRemovingAPostgresNamesTheContainerAndTheDataItTakes(t *testing.T) {
 func TestStartingAndRemovingAnAppNameItsContainer(t *testing.T) {
 	t.Parallel()
 
-	progress := &fake.Progress{}
+	progress := &fake.Log{}
 	started, err := over(&box{}).ProvisionContainers(context.Background(), aStack(t, anApp()), progress)
 	if err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
@@ -118,7 +118,7 @@ func TestAnImagePulledOntoTheBoxEchoesDockersOutputOneLineAtATime(t *testing.T) 
 		t.Fatal(err)
 	}
 	ref := server + "/shop/web:sha256-abc-ocel-0123"
-	progress := &fake.Progress{}
+	progress := &fake.Log{}
 	if err := store.Push(context.Background(), provider.ImagePush{App: "web", Source: "ocel/shop/web@sha256:abc", ImageRef: ref, Built: wrapped(t)}, progress); err != nil {
 		t.Fatalf("Push() = %v", err)
 	}
@@ -132,7 +132,7 @@ func TestAnImagePulledOntoTheBoxEchoesDockersOutputOneLineAtATime(t *testing.T) 
 
 func TestAnImageLoadedOntoTheBoxEchoesWhatDockerLoaded(t *testing.T) {
 	daemonServing(t, "tar-bytes")
-	progress := &fake.Progress{}
+	progress := &fake.Log{}
 	if err := directImagesOn(t, &box{}).Push(context.Background(), aPush(t), progress); err != nil {
 		t.Fatalf("Push() = %v", err)
 	}

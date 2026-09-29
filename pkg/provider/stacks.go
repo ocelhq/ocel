@@ -16,13 +16,13 @@ import (
 )
 
 type Stacks interface {
-	Plan(ctx context.Context, spec StackSpec, progress progress.Progress) (Plan, error)
+	Plan(ctx context.Context, spec StackSpec, progress progress.Log) (Plan, error)
 
-	Provision(ctx context.Context, spec StackSpec, progress progress.Progress) (StackResult, error)
+	Provision(ctx context.Context, spec StackSpec, progress progress.Log) (StackResult, error)
 
-	PlanDestroy(ctx context.Context, ref StackRef, progress progress.Progress) (Plan, error)
+	PlanDestroy(ctx context.Context, ref StackRef, progress progress.Log) (Plan, error)
 
-	Destroy(ctx context.Context, ref StackRef, progress progress.Progress) error
+	Destroy(ctx context.Context, ref StackRef, progress progress.Log) error
 }
 
 type StackRef struct {

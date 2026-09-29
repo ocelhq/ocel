@@ -299,7 +299,7 @@ func outstanding(records []edge.Record) string {
 	return strings.Join(wanted, "; ")
 }
 
-func (i ACM) Discard(ctx context.Context, cert Certificate, progress progress.Progress) error {
+func (i ACM) Discard(ctx context.Context, cert Certificate, progress progress.Log) error {
 	if i.API == nil || cert.ARN == "" {
 		return nil
 	}

@@ -16,7 +16,7 @@ type PromotingStack struct {
 	Ledger *ledger.Ledger
 }
 
-func (s PromotingStack) Flip(ctx context.Context, flip router.Flip, progress progress.Progress) error {
+func (s PromotingStack) Flip(ctx context.Context, flip router.Flip, progress progress.Log) error {
 	flip.Records = map[string]router.DeploymentRecord{}
 	for app, build := range flip.Promotion.Builds {
 		record, staged, err := s.Ledger.Record(ctx, app, build)

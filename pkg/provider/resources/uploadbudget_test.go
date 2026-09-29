@@ -46,7 +46,7 @@ func (s *countingStore) Open(context.Context, provider.ArtifactRef) (io.ReadClos
 	return nil, os.ErrNotExist
 }
 
-func (s *countingStore) RemovePrefix(context.Context, environment.Tier, string, progress.Progress) error {
+func (s *countingStore) RemovePrefix(context.Context, environment.Tier, string, progress.Log) error {
 	return nil
 }
 

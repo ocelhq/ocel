@@ -221,7 +221,7 @@ func TestEveryBootstrapRemovalStepSaysWhatItTookOrKeptAndWhy(t *testing.T) {
 			want:    "DEBUG Nothing to remove: secret ocel-production does not exist",
 		},
 	} {
-		progress := &fake.Progress{}
+		progress := &fake.Log{}
 		tc.removal.report(progress)
 		if got := progress.Lines(); !slices.Equal(got, []string{tc.want}) {
 			t.Errorf("removing %s said %q, want %q", tc.removal.item.ID(), got, tc.want)
@@ -234,7 +234,7 @@ func TestABootstrapResourceAlreadyCurrentIsNotedOnlyAtDebug(t *testing.T) {
 
 	target := item{Kind: KindRepository, Name: "ocel-acme-prod-production"}
 	read := survey{present: map[string]bool{target.ID(): true}}
-	progress := &fake.Progress{}
+	progress := &fake.Log{}
 
 	if err := (bootstrap{}).provision(context.Background(), read, target, progress); err != nil {
 		t.Fatalf("provision() = %v", err)

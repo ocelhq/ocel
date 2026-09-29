@@ -13,7 +13,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
-func heardAll(t *testing.T, progress *fake.Progress, want ...string) {
+func heardAll(t *testing.T, progress *fake.Log, want ...string) {
 	t.Helper()
 	lines := progress.Lines()
 	for _, line := range want {
@@ -34,7 +34,7 @@ func TestABootstrapRemovalSaysWhatItRemovedAndWhatItKeptAndWhy(t *testing.T) {
 		}
 		return session.Result{}, false
 	}
-	progress := &fake.Progress{}
+	progress := &fake.Log{}
 
 	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), tier, progress); err != nil {
 		t.Fatalf("Remove() = %v", err)
@@ -61,7 +61,7 @@ func TestAnApplySaysWhatItInstalledAndLeavesWhatWasCurrentToDebug(t *testing.T) 
 	box.installed[tier] = slices.DeleteFunc(box.installed[tier], func(item Item) bool {
 		return item.Kind == KindUnit && item.Name == BackupsTimer
 	})
-	progress := &fake.Progress{}
+	progress := &fake.Log{}
 
 	if err := NewBootstrap(box.host(), testVendor, "shop").Apply(context.Background(),
 		provider.BootstrapRequest{Tier: tier, WrittenBy: "the-suite"}, progress); err != nil {
@@ -90,7 +90,7 @@ func TestAHealSaysWhatItRewroteAndWhatItLeftAsItIs(t *testing.T) {
 		}
 		return session.Result{Stdout: aKey + "\n"}, true
 	}
-	progress := &fake.Progress{}
+	progress := &fake.Log{}
 
 	if err := NewBootstrap(box.host(), testVendor, "shop").Apply(context.Background(),
 		provider.BootstrapRequest{Tier: tier, WrittenBy: "the-suite", Heal: true}, progress); err != nil {
@@ -108,7 +108,7 @@ func TestAConnectorInstallSaysWhatItWroteAndWhereTheConsoleReachesIt(t *testing.
 	box := &claimBench{bench: machine(nil), recorded: string(mustWrite(t, routed()))}
 	absent := ""
 	box.answer = servesPair(box.bench, &box.recorded, &absent)
-	progress := &fake.Progress{}
+	progress := &fake.Log{}
 
 	if _, err := NewConnector(box.host()).Install(context.Background(), "box.example.com", []byte("a connector"), connectorConfig(), progress); err != nil {
 		t.Fatalf("Install() = %v", err)
@@ -126,7 +126,7 @@ func TestAConnectorRemovalSaysWhatItUnroutedAndRemoved(t *testing.T) {
 	box := &claimBench{bench: machine(nil), recorded: string(mustWrite(t, routed()))}
 	absent := ""
 	box.answer = servesPair(box.bench, &box.recorded, &absent)
-	progress := &fake.Progress{}
+	progress := &fake.Log{}
 
 	if err := NewConnector(box.host()).Remove(context.Background(), progress); err != nil {
 		t.Fatalf("Remove() = %v", err)
@@ -147,7 +147,7 @@ func TestReconcilingAnAppsImagesNamesEveryImageItRemoved(t *testing.T) {
 		}
 		return session.Result{Stdout: "ocel/shop-web:1111\nocel/shop-web:2222\n"}, true
 	}
-	progress := &fake.Progress{}
+	progress := &fake.Log{}
 
 	if err := box.host().Reconcile(context.Background(), "shop", "web", "ocel/shop-web:3333", progress); err != nil {
 		t.Fatalf("Reconcile() = %v", err)

@@ -698,7 +698,7 @@ func apisAcross(stacks *fakeCFN, ssmc *fakeSSM, iamc *fakeIAM, store ObjectStore
 func everything() Request { return Request{Features: featureNames()} }
 
 func runAll(ctx context.Context, apis APIs, target spec) error {
-	return run(ctx, apis, target, everything(), progress.DiscardProgress())
+	return run(ctx, apis, target, everything(), progress.Discard())
 }
 
 func isrStack(tier environment.Tier) string {

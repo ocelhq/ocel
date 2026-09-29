@@ -89,7 +89,7 @@ func containerOf(address string) string {
 	return name
 }
 
-func (h *Host) Release(ctx context.Context, rel Release, progress progress.Progress) error {
+func (h *Host) Release(ctx context.Context, rel Release, progress progress.Log) error {
 	for _, app := range rel.Apps {
 		if strings.TrimSpace(app.HealthPath) == "" {
 			return router.Unserved{Err: refusal.Refuse(refusal.CodeInvalid,
@@ -154,7 +154,7 @@ func (h *Host) Release(ctx context.Context, rel Release, progress progress.Progr
 	return h.stopRetired(ctx, rel, cut, progress, elevation)
 }
 
-func (h *Host) stopRetired(ctx context.Context, rel Release, cut cutover, progress progress.Progress, elevation string) error {
+func (h *Host) stopRetired(ctx context.Context, rel Release, cut cutover, progress progress.Log, elevation string) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
 	var failed, unstopped []string
@@ -284,7 +284,7 @@ func (c cutover) back(table RoutingTable) (RoutingTable, error) {
 	return table, nil
 }
 
-func tellDrain(progress progress.Progress, said string, window time.Duration) {
+func tellDrain(progress progress.Log, said string, window time.Duration) {
 	if progress == nil {
 		return
 	}

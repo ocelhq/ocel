@@ -20,7 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
-func ReclaimPreview(ctx context.Context, p provider.Provider, slug, pointer string, removed router.PruneResult, progress progress.Progress) error {
+func ReclaimPreview(ctx context.Context, p provider.Provider, slug, pointer string, removed router.PruneResult, progress progress.Log) error {
 	if err := reclaimUnnamed(ctx, p, openProjectLedger(p, environment.TierPreview, slug), pointer, removed, progress); err != nil {
 		return err
 	}
@@ -28,7 +28,7 @@ func ReclaimPreview(ctx context.Context, p provider.Provider, slug, pointer stri
 		removed.SurvivingRecordKeys, removed.SurvivingPointerRecordKeys, progress)
 }
 
-func destroyPointerStacks(ctx context.Context, p provider.Provider, slug, pointer string, surviving, servingHere []string, progress progress.Progress) error {
+func destroyPointerStacks(ctx context.Context, p provider.Provider, slug, pointer string, surviving, servingHere []string, progress progress.Log) error {
 	entries, err := stackrecords.List(ctx, p.KeyValues(), environment.TierPreview, slug)
 	if err != nil {
 		return err
@@ -157,7 +157,7 @@ func releasesOf(keys []string) map[appRelease]bool {
 	return served
 }
 
-func (s *edgeSession) reclaimDropped(ctx context.Context, pointer string, dropped []ledger.RecordedPromotion, progress progress.Progress) error {
+func (s *edgeSession) reclaimDropped(ctx context.Context, pointer string, dropped []ledger.RecordedPromotion, progress progress.Log) error {
 	if len(dropped) == 0 {
 		return nil
 	}
@@ -173,7 +173,7 @@ func unreclaimedWarning(promotionID string, err error) string {
 		promotionID, ledger.KeptPromotions, err)
 }
 
-func reclaimUnnamed(ctx context.Context, p provider.Provider, l projectLedger, pointer string, unnamed router.PruneResult, progress progress.Progress) error {
+func reclaimUnnamed(ctx context.Context, p provider.Provider, l projectLedger, pointer string, unnamed router.PruneResult, progress progress.Log) error {
 	removed, err := l.ReadRecords(ctx, unnamed.UnnamedRecordKeys)
 	if err != nil {
 		return err
@@ -195,7 +195,7 @@ func reclaimUnnamed(ctx context.Context, p provider.Provider, l projectLedger, p
 	return errors.Join(append(errs, l.ForgetUnnamedRecords(ctx, reclaimed))...)
 }
 
-func destroyReclaimTarget(ctx context.Context, p provider.Provider, slug string, tier environment.Tier, target ReclaimTarget, progress progress.Progress) error {
+func destroyReclaimTarget(ctx context.Context, p provider.Provider, slug string, tier environment.Tier, target ReclaimTarget, progress progress.Log) error {
 	ref := provider.StackRef{Project: slug, Tier: tier, Name: target.Stack}
 	if err := p.Stacks().Destroy(ctx, ref, progress); err != nil {
 		return fmt.Errorf("destroy %s: %w", target.Stack, err)
@@ -230,7 +230,7 @@ func (r *deployRun) reclaimOwnRelease(ctx context.Context) {
 	span := UnitSpan("reclaim/"+r.spec.PromotionID, environmentSubject(r.spec.Tier, r.spec.Env),
 		"Reclaiming what this failed deploy provisioned", progressv1.Phase_PHASE_DESTROY)
 	_ = r.spanEvents.run(span, func(*spanRun) error {
-		progress := newProgress(r.sender, span)
+		progress := newSpanLog(r.sender, span)
 		if err := r.reclaimProvisioned(ctx, progress); err != nil {
 			progress.Warn(fmt.Sprintf("Promotion %s did not land, and reclaiming what its deploy provisioned failed, so what was not reclaimed stays until this environment is destroyed: %v",
 				r.spec.PromotionID, err))
@@ -239,7 +239,7 @@ func (r *deployRun) reclaimOwnRelease(ctx context.Context) {
 	})
 }
 
-func (r *deployRun) reclaimProvisioned(ctx context.Context, progress progress.Progress) error {
+func (r *deployRun) reclaimProvisioned(ctx context.Context, progress progress.Log) error {
 	retained := r.provider.Facts().RetainsContainerReleases
 	var provisioned []provider.AppEntry
 	for _, entry := range r.spec.Apps {

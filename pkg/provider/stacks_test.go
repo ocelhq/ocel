@@ -86,6 +86,6 @@ func (keptSecret) Has(context.Context, provider.ImagePush) (bool, error) { retur
 
 func (keptSecret) Destination() string { return "the kept registry" }
 
-func (keptSecret) Push(context.Context, provider.ImagePush, progress.Progress) error {
+func (keptSecret) Push(context.Context, provider.ImagePush, progress.Log) error {
 	return nil
 }

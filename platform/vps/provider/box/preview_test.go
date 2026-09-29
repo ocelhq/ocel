@@ -144,7 +144,7 @@ func previewed(t *testing.T, stack boxStack, pointer string, apps ...string) {
 	}
 	if err := stack.Flip(context.Background(), router.Flip{Pointer: pointer, Promotion: router.Promotion{
 		PromotionID: "p-" + pointer, Ts: 1, Builds: builds,
-	}}, progress.DiscardProgress()); err != nil {
+	}}, progress.Discard()); err != nil {
 		t.Fatalf("Promote(%s): %v", pointer, err)
 	}
 }
@@ -218,7 +218,7 @@ func TestRemovingAPreviewPointerTakesItsHostnamesOffTheBoxWithIt(t *testing.T) {
 	previewed(t, stack, "pr-7", "api", "web")
 	previewed(t, stack, "pr-9", "api", "web")
 
-	if _, err := removePointer(context.Background(), stack, "pr-7", progress.DiscardProgress()); err != nil {
+	if _, err := removePointer(context.Background(), stack, "pr-7", progress.Discard()); err != nil {
 		t.Fatalf("RemovePointer: %v", err)
 	}
 	for _, claim := range claimedOn(t, m) {
@@ -244,7 +244,7 @@ func TestAPreviewHostnameDnsWillNotResolveIsRefusedRatherThanClaimed(t *testing.
 
 	err := stack.Flip(context.Background(), router.Flip{Pointer: over, Promotion: router.Promotion{
 		PromotionID: "p-over", Ts: 1, Builds: map[string]string{"web": "b1"},
-	}}, progress.DiscardProgress())
+	}}, progress.Discard())
 	if err == nil {
 		t.Fatalf("a preview whose hostname has a %d-character label was claimed on this box: DNS caps a label at %d, so the name resolves nowhere and its acme order can never succeed. The check lives in the CLI's preflight alone, and a caller that skips preflight reaches this",
 			len(slug)+len(edge.PreviewAppSeparator)+len(over), edge.PreviewLabelMaxLen)
@@ -304,7 +304,7 @@ func TestAProductionPromotionClaimsNoPreviewHostnameAtAll(t *testing.T) {
 	staged(t, pointed, "web", "b2", "shop-web-2222")
 	if err := pointed.Flip(context.Background(), router.Flip{Pointer: "pr-7", Promotion: router.Promotion{
 		PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": "b2"},
-	}}, progress.DiscardProgress()); err != nil {
+	}}, progress.Discard()); err != nil {
 		t.Fatalf("Promote under a pointer: %v", err)
 	}
 	if claimed := claimedOn(t, m); len(claimed) != 0 {
@@ -319,7 +319,7 @@ func callsATeardownMakes(t *testing.T) []string {
 	stack := previewStack(t, m)
 	previewed(t, stack, "pr-7", "api", "web")
 	m.visited = nil
-	if _, err := removePointer(context.Background(), stack, "pr-7", progress.DiscardProgress()); err != nil {
+	if _, err := removePointer(context.Background(), stack, "pr-7", progress.Discard()); err != nil {
 		t.Fatalf("RemovePointer: %v", err)
 	}
 	reached := slices.DeleteFunc(m.reached(), func(call string) bool { return call == "ApplyOrigins" })
@@ -341,7 +341,7 @@ func TestATeardownThatFellOverLeavesThePointersHistoryInPlaceForTheNextRun(t *te
 			previewed(t, stack, "pr-7", "api", "web")
 			m.refuseOn(call, errors.New("the box answered nothing over its ssh session"))
 
-			if _, err := removePointer(context.Background(), stack, "pr-7", progress.DiscardProgress()); err == nil {
+			if _, err := removePointer(context.Background(), stack, "pr-7", progress.Discard()); err == nil {
 				t.Fatalf("a teardown whose %s refused reported success, and a step a teardown never makes is a step this table names for nothing", call)
 			}
 			history, err := stack.Ledger().History(context.Background(), "pr-7")
@@ -361,7 +361,7 @@ func TestRemovingAPointerNothingWasEverPromotedUnderTakesNothingAndRefusesNothin
 	m := aMachine()
 	stack := previewStack(t, m)
 
-	if _, err := removePointer(context.Background(), stack, "pr-7", progress.DiscardProgress()); err != nil {
+	if _, err := removePointer(context.Background(), stack, "pr-7", progress.Discard()); err != nil {
 		t.Fatalf("RemovePointer of a preview that is already gone = %v, and teardown is run again on every retry", err)
 	}
 }
@@ -374,7 +374,7 @@ func TestRemovingAPreviewLeavesTheCatchAllInPlaceAndRendersItAsKeptWithAReason(t
 	previewed(t, stack, "pr-7", "web")
 	front := edgeOver(m, fake.NewKeyValues())
 
-	if _, err := removePointer(context.Background(), stack, "pr-7", progress.DiscardProgress()); err != nil {
+	if _, err := removePointer(context.Background(), stack, "pr-7", progress.Discard()); err != nil {
 		t.Fatalf("RemovePointer: %v", err)
 	}
 

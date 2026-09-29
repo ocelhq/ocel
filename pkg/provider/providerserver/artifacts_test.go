@@ -214,7 +214,7 @@ func (p *packingProvider) Hooks() provider.Hooks {
 	return hooks
 }
 
-func (p *packingProvider) PackApp(_ context.Context, req provider.PackAppRequest, _ progress.Progress) (provider.PackAppResult, error) {
+func (p *packingProvider) PackApp(_ context.Context, req provider.PackAppRequest, _ progress.Log) (provider.PackAppResult, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.requests = append(p.requests, req)

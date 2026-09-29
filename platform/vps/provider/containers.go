@@ -17,7 +17,7 @@ import (
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
-func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackSpec, progress progress.Progress) ([]provider.AppContainer, error) {
+func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackSpec, progress progress.Log) ([]provider.AppContainer, error) {
 	app := spec.App
 	if app == nil {
 		return nil, nil
@@ -72,7 +72,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	}}, nil
 }
 
-func (p *Provider) RemoveContainers(ctx context.Context, ref provider.StackRef, containers []provider.AppContainer, progress progress.Progress) error {
+func (p *Provider) RemoveContainers(ctx context.Context, ref provider.StackRef, containers []provider.AppContainer, progress progress.Log) error {
 	for _, container := range containers {
 		if container.Physical == "" {
 			continue

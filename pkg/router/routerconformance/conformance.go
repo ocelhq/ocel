@@ -100,7 +100,7 @@ func Run(t *testing.T, suite Suite) {
 		displaced := newFlip("conformance-b2", record(App, "b2"))
 		displaced.Pointer = pointer
 		displaced.StillActive = func(context.Context) error { return errDisplaced }
-		err := stack.Flip(context.Background(), displaced, progress.DiscardProgress())
+		err := stack.Flip(context.Background(), displaced, progress.Discard())
 		if !errors.Is(err, errDisplaced) {
 			t.Fatalf("Flip with a StillActive that refuses = %v, want that refusal", err)
 		}
@@ -137,7 +137,7 @@ func Run(t *testing.T, suite Suite) {
 		refused := newFlip("conformance-b2", record(App, "b2"))
 		refused.Pointer = pointer
 		fixture.FailNextFlip(errDataPlane)
-		err := stack.Flip(context.Background(), refused, progress.DiscardProgress())
+		err := stack.Flip(context.Background(), refused, progress.Discard())
 		var unserved router.Unserved
 		if !errors.As(err, &unserved) {
 			t.Fatalf("Flip the data plane refused = %v, want router.Unserved", err)
@@ -468,14 +468,14 @@ func flips(t *testing.T, stack router.Stack, pointer, promotionID string, record
 	t.Helper()
 	flip := newFlip(promotionID, records...)
 	flip.Pointer = pointer
-	if err := stack.Flip(context.Background(), flip, progress.DiscardProgress()); err != nil {
+	if err := stack.Flip(context.Background(), flip, progress.Discard()); err != nil {
 		t.Fatalf("Flip(%s onto %q): %v", promotionID, pointer, err)
 	}
 }
 
 func removesPointer(t *testing.T, stack router.Stack, pointer string) {
 	t.Helper()
-	if err := stack.RemovePointer(context.Background(), pointer, progress.DiscardProgress()); err != nil {
+	if err := stack.RemovePointer(context.Background(), pointer, progress.Discard()); err != nil {
 		t.Fatalf("RemovePointer(%q): %v", pointer, err)
 	}
 }
@@ -513,7 +513,7 @@ func (l *memoryLedger) promote(ctx context.Context, stack router.Stack, flip rou
 		stillActive = l.stillActive(flip.Promotion.PromotionID)
 	}
 	flip.StillActive = stillActive
-	err := stack.Flip(ctx, flip, progress.DiscardProgress())
+	err := stack.Flip(ctx, flip, progress.Discard())
 	var unserved router.Unserved
 	if errors.As(err, &unserved) && l.active == flip.Promotion.PromotionID {
 		l.active = displaced

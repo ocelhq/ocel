@@ -61,7 +61,7 @@ type DataPlane struct {
 	failure  error
 	before   func()
 	says     string
-	progress progress.Progress
+	progress progress.Log
 	served   map[projectPointer]map[string]string
 	writes   map[projectPointer]int
 }
@@ -100,13 +100,13 @@ func (d *DataPlane) SayOnFlip(said string) {
 	d.says = said
 }
 
-func (d *DataPlane) FlipProgress() progress.Progress {
+func (d *DataPlane) FlipProgress() progress.Log {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return d.progress
 }
 
-func (d *DataPlane) beginFlip(progress progress.Progress) {
+func (d *DataPlane) beginFlip(progress progress.Log) {
 	d.mu.Lock()
 	before, said := d.before, d.says
 	d.before, d.progress = nil, progress
@@ -262,7 +262,7 @@ func (s *RouterStack) Disclaim(_ context.Context, hostname string) error {
 	return nil
 }
 
-func (s *RouterStack) Flip(ctx context.Context, flip router.Flip, progress progress.Progress) error {
+func (s *RouterStack) Flip(ctx context.Context, flip router.Flip, progress progress.Log) error {
 	s.plane.beginFlip(progress)
 	builds := make(map[string]string, len(flip.Records))
 	for app, record := range flip.Records {
@@ -284,7 +284,7 @@ func (s *RouterStack) Flip(ctx context.Context, flip router.Flip, progress progr
 	return router.Unserved{Err: fmt.Errorf("flip %s onto %s: another flip moved it on every one of %d attempts", flip.Promotion.PromotionID, at.pointer, flipAttempts)}
 }
 
-func (s *RouterStack) RemovePointer(_ context.Context, pointer string, _ progress.Progress) error {
+func (s *RouterStack) RemovePointer(_ context.Context, pointer string, _ progress.Log) error {
 	s.plane.remove(pointerOf(s.stack.State(), pointer))
 	return nil
 }

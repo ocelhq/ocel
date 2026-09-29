@@ -14,7 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
-func (r *deployRun) admitBindings(ctx context.Context, progress progress.Progress) error {
+func (r *deployRun) admitBindings(ctx context.Context, progress progress.Log) error {
 	resources, err := manifestResources(r.manifest)
 	if err != nil {
 		return err
@@ -129,7 +129,7 @@ func (r *deployRun) publishingTiers(ctx context.Context, missing []string) map[s
 	return found
 }
 
-func (r *deployRun) warnShadowed(progress progress.Progress, resources []provider.Resource, published map[string]provider.Binding) {
+func (r *deployRun) warnShadowed(progress progress.Log, resources []provider.Resource, published map[string]provider.Binding) {
 	for _, resource := range resources {
 		if resource.Binding != "" {
 			continue

@@ -268,7 +268,7 @@ func installedEdgeChanges(kind edge.Kind, feature string, planned []edge.PlanCha
 	return &group
 }
 
-func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Progress) error {
+func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
 	if req.Heal {
 		return b.heal(ctx, req, progress)
 	}
@@ -279,7 +279,7 @@ func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 	return err
 }
 
-func (b Bootstrap) heal(ctx context.Context, req provider.BootstrapRequest, progress progress.Progress) error {
+func (b Bootstrap) heal(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
 	_, err := bootstrap.Heal(ctx, b.apis(), b.Namespace, req.Tier, bootstrap.HealRequest{
 		Features: req.Features,
 		Writer:   req.WrittenBy,
@@ -290,7 +290,7 @@ func (b Bootstrap) heal(ctx context.Context, req provider.BootstrapRequest, prog
 	return err
 }
 
-func (b Bootstrap) Remove(ctx context.Context, tier environment.Tier, progress progress.Progress) error {
+func (b Bootstrap) Remove(ctx context.Context, tier environment.Tier, progress progress.Log) error {
 	read, err := bootstrap.Read(ctx, b.CFN, b.Namespace, tier)
 	if err != nil {
 		return err

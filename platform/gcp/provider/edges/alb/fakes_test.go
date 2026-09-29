@@ -61,7 +61,7 @@ func balancer() map[string]string {
 	}
 }
 
-func (w *world) Up(_ context.Context, target Target, program Program, _ progress.Progress) (map[string]string, error) {
+func (w *world) Up(_ context.Context, target Target, program Program, _ progress.Log) (map[string]string, error) {
 	stack := target.Name()
 	if program == nil {
 		return nil, errors.New("a stack was raised with no program to raise")
@@ -118,7 +118,7 @@ func trustConfigOf(seen map[string]declaration) ([]string, bool) {
 	return nil, false
 }
 
-func (w *world) Destroy(_ context.Context, target Target, _ progress.Progress) error {
+func (w *world) Destroy(_ context.Context, target Target, _ progress.Log) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.destroys = append(w.destroys, target.Name())

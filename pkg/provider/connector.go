@@ -41,9 +41,9 @@ type ConnectorAddress struct {
 type Connector interface {
 	Target(ctx context.Context) (ConnectorTarget, error)
 
-	Install(ctx context.Context, install ConnectorInstall, progress progress.Progress) (ConnectorAddress, error)
+	Install(ctx context.Context, install ConnectorInstall, progress progress.Log) (ConnectorAddress, error)
 
-	Remove(ctx context.Context, progress progress.Progress) error
+	Remove(ctx context.Context, progress progress.Log) error
 }
 
 func ConnectorCompute(requested Compute, supported ...Compute) (Compute, error) {

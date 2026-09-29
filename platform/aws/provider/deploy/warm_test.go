@@ -54,8 +54,8 @@ func answering(body string) *fakeInvoke {
 	}}
 }
 
-func collectLog() (*fake.Progress, func() string) {
-	progress := &fake.Progress{}
+func collectLog() (*fake.Log, func() string) {
+	progress := &fake.Log{}
 	return progress, func() string {
 		var b strings.Builder
 		for _, line := range progress.Lines() {

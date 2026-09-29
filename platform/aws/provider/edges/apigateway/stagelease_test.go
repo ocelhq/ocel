@@ -79,7 +79,7 @@ func stagedFlip(t *testing.T, stack routerStack, id string) error {
 	return stack.Flip(context.Background(), router.Flip{
 		Promotion: router.Promotion{PromotionID: id, Ts: 1, Builds: map[string]string{"web": record.Build}},
 		Records:   map[string]router.DeploymentRecord{"web": record},
-	}, progress.DiscardProgress())
+	}, progress.Discard())
 }
 
 func TestAFlipLetsGoOfTheStageOnceItHasMovedIt(t *testing.T) {
