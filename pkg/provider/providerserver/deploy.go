@@ -170,6 +170,8 @@ type deployRun struct {
 	registry provider.RegistryTarget
 	images   provider.ImageStore
 
+	replaces string
+
 	dry           bool
 	dryRunPlan    dryRunPlan
 	allowDegraded []string
@@ -312,6 +314,11 @@ func (r *deployRun) prepare(ctx context.Context, progress progress.Progress) err
 		if err := r.rememberProject(ctx); err != nil {
 			return err
 		}
+		replaces, err := r.ledger.ActivePromotionID(ctx, r.spec.Pointer)
+		if err != nil {
+			return err
+		}
+		r.replaces = replaces
 	}
 	if err := r.checkNeeds(ctx); err != nil {
 		return err
@@ -1276,11 +1283,7 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 	}
 	if err := r.tracked.unit(r.stages.Promotion, func(u *unitRun) error {
 		return u.phase(func(progress progress.Progress) error {
-			replaces, err := r.ledger.ActivePromotionID(ctx, r.spec.Pointer)
-			if err != nil {
-				return err
-			}
-			pruned, err := r.sharedStack.promote(ctx, promoteRequest{pointer: r.spec.Pointer, replaces: replaces, promotion: promotion}, progress)
+			pruned, err := r.sharedStack.promote(ctx, promoteRequest{pointer: r.spec.Pointer, replaces: r.replaces, promotion: promotion}, progress)
 			if err != nil {
 				return err
 			}

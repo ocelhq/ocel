@@ -27,8 +27,8 @@ type RecordedPromotion struct {
 func (p Pointer) Promote(promotion router.Promotion, replaces string, keep int) (Pointer, []RecordedPromotion, error) {
 	if p.Active != replaces {
 		return Pointer{}, nil, refusal.Refuse(refusal.CodeBusy,
-			"point %s at promotion %s: this promote replaces %s there, and %s now names %s, so another deploy moved it while this one was promoting, and this one stopped rather than overwrite it. Re-run it once the other one has finished",
-			p.Name, promotion.PromotionID, describePromotion(replaces), p.Name, describePromotion(p.Active))
+			"promote %s on %s: %s now names %s, not %s, because another deploy or rollback promoted it after this one started. This one stopped without flipping anything rather than replace a release it never saw. Run `ocel deploy` (or `ocel rollback`) again to promote over it",
+			promotion.PromotionID, p.Name, p.Name, describePromotion(p.Active), describePromotion(replaces))
 	}
 	for _, recorded := range p.Promotions {
 		if recorded.PromotionID == promotion.PromotionID {
