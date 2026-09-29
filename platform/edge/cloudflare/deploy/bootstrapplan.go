@@ -119,7 +119,7 @@ func (w workerState) removals() []edge.PlanChange {
 }
 
 func bootstrapCredentials() (string, error) {
-	accountID := os.Getenv(envAccountID)
+	accountID := readAccountID()
 	if accountID == "" {
 		return "", fmt.Errorf("%s is not set; export it and re-run", envAccountID)
 	}

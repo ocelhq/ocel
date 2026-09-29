@@ -3,7 +3,6 @@ package cloudflare
 import (
 	"context"
 	"fmt"
-	"os"
 	"sync"
 	"time"
 
@@ -43,9 +42,9 @@ type dnsRecords struct {
 }
 
 func NewDNS(zone string) (edge.DNSRecords, error) {
-	accountID := os.Getenv(envAccountID)
-	if accountID == "" {
-		return nil, fmt.Errorf("%s is not set; it is required to write DNS records in Cloudflare", envAccountID)
+	accountID, err := requireAccountID("write DNS records in Cloudflare")
+	if err != nil {
+		return nil, err
 	}
 	client := cf.NewClient(option.WithMaxRetries(clientMaxRetries))
 	return &dnsRecords{

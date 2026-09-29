@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"slices"
 
 	cf "github.com/cloudflare/cloudflare-go/v4"
@@ -16,9 +15,9 @@ import (
 const previewEntryScript = "ocel-preview-entry"
 
 func (p *cloudflare) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewWildcardSpec) (string, error) {
-	accountID := os.Getenv(envAccountID)
-	if accountID == "" {
-		return "", fmt.Errorf("%s is not set; it is required to reconcile the shared preview entry worker", envAccountID)
+	accountID, err := requireAccountID("reconcile the shared preview entry worker")
+	if err != nil {
+		return "", err
 	}
 	wildcard := edge.PreviewWildcard(spec.BaseDomain)
 	if wildcard == "" {
@@ -46,9 +45,9 @@ func (p *cloudflare) ReconcilePreviewWildcard(ctx context.Context, spec edge.Pre
 }
 
 func (p *cloudflare) DestroyPreviewWildcard(ctx context.Context, baseDomain string) error {
-	accountID := os.Getenv(envAccountID)
-	if accountID == "" {
-		return fmt.Errorf("%s is not set; it is required to destroy the shared preview entry worker", envAccountID)
+	accountID, err := requireAccountID("destroy the shared preview entry worker")
+	if err != nil {
+		return err
 	}
 
 	snap := p.routeSnapshot()

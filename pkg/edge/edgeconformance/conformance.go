@@ -191,11 +191,11 @@ func Run(t *testing.T, suite Suite) {
 		frontedRecords(t, e, reopened.State(), suite.Hostname)
 	})
 
-	t.Run("an edge that proxies records forwards a hostname bound with an origin to that origin", func(t *testing.T) {
+	t.Run("an edge that proxies records and runs no code forwards a hostname bound with an origin to that origin", func(t *testing.T) {
 		ctx := context.Background()
 		e, stack := reconciledOn(t, suite)
-		if !e.Facts().ProxiesRecords {
-			t.Skip("this edge proxies no record, so it answers every hostname it binds itself")
+		if facts := e.Facts(); !facts.ProxiesRecords || facts.RunsCode {
+			t.Skip("this edge answers every hostname it binds itself")
 		}
 		origin := edge.Origin{Address: "203.0.113.7"}
 		if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: suite.Hostname, Origin: &origin}); err != nil {

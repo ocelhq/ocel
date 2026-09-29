@@ -76,7 +76,7 @@ func credentialPermissions(purpose edge.CredentialPurpose) (edge.CredentialDocum
 }
 
 func (p *cloudflare) verifyCredentials(ctx context.Context) (edge.CredentialIdentity, error) {
-	accountID := os.Getenv(envAccountID)
+	accountID := readAccountID()
 	if accountID == "" {
 		return edge.CredentialIdentity{}, fmt.Errorf("%s is not set", envAccountID)
 	}

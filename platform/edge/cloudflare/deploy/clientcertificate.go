@@ -110,7 +110,7 @@ func (p *cloudflare) refuseSharedOriginPull(ctx context.Context, zoneID, zoneNam
 }
 
 func (p *cloudflare) resolveHostnameZone(ctx context.Context, hostname, doing string) (id, name string, err error) {
-	accountID, err := p.requireAccountID(doing)
+	accountID, err := requireAccountID(doing)
 	if err != nil {
 		return "", "", err
 	}

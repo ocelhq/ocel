@@ -49,9 +49,9 @@ func proxiedRecord(hostname string, origin edge.Origin) (edge.Record, error) {
 }
 
 func (p *cloudflare) bindOrigin(ctx context.Context, state *edge.StackState, owner string, binding edge.DomainBinding) error {
-	accountID := p.accountID()
-	if accountID == "" {
-		return fmt.Errorf("%s is not set; it is required to forward %s through Cloudflare", envAccountID, binding.Hostname)
+	accountID, err := requireAccountID(fmt.Sprintf("forward %s through Cloudflare", binding.Hostname))
+	if err != nil {
+		return err
 	}
 	if binding.Origin.Address == "" {
 		return fmt.Errorf("the origin %s is forwarded to names no address", binding.Hostname)
@@ -88,9 +88,9 @@ func (p *cloudflare) forwardOrigin(ctx context.Context, accountID, owner, hostna
 }
 
 func (p *cloudflare) unbindOrigin(ctx context.Context, state *edge.StackState, owner, hostname string) error {
-	accountID := p.accountID()
-	if accountID == "" {
-		return fmt.Errorf("%s is not set; it is required to stop forwarding %s through Cloudflare", envAccountID, hostname)
+	accountID, err := requireAccountID(fmt.Sprintf("stop forwarding %s through Cloudflare", hostname))
+	if err != nil {
+		return err
 	}
 	zoneID, _, err := p.resolveZone(ctx, accountID, routeBaseDomain(hostname))
 	if err != nil {
@@ -122,10 +122,6 @@ func (p *cloudflare) requireStrictOrigin(ctx context.Context, zoneID, zoneName s
 		return fmt.Errorf("zone %s reaches origins with SSL mode %q, which does not check the certificate the origin answers with, so Cloudflare would forward to anything answering its address: set the zone's SSL mode to Full (strict) and bind it again", zoneName, read.Value)
 	}
 	return nil
-}
-
-func isForwarded(state edge.StackState, hostname string) bool {
-	return slices.ContainsFunc(state.Records, func(rec edge.Record) bool { return rec.Name == hostname })
 }
 
 func recordsBesides(records []edge.Record, hostname string) []edge.Record {

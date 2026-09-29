@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"maps"
 	"mime/multipart"
-	"os"
 	"slices"
 
 	cf "github.com/cloudflare/cloudflare-go/v4"
@@ -132,9 +131,9 @@ func (p *cloudflare) Open(state edge.StackState) (edge.EdgeStack, error) {
 }
 
 func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
-	accountID := os.Getenv(envAccountID)
-	if accountID == "" {
-		return nil, fmt.Errorf("%s is not set; it is required to reconcile the Cloudflare stack", envAccountID)
+	accountID, err := requireAccountID("reconcile the Cloudflare stack")
+	if err != nil {
+		return nil, err
 	}
 	program := spec.Program
 	if program == nil {
@@ -348,9 +347,9 @@ func (p *cloudflare) stackWorkers(ctx context.Context, state edge.StackState) ([
 }
 
 func (p *cloudflare) destroyWorkers(ctx context.Context, names []string) error {
-	accountID := os.Getenv(envAccountID)
-	if accountID == "" {
-		return fmt.Errorf("%s is not set; it is required to destroy the Cloudflare stack", envAccountID)
+	accountID, err := requireAccountID("destroy the Cloudflare stack")
+	if err != nil {
+		return err
 	}
 	if len(names) == 0 {
 		return nil
