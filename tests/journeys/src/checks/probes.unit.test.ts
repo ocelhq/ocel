@@ -209,6 +209,18 @@ describe("the client address check", () => {
   it("passes when every hop appends the runner's public address", async () => {
     await clientAddressCheck.run(context(dumping(appending("198.51.100.7")), PUBLIC_TARGET));
   });
+
+  it("passes on a .localhost target when the runner's own private address comes through", async () => {
+    await clientAddressCheck.run(
+      context(dumping(appending("10.248.113.1")), "http://web.localhost"),
+    );
+  });
+
+  it("passes on a target whose name does not resolve when a private address comes through", async () => {
+    await clientAddressCheck.run(
+      context(dumping(appending("10.248.113.1")), "https://nothing.invalid"),
+    );
+  });
 });
 
 describe("the public origin check", () => {

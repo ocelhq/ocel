@@ -112,8 +112,17 @@ function isPrivateAddress(address: string): boolean {
 async function isPublicTarget(baseUrl: string): Promise<boolean> {
   const { hostname } = new URL(baseUrl);
   const bare = hostname.replace(/^\[|\]$/g, "");
-  const address = isIP(bare) !== 0 ? bare : (await lookup(bare)).address;
-  return !isPrivateAddress(address);
+  if (bare === "localhost" || bare.endsWith(".localhost")) {
+    return false;
+  }
+  if (isIP(bare) !== 0) {
+    return !isPrivateAddress(bare);
+  }
+  try {
+    return !isPrivateAddress((await lookup(bare)).address);
+  } catch {
+    return false;
+  }
 }
 
 function forwardedChain(dump: HeaderDump): string[] {
