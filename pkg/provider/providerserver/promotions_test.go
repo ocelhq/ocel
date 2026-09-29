@@ -577,13 +577,18 @@ func (s *serviceEveryReleaseRevises) hooks() resources.Hooks {
 			}
 			return nil
 		},
-		RemoveRevisions: func(_ context.Context, _ provider.StackRef, functions []provider.Function, _ progress.Progress) error {
-			s.mu.Lock()
-			defer s.mu.Unlock()
-			for _, function := range functions {
-				s.removedRevisions = append(s.removedRevisions, function.Revision)
-			}
-			return nil
+		Shared: &resources.SharedHooks[provider.Function]{
+			Name: func(context.Context, provider.StackSpec) ([]provider.Function, error) {
+				return []provider.Function{{Name: "api", Physical: "shop-web-api"}}, nil
+			},
+			RemoveRevisions: func(_ context.Context, _ provider.StackRef, functions []provider.Function, _ progress.Progress) ([]provider.Function, error) {
+				s.mu.Lock()
+				defer s.mu.Unlock()
+				for _, function := range functions {
+					s.removedRevisions = append(s.removedRevisions, function.Revision)
+				}
+				return nil, nil
+			},
 		},
 	}}
 }

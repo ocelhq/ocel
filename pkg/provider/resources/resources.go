@@ -31,15 +31,20 @@ type Hooks struct {
 }
 
 type FunctionHooks struct {
-	Provision       func(ctx context.Context, spec provider.StackSpec, progress progress.Progress) ([]provider.Function, error)
-	Remove          func(ctx context.Context, ref provider.StackRef, functions []provider.Function, progress progress.Progress) error
-	RemoveRevisions func(ctx context.Context, ref provider.StackRef, functions []provider.Function, progress progress.Progress) error
+	Provision func(ctx context.Context, spec provider.StackSpec, progress progress.Progress) ([]provider.Function, error)
+	Remove    func(ctx context.Context, ref provider.StackRef, functions []provider.Function, progress progress.Progress) error
+	Shared    *SharedHooks[provider.Function]
 }
 
 type ContainerHooks struct {
-	Provision       func(ctx context.Context, spec provider.StackSpec, progress progress.Progress) ([]provider.AppContainer, error)
-	Remove          func(ctx context.Context, ref provider.StackRef, containers []provider.AppContainer, progress progress.Progress) error
-	RemoveRevisions func(ctx context.Context, ref provider.StackRef, containers []provider.AppContainer, progress progress.Progress) error
+	Provision func(ctx context.Context, spec provider.StackSpec, progress progress.Progress) ([]provider.AppContainer, error)
+	Remove    func(ctx context.Context, ref provider.StackRef, containers []provider.AppContainer, progress progress.Progress) error
+	Shared    *SharedHooks[provider.AppContainer]
+}
+
+type SharedHooks[T any] struct {
+	Name            func(ctx context.Context, spec provider.StackSpec) ([]T, error)
+	RemoveRevisions func(ctx context.Context, ref provider.StackRef, going []T, progress progress.Progress) ([]T, error)
 }
 
 type ImageRetentionHooks struct {
@@ -161,10 +166,7 @@ func (f *hookStacks) computeProvisioner(spec provider.StackSpec) (computeProvisi
 			return nil, refuseMissingComputeHooks(spec.App, "Functions")
 		}
 		return func(ctx context.Context, progress progress.Progress) (provider.StackResult, error) {
-			functions, err := f.hooks.Functions.Provision(ctx, spec, progress)
-			if err == nil && f.hooks.Functions.RemoveRevisions != nil {
-				err = recordHolders(ctx, f, spec.Ref, functions, functionPhysical)
-			}
+			functions, err := provisionCompute(ctx, f, spec, functionCompute(f.hooks.Functions), f.hooks.Functions.Provision, progress)
 			return provider.StackResult{Functions: functions}, err
 		}, nil
 	case provider.ComputeContainer:
@@ -172,10 +174,7 @@ func (f *hookStacks) computeProvisioner(spec provider.StackSpec) (computeProvisi
 			return nil, refuseMissingComputeHooks(spec.App, "Containers")
 		}
 		return func(ctx context.Context, progress progress.Progress) (provider.StackResult, error) {
-			containers, err := f.hooks.Containers.Provision(ctx, spec, progress)
-			if err == nil && f.hooks.Containers.RemoveRevisions != nil {
-				err = recordHolders(ctx, f, spec.Ref, containers, containerPhysical)
-			}
+			containers, err := provisionCompute(ctx, f, spec, containerCompute(f.hooks.Containers), f.hooks.Containers.Provision, progress)
 			return provider.StackResult{Containers: containers}, err
 		}, nil
 	default:
@@ -288,11 +287,7 @@ func (f *hookStacks) removeFunctions(ctx context.Context, ref provider.StackRef,
 	if f.hooks.Functions == nil {
 		return refuseOrphans(ref, len(going), "function", because, "Functions")
 	}
-	return removeCompute(ctx, f, ref, going, computeRemoval[provider.Function]{
-		remove:          f.hooks.Functions.Remove,
-		removeRevisions: f.hooks.Functions.RemoveRevisions,
-		physicalOf:      functionPhysical,
-	}, progress)
+	return removeCompute(ctx, f, ref, going, functionCompute(f.hooks.Functions), progress)
 }
 
 func (f *hookStacks) removeContainers(ctx context.Context, ref provider.StackRef, going []provider.AppContainer, because string, progress progress.Progress) error {
@@ -302,11 +297,7 @@ func (f *hookStacks) removeContainers(ctx context.Context, ref provider.StackRef
 	if f.hooks.Containers == nil {
 		return refuseOrphans(ref, len(going), "container", because, "Containers")
 	}
-	return removeCompute(ctx, f, ref, going, computeRemoval[provider.AppContainer]{
-		remove:          f.hooks.Containers.Remove,
-		removeRevisions: f.hooks.Containers.RemoveRevisions,
-		physicalOf:      containerPhysical,
-	}, progress)
+	return removeCompute(ctx, f, ref, going, containerCompute(f.hooks.Containers), progress)
 }
 
 func removeAll[T any](

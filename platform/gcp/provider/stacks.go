@@ -99,8 +99,35 @@ func (p *Provider) RemoveFunctions(ctx context.Context, _ provider.StackRef, fun
 	return p.tearDownAll(ctx, functionRevisions(functions), progress)
 }
 
-func (p *Provider) RemoveFunctionRevisions(ctx context.Context, _ provider.StackRef, functions []provider.Function, progress progress.Progress) error {
-	return p.removeRevisions(ctx, functionRevisions(functions), progress)
+func (p *Provider) NameFunctions(ctx context.Context, spec provider.StackSpec) ([]provider.Function, error) {
+	if spec.App == nil {
+		return nil, nil
+	}
+	names, err := p.Names(ctx)
+	if err != nil {
+		return nil, err
+	}
+	functions := make([]provider.Function, 0, len(spec.App.Functions))
+	for _, fn := range spec.App.Functions {
+		service, err := serviceFor(names, spec, spec.App, fn.Name)
+		if err != nil {
+			return nil, err
+		}
+		functions = append(functions, provider.Function{Name: fn.Name, Physical: service})
+	}
+	return functions, nil
+}
+
+func (p *Provider) RemoveFunctionRevisions(ctx context.Context, _ provider.StackRef, functions []provider.Function, progress progress.Progress) ([]provider.Function, error) {
+	kept, err := p.removeRevisions(ctx, functionRevisions(functions), progress)
+	if err != nil {
+		return nil, err
+	}
+	var left []provider.Function
+	for _, at := range kept {
+		left = append(left, functions[at])
+	}
+	return left, nil
 }
 
 func functionRevisions(functions []provider.Function) []serviceRevision {
@@ -163,8 +190,31 @@ func (p *Provider) RemoveContainers(ctx context.Context, _ provider.StackRef, co
 	return p.tearDownAll(ctx, containerRevisions(containers), progress)
 }
 
-func (p *Provider) RemoveContainerRevisions(ctx context.Context, _ provider.StackRef, containers []provider.AppContainer, progress progress.Progress) error {
-	return p.removeRevisions(ctx, containerRevisions(containers), progress)
+func (p *Provider) NameContainers(ctx context.Context, spec provider.StackSpec) ([]provider.AppContainer, error) {
+	if spec.App == nil {
+		return nil, nil
+	}
+	names, err := p.Names(ctx)
+	if err != nil {
+		return nil, err
+	}
+	service, err := serviceFor(names, spec, spec.App, spec.App.App)
+	if err != nil {
+		return nil, err
+	}
+	return []provider.AppContainer{{Name: spec.App.App, Physical: service, Image: spec.App.Image}}, nil
+}
+
+func (p *Provider) RemoveContainerRevisions(ctx context.Context, _ provider.StackRef, containers []provider.AppContainer, progress progress.Progress) ([]provider.AppContainer, error) {
+	kept, err := p.removeRevisions(ctx, containerRevisions(containers), progress)
+	if err != nil {
+		return nil, err
+	}
+	var left []provider.AppContainer
+	for _, at := range kept {
+		left = append(left, containers[at])
+	}
+	return left, nil
 }
 
 func containerRevisions(containers []provider.AppContainer) []serviceRevision {
@@ -192,13 +242,18 @@ func (p *Provider) tearDownAll(ctx context.Context, going []serviceRevision, pro
 	return nil
 }
 
-func (p *Provider) removeRevisions(ctx context.Context, going []serviceRevision, progress progress.Progress) error {
-	for _, each := range going {
-		if err := p.removeRevision(ctx, each.service, each.revision, progress); err != nil {
-			return err
+func (p *Provider) removeRevisions(ctx context.Context, going []serviceRevision, progress progress.Progress) ([]int, error) {
+	var kept []int
+	for at, each := range going {
+		stays, err := p.removeRevision(ctx, each.service, each.revision, progress)
+		if err != nil {
+			return nil, err
+		}
+		if stays {
+			kept = append(kept, at)
 		}
 	}
-	return nil
+	return kept, nil
 }
 
 func (p *Provider) runtimeEnv(names Names, spec provider.StackSpec) (map[string]string, error) {
