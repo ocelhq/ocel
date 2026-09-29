@@ -23,8 +23,10 @@ only what arrives with the certificate your zone presents to origins (zone-level
 authenticated origin pulls, with a certificate of your own rather than Cloudflare's shared
 one). Every origin trusts every client certificate the zone holds. If the zone holds none,
 ocel mints one good for ten years, uploads it, has the origin trust it, then turns
-zone-level pulls on. ocel never replaces or deletes a zone's client certificate: it is
-shared by every origin the zone forwards to. The origins ocel runs accept it past its
+zone-level pulls on. Two deploys that find the zone holding none at once each upload one,
+and the one that uploaded second deletes its own, so the zone keeps one. Past that, ocel
+never replaces or deletes a zone's client certificate: it is shared by every origin the
+zone forwards to. The origins ocel runs accept it past its
 expiry, as Cloudflare keeps presenting it. A zone that already presents Cloudflare's shared
 certificate (global pulls on, or zone-level pulls on with no certificate of the zone's own)
 is refused, since another origin in it may trust only that one: upload a certificate of

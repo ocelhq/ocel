@@ -31,8 +31,26 @@ const (
 var heldStatuses = []string{"initializing", "pending_deployment", "active"}
 
 type zoneClientCertificate struct {
-	Certificate string `json:"certificate"`
-	Status      string `json:"status"`
+	ID          string    `json:"id"`
+	Certificate string    `json:"certificate"`
+	Status      string    `json:"status"`
+	UploadedOn  time.Time `json:"uploaded_on"`
+}
+
+func (c zoneClientCertificate) isUploadedBefore(other zoneClientCertificate) bool {
+	if !c.UploadedOn.Equal(other.UploadedOn) {
+		return c.UploadedOn.Before(other.UploadedOn)
+	}
+	return c.ID < other.ID
+}
+
+func certificatesOf(held []zoneClientCertificate) []string {
+	certificates := make([]string, 0, len(held))
+	for _, certificate := range held {
+		certificates = append(certificates, certificate.Certificate)
+	}
+	slices.Sort(certificates)
+	return slices.Compact(certificates)
 }
 
 func (p *cloudflare) ensureClientCertificates(ctx context.Context, hostname string) ([]string, error) {
@@ -52,20 +70,40 @@ func (p *cloudflare) ensureClientCertificates(ctx context.Context, hostname stri
 		return nil, err
 	}
 	if len(held) > 0 {
-		return held, nil
+		return certificatesOf(held), nil
 	}
 	certificate, key, err := mintClientCertificate(zoneName, time.Now())
 	if err != nil {
 		return nil, err
 	}
-	if _, err := p.client.OriginTLSClientAuth.New(ctx, origin_tls_client_auth.OriginTLSClientAuthNewParams{
+	uploaded, err := p.client.OriginTLSClientAuth.New(ctx, origin_tls_client_auth.OriginTLSClientAuthNewParams{
 		ZoneID:      cf.F(zoneID),
 		Certificate: cf.F(certificate),
 		PrivateKey:  cf.F(key),
-	}); err != nil {
+	})
+	if err != nil {
 		return nil, fmt.Errorf("upload the client certificate zone %s presents to origins: %w", zoneName, err)
 	}
-	return p.listClientCertificates(ctx, zoneID)
+	return p.keepFirstUpload(ctx, zoneID, zoneName, uploaded.ID)
+}
+
+func (p *cloudflare) keepFirstUpload(ctx context.Context, zoneID, zoneName, uploadedID string) ([]string, error) {
+	held, err := p.listClientCertificates(ctx, zoneID)
+	if err != nil {
+		return nil, err
+	}
+	ours := slices.IndexFunc(held, func(listed zoneClientCertificate) bool { return listed.ID == uploadedID })
+	if ours < 0 {
+		return certificatesOf(held), nil
+	}
+	anotherUploadedFirst := slices.ContainsFunc(held, func(listed zoneClientCertificate) bool { return listed.isUploadedBefore(held[ours]) })
+	if !anotherUploadedFirst {
+		return certificatesOf(held), nil
+	}
+	if _, err := p.client.OriginTLSClientAuth.Delete(ctx, uploadedID, origin_tls_client_auth.OriginTLSClientAuthDeleteParams{ZoneID: cf.F(zoneID)}); err != nil {
+		return nil, fmt.Errorf("delete the client certificate this run uploaded to zone %s after another run uploaded one first: %w", zoneName, err)
+	}
+	return certificatesOf(slices.Delete(held, ours, ours+1)), nil
 }
 
 func (p *cloudflare) presentClientCertificates(ctx context.Context, hostname string) error {
@@ -138,23 +176,22 @@ func (p *cloudflare) resolveHostnameZone(ctx context.Context, hostname, doing st
 	return p.resolveZone(ctx, accountID, routeBaseDomain(hostname))
 }
 
-func (p *cloudflare) listClientCertificates(ctx context.Context, zoneID string) ([]string, error) {
+func (p *cloudflare) listClientCertificates(ctx context.Context, zoneID string) ([]zoneClientCertificate, error) {
 	listed := p.client.OriginTLSClientAuth.ListAutoPaging(ctx, origin_tls_client_auth.OriginTLSClientAuthListParams{ZoneID: cf.F(zoneID)})
-	var held []string
+	var held []zoneClientCertificate
 	for listed.Next() {
 		var read zoneClientCertificate
 		if err := json.Unmarshal([]byte(listed.Current().JSON.RawJSON()), &read); err != nil {
 			return nil, fmt.Errorf("read a client certificate of zone %s: %w", zoneID, err)
 		}
 		if slices.Contains(heldStatuses, read.Status) && read.Certificate != "" {
-			held = append(held, read.Certificate)
+			held = append(held, read)
 		}
 	}
 	if err := listed.Err(); err != nil {
 		return nil, fmt.Errorf("list the client certificates zone %s presents to origins: %w", zoneID, err)
 	}
-	slices.Sort(held)
-	return slices.Compact(held), nil
+	return held, nil
 }
 
 func mintClientCertificate(zoneName string, now time.Time) (certificate, key string, err error) {
