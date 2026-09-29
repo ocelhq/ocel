@@ -37,8 +37,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-const reasonCurrent = "already current"
-
 const FakeProviderEnvVar = "OCEL_TEST_DEPLOY_FAKE_PROVIDER"
 
 const fakeProviderSockEnvVar = "OCEL_TEST_DEPLOY_FAKE_PROVIDER_SOCK"
@@ -102,12 +100,6 @@ const (
 
 const FakeBootstrapEnvVar = "OCEL_TEST_FAKE_BOOTSTRAP"
 
-const FakePreviewBootstrapEnvVar = "OCEL_TEST_FAKE_PREVIEW_BOOTSTRAP"
-
-const FakeBootstrapPlanEnvVar = "OCEL_TEST_FAKE_BOOTSTRAP_PLAN"
-
-const FakeDescribeJournalEnvVar = "OCEL_TEST_FAKE_DESCRIBE_JOURNAL"
-
 const FakeEdgeRefusalEnvVar = "OCEL_TEST_FAKE_EDGE_REFUSAL"
 
 const FakeNeedsRefusalEnvVar = "OCEL_TEST_FAKE_NEEDS_REFUSAL"
@@ -125,7 +117,6 @@ const (
 	FakeGlobalDomainCertEnvVar          = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_CERT"
 	FakeGlobalDomainRenewalEnvVar       = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_RENEWAL"
 	FakeGlobalDomainExpiresEnvVar       = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_EXPIRES"
-	FakeHostChecksEnvVar                = "OCEL_TEST_FAKE_HOST_CHECKS"
 	FakeGlobalDomainRecordsEnvVar       = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_RECORDS"
 	FakeGlobalDomainManualRecordsEnvVar = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_MANUAL_RECORDS"
 	FakeGlobalDomainProbeEnvVar         = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_PROBE"
@@ -621,7 +612,6 @@ func (s *deployFakeProviderServer) DescribeBootstrap(ctx context.Context, req *c
 		f.Edges = []string{kind}
 		return f
 	}
-	journalDescribe(fmt.Sprintf("tier=%s withDependents=%t", req.GetTier(), req.GetWithDependents()))
 	var catalogue []*contractv1.Feature
 	if os.Getenv(FakeCatalogueEnvVar) != FakeCatalogueNone {
 		catalogue = []*contractv1.Feature{
@@ -639,121 +629,18 @@ func (s *deployFakeProviderServer) DescribeBootstrap(ctx context.Context, req *c
 }
 
 func fakeChangePlan(req *contractv1.BootstrapRequest) *planv1.ChangePlan {
-	shape := os.Getenv(FakeBootstrapPlanEnvVar)
-	if shape == "silent" {
-		return nil
-	}
 	tier := strings.ToLower(strings.TrimPrefix(req.GetTier().String(), "TIER_"))
-	core := &planv1.ChangeGroup{Kind: "stack", Name: "fake/ocel-" + tier + "-core"}
-	plan := &planv1.ChangePlan{
+	return &planv1.ChangePlan{
 		Subject:  tier,
 		EdgeKind: resolvedEdgeKind(req.GetEdge().GetKind()),
-		Groups:   []*planv1.ChangeGroup{core},
+		Groups:   []*planv1.ChangeGroup{{Kind: "stack", Name: "fake/ocel-" + tier + "-core", Action: planv1.Change_ACTION_CREATE}},
 	}
-	switch shape {
-	case "keep":
-		core.Action, core.Reason = planv1.Change_ACTION_KEEP, reasonCurrent
-		return plan
-	case "mixed":
-	default:
-		core.Action = planv1.Change_ACTION_CREATE
-		return plan
-	}
-	core.Action = planv1.Change_ACTION_UPDATE
-	core.Changes = []*planv1.Change{
-		{Kind: "Fake::Function", Name: "OcelDispatchFunction", Action: planv1.Change_ACTION_UPDATE},
-		{Kind: "Fake::Secret", Name: "OcelOriginSecret", Action: planv1.Change_ACTION_REPLACE, Reason: "rotation forces replacement"},
-	}
-	plan.Groups = append(plan.Groups,
-		&planv1.ChangeGroup{
-			Kind:    "stack",
-			Name:    "fake/ocel-" + tier + "-image-optimization",
-			Feature: "image-optimization",
-			Action:  planv1.Change_ACTION_CREATE,
-			Changes: []*planv1.Change{
-				{Kind: "Fake::Function", Name: "OcelImageFunction", Action: planv1.Change_ACTION_CREATE},
-			},
-		},
-		&planv1.ChangeGroup{
-			Kind:    "stack",
-			Name:    "fake/ocel-" + tier + "-isr",
-			Feature: "isr",
-			Action:  planv1.Change_ACTION_DELETE,
-			Reason:  "web, api were deployed against it",
-			Slow:    true,
-			Changes: []*planv1.Change{
-				{Kind: "Fake::Table", Name: "OcelRevalidationTable", Action: planv1.Change_ACTION_DELETE},
-			},
-		},
-		&planv1.ChangeGroup{
-			Kind:    "stack",
-			Name:    "fake/ocel-" + tier + "-secrets",
-			Feature: "secrets",
-			Action:  planv1.Change_ACTION_KEEP,
-			Reason:  reasonCurrent,
-		},
-	)
-	if front := fakeEdgeGroup(req, tier); front != nil {
-		plan.Groups = append(plan.Groups, front)
-	}
-	return plan
-}
-
-func fakeEdgeGroup(req *contractv1.BootstrapRequest, tier string) *planv1.ChangeGroup {
-	if resolvedEdgeKind(req.GetEdge().GetKind()) != "relay" {
-		return nil
-	}
-	store := "ocel-deployments-store"
-	if tier == "preview" {
-		store += "-preview"
-	}
-	return &planv1.ChangeGroup{
-		Kind:    "edge",
-		Name:    "relay/edge",
-		Feature: "relay-edge",
-		Action:  planv1.Change_ACTION_CREATE,
-		Changes: []*planv1.Change{
-			{Kind: "Fake::EdgeBucket", Name: "ocel-edge-cache", Action: planv1.Change_ACTION_CREATE},
-			{Kind: "Fake::EdgeScript", Name: store, Action: planv1.Change_ACTION_CREATE},
-		},
-	}
-}
-
-func refuseToDrawThePlan() error {
-	if os.Getenv(FakeBootstrapPlanEnvVar) != "edge-credentials" {
-		return nil
-	}
-	return connect.NewError(connect.CodeInvalidArgument, errors.New(
-		"plan the relay edge bootstrap: FAKE_RELAY_ACCOUNT is not set; export it and re-run"))
-}
-
-func journalIntent(req *contractv1.BootstrapRequest) {
-	line := fmt.Sprintf("tier=%s withDependents=false intent=features=%s,force=%t",
-		req.GetTier(), strings.Join(req.GetFeatures(), "|"), req.GetForce())
-	if removing := req.GetRemove(); len(removing) > 0 {
-		line += ",remove=" + strings.Join(removing, "|")
-	}
-	journalDescribe(line)
-}
-
-func journalDescribe(line string) {
-	path := os.Getenv(FakeDescribeJournalEnvVar)
-	if path == "" {
-		return
-	}
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "fake provider: describe journal:", err)
-		return
-	}
-	defer f.Close()
-	fmt.Fprintln(f, line)
 }
 
 func fakeBootstrap(tier environmentv1.Tier) *contractv1.BootstrapStatus {
-	shape := os.Getenv(FakeBootstrapEnvVar)
-	if tier == environmentv1.Tier_TIER_PREVIEW {
-		shape = os.Getenv(FakePreviewBootstrapEnvVar)
+	var shape string
+	if tier != environmentv1.Tier_TIER_PREVIEW {
+		shape = os.Getenv(FakeBootstrapEnvVar)
 	}
 	if shape == "" {
 		return &contractv1.BootstrapStatus{Tier: tier, RequiredSchema: 1, Writer: "1.4.0"}
@@ -794,16 +681,12 @@ func fakeBootstrap(tier environmentv1.Tier) *contractv1.BootstrapStatus {
 }
 
 func (s *deployFakeProviderServer) Bootstrap(ctx context.Context, req *contractv1.BootstrapRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	if err := refuseToDrawThePlan(); err != nil {
-		return err
-	}
 	if plan := fakeChangePlan(req); plan != nil && req.GetConsented() == nil {
 		if err := stream.Send(&progressv1.OperationEvent{Body: &progressv1.OperationEvent_Plan{Plan: plan}}); err != nil {
 			return err
 		}
 	}
 	if req.GetDry() {
-		journalIntent(req)
 		return stream.Send(&progressv1.OperationEvent{
 			Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
 		})
@@ -941,7 +824,6 @@ func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *contractv
 	}
 	resp.Bootstrap = fakeBootstrap(req.GetRequiredTier())
 	resp.PreviewWildcard = fakeGlobalDomain()
-	resp.HostChecks = fakeHostChecks(req.GetDomains())
 	if p := os.Getenv(FakeCredProblemEnvVar); p != "" {
 		resp.CredentialProblems = append(resp.CredentialProblems, &contractv1.CredentialProblem{
 			Provider: p,
@@ -1129,27 +1011,6 @@ func fakeGlobalDomain() *contractv1.PreviewWildcard {
 			LastProbeOk:       probeOK,
 		},
 	}
-}
-
-func fakeHostChecks(domains []string) []*contractv1.HostCheck {
-	said := os.Getenv(FakeHostChecksEnvVar)
-	if said == "" {
-		return nil
-	}
-	checks := []*contractv1.HostCheck{{
-		Subject: "203.0.113.10:80",
-		Verdict: contractv1.HostCheck_VERDICT_PASS,
-		Finding: "something listens on port 80 and a connection from this machine succeeded — that is one path in",
-	}}
-	for _, host := range domains {
-		checks = append(checks, &contractv1.HostCheck{
-			Subject: host,
-			Verdict: contractv1.HostCheck_VERDICT_NEEDS_ACTION,
-			Finding: host + " does not resolve; add a record at your DNS provider pointing it at 203.0.113.10",
-			Fix:     "add the record `ocel domain add` printed",
-		})
-	}
-	return checks
 }
 
 func splitList(raw string) []string {
@@ -1350,7 +1211,6 @@ func fakeDomainTargets(configured []string, host string) []string {
 const (
 	FakeDomainReadyAfterEnvVar = "OCEL_TEST_FAKE_DOMAIN_READY_AFTER"
 	FakeDomainCertEnvVar       = "OCEL_TEST_FAKE_DOMAIN_CERT"
-	FakeDomainRenewalEnvVar    = "OCEL_TEST_FAKE_DOMAIN_RENEWAL"
 	FakeDomainExpiresEnvVar    = "OCEL_TEST_FAKE_DOMAIN_EXPIRES"
 	FakeDomainFailUntilEnvVar  = "OCEL_TEST_FAKE_DOMAIN_FAIL_UNTIL"
 )
@@ -1383,9 +1243,8 @@ func (s *deployFakeProviderServer) GetHostnameStatus(ctx context.Context, req *c
 				LastProbeAt:       1755500000,
 				LastProbeOk:       ready,
 			},
-			RenewalStatus:  os.Getenv(FakeDomainRenewalEnvVar),
 			ExpiresAt:      expires,
-			ExpiringSoon:   expires != 0 && os.Getenv(FakeDomainRenewalEnvVar) != "SUCCESS",
+			ExpiringSoon:   expires != 0,
 			ServingPointer: "relay",
 			Ready:          ready,
 		}
