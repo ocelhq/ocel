@@ -249,12 +249,12 @@ func TestOnlyTheRoutesThatCanSetTheEdgeHeaderDeclareIt(t *testing.T) {
 	for _, path := range []string{"/", "/{proxy+}"} {
 		entry := methodOn(api, path, anyMethod)
 		if len(entry.methodResponses) != 0 {
-			t.Errorf("the entry method on %s declares the response %v; API Gateway ignores method responses on a proxy integration, so the entry function is what sets %s", path, slices.Sorted(maps.Keys(entry.methodResponses)), EdgeHeader)
+			t.Errorf("the entry method on %s declares the response %v; API Gateway ignores method responses on a proxy integration, so the entry function is what sets %s", path, slices.Sorted(maps.Keys(entry.methodResponses)), router.HeaderRouter)
 		}
 	}
 	static := methodOn(api, "/_next/static/{proxy+}", getMethod)
-	if got := static.integrationResponse["200"][edgeHeaderParameter]; got != "'"+string(Kind)+"'" {
-		t.Errorf("static integration response sets %s = %q, want 'api-gateway'", EdgeHeader, got)
+	if got := static.integrationResponse["200"][routerHeaderParameter]; got != "'"+string(Kind)+"'" {
+		t.Errorf("static integration response sets %s = %q, want 'api-gateway'", router.HeaderRouter, got)
 	}
 }
 
@@ -270,16 +270,16 @@ func TestTheLivenessProbePathIsAnsweredByTheGatewayItselfWithTheEdgeMarker(t *te
 	}
 	probed := methodOn(api, edge.LivenessProbePath, getMethod)
 	if probed == nil {
-		t.Fatalf("no method on %s; methods are %v. An app behind the proxy integration answers every other path without %s, so a probe that reads the marker never sees this edge serve", edge.LivenessProbePath, slices.Sorted(maps.Keys(api.methods)), EdgeHeader)
+		t.Fatalf("no method on %s; methods are %v. An app behind the proxy integration answers every other path without %s, so a probe that reads the marker never sees this edge serve", edge.LivenessProbePath, slices.Sorted(maps.Keys(api.methods)), router.HeaderRouter)
 	}
 	if probed.integration != agtypes.IntegrationTypeMock {
 		t.Errorf("the probe path's integration = %q, want MOCK: the gateway answers it, not the app", probed.integration)
 	}
-	if !probed.methodResponses["200"][edgeHeaderParameter] {
-		t.Errorf("the probe path's 200 declares %v, want %s", probed.methodResponses["200"], EdgeHeader)
+	if !probed.methodResponses["200"][routerHeaderParameter] {
+		t.Errorf("the probe path's 200 declares %v, want %s", probed.methodResponses["200"], router.HeaderRouter)
 	}
-	if got := probed.integrationResponse["200"][edgeHeaderParameter]; got != "'"+string(Kind)+"'" {
-		t.Errorf("the probe path's integration response sets %s = %q, want 'api-gateway'", EdgeHeader, got)
+	if got := probed.integrationResponse["200"][routerHeaderParameter]; got != "'"+string(Kind)+"'" {
+		t.Errorf("the probe path's integration response sets %s = %q, want 'api-gateway'", router.HeaderRouter, got)
 	}
 }
 
@@ -642,8 +642,8 @@ func TestReconcileRewritesResponseHeadersThatNoLongerMatchThePlan(t *testing.T) 
 	if method == nil {
 		t.Fatalf("the static-asset method is missing from %s; the drift this test covers cannot happen", api.id)
 	}
-	method.methodResponses["200"] = map[string]bool{edgeHeaderParameter: true}
-	method.integrationResponse["200"] = map[string]string{edgeHeaderParameter: "'stale'"}
+	method.methodResponses["200"] = map[string]bool{routerHeaderParameter: true}
+	method.integrationResponse["200"] = map[string]string{routerHeaderParameter: "'stale'"}
 	w.gateway.calls = nil
 
 	if _, err := e.Reconcile(ctx, testSpec(), edge.StackState{}); err != nil {
@@ -652,8 +652,8 @@ func TestReconcileRewritesResponseHeadersThatNoLongerMatchThePlan(t *testing.T) 
 	if got := method.methodResponses["200"]["method.response.header.Content-Type"]; !got {
 		t.Errorf("the method response still declares %v, not the headers the plan names; a header dropped outside Ocel would stay dropped", method.methodResponses["200"])
 	}
-	if got := method.integrationResponse["200"][edgeHeaderParameter]; got != "'"+edgeHeaderValue+"'" {
-		t.Errorf("the integration response maps %s to %q, want %q", edgeHeaderParameter, got, "'"+edgeHeaderValue+"'")
+	if got := method.integrationResponse["200"][routerHeaderParameter]; got != "'"+routerHeaderValue+"'" {
+		t.Errorf("the integration response maps %s to %q, want %q", routerHeaderParameter, got, "'"+routerHeaderValue+"'")
 	}
 }
 

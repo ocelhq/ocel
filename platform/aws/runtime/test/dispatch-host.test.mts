@@ -2,7 +2,7 @@ import http from "node:http";
 import v8 from "node:v8";
 import vm from "node:vm";
 import type { RoutingManifest } from "@framework/next-protocol/routing-manifest";
-import { dispatchesAtOrigin, edgeHeader } from "@framework/node-runtime/edge-kind";
+import { dispatchesAtOrigin } from "@framework/node-runtime/edge-kind";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { s3AssetBucket } from "../src/next/dispatch-assets.mjs";
 import {
@@ -318,21 +318,21 @@ test("a sibling call with no credentials fails loudly", async () => {
   await expect(originFetch(`${SIBLING_URL}/sibling`)).rejects.toThrow(/credentials/);
 });
 
-test("every dispatched response names the edge that served it", async () => {
+test("every dispatched response names the router that served it", async () => {
   for (const path of ["/local", "/sibling"]) {
     const response = await serving(path, forged);
-    expect(response.headers.get(edgeHeader)).toBe(EDGE_KIND);
+    expect(response.headers.get("x-ocel-router")).toBe(EDGE_KIND);
   }
 });
 
-test("the edge an origin claims is replaced by the edge in front of it", async () => {
+test("the router an origin claims is replaced by the one in front of it", async () => {
   const marked = await dispatchRequest(
     new Request("https://app.example/sibling"),
     { ...host(), edgeKind: "cloudflare" },
     () => {},
   );
 
-  expect(marked.headers.get(edgeHeader)).toBe("cloudflare");
+  expect(marked.headers.get("x-ocel-router")).toBe("cloudflare");
   expect(await marked.text()).toBe("sibling");
 });
 
@@ -343,5 +343,5 @@ test("dispatch hosted behind no edge marks nothing", async () => {
     () => {},
   );
 
-  expect(bare.headers.get(edgeHeader)).toBeNull();
+  expect(bare.headers.get("x-ocel-router")).toBeNull();
 });

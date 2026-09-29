@@ -1123,7 +1123,7 @@ func fakeGlobalDomain() *contractv1.PreviewWildcard {
 		grammarMin, grammarMax = parseGrammar(lo), parseGrammar(hi)
 	}
 	status, certID, _ := strings.Cut(os.Getenv(FakeGlobalDomainCertEnvVar), " ")
-	probeAt, probeEdge, probeOK := fakeGlobalDomainProbe()
+	probeAt, probeOK := fakeGlobalDomainProbe()
 	expires, _ := strconv.ParseInt(os.Getenv(FakeGlobalDomainExpiresEnvVar), 10, 64)
 	return &contractv1.PreviewWildcard{
 		RenewalStatus:  os.Getenv(FakeGlobalDomainRenewalEnvVar),
@@ -1140,7 +1140,6 @@ func fakeGlobalDomain() *contractv1.PreviewWildcard {
 			RecordsWritten:    splitList(os.Getenv(FakeGlobalDomainRecordsEnvVar)),
 			ManualRecords:     splitList(os.Getenv(FakeGlobalDomainManualRecordsEnvVar)),
 			LastProbeAt:       probeAt,
-			LastProbeEdge:     probeEdge,
 			LastProbeOk:       probeOK,
 		},
 	}
@@ -1177,16 +1176,16 @@ func splitList(raw string) []string {
 	return out
 }
 
-func fakeGlobalDomainProbe() (int64, string, bool) {
+func fakeGlobalDomainProbe() (int64, bool) {
 	fields := strings.Fields(os.Getenv(FakeGlobalDomainProbeEnvVar))
-	if len(fields) < 2 {
-		return 0, "", false
+	if len(fields) == 0 {
+		return 0, false
 	}
 	at, err := strconv.ParseInt(fields[0], 10, 64)
 	if err != nil {
-		return 0, "", false
+		return 0, false
 	}
-	return at, fields[1], len(fields) < 3 || fields[2] != "failed"
+	return at, len(fields) < 2 || fields[1] != "failed"
 }
 
 func parseGrammar(s string) uint32 {
@@ -1397,7 +1396,6 @@ func (s *deployFakeProviderServer) GetHostnameStatus(ctx context.Context, req *c
 				ManualRecords:     splitList(os.Getenv(FakeGlobalDomainManualRecordsEnvVar)),
 				LastProbeAt:       1755500000,
 				LastProbeOk:       ready,
-				LastProbeEdge:     "cloudflare",
 			},
 			RenewalStatus:  os.Getenv(FakeDomainRenewalEnvVar),
 			ExpiresAt:      expires,

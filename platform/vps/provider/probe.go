@@ -3,17 +3,17 @@ package vps
 import (
 	"context"
 
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider/liveness"
+	"github.com/ocelhq/ocel/pkg/router"
 )
 
-func (p *Provider) servedOnTheBox(ctx context.Context, hostname string) (edge.Kind, error) {
-	said, err := p.host.ServedEdge(ctx, hostname)
+func (p *Provider) servedOnTheBox(ctx context.Context, hostname string) (router.Kind, error) {
+	said, err := p.host.ServedRouter(ctx, hostname)
 	if err != nil {
 		return "", err
 	}
 	if said.Failure != "" {
 		return "", liveness.ProbeUnanswered{Cause: said.Failure}
 	}
-	return edge.Kind(said.Edge), nil
+	return router.Kind(said.Router), nil
 }

@@ -295,13 +295,13 @@ func (r *projectRemoval) unbind(ctx context.Context, runProgress progress.Progre
 	}
 	var errs []error
 	for _, hostname := range stack.State().Bound {
-		runProgress.Say(fmt.Sprintf("Unbinding %s from the %s edge", hostname, r.front.Kind()))
+		runProgress.Say(fmt.Sprintf("Unbinding %s from %s", hostname, frontPhrase(r.front.Kind())))
 		if err := progress.Heeded(stack.UnbindDomain(ctx, hostname), runProgress); err != nil {
 			errs = append(errs, fmt.Errorf("unbind %q before the origin it fronts is destroyed: %w", hostname, err))
 		}
 	}
 	for _, pointer := range r.pointers() {
-		runProgress.Say(fmt.Sprintf("Removing the %s routing pointer from the %s edge", pointer, r.front.Kind()))
+		runProgress.Say(fmt.Sprintf("Removing the %s routing pointer", pointer))
 		if _, err := r.removePointer(ctx, pointer, runProgress); err != nil {
 			errs = append(errs, fmt.Errorf("remove pointer %q before the origin it points at is destroyed: %w", pointer, err))
 		}
@@ -344,7 +344,7 @@ func (r *projectRemoval) tearDownEdge(ctx context.Context, progress progress.Pro
 	if stack := r.edgeStack(); stack == nil || stack.State().Empty() {
 		return nil
 	}
-	progress.Say(fmt.Sprintf("Destroying the %s edge stack of %s", r.front.Kind(), r.slug))
+	progress.Say(fmt.Sprintf("Destroying the stack that serves %s through %s", r.slug, frontPhrase(r.front.Kind())))
 	if err := r.destroy(ctx); err != nil {
 		return fmt.Errorf("destroy the edge stack: %w", err)
 	}

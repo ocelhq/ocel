@@ -43,7 +43,7 @@ func TestProviderSchemaIncludesTheOptionsAndWhatTheProviderFrontsAndWritesWith(t
 	type options struct {
 		Region string `json:"region,omitempty" doc:"The region to deploy into."`
 	}
-	generated, err := ProviderSchema("acme", options{}, []string{"relay", "direct"}, []string{"acme-dns"})
+	generated, err := ProviderSchema("acme", options{}, []string{"shield", "relay"}, []string{"acme-dns"})
 	if err != nil {
 		t.Fatalf("provider schema: %v", err)
 	}
@@ -76,7 +76,7 @@ func TestProviderSchemaIncludesTheOptionsAndWhatTheProviderFrontsAndWritesWith(t
 	if fragment.Options.AdditionalProperties {
 		t.Fatal("options accept keys the provider does not declare")
 	}
-	if !slices.Equal(fragment.Edges, []string{"direct", "relay"}) {
+	if !slices.Equal(fragment.Edges, []string{"relay", "shield"}) {
 		t.Errorf("edges = %v, want the provider's edges in order", fragment.Edges)
 	}
 	if !slices.Equal(fragment.DNS, []string{"acme-dns"}) {

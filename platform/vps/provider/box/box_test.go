@@ -907,8 +907,8 @@ func TestTheSharedCatchAllIsAKeptRowThatSaysWhyItStays(t *testing.T) {
 	if shared.Reason == "" {
 		t.Error("the shared catch-all is kept for no stated reason, and a kept row a user cannot explain is one they cannot decide to remove by hand")
 	}
-	if shared.Name != edge.EdgeGroupName(box.Kind) || shared.Kind != edge.EdgeGroupKind {
-		t.Errorf("the shared catch-all is named %q of kind %q, want the box edge's own group", shared.Name, shared.Kind)
+	if shared.Name != edge.EdgeGroupName(edge.None) || shared.Kind != edge.EdgeGroupKind {
+		t.Errorf("the shared catch-all is named %q of kind %q, want the origin's own group", shared.Name, shared.Kind)
 	}
 }
 

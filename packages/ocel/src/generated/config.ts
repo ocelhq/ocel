@@ -47,7 +47,7 @@ export interface OcelConfig {
   dns?: DnsDescriptor;
   /** The hostnames this project is served on. */
   domains?: ProjectDomainConfig;
-  /** The edge in front of the origin, keyed by its identifier with its options as the value, or named alone. Omit it and the provider fronts the deployment with its own default edge. */
+  /** The edge in front of the origin, keyed by its identifier with its options as the value, or named alone. Omit it for the provider's default: CloudFront on AWS, and no edge on GCP or a VPS. */
   edge?: EdgeDescriptor;
   /** Where each tier's values are read from. A tier left off reads its default: ocel's own store in your account for production and preview, the project's .env file for dev. */
   envSource?: EnvSourceConfig;
@@ -195,61 +195,35 @@ export interface ProjectDomainConfig {
   production?: string | string[];
 }
 
-/** The edge in front of the origin, keyed by its identifier with its options as the value, or named alone. Omit it and the provider fronts the deployment with its own default edge. */
+/** The edge in front of the origin, keyed by its identifier with its options as the value, or named alone. Omit it for the provider's default: CloudFront on AWS, and no edge on GCP or a VPS. */
 export type EdgeDescriptor =
   | "alb"
   | "api-gateway"
-  | "box"
   | "cloudflare"
   | "cloudfront"
-  | "direct"
   | {
       alb: EdgeOptions;
       "api-gateway"?: never;
-      box?: never;
       cloudflare?: never;
       cloudfront?: never;
-      direct?: never;
     }
   | {
       alb?: never;
       "api-gateway": EdgeOptions;
-      box?: never;
       cloudflare?: never;
       cloudfront?: never;
-      direct?: never;
     }
   | {
       alb?: never;
       "api-gateway"?: never;
-      box: EdgeOptions;
-      cloudflare?: never;
-      cloudfront?: never;
-      direct?: never;
-    }
-  | {
-      alb?: never;
-      "api-gateway"?: never;
-      box?: never;
       cloudflare: EdgeOptions;
       cloudfront?: never;
-      direct?: never;
     }
   | {
       alb?: never;
       "api-gateway"?: never;
-      box?: never;
       cloudflare?: never;
       cloudfront: EdgeOptions;
-      direct?: never;
-    }
-  | {
-      alb?: never;
-      "api-gateway"?: never;
-      box?: never;
-      cloudflare?: never;
-      cloudfront?: never;
-      direct: EdgeOptions;
     };
 
 export type EdgeOptions = Record<string, never>;

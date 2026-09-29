@@ -2,7 +2,6 @@ import type { AssetBucket } from "@framework/next-router/assets";
 import { describe, expect, it } from "vitest";
 import type { DeploymentRecord, DeploymentsBinding, PointerRecordResult } from "../src/deployments";
 import {
-  EDGE_HEADER,
   type ResolveBase,
   type RouteDeps,
   resolveServe,
@@ -83,7 +82,7 @@ async function resolved(binding: DeploymentsBinding, host: string) {
   );
 }
 
-describe("the edge marks every response as its own", () => {
+describe("the Cloudflare router names itself on every response", () => {
   it("marks the bootstrap placeholder a bound host lands on", async () => {
     const served = await resolved(
       bindingReturning({ kind: "no-pointer" }),
@@ -92,7 +91,7 @@ describe("the edge marks every response as its own", () => {
 
     expect(served).toBeInstanceOf(Response);
     expect((served as Response).status).toBe(404);
-    expect((served as Response).headers.get(EDGE_HEADER)).toBe("cloudflare");
+    expect((served as Response).headers.get("x-ocel-router")).toBe("cloudflare");
   });
 
   it("marks the response of a store that cannot answer", async () => {
@@ -103,14 +102,14 @@ describe("the edge marks every response as its own", () => {
 
     expect(served).toBeInstanceOf(Response);
     expect((served as Response).status).toBe(503);
-    expect((served as Response).headers.get(EDGE_HEADER)).toBe("cloudflare");
+    expect((served as Response).headers.get("x-ocel-router")).toBe("cloudflare");
   });
 
   it("marks what dispatch serves", async () => {
     const response = await serve(new Request("https://shop.example.com/a"), routedDeps());
 
     expect(response.status).toBe(200);
-    expect(response.headers.get(EDGE_HEADER)).toBe("cloudflare");
+    expect(response.headers.get("x-ocel-router")).toBe("cloudflare");
   });
 
   it("marks what an origin-served deployment answers", async () => {
@@ -121,6 +120,6 @@ describe("the edge marks every response as its own", () => {
 
     expect(typeof served).toBe("function");
     const response = await (served as ServeFetch)(new Request("https://origin.example.com/"));
-    expect(response.headers.get(EDGE_HEADER)).toBe("cloudflare");
+    expect(response.headers.get("x-ocel-router")).toBe("cloudflare");
   });
 });

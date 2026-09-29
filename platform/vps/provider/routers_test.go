@@ -6,14 +6,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/router"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
-	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 func routed(t *testing.T, p *vps.Provider, stack edge.EdgeStack) router.Stack {
 	t.Helper()
-	paired, err := p.Routers().Open(router.Kind(boxedge.Kind))
+	paired, err := p.Routers().Open(switchboard.RouterKind)
 	if err != nil {
-		t.Fatalf("Routers().Open(%q) = %v", boxedge.Kind, err)
+		t.Fatalf("Routers().Open(%q) = %v", switchboard.RouterKind, err)
 	}
 	opened, err := paired.Open(router.NewStackState(stack.State()))
 	if err != nil {

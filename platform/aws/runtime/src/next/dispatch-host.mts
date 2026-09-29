@@ -6,7 +6,7 @@ import { functionUrlImageOrigin } from "@framework/next-router/image";
 import {
   invalidatesByCacheTag,
   routingManifestPathVar,
-  withEdgeHeader,
+  withRouterHeader,
 } from "@framework/node-runtime/edge-kind";
 import { fetchToNodeHandler } from "@framework/node-runtime/fetch-bridge";
 import type { Invoke } from "@framework/node-runtime/host";
@@ -75,7 +75,7 @@ export async function dispatchRequest(
   const stripped = new Request(request, {
     headers: withoutClientControl(request.headers),
   });
-  return withEdgeHeader(await serve(stripped, newRouteDeps(host, waitUntil)), host.edgeKind);
+  return withRouterHeader(await serve(stripped, newRouteDeps(host, waitUntil)), host.edgeKind);
 }
 
 export function newDispatchInvoke(host: DispatchHost): Invoke {

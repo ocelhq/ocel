@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
-	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
@@ -34,13 +34,13 @@ func TestTheLoadBalancerIsAFeatureOnlyTheEdgeThatNeedsItPullsIn(t *testing.T) {
 		t.Errorf("an %q bootstrap requires %v, want %q among them", alb.Kind, fronted, albFeature)
 	}
 
-	plain, err := bootstrapplan.RequiredFeatures(catalogue, nil, string(direct.Kind))
+	plain, err := bootstrapplan.RequiredFeatures(catalogue, nil, string(edge.None))
 	if err != nil {
-		t.Fatalf("RequiredFeatures(direct) = %v", err)
+		t.Fatalf("RequiredFeatures(no edge) = %v", err)
 	}
 	if slices.Contains(plain, albFeature) {
-		t.Errorf("a %q bootstrap requires %v, and nothing is defaulted onto a forwarding rule that bills whether it serves a request or not",
-			direct.Kind, plain)
+		t.Errorf("a bootstrap with no edge requires %v, and nothing is defaulted onto a forwarding rule that bills whether it serves a request or not",
+			plain)
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront/resolver"
 )
 
@@ -149,8 +150,8 @@ func headersPolicyResource(ns Namespace, tier environment.Tier) string {
             - Header: %q
             - Header: %q
 `, ns.edgeHeadersPolicyName(tier),
-		fmt.Sprintf("Ocel: marks every response the %q edge served, so a probe can tell which front answered, and drops cache tags.", KindCloudFront),
-		edge.HeaderEdge, KindCloudFront, EdgeCacheTagHeader, edge.HeaderEmptyBody)
+		fmt.Sprintf("Ocel: names the %q router on every response it served, so a probe can tell which router answered, and drops cache tags.", KindCloudFront),
+		router.HeaderRouter, KindCloudFront, EdgeCacheTagHeader, edge.HeaderEmptyBody)
 }
 
 func assetAccessResource(ns Namespace, tier environment.Tier) string {

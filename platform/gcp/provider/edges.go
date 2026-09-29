@@ -6,7 +6,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
-	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
+	"github.com/ocelhq/ocel/platform/gcp/provider/cloudrun"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
@@ -22,7 +22,7 @@ type edges struct {
 	region    string
 }
 
-var supportedEdges = []edge.Kind{direct.Kind, alb.Kind}
+var supportedEdges = []edge.Kind{alb.Kind}
 
 func (p *Provider) edges() edges {
 	return edges{
@@ -37,7 +37,7 @@ func (p *Provider) edges() edges {
 	}
 }
 
-func (e edges) openDirect() *direct.Edge { return direct.New(e.pins) }
+func (e edges) openCloudRun() *cloudrun.Edge { return cloudrun.New(e.pins) }
 
 func (e edges) openALB() *alb.Edge {
 	return alb.New(alb.Deps{
@@ -53,19 +53,19 @@ func (e edges) openALB() *alb.Edge {
 
 func (e edges) Open(kind edge.Kind) (edge.Edge, error) {
 	switch kind {
-	case direct.Kind:
-		return e.openDirect(), nil
+	case edge.None:
+		return e.openCloudRun(), nil
 	case alb.Kind:
 		return e.openALB(), nil
 	case cloudflare.Kind:
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"this provider cannot front deployments with the %q edge yet: that edge answers every request from a worker it runs, "+
 				"and nothing here builds the program that worker would run, so a bootstrap of it would provision resources no deploy could use.\n"+
-				"Front them with %s, which answers on the url Cloud Run gives each service, or with %s, which provisions one load balancer per bootstrap tier at %s",
-			kind, direct.Kind, alb.Kind, alb.BaselineCost)
+				"Leave `edge` out, and each service answers on the url Cloud Run gives it, or name %s, which provisions one load balancer per bootstrap tier at %s",
+			kind, alb.Kind, alb.BaselineCost)
 	}
 	return nil, refusal.Refuse(refusal.CodeInvalid,
-		"this provider cannot front deployments with the %q edge; it fronts them with %s, which answers on the url Cloud Run gives each service, "+
-			"and with %s, which provisions one load balancer per bootstrap tier at %s",
-		kind, direct.Kind, alb.Kind, alb.BaselineCost)
+		"this provider cannot front deployments with the %q edge: leave `edge` out, and each service answers on the url Cloud Run gives it, "+
+			"or name %s, which provisions one load balancer per bootstrap tier at %s",
+		kind, alb.Kind, alb.BaselineCost)
 }

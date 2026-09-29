@@ -2,8 +2,6 @@ package edge
 
 import "strings"
 
-const HeaderEdge = "x-ocel-edge"
-
 const LivenessProbeLabel = "ocel-edge-probe"
 
 const LivenessProbePath = "/.well-known/ocel-edge"
@@ -13,8 +11,4 @@ func ProbeHostname(hostname string) string {
 		return LivenessProbeLabel + "." + rest
 	}
 	return hostname
-}
-
-func ServedBy(header string, kind Kind) bool {
-	return strings.EqualFold(strings.TrimSpace(header), string(kind))
 }

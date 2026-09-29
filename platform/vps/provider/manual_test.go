@@ -7,12 +7,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
-	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 func byHand(machine host.Conn) *vps.Provider {
@@ -29,7 +30,7 @@ func TestACertificateYourProxyServesIsRenewedByYourProxy(t *testing.T) {
 	machine := &box{leaf: string(served)}
 	p := byHand(machine)
 	cert := certificateFor(t, p, "shop.example.com")
-	health, err := p.Certificates().Inspect(context.Background(), boxedge.Kind, "shop.example.com", cert)
+	health, err := p.Certificates().Inspect(context.Background(), edge.None, "shop.example.com", cert)
 	if err != nil {
 		t.Fatalf("InspectCertificate() = %v", err)
 	}
@@ -46,12 +47,12 @@ func TestACertificateYourProxyServesIsRenewedByYourProxy(t *testing.T) {
 func TestAHostnameOnABoxYourProxyFrontsIsProbedFromTheBoxItself(t *testing.T) {
 	t.Parallel()
 
-	machine := routedByHand(map[string]answer{"'probe' 'shop.example.com'": {stdout: "box\n"}})
+	machine := routedByHand(map[string]answer{"'probe' 'shop.example.com'": {stdout: "switchboard\n"}})
 	p := byHand(machine)
 	p.System = resolvesNothing{}
-	served, err := p.ServingEdge(context.Background(), boxedge.Kind, "shop.example.com")
-	if err != nil || served != boxedge.Kind {
-		t.Fatalf("Serving() = %q, %v, want the box's own probe to answer box", served, err)
+	served, err := p.ServingRouter(context.Background(), "shop.example.com")
+	if err != nil || served != switchboard.RouterKind {
+		t.Fatalf("Serving() = %q, %v, want the box's own probe to answer switchboard", served, err)
 	}
 	if !slices.ContainsFunc(machine.ran, func(command string) bool { return strings.Contains(command, "'probe' 'shop.example.com'") }) {
 		t.Errorf("the box was asked %q, want its switchboard helper to probe 127.0.0.1:443 for the hostname: your proxy answers there before any record points at it", machine.ran)

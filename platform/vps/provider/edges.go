@@ -9,9 +9,9 @@ import (
 type edges struct{ provider *Provider }
 
 func (e edges) Open(kind edge.Kind) (edge.Edge, error) {
-	if kind != box.Kind {
+	if kind != edge.None {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"edge %q is not supported; use %q", kind, box.Kind)
+			"edge %q is not supported: leave `edge` out, and the proxy on the box answers the project's hostnames", kind)
 	}
 	return e.provider.box(), nil
 }

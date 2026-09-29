@@ -205,7 +205,7 @@ func TestResolveRefusesTheSameSelectorsInEveryForm(t *testing.T) {
 			json: `{"slug":"acme","edge":"fastly"}`,
 			yaml: "slug: acme\nedge: fastly\n",
 			ts:   `export default { slug: "acme", edge: "fastly" };`,
-			want: `"edge" names "fastly", and ocel knows no such edge — name one of alb, api-gateway, box, cloudflare, cloudfront, direct`,
+			want: `"edge" names "fastly", and ocel knows no such edge — name one of alb, api-gateway, cloudflare, cloudfront`,
 		},
 		{
 			name: "a dns keyed by nothing ocel writes with",

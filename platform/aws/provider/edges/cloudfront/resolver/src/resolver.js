@@ -4,8 +4,8 @@ var kvs = cf.kvs();
 
 var STATIC_PREFIX = '/_next/static/';
 var DRAFT_COOKIE = '__prerender_bypass';
-var EDGE_HEADER = 'x-ocel-edge';
-var EDGE_KIND = 'cloudfront';
+var ROUTER_HEADER = 'x-ocel-router';
+var ROUTER_KIND = 'cloudfront';
 var CACHE_KEY_HEADER = 'x-ocel-cache-key';
 var FORWARDED_HOST_HEADER = 'x-forwarded-host';
 var ORIGIN_SECRET_HEADER = 'x-ocel-origin-secret';
@@ -63,7 +63,7 @@ function assetOriginPath(prefix) {
 function refusal(statusCode, statusDescription, body) {
   var headers = {};
   headers['content-type'] = { value: 'text/plain' };
-  headers[EDGE_HEADER] = { value: EDGE_KIND };
+  headers[ROUTER_HEADER] = { value: ROUTER_KIND };
   return {
     statusCode: statusCode,
     statusDescription: statusDescription,

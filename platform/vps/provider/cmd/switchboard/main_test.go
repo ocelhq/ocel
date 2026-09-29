@@ -19,7 +19,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
@@ -164,18 +164,18 @@ func (s serving) ask(t *testing.T, host string) (int, string, string) {
 	}
 	defer said.Body.Close()
 	body, _ := io.ReadAll(said.Body)
-	return said.StatusCode, string(body), said.Header.Get(edge.HeaderEdge)
+	return said.StatusCode, string(body), said.Header.Get(router.HeaderRouter)
 }
 
 func TestServeAnswersEachHostnameItsTableClaimsAndNamesTheBox(t *testing.T) {
 	web := backend(t, "web")
 	running := served(t, tableFile(t, map[string]string{"shop.example.com": web}))
 
-	if status, body, named := running.ask(t, "shop.example.com"); status != http.StatusOK || body != "web" || named != switchboard.EdgeName {
-		t.Errorf("shop.example.com answered %d %q naming %q, want the app's 200 naming %s", status, body, named, switchboard.EdgeName)
+	if status, body, named := running.ask(t, "shop.example.com"); status != http.StatusOK || body != "web" || named != switchboard.RouterKind {
+		t.Errorf("shop.example.com answered %d %q naming %q, want the app's 200 naming %s", status, body, named, switchboard.RouterKind)
 	}
-	if status, _, named := running.ask(t, "unclaimed.example.com"); status != http.StatusNotFound || named != switchboard.EdgeName {
-		t.Errorf("an unclaimed hostname answered %d naming %q, want a 404 naming %s", status, named, switchboard.EdgeName)
+	if status, _, named := running.ask(t, "unclaimed.example.com"); status != http.StatusNotFound || named != switchboard.RouterKind {
+		t.Errorf("an unclaimed hostname answered %d naming %q, want a 404 naming %s", status, named, switchboard.RouterKind)
 	}
 }
 

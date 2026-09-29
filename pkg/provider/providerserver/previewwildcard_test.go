@@ -312,27 +312,6 @@ func TestRemovePreviewWildcardOpensItsDNSForTheEdgeThatOwnsIt(t *testing.T) {
 	}
 }
 
-func TestRemovePreviewWildcardRefusesWhenNothingRecordsItsOwningEdge(t *testing.T) {
-	t.Parallel()
-	client, vendor := contractServed(t, "1.0.0")
-
-	seedWildcard(t, vendor, stackrecords.Wildcard{BaseDomain: "preview.acme.com"})
-
-	stream, err := client.RemovePreviewWildcard(context.Background(), &contractv1.PreviewWildcardRequest{
-		Tier: environmentv1.Tier_TIER_PREVIEW,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	result, err := drain(stream)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result.GetSuccess() {
-		t.Fatal("RemovePreviewWildcard() tore down a wildcard through a guessed edge")
-	}
-}
-
 func TestThePreviewWildcardNamesWhoRenewsItAndWhenItExpires(t *testing.T) {
 	t.Parallel()
 	client, p := contractServed(t, "1.0.0")

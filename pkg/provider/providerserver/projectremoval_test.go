@@ -216,6 +216,7 @@ func cutOverProject(t *testing.T) (contractv1connect.ProviderServiceClient, *fak
 	t.Helper()
 	client, p := contractServed(t, "1.0.0")
 	seedStack(t, p, environment.TierProduction, "shop", stackrecords.EdgeState{
+		Kind: fake.KindRelay,
 		Edge: edge.StackState{
 			Slug:     "shop",
 			Tier:     environment.TierProduction,
@@ -303,6 +304,7 @@ func TestRemoveProjectDiscardsTheCertificateOcelRequested(t *testing.T) {
 	validation := edge.Record{Name: "_ocel.app.acme.com", Type: edge.RecordTypeCNAME, Value: "_target.validations.invalid"}
 	stale := edge.Record{Name: "_stale.app.acme.com", Type: edge.RecordTypeCNAME, Value: "_stale.validations.invalid"}
 	seedStack(t, p, environment.TierProduction, "shop", stackrecords.EdgeState{
+		Kind: fake.KindRelay,
 		Edge: edge.StackState{
 			Slug:     "shop",
 			Tier:     environment.TierProduction,
@@ -475,9 +477,9 @@ func TestADestroySaysWhichStacksHostnamesAndEdgeItRemovesAndHowFarAlongItIs(t *t
 	}
 	for _, want := range []string{
 		"Unbinding shop.example from the relay edge",
-		"Removing the @production routing pointer from the relay edge",
+		"Removing the @production routing pointer",
 		"Destroying stack prod--infra (2 of 2)",
-		"Destroying the relay edge stack of shop",
+		"Destroying the stack that serves shop through the relay edge",
 		"Removing the stored variable values of shop in production",
 		"Forgetting shop in production: nothing of it is left",
 	} {

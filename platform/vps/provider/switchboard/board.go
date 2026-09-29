@@ -16,11 +16,12 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/router"
 )
 
-const EdgeName = "box"
+const RouterKind = "switchboard"
 
-var edgeHeader = http.CanonicalHeaderKey(edge.HeaderEdge)
+var routerHeader = http.CanonicalHeaderKey(router.HeaderRouter)
 
 const (
 	ReadHeaderTimeout = 10 * time.Second
@@ -180,7 +181,7 @@ func (b *Board) Load(path string) error {
 
 func (b *Board) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	named := func(header http.Header) {
-		header.Set(edgeHeader, EdgeName)
+		header.Set(routerHeader, RouterKind)
 		if r.URL.Path == edge.LivenessProbePath {
 			header.Set(HeardHeader, b.heard(r))
 		}

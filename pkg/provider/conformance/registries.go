@@ -28,19 +28,14 @@ func RunEdges(t *testing.T, facts provider.Facts, edges provider.Edges) {
 		}
 	})
 
-	t.Run("Facts.DefaultEdge is one of the supported edges", func(t *testing.T) {
-		fallback := facts.DefaultEdge
-		switch {
-		case fallback == "" && len(supported) == 0:
-		case fallback == "":
-			t.Errorf("Facts.DefaultEdge names no edge while Facts.Edges offers %v, so a request that names none has nowhere to go", supported)
-		case !slices.Contains(supported, fallback):
+	t.Run("Facts.DefaultEdge is no edge or one of the supported edges", func(t *testing.T) {
+		if fallback := facts.DefaultEdge; fallback != edge.None && !slices.Contains(supported, fallback) {
 			t.Errorf("Facts.DefaultEdge = %q, which Facts.Edges does not offer: %v", fallback, supported)
 		}
 	})
 
-	t.Run("Open answers every supported edge under the kind it was asked for", func(t *testing.T) {
-		for _, kind := range supported {
+	t.Run("Open answers every edge a request can reach under the kind it was asked for", func(t *testing.T) {
+		for _, kind := range reachableEdges(facts) {
 			front, err := edges.Open(kind)
 			if err != nil {
 				t.Errorf("Open(%q) = %v, want the edge Facts.Edges offers", kind, err)
@@ -74,27 +69,28 @@ func RunEdges(t *testing.T, facts provider.Facts, edges provider.Edges) {
 	})
 }
 
+func reachableEdges(facts provider.Facts) []edge.Kind {
+	if slices.Contains(facts.Edges, facts.DefaultEdge) {
+		return facts.Edges
+	}
+	return append([]edge.Kind{facts.DefaultEdge}, facts.Edges...)
+}
+
 func RunRouters(t *testing.T, facts provider.Facts, edges provider.Edges, routers provider.Routers) {
 	t.Helper()
 
-	t.Run("every supported edge pairs with a router of its own kind", func(t *testing.T) {
-		for _, kind := range facts.Edges {
-			paired := slices.ContainsFunc(facts.Pairings, func(pairing provider.Pairing) bool { return pairing.Edge == kind })
-			if !paired {
+	t.Run("every edge a request can reach pairs with a router", func(t *testing.T) {
+		for _, kind := range reachableEdges(facts) {
+			if len(facts.PairedRouters(kind)) == 0 {
 				t.Errorf("Facts.Pairings pairs no router with the %q edge, so no app deployed through it could be flipped", kind)
-			}
-		}
-		for _, pairing := range facts.Pairings {
-			if pairing.Router != router.Kind(pairing.Edge) {
-				t.Errorf("Facts.Pairings pairs the %q edge with %q; every edge routes through a router of its own kind", pairing.Edge, pairing.Router)
 			}
 		}
 	})
 
-	t.Run("a pairing names a supported edge and the computes this provider runs, each once", func(t *testing.T) {
+	t.Run("a pairing names an edge a request can reach and the computes this provider runs, each once", func(t *testing.T) {
 		for i, pairing := range facts.Pairings {
-			if !slices.Contains(facts.Edges, pairing.Edge) {
-				t.Errorf("Facts.Pairings[%d] names the %q edge, which Facts.Edges does not offer: %v", i, pairing.Edge, facts.Edges)
+			if !slices.Contains(reachableEdges(facts), pairing.Edge) {
+				t.Errorf("Facts.Pairings[%d] names the %q edge, which no request reaches: Facts.Edges offers %v and Facts.DefaultEdge is %q", i, pairing.Edge, facts.Edges, facts.DefaultEdge)
 			}
 			if len(pairing.Computes) == 0 {
 				t.Errorf("Facts.Pairings[%d] pairs the %q edge for no compute", i, pairing.Edge)

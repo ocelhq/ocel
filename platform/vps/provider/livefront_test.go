@@ -16,7 +16,6 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
-	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/manual"
@@ -257,7 +256,7 @@ func servesBehind(t *testing.T, front string, meanwhile func(vm machine)) machin
 		t.Fatalf("PreflightDeploy() behind %s = %v", front, err)
 	}
 
-	opened, err := d.Edges().Open(boxedge.Kind)
+	opened, err := d.Edges().Open(edge.None)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -272,8 +271,8 @@ func servesBehind(t *testing.T, front string, meanwhile func(vm machine)) machin
 	if served := vm.throughTheFront(t, frontedHostname, "/"); served != "one" {
 		t.Fatalf("%s answered %q for %s, want the release it routes to the switchboard", front, served, frontedHostname)
 	}
-	if kind, err := d.ServingEdge(ctx, boxedge.Kind, frontedHostname); err != nil || kind != boxedge.Kind {
-		t.Errorf("Serving(%s) = %q, %v, want the box proven through %s", frontedHostname, kind, err, front)
+	if kind, err := d.ServingRouter(ctx, frontedHostname); err != nil || kind != switchboard.RouterKind {
+		t.Errorf("Serving(%s) = %q, %v, want the switchboard proven through %s", frontedHostname, kind, err, front)
 	}
 
 	two := provisioned(t, d, "two")
@@ -339,7 +338,7 @@ func bindsBehind(t *testing.T, d *vps.Provider, front string) {
 	added, err := overTheContract(t, d).AddHostname(context.Background(), &contractv1.HostnameRequest{
 		Slug:       frontedSlug,
 		Configured: configuredHosts(frontedHostname),
-		Edge:       &contractv1.EdgeSelection{Kind: string(boxedge.Kind)},
+		Edge:       &contractv1.EdgeSelection{},
 	})
 	if err != nil {
 		t.Fatalf("AddHostname() = %v", err)
@@ -388,8 +387,8 @@ func servesAPreviewBehind(t *testing.T, vm machine, d *vps.Provider, opened edge
 		t.Errorf("%s answered %q for the preview %s, want the release it was promoted to", front, served, hostname)
 	}
 	probe := edge.ProbeHostname(edge.PreviewWildcard(frontedPreview))
-	if said, err := d.Host().ServedEdge(ctx, probe); err != nil || said.Edge != switchboard.EdgeName {
-		t.Errorf("ServedEdge(%s) = %+v, %v, want the preview catch-all answered by the box through %s", probe, said, err, front)
+	if said, err := d.Host().ServedRouter(ctx, probe); err != nil || said.Router != switchboard.RouterKind {
+		t.Errorf("ServedRouter(%s) = %+v, %v, want the preview catch-all answered by the box through %s", probe, said, err, front)
 	}
 
 	if err := previews.Destroy(ctx); err != nil {

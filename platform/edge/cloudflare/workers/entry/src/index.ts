@@ -24,14 +24,14 @@ import { invalidateSnapshot } from "./tag-clock";
 export { CacheEntrypoint } from "./cache-entrypoint";
 export type { Env } from "./env";
 
-export const EDGE_HEADER = "x-ocel-edge";
+export const ROUTER_HEADER = "x-ocel-router";
 
-const EDGE_KIND = "cloudflare";
+const ROUTER_KIND = "cloudflare";
 
-export function withEdgeHeader(response: Response): Response {
-  if (response.headers.get(EDGE_HEADER) === EDGE_KIND) return response;
+export function withRouterHeader(response: Response): Response {
+  if (response.headers.get(ROUTER_HEADER) === ROUTER_KIND) return response;
   const marked = new Response(response.body, response);
-  marked.headers.set(EDGE_HEADER, EDGE_KIND);
+  marked.headers.set(ROUTER_HEADER, ROUTER_KIND);
   return marked;
 }
 
@@ -70,7 +70,7 @@ function forgetSnapshot(tier: InterceptionTier): Promise<void> {
 }
 
 export async function serve(request: Request, deps: RouteDeps): Promise<Response> {
-  return withEdgeHeader(await dispatch(request, bound(deps)));
+  return withRouterHeader(await dispatch(request, bound(deps)));
 }
 
 export function dispatchResult(
@@ -116,7 +116,7 @@ interface ServeRuntime {
 const routedRuntime: ServeRuntime = {
   serve: (record, deployments, base) => {
     const deps = bound(routedDeps(record, deployments, base));
-    return async (request) => withEdgeHeader(await dispatch(request, deps));
+    return async (request) => withRouterHeader(await dispatch(request, deps));
   },
   routeDeps: routedDeps,
 };
@@ -149,7 +149,7 @@ export async function resolveServe(
   if (record instanceof Response) return record;
 
   const serving = runtimeFor(record).serve(record, deployments, base);
-  return async (request) => withEdgeHeader(await serving(request));
+  return async (request) => withRouterHeader(await serving(request));
 }
 
 export async function resolveRouteDeps(
@@ -237,7 +237,7 @@ function deploymentNotFoundResponse(): Response {
     status: 404,
     headers: {
       "content-type": "text/html; charset=utf-8",
-      [EDGE_HEADER]: EDGE_KIND,
+      [ROUTER_HEADER]: ROUTER_KIND,
     },
   });
 }
@@ -247,7 +247,7 @@ function unroutedFrameworkResponse(framework: string): Response {
     status: 501,
     headers: {
       "content-type": "text/plain; charset=utf-8",
-      [EDGE_HEADER]: EDGE_KIND,
+      [ROUTER_HEADER]: ROUTER_KIND,
     },
   });
 }
@@ -258,7 +258,7 @@ function unavailableResponse(): Response {
     headers: {
       "content-type": "text/plain; charset=utf-8",
       "retry-after": "5",
-      [EDGE_HEADER]: EDGE_KIND,
+      [ROUTER_HEADER]: ROUTER_KIND,
     },
   });
 }

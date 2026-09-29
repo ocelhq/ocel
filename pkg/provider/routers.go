@@ -25,3 +25,13 @@ func (f Facts) PairedRouter(front edge.Kind, compute Compute) (router.Kind, bool
 	}
 	return "", false
 }
+
+func (f Facts) PairedRouters(front edge.Kind) []router.Kind {
+	var paired []router.Kind
+	for _, pairing := range f.Pairings {
+		if pairing.Edge == front && !slices.Contains(paired, pairing.Router) {
+			paired = append(paired, pairing.Router)
+		}
+	}
+	return paired
+}

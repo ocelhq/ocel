@@ -10,7 +10,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
-	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
@@ -49,7 +48,7 @@ func prunedAndRestarted(t *testing.T, front string) {
 
 	fixtures(t, vm)
 	d := vm.deployingBehind(t, proxy)
-	opened, err := d.Edges().Open(boxedge.Kind)
+	opened, err := d.Edges().Open(edge.None)
 	if err != nil {
 		t.Fatal(err)
 	}

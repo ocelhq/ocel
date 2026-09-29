@@ -35,7 +35,7 @@ describe("hostnamesWithoutUrl", () => {
 
   it("names the hostnames the deploy left pending", () => {
     const said =
-      "Done in 2m\n\n    web-j-1-deploy-python.localhost does not answer as the box edge yet — `ocel domain add` picks up where it stopped\n";
+      "Done in 2m\n\n    web-j-1-deploy-python.localhost does not answer through the origin yet — `ocel domain add` picks up where it stopped\n";
     expect(hostnamesWithoutUrl(said, ["web-j-1-deploy-python.localhost"])).toEqual([
       "web-j-1-deploy-python.localhost",
     ]);

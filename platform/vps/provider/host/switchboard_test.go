@@ -317,7 +317,7 @@ func TestTheBoxProbesWhatItServesOnItsOwnHttpsPortWithoutDocker(t *testing.T) {
 	t.Parallel()
 
 	for verb, probe := range map[string]func(h *Host) error{
-		"probe": func(h *Host) error { _, err := h.ServedEdge(context.Background(), "web.localhost"); return err },
+		"probe": func(h *Host) error { _, err := h.ServedRouter(context.Background(), "web.localhost"); return err },
 		"leaf":  func(h *Host) error { _, err := h.ServedCertificate(context.Background(), "web.localhost"); return err },
 	} {
 		box := machine(nil)
@@ -360,12 +360,12 @@ func TestAProbeTheBoxCannotAnswerYetFailsWithAOneLineReason(t *testing.T) {
 		}
 		return session.Result{}, false
 	}
-	said, err := box.host().ServedEdge(context.Background(), "web.localhost")
+	said, err := box.host().ServedRouter(context.Background(), "web.localhost")
 	if err != nil || said.Failure == "" || strings.Contains(said.Failure, "\n") {
 		t.Errorf("ServedEdge() over a box not serving yet = %+v, %v, want its failure on one line", said, err)
 	}
 	box.answer = func(string) (session.Result, bool) { return session.Result{Code: 2, Stderr: "usage"}, true }
-	if _, err := box.host().ServedEdge(context.Background(), "web.localhost"); err == nil {
+	if _, err := box.host().ServedRouter(context.Background(), "web.localhost"); err == nil {
 		t.Error("ServedEdge() over a probe that refused = nil, want the refusal")
 	}
 }

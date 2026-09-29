@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
@@ -105,7 +106,7 @@ func hearingHTTPS(t *testing.T, document []byte, relayed ...netip.Prefix) string
 func backend(t *testing.T, name string) string {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set(edge.HeaderEdge, "app")
+		w.Header().Set(router.HeaderRouter, "app")
 		w.Header().Set("X-Served-Host", r.Host)
 		w.Header().Set("X-Served-Path", r.URL.Path)
 		for _, forwarded := range []string{"X-Forwarded-For", "X-Forwarded-Proto", "X-Forwarded-Host", "X-Forwarded-Port", "X-Forwarded-Prefix", "Forwarded", "X_Forwarded_Proto", "X_Forwarded_Host", "X-Real-Ip", "True-Client-Ip"} {
@@ -174,8 +175,8 @@ func TestAClaimedHostnameIsServedByItsUpstreamUnderItsOwnHostAndNamesTheBox(t *t
 	if got := said.header.Get("X-Served-Path"); got != "/cart" {
 		t.Errorf("the upstream was asked for %q, want /cart", got)
 	}
-	if got := said.header.Values(edge.HeaderEdge); !slices.Equal(got, []string{"box"}) {
-		t.Errorf("the answer names the edge %v, want only box: the bind's probe reads this header off every hostname the box serves", got)
+	if got := said.header.Values(router.HeaderRouter); !slices.Equal(got, []string{"switchboard"}) {
+		t.Errorf("the answer names the router %v, want only switchboard: the bind's probe reads this header off every hostname the box serves", got)
 	}
 }
 
@@ -195,8 +196,8 @@ func TestEveryAnswerTheBoxRefusesOrCannotReachNamesTheBox(t *testing.T) {
 		"down.example.com":      http.StatusBadGateway,
 	} {
 		said := ask(t, boardClient, at, host, "/")
-		if said.status != status || said.header.Get(edge.HeaderEdge) != "box" {
-			t.Errorf("%s answered %d with %s %q, want %d naming box", host, said.status, edge.HeaderEdge, said.header.Get(edge.HeaderEdge), status)
+		if said.status != status || said.header.Get(router.HeaderRouter) != "switchboard" {
+			t.Errorf("%s answered %d with %s %q, want %d naming switchboard", host, said.status, router.HeaderRouter, said.header.Get(router.HeaderRouter), status)
 		}
 		if host == "unclaimed.example.com" && said.body != "" {
 			t.Errorf("%s answered %q, want a bare 404 that says nothing about what else this box serves", host, said.body)

@@ -9,6 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/router"
 )
 
 const (
@@ -69,7 +70,7 @@ func markingHeaderAction() compute.URLMapHeaderActionPtrInput {
 	return &compute.URLMapHeaderActionArgs{
 		ResponseHeadersToAdds: compute.URLMapHeaderActionResponseHeadersToAddArray{
 			&compute.URLMapHeaderActionResponseHeadersToAddArgs{
-				HeaderName:  pulumi.String(edge.HeaderEdge),
+				HeaderName:  pulumi.String(router.HeaderRouter),
 				HeaderValue: pulumi.String(string(Kind)),
 				Replace:     pulumi.Bool(true),
 			},

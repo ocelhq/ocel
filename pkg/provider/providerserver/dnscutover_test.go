@@ -11,17 +11,18 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/router"
 )
 
 type answering struct {
-	kind  edge.Kind
+	kind  router.Kind
 	after int
 	asked int
 }
 
 func (*answering) LastProbeFailure(string) string { return "" }
 
-func (a *answering) ServingEdge(context.Context, edge.Kind, string) (edge.Kind, error) {
+func (a *answering) ServingRouter(context.Context, string) (router.Kind, error) {
 	a.asked++
 	if a.asked > a.after {
 		return a.kind, nil
@@ -52,12 +53,12 @@ func TestCutoverWaitsUntilTheHostnameAnswers(t *testing.T) {
 	resolve := &answering{kind: "relay", after: 2}
 	cutover, slept := waiting(resolve, 5)
 
-	probe, err := cutover.await(context.Background(), "app.acme.com", func(string) {})
+	probe, err := cutover.await(context.Background(), "app.acme.com", "relay", func(string) {})
 	if err != nil {
 		t.Fatalf("await() = %v, want it to wait the hostname out", err)
 	}
-	if !probe.OK || probe.Edge != "relay" {
-		t.Errorf("await() = %+v, want a probe answered by the relay edge", probe)
+	if !probe.OK || probe.Router != "relay" {
+		t.Errorf("await() = %+v, want a probe answered by the relay router", probe)
 	}
 	if *slept != 2 {
 		t.Errorf("await() slept %d time(s), want the two it waited through", *slept)
@@ -69,7 +70,7 @@ func TestCutoverGivesUpAfterItsLastAttempt(t *testing.T) {
 	resolve := &answering{kind: "relay", after: 99}
 	cutover, slept := waiting(resolve, 3)
 
-	probe, err := cutover.await(context.Background(), "app.acme.com", func(string) {})
+	probe, err := cutover.await(context.Background(), "app.acme.com", "relay", func(string) {})
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("await() = %v, want a not-ready refusal naming the wait", err)
@@ -89,30 +90,28 @@ func TestCutoverStopsWhenAnotherEdgeAnswers(t *testing.T) {
 	t.Parallel()
 	cutover, _ := waiting(&answering{kind: "direct"}, 2)
 
-	probe, err := cutover.await(context.Background(), "app.acme.com", func(string) {})
+	probe, err := cutover.await(context.Background(), "app.acme.com", "relay", func(string) {})
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("await() = %v, want a not-ready refusal", err)
 	}
-	if probe.Edge != "direct" {
-		t.Errorf("await() recorded %q, want the edge that actually answered", probe.Edge)
+	if probe.Router != "direct" {
+		t.Errorf("await() recorded %q, want the router that actually answered", probe.Router)
 	}
 }
 
 type boxProvider struct {
 	provider.Provider
-	answers edge.Kind
+	answers router.Kind
 	asked   []string
-	kinds   []edge.Kind
 }
 
 func (p *boxProvider) Liveness() provider.Liveness { return p }
 
 func (*boxProvider) LastProbeFailure(string) string { return "" }
 
-func (p *boxProvider) ServingEdge(_ context.Context, kind edge.Kind, hostname string) (edge.Kind, error) {
+func (p *boxProvider) ServingRouter(_ context.Context, hostname string) (router.Kind, error) {
 	p.asked = append(p.asked, hostname)
-	p.kinds = append(p.kinds, kind)
 	return p.answers, nil
 }
 
@@ -134,36 +133,39 @@ func (f frontOf) Kind() edge.Kind { return f.kind }
 
 func (f frontOf) Facts() edge.Facts { return edge.Facts{} }
 
-func TestTheCutoverAsksTheProvidersProbeWhichEdgeAnswers(t *testing.T) {
+func TestTheCutoverAsksTheProvidersProbeWhichRouterAnswers(t *testing.T) {
 	t.Parallel()
 
-	vendor := &boxProvider{answers: "box"}
-	cutover := newDNSCutover(frontOf{kind: "box"}, nil, "", vendor.Liveness())
-	if kind, err := cutover.attempt(context.Background(), "shop.example.com"); err != nil || kind != "box" {
-		t.Fatalf("attempt() = %q, %v, want the edge the provider's own probe answered", kind, err)
+	vendor := &boxProvider{answers: "switchboard"}
+	cutover := newDNSCutover(frontOf{kind: edge.None}, nil, "", vendor.Liveness())
+	if kind, err := cutover.attempt(context.Background(), "shop.example.com"); err != nil || kind != "switchboard" {
+		t.Fatalf("attempt() = %q, %v, want the router the provider's own probe answered", kind, err)
 	}
-	if len(vendor.asked) != 1 || vendor.asked[0] != "shop.example.com" || vendor.kinds[0] != "box" {
-		t.Errorf("the provider was asked %v as %v, want the hostname being cut over and the edge it is cut over onto", vendor.asked, vendor.kinds)
+	if len(vendor.asked) != 1 || vendor.asked[0] != "shop.example.com" {
+		t.Errorf("the provider was asked %v, want the hostname being cut over", vendor.asked)
 	}
 }
 
-func TestTheCutoverRefusesAHostnameAnotherEdgeAnswersOn(t *testing.T) {
+func TestTheCutoverRefusesAHostnameAnotherRouterAnswersOnWithoutNamingEither(t *testing.T) {
 	t.Parallel()
 
 	vendor := &boxProvider{answers: "cloudfront"}
 	cutover, _ := waiting(vendor.Liveness(), 3)
-	cutover.kind = "box"
+	cutover.kind = edge.None
 
-	probe, err := cutover.await(context.Background(), "shop.example.com", func(string) {})
+	probe, err := cutover.await(context.Background(), "shop.example.com", "switchboard", func(string) {})
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
-		t.Fatalf("await() over a hostname a different edge answers = %v, want a not-ready refusal rather than a cutover that reads as done", err)
+		t.Fatalf("await() over a hostname a different router answers = %v, want a not-ready refusal rather than a cutover that reads as done", err)
 	}
-	if !strings.Contains(refused.Message, "cloudfront") || !strings.Contains(refused.Message, "box") {
-		t.Errorf("await() refused with %q, want it to name the edge answering and the one this project deploys to", refused.Message)
+	if !strings.Contains(refused.Message, "another front") || !strings.Contains(refused.Message, "the origin") {
+		t.Errorf("await() refused with %q, want it to say another front answers, not the origin this project deploys to", refused.Message)
 	}
-	if probe.OK || probe.Edge != "cloudfront" {
-		t.Errorf("await() = %+v, want the probe to record the edge that actually answered", probe)
+	if strings.Contains(refused.Message, "cloudfront") || strings.Contains(refused.Message, "switchboard") {
+		t.Errorf("await() refused with %q; a router is never user-facing, so no refusal names one", refused.Message)
+	}
+	if probe.OK || probe.Router != "cloudfront" {
+		t.Errorf("await() = %+v, want the probe to record the router that actually answered", probe)
 	}
 	if len(vendor.asked) != 3 {
 		t.Errorf("the provider's probe was asked %d time(s), want every attempt the cutover makes", len(vendor.asked))
@@ -178,7 +180,7 @@ type slowly struct {
 
 func (slowly) LastProbeFailure(string) string { return "" }
 
-func (s slowly) ServingEdge(context.Context, edge.Kind, string) (edge.Kind, error) {
+func (s slowly) ServingRouter(context.Context, string) (router.Kind, error) {
 	*s.asked++
 	*s.clock = s.clock.Add(s.cost)
 	return "", nil
@@ -187,7 +189,7 @@ func (s slowly) ServingEdge(context.Context, edge.Kind, string) (edge.Kind, erro
 func onTheClock(resolve func(*time.Time) provider.Liveness, budget time.Duration) dnsCutover {
 	clock := time.Unix(1700000000, 0)
 	return dnsCutover{
-		kind:     "box",
+		kind:     edge.None,
 		liveness: resolve(&clock),
 		budget:   budget,
 		window:   attemptWindow,
@@ -208,7 +210,7 @@ func TestADeployGivesUpOnceItsMinuteHasPassedHoweverLongEachAttemptTakes(t *test
 		return slowly{clock: clock, cost: 15 * time.Second, asked: &asked}
 	}, cutoverBudget)
 
-	_, err := cutover.await(context.Background(), "shop.example.com", func(string) {})
+	_, err := cutover.await(context.Background(), "shop.example.com", "switchboard", func(string) {})
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) {
 		t.Fatalf("await() = %v, want a refusal", err)
@@ -227,9 +229,9 @@ func TestAnAttendedCutoverWaitsOutAFrontThatTakesMinutesToAnswer(t *testing.T) {
 	const minutes = 10 * time.Minute
 	for what, budget := range map[string]time.Duration{"domain add": manualRecordBudget, "a deploy": cutoverBudget} {
 		cutover := onTheClock(func(clock *time.Time) provider.Liveness {
-			return answeringAfter{clock: clock, at: clock.Add(minutes), kind: "box"}
+			return answeringAfter{clock: clock, at: clock.Add(minutes), kind: "switchboard"}
 		}, budget)
-		_, err := cutover.await(context.Background(), "shop.example.com", func(string) {})
+		_, err := cutover.await(context.Background(), "shop.example.com", "switchboard", func(string) {})
 		if budget == manualRecordBudget && err != nil {
 			t.Errorf("%s gave up on a front that answers after %s: %v. A fresh CloudFront distribution takes minutes to serve, and `ocel domain add` is the command that waits for it", what, minutes, err)
 		}
@@ -242,12 +244,12 @@ func TestAnAttendedCutoverWaitsOutAFrontThatTakesMinutesToAnswer(t *testing.T) {
 type answeringAfter struct {
 	clock *time.Time
 	at    time.Time
-	kind  edge.Kind
+	kind  router.Kind
 }
 
 func (answeringAfter) LastProbeFailure(string) string { return "" }
 
-func (a answeringAfter) ServingEdge(context.Context, edge.Kind, string) (edge.Kind, error) {
+func (a answeringAfter) ServingRouter(context.Context, string) (router.Kind, error) {
 	if a.clock.Before(a.at) {
 		return "", nil
 	}
@@ -258,7 +260,7 @@ type hanging struct{ asked *atomic.Int32 }
 
 func (hanging) LastProbeFailure(string) string { return "" }
 
-func (h hanging) ServingEdge(ctx context.Context, _ edge.Kind, _ string) (edge.Kind, error) {
+func (h hanging) ServingRouter(ctx context.Context, _ string) (router.Kind, error) {
 	h.asked.Add(1)
 	<-ctx.Done()
 	return "", ctx.Err()
@@ -269,7 +271,7 @@ func TestAProbeThatNeverReturnsIsCutOffAtEachAttemptAndTheCutoverAtItsDeadline(t
 
 	var asked atomic.Int32
 	cutover := dnsCutover{
-		kind:     "box",
+		kind:     edge.None,
 		liveness: hanging{asked: &asked},
 		budget:   300 * time.Millisecond,
 		window:   50 * time.Millisecond,
@@ -279,7 +281,7 @@ func TestAProbeThatNeverReturnsIsCutOffAtEachAttemptAndTheCutoverAtItsDeadline(t
 	}
 
 	began := time.Now()
-	_, err := cutover.await(context.Background(), "shop.example.com", func(string) {})
+	_, err := cutover.await(context.Background(), "shop.example.com", "switchboard", func(string) {})
 	if spent := time.Since(began); spent > 2*time.Second {
 		t.Fatalf("await() returned after %s, want it bounded by its 300ms deadline", spent)
 	}
@@ -298,7 +300,7 @@ type stopped struct {
 	cause string
 }
 
-func (stopped) ServingEdge(context.Context, edge.Kind, string) (edge.Kind, error) { return "", nil }
+func (stopped) ServingRouter(context.Context, string) (router.Kind, error) { return "", nil }
 
 func (s stopped) LastProbeFailure(string) string { return s.cause }
 
@@ -308,7 +310,7 @@ func TestAHostnameNothingAnsweredForNamesWhatStoppedTheLastAttempt(t *testing.T)
 	cause := "dial tcp 203.0.113.10:443: connect: connection refused"
 	cutover, _ := waiting(stopped{cause: cause}, 2)
 
-	_, err := cutover.await(context.Background(), "shop.example.com", func(string) {})
+	_, err := cutover.await(context.Background(), "shop.example.com", "switchboard", func(string) {})
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("await() = %v, want a not-ready refusal", err)
@@ -323,7 +325,7 @@ type outlasting struct {
 	cause string
 }
 
-func (outlasting) ServingEdge(context.Context, edge.Kind, string) (edge.Kind, error) {
+func (outlasting) ServingRouter(context.Context, string) (router.Kind, error) {
 	return "", context.DeadlineExceeded
 }
 
@@ -335,7 +337,7 @@ func TestAHostnameWhoseLastAttemptOutlastedItsWindowStillNamesWhatStoppedIt(t *t
 	cause := "dial tcp 203.0.113.10:443: i/o timeout"
 	cutover, _ := waiting(outlasting{cause: cause}, 2)
 
-	_, err := cutover.await(context.Background(), "shop.example.com", func(string) {})
+	_, err := cutover.await(context.Background(), "shop.example.com", "switchboard", func(string) {})
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("await() = %v, want a not-ready refusal", err)
@@ -353,7 +355,7 @@ func TestALivenessThatDiagnosesNothingStillRefusesInOneSentence(t *testing.T) {
 
 	cutover, _ := waiting(&answering{kind: "relay", after: 99}, 2)
 
-	_, err := cutover.await(context.Background(), "shop.example.com", func(string) {})
+	_, err := cutover.await(context.Background(), "shop.example.com", "switchboard", func(string) {})
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) {
 		t.Fatalf("await() = %v, want a refusal", err)
@@ -369,9 +371,9 @@ func TestAProviderThatDiagnosesItsOwnProbeIsAskedThroughItsLiveness(t *testing.T
 	cause := "x509: certificate is valid for parked.example.net, not shop.example.com"
 	vendor := diagnosingProvider{boxProvider: &boxProvider{}, cause: cause}
 	cutover, _ := waiting(vendor.Liveness(), 2)
-	cutover.kind = "box"
+	cutover.kind = edge.None
 
-	_, err := cutover.await(context.Background(), "shop.example.com", func(string) {})
+	_, err := cutover.await(context.Background(), "shop.example.com", "switchboard", func(string) {})
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) {
 		t.Fatalf("await() = %v, want a refusal", err)
@@ -386,13 +388,13 @@ func TestAStatusLineForAHostnameThatWillNotAnswerNamesWhatStoppedTheProbe(t *tes
 
 	cause := "x509: certificate signed by unknown authority"
 	cutover, _ := waiting(stopped{cause: cause}, 1)
-	cutover.kind = "box"
+	cutover.kind = edge.None
 	rows := &hostnames{
 		edgeSession: &edgeSession{cutover: cutover},
 		configured:  []ConfiguredHost{{Hostname: "shop.example.com"}},
 	}
 
-	probe := rows.probe(context.Background(), "shop.example.com")
+	probe := rows.probe(context.Background(), "shop.example.com", "switchboard")
 	if probe.OK {
 		t.Fatal("a hostname nothing answered for probed OK, and this test states nothing about the line it is reported under")
 	}

@@ -37,6 +37,7 @@ func (s *EdgeState) Pair(kind router.Kind, state router.StackState, apps map[str
 }
 
 type HostnameState struct {
+	Edge        edge.Kind              `json:"edge,omitempty"`
 	Certificate provider.Certificate   `json:"certificate,omitzero"`
 	Superseded  []provider.Certificate `json:"superseded,omitempty"`
 	Written     []edge.Record          `json:"written,omitempty"`
@@ -82,17 +83,12 @@ func (s HostnameState) ManualRecords() []edge.Record {
 }
 
 type ServeProbe struct {
-	At   int64     `json:"at,omitempty"`
-	OK   bool      `json:"ok,omitempty"`
-	Edge edge.Kind `json:"edge,omitempty"`
+	At     int64       `json:"at,omitempty"`
+	OK     bool        `json:"ok,omitempty"`
+	Router router.Kind `json:"router,omitempty"`
 }
 
-func (s HostnameState) Serving() edge.Kind {
-	if !s.Probe.OK {
-		return ""
-	}
-	return s.Probe.Edge
-}
+func (s HostnameState) Serving() (edge.Kind, bool) { return s.Edge, s.Probe.OK }
 
 type Wildcard struct {
 	BaseDomain string        `json:"base_domain,omitempty"`
@@ -105,14 +101,15 @@ type Wildcard struct {
 
 func (w Wildcard) Hostname() string { return edge.PreviewWildcard(w.BaseDomain) }
 
-func (w Wildcard) OwningEdge() (edge.Kind, bool) { return w.Edge, w.Edge != "" }
+func (w Wildcard) OwningEdge() (edge.Kind, bool) { return w.Edge, w.BaseDomain != "" }
 
 func (s EdgeState) Host(hostname string) HostnameState { return s.Hosts[hostname] }
 
 func (s EdgeState) Hostnames() []string { return slices.Sorted(maps.Keys(s.Hosts)) }
 
-func (s EdgeState) Ready(hostname string, kind edge.Kind) bool {
-	return kind != "" && s.Host(hostname).Serving() == kind
+func (s EdgeState) Ready(hostname string, front edge.Kind, answering router.Kind) bool {
+	host := s.Host(hostname)
+	return host.Probe.OK && host.Edge == front && answering != "" && host.Probe.Router == answering
 }
 
 func (s *EdgeState) SetHost(hostname string, state HostnameState) {

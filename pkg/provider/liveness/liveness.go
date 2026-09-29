@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/router"
 )
 
 const (
@@ -51,7 +52,7 @@ type Net struct {
 	Dial         func(ctx context.Context, network, address string) (net.Conn, error)
 	TLS          *tls.Config
 	ProbeAddress *url.URL
-	Loopback     func(ctx context.Context, hostname string) (edge.Kind, error)
+	Loopback     func(ctx context.Context, hostname string) (router.Kind, error)
 
 	LoopbackOnly bool
 
@@ -59,7 +60,7 @@ type Net struct {
 	lastFailures map[string]string
 }
 
-func (l *Net) ServingEdge(ctx context.Context, _ edge.Kind, hostname string) (edge.Kind, error) {
+func (l *Net) ServingRouter(ctx context.Context, hostname string) (router.Kind, error) {
 	answered, err := l.probe(ctx, edge.ProbeHostname(hostname))
 	var unanswered ProbeUnanswered
 	switch {
@@ -95,7 +96,7 @@ func (l *Net) record(hostname, cause string) {
 	l.lastFailures[hostname] = cause
 }
 
-func (l *Net) probe(ctx context.Context, hostname string) (edge.Kind, error) {
+func (l *Net) probe(ctx context.Context, hostname string) (router.Kind, error) {
 	if l.Loopback != nil && (l.LoopbackOnly || edge.Loopback(hostname)) {
 		return l.Loopback(ctx, hostname)
 	}
@@ -109,7 +110,7 @@ func (l *Net) probe(ctx context.Context, hostname string) (edge.Kind, error) {
 	return l.request(ctx, scheme, hostname, addresses)
 }
 
-func (l *Net) request(ctx context.Context, scheme, hostname string, addresses []string) (edge.Kind, error) {
+func (l *Net) request(ctx context.Context, scheme, hostname string, addresses []string) (router.Kind, error) {
 	var config *tls.Config
 	if l.TLS != nil {
 		config = l.TLS.Clone()
@@ -150,7 +151,7 @@ func (l *Net) request(ctx context.Context, scheme, hostname string, addresses []
 	}
 	defer said.Body.Close()
 	_, _ = io.Copy(io.Discard, io.LimitReader(said.Body, 1<<12))
-	return edge.Kind(strings.TrimSpace(said.Header.Get(edge.HeaderEdge))), nil
+	return router.Kind(strings.TrimSpace(said.Header.Get(router.HeaderRouter))), nil
 }
 
 func (l *Net) dial(ctx context.Context, network, address string) (net.Conn, error) {

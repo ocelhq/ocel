@@ -14,8 +14,6 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
-const Kind edge.Kind = "box"
-
 const (
 	RouteKind       = "proxy:route"
 	CertificateKind = "proxy:certificate"
@@ -57,7 +55,7 @@ func New(machine Machine, origins Origins, scope string) *Edge {
 	return &Edge{machine: machine, origins: origins, scope: scope}
 }
 
-func (e *Edge) Kind() edge.Kind { return Kind }
+func (e *Edge) Kind() edge.Kind { return edge.None }
 
 func (e *Edge) Facts() edge.Facts {
 	return edge.Facts{
@@ -81,7 +79,7 @@ func Surface(slug string, tier environment.Tier) string {
 func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
 	if spec.Slug == "" {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"the %q edge needs a project slug; this stack has none", Kind)
+			"the box serves a project by its slug, and this stack names none")
 	}
 	next := prior
 	next.Slug = spec.Slug
@@ -153,7 +151,7 @@ func (e *Edge) DestroyPreviewWildcard(ctx context.Context, baseDomain string) er
 func (e *Edge) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
 	group := edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
-		Name:   edge.EdgeGroupName(Kind),
+		Name:   edge.EdgeGroupName(edge.None),
 		Action: edge.PlanDelete,
 	}
 	for _, hostname := range scope.Hostnames {
@@ -187,7 +185,7 @@ func (e *Edge) certificateKept(hostname string) edge.PlanChange {
 func (e *Edge) PreviewWildcardRemovals(wildcard string) (removed, kept edge.PlanGroup) {
 	removed = edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
-		Name:   edge.EdgeGroupName(Kind),
+		Name:   edge.EdgeGroupName(edge.None),
 		Action: edge.PlanDelete,
 		Changes: []edge.PlanChange{{
 			Kind: RouteKind, Name: wildcard, Action: edge.PlanDelete,
@@ -200,7 +198,7 @@ func (e *Edge) PreviewWildcardRemovals(wildcard string) (removed, kept edge.Plan
 func (e *Edge) SharedPreviewRemoval() edge.PlanGroup {
 	return edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
-		Name:   edge.EdgeGroupName(Kind),
+		Name:   edge.EdgeGroupName(edge.None),
 		Action: edge.PlanKeep,
 		Reason: "shared catch-all, kept",
 	}

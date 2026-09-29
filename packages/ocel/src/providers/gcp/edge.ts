@@ -16,8 +16,8 @@ export type AlbEdgeOptions = Record<string, never>;
  * is answered by it. It is the only piece of GCP infrastructure ocel provisions
  * that costs money while it serves no traffic — roughly $18 a month per tier
  * plus Premium-tier egress — so it is never the default: a project that names
- * no edge is answered on the URL Cloud Run gives each service, and that edge
- * binds no hostname.
+ * no edge is answered on the URL Cloud Run gives each service, and binds no
+ * hostname.
  */
 export function alb(options: AlbEdgeOptions = {}): EdgeDescriptor {
   return { alb: options };

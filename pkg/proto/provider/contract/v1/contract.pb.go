@@ -793,7 +793,6 @@ type CertificateState struct {
 	ManualRecords     []string               `protobuf:"bytes,4,rep,name=manual_records,json=manualRecords,proto3" json:"manual_records,omitempty"`
 	LastProbeAt       int64                  `protobuf:"varint,5,opt,name=last_probe_at,json=lastProbeAt,proto3" json:"last_probe_at,omitempty"`
 	LastProbeOk       bool                   `protobuf:"varint,6,opt,name=last_probe_ok,json=lastProbeOk,proto3" json:"last_probe_ok,omitempty"`
-	LastProbeEdge     string                 `protobuf:"bytes,7,opt,name=last_probe_edge,json=lastProbeEdge,proto3" json:"last_probe_edge,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -868,13 +867,6 @@ func (x *CertificateState) GetLastProbeOk() bool {
 		return x.LastProbeOk
 	}
 	return false
-}
-
-func (x *CertificateState) GetLastProbeEdge() string {
-	if x != nil {
-		return x.LastProbeEdge
-	}
-	return ""
 }
 
 type ProductionHostname struct {
@@ -4792,15 +4784,14 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\thostnames\x18\x01 \x03(\v2(.provider.contract.v1.ProductionHostnameR\thostnames\x12\x14\n" +
 	"\x05ready\x18\x02 \x01(\bR\x05ready\x12'\n" +
 	"\x0frecords_written\x18\x03 \x03(\tR\x0erecordsWritten\x12%\n" +
-	"\x0emanual_records\x18\x04 \x03(\tR\rmanualRecords\"\xa8\x02\n" +
+	"\x0emanual_records\x18\x04 \x03(\tR\rmanualRecords\"\x80\x02\n" +
 	"\x10CertificateState\x12%\n" +
 	"\x0ecertificate_id\x18\x01 \x01(\tR\rcertificateId\x12-\n" +
 	"\x12certificate_status\x18\x02 \x01(\tR\x11certificateStatus\x12'\n" +
 	"\x0frecords_written\x18\x03 \x03(\tR\x0erecordsWritten\x12%\n" +
 	"\x0emanual_records\x18\x04 \x03(\tR\rmanualRecords\x12\"\n" +
 	"\rlast_probe_at\x18\x05 \x01(\x03R\vlastProbeAt\x12\"\n" +
-	"\rlast_probe_ok\x18\x06 \x01(\bR\vlastProbeOk\x12&\n" +
-	"\x0flast_probe_edge\x18\a \x01(\tR\rlastProbeEdge\"\xda\x02\n" +
+	"\rlast_probe_ok\x18\x06 \x01(\bR\vlastProbeOk\"\xda\x02\n" +
 	"\x12ProductionHostname\x12\x1a\n" +
 	"\bhostname\x18\x01 \x01(\tR\bhostname\x12\x1a\n" +
 	"\bdeclared\x18\x02 \x01(\bR\bdeclared\x12H\n" +

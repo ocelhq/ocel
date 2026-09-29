@@ -101,6 +101,10 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progr
 	if err != nil {
 		return err
 	}
+	answering, err := pairedRouter(w.provider, front.Kind())
+	if err != nil {
+		return err
+	}
 	wildcard := edge.PreviewWildcard(base)
 	w.recorded = stackrecords.Wildcard{
 		BaseDomain: base,
@@ -150,7 +154,7 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progr
 		return err
 	}
 	written, werr := cutover.write(ctx, dnsRecords,
-		fmt.Sprintf("Point %s at the %s edge", wildcard, front.Kind()), progress.Say,
+		fmt.Sprintf("Point %s at %s", wildcard, frontPhrase(front.Kind())), progress.Say,
 		fmt.Sprintf("If this run gives up waiting, re-run `ocel domain use '%s' --preview`.", wildcard))
 	w.recorded.Host.Written, w.recorded.Host.Manual = written.Written, written.Manual
 	if err := w.save(ctx); err != nil {
@@ -160,7 +164,7 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progr
 		return werr
 	}
 
-	probe, aerr := cutover.await(ctx, wildcard, progress.Say)
+	probe, aerr := cutover.await(ctx, wildcard, answering, progress.Say)
 	w.recorded.Host.Probe = probe
 	if err := w.save(ctx); err != nil {
 		return errors.Join(aerr, err)
@@ -168,7 +172,7 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progr
 	if aerr != nil {
 		return aerr
 	}
-	progress.Say(fmt.Sprintf("Previews are served on %s by the %s edge", wildcard, front.Kind()))
+	progress.Say(fmt.Sprintf("Previews are served on %s through %s", wildcard, frontPhrase(front.Kind())))
 	return nil
 }
 
@@ -193,8 +197,8 @@ func (w *wildcards) claimable(front edge.Edge, base string) error {
 		return nil
 	}
 	return refusal.Refuse(refusal.CodeNotReady,
-		"%s is already owned by the %s edge, and this project's edge is %s: reconciling it here would raise a second wildcard at the %s edge and leave the %s one in place with nothing left to name it — release it with `ocel domain release --preview` from a project on the %s edge first, then use it again from here",
-		w.recorded.Hostname(), owningEdge, front.Kind(), front.Kind(), owningEdge, owningEdge)
+		"%s is already served through %s, and this project is served through %s: reconciling it here would raise a second wildcard through %s and leave the one through %s in place with nothing left to name it — release it with `ocel domain release --preview` from a project served through %s first, then use it again from here",
+		w.recorded.Hostname(), frontPhrase(owningEdge), frontPhrase(front.Kind()), frontPhrase(front.Kind()), frontPhrase(owningEdge), frontPhrase(owningEdge))
 }
 
 func (h *handlers) GetPreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest) (*contractv1.GetPreviewWildcardResponse, error) {
@@ -308,13 +312,7 @@ func (w *wildcards) refuseReleaseWhileLive(ctx context.Context) error {
 }
 
 func (w *wildcards) owningEdge() (edge.Edge, error) {
-	owningEdge, owned := w.recorded.OwningEdge()
-	if !owned {
-		return nil, refusal.Refuse(refusal.CodeNotReady,
-			"nothing in this account records which edge owns %s, and tearing it down through a guessed edge would delete its certificate, its DNS records and the record itself while leaving the real wildcard entry in place with nothing left to name it: run `ocel domain use '%s' --preview` from the project whose edge raised it — that writes the edge down and changes nothing else — then release it",
-			w.recorded.Hostname(), w.recorded.Hostname())
-	}
-	return w.provider.Edges().Open(owningEdge)
+	return w.provider.Edges().Open(w.recorded.Edge)
 }
 
 func (h *handlers) PlanRemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest) (*planv1.ChangePlan, error) {

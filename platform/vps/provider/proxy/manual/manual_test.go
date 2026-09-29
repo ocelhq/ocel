@@ -72,7 +72,7 @@ func TestManualRendersNothingForItsProxyWhateverTheBoxAdmits(t *testing.T) {
 	front := manual.Manual{Box: &box{}}
 	spec := proxy.Spec{
 		Upstream:   "ocel-switchboard:8080",
-		Edge:       "box",
+		Router:     "switchboard",
 		Permission: proxy.Permission{Dial: "/run/ocel-front/admit.sock", Path: "/admit"},
 	}
 	rendered, err := front.Render(spec)
@@ -123,7 +123,7 @@ func TestManualPassesWhenYourProxyListensOn443AndRoutesEveryClaimToTheSwitchboar
 	machine := &box{
 		listening: on443(),
 		claimed:   []string{"shop.example.com", "ocel-edge-probe.preview.example.com"},
-		answers:   map[string]string{"shop.example.com": "box", "ocel-edge-probe.preview.example.com": "box"},
+		answers:   map[string]string{"shop.example.com": "switchboard", "ocel-edge-probe.preview.example.com": "switchboard"},
 	}
 	inspected, err := (manual.Manual{Box: machine, Port: 8480}).Inspect(context.Background())
 	if err != nil {
@@ -190,7 +190,7 @@ func TestManualFailsAClaimYourProxyDoesNotRouteAndSaysWhereToRouteIt(t *testing.
 	machine := &box{
 		listening: on443(),
 		claimed:   []string{"shop.example.com", "api.example.com"},
-		answers:   map[string]string{"shop.example.com": "box", "api.example.com": ""},
+		answers:   map[string]string{"shop.example.com": "switchboard", "api.example.com": ""},
 		failures:  map[string]string{"api.example.com": "api.example.com answered nothing over tls at 127.0.0.1:443"},
 	}
 	inspected, err := (manual.Manual{Box: machine, Port: 9000}).Inspect(context.Background())

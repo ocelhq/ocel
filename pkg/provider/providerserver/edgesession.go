@@ -66,10 +66,17 @@ func (h *handlers) edgeFor(p provider.Provider, sel *contractv1.EdgeSelection) (
 }
 
 func (h *handlers) removalEdge(p provider.Provider, state stackrecords.EdgeState, sel *contractv1.EdgeSelection) (edge.Edge, error) {
-	if state.Kind == "" {
+	if state.Edge.Empty() {
 		return h.edgeFor(p, sel)
 	}
 	return p.Edges().Open(state.Kind)
+}
+
+func frontPhrase(kind edge.Kind) string {
+	if kind == edge.None {
+		return "the origin"
+	}
+	return "the " + string(kind) + " edge"
 }
 
 func dnsFor(p provider.Provider, front edge.Edge, sel *contractv1.EdgeSelection) (edge.DNSRecords, error) {
@@ -131,6 +138,13 @@ func (s *edgeSession) checkpoint(ctx context.Context) error {
 func (s *edgeSession) promoted(ctx context.Context) (bool, error) {
 	active, err := s.ledger.ActivePromotionID(ctx, router.DefaultPointer)
 	return active != "", err
+}
+
+func (s *edgeSession) routerFor(app string) router.Kind {
+	if kind, paired := s.state.Apps[app]; paired {
+		return kind
+	}
+	return s.router.Kind()
 }
 
 func (s *edgeSession) on(kind edge.Kind) (edge.EdgeStack, error) {

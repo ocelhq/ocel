@@ -1368,7 +1368,7 @@
       "type": "object"
     },
     "edge": {
-      "description": "The edge in front of the origin, keyed by its identifier with its options as the value, or named alone. Omit it and the provider fronts the deployment with its own default edge.",
+      "description": "The edge in front of the origin, keyed by its identifier with its options as the value, or named alone. Omit it for the provider's default: CloudFront on AWS, and no edge on GCP or a VPS.",
       "oneOf": [
         {
           "type": "string"

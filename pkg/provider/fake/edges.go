@@ -12,11 +12,17 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/router"
 )
 
 const (
 	KindRelay  edge.Kind = "relay"
 	KindDirect edge.Kind = "direct"
+)
+
+const (
+	RouterRelay  router.Kind = "relay-router"
+	RouterDirect router.Kind = "direct-router"
 )
 
 type Edges struct {
@@ -27,10 +33,10 @@ type Edges struct {
 
 func NewEdges() *Edges {
 	registry := &Edges{edges: map[edge.Kind]*Edge{}}
-	for _, kind := range []edge.Kind{KindRelay, KindDirect} {
-		registry.order = append(registry.order, kind)
-		registry.edges[kind] = newEdge(kind)
+	for kind, routedBy := range map[edge.Kind]router.Kind{KindRelay: RouterRelay, KindDirect: RouterDirect} {
+		registry.edges[kind] = newEdge(kind, routedBy)
 	}
+	registry.order = []edge.Kind{KindRelay, KindDirect}
 	return registry
 }
 
@@ -70,13 +76,13 @@ func (e *Edges) serving(certificate string) bool {
 	return false
 }
 
-func (e *Edges) answering(hostname string) edge.Kind {
+func (e *Edges) answering(hostname string) router.Kind {
 	e.mu.Lock()
 	fronts := slices.Collect(maps.Values(e.edges))
 	e.mu.Unlock()
 	for _, front := range fronts {
 		if front.answers(hostname) {
-			return front.kind
+			return front.routedBy
 		}
 	}
 	return ""
@@ -99,6 +105,7 @@ func kindList(kinds []edge.Kind) string {
 type Edge struct {
 	mu       sync.Mutex
 	kind     edge.Kind
+	routedBy router.Kind
 	owners   map[string]string
 	wildcard string
 	specs    []edge.PreviewWildcardSpec
@@ -155,8 +162,8 @@ func (e *Edge) Serving(certificate string) bool {
 	return certificate != "" && slices.Contains(slices.Collect(maps.Values(e.serving)), certificate)
 }
 
-func newEdge(kind edge.Kind) *Edge {
-	return &Edge{kind: kind, owners: map[string]string{}, serving: map[string]string{}}
+func newEdge(kind edge.Kind, routedBy router.Kind) *Edge {
+	return &Edge{kind: kind, routedBy: routedBy, owners: map[string]string{}, serving: map[string]string{}}
 }
 
 func (e *Edge) SayOnBind(said string) {

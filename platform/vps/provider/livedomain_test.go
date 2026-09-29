@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
@@ -105,9 +106,9 @@ func servingTheBox(t *testing.T) (machine, *vps.Provider, contractv1connect.Prov
 	t.Cleanup(func() { closing(t, p) })
 	p.ProbeAddress = &url.URL{Scheme: "http", Host: vm.addr + ":80"}
 
-	opened, err := p.Edges().Open(boxedge.Kind)
+	opened, err := p.Edges().Open(edge.None)
 	if err != nil {
-		t.Fatalf("Open(%q) = %v", boxedge.Kind, err)
+		t.Fatalf("Open(%q) = %v", edge.None, err)
 	}
 	stack, err := opened.Reconcile(context.Background(), edge.StackSpec{
 		Version: "test", Tier: environment.TierProduction, Slug: domainSlug,
@@ -139,7 +140,7 @@ func TestLiveDomainAddAsksForAnARecordNamingTheBoxAndTheBoxThenServesTheHostname
 	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
 		Slug:       domainSlug,
 		Configured: configuredHosts(hostname),
-		Edge:       &contractv1.EdgeSelection{Kind: string(boxedge.Kind)},
+		Edge:       &contractv1.EdgeSelection{},
 	})
 	if err != nil {
 		t.Fatalf("AddHostname() = %v", err)
@@ -171,9 +172,9 @@ func TestLiveDomainAddAsksForAnARecordNamingTheBoxAndTheBoxThenServesTheHostname
 	if served := vm.asks(t, hostname, "/"); served != "one" {
 		t.Errorf("the box answered %q for the hostname it just bound, want the release the project serves", served)
 	}
-	if head := vm.heads(t, hostname); !strings.Contains(strings.ToLower(head), strings.ToLower(edge.HeaderEdge)+": "+switchboard.EdgeName) {
+	if head := vm.heads(t, hostname); !strings.Contains(strings.ToLower(head), strings.ToLower(router.HeaderRouter)+": "+switchboard.RouterKind) {
 		t.Errorf("the box answered the bound hostname with\n%s\nwant %s: %s, which is what the serving check reads to decide this edge serves it",
-			head, edge.HeaderEdge, switchboard.EdgeName)
+			head, router.HeaderRouter, switchboard.RouterKind)
 	}
 }
 
@@ -183,7 +184,7 @@ func TestLiveDomainStatusNamesTheManualRecordsTheCertificateHandleAndWhoRenewsIt
 	req := &contractv1.HostnameRequest{
 		Slug:       domainSlug,
 		Configured: configuredHosts(hostname),
-		Edge:       &contractv1.EdgeSelection{Kind: string(boxedge.Kind)},
+		Edge:       &contractv1.EdgeSelection{},
 	}
 	stream, err := client.AddHostname(context.Background(), req)
 	if err != nil {
@@ -226,7 +227,7 @@ func TestLiveDomainRmStopsTheHostnameServingAndLeavesNothingOfItLoaded(t *testin
 	bound := &contractv1.HostnameRequest{
 		Slug:       domainSlug,
 		Configured: configuredHosts(hostname),
-		Edge:       &contractv1.EdgeSelection{Kind: string(boxedge.Kind)},
+		Edge:       &contractv1.EdgeSelection{},
 	}
 	stream, err := client.AddHostname(context.Background(), bound)
 	if err != nil {
@@ -239,7 +240,7 @@ func TestLiveDomainRmStopsTheHostnameServingAndLeavesNothingOfItLoaded(t *testin
 	gone, err := client.RemoveHostname(context.Background(), &contractv1.HostnameRequest{
 		Slug: domainSlug,
 		Host: hostname,
-		Edge: &contractv1.EdgeSelection{Kind: string(boxedge.Kind)},
+		Edge: &contractv1.EdgeSelection{},
 	})
 	if err != nil {
 		t.Fatalf("RemoveHostname() = %v", err)
@@ -255,7 +256,7 @@ func TestLiveDomainRmStopsTheHostnameServingAndLeavesNothingOfItLoaded(t *testin
 	if strings.Contains(loaded, hostname) {
 		t.Errorf("%s still names %s after the unbind:\n%s", host.ProxyConfig, hostname, loaded)
 	}
-	owner, err := p.Edges().Open(boxedge.Kind)
+	owner, err := p.Edges().Open(edge.None)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -270,7 +271,7 @@ func TestLiveTheCertificateBehindAnUnboundHostnameStaysOnTheBox(t *testing.T) {
 	req := &contractv1.HostnameRequest{
 		Slug:       domainSlug,
 		Configured: configuredHosts(hostname),
-		Edge:       &contractv1.EdgeSelection{Kind: string(boxedge.Kind)},
+		Edge:       &contractv1.EdgeSelection{},
 	}
 	stream, err := client.AddHostname(context.Background(), req)
 	if err != nil {
@@ -283,7 +284,7 @@ func TestLiveTheCertificateBehindAnUnboundHostnameStaysOnTheBox(t *testing.T) {
 	gone, err := client.RemoveHostname(context.Background(), &contractv1.HostnameRequest{
 		Slug: domainSlug,
 		Host: hostname,
-		Edge: &contractv1.EdgeSelection{Kind: string(boxedge.Kind)},
+		Edge: &contractv1.EdgeSelection{},
 	})
 	if err != nil {
 		t.Fatalf("RemoveHostname() = %v", err)
@@ -305,7 +306,7 @@ func TestLiveASecondProjectDeclaringAServedHostnameIsNamedAsAClaimAtPreflight(t 
 	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
 		Slug:       domainSlug,
 		Configured: configuredHosts(hostname),
-		Edge:       &contractv1.EdgeSelection{Kind: string(boxedge.Kind)},
+		Edge:       &contractv1.EdgeSelection{},
 	})
 	if err != nil {
 		t.Fatalf("AddHostname() = %v", err)
@@ -318,7 +319,7 @@ func TestLiveASecondProjectDeclaringAServedHostnameIsNamedAsAClaimAtPreflight(t 
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
 		Slug:         "intruder",
 		Domains:      []string{hostname, "nobody.example.invalid"},
-		Edge:         &contractv1.EdgeSelection{Kind: string(boxedge.Kind)},
+		Edge:         &contractv1.EdgeSelection{},
 	})
 	if err != nil {
 		t.Fatalf("Preflight() = %v", err)
@@ -343,7 +344,7 @@ func TestLiveASecondProjectDeclaringAServedHostnameIsNamedAsAClaimAtPreflight(t 
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
 		Slug:         domainSlug,
 		Domains:      []string{hostname},
-		Edge:         &contractv1.EdgeSelection{Kind: string(boxedge.Kind)},
+		Edge:         &contractv1.EdgeSelection{},
 	})
 	if err != nil {
 		t.Fatalf("Preflight() = %v", err)

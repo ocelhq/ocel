@@ -35,7 +35,7 @@ function answering(answers: Answer[]): Fetch {
     }
     return new Response(null, {
       status: answer.edged,
-      headers: { "x-ocel-edge": "cloudfront" },
+      headers: { "x-ocel-router": "cloudfront" },
     });
   }) as unknown as Fetch;
 }

@@ -112,7 +112,7 @@ func proxySpec(state RoutingTable) proxy.Spec {
 		Hostnames:   state.hostnames(),
 		PreviewBase: state.PreviewBase,
 		Upstream:    SwitchboardUpstream,
-		Edge:        switchboard.EdgeName,
+		Router:      switchboard.RouterKind,
 		Permission:  SwitchboardPermission,
 	}
 }

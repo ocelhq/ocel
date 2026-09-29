@@ -3,11 +3,11 @@ package alb
 import (
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/router"
 )
 
-func TestEveryResponseTheLoadBalancerSendsNamesItAsTheEdge(t *testing.T) {
+func TestEveryResponseTheLoadBalancerSendsNamesItAsTheRouter(t *testing.T) {
 	t.Parallel()
 
 	seen, err := declared(frontProgram(frontSpec{Names: frontNames(environment.TierProduction)}))
@@ -18,9 +18,9 @@ func TestEveryResponseTheLoadBalancerSendsNamesItAsTheEdge(t *testing.T) {
 	added, _ := action["responseHeadersToAdds"].([]any)
 	for _, header := range added {
 		fields, _ := header.(map[string]any)
-		if fields["headerName"] == edge.HeaderEdge && fields["headerValue"] == string(Kind) && fields["replace"] == true {
+		if fields["headerName"] == router.HeaderRouter && fields["headerValue"] == string(Kind) && fields["replace"] == true {
 			return
 		}
 	}
-	t.Errorf("the url map adds %v to its responses, want %s: %s, the marker a liveness probe reads to know which edge answers a hostname, so no hostname on this edge is ever cut over", added, edge.HeaderEdge, Kind)
+	t.Errorf("the url map adds %v to its responses, want %s: %s, the marker a liveness probe reads to know which router answers a hostname, so no hostname behind this load balancer is ever cut over", added, router.HeaderRouter, Kind)
 }

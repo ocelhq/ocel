@@ -1,4 +1,4 @@
-package direct
+package cloudrun
 
 import (
 	"context"
@@ -9,11 +9,13 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
 
+const RouterKind router.Kind = "cloud-run"
+
 type Router struct{ e *Edge }
 
 func NewRouter(e *Edge) Router { return Router{e: e} }
 
-func (r Router) Kind() router.Kind { return router.Kind(Kind) }
+func (r Router) Kind() router.Kind { return RouterKind }
 
 func (r Router) Facts() router.Facts {
 	return router.Facts{AddressesItself: true, ReachesFunctions: true, ReachesContainers: true}
@@ -22,7 +24,7 @@ func (r Router) Facts() router.Facts {
 func (r Router) Reconcile(_ context.Context, spec router.StackSpec, prior router.StackState) (router.Stack, error) {
 	if spec.Slug == "" {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"the %q edge serves a project by slug, and this stack names none", Kind)
+			"Cloud Run serves a project by its slug, and this stack names none")
 	}
 	return r.Open(prior.WithSpec(spec))
 }

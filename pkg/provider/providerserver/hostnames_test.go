@@ -108,8 +108,11 @@ func TestAddHostnameBindsWritesAndRecordsTheProbe(t *testing.T) {
 		t.Errorf("the recorded edge state binds %v, want app.acme.com among them", state.Edge.Bound)
 	}
 	hostState := state.Host("app.acme.com")
-	if !hostState.Probe.OK || hostState.Probe.Edge != fake.KindRelay {
-		t.Errorf("recorded probe = %+v, want it answered by the %s edge", hostState.Probe, fake.KindRelay)
+	if !hostState.Probe.OK || hostState.Probe.Router != fake.RouterRelay {
+		t.Errorf("recorded probe = %+v, want it answered by the %s router the %s edge pairs the app with", hostState.Probe, fake.RouterRelay, fake.KindRelay)
+	}
+	if hostState.Edge != fake.KindRelay {
+		t.Errorf("the hostname is recorded bound to %q, want the %s edge it was bound to", hostState.Edge, fake.KindRelay)
 	}
 	if len(hostState.Written) == 0 {
 		t.Error("the hostname state records no written DNS record, though a writer was selected")
@@ -648,7 +651,8 @@ func TestAddHostnameRebindsAServedHostnameWhoseCertificateChanged(t *testing.T) 
 		Hosts: map[string]stackrecords.HostnameState{
 			"app.acme.com": {
 				Certificate: provider.Certificate{ID: "cert-of-yesterday"},
-				Probe:       stackrecords.ServeProbe{OK: true, Edge: fake.KindRelay},
+				Edge:        fake.KindRelay,
+				Probe:       stackrecords.ServeProbe{OK: true, Router: fake.RouterRelay},
 			},
 		},
 	})
@@ -687,7 +691,8 @@ func TestHostnameStatusReportsWhatTheProviderSaysOfTheCertificate(t *testing.T) 
 		Hosts: map[string]stackrecords.HostnameState{
 			"app.acme.com": {
 				Certificate: provider.Certificate{ID: "pending-cert", Requested: true},
-				Probe:       stackrecords.ServeProbe{OK: true, Edge: fake.KindRelay},
+				Edge:        fake.KindRelay,
+				Probe:       stackrecords.ServeProbe{OK: true, Router: fake.RouterRelay},
 			},
 		},
 	})
@@ -733,7 +738,7 @@ func TestGetHostnameStatusReadsTheRecordedProbeUnlessAskedToCheckLive(t *testing
 			Fronts:   map[string]string{"app.acme.com": "shop.relay.fake.invalid"},
 		},
 		Hosts: map[string]stackrecords.HostnameState{
-			"app.acme.com": {Probe: stackrecords.ServeProbe{At: 1755500000, OK: true, Edge: fake.KindRelay}},
+			"app.acme.com": {Edge: fake.KindRelay, Probe: stackrecords.ServeProbe{At: 1755500000, OK: true, Router: fake.RouterRelay}},
 		},
 	})
 

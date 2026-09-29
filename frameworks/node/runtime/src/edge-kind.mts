@@ -2,11 +2,11 @@ export const routingManifestPathVar = "OCEL_ROUTING_MANIFEST";
 
 export { dispatchesAtOrigin, invalidatesByCacheTag } from "./host.mjs";
 
-export const edgeHeader = "x-ocel-edge";
+export const routerHeader = "x-ocel-router";
 
-export function withEdgeHeader(response: Response, edgeKind: string): Response {
-  if (!edgeKind || response.headers.get(edgeHeader) === edgeKind) return response;
+export function withRouterHeader(response: Response, routerKind: string): Response {
+  if (!routerKind || response.headers.get(routerHeader) === routerKind) return response;
   const marked = new Response(response.body, response);
-  marked.headers.set(edgeHeader, edgeKind);
+  marked.headers.set(routerHeader, routerKind);
   return marked;
 }

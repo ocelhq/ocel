@@ -13,13 +13,14 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
 const (
 	switchboard = "ocel-switchboard:8080"
-	edgeName    = "box"
+	routerName  = "switchboard"
 )
 
 var permission = proxy.Permission{Dial: "unix//run/ocel-front/admit.sock", Path: "/admit"}
@@ -29,7 +30,7 @@ func pinned(hostname, leaf string) proxy.Pin {
 }
 
 func specified(pins ...proxy.Pin) proxy.Spec {
-	return proxy.Spec{Pins: pins, Upstream: switchboard, Edge: edgeName, Permission: permission}
+	return proxy.Spec{Pins: pins, Upstream: switchboard, Router: routerName, Permission: permission}
 }
 
 type policy struct {
@@ -219,7 +220,7 @@ func TestEveryErrorTheFrontProxyAnswersItselfNamesTheEdge(t *testing.T) {
 			t.Fatalf("the front server handles its own errors with %+v, want one route answering every error", server.Errors)
 		}
 		answered, _ := json.Marshal(server.Errors.Routes[0].Handle[0])
-		if want := `{"handler":"static_response","headers":{"` + http.CanonicalHeaderKey(edge.HeaderEdge) + `":["` + edgeName + `"]},"status_code":"{http.error.status_code}"}`; string(answered) != want {
+		if want := `{"handler":"static_response","headers":{"` + http.CanonicalHeaderKey(router.HeaderRouter) + `":["` + routerName + `"]},"status_code":"{http.error.status_code}"}`; string(answered) != want {
 			t.Errorf("the front proxy answers its own errors with %s, want %s: caddy answers a 502 of its own while the switchboard is down or being recreated, and the bind's probe reads the edge off every answer the box gives", answered, want)
 		}
 	}
@@ -337,11 +338,11 @@ func TestWhatTheProxyCouldNotServeIsRefusedRatherThanRendered(t *testing.T) {
 	t.Parallel()
 
 	for what, spec := range map[string]proxy.Spec{
-		"no upstream":                     {Edge: edgeName, Permission: permission},
-		"no edge to name":                 {Upstream: switchboard, Permission: permission},
-		"no permission endpoint":          {Upstream: switchboard, Edge: edgeName},
-		"no admission to relay to":        {Upstream: switchboard, Edge: edgeName, Permission: proxy.Permission{Path: permission.Path}},
-		"no path to ask the admission at": {Upstream: switchboard, Edge: edgeName, Permission: proxy.Permission{Dial: permission.Dial}},
+		"no upstream":                     {Router: routerName, Permission: permission},
+		"no router to name":               {Upstream: switchboard, Permission: permission},
+		"no permission endpoint":          {Upstream: switchboard, Router: routerName},
+		"no admission to relay to":        {Upstream: switchboard, Router: routerName, Permission: proxy.Permission{Path: permission.Path}},
+		"no path to ask the admission at": {Upstream: switchboard, Router: routerName, Permission: proxy.Permission{Dial: permission.Dial}},
 		"a pin outside the pin root":      specified(proxy.Pin{Hostname: "shop.example.com", Path: "/etc/shadow"}),
 		"a pin beneath the pin root":      specified(pinned("shop.example.com", "nested/shop")),
 		"the pin root itself":             specified(proxy.Pin{Hostname: "shop.example.com", Path: caddy.PinsDir}),

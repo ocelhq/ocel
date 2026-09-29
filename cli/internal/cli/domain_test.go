@@ -124,7 +124,6 @@ func TestRunDomainStatusJSON(t *testing.T) {
 		"expiresAt":         "2025-09-04T15:33:20Z",
 		"lastProbeAt":       "2025-08-18T06:53:20Z",
 		"lastProbeOk":       true,
-		"lastProbeEdge":     "cloudflare",
 		"servingPointer":    "cloudflare",
 	} {
 		if host[field] != want {
@@ -289,7 +288,7 @@ export default {
 		t.Setenv(clitest.FakeGlobalDomainCertEnvVar, "ISSUED arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234")
 		t.Setenv(clitest.FakeGlobalDomainRecordsEnvVar, "*.preview.acme.com AAAA 100::")
 		t.Setenv(clitest.FakeGlobalDomainManualRecordsEnvVar, "_ocel.preview.acme.com CNAME _target.acm-validations.aws")
-		t.Setenv(clitest.FakeGlobalDomainProbeEnvVar, "1755500000 cloudflare")
+		t.Setenv(clitest.FakeGlobalDomainProbeEnvVar, "1755500000")
 		t.Setenv(clitest.FakeGlobalDomainRenewalEnvVar, "you placed it on this box and you renew it")
 		t.Setenv(clitest.FakeGlobalDomainExpiresEnvVar, "1755500000")
 
@@ -304,7 +303,7 @@ export default {
 			"Renewal              expires 2025-08-18T06:53:20Z, you placed it on this box and you renew it — EXPIRING SOON",
 			"Records ocel wrote   *.preview.acme.com AAAA 100::",
 			"Records you own      _ocel.preview.acme.com CNAME _target.acm-validations.aws",
-			"Last probe           2025-08-18T06:53:20Z  x-ocel-edge: cloudflare",
+			"Last probe           2025-08-18T06:53:20Z  answered",
 		} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)
@@ -637,7 +636,7 @@ export default {
 			"Renewal              expires 2025-09-04T15:33:20Z",
 			"Records ocel wrote   shop.app.com AAAA 100::",
 			"Records you own      _ocel.shop.app.com CNAME _target.acm-validations.aws",
-			"Last probe           2025-08-18T06:53:20Z  x-ocel-edge: cloudflare",
+			"Last probe           2025-08-18T06:53:20Z  answered",
 			"Served by            cloudflare",
 		} {
 			if !strings.Contains(out, want) {
