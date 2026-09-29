@@ -35,15 +35,18 @@ jobs:
       OCEL_JOURNEY_COVERAGE: every-cell
       OCEL_GCE_ZONE: ${{ vars.GCP_VPS_ZONE || 'europe-west1-b' }}
       BOX: nightly-${{ github.run_id }}-${{ github.run_attempt }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.E2E_CLOUDFLARE_API_TOKEN }}
     steps:
       - name: Name the project this run may spend
         env:
           PROJECT: ${{ vars.GCP_LIVE_PROJECT }}
           WIF: ${{ vars.GCP_WIF_PROVIDER }}
           ACCOUNT: ${{ vars.GCP_SERVICE_ACCOUNT }}
+          ZONE: ${{ vars.E2E_PREVIEW_DOMAIN }}
         run: |
           set -euo pipefail
-          for named in PROJECT WIF ACCOUNT; do
+          for named in PROJECT WIF ACCOUNT ZONE; do
             if [ -z "${!named}" ]; then
               echo "the repository variable behind $named is unset, and this run brings up a real VM" >&2
               exit 1
@@ -77,6 +80,19 @@ jobs:
 
       - name: The node bundles the fixtures import
         run: pnpm turbo run build --filter=ocel --filter=@ocel/transforms
+
+      - name: Guard the Cloudflare account the cells it fronts deploy into
+        env:
+          EXPECTED_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
+        run: tests/next-compat/guard-cloudflare.sh
+
+      - name: Name the zone this run may touch
+        env:
+          ZONE: ${{ vars.E2E_PREVIEW_DOMAIN }}
+        run: |
+          set -euo pipefail
+          ZONE=${ZONE#\*.}
+          echo "OCEL_JOURNEY_ZONE=$ZONE" >> "$GITHUB_ENV"
 
       - name: The Docker the image build on this runner needs
         uses: ./.github/actions/containerd-docker

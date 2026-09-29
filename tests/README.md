@@ -221,6 +221,13 @@ not, and the `Sweep` workflow reclaims, every six hours, any EC2 or Compute Engi
 than three hours that a run which died left behind. A nightly pass releases the commit it
 drove as a nightly.
 
+The cells Cloudflare fronts on a box run only on the nightly: Cloudflare cannot reach an
+incus VM, and the EC2 lane names no zone. The nightly deploys them into the Cloudflare
+account and under the zone the `aws` lane uses, taking `E2E_CLOUDFLARE_API_TOKEN`,
+`E2E_CLOUDFLARE_ACCOUNT_ID` and `E2E_PREVIEW_DOMAIN`, and refuses to run unless
+`E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID` names that account. With a zone named, every other cell
+of the lane takes its hostnames under it too.
+
 The nightly signs in to Google Cloud over workload identity federation — no key is stored.
 
 | name                  | kind | what it contains                                                              |
