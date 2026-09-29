@@ -59,13 +59,16 @@ esac
 
 endpoint_of() {
     local mapped
-    mapped=$(docker port "$1" "$PORT/tcp" 2>/dev/null | head -n1) || return 1
+    mapped=$(docker port "$1" "$PORT/tcp" 2>/dev/null) || return 1
+    mapped=${mapped%%$'\n'*}
     [ -n "$mapped" ] || return 1
     printf 'http://127.0.0.1:%s\n' "${mapped##*:}"
 }
 
 answering() {
-    curl -sf --max-time 5 "$1$READY_PATH" | grep -qE "$READY_BODY"
+    local body
+    body=$(curl -sf --max-time 5 "$1$READY_PATH") || return 1
+    grep -qE "$READY_BODY" <<<"$body"
 }
 
 wait_ready() {

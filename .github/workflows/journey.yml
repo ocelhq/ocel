@@ -185,7 +185,7 @@ jobs:
           else
             files=$(git diff --name-only "$BASE" "$HEAD")
             echo "$files"
-            hit() { printf '%s\n' "$files" | grep -Eq "$1" && echo true || echo false; }
+            hit() { grep -Eq "$1" <<<"$files" && echo true || echo false; }
             shared='^(cli|packages|frameworks|pkg|sdk|proto|tests/fixtures|tests/journeys|tests/shared)/'
             shared="$shared"'|^\.github/(actions/|workflows/journey\.yml$)'
             shared="$shared"'|^(package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml)$'

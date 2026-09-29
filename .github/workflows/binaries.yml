@@ -63,8 +63,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft,assets \
-            --jq 'select(.isDraft | not) | .assets[].name' 2>/dev/null | grep -qx 'checksums.txt.sigstore.json'; then
+          if assets=$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft,assets \
+            --jq 'select(.isDraft | not) | .assets[].name' 2>/dev/null) &&
+            grep -qx 'checksums.txt.sigstore.json' <<<"$assets"; then
             echo "published=true" >> "$GITHUB_OUTPUT"
             echo "$GITHUB_REF_NAME is already published; the registries take its archives as they are"
           else

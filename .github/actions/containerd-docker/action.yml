@@ -30,8 +30,9 @@ runs:
           if docker info >/dev/null 2>&1; then break; fi
           sleep 1
         done
-        docker info --format '{{json .DriverStatus}}'
-        if ! docker info --format '{{json .DriverStatus}}' | grep -q 'containerd.snapshotter'; then
+        driver=$(docker info --format '{{json .DriverStatus}}')
+        echo "$driver"
+        if ! grep -q 'containerd.snapshotter' <<<"$driver"; then
           echo "the containerd image store did not take: the daemon still keeps images in its classic store," >&2
           echo "so the live transfer would export an archive production never exports and prove nothing." >&2
           docker info >&2

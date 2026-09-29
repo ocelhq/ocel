@@ -100,7 +100,7 @@ instance_of() {
         --region "$(region_of "$name")" \
         --filters "Name=tag:ocel:name,Values=$name" "Name=instance-state-name,Values=$LIVE_STATES" \
         --query 'Reservations[].Instances[].InstanceId' \
-        --output text | tr '\t' '\n' | sed '/^$/d' | head -n1
+        --output text | tr '\t' '\n' | sed -n '/./p' | sed -n 1p
 }
 
 addr_of() {

@@ -22,7 +22,7 @@ lanes=$1
 [ -s "$lanes" ] || usage
 
 as_admin() {
-    if id -nG | grep -qw incus-admin; then
+    if [[ " $(id -nG) " == *" incus-admin "* ]]; then
         bash -c "$1"
     else
         sg incus-admin -c "$1"
@@ -44,7 +44,7 @@ host() {
 }
 
 host "before the lanes"
-if cut -f4 "$lanes" | grep -qx ''; then
+if awk -F'\t' '$4 == "" { bare = 1 } END { exit !bare }' "$lanes"; then
     as_admin "$here/incus.sh fetch"
 fi
 

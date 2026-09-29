@@ -79,7 +79,8 @@ zone_of() {
     fi
     zone=$(gcloud compute instances list \
         --filter="name=$(resource_name "$1")" \
-        --format='value(zone.basename())' | head -n1)
+        --format='value(zone.basename())')
+    zone=${zone%%$'\n'*}
     printf '%s\n' "${zone:-$ZONE}"
 }
 
