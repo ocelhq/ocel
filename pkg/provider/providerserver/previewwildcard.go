@@ -192,8 +192,7 @@ func (w *wildcards) reconcileEntry(ctx context.Context, front edge.Edge, answeri
 	if err != nil {
 		return "", err
 	}
-	w.recorded.Host.ClientCertificateDigests = digestClientCertificates(claimed.trusted)
-	superseded := claimed.recordIssued(&w.recorded.Host)
+	superseded := claimed.recordOn(&w.recorded.Host)
 	if err := w.save(ctx); err != nil {
 		return "", err
 	}
@@ -206,31 +205,65 @@ func (w *wildcards) claimEntry(ctx context.Context, front edge.Edge, answering r
 	if err != nil {
 		return originClaim{}, err
 	}
-	wildcard := w.recorded.Hostname()
-	claimed := originClaim{}
-	origin, trusted, err := claimShielded(ctx, front, wildcard, func(ctx context.Context, clientCertificates []string) (edge.Origin, error) {
-		claim := router.Claim{Hostname: wildcard, Certificate: w.recorded.Host.Certificate.ID, ClientCertificates: clientCertificates}
-		return claimCertified(ctx, front, claim, &claimed.issued, entry.ClaimPreviewEntry)
-	})
-	claimed.trusted = trusted
-	if err != nil {
-		return claimed, err
+	claim := router.Claim{Hostname: w.recorded.Hostname(), Certificate: w.recorded.Host.Certificate.ID}
+	return claimOrigin(ctx, front, claim, entry.ClaimPreviewEntry, w.reserveOriginCertificate)
+}
+
+var errPreviewEntryRenewing = errors.New("another run is renewing the certificate the shared preview entry is answered with")
+
+const reservationAttempts = 8
+
+func (w *wildcards) reserveOriginCertificate(ctx context.Context, issued edge.OriginCertificate) (func(context.Context) error, error) {
+	prior := w.recorded.Host
+	if err := w.swapOriginCertificate(ctx, prior.OriginCertificateID, issued.ID, issued.ExpiresAt); err != nil {
+		return nil, err
 	}
-	if origin.Address != "" {
-		claimed.origin = &origin
+	return func(ctx context.Context) error {
+		return w.swapOriginCertificate(ctx, issued.ID, prior.OriginCertificateID, prior.OriginCertificateExpiresAt)
+	}, nil
+}
+
+func (w *wildcards) swapOriginCertificate(ctx context.Context, from, to string, expiresAt time.Time) error {
+	name := stackrecords.WildcardKey(environment.TierPreview)
+	for range reservationAttempts {
+		entry, err := keyvalue.ReadOrEmpty(ctx, w.keyValues, name)
+		if err != nil {
+			return fmt.Errorf("read %s: %w", name, err)
+		}
+		var recorded stackrecords.Wildcard
+		if len(entry.Value) > 0 {
+			if err := json.Unmarshal(entry.Value, &recorded); err != nil {
+				return fmt.Errorf("read %s: %w", name, err)
+			}
+		}
+		if recorded.Host.OriginCertificateID != from {
+			return fmt.Errorf("%w on %s: deploy again once it finishes", errPreviewEntryRenewing, w.recorded.Hostname())
+		}
+		recorded.Host.OriginCertificateID, recorded.Host.OriginCertificateExpiresAt = to, expiresAt
+		if entry.Value, err = json.Marshal(recorded); err != nil {
+			return fmt.Errorf("record %s: %w", name, err)
+		}
+		_, err = w.keyValues.Write(ctx, entry)
+		if errors.Is(err, keyvalue.ErrStale) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("record %s: %w", name, err)
+		}
+		return nil
 	}
-	return claimed, nil
+	return fmt.Errorf("%w on %s: its record changed under every one of %d attempts", errPreviewEntryRenewing, w.recorded.Hostname(), reservationAttempts)
 }
 
 func (w *wildcards) reclaimEntry(ctx context.Context, front edge.Edge, runProgress progress.Progress) error {
 	if !forwardsToRouter(front) || !w.recorded.IsRecorded() || w.recorded.Edge != front.Kind() {
 		return nil
 	}
-	changed, err := stagedClientCertificatesChanged(ctx, front, w.recorded.Hostname(), w.recorded.Host.ClientCertificateDigests)
+	changed, err := clientCertificatesChanged(ctx, front, w.recorded.Hostname(), w.recorded.Host.ClientCertificateDigests)
 	if err != nil {
 		return err
 	}
-	if !changed && !originCertificateDue(&w.recorded.Host, time.Now()) {
+	if !changed && !isOriginCertificateDue(&w.recorded.Host, time.Now()) {
 		return nil
 	}
 	answering, err := findPairedRouter(w.provider, front.Kind())
@@ -239,6 +272,10 @@ func (w *wildcards) reclaimEntry(ctx context.Context, front edge.Edge, runProgre
 	}
 	runProgress.Say("Claiming the shared preview entry on " + w.recorded.Hostname() + " again: what its origin trusts or answers with is due to change")
 	_, err = w.reconcileEntry(ctx, front, answering, runProgress)
+	if errors.Is(err, errPreviewEntryRenewing) {
+		runProgress.Say(err.Error())
+		return nil
+	}
 	return err
 }
 

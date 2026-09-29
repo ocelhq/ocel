@@ -140,6 +140,21 @@ type Edge struct {
 	disclaimed []string
 	purged     [][]string
 	purgeError error
+
+	refusesCertified error
+	onIssued         func()
+}
+
+func (e *Edge) RefusesClaimsCarryingAnOriginCertificate(err error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.refusesCertified = err
+}
+
+func (e *Edge) OnOriginCertificateIssued(fn func()) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.onIssued = fn
 }
 
 func (e *Edge) RefusePurges(err error) {
@@ -204,18 +219,23 @@ func (e *Edge) RevokedOriginCertificates() []string {
 
 func (e *Edge) issueOriginCertificate(_ context.Context, hostname string) (edge.OriginCertificate, error) {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 	e.issued++
 	life := e.originLife
 	if life == 0 {
 		life = 365 * 24 * time.Hour
 	}
-	return edge.OriginCertificate{
+	issued := edge.OriginCertificate{
 		ID:          fmt.Sprintf("origin-certificate-%d", e.issued),
 		Certificate: "origin certificate for " + hostname,
 		Key:         "origin key for " + hostname,
 		ExpiresAt:   time.Now().Add(life),
-	}, nil
+	}
+	then := e.onIssued
+	e.mu.Unlock()
+	if then != nil {
+		then()
+	}
+	return issued, nil
 }
 
 func (e *Edge) revokeOriginCertificate(_ context.Context, id string) error {
@@ -254,23 +274,29 @@ func (e *Edge) presentClientCertificate(context.Context, string) error {
 	return nil
 }
 
-func (e *Edge) recordClaim(claim router.Claim) edge.Origin {
+func (e *Edge) recordClaim(claim router.Claim) (edge.Origin, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if claim.OriginCertificate.ID != "" && e.refusesCertified != nil {
+		return edge.Origin{}, e.refusesCertified
+	}
 	e.events = append(e.events, "claim")
 	e.claims = append(e.claims, claim)
 	if !slices.Contains(e.holding, claim.Hostname) {
 		e.holding = append(e.holding, claim.Hostname)
 	}
-	return e.certifiedOrigin(claim)
+	return e.certifiedOrigin(claim), nil
 }
 
-func (e *Edge) recordPreviewEntryClaim(claim router.Claim) edge.Origin {
+func (e *Edge) recordPreviewEntryClaim(claim router.Claim) (edge.Origin, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if claim.OriginCertificate.ID != "" && e.refusesCertified != nil {
+		return edge.Origin{}, e.refusesCertified
+	}
 	e.events = append(e.events, "claim")
 	e.entries = append(e.entries, claim)
-	return e.certifiedOrigin(claim)
+	return e.certifiedOrigin(claim), nil
 }
 
 func (e *Edge) recordPreviewEntryDisclaim(baseDomain string) {

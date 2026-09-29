@@ -123,7 +123,7 @@ func (d *hostnames) attachHostname(ctx context.Context, target ConfiguredHost, p
 		return false, err
 	}
 	if d.state.Ready(host, d.front.Kind(), answering) && hostState.Certificate.ID == priorCertID {
-		reclaimed, err := d.reclaimShielded(ctx, target, &hostState, progress)
+		reclaimed, err := d.refreshOriginClaim(ctx, target, &hostState, progress)
 		if err != nil {
 			return reclaimed, err
 		}
@@ -170,7 +170,7 @@ func (d *hostnames) attachHostname(ctx context.Context, target ConfiguredHost, p
 
 func (d *hostnames) bindOrigin(ctx context.Context, target ConfiguredHost, hostState *stackrecords.HostnameState, progress progress.Progress) error {
 	host := target.Hostname
-	claimed, err := d.claimOrigin(ctx, target, hostState.Certificate.ID)
+	claimed, err := d.claimRouterOrigin(ctx, target, hostState.Certificate.ID)
 	if err != nil {
 		return err
 	}
@@ -179,8 +179,7 @@ func (d *hostnames) bindOrigin(ctx context.Context, target ConfiguredHost, hostS
 		return err
 	}
 	hostState.Edge = d.front.Kind()
-	hostState.ClientCertificateDigests = digestClientCertificates(claimed.trusted)
-	superseded := claimed.recordIssued(hostState)
+	superseded := claimed.recordOn(hostState)
 	d.state.SetHost(host, *hostState)
 	if err := d.checkpoint(ctx); err != nil {
 		return err
@@ -189,15 +188,15 @@ func (d *hostnames) bindOrigin(ctx context.Context, target ConfiguredHost, hostS
 	return nil
 }
 
-func (d *hostnames) reclaimShielded(ctx context.Context, target ConfiguredHost, hostState *stackrecords.HostnameState, progress progress.Progress) (bool, error) {
+func (d *hostnames) refreshOriginClaim(ctx context.Context, target ConfiguredHost, hostState *stackrecords.HostnameState, progress progress.Progress) (bool, error) {
 	if !d.front.Facts().ProxiesRecords {
 		return false, nil
 	}
-	changed, err := stagedClientCertificatesChanged(ctx, d.front, target.Hostname, hostState.ClientCertificateDigests)
+	changed, err := clientCertificatesChanged(ctx, d.front, target.Hostname, hostState.ClientCertificateDigests)
 	if err != nil {
 		return false, err
 	}
-	due := originCertificateDue(hostState, time.Now())
+	due := isOriginCertificateDue(hostState, time.Now())
 	if !changed && !due {
 		return false, nil
 	}
@@ -209,26 +208,17 @@ func (d *hostnames) reclaimShielded(ctx context.Context, target ConfiguredHost, 
 	return true, d.bindOrigin(ctx, target, hostState, progress)
 }
 
-func (d *hostnames) claimOrigin(ctx context.Context, target ConfiguredHost, certificate string) (originClaim, error) {
+func (d *hostnames) claimRouterOrigin(ctx context.Context, target ConfiguredHost, certificate string) (originClaim, error) {
 	if !d.front.Facts().ProxiesRecords {
 		return originClaim{}, nil
 	}
-	claimed := originClaim{}
-	origin, trusted, err := claimShielded(ctx, d.front, target.Hostname, func(ctx context.Context, clientCertificates []string) (edge.Origin, error) {
-		routed, err := d.openRouterStack()
-		if err != nil {
-			return edge.Origin{}, err
-		}
-		claim := router.Claim{Hostname: target.Hostname, App: target.App, Certificate: certificate, ClientCertificates: clientCertificates}
-		origin, err := claimCertified(ctx, d.front, claim, &claimed.issued, routed.Claim)
-		return origin, errors.Join(err, d.adopt(routed))
-	})
-	claimed.trusted = trusted
-	if err != nil || origin.Address == "" {
-		return claimed, err
+	routed, err := d.openRouterStack()
+	if err != nil {
+		return originClaim{}, err
 	}
-	claimed.origin = &origin
-	return claimed, nil
+	claim := router.Claim{Hostname: target.Hostname, App: target.App, Certificate: certificate}
+	claimed, err := claimOrigin(ctx, d.front, claim, routed.Claim, nil)
+	return claimed, errors.Join(err, d.adopt(routed))
 }
 
 func (d *hostnames) disclaim(ctx context.Context, hostname string) error {

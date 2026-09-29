@@ -199,7 +199,7 @@ func (r Router) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
 }
 
 func (r Router) ClaimPreviewEntry(_ context.Context, claim router.Claim) (edge.Origin, error) {
-	return r.edge.recordPreviewEntryClaim(claim), nil
+	return r.edge.recordPreviewEntryClaim(claim)
 }
 
 func (r Router) DisclaimPreviewEntry(_ context.Context, baseDomain string) error {
@@ -241,7 +241,7 @@ func (s *RouterStack) State() router.StackState {
 }
 
 func (s *RouterStack) Claim(_ context.Context, claim router.Claim) (edge.Origin, error) {
-	return s.stack.front.recordClaim(claim), nil
+	return s.stack.front.recordClaim(claim)
 }
 
 func (s *RouterStack) Disclaim(_ context.Context, hostname string) error {

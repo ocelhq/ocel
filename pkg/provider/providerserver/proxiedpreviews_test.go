@@ -2,12 +2,14 @@ package providerserver_test
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/router"
 )
@@ -115,5 +117,59 @@ func TestTheReleasePlanOfAPreviewWildcardAnEdgeForwardsNamesWhatItsRouterTakesDo
 	}
 	if !slices.Equal(entries, []string{"*.preview.acme.com"}) {
 		t.Errorf("the release plan names preview entries %v, want *.preview.acme.com: the router the edge forwards previews to takes its entry down", entries)
+	}
+}
+
+func dueSharedPreviewEntry(t *testing.T) (contractv1connect.ProviderServiceClient, *fake.Provider, *fake.Edge) {
+	t.Helper()
+	client, vendor := contractServed(t, "1.0.0")
+	relay := vendor.Edges().(*fake.Edges).Edge(fake.KindDirect)
+	relay.ProxiesRecords()
+	relay.IssuesOriginCertificates()
+	if result := usePreviewWildcard(t, client, "preview.acme.com", &contractv1.EdgeSelection{Kind: string(fake.KindDirect)}); !result.GetSuccess() {
+		t.Fatalf("UsePreviewWildcard() = %q", result.GetError())
+	}
+	relay.ForgetsOriginCertificate("*.preview.acme.com")
+	return client, vendor, relay
+}
+
+func TestTheSharedPreviewEntryRenewedByAnotherRunMeanwhileKeepsThatRunsCertificate(t *testing.T) {
+	t.Parallel()
+	client, vendor, relay := dueSharedPreviewEntry(t)
+	relay.OnOriginCertificateIssued(func() {
+		recorded := readRecordedWildcard(t, vendor)
+		recorded.Host.OriginCertificateID = "origin-certificate-of-another-run"
+		seedWildcard(t, vendor, recorded)
+	})
+
+	if result := usePreviewWildcard(t, client, "preview.acme.com", &contractv1.EdgeSelection{Kind: string(fake.KindDirect)}); result.GetSuccess() {
+		t.Error("UsePreviewWildcard() succeeded while another run renewed the entry's certificate, want it told to run again once that finishes")
+	}
+	for _, entry := range relay.PreviewEntryClaims() {
+		if entry.OriginCertificate.ID == "origin-certificate-2" {
+			t.Errorf("the router took the preview entry with %s, want it never handed over: the record names the other run's certificate, and the one the router answers with must be the one recorded", entry.OriginCertificate.ID)
+		}
+	}
+	if recorded := readRecordedWildcard(t, vendor).Host.OriginCertificateID; recorded != "origin-certificate-of-another-run" {
+		t.Errorf("the wildcard records origin certificate %q, want the other run's", recorded)
+	}
+	if revoked := relay.RevokedOriginCertificates(); !slices.Equal(revoked, []string{"origin-certificate-2"}) {
+		t.Errorf("the edge revoked %v, want the certificate this run issued and never handed over, and nothing the other run answers with", revoked)
+	}
+}
+
+func TestTheSharedPreviewEntryKeepsItsRecordedCertificateWhenTheRouterRefusesItsSuccessor(t *testing.T) {
+	t.Parallel()
+	client, vendor, relay := dueSharedPreviewEntry(t)
+	relay.RefusesClaimsCarryingAnOriginCertificate(errors.New("the box could not load the certificate"))
+
+	if result := usePreviewWildcard(t, client, "preview.acme.com", &contractv1.EdgeSelection{Kind: string(fake.KindDirect)}); result.GetSuccess() {
+		t.Fatal("UsePreviewWildcard() succeeded, want it failed with the claim the router refused")
+	}
+	if recorded := readRecordedWildcard(t, vendor).Host.OriginCertificateID; recorded != "origin-certificate-1" {
+		t.Errorf("the wildcard records origin certificate %q, want origin-certificate-1, which the router still answers with", recorded)
+	}
+	if revoked := relay.RevokedOriginCertificates(); !slices.Equal(revoked, []string{"origin-certificate-2"}) {
+		t.Errorf("the edge revoked %v, want the successor the router refused, and not the certificate it still answers with", revoked)
 	}
 }

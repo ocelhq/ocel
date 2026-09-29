@@ -2,6 +2,7 @@ package providerserver_test
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"slices"
 	"testing"
@@ -272,5 +273,29 @@ func TestTheRemovalPlanNamesAClaimGivenBackAndTakenAgain(t *testing.T) {
 	}
 	if !slices.Equal(claimed, []string{"app.acme.com"}) {
 		t.Errorf("the removal plan names claims %v, want app.acme.com, which the router holds again", claimed)
+	}
+}
+
+func TestAnOriginCertificateIssuedForAClaimTheRouterRefusesIsRevoked(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	relay := vendor.Edges().(*fake.Edges).Edge(fake.KindRelay)
+	relay.ProxiesRecords()
+	relay.IssuesOriginCertificates()
+	relay.RefusesClaimsCarryingAnOriginCertificate(errors.New("the box could not load the certificate"))
+	deployed(t, vendor, environment.TierProduction, "shop")
+
+	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
+		Slug:       "shop",
+		Configured: []*contractv1.ConfiguredHostname{{Hostname: "app.acme.com", App: "web"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result, err := drain(stream); err != nil || result.GetSuccess() {
+		t.Fatalf("AddHostname() succeeded = %t, %v, want it failed with the claim the router refused", result.GetSuccess(), err)
+	}
+	if revoked := relay.RevokedOriginCertificates(); !slices.Equal(revoked, []string{"origin-certificate-1"}) {
+		t.Errorf("the edge revoked %v, want origin-certificate-1: a certificate nothing answers with stays valid for a year unless it is revoked", revoked)
 	}
 }
