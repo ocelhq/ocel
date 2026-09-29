@@ -17,7 +17,7 @@ import { isLoopback, siblingOriginFetch } from "../src/next/dispatch-signing.mjs
 const LOCAL_BUNDLE = "local-bundle";
 const SIBLING_BUNDLE = "other-bundle";
 const SIBLING_URL = "https://abc123.lambda-url.us-east-1.on.aws";
-const EDGE_KIND = "api-gateway";
+const ROUTER_KIND = "api-gateway";
 
 const credentials = {
   AWS_ACCESS_KEY_ID: "AKIAEXAMPLE",
@@ -76,7 +76,7 @@ function host(): DispatchHost {
 
   return {
     manifest,
-    edgeKind: EDGE_KIND,
+    routerKind: ROUTER_KIND,
     keepCacheTags: true,
     localOrigin,
     functionUrls: { [SIBLING_BUNDLE]: SIBLING_URL },
@@ -171,7 +171,7 @@ test("only a deploy that declared origin dispatch hosts it", () => {
 });
 
 test("origin dispatch without a routing manifest refuses to boot", () => {
-  expect(() => readDispatchHost({ OCEL_EDGE_KIND: "cloudfront" }, localOrigin)).toThrow(
+  expect(() => readDispatchHost({ OCEL_ROUTER_KIND: "cloudfront" }, localOrigin)).toThrow(
     /OCEL_ROUTING_MANIFEST/,
   );
 });
@@ -207,7 +207,7 @@ test("the env names the entry function's own bundle as the loopback origin", asy
 
   const built = readDispatchHost(
     {
-      OCEL_EDGE_KIND: "cloudfront",
+      OCEL_ROUTER_KIND: "cloudfront",
       OCEL_ROUTING_MANIFEST: path,
       OCEL_FUNCTION_URLS: JSON.stringify({ [SIBLING_BUNDLE]: SIBLING_URL }),
       OCEL_ASSET_PREFIX: "prod/shop/web/r0a1b2c3d/assets",
@@ -219,7 +219,7 @@ test("the env names the entry function's own bundle as the loopback origin", asy
   );
 
   expect(built.manifest.entry).toBe(LOCAL_BUNDLE);
-  expect(built.edgeKind).toBe("cloudfront");
+  expect(built.routerKind).toBe("cloudfront");
   expect(built.functionUrls).toEqual({ [SIBLING_BUNDLE]: SIBLING_URL });
   expect(built.assetPrefix).toBe("prod/shop/web/r0a1b2c3d/assets");
   expect(built.assetBucket).toBeUndefined();
@@ -284,7 +284,7 @@ test("an asset bucket the function cannot read refuses to boot", async () => {
   await writeFile(path, JSON.stringify(manifest));
 
   const env = {
-    OCEL_EDGE_KIND: "cloudfront",
+    OCEL_ROUTER_KIND: "cloudfront",
     OCEL_ROUTING_MANIFEST: path,
     OCEL_ASSET_BUCKET: "assets-bucket",
     AWS_REGION: "us-east-1",
@@ -321,14 +321,14 @@ test("a sibling call with no credentials fails loudly", async () => {
 test("every dispatched response names the router that served it", async () => {
   for (const path of ["/local", "/sibling"]) {
     const response = await serving(path, forged);
-    expect(response.headers.get("x-ocel-router")).toBe(EDGE_KIND);
+    expect(response.headers.get("x-ocel-router")).toBe(ROUTER_KIND);
   }
 });
 
 test("the router an origin claims is replaced by the one in front of it", async () => {
   const marked = await dispatchRequest(
     new Request("https://app.example/sibling"),
-    { ...host(), edgeKind: "cloudflare" },
+    { ...host(), routerKind: "cloudflare" },
     () => {},
   );
 
@@ -336,10 +336,10 @@ test("the router an origin claims is replaced by the one in front of it", async 
   expect(await marked.text()).toBe("sibling");
 });
 
-test("dispatch hosted behind no edge marks nothing", async () => {
+test("dispatch handed no router marks nothing", async () => {
   const bare = await dispatchRequest(
     new Request("https://app.example/sibling"),
-    { ...host(), edgeKind: "" },
+    { ...host(), routerKind: "" },
     () => {},
   );
 

@@ -101,6 +101,26 @@ func TestAProjectWithNoEdgeIsServedByTheRouterNoEdgePairsWithAndRemovedThroughNo
 	}
 }
 
+func TestEachAppStackIsHandedTheRouterItsAppFlipsThroughAndNotItsEdge(t *testing.T) {
+	builtProject(t)
+	p := fake.NewProvider(fake.Options{})
+	client := servedBy(t, unfronted{p})
+	bootstrappedOverRPC(t, client)
+
+	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
+		t.Fatalf("Deploy() with no edge = %q", result.GetError())
+	}
+	var routers []router.Kind
+	for _, spec := range p.FakeStacks().Provisioned() {
+		if spec.App != nil && spec.App.App == "web" {
+			routers = append(routers, spec.App.Router)
+		}
+	}
+	if !slices.Equal(routers, []router.Kind{fake.RouterDirect}) {
+		t.Errorf("web's stack was handed routers %v, want [%s]: the router, not the edge, names itself on what the app answers", routers, fake.RouterDirect)
+	}
+}
+
 type pairedForContainersOnly struct{ *fake.Provider }
 
 func (p pairedForContainersOnly) Facts() provider.Facts {

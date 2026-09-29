@@ -24,7 +24,7 @@ export function withoutClientControl(headers: Headers): Headers {
 
 export interface DispatchHost {
   manifest: RoutingManifest;
-  edgeKind: string;
+  routerKind: string;
   keepCacheTags: boolean;
   localOrigin: string;
   functionUrls: Record<string, string>;
@@ -71,7 +71,7 @@ export async function dispatchRequest(
   const stripped = new Request(request, {
     headers: withoutClientControl(request.headers),
   });
-  return withRouterHeader(await serve(stripped, newRouteDeps(host, waitUntil)), host.edgeKind);
+  return withRouterHeader(await serve(stripped, newRouteDeps(host, waitUntil)), host.routerKind);
 }
 
 export function newDispatchInvoke(host: DispatchHost): Invoke {
@@ -117,7 +117,7 @@ export function readDispatchHost(env: NodeJS.ProcessEnv, localOrigin: string): D
 
   return {
     manifest,
-    edgeKind: env.OCEL_EDGE_KIND ?? "",
+    routerKind: env.OCEL_ROUTER_KIND ?? "",
     keepCacheTags: invalidatesByCacheTag(env),
     localOrigin,
     functionUrls: siblingFunctionUrls(env[functionUrlsVar]),

@@ -178,7 +178,7 @@ func TestEntryFunctionGetsTheEdgeKindAndItsSiblingURLs(t *testing.T) {
 				"fn--web--admin": {Bucket: "artifacts", Key: "admin.zip"},
 			},
 			Layers:   testRuntimeLayers(),
-			Env:      map[string]string{edgeKindEnv: string(cloudfront.Kind)},
+			Env:      map[string]string{routerKindEnv: string(cloudfront.Kind)},
 			Dispatch: host,
 			RoleArn:  role.Arn,
 			RoleName: role.Name,
@@ -189,8 +189,8 @@ func TestEntryFunctionGetsTheEdgeKindAndItsSiblingURLs(t *testing.T) {
 	}
 
 	entry := functionEnvOf(t, rec, functionCoordinate("shop", stack, "fn--web--entry").PhysicalName(maxLambdaBaseNameLen))
-	if entry[edgeKindEnv] != string(cloudfront.Kind) {
-		t.Errorf("%s = %q, want the edge kind the deploy chose", edgeKindEnv, entry[edgeKindEnv])
+	if entry[routerKindEnv] != string(cloudfront.Kind) {
+		t.Errorf("%s = %q, want the router kind the deploy chose", routerKindEnv, entry[routerKindEnv])
 	}
 	if entry[routingManifestEnv] != routingManifestInTask {
 		t.Errorf("%s = %q, want the manifest packed beside the handler", routingManifestEnv, entry[routingManifestEnv])
@@ -220,7 +220,7 @@ func TestASiblingFunctionHostsNoDispatch(t *testing.T) {
 			Args:      argsFor(routedFunctions()),
 			Artifacts: map[string]artifactRef{},
 			Layers:    testRuntimeLayers(),
-			Env:       map[string]string{edgeKindEnv: string(cloudfront.Kind)},
+			Env:       map[string]string{routerKindEnv: string(cloudfront.Kind)},
 			Dispatch:  host,
 			RoleArn:   pulumi.String("arn:aws:iam::123456789012:role/app"),
 			RoleName:  pulumi.String("app"),
@@ -231,8 +231,8 @@ func TestASiblingFunctionHostsNoDispatch(t *testing.T) {
 	}
 
 	sibling := functionEnvOf(t, rec, functionCoordinate("shop", stack, "fn--web--admin").PhysicalName(maxLambdaBaseNameLen))
-	if sibling[edgeKindEnv] != string(cloudfront.Kind) {
-		t.Errorf("%s = %q, want every function to learn the edge kind", edgeKindEnv, sibling[edgeKindEnv])
+	if sibling[routerKindEnv] != string(cloudfront.Kind) {
+		t.Errorf("%s = %q, want every function to learn the router kind", routerKindEnv, sibling[routerKindEnv])
 	}
 	for _, key := range []string{routingManifestEnv, functionURLsEnv} {
 		if _, wired := sibling[key]; wired {
@@ -272,22 +272,26 @@ func TestAnEdgeThatRunsNoCodeLeavesPathDispatchToTheOrigin(t *testing.T) {
 	}
 }
 
-func TestAppEnvNamesTheEdgeKind(t *testing.T) {
+func TestAppEnvNamesTheRouterItsAppFlipsThroughAndNotItsEdge(t *testing.T) {
 	t.Parallel()
 
-	env := plannedEnv(t, routedConfig(t, cloudfront.Kind), routedApp(), fakeEdgeOf(cloudfront.Kind))
-	if env[edgeKindEnv] != string(cloudfront.Kind) {
-		t.Errorf("%s = %q, want the kind of edge the deploy chose", edgeKindEnv, env[edgeKindEnv])
+	release := releasing(t, routedConfig(t, cloudfront.Kind))
+	routed := func(kind router.Kind) map[string]string {
+		return release.appEnv(provider.StackSpec{
+			Kind: provider.StackApp,
+			Edge: fakeEdgeOf(cloudfront.Kind),
+			App:  &provider.AppSpec{App: "web", Router: kind},
+		}, appBundle{}, sessionScope{})
 	}
 
-	behind := plannedEnv(t, routedConfig(t, cloudflare.Kind), routedApp(), fakeEdgeOf(cloudflare.Kind))
-	if behind[edgeKindEnv] != string(cloudflare.Kind) {
-		t.Errorf("%s = %q, want the Cloudflare kind named too", edgeKindEnv, behind[edgeKindEnv])
+	if env := routed("relay"); env["OCEL_ROUTER_KIND"] != "relay" {
+		t.Errorf("OCEL_ROUTER_KIND = %q behind CloudFront for an app flipping through relay, want relay: the dispatch host names the router on every answer, and liveness expects the router the app pairs with", env["OCEL_ROUTER_KIND"])
 	}
-
-	none := plannedEnv(t, Config{}, routedApp(), nil)
-	if _, named := none[edgeKindEnv]; named {
-		t.Errorf("%s = %q, want no kind where the deploy binds no edge", edgeKindEnv, none[edgeKindEnv])
+	if env := routed(""); env["OCEL_ROUTER_KIND"] != "" {
+		t.Errorf("OCEL_ROUTER_KIND = %q for an app handed no router, want it unset", env["OCEL_ROUTER_KIND"])
+	}
+	if env := routed("relay"); env["OCEL_EDGE_KIND"] != "" {
+		t.Errorf("OCEL_EDGE_KIND = %q, want it unset: nothing the function runs reads the edge's kind", env["OCEL_EDGE_KIND"])
 	}
 }
 
@@ -296,7 +300,7 @@ func TestTheEnvBudgetChargesForSiblingURLsStillToResolve(t *testing.T) {
 
 	host := newDispatchHostFor(t, routedConfig(t, cloudfront.Kind))
 
-	base := map[string]string{edgeKindEnv: string(cloudfront.Kind)}
+	base := map[string]string{routerKindEnv: string(cloudfront.Kind)}
 	planned := host.plannedEntryEnv(base, manifestAppFunctions(routedFunctions()))
 	if charged := len(planned[functionURLsEnv]); charged < len("/admin")+functionURLBudgetBytes {
 		t.Errorf("%s charges %d bytes, want an upper bound on the URL Pulumi resolves later", functionURLsEnv, charged)
@@ -346,7 +350,7 @@ func TestTheEntryRoleMayInvokeItsSiblingsAndTheOptimizer(t *testing.T) {
 			Args:      argsFor(routedFunctions()),
 			Artifacts: map[string]artifactRef{},
 			Layers:    testRuntimeLayers(),
-			Env:       map[string]string{edgeKindEnv: string(cloudfront.Kind)},
+			Env:       map[string]string{routerKindEnv: string(cloudfront.Kind)},
 			Dispatch:  host,
 			RoleArn:   role.Arn,
 			RoleName:  role.Name,

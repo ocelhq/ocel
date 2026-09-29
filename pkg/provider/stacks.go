@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/router"
 )
 
 type Stacks interface {
@@ -73,6 +74,7 @@ type AppSpec struct {
 	Entry      string
 	Deployment string
 	Compute    Compute
+	Router     router.Kind
 	Functions  []FunctionSpec
 
 	Image           string

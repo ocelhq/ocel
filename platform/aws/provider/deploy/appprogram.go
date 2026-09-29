@@ -323,8 +323,10 @@ func bindingResource(binding provider.Binding) string {
 func (r *release) appEnv(spec provider.StackSpec, bundle appBundle, sessions sessionScope) map[string]string {
 	app := spec.App
 	env := map[string]string{}
+	if app.Router != "" {
+		env[routerKindEnv] = string(app.Router)
+	}
 	if spec.Edge != nil {
-		env[edgeKindEnv] = string(spec.Edge.Kind())
 		facts := spec.Edge.Facts()
 		if !facts.RunsCode {
 			env[edge.OriginDispatchVar] = "1"
