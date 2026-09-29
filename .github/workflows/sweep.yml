@@ -141,6 +141,46 @@ jobs:
       - name: Reclaim the cells and namespaces no run is using
         run: pnpm --filter @ocel-tests/journeys sweep --target aws
 
+  zone:
+    name: zone
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.E2E_CLOUDFLARE_API_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: ./.github/actions/node-workspace
+        with:
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+
+      - name: The node bundles the fixtures import
+        run: pnpm turbo run build --filter=ocel
+
+      - name: Guard the Cloudflare account this sweep may touch
+        env:
+          EXPECTED_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
+        run: tests/next-compat/guard-cloudflare.sh
+
+      - name: Name the zone this sweep may touch
+        env:
+          ZONE: ${{ vars.E2E_PREVIEW_DOMAIN }}
+        run: |
+          set -euo pipefail
+          [ -n "$ZONE" ] || { echo "the repository variable behind ZONE is unset" >&2; exit 1; }
+          ZONE=${ZONE#\*.}
+          echo "OCEL_JOURNEY_ZONE=$ZONE" >> "$GITHUB_ENV"
+
+      - name: Reclaim the records and origin certificates a dead vps run left in the zone
+        run: pnpm --filter @ocel-tests/journeys sweep:zone --target vps
+
   previews:
     name: previews
     runs-on: ubuntu-latest
