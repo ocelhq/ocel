@@ -193,7 +193,7 @@ func TestATeardownThatStoppedAfterTheStoreWentIsFinishedByTheNextRun(t *testing.
 	machine := &box{kept: sealedRootKey()}
 	stack := aStackName(t)
 	ref := provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: stack}
-	own := host.StoreAccountKey(naming.InfraStack(ref.Name.Env).String(), "web")
+	own := host.StoreAccountKey(ref.Project, naming.InfraStack(ref.Name.Env).String(), "web")
 
 	stopped := over(machine)
 	binding := provisionedBucket(t, machine, stopped, "uploads")
@@ -246,14 +246,14 @@ func TestAnAppThatGoesTakesItsOwnStoreAccountWithIt(t *testing.T) {
 	}
 
 	joined := strings.Join(machine.commands(), "\n")
-	own := host.StoreAccountKey(naming.InfraStack(ref.Name.Env).String(), "web")
+	own := host.StoreAccountKey(ref.Project, naming.InfraStack(ref.Name.Env).String(), "web")
 	if !strings.Contains(joined, "delete-service-account") || !strings.Contains(joined, own) {
 		t.Errorf("the app went and the account it reached the store under stayed, so a credential outlives what it was minted for:\n%s", joined)
 	}
 	if !strings.Contains(joined, "/kept/"+own) {
 		t.Errorf("the app's sealed store credential was left on the box:\n%s", joined)
 	}
-	if other := host.StoreAccountKey(naming.InfraStack(ref.Name.Env).String(), "api"); strings.Contains(joined, other) {
+	if other := host.StoreAccountKey(ref.Project, naming.InfraStack(ref.Name.Env).String(), "api"); strings.Contains(joined, other) {
 		t.Errorf("removing one app reached for another app's account:\n%s", joined)
 	}
 	if strings.Contains(joined, "docker rm --force '"+vps.StoreName(ref)+"'") {

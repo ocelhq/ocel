@@ -155,8 +155,8 @@ func accountScript(a StoreAccount, call adminCall, now time.Time) (string, error
 	}), nil
 }
 
-func StoreAccountKey(env, app string) string {
-	sum := sha256.Sum256([]byte(env + "/" + app))
+func StoreAccountKey(project, env, app string) string {
+	sum := sha256.Sum256([]byte(project + "/" + env + "/" + app))
 	return "ocel" + hex.EncodeToString(sum[:8])
 }
 

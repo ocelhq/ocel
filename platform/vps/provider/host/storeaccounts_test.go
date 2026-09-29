@@ -89,7 +89,7 @@ func TestAnAppsAccountReachesTheBucketsItWasGrantedAndNoOthers(t *testing.T) {
 	aBucketOn(t, store, "ungranted-bucket")
 
 	account := StoreAccount{
-		AccessKeyID: StoreAccountKey("prod", "web"),
+		AccessKeyID: StoreAccountKey("shop", "prod", "web"),
 		SecretKey:   "an-app-secret",
 		Buckets:     []string{"granted-bucket"},
 	}
@@ -118,7 +118,7 @@ func TestGrantingTheSameAppTwiceLimitsItToWhatItDeclaresNow(t *testing.T) {
 	aBucketOn(t, store, "second-bucket")
 
 	account := StoreAccount{
-		AccessKeyID: StoreAccountKey("prod", "regranted"),
+		AccessKeyID: StoreAccountKey("shop", "prod", "regranted"),
 		SecretKey:   "an-app-secret",
 		Buckets:     []string{"first-bucket"},
 	}
@@ -144,11 +144,11 @@ func TestGrantingTheSameAppTwiceLimitsItToWhatItDeclaresNow(t *testing.T) {
 func TestAnAccountIsNamedInWhatEveryStoreKeepsAnAccessKeyIn(t *testing.T) {
 	t.Parallel()
 
-	key := StoreAccountKey("prod", "web")
+	key := StoreAccountKey("shop", "prod", "web")
 	if len(key) != 20 {
 		t.Errorf("StoreAccountKey() = %q, %d characters, and a store keeps an access key in 3 to 20", key, len(key))
 	}
-	if key == StoreAccountKey("prod", "admin") || key == StoreAccountKey("preview-pr-1", "web") {
+	if key == StoreAccountKey("shop", "prod", "admin") || key == StoreAccountKey("shop", "preview-pr-1", "web") || key == StoreAccountKey("blog", "prod", "web") {
 		t.Error("two apps reach the store under one account, so either reaches what the other was granted")
 	}
 }
@@ -160,7 +160,7 @@ func TestTheSecretAnAppReachesTheStoreWithNeverRidesTheCommandLine(t *testing.T)
 	account := StoreAccount{
 		Store: "shop-prod-store-s3", Endpoint: "http://127.0.0.1:9000", Region: "us-east-1",
 		RootKeyID: "ocel", RootSecret: "root-secret",
-		AccessKeyID: StoreAccountKey("prod", "web"), SecretKey: secret,
+		AccessKeyID: StoreAccountKey("shop", "prod", "web"), SecretKey: secret,
 		Buckets: []string{"shop-prod-uploads"},
 	}
 	calls, err := account.calls()
@@ -213,7 +213,7 @@ func TestAnAppsAccountDrivesTheDataPlaneAndNothingThatReshapesTheBucket(t *testi
 	root := aSignedStore(t, store, "scoped-bucket")
 
 	account := StoreAccount{
-		AccessKeyID: StoreAccountKey("prod", "scoped"),
+		AccessKeyID: StoreAccountKey("shop", "prod", "scoped"),
 		SecretKey:   "an-app-secret",
 		Buckets:     []string{"scoped-bucket"},
 		Sessions:    constants.StoreSessionsBucket() + "/prod/scoped",
