@@ -229,16 +229,62 @@ function compressProbe(request: Request): Response {
   });
 }
 
+function isDeclaredTooLarge(request: Request): boolean {
+  const declared = request.headers.get("content-length");
+  return declared !== null && !(Number(declared) <= MAX_BODY);
+}
+
+function tooLarge(): Response {
+  return json({ error: "request entity too large" }, { status: 413 });
+}
+
+async function readBounded(request: Request): Promise<Buffer | undefined> {
+  if (isDeclaredTooLarge(request)) {
+    return undefined;
+  }
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  const reader = request.body?.getReader();
+  for (;;) {
+    const read = await reader?.read();
+    if (!read || read.done) {
+      return Buffer.concat(chunks);
+    }
+    total += read.value.byteLength;
+    if (total > MAX_BODY) {
+      await reader?.cancel();
+      return undefined;
+    }
+    chunks.push(read.value);
+  }
+}
+
 async function inflateProbe(request: Request): Promise<Response> {
   const encoding = request.headers.get("content-encoding");
-  const raw = Buffer.from(await request.arrayBuffer());
-  const body = encoding === "gzip" ? gunzipSync(raw) : raw;
+  const raw = await readBounded(request);
+  if (raw === undefined) {
+    return tooLarge();
+  }
+  let body = raw;
+  if (encoding === "gzip") {
+    try {
+      body = gunzipSync(raw, { maxOutputLength: MAX_BODY });
+    } catch (error) {
+      if ((error as { code?: string }).code === "ERR_BUFFER_TOO_LARGE") {
+        return tooLarge();
+      }
+      return json({ error: "the body does not decode" }, { status: 400 });
+    }
+  }
   return json({ encoding, bytes: body.byteLength, sha256: sha256(body) });
 }
 
 async function multipartProbe(request: Request): Promise<Response> {
   if (!request.headers.get("content-type")?.startsWith("multipart/form-data")) {
     return json({ error: "multipart/form-data only" }, { status: 415 });
+  }
+  if (request.headers.get("content-length") === null || isDeclaredTooLarge(request)) {
+    return tooLarge();
   }
   const form = await request.formData();
   const fields: Record<string, string> = {};
@@ -261,9 +307,9 @@ async function multipartProbe(request: Request): Promise<Response> {
 }
 
 async function largeIn(request: Request): Promise<Response> {
-  const body = Buffer.from(await request.arrayBuffer());
-  if (body.byteLength > MAX_BODY) {
-    return json({ error: "bad request" }, { status: 413 });
+  const body = await readBounded(request);
+  if (body === undefined) {
+    return tooLarge();
   }
   return json({ bytes: body.byteLength, sha256: sha256(body) });
 }
