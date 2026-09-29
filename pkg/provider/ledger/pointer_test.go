@@ -279,3 +279,34 @@ func TestUnpromotingAPromotionThePointerNeverRecordedIsAnError(t *testing.T) {
 		t.Error("Unpromote(p9) = nil, want an error naming a promotion the pointer does not record")
 	}
 }
+
+func TestRetainKeepsWhatTakingTheActivePromotionBackWouldServe(t *testing.T) {
+	t.Parallel()
+
+	kept, dropped := promoted(t, promotion("p1"), promotion("p2"), promotion("p3")).Retain(0)
+	if got := ids(kept.Promotions); got != "p3,p2" {
+		t.Errorf("kept %s, want p3 and p2: a prune racing p3's flip must leave the promotion a failed flip falls back to", got)
+	}
+	if got := ids(dropped); got != "p1" {
+		t.Errorf("dropped %s, want p1", got)
+	}
+	if after := unpromoted(t, kept, "p3"); after.Active != "p2" {
+		t.Errorf("taking p3 back after the prune leaves the pointer at %q, want p2", after.Active)
+	}
+}
+
+func TestRetainKeepsTheFallbackPastPromotionsAlreadyTakenBack(t *testing.T) {
+	t.Parallel()
+
+	pointer := unpromoted(t, promoted(t, promotion("p1"), promotion("p2"), promotion("p3")), "p2")
+	kept, dropped := pointer.Retain(0)
+	if got := ids(kept.Promotions); got != "p3,p2,p1" {
+		t.Errorf("kept %s, want p3, p2 and p1: p2 was taken back, so taking p3 back falls back to p1", got)
+	}
+	if len(dropped) != 0 {
+		t.Errorf("dropped %s, want nothing", ids(dropped))
+	}
+	if after := unpromoted(t, kept, "p3"); after.Active != "p1" {
+		t.Errorf("taking p3 back after the prune leaves the pointer at %q, want p1", after.Active)
+	}
+}

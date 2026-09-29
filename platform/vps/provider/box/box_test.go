@@ -1076,6 +1076,10 @@ func TestRemovingAPointerTakesTheRouteOfAnAppTheLedgerNoLongerRemembers(t *testi
 	if err := promoted(t, stack, "p2", "web", "b2"); err != nil {
 		t.Fatalf("Promote(p2): %v", err)
 	}
+	staged(t, stack, "web", "b3", "shop-web-3333")
+	if err := promoted(t, stack, "p3", "web", "b3"); err != nil {
+		t.Fatalf("Promote(p3): %v", err)
+	}
 	if _, err := stack.Ledger().Prune(context.Background(), 1, ""); err != nil {
 		t.Fatalf("Prune: %v", err)
 	}
