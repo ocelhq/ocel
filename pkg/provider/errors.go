@@ -40,11 +40,11 @@ func RefusalError(err error) error {
 	if !ok {
 		code = connect.CodeInternal
 	}
-	wire := connect.NewError(code, errors.New(refused.Message))
-	if detail, err := connect.NewErrorDetail(&contractv1.Refusal{Code: wireRefusalCodes[refused.Code]}); err == nil {
-		wire.AddDetail(detail)
+	rpcErr := connect.NewError(code, errors.New(refused.Message))
+	if detail, err := connect.NewErrorDetail(&contractv1.Refusal{Code: protoRefusalCodes[refused.Code]}); err == nil {
+		rpcErr.AddDetail(detail)
 	}
-	return wire
+	return rpcErr
 }
 
 func questionError(err error, asked QuestionRefusal) error {
@@ -52,14 +52,14 @@ func questionError(err error, asked QuestionRefusal) error {
 	if errors.As(err, &already) {
 		return err
 	}
-	wire := connect.NewError(connect.CodePermissionDenied, asked)
+	rpcErr := connect.NewError(connect.CodePermissionDenied, asked)
 	if detail, err := connect.NewErrorDetail(&contractv1.Refusal{Code: contractv1.RefusalCode_REFUSAL_CODE_DENIED}); err == nil {
-		wire.AddDetail(detail)
+		rpcErr.AddDetail(detail)
 	}
-	return wire
+	return rpcErr
 }
 
-var wireRefusalCodes = map[refusal.Code]contractv1.RefusalCode{
+var protoRefusalCodes = map[refusal.Code]contractv1.RefusalCode{
 	refusal.CodeInvalid:  contractv1.RefusalCode_REFUSAL_CODE_INVALID,
 	refusal.CodeNotReady: contractv1.RefusalCode_REFUSAL_CODE_NOT_READY,
 	refusal.CodeDenied:   contractv1.RefusalCode_REFUSAL_CODE_DENIED,
@@ -73,11 +73,11 @@ func RefusedCode(err error) (refusal.Code, bool) {
 	if errors.As(err, &refused) {
 		return refused.Code, true
 	}
-	var wire *connect.Error
-	if !errors.As(err, &wire) {
+	var rpcErr *connect.Error
+	if !errors.As(err, &rpcErr) {
 		return "", false
 	}
-	for _, detail := range wire.Details() {
+	for _, detail := range rpcErr.Details() {
 		value, err := detail.Value()
 		if err != nil {
 			continue
@@ -86,7 +86,7 @@ func RefusedCode(err error) (refusal.Code, bool) {
 		if !ok {
 			continue
 		}
-		for code, encoded := range wireRefusalCodes {
+		for code, encoded := range protoRefusalCodes {
 			if encoded == refused.GetCode() {
 				return code, true
 			}

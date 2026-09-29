@@ -378,13 +378,13 @@ func envSourceError(descriptor envsource.Descriptor, err error) error {
 		for _, credential := range refused {
 			messages = append(messages, fmt.Sprintf("%s logs in with %s, which %s", descriptor.ID(), credential.Variable, credential.Reason))
 		}
-		wire := connect.NewError(connect.CodeFailedPrecondition, errors.New(strings.Join(messages, "\n")))
+		rpcErr := connect.NewError(connect.CodeFailedPrecondition, errors.New(strings.Join(messages, "\n")))
 		for _, credential := range refused {
 			if detail, err := connect.NewErrorDetail(&envvarsv1.CredentialRefusal{Variable: credential.Variable, Unset: credential.Unset, Reason: credential.Reason}); err == nil {
-				wire.AddDetail(detail)
+				rpcErr.AddDetail(detail)
 			}
 		}
-		return wire
+		return rpcErr
 	}
 	if _, refused := provider.RefusedCode(err); refused {
 		return provider.RefusalError(err)

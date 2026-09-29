@@ -152,7 +152,7 @@ func BindingOf(message *bindingsv1.Binding) Binding {
 		Properties: map[string]string{},
 		Grants:     GrantsOf(message),
 	}
-	if kind, known := BindingTypeFromWire(naming.BindingTypeOf(message)); known {
+	if kind, known := BindingTypeFromProto(naming.BindingTypeOf(message)); known {
 		binding.Type = kind
 	}
 	for _, name := range naming.BindingPropertyNames(message) {
@@ -189,26 +189,26 @@ var bindingTypes = map[bindingsv1.BindingType]BindingType{
 	bindingsv1.BindingType_BINDING_TYPE_CUSTOM:   BindingCustom,
 }
 
-var wireBindingTypes = func() map[BindingType]bindingsv1.BindingType {
+var protoBindingTypes = func() map[BindingType]bindingsv1.BindingType {
 	out := make(map[BindingType]bindingsv1.BindingType, len(bindingTypes))
-	for wire, kind := range bindingTypes {
-		out[kind] = wire
+	for encoded, kind := range bindingTypes {
+		out[kind] = encoded
 	}
 	return out
 }()
 
-func WireBindingType(kind BindingType) bindingsv1.BindingType {
-	if wire, known := wireBindingTypes[kind]; known {
-		return wire
+func ProtoBindingType(kind BindingType) bindingsv1.BindingType {
+	if encoded, known := protoBindingTypes[kind]; known {
+		return encoded
 	}
 	return bindingsv1.BindingType_BINDING_TYPE_CUSTOM
 }
 
-func BindingTypeFromWire(wire bindingsv1.BindingType) (BindingType, bool) {
-	kind, known := bindingTypes[wire]
+func BindingTypeFromProto(encoded bindingsv1.BindingType) (BindingType, bool) {
+	kind, known := bindingTypes[encoded]
 	return kind, known
 }
 
 func ResourceEnvName(kind BindingType, resource string) string {
-	return naming.ResourceEnvName(WireBindingType(kind), resource)
+	return naming.ResourceEnvName(ProtoBindingType(kind), resource)
 }

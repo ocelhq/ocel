@@ -42,13 +42,13 @@ func registryDeployRequest() *contractv1.DeployRequest {
 	return namingARegistry(containerDeployRequest("/"))
 }
 
-func wireContains(t *testing.T, event proto.Message, text string) bool {
+func encodingContains(t *testing.T, event proto.Message, text string) bool {
 	t.Helper()
-	wire, err := proto.Marshal(event)
+	encoded, err := proto.Marshal(event)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return bytes.Contains(wire, []byte(text))
+	return bytes.Contains(encoded, []byte(text))
 }
 
 func imageRows(plan *planv1.ChangePlan) []*planv1.Change {
@@ -256,7 +256,7 @@ func TestThePasswordTheDeploySendsReachesTheRegistryAndNothingElse(t *testing.T)
 		t.Fatalf("the registry was opened as %v, want the one target the deploy resolved", opened)
 	}
 	for _, event := range events {
-		if wireContains(t, event, "hunter2") {
+		if encodingContains(t, event, "hunter2") {
 			t.Fatal("the deploy stream contains the registry password")
 		}
 	}

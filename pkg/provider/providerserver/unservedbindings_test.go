@@ -13,7 +13,7 @@ import (
 const boxVendor = provider.Vendor("vps")
 
 func proxied(kind provider.BindingType) bool {
-	return naming.Proxied(provider.WireBindingType(kind))
+	return naming.Proxied(provider.ProtoBindingType(kind))
 }
 
 func reachableResources() []provider.Resource {

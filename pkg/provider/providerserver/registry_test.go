@@ -75,7 +75,7 @@ func TestADeployNamingNoRegistryPushesToTheProvidersOwn(t *testing.T) {
 		t.Errorf("the deploy pushed %v, want the image under the provider's own registry", pushed)
 	}
 	for _, event := range events {
-		if wireContains(t, event, ownRegistry.Password) {
+		if encodingContains(t, event, ownRegistry.Password) {
 			t.Fatal("the deploy stream contains the provider's own registry password")
 		}
 	}

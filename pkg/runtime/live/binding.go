@@ -25,17 +25,17 @@ type Binding struct {
 }
 
 func (l Binding) MarshalJSON() ([]byte, error) {
-	type wire Binding
+	type fields Binding
 	return json.Marshal(struct {
-		wire
+		fields
 		Type string `json:"type"`
-	}{wire(l), l.Type.String()})
+	}{fields(l), l.Type.String()})
 }
 
 func (l *Binding) UnmarshalJSON(data []byte) error {
-	type wire Binding
+	type fields Binding
 	var decoded struct {
-		wire
+		fields
 		Type string `json:"type"`
 	}
 	if err := json.Unmarshal(data, &decoded); err != nil {
@@ -45,7 +45,7 @@ func (l *Binding) UnmarshalJSON(data []byte) error {
 	if !ok {
 		return fmt.Errorf("binding %s names type %q, which no binding type is called", decoded.Name, decoded.Type)
 	}
-	*l = Binding(decoded.wire)
+	*l = Binding(decoded.fields)
 	l.Type = bindingsv1.BindingType(value)
 	return nil
 }

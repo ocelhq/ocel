@@ -67,11 +67,11 @@ func New(_ context.Context, settings provider.Settings) (provider.Provider, erro
 
 func NewProvider(options Options) *Provider {
 	p := &Provider{options: options}
-	return p.wire(p.conn)
+	return p.onHost(p.conn)
 }
 
 func newProvider(options Options, dial host.Dial) *Provider {
-	return (&Provider{options: options}).wire(dial)
+	return (&Provider{options: options}).onHost(dial)
 }
 
 func (p *Provider) Facts() provider.Facts {

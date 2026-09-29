@@ -298,7 +298,7 @@ func (r *release) appBundle(spec provider.StackSpec) (appBundle, error) {
 func (r *release) sealApp(project, app string, values provider.AppValues) (appBundle, error) {
 	bindings := make([]live.Binding, 0, len(values.Bindings))
 	for _, binding := range values.Bindings {
-		kind := provider.WireBindingType(binding.Type)
+		kind := provider.ProtoBindingType(binding.Type)
 		bindings = append(bindings, live.Binding{
 			Name:    binding.Name,
 			Key:     naming.ResourceEnvName(kind, bindingResource(binding)),

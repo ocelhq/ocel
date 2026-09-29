@@ -108,7 +108,7 @@ func liveKeys(values provider.AppValues) []live.Key {
 func liveBindings(values provider.AppValues) []live.Binding {
 	bindings := make([]live.Binding, 0, len(values.Bindings))
 	for _, binding := range values.Bindings {
-		kind := provider.WireBindingType(binding.Type)
+		kind := provider.ProtoBindingType(binding.Type)
 		resource := binding.Resource
 		if resource == "" {
 			resource = binding.Name

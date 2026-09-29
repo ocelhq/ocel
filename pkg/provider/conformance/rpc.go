@@ -32,7 +32,7 @@ const unknownOption = "an-option-no-provider-accepts"
 
 const readyTimeout = 20 * time.Second
 
-func runWire(t *testing.T, suite Suite) {
+func runRPC(t *testing.T, suite Suite) {
 	t.Helper()
 
 	t.Run("in process", func(t *testing.T) {
@@ -159,7 +159,7 @@ func saysWhatItWouldChange(t *testing.T, client contractv1connect.ProviderServic
 func faults(drawn, applied streamed) []string {
 	var found []string
 	if drawn.plan == nil {
-		found = append(found, "a dry bootstrap emitted no plan envelope, so nothing on the wire says what the run would change")
+		found = append(found, "a dry bootstrap emitted no plan envelope, so nothing in the stream says what the run would change")
 	}
 	if drawn.worked() {
 		found = append(found, "a dry bootstrap reported work in progress, and a dry run changes nothing")

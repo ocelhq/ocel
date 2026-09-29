@@ -60,7 +60,7 @@ func (r *deployRun) writtenByTheDeploy(name string, published map[string]provide
 }
 
 func proxied(kind provider.BindingType) bool {
-	return naming.Proxied(provider.WireBindingType(kind))
+	return naming.Proxied(provider.ProtoBindingType(kind))
 }
 
 func RefuseMismatchedBinding(binding provider.Binding, declaredName string, declared provider.BindingType, proxied func(provider.BindingType) bool) error {

@@ -474,7 +474,7 @@ func TestPromoteEnsuresTheContainerIsRunningBeforeItFlips(t *testing.T) {
 		t.Fatalf("Promote drove the box as %v, want %v: it makes the promotion's containers running and only then flips", m.calls, want)
 	}
 	if m.releases[0].Apps[0].HealthPath != "/healthz" {
-		t.Errorf("the release is gated on %q, want the path the record names: up is a 2xx on the path the wire named", m.releases[0].Apps[0].HealthPath)
+		t.Errorf("the release is gated on %q, want the path the record names: up is a 2xx on the path the deploy request named", m.releases[0].Apps[0].HealthPath)
 	}
 }
 

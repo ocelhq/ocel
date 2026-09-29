@@ -143,7 +143,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	}
 	if strings.TrimSpace(app.HealthCheckPath) == "" {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"app %s names no health check path, and up means a 2xx on the path the wire named rather than on one this provider chose", app.App)
+			"app %s names no health check path, and up means a 2xx on the path the deploy request named rather than on one this provider chose", app.App)
 	}
 	names, err := p.Names(ctx)
 	if err != nil {
@@ -294,7 +294,7 @@ func liveKeys(values provider.AppValues) []live.Key {
 func liveBindings(values provider.AppValues) []live.Binding {
 	bindings := make([]live.Binding, 0, len(values.Bindings))
 	for _, binding := range values.Bindings {
-		kind := provider.WireBindingType(binding.Type)
+		kind := provider.ProtoBindingType(binding.Type)
 		resource := binding.Resource
 		if resource == "" {
 			resource = binding.Name

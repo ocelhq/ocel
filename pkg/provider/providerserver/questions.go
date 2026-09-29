@@ -42,8 +42,8 @@ func (q *questions) WrapStreamingHandler(next connect.StreamingHandlerFunc) conn
 
 func (q *questions) pose(err error) error {
 	question, asked := provider.QuestionOf(err)
-	var wire *connect.Error
-	if !asked || !errors.As(err, &wire) {
+	var rpcErr *connect.Error
+	if !asked || !errors.As(err, &rpcErr) {
 		return err
 	}
 	id, idErr := newQuestionID()
@@ -57,7 +57,7 @@ func (q *questions) pose(err error) error {
 	q.mu.Lock()
 	q.pending[id] = question
 	q.mu.Unlock()
-	wire.AddDetail(detail)
+	rpcErr.AddDetail(detail)
 	return err
 }
 

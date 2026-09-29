@@ -73,7 +73,7 @@ func TestAContainerRevisionKeepsAnInstanceUpAndIsProbedOnItsOwnPath(t *testing.T
 		t.Error("a container's cpu idles between requests, and a container is paid for by the instance: it keeps its cpu")
 	}
 	if container.StartupProbe == nil || container.StartupProbe.HttpGet == nil {
-		t.Fatal("a container has no startup probe, and up means a 2xx on the path the wire named")
+		t.Fatal("a container has no startup probe, and up means a 2xx on the path the deploy request named")
 	}
 	if got := container.StartupProbe.HttpGet; got.Path != "/healthz" || got.Port != containerimage.Port {
 		t.Errorf("a container is probed at %v, want /healthz on %d", got, containerimage.Port)

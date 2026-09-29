@@ -26,7 +26,7 @@ func Run(t *testing.T, suite Suite) {
 	t.Helper()
 
 	t.Run("ports", func(t *testing.T) { runPorts(t, suite) })
-	t.Run("wire", func(t *testing.T) { runWire(t, suite) })
+	t.Run("rpc", func(t *testing.T) { runRPC(t, suite) })
 	t.Run("certificates", func(t *testing.T) { runCertificates(t, suite) })
 	t.Run("hooks", func(t *testing.T) { runHooks(t, suite) })
 	t.Run("vendor", func(t *testing.T) { runVendor(t, suite) })

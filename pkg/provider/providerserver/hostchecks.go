@@ -12,16 +12,16 @@ func HostChecksProto(checks []provider.HostCheck) []*contractv1.HostCheck {
 	if len(checks) == 0 {
 		return nil
 	}
-	wired := make([]*contractv1.HostCheck, 0, len(checks))
+	encoded := make([]*contractv1.HostCheck, 0, len(checks))
 	for _, check := range checks {
-		wired = append(wired, &contractv1.HostCheck{
+		encoded = append(encoded, &contractv1.HostCheck{
 			Subject: check.Subject,
 			Verdict: verdictProto(check.Verdict),
 			Finding: check.Finding,
 			Fix:     check.Fix,
 		})
 	}
-	return wired
+	return encoded
 }
 
 func verdictProto(verdict provider.HostVerdict) contractv1.HostCheck_Verdict {

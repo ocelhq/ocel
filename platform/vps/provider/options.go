@@ -90,8 +90,8 @@ func (p *Proxy) UnmarshalJSON(data []byte) error {
 	if len(keyed) != 1 {
 		return fmt.Errorf(`option "proxy" must set exactly one of the keys %s`, strings.Join(configdoc.KeysOf(Proxy{}), ", "))
 	}
-	type wire Proxy
-	var decoded wire
+	type fields Proxy
+	var decoded fields
 	if err := json.Unmarshal(trimmed, &decoded); err != nil {
 		return fmt.Errorf(`option "proxy": %w`, err)
 	}
@@ -273,8 +273,8 @@ func (t *Target) UnmarshalJSON(data []byte) error {
 		*t = Target{Alias: alias}
 		return nil
 	case trimmed[0] == '{':
-		type wire Target
-		var decoded wire
+		type fields Target
+		var decoded fields
 		if err := json.Unmarshal(trimmed, &decoded); err != nil {
 			return fmt.Errorf(`option "ssh": %w`, err)
 		}
