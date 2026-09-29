@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
@@ -539,11 +540,13 @@ func TestAProxyThisOcelDoesNotServeYetIsRefusedNamedRatherThanRunAsOcelsOwn(t *t
 			ctx := context.Background()
 			_, rendered := front.Render(proxy.Spec{})
 			_, inspected := front.Inspect(ctx)
-			_, certified := front.Certificate(ctx, "shop.example.com")
-			for asked, err := range map[string]error{"Render": rendered, "Reload": front.Reload(ctx), "Inspect": inspected, "Certificate": certified} {
+			for asked, err := range map[string]error{"Render": rendered, "Reload": front.Reload(ctx), "Inspect": inspected} {
 				if err == nil || !strings.Contains(err.Error(), tc.named) || !strings.Contains(err.Error(), "not supported yet") {
 					t.Errorf("%s() on %s = %v, want it refused naming %s as not supported yet", asked, name, err, tc.named)
 				}
+			}
+			if certificate, err := front.Certificate(ctx, "shop.example.com"); err != nil || certificate.Renewal != certs.AdoptedRenewal {
+				t.Errorf("Certificate() on %s = %+v, %v; want %q: whatever ocel serves of it, your proxy renews what it serves", name, certificate, err, certs.AdoptedRenewal)
 			}
 		})
 	}

@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/refusal"
 
+	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/manual"
@@ -93,8 +94,8 @@ func (u unservedFront) Reload(context.Context) error { return u.refused() }
 
 func (u unservedFront) Inspect(context.Context) (proxy.Checks, error) { return nil, u.refused() }
 
-func (u unservedFront) Certificate(context.Context, string) (proxy.Certificate, error) {
-	return proxy.Certificate{}, u.refused()
+func (unservedFront) Certificate(context.Context, string) (proxy.Certificate, error) {
+	return proxy.Certificate{Renewal: certs.AdoptedRenewal}, nil
 }
 
 func (state RoutingTable) hostnames() []string {
