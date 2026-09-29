@@ -11,7 +11,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 	"time"
 
@@ -96,26 +95,6 @@ func UnsetColorEnv() {
 	for _, name := range []string{"FORCE_COLOR", "CLICOLOR_FORCE", "GITHUB_ACTIONS"} {
 		os.Unsetenv(name)
 	}
-}
-
-func SetUpDeployFixture(t *testing.T) (root, sockPath string) {
-	t.Helper()
-
-	root = writeProject(t)
-	testBinary, err := filepath.Abs(os.Args[0])
-	if err != nil {
-		t.Fatalf("resolve test binary path: %v", err)
-	}
-	InstallProvider(t, string(fake.Vendor), func(executable string) error { return os.Symlink(testBinary, executable) })
-
-	sockPath = filepath.Join(t.TempDir(), "deploy-provider.sock")
-	t.Setenv(FakeProviderEnvVar, "1")
-	t.Setenv(fakeProviderSockEnvVar, sockPath)
-
-	t.Setenv(FakeInfraTierEnvVar, "production")
-	t.Setenv(FakeInfraPresentEnvVar, "1")
-
-	return root, sockPath
 }
 
 func writeProject(t *testing.T) string {
@@ -277,34 +256,6 @@ export default {
   apps: [{ name: "api", path: "apps/api", framework: "node" }],
 `+declaration+`};
 `)
-}
-
-func ReadJournal(t *testing.T, path string) []string {
-	t.Helper()
-
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read edge journal: %v", err)
-	}
-	var lines []string
-	for _, line := range strings.Split(string(raw), "\n") {
-		if line != "" {
-			lines = append(lines, line)
-		}
-	}
-	return lines
-}
-
-func SetUpEdgeFixture(t *testing.T, declaration string) (root, journal string) {
-	t.Helper()
-
-	root, _ = SetUpDeployFixture(t)
-	WriteUsageMonorepo(t, root)
-	writeEdgeConfig(t, root, declaration)
-
-	journal = filepath.Join(t.TempDir(), "edge.journal")
-	t.Setenv(FakeEdgeJournalEnvVar, journal)
-	return root, journal
 }
 
 func UsageMonorepoFunctions() []build.Function {

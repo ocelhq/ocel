@@ -1,9 +1,6 @@
 package clitest
 
 import (
-	"path/filepath"
-	"testing"
-
 	"github.com/ocelhq/ocel/pkg/processenv"
 )
 
@@ -64,18 +61,3 @@ globalThis.__ocelRegister.push(
 );
 export {};
 `
-
-func SetUpVariablesFixture(t *testing.T, definitions string) string {
-	t.Helper()
-	return SetUpVariablesFixtureWith(t, definitions, EnvDeclarationScript)
-}
-
-func SetUpVariablesFixtureWith(t *testing.T, definitions, script string) string {
-	t.Helper()
-	root, _ := SetUpDeployFixture(t)
-	t.Setenv(FakeVarsStoreEnvVar, filepath.Join(t.TempDir(), "vars.json"))
-	t.Setenv("OCEL_TEST_ENV_DEFINITIONS", definitions)
-	t.Setenv("OCEL_TEST_ENV_PROBLEMS", "[]")
-	WriteFile(t, filepath.Join(DiscoveryDir(root), "env.ts"), script)
-	return root
-}

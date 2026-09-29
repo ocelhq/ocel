@@ -23,14 +23,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 )
 
-const fakeSessionsEnvVar = "OCEL_TEST_FAKE_SESSIONS"
+const providerSessionsEnvVar = "OCEL_TEST_PROVIDER_SESSIONS"
 
 func IsFakeSession() bool {
-	return os.Getenv(fakeSessionsEnvVar) != "" && os.Getenv(localrpc.ClientCertEnvVar) != ""
+	return os.Getenv(providerSessionsEnvVar) != "" && os.Getenv(localrpc.ClientCertEnvVar) != ""
 }
 
 func RunFakeSession() int {
-	control := os.Getenv(fakeSessionsEnvVar)
+	control := os.Getenv(providerSessionsEnvVar)
 	client := &http.Client{Transport: &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			var d net.Dialer
@@ -83,7 +83,7 @@ func ServeFake(t *testing.T, p *fake.Provider) *ProviderRequests {
 		t.Fatalf("resolve test binary path: %v", err)
 	}
 	InstallProvider(t, string(fake.Vendor), func(dest string) error { return os.Symlink(testBinary, dest) })
-	t.Setenv(fakeSessionsEnvVar, controlPath)
+	t.Setenv(providerSessionsEnvVar, controlPath)
 	return sessions.requests
 }
 
