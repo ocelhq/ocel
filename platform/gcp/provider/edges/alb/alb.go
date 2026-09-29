@@ -151,7 +151,13 @@ func (e *Edge) Teardown(ctx context.Context, tier environment.Tier) error {
 				"release those hostnames with `ocel domain remove` in the projects that bound them, then take this bootstrap down",
 			Kind, tier, strings.Join(bound, ", "))
 	}
-	return e.deps.Stacks.Destroy(ctx, e.loadBalancerTarget(tier), progress.DiscardProgress())
+	if err := e.deps.Stacks.Destroy(ctx, e.loadBalancerTarget(tier), progress.DiscardProgress()); err != nil {
+		return err
+	}
+	if !e.deps.Shielded {
+		return nil
+	}
+	return e.forgetTrust(ctx, tier)
 }
 
 type edgeRecord struct {
