@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
-	"time"
 
 	"google.golang.org/protobuf/encoding/protojson"
 
@@ -24,15 +24,15 @@ const liveEnv = "OCEL_LIVE_DOCKER"
 
 type liveBucket struct {
 	component *bucket.Component
+	project   string
 	name      string
 	endpoint  string
 	callbacks chan map[string]any
-	reported  chan error
 	app       *httptest.Server
 	origins   *[]string
 }
 
-func startLive(t *testing.T, project string, answer int) liveBucket {
+func startLive(t *testing.T, project string) liveBucket {
 	t.Helper()
 	if os.Getenv(liveEnv) == "" {
 		t.Skipf("no docker daemon promised to this run; set %s=1 where one is running", liveEnv)
@@ -40,18 +40,16 @@ func startLive(t *testing.T, project string, answer int) liveBucket {
 	ctx := context.Background()
 
 	callbacks := make(chan map[string]any, 16)
-	reported := make(chan error, 16)
 	app := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		body["op"] = r.URL.Query().Get("op")
 		callbacks <- body
-		w.WriteHeader(answer)
 	}))
 	t.Cleanup(app.Close)
 
 	origins := []string{app.URL}
-	component := bucket.New(docker.Open, func() []string { return origins }, func(err error) { reported <- err })
+	component := bucket.New(docker.Open, t.TempDir(), func() []string { return origins })
 	t.Cleanup(func() {
 		_ = component.Close(ctx, true)
 		engine, err := docker.Open(ctx)
@@ -71,42 +69,55 @@ func startLive(t *testing.T, project string, answer int) liveBucket {
 		t.Fatalf("the binding is not the JSON the SDKs read: %v (%v)", err, resolved[0].Env)
 	}
 	_, endpoint, _ := strings.Cut(resolved[0].Origin, " @ ")
-	return liveBucket{component: component, name: bound.GetBucket().GetBucket(), endpoint: "http://" + endpoint, callbacks: callbacks, reported: reported, app: app, origins: &origins}
+	return liveBucket{component: component, project: project, name: bound.GetBucket().GetBucket(), endpoint: "http://" + endpoint, callbacks: callbacks, app: app, origins: &origins}
 }
 
-func put(t *testing.T, target *bucketv1.PresignedTarget, contentType, body string) *http.Response {
+func send(t *testing.T, method, url string, headers map[string]string, body string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequest(http.MethodPut, target.GetUrl(), bytes.NewReader([]byte(body)))
+	req, err := http.NewRequest(method, url, bytes.NewReader([]byte(body)))
 	if err != nil {
 		t.Fatal(err)
 	}
-	req.Header.Set("Content-Type", contentType)
-	for name, value := range target.GetHeaders() {
+	for name, value := range headers {
 		req.Header.Set(name, value)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		t.Fatalf("PUT = %v", err)
+		t.Fatalf("%s = %v", method, err)
 	}
 	t.Cleanup(func() { _ = resp.Body.Close() })
 	return resp
 }
 
-func TestAnUploadThatBreaksItsSignedConditionsIsRefused(t *testing.T) {
-	t.Skip("TODO(#1203): ghcr.io/ocelhq/floci:2.0.1-ocel.2 verifies no query signature, so a presigned PUT with another content type or length is stored; unskip once the fork enforces SigV4 presigned requests")
+func put(t *testing.T, target *bucketv1.PresignedTarget, contentType, body string) *http.Response {
+	t.Helper()
+	headers := map[string]string{}
+	for name, value := range target.GetHeaders() {
+		headers[http.CanonicalHeaderKey(name)] = value
+	}
+	headers["Content-Type"] = contentType
+	return send(t, http.MethodPut, target.GetUrl(), headers, body)
+}
 
-	live := startLive(t, "bucket-live-conditions-test", http.StatusOK)
-	presigned, err := live.component.PresignUpload(context.Background(), &bucketv1.PresignUploadRequest{
-		Bucket:          live.name,
-		CallbackBaseUrl: live.app.URL + "/api/upload",
-		Files: []*bucketv1.PresignFile{
-			{Key: "type.txt", Name: "type.txt", Size: 5, MimeType: "text/plain"},
-			{Key: "size.txt", Name: "size.txt", Size: 5, MimeType: "text/plain"},
-		},
+func (l liveBucket) presign(t *testing.T, callbackBase string, files ...*bucketv1.PresignFile) *bucketv1.PresignUploadResponse {
+	t.Helper()
+	presigned, err := l.component.PresignUpload(context.Background(), &bucketv1.PresignUploadRequest{
+		Bucket:          l.name,
+		CallbackBaseUrl: callbackBase,
+		Files:           files,
 	})
 	if err != nil {
 		t.Fatalf("PresignUpload = %v", err)
 	}
+	return presigned
+}
+
+func TestDockerAnUploadThatBreaksItsSignedConditionsIsRefused(t *testing.T) {
+	live := startLive(t, "bucket-live-conditions-test")
+	presigned := live.presign(t, live.app.URL+"/api/upload",
+		&bucketv1.PresignFile{Key: "type.txt", Name: "type.txt", Size: 5, MimeType: "text/plain"},
+		&bucketv1.PresignFile{Key: "size.txt", Name: "size.txt", Size: 5, MimeType: "text/plain"},
+	)
 	if resp := put(t, presigned.GetFiles()[0], "image/png", "hello"); resp.StatusCode != http.StatusForbidden {
 		t.Errorf("a PUT under another content type answered %s, want 403", resp.Status)
 	}
@@ -115,54 +126,104 @@ func TestAnUploadThatBreaksItsSignedConditionsIsRefused(t *testing.T) {
 	}
 }
 
-func TestDockerACompletionTheAppKeepsRefusingIsReportedOnceAndDropped(t *testing.T) {
-	live := startLive(t, "bucket-live-poison-test", http.StatusInternalServerError)
-
-	presigned, err := live.component.PresignUpload(context.Background(), &bucketv1.PresignUploadRequest{
-		Bucket:          live.name,
-		CallbackBaseUrl: live.app.URL + "/api/upload",
-		Files:           []*bucketv1.PresignFile{{Key: "a.txt", Name: "a.txt", Size: 5, MimeType: "text/plain"}},
-	})
-	if err != nil {
-		t.Fatalf("PresignUpload = %v", err)
-	}
+func TestDockerACompletedUploadCallsTheAppBackWithTheSignedFile(t *testing.T) {
+	live := startLive(t, "bucket-live-complete-test")
+	presigned := live.presign(t, live.app.URL+"/api/upload",
+		&bucketv1.PresignFile{Key: "a.txt", Name: "a.txt", Size: 5, MimeType: "text/plain"})
 	if resp := put(t, presigned.GetFiles()[0], "text/plain", "hello"); resp.StatusCode != http.StatusOK {
 		t.Fatalf("PUT to the presigned url answered %s", resp.Status)
 	}
 
+	completed, err := live.component.CompleteUpload(context.Background(), &bucketv1.CompleteUploadRequest{SessionId: presigned.GetSessionId()})
+	if err != nil {
+		t.Fatalf("CompleteUpload = %v", err)
+	}
+	if completed.GetState() != bucketv1.UploadState_UPLOAD_STATE_SUCCEEDED {
+		t.Fatalf("CompleteUpload state = %v, want succeeded", completed.GetState())
+	}
 	select {
-	case err := <-live.reported:
-		if !strings.Contains(err.Error(), "3 attempts") {
-			t.Fatalf("reported %v, want the completion given up on after 3 attempts", err)
+	case called := <-live.callbacks:
+		if called["op"] != "callback" || called["sessionId"] != presigned.GetSessionId() {
+			t.Errorf("the app was called with %v, want the callback for the session", called)
 		}
-	case <-time.After(time.Minute):
-		t.Fatal("a completion that keeps failing was never reported")
+	default:
+		t.Fatal("a completed upload never called the app back")
 	}
 
-	time.Sleep(12 * time.Second)
-	if attempts := len(live.callbacks); attempts != 3 {
-		t.Errorf("the app was called %d times, want 3 and then no more", attempts)
+	status, err := live.component.GetUploadStatus(context.Background(), &bucketv1.GetUploadStatusRequest{SessionId: presigned.GetSessionId()})
+	if err != nil {
+		t.Fatalf("GetUploadStatus = %v", err)
 	}
-	if again := len(live.reported); again != 0 {
-		t.Errorf("the failure was reported %d more times, want it said once", again)
+	if status.GetState() != bucketv1.UploadState_UPLOAD_STATE_SUCCEEDED {
+		t.Errorf("GetUploadStatus state = %v, want succeeded", status.GetState())
+	}
+}
+
+func TestDockerAnUploadCallbackToAnOriginNoBucketAllowsIsRefused(t *testing.T) {
+	live := startLive(t, "bucket-live-foreign-callback-test")
+	presigned := live.presign(t, "http://127.0.0.1:1/api/upload",
+		&bucketv1.PresignFile{Key: "a.txt", Name: "a.txt", Size: 5, MimeType: "text/plain"})
+	if resp := put(t, presigned.GetFiles()[0], "text/plain", "hello"); resp.StatusCode != http.StatusOK {
+		t.Fatalf("PUT to the presigned url answered %s", resp.Status)
+	}
+
+	_, err := live.component.CompleteUpload(context.Background(), &bucketv1.CompleteUploadRequest{SessionId: presigned.GetSessionId()})
+	if err == nil || !strings.Contains(err.Error(), "http://127.0.0.1:1") {
+		t.Fatalf("CompleteUpload = %v, want the callback to a foreign origin refused", err)
+	}
+}
+
+func TestDockerAnObjectSignedForIsListedReadAndDeleted(t *testing.T) {
+	live := startLive(t, "bucket-live-objects-test")
+	ctx := context.Background()
+	sign := func(operation bucketv1.SignedOperation) *bucketv1.PresignedTarget {
+		signed, err := live.component.Sign(ctx, &bucketv1.SignRequest{
+			Bucket:      live.name,
+			Key:         "notes/hello.txt",
+			Operation:   operation,
+			Audience:    bucketv1.SignedAudience_SIGNED_AUDIENCE_INTERNAL,
+			Constraints: &bucketv1.SignConstraints{ContentType: "text/plain"},
+		})
+		if err != nil {
+			t.Fatalf("Sign %v = %v", operation, err)
+		}
+		return signed.GetTarget()
+	}
+
+	if resp := put(t, sign(bucketv1.SignedOperation_SIGNED_OPERATION_PUT), "text/plain", "hello"); resp.StatusCode != http.StatusOK {
+		t.Fatalf("PUT to the signed url answered %s", resp.Status)
+	}
+	listed, err := live.component.List(ctx, &bucketv1.ListRequest{Bucket: live.name, Prefix: "notes/"})
+	if err != nil {
+		t.Fatalf("List = %v", err)
+	}
+	if len(listed.GetObjects()) != 1 || listed.GetObjects()[0].GetKey() != "notes/hello.txt" {
+		t.Fatalf("List = %v, want the one object put", listed.GetObjects())
+	}
+	got := send(t, http.MethodGet, sign(bucketv1.SignedOperation_SIGNED_OPERATION_GET).GetUrl(), nil, "")
+	if body, _ := io.ReadAll(got.Body); string(body) != "hello" {
+		t.Errorf("GET of the signed url = %s %q, want the object put", got.Status, body)
+	}
+	if _, err := live.component.Delete(ctx, &bucketv1.DeleteRequest{Bucket: live.name, Keys: []string{"notes/hello.txt"}}); err != nil {
+		t.Fatalf("Delete = %v", err)
+	}
+	head, err := live.component.Head(ctx, &bucketv1.HeadRequest{Bucket: live.name, Key: "notes/hello.txt"})
+	if err != nil {
+		t.Fatalf("Head = %v", err)
+	}
+	if head.GetObject() != nil {
+		t.Error("Head found the object after it was deleted")
 	}
 }
 
 func TestDockerTheAppsOriginIsReadAgainOnEverySync(t *testing.T) {
-	live := startLive(t, "bucket-live-origins-test", http.StatusOK)
+	live := startLive(t, "bucket-live-origins-test")
 
 	allowed := func(origin string) string {
-		req, err := http.NewRequest(http.MethodOptions, live.endpoint+"/"+live.name+"/a.txt", nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		req.Header.Set("Origin", origin)
-		req.Header.Set("Access-Control-Request-Method", http.MethodPut)
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatalf("preflight = %v", err)
-		}
-		_ = resp.Body.Close()
+		resp := send(t, http.MethodOptions, live.endpoint+"/"+live.name+"/a.txt", map[string]string{
+			"Origin":                        origin,
+			"Access-Control-Request-Method": http.MethodPut,
+		}, "")
 		return resp.Header.Get("Access-Control-Allow-Origin")
 	}
 
@@ -171,7 +232,7 @@ func TestDockerTheAppsOriginIsReadAgainOnEverySync(t *testing.T) {
 		t.Fatalf("%s may upload before the app ever ran there", moved)
 	}
 	*live.origins = []string{moved}
-	if _, err := live.component.Resolve(context.Background(), "bucket-live-origins-test", []declare.Resource{declared("User Uploads")}); err != nil {
+	if _, err := live.component.Resolve(context.Background(), live.project, []declare.Resource{declared("User Uploads")}); err != nil {
 		t.Fatalf("Resolve = %v", err)
 	}
 	if got := allowed(moved); got != moved {

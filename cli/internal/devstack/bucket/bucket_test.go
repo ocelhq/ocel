@@ -3,6 +3,9 @@ package bucket_test
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -10,7 +13,9 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/devstack/bucket"
+	"github.com/ocelhq/ocel/cli/internal/devstack/docker"
 	"github.com/ocelhq/ocel/cli/internal/devstack/docker/dockertest"
+	"github.com/ocelhq/ocel/pkg/constants"
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
@@ -23,11 +28,33 @@ func declared(name string, origins ...string) declare.Resource {
 	}
 }
 
+func noOrigins() []string { return nil }
+
+func resolveInterrupted(t *testing.T, component *bucket.Component, project string) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := component.Resolve(ctx, project, []declare.Resource{declared("uploads")}); err == nil {
+		t.Fatal("Resolve = nil against a store that is not there")
+	}
+}
+
+func secretKeyOf(t *testing.T, spec docker.Spec) string {
+	t.Helper()
+	for _, entry := range spec.Env {
+		if key, found := strings.CutPrefix(entry, "RUSTFS_SECRET_KEY="); found {
+			return key
+		}
+	}
+	t.Fatalf("Env = %v, want the store's secret key set", spec.Env)
+	return ""
+}
+
 func TestAnUploadBeforeAnyBucketIsDeclaredIsRefusedWithoutDocker(t *testing.T) {
 	t.Parallel()
 
 	engine := &dockertest.Engine{}
-	component := bucket.New(engine.Opener(), func() []string { return nil }, nil)
+	component := bucket.New(engine.Opener(), t.TempDir(), noOrigins)
 
 	_, err := component.PresignUpload(context.Background(), &bucketv1.PresignUploadRequest{Bucket: "uploads"})
 
@@ -40,25 +67,20 @@ func TestAnUploadBeforeAnyBucketIsDeclaredIsRefusedWithoutDocker(t *testing.T) {
 	}
 }
 
-func TestTheEmulatorRunsPinnedLabelledOnAVolumeOfTheProjectAndStopsEvenIfInterrupted(t *testing.T) {
+func TestTheStoreRunsPinnedLabelledOnAVolumeOfTheProjectAndStopsEvenIfInterrupted(t *testing.T) {
 	t.Parallel()
 
 	engine := &dockertest.Engine{}
-	component := bucket.New(engine.Opener(), func() []string { return nil }, nil)
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
+	component := bucket.New(engine.Opener(), t.TempDir(), noOrigins)
 
-	_, err := component.Resolve(ctx, "shop-1a2b", []declare.Resource{declared("uploads")})
-	if err == nil {
-		t.Fatal("Resolve = nil against an emulator that is not there")
-	}
+	resolveInterrupted(t, component, "shop-1a2b")
 
 	if len(engine.Specs) != 1 {
-		t.Fatalf("ran %d containers, want the one emulator", len(engine.Specs))
+		t.Fatalf("ran %d containers, want the one store", len(engine.Specs))
 	}
 	spec := engine.Specs[0]
-	if !strings.HasPrefix(spec.Image, "ghcr.io/ocelhq/floci:2.0.1-ocel.2@sha256:") {
-		t.Errorf("Image = %q, want the ocelhq floci build pinned by digest", spec.Image)
+	if spec.Image != constants.ObjectStoreImage() {
+		t.Errorf("Image = %q, want the object store every vendor runs, pinned by digest", spec.Image)
 	}
 	if spec.Labels["dev.ocel.project"] != "shop-1a2b" || spec.Labels["dev.ocel.component"] != "bucket" {
 		t.Errorf("Labels = %v, want the project and the component", spec.Labels)
@@ -70,6 +92,41 @@ func TestTheEmulatorRunsPinnedLabelledOnAVolumeOfTheProjectAndStopsEvenIfInterru
 		t.Fatalf("Close = %v", err)
 	}
 	if len(engine.Stopped) != 1 {
-		t.Errorf("stopped %v, want the emulator that was running when the interrupt landed stopped by Close", engine.Stopped)
+		t.Errorf("stopped %v, want the store that was running when the interrupt landed stopped by Close", engine.Stopped)
+	}
+}
+
+func TestTheStoreKeyIsGeneratedOncePerProjectAndKeptPrivate(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	first, second, other := &dockertest.Engine{}, &dockertest.Engine{}, &dockertest.Engine{}
+	resolveInterrupted(t, bucket.New(first.Opener(), stateDir, noOrigins), "shop-1a2b")
+	resolveInterrupted(t, bucket.New(second.Opener(), stateDir, noOrigins), "shop-1a2b")
+	resolveInterrupted(t, bucket.New(other.Opener(), t.TempDir(), noOrigins), "blog-3c4d")
+
+	key := secretKeyOf(t, first.Specs[0])
+	if len(key) < 32 || slices.Contains([]string{"test", "ocel", "minioadmin", "rustfsadmin"}, key) {
+		t.Errorf("secret key = %q, want one generated for the project", key)
+	}
+	if again := secretKeyOf(t, second.Specs[0]); again != key {
+		t.Errorf("a restarted dev run keyed the store %q, want the %q it kept", again, key)
+	}
+	if theirs := secretKeyOf(t, other.Specs[0]); theirs == key {
+		t.Error("two projects share a store key")
+	}
+
+	entries, err := os.ReadDir(stateDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		info, err := os.Stat(filepath.Join(stateDir, entry.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm()&0o077 != 0 {
+			t.Errorf("%s is %v, want it readable by its owner alone", entry.Name(), info.Mode().Perm())
+		}
 	}
 }

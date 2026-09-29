@@ -41,7 +41,6 @@ type Env struct {
 	StateDir   string
 	AppOrigins func() []string
 	Stdout     io.Writer
-	Report     func(error)
 }
 
 var table = map[resourcesv1.ResourceType]func(Env) Component{
@@ -49,7 +48,7 @@ var table = map[resourcesv1.ResourceType]func(Env) Component{
 		return postgres.New(env.Open, filepath.Join(env.StateDir, keptDir))
 	},
 	resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET: func(env Env) Component {
-		return bucket.New(env.Open, env.AppOrigins, env.Report)
+		return bucket.New(env.Open, filepath.Join(env.StateDir, keptDir), env.AppOrigins)
 	},
 }
 

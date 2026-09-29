@@ -259,7 +259,6 @@ func startDevHost(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Con
 		StateDir:   devStateDir(cfg),
 		AppOrigins: devAppOrigins(cfg.Dir, source),
 		Stdout:     stdout,
-		Report:     func(err error) { fmt.Fprintln(stderr, "dev resources:", err) },
 	})
 
 	srv := devserver.New("http://"+addr, stack)
