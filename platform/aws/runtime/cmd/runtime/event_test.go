@@ -449,14 +449,17 @@ func TestLoopbackClientDoesNotHangOnAConnectionPoisonedByAnUnreadBody(t *testing
 }
 
 func TestTheAppHearsTheAuthorizationTheClientSentBehindASigningEdge(t *testing.T) {
-	ev := &httpEvent{
-		RawPath: "/private",
-		Headers: map[string]string{
-			"authorization":                "AWS4-HMAC-SHA256 Credential=AKIAEXAMPLE/20260929/us-east-1/lambda/aws4_request",
-			edge.HeaderClientAuthorization: "Bearer client-token",
+	ev, err := parseEvent([]byte(`{
+		"rawPath": "/private",
+		"headers": {
+			"authorization": "AWS4-HMAC-SHA256 Credential=AKIAEXAMPLE/20260929/us-east-1/lambda/aws4_request",
+			"x-ocel-client-authorization": "Bearer client-token"
 		},
+		"requestContext": {"http": {"method": "GET"}, "authorizer": {"iam": {"accessKey": "AKIAEXAMPLE"}}}
+	}`))
+	if err != nil {
+		t.Fatal(err)
 	}
-	ev.RequestContext.HTTP.Method = http.MethodGet
 
 	req, err := buildLoopbackRequest(t.Context(), 4321, ev)
 	if err != nil {
@@ -544,5 +547,26 @@ func TestTheAppIgnoresAClientAddressOnACallNoSigningEdgeMade(t *testing.T) {
 	}
 	if got := req.Header.Values(edge.HeaderClientAddress); len(got) != 0 {
 		t.Errorf("%s = %q, want the carrier dropped", edge.HeaderClientAddress, got)
+	}
+}
+
+func TestTheAppIgnoresAnAuthorizationCarrierOnACallNoSigningEdgeMade(t *testing.T) {
+	ev, err := parseEvent([]byte(`{
+		"rawPath": "/private",
+		"headers": {"authorization": "Bearer own", "x-ocel-client-authorization": "Bearer forged"},
+		"requestContext": {"http": {"method": "GET"}}
+	}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, err := buildLoopbackRequest(t.Context(), 4321, ev)
+	if err != nil {
+		t.Fatalf("buildLoopbackRequest: %v", err)
+	}
+	if got := req.Header.Get("Authorization"); got != "Bearer own" {
+		t.Errorf("Authorization = %q, want the caller's own header, not a carrier on an unsigned call", got)
+	}
+	if got := req.Header.Values(edge.HeaderClientAuthorization); len(got) != 0 {
+		t.Errorf("%s = %q, want the carrier dropped", edge.HeaderClientAuthorization, got)
 	}
 }
