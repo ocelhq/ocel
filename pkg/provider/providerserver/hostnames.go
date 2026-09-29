@@ -125,8 +125,12 @@ func (d *hostnames) attachHostname(ctx context.Context, target ConfiguredHost, p
 		return false, certifying.discardSuperseded(ctx, progress)
 	}
 
+	origin, err := d.claimOrigin(ctx, target)
+	if err != nil {
+		return true, err
+	}
 	progress.Say(fmt.Sprintf("Binding %s to %s", host, describeFront(d.front.Kind())))
-	if err := d.edgeStack().BindDomain(ctx, edge.DomainBinding{Hostname: host, Certificate: hostState.Certificate.ID, App: target.App, Say: progress.Say}); err != nil {
+	if err := d.edgeStack().BindDomain(ctx, edge.DomainBinding{Hostname: host, Certificate: hostState.Certificate.ID, App: target.App, Origin: origin, Say: progress.Say}); err != nil {
 		return true, err
 	}
 	hostState.Edge = d.front.Kind()
@@ -167,6 +171,43 @@ func (d *hostnames) attachHostname(ctx context.Context, target ConfiguredHost, p
 		return true, nil
 	}
 	return true, d.unbindPreviousEdge(ctx, host, previous, progress)
+}
+
+func (d *hostnames) claimOrigin(ctx context.Context, target ConfiguredHost) (*edge.Origin, error) {
+	if !d.front.Facts().ProxiesRecords {
+		return nil, nil
+	}
+	claim := router.Claim{Hostname: target.Hostname, App: target.App}
+	if ensure := d.front.Hooks().EnsureClientCertificate; ensure != nil {
+		certificate, err := ensure(ctx, target.Hostname)
+		if err != nil {
+			return nil, err
+		}
+		claim.ClientCertificate = certificate
+	}
+	routed, err := d.openRouterStack()
+	if err != nil {
+		return nil, err
+	}
+	origin, err := routed.Claim(ctx, claim)
+	if err := errors.Join(err, d.adopt(routed)); err != nil {
+		return nil, err
+	}
+	if origin.Address == "" {
+		return nil, nil
+	}
+	return &origin, nil
+}
+
+func (d *hostnames) disclaim(ctx context.Context, hostname string) error {
+	if !d.front.Facts().ProxiesRecords {
+		return nil
+	}
+	routed, err := d.openRouterStack()
+	if err != nil {
+		return err
+	}
+	return errors.Join(routed.Disclaim(ctx, hostname), d.adopt(routed))
 }
 
 func (d *hostnames) hostCertificates(host string, hostState *stackrecords.HostnameState) hostCertificates {
@@ -227,6 +268,9 @@ func (d *hostnames) remove(ctx context.Context, runProgress progress.Progress) e
 	for _, host := range targets {
 		runProgress.Say(fmt.Sprintf("Unbinding %s from %s", host, describeFront(d.front.Kind())))
 		if err := progress.Heeded(d.edgeStack().UnbindDomain(ctx, host), runProgress); err != nil {
+			return err
+		}
+		if err := d.disclaim(ctx, host); err != nil {
 			return err
 		}
 		hostState := d.state.Host(host)

@@ -122,6 +122,49 @@ type Edge struct {
 
 	unreadable  error
 	entitlement *edge.CodeEntitlement
+
+	proxies    bool
+	claims     []router.Claim
+	disclaimed []string
+}
+
+func (e *Edge) ProxiesRecords() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.proxies = true
+}
+
+func ClientCertificate(kind edge.Kind) string {
+	return "client certificate the " + string(kind) + " edge presents"
+}
+
+func Origin(kind router.Kind) edge.Origin {
+	return edge.Origin{Address: "origin." + string(kind) + ".fake.invalid"}
+}
+
+func (e *Edge) claimed(claim router.Claim) edge.Origin {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.claims = append(e.claims, claim)
+	return Origin(e.routedBy)
+}
+
+func (e *Edge) gaveBack(hostname string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.disclaimed = append(e.disclaimed, hostname)
+}
+
+func (e *Edge) Claims() []router.Claim {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return slices.Clone(e.claims)
+}
+
+func (e *Edge) Disclaimed() []string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return slices.Clone(e.disclaimed)
 }
 
 func (e *Edge) Bindings() []edge.DomainBinding {
@@ -225,6 +268,7 @@ func (e *Edge) Facts() edge.Facts {
 	facts := edge.Facts{
 		Supported:       edge.AllNeeds(),
 		RunsCode:        e.kind == KindRelay,
+		ProxiesRecords:  e.proxies,
 		CredentialScope: "fake-account",
 	}
 	if e.serves != nil {
@@ -251,6 +295,9 @@ func (e *Edge) Hooks() edge.Hooks {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	hooks := edge.Hooks{VerifyCredentials: e.verify}
+	if e.proxies {
+		hooks.EnsureClientCertificate = func(context.Context, string) (string, error) { return ClientCertificate(e.kind), nil }
+	}
 	if e.entitlement != nil {
 		granted := *e.entitlement
 		hooks.CheckCodeEntitlement = func(context.Context) (edge.CodeEntitlement, error) { return granted, nil }
@@ -416,7 +463,16 @@ func (s *Stack) BindDomain(_ context.Context, binding edge.DomainBinding) error 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.state.Bind(binding.Hostname)
-	s.state.PublishFront(binding.Hostname, s.front.front(s.state.Slug))
+	if binding.Origin == nil {
+		s.state.PublishFront(binding.Hostname, s.front.front(s.state.Slug))
+		return nil
+	}
+	s.state.PublishFront(binding.Hostname, binding.Origin.Address)
+	written, err := edge.RecordsFor(edge.TargetOf(s.front.kind, s.front.Facts(), s.state), []string{binding.Hostname})
+	if err != nil {
+		return err
+	}
+	s.state.RecordWrites(append(slices.Clone(s.state.Records), written...))
 	return nil
 }
 

@@ -120,6 +120,7 @@ type DomainBinding struct {
 	Hostname    string
 	Certificate string
 	App         string
+	Origin      *Origin
 	Say         func(string)
 }
 
