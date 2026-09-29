@@ -32,10 +32,14 @@ func originPlaceable(path string) error {
 		return err
 	}
 	name := filepath.Base(path)
-	if !strings.HasPrefix(name, switchboard.OriginPrefix) || !strings.HasSuffix(name, originSuffix) {
+	if !isOriginName(name) {
 		return fmt.Errorf("%s is not named %s*%s, the only names an origin certificate is placed under", path, switchboard.OriginPrefix, originSuffix)
 	}
 	return nil
+}
+
+func isOriginName(name string) bool {
+	return strings.HasPrefix(name, switchboard.OriginPrefix) && strings.HasSuffix(name, originSuffix)
 }
 
 func placeOrigin(argv []string, in io.Reader, errs io.Writer) int {
@@ -97,7 +101,7 @@ func unplaceOrigins(kept []string, errs io.Writer) int {
 	}
 	for _, entry := range entries {
 		path := filepath.Join(dir, entry.Name())
-		if !strings.HasPrefix(entry.Name(), switchboard.OriginPrefix) || slices.Contains(kept, path) {
+		if !entry.Type().IsRegular() || !isOriginName(entry.Name()) || slices.Contains(kept, path) {
 			continue
 		}
 		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {

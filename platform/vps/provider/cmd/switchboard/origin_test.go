@@ -77,3 +77,22 @@ func TestUnplacingOriginsRemovesEveryOriginCertificateButTheOnesKeptAndNothingEl
 		t.Errorf("the directory contains %q, want %q", got, want)
 	}
 }
+
+func TestUnplacingOriginsLeavesWhatIsNamedLikeOneButIsNoOriginCertificate(t *testing.T) {
+	dir := placing(t)
+	notes := switchboard.OriginPrefix + "notes.txt"
+	if err := os.WriteFile(filepath.Join(dir, notes), []byte("yours"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	folder := switchboard.OriginPrefix + "archive.pem"
+	if err := os.MkdirAll(filepath.Join(dir, folder, "inside"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	if code, _, errs := ran(t, "unplace-origins"); code != 0 {
+		t.Fatalf("unplace-origins = %d: %s", code, errs)
+	}
+	if got, want := entries(t, dir), []string{folder, notes}; !slices.Equal(got, want) {
+		t.Errorf("the directory contains %q, want %q: only a file named %s*.pem is an origin certificate", got, want, switchboard.OriginPrefix)
+	}
+}
