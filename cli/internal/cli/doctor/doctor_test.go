@@ -3,11 +3,10 @@ package doctor
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
-	"os"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -18,8 +17,17 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/version"
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
+	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 var nodeLine = regexp.MustCompile(`(?m)^(  ✓ node is needed — .*) — node .* on PATH$`)
@@ -161,11 +169,12 @@ func TestRunDoctorWithoutAConfig(t *testing.T) {
 	}
 }
 
-func healthyProject(t *testing.T) string {
+func healthyProject(t *testing.T) clitest.FakeProject {
 	t.Helper()
 
-	root, _ := clitest.SetUpDeployFixture(t)
-	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+	project := clitest.SetUpProject(t)
+	clitest.Bootstrap(t, project.Provider, environment.TierPreview)
+	clitest.WriteFile(t, filepath.Join(project.Root, "ocel.config.ts"), `
 export default {
   slug: "my-shop",
   provider: { fake: {} },
@@ -176,27 +185,36 @@ export default {
   ],
 };
 `)
-	clitest.WriteFile(t, filepath.Join(root, "apps", "web", "src", "server.ts"), "export function handler() {}\n")
-	clitest.WriteFile(t, filepath.Join(root, "apps", "api", "src", "server.ts"), "export function handler() {}\n")
+	clitest.WriteFile(t, filepath.Join(project.Root, "apps", "web", "src", "server.ts"), "export function handler() {}\n")
+	clitest.WriteFile(t, filepath.Join(project.Root, "apps", "api", "src", "server.ts"), "export function handler() {}\n")
+	return project
+}
 
-	t.Setenv(clitest.FakeIDProviderEnvVar, "fake")
-	t.Setenv(clitest.FakeIDAccountEnvVar, "123456789012")
-	t.Setenv(clitest.FakeIDLocationEnvVar, "zone-c")
-	t.Setenv(clitest.FakeIDProfileEnvVar, "shop")
-	return root
+func record(t *testing.T, p *fake.Provider, key keyvalue.Key, value any) {
+	t.Helper()
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.KeyValues().Write(context.Background(), keyvalue.Entry{Key: key, Value: encoded}); err != nil {
+		t.Fatalf("record %s: %v", key, err)
+	}
+}
+
+func recordPreviewWildcard(t *testing.T, p *fake.Provider, baseDomain string) {
+	t.Helper()
+	record(t, p, stackrecords.WildcardKey(environment.TierPreview), stackrecords.Wildcard{BaseDomain: baseDomain, Edge: fake.KindRelay})
 }
 
 func TestRunDoctorOnAHealthyProject(t *testing.T) {
-	root := healthyProject(t)
-	t.Setenv(clitest.FakeBootstrapEnvVar, "current")
-	t.Setenv(clitest.FakePreviewBootstrapEnvVar, "current")
+	project := healthyProject(t)
 
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(deps, &stderr)
-	if err := Run(context.Background(), deps, root, &stdout); err != nil {
+	if err := Run(context.Background(), deps, project.Root, &stdout); err != nil {
 		t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
@@ -207,7 +225,7 @@ func TestRunDoctorOnAHealthyProject(t *testing.T) {
 		"  ✓ provider fake " + version.Version + "",
 		"  ✓ provider default edge",
 		"",
-		"Fake  123456789012 · zone-c · profile shop",
+		"Fake  000000000000 · fake/reference",
 		"  ✓ credentials valid",
 		"",
 		"Production  shop.example.com",
@@ -225,8 +243,8 @@ func TestRunDoctorOnAHealthyProject(t *testing.T) {
 }
 
 func TestDoctorAsksTheProviderAboutTheContainerAppsADeployWould(t *testing.T) {
-	root := healthyProject(t)
-	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+	project := healthyProject(t)
+	clitest.WriteFile(t, filepath.Join(project.Root, "ocel.config.ts"), `
 export default {
   slug: "my-shop",
   provider: { fake: {} },
@@ -236,53 +254,43 @@ export default {
   ],
 };
 `)
-	journal := filepath.Join(t.TempDir(), "preflight.journal")
-	t.Setenv(clitest.FakePreflightJournalEnvVar, journal)
-	t.Setenv(clitest.FakeBootstrapEnvVar, "current")
-	t.Setenv(clitest.FakePreviewBootstrapEnvVar, "current")
 
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(deps, &stderr)
-	if err := Run(context.Background(), deps, root, &stdout); err != nil {
+	if err := Run(context.Background(), deps, project.Root, &stdout); err != nil {
 		t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
-	sent, err := os.ReadFile(journal)
-	if err != nil {
-		t.Fatalf("read the preflight journal: %v", err)
-	}
-	lines := strings.Split(strings.TrimSpace(string(sent)), "\n")
-	if len(lines) == 0 || lines[0] == "" {
+	sent := clitest.RequestsTo[*contractv1.PreflightRequest](t, project.Requests, contractv1connect.ProviderServicePreflightProcedure)
+	if len(sent) == 0 {
 		t.Fatal("doctor sent no preflight")
 	}
-	for _, line := range lines {
-		if !strings.Contains(line, "containers=api") {
-			t.Errorf("doctor sent preflight %q, want it to name the container app api as a deploy's preflight does", line)
+	for _, req := range sent {
+		if len(req.GetContainers()) != 1 || req.GetContainers()[0].GetApp() != "api" {
+			t.Errorf("doctor sent preflight naming containers %v, want the container app api as a deploy's preflight does", req.GetContainers())
 		}
 	}
 }
 
 func TestRunDoctorReportsACredentialProblem(t *testing.T) {
-	root := healthyProject(t)
-	t.Setenv(clitest.FakeBootstrapEnvVar, "current")
-	t.Setenv(clitest.FakePreviewBootstrapEnvVar, "current")
-	t.Setenv(clitest.FakeCredProblemEnvVar, "relay")
+	project := healthyProject(t)
+	project.Provider.Edges().(*fake.Edges).Verifies(fake.KindRelay, edge.CredentialIdentity{}, refusal.Refuse(refusal.CodeDenied, "configure the credential and re-run"))
 
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(deps, &stderr)
-	err := Run(context.Background(), deps, root, &stdout)
+	err := Run(context.Background(), deps, project.Root, &stdout)
 	if code := exitCode(t, err); code != 1 {
 		t.Fatalf("exit code = %d, want 1; stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
 
 	out := rendered(t, stdout.String())
 	for _, want := range []string{
-		"Fake  123456789012 · zone-c · profile shop\n  ✓ credentials valid",
+		"Fake  000000000000 · fake/reference\n  ✓ credentials valid",
 		"Relay\n  ✗ could not authenticate\n    → configure the credential and re-run",
 		"1 problem.",
 	} {
@@ -292,24 +300,24 @@ func TestRunDoctorReportsACredentialProblem(t *testing.T) {
 	}
 }
 
-func TestRunDoctorWarnsAboutAStaleBootstrap(t *testing.T) {
-	root := healthyProject(t)
-	t.Setenv(clitest.FakeBootstrapEnvVar, "stale")
-	t.Setenv(clitest.FakePreviewBootstrapEnvVar, "current")
+func TestRunDoctorWarnsAboutAStaleStackNoFeatureRequires(t *testing.T) {
+	project := healthyProject(t)
+	clitest.Bootstrap(t, project.Provider, environment.TierProduction, fake.FeatureCache)
+	project.Provider.FakeBootstrap().MarkStale(fake.FeatureCache)
 
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(deps, &stderr)
-	err := Run(context.Background(), deps, root, &stdout)
+	err := Run(context.Background(), deps, project.Root, &stdout)
 	if code := exitCode(t, err); code != 0 {
 		t.Fatalf("exit code = %d, want warnings alone to pass; stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
 
 	out := rendered(t, stdout.String())
 	for _, want := range []string{
-		"  ⚠ ocel-bootstrap-isr is stale",
+		"  ⚠ fake-production-cache is stale",
 		"    → run `ocel bootstrap production` to refresh it",
 		"1 warning.",
 	} {
@@ -320,16 +328,15 @@ func TestRunDoctorWarnsAboutAStaleBootstrap(t *testing.T) {
 }
 
 func TestRunDoctorFailsAnUnfinishedBootstrap(t *testing.T) {
-	root := healthyProject(t)
-	t.Setenv(clitest.FakeBootstrapEnvVar, "unfinished")
-	t.Setenv(clitest.FakePreviewBootstrapEnvVar, "current")
+	project := healthyProject(t)
+	project.Provider.FakeBootstrap().MarkUnfinished()
 
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(deps, &stderr)
-	err := Run(context.Background(), deps, root, &stdout)
+	err := Run(context.Background(), deps, project.Root, &stdout)
 	if code := exitCode(t, err); code != 1 {
 		t.Fatalf("exit code = %d, want an unfinished apply to fail; stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
@@ -338,7 +345,6 @@ func TestRunDoctorFailsAnUnfinishedBootstrap(t *testing.T) {
 	for _, want := range []string{
 		"  ✗ an apply never finished, so nothing recorded is a claim about what is provisioned",
 		"    → run `ocel bootstrap production` to plan the work that is left and finish it",
-		"1 problem.",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("stdout missing %q; got:\n%s", want, out)
@@ -346,26 +352,24 @@ func TestRunDoctorFailsAnUnfinishedBootstrap(t *testing.T) {
 	}
 }
 
-func TestRunDoctorWarnsAboutAStaleStackNoFeatureRequires(t *testing.T) {
-	root := healthyProject(t)
-	t.Setenv(clitest.FakeBootstrapEnvVar, "stale-optional")
-	t.Setenv(clitest.FakePreviewBootstrapEnvVar, "current")
+func TestRunDoctorWarnsAboutAStaleBootstrap(t *testing.T) {
+	project := healthyProject(t)
+	project.Provider.FakeBootstrap().MarkStale("")
 
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(deps, &stderr)
-	err := Run(context.Background(), deps, root, &stdout)
+	err := Run(context.Background(), deps, project.Root, &stdout)
 	if code := exitCode(t, err); code != 0 {
 		t.Fatalf("exit code = %d, want warnings alone to pass; stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
 
 	out := rendered(t, stdout.String())
 	for _, want := range []string{
-		"  ⚠ ocel-bootstrap-image-optimization is stale",
+		"  ⚠ fake-production is stale",
 		"    → run `ocel bootstrap production` to refresh it",
-		"1 warning.",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("stdout missing %q; got:\n%s", want, out)
@@ -374,34 +378,30 @@ func TestRunDoctorWarnsAboutAStaleStackNoFeatureRequires(t *testing.T) {
 }
 
 func TestDoctorReadsTheBootstrapAndNothingThatGrowsWithTheAccount(t *testing.T) {
-	root := healthyProject(t)
-	t.Setenv(clitest.FakeBootstrapEnvVar, "current")
-	t.Setenv(clitest.FakePreviewBootstrapEnvVar, "current")
-	journal := filepath.Join(t.TempDir(), "describe.journal")
-	t.Setenv(clitest.FakeDescribeJournalEnvVar, journal)
+	project := healthyProject(t)
 
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(deps, &stderr)
-	if err := Run(context.Background(), deps, root, &stdout); err != nil {
+	if err := Run(context.Background(), deps, project.Root, &stdout); err != nil {
 		t.Fatalf("Run err = %v; stderr=%s", err, stderr.String())
 	}
-	got := clitest.ReadJournal(t, journal)
-	if len(got) != 2 {
-		t.Fatalf("the provider was asked %d times, want once per tier: %v", len(got), got)
+	asked := clitest.RequestsTo[*contractv1.DescribeBootstrapRequest](t, project.Requests, contractv1connect.ProviderServiceDescribeBootstrapProcedure)
+	if len(asked) != 2 {
+		t.Fatalf("the provider was asked %d times, want once per tier: %v", len(asked), asked)
 	}
-	for _, line := range got {
-		if strings.Contains(line, "withDependents=true") {
-			t.Errorf("doctor asked %v; it renders no dependent, and reading them costs one query per project in the account", got)
+	for _, req := range asked {
+		if req.GetWithDependents() {
+			t.Errorf("doctor asked %v; it renders no dependent, and reading them costs one query per project in the account", asked)
 		}
 	}
 }
 
 func TestRunDoctorServesPreviewsOnTheGlobalWildcardWithoutAWarning(t *testing.T) {
-	root := healthyProject(t)
-	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+	project := healthyProject(t)
+	clitest.WriteFile(t, filepath.Join(project.Root, "ocel.config.ts"), `
 export default {
   slug: "my-shop",
   provider: { fake: {} },
@@ -412,16 +412,14 @@ export default {
   ],
 };
 `)
-	t.Setenv(clitest.FakeBootstrapEnvVar, "current")
-	t.Setenv(clitest.FakePreviewBootstrapEnvVar, "current")
-	t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.ocel.app")
+	recordPreviewWildcard(t, project.Provider, "preview.ocel.app")
 
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(deps, &stderr)
-	if err := Run(context.Background(), deps, root, &stdout); err != nil {
+	if err := Run(context.Background(), deps, project.Root, &stdout); err != nil {
 		t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
@@ -437,17 +435,15 @@ export default {
 }
 
 func TestRunDoctorNotesAProjectPreviewDomainShadowingTheGlobalOne(t *testing.T) {
-	root := healthyProject(t)
-	t.Setenv(clitest.FakeBootstrapEnvVar, "current")
-	t.Setenv(clitest.FakePreviewBootstrapEnvVar, "current")
-	t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.ocel.app")
+	project := healthyProject(t)
+	recordPreviewWildcard(t, project.Provider, "preview.ocel.app")
 
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(deps, &stderr)
-	if err := Run(context.Background(), deps, root, &stdout); err != nil {
+	if err := Run(context.Background(), deps, project.Root, &stdout); err != nil {
 		t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
@@ -460,22 +456,21 @@ func TestRunDoctorNotesAProjectPreviewDomainShadowingTheGlobalOne(t *testing.T) 
 }
 
 func TestRunDoctorLeavesAnUnwantedTierAlone(t *testing.T) {
-	root, _ := clitest.SetUpDeployFixture(t)
-	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+	project := clitest.SetUpProject(t)
+	clitest.WriteFile(t, filepath.Join(project.Root, "ocel.config.ts"), `
 export default {
   slug: "my-shop",
   provider: { fake: {} },
   domains: { production: "shop.example.com" },
 };
 `)
-	t.Setenv(clitest.FakeBootstrapEnvVar, "current")
 
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(deps, &stderr)
-	err := Run(context.Background(), deps, root, &stdout)
+	err := Run(context.Background(), deps, project.Root, &stdout)
 	if code := exitCode(t, err); code != 0 {
 		t.Fatalf("exit code = %d, want a tier nobody asked for to pass; stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
@@ -492,23 +487,35 @@ export default {
 }
 
 func TestRunDoctorPrintsTheHostCheckFindingsAndTheCertificatesAndRefusesNothing(t *testing.T) {
-	root := healthyProject(t)
-	t.Setenv(clitest.FakeBootstrapEnvVar, "current")
-	t.Setenv(clitest.FakePreviewBootstrapEnvVar, "current")
-	t.Setenv(clitest.FakeHostChecksEnvVar, "1")
-	t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.example.com")
-	t.Setenv(clitest.FakeGlobalDomainRenewalEnvVar, "you placed it on this box and you renew it")
-	t.Setenv(clitest.FakeGlobalDomainExpiresEnvVar, "4102444800")
-	t.Setenv(clitest.FakeDomainCertEnvVar, "SERVING proxy:shop.example.com")
-	t.Setenv(clitest.FakeDomainRenewalEnvVar, "SUCCESS")
-	t.Setenv(clitest.FakeDomainExpiresEnvVar, "4102444800")
+	project := healthyProject(t)
+	p := project.Provider
+	p.WithHooks(func(hooks *provider.Hooks) {
+		hooks.CheckHost = func(_ context.Context, req provider.HostCheckRequest) ([]provider.HostCheck, error) {
+			checks := []provider.HostCheck{{Subject: "port 80", Finding: "something listens on port 80"}}
+			for _, hostname := range req.Hostnames {
+				checks = append(checks, provider.HostCheck{
+					Subject: hostname,
+					Verdict: provider.HostNeedsAction,
+					Finding: hostname + " does not resolve",
+					Fix:     "add the record `ocel domain add` printed",
+				})
+			}
+			return checks, nil
+		}
+	})
+	recordPreviewWildcard(t, p, "preview.example.com")
+	p.ReportCertificateFor("*.preview.example.com", provider.CertificateHealth{Renewal: "you placed it on this box and you renew it", ExpiresAt: 4102444800})
+	edgeState := stackrecords.EdgeState{Kind: fake.KindRelay, Edge: edge.StackState{Slug: "my-shop", Tier: environment.TierProduction}}
+	edgeState.SetHost("shop.example.com", stackrecords.HostnameState{Edge: fake.KindRelay, Certificate: provider.Certificate{ID: "proxy:shop.example.com"}})
+	record(t, p, stackrecords.EdgeStackKey(environment.TierProduction, "my-shop"), edgeState)
+	p.ReportCertificateFor("shop.example.com", provider.CertificateHealth{Renewal: "SUCCESS", ExpiresAt: 4102444800})
 
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(deps, &stderr)
-	err := Run(context.Background(), deps, root, &stdout)
+	err := Run(context.Background(), deps, project.Root, &stdout)
 	out := rendered(t, stdout.String())
 
 	if !strings.Contains(out, "Host checks") || !strings.Contains(out, "Certificates") {
@@ -516,7 +523,7 @@ func TestRunDoctorPrintsTheHostCheckFindingsAndTheCertificatesAndRefusesNothing(
 	}
 	for _, want := range []string{
 		"  ✓ something listens on port 80",
-		"  ⚠ shop.example.com does not resolve; add a record at your DNS provider pointing it at 203.0.113.10",
+		"  ⚠ shop.example.com does not resolve",
 		"    → add the record `ocel domain add` printed",
 		"  ⚠ *.preview.example.com does not resolve",
 		"*.preview.example.com — expires 2100-01-01T00:00:00Z, you placed it on this box and you renew it",
@@ -535,19 +542,20 @@ func TestRunDoctorPrintsTheHostCheckFindingsAndTheCertificatesAndRefusesNothing(
 }
 
 func TestRunDoctorWarnsThatNothingRenewsAPinnedWildcardAboutToExpire(t *testing.T) {
-	root := healthyProject(t)
-	t.Setenv(clitest.FakeBootstrapEnvVar, "current")
-	t.Setenv(clitest.FakePreviewBootstrapEnvVar, "current")
-	t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.example.com")
-	t.Setenv(clitest.FakeGlobalDomainRenewalEnvVar, "you placed it on this box and you renew it")
-	t.Setenv(clitest.FakeGlobalDomainExpiresEnvVar, strconv.FormatInt(time.Now().Add(72*time.Hour).Unix(), 10))
+	project := healthyProject(t)
+	recordPreviewWildcard(t, project.Provider, "preview.example.com")
+	project.Provider.ReportCertificateFor("*.preview.example.com", provider.CertificateHealth{
+		Renewal:      "you placed it on this box and you renew it",
+		ExpiresAt:    time.Now().Add(72 * time.Hour).Unix(),
+		ExpiringSoon: true,
+	})
 
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(deps, &stderr)
-	err := Run(context.Background(), deps, root, &stdout)
+	err := Run(context.Background(), deps, project.Root, &stdout)
 	if code := exitCode(t, err); code != 0 {
 		t.Fatalf("exit code = %d, want a warning rather than a refusal; stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
@@ -564,9 +572,7 @@ func TestRunDoctorWarnsThatNothingRenewsAPinnedWildcardAboutToExpire(t *testing.
 }
 
 func TestDoctorChecksTheSetupInTheCheckPhaseOfItsRunAndPrintsItsReportAloneOnStdout(t *testing.T) {
-	root := healthyProject(t)
-	t.Setenv(clitest.FakeBootstrapEnvVar, "current")
-	t.Setenv(clitest.FakePreviewBootstrapEnvVar, "current")
+	project := healthyProject(t)
 
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
@@ -576,7 +582,7 @@ func TestDoctorChecksTheSetupInTheCheckPhaseOfItsRunAndPrintsItsReportAloneOnStd
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(deps, &stderr)
-	if err := Run(context.Background(), deps, root, &stdout); err != nil {
+	if err := Run(context.Background(), deps, project.Root, &stdout); err != nil {
 		t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 

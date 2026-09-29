@@ -23,6 +23,7 @@ type Provider struct {
 	rotation              int
 	pending               error
 	health                *provider.CertificateHealth
+	healthFor             map[string]provider.CertificateHealth
 
 	preflightRefusal error
 	preflighted      []provider.DeployPreflight

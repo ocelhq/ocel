@@ -3,7 +3,6 @@ package doctor
 import (
 	"bytes"
 	"context"
-	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -11,6 +10,8 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 )
 
 func TestDoctorPassesOnAGoProjectWithNoNode(t *testing.T) {
@@ -27,19 +28,11 @@ func TestDoctorPassesOnAGoProjectWithNoNode(t *testing.T) {
 }
 `)
 
-	testBinary, err := filepath.Abs(os.Args[0])
-	if err != nil {
-		t.Fatalf("resolve test binary path: %v", err)
-	}
-	clitest.InstallProvider(t, "fake", func(dest string) error { return os.Symlink(testBinary, dest) })
-
+	p := fake.NewForProject(fake.Options{}, root)
+	clitest.Bootstrap(t, p, environment.TierProduction)
+	clitest.Bootstrap(t, p, environment.TierPreview)
+	clitest.ServeFake(t, p)
 	t.Setenv(providerclient.ReadyTimeoutEnvVar, "5s")
-	t.Setenv(clitest.FakeProviderEnvVar, "1")
-	t.Setenv("OCEL_TEST_DEPLOY_FAKE_PROVIDER_SOCK", filepath.Join(t.TempDir(), "deploy-provider.sock"))
-	t.Setenv(clitest.FakeIDProviderEnvVar, "fake")
-	t.Setenv(clitest.FakeIDAccountEnvVar, "123456789012")
-	t.Setenv(clitest.FakeBootstrapEnvVar, "current")
-	t.Setenv(clitest.FakePreviewBootstrapEnvVar, "current")
 	t.Setenv("PATH", t.TempDir())
 
 	deps := clitest.NewDeps()

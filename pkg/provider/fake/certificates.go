@@ -97,9 +97,21 @@ func (p *Provider) ReportCertificate(health provider.CertificateHealth) {
 	p.health = &health
 }
 
+func (p *Provider) ReportCertificateFor(hostname string, health provider.CertificateHealth) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.healthFor == nil {
+		p.healthFor = map[string]provider.CertificateHealth{}
+	}
+	p.healthFor[hostname] = health
+}
+
 func (p certificates) Inspect(_ context.Context, _ edge.Kind, hostname string, cert provider.Certificate) (provider.CertificateHealth, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if health, reported := p.healthFor[hostname]; reported {
+		return health, nil
+	}
 	if p.health != nil {
 		return *p.health, nil
 	}
