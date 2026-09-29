@@ -63,7 +63,7 @@ func (t Traefik) routers(ctx context.Context) ([]userRouter, error) {
 		if err != nil {
 			continue
 		}
-		found = append(found, routersIn(tree, filepath.Join(filepath.Clean(t.Directory), file.Name))...)
+		found = append(found, routersIn(tree, filepath.Join(t.directory(), file.Name))...)
 	}
 	for _, source := range []struct {
 		what  string
