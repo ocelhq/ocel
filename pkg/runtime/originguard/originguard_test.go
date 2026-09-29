@@ -20,6 +20,7 @@ type upstream struct {
 
 	host   string
 	query  string
+	heard  http.Header
 	secret string
 	seen   int
 }
@@ -31,6 +32,7 @@ func serveUpstream(t *testing.T) *upstream {
 		up.seen++
 		up.host = r.Host
 		up.query = r.URL.RawQuery
+		up.heard = r.Header.Clone()
 		up.secret = r.Header.Get(OriginSecretHeader)
 		io.WriteString(w, "served by the app")
 	}))
@@ -239,6 +241,40 @@ func TestTheAppIsHandedTheQueryTheClientSentByteForByte(t *testing.T) {
 		ask(t, front, http.MethodGet, "/echo?"+query, "")
 		if up.query != query {
 			t.Errorf("the app was handed the query %q, want %q", up.query, query)
+		}
+	}
+}
+
+func TestTheAppHearsTheForwardedChainAndSchemeTheFrontSetWithTheGuardsPeerAppended(t *testing.T) {
+	up := serveUpstream(t)
+	front := serveFront(t, up, nil, nil)
+	for _, heard := range []struct {
+		name          string
+		chain, scheme string
+		wantChain     string
+		wantScheme    string
+	}{
+		{name: "behind a front", chain: "203.0.113.9, 198.51.100.7", scheme: "https", wantChain: "203.0.113.9, 198.51.100.7, 127.0.0.1", wantScheme: "https"},
+		{name: "with nothing in front", wantChain: "127.0.0.1", wantScheme: "http"},
+	} {
+		req, err := http.NewRequest(http.MethodGet, front.URL+"/", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if heard.chain != "" {
+			req.Header.Set("X-Forwarded-For", heard.chain)
+			req.Header.Set("X-Forwarded-Proto", heard.scheme)
+		}
+		resp, err := front.Client().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if got := strings.Join(up.heard.Values("X-Forwarded-For"), ", "); got != heard.wantChain {
+			t.Errorf("%s: the app heard the chain %q, want %q", heard.name, got, heard.wantChain)
+		}
+		if got := up.heard.Get("X-Forwarded-Proto"); got != heard.wantScheme {
+			t.Errorf("%s: the app heard the scheme %q, want %q", heard.name, got, heard.wantScheme)
 		}
 	}
 }
