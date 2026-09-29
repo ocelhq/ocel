@@ -98,7 +98,7 @@ func (g *Gate) Matrix(environments []string) Matrix {
 	complaints := map[Cell]string{}
 	for _, problem := range g.problems {
 		if problem.GetKind() == resourcesv1.VariableProblem_KIND_INVALID {
-			complaints[Cell{Key: problem.GetKey(), Folder: problem.GetFolder()}] = problem.GetDetail()
+			complaints[Cell{Key: problem.GetKey(), Folder: problem.GetFolder()}] = cmp.Or(problem.GetDetail(), "it does not satisfy its schema")
 		}
 	}
 	g.mu.Unlock()

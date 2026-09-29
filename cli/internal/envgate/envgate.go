@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	"google.golang.org/protobuf/proto"
 )
 
 type Cell struct {
@@ -275,8 +276,28 @@ func (g *Gate) Groups() []*resourcesv1.GroupDefinition {
 func (g *Gate) ReportEnvProblems(_ context.Context, req *resourcesv1.ReportEnvProblemsRequest) (*resourcesv1.ReportEnvProblemsResponse, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	g.problems = append(g.problems, req.GetProblems()...)
+	for _, problem := range req.GetProblems() {
+		if problem.GetDetail() != "" && !isPlain(g.definitions, problem.GetKey()) {
+			problem = proto.CloneOf(problem)
+			problem.Detail = ""
+		}
+		g.problems = append(g.problems, problem)
+	}
 	return &resourcesv1.ReportEnvProblemsResponse{}, nil
+}
+
+func isPlain(definitions []*resourcesv1.VariableDefinition, key string) bool {
+	declared := false
+	for _, definition := range definitions {
+		if definition.GetKey() != key {
+			continue
+		}
+		if definition.GetClass() != resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN {
+			return false
+		}
+		declared = true
+	}
+	return declared
 }
 
 func (g *Gate) Definitions() []*resourcesv1.VariableDefinition {

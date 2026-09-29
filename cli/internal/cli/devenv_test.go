@@ -222,6 +222,16 @@ func TestDevRefusal(t *testing.T) {
 		}
 	})
 
+	t.Run("an invalid value the gate kept no detail for ends at its schema", func(t *testing.T) {
+		refusal := &envgate.Refusal{Problems: []*resourcesv1.VariableProblem{{Key: "API_TOKEN", Kind: resourcesv1.VariableProblem_KIND_INVALID}}}
+
+		got := devRefusal(refusal, nil, invocation{name: "dev", source: devSource{id: "dotenv"}}).Error()
+
+		if !strings.Contains(got, "set, but it does not satisfy its schema\n") {
+			t.Errorf("refusal = %q, want the reason to end at the schema with nothing trailing", got)
+		}
+	})
+
 	t.Run("it is never given a value it could print", func(t *testing.T) {
 		want := reflect.TypeOf(func(error, map[string]struct{}, invocation) error { return nil })
 		if got := reflect.TypeOf(devRefusal); got != want {

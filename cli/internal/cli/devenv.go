@@ -170,10 +170,13 @@ func devPlural(n int) string {
 }
 
 func whyUnready(problem *resourcesv1.VariableProblem) string {
-	if problem.GetKind() == resourcesv1.VariableProblem_KIND_INVALID {
-		return "set, but it does not satisfy its schema: " + problem.GetDetail()
+	if problem.GetKind() != resourcesv1.VariableProblem_KIND_INVALID {
+		return "no value is set"
 	}
-	return "no value is set"
+	if detail := problem.GetDetail(); detail != "" {
+		return "set, but it does not satisfy its schema: " + detail
+	}
+	return "set, but it does not satisfy its schema"
 }
 
 func devCellLabel(cell envgate.Cell) string {

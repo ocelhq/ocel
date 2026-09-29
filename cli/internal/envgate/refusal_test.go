@@ -241,3 +241,41 @@ func TestPaintTouchesOnlyTheMarkAndTheFolder(t *testing.T) {
 		t.Errorf("painted minus codes =\n%s\nwant the plain form\n%s", stripped, plain)
 	}
 }
+
+func TestASchemaComplaintAboutAValueThatIsNotPlainQuotesNothingTheSDKSaid(t *testing.T) {
+	t.Parallel()
+
+	for _, class := range []resourcesv1.VariableClass{resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, resourcesv1.VariableClass_VARIABLE_CLASS_SECRET} {
+		t.Run(class.String(), func(t *testing.T) {
+			t.Parallel()
+			values := newFakeValues()
+			values.set("STRIPE_KEY", "", "sk_live_leaked")
+			g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "web"}}})
+			declare(t, g, def("STRIPE_KEY", class))
+			report(t, g, invalid("STRIPE_KEY", "", `expected "sk_test_", received "sk_live_leaked"`))
+
+			err := g.Check()
+			if err == nil {
+				t.Fatal("Check = nil, want the invalid value refused")
+			}
+			if strings.Contains(err.Error(), "sk_live_leaked") || !strings.Contains(err.Error(), "does not satisfy its schema") {
+				t.Errorf("refusal = %q, want the generic reason and nothing the schema said", err)
+			}
+			problem := cell(t, row(t, g.Matrix(nil), "STRIPE_KEY"), "").Problem
+			if strings.Contains(problem, "sk_live_leaked") || problem == "" {
+				t.Errorf("matrix problem = %q, want a complaint that quotes nothing the schema said", problem)
+			}
+		})
+	}
+
+	t.Run("a complaint about a key not yet declared plain keeps nothing the SDK said", func(t *testing.T) {
+		t.Parallel()
+		g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "web"}}})
+		report(t, g, invalid("UNDECLARED", "", "received hunter2"))
+		declare(t, g, def("UNDECLARED", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET))
+
+		if err := g.Check(); err == nil || strings.Contains(err.Error(), "hunter2") {
+			t.Errorf("Check = %v, want a refusal quoting nothing the schema said", err)
+		}
+	})
+}
