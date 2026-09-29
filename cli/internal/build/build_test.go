@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/fixturetest"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/node"
+	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/processenv"
@@ -269,7 +270,7 @@ func TestBuild(t *testing.T) {
 			t.Fatalf("ReadFunctions: %v", err)
 		}
 		assertFunctions(t, "ReadFunctions", fns, []Function{
-			{Route: "index", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "index.mjs", ArtifactPath: "apps/api/functions/index.func", RouteID: "/", App: "api"},
+			{Route: "index", Framework: buildoutput.Framework{Name: "node", Arch: arch.X8664}, EntryFile: "index.mjs", ArtifactPath: "apps/api/functions/index.func", RouteID: "/", App: "api"},
 		})
 		if got, err := BuildID(root, "api"); err != nil || len(got) != 16 {
 			t.Errorf("BuildID = %q, %v, want the artifact hash the bundle wrote", got, err)
@@ -316,7 +317,7 @@ func TestBuild(t *testing.T) {
 			t.Fatalf("ReadFunctions: %v", err)
 		}
 		assertFunctions(t, "ReadFunctions", fns, []Function{
-			{Route: "index", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "index.mjs", ArtifactPath: "apps/api/functions/index.func", RouteID: "/", App: "api"},
+			{Route: "index", Framework: buildoutput.Framework{Name: "node", Arch: arch.X8664}, EntryFile: "index.mjs", ArtifactPath: "apps/api/functions/index.func", RouteID: "/", App: "api"},
 		})
 	})
 
@@ -407,7 +408,7 @@ func TestBuildTracesANodeAppWhenTracingIsPreferred(t *testing.T) {
 			t.Fatalf("ReadFunctions: %v", err)
 		}
 		assertFunctions(t, "ReadFunctions", fns, []Function{
-			{Route: "index", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "apps/api/functions/index.func", RouteID: "/", App: "api"},
+			{Route: "index", Framework: buildoutput.Framework{Name: "node", Arch: arch.X8664}, EntryFile: "src/server.js", ArtifactPath: "apps/api/functions/index.func", RouteID: "/", App: "api"},
 		})
 		funcDir := filepath.Join(buildoutput.AppRoot(buildoutput.Root(fixtureRoot), "api"), functionsDirName, entryFuncDirName)
 		for _, rel := range []string{"src/server.js", "node_modules/express/package.json"} {

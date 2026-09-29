@@ -187,7 +187,7 @@ func nodeTarget(cfg *project.Project, a project.App, outputDir string) (toolchai
 	appDir := buildoutput.AppRoot(outputDir, a.Name)
 	return toolchain.Target{
 		App:        a.Name,
-		Framework:  buildoutput.Framework{Name: buildoutput.FrameworkNode, Arch: a.Arch},
+		Framework:  buildoutput.Framework{Name: buildoutput.FrameworkNode, Arch: a.Architecture()},
 		Source:     source,
 		Entrypoint: entrypoint,
 		FuncDir:    filepath.Join(appDir, functionsDirName, entryFuncDirName),
