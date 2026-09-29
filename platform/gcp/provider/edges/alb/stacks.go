@@ -29,11 +29,8 @@ func (t Target) Name() string {
 }
 
 func (t Target) Prefix() string {
-	switch {
-	case t.Slug == "" && t.Shielded:
-		return dashed(string(Kind), "front", shieldedWord, string(t.Tier))
-	case t.Slug == "":
-		return dashed(string(Kind), "front", string(t.Tier))
+	if t.Slug == "" {
+		return t.Name()
 	}
 	return dashed(string(Kind), "project", naming.Sanitize(t.Slug))
 }
@@ -89,7 +86,7 @@ func frontOf(outputs map[string]string) Front {
 func FrontStack(tier environment.Tier) string { return dashed(string(Kind), "front", string(tier)) }
 
 func ShieldedFrontStack(tier environment.Tier) string {
-	return dashed(string(Kind), "front", shieldedWord, string(tier))
+	return dashed(string(Kind), "front", shieldedNameSegment, string(tier))
 }
 
 func BindingStack(slug string, tier environment.Tier) string {

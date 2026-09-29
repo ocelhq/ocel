@@ -61,8 +61,10 @@ type shield struct {
 	Hostname           string   `json:"hostname"`
 	Owner              string   `json:"owner"`
 	ClientCertificates []string `json:"clientCertificates,omitempty"`
-	Certificate        string   `json:"certificate,omitempty"`
-	Key                string   `json:"key,omitempty"`
+	OriginCertificate  struct {
+		Certificate string `json:"certificate"`
+		Key         string `json:"key"`
+	} `json:"originCertificate"`
 }
 
 type route struct {
@@ -175,7 +177,7 @@ func Read(document []byte) (*Table, error) {
 		pinned[pin.Hostname] = true
 	}
 	for _, held := range read.Shields {
-		if held.Certificate != "" {
+		if held.OriginCertificate.Certificate != "" {
 			pinned[strings.ToLower(held.Hostname)] = true
 		}
 	}

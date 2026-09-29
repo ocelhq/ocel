@@ -285,7 +285,7 @@ func (e *Edge) recordClaim(claim router.Claim) (edge.Origin, error) {
 	if !slices.Contains(e.holding, claim.Hostname) {
 		e.holding = append(e.holding, claim.Hostname)
 	}
-	return e.certifiedOrigin(claim), nil
+	return e.holdOriginCertificate(claim), nil
 }
 
 func (e *Edge) recordPreviewEntryClaim(claim router.Claim) (edge.Origin, error) {
@@ -296,7 +296,7 @@ func (e *Edge) recordPreviewEntryClaim(claim router.Claim) (edge.Origin, error) 
 	}
 	e.events = append(e.events, "claim")
 	e.entries = append(e.entries, claim)
-	return e.certifiedOrigin(claim), nil
+	return e.holdOriginCertificate(claim), nil
 }
 
 func (e *Edge) recordPreviewEntryDisclaim(baseDomain string) {
@@ -317,7 +317,7 @@ func (e *Edge) DisclaimedPreviewEntries() []string {
 	return slices.Clone(e.released)
 }
 
-func (e *Edge) certifiedOrigin(claim router.Claim) edge.Origin {
+func (e *Edge) holdOriginCertificate(claim router.Claim) edge.Origin {
 	if claim.OriginCertificate.ID != "" {
 		if e.held == nil {
 			e.held = map[string]string{}
@@ -336,7 +336,7 @@ func (e *Edge) recordDisclaim(hostname string) {
 	e.holding = slices.DeleteFunc(e.holding, func(held string) bool { return held == hostname })
 }
 
-func (e *Edge) heldClaims() []string {
+func (e *Edge) listHeldClaims() []string {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return slices.Clone(e.holding)

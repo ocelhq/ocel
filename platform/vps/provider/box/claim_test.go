@@ -160,7 +160,7 @@ func TestTheBoxSaysItHoldsNoCertificateForAShieldedHostnameUntilTheEdgeIssuesOne
 	if origin, err = routed.Claim(ctx, claim); err != nil || !origin.Certified {
 		t.Fatalf("Claim with an origin certificate = %+v, %v, want the box certified", origin, err)
 	}
-	if len(m.shields) != 1 || m.shields[0].Certificate != claim.OriginCertificate.Certificate || m.shields[0].Key != claim.OriginCertificate.Key {
+	if len(m.shields) != 1 || m.shields[0].OriginCertificate.Certificate != claim.OriginCertificate.Certificate || m.shields[0].OriginCertificate.Key != claim.OriginCertificate.Key {
 		t.Errorf("the box shields %+v, want the origin certificate and its key held for shop.example.com", m.shields)
 	}
 

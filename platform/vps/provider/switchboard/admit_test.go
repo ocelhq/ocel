@@ -96,7 +96,7 @@ func TestTheTableRefusesEveryNameAnOriginCertificateTheEdgeIssuedCovers(t *testi
 			{"owner":"ocel--shop--production","hostname":"shop.example.com","pointer":"@production"},
 			{"owner":"ocel--blog--production","hostname":"blog.example.com","pointer":"@production"}],
 		"shields":[
-			{"hostname":"shop.example.com","owner":"ocel--shop--production","clientCertificates":["zone"],"certificate":"ORIGIN","key":"KEY"},
+			{"hostname":"shop.example.com","owner":"ocel--shop--production","clientCertificates":["zone"],"originCertificate":{"certificate":"ORIGIN","key":"KEY"}},
 			{"hostname":"blog.example.com","owner":"ocel--blog--production","clientCertificates":["zone"]}]}`)
 
 	if table.Admits("shop.example.com") {

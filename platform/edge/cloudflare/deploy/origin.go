@@ -19,21 +19,21 @@ import (
 
 const ownerSeparator = " for "
 
-func forwardingOwner(namespace, slug string, tier environment.Tier) string {
+func formatForwardingOwner(namespace, slug string, tier environment.Tier) string {
 	return naming.NamespaceField(namespace) + fieldSeparator + slug + fieldSeparator + string(tier)
 }
 
-func ownerComment(owner string) string { return recordComment + ownerSeparator + owner }
+func formatOwnerComment(owner string) string { return recordComment + ownerSeparator + owner }
 
-func parseCommentOwner(comment string) (owner string, ocels bool) {
+func parseCommentOwner(comment string) (owner string, written bool) {
 	if comment == recordComment {
 		return "", true
 	}
-	owner, ocels = strings.CutPrefix(comment, recordComment+ownerSeparator)
-	return owner, ocels && owner != ""
+	owner, written = strings.CutPrefix(comment, recordComment+ownerSeparator)
+	return owner, written && owner != ""
 }
 
-func proxiedRecord(hostname string, origin edge.Origin) (edge.Record, error) {
+func newProxiedRecord(hostname string, origin edge.Origin) (edge.Record, error) {
 	records, err := edge.RecordsFor(edge.DNSTarget{
 		Kind:           Kind,
 		ProxiesRecords: true,
@@ -62,7 +62,7 @@ func (p *cloudflare) bindOrigin(ctx context.Context, state *edge.StackState, own
 	}
 	state.Bind(binding.Hostname)
 	state.PublishFront(binding.Hostname, binding.Origin.Address)
-	state.RecordWrites(append(recordsBesides(state.Records, binding.Hostname), want))
+	state.RecordWrites(append(removeRecordsNamed(state.Records, binding.Hostname), want))
 	return nil
 }
 
@@ -74,13 +74,13 @@ func (p *cloudflare) forwardOrigin(ctx context.Context, accountID, owner, hostna
 	if err != nil {
 		return edge.Record{}, err
 	}
-	if err := p.ensureTLSCover(ctx, zoneID, zoneName, hostname); err != nil {
+	if err := p.orderTLSCover(ctx, zoneID, zoneName, hostname); err != nil {
 		return edge.Record{}, err
 	}
 	if err := p.requireStrictOrigin(ctx, zoneID, zoneName); err != nil {
 		return edge.Record{}, err
 	}
-	want, err := proxiedRecord(hostname, origin)
+	want, err := newProxiedRecord(hostname, origin)
 	if err != nil {
 		return edge.Record{}, err
 	}
@@ -101,7 +101,7 @@ func (p *cloudflare) unbindOrigin(ctx context.Context, state *edge.StackState, o
 	}
 	state.Release(hostname)
 	state.PublishFront(hostname, "")
-	state.RecordWrites(recordsBesides(state.Records, hostname))
+	state.RecordWrites(removeRecordsNamed(state.Records, hostname))
 	return nil
 }
 
@@ -124,7 +124,7 @@ func (p *cloudflare) requireStrictOrigin(ctx context.Context, zoneID, zoneName s
 	return nil
 }
 
-func recordsBesides(records []edge.Record, hostname string) []edge.Record {
+func removeRecordsNamed(records []edge.Record, hostname string) []edge.Record {
 	return slices.DeleteFunc(slices.Clone(records), func(rec edge.Record) bool { return rec.Name == hostname })
 }
 
@@ -152,9 +152,9 @@ func (p *cloudflare) forwardRecord(ctx context.Context, zoneID, owner string, wa
 	}
 	var ours *dns.RecordResponse
 	for i := range live {
-		held, ocels := parseCommentOwner(live[i].Comment)
+		held, written := parseCommentOwner(live[i].Comment)
 		switch {
-		case !ocels:
+		case !written:
 			return fmt.Errorf("%s already has a %s record ocel did not write, pointing at %s — delete it, and ocel writes the proxied record that forwards %s through Cloudflare", want.Name, live[i].Type, live[i].Content, want.Name)
 		case held != "" && held != owner:
 			return fmt.Errorf("%s is forwarded through Cloudflare for %s, and one hostname is served by one project: release it there with `ocel domain remove` first", want.Name, held)
@@ -172,7 +172,7 @@ func (p *cloudflare) forwardRecord(ctx context.Context, zoneID, owner string, wa
 		}
 		return nil
 	}
-	if ours.Content == want.Value && string(ours.Type) == string(want.Type) && ours.Proxied && ours.Comment == ownerComment(owner) {
+	if ours.Content == want.Value && string(ours.Type) == string(want.Type) && ours.Proxied && ours.Comment == formatOwnerComment(owner) {
 		return nil
 	}
 	if _, err := p.client.DNS.Records.Update(ctx, ours.ID, dns.RecordUpdateParams{ZoneID: cf.F(zoneID), Body: body}); err != nil {
@@ -184,13 +184,13 @@ func (p *cloudflare) forwardRecord(ctx context.Context, zoneID, owner string, wa
 func withOwnerComment(body recordParam, owner string) recordParam {
 	switch typed := body.(type) {
 	case dns.ARecordParam:
-		typed.Comment = cf.F(ownerComment(owner))
+		typed.Comment = cf.F(formatOwnerComment(owner))
 		return typed
 	case dns.AAAARecordParam:
-		typed.Comment = cf.F(ownerComment(owner))
+		typed.Comment = cf.F(formatOwnerComment(owner))
 		return typed
 	case dns.CNAMERecordParam:
-		typed.Comment = cf.F(ownerComment(owner))
+		typed.Comment = cf.F(formatOwnerComment(owner))
 		return typed
 	}
 	return body

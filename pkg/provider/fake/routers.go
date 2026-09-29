@@ -190,7 +190,7 @@ func (e *Edge) routerFacts() router.Facts {
 const ClaimKind = "Fake::Claim"
 
 func (r Router) planProjectRemoval(scope edge.ProjectScope) []edge.PlanGroup {
-	held := r.edge.heldClaims()
+	held := r.edge.listHeldClaims()
 	var changes []edge.PlanChange
 	for _, hostname := range scope.Hostnames {
 		if slices.Contains(held, hostname) {

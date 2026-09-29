@@ -409,8 +409,8 @@ func TestCertificateCovers(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			if got := certificateCovers(tc.covered, tc.hostname); got != tc.want {
-				t.Errorf("certificateCovers(%q, %q) = %v, want %v", tc.covered, tc.hostname, got, tc.want)
+			if got := isCoveredByName(tc.covered, tc.hostname); got != tc.want {
+				t.Errorf("isCoveredByName(%q, %q) = %v, want %v", tc.covered, tc.hostname, got, tc.want)
 			}
 		})
 	}

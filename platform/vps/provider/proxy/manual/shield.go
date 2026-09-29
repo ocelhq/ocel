@@ -19,7 +19,7 @@ func (m Manual) checkShield(ctx context.Context, hostname string) (provider.Host
 		return provider.HostCheck{
 			Subject: hostname, Verdict: provider.HostFail,
 			Finding: fmt.Sprintf("your proxy answers %s to a client that presents no certificate", hostname),
-			Fix:     clientCertificateFix(hostname),
+			Fix:     describeClientCertificateFix(hostname),
 		}, nil
 	}
 	plainAnswered, _, err := m.Box.ProbePlainHTTP(ctx, probed)
@@ -39,6 +39,6 @@ func (m Manual) checkShield(ctx context.Context, hostname string) (provider.Host
 	}, nil
 }
 
-func clientCertificateFix(hostname string) string {
+func describeClientCertificateFix(hostname string) string {
 	return fmt.Sprintf("in your proxy, require a client certificate for %s and trust only the ones listed for it under \"shields\" in %s", hostname, live.RoutingTable)
 }

@@ -222,16 +222,16 @@ func (m *machine) DisclaimSurface(_ context.Context, owner string) error {
 		return err
 	}
 	m.claims = host.Disclaiming(m.claims, func(claim host.HostClaim) bool { return claim.Owner == owner })
-	m.shields = host.Unshielding(m.shields, func(shield host.Shield) bool { return shield.Owner == owner })
+	m.shields = host.DropShields(m.shields, func(shield host.Shield) bool { return shield.Owner == owner })
 	return nil
 }
 
-func (m *machine) ShieldHost(_ context.Context, shield host.Shield) (host.Shield, error) {
+func (m *machine) PutShield(_ context.Context, shield host.Shield) (host.Shield, error) {
 	m.calls = append(m.calls, "shield "+shield.Hostname)
-	if err := m.refuse("ShieldHost"); err != nil {
+	if err := m.refuse("PutShield"); err != nil {
 		return host.Shield{}, err
 	}
-	m.shields = host.Shielding(m.shields, shield)
+	m.shields = host.MergeShield(m.shields, shield)
 	return m.shields[len(m.shields)-1], nil
 }
 
@@ -239,12 +239,12 @@ func (m *machine) RefuseUnshielded(context.Context, string) error {
 	return m.refuse("RefuseUnshielded")
 }
 
-func (m *machine) UnshieldHost(_ context.Context, hostname, owner string) error {
+func (m *machine) RemoveShield(_ context.Context, hostname, owner string) error {
 	m.calls = append(m.calls, "unshield "+hostname)
-	if err := m.refuse("UnshieldHost"); err != nil {
+	if err := m.refuse("RemoveShield"); err != nil {
 		return err
 	}
-	m.shields = host.Unshielding(m.shields, func(shield host.Shield) bool { return shield.Hostname == hostname && shield.Owner == owner })
+	m.shields = host.DropShields(m.shields, func(shield host.Shield) bool { return shield.Hostname == hostname && shield.Owner == owner })
 	return nil
 }
 

@@ -41,7 +41,7 @@ func dashed(parts ...string) string { return strings.Join(parts, "-") }
 func frontNames(tier environment.Tier, shielded bool) names {
 	stem := dashed("ocel", string(Kind), string(tier))
 	if shielded {
-		stem = dashed("ocel", string(Kind), shieldedWord, string(tier))
+		stem = dashed("ocel", string(Kind), shieldedNameSegment, string(tier))
 	}
 	return names{
 		Address:        stem + "-address",

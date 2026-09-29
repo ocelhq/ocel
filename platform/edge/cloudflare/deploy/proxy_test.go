@@ -160,7 +160,7 @@ func TestTheCloudflareProxyRefusesAHostnameAnotherProjectForwards(t *testing.T) 
 	m := proxyZoneMock()
 	m.existingRecords = []map[string]any{{
 		"id": "other", "name": "shop.app.com", "type": "A", "content": "192.0.2.1", "proxied": true,
-		"comment": ownerComment(forwardingOwner(defaultNamespace, "other", environment.TierProduction)),
+		"comment": formatOwnerComment(formatForwardingOwner(defaultNamespace, "other", environment.TierProduction)),
 	}}
 	front, stack := reconciledProxy(t, m)
 
@@ -175,7 +175,7 @@ func TestTheCloudflareProxyRefusesAHostnameAnotherProjectForwards(t *testing.T) 
 		t.Errorf("deleted %v, want another project's record left in place", m.deletedRecords)
 	}
 	owner, err := front.DomainOwner(context.Background(), "shop.app.com")
-	if err != nil || owner != forwardingOwner(defaultNamespace, "other", environment.TierProduction) {
+	if err != nil || owner != formatForwardingOwner(defaultNamespace, "other", environment.TierProduction) {
 		t.Errorf("DomainOwner = %q, %v, want the project that forwards it", owner, err)
 	}
 }

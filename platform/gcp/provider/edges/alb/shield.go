@@ -25,7 +25,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
-const shieldedWord = "shielded"
+const shieldedNameSegment = "shielded"
 
 const (
 	trustAttempts  = 8
@@ -152,44 +152,51 @@ func (e *Edge) ensureAllowlist(ctx context.Context, tier environment.Tier) ([]st
 }
 
 func (e *Edge) trustClaim(ctx context.Context, tier environment.Tier, hostname string, certificates []string) (Front, error) {
-	front, err := e.applyTrust(ctx, tier, true, func(read trustRecord) trustRecord { return read.withClaim(hostname, certificates) })
+	front, record, err := e.applyTrust(ctx, tier, func(read trustRecord) trustRecord { return read.withClaim(hostname, certificates) })
 	if err != nil {
 		return Front{}, err
 	}
-	if _, err := e.applyTrust(ctx, tier.Sibling(), false, func(read trustRecord) trustRecord { return read.withCarried(certificates) }); err != nil {
+	if !front.provisioned() {
+		if front, err = e.raiseTrusting(ctx, tier, record.allowlist()); err != nil {
+			return Front{}, err
+		}
+	}
+	if _, _, err := e.applyTrust(ctx, tier.Sibling(), func(read trustRecord) trustRecord { return read.withCarried(certificates) }); err != nil {
 		return Front{}, err
 	}
 	return front, nil
 }
 
 func (e *Edge) withdrawClaims(ctx context.Context, tier environment.Tier, hostnames ...string) error {
-	_, err := e.applyTrust(ctx, tier, false, func(read trustRecord) trustRecord { return read.withoutClaims(hostnames) })
+	_, _, err := e.applyTrust(ctx, tier, func(read trustRecord) trustRecord { return read.withoutClaims(hostnames) })
 	return err
 }
 
-func (e *Edge) applyTrust(ctx context.Context, tier environment.Tier, provisioning bool, change func(trustRecord) trustRecord) (Front, error) {
+func (e *Edge) applyTrust(ctx context.Context, tier environment.Tier, change func(trustRecord) trustRecord) (Front, trustRecord, error) {
 	outputs, err := e.deps.Stacks.Outputs(ctx, e.frontTarget(tier))
 	if err != nil {
-		return Front{}, err
+		return Front{}, trustRecord{}, err
 	}
 	front := frontOf(outputs)
 	front.Shielded = true
 	record, err := e.changeTrust(ctx, tier, change)
 	if err != nil {
-		return Front{}, err
+		return Front{}, trustRecord{}, err
 	}
 	allowlist := record.allowlist()
 	if len(allowlist) > maxAllowlisted {
-		return Front{}, fmt.Errorf("the %s front of tier %s would trust %d client certificates, and a Certificate Manager trust config allowlists at most %d: delete the client certificates your Cloudflare zones no longer present, and deploy again",
+		return Front{}, trustRecord{}, fmt.Errorf("the %s front of tier %s would trust %d client certificates, and a Certificate Manager trust config allowlists at most %d: delete the client certificates your Cloudflare zones no longer present, and deploy again",
 			Kind, tier, len(allowlist), maxAllowlisted)
 	}
-	if !provisioning && !front.provisioned() {
-		return front, nil
+	if !front.provisioned() || slices.Equal(record.Provisioned, allowlist) {
+		return front, record, nil
 	}
-	if front.provisioned() && slices.Equal(record.Provisioned, allowlist) {
-		return front, nil
-	}
-	front, err = e.raise(ctx, tier, progress.DiscardProgress())
+	front, err = e.raiseTrusting(ctx, tier, allowlist)
+	return front, record, err
+}
+
+func (e *Edge) raiseTrusting(ctx context.Context, tier environment.Tier, allowlist []string) (Front, error) {
+	front, err := e.raise(ctx, tier, progress.DiscardProgress())
 	if err != nil {
 		return Front{}, err
 	}
