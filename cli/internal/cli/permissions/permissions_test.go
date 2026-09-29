@@ -12,9 +12,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/pkg/edge"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 )
 
 func TestPermissionsNeedsATier(t *testing.T) {
@@ -73,17 +75,16 @@ func TestPermissionsPurposeArg(t *testing.T) {
 
 func TestRunPermissions(t *testing.T) {
 	t.Run("it writes the document the provider renders for the purpose", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
+		project := clitest.SetUpProject(t)
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, nil)
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(deps, &stderr)
-		if err := Run(context.Background(), deps, root, contractv1.CredentialPurpose_CREDENTIAL_PURPOSE_DEPLOY, &stdout); err != nil {
+		if err := Run(context.Background(), deps, project.Root, contractv1.CredentialPurpose_CREDENTIAL_PURPOSE_DEPLOY, &stdout); err != nil {
 			t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
-		if !strings.Contains(stdout.String(), "CREDENTIAL_PURPOSE_DEPLOY") {
+		if !strings.Contains(stdout.String(), "fake permissions for deploy") {
 			t.Errorf("stdout = %q, want the deploy purpose's document", stdout.String())
 		}
 		if strings.Contains(stdout.String(), "fake credentials") {
@@ -92,34 +93,39 @@ func TestRunPermissions(t *testing.T) {
 	})
 
 	t.Run("it writes the bootstrap document when the bootstrap purpose is asked for", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
+		project := clitest.SetUpProject(t)
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, nil)
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(deps, &stderr)
-		if err := Run(context.Background(), deps, root, contractv1.CredentialPurpose_CREDENTIAL_PURPOSE_BOOTSTRAP, &stdout); err != nil {
+		if err := Run(context.Background(), deps, project.Root, contractv1.CredentialPurpose_CREDENTIAL_PURPOSE_BOOTSTRAP, &stdout); err != nil {
 			t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
-		if !strings.Contains(stdout.String(), "CREDENTIAL_PURPOSE_BOOTSTRAP") {
+		if !strings.Contains(stdout.String(), "fake permissions for bootstrap") {
 			t.Errorf("stdout = %q, want the bootstrap purpose's document", stdout.String())
 		}
 	})
 
 	t.Run("it heads each group where the edge has credentials of its own", func(t *testing.T) {
-		root, _, deps := clitest.SetUpEdgeFixture(t, "  edge: \"relay\",\n")
+		project := clitest.SetUpProject(t)
+		project.Provider.Edges().(*fake.Edges).Edge(fake.KindRelay).DocumentsPermissions(edge.CredentialDocument{
+			Heading:  "relay token",
+			Document: "Account · Relay Scripts · Edit",
+		})
+		deps := clitest.NewDeps()
+		clitest.SetLoggedIn(&deps)
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(deps, &stderr)
-		if err := Run(context.Background(), deps, root, contractv1.CredentialPurpose_CREDENTIAL_PURPOSE_DEPLOY, &stdout); err != nil {
+		if err := Run(context.Background(), deps, project.Root, contractv1.CredentialPurpose_CREDENTIAL_PURPOSE_DEPLOY, &stdout); err != nil {
 			t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		for _, want := range []string{
 			"fake credentials",
-			"CREDENTIAL_PURPOSE_DEPLOY",
+			"fake permissions for deploy",
 			"relay token",
-			"Account · Relay Scripts · Edit",
+			"Account · Relay Scripts · Edit for deploy",
 		} {
 			if !strings.Contains(stdout.String(), want) {
 				t.Errorf("stdout = %q, want it to include %q", stdout.String(), want)
@@ -129,7 +135,7 @@ func TestRunPermissions(t *testing.T) {
 }
 
 func TestPermissionsStartsTheProviderInTheCheckPhaseOfItsRunAndPrintsTheDocumentAloneOnStdout(t *testing.T) {
-	root, _ := clitest.SetUpDeployFixture(t)
+	root := clitest.SetUpProject(t).Root
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
 	deps.Presentation = func(io.Writer) runui.Presentation {
@@ -162,7 +168,7 @@ func TestPermissionsStartsTheProviderInTheCheckPhaseOfItsRunAndPrintsTheDocument
 	if !result.GetSuccess() {
 		t.Errorf("result = %v, want the run to succeed", result)
 	}
-	if strings.TrimSpace(stdout.String()) == "" || strings.Contains(stderr.String(), "CREDENTIAL_PURPOSE_DEPLOY") {
+	if strings.TrimSpace(stdout.String()) == "" || strings.Contains(stderr.String(), "fake permissions for deploy") {
 		t.Errorf("stdout = %q, stream = %q: want the document on stdout and not on the stream", stdout.String(), stderr.String())
 	}
 }

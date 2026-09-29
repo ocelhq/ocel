@@ -145,6 +145,7 @@ type Edge struct {
 	refusesBinds     error
 	onIssued         func()
 	onEntryClaimed   func()
+	permissions      *edge.CredentialDocument
 }
 
 func (e *Edge) RefusesClaimsCarryingAnOriginCertificate(err error) {
@@ -523,7 +524,19 @@ func (e *Edge) Hooks() edge.Hooks {
 		granted := *e.entitlement
 		hooks.CheckCodeEntitlement = func(context.Context) (edge.CodeEntitlement, error) { return granted, nil }
 	}
+	if e.permissions != nil {
+		documented := *e.permissions
+		hooks.DescribeCredentialPermissions = func(purpose edge.CredentialPurpose) (edge.CredentialDocument, error) {
+			return edge.CredentialDocument{Heading: documented.Heading, Document: documented.Document + " for " + string(purpose)}, nil
+		}
+	}
 	return hooks
+}
+
+func (e *Edge) DocumentsPermissions(document edge.CredentialDocument) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.permissions = &document
 }
 
 func (e *Edge) Entitles(granted edge.CodeEntitlement) {
