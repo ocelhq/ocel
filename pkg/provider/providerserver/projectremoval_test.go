@@ -4,13 +4,16 @@ import (
 	"context"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/envvars"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -18,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
+	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -485,5 +489,68 @@ func TestADestroySaysWhichStacksHostnamesAndEdgeItRemovesAndHowFarAlongItIs(t *t
 		return strings.HasPrefix(line, "Destroying stack prod--web--") && strings.HasSuffix(line, " (1 of 2)")
 	}) {
 		t.Errorf("the destroy said %q, want the web stack named as the first of 2", said)
+	}
+}
+
+func TestRemoveProjectRemovesAServiceWhoseHolderLostItsStackRecord(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	var mu sync.Mutex
+	var removed []string
+	vendor.ResourceStacks(resources.Hooks{Functions: &resources.FunctionHooks{
+		Provision: func(context.Context, provider.StackSpec, progress.Progress) ([]provider.Function, error) {
+			return []provider.Function{{Name: "server", Physical: "shop-web-server", Revision: "shop-web-server-00001"}}, nil
+		},
+		Remove: func(_ context.Context, _ provider.StackRef, functions []provider.Function, _ progress.Progress) error {
+			mu.Lock()
+			defer mu.Unlock()
+			for _, function := range functions {
+				removed = append(removed, function.Physical)
+			}
+			return nil
+		},
+		Shared: &resources.SharedHooks[provider.Function]{
+			Name: func(context.Context, provider.StackSpec) ([]provider.Function, error) {
+				return []provider.Function{{Name: "server", Physical: "shop-web-server"}}, nil
+			},
+			RemoveRevisions: func(context.Context, provider.StackRef, []provider.Function, progress.Progress) ([]provider.Function, error) {
+				return nil, nil
+			},
+		},
+	}})
+	req := deployRequest()
+	req.Manifest.Resources, req.Manifest.Usages = nil, nil
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+	ctx := context.Background()
+	entries, err := stackrecords.List(ctx, vendor.KeyValues(), environment.TierProduction, "shop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if !entry.Name.IsInfra() {
+			if err := stackrecords.Forget(ctx, vendor.KeyValues(), environment.TierProduction, "shop", entry.Name); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	stream, err := client.RemoveProject(ctx, projectRequest())
+	if err != nil {
+		t.Fatalf("RemoveProject() error = %v", err)
+	}
+	if result, err := drain(stream); err != nil || !result.GetSuccess() {
+		t.Fatalf("RemoveProject() = %q, %v, want the project removed", result.GetError(), err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if !slices.Equal(removed, []string{"shop-web-server"}) {
+		t.Errorf("the removal took down %v, want the service a release still held though its stack record was gone", removed)
+	}
+	shared := keyvalue.Partition{Tier: environment.TierProduction, Root: keyvalue.RootSharedPhysicals, Path: []string{"shop"}}
+	if left, err := vendor.KeyValues().List(ctx, shared); err != nil || len(left) != 0 {
+		t.Errorf("the removal left %v, %v behind, want nothing: a removed project leaves no bytes", left, err)
 	}
 }
