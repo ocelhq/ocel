@@ -10,45 +10,18 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
-const Renewal = "your Caddy renews it for as long as a site block names the hostname"
-
 const collisionSubject = "hostnames your Caddy also serves"
 
-func (c Caddyfile) inspect(ctx context.Context) (proxy.Checks, error) {
-	claimed, err := c.Box.Claimed(ctx)
-	if err != nil {
-		return nil, err
-	}
-	admin := provider.HostCheck{Subject: c.named() + " admin endpoint", Verdict: provider.HostPass,
+func (c Caddyfile) adminCheck(unread error) provider.HostCheck {
+	check := provider.HostCheck{Subject: c.named() + " admin endpoint", Verdict: provider.HostPass,
 		Finding: fmt.Sprintf("%s answers on %s", c.named(), adminServers)}
-	sites, unread := c.sites(ctx)
 	if unread != nil {
-		admin.Verdict, admin.Finding, admin.Fix = provider.HostFail, unread.Error(), "restore `admin localhost:2019` in your Caddy's global options"
+		check.Verdict, check.Finding, check.Fix = provider.HostFail, unread.Error(), "restore `admin localhost:2019` in your Caddy's global options"
 	}
-	checks := proxy.Checks{admin}
-	if unread == nil {
-		checks = append(checks, c.imported(sites, claimed), collisions(sites, claimed))
-	}
-	placed, err := c.placedCheck(ctx, claimed)
-	if err != nil {
-		return nil, err
-	}
-	checks = append(checks, placed)
-	if c.Network != "" {
-		checks = append(checks, c.memberCheck(ctx))
-	}
-	for _, hostname := range claimed {
-		check, err := c.routing(ctx, hostname)
-		if err != nil {
-			return nil, err
-		}
-		checks = append(checks, check)
-	}
-	return checks, nil
+	return check
 }
 
 func (c Caddyfile) imported(sites []site, claimed []string) provider.HostCheck {
@@ -56,7 +29,7 @@ func (c Caddyfile) imported(sites []site, claimed []string) provider.HostCheck {
 		Finding: fmt.Sprintf("%s serves every hostname %s names", c.named(), FileName)}
 	var served []string
 	for _, each := range sites {
-		if each.ocels {
+		if each.reachesSwitchboard {
 			served = append(served, each.hosts...)
 		}
 	}
@@ -99,7 +72,7 @@ func sum(content []byte) string {
 
 func (c Caddyfile) placedCheck(ctx context.Context, claimed []string) (provider.HostCheck, error) {
 	check := provider.HostCheck{Subject: c.File(), Verdict: provider.HostPass, Finding: FileName + " is what ocel renders"}
-	placed, err := c.Box.Placed(ctx, c.File())
+	placed, err := c.Box.PlacedSum(ctx, c.File())
 	if err != nil {
 		return check, err
 	}

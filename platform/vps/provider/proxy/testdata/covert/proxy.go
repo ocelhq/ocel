@@ -16,7 +16,7 @@ func (o *Overt) File() string { return "" }
 
 func (o *Overt) Unrendered([]byte, proxy.Permission) string { return "" }
 
-func (o *Overt) Unrouted(context.Context, []string) error { return nil }
+func (o *Overt) RefuseRouted(context.Context, []string) error { return nil }
 
 func (o *Overt) Validate(context.Context, []byte) error { return nil }
 

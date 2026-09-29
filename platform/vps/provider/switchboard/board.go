@@ -21,6 +21,8 @@ import (
 
 const RouterKind router.Kind = "switchboard"
 
+const HTTPSListenPort = "8443"
+
 var routerHeader = http.CanonicalHeaderKey(router.HeaderRouter)
 
 const (

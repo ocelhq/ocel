@@ -41,7 +41,7 @@ func (y yours) File() string { return y.file }
 
 func (yours) Unrendered([]byte, proxy.Permission) string { return "" }
 
-func (y yours) Unrouted(_ context.Context, hostnames []string) error {
+func (y yours) RefuseRouted(_ context.Context, hostnames []string) error {
 	if y.asked != nil {
 		*y.asked = append(*y.asked, hostnames)
 	}

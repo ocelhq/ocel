@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 
+	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 )
 
@@ -17,17 +18,69 @@ func (c Caddyfile) File() string { return filepath.Join(c.Directory, FileName) }
 
 func (Caddyfile) Unrendered([]byte, proxy.Permission) string { return "" }
 
-func (c Caddyfile) Unrouted(ctx context.Context, hostnames []string) error {
-	return c.unrouted(ctx, hostnames)
+func (c Caddyfile) RefuseRouted(ctx context.Context, hostnames []string) error {
+	sites, err := c.sites(ctx)
+	if err != nil {
+		return err
+	}
+	for _, hostname := range hostnames {
+		if theirs, host, taken := collision(sites, hostname); taken {
+			return refusal.Refuse(refusal.CodeBusy,
+				"%s is already served by %s: %s matches host %s\n"+
+					"Ocel never takes a hostname your Caddy serves; remove it from that site and reload your Caddy, or bind another hostname",
+				hostname, c.named(), theirs, host)
+		}
+	}
+	return nil
 }
 
 func (c Caddyfile) Validate(ctx context.Context, rendered []byte) error {
-	return c.validate(ctx, rendered)
+	if len(rendered) == 0 {
+		return nil
+	}
+	if _, err := c.Box.RanWithStdin(ctx, "adapt "+FileName+" with "+c.named(), c.adapting(), rendered); err != nil {
+		return refusal.Refuse(refusal.CodeInvalid,
+			"%s cannot adapt the %s ocel rendered, so it was not placed: %v", c.named(), FileName, err)
+	}
+	return nil
 }
 
-func (c Caddyfile) Reload(ctx context.Context) error { return c.reload(ctx) }
+func (c Caddyfile) Reload(ctx context.Context) error {
+	if _, err := c.Box.Ran(ctx, "reload "+c.named(), c.Reloading()); err != nil {
+		return refusal.Refuse(refusal.CodeNotReady,
+			"%s refused the reload and keeps serving the config it had: %v\nThe error can be in your own Caddyfile as well as in %s",
+			c.named(), err, FileName)
+	}
+	return nil
+}
 
-func (c Caddyfile) Inspect(ctx context.Context) (proxy.Checks, error) { return c.inspect(ctx) }
+func (c Caddyfile) Inspect(ctx context.Context) (proxy.Checks, error) {
+	claimed, err := c.Box.Claimed(ctx)
+	if err != nil {
+		return nil, err
+	}
+	sites, unread := c.sites(ctx)
+	checks := proxy.Checks{c.adminCheck(unread)}
+	if unread == nil {
+		checks = append(checks, c.imported(sites, claimed), collisions(sites, claimed))
+	}
+	placed, err := c.placedCheck(ctx, claimed)
+	if err != nil {
+		return nil, err
+	}
+	checks = append(checks, placed)
+	if c.Network != "" {
+		checks = append(checks, c.memberCheck(ctx))
+	}
+	for _, hostname := range claimed {
+		check, err := c.routing(ctx, hostname)
+		if err != nil {
+			return nil, err
+		}
+		checks = append(checks, check)
+	}
+	return checks, nil
+}
 
 func (Caddyfile) Certificate(context.Context, string) (proxy.Certificate, error) {
 	return proxy.Certificate{Renewal: Renewal}, nil

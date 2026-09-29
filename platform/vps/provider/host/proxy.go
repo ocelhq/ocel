@@ -12,7 +12,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
-	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddyfile"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
@@ -117,7 +116,7 @@ func ProxyItems(arch string, front Front) []Item {
 			networkItem(),
 			dir(switchboard.ControlDir, 0o755, rootOwner, "the switchboard's control socket"),
 			dir(switchboard.FrontDir, 0o700, rootOwner, ""),
-			board.item(front.reachedAt()),
+			board.item(front.switchboardNote()),
 		}, front.reloadGrant()...)
 	}
 	return []Item{
@@ -449,13 +448,13 @@ func (s boxContainer) placePresent() string {
 	}
 	missing := fmt.Sprintf("option %q names the directory %s, which this box does not have: name the directory your proxy reads, or create it",
 		s.placeOption, s.placesIn)
-	return "if " + s.placeGone() + "; then\n" +
+	return "if " + s.placeDirMissingTest() + "; then\n" +
 		"printf '%s\\n' " + quoted(missing) + " >&2\n" +
 		"exit 1\n" +
 		"fi\n"
 }
 
-func (s boxContainer) placeGone() string {
+func (s boxContainer) placeDirMissingTest() string {
 	return "[ ! -d " + quoted(s.placesIn) + " ] && [ -x " + quoted(filepath.Dir(s.placesIn)) + " ]"
 }
 
@@ -547,18 +546,6 @@ func (s boxContainer) mountsProbe() string {
 		"facts=\"$facts\n" + mountsFact + "$mounts\"\n"
 }
 
-func (f Front) reloadGrant() []Item {
-	if f.Caddy == nil || f.Caddy.Container != "" {
-		return nil
-	}
-	return []Item{{Kind: KindFile, Name: sudoersCaddyReload, Mode: 0o440, Owner: rootOwner, Content: caddyReloadSudoers(),
-		Note: "sudo for reloading your Caddy"}}
-}
-
-func caddyReloadSudoers() []byte {
-	return []byte(deployUser + " ALL=(root) NOPASSWD: " + strings.Join(caddyfile.ServiceReload(), " ") + "\n")
-}
-
 func (f Front) placedRemovals() []removal {
 	at := destination(openFront(f, frontBox{}))
 	if at == "" {
@@ -573,14 +560,6 @@ func (f Front) placedRemovals() []removal {
 		removals = append(removals, taking(KindFile, grant.Name, ""))
 	}
 	return removals
-}
-
-func (f Front) caddyReloadCommand() string {
-	reload := words(f.caddyfile(frontBox{}).Reloading())
-	if f.Caddy.Container == "" {
-		return "if systemctl is-active --quiet caddy.service; then " + reload + "; fi"
-	}
-	return "if [ \"$(docker inspect --type container --format '{{.State.Running}}' " + quoted(f.Caddy.Container) + " 2>/dev/null)\" = true ]; then " + reload + "; fi"
 }
 
 func proxyRemovals() []removal {

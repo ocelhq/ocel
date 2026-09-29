@@ -107,7 +107,7 @@ func presenceRead(board boxContainer) string {
 		}
 	}
 	if board.placesIn != "" {
-		script = append(script, board.placeGone()+" && printf 'missing=%s\\n' "+quoted(board.placesIn)+" || :")
+		script = append(script, board.placeDirMissingTest()+" && printf 'missing=%s\\n' "+quoted(board.placesIn)+" || :")
 	}
 	for _, file := range board.files {
 		missing("-f", file)

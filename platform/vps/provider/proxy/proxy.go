@@ -12,7 +12,7 @@ type Proxy interface {
 	Render(spec Spec) ([]byte, error)
 	File() string
 	Unrendered(config []byte, permission Permission) string
-	Unrouted(ctx context.Context, hostnames []string) error
+	RefuseRouted(ctx context.Context, hostnames []string) error
 	Validate(ctx context.Context, rendered []byte) error
 	Reload(ctx context.Context) error
 	Inspect(ctx context.Context) (Checks, error)

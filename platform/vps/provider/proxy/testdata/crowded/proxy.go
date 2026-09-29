@@ -16,7 +16,7 @@ func (c *Crowded) File() string { return "" }
 
 func (c *Crowded) Unrendered([]byte, proxy.Permission) string { return "" }
 
-func (c *Crowded) Unrouted(context.Context, []string) error { return nil }
+func (c *Crowded) RefuseRouted(context.Context, []string) error { return nil }
 
 func (c *Crowded) Validate(context.Context, []byte) error { return nil }
 

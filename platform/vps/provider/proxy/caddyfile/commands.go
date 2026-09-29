@@ -1,10 +1,13 @@
 package caddyfile
 
+import "slices"
+
 const (
 	hostCaddy = "/usr/bin/caddy"
 	service   = "caddy.service"
 	systemctl = "/usr/bin/systemctl"
 	adapter   = "caddyfile"
+	stdin     = "/dev/stdin"
 )
 
 func ServiceReload() []string { return []string{systemctl, "reload", service} }
@@ -13,15 +16,15 @@ func (c Caddyfile) caddy(argv ...string) []string {
 	if c.Container == "" {
 		return append([]string{hostCaddy}, argv...)
 	}
-	return append([]string{"docker", "exec", c.Container, "caddy"}, argv...)
+	exec := []string{"docker", "exec"}
+	if slices.Contains(argv, stdin) {
+		exec = append(exec, "-i")
+	}
+	return slices.Concat(exec, []string{c.Container, "caddy"}, argv)
 }
 
 func (c Caddyfile) adapting() []string {
-	adapt := []string{"adapt", "--config", "/dev/stdin", "--adapter", adapter}
-	if c.Container == "" {
-		return append([]string{hostCaddy}, adapt...)
-	}
-	return append([]string{"docker", "exec", "-i", c.Container, "caddy"}, adapt...)
+	return c.caddy("adapt", "--config", stdin, "--adapter", adapter)
 }
 
 func (c Caddyfile) Reloading() []string {

@@ -11,7 +11,6 @@ import (
 
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
-	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddyfile"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/manual"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
@@ -71,18 +70,6 @@ func destination(front proxy.Proxy) string {
 	return ""
 }
 
-func (f Front) caddyfile(box caddyfile.Box) caddyfile.Caddyfile {
-	return caddyfile.Caddyfile{
-		Box:       box,
-		Preset:    f.Caddy.Preset,
-		Directory: f.Caddy.Directory,
-		Container: f.Caddy.Container,
-		Config:    f.Caddy.Config,
-		Network:   f.Caddy.Network,
-		Port:      f.Caddy.Port,
-	}
-}
-
 type unservedFront struct{ named string }
 
 func (u unservedFront) refused() error {
@@ -98,7 +85,7 @@ func (unservedFront) File() string { return "" }
 
 func (unservedFront) Unrendered([]byte, proxy.Permission) string { return "" }
 
-func (u unservedFront) Unrouted(context.Context, []string) error { return u.refused() }
+func (u unservedFront) RefuseRouted(context.Context, []string) error { return u.refused() }
 
 func (u unservedFront) Validate(context.Context, []byte) error { return u.refused() }
 
@@ -192,7 +179,7 @@ func (f Front) directoryOption() string {
 	}
 }
 
-func (f Front) reachedAt() string {
+func (f Front) switchboardNote() string {
 	if published := f.published(); len(published) > 0 {
 		return "routes what your proxy forwards to " + published[0].String()
 	}

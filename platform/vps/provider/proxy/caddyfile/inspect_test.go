@@ -10,7 +10,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/router"
-	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddyfile"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
@@ -138,22 +137,10 @@ func TestInspectStopsAtAnAdminEndpointThatDoesNotAnswer(t *testing.T) {
 	t.Parallel()
 
 	machine, front := servingCoolify(t)
-	machine.refused = map[string]string{adminServers: "wget: can't connect to remote host: Connection refused"}
+	machine.refused = map[string]string{caddyfile.AdminServers: "wget: can't connect to remote host: Connection refused"}
 	checks := checked(t, front)
 	check := checks["your Caddy (container coolify-proxy) admin endpoint"]
 	if check.Verdict != provider.HostFail || !strings.Contains(check.Finding, "Connection refused") {
 		t.Errorf("admin endpoint = %+v, want it failed with what the read met", check)
-	}
-}
-
-func TestYourCaddyRenewsTheCertificatesOfWhatOcelPlaces(t *testing.T) {
-	t.Parallel()
-
-	certificate, err := (caddyfile.Caddyfile{Box: &box{}}).Certificate(context.Background(), "shop.example.com")
-	if err != nil || certificate.Renewal != caddyfile.Renewal || certificate.Trouble != nil {
-		t.Errorf("Certificate() = %+v, %v; want renewal %q", certificate, err, caddyfile.Renewal)
-	}
-	if caddyfile.Renewal == certs.AdoptedRenewal {
-		t.Errorf("renewal reads %q, the sentence for a proxy routed by hand", caddyfile.Renewal)
 	}
 }

@@ -16,7 +16,7 @@ func (i *Incomplete) File() string { return "" }
 
 func (i *Incomplete) Unrendered([]byte, proxy.Permission) string { return "" }
 
-func (i *Incomplete) Unrouted(context.Context, []string) error { return nil }
+func (i *Incomplete) RefuseRouted(context.Context, []string) error { return nil }
 
 func (i *Incomplete) Validate(context.Context, []byte) error { return nil }
 

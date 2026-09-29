@@ -14,7 +14,7 @@ func (u *Unasserted) File() string { return "" }
 
 func (u *Unasserted) Unrendered([]byte, proxy.Permission) string { return "" }
 
-func (u *Unasserted) Unrouted(context.Context, []string) error { return nil }
+func (u *Unasserted) RefuseRouted(context.Context, []string) error { return nil }
 
 func (u *Unasserted) Validate(context.Context, []byte) error { return nil }
 

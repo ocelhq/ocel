@@ -16,7 +16,7 @@ func (Covert) File() string { return "" }
 
 func (Covert) Unrendered([]byte, proxy.Permission) string { return "" }
 
-func (Covert) Unrouted(context.Context, []string) error { return nil }
+func (Covert) RefuseRouted(context.Context, []string) error { return nil }
 
 func (Covert) Validate(context.Context, []byte) error { return nil }
 
