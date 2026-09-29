@@ -20,15 +20,9 @@ func TestLiveADryRunOfAContainerAppSendsTheDigestTheDaemonBuilt(t *testing.T) {
 	dependencies := newTestDependencies()
 	stubBuild(&dependencies, nil)
 
-	root, sockPath := clitest.SetUpDeployFixture(t)
-	t.Setenv(clitest.FakeComputesEnvVar, "container,serverless")
-	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
-export default {
-  slug: "`+clitest.FixtureSlug+`",
-  provider: { fake: {} },
-  apps: [{ name: "api", path: "apps/api", compute: "container" }],
-};
-`)
+	fixture := setUpDeployProject(t)
+	root := fixture.Root
+	writeAppsConfig(t, root, `{ name: "api", path: "apps/api", compute: "container" }`)
 	copyFixtureApp(t, "../../build/image/testdata/dockerfileapp", filepath.Join(root, "apps", "api"))
 
 	var stdout, stderr bytes.Buffer
@@ -37,24 +31,13 @@ export default {
 		t.Fatalf("runDeploy --dry err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
-	ref := pinnedRefIn(t, stdout.String(), "ocel/"+clitest.FixtureSlug+"/api")
+	ref := manifestApp(t, sentDeploy(t, fixture).GetManifest(), "api").GetContainer().GetImage()
+	if repository, digest, pinned := strings.Cut(ref, "@sha256:"); !pinned || repository != "ocel/"+clitest.FixtureSlug+"/api" || len(digest) != 64 {
+		t.Fatalf("the dry run sent image %q, want it pinned at ocel/%s/api@sha256:<digest>", ref, clitest.FixtureSlug)
+	}
 	if _, err := vm.Attempt("docker image inspect " + ref); err != nil {
-		t.Errorf("the plan names %s and the daemon has no image there, so the dry run rendered a coordinate no release could be pinned to: %v", ref, err)
+		t.Errorf("the dry run sent %s and the daemon has no image there, so it planned a coordinate no release could be pinned to: %v", ref, err)
 	}
-	clitest.WaitForNoStaleSocket(t, sockPath)
-}
-
-func pinnedRefIn(t *testing.T, out, repository string) string {
-	t.Helper()
-	for _, field := range strings.Fields(out) {
-		named, digest, pinned := strings.Cut(field, "@sha256:")
-		if !pinned || named != repository || len(digest) != 64 {
-			continue
-		}
-		return field
-	}
-	t.Fatalf("the dry run rendered no image pinned at %s@sha256:<digest>:\n%s", repository, out)
-	return ""
 }
 
 func copyFixtureApp(t *testing.T, from, to string) {

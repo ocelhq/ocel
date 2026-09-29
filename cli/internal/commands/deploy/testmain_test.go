@@ -2,7 +2,13 @@ package deploy
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"io"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/build"
@@ -11,14 +17,23 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/projecteditor"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
-	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/envvars"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 func TestMain(m *testing.M) {
 	clitest.AddFakeProviderIDs()
-	if os.Getenv(clitest.FakeProviderEnvVar) == "1" {
-		os.Exit(clitest.RunFakeProvider())
+	if clitest.IsFakeSession() {
+		os.Exit(clitest.RunFakeSession())
 	}
 	clitest.UnsetColorEnv()
 	done := clitest.IsolateConfigHome()
@@ -40,14 +55,107 @@ func newTestDependencies() Dependencies {
 	}
 }
 
-func stubBuild(dependencies *Dependencies, functions []build.Function) {
-	dependencies.BuildApps = func(context.Context, *project.Project, map[string]map[string]string, map[string]string, build.Log) (build.Output, error) {
-		return build.Output{Functions: functions}, nil
+const productionDomain = "app.acme.com"
+
+func setUpDeployProject(t *testing.T) clitest.FakeProject {
+	t.Helper()
+	fixture := clitest.SetUpProject(t)
+	bootstrapTier(t, fixture, environment.TierProduction)
+	writeConfig(t, fixture.Root, "")
+	return fixture
+}
+
+func setUpPreviewProject(t *testing.T) clitest.FakeProject {
+	t.Helper()
+	fixture := setUpDeployProject(t)
+	bootstrapTier(t, fixture, environment.TierPreview)
+	return fixture
+}
+
+func bootstrapTier(t *testing.T, fixture clitest.FakeProject, tier environment.Tier) {
+	t.Helper()
+	clitest.Bootstrap(t, fixture.Provider, tier, fake.FeatureCache, fake.FeatureImages)
+}
+
+func removeBootstrap(t *testing.T, fixture clitest.FakeProject, tier environment.Tier) {
+	t.Helper()
+	if err := fixture.Provider.FakeBootstrap().Remove(context.Background(), tier, nil); err != nil {
+		t.Fatalf("remove the %s bootstrap: %v", tier, err)
 	}
-	dependencies.ReadPrebuilt = func(context.Context, *project.Project, map[string]string) (build.Output, error) {
-		return build.Output{Functions: functions}, nil
+}
+
+func writeConfig(t *testing.T, root, fields string) {
+	t.Helper()
+	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  slug: "`+clitest.FixtureSlug+`",
+  provider: { fake: {} },
+  domains: { production: "`+productionDomain+`", preview: "*.preview.acme.com" },
+`+fields+`};
+`)
+}
+
+func writeAppsConfig(t *testing.T, root, apps string) {
+	t.Helper()
+	writeConfig(t, root, "  apps: ["+apps+"],\n")
+}
+
+func addAppToFixtureConfig(t *testing.T, root string) {
+	t.Helper()
+	writeAppsConfig(t, root, `{ name: "api", path: "apps/api", framework: "node" }`)
+	writeAppSource(t, root, "api")
+}
+
+func writeAppSource(t *testing.T, root string, apps ...string) {
+	t.Helper()
+	for _, app := range apps {
+		clitest.WriteFile(t, filepath.Join(root, "apps", app, "src", "server.ts"), `
+export function handler() {
+  return "`+app+`";
+}
+`)
+	}
+}
+
+func writeRootApp(t *testing.T, root string) {
+	t.Helper()
+	clitest.WriteFile(t, filepath.Join(root, "package.json"), "{}\n")
+}
+
+func writeUsageMonorepo(t *testing.T, root, fields string) {
+	t.Helper()
+	clitest.WriteUsageMonorepo(t, root)
+	writeConfig(t, root, `  apps: [{ name: "api", path: "apps/api", framework: "node" }],
+`+fields)
+}
+
+func apiFunction() []build.Function {
+	return []build.Function{
+		{Route: "api", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
+	}
+}
+
+func stubBuild(dependencies *Dependencies, functions []build.Function) {
+	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
+		return build.Output{Functions: functions}, writeArtifacts(cfg.Dir, functions)
+	}
+	dependencies.ReadPrebuilt = func(_ context.Context, cfg *project.Project, _ map[string]string) (build.Output, error) {
+		return build.Output{Functions: functions}, writeArtifacts(cfg.Dir, functions)
 	}
 	stubRecordedDeploymentIDs(dependencies)
+}
+
+func writeArtifacts(root string, functions []build.Function) error {
+	for _, function := range functions {
+		dir := filepath.Join(buildoutput.Root(root), filepath.FromSlash(function.ArtifactPath))
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(dir, "index.js"), []byte("export const handler = () => \""+function.App+"\";\n"), 0o644); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func stubAppImages(dependencies *Dependencies, apps ...string) {
@@ -73,7 +181,102 @@ func stubAppImages(dependencies *Dependencies, apps ...string) {
 }
 
 func stubRecordedDeploymentIDs(dependencies *Dependencies) {
-	dependencies.DeploymentID = func(_, app string) (string, error) { return clitest.FixtureDeploymentID(app), nil }
+	dependencies.DeploymentID = func(_, app string) (string, error) { return recordedDeploymentID(app), nil }
+}
+
+func recordedDeploymentID(app string) string {
+	sum := sha256.Sum256([]byte("ocel-test-deployment/" + app))
+	return hex.EncodeToString(sum[:])[:32]
+}
+
+func useJSONLogFormat(t *testing.T, dependencies *Dependencies) {
+	t.Helper()
+	dependencies.Presentation = func(io.Writer) terminal.Presentation {
+		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
+	}
+}
+
+func terminalStdin(dependencies *Dependencies) {
+	dependencies.StdinIsTerminal = func(io.Reader) bool { return true }
+}
+
+func stubGit(dependencies *Dependencies, branch, pr string) {
+	dependencies.ReadGitBranch = func(string) (string, error) { return branch, nil }
+	dependencies.DiscoverPRNumber = func() string { return pr }
+}
+
+func envelopes(t *testing.T, out string) []*streamv1.RunEvent {
+	t.Helper()
+	var events []*streamv1.RunEvent
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "{") {
+			continue
+		}
+		ev := &streamv1.RunEvent{}
+		if err := protojson.Unmarshal([]byte(line), ev); err != nil {
+			t.Fatalf("line %q is not a protojson RunEvent: %v", line, err)
+		}
+		events = append(events, ev)
+	}
+	return events
+}
+
+func sentDeploys(t *testing.T, fixture clitest.FakeProject) []*contractv1.DeployRequest {
+	t.Helper()
+	return clitest.RequestsTo[*contractv1.DeployRequest](t, fixture.Requests, contractv1connect.ProviderServiceDeployProcedure)
+}
+
+func sentDeploy(t *testing.T, fixture clitest.FakeProject) *contractv1.DeployRequest {
+	t.Helper()
+	sent := sentDeploys(t, fixture)
+	if len(sent) != 1 {
+		t.Fatalf("the CLI sent %d deploys, want exactly 1", len(sent))
+	}
+	return sent[0]
+}
+
+func sentPreflights(t *testing.T, fixture clitest.FakeProject) []*contractv1.PreflightRequest {
+	t.Helper()
+	return clitest.RequestsTo[*contractv1.PreflightRequest](t, fixture.Requests, contractv1connect.ProviderServicePreflightProcedure)
+}
+
+func manifestApp(t *testing.T, manifest *contractv1.Manifest, name string) *contractv1.ManifestApp {
+	t.Helper()
+	for _, app := range manifest.GetApps() {
+		if app.GetName() == name {
+			return app
+		}
+	}
+	t.Fatalf("the manifest has no app %q among %d apps", name, len(manifest.GetApps()))
+	return nil
+}
+
+func recordProjects(t *testing.T, fixture clitest.FakeProject, tier environment.Tier, slugs ...string) {
+	t.Helper()
+	for _, slug := range slugs {
+		body, err := json.Marshal(stackrecords.Project{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := fixture.Provider.KeyValues().Write(context.Background(), keyvalue.Entry{Key: stackrecords.ProjectKey(tier, slug), Value: body}); err != nil {
+			t.Fatalf("record project %s: %v", slug, err)
+		}
+	}
+}
+
+func setUpVariablesProject(t *testing.T, definitions string) clitest.FakeProject {
+	t.Helper()
+	return setUpVariablesProjectWith(t, definitions, clitest.EnvDeclarationScript)
+}
+
+func setUpVariablesProjectWith(t *testing.T, definitions, script string) clitest.FakeProject {
+	t.Helper()
+	fixture := setUpDeployProject(t)
+	t.Setenv("OCEL_TEST_ENV_DEFINITIONS", definitions)
+	t.Setenv("OCEL_TEST_ENV_PROBLEMS", "[]")
+	clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(fixture.Root), "env.ts"), script)
+	return fixture
 }
 
 type envOptions struct {
@@ -82,39 +285,26 @@ type envOptions struct {
 	preview     bool
 }
 
-type envRefOptions struct {
-	project string
-}
-
-func valueTier(opts envOptions) environmentv1.Tier {
-	if opts.preview {
-		return environmentv1.Tier_TIER_PREVIEW
+func (o envOptions) tier() environment.Tier {
+	if o.preview {
+		return environment.TierPreview
 	}
-	return environmentv1.Tier_TIER_PRODUCTION
+	return environment.TierProduction
 }
 
-func envSet(t *testing.T, _ string, key, value string, opts envOptions) {
-	t.Helper()
-	seedCell(t, valueTier(opts), &envvarsv1.Coordinate{Slug: "test-app", Folder: opts.folder, Key: key, Environment: opts.environment}, clitest.FakeCellData{Value: value})
+func valueStore(fixture clitest.FakeProject) envvars.Store {
+	return envvars.Store{KeyValues: fixture.Provider.KeyValues(), Cipher: fixture.Provider.Cipher()}
 }
 
-func envRef(t *testing.T, _ string, key string, opts envOptions, ref envRefOptions) {
+func envSet(t *testing.T, fixture clitest.FakeProject, key, value string, opts envOptions) {
 	t.Helper()
-	seedCell(t, valueTier(opts), &envvarsv1.Coordinate{Slug: "test-app", Key: key}, clitest.FakeCellData{Target: &clitest.FakeCoordinate{Slug: ref.project, Key: key}})
+	setValue(t, fixture, envvars.Scope{Project: clitest.FixtureSlug, Tier: opts.tier()}, key, value, opts)
 }
 
-func ownedElsewhere(t *testing.T, key, value string) {
+func setValue(t *testing.T, fixture clitest.FakeProject, scope envvars.Scope, key, value string, opts envOptions) {
 	t.Helper()
-	seedCell(t, environmentv1.Tier_TIER_PRODUCTION, &envvarsv1.Coordinate{Slug: "platform", Key: key}, clitest.FakeCellData{Value: value})
-}
-
-func seedCell(t *testing.T, tier environmentv1.Tier, c *envvarsv1.Coordinate, data clitest.FakeCellData) {
-	t.Helper()
-	store, err := clitest.LoadFakeStore()
-	if err != nil {
-		t.Fatalf("load the fake store: %v", err)
-	}
-	if err := store.Write(tier, c, data); err != nil {
-		t.Fatalf("seed %s: %v", c.GetKey(), err)
+	at := envvars.Coordinate{Cell: envvars.Cell{Folder: opts.folder, Key: key}, Environment: opts.environment}
+	if _, err := valueStore(fixture).Set(context.Background(), scope, at, value, nil); err != nil {
+		t.Fatalf("set %s for %s: %v", key, scope.Project, err)
 	}
 }

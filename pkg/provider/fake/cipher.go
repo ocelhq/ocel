@@ -14,8 +14,9 @@ import (
 )
 
 type Cipher struct {
-	mu   sync.Mutex
-	keys map[environment.Tier][]byte
+	mu      sync.Mutex
+	keys    map[environment.Tier][]byte
+	refusal error
 }
 
 func NewCipher() *Cipher {
@@ -38,7 +39,19 @@ func (s *Cipher) Seal(_ context.Context, tier environment.Tier, bound seal.Assoc
 	return gcm.Seal(nonce, nonce, plaintext, bound.Bytes()), nil
 }
 
+func (s *Cipher) RefuseOpening(err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.refusal = err
+}
+
 func (s *Cipher) Open(_ context.Context, tier environment.Tier, bound seal.AssociatedData, sealed []byte) ([]byte, error) {
+	s.mu.Lock()
+	refused := s.refusal
+	s.mu.Unlock()
+	if refused != nil {
+		return nil, refused
+	}
 	gcm, err := s.gcm(tier)
 	if err != nil {
 		return nil, err

@@ -3,13 +3,14 @@ package deploy
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/project"
@@ -17,12 +18,15 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
+	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/statedir"
-	"google.golang.org/protobuf/encoding/protojson"
 )
 
 func TestADeployRefusesEveryHostnameAnotherProjectClaims(t *testing.T) {
@@ -110,25 +114,20 @@ func TestADeployRefusesEveryHostnameAnotherProjectClaims(t *testing.T) {
 	})
 }
 
+func relayEdge(fixture clitest.FakeProject) *fake.Edge {
+	return fixture.Provider.Edges().(*fake.Edges).Edge(fake.KindRelay)
+}
+
 func TestAPreviewRefusesADomainAnotherProjectClaims(t *testing.T) {
 	t.Run("a preview refuses a domain another project claims", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
-		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
-export default {
-  slug: "test-app",
-  provider: { fake: {} },
-  domains: { preview: "*.preview.acme.com" },
-};
-`)
+		fixture := setUpPreviewProject(t)
+		relayEdge(fixture).Owns("*.preview.acme.com", "ocel-other-preview")
 		dependencies := newTestDependencies()
 		stubGit(&dependencies, "feature/login", "")
-		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
-		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
-		t.Setenv(clitest.FakeDomainOwnerEnvVar, "ocel-other-preview")
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-		err := runPreviewUp(context.Background(), dependencies, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader(""))
+		err := runPreviewUp(context.Background(), dependencies, fixture.Root, previewUpOptions{}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runPreviewUp err = nil, want a domain-claim refusal")
 		}
@@ -142,32 +141,25 @@ export default {
 		if strings.Contains(out, "[build]") {
 			t.Errorf("stdout = %q, want the refusal before anything is built", out)
 		}
-		if strings.Contains(out, "DEPLOY ") {
-			t.Errorf("stdout = %q, want no Deploy to have been driven", out)
+		if sent := sentDeploys(t, fixture); len(sent) != 0 {
+			t.Errorf("the CLI sent %d deploys, want none", len(sent))
 		}
 	})
 
 	t.Run("a deploy refuses a domain another project claims", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
-		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
-export default {
-  slug: "test-app",
-  provider: { fake: {} },
-  domains: { production: "acme.com" },
-};
-`)
-		t.Setenv(clitest.FakeDomainOwnerEnvVar, "ocel-other-production-web")
+		fixture := setUpDeployProject(t)
+		relayEdge(fixture).Owns(productionDomain, "ocel-other-production-web")
 
 		var stdout, stderr bytes.Buffer
 		dependencies := newTestDependencies()
 		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-		err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDeploy err = nil, want a domain-claim refusal")
 		}
 
 		out := stdout.String()
-		for _, want := range []string{"acme.com", "ocel-other-production-web"} {
+		for _, want := range []string{productionDomain, "ocel-other-production-web"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout = %q, want it to name %q", out, want)
 			}
@@ -175,14 +167,14 @@ export default {
 		if strings.Contains(out, "[build]") {
 			t.Errorf("stdout = %q, want the refusal before anything is built", out)
 		}
-		if strings.Contains(out, "DEPLOY ") {
-			t.Errorf("stdout = %q, want no Deploy to have been driven", out)
+		if sent := sentDeploys(t, fixture); len(sent) != 0 {
+			t.Errorf("the CLI sent %d deploys, want none", len(sent))
 		}
 	})
 
 	t.Run("a deploy declares the project's and the apps' hostnames", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
-		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+		fixture := setUpDeployProject(t)
+		clitest.WriteFile(t, filepath.Join(fixture.Root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
   provider: { fake: {} },
@@ -190,39 +182,289 @@ export default {
   apps: [{ name: "api", path: "apps/api", framework: "node", domains: { production: "api.acme.com" } }],
 };
 `)
-		writeAppSource(t, root, "api")
+		writeAppSource(t, fixture.Root, "api")
 		dependencies := newTestDependencies()
 		stubBuild(&dependencies, nil)
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-		if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
-		if !strings.Contains(stdout.String(), "PREFLIGHT slug=test-app domains=acme.com,api.acme.com") {
-			t.Errorf("stdout = %q, want the declared hostnames to have reached Preflight", stdout.String())
+		preflights := sentPreflights(t, fixture)
+		if len(preflights) != 1 {
+			t.Fatalf("the CLI sent %d preflights, want 1", len(preflights))
+		}
+		if got := preflights[0]; got.GetSlug() != "test-app" || !slices.Equal(got.GetDomains(), []string{"acme.com", "api.acme.com"}) {
+			t.Errorf("the preflight named slug %q and domains %v, want test-app with the declared hostnames", got.GetSlug(), got.GetDomains())
 		}
 	})
+}
+
+func deployOutput(t *testing.T, fixture clitest.FakeProject, dependencies Dependencies, opts deployOptions, stdin string) string {
+	t.Helper()
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runDeploy(context.Background(), dependencies, fixture.Root, opts, &stdout, &stderr, strings.NewReader(stdin)); err != nil {
+		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	return stdout.String()
+}
+
+func onlyPreflight(t *testing.T, fixture clitest.FakeProject) *contractv1.PreflightRequest {
+	t.Helper()
+	preflights := sentPreflights(t, fixture)
+	if len(preflights) != 1 {
+		t.Fatalf("the CLI sent %d preflights, want 1", len(preflights))
+	}
+	return preflights[0]
+}
+
+func TestADeployAsksAboutTheProjectsSlugOnlyWhenItCanActOnTheAnswer(t *testing.T) {
+	t.Run("declared domains pass the slug to the preflight", func(t *testing.T) {
+		dependencies := newTestDependencies()
+		stubBuild(&dependencies, nil)
+		fixture := setUpDeployProject(t)
+
+		deployOutput(t, fixture, dependencies, deployOptions{yes: true}, "")
+		if slug := onlyPreflight(t, fixture).GetSlug(); slug != "test-app" {
+			t.Errorf("the preflight named slug %q, want the project's", slug)
+		}
+	})
+
+	t.Run("a non-TTY stdin with no domains leaves the slug out", func(t *testing.T) {
+		dependencies := newTestDependencies()
+		stubBuild(&dependencies, nil)
+		fixture := setUpDeployProject(t)
+		recordProjects(t, fixture, environment.TierProduction, "my-application", "billing")
+		clitest.WriteFile(t, filepath.Join(fixture.Root, "ocel.config.ts"), `
+export default {
+  slug: "test-app",
+  provider: { fake: {} },
+  domains: { preview: "*.preview.acme.com" },
+};
+`)
+
+		var stdout, stderr bytes.Buffer
+		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+		_ = runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{}, &stdout, &stderr, strings.NewReader(""))
+		if slug := onlyPreflight(t, fixture).GetSlug(); slug != "" {
+			t.Errorf("the preflight named slug %q, want a non-TTY deploy to ask for no slug-scoped answers", slug)
+		}
+		if strings.Contains(stdout.String(), "NEW project") {
+			t.Errorf("stdout = %q, want no drift warning from a preflight that asked about no slug", stdout.String())
+		}
+	})
+
+	t.Run("--yes asks the provider exactly what the same run without it would", func(t *testing.T) {
+		dependencies := newTestDependencies()
+		stubBuild(&dependencies, nil)
+		terminalStdin(&dependencies)
+		fixture := setUpDeployProject(t)
+		recordProjects(t, fixture, environment.TierProduction, "my-application", "billing")
+
+		out := deployOutput(t, fixture, dependencies, deployOptions{yes: true}, "")
+		if slug := onlyPreflight(t, fixture).GetSlug(); slug != "test-app" {
+			t.Errorf("the preflight named slug %q, want --yes to leave the slug-scoped question on the wire untouched", slug)
+		}
+		if !strings.Contains(out, "This will create a NEW project.") {
+			t.Errorf("stdout = %q, want the drift warning still told to whoever passed --yes", out)
+		}
+		if strings.Contains(out, "[y/N]") {
+			t.Errorf("stdout = %q, want --yes to grant the guard rather than raise it", out)
+		}
+	})
+}
+
+func TestAnInteractiveDeployWarnsAboutTheOtherProjectsOnTheBackend(t *testing.T) {
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, nil)
+	terminalStdin(&dependencies)
+	fixture := setUpDeployProject(t)
+	recordProjects(t, fixture, environment.TierProduction, "my-application", "billing")
+
+	out := deployOutput(t, fixture, dependencies, deployOptions{}, "y\n")
+	if slug := onlyPreflight(t, fixture).GetSlug(); slug != "test-app" {
+		t.Errorf("the preflight named slug %q, want the prompting deploy to have asked with the slug", slug)
+	}
+	for _, want := range []string{
+		"No existing deployment for slug \"test-app\".",
+		"This will create a NEW project.",
+		"This backend already has: billing, my-application",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("stdout missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestDeployYesBypassesTheSlugDriftGuard(t *testing.T) {
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, nil)
+	fixture := setUpDeployProject(t)
+	recordProjects(t, fixture, environment.TierProduction, "my-application", "billing")
+
+	out := deployOutput(t, fixture, dependencies, deployOptions{yes: true}, "")
+	if strings.Contains(out, "[y/N]") {
+		t.Errorf("stdout = %q, want --yes to bypass the drift prompt", out)
+	}
+	if !strings.Contains(out, "Deployed") {
+		t.Errorf("stdout = %q, want the deploy to proceed", out)
+	}
+}
+
+func TestTheIdentityBannerPrintsBeforeTheBuildAndTheDeploy(t *testing.T) {
+	t.Run("on a terminal", func(t *testing.T) {
+		dependencies := newTestDependencies()
+		stubBuild(&dependencies, nil)
+		pretendStdoutIsTerminal(&dependencies)
+		fixture := setUpDeployProject(t)
+		fixture.Provider.Edges().(*fake.Edges).Verifies(fake.KindRelay, edge.CredentialIdentity{Account: "abcd1234"}, nil)
+
+		out := ansi.Strip(deployOutput(t, fixture, dependencies, deployOptions{yes: true}, ""))
+		for _, want := range []string{"ocel", "test-app › production", "fake", "000000000000", "fake/reference", "edge", "abcd1234"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("stdout missing %q:\n%s", want, out)
+			}
+		}
+		banner := strings.Index(out, "test-app › production")
+		built := strings.Index(out, "[build]")
+		deployed := strings.Index(out, "[provision]")
+		if banner < 0 || built < 0 || deployed < 0 {
+			t.Fatalf("expected banner, build, and deploy all present; banner=%d build=%d deploy=%d\n%s", banner, built, deployed, out)
+		}
+		if banner >= built || built >= deployed {
+			t.Errorf("expected order banner < build < deploy; got banner=%d build=%d deploy=%d\n%s", banner, built, deployed, out)
+		}
+	})
+
+	t.Run("with no terminal to print it to", func(t *testing.T) {
+		dependencies := newTestDependencies()
+		stubBuild(&dependencies, nil)
+		fixture := setUpDeployProject(t)
+		fixture.Provider.Edges().(*fake.Edges).Verifies(fake.KindRelay, edge.CredentialIdentity{Account: "abcd1234"}, nil)
+
+		out := deployOutput(t, fixture, dependencies, deployOptions{yes: true}, "")
+		for _, want := range []string{"ocel  dev  test-app › production", "  fake  000000000000 · as fake/reference\n  edge  abcd1234"} {
+			if !strings.Contains(out, want+"\n") {
+				t.Errorf("stdout missing %q with no terminal attached:\n%s", want, out)
+			}
+		}
+		if strings.Contains(out, "\x1b[") {
+			t.Errorf("the banner painted colour with no terminal attached:\n%q", out)
+		}
+	})
+}
+
+func TestACredentialProblemAbortsTheDeployBeforeTheBuild(t *testing.T) {
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, nil)
+	pretendStdoutIsTerminal(&dependencies)
+	fixture := setUpDeployProject(t)
+	fixture.Provider.Edges().(*fake.Edges).Verifies(fake.KindRelay, edge.CredentialIdentity{}, errors.New("the relay token was revoked"))
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+	if err == nil {
+		t.Fatal("runDeploy err = nil, want a credential-check error")
+	}
+
+	out := stdout.String()
+	if !strings.Contains(out, "000000000000") {
+		t.Errorf("stdout = %q, want the resolved identity still shown", out)
+	}
+	if !strings.Contains(out, "relay token was revoked") {
+		t.Errorf("stdout = %q, want the relay credential problem surfaced", out)
+	}
+	if strings.Contains(out, "[build]") {
+		t.Errorf("stdout = %q, want the build to be skipped on a credential failure", out)
+	}
+	if sent := sentDeploys(t, fixture); len(sent) != 0 {
+		t.Errorf("the CLI sent %d deploys, want none", len(sent))
+	}
+}
+
+func TestADeployRefusesWithoutProductionInfrastructure(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		arrange func(t *testing.T, fixture clitest.FakeProject)
+		want    string
+	}{
+		{
+			name: "a tier mismatch refuses without deploying",
+			arrange: func(t *testing.T, fixture clitest.FakeProject) {
+				removeBootstrap(t, fixture, environment.TierProduction)
+				bootstrapTier(t, fixture, environment.TierPreview)
+			},
+			want: "this command needs production infrastructure",
+		},
+		{
+			name: "absent infrastructure refuses without deploying",
+			arrange: func(t *testing.T, fixture clitest.FakeProject) {
+				removeBootstrap(t, fixture, environment.TierProduction)
+			},
+			want: "ocel bootstrap",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dependencies := newTestDependencies()
+			stubBuild(&dependencies, nil)
+			fixture := setUpDeployProject(t)
+			tc.arrange(t, fixture)
+
+			var stdout, stderr bytes.Buffer
+			clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+			err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+			if err == nil {
+				t.Fatal("runDeploy err = nil, want a refusal")
+			}
+			if !strings.Contains(stdout.String(), tc.want) {
+				t.Errorf("stdout = %q, want it to contain %q", stdout.String(), tc.want)
+			}
+			if sent := sentDeploys(t, fixture); len(sent) != 0 {
+				t.Errorf("the CLI sent %d deploys, want none", len(sent))
+			}
+		})
+	}
+}
+
+func TestRunDeployRefusesAComputeTheProviderDoesNotRun(t *testing.T) {
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, nil)
+	fixture := setUpDeployProject(t)
+	fixture.Provider.WithFacts(func(facts *provider.Facts) { facts.Computes = []provider.Compute{provider.ComputeServerless} })
+	writeAppsConfig(t, fixture.Root, `{ name: "api", path: "apps/api", compute: "container" }`)
+	writeAppSource(t, fixture.Root, "api")
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+	if err == nil {
+		t.Fatalf("runDeploy err = nil, want the deploy refused; stdout=%s stderr=%s", stdout.String(), stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{`"api"`, `"container"`, "fake", "serverless"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("stdout = %q, want the refusal to name %s", out, want)
+		}
+	}
 }
 
 func TestDeployChecksCredentialsAndTheProjectsBootstrapAsACheckUnitNamedForItsProviderThenSaysWhoItActsAs(t *testing.T) {
 	dependencies := newTestDependencies()
 	stubBuild(&dependencies, nil)
 	useJSONLogFormat(t, &dependencies)
-	root, _ := clitest.SetUpDeployFixture(t)
+	fixture := setUpDeployProject(t)
 
-	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-	if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
-		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
-	}
+	out := deployOutput(t, fixture, dependencies, deployOptions{yes: true}, "")
 
-	evs := envelopes(t, stdout.String())
+	evs := envelopes(t, out)
 	started := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool {
 		return ev.GetStarted() != nil && ev.GetMessage() == "Checking your credentials and the production bootstrap for "+clitest.FixtureSlug
 	})
 	if started < 0 {
-		t.Fatalf("no unit started for the credential check: %s", stdout.String())
+		t.Fatalf("no unit started for the credential check: %s", out)
 	}
 	unit := evs[started]
 	if unit.GetPhase() != progressv1.Phase_PHASE_CHECK || unit.GetSubject() != "fake" {
@@ -232,7 +474,7 @@ func TestDeployChecksCredentialsAndTheProjectsBootstrapAsACheckUnitNamedForItsPr
 		return ev.GetEnded() != nil && bytes.Equal(ev.GetSpanId(), unit.GetSpanId())
 	})
 	if ended < 0 || evs[ended].GetEnded().GetStatus() != progressv1.SpanStatus_SPAN_STATUS_OK {
-		t.Fatalf("the credential check never ended OK: %s", stdout.String())
+		t.Fatalf("the credential check never ended OK: %s", out)
 	}
 	identity := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetIdentity() != nil })
 	if identity < started || identity > ended {
@@ -247,12 +489,12 @@ func TestAnUnbootstrappedProductionFailsTheCheckUnitWithTheCommandThatBootstraps
 	dependencies := newTestDependencies()
 	stubBuild(&dependencies, nil)
 	useJSONLogFormat(t, &dependencies)
-	root, _ := clitest.SetUpDeployFixture(t)
-	t.Setenv(clitest.FakeInfraPresentEnvVar, "0")
+	fixture := setUpDeployProject(t)
+	removeBootstrap(t, fixture, environment.TierProduction)
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-	if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err == nil {
+	if err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err == nil {
 		t.Fatalf("runDeploy succeeded against no bootstrap: %s", stdout.String())
 	}
 
@@ -275,16 +517,12 @@ func TestDeploysEventsAreInTheCheckPhaseThenBuildThenTheProvidersDeployPhases(t 
 	dependencies := newTestDependencies()
 	stubBuild(&dependencies, nil)
 	useJSONLogFormat(t, &dependencies)
-	root, _ := clitest.SetUpDeployFixture(t)
+	fixture := setUpDeployProject(t)
 
-	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-	if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
-		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
-	}
+	out := deployOutput(t, fixture, dependencies, deployOptions{yes: true}, "")
 
 	var order []progressv1.Phase
-	for _, ev := range envelopes(t, stdout.String()) {
+	for _, ev := range envelopes(t, out) {
 		phase := ev.GetPhase()
 		if phase == progressv1.Phase_PHASE_UNSPECIFIED || (len(order) > 0 && order[len(order)-1] == phase) {
 			continue
@@ -302,24 +540,33 @@ func TestDeploysEventsAreInTheCheckPhaseThenBuildThenTheProvidersDeployPhases(t 
 	}
 }
 
+func setUpProjectLackingFeatures(t *testing.T) clitest.FakeProject {
+	t.Helper()
+	fixture := clitest.SetUpProject(t)
+	fixture.Provider.FakeBootstrap().DescribeAbsent(fake.FeatureCache, fake.FeatureImages)
+	writeUsageMonorepo(t, fixture.Root, "")
+	return fixture
+}
+
+const bootstrapCommand = "Run `ocel bootstrap production --features cache,images` and try again"
+
 func TestDeployYesNeverStopsToAsk(t *testing.T) {
-	root, journal := clitest.SetUpEdgeFixture(t, "")
+	fixture := setUpProjectLackingFeatures(t)
 	dependencies := newTestDependencies()
-	stubBuild(&dependencies, clitest.UsageMonorepoFunctions())
-	t.Setenv(clitest.FakeBootstrapEnvVar, "missing")
-	dependencies.StdinIsTerminal = func(io.Reader) bool { return true }
+	stubBuild(&dependencies, apiFunction())
+	terminalStdin(&dependencies)
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-	err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+	err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 	if err == nil {
 		t.Fatal("an unattended deploy against a bootstrap missing a feature it needs was allowed through")
 	}
-	if !strings.Contains(stdout.String(), "Run `ocel bootstrap production --features image-optimization,isr` and try again") {
+	if !strings.Contains(stdout.String(), bootstrapCommand) {
 		t.Errorf("stdout = %q, want the literal command to run", stdout.String())
 	}
-	if _, err := os.Stat(journal); !os.IsNotExist(err) {
-		t.Errorf("the provider was reached; --yes answers questions about the deploy, it does not order a bootstrap")
+	if bootstraps := clitest.RequestsTo[*contractv1.BootstrapRequest](t, fixture.Requests, contractv1connect.ProviderServiceBootstrapProcedure); len(bootstraps) != 0 || len(sentDeploys(t, fixture)) != 0 {
+		t.Errorf("the provider was asked to bootstrap or deploy; --yes answers questions about the deploy, it does not order a bootstrap")
 	}
 }
 
@@ -332,66 +579,51 @@ func TestDeployWithoutATerminalRefusesTheBootstrapItCannotOffer(t *testing.T) {
 		{name: "with --yes", opts: deployOptions{yes: true}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			root, journal := clitest.SetUpEdgeFixture(t, "")
+			fixture := setUpProjectLackingFeatures(t)
 			dependencies := newTestDependencies()
-			stubBuild(&dependencies, clitest.UsageMonorepoFunctions())
-			t.Setenv(clitest.FakeBootstrapEnvVar, "missing")
+			stubBuild(&dependencies, apiFunction())
 
 			var stdout, stderr bytes.Buffer
 			clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-			err := runDeploy(context.Background(), dependencies, root, tc.opts, &stdout, &stderr, strings.NewReader(""))
+			err := runDeploy(context.Background(), dependencies, fixture.Root, tc.opts, &stdout, &stderr, strings.NewReader(""))
 			if err == nil {
 				t.Fatal("a deploy against a bootstrap missing a feature it needs was allowed through")
 			}
-			if !strings.Contains(stdout.String(), "Run `ocel bootstrap production --features image-optimization,isr` and try again") {
+			if !strings.Contains(stdout.String(), bootstrapCommand) {
 				t.Errorf("stdout = %q, want the literal command to run", stdout.String())
 			}
-			if _, err := os.Stat(journal); !os.IsNotExist(err) {
-				t.Error("the provider was reached; a bootstrap nobody can be offered is never ordered, --yes or not")
+			if bootstraps := clitest.RequestsTo[*contractv1.BootstrapRequest](t, fixture.Requests, contractv1connect.ProviderServiceBootstrapProcedure); len(bootstraps) != 0 || len(sentDeploys(t, fixture)) != 0 {
+				t.Error("the provider was asked to bootstrap or deploy; a bootstrap nobody can be offered is never ordered, --yes or not")
 			}
 		})
 	}
 }
 
-const needsRefusal = "app web needs edge-middleware and the \"direct\" edge does not serve it: middleware runs in the origin's Node server the way `next start` runs it, so every request pays the round trip to the origin before it is routed. " +
-	"It affects routes /dashboard, /admin. " +
-	"Add \"edge-middleware\" to `allowDegraded` in ocel.config.ts to deploy it degraded, or move the app to an edge that serves edge-middleware"
-
-const degradedDetail = "web: middleware runs in the origin's Node server the way `next start` runs it, so every request pays the round trip to the origin before it is routed. It affects routes /dashboard"
-
-func useJSONLogFormat(t *testing.T, dependencies *Dependencies) {
+func writeAppNeeds(t *testing.T, root, app, framework, needs string) {
 	t.Helper()
-	dependencies.Presentation = func(io.Writer) terminal.Presentation {
-		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
-	}
+	clitest.WriteFile(t, filepath.Join(root, statedir.Name, "output", "apps", app, edge.ServeDescriptorFile),
+		`{"framework":"`+framework+`","buildId":"b1","needs":`+needs+`}`)
 }
 
-func envelopes(t *testing.T, out string) []*streamv1.RunEvent {
+const middlewareNeeds = `{"edge-middleware":{"count":2,"routes":["/dashboard","/admin"]}}`
+
+func setUpNeedsProject(t *testing.T, fields, needs string) (clitest.FakeProject, Dependencies) {
 	t.Helper()
-	var events []*streamv1.RunEvent
-	for _, line := range strings.Split(out, "\n") {
-		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, "{") {
-			continue
-		}
-		ev := &streamv1.RunEvent{}
-		if err := protojson.Unmarshal([]byte(line), ev); err != nil {
-			t.Fatalf("line %q is not a protojson RunEvent: %v", line, err)
-		}
-		events = append(events, ev)
-	}
-	return events
+	fixture := setUpDeployProject(t)
+	writeUsageMonorepo(t, fixture.Root, fields)
+	writeAppNeeds(t, fixture.Root, "api", "node", needs)
+	relayEdge(fixture).Serves([]edge.Need{})
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, apiFunction())
+	return fixture, dependencies
 }
 
 func TestDeployRendersTheNeedsRefusalInHumanMode(t *testing.T) {
-	root, _ := clitest.SetUpEdgeFixture(t, "")
-	dependencies := newTestDependencies()
-	stubBuild(&dependencies, clitest.UsageMonorepoFunctions())
-	t.Setenv(clitest.FakeNeedsRefusalEnvVar, needsRefusal)
+	fixture, dependencies := setUpNeedsProject(t, "", middlewareNeeds)
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-	err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+	err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 	if err == nil {
 		t.Fatalf("runDeploy err = nil, want the unsupported need to fail the deploy; stdout=%s stderr=%s", stdout.String(), stderr.String())
 	}
@@ -405,15 +637,12 @@ func TestDeployRendersTheNeedsRefusalInHumanMode(t *testing.T) {
 }
 
 func TestDeployRendersTheNeedsRefusalInJSONMode(t *testing.T) {
-	root, _ := clitest.SetUpEdgeFixture(t, "")
-	dependencies := newTestDependencies()
-	stubBuild(&dependencies, clitest.UsageMonorepoFunctions())
+	fixture, dependencies := setUpNeedsProject(t, "", middlewareNeeds)
 	useJSONLogFormat(t, &dependencies)
-	t.Setenv(clitest.FakeNeedsRefusalEnvVar, needsRefusal)
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-	err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+	err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 	if err == nil {
 		t.Fatalf("runDeploy err = nil, want the unsupported need to fail the deploy; stdout=%s", stdout.String())
 	}
@@ -438,14 +667,11 @@ func TestDeployRendersTheNeedsRefusalInJSONMode(t *testing.T) {
 }
 
 func TestDeployRendersADegradedNeedInHumanMode(t *testing.T) {
-	root, _ := clitest.SetUpEdgeFixture(t, "  allowDegraded: [\"edge-middleware\"],\n")
-	dependencies := newTestDependencies()
-	stubBuild(&dependencies, clitest.UsageMonorepoFunctions())
-	t.Setenv(clitest.FakeDegradedEnvVar, "edge-middleware="+degradedDetail)
+	fixture, dependencies := setUpNeedsProject(t, "  allowDegraded: [\"edge-middleware\"],\n", middlewareNeeds)
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-	if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+	if err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
@@ -458,15 +684,13 @@ func TestDeployRendersADegradedNeedInHumanMode(t *testing.T) {
 }
 
 func TestDeployRendersADegradedNeedAsACheckPhaseWarningInJSON(t *testing.T) {
-	root, _ := clitest.SetUpEdgeFixture(t, "  allowDegraded: [\"edge-middleware\", \"ppr-resume\"],\n")
-	dependencies := newTestDependencies()
-	stubBuild(&dependencies, clitest.UsageMonorepoFunctions())
+	fixture, dependencies := setUpNeedsProject(t, "  allowDegraded: [\"edge-middleware\", \"ppr-resume\"],\n",
+		`{"edge-middleware":{"count":1,"routes":["/dashboard"]},"ppr-resume":{"count":1,"routes":["/"]}}`)
 	useJSONLogFormat(t, &dependencies)
-	t.Setenv(clitest.FakeDegradedEnvVar, "edge-middleware="+degradedDetail+";ppr-resume=web: the shell comes from the origin. It affects routes /")
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-	if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+	if err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
@@ -479,7 +703,7 @@ func TestDeployRendersADegradedNeedAsACheckPhaseWarningInJSON(t *testing.T) {
 	if len(degraded) != 2 {
 		t.Fatalf("got %d check-phase warnings, want one per waived need: %s", len(degraded), stdout.String())
 	}
-	if !strings.HasPrefix(degraded[0], "edge-middleware: ") || !strings.HasPrefix(degraded[1], "ppr-resume: ") {
+	if !strings.HasPrefix(degraded[0], "edge-middleware ") || !strings.HasPrefix(degraded[1], "ppr-resume ") {
 		t.Errorf("check-phase warnings = %q, want edge-middleware then ppr-resume", degraded)
 	}
 	if !strings.Contains(degraded[0], "next start") {
@@ -489,46 +713,31 @@ func TestDeployRendersADegradedNeedAsACheckPhaseWarningInJSON(t *testing.T) {
 
 func TestDeploySaysNothingAboutNeedsForAnAppThatDeclaresNone(t *testing.T) {
 	t.Run("human", func(t *testing.T) {
-		root, _ := clitest.SetUpEdgeFixture(t, "")
-		dependencies := newTestDependencies()
-		stubBuild(&dependencies, clitest.UsageMonorepoFunctions())
-
-		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-		if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
-			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		_, out, err := deployUsageMonorepo(t, "")
+		if err != nil {
+			t.Fatalf("runDeploy err = %v; output=%s", err, out)
 		}
-		rendered := stdout.String() + stderr.String()
 		for _, unwanted := range []string{"next start", "allowDegraded", "degraded"} {
-			if strings.Contains(rendered, unwanted) {
-				t.Errorf("rendered output = %q, want no needs notice for an app that declares none (%q)", rendered, unwanted)
+			if strings.Contains(out, unwanted) {
+				t.Errorf("rendered output = %q, want no needs notice for an app that declares none (%q)", out, unwanted)
 			}
 		}
 	})
 
 	t.Run("json", func(t *testing.T) {
-		root, _ := clitest.SetUpEdgeFixture(t, "")
+		fixture := setUpDeployProject(t)
+		writeUsageMonorepo(t, fixture.Root, "")
 		dependencies := newTestDependencies()
-		stubBuild(&dependencies, clitest.UsageMonorepoFunctions())
+		stubBuild(&dependencies, apiFunction())
 		useJSONLogFormat(t, &dependencies)
 
-		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-		if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
-			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
-		}
-		for _, ev := range envelopes(t, stdout.String()) {
+		out := deployOutput(t, fixture, dependencies, deployOptions{yes: true}, "")
+		for _, ev := range envelopes(t, out) {
 			if ev.GetLevel() == progressv1.Level_LEVEL_WARN && ev.GetPhase() == progressv1.Phase_PHASE_CHECK {
 				t.Errorf("check-phase warning %q on the stream, want none for an app that declares no needs", ev.GetMessage())
 			}
 		}
 	})
-}
-
-func writeAppNeeds(t *testing.T, root, app, framework, needs string) {
-	t.Helper()
-	clitest.WriteFile(t, filepath.Join(root, statedir.Name, "output", "apps", app, edge.ServeDescriptorFile),
-		`{"framework":"`+framework+`","buildId":"b1","needs":`+needs+`}`)
 }
 
 func lintEdgeWarnings(t *testing.T, cfg *project.Project) []string {
@@ -595,4 +804,10 @@ func TestEdgeAppsReadsTheNeeds(t *testing.T) {
 			t.Fatalf("EdgeApps = %v, want none", apps)
 		}
 	})
+}
+
+func pretendStdoutIsTerminal(dependencies *Dependencies) {
+	dependencies.Presentation = func(io.Writer) terminal.Presentation {
+		return terminal.Resolve(terminal.Conditions{TTY: true})
+	}
 }

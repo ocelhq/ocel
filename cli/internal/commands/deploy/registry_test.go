@@ -14,6 +14,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 )
 
 func registryConfig(registry *project.Registry) *project.Project {
@@ -26,15 +29,15 @@ func registryConfig(registry *project.Registry) *project.Project {
 }
 
 func TestAProjectRegistryRidesTheDeployWithItsPasswordReadFromTheEnvironment(t *testing.T) {
-	t.Setenv("GHCR_TOKEN", "hunter2")
+	t.Setenv("REGISTRY_TOKEN", "hunter2")
 
 	registry, err := projectRegistry(registryConfig(&project.Registry{
-		Server: "ghcr.io", Namespace: "acme", Username: "acme-bot", Password: "GHCR_TOKEN",
+		Server: "registry.example.com", Namespace: "acme", Username: "acme-bot", Password: "REGISTRY_TOKEN",
 	}))
 	if err != nil {
 		t.Fatalf("projectRegistry() error = %v", err)
 	}
-	if registry.GetServer() != "ghcr.io" || registry.GetNamespace() != "acme" || registry.GetUsername() != "acme-bot" || registry.GetPassword() != "hunter2" {
+	if registry.GetServer() != "registry.example.com" || registry.GetNamespace() != "acme" || registry.GetUsername() != "acme-bot" || registry.GetPassword() != "hunter2" {
 		t.Errorf("projectRegistry() = server %q namespace %q username %q, want the project's own registry with its password read from the environment",
 			registry.GetServer(), registry.GetNamespace(), registry.GetUsername())
 	}
@@ -52,8 +55,8 @@ func TestAProjectNamingNoRegistrySendsNone(t *testing.T) {
 }
 
 func TestAProjectWithNoAppSendsNoRegistry(t *testing.T) {
-	t.Setenv("GHCR_TOKEN", "hunter2")
-	cfg := registryConfig(&project.Registry{Server: "ghcr.io", Password: "GHCR_TOKEN"})
+	t.Setenv("REGISTRY_TOKEN", "hunter2")
+	cfg := registryConfig(&project.Registry{Server: "registry.example.com", Password: "REGISTRY_TOKEN"})
 	cfg.Apps = nil
 
 	registry, err := projectRegistry(cfg)
@@ -63,13 +66,13 @@ func TestAProjectWithNoAppSendsNoRegistry(t *testing.T) {
 }
 
 func TestARegistryWhoseVariableIsUnsetIsRefusedBeforeAnythingIsBuilt(t *testing.T) {
-	cfg := registryConfig(&project.Registry{Server: "ghcr.io", Password: "GHCR_TOKEN"})
+	cfg := registryConfig(&project.Registry{Server: "registry.example.com", Password: "REGISTRY_TOKEN"})
 
 	err := requireProjectRegistryPassword(cfg)
 	if err == nil {
 		t.Fatal("requireProjectRegistryPassword() passed with the registry's variable unset, so the deploy would build before discovering it cannot push")
 	}
-	for _, want := range []string{"GHCR_TOKEN", "ghcr.io"} {
+	for _, want := range []string{"REGISTRY_TOKEN", "registry.example.com"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("requireProjectRegistryPassword() error = %v, want it to mention %q", err, want)
 		}
@@ -77,8 +80,8 @@ func TestARegistryWhoseVariableIsUnsetIsRefusedBeforeAnythingIsBuilt(t *testing.
 }
 
 func TestARegistryWhoseVariableIsEmptyIsRefusedToo(t *testing.T) {
-	t.Setenv("GHCR_TOKEN", "")
-	cfg := registryConfig(&project.Registry{Server: "ghcr.io", Password: "GHCR_TOKEN"})
+	t.Setenv("REGISTRY_TOKEN", "")
+	cfg := registryConfig(&project.Registry{Server: "registry.example.com", Password: "REGISTRY_TOKEN"})
 
 	if err := requireProjectRegistryPassword(cfg); err == nil {
 		t.Fatal("requireProjectRegistryPassword() passed with the registry's variable empty, which authenticates as nobody")
@@ -86,7 +89,7 @@ func TestARegistryWhoseVariableIsEmptyIsRefusedToo(t *testing.T) {
 }
 
 func TestAProjectWithNoAppIsAskedForNoRegistryPassword(t *testing.T) {
-	cfg := registryConfig(&project.Registry{Server: "ghcr.io", Password: "GHCR_TOKEN"})
+	cfg := registryConfig(&project.Registry{Server: "registry.example.com", Password: "REGISTRY_TOKEN"})
 	cfg.Apps = nil
 
 	if err := requireProjectRegistryPassword(cfg); err != nil {
@@ -101,14 +104,14 @@ func TestAProjectWithNoRegistryIsAskedForNoPassword(t *testing.T) {
 }
 
 func TestTheRegistryPasswordIsReadWhenTheRequestIsBuiltAndNowhereEarlier(t *testing.T) {
-	cfg := registryConfig(&project.Registry{Server: "ghcr.io", Password: "GHCR_TOKEN"})
+	cfg := registryConfig(&project.Registry{Server: "registry.example.com", Password: "REGISTRY_TOKEN"})
 
-	t.Setenv("GHCR_TOKEN", "the-one-checked-at-preflight")
+	t.Setenv("REGISTRY_TOKEN", "the-one-checked-at-preflight")
 	if err := requireProjectRegistryPassword(cfg); err != nil {
 		t.Fatalf("requireProjectRegistryPassword() = %v", err)
 	}
 
-	t.Setenv("GHCR_TOKEN", "the-one-the-push-uses")
+	t.Setenv("REGISTRY_TOKEN", "the-one-the-push-uses")
 	registry, err := projectRegistry(cfg)
 	if err != nil {
 		t.Fatalf("projectRegistry() error = %v", err)
@@ -119,9 +122,9 @@ func TestTheRegistryPasswordIsReadWhenTheRequestIsBuiltAndNowhereEarlier(t *test
 }
 
 func TestTheRegistryPasswordIsReadFromTheProjectsDotenvWhenTheShellLacksIt(t *testing.T) {
-	cfg := registryConfig(&project.Registry{Server: "ghcr.io", Password: "GHCR_TOKEN"})
+	cfg := registryConfig(&project.Registry{Server: "registry.example.com", Password: "REGISTRY_TOKEN"})
 	cfg.Dir = t.TempDir()
-	if err := os.WriteFile(filepath.Join(cfg.Dir, ".env"), []byte("GHCR_TOKEN=from-dotenv\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(cfg.Dir, ".env"), []byte("REGISTRY_TOKEN=from-dotenv\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -138,12 +141,12 @@ func TestTheRegistryPasswordIsReadFromTheProjectsDotenvWhenTheShellLacksIt(t *te
 }
 
 func TestTheShellsRegistryPasswordWinsOverTheProjectsDotenv(t *testing.T) {
-	cfg := registryConfig(&project.Registry{Server: "ghcr.io", Password: "GHCR_TOKEN"})
+	cfg := registryConfig(&project.Registry{Server: "registry.example.com", Password: "REGISTRY_TOKEN"})
 	cfg.Dir = t.TempDir()
-	if err := os.WriteFile(filepath.Join(cfg.Dir, ".env"), []byte("GHCR_TOKEN=from-dotenv\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(cfg.Dir, ".env"), []byte("REGISTRY_TOKEN=from-dotenv\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("GHCR_TOKEN", "from-shell")
+	t.Setenv("REGISTRY_TOKEN", "from-shell")
 
 	registry, err := projectRegistry(cfg)
 	if err != nil {
@@ -154,7 +157,7 @@ func TestTheShellsRegistryPasswordWinsOverTheProjectsDotenv(t *testing.T) {
 	}
 }
 
-func registryProject(t *testing.T, registry string) (Dependencies, string, func() bool) {
+func registryProject(t *testing.T, registry string) (Dependencies, clitest.FakeProject, func() bool) {
 	t.Helper()
 
 	dependencies := newTestDependencies()
@@ -167,32 +170,25 @@ func registryProject(t *testing.T, registry string) (Dependencies, string, func(
 		return buildApps(ctx, cfg, env, archs, log)
 	}
 
-	root, _ := clitest.SetUpDeployFixture(t)
-	t.Setenv(clitest.FakeComputesEnvVar, "container,serverless")
-	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
-export default {
-  slug: "test-app",
-  provider: { fake: {} },
-  domains: { preview: "*.preview.acme.com" },
-  apps: [{ name: "api", path: "apps/api", compute: "container" }],`+registry+`
-};
-`)
-	clitest.WriteFile(t, filepath.Join(root, "apps", "api", "src", "server.ts"), "export {};\n")
-	return dependencies, root, func() bool { return built }
+	fixture := setUpDeployProject(t)
+	clitest.ServeImageDaemon(t, "amd64")
+	writeConfig(t, fixture.Root, `  apps: [{ name: "api", path: "apps/api", compute: "container" }],`+registry+"\n")
+	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "api", "src", "server.ts"), "export {};\n")
+	return dependencies, fixture, func() bool { return built }
 }
 
 func TestARegistryWhoseVariableIsUnsetStopsTheDeployBeforeAnythingIsBuilt(t *testing.T) {
-	dependencies, root, built := registryProject(t, `
-  registry: { server: "ghcr.io", password: "${OCEL_TEST_REGISTRY_TOKEN}" },`)
+	dependencies, fixture, built := registryProject(t, `
+  registry: { server: "registry.example.com", password: "${OCEL_TEST_REGISTRY_TOKEN}" },`)
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-	err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+	err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 	if err == nil {
 		t.Fatal("runDeploy() built and deployed a project whose registry password is nowhere to be read, want it refused at the plan")
 	}
 	said := err.Error() + stdout.String() + stderr.String()
-	for _, want := range []string{"OCEL_TEST_REGISTRY_TOKEN", "ghcr.io"} {
+	for _, want := range []string{"OCEL_TEST_REGISTRY_TOKEN", "registry.example.com"} {
 		if !strings.Contains(said, want) {
 			t.Errorf("runDeploy() failed with %q, want it to mention %q", said, want)
 		}
@@ -203,13 +199,13 @@ func TestARegistryWhoseVariableIsUnsetStopsTheDeployBeforeAnythingIsBuilt(t *tes
 }
 
 func TestARegistryPasswordPastedAsATokenIsRefusedWithoutEchoingIt(t *testing.T) {
-	const token = "ghp_16C7e42F292c6912E7710c838347Ae178B4a"
-	dependencies, root, built := registryProject(t, `
-  registry: { server: "ghcr.io", password: "`+token+`" },`)
+	const token = "tok_16C7e42F292c6912E7710c838347Ae178B4a"
+	dependencies, fixture, built := registryProject(t, `
+  registry: { server: "registry.example.com", password: "`+token+`" },`)
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-	err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+	err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 	if err == nil {
 		t.Fatal("runDeploy() took a pasted token as the name of an environment variable, and would authenticate as nobody")
 	}
@@ -227,12 +223,12 @@ func TestARegistryPasswordPastedAsATokenIsRefusedWithoutEchoingIt(t *testing.T) 
 
 func TestARegistryWhoseVariableIsSetDeploysAsUsual(t *testing.T) {
 	t.Setenv("OCEL_TEST_REGISTRY_TOKEN", "hunter2")
-	dependencies, root, _ := registryProject(t, `
-  registry: { server: "ghcr.io", password: "${OCEL_TEST_REGISTRY_TOKEN}" },`)
+	dependencies, fixture, _ := registryProject(t, `
+  registry: { server: "registry.example.com", password: "${OCEL_TEST_REGISTRY_TOKEN}" },`)
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-	if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+	if err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy() err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	if said := stdout.String() + stderr.String(); strings.Contains(said, "hunter2") {
@@ -241,16 +237,16 @@ func TestARegistryWhoseVariableIsSetDeploysAsUsual(t *testing.T) {
 }
 
 func TestAProjectThatNamesNoRegistryDemandsNoSecret(t *testing.T) {
-	dependencies, root, _ := registryProject(t, "")
+	dependencies, fixture, _ := registryProject(t, "")
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-	if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+	if err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy() err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 }
 
-func containerProject(t *testing.T, health string) (Dependencies, string, string) {
+func containerProject(t *testing.T, health string) (Dependencies, clitest.FakeProject) {
 	t.Helper()
 
 	dependencies := newTestDependencies()
@@ -259,102 +255,94 @@ func containerProject(t *testing.T, health string) (Dependencies, string, string
 	})
 	stubAppImages(&dependencies, "api")
 
-	root, sockPath := clitest.SetUpDeployFixture(t)
-	t.Setenv(clitest.FakeComputesEnvVar, "container,serverless")
-	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
-export default {
-  slug: "test-app",
-  provider: { fake: {} },
-  domains: { preview: "*.preview.acme.com" },
-  apps: [{ name: "api", path: "apps/api", compute: "container"`+health+` }],
-};
-`)
-	clitest.WriteFile(t, filepath.Join(root, "apps", "api", "src", "server.ts"), "export {};\n")
-	return dependencies, root, sockPath
+	fixture := setUpDeployProject(t)
+	clitest.ServeImageDaemon(t, "amd64")
+	writeConfig(t, fixture.Root, `  apps: [{ name: "api", path: "apps/api", compute: "container"`+health+` }],`+"\n")
+	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "api", "src", "server.ts"), "export {};\n")
+	return dependencies, fixture
 }
 
-func deployContainerProject(t *testing.T, health string) string {
+func deployContainerProject(t *testing.T, health string) *contractv1.ManifestApp {
 	t.Helper()
 
-	dependencies, root, sockPath := containerProject(t, health)
+	dependencies, fixture := containerProject(t, health)
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-	if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+	if err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
-	clitest.WaitForNoStaleSocket(t, sockPath)
-	return stdout.String()
+	return manifestApp(t, sentDeploy(t, fixture).GetManifest(), "api")
 }
 
 func TestAContainerAppReachesTheProviderAsOneDigestPinnedProcess(t *testing.T) {
-	out := deployContainerProject(t, "")
+	container := deployContainerProject(t, "").GetContainer()
 
-	want := "CONTAINER app=api image=" + clitest.FixtureImage("api") + " health=/"
-	if !strings.Contains(out, want) {
-		t.Errorf("stdout = %q, want %q — the container reaching the provider pinned at the digest the build produced", out, want)
+	if container.GetImage() != clitest.FixtureImage("api") || container.GetHealthCheckPath() != "/" {
+		t.Errorf("container = %s checked at %s, want %s checked at / — the container reaching the provider pinned at the digest the build produced", container.GetImage(), container.GetHealthCheckPath(), clitest.FixtureImage("api"))
 	}
 }
 
 func TestAContainerAppContributesZeroFunctions(t *testing.T) {
-	out := deployContainerProject(t, "")
+	api := deployContainerProject(t, "")
 
-	if strings.Contains(out, "FUNCTION ") {
-		t.Errorf("stdout = %q, want no function at all for an app one always-on process serves: routing collapses to that process, and a packed zip beside it would be a second answer", out)
+	if functions := api.GetServerless().GetFunctions(); len(functions) != 0 {
+		t.Errorf("api carries %d functions, want none at all for an app one always-on process serves: routing collapses to that process, and a packed zip beside it would be a second answer", len(functions))
 	}
 }
 
 func TestAContainersHealthPathIsTheOneTheAppNames(t *testing.T) {
-	out := deployContainerProject(t, `, health: { path: "/healthz" }`)
+	container := deployContainerProject(t, `, health: { path: "/healthz" }`).GetContainer()
 
-	if !strings.Contains(out, "health=/healthz") {
-		t.Errorf("stdout = %q, want the health path the app names passed through to the provider", out)
+	if container.GetHealthCheckPath() != "/healthz" {
+		t.Errorf("health path = %q, want the health path the app names passed through to the provider", container.GetHealthCheckPath())
 	}
 }
 
 func TestAContainerAppRendersADigestPinnedManifestUnderDry(t *testing.T) {
-	dependencies, root, sockPath := containerProject(t, "")
+	dependencies, fixture := containerProject(t, "")
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-	if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true, dry: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+	if err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true, dry: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy --dry err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
-	out := stdout.String()
-	want := clitest.FixtureImage("api") + "  container"
-	if !strings.Contains(out, want) {
-		t.Errorf("stdout = %q, want the plan to name %q — a dry run renders the manifest a real deploy would send, digest and all", out, want)
+	req := sentDeploy(t, fixture)
+	if image := manifestApp(t, req.GetManifest(), "api").GetContainer().GetImage(); !req.GetDry() || image != clitest.FixtureImage("api") {
+		t.Errorf("the dry deploy sent dry=%v with image %q, want %q — a dry run plans the manifest a real deploy would send, digest and all", req.GetDry(), image, clitest.FixtureImage("api"))
 	}
-	clitest.WaitForNoStaleSocket(t, sockPath)
+	if !strings.Contains(stdout.String(), "api  image") {
+		t.Errorf("stdout = %q, want the plan to show the image it would push", stdout.String())
+	}
 }
 
 func TestTheRegistryTheProjectNamesRidesTheDeployWithItsSecretResolved(t *testing.T) {
 	t.Setenv("OCEL_TEST_REGISTRY_TOKEN", "hunter2")
-	dependencies, root, _ := registryProject(t, `
-  registry: { server: "ghcr.io", username: "acme-bot", password: "${OCEL_TEST_REGISTRY_TOKEN}" },`)
+	dependencies, fixture, _ := registryProject(t, `
+  registry: { server: "registry.example.com", username: "acme-bot", password: "${OCEL_TEST_REGISTRY_TOKEN}" },`)
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-	if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+	if err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy() err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
-	want := "REGISTRY server=ghcr.io namespace= username=acme-bot secret=true"
-	if !strings.Contains(stdout.String(), want) {
-		t.Errorf("stdout = %q, want %q — the push is an engine resource, so the registry it pushes to reaches the release", stdout.String(), want)
+	registry := sentDeploy(t, fixture).GetProjectRegistry()
+	if registry.GetServer() != "registry.example.com" || registry.GetNamespace() != "" || registry.GetUsername() != "acme-bot" || registry.GetPassword() != "hunter2" {
+		t.Errorf("registry = %s as %q in %q, want registry.example.com as acme-bot with its secret resolved — the push is an engine resource, so the registry it pushes to reaches the release", registry.GetServer(), registry.GetUsername(), registry.GetNamespace())
 	}
 }
 
 func TestADeployThatNamesNoRegistrySendsNone(t *testing.T) {
-	dependencies, root, _ := registryProject(t, "")
+	dependencies, fixture, _ := registryProject(t, "")
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-	if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+	if err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy() err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
-	if strings.Contains(stdout.String(), "REGISTRY ") {
-		t.Errorf("stdout = %q, want no registry on a deploy whose project names none: the provider resolves its own inside the deploy, so its credentials never cross the CLI", stdout.String())
+	if registry := sentDeploy(t, fixture).GetProjectRegistry(); registry != nil {
+		t.Errorf("registry = %s, want none on a deploy whose project names none: the provider resolves its own inside the deploy, so its credentials never cross the CLI", registry.GetServer())
 	}
 }
 
@@ -364,32 +352,26 @@ func TestAServerlessOnlyDeployStillSendsTheRegistryItsFunctionsMayBeRunFrom(t *t
 	stubBuild(&dependencies, []build.Function{
 		{Route: "index", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
 	})
-	root, _ := clitest.SetUpDeployFixture(t)
-	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
-export default {
-  slug: "test-app",
-  provider: { fake: {} },
-  domains: { preview: "*.preview.acme.com" },
-  apps: [{ name: "api", path: "apps/api", compute: "serverless", framework: "node" }],
-  registry: { server: "ghcr.io", password: "${OCEL_TEST_REGISTRY_TOKEN}" },
-};
+	fixture := setUpDeployProject(t)
+	writeConfig(t, fixture.Root, `  apps: [{ name: "api", path: "apps/api", compute: "serverless", framework: "node" }],
+  registry: { server: "registry.example.com", password: "${OCEL_TEST_REGISTRY_TOKEN}" },
 `)
-	clitest.WriteFile(t, filepath.Join(root, "apps", "api", "src", "server.ts"), "export {};\n")
+	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "api", "src", "server.ts"), "export {};\n")
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-	if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+	if err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy() err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
-	want := "REGISTRY server=ghcr.io"
-	if !strings.Contains(stdout.String(), want) {
-		t.Errorf("stdout = %q, want %q — a provider that runs its functions from images pushes them somewhere too", stdout.String(), want)
+	if server := sentDeploy(t, fixture).GetProjectRegistry().GetServer(); server != "registry.example.com" {
+		t.Errorf("registry = %q, want registry.example.com — a provider that runs its functions from images pushes them somewhere too", server)
 	}
 }
 
 func TestTheImageIsBuiltForTheArchitectureTheProviderSaysItsContainersRunOn(t *testing.T) {
-	dependencies, root, _ := registryProject(t, "")
-	t.Setenv(clitest.FakeContainerArchEnvVar, "arm64")
+	dependencies, fixture, _ := registryProject(t, "")
+	fixture.Provider.WrappingContainers("arm64", []byte(fake.RuntimeBinary))
+	clitest.ServeImageDaemon(t, "arm64")
 	var required, built map[string]string
 	dependencies.RefuseUnbuildableImages = func(_ context.Context, _ *run.Span, _ *project.Project, archs map[string]string) error {
 		required = archs
@@ -403,7 +385,7 @@ func TestTheImageIsBuiltForTheArchitectureTheProviderSaysItsContainersRunOn(t *t
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-	if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+	if err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy() err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	want := map[string]string{"api": "arm64"}
@@ -416,17 +398,11 @@ func TestTheImageIsBuiltForTheArchitectureTheProviderSaysItsContainersRunOn(t *t
 }
 
 func TestAnAppThatFallsBackToContainerIsBuiltForTheArchitectureTheProviderNames(t *testing.T) {
-	dependencies, root, _ := registryProject(t, "")
-	t.Setenv(clitest.FakeComputesEnvVar, "container")
-	t.Setenv(clitest.FakeContainerArchEnvVar, "arm64")
-	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
-export default {
-  slug: "test-app",
-  provider: { fake: {} },
-  domains: { preview: "*.preview.acme.com" },
-  apps: [{ name: "api", path: "apps/api" }],
-};
-`)
+	dependencies, fixture, _ := registryProject(t, "")
+	fixture.Provider.WithFacts(func(facts *provider.Facts) { facts.Computes = []provider.Compute{provider.ComputeContainer} })
+	fixture.Provider.WrappingContainers("arm64", []byte(fake.RuntimeBinary))
+	clitest.ServeImageDaemon(t, "arm64")
+	writeAppsConfig(t, fixture.Root, `{ name: "api", path: "apps/api" }`)
 	var required, built map[string]string
 	dependencies.RefuseUnbuildableImages = func(_ context.Context, _ *run.Span, _ *project.Project, archs map[string]string) error {
 		required = archs
@@ -440,7 +416,7 @@ export default {
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-	if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+	if err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy() err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	want := map[string]string{"api": "arm64"}
@@ -453,7 +429,7 @@ export default {
 }
 
 func TestAPrebuiltDeployDoesNotAskWhetherThisMachineCanBuildImages(t *testing.T) {
-	dependencies, root, built := registryProject(t, "")
+	dependencies, fixture, built := registryProject(t, "")
 	asked := false
 	dependencies.RefuseUnbuildableImages = func(context.Context, *run.Span, *project.Project, map[string]string) error {
 		asked = true
@@ -462,7 +438,7 @@ func TestAPrebuiltDeployDoesNotAskWhetherThisMachineCanBuildImages(t *testing.T)
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-	if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true, prebuilt: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+	if err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true, prebuilt: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy() err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	if asked {

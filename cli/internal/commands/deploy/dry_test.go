@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -14,25 +13,23 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/deployrecord"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/variableeditor"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/environment"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 func newDryRunDependencies(t *testing.T) Dependencies {
 	t.Helper()
 	dependencies := newTestDependencies()
-	stubBuild(&dependencies, []build.Function{{
-		Route: "api", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js",
-		ArtifactPath: "output/api", App: "api",
-	}})
+	stubBuild(&dependencies, apiFunction())
 	return dependencies
 }
 
@@ -40,7 +37,7 @@ var planRows = []string{
 	"main  postgres",
 	"values",
 	"artifact",
-	"direct/edge",
+	"relay/edge",
 	"promotion",
 	"Run without --dry to apply.",
 }
@@ -53,7 +50,8 @@ func absent(t *testing.T, path string) bool {
 
 func TestADryDeployShowsThePlanAndWritesNothing(t *testing.T) {
 	dependencies := newDryRunDependencies(t)
-	root, _ := clitest.SetUpDeployFixture(t)
+	fixture := setUpDeployProject(t)
+	root := fixture.Root
 	addAppToFixtureConfig(t, root)
 	writeServeDescriptor(t, root, "api", "bld_api_1")
 
@@ -79,14 +77,16 @@ func TestADryDeployShowsThePlanAndWritesNothing(t *testing.T) {
 	if !absent(t, deployrecord.Path(root)) {
 		t.Error("a dry deploy wrote the deploy result, want a run that records nothing it did not do")
 	}
+	if promoted := activePromotion(t, fixture, environment.TierProduction, router.DefaultPointer); promoted != "" {
+		t.Errorf("production serves promotion %q after a dry deploy, want nothing promoted", promoted)
+	}
 }
 
 func TestADryPreviewUpShowsThePlanAndWritesNothing(t *testing.T) {
 	dependencies := newDryRunDependencies(t)
-	root, _ := clitest.SetUpDeployFixture(t)
+	root := setUpPreviewProject(t).Root
 	addAppToFixtureConfig(t, root)
 	writeServeDescriptor(t, root, "api", "bld_api_1")
-	t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
@@ -134,9 +134,10 @@ func TestADryRunRefusesOnAnUnbootstrappedAccount(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dependencies := newDryRunDependencies(t)
-			root, _ := clitest.SetUpDeployFixture(t)
+			fixture := setUpDeployProject(t)
+			root := fixture.Root
 			addAppToFixtureConfig(t, root)
-			t.Setenv(clitest.FakeInfraPresentEnvVar, "0")
+			removeBootstrap(t, fixture, environment.TierProduction)
 
 			var stdout, stderr bytes.Buffer
 			err := tc.run(dependencies, root, &stdout, &stderr)
@@ -155,11 +156,12 @@ func TestADryRunRefusesOnAnUnbootstrappedAccount(t *testing.T) {
 
 func TestADryRunRefusesABootstrapThatIsBehindTheBuild(t *testing.T) {
 	dependencies := newDryRunDependencies(t)
-	dependencies.StdinIsTerminal = func(io.Reader) bool { return true }
-	root, _ := clitest.SetUpDeployFixture(t)
+	terminalStdin(&dependencies)
+	fixture := setUpDeployProject(t)
+	root := fixture.Root
 	addAppToFixtureConfig(t, root)
 	writeServeDescriptor(t, root, "api", "bld_api_1")
-	t.Setenv(clitest.FakeBootstrapEnvVar, "stale")
+	fixture.Provider.FakeBootstrap().MarkStale(fake.FeatureCache)
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
@@ -201,10 +203,11 @@ func TestADryRunNeverOpensTheVariableEditor(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+			fixture := setUpVariablesProject(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+			root := fixture.Root
 			t.Setenv("OCEL_TEST_ENV_PROBLEMS", `[{"key":"STRIPE_API_KEY","folder":"","kind":"KIND_MISSING"}]`)
 			if tc.preview {
-				t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
+				bootstrapTier(t, fixture, environment.TierPreview)
 			}
 			dependencies := newTestDependencies()
 			terminalStdin(&dependencies)
@@ -231,10 +234,8 @@ func TestADryRunNeverOpensTheVariableEditor(t *testing.T) {
 
 func TestADryRunRefusesWhenTheBootstrapLacksWhatTheProjectNeeds(t *testing.T) {
 	dependencies := newDryRunDependencies(t)
-	dependencies.StdinIsTerminal = func(io.Reader) bool { return true }
-	root, _ := clitest.SetUpDeployFixture(t)
-	addAppToFixtureConfig(t, root)
-	t.Setenv(clitest.FakeBootstrapEnvVar, "missing")
+	terminalStdin(&dependencies)
+	root := setUpProjectLackingFeatures(t).Root
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
@@ -310,7 +311,7 @@ func writeAppTSConfig(t *testing.T, root, app string) string {
 
 func TestADryDeployLeavesEveryFileTheProjectOwnsAsItFoundIt(t *testing.T) {
 	dependencies := newDryRunDependencies(t)
-	root, _ := clitest.SetUpDeployFixture(t)
+	root := setUpDeployProject(t).Root
 	addAppToFixtureConfig(t, root)
 	writeServeDescriptor(t, root, "api", "bld_api_1")
 	writeAppTSConfig(t, root, "api")
@@ -334,7 +335,7 @@ func TestADryDeployLeavesEveryFileTheProjectOwnsAsItFoundIt(t *testing.T) {
 
 func TestADeployPointsEachAppsImportsAtItsClientAccessor(t *testing.T) {
 	dependencies := newDryRunDependencies(t)
-	root, _ := clitest.SetUpDeployFixture(t)
+	root := setUpDeployProject(t).Root
 	addAppToFixtureConfig(t, root)
 	writeServeDescriptor(t, root, "api", "bld_api_1")
 	tsconfig := writeAppTSConfig(t, root, "api")

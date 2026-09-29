@@ -133,7 +133,10 @@ func (s *fakeSessions) serve(clientPEM string) (string, error) {
 	}
 	server := &http.Server{Handler: s.requests.record(providerserver.ConformanceMux(providerserver.Config{
 		Version: version.Version,
-		New: func(context.Context, provider.Settings) (provider.Provider, error) {
+		New: func(_ context.Context, settings provider.Settings) (provider.Provider, error) {
+			if _, err := provider.Decode[fake.Options](fake.Vendor, settings.Options); err != nil {
+				return nil, err
+			}
 			return s.provider, nil
 		},
 	}))}

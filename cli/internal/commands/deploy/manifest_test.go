@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -20,14 +23,21 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/envvars"
+	"github.com/ocelhq/ocel/pkg/envvarsserver"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/statedir"
 	"github.com/spf13/cobra"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 func manifestVariable(t *testing.T, manifest *contractv1.Manifest, app, key string) *contractv1.ManifestVariable {
@@ -226,11 +236,11 @@ func TestAnAppsVariablesPairEachDeclarationWithItsResolvedValue(t *testing.T) {
 		t.Parallel()
 
 		definitions := []*resourcesv1.VariableDefinition{
-			definition("POSTHOG_ID", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
+			definition("PAGE_ID", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
 			definition("WEBHOOK_SECRET", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET),
 		}
 		resolved := map[string]variables.ResolvedValue{
-			"POSTHOG_ID":     {Value: "ph-123"},
+			"PAGE_ID":        {Value: "page-123"},
 			"WEBHOOK_SECRET": {},
 		}
 
@@ -238,9 +248,9 @@ func TestAnAppsVariablesPairEachDeclarationWithItsResolvedValue(t *testing.T) {
 		if len(got) != 2 {
 			t.Fatalf("appVariables = %+v, want both declarations", got)
 		}
-		if got[0].Key != "POSTHOG_ID" || got[0].Value != "ph-123" ||
+		if got[0].Key != "PAGE_ID" || got[0].Value != "page-123" ||
 			got[0].Class != resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN {
-			t.Errorf("POSTHOG_ID = %+v, want its class and its resolved value", got[0])
+			t.Errorf("PAGE_ID = %+v, want its class and its resolved value", got[0])
 		}
 		if got[1].Value != "" {
 			t.Errorf("WEBHOOK_SECRET = %+v, want no value: a live value never reaches a build host", got[1])
@@ -706,28 +716,26 @@ func TestEveryDeployingCommandTakesPrebuilt(t *testing.T) {
 }
 
 func TestAPrebuiltDeployWithNoBuildOutputStopsBeforeTheProvider(t *testing.T) {
-	t.Run("no build output aborts before the provider is spawned", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
-		addAppToFixtureConfig(t, root)
-		if err := os.RemoveAll(filepath.Join(root, statedir.Name, "output")); err != nil {
-			t.Fatalf("drop the fixture's build output: %v", err)
-		}
-		dependencies := newTestDependencies()
-		recordBuildApp(&dependencies)
+	fixture := setUpDeployProject(t)
+	addAppToFixtureConfig(t, fixture.Root)
+	if err := os.RemoveAll(filepath.Join(fixture.Root, statedir.Name, "output")); err != nil {
+		t.Fatalf("drop the fixture's build output: %v", err)
+	}
+	dependencies := newTestDependencies()
+	recordBuildApp(&dependencies)
 
-		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-		err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true, prebuilt: true}, &stdout, &stderr, strings.NewReader(""))
-		if err == nil {
-			t.Fatal("runDeploy err = nil, want the missing build output reported")
-		}
-		if !strings.Contains(stdout.String(), "ocel build") {
-			t.Errorf("stdout = %q, want it to point at `ocel build`", stdout.String())
-		}
-		if strings.Contains(stdout.String(), "DEPLOY ") {
-			t.Errorf("stdout = %q, want no Deploy to have been driven", stdout.String())
-		}
-	})
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true, prebuilt: true}, &stdout, &stderr, strings.NewReader(""))
+	if err == nil {
+		t.Fatal("runDeploy err = nil, want the missing build output reported")
+	}
+	if !strings.Contains(stdout.String(), "ocel build") {
+		t.Errorf("stdout = %q, want it to point at `ocel build`", stdout.String())
+	}
+	if sent := sentDeploys(t, fixture); len(sent) != 0 {
+		t.Errorf("the CLI sent %d deploys, want none without a build to deploy", len(sent))
+	}
 }
 
 func TestPrebuiltDeploysTheImageTheBuildRecordedRatherThanBuildingOne(t *testing.T) {
@@ -772,4 +780,865 @@ func stubPrebuiltFromDisk(dependencies *Dependencies) {
 		functions, err := build.ReadFunctions(cfg.Dir)
 		return build.Output{Functions: functions}, err
 	}
+}
+
+func deployWith(t *testing.T, dependencies Dependencies, fixture clitest.FakeProject, opts deployOptions) (string, error) {
+	t.Helper()
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	err := runDeploy(context.Background(), dependencies, fixture.Root, opts, &stdout, &stderr, strings.NewReader(""))
+	return stdout.String() + stderr.String(), err
+}
+
+func TestAnAppBuildsItsFunctionsIntoTheManifest(t *testing.T) {
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, apiFunction())
+	fixture := setUpDeployProject(t)
+	addAppToFixtureConfig(t, fixture.Root)
+
+	out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true})
+	if err != nil {
+		t.Fatalf("runDeploy err = %v; output=%s", err, out)
+	}
+	functions := manifestApp(t, sentDeploy(t, fixture).GetManifest(), "api").GetServerless().GetFunctions()
+	if len(functions) != 1 {
+		t.Fatalf("api has %d functions in the manifest, want the one it built", len(functions))
+	}
+	fn := functions[0]
+	if fn.GetLogicalName() != "fn--api--api" || fn.GetFramework().GetName() != "node" || fn.GetEntryFile() != "src/server.js" || fn.GetArtifactPath() != "output/api" {
+		t.Errorf("function = %v, want fn--api--api built by node from src/server.js at output/api", fn)
+	}
+	if strings.Contains(out, "deploys only the") {
+		t.Errorf("output = %q, want no infra-only note when a function is built", out)
+	}
+	if !strings.Contains(out, "Deployed") {
+		t.Errorf("output = %q, want a terminal success message", out)
+	}
+}
+
+func TestAProjectWhoseAppsBuildNothingDeploysItsResourcesAlone(t *testing.T) {
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, nil)
+	fixture := setUpDeployProject(t)
+
+	out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true})
+	if err != nil {
+		t.Fatalf("runDeploy err = %v; output=%s", err, out)
+	}
+	if !strings.Contains(out, "No app has a function or image to deploy, so this deploys only the 1 resource test-app declares") {
+		t.Errorf("output = %q, want the infra-only note naming how many resources deploy", out)
+	}
+	if !strings.Contains(out, "INFO  [build] ✓ test-app: Collected the resources test-app declares in ") {
+		t.Errorf("output = %q, want the build unit to say it only collects what the project declares", out)
+	}
+	if !strings.Contains(out, "Deployed") {
+		t.Errorf("output = %q, want resources to still deploy to success", out)
+	}
+	manifest := sentDeploy(t, fixture).GetManifest()
+	if len(manifest.GetApps()) != 0 {
+		t.Errorf("the manifest carries %d apps, want none when nothing was built", len(manifest.GetApps()))
+	}
+	if len(manifest.GetResources()) != 1 || manifest.GetResources()[0].GetLogicalName() != "db--main" {
+		t.Errorf("the manifest carries resources %v, want db--main alone", manifest.GetResources())
+	}
+}
+
+func TestAnAppBuildFailureStopsTheDeployBeforeTheProviderDeploysAnything(t *testing.T) {
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, nil)
+	dependencies.BuildApps = func(context.Context, *project.Project, map[string]map[string]string, map[string]string, build.Log) (build.Output, error) {
+		return build.Output{}, errors.New("boom: app build failed")
+	}
+	fixture := setUpDeployProject(t)
+	addAppToFixtureConfig(t, fixture.Root)
+
+	out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true})
+	if err == nil {
+		t.Fatal("runDeploy err = nil, want the app-build failure")
+	}
+	if !strings.Contains(out, "boom: app build failed") {
+		t.Errorf("output = %q, want the app-build failure surfaced", out)
+	}
+	if sent := sentDeploys(t, fixture); len(sent) != 0 {
+		t.Errorf("the CLI sent %d deploys, want none after a failed build", len(sent))
+	}
+}
+
+func TestADeployAttributesEachFunctionToTheAppThatBuiltIt(t *testing.T) {
+	t.Run("a single app produces exactly one attributed app", func(t *testing.T) {
+		dependencies := newTestDependencies()
+		stubBuild(&dependencies, apiFunction())
+		fixture := setUpDeployProject(t)
+		writeAppsConfig(t, fixture.Root, `{ name: "api", path: "apps/api", framework: "node", domains: { production: "Api.Acme.com" } }`)
+		writeAppSource(t, fixture.Root, "api")
+
+		if out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true}); err != nil {
+			t.Fatalf("runDeploy err = %v; output=%s", err, out)
+		}
+		manifest := sentDeploy(t, fixture).GetManifest()
+		if len(manifest.GetApps()) != 1 {
+			t.Fatalf("the manifest carries %d apps, want exactly 1", len(manifest.GetApps()))
+		}
+		api := manifestApp(t, manifest, "api")
+		if api.GetFramework().GetName() != "node" || !slices.Equal(productionHostnames(api), []string{"api.acme.com"}) {
+			t.Errorf("api = %s on %v, want node with its own production domain, lower-cased", api.GetFramework().GetName(), productionHostnames(api))
+		}
+		if api.GetDeploymentId() != recordedDeploymentID("api") {
+			t.Errorf("api deployment = %q, want the id its build recorded", api.GetDeploymentId())
+		}
+		if functions := api.GetServerless().GetFunctions(); len(functions) != 1 || functions[0].GetArtifactPath() != "output/api" {
+			t.Errorf("api functions = %v, want the api function attributed to it", functions)
+		}
+	})
+
+	t.Run("two apps attribute their functions to their own app", func(t *testing.T) {
+		dependencies := newTestDependencies()
+		stubBuild(&dependencies, []build.Function{
+			{Route: "web", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/web", App: "web"},
+			{Route: "admin", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/admin", App: "admin"},
+		})
+		fixture := setUpDeployProject(t)
+		clitest.WriteFile(t, filepath.Join(fixture.Root, "ocel.config.ts"), `
+export default {
+  slug: "test-app",
+  provider: { fake: {} },
+  apps: [
+    { name: "web", path: "apps/web", framework: "node", domains: { production: "acme.com" } },
+    { name: "admin", path: "apps/admin", framework: "node" },
+  ],
+};
+`)
+		writeAppSource(t, fixture.Root, "web", "admin")
+
+		out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true})
+		if err != nil {
+			t.Fatalf("runDeploy err = %v; output=%s", err, out)
+		}
+		if !strings.Contains(out, "INFO  [build] ✓ test-app: Collected the resources test-app declares in ") {
+			t.Errorf("output = %q, want the build phase to say whose resources it collected", out)
+		}
+		manifest := sentDeploy(t, fixture).GetManifest()
+		if len(manifest.GetApps()) != 2 {
+			t.Fatalf("the manifest carries %d apps, want exactly 2", len(manifest.GetApps()))
+		}
+		if hostnames := productionHostnames(manifestApp(t, manifest, "admin")); len(hostnames) != 0 {
+			t.Errorf("admin serves %v, want no domain of its own", hostnames)
+		}
+		if hostnames := productionHostnames(manifestApp(t, manifest, "web")); !slices.Equal(hostnames, []string{"acme.com"}) {
+			t.Errorf("web serves %v, want its own production domain", hostnames)
+		}
+		for _, app := range []string{"web", "admin"} {
+			a := manifestApp(t, manifest, app)
+			functions := a.GetServerless().GetFunctions()
+			if len(functions) != 1 || functions[0].GetLogicalName() != "fn--"+app+"--"+app || functions[0].GetArtifactPath() != "output/"+app {
+				t.Errorf("%s functions = %v, want its own function attributed to it", app, functions)
+			}
+			if a.GetDeploymentId() != recordedDeploymentID(app) {
+				t.Errorf("%s deployment = %q, want the id its own build recorded", app, a.GetDeploymentId())
+			}
+		}
+		if recordedDeploymentID("web") == recordedDeploymentID("admin") {
+			t.Fatal("the fixture gives both apps one id, so this proves nothing")
+		}
+	})
+
+	t.Run("the app at the root of a project naming none appears in the manifest under its slug", func(t *testing.T) {
+		dependencies := newTestDependencies()
+		stubBuild(&dependencies, []build.Function{
+			{Route: "index", Framework: buildoutput.Framework{Name: "next"}, EntryFile: "h.js", ArtifactPath: "output/index", App: clitest.FixtureSlug},
+		})
+		fixture := setUpDeployProject(t)
+		writeRootApp(t, fixture.Root)
+
+		if out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true}); err != nil {
+			t.Fatalf("runDeploy err = %v; output=%s", err, out)
+		}
+		manifest := sentDeploy(t, fixture).GetManifest()
+		if len(manifest.GetApps()) != 1 {
+			t.Fatalf("the manifest carries %d apps, want exactly 1", len(manifest.GetApps()))
+		}
+		if root := manifestApp(t, manifest, clitest.FixtureSlug); root.GetFramework().GetName() != "node" {
+			t.Errorf("the root app is framework %q, want node", root.GetFramework().GetName())
+		}
+	})
+}
+
+func twoAppProject(t *testing.T) (Dependencies, clitest.FakeProject) {
+	t.Helper()
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, nil)
+	useJSONLogFormat(t, &dependencies)
+	fixture := setUpDeployProject(t)
+	writeAppsConfig(t, fixture.Root, `
+    { name: "web", path: "apps/web", framework: "node" },
+    { name: "api", path: "apps/api", framework: "node" },
+  `)
+	writeAppSource(t, fixture.Root, "web", "api")
+	return dependencies, fixture
+}
+
+func buildingEach(failing string) func(context.Context, *project.Project, map[string]map[string]string, map[string]string, build.Log) (build.Output, error) {
+	return func(_ context.Context, cfg *project.Project, _ map[string]map[string]string, _ map[string]string, out build.Log) (build.Output, error) {
+		_, _ = io.WriteString(out.Shared, "the builder started\n")
+		for _, app := range cfg.Apps {
+			log, ended := out.App(app.Name)
+			_, _ = fmt.Fprintf(log, "compiling %s\n", app.Name)
+			if app.Name == failing {
+				err := errors.New(app.Name + " did not compile")
+				ended(err)
+				return build.Output{}, err
+			}
+			ended(nil)
+		}
+		return build.Output{}, nil
+	}
+}
+
+type buildScope struct {
+	subject, message string
+	started, ended   int
+	status           progressv1.SpanStatus
+	output           []string
+}
+
+func buildScopes(t *testing.T, stream string) ([]*buildScope, []string) {
+	t.Helper()
+	var scopes []*buildScope
+	bySpan := map[string]*buildScope{}
+	var phaseOutput []string
+	for i, ev := range envelopes(t, stream) {
+		if ev.GetPhase() != progressv1.Phase_PHASE_BUILD {
+			continue
+		}
+		span := string(ev.GetSpanId())
+		switch body := ev.GetBody().(type) {
+		case *streamv1.RunEvent_Started:
+			if ev.GetSubject() == "" || ev.GetLevel() == progressv1.Level_LEVEL_DEBUG {
+				continue
+			}
+			scope := &buildScope{subject: ev.GetSubject(), message: ev.GetMessage(), started: i}
+			bySpan[span] = scope
+			scopes = append(scopes, scope)
+		case *streamv1.RunEvent_Ended:
+			if scope, ok := bySpan[span]; ok {
+				scope.ended, scope.status = i, body.Ended.GetStatus()
+			}
+		case *streamv1.RunEvent_Output:
+			if scope, ok := bySpan[span]; ok {
+				scope.output = append(scope.output, ev.GetMessage())
+			} else {
+				phaseOutput = append(phaseOutput, ev.GetMessage())
+			}
+		}
+	}
+	return scopes, phaseOutput
+}
+
+func TestEachAppBuildsAsAUnitOfItsOwnInTheBuildPhaseOnceTheDeclarationsAreCollected(t *testing.T) {
+	dependencies, fixture := twoAppProject(t)
+	dependencies.BuildApps = buildingEach("")
+
+	out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true})
+	if err != nil {
+		t.Fatalf("runDeploy err = %v; output=%s", err, out)
+	}
+
+	scopes, phaseOutput := buildScopes(t, out)
+	var got []string
+	for _, scope := range scopes {
+		got = append(got, scope.subject+": "+scope.message)
+	}
+	want := []string{
+		clitest.FixtureSlug + ": Collecting the resources " + clitest.FixtureSlug + " declares",
+		"web: Building app web",
+		"api: Building app api",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("build units =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	for i, scope := range scopes {
+		if scope.status != progressv1.SpanStatus_SPAN_STATUS_OK {
+			t.Errorf("%s ended %s, want OK", scope.subject, scope.status)
+		}
+		if i > 0 && scopes[i-1].ended > scope.started {
+			t.Errorf("%s started before %s ended, want each unit to end before the next begins", scope.subject, scopes[i-1].subject)
+		}
+	}
+	for _, scope := range scopes[1:] {
+		if want := "compiling " + scope.subject; strings.Join(scope.output, "\n") != want {
+			t.Errorf("%s's output = %q, want %q", scope.subject, scope.output, want)
+		}
+	}
+	if strings.Join(phaseOutput, "\n") != "the builder started" {
+		t.Errorf("build phase output = %q, want what no app's build said and nothing else", phaseOutput)
+	}
+}
+
+func TestAnAppWhoseBuildFailsEndsItsOwnUnitInFailureAndTheDeployWithIt(t *testing.T) {
+	dependencies, fixture := twoAppProject(t)
+	dependencies.BuildApps = buildingEach("api")
+
+	out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true})
+	if err == nil {
+		t.Fatal("runDeploy succeeded, want api's build failure")
+	}
+
+	scopes, _ := buildScopes(t, out)
+	statuses := map[string]progressv1.SpanStatus{}
+	for _, scope := range scopes {
+		statuses[scope.subject] = scope.status
+	}
+	if statuses["web"] != progressv1.SpanStatus_SPAN_STATUS_OK || statuses["api"] != progressv1.SpanStatus_SPAN_STATUS_ERROR {
+		t.Errorf("unit statuses = %v, want web OK and api ERROR", statuses)
+	}
+	if statuses[clitest.FixtureSlug] != progressv1.SpanStatus_SPAN_STATUS_OK {
+		t.Errorf("the collecting unit ended %s, want OK: it finished before any app built", statuses[clitest.FixtureSlug])
+	}
+}
+
+func TestEachAppsBuildPrintsAsABlockOfItsOwnWhenThatAppFinishes(t *testing.T) {
+	dependencies, fixture := twoAppProject(t)
+	dependencies.Presentation = func(io.Writer) terminal.Presentation { return terminal.Resolve(terminal.Conditions{}) }
+	dependencies.BuildApps = buildingEach("")
+
+	out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true})
+	if err != nil {
+		t.Fatalf("runDeploy err = %v; output=%s", err, out)
+	}
+	for _, app := range []string{"web", "api"} {
+		block := "INFO  [build] ✓ " + app + ": Built app " + app + " in <1s\n\n    compiling " + app + "\n"
+		if !strings.Contains(out, block) {
+			t.Errorf("output = %q, want %s's block %q", out, app, block)
+		}
+	}
+	if web, api := strings.Index(out, "✓ web: Built"), strings.Index(out, "✓ api: Built"); web < 0 || api < web {
+		t.Errorf("output = %q, want web's block before api's, in the order they finished", out)
+	}
+}
+
+func TestABuilderFailureOutsideEveryAppsBuildEndsAUnitOfItsOwnHoldingWhatTheBuilderSaid(t *testing.T) {
+	dependencies, fixture := twoAppProject(t)
+	dependencies.BuildApps = func(_ context.Context, _ *project.Project, _ map[string]map[string]string, _ map[string]string, out build.Log) (build.Output, error) {
+		_, _ = io.WriteString(out.Shared, "Error: Cannot find module 'esbuild'\n")
+		return build.Output{}, errors.New("node-builder failed (exit status 1): Error: Cannot find module 'esbuild'")
+	}
+
+	out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true})
+	if err == nil {
+		t.Fatal("runDeploy succeeded, want the builder's failure")
+	}
+
+	scopes, phaseOutput := buildScopes(t, out)
+	last := scopes[len(scopes)-1]
+	if last.subject != clitest.FixtureSlug || last.message != "Building 2 apps (web and api)" || last.status != progressv1.SpanStatus_SPAN_STATUS_ERROR {
+		t.Fatalf("the last build unit = %s: %q ended %s, want %s: \"Building 2 apps (web and api)\" ended in error", last.subject, last.message, last.status, clitest.FixtureSlug)
+	}
+	if strings.Join(last.output, "\n") != "Error: Cannot find module 'esbuild'" {
+		t.Errorf("the failed unit's output = %q, want what the builder said", last.output)
+	}
+	if len(phaseOutput) != 0 {
+		t.Errorf("build phase output = %q, want none: the builder's words belong to the unit that failed", phaseOutput)
+	}
+}
+
+func TestAnAppsOwnBuildFailureEndsNoSecondUnit(t *testing.T) {
+	dependencies, fixture := twoAppProject(t)
+	dependencies.BuildApps = buildingEach("web")
+
+	out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true})
+	if err == nil {
+		t.Fatal("runDeploy succeeded, want web's build failure")
+	}
+
+	scopes, phaseOutput := buildScopes(t, out)
+	var got []string
+	for _, scope := range scopes {
+		got = append(got, scope.subject+" "+scope.status.String())
+	}
+	want := []string{clitest.FixtureSlug + " SPAN_STATUS_OK", "web SPAN_STATUS_ERROR"}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("build units = %q, want %q: web's unit already reports the failure", got, want)
+	}
+	if strings.Join(phaseOutput, "\n") != "the builder started" {
+		t.Errorf("build phase output = %q, want what the builder said before web's build", phaseOutput)
+	}
+}
+
+func TestAFailureAssemblingTheManifestAfterTheBuildsEndsAUnitOfItsOwn(t *testing.T) {
+	dependencies, fixture := twoAppProject(t)
+	dependencies.BuildApps = buildingEach("")
+	dependencies.DeploymentID = func(string, string) (string, error) {
+		return "", errors.New("no deployment id for app \"web\"; run `ocel build`")
+	}
+
+	out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true})
+	if err == nil {
+		t.Fatal("runDeploy succeeded, want the manifest's failure")
+	}
+
+	scopes, _ := buildScopes(t, out)
+	last := scopes[len(scopes)-1]
+	if last.subject != clitest.FixtureSlug || last.message != "Assembling the deploy manifest of "+clitest.FixtureSlug || last.status != progressv1.SpanStatus_SPAN_STATUS_ERROR {
+		t.Errorf("the last build unit = %s: %q ended %s, want the manifest's unit ended in error", last.subject, last.message, last.status)
+	}
+}
+
+func publishBinding(t *testing.T, fixture clitest.FakeProject, binding *bindingsv1.Binding) {
+	t.Helper()
+	const owner = "infra-repo"
+	pair, err := envvarsserver.BindingPair(owner, binding)
+	if err != nil {
+		t.Fatalf("BindingPair: %v", err)
+	}
+	scope := envvars.Scope{Project: clitest.FixtureSlug, Tier: environment.TierProduction}
+	if _, err := valueStore(fixture).SetBindings(context.Background(), scope, "", owner, []envvars.NamedBindingWrite{{Name: binding.GetName(), Write: pair}}); err != nil {
+		t.Fatalf("publish %s: %v", binding.GetName(), err)
+	}
+}
+
+func publishedPostgres(name string) *bindingsv1.Binding {
+	return &bindingsv1.Binding{
+		Name:   name,
+		Source: "infra-repo",
+		Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{
+			Host: "db.example", Port: 5432, Database: "orders", Username: "app", Password: "hunter2",
+		}},
+	}
+}
+
+func deployBound(t *testing.T, bindings string, publish func(clitest.FakeProject)) (clitest.FakeProject, string, error) {
+	t.Helper()
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, apiFunction())
+	fixture := setUpDeployProject(t)
+	writeUsageMonorepo(t, fixture.Root, "  bindings: {"+bindings+"},\n")
+	if publish != nil {
+		publish(fixture)
+	}
+	out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true})
+	return fixture, out, err
+}
+
+func manifestResource(t *testing.T, manifest *contractv1.Manifest, logicalName string) *contractv1.ManifestResource {
+	t.Helper()
+	for _, resource := range manifest.GetResources() {
+		if resource.GetLogicalName() == logicalName {
+			return resource
+		}
+	}
+	t.Fatalf("the manifest has no resource %q among %v", logicalName, manifest.GetResources())
+	return nil
+}
+
+func usagesOf(manifest *contractv1.Manifest, app string) []string {
+	var reached []string
+	for _, usage := range manifest.GetUsages() {
+		if usage.GetApp() == app {
+			reached = append(reached, usage.GetResource())
+		}
+	}
+	slices.Sort(reached)
+	return reached
+}
+
+func TestDeployBindsListedBindings(t *testing.T) {
+	t.Run("a listed resource reaches the provider bound to its published record", func(t *testing.T) {
+		fixture, out, err := deployBound(t, `postgres: { main: "@main" }`, func(fixture clitest.FakeProject) {
+			publishBinding(t, fixture, publishedPostgres("main"))
+		})
+		if err != nil {
+			t.Fatalf("runDeploy err = %v; output=%s", err, out)
+		}
+		manifest := sentDeploy(t, fixture).GetManifest()
+		if bound := manifestResource(t, manifest, "db--main").GetBinding(); bound != "main" {
+			t.Errorf("db--main is bound to %q, want the published record main", bound)
+		}
+		if reached := usagesOf(manifest, "api"); !slices.Equal(reached, []string{"db--main"}) {
+			t.Errorf("api reaches %v, want a bound resource to have its usage edge like any other", reached)
+		}
+	})
+
+	t.Run("a listed resource nothing published refuses the deploy by name", func(t *testing.T) {
+		_, out, err := deployBound(t, `postgres: { main: "@main" }`, nil)
+		if err == nil {
+			t.Fatalf("runDeploy err = nil, want the deploy refused; output=%s", out)
+		}
+		if !strings.Contains(out, "`bindings` binds \"main\", and nothing has published a record under that name") {
+			t.Errorf("output = %q, want the refusal to name the binding that was never published", out)
+		}
+	})
+
+	t.Run("a published name this project provisions instead is called out", func(t *testing.T) {
+		_, out, err := deployBound(t, ``, func(fixture clitest.FakeProject) {
+			publishBinding(t, fixture, publishedPostgres("main"))
+		})
+		if err != nil {
+			t.Fatalf("runDeploy err = %v; output=%s", err, out)
+		}
+		if !strings.Contains(out, `A binding named "main" is already published`) {
+			t.Errorf("output = %q, want the collision between a provisioned resource and a published binding surfaced", out)
+		}
+	})
+
+	t.Run("a listed name nothing declares refuses before any provider is reached", func(t *testing.T) {
+		fixture, out, err := deployBound(t, `postgres: { nowhere: "@nowhere" }`, nil)
+		if err == nil {
+			t.Fatalf("runDeploy err = nil, want the deploy refused; output=%s", out)
+		}
+		if !strings.Contains(out, "nowhere") {
+			t.Errorf("output = %q, want the unbound binding named", out)
+		}
+		if sent := sentDeploys(t, fixture); len(sent) != 0 {
+			t.Errorf("the CLI sent %d deploys, want the refusal before any", len(sent))
+		}
+	})
+}
+
+func inlineURL(t *testing.T) string {
+	t.Helper()
+	return "postgres://app:s3cret-pw@" + clitest.ServePostgres(t, "170004") + "/main?sslmode=disable"
+}
+
+const inlineByURL = `postgres: { main: { url: { $env: "MAIN_DATABASE_URL" } } }`
+
+func deployInline(t *testing.T, fixture clitest.FakeProject, bindings string, opts deployOptions) (string, error) {
+	t.Helper()
+	writeUsageMonorepo(t, fixture.Root, "  bindings: {"+bindings+"},\n")
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, apiFunction())
+	opts.yes = true
+	return deployWith(t, dependencies, fixture, opts)
+}
+
+func carriedNames(carried []*bindingsv1.Binding) []string {
+	names := make([]string, 0, len(carried))
+	for _, binding := range carried {
+		names = append(names, binding.GetName()+" from "+binding.GetSource())
+	}
+	return names
+}
+
+func TestDeployBindsAnInlineRecord(t *testing.T) {
+	t.Run("the request carries the record whole and the manifest names it, never its secret", func(t *testing.T) {
+		fixture := setUpDeployProject(t)
+		url := inlineURL(t)
+		envSet(t, fixture, "MAIN_DATABASE_URL", url, envOptions{})
+
+		out, err := deployInline(t, fixture, inlineByURL, deployOptions{})
+		if err != nil {
+			t.Fatalf("deploy: %v\n%s", err, out)
+		}
+		req := sentDeploy(t, fixture)
+		if bound := manifestResource(t, req.GetManifest(), "db--main").GetBinding(); bound != "ocel:postgres.main" {
+			t.Errorf("db--main is bound to %q, want the record the request carries", bound)
+		}
+		carried := req.GetInlineBindings()
+		if len(carried) != 1 || carried[0].GetName() != "ocel:postgres.main" || carried[0].GetSource() != "ocel.config.ts" {
+			t.Fatalf("inline bindings = %v, want the one record, sourced from the config", carriedNames(carried))
+		}
+		if carried[0].GetPostgres().GetUrl() != url {
+			t.Error("the carried record lost the url the app connects with")
+		}
+		manifest, err := protojson.Marshal(req.GetManifest())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(manifest), "s3cret-pw") {
+			t.Errorf("the manifest contains the database password: %s", manifest)
+		}
+		if strings.Contains(out, "s3cret-pw") {
+			t.Errorf("the deploy printed the database password: %s", out)
+		}
+	})
+
+	t.Run("a variable the binding reads and nobody set refuses the deploy with the command that sets it", func(t *testing.T) {
+		fixture := setUpDeployProject(t)
+
+		out, err := deployInline(t, fixture, inlineByURL, deployOptions{})
+		if err == nil {
+			t.Fatalf("deploy succeeded with MAIN_DATABASE_URL unset\n%s", out)
+		}
+		if said := err.Error() + out; !strings.Contains(said, "ocel env set MAIN_DATABASE_URL=<VALUE>") {
+			t.Errorf("refusal = %q, want the command that sets it", said)
+		}
+		if sent := sentDeploys(t, fixture); len(sent) != 0 {
+			t.Error("the deploy reached the provider without the record's value")
+		}
+	})
+
+	t.Run("a dry run hands the provider the record to plan with", func(t *testing.T) {
+		fixture := setUpDeployProject(t)
+		url := inlineURL(t)
+		envSet(t, fixture, "MAIN_DATABASE_URL", url, envOptions{})
+
+		if out, err := deployInline(t, fixture, inlineByURL, deployOptions{dry: true}); err != nil {
+			t.Fatalf("dry deploy: %v\n%s", err, out)
+		}
+		req := sentDeploy(t, fixture)
+		if !req.GetDry() || len(req.GetInlineBindings()) != 1 {
+			t.Errorf("request dry = %v with %d inline bindings, want the dry plan to carry the record", req.GetDry(), len(req.GetInlineBindings()))
+		}
+	})
+
+	t.Run("dropping the binding leaves the request carrying no record", func(t *testing.T) {
+		fixture := setUpDeployProject(t)
+		url := inlineURL(t)
+		envSet(t, fixture, "MAIN_DATABASE_URL", url, envOptions{})
+		if out, err := deployInline(t, fixture, inlineByURL, deployOptions{}); err != nil {
+			t.Fatalf("first deploy: %v\n%s", err, out)
+		}
+
+		if out, err := deployInline(t, fixture, ``, deployOptions{}); err != nil {
+			t.Fatalf("second deploy: %v\n%s", err, out)
+		}
+		sent := sentDeploys(t, fixture)
+		if carried := sent[len(sent)-1].GetInlineBindings(); len(carried) != 0 {
+			t.Errorf("inline bindings = %v, want none: the provider prunes what the request no longer carries", carriedNames(carried))
+		}
+	})
+}
+
+const inlineBucket = `bucket: { uploads: {
+  endpoint: "https://abc.storage.example.com", region: "auto", bucket: "acme", prefix: "uploads/",
+  accessKeyId: { $env: "BUCKET_KEY" }, secretAccessKey: { $env: "BUCKET_SECRET" },
+} }`
+
+func declareUploads(t *testing.T, root string) {
+	t.Helper()
+	clitest.WriteFile(t, filepath.Join(root, "shared", "files.ts"), `
+import { declareBucket } from "./declare.js";
+
+export const files = declareBucket("uploads");
+`)
+	clitest.WriteFile(t, filepath.Join(root, "shared", "index.ts"), `
+export * from "./db.js";
+export * from "./files.js";
+`)
+	clitest.WriteFile(t, filepath.Join(root, "apps", "api", "src", "server.ts"), `
+import { db, files } from "../../../shared/index.js";
+
+export function handler() {
+  return db.name + files.name;
+}
+`)
+}
+
+func TestDeployBindsAnInlineBucket(t *testing.T) {
+	fixture := setUpDeployProject(t)
+	envSet(t, fixture, "BUCKET_KEY", "AKIDEXAMPLE", envOptions{})
+	envSet(t, fixture, "BUCKET_SECRET", "bucket-s3cret", envOptions{})
+	writeUsageMonorepo(t, fixture.Root, "  bindings: {"+inlineBucket+"},\n")
+	declareUploads(t, fixture.Root)
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, apiFunction())
+
+	out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true})
+	if err != nil {
+		t.Fatalf("deploy: %v\n%s", err, out)
+	}
+	carried := sentDeploy(t, fixture).GetInlineBindings()
+	if len(carried) != 1 || carried[0].GetName() != "ocel:bucket.uploads" {
+		t.Fatalf("inline bindings = %v, want the inline bucket's record", carriedNames(carried))
+	}
+	want := &bindingsv1.BucketProperties{
+		Endpoint: "https://abc.storage.example.com", Region: "auto", Bucket: "acme", Prefix: "uploads/",
+		AccessKeyId: "AKIDEXAMPLE", SecretAccessKey: "bucket-s3cret",
+	}
+	if got := carried[0].GetBucket(); !proto.Equal(got, want) {
+		t.Errorf("bucket = %s at %s under %q, want %s at %s under %q with the key pair the variables hold",
+			got.GetBucket(), got.GetEndpoint(), got.GetPrefix(), want.GetBucket(), want.GetEndpoint(), want.GetPrefix())
+	}
+	if strings.Contains(out, "bucket-s3cret") {
+		t.Errorf("the deploy printed the store's secret key: %s", out)
+	}
+}
+
+func TestDeployLandsAUsageEdgeForEveryResourceAnAppReaches(t *testing.T) {
+	t.Run("an app that uses a shared resource lands a usage edge naming the files it reaches through", func(t *testing.T) {
+		fixture, out, err := deployUsageMonorepo(t, "")
+		if err != nil {
+			t.Fatalf("runDeploy err = %v; output=%s", err, out)
+		}
+		usages := sentDeploy(t, fixture).GetManifest().GetUsages()
+		if len(usages) != 1 || usages[0].GetApp() != "api" || usages[0].GetResource() != "db--main" || !slices.Equal(usages[0].GetFiles(), []string{"apps/api/src/server.ts"}) {
+			t.Errorf("usages = %v, want api reaching db--main through apps/api/src/server.ts", usages)
+		}
+	})
+
+	t.Run("a resource no app uses still provisions and has no edge", func(t *testing.T) {
+		dependencies := newTestDependencies()
+		stubBuild(&dependencies, nil)
+		fixture := setUpDeployProject(t)
+
+		out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true})
+		if err != nil {
+			t.Fatalf("runDeploy err = %v; output=%s", err, out)
+		}
+		if !strings.Contains(out, "Deployed") {
+			t.Errorf("output = %q, want the orphan resource to deploy", out)
+		}
+		if usages := sentDeploy(t, fixture).GetManifest().GetUsages(); len(usages) != 0 {
+			t.Errorf("usages = %v, want no usage edge for an orphan resource", usages)
+		}
+	})
+
+	t.Run("a runtime-computed import in an app fails the deploy closed", func(t *testing.T) {
+		dependencies := newTestDependencies()
+		stubBuild(&dependencies, nil)
+		fixture := setUpDeployProject(t)
+		writeUsageMonorepo(t, fixture.Root, "")
+		clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "api", "src", "late.ts"), `
+const spec = "../../../shared/" + ["d", "b"].join("") + ".js";
+
+export async function late() {
+  return await import(spec);
+}
+`)
+
+		out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true})
+		if err == nil {
+			t.Fatalf("runDeploy err = nil, want the deploy refused; output=%s", out)
+		}
+		if !strings.Contains(out, "apps/api/src/late.ts") {
+			t.Errorf("output = %q, want it to name the file containing the unresolvable import", out)
+		}
+	})
+}
+
+func writeSharedResourceMonorepo(t *testing.T, root string) {
+	t.Helper()
+
+	clitest.WriteUsageMonorepo(t, root)
+	writeAppsConfig(t, root, `
+    { name: "api", path: "apps/api", framework: "node" },
+    { name: "web", path: "apps/web", framework: "node" },
+  `)
+	clitest.WriteFile(t, filepath.Join(root, "shared", "files.ts"), `
+import { declareBucket } from "./declare.js";
+
+export const uploads = declareBucket("uploads");
+`)
+	clitest.WriteFile(t, filepath.Join(root, "shared", "index.ts"), `
+export * from "./db.js";
+export * from "./files.js";
+`)
+	clitest.WriteFile(t, filepath.Join(root, "apps", "api", "src", "server.ts"), `
+import { db, uploads } from "../../../shared/index.js";
+
+export function handler() {
+  return db.name + uploads.name;
+}
+`)
+	clitest.WriteFile(t, filepath.Join(root, "apps", "web", "src", "server.ts"), `
+import { db } from "../../../shared/index.js";
+
+export function handler() {
+  return db.name;
+}
+`)
+}
+
+func TestDeployScopesDeliveryToTheUsingApps(t *testing.T) {
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, []build.Function{
+		{Route: "api", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
+		{Route: "web", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/web", App: "web"},
+	})
+	fixture := setUpDeployProject(t)
+	writeSharedResourceMonorepo(t, fixture.Root)
+
+	if out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true}); err != nil {
+		t.Fatalf("runDeploy err = %v; output=%s", err, out)
+	}
+	manifest := sentDeploy(t, fixture).GetManifest()
+	if reached := usagesOf(manifest, "api"); !slices.Equal(reached, []string{"bucket--uploads", "db--main"}) {
+		t.Errorf("api reaches %v, want the bucket and the database", reached)
+	}
+	if reached := usagesOf(manifest, "web"); !slices.Equal(reached, []string{"db--main"}) {
+		t.Errorf("web reaches %v: web never reaches the bucket, so it receives neither its values nor its live keys", reached)
+	}
+}
+
+func TestDeployAttributesAnUnconfiguredProjectToItsOnlyApp(t *testing.T) {
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, []build.Function{
+		{Route: "index", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output", App: clitest.FixtureSlug},
+	})
+	fixture := setUpDeployProject(t)
+	writeRootApp(t, fixture.Root)
+
+	if out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true}); err != nil {
+		t.Fatalf("runDeploy err = %v; output=%s", err, out)
+	}
+	if reached := usagesOf(sentDeploy(t, fixture).GetManifest(), clitest.FixtureSlug); !slices.Equal(reached, []string{"db--main"}) {
+		t.Errorf("%s reaches %v, want the only app of a project that configures none to still reach what it declares", clitest.FixtureSlug, reached)
+	}
+}
+
+func TestDeployRefusesWhatItCannotAttribute(t *testing.T) {
+	t.Run("a project that builds two apps and names neither", func(t *testing.T) {
+		dependencies := newTestDependencies()
+		stubBuild(&dependencies, []build.Function{
+			{Route: "index", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
+			{Route: "index", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/web", App: "web"},
+		})
+		fixture := setUpDeployProject(t)
+
+		out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true})
+		if err == nil {
+			t.Fatalf("runDeploy err = nil, want the deploy refused; output=%s", out)
+		}
+		combined := out + err.Error()
+		for _, want := range []string{"api", "web", "ocel.config.ts"} {
+			if !strings.Contains(combined, want) {
+				t.Errorf("output = %q, want it to name %q", combined, want)
+			}
+		}
+	})
+
+	t.Run("a built app the config names nothing of", func(t *testing.T) {
+		dependencies := newTestDependencies()
+		stubBuild(&dependencies, []build.Function{
+			{Route: "index", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
+			{Route: "index", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/legacy", App: "legacy"},
+		})
+		fixture := setUpDeployProject(t)
+		writeUsageMonorepo(t, fixture.Root, "")
+
+		out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true})
+		if err == nil {
+			t.Fatalf("runDeploy err = nil, want the app no configured app covers to refuse the deploy; output=%s", out)
+		}
+		if combined := out + err.Error(); !strings.Contains(combined, "legacy") {
+			t.Errorf("output = %q, want it to name the app the config covers with nothing", combined)
+		}
+	})
+
+	t.Run("a configured path that names no directory", func(t *testing.T) {
+		dependencies := newTestDependencies()
+		stubBuild(&dependencies, apiFunction())
+		fixture := setUpDeployProject(t)
+		clitest.WriteUsageMonorepo(t, fixture.Root)
+		writeAppsConfig(t, fixture.Root, `{ name: "api", path: "apps/ap1", framework: "node" }`)
+
+		out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true})
+		if err == nil {
+			t.Fatalf("runDeploy err = nil, want a path naming nothing to refuse the deploy rather than ship an app no resource reaches; output=%s", out)
+		}
+		combined := out + err.Error()
+		for _, want := range []string{`"api"`, "apps/ap1"} {
+			if !strings.Contains(combined, want) {
+				t.Errorf("output = %q, want it to name %q", combined, want)
+			}
+		}
+	})
+}
+
+func productionHostnames(app *contractv1.ManifestApp) []string {
+	for _, domains := range app.GetDomains() {
+		if domains.GetTier() == environmentv1.Tier_TIER_PRODUCTION {
+			return domains.GetHostnames()
+		}
+	}
+	return nil
 }

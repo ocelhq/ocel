@@ -3,122 +3,97 @@ package deploy
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/build"
+	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
-	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-
-	"github.com/ocelhq/ocel/cli/internal/clitest"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
-
-func stubGit(dependencies *Dependencies, branch, pr string) {
-	dependencies.ReadGitBranch = func(string) (string, error) { return branch, nil }
-	dependencies.DiscoverPRNumber = func() string { return pr }
-}
 
 var errNotARepo = errors.New("determine current git branch: not a git repository")
 
+func previewDependencies(branch, pr string) Dependencies {
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, nil)
+	stubGit(&dependencies, branch, pr)
+	return dependencies
+}
+
+func previewUp(t *testing.T, fixture clitest.FakeProject, dependencies Dependencies, opts previewUpOptions) string {
+	t.Helper()
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runPreviewUp(context.Background(), dependencies, fixture.Root, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	return stdout.String()
+}
+
+func previewKey(t *testing.T, ref string) string {
+	t.Helper()
+	id, err := previewid.Resolve(ref, "")
+	if err != nil {
+		t.Fatalf("previewid.Resolve: %v", err)
+	}
+	return id.Key
+}
+
+func assertEnvironment(t *testing.T, env *environmentv1.Environment, lifecycle environmentv1.Lifecycle, identity string) {
+	t.Helper()
+	if env.GetTier() != environmentv1.Tier_TIER_PREVIEW || env.GetLifecycle() != lifecycle || env.GetIdentity() != identity {
+		t.Errorf("environment = %v, want a %s preview named %q", env, lifecycle, identity)
+	}
+}
+
 func TestPreviewUpSendsThePreviewEnvironmentItsFlagsName(t *testing.T) {
 	t.Run("an ephemeral preview sends a preview, ephemeral environment", func(t *testing.T) {
-		root, sockPath := clitest.SetUpDeployFixture(t)
-		dependencies := newTestDependencies()
-		stubBuild(&dependencies, nil)
-		stubGit(&dependencies, "feature/login", "")
-		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
-		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+		fixture := setUpPreviewProject(t)
+		want := previewKey(t, "feature/login")
 
-		want, err := previewid.Resolve("feature/login", "")
-		if err != nil {
-			t.Fatalf("previewid.Resolve: %v", err)
+		out := previewUp(t, fixture, previewDependencies("feature/login", ""), previewUpOptions{})
+		assertEnvironment(t, sentDeploy(t, fixture).GetEnvironment(), environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL, want)
+		if !strings.Contains(out, "Deployed "+clitest.FixtureSlug+" to preview "+want) {
+			t.Errorf("stdout = %q, want it to name the preview it deployed", out)
 		}
-
-		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-		if err := runPreviewUp(context.Background(), dependencies, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
-			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
-		}
-
-		out := stdout.String()
-		for _, sub := range []string{
-			"DEPLOY tier=TIER_PREVIEW lifecycle=LIFECYCLE_EPHEMERAL",
-			"identity=" + want.Key,
-			"Deployed " + clitest.FixtureSlug + " to preview " + want.Key,
-		} {
-			if !strings.Contains(out, sub) {
-				t.Errorf("stdout = %q, want it to contain %q", out, sub)
-			}
-		}
-		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
 	t.Run("an app's functions reach the preview manifest", func(t *testing.T) {
-		root, sockPath := clitest.SetUpDeployFixture(t)
-		addAppToFixtureConfig(t, root)
-		dependencies := newTestDependencies()
-		stubGit(&dependencies, "feature/login", "")
-		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
-		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
-		stubBuild(&dependencies, []build.Function{
-			{
-				Route:        "api",
-				Framework:    buildoutput.Framework{Name: "node"},
-				EntryFile:    "index.handler",
-				ArtifactPath: "output/api",
-				App:          "api",
-			},
-		})
+		fixture := setUpPreviewProject(t)
+		addAppToFixtureConfig(t, fixture.Root)
+		dependencies := previewDependencies("feature/login", "")
+		stubBuild(&dependencies, apiFunction())
 
-		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-		if err := runPreviewUp(context.Background(), dependencies, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
-			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		previewUp(t, fixture, dependencies, previewUpOptions{})
+		functions := manifestApp(t, sentDeploy(t, fixture).GetManifest(), "api").GetServerless().GetFunctions()
+		if len(functions) != 1 || functions[0].GetLogicalName() != "fn--api--api" || functions[0].GetArtifactPath() != "output/api" {
+			t.Errorf("api functions = %v, want the function to have reached the preview manifest", functions)
 		}
-
-		if !strings.Contains(stdout.String(), "FUNCTION logical_name=fn--api--api framework=node entry_file=index.handler artifact_path=output/api app=api") {
-			t.Errorf("stdout = %q, want the function to have reached the preview manifest", stdout.String())
-		}
-
-		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
 	t.Run("--ref provisions the explicit ref's ephemeral", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
-		dependencies := newTestDependencies()
-		stubBuild(&dependencies, nil)
-		stubGit(&dependencies, "some-other-branch", "")
-		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
-		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+		fixture := setUpPreviewProject(t)
 
-		want, err := previewid.Resolve("release/v2", "")
-		if err != nil {
-			t.Fatalf("previewid.Resolve: %v", err)
-		}
-
-		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-		if err := runPreviewUp(context.Background(), dependencies, root, previewUpOptions{ref: "release/v2"}, &stdout, &stderr, strings.NewReader("")); err != nil {
-			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
-		}
-
-		out := stdout.String()
-		if !strings.Contains(out, "DEPLOY tier=TIER_PREVIEW lifecycle=LIFECYCLE_EPHEMERAL identity="+want.Key) {
-			t.Errorf("stdout = %q, want the ephemeral Deploy echo for the explicit ref", out)
-		}
+		previewUp(t, fixture, previewDependencies("some-other-branch", ""), previewUpOptions{ref: "release/v2"})
+		assertEnvironment(t, sentDeploy(t, fixture).GetEnvironment(), environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL, previewKey(t, "release/v2"))
 	})
 
 	t.Run("--ref needs no git", func(t *testing.T) {
@@ -129,12 +104,8 @@ func TestPreviewUpSendsThePreviewEnvironmentItsFlagsName(t *testing.T) {
 		if err != nil {
 			t.Fatalf("resolveUpEnvironment(--ref) err = %v, want it to resolve without git", err)
 		}
-		want, err := previewid.Resolve("/tmp/some-fixture", "")
-		if err != nil {
-			t.Fatalf("previewid.Resolve: %v", err)
-		}
-		if env.GetIdentity() != want.Key {
-			t.Errorf("identity = %q, want %q", env.GetIdentity(), want.Key)
+		if want := previewKey(t, "/tmp/some-fixture"); env.GetIdentity() != want {
+			t.Errorf("identity = %q, want %q", env.GetIdentity(), want)
 		}
 		if env.GetLifecycle() != environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL {
 			t.Errorf("lifecycle = %v, want ephemeral", env.GetLifecycle())
@@ -142,62 +113,35 @@ func TestPreviewUpSendsThePreviewEnvironmentItsFlagsName(t *testing.T) {
 	})
 
 	t.Run("a persistent --name sends a persistent, declared environment", func(t *testing.T) {
-		root, sockPath := clitest.SetUpDeployFixture(t)
-		dependencies := newTestDependencies()
-		stubBuild(&dependencies, nil)
-		stubGit(&dependencies, "feature/login", "")
-		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
-		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+		fixture := setUpPreviewProject(t)
 
-		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-		if err := runPreviewUp(context.Background(), dependencies, root, previewUpOptions{name: "staging"}, &stdout, &stderr, strings.NewReader("")); err != nil {
-			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
-		}
-
-		out := stdout.String()
-		if !strings.Contains(out, "DEPLOY tier=TIER_PREVIEW lifecycle=LIFECYCLE_PERSISTENT identity=staging") {
-			t.Errorf("stdout = %q, want the persistent/declared Environment echo", out)
-		}
-
-		clitest.WaitForNoStaleSocket(t, sockPath)
+		previewUp(t, fixture, previewDependencies("feature/login", ""), previewUpOptions{name: "staging"})
+		assertEnvironment(t, sentDeploy(t, fixture).GetEnvironment(), environmentv1.Lifecycle_LIFECYCLE_PERSISTENT, "staging")
 	})
 
 	t.Run("it declares the slug and the preview wildcard", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
-		dependencies := newTestDependencies()
-		stubBuild(&dependencies, nil)
-		stubGit(&dependencies, "feature/login", "")
-		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
-		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+		fixture := setUpPreviewProject(t)
 
-		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-		if err := runPreviewUp(context.Background(), dependencies, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
-			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
-		}
-		if !strings.Contains(stdout.String(), "PREFLIGHT slug=test-app domains=*.preview.acme.com tier=TIER_PREVIEW") {
-			t.Errorf("stdout = %q, want the slug and preview wildcard to have reached Preflight under the preview tier", stdout.String())
+		previewUp(t, fixture, previewDependencies("feature/login", ""), previewUpOptions{})
+		preflight := onlyPreflight(t, fixture)
+		if preflight.GetSlug() != "test-app" || !slices.Equal(preflight.GetDomains(), []string{"*.preview.acme.com"}) || preflight.GetRequiredTier() != environmentv1.Tier_TIER_PREVIEW {
+			t.Errorf("the preflight named slug %q, domains %v, tier %s; want the slug and the preview wildcard under the preview tier", preflight.GetSlug(), preflight.GetDomains(), preflight.GetRequiredTier())
 		}
 	})
 
 	t.Run("it refuses without a preview domain, before anything is built", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
-		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+		fixture := setUpPreviewProject(t)
+		clitest.WriteFile(t, filepath.Join(fixture.Root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
   provider: { fake: {} },
 };
 `)
-		dependencies := newTestDependencies()
-		stubBuild(&dependencies, nil)
-		stubGit(&dependencies, "feature/login", "")
-		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
-		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
+		dependencies := previewDependencies("feature/login", "")
 		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-		err := runPreviewUp(context.Background(), dependencies, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader(""))
+		err := runPreviewUp(context.Background(), dependencies, fixture.Root, previewUpOptions{}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runPreviewUp err = nil, want a missing-preview-domain refusal")
 		}
@@ -207,114 +151,88 @@ export default {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)
 			}
 		}
-
 		if strings.Contains(out, "[build]") {
 			t.Errorf("stdout = %q, want the refusal before anything is built", out)
 		}
-		if strings.Contains(out, "DEPLOY ") {
-			t.Errorf("stdout = %q, want no Deploy to have been driven", out)
+		if sent := sentDeploys(t, fixture); len(sent) != 0 {
+			t.Errorf("the CLI sent %d deploys, want none", len(sent))
 		}
 	})
 
 	t.Run("a project with no preview domain serves on the bootstrap's global one", func(t *testing.T) {
-		root, sockPath := clitest.SetUpDeployFixture(t)
-		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+		fixture := setUpPreviewProject(t)
+		useGlobalPreviewDomain(t, fixture, "preview.ocel.app")
+		clitest.WriteFile(t, filepath.Join(fixture.Root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
   provider: { fake: {} },
 };
 `)
-		dependencies := newTestDependencies()
-		stubBuild(&dependencies, nil)
-		stubGit(&dependencies, "feature/login", "")
-		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
-		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
-		t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.ocel.app")
 
-		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-		if err := runPreviewUp(context.Background(), dependencies, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
-			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		out := previewUp(t, fixture, previewDependencies("feature/login", ""), previewUpOptions{})
+		if !strings.Contains(out, "Serving previews on global *.preview.ocel.app") {
+			t.Errorf("stdout = %q, want it to name the global preview domain it serves on", out)
 		}
-
-		out := stdout.String()
-		for _, want := range []string{"Serving previews on global *.preview.ocel.app", "DEPLOY tier=TIER_PREVIEW"} {
-			if !strings.Contains(out, want) {
-				t.Errorf("stdout = %q, want it to contain %q", out, want)
-			}
+		if env := sentDeploy(t, fixture).GetEnvironment(); env.GetTier() != environmentv1.Tier_TIER_PREVIEW {
+			t.Errorf("deploy environment = %v, want a preview", env)
 		}
-
-		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
 	t.Run("a tier mismatch refuses and drives no Deploy", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
-		dependencies := newTestDependencies()
-		stubBuild(&dependencies, nil)
-		stubGit(&dependencies, "feature/login", "")
-		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
-		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+		fixture := setUpDeployProject(t)
 
 		var stdout, stderr bytes.Buffer
+		dependencies := previewDependencies("feature/login", "")
 		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-		err := runPreviewUp(context.Background(), dependencies, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader(""))
-		if err == nil {
+		if err := runPreviewUp(context.Background(), dependencies, fixture.Root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err == nil {
 			t.Fatal("runPreviewUp err = nil, want a tier-mismatch error")
 		}
 		if !strings.Contains(stdout.String(), "this command needs preview infrastructure") {
 			t.Errorf("stdout = %q, want the concrete tier-mismatch message", stdout.String())
 		}
-		if strings.Contains(stdout.String(), "DEPLOY ") {
-			t.Errorf("stdout = %q, want no Deploy to have been driven", stdout.String())
+		if sent := sentDeploys(t, fixture); len(sent) != 0 {
+			t.Errorf("the CLI sent %d deploys, want none", len(sent))
 		}
 	})
 
 	t.Run("absent infrastructure refuses and drives no Deploy", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
-		dependencies := newTestDependencies()
-		stubBuild(&dependencies, nil)
-		stubGit(&dependencies, "feature/login", "")
-		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
-		t.Setenv(clitest.FakeInfraPresentEnvVar, "0")
+		fixture := setUpDeployProject(t)
+		removeBootstrap(t, fixture, environment.TierProduction)
 
 		var stdout, stderr bytes.Buffer
+		dependencies := previewDependencies("feature/login", "")
 		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-		err := runPreviewUp(context.Background(), dependencies, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader(""))
-		if err == nil {
+		if err := runPreviewUp(context.Background(), dependencies, fixture.Root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err == nil {
 			t.Fatal("runPreviewUp err = nil, want a missing-infrastructure error")
 		}
 		if !strings.Contains(stdout.String(), "ocel bootstrap preview") {
 			t.Errorf("stdout = %q, want it to direct the user to `ocel bootstrap preview`", stdout.String())
 		}
-		if strings.Contains(stdout.String(), "DEPLOY ") {
-			t.Errorf("stdout = %q, want no Deploy to have been driven", stdout.String())
+		if sent := sentDeploys(t, fixture); len(sent) != 0 {
+			t.Errorf("the CLI sent %d deploys, want none", len(sent))
 		}
 	})
 
 	t.Run("a slug this preview environment has never seen is guarded like production's", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
-		dependencies := newTestDependencies()
-		stubBuild(&dependencies, nil)
-		stubGit(&dependencies, "feature/login", "")
-		dependencies.StdinIsTerminal = func(io.Reader) bool { return true }
-		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
-		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
-		t.Setenv(clitest.FakeKnownSlugsEnvVar, "my-application,billing")
+		fixture := setUpPreviewProject(t)
+		recordProjects(t, fixture, environment.TierPreview, "my-application", "billing")
+		dependencies := previewDependencies("feature/login", "")
+		terminalStdin(&dependencies)
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-		if err := runPreviewUp(context.Background(), dependencies, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("n\n")); err != nil {
+		if err := runPreviewUp(context.Background(), dependencies, fixture.Root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("n\n")); err != nil {
 			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
 		out := stdout.String()
-		for _, want := range []string{"This will create a NEW project.", "This backend already has: my-application, billing", "Not confirmed, so this run changes nothing", "Nothing deployed to preview"} {
+		for _, want := range []string{"This will create a NEW project.", "This backend already has: billing, my-application", "Not confirmed, so this run changes nothing", "Nothing deployed to preview"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout missing %q:\n%s", want, out)
 			}
 		}
-		if strings.Contains(out, "DEPLOY tier=TIER_PREVIEW") {
-			t.Errorf("stdout = %q, want the declined guard to stop the preview before it deploys", out)
+		if sent := sentDeploys(t, fixture); len(sent) != 0 {
+			t.Errorf("the CLI sent %d deploys, want the declined guard to stop the preview before it deploys", len(sent))
 		}
 	})
 
@@ -336,100 +254,109 @@ export default {
 	})
 }
 
+func useGlobalPreviewDomain(t *testing.T, fixture clitest.FakeProject, base string) {
+	t.Helper()
+	wildcard := stackrecords.Wildcard{BaseDomain: base, Edge: fake.KindRelay, GrammarMin: 1, GrammarMax: 1}
+	encoded, err := json.Marshal(wildcard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	name := stackrecords.WildcardKey(environment.TierPreview)
+	entry, err := keyvalue.ReadOrEmpty(context.Background(), fixture.Provider.KeyValues(), name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry.Value = encoded
+	if _, err := fixture.Provider.KeyValues().Write(context.Background(), entry); err != nil {
+		t.Fatal(err)
+	}
+	relayEdge(fixture).Owns(wildcard.Hostname(), edge.PreviewEntryOwner)
+}
+
 func TestRunDeployWithoutAPreviewDomain(t *testing.T) {
 	t.Run("a production deploy needs no preview domain", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
-		dependencies := newTestDependencies()
-		stubBuild(&dependencies, nil)
-		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+		fixture := setUpDeployProject(t)
+		clitest.WriteFile(t, filepath.Join(fixture.Root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
   provider: { fake: {} },
   domains: { production: "acme.com" },
 };
 `)
+		dependencies := newTestDependencies()
+		stubBuild(&dependencies, nil)
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-		if err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 	})
 }
 
+func removedEnvironments(t *testing.T, fixture clitest.FakeProject) []*environmentv1.Environment {
+	t.Helper()
+	var removed []*environmentv1.Environment
+	for _, req := range clitest.RequestsTo[*contractv1.RemoveEnvironmentRequest](t, fixture.Requests, contractv1connect.ProviderServiceRemoveEnvironmentProcedure) {
+		if req.GetSlug() != clitest.FixtureSlug {
+			t.Errorf("removed an environment of %q, want %s's", req.GetSlug(), clitest.FixtureSlug)
+		}
+		removed = append(removed, req.GetEnvironment())
+	}
+	return removed
+}
+
+func previewRemove(t *testing.T, fixture clitest.FakeProject, dependencies Dependencies, opts previewRemoveOptions) string {
+	t.Helper()
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runPreviewRemove(context.Background(), dependencies, fixture.Root, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runPreviewRemove err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	return stdout.String()
+}
+
 func TestPreviewRemoveDestroysThePreviewItsFlagsName(t *testing.T) {
 	t.Run("an ephemeral preview for the current branch is destroyed without prompting", func(t *testing.T) {
-		root, sockPath := clitest.SetUpDeployFixture(t)
-		dependencies := newTestDependencies()
-		stubBuild(&dependencies, nil)
-		stubGit(&dependencies, "feature/login", "")
-		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
-		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+		fixture := setUpPreviewProject(t)
+		dependencies := previewDependencies("feature/login", "")
+		previewUp(t, fixture, dependencies, previewUpOptions{})
 
-		want, err := previewid.Resolve("feature/login", "")
-		if err != nil {
-			t.Fatalf("previewid.Resolve: %v", err)
+		out := previewRemove(t, fixture, dependencies, previewRemoveOptions{})
+		removed := removedEnvironments(t, fixture)
+		if len(removed) != 1 {
+			t.Fatalf("the CLI removed %d environments, want 1", len(removed))
 		}
-
-		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-		if err := runPreviewRemove(context.Background(), dependencies, root, previewRemoveOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
-			t.Fatalf("runPreviewRemove err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
-		}
-
-		out := stdout.String()
-		if !strings.Contains(out, "DESTROY project=test-app tier=TIER_PREVIEW lifecycle=LIFECYCLE_EPHEMERAL identity="+want.Key) {
-			t.Errorf("stdout = %q, want the ephemeral Destroy echo for the current branch", out)
-		}
+		assertEnvironment(t, removed[0], environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL, previewKey(t, "feature/login"))
 		if strings.Contains(out, "[y/N]") {
 			t.Errorf("stdout = %q, want no prompt for ephemeral teardown", out)
 		}
-
-		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
 	t.Run("--ref destroys the explicit ref", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
-		dependencies := newTestDependencies()
-		stubBuild(&dependencies, nil)
-		stubGit(&dependencies, "some-other-branch", "")
-		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
-		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+		fixture := setUpPreviewProject(t)
+		dependencies := previewDependencies("some-other-branch", "")
+		previewUp(t, fixture, dependencies, previewUpOptions{ref: "release/v2"})
 
-		want, err := previewid.Resolve("release/v2", "")
-		if err != nil {
-			t.Fatalf("previewid.Resolve: %v", err)
+		previewRemove(t, fixture, dependencies, previewRemoveOptions{ref: "release/v2"})
+		removed := removedEnvironments(t, fixture)
+		if len(removed) != 1 {
+			t.Fatalf("the CLI removed %d environments, want 1", len(removed))
 		}
-
-		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-		if err := runPreviewRemove(context.Background(), dependencies, root, previewRemoveOptions{ref: "release/v2"}, &stdout, &stderr, strings.NewReader("")); err != nil {
-			t.Fatalf("runPreviewRemove err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
-		}
-
-		if !strings.Contains(stdout.String(), "DESTROY project=test-app tier=TIER_PREVIEW lifecycle=LIFECYCLE_EPHEMERAL identity="+want.Key) {
-			t.Errorf("stdout = %q, want the Destroy echo for the explicit ref", stdout.String())
-		}
+		assertEnvironment(t, removed[0], environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL, previewKey(t, "release/v2"))
 	})
 
 	t.Run("a persistent preview with --yes is destroyed without prompting", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
-		dependencies := newTestDependencies()
-		stubBuild(&dependencies, nil)
-		stubGit(&dependencies, "feature/login", "")
-		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
-		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+		fixture := setUpPreviewProject(t)
+		dependencies := previewDependencies("feature/login", "")
+		previewUp(t, fixture, dependencies, previewUpOptions{name: "staging"})
 
-		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-		if err := runPreviewRemove(context.Background(), dependencies, root, previewRemoveOptions{name: "staging", yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
-			t.Fatalf("runPreviewRemove err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		out := previewRemove(t, fixture, dependencies, previewRemoveOptions{name: "staging", yes: true})
+		removed := removedEnvironments(t, fixture)
+		if len(removed) != 1 {
+			t.Fatalf("the CLI removed %d environments, want 1", len(removed))
 		}
-
-		out := stdout.String()
-		if !strings.Contains(out, "DESTROY project=test-app tier=TIER_PREVIEW lifecycle=LIFECYCLE_PERSISTENT identity=staging") {
-			t.Errorf("stdout = %q, want the persistent Destroy echo", out)
-		}
+		assertEnvironment(t, removed[0], environmentv1.Lifecycle_LIFECYCLE_PERSISTENT, "staging")
 		if strings.Contains(out, "[y/N]") {
 			t.Errorf("stdout = %q, want --yes to skip the prompt", out)
 		}
@@ -437,16 +364,15 @@ func TestPreviewRemoveDestroysThePreviewItsFlagsName(t *testing.T) {
 }
 
 func TestTearingDownANamedPreviewAsksThroughConsentWhileTheRunIsHeld(t *testing.T) {
-	root, _ := clitest.SetUpDeployFixture(t)
+	fixture := setUpPreviewProject(t)
+	previewUp(t, fixture, previewDependencies("feature/login", ""), previewUpOptions{name: "staging"})
 	dependencies := newTestDependencies()
 	terminalStdin(&dependencies)
 	useJSONLogFormat(t, &dependencies)
-	t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
-	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 	var stream, stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stream)
-	if err := runPreviewRemove(context.Background(), dependencies, root, previewRemoveOptions{name: "staging"}, &stdout, &stderr, strings.NewReader("y\n")); err != nil {
+	if err := runPreviewRemove(context.Background(), dependencies, fixture.Root, previewRemoveOptions{name: "staging"}, &stdout, &stderr, strings.NewReader("y\n")); err != nil {
 		t.Fatalf("runPreviewRemove err = %v; stream=%s stdout=%s stderr=%s", err, stream.String(), stdout.String(), stderr.String())
 	}
 
@@ -462,9 +388,7 @@ func TestTearingDownANamedPreviewAsksThroughConsentWhileTheRunIsHeld(t *testing.
 	if resumed < waiting || evs[resumed].GetResumed().GetReason() != "answered" || !bytes.Equal(evs[resumed].GetSpanId(), evs[waiting].GetSpanId()) {
 		t.Fatalf("resumed at event %d, waiting at %d: want the held span resumed once answered: %s", resumed, waiting, stream.String())
 	}
-	destroyed := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool {
-		return strings.Contains(ev.GetMessage(), "DESTROY project=test-app")
-	})
+	destroyed := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetPhase() == progressv1.Phase_PHASE_DESTROY })
 	if destroyed < resumed {
 		t.Errorf("teardown at event %d, resumed at %d: want nothing torn down until the question is answered: %s", destroyed, resumed, stream.String())
 	}
@@ -474,92 +398,94 @@ func TestTearingDownANamedPreviewAsksThroughConsentWhileTheRunIsHeld(t *testing.
 	}
 }
 
+func prunedEnvironments(t *testing.T, fixture clitest.FakeProject) []*environmentv1.Environment {
+	t.Helper()
+	var pruned []*environmentv1.Environment
+	for _, req := range clitest.RequestsTo[*contractv1.RemoveStalePromotionsRequest](t, fixture.Requests, contractv1connect.ProviderServiceRemoveStalePromotionsProcedure) {
+		if req.GetSlug() != clitest.FixtureSlug || req.GetKeepN() != defaultPreviewPruneKeepN {
+			t.Errorf("pruned %q down to %d, want %s's down to %d", req.GetSlug(), req.GetKeepN(), clitest.FixtureSlug, defaultPreviewPruneKeepN)
+		}
+		pruned = append(pruned, req.GetEnvironment())
+	}
+	return pruned
+}
+
+func previewPrune(t *testing.T, fixture clitest.FakeProject, dependencies Dependencies, opts previewPruneOptions) {
+	t.Helper()
+	opts.keep = defaultPreviewPruneKeepN
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runPreviewPrune(context.Background(), dependencies, fixture.Root, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runPreviewPrune err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+}
+
 func TestPreviewPruneReclaimsThePreviewItsFlagsName(t *testing.T) {
-	t.Run("with no flags it prunes the current branch's preview", func(t *testing.T) {
-		root, sockPath := clitest.SetUpDeployFixture(t)
-		dependencies := newTestDependencies()
-		stubBuild(&dependencies, nil)
-		stubGit(&dependencies, "feature/login", "")
-		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
-		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+	for _, tc := range []struct {
+		name      string
+		branch    string
+		up        previewUpOptions
+		prune     previewPruneOptions
+		lifecycle environmentv1.Lifecycle
+		identity  func(t *testing.T) string
+	}{
+		{
+			name:      "with no flags it prunes the current branch's preview",
+			branch:    "feature/login",
+			lifecycle: environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL,
+			identity:  func(t *testing.T) string { return previewKey(t, "feature/login") },
+		},
+		{
+			name:      "--ref prunes the explicit ref",
+			branch:    "some-other-branch",
+			up:        previewUpOptions{ref: "release/v2"},
+			prune:     previewPruneOptions{ref: "release/v2"},
+			lifecycle: environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL,
+			identity:  func(t *testing.T) string { return previewKey(t, "release/v2") },
+		},
+		{
+			name:      "--name prunes the named preview",
+			branch:    "feature/login",
+			up:        previewUpOptions{name: "staging"},
+			prune:     previewPruneOptions{name: "staging"},
+			lifecycle: environmentv1.Lifecycle_LIFECYCLE_PERSISTENT,
+			identity:  func(*testing.T) string { return "staging" },
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fixture := setUpPreviewProject(t)
+			dependencies := previewDependencies(tc.branch, "")
+			previewUp(t, fixture, dependencies, tc.up)
 
-		want, err := previewid.Resolve("feature/login", "")
-		if err != nil {
-			t.Fatalf("previewid.Resolve: %v", err)
-		}
+			previewPrune(t, fixture, dependencies, tc.prune)
+			pruned := prunedEnvironments(t, fixture)
+			if len(pruned) != 1 {
+				t.Fatalf("the CLI pruned %d environments, want 1", len(pruned))
+			}
+			assertEnvironment(t, pruned[0], tc.lifecycle, tc.identity(t))
+		})
+	}
+}
 
-		var stdout, stderr bytes.Buffer
-		opts := previewPruneOptions{keep: defaultPreviewPruneKeepN}
-		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-		if err := runPreviewPrune(context.Background(), dependencies, root, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
-			t.Fatalf("runPreviewPrune err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
-		}
-
-		if !strings.Contains(stdout.String(), "PRUNE project=test-app tier=TIER_PREVIEW lifecycle=LIFECYCLE_EPHEMERAL identity="+want.Key) {
-			t.Errorf("stdout = %q, want the prune echo for the current branch: a branch preview that cannot be named is one that only ever goes down whole", stdout.String())
-		}
-
-		clitest.WaitForNoStaleSocket(t, sockPath)
-	})
-
-	t.Run("--ref prunes the explicit ref", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
-		dependencies := newTestDependencies()
-		stubBuild(&dependencies, nil)
-		stubGit(&dependencies, "some-other-branch", "")
-		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
-		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
-
-		want, err := previewid.Resolve("release/v2", "")
-		if err != nil {
-			t.Fatalf("previewid.Resolve: %v", err)
-		}
-
-		var stdout, stderr bytes.Buffer
-		opts := previewPruneOptions{ref: "release/v2", keep: defaultPreviewPruneKeepN}
-		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-		if err := runPreviewPrune(context.Background(), dependencies, root, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
-			t.Fatalf("runPreviewPrune err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
-		}
-
-		if !strings.Contains(stdout.String(), "identity="+want.Key) {
-			t.Errorf("stdout = %q, want the prune echo for the explicit ref", stdout.String())
-		}
-	})
-
-	t.Run("--name prunes the named preview", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
-		dependencies := newTestDependencies()
-		stubBuild(&dependencies, nil)
-		stubGit(&dependencies, "feature/login", "")
-		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
-		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
-
-		var stdout, stderr bytes.Buffer
-		opts := previewPruneOptions{name: "staging", keep: defaultPreviewPruneKeepN}
-		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-		if err := runPreviewPrune(context.Background(), dependencies, root, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
-			t.Fatalf("runPreviewPrune err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
-		}
-
-		if !strings.Contains(stdout.String(), "lifecycle=LIFECYCLE_PERSISTENT identity=staging") {
-			t.Errorf("stdout = %q, want the prune echo for the named preview", stdout.String())
-		}
-	})
+func previewAppDependencies(branch, pr string) Dependencies {
+	dependencies := previewDependencies(branch, pr)
+	stubBuild(&dependencies, apiFunction())
+	return dependencies
 }
 
 func TestListingPreviewsStartsTheProviderInTheCheckPhaseOfItsRunAndPrintsTheListingAloneOnStdout(t *testing.T) {
-	root, _ := clitest.SetUpDeployFixture(t)
+	fixture := setUpPreviewProject(t)
+	addAppToFixtureConfig(t, fixture.Root)
+	previewUp(t, fixture, previewAppDependencies("feature/login", ""), previewUpOptions{})
+	identity := previewKey(t, "feature/login")
 	dependencies := newTestDependencies()
 	dependencies.Presentation = func(io.Writer) terminal.Presentation {
 		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
 	}
-	t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
-	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stderr)
-	if err := runPreviewList(context.Background(), dependencies, root, &stdout); err != nil {
+	if err := runPreviewList(context.Background(), dependencies, fixture.Root, &stdout); err != nil {
 		t.Fatalf("runPreviewList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
@@ -571,40 +497,35 @@ func TestListingPreviewsStartsTheProviderInTheCheckPhaseOfItsRunAndPrintsTheList
 	if result := evs[len(evs)-1].GetSummary(); !result.GetSuccess() {
 		t.Errorf("result = %v, want the listing's run to succeed", result)
 	}
-	if !strings.Contains(stdout.String(), "feature_login_ab12cd34") || strings.Contains(stderr.String(), "feature_login_ab12cd34") {
+	if !strings.Contains(stdout.String(), identity) || strings.Contains(stderr.String(), identity) {
 		t.Errorf("stdout = %q, stream = %q: want the listing on stdout and not on the stream", stdout.String(), stderr.String())
 	}
 }
 
 func TestPreviewListRendersEveryEnvironment(t *testing.T) {
-	t.Run("it renders every environment", func(t *testing.T) {
-		root, sockPath := clitest.SetUpDeployFixture(t)
-		dependencies := newTestDependencies()
-		stubBuild(&dependencies, nil)
-		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
-		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+	fixture := setUpPreviewProject(t)
+	addAppToFixtureConfig(t, fixture.Root)
+	previewUp(t, fixture, previewAppDependencies("feature/login", ""), previewUpOptions{})
+	previewUp(t, fixture, previewAppDependencies("feature/checkout", "7"), previewUpOptions{})
+	previewUp(t, fixture, previewAppDependencies("feature/login", ""), previewUpOptions{name: "staging"})
 
-		var stdout, stderr bytes.Buffer
-		if err := runPreviewList(context.Background(), dependencies, root, &stdout); err != nil {
-			t.Fatalf("runPreviewList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
-		}
+	var stdout, stderr bytes.Buffer
+	if err := runPreviewList(context.Background(), newTestDependencies(), fixture.Root, &stdout); err != nil {
+		t.Fatalf("runPreviewList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
 
-		out := stdout.String()
-		for _, sub := range []string{
-			"feature_login_ab12cd34", "ephemeral", "pr-7",
-			"staging", "persistent", "—",
-			"project:test-app",
-		} {
-			if !strings.Contains(out, sub) {
-				t.Errorf("stdout = %q, want it to contain %q", out, sub)
-			}
+	out := stdout.String()
+	for _, sub := range []string{
+		previewKey(t, "feature/login"), "ephemeral", "pr-7",
+		"staging", "persistent", "—",
+	} {
+		if !strings.Contains(out, sub) {
+			t.Errorf("stdout = %q, want it to contain %q", out, sub)
 		}
-		if strings.Contains(out, "expires") {
-			t.Errorf("stdout = %q, and a listing that prints an expiry promises a teardown nothing performs: no reaper, no sweep, and on an agentless box nothing resident that could run one", out)
-		}
-
-		clitest.WaitForNoStaleSocket(t, sockPath)
-	})
+	}
+	if strings.Contains(out, "expires") {
+		t.Errorf("stdout = %q, and a listing that prints an expiry promises a teardown nothing performs: no reaper, no sweep, and on an agentless box nothing resident that could run one", out)
+	}
 }
 
 func TestAPreviewIsNamedByOneFlagThatFitsASubdomainLabel(t *testing.T) {
@@ -683,125 +604,62 @@ func TestPreviewPreflightShapeKeepsTeardownOffTheSharedWildcardRefusal(t *testin
 	const why = "the provider refuses a global-preview account mismatch only for a preflight that includes a slug and no domains, " +
 		"because that is exactly a preview deploy landing on the shared wildcard; a teardown that starts sending a slug would be refused and strand its resources"
 
-	setUpPreview := func(t *testing.T) (root, journal string, dependencies Dependencies) {
-		t.Helper()
-		root, _ = clitest.SetUpDeployFixture(t)
-		journal = filepath.Join(t.TempDir(), "preflight.journal")
-		t.Setenv(clitest.FakePreflightJournalEnvVar, journal)
-		dependencies = newTestDependencies()
-		stubBuild(&dependencies, nil)
-		stubGit(&dependencies, "feature/login", "")
-		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
-		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
-		return root, journal, dependencies
-	}
-
 	t.Run("up sends the slug and the project's declared preview hostnames, so the shared-wildcard refusal can reach it", func(t *testing.T) {
-		root, journal, dependencies := setUpPreview(t)
+		fixture := setUpPreviewProject(t)
 
-		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-		if err := runPreviewUp(context.Background(), dependencies, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
-			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
-		}
-
-		got := readPreflightJournal(t, journal)
-		if len(got) != 1 {
-			t.Fatalf("`ocel preview up` issued %d preflights, want exactly 1: %+v", len(got), got)
-		}
-		if got[0].slug == "" {
+		previewUp(t, fixture, previewDependencies("feature/login", ""), previewUpOptions{})
+		got := onlyPreflight(t, fixture)
+		if got.GetSlug() == "" {
 			t.Errorf("`ocel preview up` sent an empty slug, want the project slug: %s", why)
 		}
-		if want := "*.preview.acme.com"; strings.Join(got[0].domains, ",") != want {
-			t.Errorf("`ocel preview up` sent domains %v, want the project's declared preview hostnames [%s]: %s", got[0].domains, want, why)
+		if want := []string{"*.preview.acme.com"}; !slices.Equal(got.GetDomains(), want) {
+			t.Errorf("`ocel preview up` sent domains %v, want the project's declared preview hostnames %v: %s", got.GetDomains(), want, why)
 		}
 	})
 
 	teardowns := []struct {
 		name string
-		run  func(t *testing.T, dependencies Dependencies, root string, stdout, stderr *bytes.Buffer) error
+		run  func(t *testing.T, fixture clitest.FakeProject, dependencies Dependencies)
 	}{
-		{"rm", func(t *testing.T, dependencies Dependencies, root string, stdout, stderr *bytes.Buffer) error {
-			clitest.AttachTerminalSink(dependencies.Invocation, stdout)
-			return runPreviewRemove(context.Background(), dependencies, root, previewRemoveOptions{}, stdout, stderr, strings.NewReader(""))
+		{"rm", func(t *testing.T, fixture clitest.FakeProject, dependencies Dependencies) {
+			previewRemove(t, fixture, dependencies, previewRemoveOptions{name: "staging", yes: true})
 		}},
-		{"prune", func(t *testing.T, dependencies Dependencies, root string, stdout, stderr *bytes.Buffer) error {
-			clitest.AttachTerminalSink(dependencies.Invocation, stdout)
-			return runPreviewPrune(context.Background(), dependencies, root, previewPruneOptions{name: "staging", keep: defaultPreviewPruneKeepN}, stdout, stderr, strings.NewReader(""))
+		{"prune", func(t *testing.T, fixture clitest.FakeProject, dependencies Dependencies) {
+			previewPrune(t, fixture, dependencies, previewPruneOptions{name: "staging"})
 		}},
 	}
 	for _, tc := range teardowns {
 		t.Run(tc.name+" sends neither a slug nor domains, so the shared-wildcard refusal never reaches a teardown", func(t *testing.T) {
-			root, journal, dependencies := setUpPreview(t)
+			fixture := setUpPreviewProject(t)
+			dependencies := previewDependencies("feature/login", "")
+			previewUp(t, fixture, dependencies, previewUpOptions{name: "staging"})
+			before := len(sentPreflights(t, fixture))
 
-			var stdout, stderr bytes.Buffer
-			if err := tc.run(t, dependencies, root, &stdout, &stderr); err != nil {
-				t.Fatalf("`ocel preview %s` err = %v; stdout=%s stderr=%s", tc.name, err, stdout.String(), stderr.String())
-			}
-
-			got := readPreflightJournal(t, journal)
+			tc.run(t, fixture, dependencies)
+			got := sentPreflights(t, fixture)[before:]
 			if len(got) != 1 {
-				t.Fatalf("`ocel preview %s` issued %d preflights, want exactly 1: %+v", tc.name, len(got), got)
+				t.Fatalf("`ocel preview %s` issued %d preflights, want exactly 1", tc.name, len(got))
 			}
-			if got[0].slug != "" {
-				t.Errorf("`ocel preview %s` sent slug %q, want none: %s", tc.name, got[0].slug, why)
+			if got[0].GetSlug() != "" {
+				t.Errorf("`ocel preview %s` sent slug %q, want none: %s", tc.name, got[0].GetSlug(), why)
 			}
-			if len(got[0].domains) != 0 {
-				t.Errorf("`ocel preview %s` sent domains %v, want none: %s", tc.name, got[0].domains, why)
+			if len(got[0].GetDomains()) != 0 {
+				t.Errorf("`ocel preview %s` sent domains %v, want none: %s", tc.name, got[0].GetDomains(), why)
 			}
 		})
 	}
 
 	t.Run("ls preflights not at all, so nothing about it can be refused", func(t *testing.T) {
-		root, journal, dependencies := setUpPreview(t)
+		fixture := setUpPreviewProject(t)
 
 		var stdout, stderr bytes.Buffer
-		if err := runPreviewList(context.Background(), dependencies, root, &stdout); err != nil {
+		if err := runPreviewList(context.Background(), newTestDependencies(), fixture.Root, &stdout); err != nil {
 			t.Fatalf("runPreviewList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
-
-		if got := readPreflightJournal(t, journal); len(got) != 0 {
-			t.Errorf("`ocel preview ls` issued %d preflights, want none: %+v; %s", len(got), got, why)
+		if got := sentPreflights(t, fixture); len(got) != 0 {
+			t.Errorf("`ocel preview ls` issued %d preflights, want none; %s", len(got), why)
 		}
 	})
-}
-
-type preflightRecord struct {
-	slug    string
-	domains []string
-}
-
-func readPreflightJournal(t *testing.T, path string) []preflightRecord {
-	t.Helper()
-
-	data, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		t.Fatalf("read preflight journal %s: %v", path, err)
-	}
-
-	var records []preflightRecord
-	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
-		if line == "" {
-			continue
-		}
-		var rec preflightRecord
-		for _, field := range strings.Fields(line) {
-			key, value, _ := strings.Cut(field, "=")
-			switch key {
-			case "slug":
-				rec.slug = value
-			case "domains":
-				if value != "" {
-					rec.domains = strings.Split(value, ",")
-				}
-			}
-		}
-		records = append(records, rec)
-	}
-	return records
 }
 
 func checkSpan(t *testing.T, w io.Writer) *run.Span {
@@ -951,13 +809,13 @@ func TestAPreviewNeedsADomainWhoseLabelsFit(t *testing.T) {
 	t.Run("an edge account mismatch refuses with the account to point at", func(t *testing.T) {
 		t.Parallel()
 
-		elsewhere := &contractv1.PreviewWildcard{BaseDomain: "preview.ocel.app", EdgeScope: "cf-owner", GrammarMin: 1, GrammarMax: 1, RouteInstalled: true}
+		elsewhere := &contractv1.PreviewWildcard{BaseDomain: "preview.ocel.app", EdgeScope: "edge-owner", GrammarMin: 1, GrammarMax: 1, RouteInstalled: true}
 		var out bytes.Buffer
-		_, err := requirePreviewDomain(bare, elsewhere, &contractv1.Identity{EdgeScope: "cf-other"}, "pr-1", checkSpan(t, &out))
+		_, err := requirePreviewDomain(bare, elsewhere, &contractv1.Identity{EdgeScope: "edge-other"}, "pr-1", checkSpan(t, &out))
 		if err == nil {
 			t.Fatal("requirePreviewDomain err = nil, want an account refusal")
 		}
-		for _, want := range []string{"cf-owner", "cf-other", "edge account"} {
+		for _, want := range []string{"edge-owner", "edge-other", "edge account"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("err = %v, want it to contain %q", err, want)
 			}

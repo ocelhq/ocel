@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"maps"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -26,16 +28,16 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/variableeditor"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/envsource"
+	"github.com/ocelhq/ocel/pkg/envvars"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/statedir"
 )
-
-func terminalStdin(dependencies *Dependencies) {
-	dependencies.StdinIsTerminal = func(io.Reader) bool { return true }
-}
 
 func recordBrowser(dependencies *Dependencies, opened *[]string, mu *sync.Mutex) {
 	dependencies.OpenBrowser = func(url string) error {
@@ -171,7 +173,8 @@ func editorTier(t *testing.T, address, token string) string {
 const missingStripeKey = `[{"key":"STRIPE_API_KEY","folder":"","kind":"KIND_MISSING"}]`
 
 func TestAMissingVariableHoldsTheRunWithTheWaitingEventAndResumesIt(t *testing.T) {
-	root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+	fixture := setUpVariablesProject(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+	root := fixture.Root
 	problems := problemsFile(t, missingStripeKey)
 	dependencies := newTestDependencies()
 	terminalStdin(&dependencies)
@@ -228,7 +231,8 @@ func TestAMissingVariableHoldsTheRunWithTheWaitingEventAndResumesIt(t *testing.T
 
 func TestADeployMissingVariablesOpensTheEditorAndResumesOnceTheyAreSet(t *testing.T) {
 	t.Run("a declarations refusal in a terminal opens the UI and resumes into the build", func(t *testing.T) {
-		root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+		fixture := setUpVariablesProject(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+		root := fixture.Root
 		problems := problemsFile(t, missingStripeKey)
 		dependencies := newTestDependencies()
 		terminalStdin(&dependencies)
@@ -278,7 +282,8 @@ func TestADeployMissingVariablesOpensTheEditorAndResumesOnceTheyAreSet(t *testin
 	})
 
 	t.Run("the resumed pass declares each variable once", func(t *testing.T) {
-		root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
+		fixture := setUpVariablesProject(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
+		root := fixture.Root
 		writeRootApp(t, root)
 		problems := problemsFile(t, missingStripeKey)
 		dependencies := newTestDependencies()
@@ -313,8 +318,14 @@ func TestADeployMissingVariablesOpensTheEditorAndResumesOnceTheyAreSet(t *testin
 		}
 
 		got := out.String()
-		if !strings.Contains(got, "vars=STRIPE_API_KEY deployment=") {
-			t.Errorf("stdout = %q, want the resumed manifest to contain STRIPE_API_KEY exactly once", got)
+		declared := 0
+		for _, variable := range manifestApp(t, sentDeploy(t, fixture).GetManifest(), clitest.FixtureSlug).GetVariables() {
+			if variable.GetKey() == "STRIPE_API_KEY" {
+				declared++
+			}
+		}
+		if declared != 1 {
+			t.Errorf("the resumed manifest declares STRIPE_API_KEY %d times, want exactly once", declared)
 		}
 		if strings.Contains(got, "pk_filled_in") {
 			t.Errorf("stdout = %q, want no variable value ever printed", got)
@@ -322,7 +333,8 @@ func TestADeployMissingVariablesOpensTheEditorAndResumesOnceTheyAreSet(t *testin
 	})
 
 	t.Run("the waiting state says how to abort", func(t *testing.T) {
-		root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+		fixture := setUpVariablesProject(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+		root := fixture.Root
 		problemsFile(t, missingStripeKey)
 		dependencies := newTestDependencies()
 		terminalStdin(&dependencies)
@@ -357,7 +369,8 @@ func TestADeployMissingVariablesOpensTheEditorAndResumesOnceTheyAreSet(t *testin
 	})
 
 	t.Run("interrupting while waiting aborts with nothing built", func(t *testing.T) {
-		root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+		fixture := setUpVariablesProject(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+		root := fixture.Root
 		problemsFile(t, missingStripeKey)
 		dependencies := newTestDependencies()
 		terminalStdin(&dependencies)
@@ -393,8 +406,8 @@ func TestADeployMissingVariablesOpensTheEditorAndResumesOnceTheyAreSet(t *testin
 		if built {
 			t.Error("the app was built, want an interrupted wait to build nothing")
 		}
-		if strings.Contains(out.String(), "DEPLOY ") {
-			t.Errorf("stdout = %q, want no Deploy to have been driven", out.String())
+		if sent := sentDeploys(t, fixture); len(sent) != 0 {
+			t.Errorf("the CLI sent %d deploys, want none after an interrupted wait", len(sent))
 		}
 		if strings.Contains(out.String(), "Resources may be partially created") {
 			t.Errorf("stdout = %q, want an interrupted wait to say nothing was provisioned", out.String())
@@ -402,7 +415,8 @@ func TestADeployMissingVariablesOpensTheEditorAndResumesOnceTheyAreSet(t *testin
 	})
 
 	t.Run("closing the UI still names the keys that are missing", func(t *testing.T) {
-		root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+		fixture := setUpVariablesProject(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+		root := fixture.Root
 		problemsFile(t, missingStripeKey)
 		dependencies := newTestDependencies()
 		terminalStdin(&dependencies)
@@ -447,8 +461,9 @@ func TestADeployMissingVariablesOpensTheEditorAndResumesOnceTheyAreSet(t *testin
 	})
 
 	t.Run("a replacement that still fails the schema fails the deploy without reopening the UI", func(t *testing.T) {
-		root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
-		envSet(t, root, "STRIPE_API_KEY", "nope", envOptions{})
+		fixture := setUpVariablesProject(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+		root := fixture.Root
+		envSet(t, fixture, "STRIPE_API_KEY", "nope", envOptions{})
 		problemsFile(t, `[{"key":"STRIPE_API_KEY","folder":"","kind":"KIND_INVALID","detail":"must start with sk_"}]`)
 		dependencies := newTestDependencies()
 		terminalStdin(&dependencies)
@@ -499,7 +514,8 @@ func TestADeployMissingVariablesOpensTheEditorAndResumesOnceTheyAreSet(t *testin
 	})
 
 	t.Run("returning with a cell still missing is refused, and abandoning fails the deploy once", func(t *testing.T) {
-		root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true},{"key":"DATABASE_URL","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+		fixture := setUpVariablesProject(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true},{"key":"DATABASE_URL","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+		root := fixture.Root
 		problemsFile(t, `[{"key":"STRIPE_API_KEY","folder":"","kind":"KIND_MISSING"},{"key":"DATABASE_URL","folder":"","kind":"KIND_MISSING"}]`)
 		dependencies := newTestDependencies()
 		terminalStdin(&dependencies)
@@ -592,7 +608,8 @@ func TestADeployMissingVariablesOpensTheEditorAndResumesOnceTheyAreSet(t *testin
 			{name: commands.NoBrowserEnvVar + "=anything", terminal: true, opts: deployOptions{yes: true}, env: "true"},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
-				root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+				fixture := setUpVariablesProject(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+				root := fixture.Root
 				t.Setenv("OCEL_TEST_ENV_PROBLEMS", missingStripeKey)
 				t.Setenv(commands.NoBrowserEnvVar, tc.env)
 				dependencies := newTestDependencies()
@@ -636,8 +653,9 @@ func TestADeployMissingVariablesOpensTheEditorAndResumesOnceTheyAreSet(t *testin
 
 func TestAPreviewMissingVariablesOpensTheEditorAndResumesOnceTheyAreSet(t *testing.T) {
 	t.Run("a declarations refusal in a terminal opens the UI and resumes", func(t *testing.T) {
-		root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
-		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
+		fixture := setUpVariablesProject(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+		root := fixture.Root
+		bootstrapTier(t, fixture, environment.TierPreview)
 		problems := problemsFile(t, missingStripeKey)
 		dependencies := newTestDependencies()
 		terminalStdin(&dependencies)
@@ -686,8 +704,9 @@ func TestAPreviewMissingVariablesOpensTheEditorAndResumesOnceTheyAreSet(t *testi
 			{name: "no terminal with --yes", opts: previewUpOptions{name: "staging", yes: true}},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
-				root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
-				t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
+				fixture := setUpVariablesProject(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+				root := fixture.Root
+				bootstrapTier(t, fixture, environment.TierPreview)
 				t.Setenv("OCEL_TEST_ENV_PROBLEMS", missingStripeKey)
 				dependencies := newTestDependencies()
 				if tc.terminal {
@@ -863,7 +882,8 @@ func rootSpan(t *testing.T, spans []traceSpan) traceSpan {
 }
 
 func TestVariablesRecoveryTracesEachAttemptAndTheHumanWait(t *testing.T) {
-	root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+	fixture := setUpVariablesProject(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+	root := fixture.Root
 	problems := problemsFile(t, missingStripeKey)
 	dependencies := newTestDependencies()
 	terminalStdin(&dependencies)
@@ -929,4 +949,697 @@ func TestVariablesRecoveryTracesEachAttemptAndTheHumanWait(t *testing.T) {
 	if rootDuration < buildSum+waitDuration {
 		t.Errorf("root span duration = %dns, want it to cover both build attempts (%dns) and the wait (%dns)", rootDuration, buildSum, waitDuration)
 	}
+}
+
+const stripeRequired = `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`
+
+func TestADeployIsRefusedUntilItsVariablesAreReady(t *testing.T) {
+	t.Run("a missing value refuses before anything is built", func(t *testing.T) {
+		fixture := setUpVariablesProject(t, stripeRequired)
+		t.Setenv("OCEL_TEST_ENV_PROBLEMS", missingStripeKey)
+		dependencies := newTestDependencies()
+		built := false
+		stubAppBuildRecorder(&dependencies, &built)
+
+		out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true})
+		if err == nil {
+			t.Fatal("runDeploy err = nil, want the declarations to refuse")
+		}
+		var exit *exitcode.ExitError
+		if !errors.As(err, &exit) || exit.Code == 0 {
+			t.Errorf("runDeploy err = %v, want a non-zero exit", err)
+		}
+		for _, want := range []string{"STRIPE_API_KEY", "ocel env set STRIPE_API_KEY=<VALUE>"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("output = %q, want it to contain %q", out, want)
+			}
+		}
+		if built {
+			t.Error("the app was built, want the declarations to refuse before any build runs")
+		}
+		if sent := sentDeploys(t, fixture); len(sent) != 0 {
+			t.Errorf("the CLI sent %d deploys, want none", len(sent))
+		}
+	})
+
+	t.Run("a client value that fails its schema refuses before anything is built, naming the key and the complaint", func(t *testing.T) {
+		fixture := setUpVariablesProject(t, `[{"key":"NEXT_PUBLIC_PORT","class":"VARIABLE_CLASS_PLAIN","required":true,"clientAccessible":true,"hasSchema":true,"schemaSource":"/app/env.schema.ts","source":"/app/env.ts"}]`)
+		t.Setenv("OCEL_TEST_ENV_PROBLEMS", `[{"key":"NEXT_PUBLIC_PORT","folder":"","kind":"KIND_INVALID","detail":"expected a number"}]`)
+		dependencies := newTestDependencies()
+		built := false
+		stubAppBuildRecorder(&dependencies, &built)
+
+		out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true})
+		if err == nil {
+			t.Fatal("runDeploy err = nil, want the declarations to refuse")
+		}
+		for _, want := range []string{"NEXT_PUBLIC_PORT", "set, but expected a number", "ocel env set NEXT_PUBLIC_PORT=<VALUE>"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("output = %q, want it to contain %q", out, want)
+			}
+		}
+		if built {
+			t.Error("the app was built with a client value its schema rejects")
+		}
+	})
+
+	t.Run("a missing value refuses though discovery reported nothing", func(t *testing.T) {
+		fixture := setUpVariablesProjectWith(t, stripeRequired, clitest.EnvDeclareOnlyScript)
+		dependencies := newTestDependencies()
+		built := false
+		stubAppBuildRecorder(&dependencies, &built)
+
+		out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true})
+		if err == nil {
+			t.Fatal("runDeploy err = nil, want the declarations to refuse on what it knows itself")
+		}
+		for _, want := range []string{"STRIPE_API_KEY", "ocel env set STRIPE_API_KEY=<VALUE>"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("output = %q, want it to contain %q", out, want)
+			}
+		}
+		if built {
+			t.Error("the app was built, want the declarations to refuse before any build runs")
+		}
+	})
+
+	t.Run("a value that is set passes the declarations and deploys", func(t *testing.T) {
+		fixture := setUpVariablesProject(t, stripeRequired)
+		envSet(t, fixture, "STRIPE_API_KEY", "sk_live_value", envOptions{})
+
+		out, err := deployWith(t, newTestDependencies(), fixture, deployOptions{yes: true})
+		if err != nil {
+			t.Fatalf("runDeploy err = %v; output=%s", err, out)
+		}
+		if !strings.Contains(out, "Deployed") {
+			t.Errorf("output = %q, want the deploy to have completed", out)
+		}
+	})
+
+	t.Run("a value that cannot be read names the cell", func(t *testing.T) {
+		fixture := setUpVariablesProject(t, stripeRequired)
+		envSet(t, fixture, "STRIPE_API_KEY", "sk_live_value", envOptions{})
+		fixture.Provider.Cipher().(*fake.Cipher).RefuseOpening(errors.New("the store is unreachable"))
+
+		out, err := deployWith(t, newTestDependencies(), fixture, deployOptions{yes: true})
+		if err == nil {
+			t.Fatal("runDeploy err = nil, want a store it cannot read to stop the deploy")
+		}
+		if said := out + err.Error(); !strings.Contains(said, "STRIPE_API_KEY (project root)") {
+			t.Errorf("output = %q, want it to name the cell that could not be read", said)
+		}
+	})
+
+	t.Run("a live value is never handed to the declaring process", func(t *testing.T) {
+		fixture := setUpVariablesProject(t, `[{"key":"LIVE_KEY","class":"VARIABLE_CLASS_SECRET","required":true},{"key":"BAKED_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
+		envSet(t, fixture, "LIVE_KEY", "sk_live_do_not_leak", envOptions{})
+		envSet(t, fixture, "BAKED_KEY", "baked_value", envOptions{})
+
+		cellsPath := filepath.Join(t.TempDir(), "cells.json")
+		t.Setenv("OCEL_TEST_ENV_CELLS_OUT", cellsPath)
+
+		if out, err := deployWith(t, newTestDependencies(), fixture, deployOptions{yes: true}); err != nil {
+			t.Fatalf("runDeploy err = %v; output=%s", err, out)
+		}
+
+		raw, readErr := os.ReadFile(cellsPath)
+		if readErr != nil {
+			t.Fatalf("read cells handed to discovery: %v", readErr)
+		}
+		if strings.Contains(string(raw), "sk_live_do_not_leak") {
+			t.Errorf("cells = %s, want a live value never pulled onto the build host", raw)
+		}
+
+		var cells []struct {
+			Key   string `json:"key"`
+			Value string `json:"value"`
+		}
+		if err := json.Unmarshal(raw, &cells); err != nil {
+			t.Fatalf("unmarshal cells: %v", err)
+		}
+		byKey := map[string]string{}
+		for _, c := range cells {
+			byKey[c.Key] = c.Value
+		}
+		if _, ok := byKey["LIVE_KEY"]; !ok {
+			t.Error("cells has no LIVE_KEY, want the live cell reported present so it is not called missing")
+		}
+		if byKey["BAKED_KEY"] != "baked_value" {
+			t.Errorf("BAKED_KEY = %q, want the plaintext its schema is checked against", byKey["BAKED_KEY"])
+		}
+	})
+
+	t.Run("a folder no app binds is a warning, not a refusal", func(t *testing.T) {
+		fixture := setUpVariablesProject(t, `[{"key":"PAGE_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`)
+		writeAppsConfig(t, fixture.Root, `{ name: "api", path: "apps/api", framework: "node" }`)
+		writeAppSource(t, fixture.Root, "api")
+		envSet(t, fixture, "PAGE_ID", "page_web", envOptions{folder: "/web"})
+		dependencies := newTestDependencies()
+		stubBuild(&dependencies, nil)
+
+		out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true})
+		if err != nil {
+			t.Fatalf("runDeploy err = %v, want a dead scope to warn, not stop the deploy; output=%s", err, out)
+		}
+		if !strings.Contains(out, "PAGE_ID") || !strings.Contains(out, "/web") {
+			t.Errorf("output = %q, want a warning naming the key and the folder no app binds", out)
+		}
+	})
+
+	t.Run("each app is built with its own diverged value", func(t *testing.T) {
+		fixture := setUpVariablesProject(t, `[{"key":"PAGE_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web","/admin"]}]`)
+		writeAppsConfig(t, fixture.Root, `
+    { name: "web", path: "apps/web", framework: "node", folder: "/web" },
+    { name: "admin", path: "apps/admin", framework: "node", folder: "/admin" }`)
+		writeAppSource(t, fixture.Root, "web", "admin")
+		envSet(t, fixture, "PAGE_ID", "page_web", envOptions{folder: "/web"})
+		envSet(t, fixture, "PAGE_ID", "page_admin", envOptions{folder: "/admin"})
+
+		dependencies := newTestDependencies()
+		got := captureBuildEnv(&dependencies)
+
+		if out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true}); err != nil {
+			t.Fatalf("runDeploy err = %v; output=%s", err, out)
+		}
+		if (*got)["web"]["PAGE_ID"] != "page_web" || (*got)["admin"]["PAGE_ID"] != "page_admin" {
+			t.Errorf("build environments = %v, want each app the value it resolved", *got)
+		}
+	})
+
+	t.Run("a half-completed folder rename stops the deploy naming both files", func(t *testing.T) {
+		fixture := setUpVariablesProject(t, `[{"key":"PAGE_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web","/admin"],"source":"ocel/env.ts"}]`)
+		writeAppsConfig(t, fixture.Root, `
+    { name: "web", path: "apps/web", framework: "node", folder: "/web" },
+    { name: "admin", path: "apps/admin", framework: "node", folder: "/administration" }`)
+		envSet(t, fixture, "PAGE_ID", "page_web", envOptions{folder: "/web"})
+		envSet(t, fixture, "PAGE_ID", "page_admin", envOptions{folder: "/admin"})
+
+		dependencies := newTestDependencies()
+		built := false
+		stubAppBuildRecorder(&dependencies, &built)
+
+		out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true})
+		if err == nil {
+			t.Fatal("runDeploy err = nil, want a half-finished folder rename to stop the deploy")
+		}
+		said := out + err.Error()
+		for _, want := range []string{"PAGE_ID", "/admin", "ocel.config.ts", "env.ts"} {
+			if !strings.Contains(said, want) {
+				t.Errorf("output = %q, want it to name %q", said, want)
+			}
+		}
+		if built {
+			t.Error("the app was built, want the lint to refuse before any build runs")
+		}
+	})
+
+	t.Run("a reference satisfies the declarations with its source's value", func(t *testing.T) {
+		fixture := setUpVariablesProject(t, `[{"key":"PAGE_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
+		ownedElsewhere(t, fixture, "platform", "PAGE_ID", "page_owned_by_platform")
+		envRef(t, fixture, "PAGE_ID", "platform")
+		writeRootApp(t, fixture.Root)
+
+		dependencies := newTestDependencies()
+		got := captureBuildEnv(&dependencies)
+
+		if out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true}); err != nil {
+			t.Fatalf("runDeploy err = %v; output=%s", err, out)
+		}
+		if (*got)[clitest.FixtureSlug]["PAGE_ID"] != "page_owned_by_platform" {
+			t.Errorf("build environment = %v, want the value the other project stores", *got)
+		}
+	})
+}
+
+func setUpPreviewVariablesProject(t *testing.T, definitions string) (clitest.FakeProject, Dependencies) {
+	t.Helper()
+	fixture := setUpVariablesProject(t, definitions)
+	bootstrapTier(t, fixture, environment.TierPreview)
+	writeRootApp(t, fixture.Root)
+	dependencies := newTestDependencies()
+	stubGit(&dependencies, "feature/login", "")
+	return fixture, dependencies
+}
+
+func previewUpWith(t *testing.T, fixture clitest.FakeProject, dependencies Dependencies, opts previewUpOptions) (string, error) {
+	t.Helper()
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	err := runPreviewUp(context.Background(), dependencies, fixture.Root, opts, &stdout, &stderr, strings.NewReader(""))
+	return stdout.String() + stderr.String(), err
+}
+
+func TestAPreviewIsRefusedUntilItsVariablesAreReady(t *testing.T) {
+	t.Run("a production value does not satisfy the preview declarations", func(t *testing.T) {
+		fixture, dependencies := setUpPreviewVariablesProject(t, stripeRequired)
+		envSet(t, fixture, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
+		built := false
+		stubAppBuildRecorder(&dependencies, &built)
+
+		out, err := previewUpWith(t, fixture, dependencies, previewUpOptions{name: "staging"})
+		if err == nil {
+			t.Fatal("runPreviewUp err = nil, want the preview declarations to refuse: the production store is not the preview one")
+		}
+		said := out + err.Error()
+		if !strings.Contains(said, "STRIPE_API_KEY") {
+			t.Errorf("output = %q, want it to name the cell the preview bootstrap is missing", said)
+		}
+		if strings.Contains(said, "sk_live_secret") {
+			t.Errorf("output = %q, want no production value reachable from a preview", said)
+		}
+		if built {
+			t.Error("the app was built, want the declarations to refuse before any build runs")
+		}
+	})
+
+	t.Run("the environment being deployed resolves its own override", func(t *testing.T) {
+		for name, tc := range map[string]struct {
+			deploying string
+			want      string
+		}{
+			"the environment with the override": {deploying: "staging", want: "page_staging"},
+			"another preview":                   {deploying: "canary", want: "page_shared"},
+		} {
+			t.Run(name, func(t *testing.T) {
+				fixture, dependencies := setUpPreviewVariablesProject(t, `[{"key":"PAGE_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
+				envSet(t, fixture, "PAGE_ID", "page_shared", envOptions{preview: true})
+				envSet(t, fixture, "PAGE_ID", "page_staging", envOptions{preview: true, environment: "staging"})
+				got := captureBuildEnv(&dependencies)
+
+				if out, err := previewUpWith(t, fixture, dependencies, previewUpOptions{name: tc.deploying}); err != nil {
+					t.Fatalf("runPreviewUp err = %v; output=%s", err, out)
+				}
+				if len(*got) == 0 {
+					t.Fatal("no app was built, so nothing resolved a value")
+				}
+				for app, env := range *got {
+					if env["PAGE_ID"] != tc.want {
+						t.Errorf("%s built with PAGE_ID=%q, want %q", app, env["PAGE_ID"], tc.want)
+					}
+				}
+			})
+		}
+	})
+
+	t.Run("an override is the only value its own environment needs", func(t *testing.T) {
+		fixture, dependencies := setUpPreviewVariablesProject(t, `[{"key":"PAGE_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
+		envSet(t, fixture, "PAGE_ID", "page_staging", envOptions{preview: true, environment: "staging"})
+		got := captureBuildEnv(&dependencies)
+
+		if out, err := previewUpWith(t, fixture, dependencies, previewUpOptions{name: "staging"}); err != nil {
+			t.Fatalf("runPreviewUp err = %v, want staging's own override to satisfy the declarations; output=%s", err, out)
+		}
+		if len(*got) == 0 {
+			t.Fatal("no app was built, so nothing resolved a value")
+		}
+		for app, env := range *got {
+			if env["PAGE_ID"] != "page_staging" {
+				t.Errorf("%s built with PAGE_ID=%q, want %q", app, env["PAGE_ID"], "page_staging")
+			}
+		}
+	})
+
+	t.Run("a redeployed branch finds the override it already had", func(t *testing.T) {
+		fixture, dependencies := setUpPreviewVariablesProject(t, `[{"key":"PAGE_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
+		envSet(t, fixture, "PAGE_ID", "page_shared", envOptions{preview: true})
+		envSet(t, fixture, "PAGE_ID", "page_staging", envOptions{preview: true, environment: "staging"})
+		got := captureBuildEnv(&dependencies)
+
+		up := func(when string) {
+			t.Helper()
+			*got = nil
+			if out, err := previewUpWith(t, fixture, dependencies, previewUpOptions{name: "staging"}); err != nil {
+				t.Fatalf("runPreviewUp %s err = %v; output=%s", when, err, out)
+			}
+			if len(*got) == 0 {
+				t.Fatalf("no app was built %s, so nothing resolved a value", when)
+			}
+			for app, env := range *got {
+				if env["PAGE_ID"] != "page_staging" {
+					t.Errorf("%s built %s with PAGE_ID=%q, want %q", when, app, env["PAGE_ID"], "page_staging")
+				}
+			}
+		}
+
+		up("before the teardown")
+
+		var rm bytes.Buffer
+		clitest.AttachTerminalSink(dependencies.Invocation, &rm)
+		if err := runPreviewRemove(context.Background(), dependencies, fixture.Root, previewRemoveOptions{name: "staging", yes: true}, &rm, &rm, strings.NewReader("")); err != nil {
+			t.Fatalf("runPreviewRemove err = %v; out=%s", err, rm.String())
+		}
+
+		up("after the branch was rebuilt")
+	})
+}
+
+func nothingToDeployHeadline(t *testing.T, fields string) string {
+	t.Helper()
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, nil)
+	useJSONLogFormat(t, &dependencies)
+	fixture := setUpDeployProject(t)
+	writeConfig(t, fixture.Root, fields)
+	clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(fixture.Root), "main.ts"), "export {};\n")
+	writeAppSource(t, fixture.Root, "web", "api")
+
+	out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true})
+	if err != nil {
+		t.Fatalf("runDeploy err = %v; output=%s", err, out)
+	}
+	evs := envelopes(t, out)
+	return evs[len(evs)-1].GetSummary().GetHeadline()
+}
+
+func TestAProjectWithoutAppsOrResourcesHasNothingToDeploy(t *testing.T) {
+	headline := nothingToDeployHeadline(t, "")
+	if want := "Nothing to deploy: test-app declares no apps or resources"; headline != want {
+		t.Errorf("headline = %q, want %q", headline, want)
+	}
+}
+
+func TestAppsThatBuildNoFunctionOrImageAreNamedWhenNothingIsLeftToDeploy(t *testing.T) {
+	headline := nothingToDeployHeadline(t, `  apps: [
+    { name: "web", path: "apps/web", framework: "node" },
+    { name: "api", path: "apps/api", framework: "node" },
+  ],
+`)
+	if want := "Nothing to deploy: 2 apps (web and api) built no function or image, and test-app declares no resources"; headline != want {
+		t.Errorf("headline = %q, want %q", headline, want)
+	}
+}
+
+type infisicalProject struct {
+	URL string
+
+	mu      sync.Mutex
+	secrets map[string]string
+	created []string
+	refusal string
+}
+
+func serveInfisicalProject(t *testing.T, secrets map[string]string) *infisicalProject {
+	t.Helper()
+	source := &infisicalProject{secrets: map[string]string{}}
+	maps.Copy(source.secrets, secrets)
+	server := httptest.NewServer(source)
+	t.Cleanup(server.Close)
+	source.URL = server.URL
+	return source
+}
+
+func (p *infisicalProject) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	key := strings.TrimPrefix(r.URL.Path, "/api/v4/secrets/")
+	switch {
+	case r.URL.Path == "/api/v1/auth/universal-auth/login":
+		_ = json.NewEncoder(w).Encode(map[string]any{"accessToken": "token", "expiresIn": 3600})
+	case r.Header.Get("Authorization") != "Bearer token":
+		w.WriteHeader(http.StatusUnauthorized)
+	case r.URL.Path == "/api/v1/projects/p-1":
+		_ = json.NewEncoder(w).Encode(map[string]any{"project": map[string]any{"orgId": "org-1"}})
+	case p.refusal != "":
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]any{"message": p.refusal})
+	case r.Method == http.MethodGet && r.URL.Path == "/api/v4/secrets":
+		secrets := []map[string]any{}
+		for key, value := range p.secrets {
+			secrets = append(secrets, map[string]any{"id": key, "secretKey": key, "secretValue": value, "version": 1})
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"secrets": secrets})
+	case r.Method == http.MethodPost:
+		var body map[string]string
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		p.secrets[key] = body["secretValue"]
+		p.created = append(p.created, key+"="+body["secretValue"])
+		_ = json.NewEncoder(w).Encode(map[string]any{"secret": map[string]any{"id": key}})
+	default:
+		w.WriteHeader(http.StatusNotFound)
+	}
+}
+
+func (p *infisicalProject) refuseReads(message string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.refusal = message
+}
+
+func (p *infisicalProject) createdKeys() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return slices.Clone(p.created)
+}
+
+func (p *infisicalProject) config(write string) string {
+	return `
+export default {
+  slug: "` + clitest.FixtureSlug + `",
+  provider: { fake: {} },
+  domains: { production: "` + productionDomain + `" },
+  envSource: {
+    production: { infisical: { project: "p-1", environment: "prod", host: "` + p.URL + `", write: "` + write + `", auth: { universal: { clientId: { $env: "INFISICAL_CLIENT_ID" }, clientSecret: { $env: "INFISICAL_CLIENT_SECRET" } } } } },
+  },
+};
+`
+}
+
+const stripeDeclared = `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true,"description":"Stripe's secret key"}]`
+
+func setUpEnvSourceProject(t *testing.T, secrets map[string]string, write string) (clitest.FakeProject, *infisicalProject) {
+	t.Helper()
+	fixture := setUpVariablesProjectWith(t, stripeDeclared, clitest.EnvDeclareOnlyScript)
+	source := serveInfisicalProject(t, secrets)
+	clitest.WriteFile(t, filepath.Join(fixture.Root, "ocel.config.ts"), source.config(write))
+	envSet(t, fixture, "INFISICAL_CLIENT_ID", "client-id", envOptions{})
+	envSet(t, fixture, "INFISICAL_CLIENT_SECRET", "client-secret", envOptions{})
+	return fixture, source
+}
+
+func registeredEnvSource(t *testing.T, fixture clitest.FakeProject) (envsource.Registration, bool) {
+	t.Helper()
+	registration, registered, err := envsource.Registered(context.Background(), fixture.Provider.KeyValues(), environment.TierProduction, clitest.FixtureSlug)
+	if err != nil {
+		t.Fatalf("read the registered env source: %v", err)
+	}
+	return registration, registered
+}
+
+func TestADeployReadsItsTiersEnvSourceBeforeCheckingItsVariables(t *testing.T) {
+	t.Run("a value the env source has passes the variables check", func(t *testing.T) {
+		fixture, _ := setUpEnvSourceProject(t, map[string]string{"STRIPE_API_KEY": "sk_live_from_the_source"}, "never")
+
+		out, err := deployWith(t, newTestDependencies(), fixture, deployOptions{yes: true})
+		if err != nil {
+			t.Fatalf("runDeploy err = %v; output=%s", err, out)
+		}
+		if !strings.Contains(out, "Deployed") {
+			t.Errorf("output = %q, want the deploy to complete on the env source's value", out)
+		}
+		if value := storedValue(t, fixture, "STRIPE_API_KEY"); value.Plaintext != "sk_live_from_the_source" {
+			t.Errorf("STRIPE_API_KEY = %q, want the value copied from the env source", value.Plaintext)
+		}
+	})
+
+	t.Run("a value the env source lacks refuses, naming where to set it", func(t *testing.T) {
+		fixture, source := setUpEnvSourceProject(t, nil, "never")
+
+		out, err := deployWith(t, newTestDependencies(), fixture, deployOptions{yes: true})
+		if err == nil {
+			t.Fatal("runDeploy err = nil, want the variables check to refuse")
+		}
+		for _, want := range []string{"STRIPE_API_KEY", "set it in infisical:p-1/prod", source.URL} {
+			if !strings.Contains(out, want) {
+				t.Errorf("output = %q, want %q", out, want)
+			}
+		}
+		if strings.Contains(out, "ocel env set STRIPE_API_KEY") {
+			t.Errorf("output = %q, want no `ocel env set` offered for a value the env source owns", out)
+		}
+	})
+
+	t.Run("what the env source has and nothing declares is a warning, not a refusal", func(t *testing.T) {
+		fixture, _ := setUpEnvSourceProject(t, map[string]string{"STRIPE_API_KEY": "sk", "OLD_TOKEN": "old"}, "never")
+
+		out, err := deployWith(t, newTestDependencies(), fixture, deployOptions{yes: true})
+		if err != nil {
+			t.Fatalf("runDeploy err = %v; output=%s", err, out)
+		}
+		if !strings.Contains(out, "OLD_TOKEN") || !strings.Contains(out, "nothing this project declares") {
+			t.Errorf("output = %q, want OLD_TOKEN reported as undeclared", out)
+		}
+	})
+
+	t.Run("an env source that cannot be read stops the deploy before anything is built", func(t *testing.T) {
+		fixture, source := setUpEnvSourceProject(t, nil, "never")
+		source.refuseReads("the env source is down for maintenance")
+		dependencies := newTestDependencies()
+		built := false
+		stubAppBuildRecorder(&dependencies, &built)
+
+		out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true})
+		if err == nil || built {
+			t.Fatalf("runDeploy err = %v, built = %v, want an unreadable env source to stop the deploy first", err, built)
+		}
+		if said := out + err.Error(); !strings.Contains(said, "503") && !strings.Contains(said, "down for maintenance") {
+			t.Errorf("output = %q, want the env source's failure named", said)
+		}
+	})
+
+	t.Run("an unset credential stops the deploy with the command that sets it", func(t *testing.T) {
+		fixture := setUpVariablesProjectWith(t, stripeDeclared, clitest.EnvDeclareOnlyScript)
+		source := serveInfisicalProject(t, nil)
+		clitest.WriteFile(t, filepath.Join(fixture.Root, "ocel.config.ts"), source.config("never"))
+		envSet(t, fixture, "INFISICAL_CLIENT_ID", "client-id", envOptions{})
+
+		out, err := deployWith(t, newTestDependencies(), fixture, deployOptions{yes: true})
+		if err == nil || !strings.Contains(out, "1 variable is not ready") || !strings.Contains(out, "INFISICAL_CLIENT_SECRET  root  no value") {
+			t.Fatalf("runDeploy err = %v; output=%s, want the variables check to refuse the unset credential alone", err, out)
+		}
+		if !strings.Contains(out, "ocel env set INFISICAL_CLIENT_SECRET=<VALUE>") {
+			t.Errorf("output = %q, want the credential's command named, not the env source", out)
+		}
+	})
+
+	t.Run("an unset credential opens the recovery page, and saving it there resumes the deploy", func(t *testing.T) {
+		fixture := setUpVariablesProjectWith(t, stripeDeclared, clitest.EnvDeclareOnlyScript)
+		source := serveInfisicalProject(t, map[string]string{"STRIPE_API_KEY": "sk_live_from_the_source"})
+		clitest.WriteFile(t, filepath.Join(fixture.Root, "ocel.config.ts"), source.config("never"))
+		dependencies := newTestDependencies()
+		terminalStdin(&dependencies)
+		var mu sync.Mutex
+		var opened []string
+		recordBrowser(&dependencies, &opened, &mu)
+
+		var out syncBuffer
+		var stderr bytes.Buffer
+		clitest.AttachTerminalSink(dependencies.Invocation, &out)
+		done := make(chan error, 1)
+		go func() {
+			done <- runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
+		}()
+
+		address, token := awaitEditorURL(t, &out, 1)
+		setCell(t, address, token, "INFISICAL_CLIENT_ID", "client-id")
+		setCell(t, address, token, "INFISICAL_CLIENT_SECRET", "client-secret")
+		markDone(t, address, token)
+
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatalf("runDeploy err = %v, want the deploy to resume on the env source's values; stdout=%s", err, out.String())
+			}
+		case <-time.After(60 * time.Second):
+			t.Fatal("runDeploy never returned after the credentials were saved")
+		}
+		if !strings.Contains(out.String(), "Deployed") {
+			t.Errorf("stdout = %q, want the resumed deploy to have completed", out.String())
+		}
+	})
+
+	t.Run("a writable env source is handed the keys it lacks, empty, for a human to fill", func(t *testing.T) {
+		fixture, source := setUpEnvSourceProject(t, nil, "missing")
+
+		out, err := deployWith(t, newTestDependencies(), fixture, deployOptions{yes: true})
+		if err == nil {
+			t.Fatal("runDeploy err = nil, want the variables check to refuse: an empty key is still unset")
+		}
+		if created := source.createdKeys(); !slices.Equal(created, []string{"STRIPE_API_KEY="}) {
+			t.Fatalf("created = %v, want STRIPE_API_KEY created empty", created)
+		}
+		if !strings.Contains(out, "Created STRIPE_API_KEY empty in infisical:p-1/prod") {
+			t.Errorf("output = %q, want the creation reported", out)
+		}
+	})
+
+	t.Run("a dry run creates nothing in the env source", func(t *testing.T) {
+		fixture, source := setUpEnvSourceProject(t, nil, "missing")
+
+		out, _ := deployWith(t, newTestDependencies(), fixture, deployOptions{yes: true, dry: true})
+		if _, registered := registeredEnvSource(t, fixture); !registered || !strings.Contains(out, "STRIPE_API_KEY") {
+			t.Fatalf("registered = %v, output = %q, want the dry run to have read the env source and refused", registered, out)
+		}
+		if created := source.createdKeys(); len(created) != 0 {
+			t.Errorf("created = %v, want a dry run to write nothing into the env source", created)
+		}
+	})
+
+	t.Run("exec runs where ocel deploys, and the provider is handed what it printed", func(t *testing.T) {
+		fixture := setUpVariablesProjectWith(t, stripeDeclared, clitest.EnvDeclareOnlyScript)
+		clitest.WriteFile(t, filepath.Join(fixture.Root, "ocel.config.ts"), `
+export default {
+  slug: "`+clitest.FixtureSlug+`",
+  provider: { fake: {} },
+  domains: { production: "`+productionDomain+`" },
+  envSource: {
+    production: { exec: { command: ["sh", "-c", "printf 'STRIPE_API_KEY=sk_from_exec'"], format: "dotenv" } },
+  },
+};
+`)
+
+		if out, err := deployWith(t, newTestDependencies(), fixture, deployOptions{yes: true}); err != nil {
+			t.Fatalf("runDeploy err = %v; output=%s", err, out)
+		}
+		value := storedValue(t, fixture, "STRIPE_API_KEY")
+		if value.Plaintext != "sk_from_exec" || value.Provenance.EnvSource != "exec" {
+			t.Errorf("STRIPE_API_KEY = %q from %q, want the value copied from exec", value.Plaintext, value.Provenance.EnvSource)
+		}
+	})
+
+	t.Run("a tier back on builtin forgets the env source it read before", func(t *testing.T) {
+		fixture, _ := setUpEnvSourceProject(t, map[string]string{"STRIPE_API_KEY": "sk"}, "never")
+		if out, err := deployWith(t, newTestDependencies(), fixture, deployOptions{yes: true}); err != nil {
+			t.Fatalf("runDeploy err = %v; output=%s", err, out)
+		}
+		writeConfig(t, fixture.Root, "")
+
+		if out, err := deployWith(t, newTestDependencies(), fixture, deployOptions{yes: true}); err != nil {
+			t.Fatalf("runDeploy err = %v; output=%s", err, out)
+		}
+		if registration, registered := registeredEnvSource(t, fixture); registered {
+			t.Errorf("production still reads from %s, want its registration forgotten", registration.Descriptor.ID())
+		}
+	})
+}
+
+func stubAppBuildRecorder(dependencies *Dependencies, built *bool) {
+	stubRecordedDeploymentIDs(dependencies)
+	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
+		*built = true
+		return functionsOnDisk(cfg)
+	}
+}
+
+func captureBuildEnv(dependencies *Dependencies) *map[string]map[string]string {
+	stubRecordedDeploymentIDs(dependencies)
+	var got map[string]map[string]string
+	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, envByApp map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
+		got = envByApp
+		return functionsOnDisk(cfg)
+	}
+	return &got
+}
+
+func ownedElsewhere(t *testing.T, fixture clitest.FakeProject, owner, key, value string) {
+	t.Helper()
+	setValue(t, fixture, envvars.Scope{Project: owner, Tier: environment.TierProduction}, key, value, envOptions{})
+}
+
+func envRef(t *testing.T, fixture clitest.FakeProject, key, owner string) {
+	t.Helper()
+	scope := envvars.Scope{Project: clitest.FixtureSlug, Tier: environment.TierProduction}
+	at := envvars.Coordinate{Cell: envvars.Cell{Key: key}}
+	if _, err := valueStore(fixture).SetReference(context.Background(), scope, at, envvars.Target{Project: owner, Cell: envvars.Cell{Key: key}}); err != nil {
+		t.Fatalf("reference %s in %s: %v", key, owner, err)
+	}
+}
+
+func storedValue(t *testing.T, fixture clitest.FakeProject, key string) envvars.Value {
+	t.Helper()
+	scope := envvars.Scope{Project: clitest.FixtureSlug, Tier: environment.TierProduction}
+	value, err := valueStore(fixture).Get(context.Background(), scope, envvars.Coordinate{Cell: envvars.Cell{Key: key}}, true)
+	if err != nil {
+		t.Fatalf("read %s: %v", key, err)
+	}
+	return value
 }
