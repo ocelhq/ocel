@@ -2,7 +2,9 @@ package edgeconformance
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"maps"
 	"net/netip"
 	"slices"
@@ -15,6 +17,7 @@ import (
 type Suite struct {
 	New       func(t *testing.T) (edge.Edge, edge.StackSpec)
 	Hostname  string
+	Origin    *edge.Origin
 	Previews  func(t *testing.T) (edge.Edge, edge.StackSpec, edge.PreviewWildcardSpec)
 	Bootstrap func(t *testing.T) (edge.Edge, environment.Tier)
 }
@@ -92,8 +95,8 @@ func Run(t *testing.T, suite Suite) {
 	t.Run("binding a domain twice binds it once and shows in state", func(t *testing.T) {
 		ctx := context.Background()
 		e, stack := reconciledOn(t, suite)
-		binds(t, stack, suite.Hostname)
-		if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: suite.Hostname}); err != nil {
+		suite.binds(t, stack)
+		if err := stack.BindDomain(ctx, suite.binding()); err != nil {
 			t.Fatalf("BindDomain again: %v", err)
 		}
 
@@ -117,7 +120,7 @@ func Run(t *testing.T, suite Suite) {
 		if err != nil {
 			t.Fatalf("Reconcile: %v", err)
 		}
-		binds(t, stack, suite.Hostname)
+		suite.binds(t, stack)
 
 		mine := e.ProjectOwner(spec.Slug, spec.Tier)
 		if mine == "" {
@@ -135,7 +138,7 @@ func Run(t *testing.T, suite Suite) {
 
 	t.Run("a bound domain has a front to point DNS at", func(t *testing.T) {
 		e, stack := reconciledOn(t, suite)
-		binds(t, stack, suite.Hostname)
+		suite.binds(t, stack)
 
 		records := frontedRecords(t, e, stack.State(), suite.Hostname)
 
@@ -155,7 +158,7 @@ func Run(t *testing.T, suite Suite) {
 		if err != nil {
 			t.Fatalf("Open a state with no front: %v", err)
 		}
-		binds(t, stack, suite.Hostname)
+		suite.binds(t, stack)
 
 		frontedRecords(t, e, stack.State(), suite.Hostname)
 	})
@@ -164,7 +167,7 @@ func Run(t *testing.T, suite Suite) {
 		_, stack := reconciledOn(t, suite)
 
 		before := stack.State()
-		binds(t, stack, suite.Hostname)
+		suite.binds(t, stack)
 		if after := stack.State(); after.Equal(before) {
 			t.Errorf("state = %+v both before and after %q was bound; the origin writes what a call reports as changed, so a binding that reports nothing is lost the moment the process ends", after, suite.Hostname)
 		}
@@ -172,7 +175,7 @@ func Run(t *testing.T, suite Suite) {
 
 	t.Run("state survives the seam it is persisted through", func(t *testing.T) {
 		e, stack := reconciledOn(t, suite)
-		binds(t, stack, suite.Hostname)
+		suite.binds(t, stack)
 
 		written := stack.State()
 		persisted := roundTrip(t, written)
@@ -187,6 +190,69 @@ func Run(t *testing.T, suite Suite) {
 		frontedRecords(t, e, reopened.State(), suite.Hostname)
 	})
 
+	t.Run("an edge that proxies records forwards a hostname bound with an origin to that origin", func(t *testing.T) {
+		ctx := context.Background()
+		e, stack := reconciledOn(t, suite)
+		if !e.Facts().ProxiesRecords {
+			t.Skip("this edge proxies no record, so it answers every hostname it binds itself")
+		}
+		origin := edge.Origin{Address: "203.0.113.7"}
+		if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: suite.Hostname, Origin: &origin}); err != nil {
+			t.Fatalf("BindDomain with origin %+v: %v", origin, err)
+		}
+		t.Cleanup(func() {
+			if err := stack.UnbindDomain(context.Background(), suite.Hostname); err != nil {
+				t.Errorf("UnbindDomain(%q) releasing what this obligation bound: %v", suite.Hostname, err)
+			}
+		})
+
+		records, err := edge.RecordsFor(edge.TargetFor(e, stack.State()), []string{suite.Hostname})
+		if err != nil {
+			t.Fatalf("RecordsFor(%q): %v", suite.Hostname, err)
+		}
+		want := edge.Record{Name: suite.Hostname, Type: edge.RecordTypeA, Value: origin.Address, Proxied: true}
+		if len(records) != 1 || records[0] != want {
+			t.Errorf("records = %v, want the one %v: a hostname bound with an origin is forwarded there through the edge's proxy", records, want)
+		}
+		owner, err := e.DomainOwner(ctx, suite.Hostname)
+		if err != nil {
+			t.Fatalf("DomainOwner: %v", err)
+		}
+		if owner == "" {
+			t.Errorf("DomainOwner(%q) = %q after it was bound with an origin, want the surface the binding created", suite.Hostname, owner)
+		}
+	})
+
+	t.Run("an edge presents one client certificate to its origins however often it is asked", func(t *testing.T) {
+		e, _ := suite.New(t)
+		ensure := e.Hooks().EnsureClientCertificate
+		if ensure == nil {
+			t.Skip("this edge presents no client certificate to its origins")
+		}
+		first, err := ensure(context.Background(), suite.Hostname)
+		if err != nil {
+			t.Fatalf("EnsureClientCertificate(%q): %v", suite.Hostname, err)
+		}
+		second, err := ensure(context.Background(), suite.Hostname)
+		if err != nil {
+			t.Fatalf("EnsureClientCertificate(%q) again: %v", suite.Hostname, err)
+		}
+		if second != first {
+			t.Errorf("EnsureClientCertificate(%q) named another certificate the second time; an origin pinned to the first would refuse every request the edge forwards", suite.Hostname)
+		}
+		block, _ := pem.Decode([]byte(first))
+		if block == nil || block.Type != "CERTIFICATE" {
+			t.Fatalf("EnsureClientCertificate(%q) = %q, want a PEM certificate", suite.Hostname, first)
+		}
+		leaf, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			t.Fatalf("parse the client certificate: %v", err)
+		}
+		if !slices.Contains(leaf.ExtKeyUsage, x509.ExtKeyUsageClientAuth) {
+			t.Errorf("the client certificate is good for %v, want client authentication among them", leaf.ExtKeyUsage)
+		}
+	})
+
 	t.Run("unbinding a domain twice leaves nothing bound", func(t *testing.T) {
 		ctx := context.Background()
 		e, stack := reconciledOn(t, suite)
@@ -194,7 +260,7 @@ func Run(t *testing.T, suite Suite) {
 		if err := stack.UnbindDomain(ctx, suite.Hostname); err != nil {
 			t.Fatalf("UnbindDomain before any binding: %v", err)
 		}
-		if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: suite.Hostname}); err != nil {
+		if err := stack.BindDomain(ctx, suite.binding()); err != nil {
 			t.Fatalf("BindDomain: %v", err)
 		}
 		if err := stack.UnbindDomain(ctx, suite.Hostname); err != nil {
@@ -219,7 +285,7 @@ func Run(t *testing.T, suite Suite) {
 	t.Run("a hostname one surface releases is one the next can bind", func(t *testing.T) {
 		ctx := context.Background()
 		_, first := reconciledOn(t, suite)
-		if err := first.BindDomain(ctx, edge.DomainBinding{Hostname: suite.Hostname}); err != nil {
+		if err := first.BindDomain(ctx, suite.binding()); err != nil {
 			t.Fatalf("BindDomain: %v", err)
 		}
 		if err := first.UnbindDomain(ctx, suite.Hostname); err != nil {
@@ -227,7 +293,7 @@ func Run(t *testing.T, suite Suite) {
 		}
 
 		e, second := reconciledOn(t, suite)
-		binds(t, second, suite.Hostname)
+		suite.binds(t, second)
 
 		owner, err := e.DomainOwner(ctx, suite.Hostname)
 		if err != nil {
@@ -245,7 +311,7 @@ func Run(t *testing.T, suite Suite) {
 	t.Run("destroying a stack takes the domains it bound with it", func(t *testing.T) {
 		ctx := context.Background()
 		e, stack := reconciledOn(t, suite)
-		if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: suite.Hostname}); err != nil {
+		if err := stack.BindDomain(ctx, suite.binding()); err != nil {
 			t.Fatalf("BindDomain: %v", err)
 		}
 
@@ -371,10 +437,15 @@ func withoutFronts(state edge.StackState) edge.StackState {
 	return state
 }
 
-func binds(t *testing.T, stack edge.EdgeStack, hostname string) {
+func (s Suite) binding() edge.DomainBinding {
+	return edge.DomainBinding{Hostname: s.Hostname, Origin: s.Origin}
+}
+
+func (s Suite) binds(t *testing.T, stack edge.EdgeStack) {
 	t.Helper()
 
-	if err := stack.BindDomain(context.Background(), edge.DomainBinding{Hostname: hostname}); err != nil {
+	hostname := s.Hostname
+	if err := stack.BindDomain(context.Background(), s.binding()); err != nil {
 		t.Fatalf("BindDomain: %v", err)
 	}
 	t.Cleanup(func() {
