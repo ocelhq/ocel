@@ -49,54 +49,12 @@ func AddKnownIDs(provider string, edges, dns []string) (restore func()) {
 
 func ProviderNamedAlone(id string) bool { return slices.Contains(known.Provider.Shorthand, id) }
 
-type Selector[O any, K selectorKind] struct {
+type Selector[O any] struct {
 	ID      string
 	Options O
 }
 
-type selectorKind interface {
-	title() string
-	noun() string
-	of() selection
-}
-
-type ProviderDescriptor struct {
-	Selector[json.RawMessage, providerSelector]
-}
-
-type EdgeDescriptor struct {
-	Selector[EdgeOptions, edgeSelector]
-}
-
-type EdgeOptions struct{}
-
-type DNSDescriptor struct {
-	Selector[DNSOptions, dnsSelector]
-}
-
-type DNSOptions struct {
-	Zone string `json:"zone,omitempty" doc:"The zone the records are written into. Omit it and ocel picks the zone that covers the hostname."`
-}
-
-type providerSelector struct{}
-
-func (providerSelector) title() string { return "ProviderDescriptor" }
-func (providerSelector) noun() string  { return "provider" }
-func (providerSelector) of() selection { return known.Provider }
-
-type edgeSelector struct{}
-
-func (edgeSelector) title() string { return "EdgeDescriptor" }
-func (edgeSelector) noun() string  { return "edge" }
-func (edgeSelector) of() selection { return known.Edge }
-
-type dnsSelector struct{}
-
-func (dnsSelector) title() string { return "DNSDescriptor" }
-func (dnsSelector) noun() string  { return "DNS service" }
-func (dnsSelector) of() selection { return known.DNS }
-
-func (s *Selector[O, K]) UnmarshalJSON(data []byte) error {
+func (s *Selector[O]) UnmarshalJSON(data []byte) error {
 	id, options, err := unmarshalSelector(data)
 	if err != nil {
 		return err
@@ -105,14 +63,46 @@ func (s *Selector[O, K]) UnmarshalJSON(data []byte) error {
 	return json.Unmarshal(options, &s.Options)
 }
 
-func (Selector[O, K]) checkShape(path string, value any) error {
-	var kind K
-	return checkSelector(path, value, kind.noun(), kind.of(), reflect.TypeFor[O]())
+type ProviderDescriptor struct {
+	Selector[json.RawMessage]
 }
 
-func (Selector[O, K]) jsonSchema() object {
-	var kind K
-	return selectorSchema(kind.title(), schemaOf(reflect.TypeFor[O]()))
+func (ProviderDescriptor) checkShape(path string, value any) error {
+	return checkSelector(path, value, "provider", known.Provider, reflect.TypeFor[json.RawMessage]())
+}
+
+func (ProviderDescriptor) jsonSchema() object {
+	return selectorSchema("ProviderDescriptor", schemaOf(reflect.TypeFor[json.RawMessage]()))
+}
+
+type EdgeDescriptor struct {
+	Selector[EdgeOptions]
+}
+
+type EdgeOptions struct{}
+
+func (EdgeDescriptor) checkShape(path string, value any) error {
+	return checkSelector(path, value, "edge", known.Edge, reflect.TypeFor[EdgeOptions]())
+}
+
+func (EdgeDescriptor) jsonSchema() object {
+	return selectorSchema("EdgeDescriptor", schemaOf(reflect.TypeFor[EdgeOptions]()))
+}
+
+type DNSDescriptor struct {
+	Selector[DNSOptions]
+}
+
+type DNSOptions struct {
+	Zone string `json:"zone,omitempty" doc:"The zone the records are written into. Omit it and ocel picks the zone that covers the hostname."`
+}
+
+func (DNSDescriptor) checkShape(path string, value any) error {
+	return checkSelector(path, value, "DNS service", known.DNS, reflect.TypeFor[DNSOptions]())
+}
+
+func (DNSDescriptor) jsonSchema() object {
+	return selectorSchema("DNSDescriptor", schemaOf(reflect.TypeFor[DNSOptions]()))
 }
 
 func selectorSchema(title string, options object) object {
