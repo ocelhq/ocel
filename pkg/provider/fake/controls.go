@@ -3,10 +3,18 @@ package fake
 import (
 	"context"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 )
+
+const KeptPromotions = ledger.KeptPromotions
+
+func (p *Provider) Releases(tier environment.Tier, project string) *ledger.Ledger {
+	return ledger.New(p.KeyValues(), tier, project)
+}
 
 func (p *Provider) WithHooks(set func(*provider.Hooks)) *Provider {
 	p.mu.Lock()

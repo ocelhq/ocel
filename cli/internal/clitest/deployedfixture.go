@@ -12,7 +12,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
-	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -59,7 +58,7 @@ func RecordPromotions(t *testing.T, project FakeProject, promotionIDs ...string)
 
 	RecordEdgeStack(t, project, environment.TierProduction, fake.KindRelay)
 	ctx := context.Background()
-	releases := ledger.New(project.Provider.KeyValues(), environment.TierProduction, FixtureSlug)
+	releases := project.Provider.Releases(environment.TierProduction, FixtureSlug)
 	replaces := ""
 	for i, id := range promotionIDs {
 		build := fmt.Sprintf("%032x~%012x", i+1, i+1)

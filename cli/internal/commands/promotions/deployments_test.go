@@ -16,7 +16,6 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
-	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
@@ -46,7 +45,7 @@ func firstTwoPromotions() []router.Promotion {
 func recordPromotions(t *testing.T, project clitest.FakeProject, promotions ...router.Promotion) {
 	t.Helper()
 	clitest.RecordEdgeStack(t, project, environment.TierProduction, fake.KindRelay)
-	releases := productionLedger(project)
+	releases := project.Provider.Releases(environment.TierProduction, clitest.FixtureSlug)
 	replaces := ""
 	for _, promotion := range promotions {
 		for app, build := range promotion.Builds {
@@ -61,13 +60,9 @@ func recordPromotions(t *testing.T, project clitest.FakeProject, promotions ...r
 	}
 }
 
-func productionLedger(project clitest.FakeProject) *ledger.Ledger {
-	return ledger.New(project.Provider.KeyValues(), environment.TierProduction, clitest.FixtureSlug)
-}
-
 func activePromotionID(t *testing.T, project clitest.FakeProject) string {
 	t.Helper()
-	active, err := productionLedger(project).ActivePromotionID(context.Background(), "")
+	active, err := project.Provider.Releases(environment.TierProduction, clitest.FixtureSlug).ActivePromotionID(context.Background(), "")
 	if err != nil {
 		t.Fatalf("read the active promotion: %v", err)
 	}
@@ -179,7 +174,7 @@ func TestDeploymentsPruneReclaimsOldPromotionsOnceConsented(t *testing.T) {
 		if !strings.Contains(out, "Reclaimed promotion promo-1, kept 2") {
 			t.Errorf("stdout = %q, want it to report the reclaimed promotion and the kept count", out)
 		}
-		history, err := productionLedger(project).History(context.Background(), "")
+		history, err := project.Provider.Releases(environment.TierProduction, clitest.FixtureSlug).History(context.Background(), "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -241,7 +236,7 @@ func TestDeploymentsPruneReclaimsOldPromotionsOnceConsented(t *testing.T) {
 
 func assertKeptEveryPromotion(t *testing.T, project clitest.FakeProject) {
 	t.Helper()
-	history, err := productionLedger(project).History(context.Background(), "")
+	history, err := project.Provider.Releases(environment.TierProduction, clitest.FixtureSlug).History(context.Background(), "")
 	if err != nil {
 		t.Fatal(err)
 	}

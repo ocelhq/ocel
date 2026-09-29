@@ -18,7 +18,6 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
-	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
@@ -47,7 +46,7 @@ func TestRollbackMovesProductionToTheChosenPromotionOnceConsented(t *testing.T) 
 				t.Errorf("stdout missing %q; got:\n%s", want, out)
 			}
 		}
-		active, _, err := productionLedger(project).ReadActive(context.Background(), "")
+		active, _, err := project.Provider.Releases(environment.TierProduction, clitest.FixtureSlug).ReadActive(context.Background(), "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -382,7 +381,7 @@ func TestARollbackPassesOverAPromotionTakenBackAndRefusesToNameOne(t *testing.T)
 
 func TestARollbackShowsTheWarningsTheProviderReturned(t *testing.T) {
 	project := clitest.SetUpProject(t)
-	kept := make([]router.Promotion, ledger.KeptPromotions)
+	kept := make([]router.Promotion, fake.KeptPromotions)
 	for i := range kept {
 		kept[i] = router.Promotion{PromotionID: fmt.Sprintf("p%02d", i), Ts: int64(i + 1), Builds: map[string]string{"web": fmt.Sprintf("build-%02d~fp%02d", i, i)}}
 	}

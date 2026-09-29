@@ -21,7 +21,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
-	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/statedir"
 )
@@ -146,7 +145,7 @@ func TestADeploysResultNamesTheProjectAndProduction(t *testing.T) {
 
 func activePromotion(t *testing.T, fixture clitest.FakeProject, tier environment.Tier, pointer string) string {
 	t.Helper()
-	promoted, err := ledger.New(fixture.Provider.KeyValues(), tier, clitest.FixtureSlug).ActivePromotionID(context.Background(), pointer)
+	promoted, err := fixture.Provider.Releases(tier, clitest.FixtureSlug).ActivePromotionID(context.Background(), pointer)
 	if err != nil {
 		t.Fatalf("read the promotion %s serves: %v", pointer, err)
 	}
