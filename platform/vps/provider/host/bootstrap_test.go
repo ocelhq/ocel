@@ -57,34 +57,34 @@ func refusalOf(t *testing.T, err error, code refusal.Code) refusal.Refusal {
 	return refused
 }
 
-func TestHealReassertsTheStateTheDeployLoginOwns(t *testing.T) {
+func TestRepairReassertsTheStateTheDeployLoginOwns(t *testing.T) {
 	t.Parallel()
 
 	read := drifted(t, currentHost(), KeyValuesDir(environment.TierProduction))
-	work, _, err := healable(read)
+	work, _, err := repairable(read)
 	if err != nil {
-		t.Fatalf("healable() over a drifted record tier = %v, want the deploy login's own state reasserted", err)
+		t.Fatalf("repairable() over a drifted record tier = %v, want the deploy login's own state reasserted", err)
 	}
 	if len(work) != 1 || work[0].Name != KeyValuesDir(environment.TierProduction) {
-		t.Fatalf("healable() = %v, want only %s", ids(work), KeyValuesDir(environment.TierProduction))
+		t.Fatalf("repairable() = %v, want only %s", ids(work), KeyValuesDir(environment.TierProduction))
 	}
 }
 
-func TestHealRefusesAMixedSetWholeRatherThanDoingThePartItMay(t *testing.T) {
+func TestRepairRefusesAMixedSetWholeRatherThanDoingThePartItMay(t *testing.T) {
 	t.Parallel()
 
 	read := drifted(t, drifted(t, currentHost(), KeyValuesDir(environment.TierProduction)), boxstore.KeyValuesHelper)
-	work, _, err := healable(read)
+	work, _, err := repairable(read)
 	refused := refusalOf(t, err, refusal.CodeDenied)
 	if !strings.Contains(refused.Message, boxstore.KeyValuesHelper) {
-		t.Errorf("the refusal says %q, want it to name %s as what heal may not write", refused.Message, boxstore.KeyValuesHelper)
+		t.Errorf("the refusal says %q, want it to name %s as what repair may not write", refused.Message, boxstore.KeyValuesHelper)
 	}
 	if len(work) != 0 {
-		t.Errorf("healable() = %v alongside its refusal, want a mixed set refused whole", ids(work))
+		t.Errorf("repairable() = %v alongside its refusal, want a mixed set refused whole", ids(work))
 	}
 }
 
-func TestHealRefusesEveryItemOutsideTheRecordTier(t *testing.T) {
+func TestRepairRefusesEveryItemOutsideTheRecordTier(t *testing.T) {
 	t.Parallel()
 
 	tier := environment.TierProduction
@@ -92,77 +92,77 @@ func TestHealRefusesEveryItemOutsideTheRecordTier(t *testing.T) {
 		TierDir(tier), SealKeyPath(tier), boxstore.SealHelper, sudoersSeal(tier), deployUser, sshDir, authorizedKeys,
 	} {
 		read := drifted(t, currentHost(), name)
-		refused := refusalOf(t, second(healable(read)), refusal.CodeDenied)
+		refused := refusalOf(t, second(repairable(read)), refusal.CodeDenied)
 		if !strings.Contains(refused.Message, name) {
-			t.Errorf("heal over a drifted %s says %q, want it named as what heal may not write", name, refused.Message)
+			t.Errorf("repair over a drifted %s says %q, want it named as what repair may not write", name, refused.Message)
 		}
 	}
 }
 
-func TestHealLeavesWhatADaemonReportsRatherThanRefusingOverIt(t *testing.T) {
+func TestRepairLeavesWhatADaemonReportsRatherThanRefusingOverIt(t *testing.T) {
 	t.Parallel()
 
 	tier := environment.TierProduction
 	reported := []string{dockerEngine, dockerUnit, ProxyNetwork, caddy.Container, SwitchboardContainer}
 	for _, name := range reported {
 		read := drifted(t, drifted(t, currentHost(), KeyValuesDir(tier)), name)
-		work, left, err := healing(read, true)
+		work, left, err := repairing(read, true)
 		if err != nil {
-			t.Fatalf("heal over a box whose %s is not as the stamp records = %v, want it left: heal starts nothing and a daemon reports what it runs, so a stopped one is not drift heal can refuse over",
+			t.Fatalf("repair over a box whose %s is not as the stamp records = %v, want it left: repair starts nothing and a daemon reports what it runs, so a stopped one is not drift repair can refuse over",
 				name, err)
 		}
 		if len(work) != 1 || work[0].Name != KeyValuesDir(tier) {
-			t.Errorf("healing() over a drifted %s = %v, want only the record tier", name, ids(work))
+			t.Errorf("repairing() over a drifted %s = %v, want only the record tier", name, ids(work))
 		}
 		if !slices.ContainsFunc(left, func(item Item) bool { return item.Name == name }) {
-			t.Errorf("heal left %v over a drifted %s, and a box told nothing about what heal declined is one nobody can read the exit code of", ids(left), name)
+			t.Errorf("repair left %v over a drifted %s, and a box told nothing about what repair declined is one nobody can read the exit code of", ids(left), name)
 		}
 	}
 
 	for _, item := range Items(tier, []byte(aKey+"\n"), ArchAMD64, Front{}) {
 		if daemonState(item) && deployOwned(item) {
-			t.Errorf("%s is both a daemon's to report and heal's to write, and the two dispositions cannot both apply", item.ID())
+			t.Errorf("%s is both a daemon's to report and repair's to write, and the two dispositions cannot both apply", item.ID())
 		}
 	}
 }
 
-func TestHealWillNotReassertRecordsSealedToAKeyThatIsGone(t *testing.T) {
+func TestRepairWillNotReassertRecordsSealedToAKeyThatIsGone(t *testing.T) {
 	t.Parallel()
 
 	read := drifted(t, currentHost(), KeyValuesDir(environment.TierProduction))
 	read.Stamp.Seal = Seal{Fingerprint: "the key every value this tier stores was sealed to"}
 	delete(read.Observed, sealKey(read.Tier).ID())
-	refused := refusalOf(t, second(healing(read, true)), refusal.CodeInvalid)
+	refused := refusalOf(t, second(repairing(read, true)), refusal.CodeInvalid)
 	if !strings.Contains(refused.Message, SealKeyPath(read.Tier)) {
-		t.Errorf("heal over a tier whose seal key vanished says %q, want it to name the key: reasserting the records and calling the bootstrap refreshed loses the failure until unseal time", refused.Message)
+		t.Errorf("repair over a tier whose seal key vanished says %q, want it to name the key: reasserting the records and calling the bootstrap refreshed loses the failure until unseal time", refused.Message)
 	}
 }
 
-func TestHealReadsAKeyItCannotOpenAsTheKeyInPlace(t *testing.T) {
+func TestRepairReadsAKeyItCannotOpenAsTheKeyInPlace(t *testing.T) {
 	t.Parallel()
 
 	read := drifted(t, currentHost(), KeyValuesDir(environment.TierProduction))
 	read.Stamp.Seal = Seal{Fingerprint: "the key the stamp records"}
 	read.Seal = Seal{}
-	if _, _, err := healing(read, true); err != nil {
-		t.Errorf("heal driven by a login that cannot read the key's bytes = %v, want the key in place taken as the current key: nothing but root ever writes it", err)
+	if _, _, err := repairing(read, true); err != nil {
+		t.Errorf("repair driven by a login that cannot read the key's bytes = %v, want the key in place taken as the current key: nothing but root ever writes it", err)
 	}
 }
 
-func TestHealRunsTheReplacementRefusingGateTheRestOfApplyRuns(t *testing.T) {
+func TestRepairRunsTheReplacementRefusingGateTheRestOfApplyRuns(t *testing.T) {
 	t.Parallel()
 
 	read := drifted(t, currentHost(), KeyValuesDir(environment.TierProduction))
-	work, _, err := healing(read, true)
+	work, _, err := repairing(read, true)
 	if err != nil {
-		t.Fatalf("a replacement-refusing heal over a drifted record tier = %v, want the converge to proceed", err)
+		t.Fatalf("a replacement-refusing repair over a drifted record tier = %v, want the converge to proceed", err)
 	}
 	if err := refuseReplacements(read, work); err != nil {
-		t.Errorf("the gate over what a replacement-refusing heal admitted = %v, want heal to have refused it before writing a byte", err)
+		t.Errorf("the gate over what a replacement-refusing repair admitted = %v, want repair to have refused it before writing a byte", err)
 	}
 }
 
-func TestHealIsNotWedgedByWhatItsOwnLoginCannotSee(t *testing.T) {
+func TestRepairIsNotWedgedByWhatItsOwnLoginCannotSee(t *testing.T) {
 	t.Parallel()
 
 	tier := environment.TierProduction
@@ -181,16 +181,16 @@ func TestHealIsNotWedgedByWhatItsOwnLoginCannotSee(t *testing.T) {
 			t.Fatalf("%s reads as one %s can hash, and a survey drawn by that login reports nothing for it: %v", hidden, deployUser, unread)
 		}
 	}
-	work, _, err := healing(read, true)
+	work, _, err := repairing(read, true)
 	if err != nil {
-		t.Fatalf("heal over a survey that could read none of %v = %v, want the record tier reasserted anyway", unread, err)
+		t.Fatalf("repair over a survey that could read none of %v = %v, want the record tier reasserted anyway", unread, err)
 	}
 	if len(work) != 1 || work[0].Name != KeyValuesDir(tier) {
-		t.Errorf("healing() = %v, want only %s", ids(work), KeyValuesDir(tier))
+		t.Errorf("repairing() = %v, want only %s", ids(work), KeyValuesDir(tier))
 	}
 }
 
-func TestHealAsALoginThatIsNeitherRootNorSudoAsksForNeither(t *testing.T) {
+func TestRepairAsALoginThatIsNeitherRootNorSudoAsksForNeither(t *testing.T) {
 	t.Parallel()
 
 	tier := environment.TierProduction
@@ -213,40 +213,40 @@ func TestHealAsALoginThatIsNeitherRootNorSudoAsksForNeither(t *testing.T) {
 	}
 
 	err := NewBootstrap(box.host(), testVendor, "shop").Apply(context.Background(),
-		provider.BootstrapRequest{Tier: tier, WrittenBy: "the-suite", Heal: true, RefuseReplacements: true}, nil)
+		provider.BootstrapRequest{Tier: tier, WrittenBy: "the-suite", Repair: true, RefuseReplacements: true}, nil)
 	if err != nil {
-		t.Fatalf("heal driven by the deploy login = %v, want what that login owns reasserted without asking for root", err)
+		t.Fatalf("repair driven by the deploy login = %v, want what that login owns reasserted without asking for root", err)
 	}
 	ran := box.commands()
 	if !slices.ContainsFunc(ran, func(command string) bool {
 		return strings.HasPrefix(command, "install -d ") && strings.HasSuffix(command, quoted(records))
 	}) {
-		t.Errorf("heal never wrote %s back:\n%s", records, strings.Join(ran, "\n"))
+		t.Errorf("repair never wrote %s back:\n%s", records, strings.Join(ran, "\n"))
 	}
 	for _, command := range ran {
 		if strings.HasPrefix(command, "sudo ") {
-			t.Errorf("heal ran %q, and the login it runs as has no sudo at all", command)
+			t.Errorf("repair ran %q, and the login it runs as has no sudo at all", command)
 		}
 	}
 }
 
-func TestHealNeverFinishesAnApplyThatDiedMidWay(t *testing.T) {
+func TestRepairNeverFinishesAnApplyThatDiedMidWay(t *testing.T) {
 	t.Parallel()
 
 	read := drifted(t, currentHost(), KeyValuesDir(environment.TierProduction))
 	read.Stamp.State = StateApplying
-	refused := refusalOf(t, second(healable(read)), refusal.CodeDenied)
+	refused := refusalOf(t, second(repairable(read)), refusal.CodeDenied)
 	if !strings.Contains(refused.Message, StampPath(read.Tier)) {
-		t.Errorf("heal over an unfinished apply says %q, want it to name the stamp that says so", refused.Message)
+		t.Errorf("repair over an unfinished apply says %q, want it to name the stamp that says so", refused.Message)
 	}
 }
 
-func TestHealHasNothingToReassertWhereNoBootstrapRan(t *testing.T) {
+func TestRepairHasNothingToReassertWhereNoBootstrapRan(t *testing.T) {
 	t.Parallel()
 
 	tier := environment.TierProduction
 	fresh := Reading{Arch: ArchAMD64, Tier: tier, Observed: map[string]string{}}
-	refusalOf(t, second(healable(fresh)), refusal.CodeDenied)
+	refusalOf(t, second(repairable(fresh)), refusal.CodeDenied)
 }
 
 func second(_ []Item, _ []Item, err error) error { return err }
@@ -297,13 +297,13 @@ func TestAReplacementRefusingApplyConvergesAHostRatherThanRefusingEveryChange(t 
 	}
 }
 
-func TestNothingHealMayWriteIsAReplacementTierChange(t *testing.T) {
+func TestNothingRepairMayWriteIsAReplacementTierChange(t *testing.T) {
 	t.Parallel()
 
 	tier := environment.TierProduction
 	for _, item := range Items(tier, []byte(aKey+"\n"), ArchAMD64, Front{}) {
 		if deployOwned(item) && replacing(item) {
-			t.Errorf("heal may write %s and writing it replaces rather than converges, so heal, the one path that refuses replacements, would rebuild it", item.ID())
+			t.Errorf("repair may write %s and writing it replaces rather than converges, so repair, the one path that refuses replacements, would rebuild it", item.ID())
 		}
 	}
 }

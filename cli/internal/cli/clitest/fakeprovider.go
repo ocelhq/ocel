@@ -956,8 +956,8 @@ func journalBootstrap(req *contractv1.BootstrapRequest) {
 		line += " remove=" + strings.Join(removing, ",")
 	}
 	line += fmt.Sprintf(" force=%t acceptReplacements=%t", req.GetForce(), req.GetAcceptReplacements())
-	if req.AutoHeal != nil {
-		line += fmt.Sprintf(" autoHeal=%t", req.GetAutoHeal())
+	if req.RepairOnDeploy != nil {
+		line += fmt.Sprintf(" repairOnDeploy=%t", req.GetRepairOnDeploy())
 	}
 	fmt.Fprintln(f, line)
 }

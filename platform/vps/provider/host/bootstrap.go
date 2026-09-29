@@ -162,8 +162,8 @@ func (b Bootstrap) read(ctx context.Context, tier environment.Tier) (Reading, er
 }
 
 func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
-	if req.Heal {
-		return b.heal(ctx, req, progress)
+	if req.Repair {
+		return b.repair(ctx, req, progress)
 	}
 	shown, err := b.reading(ctx, req)
 	if err != nil {
@@ -251,12 +251,12 @@ func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 	return b.host.Stamp(ctx, req.Tier, stamp)
 }
 
-func (b Bootstrap) heal(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
+func (b Bootstrap) repair(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
 	read, err := b.host.Own(ctx, req.Tier)
 	if err != nil {
 		return err
 	}
-	work, left, err := healing(read, req.RefuseReplacements)
+	work, left, err := repairing(read, req.RefuseReplacements)
 	if err != nil {
 		return err
 	}
@@ -266,8 +266,8 @@ func (b Bootstrap) heal(ctx context.Context, req provider.BootstrapRequest, prog
 	return b.writing(ctx, read, work, progress, b.host.Reassert)
 }
 
-func healing(read Reading, refuse bool) ([]Item, []Item, error) {
-	work, left, err := healable(read)
+func repairing(read Reading, refuse bool) ([]Item, []Item, error) {
+	work, left, err := repairable(read)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -279,7 +279,7 @@ func healing(read Reading, refuse bool) ([]Item, []Item, error) {
 	return work, left, nil
 }
 
-func healable(read Reading) ([]Item, []Item, error) {
+func repairable(read Reading) ([]Item, []Item, error) {
 	command := provider.BootstrapCommand(read.Tier)
 	if !read.Present {
 		return nil, nil, refusal.Refuse(refusal.CodeDenied,
@@ -312,7 +312,7 @@ func healable(read Reading) ([]Item, []Item, error) {
 	}
 	if len(denied) > 0 {
 		return nil, nil, refusal.Refuse(refusal.CodeDenied,
-			"heal cannot write %s\nRun `%s` as the login that bootstrapped this host",
+			"repair cannot write %s\nRun `%s` as the login that bootstrapped this host",
 			strings.Join(denied, ", "), command)
 	}
 	return work, left, nil

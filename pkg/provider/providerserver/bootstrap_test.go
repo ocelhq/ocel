@@ -140,16 +140,16 @@ func TestBootstrapRefusesAFeatureThisProviderDoesNotOffer(t *testing.T) {
 	}
 }
 
-func TestBootstrapRecordsAutoHealAndTheRecordSchema(t *testing.T) {
+func TestBootstrapRecordsRepairOnDeployAndTheRecordSchema(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	client, vendor := contractServed(t, "1.2.3")
-	healing := true
+	repairing := true
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{
-		Tier:     environmentv1.Tier_TIER_PRODUCTION,
-		Features: []string{fake.FeatureCache},
-		AutoHeal: &healing,
+		Tier:           environmentv1.Tier_TIER_PRODUCTION,
+		Features:       []string{fake.FeatureCache},
+		RepairOnDeploy: &repairing,
 	})
 
 	recorded, err := vendor.KeyValues().Read(ctx, stackrecords.BootstrapKey(environment.TierProduction))
@@ -157,8 +157,8 @@ func TestBootstrapRecordsAutoHealAndTheRecordSchema(t *testing.T) {
 		t.Fatalf("Read() of the bootstrap record = %v", err)
 	}
 	var state stackrecords.BootstrapSettings
-	if err := json.Unmarshal(recorded.Value, &state); err != nil || !state.AutoHeal {
-		t.Fatalf("the bootstrap record contains %q, %v, want auto_heal on", recorded.Value, err)
+	if err := json.Unmarshal(recorded.Value, &state); err != nil || !state.RepairOnDeploy {
+		t.Fatalf("the bootstrap record contains %q, %v, want repair_on_deploy on", recorded.Value, err)
 	}
 
 	written, err := stackrecords.WrittenSchema(ctx, vendor.KeyValues(), environment.TierProduction)
@@ -170,8 +170,8 @@ func TestBootstrapRecordsAutoHealAndTheRecordSchema(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DescribeBootstrap() error = %v", err)
 	}
-	if !planned.GetBootstrap().GetAutoHeal() {
-		t.Error("DescribeBootstrap() reports auto_heal off after a bootstrap that turned it on")
+	if !planned.GetBootstrap().GetRepairOnDeploy() {
+		t.Error("DescribeBootstrap() reports repair_on_deploy off after a bootstrap that turned it on")
 	}
 
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{
@@ -182,8 +182,8 @@ func TestBootstrapRecordsAutoHealAndTheRecordSchema(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DescribeBootstrap() error = %v", err)
 	}
-	if !planned.GetBootstrap().GetAutoHeal() {
-		t.Error("a bootstrap that named no auto_heal turned the existing one off")
+	if !planned.GetBootstrap().GetRepairOnDeploy() {
+		t.Error("a bootstrap that named no repair_on_deploy turned the existing one off")
 	}
 }
 
@@ -709,11 +709,11 @@ func TestRemoveBootstrapTakesTheBootstrapAndItsRecord(t *testing.T) {
 
 	ctx := context.Background()
 	client, vendor := contractServed(t, "1.2.3")
-	healing := true
+	repairing := true
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{
-		Tier:     environmentv1.Tier_TIER_PRODUCTION,
-		Features: []string{fake.FeatureCache},
-		AutoHeal: &healing,
+		Tier:           environmentv1.Tier_TIER_PRODUCTION,
+		Features:       []string{fake.FeatureCache},
+		RepairOnDeploy: &repairing,
 	})
 
 	stream, err := client.RemoveBootstrap(ctx, &contractv1.BootstrapScope{Tier: environmentv1.Tier_TIER_PRODUCTION})

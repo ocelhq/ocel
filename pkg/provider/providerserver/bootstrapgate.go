@@ -26,15 +26,15 @@ type Gate struct {
 }
 
 type BootstrapStatus struct {
-	Tier        environment.Tier
-	Present     bool
-	Stacks      []provider.BootstrapStack
-	Features    []string
-	Schema      int
-	WrittenBy   provider.WrittenBy
-	AutoHeal    bool
-	Unfinished  bool
-	VendorState any
+	Tier           environment.Tier
+	Present        bool
+	Stacks         []provider.BootstrapStack
+	Features       []string
+	Schema         int
+	WrittenBy      provider.WrittenBy
+	RepairOnDeploy bool
+	Unfinished     bool
+	VendorState    any
 }
 
 func (g Gate) Status(ctx context.Context, tier environment.Tier) (BootstrapStatus, error) {
@@ -56,7 +56,7 @@ func (g Gate) Status(ctx context.Context, tier environment.Tier) (BootstrapStatu
 		}
 	}
 	status.Features = bootstrapplan.InCatalogueOrder(g.Bootstrap.Catalogue(), present)
-	if status.AutoHeal, err = g.autoHeal(ctx, tier); err != nil {
+	if status.RepairOnDeploy, err = g.repairOnDeploy(ctx, tier); err != nil {
 		return BootstrapStatus{}, err
 	}
 	return status, nil
@@ -80,7 +80,7 @@ func (s BootstrapStatus) Downgrade(writing provider.WrittenBy) bool {
 	return s.WrittenBy.Newer(writing)
 }
 
-func (s BootstrapStatus) healable(required []string) []string {
+func (s BootstrapStatus) repairable(required []string) []string {
 	var out []string
 	for _, stack := range s.Stacks {
 		if stack.Feature == "" || stack.DigestCurrent || !stack.Present {
@@ -100,7 +100,7 @@ type ApplyRequest struct {
 
 	Force bool
 
-	AutoHeal *bool
+	RepairOnDeploy *bool
 
 	AcceptReplacements bool
 }
@@ -245,14 +245,14 @@ func (g Gate) Apply(ctx context.Context, shown provider.Plan, tier environment.T
 		return err
 	}
 
-	autoHeal := change.status.AutoHeal
-	if req.AutoHeal != nil {
-		autoHeal = *req.AutoHeal
+	repairOnDeploy := change.status.RepairOnDeploy
+	if req.RepairOnDeploy != nil {
+		repairOnDeploy = *req.RepairOnDeploy
 	}
 	if err := g.Bootstrap.Apply(ctx, change.request(tier, req, g.WrittenBy), progress); err != nil {
 		return err
 	}
-	if err := g.RecordBootstrap(ctx, tier, stackrecords.BootstrapSettings{AutoHeal: autoHeal}); err != nil {
+	if err := g.RecordBootstrap(ctx, tier, stackrecords.BootstrapSettings{RepairOnDeploy: repairOnDeploy}); err != nil {
 		return err
 	}
 	return stackrecords.EnsureSchema(ctx, g.KeyValues, tier)
@@ -336,7 +336,7 @@ func ProjectsDependingOn(recorded map[string][]string, dropped []string) []strin
 	return out
 }
 
-func (g Gate) EnsureReady(ctx context.Context, tier environment.Tier, required []string, heal bool, progress progress.Log) (BootstrapStatus, error) {
+func (g Gate) EnsureReady(ctx context.Context, tier environment.Tier, required []string, repair bool, progress progress.Log) (BootstrapStatus, error) {
 	status, err := g.Status(ctx, tier)
 	if err != nil {
 		return BootstrapStatus{}, err
@@ -348,7 +348,7 @@ func (g Gate) EnsureReady(ctx context.Context, tier environment.Tier, required [
 	if err := status.lacking(required, command); err != nil {
 		return status, err
 	}
-	if heal && g.heal(ctx, status, required, progress) {
+	if repair && g.repair(ctx, status, required, progress) {
 		if status, err = g.Status(ctx, tier); err != nil {
 			return BootstrapStatus{}, err
 		}
@@ -371,8 +371,8 @@ func (s BootstrapStatus) lacking(required []string, command string) error {
 		strings.Join(missing, ", "), command, strings.Join(missing, ","))
 }
 
-func (g Gate) heal(ctx context.Context, status BootstrapStatus, required []string, progress progress.Log) bool {
-	if !status.AutoHeal || len(status.healable(required)) == 0 {
+func (g Gate) repair(ctx context.Context, status BootstrapStatus, required []string, progress progress.Log) bool {
+	if !status.RepairOnDeploy || len(status.repairable(required)) == 0 {
 		return false
 	}
 	if !g.WrittenBy.Release() {
@@ -389,7 +389,7 @@ func (g Gate) heal(ctx context.Context, status BootstrapStatus, required []strin
 		Tier:               status.Tier,
 		Features:           status.Features,
 		RefuseReplacements: true,
-		Heal:               true,
+		Repair:             true,
 		WrittenBy:          g.WrittenBy,
 	}, progress)
 	var refused refusal.Refusal
@@ -412,7 +412,7 @@ func denied(refused refusal.Refusal) string {
 	return said + ": " + refused.Message
 }
 
-func (g Gate) autoHeal(ctx context.Context, tier environment.Tier) (bool, error) {
+func (g Gate) repairOnDeploy(ctx context.Context, tier environment.Tier) (bool, error) {
 	recorded, err := keyvalue.ReadOrEmpty(ctx, g.KeyValues, stackrecords.BootstrapKey(tier))
 	if err != nil {
 		return false, fmt.Errorf("read the %s bootstrap record: %w", tier, err)
@@ -424,7 +424,7 @@ func (g Gate) autoHeal(ctx context.Context, tier environment.Tier) (bool, error)
 	if err := json.Unmarshal(recorded.Value, &state); err != nil {
 		return false, fmt.Errorf("read the %s bootstrap record: %w", tier, err)
 	}
-	return state.AutoHeal, nil
+	return state.RepairOnDeploy, nil
 }
 
 func (g Gate) RecordBootstrap(ctx context.Context, tier environment.Tier, state stackrecords.BootstrapSettings) error {

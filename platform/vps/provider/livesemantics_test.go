@@ -145,10 +145,10 @@ func TestLiveAnApplyKilledMidWayIsFinishedByTheSameCommand(t *testing.T) {
 		t.Error("Describe() says nothing about the apply that never finished, so status has nothing to banner and reads the host as ordinarily stale")
 	}
 
-	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", Heal: true}, nil); err == nil {
-		t.Error("heal finished an apply it did not start")
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", Repair: true}, nil); err == nil {
+		t.Error("repair finished an apply it did not start")
 	} else if got := refused(t, err, refusal.CodeDenied); !strings.Contains(got.Message, host.StampPath(tier)) {
-		t.Errorf("heal over a half-applied host says %q, want it to name the stamp that says so", got.Message)
+		t.Errorf("repair over a half-applied host says %q, want it to name the stamp that says so", got.Message)
 	}
 
 	plan, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", VendorState: described.VendorState})
@@ -256,7 +256,7 @@ func TestLiveAReplacementRefusingApplyInstallsWhatIsAbsentAndStopsAtWhatExists(t
 	}
 }
 
-func TestLiveHealReassertsTheStateTierAndRefusesEverythingBesideWhole(t *testing.T) {
+func TestLiveRepairReassertsTheStateTierAndRefusesEverythingBesideWhole(t *testing.T) {
 	vm := liveMachine(t)
 	tier := environment.TierProduction
 	p := bootstrapped(t, vm, tier)
@@ -265,24 +265,24 @@ func TestLiveHealReassertsTheStateTierAndRefusesEverythingBesideWhole(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	healing := provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", Heal: true, RefuseReplacements: true}
+	repairing := provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", Repair: true, RefuseReplacements: true}
 
 	vm.ssh(t, "sudo chmod 700 "+keyValuesDir)
-	if err := bootstrap.Apply(ctx, healing, nil); err != nil {
-		t.Fatalf("heal over a drifted record tier = %v, want the state the deploy login owns reasserted", err)
+	if err := bootstrap.Apply(ctx, repairing, nil); err != nil {
+		t.Fatalf("repair over a drifted record tier = %v, want the state the deploy login owns reasserted", err)
 	}
 	if got := mode(t, vm, keyValuesDir); got != "750" {
-		t.Errorf("%s is %q after a heal, want 750", keyValuesDir, got)
+		t.Errorf("%s is %q after a repair, want 750", keyValuesDir, got)
 	}
 
 	vm.ssh(t, "sudo chmod 700 "+keyValuesDir)
 	vm.ssh(t, "sudo chmod 700 "+helperDir)
-	got := refused(t, bootstrap.Apply(ctx, healing, nil), refusal.CodeDenied)
+	got := refused(t, bootstrap.Apply(ctx, repairing, nil), refusal.CodeDenied)
 	if !strings.Contains(got.Message, helperDir) {
-		t.Errorf("heal over a mixed set says %q, want it to name %s as what heal may not write", got.Message, helperDir)
+		t.Errorf("repair over a mixed set says %q, want it to name %s as what repair may not write", got.Message, helperDir)
 	}
 	if got := mode(t, vm, keyValuesDir); got != "700" {
-		t.Errorf("%s is %q after a heal that refused, want a mixed set refused whole rather than half-done", keyValuesDir, got)
+		t.Errorf("%s is %q after a repair that refused, want a mixed set refused whole rather than half-done", keyValuesDir, got)
 	}
 
 	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil); err != nil {
@@ -310,17 +310,17 @@ func TestLiveASymlinkWhereTheDeployLoginOwnsAPathIsRefusedRatherThanChowned(t *t
 	defer vm.ssh(t, "sudo rm -f "+keyValuesDir+" && sudo mv "+aside+" "+keyValuesDir+" && sudo systemctl try-restart "+host.EnvSourceSyncService(tier))
 
 	got := refused(t, bootstrap.Apply(ctx,
-		provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", Heal: true, RefuseReplacements: true}, nil),
+		provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", Repair: true, RefuseReplacements: true}, nil),
 		refusal.CodeDenied)
 	if !strings.Contains(got.Message, keyValuesDir) || !strings.Contains(got.Message, "/etc") {
-		t.Errorf("heal over a path the deploy login pointed elsewhere says %q, want both the path and where it points named", got.Message)
+		t.Errorf("repair over a path the deploy login pointed elsewhere says %q, want both the path and where it points named", got.Message)
 	}
 	if got := strings.TrimSpace(vm.ssh(t, "sudo stat -c %U /etc")); got != "root" {
-		t.Fatalf("/etc is owned by %q after a heal that followed a binding into it, want root", got)
+		t.Fatalf("/etc is owned by %q after a repair that followed a binding into it, want root", got)
 	}
 }
 
-func TestLiveHealAsTheDeployLoginReassertsItsOwnTierAndNothingBeside(t *testing.T) {
+func TestLiveRepairAsTheDeployLoginReassertsItsOwnTierAndNothingBeside(t *testing.T) {
 	vm := liveMachine(t)
 	tier := environment.TierProduction
 	bootstrapped(t, vm, tier)
@@ -330,24 +330,24 @@ func TestLiveHealAsTheDeployLoginReassertsItsOwnTierAndNothingBeside(t *testing.
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	healing := provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", Heal: true, RefuseReplacements: true}
+	repairing := provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", Repair: true, RefuseReplacements: true}
 
 	vm.sshAs(t, deployLogin, "chmod 700 "+keyValuesDir)
-	if err := bootstrap.Apply(ctx, healing, nil); err != nil {
-		t.Fatalf("heal as %s over its own drifted record tier = %v, want what that login owns reasserted without asking for root", deployLogin, err)
+	if err := bootstrap.Apply(ctx, repairing, nil); err != nil {
+		t.Fatalf("repair as %s over its own drifted record tier = %v, want what that login owns reasserted without asking for root", deployLogin, err)
 	}
 	if got := mode(t, vm, keyValuesDir); got != "750" {
-		t.Errorf("%s is %q after a heal driven by the login that owns it, want 750", keyValuesDir, got)
+		t.Errorf("%s is %q after a repair driven by the login that owns it, want 750", keyValuesDir, got)
 	}
 
 	vm.sshAs(t, deployLogin, "chmod 700 "+keyValuesDir)
 	vm.ssh(t, "sudo chmod 700 "+helperDir)
 	defer vm.ssh(t, "sudo chmod 755 "+helperDir)
-	got := refused(t, bootstrap.Apply(ctx, healing, nil), refusal.CodeDenied)
+	got := refused(t, bootstrap.Apply(ctx, repairing, nil), refusal.CodeDenied)
 	if !strings.Contains(got.Message, helperDir) {
-		t.Errorf("heal as %s over a mixed set says %q, want %s named as what that login may not write", deployLogin, got.Message, helperDir)
+		t.Errorf("repair as %s over a mixed set says %q, want %s named as what that login may not write", deployLogin, got.Message, helperDir)
 	}
 	if got := mode(t, vm, keyValuesDir); got != "700" {
-		t.Errorf("%s is %q after a heal that refused, want a mixed set refused whole rather than half-done", keyValuesDir, got)
+		t.Errorf("%s is %q after a repair that refused, want a mixed set refused whole rather than half-done", keyValuesDir, got)
 	}
 }

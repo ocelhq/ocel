@@ -304,7 +304,7 @@ message BootstrapRequest {
 
   bool force = 3;
 
-  optional bool auto_heal = 4;
+  optional bool repair_on_deploy = 4;
 
   bool accept_replacements = 5;
 
@@ -359,7 +359,7 @@ message BootstrapStatus {
 
   uint32 required_schema = 4;
 
-  bool auto_heal = 5;
+  bool repair_on_deploy = 5;
 
   repeated BootstrapStack stacks = 6;
 

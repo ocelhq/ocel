@@ -315,7 +315,7 @@ func TestOnlyTheOwnerDrawnSurveyPassesOverAFileItCannotRead(t *testing.T) {
 	t.Parallel()
 
 	if os.Geteuid() == 0 {
-		t.Skip("this test runs as root, which reads every mode, and the login a heal is drawn as is not root")
+		t.Skip("this test runs as root, which reads every mode, and the login a repair is drawn as is not root")
 	}
 	root := t.TempDir()
 	readable := filepath.Join(root, "records")
@@ -353,7 +353,7 @@ func TestOnlyTheOwnerDrawnSurveyPassesOverAFileItCannotRead(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, present := owned[KindFile+" "+sealed]; present {
-		t.Errorf("the survey a heal draws reports %s, and a file the drawing login could not hash reads as one that moved: heal denies the whole set over a helper root owns and nothing else may read",
+		t.Errorf("the survey a repair draws reports %s, and a file the drawing login could not hash reads as one that moved: repair denies the whole set over a helper root owns and nothing else may read",
 			sealed)
 	}
 }

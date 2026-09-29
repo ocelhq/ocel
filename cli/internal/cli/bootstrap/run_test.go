@@ -104,8 +104,8 @@ func intent(req *contractv1.BootstrapRequest) string {
 		said += " remove=" + strings.Join(req.GetRemove(), ",")
 	}
 	said += " force=" + boolWord(req.GetForce()) + " acceptReplacements=" + boolWord(req.GetAcceptReplacements())
-	if req.AutoHeal != nil {
-		said += " autoHeal=" + boolWord(req.GetAutoHeal())
+	if req.RepairOnDeploy != nil {
+		said += " repairOnDeploy=" + boolWord(req.GetRepairOnDeploy())
 	}
 	return said
 }
@@ -857,15 +857,15 @@ func TestBootstrapDryPreviewsEverything(t *testing.T) {
 	})
 }
 
-func TestBootstrapSendsAutoHeal(t *testing.T) {
+func TestBootstrapSendsRepairOnDeploy(t *testing.T) {
 	tests := []struct {
 		name string
 		opts Options
 		want string
 	}{
 		{"an unset switch leaves the account as it is", Options{Yes: true}, "features=isr force=false acceptReplacements=true"},
-		{"--auto-heal turns it on", Options{Yes: true, AutoHealDeclared: true, AutoHeal: true}, "features=isr force=false acceptReplacements=true autoHeal=true"},
-		{"--auto-heal=false takes it back", Options{Yes: true, AutoHealDeclared: true}, "features=isr force=false acceptReplacements=true autoHeal=false"},
+		{"--repair turns it on", Options{Yes: true, RepairDeclared: true, Repair: true}, "features=isr force=false acceptReplacements=true repairOnDeploy=true"},
+		{"--repair=false takes it back", Options{Yes: true, RepairDeclared: true}, "features=isr force=false acceptReplacements=true repairOnDeploy=false"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

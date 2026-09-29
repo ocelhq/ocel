@@ -86,21 +86,21 @@ func TestAskingWhatABootstrapWouldDoIsNotAskingToRunIt(t *testing.T) {
 	}
 }
 
-func TestAHealDoesNotNeedWhatABootstrapNeeds(t *testing.T) {
+func TestARepairDoesNotNeedWhatABootstrapNeeds(t *testing.T) {
 	t.Parallel()
 
 	inner := &reached{}
 	ctx := context.Background()
 	gated := vps.Elevating(inner, unelevated)
-	healing := provider.BootstrapRequest{Tier: environment.TierProduction, Heal: true}
+	repairing := provider.BootstrapRequest{Tier: environment.TierProduction, Repair: true}
 
-	if _, err := gated.Plan(ctx, healing); err != nil {
-		t.Fatalf("Plan(heal) = %v, want it planned: heal reasserts only what the deploy login already owns, and that login has no passwordless sudo by design", err)
+	if _, err := gated.Plan(ctx, repairing); err != nil {
+		t.Fatalf("Plan(repair) = %v, want it planned: repair reasserts only what the deploy login already owns, and that login has no passwordless sudo by design", err)
 	}
-	if err := gated.Apply(ctx, healing, nil); err != nil {
-		t.Fatalf("Apply(heal) = %v, want the deploy login's own tier reasserted without asking for root", err)
+	if err := gated.Apply(ctx, repairing, nil); err != nil {
+		t.Fatalf("Apply(repair) = %v, want the deploy login's own tier reasserted without asking for root", err)
 	}
 	if inner.planned != 1 || inner.applied != 1 {
-		t.Errorf("the host was reached %+v, want the heal passed through once each", *inner)
+		t.Errorf("the host was reached %+v, want the repair passed through once each", *inner)
 	}
 }

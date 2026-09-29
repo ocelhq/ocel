@@ -1967,7 +1967,7 @@ type BootstrapRequest struct {
 	Tier               v1.Tier                `protobuf:"varint,1,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
 	Features           []string               `protobuf:"bytes,2,rep,name=features,proto3" json:"features,omitempty"`
 	Force              bool                   `protobuf:"varint,3,opt,name=force,proto3" json:"force,omitempty"`
-	AutoHeal           *bool                  `protobuf:"varint,4,opt,name=auto_heal,json=autoHeal,proto3,oneof" json:"auto_heal,omitempty"`
+	RepairOnDeploy     *bool                  `protobuf:"varint,4,opt,name=repair_on_deploy,json=repairOnDeploy,proto3,oneof" json:"repair_on_deploy,omitempty"`
 	AcceptReplacements bool                   `protobuf:"varint,5,opt,name=accept_replacements,json=acceptReplacements,proto3" json:"accept_replacements,omitempty"`
 	Edge               *EdgeSelection         `protobuf:"bytes,6,opt,name=edge,proto3" json:"edge,omitempty"`
 	Remove             []string               `protobuf:"bytes,7,rep,name=remove,proto3" json:"remove,omitempty"`
@@ -2031,9 +2031,9 @@ func (x *BootstrapRequest) GetForce() bool {
 	return false
 }
 
-func (x *BootstrapRequest) GetAutoHeal() bool {
-	if x != nil && x.AutoHeal != nil {
-		return *x.AutoHeal
+func (x *BootstrapRequest) GetRepairOnDeploy() bool {
+	if x != nil && x.RepairOnDeploy != nil {
+		return *x.RepairOnDeploy
 	}
 	return false
 }
@@ -2283,7 +2283,7 @@ type BootstrapStatus struct {
 	Present        bool                   `protobuf:"varint,2,opt,name=present,proto3" json:"present,omitempty"`
 	Schema         uint32                 `protobuf:"varint,3,opt,name=schema,proto3" json:"schema,omitempty"`
 	RequiredSchema uint32                 `protobuf:"varint,4,opt,name=required_schema,json=requiredSchema,proto3" json:"required_schema,omitempty"`
-	AutoHeal       bool                   `protobuf:"varint,5,opt,name=auto_heal,json=autoHeal,proto3" json:"auto_heal,omitempty"`
+	RepairOnDeploy bool                   `protobuf:"varint,5,opt,name=repair_on_deploy,json=repairOnDeploy,proto3" json:"repair_on_deploy,omitempty"`
 	Stacks         []*BootstrapStack      `protobuf:"bytes,6,rep,name=stacks,proto3" json:"stacks,omitempty"`
 	Writer         string                 `protobuf:"bytes,7,opt,name=writer,proto3" json:"writer,omitempty"`
 	Downgrade      bool                   `protobuf:"varint,8,opt,name=downgrade,proto3" json:"downgrade,omitempty"`
@@ -2350,9 +2350,9 @@ func (x *BootstrapStatus) GetRequiredSchema() uint32 {
 	return 0
 }
 
-func (x *BootstrapStatus) GetAutoHeal() bool {
+func (x *BootstrapStatus) GetRepairOnDeploy() bool {
 	if x != nil {
-		return x.AutoHeal
+		return x.RepairOnDeploy
 	}
 	return false
 }
@@ -4835,19 +4835,18 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x06server\x18\x01 \x01(\tR\x06server\x12\x1c\n" +
 	"\tnamespace\x18\x02 \x01(\tR\tnamespace\x12\x1a\n" +
 	"\busername\x18\x03 \x01(\tR\busername\x12\x1f\n" +
-	"\bpassword\x18\x04 \x01(\tB\x03\x80\x01\x01R\bpassword\"\xfd\x02\n" +
+	"\bpassword\x18\x04 \x01(\tB\x03\x80\x01\x01R\bpassword\"\x91\x03\n" +
 	"\x10BootstrapRequest\x129\n" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\b\xbaH\x05\x82\x01\x02\x10\x01R\x04tier\x12\x1a\n" +
 	"\bfeatures\x18\x02 \x03(\tR\bfeatures\x12\x14\n" +
-	"\x05force\x18\x03 \x01(\bR\x05force\x12 \n" +
-	"\tauto_heal\x18\x04 \x01(\bH\x00R\bautoHeal\x88\x01\x01\x12/\n" +
+	"\x05force\x18\x03 \x01(\bR\x05force\x12-\n" +
+	"\x10repair_on_deploy\x18\x04 \x01(\bH\x00R\x0erepairOnDeploy\x88\x01\x01\x12/\n" +
 	"\x13accept_replacements\x18\x05 \x01(\bR\x12acceptReplacements\x127\n" +
 	"\x04edge\x18\x06 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\x12\x16\n" +
 	"\x06remove\x18\a \x03(\tR\x06remove\x12\x10\n" +
 	"\x03dry\x18\b \x01(\bR\x03dry\x128\n" +
-	"\tconsented\x18\t \x01(\v2\x1a.common.plan.v1.ChangePlanR\tconsentedB\f\n" +
-	"\n" +
-	"_auto_heal\"\xb7\x01\n" +
+	"\tconsented\x18\t \x01(\v2\x1a.common.plan.v1.ChangePlanR\tconsentedB\x13\n" +
+	"\x11_repair_on_deploy\"\xb7\x01\n" +
 	"\x18DescribeBootstrapRequest\x129\n" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\b\xbaH\x05\x82\x01\x02\x10\x01R\x04tier\x12'\n" +
 	"\x0fwith_dependents\x18\x02 \x01(\bR\x0ewithDependents\x127\n" +
@@ -4863,13 +4862,13 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x0edigest_current\x18\x05 \x01(\bR\rdigestCurrent\x12\x1d\n" +
 	"\n" +
 	"written_by\x18\x06 \x01(\tR\twrittenBy\x12\x1a\n" +
-	"\brequired\x18\a \x01(\bR\brequired\"\xce\x02\n" +
+	"\brequired\x18\a \x01(\bR\brequired\"\xdb\x02\n" +
 	"\x0fBootstrapStatus\x12/\n" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierR\x04tier\x12\x18\n" +
 	"\apresent\x18\x02 \x01(\bR\apresent\x12\x16\n" +
 	"\x06schema\x18\x03 \x01(\rR\x06schema\x12'\n" +
-	"\x0frequired_schema\x18\x04 \x01(\rR\x0erequiredSchema\x12\x1b\n" +
-	"\tauto_heal\x18\x05 \x01(\bR\bautoHeal\x12<\n" +
+	"\x0frequired_schema\x18\x04 \x01(\rR\x0erequiredSchema\x12(\n" +
+	"\x10repair_on_deploy\x18\x05 \x01(\bR\x0erepairOnDeploy\x12<\n" +
 	"\x06stacks\x18\x06 \x03(\v2$.provider.contract.v1.BootstrapStackR\x06stacks\x12\x16\n" +
 	"\x06writer\x18\a \x01(\tR\x06writer\x12\x1c\n" +
 	"\tdowngrade\x18\b \x01(\bR\tdowngrade\x12\x1e\n" +

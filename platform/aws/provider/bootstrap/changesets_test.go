@@ -244,21 +244,21 @@ func (deniedChangeSets) CreateChangeSet(context.Context, *cloudformation.CreateC
 	return nil, &smithy.GenericAPIError{Code: "AccessDenied", Message: "not authorized to perform: cloudformation:CreateChangeSet"}
 }
 
-func TestHealRefusedByTheseCredentialsSaysSoOnce(t *testing.T) {
+func TestRepairRefusedByTheseCredentialsSaysSoOnce(t *testing.T) {
 	stacks, apis := installedBootstrap(t)
 	stacks.fallBehind(isrStack(environment.TierProduction))
 	apis.CFN = deniedChangeSets{stacks}
-	var log healLog
+	var log repairLog
 
-	healed, err := Heal(context.Background(), apis, defaultNamespace, environment.TierProduction, HealRequest{Features: featureNames(), Writer: "1.4.0"}, &log)
-	if !errors.Is(err, ErrHealNotPermitted) {
-		t.Fatalf("Heal err = %v, want ErrHealNotPermitted", err)
+	repaired, err := Repair(context.Background(), apis, defaultNamespace, environment.TierProduction, RepairRequest{Features: featureNames(), Writer: "1.4.0"}, &log)
+	if !errors.Is(err, ErrRepairNotPermitted) {
+		t.Fatalf("Repair err = %v, want ErrRepairNotPermitted", err)
 	}
-	if healed {
-		t.Error("a heal that was refused outright reported that it wrote something")
+	if repaired {
+		t.Error("a repair that was refused outright reported that it wrote something")
 	}
 	if log.says("Could not refresh") {
-		t.Errorf("heal said %v, want no alarming per-stack failure for a credential that simply may not write", log.Lines())
+		t.Errorf("repair said %v, want no alarming per-stack failure for a credential that simply may not write", log.Lines())
 	}
 }
 
@@ -268,20 +268,20 @@ func TestWaitingOnABusyStackIsBoundedAndReported(t *testing.T) {
 	stack := isrStack(environment.TierProduction)
 	stacks.fallBehind(stack)
 	stacks.busy(stack, idleAttempts*4)
-	var log healLog
+	var log repairLog
 
-	if _, err := Heal(context.Background(), apis, defaultNamespace, environment.TierProduction, HealRequest{Features: featureNames(), Writer: "1.4.0"}, &log); err != nil {
-		t.Fatalf("Heal: %v", err)
+	if _, err := Repair(context.Background(), apis, defaultNamespace, environment.TierProduction, RepairRequest{Features: featureNames(), Writer: "1.4.0"}, &log); err != nil {
+		t.Fatalf("Repair: %v", err)
 	}
 	if len(*waits) >= cfn.ChangeSetAttempts {
 		t.Errorf("waited %d times on a stack another run is writing; that budget belongs to building a change set, not to waiting on a busy stack", len(*waits))
 	}
 	if !log.says("INFO Stack " + stack + " is UPDATE_IN_PROGRESS under another run") {
-		t.Errorf("heal said %v, want it to report progress while it waited", log.Lines())
+		t.Errorf("repair said %v, want it to report progress while it waited", log.Lines())
 	}
 }
 
-func TestAStackTagPropagatedOntoAPrincipalDoesNotBlockAHeal(t *testing.T) {
+func TestAStackTagPropagatedOntoAPrincipalDoesNotBlockARepair(t *testing.T) {
 	stacks, apis := installedBootstrap(t)
 	stack := edgeStack(environment.TierProduction)
 	stacks.fallBehind(stack)
@@ -294,21 +294,21 @@ func TestAStackTagPropagatedOntoAPrincipalDoesNotBlockAHeal(t *testing.T) {
 		},
 		change(cfntypes.ChangeActionModify, "TagPublisher", "AWS::Lambda::Function", cfntypes.ReplacementFalse),
 	)
-	var log healLog
+	var log repairLog
 
-	healed, err := Heal(context.Background(), apis, defaultNamespace, environment.TierProduction, HealRequest{Features: featureNames(), Writer: "1.4.0"}, &log)
+	repaired, err := Repair(context.Background(), apis, defaultNamespace, environment.TierProduction, RepairRequest{Features: featureNames(), Writer: "1.4.0"}, &log)
 	if err != nil {
-		t.Fatalf("Heal: %v", err)
+		t.Fatalf("Repair: %v", err)
 	}
-	if !healed {
+	if !repaired {
 		t.Fatalf("the edge stack was refused a refresh: %v", log.Lines())
 	}
 	if log.says("is a AWS::IAM::User") {
-		t.Errorf("heal said %v, want a stack tag landing on the edge user to count for nothing", log.Lines())
+		t.Errorf("repair said %v, want a stack tag landing on the edge user to count for nothing", log.Lines())
 	}
 }
 
-func TestAPrincipalWhoseShapeChangesStillStopsAHeal(t *testing.T) {
+func TestAPrincipalWhoseShapeChangesStillStopsARepair(t *testing.T) {
 	stacks, apis := installedBootstrap(t)
 	stack := edgeStack(environment.TierProduction)
 	stacks.fallBehind(stack)
@@ -318,14 +318,14 @@ func TestAPrincipalWhoseShapeChangesStillStopsAHeal(t *testing.T) {
 		ResourceType:      aws.String("AWS::IAM::User"),
 		Scope:             []cfntypes.ResourceAttribute{cfntypes.ResourceAttributeTags, cfntypes.ResourceAttributeProperties},
 	})
-	var log healLog
+	var log repairLog
 
-	healed, _ := Heal(context.Background(), apis, defaultNamespace, environment.TierProduction, HealRequest{Features: featureNames(), Writer: "1.4.0"}, &log)
-	if healed {
-		t.Error("a heal rewrote the policy of the identity the edge signs its calls with")
+	repaired, _ := Repair(context.Background(), apis, defaultNamespace, environment.TierProduction, RepairRequest{Features: featureNames(), Writer: "1.4.0"}, &log)
+	if repaired {
+		t.Error("a repair rewrote the policy of the identity the edge signs its calls with")
 	}
 	if !log.says("WARN Could not refresh stack "+stack) || !log.says("EdgeUser") {
-		t.Errorf("heal said %v, want it to name what stopped it", log.Lines())
+		t.Errorf("repair said %v, want it to name what stopped it", log.Lines())
 	}
 }
 

@@ -108,27 +108,27 @@ func TestStateReadsWhatTheVendorDescribes(t *testing.T) {
 	if status.WrittenBy != "1.0.0" {
 		t.Errorf("Status().WrittenBy = %q, want the writer the core stack records", status.WrittenBy)
 	}
-	if status.AutoHeal {
-		t.Error("Status().AutoHeal is on with no bootstrap record written")
+	if status.RepairOnDeploy {
+		t.Error("Status().RepairOnDeploy is on with no bootstrap record written")
 	}
 }
 
-func TestStateReadsAutoHealFromTheRecord(t *testing.T) {
+func TestStateReadsRepairOnDeployFromTheRecord(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	gate, vendor := gated(t, "2.0.0")
 	bootstrapped(t, vendor, environment.TierProduction, fake.FeatureCache)
 
-	if err := gate.RecordBootstrap(ctx, environment.TierProduction, stackrecords.BootstrapSettings{AutoHeal: true}); err != nil {
+	if err := gate.RecordBootstrap(ctx, environment.TierProduction, stackrecords.BootstrapSettings{RepairOnDeploy: true}); err != nil {
 		t.Fatalf("RecordBootstrap() error = %v", err)
 	}
 	status, err := gate.Status(ctx, environment.TierProduction)
 	if err != nil {
 		t.Fatalf("Status() error = %v", err)
 	}
-	if !status.AutoHeal {
-		t.Error("Status().AutoHeal is off after the record said it is on")
+	if !status.RepairOnDeploy {
+		t.Error("Status().RepairOnDeploy is off after the record said it is on")
 	}
 
 	recorded, err := vendor.KeyValues().Read(ctx, stackrecords.BootstrapKey(environment.TierProduction))
@@ -136,8 +136,8 @@ func TestStateReadsAutoHealFromTheRecord(t *testing.T) {
 		t.Fatalf("Read() of the bootstrap record = %v", err)
 	}
 	var settings stackrecords.BootstrapSettings
-	if err := json.Unmarshal(recorded.Value, &settings); err != nil || !settings.AutoHeal {
-		t.Fatalf("the bootstrap record contains %q, %v, want auto_heal on", recorded.Value, err)
+	if err := json.Unmarshal(recorded.Value, &settings); err != nil || !settings.RepairOnDeploy {
+		t.Fatalf("the bootstrap record contains %q, %v, want repair_on_deploy on", recorded.Value, err)
 	}
 }
 
@@ -194,14 +194,14 @@ func TestEnsureReadyRefusesAMissingFeatureAndOffersTheOneCommandThatAddsIt(t *te
 	}
 }
 
-func TestEnsureReadyHealsAStaleBootstrapWithoutAcceptingReplacements(t *testing.T) {
+func TestEnsureReadyRepairsAStaleBootstrapWithoutAcceptingReplacements(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	gate, vendor := gated(t, "2.0.0")
 	bootstrap := vendor.FakeBootstrap()
 	bootstrapped(t, vendor, environment.TierProduction, fake.FeatureCache)
-	if err := gate.RecordBootstrap(ctx, environment.TierProduction, stackrecords.BootstrapSettings{AutoHeal: true}); err != nil {
+	if err := gate.RecordBootstrap(ctx, environment.TierProduction, stackrecords.BootstrapSettings{RepairOnDeploy: true}); err != nil {
 		t.Fatal(err)
 	}
 	bootstrap.MarkStale(fake.FeatureCache)
@@ -212,20 +212,20 @@ func TestEnsureReadyHealsAStaleBootstrapWithoutAcceptingReplacements(t *testing.
 		t.Fatalf("EnsureReady() error = %v", err)
 	}
 	if stale := status.Stale([]string{fake.FeatureCache}); len(stale) != 0 {
-		t.Errorf("EnsureReady() left %v behind, want the heal to have refreshed them", stale)
+		t.Errorf("EnsureReady() left %v behind, want the repair to have refreshed them", stale)
 	}
 
 	applied := bootstrap.Applied()
-	healing := applied[len(applied)-1]
-	if !healing.RefuseReplacements {
-		t.Error("the heal reached Apply() allowed to replace resources, and nothing is there to accept a replacement")
+	repairing := applied[len(applied)-1]
+	if !repairing.RefuseReplacements {
+		t.Error("the repair reached Apply() allowed to replace resources, and nothing is there to accept a replacement")
 	}
-	if !slices.Equal(healing.Features, []string{fake.FeatureCache}) {
-		t.Errorf("the heal applied %v, want the features already installed", healing.Features)
+	if !slices.Equal(repairing.Features, []string{fake.FeatureCache}) {
+		t.Errorf("the repair applied %v, want the features already installed", repairing.Features)
 	}
 }
 
-func TestEnsureReadyLeavesAStaleBootstrapAloneWhenTheAccountNeverOptedIntoHealing(t *testing.T) {
+func TestEnsureReadyLeavesAStaleBootstrapAloneWhenTheAccountNeverOptedIntoRepair(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -246,14 +246,14 @@ func TestEnsureReadyLeavesAStaleBootstrapAloneWhenTheAccountNeverOptedIntoHealin
 	}
 }
 
-func TestEnsureReadyAsksForNoHealingAndGetsNone(t *testing.T) {
+func TestEnsureReadyAsksForNoRepairAndGetsNone(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	gate, vendor := gated(t, "2.0.0")
 	bootstrap := vendor.FakeBootstrap()
 	bootstrapped(t, vendor, environment.TierProduction, fake.FeatureCache)
-	if err := gate.RecordBootstrap(ctx, environment.TierProduction, stackrecords.BootstrapSettings{AutoHeal: true}); err != nil {
+	if err := gate.RecordBootstrap(ctx, environment.TierProduction, stackrecords.BootstrapSettings{RepairOnDeploy: true}); err != nil {
 		t.Fatal(err)
 	}
 	bootstrap.MarkStale(fake.FeatureCache)
@@ -264,7 +264,7 @@ func TestEnsureReadyAsksForNoHealingAndGetsNone(t *testing.T) {
 		t.Fatalf("EnsureReady() error = %v", err)
 	}
 	if got := len(bootstrap.Applied()); got != 1 {
-		t.Errorf("Apply() ran %d times, want a caller that asked for no healing to get none though the account opted in", got)
+		t.Errorf("Apply() ran %d times, want a caller that asked for no repairing to get none though the account opted in", got)
 	}
 	if stale := status.Stale([]string{fake.FeatureCache}); len(stale) != 1 {
 		t.Errorf("EnsureReady() reports %v behind, want the drift it was told to leave state", stale)
@@ -274,14 +274,14 @@ func TestEnsureReadyAsksForNoHealingAndGetsNone(t *testing.T) {
 	}
 }
 
-func TestEnsureReadyWillNotHealFromADevelopmentBuild(t *testing.T) {
+func TestEnsureReadyWillNotRepairFromADevelopmentBuild(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	gate, vendor := gated(t, "dev+cafebabe")
 	bootstrap := vendor.FakeBootstrap()
 	bootstrapped(t, vendor, environment.TierProduction, fake.FeatureCache)
-	if err := gate.RecordBootstrap(ctx, environment.TierProduction, stackrecords.BootstrapSettings{AutoHeal: true}); err != nil {
+	if err := gate.RecordBootstrap(ctx, environment.TierProduction, stackrecords.BootstrapSettings{RepairOnDeploy: true}); err != nil {
 		t.Fatal(err)
 	}
 	bootstrap.MarkStale(fake.FeatureCache)
@@ -294,18 +294,18 @@ func TestEnsureReadyWillNotHealFromADevelopmentBuild(t *testing.T) {
 		t.Errorf("Apply() ran %d times, want a development build to leave the account unchanged", got)
 	}
 	if !strings.Contains(progress.sayings(), "development build (dev+cafebabe)") {
-		t.Errorf("EnsureReady() said %q, want it to say which build declined to heal", progress.sayings())
+		t.Errorf("EnsureReady() said %q, want it to say which build declined to repair", progress.sayings())
 	}
 }
 
-func TestEnsureReadyReportsAHealTheCredentialsCannotDo(t *testing.T) {
+func TestEnsureReadyReportsARepairTheCredentialsCannotDo(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	gate, vendor := gated(t, "2.0.0")
 	bootstrap := vendor.FakeBootstrap()
 	bootstrapped(t, vendor, environment.TierProduction, fake.FeatureCache)
-	if err := gate.RecordBootstrap(ctx, environment.TierProduction, stackrecords.BootstrapSettings{AutoHeal: true}); err != nil {
+	if err := gate.RecordBootstrap(ctx, environment.TierProduction, stackrecords.BootstrapSettings{RepairOnDeploy: true}); err != nil {
 		t.Fatal(err)
 	}
 	bootstrap.MarkStale(fake.FeatureCache)
@@ -314,10 +314,10 @@ func TestEnsureReadyReportsAHealTheCredentialsCannotDo(t *testing.T) {
 
 	progress := &recorder{}
 	if _, err := gate.EnsureReady(ctx, environment.TierProduction, []string{fake.FeatureCache}, true, progress); err != nil {
-		t.Fatalf("EnsureReady() error = %v, want a refused heal to leave the run state", err)
+		t.Fatalf("EnsureReady() error = %v, want a refused repair to leave the run state", err)
 	}
 	if !strings.Contains(progress.warnings(), "ocel-deploy@10.0.0.4 can neither act as root nor run sudo without a password") {
-		t.Errorf("EnsureReady() warned %q, want a warning with the provider's own account of why the heal was denied", progress.warnings())
+		t.Errorf("EnsureReady() warned %q, want a warning with the provider's own account of why the repair was denied", progress.warnings())
 	}
 	written, _, _ := strings.Cut(refusedLine(t, progress), ": ")
 	for _, vendored := range []string{"account", "stack"} {
@@ -335,18 +335,18 @@ func refusedLine(t *testing.T, progress *recorder) string {
 			return line
 		}
 	}
-	t.Fatalf("no warning in %q says the heal was denied", progress.warnings())
+	t.Fatalf("no warning in %q says the repair was denied", progress.warnings())
 	return ""
 }
 
-func TestADeniedHealWithNothingToSayStillReadsAsASentence(t *testing.T) {
+func TestADeniedRepairWithNothingToSayStillReadsAsASentence(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	gate, vendor := gated(t, "2.0.0")
 	bootstrap := vendor.FakeBootstrap()
 	bootstrapped(t, vendor, environment.TierProduction, fake.FeatureCache)
-	if err := gate.RecordBootstrap(ctx, environment.TierProduction, stackrecords.BootstrapSettings{AutoHeal: true}); err != nil {
+	if err := gate.RecordBootstrap(ctx, environment.TierProduction, stackrecords.BootstrapSettings{RepairOnDeploy: true}); err != nil {
 		t.Fatal(err)
 	}
 	bootstrap.MarkStale(fake.FeatureCache)
@@ -354,21 +354,21 @@ func TestADeniedHealWithNothingToSayStillReadsAsASentence(t *testing.T) {
 
 	progress := &recorder{}
 	if _, err := gate.EnsureReady(ctx, environment.TierProduction, []string{fake.FeatureCache}, true, progress); err != nil {
-		t.Fatalf("EnsureReady() error = %v, want a refused heal to leave the run state", err)
+		t.Fatalf("EnsureReady() error = %v, want a refused repair to leave the run state", err)
 	}
 	if line := refusedLine(t, progress); strings.Contains(line, ": ") {
 		t.Errorf("providerserver wrote %q, want no colon introducing a reason the provider never gave", line)
 	}
 }
 
-func TestEnsureReadyWarnsThatAHealFailedAndCarriesOnWithTheBootstrapInPlace(t *testing.T) {
+func TestEnsureReadyWarnsThatARepairFailedAndCarriesOnWithTheBootstrapInPlace(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	gate, vendor := gated(t, "2.0.0")
 	bootstrap := vendor.FakeBootstrap()
 	bootstrapped(t, vendor, environment.TierProduction, fake.FeatureCache)
-	if err := gate.RecordBootstrap(ctx, environment.TierProduction, stackrecords.BootstrapSettings{AutoHeal: true}); err != nil {
+	if err := gate.RecordBootstrap(ctx, environment.TierProduction, stackrecords.BootstrapSettings{RepairOnDeploy: true}); err != nil {
 		t.Fatal(err)
 	}
 	bootstrap.MarkStale(fake.FeatureCache)
@@ -376,7 +376,7 @@ func TestEnsureReadyWarnsThatAHealFailedAndCarriesOnWithTheBootstrapInPlace(t *t
 
 	progress := &recorder{}
 	if _, err := gate.EnsureReady(ctx, environment.TierProduction, []string{fake.FeatureCache}, true, progress); err != nil {
-		t.Fatalf("EnsureReady() error = %v, want a failed heal to leave the run standing", err)
+		t.Fatalf("EnsureReady() error = %v, want a failed repair to leave the run standing", err)
 	}
 	want := "Could not refresh the production bootstrap, so this run continues against the one in place: the stack update timed out"
 	if !strings.Contains(progress.warnings(), want) {

@@ -17,14 +17,14 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 )
 
-var healPrincipals = map[string]bool{
+var repairPrincipals = map[string]bool{
 	"AWS::IAM::User":       true,
 	"AWS::IAM::AccessKey":  true,
 	"AWS::IAM::Group":      true,
 	"AWS::IAM::UserPolicy": true,
 }
 
-var healAllowed = map[string]bool{
+var repairAllowed = map[string]bool{
 	"AWS::Lambda::Function":           true,
 	"AWS::Lambda::Url":                true,
 	"AWS::Lambda::Permission":         true,
@@ -48,13 +48,13 @@ func restampOnly(c cfntypes.ResourceChange) bool {
 		len(c.Scope) == 1 && c.Scope[0] == cfntypes.ResourceAttributeTags
 }
 
-func healable(ns Namespace) cfn.ChangeReview {
+func repairable(ns Namespace) cfn.ChangeReview {
 	return func(stackName string, changes []cfntypes.ResourceChange) error {
-		return healableChange(ns, stackName, changes)
+		return repairableChange(ns, stackName, changes)
 	}
 }
 
-func healableChange(ns Namespace, stackName string, changes []cfntypes.ResourceChange) error {
+func repairableChange(ns Namespace, stackName string, changes []cfntypes.ResourceChange) error {
 	if isCoreStack(ns, stackName) {
 		return fmt.Errorf("%s is the bootstrap's core, and the core is only ever written by an explicit bootstrap", stackName)
 	}
@@ -64,7 +64,7 @@ func healableChange(ns Namespace, stackName string, changes []cfntypes.ResourceC
 		switch {
 		case restampOnly(c):
 			continue
-		case healPrincipals[kind]:
+		case repairPrincipals[kind]:
 			return fmt.Errorf("%s in %s is a %s, and a principal is only ever written by an explicit bootstrap", id, stackName, kind)
 		case c.Replacement == cfntypes.ReplacementTrue || c.Replacement == cfntypes.ReplacementConditional:
 			return fmt.Errorf("%s in %s (%s) would be replaced, not updated in place", id, stackName, kind)
@@ -72,7 +72,7 @@ func healableChange(ns Namespace, stackName string, changes []cfntypes.ResourceC
 			return fmt.Errorf("%s in %s (%s) would be removed", id, stackName, kind)
 		case c.Action != cfntypes.ChangeActionAdd && c.Action != cfntypes.ChangeActionModify:
 			return fmt.Errorf("%s in %s (%s) would be %sed, which only an explicit bootstrap does", id, stackName, kind, c.Action)
-		case !healAllowed[kind]:
+		case !repairAllowed[kind]:
 			return fmt.Errorf("%s in %s is a %s, which only an explicit bootstrap writes", id, stackName, kind)
 		}
 	}
@@ -109,12 +109,12 @@ func AdmitReplacements(ns Namespace, accept bool, progress progress.Log) cfn.Cha
 	}
 }
 
-type HealRequest struct {
+type RepairRequest struct {
 	Features []string
 	Writer   provider.WrittenBy
 }
 
-var ErrHealNotPermitted = errors.New("these credentials may not write this account's bootstrap stacks")
+var ErrRepairNotPermitted = errors.New("these credentials may not write this account's bootstrap stacks")
 
 func RefusedWrite(err error) bool {
 	var api smithy.APIError
@@ -129,15 +129,15 @@ func RefusedWrite(err error) bool {
 	}
 }
 
-func Heal(ctx context.Context, apis APIs, ns Namespace, tier environment.Tier, req HealRequest, progress progress.Log) (bool, error) {
+func Repair(ctx context.Context, apis APIs, ns Namespace, tier environment.Tier, req RepairRequest, progress progress.Log) (bool, error) {
 	target, err := specFor(ns, tier)
 	if err != nil {
 		return false, err
 	}
-	return heal(ctx, apis, target, req, ensureProgress(progress))
+	return repair(ctx, apis, target, req, ensureProgress(progress))
 }
 
-func heal(ctx context.Context, apis APIs, target spec, req HealRequest, progress progress.Log) (bool, error) {
+func repair(ctx context.Context, apis APIs, target spec, req RepairRequest, progress progress.Log) (bool, error) {
 	deployed, refs, err := readBootstrap(ctx, apis.CFN, target.ns, target.tier)
 	if err != nil {
 		return false, err
@@ -157,28 +157,28 @@ func heal(ctx context.Context, apis APIs, target spec, req HealRequest, progress
 		return false, err
 	}
 
-	healed := false
+	repaired := false
 	for _, level := range levels {
 		for _, name := range level {
 			i := slices.IndexFunc(stale, func(s StackStamp) bool { return s.Feature == name })
 			if i < 0 {
 				continue
 			}
-			done, err := healStack(ctx, apis, target.ns, target.tier, stale[i], deployed, refs, req.Writer, progress)
+			done, err := repairStack(ctx, apis, target.ns, target.tier, stale[i], deployed, refs, req.Writer, progress)
 			if err != nil {
 				if RefusedWrite(err) {
-					return healed, ErrHealNotPermitted
+					return repaired, ErrRepairNotPermitted
 				}
 				progress.Warn(fmt.Sprintf("Could not refresh stack %s, so this deploy runs against it unchanged: %v", stale[i].Name, err))
 				continue
 			}
-			healed = healed || done
+			repaired = repaired || done
 		}
 	}
-	return healed, nil
+	return repaired, nil
 }
 
-func healStack(ctx context.Context, apis APIs, ns Namespace, tier environment.Tier, stale StackStamp, deployed Deployed, refs stackRefs, writer provider.WrittenBy, progress progress.Log) (bool, error) {
+func repairStack(ctx context.Context, apis APIs, ns Namespace, tier environment.Tier, stale StackStamp, deployed Deployed, refs stackRefs, writer provider.WrittenBy, progress progress.Log) (bool, error) {
 	f, ok := featureNamed(stale.Feature)
 	if !ok {
 		return false, fmt.Errorf("this provider has no feature named %q", stale.Feature)
@@ -205,7 +205,7 @@ func healStack(ctx context.Context, apis APIs, ns Namespace, tier environment.Ti
 	}
 	tags := stampTags(ns, Stamp{Schema: provider.BootstrapSchema, Digest: cfn.TemplateDigest(stack.body), WrittenBy: writer.String()})
 	capabilities := []cfntypes.Capability{cfntypes.CapabilityCapabilityNamedIam}
-	if err := cfn.Update(ctx, apis.CFN, ns.ChangeSetNameFor, stale.Name, stack.body, stack.params, capabilities, tags, healable(ns)); err != nil {
+	if err := cfn.Update(ctx, apis.CFN, ns.ChangeSetNameFor, stale.Name, stack.body, stack.params, capabilities, tags, repairable(ns)); err != nil {
 		return false, err
 	}
 	progress.Say("Refreshed stack " + stale.Name)

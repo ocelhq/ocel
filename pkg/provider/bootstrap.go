@@ -64,7 +64,7 @@ type BootstrapRequest struct {
 
 	RefuseReplacements bool
 
-	Heal bool
+	Repair bool
 
 	WrittenBy WrittenBy
 

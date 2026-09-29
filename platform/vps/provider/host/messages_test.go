@@ -73,7 +73,7 @@ func TestAnApplySaysWhatItInstalledAndLeavesWhatWasCurrentToDebug(t *testing.T) 
 	)
 }
 
-func TestAHealSaysWhatItRewroteAndWhatItLeftAsItIs(t *testing.T) {
+func TestARepairSaysWhatItRewroteAndWhatItLeftAsItIs(t *testing.T) {
 	t.Parallel()
 
 	tier := environment.TierProduction
@@ -93,8 +93,8 @@ func TestAHealSaysWhatItRewroteAndWhatItLeftAsItIs(t *testing.T) {
 	progress := &fake.Log{}
 
 	if err := NewBootstrap(box.host(), testVendor, "shop").Apply(context.Background(),
-		provider.BootstrapRequest{Tier: tier, WrittenBy: "the-suite", Heal: true}, progress); err != nil {
-		t.Fatalf("heal = %v", err)
+		provider.BootstrapRequest{Tier: tier, WrittenBy: "the-suite", Repair: true}, progress); err != nil {
+		t.Fatalf("repair = %v", err)
 	}
 	heardAll(t, progress,
 		"INFO Left systemd unit docker.service as it is: a refresh rewrites only what deploys own",

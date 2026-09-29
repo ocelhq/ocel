@@ -173,7 +173,7 @@ func TestOfferBootstrapWithoutATerminal(t *testing.T) {
 	})
 }
 
-func TestAHealingPromptHoldsTheRunWhileItAsks(t *testing.T) {
+func TestARepairPromptHoldsTheRunWhileItAsks(t *testing.T) {
 	core := &contractv1.BootstrapStack{Name: "ocel-bootstrap", Present: true, DigestCurrent: true, Required: true}
 	status := bootstrapOf(core,
 		&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true, Required: true},
@@ -182,7 +182,7 @@ func TestAHealingPromptHoldsTheRunWhileItAsks(t *testing.T) {
 	var out bytes.Buffer
 
 	if err := Offer(context.Background(), span, nil, status, environmentv1.Tier_TIER_PREVIEW, nil, true, &out, strings.NewReader("n\n")); err != nil {
-		t.Fatalf("declining to heal a bootstrap that is merely behind stopped the deploy: %v", err)
+		t.Fatalf("declining to repair a bootstrap that is merely behind stopped the deploy: %v", err)
 	}
 
 	got := seen.shape()

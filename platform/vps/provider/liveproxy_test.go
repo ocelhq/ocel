@@ -241,7 +241,7 @@ func TestLiveTheProxyIsStateTheBoxKeepsAndIsWrittenBackWhenItIsGone(t *testing.T
 
 	vm.ssh(t, "sudo docker rm --force "+caddy.Container)
 	if vm.running(t, caddy.Container) {
-		t.Fatal("the proxy survived being removed, so healing it cannot be proven here")
+		t.Fatal("the proxy survived being removed, so repairing it cannot be proven here")
 	}
 	torn, err := bootstrap.Describe(ctx, tier)
 	if err != nil {
@@ -250,8 +250,8 @@ func TestLiveTheProxyIsStateTheBoxKeepsAndIsWrittenBackWhenItIsGone(t *testing.T
 	if torn.Stacks[0].DigestCurrent {
 		t.Error("Describe() calls a box whose proxy is gone current, and a proxy nothing notices is one nothing repairs")
 	}
-	healing := provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", VendorState: torn.VendorState}
-	writing, err := bootstrap.Plan(ctx, healing)
+	repairing := provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", VendorState: torn.VendorState}
+	writing, err := bootstrap.Plan(ctx, repairing)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -264,7 +264,7 @@ func TestLiveTheProxyIsStateTheBoxKeepsAndIsWrittenBackWhenItIsGone(t *testing.T
 			t.Errorf("removing the proxy re-planned %s as %q, and nothing but the container moved", change.Name, change.Action)
 		}
 	}
-	if err := bootstrap.Apply(ctx, healing, nil); err != nil {
+	if err := bootstrap.Apply(ctx, repairing, nil); err != nil {
 		t.Fatalf("Apply() over a box whose proxy was removed = %v", err)
 	}
 	if !vm.running(t, caddy.Container) {

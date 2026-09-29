@@ -83,7 +83,7 @@ func applyRequestOf(req *contractv1.BootstrapRequest) ApplyRequest {
 		Features:           req.GetFeatures(),
 		Remove:             req.GetRemove(),
 		Force:              req.GetForce(),
-		AutoHeal:           req.AutoHeal,
+		RepairOnDeploy:     req.RepairOnDeploy,
 		AcceptReplacements: req.GetAcceptReplacements(),
 	}
 }
@@ -211,7 +211,7 @@ func BootstrapStatusProto(current BootstrapStatus, writing provider.WrittenBy, t
 		Present:        current.Present,
 		Schema:         uint32(current.Schema),
 		RequiredSchema: provider.BootstrapSchema,
-		AutoHeal:       current.AutoHeal,
+		RepairOnDeploy: current.RepairOnDeploy,
 		Writer:         writing.String(),
 		Downgrade:      current.Downgrade(writing),
 		Unfinished:     current.Unfinished,

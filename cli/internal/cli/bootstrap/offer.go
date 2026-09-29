@@ -157,7 +157,7 @@ func OfferPlan(ctx context.Context, span *run.Span, prov *providerclient.Provide
 	}
 
 	span.Warn(fmt.Sprintf("The %s bootstrap is not what this project needs: %s.", Name(tier), plan.summary()))
-	proceed, err := confirmHealing(ctx, plan, tier, span, out, in)
+	proceed, err := confirmRepair(ctx, plan, tier, span, out, in)
 	if err != nil {
 		return err
 	}
@@ -168,7 +168,7 @@ func OfferPlan(ctx context.Context, span *run.Span, prov *providerclient.Provide
 	return err
 }
 
-func confirmHealing(ctx context.Context, plan Plan, tier environmentv1.Tier, span *run.Span, out io.Writer, in io.Reader) (bool, error) {
+func confirmRepair(ctx context.Context, plan Plan, tier environmentv1.Tier, span *run.Span, out io.Writer, in io.Reader) (bool, error) {
 	return span.Confirm(func() (bool, error) {
 		return terminal.NewPrompt(out, in).Confirm(ctx, fmt.Sprintf("Run `%s` now?", plan.Command(tier)))
 	})

@@ -24,7 +24,7 @@ func change(action cfntypes.ChangeAction, logicalID, resourceType string, replac
 	}
 }
 
-func TestHealable(t *testing.T) {
+func TestRepairable(t *testing.T) {
 	tests := []struct {
 		name    string
 		stack   string
@@ -36,19 +36,19 @@ func TestHealable(t *testing.T) {
 			stack: "ocel-bootstrap-isr",
 		},
 		{
-			name:    "the production core never heals",
+			name:    "the production core never repairs",
 			stack:   coreStackName,
 			changes: []cfntypes.ResourceChange{change(cfntypes.ChangeActionModify, "Revalidator", "AWS::Lambda::Function", cfntypes.ReplacementFalse)},
 			names:   coreStackName,
 		},
 		{
-			name:    "the preview core never heals",
+			name:    "the preview core never repairs",
 			stack:   previewStackName,
 			changes: []cfntypes.ResourceChange{change(cfntypes.ChangeActionModify, "Revalidator", "AWS::Lambda::Function", cfntypes.ReplacementFalse)},
 			names:   previewStackName,
 		},
 		{
-			name:  "an empty change set on the core still never heals",
+			name:  "an empty change set on the core still never repairs",
 			stack: coreStackName,
 			names: coreStackName,
 		},
@@ -184,26 +184,26 @@ func TestHealable(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := healable(defaultNamespace)(tt.stack, tt.changes)
+			err := repairable(defaultNamespace)(tt.stack, tt.changes)
 			if tt.names == "" {
 				if err != nil {
-					t.Fatalf("healable() = %v, want nil", err)
+					t.Fatalf("repairable() = %v, want nil", err)
 				}
 				return
 			}
 			if err == nil {
-				t.Fatalf("healable() = nil, want a refusal naming %s", tt.names)
+				t.Fatalf("repairable() = nil, want a refusal naming %s", tt.names)
 			}
 			if !strings.Contains(err.Error(), tt.names) {
-				t.Fatalf("healable() = %q, want it to name %s", err, tt.names)
+				t.Fatalf("repairable() = %q, want it to name %s", err, tt.names)
 			}
 		})
 	}
 }
 
-type healLog struct{ fake.Log }
+type repairLog struct{ fake.Log }
 
-func (l *healLog) says(line string) bool {
+func (l *repairLog) says(line string) bool {
 	return slices.ContainsFunc(l.Lines(), func(said string) bool { return strings.Contains(said, line) })
 }
 
@@ -269,41 +269,41 @@ func TestChangeSets(t *testing.T) {
 	})
 }
 
-func TestHeal(t *testing.T) {
-	all := HealRequest{Features: featureNames(), Writer: "1.4.0"}
+func TestRepair(t *testing.T) {
+	all := RepairRequest{Features: featureNames(), Writer: "1.4.0"}
 
 	t.Run("a required feature stack that has fallen behind is written back", func(t *testing.T) {
 		stacks, apis := installedBootstrap(t)
 		stack := isrStack(environment.TierProduction)
 		stacks.fallBehind(stack)
-		var log healLog
+		var log repairLog
 
-		healed, err := Heal(context.Background(), apis, defaultNamespace, environment.TierProduction, all, &log)
+		repaired, err := Repair(context.Background(), apis, defaultNamespace, environment.TierProduction, all, &log)
 		if err != nil {
-			t.Fatalf("Heal: %v", err)
+			t.Fatalf("Repair: %v", err)
 		}
-		if !healed {
+		if !repaired {
 			t.Fatal("a stale feature stack was left behind")
 		}
 		if stacks.template(stack) == behindTemplate {
 			t.Error("the stale template is still what the account has deployed")
 		}
 		if !log.says("INFO Refreshed stack " + stack) {
-			t.Errorf("heal said %v, want it to name what it refreshed", log.Lines())
+			t.Errorf("repair said %v, want it to name what it refreshed", log.Lines())
 		}
 	})
 
-	t.Run("core never heals", func(t *testing.T) {
+	t.Run("core never repairs", func(t *testing.T) {
 		stacks, apis := installedBootstrap(t)
 		stacks.fallBehind(coreStackName)
-		var log healLog
+		var log repairLog
 
-		healed, err := Heal(context.Background(), apis, defaultNamespace, environment.TierProduction, all, &log)
+		repaired, err := Repair(context.Background(), apis, defaultNamespace, environment.TierProduction, all, &log)
 		if err != nil {
-			t.Fatalf("Heal: %v", err)
+			t.Fatalf("Repair: %v", err)
 		}
-		if healed || stacks.template(coreStackName) != behindTemplate {
-			t.Error("the bootstrap's core was rewritten by a heal; only an explicit bootstrap may write it")
+		if repaired || stacks.template(coreStackName) != behindTemplate {
+			t.Error("the bootstrap's core was rewritten by a repair; only an explicit bootstrap may write it")
 		}
 	})
 
@@ -311,13 +311,13 @@ func TestHeal(t *testing.T) {
 		stacks, apis := installedBootstrap(t)
 		stack := optStack(environment.TierProduction)
 		stacks.fallBehind(stack)
-		var log healLog
+		var log repairLog
 
-		healed, err := Heal(context.Background(), apis, defaultNamespace, environment.TierProduction, HealRequest{Features: []string{FeatureISR}, Writer: "1.4.0"}, &log)
+		repaired, err := Repair(context.Background(), apis, defaultNamespace, environment.TierProduction, RepairRequest{Features: []string{FeatureISR}, Writer: "1.4.0"}, &log)
 		if err != nil {
-			t.Fatalf("Heal: %v", err)
+			t.Fatalf("Repair: %v", err)
 		}
-		if healed || stacks.template(stack) != behindTemplate {
+		if repaired || stacks.template(stack) != behindTemplate {
 			t.Error("a feature stack no required feature names was refreshed anyway")
 		}
 	})
@@ -327,17 +327,17 @@ func TestHeal(t *testing.T) {
 		stack := isrStack(environment.TierProduction)
 		stacks.fallBehind(stack)
 		stacks.plan(stack, change(cfntypes.ChangeActionRemove, "RevalidateQueue", "AWS::SQS::Queue", cfntypes.ReplacementFalse))
-		var log healLog
+		var log repairLog
 
-		healed, err := Heal(context.Background(), apis, defaultNamespace, environment.TierProduction, all, &log)
+		repaired, err := Repair(context.Background(), apis, defaultNamespace, environment.TierProduction, all, &log)
 		if err != nil {
-			t.Fatalf("Heal: %v", err)
+			t.Fatalf("Repair: %v", err)
 		}
-		if healed || stacks.template(stack) != behindTemplate {
+		if repaired || stacks.template(stack) != behindTemplate {
 			t.Error("a refused change was applied anyway")
 		}
 		if !log.says("WARN Could not refresh stack "+stack) || !log.says("RevalidateQueue") {
-			t.Errorf("heal said %v, want it to name what stopped it", log.Lines())
+			t.Errorf("repair said %v, want it to name what stopped it", log.Lines())
 		}
 		if left := stacks.leftBehind(); len(left) != 0 {
 			t.Errorf("change sets %v were neither applied nor deleted", left)
@@ -350,17 +350,17 @@ func TestHeal(t *testing.T) {
 		stack := isrStack(environment.TierProduction)
 		stacks.fallBehind(stack)
 		stacks.busy(stack, cfn.ChangeSetAttempts*2)
-		var log healLog
+		var log repairLog
 
-		healed, err := Heal(context.Background(), apis, defaultNamespace, environment.TierProduction, all, &log)
+		repaired, err := Repair(context.Background(), apis, defaultNamespace, environment.TierProduction, all, &log)
 		if err != nil {
-			t.Fatalf("Heal: %v", err)
+			t.Fatalf("Repair: %v", err)
 		}
-		if healed || stacks.template(stack) != behindTemplate {
+		if repaired || stacks.template(stack) != behindTemplate {
 			t.Error("a stack another run was still writing was written over")
 		}
 		if !log.says("WARN Stack " + stack + " is still being written by another run") {
-			t.Errorf("heal said %v, want it to say the stack was still being written", log.Lines())
+			t.Errorf("repair said %v, want it to say the stack was still being written", log.Lines())
 		}
 	})
 
@@ -370,17 +370,17 @@ func TestHeal(t *testing.T) {
 		stack := isrStack(environment.TierProduction)
 		stacks.fallBehind(stack)
 		stacks.busy(stack, 3)
-		var log healLog
+		var log repairLog
 
-		healed, err := Heal(context.Background(), apis, defaultNamespace, environment.TierProduction, all, &log)
+		repaired, err := Repair(context.Background(), apis, defaultNamespace, environment.TierProduction, all, &log)
 		if err != nil {
-			t.Fatalf("Heal: %v", err)
+			t.Fatalf("Repair: %v", err)
 		}
-		if healed || stacks.template(stack) != behindTemplate {
+		if repaired || stacks.template(stack) != behindTemplate {
 			t.Error("a stack that had just been written by another run was written over")
 		}
 		if !log.says("WARN Stack " + stack + " was written by another run and is still behind") {
-			t.Errorf("heal said %v, want it to say the stack went idle behind the template this build renders", log.Lines())
+			t.Errorf("repair said %v, want it to say the stack went idle behind the template this build renders", log.Lines())
 		}
 	})
 }

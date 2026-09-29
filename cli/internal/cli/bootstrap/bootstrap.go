@@ -33,8 +33,8 @@ type Options struct {
 	Features         string
 	Remove           string
 	FeaturesDeclared bool
-	AutoHealDeclared bool
-	AutoHeal         bool
+	RepairDeclared   bool
+	Repair           bool
 }
 
 func NewCommand(deps cmddeps.Deps) *cobra.Command {
@@ -75,7 +75,7 @@ func newProvisionCommand(deps cmddeps.Deps, tier environmentv1.Tier, aliases []s
 			fmt.Sprintf("  $ ocel bootstrap %s --features core,queues\n", name) +
 			fmt.Sprintf("  $ ocel bootstrap %s --remove queues\n", name) +
 			fmt.Sprintf("  $ ocel bootstrap %s --dry\n", name) +
-			fmt.Sprintf("  $ ocel bootstrap %s --auto-heal", name),
+			fmt.Sprintf("  $ ocel bootstrap %s --repair", name),
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cwd, err := os.Getwd()
@@ -85,7 +85,7 @@ func newProvisionCommand(deps cmddeps.Deps, tier environmentv1.Tier, aliases []s
 
 			opts := opts
 			opts.FeaturesDeclared = cmd.Flags().Changed("features")
-			opts.AutoHealDeclared = cmd.Flags().Changed("auto-heal")
+			opts.RepairDeclared = cmd.Flags().Changed("repair")
 
 			return Run(cmd.Context(), deps, cwd, tier, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 		},
@@ -96,7 +96,7 @@ func newProvisionCommand(deps cmddeps.Deps, tier environmentv1.Tier, aliases []s
 	cmd.Flags().StringVar(&opts.Features, "features", "", "Comma-separated `set` of features to add or refresh; whatever else is installed is left alone (also: all, none)")
 	cmd.Flags().StringVar(&opts.Remove, "remove", "", "Comma-separated `set` of features to tear down; nothing goes unless it is named here")
 	cmd.Flags().BoolVar(&opts.Force, "force", false, "Remove a feature other projects still use")
-	cmd.Flags().BoolVar(&opts.AutoHeal, "auto-heal", false, "Let later deploys refresh stale features on their own; --auto-heal=false turns it off")
+	cmd.Flags().BoolVar(&opts.Repair, "repair", false, "Let later deploys refresh stale features on their own; --repair=false turns it off")
 
 	return cmd
 }
@@ -226,8 +226,8 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 			Edge:     cfg.EdgeSelection(),
 			Dry:      dry,
 		}
-		if opts.AutoHealDeclared {
-			req.AutoHeal = &opts.AutoHeal
+		if opts.RepairDeclared {
+			req.RepairOnDeploy = &opts.Repair
 		}
 		return req
 	}

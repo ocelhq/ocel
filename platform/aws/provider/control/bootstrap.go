@@ -269,8 +269,8 @@ func installedEdgeChanges(kind edge.Kind, feature string, planned []edge.PlanCha
 }
 
 func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
-	if req.Heal {
-		return b.heal(ctx, req, progress)
+	if req.Repair {
+		return b.repair(ctx, req, progress)
 	}
 	err := bootstrap.Run(ctx, b.apis(), b.Namespace, req.Tier, b.request(req), progress)
 	if bootstrap.RefusedWrite(err) {
@@ -279,12 +279,12 @@ func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 	return err
 }
 
-func (b Bootstrap) heal(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
-	_, err := bootstrap.Heal(ctx, b.apis(), b.Namespace, req.Tier, bootstrap.HealRequest{
+func (b Bootstrap) repair(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
+	_, err := bootstrap.Repair(ctx, b.apis(), b.Namespace, req.Tier, bootstrap.RepairRequest{
 		Features: req.Features,
 		Writer:   req.WrittenBy,
 	}, progress)
-	if errors.Is(err, bootstrap.ErrHealNotPermitted) {
+	if errors.Is(err, bootstrap.ErrRepairNotPermitted) {
 		return refusal.Refuse(refusal.CodeDenied, "%s", err.Error())
 	}
 	return err

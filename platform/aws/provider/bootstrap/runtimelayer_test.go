@@ -270,7 +270,7 @@ func TestEnsureRuntimeLayers(t *testing.T) {
 		recordWaits(t)
 		stacks, store := newFakeCFN(), newFakeObjectStore()
 		stacks.seed(runtimeStack(environment.TierProduction), staleRuntimeBody())
-		var log healLog
+		var log repairLog
 
 		layers, err := EnsureRuntimeLayers(context.Background(), ensuringAPIs(stacks, store), defaultNamespace, environment.TierProduction, ensureRuntimeRequest(), &log)
 		if err != nil {
@@ -296,7 +296,7 @@ func TestEnsureRuntimeLayers(t *testing.T) {
 		stacks, store := newFakeCFN(), preloadedStore()
 		stacks.seed(runtimeStack(environment.TierProduction), runtimeLayerBody(t, environment.TierProduction))
 		creates, updates := stacks.creates, stacks.updates
-		var log healLog
+		var log repairLog
 
 		layers, err := EnsureRuntimeLayers(context.Background(), ensuringAPIs(stacks, store), defaultNamespace, environment.TierProduction, ensureRuntimeRequest(), &log)
 		if err != nil {
@@ -317,7 +317,7 @@ func TestEnsureRuntimeLayers(t *testing.T) {
 		stacks, store := newFakeCFN(), preloadedStore()
 		stacks.seed(runtimeStack(environment.TierProduction), staleRuntimeBody())
 		stacks.busyWriting(runtimeStack(environment.TierProduction), 4, runtimeLayerBody(t, environment.TierProduction))
-		var log healLog
+		var log repairLog
 
 		layers, err := EnsureRuntimeLayers(context.Background(), ensuringAPIs(stacks, store), defaultNamespace, environment.TierProduction, ensureRuntimeRequest(), &log)
 		if err != nil {
@@ -336,7 +336,7 @@ func TestEnsureRuntimeLayers(t *testing.T) {
 		recordWaits(t)
 		stacks, store := newFakeCFN(), preloadedStore()
 		stacks.claimedMidCreate(runtimeStack(environment.TierProduction), runtimeLayerBody(t, environment.TierProduction))
-		var log healLog
+		var log repairLog
 
 		layers, err := EnsureRuntimeLayers(context.Background(), ensuringAPIs(stacks, store), defaultNamespace, environment.TierProduction, ensureRuntimeRequest(), &log)
 		if err != nil {
@@ -351,7 +351,7 @@ func TestEnsureRuntimeLayers(t *testing.T) {
 		stacks.seed(runtimeStack(environment.TierProduction), staleRuntimeBody())
 		apis := ensuringAPIs(stacks, store)
 		apis.CFN = deniedChangeSets{stacks}
-		var log healLog
+		var log repairLog
 
 		if _, err := EnsureRuntimeLayers(context.Background(), apis, defaultNamespace, environment.TierProduction, ensureRuntimeRequest(), &log); err != nil {
 			t.Fatalf("EnsureRuntimeLayers with credentials that may not write: %v", err)
@@ -366,7 +366,7 @@ func TestEnsureRuntimeLayers(t *testing.T) {
 		stacks, store := newFakeCFN(), preloadedStore()
 		stacks.seed(runtimeStack(environment.TierProduction), staleRuntimeBody())
 		stacks.busyWriting(runtimeStack(environment.TierProduction), idleAttempts*4, staleRuntimeBody())
-		var log healLog
+		var log repairLog
 
 		layers, err := EnsureRuntimeLayers(context.Background(), ensuringAPIs(stacks, store), defaultNamespace, environment.TierProduction, ensureRuntimeRequest(), &log)
 		if err != nil {

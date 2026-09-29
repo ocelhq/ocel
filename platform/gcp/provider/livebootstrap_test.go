@@ -304,12 +304,12 @@ func TestLiveAnApplyThatNeverFinishedReadsAsUnfinishedAndAReApplyFinishesIt(t *t
 	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply() over an unfinished bootstrap = %v, want it finished", err)
 	}
-	healed, err := bootstrap.Describe(ctx, tier)
+	repaired, err := bootstrap.Describe(ctx, tier)
 	if err != nil {
 		t.Fatalf("Describe() after the second Apply() = %v", err)
 	}
-	if healed.Unfinished || !healed.Present {
-		t.Fatalf("Describe() = %+v after a re-apply, want a bootstrap that is installed and finished", healed)
+	if repaired.Unfinished || !repaired.Present {
+		t.Fatalf("Describe() = %+v after a re-apply, want a bootstrap that is installed and finished", repaired)
 	}
 }
 
