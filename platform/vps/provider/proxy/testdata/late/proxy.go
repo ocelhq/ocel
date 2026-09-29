@@ -29,3 +29,5 @@ func (l *Late) Certificate(context.Context, string) (proxy.Certificate, error) {
 }
 
 func (l *Late) RefuseUnshielded(context.Context, string) error { return nil }
+
+func (l *Late) OriginFiles(proxy.Spec) ([]proxy.OriginFile, error) { return nil, nil }

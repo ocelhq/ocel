@@ -1,0 +1,172 @@
+{
+  "srv0": {
+    "listen": [
+      ":443"
+    ],
+    "routes": [
+      {
+        "match": [
+          {
+            "host": [
+              "pr-1--web.preview.example.com"
+            ]
+          }
+        ],
+        "handle": [
+          {
+            "handler": "subroute",
+            "routes": [
+              {
+                "handle": [
+                  {
+                    "handler": "reverse_proxy",
+                    "stream_close_delay": 30000000000,
+                    "upstreams": [
+                      {
+                        "dial": "ocel-switchboard:8443"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "terminal": true
+      },
+      {
+        "match": [
+          {
+            "host": [
+              "blog.example.com",
+              "box.example.com"
+            ]
+          }
+        ],
+        "handle": [
+          {
+            "handler": "subroute",
+            "routes": [
+              {
+                "handle": [
+                  {
+                    "handler": "reverse_proxy",
+                    "stream_close_delay": 30000000000,
+                    "upstreams": [
+                      {
+                        "dial": "ocel-switchboard:8443"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "terminal": true
+      },
+      {
+        "match": [
+          {
+            "host": [
+              "shop.example.com"
+            ]
+          }
+        ],
+        "handle": [
+          {
+            "handler": "subroute",
+            "routes": [
+              {
+                "handle": [
+                  {
+                    "handler": "reverse_proxy",
+                    "stream_close_delay": 30000000000,
+                    "upstreams": [
+                      {
+                        "dial": "ocel-switchboard:8443"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "terminal": true
+      }
+    ],
+    "tls_connection_policies": [
+      {
+        "match": {
+          "sni": [
+            "pr-1--web.preview.example.com"
+          ]
+        },
+        "client_authentication": {
+          "trusted_leaf_certs": [
+            "MIIBIDCBx6ADAgECAgEBMAoGCCqGSM49BAMCMAAwHhcNMjYwOTI5MTYzNTQyWhcNMjYwOTI5MTgzNTQyWjAAMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEp4A96DZrXqYNtwhCcKvDbRU3PAfpar3IIt2rGZ4o3nG6zZXBZ792pMQbnK5QFQ3E7Mt5OHUWZ9m5++3UHTfMR6MyMDAwEwYDVR0lBAwwCgYIKwYBBQUHAwIwGQYDVR0RAQH/BA8wDYILZXhhbXBsZS5jb20wCgYIKoZIzj0EAwIDSAAwRQIgUOMcFEYvBopqSX4pgv1pyKfw5UBCCIk13FdSM+xOzLICIQCE46JHo02pP6hHmVBeDvz3dcvuRN8zpVigCuQG1VX/7g=="
+          ],
+          "mode": "require"
+        }
+      },
+      {
+        "match": {
+          "sni": [
+            "shop.example.com"
+          ]
+        },
+        "certificate_selection": {
+          "any_tag": [
+            "cert0"
+          ]
+        },
+        "client_authentication": {
+          "trusted_leaf_certs": [
+            "MIIBIDCBx6ADAgECAgEBMAoGCCqGSM49BAMCMAAwHhcNMjYwOTI5MTYzNTQyWhcNMjYwOTI5MTgzNTQyWjAAMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEp4A96DZrXqYNtwhCcKvDbRU3PAfpar3IIt2rGZ4o3nG6zZXBZ792pMQbnK5QFQ3E7Mt5OHUWZ9m5++3UHTfMR6MyMDAwEwYDVR0lBAwwCgYIKwYBBQUHAwIwGQYDVR0RAQH/BA8wDYILZXhhbXBsZS5jb20wCgYIKoZIzj0EAwIDSAAwRQIgUOMcFEYvBopqSX4pgv1pyKfw5UBCCIk13FdSM+xOzLICIQCE46JHo02pP6hHmVBeDvz3dcvuRN8zpVigCuQG1VX/7g=="
+          ],
+          "mode": "require"
+        }
+      },
+      {}
+    ]
+  },
+  "srv1": {
+    "listen": [
+      ":80"
+    ],
+    "routes": [
+      {
+        "match": [
+          {
+            "host": [
+              "shop.example.com",
+              "pr-1--web.preview.example.com"
+            ]
+          }
+        ],
+        "handle": [
+          {
+            "handler": "subroute",
+            "routes": [
+              {
+                "handle": [
+                  {
+                    "handler": "static_response",
+                    "headers": {
+                      "Location": [
+                        "https://{http.request.host}{http.request.uri}"
+                      ]
+                    },
+                    "status_code": 308
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "terminal": true
+      }
+    ]
+  }
+}

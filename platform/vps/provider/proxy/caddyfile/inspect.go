@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
@@ -24,17 +25,17 @@ func (c Caddyfile) adminCheck(unread error) provider.HostCheck {
 	return check
 }
 
-func (c Caddyfile) imported(sites []site, claimed []string) provider.HostCheck {
+func (c Caddyfile) imported(sites []site, placed proxy.Spec) provider.HostCheck {
 	check := provider.HostCheck{Subject: "import of " + c.File(), Verdict: provider.HostPass,
 		Finding: fmt.Sprintf("%s serves every hostname %s names", c.named(), FileName)}
 	var served []string
 	for _, each := range sites {
-		if each.isPlacedBlock(claimed) {
+		if each.reachesSwitchboard && each.isPlacedBlock(placed) {
 			served = append(served, each.hosts...)
 		}
 	}
 	var missing []string
-	for _, hostname := range claimed {
+	for _, hostname := range placed.Hostnames {
 		if !slices.ContainsFunc(served, func(host string) bool { return strings.EqualFold(host, hostname) }) {
 			missing = append(missing, hostname)
 		}
@@ -48,12 +49,12 @@ func (c Caddyfile) imported(sites []site, claimed []string) provider.HostCheck {
 	return check
 }
 
-func collisions(sites []site, claimed []string) provider.HostCheck {
+func collisions(sites []site, placed proxy.Spec) provider.HostCheck {
 	check := provider.HostCheck{Subject: collisionSubject, Verdict: provider.HostPass,
 		Finding: "no site of yours serves a hostname ocel serves"}
 	var found []string
-	for _, hostname := range claimed {
-		if theirs, host, taken := collision(sites, claimed, hostname); taken {
+	for _, hostname := range placed.Hostnames {
+		if theirs, host, taken := collision(sites, placed, hostname); taken {
 			found = append(found, fmt.Sprintf("%s by %s, matching host %s", hostname, theirs, host))
 		}
 	}
@@ -70,13 +71,17 @@ func sum(content []byte) string {
 	return hex.EncodeToString(digest[:])
 }
 
-func (c Caddyfile) placedCheck(ctx context.Context, claimed []string) (provider.HostCheck, error) {
+func (c Caddyfile) placedCheck(ctx context.Context, placed proxy.Spec) (provider.HostCheck, error) {
 	check := provider.HostCheck{Subject: c.File(), Verdict: provider.HostPass, Finding: FileName + " is what ocel renders"}
-	placed, err := c.Box.PlacedSum(ctx, c.File())
+	current, err := c.Box.PlacedSum(ctx, c.File())
 	if err != nil {
 		return check, err
 	}
-	if placed != sum(c.render(claimed)) {
+	rendered, err := c.render(placed)
+	if err != nil {
+		return check, err
+	}
+	if current != sum(rendered) {
 		check.Verdict = provider.HostFail
 		check.Finding = fmt.Sprintf("%s is missing or not what ocel renders from this box's routes", c.File())
 		check.Fix = "run a deploy, which places it again"
@@ -99,6 +104,22 @@ func (c Caddyfile) memberCheck(ctx context.Context) provider.HostCheck {
 		check.Finding = fmt.Sprintf("%s is on %s, where your Caddy reaches it", switchboard.Name, c.Network)
 	}
 	return check
+}
+
+func (c Caddyfile) shieldCheck(ctx context.Context, hostname string) (provider.HostCheck, error) {
+	check := provider.HostCheck{Subject: hostname, Verdict: provider.HostFail,
+		Fix: fmt.Sprintf("check %s imports %s and was reloaded", c.named(), c.File())}
+	answered, failure, err := c.Box.Probe(ctx, hostname)
+	switch {
+	case err != nil:
+		return check, err
+	case answered != "":
+		check.Finding = fmt.Sprintf("your Caddy answers %s to a client that presents no certificate, so the shield in %s is not in effect", hostname, FileName)
+	default:
+		check.Verdict, check.Fix = provider.HostPass, ""
+		check.Finding = fmt.Sprintf("your Caddy refuses %s to a client that presents no certificate (%s)", hostname, failure)
+	}
+	return check, nil
 }
 
 func (c Caddyfile) routing(ctx context.Context, hostname string) (provider.HostCheck, error) {

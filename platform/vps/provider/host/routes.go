@@ -131,6 +131,14 @@ func RenderProxyConfig(front proxy.Proxy, state RoutingTable) ([]byte, error) {
 	return rendered, nil
 }
 
+func RenderOriginFiles(front proxy.Proxy, state RoutingTable) ([]proxy.OriginFile, error) {
+	files, err := front.OriginFiles(proxySpec(state))
+	if err != nil {
+		return nil, refusal.Refuse(refusal.CodeInvalid, "%v", err)
+	}
+	return files, nil
+}
+
 func proxySpec(state RoutingTable) proxy.Spec {
 	pins := make([]proxy.Pin, 0, len(state.Pins))
 	for _, pin := range state.Pins {

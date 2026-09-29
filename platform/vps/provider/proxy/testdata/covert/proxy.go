@@ -29,3 +29,5 @@ func (o *Overt) Certificate(context.Context, string) (proxy.Certificate, error) 
 }
 
 func (o *Overt) RefuseUnshielded(context.Context, string) error { return nil }
+
+func (o *Overt) OriginFiles(proxy.Spec) ([]proxy.OriginFile, error) { return nil, nil }

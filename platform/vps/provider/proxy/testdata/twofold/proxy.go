@@ -29,3 +29,5 @@ func (f *First) Certificate(context.Context, string) (proxy.Certificate, error) 
 }
 
 func (f *First) RefuseUnshielded(context.Context, string) error { return nil }
+
+func (f *First) OriginFiles(proxy.Spec) ([]proxy.OriginFile, error) { return nil, nil }

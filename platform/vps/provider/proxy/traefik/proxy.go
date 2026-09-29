@@ -34,6 +34,8 @@ func (t Traefik) RefuseUnshielded(_ context.Context, hostname string) error {
 		hostname, t.File(), hostname)
 }
 
+func (Traefik) OriginFiles(proxy.Spec) ([]proxy.OriginFile, error) { return nil, nil }
+
 func (t Traefik) Certificate(ctx context.Context, hostname string) (proxy.Certificate, error) {
 	spec, err := t.Box.ReadSpec(ctx)
 	if err != nil {

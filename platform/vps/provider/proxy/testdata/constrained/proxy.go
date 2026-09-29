@@ -29,3 +29,5 @@ func (Constrained) Certificate(context.Context, string) (proxy.Certificate, erro
 }
 
 func (Constrained) RefuseUnshielded(context.Context, string) error { return nil }
+
+func (Constrained) OriginFiles(proxy.Spec) ([]proxy.OriginFile, error) { return nil, nil }

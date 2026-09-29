@@ -553,7 +553,7 @@ func (f Front) placedRemovals() []removal {
 	}
 	placed := taking(KindPlaced, at, "ocel's routes in your proxy's directory")
 	if f.Caddy != nil {
-		placed.reload = f.caddyReloadCommand()
+		placed.reload, placed.origins = f.caddyReloadCommand(), filepath.Dir(at)
 	}
 	removals := []removal{placed}
 	for _, grant := range f.reloadGrant() {

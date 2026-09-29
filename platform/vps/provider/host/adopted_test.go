@@ -27,6 +27,7 @@ type userProxy struct {
 	invalid  string
 	unloaded *[]string
 	reloaded *[]proxy.Spec
+	origins  []proxy.OriginFile
 }
 
 func (y userProxy) Guarantees() proxy.Guarantees { return proxy.Guarantees{} }
@@ -76,6 +77,8 @@ func (y userProxy) Reload(_ context.Context, served proxy.Spec) error {
 func (userProxy) Inspect(context.Context) (proxy.Checks, error) { return nil, nil }
 
 func (userProxy) RefuseUnshielded(context.Context, string) error { return nil }
+
+func (y userProxy) OriginFiles(proxy.Spec) ([]proxy.OriginFile, error) { return y.origins, nil }
 
 func (userProxy) Certificate(context.Context, string) (proxy.Certificate, error) {
 	return proxy.Certificate{}, nil
@@ -620,7 +623,7 @@ func TestTheWriteFeedsTheSwitchboardTheRenderingOnlyOnceTheTableItRendersIsInPla
 	fed := pairFed(routingPair{table: []byte(after), config: []byte("routes shop.example.com\n")})
 	asking := strings.Join(switchboardFed("place", coolifyFile)[1:], " ")
 
-	if code, _, _ := box.run(t, stagedWrite(tableDigest(digested("a table another deploy has since replaced")), coolifyFile), fed); code != routingMoved {
+	if code, _, _ := box.run(t, stagedWrite(tableDigest(digested("a table another deploy has since replaced")), coolifyFile, nil), fed); code != routingMoved {
 		t.Errorf("a write over a table that moved = %d, want %d", code, routingMoved)
 	}
 	if asked := box.asks(t); asked != "" {
@@ -630,7 +633,7 @@ func TestTheWriteFeedsTheSwitchboardTheRenderingOnlyOnceTheTableItRendersIsInPla
 		t.Errorf("a write over a table that moved left it\n%s\nwant it untouched", got)
 	}
 
-	code, out, errs := box.run(t, stagedWrite(tableDigest(digested(before)), coolifyFile), fed)
+	code, out, errs := box.run(t, stagedWrite(tableDigest(digested(before)), coolifyFile, nil), fed)
 	if code != 0 {
 		t.Fatalf("a write over the table it read = %d: %s", code, errs)
 	}
@@ -656,7 +659,7 @@ func TestAWriteWhoseRenderingTheSwitchboardRefusesSaysSoAndNamesTheTableItLeft(t
 	after := string(mustWrite(t, previewing()))
 	box.refuse(t)
 
-	code, out, errs := box.run(t, stagedWrite(tableDigest(digested(before)), coolifyFile),
+	code, out, errs := box.run(t, stagedWrite(tableDigest(digested(before)), coolifyFile, nil),
 		pairFed(routingPair{table: []byte(after), config: []byte("routes shop.example.com\n")}))
 	if code != routingPlaceFailed {
 		t.Errorf("a write whose placement the switchboard refused = %d, want %d so the deploy puts the table back", code, routingPlaceFailed)
@@ -675,14 +678,14 @@ func TestAPlacementAloneFeedsTheSwitchboardOnlyWhileTheTableIsTheOneItRenders(t 
 	box := shellPlacing(t)
 	current := fileContents(t, box.table)
 
-	if code, _, _ := box.run(t, replacement(tableDigest(digested("a table another deploy has since replaced")), coolifyFile), "routes shop.example.com\n"); code != routingMoved {
+	if code, _, _ := box.run(t, replacement(tableDigest(digested("a table another deploy has since replaced")), coolifyFile, nil), "routes shop.example.com\n"); code != routingMoved {
 		t.Errorf("a placement over a table that moved = %d, want %d: the deploy reads the table again and places what it renders", code, routingMoved)
 	}
 	if asked := box.asks(t); asked != "" {
 		t.Errorf("a placement over a table that moved still asked docker %q, leaving a rendering of a table the box no longer has", asked)
 	}
 
-	if code, _, errs := box.run(t, replacement(tableDigest(digested(current)), coolifyFile), "routes shop.example.com\n"); code != 0 {
+	if code, _, errs := box.run(t, replacement(tableDigest(digested(current)), coolifyFile, nil), "routes shop.example.com\n"); code != 0 {
 		t.Fatalf("a placement over the table it renders = %d: %s", code, errs)
 	}
 	if got := fileContents(t, box.fed); got != "routes shop.example.com\n" {
@@ -693,7 +696,7 @@ func TestAPlacementAloneFeedsTheSwitchboardOnlyWhileTheTableIsTheOneItRenders(t 
 	}
 
 	box.refuse(t)
-	if code, _, errs := box.run(t, replacement(tableDigest(digested(current)), coolifyFile), "routes shop.example.com\n"); code != routingPlaceFailed || !strings.Contains(errs, "no space left on device") {
+	if code, _, errs := box.run(t, replacement(tableDigest(digested(current)), coolifyFile, nil), "routes shop.example.com\n"); code != routingPlaceFailed || !strings.Contains(errs, "no space left on device") {
 		t.Errorf("a placement the switchboard refused = %d, %q, want %d saying why", code, errs, routingPlaceFailed)
 	}
 }

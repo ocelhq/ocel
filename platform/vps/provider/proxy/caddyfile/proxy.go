@@ -3,6 +3,7 @@ package caddyfile
 import (
 	"context"
 	"path/filepath"
+	"slices"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
@@ -12,14 +13,14 @@ var _ proxy.Proxy = Caddyfile{}
 
 func (Caddyfile) Guarantees() proxy.Guarantees { return proxy.Guarantees{} }
 
-func (c Caddyfile) Render(spec proxy.Spec) ([]byte, error) { return c.render(spec.Hostnames), nil }
+func (c Caddyfile) Render(spec proxy.Spec) ([]byte, error) { return c.render(spec) }
 
 func (c Caddyfile) File() string { return filepath.Join(c.Directory, FileName) }
 
 func (Caddyfile) Unrendered([]byte, proxy.Permission) string { return "" }
 
 func (c Caddyfile) RefuseRouted(ctx context.Context, hostnames []string) error {
-	placed, err := c.Box.Claimed(ctx)
+	placed, err := c.Box.ReadSpec(ctx)
 	if err != nil {
 		return err
 	}
@@ -56,25 +57,30 @@ func (c Caddyfile) Reload(ctx context.Context, _ proxy.Spec) error {
 }
 
 func (c Caddyfile) Inspect(ctx context.Context) (proxy.Checks, error) {
-	claimed, err := c.Box.Claimed(ctx)
+	placed, err := c.Box.ReadSpec(ctx)
 	if err != nil {
 		return nil, err
 	}
 	sites, unread := c.sites(ctx)
 	checks := proxy.Checks{c.adminCheck(unread)}
 	if unread == nil {
-		checks = append(checks, c.imported(sites, claimed), collisions(sites, claimed))
+		checks = append(checks, c.imported(sites, placed), collisions(sites, placed))
 	}
-	placed, err := c.placedCheck(ctx, claimed)
+	current, err := c.placedCheck(ctx, placed)
 	if err != nil {
 		return nil, err
 	}
-	checks = append(checks, placed)
+	checks = append(checks, current)
 	if c.Network != "" {
 		checks = append(checks, c.memberCheck(ctx))
 	}
-	for _, hostname := range claimed {
-		check, err := c.routing(ctx, hostname)
+	_, shielded := split(placed)
+	for _, hostname := range placed.Hostnames {
+		probe := c.routing
+		if slices.ContainsFunc(shielded, func(site shieldedSite) bool { return site.hostname == hostname }) {
+			probe = c.shieldCheck
+		}
+		check, err := probe(ctx, hostname)
 		if err != nil {
 			return nil, err
 		}
@@ -83,11 +89,10 @@ func (c Caddyfile) Inspect(ctx context.Context) (proxy.Checks, error) {
 	return checks, nil
 }
 
-func (Caddyfile) RefuseUnshielded(_ context.Context, hostname string) error {
-	return refusal.Refuse(refusal.CodeInvalid,
-		"the site block ocel places for %s in %s requires no client certificate, so the edge in front would forward a hostname anyone reaches without it\n"+
-			"Put an edge in front of %s behind ocel's own proxy or with `\"proxy\": \"manual\"`, or bind it with no edge in front",
-		hostname, FileName, hostname)
+func (Caddyfile) RefuseUnshielded(context.Context, string) error { return nil }
+
+func (c Caddyfile) OriginFiles(spec proxy.Spec) ([]proxy.OriginFile, error) {
+	return c.originFiles(spec), nil
 }
 
 func (Caddyfile) Certificate(context.Context, string) (proxy.Certificate, error) {

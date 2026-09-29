@@ -27,3 +27,5 @@ func (u *Unasserted) Certificate(context.Context, string) (proxy.Certificate, er
 }
 
 func (u *Unasserted) RefuseUnshielded(context.Context, string) error { return nil }
+
+func (u *Unasserted) OriginFiles(proxy.Spec) ([]proxy.OriginFile, error) { return nil, nil }
