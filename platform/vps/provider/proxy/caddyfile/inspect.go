@@ -29,7 +29,7 @@ func (c Caddyfile) imported(sites []site, claimed []string) provider.HostCheck {
 		Finding: fmt.Sprintf("%s serves every hostname %s names", c.named(), FileName)}
 	var served []string
 	for _, each := range sites {
-		if each.reachesSwitchboard {
+		if each.isOcels(claimed) {
 			served = append(served, each.hosts...)
 		}
 	}
@@ -53,7 +53,7 @@ func collisions(sites []site, claimed []string) provider.HostCheck {
 		Finding: "no site of yours serves a hostname ocel serves"}
 	var found []string
 	for _, hostname := range claimed {
-		if theirs, host, taken := collision(sites, hostname); taken {
+		if theirs, host, taken := collision(sites, claimed, hostname); taken {
 			found = append(found, fmt.Sprintf("%s by %s, matching host %s", hostname, theirs, host))
 		}
 	}

@@ -53,9 +53,10 @@ func TestAHostMatcherInsideASiteOfYoursIsReadToo(t *testing.T) {
 func TestTheHostnamesOcelsOwnBlockServesAndOnesNothingServesAreFree(t *testing.T) {
 	t.Parallel()
 
-	_, front := coolifys(t)
+	machine, front := coolifys(t)
+	machine.claimed = coolifyServed
 	if err := front.RefuseRouted(context.Background(), []string{"shop.p1305.test", "ocel-edge-probe.preview.p1305.test", "blog.p1305.test", "p1305.test", "a.b.apps.p1305.test"}); err != nil {
-		t.Errorf("RefuseRouted() = %v, want nothing refused: ocel's own block is no site of yours, a catch-all with no host names no hostname, and a wildcard covers one label", err)
+		t.Errorf("RefuseRouted() = %v, want nothing refused: ocel's own block, serving exactly what ocel placed, is no site of yours, a catch-all with no host names no hostname, and a wildcard covers one label", err)
 	}
 }
 
@@ -92,5 +93,29 @@ func TestAnAdminEndpointThatDoesNotAnswerRefusesTheClaimNamingAdminOff(t *testin
 	err := (caddyfile.Caddyfile{Box: machine, Port: 8480}).RefuseRouted(context.Background(), []string{"blog.example.com"})
 	if err == nil || !strings.Contains(err.Error(), "admin off") || !strings.Contains(err.Error(), "port 2019") {
 		t.Errorf("RefuseRouted() = %v, want it refused naming admin off and what the read met: ocel cannot tell what your Caddy serves without it", err)
+	}
+}
+
+func sameUpstream(hosts ...[]string) string {
+	routes := make([]string, 0, len(hosts))
+	for _, each := range hosts {
+		routes = append(routes, `{"match":[{"host":["`+strings.Join(each, `","`)+`"]}],"handle":[{"handler":"subroute","routes":[{"handle":[{"handler":"reverse_proxy","upstreams":[{"dial":"ocel-switchboard:8443"}]}]}]}],"terminal":true}`)
+	}
+	return `{"srv0":{"listen":[":443"],"routes":[` + strings.Join(routes, ",") + `]}}`
+}
+
+func TestASiteOfYoursProxyingToTheSwitchboardUnderOtherHostnamesIsStillYours(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{claimed: []string{"shop.example.com"}, said: map[string]string{
+		caddyfile.AdminServers: sameUpstream([]string{"shop.example.com"}, []string{"mine.example.com"}),
+	}}
+	front := caddyfile.Caddyfile{Box: machine, Container: "caddy", Config: "/etc/caddy/Caddyfile", Network: "web"}
+	err := front.RefuseRouted(context.Background(), []string{"mine.example.com"})
+	if err == nil || !strings.Contains(err.Error(), "route 2") {
+		t.Errorf("RefuseRouted(mine.example.com) = %v, want it refused naming route 2: a route is ocel's only when it serves exactly the hostnames ocel placed", err)
+	}
+	if err := front.RefuseRouted(context.Background(), []string{"SHOP.example.com"}); err != nil {
+		t.Errorf("RefuseRouted(SHOP.example.com) = %v, want the hostname ocel's own block serves let through", err)
 	}
 }
