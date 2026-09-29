@@ -109,6 +109,7 @@ func backend(t *testing.T, name string) string {
 		w.Header().Set(router.HeaderRouter, "app")
 		w.Header().Set("X-Served-Host", r.Host)
 		w.Header().Set("X-Served-Path", r.URL.Path)
+		w.Header().Set("X-Served-Query", r.URL.RawQuery)
 		for _, forwarded := range []string{"X-Forwarded-For", "X-Forwarded-Proto", "X-Forwarded-Host", "X-Forwarded-Port", "X-Forwarded-Prefix", "Forwarded", "X_Forwarded_Proto", "X_Forwarded_Host", "X-Real-Ip", "True-Client-Ip"} {
 			w.Header().Set("Seen-"+forwarded, strings.Join(r.Header.Values(forwarded), ","))
 		}
@@ -177,6 +178,23 @@ func TestAClaimedHostnameIsServedByItsUpstreamUnderItsOwnHostAndNamesTheBox(t *t
 	}
 	if got := said.header.Values(router.HeaderRouter); !slices.Equal(got, []string{"switchboard"}) {
 		t.Errorf("the answer names the router %v, want only switchboard: the bind's probe reads this header off every hostname the box serves", got)
+	}
+}
+
+func TestTheUpstreamIsHandedTheQueryTheClientSentByteForByte(t *testing.T) {
+	t.Parallel()
+
+	web := backend(t, "web")
+	_, at := served(t, routing(t, map[string]string{"shop.example.com": web}))
+
+	for _, query := range []string{
+		"tag=a&tag=b&tag=a,b&x=1;2&y=%7B%7D&z=a%2Bb&w=100%25",
+		"a=%%URL%%&b=%zz&c=100%",
+	} {
+		said := ask(t, boardClient, at, "shop.example.com", "/echo?"+query)
+		if got := said.header.Get("X-Served-Query"); got != query {
+			t.Errorf("the upstream was handed the query %q, want %q", got, query)
+		}
 	}
 }
 

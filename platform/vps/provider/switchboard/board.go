@@ -201,6 +201,7 @@ func (b *Board) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Rewrite: func(out *httputil.ProxyRequest) {
 			out.Out.URL.Scheme = "http"
 			out.Out.URL.Host = host
+			out.Out.URL.RawQuery = out.In.URL.RawQuery
 			out.Out.Host = out.In.Host
 			if forward.Strip != "" {
 				out.Out.URL.Path = stripped(out.In.URL.Path, forward.Strip)
