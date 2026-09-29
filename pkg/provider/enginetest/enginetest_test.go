@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/images"
 )
 
 func TestMain(m *testing.M) { os.Exit(Main(m)) }
@@ -81,9 +81,9 @@ func plant(t *testing.T, of string) planted {
 	})
 	does(append(append([]string{"network", "create"}, labelledAs(of)...), left.network)...)
 	does(append(append([]string{"run", "--detach", "--name", left.labelled}, labelledAs(of)...),
-		"--network", "none", "--entrypoint", "sleep", constants.ObjectStoreImage(), "600")...)
+		"--network", "none", "--entrypoint", "sleep", images.ObjectStore(), "600")...)
 	does("run", "--detach", "--name", left.attached, "--network", left.network,
-		"--entrypoint", "sleep", constants.ObjectStoreImage(), "600")
+		"--entrypoint", "sleep", images.ObjectStore(), "600")
 
 	root, err := os.MkdirTemp(seen, rootPrefix)
 	if err != nil {
@@ -95,7 +95,7 @@ func plant(t *testing.T, of string) planted {
 		t.Fatal(err)
 	}
 	does("run", "--rm", "--network", "none", "--user", "0", "--volume", root+":/written",
-		"--entrypoint", "sh", constants.ObjectStoreImage(), "-c", "mkdir -m 700 /written/data && echo written > /written/data/state")
+		"--entrypoint", "sh", images.ObjectStore(), "-c", "mkdir -m 700 /written/data && echo written > /written/data/state")
 	return left
 }
 
@@ -164,7 +164,7 @@ func TestABindSourceIsOneTheEngineReadsAndNoTwoTestsShareOne(t *testing.T) {
 		t.Fatal(err)
 	}
 	if out, err := exec.Command(engine, "run", "--rm", "--network", "none", "--user", "0", "--volume", first+":/seen:ro",
-		"--entrypoint", "test", constants.ObjectStoreImage(), "-f", "/seen/seen").CombinedOutput(); err != nil {
+		"--entrypoint", "test", images.ObjectStore(), "-f", "/seen/seen").CombinedOutput(); err != nil {
 		t.Errorf("the engine cannot read %s: %v\n%s", first, err, out)
 	}
 	if of, err := os.ReadFile(filepath.Join(filepath.Dir(first), runFile)); err != nil || string(of) != run {

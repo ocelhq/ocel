@@ -14,8 +14,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -24,6 +24,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	s3store "github.com/ocelhq/ocel/platform/s3"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
@@ -80,7 +81,7 @@ func storeContainer(in resources.ProvisionRequest) host.ResourceContainer {
 		Resource: storeResource,
 		Tier:     in.Ref.Tier,
 
-		Image: constants.ObjectStoreImage(),
+		Image: images.ObjectStore(),
 		Env: map[string]string{
 			"RUSTFS_ACCESS_KEY":     storeAccessKey,
 			"RUSTFS_ADDRESS":        ":" + storePort,
@@ -276,7 +277,7 @@ func (p *Provider) ProvisionBucket(ctx context.Context, in resources.ProvisionRe
 			return storeCredential{}, err
 		}
 		state, err := p.host.ProvisionBucket(ctx, storeBucketSpec(in.Ref, spec.Name, credential.secret,
-			host.BucketSpec{Bucket: constants.StoreSessionsBucket(), Internal: true}))
+			host.BucketSpec{Bucket: s3store.SessionsBucket(), Internal: true}))
 		if err != nil {
 			return storeCredential{}, err
 		}
@@ -356,7 +357,7 @@ func (p *Provider) storeSection(ctx context.Context, spec provider.StackSpec) (*
 }
 
 func sessionsPrefix(spec provider.StackSpec) string {
-	return constants.StoreSessionsBucket() + "/" +
+	return s3store.SessionsBucket() + "/" +
 		storeRef(spec.Ref).Name.String() + "/" + naming.Sanitize(appNameOf(spec.App))
 }
 

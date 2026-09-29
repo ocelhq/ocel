@@ -15,7 +15,6 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
-	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -34,6 +33,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 const webDeploymentID = "0123456789abcdef0123456789abcdef"
@@ -63,7 +63,7 @@ func builtApps(t *testing.T, apps ...string) {
 func builtAppsUnder(t *testing.T, root string, apps ...string) {
 	t.Helper()
 	for _, app := range apps {
-		built := filepath.Join(root, constants.ProjectStateDirName, "output", filepath.FromSlash(appArtifactPath(app)))
+		built := filepath.Join(root, statedir.Name, "output", filepath.FromSlash(appArtifactPath(app)))
 		if err := os.MkdirAll(built, 0o755); err != nil {
 			t.Fatal(err)
 		}

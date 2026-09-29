@@ -18,10 +18,10 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/arch"
-	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
@@ -124,7 +124,7 @@ func TestAContainerIsHandedItsValuesAndThePortItListensOn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("containerWork() = %v", err)
 	}
-	if work.env["GREETING"] != "hello" || work.env["API_TOKEN"] != "sensitive-token" || work.env[constants.PhaseEnvName] != "production" {
+	if work.env["GREETING"] != "hello" || work.env["API_TOKEN"] != "sensitive-token" || work.env[processenv.PhaseEnvVar] != "production" {
 		t.Errorf("env = %v, want the plain and sensitive values and the phase: those are handed to the runtime once, in the task definition", work.env)
 	}
 	if work.env[containerPortEnv] != containerPort {

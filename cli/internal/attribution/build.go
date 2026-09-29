@@ -11,7 +11,7 @@ import (
 	"github.com/evanw/esbuild/pkg/api"
 
 	"github.com/ocelhq/ocel/cli/internal/discovery"
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 var unresolvableImportLogLevels = map[string]api.LogLevel{
@@ -112,7 +112,7 @@ func treeShake(root string, app App) (map[string]map[string]bool, error) {
 		Bundle:        true,
 		Platform:      api.PlatformNode,
 		Format:        api.FormatESModule,
-		Outdir:        filepath.Join(root, constants.ProjectStateDirName, "attribution", app.Name),
+		Outdir:        filepath.Join(root, statedir.Name, "attribution", app.Name),
 		Write:         false,
 		Metafile:      true,
 		Loader:        assetLoaders,

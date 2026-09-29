@@ -24,8 +24,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/channel"
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/statedir"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
@@ -39,12 +40,12 @@ globalThis.__ocelRegister ??= [];
 globalThis.__ocelRegister.push(
   fetch(new URL("/app.resources.v1.ResourceService/DeclareEnv", process.env.%s), {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: "Bearer " + process.env.`+constants.DevServerTokenEnvName+` },
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + process.env.`+processenv.DevServerTokenEnvVar+` },
     body: JSON.stringify({ definitions: [%s] }),
   }),
 );
 export {};
-`, constants.DevServerEnvName, strings.Join(definitions, ","))
+`, processenv.DevServerEnvVar, strings.Join(definitions, ","))
 }
 
 func TestResolvedEnv(t *testing.T) {
@@ -103,12 +104,12 @@ func TestResolvedEnv(t *testing.T) {
 		t.Parallel()
 
 		reached := resolvedEnv(nil, nil, nil, runtimeAccess{url: "http://127.0.0.1:4242", token: "app-token"}, "", variables.Scope{})
-		if reached[constants.RuntimeAddressEnvName] != "http://127.0.0.1:4242" || reached[channel.SessionTokenEnvVar] != "app-token" {
-			t.Errorf("env = %v, want %s and %s stated together", reached, constants.RuntimeAddressEnvName, channel.SessionTokenEnvVar)
+		if reached[processenv.RuntimeAddressEnvVar] != "http://127.0.0.1:4242" || reached[channel.SessionTokenEnvVar] != "app-token" {
+			t.Errorf("env = %v, want %s and %s stated together", reached, processenv.RuntimeAddressEnvVar, channel.SessionTokenEnvVar)
 		}
 
 		unreached := resolvedEnv(nil, nil, nil, runtimeAccess{}, "", variables.Scope{})
-		for _, name := range []string{constants.RuntimeAddressEnvName, channel.SessionTokenEnvVar} {
+		for _, name := range []string{processenv.RuntimeAddressEnvVar, channel.SessionTokenEnvVar} {
 			if _, ok := unreached[name]; ok {
 				t.Errorf("%s stated for an app with no runtime to reach", name)
 			}
@@ -119,34 +120,34 @@ func TestResolvedEnv(t *testing.T) {
 		t.Parallel()
 
 		bound := resolvedEnv(nil, nil, nil, runtimeAccess{}, "/web", variables.Scope{})
-		if bound[constants.AppFolderEnvName] != "/web" {
-			t.Errorf("%s = %q, want %q", constants.AppFolderEnvName, bound[constants.AppFolderEnvName], "/web")
+		if bound[processenv.AppFolderEnvVar] != "/web" {
+			t.Errorf("%s = %q, want %q", processenv.AppFolderEnvVar, bound[processenv.AppFolderEnvVar], "/web")
 		}
 
 		unbound := resolvedEnv(nil, nil, nil, runtimeAccess{}, "", variables.Scope{})
-		folder, ok := unbound[constants.AppFolderEnvName]
+		folder, ok := unbound[processenv.AppFolderEnvVar]
 		if !ok {
-			t.Fatalf("resolvedEnv = %v, want %s written even for an unbound app", unbound, constants.AppFolderEnvName)
+			t.Fatalf("resolvedEnv = %v, want %s written even for an unbound app", unbound, processenv.AppFolderEnvVar)
 		}
 		if folder != "" {
-			t.Errorf("%s = %q, want the project root spelled as the empty string", constants.AppFolderEnvName, folder)
+			t.Errorf("%s = %q, want the project root spelled as the empty string", processenv.AppFolderEnvVar, folder)
 		}
 
-		stale := toMap(applyEnv([]string{constants.AppFolderEnvName + "=/stale"}, resolvedEnv(nil, nil, nil, runtimeAccess{}, "", variables.Scope{})))
-		if stale[constants.AppFolderEnvName] != "" {
-			t.Errorf("%s = %q, want the shell's stale binding overwritten", constants.AppFolderEnvName, stale[constants.AppFolderEnvName])
+		stale := toMap(applyEnv([]string{processenv.AppFolderEnvVar + "=/stale"}, resolvedEnv(nil, nil, nil, runtimeAccess{}, "", variables.Scope{})))
+		if stale[processenv.AppFolderEnvVar] != "" {
+			t.Errorf("%s = %q, want the shell's stale binding overwritten", processenv.AppFolderEnvVar, stale[processenv.AppFolderEnvVar])
 		}
 
 		contested := resolvedEnv(
-			map[string]string{constants.AppFolderEnvName: "/from-live"},
-			map[string]string{constants.AppFolderEnvName: "/from-dotfile"},
-			[]binding.Resolved{{Name: "main", Env: map[string]string{constants.AppFolderEnvName: "/from-resource"}}},
+			map[string]string{processenv.AppFolderEnvVar: "/from-live"},
+			map[string]string{processenv.AppFolderEnvVar: "/from-dotfile"},
+			[]binding.Resolved{{Name: "main", Env: map[string]string{processenv.AppFolderEnvVar: "/from-resource"}}},
 			runtimeAccess{},
 			"/web",
 			variables.Scope{},
 		)
-		if contested[constants.AppFolderEnvName] != "/web" {
-			t.Errorf("%s = %q, want the binding dev states to outrank every source it merges", constants.AppFolderEnvName, contested[constants.AppFolderEnvName])
+		if contested[processenv.AppFolderEnvVar] != "/web" {
+			t.Errorf("%s = %q, want the binding dev states to outrank every source it merges", processenv.AppFolderEnvVar, contested[processenv.AppFolderEnvVar])
 		}
 	})
 }
@@ -188,8 +189,8 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 			if env["API_BASE"] != "http://localhost:3000" {
 				t.Errorf("API_BASE = %q, want the dotfile's value", env["API_BASE"])
 			}
-			if env[constants.AppFolderEnvName] != "/web" {
-				t.Errorf("%s = %q, want the folder the only app binds", constants.AppFolderEnvName, env[constants.AppFolderEnvName])
+			if env[processenv.AppFolderEnvVar] != "/web" {
+				t.Errorf("%s = %q, want the folder the only app binds", processenv.AppFolderEnvVar, env[processenv.AppFolderEnvVar])
 			}
 		})
 
@@ -517,7 +518,7 @@ export default {
 			t.Fatalf("runDev err = %v, want exit 7 (no refusal); stderr=%s", err, stderr.String())
 		}
 
-		accessor, readErr := os.ReadFile(filepath.Join(root, constants.ProjectStateDirName, "env-client.ts"))
+		accessor, readErr := os.ReadFile(filepath.Join(root, statedir.Name, "env-client.ts"))
 		if readErr != nil {
 			t.Fatalf("dev generated no client accessor: %v", readErr)
 		}
@@ -527,7 +528,7 @@ export default {
 		if strings.Contains(string(accessor), "STRIPE_API_KEY") {
 			t.Errorf("accessor names a server-only value:\n%s", accessor)
 		}
-		if tsconfig := readTestFile(t, filepath.Join(root, "tsconfig.json")); !strings.Contains(tsconfig, `"ocel/env/client": ["./`+constants.ProjectStateDirName+`/env-client.ts"]`) {
+		if tsconfig := readTestFile(t, filepath.Join(root, "tsconfig.json")); !strings.Contains(tsconfig, `"ocel/env/client": ["./`+statedir.Name+`/env-client.ts"]`) {
 			t.Errorf("tsconfig does not point the import at the accessor:\n%s", tsconfig)
 		}
 
@@ -611,8 +612,8 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		if env["API_BASE"] != "http://localhost:3000" {
 			t.Errorf("API_BASE = %q, want `ocel run` to resolve the dotfile the way `ocel dev` does", env["API_BASE"])
 		}
-		if env[constants.AppFolderEnvName] != "/web" {
-			t.Errorf("%s = %q, want the folder the only app binds", constants.AppFolderEnvName, env[constants.AppFolderEnvName])
+		if env[processenv.AppFolderEnvVar] != "/web" {
+			t.Errorf("%s = %q, want the folder the only app binds", processenv.AppFolderEnvVar, env[processenv.AppFolderEnvVar])
 		}
 		if !strings.Contains(stdout.String(), valueLayers{{from: dotfile.FileName, file: true}, {from: dotfile.LocalFileName, file: true}}.advice(false)) {
 			t.Errorf("stdout = %q, want the advice for a run that reads the file once", stdout.String())
@@ -700,7 +701,7 @@ func TestDevGivesEveryAppItsURL(t *testing.T) {
 		t.Setenv("PORT", "")
 
 		got := resolvedEnv(nil, nil, nil, runtimeAccess{}, "", node)
-		for _, key := range []string{constants.AppURLEnvName, appbuild.ClientURLEnvName} {
+		for _, key := range []string{processenv.AppURLEnvVar, appbuild.ClientURLEnvName} {
 			if want := "http://localhost:3000"; got[key] != want {
 				t.Errorf("%s = %q, want %q — dev never leaves it unset, so an app may read it without a fallback", key, got[key], want)
 			}
@@ -712,8 +713,8 @@ func TestDevGivesEveryAppItsURL(t *testing.T) {
 		dotfile := map[string]string{appbuild.ClientURLEnvName: "https://mine.example"}
 
 		got := resolvedEnv(nil, dotfile, nil, runtimeAccess{}, "", variables.Scope{Apps: []variables.App{{Name: "api"}}})
-		if want := "http://localhost:3000"; got[constants.AppURLEnvName] != want {
-			t.Errorf("%s = %q, want %q for every app", constants.AppURLEnvName, got[constants.AppURLEnvName], want)
+		if want := "http://localhost:3000"; got[processenv.AppURLEnvVar] != want {
+			t.Errorf("%s = %q, want %q for every app", processenv.AppURLEnvVar, got[processenv.AppURLEnvVar], want)
 		}
 		if want := "https://mine.example"; got[appbuild.ClientURLEnvName] != want {
 			t.Errorf("%s = %q, want the go app's own %q: nothing in a go app reads ocel's copy, so writing one overwrites its value", appbuild.ClientURLEnvName, got[appbuild.ClientURLEnvName], want)
@@ -724,8 +725,8 @@ func TestDevGivesEveryAppItsURL(t *testing.T) {
 		t.Setenv("PORT", "")
 
 		got := resolvedEnv(nil, map[string]string{"PORT": "4321"}, nil, runtimeAccess{}, "", node)
-		if want := "http://localhost:4321"; got[constants.AppURLEnvName] != want {
-			t.Errorf("%s = %q, want %q", constants.AppURLEnvName, got[constants.AppURLEnvName], want)
+		if want := "http://localhost:4321"; got[processenv.AppURLEnvVar] != want {
+			t.Errorf("%s = %q, want %q", processenv.AppURLEnvVar, got[processenv.AppURLEnvVar], want)
 		}
 	})
 
@@ -733,8 +734,8 @@ func TestDevGivesEveryAppItsURL(t *testing.T) {
 		t.Setenv("PORT", "8080")
 
 		got := resolvedEnv(nil, nil, nil, runtimeAccess{}, "", node)
-		if want := "http://localhost:8080"; got[constants.AppURLEnvName] != want {
-			t.Errorf("%s = %q, want %q — the app is spawned with the shell's environment under it", constants.AppURLEnvName, got[constants.AppURLEnvName], want)
+		if want := "http://localhost:8080"; got[processenv.AppURLEnvVar] != want {
+			t.Errorf("%s = %q, want %q — the app is spawned with the shell's environment under it", processenv.AppURLEnvVar, got[processenv.AppURLEnvVar], want)
 		}
 	})
 }

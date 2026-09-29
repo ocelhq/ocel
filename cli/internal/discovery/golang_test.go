@@ -10,8 +10,9 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/language"
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 func goFixture(t *testing.T, module string) string {
@@ -35,16 +36,16 @@ func TestGoDiscoveryDerivesTheImportedPackageFromTheRoot(t *testing.T) {
 	if cmd.Dir != moduleRoot {
 		t.Errorf("Dir = %q, want %q", cmd.Dir, moduleRoot)
 	}
-	if want := []string{"go", "run", "-trimpath=false", "./" + constants.ProjectStateDirName + "/discovery"}; !slices.Equal(cmd.Args[1:], want[1:]) || filepath.Base(cmd.Args[0]) != "go" {
+	if want := []string{"go", "run", "-trimpath=false", "./" + statedir.Name + "/discovery"}; !slices.Equal(cmd.Args[1:], want[1:]) || filepath.Base(cmd.Args[0]) != "go" {
 		t.Errorf("Args = %q, want %q", cmd.Args, want)
 	}
-	for _, want := range []string{constants.PhaseEnvName + "=discovery", constants.DevServerEnvName + "=http://127.0.0.1:1234", constants.DevServerTokenEnvName + "=opensesame"} {
+	for _, want := range []string{processenv.PhaseEnvVar + "=discovery", processenv.DevServerEnvVar + "=http://127.0.0.1:1234", processenv.DevServerTokenEnvVar + "=opensesame"} {
 		if !slices.Contains(cmd.Env, want) {
 			t.Errorf("Env lacks %q", want)
 		}
 	}
 
-	generated, err := os.ReadFile(filepath.Join(moduleRoot, constants.ProjectStateDirName, "discovery", "main.go"))
+	generated, err := os.ReadFile(filepath.Join(moduleRoot, statedir.Name, "discovery", "main.go"))
 	if err != nil {
 		t.Fatalf("read the generated main: %v", err)
 	}
@@ -84,7 +85,7 @@ func TestRunDeclaresWhatTheGoFixtureDeclares(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read the fixture app: %v", err)
 	}
-	if !strings.Contains(string(app), "example.com/web/"+constants.DefaultDiscoveryDirName) {
+	if !strings.Contains(string(app), "example.com/web/"+DefaultRootDirName) {
 		t.Fatalf("the fixture app does not import the default discovery package")
 	}
 
@@ -92,7 +93,7 @@ func TestRunDeclaresWhatTheGoFixtureDeclares(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Roots: %v", err)
 	}
-	if len(roots) != 1 || roots[0].Language != language.Go || roots[0].Dir != filepath.Join(configDir, constants.DefaultDiscoveryDirName) {
+	if len(roots) != 1 || roots[0].Language != language.Go || roots[0].Dir != filepath.Join(configDir, DefaultRootDirName) {
 		t.Fatalf("roots = %+v, want the go infra folder of the project", roots)
 	}
 
@@ -131,7 +132,7 @@ func TestRunDeclaresWhatTheGoFixtureDeclares(t *testing.T) {
 		if request.GetResource().GetName() != want.name {
 			t.Errorf("resource = %v, want %q", request.GetResource(), want.name)
 		}
-		source := filepath.ToSlash(filepath.Join(constants.DefaultDiscoveryDirName, "infra.go")) + want.line
+		source := filepath.ToSlash(filepath.Join(DefaultRootDirName, "infra.go")) + want.line
 		if !strings.HasSuffix(filepath.ToSlash(request.GetSource()), source) {
 			t.Errorf("source = %q, want it to end with %q", request.GetSource(), source)
 		}
@@ -141,7 +142,7 @@ func TestRunDeclaresWhatTheGoFixtureDeclares(t *testing.T) {
 	if len(variables) != 1 || variables[0].GetKey() != "GREETING" || variables[0].GetRequired() {
 		t.Fatalf("variables = %v, want the one defaulted GREETING", variables)
 	}
-	if want := filepath.ToSlash(filepath.Join(constants.DefaultDiscoveryDirName, "infra.go")) + ":9"; !strings.HasSuffix(filepath.ToSlash(variables[0].GetSource()), want) {
+	if want := filepath.ToSlash(filepath.Join(DefaultRootDirName, "infra.go")) + ":9"; !strings.HasSuffix(filepath.ToSlash(variables[0].GetSource()), want) {
 		t.Errorf("variable source = %q, want it to end with %q", variables[0].GetSource(), want)
 	}
 }
@@ -164,7 +165,7 @@ func TestRunNamesTheDeclaringFileByItsPathWhenGOFLAGSTrimsPaths(t *testing.T) {
 		t.Fatalf("Run: %v; stderr=%s", err, stderr.String())
 	}
 
-	infra := filepath.Join(configDir, constants.DefaultDiscoveryDirName, "infra.go")
+	infra := filepath.Join(configDir, DefaultRootDirName, "infra.go")
 	for _, request := range collected.declared() {
 		if file, _, _ := strings.Cut(request.GetSource(), ".go:"); file+".go" != infra {
 			t.Errorf("source = %q, want the line in %s", request.GetSource(), infra)

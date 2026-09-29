@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
+	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/projecteditor"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
@@ -29,12 +30,13 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/configdoc"
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 func DiscoveryDir(root string) string {
-	return filepath.Join(root, constants.DefaultDiscoveryDirName)
+	return filepath.Join(root, discovery.DefaultRootDirName)
 }
 
 func AttachTerminalSink(deps cmddeps.Deps, w io.Writer) {
@@ -63,7 +65,7 @@ func NewDeps() cmddeps.Deps {
 
 func WritePrebuiltFunction(t *testing.T, root, app, route string) {
 	t.Helper()
-	dir := filepath.Join(root, constants.ProjectStateDirName, "output", "apps", app, "functions", route+".func")
+	dir := filepath.Join(root, statedir.Name, "output", "apps", app, "functions", route+".func")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -158,9 +160,9 @@ declare global {
 const source = declarationSite();
 globalThis.__ocelRegister ??= [];
 globalThis.__ocelRegister.push(
-  fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.`+constants.DevServerEnvName+`), {
+  fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.`+processenv.DevServerEnvVar+`), {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: "Bearer " + process.env.`+constants.DevServerTokenEnvName+` },
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + process.env.`+processenv.DevServerTokenEnvVar+` },
     body: JSON.stringify({
       resource: { type: "RESOURCE_TYPE_POSTGRES", name: "main" },
       postgres: { version: "17" },
@@ -276,9 +278,9 @@ declare global {
 function register(body: Record<string, unknown>) {
   globalThis.__ocelRegister ??= [];
   globalThis.__ocelRegister.push(
-    fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.`+constants.DevServerEnvName+`), {
+    fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.`+processenv.DevServerEnvVar+`), {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: "Bearer " + process.env.`+constants.DevServerTokenEnvName+` },
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + process.env.`+processenv.DevServerTokenEnvVar+` },
       body: JSON.stringify(body),
     }),
   );

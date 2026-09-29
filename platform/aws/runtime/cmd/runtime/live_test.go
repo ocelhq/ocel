@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/channel"
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 )
 
@@ -262,8 +262,8 @@ func TestTheChildIsHandedTheLiveDeclarationTheProjectionAndTheProxy(t *testing.T
 		}
 
 		got := childEnv(nil, l, nil)
-		if !slices.Contains(got, constants.LiveDirEnvName+"="+root) {
-			t.Fatalf("childEnv = %q, missing %s=%s, so a go or python child is handed no way to read a secret at all", got, constants.LiveDirEnvName, root)
+		if !slices.Contains(got, processenv.LiveDirEnvVar+"="+root) {
+			t.Fatalf("childEnv = %q, missing %s=%s, so a go or python child is handed no way to read a secret at all", got, processenv.LiveDirEnvVar, root)
 		}
 		value, err := os.ReadFile(filepath.Join(root, "DB_PASSWORD"))
 		if err != nil || string(value) != "hunter2" {
@@ -278,7 +278,7 @@ func TestTheChildIsHandedTheLiveDeclarationTheProjectionAndTheProxy(t *testing.T
 
 	t.Run("hands the child the proxy it must reach and the token that opens it", func(t *testing.T) {
 		proxyEnv := []string{
-			constants.RuntimeAddressEnvName + "=http://127.0.0.1:41000",
+			processenv.RuntimeAddressEnvVar + "=http://127.0.0.1:41000",
 			channel.SessionTokenEnvVar + "=deadbeef",
 		}
 		l := &stubValues{env: []string{"OCEL_LIVE_KEYS=DB_PASSWORD"}}

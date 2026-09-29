@@ -8,7 +8,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/appbuild"
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
@@ -118,8 +118,8 @@ func TestPrepend(t *testing.T) {
 	for _, v := range byApp["web"] {
 		variables[v.Key] = v
 	}
-	if got, want := variables[constants.AppURLEnvName].Value, "https://acme.com"; got != want {
-		t.Errorf("%s = %q, want %q", constants.AppURLEnvName, got, want)
+	if got, want := variables[processenv.AppURLEnvVar].Value, "https://acme.com"; got != want {
+		t.Errorf("%s = %q, want %q", processenv.AppURLEnvVar, got, want)
 	}
 	if got, want := variables[appbuild.ClientURLEnvName].Value, "https://acme.com"; got != want {
 		t.Errorf("%s = %q, want the same value mirrored for the browser bundle", appbuild.ClientURLEnvName, got)
@@ -127,14 +127,14 @@ func TestPrepend(t *testing.T) {
 	if !variables[appbuild.ClientURLEnvName].ClientAccessible {
 		t.Errorf("%s is not client-accessible, so nothing would inline it into the bundle", appbuild.ClientURLEnvName)
 	}
-	if variables[constants.AppURLEnvName].ClientAccessible {
-		t.Errorf("%s is client-accessible, and a bundler inlines only its own public prefix", constants.AppURLEnvName)
+	if variables[processenv.AppURLEnvVar].ClientAccessible {
+		t.Errorf("%s is client-accessible, and a bundler inlines only its own public prefix", processenv.AppURLEnvVar)
 	}
 	if variables["LOG_LEVEL"].Value != "info" {
 		t.Errorf("web variables = %+v, want the declared ones kept", byApp["web"])
 	}
-	if got := keys(byApp["api"]); !slices.Equal(got, []string{constants.AppURLEnvName}) {
-		t.Errorf("api variables = %v, want only %s: a go app has no bundle to read %s, and a value of its own under that name would be overwritten", got, constants.AppURLEnvName, appbuild.ClientURLEnvName)
+	if got := keys(byApp["api"]); !slices.Equal(got, []string{processenv.AppURLEnvVar}) {
+		t.Errorf("api variables = %v, want only %s: a go app has no bundle to read %s, and a value of its own under that name would be overwritten", got, processenv.AppURLEnvVar, appbuild.ClientURLEnvName)
 	}
 	if len(byApp["docs"]) != 0 {
 		t.Errorf("docs variables = %+v, want none where the app has no hostname", byApp["docs"])

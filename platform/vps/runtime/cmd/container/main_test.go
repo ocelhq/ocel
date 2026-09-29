@@ -14,7 +14,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/ocelhq/ocel/pkg/channel"
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -60,7 +60,7 @@ func TestTheRuntimeProjectsLiveValuesIntoADirectoryTheImageNeverHadToShip(t *tes
 		t.Errorf("the projection reads DATABASE_URL as %q", read)
 	}
 	env := values.Env()
-	for _, want := range []string{constants.LiveKeysEnvName + "=DATABASE_URL", constants.LiveDirEnvName + "=" + dir} {
+	for _, want := range []string{processenv.LiveKeysEnvVar + "=DATABASE_URL", processenv.LiveDirEnvVar + "=" + dir} {
 		if !slices.Contains(env, want) {
 			t.Errorf("the app is handed %q, which never says %s", env, want)
 		}
@@ -115,7 +115,7 @@ func TestTheRuntimeFrontsAProxiedBindingAndKeepsTheStoreCredentialToItself(t *te
 	for _, entry := range served.Env {
 		name, value, _ := strings.Cut(entry, "=")
 		switch name {
-		case constants.RuntimeAddressEnvName:
+		case processenv.RuntimeAddressEnvVar:
 			address = value
 		case channel.SessionTokenEnvVar:
 			token = value

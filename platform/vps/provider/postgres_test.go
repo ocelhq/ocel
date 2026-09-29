@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
@@ -362,7 +362,7 @@ func TestAPostgresIsPulledFromTheOfficialImagesMirrorByItsPinnedDigest(t *testin
 	if _, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "17"), nil); err != nil {
 		t.Fatalf("Postgres() = %v", err)
 	}
-	image, _ := constants.PostgresImage("17")
+	image, _ := images.Postgres("17")
 	runCommand := machine.commands()[machine.at("'docker' 'run'")]
 	if want := "'mirror.gcr.io/library/" + image + "'"; !strings.Contains(runCommand, want) {
 		t.Errorf("with %s set, the postgres was started as:\n%s\nwant it run as %s", officialimages.MirrorEnv, runCommand, want)

@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/provider/enginetest"
+	s3store "github.com/ocelhq/ocel/platform/s3"
 )
 
 func TestARealStoreTakesEveryCallABucketIsDescribedWith(t *testing.T) {
@@ -20,7 +20,7 @@ func TestARealStoreTakesEveryCallABucketIsDescribedWith(t *testing.T) {
 		"a bucket the project named no origin for": {Bucket: "plain-bucket"},
 		"a bucket with declared origins":           {Bucket: "cors-bucket", AllowedOrigins: []string{"https://app.example.com"}},
 		"a public bucket":                          {Bucket: "public-bucket", Public: true},
-		"the store's own sessions bucket":          {Bucket: constants.StoreSessionsBucket(), Internal: true},
+		"the store's own sessions bucket":          {Bucket: s3store.SessionsBucket(), Internal: true},
 	} {
 		store.ClaimBucket(t, spec.Bucket)
 		spec.Store = store.Name

@@ -12,7 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
@@ -50,7 +50,7 @@ func TestRustDiscoveryRunsTheCratesBinaryFromTheWorkspaceRoot(t *testing.T) {
 	if !slices.Equal(cmd.Args[1:], want) || filepath.Base(cmd.Args[0]) != "cargo" {
 		t.Errorf("Args = %q, want cargo %q", cmd.Args, want)
 	}
-	for _, env := range []string{constants.PhaseEnvName + "=discovery", constants.DevServerEnvName + "=http://127.0.0.1:1234", constants.DevServerTokenEnvName + "=opensesame", "OCEL_SOURCE_ROOT=" + configDir} {
+	for _, env := range []string{processenv.PhaseEnvVar + "=discovery", processenv.DevServerEnvVar + "=http://127.0.0.1:1234", processenv.DevServerTokenEnvVar + "=opensesame", "OCEL_SOURCE_ROOT=" + configDir} {
 		if !slices.Contains(cmd.Env, env) {
 			t.Errorf("Env lacks %q", env)
 		}

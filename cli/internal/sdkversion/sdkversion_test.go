@@ -11,7 +11,6 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/cli/internal/language"
-	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/resources/v1/resourcesv1connect"
 )
@@ -113,7 +112,7 @@ func TestTheGateRefusesAMismatchedSDKAndKeepsTheRefusal(t *testing.T) {
 			connect.WithInterceptors(connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
 				return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 					if header != "" {
-						req.Header().Set(constants.SDKVersionHeader, header)
+						req.Header().Set(Header, header)
 					}
 					return next(ctx, req)
 				}

@@ -14,7 +14,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/ocelhq/ocel/cli/internal/terminal"
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -85,14 +85,14 @@ globalThis.__ocelRegister.push(
 
     const res = await fetch(new URL("/app.resources.v1.ResourceService/DeclareEnv", process.env.%s), {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: "Bearer " + process.env.`+constants.DevServerTokenEnvName+` },
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + process.env.`+processenv.DevServerTokenEnvVar+` },
       body: JSON.stringify(%s),
     });
     if (!res.ok) throw new Error("DeclareEnv failed: " + res.status + " " + (await res.text()));
   })(),
 );
 export {};
-`, constants.DevServerEnvName, body)
+`, processenv.DevServerEnvVar, body)
 }
 
 func setUpDeclaringFixture(t *testing.T, definitions string) (root, log string) {

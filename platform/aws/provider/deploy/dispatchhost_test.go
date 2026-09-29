@@ -9,10 +9,10 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
-	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -246,12 +246,12 @@ func TestAppEnvPassesTheDeploymentURLToTheFunction(t *testing.T) {
 
 	app := routedApp()
 	app.Variables = []*contractv1.ManifestVariable{
-		{Key: constants.AppURLEnvName, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "https://shop.example"},
+		{Key: processenv.AppURLEnvVar, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "https://shop.example"},
 		{Key: appbuild.ClientURLEnvName, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "https://shop.example"},
 	}
 
 	env := plannedEnv(t, Config{}, app, nil)
-	for _, key := range []string{constants.AppURLEnvName, appbuild.ClientURLEnvName} {
+	for _, key := range []string{processenv.AppURLEnvVar, appbuild.ClientURLEnvName} {
 		if got, want := env[key], "https://shop.example"; got != want {
 			t.Errorf("%s = %q, want %q: server code reads the url off its own environment", key, got, want)
 		}

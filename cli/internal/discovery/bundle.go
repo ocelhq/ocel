@@ -9,7 +9,7 @@ import (
 	"github.com/evanw/esbuild/pkg/api"
 
 	"github.com/ocelhq/ocel/cli/internal/nodeprotocol"
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 const protocolBanner = `
@@ -46,9 +46,9 @@ func importsOf(files []string) string {
 }
 
 func Bundle(configDir string, files []string) (string, error) {
-	outDir := filepath.Join(configDir, constants.ProjectStateDirName)
+	outDir := filepath.Join(configDir, statedir.Name)
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
-		return "", fmt.Errorf("create %s: %w", constants.ProjectStateDirName, err)
+		return "", fmt.Errorf("create %s: %w", statedir.Name, err)
 	}
 	outfile := filepath.Join(outDir, "entry.mjs")
 

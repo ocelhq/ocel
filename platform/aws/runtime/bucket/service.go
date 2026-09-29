@@ -15,9 +15,9 @@ import (
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
-	"github.com/ocelhq/ocel/pkg/constants"
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
+	s3store "github.com/ocelhq/ocel/platform/s3"
 )
 
 const (
@@ -86,12 +86,12 @@ func (s *Service) reach(bucket string, keys ...string) error {
 		return err
 	}
 	for _, key := range keys {
-		if !strings.HasPrefix(key, constants.ReservedKeyPrefix) {
+		if !strings.HasPrefix(key, s3store.ReservedKeyPrefix) {
 			continue
 		}
 		return connect.NewError(connect.CodePermissionDenied, fmt.Errorf(
 			"%q names a key under %s, which is where the store keeps its own bookkeeping and is no app's to read or write",
-			key, constants.ReservedKeyPrefix))
+			key, s3store.ReservedKeyPrefix))
 	}
 	return nil
 }

@@ -10,8 +10,8 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/channel"
-	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -82,9 +82,9 @@ func TestServeProxy(t *testing.T) {
 			t.Fatal("serveProxy returned no channel to deliver the proxy's terminal error")
 		}
 
-		addr := proxyEnvValue(t, env, constants.RuntimeAddressEnvName)
+		addr := proxyEnvValue(t, env, processenv.RuntimeAddressEnvVar)
 		if !strings.HasPrefix(addr, "http://127.0.0.1:") {
-			t.Fatalf("%s = %q, want a loopback address the sandbox alone can reach", constants.RuntimeAddressEnvName, addr)
+			t.Fatalf("%s = %q, want a loopback address the sandbox alone can reach", processenv.RuntimeAddressEnvVar, addr)
 		}
 		token := proxyEnvValue(t, env, channel.SessionTokenEnvVar)
 		if token == "" {
@@ -121,7 +121,7 @@ func TestABucketBoundToAStoreIsSignedForThatStore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("serveProxy: %v", err)
 	}
-	client := bucketv1connect.NewBucketServiceClient(&http.Client{Transport: bearerToken(proxyEnvValue(t, env, channel.SessionTokenEnvVar))}, proxyEnvValue(t, env, constants.RuntimeAddressEnvName))
+	client := bucketv1connect.NewBucketServiceClient(&http.Client{Transport: bearerToken(proxyEnvValue(t, env, channel.SessionTokenEnvVar))}, proxyEnvValue(t, env, processenv.RuntimeAddressEnvVar))
 	signed, err := client.Sign(context.Background(), &bucketv1.SignRequest{
 		Bucket: "OCEL_RESOURCE_BUCKET_uploads", Key: "a.png",
 		Operation: bucketv1.SignedOperation_SIGNED_OPERATION_GET,

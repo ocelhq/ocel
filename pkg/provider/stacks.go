@@ -7,10 +7,10 @@ import (
 	"slices"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
-	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/router"
 )
@@ -131,7 +131,7 @@ func (v AppValues) PhaseEnv() map[string]string {
 	if v.Phase == "" {
 		return nil
 	}
-	return map[string]string{constants.PhaseEnvName: v.Phase}
+	return map[string]string{processenv.PhaseEnvVar: v.Phase}
 }
 
 func (v AppValues) String() string {

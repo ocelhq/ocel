@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 	"regexp"
 
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
-const goEntryDir = constants.ProjectStateDirName + "/discovery"
+const goEntryDir = statedir.Name + "/discovery"
 
 func goCommand(ctx context.Context, configDir string, root Root, server Server) (*exec.Cmd, error) {
 	moduleRoot, modulePath, err := goModule(configDir, root.Dir)

@@ -21,13 +21,13 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
-	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/envvarsserver"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/progress"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -1317,7 +1317,7 @@ func variableEnv(values provider.AppValues) map[string]string {
 	env := make(map[string]string, len(values.Plain)+1)
 	maps.Copy(env, values.Plain)
 	if values.Folder != "" {
-		env[constants.AppFolderEnvName] = values.Folder
+		env[processenv.AppFolderEnvVar] = values.Folder
 	}
 	return env
 }

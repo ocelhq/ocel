@@ -15,9 +15,9 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/pkg/constants"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 type tracedRun struct {
@@ -45,7 +45,7 @@ func (r *tracedRun) Close() error {
 }
 
 func (r *tracedRun) LogPath() string {
-	found, _ := filepath.Glob(filepath.Join(r.dir, constants.ProjectStateDirName, "runs", "*.ndjson"))
+	found, _ := filepath.Glob(filepath.Join(r.dir, statedir.Name, "runs", "*.ndjson"))
 	if len(found) != 1 {
 		return ""
 	}

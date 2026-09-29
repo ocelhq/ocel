@@ -12,10 +12,10 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
@@ -244,7 +244,7 @@ func plainEnv(values provider.AppValues) map[string]string {
 	env := make(map[string]string, len(values.Plain)+1)
 	maps.Copy(env, values.Plain)
 	if values.Folder != "" {
-		env[constants.AppFolderEnvName] = values.Folder
+		env[processenv.AppFolderEnvVar] = values.Folder
 	}
 	return env
 }

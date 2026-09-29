@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/provider"
+	s3store "github.com/ocelhq/ocel/platform/s3"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -95,7 +95,7 @@ func TestAnAppsUploadSessionsLiveWhereNoOtherAppsAccountReaches(t *testing.T) {
 			web.Store.Sessions)
 	}
 	for _, store := range []*vars.Store{web.Store, admin.Store} {
-		if !strings.HasPrefix(store.Sessions, constants.StoreSessionsBucket()+"/") {
+		if !strings.HasPrefix(store.Sessions, s3store.SessionsBucket()+"/") {
 			t.Errorf("upload sessions live at %q, want a prefix inside the store's own sessions bucket", store.Sessions)
 		}
 		if slices.Contains(store.Granted, store.Sessions) {
@@ -114,8 +114,8 @@ func TestAnAppsStoreAccountIsLimitedToItsOwnSessions(t *testing.T) {
 	if !strings.Contains(policy, "arn:aws:s3:::"+manifest.Store.Sessions+"/*") {
 		t.Errorf("the app's account is not limited to its own sessions prefix:\n%s", policy)
 	}
-	if strings.Contains(policy, `"arn:aws:s3:::`+constants.StoreSessionsBucket()+`"`) ||
-		strings.Contains(policy, `"arn:aws:s3:::`+constants.StoreSessionsBucket()+`/*"`) {
+	if strings.Contains(policy, `"arn:aws:s3:::`+s3store.SessionsBucket()+`"`) ||
+		strings.Contains(policy, `"arn:aws:s3:::`+s3store.SessionsBucket()+`/*"`) {
 		t.Errorf("the app's account reaches every app's upload sessions:\n%s", policy)
 	}
 }

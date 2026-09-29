@@ -7,7 +7,6 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/progress"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -15,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 type connectorHost struct {
@@ -44,7 +44,7 @@ func (h *connectorHost) Install(_ context.Context, install provider.ConnectorIns
 		compute = provider.ComputeContainer
 	}
 	return provider.ConnectorAddress{
-		URL:       "https://box.example.com/" + constants.ProjectStateDirName + "/connector",
+		URL:       "https://box.example.com/" + statedir.Name + "/connector",
 		PublicKey: "ZmFrZQ==",
 		Compute:   compute,
 	}, nil
@@ -142,7 +142,7 @@ func TestInstallingAConnectorEndsWithTheAddressAndTheKey(t *testing.T) {
 	if !result.GetSuccess() {
 		t.Fatalf("result error = %q, want a success", result.GetError())
 	}
-	if result.GetConnector().GetUrl() != "https://box.example.com/"+constants.ProjectStateDirName+"/connector" {
+	if result.GetConnector().GetUrl() != "https://box.example.com/"+statedir.Name+"/connector" {
 		t.Errorf("url = %q", result.GetConnector().GetUrl())
 	}
 	if result.GetConnector().GetPublicKey() != "ZmFrZQ==" {

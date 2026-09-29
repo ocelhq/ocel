@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 const linkFileName = "console.json"
@@ -21,7 +21,7 @@ type Link struct {
 }
 
 func linkPath(projectDir string) string {
-	return filepath.Join(projectDir, constants.ProjectStateDirName, linkFileName)
+	return filepath.Join(projectDir, statedir.Name, linkFileName)
 }
 
 func ReadLink(projectDir, apiURL string) (*Link, error) {

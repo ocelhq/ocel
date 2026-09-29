@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 func TestAFreshBuildSupersedesTheDeploymentIDTheLastOneRecorded(t *testing.T) {
@@ -45,7 +45,7 @@ func TestDeploymentID(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
-		if err := os.MkdirAll(filepath.Join(root, constants.ProjectStateDirName, "output", "apps", "web"), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Join(root, statedir.Name, "output", "apps", "web"), 0o755); err != nil {
 			t.Fatal(err)
 		}
 		if err := writeDeploymentID(root, "web", "d1a2b3c4d5e6f708192a3b4c5d6e7f80"); err != nil {

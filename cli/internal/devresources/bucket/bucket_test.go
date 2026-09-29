@@ -15,7 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devresources/bucket"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker/dockertest"
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/images"
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
@@ -79,7 +79,7 @@ func TestTheStoreRunsPinnedLabelledOnAVolumeOfTheProjectAndStopsEvenIfInterrupte
 		t.Fatalf("ran %d containers, want the one store", len(engine.Specs))
 	}
 	spec := engine.Specs[0]
-	if spec.Image != constants.ObjectStoreImage() {
+	if spec.Image != images.ObjectStore() {
 		t.Errorf("Image = %q, want the object store every vendor runs, pinned by digest", spec.Image)
 	}
 	if spec.Labels["dev.ocel.project"] != "shop-1a2b" || spec.Labels["dev.ocel.backend"] != "bucket" {

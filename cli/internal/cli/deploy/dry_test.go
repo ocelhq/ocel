@@ -23,8 +23,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/variableeditor"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/appbuild"
-	"github.com/ocelhq/ocel/pkg/constants"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 func dryDeps(t *testing.T) cmddeps.Deps {
@@ -255,7 +255,7 @@ func TestADryRunRefusesWhenTheBootstrapLacksWhatTheProjectNeeds(t *testing.T) {
 func projectFiles(t *testing.T, root string) map[string]string {
 	t.Helper()
 	files := map[string]string{}
-	state := filepath.Join(root, constants.ProjectStateDirName)
+	state := filepath.Join(root, statedir.Name)
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -348,10 +348,10 @@ func TestADeployPointsEachAppsImportsAtItsClientAccessor(t *testing.T) {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
-	if _, err := os.Stat(filepath.Join(root, constants.ProjectStateDirName, "apps", "api", "env-client.ts")); err != nil {
+	if _, err := os.Stat(filepath.Join(root, statedir.Name, "apps", "api", "env-client.ts")); err != nil {
 		t.Fatalf("no client accessor was generated: %v", err)
 	}
-	mapping := `"ocel/env/client": ["../../` + constants.ProjectStateDirName + `/apps/api/env-client.ts"]`
+	mapping := `"ocel/env/client": ["../../` + statedir.Name + `/apps/api/env-client.ts"]`
 	data, err := os.ReadFile(tsconfig)
 	if err != nil {
 		t.Fatalf("read %s: %v", tsconfig, err)

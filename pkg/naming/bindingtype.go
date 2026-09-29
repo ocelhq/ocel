@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
@@ -128,5 +128,5 @@ func propertyScalar(fd protoreflect.FieldDescriptor, v protoreflect.Value) any {
 }
 
 func ResourceEnvName(t bindingsv1.BindingType, resource string) string {
-	return constants.ResourceEnvPrefix + EnvFragment(t) + "_" + resource
+	return processenv.ResourceEnvVarPrefix + EnvFragment(t) + "_" + resource
 }

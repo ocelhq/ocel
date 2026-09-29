@@ -23,7 +23,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 func TestBytecodeCacheKey(t *testing.T) {
@@ -1852,7 +1852,7 @@ func TestLoadEmbeddedBytecodeCache(t *testing.T) {
 func TestEmbeddedBytecodeCache(t *testing.T) {
 	t.Run("logs a line distinct from the S3 rehydrate", func(t *testing.T) {
 		root := t.TempDir()
-		dir := filepath.Join(root, constants.ProjectStateDirName, "bytecode")
+		dir := filepath.Join(root, statedir.Name, "bytecode")
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
 		}

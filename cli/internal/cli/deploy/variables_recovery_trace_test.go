@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 type traceSpan struct {
@@ -63,7 +63,7 @@ func parseNano(t *testing.T, s string) int64 {
 
 func readTraceSpans(t *testing.T, root string) []traceSpan {
 	t.Helper()
-	matches, err := filepath.Glob(filepath.Join(root, constants.ProjectStateDirName, "runs", "*.otlp.json"))
+	matches, err := filepath.Glob(filepath.Join(root, statedir.Name, "runs", "*.otlp.json"))
 	if err != nil {
 		t.Fatalf("glob trace files: %v", err)
 	}

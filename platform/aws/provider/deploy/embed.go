@@ -22,8 +22,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/statedir"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
@@ -202,7 +202,7 @@ func embeddedTarPath(cacheKey string) (string, error) {
 	if !strings.HasPrefix(base, "node") || !strings.HasSuffix(base, ".tar.gz") {
 		return "", fmt.Errorf("cannot mirror the cache key %q: its name is not node<version>-<arch>.tar.gz", cacheKey)
 	}
-	return constants.ProjectStateDirName + "/bytecode/" + strings.TrimSuffix(base, ".gz"), nil
+	return statedir.Name + "/bytecode/" + strings.TrimSuffix(base, ".gz"), nil
 }
 
 const embedKeyDigestLen = 13

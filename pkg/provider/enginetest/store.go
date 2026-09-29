@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/images"
 )
 
 type ObjectStore struct {
@@ -70,7 +70,7 @@ func startObjectStore(labels []string, patience time.Duration) (ObjectStore, str
 		"--env", "RUSTFS_CONSOLE_ENABLE=false",
 		"--env", "RUSTFS_REGION="+started.Region,
 		"--env", "RUSTFS_VOLUMES=/data",
-		constants.ObjectStoreImage())
+		images.ObjectStore())
 	if said, err := exec.Command(engine, argv...).CombinedOutput(); err != nil {
 		return ObjectStore{}, fmt.Sprintf("no store to drive: %v\n%s", err, said)
 	}

@@ -22,9 +22,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 
-	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 func TestBytecodeEmbedEnabled(t *testing.T) {
@@ -105,7 +105,7 @@ func TestEmbeddedTarPath(t *testing.T) {
 		if err != nil {
 			t.Fatalf("embeddedTarPath: %v", err)
 		}
-		if want := constants.ProjectStateDirName + "/bytecode/node24.3.1-arm64.tar"; path != want {
+		if want := statedir.Name + "/bytecode/node24.3.1-arm64.tar"; path != want {
 			t.Errorf("embeddedTarPath = %q, want %q", path, want)
 		}
 	})
@@ -154,10 +154,10 @@ func TestMergeEmbeddedTar(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
 		original := map[string]string{
-			"index.js":              "export default () => 1\n",
-			"node_modules/dep/x.js": strings.Repeat("compressible ", 500),
-			constants.ProjectStateDirName + "/variables.enc": "\x00\x01binary\xff",
-			"nested/deep/empty.json":                         "",
+			"index.js":                       "export default () => 1\n",
+			"node_modules/dep/x.js":          strings.Repeat("compressible ", 500),
+			statedir.Name + "/variables.enc": "\x00\x01binary\xff",
+			"nested/deep/empty.json":         "",
 		}
 		srcZip := filepath.Join(dir, "src.zip")
 		writeTestZip(t, srcZip, original)
@@ -169,7 +169,7 @@ func TestMergeEmbeddedTar(t *testing.T) {
 		}
 
 		dst := filepath.Join(dir, "merged.zip")
-		const entry = constants.ProjectStateDirName + "/bytecode/node24.3.1-arm64.tar"
+		const entry = statedir.Name + "/bytecode/node24.3.1-arm64.tar"
 		if err := mergeEmbeddedTar(dst, srcZip, tarPath, entry); err != nil {
 			t.Fatalf("mergeEmbeddedTar: %v", err)
 		}
@@ -222,7 +222,7 @@ func TestMergeEmbeddedTar(t *testing.T) {
 			t.Fatal(err)
 		}
 		dst := filepath.Join(dir, "merged.zip")
-		if err := mergeEmbeddedTar(dst, srcZip, tarPath, constants.ProjectStateDirName+"/bytecode/node24.3.1-x86_64.tar"); err != nil {
+		if err := mergeEmbeddedTar(dst, srcZip, tarPath, statedir.Name+"/bytecode/node24.3.1-x86_64.tar"); err != nil {
 			t.Fatalf("mergeEmbeddedTar: %v", err)
 		}
 		if got := len(readTestZip(t, dst)); got != len(original)+1 {
@@ -373,7 +373,7 @@ func TestEmbedPass(t *testing.T) {
 		log := out()
 		for _, want := range []string{
 			"INFO Embedding compile caches into 1 bundle", "web_bundle", "of app web",
-			constants.ProjectStateDirName + "/bytecode/node24.3.1-arm64.tar", "INFO Embedded 1/1 compile caches",
+			statedir.Name + "/bytecode/node24.3.1-arm64.tar", "INFO Embedded 1/1 compile caches",
 		} {
 			if !strings.Contains(log, want) {
 				t.Errorf("embed log missing %q:\n%s", want, log)

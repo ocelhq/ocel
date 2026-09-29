@@ -10,8 +10,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 func clientVar(key, value string) variables.Variable {
@@ -94,7 +94,7 @@ func TestGenerate(t *testing.T) {
 			"  NEXT_PUBLIC_OCEL_URL: inlined(schema, \"NEXT_PUBLIC_OCEL_URL\", process.env.NEXT_PUBLIC_OCEL_URL),\n" +
 			"  NEXT_PUBLIC_SITE_URL: inlined(schema, \"NEXT_PUBLIC_SITE_URL\", process.env.NEXT_PUBLIC_SITE_URL),\n" +
 			"};\n"
-		if got := read(t, filepath.Join(dir, constants.ProjectStateDirName, "env-client.ts")); got != want {
+		if got := read(t, filepath.Join(dir, statedir.Name, "env-client.ts")); got != want {
 			t.Errorf("accessor =\n%q\nwant\n%q", got, want)
 		}
 	})
@@ -129,7 +129,7 @@ func TestGenerate(t *testing.T) {
 			"  NEXT_PUBLIC_PORT: inlined(schema, \"NEXT_PUBLIC_PORT\", process.env.NEXT_PUBLIC_PORT),\n" +
 			"  NEXT_PUBLIC_SITE_URL: inlined(schema, \"NEXT_PUBLIC_SITE_URL\", process.env.NEXT_PUBLIC_SITE_URL),\n" +
 			"};\n"
-		if got := read(t, filepath.Join(dir, constants.ProjectStateDirName, "env-client.ts")); got != want {
+		if got := read(t, filepath.Join(dir, statedir.Name, "env-client.ts")); got != want {
 			t.Errorf("accessor =\n%s\nwant\n%s", got, want)
 		}
 	})
@@ -149,7 +149,7 @@ func TestGenerate(t *testing.T) {
 			t.Fatalf("Generate: %v", err)
 		}
 
-		accessor := read(t, filepath.Join(dir, constants.ProjectStateDirName, "env-client.ts"))
+		accessor := read(t, filepath.Join(dir, statedir.Name, "env-client.ts"))
 		for _, want := range []string{
 			" from \"../../packages/env/index\";\n",
 			" from \"../env.schema\";\n",
@@ -206,7 +206,7 @@ func TestGenerate(t *testing.T) {
 			t.Fatalf("Generate: %v", err)
 		}
 
-		accessor := read(t, filepath.Join(dir, constants.ProjectStateDirName, "env-client.ts"))
+		accessor := read(t, filepath.Join(dir, statedir.Name, "env-client.ts"))
 		for _, want := range []string{"process.env.NEXT_PUBLIC_APP_ID", "process.env.VITE_APP_ID"} {
 			if !strings.Contains(accessor, want) {
 				t.Errorf("accessor =\n%s\nwant a read of %s", accessor, want)
@@ -230,7 +230,7 @@ func TestGenerate(t *testing.T) {
 			t.Fatalf("Generate: %v", err)
 		}
 
-		accessor := read(t, filepath.Join(dir, constants.ProjectStateDirName, "env-client.ts"))
+		accessor := read(t, filepath.Join(dir, statedir.Name, "env-client.ts"))
 		if strings.Contains(accessor, "STRIPE_API_KEY") {
 			t.Errorf("accessor names a server-only value:\n%s", accessor)
 		}
@@ -249,7 +249,7 @@ func TestGenerate(t *testing.T) {
 		}
 
 		tsconfig := read(t, filepath.Join(dir, "tsconfig.json"))
-		if !strings.Contains(tsconfig, `"ocel/env/client": ["./`+constants.ProjectStateDirName+`/env-client.ts"]`) {
+		if !strings.Contains(tsconfig, `"ocel/env/client": ["./`+statedir.Name+`/env-client.ts"]`) {
 			t.Errorf("tsconfig does not map the specifier at the generated file:\n%s", tsconfig)
 		}
 		if !strings.Contains(tsconfig, `"strict": true`) || !strings.Contains(tsconfig, `"include"`) {
@@ -273,7 +273,7 @@ func TestGenerate(t *testing.T) {
 			"// the compiler options this project has always had",
 			"// app aliases",
 			`"@/*": ["./src/*"]`,
-			`"ocel/env/client": ["./` + constants.ProjectStateDirName + `/env-client.ts"]`,
+			`"ocel/env/client": ["./` + statedir.Name + `/env-client.ts"]`,
 		} {
 			if !strings.Contains(tsconfig, want) {
 				t.Errorf("tsconfig lost %q:\n%s", want, tsconfig)
@@ -329,7 +329,7 @@ func TestGenerate(t *testing.T) {
 			t.Fatalf("Generate: %v", err)
 		}
 		first := read(t, filepath.Join(dir, "tsconfig.json"))
-		accessor := read(t, filepath.Join(dir, constants.ProjectStateDirName, "env-client.ts"))
+		accessor := read(t, filepath.Join(dir, statedir.Name, "env-client.ts"))
 
 		if err := Generate(dir, apps); err != nil {
 			t.Fatalf("Generate again: %v", err)
@@ -337,7 +337,7 @@ func TestGenerate(t *testing.T) {
 		if got := read(t, filepath.Join(dir, "tsconfig.json")); got != first {
 			t.Errorf("tsconfig changed on a second run:\n%s\nwant\n%s", got, first)
 		}
-		if got := read(t, filepath.Join(dir, constants.ProjectStateDirName, "env-client.ts")); got != accessor {
+		if got := read(t, filepath.Join(dir, statedir.Name, "env-client.ts")); got != accessor {
 			t.Errorf("accessor changed on a second run:\n%s", got)
 		}
 	})
@@ -351,7 +351,7 @@ func TestGenerate(t *testing.T) {
 			t.Fatalf("Generate: %v", err)
 		}
 
-		got := read(t, filepath.Join(dir, constants.ProjectStateDirName, "env-client.ts"))
+		got := read(t, filepath.Join(dir, statedir.Name, "env-client.ts"))
 		if !strings.Contains(got, "NEXT_PUBLIC_OCEL_URL: inlined(schema, \"NEXT_PUBLIC_OCEL_URL\", process.env.NEXT_PUBLIC_OCEL_URL)") {
 			t.Errorf("accessor =\n%s\nwant the deployment url ocel writes for a node app, declared or not", got)
 		}
@@ -377,7 +377,7 @@ func TestGenerate(t *testing.T) {
 					t.Fatalf("Generate: %v", err)
 				}
 
-				got := read(t, filepath.Join(dir, constants.ProjectStateDirName, "env-client.ts"))
+				got := read(t, filepath.Join(dir, statedir.Name, "env-client.ts"))
 				if offered := strings.Contains(got, "NEXT_PUBLIC_OCEL_URL"); offered != tc.offered {
 					t.Errorf("accessor =\n%s\nwant NEXT_PUBLIC_OCEL_URL offered %v: an accessor that names a key the deploy never writes reads undefined in the browser", got, tc.offered)
 				}
@@ -399,16 +399,16 @@ func TestGenerate(t *testing.T) {
 			t.Fatalf("Generate: %v", err)
 		}
 
-		got := read(t, filepath.Join(root, constants.ProjectStateDirName, "apps", "storefront", "env-client.ts"))
+		got := read(t, filepath.Join(root, statedir.Name, "apps", "storefront", "env-client.ts"))
 		if !strings.Contains(got, "process.env.PUBLIC_SITE_URL") || strings.Contains(got, "ADMIN") {
 			t.Errorf("storefront accessor = %q, want its own key only", got)
 		}
-		got = read(t, filepath.Join(root, constants.ProjectStateDirName, "apps", "admin", "env-client.ts"))
+		got = read(t, filepath.Join(root, statedir.Name, "apps", "admin", "env-client.ts"))
 		if !strings.Contains(got, "process.env.PUBLIC_ADMIN_URL") || strings.Contains(got, "SITE_URL") {
 			t.Errorf("admin accessor = %q, want its own key only", got)
 		}
 		for _, dir := range []string{store, admin} {
-			if _, err := os.Stat(filepath.Join(dir, constants.ProjectStateDirName)); !errors.Is(err, fs.ErrNotExist) {
+			if _, err := os.Stat(filepath.Join(dir, statedir.Name)); !errors.Is(err, fs.ErrNotExist) {
 				t.Errorf("%s has state of its own (err = %v), want every generated file under the project directory", dir, err)
 			}
 		}
@@ -426,7 +426,7 @@ func TestGenerate(t *testing.T) {
 		}
 
 		got := mapped(t, filepath.Join(dir, "tsconfig.json"))
-		want := "../../" + constants.ProjectStateDirName + "/apps/storefront/env-client.ts"
+		want := "../../" + statedir.Name + "/apps/storefront/env-client.ts"
 		if len(got) != 1 || got[0] != want {
 			t.Errorf("paths[%q] = %v, want [%q]", specifier, got, want)
 		}
@@ -445,7 +445,7 @@ func TestGenerate(t *testing.T) {
 			t.Fatalf("Generate: %v", err)
 		}
 
-		got := read(t, filepath.Join(root, constants.ProjectStateDirName, "apps", "storefront", "env-client.ts"))
+		got := read(t, filepath.Join(root, statedir.Name, "apps", "storefront", "env-client.ts"))
 		if want := "from \"../../../apps/storefront/src/env.schema\";\n"; !strings.Contains(got, want) {
 			t.Errorf("accessor =\n%s\nwant it to import %q", got, want)
 		}
@@ -564,7 +564,7 @@ func TestRecord(t *testing.T) {
 			t.Fatalf("Record: %v", err)
 		}
 
-		if got := read(t, filepath.Join(root, constants.ProjectStateDirName, "output", "client-digests.json")); strings.Contains(got, "https://example.com") {
+		if got := read(t, filepath.Join(root, statedir.Name, "output", "client-digests.json")); strings.Contains(got, "https://example.com") {
 			t.Errorf("record contains the value itself: %s", got)
 		}
 	})

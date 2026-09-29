@@ -15,7 +15,6 @@ var providerBuildsOn = []string{
 	"github.com/ocelhq/ocel/pkg/arch",
 	"github.com/ocelhq/ocel/pkg/channel",
 	"github.com/ocelhq/ocel/pkg/configdoc",
-	"github.com/ocelhq/ocel/pkg/constants",
 	"github.com/ocelhq/ocel/pkg/dotenv",
 	"github.com/ocelhq/ocel/pkg/edge",
 	"github.com/ocelhq/ocel/pkg/environment",
@@ -27,6 +26,7 @@ var providerBuildsOn = []string{
 	"github.com/ocelhq/ocel/pkg/keyvalue",
 	"github.com/ocelhq/ocel/pkg/naming",
 	"github.com/ocelhq/ocel/pkg/pricing",
+	"github.com/ocelhq/ocel/pkg/processenv",
 	"github.com/ocelhq/ocel/pkg/progress",
 	"github.com/ocelhq/ocel/pkg/progresswire",
 	"github.com/ocelhq/ocel/pkg/proto",
@@ -34,6 +34,7 @@ var providerBuildsOn = []string{
 	"github.com/ocelhq/ocel/pkg/router",
 	"github.com/ocelhq/ocel/pkg/seal",
 	"github.com/ocelhq/ocel/pkg/stackrecords",
+	"github.com/ocelhq/ocel/pkg/statedir",
 }
 
 func TestPkgImportsOnlyWhatTheCodebaseMapOpensToIt(t *testing.T) {

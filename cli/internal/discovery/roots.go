@@ -10,7 +10,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/pkg/constants"
 )
 
 type Root struct {
@@ -109,8 +108,10 @@ func configuredRootDirs(configDir string, paths []string) ([]string, error) {
 	return dirs, nil
 }
 
+const DefaultRootDirName = "infra"
+
 func defaultRootDirs(configDir string) []string {
-	dir := filepath.Join(configDir, constants.DefaultDiscoveryDirName)
+	dir := filepath.Join(configDir, DefaultRootDirName)
 	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
 		return nil
 	}

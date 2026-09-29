@@ -13,10 +13,10 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/configdoc"
-	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 func nestedDir(t *testing.T, root string) string {
@@ -56,7 +56,7 @@ func TestFindProjectRoot(t *testing.T) {
 		{
 			name: "walks past a scratch dir that anchors nothing",
 			setup: func(t *testing.T, root string) {
-				if err := os.MkdirAll(filepath.Join(root, constants.ProjectStateDirName), 0o755); err != nil {
+				if err := os.MkdirAll(filepath.Join(root, statedir.Name), 0o755); err != nil {
 					t.Fatalf("mkdir scratch: %v", err)
 				}
 			},
@@ -70,7 +70,7 @@ func TestFindProjectRoot(t *testing.T) {
 		{
 			name: "ignores a scratch dir that is a file rather than a directory",
 			setup: func(t *testing.T, root string) {
-				if err := os.WriteFile(filepath.Join(root, constants.ProjectStateDirName), []byte("x"), 0o644); err != nil {
+				if err := os.WriteFile(filepath.Join(root, statedir.Name), []byte("x"), 0o644); err != nil {
 					t.Fatalf("write scratch file: %v", err)
 				}
 			},
@@ -509,7 +509,7 @@ export default {
 };
 `,
 			check: func(t *testing.T, root string, cfg *Project) {
-				artifact := filepath.Join(root, constants.ProjectStateDirName, "config.mjs")
+				artifact := filepath.Join(root, statedir.Name, "config.mjs")
 				if _, err := os.Stat(artifact); err != nil {
 					t.Fatalf("expected build artifact at %s: %v", artifact, err)
 				}
@@ -1243,7 +1243,7 @@ export default { slug: "test-app" };
 				t.Errorf("err = %q, want it to contain %q", message, want)
 			}
 		}
-		for _, unwanted := range []string{"ocel init", "at ", constants.ProjectStateDirName + "/config.mjs"} {
+		for _, unwanted := range []string{"ocel init", "at ", statedir.Name + "/config.mjs"} {
 			if strings.Contains(message, unwanted) {
 				t.Errorf("err = %q, want it free of %q", message, unwanted)
 			}
@@ -1308,7 +1308,7 @@ export default { slug: "test-app" };
 		t.Parallel()
 
 		root := t.TempDir()
-		if err := os.MkdirAll(filepath.Join(root, constants.ProjectStateDirName), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Join(root, statedir.Name), 0o755); err != nil {
 			t.Fatalf("mkdir scratch: %v", err)
 		}
 
@@ -1503,7 +1503,7 @@ func TestAProjectWithNoConfigStillLoadsForTheCommandsThatNeedNone(t *testing.T) 
 		t.Parallel()
 
 		root := t.TempDir()
-		if err := os.MkdirAll(filepath.Join(root, constants.ProjectStateDirName), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Join(root, statedir.Name), 0o755); err != nil {
 			t.Fatalf("mkdir scratch: %v", err)
 		}
 		start := nestedDir(t, root)

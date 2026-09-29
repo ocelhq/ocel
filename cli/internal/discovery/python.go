@@ -9,11 +9,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 const (
-	pythonEntryFile = constants.ProjectStateDirName + "/discovery.py"
+	pythonEntryFile = statedir.Name + "/discovery.py"
 	pythonOnPath    = "python3"
 )
 

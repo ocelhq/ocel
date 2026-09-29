@@ -27,7 +27,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/filewatch"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/processenv"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
@@ -167,8 +167,8 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 			t.Fatalf("OCEL_RESOURCE_POSTGRES_main = %q, want it to contain a postgres link", raw)
 		}
 
-		if got, ok := env[constants.AppFolderEnvName]; !ok || got != "/web" {
-			t.Errorf("follower %s = %q (present=%v), want the folder the app binds", constants.AppFolderEnvName, got, ok)
+		if got, ok := env[processenv.AppFolderEnvVar]; !ok || got != "/web" {
+			t.Errorf("follower %s = %q (present=%v), want the folder the app binds", processenv.AppFolderEnvVar, got, ok)
 		}
 
 		cancelLeader()
@@ -908,7 +908,7 @@ globalThis.__ocelRegister ??= [];
 globalThis.__ocelRegister.push(
   fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.%s), {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: "Bearer " + process.env.`+constants.DevServerTokenEnvName+` },
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + process.env.`+processenv.DevServerTokenEnvVar+` },
     body: JSON.stringify({
       resource: { type: "RESOURCE_TYPE_POSTGRES", name: %q },
       postgres: { version: "17" },
@@ -916,7 +916,7 @@ globalThis.__ocelRegister.push(
   }),
 );
 export {};
-`, constants.DevServerEnvName, name)
+`, processenv.DevServerEnvVar, name)
 }
 
 func waitForEnvVar(t *testing.T, path, key string) {

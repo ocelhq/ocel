@@ -16,9 +16,10 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/node"
 	"github.com/ocelhq/ocel/pkg/appbuild"
-	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 func writeBuildScript(t *testing.T, projectDir string) string {
@@ -76,7 +77,7 @@ func expressFixture(t *testing.T) string {
 	if _, err := os.Stat(fixtureRoot); err != nil {
 		t.Skipf("fixture not available: %v", err)
 	}
-	t.Cleanup(func() { os.RemoveAll(filepath.Join(fixtureRoot, constants.ProjectStateDirName)) })
+	t.Cleanup(func() { os.RemoveAll(filepath.Join(fixtureRoot, statedir.Name)) })
 	if err := node.Ensure(fixtureRoot); err != nil {
 		t.Fatalf("node.Ensure: %v", err)
 	}
@@ -220,7 +221,7 @@ func TestBuild(t *testing.T) {
 	t.Run("refuses a resolved value the build environment owns", func(t *testing.T) {
 		t.Parallel()
 
-		for _, name := range []string{"PATH", constants.AppFolderEnvName, constants.PhaseEnvName} {
+		for _, name := range []string{"PATH", processenv.AppFolderEnvVar, processenv.PhaseEnvVar} {
 			t.Run(name, func(t *testing.T) {
 				t.Parallel()
 

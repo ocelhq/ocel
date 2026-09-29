@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/processenv"
 )
 
 const StalenessBound = 60 * time.Second
@@ -76,11 +76,11 @@ func (l *Values) Env() []string {
 	if l == nil || len(l.keys) == 0 {
 		return nil
 	}
-	env := []string{constants.LiveKeysEnvName + "=" + strings.Join(l.keys, ",")}
+	env := []string{processenv.LiveKeysEnvVar + "=" + strings.Join(l.keys, ",")}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.projection != nil {
-		env = append(env, constants.LiveDirEnvName+"="+l.projection.root)
+		env = append(env, processenv.LiveDirEnvVar+"="+l.projection.root)
 	}
 	return env
 }

@@ -17,7 +17,7 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/images"
 )
 
 const (
@@ -205,7 +205,7 @@ func removeRunRoot(root string) error {
 		return os.RemoveAll(root)
 	}
 	said, err := exec.Command(engine, "run", "--rm", "--network", "none", "--user", "0",
-		"--volume", root+":/reclaimed", "--entrypoint", "find", constants.ObjectStoreImage(),
+		"--volume", root+":/reclaimed", "--entrypoint", "find", images.ObjectStore(),
 		"/reclaimed", "-mindepth", "1", "!", "-path", "/reclaimed/"+runFile, "-delete").CombinedOutput()
 	if err != nil {
 		if _, gone := os.Stat(root); errors.Is(gone, fs.ErrNotExist) {
@@ -301,7 +301,7 @@ func rootSeenByTheEngine() (string, string) {
 			continue
 		}
 		said, err := exec.Command(engine, "run", "--rm", "--network", "none", "--user", "0",
-			"--volume", root+":/seen:ro", "--entrypoint", "test", constants.ObjectStoreImage(),
+			"--volume", root+":/seen:ro", "--entrypoint", "test", images.ObjectStore(),
 			"-f", "/seen/"+runFile).CombinedOutput()
 		if err == nil {
 			return root, ""

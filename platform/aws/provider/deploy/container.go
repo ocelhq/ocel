@@ -22,9 +22,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
-	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -278,7 +278,7 @@ func containerEnv(app string, values provider.AppValues, originSecret, previousS
 	maps.Copy(env, values.Plain)
 	maps.Copy(env, values.Sensitive)
 	if values.Folder != "" {
-		env[constants.AppFolderEnvName] = values.Folder
+		env[processenv.AppFolderEnvVar] = values.Folder
 	}
 	maps.Copy(env, values.PhaseEnv())
 	if _, set := env[containerPortEnv]; set {

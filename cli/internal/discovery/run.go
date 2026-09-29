@@ -15,7 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/nodeprotocol"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/channel"
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/processenv"
 )
 
 type Server struct {
@@ -25,9 +25,9 @@ type Server struct {
 
 func (s Server) Env() []string {
 	return []string{
-		constants.PhaseEnvName + "=discovery",
-		constants.DevServerEnvName + "=" + s.URL,
-		constants.DevServerTokenEnvName + "=" + s.Token,
+		processenv.PhaseEnvVar + "=discovery",
+		processenv.DevServerEnvVar + "=" + s.URL,
+		processenv.DevServerTokenEnvVar + "=" + s.Token,
 	}
 }
 

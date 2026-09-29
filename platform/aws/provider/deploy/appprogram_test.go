@@ -11,9 +11,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
-	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -251,7 +251,7 @@ func TestAReleaseThatProvisionsNamesNoPhase(t *testing.T) {
 
 	env := releasing(t, Config{}).appEnv(spec, appBundle{}, sessionScope{})
 
-	if got, set := env[constants.PhaseEnvName]; set {
-		t.Errorf("%s = %q, want a release that provisions to name no phase at all", constants.PhaseEnvName, got)
+	if got, set := env[processenv.PhaseEnvVar]; set {
+		t.Errorf("%s = %q, want a release that provisions to name no phase at all", processenv.PhaseEnvVar, got)
 	}
 }

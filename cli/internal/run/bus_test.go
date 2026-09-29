@@ -13,11 +13,11 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/progress"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 type recording struct {
@@ -74,7 +74,7 @@ func (c *clock) advance(d time.Duration) {
 
 func runFile(t *testing.T, projectDir, extension string) string {
 	t.Helper()
-	found, err := filepath.Glob(filepath.Join(projectDir, constants.ProjectStateDirName, "runs", "*"+extension))
+	found, err := filepath.Glob(filepath.Join(projectDir, statedir.Name, "runs", "*"+extension))
 	if err != nil || len(found) != 1 {
 		t.Fatalf("run files = %v, %v, want the run's one %s file", found, err, extension)
 	}

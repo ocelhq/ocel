@@ -11,12 +11,14 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/sdkversion"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/version"
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 func TestCollectReturnsEveryResourceTheProgramDeclares(t *testing.T) {
@@ -46,7 +48,7 @@ func TestCollectReturnsEveryResourceTheProgramDeclares(t *testing.T) {
 		}
 
 		root := t.TempDir()
-		writeFile(t, filepath.Join(root, constants.DefaultDiscoveryDirName, "main.ts"), `
+		writeFile(t, filepath.Join(root, discovery.DefaultRootDirName, "main.ts"), `
 declare global {
   var __ocelRegister: Promise<unknown>[];
 }
@@ -54,9 +56,9 @@ globalThis.__ocelRegister ??= [];
 
 function declareResource(body: unknown) {
   globalThis.__ocelRegister.push(
-    fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.`+constants.DevServerEnvName+`), {
+    fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.`+processenv.DevServerEnvVar+`), {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: "Bearer " + process.env.`+constants.DevServerTokenEnvName+` },
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + process.env.`+processenv.DevServerTokenEnvVar+` },
       body: JSON.stringify(body),
     }),
   );
@@ -76,7 +78,7 @@ export {};
 		cfg := &project.Project{
 			Slug:           "test-app",
 			Dir:            root,
-			DiscoveryPaths: []string{constants.DefaultDiscoveryDirName},
+			DiscoveryPaths: []string{discovery.DefaultRootDirName},
 		}
 
 		var stdout, stderr bytes.Buffer
@@ -114,7 +116,7 @@ func TestADeclarationThatIsNotTheChildsIsRefused(t *testing.T) {
 	root := t.TempDir()
 	statuses := filepath.Join(t.TempDir(), "statuses.json")
 	t.Setenv("OCEL_TEST_STATUS_FILE", statuses)
-	writeFile(t, filepath.Join(root, constants.DefaultDiscoveryDirName, "main.ts"), `
+	writeFile(t, filepath.Join(root, discovery.DefaultRootDirName, "main.ts"), `
 declare global {
   var __ocelRegister: Promise<unknown>[];
 }
@@ -126,7 +128,7 @@ const body = JSON.stringify({
 });
 
 const declare = (headers: Record<string, string>) =>
-  fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.`+constants.DevServerEnvName+`), {
+  fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.`+processenv.DevServerEnvVar+`), {
     method: "POST",
     headers: { "Content-Type": "application/json", ...headers },
     body,
@@ -134,7 +136,7 @@ const declare = (headers: Record<string, string>) =>
 
 globalThis.__ocelRegister.push(
   (async () => {
-    const token = "Bearer " + process.env.`+constants.DevServerTokenEnvName+`;
+    const token = "Bearer " + process.env.`+processenv.DevServerTokenEnvVar+`;
     const statuses = [
       (await declare({})).status,
       (await declare({ Authorization: "Bearer guessed" })).status,
@@ -153,7 +155,7 @@ export {};
 	cfg := &project.Project{
 		Slug:           "test-app",
 		Dir:            root,
-		DiscoveryPaths: []string{constants.DefaultDiscoveryDirName},
+		DiscoveryPaths: []string{discovery.DefaultRootDirName},
 	}
 
 	var stdout, stderr bytes.Buffer
@@ -184,7 +186,7 @@ func TestCollectPreparedRunsTheBundlePrepareAlreadyBuilt(t *testing.T) {
 	}
 
 	root := t.TempDir()
-	writeFile(t, filepath.Join(root, constants.DefaultDiscoveryDirName, "main.ts"), "export {};\n")
+	writeFile(t, filepath.Join(root, discovery.DefaultRootDirName, "main.ts"), "export {};\n")
 
 	cfg := &project.Project{Slug: "test-app", Dir: root}
 	prepared, err := Prepare(cfg)
@@ -195,10 +197,10 @@ func TestCollectPreparedRunsTheBundlePrepareAlreadyBuilt(t *testing.T) {
 		t.Fatal("Entry() is empty, want the bundle Prepare built")
 	}
 
-	writeFile(t, filepath.Join(root, constants.ProjectStateDirName, "entry.mjs"), `
-await fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.`+constants.DevServerEnvName+`), {
+	writeFile(t, filepath.Join(root, statedir.Name, "entry.mjs"), `
+await fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.`+processenv.DevServerEnvVar+`), {
   method: "POST",
-  headers: { "Content-Type": "application/json", Authorization: "Bearer " + process.env.`+constants.DevServerTokenEnvName+` },
+  headers: { "Content-Type": "application/json", Authorization: "Bearer " + process.env.`+processenv.DevServerTokenEnvVar+` },
   body: JSON.stringify({
     resource: { type: "RESOURCE_TYPE_POSTGRES", name: "prepared-once" },
     postgres: { version: "17" },
@@ -225,18 +227,18 @@ func TestAnSDKOfAnotherReleaseIsRefusedWithTheUpgradeThatFixesIt(t *testing.T) {
 	t.Cleanup(func() { version.Version = wanted })
 
 	root := t.TempDir()
-	writeFile(t, filepath.Join(root, constants.DefaultDiscoveryDirName, "main.ts"), `
+	writeFile(t, filepath.Join(root, discovery.DefaultRootDirName, "main.ts"), `
 declare global {
   var __ocelRegister: Promise<unknown>[];
 }
 globalThis.__ocelRegister ??= [];
 globalThis.__ocelRegister.push(
-  fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.`+constants.DevServerEnvName+`), {
+  fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.`+processenv.DevServerEnvVar+`), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: "Bearer " + process.env.`+constants.DevServerTokenEnvName+`,
-      "`+constants.SDKVersionHeader+`": "js/0.0.2",
+      Authorization: "Bearer " + process.env.`+processenv.DevServerTokenEnvVar+`,
+      "`+sdkversion.Header+`": "js/0.0.2",
     },
     body: JSON.stringify({
       resource: { type: "RESOURCE_TYPE_POSTGRES", name: "main" },
@@ -249,7 +251,7 @@ export {};
 	cfg := &project.Project{
 		Slug:           "test-app",
 		Dir:            root,
-		DiscoveryPaths: []string{constants.DefaultDiscoveryDirName},
+		DiscoveryPaths: []string{discovery.DefaultRootDirName},
 	}
 
 	var stdout, stderr bytes.Buffer

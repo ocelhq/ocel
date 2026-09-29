@@ -13,7 +13,7 @@ import (
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
 
-	"github.com/ocelhq/ocel/pkg/constants"
+	s3store "github.com/ocelhq/ocel/platform/s3"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
@@ -142,7 +142,7 @@ func (s *Service) List(ctx context.Context, req *bucketv1.ListRequest) (*bucketv
 	resp := &bucketv1.ListResponse{NextCursor: aws.ToString(out.NextContinuationToken)}
 	for _, obj := range out.Contents {
 		key := aws.ToString(obj.Key)
-		if strings.HasPrefix(key, constants.ReservedKeyPrefix) {
+		if strings.HasPrefix(key, s3store.ReservedKeyPrefix) {
 			continue
 		}
 		info := &bucketv1.ObjectInfo{

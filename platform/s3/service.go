@@ -16,9 +16,9 @@ import (
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
-	"github.com/ocelhq/ocel/pkg/constants"
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 const (
@@ -26,7 +26,9 @@ const (
 	maxPresignTTL = 7 * 24 * time.Hour
 	sessionTTL    = 2 * time.Hour
 
-	sessionPrefix = constants.ReservedKeyPrefix + "sessions/"
+	ReservedKeyPrefix = statedir.Name + "/"
+
+	sessionPrefix = ReservedKeyPrefix + "sessions/"
 )
 
 type ObjectAPI interface {
@@ -164,10 +166,10 @@ func (s *Service) reach(name, key string) (scope, string, error) {
 }
 
 func reserved(key string) error {
-	if !strings.HasPrefix(key, constants.ReservedKeyPrefix) {
+	if !strings.HasPrefix(key, ReservedKeyPrefix) {
 		return nil
 	}
-	return connect.NewError(connect.CodePermissionDenied, fmt.Errorf("%q is under the reserved prefix %s", key, constants.ReservedKeyPrefix))
+	return connect.NewError(connect.CodePermissionDenied, fmt.Errorf("%q is under the reserved prefix %s", key, ReservedKeyPrefix))
 }
 
 func (s *Service) signer(ctx context.Context, audience bucketv1.SignedAudience) (PresignAPI, error) {

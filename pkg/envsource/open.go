@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-const infisicalTokenEnvName = "INFISICAL_TOKEN"
+const infisicalTokenEnvVar = "INFISICAL_TOKEN"
 
 func Open(descriptor Descriptor, dir string, lookupEnv func(string) (string, bool)) (Source, error) {
 	switch {
@@ -21,12 +21,12 @@ func Open(descriptor Descriptor, dir string, lookupEnv func(string) (string, boo
 func openInfisicalAsDeveloper(options InfisicalOptions, dir string, lookupEnv func(string) (string, bool)) (Source, error) {
 	options = options.Normalize()
 	options.Write = WriteNever
-	if token, set := lookupEnv(infisicalTokenEnvName); set && strings.TrimSpace(token) != "" {
+	if token, set := lookupEnv(infisicalTokenEnvVar); set && strings.TrimSpace(token) != "" {
 		return NewInfisical(options, AccessToken(strings.TrimSpace(token)), nil), nil
 	}
 	cli, err := exec.LookPath(infisicalCLIName)
 	if err != nil {
-		return nil, fmt.Errorf("%s is read as you, and this shell offers no way in: export %s with an access token, or install the infisical CLI and run `infisical login`", options.ID(), infisicalTokenEnvName)
+		return nil, fmt.Errorf("%s is read as you, and this shell offers no way in: export %s with an access token, or install the infisical CLI and run `infisical login`", options.ID(), infisicalTokenEnvVar)
 	}
 	return infisicalExport{options: options, cli: cli, dir: dir}, nil
 }

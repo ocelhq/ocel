@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/fixturetest"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/pkg/constants"
 )
 
 const docsDir = "www/content/docs"
@@ -130,7 +130,7 @@ func TestOnlyTheConfigurationPageNamesTheDefaultDiscoveryDirectory(t *testing.T)
 	root := fixturetest.RepoDir(t)
 	pages := mdxPages(t, root)
 	canonical := "configuration.mdx"
-	named := regexp.MustCompile(`\b` + regexp.QuoteMeta(constants.DefaultDiscoveryDirName) + `\b`)
+	named := regexp.MustCompile(`\b` + regexp.QuoteMeta(discovery.DefaultRootDirName) + `\b`)
 	for page, source := range pages {
 		if page != canonical && named.MatchString(source) {
 			t.Errorf("%s names the default discovery directory instead of linking to %s", page, canonical)

@@ -11,13 +11,14 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/cli/internal/language"
-	"github.com/ocelhq/ocel/pkg/constants"
 )
 
 type release struct {
 	major, minor, patch int
 	pre                 string
 }
+
+const Header = "Ocel-Sdk-Version"
 
 const core = `(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)`
 
@@ -166,7 +167,7 @@ func NewGate(cli string) *Gate {
 func (g *Gate) Interceptor() connect.Interceptor {
 	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			if err := g.check(req.Header().Get(constants.SDKVersionHeader)); err != nil {
+			if err := g.check(req.Header().Get(Header)); err != nil {
 				return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 			}
 			return next(ctx, req)

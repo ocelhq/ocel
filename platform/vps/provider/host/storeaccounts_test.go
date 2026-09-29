@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/provider/enginetest"
+	s3store "github.com/ocelhq/ocel/platform/s3"
 )
 
 func bucketOn(store enginetest.ObjectStore, bucket string) BucketSpec {
@@ -216,7 +216,7 @@ func TestAnAppsAccountDrivesTheDataPlaneAndNothingThatReshapesTheBucket(t *testi
 		AccessKeyID: StoreAccountKey("shop", "prod", "scoped"),
 		SecretKey:   "an-app-secret",
 		Buckets:     []string{"scoped-bucket"},
-		Sessions:    constants.StoreSessionsBucket() + "/prod/scoped",
+		Sessions:    s3store.SessionsBucket() + "/prod/scoped",
 	}
 	if err := anAccountOn(t, store, account); err != nil {
 		t.Fatalf("the store granted the app no account of its own: %v", err)

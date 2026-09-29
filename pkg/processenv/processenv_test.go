@@ -1,4 +1,4 @@
-package constants
+package processenv
 
 import "testing"
 
@@ -14,12 +14,12 @@ func TestProcessEnvironmentNames(t *testing.T) {
 		"runtime address":  "OCEL_RUNTIME_ADDRESS",
 	}
 	got := map[string]string{
-		"phase":            PhaseEnvName,
-		"dev server":       DevServerEnvName,
-		"dev server token": DevServerTokenEnvName,
-		"app folder":       AppFolderEnvName,
-		"app URL":          AppURLEnvName,
-		"runtime address":  RuntimeAddressEnvName,
+		"phase":            PhaseEnvVar,
+		"dev server":       DevServerEnvVar,
+		"dev server token": DevServerTokenEnvVar,
+		"app folder":       AppFolderEnvVar,
+		"app URL":          AppURLEnvVar,
+		"runtime address":  RuntimeAddressEnvVar,
 	}
 	for name, value := range got {
 		if value != want[name] {

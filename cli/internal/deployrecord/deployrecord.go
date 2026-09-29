@@ -11,10 +11,10 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/pkg/constants"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 const fileName = "deploy-result.json"
@@ -97,7 +97,7 @@ func tierKey(tier environmentv1.Tier) string {
 }
 
 func Path(projectDir string) string {
-	return filepath.Join(projectDir, constants.ProjectStateDirName, fileName)
+	return filepath.Join(projectDir, statedir.Name, fileName)
 }
 
 func Write(projectDir string, r Record) error {

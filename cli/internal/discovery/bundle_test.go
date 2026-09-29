@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/processenv"
 )
 
 const registerSideEffect = `
@@ -46,7 +46,7 @@ console.log("declared");
 		defer server.Close()
 
 		cmd := exec.Command("node", entry)
-		cmd.Env = append(cmd.Environ(), constants.DevServerEnvName+"="+server.URL)
+		cmd.Env = append(cmd.Environ(), processenv.DevServerEnvVar+"="+server.URL)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Fatalf("run bundled entry: %v\n%s", err, out)
@@ -86,7 +86,7 @@ module.exports = { emitter: new EventEmitter() };
 		defer server.Close()
 
 		cmd := exec.Command("node", entry)
-		cmd.Env = append(cmd.Environ(), constants.DevServerEnvName+"="+server.URL)
+		cmd.Env = append(cmd.Environ(), processenv.DevServerEnvVar+"="+server.URL)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("run bundled entry with CJS builtin-requiring dep: %v\n%s", err, out)
 		}

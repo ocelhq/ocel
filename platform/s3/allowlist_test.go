@@ -6,8 +6,8 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/pkg/constants"
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 func neighbours(t *testing.T) *harness {
@@ -18,7 +18,7 @@ func neighbours(t *testing.T) *harness {
 	})
 	h.store.put("customer", "shop/production/uploads/mine.png", []byte("abc"), "image/png")
 	h.store.put("customer", "other/production/theirs/secret.png", []byte("xyz"), "image/png")
-	h.store.put(constants.StoreSessionsBucket(), sessionPrefix+"sess_theirs", []byte(`{"secret":"theirs"}`), "application/json")
+	h.store.put(SessionsBucket(), sessionPrefix+"sess_theirs", []byte(`{"secret":"theirs"}`), "application/json")
 	return h
 }
 
@@ -95,8 +95,8 @@ func TestOnlyTheBucketsThisAppWasGrantedAnswerIt(t *testing.T) {
 				"customer/other/production/theirs",
 				"customer",
 				"customer/shop/production/uploads/deeper",
-				constants.StoreSessionsBucket(),
-				constants.StoreSessionsBucket() + "/" + constants.ProjectStateDirName,
+				SessionsBucket(),
+				SessionsBucket() + "/" + statedir.Name,
 				"customer/shop/production/web",
 			} {
 				denied(t, name+" of "+bucket, reach(neighbours(t), bucket))
@@ -125,7 +125,7 @@ func TestTheStoresOwnBookkeepingIsNoKeyAnAppCanName(t *testing.T) {
 
 	ctx := context.Background()
 	const granted = "customer/shop/production/uploads"
-	reserved := constants.ReservedKeyPrefix + "sessions/sess_theirs"
+	reserved := ReservedKeyPrefix + "sessions/sess_theirs"
 
 	for name, reach := range map[string]func(*harness) error{
 		"head": func(h *harness) error {
@@ -152,7 +152,7 @@ func TestTheStoresOwnBookkeepingIsNoKeyAnAppCanName(t *testing.T) {
 			return err
 		},
 		"list": func(h *harness) error {
-			_, err := h.svc.List(ctx, &bucketv1.ListRequest{Bucket: granted, Prefix: constants.ReservedKeyPrefix})
+			_, err := h.svc.List(ctx, &bucketv1.ListRequest{Bucket: granted, Prefix: ReservedKeyPrefix})
 			return err
 		},
 		"create a multipart upload": func(h *harness) error {

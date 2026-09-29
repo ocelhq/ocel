@@ -9,7 +9,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/channel"
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/processenv"
 )
 
 const (
@@ -36,13 +36,13 @@ func resolvedEnv(secretValues, values map[string]string, resources []binding.Res
 		}
 	}
 	if runtime.url != "" {
-		merged[constants.RuntimeAddressEnvName] = runtime.url
+		merged[processenv.RuntimeAddressEnvVar] = runtime.url
 		merged[channel.SessionTokenEnvVar] = runtime.token
 	}
-	merged[constants.AppFolderEnvName] = appFolder
-	merged[constants.AppURLEnvName] = localURL(merged[portEnv])
+	merged[processenv.AppFolderEnvVar] = appFolder
+	merged[processenv.AppURLEnvVar] = localURL(merged[portEnv])
 	if scope.IsWrittenByOcel(appbuild.ClientURLEnvName, nil) {
-		merged[appbuild.ClientURLEnvName] = merged[constants.AppURLEnvName]
+		merged[appbuild.ClientURLEnvName] = merged[processenv.AppURLEnvVar]
 	}
 	return merged
 }

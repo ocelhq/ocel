@@ -6,8 +6,8 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/pkg/constants"
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
+	s3store "github.com/ocelhq/ocel/platform/s3"
 )
 
 func reaching(svc *Service, bucket, key string) map[string]func() error {
@@ -100,10 +100,10 @@ func TestTheStoresOwnBookkeepingIsNoKeyADeploymentCanName(t *testing.T) {
 	t.Parallel()
 
 	objects := newFakeS3()
-	objects.seed("storage", constants.ReservedKeyPrefix+"sessions/sess_1", "{}", "application/json")
+	objects.seed("storage", s3store.ReservedKeyPrefix+"sessions/sess_1", "{}", "application/json")
 	svc := newObjectService(t, objects)
 
-	for name, reach := range reaching(svc, "storage", constants.ReservedKeyPrefix+"sessions/sess_1") {
+	for name, reach := range reaching(svc, "storage", s3store.ReservedKeyPrefix+"sessions/sess_1") {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			refused(t, name, reach())

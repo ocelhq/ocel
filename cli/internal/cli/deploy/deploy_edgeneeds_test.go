@@ -7,9 +7,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/edge"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	"github.com/ocelhq/ocel/pkg/statedir"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
@@ -17,7 +17,7 @@ import (
 
 func writeAppNeeds(t *testing.T, root, app, framework, needs string) {
 	t.Helper()
-	clitest.WriteFile(t, filepath.Join(root, constants.ProjectStateDirName, "output", "apps", app, edge.ServeDescriptorFile),
+	clitest.WriteFile(t, filepath.Join(root, statedir.Name, "output", "apps", app, edge.ServeDescriptorFile),
 		`{"framework":"`+framework+`","buildId":"b1","needs":`+needs+`}`)
 }
 

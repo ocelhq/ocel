@@ -11,7 +11,8 @@ const repo = "github.com/ocelhq/ocel/"
 
 var reachable = []string{
 	repo + "pkg/appbuild",
-	repo + "pkg/constants",
+	repo + "pkg/processenv",
+	repo + "pkg/statedir",
 	repo + "pkg/edge",
 	repo + "pkg/environment",
 	repo + "pkg/progress",

@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	s3store "github.com/ocelhq/ocel/platform/s3"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -54,7 +54,7 @@ func TestAnAppsStoreAccountIsLimitedToTheBucketsItBinds(t *testing.T) {
 	policy := fedBy(t, machine, "add-service-account")
 	for what, named := range map[string]string{
 		"the bucket the app binds":        "prod-web-r0a1b2c3d-uploads",
-		"the store's own sessions":        constants.StoreSessionsBucket(),
+		"the store's own sessions":        s3store.SessionsBucket(),
 		"a policy naming what it reaches": "arn:aws:s3:::",
 	} {
 		if !strings.Contains(policy, named) {

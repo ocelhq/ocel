@@ -19,7 +19,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devresources/binding"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 	"github.com/ocelhq/ocel/cli/internal/devresources/secret"
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/images"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 )
 
@@ -55,8 +55,8 @@ func (c *Backend) Resolve(ctx context.Context, project string, resources []decla
 	defer c.mu.Unlock()
 
 	for _, resource := range resources {
-		if _, known := constants.PostgresImage(resource.Postgres.GetVersion()); !known {
-			return nil, fmt.Errorf("postgres %q asks for version %q, and ocel dev runs %s: declare one of those", resource.Name, resource.Postgres.GetVersion(), strings.Join(constants.PostgresVersions(), ", "))
+		if _, known := images.Postgres(resource.Postgres.GetVersion()); !known {
+			return nil, fmt.Errorf("postgres %q asks for version %q, and ocel dev runs %s: declare one of those", resource.Name, resource.Postgres.GetVersion(), strings.Join(images.PostgresVersions(), ", "))
 		}
 	}
 
@@ -92,7 +92,7 @@ func (c *Backend) server(ctx context.Context, engine docker.Engine, project, ver
 			return nil, err
 		}
 		name := docker.Name(project, backend, version)
-		image, _ := constants.PostgresImage(version)
+		image, _ := images.Postgres(version)
 		container, err := engine.Run(ctx, docker.Spec{
 			Name:       name,
 			Image:      image,

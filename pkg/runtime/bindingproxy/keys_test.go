@@ -7,9 +7,9 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/pkg/constants"
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 func keyed(client bucketv1connect.BucketServiceClient, key string) map[string]func() error {
@@ -77,7 +77,7 @@ func TestEveryKeyedCallRefusesAKeyThatIsNotTheAppsToName(t *testing.T) {
 	t.Parallel()
 
 	for _, key := range []string{
-		constants.ReservedKeyPrefix + "sessions/sess_1",
+		statedir.Name + "/sessions/sess_1",
 		"../secrets/key",
 		"avatars/../../etc/passwd",
 		`a\b`,

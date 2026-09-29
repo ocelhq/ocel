@@ -8,12 +8,12 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 const (
-	ArtifactRootDir = constants.ProjectStateDirName + "/output"
+	ArtifactRootDir = statedir.Name + "/output"
 
 	appsDir = "apps"
 )

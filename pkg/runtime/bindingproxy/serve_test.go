@@ -10,7 +10,7 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/channel"
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
 	"github.com/ocelhq/ocel/pkg/runtime/bindingproxy"
@@ -54,9 +54,9 @@ func TestServe(t *testing.T) {
 	}
 	t.Cleanup(func() { served.Close() })
 
-	addr := envValue(t, served.Env, constants.RuntimeAddressEnvName)
+	addr := envValue(t, served.Env, processenv.RuntimeAddressEnvVar)
 	if !strings.HasPrefix(addr, "http://127.0.0.1:") {
-		t.Fatalf("%s = %q, want a loopback address nothing off the host can reach", constants.RuntimeAddressEnvName, addr)
+		t.Fatalf("%s = %q, want a loopback address nothing off the host can reach", processenv.RuntimeAddressEnvVar, addr)
 	}
 	token := envValue(t, served.Env, channel.SessionTokenEnvVar)
 	if len(token) < 32 {

@@ -10,8 +10,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
-	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 func writeGoApp(t *testing.T, root, path string) {
@@ -66,7 +66,7 @@ func TestAGoAppIsCompiledHereRatherThanHandedToTheNodeBuildScript(t *testing.T) 
 		App:          "api",
 	}})
 
-	binary := filepath.Join(root, constants.ProjectStateDirName, "output", "apps", "api", "functions", "index.func", "api")
+	binary := filepath.Join(root, statedir.Name, "output", "apps", "api", "functions", "index.func", "api")
 	if _, err := os.Stat(binary); err != nil {
 		t.Fatalf("the build wrote no binary for the function to boot: %v", err)
 	}
@@ -119,7 +119,7 @@ func TestAPythonAppIsVendoredHereRatherThanHandedToTheNodeBuilder(t *testing.T) 
 		App:          "api",
 	}})
 
-	entry := filepath.Join(root, constants.ProjectStateDirName, "output", "apps", "api", "functions", "index.func", "main.py")
+	entry := filepath.Join(root, statedir.Name, "output", "apps", "api", "functions", "index.func", "main.py")
 	if _, err := os.Stat(entry); err != nil {
 		t.Fatalf("the build produced no module for the function to boot: %v", err)
 	}
@@ -175,7 +175,7 @@ func TestARustAppIsCompiledHereRatherThanHandedToTheNodeBuilder(t *testing.T) {
 		App:          "api",
 	}})
 
-	binary := filepath.Join(root, constants.ProjectStateDirName, "output", "apps", "api", "functions", "index.func", "api")
+	binary := filepath.Join(root, statedir.Name, "output", "apps", "api", "functions", "index.func", "api")
 	if _, err := os.Stat(binary); err != nil {
 		t.Fatalf("the build wrote no binary for the function to boot: %v", err)
 	}

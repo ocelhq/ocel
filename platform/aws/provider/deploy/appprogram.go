@@ -7,9 +7,9 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
-	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -345,7 +345,7 @@ func (r *release) appEnv(spec provider.StackSpec, bundle appBundle, sessions ses
 	}
 	maps.Copy(env, app.Values.PhaseEnv())
 	if app.Values.Folder != "" {
-		env[constants.AppFolderEnvName] = app.Values.Folder
+		env[processenv.AppFolderEnvVar] = app.Values.Folder
 	}
 	for key, value := range bundle.env() {
 		env[key] = value

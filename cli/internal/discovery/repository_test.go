@@ -14,8 +14,10 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/fixturetest"
+	"github.com/ocelhq/ocel/cli/internal/sdkversion"
 	"github.com/ocelhq/ocel/pkg/channel"
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/processenv"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 func gitIgnoredDirs(t *testing.T, repo string) map[string]bool {
@@ -40,57 +42,61 @@ func TestGoCodeNamesSharedPathsThroughConstants(t *testing.T) {
 	ignored := gitIgnoredDirs(t, repo)
 	allowed := map[string]map[string]bool{
 		"cli/internal/attribution/rust_test.go": {
-			constants.DefaultDiscoveryDirName: true,
+			DefaultRootDirName: true,
 		},
 		"cli/internal/cli/clitest/fakeprovider.go": {
-			constants.DefaultDiscoveryDirName: true,
+			DefaultRootDirName: true,
 		},
 		"cli/internal/discovery/rust_test.go": {
-			constants.DefaultDiscoveryDirName: true,
+			DefaultRootDirName: true,
 		},
-		"pkg/constants/constants.go": {
-			constants.DefaultDiscoveryDirName: true,
-			constants.ProjectStateDirName:     true,
-			constants.PhaseEnvName:            true,
-			constants.DevServerEnvName:        true,
-			constants.DevServerTokenEnvName:   true,
-			constants.AppFolderEnvName:        true,
-			constants.AppURLEnvName:           true,
-			constants.RuntimeAddressEnvName:   true,
+		"cli/internal/discovery/roots.go": {
+			DefaultRootDirName: true,
 		},
-		"pkg/constants/constants_test.go": {
-			constants.PhaseEnvName:          true,
-			constants.DevServerEnvName:      true,
-			constants.DevServerTokenEnvName: true,
-			constants.AppFolderEnvName:      true,
-			constants.AppURLEnvName:         true,
-			constants.RuntimeAddressEnvName: true,
+		"pkg/statedir/statedir.go": {
+			statedir.Name: true,
+		},
+		"pkg/processenv/processenv.go": {
+			processenv.PhaseEnvVar:          true,
+			processenv.DevServerEnvVar:      true,
+			processenv.DevServerTokenEnvVar: true,
+			processenv.AppFolderEnvVar:      true,
+			processenv.AppURLEnvVar:         true,
+			processenv.RuntimeAddressEnvVar: true,
+		},
+		"pkg/processenv/processenv_test.go": {
+			processenv.PhaseEnvVar:          true,
+			processenv.DevServerEnvVar:      true,
+			processenv.DevServerTokenEnvVar: true,
+			processenv.AppFolderEnvVar:      true,
+			processenv.AppURLEnvVar:         true,
+			processenv.RuntimeAddressEnvVar: true,
 		},
 		"pkg/naming/stack.go": {
-			constants.DefaultDiscoveryDirName: true,
+			DefaultRootDirName: true,
 		},
 		"pkg/provider/providerserver/eventstream_test.go": {
-			constants.DefaultDiscoveryDirName: true,
+			DefaultRootDirName: true,
 		},
 		"pkg/provider/stacks.go": {
-			constants.DefaultDiscoveryDirName: true,
+			DefaultRootDirName: true,
 		},
 		"pkg/provider/pulumi/runtime.go": {
-			constants.ProjectStateDirName: true,
+			statedir.Name: true,
 		},
 		"tests/fixtures/sdk/go/server/main.go": {
-			"example.com/web/" + constants.DefaultDiscoveryDirName: true,
+			"example.com/web/" + DefaultRootDirName: true,
 		},
 	}
 	segments := []*regexp.Regexp{
-		regexp.MustCompile(`(?:^|[/\\"'])` + regexp.QuoteMeta(constants.DefaultDiscoveryDirName) + `(?:$|[/\\"'])`),
-		regexp.MustCompile(`(?:^|[/\\"'])` + regexp.QuoteMeta(constants.ProjectStateDirName) + `(?:$|[/\\"'])`),
-		regexp.MustCompile(`(?:^|[^A-Z0-9_])` + constants.PhaseEnvName + `(?:$|[^A-Z0-9_])`),
-		regexp.MustCompile(`(?:^|[^A-Z0-9_])` + constants.DevServerEnvName + `(?:$|[^A-Z0-9_])`),
-		regexp.MustCompile(`(?:^|[^A-Z0-9_])` + constants.DevServerTokenEnvName + `(?:$|[^A-Z0-9_])`),
-		regexp.MustCompile(`(?:^|[^A-Z0-9_])` + constants.AppFolderEnvName + `(?:$|[^A-Z0-9_])`),
-		regexp.MustCompile(`(?:^|[^A-Z0-9_])` + constants.AppURLEnvName + `(?:$|[^A-Z0-9_])`),
-		regexp.MustCompile(`(?:^|[^A-Z0-9_])` + constants.RuntimeAddressEnvName + `(?:$|[^A-Z0-9_])`),
+		regexp.MustCompile(`(?:^|[/\\"'])` + regexp.QuoteMeta(DefaultRootDirName) + `(?:$|[/\\"'])`),
+		regexp.MustCompile(`(?:^|[/\\"'])` + regexp.QuoteMeta(statedir.Name) + `(?:$|[/\\"'])`),
+		regexp.MustCompile(`(?:^|[^A-Z0-9_])` + processenv.PhaseEnvVar + `(?:$|[^A-Z0-9_])`),
+		regexp.MustCompile(`(?:^|[^A-Z0-9_])` + processenv.DevServerEnvVar + `(?:$|[^A-Z0-9_])`),
+		regexp.MustCompile(`(?:^|[^A-Z0-9_])` + processenv.DevServerTokenEnvVar + `(?:$|[^A-Z0-9_])`),
+		regexp.MustCompile(`(?:^|[^A-Z0-9_])` + processenv.AppFolderEnvVar + `(?:$|[^A-Z0-9_])`),
+		regexp.MustCompile(`(?:^|[^A-Z0-9_])` + processenv.AppURLEnvVar + `(?:$|[^A-Z0-9_])`),
+		regexp.MustCompile(`(?:^|[^A-Z0-9_])` + processenv.RuntimeAddressEnvVar + `(?:$|[^A-Z0-9_])`),
 	}
 	err := filepath.WalkDir(repo, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
@@ -103,7 +109,7 @@ func TestGoCodeNamesSharedPathsThroughConstants(t *testing.T) {
 		rel = filepath.ToSlash(rel)
 		if entry.IsDir() {
 			switch entry.Name() {
-			case ".git", ".next", ".venv", ".claude", constants.ProjectStateDirName, "node_modules", "dist", "target":
+			case ".git", ".next", ".venv", ".claude", statedir.Name, "node_modules", "dist", "target":
 				return filepath.SkipDir
 			}
 			if rel == "pkg/proto" || rel == "sdk" || ignored[rel] {
@@ -156,15 +162,15 @@ func TestRepositoryNamesTheDefaultDiscoveryDirectoryCentrally(t *testing.T) {
 		"tests/fixtures/sdk/workspace",
 	}
 	for _, root := range fixtureRoots {
-		if _, err := os.Stat(filepath.Join(repo, filepath.FromSlash(root), constants.DefaultDiscoveryDirName)); err != nil {
+		if _, err := os.Stat(filepath.Join(repo, filepath.FromSlash(root), DefaultRootDirName)); err != nil {
 			t.Errorf("%s does not name its discovery directory through the shared default: %v", root, err)
 		}
 	}
-	if _, err := os.Stat(filepath.Join(repo, "tests", "fixtures", "sdk", "rust-workspace", "crates", constants.DefaultDiscoveryDirName)); err != nil {
+	if _, err := os.Stat(filepath.Join(repo, "tests", "fixtures", "sdk", "rust-workspace", "crates", DefaultRootDirName)); err != nil {
 		t.Errorf("the Rust workspace fixture does not name its discovery crate through the shared default: %v", err)
 	}
 
-	name := regexp.QuoteMeta(constants.DefaultDiscoveryDirName)
+	name := regexp.QuoteMeta(DefaultRootDirName)
 	patterns := []*regexp.Regexp{
 		regexp.MustCompile(`(?:^|[^[:alnum:]_])` + name + `/`),
 		regexp.MustCompile(`/` + name + `(?:$|[^[:alnum:]_])`),
@@ -172,7 +178,7 @@ func TestRepositoryNamesTheDefaultDiscoveryDirectoryCentrally(t *testing.T) {
 		regexp.MustCompile(`\bfrom\s+` + name + `\s+import\b`),
 	}
 	allowed := func(rel string) bool {
-		if rel == "www/content/docs/configuration.mdx" || rel == "console/github/src/server.ts" || strings.HasPrefix(rel, constants.DefaultDiscoveryDirName+"/") || strings.HasPrefix(rel, "packages/ocel/tests/fixtures/"+constants.DefaultDiscoveryDirName+"/") {
+		if rel == "www/content/docs/configuration.mdx" || rel == "console/github/src/server.ts" || strings.HasPrefix(rel, DefaultRootDirName+"/") || strings.HasPrefix(rel, "packages/ocel/tests/fixtures/"+DefaultRootDirName+"/") {
 			return true
 		}
 		for _, root := range append(fixtureRoots, "tests/fixtures/sdk/rust-workspace") {
@@ -188,7 +194,7 @@ func TestRepositoryNamesTheDefaultDiscoveryDirectoryCentrally(t *testing.T) {
 		}
 		if entry.IsDir() {
 			switch entry.Name() {
-			case ".git", ".next", ".venv", ".claude", constants.ProjectStateDirName, "node_modules", "dist", "target":
+			case ".git", ".next", ".venv", ".claude", statedir.Name, "node_modules", "dist", "target":
 				return filepath.SkipDir
 			}
 			rel, err := filepath.Rel(repo, path)
@@ -212,7 +218,7 @@ func TestRepositoryNamesTheDefaultDiscoveryDirectoryCentrally(t *testing.T) {
 			return nil
 		}
 		for _, part := range strings.Split(rel, "/") {
-			if part == constants.DefaultDiscoveryDirName {
+			if part == DefaultRootDirName {
 				t.Errorf("%s names the default discovery directory directly", rel)
 			}
 		}
@@ -257,15 +263,15 @@ func TestGoSDKWireNamesMatchConstants(t *testing.T) {
 		return true
 	})
 	want := map[string]string{
-		"phaseEnv":          constants.PhaseEnvName,
-		"devServerEnv":      constants.DevServerEnvName,
-		"devServerTokenEnv": constants.DevServerTokenEnvName,
-		"appFolderEnv":      constants.AppFolderEnvName,
-		"appURLEnv":         constants.AppURLEnvName,
-		"runtimeAddressEnv": constants.RuntimeAddressEnvName,
-		"liveDirEnv":        constants.LiveDirEnvName,
+		"phaseEnv":          processenv.PhaseEnvVar,
+		"devServerEnv":      processenv.DevServerEnvVar,
+		"devServerTokenEnv": processenv.DevServerTokenEnvVar,
+		"appFolderEnv":      processenv.AppFolderEnvVar,
+		"appURLEnv":         processenv.AppURLEnvVar,
+		"runtimeAddressEnv": processenv.RuntimeAddressEnvVar,
+		"liveDirEnv":        processenv.LiveDirEnvVar,
 		"sessionTokenEnv":   channel.SessionTokenEnvVar,
-		"sdkVersionHeader":  constants.SDKVersionHeader,
+		"sdkVersionHeader":  sdkversion.Header,
 	}
 	for name, value := range want {
 		if got[name] != value {

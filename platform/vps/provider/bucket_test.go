@@ -7,12 +7,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/router"
+	s3store "github.com/ocelhq/ocel/platform/s3"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -287,7 +287,7 @@ func TestAnAppBindingABucketIsHandedItsStoreSealedAndNeverInPlaintext(t *testing
 	if manifest.Store.Volume == "" {
 		t.Error("the manifest names no volume, so the disk guard has nothing to measure")
 	}
-	if !strings.HasPrefix(manifest.Store.Sessions, constants.StoreSessionsBucket()+"/") {
+	if !strings.HasPrefix(manifest.Store.Sessions, s3store.SessionsBucket()+"/") {
 		t.Errorf("upload sessions live in %q, want a prefix of the store's own bucket: a session kept inside a declared bucket is stranded the day that bucket is dropped",
 			manifest.Store.Sessions)
 	}
@@ -301,11 +301,11 @@ func TestTheStoreKeepsItsSessionsInABucketNoAppDeclaresOrReaches(t *testing.T) {
 		t.Fatalf("Bucket() = %v", err)
 	}
 	joined := strings.Join(machine.commands(), "\n")
-	if !strings.Contains(joined, "/"+constants.StoreSessionsBucket()) {
+	if !strings.Contains(joined, "/"+s3store.SessionsBucket()) {
 		t.Fatalf("provisioning a store created no bucket for its sessions:\n%s", joined)
 	}
 	for line := range strings.SplitSeq(joined, "\n") {
-		if strings.Contains(line, constants.StoreSessionsBucket()) && strings.Contains(line, "?policy") {
+		if strings.Contains(line, s3store.SessionsBucket()) && strings.Contains(line, "?policy") {
 			t.Errorf("the store's own sessions bucket was given a policy of its own:\n%s", line)
 		}
 	}
@@ -321,7 +321,7 @@ func TestDroppingADeclaredBucketLeavesTheStoresSessionsWhereTheyAre(t *testing.T
 	if err != nil {
 		t.Fatalf("RemoveResource(bucket) = %v", err)
 	}
-	if joined := strings.Join(machine.commands(), "\n"); strings.Contains(joined, constants.StoreSessionsBucket()) {
+	if joined := strings.Join(machine.commands(), "\n"); strings.Contains(joined, s3store.SessionsBucket()) {
 		t.Errorf("dropping one declared bucket reached for the store's sessions:\n%s", joined)
 	}
 }

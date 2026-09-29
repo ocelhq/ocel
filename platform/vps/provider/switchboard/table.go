@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 const (
@@ -25,7 +25,7 @@ const (
 )
 
 const (
-	ConnectorPath   = "/" + constants.ProjectStateDirName + "/connector"
+	ConnectorPath   = "/" + statedir.Name + "/connector"
 	ConnectorSocket = "/run/ocel/connector.sock"
 	connectorDial   = "unix/" + ConnectorSocket
 )

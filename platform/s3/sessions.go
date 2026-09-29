@@ -13,6 +13,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
+const sessionsBucket = "ocel-sessions"
+
+func SessionsBucket() string { return sessionsBucket }
+
 type fileState string
 
 const (

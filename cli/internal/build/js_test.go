@@ -5,15 +5,15 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/fixturetest"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/pkg/constants"
 )
 
 func TestHasJS(t *testing.T) {
 	t.Run("a declaration root written in JS contains JS", func(t *testing.T) {
 		root := t.TempDir()
-		dir := filepath.Join(root, constants.DefaultDiscoveryDirName)
+		dir := filepath.Join(root, discovery.DefaultRootDirName)
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
 		}

@@ -25,11 +25,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/providers"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
-	"github.com/ocelhq/ocel/pkg/constants"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 const (
@@ -145,7 +145,7 @@ func TestAddPairsTheTargetWithTheConsoleAndInstallsTheAsset(t *testing.T) {
 	if len(srv.patched) != 1 {
 		t.Fatalf("patches = %v, want one", srv.patched)
 	}
-	if srv.patched[0]["url"] != "https://"+hostname+"/"+constants.ProjectStateDirName+"/connector" {
+	if srv.patched[0]["url"] != "https://"+hostname+"/"+statedir.Name+"/connector" {
 		t.Errorf("patched url = %v, want the box's own connector path", srv.patched[0]["url"])
 	}
 	if srv.patched[0]["publicKey"] == "" {
@@ -433,7 +433,7 @@ func TestStatusSaysWhatTheConsoleHasRegistered(t *testing.T) {
 	seen := time.Now().Add(-10 * time.Second)
 	srv := newConsoleServer(t, map[string]any{
 		"id": "con_1", "target": fingerprint, "vendor": "fake", "compute": "container", "reach": "dial",
-		"url": "https://" + hostname + "/" + constants.ProjectStateDirName + "/connector", "capabilities": []string{"envvars.read", "envvars.write"},
+		"url": "https://" + hostname + "/" + statedir.Name + "/connector", "capabilities": []string{"envvars.read", "envvars.write"},
 		"connectedAt": seen, "lastSeenAt": seen, "online": true,
 	})
 	linked(t, root, srv.URL)

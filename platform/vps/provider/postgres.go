@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
@@ -33,15 +33,15 @@ const (
 var postgresCapabilities = []string{"CHOWN", "DAC_OVERRIDE", "FOWNER", "SETGID", "SETUID"}
 
 func postgresContainer(in resources.ProvisionRequest) (host.ResourceContainer, error) {
-	version := constants.DefaultPostgresVersion
+	version := images.DefaultPostgresVersion
 	if in.Resource.Postgres != nil && in.Resource.Postgres.Version != "" {
 		version = in.Resource.Postgres.Version
 	}
-	image, pinned := constants.PostgresImage(version)
+	image, pinned := images.Postgres(version)
 	if !pinned {
 		return host.ResourceContainer{}, refusal.Refuse(refusal.CodeInvalid,
 			"postgres %s asks for version %q; supported: %s",
-			in.Resource.Name, version, strings.Join(constants.PostgresVersions(), ", "))
+			in.Resource.Name, version, strings.Join(images.PostgresVersions(), ", "))
 	}
 	return host.ResourceContainer{
 		Name:     host.ResourceName(in.Ref.Project, in.Ref.Name.String(), in.Resource.Name, postgresKind),

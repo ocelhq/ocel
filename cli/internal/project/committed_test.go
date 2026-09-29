@@ -17,7 +17,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/fixturetest"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 func committedSchemaFile(t *testing.T, root string) string {
@@ -34,12 +34,12 @@ const compareTable = "www/components/docs/compare/data.ts"
 var sampleNamed = regexp.MustCompile("filename: \"([^\"]+)\",\\s*code: `([^`]*)`")
 
 var skippedDirs = map[string]bool{
-	"node_modules":                true,
-	constants.ProjectStateDirName: true,
-	".next":                       true,
-	"dist":                        true,
-	"output":                      true,
-	".git":                        true,
+	"node_modules": true,
+	statedir.Name:  true,
+	".next":        true,
+	"dist":         true,
+	"output":       true,
+	".git":         true,
 }
 
 func schemaID(t *testing.T, root string) string {

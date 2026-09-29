@@ -22,7 +22,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/statedir"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 )
 
@@ -109,7 +109,7 @@ func buildArchive(ctx context.Context, dir string) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-const compileCacheDir = "/tmp/" + constants.ProjectStateDirName + "/compile-cache"
+const compileCacheDir = "/tmp/" + statedir.Name + "/compile-cache"
 
 const prefixEnvVar = "OCEL_BYTECODE_PREFIX"
 
@@ -436,7 +436,7 @@ const (
 	SourceNone     Source = "none"
 )
 
-const embeddedDir = "/var/task/" + constants.ProjectStateDirName + "/bytecode"
+const embeddedDir = "/var/task/" + statedir.Name + "/bytecode"
 
 func embeddedPath(key string) string {
 	base := path.Base(key)

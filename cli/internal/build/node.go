@@ -13,7 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/nodeprotocol"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/processenv"
 )
 
 type nodeBuildRequest struct {
@@ -34,7 +34,7 @@ type nodeAppBuild struct {
 	FuncDir       string            `json:"funcDir,omitempty"`
 }
 
-var buildOwnedNames = []string{constants.AppFolderEnvName, constants.PhaseEnvName, "PATH"}
+var buildOwnedNames = []string{processenv.AppFolderEnvVar, processenv.PhaseEnvVar, "PATH"}
 
 func checkVariableNames(vars map[string]string) error {
 	for _, name := range buildOwnedNames {

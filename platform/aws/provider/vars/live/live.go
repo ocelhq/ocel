@@ -4,13 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
-const FilePath = constants.ProjectStateDirName + "/variables.live.json"
+const FilePath = statedir.Name + "/variables.live.json"
 
 const EnvVar = "OCEL_LIVE_MANIFEST"
 

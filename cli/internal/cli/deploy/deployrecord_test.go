@@ -14,8 +14,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/deployrecord"
 	"github.com/ocelhq/ocel/pkg/appbuild"
-	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/statedir"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
@@ -133,6 +133,6 @@ func readDeployRecord(t *testing.T, root string) deployrecord.Record {
 
 func writeServeDescriptor(t *testing.T, root, app, buildID string) {
 	t.Helper()
-	clitest.WriteFile(t, filepath.Join(root, constants.ProjectStateDirName, "output", "apps", app, edge.ServeDescriptorFile),
+	clitest.WriteFile(t, filepath.Join(root, statedir.Name, "output", "apps", app, edge.ServeDescriptorFile),
 		`{"framework":"node","buildId":"`+buildID+`"}`)
 }

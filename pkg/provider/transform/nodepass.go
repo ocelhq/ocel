@@ -14,8 +14,8 @@ import (
 
 	"github.com/evanw/esbuild/pkg/api"
 
-	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 //go:generate pnpm --dir ../../.. exec turbo run build --filter=@pkg/transform-runner
@@ -91,9 +91,9 @@ func (p NodePass) Evaluate(ctx context.Context, req Request) ([]Result, error) {
 }
 
 func (p NodePass) bundle() (string, error) {
-	outDir := filepath.Join(p.Root, constants.ProjectStateDirName)
+	outDir := filepath.Join(p.Root, statedir.Name)
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
-		return "", fmt.Errorf("create %s: %w", constants.ProjectStateDirName, err)
+		return "", fmt.Errorf("create %s: %w", statedir.Name, err)
 	}
 	runnerPath := filepath.Join(outDir, runnerFileName)
 	if err := os.WriteFile(runnerPath, runner, 0o644); err != nil {

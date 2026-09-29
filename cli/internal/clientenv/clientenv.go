@@ -16,8 +16,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/appbuild"
-	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 const specifier = "ocel/env/client"
@@ -26,7 +26,7 @@ const accessorFile = "env-client.ts"
 
 var configFiles = []string{"tsconfig.json", "jsconfig.json"}
 
-var recordPath = filepath.Join(constants.ProjectStateDirName, "output", "client-digests.json")
+var recordPath = filepath.Join(statedir.Name, "output", "client-digests.json")
 
 type App struct {
 	Name         string
@@ -94,9 +94,9 @@ func MapAppEnvImport(projectDir string, app App) error {
 
 func accessorPath(projectDir, appName, appDir string) string {
 	if filepath.Clean(appDir) != filepath.Clean(projectDir) {
-		return filepath.Join(projectDir, constants.ProjectStateDirName, "apps", appName, accessorFile)
+		return filepath.Join(projectDir, statedir.Name, "apps", appName, accessorFile)
 	}
-	return filepath.Join(projectDir, constants.ProjectStateDirName, accessorFile)
+	return filepath.Join(projectDir, statedir.Name, accessorFile)
 }
 
 const schemaSpecifier = "ocel/env/schema"
@@ -230,12 +230,12 @@ func CheckFresh(projectDir string, apps []App) error {
 	var causes []string
 	if len(missing) > 0 {
 		causes = append(causes, fmt.Sprintf(
-			"%s %s never inlined — either not client-accessible when "+constants.ProjectStateDirName+"/output was built, or built by `ocel build`, which resolves no values",
+			"%s %s never inlined — either not client-accessible when "+statedir.Name+"/output was built, or built by `ocel build`, which resolves no values",
 			strings.Join(missing, ", "), were(missing),
 		))
 	}
 	if len(changed) > 0 {
-		causes = append(causes, fmt.Sprintf("the client-accessible value of %s changed since "+constants.ProjectStateDirName+"/output was built", strings.Join(changed, ", ")))
+		causes = append(causes, fmt.Sprintf("the client-accessible value of %s changed since "+statedir.Name+"/output was built", strings.Join(changed, ", ")))
 	}
 	return fmt.Errorf(
 		"--prebuilt cannot deploy this build: %s. "+

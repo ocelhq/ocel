@@ -22,7 +22,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devresources/binding"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 	"github.com/ocelhq/ocel/cli/internal/devresources/secret"
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/images"
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -127,7 +127,7 @@ func (c *Backend) running(ctx context.Context, project string) (*s3store.Store, 
 		name := docker.Name(project, backend)
 		container, err := engine.Run(ctx, docker.Spec{
 			Name:  name,
-			Image: constants.ObjectStoreImage(),
+			Image: images.ObjectStore(),
 			Env: []string{
 				"RUSTFS_ACCESS_KEY=" + accessKeyID,
 				"RUSTFS_SECRET_KEY=" + key,
@@ -156,7 +156,7 @@ func (c *Backend) running(ctx context.Context, project string) (*s3store.Store, 
 	if err := waitReady(ctx, store.Endpoint); err != nil {
 		return nil, err
 	}
-	if err := store.EnsureBucket(ctx, constants.StoreSessionsBucket(), nil); err != nil {
+	if err := store.EnsureBucket(ctx, s3store.SessionsBucket(), nil); err != nil {
 		return nil, fmt.Errorf("keep upload sessions: %w", err)
 	}
 	c.store = &store
@@ -197,7 +197,7 @@ func serve(store s3store.Store, buckets map[string][]string) *s3store.Service {
 		External:     func(context.Context) (s3store.PresignAPI, string) { return presigner, store.Endpoint },
 		Callbacks:    callbacks{allowed: allowed},
 		SweepUploads: true,
-		Sessions:     constants.StoreSessionsBucket(),
+		Sessions:     s3store.SessionsBucket(),
 		Granted:      slices.Sorted(maps.Keys(buckets)),
 	})
 }

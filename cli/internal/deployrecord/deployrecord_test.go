@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 func TestWriteLeavesTheDocumentedRecordInTheProjectStateDir(t *testing.T) {
@@ -137,7 +137,7 @@ func TestPathIsUnderTheProjectStateDir(t *testing.T) {
 
 	t.Run("is under the project scratch dir", func(t *testing.T) {
 		t.Parallel()
-		if got, want := Path("/p"), filepath.Join("/p", constants.ProjectStateDirName, "deploy-result.json"); got != want {
+		if got, want := Path("/p"), filepath.Join("/p", statedir.Name, "deploy-result.json"); got != want {
 			t.Errorf("Path() = %q, want %q", got, want)
 		}
 	})

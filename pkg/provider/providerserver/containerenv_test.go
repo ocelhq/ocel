@@ -8,9 +8,9 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
-	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -72,8 +72,8 @@ func TestADeployThatProvisionsNamesNoPhase(t *testing.T) {
 	daemonWithTheBuiltImage(t, "amd64")
 	delivered := deliveredBy(t, namingARegistry(containerDeployRequest("/healthz")), nil)
 
-	if got, ok := delivered[constants.PhaseEnvName]; ok {
-		t.Errorf("%s = %q, want a deploy that provisions to name no phase at all", constants.PhaseEnvName, got)
+	if got, ok := delivered[processenv.PhaseEnvVar]; ok {
+		t.Errorf("%s = %q, want a deploy that provisions to name no phase at all", processenv.PhaseEnvVar, got)
 	}
 }
 
@@ -242,12 +242,12 @@ func TestTheStagedRecordNamesEveryValueAWrappingProvidersAppDeclares(t *testing.
 func TestTheDeploymentURLIsDeliveredToAContainerRatherThanRefusedAsAnOcelName(t *testing.T) {
 	daemonWithTheBuiltImage(t, "amd64")
 	req := namingARegistry(containerDeployRequest("/healthz"))
-	declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, constants.AppURLEnvName, "https://shop.example")
+	declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, processenv.AppURLEnvVar, "https://shop.example")
 	declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, appbuild.ClientURLEnvName, "https://shop.example")
 
 	delivered := deliveredBy(t, req, nil)
 
-	for _, key := range []string{constants.AppURLEnvName, appbuild.ClientURLEnvName} {
+	for _, key := range []string{processenv.AppURLEnvVar, appbuild.ClientURLEnvName} {
 		if got, want := delivered[key], "https://shop.example"; got != want {
 			t.Errorf("a container is handed %s=%q, want %q: ocel writes it for every app, so the guard on its own prefix must not refuse its own entry", key, got, want)
 		}
@@ -386,7 +386,7 @@ func TestTheStagedRecordLeavesOutOnlyWhatOcelWritesForTheApp(t *testing.T) {
 
 			req := namingARegistry(containerDeployRequest("/healthz"))
 			req.Manifest.Apps[0].ClientBundle = tc.clientBundle
-			declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, constants.AppURLEnvName, "https://shop.example")
+			declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, processenv.AppURLEnvVar, "https://shop.example")
 			declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, appbuild.ClientURLEnvName, "https://shop.example")
 			declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, "REGION", "eu-west-1")
 

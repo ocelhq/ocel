@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 const apiURL = "https://ocel.app"
@@ -89,10 +89,10 @@ func TestReadLink(t *testing.T) {
 		t.Parallel()
 
 		dir := t.TempDir()
-		if err := os.MkdirAll(filepath.Join(dir, constants.ProjectStateDirName), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Join(dir, statedir.Name), 0o755); err != nil {
 			t.Fatalf("mkdir: %v", err)
 		}
-		if err := os.WriteFile(filepath.Join(dir, constants.ProjectStateDirName, "console.json"), []byte("{not json"), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, statedir.Name, "console.json"), []byte("{not json"), 0o644); err != nil {
 			t.Fatalf("write: %v", err)
 		}
 
@@ -134,8 +134,8 @@ func TestWriteLink(t *testing.T) {
 		if err := WriteLink(dir, sample()); err != nil {
 			t.Fatalf("WriteLink err = %v", err)
 		}
-		if _, err := os.Stat(filepath.Join(dir, constants.ProjectStateDirName, "console.json")); err != nil {
-			t.Fatalf("stat %s/console.json: %v", constants.ProjectStateDirName, err)
+		if _, err := os.Stat(filepath.Join(dir, statedir.Name, "console.json")); err != nil {
+			t.Fatalf("stat %s/console.json: %v", statedir.Name, err)
 		}
 	})
 

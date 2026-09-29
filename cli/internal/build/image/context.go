@@ -9,12 +9,12 @@ import (
 	"github.com/moby/patternmatcher/ignorefile"
 	"github.com/tonistiigi/fsutil"
 
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 const DockerignoreName = ".dockerignore"
 
-var neverInTheContext = []string{"node_modules", ".git", constants.ProjectStateDirName}
+var neverInTheContext = []string{"node_modules", ".git", statedir.Name}
 
 func contextFS(root string) (fsutil.FS, error) {
 	source, err := fsutil.NewFS(root)

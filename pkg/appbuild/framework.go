@@ -3,7 +3,7 @@ package appbuild
 import (
 	"slices"
 
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/processenv"
 )
 
 const (
@@ -30,7 +30,7 @@ func FrameworkBundlesClient(framework string) bool {
 
 func IsOcelInjectedEnv(clientBundle bool, key string) bool {
 	switch key {
-	case constants.AppURLEnvName:
+	case processenv.AppURLEnvVar:
 		return true
 	case ClientURLEnvName:
 		return clientBundle

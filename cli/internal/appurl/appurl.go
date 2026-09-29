@@ -5,7 +5,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/appbuild"
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
@@ -46,7 +46,7 @@ func Variables(clientBundle bool, url string) []variables.Variable {
 	}
 	var written []variables.Variable
 	for _, v := range []variables.Variable{
-		{Key: constants.AppURLEnvName, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: url},
+		{Key: processenv.AppURLEnvVar, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: url},
 		{Key: appbuild.ClientURLEnvName, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: url, ClientAccessible: true},
 	} {
 		if appbuild.IsOcelInjectedEnv(clientBundle, v.Key) {

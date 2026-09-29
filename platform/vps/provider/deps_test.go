@@ -19,7 +19,6 @@ var reachable = map[string]bool{
 	"github.com/ocelhq/ocel/pkg/arch":              true,
 	"github.com/ocelhq/ocel/pkg/channel":           true,
 	"github.com/ocelhq/ocel/pkg/configdoc":         true,
-	"github.com/ocelhq/ocel/pkg/constants":         true,
 	"github.com/ocelhq/ocel/pkg/dotenv":            true,
 	"github.com/ocelhq/ocel/pkg/edge":              true,
 	"github.com/ocelhq/ocel/pkg/environment":       true,
@@ -30,6 +29,7 @@ var reachable = map[string]bool{
 	"github.com/ocelhq/ocel/pkg/images":            true,
 	"github.com/ocelhq/ocel/pkg/naming":            true,
 	"github.com/ocelhq/ocel/pkg/pricing":           true,
+	"github.com/ocelhq/ocel/pkg/processenv":        true,
 	"github.com/ocelhq/ocel/pkg/progress":          true,
 	"github.com/ocelhq/ocel/pkg/proto":             true,
 	"github.com/ocelhq/ocel/pkg/keyvalue":          true,
@@ -38,6 +38,7 @@ var reachable = map[string]bool{
 	"github.com/ocelhq/ocel/pkg/runtime":           true,
 	"github.com/ocelhq/ocel/pkg/seal":              true,
 	"github.com/ocelhq/ocel/pkg/stackrecords":      true,
+	"github.com/ocelhq/ocel/pkg/statedir":          true,
 	"github.com/ocelhq/ocel/pkg/target":            true,
 	dnsRecords:                                     true,
 }

@@ -8,7 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/appbuild"
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
@@ -427,7 +427,7 @@ func TestDeclaringVariablesAnswersTheCellsThatHoldTheirValues(t *testing.T) {
 			key          string
 			refused      bool
 		}{
-			{name: "an app with no client bundle", key: constants.AppURLEnvName, refused: true},
+			{name: "an app with no client bundle", key: processenv.AppURLEnvVar, refused: true},
 			{name: "an app whose bundle reads it", clientBundle: true, key: appbuild.ClientURLEnvName, refused: true},
 			{name: "an app whose bundle never reads it", key: appbuild.ClientURLEnvName, refused: false},
 		} {

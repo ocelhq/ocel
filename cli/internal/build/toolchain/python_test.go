@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
-	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/edge"
 )
 
@@ -323,13 +323,13 @@ func TestCompileCopiesTheDiscoveryRootsThePythonAppImportsIntoTheArtifact(t *tes
 	t.Parallel()
 
 	fixtureImport := "from infra import db\n"
-	if imported := strings.Fields(fixtureImport)[1]; imported != constants.DefaultDiscoveryDirName {
-		t.Fatalf("the fixture imports %q, want the default discovery package %q", imported, constants.DefaultDiscoveryDirName)
+	if imported := strings.Fields(fixtureImport)[1]; imported != discovery.DefaultRootDirName {
+		t.Fatalf("the fixture imports %q, want the default discovery package %q", imported, discovery.DefaultRootDirName)
 	}
 	project := pythonApp(t, map[string]string{
 		"server/main.py": fixtureImport,
-		constants.DefaultDiscoveryDirName + "/__init__.py":  "db = 1\n",
-		constants.DefaultDiscoveryDirName + "/nested/db.py": "handle = 2\n",
+		discovery.DefaultRootDirName + "/__init__.py":  "db = 1\n",
+		discovery.DefaultRootDirName + "/nested/db.py": "handle = 2\n",
 	})
 	out := t.TempDir()
 	appDir := filepath.Join(out, "apps", "web")
@@ -338,7 +338,7 @@ func TestCompileCopiesTheDiscoveryRootsThePythonAppImportsIntoTheArtifact(t *tes
 		App:            "web",
 		Framework:      appbuild.Framework{Name: "python", Arch: "x86_64"},
 		Source:         filepath.Join(project, "server"),
-		DiscoveryRoots: []string{filepath.Join(project, constants.DefaultDiscoveryDirName), filepath.Join(project, "server")},
+		DiscoveryRoots: []string{filepath.Join(project, discovery.DefaultRootDirName), filepath.Join(project, "server")},
 		FuncDir:        funcDir,
 		AppDir:         appDir,
 	})
@@ -346,7 +346,7 @@ func TestCompileCopiesTheDiscoveryRootsThePythonAppImportsIntoTheArtifact(t *tes
 		t.Fatalf("compile: %v", err)
 	}
 
-	for _, rel := range []string{filepath.Join(constants.DefaultDiscoveryDirName, "__init__.py"), filepath.Join(constants.DefaultDiscoveryDirName, "nested", "db.py")} {
+	for _, rel := range []string{filepath.Join(discovery.DefaultRootDirName, "__init__.py"), filepath.Join(discovery.DefaultRootDirName, "nested", "db.py")} {
 		if _, err := os.Stat(filepath.Join(funcDir, rel)); err != nil {
 			t.Errorf("the artifact contains no %s: `from infra import db` resolves at runtime only if the folder that declared it travels with the app: %v", rel, err)
 		}

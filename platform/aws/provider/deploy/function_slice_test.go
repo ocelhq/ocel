@@ -14,12 +14,12 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
-	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 func TestTranslateFunctionSpec(t *testing.T) {
@@ -756,8 +756,8 @@ func TestFunctionEnvKey(t *testing.T) {
 
 func TestArtifactArchivePath(t *testing.T) {
 	t.Run("resolves relative to the output root", func(t *testing.T) {
-		got := artifactArchivePath("/proj/"+constants.ProjectStateDirName+"/output", "apps/web/functions/api.func")
-		want := "/proj/" + constants.ProjectStateDirName + "/output/apps/web/functions/api.func"
+		got := artifactArchivePath("/proj/"+statedir.Name+"/output", "apps/web/functions/api.func")
+		want := "/proj/" + statedir.Name + "/output/apps/web/functions/api.func"
 		if got != want {
 			t.Errorf("artifactArchivePath() = %q, want %q", got, want)
 		}

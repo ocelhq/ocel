@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 func generate(t *testing.T, dir string) error {
@@ -42,9 +42,9 @@ func TestWithMapping(t *testing.T) {
 		t.Parallel()
 
 		for name, tc := range map[string]struct{ baseURL, want string }{
-			"a source root":  {"./src", "../" + constants.ProjectStateDirName + "/env-client.ts"},
-			"the app itself": {".", "./" + constants.ProjectStateDirName + "/env-client.ts"},
-			"a nested root":  {"./app/src", "../../" + constants.ProjectStateDirName + "/env-client.ts"},
+			"a source root":  {"./src", "../" + statedir.Name + "/env-client.ts"},
+			"the app itself": {".", "./" + statedir.Name + "/env-client.ts"},
+			"a nested root":  {"./app/src", "../../" + statedir.Name + "/env-client.ts"},
 		} {
 			t.Run(name, func(t *testing.T) {
 				t.Parallel()
@@ -76,7 +76,7 @@ func TestWithMapping(t *testing.T) {
 		if err == nil {
 			t.Fatal("Generate = nil for a config whose paths are inherited, want a refusal")
 		}
-		for _, want := range []string{"tsconfig.json", "extends", specifier, "./" + constants.ProjectStateDirName + "/env-client.ts"} {
+		for _, want := range []string{"tsconfig.json", "extends", specifier, "./" + statedir.Name + "/env-client.ts"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("error = %q, want it to name %q", err, want)
 			}
@@ -96,7 +96,7 @@ func TestWithMapping(t *testing.T) {
 		if err := generate(t, dir); err != nil {
 			t.Fatalf("Generate: %v", err)
 		}
-		if got := mapped(t, filepath.Join(dir, "tsconfig.json")); len(got) != 1 || got[0] != "./"+constants.ProjectStateDirName+"/env-client.ts" {
+		if got := mapped(t, filepath.Join(dir, "tsconfig.json")); len(got) != 1 || got[0] != "./"+statedir.Name+"/env-client.ts" {
 			t.Errorf("paths[%q] = %v, want the accessor", specifier, got)
 		}
 	})
@@ -115,7 +115,7 @@ func TestWithMapping(t *testing.T) {
 		if !strings.Contains(updated, `"~/*": ["./app/*"]`) {
 			t.Errorf("the app's own alias was lost:\n%s", updated)
 		}
-		if got := mapped(t, filepath.Join(dir, "tsconfig.json")); len(got) != 1 || got[0] != "./"+constants.ProjectStateDirName+"/env-client.ts" {
+		if got := mapped(t, filepath.Join(dir, "tsconfig.json")); len(got) != 1 || got[0] != "./"+statedir.Name+"/env-client.ts" {
 			t.Errorf("paths[%q] = %v, want the accessor", specifier, got)
 		}
 	})
@@ -130,7 +130,7 @@ func TestWithMapping(t *testing.T) {
 		if err := generate(t, dir); err != nil {
 			t.Fatalf("Generate: %v", err)
 		}
-		if got := mapped(t, filepath.Join(dir, "tsconfig.json")); len(got) != 1 || got[0] != "../"+constants.ProjectStateDirName+"/env-client.ts" {
+		if got := mapped(t, filepath.Join(dir, "tsconfig.json")); len(got) != 1 || got[0] != "../"+statedir.Name+"/env-client.ts" {
 			t.Errorf("paths[%q] = %v, want the accessor stated from the inherited baseUrl", specifier, got)
 		}
 	})
@@ -183,7 +183,7 @@ func TestWithMapping(t *testing.T) {
 				if err == nil {
 					t.Fatal("Generate = nil for a config ocel cannot read, want a refusal")
 				}
-				for _, want := range []string{"tsconfig.json", specifier, "./" + constants.ProjectStateDirName + "/env-client.ts"} {
+				for _, want := range []string{"tsconfig.json", specifier, "./" + statedir.Name + "/env-client.ts"} {
 					if !strings.Contains(err.Error(), want) {
 						t.Errorf("error = %q, want it to name %q", err, want)
 					}
@@ -207,7 +207,7 @@ func TestWithMapping(t *testing.T) {
 		if !strings.HasPrefix(read(t, filepath.Join(dir, "tsconfig.json")), "\ufeff") {
 			t.Error("the byte order mark was dropped")
 		}
-		if got := mapped(t, filepath.Join(dir, "tsconfig.json")); len(got) != 1 || got[0] != "./"+constants.ProjectStateDirName+"/env-client.ts" {
+		if got := mapped(t, filepath.Join(dir, "tsconfig.json")); len(got) != 1 || got[0] != "./"+statedir.Name+"/env-client.ts" {
 			t.Errorf("paths[%q] = %v, want the accessor", specifier, got)
 		}
 	})

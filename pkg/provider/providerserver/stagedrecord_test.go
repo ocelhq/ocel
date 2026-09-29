@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
-	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -138,8 +138,8 @@ func TestTheStagedRecordIncludesTheCodeAndVariablesAnEdgeRunsTheAppWith(t *testi
 	if record.Env["PUBLIC_MODE"] != "loud" {
 		t.Errorf("env = %v, want the app's plain variables, which the edge passes into the worker", record.Env)
 	}
-	if record.Env[constants.AppFolderEnvName] != "/web" {
-		t.Errorf("env[%s] = %q, want the folder the app is rooted at", constants.AppFolderEnvName, record.Env[constants.AppFolderEnvName])
+	if record.Env[processenv.AppFolderEnvVar] != "/web" {
+		t.Errorf("env[%s] = %q, want the folder the app is rooted at", processenv.AppFolderEnvVar, record.Env[processenv.AppFolderEnvVar])
 	}
 	if _, named := record.Env["orders"]; named {
 		t.Errorf("env = %v, want no binding name among the variables the worker runs with", record.Env)

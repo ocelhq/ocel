@@ -17,13 +17,14 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/channel"
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/processenv"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 func jsFixture(t *testing.T, source string) (string, Programs) {
 	t.Helper()
 	root := t.TempDir()
-	write(t, filepath.Join(root, constants.DefaultDiscoveryDirName, "main.ts"), source)
+	write(t, filepath.Join(root, DefaultRootDirName, "main.ts"), source)
 
 	return root, prepare(t, root)
 }
@@ -141,7 +142,7 @@ export {};
 
 func readTraceFile(t *testing.T, projectDir string) string {
 	t.Helper()
-	traces, err := filepath.Glob(filepath.Join(projectDir, constants.ProjectStateDirName, "runs", "*.otlp.json"))
+	traces, err := filepath.Glob(filepath.Join(projectDir, statedir.Name, "runs", "*.otlp.json"))
 	if err != nil || len(traces) != 1 {
 		t.Fatalf("traces = %v, %v, want the run's one trace", traces, err)
 	}
@@ -165,10 +166,10 @@ func TestRunDeclaresAgainstTheCollectorAndSyncsOnceAfterTheChildExits(t *testing
 	root, prepared := jsFixture(t, `declare global { var __ocelRegister: Promise<unknown>[]; }
 globalThis.__ocelRegister ??= [];
 globalThis.__ocelRegister.push(
-  fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.`+constants.DevServerEnvName+`), {
+  fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.`+processenv.DevServerEnvVar+`), {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: "Bearer " + process.env.`+constants.DevServerTokenEnvName+` },
-    body: JSON.stringify({ resource: { type: "RESOURCE_TYPE_POSTGRES", name: "main" }, postgres: { version: "17" }, source: "`+constants.DefaultDiscoveryDirName+`/main.ts:1" }),
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + process.env.`+processenv.DevServerTokenEnvVar+` },
+    body: JSON.stringify({ resource: { type: "RESOURCE_TYPE_POSTGRES", name: "main" }, postgres: { version: "17" }, source: "`+DefaultRootDirName+`/main.ts:1" }),
   }),
 );
 export {};
@@ -217,7 +218,7 @@ func TestRunBuildsNoBundleAndRunsNoNodeWithoutAJSRoot(t *testing.T) {
 	if err := Run(context.Background(), root, prepare(t, root), okServer(t), &stdout, &stderr); err != nil {
 		t.Fatalf("Run: %v; stderr=%s", err, stderr.String())
 	}
-	if _, err := os.Stat(filepath.Join(root, constants.ProjectStateDirName, "entry.mjs")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(root, statedir.Name, "entry.mjs")); !os.IsNotExist(err) {
 		t.Errorf("stat entry.mjs = %v, want a project with no js root to bundle nothing and run no node", err)
 	}
 }
@@ -239,7 +240,7 @@ func TestRunBundlesNothingForARootItCannotDiscover(t *testing.T) {
 	if err := Run(context.Background(), root, prepared, okServer(t), &stdout, &stderr); err == nil {
 		t.Fatal("Run succeeded on a root of a language ocel does not discover, want an error")
 	}
-	if _, err := os.Stat(filepath.Join(root, constants.ProjectStateDirName, "entry.mjs")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(root, statedir.Name, "entry.mjs")); !os.IsNotExist(err) {
 		t.Errorf("stat entry.mjs = %v, want a project with no js root to bundle nothing", err)
 	}
 }

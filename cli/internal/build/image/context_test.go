@@ -8,7 +8,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 func laidOut(t *testing.T, files map[string]string) string {
@@ -51,13 +51,13 @@ func mounted(t *testing.T, root string) []string {
 
 func TestTheContextIncludesNoInstalledDependenciesNoHistoryAndNoEarlierBuild(t *testing.T) {
 	root := laidOut(t, map[string]string{
-		"package.json":                       `{"name":"root"}`,
-		"apps/web/server.js":                 "listen()\n",
-		"node_modules/express/index.js":      "module.exports = {}\n",
-		"apps/web/node_modules/lib/index.js": "module.exports = {}\n",
-		".git/HEAD":                          "ref: refs/heads/main\n",
-		constants.ProjectStateDirName + "/output/functions/exp.func/x.js": "stale\n",
-		"apps/web/" + constants.ProjectStateDirName + "/dist/x.js":        "stale\n",
+		"package.json":                                    `{"name":"root"}`,
+		"apps/web/server.js":                              "listen()\n",
+		"node_modules/express/index.js":                   "module.exports = {}\n",
+		"apps/web/node_modules/lib/index.js":              "module.exports = {}\n",
+		".git/HEAD":                                       "ref: refs/heads/main\n",
+		statedir.Name + "/output/functions/exp.func/x.js": "stale\n",
+		"apps/web/" + statedir.Name + "/dist/x.js":        "stale\n",
 	})
 
 	files := mounted(t, root)

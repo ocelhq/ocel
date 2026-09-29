@@ -10,7 +10,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
-	"github.com/ocelhq/ocel/pkg/constants"
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
 	"github.com/ocelhq/ocel/pkg/provider/enginetest"
 )
@@ -41,7 +40,7 @@ func TestAStoreTakesThePutTheServiceSignedWithMetadataAndCacheControl(t *testing
 		Objects:  store.Client(),
 		Internal: store.Presigner(),
 		Granted:  []string{"uploads"},
-		Sessions: "uploads/" + constants.ReservedKeyPrefix,
+		Sessions: "uploads/" + ReservedKeyPrefix,
 	})
 
 	resp, err := svc.Sign(ctx, &bucketv1.SignRequest{

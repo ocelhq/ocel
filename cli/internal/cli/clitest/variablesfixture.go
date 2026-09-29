@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/processenv"
 )
 
 const EnvDeclarationScript = `
@@ -14,9 +14,9 @@ declare global {
 globalThis.__ocelRegister ??= [];
 
 const call = async (method: string, body: unknown) => {
-  const res = await fetch(new URL("/app.resources.v1.ResourceService/" + method, process.env.` + constants.DevServerEnvName + `), {
+  const res = await fetch(new URL("/app.resources.v1.ResourceService/" + method, process.env.` + processenv.DevServerEnvVar + `), {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: "Bearer " + process.env.` + constants.DevServerTokenEnvName + ` },
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + process.env.` + processenv.DevServerTokenEnvVar + ` },
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(method + " failed: " + res.status + " " + (await res.text()));
@@ -54,9 +54,9 @@ globalThis.__ocelRegister ??= [];
 
 globalThis.__ocelRegister.push(
   (async () => {
-    const res = await fetch(new URL("/app.resources.v1.ResourceService/DeclareEnv", process.env.` + constants.DevServerEnvName + `), {
+    const res = await fetch(new URL("/app.resources.v1.ResourceService/DeclareEnv", process.env.` + processenv.DevServerEnvVar + `), {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: "Bearer " + process.env.` + constants.DevServerTokenEnvName + ` },
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + process.env.` + processenv.DevServerTokenEnvVar + ` },
       body: JSON.stringify({ definitions: JSON.parse(process.env.OCEL_TEST_ENV_DEFINITIONS!) }),
     });
     if (!res.ok) throw new Error("DeclareEnv failed: " + res.status + " " + (await res.text()));

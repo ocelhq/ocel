@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/platform/aws/runtime/bytecode"
 )
 
@@ -210,12 +210,12 @@ func TestStartExecutable(t *testing.T) {
 }
 
 func TestExecutableEnvNamesThePortTheAppBinds(t *testing.T) {
-	env := executableEnv(4321, []string{constants.RuntimeAddressEnvName + "=http://127.0.0.1:9"})
+	env := executableEnv(4321, []string{processenv.RuntimeAddressEnvVar + "=http://127.0.0.1:9"})
 	var port, address string
 	for _, entry := range env {
 		if name, value, _ := strings.Cut(entry, "="); name == "PORT" {
 			port = value
-		} else if name == constants.RuntimeAddressEnvName {
+		} else if name == processenv.RuntimeAddressEnvVar {
 			address = value
 		}
 	}
@@ -223,7 +223,7 @@ func TestExecutableEnvNamesThePortTheAppBinds(t *testing.T) {
 		t.Errorf("PORT = %q, want the port the runtime forwards to", port)
 	}
 	if address != "http://127.0.0.1:9" {
-		t.Errorf("%s = %q, want what the runtime resolved for this deployment", constants.RuntimeAddressEnvName, address)
+		t.Errorf("%s = %q, want what the runtime resolved for this deployment", processenv.RuntimeAddressEnvVar, address)
 	}
 }
 
