@@ -6,6 +6,24 @@ import type { AwsWorld } from "./world";
 
 export type Address = { hostname: string; port: number };
 
+async function undiciBody(init: RequestInit | undefined): Promise<RequestInit | undefined> {
+  if (!(init?.body instanceof FormData)) {
+    return init;
+  }
+  const encoded = new Response(init.body);
+  const headers = new Headers(init.headers);
+  headers.set("content-type", encoded.headers.get("content-type") ?? "");
+  return { ...init, headers, body: new Uint8Array(await encoded.arrayBuffer()) };
+}
+
+function fetchThrough(dispatcher: Agent): Fetch {
+  return async (input, init) =>
+    (await undiciFetch(input as Parameters<typeof undiciFetch>[0], {
+      ...((await undiciBody(init)) as Parameters<typeof undiciFetch>[1]),
+      dispatcher,
+    })) as unknown as Response;
+}
+
 export function emulatorAddress(endpoint: string): Address {
   let url: URL;
   try {
@@ -30,9 +48,7 @@ export function emulatorFetch(endpoint: string): Fetch {
       socket.on("error", (error) => callback(error, null));
     },
   });
-  const dispatch = (input: Parameters<typeof undiciFetch>[0], init?: RequestInit) =>
-    undiciFetch(input, { ...(init as Parameters<typeof undiciFetch>[1]), dispatcher });
-  return dispatch as unknown as Fetch;
+  return fetchThrough(dispatcher);
 }
 
 export type LookupAnswer = { address: string; family: number };
@@ -160,9 +176,7 @@ export function authoritativeFetch(zone: string): Fetch {
     );
   };
   const dispatcher = new Agent({ connect: { lookup: lookup as never } });
-  const dispatch = (input: Parameters<typeof undiciFetch>[0], init?: RequestInit) =>
-    undiciFetch(input, { ...(init as Parameters<typeof undiciFetch>[1]), dispatcher });
-  return dispatch as unknown as Fetch;
+  return fetchThrough(dispatcher);
 }
 
 export class AwsDispatch {

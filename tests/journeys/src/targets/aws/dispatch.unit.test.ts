@@ -52,6 +52,7 @@ describe("emulatorFetch", () => {
           JSON.stringify({
             host: req.headers.host,
             probe: req.headers["x-ocel-probe"] ?? null,
+            type: req.headers["content-type"] ?? null,
             url: req.url,
             method: req.method,
             body,
@@ -80,10 +81,24 @@ describe("emulatorFetch", () => {
     assert.deepEqual(await res.json(), {
       host: "web-j-1-node.journey.test",
       probe: "probe-value",
+      type: "text/plain;charset=UTF-8",
       url: "/api/probes/echo?one=1",
       method: "POST",
       body: "payload",
     });
+  });
+
+  it("sends a form as multipart form data, never as its string form", async () => {
+    const dispatch = emulatorFetch(endpoint);
+    const form = new FormData();
+    form.append("note", "café");
+    const res = await dispatch("https://web-j-1-node.journey.test/api/probes/multipart", {
+      method: "POST",
+      body: form,
+    });
+    const seen = (await res.json()) as { type: string; body: string };
+    assert.match(seen.type, /^multipart\/form-data; boundary=/);
+    assert.match(seen.body, /name="note"\r\n\r\ncafé\r\n/);
   });
 });
 
