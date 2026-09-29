@@ -138,7 +138,7 @@ func (r *projectRemoval) plan() (*planv1.ChangePlan, error) {
 		Slug:      r.slug,
 		Tier:      r.tier,
 		Hostnames: r.state.Hostnames(),
-		Front:     r.state.Edge.Front,
+		Address:   r.state.Edge.Address,
 	}
 	groups := r.front.ProjectRemovals(scope)
 	if origin := r.routerOrigin(); origin != nil {

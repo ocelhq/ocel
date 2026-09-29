@@ -47,20 +47,20 @@ func shapedCounts(shaped []pricing.Shaped) map[string]int {
 func TestTheFrontShapeMatchesTheFrontProgram(t *testing.T) {
 	t.Parallel()
 
-	spec := frontSpec{Region: "europe-west1", Names: frontNames(environment.TierPreview, false),
+	spec := loadBalancerSpec{Region: "europe-west1", Names: loadBalancerNames(environment.TierPreview, false),
 		Preview: previewEntry{BaseDomain: "preview.example.com", Certificate: "cert"}}
-	registered := declaredCounts(t, frontProgram(spec))
-	shaped := shapedCounts(ShapeFront(environment.TierPreview, "preview.example.com"))
+	registered := declaredCounts(t, loadBalancerProgram(spec))
+	shaped := shapedCounts(ShapeLoadBalancer(environment.TierPreview, "preview.example.com"))
 	if !maps.Equal(registered, shaped) {
-		t.Errorf("the front program registers %v, the shape lists %v", registered, shaped)
+		t.Errorf("the balancer program registers %v, the shape lists %v", registered, shaped)
 	}
 
-	registered = declaredCounts(t, frontProgram(frontSpec{Names: frontNames(environment.TierProduction, false)}))
-	shaped = shapedCounts(ShapeFront(environment.TierProduction, ""))
+	registered = declaredCounts(t, loadBalancerProgram(loadBalancerSpec{Names: loadBalancerNames(environment.TierProduction, false)}))
+	shaped = shapedCounts(ShapeLoadBalancer(environment.TierProduction, ""))
 	if !maps.Equal(registered, shaped) {
-		t.Errorf("without a preview base the front program registers %v, the shape lists %v", registered, shaped)
+		t.Errorf("without a preview base the balancer program registers %v, the shape lists %v", registered, shaped)
 	}
-	for _, s := range ShapeFront(environment.TierProduction, "") {
+	for _, s := range ShapeLoadBalancer(environment.TierProduction, "") {
 		if s.Type == tfGlobalForwardingRule && s.Properties["network_tier"] != premiumTier {
 			t.Errorf("forwarding rule = %v, want the premium tier the program asks for", s.Properties)
 		}

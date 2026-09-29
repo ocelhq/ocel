@@ -66,11 +66,11 @@ func (s *stack) released(ctx context.Context, records map[string]router.Deployme
 	return nil
 }
 
-func (s *stack) adopt(front Front) error {
+func (s *stack) adopt(balancer LoadBalancer) error {
 	if err := s.state.Private.Into(&s.recorded); err != nil {
 		return err
 	}
-	s.recorded.Front = front
+	s.recorded.LoadBalancer = balancer
 	s.keep()
 	return nil
 }
@@ -79,9 +79,9 @@ func (s *stack) keep() { s.state.Private = edge.Own(s.recorded) }
 
 func (s *stack) reach(ctx context.Context, host Host, hostname string) error {
 	if host.Service == "" {
-		return s.e.deps.Routes.ServeNotFound(ctx, s.recorded.Front.URLMap, hostname)
+		return s.e.deps.Routes.ServeNotFound(ctx, s.recorded.LoadBalancer.URLMap, hostname)
 	}
-	return s.e.deps.Routes.Route(ctx, s.recorded.Front.URLMap, hostname, host.Backend)
+	return s.e.deps.Routes.Route(ctx, s.recorded.LoadBalancer.URLMap, hostname, host.Backend)
 }
 
 func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) error {
@@ -97,7 +97,7 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 				"which serves every project's previews from one wildcard with the project in the label",
 			edge.PreviewWildcard(base), Kind, edge.PreviewWildcard(base))
 	}
-	if !s.recorded.Front.provisioned() {
+	if !s.recorded.LoadBalancer.provisioned() {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"no %s load balancer is provisioned for tier %s, and %s is served by writing a host rule into its url map: run `ocel bootstrap` for this tier first",
 			Kind, s.state.Tier, binding.Hostname)
@@ -135,19 +135,19 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 	s.recorded.Hosts = hosts
 	s.keep()
 	s.state.Bind(binding.Hostname)
-	s.state.PublishFront(binding.Hostname, s.recorded.Front.Address)
+	s.state.PublishAddress(binding.Hostname, s.recorded.LoadBalancer.Address)
 	return nil
 }
 
 func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
 	if _, bound := s.recorded.Hosts[hostname]; !bound {
 		s.state.Release(hostname)
-		s.state.PublishFront(hostname, "")
+		s.state.PublishAddress(hostname, "")
 		return nil
 	}
 	hosts := maps.Clone(s.recorded.Hosts)
 	delete(hosts, hostname)
-	if err := s.e.deps.Routes.Unroute(ctx, s.recorded.Front.URLMap, hostname); err != nil {
+	if err := s.e.deps.Routes.Unroute(ctx, s.recorded.LoadBalancer.URLMap, hostname); err != nil {
 		return err
 	}
 	if err := s.raise(ctx, hosts); err != nil {
@@ -162,7 +162,7 @@ func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
 	s.recorded.Hosts = hosts
 	s.keep()
 	s.state.Release(hostname)
-	s.state.PublishFront(hostname, "")
+	s.state.PublishAddress(hostname, "")
 	return nil
 }
 
@@ -177,7 +177,7 @@ func (s *stack) raise(ctx context.Context, hosts map[string]Host) error {
 		Region:         s.e.deps.Region,
 		Slug:           s.state.Slug,
 		Tier:           s.state.Tier,
-		CertificateMap: s.recorded.Front.CertificateMap,
+		CertificateMap: s.recorded.LoadBalancer.CertificateMap,
 		Hosts:          hosts,
 	}), progress.DiscardProgress())
 	return err
@@ -262,7 +262,7 @@ func (s *stack) disown(ctx context.Context, hostname string) error {
 
 func (s *stack) Destroy(ctx context.Context) error {
 	for _, hostname := range slices.Sorted(maps.Keys(s.recorded.Hosts)) {
-		if err := s.e.deps.Routes.Unroute(ctx, s.recorded.Front.URLMap, hostname); err != nil {
+		if err := s.e.deps.Routes.Unroute(ctx, s.recorded.LoadBalancer.URLMap, hostname); err != nil {
 			return err
 		}
 		if err := s.disown(ctx, hostname); err != nil {
@@ -277,7 +277,7 @@ func (s *stack) Destroy(ctx context.Context) error {
 	s.recorded.Hosts = nil
 	s.keep()
 	for _, hostname := range s.state.Bound {
-		s.state.PublishFront(hostname, "")
+		s.state.PublishAddress(hostname, "")
 	}
 	s.state.Bound = nil
 	return nil

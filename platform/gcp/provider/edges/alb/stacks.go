@@ -23,9 +23,9 @@ func (t Target) Name() string {
 	case t.Slug != "":
 		return BindingStack(t.Slug, t.Tier)
 	case t.Shielded:
-		return ShieldedFrontStack(t.Tier)
+		return ShieldedLoadBalancerStack(t.Tier)
 	}
-	return FrontStack(t.Tier)
+	return LoadBalancerStack(t.Tier)
 }
 
 func (t Target) Prefix() string {
@@ -55,7 +55,7 @@ type Entries interface {
 	Entered(ctx context.Context, certificateMap string) ([]string, error)
 }
 
-type Front struct {
+type LoadBalancer struct {
 	Address        string `json:"address,omitempty"`
 	CertificateMap string `json:"certificateMap,omitempty"`
 	URLMap         string `json:"urlMap,omitempty"`
@@ -63,7 +63,7 @@ type Front struct {
 	Shielded       bool   `json:"shielded,omitempty"`
 }
 
-func (f Front) provisioned() bool {
+func (f LoadBalancer) provisioned() bool {
 	return f.Address != "" && f.CertificateMap != "" && f.URLMap != "" && f.NotFound != ""
 }
 
@@ -74,8 +74,8 @@ const (
 	outputNotFound       = "notFound"
 )
 
-func frontOf(outputs map[string]string) Front {
-	return Front{
+func loadBalancerOf(outputs map[string]string) LoadBalancer {
+	return LoadBalancer{
 		Address:        outputs[outputAddress],
 		CertificateMap: outputs[outputCertificateMap],
 		URLMap:         outputs[outputURLMap],
@@ -83,9 +83,11 @@ func frontOf(outputs map[string]string) Front {
 	}
 }
 
-func FrontStack(tier environment.Tier) string { return dashed(string(Kind), "front", string(tier)) }
+func LoadBalancerStack(tier environment.Tier) string {
+	return dashed(string(Kind), "front", string(tier))
+}
 
-func ShieldedFrontStack(tier environment.Tier) string {
+func ShieldedLoadBalancerStack(tier environment.Tier) string {
 	return dashed(string(Kind), "front", shieldedNameSegment, string(tier))
 }
 

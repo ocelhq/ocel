@@ -169,7 +169,7 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 		return err
 	}
 	s.state.Bind(binding.Hostname)
-	s.state.PublishFront(binding.Hostname, address)
+	s.state.PublishAddress(binding.Hostname, address)
 	if route := s.e.machine.RouteBy(binding.Hostname); route != "" && binding.Say != nil {
 		binding.Say(route)
 	}
@@ -267,7 +267,7 @@ func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
 		return err
 	}
 	s.state.Release(hostname)
-	s.state.PublishFront(hostname, "")
+	s.state.PublishAddress(hostname, "")
 	if err := s.applyOrigins(ctx); err != nil {
 		return progress.Warned(s.released(hostname, err))
 	}
@@ -295,7 +295,7 @@ func (s *stack) Destroy(ctx context.Context) error {
 	} else {
 		for _, hostname := range slices.Clone(s.state.Bound) {
 			s.state.Release(hostname)
-			s.state.PublishFront(hostname, "")
+			s.state.PublishAddress(hostname, "")
 		}
 	}
 	if err := s.e.machine.UnrouteSurface(ctx, s.surface()); err != nil {

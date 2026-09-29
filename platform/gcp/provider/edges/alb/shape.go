@@ -19,7 +19,7 @@ func Shape(site pricing.EdgeSite) (pricing.EdgeShape, error) {
 		Vendor:      costVendor,
 		Region:      site.Region,
 		BillsEgress: true,
-		Shared:      ShapeFront(site.Tier, previewBase),
+		Shared:      ShapeLoadBalancer(site.Tier, previewBase),
 		Apps:        make(map[string][]pricing.Shaped, len(site.Apps)),
 	}
 	for _, app := range site.Apps {
@@ -41,15 +41,15 @@ const (
 	tfNetworkEndpointGroup = "google_compute_region_network_endpoint_group"
 )
 
-func ShapeFront(tier environment.Tier, previewBaseDomain string) []pricing.Shaped {
-	front := frontNames(tier, false)
+func ShapeLoadBalancer(tier environment.Tier, previewBaseDomain string) []pricing.Shaped {
+	balancer := loadBalancerNames(tier, false)
 	shaped := []pricing.Shaped{
-		{Name: front.Address, Type: tfGlobalAddress, Properties: map[string]any{"address_type": "EXTERNAL"}},
-		{Name: front.NotFound, Type: tfBackendService, Properties: backendProperties(false)},
-		{Name: front.CertificateMap, Type: tfCertificateMap, Properties: map[string]any{}},
-		{Name: front.URLMap, Type: tfURLMap, Properties: map[string]any{}},
-		{Name: front.Proxy, Type: tfTargetHTTPSProxy, Properties: map[string]any{}},
-		{Name: front.Rule, Type: tfGlobalForwardingRule, Properties: map[string]any{
+		{Name: balancer.Address, Type: tfGlobalAddress, Properties: map[string]any{"address_type": "EXTERNAL"}},
+		{Name: balancer.NotFound, Type: tfBackendService, Properties: backendProperties(false)},
+		{Name: balancer.CertificateMap, Type: tfCertificateMap, Properties: map[string]any{}},
+		{Name: balancer.URLMap, Type: tfURLMap, Properties: map[string]any{}},
+		{Name: balancer.Proxy, Type: tfTargetHTTPSProxy, Properties: map[string]any{}},
+		{Name: balancer.Rule, Type: tfGlobalForwardingRule, Properties: map[string]any{
 			"load_balancing_scheme": externalManaged,
 			"network_tier":          premiumTier,
 			"port_range":            httpsPortRange,

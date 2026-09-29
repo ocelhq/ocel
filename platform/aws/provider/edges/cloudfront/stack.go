@@ -149,12 +149,12 @@ func (s *stack) ensureDistribution(ctx context.Context, c Clients) (front, error
 
 func (s *stack) recordFront(served front) {
 	s.own.Distribution = served.id
-	s.state.Front = served.domainName
+	s.state.Address = served.domainName
 }
 
 func (s *stack) findDistributionFor(ctx context.Context, c Clients, name string) (front, bool, error) {
-	if s.own.Distribution != "" && s.state.Front != "" {
-		return front{id: s.own.Distribution, domainName: s.state.Front}, true, nil
+	if s.own.Distribution != "" && s.state.Address != "" {
+		return front{id: s.own.Distribution, domainName: s.state.Address}, true, nil
 	}
 	return findDistribution(ctx, c, name)
 }
@@ -417,6 +417,6 @@ func (s *stack) Destroy(ctx context.Context) error {
 			}
 		}
 	}
-	s.own.Distribution, s.state.Front = "", ""
+	s.own.Distribution, s.state.Address = "", ""
 	return errors.Join(errs...)
 }

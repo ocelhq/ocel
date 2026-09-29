@@ -72,7 +72,7 @@ func TestACertificateYourProxyServesIsKeptAsYours(t *testing.T) {
 
 	front := edgeOver(routedByHand(), fake.NewKeyValues())
 	for _, change := range front.ProjectRemovals(edge.ProjectScope{
-		Slug: slug, Tier: environment.TierProduction, Hostnames: []string{"shop.example.com"}, Front: address,
+		Slug: slug, Tier: environment.TierProduction, Hostnames: []string{"shop.example.com"}, Address: address,
 	})[0].Changes {
 		if change.Kind != box.CertificateKind {
 			continue

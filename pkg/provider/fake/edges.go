@@ -527,7 +527,7 @@ func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.St
 	e.warn(spec.Warn)
 	state := prior
 	state.Slug, state.Tier = spec.Slug, spec.Tier
-	state.Front = e.front(spec.Slug)
+	state.Address = e.front(spec.Slug)
 	return e.open(state)
 }
 
@@ -539,8 +539,8 @@ func (e *Edge) open(state edge.StackState) (*Stack, error) {
 	if e.refusal != nil {
 		return nil, e.refusal
 	}
-	if state.Front == "" {
-		state.Front = e.front(state.Slug)
+	if state.Address == "" {
+		state.Address = e.front(state.Slug)
 	}
 	return &Stack{front: e, state: state}, nil
 }
@@ -655,10 +655,10 @@ func (s *Stack) BindDomain(_ context.Context, binding edge.DomainBinding) error 
 	defer s.mu.Unlock()
 	s.state.Bind(binding.Hostname)
 	if binding.Origin == nil {
-		s.state.PublishFront(binding.Hostname, s.front.front(s.state.Slug))
+		s.state.PublishAddress(binding.Hostname, s.front.front(s.state.Slug))
 		return nil
 	}
-	s.state.PublishFront(binding.Hostname, binding.Origin.Address)
+	s.state.PublishAddress(binding.Hostname, binding.Origin.Address)
 	written, err := edge.RecordsFor(edge.TargetOf(s.front.kind, s.front.Facts(), s.state), []string{binding.Hostname})
 	if err != nil {
 		return err
@@ -672,7 +672,7 @@ func (s *Stack) UnbindDomain(_ context.Context, hostname string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.state.Release(hostname)
-	s.state.PublishFront(hostname, "")
+	s.state.PublishAddress(hostname, "")
 	return warned
 }
 

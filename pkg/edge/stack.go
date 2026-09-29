@@ -51,8 +51,8 @@ type StackState struct {
 	Endpoint      string            `json:"endpoint,omitempty"`
 	Secret        string            `json:"secret,omitempty"`
 	OwnerToken    string            `json:"ownerToken,omitempty"`
-	Front         string            `json:"front,omitempty"`
-	Fronts        map[string]string `json:"fronts,omitempty"`
+	Address       string            `json:"address,omitempty"`
+	Addresses     map[string]string `json:"addresses,omitempty"`
 	Bound         []string          `json:"bound,omitempty"`
 	Records       []Record          `json:"records,omitempty"`
 	GlobalPreview string            `json:"globalPreview,omitempty"`
@@ -62,7 +62,7 @@ type StackState struct {
 
 func (s StackState) Empty() bool {
 	return s.Slug == "" && s.Tier == "" && s.Endpoint == "" && s.Secret == "" && s.OwnerToken == "" &&
-		s.Front == "" && len(s.Fronts) == 0 && len(s.Bound) == 0 && len(s.Records) == 0 &&
+		s.Address == "" && len(s.Addresses) == 0 && len(s.Bound) == 0 && len(s.Records) == 0 &&
 		s.GlobalPreview == "" && s.PreviewBase == "" && s.Private.IsZero()
 }
 
@@ -72,10 +72,10 @@ func (s StackState) Equal(other StackState) bool {
 		s.Endpoint == other.Endpoint &&
 		s.Secret == other.Secret &&
 		s.OwnerToken == other.OwnerToken &&
-		s.Front == other.Front &&
+		s.Address == other.Address &&
 		s.GlobalPreview == other.GlobalPreview &&
 		s.PreviewBase == other.PreviewBase &&
-		maps.Equal(s.Fronts, other.Fronts) &&
+		maps.Equal(s.Addresses, other.Addresses) &&
 		slices.Equal(s.Bound, other.Bound) &&
 		slices.Equal(s.Records, other.Records) &&
 		s.Private.sameAs(other.Private)

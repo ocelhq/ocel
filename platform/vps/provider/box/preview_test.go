@@ -43,7 +43,7 @@ func TestThePreviewEntryBearsNoCertificateAndStillPublishesAFrontToPointAt(t *te
 	if published != address {
 		t.Fatalf("the wildcard published %q, want the box's address %q: %s resolves to one A record and it is the box", published, address, edge.PreviewWildcard(previewBase))
 	}
-	records, err := edge.RecordsFor(edge.DNSTarget{Kind: front.Kind(), Front: published}, []string{edge.PreviewWildcard(previewBase)})
+	records, err := edge.RecordsFor(edge.DNSTarget{Kind: front.Kind(), Address: published}, []string{edge.PreviewWildcard(previewBase)})
 	if err != nil {
 		t.Fatalf("RecordsFor: %v", err)
 	}

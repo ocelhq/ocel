@@ -111,7 +111,7 @@ func (s *stack) BindDomain(context.Context, edge.DomainBinding) error {
 
 func (s *stack) UnbindDomain(_ context.Context, hostname string) error {
 	s.state.Release(hostname)
-	s.state.PublishFront(hostname, "")
+	s.state.PublishAddress(hostname, "")
 	return nil
 }
 

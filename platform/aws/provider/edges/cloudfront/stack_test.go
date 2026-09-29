@@ -249,7 +249,7 @@ func TestBindDomainRecordsTheFrontOfADistributionFoundByName(t *testing.T) {
 	}
 
 	forgotten := original.State()
-	forgotten.Front = ""
+	forgotten.Address = ""
 	forgotten.Private = edge.Own(private{})
 	opened, err := e.Open(forgotten)
 	if err != nil {
@@ -263,7 +263,7 @@ func TestBindDomainRecordsTheFrontOfADistributionFoundByName(t *testing.T) {
 	if got := stack.own.Distribution; got != dist.id {
 		t.Errorf("state records distribution %q, want the one already serving the stack (%q)", got, dist.id)
 	}
-	if got := stack.State().Front; got != dist.domain {
+	if got := stack.State().Address; got != dist.domain {
 		t.Errorf("state records front %q, want %q: a binding onto a distribution found by name still has to say where DNS points", got, dist.domain)
 	}
 }

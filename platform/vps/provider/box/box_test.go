@@ -787,7 +787,7 @@ func TestATeardownTakesTheClaimsTheBoxRecordsRatherThanTheOnesItsStateRemembers(
 	}
 
 	forgotten := first.State()
-	forgotten.Bound, forgotten.Fronts, forgotten.Front = nil, nil, ""
+	forgotten.Bound, forgotten.Addresses, forgotten.Address = nil, nil, ""
 	reopenedEdge, err := front.Open(forgotten)
 	if err != nil {
 		t.Fatalf("Open a state with no binding: %v", err)
@@ -833,7 +833,7 @@ func TestTheRemovalPlanNamesTheEdgesRowsAndNotTheContainersReleasesOwn(t *testin
 
 	front := edgeOver(aMachine(), fake.NewKeyValues())
 	groups := front.ProjectRemovals(edge.ProjectScope{
-		Slug: slug, Tier: environment.TierProduction, Hostnames: []string{"shop.example.com"}, Front: address,
+		Slug: slug, Tier: environment.TierProduction, Hostnames: []string{"shop.example.com"}, Address: address,
 	})
 	if len(groups) != 1 {
 		t.Fatalf("ProjectRemovals = %d groups, want one", len(groups))
@@ -874,7 +874,7 @@ func TestTheKeptCertificateIsNamedByTheHandleThatStoresItAndSaysWhoRenewsIt(t *t
 
 	kept := map[string]edge.PlanChange{}
 	for _, change := range front.ProjectRemovals(edge.ProjectScope{
-		Slug: slug, Tier: environment.TierProduction, Hostnames: []string{"shop.example.com", pinned}, Front: address,
+		Slug: slug, Tier: environment.TierProduction, Hostnames: []string{"shop.example.com", pinned}, Address: address,
 	})[0].Changes {
 		if change.Kind == box.CertificateKind {
 			kept[change.Name] = change

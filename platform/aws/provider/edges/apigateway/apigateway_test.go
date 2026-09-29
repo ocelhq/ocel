@@ -936,7 +936,7 @@ func TestReconcileRecoversTheFrontOfADomainBoundBeforeItWasRecorded(t *testing.T
 		t.Fatalf("BindDomain: %v", err)
 	}
 	forgotten := stack.State()
-	forgotten.PublishFront(host, "")
+	forgotten.PublishAddress(host, "")
 
 	rerun, err := e.Reconcile(ctx, testSpec(), forgotten)
 	if err != nil {
@@ -967,7 +967,7 @@ func TestReconcileForgetsABindingWhoseDomainNameIsGone(t *testing.T) {
 		t.Fatalf("BindDomain: %v", err)
 	}
 	bound := stack.State()
-	bound.PublishFront(host, "")
+	bound.PublishAddress(host, "")
 	delete(w.gateway.domains, host)
 
 	spec := testSpec()

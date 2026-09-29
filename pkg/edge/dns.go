@@ -79,39 +79,39 @@ type DNSTarget struct {
 	Kind           Kind
 	ServesUnbound  bool
 	ProxiesRecords bool
-	Front          string
-	FrontByHost    map[string]string
+	Address        string
+	AddressByHost  map[string]string
 }
 
-func (t DNSTarget) FrontFor(hostname string) string {
-	if front := t.FrontByHost[hostname]; front != "" {
-		return front
+func (t DNSTarget) AddressFor(hostname string) string {
+	if address := t.AddressByHost[hostname]; address != "" {
+		return address
 	}
-	return t.Front
+	return t.Address
 }
 
-func (s *StackState) PublishFront(hostname, front string) {
+func (s *StackState) PublishAddress(hostname, address string) {
 	if hostname == "" {
 		return
 	}
-	if front == "" {
-		if _, published := s.Fronts[hostname]; !published {
+	if address == "" {
+		if _, published := s.Addresses[hostname]; !published {
 			return
 		}
-		fronts := maps.Clone(s.Fronts)
-		delete(fronts, hostname)
-		if len(fronts) == 0 {
-			fronts = nil
+		addresses := maps.Clone(s.Addresses)
+		delete(addresses, hostname)
+		if len(addresses) == 0 {
+			addresses = nil
 		}
-		s.Fronts = fronts
+		s.Addresses = addresses
 		return
 	}
-	fronts := maps.Clone(s.Fronts)
-	if fronts == nil {
-		fronts = map[string]string{}
+	addresses := maps.Clone(s.Addresses)
+	if addresses == nil {
+		addresses = map[string]string{}
 	}
-	fronts[hostname] = front
-	s.Fronts = fronts
+	addresses[hostname] = address
+	s.Addresses = addresses
 }
 
 func TargetFor(e Edge, state StackState) DNSTarget {
@@ -123,8 +123,8 @@ func TargetOf(kind Kind, facts Facts, state StackState) DNSTarget {
 		Kind:           kind,
 		ServesUnbound:  facts.ServesUnbound,
 		ProxiesRecords: facts.ProxiesRecords,
-		Front:          state.Front,
-		FrontByHost:    state.Fronts,
+		Address:        state.Address,
+		AddressByHost:  state.Addresses,
 	}
 }
 
@@ -138,10 +138,10 @@ func RecordsFor(target DNSTarget, hostnames []string) ([]Record, error) {
 		if host == "" || Loopback(host) {
 			continue
 		}
-		front := target.FrontFor(host)
+		address := target.AddressFor(host)
 		switch {
-		case front != "":
-			record := addressRecord(host, front)
+		case address != "":
+			record := addressRecord(host, address)
 			record.Proxied = target.ProxiesRecords
 			records = append(records, record)
 		case target.ServesUnbound:
@@ -157,10 +157,10 @@ func Loopback(hostname string) bool {
 	return ZoneOwns(strings.TrimSuffix(hostname, "."), "localhost")
 }
 
-func addressRecord(host, front string) Record {
-	addr, err := netip.ParseAddr(front)
+func addressRecord(host, address string) Record {
+	addr, err := netip.ParseAddr(address)
 	if err != nil || addr.Zone() != "" {
-		return Record{Name: host, Type: RecordTypeCNAME, Value: front}
+		return Record{Name: host, Type: RecordTypeCNAME, Value: address}
 	}
 	addr = addr.Unmap()
 	if addr.Is4() {

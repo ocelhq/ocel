@@ -333,7 +333,7 @@ func TestReconcile(t *testing.T) {
 		if got := ownState(t, stack).Distribution; got != distribution.id {
 			t.Errorf("state records distribution %q, want the one reconcile created (%q)", got, distribution.id)
 		}
-		if got := stack.State().Front; got != distribution.domain {
+		if got := stack.State().Address; got != distribution.domain {
 			t.Errorf("state records front %q, want the distribution's domain name (%q), which is what a CNAME points at", got, distribution.domain)
 		}
 

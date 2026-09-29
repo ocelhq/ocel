@@ -60,32 +60,32 @@ func (r routerStack) State() router.StackState {
 
 func (r routerStack) Claim(ctx context.Context, claim router.Claim) (edge.Origin, error) {
 	s := r.s
-	fronted := s.e.frontFor(claim)
-	var front Front
+	balancing := s.e.loadBalancerFor(claim)
+	var balancer LoadBalancer
 	var err error
 	switch {
 	case len(claim.ClientCertificates) > 0:
-		front, err = fronted.trustClaim(ctx, s.state.Tier, claim.Hostname, claim.ClientCertificates)
-	case !s.recorded.Front.provisioned():
-		front, err = fronted.readProvisionedFront(ctx, s.state.Tier)
+		balancer, err = balancing.trustClaim(ctx, s.state.Tier, claim.Hostname, claim.ClientCertificates)
+	case !s.recorded.LoadBalancer.provisioned():
+		balancer, err = balancing.readProvisionedLoadBalancer(ctx, s.state.Tier)
 	default:
-		front = s.recorded.Front
+		balancer = s.recorded.LoadBalancer
 	}
 	if err != nil {
 		return edge.Origin{}, err
 	}
-	if front != s.recorded.Front {
-		s.recorded.Front = front
+	if balancer != s.recorded.LoadBalancer {
+		s.recorded.LoadBalancer = balancer
 		s.keep()
 	}
 	if err := s.BindDomain(ctx, edge.DomainBinding{Hostname: claim.Hostname, Certificate: claim.Certificate, App: claim.App}); err != nil {
 		return edge.Origin{}, err
 	}
-	return edge.Origin{Address: s.recorded.Front.Address, Certified: true}, nil
+	return edge.Origin{Address: s.recorded.LoadBalancer.Address, Certified: true}, nil
 }
 
 func (r routerStack) Disclaim(ctx context.Context, hostname string) error {
-	shielded := r.s.recorded.Front.Shielded
+	shielded := r.s.recorded.LoadBalancer.Shielded
 	if err := r.s.UnbindDomain(ctx, hostname); err != nil {
 		return err
 	}
@@ -105,7 +105,7 @@ func (r routerStack) Flip(ctx context.Context, flip router.Flip, progress progre
 func (r routerStack) RemovePointer(context.Context, string, progress.Progress) error { return nil }
 
 func (r routerStack) Destroy(ctx context.Context) error {
-	shielded, hostnames := r.s.recorded.Front.Shielded, slices.Sorted(maps.Keys(r.s.recorded.Hosts))
+	shielded, hostnames := r.s.recorded.LoadBalancer.Shielded, slices.Sorted(maps.Keys(r.s.recorded.Hosts))
 	if err := r.s.Destroy(ctx); err != nil {
 		return err
 	}

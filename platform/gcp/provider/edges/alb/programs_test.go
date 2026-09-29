@@ -19,7 +19,7 @@ func binding(hosts map[string]Host) Program {
 func TestTheFrontendProvisionsOneLoadBalancerForTheWholeTier(t *testing.T) {
 	t.Parallel()
 
-	seen, err := declared(frontProgram(frontSpec{Names: frontNames(environment.TierProduction, false)}))
+	seen, err := declared(loadBalancerProgram(loadBalancerSpec{Names: loadBalancerNames(environment.TierProduction, false)}))
 	if err != nil {
 		t.Fatalf("the frontend program = %v", err)
 	}
@@ -58,7 +58,7 @@ func TestTheFrontendProvisionsOneLoadBalancerForTheWholeTier(t *testing.T) {
 	}
 	rule := seen["ocel-alb-production-forward"]
 	if got := rule.Args["portRange"]; got != "443" {
-		t.Errorf("the forwarding rule listens on %v, want 443: the front terminates TLS", got)
+		t.Errorf("the forwarding rule listens on %v, want 443: the balancer terminates TLS", got)
 	}
 	if got := rule.Args["loadBalancingScheme"]; got != "EXTERNAL_MANAGED" {
 		t.Errorf("the forwarding rule is %v, want EXTERNAL_MANAGED, which is the global external Application Load Balancer", got)
@@ -103,7 +103,7 @@ func TestABindingDeclaresACachedBackendOnThePointersCloudRunService(t *testing.T
 
 	entry, declaredEntry := seen["ocel-alb-shop-production-shop-example-com-cert"]
 	if !declaredEntry {
-		t.Fatalf("the binding declares no certificate map entry; the front would serve shop.example.com no certificate. Declared: %v", seen)
+		t.Fatalf("the binding declares no certificate map entry; the balancer would serve shop.example.com no certificate. Declared: %v", seen)
 	}
 	if got := entry.Args["hostname"]; got != "shop.example.com" {
 		t.Errorf("the certificate map entry answers for %v, want shop.example.com", got)
