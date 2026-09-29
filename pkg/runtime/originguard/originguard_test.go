@@ -19,6 +19,7 @@ type upstream struct {
 	server *httptest.Server
 
 	host   string
+	query  string
 	secret string
 	seen   int
 }
@@ -29,6 +30,7 @@ func serveUpstream(t *testing.T) *upstream {
 	up.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		up.seen++
 		up.host = r.Host
+		up.query = r.URL.RawQuery
 		up.secret = r.Header.Get(OriginSecretHeader)
 		io.WriteString(w, "served by the app")
 	}))
@@ -225,6 +227,20 @@ func TestHandler(t *testing.T) {
 			t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusBadGateway)
 		}
 	})
+}
+
+func TestTheAppIsHandedTheQueryTheClientSentByteForByte(t *testing.T) {
+	up := serveUpstream(t)
+	front := serveFront(t, up, nil, nil)
+	for _, query := range []string{
+		"tag=a&tag=b&tag=a,b&x=1;2&y=%7B%7D&z=a%2Bb&w=100%25",
+		"a=%%URL%%&b=%zz&c=100%",
+	} {
+		ask(t, front, http.MethodGet, "/echo?"+query, "")
+		if up.query != query {
+			t.Errorf("the app was handed the query %q, want %q", up.query, query)
+		}
+	}
 }
 
 func TestAStreamTheAppFlushesReachesTheClientEventByEvent(t *testing.T) {

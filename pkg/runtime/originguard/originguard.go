@@ -84,6 +84,7 @@ func Handler(opts Options) http.Handler {
 		Rewrite: func(r *httputil.ProxyRequest) {
 			r.SetXForwarded()
 			r.SetURL(opts.Upstream)
+			r.Out.URL.RawQuery = r.In.URL.RawQuery
 			r.Out.Host = r.In.Host
 			r.Out.Header.Del(OriginSecretHeader)
 		},
