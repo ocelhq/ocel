@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -44,7 +45,9 @@ type HostnameState struct {
 	Manual      []edge.Record          `json:"owed,omitempty"`
 	Probe       ServeProbe             `json:"probe,omitzero"`
 
-	ClientCertificateDigests []string `json:"clientCertificateDigests,omitempty"`
+	ClientCertificateDigests []string  `json:"clientCertificateDigests,omitempty"`
+	OriginCertificate        string    `json:"originCertificate,omitempty"`
+	OriginCertificateExpires time.Time `json:"originCertificateExpires,omitzero"`
 }
 
 func (s *HostnameState) Supersede(cert provider.Certificate) {

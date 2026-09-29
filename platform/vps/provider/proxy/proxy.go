@@ -47,6 +47,8 @@ type Permission struct {
 type Shield struct {
 	Hostname           string
 	ClientCertificates []string
+	Certificate        string
+	Key                string
 }
 
 type Pin struct {

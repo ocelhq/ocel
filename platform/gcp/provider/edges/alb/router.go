@@ -68,7 +68,7 @@ func (r routerStack) Claim(ctx context.Context, claim router.Claim) (edge.Origin
 	if err := s.BindDomain(ctx, edge.DomainBinding{Hostname: claim.Hostname, Certificate: claim.Certificate, App: claim.App}); err != nil {
 		return edge.Origin{}, err
 	}
-	return edge.Origin{Address: s.recorded.Front.Address}, nil
+	return edge.Origin{Address: s.recorded.Front.Address, Certified: true}, nil
 }
 
 func (r routerStack) Disclaim(ctx context.Context, hostname string) error {

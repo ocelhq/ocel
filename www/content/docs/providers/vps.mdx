@@ -61,7 +61,9 @@ Name the `cloudflare` edge and each hostname is forwarded to the box through Clo
 writes a proxied record pointing at the box, and a deploy flips which release answers it on
 the box, with no DNS change. The proxy on the box answers that hostname only to a client
 presenting the certificate your Cloudflare zone presents to origins, so a request that
-skips Cloudflare is refused. Set the zone's SSL mode to Full (strict). Previews are not
+skips Cloudflare is refused. It answers with a certificate from Cloudflare's origin CA, which
+ocel issues for the hostname and renews half way through its year, rather than one ordered
+from a public CA through Cloudflare. Set the zone's SSL mode to Full (strict). Previews are not
 forwarded through Cloudflare yet.
 
 ```json title="ocel.json"

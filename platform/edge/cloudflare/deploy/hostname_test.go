@@ -2,9 +2,16 @@ package cloudflare
 
 import (
 	"bytes"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io"
+	"math/big"
 	"mime"
 	"mime/multipart"
 	"net/http"
@@ -13,6 +20,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	cf "github.com/cloudflare/cloudflare-go/v4"
 	"github.com/cloudflare/cloudflare-go/v4/option"
@@ -58,11 +66,14 @@ type cfMock struct {
 	clientCertificates []map[string]any
 
 	deletedClientCertificates []string
-	uploadedKeys              []string
-	originPulls               bool
-	originPullWrites          []bool
-	purges                    [][]string
-	sslMode                   string
+
+	originRequests   [][]string
+	revokedOrigin    []string
+	uploadedKeys     []string
+	originPulls      bool
+	originPullWrites []bool
+	purges           [][]string
+	sslMode          string
 }
 
 type putSecret struct {
@@ -345,6 +356,30 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 		}
 		m.clientCertificates = append(m.clientCertificates, uploaded)
 		writeResult(w, uploaded)
+	})
+
+	mux.HandleFunc("POST /certificates", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			CSR       string   `json:"csr"`
+			Hostnames []string `json:"hostnames"`
+			Validity  int      `json:"requested_validity"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		m.originRequests = append(m.originRequests, body.Hostnames)
+		certificate, err := signOriginCertificate(body.CSR, body.Hostnames, time.Duration(body.Validity)*24*time.Hour)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeResult(w, map[string]any{
+			"id": fmt.Sprintf("origin-%d", len(m.originRequests)), "certificate": certificate, "hostnames": body.Hostnames,
+			"csr": body.CSR, "request_type": "origin-ecc", "requested_validity": body.Validity,
+		})
+	})
+
+	mux.HandleFunc("DELETE /certificates/{id}", func(w http.ResponseWriter, r *http.Request) {
+		m.revokedOrigin = append(m.revokedOrigin, r.PathValue("id"))
+		writeResult(w, map[string]any{"id": r.PathValue("id"), "revoked_at": "2026-09-29T10:00:00Z"})
 	})
 
 	mux.HandleFunc("DELETE /zones/"+m.zoneID+"/origin_tls_client_auth/{id}", func(w http.ResponseWriter, r *http.Request) {
@@ -1115,4 +1150,35 @@ func TestRouteBaseDomain(t *testing.T) {
 			}
 		})
 	}
+}
+
+func signOriginCertificate(csrPEM string, hostnames []string, validity time.Duration) (string, error) {
+	block, _ := pem.Decode([]byte(csrPEM))
+	if block == nil || block.Type != "CERTIFICATE REQUEST" {
+		return "", fmt.Errorf("the csr is no PEM certificate request")
+	}
+	request, err := x509.ParseCertificateRequest(block.Bytes)
+	if err != nil {
+		return "", err
+	}
+	if err := request.CheckSignature(); err != nil {
+		return "", err
+	}
+	caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return "", err
+	}
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(time.Now().UnixNano()),
+		Subject:      pkix.Name{CommonName: "CloudFlare Origin Certificate"},
+		DNSNames:     hostnames,
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(validity),
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, request.PublicKey, caKey)
+	if err != nil {
+		return "", err
+	}
+	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})), nil
 }

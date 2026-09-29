@@ -23,7 +23,7 @@ import (
 const (
 	clientCertificateBits     = 2048
 	clientCertificateLifetime = 365 * 24 * time.Hour
-	clientCertificateRenewal  = 30 * 24 * time.Hour
+	clientCertificateRenewal  = clientCertificateLifetime / 2
 	clientCertificateName     = "ocel origin pull"
 	activeStatus              = "active"
 )

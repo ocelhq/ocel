@@ -56,6 +56,7 @@ type Claim struct {
 	App                string
 	Certificate        string
 	ClientCertificates []string
+	OriginCertificate  edge.OriginCertificate
 }
 
 type Stack interface {

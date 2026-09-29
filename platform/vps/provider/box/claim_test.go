@@ -2,9 +2,16 @@ package box_test
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"encoding/pem"
+	"math/big"
 	"reflect"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -32,7 +39,7 @@ func TestAClaimOnTheBoxShieldsTheHostnameBeforeItTakesItAndNamesTheBoxAsItsOrigi
 	if err != nil {
 		t.Fatalf("Claim: %v", err)
 	}
-	if origin != (edge.Origin{Address: address}) {
+	if origin.Address != address {
 		t.Errorf("Claim named origin %+v, want the box at %s: the edge in front forwards the hostname there", origin, address)
 	}
 	surface := box.Surface(slug, environment.TierProduction)
@@ -103,5 +110,76 @@ func TestTheBoxRoutersRemovalPlanNamesTheRouteOfEveryHostnameAnEdgeForwardsToIt(
 	}
 	if !slices.Equal(routes, []string{"shop.example.com"}) {
 		t.Errorf("the box router plans to delete routes %v, want shop.example.com: an edge in front lists only what it forwards, and the plan must name what the box takes down", routes)
+	}
+}
+
+func originCertificate(t *testing.T, hostname string, life time.Duration) edge.OriginCertificate {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		DNSNames:     []string{hostname},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(life),
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyDER, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return edge.OriginCertificate{
+		ID:          "origin-1",
+		Certificate: string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})),
+		Key:         string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})),
+		ExpiresAt:   template.NotAfter,
+	}
+}
+
+func TestTheBoxSaysItHoldsNoCertificateForAShieldedHostnameUntilTheEdgeIssuesOne(t *testing.T) {
+	m, routed := routedOn(t)
+	ctx := context.Background()
+	claim := router.Claim{Hostname: "shop.example.com", App: "web", ClientCertificates: []string{pulled}}
+
+	origin, err := routed.Claim(ctx, claim)
+	if err != nil {
+		t.Fatalf("Claim: %v", err)
+	}
+	if origin.Certified {
+		t.Fatal("the box says it holds a certificate for shop.example.com, and it holds none: one ordered on demand through the edge stalls wherever the zone redirects plain HTTP")
+	}
+
+	claim.OriginCertificate = originCertificate(t, "shop.example.com", 365*24*time.Hour)
+	if origin, err = routed.Claim(ctx, claim); err != nil || !origin.Certified {
+		t.Fatalf("Claim with an origin certificate = %+v, %v, want the box certified", origin, err)
+	}
+	if len(m.shields) != 1 || m.shields[0].Certificate != claim.OriginCertificate.Certificate || m.shields[0].Key != claim.OriginCertificate.Key {
+		t.Errorf("the box shields %+v, want the origin certificate and its key held for shop.example.com", m.shields)
+	}
+
+	claim.OriginCertificate = edge.OriginCertificate{}
+	if origin, err = routed.Claim(ctx, claim); err != nil || !origin.Certified {
+		t.Errorf("Claim again = %+v, %v, want the box still certified by the certificate it holds", origin, err)
+	}
+}
+
+func TestTheBoxSaysACertificateDueForRenewalCertifiesNothing(t *testing.T) {
+	_, routed := routedOn(t)
+	claim := router.Claim{
+		Hostname: "shop.example.com", App: "web", ClientCertificates: []string{pulled},
+		OriginCertificate: originCertificate(t, "shop.example.com", 24*time.Hour),
+	}
+
+	origin, err := routed.Claim(context.Background(), claim)
+	if err != nil {
+		t.Fatalf("Claim: %v", err)
+	}
+	if origin.Certified {
+		t.Error("the box says a certificate expiring tomorrow certifies shop.example.com, so no renewal is ever issued")
 	}
 }

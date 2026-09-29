@@ -278,6 +278,34 @@ func TestTheCloudflareProxyRenewsTheClientCertificateItMintedBeforeItExpires(t *
 	}
 }
 
+func TestTheCloudflareProxyIssuesAnOriginCertificateForAHostnameAndRevokesIt(t *testing.T) {
+	m := proxyZoneMock()
+	hooks := m.proxy(t).Hooks().OriginCertificates
+	ctx := context.Background()
+
+	issued, err := hooks.Issue(ctx, "shop.app.com")
+	if err != nil {
+		t.Fatalf("Issue: %v", err)
+	}
+	if len(m.originRequests) != 1 || !slices.Equal(m.originRequests[0], []string{"shop.app.com"}) {
+		t.Errorf("asked Cloudflare's origin CA for %v, want a certificate for shop.app.com alone", m.originRequests)
+	}
+	leaf := parsedLeaf(t, issued.Certificate)
+	if !issued.ExpiresAt.Equal(leaf.NotAfter) {
+		t.Errorf("the certificate is read as expiring %s, want %s, the moment its leaf says", issued.ExpiresAt, leaf.NotAfter)
+	}
+	if lifetime := time.Until(leaf.NotAfter); lifetime > 400*24*time.Hour {
+		t.Errorf("the origin certificate is good for %s, want about a year: it is renewed half way through", lifetime)
+	}
+
+	if err := hooks.Revoke(ctx, issued.ID); err != nil {
+		t.Fatalf("Revoke: %v", err)
+	}
+	if !slices.Equal(m.revokedOrigin, []string{issued.ID}) {
+		t.Errorf("revoked %v, want %s", m.revokedOrigin, issued.ID)
+	}
+}
+
 func parsedLeaf(t *testing.T, certificate string) *x509.Certificate {
 	t.Helper()
 	block, _ := pem.Decode([]byte(certificate))

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	connect "connectrpc.com/connect"
 
@@ -169,18 +170,23 @@ func (d *hostnames) attachHostname(ctx context.Context, target ConfiguredHost, p
 
 func (d *hostnames) bindOrigin(ctx context.Context, target ConfiguredHost, hostState *stackrecords.HostnameState, progress progress.Progress) error {
 	host := target.Hostname
-	origin, trusted, err := d.claimOrigin(ctx, target, hostState.Certificate.ID)
+	claimed, err := d.claimOrigin(ctx, target, hostState.Certificate.ID)
 	if err != nil {
 		return err
 	}
 	progress.Say(fmt.Sprintf("Binding %s to %s", host, describeFront(d.front.Kind())))
-	if err := d.edgeStack().BindDomain(ctx, edge.DomainBinding{Hostname: host, Certificate: hostState.Certificate.ID, App: target.App, Origin: origin, Say: progress.Say}); err != nil {
+	if err := d.edgeStack().BindDomain(ctx, edge.DomainBinding{Hostname: host, Certificate: hostState.Certificate.ID, App: target.App, Origin: claimed.origin, Say: progress.Say}); err != nil {
 		return err
 	}
 	hostState.Edge = d.front.Kind()
-	hostState.ClientCertificateDigests = digestClientCertificates(trusted)
+	hostState.ClientCertificateDigests = digestClientCertificates(claimed.trusted)
+	superseded := claimed.recordIssued(hostState)
 	d.state.SetHost(host, *hostState)
-	return d.checkpoint(ctx)
+	if err := d.checkpoint(ctx); err != nil {
+		return err
+	}
+	revokeOriginCertificate(ctx, d.front, superseded, progress)
+	return nil
 }
 
 func (d *hostnames) reclaimShielded(ctx context.Context, target ConfiguredHost, hostState *stackrecords.HostnameState, progress progress.Progress) (bool, error) {
@@ -188,31 +194,41 @@ func (d *hostnames) reclaimShielded(ctx context.Context, target ConfiguredHost, 
 		return false, nil
 	}
 	changed, err := stagedClientCertificatesChanged(ctx, d.front, target.Hostname, hostState.ClientCertificateDigests)
-	if err != nil || !changed {
+	if err != nil {
 		return false, err
 	}
-	progress.Say(fmt.Sprintf("Claiming %s again: the client certificates %s presents to its origin changed", target.Hostname, describeFront(d.front.Kind())))
+	due := originCertificateDue(hostState, time.Now())
+	if !changed && !due {
+		return false, nil
+	}
+	if due {
+		progress.Say(fmt.Sprintf("Claiming %s again: the certificate its origin answers it with is due for renewal", target.Hostname))
+	} else {
+		progress.Say(fmt.Sprintf("Claiming %s again: the client certificates %s presents to its origin changed", target.Hostname, describeFront(d.front.Kind())))
+	}
 	return true, d.bindOrigin(ctx, target, hostState, progress)
 }
 
-func (d *hostnames) claimOrigin(ctx context.Context, target ConfiguredHost, certificate string) (*edge.Origin, []string, error) {
+func (d *hostnames) claimOrigin(ctx context.Context, target ConfiguredHost, certificate string) (originClaim, error) {
 	if !d.front.Facts().ProxiesRecords {
-		return nil, nil, nil
+		return originClaim{}, nil
 	}
+	claimed := originClaim{}
 	origin, trusted, err := claimShielded(ctx, d.front, target.Hostname, func(ctx context.Context, clientCertificates []string) (edge.Origin, error) {
 		routed, err := d.openRouterStack()
 		if err != nil {
 			return edge.Origin{}, err
 		}
-		origin, err := routed.Claim(ctx, router.Claim{
-			Hostname: target.Hostname, App: target.App, Certificate: certificate, ClientCertificates: clientCertificates,
-		})
+		claim := router.Claim{Hostname: target.Hostname, App: target.App, Certificate: certificate, ClientCertificates: clientCertificates}
+		origin, err := claimCertified(ctx, d.front, claim, &claimed.issued, routed.Claim)
 		return origin, errors.Join(err, d.adopt(routed))
 	})
+	claimed.trusted = trusted
 	if err != nil || origin.Address == "" {
-		return nil, trusted, err
+		return claimed, err
 	}
-	return &origin, trusted, nil
+	claimed.origin = &origin
+	return claimed, nil
 }
 
 func (d *hostnames) disclaim(ctx context.Context, hostname string) error {
@@ -290,6 +306,7 @@ func (d *hostnames) remove(ctx context.Context, runProgress progress.Progress) e
 			return err
 		}
 		hostState := d.state.Host(host)
+		revokeOriginCertificate(ctx, d.front, hostState.OriginCertificate, runProgress)
 		if err := d.cutover.release(ctx, hostState.Written, runProgress.Say); err != nil {
 			return err
 		}

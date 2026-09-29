@@ -2,10 +2,13 @@ package box
 
 import (
 	"context"
+	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"maps"
 	"slices"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -159,7 +162,7 @@ func (s *stack) previewClaims(ctx context.Context, pointer string, apps []string
 }
 
 func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) error {
-	address, err := s.claimHostname(ctx, router.Claim{Hostname: binding.Hostname, App: binding.App})
+	address, _, err := s.claimHostname(ctx, router.Claim{Hostname: binding.Hostname, App: binding.App})
 	if err != nil {
 		return err
 	}
@@ -171,27 +174,30 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 	return nil
 }
 
-func (s *stack) claimHostname(ctx context.Context, taken router.Claim) (string, error) {
+func (s *stack) claimHostname(ctx context.Context, taken router.Claim) (address string, certified bool, err error) {
 	if taken.Hostname == "" {
-		return "", refusal.Refuse(refusal.CodeInvalid, "this binding names no hostname for %s to claim", s.surface())
+		return "", false, refusal.Refuse(refusal.CodeInvalid, "this binding names no hostname for %s to claim", s.surface())
 	}
-	address, err := s.e.machine.Address(ctx)
-	if err != nil {
-		return "", err
+	if address, err = s.e.machine.Address(ctx); err != nil {
+		return "", false, err
 	}
+	certified = true
 	if len(taken.ClientCertificates) > 0 {
-		if err := s.e.machine.ShieldHost(ctx, host.Shield{
+		held, err := s.e.machine.ShieldHost(ctx, host.Shield{
 			Hostname: taken.Hostname, Owner: s.surface(), ClientCertificates: taken.ClientCertificates,
-		}); err != nil {
-			return "", err
+			Certificate: taken.OriginCertificate.Certificate, Key: taken.OriginCertificate.Key,
+		})
+		if err != nil {
+			return "", false, err
 		}
+		certified = certifies(held, time.Now())
 	}
 	claims := []host.HostClaim{{
 		Hostname: taken.Hostname, Owner: s.surface(), Pointer: router.DefaultPointer, App: taken.App,
 	}}
 	stores, err := s.stores(ctx, router.DefaultPointer)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	if stores {
 		claims = append(claims, host.HostClaim{
@@ -199,7 +205,19 @@ func (s *stack) claimHostname(ctx context.Context, taken router.Claim) (string, 
 			Pointer: router.DefaultPointer, App: switchboard.StoreLabel,
 		})
 	}
-	return address, s.claim(ctx, claims)
+	return address, certified, s.claim(ctx, claims)
+}
+
+func certifies(shield host.Shield, now time.Time) bool {
+	block, _ := pem.Decode([]byte(shield.Certificate))
+	if block == nil {
+		return false
+	}
+	leaf, err := x509.ParseCertificate(block.Bytes)
+	if err != nil || leaf.VerifyHostname(shield.Hostname) != nil {
+		return false
+	}
+	return !edge.OriginCertificate{ExpiresAt: leaf.NotAfter}.IsDue(now)
 }
 
 func (s *stack) claim(ctx context.Context, claims []host.HostClaim) error {

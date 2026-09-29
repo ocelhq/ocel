@@ -137,3 +137,40 @@ func TestAClientCertificateThatIsNoCertificateIsRefusedRatherThanRendered(t *tes
 		t.Error("Render() = nil, want the unreadable client certificate refused: a proxy that trusts nothing it can read shields nothing")
 	}
 }
+
+func TestAShieldedHostnameIsAnsweredWithTheOriginCertificateTheEdgeIssuedForIt(t *testing.T) {
+	t.Parallel()
+
+	client, _ := clientCertificate(t)
+	spec := specified(pinned("shop.example.com", "shop"))
+	spec.Shields = []proxy.Shield{{
+		Hostname: "shop.example.com", ClientCertificates: []string{client},
+		Certificate: "ORIGIN CERTIFICATE", Key: "ORIGIN KEY",
+	}}
+	written, _ := render(t, spec)
+
+	var read struct {
+		Apps struct {
+			TLS struct {
+				Certificates struct {
+					LoadPEM []struct {
+						Certificate string   `json:"certificate"`
+						Key         string   `json:"key"`
+						Tags        []string `json:"tags"`
+					} `json:"load_pem"`
+				} `json:"certificates"`
+			} `json:"tls"`
+		} `json:"apps"`
+	}
+	if err := json.Unmarshal(written, &read); err != nil {
+		t.Fatal(err)
+	}
+	loaded := read.Apps.TLS.Certificates.LoadPEM
+	if len(loaded) != 1 || loaded[0].Certificate != "ORIGIN CERTIFICATE" || loaded[0].Key != "ORIGIN KEY" || len(loaded[0].Tags) != 1 {
+		t.Fatalf("the proxy loads %+v, want the origin certificate and its key, tagged", loaded)
+	}
+	policies, _ := shieldingPolicies(t, written)
+	if shop := policies[0]; shop.Match["sni"][0] != "shop.example.com" || !slices.Equal(shop.Selection["any_tag"], loaded[0].Tags) {
+		t.Errorf("shop.example.com is handed %+v, want the origin certificate the edge trusts rather than the pin or one ordered on demand", shop)
+	}
+}
