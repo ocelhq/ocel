@@ -306,7 +306,7 @@ func shieldPolicies(selecting []connectionPolicy, shields []proxy.Shield) ([]con
 		}
 		client := &clientAuthentication{TrustedLeafCerts: trusted, Mode: requireClientCertificate}
 		var chosen *selection
-		if shield.Certificate != "" {
+		if shield.OriginCertificate.Certificate != "" {
 			chosen = &selection{AnyTag: []string{shieldTag + hostname}}
 		}
 		if at := slices.IndexFunc(selecting, func(policy connectionPolicy) bool { return policy.Match.SNI[0] == hostname }); at >= 0 {
@@ -337,15 +337,15 @@ func refusedOverPlainHTTP(shields []proxy.Shield) []route {
 
 func withOriginCertificates(loaded *certificates, shields []proxy.Shield) *certificates {
 	for _, shield := range slices.SortedFunc(slices.Values(shields), byHostname) {
-		if shield.Certificate == "" {
+		if shield.OriginCertificate.Certificate == "" {
 			continue
 		}
 		if loaded == nil {
 			loaded = &certificates{}
 		}
 		loaded.LoadPEM = append(loaded.LoadPEM, loadPEM{
-			Certificate: shield.Certificate,
-			Key:         shield.Key,
+			Certificate: shield.OriginCertificate.Certificate,
+			Key:         shield.OriginCertificate.Key,
 			Tags:        []string{shieldTag + strings.ToLower(strings.TrimSpace(shield.Hostname))},
 		})
 	}

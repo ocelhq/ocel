@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
@@ -175,32 +176,36 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 	return nil
 }
 
-func (s *stack) claimHostname(ctx context.Context, taken router.Claim) (address string, certified bool, err error) {
-	if taken.Hostname == "" {
+func (s *stack) claimHostname(ctx context.Context, claim router.Claim) (address string, certified bool, err error) {
+	if claim.Hostname == "" {
 		return "", false, refusal.Refuse(refusal.CodeInvalid, "this binding names no hostname for %s to claim", s.surface())
 	}
 	if address, err = s.e.machine.Address(ctx); err != nil {
 		return "", false, err
 	}
-	if certified, err = s.e.shield(ctx, taken, s.surface()); err != nil {
-		return "", false, err
-	}
-	if _, wild := strings.CutPrefix(taken.Hostname, "*."); !wild {
-		if err := s.claimServed(ctx, taken); err != nil {
+	shielded := len(claim.ClientCertificates) > 0
+	certified = true
+	if shielded {
+		if certified, err = s.e.putShield(ctx, claim, s.surface()); err != nil {
 			return "", false, err
 		}
 	}
-	if len(taken.ClientCertificates) > 0 {
-		if err := s.e.machine.RefuseUnshielded(ctx, taken.Hostname); err != nil {
+	if _, wild := strings.CutPrefix(claim.Hostname, "*."); !wild {
+		if err := s.claimServed(ctx, claim); err != nil {
+			return "", false, err
+		}
+	}
+	if shielded {
+		if err := s.e.machine.RefuseUnshielded(ctx, claim.Hostname); err != nil {
 			return "", false, err
 		}
 	}
 	return address, certified, nil
 }
 
-func (s *stack) claimServed(ctx context.Context, taken router.Claim) error {
+func (s *stack) claimServed(ctx context.Context, claim router.Claim) error {
 	claims := []host.HostClaim{{
-		Hostname: taken.Hostname, Owner: s.surface(), Pointer: router.DefaultPointer, App: taken.App,
+		Hostname: claim.Hostname, Owner: s.surface(), Pointer: router.DefaultPointer, App: claim.App,
 	}}
 	stores, err := s.stores(ctx, router.DefaultPointer)
 	if err != nil {
@@ -208,29 +213,26 @@ func (s *stack) claimServed(ctx context.Context, taken router.Claim) error {
 	}
 	if stores {
 		claims = append(claims, host.HostClaim{
-			Hostname: live.StoreHostname(taken.Hostname), Owner: s.surface(),
+			Hostname: live.StoreHostname(claim.Hostname), Owner: s.surface(),
 			Pointer: router.DefaultPointer, App: switchboard.StoreLabel,
 		})
 	}
 	return s.claim(ctx, claims)
 }
 
-func (e *Edge) shield(ctx context.Context, taken router.Claim, owner string) (bool, error) {
-	if len(taken.ClientCertificates) == 0 {
-		return true, nil
-	}
-	held, err := e.machine.ShieldHost(ctx, host.Shield{
-		Hostname: taken.Hostname, Owner: owner, ClientCertificates: taken.ClientCertificates,
-		Certificate: taken.OriginCertificate.Certificate, Key: taken.OriginCertificate.Key,
+func (e *Edge) putShield(ctx context.Context, claim router.Claim, owner string) (certified bool, err error) {
+	held, err := e.machine.PutShield(ctx, host.Shield{
+		Hostname: claim.Hostname, Owner: owner, ClientCertificates: claim.ClientCertificates,
+		OriginCertificate: proxy.CertificatePair{Certificate: claim.OriginCertificate.Certificate, Key: claim.OriginCertificate.Key},
 	})
 	if err != nil {
 		return false, err
 	}
-	return certifies(held, time.Now()), nil
+	return isOriginCertificateCurrent(held, time.Now()), nil
 }
 
-func certifies(shield host.Shield, now time.Time) bool {
-	block, _ := pem.Decode([]byte(shield.Certificate))
+func isOriginCertificateCurrent(shield host.Shield, now time.Time) bool {
+	block, _ := pem.Decode([]byte(shield.OriginCertificate.Certificate))
 	if block == nil {
 		return false
 	}
@@ -279,7 +281,7 @@ func (s *stack) disclaimHostname(ctx context.Context, hostname string) error {
 	if err := s.e.machine.DisclaimHost(ctx, live.StoreHostname(hostname), s.surface()); err != nil {
 		return err
 	}
-	return s.e.machine.UnshieldHost(ctx, hostname, s.surface())
+	return s.e.machine.RemoveShield(ctx, hostname, s.surface())
 }
 
 func (s *stack) released(what string, err error) error {

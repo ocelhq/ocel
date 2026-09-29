@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
@@ -88,7 +89,7 @@ func TestARealProxyRefusesAShieldedHostnameOverPlainHTTPAndStillServesTheRest(t 
 	}
 }
 
-func TestShieldingAHostnameCarriesItsSuccessorCertificateToEveryHostnameThatTrustedTheOneItReplaces(t *testing.T) {
+func TestMergingAShieldCarriesItsCertificatesToEveryHostnameThatTrustedOneOfThem(t *testing.T) {
 	t.Parallel()
 
 	shields := []Shield{
@@ -97,7 +98,7 @@ func TestShieldingAHostnameCarriesItsSuccessorCertificateToEveryHostnameThatTrus
 		{Hostname: "other.example.org", Owner: "ocel-other-production", ClientCertificates: []string{"another zone"}},
 	}
 
-	rotated := Shielding(shields, Shield{Hostname: "shop.example.com", Owner: "ocel-shop-production", ClientCertificates: []string{"new", "old"}})
+	rotated := MergeShield(shields, Shield{Hostname: "shop.example.com", Owner: "ocel-shop-production", ClientCertificates: []string{"new", "old"}})
 	trusts := map[string][]string{}
 	for _, shield := range rotated {
 		trusts[shield.Hostname] = shield.ClientCertificates
@@ -109,7 +110,7 @@ func TestShieldingAHostnameCarriesItsSuccessorCertificateToEveryHostnameThatTrus
 		t.Errorf("other.example.org trusts %v, want its own zone's certificate left alone", trusts["other.example.org"])
 	}
 
-	retired := Shielding(rotated, Shield{Hostname: "shop.example.com", Owner: "ocel-shop-production", ClientCertificates: []string{"new"}})
+	retired := MergeShield(rotated, Shield{Hostname: "shop.example.com", Owner: "ocel-shop-production", ClientCertificates: []string{"new"}})
 	for _, shield := range retired {
 		if shield.Hostname == "blog.example.com" && !slices.Equal(shield.ClientCertificates, []string{"new"}) {
 			t.Errorf("blog.example.com trusts %v once the old certificate is retired, want the successor alone", shield.ClientCertificates)
@@ -117,12 +118,12 @@ func TestShieldingAHostnameCarriesItsSuccessorCertificateToEveryHostnameThatTrus
 	}
 }
 
-func TestShieldingAHostnameAgainKeepsTheOriginCertificateItAlreadyHolds(t *testing.T) {
+func TestMergingAShieldAgainKeepsTheOriginCertificateItAlreadyHolds(t *testing.T) {
 	t.Parallel()
 
-	held := []Shield{{Hostname: "shop.example.com", Owner: "ocel-shop-production", ClientCertificates: []string{"zone"}, Certificate: "ORIGIN", Key: "KEY"}}
-	again := Shielding(held, Shield{Hostname: "shop.example.com", Owner: "ocel-shop-production", ClientCertificates: []string{"zone", "successor"}})
-	if len(again) != 1 || again[0].Certificate != "ORIGIN" || again[0].Key != "KEY" {
+	held := []Shield{{Hostname: "shop.example.com", Owner: "ocel-shop-production", ClientCertificates: []string{"zone"}, OriginCertificate: proxy.CertificatePair{Certificate: "ORIGIN", Key: "KEY"}}}
+	again := MergeShield(held, Shield{Hostname: "shop.example.com", Owner: "ocel-shop-production", ClientCertificates: []string{"zone", "successor"}})
+	if len(again) != 1 || again[0].OriginCertificate.Certificate != "ORIGIN" || again[0].OriginCertificate.Key != "KEY" {
 		t.Errorf("shielding shop.example.com again leaves %+v, want the origin certificate it holds kept: a claim carries one only when the origin needs a new one", again)
 	}
 }

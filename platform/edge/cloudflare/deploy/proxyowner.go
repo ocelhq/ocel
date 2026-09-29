@@ -19,5 +19,5 @@ func (x *Proxy) DomainOwner(ctx context.Context, hostname string) (string, error
 }
 
 func (x *Proxy) ProjectOwner(slug string, tier environment.Tier) string {
-	return forwardingOwner(x.p.namespace, slug, tier)
+	return formatForwardingOwner(x.p.namespace, slug, tier)
 }

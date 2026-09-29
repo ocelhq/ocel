@@ -38,32 +38,31 @@ type AppRoute struct {
 type HostClaim live.Claimed
 
 type Shield struct {
-	Hostname           string   `json:"hostname"`
-	Owner              string   `json:"owner"`
-	ClientCertificates []string `json:"clientCertificates,omitempty"`
-	Certificate        string   `json:"certificate,omitempty"`
-	Key                string   `json:"key,omitempty"`
+	Hostname           string                `json:"hostname"`
+	Owner              string                `json:"owner"`
+	ClientCertificates []string              `json:"clientCertificates,omitempty"`
+	OriginCertificate  proxy.CertificatePair `json:"originCertificate,omitzero"`
 }
 
-func Shielding(shields []Shield, taken Shield) []Shield {
-	taken.ClientCertificates = slices.Compact(slices.Sorted(slices.Values(taken.ClientCertificates)))
+func MergeShield(shields []Shield, merged Shield) []Shield {
+	merged.ClientCertificates = slices.Compact(slices.Sorted(slices.Values(merged.ClientCertificates)))
 	kept := make([]Shield, 0, len(shields)+1)
 	for _, shield := range shields {
-		if shield.Hostname == taken.Hostname {
-			if taken.Certificate == "" && shield.Owner == taken.Owner {
-				taken.Certificate, taken.Key = shield.Certificate, shield.Key
+		if shield.Hostname == merged.Hostname {
+			if merged.OriginCertificate.Certificate == "" && shield.Owner == merged.Owner {
+				merged.OriginCertificate = shield.OriginCertificate
 			}
 			continue
 		}
-		if slices.ContainsFunc(shield.ClientCertificates, func(certificate string) bool { return slices.Contains(taken.ClientCertificates, certificate) }) {
-			shield.ClientCertificates = slices.Clone(taken.ClientCertificates)
+		if slices.ContainsFunc(shield.ClientCertificates, func(certificate string) bool { return slices.Contains(merged.ClientCertificates, certificate) }) {
+			shield.ClientCertificates = slices.Clone(merged.ClientCertificates)
 		}
 		kept = append(kept, shield)
 	}
-	return append(kept, taken)
+	return append(kept, merged)
 }
 
-func Unshielding(shields []Shield, dropped func(Shield) bool) []Shield {
+func DropShields(shields []Shield, dropped func(Shield) bool) []Shield {
 	return slices.DeleteFunc(slices.Clone(shields), dropped)
 }
 
@@ -140,8 +139,7 @@ func proxySpec(state RoutingTable) proxy.Spec {
 	shields := make([]proxy.Shield, 0, len(state.Shields))
 	for _, shield := range state.Shields {
 		shields = append(shields, proxy.Shield{
-			Hostname: shield.Hostname, ClientCertificates: shield.ClientCertificates,
-			Certificate: shield.Certificate, Key: shield.Key,
+			Hostname: shield.Hostname, ClientCertificates: shield.ClientCertificates, OriginCertificate: shield.OriginCertificate,
 		})
 	}
 	return proxy.Spec{

@@ -48,8 +48,12 @@ type Permission struct {
 type Shield struct {
 	Hostname           string
 	ClientCertificates []string
-	Certificate        string
-	Key                string
+	OriginCertificate  CertificatePair
+}
+
+type CertificatePair struct {
+	Certificate string `json:"certificate"`
+	Key         string `json:"key"`
 }
 
 type Pin struct {

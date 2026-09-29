@@ -111,12 +111,12 @@ func (h *Host) DisclaimPointer(ctx context.Context, owner, pointer string) error
 func (h *Host) DisclaimSurface(ctx context.Context, owner string) error {
 	return h.reshape(ctx, func(state RoutingTable) (RoutingTable, error) {
 		state.Claims = Disclaiming(state.Claims, func(claim HostClaim) bool { return claim.Owner == owner })
-		state.Shields = Unshielding(state.Shields, func(shield Shield) bool { return shield.Owner == owner })
+		state.Shields = DropShields(state.Shields, func(shield Shield) bool { return shield.Owner == owner })
 		return state, nil
 	})
 }
 
-func (h *Host) ShieldHost(ctx context.Context, shield Shield) (Shield, error) {
+func (h *Host) PutShield(ctx context.Context, shield Shield) (Shield, error) {
 	if err := validTable(RoutingTable{Shields: []Shield{shield}}); err != nil {
 		return Shield{}, err
 	}
@@ -127,16 +127,16 @@ func (h *Host) ShieldHost(ctx context.Context, shield Shield) (Shield, error) {
 				"%s is shielded on this box for %s\nUnbind it there before %s binds it",
 				shield.Hostname, state.Shields[at].Owner, shield.Owner)
 		}
-		state.Shields = Shielding(state.Shields, shield)
+		state.Shields = MergeShield(state.Shields, shield)
 		held = state.Shields[len(state.Shields)-1]
 		return state, nil
 	})
 	return held, err
 }
 
-func (h *Host) UnshieldHost(ctx context.Context, hostname, owner string) error {
+func (h *Host) RemoveShield(ctx context.Context, hostname, owner string) error {
 	return h.reshape(ctx, func(state RoutingTable) (RoutingTable, error) {
-		state.Shields = Unshielding(state.Shields, func(shield Shield) bool {
+		state.Shields = DropShields(state.Shields, func(shield Shield) bool {
 			return shield.Hostname == hostname && shield.Owner == owner
 		})
 		return state, nil

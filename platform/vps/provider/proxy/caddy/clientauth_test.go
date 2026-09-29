@@ -145,7 +145,7 @@ func TestAShieldedHostnameIsAnsweredWithTheOriginCertificateTheEdgeIssuedForIt(t
 	spec := specified(pinned("shop.example.com", "shop"))
 	spec.Shields = []proxy.Shield{{
 		Hostname: "shop.example.com", ClientCertificates: []string{client},
-		Certificate: "ORIGIN CERTIFICATE", Key: "ORIGIN KEY",
+		OriginCertificate: proxy.CertificatePair{Certificate: "ORIGIN CERTIFICATE", Key: "ORIGIN KEY"},
 	}}
 	written, _ := render(t, spec)
 

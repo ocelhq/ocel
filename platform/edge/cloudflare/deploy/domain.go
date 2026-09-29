@@ -123,7 +123,7 @@ func (p *cloudflare) requireTLSCover(ctx context.Context, zoneID, zoneName, host
 	if coveredByUniversalSSL(hostname, zoneName) {
 		return nil
 	}
-	covered, err := p.certificatePackCovers(ctx, zoneID, hostname)
+	covered, err := p.isCoveredByCertificatePack(ctx, zoneID, hostname)
 	if err != nil {
 		return err
 	}
@@ -133,22 +133,24 @@ func (p *cloudflare) requireTLSCover(ctx context.Context, zoneID, zoneName, host
 	return fmt.Errorf("%s is more than one label below %s, which the zone's Universal SSL certificate does not cover, and no active certificate pack covers it either — add a Cloudflare Advanced Certificate for %s and bind it again", hostname, zoneName, hostname)
 }
 
-func (p *cloudflare) certificatePackCovers(ctx context.Context, zoneID, hostname string) (bool, error) {
-	status, err := p.certificatePackCover(ctx, zoneID, hostname)
+func (p *cloudflare) isCoveredByCertificatePack(ctx context.Context, zoneID, hostname string) (bool, error) {
+	status, err := p.readCoveringPackStatus(ctx, zoneID, hostname)
 	return status == string(ssl.StatusActive), err
 }
 
-var pendingPackStatuses = []string{"initializing", "pending_validation", "pending_issuance", "pending_deployment"}
+var pendingPackStatuses = []string{
+	string(ssl.StatusInitializing), string(ssl.StatusPendingValidation), string(ssl.StatusPendingIssuance), string(ssl.StatusPendingDeployment),
+}
 
-func (p *cloudflare) certificatePackCover(ctx context.Context, zoneID, hostname string) (string, error) {
+func (p *cloudflare) readCoveringPackStatus(ctx context.Context, zoneID, hostname string) (string, error) {
 	packs := p.client.SSL.CertificatePacks.ListAutoPaging(ctx, ssl.CertificatePackListParams{ZoneID: cf.F(zoneID)})
 	cover := ""
 	for packs.Next() {
-		status, hosts, err := certificatePackHosts(packs.Current())
+		status, hosts, err := decodeCertificatePack(packs.Current())
 		if err != nil {
 			return "", fmt.Errorf("read a certificate pack in zone %s: %w", zoneID, err)
 		}
-		if !slices.ContainsFunc(hosts, func(covered string) bool { return certificateCovers(covered, hostname) }) {
+		if !slices.ContainsFunc(hosts, func(covered string) bool { return isCoveredByName(covered, hostname) }) {
 			continue
 		}
 		switch {
@@ -164,7 +166,7 @@ func (p *cloudflare) certificatePackCover(ctx context.Context, zoneID, hostname 
 	return cover, nil
 }
 
-func certificatePackHosts(pack ssl.CertificatePackListResponse) (string, []string, error) {
+func decodeCertificatePack(pack ssl.CertificatePackListResponse) (string, []string, error) {
 	raw, err := json.Marshal(pack)
 	if err != nil {
 		return "", nil, err
@@ -179,7 +181,7 @@ func certificatePackHosts(pack ssl.CertificatePackListResponse) (string, []strin
 	return decoded.Status, decoded.Hosts, nil
 }
 
-func certificateCovers(covered, hostname string) bool {
+func isCoveredByName(covered, hostname string) bool {
 	if covered == hostname {
 		return true
 	}
@@ -191,11 +193,11 @@ func certificateCovers(covered, hostname string) bool {
 	return ok && label != "" && !strings.Contains(label, ".")
 }
 
-func (p *cloudflare) ensureTLSCover(ctx context.Context, zoneID, zoneName, hostname string) error {
+func (p *cloudflare) orderTLSCover(ctx context.Context, zoneID, zoneName, hostname string) error {
 	if coveredByUniversalSSL(hostname, zoneName) {
 		return nil
 	}
-	status, err := p.certificatePackCover(ctx, zoneID, hostname)
+	status, err := p.readCoveringPackStatus(ctx, zoneID, hostname)
 	switch {
 	case err != nil:
 		return err
