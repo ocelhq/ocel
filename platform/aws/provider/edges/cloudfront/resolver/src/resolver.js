@@ -12,7 +12,14 @@ var ORIGIN_SECRET_HEADER = 'x-ocel-origin-secret';
 var CONTAINER_HEADER = 'x-ocel-container';
 var CONTAINER_ORIGIN_ID = 'containers';
 var CONTROL_PREFIX = 'x-middleware-';
-var CONTROL_HEADERS = ['x-ocel-entry', 'next-resume', ORIGIN_SECRET_HEADER, CONTAINER_HEADER];
+var CLIENT_AUTHORIZATION_HEADER = 'x-ocel-client-authorization';
+var CONTROL_HEADERS = [
+  'x-ocel-entry',
+  'next-resume',
+  ORIGIN_SECRET_HEADER,
+  CONTAINER_HEADER,
+  CLIENT_AUTHORIZATION_HEADER,
+];
 var ORIGIN_READ_TIMEOUT_SECONDS = 60;
 
 function headerValue(headers, name) {

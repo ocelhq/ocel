@@ -35,3 +35,28 @@ describe("the empty-body dropper", () => {
     expect(answered.body).toEqual({ encoding: "text", data: "hello" });
   });
 });
+
+describe("the remapped-header restorer", () => {
+  it("hands the client the header a Function URL remapped, under its own name, and no remapped name", () => {
+    const answered = load()(
+      response({
+        "x-amzn-remapped-www-authenticate": 'Bearer realm="ocel"',
+        "x-amzn-remapped-date": "Mon, 29 Sep 2026 00:00:00 GMT",
+        date: "Mon, 29 Sep 2026 00:00:01 GMT",
+      }),
+    );
+
+    expect(answered.headers["www-authenticate"].value).toBe('Bearer realm="ocel"');
+    expect(answered.headers.date.value).toBe("Mon, 29 Sep 2026 00:00:01 GMT");
+    expect(
+      Object.keys(answered.headers).filter((name) => name.startsWith("x-amzn-remapped-")),
+    ).toEqual([]);
+  });
+
+  it("never restores a header CloudFront refuses a function to add", () => {
+    const answered = load()(response({ "x-amzn-remapped-connection": "close" }));
+
+    expect(answered.headers.connection).toBeUndefined();
+    expect(answered.headers["x-amzn-remapped-connection"]).toBeUndefined();
+  });
+});
