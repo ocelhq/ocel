@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 type httpEvent struct {
@@ -19,6 +21,9 @@ type httpEvent struct {
 		HTTP struct {
 			Method string `json:"method"`
 		} `json:"http"`
+		Authorizer struct {
+			IAM json.RawMessage `json:"iam"`
+		} `json:"authorizer"`
 	} `json:"requestContext"`
 
 	Path                            string              `json:"path"`
@@ -88,6 +93,12 @@ func (ev *httpEvent) header() http.Header {
 	if len(ev.Cookies) > 0 {
 		h.Set("Cookie", strings.Join(ev.Cookies, "; "))
 	}
+	if carried := h.Get(edge.HeaderClientAuthorization); carried != "" {
+		h.Set("Authorization", carried)
+	} else if len(ev.RequestContext.Authorizer.IAM) > 0 {
+		h.Del("Authorization")
+	}
+	h.Del(edge.HeaderClientAuthorization)
 	return h
 }
 

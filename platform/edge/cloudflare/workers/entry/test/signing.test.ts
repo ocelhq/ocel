@@ -13,6 +13,33 @@ describe("lambdaRegion", () => {
   });
 });
 
+const FUNCTION_URL = "https://abc123.lambda-url.us-east-1.on.aws/api/x";
+
+async function forwarded(headers: Record<string, string>): Promise<Request> {
+  let sent: Request | undefined;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    sent = new Request(input as RequestInfo, init);
+    return new Response("ok");
+  }) as typeof fetch;
+  try {
+    await edgeOriginFetch("AKIAEXAMPLE", "secretkey")!(new Request(FUNCTION_URL, { headers }));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  return sent!;
+}
+
+async function answering(response: Response): Promise<Response> {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async () => response) as typeof fetch;
+  try {
+    return await edgeOriginFetch("AKIAEXAMPLE", "secretkey")!(new Request(FUNCTION_URL));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
 describe("edgeOriginFetch", () => {
   it("is undefined when either credential is missing", () => {
     expect(edgeOriginFetch(undefined, "s")).toBeUndefined();
@@ -101,6 +128,45 @@ describe("edgeOriginFetch", () => {
     expect(await answered.text()).toBe("");
     expect(answered.headers.get("x-ocel-empty-body")).toBeNull();
     expect(answered.headers.get("location")).toBe("/elsewhere");
+  });
+
+  it("hands the origin the client's authorization in the carrier, since SigV4 takes authorization", async () => {
+    const sent = await forwarded({
+      authorization: "Bearer client-token",
+      "x-ocel-client-authorization": "Bearer forged",
+    });
+
+    expect(sent.headers.get("authorization")).toContain("AWS4-HMAC-SHA256");
+    expect(sent.headers.get("x-ocel-client-authorization")).toBe("Bearer client-token");
+  });
+
+  it("drops a carrier the client sent when the client sent no authorization", async () => {
+    const sent = await forwarded({ "x-ocel-client-authorization": "Bearer forged" });
+
+    expect(sent.headers.has("x-ocel-client-authorization")).toBe(false);
+  });
+
+  it("restores the WWW-Authenticate a Function URL remapped, and no remapped name reaches the client", async () => {
+    const answered = await answering(
+      new Response("denied", {
+        status: 401,
+        headers: {
+          "x-amzn-remapped-www-authenticate": 'Bearer realm="app"',
+          "x-amzn-remapped-date": "Mon, 01 Jan 2024 00:00:00 GMT",
+          "x-amzn-remapped-connection": "close",
+          date: "Tue, 29 Sep 2026 00:00:00 GMT",
+        },
+      }),
+    );
+
+    expect(answered.status).toBe(401);
+    expect(await answered.text()).toBe("denied");
+    expect(answered.headers.get("www-authenticate")).toBe('Bearer realm="app"');
+    expect(answered.headers.get("date")).toBe("Tue, 29 Sep 2026 00:00:00 GMT");
+    expect(answered.headers.get("connection")).toBeNull();
+    expect(
+      [...answered.headers.keys()].filter((name) => name.startsWith("x-amzn-remapped-")),
+    ).toEqual([]);
   });
 
   it("fails loudly rather than mis-signing a non-Function-URL host", async () => {
