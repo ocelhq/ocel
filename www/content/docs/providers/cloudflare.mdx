@@ -21,13 +21,24 @@ On a [VPS](/docs/providers/vps) or [Google Cloud](/docs/providers/gcp), Cloudfla
 worker: it forwards each hostname to the origin through a proxied record. The origin answers
 only what arrives with the certificate your zone presents to origins (zone-level
 authenticated origin pulls, with a certificate of your own rather than Cloudflare's shared
-one). If the zone has none, ocel mints one good for a year, has every origin trust it, then
-uploads it and turns zone-level pulls on. Once a certificate ocel minted is half way through
-its year, the next deploy mints its successor the same way: origins trust both, the zone switches, and
-the certificate it replaced is deleted. To retire a leaked key sooner, delete that
-certificate from the zone; the next deploy of each project mints and trusts a new one. A
-promote purges what Cloudflare cached for the hostnames it flipped. The zone's SSL mode must
-be Full or Full (strict). The token needs Zone Read, Zone Settings Read, DNS Edit, SSL and
+one). Every origin trusts every client certificate the zone holds. If the zone holds none,
+ocel mints one good for ten years, uploads it, has the origin trust it, then turns
+zone-level pulls on. ocel never replaces or deletes a zone's client certificate: it is
+shared by every origin the zone forwards to. The origins ocel runs accept it past its
+expiry, as Cloudflare keeps presenting it. A zone that already presents Cloudflare's shared
+certificate (global pulls on, or zone-level pulls on with no certificate of the zone's own)
+is refused, since another origin in it may trust only that one: upload a certificate of
+your own first.
+
+To rotate the certificate, or retire a leaked key, upload the new one to the zone
+(**SSL/TLS > Origin Server > Authenticated Origin Pulls**). Cloudflare presents the
+certificate uploaded last at once, so until the next step origins refuse it. Deploy one
+project on each VPS box and on each Google Cloud tier the zone forwards to: each origin
+then trusts both. Delete the old certificate from the zone, and deploy once more on each of
+them to stop trusting it.
+
+A promote purges what Cloudflare cached for the hostnames it flipped. The zone's SSL mode
+must be Full (strict). The token needs Zone Read, Zone Settings Read, DNS Edit, SSL and
 Certificates Edit and Cache Purge on the zone, and Account Settings Read.
 
 Hostname records go into the origin provider's own DNS unless you say otherwise. Write

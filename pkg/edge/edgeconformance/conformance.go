@@ -231,34 +231,25 @@ func Run(t *testing.T, suite Suite) {
 			t.Skip("this edge presents no client certificate to its origins")
 		}
 		ctx := context.Background()
-		staged, err := certificates.Stage(ctx, suite.Hostname)
+		trusted, err := certificates.Ensure(ctx, suite.Hostname)
 		if err != nil {
-			t.Fatalf("Stage(%q): %v", suite.Hostname, err)
+			t.Fatalf("Ensure(%q): %v", suite.Hostname, err)
 		}
-		if len(staged) == 0 {
-			t.Fatalf("Stage(%q) names no certificate, and an origin that trusts none refuses every request the edge forwards", suite.Hostname)
+		if len(trusted) == 0 {
+			t.Fatalf("Ensure(%q) names no certificate, and an origin that trusts none refuses every request the edge forwards", suite.Hostname)
 		}
-		for _, certificate := range staged {
+		for _, certificate := range trusted {
 			requireClientCertificate(t, certificate)
 		}
 		if err := certificates.Present(ctx, suite.Hostname); err != nil {
 			t.Fatalf("Present(%q): %v", suite.Hostname, err)
 		}
-		presented, err := certificates.Stage(ctx, suite.Hostname)
+		presented, err := certificates.Ensure(ctx, suite.Hostname)
 		if err != nil {
-			t.Fatalf("Stage(%q) once presented: %v", suite.Hostname, err)
+			t.Fatalf("Ensure(%q) once presented: %v", suite.Hostname, err)
 		}
-		for _, certificate := range presented {
-			if !slices.Contains(staged, certificate) {
-				t.Errorf("Stage(%q) names %q once presented, which it did not name before: an origin claimed with what it named first refuses what the edge presents", suite.Hostname, certificate)
-			}
-		}
-		again, err := certificates.Stage(ctx, suite.Hostname)
-		if err != nil {
-			t.Fatalf("Stage(%q) again: %v", suite.Hostname, err)
-		}
-		if !slices.Equal(again, presented) {
-			t.Errorf("Stage(%q) = %d certificates, then %d with nothing due: an origin is claimed again every time what it trusts changes", suite.Hostname, len(presented), len(again))
+		if !slices.Equal(presented, trusted) {
+			t.Errorf("Ensure(%q) = %d certificates once presented, %d before: an edge that holds a certificate mints no other, and an origin claimed with what it named first refuses anything new", suite.Hostname, len(presented), len(trusted))
 		}
 	})
 

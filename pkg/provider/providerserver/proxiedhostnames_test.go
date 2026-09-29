@@ -138,8 +138,8 @@ func TestAnEdgePresentsAClientCertificateOnlyOnceTheRouterTookTheClaimThatTrusts
 
 	addWebHostname(t, client, "app.acme.com", nil)
 
-	if got := relay.ClientCertificateEvents(); !slices.Equal(got, []string{"stage", "claim", "present", "stage"}) {
-		t.Errorf("the edge and router saw %v, want the certificates staged, claimed on the router, then presented: an origin refuses a certificate it was not told to trust", got)
+	if got := relay.ClientCertificateEvents(); !slices.Equal(got, []string{"ensure", "claim", "present", "ensure"}) {
+		t.Errorf("the edge and router saw %v, want the certificates the edge holds read, claimed on the router, then presented: an origin refuses a certificate it was not told to trust", got)
 	}
 }
 
@@ -156,12 +156,12 @@ func TestAServedHostnameIsClaimedAgainWhenTheCertificatesItsEdgePresentsChange(t
 		t.Fatalf("the router took %d claims, want the one: nothing the origin trusts changed", len(claims))
 	}
 
-	rotated := []string{fake.ClientCertificate(fake.KindRelay), "the successor the relay edge presents"}
-	relay.StagesClientCertificates(rotated...)
+	rotated := []string{fake.ClientCertificate(fake.KindRelay), "the certificate you uploaded beside it"}
+	relay.HoldsClientCertificates(rotated...)
 	addWebHostname(t, client, "app.acme.com", nil)
 	claims := relay.Claims()
 	if len(claims) != 2 || !slices.Equal(claims[1].ClientCertificates, rotated) {
-		t.Fatalf("the router took claims %+v, want app.acme.com claimed again trusting %v: the origin refuses the successor once the edge presents it unless it was told to trust it first", claims, rotated)
+		t.Fatalf("the router took claims %+v, want app.acme.com claimed again trusting %v: the edge presents the certificate uploaded last, and the origin refuses it until it is told to trust it", claims, rotated)
 	}
 }
 

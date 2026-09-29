@@ -65,9 +65,6 @@ type cloudflare struct {
 
 	entryMu      sync.Mutex
 	entryWorkers map[string][]string
-
-	clientMu sync.Mutex
-	staged   map[string]stagedClientCertificate
 }
 
 func New(namespace string) edge.Edge { return newCloudflare(namespace) }
@@ -86,6 +83,14 @@ func (p *cloudflare) Kind() edge.Kind { return Kind }
 
 func (p *cloudflare) accountID() string { return os.Getenv(envAccountID) }
 
+func (p *cloudflare) requireAccountID(doing string) (string, error) {
+	accountID := p.accountID()
+	if accountID == "" {
+		return "", fmt.Errorf("%s is not set; it is required to %s", envAccountID, doing)
+	}
+	return accountID, nil
+}
+
 func (p *cloudflare) cacheStore() cacheStore {
 	store := newCacheStore(p.client, p.namespace)
 	if p.objects != nil {
@@ -101,7 +106,7 @@ func (p *cloudflare) Facts() edge.Facts {
 		RunsCode:        true,
 		ServesUnbound:   true,
 		ProxiesRecords:  true,
-		CredentialScope: os.Getenv(envAccountID),
+		CredentialScope: p.accountID(),
 	}
 }
 
