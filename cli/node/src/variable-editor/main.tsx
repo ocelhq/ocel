@@ -1,4 +1,4 @@
-import { install, store } from "@ui/vars";
+import { install, store } from "@ui/variables";
 import { createRoot } from "react-dom/client";
 
 import { loopback, session } from "./api";

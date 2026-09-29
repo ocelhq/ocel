@@ -40,7 +40,7 @@ import {
   variableGroupStatesOf,
   variantsOf,
 } from "./model";
-import { conflict, port, type Revealed, sessionPort, VarsError } from "./port";
+import { conflict, port, type Revealed, sessionPort, VariablesError } from "./port";
 import { computed, signal } from "./signals";
 
 export const state = signal<State | null>(null);
@@ -445,7 +445,7 @@ async function attempt(at: Address, run: () => Promise<unknown>): Promise<SaveRe
     return {
       at,
       ok: false,
-      status: thrown instanceof VarsError ? thrown.status : 0,
+      status: thrown instanceof VariablesError ? thrown.status : 0,
       message: message(thrown),
     };
   }

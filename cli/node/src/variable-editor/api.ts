@@ -4,10 +4,10 @@ import type {
   Revealed,
   SessionPort,
   State,
-  VarsPort,
+  VariablesPort,
   Version,
-} from "@ui/vars";
-import { VarsError } from "@ui/vars";
+} from "@ui/variables";
+import { VariablesError } from "@ui/variables";
 
 const token = new URLSearchParams(location.hash.slice(1)).get("t") ?? "";
 history.replaceState(null, "", location.pathname);
@@ -27,7 +27,7 @@ async function api<T>(method: string, path: string, body?: unknown): Promise<T> 
     try {
       message = JSON.parse(text).error ?? text;
     } catch {}
-    throw new VarsError(response.status, message.trim());
+    throw new VariablesError(response.status, message.trim());
   }
   return text ? (JSON.parse(text) as T) : (undefined as T);
 }
@@ -36,7 +36,7 @@ function query(at: Address): string {
   return `key=${encodeURIComponent(at.key)}&folder=${encodeURIComponent(at.folder)}&environment=${encodeURIComponent(at.environment)}`;
 }
 
-export const loopback: VarsPort = {
+export const loopback: VariablesPort = {
   read: () => api<State>("GET", "/api/state"),
   reveal: (cells) => api<Revealed>("POST", "/api/reveal", { cells }),
   set: (at, value, version) => api("PUT", "/api/value", { ...at, value, version }),
@@ -56,7 +56,7 @@ export const session: SessionPort = {
       cache: "no-store",
     });
     if (!response.ok || response.body === null) {
-      throw new VarsError(response.status, await response.text());
+      throw new VariablesError(response.status, await response.text());
     }
     const reader = response.body.getReader();
     while (!(await reader.read()).done) {}

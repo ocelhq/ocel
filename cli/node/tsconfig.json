@@ -13,9 +13,9 @@
     "types": ["node"],
     "noEmit": true,
     "paths": {
-      "@/*": ["./src/vars-ui/*"]
+      "@/*": ["./src/variable-editor/*"]
     }
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "test", "src/**/*.test.ts", "src/vars-ui"]
+  "exclude": ["node_modules", "dist", "test", "src/**/*.test.ts", "src/variable-editor"]
 }

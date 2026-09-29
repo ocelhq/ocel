@@ -8,7 +8,7 @@ import {
   type MatrixRow,
   type State,
 } from "./model";
-import { install, type VarsPort } from "./port";
+import { install, type VariablesPort } from "./port";
 
 const store = await import("./store");
 
@@ -150,7 +150,7 @@ interface Sent {
 
 function record(current: State, awaitingApproval = false): Sent[] {
   const sent: Sent[] = [];
-  const port: VarsPort = {
+  const port: VariablesPort = {
     read: async () => current,
     reveal: async () => ({ values: [], errors: [] }),
     set: async (at, value, version) => {

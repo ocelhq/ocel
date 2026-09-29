@@ -40,20 +40,27 @@ await bundle(
   { target: "node", format: "esm" },
 );
 
-await bundle(join(platformDir, "src/vars-ui/main.tsx"), join(dist, "vars-ui/app.js"), {
-  naming: { entry: "app.[ext]" },
-  target: "browser",
-  format: "esm",
-  tsconfig: join(platformDir, "tsconfig.vars-ui.json"),
-  minify: true,
-});
-const sheet = join(platformDir, "src/vars-ui/styles.css");
+await bundle(
+  join(platformDir, "src/variable-editor/main.tsx"),
+  join(dist, "variable-editor/app.js"),
+  {
+    naming: { entry: "app.[ext]" },
+    target: "browser",
+    format: "esm",
+    tsconfig: join(platformDir, "tsconfig.variable-editor.json"),
+    minify: true,
+  },
+);
+const sheet = join(platformDir, "src/variable-editor/styles.css");
 const compiled = await postcss([tailwind({ optimize: { minify: true } })]).process(
   await readFile(sheet, "utf8"),
-  { from: sheet, to: join(dist, "vars-ui/app.css") },
+  { from: sheet, to: join(dist, "variable-editor/app.css") },
 );
-await writeFile(join(dist, "vars-ui/app.css"), compiled.css);
-await copyFile(join(platformDir, "src/vars-ui/index.html"), join(dist, "vars-ui/index.html"));
+await writeFile(join(dist, "variable-editor/app.css"), compiled.css);
+await copyFile(
+  join(platformDir, "src/variable-editor/index.html"),
+  join(dist, "variable-editor/index.html"),
+);
 
 await Promise.all([
   ...runtimeFiles.map((name) =>

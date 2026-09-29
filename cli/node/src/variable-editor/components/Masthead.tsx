@@ -10,7 +10,7 @@ import {
   tallyLine,
   unfilledCount,
   useValue,
-} from "@ui/vars";
+} from "@ui/variables";
 
 import { cn } from "../lib/utils";
 

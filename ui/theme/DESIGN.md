@@ -196,5 +196,5 @@ are set by each host's own layout.
 
 ## Open Decisions
 
-- **Label face.** The docs and landing set labels in Plex Mono. `ui/vars` sets them in Plex Sans, having measured that uppercase at 0.14em erases every glyph Mono exists to disambiguate. One of the two becomes the rule for all registers.
+- **Label face.** The docs and landing set labels in Plex Mono. `ui/variables` sets them in Plex Sans, having measured that uppercase at 0.14em erases every glyph Mono exists to disambiguate. One of the two becomes the rule for all registers.
 - **Landing running text.** The landing sets running text in Space Grotesk; Read and Operate set it in Plex Sans.

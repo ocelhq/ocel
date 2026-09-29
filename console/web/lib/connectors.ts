@@ -2,7 +2,7 @@ import { type ActiveOrganizationSession, roleOf } from "@console/auth";
 import type { Connector as Dialled, Refusal } from "@console/connectors";
 import { db } from "@console/db";
 import { type Connector, connector } from "@console/db/schema";
-import type { Ability } from "@ui/vars";
+import type { Ability } from "@ui/variables";
 import { and, eq } from "drizzle-orm";
 import { abilityOf, scopesFor } from "./connector-policy";
 import { connectorToken } from "./connector-token";

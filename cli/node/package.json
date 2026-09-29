@@ -8,7 +8,7 @@
     "build": "bun build.mjs",
     "live": "go test -C .. -race -count=1 -timeout 30m -run '^TestLive' ./...",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit && tsc -p tsconfig.vars-ui.json"
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.variable-editor.json"
   },
   "license": "Apache-2.0",
   "dependencies": {
@@ -17,7 +17,7 @@
     "@platform/cf-entry": "workspace:^",
     "@platform/cf-isr-writer": "workspace:^",
     "@ui/theme": "workspace:^",
-    "@ui/vars": "workspace:^",
+    "@ui/variables": "workspace:^",
     "@vercel/nft": "^0.27.4",
     "es-module-lexer": "^1.5.4",
     "package-manager-detector": "^0.2.11",

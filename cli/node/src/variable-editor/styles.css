@@ -4,7 +4,7 @@
 @import "@ui/theme/base.css";
 
 @source "./";
-@source "../../../../ui/vars/src";
+@source "../../../../ui/variables/src";
 
 @custom-variant dark (&:is(.dark *));
 

@@ -93,15 +93,15 @@ func TestEnsure(t *testing.T) {
 	})
 }
 
-func TestVarsUI(t *testing.T) {
+func TestTheVariableEditorPageIsEmbedded(t *testing.T) {
 	t.Parallel()
 
 	t.Run("the index page loads the bundled script", func(t *testing.T) {
 		t.Parallel()
 
-		assets, err := VarsUI()
+		assets, err := VariableEditor()
 		if err != nil {
-			t.Fatalf("VarsUI: %v", err)
+			t.Fatalf("VariableEditor: %v", err)
 		}
 		page, err := fs.ReadFile(assets, "index.html")
 		if err != nil {
@@ -116,7 +116,7 @@ func TestVarsUI(t *testing.T) {
 		t.Parallel()
 
 		dir := ensured(t)
-		materialized := filepath.Join(DistDir(dir), varsUIDir)
+		materialized := filepath.Join(DistDir(dir), variableEditorDir)
 		if _, err := os.Stat(materialized); !errors.Is(err, fs.ErrNotExist) {
 			t.Errorf("stat %s = %v, want it absent", materialized, err)
 		}

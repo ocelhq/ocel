@@ -17,8 +17,8 @@ import type {
   State,
   UndeclaredCell,
   VariableGroup,
-} from "@ui/vars";
-import { envSourceGroup } from "@ui/vars/model";
+} from "@ui/variables";
+import { envSourceGroup } from "@ui/variables/model";
 
 type Declared = DeploymentVariable & { folders: Set<string>; scopes: Set<string> };
 

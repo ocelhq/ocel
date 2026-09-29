@@ -5,7 +5,7 @@
   "tsx": true,
   "tailwind": {
     "config": "",
-    "css": "src/vars-ui/styles.css",
+    "css": "src/variable-editor/styles.css",
     "baseColor": "neutral",
     "cssVariables": true,
     "prefix": ""

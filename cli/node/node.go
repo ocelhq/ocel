@@ -47,10 +47,10 @@ func ISRWriterBundles(projectDir string) map[string]string {
 	}
 }
 
-const varsUIDir = "vars-ui"
+const variableEditorDir = "variable-editor"
 
-func VarsUI() (fs.FS, error) {
-	return fs.Sub(embedded, path.Join("dist", varsUIDir))
+func VariableEditor() (fs.FS, error) {
+	return fs.Sub(embedded, path.Join("dist", variableEditorDir))
 }
 
 func Ensure(projectDir string) error {
@@ -83,7 +83,7 @@ func writeTree(dir string) error {
 		if err != nil {
 			return err
 		}
-		if name == varsUIDir {
+		if name == variableEditorDir {
 			return fs.SkipDir
 		}
 		out := filepath.Join(dir, filepath.FromSlash(name))

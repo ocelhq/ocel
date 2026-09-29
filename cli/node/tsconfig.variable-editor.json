@@ -11,7 +11,7 @@
     "noUncheckedIndexedAccess": true,
     "types": [],
     "noEmit": true,
-    "paths": { "@/*": ["./src/vars-ui/*"] }
+    "paths": { "@/*": ["./src/variable-editor/*"] }
   },
-  "include": ["src/vars-ui/**/*"]
+  "include": ["src/variable-editor/**/*"]
 }

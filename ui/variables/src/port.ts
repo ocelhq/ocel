@@ -1,6 +1,6 @@
 import type { Address, OtherValue, State, Version } from "./model";
 
-export class VarsError extends Error {
+export class VariablesError extends Error {
   status: number;
 
   constructor(status: number, message: string) {
@@ -22,7 +22,7 @@ export interface CopyResult extends Address {
   error?: string;
 }
 
-export interface VarsPort {
+export interface VariablesPort {
   read(): Promise<State>;
   reveal(cells: readonly Address[]): Promise<Revealed>;
   set(at: Address, value: string, version: number): Promise<void>;
@@ -39,16 +39,16 @@ export interface SessionPort {
   abandon(): Promise<void>;
 }
 
-let installed: VarsPort | null = null;
+let installed: VariablesPort | null = null;
 let session: SessionPort | null = null;
 
-export function install(port: VarsPort, attending?: SessionPort): void {
+export function install(port: VariablesPort, attending?: SessionPort): void {
   installed = port;
   session = attending ?? null;
 }
 
-export function port(): VarsPort {
-  if (installed === null) throw new Error("@ui/vars: install(port) before reading anything");
+export function port(): VariablesPort {
+  if (installed === null) throw new Error("@ui/variables: install(port) before reading anything");
   return installed;
 }
 

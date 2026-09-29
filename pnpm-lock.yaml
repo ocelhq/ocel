@@ -280,9 +280,9 @@ importers:
       '@ui/theme':
         specifier: workspace:^
         version: link:../../ui/theme
-      '@ui/vars':
+      '@ui/variables':
         specifier: workspace:^
-        version: link:../../ui/vars
+        version: link:../../ui/variables
       '@vercel/nft':
         specifier: ^0.27.4
         version: 0.27.10(rollup@4.62.2)
@@ -536,9 +536,9 @@ importers:
       '@ui/theme':
         specifier: workspace:^
         version: link:../../ui/theme
-      '@ui/vars':
+      '@ui/variables':
         specifier: workspace:^
-        version: link:../../ui/vars
+        version: link:../../ui/variables
       '@xyflow/react':
         specifier: ^12.11.6
         version: 12.11.6(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -1689,7 +1689,7 @@ importers:
         specifier: ^4.1.9
         version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@26.1.1)(vite@8.1.3(@types/node@26.1.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.0)(yaml@2.9.0))
 
-  ui/vars:
+  ui/variables:
     devDependencies:
       '@base-ui/react':
         specifier: ^1.6.0

@@ -1,5 +1,5 @@
 import type { Scope } from "@console/connectors";
-import type { Ability } from "@ui/vars";
+import type { Ability } from "@ui/variables";
 
 const byRole: Record<string, readonly Scope[]> = {
   owner: ["envvars.read", "envvars.write", "envvars.reveal"],

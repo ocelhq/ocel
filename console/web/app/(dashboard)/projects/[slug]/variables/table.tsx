@@ -12,7 +12,7 @@ import {
   store,
   Table,
   useValue,
-} from "@ui/vars";
+} from "@ui/variables";
 import { useEffect, useState } from "react";
 
 import { consolePort } from "./port";

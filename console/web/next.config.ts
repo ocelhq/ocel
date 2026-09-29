@@ -8,7 +8,7 @@ const nextConfig: NextConfig = {
     "@console/connectors",
     "@console/db",
     "@console/resources",
-    "@ui/vars",
+    "@ui/variables",
   ],
 };
 

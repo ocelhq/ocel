@@ -15,7 +15,7 @@ import (
 )
 
 func Serve(ctx context.Context, cfg *projectconfig.Config, prov *providerclient.Provider, tier environmentv1.Tier, declarations *variables.Declarations, recovery *variableeditor.Recovery) (*variableeditor.Session, error) {
-	assets, err := node.VarsUI()
+	assets, err := node.VariableEditor()
 	if err != nil {
 		return nil, fmt.Errorf("read the bundled variables UI: %w", err)
 	}
