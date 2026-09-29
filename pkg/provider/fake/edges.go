@@ -124,6 +124,8 @@ type Edge struct {
 	entitlement *edge.CodeEntitlement
 
 	proxies    bool
+	staged     []string
+	events     []string
 	claims     []router.Claim
 	disclaimed []string
 	purged     [][]string
@@ -166,9 +168,39 @@ func Origin(kind router.Kind) edge.Origin {
 	return edge.Origin{Address: "origin." + string(kind) + ".fake.invalid"}
 }
 
+func (e *Edge) StagesClientCertificates(certificates ...string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.staged = certificates
+}
+
+func (e *Edge) ClientCertificateEvents() []string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return slices.Clone(e.events)
+}
+
+func (e *Edge) stageClientCertificates(context.Context, string) ([]string, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.events = append(e.events, "stage")
+	if e.staged == nil {
+		return []string{ClientCertificate(e.kind)}, nil
+	}
+	return slices.Clone(e.staged), nil
+}
+
+func (e *Edge) presentClientCertificate(context.Context, string) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.events = append(e.events, "present")
+	return nil
+}
+
 func (e *Edge) recordClaim(claim router.Claim) edge.Origin {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	e.events = append(e.events, "claim")
 	e.claims = append(e.claims, claim)
 	return Origin(e.routedBy)
 }
@@ -332,7 +364,7 @@ func (e *Edge) Hooks() edge.Hooks {
 	defer e.mu.Unlock()
 	hooks := edge.Hooks{VerifyCredentials: e.verify}
 	if e.proxies {
-		hooks.EnsureClientCertificate = func(context.Context, string) (string, error) { return ClientCertificate(e.kind), nil }
+		hooks.ClientCertificates = &edge.ClientCertificateHooks{Stage: e.stageClientCertificates, Present: e.presentClientCertificate}
 		hooks.PurgeHostnames = e.purge
 	}
 	if e.entitlement != nil {

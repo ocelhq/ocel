@@ -35,6 +35,7 @@ const (
 type machine struct {
 	pins        []host.Pin
 	claims      []host.HostClaim
+	shields     []host.Shield
 	upstream    map[host.RouteKey]string
 	swept       map[string]bool
 	calls       []string
@@ -221,6 +222,25 @@ func (m *machine) DisclaimSurface(_ context.Context, owner string) error {
 		return err
 	}
 	m.claims = host.Disclaiming(m.claims, func(claim host.HostClaim) bool { return claim.Owner == owner })
+	m.shields = host.Unshielding(m.shields, func(shield host.Shield) bool { return shield.Owner == owner })
+	return nil
+}
+
+func (m *machine) ShieldHost(_ context.Context, shield host.Shield) error {
+	m.calls = append(m.calls, "shield "+shield.Hostname)
+	if err := m.refuse("ShieldHost"); err != nil {
+		return err
+	}
+	m.shields = host.Shielding(m.shields, shield)
+	return nil
+}
+
+func (m *machine) UnshieldHost(_ context.Context, hostname, owner string) error {
+	m.calls = append(m.calls, "unshield "+hostname)
+	if err := m.refuse("UnshieldHost"); err != nil {
+		return err
+	}
+	m.shields = host.Unshielding(m.shields, func(shield host.Shield) bool { return shield.Hostname == hostname && shield.Owner == owner })
 	return nil
 }
 

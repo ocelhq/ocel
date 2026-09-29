@@ -122,20 +122,14 @@ func (d *hostnames) attachHostname(ctx context.Context, target ConfiguredHost, p
 		return false, err
 	}
 	if d.state.Ready(host, d.front.Kind(), answering) && hostState.Certificate.ID == priorCertID {
-		return false, certifying.discardSuperseded(ctx, progress)
+		reclaimed, err := d.reclaimShielded(ctx, target, &hostState, progress)
+		if err != nil {
+			return reclaimed, err
+		}
+		return reclaimed, certifying.discardSuperseded(ctx, progress)
 	}
 
-	origin, err := d.claimOrigin(ctx, target, hostState.Certificate.ID)
-	if err != nil {
-		return true, err
-	}
-	progress.Say(fmt.Sprintf("Binding %s to %s", host, describeFront(d.front.Kind())))
-	if err := d.edgeStack().BindDomain(ctx, edge.DomainBinding{Hostname: host, Certificate: hostState.Certificate.ID, App: target.App, Origin: origin, Say: progress.Say}); err != nil {
-		return true, err
-	}
-	hostState.Edge = d.front.Kind()
-	d.state.SetHost(host, hostState)
-	if err := d.checkpoint(ctx); err != nil {
+	if err := d.bindOrigin(ctx, target, &hostState, progress); err != nil {
 		return true, err
 	}
 	if err := certifying.discardSuperseded(ctx, progress); err != nil {
@@ -173,30 +167,52 @@ func (d *hostnames) attachHostname(ctx context.Context, target ConfiguredHost, p
 	return true, d.unbindPreviousEdge(ctx, host, previous, progress)
 }
 
-func (d *hostnames) claimOrigin(ctx context.Context, target ConfiguredHost, certificate string) (*edge.Origin, error) {
-	if !d.front.Facts().ProxiesRecords {
-		return nil, nil
-	}
-	claim := router.Claim{Hostname: target.Hostname, App: target.App, Certificate: certificate}
-	if ensure := d.front.Hooks().EnsureClientCertificate; ensure != nil {
-		certificate, err := ensure(ctx, target.Hostname)
-		if err != nil {
-			return nil, err
-		}
-		claim.ClientCertificate = certificate
-	}
-	routed, err := d.openRouterStack()
+func (d *hostnames) bindOrigin(ctx context.Context, target ConfiguredHost, hostState *stackrecords.HostnameState, progress progress.Progress) error {
+	host := target.Hostname
+	origin, trusted, err := d.claimOrigin(ctx, target, hostState.Certificate.ID)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	origin, err := routed.Claim(ctx, claim)
-	if err := errors.Join(err, d.adopt(routed)); err != nil {
-		return nil, err
+	progress.Say(fmt.Sprintf("Binding %s to %s", host, describeFront(d.front.Kind())))
+	if err := d.edgeStack().BindDomain(ctx, edge.DomainBinding{Hostname: host, Certificate: hostState.Certificate.ID, App: target.App, Origin: origin, Say: progress.Say}); err != nil {
+		return err
 	}
-	if origin.Address == "" {
-		return nil, nil
+	hostState.Edge = d.front.Kind()
+	hostState.ClientCertificateDigests = digestClientCertificates(trusted)
+	d.state.SetHost(host, *hostState)
+	return d.checkpoint(ctx)
+}
+
+func (d *hostnames) reclaimShielded(ctx context.Context, target ConfiguredHost, hostState *stackrecords.HostnameState, progress progress.Progress) (bool, error) {
+	if !d.front.Facts().ProxiesRecords {
+		return false, nil
 	}
-	return &origin, nil
+	changed, err := stagedClientCertificatesChanged(ctx, d.front, target.Hostname, hostState.ClientCertificateDigests)
+	if err != nil || !changed {
+		return false, err
+	}
+	progress.Say(fmt.Sprintf("Claiming %s again: the client certificates %s presents to its origin changed", target.Hostname, describeFront(d.front.Kind())))
+	return true, d.bindOrigin(ctx, target, hostState, progress)
+}
+
+func (d *hostnames) claimOrigin(ctx context.Context, target ConfiguredHost, certificate string) (*edge.Origin, []string, error) {
+	if !d.front.Facts().ProxiesRecords {
+		return nil, nil, nil
+	}
+	origin, trusted, err := claimShielded(ctx, d.front, target.Hostname, func(ctx context.Context, clientCertificates []string) (edge.Origin, error) {
+		routed, err := d.openRouterStack()
+		if err != nil {
+			return edge.Origin{}, err
+		}
+		origin, err := routed.Claim(ctx, router.Claim{
+			Hostname: target.Hostname, App: target.App, Certificate: certificate, ClientCertificates: clientCertificates,
+		})
+		return origin, errors.Join(err, d.adopt(routed))
+	})
+	if err != nil || origin.Address == "" {
+		return nil, trusted, err
+	}
+	return &origin, trusted, nil
 }
 
 func (d *hostnames) disclaim(ctx context.Context, hostname string) error {

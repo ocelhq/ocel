@@ -37,6 +37,31 @@ type AppRoute struct {
 
 type HostClaim live.Claimed
 
+type Shield struct {
+	Hostname           string   `json:"hostname"`
+	Owner              string   `json:"owner"`
+	ClientCertificates []string `json:"clientCertificates,omitempty"`
+}
+
+func Shielding(shields []Shield, taken Shield) []Shield {
+	taken.ClientCertificates = slices.Compact(slices.Sorted(slices.Values(taken.ClientCertificates)))
+	kept := make([]Shield, 0, len(shields)+1)
+	for _, shield := range shields {
+		if shield.Hostname == taken.Hostname {
+			continue
+		}
+		if slices.ContainsFunc(shield.ClientCertificates, func(certificate string) bool { return slices.Contains(taken.ClientCertificates, certificate) }) {
+			shield.ClientCertificates = slices.Clone(taken.ClientCertificates)
+		}
+		kept = append(kept, shield)
+	}
+	return append(kept, taken)
+}
+
+func Unshielding(shields []Shield, dropped func(Shield) bool) []Shield {
+	return slices.DeleteFunc(slices.Clone(shields), dropped)
+}
+
 type Pin struct {
 	Hostname string `json:"hostname"`
 	Path     string `json:"path"`
@@ -107,20 +132,18 @@ func proxySpec(state RoutingTable) proxy.Spec {
 	for _, pin := range state.Pins {
 		pins = append(pins, proxy.Pin(pin))
 	}
-	var pulls []proxy.ClientCertificate
-	for _, claim := range state.Claims {
-		if claim.ClientCertificate != "" {
-			pulls = append(pulls, proxy.ClientCertificate{Hostname: claim.Hostname, Certificate: claim.ClientCertificate})
-		}
+	shields := make([]proxy.Shield, 0, len(state.Shields))
+	for _, shield := range state.Shields {
+		shields = append(shields, proxy.Shield{Hostname: shield.Hostname, ClientCertificates: shield.ClientCertificates})
 	}
 	return proxy.Spec{
-		Pins:               pins,
-		ClientCertificates: pulls,
-		Hostnames:          state.hostnames(),
-		PreviewBase:        state.PreviewBase,
-		Upstream:           SwitchboardUpstream,
-		Router:             switchboard.RouterKind,
-		Permission:         SwitchboardPermission,
+		Pins:        pins,
+		Shields:     shields,
+		Hostnames:   state.hostnames(),
+		PreviewBase: state.PreviewBase,
+		Upstream:    SwitchboardUpstream,
+		Router:      switchboard.RouterKind,
+		Permission:  SwitchboardPermission,
 	}
 }
 
@@ -155,6 +178,10 @@ func byClaimed(a, b HostClaim) int {
 
 func byPinned(a, b Pin) int {
 	return cmp.Or(strings.Compare(a.Hostname, b.Hostname), strings.Compare(a.Path, b.Path))
+}
+
+func byShielded(a, b Shield) int {
+	return cmp.Or(strings.Compare(a.Hostname, b.Hostname), strings.Compare(a.Owner, b.Owner))
 }
 
 func byKey(a, b AppRoute) int {

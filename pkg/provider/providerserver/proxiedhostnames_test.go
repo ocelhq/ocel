@@ -2,6 +2,7 @@ package providerserver_test
 
 import (
 	"context"
+	"reflect"
 	"slices"
 	"testing"
 
@@ -42,8 +43,8 @@ func TestAHostnameAnEdgeProxiesIsClaimedOnTheRouterAndForwardedToTheOriginTheCla
 	addWebHostname(t, client, "app.acme.com", nil)
 
 	claims := relay.Claims()
-	want := router.Claim{Hostname: "app.acme.com", App: "web", Certificate: "pinned-app-certificate", ClientCertificate: fake.ClientCertificate(fake.KindRelay)}
-	if len(claims) != 1 || claims[0] != want {
+	want := router.Claim{Hostname: "app.acme.com", App: "web", Certificate: "pinned-app-certificate", ClientCertificates: []string{fake.ClientCertificate(fake.KindRelay)}}
+	if len(claims) != 1 || !reflect.DeepEqual(claims[0], want) {
 		t.Fatalf("the router took claims %+v, want the one %+v: an edge that proxies records forwards to an origin, and the router is what answers there", claims, want)
 	}
 	bindings := relay.Bindings()
@@ -124,5 +125,41 @@ func TestTheRemovalPlanOfAProjectAnEdgeProxiesNamesWhatItsRouterTakesDown(t *tes
 	}
 	if !slices.Equal(claimed, []string{"app.acme.com"}) {
 		t.Errorf("the removal plan names claims %v, want app.acme.com: the router the edge forwards to takes its claim down with the project, and a plan names everything the removal deletes", claimed)
+	}
+}
+
+func TestAnEdgePresentsAClientCertificateOnlyOnceTheRouterTookTheClaimThatTrustsIt(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	relay := vendor.Edges().(*fake.Edges).Edge(fake.KindRelay)
+	relay.ProxiesRecords()
+	deployed(t, vendor, environment.TierProduction, "shop")
+
+	addWebHostname(t, client, "app.acme.com", nil)
+
+	if got := relay.ClientCertificateEvents(); !slices.Equal(got, []string{"stage", "claim", "present", "stage"}) {
+		t.Errorf("the edge and router saw %v, want the certificates staged, claimed on the router, then presented: an origin refuses a certificate it was not told to trust", got)
+	}
+}
+
+func TestAServedHostnameIsClaimedAgainWhenTheCertificatesItsEdgePresentsChange(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	relay := vendor.Edges().(*fake.Edges).Edge(fake.KindRelay)
+	relay.ProxiesRecords()
+	deployed(t, vendor, environment.TierProduction, "shop")
+	addWebHostname(t, client, "app.acme.com", nil)
+
+	addWebHostname(t, client, "app.acme.com", nil)
+	if claims := relay.Claims(); len(claims) != 1 {
+		t.Fatalf("the router took %d claims, want the one: nothing the origin trusts changed", len(claims))
+	}
+
+	rotated := []string{fake.ClientCertificate(fake.KindRelay), "the successor the relay edge presents"}
+	relay.StagesClientCertificates(rotated...)
+	addWebHostname(t, client, "app.acme.com", nil)
+	claims := relay.Claims()
+	if len(claims) != 2 || !slices.Equal(claims[1].ClientCertificates, rotated) {
+		t.Fatalf("the router took claims %+v, want app.acme.com claimed again trusting %v: the origin refuses the successor once the edge presents it unless it was told to trust it first", claims, rotated)
 	}
 }

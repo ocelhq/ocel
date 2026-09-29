@@ -56,11 +56,13 @@ type cfMock struct {
 	updatedRecords       []string
 
 	clientCertificates []map[string]any
-	uploadedKeys       []string
-	originPulls        bool
-	originPullWrites   []bool
-	purges             [][]string
-	sslMode            string
+
+	deletedClientCertificates []string
+	uploadedKeys              []string
+	originPulls               bool
+	originPullWrites          []bool
+	purges                    [][]string
+	sslMode                   string
 }
 
 type putSecret struct {
@@ -343,6 +345,13 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 		}
 		m.clientCertificates = append(m.clientCertificates, uploaded)
 		writeResult(w, uploaded)
+	})
+
+	mux.HandleFunc("DELETE /zones/"+m.zoneID+"/origin_tls_client_auth/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		m.deletedClientCertificates = append(m.deletedClientCertificates, id)
+		m.clientCertificates = slices.DeleteFunc(m.clientCertificates, func(listed map[string]any) bool { return listed["id"] == id })
+		writeResult(w, map[string]any{"id": id})
 	})
 
 	mux.HandleFunc("GET /zones/"+m.zoneID+"/origin_tls_client_auth/settings", func(w http.ResponseWriter, _ *http.Request) {

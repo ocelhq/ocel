@@ -65,6 +65,9 @@ type cloudflare struct {
 
 	entryMu      sync.Mutex
 	entryWorkers map[string][]string
+
+	clientMu sync.Mutex
+	staged   map[string]stagedClientCertificate
 }
 
 func New(namespace string) edge.Edge { return newCloudflare(namespace) }

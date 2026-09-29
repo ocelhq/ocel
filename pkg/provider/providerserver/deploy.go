@@ -502,6 +502,10 @@ func (r *deployRun) attachHostnames(ctx context.Context) error {
 			}
 			for _, host := range r.configured {
 				if r.state.Ready(host.Hostname, r.front.Kind(), r.readAppRouter(host.App)) {
+					hostState := r.state.Host(host.Hostname)
+					if _, err := attaching.reclaimShielded(ctx, host, &hostState, progress); err != nil {
+						return err
+					}
 					attached = append(attached, host.Hostname)
 					continue
 				}

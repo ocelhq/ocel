@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"math/big"
+	"slices"
 	"testing"
 	"time"
 
@@ -70,8 +71,9 @@ func TestAHostnameShieldedByAClientCertificateIsHandedOnlyToAClientPresentingIt(
 	t.Parallel()
 
 	certificate, der := clientCertificate(t)
+	successor, successorDER := clientCertificate(t)
 	spec := specified(pinned("www.example.com", "www"))
-	spec.ClientCertificates = []proxy.ClientCertificate{{Hostname: "Shop.Example.com", Certificate: certificate}}
+	spec.Shields = []proxy.Shield{{Hostname: "Shop.Example.com", ClientCertificates: []string{certificate, successor}}}
 	written, _ := render(t, spec)
 	policies, strict := shieldingPolicies(t, written)
 
@@ -84,8 +86,9 @@ func TestAHostnameShieldedByAClientCertificateIsHandedOnlyToAClientPresentingIt(
 	if shielding == nil || shielding.Client == nil {
 		t.Fatalf("connection policies %+v, want one for shop.example.com that authenticates the client, ahead of the catch-all", policies)
 	}
-	if want := base64.StdEncoding.EncodeToString(der); len(shielding.Client.TrustedLeafCerts) != 1 || shielding.Client.TrustedLeafCerts[0] != want {
-		t.Errorf("shop.example.com trusts client certificates %v, want only the one the edge presents", shielding.Client.TrustedLeafCerts)
+	want := []string{base64.StdEncoding.EncodeToString(der), base64.StdEncoding.EncodeToString(successorDER)}
+	if !slices.Equal(shielding.Client.TrustedLeafCerts, want) {
+		t.Errorf("shop.example.com trusts client certificates %v, want the one the edge presents and the successor it presents next", shielding.Client.TrustedLeafCerts)
 	}
 	if shielding.Client.Mode != "require" {
 		t.Errorf("shop.example.com authenticates clients in mode %q, want require: a handshake with no certificate is refused", shielding.Client.Mode)
@@ -103,7 +106,7 @@ func TestAPinnedHostnameShieldedByAClientCertificateKeepsItsPin(t *testing.T) {
 
 	certificate, _ := clientCertificate(t)
 	spec := specified(pinned("shop.example.com", "shop"))
-	spec.ClientCertificates = []proxy.ClientCertificate{{Hostname: "shop.example.com", Certificate: certificate}}
+	spec.Shields = []proxy.Shield{{Hostname: "shop.example.com", ClientCertificates: []string{certificate}}}
 	written, _ := render(t, spec)
 	policies, _ := shieldingPolicies(t, written)
 
@@ -129,7 +132,7 @@ func TestAClientCertificateThatIsNoCertificateIsRefusedRatherThanRendered(t *tes
 	t.Parallel()
 
 	spec := specified()
-	spec.ClientCertificates = []proxy.ClientCertificate{{Hostname: "shop.example.com", Certificate: "not a certificate"}}
+	spec.Shields = []proxy.Shield{{Hostname: "shop.example.com", ClientCertificates: []string{"not a certificate"}}}
 	if _, err := (caddy.Builtin{}).Render(spec); err == nil {
 		t.Error("Render() = nil, want the unreadable client certificate refused: a proxy that trusts nothing it can read shields nothing")
 	}

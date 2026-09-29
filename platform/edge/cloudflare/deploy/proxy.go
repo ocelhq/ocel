@@ -35,8 +35,11 @@ func (x *Proxy) Hooks() edge.Hooks {
 	return edge.Hooks{
 		VerifyCredentials:             x.p.verifyCredentials,
 		DescribeCredentialPermissions: proxyCredentialPermissions,
-		EnsureClientCertificate:       x.p.ensureClientCertificate,
-		PurgeHostnames:                x.p.purgeHostnames,
+		ClientCertificates: &edge.ClientCertificateHooks{
+			Stage:   x.p.stageClientCertificates,
+			Present: x.p.presentClientCertificate,
+		},
+		PurgeHostnames: x.p.purgeHostnames,
 	}
 }
 

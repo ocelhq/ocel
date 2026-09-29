@@ -223,33 +223,41 @@ func Run(t *testing.T, suite Suite) {
 		}
 	})
 
-	t.Run("an edge presents one client certificate to its origins however often it is asked", func(t *testing.T) {
+	t.Run("an edge presents only a client certificate its origins were told to trust", func(t *testing.T) {
 		e, _ := suite.New(t)
-		ensure := e.Hooks().EnsureClientCertificate
-		if ensure == nil {
+		certificates := e.Hooks().ClientCertificates
+		if certificates == nil {
 			t.Skip("this edge presents no client certificate to its origins")
 		}
-		first, err := ensure(context.Background(), suite.Hostname)
+		ctx := context.Background()
+		staged, err := certificates.Stage(ctx, suite.Hostname)
 		if err != nil {
-			t.Fatalf("EnsureClientCertificate(%q): %v", suite.Hostname, err)
+			t.Fatalf("Stage(%q): %v", suite.Hostname, err)
 		}
-		second, err := ensure(context.Background(), suite.Hostname)
+		if len(staged) == 0 {
+			t.Fatalf("Stage(%q) names no certificate, and an origin that trusts none refuses every request the edge forwards", suite.Hostname)
+		}
+		for _, certificate := range staged {
+			requireClientCertificate(t, certificate)
+		}
+		if err := certificates.Present(ctx, suite.Hostname); err != nil {
+			t.Fatalf("Present(%q): %v", suite.Hostname, err)
+		}
+		presented, err := certificates.Stage(ctx, suite.Hostname)
 		if err != nil {
-			t.Fatalf("EnsureClientCertificate(%q) again: %v", suite.Hostname, err)
+			t.Fatalf("Stage(%q) once presented: %v", suite.Hostname, err)
 		}
-		if second != first {
-			t.Errorf("EnsureClientCertificate(%q) named another certificate the second time; an origin pinned to the first would refuse every request the edge forwards", suite.Hostname)
+		for _, certificate := range presented {
+			if !slices.Contains(staged, certificate) {
+				t.Errorf("Stage(%q) names %q once presented, which it did not name before: an origin claimed with what it named first refuses what the edge presents", suite.Hostname, certificate)
+			}
 		}
-		block, _ := pem.Decode([]byte(first))
-		if block == nil || block.Type != "CERTIFICATE" {
-			t.Fatalf("EnsureClientCertificate(%q) = %q, want a PEM certificate", suite.Hostname, first)
-		}
-		leaf, err := x509.ParseCertificate(block.Bytes)
+		again, err := certificates.Stage(ctx, suite.Hostname)
 		if err != nil {
-			t.Fatalf("parse the client certificate: %v", err)
+			t.Fatalf("Stage(%q) again: %v", suite.Hostname, err)
 		}
-		if !slices.Contains(leaf.ExtKeyUsage, x509.ExtKeyUsageClientAuth) {
-			t.Errorf("the client certificate is good for %v, want client authentication among them", leaf.ExtKeyUsage)
+		if !slices.Equal(again, presented) {
+			t.Errorf("Stage(%q) = %d certificates, then %d with nothing due: an origin is claimed again every time what it trusts changes", suite.Hostname, len(presented), len(again))
 		}
 	})
 
@@ -589,4 +597,19 @@ func runPreviews(t *testing.T, suite Suite) {
 			}
 		})
 	})
+}
+
+func requireClientCertificate(t *testing.T, certificate string) {
+	t.Helper()
+	block, _ := pem.Decode([]byte(certificate))
+	if block == nil || block.Type != "CERTIFICATE" {
+		t.Fatalf("staged %q, want a PEM certificate", certificate)
+	}
+	leaf, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		t.Fatalf("parse the client certificate: %v", err)
+	}
+	if !slices.Contains(leaf.ExtKeyUsage, x509.ExtKeyUsageClientAuth) {
+		t.Errorf("the client certificate is good for %v, want client authentication among them", leaf.ExtKeyUsage)
+	}
 }

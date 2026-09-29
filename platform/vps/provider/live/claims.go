@@ -32,8 +32,6 @@ type Claimed struct {
 	Hostname string `json:"hostname"`
 	Pointer  string `json:"pointer"`
 	App      string `json:"app,omitempty"`
-
-	ClientCertificate string `json:"clientCertificate,omitempty"`
 }
 
 func ClaimIdentity(c Claimed) string {

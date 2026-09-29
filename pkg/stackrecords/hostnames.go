@@ -43,6 +43,8 @@ type HostnameState struct {
 	Written     []edge.Record          `json:"written,omitempty"`
 	Manual      []edge.Record          `json:"owed,omitempty"`
 	Probe       ServeProbe             `json:"probe,omitzero"`
+
+	ClientCertificateDigests []string `json:"clientCertificateDigests,omitempty"`
 }
 
 func (s *HostnameState) Supersede(cert provider.Certificate) {

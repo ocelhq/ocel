@@ -55,8 +55,12 @@ type claim struct {
 	Hostname string `json:"hostname"`
 	Pointer  string `json:"pointer"`
 	App      string `json:"app,omitempty"`
+}
 
-	ClientCertificate string `json:"clientCertificate,omitempty"`
+type shield struct {
+	Hostname           string   `json:"hostname"`
+	Owner              string   `json:"owner"`
+	ClientCertificates []string `json:"clientCertificates,omitempty"`
 }
 
 type route struct {
@@ -82,12 +86,13 @@ type pin struct {
 }
 
 type writtenTable struct {
-	Grace       string  `json:"grace"`
-	Claims      []claim `json:"claims,omitempty"`
-	Routes      []route `json:"routes,omitempty"`
-	Pins        []pin   `json:"pins,omitempty"`
-	PreviewBase string  `json:"preview,omitempty"`
-	Connector   string  `json:"connector,omitempty"`
+	Grace       string   `json:"grace"`
+	Claims      []claim  `json:"claims,omitempty"`
+	Routes      []route  `json:"routes,omitempty"`
+	Pins        []pin    `json:"pins,omitempty"`
+	Shields     []shield `json:"shields,omitempty"`
+	PreviewBase string   `json:"preview,omitempty"`
+	Connector   string   `json:"connector,omitempty"`
 }
 
 type claimKey struct{ owner, pointer, app string }
@@ -121,6 +126,12 @@ func Read(document []byte) (*Table, error) {
 		}
 		key := claimKey{hostClaim.Owner, hostClaim.Pointer, hostClaim.App}
 		claimed[key] = append(claimed[key], hostClaim.Hostname)
+	}
+	for _, held := range read.Shields {
+		if held.Hostname == "" || held.Owner == "" || len(held.ClientCertificates) == 0 {
+			return nil, fmt.Errorf("a shield is incomplete: host %q, surface %q, %d client certificates",
+				held.Hostname, held.Owner, len(held.ClientCertificates))
+		}
 	}
 	routes := slices.SortedFunc(slices.Values(read.Routes), byIdentity)
 	running := map[surfaceKey][]string{}

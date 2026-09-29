@@ -179,9 +179,15 @@ func (s *stack) claimHostname(ctx context.Context, taken router.Claim) (string, 
 	if err != nil {
 		return "", err
 	}
+	if len(taken.ClientCertificates) > 0 {
+		if err := s.e.machine.ShieldHost(ctx, host.Shield{
+			Hostname: taken.Hostname, Owner: s.surface(), ClientCertificates: taken.ClientCertificates,
+		}); err != nil {
+			return "", err
+		}
+	}
 	claims := []host.HostClaim{{
 		Hostname: taken.Hostname, Owner: s.surface(), Pointer: router.DefaultPointer, App: taken.App,
-		ClientCertificate: taken.ClientCertificate,
 	}}
 	stores, err := s.stores(ctx, router.DefaultPointer)
 	if err != nil {
@@ -231,7 +237,10 @@ func (s *stack) disclaimHostname(ctx context.Context, hostname string) error {
 	if err := s.e.machine.DisclaimHost(ctx, hostname, s.surface()); err != nil {
 		return err
 	}
-	return s.e.machine.DisclaimHost(ctx, live.StoreHostname(hostname), s.surface())
+	if err := s.e.machine.DisclaimHost(ctx, live.StoreHostname(hostname), s.surface()); err != nil {
+		return err
+	}
+	return s.e.machine.UnshieldHost(ctx, hostname, s.surface())
 }
 
 func (s *stack) released(what string, err error) error {

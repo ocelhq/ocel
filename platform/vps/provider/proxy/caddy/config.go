@@ -180,7 +180,7 @@ func render(spec proxy.Spec) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	selecting, err = shieldPolicies(selecting, spec.ClientCertificates)
+	selecting, err = shieldPolicies(selecting, spec.Shields)
 	if err != nil {
 		return nil, err
 	}
@@ -266,18 +266,25 @@ func loaded(pins []proxy.Pin) (*certificates, []connectionPolicy, error) {
 	return &certificates{LoadFiles: files}, selecting, nil
 }
 
-func shieldPolicies(selecting []connectionPolicy, pulls []proxy.ClientCertificate) ([]connectionPolicy, error) {
+func shieldPolicies(selecting []connectionPolicy, shields []proxy.Shield) ([]connectionPolicy, error) {
 	var shielding []connectionPolicy
-	for _, pull := range slices.SortedFunc(slices.Values(pulls), byHostname) {
-		hostname := strings.ToLower(strings.TrimSpace(pull.Hostname))
+	for _, shield := range slices.SortedFunc(slices.Values(shields), byHostname) {
+		hostname := strings.ToLower(strings.TrimSpace(shield.Hostname))
 		if hostname == "" {
 			return nil, errors.New("a client certificate the proxy requires names no hostname it shields")
 		}
-		trusted, err := encodeLeafDER(pull.Certificate)
-		if err != nil {
-			return nil, fmt.Errorf("the client certificate %s is shielded by: %w", hostname, err)
+		if len(shield.ClientCertificates) == 0 {
+			return nil, fmt.Errorf("%s is shielded by no client certificate", hostname)
 		}
-		client := &clientAuthentication{TrustedLeafCerts: []string{trusted}, Mode: requireClientCertificate}
+		trusted := make([]string, 0, len(shield.ClientCertificates))
+		for _, certificate := range shield.ClientCertificates {
+			leaf, err := encodeLeafDER(certificate)
+			if err != nil {
+				return nil, fmt.Errorf("a client certificate %s is shielded by: %w", hostname, err)
+			}
+			trusted = append(trusted, leaf)
+		}
+		client := &clientAuthentication{TrustedLeafCerts: trusted, Mode: requireClientCertificate}
 		if at := slices.IndexFunc(selecting, func(policy connectionPolicy) bool { return policy.Match.SNI[0] == hostname }); at >= 0 {
 			selecting[at].Client = client
 			continue
@@ -287,7 +294,7 @@ func shieldPolicies(selecting []connectionPolicy, pulls []proxy.ClientCertificat
 	return slices.Concat(shielding, selecting), nil
 }
 
-func byHostname(a, b proxy.ClientCertificate) int {
+func byHostname(a, b proxy.Shield) int {
 	return strings.Compare(strings.ToLower(a.Hostname), strings.ToLower(b.Hostname))
 }
 

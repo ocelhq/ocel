@@ -54,11 +54,11 @@ func (r routerStack) State() router.StackState {
 func (r routerStack) Claim(ctx context.Context, claim router.Claim) (edge.Origin, error) {
 	s := r.s
 	fronted := s.e
-	if claim.ClientCertificate != "" {
+	if len(claim.ClientCertificates) > 0 {
 		fronted = s.e.Shielded()
 	}
-	if claim.ClientCertificate != "" || !s.recorded.Front.provisioned() {
-		front, err := fronted.ensureFront(ctx, s.state.Tier, claim.ClientCertificate)
+	if len(claim.ClientCertificates) > 0 || !s.recorded.Front.provisioned() {
+		front, err := fronted.ensureFront(ctx, s.state.Tier, claim.ClientCertificates)
 		if err != nil {
 			return edge.Origin{}, err
 		}
