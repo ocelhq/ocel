@@ -84,13 +84,13 @@ func run(ctx context.Context, deps cmddeps.Deps, force bool, stdin io.Reader, ou
 		creds.Email = session.User.Email
 	}
 
-	backend, err := console.SaveCredentials(creds)
+	store, err := deps.SaveCredentials(creds)
 	if err != nil {
 		return fmt.Errorf("logged in, but failed to save credentials: %w", err)
 	}
 
 	fmt.Fprintf(out, "%s Logged in as %s\n", check, identity(creds))
-	if backend == console.FileStore {
+	if store == console.FileStore {
 		fmt.Fprintln(out, faint("  No OS keyring, so the token is saved to a file only you can read."))
 	}
 	return nil

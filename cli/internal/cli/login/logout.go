@@ -44,7 +44,7 @@ func runLogout(ctx context.Context, deps cmddeps.Deps, stdout, stderr io.Writer)
 		fmt.Fprintf(stderr, "%s Couldn't revoke the session on the console: %v\n", warn, err)
 	}
 
-	if err := console.DeleteCredentials(); err != nil {
+	if err := deps.DeleteCredentials(); err != nil {
 		return fmt.Errorf("failed to clear local credentials: %w", err)
 	}
 	fmt.Fprintf(stdout, "%s Logged out\n", check)

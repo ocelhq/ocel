@@ -4,12 +4,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/zalando/go-keyring"
+
+	"github.com/ocelhq/ocel/cli/internal/exitsig"
 )
 
 const (
@@ -125,4 +128,13 @@ func DeleteCredentials() error {
 		return fmt.Errorf("remove credentials file: %w", err)
 	}
 	return nil
+}
+
+func RequireLogin(load func() (Credentials, error), stderr io.Writer) (Credentials, error) {
+	creds, err := load()
+	if err != nil {
+		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
+		return Credentials{}, &exitsig.ExitError{Code: 1}
+	}
+	return creds, nil
 }

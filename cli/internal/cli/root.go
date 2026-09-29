@@ -131,6 +131,8 @@ func init() {
 func newDeps() cmddeps.Deps {
 	return cmddeps.Deps{
 		LoadCredentials:     console.LoadCredentials,
+		SaveCredentials:     console.SaveCredentials,
+		DeleteCredentials:   console.DeleteCredentials,
 		OpenDocker:          docker.Open,
 		BuildApp:            appbuilder.Build,
 		RequireImageBuilder: appimages.RequireBuilder,

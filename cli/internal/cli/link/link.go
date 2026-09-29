@@ -18,7 +18,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/events"
-	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/prompt"
 	"github.com/ocelhq/ocel/cli/internal/slug"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
@@ -68,10 +67,9 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 var check = color.New(color.FgGreen).Sprint("✓")
 
 func run(ctx context.Context, deps cmddeps.Deps, projectDir, projectRef string, opts options, stdout, stderr io.Writer, stdin io.Reader) (err error) {
-	creds, err := deps.LoadCredentials()
+	creds, err := console.RequireLogin(deps.LoadCredentials, stderr)
 	if err != nil {
-		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
-		return &exitsig.ExitError{Code: 1}
+		return err
 	}
 
 	ctx, linking, err := deps.Events.Begin(ctx, "ocel link", "")

@@ -123,10 +123,9 @@ func withOptions(cmd *cobra.Command, deps cmddeps.Deps, opts *options,
 	if err != nil {
 		return err
 	}
-	creds, credErr := deps.LoadCredentials()
-	if credErr != nil {
-		fmt.Fprintln(cmd.ErrOrStderr(), "You're not logged in. Run `ocel login` first.")
-		return &exitsig.ExitError{Code: 1}
+	creds, err := console.RequireLogin(deps.LoadCredentials, cmd.ErrOrStderr())
+	if err != nil {
+		return err
 	}
 	opts.apiURL = console.BaseURL(creds.APIURL)
 	opts.console = console.New(opts.apiURL)

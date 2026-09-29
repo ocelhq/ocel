@@ -24,6 +24,8 @@ import (
 
 type Deps struct {
 	LoadCredentials     func() (console.Credentials, error)
+	SaveCredentials     func(console.Credentials) (console.CredentialStore, error)
+	DeleteCredentials   func() error
 	OpenDocker          docker.Opener
 	BuildApp            func(ctx context.Context, cfg *projectconfig.Config, envByApp map[string]map[string]string, out appbuilder.Output) error
 	RequireImageBuilder func(ctx context.Context, scope *events.Scope, cfg *projectconfig.Config, archs map[string]string) error
