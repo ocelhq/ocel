@@ -140,7 +140,7 @@ func TestBootstrapRefusesAFeatureThisProviderDoesNotOffer(t *testing.T) {
 	}
 }
 
-func TestBootstrapRecordsRepairOnDeployAndTheRecordSchema(t *testing.T) {
+func TestBootstrapRecordsRepairOnDeploy(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -159,11 +159,6 @@ func TestBootstrapRecordsRepairOnDeployAndTheRecordSchema(t *testing.T) {
 	var state stackrecords.BootstrapSettings
 	if err := json.Unmarshal(recorded.Value, &state); err != nil || !state.RepairOnDeploy {
 		t.Fatalf("the bootstrap record contains %q, %v, want repair_on_deploy on", recorded.Value, err)
-	}
-
-	written, err := stackrecords.WrittenSchema(ctx, vendor.KeyValues(), environment.TierProduction)
-	if err != nil || written != stackrecords.SchemaVersion {
-		t.Fatalf("WrittenSchema() = %d, %v, want the bootstrap to have stamped %d", written, err, stackrecords.SchemaVersion)
 	}
 
 	planned, err := client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})

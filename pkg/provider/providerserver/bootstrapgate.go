@@ -246,10 +246,7 @@ func (g Gate) Apply(ctx context.Context, shown provider.Plan, tier environment.T
 	if err := g.Bootstrap.Apply(ctx, change.request(tier, req, g.WrittenBy), progress); err != nil {
 		return err
 	}
-	if err := g.RecordBootstrap(ctx, tier, stackrecords.BootstrapSettings{RepairOnDeploy: repairOnDeploy}); err != nil {
-		return err
-	}
-	return stackrecords.EnsureSchema(ctx, g.KeyValues, tier)
+	return g.RecordBootstrap(ctx, tier, stackrecords.BootstrapSettings{RepairOnDeploy: repairOnDeploy})
 }
 
 func (g Gate) Remove(ctx context.Context, shown provider.Plan, tier environment.Tier, progress progress.Log) error {

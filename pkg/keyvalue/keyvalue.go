@@ -34,7 +34,6 @@ var ErrNotFound = errors.New("no such entry")
 type Root string
 
 const (
-	RootSchema             Root = "schema"
 	RootProjects           Root = "projects"
 	RootStacks             Root = "stacks"
 	RootEnvironments       Root = "environments"

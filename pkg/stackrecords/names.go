@@ -11,10 +11,6 @@ const (
 	wildcardKey  = "preview"
 )
 
-func SchemaKey(tier environment.Tier) keyvalue.Key {
-	return keyvalue.Partition{Tier: tier, Root: keyvalue.RootSchema}.Key(string(tier))
-}
-
 func ProjectsPartition(tier environment.Tier) keyvalue.Partition {
 	return keyvalue.Partition{Tier: tier, Root: keyvalue.RootProjects}
 }
