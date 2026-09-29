@@ -31,9 +31,7 @@ const Kind edge.Kind = "api-gateway"
 const propagationBound = 5 * time.Second
 
 const (
-	EdgeHeader = "x-ocel-edge"
-
-	edgeHeaderValue = string(Kind)
+	routerHeaderValue = string(Kind)
 
 	stageName = bootstrap.EdgeStageName
 

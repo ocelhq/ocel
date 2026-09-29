@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -156,12 +157,12 @@ func (s dnsCutover) release(ctx context.Context, written []edge.Record, say func
 	return s.dns.Delete(ctx, written)
 }
 
-func (s dnsCutover) await(ctx context.Context, hostname string, say func(string)) (stackrecords.ServeProbe, error) {
+func (s dnsCutover) await(ctx context.Context, hostname string, answering router.Kind, say func(string)) (stackrecords.ServeProbe, error) {
 	began := s.now()
 	deadline := began.Add(s.budget)
 	bounded, stop := context.WithTimeout(ctx, s.budget)
 	defer stop()
-	var serving edge.Kind
+	var serving router.Kind
 	var outlasted string
 	for {
 		var err error
@@ -170,38 +171,38 @@ func (s dnsCutover) await(ctx context.Context, hostname string, say func(string)
 		case err == nil:
 			outlasted = ""
 		case ctx.Err() != nil:
-			return stackrecords.ServeProbe{At: s.now().Unix(), Edge: serving}, ctx.Err()
+			return stackrecords.ServeProbe{At: s.now().Unix(), Router: serving}, ctx.Err()
 		case bounded.Err() != nil:
 			return stackrecords.ServeProbe{At: s.now().Unix()}, s.unresolved(hostname, "", began, outlasted)
 		case errors.Is(err, context.DeadlineExceeded):
 			serving, outlasted = "", fmt.Sprintf("it got no answer within %s", s.window)
 		default:
-			return stackrecords.ServeProbe{At: s.now().Unix(), Edge: serving}, err
+			return stackrecords.ServeProbe{At: s.now().Unix(), Router: serving}, err
 		}
-		if serving == s.kind {
-			return stackrecords.ServeProbe{At: s.now().Unix(), OK: true, Edge: serving}, nil
+		if serving != "" && serving == answering {
+			return stackrecords.ServeProbe{At: s.now().Unix(), OK: true, Router: serving}, nil
 		}
 		if !s.now().Add(s.wait).Before(deadline) {
 			break
 		}
-		say(fmt.Sprintf("Waiting for %s to answer as the %s edge", hostname, s.kind))
+		say(fmt.Sprintf("Waiting for %s to answer through %s", hostname, frontPhrase(s.kind)))
 		if err := s.sleep(bounded, s.wait); err != nil {
 			if ctx.Err() != nil {
-				return stackrecords.ServeProbe{At: s.now().Unix(), Edge: serving}, ctx.Err()
+				return stackrecords.ServeProbe{At: s.now().Unix(), Router: serving}, ctx.Err()
 			}
 			break
 		}
 	}
-	return stackrecords.ServeProbe{At: s.now().Unix(), Edge: serving}, s.unresolved(hostname, serving, began, outlasted)
+	return stackrecords.ServeProbe{At: s.now().Unix(), Router: serving}, s.unresolved(hostname, serving, began, outlasted)
 }
 
-func (s dnsCutover) attempt(ctx context.Context, hostname string) (edge.Kind, error) {
+func (s dnsCutover) attempt(ctx context.Context, hostname string) (router.Kind, error) {
 	asking, stop := context.WithTimeout(ctx, s.window)
 	defer stop()
-	return s.liveness.ServingEdge(asking, s.kind, hostname)
+	return s.liveness.ServingRouter(asking, hostname)
 }
 
-func (s dnsCutover) unresolved(hostname string, serving edge.Kind, began time.Time, outlasted string) error {
+func (s dnsCutover) unresolved(hostname string, serving router.Kind, began time.Time, outlasted string) error {
 	waited := s.now().Sub(began).Round(time.Second)
 	if serving == "" {
 		failure := s.lastProbeFailure(hostname)
@@ -209,12 +210,12 @@ func (s dnsCutover) unresolved(hostname string, serving edge.Kind, began time.Ti
 			failure += ", and " + outlasted
 		}
 		return provider.Resumable(refusal.Refuse(refusal.CodeNotReady,
-			"%s does not answer as the %s edge yet%s — this run gave up after about %s, and `ocel domain add` picks up where it stopped",
-			hostname, s.kind, failure, waited))
+			"%s does not answer through %s yet%s — this run gave up after about %s, and `ocel domain add` picks up where it stopped",
+			hostname, frontPhrase(s.kind), failure, waited))
 	}
 	return provider.Resumable(refusal.Refuse(refusal.CodeNotReady,
-		"%s answers as the %s edge, not the %s one this project deploys to — this run gave up after about %s",
-		hostname, serving, s.kind, waited))
+		"%s is answered by another front, not through %s this project deploys to — this run gave up after about %s",
+		hostname, frontPhrase(s.kind), waited))
 }
 
 func (s dnsCutover) lastProbeFailure(hostname string) string {

@@ -15,17 +15,3 @@ func TestProbeHostname(t *testing.T) {
 		}
 	}
 }
-
-func TestServedBy(t *testing.T) {
-	t.Parallel()
-
-	if !ServedBy(" Sample ", sampleKind) {
-		t.Error("a padded, differently cased header does not name the edge that sent it")
-	}
-	if ServedBy("other", sampleKind) {
-		t.Error("another edge's header passed for the sample edge")
-	}
-	if ServedBy("", frontedKind) {
-		t.Error("a missing header passed")
-	}
-}

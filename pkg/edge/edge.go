@@ -9,6 +9,8 @@ import (
 
 type Kind string
 
+const None Kind = ""
+
 type Need string
 
 const (

@@ -543,7 +543,7 @@ func TestRemovingAPreviewSaysWhichPointerAndStacksItRemovesAndHowFarAlongItIs(t 
 		}
 	}
 	for _, want := range []string{
-		"Removing the routing pointer of preview pr-7 from the relay edge",
+		"Removing the routing pointer of preview pr-7",
 		"Destroying stack " + naming.InfraStack("pr-7").String() + " (2 of 2)",
 		"Reclaimed promotions p2 and p1",
 		"Destroying the stack of web build 00000000000000000000000000000001~000000000001 (1 of 2)",

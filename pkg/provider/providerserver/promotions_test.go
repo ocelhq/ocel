@@ -118,7 +118,7 @@ func TestRollbackPromotesTheBuildsOfTheEarlierPromotionAsANewOne(t *testing.T) {
 }
 
 func relayPlane(provider *fake.Provider) *fake.DataPlane {
-	return provider.Routers().(*fake.Routers).DataPlane(router.Kind(fake.KindRelay))
+	return provider.Routers().(*fake.Routers).DataPlane(fake.RouterRelay)
 }
 
 func TestTheDeployFlipSpeaksThroughThePromotionStagesOwnProgress(t *testing.T) {

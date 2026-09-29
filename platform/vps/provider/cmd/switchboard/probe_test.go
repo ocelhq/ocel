@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
@@ -104,7 +105,7 @@ func silent(t *testing.T) string {
 }
 
 func switchboardAnswers(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set(edge.HeaderEdge, "box")
+	w.Header().Set(router.HeaderRouter, "switchboard")
 	w.Header().Set(switchboard.HeardHeader, "https "+r.Host+" "+r.Host)
 }
 
@@ -119,7 +120,7 @@ func TestTheProbeReadsTheEdgeTheBoxNamesForAHostnameItServesACertificateFor(t *t
 	if code != 0 {
 		t.Fatalf("probe = %d: %q", code, errs)
 	}
-	if strings.TrimSpace(out) != "box" {
+	if strings.TrimSpace(out) != "switchboard" {
 		t.Errorf("probe printed %q, want the edge the box named for the hostname", out)
 	}
 	if asked != "web.localhost" || path != edge.LivenessProbePath {
@@ -137,7 +138,7 @@ func TestTheProbeRefusesABoxWhoseAppsWouldHearAnotherSchemeOrHost(t *testing.T) 
 		"https":                                     "keep the Host header",
 	} {
 		at := answering(t, current(t, "web.localhost"), func(w http.ResponseWriter, _ *http.Request) {
-			w.Header().Set(edge.HeaderEdge, "box")
+			w.Header().Set(router.HeaderRouter, "switchboard")
 			w.Header().Set(switchboard.HeardHeader, heard)
 		})
 		code, out, errs := ran(t, "probe", "--at", at, "web.localhost")
@@ -152,17 +153,17 @@ func TestTheProbeRefusesABoxWhoseAppsWouldHearAnotherSchemeOrHost(t *testing.T) 
 
 func TestTheProbePassesABoxWhoseAppsHearHttpsForTheHostnameAsked(t *testing.T) {
 	at := answering(t, current(t, "web.localhost"), func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set(edge.HeaderEdge, "box")
+		w.Header().Set(router.HeaderRouter, "switchboard")
 		w.Header().Set(switchboard.HeardHeader, "https web.localhost WEB.localhost")
 	})
-	if code, out, errs := ran(t, "probe", "--at", at, "web.localhost"); code != 0 || strings.TrimSpace(out) != "box" {
+	if code, out, errs := ran(t, "probe", "--at", at, "web.localhost"); code != 0 || strings.TrimSpace(out) != "switchboard" {
 		t.Errorf("probe = %d %q %q, want box", code, out, errs)
 	}
 }
 
 func TestTheProbeRefusesAnAnswerThatSaysNothingOfWhatItsAppsWouldHear(t *testing.T) {
 	at := answering(t, current(t, "web.localhost"), func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set(edge.HeaderEdge, "box")
+		w.Header().Set(router.HeaderRouter, "switchboard")
 	})
 	code, out, errs := ran(t, "probe", "--at", at, "web.localhost")
 	if code != exitNotServingYet {
@@ -176,7 +177,7 @@ func TestTheProbeRefusesAnAnswerThatSaysNothingOfWhatItsAppsWouldHear(t *testing
 func TestTheProbeTrustsNoAuthorityOfAnyOneFrontProxy(t *testing.T) {
 	at := answering(t, current(t, "web.localhost"), switchboardAnswers)
 
-	if code, out, errs := ran(t, "probe", "--at", at, "web.localhost"); code != 0 || strings.TrimSpace(out) != "box" {
+	if code, out, errs := ran(t, "probe", "--at", at, "web.localhost"); code != 0 || strings.TrimSpace(out) != "switchboard" {
 		t.Errorf("probe over a certificate no public root vouches for = %d, %q, %q, want the edge read: a .localhost name is served under whatever authority the front proxy keeps, and the probe must not know which proxy that is", code, out, errs)
 	}
 }
@@ -189,7 +190,7 @@ func TestTheProbeRefusesACertificateThatDoesNotServeTheName(t *testing.T) {
 		"not yet in its term": issued(t, "web.localhost", now.Add(time.Hour), now.Add(2*time.Hour)),
 	} {
 		at := answering(t, leaf, func(w http.ResponseWriter, _ *http.Request) {
-			w.Header().Set(edge.HeaderEdge, "box")
+			w.Header().Set(router.HeaderRouter, "switchboard")
 		})
 		code, out, errs := ran(t, "probe", "--at", at, "web.localhost")
 		if code != exitNotServingYet {

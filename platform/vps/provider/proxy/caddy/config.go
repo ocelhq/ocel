@@ -11,7 +11,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 )
 
@@ -158,8 +158,8 @@ func render(spec proxy.Spec) ([]byte, error) {
 	if strings.TrimSpace(spec.Upstream) == "" {
 		return nil, errors.New("a proxy spec names no upstream to forward to")
 	}
-	if strings.TrimSpace(spec.Edge) == "" {
-		return nil, errors.New("a proxy spec names no edge for the proxy's answers to name")
+	if strings.TrimSpace(spec.Router) == "" {
+		return nil, errors.New("a proxy spec names no router for the proxy's answers to name")
 	}
 	if strings.TrimSpace(spec.Permission.Dial) == "" || !strings.HasPrefix(spec.Permission.Path, "/") {
 		return nil, errors.New("a proxy spec names no endpoint to ask whether a hostname may be issued a certificate")
@@ -177,7 +177,7 @@ func render(spec proxy.Spec) ([]byte, error) {
 	front.Errors = &failing{Routes: []failure{{Handle: []answer{{
 		Handler: answerHandler,
 		Status:  errorStatus,
-		Headers: map[string][]string{http.CanonicalHeaderKey(edge.HeaderEdge): {spec.Edge}},
+		Headers: map[string][]string{http.CanonicalHeaderKey(router.HeaderRouter): {spec.Router}},
 	}}}}}
 	return json.Marshal(config{
 		Admin:   admin{Listen: Listen()},

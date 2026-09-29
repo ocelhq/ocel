@@ -12,17 +12,17 @@ import (
 )
 
 func TestEveryFakeRouterBehavesAsEveryRouterMust(t *testing.T) {
-	for _, kind := range []edge.Kind{fake.KindRelay, fake.KindDirect} {
+	for kind, routedBy := range map[edge.Kind]router.Kind{fake.KindRelay: fake.RouterRelay, fake.KindDirect: fake.RouterDirect} {
 		t.Run(string(kind), func(t *testing.T) {
 			routerconformance.Run(t, routerconformance.Suite{
-				New:      func(t *testing.T) routerconformance.Fixture { return fakeFixture(t, kind) },
+				New:      func(t *testing.T) routerconformance.Fixture { return fakeFixture(t, kind, routedBy) },
 				Hostname: "shop.example.com",
 			})
 		})
 	}
 }
 
-func fakeFixture(t *testing.T, kind edge.Kind) routerconformance.Fixture {
+func fakeFixture(t *testing.T, kind edge.Kind, routedBy router.Kind) routerconformance.Fixture {
 	t.Helper()
 	p := fake.NewProvider(fake.Options{})
 	spec := edge.StackSpec{Tier: environment.TierProduction, Slug: "conformance"}
@@ -34,11 +34,11 @@ func fakeFixture(t *testing.T, kind edge.Kind) routerconformance.Fixture {
 	if err != nil {
 		t.Fatalf("Reconcile the edge: %v", err)
 	}
-	opened, err := p.Routers().Open(router.Kind(kind))
+	opened, err := p.Routers().Open(routedBy)
 	if err != nil {
-		t.Fatalf("Routers().Open(%q): %v", kind, err)
+		t.Fatalf("Routers().Open(%q): %v", routedBy, err)
 	}
-	plane := p.Routers().(*fake.Routers).DataPlane(router.Kind(kind))
+	plane := p.Routers().(*fake.Routers).DataPlane(routedBy)
 	return routerconformance.Fixture{
 		Router: opened,
 		Spec:   router.StackSpec{Tier: spec.Tier, Slug: spec.Slug},

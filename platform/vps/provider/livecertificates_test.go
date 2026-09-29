@@ -15,9 +15,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
@@ -88,7 +88,7 @@ func TestLiveTheProxyHandleIsReadOffAHandshakeAndAsksTheAdminApiNothing(t *testi
 
 	ctx := context.Background()
 	cert, err := pinned.Certificates().Issue(ctx, provider.CertificateRequest{
-		Kind: boxedge.Kind, Hostname: caddy.Container, Progress: progress.DiscardProgress(),
+		Kind: edge.None, Hostname: caddy.Container, Progress: progress.DiscardProgress(),
 	})
 	if err != nil {
 		t.Fatalf("Certificate(%s) = %v", caddy.Container, err)
@@ -101,7 +101,7 @@ func TestLiveTheProxyHandleIsReadOffAHandshakeAndAsksTheAdminApiNothing(t *testi
 	}
 
 	spoken := vm.proxyLogBytes(t)
-	served, err := pinned.Certificates().Inspect(ctx, boxedge.Kind, caddy.Container,
+	served, err := pinned.Certificates().Inspect(ctx, edge.None, caddy.Container,
 		provider.Certificate{ID: certs.ProxyHandle(caddy.Container)})
 	if err != nil {
 		t.Fatalf("Inspect() over a proxy handle = %v", err)
@@ -136,12 +136,12 @@ func TestLiveAPinnedPairIsVerifiedFromTheCertificateAndTheKeyIsNeverRead(t *test
 
 	ctx := context.Background()
 	cert, err := pinned.Certificates().Issue(ctx, provider.CertificateRequest{
-		Kind: boxedge.Kind, Hostname: "pr-7.preview.example.invalid", Progress: progress.DiscardProgress(),
+		Kind: edge.None, Hostname: "pr-7.preview.example.invalid", Progress: progress.DiscardProgress(),
 	})
 	if err != nil {
 		t.Fatalf("Issue() over a pinned wildcard = %v", err)
 	}
-	health, err := pinned.Certificates().Inspect(ctx, boxedge.Kind, "pr-7.preview.example.invalid", cert)
+	health, err := pinned.Certificates().Inspect(ctx, edge.None, "pr-7.preview.example.invalid", cert)
 	if err != nil {
 		t.Fatalf("Inspect() = %v", err)
 	}

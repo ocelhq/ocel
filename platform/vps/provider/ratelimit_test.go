@@ -7,12 +7,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
-	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
@@ -48,7 +48,7 @@ func certificateRefusal(t *testing.T, p *vps.Provider, hostname string) error {
 	t.Helper()
 
 	_, err := p.Certificates().Issue(context.Background(), provider.CertificateRequest{
-		Kind: boxedge.Kind, Hostname: hostname, Progress: progress.DiscardProgress(),
+		Kind: edge.None, Hostname: hostname, Progress: progress.DiscardProgress(),
 	})
 	return err
 }
@@ -106,7 +106,7 @@ func TestAProxyWithNothingToSayCertifiesAsItAlwaysDid(t *testing.T) {
 
 	machine := boxWhoseProxyWasRefused(`{"level":"info","msg":"certificate obtained successfully"}`)
 	cert, err := certifying(machine).Certificates().Issue(context.Background(), provider.CertificateRequest{
-		Kind: boxedge.Kind, Hostname: "pr-9.preview.acme.com", Progress: progress.DiscardProgress(),
+		Kind: edge.None, Hostname: "pr-9.preview.acme.com", Progress: progress.DiscardProgress(),
 	})
 	if err != nil {
 		t.Fatalf("Certificate() = %v", err)
@@ -128,7 +128,7 @@ func TestABoxWhoseEngineCannotBeReachedSaysSoInTheEnginesOwnWordsAndStillMintsTh
 	}
 	spoken := &fake.Progress{}
 	cert, err := certifying(machine).Certificates().Issue(context.Background(), provider.CertificateRequest{
-		Kind: boxedge.Kind, Hostname: "pr-9.preview.acme.com", Progress: spoken,
+		Kind: edge.None, Hostname: "pr-9.preview.acme.com", Progress: spoken,
 	})
 	if err != nil {
 		t.Fatalf("Certificate() = %v: the handle names what the proxy renews and asks the box for nothing, and the conformance suite mints it against a box that answers nothing at all", err)

@@ -17,8 +17,8 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider/enginetest"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
@@ -342,9 +342,9 @@ func TestATableAndAConfigMovedIntoPlaceAreWhatTheRunningBoxServes(t *testing.T) 
 		return said
 	}
 
-	if said := ask("unclaimed.example.com"); said.StatusCode != http.StatusNotFound || said.Header.Get(edge.HeaderEdge) != switchboard.EdgeName {
+	if said := ask("unclaimed.example.com"); said.StatusCode != http.StatusNotFound || said.Header.Get(router.HeaderRouter) != switchboard.RouterKind {
 		t.Errorf("a hostname nothing on this box claims was answered %d with %s: %q, want a 404 naming this edge",
-			said.StatusCode, edge.HeaderEdge, said.Header.Get(edge.HeaderEdge))
+			said.StatusCode, router.HeaderRouter, said.Header.Get(router.HeaderRouter))
 	}
 	said := ask(claimed)
 	read, err := io.ReadAll(io.LimitReader(said.Body, 1<<12))
@@ -355,8 +355,8 @@ func TestATableAndAConfigMovedIntoPlaceAreWhatTheRunningBoxServes(t *testing.T) 
 		t.Errorf("the hostname %q claims was answered %d %q, want the body of the app running on %s: the switchboard is handed the directory the table is renamed into, and one handed the file keeps routing the seed",
 			surface, said.StatusCode, read, flipped.Routes[0].Upstream)
 	}
-	if said.Header.Get(edge.HeaderEdge) != switchboard.EdgeName {
-		t.Errorf("the surface's own route answered %s: %q, want %q", edge.HeaderEdge, said.Header.Get(edge.HeaderEdge), switchboard.EdgeName)
+	if said.Header.Get(router.HeaderRouter) != switchboard.RouterKind {
+		t.Errorf("the surface's own route answered %s: %q, want %q", router.HeaderRouter, said.Header.Get(router.HeaderRouter), switchboard.RouterKind)
 	}
 }
 
@@ -417,15 +417,15 @@ func TestTheFrontProxyNamesTheEdgeOnItsOwnAnswerWhileTheSwitchboardIsDown(t *tes
 		return said
 	}
 
-	if said := ask(); said.StatusCode != http.StatusOK || !slices.Equal(said.Header.Values(edge.HeaderEdge), []string{switchboard.EdgeName}) {
-		t.Errorf("%s was answered %d naming the edge %q, want 200 naming it once as %s", claimed, said.StatusCode, said.Header.Values(edge.HeaderEdge), switchboard.EdgeName)
+	if said := ask(); said.StatusCode != http.StatusOK || !slices.Equal(said.Header.Values(router.HeaderRouter), []string{switchboard.RouterKind}) {
+		t.Errorf("%s was answered %d naming the edge %q, want 200 naming it once as %s", claimed, said.StatusCode, said.Header.Values(router.HeaderRouter), switchboard.RouterKind)
 	}
 	if out, err := exec.Command(dockerEngine, "stop", "--time", "1", proxy.board).CombinedOutput(); err != nil {
 		t.Fatalf("stop the switchboard: %v\n%s", err, out)
 	}
-	if said := ask(); said.StatusCode != http.StatusBadGateway || !slices.Equal(said.Header.Values(edge.HeaderEdge), []string{switchboard.EdgeName}) {
+	if said := ask(); said.StatusCode != http.StatusBadGateway || !slices.Equal(said.Header.Values(router.HeaderRouter), []string{switchboard.RouterKind}) {
 		t.Errorf("with the switchboard down %s was answered %d naming the edge %q, want caddy's own 502 naming it as %s: a bootstrap recreates the switchboard under a running caddy, and the bind's probe reads the edge off every answer the box gives",
-			claimed, said.StatusCode, said.Header.Values(edge.HeaderEdge), switchboard.EdgeName)
+			claimed, said.StatusCode, said.Header.Values(router.HeaderRouter), switchboard.RouterKind)
 	}
 }
 

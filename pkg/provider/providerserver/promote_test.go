@@ -22,7 +22,7 @@ const promotedSlug = "shop"
 type promoteWorld struct {
 	ledger  projectLedger
 	routers *fake.Routers
-	stacks  map[edge.Kind]router.Stack
+	stacks  map[router.Kind]router.Stack
 }
 
 func newPromoteWorld(t *testing.T) *promoteWorld {
@@ -31,10 +31,10 @@ func newPromoteWorld(t *testing.T) *promoteWorld {
 	w := &promoteWorld{
 		ledger:  openProjectLedger(vendor, environment.TierProduction, promotedSlug),
 		routers: vendor.Routers().(*fake.Routers),
-		stacks:  map[edge.Kind]router.Stack{},
+		stacks:  map[router.Kind]router.Stack{},
 	}
-	for _, kind := range []edge.Kind{fake.KindRelay, fake.KindDirect} {
-		opened, err := w.routers.Open(router.Kind(kind))
+	for _, kind := range []router.Kind{fake.RouterRelay, fake.RouterDirect} {
+		opened, err := w.routers.Open(kind)
 		if err != nil {
 			t.Fatalf("Routers().Open(%q): %v", kind, err)
 		}
@@ -49,8 +49,8 @@ func newPromoteWorld(t *testing.T) *promoteWorld {
 
 func (w *promoteWorld) appRouters() []appRouter {
 	return []appRouter{
-		{stack: w.stacks[fake.KindRelay], apps: []string{"web"}},
-		{stack: w.stacks[fake.KindDirect], apps: []string{"api"}},
+		{stack: w.stacks[fake.RouterRelay], apps: []string{"web"}},
+		{stack: w.stacks[fake.RouterDirect], apps: []string{"api"}},
 	}
 }
 
@@ -76,8 +76,8 @@ func (w *promoteWorld) promotesReplacing(t *testing.T, ctx context.Context, repl
 	return err
 }
 
-func (w *promoteWorld) serves(kind edge.Kind, app string) string {
-	return w.routers.DataPlane(router.Kind(kind)).Builds(promotedSlug, environment.TierProduction, router.DefaultPointer)[app]
+func (w *promoteWorld) serves(kind router.Kind, app string) string {
+	return w.routers.DataPlane(kind).Builds(promotedSlug, environment.TierProduction, router.DefaultPointer)[app]
 }
 
 func (w *promoteWorld) active(t *testing.T) string {
@@ -99,10 +99,10 @@ func TestAPromoteFlipsEveryRouterOntoTheRecordsItsAppsStaged(t *testing.T) {
 	if active := w.active(t); active != "p1" {
 		t.Errorf("the ledger names %q, want p1", active)
 	}
-	if served := w.serves(fake.KindRelay, "web"); served != "web-p1" {
+	if served := w.serves(fake.RouterRelay, "web"); served != "web-p1" {
 		t.Errorf("the relay router serves web %q, want web-p1", served)
 	}
-	if served := w.serves(fake.KindDirect, "api"); served != "api-p1" {
+	if served := w.serves(fake.RouterDirect, "api"); served != "api-p1" {
 		t.Errorf("the direct router serves api %q, want api-p1", served)
 	}
 }
@@ -114,7 +114,7 @@ func TestAPromoteARouterLeavesUnservedIsTakenBackAndTheRoutersThatFlippedServeWh
 	}
 
 	refused := errors.New("the data plane refused the write")
-	w.routers.DataPlane(router.Kind(fake.KindDirect)).FailNextFlip(refused)
+	w.routers.DataPlane(fake.RouterDirect).FailNextFlip(refused)
 	err := w.promotes(t, "p2")
 
 	var unserved router.Unserved
@@ -124,10 +124,10 @@ func TestAPromoteARouterLeavesUnservedIsTakenBackAndTheRoutersThatFlippedServeWh
 	if active := w.active(t); active != "p1" {
 		t.Errorf("the ledger names %q after the promote was taken back, want p1, the promotion it displaced", active)
 	}
-	if served := w.serves(fake.KindRelay, "web"); served != "web-p1" {
+	if served := w.serves(fake.RouterRelay, "web"); served != "web-p1" {
 		t.Errorf("the relay router serves web %q after the promote was taken back, want web-p1 again", served)
 	}
-	if served := w.serves(fake.KindDirect, "api"); served != "api-p1" {
+	if served := w.serves(fake.RouterDirect, "api"); served != "api-p1" {
 		t.Errorf("the direct router serves api %q after it refused p2, want api-p1", served)
 	}
 }
@@ -135,7 +135,7 @@ func TestAPromoteARouterLeavesUnservedIsTakenBackAndTheRoutersThatFlippedServeWh
 func TestAFirstPromoteARouterLeavesUnservedLeavesNothingServedOnItsPointer(t *testing.T) {
 	w := newPromoteWorld(t)
 
-	w.routers.DataPlane(router.Kind(fake.KindDirect)).FailNextFlip(errors.New("the data plane refused the write"))
+	w.routers.DataPlane(fake.RouterDirect).FailNextFlip(errors.New("the data plane refused the write"))
 	if err := w.promotes(t, "p1"); err == nil {
 		t.Fatal("promote(p1) with a router that refused = nil, want it unserved")
 	}
@@ -143,7 +143,7 @@ func TestAFirstPromoteARouterLeavesUnservedLeavesNothingServedOnItsPointer(t *te
 	if active := w.active(t); active != "" {
 		t.Errorf("the ledger names %q after the only promote was taken back, want nothing", active)
 	}
-	if served := w.serves(fake.KindRelay, "web"); served != "" {
+	if served := w.serves(fake.RouterRelay, "web"); served != "" {
 		t.Errorf("the relay router serves web %q after the only promote was taken back, want nothing", served)
 	}
 }
@@ -155,7 +155,7 @@ func TestTwoPromotesRacingOnOnePointerLeaveTheLedgerAndEveryRouterOnTheSameRelea
 	}
 
 	var raced error
-	w.routers.DataPlane(router.Kind(fake.KindDirect)).BeforeNextFlip(func() {
+	w.routers.DataPlane(fake.RouterDirect).BeforeNextFlip(func() {
 		raced = w.promotes(t, "p3")
 	})
 	err := w.promotes(t, "p2")
@@ -170,10 +170,10 @@ func TestTwoPromotesRacingOnOnePointerLeaveTheLedgerAndEveryRouterOnTheSameRelea
 	if active := w.active(t); active != "p3" {
 		t.Errorf("the ledger names %q, want p3, the promote that won", active)
 	}
-	if served := w.serves(fake.KindRelay, "web"); served != "web-p3" {
+	if served := w.serves(fake.RouterRelay, "web"); served != "web-p3" {
 		t.Errorf("the relay router serves web %q, want web-p3, the release the ledger names", served)
 	}
-	if served := w.serves(fake.KindDirect, "api"); served != "api-p3" {
+	if served := w.serves(fake.RouterDirect, "api"); served != "api-p3" {
 		t.Errorf("the direct router serves api %q, want api-p3, the release the ledger names", served)
 	}
 }
@@ -209,7 +209,7 @@ func TestAPromoteInterruptedWhileItFlipsStillTakesItsPromotionBack(t *testing.T)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	direct := w.routers.DataPlane(router.Kind(fake.KindDirect))
+	direct := w.routers.DataPlane(fake.RouterDirect)
 	direct.BeforeNextFlip(cancel)
 	direct.FailNextFlip(errors.New("the flip was interrupted"))
 	if err := w.promotesReplacing(t, ctx, "p1", "p2"); err == nil {
@@ -219,7 +219,7 @@ func TestAPromoteInterruptedWhileItFlipsStillTakesItsPromotionBack(t *testing.T)
 	if active := w.active(t); active != "p1" {
 		t.Errorf("the ledger names %q after an interrupted promote, want p1: the interrupt that stopped the flip is not the context the take-back runs under", active)
 	}
-	if served := w.serves(fake.KindRelay, "web"); served != "web-p1" {
+	if served := w.serves(fake.RouterRelay, "web"); served != "web-p1" {
 		t.Errorf("the relay router serves web %q after an interrupted promote, want web-p1 again", served)
 	}
 }
@@ -275,10 +275,10 @@ func TestAPromoteAnotherOvertookBeforeItsLedgerWriteIsRefusedBusyAndFlipsNothing
 	if active := w.active(t); active != "p3" {
 		t.Errorf("the ledger names %q, want p3, the promote that won", active)
 	}
-	if served := w.serves(fake.KindRelay, "web"); served != "web-p3" {
+	if served := w.serves(fake.RouterRelay, "web"); served != "web-p3" {
 		t.Errorf("the relay router serves web %q, want web-p3", served)
 	}
-	if served := w.serves(fake.KindDirect, "api"); served != "api-p3" {
+	if served := w.serves(fake.RouterDirect, "api"); served != "api-p3" {
 		t.Errorf("the direct router serves api %q, want api-p3", served)
 	}
 }
@@ -314,7 +314,7 @@ func TestAPromoteWhoseRecordAReclaimRemovedAsItLandedIsTakenBackAndFlipsNothing(
 	if active := w.active(t); active != "p1" {
 		t.Errorf("the ledger names %q, want p1: p2 was taken back", active)
 	}
-	if served := w.serves(fake.KindRelay, "web"); served != "web-p1" {
+	if served := w.serves(fake.RouterRelay, "web"); served != "web-p1" {
 		t.Errorf("the relay router serves web %q, want web-p1", served)
 	}
 }

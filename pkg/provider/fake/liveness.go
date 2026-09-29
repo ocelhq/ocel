@@ -3,12 +3,12 @@ package fake
 import (
 	"context"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/router"
 )
 
 type liveness struct{ *Provider }
 
-func (p liveness) ServingEdge(_ context.Context, _ edge.Kind, hostname string) (edge.Kind, error) {
+func (p liveness) ServingRouter(_ context.Context, hostname string) (router.Kind, error) {
 	return p.edges.answering(hostname), nil
 }
 

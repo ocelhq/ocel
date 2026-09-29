@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/router"
 )
 
 const (
@@ -139,7 +139,7 @@ func notFoundMethodResource(logical, resourceID, path string) string {
 	for _, contentType := range edgeNotFoundContentTypes {
 		fmt.Fprintf(&templates, "          '%s': '{\"statusCode\": 404}'\n", contentType)
 	}
-	parameter := "method.response.header." + edge.HeaderEdge
+	parameter := "method.response.header." + router.HeaderRouter
 	return fmt.Sprintf(`  %s:
     Type: AWS::ApiGateway::Method
     Metadata:
@@ -163,7 +163,7 @@ func notFoundMethodResource(logical, resourceID, path string) string {
         - StatusCode: '404'
           ResponseParameters:
             %s: true
-`, logical, path, edge.HeaderEdge, resourceID, edgeAnyMethod, templates.String(), parameter, KindAPIGateway, parameter)
+`, logical, path, router.HeaderRouter, resourceID, edgeAnyMethod, templates.String(), parameter, KindAPIGateway, parameter)
 }
 
 func notFoundDeploymentResource(logical string) string {

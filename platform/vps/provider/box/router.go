@@ -8,13 +8,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 type Router struct{ e *Edge }
 
 func NewRouter(e *Edge) Router { return Router{e: e} }
 
-func (r Router) Kind() router.Kind { return router.Kind(Kind) }
+func (r Router) Kind() router.Kind { return switchboard.RouterKind }
 
 func (r Router) Facts() router.Facts {
 	return router.Facts{ReachesContainers: true, AnswersHostnames: true, StopsServingRemovedPointers: true}
@@ -23,7 +24,7 @@ func (r Router) Facts() router.Facts {
 func (r Router) Reconcile(_ context.Context, spec router.StackSpec, prior router.StackState) (router.Stack, error) {
 	if spec.Slug == "" {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"the %q edge needs a project slug; this stack has none", Kind)
+			"the box serves a project by its slug, and this stack names none")
 	}
 	return r.Open(prior.WithSpec(spec))
 }

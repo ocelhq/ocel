@@ -12,12 +12,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/seal"
-	"github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 const Vendor provider.Vendor = "vps"
@@ -74,13 +73,11 @@ func newProvider(options Options, dial host.Dial) *Provider {
 
 func (p *Provider) Facts() provider.Facts {
 	return provider.Facts{
-		Vendor:      Vendor,
-		Bindings:    resources.ServedBindingTypes(p.resourceHooks()),
-		Computes:    []provider.Compute{provider.ComputeContainer},
-		Edges:       []edge.Kind{box.Kind},
-		DefaultEdge: box.Kind,
+		Vendor:   Vendor,
+		Bindings: resources.ServedBindingTypes(p.resourceHooks()),
+		Computes: []provider.Compute{provider.ComputeContainer},
 		Pairings: []provider.Pairing{
-			{Edge: box.Kind, Router: router.Kind(box.Kind), Computes: []provider.Compute{provider.ComputeContainer}},
+			{Edge: edge.None, Router: switchboard.RouterKind, Computes: []provider.Compute{provider.ComputeContainer}},
 		},
 		DNSKinds:                 []provider.DNSKind{dnsCloudflare},
 		RendersTransforms:        true,

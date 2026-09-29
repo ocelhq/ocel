@@ -18,9 +18,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/router"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
-	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 func TestTheDNSRegistryOpensACloudflareWriter(t *testing.T) {
@@ -48,7 +49,7 @@ func TestTheDNSRegistryOpensACloudflareWriter(t *testing.T) {
 	}
 }
 
-func TestTheEdgeRegistryOpensTheBoxEdge(t *testing.T) {
+func TestAProjectThatNamesNoEdgeIsAnsweredByTheSwitchboardOnTheBox(t *testing.T) {
 	t.Parallel()
 
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
@@ -56,20 +57,28 @@ func TestTheEdgeRegistryOpensTheBoxEdge(t *testing.T) {
 
 	conformance.RunEdges(t, p.Facts(), registry)
 
-	if got := p.Facts().Edges; !slices.Equal(got, []edge.Kind{boxedge.Kind}) {
-		t.Errorf("Facts().Edges = %v, want %q alone: a machine is fronted by the proxy ocel puts on it", got, boxedge.Kind)
+	if got := p.Facts().Edges; len(got) != 0 {
+		t.Errorf("Facts().Edges = %v, want none: the proxy on the box answers a hostname, and it is no edge", got)
 	}
-	if got := p.Facts().DefaultEdge; got != boxedge.Kind {
-		t.Errorf("Facts().DefaultEdge = %q, want %q: a deploy that names no edge reaches the box's own proxy", got, boxedge.Kind)
+	if got := p.Facts().DefaultEdge; got != edge.None {
+		t.Errorf("Facts().DefaultEdge = %q, want no edge: a deploy that names none reaches the box's own proxy", got)
+	}
+	if got := p.Facts().PairedRouters(edge.None); !slices.Equal(got, []router.Kind{switchboard.RouterKind}) {
+		t.Errorf("PairedRouters(no edge) = %v, want the switchboard alone", got)
 	}
 
-	var rejection refusal.Refusal
-	opened, err := registry.Open("cloudflare")
-	if !errors.As(err, &rejection) || rejection.Code != refusal.CodeInvalid {
-		t.Fatalf("Open(cloudflare) = %v, %v, want an invalid refusal", opened, err)
-	}
-	if !strings.Contains(rejection.Message, "cloudflare") || !strings.Contains(rejection.Message, string(boxedge.Kind)) {
-		t.Errorf("Open(cloudflare) refused with %q, want it to name the edge asked for and the one this provider serves", rejection.Message)
+	for _, named := range []edge.Kind{"cloudflare", "box"} {
+		var rejection refusal.Refusal
+		opened, err := registry.Open(named)
+		if !errors.As(err, &rejection) || rejection.Code != refusal.CodeInvalid {
+			t.Fatalf("Open(%s) = %v, %v, want an invalid refusal", named, opened, err)
+		}
+		if !strings.Contains(rejection.Message, string(named)) || !strings.Contains(rejection.Message, "leave `edge` out") {
+			t.Errorf("Open(%s) refused with %q, want it to name the edge asked for and say to leave the edge out", named, rejection.Message)
+		}
+		if strings.Contains(strings.ToLower(rejection.Message), "rout") {
+			t.Errorf("Open(%s) refused with %q; a router is never user-facing, so no refusal names one", named, rejection.Message)
+		}
 	}
 }
 
@@ -88,7 +97,7 @@ func TestVPSProvider(t *testing.T) {
 		Options: provider.Options{"ssh": map[string]any{"host": "203.0.113.10"}},
 		Binary:  buildProvider(t),
 		Certificates: &conformance.CertificateChecks{
-			Kind:      boxedge.Kind,
+			Kind:      edge.None,
 			Hostnames: []string{"shop.example.com", "www.shop.example.com"},
 			Handle:    certs.ProxyHandle,
 		},

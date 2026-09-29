@@ -14,7 +14,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
-	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
 	vars "github.com/ocelhq/ocel/platform/gcp/provider/live"
 )
 
@@ -25,18 +24,14 @@ func serviceFor(names Names, spec provider.StackSpec, app *provider.AppSpec, fun
 	return names.Service(spec.Ref.Project, spec.Ref.Name.Env, app.App, function)
 }
 
-const previewOpenWarning = "is a preview and answers anyone who knows its Cloud Run url: the %q edge shields nothing, " +
+const previewOpenWarning = "is a preview and answers anyone who knows its Cloud Run url: nothing in front of it shields it, " +
 	"and Cloud Run's invoker check would shut browsers out too. Front previews with an edge that shields the origin, or keep their urls to yourselves"
 
 func warnPreviewOpen(spec provider.StackSpec, service string, progress progress.Progress) {
 	if spec.Ref.Tier != environment.TierPreview || factsOf(spec.Edge).ShieldsOrigin {
 		return
 	}
-	kind := direct.Kind
-	if spec.Edge != nil {
-		kind = spec.Edge.Kind()
-	}
-	ensureProgress(progress).Warn("Cloud Run service " + service + " " + fmt.Sprintf(previewOpenWarning, kind))
+	ensureProgress(progress).Warn("Cloud Run service " + service + " " + previewOpenWarning)
 }
 
 func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSpec, progress progress.Progress) ([]provider.Function, error) {

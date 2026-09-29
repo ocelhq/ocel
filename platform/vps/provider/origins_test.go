@@ -16,7 +16,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
-	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
@@ -66,7 +65,7 @@ func provisionedWithABucketDeclared(t *testing.T, declared ...string) (*box, *vp
 		t.Fatal(err)
 	}
 
-	front, err := p.Edges().Open(boxedge.Kind)
+	front, err := p.Edges().Open(edge.None)
 	if err != nil {
 		t.Fatal(err)
 	}

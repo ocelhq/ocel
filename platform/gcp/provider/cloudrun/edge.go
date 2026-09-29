@@ -1,4 +1,4 @@
-package direct
+package cloudrun
 
 import (
 	"context"
@@ -11,8 +11,6 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
 
-const Kind edge.Kind = "direct"
-
 type Edge struct {
 	pins pin.Pins
 }
@@ -21,7 +19,7 @@ func New(pins pin.Pins) *Edge {
 	return &Edge{pins: pins}
 }
 
-func (e *Edge) Kind() edge.Kind { return Kind }
+func (e *Edge) Kind() edge.Kind { return edge.None }
 
 func (e *Edge) Facts() edge.Facts {
 	return edge.Facts{
@@ -44,7 +42,7 @@ func Surface(slug string, tier environment.Tier) string {
 func (e *Edge) Reconcile(_ context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
 	if spec.Slug == "" {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"the %q edge serves a project by slug, and this stack names none", Kind)
+			"Cloud Run serves a project by its slug, and this stack names none")
 	}
 	next := prior
 	next.Slug = spec.Slug
@@ -68,15 +66,15 @@ func (e *Edge) DestroyPreviewWildcard(context.Context, string) error { return ni
 
 func unbindable(what string) error {
 	return refusal.Refuse(refusal.CodeInvalid,
-		"the %q edge answers on the url Cloud Run gives each service and claims no hostname of its own, so %s cannot be bound to it: "+
+		"with no edge in front, a project is answered on the url Cloud Run gives each service and claims no hostname of its own, so %s cannot be bound to it: "+
 			"name the %q edge, which provisions one load balancer per bootstrap tier at %s",
-		Kind, what, alb.Kind, alb.BaselineCost)
+		what, alb.Kind, alb.BaselineCost)
 }
 
 func (e *Edge) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
 	return []edge.PlanGroup{{
 		Kind:   edge.EdgeGroupKind,
-		Name:   edge.EdgeGroupName(Kind),
+		Name:   edge.EdgeGroupName(edge.None),
 		Action: edge.PlanKeep,
 		Reason: "this project is answered on each service's own url, so the release surface's rows are the whole of what serves it",
 	}}
@@ -89,7 +87,7 @@ func (e *Edge) PreviewWildcardRemovals(string) (removed, kept edge.PlanGroup) {
 func (e *Edge) SharedPreviewRemoval() edge.PlanGroup {
 	return edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
-		Name:   edge.EdgeGroupName(Kind),
+		Name:   edge.EdgeGroupName(edge.None),
 		Action: edge.PlanKeep,
 		Reason: "nothing claims a preview hostname here: a preview is reached at the url Cloud Run gave the services it deployed",
 	}

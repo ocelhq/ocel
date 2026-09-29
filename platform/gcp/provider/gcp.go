@@ -16,7 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/seal"
-	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
+	"github.com/ocelhq/ocel/platform/gcp/provider/cloudrun"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
@@ -82,13 +82,12 @@ func NewProvider(options Options) (*Provider, error) {
 
 func (p *Provider) Facts() provider.Facts {
 	return provider.Facts{
-		Vendor:      Vendor,
-		Bindings:    resources.ServedBindingTypes(p.resourceHooks()),
-		Computes:    []provider.Compute{provider.ComputeServerless, provider.ComputeContainer},
-		Edges:       slices.Clone(supportedEdges),
-		DefaultEdge: direct.Kind,
+		Vendor:   Vendor,
+		Bindings: resources.ServedBindingTypes(p.resourceHooks()),
+		Computes: []provider.Compute{provider.ComputeServerless, provider.ComputeContainer},
+		Edges:    slices.Clone(supportedEdges),
 		Pairings: []provider.Pairing{
-			{Edge: direct.Kind, Router: router.Kind(direct.Kind), Computes: provider.Computes()},
+			{Edge: edge.None, Router: cloudrun.RouterKind, Computes: provider.Computes()},
 			{Edge: alb.Kind, Router: router.Kind(alb.Kind), Computes: provider.Computes()},
 		},
 		DNSKinds:        []provider.DNSKind{dnsCloudflare},

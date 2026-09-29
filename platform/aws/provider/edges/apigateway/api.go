@@ -11,6 +11,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/apigateway"
 	agtypes "github.com/aws/aws-sdk-go-v2/service/apigateway/types"
+
+	"github.com/ocelhq/ocel/pkg/router"
 )
 
 const (
@@ -24,7 +26,7 @@ const (
 	probeParent    = ".well-known"
 	probePathPart  = "ocel-edge"
 
-	edgeHeaderParameter = "method.response.header." + EdgeHeader
+	routerHeaderParameter = "method.response.header." + router.HeaderRouter
 
 	proxyPathParameter            = "method.request.path.proxy"
 	integrationProxyPathParameter = "integration.request.path.proxy"
@@ -308,7 +310,7 @@ func putProbeRoute(ctx context.Context, c Clients, api, resource string) error {
 		ResourceId:         aws.String(resource),
 		HttpMethod:         aws.String(getMethod),
 		StatusCode:         aws.String("200"),
-		ResponseParameters: map[string]bool{edgeHeaderParameter: true},
+		ResponseParameters: map[string]bool{routerHeaderParameter: true},
 	}); err != nil {
 		return fmt.Errorf("declare the liveness probe's edge header on REST API %s: %w", api, err)
 	}
@@ -317,7 +319,7 @@ func putProbeRoute(ctx context.Context, c Clients, api, resource string) error {
 		ResourceId:         aws.String(resource),
 		HttpMethod:         aws.String(getMethod),
 		StatusCode:         aws.String("200"),
-		ResponseParameters: map[string]string{edgeHeaderParameter: "'" + edgeHeaderValue + "'"},
+		ResponseParameters: map[string]string{routerHeaderParameter: "'" + routerHeaderValue + "'"},
 	}); err != nil {
 		return fmt.Errorf("set the liveness probe's edge header on REST API %s: %w", api, err)
 	}
@@ -352,7 +354,7 @@ func putStaticRoute(ctx context.Context, c Clients, spec apiSpec, api, resource 
 		HttpMethod: aws.String(getMethod),
 		StatusCode: aws.String("200"),
 		ResponseParameters: map[string]bool{
-			edgeHeaderParameter:                     true,
+			routerHeaderParameter:                   true,
 			"method.response.header.Content-Type":   true,
 			"method.response.header.Cache-Control":  true,
 			"method.response.header.Content-Length": true,
@@ -366,7 +368,7 @@ func putStaticRoute(ctx context.Context, c Clients, spec apiSpec, api, resource 
 		HttpMethod: aws.String(getMethod),
 		StatusCode: aws.String("200"),
 		ResponseParameters: map[string]string{
-			edgeHeaderParameter:                     "'" + edgeHeaderValue + "'",
+			routerHeaderParameter:                   "'" + routerHeaderValue + "'",
 			"method.response.header.Content-Type":   "integration.response.header.Content-Type",
 			"method.response.header.Cache-Control":  "integration.response.header.Cache-Control",
 			"method.response.header.Content-Length": "integration.response.header.Content-Length",

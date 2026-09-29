@@ -4,8 +4,8 @@
     "shorthand": ["aws"]
   },
   "edge": {
-    "ids": ["alb", "api-gateway", "box", "cloudflare", "cloudfront", "direct"],
-    "shorthand": ["alb", "api-gateway", "box", "cloudflare", "cloudfront", "direct"]
+    "ids": ["alb", "api-gateway", "cloudflare", "cloudfront"],
+    "shorthand": ["alb", "api-gateway", "cloudflare", "cloudfront"]
   },
   "dns": {
     "ids": ["cloudflare", "route53"],

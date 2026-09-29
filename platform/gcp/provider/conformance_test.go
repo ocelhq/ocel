@@ -17,7 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	"github.com/ocelhq/ocel/pkg/router"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
-	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
+	"github.com/ocelhq/ocel/platform/gcp/provider/cloudrun"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
@@ -51,11 +51,22 @@ func TestTheEdgeRegistryOpensTheEdgesThisProviderFronts(t *testing.T) {
 
 	conformance.RunEdges(t, facts, p.Edges())
 
-	if got := facts.Edges; !slices.Equal(got, []edge.Kind{direct.Kind, alb.Kind}) {
-		t.Errorf("Facts().Edges = %v, want %q and %q", got, direct.Kind, alb.Kind)
+	if got := facts.Edges; !slices.Equal(got, []edge.Kind{alb.Kind}) {
+		t.Errorf("Facts().Edges = %v, want %q alone", got, alb.Kind)
 	}
-	if got := facts.DefaultEdge; got != direct.Kind {
-		t.Errorf("Facts().DefaultEdge = %q, want %q: a deploy that names no edge is answered on the url Cloud Run gave it", got, direct.Kind)
+	if got := facts.DefaultEdge; got != edge.None {
+		t.Errorf("Facts().DefaultEdge = %q, want no edge: a deploy that names none is answered on the url Cloud Run gave it", got)
+	}
+	if got := facts.PairedRouters(edge.None); !slices.Equal(got, []router.Kind{cloudrun.RouterKind}) {
+		t.Errorf("PairedRouters(no edge) = %v, want Cloud Run alone", got)
+	}
+	if got := facts.PairedRouters(alb.Kind); !slices.Equal(got, []router.Kind{router.Kind(alb.Kind)}) {
+		t.Errorf("PairedRouters(alb) = %v, want the load balancer, which is edge and router in one", got)
+	}
+	for _, gone := range []edge.Kind{"direct", "cloud-run"} {
+		if _, err := p.Edges().Open(gone); err == nil {
+			t.Errorf("Open(%q) opened an edge, want it refused: leave `edge` out for no edge", gone)
+		}
 	}
 }
 
@@ -65,29 +76,29 @@ func TestTheRouterRegistryOpensTheRouterEveryEdgePairsWith(t *testing.T) {
 	conformance.RunRouters(t, p.Facts(), p.Edges(), p.Routers())
 }
 
-func TestTheDirectEdgeBindsNoHostnameAndSaysSo(t *testing.T) {
+func TestAProjectWithNoEdgeBindsNoHostnameAndSaysSo(t *testing.T) {
 	p := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"})
 	registry := p.Edges()
 
-	front, err := registry.Open(direct.Kind)
+	front, err := registry.Open(edge.None)
 	if err != nil {
-		t.Fatalf("Open(%q) = %v", direct.Kind, err)
+		t.Fatalf("Open(no edge) = %v", err)
 	}
 	stack, err := front.Open(edge.StackState{Slug: "shop", Tier: environment.TierProduction})
 	if err != nil {
 		t.Fatal(err)
 	}
-	opened, err := p.Routers().Open(router.Kind(direct.Kind))
+	opened, err := p.Routers().Open(cloudrun.RouterKind)
 	if err != nil {
-		t.Fatalf("Routers().Open(%q) = %v", direct.Kind, err)
+		t.Fatalf("Routers().Open(%q) = %v", cloudrun.RouterKind, err)
 	}
 	if !opened.Facts().AddressesItself {
 		t.Error("Facts() says the origin does not address itself, and a deploy would then demand a hostname " +
-			"the direct edge has no way to bind")
+			"nothing in front has a way to bind")
 	}
 	err = stack.BindDomain(context.Background(), edge.DomainBinding{Hostname: "shop.example.com", App: "web"})
 	if err == nil {
-		t.Fatal("BindDomain() bound a hostname to an edge that claims none")
+		t.Fatal("BindDomain() bound a hostname with no edge in front to claim it")
 	}
 	if !strings.Contains(err.Error(), string(alb.Kind)) {
 		t.Errorf("BindDomain() = %v, want it to name the edge that would serve the hostname", err)

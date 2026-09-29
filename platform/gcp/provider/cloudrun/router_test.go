@@ -1,4 +1,4 @@
-package direct_test
+package cloudrun_test
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/router/routerconformance"
-	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
+	"github.com/ocelhq/ocel/platform/gcp/provider/cloudrun"
 )
 
 type pinRecorder struct {
@@ -57,18 +57,18 @@ func (p *pinRecorder) calls() []string {
 
 const webService = "ocel-shop-prod-web"
 
-func TestTheDirectRouterBehavesAsEveryRouterMust(t *testing.T) {
+func TestTheCloudRunRouterBehavesAsEveryRouterMust(t *testing.T) {
 	routerconformance.Run(t, routerconformance.Suite{
 		New: func(t *testing.T) routerconformance.Fixture {
 			pins := &pinRecorder{}
-			front := direct.New(pins)
+			front := cloudrun.New(pins)
 			stack, err := front.Reconcile(context.Background(), edge.StackSpec{Slug: "shop", Tier: environment.TierProduction}, edge.StackState{})
 			if err != nil {
 				t.Fatalf("Reconcile(shop) = %v", err)
 			}
 			state := stack.State()
 			return routerconformance.Fixture{
-				Router: direct.NewRouter(front),
+				Router: cloudrun.NewRouter(front),
 				Spec:   router.StackSpec{Tier: state.Tier, Slug: state.Slug},
 				Prior:  router.NewStackState(state),
 				Serving: func(string) string {
@@ -94,12 +94,12 @@ func TestTheDirectRouterBehavesAsEveryRouterMust(t *testing.T) {
 
 func fronting(t *testing.T, pins *pinRecorder) fake.PromotingStack {
 	t.Helper()
-	front := direct.New(pins)
+	front := cloudrun.New(pins)
 	stack, err := front.Reconcile(context.Background(), edge.StackSpec{Slug: "shop", Tier: environment.TierProduction}, edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile(shop) = %v", err)
 	}
-	opened, err := direct.NewRouter(front).Open(router.NewStackState(stack.State()))
+	opened, err := cloudrun.NewRouter(front).Open(router.NewStackState(stack.State()))
 	if err != nil {
 		t.Fatalf("Open the router = %v", err)
 	}

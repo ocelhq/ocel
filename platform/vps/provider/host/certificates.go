@@ -114,18 +114,18 @@ func (h *Host) ServedCertificate(ctx context.Context, hostname string) ([]byte, 
 }
 
 type Answer struct {
-	Edge    string
+	Router  string
 	Failure string
 }
 
-func (h *Host) ServedEdge(ctx context.Context, hostname string) (Answer, error) {
+func (h *Host) ServedRouter(ctx context.Context, hostname string) (Answer, error) {
 	result, err := h.stream(ctx, words([]string{SwitchboardBinary, "probe", hostname}), nil, "")
 	if err != nil {
 		return Answer{}, err
 	}
 	switch result.Code {
 	case 0:
-		return Answer{Edge: strings.TrimSpace(result.Stdout)}, nil
+		return Answer{Router: strings.TrimSpace(result.Stdout)}, nil
 	case proxyNotServingYet:
 		return Answer{Failure: spoken(result)}, nil
 	default:
@@ -160,8 +160,8 @@ func (b frontBox) Claimed(ctx context.Context) ([]string, error) {
 }
 
 func (b frontBox) Probe(ctx context.Context, hostname string) (string, string, error) {
-	said, err := b.h.ServedEdge(ctx, hostname)
-	return said.Edge, said.Failure, err
+	said, err := b.h.ServedRouter(ctx, hostname)
+	return said.Router, said.Failure, err
 }
 
 func (b frontBox) Said(ctx context.Context, argv []string) (string, error) {

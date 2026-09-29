@@ -503,9 +503,9 @@ func lastProbe(cert *contractv1.CertificateState, never string) string {
 	}
 	at := epochRFC3339(cert.GetLastProbeAt())
 	if !cert.GetLastProbeOk() {
-		return fmt.Sprintf("%s  FAILED — nothing answered as the %s edge", at, cert.GetLastProbeEdge())
+		return at + "  FAILED — nothing answered for this project"
 	}
-	return fmt.Sprintf("%s  x-ocel-edge: %s", at, cert.GetLastProbeEdge())
+	return at + "  answered"
 }
 
 func renderCertificateRecords(out io.Writer, cert *contractv1.CertificateState) {
@@ -704,7 +704,6 @@ type domainHostReport struct {
 	ManualRecords  []string `json:"manualRecords,omitempty"`
 	LastProbeAt    string   `json:"lastProbeAt,omitempty"`
 	LastProbeOk    bool     `json:"lastProbeOk"`
-	LastProbeEdge  string   `json:"lastProbeEdge,omitempty"`
 	ServingPointer string   `json:"servingPointer,omitempty"`
 }
 
@@ -731,7 +730,6 @@ func writeDomainStatusJSON(out io.Writer, resp *contractv1.GetHostnameStatusResp
 			ManualRecords:  cert.GetManualRecords(),
 			LastProbeAt:    epochRFC3339(cert.GetLastProbeAt()),
 			LastProbeOk:    cert.GetLastProbeOk(),
-			LastProbeEdge:  cert.GetLastProbeEdge(),
 			ServingPointer: host.GetServingPointer(),
 		})
 	}

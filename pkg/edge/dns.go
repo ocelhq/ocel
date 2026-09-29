@@ -137,7 +137,7 @@ func RecordsFor(target DNSTarget, hostnames []string) ([]Record, error) {
 		}
 		front := target.FrontFor(host)
 		if front == "" {
-			return nil, fmt.Errorf("nothing to point %s at: the %s edge published no hostname for this deployment", host, target.Kind)
+			return nil, fmt.Errorf("nothing to point %s at: this deployment published no hostname or address to point it at", host)
 		}
 		records = append(records, addressRecord(host, front))
 	}

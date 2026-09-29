@@ -25,7 +25,7 @@ type Routers struct {
 func newRouters(edges *Edges) *Routers {
 	routers := &Routers{edges: edges, planes: map[router.Kind]*DataPlane{}}
 	for _, kind := range edges.kinds() {
-		routers.planes[router.Kind(kind)] = &DataPlane{served: map[projectPointer]map[string]string{}, writes: map[projectPointer]int{}}
+		routers.planes[edges.Edge(kind).routedBy] = &DataPlane{served: map[projectPointer]map[string]string{}, writes: map[projectPointer]int{}}
 	}
 	return routers
 }
@@ -34,16 +34,20 @@ func (e *Edges) pairings() []provider.Pairing {
 	kinds := e.kinds()
 	pairings := make([]provider.Pairing, 0, len(kinds))
 	for _, kind := range kinds {
-		pairings = append(pairings, provider.Pairing{Edge: kind, Router: router.Kind(kind), Computes: provider.Computes()})
+		pairings = append(pairings, provider.Pairing{Edge: kind, Router: e.Edge(kind).routedBy, Computes: provider.Computes()})
 	}
 	return pairings
 }
 
 func (r *Routers) Open(kind router.Kind) (router.Router, error) {
-	shared := r.edges.Edge(edge.Kind(kind))
+	var shared *Edge
+	for _, front := range r.edges.kinds() {
+		if paired := r.edges.Edge(front); paired.routedBy == kind {
+			shared = paired
+		}
+	}
 	if shared == nil {
-		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"the reference provider serves no edge %q; it serves %s", kind, kindList(r.edges.kinds()))
+		return nil, refusal.Refuse(refusal.CodeInvalid, "the reference provider has nothing named %q", kind)
 	}
 	return Router{edge: shared, plane: r.planes[kind]}, nil
 }
@@ -153,7 +157,7 @@ type Router struct {
 	plane *DataPlane
 }
 
-func (r Router) Kind() router.Kind { return router.Kind(r.edge.kind) }
+func (r Router) Kind() router.Kind { return r.edge.routedBy }
 
 func (r Router) Facts() router.Facts { return r.edge.routerFacts() }
 

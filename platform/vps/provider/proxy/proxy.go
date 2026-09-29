@@ -31,7 +31,7 @@ type Spec struct {
 	Hostnames   []string
 	PreviewBase string
 	Upstream    string
-	Edge        string
+	Router      string
 	Permission  Permission
 }
 

@@ -84,7 +84,7 @@ func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.Remove
 		if err != nil {
 			return err
 		}
-		progress.Say(fmt.Sprintf("Removing the routing pointer of %s from the %s edge", environmentPhrase(environment.TierPreview, pointer), session.front.Kind()))
+		progress.Say(fmt.Sprintf("Removing the routing pointer of %s", environmentPhrase(environment.TierPreview, pointer)))
 		removed, err := session.removePointer(ctx, pointer, progress)
 		if err != nil {
 			return err

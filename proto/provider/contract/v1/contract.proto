@@ -142,8 +142,6 @@ message CertificateState {
   int64 last_probe_at = 5;
 
   bool last_probe_ok = 6;
-
-  string last_probe_edge = 7;
 }
 
 message ProductionHostname {

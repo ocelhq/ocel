@@ -17,7 +17,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
-	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
@@ -47,9 +46,9 @@ func onABoxServingPreviews(t *testing.T) (machine, *vps.Provider, edge.EdgeStack
 	})
 
 	p := vm.deploying(t)
-	front, err := p.Edges().Open(boxedge.Kind)
+	front, err := p.Edges().Open(edge.None)
 	if err != nil {
-		t.Fatalf("Open(%q) = %v", boxedge.Kind, err)
+		t.Fatalf("Open(%q) = %v", edge.None, err)
 	}
 	if _, err := front.ReconcilePreviewWildcard(context.Background(), edge.PreviewWildcardSpec{
 		BaseDomain: livePreviewBase,
@@ -265,9 +264,9 @@ func TestLiveAPreviewTornDownLeavesNoRouteAndNoImageBehindAndKeepsItsCertificate
 	}
 	answered := vm.peers(t, "curl -sS -m 10 -o /dev/null -D - -H "+quote("Host: "+hostname)+" http://"+caddy.Container+"/")
 	if !strings.Contains(answered, "404") ||
-		!strings.Contains(strings.ToLower(answered), strings.ToLower(edge.HeaderEdge)+": "+switchboard.EdgeName) {
+		!strings.Contains(strings.ToLower(answered), strings.ToLower(router.HeaderRouter)+": "+switchboard.RouterKind) {
 		t.Errorf("%s was answered\n%s\nafter its preview came down, want the catch-all's 404 with %s: %s. A 404 from a route this teardown was meant to remove reads the same on the status line alone",
-			hostname, answered, edge.HeaderEdge, switchboard.EdgeName)
+			hostname, answered, router.HeaderRouter, switchboard.RouterKind)
 	}
 	if wildcard := edge.PreviewWildcard(livePreviewBase); !slices.Contains(vm.routedHosts(t), wildcard) {
 		t.Errorf("the catch-all %s went down with one project's preview, and it is a bootstrap item answering for every project this box serves: %v", wildcard, vm.routedHosts(t))

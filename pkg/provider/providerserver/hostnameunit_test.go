@@ -66,7 +66,7 @@ func TestAHostnameAnotherEdgeServesLeavesTheAttachingUnitAtAWarningNamingOnlyThe
 	if want := "Attached production hostname www.shop.example but not shop.example"; unit.ended.GetMessage() != want {
 		t.Errorf("the unit ended saying %q, want %q", unit.ended.GetMessage(), want)
 	}
-	if len(unit.warnings) != 1 || !strings.HasPrefix(unit.warnings[0], "shop.example is still served by the relay edge") {
+	if len(unit.warnings) != 1 || !strings.HasPrefix(unit.warnings[0], "shop.example is still served through the relay edge") {
 		t.Errorf("the unit warned %q, want one warning naming shop.example and the edge still serving it", unit.warnings)
 	}
 }

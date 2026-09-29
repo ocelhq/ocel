@@ -16,7 +16,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/seal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
-	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
@@ -106,7 +105,7 @@ func TestNamingTheCloudflareEdgeIsRefusedWhenTheBootstrapIsOpenedAndSaysWhy(t *t
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("Bootstrap(%q) = %v, want an %s refusal before a token is spent provisioning anything", cloudflare.Kind, err, refusal.CodeInvalid)
 	}
-	for _, said := range []string{"program", string(direct.Kind), string(alb.Kind)} {
+	for _, said := range []string{"program", "`edge` out", string(alb.Kind)} {
 		if !strings.Contains(refused.Message, said) {
 			t.Errorf("the refusal reads %q, want it to say %q: the reader learns why it is refused and what to name instead", refused.Message, said)
 		}
@@ -123,16 +122,16 @@ func TestAFrontedServiceStopsAnsweringOnItsOwnCloudRunUrl(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open(%q) = %v", alb.Kind, err)
 	}
-	direct, err := testProvider(t).Edges().Open(direct.Kind)
+	unfronted, err := testProvider(t).Edges().Open(edge.None)
 	if err != nil {
-		t.Fatalf("Open(direct) = %v", err)
+		t.Fatalf("Open(no edge) = %v", err)
 	}
 	if !front.Facts().ShieldsOrigin {
 		t.Errorf("the %q edge does not declare that it shields the origin, and the ingress a release takes is read from that fact "+
 			"rather than from which edge it is", alb.Kind)
 	}
-	if direct.Facts().ShieldsOrigin {
-		t.Error("the direct edge declares that it shields the origin, and the url Cloud Run gives each service is the whole of what serves it")
+	if unfronted.Facts().ShieldsOrigin {
+		t.Error("a project with no edge in front declares that it shields the origin, and the url Cloud Run gives each service is the whole of what serves it")
 	}
 	if got := gcp.IngressFor(edge.Facts{ShieldsOrigin: true}); got != "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER" {
 		t.Errorf("a service behind an edge that shields the origin takes ingress %q, want the load balancer only: the run.app url would "+

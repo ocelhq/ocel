@@ -11,10 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/router"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
-	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
@@ -63,7 +61,7 @@ func probingAt(t *testing.T, header string) *vps.Provider {
 			t.Error("the probe reached the hostname over something other than tls, and a header read off plain http proves no certificate was ever served")
 		}
 		if header != "" {
-			w.Header().Set(edge.HeaderEdge, header)
+			w.Header().Set(router.HeaderRouter, header)
 		}
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -78,20 +76,20 @@ func probingAt(t *testing.T, header string) *vps.Provider {
 	return p
 }
 
-func TestTheBoxAnswersWhichEdgeServesAHostnameOffTheHeaderItReadsOverTls(t *testing.T) {
+func TestTheBoxAnswersWhichRouterServesAHostnameOffTheHeaderItReadsOverTls(t *testing.T) {
 	t.Parallel()
 
 	for what, header := range map[string]string{
-		"the box itself":    string(boxedge.Kind),
-		"a different edge":  "cloudfront",
-		"nothing ocel runs": "",
+		"the box itself":     switchboard.RouterKind,
+		"a different router": "cloudfront",
+		"nothing ocel runs":  "",
 	} {
-		kind, err := probingAt(t, header).ServingEdge(context.Background(), boxedge.Kind, "shop.example.com")
+		kind, err := probingAt(t, header).ServingRouter(context.Background(), "shop.example.com")
 		if err != nil {
 			t.Fatalf("Serving() over %s = %v", what, err)
 		}
 		if string(kind) != header {
-			t.Errorf("Serving() over %s = %q, want %q read off %s", what, kind, header, edge.HeaderEdge)
+			t.Errorf("Serving() over %s = %q, want %q read off %s", what, kind, header, router.HeaderRouter)
 		}
 	}
 }
@@ -100,7 +98,7 @@ func TestTheEdgeIsReadOffTheHostnameProbedAndNotOffWhereeverItPointsOn(t *testin
 	t.Parallel()
 
 	elsewhere := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set(edge.HeaderEdge, "cloudfront")
+		w.Header().Set(router.HeaderRouter, "cloudfront")
 		w.WriteHeader(http.StatusOK)
 	}))
 	t.Cleanup(elsewhere.Close)
@@ -117,7 +115,7 @@ func TestTheEdgeIsReadOffTheHostnameProbedAndNotOffWhereeverItPointsOn(t *testin
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
 	probedAt(p, at.Host, trusted)
 
-	kind, err := p.ServingEdge(context.Background(), boxedge.Kind, "shop.example.com")
+	kind, err := p.ServingRouter(context.Background(), "shop.example.com")
 	if err != nil {
 		t.Fatalf("Serving() over a hostname fronted by a redirect = %v", err)
 	}
@@ -130,7 +128,7 @@ func TestAHostnameServingACertificateNothingTrustsKeepsConvergingAndSaysWhy(t *t
 	t.Parallel()
 
 	served := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set(edge.HeaderEdge, string(boxedge.Kind))
+		w.Header().Set(router.HeaderRouter, switchboard.RouterKind)
 		w.WriteHeader(http.StatusOK)
 	}))
 	t.Cleanup(served.Close)
@@ -142,7 +140,7 @@ func TestAHostnameServingACertificateNothingTrustsKeepsConvergingAndSaysWhy(t *t
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
 	probedAt(p, at.Host, untrusted)
 
-	kind, err := p.ServingEdge(context.Background(), boxedge.Kind, "shop.example.com")
+	kind, err := p.ServingRouter(context.Background(), "shop.example.com")
 	if err != nil {
 		t.Fatalf("Serving() over a certificate nothing trusts = %v, want it reported unserved: a cutover writes the record and probes at once, so for the whole of the old record's ttl the probe reaches the previous host, and a deploy that dies on attempt 1 there never moves the domain at all",
 			err)
@@ -159,7 +157,7 @@ func TestAHostnameThatAnswersClearsTheCauseTheLastAttemptLeft(t *testing.T) {
 	t.Parallel()
 
 	served := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set(edge.HeaderEdge, string(boxedge.Kind))
+		w.Header().Set(router.HeaderRouter, switchboard.RouterKind)
 		w.WriteHeader(http.StatusOK)
 	}))
 	t.Cleanup(served.Close)
@@ -179,13 +177,13 @@ func TestAHostnameThatAnswersClearsTheCauseTheLastAttemptLeft(t *testing.T) {
 		return (&net.Dialer{}).DialContext(ctx, network, at.Host)
 	}
 
-	if _, err := p.ServingEdge(context.Background(), boxedge.Kind, "shop.example.com"); err != nil {
+	if _, err := p.ServingRouter(context.Background(), "shop.example.com"); err != nil {
 		t.Fatal(err)
 	}
 	if p.LastProbeFailure("shop.example.com") == "" {
 		t.Fatal("a hostname the probe never reached has no cause, and this test states nothing about clearing one")
 	}
-	if _, err := p.ServingEdge(context.Background(), boxedge.Kind, "shop.example.com"); err != nil {
+	if _, err := p.ServingRouter(context.Background(), "shop.example.com"); err != nil {
 		t.Fatal(err)
 	}
 	if cause := p.LastProbeFailure("shop.example.com"); cause != "" {
@@ -202,7 +200,7 @@ func TestAProbeTheRunGaveUpOnSaysSoRatherThanReportingTheHostnameUnserved(t *tes
 	ctx, stop := context.WithCancel(context.Background())
 	stop()
 
-	if _, err := p.ServingEdge(ctx, boxedge.Kind, "shop.example.com"); !errors.Is(err, context.Canceled) {
+	if _, err := p.ServingRouter(ctx, "shop.example.com"); !errors.Is(err, context.Canceled) {
 		t.Errorf("Serving() under a cancelled context = %v, want the cancellation: a deploy the user stopped reads as a hostname that does not answer yet", err)
 	}
 }
@@ -213,7 +211,7 @@ func TestAHostnameNothingAnswersIsNotAnErrorTheCutoverGivesUpOn(t *testing.T) {
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
 	p.System = resolvesNothing{}
 
-	kind, err := p.ServingEdge(context.Background(), boxedge.Kind, "nothing.invalid")
+	kind, err := p.ServingRouter(context.Background(), "nothing.invalid")
 	if err != nil {
 		t.Fatalf("Serving() over a hostname that resolves to nothing = %v, want it reported as unserved: the cutover retries on an empty answer and gives up on an error", err)
 	}
@@ -256,12 +254,12 @@ func TestAHostnameOneOfTheBoxesProjectsAnswersStillNamesTheBoxAsItsEdge(t *testi
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
 	probedAt(p, at.Host, trusted)
 
-	kind, err := p.ServingEdge(context.Background(), boxedge.Kind, hostname)
+	kind, err := p.ServingRouter(context.Background(), hostname)
 	if err != nil {
 		t.Fatalf("Serving() = %v", err)
 	}
-	if kind != boxedge.Kind {
-		t.Errorf("Serving() over a hostname a project on the box claims and routes = %q, want %q: a box that names the edge only on the route nothing claims makes the first bind on a project already deployed probe its own app, read no header and burn every attempt before refusing", kind, boxedge.Kind)
+	if kind != switchboard.RouterKind {
+		t.Errorf("Serving() over a hostname a project on the box claims and routes = %q, want %q: a box that names the edge only on the route nothing claims makes the first bind on a project already deployed probe its own app, read no header and burn every attempt before refusing", kind, switchboard.RouterKind)
 	}
 }
 
@@ -288,14 +286,14 @@ func probedOnTheBox(t *testing.T, answer session.Result) (*vps.Provider, *box) {
 func TestALocalhostNameIsProbedOnTheBoxItResolvesOn(t *testing.T) {
 	t.Parallel()
 
-	p, machine := probedOnTheBox(t, session.Result{Stdout: string(boxedge.Kind) + "\n"})
+	p, machine := probedOnTheBox(t, session.Result{Stdout: switchboard.RouterKind + "\n"})
 
-	kind, err := p.ServingEdge(context.Background(), boxedge.Kind, "web.localhost")
+	kind, err := p.ServingRouter(context.Background(), "web.localhost")
 	if err != nil {
 		t.Fatalf("Serving() = %v", err)
 	}
-	if kind != boxedge.Kind {
-		t.Errorf("Serving() = %q, want %q read off the box's own proxy", kind, boxedge.Kind)
+	if kind != switchboard.RouterKind {
+		t.Errorf("Serving() = %q, want %q read off the box's own proxy", kind, switchboard.RouterKind)
 	}
 	if machine.at("ocel-switchboard' 'probe' 'web.localhost'") < 0 {
 		t.Errorf("the box was never asked to probe web.localhost: %v", machine.commands())
@@ -308,7 +306,7 @@ func TestALocalhostNameTheBoxCannotReachKeepsConvergingAndSaysWhy(t *testing.T) 
 	p, _ := probedOnTheBox(t, session.Result{Code: 3,
 		Stderr: "web.localhost at 127.0.0.1:443: the certificate served is for fallback.localhost, not this name"})
 
-	kind, err := p.ServingEdge(context.Background(), boxedge.Kind, "web.localhost")
+	kind, err := p.ServingRouter(context.Background(), "web.localhost")
 	if err != nil {
 		t.Fatalf("Serving() = %v, want it reported unserved: the proxy obtains the name's certificate in the background after the bind", err)
 	}
@@ -325,7 +323,7 @@ func TestALocalhostProbeTheBoxRefusesIsAnError(t *testing.T) {
 
 	p, _ := probedOnTheBox(t, session.Result{Code: 2, Stderr: "usage: ocel-switchboard serve"})
 
-	if _, err := p.ServingEdge(context.Background(), boxedge.Kind, "web.localhost"); err == nil {
+	if _, err := p.ServingRouter(context.Background(), "web.localhost"); err == nil {
 		t.Error("Serving() = nil over a proxy that could not be asked at all, and the cutover burns a minute on a box whose proxy is down")
 	}
 }

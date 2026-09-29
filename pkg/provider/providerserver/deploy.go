@@ -501,15 +501,14 @@ func (r *deployRun) attachHostnames(ctx context.Context) error {
 				missed = append(missed, host)
 			}
 			for _, host := range r.configured {
-				serving := r.state.Host(host.Hostname).Serving()
-				if serving == r.front.Kind() {
+				if r.state.Ready(host.Hostname, r.front.Kind(), r.routerFor(host.App)) {
 					attached = append(attached, host.Hostname)
 					continue
 				}
-				if serving != "" {
+				if bound, served := r.state.Host(host.Hostname).Serving(); served && bound != r.front.Kind() {
 					skip(host.Hostname, fmt.Sprintf(
-						"%s is still served by the %s edge, not the %s edge this deploy promoted to: `ocel domain add` moves it, in the order that keeps it answering",
-						host.Hostname, serving, r.front.Kind()))
+						"%s is still served through %s, not through %s this deploy promoted to: `ocel domain add` moves it, in the order that keeps it answering",
+						host.Hostname, frontPhrase(bound), frontPhrase(r.front.Kind())))
 					continue
 				}
 				_, err := attaching.attachHostname(ctx, host, progress)
@@ -1357,7 +1356,7 @@ func (r *deployRun) result(promotion router.Promotion, flip router.FlipBound) (*
 	}
 	for slot, hosts := range r.servedHostnames() {
 		for _, host := range hosts {
-			if r.hostingMode() == hostingProduction && !r.state.Ready(host, r.front.Kind()) {
+			if r.hostingMode() == hostingProduction && !r.state.Ready(host, r.front.Kind(), r.routerFor(r.spec.Apps[slot].App)) {
 				continue
 			}
 			r.outcomes[slot].Urls = append(r.outcomes[slot].Urls, "https://"+host)

@@ -1,6 +1,6 @@
 import type { Fetch } from "../../checks/context";
 
-const EDGE_HEADER = "x-ocel-edge";
+const ROUTER_HEADER = "x-ocel-router";
 const STABLE_EDGE_ANSWERS = 6;
 
 export type ServingReport = {
@@ -58,7 +58,7 @@ export async function awaitServing(
           break;
         }
         last = `last status ${response.status}`;
-        if (response.headers.get(EDGE_HEADER)) {
+        if (response.headers.get(ROUTER_HEADER)) {
           if (edged === 0) {
             edgedSince = now();
           }

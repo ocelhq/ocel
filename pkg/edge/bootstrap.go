@@ -51,7 +51,14 @@ func ValidPlanAction(action PlanAction) bool {
 
 const EdgeGroupKind = "edge"
 
-func EdgeGroupName(kind Kind) string { return string(kind) + "/edge" }
+const OriginGroupName = "origin"
+
+func EdgeGroupName(kind Kind) string {
+	if kind == None {
+		return OriginGroupName
+	}
+	return string(kind) + "/edge"
+}
 
 func EdgeGroupKindOf(name string) (Kind, bool) {
 	kind, ok := strings.CutSuffix(name, "/edge")

@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
-	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
@@ -45,9 +44,9 @@ func previewEntryOn(t *testing.T, vm machine) edge.Edge {
 
 	p := vm.deploying(t)
 	t.Cleanup(func() { closing(t, p) })
-	front, err := p.Edges().Open(boxedge.Kind)
+	front, err := p.Edges().Open(edge.None)
 	if err != nil {
-		t.Fatalf("Open(%q) = %v", boxedge.Kind, err)
+		t.Fatalf("Open(%q) = %v", edge.None, err)
 	}
 	if _, err := front.ReconcilePreviewWildcard(context.Background(), edge.PreviewWildcardSpec{
 		BaseDomain: livePreviewBase,

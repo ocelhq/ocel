@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
@@ -122,7 +123,7 @@ func probe(argv []string, out, errs io.Writer) int {
 	}
 	defer answer.Body.Close()
 	_, _ = io.Copy(io.Discard, io.LimitReader(answer.Body, edgeAnswerCap))
-	answered := strings.TrimSpace(answer.Header.Get(edge.HeaderEdge))
+	answered := strings.TrimSpace(answer.Header.Get(router.HeaderRouter))
 	heard := answer.Header.Get(switchboard.HeardHeader)
 	if heard == "" {
 		fmt.Fprintf(errs, "%s answered at %s as %q, and %s never did: route it to %s\n", hostname, at, answered, switchboard.Name, switchboard.Name)

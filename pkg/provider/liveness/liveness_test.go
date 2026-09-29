@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/router"
 )
 
 func answeringAs(t *testing.T, header string, handler http.HandlerFunc) string {
@@ -21,7 +22,7 @@ func answeringAs(t *testing.T, header string, handler http.HandlerFunc) string {
 	if handler == nil {
 		handler = func(w http.ResponseWriter, _ *http.Request) {
 			if header != "" {
-				w.Header().Set(edge.HeaderEdge, header)
+				w.Header().Set(router.HeaderRouter, header)
 			}
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -117,17 +118,17 @@ func resolvedAt(t *testing.T, header string, handler http.HandlerFunc) *Net {
 	}
 }
 
-func TestTheLivenessProbeReadsWhichEdgeAnswersOffItsMarkerAndNotItsStatus(t *testing.T) {
+func TestTheLivenessProbeReadsWhichRouterAnswersOffItsMarkerAndNotItsStatus(t *testing.T) {
 	t.Parallel()
 
 	for _, header := range []string{"cloudfront", "cloudflare", ""} {
 		probe := resolvedAt(t, header, nil)
-		kind, err := probe.ServingEdge(context.Background(), "cloudfront", "shop.example.com")
+		kind, err := probe.ServingRouter(context.Background(), "shop.example.com")
 		if err != nil {
 			t.Fatalf("Serving() = %v", err)
 		}
 		if string(kind) != header {
-			t.Errorf("Serving() = %q, want %q read off %s: a placeholder answering 404 is a front that serves the hostname", kind, header, edge.HeaderEdge)
+			t.Errorf("Serving() = %q, want %q read off %s: a placeholder answering 404 is a front that serves the hostname", kind, header, router.HeaderRouter)
 		}
 	}
 }
@@ -142,15 +143,15 @@ func TestTheLivenessProbeAsksForTheHostnameItProbesAndFollowsNoRedirect(t *testi
 			http.Redirect(w, r, "/elsewhere", http.StatusFound)
 			return
 		}
-		w.Header().Set(edge.HeaderEdge, "cloudflare")
+		w.Header().Set(router.HeaderRouter, "cloudflare")
 	})
 
-	kind, err := probe.ServingEdge(context.Background(), "cloudflare", "shop.example.com")
+	kind, err := probe.ServingRouter(context.Background(), "shop.example.com")
 	if err != nil {
 		t.Fatalf("Serving() = %v", err)
 	}
 	if kind != "" {
-		t.Errorf("Serving() = %q, want nothing: the probe followed a redirect and read the edge off wherever it landed", kind)
+		t.Errorf("Serving() = %q, want nothing: the probe followed a redirect and read the router off wherever it landed", kind)
 	}
 	if !slices.Equal(asked, []string{"shop.example.com shop.example.com " + edge.LivenessProbePath}) {
 		t.Errorf("the front was asked %v, want the hostname as both Host and SNI, on the path every front answers itself: an edge routes and terminates on the name, not the address, and an app behind API Gateway's proxy integration answers / without the marker", asked)
@@ -167,9 +168,9 @@ func TestAHostnameTheSystemResolverAnswersIsProbedWhereItResolvesAndNoNameserver
 		return &dnsBook{}
 	}
 
-	kind, err := probe.ServingEdge(context.Background(), "cloudfront", "shop.example.com")
+	kind, err := probe.ServingRouter(context.Background(), "shop.example.com")
 	if err != nil || kind != "cloudfront" {
-		t.Fatalf("Serving() = %q, %v, want the edge at the address the system resolver gave", kind, err)
+		t.Fatalf("Serving() = %q, %v, want the router at the address the system resolver gave", kind, err)
 	}
 	if len(authorities) != 0 {
 		t.Errorf("the probe asked nameservers %v directly although the system resolver answered: a private zone, a split horizon or a hosts-file entry is what the operator's own machine reaches, and the public nameservers know nothing of it", authorities)
@@ -181,7 +182,7 @@ func TestAWildcardIsProbedOnALabelUnderIt(t *testing.T) {
 
 	book := &dnsBook{}
 	probe := &Net{System: book, Authority: func(string) DNSLookup { return &dnsBook{} }}
-	if _, err := probe.ServingEdge(context.Background(), "cloudflare", "*.preview.example.com"); err != nil {
+	if _, err := probe.ServingRouter(context.Background(), "*.preview.example.com"); err != nil {
 		t.Fatal(err)
 	}
 	want := "A " + edge.ProbeHostname("*.preview.example.com")
@@ -195,7 +196,7 @@ func TestACertificateNothingTrustsIsUnservedAndSaysWhy(t *testing.T) {
 
 	probe := resolvedAt(t, "cloudfront", nil)
 	probe.TLS = nil
-	kind, err := probe.ServingEdge(context.Background(), "cloudfront", "shop.example.com")
+	kind, err := probe.ServingRouter(context.Background(), "shop.example.com")
 	if err != nil {
 		t.Fatalf("Serving() = %v, want it reported unserved so the cutover wait keeps polling", err)
 	}
@@ -238,9 +239,9 @@ func TestAHostnameTheSystemResolverCannotSeeYetIsLocatedOffAnyOneOfItsZonesNames
 			"ns2.example.net": {hosts: map[string][]string{"shop.example.com": {"203.0.113.4"}}},
 		})
 
-	kind, err := probe.ServingEdge(context.Background(), "cloudfront", "shop.example.com")
+	kind, err := probe.ServingRouter(context.Background(), "shop.example.com")
 	if err != nil || kind != "cloudfront" {
-		t.Fatalf("Serving() = %q, %v (%s), want the edge located off the one nameserver that answered: the address is a hint, and one nameserver out of reach is no reason to call the hostname unserved", kind, err, probe.LastProbeFailure("shop.example.com"))
+		t.Fatalf("Serving() = %q, %v (%s), want the router located off the one nameserver that answered: the address is a hint, and one nameserver out of reach is no reason to call the hostname unserved", kind, err, probe.LastProbeFailure("shop.example.com"))
 	}
 }
 
@@ -253,7 +254,7 @@ func TestAHostnameThatIsItsOwnZoneApexIsAskedOfItsOwnNameservers(t *testing.T) {
 			"ns1.example.net": {hosts: map[string][]string{"shop.example.co.uk": {"203.0.113.4"}}},
 		})
 
-	kind, err := probe.ServingEdge(context.Background(), "cloudfront", "shop.example.co.uk")
+	kind, err := probe.ServingRouter(context.Background(), "shop.example.co.uk")
 	if err != nil || kind != "cloudfront" {
 		t.Fatalf("Serving() = %q, %v (%s), want the apex located off the zone it heads", kind, err, probe.LastProbeFailure("shop.example.co.uk"))
 	}
@@ -268,7 +269,7 @@ func TestAHostnameTwoLabelsBelowItsZoneFindsTheZoneAboveIt(t *testing.T) {
 			"ns1.example.net": {hosts: map[string][]string{"a.b.example.com": {"203.0.113.4"}}},
 		})
 
-	if kind, err := probe.ServingEdge(context.Background(), "cloudfront", "a.b.example.com"); err != nil || kind != "cloudfront" {
+	if kind, err := probe.ServingRouter(context.Background(), "a.b.example.com"); err != nil || kind != "cloudfront" {
 		t.Fatalf("Serving() = %q, %v (%s)", kind, err, probe.LastProbeFailure("a.b.example.com"))
 	}
 }
@@ -282,8 +283,8 @@ func TestAHostnameAliasedToTheFrontIsLocatedWhereTheFrontIs(t *testing.T) {
 			"ns1.example.net": {aliases: map[string]string{"shop.example.com": "d111.cloudfront.net"}},
 		})
 
-	if kind, err := probe.ServingEdge(context.Background(), "cloudfront", "shop.example.com"); err != nil || kind != "cloudfront" {
-		t.Fatalf("Serving() = %q, %v (%s), want the edge where the alias the zone records resolves", kind, err, probe.LastProbeFailure("shop.example.com"))
+	if kind, err := probe.ServingRouter(context.Background(), "shop.example.com"); err != nil || kind != "cloudfront" {
+		t.Fatalf("Serving() = %q, %v (%s), want the router where the alias the zone records resolves", kind, err, probe.LastProbeFailure("shop.example.com"))
 	}
 }
 
@@ -294,7 +295,7 @@ func TestAHostnameNoNameserverAnswersForYetIsUnservedAndSaysWhy(t *testing.T) {
 		map[string][]string{"example.com": {"ns1.example.net", "ns2.example.net"}},
 		map[string]*dnsBook{"ns1.example.net": {}, "ns2.example.net": {}})
 
-	kind, err := probe.ServingEdge(context.Background(), "cloudfront", "shop.example.com")
+	kind, err := probe.ServingRouter(context.Background(), "shop.example.com")
 	if err != nil || kind != "" {
 		t.Fatalf("Serving() = %q, %v, want it unserved", kind, err)
 	}
@@ -312,7 +313,7 @@ func TestAProbeTheRunStoppedReportsTheStop(t *testing.T) {
 	ctx, stop := context.WithCancel(context.Background())
 	stop()
 	probe := resolvedAt(t, "cloudfront", nil)
-	if _, err := probe.ServingEdge(ctx, "cloudfront", "shop.example.com"); !errors.Is(err, context.Canceled) {
+	if _, err := probe.ServingRouter(ctx, "shop.example.com"); !errors.Is(err, context.Canceled) {
 		t.Errorf("Serving() under a cancelled context = %v, want the cancellation", err)
 	}
 }
@@ -323,7 +324,7 @@ func TestAFrontThatAnswersAtAKnownEndpointIsAskedThereForTheHostname(t *testing.
 	var asked []string
 	served := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		asked = append(asked, r.Host)
-		w.Header().Set(edge.HeaderEdge, "api-gateway")
+		w.Header().Set(router.HeaderRouter, "api-gateway")
 		w.WriteHeader(http.StatusNotFound)
 	}))
 	t.Cleanup(served.Close)
@@ -334,9 +335,9 @@ func TestAFrontThatAnswersAtAKnownEndpointIsAskedThereForTheHostname(t *testing.
 	book := &dnsBook{}
 	probe := &Net{System: book, ProbeAddress: front}
 
-	kind, err := probe.ServingEdge(context.Background(), "api-gateway", "web.journey.test")
+	kind, err := probe.ServingRouter(context.Background(), "web.journey.test")
 	if err != nil || kind != "api-gateway" {
-		t.Fatalf("Serving() = %q, %v (%s), want the edge the endpoint answered as", kind, err, probe.LastProbeFailure("web.journey.test"))
+		t.Fatalf("Serving() = %q, %v (%s), want the router the endpoint answered as", kind, err, probe.LastProbeFailure("web.journey.test"))
 	}
 	if !slices.Equal(asked, []string{"web.journey.test"}) {
 		t.Errorf("the endpoint was asked for %v, want the hostname: the front routes on the name", asked)
@@ -354,14 +355,14 @@ func TestAFrontThatAnswersOnlyOnItsOwnMachineIsProbedThereForEveryName(t *testin
 	probe := &Net{
 		System:       book,
 		LoopbackOnly: true,
-		Loopback: func(_ context.Context, hostname string) (edge.Kind, error) {
+		Loopback: func(_ context.Context, hostname string) (router.Kind, error) {
 			asked = append(asked, hostname)
-			return "box", nil
+			return "switchboard", nil
 		},
 	}
-	kind, err := probe.ServingEdge(context.Background(), "box", "shop.example.com")
-	if err != nil || kind != "box" {
-		t.Fatalf("Serving() = %q, %v, want box", kind, err)
+	kind, err := probe.ServingRouter(context.Background(), "shop.example.com")
+	if err != nil || kind != "switchboard" {
+		t.Fatalf("Serving() = %q, %v, want switchboard", kind, err)
 	}
 	if !slices.Equal(asked, []string{"shop.example.com"}) {
 		t.Errorf("the loopback probe was asked %v, want the public name asked there too", asked)
@@ -377,12 +378,12 @@ func TestALoopbackNameIsProbedFromWhereItResolves(t *testing.T) {
 	var asked []string
 	probe := &Net{
 		System: &dnsBook{},
-		Loopback: func(_ context.Context, hostname string) (edge.Kind, error) {
+		Loopback: func(_ context.Context, hostname string) (router.Kind, error) {
 			asked = append(asked, hostname)
 			return "", ProbeUnanswered{Cause: "tls: no certificate for " + hostname + " yet"}
 		},
 	}
-	kind, err := probe.ServingEdge(context.Background(), "box", "shop.localhost")
+	kind, err := probe.ServingRouter(context.Background(), "shop.localhost")
 	if err != nil || kind != "" {
 		t.Fatalf("Serving() = %q, %v, want it unserved", kind, err)
 	}
@@ -392,7 +393,7 @@ func TestALoopbackNameIsProbedFromWhereItResolves(t *testing.T) {
 	if cause := probe.LastProbeFailure("shop.localhost"); !strings.Contains(cause, "no certificate") {
 		t.Errorf("LastProbeFailure() = %q, want what the loopback probe said", cause)
 	}
-	if _, err := probe.ServingEdge(context.Background(), "box", "shop.example.com"); err != nil {
+	if _, err := probe.ServingRouter(context.Background(), "shop.example.com"); err != nil {
 		t.Fatal(err)
 	}
 	if len(asked) != 1 {

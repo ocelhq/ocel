@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
@@ -74,8 +74,8 @@ func upgrading(t *testing.T, at, host string) socket {
 	if response.StatusCode != http.StatusSwitchingProtocols {
 		t.Fatalf("the upgrade answered %d, want 101", response.StatusCode)
 	}
-	if response.Header.Get(edge.HeaderEdge) != switchboard.EdgeName {
-		t.Errorf("the upgrade answered naming the edge %q, want %q", response.Header.Get(edge.HeaderEdge), switchboard.EdgeName)
+	if response.Header.Get(router.HeaderRouter) != switchboard.RouterKind {
+		t.Errorf("the upgrade answered naming the edge %q, want %q", response.Header.Get(router.HeaderRouter), switchboard.RouterKind)
 	}
 	return socket{conn: conn, reader: reader}
 }
@@ -293,8 +293,8 @@ func TestTheConnectorPathReachesTheConnectorOverItsSocketWithThePrefixStripped(t
 	if said.body != "connector" || said.header.Get("X-Served-Path") != "/connector.v1.Box/Describe" {
 		t.Errorf("the connector path answered %q asking for %q, want the connector asked for the procedure without the prefix", said.body, said.header.Get("X-Served-Path"))
 	}
-	if said.header.Get("X-Served-Host") != "box.example.com" || said.header.Get(edge.HeaderEdge) != switchboard.EdgeName {
-		t.Errorf("the connector was asked for host %q and answered naming %q, want box.example.com and %s", said.header.Get("X-Served-Host"), said.header.Get(edge.HeaderEdge), switchboard.EdgeName)
+	if said.header.Get("X-Served-Host") != "box.example.com" || said.header.Get(router.HeaderRouter) != switchboard.RouterKind {
+		t.Errorf("the connector was asked for host %q and answered naming %q, want box.example.com and %s", said.header.Get("X-Served-Host"), said.header.Get(router.HeaderRouter), switchboard.RouterKind)
 	}
 	if said := ask(t, boardClient, at, "box.example.com", "/"); said.body != "web" {
 		t.Errorf("the connector's hostname answered %q off the connector path, want the app that claims it", said.body)
