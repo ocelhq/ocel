@@ -18,7 +18,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
-	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -399,7 +398,7 @@ func askProvider(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Conf
 
 		var planned *contractv1.DescribeBootstrapResponse
 		err = prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
-			planned, err = client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{Tier: tier, Edge: edgewire.Selection(cfg)})
+			planned, err = client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{Tier: tier, Edge: cfg.EdgeSelection()})
 			return err
 		})
 		if err != nil {
@@ -422,7 +421,7 @@ func askProvider(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Conf
 			bound, err = client.GetHostnameStatus(ctx, &contractv1.HostnameRequest{
 				Slug:       cfg.Slug,
 				Configured: configured,
-				Edge:       edgewire.Selection(cfg),
+				Edge:       cfg.EdgeSelection(),
 			})
 			return err
 		})

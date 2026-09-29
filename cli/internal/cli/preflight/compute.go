@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runui"
@@ -17,7 +16,7 @@ import (
 func ResolveComputesFromProvider(ctx context.Context, prov *providerclient.Provider, cfg *projectconfig.Config) (string, error) {
 	var resp *contractv1.PreflightResponse
 	err := prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
-		resp, err = client.Preflight(ctx, &contractv1.PreflightRequest{Edge: edgewire.Selection(cfg)})
+		resp, err = client.Preflight(ctx, &contractv1.PreflightRequest{Edge: cfg.EdgeSelection()})
 		return err
 	})
 	if err != nil {

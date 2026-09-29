@@ -11,7 +11,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
-	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
@@ -80,7 +79,7 @@ func preflightEnvProvider(ctx context.Context, deps cmddeps.Deps, check *events.
 }
 
 func offerVariablesKey(ctx context.Context, deps cmddeps.Deps, check *events.Scope, prov *providerclient.Provider, cfg *projectconfig.Config, opts envOptions, status *contractv1.BootstrapStatus, stdin io.Reader, stderr io.Writer) error {
-	front := edgewire.Selection(cfg)
+	front := cfg.EdgeSelection()
 	offered, err := bootstrap.Offers(ctx, prov, opts.tier(), front, provider.FeatureVarsKey)
 	if err != nil || !offered {
 		return err

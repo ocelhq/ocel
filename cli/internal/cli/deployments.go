@@ -15,7 +15,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/consent"
-	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runui"
@@ -114,7 +113,7 @@ func listPromotions(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.C
 	err = prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		listed, err = client.ListPromotions(ctx, &contractv1.ListPromotionsRequest{
 			Slug: cfg.Slug,
-			Edge: edgewire.Selection(cfg),
+			Edge: cfg.EdgeSelection(),
 		})
 		return err
 	})
@@ -169,7 +168,7 @@ func runPromotionsPrune(ctx context.Context, deps cmddeps.Deps, cwd string, opts
 	req := &contractv1.RemoveStalePromotionsRequest{
 		Slug:  cfg.Slug,
 		KeepN: int32(opts.keep),
-		Edge:  edgewire.Selection(cfg),
+		Edge:  cfg.EdgeSelection(),
 	}
 	if _, err := providerclient.Stream(ctx, prov, "RemoveStalePromotions", req, contractv1connect.ProviderServiceClient.RemoveStalePromotions); err != nil {
 		return err

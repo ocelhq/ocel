@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
@@ -49,7 +48,7 @@ func NewRequest(cfg *projectconfig.Config, required environmentv1.Tier, slug str
 		Domains:      domains,
 		Frameworks:   frameworks,
 		Containers:   Containers(cfg),
-		Edge:         edgewire.Selection(cfg),
+		Edge:         cfg.EdgeSelection(),
 	}
 }
 

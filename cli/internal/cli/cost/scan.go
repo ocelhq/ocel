@@ -19,7 +19,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
-	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/manifestwire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -135,7 +134,7 @@ func price(ctx context.Context, deps cmddeps.Deps, prov *providerclient.Provider
 		set, err = client.Shape(ctx, &contractv1.ShapeRequest{
 			Manifest:    manifest,
 			Environment: env,
-			Edge:        edgewire.Selection(cfg),
+			Edge:        cfg.EdgeSelection(),
 		})
 		return err
 	})

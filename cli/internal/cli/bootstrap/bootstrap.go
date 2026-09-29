@@ -14,7 +14,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/consent"
-	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -223,7 +222,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 			Features: requested,
 			Remove:   going,
 			Force:    opts.Force,
-			Edge:     edgewire.Selection(cfg),
+			Edge:     cfg.EdgeSelection(),
 			Dry:      dry,
 		}
 		if opts.AutoHealDeclared {
@@ -318,7 +317,7 @@ func describeBootstrap(ctx context.Context, check *events.Scope, prov *providerc
 		planned, err = client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{
 			Tier:           tier,
 			WithDependents: true,
-			Edge:           edgewire.Selection(cfg),
+			Edge:           cfg.EdgeSelection(),
 		})
 		return err
 	})

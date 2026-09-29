@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/naming"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 type Discovery struct {
@@ -94,6 +95,17 @@ func (c *Config) EdgeID() edge.Kind {
 		return ""
 	}
 	return edge.Kind(c.Edge.ID)
+}
+
+func (c *Config) EdgeSelection() *contractv1.EdgeSelection {
+	selection := &contractv1.EdgeSelection{
+		Kind:          string(c.EdgeID()),
+		AllowDegraded: c.AllowDegraded,
+	}
+	if c.DNS != nil {
+		selection.Dns = &contractv1.Dns{Kind: c.DNS.ID, Zone: c.DNS.Zone}
+	}
+	return selection
 }
 
 func (c *Config) RequireProvider() (*ProviderDescriptor, error) {

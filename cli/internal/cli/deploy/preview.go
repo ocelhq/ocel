@@ -14,7 +14,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/deployresult"
-	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -270,7 +269,7 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 	req := &contractv1.DeployRequest{
 		Manifest:    manifest,
 		Environment: env,
-		Edge:        edgewire.Selection(cfg),
+		Edge:        cfg.EdgeSelection(),
 		Dry:         opts.dry,
 
 		ImageRegistry: registry,
@@ -412,7 +411,7 @@ func runPreviewRm(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 	req := &contractv1.RemoveEnvironmentRequest{
 		Environment: env,
 		Slug:        cfg.Slug,
-		Edge:        edgewire.Selection(cfg),
+		Edge:        cfg.EdgeSelection(),
 	}
 	if _, err := providerclient.Stream(ctx, prov, "RemoveEnvironment", req, contractv1connect.ProviderServiceClient.RemoveEnvironment); err != nil {
 		return err
@@ -499,7 +498,7 @@ func runPreviewPrune(ctx context.Context, deps cmddeps.Deps, cwd string, opts pr
 		Slug:        cfg.Slug,
 		KeepN:       int32(opts.keep),
 		Environment: env,
-		Edge:        edgewire.Selection(cfg),
+		Edge:        cfg.EdgeSelection(),
 	}
 	if _, err := providerclient.Stream(ctx, prov, "RemoveStalePromotions", req, contractv1connect.ProviderServiceClient.RemoveStalePromotions); err != nil {
 		return err

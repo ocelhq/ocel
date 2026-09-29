@@ -8,7 +8,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/consent"
-	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -80,7 +79,7 @@ func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Confi
 	err = prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		plan, err = client.PlanRemoveBootstrap(ctx, &contractv1.BootstrapScope{
 			Tier: tier,
-			Edge: edgewire.Selection(cfg),
+			Edge: cfg.EdgeSelection(),
 		})
 		return err
 	})
@@ -111,7 +110,7 @@ func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Confi
 
 	req := &contractv1.BootstrapScope{
 		Tier:      tier,
-		Edge:      edgewire.Selection(cfg),
+		Edge:      cfg.EdgeSelection(),
 		Consented: consented,
 	}
 	if _, err := providerclient.Stream(ctx, prov, "RemoveBootstrap", req, contractv1connect.ProviderServiceClient.RemoveBootstrap); err != nil {

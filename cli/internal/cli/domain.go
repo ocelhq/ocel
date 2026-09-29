@@ -18,7 +18,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/consent"
-	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
@@ -202,7 +201,7 @@ func runDomainUse(ctx context.Context, deps cmddeps.Deps, cwd, wildcard string, 
 	req := &contractv1.UsePreviewWildcardRequest{
 		Tier:       environmentv1.Tier_TIER_PREVIEW,
 		BaseDomain: base,
-		Edge:       edgewire.Selection(cfg),
+		Edge:       cfg.EdgeSelection(),
 	}
 	if _, err := providerclient.Stream(ctx, prov, "UsePreviewWildcard", req, contractv1connect.ProviderServiceClient.UsePreviewWildcard); err != nil {
 		return err
@@ -251,7 +250,7 @@ func listProductionHostnames(ctx context.Context, deps cmddeps.Deps, cfg *projec
 			resp, err = client.GetHostnameStatus(ctx, &contractv1.HostnameRequest{
 				Slug:       cfg.Slug,
 				Configured: preflight.Configured(preflight.Hostnames(cfg, "production")),
-				Edge:       edgewire.Selection(cfg),
+				Edge:       cfg.EdgeSelection(),
 			})
 			return err
 		})
@@ -364,7 +363,7 @@ func runDomainRelease(ctx context.Context, deps cmddeps.Deps, cwd string, opts d
 		return nil
 	}
 
-	req := &contractv1.PreviewWildcardRequest{Tier: environmentv1.Tier_TIER_PREVIEW, Edge: edgewire.Selection(cfg)}
+	req := &contractv1.PreviewWildcardRequest{Tier: environmentv1.Tier_TIER_PREVIEW, Edge: cfg.EdgeSelection()}
 	if _, err := providerclient.Stream(ctx, prov, "RemovePreviewWildcard", req, contractv1connect.ProviderServiceClient.RemovePreviewWildcard); err != nil {
 		return err
 	}
@@ -386,7 +385,7 @@ func runDomainAdd(ctx context.Context, deps cmddeps.Deps, cwd, host string, stdo
 		Slug:       cfg.Slug,
 		Configured: preflight.Configured(declared),
 		Host:       host,
-		Edge:       edgewire.Selection(cfg),
+		Edge:       cfg.EdgeSelection(),
 	}
 	return changeHostnames(ctx, deps, cfg, hostnameChange{
 		command:  "ocel domain add",
@@ -474,7 +473,7 @@ func runDomainRm(ctx context.Context, deps cmddeps.Deps, cwd, host string, opts 
 		Slug:       cfg.Slug,
 		Configured: preflight.Configured(preflight.Hostnames(cfg, "production")),
 		Host:       host,
-		Edge:       edgewire.Selection(cfg),
+		Edge:       cfg.EdgeSelection(),
 	}
 	headline := "Removed every hostname this project no longer declares"
 	plan := fmt.Sprintf("This will unbind every production hostname project %q no longer declares, and remove the certificates and DNS records ocel created for them", cfg.Slug)
@@ -625,7 +624,7 @@ func readDomainStatus(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig
 	req := &contractv1.HostnameRequest{
 		Slug:       cfg.Slug,
 		Configured: preflight.Configured(preflight.Hostnames(cfg, "production")),
-		Edge:       edgewire.Selection(cfg),
+		Edge:       cfg.EdgeSelection(),
 		Probe:      true,
 	}
 	resp, err = awaitDomainStatus(ctx, check, cfg.Slug, hostnameStatus(prov, req), wait)

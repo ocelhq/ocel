@@ -14,7 +14,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/consent"
-	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
@@ -105,7 +104,7 @@ func ensureBootstrap(ctx context.Context, gate consent.Gate, check *events.Scope
 	if gate.Dry {
 		return bootstrap.PlanFor(status).Insist(tier)
 	}
-	return bootstrap.Offer(ctx, check, prov, status, tier, edgewire.Selection(cfg), gate.Interactive, out, in)
+	return bootstrap.Offer(ctx, check, prov, status, tier, cfg.EdgeSelection(), gate.Interactive, out, in)
 }
 
 func slugToScopeBy(interactive bool, domains []string, cfg *projectconfig.Config) string {

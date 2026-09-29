@@ -12,7 +12,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/consent"
-	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
@@ -180,7 +179,7 @@ func destroyProject(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.C
 		plan, err = client.PlanRemoveProject(ctx, &contractv1.ProjectRequest{
 			Slug:        cfg.Slug,
 			Environment: env,
-			Edge:        edgewire.Selection(cfg),
+			Edge:        cfg.EdgeSelection(),
 		})
 		return err
 	})
@@ -212,7 +211,7 @@ func destroyProject(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.C
 	req := &contractv1.ProjectRequest{
 		Slug:        cfg.Slug,
 		Environment: env,
-		Edge:        edgewire.Selection(cfg),
+		Edge:        cfg.EdgeSelection(),
 		Consented:   consented,
 	}
 	if _, err := providerclient.Stream(ctx, prov, "RemoveProject", req, contractv1connect.ProviderServiceClient.RemoveProject); err != nil {

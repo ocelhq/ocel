@@ -11,7 +11,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -95,7 +94,7 @@ func credentialPermissions(ctx context.Context, deps cmddeps.Deps, cfg *projectc
 	err = prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		permissions, err = client.GetCredentialPermissions(ctx, &contractv1.CredentialPermissionsRequest{
 			Purpose: purpose,
-			Edge:    edgewire.Selection(cfg),
+			Edge:    cfg.EdgeSelection(),
 		})
 		return err
 	})

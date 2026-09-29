@@ -12,7 +12,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/consent"
-	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
@@ -148,7 +147,7 @@ func promotionHistory(ctx context.Context, check *events.Scope, prov *providercl
 	err := prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		listed, err = client.ListPromotions(ctx, &contractv1.ListPromotionsRequest{
 			Slug: cfg.Slug,
-			Edge: edgewire.Selection(cfg),
+			Edge: cfg.EdgeSelection(),
 		})
 		return err
 	})
@@ -163,7 +162,7 @@ func promote(ctx context.Context, phase *events.Scope, prov *providerclient.Prov
 		resp, err = client.Rollback(ctx, &contractv1.RollbackRequest{
 			Slug: cfg.Slug,
 			To:   target.GetPromotionId(),
-			Edge: edgewire.Selection(cfg),
+			Edge: cfg.EdgeSelection(),
 		})
 		return err
 	})
