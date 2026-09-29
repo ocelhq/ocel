@@ -57,8 +57,8 @@ changes anything: stop it, or run ocel [behind it](#behind-your-own-proxy).
 
 ## Behind Cloudflare
 
-Name the `cloudflare` edge and each hostname is forwarded to the box through Cloudflare: ocel
-writes a proxied record pointing at the box, and a deploy flips which release answers it on
+Name the `cloudflare` edge and `cloudflare` DNS and each hostname is forwarded to the box
+through Cloudflare: ocel writes a proxied record pointing at the box, and a deploy flips which release answers it on
 the box, with no DNS change. The proxy on the box answers that hostname only to a client
 presenting the certificate your Cloudflare zone presents to origins, so a request that
 skips Cloudflare is refused on port 443. On port 80 it answers that hostname with a redirect
@@ -75,6 +75,7 @@ forwarded the same way, on a project's own `domains.preview` wildcard or the one
   "slug": "my-app",
   "provider": { "vps": { "ssh": "my-box" } },
   "edge": "cloudflare",
+  "dns": "cloudflare",
   "apps": [{ "name": "web", "path": ".", "domains": { "production": "shop.example.com" } }]
 }
 ```
