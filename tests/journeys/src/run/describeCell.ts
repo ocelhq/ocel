@@ -9,12 +9,8 @@ import { readPrepareFailure } from "../prepare";
 import { progress } from "../progress";
 import { phasesDriven, stepsPlanned } from "../steps";
 import { targetNamed } from "../targets";
-import { CellRun } from "./cellRun";
+import { CellRun, messageOf } from "./cellRun";
 import { resultWriter } from "./results";
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
 
 export function describeCell(planFile: string, name: string) {
   const planned = JSON.parse(readFileSync(planFile, "utf8")) as Plan;
