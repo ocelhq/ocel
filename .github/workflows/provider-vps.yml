@@ -5,11 +5,12 @@ on:
     types: [opened, synchronize, reopened, closed]
     paths:
       - "platform/vps/**"
-      - "pkg/appbuild/**"
       - "pkg/arch/**"
+      - "pkg/buildoutput/**"
       - "pkg/channel/**"
       - "pkg/configdoc/**"
       - "pkg/connectorserver/**"
+      - "pkg/containerimage/**"
       - "pkg/dotenv/**"
       - "pkg/edge/**"
       - "pkg/environment/**"

@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -205,9 +205,9 @@ func containerRun(spec Container, env handoff) []string {
 	}
 	if len(spec.Manifest) > 0 {
 		argv = append(argv, "--mount", "type=bind,src="+LiveSocketDir+",dst="+LiveSocketDir+",readonly",
-			"--tmpfs", appbuild.ContainerLivePath+":"+liveDirTmpfs)
+			"--tmpfs", containerimage.LivePath+":"+liveDirTmpfs)
 	}
-	return append(argv, "--env", appbuild.InjectedPortName+"="+appbuild.InjectedPortText, spec.Image)
+	return append(argv, "--env", containerimage.PortEnvVar+"="+containerimage.PortText, spec.Image)
 }
 
 func LabelSelector(label string) string {

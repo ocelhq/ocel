@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"slices"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 )
 
 type Language string
@@ -31,11 +31,11 @@ var manifests = []struct {
 var extendedByRust = []Language{JS, Python}
 
 var frameworks = map[string]Language{
-	appbuild.FrameworkNode:   JS,
-	appbuild.FrameworkNext:   JS,
-	appbuild.FrameworkGo:     Go,
-	appbuild.FrameworkPython: Python,
-	appbuild.FrameworkRust:   Rust,
+	buildoutput.FrameworkNode:   JS,
+	buildoutput.FrameworkNext:   JS,
+	buildoutput.FrameworkGo:     Go,
+	buildoutput.FrameworkPython: Python,
+	buildoutput.FrameworkRust:   Rust,
 }
 
 func ManifestNames() []string {
@@ -85,7 +85,7 @@ func OfApp(framework, dir string) Language {
 
 func HasClientBundle(framework, dir string) bool {
 	if framework != "" {
-		return appbuild.FrameworkBundlesClient(framework)
+		return buildoutput.FrameworkBundlesClient(framework)
 	}
 	language, ok := Of(dir)
 	return ok && language == JS

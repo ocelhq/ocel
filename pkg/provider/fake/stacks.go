@@ -7,7 +7,7 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -30,7 +30,7 @@ type Stacks struct {
 }
 
 func NewStacks(artifacts provider.ArtifactStore) *Stacks {
-	return &Stacks{artifacts: artifacts, artifactRoot: appbuild.ArtifactRoot(""), stacks: map[string]provider.StackResult{}}
+	return &Stacks{artifacts: artifacts, artifactRoot: buildoutput.Root(""), stacks: map[string]provider.StackResult{}}
 }
 
 func (r *Stacks) journalling(journal *Journal) *Stacks {
@@ -136,7 +136,7 @@ func (r *Stacks) Inspect(ref provider.StackRef) provider.InspectedStack {
 }
 
 func (r *Stacks) deliveredEdgeBundle(spec provider.StackSpec) string {
-	root := appbuild.AppArtifactRoot(r.artifactRoot, spec.App.App)
+	root := buildoutput.AppRoot(r.artifactRoot, spec.App.App)
 	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(edge.AppBundleFile))); err != nil {
 		return ""
 	}

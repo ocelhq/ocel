@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
@@ -37,7 +37,7 @@ func previewSpec(label string) provider.StackSpec {
 			Functions: []provider.FunctionSpec{{
 				Name:      "fn--web--checkout",
 				Image:     "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:abc",
-				Framework: appbuild.Framework{Name: "nodejs", Arch: string(arch.X8664)},
+				Framework: buildoutput.Framework{Name: "nodejs", Arch: string(arch.X8664)},
 			}},
 		},
 	}
@@ -179,7 +179,7 @@ func functionRelease(deploymentID, image string) provider.StackSpec {
 			Functions: []provider.FunctionSpec{{
 				Name:      "fn--web--checkout",
 				Image:     image,
-				Framework: appbuild.Framework{Name: "nodejs", Arch: string(arch.X8664)},
+				Framework: buildoutput.Framework{Name: "nodejs", Arch: string(arch.X8664)},
 			}},
 		},
 	}

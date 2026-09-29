@@ -1,10 +1,6 @@
-package appbuild
+package buildoutput
 
-import (
-	"slices"
-
-	"github.com/ocelhq/ocel/pkg/processenv"
-)
+import "slices"
 
 const (
 	FrameworkNode = "node"
@@ -20,22 +16,10 @@ func Frameworks() []string {
 	return []string{FrameworkNode, FrameworkNext, FrameworkGo, FrameworkPython, FrameworkRust}
 }
 
-func KnownFramework(name string) bool { return slices.Contains(Frameworks(), name) }
-
-const ClientURLEnvName = "NEXT_PUBLIC_OCEL_URL"
+func IsKnownFramework(name string) bool { return slices.Contains(Frameworks(), name) }
 
 func FrameworkBundlesClient(framework string) bool {
 	return framework == FrameworkNode || framework == FrameworkNext
-}
-
-func IsOcelInjectedEnv(clientBundle bool, key string) bool {
-	switch key {
-	case processenv.AppURLEnvVar:
-		return true
-	case ClientURLEnvName:
-		return clientBundle
-	}
-	return false
 }
 
 type Framework struct {

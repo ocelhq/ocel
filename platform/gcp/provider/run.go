@@ -14,7 +14,7 @@ import (
 	"google.golang.org/api/googleapi"
 	run "google.golang.org/api/run/v2"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -109,7 +109,7 @@ func serviceOf(s serving) (*run.GoogleCloudRunV2Service, error) {
 	}
 	container := &run.GoogleCloudRunV2Container{
 		Image: s.image,
-		Ports: []*run.GoogleCloudRunV2ContainerPort{{ContainerPort: appbuild.InjectedPort}},
+		Ports: []*run.GoogleCloudRunV2ContainerPort{{ContainerPort: containerimage.Port}},
 		Env:   environmentOf(s.env),
 		Resources: &run.GoogleCloudRunV2ResourceRequirements{
 			CpuIdle:         s.compute == provider.ComputeServerless,
@@ -124,7 +124,7 @@ func serviceOf(s serving) (*run.GoogleCloudRunV2Service, error) {
 	if s.compute == provider.ComputeContainer {
 		scaling.MinInstanceCount = 1
 		container.StartupProbe = &run.GoogleCloudRunV2Probe{
-			HttpGet: &run.GoogleCloudRunV2HTTPGetAction{Path: s.health, Port: appbuild.InjectedPort},
+			HttpGet: &run.GoogleCloudRunV2HTTPGetAction{Path: s.health, Port: containerimage.Port},
 		}
 	}
 	volumes, mounted := volumesOf(s.mounts)

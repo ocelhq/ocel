@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
@@ -35,7 +35,7 @@ func TestEveryAppContainerJoinsANetworkNamedForItsTierAndProjectAndNeverTheProxy
 		}
 		networks[what] = argv[at+1]
 		if argv[at+1] == ProxyNetwork {
-			t.Errorf("%s is run on %s, the network every other project's containers sit on, so any of them reaches its :%s", what, ProxyNetwork, appbuild.InjectedPortText)
+			t.Errorf("%s is run on %s, the network every other project's containers sit on, so any of them reaches its :%s", what, ProxyNetwork, containerimage.PortText)
 		}
 		if argv[at+1] != AppNetwork(spec.Tier, spec.Project) {
 			t.Errorf("%s is run on %q, want %q", what, argv[at+1], AppNetwork(spec.Tier, spec.Project))
@@ -45,7 +45,7 @@ func TestEveryAppContainerJoinsANetworkNamedForItsTierAndProjectAndNeverTheProxy
 		}
 	}
 	if networks["production shop"] == networks["preview shop"] {
-		t.Errorf("shop's preview and production share %q, and a preview that reaches production's :%s is the flat network this replaces", networks["production shop"], appbuild.InjectedPortText)
+		t.Errorf("shop's preview and production share %q, and a preview that reaches production's :%s is the flat network this replaces", networks["production shop"], containerimage.PortText)
 	}
 	if networks["production shop"] == networks["production blog"] {
 		t.Errorf("shop and blog share %q, and one project reaching another's container is what a network per project exists to refuse", networks["production shop"])

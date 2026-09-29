@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/naming"
 )
 
@@ -26,7 +26,7 @@ func mintDeploymentID() (string, error) {
 }
 
 func deploymentIDRel(app string) string {
-	return filepath.Join(appbuild.AppArtifactRoot(filepath.FromSlash(appbuild.ArtifactRootDir), app), deploymentIDFileName)
+	return filepath.Join(buildoutput.AppRoot(filepath.FromSlash(buildoutput.Dir), app), deploymentIDFileName)
 }
 
 func deploymentIDPath(projectDir, app string) string {

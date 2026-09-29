@@ -15,7 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
@@ -105,7 +105,7 @@ export default {
 		clitest.StubBuild(&deps, []build.Function{
 			{
 				Route:        "api",
-				Framework:    appbuild.Framework{Name: "node"},
+				Framework:    buildoutput.Framework{Name: "node"},
 				EntryFile:    "src/server.js",
 				ArtifactPath: "output/api",
 				App:          "api",
@@ -487,7 +487,7 @@ export default {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, []build.Function{
-			{Route: "api", Framework: appbuild.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
+			{Route: "api", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
 		})
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
@@ -526,8 +526,8 @@ export default {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, []build.Function{
-			{Route: "web", Framework: appbuild.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/web", App: "web"},
-			{Route: "admin", Framework: appbuild.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/admin", App: "admin"},
+			{Route: "web", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/web", App: "web"},
+			{Route: "admin", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/admin", App: "admin"},
 		})
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
@@ -586,7 +586,7 @@ export default {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, []build.Function{
-			{Route: "index", Framework: appbuild.Framework{Name: "next"}, EntryFile: "h.js", ArtifactPath: "output/index", App: clitest.FixtureSlug},
+			{Route: "index", Framework: buildoutput.Framework{Name: "next"}, EntryFile: "h.js", ArtifactPath: "output/index", App: clitest.FixtureSlug},
 		})
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		writeRootApp(t, root)

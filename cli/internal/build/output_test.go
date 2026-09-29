@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/statedir"
 )
@@ -175,9 +175,9 @@ func TestReadFunctions(t *testing.T) {
 		root := t.TempDir()
 		outDir := filepath.Join(root, statedir.Name, "output")
 		writeFuncConfig(t, outDir, "web", "index.func",
-			appbuild.FunctionConfig{Framework: appbuild.Framework{Name: "next"}, Handler: "index.handler", App: "web"})
+			buildoutput.FunctionDescriptor{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", App: "web"})
 		writeFuncConfig(t, outDir, "web", filepath.Join("api", "todos", "[id].func"),
-			appbuild.FunctionConfig{Framework: appbuild.Framework{Name: "next"}, Handler: "index.handler", App: "web"})
+			buildoutput.FunctionDescriptor{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", App: "web"})
 
 		fns, err := ReadFunctions(root)
 		if err != nil {
@@ -185,8 +185,8 @@ func TestReadFunctions(t *testing.T) {
 		}
 
 		assertFunctions(t, "ReadFunctions", fns, []Function{
-			{Route: "api/todos/[id]", Framework: appbuild.Framework{Name: "next"}, EntryFile: "index.handler", ArtifactPath: "apps/web/functions/api/todos/[id].func", App: "web"},
-			{Route: "index", Framework: appbuild.Framework{Name: "next"}, EntryFile: "index.handler", ArtifactPath: "apps/web/functions/index.func", App: "web"},
+			{Route: "api/todos/[id]", Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", ArtifactPath: "apps/web/functions/api/todos/[id].func", App: "web"},
+			{Route: "index", Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", ArtifactPath: "apps/web/functions/index.func", App: "web"},
 		})
 	})
 
@@ -211,16 +211,16 @@ func TestReadFunctions(t *testing.T) {
 			name: "nested routes are collected without descending into a function's own tree",
 			setup: func(t *testing.T, outDir string) {
 				writeFuncConfig(t, outDir, "web", filepath.Join("api", "todos", "[id].func"),
-					appbuild.FunctionConfig{Framework: appbuild.Framework{Name: "next"}, Handler: "index.handler", App: "web"})
+					buildoutput.FunctionDescriptor{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", App: "web"})
 				writeFuncConfig(t, outDir, "web", "index.func",
-					appbuild.FunctionConfig{Framework: appbuild.Framework{Name: "next"}, Handler: "index.handler", App: "web"})
+					buildoutput.FunctionDescriptor{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", App: "web"})
 				if err := os.MkdirAll(filepath.Join(outDir, "apps", "web", "functions", "index.func", "node_modules", "dep"), 0o755); err != nil {
 					t.Fatal(err)
 				}
 			},
 			want: []Function{
-				{Route: "api/todos/[id]", Framework: appbuild.Framework{Name: "next"}, EntryFile: "index.handler", ArtifactPath: "apps/web/functions/api/todos/[id].func", App: "web"},
-				{Route: "index", Framework: appbuild.Framework{Name: "next"}, EntryFile: "index.handler", ArtifactPath: "apps/web/functions/index.func", App: "web"},
+				{Route: "api/todos/[id]", Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", ArtifactPath: "apps/web/functions/api/todos/[id].func", App: "web"},
+				{Route: "index", Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", ArtifactPath: "apps/web/functions/index.func", App: "web"},
 			},
 		},
 		{
@@ -228,12 +228,12 @@ func TestReadFunctions(t *testing.T) {
 			setup: func(t *testing.T, outDir string) {
 				for _, app := range []string{"admin", "storefront"} {
 					writeFuncConfig(t, outDir, app, filepath.Join("api", "documents.func"),
-						appbuild.FunctionConfig{Framework: appbuild.Framework{Name: "next"}, Handler: "route.js", ID: "/api/documents", App: app})
+						buildoutput.FunctionDescriptor{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "route.js", ID: "/api/documents", App: app})
 				}
 			},
 			want: []Function{
-				{Route: "api/documents", Framework: appbuild.Framework{Name: "next"}, EntryFile: "route.js", ArtifactPath: "apps/admin/functions/api/documents.func", RouteID: "/api/documents", App: "admin"},
-				{Route: "api/documents", Framework: appbuild.Framework{Name: "next"}, EntryFile: "route.js", ArtifactPath: "apps/storefront/functions/api/documents.func", RouteID: "/api/documents", App: "storefront"},
+				{Route: "api/documents", Framework: buildoutput.Framework{Name: "next"}, EntryFile: "route.js", ArtifactPath: "apps/admin/functions/api/documents.func", RouteID: "/api/documents", App: "admin"},
+				{Route: "api/documents", Framework: buildoutput.Framework{Name: "next"}, EntryFile: "route.js", ArtifactPath: "apps/storefront/functions/api/documents.func", RouteID: "/api/documents", App: "storefront"},
 			},
 		},
 	}
@@ -257,7 +257,7 @@ func TestReadFunctions(t *testing.T) {
 
 		outDir := t.TempDir()
 		writeFuncConfig(t, outDir, "web", filepath.Join("api", "documents.func"),
-			appbuild.FunctionConfig{Framework: appbuild.Framework{Name: "next"}, Handler: "route.js", ID: "/api/documents", App: "web"})
+			buildoutput.FunctionDescriptor{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "route.js", ID: "/api/documents", App: "web"})
 
 		fns, err := readFunctions(outDir)
 		if err != nil {
@@ -276,7 +276,7 @@ func TestReadFunctions(t *testing.T) {
 
 		outDir := t.TempDir()
 		writeFuncConfig(t, outDir, "storefront", "index.func",
-			appbuild.FunctionConfig{Framework: appbuild.Framework{Name: "node"}, Handler: "index.handler", App: "storefront"})
+			buildoutput.FunctionDescriptor{Framework: buildoutput.Framework{Name: "node"}, EntryFile: "index.handler", App: "storefront"})
 
 		fns, err := readFunctions(outDir)
 		if err != nil {
@@ -302,26 +302,26 @@ func TestReadFunctions(t *testing.T) {
 				}
 			},
 			succeeded: "collectFunctions succeeded on a .func with no config.json, want error",
-			wants:     []string{"api.func", appbuild.FunctionConfigFile},
+			wants:     []string{"api.func", buildoutput.FunctionDescriptorFile},
 			wantMsg:   "want it to name the offending .func and config.json",
 		},
 		{
 			name: "a config missing its framework errors",
 			setup: func(t *testing.T, outDir string) {
-				writeFuncConfig(t, outDir, "web", "api.func", appbuild.FunctionConfig{Handler: "index.handler", App: "web"})
+				writeFuncConfig(t, outDir, "web", "api.func", buildoutput.FunctionDescriptor{EntryFile: "index.handler", App: "web"})
 			},
 			succeeded: "collectFunctions succeeded on config missing its framework, want error",
-			wants:     []string{"requires framework, handler, and app"},
+			wants:     []string{"requires framework, entryFile, and app"},
 			wantMsg:   "want it to explain the required fields",
 		},
 		{
 			name: "a config missing app errors",
 			setup: func(t *testing.T, outDir string) {
 				writeFuncConfig(t, outDir, "web", "index.func",
-					appbuild.FunctionConfig{Framework: appbuild.Framework{Name: "node"}, Handler: "index.handler"})
+					buildoutput.FunctionDescriptor{Framework: buildoutput.Framework{Name: "node"}, EntryFile: "index.handler"})
 			},
 			succeeded: "collectFunctions succeeded on config missing app, want error",
-			wants:     []string{"requires framework, handler, and app"},
+			wants:     []string{"requires framework, entryFile, and app"},
 			wantMsg:   "want it to explain the required fields",
 		},
 		{
@@ -331,12 +331,12 @@ func TestReadFunctions(t *testing.T) {
 				if err := os.MkdirAll(dir, 0o755); err != nil {
 					t.Fatal(err)
 				}
-				if err := os.WriteFile(filepath.Join(dir, appbuild.FunctionConfigFile), []byte("not json"), 0o644); err != nil {
+				if err := os.WriteFile(filepath.Join(dir, buildoutput.FunctionDescriptorFile), []byte("not json"), 0o644); err != nil {
 					t.Fatal(err)
 				}
 			},
 			succeeded: "collectFunctions succeeded on invalid JSON, want error",
-			wants:     []string{"invalid " + appbuild.FunctionConfigFile},
+			wants:     []string{"invalid " + buildoutput.FunctionDescriptorFile},
 			wantMsg:   "want it to flag invalid config.json",
 		},
 	}

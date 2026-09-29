@@ -1231,7 +1231,7 @@ test("writes the bundle name into its config.json", async () => {
   );
 
   expect(config.id).toBe("bundle-0");
-  expect(config.handler).toBe("__next_launcher.cjs");
+  expect(config.entryFile).toBe("__next_launcher.cjs");
   expect(config.framework).toEqual({ name: "next" });
 });
 

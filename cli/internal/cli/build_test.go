@@ -13,7 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/statedir"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
@@ -129,8 +129,8 @@ export default {
 		if err := runBuild(context.Background(), deps, root); err != nil {
 			t.Fatalf("runBuild: %v", err)
 		}
-		if got, want := env["web"][appbuild.ClientURLEnvName], "https://shop.acme.com"; got != want {
-			t.Errorf("web was built with %s = %q, want %q", appbuild.ClientURLEnvName, got, want)
+		if got, want := env["web"][processenv.ClientURLEnvVar], "https://shop.acme.com"; got != want {
+			t.Errorf("web was built with %s = %q, want %q", processenv.ClientURLEnvVar, got, want)
 		}
 	})
 

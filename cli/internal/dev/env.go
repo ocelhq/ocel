@@ -7,7 +7,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/devresources/binding"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/processenv"
 )
@@ -41,8 +40,8 @@ func resolvedEnv(secretValues, values map[string]string, resources []binding.Res
 	}
 	merged[processenv.AppFolderEnvVar] = appFolder
 	merged[processenv.AppURLEnvVar] = localURL(merged[portEnv])
-	if scope.IsWrittenByOcel(appbuild.ClientURLEnvName, nil) {
-		merged[appbuild.ClientURLEnvName] = merged[processenv.AppURLEnvVar]
+	if scope.IsWrittenByOcel(processenv.ClientURLEnvVar, nil) {
+		merged[processenv.ClientURLEnvVar] = merged[processenv.AppURLEnvVar]
 	}
 	return merged
 }

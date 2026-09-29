@@ -12,8 +12,9 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -26,7 +27,7 @@ func TestTranslateFunctionSpec(t *testing.T) {
 	t.Run("passes runtime and entrypoint", func(t *testing.T) {
 		t.Parallel()
 		got, err := translateFunctionSpec("", provider.FunctionSpec{
-			Framework: appbuild.Framework{Name: appbuild.FrameworkNode},
+			Framework: buildoutput.Framework{Name: buildoutput.FrameworkNode},
 			EntryFile: "src/server.js",
 		})
 		if err != nil {
@@ -81,7 +82,7 @@ func TestTranslateFunctionSpec(t *testing.T) {
 
 	t.Run("Next gets the bundle memory default", func(t *testing.T) {
 		t.Parallel()
-		got, err := translateFunctionSpec(appbuild.FrameworkNext, provider.FunctionSpec{})
+		got, err := translateFunctionSpec(buildoutput.FrameworkNext, provider.FunctionSpec{})
 		if err != nil {
 			t.Fatalf("translateFunctionSpec: %v", err)
 		}
@@ -92,7 +93,7 @@ func TestTranslateFunctionSpec(t *testing.T) {
 
 	t.Run("non-Next keeps the flat default", func(t *testing.T) {
 		t.Parallel()
-		got, err := translateFunctionSpec(appbuild.FrameworkNode, provider.FunctionSpec{})
+		got, err := translateFunctionSpec(buildoutput.FrameworkNode, provider.FunctionSpec{})
 		if err != nil {
 			t.Fatalf("translateFunctionSpec: %v", err)
 		}
@@ -103,7 +104,7 @@ func TestTranslateFunctionSpec(t *testing.T) {
 
 	t.Run("the memory the spec asks for wins over both defaults", func(t *testing.T) {
 		t.Parallel()
-		got, err := translateFunctionSpec(appbuild.FrameworkNext, provider.FunctionSpec{Memory: 3008})
+		got, err := translateFunctionSpec(buildoutput.FrameworkNext, provider.FunctionSpec{Memory: 3008})
 		if err != nil {
 			t.Fatalf("translateFunctionSpec: %v", err)
 		}
@@ -118,13 +119,13 @@ func TestExecutionFor(t *testing.T) {
 
 	t.Run("every runtime lands on a managed runtime its language runs on, on the architecture it named", func(t *testing.T) {
 		t.Parallel()
-		for _, name := range append([]string{""}, appbuild.Frameworks()...) {
+		for _, name := range append([]string{""}, buildoutput.Frameworks()...) {
 			for declared, want := range map[string]string{
 				"":         arch.X8664,
 				arch.X8664: arch.X8664,
 				arch.ARM64: arch.ARM64,
 			} {
-				got, err := executionFor(appbuild.Framework{Name: name, Arch: declared})
+				got, err := executionFor(buildoutput.Framework{Name: name, Arch: declared})
 				if err != nil {
 					t.Fatalf("executionFor(%q, %q): %v", name, declared, err)
 				}
@@ -137,7 +138,7 @@ func TestExecutionFor(t *testing.T) {
 
 	t.Run("an architecture nothing runs on is refused by name", func(t *testing.T) {
 		t.Parallel()
-		_, err := executionFor(appbuild.Framework{Name: appbuild.FrameworkGo, Arch: "riscv"})
+		_, err := executionFor(buildoutput.Framework{Name: buildoutput.FrameworkGo, Arch: "riscv"})
 		var refused refusal.Refusal
 		if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 			t.Fatalf("executionFor(riscv) = %v, want a %s refusal", err, refusal.CodeInvalid)
@@ -149,7 +150,7 @@ func TestExecutionFor(t *testing.T) {
 
 	t.Run("a runtime this provider does not have is refused", func(t *testing.T) {
 		t.Parallel()
-		_, err := executionFor(appbuild.Framework{Name: "deno"})
+		_, err := executionFor(buildoutput.Framework{Name: "deno"})
 		var refused refusal.Refusal
 		if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 			t.Fatalf("executionFor(deno) = %v, want a %s refusal", err, refusal.CodeInvalid)
@@ -167,8 +168,8 @@ func TestAnARM64FunctionTakesTheARM64RuntimeLayerAndNamesItsArchitecture(t *test
 		if err != nil {
 			return err
 		}
-		args, err := translateFunctionSpec(appbuild.FrameworkGo, provider.FunctionSpec{
-			Framework: appbuild.Framework{Name: appbuild.FrameworkGo, Arch: arch.ARM64},
+		args, err := translateFunctionSpec(buildoutput.FrameworkGo, provider.FunctionSpec{
+			Framework: buildoutput.Framework{Name: buildoutput.FrameworkGo, Arch: arch.ARM64},
 			EntryFile: "web",
 		})
 		if err != nil {
@@ -209,8 +210,8 @@ func TestAnARM64FunctionTakesTheARM64RuntimeLayerAndNamesItsArchitecture(t *test
 func TestAManagedRuntimeFunctionKeepsItsOwnEntryAsTheHandler(t *testing.T) {
 	t.Parallel()
 
-	args, err := translateFunctionSpec(appbuild.FrameworkNode, provider.FunctionSpec{
-		Framework: appbuild.Framework{Name: appbuild.FrameworkNode},
+	args, err := translateFunctionSpec(buildoutput.FrameworkNode, provider.FunctionSpec{
+		Framework: buildoutput.Framework{Name: buildoutput.FrameworkNode},
 		EntryFile: "src/server.js",
 	})
 	if err != nil {
@@ -227,8 +228,8 @@ func TestAManagedRuntimeFunctionKeepsItsOwnEntryAsTheHandler(t *testing.T) {
 func TestACommandFunctionKeepsItsOwnEntryInTheEnvironment(t *testing.T) {
 	t.Parallel()
 
-	args, err := translateFunctionSpec(appbuild.FrameworkGo, provider.FunctionSpec{
-		Framework: appbuild.Framework{Name: appbuild.FrameworkGo},
+	args, err := translateFunctionSpec(buildoutput.FrameworkGo, provider.FunctionSpec{
+		Framework: buildoutput.Framework{Name: buildoutput.FrameworkGo},
 		EntryFile: "web",
 	})
 	if err != nil {
@@ -245,8 +246,8 @@ func TestACommandFunctionKeepsItsOwnEntryInTheEnvironment(t *testing.T) {
 func TestARustFunctionBootsItsOwnBinaryOnTheProvidedRuntime(t *testing.T) {
 	t.Parallel()
 
-	args, err := translateFunctionSpec(appbuild.FrameworkRust, provider.FunctionSpec{
-		Framework: appbuild.Framework{Name: appbuild.FrameworkRust, Arch: arch.ARM64},
+	args, err := translateFunctionSpec(buildoutput.FrameworkRust, provider.FunctionSpec{
+		Framework: buildoutput.Framework{Name: buildoutput.FrameworkRust, Arch: arch.ARM64},
 		EntryFile: "web",
 	})
 	if err != nil {
@@ -269,9 +270,9 @@ func TestARustFunctionBootsItsOwnBinaryOnTheProvidedRuntime(t *testing.T) {
 func TestEveryFunctionBootsTheRuntimeWhateverRuntimeItServes(t *testing.T) {
 	t.Parallel()
 
-	for _, name := range appbuild.Frameworks() {
+	for _, name := range buildoutput.Frameworks() {
 		args, err := translateFunctionSpec(name, provider.FunctionSpec{
-			Framework: appbuild.Framework{Name: name},
+			Framework: buildoutput.Framework{Name: name},
 			EntryFile: "web",
 		})
 		if err != nil {
@@ -289,8 +290,8 @@ func TestEveryFunctionBootsTheRuntimeWhateverRuntimeItServes(t *testing.T) {
 		if want := "/var/task/web"; env["OCEL_HANDLER"] != want {
 			t.Errorf("%q hands the runtime %q, want %q", name, env["OCEL_HANDLER"], want)
 		}
-		if _, injected := env[appbuild.InjectedPortName]; injected {
-			t.Errorf("%q is handed %s by the provider; the runtime tells its child which port to bind", name, appbuild.InjectedPortName)
+		if _, injected := env[containerimage.PortEnvVar]; injected {
+			t.Errorf("%q is handed %s by the provider; the runtime tells its child which port to bind", name, containerimage.PortEnvVar)
 		}
 	}
 }
@@ -299,12 +300,12 @@ func TestAnAppThatShipsItsOwnBinaryRunsOnTheProvidedRuntime(t *testing.T) {
 	t.Parallel()
 
 	for name, want := range map[string]string{
-		appbuild.FrameworkGo:     providedFunctionRuntime,
-		"rust":                   providedFunctionRuntime,
-		appbuild.FrameworkNode:   defaultFunctionRuntime,
-		appbuild.FrameworkNext:   defaultFunctionRuntime,
-		"":                       defaultFunctionRuntime,
-		appbuild.FrameworkPython: pythonFunctionRuntime,
+		buildoutput.FrameworkGo:     providedFunctionRuntime,
+		"rust":                      providedFunctionRuntime,
+		buildoutput.FrameworkNode:   defaultFunctionRuntime,
+		buildoutput.FrameworkNext:   defaultFunctionRuntime,
+		"":                          defaultFunctionRuntime,
+		buildoutput.FrameworkPython: pythonFunctionRuntime,
 	} {
 		if got := managedRuntime(name); got != want {
 			t.Errorf("a %q function runs on %q, want %q — a language this provider ships no interpreter for runs the binary the app ships", name, got, want)
@@ -316,12 +317,12 @@ func TestAFunctionRunsOnTheManagedRuntimeItsLanguageNeedsAnInterpreterFrom(t *te
 	t.Parallel()
 
 	for name, want := range map[string]string{
-		appbuild.FrameworkNode:   defaultFunctionRuntime,
-		appbuild.FrameworkNext:   defaultFunctionRuntime,
-		appbuild.FrameworkGo:     providedFunctionRuntime,
-		appbuild.FrameworkPython: pythonFunctionRuntime,
+		buildoutput.FrameworkNode:   defaultFunctionRuntime,
+		buildoutput.FrameworkNext:   defaultFunctionRuntime,
+		buildoutput.FrameworkGo:     providedFunctionRuntime,
+		buildoutput.FrameworkPython: pythonFunctionRuntime,
 	} {
-		args, err := translateFunctionSpec(name, provider.FunctionSpec{Framework: appbuild.Framework{Name: name}})
+		args, err := translateFunctionSpec(name, provider.FunctionSpec{Framework: buildoutput.Framework{Name: name}})
 		if err != nil {
 			t.Fatalf("translateFunctionSpec(%q): %v", name, err)
 		}
@@ -340,8 +341,8 @@ func TestAFunctionIsToldTheFileItBootsFrom(t *testing.T) {
 		handler string
 		want    string
 	}{
-		{"an exec artifact takes the bootstrap the layer ships", appbuild.FrameworkGo, "web", providedHandler},
-		{"a bundled node artifact takes its bundle", appbuild.FrameworkNode, "index.mjs", "index.mjs"},
+		{"an exec artifact takes the bootstrap the layer ships", buildoutput.FrameworkGo, "web", providedHandler},
+		{"a bundled node artifact takes its bundle", buildoutput.FrameworkNode, "index.mjs", "index.mjs"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -355,7 +356,7 @@ func TestAFunctionIsToldTheFileItBootsFrom(t *testing.T) {
 					return err
 				}
 				args, err := translateFunctionSpec(tc.runtime, provider.FunctionSpec{
-					Framework: appbuild.Framework{Name: tc.runtime},
+					Framework: buildoutput.Framework{Name: tc.runtime},
 					EntryFile: tc.handler,
 				})
 				if err != nil {
@@ -394,7 +395,7 @@ func argsFor(functions []*contractv1.ManifestFunction) func(appFunction) functio
 	for _, fn := range functions {
 		translated, err := translateFunctionSpec(fn.GetFramework().GetName(), provider.FunctionSpec{
 			Name:      fn.GetLogicalName(),
-			Framework: appbuild.Framework{Name: fn.GetFramework().GetName(), Arch: fn.GetFramework().GetArch()},
+			Framework: buildoutput.Framework{Name: fn.GetFramework().GetName(), Arch: fn.GetFramework().GetArch()},
 			EntryFile: fn.GetEntryFile(),
 		})
 		if err != nil {

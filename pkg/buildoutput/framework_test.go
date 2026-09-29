@@ -1,26 +1,26 @@
-package appbuild_test
+package buildoutput_test
 
 import (
 	"slices"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 )
 
 func TestPythonIsARuntimeAnAppMayDeclare(t *testing.T) {
 	t.Parallel()
 
-	if !appbuild.KnownFramework(appbuild.FrameworkPython) {
-		t.Fatalf("Frameworks() = %v, and none of them is %q", appbuild.Frameworks(), appbuild.FrameworkPython)
+	if !buildoutput.IsKnownFramework(buildoutput.FrameworkPython) {
+		t.Fatalf("Frameworks() = %v, and none of them is %q", buildoutput.Frameworks(), buildoutput.FrameworkPython)
 	}
 }
 
 func TestRustIsARuntimeAnAppMayDeclare(t *testing.T) {
 	t.Parallel()
 
-	if !appbuild.KnownFramework(appbuild.FrameworkRust) {
-		t.Fatalf("Frameworks() = %v, and none of them is %q", appbuild.Frameworks(), appbuild.FrameworkRust)
+	if !buildoutput.IsKnownFramework(buildoutput.FrameworkRust) {
+		t.Fatalf("Frameworks() = %v, and none of them is %q", buildoutput.Frameworks(), buildoutput.FrameworkRust)
 	}
 }
 
@@ -35,7 +35,7 @@ func TestTheArchitecturesAreTheOnesEveryRuntimeSharesAVocabularyFor(t *testing.T
 			t.Errorf("PythonPlatformTag(%q) names no wheel platform", architecture)
 		}
 	}
-	if !slices.Contains(appbuild.Frameworks(), appbuild.FrameworkGo) {
+	if !slices.Contains(buildoutput.Frameworks(), buildoutput.FrameworkGo) {
 		t.Error("Frameworks() no longer names the go framework")
 	}
 }

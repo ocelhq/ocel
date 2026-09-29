@@ -15,10 +15,11 @@ const (
 var reachable = map[string]bool{
 	"github.com/ocelhq/ocel/platform/vps/provider": true,
 	"github.com/ocelhq/ocel/pkg/provider":          true,
-	"github.com/ocelhq/ocel/pkg/appbuild":          true,
 	"github.com/ocelhq/ocel/pkg/arch":              true,
+	"github.com/ocelhq/ocel/pkg/buildoutput":       true,
 	"github.com/ocelhq/ocel/pkg/channel":           true,
 	"github.com/ocelhq/ocel/pkg/configdoc":         true,
+	"github.com/ocelhq/ocel/pkg/containerimage":    true,
 	"github.com/ocelhq/ocel/pkg/dotenv":            true,
 	"github.com/ocelhq/ocel/pkg/edge":              true,
 	"github.com/ocelhq/ocel/pkg/environment":       true,

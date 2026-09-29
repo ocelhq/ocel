@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 )
 
@@ -156,7 +156,7 @@ func withServeDescriptors(t *testing.T, files map[string]string) map[string]stri
 		if _, written := out[descriptor]; written {
 			continue
 		}
-		out[descriptor] = serveDescriptor(t, appbuild.FrameworkNext, buildIDOf(t, contents))
+		out[descriptor] = serveDescriptor(t, buildoutput.FrameworkNext, buildIDOf(t, contents))
 	}
 	return out
 }

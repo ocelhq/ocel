@@ -12,7 +12,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -135,8 +135,8 @@ func synthDeclarations() []declaredResource {
 
 func synthFunctions() []build.Function {
 	return []build.Function{
-		{Route: "api/documents", App: "web", Framework: appbuild.Framework{Name: "next"}, EntryFile: "app/api.ts", ArtifactPath: "dist/api.zip", RouteID: "/api/documents"},
-		{Route: "worker", App: "web", Framework: appbuild.Framework{Name: "node"}, EntryFile: "app/worker.ts", ArtifactPath: "dist/worker.zip"},
+		{Route: "api/documents", App: "web", Framework: buildoutput.Framework{Name: "next"}, EntryFile: "app/api.ts", ArtifactPath: "dist/api.zip", RouteID: "/api/documents"},
+		{Route: "worker", App: "web", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "app/worker.ts", ArtifactPath: "dist/worker.zip"},
 	}
 }
 
@@ -353,8 +353,8 @@ func TestTheManifestAssemblesTheProjectsAppsResourcesAndFunctions(t *testing.T) 
 		t.Parallel()
 
 		manifest, err := assembleBuiltApps("proj-1", "serverless", nil, nil, []build.Function{
-			{Route: "api/users", App: "web", Framework: appbuild.Framework{Name: "node"}, EntryFile: "h.js", ArtifactPath: "a"},
-			{Route: "users", App: "web-api", Framework: appbuild.Framework{Name: "node"}, EntryFile: "h.js", ArtifactPath: "b"},
+			{Route: "api/users", App: "web", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "h.js", ArtifactPath: "a"},
+			{Route: "users", App: "web-api", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "h.js", ArtifactPath: "b"},
 		}, nil)
 		if err != nil {
 			t.Fatalf("assemble: %v", err)
@@ -373,8 +373,8 @@ func TestTheManifestAssemblesTheProjectsAppsResourcesAndFunctions(t *testing.T) 
 		t.Parallel()
 
 		_, err := assembleBuiltApps("proj-1", "serverless", nil, nil, []build.Function{
-			{Route: "api/users", App: "web", Framework: appbuild.Framework{Name: "node"}, EntryFile: "h.js", ArtifactPath: "a"},
-			{Route: "api_users", App: "web", Framework: appbuild.Framework{Name: "node"}, EntryFile: "h.js", ArtifactPath: "b"},
+			{Route: "api/users", App: "web", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "h.js", ArtifactPath: "a"},
+			{Route: "api_users", App: "web", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "h.js", ArtifactPath: "b"},
 		}, nil)
 		if err == nil {
 			t.Fatal("assemble: expected a collision error, got nil")
@@ -422,7 +422,7 @@ func TestTheManifestAssemblesTheProjectsAppsResourcesAndFunctions(t *testing.T) 
 		t.Parallel()
 
 		_, err := assembleBuiltApps("proj-1", "serverless", nil, nil, []build.Function{
-			{Route: "index", Framework: appbuild.Framework{Name: "node"}, EntryFile: "h.js", ArtifactPath: "a"},
+			{Route: "index", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "h.js", ArtifactPath: "a"},
 		}, nil)
 		if err == nil {
 			t.Fatal("assemble: expected an error for a function with no app, got nil")
@@ -471,7 +471,7 @@ func TestTheManifestAssemblesTheProjectsAppsResourcesAndFunctions(t *testing.T) 
 		t.Parallel()
 
 		manifest, err := assembleBuiltApps("proj-1", "serverless", nil, nil, []build.Function{
-			{Route: "Web API", App: "web", Framework: appbuild.Framework{Name: "node"}, EntryFile: "app/api.ts", ArtifactPath: "dist/api.zip"},
+			{Route: "Web API", App: "web", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "app/api.ts", ArtifactPath: "dist/api.zip"},
 		}, nil)
 		if err != nil {
 			t.Fatalf("assemble: %v", err)
@@ -488,7 +488,7 @@ func TestTheManifestAssemblesTheProjectsAppsResourcesAndFunctions(t *testing.T) 
 		t.Parallel()
 
 		manifest, err := assembleBuiltApps("proj-1", "serverless", nil, nil, []build.Function{
-			{Route: "api/documents", App: "web", Framework: appbuild.Framework{Name: "next"}, EntryFile: "route.js", ArtifactPath: "functions/api/documents.func", RouteID: "/api/documents"},
+			{Route: "api/documents", App: "web", Framework: buildoutput.Framework{Name: "next"}, EntryFile: "route.js", ArtifactPath: "functions/api/documents.func", RouteID: "/api/documents"},
 		}, nil)
 		if err != nil {
 			t.Fatalf("assemble: %v", err)
@@ -510,8 +510,8 @@ func TestTheManifestAssemblesTheProjectsAppsResourcesAndFunctions(t *testing.T) 
 			{Name: "admin"},
 		}
 		manifest, err := assembleOn("serverless", "proj-1", project.Domains{}, apps, nil, nil, []build.Function{
-			{Route: "web", Framework: appbuild.Framework{Name: "next"}, EntryFile: "h.js", ArtifactPath: "a", App: "web"},
-			{Route: "admin", Framework: appbuild.Framework{Name: "node"}, EntryFile: "h.js", ArtifactPath: "b", App: "admin"},
+			{Route: "web", Framework: buildoutput.Framework{Name: "next"}, EntryFile: "h.js", ArtifactPath: "a", App: "web"},
+			{Route: "admin", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "h.js", ArtifactPath: "b", App: "admin"},
 		}, nil)
 		if err != nil {
 			t.Fatalf("assemble: %v", err)
@@ -539,7 +539,7 @@ func TestTheManifestAssemblesTheProjectsAppsResourcesAndFunctions(t *testing.T) 
 		t.Parallel()
 
 		manifest, err := assembleOn("serverless", "proj-1", project.Domains{}, []app{{Name: "web"}}, nil, nil, []build.Function{
-			{Route: "web", Framework: appbuild.Framework{Name: "node"}, EntryFile: "h.js", ArtifactPath: "a", App: "web"},
+			{Route: "web", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "h.js", ArtifactPath: "a", App: "web"},
 		}, nil)
 		if err != nil {
 			t.Fatalf("assemble: %v", err)
@@ -553,7 +553,7 @@ func TestTheManifestAssemblesTheProjectsAppsResourcesAndFunctions(t *testing.T) 
 		t.Parallel()
 
 		manifest, err := assembleOn("serverless", "proj-1", project.Domains{}, []app{{Name: "web"}}, nil, nil, []build.Function{
-			{Route: "web", Framework: appbuild.Framework{Name: "node"}, EntryFile: "h.js", ArtifactPath: "a", App: "web"},
+			{Route: "web", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "h.js", ArtifactPath: "a", App: "web"},
 		}, nil)
 		if err != nil {
 			t.Fatalf("assemble: %v", err)
@@ -624,7 +624,7 @@ func TestTheManifestAssemblesTheProjectsAppsResourcesAndFunctions(t *testing.T) 
 			},
 		}
 		manifest, err := assembleOn("serverless", "proj-1", project.Domains{}, []app{{Name: "admin"}, {Name: "storefront"}}, nil, nil, []build.Function{
-			{Route: "index", Framework: appbuild.Framework{Name: "next"}, EntryFile: "h.js", ArtifactPath: "a", App: "storefront"},
+			{Route: "index", Framework: buildoutput.Framework{Name: "next"}, EntryFile: "h.js", ArtifactPath: "a", App: "storefront"},
 		}, variables)
 		if err != nil {
 			t.Fatalf("assemble: %v", err)

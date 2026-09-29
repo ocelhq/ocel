@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/naming"
 )
 
@@ -25,7 +25,7 @@ func TestAProjectNamingNoAppsHasTheNodeAppAtItsRootNamedAfterItsSlug(t *testing.
 	if len(cfg.Apps) != 1 {
 		t.Fatalf("Apps = %+v, want the one app at the project root", cfg.Apps)
 	}
-	if app := cfg.Apps[0]; app.Name != "shop" || app.Path != "." || app.Framework() != appbuild.FrameworkNode {
+	if app := cfg.Apps[0]; app.Name != "shop" || app.Path != "." || app.Framework() != buildoutput.FrameworkNode {
 		t.Errorf("the root app = %+v, want a node app named %q at %q", app, "shop", ".")
 	}
 }
@@ -41,7 +41,7 @@ func TestTheRootAppOfANextProjectIsBuiltWithNext(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if len(cfg.Apps) != 1 || cfg.Apps[0].Framework() != appbuild.FrameworkNext {
+	if len(cfg.Apps) != 1 || cfg.Apps[0].Framework() != buildoutput.FrameworkNext {
 		t.Errorf("Apps = %+v, want one next app", cfg.Apps)
 	}
 }

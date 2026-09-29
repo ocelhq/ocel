@@ -9,7 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 )
 
 func TestDeployUsageEdges(t *testing.T) {
@@ -17,7 +17,7 @@ func TestDeployUsageEdges(t *testing.T) {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, []build.Function{
-			{Route: "api", Framework: appbuild.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
+			{Route: "api", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
 		})
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		clitest.WriteUsageMonorepo(t, root)
@@ -92,8 +92,8 @@ func TestDeployScopesDeliveryToTheUsingApps(t *testing.T) {
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
 	clitest.StubBuild(&deps, []build.Function{
-		{Route: "api", Framework: appbuild.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
-		{Route: "web", Framework: appbuild.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/web", App: "web"},
+		{Route: "api", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
+		{Route: "web", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/web", App: "web"},
 	})
 	root, sockPath := clitest.SetUpDeployFixture(t)
 	writeSharedResourceMonorepo(t, root)
@@ -125,7 +125,7 @@ func TestDeployAttributesAnUnconfiguredProjectToItsOnlyApp(t *testing.T) {
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
 	clitest.StubBuild(&deps, []build.Function{
-		{Route: "index", Framework: appbuild.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output", App: clitest.FixtureSlug},
+		{Route: "index", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output", App: clitest.FixtureSlug},
 	})
 	root, sockPath := clitest.SetUpDeployFixture(t)
 	writeRootApp(t, root)
@@ -150,8 +150,8 @@ func TestDeployRefusesWhatItCannotAttribute(t *testing.T) {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, []build.Function{
-			{Route: "index", Framework: appbuild.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
-			{Route: "index", Framework: appbuild.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/web", App: "web"},
+			{Route: "index", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
+			{Route: "index", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/web", App: "web"},
 		})
 		root, _ := clitest.SetUpDeployFixture(t)
 
@@ -173,8 +173,8 @@ func TestDeployRefusesWhatItCannotAttribute(t *testing.T) {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, []build.Function{
-			{Route: "index", Framework: appbuild.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
-			{Route: "index", Framework: appbuild.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/legacy", App: "legacy"},
+			{Route: "index", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
+			{Route: "index", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/legacy", App: "legacy"},
 		})
 		root, _ := clitest.SetUpDeployFixture(t)
 		clitest.WriteUsageMonorepo(t, root)
@@ -195,7 +195,7 @@ func TestDeployRefusesWhatItCannotAttribute(t *testing.T) {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, []build.Function{
-			{Route: "index", Framework: appbuild.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
+			{Route: "index", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
 		})
 		root, _ := clitest.SetUpDeployFixture(t)
 		clitest.WriteUsageMonorepo(t, root)

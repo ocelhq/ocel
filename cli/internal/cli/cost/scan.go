@@ -24,7 +24,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -263,7 +263,7 @@ func scannedOutput(deps cmddeps.Deps, cfg *project.Project) (build.Output, []str
 func unbuiltFunctions(cfg *project.Project) []build.Function {
 	functions := make([]build.Function, 0, len(cfg.Apps))
 	for _, a := range build.FunctionApps(cfg.Apps) {
-		functions = append(functions, build.Function{Route: a.Name, App: a.Name, Framework: appbuild.Framework{Name: a.Framework(), Arch: a.Arch}})
+		functions = append(functions, build.Function{Route: a.Name, App: a.Name, Framework: buildoutput.Framework{Name: a.Framework(), Arch: a.Arch}})
 	}
 	return functions
 }

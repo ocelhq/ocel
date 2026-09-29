@@ -18,7 +18,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -79,7 +79,7 @@ func TestRunPreviewUp(t *testing.T) {
 		clitest.StubBuild(&deps, []build.Function{
 			{
 				Route:        "api",
-				Framework:    appbuild.Framework{Name: "node"},
+				Framework:    buildoutput.Framework{Name: "node"},
 				EntryFile:    "index.handler",
 				ArtifactPath: "output/api",
 				App:          "api",

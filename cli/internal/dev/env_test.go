@@ -22,7 +22,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -701,7 +701,7 @@ func TestDevGivesEveryAppItsURL(t *testing.T) {
 		t.Setenv("PORT", "")
 
 		got := resolvedEnv(nil, nil, nil, runtimeAccess{}, "", node)
-		for _, key := range []string{processenv.AppURLEnvVar, appbuild.ClientURLEnvName} {
+		for _, key := range []string{processenv.AppURLEnvVar, processenv.ClientURLEnvVar} {
 			if want := "http://localhost:3000"; got[key] != want {
 				t.Errorf("%s = %q, want %q — dev never leaves it unset, so an app may read it without a fallback", key, got[key], want)
 			}
@@ -710,14 +710,14 @@ func TestDevGivesEveryAppItsURL(t *testing.T) {
 
 	t.Run("the browser's copy only where an app's bundle reads it", func(t *testing.T) {
 		t.Setenv("PORT", "")
-		dotfile := map[string]string{appbuild.ClientURLEnvName: "https://mine.example"}
+		dotfile := map[string]string{processenv.ClientURLEnvVar: "https://mine.example"}
 
 		got := resolvedEnv(nil, dotfile, nil, runtimeAccess{}, "", variables.Scope{Apps: []variables.App{{Name: "api"}}})
 		if want := "http://localhost:3000"; got[processenv.AppURLEnvVar] != want {
 			t.Errorf("%s = %q, want %q for every app", processenv.AppURLEnvVar, got[processenv.AppURLEnvVar], want)
 		}
-		if want := "https://mine.example"; got[appbuild.ClientURLEnvName] != want {
-			t.Errorf("%s = %q, want the go app's own %q: nothing in a go app reads ocel's copy, so writing one overwrites its value", appbuild.ClientURLEnvName, got[appbuild.ClientURLEnvName], want)
+		if want := "https://mine.example"; got[processenv.ClientURLEnvVar] != want {
+			t.Errorf("%s = %q, want the go app's own %q: nothing in a go app reads ocel's copy, so writing one overwrites its value", processenv.ClientURLEnvVar, got[processenv.ClientURLEnvVar], want)
 		}
 	})
 
@@ -744,9 +744,9 @@ func TestRunWritesTheBrowsersURLForTheAppItRunsIn(t *testing.T) {
 	t.Setenv("PORT", "")
 	root := t.TempDir()
 	cfg := &project.Project{Dir: root, Apps: []project.App{
-		{Name: "web", Path: filepath.Join("apps", "web"), Folder: "/web", Serverless: &project.Serverless{Framework: appbuild.FrameworkNext}},
-		{Name: "api", Path: filepath.Join("apps", "api"), Folder: "/api", Serverless: &project.Serverless{Framework: appbuild.FrameworkGo}},
-		{Name: "webhooks", Path: filepath.Join("apps", "web-hooks"), Serverless: &project.Serverless{Framework: appbuild.FrameworkPython}},
+		{Name: "web", Path: filepath.Join("apps", "web"), Folder: "/web", Serverless: &project.Serverless{Framework: buildoutput.FrameworkNext}},
+		{Name: "api", Path: filepath.Join("apps", "api"), Folder: "/api", Serverless: &project.Serverless{Framework: buildoutput.FrameworkGo}},
+		{Name: "webhooks", Path: filepath.Join("apps", "web-hooks"), Serverless: &project.Serverless{Framework: buildoutput.FrameworkPython}},
 		{Name: "store", Path: filepath.Join("apps", "store"), Folder: "/store", Compute: provider.ComputeContainer},
 		{Name: "worker", Path: filepath.Join("apps", "worker"), Folder: "/worker", Compute: provider.ComputeContainer},
 	}}
@@ -767,8 +767,8 @@ func TestRunWritesTheBrowsersURLForTheAppItRunsIn(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := resolvedEnv(nil, nil, nil, runtimeAccess{}, "", targetScope(cfg, tc.cwd))
-			if _, written := got[appbuild.ClientURLEnvName]; written != tc.written {
-				t.Errorf("%s written = %v, want %v — a command run inside one app reads only that app's runtime, and elsewhere any app in the project", appbuild.ClientURLEnvName, written, tc.written)
+			if _, written := got[processenv.ClientURLEnvVar]; written != tc.written {
+				t.Errorf("%s written = %v, want %v — a command run inside one app reads only that app's runtime, and elsewhere any app in the project", processenv.ClientURLEnvVar, written, tc.written)
 			}
 		})
 	}

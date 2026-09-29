@@ -13,14 +13,15 @@ import (
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 const FunctionImageRoot = "/ocel/app"
 
-func FunctionImage(base v1.Image, framework appbuild.Framework, dir string, overlay map[string][]byte) (v1.Image, error) {
+func FunctionImage(base v1.Image, framework buildoutput.Framework, dir string, overlay map[string][]byte) (v1.Image, error) {
 	rels, err := ArtifactFiles(dir)
 	if err != nil {
 		return nil, err
@@ -61,14 +62,14 @@ func FunctionImage(base v1.Image, framework appbuild.Framework, dir string, over
 	return mutate.Config(appended, config)
 }
 
-func functionStaging(dir string) (appbuild.FunctionConfig, error) {
-	raw, err := os.ReadFile(filepath.Join(dir, appbuild.FunctionConfigFile))
+func functionStaging(dir string) (buildoutput.FunctionDescriptor, error) {
+	raw, err := os.ReadFile(filepath.Join(dir, buildoutput.FunctionDescriptorFile))
 	if err != nil {
-		return appbuild.FunctionConfig{}, err
+		return buildoutput.FunctionDescriptor{}, err
 	}
-	var staged appbuild.FunctionConfig
+	var staged buildoutput.FunctionDescriptor
 	if err := json.Unmarshal(raw, &staged); err != nil {
-		return appbuild.FunctionConfig{}, err
+		return buildoutput.FunctionDescriptor{}, err
 	}
 	return staged, nil
 }
@@ -81,12 +82,12 @@ const HandlerName = "OCEL_HANDLER"
 
 const nodeEnvName = "NODE_ENV"
 
-func BootsThroughRuntime(framework appbuild.Framework) bool {
-	return framework.Name == appbuild.FrameworkNode || framework.Name == appbuild.FrameworkNext
+func BootsThroughRuntime(framework buildoutput.Framework) bool {
+	return framework.Name == buildoutput.FrameworkNode || framework.Name == buildoutput.FrameworkNext
 }
 
-func servedHandler(staged appbuild.FunctionConfig) string {
-	return HandlerName + "=" + path.Join(FunctionImageRoot, staged.Handler)
+func servedHandler(staged buildoutput.FunctionDescriptor) string {
+	return HandlerName + "=" + path.Join(FunctionImageRoot, staged.EntryFile)
 }
 
 func ensureNodeEnv(env []string) []string {
@@ -101,15 +102,15 @@ func ensureNodeEnv(env []string) []string {
 func boundPort(env []string) []string {
 	kept := make([]string, 0, len(env)+1)
 	for _, entry := range env {
-		if name, _, _ := strings.Cut(entry, "="); name == appbuild.InjectedPortName {
+		if name, _, _ := strings.Cut(entry, "="); name == containerimage.PortEnvVar {
 			continue
 		}
 		kept = append(kept, entry)
 	}
-	return append(kept, appbuild.InjectedPortName+"="+appbuild.InjectedPortText)
+	return append(kept, containerimage.PortEnvVar+"="+containerimage.PortText)
 }
 
-func functionCommand(framework appbuild.Framework, staged appbuild.FunctionConfig) ([]string, error) {
+func functionCommand(framework buildoutput.Framework, staged buildoutput.FunctionDescriptor) ([]string, error) {
 	switch {
 	case len(staged.Command) > 0:
 		return staged.Command, nil

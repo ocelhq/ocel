@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 )
 
@@ -49,7 +49,7 @@ func compileRust(t *testing.T, source, architecture string) (string, string, err
 	funcDir := filepath.Join(appDir, "functions", "index.func")
 	err := Compile(context.Background(), Compilation{
 		App:       "web",
-		Framework: appbuild.Framework{Name: appbuild.FrameworkRust, Arch: architecture},
+		Framework: buildoutput.Framework{Name: buildoutput.FrameworkRust, Arch: architecture},
 		Source:    source,
 		FuncDir:   funcDir,
 		AppDir:    appDir,
@@ -215,15 +215,15 @@ func TestCompileDeclaresTheCommandARustArtifactIsServedBy(t *testing.T) {
 		t.Fatalf("compile: %v", err)
 	}
 
-	var config appbuild.FunctionConfig
-	readJSON(t, filepath.Join(funcDir, appbuild.FunctionConfigFile), &config)
-	if config.Handler != "web" {
-		t.Errorf("handler = %q, want the binary named after the app", config.Handler)
+	var config buildoutput.FunctionDescriptor
+	readJSON(t, filepath.Join(funcDir, buildoutput.FunctionDescriptorFile), &config)
+	if config.EntryFile != "web" {
+		t.Errorf("entryFile = %q, want the binary named after the app", config.EntryFile)
 	}
 	if len(config.Command) != 1 || config.Command[0] != "./web" {
 		t.Errorf("command = %q, want the artifact's own binary, which whatever hosts it execs", config.Command)
 	}
-	if config.Framework != (appbuild.Framework{Name: "rust", Arch: "x86_64"}) {
+	if config.Framework != (buildoutput.Framework{Name: "rust", Arch: "x86_64"}) {
 		t.Errorf("runtime = %+v, want the rust runtime at the architecture it was built for", config.Framework)
 	}
 
@@ -321,7 +321,7 @@ func TestCompileRefusesAnEntrypointForARustApp(t *testing.T) {
 	}
 	err := Compile(context.Background(), Compilation{
 		App:        "web",
-		Framework:  appbuild.Framework{Name: appbuild.FrameworkRust},
+		Framework:  buildoutput.Framework{Name: buildoutput.FrameworkRust},
 		Source:     source,
 		Entrypoint: "bin",
 		FuncDir:    filepath.Join(t.TempDir(), "index.func"),

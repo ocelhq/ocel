@@ -20,8 +20,8 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/processenv"
@@ -132,7 +132,7 @@ func (r *release) checkContainer(spec provider.StackSpec) (*containerWork, error
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"app %s names no image, and a container on this provider runs what a registry coordinate names and nothing else", app.App)
 	}
-	if !appbuild.HealthCheckPath(app.HealthCheckPath) {
+	if !containerimage.IsHealthCheckPath(app.HealthCheckPath) {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"app %s is probed at %q, which is not a path a load balancer can send a health check to", app.App, app.HealthCheckPath)
 	}

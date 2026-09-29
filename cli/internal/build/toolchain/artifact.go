@@ -12,7 +12,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 )
 
@@ -69,10 +69,10 @@ func fileHash(path string) (string, error) {
 	return hex.EncodeToString(digest.Sum(nil)), nil
 }
 
-func describeArtifact(app string, framework appbuild.Framework, handler string, command []string, funcDir, appDir string) error {
-	if err := writeJSON(filepath.Join(funcDir, appbuild.FunctionConfigFile), appbuild.FunctionConfig{
+func describeArtifact(app string, framework buildoutput.Framework, entryFile string, command []string, funcDir, appDir string) error {
+	if err := writeJSON(filepath.Join(funcDir, buildoutput.FunctionDescriptorFile), buildoutput.FunctionDescriptor{
 		Framework: framework,
-		Handler:   handler,
+		EntryFile: entryFile,
 		Command:   command,
 		ID:        entryRouteID,
 		App:       app,

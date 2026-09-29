@@ -9,8 +9,8 @@ import (
 
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/processenv"
@@ -37,7 +37,7 @@ func appStackSpec(t *testing.T) (Config, provider.StackSpec) {
 		Edge: fakeEdgeOf(cloudfront.Kind),
 		App: &provider.AppSpec{
 			App:        "web",
-			Framework:  appbuild.FrameworkNext,
+			Framework:  buildoutput.FrameworkNext,
 			Router:     router.Kind(cloudfront.Kind),
 			Entry:      "fn--web--entry",
 			Deployment: "d1",

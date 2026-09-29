@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 )
 
@@ -62,7 +62,7 @@ func newLayout(t *testing.T, files tree) layout {
 func (l layout) target(entry string) Target {
 	return Target{
 		App:        "api",
-		Framework:  appbuild.Framework{Name: "node"},
+		Framework:  buildoutput.Framework{Name: "node"},
 		Entrypoint: filepath.Join(l.appSrc, filepath.FromSlash(entry)),
 		FuncDir:    l.funcDir,
 		AppDir:     l.appDir,
@@ -119,16 +119,16 @@ func TestBundle(t *testing.T) {
 			names = append(names, entry.Name())
 		}
 		if len(names) != 2 {
-			t.Errorf("function directory contains %v, want only the bundle and %s", names, appbuild.FunctionConfigFile)
+			t.Errorf("function directory contains %v, want only the bundle and %s", names, buildoutput.FunctionDescriptorFile)
 		}
 
-		var cfg appbuild.FunctionConfig
-		if err := json.Unmarshal([]byte(readFile(t, filepath.Join(l.funcDir, appbuild.FunctionConfigFile))), &cfg); err != nil {
+		var cfg buildoutput.FunctionDescriptor
+		if err := json.Unmarshal([]byte(readFile(t, filepath.Join(l.funcDir, buildoutput.FunctionDescriptorFile))), &cfg); err != nil {
 			t.Fatal(err)
 		}
-		want := appbuild.FunctionConfig{Framework: appbuild.Framework{Name: "node"}, Handler: handlerFile, ID: entryRouteID, App: "api"}
+		want := buildoutput.FunctionDescriptor{Framework: buildoutput.Framework{Name: "node"}, EntryFile: handlerFile, ID: entryRouteID, App: "api"}
 		if !reflect.DeepEqual(cfg, want) {
-			t.Errorf("%s = %+v, want %+v", appbuild.FunctionConfigFile, cfg, want)
+			t.Errorf("%s = %+v, want %+v", buildoutput.FunctionDescriptorFile, cfg, want)
 		}
 
 		var descriptor edge.ServeDescriptor
@@ -361,7 +361,7 @@ func TestBundle(t *testing.T) {
 			name:  "an unnamed framework fails the build",
 			files: tree{"package.json": appPkg, "server.js": "console.log('hi');\n"},
 			entry: "server.js",
-			mut:   func(target *Target) { target.Framework = appbuild.Framework{} },
+			mut:   func(target *Target) { target.Framework = buildoutput.Framework{} },
 			wants: []string{"framework"},
 		},
 		{

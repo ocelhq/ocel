@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
@@ -20,7 +20,7 @@ import (
 func servedDescriptor(t *testing.T, app string, desc edge.ServeDescriptor) string {
 	t.Helper()
 	root := t.TempDir()
-	dir := appbuild.AppArtifactRoot(root, app)
+	dir := buildoutput.AppRoot(root, app)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}

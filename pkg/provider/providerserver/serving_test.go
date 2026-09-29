@@ -10,7 +10,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -23,7 +23,7 @@ import (
 func servingRoot(t *testing.T, app string, desc edge.ServeDescriptor, manifest []byte) string {
 	t.Helper()
 	root := t.TempDir()
-	dir := appbuild.AppArtifactRoot(root, app)
+	dir := buildoutput.AppRoot(root, app)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func TestEveryAppIncludesTheAssetPrefixAndBytecodeCacheItServesFrom(t *testing.T
 }
 
 func TestOnlyNextAsksForAnISRLedger(t *testing.T) {
-	next, err := providerserver.AppServingFor(servingQuery(t.TempDir(), "web", appbuild.FrameworkNext))
+	next, err := providerserver.AppServingFor(servingQuery(t.TempDir(), "web", buildoutput.FrameworkNext))
 	if err != nil {
 		t.Fatalf("AppServingFor() = %v", err)
 	}
@@ -93,7 +93,7 @@ func TestAnAppDispatchingAtItsOriginIncludesTheManifestItDispatchesBy(t *testing
 	manifest := []byte(`{"routes":[]}`)
 	root := servingRoot(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index"}, manifest)
 
-	facts, err := providerserver.AppServingFor(servingQuery(root, "web", appbuild.FrameworkNext))
+	facts, err := providerserver.AppServingFor(servingQuery(root, "web", buildoutput.FrameworkNext))
 	if err != nil {
 		t.Fatalf("AppServingFor() = %v", err)
 	}
@@ -111,7 +111,7 @@ func TestAnAppDispatchingAtItsOriginIncludesTheManifestItDispatchesBy(t *testing
 func TestAnEdgeThatRunsCodeTakesTheManifestTheOriginWouldHaveDispatchedBy(t *testing.T) {
 	manifest := []byte(`{"routes":[]}`)
 	root := servingRoot(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index"}, manifest)
-	query := servingQuery(root, "web", appbuild.FrameworkNext)
+	query := servingQuery(root, "web", buildoutput.FrameworkNext)
 	query.EdgeRunsCode = true
 
 	facts, err := providerserver.AppServingFor(query)
@@ -129,7 +129,7 @@ func TestAnEdgeThatRunsCodeTakesTheManifestTheOriginWouldHaveDispatchedBy(t *tes
 func TestAnEdgeThatRunsNoCodeHandsTheEdgeNothingToDispatchBy(t *testing.T) {
 	root := servingRoot(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index"}, []byte(`{}`))
 
-	facts, err := providerserver.AppServingFor(servingQuery(root, "web", appbuild.FrameworkNext))
+	facts, err := providerserver.AppServingFor(servingQuery(root, "web", buildoutput.FrameworkNext))
 	if err != nil {
 		t.Fatalf("AppServingFor() = %v", err)
 	}
@@ -141,7 +141,7 @@ func TestAnEdgeThatRunsNoCodeHandsTheEdgeNothingToDispatchBy(t *testing.T) {
 func TestAnAppThatRoutesAtItsOriginAndWroteNoManifestIsRefused(t *testing.T) {
 	root := servingRoot(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index"}, nil)
 
-	_, err := providerserver.AppServingFor(servingQuery(root, "web", appbuild.FrameworkNext))
+	_, err := providerserver.AppServingFor(servingQuery(root, "web", buildoutput.FrameworkNext))
 	if err == nil || !strings.Contains(err.Error(), edge.RoutingManifestFile) {
 		t.Fatalf("AppServingFor() = %v, want a refusal naming %s", err, edge.RoutingManifestFile)
 	}
@@ -150,7 +150,7 @@ func TestAnAppThatRoutesAtItsOriginAndWroteNoManifestIsRefused(t *testing.T) {
 func TestAnAppThatRoutesAtItsOriginAndNamesNoEntryIsRefused(t *testing.T) {
 	root := servingRoot(t, "web", edge.ServeDescriptor{EdgeRouting: true}, []byte(`{}`))
 
-	_, err := providerserver.AppServingFor(servingQuery(root, "web", appbuild.FrameworkNext))
+	_, err := providerserver.AppServingFor(servingQuery(root, "web", buildoutput.FrameworkNext))
 	if err == nil || !strings.Contains(err.Error(), "entry route") {
 		t.Fatalf("AppServingFor() = %v, want a refusal naming the missing entry route", err)
 	}
@@ -158,7 +158,7 @@ func TestAnAppThatRoutesAtItsOriginAndNamesNoEntryIsRefused(t *testing.T) {
 
 func builtRoutingApp(t *testing.T, app string, desc edge.ServeDescriptor, manifest []byte) {
 	t.Helper()
-	dir := filepath.Join(appbuild.ArtifactRoot(""), "apps", app)
+	dir := filepath.Join(buildoutput.Root(""), "apps", app)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}

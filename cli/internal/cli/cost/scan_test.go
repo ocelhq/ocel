@@ -18,7 +18,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
@@ -35,7 +35,7 @@ func scanFixture(t *testing.T) (string, *fake.Provider, cmddeps.Deps) {
 	clitest.WriteUsageMonorepo(t, root)
 	deps := clitest.NewDeps()
 	clitest.StubBuild(&deps, []build.Function{
-		{Route: "api", Framework: appbuild.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
+		{Route: "api", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
 	})
 	return root, p, deps
 }

@@ -231,7 +231,7 @@ func TestReadArtifactNamesTheCommandItIsServedBy(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("LAMBDA_TASK_ROOT", root)
 	if err := os.WriteFile(filepath.Join(root, "config.json"),
-		[]byte(`{"framework":{"name":"go"},"handler":"web","command":["./web"]}`), 0o600); err != nil {
+		[]byte(`{"framework":{"name":"go"},"entryFile":"web","command":["./web"]}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	served := readArtifact()
@@ -250,7 +250,7 @@ func TestAnArtifactWithoutACommandIsHostedByNode(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("LAMBDA_TASK_ROOT", root)
 	if err := os.WriteFile(filepath.Join(root, "config.json"),
-		[]byte(`{"framework":{"name":"node"},"handler":"index.mjs"}`), 0o600); err != nil {
+		[]byte(`{"framework":{"name":"node"},"entryFile":"index.mjs"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if executable(readArtifact()) {

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -42,7 +42,7 @@ func nodeAppTree(t *testing.T) string {
 	return writeTree(t, map[string]string{
 		"apps/api/serve.json":  serveDescriptor(t, "express", "a1b2c3d4e5f60718"),
 		"apps/api/index.mjs":   "export default {}",
-		"apps/api/config.json": `{"framework":{"name":"node"},"handler":"index.mjs","app":"api"}`,
+		"apps/api/config.json": `{"framework":{"name":"node"},"entryFile":"index.mjs","app":"api"}`,
 	})
 }
 
@@ -115,7 +115,7 @@ func bakedBuilds(t *testing.T, cfg Config, manifest *contractv1.Manifest, baked 
 		}
 		coord := storageCoordinate(cfg.Env, manifest.GetSlug(), name, id.Release())
 		builds.coords[name] = coord
-		if app.GetFramework().GetName() != appbuild.FrameworkNext {
+		if app.GetFramework().GetName() != buildoutput.FrameworkNext {
 			continue
 		}
 		prefix := isrPrefixOf(coord)

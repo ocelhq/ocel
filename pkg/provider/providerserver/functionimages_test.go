@@ -14,7 +14,8 @@ import (
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/empty"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/images"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -46,14 +47,14 @@ func (i imaging) Hooks() provider.Hooks {
 	return hooks
 }
 
-func (i imaging) ResolveBase(context.Context, appbuild.Framework) (v1.Image, error) {
+func (i imaging) ResolveBase(context.Context, buildoutput.Framework) (v1.Image, error) {
 	if i.base != nil {
 		return i.base, nil
 	}
 	return empty.Image, nil
 }
 
-func (imaging) ReadRuntime(context.Context, appbuild.Framework) ([]byte, error) {
+func (imaging) ReadRuntime(context.Context, buildoutput.Framework) ([]byte, error) {
 	return []byte("export const runtime = 1"), nil
 }
 
@@ -61,10 +62,10 @@ func stagedProject(t *testing.T, apps ...string) {
 	t.Helper()
 	builtApps(t, apps...)
 	for _, app := range apps {
-		dir := filepath.Join(appbuild.ArtifactRoot(""), filepath.FromSlash(appArtifactPath(app)))
+		dir := filepath.Join(buildoutput.Root(""), filepath.FromSlash(appArtifactPath(app)))
 		raw, err := json.Marshal(map[string]any{
 			"framework": map[string]string{"name": "node", "arch": "x86_64"},
-			"handler":   "index.handler",
+			"entryFile": "index.handler",
 			"id":        "server",
 			"app":       app,
 		})
@@ -238,7 +239,7 @@ func (w imagingWithoutRuntime) Hooks() provider.Hooks {
 	return hooks
 }
 
-func (imagingWithoutRuntime) ReadRuntime(context.Context, appbuild.Framework) ([]byte, error) {
+func (imagingWithoutRuntime) ReadRuntime(context.Context, buildoutput.Framework) ([]byte, error) {
 	return nil, nil
 }
 
@@ -311,7 +312,7 @@ func TestAFunctionImageIsWrappedInTheRuntimeWhereTheProviderShipsOne(t *testing.
 		t.Fatalf("the deploy pushed %v, want the one wrapped image the app's function runs", pushed)
 	}
 	config := configOf(t, pushed[0].Built)
-	if !slices.Equal(config.Entrypoint, []string{appbuild.ContainerRuntimePath}) {
+	if !slices.Equal(config.Entrypoint, []string{containerimage.RuntimePath}) {
 		t.Errorf("the function's image enters at %v, want the runtime: it is what reads the function's secrets live", config.Entrypoint)
 	}
 	if !slices.Equal(config.Cmd, []string{"node", images.NodeRuntimePath}) {
@@ -320,7 +321,7 @@ func TestAFunctionImageIsWrappedInTheRuntimeWhereTheProviderShipsOne(t *testing.
 	files := regularFiles(t, pushed[0].Built)
 	for _, want := range []string{
 		strings.TrimPrefix(images.NodeRuntimePath, "/"),
-		strings.TrimPrefix(appbuild.ContainerRuntimePath, "/"),
+		strings.TrimPrefix(containerimage.RuntimePath, "/"),
 	} {
 		if !slices.Contains(files, want) {
 			t.Errorf("the image contains %v and nothing at /%s", files, want)

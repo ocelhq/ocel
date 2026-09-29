@@ -8,7 +8,7 @@ import (
 
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -52,7 +52,7 @@ func routedCoordinate(t *testing.T) naming.Coordinate {
 }
 
 func routedApp() *contractv1.ManifestApp {
-	return &contractv1.ManifestApp{Name: "web", Framework: &contractv1.Framework{Name: appbuild.FrameworkNext}}
+	return &contractv1.ManifestApp{Name: "web", Framework: &contractv1.Framework{Name: buildoutput.FrameworkNext}}
 }
 
 func servingSpec(t *testing.T, cfg Config, app, runtime string, coord naming.Coordinate) provider.StackSpec {
@@ -93,7 +93,7 @@ func servingSpec(t *testing.T, cfg Config, app, runtime string, coord naming.Coo
 
 func routedSpec(t *testing.T, cfg Config) provider.StackSpec {
 	t.Helper()
-	return servingSpec(t, cfg, "web", appbuild.FrameworkNext, routedCoordinate(t))
+	return servingSpec(t, cfg, "web", buildoutput.FrameworkNext, routedCoordinate(t))
 }
 
 func newDispatchHostFor(t *testing.T, cfg Config) *dispatchHost {
@@ -135,8 +135,8 @@ func TestDispatchHostNamesTheEntryAndWhatDispatchReads(t *testing.T) {
 
 func routedFunctions() []*contractv1.ManifestFunction {
 	return []*contractv1.ManifestFunction{
-		{LogicalName: "fn--web--entry", Framework: &contractv1.Framework{Name: appbuild.FrameworkNext}, RouteId: "/"},
-		{LogicalName: "fn--web--admin", Framework: &contractv1.Framework{Name: appbuild.FrameworkNext}, RouteId: "/admin"},
+		{LogicalName: "fn--web--entry", Framework: &contractv1.Framework{Name: buildoutput.FrameworkNext}, RouteId: "/"},
+		{LogicalName: "fn--web--admin", Framework: &contractv1.Framework{Name: buildoutput.FrameworkNext}, RouteId: "/admin"},
 	}
 }
 
@@ -247,11 +247,11 @@ func TestAppEnvPassesTheDeploymentURLToTheFunction(t *testing.T) {
 	app := routedApp()
 	app.Variables = []*contractv1.ManifestVariable{
 		{Key: processenv.AppURLEnvVar, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "https://shop.example"},
-		{Key: appbuild.ClientURLEnvName, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "https://shop.example"},
+		{Key: processenv.ClientURLEnvVar, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "https://shop.example"},
 	}
 
 	env := plannedEnv(t, Config{}, app, nil)
-	for _, key := range []string{processenv.AppURLEnvVar, appbuild.ClientURLEnvName} {
+	for _, key := range []string{processenv.AppURLEnvVar, processenv.ClientURLEnvVar} {
 		if got, want := env[key], "https://shop.example"; got != want {
 			t.Errorf("%s = %q, want %q: server code reads the url off its own environment", key, got, want)
 		}

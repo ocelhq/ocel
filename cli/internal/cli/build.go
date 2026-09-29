@@ -21,8 +21,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/node"
-	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/progress"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
@@ -31,7 +31,7 @@ var buildCmd = &cobra.Command{
 	Use:   "build",
 	Short: "Build every app in your project without deploying",
 	Long: "Build every app in your project without deploying: a serverless app's functions\n" +
-		"into " + appbuild.ArtifactRootDir + ", and a container app's image into the local docker daemon.\n" +
+		"into " + buildoutput.Dir + ", and a container app's image into the local docker daemon.\n" +
 		"`ocel deploy --prebuilt` deploys what this built.\n\n" +
 		"Express, Fastify and Hono servers are bundled, so only what the entrypoint imports\n" +
 		"reaches the function: static directories, view templates and files read at run\n" +
@@ -135,7 +135,7 @@ func builtHeadline(built build.Output) string {
 	if len(built.Functions) == 0 && len(built.Images) > 0 {
 		return fmt.Sprintf("Built %d %s", len(built.Images), plural(len(built.Images), "image", "images"))
 	}
-	return fmt.Sprintf("Built %d %s into %s", len(built.Functions), plural(len(built.Functions), "function", "functions"), appbuild.ArtifactRootDir)
+	return fmt.Sprintf("Built %d %s into %s", len(built.Functions), plural(len(built.Functions), "function", "functions"), buildoutput.Dir)
 }
 
 func builtLines(built build.Output) []string {

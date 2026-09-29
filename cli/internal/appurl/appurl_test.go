@@ -7,7 +7,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/appurl"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
@@ -59,7 +60,7 @@ func TestProduction(t *testing.T) {
 			Apps:    []project.App{{Name: "web"}, {Name: "api"}},
 		}
 
-		served := appbuild.AttributeHostnames(cfg.Domains.Production, [][]string{nil, nil})
+		served := edge.AttributeHostnames(cfg.Domains.Production, [][]string{nil, nil})
 		urls := appurl.Production(cfg)
 		if got, want := urls["web"], "https://"+served[0][0]; got != want {
 			t.Errorf("web url = %q, want %q: the deploy serves a project hostname on the first app `apps` names", got, want)
@@ -103,8 +104,8 @@ func TestPrepend(t *testing.T) {
 	t.Parallel()
 
 	cfg := &project.Project{Apps: []project.App{
-		{Name: "web", Serverless: &project.Serverless{Framework: appbuild.FrameworkNext}},
-		{Name: "api", Serverless: &project.Serverless{Framework: appbuild.FrameworkGo}},
+		{Name: "web", Serverless: &project.Serverless{Framework: buildoutput.FrameworkNext}},
+		{Name: "api", Serverless: &project.Serverless{Framework: buildoutput.FrameworkGo}},
 		{Name: "docs"},
 	}}
 	byApp := map[string][]variables.Variable{
@@ -121,11 +122,11 @@ func TestPrepend(t *testing.T) {
 	if got, want := variables[processenv.AppURLEnvVar].Value, "https://acme.com"; got != want {
 		t.Errorf("%s = %q, want %q", processenv.AppURLEnvVar, got, want)
 	}
-	if got, want := variables[appbuild.ClientURLEnvName].Value, "https://acme.com"; got != want {
-		t.Errorf("%s = %q, want the same value mirrored for the browser bundle", appbuild.ClientURLEnvName, got)
+	if got, want := variables[processenv.ClientURLEnvVar].Value, "https://acme.com"; got != want {
+		t.Errorf("%s = %q, want the same value mirrored for the browser bundle", processenv.ClientURLEnvVar, got)
 	}
-	if !variables[appbuild.ClientURLEnvName].ClientAccessible {
-		t.Errorf("%s is not client-accessible, so nothing would inline it into the bundle", appbuild.ClientURLEnvName)
+	if !variables[processenv.ClientURLEnvVar].ClientAccessible {
+		t.Errorf("%s is not client-accessible, so nothing would inline it into the bundle", processenv.ClientURLEnvVar)
 	}
 	if variables[processenv.AppURLEnvVar].ClientAccessible {
 		t.Errorf("%s is client-accessible, and a bundler inlines only its own public prefix", processenv.AppURLEnvVar)
@@ -134,7 +135,7 @@ func TestPrepend(t *testing.T) {
 		t.Errorf("web variables = %+v, want the declared ones kept", byApp["web"])
 	}
 	if got := keys(byApp["api"]); !slices.Equal(got, []string{processenv.AppURLEnvVar}) {
-		t.Errorf("api variables = %v, want only %s: a go app has no bundle to read %s, and a value of its own under that name would be overwritten", got, processenv.AppURLEnvVar, appbuild.ClientURLEnvName)
+		t.Errorf("api variables = %v, want only %s: a go app has no bundle to read %s, and a value of its own under that name would be overwritten", got, processenv.AppURLEnvVar, processenv.ClientURLEnvVar)
 	}
 	if len(byApp["docs"]) != 0 {
 		t.Errorf("docs variables = %+v, want none where the app has no hostname", byApp["docs"])

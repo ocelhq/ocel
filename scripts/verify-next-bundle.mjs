@@ -95,10 +95,10 @@ function readBundle(dir, name) {
     return null;
   }
   const config = JSON.parse(readFileSync(configPath, "utf8"));
-  const launcherRel = config.handler;
+  const launcherRel = config.entryFile;
   const launcher = join(dir, launcherRel ?? "");
   if (!launcherRel || !existsSync(launcher)) {
-    failures.push(`${name}: config.handler "${launcherRel}" names no file in the bundle`);
+    failures.push(`${name}: config.entryFile "${launcherRel}" names no file in the bundle`);
     return null;
   }
   const probe = probeLauncher(launcher);

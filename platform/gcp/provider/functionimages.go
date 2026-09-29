@@ -11,8 +11,8 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/google"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
-	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
@@ -35,10 +35,10 @@ type base struct {
 
 func functionBases() map[string]base {
 	return map[string]base{
-		appbuild.FrameworkNode:   {ref: nodeImage, bins: []string{nodeBinDir}},
-		appbuild.FrameworkGo:     {ref: staticImage},
-		appbuild.FrameworkPython: {ref: pythonImage},
-		appbuild.FrameworkRust:   {ref: staticImage},
+		buildoutput.FrameworkNode:   {ref: nodeImage, bins: []string{nodeBinDir}},
+		buildoutput.FrameworkGo:     {ref: staticImage},
+		buildoutput.FrameworkPython: {ref: pythonImage},
+		buildoutput.FrameworkRust:   {ref: staticImage},
 	}
 }
 
@@ -55,7 +55,7 @@ func pullBase(ctx context.Context, ref string) (v1.Image, error) {
 		remote.WithPlatform(runOn))
 }
 
-func (p *Provider) ResolveFunctionBase(ctx context.Context, framework appbuild.Framework) (v1.Image, error) {
+func (p *Provider) ResolveFunctionBase(ctx context.Context, framework buildoutput.Framework) (v1.Image, error) {
 	if err := runsX8664(framework.Arch, "the "+framework.Name+" function"); err != nil {
 		return nil, err
 	}
@@ -114,7 +114,7 @@ func runsX8664(architecture, what string) error {
 		what, arch.Architecture(architecture), arch.X8664, arch.X8664, arch.Architecture(architecture))
 }
 
-func (p *Provider) ReadFunctionRuntime(_ context.Context, framework appbuild.Framework) ([]byte, error) {
+func (p *Provider) ReadFunctionRuntime(_ context.Context, framework buildoutput.Framework) ([]byte, error) {
 	if !images.BootsThroughRuntime(framework) {
 		return nil, nil
 	}

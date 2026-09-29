@@ -10,7 +10,7 @@ import (
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -73,7 +73,7 @@ func siblingAppSpec(t *testing.T, app string) provider.StackSpec {
 		Edge: fakeEdgeOf(cloudfront.Kind),
 		App: &provider.AppSpec{
 			App:        app,
-			Framework:  appbuild.FrameworkNext,
+			Framework:  buildoutput.FrameworkNext,
 			Entry:      "fn--" + app + "--entry",
 			Deployment: "d1",
 			Functions: []provider.FunctionSpec{

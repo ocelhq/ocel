@@ -9,22 +9,22 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 )
 
 func compiledFromSource(framework string) bool {
-	return framework == appbuild.FrameworkGo || framework == appbuild.FrameworkPython || framework == appbuild.FrameworkRust
+	return framework == buildoutput.FrameworkGo || framework == buildoutput.FrameworkPython || framework == buildoutput.FrameworkRust
 }
 
 func compile(ctx context.Context, cfg *project.Project, a project.App, outputDir string, log io.Writer) error {
-	appDir := appbuild.AppArtifactRoot(outputDir, a.Name)
+	appDir := buildoutput.AppRoot(outputDir, a.Name)
 	roots, err := discoveryRootsFor(cfg, a.Framework())
 	if err != nil {
 		return err
 	}
 	return toolchain.Compile(ctx, toolchain.Compilation{
 		App:            a.Name,
-		Framework:      appbuild.Framework{Name: a.Framework(), Arch: a.Architecture()},
+		Framework:      buildoutput.Framework{Name: a.Framework(), Arch: a.Architecture()},
 		Source:         filepath.Join(cfg.Dir, a.Path),
 		Entrypoint:     a.Serverless.Entrypoint,
 		FuncDir:        filepath.Join(appDir, functionsDirName, entryFuncDirName),
@@ -35,7 +35,7 @@ func compile(ctx context.Context, cfg *project.Project, a project.App, outputDir
 }
 
 func discoveryRootsFor(cfg *project.Project, framework string) ([]string, error) {
-	if framework != appbuild.FrameworkPython {
+	if framework != buildoutput.FrameworkPython {
 		return nil, nil
 	}
 	roots, err := discovery.RootsOf(cfg)

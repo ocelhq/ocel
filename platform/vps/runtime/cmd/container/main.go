@@ -16,7 +16,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/runtime/bindingproxy"
 	"github.com/ocelhq/ocel/pkg/runtime/child"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
@@ -42,14 +42,14 @@ func run(ctx context.Context, command []string, environ []string) int {
 	if len(command) == 0 {
 		return fatal("the image has no ENTRYPOINT or CMD")
 	}
-	exposed := appbuild.InjectedPortText
+	exposed := containerimage.PortText
 	env := make([]string, 0, len(environ))
 	manifest := ""
 	healthPath := ""
 	for _, entry := range environ {
 		name, value, _ := strings.Cut(entry, "=")
 		switch name {
-		case appbuild.InjectedPortName:
+		case containerimage.PortEnvVar:
 			exposed = value
 			continue
 		case vars.EnvVar:
@@ -62,7 +62,7 @@ func run(ctx context.Context, command []string, environ []string) int {
 	}
 	guard, env := originguard.GuardFromEnv(env)
 
-	values, err := resolve(ctx, manifest, vars.SocketPath, appbuild.ContainerLivePath)
+	values, err := resolve(ctx, manifest, vars.SocketPath, containerimage.LivePath)
 	if err != nil {
 		return fatal(err.Error())
 	}
@@ -83,7 +83,7 @@ func run(ctx context.Context, command []string, environ []string) int {
 	}
 	defer fronting.Close()
 
-	env = append(env, appbuild.InjectedPortName+"="+strconv.Itoa(internal))
+	env = append(env, containerimage.PortEnvVar+"="+strconv.Itoa(internal))
 	env = append(env, values.Env()...)
 	env = append(env, fronting.Env...)
 

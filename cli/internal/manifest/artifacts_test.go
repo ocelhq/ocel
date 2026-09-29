@@ -6,7 +6,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
@@ -102,7 +102,7 @@ func TestAnAppOnlyTheBuildNamesCannotLandOnContainerCompute(t *testing.T) {
 	t.Parallel()
 
 	_, err := assembleOn("container", "proj-1", project.Domains{}, nil, nil, nil, []build.Function{
-		{App: "api", Route: "index", Framework: appbuild.Framework{Name: "node"}, EntryFile: "index.handler", ArtifactPath: "apps/api/functions/index"},
+		{App: "api", Route: "index", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "index.handler", ArtifactPath: "apps/api/functions/index"},
 	}, nil)
 	if err == nil {
 		t.Fatal("assemble() landed an app the config never names on container compute, and nothing would have told a provider what image to run")
@@ -141,7 +141,7 @@ func TestAServerlessAppIsWrittenAsNoContainerAtAll(t *testing.T) {
 	t.Parallel()
 
 	manifest, err := assembleOn("serverless", "proj-1", project.Domains{}, []app{{Name: "web"}}, nil, nil, []build.Function{
-		{App: "web", Route: "index", Framework: appbuild.Framework{Name: "node"}, EntryFile: "index.handler", ArtifactPath: "apps/web/functions/index"},
+		{App: "web", Route: "index", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "index.handler", ArtifactPath: "apps/web/functions/index"},
 	}, nil)
 	if err != nil {
 		t.Fatalf("assemble: %v", err)
@@ -157,7 +157,7 @@ func TestAContainerAppPackedIntoFunctionsIsRefused(t *testing.T) {
 	_, err := assembleOn("container", "proj-1", project.Domains{}, []app{
 		{Name: "api", Compute: "container", Image: "ocel/api@" + fakeDigest},
 	}, nil, nil, []build.Function{
-		{App: "api", Route: "index", Framework: appbuild.Framework{Name: "node"}, EntryFile: "index.handler", ArtifactPath: "apps/api/functions/index"},
+		{App: "api", Route: "index", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "index.handler", ArtifactPath: "apps/api/functions/index"},
 	}, nil)
 	if err == nil {
 		t.Fatal("assemble() included both a container and a function for one app, so routing would have two answers for the same request")

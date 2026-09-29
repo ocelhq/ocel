@@ -13,7 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/deployrecord"
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/statedir"
 
@@ -25,7 +25,7 @@ func TestADeployRecordsWhatItDeployed(t *testing.T) {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, []build.Function{{
-			Route: "api", Framework: appbuild.Framework{Name: "node"}, EntryFile: "src/server.js",
+			Route: "api", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js",
 			ArtifactPath: "output/api", App: "api",
 		}})
 		root, _ := clitest.SetUpDeployFixture(t)
@@ -91,7 +91,7 @@ func TestADeployRecordsWhatItDeployed(t *testing.T) {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, []build.Function{{
-			Route: "api", Framework: appbuild.Framework{Name: "node"}, EntryFile: "src/server.js",
+			Route: "api", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js",
 			ArtifactPath: "output/api", App: "api",
 		}})
 		root, _ := clitest.SetUpDeployFixture(t)

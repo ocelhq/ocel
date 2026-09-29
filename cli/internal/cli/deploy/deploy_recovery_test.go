@@ -22,7 +22,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/variableeditor"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -285,7 +285,7 @@ func TestADeployMissingVariablesOpensTheEditorAndResumesOnceTheyAreSet(t *testin
 		var opened []string
 		recordBrowser(&deps, &opened, &mu)
 		clitest.StubBuild(&deps, []build.Function{
-			{Route: "api", Framework: appbuild.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: clitest.FixtureSlug},
+			{Route: "api", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: clitest.FixtureSlug},
 		})
 
 		var out syncBuffer

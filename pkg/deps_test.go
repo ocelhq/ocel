@@ -11,10 +11,11 @@ import (
 
 var providerBuildsOn = []string{
 	"github.com/ocelhq/ocel/pkg/provider",
-	"github.com/ocelhq/ocel/pkg/appbuild",
 	"github.com/ocelhq/ocel/pkg/arch",
+	"github.com/ocelhq/ocel/pkg/buildoutput",
 	"github.com/ocelhq/ocel/pkg/channel",
 	"github.com/ocelhq/ocel/pkg/configdoc",
+	"github.com/ocelhq/ocel/pkg/containerimage",
 	"github.com/ocelhq/ocel/pkg/dotenv",
 	"github.com/ocelhq/ocel/pkg/edge",
 	"github.com/ocelhq/ocel/pkg/environment",
@@ -48,8 +49,9 @@ func TestPkgImportsOnlyWhatTheCodebaseMapOpensToIt(t *testing.T) {
 	}{
 		{name: "pkg", pattern: "./...", open: depstest.OpenToPkg},
 		{name: "provider", pattern: "./provider/...", open: providerBuildsOn},
-		{name: "appbuild", pattern: "./appbuild/...", open: providerBuildsOn},
 		{name: "arch", pattern: "./arch/...", open: providerBuildsOn},
+		{name: "buildoutput", pattern: "./buildoutput/...", open: providerBuildsOn},
+		{name: "containerimage", pattern: "./containerimage/...", open: providerBuildsOn},
 		{name: "dotenv", pattern: "./dotenv/...", open: providerBuildsOn},
 		{name: "environment", pattern: "./environment/...", open: []string{"github.com/ocelhq/ocel/pkg/environment"}},
 		{name: "envsource", pattern: "./envsource/...", open: providerBuildsOn},

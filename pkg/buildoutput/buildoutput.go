@@ -1,4 +1,4 @@
-package appbuild
+package buildoutput
 
 import (
 	"encoding/json"
@@ -13,21 +13,21 @@ import (
 )
 
 const (
-	ArtifactRootDir = statedir.Name + "/output"
+	Dir = statedir.Name + "/output"
 
 	appsDir = "apps"
 )
 
-func ArtifactRoot(projectDir string) string {
-	return filepath.Join(projectDir, filepath.FromSlash(ArtifactRootDir))
+func Root(projectDir string) string {
+	return filepath.Join(projectDir, filepath.FromSlash(Dir))
 }
 
 func AppsRoot(root string) string { return filepath.Join(root, appsDir) }
 
-func AppArtifactRoot(root, app string) string { return filepath.Join(AppsRoot(root), app) }
+func AppRoot(root, app string) string { return filepath.Join(AppsRoot(root), app) }
 
 func ReadServeDescriptor(root, app string) (edge.ServeDescriptor, bool, error) {
-	raw, err := os.ReadFile(filepath.Join(AppArtifactRoot(root, app), edge.ServeDescriptorFile))
+	raw, err := os.ReadFile(filepath.Join(AppRoot(root, app), edge.ServeDescriptorFile))
 	if errors.Is(err, fs.ErrNotExist) {
 		return edge.ServeDescriptor{}, false, nil
 	}

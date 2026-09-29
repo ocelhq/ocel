@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
@@ -118,7 +118,7 @@ func (c EdgeNeedCheck) Run(ctx context.Context, manifest *contractv1.Manifest) (
 
 	for _, app := range manifest.GetApps() {
 		name := app.GetName()
-		desc, present, err := appbuild.ReadServeDescriptor(c.Root, name)
+		desc, present, err := buildoutput.ReadServeDescriptor(c.Root, name)
 		if err != nil {
 			return nil, err
 		}

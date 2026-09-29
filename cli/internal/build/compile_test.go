@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/statedir"
 )
@@ -59,7 +59,7 @@ func TestAGoAppIsCompiledHereRatherThanHandedToTheNodeBuildScript(t *testing.T) 
 	}
 	assertFunctions(t, "ReadFunctions", fns, []Function{{
 		Route:        "index",
-		Framework:    appbuild.Framework{Name: "go", Arch: arch.X8664},
+		Framework:    buildoutput.Framework{Name: "go", Arch: arch.X8664},
 		EntryFile:    "api",
 		ArtifactPath: "apps/api/functions/index.func",
 		RouteID:      "/",
@@ -112,7 +112,7 @@ func TestAPythonAppIsVendoredHereRatherThanHandedToTheNodeBuilder(t *testing.T) 
 	}
 	assertFunctions(t, "ReadFunctions", fns, []Function{{
 		Route:        "index",
-		Framework:    appbuild.Framework{Name: "python", Arch: arch.X8664},
+		Framework:    buildoutput.Framework{Name: "python", Arch: arch.X8664},
 		EntryFile:    "main.py",
 		ArtifactPath: "apps/api/functions/index.func",
 		RouteID:      "/",
@@ -168,7 +168,7 @@ func TestARustAppIsCompiledHereRatherThanHandedToTheNodeBuilder(t *testing.T) {
 	}
 	assertFunctions(t, "ReadFunctions", fns, []Function{{
 		Route:        "index",
-		Framework:    appbuild.Framework{Name: "rust", Arch: arch.X8664},
+		Framework:    buildoutput.Framework{Name: "rust", Arch: arch.X8664},
 		EntryFile:    "api",
 		ArtifactPath: "apps/api/functions/index.func",
 		RouteID:      "/",

@@ -10,7 +10,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 )
 
@@ -26,16 +26,16 @@ type Function struct {
 	App          string
 	Route        string
 	RouteID      string
-	Framework    appbuild.Framework
+	Framework    buildoutput.Framework
 	EntryFile    string
 	ArtifactPath string
 }
 
 func ReadFunctions(projectDir string) ([]Function, error) {
-	outputDir := appbuild.ArtifactRoot(projectDir)
+	outputDir := buildoutput.Root(projectDir)
 	if _, err := os.Stat(outputDir); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return nil, fmt.Errorf("%w at %s; run `ocel build` first", ErrNoBuildOutput, appbuild.ArtifactRootDir)
+			return nil, fmt.Errorf("%w at %s; run `ocel build` first", ErrNoBuildOutput, buildoutput.Dir)
 		}
 		return nil, err
 	}
@@ -43,7 +43,7 @@ func ReadFunctions(projectDir string) ([]Function, error) {
 }
 
 func EdgeApps(projectDir string) ([]string, error) {
-	root := appbuild.ArtifactRoot(projectDir)
+	root := buildoutput.Root(projectDir)
 	names, err := builtApps(root)
 	if err != nil {
 		return nil, err
@@ -51,7 +51,7 @@ func EdgeApps(projectDir string) ([]string, error) {
 
 	var apps []string
 	for _, name := range names {
-		desc, _, err := appbuild.ReadServeDescriptor(root, name)
+		desc, _, err := buildoutput.ReadServeDescriptor(root, name)
 		if err != nil {
 			return nil, err
 		}
@@ -66,12 +66,12 @@ func EdgeApps(projectDir string) ([]string, error) {
 }
 
 func BuildID(projectDir, app string) (string, error) {
-	desc, _, err := appbuild.ReadServeDescriptor(appbuild.ArtifactRoot(projectDir), app)
+	desc, _, err := buildoutput.ReadServeDescriptor(buildoutput.Root(projectDir), app)
 	return desc.BuildID, err
 }
 
 func builtApps(root string) ([]string, error) {
-	entries, err := os.ReadDir(appbuild.AppsRoot(root))
+	entries, err := os.ReadDir(buildoutput.AppsRoot(root))
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
 	}
@@ -95,7 +95,7 @@ func readFunctions(outputDir string) ([]Function, error) {
 
 	var functions []Function
 	for _, app := range apps {
-		appFunctions, err := readAppFunctions(outputDir, appbuild.AppArtifactRoot(outputDir, app))
+		appFunctions, err := readAppFunctions(outputDir, buildoutput.AppRoot(outputDir, app))
 		if err != nil {
 			return nil, err
 		}
@@ -153,27 +153,27 @@ func readFunction(outputDir, functionsDir, funcDir string) (Function, error) {
 	}
 	route := strings.TrimSuffix(filepath.ToSlash(routeRel), funcDirSuffix)
 
-	configPath := filepath.Join(funcDir, appbuild.FunctionConfigFile)
+	configPath := filepath.Join(funcDir, buildoutput.FunctionDescriptorFile)
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return Function{}, fmt.Errorf("%s: missing %s", funcDir, appbuild.FunctionConfigFile)
+			return Function{}, fmt.Errorf("%s: missing %s", funcDir, buildoutput.FunctionDescriptorFile)
 		}
 		return Function{}, err
 	}
 
-	var fc appbuild.FunctionConfig
+	var fc buildoutput.FunctionDescriptor
 	if err := json.Unmarshal(data, &fc); err != nil {
-		return Function{}, fmt.Errorf("%s: invalid %s: %w", configPath, appbuild.FunctionConfigFile, err)
+		return Function{}, fmt.Errorf("%s: invalid %s: %w", configPath, buildoutput.FunctionDescriptorFile, err)
 	}
-	if fc.Framework.Name == "" || fc.Handler == "" || fc.App == "" {
-		return Function{}, fmt.Errorf("%s: %s requires framework, handler, and app", configPath, appbuild.FunctionConfigFile)
+	if fc.Framework.Name == "" || fc.EntryFile == "" || fc.App == "" {
+		return Function{}, fmt.Errorf("%s: %s requires framework, entryFile, and app", configPath, buildoutput.FunctionDescriptorFile)
 	}
 
 	return Function{
 		Route:        route,
 		Framework:    fc.Framework,
-		EntryFile:    fc.Handler,
+		EntryFile:    fc.EntryFile,
 		ArtifactPath: filepath.ToSlash(artifactRel),
 		RouteID:      fc.ID,
 		App:          fc.App,

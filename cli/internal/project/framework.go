@@ -8,8 +8,8 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/language"
-	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 )
 
 const (
@@ -20,10 +20,10 @@ const (
 var nextConfigNames = []string{"next.config.js", "next.config.mjs", "next.config.ts"}
 
 var languageFrameworks = map[language.Language]string{
-	language.JS:     appbuild.FrameworkNode,
-	language.Go:     appbuild.FrameworkGo,
-	language.Python: appbuild.FrameworkPython,
-	language.Rust:   appbuild.FrameworkRust,
+	language.JS:     buildoutput.FrameworkNode,
+	language.Go:     buildoutput.FrameworkGo,
+	language.Python: buildoutput.FrameworkPython,
+	language.Rust:   buildoutput.FrameworkRust,
 }
 
 func detectFramework(dir string) (string, error) {
@@ -42,13 +42,13 @@ func detectFramework(dir string) (string, error) {
 			return "", err
 		}
 		if next {
-			return appbuild.FrameworkNext, nil
+			return buildoutput.FrameworkNext, nil
 		}
-		return appbuild.FrameworkNode, nil
+		return buildoutput.FrameworkNode, nil
 	case 0:
 		return "", fmt.Errorf(
 			"nothing in %s says what this app is built with: it contains no %s, so set \"framework\" to one of %s",
-			dir, english.Or(language.ManifestNames()), english.Or(english.Quoted(appbuild.Frameworks())),
+			dir, english.Or(language.ManifestNames()), english.Or(english.Quoted(buildoutput.Frameworks())),
 		)
 	default:
 		return "", fmt.Errorf(
@@ -83,8 +83,8 @@ func isNextApp(dir string) (bool, error) {
 
 func frameworkOf(app string, dir string, named string) (string, error) {
 	if named != "" {
-		if !appbuild.KnownFramework(named) {
-			return "", fmt.Errorf("app %q declares framework %q, which nothing builds: the frameworks are %s", app, named, english.And(english.Quoted(appbuild.Frameworks())))
+		if !buildoutput.IsKnownFramework(named) {
+			return "", fmt.Errorf("app %q declares framework %q, which nothing builds: the frameworks are %s", app, named, english.And(english.Quoted(buildoutput.Frameworks())))
 		}
 		return named, nil
 	}

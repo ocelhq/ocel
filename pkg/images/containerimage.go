@@ -16,7 +16,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
@@ -53,7 +53,7 @@ func WrapContainer(base v1.Image, runtime []byte) (v1.Image, error) {
 		return nil, err
 	}
 	config := file.Config
-	config.Entrypoint = []string{appbuild.ContainerRuntimePath}
+	config.Entrypoint = []string{containerimage.RuntimePath}
 	config.Cmd = command
 	return mutate.Config(appended, config)
 }
@@ -63,17 +63,17 @@ func runtimeLayer(runtime []byte) ([]byte, error) {
 	archive := tar.NewWriter(&packed)
 	if err := archive.WriteHeader(&tar.Header{
 		Typeflag: tar.TypeDir,
-		Name:     strings.TrimPrefix(appbuild.ContainerRuntimePath[:strings.LastIndex(appbuild.ContainerRuntimePath, "/")], "/") + "/",
+		Name:     strings.TrimPrefix(containerimage.RuntimePath[:strings.LastIndex(containerimage.RuntimePath, "/")], "/") + "/",
 		Mode:     0o755,
 	}); err != nil {
 		return nil, err
 	}
-	if err := tarBody(archive, appbuild.ContainerRuntimePath, runtime, 0o755); err != nil {
+	if err := tarBody(archive, containerimage.RuntimePath, runtime, 0o755); err != nil {
 		return nil, err
 	}
 	if err := archive.WriteHeader(&tar.Header{
 		Typeflag: tar.TypeDir,
-		Name:     strings.TrimPrefix(appbuild.ContainerLivePath, "/") + "/",
+		Name:     strings.TrimPrefix(containerimage.LivePath, "/") + "/",
 		Mode:     0o1777,
 	}); err != nil {
 		return nil, err

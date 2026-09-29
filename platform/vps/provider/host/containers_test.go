@@ -9,7 +9,7 @@ import (
 	"testing"
 	"text/template"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
@@ -65,7 +65,7 @@ func TestAReleaseRunsOneLabelledContainerOnTheOneNetworkTargetsResolveAcross(t *
 		"the app label retention reads":                        quoted("--label") + " " + quoted(LabelApp+"=web"),
 		"the project label retention reads":                    quoted("--label") + " " + quoted(LabelProject+"=shop"),
 		"the ref label retention reads":                        quoted("--label") + " " + quoted(LabelRef+"="+appImage),
-		"the port the app is told to bind":                     quoted("--env") + " " + quoted("PORT="+appbuild.InjectedPortText),
+		"the port the app is told to bind":                     quoted("--env") + " " + quoted("PORT="+containerimage.PortText),
 		"the image the release names":                          quoted(appImage),
 	} {
 		if !strings.Contains(command, wanted) {
@@ -245,7 +245,7 @@ func TestAContainerReadingValuesLiveIsHandedTheBoxSocketReadOnlyAndItsManifestBy
 	if !strings.Contains(command, mount) {
 		t.Errorf("starting a live container runs %q, which hands it no socket to read its values through (%s)", command, mount)
 	}
-	tmpfs := quoted("--tmpfs") + " " + quoted(appbuild.ContainerLivePath+":rw,noexec,nosuid,size=8m")
+	tmpfs := quoted("--tmpfs") + " " + quoted(containerimage.LivePath+":rw,noexec,nosuid,size=8m")
 	if !strings.Contains(command, tmpfs) {
 		t.Errorf("starting a live container runs %q, which gives the runtime nowhere in memory to project the values into (%s): an image built from scratch has no /tmp, and the writable layer is the box's disk", command, tmpfs)
 	}

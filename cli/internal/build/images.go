@@ -16,7 +16,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build/image"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/images"
 )
 
@@ -81,7 +82,7 @@ func (t tools) refuseAbsentImage(ctx context.Context, app, ref, arch string) err
 const imageRefFileName = "image-ref"
 
 func imageRefPath(projectDir, app string) string {
-	return filepath.Join(appbuild.AppArtifactRoot(appbuild.ArtifactRoot(projectDir), app), imageRefFileName)
+	return filepath.Join(buildoutput.AppRoot(buildoutput.Root(projectDir), app), imageRefFileName)
 }
 
 func writeImageRef(projectDir, app, ref string) error {
@@ -99,13 +100,13 @@ func readImageRef(projectDir, app string) (string, error) {
 	path := imageRefPath(projectDir, app)
 	raw, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
-		return "", fmt.Errorf("app %q runs in a container, and %s holds no image for it: run `ocel build` with `compute: \"container\"` stated on %q, or deploy without --prebuilt", app, appbuild.ArtifactRootDir, app)
+		return "", fmt.Errorf("app %q runs in a container, and %s holds no image for it: run `ocel build` with `compute: \"container\"` stated on %q, or deploy without --prebuilt", app, buildoutput.Dir, app)
 	}
 	if err != nil {
 		return "", fmt.Errorf("read the image of %q at %s: %w", app, path, err)
 	}
 	ref := strings.TrimSpace(string(raw))
-	if !appbuild.PinnedImage(ref) {
+	if !containerimage.IsPinned(ref) {
 		return "", fmt.Errorf("%s names %q as the image of %q, which pins no digest; run `ocel build` again", path, ref, app)
 	}
 	return ref, nil

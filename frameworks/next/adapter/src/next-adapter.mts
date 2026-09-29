@@ -288,7 +288,7 @@ const adapter = {
           join(funcDir, "config.json"),
           JSON.stringify({
             framework: { name: "next" },
-            handler: launcherRel,
+            entryFile: launcherRel,
             id: bundle.name,
             app: appName,
           }),

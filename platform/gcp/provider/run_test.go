@@ -10,7 +10,7 @@ import (
 
 	run "google.golang.org/api/run/v2"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -47,9 +47,9 @@ func TestAServerlessRevisionScalesToNothingAndIsBilledPerRequest(t *testing.T) {
 	if got := container.Resources.Limits; got["cpu"] != "1" || got["memory"] != "512Mi" {
 		t.Errorf("a revision asks for %v, want one vCPU and 512Mi", got)
 	}
-	if len(container.Ports) != 1 || container.Ports[0].ContainerPort != appbuild.InjectedPort {
+	if len(container.Ports) != 1 || container.Ports[0].ContainerPort != containerimage.Port {
 		t.Errorf("a revision listens on %v, want %d, which is the port every image ocel builds binds",
-			container.Ports, appbuild.InjectedPort)
+			container.Ports, containerimage.Port)
 	}
 	if template.ServiceAccount != "ocel-production@acme.iam.gserviceaccount.com" {
 		t.Errorf("a revision runs as %q, want the tier's own runtime account", template.ServiceAccount)
@@ -75,8 +75,8 @@ func TestAContainerRevisionKeepsAnInstanceUpAndIsProbedOnItsOwnPath(t *testing.T
 	if container.StartupProbe == nil || container.StartupProbe.HttpGet == nil {
 		t.Fatal("a container has no startup probe, and up means a 2xx on the path the wire named")
 	}
-	if got := container.StartupProbe.HttpGet; got.Path != "/healthz" || got.Port != appbuild.InjectedPort {
-		t.Errorf("a container is probed at %v, want /healthz on %d", got, appbuild.InjectedPort)
+	if got := container.StartupProbe.HttpGet; got.Path != "/healthz" || got.Port != containerimage.Port {
+		t.Errorf("a container is probed at %v, want /healthz on %d", got, containerimage.Port)
 	}
 }
 

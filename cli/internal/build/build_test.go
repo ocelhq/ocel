@@ -15,7 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/fixturetest"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/node"
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -44,7 +44,7 @@ func writeFile(t *testing.T, path, body string) {
 	}
 }
 
-func writeFuncConfig(t *testing.T, outDir, app, funcRel string, cfg appbuild.FunctionConfig) {
+func writeFuncConfig(t *testing.T, outDir, app, funcRel string, cfg buildoutput.FunctionDescriptor) {
 	t.Helper()
 	dir := filepath.Join(outDir, "apps", app, functionsDirName, funcRel)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -54,7 +54,7 @@ func writeFuncConfig(t *testing.T, outDir, app, funcRel string, cfg appbuild.Fun
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, appbuild.FunctionConfigFile), data, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, buildoutput.FunctionDescriptorFile), data, 0o644); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -85,7 +85,7 @@ func expressFixture(t *testing.T) string {
 }
 
 func nextApp(name, path string) project.App {
-	return project.App{Name: name, Path: path, Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: appbuild.FrameworkNext}}
+	return project.App{Name: name, Path: path, Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: buildoutput.FrameworkNext}}
 }
 
 func requestOf(got *nodeBuildRequest) nodeRun {
@@ -113,7 +113,7 @@ func TestBuild(t *testing.T) {
 			}
 			for _, app := range got.Apps {
 				writeFuncConfig(t, filepath.Dir(filepath.Dir(app.OutputDir)), app.Name, "index.func",
-					appbuild.FunctionConfig{Framework: appbuild.Framework{Name: "next"}, Handler: "index.handler", App: app.Name})
+					buildoutput.FunctionDescriptor{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", App: app.Name})
 			}
 			return nil
 		}}
@@ -128,10 +128,10 @@ func TestBuild(t *testing.T) {
 		if len(got.Apps) != 2 {
 			t.Fatalf("request had %d apps, want 2", len(got.Apps))
 		}
-		outputDir := appbuild.ArtifactRoot(root)
+		outputDir := buildoutput.Root(root)
 		for i, want := range []nodeAppBuild{
-			{Framework: "next", Name: "web", Cwd: filepath.Join(root, "apps/web"), OutputDir: appbuild.AppArtifactRoot(outputDir, "web"), Folder: "/web", Env: map[string]string{"POSTHOG_ID": "ph-web"}},
-			{Framework: "next", Name: "docs", Cwd: filepath.Join(root, "apps/docs"), OutputDir: appbuild.AppArtifactRoot(outputDir, "docs")},
+			{Framework: "next", Name: "web", Cwd: filepath.Join(root, "apps/web"), OutputDir: buildoutput.AppRoot(outputDir, "web"), Folder: "/web", Env: map[string]string{"POSTHOG_ID": "ph-web"}},
+			{Framework: "next", Name: "docs", Cwd: filepath.Join(root, "apps/docs"), OutputDir: buildoutput.AppRoot(outputDir, "docs")},
 		} {
 			app := got.Apps[i]
 			recorded, err := DeploymentID(root, want.Name)
@@ -157,8 +157,8 @@ func TestBuild(t *testing.T) {
 			t.Fatalf("ReadFunctions: %v", err)
 		}
 		assertFunctions(t, "ReadFunctions", fns, []Function{
-			{Route: "index", Framework: appbuild.Framework{Name: "next"}, EntryFile: "index.handler", ArtifactPath: "apps/docs/functions/index.func", App: "docs"},
-			{Route: "index", Framework: appbuild.Framework{Name: "next"}, EntryFile: "index.handler", ArtifactPath: "apps/web/functions/index.func", App: "web"},
+			{Route: "index", Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", ArtifactPath: "apps/docs/functions/index.func", App: "docs"},
+			{Route: "index", Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", ArtifactPath: "apps/web/functions/index.func", App: "web"},
 		})
 	})
 
@@ -181,8 +181,8 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
-		writeFuncConfig(t, appbuild.ArtifactRoot(root), "stale", "index.func",
-			appbuild.FunctionConfig{Framework: appbuild.Framework{Name: "node"}, Handler: "h", App: "stale"})
+		writeFuncConfig(t, buildoutput.Root(root), "stale", "index.func",
+			buildoutput.FunctionDescriptor{Framework: buildoutput.Framework{Name: "node"}, EntryFile: "h", App: "stale"})
 
 		ran := false
 		builder := nodeOnly{node: func(context.Context, string, []byte, Log) error {
@@ -196,7 +196,7 @@ func TestBuild(t *testing.T) {
 		if ran {
 			t.Error("the node build script ran for a project with nothing to build")
 		}
-		if _, err := os.Stat(filepath.Join(appbuild.AppsRoot(appbuild.ArtifactRoot(root)), "stale")); !errors.Is(err, os.ErrNotExist) {
+		if _, err := os.Stat(filepath.Join(buildoutput.AppsRoot(buildoutput.Root(root)), "stale")); !errors.Is(err, os.ErrNotExist) {
 			t.Errorf("stale .func survived the reset (stat err = %v)", err)
 		}
 	})
@@ -269,7 +269,7 @@ func TestBuild(t *testing.T) {
 			t.Fatalf("ReadFunctions: %v", err)
 		}
 		assertFunctions(t, "ReadFunctions", fns, []Function{
-			{Route: "index", Framework: appbuild.Framework{Name: "node"}, EntryFile: "index.mjs", ArtifactPath: "apps/api/functions/index.func", RouteID: "/", App: "api"},
+			{Route: "index", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "index.mjs", ArtifactPath: "apps/api/functions/index.func", RouteID: "/", App: "api"},
 		})
 		if got, err := BuildID(root, "api"); err != nil || len(got) != 16 {
 			t.Errorf("BuildID = %q, %v, want the artifact hash the bundle wrote", got, err)
@@ -316,7 +316,7 @@ func TestBuild(t *testing.T) {
 			t.Fatalf("ReadFunctions: %v", err)
 		}
 		assertFunctions(t, "ReadFunctions", fns, []Function{
-			{Route: "index", Framework: appbuild.Framework{Name: "node"}, EntryFile: "index.mjs", ArtifactPath: "apps/api/functions/index.func", RouteID: "/", App: "api"},
+			{Route: "index", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "index.mjs", ArtifactPath: "apps/api/functions/index.func", RouteID: "/", App: "api"},
 		})
 	})
 
@@ -344,7 +344,7 @@ func TestBuildTracesANodeAppWhenTracingIsPreferred(t *testing.T) {
 			t.Fatalf("Build: %v", err)
 		}
 
-		funcDir := filepath.Join(appbuild.AppArtifactRoot(appbuild.ArtifactRoot(root), "api"), functionsDirName, entryFuncDirName)
+		funcDir := filepath.Join(buildoutput.AppRoot(buildoutput.Root(root), "api"), functionsDirName, entryFuncDirName)
 		want := nodeAppBuild{Framework: "node", Name: "api", Cwd: source, Entrypoint: filepath.Join(source, "src", "server.ts"), FuncDir: funcDir}
 		if len(got.Apps) != 1 || got.Apps[0].Framework != want.Framework || got.Apps[0].Name != want.Name || got.Apps[0].Cwd != want.Cwd || got.Apps[0].Entrypoint != want.Entrypoint || got.Apps[0].FuncDir != want.FuncDir {
 			t.Fatalf("request apps = %+v, want [%+v]", got.Apps, want)
@@ -355,9 +355,9 @@ func TestBuildTracesANodeAppWhenTracingIsPreferred(t *testing.T) {
 			t.Fatalf("ReadFunctions: %v", err)
 		}
 		assertFunctions(t, "ReadFunctions", fns, []Function{
-			{Route: "index", Framework: appbuild.Framework{Name: "node", Arch: "arm64"}, EntryFile: "src/server.js", ArtifactPath: "apps/api/functions/index.func", RouteID: "/", App: "api"},
+			{Route: "index", Framework: buildoutput.Framework{Name: "node", Arch: "arm64"}, EntryFile: "src/server.js", ArtifactPath: "apps/api/functions/index.func", RouteID: "/", App: "api"},
 		})
-		desc, found, err := appbuild.ReadServeDescriptor(appbuild.ArtifactRoot(root), "api")
+		desc, found, err := buildoutput.ReadServeDescriptor(buildoutput.Root(root), "api")
 		if err != nil || !found {
 			t.Fatalf("ReadServeDescriptor = %v, %v", found, err)
 		}
@@ -407,9 +407,9 @@ func TestBuildTracesANodeAppWhenTracingIsPreferred(t *testing.T) {
 			t.Fatalf("ReadFunctions: %v", err)
 		}
 		assertFunctions(t, "ReadFunctions", fns, []Function{
-			{Route: "index", Framework: appbuild.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "apps/api/functions/index.func", RouteID: "/", App: "api"},
+			{Route: "index", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "apps/api/functions/index.func", RouteID: "/", App: "api"},
 		})
-		funcDir := filepath.Join(appbuild.AppArtifactRoot(appbuild.ArtifactRoot(fixtureRoot), "api"), functionsDirName, entryFuncDirName)
+		funcDir := filepath.Join(buildoutput.AppRoot(buildoutput.Root(fixtureRoot), "api"), functionsDirName, entryFuncDirName)
 		for _, rel := range []string{"src/server.js", "node_modules/express/package.json"} {
 			if _, err := os.Stat(filepath.Join(funcDir, filepath.FromSlash(rel))); err != nil {
 				t.Errorf("traced artifact lacks %s: %v", rel, err)

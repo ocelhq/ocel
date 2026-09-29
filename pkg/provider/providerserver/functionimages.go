@@ -8,8 +8,8 @@ import (
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/naming"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -99,7 +99,7 @@ func (r *deployRun) imageFunction(
 	}, nil
 }
 
-func (r *deployRun) wrapFunction(ctx context.Context, name string, framework appbuild.Framework, image v1.Image) (v1.Image, error) {
+func (r *deployRun) wrapFunction(ctx context.Context, name string, framework buildoutput.Framework, image v1.Image) (v1.Image, error) {
 	goarch, known := arch.GoArch(framework.Arch)
 	if !known {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
@@ -124,7 +124,7 @@ func (r *deployRun) wrapFunction(ctx context.Context, name string, framework app
 func runtimeOverlay(
 	ctx context.Context,
 	hooks provider.Hooks,
-	framework appbuild.Framework,
+	framework buildoutput.Framework,
 	name string,
 	overlay map[string][]byte,
 ) (map[string][]byte, error) {

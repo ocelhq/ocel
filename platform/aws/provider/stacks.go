@@ -14,7 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -74,7 +74,7 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 
 		RuntimeLayers: deployed.RuntimeLayers,
 
-		ArtifactRoot:       appbuild.ArtifactRoot(p.projectDir),
+		ArtifactRoot:       buildoutput.Root(p.projectDir),
 		ArtifactBucket:     deployed.ArtifactBucket,
 		AssetBucket:        deployed.AssetBucket,
 		ImageOptimizerURL:  deployed.ImageOptimizerURL,

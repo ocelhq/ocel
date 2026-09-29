@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -119,7 +119,7 @@ func isrSpec(app, prefix string) provider.StackSpec {
 		Kind: provider.StackApp,
 		App: &provider.AppSpec{
 			App:       app,
-			Framework: appbuild.FrameworkNext,
+			Framework: buildoutput.FrameworkNext,
 			ISR:       &provider.ISRSpec{Prefix: prefix, TagNamespace: "tag:proj"},
 		},
 	}

@@ -3,7 +3,7 @@ package manifest
 import (
 	"fmt"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/containerimage"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
@@ -18,7 +18,7 @@ func attachArtifact(manifestApp *contractv1.ManifestApp, a app, functions []*con
 	if a.Image == "" {
 		return fmt.Errorf("app %q runs on container compute and names no image, so the manifest would hand a provider an app with nothing to run", a.Name)
 	}
-	if !appbuild.PinnedImage(a.Image) {
+	if !containerimage.IsPinned(a.Image) {
 		return fmt.Errorf("app %q names image %q, and a release pins one repository at one digest: a tag repoints under a running release, so it never rides in the identity", a.Name, a.Image)
 	}
 	if len(functions) > 0 {

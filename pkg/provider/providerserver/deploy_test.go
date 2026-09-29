@@ -14,7 +14,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -624,7 +624,7 @@ func bootstrappedOverRPC(t *testing.T, client contractv1connect.ProviderServiceC
 
 func declaresNeed(t *testing.T, app string, need edge.Need) {
 	t.Helper()
-	dir := appbuild.AppArtifactRoot(appbuild.ArtifactRoot(""), app)
+	dir := buildoutput.AppRoot(buildoutput.Root(""), app)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}

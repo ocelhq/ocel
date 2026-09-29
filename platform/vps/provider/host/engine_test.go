@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/provider/enginetest"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -304,7 +304,7 @@ func (p liveProxy) runsApp(t *testing.T, upstream, body string) {
 	exec.Command(dockerEngine, "rm", "--force", name).Run()
 	run := append([]string{"run", "--rm", "--detach", "--name", name}, enginetest.RunLabelArgs(t)...)
 	out, err := exec.Command(dockerEngine, append(run, "--network", p.network, caddy.Image(),
-		"caddy", "respond", "--listen", ":"+appbuild.InjectedPortText, body)...).CombinedOutput()
+		"caddy", "respond", "--listen", ":"+containerimage.PortText, body)...).CombinedOutput()
 	if err != nil {
 		t.Skipf("this machine's engine will not run the app the proxy forwards to: %s", out)
 	}
@@ -464,7 +464,7 @@ func (p liveProxy) runsSlowApp(t *testing.T, upstream string, slow time.Duration
 		int(slow.Seconds()))
 	out, err := exec.Command(dockerEngine, "run", "--rm", "--detach", "--name", name,
 		"--network", p.network, "--entrypoint", "nc", caddy.Image(),
-		"-lk", "-p", appbuild.InjectedPortText, "-e", "sh", "-c", answer).CombinedOutput()
+		"-lk", "-p", containerimage.PortText, "-e", "sh", "-c", answer).CombinedOutput()
 	if err != nil {
 		t.Skipf("this machine's engine will not run the app the proxy forwards to: %s", out)
 	}
@@ -474,7 +474,7 @@ func (p liveProxy) runsSlowApp(t *testing.T, upstream string, slow time.Duration
 func TestARealProxyDropsNoRequestWhileAFlipMovesAnExistingRouteBetweenUpstreams(t *testing.T) {
 	proxy := aLiveProxy(t)
 
-	one, two := "shop-web-1111:"+appbuild.InjectedPortText, "shop-web-2222:"+appbuild.InjectedPortText
+	one, two := "shop-web-1111:"+containerimage.PortText, "shop-web-2222:"+containerimage.PortText
 	proxy.runsApp(t, one, "one")
 	proxy.runsApp(t, two, "two")
 	serving := func(upstream string) RoutingTable {
@@ -599,7 +599,7 @@ func TestARealProxyDropsNoRequestWhileOtherHostnamesAreBoundAndUnboundBesideIt(t
 func TestARealBoxServesTheNewReleaseTheMomentTheRetiredOneIsRemoved(t *testing.T) {
 	proxy := aLiveProxy(t)
 
-	retired, next := "shop-web-1111:"+appbuild.InjectedPortText, "shop-web-2222:"+appbuild.InjectedPortText
+	retired, next := "shop-web-1111:"+containerimage.PortText, "shop-web-2222:"+containerimage.PortText
 	proxy.runsSlowApp(t, retired, 2*time.Second)
 	proxy.runsApp(t, next, "two")
 	serving := func(upstream string) RoutingTable {
@@ -661,7 +661,7 @@ func askedFor(hostname string, timeout time.Duration) (string, error) {
 func TestARealProxyCallsAnUpstreamIdleOnlyOnceTheFlipRetiringItHasDrainedIt(t *testing.T) {
 	proxy := aLiveProxy(t)
 
-	retired, next := "shop-web-1111:"+appbuild.InjectedPortText, "shop-web-2222:"+appbuild.InjectedPortText
+	retired, next := "shop-web-1111:"+containerimage.PortText, "shop-web-2222:"+containerimage.PortText
 	proxy.runsSlowApp(t, retired, 4*time.Second)
 	proxy.runsApp(t, next, "two")
 	serving := func(upstream string) RoutingTable {

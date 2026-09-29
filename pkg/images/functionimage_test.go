@@ -17,13 +17,14 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/empty"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/images"
 )
 
 var (
-	nodeRuntime = appbuild.Framework{Name: appbuild.FrameworkNode, Arch: "x86_64"}
-	goRuntime   = appbuild.Framework{Name: appbuild.FrameworkGo, Arch: "x86_64"}
+	nodeRuntime = buildoutput.Framework{Name: buildoutput.FrameworkNode, Arch: "x86_64"}
+	goRuntime   = buildoutput.Framework{Name: buildoutput.FrameworkGo, Arch: "x86_64"}
 )
 
 func stagedFunc(t *testing.T, files map[string]string) string {
@@ -43,14 +44,14 @@ func stagedFunc(t *testing.T, files map[string]string) string {
 
 func functionConfig(t *testing.T, command []string) string {
 	t.Helper()
-	return frameworkConfig(t, appbuild.FrameworkNode, command)
+	return frameworkConfig(t, buildoutput.FrameworkNode, command)
 }
 
 func frameworkConfig(t *testing.T, framework string, command []string) string {
 	t.Helper()
 	raw, err := json.Marshal(map[string]any{
 		"framework": map[string]string{"name": framework, "arch": "x86_64"},
-		"handler":   "index.mjs",
+		"entryFile": "index.mjs",
 		"command":   command,
 		"id":        "server",
 		"app":       "web",
@@ -133,7 +134,7 @@ func TestFunctionImageBootsANodeFunctionThroughTheRuntime(t *testing.T) {
 func TestFunctionImageRefusesAFunctionThatNamesNoCommandAndBootsThroughNoRuntime(t *testing.T) {
 	dir := stagedFunc(t, map[string]string{
 		"server":      "a built binary",
-		"config.json": frameworkConfig(t, appbuild.FrameworkGo, nil),
+		"config.json": frameworkConfig(t, buildoutput.FrameworkGo, nil),
 	})
 
 	_, err := images.FunctionImage(empty.Image, goRuntime, dir, nil)
@@ -148,7 +149,7 @@ func TestFunctionImageRefusesAFunctionThatNamesNoCommandAndBootsThroughNoRuntime
 func TestFunctionImageRunsWhatTheRuntimeItIsBuiltAgainstNames(t *testing.T) {
 	dir := stagedFunc(t, map[string]string{
 		"server":      "a built binary",
-		"config.json": frameworkConfig(t, appbuild.FrameworkNode, nil),
+		"config.json": frameworkConfig(t, buildoutput.FrameworkNode, nil),
 	})
 
 	_, err := images.FunctionImage(empty.Image, goRuntime, dir, nil)
@@ -176,7 +177,7 @@ func TestFunctionImageTellsTheFunctionWhichPortToBind(t *testing.T) {
 	}
 
 	config := configOf(t, image)
-	port := appbuild.InjectedPortName + "=" + appbuild.InjectedPortText
+	port := containerimage.PortEnvVar + "=" + containerimage.PortText
 	if !slices.Contains(config.Env, port) {
 		t.Errorf("the image has env %v, want %s: the function is reached on the port ocel binds it to", config.Env, port)
 	}
@@ -368,10 +369,10 @@ func TestFunctionImageIncludesAnOverlayAlongsideTheRuntimeItBootsFrom(t *testing
 func TestTheContainerRuntimeLandsOutsideBothTreesAFunctionImageContains(t *testing.T) {
 	t.Parallel()
 
-	landed := appbuild.ContainerRuntimePath
+	landed := containerimage.RuntimePath
 	for _, root := range []string{images.FunctionImageRoot, images.NodeRuntimeRoot} {
 		if landed == root || strings.HasPrefix(landed, root+"/") {
-			t.Errorf("the container runtime lands at %s, inside %s: a node function's image has a directory there, and a file appended over a directory cannot be loaded", appbuild.ContainerRuntimePath, root)
+			t.Errorf("the container runtime lands at %s, inside %s: a node function's image has a directory there, and a file appended over a directory cannot be loaded", containerimage.RuntimePath, root)
 		}
 	}
 
@@ -380,8 +381,8 @@ func TestTheContainerRuntimeLandsOutsideBothTreesAFunctionImageContains(t *testi
 		"config.json": functionConfig(t, nil),
 	})
 	if _, err := images.FunctionImage(empty.Image, nodeRuntime, dir,
-		map[string][]byte{appbuild.ContainerRuntimePath: []byte("theirs")}); err == nil {
-		t.Errorf("FunctionImage() included an overlay at %s, want it refused: a function's overlay may not write over the runtime its image is later wrapped in", appbuild.ContainerRuntimePath)
+		map[string][]byte{containerimage.RuntimePath: []byte("theirs")}); err == nil {
+		t.Errorf("FunctionImage() included an overlay at %s, want it refused: a function's overlay may not write over the runtime its image is later wrapped in", containerimage.RuntimePath)
 	}
 
 	image, err := images.FunctionImage(empty.Image, nodeRuntime, dir,
@@ -394,7 +395,7 @@ func TestTheContainerRuntimeLandsOutsideBothTreesAFunctionImageContains(t *testi
 		t.Fatalf("WrapContainer() = %v, want a node function's image wrapped like any container", err)
 	}
 	config := configOf(t, wrapped)
-	if !slices.Equal(config.Entrypoint, []string{appbuild.ContainerRuntimePath}) || !slices.Equal(config.Cmd, []string{"node", images.NodeRuntimePath}) {
+	if !slices.Equal(config.Entrypoint, []string{containerimage.RuntimePath}) || !slices.Equal(config.Cmd, []string{"node", images.NodeRuntimePath}) {
 		t.Errorf("the wrapped function enters at %v and runs %v, want the container runtime running the node one", config.Entrypoint, config.Cmd)
 	}
 }

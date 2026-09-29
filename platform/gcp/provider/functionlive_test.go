@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -29,7 +29,7 @@ func functionStackDeclaring(tier environment.Tier, env string, values provider.A
 			Functions: []provider.FunctionSpec{{
 				Name:      "fn--api--index",
 				Image:     "europe-west1-docker.pkg.dev/acme/ocel/api-index@sha256:abc",
-				Framework: appbuild.Framework{Name: appbuild.FrameworkNode, Arch: arch.X8664},
+				Framework: buildoutput.Framework{Name: buildoutput.FrameworkNode, Arch: arch.X8664},
 				Env:       map[string]string{"OCEL_ROUTE": "index"},
 			}},
 		},

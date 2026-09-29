@@ -15,7 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/statedir"
 )
@@ -305,8 +305,8 @@ func sourceOrUnknown(source string) string {
 
 func Offered(keys []Key, clientBundle bool) []Key {
 	keys = slices.Clone(keys)
-	if appbuild.IsOcelInjectedEnv(clientBundle, appbuild.ClientURLEnvName) {
-		keys = append(keys, Key{Name: appbuild.ClientURLEnvName})
+	if processenv.IsInjected(clientBundle, processenv.ClientURLEnvVar) {
+		keys = append(keys, Key{Name: processenv.ClientURLEnvVar})
 	}
 	slices.SortFunc(keys, func(a, b Key) int { return strings.Compare(a.Name, b.Name) })
 	return slices.CompactFunc(keys, func(a, b Key) bool { return a.Name == b.Name })

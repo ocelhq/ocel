@@ -21,7 +21,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/progress"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -101,7 +101,7 @@ func buildApps(ctx context.Context, deps cmddeps.Deps, a assembly, steps *buildS
 		if err != nil {
 			return build.Output{}, err
 		}
-		span.Say("Using the prebuilt output in " + appbuild.ArtifactRootDir + " instead of building")
+		span.Say("Using the prebuilt output in " + buildoutput.Dir + " instead of building")
 		span.End(nil)
 		return built, nil
 	}

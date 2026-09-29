@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -19,7 +19,7 @@ import (
 
 func builtEdgeBundle(t *testing.T, app string, bundle []byte) {
 	t.Helper()
-	path := filepath.Join(appbuild.AppArtifactRoot(appbuild.ArtifactRoot(""), app), filepath.FromSlash(edge.AppBundleFile))
+	path := filepath.Join(buildoutput.AppRoot(buildoutput.Root(""), app), filepath.FromSlash(edge.AppBundleFile))
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}

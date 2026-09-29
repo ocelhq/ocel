@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -60,7 +60,7 @@ func (s *stack) serve(ctx context.Context, flip router.Flip, ready []promotable,
 		}
 		apps = append(apps, host.AppRelease{
 			RouteKey:   release.key,
-			Target:     release.record.Physical + ":" + appbuild.InjectedPortText,
+			Target:     release.record.Physical + ":" + containerimage.PortText,
 			HealthPath: release.record.HealthPath,
 		})
 	}

@@ -3,7 +3,7 @@ package variables
 import (
 	"slices"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
 
@@ -30,6 +30,6 @@ func (s Scope) isPreview() bool {
 func (s Scope) IsWrittenByOcel(key string, folders []string) bool {
 	return slices.ContainsFunc(s.Apps, func(app App) bool {
 		reached := len(folders) == 0 || slices.Contains(folders, app.Folder)
-		return reached && appbuild.IsOcelInjectedEnv(app.ClientBundle, key)
+		return reached && processenv.IsInjected(app.ClientBundle, key)
 	})
 }

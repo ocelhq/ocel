@@ -20,7 +20,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/pkg/statedir"
@@ -98,7 +98,7 @@ func prebuiltConfig(root string) *project.Project {
 	return &project.Project{
 		Dir:  root,
 		Slug: "prebuilt",
-		Apps: []project.App{{Name: "api", Path: ".", Compute: "serverless", Serverless: &project.Serverless{Framework: appbuild.FrameworkNode}}},
+		Apps: []project.App{{Name: "api", Path: ".", Compute: "serverless", Serverless: &project.Serverless{Framework: buildoutput.FrameworkNode}}},
 	}
 }
 

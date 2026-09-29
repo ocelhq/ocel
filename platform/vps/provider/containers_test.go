@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -60,7 +60,7 @@ func TestStartingAnAppEndsAtARunningLabelledContainerAndFlipsNothing(t *testing.
 	if container.Name != "web" {
 		t.Errorf("the container is recorded under %q, want the app's own name", container.Name)
 	}
-	if container.Physical == "" || !strings.Contains(container.URL, container.Physical+":"+appbuild.InjectedPortText) {
+	if container.Physical == "" || !strings.Contains(container.URL, container.Physical+":"+containerimage.PortText) {
 		t.Errorf("the container is reachable at %q, want the name and port the proxy dials it by", container.URL)
 	}
 	joined := strings.Join(machine.commands(), "\n")

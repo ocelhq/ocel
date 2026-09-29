@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -59,7 +59,7 @@ func New(_ context.Context, settings provider.Settings) (provider.Provider, erro
 
 func NewForProject(options Options, projectDir string) *Provider {
 	p := NewProvider(options)
-	p.stacks.artifactRoot = appbuild.ArtifactRoot(projectDir)
+	p.stacks.artifactRoot = buildoutput.Root(projectDir)
 	return p.WithHooks(p.everyHook)
 }
 

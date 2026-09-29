@@ -10,7 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
@@ -50,7 +50,7 @@ export default {
 	deps = clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
 	clitest.StubBuild(&deps, []build.Function{
-		{Route: "api", Framework: appbuild.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
+		{Route: "api", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
 	})
 	return root, journal, deps
 }

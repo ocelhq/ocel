@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -67,7 +67,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	return []provider.AppContainer{{
 		Name:     app.App,
 		Physical: physical,
-		URL:      "http://" + physical + ":" + appbuild.InjectedPortText,
+		URL:      "http://" + physical + ":" + containerimage.PortText,
 		Image:    app.Image,
 	}}, nil
 }

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -166,7 +166,7 @@ func edgeVarsManifest(variables ...*contractv1.ManifestVariable) *contractv1.Man
 	return &contractv1.Manifest{
 		Slug: "proj",
 		Apps: []*contractv1.ManifestApp{
-			{Name: "web", Framework: &contractv1.Framework{Name: appbuild.FrameworkNext}, Folder: "/shop", Variables: variables,
+			{Name: "web", Framework: &contractv1.Framework{Name: buildoutput.FrameworkNext}, Folder: "/shop", Variables: variables,
 				Artifact: serverlessArtifact(&contractv1.ManifestFunction{LogicalName: "web_index", Framework: &contractv1.Framework{Name: "next"}})},
 		},
 	}

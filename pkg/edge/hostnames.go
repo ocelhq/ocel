@@ -1,4 +1,4 @@
-package appbuild
+package edge
 
 func AttributeHostnames(project []string, apps [][]string) [][]string {
 	served := make([][]string, len(apps))

@@ -6,7 +6,7 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -167,7 +167,7 @@ type FunctionSpec struct {
 	Name      string
 	Route     string
 	EntryFile string
-	Framework appbuild.Framework
+	Framework buildoutput.Framework
 	Artifact  ArtifactRef
 	Image     string
 	Env       map[string]string

@@ -14,7 +14,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/runtime/child"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
@@ -39,14 +39,14 @@ func run(ctx context.Context, command []string, environ []string) int {
 	if len(command) == 0 {
 		return fatal("the image names no command for the runtime to run: it must set an ENTRYPOINT or CMD")
 	}
-	exposed := appbuild.InjectedPortText
+	exposed := containerimage.PortText
 	env := make([]string, 0, len(environ))
 	manifest := ""
 	healthPath := ""
 	for _, entry := range environ {
 		name, value, _ := strings.Cut(entry, "=")
 		switch name {
-		case appbuild.InjectedPortName:
+		case containerimage.PortEnvVar:
 			exposed = value
 			continue
 		case vars.EnvVar:
@@ -74,7 +74,7 @@ func run(ctx context.Context, command []string, environ []string) int {
 	}
 	defer fronting.Close()
 
-	env = append(env, appbuild.InjectedPortName+"="+strconv.Itoa(internal))
+	env = append(env, containerimage.PortEnvVar+"="+strconv.Itoa(internal))
 	env = append(env, values.Env()...)
 	env = append(env, fronting.Env...)
 
@@ -164,10 +164,10 @@ func resolve(ctx context.Context, manifest string) (*live.Values, error) {
 		return nil, fmt.Errorf("nothing is stored for %s, which this deployment declares as %s: set it with `ocel env set` and deploy again",
 			strings.Join(missing, ", "), plural(len(missing), "a secret", "secrets"))
 	}
-	if err := os.MkdirAll(appbuild.ContainerLivePath, 0o700); err != nil {
-		return nil, fmt.Errorf("make %s to hand the app its live variables through: %w", appbuild.ContainerLivePath, err)
+	if err := os.MkdirAll(containerimage.LivePath, 0o700); err != nil {
+		return nil, fmt.Errorf("make %s to hand the app its live variables through: %w", containerimage.LivePath, err)
 	}
-	if err := values.Project(appbuild.ContainerLivePath); err != nil {
+	if err := values.Project(containerimage.LivePath); err != nil {
 		return nil, err
 	}
 	return values, nil

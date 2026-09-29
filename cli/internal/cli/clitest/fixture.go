@@ -28,7 +28,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/version"
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/configdoc"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
@@ -71,7 +71,7 @@ func WritePrebuiltFunction(t *testing.T, root, app, route string) {
 	}
 	config, err := json.Marshal(map[string]any{
 		"framework": map[string]string{"name": "node"},
-		"handler":   "index.handler",
+		"entryFile": "index.handler",
 		"app":       app,
 	})
 	if err != nil {
@@ -360,7 +360,7 @@ func SetUpEdgeFixture(t *testing.T, declaration string) (root, journal string, d
 	deps = NewDeps()
 	SetLoggedIn(&deps)
 	StubBuild(&deps, []build.Function{
-		{Route: "api", Framework: appbuild.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
+		{Route: "api", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
 	})
 	return root, journal, deps
 }

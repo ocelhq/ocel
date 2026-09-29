@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -82,7 +82,7 @@ func provisioned(t *testing.T, p *vps.Provider, tag string) release {
 	if len(started) != 1 {
 		t.Fatalf("ProvisionContainers(%s) started %v", tag, started)
 	}
-	return release{physical: started[0].Physical, address: started[0].Physical + ":" + appbuild.InjectedPortText}
+	return release{physical: started[0].Physical, address: started[0].Physical + ":" + containerimage.PortText}
 }
 
 func releasing(p *vps.Provider, next release, drain time.Duration, progress progress.Log) error {
@@ -99,7 +99,7 @@ func releasing(p *vps.Provider, next release, drain time.Duration, progress prog
 
 func inflightOn(t *testing.T, vm machine, serving release) int {
 	t.Helper()
-	read := strings.TrimSpace(vm.beside(t, serving.physical, "curl -sS -m 5 http://127.0.0.1:"+appbuild.InjectedPortText+"/inflight"))
+	read := strings.TrimSpace(vm.beside(t, serving.physical, "curl -sS -m 5 http://127.0.0.1:"+containerimage.PortText+"/inflight"))
 	count, err := strconv.Atoi(read)
 	if err != nil {
 		return -1

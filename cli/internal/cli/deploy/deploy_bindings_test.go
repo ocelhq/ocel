@@ -9,7 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 )
 
 func writeBoundMonorepo(t *testing.T, root string, bindings string) {
@@ -33,7 +33,7 @@ func deployBound(t *testing.T, bindings string) (root string, stdout, stderr byt
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
 	clitest.StubBuild(&deps, []build.Function{
-		{Route: "api", Framework: appbuild.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
+		{Route: "api", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
 	})
 	root, _ = clitest.SetUpDeployFixture(t)
 	writeBoundMonorepo(t, root, bindings)

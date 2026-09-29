@@ -6,9 +6,10 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/images"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
@@ -91,7 +92,7 @@ func refuseOwnedNames(app string, clientBundle bool, values provider.AppValues) 
 	var injected, served, owned []string
 	for _, key := range declaredNames(clientBundle, values) {
 		switch {
-		case key == appbuild.InjectedPortName:
+		case key == containerimage.PortEnvVar:
 			injected = append(injected, key)
 		case key == images.HandlerName:
 			served = append(served, key)
@@ -107,7 +108,7 @@ func refuseOwnedNames(app string, clientBundle bool, values provider.AppValues) 
 	if len(injected) > 0 {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"app %s declares %s, and %s is the one name a provider running a container injects itself: it names the port the app is told to bind, so a value declared under it would either be lost or win and leave the release gated on a port nothing is listening on. Rename it",
-			app, strings.Join(injected, ", "), appbuild.InjectedPortName)
+			app, strings.Join(injected, ", "), containerimage.PortEnvVar)
 	}
 	if len(owned) > 0 {
 		return refusal.Refuse(refusal.CodeInvalid,
@@ -121,7 +122,7 @@ func declaredNames(clientBundle bool, values provider.AppValues) []string {
 	names := make([]string, 0, len(values.Plain)+len(values.Sensitive)+len(values.Secrets))
 	for _, named := range []map[string]string{values.Plain, values.Sensitive} {
 		for key := range named {
-			if appbuild.IsOcelInjectedEnv(clientBundle, key) {
+			if processenv.IsInjected(clientBundle, key) {
 				continue
 			}
 			names = append(names, key)

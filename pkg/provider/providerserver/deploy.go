@@ -20,7 +20,7 @@ import (
 	connect "connectrpc.com/connect"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
@@ -695,7 +695,7 @@ func (r *deployRun) servedHostnames() [][]string {
 	for slot, entry := range r.spec.Apps {
 		own[slot] = tierHostnames(entry.Manifest.GetDomains(), tier)
 	}
-	return appbuild.AttributeHostnames(tierHostnames(r.manifest.GetDomains(), tier), own)
+	return edge.AttributeHostnames(tierHostnames(r.manifest.GetDomains(), tier), own)
 }
 
 func (r *deployRun) checkpoint(ctx context.Context) error {
@@ -1212,7 +1212,7 @@ func (r *deployRun) warmFunctions(ctx context.Context, functions []provider.Func
 func declaredVariables(clientBundle bool, values provider.AppValues) []router.VariableRecord {
 	names := make([]string, 0, len(values.Plain)+len(values.Sensitive)+len(values.Secrets))
 	for _, key := range slices.Sorted(maps.Keys(values.Plain)) {
-		if !appbuild.IsOcelInjectedEnv(clientBundle, key) {
+		if !processenv.IsInjected(clientBundle, key) {
 			names = append(names, key)
 		}
 	}
@@ -1296,7 +1296,7 @@ func (r *deployRun) edgeCode(entry provider.AppEntry, result provider.StackResul
 	if compatibility.IsZero() {
 		return nil, nil
 	}
-	bundle, err := os.ReadFile(filepath.Join(appbuild.AppArtifactRoot(r.artifactRoot, entry.App), filepath.FromSlash(edge.AppBundleFile)))
+	bundle, err := os.ReadFile(filepath.Join(buildoutput.AppRoot(r.artifactRoot, entry.App), filepath.FromSlash(edge.AppBundleFile)))
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"%s was released with an edge bundle at %s but its build left no %s for the edge to load; rebuild the app",
@@ -1583,6 +1583,6 @@ func unseen(hosts []string, seen map[string]bool) []string {
 	return out
 }
 
-func frameworkOf(fn *contractv1.ManifestFunction) appbuild.Framework {
-	return appbuild.Framework{Name: fn.GetFramework().GetName(), Arch: fn.GetFramework().GetArch()}
+func frameworkOf(fn *contractv1.ManifestFunction) buildoutput.Framework {
+	return buildoutput.Framework{Name: fn.GetFramework().GetName(), Arch: fn.GetFramework().GetArch()}
 }

@@ -10,7 +10,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/statedir"
@@ -61,8 +60,8 @@ func TestTheDeploymentURLReachesEveryDeliverySite(t *testing.T) {
 		if got, want := built["api"][processenv.AppURLEnvVar], "https://api.acme.com"; got != want {
 			t.Errorf("build env = %v, want %s = %q", built["api"], processenv.AppURLEnvVar, want)
 		}
-		if got, want := built["api"][appbuild.ClientURLEnvName], "https://api.acme.com"; got != want {
-			t.Errorf("build env = %v, want %s = %q for the browser bundle", built["api"], appbuild.ClientURLEnvName, want)
+		if got, want := built["api"][processenv.ClientURLEnvVar], "https://api.acme.com"; got != want {
+			t.Errorf("build env = %v, want %s = %q for the browser bundle", built["api"], processenv.ClientURLEnvVar, want)
 		}
 	})
 
@@ -70,8 +69,8 @@ func TestTheDeploymentURLReachesEveryDeliverySite(t *testing.T) {
 		if got, want := manifestVariable(t, manifest, "api", processenv.AppURLEnvVar).GetValue(), "https://api.acme.com"; got != want {
 			t.Errorf("%s = %q, want %q", processenv.AppURLEnvVar, got, want)
 		}
-		if got, want := manifestVariable(t, manifest, "api", appbuild.ClientURLEnvName).GetValue(), "https://api.acme.com"; got != want {
-			t.Errorf("%s = %q, want %q", appbuild.ClientURLEnvName, got, want)
+		if got, want := manifestVariable(t, manifest, "api", processenv.ClientURLEnvVar).GetValue(), "https://api.acme.com"; got != want {
+			t.Errorf("%s = %q, want %q", processenv.ClientURLEnvVar, got, want)
 		}
 	})
 
@@ -80,8 +79,8 @@ func TestTheDeploymentURLReachesEveryDeliverySite(t *testing.T) {
 		if err != nil {
 			t.Fatalf("no client accessor was generated: %v", err)
 		}
-		if !strings.Contains(string(accessor), appbuild.ClientURLEnvName) {
-			t.Errorf("accessor = %s, want it to read %s", accessor, appbuild.ClientURLEnvName)
+		if !strings.Contains(string(accessor), processenv.ClientURLEnvVar) {
+			t.Errorf("accessor = %s, want it to read %s", accessor, processenv.ClientURLEnvVar)
 		}
 	})
 }
@@ -103,7 +102,7 @@ func TestPrebuiltRefusesAnOutputBuiltForAnotherURL(t *testing.T) {
 	if err == nil {
 		t.Fatal("collectBuildAndAssemble = nil for output built against another hostname, want a refusal: the url is inlined into the browser bundle, so this deploy would serve the wrong one")
 	}
-	if !strings.Contains(err.Error(), appbuild.ClientURLEnvName) {
+	if !strings.Contains(err.Error(), processenv.ClientURLEnvVar) {
 		t.Errorf("error = %q, want it to name the key whose value changed", err)
 	}
 }

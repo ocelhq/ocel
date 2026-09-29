@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/evanw/esbuild/pkg/api"
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 )
 
 const handlerFile = "index.mjs"
@@ -75,7 +75,7 @@ const banner = `import { createRequire as __ocelCreateRequire } from "node:modul
 
 type Target struct {
 	App        string
-	Framework  appbuild.Framework
+	Framework  buildoutput.Framework
 	Source     string
 	Entrypoint string
 	FuncDir    string

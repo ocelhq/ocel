@@ -11,7 +11,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
@@ -162,11 +162,11 @@ func TestAStaticAssetSetIsPlannedOnceAndPushedOnce(t *testing.T) {
 	cfg.CacheStoreObjects = &fakeArtifactStore{exists: map[string]bool{}}
 	coord := storageCoordinate("prod", "shop", "web", fixedRelease(t))
 
-	first, err := staticAssetSet(cfg, "web", appbuild.FrameworkNext, coord)
+	first, err := staticAssetSet(cfg, "web", buildoutput.FrameworkNext, coord)
 	if err != nil {
 		t.Fatalf("staticAssetSet: %v", err)
 	}
-	second, err := staticAssetSet(cfg, "web", appbuild.FrameworkNext, coord)
+	second, err := staticAssetSet(cfg, "web", buildoutput.FrameworkNext, coord)
 	if err != nil {
 		t.Fatalf("staticAssetSet: %v", err)
 	}

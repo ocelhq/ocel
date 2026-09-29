@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/envvarsserver"
@@ -105,7 +105,7 @@ func aPort(said string) bool {
 
 func (vm machine) reads(t *testing.T, container, name string) string {
 	t.Helper()
-	return strings.TrimSpace(vm.beside(t, container, "curl -sS -m 10 'http://127.0.0.1:"+appbuild.InjectedPortText+"/env?name="+name+"'"))
+	return strings.TrimSpace(vm.beside(t, container, "curl -sS -m 10 'http://127.0.0.1:"+containerimage.PortText+"/env?name="+name+"'"))
 }
 
 func TestLiveAContainerReadsEveryValueClassOffItsOwnEnvironmentAndNothingIsLeftOnTheBox(t *testing.T) {
@@ -128,8 +128,8 @@ func TestLiveAContainerReadsEveryValueClassOffItsOwnEnvironmentAndNothingIsLeftO
 	if got := vm.reads(t, physical, "RELEASE"); got != "handed-by-the-deploy" {
 		t.Errorf("the app reads RELEASE as %q: the image sets it in its own `ENV` line, and what the deploy hands a container outranks an image's defaults, deliberately", got)
 	}
-	if got := vm.reads(t, physical, "PORT"); got == appbuild.InjectedPortText || !aPort(got) {
-		t.Errorf("the app reads PORT as %q: the runtime answers on %s and fronts the app on a loopback port of its own choosing, which outranks anything an env file names", got, appbuild.InjectedPortText)
+	if got := vm.reads(t, physical, "PORT"); got == containerimage.PortText || !aPort(got) {
+		t.Errorf("the app reads PORT as %q: the runtime answers on %s and fronts the app on a loopback port of its own choosing, which outranks anything an env file names", got, containerimage.PortText)
 	}
 
 	path := host.EnvFile(environment.TierProduction, physical)
@@ -221,7 +221,7 @@ func TestLiveAReleaseThatFallsOverKeepsNoEnvFileAndSaysNothingOfWhatWasInIt(t *t
 	}
 	physical := broken[0].Physical
 
-	refusal := releasing(p, release{physical: physical, address: physical + ":" + appbuild.InjectedPortText}, 5*time.Second, nil)
+	refusal := releasing(p, release{physical: physical, address: physical + ":" + containerimage.PortText}, 5*time.Second, nil)
 	if refusal == nil {
 		t.Fatal("a release of the crash-looping fixture passed its gate")
 	}

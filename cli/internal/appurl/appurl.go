@@ -4,7 +4,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
@@ -32,7 +32,7 @@ func byApp(cfg *project.Project, projectHosts []string, declared func(project.Ap
 	}
 
 	urls := make(map[string]string, len(apps))
-	for slot, served := range appbuild.AttributeHostnames(projectHosts, own) {
+	for slot, served := range edge.AttributeHostnames(projectHosts, own) {
 		if host := first(served); host != "" {
 			urls[apps[slot].Name] = "https://" + host
 		}
@@ -47,9 +47,9 @@ func Variables(clientBundle bool, url string) []variables.Variable {
 	var written []variables.Variable
 	for _, v := range []variables.Variable{
 		{Key: processenv.AppURLEnvVar, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: url},
-		{Key: appbuild.ClientURLEnvName, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: url, ClientAccessible: true},
+		{Key: processenv.ClientURLEnvVar, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: url, ClientAccessible: true},
 	} {
-		if appbuild.IsOcelInjectedEnv(clientBundle, v.Key) {
+		if processenv.IsInjected(clientBundle, v.Key) {
 			written = append(written, v)
 		}
 	}

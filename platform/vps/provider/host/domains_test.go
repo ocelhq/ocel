@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
@@ -38,7 +38,7 @@ func claimingBox(t *testing.T, state RoutingTable) *claimBench {
 func routed() RoutingTable {
 	return RoutingTable{
 		Grace:  DrainWindow,
-		Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: "shop-web-2222:" + appbuild.InjectedPortText}},
+		Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: "shop-web-2222:" + containerimage.PortText}},
 	}
 }
 
@@ -339,7 +339,7 @@ func TestWhatServesAnAppIsTheUpstreamItsRouteNames(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Serving() = %v", err)
 	}
-	if upstream != "shop-web-2222:"+appbuild.InjectedPortText {
+	if upstream != "shop-web-2222:"+containerimage.PortText {
 		t.Errorf("Serving(web) = %q, want the upstream its route names: a release retires what is serving, and retiring the wrong name drains nothing and stops something live", upstream)
 	}
 	absent, err := box.host().Serving(context.Background(), keyed("api"))
@@ -359,7 +359,7 @@ func TestAClaimSurvivesTheReleaseThatRewritesTheWholeFile(t *testing.T) {
 	box := claimingBox(t, state)
 
 	rel := Release{
-		Apps:          []AppRelease{{RouteKey: keyed("web"), Target: "shop-web-3333:" + appbuild.InjectedPortText, HealthPath: "/healthz"}},
+		Apps:          []AppRelease{{RouteKey: keyed("web"), Target: "shop-web-3333:" + containerimage.PortText, HealthPath: "/healthz"}},
 		DeployTimeout: DeployWindow,
 		DrainTimeout:  DrainWindow,
 	}
@@ -382,8 +382,8 @@ func twoProjects() RoutingTable {
 	return RoutingTable{
 		Grace: DrainWindow,
 		Routes: []AppRoute{
-			{RouteKey: keyed("web"), Upstream: "shop-web-2222:" + appbuild.InjectedPortText},
-			{RouteKey: RouteKey{Owner: otherSurface, Pointer: pointed, App: "web"}, Upstream: "blog-web-3333:" + appbuild.InjectedPortText},
+			{RouteKey: keyed("web"), Upstream: "shop-web-2222:" + containerimage.PortText},
+			{RouteKey: RouteKey{Owner: otherSurface, Pointer: pointed, App: "web"}, Upstream: "blog-web-3333:" + containerimage.PortText},
 		},
 	}
 }
@@ -413,7 +413,7 @@ func TestADeployOfOneProjectLeavesAnotherProjectsRouteWhereItFoundIt(t *testing.
 	box := claimingBox(t, twoProjects())
 	blog := RouteKey{Owner: otherSurface, Pointer: pointed, App: "web"}
 	if err := box.host().Release(context.Background(), Release{
-		Apps:          []AppRelease{{RouteKey: blog, Target: "blog-web-4444:" + appbuild.InjectedPortText, HealthPath: "/healthz"}},
+		Apps:          []AppRelease{{RouteKey: blog, Target: "blog-web-4444:" + containerimage.PortText, HealthPath: "/healthz"}},
 		DeployTimeout: DeployWindow,
 		DrainTimeout:  DrainWindow,
 	}, nil); err != nil {
@@ -425,7 +425,7 @@ func TestADeployOfOneProjectLeavesAnotherProjectsRouteWhereItFoundIt(t *testing.
 		t.Fatal(err)
 	}
 	at := slices.IndexFunc(table.Routes, func(route AppRoute) bool { return route.RouteKey == keyed("web") })
-	if at < 0 || table.Routes[at].Upstream != "shop-web-2222:"+appbuild.InjectedPortText {
+	if at < 0 || table.Routes[at].Upstream != "shop-web-2222:"+containerimage.PortText {
 		t.Errorf("after a deploy of %s the routes read %v; the other project's app is named web too, and its live container is what a deploy that took its route would then stop", otherSurface, table.Routes)
 	}
 	if box.at("docker stop "+quoted("shop-web-2222")) >= 0 {
@@ -452,8 +452,8 @@ func twoApps() RoutingTable {
 	return RoutingTable{
 		Grace: DrainWindow,
 		Routes: []AppRoute{
-			{RouteKey: keyed("api"), Upstream: "shop-api-1111:" + appbuild.InjectedPortText},
-			{RouteKey: keyed("web"), Upstream: "shop-web-2222:" + appbuild.InjectedPortText},
+			{RouteKey: keyed("api"), Upstream: "shop-api-1111:" + containerimage.PortText},
+			{RouteKey: keyed("web"), Upstream: "shop-web-2222:" + containerimage.PortText},
 		},
 	}
 }
@@ -627,7 +627,7 @@ func TestATornDownSurfaceLeavesNoRouteForwardingToARemovedContainer(t *testing.T
 	state := twoProjects()
 	state.Routes = append(state.Routes, AppRoute{
 		RouteKey: RouteKey{Owner: surface, Pointer: pointed, App: "worker"},
-		Upstream: "shop-worker-5555:" + appbuild.InjectedPortText,
+		Upstream: "shop-worker-5555:" + containerimage.PortText,
 	})
 	box := claimingBox(t, state)
 	if err := box.host().UnrouteSurface(context.Background(), surface); err != nil {

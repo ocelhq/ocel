@@ -8,7 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/attribution"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
@@ -21,8 +21,8 @@ func TestTheManifestNamesWhichAppsBundleReadsTheClientURL(t *testing.T) {
 		manifest string
 		want     bool
 	}{
-		{name: "a next app", app: project.App{Name: "web", Serverless: &project.Serverless{Framework: appbuild.FrameworkNext}}, want: true},
-		{name: "a go app", app: project.App{Name: "api", Serverless: &project.Serverless{Framework: appbuild.FrameworkGo}}, manifest: "go.mod"},
+		{name: "a next app", app: project.App{Name: "web", Serverless: &project.Serverless{Framework: buildoutput.FrameworkNext}}, want: true},
+		{name: "a go app", app: project.App{Name: "api", Serverless: &project.Serverless{Framework: buildoutput.FrameworkGo}}, manifest: "go.mod"},
 		{name: "a container app containing a package.json", app: project.App{Name: "store", Compute: provider.ComputeContainer}, manifest: "package.json", want: true},
 		{name: "a container app containing a go.mod", app: project.App{Name: "worker", Compute: provider.ComputeContainer}, manifest: "go.mod"},
 	} {

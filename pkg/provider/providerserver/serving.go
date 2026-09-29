@@ -9,7 +9,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -38,7 +38,7 @@ type AppServing struct {
 }
 
 func AppServingFor(q AppServingInput) (AppServing, error) {
-	desc, present, err := appbuild.ReadServeDescriptor(q.Root, q.App)
+	desc, present, err := buildoutput.ReadServeDescriptor(q.Root, q.App)
 	if err != nil {
 		return AppServing{}, err
 	}
@@ -49,7 +49,7 @@ func AppServingFor(q AppServingInput) (AppServing, error) {
 	if present {
 		facts.Entry = desc.Entry
 	}
-	if q.Framework == appbuild.FrameworkNext {
+	if q.Framework == buildoutput.FrameworkNext {
 		facts.ISR = &provider.ISRSpec{
 			Prefix:       withoutSlash(q.Coordinate.ISRPrefix()),
 			TagNamespace: naming.ISRTagPrefix(q.Project, q.Stack),
@@ -87,7 +87,7 @@ func routingFor(q AppServingInput, desc edge.ServeDescriptor, present bool) (*pr
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"app %s declares edge routing but its build names no entry route; rebuild the app", q.App)
 	}
-	raw, err := os.ReadFile(filepath.Join(appbuild.AppArtifactRoot(q.Root, q.App), edge.RoutingManifestFile))
+	raw, err := os.ReadFile(filepath.Join(buildoutput.AppRoot(q.Root, q.App), edge.RoutingManifestFile))
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"app %s declares edge routing but its build wrote no %s; rebuild the app", q.App, edge.RoutingManifestFile)

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/provider/enginetest"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
@@ -149,12 +149,12 @@ func appOn(t *testing.T, network, named, body string) string {
 	exec.Command(dockerEngine, "rm", "--force", name).Run()
 	run := append([]string{"run", "--rm", "--detach", "--name", name}, enginetest.RunLabelArgs(t)...)
 	out, err := exec.Command(dockerEngine, append(run, "--network", network, caddy.Image(),
-		"caddy", "respond", "--listen", ":"+appbuild.InjectedPortText, body)...).CombinedOutput()
+		"caddy", "respond", "--listen", ":"+containerimage.PortText, body)...).CombinedOutput()
 	if err != nil {
 		t.Skipf("this machine's engine will not run the app the proxy forwards to: %s", out)
 	}
 	t.Cleanup(func() { exec.Command(dockerEngine, "rm", "--force", name).Run() })
-	return name + ":" + appbuild.InjectedPortText
+	return name + ":" + containerimage.PortText
 }
 
 func anApp(t *testing.T, body string) (network, upstream string) {

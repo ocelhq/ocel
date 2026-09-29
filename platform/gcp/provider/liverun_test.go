@@ -19,8 +19,8 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -32,9 +32,9 @@ import (
 var liveRelease = naming.NewRelease("live", "wp4")
 
 var (
-	nodeRuntime   = appbuild.Framework{Name: appbuild.FrameworkNode, Arch: arch.X8664}
-	goRuntime     = appbuild.Framework{Name: appbuild.FrameworkGo, Arch: arch.X8664}
-	pythonRuntime = appbuild.Framework{Name: appbuild.FrameworkPython, Arch: arch.X8664}
+	nodeRuntime   = buildoutput.Framework{Name: buildoutput.FrameworkNode, Arch: arch.X8664}
+	goRuntime     = buildoutput.Framework{Name: buildoutput.FrameworkGo, Arch: arch.X8664}
+	pythonRuntime = buildoutput.Framework{Name: buildoutput.FrameworkPython, Arch: arch.X8664}
 )
 
 func runnable(t *testing.T) *gcp.Provider {
@@ -103,15 +103,15 @@ func asked(t *testing.T, uri string) (int, string) {
 	return resp.StatusCode, strings.TrimSpace(string(said))
 }
 
-func staged(t *testing.T, dir string, framework appbuild.Framework, handler string, command []string, files map[string]string) string {
+func staged(t *testing.T, dir string, framework buildoutput.Framework, entryFile string, command []string, files map[string]string) string {
 	t.Helper()
-	config, err := json.Marshal(appbuild.FunctionConfig{
-		Framework: framework, Handler: handler, Command: command, ID: "live", App: "live",
+	config, err := json.Marshal(buildoutput.FunctionDescriptor{
+		Framework: framework, EntryFile: entryFile, Command: command, ID: "live", App: "live",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	files[appbuild.FunctionConfigFile] = string(config)
+	files[buildoutput.FunctionDescriptorFile] = string(config)
 	for name, content := range files {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
 			t.Fatal(err)
@@ -183,7 +183,7 @@ func pushedToDaemon(t *testing.T, repository string, image v1.Image) string {
 	return strings.TrimSuffix(target, ":"+naming.DigestTag(digest.String())) + "@" + digest.String()
 }
 
-func functionImage(t *testing.T, p *gcp.Provider, repository string, framework appbuild.Framework, dir string) string {
+func functionImage(t *testing.T, p *gcp.Provider, repository string, framework buildoutput.Framework, dir string) string {
 	t.Helper()
 	ctx := context.Background()
 	base, err := p.ResolveFunctionBase(ctx, framework)
@@ -262,7 +262,7 @@ func serverlessSpec(app, image string, values map[string]string) provider.StackS
 	return serverlessSpecOn(app, image, nodeRuntime, values)
 }
 
-func serverlessSpecOn(app, image string, framework appbuild.Framework, values map[string]string) provider.StackSpec {
+func serverlessSpecOn(app, image string, framework buildoutput.Framework, values map[string]string) provider.StackSpec {
 	return provider.StackSpec{
 		Ref: provider.StackRef{
 			Project: "live",
@@ -392,7 +392,7 @@ func TestLiveAServiceTakenDownAnswersNothingAndIsTakenDownOnlyOnce(t *testing.T)
 	}
 }
 
-func servesItsOwn(t *testing.T, app string, framework appbuild.Framework, stage func(*testing.T) string, mark string) {
+func servesItsOwn(t *testing.T, app string, framework buildoutput.Framework, stage func(*testing.T) string, mark string) {
 	t.Helper()
 	ctx := context.Background()
 	p := runnable(t)

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/connectorserver"
+	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/envvarsserver"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/target"
@@ -33,7 +33,7 @@ func main() {
 }
 
 func served() string {
-	if port := os.Getenv(appbuild.InjectedPortName); port != "" {
+	if port := os.Getenv(containerimage.PortEnvVar); port != "" {
 		return port
 	}
 	return defaultPort

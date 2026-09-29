@@ -8,12 +8,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 )
 
 type Compilation struct {
 	App            string
-	Framework      appbuild.Framework
+	Framework      buildoutput.Framework
 	Source         string
 	Entrypoint     string
 	FuncDir        string
@@ -34,11 +34,11 @@ func Compile(ctx context.Context, c Compilation) error {
 		return err
 	}
 	switch c.Framework.Name {
-	case appbuild.FrameworkGo:
+	case buildoutput.FrameworkGo:
 		return c.compileGo(ctx)
-	case appbuild.FrameworkPython:
+	case buildoutput.FrameworkPython:
 		return c.vendorPython(ctx)
-	case appbuild.FrameworkRust:
+	case buildoutput.FrameworkRust:
 		return c.compileRust(ctx)
 	}
 	return fmt.Errorf("app %q is built with %q, which is not built from its own source tree", c.App, c.Framework.Name)
@@ -60,10 +60,10 @@ func (c Compilation) validate() error {
 	}); err != nil {
 		return err
 	}
-	if c.Framework.Name == appbuild.FrameworkPython && c.Entrypoint != "" {
+	if c.Framework.Name == buildoutput.FrameworkPython && c.Entrypoint != "" {
 		return fmt.Errorf("app %q is built with python and names entrypoint %q: a python app is served by the %s in its own directory, and both the artifact and the image are built from that, so an entrypoint here would name a file nothing boots", c.App, c.Entrypoint, pythonEntryFile)
 	}
-	if c.Framework.Name == appbuild.FrameworkRust && c.Entrypoint != "" {
+	if c.Framework.Name == buildoutput.FrameworkRust && c.Entrypoint != "" {
 		return fmt.Errorf("app %q is built with rust and names entrypoint %q: a rust app is compiled from the one binary the %s in its own directory builds, so an entrypoint here would name nothing that is built", c.App, c.Entrypoint, cargoManifestFile)
 	}
 	pkg := c.pkg()

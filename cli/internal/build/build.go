@@ -13,7 +13,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/node"
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/images"
 )
@@ -89,12 +89,12 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, envByApp map
 		}
 	}
 
-	outputDir := appbuild.ArtifactRoot(cfg.Dir)
+	outputDir := buildoutput.Root(cfg.Dir)
 	if err := os.RemoveAll(outputDir); err != nil {
-		return fmt.Errorf("reset %s: %w", appbuild.ArtifactRootDir, err)
+		return fmt.Errorf("reset %s: %w", buildoutput.Dir, err)
 	}
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
-		return fmt.Errorf("create %s: %w", appbuild.ArtifactRootDir, err)
+		return fmt.Errorf("create %s: %w", buildoutput.Dir, err)
 	}
 
 	deploymentIDs, err := recordDeploymentIDs(cfg, cfg.Apps)
@@ -114,19 +114,19 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, envByApp map
 			if err != nil {
 				return err
 			}
-		case name == appbuild.FrameworkNext:
+		case name == buildoutput.FrameworkNext:
 			req.Apps = append(req.Apps, nodeAppBuild{
-				Framework:     appbuild.FrameworkNext,
+				Framework:     buildoutput.FrameworkNext,
 				Name:          a.Name,
 				Cwd:           filepath.Join(cfg.Dir, a.Path),
-				OutputDir:     appbuild.AppArtifactRoot(outputDir, a.Name),
+				OutputDir:     buildoutput.AppRoot(outputDir, a.Name),
 				DeploymentID:  deploymentIDs[a.Name],
 				Folder:        a.Folder,
 				Env:           envByApp[a.Name],
 				EdgeKind:      string(cfg.EdgeKind()),
 				AllowDegraded: edge.NeedNames(cfg.AllowDegraded),
 			})
-		case name == appbuild.FrameworkNode:
+		case name == buildoutput.FrameworkNode:
 			target, err := nodeTarget(cfg, a, outputDir)
 			if err != nil {
 				return err
@@ -136,7 +136,7 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, envByApp map
 					return err
 				}
 				req.Apps = append(req.Apps, nodeAppBuild{
-					Framework:  appbuild.FrameworkNode,
+					Framework:  buildoutput.FrameworkNode,
 					Name:       a.Name,
 					Cwd:        target.Source,
 					Entrypoint: target.Entrypoint,
@@ -184,10 +184,10 @@ func nodeTarget(cfg *project.Project, a project.App, outputDir string) (toolchai
 	if err != nil {
 		return toolchain.Target{}, fmt.Errorf("app %q: %w", a.Name, err)
 	}
-	appDir := appbuild.AppArtifactRoot(outputDir, a.Name)
+	appDir := buildoutput.AppRoot(outputDir, a.Name)
 	return toolchain.Target{
 		App:        a.Name,
-		Framework:  appbuild.Framework{Name: appbuild.FrameworkNode, Arch: a.Arch},
+		Framework:  buildoutput.Framework{Name: buildoutput.FrameworkNode, Arch: a.Arch},
 		Source:     source,
 		Entrypoint: entrypoint,
 		FuncDir:    filepath.Join(appDir, functionsDirName, entryFuncDirName),

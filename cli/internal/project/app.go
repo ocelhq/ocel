@@ -8,9 +8,10 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/configdoc"
+	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
@@ -189,13 +190,13 @@ func rootApp(name, dir string) ([]App, error) {
 	if !isRegularFile(filepath.Join(dir, nodeManifest)) {
 		return nil, nil
 	}
-	framework := appbuild.FrameworkNode
+	framework := buildoutput.FrameworkNode
 	next, err := isNextApp(dir)
 	if err != nil {
 		return nil, err
 	}
 	if next {
-		framework = appbuild.FrameworkNext
+		framework = buildoutput.FrameworkNext
 	}
 	return []App{{
 		Name:       name,
@@ -232,7 +233,7 @@ func normalizeHealth(a configdoc.AppConfig) (*Health, error) {
 	if path != "" && !strings.HasPrefix(path, "/") {
 		return nil, fmt.Errorf("app %q sets health.path to %q, which is not a path off the app's root: give it one starting with %q, or drop health.path to have %q probed at %q", a.Name, a.Health.Path, "/", a.Name, "/")
 	}
-	if path != "" && !appbuild.HealthCheckPath(path) {
+	if path != "" && !containerimage.IsHealthCheckPath(path) {
 		return nil, fmt.Errorf("app %q sets health.path to %q, and a probe asks one path of the process: give %q a path containing no %q, %q, whitespace or control character, since a query or fragment names nothing the process is asked for", a.Name, a.Health.Path, a.Name, "?", "#")
 	}
 	return &Health{Path: path}, nil

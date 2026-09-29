@@ -8,8 +8,8 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
@@ -104,7 +104,7 @@ func translateFunctionSpec(appFramework string, spec provider.FunctionSpec) (fun
 		handler = spec.EntryFile
 	}
 	memoryMB := defaultFunctionMemoryMB
-	if appFramework == appbuild.FrameworkNext {
+	if appFramework == buildoutput.FrameworkNext {
 		memoryMB = nextBundleFunctionMemoryMB
 	}
 	if spec.Memory > 0 {
@@ -125,8 +125,8 @@ type execution struct {
 	Arch    string
 }
 
-func executionFor(framework appbuild.Framework) (execution, error) {
-	if framework.Name != "" && !appbuild.KnownFramework(framework.Name) {
+func executionFor(framework buildoutput.Framework) (execution, error) {
+	if framework.Name != "" && !buildoutput.IsKnownFramework(framework.Name) {
 		return execution{}, refusal.Refuse(refusal.CodeInvalid, "this provider has no framework named %q", framework.Name)
 	}
 	architecture := arch.Architecture(framework.Arch)
@@ -140,9 +140,9 @@ func executionFor(framework appbuild.Framework) (execution, error) {
 
 func managedRuntime(name string) string {
 	switch name {
-	case appbuild.FrameworkPython:
+	case buildoutput.FrameworkPython:
 		return pythonFunctionRuntime
-	case "", appbuild.FrameworkNode, appbuild.FrameworkNext:
+	case "", buildoutput.FrameworkNode, buildoutput.FrameworkNext:
 		return defaultFunctionRuntime
 	}
 	return providedFunctionRuntime

@@ -11,7 +11,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/edge"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -211,7 +211,7 @@ func TestDeployServesAProjectHostnameOnTheFirstAppAlone(t *testing.T) {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	served := appbuild.AttributeHostnames([]string{"shop.example"}, [][]string{nil, nil})
+	served := edge.AttributeHostnames([]string{"shop.example"}, [][]string{nil, nil})
 	if want := []string{"https://" + served[0][0]}; !slices.Equal(servedAppURLs(result, "web"), want) {
 		t.Errorf("web is served %v, want %v", servedAppURLs(result, "web"), want)
 	}

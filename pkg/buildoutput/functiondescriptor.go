@@ -1,10 +1,10 @@
-package appbuild
+package buildoutput
 
-const FunctionConfigFile = "config.json"
+const FunctionDescriptorFile = "config.json"
 
-type FunctionConfig struct {
+type FunctionDescriptor struct {
 	Framework Framework `json:"framework"`
-	Handler   string    `json:"handler"`
+	EntryFile string    `json:"entryFile"`
 	Command   []string  `json:"command,omitempty"`
 	ID        string    `json:"id"`
 	App       string    `json:"app"`

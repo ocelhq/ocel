@@ -1,19 +1,19 @@
-package appbuild_test
+package edge_test
 
 import (
 	"slices"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/edge"
 )
 
-func TestAttributeHostnames(t *testing.T) {
+func TestEachHostnameIsServedByOneApp(t *testing.T) {
 	t.Parallel()
 
 	t.Run("gives a project-level hostname to the first app alone", func(t *testing.T) {
 		t.Parallel()
 
-		served := appbuild.AttributeHostnames([]string{"shop.example"}, [][]string{nil, nil})
+		served := edge.AttributeHostnames([]string{"shop.example"}, [][]string{nil, nil})
 		if want := []string{"shop.example"}; !slices.Equal(served[0], want) {
 			t.Errorf("the first app is served %v, want %v", served[0], want)
 		}
@@ -25,7 +25,7 @@ func TestAttributeHostnames(t *testing.T) {
 	t.Run("puts an app's own hostnames ahead of the project's", func(t *testing.T) {
 		t.Parallel()
 
-		served := appbuild.AttributeHostnames(
+		served := edge.AttributeHostnames(
 			[]string{"shop.example", "www.shop.example"},
 			[][]string{{"web.shop.example"}, {"admin.shop.example"}},
 		)
@@ -40,7 +40,7 @@ func TestAttributeHostnames(t *testing.T) {
 	t.Run("hands a hostname declared twice to the app that reaches it first", func(t *testing.T) {
 		t.Parallel()
 
-		served := appbuild.AttributeHostnames([]string{"shop.example"}, [][]string{nil, {"shop.example"}})
+		served := edge.AttributeHostnames([]string{"shop.example"}, [][]string{nil, {"shop.example"}})
 		if want := []string{"shop.example"}; !slices.Equal(served[0], want) {
 			t.Errorf("the first app is served %v, want %v", served[0], want)
 		}

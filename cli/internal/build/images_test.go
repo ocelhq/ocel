@@ -15,7 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build/image"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/images"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -217,7 +217,7 @@ func TestAPrebuiltImageIsReadBackRatherThanBuiltAgain(t *testing.T) {
 
 func TestAPrebuiltContainerAppWithNoImageRecordedIsRefusedByName(t *testing.T) {
 	cfg := containerProject(t, "")
-	if err := os.MkdirAll(appbuild.ArtifactRoot(cfg.Dir), 0o755); err != nil {
+	if err := os.MkdirAll(buildoutput.Root(cfg.Dir), 0o755); err != nil {
 		t.Fatal(err)
 	}
 

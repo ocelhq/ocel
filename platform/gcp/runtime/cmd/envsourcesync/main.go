@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/envvars"
@@ -41,9 +41,9 @@ func newHandler(copyScheduled func(context.Context) error, errs io.Writer) http.
 }
 
 func main() {
-	port := os.Getenv(appbuild.InjectedPortName)
+	port := os.Getenv(containerimage.PortEnvVar)
 	if port == "" {
-		fmt.Fprintf(os.Stderr, "%s%s is not set, so there is no port to answer Cloud Scheduler on\n", logPrefix, appbuild.InjectedPortName)
+		fmt.Fprintf(os.Stderr, "%s%s is not set, so there is no port to answer Cloud Scheduler on\n", logPrefix, containerimage.PortEnvVar)
 		os.Exit(1)
 	}
 	sync, err := newSync(os.Getenv)

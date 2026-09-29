@@ -11,7 +11,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -75,7 +75,7 @@ func servedByFunctions(functions []build.Function, cfg *project.Project) []build
 }
 
 func manifestAppsOf(apps []app, functions []build.Function, functionsByApp map[string][]*contractv1.ManifestFunction, values map[string][]variables.Variable) ([]*contractv1.ManifestApp, error) {
-	frameworkByApp := make(map[string]appbuild.Framework, len(functions))
+	frameworkByApp := make(map[string]buildoutput.Framework, len(functions))
 	for _, f := range functions {
 		if f.App != "" && f.Framework.Name != "" {
 			if _, ok := frameworkByApp[f.App]; !ok {
@@ -91,7 +91,7 @@ func manifestAppsOf(apps []app, functions []build.Function, functionsByApp map[s
 		if a.Compute == "" {
 			return nil, fmt.Errorf("app %q reached the manifest with no compute resolved — every app on the wire names the compute it runs on, and the manifest is built after preflight so that a provider's own answer is what fills it", a.Name)
 		}
-		framework := appbuild.Framework{Name: a.Framework, Arch: a.Arch}
+		framework := buildoutput.Framework{Name: a.Framework, Arch: a.Arch}
 		if framework.Name == "" {
 			framework = frameworkByApp[a.Name]
 		}

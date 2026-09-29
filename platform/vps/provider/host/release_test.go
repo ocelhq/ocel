@@ -19,7 +19,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -33,10 +33,10 @@ const (
 )
 
 var (
-	retired    = retiring + ":" + appbuild.InjectedPortText
-	flipTo     = physical + ":" + appbuild.InjectedPortText
-	apiRetired = apiRetiring + ":" + appbuild.InjectedPortText
-	apiFlipTo  = apiCurrent + ":" + appbuild.InjectedPortText
+	retired    = retiring + ":" + containerimage.PortText
+	flipTo     = physical + ":" + containerimage.PortText
+	apiRetired = apiRetiring + ":" + containerimage.PortText
+	apiFlipTo  = apiCurrent + ":" + containerimage.PortText
 )
 
 func aRelease() Release {
@@ -1044,12 +1044,12 @@ func TestAHungAppIsDiagnosedByTheCombinationAndNeverByOneLine(t *testing.T) {
 	t.Parallel()
 
 	said := diagnosed(t,
-		session.Result{Code: 4, Stderr: physical + ":" + appbuild.InjectedPortText + " never answered /healthz within 30s"},
+		session.Result{Code: 4, Stderr: physical + ":" + containerimage.PortText + " never answered /healthz within 30s"},
 		"Status=running ExitCode=0 OOMKilled=false Error= StartedAt=2026-01-01T00:00:00Z FinishedAt=0001-01-01T00:00:00Z RestartCount=0", "")
 
 	for what, wanted := range map[string]string{
 		"the verdict the helper reached":      "never answered",
-		"the exact target it probed":          physical + ":" + appbuild.InjectedPortText,
+		"the exact target it probed":          physical + ":" + containerimage.PortText,
 		"the path it probed":                  "/healthz",
 		"the config key that changes it":      healthKey,
 		"the deploy timeout that expired":     "30s",
@@ -1344,7 +1344,7 @@ func TestAReleaseInterruptedAtItsFirstWriteStillPutsTheFileBackAndRemovesWhatItS
 func TestWhatFollowsTheFlipLeavesARouteAnotherReleaseFlippedSinceOnItsUpstream(t *testing.T) {
 	t.Parallel()
 
-	overtaking := "shop-web-overtaker:" + appbuild.InjectedPortText
+	overtaking := "shop-web-overtaker:" + containerimage.PortText
 	box := benched(t, session.Result{}, session.Result{})
 	proxied := box.answer
 	var once sync.Once
