@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { placeFile, traceFunction } from "../src/trace.mjs";
+import { DuplicatePackageError, placeFile, placeTrace, traceFunction } from "../src/trace.mjs";
 
 function importEntryInNode(entryMjs: string): { defaultType: string } {
   const script =
@@ -174,6 +174,118 @@ describe("placeFile", () => {
     writeFileSync(path.join(cwd, "src", "server.ts"), "");
     expect(placeFile(path.join(cwd, "src", "server.ts"), cwd).dest).toBe(
       path.join("src", "server.ts"),
+    );
+  });
+});
+
+describe("placeTrace", () => {
+  const root = mkdtempSync(path.join(tmpdir(), "nb-trace-"));
+  afterAll(() => rmSync(root, { recursive: true, force: true }));
+  const at = (p: string) => path.join(root, p);
+  const cwd = at("app");
+
+  function packageAt(dir: string, name: string, version: string) {
+    mkdirSync(at(dir), { recursive: true });
+    writeFileSync(at(path.join(dir, "package.json")), JSON.stringify({ name, version }));
+    writeFileSync(at(path.join(dir, "index.js")), "");
+  }
+
+  beforeAll(() => {
+    mkdirSync(path.join(cwd, "src"), { recursive: true });
+    writeFileSync(path.join(cwd, "src", "server.js"), "");
+    packageAt("node_modules/.pnpm/dep@1/node_modules/dep", "dep", "1.0.0");
+    packageAt("node_modules/.pnpm/dep@2/node_modules/dep", "dep", "2.0.0");
+    packageAt("node_modules/.pnpm/lib@1/node_modules/lib", "lib", "1.0.0");
+  });
+
+  const server = path.join(cwd, "src", "server.js");
+  const depOne = at("node_modules/.pnpm/dep@1/node_modules/dep/index.js");
+  const depTwo = at("node_modules/.pnpm/dep@2/node_modules/dep/index.js");
+  const lib = at("node_modules/.pnpm/lib@1/node_modules/lib/index.js");
+
+  it("nests a second version of a package under the package that imports it", () => {
+    const parents: Record<string, string[]> = {
+      [depOne]: [server],
+      [lib]: [server],
+      [depTwo]: [lib],
+    };
+    const placed = placeTrace([server, depOne, lib, depTwo], (file) => parents[file] ?? [], cwd);
+
+    expect(placed.get(depOne)).toEqual([path.join("node_modules", "dep", "index.js")]);
+    expect(placed.get(depTwo)).toEqual([
+      path.join("node_modules", "lib", "node_modules", "dep", "index.js"),
+    ]);
+    expect(placed.get(at("node_modules/.pnpm/dep@2/node_modules/dep/package.json"))).toEqual([
+      path.join("node_modules", "lib", "node_modules", "dep", "package.json"),
+    ]);
+  });
+
+  it("refuses an app whose own code imports two copies of one package", () => {
+    const parents: Record<string, string[]> = { [depOne]: [server], [depTwo]: [server] };
+    expect(() => placeTrace([server, depOne, depTwo], (file) => parents[file] ?? [], cwd)).toThrow(
+      DuplicatePackageError,
+    );
+  });
+
+  it("keeps two same-named files outside any package apart", () => {
+    mkdirSync(at("shared/a"), { recursive: true });
+    mkdirSync(at("shared/b"), { recursive: true });
+    writeFileSync(at("shared/a/config.json"), "{}");
+    writeFileSync(at("shared/b/config.json"), "{}");
+
+    const placed = placeTrace(
+      [at("shared/a/config.json"), at("shared/b/config.json")],
+      () => [],
+      cwd,
+    );
+
+    const [first] = placed.get(at("shared/a/config.json")) ?? [];
+    const [second] = placed.get(at("shared/b/config.json")) ?? [];
+    expect(first).toMatch(/^_external/);
+    expect(first).not.toBe(second);
+  });
+});
+
+describe("traceFunction with two versions of one dependency", () => {
+  it("serves each importer the version it resolved", async () => {
+    const project = scratch("nb-versions-");
+    const write = (file: string, content: string) => {
+      mkdirSync(path.dirname(path.join(project, file)), { recursive: true });
+      writeFileSync(path.join(project, file), content);
+    };
+    write("package.json", JSON.stringify({ name: "app", type: "module" }));
+    write(
+      "src/server.mjs",
+      'import dep from "dep";\nimport lib from "lib";\nexport default () => dep + ":" + lib;\n',
+    );
+    write(
+      "node_modules/dep/package.json",
+      JSON.stringify({ name: "dep", version: "1.0.0", main: "index.js" }),
+    );
+    write("node_modules/dep/index.js", 'module.exports = "dep1";\n');
+    write(
+      "node_modules/lib/package.json",
+      JSON.stringify({ name: "lib", version: "1.0.0", main: "index.js" }),
+    );
+    write("node_modules/lib/index.js", 'module.exports = require("dep");\n');
+    write(
+      "node_modules/lib/node_modules/dep/package.json",
+      JSON.stringify({ name: "dep", version: "2.0.0", main: "index.js" }),
+    );
+    write("node_modules/lib/node_modules/dep/index.js", 'module.exports = "dep2";\n');
+
+    const functionDir = path.join(scratch("nb-out-"), "index.func");
+    await traceFunction({
+      cwd: project,
+      entrypoint: path.join(project, "src", "server.mjs"),
+      funcDir: functionDir,
+    });
+
+    const script =
+      `const mod = await import(${JSON.stringify(pathToFileURL(path.join(functionDir, "src", "server.mjs")).href)});\n` +
+      "process.stdout.write(mod.default());";
+    expect(execFileSync("node", ["--input-type=module", "-e", script], { encoding: "utf8" })).toBe(
+      "dep1:dep2",
     );
   });
 });
