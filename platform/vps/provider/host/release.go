@@ -504,10 +504,13 @@ func originReading(paths []string) []string {
 }
 
 func originPlacing(paths []string) []string {
-	steps := make([]string, 0, len(paths))
+	if len(paths) == 0 {
+		return nil
+	}
+	steps := []string{`if ! group=$(` + words(switchboardCommand("origin-group")) + ` </dev/null); then exit ` + strconv.Itoa(routingPlaceFailed) + `; fi`}
 	for at, path := range paths {
-		steps = append(steps, `if ! printf '%s' "$origin`+strconv.Itoa(at)+`" | base64 -d | `+words(switchboardFed("place-origin", path))+
-			`; then exit `+strconv.Itoa(routingPlaceFailed)+`; fi`)
+		steps = append(steps, `if ! printf '%s' "$origin`+strconv.Itoa(at)+`" | base64 -d | docker exec -i --user "0:$group" `+
+			words(switchboardCommand("place-origin", path)[2:])+`; then exit `+strconv.Itoa(routingPlaceFailed)+`; fi`)
 	}
 	return steps
 }

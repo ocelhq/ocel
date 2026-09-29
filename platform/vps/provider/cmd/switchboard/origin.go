@@ -85,6 +85,26 @@ func stagedPrivate(path string, in io.Reader) error {
 	return synced(dir)
 }
 
+func originGroup(argv []string, out, errs io.Writer) int {
+	if len(argv) != 0 {
+		return usage(errs)
+	}
+	dir, err := placeDir()
+	if err != nil {
+		return refuse(errs, err)
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		return refuse(errs, err)
+	}
+	owned, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return refuse(errs, fmt.Errorf("the group of %s cannot be read", dir))
+	}
+	fmt.Fprintln(out, owned.Gid)
+	return 0
+}
+
 func unplaceOrigins(kept []string, errs io.Writer) int {
 	dir, err := placeDir()
 	if err != nil {
