@@ -916,7 +916,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 				if err != nil {
 					return err
 				}
-				r.dryRunPlan.apps[slot] = planned
+				r.dryRunPlan.apps[slot] = withReleaseMintedAtDeploy(planned, entry.Build.Release())
 				return nil
 			}
 			r.recordProvisioning(entry.App)

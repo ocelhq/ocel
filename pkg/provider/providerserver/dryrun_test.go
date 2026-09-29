@@ -2,7 +2,6 @@ package providerserver_test
 
 import (
 	"maps"
-	"regexp"
 	"slices"
 	"testing"
 
@@ -29,16 +28,6 @@ func groupNames(plan *planv1.ChangePlan) []string {
 		names = append(names, group.GetKind()+":"+group.GetName())
 	}
 	return names
-}
-
-var releaseSuffix = regexp.MustCompile(`--r[0-9a-f]{8}$`)
-
-func withoutReleases(names []string) []string {
-	stripped := make([]string, len(names))
-	for i, name := range names {
-		stripped[i] = releaseSuffix.ReplaceAllString(name, "")
-	}
-	return stripped
 }
 
 func changeNames(group *planv1.ChangeGroup) []string {
@@ -75,20 +64,20 @@ func TestADryDeployOrdersItsGroupsTheSameWayEveryRun(t *testing.T) {
 		if plan == nil {
 			t.Fatal("a dry deploy streamed no plan")
 		}
-		drawn = append(drawn, withoutReleases(groupNames(plan)))
+		drawn = append(drawn, groupNames(plan))
 	}
 
 	want := []string{
 		"stack:prod--infra",
 		"parameters:values",
-		"stack:prod--web",
-		"stack:prod--admin",
+		"stack:prod--web--<release minted at deploy>",
+		"stack:prod--admin--<release minted at deploy>",
 		"edge:relay/edge",
 		"promotion:" + router.DefaultPointer,
 	}
 	for run, got := range drawn {
 		if !slices.Equal(got, want) {
-			t.Fatalf("run %d drew %v, want %v: shared infra, then the apps in manifest order, then the edge and the promotion — whatever order the apps finish in",
+			t.Fatalf("run %d drew %v, want %v: shared infra, then the apps in manifest order, then the edge and the promotion — whatever order the apps finish in, and each app's stack named for a release the deploy mints rather than one this plan invented",
 				run, got, want)
 		}
 	}
