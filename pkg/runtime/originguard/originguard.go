@@ -82,7 +82,11 @@ type Options struct {
 func Handler(opts Options) http.Handler {
 	proxy := &httputil.ReverseProxy{
 		Rewrite: func(r *httputil.ProxyRequest) {
+			r.Out.Header["X-Forwarded-For"] = r.In.Header["X-Forwarded-For"]
 			r.SetXForwarded()
+			if scheme := r.In.Header.Get("X-Forwarded-Proto"); scheme != "" {
+				r.Out.Header.Set("X-Forwarded-Proto", scheme)
+			}
 			r.SetURL(opts.Upstream)
 			r.Out.URL.RawQuery = r.In.URL.RawQuery
 			r.Out.Host = r.In.Host
