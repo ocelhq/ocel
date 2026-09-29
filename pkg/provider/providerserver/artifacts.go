@@ -14,7 +14,6 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -56,7 +55,7 @@ func (r *deployRun) stageFunctions(
 }
 
 func (r *deployRun) stageApp(entry provider.AppEntry, pack provider.PackAppResult, routing *provider.RoutingSpec) ([]provider.Upload, error) {
-	root := appbuild.ArtifactRoot()
+	root := r.artifactRoot
 	var shipping []*contractv1.ManifestFunction
 	for _, fn := range r.manifest.GetFunctions() {
 		if fn.GetApp() == entry.App {

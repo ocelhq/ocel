@@ -56,6 +56,12 @@ func builtProject(t *testing.T) {
 func builtApps(t *testing.T, apps ...string) {
 	t.Helper()
 	root := t.TempDir()
+	builtAppsUnder(t, root, apps...)
+	t.Chdir(root)
+}
+
+func builtAppsUnder(t *testing.T, root string, apps ...string) {
+	t.Helper()
 	for _, app := range apps {
 		built := filepath.Join(root, constants.ProjectStateDirName, "output", filepath.FromSlash(appArtifactPath(app)))
 		if err := os.MkdirAll(built, 0o755); err != nil {
@@ -65,7 +71,31 @@ func builtApps(t *testing.T, apps ...string) {
 			t.Fatal(err)
 		}
 	}
-	t.Chdir(root)
+}
+
+func TestDeployReadsTheBuildUnderTheConfiguredProjectWhateverDirectoryItRunsIn(t *testing.T) {
+	project := t.TempDir()
+	builtAppsUnder(t, project, "web", "admin")
+	t.Chdir(t.TempDir())
+
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"})
+	server := httptest.NewServer(providerserver.ConformanceMux(providerserver.Config{
+		Version: "1.0.0",
+		New:     func(context.Context, provider.Settings) (provider.Provider, error) { return vendor, nil },
+	}))
+	t.Cleanup(server.Close)
+	client := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)
+	if _, err := client.Configure(context.Background(), &contractv1.ConfigureRequest{
+		Config: &contractv1.ProviderConfig{ProjectDir: project},
+	}); err != nil {
+		t.Fatalf("Configure() error = %v", err)
+	}
+	bootstrappedOverRPC(t, client)
+
+	result, _ := deploy(t, client, deployRequest())
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() from outside the project = %q, want it to ship the build under the project the CLI configured", result.GetError())
+	}
 }
 
 func deployRequest() *contractv1.DeployRequest {
@@ -593,7 +623,7 @@ func bootstrappedOverRPC(t *testing.T, client contractv1connect.ProviderServiceC
 
 func declaresNeed(t *testing.T, app string, need edge.Need) {
 	t.Helper()
-	dir := appbuild.AppArtifactRoot(appbuild.ArtifactRoot(), app)
+	dir := appbuild.AppArtifactRoot(appbuild.ArtifactRoot(""), app)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}

@@ -13,6 +13,7 @@ import (
 	connect "connectrpc.com/connect"
 	"connectrpc.com/validate"
 
+	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/envvarsserver"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -135,6 +136,12 @@ func (s *session) transforms() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.settings.Transforms
+}
+
+func (s *session) artifactRoot() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return appbuild.ArtifactRoot(s.settings.ProjectDir)
 }
 
 func (s *session) configure(ctx context.Context, settings provider.Settings) error {

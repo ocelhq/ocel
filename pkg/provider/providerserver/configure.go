@@ -12,6 +12,7 @@ func (h *handlers) Configure(ctx context.Context, req *contractv1.ConfigureReque
 		Options:    provider.Options(req.GetConfig().GetOptions().AsMap()),
 		Transforms: req.GetConfig().GetTransforms(),
 		Slug:       req.GetConfig().GetSlug(),
+		ProjectDir: req.GetConfig().GetProjectDir(),
 	}
 	if err := h.session.configure(ctx, settings); err != nil {
 		return nil, err

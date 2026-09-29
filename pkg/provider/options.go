@@ -18,6 +18,7 @@ type Settings struct {
 	Options    Options
 	Transforms []string
 	Slug       string
+	ProjectDir string
 }
 
 func RefuseTransforms(vendor Vendor, transforms []string) error {

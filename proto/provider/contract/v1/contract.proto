@@ -74,6 +74,8 @@ message ProviderConfig {
   repeated string transforms = 2;
 
   string slug = 3;
+
+  string project_dir = 4;
 }
 
 message ConfigureRequest {

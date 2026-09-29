@@ -28,6 +28,7 @@ const Vendor provider.Vendor = "aws"
 type Provider struct {
 	options    Options
 	transforms []string
+	projectDir string
 	aws        aws.Config
 	namespace  bootstrap.Namespace
 
@@ -53,7 +54,9 @@ func New(ctx context.Context, settings provider.Settings) (provider.Provider, er
 	if err != nil {
 		return nil, err
 	}
-	return NewProvider(decoded, settings.Transforms, cfg, bootstrap.Namespace(ns)), nil
+	p := NewProvider(decoded, settings.Transforms, cfg, bootstrap.Namespace(ns))
+	p.projectDir = settings.ProjectDir
+	return p, nil
 }
 
 func NewProvider(options Options, transforms []string, cfg aws.Config, ns bootstrap.Namespace) *Provider {

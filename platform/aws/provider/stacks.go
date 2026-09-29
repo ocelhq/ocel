@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"path/filepath"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -15,7 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -28,8 +27,6 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 	"github.com/ocelhq/ocel/platform/aws/provider/tagclock"
 )
-
-const artifactRootDirName = constants.ProjectStateDirName + "/output"
 
 func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Config, error) {
 	deployed, err := p.bootstrapped(ctx, scope.Tier)
@@ -53,7 +50,6 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 		return deploy.Config{}, err
 	}
 
-	root := projectRoot()
 	cfg := deploy.Config{
 		Region:        p.aws.Region,
 		BackendURL:    stateBackendURL(deployed.StateBucket, scope.Slug),
@@ -78,7 +74,7 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 
 		RuntimeLayers: deployed.RuntimeLayers,
 
-		ArtifactRoot:       filepath.Join(root, artifactRootDirName),
+		ArtifactRoot:       appbuild.ArtifactRoot(p.projectDir),
 		ArtifactBucket:     deployed.ArtifactBucket,
 		AssetBucket:        deployed.AssetBucket,
 		ImageOptimizerURL:  deployed.ImageOptimizerURL,
@@ -104,7 +100,7 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 		OriginSecret:         params.OriginSecret.Current,
 		PreviousOriginSecret: params.OriginSecret.Previous,
 
-		Transform: p.transformPass(root),
+		Transform: p.transformPass(),
 	}
 	if params.EdgeCredentialsErr == nil {
 		cfg.EdgeAccessKeyID = params.EdgeCredentials.AccessKeyID
@@ -136,11 +132,11 @@ func (p *Provider) requireBootstrapped(deployed bootstrap.Deployed, tier environ
 	return nil
 }
 
-func (p *Provider) transformPass(root string) transform.Pass {
+func (p *Provider) transformPass() transform.Pass {
 	if len(p.transforms) == 0 {
 		return nil
 	}
-	return deploy.NodePass(root, p.transforms)
+	return deploy.NodePass(p.projectDir, p.transforms)
 }
 
 func tableARN(region, account, table string) string {
@@ -158,14 +154,6 @@ func cacheStoreObjects(store bootstrap.CacheStore) payloads.ObjectStore {
 	}, func(o *s3.Options) {
 		o.BaseEndpoint = aws.String(store.Endpoint)
 	})
-}
-
-func projectRoot() string {
-	wd, err := os.Getwd()
-	if err != nil {
-		return "."
-	}
-	return wd
 }
 
 const s3Scheme = "s3"

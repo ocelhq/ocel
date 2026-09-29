@@ -17,9 +17,10 @@ import (
 type Stacks struct {
 	Grants []provider.Grant
 
-	artifacts provider.ArtifactStore
-	journal   *Journal
-	refusal   error
+	artifacts    provider.ArtifactStore
+	artifactRoot string
+	journal      *Journal
+	refusal      error
 
 	mu          sync.Mutex
 	stacks      map[string]provider.StackResult
@@ -29,7 +30,7 @@ type Stacks struct {
 }
 
 func NewStacks(artifacts provider.ArtifactStore) *Stacks {
-	return &Stacks{artifacts: artifacts, stacks: map[string]provider.StackResult{}}
+	return &Stacks{artifacts: artifacts, artifactRoot: appbuild.ArtifactRoot(""), stacks: map[string]provider.StackResult{}}
 }
 
 func (r *Stacks) journalling(journal *Journal) *Stacks {
@@ -90,7 +91,7 @@ func (r *Stacks) Provision(ctx context.Context, spec provider.StackSpec, progres
 	result.Functions = ProvisionedFunctions(spec)
 	result.Containers = ProvisionedContainers(spec)
 	if spec.App != nil {
-		result.EdgeBundleKey = deliveredEdgeBundle(spec)
+		result.EdgeBundleKey = r.deliveredEdgeBundle(spec)
 		if spec.App.ISR != nil {
 			result.ISRWriteSecret = "isr-" + spec.Ref.Name.String()
 		}
@@ -134,8 +135,8 @@ func (r *Stacks) Inspect(ref provider.StackRef) provider.InspectedStack {
 	return provider.InspectedStack{Present: present, Result: result}
 }
 
-func deliveredEdgeBundle(spec provider.StackSpec) string {
-	root := appbuild.AppArtifactRoot(appbuild.ArtifactRoot(), spec.App.App)
+func (r *Stacks) deliveredEdgeBundle(spec provider.StackSpec) string {
+	root := appbuild.AppArtifactRoot(r.artifactRoot, spec.App.App)
 	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(edge.AppBundleFile))); err != nil {
 		return ""
 	}

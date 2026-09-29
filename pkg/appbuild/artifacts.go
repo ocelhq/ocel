@@ -18,12 +18,8 @@ const (
 	appsDir = "apps"
 )
 
-func ArtifactRoot() string {
-	wd, err := os.Getwd()
-	if err != nil {
-		return artifactRootDir
-	}
-	return filepath.Join(wd, artifactRootDir)
+func ArtifactRoot(projectDir string) string {
+	return filepath.Join(projectDir, filepath.FromSlash(artifactRootDir))
 }
 
 func AppArtifactRoot(root, app string) string { return filepath.Join(root, appsDir, app) }

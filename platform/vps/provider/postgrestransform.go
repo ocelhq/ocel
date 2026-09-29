@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"maps"
-	"os"
 	"regexp"
 	"slices"
 	"strings"
@@ -67,11 +66,7 @@ type volumePatch struct {
 	DriverOpts map[string]string `json:"driverOpts"`
 }
 
-func nodePass(modules []string) transform.Pass {
-	root, err := os.Getwd()
-	if err != nil {
-		root = "."
-	}
+func nodePass(root string, modules []string) transform.Pass {
 	return transform.NodePass{
 		Root: root, Modules: modules,
 		Uninstalled: "Install `@ocel/transforms` as a devDependency",

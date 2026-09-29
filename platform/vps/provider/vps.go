@@ -59,7 +59,7 @@ func New(_ context.Context, settings provider.Settings) (provider.Provider, erro
 	p := NewProvider(decoded)
 	p.project = settings.Slug
 	if len(settings.Transforms) > 0 {
-		p.transform = nodePass(settings.Transforms)
+		p.transform = nodePass(settings.ProjectDir, settings.Transforms)
 	}
 	return p, nil
 }

@@ -290,6 +290,7 @@ type ProviderConfig struct {
 	Options       *structpb.Struct       `protobuf:"bytes,1,opt,name=options,proto3" json:"options,omitempty"`
 	Transforms    []string               `protobuf:"bytes,2,rep,name=transforms,proto3" json:"transforms,omitempty"`
 	Slug          string                 `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
+	ProjectDir    string                 `protobuf:"bytes,4,opt,name=project_dir,json=projectDir,proto3" json:"project_dir,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -341,6 +342,13 @@ func (x *ProviderConfig) GetTransforms() []string {
 func (x *ProviderConfig) GetSlug() string {
 	if x != nil {
 		return x.Slug
+	}
+	return ""
+}
+
+func (x *ProviderConfig) GetProjectDir() string {
+	if x != nil {
+		return x.ProjectDir
 	}
 	return ""
 }
@@ -4748,13 +4756,15 @@ var File_provider_contract_v1_contract_proto protoreflect.FileDescriptor
 
 const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\n" +
-	"#provider/contract/v1/contract.proto\x12\x14provider.contract.v1\x1a app/resources/v1/resources.proto\x1a app/resources/v1/variables.proto\x1a\x1bbuf/validate/validate.proto\x1a'common/environment/v1/environment.proto\x1a\x19common/plan/v1/plan.proto\x1a!common/progress/v1/progress.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1bprovider/cost/v1/cost.proto\"w\n" +
+	"#provider/contract/v1/contract.proto\x12\x14provider.contract.v1\x1a app/resources/v1/resources.proto\x1a app/resources/v1/variables.proto\x1a\x1bbuf/validate/validate.proto\x1a'common/environment/v1/environment.proto\x1a\x19common/plan/v1/plan.proto\x1a!common/progress/v1/progress.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1bprovider/cost/v1/cost.proto\"\x98\x01\n" +
 	"\x0eProviderConfig\x121\n" +
 	"\aoptions\x18\x01 \x01(\v2\x17.google.protobuf.StructR\aoptions\x12\x1e\n" +
 	"\n" +
 	"transforms\x18\x02 \x03(\tR\n" +
 	"transforms\x12\x12\n" +
-	"\x04slug\x18\x03 \x01(\tR\x04slug\"P\n" +
+	"\x04slug\x18\x03 \x01(\tR\x04slug\x12\x1f\n" +
+	"\vproject_dir\x18\x04 \x01(\tR\n" +
+	"projectDir\"P\n" +
 	"\x10ConfigureRequest\x12<\n" +
 	"\x06config\x18\x01 \x01(\v2$.provider.contract.v1.ProviderConfigR\x06config\"\x13\n" +
 	"\x11ConfigureResponse\"\xb0\x01\n" +

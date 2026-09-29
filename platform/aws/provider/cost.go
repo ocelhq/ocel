@@ -35,7 +35,7 @@ func (p *Provider) ShapeCost(ctx context.Context, req provider.ShapeRequest) (*c
 	}
 	tree.AddShaped(shared, string(Vendor), p.aws.Region, bootstrapShape)
 
-	if err := deploy.Shape(ctx, p.transformPass(projectRoot()), p.aws.Region, req, tree, deploy.ShapeScopes{
+	if err := deploy.Shape(ctx, p.transformPass(), p.aws.Region, req, tree, deploy.ShapeScopes{
 		Environment: environment,
 		Shared:      shared,
 	}); err != nil {

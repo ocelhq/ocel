@@ -40,7 +40,7 @@ func (r *deployRun) imageFunctions(
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"%s's functions are run from images, and nothing in this deploy names a registry to push them to", entry.App)
 	}
-	root := appbuild.ArtifactRoot()
+	root := r.artifactRoot
 	var pushes []provider.ImagePush
 	for _, fn := range r.manifest.GetFunctions() {
 		if fn.GetApp() != entry.App {

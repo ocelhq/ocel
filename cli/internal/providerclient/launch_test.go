@@ -20,6 +20,16 @@ func TestProviderConfigIncludesTheProjectTransformModules(t *testing.T) {
 	}
 }
 
+func TestProviderConfigNamesTheProjectDirectoryTheBuildIsUnder(t *testing.T) {
+	config, err := providerConfig(&projectconfig.Config{Dir: "/work/shop"}, &projectconfig.ProviderDescriptor{ID: "vps"})
+	if err != nil {
+		t.Fatalf("providerConfig: %v", err)
+	}
+	if config.GetProjectDir() != "/work/shop" {
+		t.Errorf("project dir = %q, want /work/shop: the provider reads the build from the project, not from whatever directory the CLI ran in", config.GetProjectDir())
+	}
+}
+
 func TestProviderConfigIncludesTheProjectItConfigures(t *testing.T) {
 	config, err := providerConfig(&projectconfig.Config{Slug: "shop"}, &projectconfig.ProviderDescriptor{ID: "vps"})
 	if err != nil {

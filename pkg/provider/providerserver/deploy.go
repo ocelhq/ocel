@@ -148,14 +148,15 @@ func joinNames(names []string) string {
 
 type deployRun struct {
 	*edgeSession
-	gate       Gate
-	features   []string
-	transforms []string
-	sender     *eventStream
-	tracked    *stageScope
-	manifest   *contractv1.Manifest
-	spec       provider.DeploySpec
-	stages     deployStages
+	gate         Gate
+	features     []string
+	transforms   []string
+	artifactRoot string
+	sender       *eventStream
+	tracked      *stageScope
+	manifest     *contractv1.Manifest
+	spec         provider.DeploySpec
+	stages       deployStages
 
 	wildcard   stackrecords.Wildcard
 	previewOn  string
@@ -253,6 +254,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 		gate:           gate,
 		features:       features,
 		transforms:     h.session.transforms(),
+		artifactRoot:   h.session.artifactRoot(),
 		sender:         sender,
 		tracked:        newStageScope(sender),
 		manifest:       req.GetManifest(),
@@ -701,7 +703,7 @@ func (r *deployRun) checkpoint(ctx context.Context) error {
 func (r *deployRun) checkNeeds(ctx context.Context) error {
 	check := EdgeNeedCheck{
 		Edge:          r.front,
-		Root:          appbuild.ArtifactRoot(),
+		Root:          r.artifactRoot,
 		AllowDegraded: r.allowDegraded,
 		Degraded: func(app string, need edge.Need, detail string) {
 			r.sender.send(degradedEvent(app, need, detail))
@@ -1010,7 +1012,7 @@ func (r *deployRun) refuseToAdopt(ctx context.Context, stack naming.StackName) e
 
 func (r *deployRun) appServing(entry provider.AppEntry) (AppServing, error) {
 	return AppServingFor(AppServingInput{
-		Root:              appbuild.ArtifactRoot(),
+		Root:              r.artifactRoot,
 		Project:           naming.Sanitize(r.spec.Slug),
 		App:               entry.App,
 		Framework:         entry.Manifest.GetFramework().GetName(),
@@ -1293,7 +1295,7 @@ func (r *deployRun) edgeCode(entry provider.AppEntry, result provider.StackResul
 	if compatibility.IsZero() {
 		return nil, nil
 	}
-	bundle, err := os.ReadFile(filepath.Join(appbuild.AppArtifactRoot(appbuild.ArtifactRoot(), entry.App), filepath.FromSlash(edge.AppBundleFile)))
+	bundle, err := os.ReadFile(filepath.Join(appbuild.AppArtifactRoot(r.artifactRoot, entry.App), filepath.FromSlash(edge.AppBundleFile)))
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"%s was released with an edge bundle at %s but its build left no %s for the edge to load; rebuild the app",
