@@ -18,8 +18,11 @@ const (
 	appsDir = "apps"
 )
 
-func Root(projectDir string) string {
-	return filepath.Join(projectDir, filepath.FromSlash(Dir))
+func Root(projectDir string) (string, error) {
+	if !filepath.IsAbs(projectDir) {
+		return "", fmt.Errorf("the build output of project directory %q: the directory is not absolute, so the output would land wherever the process runs", projectDir)
+	}
+	return filepath.Join(projectDir, filepath.FromSlash(Dir)), nil
 }
 
 func AppsRoot(root string) string { return filepath.Join(root, appsDir) }

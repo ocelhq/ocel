@@ -81,12 +81,19 @@ func (t tools) refuseAbsentImage(ctx context.Context, app, ref, arch string) err
 
 const imageRefFileName = "image-ref"
 
-func imageRefPath(projectDir, app string) string {
-	return filepath.Join(buildoutput.AppRoot(buildoutput.Root(projectDir), app), imageRefFileName)
+func imageRefPath(projectDir, app string) (string, error) {
+	root, err := buildoutput.Root(projectDir)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(buildoutput.AppRoot(root, app), imageRefFileName), nil
 }
 
 func writeImageRef(projectDir, app, ref string) error {
-	path := imageRefPath(projectDir, app)
+	path, err := imageRefPath(projectDir, app)
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create %s: %w", filepath.Dir(path), err)
 	}
@@ -97,7 +104,10 @@ func writeImageRef(projectDir, app, ref string) error {
 }
 
 func readImageRef(projectDir, app string) (string, error) {
-	path := imageRefPath(projectDir, app)
+	path, err := imageRefPath(projectDir, app)
+	if err != nil {
+		return "", err
+	}
 	raw, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return "", fmt.Errorf("app %q runs in a container, and %s holds no image for it: run `ocel build` with `compute: \"container\"` stated on %q, or deploy without --prebuilt", app, buildoutput.Dir, app)

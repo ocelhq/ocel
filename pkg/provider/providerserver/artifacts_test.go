@@ -13,7 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -431,7 +430,7 @@ func (b *barrierArtifacts) Put(ctx context.Context, ref provider.ArtifactRef, bo
 func builtFunction(t *testing.T, name string) string {
 	t.Helper()
 	path := "apps/web/functions/" + name + ".func"
-	dir := filepath.Join(buildoutput.Root(workingDir(t)), filepath.FromSlash(path))
+	dir := filepath.Join(workingOutputRoot(t), filepath.FromSlash(path))
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}

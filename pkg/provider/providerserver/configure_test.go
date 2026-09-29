@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -71,6 +72,15 @@ func workingDir(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return dir
+}
+
+func workingOutputRoot(t *testing.T) string {
+	t.Helper()
+	root, err := buildoutput.Root(workingDir(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return root
 }
 
 func configureInWorkingDir(t *testing.T) *contractv1.ConfigureRequest {

@@ -54,10 +54,10 @@ func TestSessionConstructsTheProviderExactlyOnce(t *testing.T) {
 		return stubProvider{}, nil
 	}}}
 
-	if err := s.configure(context.Background(), provider.Settings{}); err != nil {
+	if err := s.configure(context.Background(), provider.Settings{ProjectDir: t.TempDir()}); err != nil {
 		t.Fatalf("configure() error = %v", err)
 	}
-	err := s.configure(context.Background(), provider.Settings{})
+	err := s.configure(context.Background(), provider.Settings{ProjectDir: t.TempDir()})
 	if got := connect.CodeOf(err); got != connect.CodeFailedPrecondition {
 		t.Errorf("a second configure: code = %v, want %v", got, connect.CodeFailedPrecondition)
 	}
@@ -76,7 +76,7 @@ func TestSessionRefusesEveryRPCBeforeConfigure(t *testing.T) {
 		t.Fatalf("use() before configure: code = %v, want %v", got, connect.CodeFailedPrecondition)
 	}
 
-	if err := s.configure(context.Background(), provider.Settings{}); err != nil {
+	if err := s.configure(context.Background(), provider.Settings{ProjectDir: t.TempDir()}); err != nil {
 		t.Fatalf("configure() error = %v", err)
 	}
 	if _, err := s.use(); err != nil {
@@ -91,7 +91,7 @@ func TestSessionTurnsARefusedConstructionIntoInvalidArgument(t *testing.T) {
 		return nil, refusal.Refuse(refusal.CodeInvalid, "unknown option \"regoin\"")
 	}}}
 
-	err := s.configure(context.Background(), provider.Settings{Options: provider.Options{"regoin": "typo"}})
+	err := s.configure(context.Background(), provider.Settings{ProjectDir: t.TempDir(), Options: provider.Options{"regoin": "typo"}})
 	if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
 		t.Fatalf("configure() with refused options: code = %v, want %v", got, connect.CodeInvalidArgument)
 	}
@@ -107,7 +107,7 @@ func TestSessionReportsAFailedConstructionAsAFailure(t *testing.T) {
 		return nil, errors.New("the vendor sdk is unreachable")
 	}}}
 
-	if got := connect.CodeOf(s.configure(context.Background(), provider.Settings{})); got != connect.CodeInternal {
+	if got := connect.CodeOf(s.configure(context.Background(), provider.Settings{ProjectDir: t.TempDir()})); got != connect.CodeInternal {
 		t.Fatalf("configure() with a failure: code = %v, want %v", got, connect.CodeInternal)
 	}
 }
@@ -117,7 +117,7 @@ func TestSessionRefusesAConstructorThatReturnsNothing(t *testing.T) {
 
 	s := &session{config: Config{New: func(context.Context, provider.Settings) (provider.Provider, error) { return nil, nil }}}
 
-	if got := connect.CodeOf(s.configure(context.Background(), provider.Settings{})); got != connect.CodeInternal {
+	if got := connect.CodeOf(s.configure(context.Background(), provider.Settings{ProjectDir: t.TempDir()})); got != connect.CodeInternal {
 		t.Fatalf("configure() with a nil provider: code = %v, want %v", got, connect.CodeInternal)
 	}
 }
@@ -139,7 +139,7 @@ func TestSessionConfigureIsSafeUnderConcurrency(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_ = s.configure(context.Background(), provider.Settings{})
+			_ = s.configure(context.Background(), provider.Settings{ProjectDir: t.TempDir()})
 		}()
 	}
 	wg.Wait()

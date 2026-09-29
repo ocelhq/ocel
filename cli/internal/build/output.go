@@ -32,7 +32,10 @@ type Function struct {
 }
 
 func ReadFunctions(projectDir string) ([]Function, error) {
-	outputDir := buildoutput.Root(projectDir)
+	outputDir, err := buildoutput.Root(projectDir)
+	if err != nil {
+		return nil, err
+	}
 	if _, err := os.Stat(outputDir); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil, fmt.Errorf("%w at %s; run `ocel build` first", ErrNoBuildOutput, buildoutput.Dir)
@@ -43,7 +46,10 @@ func ReadFunctions(projectDir string) ([]Function, error) {
 }
 
 func EdgeApps(projectDir string) ([]string, error) {
-	root := buildoutput.Root(projectDir)
+	root, err := buildoutput.Root(projectDir)
+	if err != nil {
+		return nil, err
+	}
 	names, err := builtApps(root)
 	if err != nil {
 		return nil, err
@@ -66,7 +72,11 @@ func EdgeApps(projectDir string) ([]string, error) {
 }
 
 func BuildID(projectDir, app string) (string, error) {
-	desc, _, err := buildoutput.ReadServeDescriptor(buildoutput.Root(projectDir), app)
+	root, err := buildoutput.Root(projectDir)
+	if err != nil {
+		return "", err
+	}
+	desc, _, err := buildoutput.ReadServeDescriptor(root, app)
 	return desc.BuildID, err
 }
 

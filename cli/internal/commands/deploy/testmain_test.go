@@ -145,9 +145,13 @@ func stubBuild(dependencies *Dependencies, functions []build.Function) {
 	stubRecordedDeploymentIDs(dependencies)
 }
 
-func writeArtifacts(root string, functions []build.Function) error {
+func writeArtifacts(projectDir string, functions []build.Function) error {
+	root, err := buildoutput.Root(projectDir)
+	if err != nil {
+		return err
+	}
 	for _, function := range functions {
-		dir := filepath.Join(buildoutput.Root(root), filepath.FromSlash(function.ArtifactPath))
+		dir := filepath.Join(root, filepath.FromSlash(function.ArtifactPath))
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
 		}

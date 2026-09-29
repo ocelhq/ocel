@@ -17,10 +17,10 @@ import (
 type Stacks struct {
 	Grants []provider.Grant
 
-	artifacts    provider.ArtifactStore
-	artifactRoot string
-	journal      *Journal
-	refusal      error
+	artifacts  provider.ArtifactStore
+	projectDir string
+	journal    *Journal
+	refusal    error
 
 	mu          sync.Mutex
 	stacks      map[string]provider.StackResult
@@ -136,10 +136,11 @@ func (r *Stacks) Inspect(ref provider.StackRef) provider.InspectedStack {
 }
 
 func (r *Stacks) deliveredEdgeBundle(spec provider.StackSpec) string {
-	if r.artifactRoot == "" {
+	outputRoot, err := buildoutput.Root(r.projectDir)
+	if err != nil {
 		return ""
 	}
-	root := buildoutput.AppRoot(r.artifactRoot, spec.App.App)
+	root := buildoutput.AppRoot(outputRoot, spec.App.App)
 	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(edge.AppBundleFile))); err != nil {
 		return ""
 	}

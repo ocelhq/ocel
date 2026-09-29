@@ -129,7 +129,7 @@ func TestBuild(t *testing.T) {
 		if len(got.Apps) != 2 {
 			t.Fatalf("request had %d apps, want 2", len(got.Apps))
 		}
-		outputDir := buildoutput.Root(root)
+		outputDir := outputRoot(t, root)
 		for i, want := range []nodeAppBuild{
 			{Framework: "next", Name: "web", Cwd: filepath.Join(root, "apps/web"), OutputDir: buildoutput.AppRoot(outputDir, "web"), Folder: "/web", Env: map[string]string{"POSTHOG_ID": "ph-web"}},
 			{Framework: "next", Name: "docs", Cwd: filepath.Join(root, "apps/docs"), OutputDir: buildoutput.AppRoot(outputDir, "docs")},
@@ -182,7 +182,7 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
-		writeFuncConfig(t, buildoutput.Root(root), "stale", "index.func",
+		writeFuncConfig(t, outputRoot(t, root), "stale", "index.func",
 			buildoutput.FunctionDescriptor{Framework: buildoutput.Framework{Name: "node"}, EntryFile: "h", App: "stale"})
 
 		ran := false
@@ -197,7 +197,7 @@ func TestBuild(t *testing.T) {
 		if ran {
 			t.Error("the node build script ran for a project with nothing to build")
 		}
-		if _, err := os.Stat(filepath.Join(buildoutput.AppsRoot(buildoutput.Root(root)), "stale")); !errors.Is(err, os.ErrNotExist) {
+		if _, err := os.Stat(filepath.Join(buildoutput.AppsRoot(outputRoot(t, root)), "stale")); !errors.Is(err, os.ErrNotExist) {
 			t.Errorf("stale .func survived the reset (stat err = %v)", err)
 		}
 	})
@@ -345,7 +345,7 @@ func TestBuildTracesANodeAppWhenTracingIsPreferred(t *testing.T) {
 			t.Fatalf("Build: %v", err)
 		}
 
-		funcDir := filepath.Join(buildoutput.AppRoot(buildoutput.Root(root), "api"), functionsDirName, entryFuncDirName)
+		funcDir := filepath.Join(buildoutput.AppRoot(outputRoot(t, root), "api"), functionsDirName, entryFuncDirName)
 		want := nodeAppBuild{Framework: "node", Name: "api", Cwd: source, Entrypoint: filepath.Join(source, "src", "server.ts"), FuncDir: funcDir}
 		if len(got.Apps) != 1 || got.Apps[0].Framework != want.Framework || got.Apps[0].Name != want.Name || got.Apps[0].Cwd != want.Cwd || got.Apps[0].Entrypoint != want.Entrypoint || got.Apps[0].FuncDir != want.FuncDir {
 			t.Fatalf("request apps = %+v, want [%+v]", got.Apps, want)
@@ -358,7 +358,7 @@ func TestBuildTracesANodeAppWhenTracingIsPreferred(t *testing.T) {
 		assertFunctions(t, "ReadFunctions", fns, []Function{
 			{Route: "index", Framework: buildoutput.Framework{Name: "node", Arch: "arm64"}, EntryFile: "src/server.js", ArtifactPath: "apps/api/functions/index.func", RouteID: "/", App: "api"},
 		})
-		desc, found, err := buildoutput.ReadServeDescriptor(buildoutput.Root(root), "api")
+		desc, found, err := buildoutput.ReadServeDescriptor(outputRoot(t, root), "api")
 		if err != nil || !found {
 			t.Fatalf("ReadServeDescriptor = %v, %v", found, err)
 		}
@@ -410,7 +410,7 @@ func TestBuildTracesANodeAppWhenTracingIsPreferred(t *testing.T) {
 		assertFunctions(t, "ReadFunctions", fns, []Function{
 			{Route: "index", Framework: buildoutput.Framework{Name: "node", Arch: arch.X8664}, EntryFile: "src/server.js", ArtifactPath: "apps/api/functions/index.func", RouteID: "/", App: "api"},
 		})
-		funcDir := filepath.Join(buildoutput.AppRoot(buildoutput.Root(fixtureRoot), "api"), functionsDirName, entryFuncDirName)
+		funcDir := filepath.Join(buildoutput.AppRoot(outputRoot(t, fixtureRoot), "api"), functionsDirName, entryFuncDirName)
 		for _, rel := range []string{"src/server.js", "node_modules/express/package.json"} {
 			if _, err := os.Stat(filepath.Join(funcDir, filepath.FromSlash(rel))); err != nil {
 				t.Errorf("traced artifact lacks %s: %v", rel, err)
@@ -497,4 +497,13 @@ type nodeOnly struct {
 
 func (n nodeOnly) Build(ctx context.Context, cfg *project.Project, env map[string]map[string]string, log Log) error {
 	return tools{node: n.node}.functions(ctx, cfg, env, log)
+}
+
+func outputRoot(t *testing.T, projectDir string) string {
+	t.Helper()
+	root, err := buildoutput.Root(projectDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return root
 }

@@ -89,7 +89,10 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, envByApp map
 		}
 	}
 
-	outputDir := buildoutput.Root(cfg.Dir)
+	outputDir, err := buildoutput.Root(cfg.Dir)
+	if err != nil {
+		return err
+	}
 	if err := os.RemoveAll(outputDir); err != nil {
 		return fmt.Errorf("reset %s: %w", buildoutput.Dir, err)
 	}

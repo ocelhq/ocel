@@ -620,7 +620,7 @@ func bootstrappedOverRPC(t *testing.T, client contractv1connect.ProviderServiceC
 
 func declaresNeed(t *testing.T, app string, need edge.Need) {
 	t.Helper()
-	dir := buildoutput.AppRoot(buildoutput.Root(workingDir(t)), app)
+	dir := buildoutput.AppRoot(workingOutputRoot(t), app)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}

@@ -50,6 +50,11 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 		return deploy.Config{}, err
 	}
 
+	artifactRoot, err := buildoutput.Root(p.projectDir)
+	if err != nil {
+		return deploy.Config{}, err
+	}
+
 	cfg := deploy.Config{
 		Region:        p.aws.Region,
 		BackendURL:    stateBackendURL(deployed.StateBucket, scope.Slug),
@@ -74,7 +79,7 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 
 		RuntimeLayers: deployed.RuntimeLayers,
 
-		ArtifactRoot:       buildoutput.Root(p.projectDir),
+		ArtifactRoot:       artifactRoot,
 		ArtifactBucket:     deployed.ArtifactBucket,
 		AssetBucket:        deployed.AssetBucket,
 		ImageOptimizerURL:  deployed.ImageOptimizerURL,

@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 type Config struct {
@@ -130,9 +131,10 @@ type session struct {
 	config Config
 	writer provider.WrittenBy
 
-	mu       sync.Mutex
-	provider provider.Provider
-	settings provider.Settings
+	mu         sync.Mutex
+	provider   provider.Provider
+	settings   provider.Settings
+	outputRoot string
 }
 
 func (s *session) transforms() []string {
@@ -144,7 +146,7 @@ func (s *session) transforms() []string {
 func (s *session) artifactRoot() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return buildoutput.Root(s.settings.ProjectDir)
+	return s.outputRoot
 }
 
 func (s *session) configure(ctx context.Context, settings provider.Settings) error {
@@ -152,6 +154,11 @@ func (s *session) configure(ctx context.Context, settings provider.Settings) err
 	defer s.mu.Unlock()
 	if s.provider != nil {
 		return connect.NewError(connect.CodeFailedPrecondition, errors.New("the provider session is already configured"))
+	}
+	outputRoot, err := buildoutput.Root(settings.ProjectDir)
+	if err != nil {
+		return provider.RefusalError(refusal.Refuse(refusal.CodeInvalid,
+			"the provider was configured with the project directory %q, and it reads the build under that directory: configure it with the project's absolute path", settings.ProjectDir))
 	}
 	p, err := s.config.New(ctx, settings)
 	if err != nil {
@@ -162,6 +169,7 @@ func (s *session) configure(ctx context.Context, settings provider.Settings) err
 	}
 	s.provider = p
 	s.settings = settings
+	s.outputRoot = outputRoot
 	return nil
 }
 
