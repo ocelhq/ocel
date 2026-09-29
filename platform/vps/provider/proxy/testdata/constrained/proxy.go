@@ -18,6 +18,8 @@ func (Constrained) Unrendered([]byte, proxy.Permission) string { return "" }
 
 func (Constrained) Unrouted(context.Context, []string) error { return nil }
 
+func (Constrained) Validate(context.Context, []byte) error { return nil }
+
 func (Constrained) Reload(context.Context) error { return nil }
 
 func (Constrained) Inspect(context.Context) (proxy.Checks, error) { return nil, nil }

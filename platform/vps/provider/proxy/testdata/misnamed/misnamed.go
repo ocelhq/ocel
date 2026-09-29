@@ -18,6 +18,8 @@ func (m *Misnamed) Unrendered([]byte, proxy.Permission) string { return "" }
 
 func (m *Misnamed) Unrouted(context.Context, []string) error { return nil }
 
+func (m *Misnamed) Validate(context.Context, []byte) error { return nil }
+
 func (m *Misnamed) Reload(context.Context) error { return nil }
 
 func (m *Misnamed) Inspect(context.Context) (proxy.Checks, error) { return nil, nil }

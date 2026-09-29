@@ -18,6 +18,8 @@ func (*Addressed) Unrendered([]byte, proxy.Permission) string { return "" }
 
 func (*Addressed) Unrouted(context.Context, []string) error { return nil }
 
+func (*Addressed) Validate(context.Context, []byte) error { return nil }
+
 func (*Addressed) Reload(context.Context) error { return nil }
 
 func (*Addressed) Inspect(context.Context) (proxy.Checks, error) { return nil, nil }

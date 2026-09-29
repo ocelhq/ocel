@@ -22,6 +22,8 @@ func (*Grouped) Unrendered([]byte, proxy.Permission) string { return "" }
 
 func (*Grouped) Unrouted(context.Context, []string) error { return nil }
 
+func (*Grouped) Validate(context.Context, []byte) error { return nil }
+
 func (*Grouped) Reload(context.Context) error { return nil }
 
 func (*Grouped) Inspect(context.Context) (proxy.Checks, error) { return nil, nil }

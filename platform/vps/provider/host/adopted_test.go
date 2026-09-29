@@ -23,6 +23,9 @@ type yours struct {
 	handed *proxy.Spec
 	routes map[string]string
 	asked  *[][]string
+
+	invalid  string
+	unloaded *[]string
 }
 
 func (y yours) Guarantees() proxy.Guarantees { return proxy.Guarantees{} }
@@ -50,7 +53,21 @@ func (y yours) Unrouted(_ context.Context, hostnames []string) error {
 	return nil
 }
 
-func (yours) Reload(context.Context) error { return nil }
+func (y yours) Validate(_ context.Context, rendered []byte) error {
+	if y.invalid != "" && len(rendered) > 0 {
+		return refusal.Refuse(refusal.CodeInvalid, "your proxy refuses %q: %s", rendered, y.invalid)
+	}
+	return nil
+}
+
+func (y yours) Reload(context.Context) error {
+	if y.unloaded == nil || len(*y.unloaded) == 0 {
+		return nil
+	}
+	refused := (*y.unloaded)[0]
+	*y.unloaded = (*y.unloaded)[1:]
+	return refusal.Refuse(refusal.CodeNotReady, "%s", refused)
+}
 
 func (yours) Inspect(context.Context) (proxy.Checks, error) { return nil, nil }
 
@@ -298,6 +315,62 @@ func TestYourProxyIsAskedOnlyAboutTheHostnamesAWriteAdds(t *testing.T) {
 	want := [][]string{{edge.ProbeHostname(edge.PreviewWildcard(previewBase))}}
 	if !slices.EqualFunc(asked, want, slices.Equal) {
 		t.Errorf("your proxy was asked about %q, want only %q: a hostname the box already serves was vetted when it was claimed", asked, want)
+	}
+}
+
+func TestARenderingYourProxyRefusesIsNeverPlacedAndNothingIsWritten(t *testing.T) {
+	t.Parallel()
+
+	adopted := adoptedBox(t, routed())
+	prior, placedBefore := adopted.recorded, adopted.placed
+	h := adopted.host()
+	h.front = yours{file: coolifyFile, invalid: "Error: /dev/stdin:2: unrecognized directive: bogus"}
+	err := h.ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}})
+	if err == nil || !strings.Contains(err.Error(), "unrecognized directive: bogus") {
+		t.Fatalf("ClaimHosts() = %v, want the claim refused with what your proxy said of the rendering", err)
+	}
+	if adopted.count(writesProxy) != 0 || adopted.count(places) != 0 {
+		t.Errorf("a claim whose rendering your proxy refuses ran %q, want nothing written: a file your proxy cannot read can drop every site it imports", adopted.commands())
+	}
+	if adopted.recorded != prior || adopted.placed != placedBefore {
+		t.Errorf("a refused rendering left the table %q and the placed file %q, want both untouched", adopted.recorded, adopted.placed)
+	}
+}
+
+func TestADriftedFileWhoseRenderingYourProxyRefusesIsNotPlacedAgain(t *testing.T) {
+	t.Parallel()
+
+	state := routed()
+	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
+	adopted := adoptedBox(t, state)
+	adopted.gone = true
+	h := adopted.host()
+	h.front = yours{file: coolifyFile, invalid: "Error: /dev/stdin:1: unexpected token"}
+	if err := h.ClaimHosts(context.Background(), state.Claims); err == nil || !strings.Contains(err.Error(), "unexpected token") {
+		t.Errorf("ClaimHosts() = %v, want it refused with what your proxy said of the rendering", err)
+	}
+	if adopted.count(places) != 0 || !adopted.gone {
+		t.Errorf("a rendering your proxy refuses was placed: %q", adopted.commands())
+	}
+}
+
+func TestAReloadYourProxyRefusesPutsThePreviousFileBackAndSaysWhatYourProxySaid(t *testing.T) {
+	t.Parallel()
+
+	adopted := adoptedBox(t, routed())
+	prior, placedBefore := adopted.recorded, adopted.placed
+	said := `Error: sending configuration to instance: caddy responded with error: HTTP 400: {"error":"loading config: ambiguous site definition: shop.example.com"}`
+	h := adopted.host()
+	h.front = yours{file: coolifyFile, unloaded: &[]string{said}}
+	err := h.ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}})
+	if err == nil || !strings.Contains(err.Error(), said) {
+		t.Fatalf("ClaimHosts() = %v, want the claim refused carrying what your proxy said verbatim", err)
+	}
+	if adopted.placed != placedBefore {
+		t.Errorf("the placed file reads %q after a reload your proxy refused, want the previous file put back, %q", adopted.placed, placedBefore)
+	}
+	if adopted.recorded != prior {
+		t.Errorf("%s reads\n%s\nafter a reload your proxy refused, want the table before the claim\n%s", live.RoutingTable, adopted.recorded, prior)
 	}
 }
 

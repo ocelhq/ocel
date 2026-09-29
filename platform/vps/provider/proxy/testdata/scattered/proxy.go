@@ -18,6 +18,8 @@ func (s *Scattered) Unrendered([]byte, proxy.Permission) string { return "" }
 
 func (s *Scattered) Unrouted(context.Context, []string) error { return nil }
 
+func (s *Scattered) Validate(context.Context, []byte) error { return nil }
+
 func (s *Scattered) Reload(context.Context) error { return nil }
 
 func (s *Scattered) Inspect(context.Context) (proxy.Checks, error) { return nil, nil }
