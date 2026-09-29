@@ -3,18 +3,19 @@ package caddyfile
 import "slices"
 
 const (
-	hostCaddy = "/usr/bin/caddy"
-	service   = "caddy.service"
-	systemctl = "/usr/bin/systemctl"
-	adapter   = "caddyfile"
-	stdin     = "/dev/stdin"
+	hostCaddy           = "/usr/bin/caddy"
+	uncreatableStepPath = "STEPPATH=/dev/null/step"
+	service             = "caddy.service"
+	systemctl           = "/usr/bin/systemctl"
+	adapter             = "caddyfile"
+	stdin               = "/dev/stdin"
 )
 
 func ServiceReload() []string { return []string{systemctl, "reload", service} }
 
 func (c Caddyfile) caddy(argv ...string) []string {
 	if c.Container == "" {
-		return append([]string{hostCaddy}, argv...)
+		return append([]string{"env", uncreatableStepPath, hostCaddy}, argv...)
 	}
 	exec := []string{"docker", "exec"}
 	if slices.Contains(argv, stdin) {

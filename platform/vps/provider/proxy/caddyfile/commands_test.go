@@ -24,7 +24,7 @@ func TestTheSnippetIsAdaptedAloneInsideYourCaddysContainerBeforeItIsPlaced(t *te
 	}
 }
 
-func TestTheSnippetIsAdaptedByTheHostsCaddyWhenCaddyRunsAsAService(t *testing.T) {
+func TestTheSnippetIsAdaptedByTheHostsCaddyWithoutLeavingAStepDirectoryInTheDeployHome(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
@@ -32,9 +32,9 @@ func TestTheSnippetIsAdaptedByTheHostsCaddyWhenCaddyRunsAsAService(t *testing.T)
 	if err := (caddyfile.Caddyfile{Box: machine, Port: 8480}).Validate(context.Background(), rendered); err != nil {
 		t.Fatalf("Validate() = %v", err)
 	}
-	want := []string{"/usr/bin/caddy", "adapt", "--config", "/dev/stdin", "--adapter", "caddyfile"}
+	want := []string{"env", "STEPPATH=/dev/null/step", "/usr/bin/caddy", "adapt", "--config", "/dev/stdin", "--adapter", "caddyfile"}
 	if len(machine.ran) != 1 || !slices.Equal(machine.ran[0].argv, want) || string(machine.ran[0].stdin) != string(rendered) {
-		t.Errorf("Validate() ran %q, want %q fed the snippet", machine.argvs(), want)
+		t.Errorf("Validate() ran %q, want %q fed the snippet: the caddy 2.6 package makes $STEPPATH on every run, $HOME/.step unless it names a path no one can create, and a .step left in the deploy login's home keeps the destroy from removing it", machine.argvs(), want)
 	}
 }
 
