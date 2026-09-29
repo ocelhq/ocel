@@ -148,31 +148,93 @@ func TestPreflightReportsCredentialsThatWereDenied(t *testing.T) {
 	}
 }
 
-func TestPreflightRefusesAnUnknownHostKeyAsACallTheCallerCanAnswerAndReportsAChangedOne(t *testing.T) {
+func questionIn(err error) *contractv1.Question {
+	var wire *connect.Error
+	if !errors.As(err, &wire) {
+		return nil
+	}
+	for _, detail := range wire.Details() {
+		if value, err := detail.Value(); err == nil {
+			if question, ok := value.(*contractv1.Question); ok {
+				return question
+			}
+		}
+	}
+	return nil
+}
+
+func askingCredentials(vendor *fake.Provider, confirmed *int) {
+	creds := vendor.Credentials().(*fake.Credentials)
+	creds.Ask("the host key is in no known_hosts file; record it and try again", provider.Question{
+		Finding: "the host key for 203.0.113.7 is in none of ~/.ssh/known_hosts",
+		Prompt:  "Trust that key?",
+		Confirm: func(context.Context) error {
+			*confirmed++
+			creds.Admit()
+			return nil
+		},
+	})
+}
+
+func TestPreflightRefusesWithTheQuestionTheProviderAskedAndConfirmRunsWhatAYesDoes(t *testing.T) {
 	t.Parallel()
 
-	for reason, wantRefused := range map[provider.HostTrustReason]bool{
-		provider.UnknownHostKey:  true,
-		provider.HostKeyMismatch: false,
-	} {
-		client, vendor := contractServed(t, "1.2.3")
-		vendor.Credentials().(*fake.Credentials).RefuseHostKey(provider.HostTrust{
-			Reason:  reason,
-			Address: "203.0.113.7",
-			Got:     provider.HostKey{Type: "ssh-ed25519", Key: "AAAA", Fingerprint: "SHA256:got"},
-		})
+	ctx := context.Background()
+	client, vendor := contractServed(t, "1.2.3")
+	confirmed := 0
+	askingCredentials(vendor, &confirmed)
 
-		resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
-			RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
-		})
-		trust, refused := provider.HostTrustOf(err)
-		if refused != wantRefused || (refused && trust.Reason != reason) {
-			t.Errorf("Preflight() over a %s = %v, want a host-trust refusal %v: only a refusal the caller can answer by trusting the key is lifted out of the answer, so a retried call answers clean",
-				reason, err, wantRefused)
-		}
-		if !wantRefused && len(resp.GetCredentialProblems()) != 1 {
-			t.Errorf("Preflight() over a %s reported %v, want it as the one credential problem", reason, resp.GetCredentialProblems())
-		}
+	_, err := client.Preflight(ctx, &contractv1.PreflightRequest{RequiredTier: environmentv1.Tier_TIER_PRODUCTION})
+	question := questionIn(err)
+	if question == nil || question.GetId() == "" {
+		t.Fatalf("Preflight() error = %v, want a refusal carrying a question with an id to answer", err)
+	}
+	if question.GetFinding() == "" || question.GetPrompt() != "Trust that key?" {
+		t.Errorf("question = %v, want the provider's finding and prompt", question)
+	}
+	if !strings.Contains(err.Error(), "record it and try again") {
+		t.Errorf("Preflight() error = %v, want the remedy for a caller nobody can answer for", err)
+	}
+	if confirmed != 0 {
+		t.Fatal("the provider acted on a question nobody answered")
+	}
+
+	if _, err := client.Confirm(ctx, &contractv1.ConfirmRequest{QuestionId: question.GetId()}); err != nil {
+		t.Fatalf("Confirm() error = %v", err)
+	}
+	if confirmed != 1 {
+		t.Errorf("Confirm() ran the provider's action %d times, want once", confirmed)
+	}
+	if _, err := client.Preflight(ctx, &contractv1.PreflightRequest{RequiredTier: environmentv1.Tier_TIER_PRODUCTION}); err != nil {
+		t.Errorf("Preflight() after the answer = %v, want the retried call to go through", err)
+	}
+	if _, err := client.Confirm(ctx, &contractv1.ConfirmRequest{QuestionId: question.GetId()}); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Errorf("a second Confirm() of one question = %v, want it refused: a question is answered once", err)
+	}
+}
+
+func TestConfirmRefusesAQuestionTheProviderNeverAsked(t *testing.T) {
+	t.Parallel()
+
+	client, _ := contractServed(t, "1.2.3")
+	_, err := client.Confirm(context.Background(), &contractv1.ConfirmRequest{QuestionId: "never-asked"})
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Errorf("Confirm() = %v, want InvalidArgument: only the provider's own questions can be confirmed", err)
+	}
+}
+
+func TestPreflightReportsAPlainCredentialRefusalAsAProblemAndAsksNothing(t *testing.T) {
+	t.Parallel()
+
+	client, vendor := contractServed(t, "1.2.3")
+	vendor.Credentials().(*fake.Credentials).Deny("the host key for 203.0.113.7 changed")
+
+	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{RequiredTier: environmentv1.Tier_TIER_PRODUCTION})
+	if err != nil || questionIn(err) != nil {
+		t.Fatalf("Preflight() error = %v, want the refusal reported in the answer", err)
+	}
+	if len(resp.GetCredentialProblems()) != 1 {
+		t.Errorf("Preflight() reported %v, want it as the one credential problem", resp.GetCredentialProblems())
 	}
 }
 

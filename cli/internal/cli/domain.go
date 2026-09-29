@@ -212,7 +212,7 @@ func runDomainUse(ctx context.Context, deps cmddeps.Deps, cwd, wildcard string, 
 }
 
 func startReadyProvider(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, check *run.Span, tier environmentv1.Tier) (*providerclient.Provider, error) {
-	prov, err := providerclient.Start(ctx, cfg, check, deps.HostTrust, providerclient.PinToLock)
+	prov, err := providerclient.Start(ctx, cfg, check, deps.Questions, providerclient.PinToLock)
 	if err != nil {
 		return nil, err
 	}

@@ -141,7 +141,7 @@ func withOptions(cmd *cobra.Command, deps cmddeps.Deps, opts *options,
 }
 
 func reachTarget(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, check *run.Span) (*providerclient.Provider, *contractv1.DescribeConnectorTargetResponse, error) {
-	prov, err := providerclient.Start(ctx, cfg, check, deps.HostTrust, providerclient.PinToLock)
+	prov, err := providerclient.Start(ctx, cfg, check, deps.Questions, providerclient.PinToLock)
 	if err != nil {
 		return nil, nil, err
 	}

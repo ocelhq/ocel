@@ -6,8 +6,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-
-	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 type Target struct {
@@ -57,7 +55,7 @@ func (d Destination) Principal() string { return d.User + "@" + d.Written }
 func (d Destination) Forget() string { return forgetting(d.entry(), d.KnownHosts) }
 
 func (d Destination) entry() string {
-	return provider.KnownHostsEntry(d.Address, d.KeyAlias, d.Port)
+	return KnownHostsEntry(d.Address, d.KeyAlias, d.Port)
 }
 
 func resolve(ctx context.Context, target Target) (Destination, error) {

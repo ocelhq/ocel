@@ -18,8 +18,8 @@ type surveyed struct {
 
 func (s surveyed) Facts(context.Context) (session.Facts, error) { return s.facts, s.err }
 
-func (s surveyed) HostKey() provider.HostKey {
-	return provider.HostKey{Type: "ssh-ed25519", Fingerprint: "SHA256:whoami"}
+func (s surveyed) HostKey() session.HostKey {
+	return session.HostKey{Type: "ssh-ed25519", Fingerprint: "SHA256:whoami"}
 }
 
 func (s surveyed) Destination() session.Destination {

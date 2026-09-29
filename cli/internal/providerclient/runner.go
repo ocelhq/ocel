@@ -411,10 +411,10 @@ func (r *Runner) driveStream(rpc string, stream *connect.ServerStreamForClient[p
 		if cancelled(err) {
 			return nil, fmt.Errorf("provider: %s was cancelled: %w", rpc, err)
 		}
+		if _, named := provider.RefusedCode(err); refused || named {
+			return nil, fmt.Errorf("provider: call %s: %w", rpc, err)
+		}
 		if connect.CodeOf(err) == connect.CodeInvalidArgument {
-			if refused {
-				return nil, fmt.Errorf("provider: call %s: %w", rpc, err)
-			}
 			return nil, r.withExitStderr(fmt.Errorf("provider: call %s: %w", rpc, err))
 		}
 		return nil, r.withExitStderr(fmt.Errorf("provider: provider connection lost: %w", err))

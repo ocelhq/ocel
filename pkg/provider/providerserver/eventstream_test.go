@@ -13,6 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 type recordingStream struct {
@@ -151,6 +152,24 @@ func TestEventStreamSendUnblocksOnContextCancellation(t *testing.T) {
 
 	close(blockDrain)
 	sender.close()
+}
+
+func TestEventStreamFailPassesAQuestionBackToTheCallerAndReportsNoResult(t *testing.T) {
+	t.Parallel()
+
+	stream := &recordingStream{}
+	sender := newEventStream(context.Background(), stream.send)
+
+	asked := provider.RefusalError(provider.Ask("record the key and try again", provider.Question{Prompt: "Trust it?"}))
+	if err := sender.fail(asked); !errors.Is(err, asked) {
+		t.Fatalf("fail(question) = %v, want the question returned so the caller can answer it", err)
+	}
+	if err := sender.close(); err != nil {
+		t.Fatalf("close() error = %v", err)
+	}
+	if events := stream.recorded(); len(events) != 0 {
+		t.Errorf("got %v, want no result: a question is not the run's verdict", events)
+	}
 }
 
 func TestEventStreamFailPassesARefusalBackToTheCaller(t *testing.T) {

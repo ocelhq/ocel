@@ -17,7 +17,6 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
-	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 type recording struct {
@@ -52,10 +51,10 @@ func deploySpan(t *testing.T) (context.Context, *run.Span, *recording) {
 	return ctx, run.Phase(progressv1.Phase_PHASE_DEPLOY), seen
 }
 
-func startFake(t *testing.T, ctx context.Context, mode string, span *run.Span, trust Trust, env ...string) *Provider {
+func startFake(t *testing.T, ctx context.Context, mode string, span *run.Span, questions Questions, env ...string) *Provider {
 	t.Helper()
 
-	p, err := start(ctx, span, trust, fakeConfig(t, mode, Config{ProviderName: "fake", Env: env}))
+	p, err := start(ctx, span, questions, fakeConfig(t, mode, Config{ProviderName: "fake", Env: env}))
 	if err != nil {
 		t.Fatalf("start() error = %v", err)
 	}
@@ -67,7 +66,7 @@ func TestAStartedProvidersStreamEventsReachTheSpan(t *testing.T) {
 	t.Parallel()
 
 	ctx, span, seen := deploySpan(t)
-	p := startFake(t, ctx, "success", span, Trust{})
+	p := startFake(t, ctx, "success", span, Questions{})
 
 	result, err := Stream(ctx, p, "Deploy", &contractv1.DeployRequest{
 		Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"},
@@ -96,7 +95,7 @@ func TestAPlanningStreamHandsBackThePlanAndForwardsEveryOtherEvent(t *testing.T)
 	t.Parallel()
 
 	ctx, span, seen := deploySpan(t)
-	p := startFake(t, ctx, "success", span, Trust{})
+	p := startFake(t, ctx, "success", span, Questions{})
 
 	plan, err := Plan(ctx, p, "Deploy", &contractv1.DeployRequest{
 		Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"},
@@ -125,7 +124,7 @@ func TestALineTheProviderWritesToStderrReachesTheRunAtDebugNamingTheProviderInTh
 	t.Parallel()
 
 	ctx, span, seen := deploySpan(t)
-	p := startFake(t, ctx, "chatty", span, Trust{})
+	p := startFake(t, ctx, "chatty", span, Questions{})
 	p.Close()
 
 	for _, ev := range seen.received() {
@@ -155,14 +154,14 @@ func bodies(seen *recording) []string {
 	return kinds
 }
 
-func TestAnUnknownHostKeyOnAStreamIsAskedOnceUnderAHoldRecordedAndThatCallRetriedOnAFreshProcess(t *testing.T) {
+func TestAQuestionOnAStreamIsAskedOnceUnderAHoldConfirmedAndThatCallRetried(t *testing.T) {
 	t.Parallel()
 
 	ctx, span, seen := deploySpan(t)
-	fake := newHostTrustFake(t, "unknown-host-key")
+	fake := newQuestionFake(t, "unknown-host-key")
 	asker := &scriptedPrompt{attended: true, answer: true}
 	var out bytes.Buffer
-	p := startFake(t, ctx, "unknown-host-key", span, trustAsking(asker, &out), fake.env()...)
+	p := startFake(t, ctx, "unknown-host-key", span, answering(asker, &out), fake.env()...)
 
 	result, err := Stream(ctx, p, "Bootstrap", &contractv1.BootstrapRequest{}, contractv1connect.ProviderServiceClient.Bootstrap)
 	if err != nil {
@@ -174,22 +173,22 @@ func TestAnUnknownHostKeyOnAStreamIsAskedOnceUnderAHoldRecordedAndThatCallRetrie
 	if len(asker.asked) != 1 {
 		t.Errorf("asked %d times (%v), want exactly one prompt", len(asker.asked), asker.asked)
 	}
-	if got := fake.recorded(t); got != wantedLine() {
-		t.Errorf("known_hosts = %q, want %q", got, wantedLine())
+	if got := fake.recorded(t); got != fakeHostLine() {
+		t.Errorf("known_hosts = %q, want %q", got, fakeHostLine())
 	}
-	if !strings.Contains(out.String(), fakeKey(fakeHostKey).Fingerprint) {
+	if !strings.Contains(out.String(), fakeHostFingerprint) {
 		t.Errorf("output = %q, want the fingerprint shown before asking", out.String())
 	}
 	drivenBy := fake.drivenBy(t)
-	if len(drivenBy) != 2 || drivenBy[0] == drivenBy[1] {
-		t.Errorf("the call ran in processes %v, want it once and then once more in a restarted provider", drivenBy)
+	if len(drivenBy) != 2 || drivenBy[0] != drivenBy[1] {
+		t.Errorf("the call ran in processes %v, want it twice in the one provider that asked", drivenBy)
 	}
 	if got := bodies(seen); !slices.Equal(got, []string{"waiting", "resumed answered"}) {
 		t.Errorf("the span saw %v around the prompt, want the run held while it asked", got)
 	}
 }
 
-func TestAHostKeyPromptAfterTheStartingPhaseEndedHoldsTheRunNotThatPhase(t *testing.T) {
+func TestAQuestionAskedAfterTheStartingPhaseEndedHoldsTheRunNotThatPhase(t *testing.T) {
 	t.Parallel()
 
 	seen := &recording{}
@@ -200,8 +199,8 @@ func TestAHostKeyPromptAfterTheStartingPhaseEndedHoldsTheRunNotThatPhase(t *test
 		t.Fatalf("Begin() error = %v", err)
 	}
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	fake := newHostTrustFake(t, "unknown-host-key")
-	p := startFake(t, ctx, "unknown-host-key", check, trustAsking(&scriptedPrompt{attended: true, answer: true}, io.Discard), fake.env()...)
+	fake := newQuestionFake(t, "unknown-host-key")
+	p := startFake(t, ctx, "unknown-host-key", check, answering(&scriptedPrompt{attended: true, answer: true}, io.Discard), fake.env()...)
 	check.End(nil)
 
 	if _, err := Stream(ctx, p, "Bootstrap", &contractv1.BootstrapRequest{}, contractv1connect.ProviderServiceClient.Bootstrap); err != nil {
@@ -223,13 +222,13 @@ func TestAHostKeyPromptAfterTheStartingPhaseEndedHoldsTheRunNotThatPhase(t *test
 	}
 }
 
-func TestAnUnknownHostKeyOnAUnaryCallIsAskedOnceRecordedAndThatCallRetried(t *testing.T) {
+func TestAQuestionOnAUnaryCallIsAskedOnceConfirmedAndThatCallRetried(t *testing.T) {
 	t.Parallel()
 
 	ctx, span, _ := deploySpan(t)
-	fake := newHostTrustFake(t, "unknown-host-key")
+	fake := newQuestionFake(t, "unknown-host-key")
 	asker := &scriptedPrompt{attended: true, answer: true}
-	p := startFake(t, ctx, "unknown-host-key", span, trustAsking(asker, io.Discard), fake.env()...)
+	p := startFake(t, ctx, "unknown-host-key", span, answering(asker, io.Discard), fake.env()...)
 
 	err := p.Call(ctx, func(client contractv1connect.ProviderServiceClient) error {
 		_, err := client.Preflight(ctx, &contractv1.PreflightRequest{})
@@ -244,22 +243,22 @@ func TestAnUnknownHostKeyOnAUnaryCallIsAskedOnceRecordedAndThatCallRetried(t *te
 	if got := fake.drivenTimes(t); got != 2 {
 		t.Errorf("the call ran %d times, want 2", got)
 	}
-	if got := fake.recorded(t); got != wantedLine() {
-		t.Errorf("known_hosts = %q, want %q", got, wantedLine())
+	if got := fake.recorded(t); got != fakeHostLine() {
+		t.Errorf("known_hosts = %q, want %q", got, fakeHostLine())
 	}
 }
 
-func TestAHostKeyRefusedAtThePromptLeavesTheCallsErrorStandingAndRetriesNothing(t *testing.T) {
+func TestAQuestionDeclinedAtThePromptLeavesTheCallsErrorStandingAndConfirmsNothing(t *testing.T) {
 	t.Parallel()
 
 	ctx, span, seen := deploySpan(t)
-	fake := newHostTrustFake(t, "unknown-host-key")
+	fake := newQuestionFake(t, "unknown-host-key")
 	asker := &scriptedPrompt{attended: true, answer: false}
-	p := startFake(t, ctx, "unknown-host-key", span, trustAsking(asker, io.Discard), fake.env()...)
+	p := startFake(t, ctx, "unknown-host-key", span, answering(asker, io.Discard), fake.env()...)
 
 	_, err := Stream(ctx, p, "Bootstrap", &contractv1.BootstrapRequest{}, contractv1connect.ProviderServiceClient.Bootstrap)
-	if trust, ok := provider.HostTrustOf(err); !ok || trust.Reason != provider.UnknownHostKey {
-		t.Errorf("Stream() error = %v, want the unknown-host-key refusal", err)
+	if _, asked := questionIn(err); !asked {
+		t.Errorf("Stream() error = %v, want the provider's question left standing", err)
 	}
 	if got := fake.drivenTimes(t); got != 1 {
 		t.Errorf("the call ran %d times, want 1", got)

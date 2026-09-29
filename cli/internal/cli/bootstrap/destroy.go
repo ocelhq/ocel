@@ -63,7 +63,7 @@ func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, ti
 	if notice != "" {
 		check.Warn(notice)
 	}
-	prov, err := providerclient.Start(ctx, cfg, check, deps.HostTrust, providerclient.ChoosePinning(opts.Dry))
+	prov, err := providerclient.Start(ctx, cfg, check, deps.Questions, providerclient.ChoosePinning(opts.Dry))
 	if err != nil {
 		return err
 	}

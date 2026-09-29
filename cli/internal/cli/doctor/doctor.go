@@ -353,7 +353,7 @@ func checkSetup(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, go
 }
 
 func askProvider(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, unit *run.Span, got *answers) error {
-	prov, err := providerclient.Start(ctx, cfg, unit, deps.HostTrust, providerclient.PinToLock)
+	prov, err := providerclient.Start(ctx, cfg, unit, deps.Questions, providerclient.PinToLock)
 	if err != nil {
 		return err
 	}

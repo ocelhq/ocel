@@ -152,7 +152,7 @@ func destroyProject(ctx context.Context, deps cmddeps.Deps, cfg *project.Project
 	if bypassNotice != "" {
 		check.Warn(bypassNotice)
 	}
-	prov, err := providerclient.Start(ctx, cfg, check, deps.HostTrust, providerclient.ChoosePinning(policy.DryRun))
+	prov, err := providerclient.Start(ctx, cfg, check, deps.Questions, providerclient.ChoosePinning(policy.DryRun))
 	if err != nil {
 		return err
 	}

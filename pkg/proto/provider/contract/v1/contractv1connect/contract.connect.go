@@ -112,6 +112,8 @@ const (
 	ProviderServiceRemoveConnectorProcedure = "/provider.contract.v1.ProviderService/RemoveConnector"
 	// ProviderServiceShapeProcedure is the fully-qualified name of the ProviderService's Shape RPC.
 	ProviderServiceShapeProcedure = "/provider.contract.v1.ProviderService/Shape"
+	// ProviderServiceConfirmProcedure is the fully-qualified name of the ProviderService's Confirm RPC.
+	ProviderServiceConfirmProcedure = "/provider.contract.v1.ProviderService/Confirm"
 )
 
 // ProviderServiceClient is a client for the provider.contract.v1.ProviderService service.
@@ -142,6 +144,7 @@ type ProviderServiceClient interface {
 	InstallConnector(context.Context, *v1.InstallConnectorRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 	RemoveConnector(context.Context, *v1.RemoveConnectorRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 	Shape(context.Context, *v1.ShapeRequest) (*v13.ResourceSet, error)
+	Confirm(context.Context, *v1.ConfirmRequest) (*v1.ConfirmResponse, error)
 }
 
 // NewProviderServiceClient constructs a client for the provider.contract.v1.ProviderService
@@ -311,6 +314,12 @@ func NewProviderServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(providerServiceMethods.ByName("Shape")),
 			connect.WithClientOptions(opts...),
 		),
+		confirm: connect.NewClient[v1.ConfirmRequest, v1.ConfirmResponse](
+			httpClient,
+			baseURL+ProviderServiceConfirmProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("Confirm")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -342,6 +351,7 @@ type providerServiceClient struct {
 	installConnector          *connect.Client[v1.InstallConnectorRequest, v11.OperationEvent]
 	removeConnector           *connect.Client[v1.RemoveConnectorRequest, v11.OperationEvent]
 	shape                     *connect.Client[v1.ShapeRequest, v13.ResourceSet]
+	confirm                   *connect.Client[v1.ConfirmRequest, v1.ConfirmResponse]
 }
 
 // Configure calls provider.contract.v1.ProviderService.Configure.
@@ -530,6 +540,15 @@ func (c *providerServiceClient) Shape(ctx context.Context, req *v1.ShapeRequest)
 	return nil, err
 }
 
+// Confirm calls provider.contract.v1.ProviderService.Confirm.
+func (c *providerServiceClient) Confirm(ctx context.Context, req *v1.ConfirmRequest) (*v1.ConfirmResponse, error) {
+	response, err := c.confirm.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
 // ProviderServiceHandler is an implementation of the provider.contract.v1.ProviderService service.
 type ProviderServiceHandler interface {
 	Configure(context.Context, *v1.ConfigureRequest) (*v1.ConfigureResponse, error)
@@ -558,6 +577,7 @@ type ProviderServiceHandler interface {
 	InstallConnector(context.Context, *v1.InstallConnectorRequest, *connect.ServerStream[v11.OperationEvent]) error
 	RemoveConnector(context.Context, *v1.RemoveConnectorRequest, *connect.ServerStream[v11.OperationEvent]) error
 	Shape(context.Context, *v1.ShapeRequest) (*v13.ResourceSet, error)
+	Confirm(context.Context, *v1.ConfirmRequest) (*v1.ConfirmResponse, error)
 }
 
 // NewProviderServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -723,6 +743,12 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 		connect.WithSchema(providerServiceMethods.ByName("Shape")),
 		connect.WithHandlerOptions(opts...),
 	)
+	providerServiceConfirmHandler := connect.NewUnaryHandlerSimple(
+		ProviderServiceConfirmProcedure,
+		svc.Confirm,
+		connect.WithSchema(providerServiceMethods.ByName("Confirm")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/provider.contract.v1.ProviderService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ProviderServiceConfigureProcedure:
@@ -777,6 +803,8 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 			providerServiceRemoveConnectorHandler.ServeHTTP(w, r)
 		case ProviderServiceShapeProcedure:
 			providerServiceShapeHandler.ServeHTTP(w, r)
+		case ProviderServiceConfirmProcedure:
+			providerServiceConfirmHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -888,4 +916,8 @@ func (UnimplementedProviderServiceHandler) RemoveConnector(context.Context, *v1.
 
 func (UnimplementedProviderServiceHandler) Shape(context.Context, *v1.ShapeRequest) (*v13.ResourceSet, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.Shape is not implemented"))
+}
+
+func (UnimplementedProviderServiceHandler) Confirm(context.Context, *v1.ConfirmRequest) (*v1.ConfirmResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.Confirm is not implemented"))
 }

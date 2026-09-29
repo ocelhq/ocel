@@ -6,11 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-func generated(t *testing.T, kind string) provider.HostKey {
+func generated(t *testing.T, kind string) HostKey {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "host_key")
 	if out, err := exec.Command("ssh-keygen", "-q", "-t", kind, "-N", "", "-f", path).CombinedOutput(); err != nil {
@@ -21,7 +19,7 @@ func generated(t *testing.T, kind string) provider.HostKey {
 		t.Fatal(err)
 	}
 	fields := strings.Fields(string(published))
-	key, err := (provider.HostKey{Type: fields[0], Key: fields[1]}).Fingerprinted()
+	key, err := (HostKey{Type: fields[0], Key: fields[1]}).Fingerprinted()
 	if err != nil {
 		t.Fatalf("could not fingerprint the %s key ssh-keygen just wrote: %v", kind, err)
 	}
@@ -65,7 +63,7 @@ func TestAKeyTheUserAlreadyTrustsAnchorsTheSession(t *testing.T) {
 	t.Parallel()
 
 	key := generated(t, "ed25519")
-	anchor, trust := classify(destination(), []provider.HostKey{key}, known{keys: []provider.HostKey{key}})
+	anchor, trust := classify(destination(), []HostKey{key}, known{keys: []HostKey{key}})
 	if trust != nil {
 		t.Fatalf("classify() refused %+v over a key the user already trusts", trust)
 	}
@@ -78,14 +76,14 @@ func TestAHostNobodyHasSeenIsAnUnknownHostKey(t *testing.T) {
 	t.Parallel()
 
 	key := generated(t, "ed25519")
-	anchor, trust := classify(destination(), []provider.HostKey{key}, known{})
+	anchor, trust := classify(destination(), []HostKey{key}, known{})
 	if trust == nil {
 		t.Fatal("classify() trusted a host listed in no known_hosts file")
 	}
-	if trust.Reason != provider.UnknownHostKey {
-		t.Errorf("classify() called it %s, want %s", trust.Reason, provider.UnknownHostKey)
+	if trust.Reason != UnknownHostKey {
+		t.Errorf("classify() called it %s, want %s", trust.Reason, UnknownHostKey)
 	}
-	if trust.Got != key || trust.Want != (provider.HostKey{}) {
+	if trust.Got != key || trust.Want != (HostKey{}) {
 		t.Errorf("classify() reported got %+v want %+v, want the offered key and nothing listed", trust.Got, trust.Want)
 	}
 	if trust.Address != "203.0.113.10" || trust.Port != 2222 || trust.Host != "web-1" {
@@ -94,7 +92,7 @@ func TestAHostNobodyHasSeenIsAnUnknownHostKey(t *testing.T) {
 	if len(trust.KnownHosts) == 0 {
 		t.Error("classify() named no known_hosts file, so the user cannot act on the refusal")
 	}
-	if anchor != (provider.HostKey{}) {
+	if anchor != (HostKey{}) {
 		t.Errorf("classify() anchored on %+v while refusing", anchor)
 	}
 	if trust.Remedy != "ssh-keyscan -t "+key.Type+" -p 2222 203.0.113.10 >> /home/ada/.ssh/known_hosts" {
@@ -108,7 +106,7 @@ func TestAPlainPortNeedsNoBracketsInTheRemedy(t *testing.T) {
 	listed, offering := generated(t, "ed25519"), generated(t, "ed25519")
 	plain := destination()
 	plain.Port = 22
-	_, trust := classify(plain, []provider.HostKey{offering}, known{keys: []provider.HostKey{listed}})
+	_, trust := classify(plain, []HostKey{offering}, known{keys: []HostKey{listed}})
 	if trust == nil {
 		t.Fatal("classify() trusted a host offering a key that is not the one listed")
 	}
@@ -121,12 +119,12 @@ func TestADifferentKeyOfTheSameTypeIsAMismatch(t *testing.T) {
 	t.Parallel()
 
 	listed, offering := generated(t, "ed25519"), generated(t, "ed25519")
-	_, trust := classify(destination(), []provider.HostKey{offering}, known{keys: []provider.HostKey{listed}})
+	_, trust := classify(destination(), []HostKey{offering}, known{keys: []HostKey{listed}})
 	if trust == nil {
 		t.Fatal("classify() trusted a host offering a key that is not the one listed")
 	}
-	if trust.Reason != provider.HostKeyMismatch || !trust.Terminal() {
-		t.Errorf("classify() called it %s, want a terminal %s", trust.Reason, provider.HostKeyMismatch)
+	if trust.Reason != HostKeyMismatch || !trust.Terminal() {
+		t.Errorf("classify() called it %s, want a terminal %s", trust.Reason, HostKeyMismatch)
 	}
 	if trust.Got != offering || trust.Want != listed {
 		t.Errorf("classify() reported got %+v want %+v, want the offered and the listed key", trust.Got, trust.Want)
@@ -140,7 +138,7 @@ func TestTheStrongestOfferedKeyIsTheOneReported(t *testing.T) {
 	t.Parallel()
 
 	rsa, ed := generated(t, "rsa"), generated(t, "ed25519")
-	_, trust := classify(destination(), []provider.HostKey{rsa, ed}, known{})
+	_, trust := classify(destination(), []HostKey{rsa, ed}, known{})
 	if trust == nil {
 		t.Fatal("classify() trusted a host listed in no known_hosts file")
 	}
@@ -153,7 +151,7 @@ func TestOneKnownKeyAmongSeveralOfferedIsEnough(t *testing.T) {
 	t.Parallel()
 
 	rsa, ed := generated(t, "rsa"), generated(t, "ed25519")
-	anchor, trust := classify(destination(), []provider.HostKey{rsa, ed}, known{keys: []provider.HostKey{rsa}})
+	anchor, trust := classify(destination(), []HostKey{rsa, ed}, known{keys: []HostKey{rsa}})
 	if trust != nil {
 		t.Fatalf("classify() refused %+v while known_hosts lists one of the offered keys", trust)
 	}
@@ -181,7 +179,7 @@ func TestAMarkedEntryIsLeftToOpenSSH(t *testing.T) {
 	t.Parallel()
 
 	key := generated(t, "ed25519")
-	anchor, trust := classify(destination(), []provider.HostKey{key}, known{delegated: true})
+	anchor, trust := classify(destination(), []HostKey{key}, known{delegated: true})
 	if trust != nil {
 		t.Fatalf("classify() refused %+v over a marked known_hosts entry; only ssh knows what @cert-authority and @revoked mean", trust)
 	}
@@ -213,8 +211,8 @@ func TestARevokedEntryIsNoDelegationAndAnUnknownKeyBesideItIsStillUnknown(t *tes
 		t.Fatal("markedIn() read @revoked as a delegation to a certificate authority, and a host whose old key was revoked would anchor on whatever key it offers next")
 	}
 	offered := generated(t, "ed25519")
-	_, trust := classify(destination(), []provider.HostKey{offered}, known{delegated: markedIn(rendered)})
-	if trust == nil || trust.Reason != provider.UnknownHostKey {
+	_, trust := classify(destination(), []HostKey{offered}, known{delegated: markedIn(rendered)})
+	if trust == nil || trust.Reason != UnknownHostKey {
 		t.Errorf("classify() = %+v over a known_hosts listing only a revoked key, want the unknown-host-key refusal", trust)
 	}
 }

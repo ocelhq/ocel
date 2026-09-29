@@ -95,7 +95,7 @@ func listPromotions(ctx context.Context, deps cmddeps.Deps, cfg *project.Project
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := providerclient.Start(ctx, cfg, check, deps.HostTrust, providerclient.PinToLock)
+	prov, err := providerclient.Start(ctx, cfg, check, deps.Questions, providerclient.PinToLock)
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +140,7 @@ func runPromotionsPrune(ctx context.Context, deps cmddeps.Deps, cwd string, opts
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := providerclient.Start(ctx, cfg, check, deps.HostTrust, providerclient.PinToLock)
+	prov, err := providerclient.Start(ctx, cfg, check, deps.Questions, providerclient.PinToLock)
 	if err != nil {
 		return err
 	}

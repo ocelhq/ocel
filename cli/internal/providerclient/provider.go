@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync"
 
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
@@ -17,86 +16,51 @@ import (
 )
 
 type Provider struct {
-	ctx    context.Context
-	span   *run.Span
-	trust  Trust
-	config Config
-
-	mu     sync.Mutex
-	runner *Runner
+	span      *run.Span
+	questions Questions
+	config    Config
+	runner    *Runner
 }
 
-func Start(ctx context.Context, cfg *project.Project, span *run.Span, trust Trust, pins Pinning) (*Provider, error) {
+func Start(ctx context.Context, cfg *project.Project, span *run.Span, questions Questions, pins Pinning) (*Provider, error) {
 	config, err := prepareLaunch(ctx, cfg, pins)
 	if err != nil {
 		return nil, err
 	}
-	return start(ctx, span, trust, config)
+	return start(ctx, span, questions, config)
 }
 
-func start(ctx context.Context, span *run.Span, trust Trust, config Config) (*Provider, error) {
+func start(ctx context.Context, span *run.Span, questions Questions, config Config) (*Provider, error) {
 	config.Stdout = processLines{span: span, subject: config.ProviderName, stream: progressv1.Stream_STREAM_STDOUT}
 	config.Stderr = processLines{span: span, subject: config.ProviderName, stream: progressv1.Stream_STREAM_STDERR}
-	trust.run = span.Run()
-	p := &Provider{ctx: ctx, span: span, trust: trust, config: config}
-	runner, err := p.spawn()
-	if err != nil {
-		return nil, err
-	}
-	p.runner = runner
-	return p, nil
-}
-
-func (p *Provider) spawn() (*Runner, error) {
-	runner, err := Spawn(p.ctx, p.config)
+	questions.run = span.Run()
+	runner, err := Spawn(ctx, config)
 	if err != nil {
 		return nil, fmt.Errorf("spawn provider: %w", err)
 	}
-	if err := runner.Ready(p.ctx); err != nil {
+	if err := runner.Ready(ctx); err != nil {
 		runner.Close()
 		return nil, err
 	}
-	return runner, nil
-}
-
-func (p *Provider) current() *Runner {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.runner
+	return &Provider{span: span, questions: questions, config: config, runner: runner}, nil
 }
 
 func (p *Provider) Name() string { return p.config.ProviderName }
 
-func (p *Provider) Facts() *contractv1.ProviderFacts { return p.current().Facts() }
+func (p *Provider) Facts() *contractv1.ProviderFacts { return p.runner.Facts() }
 
-func (p *Provider) Close() { p.current().Close() }
+func (p *Provider) Close() { p.runner.Close() }
 
-func (p *Provider) callTrusting(ctx context.Context, call func(*Runner) error) error {
-	err := call(p.current())
-	if trusted, err := p.trust.acceptKey(ctx, err); !trusted {
+func (p *Provider) callAnswering(ctx context.Context, call func(*Runner) error) error {
+	err := call(p.runner)
+	if confirmed, err := p.questions.answer(ctx, p.runner, err); !confirmed {
 		return err
 	}
-	runner, err := p.restart()
-	if err != nil {
-		return err
-	}
-	return call(runner)
-}
-
-func (p *Provider) restart() (*Runner, error) {
-	p.Close()
-	runner, err := p.spawn()
-	if err != nil {
-		return nil, err
-	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.runner = runner
-	return runner, nil
+	return call(p.runner)
 }
 
 func (p *Provider) Call(ctx context.Context, call func(contractv1connect.ProviderServiceClient) error) error {
-	return p.callTrusting(ctx, func(r *Runner) error {
+	return p.callAnswering(ctx, func(r *Runner) error {
 		client, err := r.Client()
 		if err != nil {
 			return err
@@ -123,7 +87,7 @@ func Plan[Req any](ctx context.Context, p *Provider, rpc string, req *Req, call 
 
 func forward[Req any](ctx context.Context, p *Provider, rpc string, req *Req, call streamCall[Req], each func(*progressv1.OperationEvent)) (*progressv1.OperationResult, error) {
 	var result *progressv1.OperationResult
-	err := p.callTrusting(ctx, func(r *Runner) error {
+	err := p.callAnswering(ctx, func(r *Runner) error {
 		var err error
 		result, err = stream(ctx, r, rpc, req, call, each)
 		return err
@@ -132,11 +96,11 @@ func forward[Req any](ctx context.Context, p *Provider, rpc string, req *Req, ca
 }
 
 func (p *Provider) Vars() (envvarsv1connect.EnvVarsServiceClient, error) {
-	return p.current().Vars()
+	return p.runner.Vars()
 }
 
 func (p *Provider) Cost() (costv1connect.CostServiceClient, error) {
-	return p.current().Cost()
+	return p.runner.Cost()
 }
 
 type processLines struct {

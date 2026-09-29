@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/target"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/session"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
@@ -34,7 +35,7 @@ func dialable(hostname string) error {
 	return nil
 }
 
-func hostKeyDigest(offered provider.HostKey) (string, error) {
+func hostKeyDigest(offered session.HostKey) (string, error) {
 	fingerprinted, err := offered.Fingerprinted()
 	if err != nil {
 		return "", err

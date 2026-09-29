@@ -141,7 +141,7 @@ func newDeps() cmddeps.Deps {
 		CurrentGitBranch:        gitBranch,
 		DiscoverPRNumber:        prNumberFromEnv,
 		RunPackageManager:       runPackageManagerCommand,
-		HostTrust:               providerclient.Trust{Prompt: terminal.NewPrompt(os.Stderr, os.Stdin), Out: os.Stderr},
+		Questions:               providerclient.Questions{Prompt: terminal.NewPrompt(os.Stderr, os.Stdin), Out: os.Stderr},
 		StdinIsTerminal:         func(in io.Reader) bool { return terminal.IsTerminal(in) },
 		ConfigPath:              explicitConfigPath,
 		Presentation:            presentation,

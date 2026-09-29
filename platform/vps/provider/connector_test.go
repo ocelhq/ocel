@@ -8,6 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/target"
+	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
 func TestAnUnsetComputeTakesTheBoxsLongRunningProcess(t *testing.T) {
@@ -50,7 +51,7 @@ func TestADestinationTheConsoleCannotDialIsRefusedBeforeAnyRowIsWritten(t *testi
 func TestTheHostKeyDigestFitsInATarget(t *testing.T) {
 	t.Parallel()
 
-	key := provider.HostKey{
+	key := session.HostKey{
 		Type: "ssh-ed25519",
 		Key:  base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{0xff}, 51)),
 	}

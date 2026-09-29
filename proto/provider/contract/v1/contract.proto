@@ -65,6 +65,8 @@ service ProviderService {
     rpc RemoveConnector(RemoveConnectorRequest) returns (stream common.progress.v1.OperationEvent);
 
     rpc Shape(ShapeRequest) returns (provider.cost.v1.ResourceSet);
+
+    rpc Confirm(ConfirmRequest) returns (ConfirmResponse);
 }
 
 message ProviderConfig {
@@ -650,33 +652,19 @@ message RemoveStalePromotionsRequest {
   EdgeSelection edge = 4;
 }
 
-message HostTrustRefusal {
-  HostTrustReason reason = 1;
+message Question {
+  string id = 1;
 
-  string host = 2;
+  string finding = 2;
 
-  string address = 3;
-
-  uint32 port = 4;
-
-  HostKey got = 5;
-
-  HostKey want = 6;
-
-  repeated string known_hosts = 7;
-
-  string remedy = 8;
-
-  string key_alias = 9;
+  string prompt = 3;
 }
 
-message HostKey {
-  string type = 1;
-
-  string key = 2;
-
-  string fingerprint = 3;
+message ConfirmRequest {
+  string question_id = 1 [(buf.validate.field).string.min_len = 1];
 }
+
+message ConfirmResponse {}
 
 message Refusal {
   RefusalCode code = 1;
@@ -694,14 +682,6 @@ enum RefusalCode {
   REFUSAL_CODE_BUSY = 4;
 
   REFUSAL_CODE_UNKNOWN_OPTION = 5;
-}
-
-enum HostTrustReason {
-  HOST_TRUST_REASON_UNSPECIFIED = 0;
-
-  HOST_TRUST_REASON_UNKNOWN_HOST_KEY = 1;
-
-  HOST_TRUST_REASON_HOST_KEY_MISMATCH = 2;
 }
 
 message DescribeConnectorTargetRequest {}

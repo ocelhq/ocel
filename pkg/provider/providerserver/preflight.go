@@ -32,7 +32,7 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 	}
 
 	principal, err := p.Credentials().Whoami(ctx)
-	if trust, askable := provider.HostTrustOf(err); askable && !trust.Terminal() {
+	if _, asked := provider.QuestionOf(err); asked {
 		return nil, provider.RefusalError(err)
 	}
 	if err != nil {

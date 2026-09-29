@@ -102,7 +102,7 @@ func resolveBuiltComputes(ctx context.Context, deps cmddeps.Deps, building *run.
 	}
 	check := building.Phase(progressv1.Phase_PHASE_CHECK)
 	defer func() { check.End(err) }()
-	prov, err := providerclient.Start(ctx, declared, check, deps.HostTrust, providerclient.PinToLock)
+	prov, err := providerclient.Start(ctx, declared, check, deps.Questions, providerclient.PinToLock)
 	if err != nil {
 		return nil, err
 	}

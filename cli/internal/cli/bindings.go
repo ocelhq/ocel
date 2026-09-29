@@ -168,7 +168,7 @@ func withBindingProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opt
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := providerclient.Start(ctx, cfg, check, deps.HostTrust, providerclient.PinToLock)
+	prov, err := providerclient.Start(ctx, cfg, check, deps.Questions, providerclient.PinToLock)
 	if err != nil {
 		return err
 	}

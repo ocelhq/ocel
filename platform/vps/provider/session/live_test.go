@@ -10,7 +10,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
@@ -43,7 +42,7 @@ func live(t *testing.T) harness {
 	return harness{target: Target{Alias: alias, Config: config}, knownHosts: knownHosts, addr: addr}
 }
 
-func (h harness) trust(t *testing.T) provider.HostKey {
+func (h harness) trust(t *testing.T) HostKey {
 	t.Helper()
 	scanned, err := exec.Command("ssh-keyscan", "-T", "10", h.addr).Output()
 	if err != nil {
@@ -63,12 +62,12 @@ func TestLiveAnUnknownHostIsRefusedWithEverythingTheUserNeeds(t *testing.T) {
 	h := live(t)
 
 	_, err := Open(context.Background(), h.target)
-	trust, ok := provider.HostTrustOf(err)
+	trust, ok := HostTrustOf(err)
 	if !ok {
 		t.Fatalf("Open() = %v, want an unknown-host-key refusal against an empty known_hosts", err)
 	}
-	if trust.Reason != provider.UnknownHostKey || trust.Terminal() {
-		t.Errorf("Open() refused with %s, want a recoverable %s", trust.Reason, provider.UnknownHostKey)
+	if trust.Reason != UnknownHostKey || trust.Terminal() {
+		t.Errorf("Open() refused with %s, want a recoverable %s", trust.Reason, UnknownHostKey)
 	}
 	if trust.Host != alias || trust.Address != h.addr || trust.Port != 22 {
 		t.Errorf("Open() refused over %+v, want the alias as written and the resolved address", trust)
@@ -113,12 +112,12 @@ func TestLiveAChangedHostKeyIsTerminal(t *testing.T) {
 	}
 
 	_, err := Open(context.Background(), h.target)
-	trust, ok := provider.HostTrustOf(err)
+	trust, ok := HostTrustOf(err)
 	if !ok {
 		t.Fatalf("Open() = %v, want a host-key-mismatch refusal", err)
 	}
-	if trust.Reason != provider.HostKeyMismatch || !trust.Terminal() {
-		t.Errorf("Open() refused with %s, want a terminal %s", trust.Reason, provider.HostKeyMismatch)
+	if trust.Reason != HostKeyMismatch || !trust.Terminal() {
+		t.Errorf("Open() refused with %s, want a terminal %s", trust.Reason, HostKeyMismatch)
 	}
 	if trust.Got.Fingerprint != offered.Fingerprint || trust.Want.Fingerprint != other.Fingerprint {
 		t.Errorf("Open() refused with got %s want %s, want %s and %s", trust.Got.Fingerprint, trust.Want.Fingerprint, offered.Fingerprint, other.Fingerprint)

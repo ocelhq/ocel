@@ -7,13 +7,11 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-
-	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 var preference = []string{"ssh-ed25519", "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521", "rsa-sha2-512", "rsa-sha2-256", "ssh-rsa"}
 
-func offered(ctx context.Context, dest Destination) ([]provider.HostKey, error) {
+func offered(ctx context.Context, dest Destination) ([]HostKey, error) {
 	rendered, err := output(ctx, "ssh-keyscan", "-T", strconv.Itoa(int(reach.Seconds())), "-p", strconv.Itoa(dest.Port), dest.Address)
 	if err != nil {
 		return nil, err
@@ -22,7 +20,7 @@ func offered(ctx context.Context, dest Destination) ([]provider.HostKey, error) 
 }
 
 type known struct {
-	keys      []provider.HostKey
+	keys      []HostKey
 	delegated bool
 }
 
@@ -39,15 +37,15 @@ func recorded(ctx context.Context, dest Destination) known {
 	return listed
 }
 
-func keysIn(rendered string) []provider.HostKey {
-	var keys []provider.HostKey
+func keysIn(rendered string) []HostKey {
+	var keys []HostKey
 	scanner := bufio.NewScanner(strings.NewReader(rendered))
 	for scanner.Scan() {
 		fields := strings.Fields(scanner.Text())
 		if len(fields) < 3 || strings.HasPrefix(fields[0], "#") || strings.HasPrefix(fields[0], "@") {
 			continue
 		}
-		if key, err := (provider.HostKey{Type: fields[1], Key: fields[2]}).Fingerprinted(); err == nil {
+		if key, err := (HostKey{Type: fields[1], Key: fields[2]}).Fingerprinted(); err == nil {
 			keys = append(keys, key)
 		}
 	}
@@ -66,20 +64,20 @@ func markedIn(rendered string) bool {
 	return false
 }
 
-func classify(dest Destination, offered []provider.HostKey, listed known) (provider.HostKey, *provider.HostTrust) {
+func classify(dest Destination, offered []HostKey, listed known) (HostKey, *HostTrust) {
 	if len(offered) == 0 {
-		return provider.HostKey{}, nil
+		return HostKey{}, nil
 	}
 	ordered := preferred(offered)
 	for _, key := range ordered {
-		if slices.ContainsFunc(listed.keys, func(k provider.HostKey) bool { return k.Key == key.Key }) {
+		if slices.ContainsFunc(listed.keys, func(k HostKey) bool { return k.Key == key.Key }) {
 			return key, nil
 		}
 	}
 	if listed.delegated {
 		return ordered[0], nil
 	}
-	trust := provider.HostTrust{
+	trust := HostTrust{
 		Host:       dest.Written,
 		Address:    dest.Address,
 		Port:       dest.Port,
@@ -88,24 +86,24 @@ func classify(dest Destination, offered []provider.HostKey, listed known) (provi
 		Got:        ordered[0],
 	}
 	if len(listed.keys) == 0 {
-		trust.Reason = provider.UnknownHostKey
+		trust.Reason = UnknownHostKey
 		trust.Remedy = remedy(trust)
-		return provider.HostKey{}, &trust
+		return HostKey{}, &trust
 	}
-	trust.Reason = provider.HostKeyMismatch
+	trust.Reason = HostKeyMismatch
 	trust.Want = preferred(listed.keys)[0]
 	for _, key := range ordered {
-		if paired := slices.IndexFunc(listed.keys, func(k provider.HostKey) bool { return k.Type == key.Type }); paired >= 0 {
+		if paired := slices.IndexFunc(listed.keys, func(k HostKey) bool { return k.Type == key.Type }); paired >= 0 {
 			trust.Got, trust.Want = key, listed.keys[paired]
 			break
 		}
 	}
 	trust.Remedy = remedy(trust)
-	return provider.HostKey{}, &trust
+	return HostKey{}, &trust
 }
 
-func remedy(trust provider.HostTrust) string {
-	if trust.Reason == provider.HostKeyMismatch {
+func remedy(trust HostTrust) string {
+	if trust.Reason == HostKeyMismatch {
 		return forgetting(trust.KnownHostsEntry(), trust.KnownHosts)
 	}
 	return fmt.Sprintf("ssh-keyscan -t %s -p %d %s >> %s", trust.Got.Type, trust.Port, trust.Address, store(trust.KnownHosts))
@@ -143,9 +141,9 @@ func plainly(word string) bool {
 	}) < 0
 }
 
-func preferred(keys []provider.HostKey) []provider.HostKey {
+func preferred(keys []HostKey) []HostKey {
 	ordered := slices.Clone(keys)
-	slices.SortStableFunc(ordered, func(a, b provider.HostKey) int {
+	slices.SortStableFunc(ordered, func(a, b HostKey) int {
 		return rank(a.Type) - rank(b.Type)
 	})
 	return ordered

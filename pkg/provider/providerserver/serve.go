@@ -73,13 +73,15 @@ func ConformanceMux(config Config) *http.ServeMux { return newMux(config) }
 
 func newMux(config Config) *http.ServeMux {
 	mux := http.NewServeMux()
+	asked := newQuestions()
 	interceptors := connect.WithInterceptors(
 		traceInterceptor(),
 		validate.NewInterceptor(),
+		asked,
 	)
 
 	s := &session{config: config, writer: provider.WrittenByVersion(config.Version)}
-	services := &handlers{session: s, Service: &envvarsserver.Service{Source: sessionBackend{session: s}, CallerNamesEnvSource: true}}
+	services := &handlers{session: s, questions: asked, Service: &envvarsserver.Service{Source: sessionBackend{session: s}, CallerNamesEnvSource: true}}
 
 	path, handler := contractv1connect.NewProviderServiceHandler(services, interceptors)
 	mux.Handle(path, handler)
@@ -96,7 +98,8 @@ func newMux(config Config) *http.ServeMux {
 type handlers struct {
 	*envvarsserver.Service
 
-	session *session
+	session   *session
+	questions *questions
 }
 
 var (

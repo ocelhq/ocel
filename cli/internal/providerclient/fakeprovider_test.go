@@ -249,7 +249,7 @@ func (s *fakeProviderServer) Preflight(context.Context, *contractv1.PreflightReq
 		return nil, err
 	}
 	if err := refusalFor(s.mode); err != nil {
-		return nil, err
+		return nil, askedOver(err)
 	}
 	return &contractv1.PreflightResponse{}, nil
 }
@@ -259,7 +259,7 @@ func (s *fakeProviderServer) Bootstrap(ctx context.Context, req *contractv1.Boot
 		return err
 	}
 	if err := refusalFor(s.mode); err != nil {
-		return err
+		return askedOver(err)
 	}
 
 	if err := stream.Send(fakeSaid("bootstrapping")); err != nil {
@@ -291,56 +291,78 @@ func recordDrive() error {
 	return file.Sync()
 }
 
+const (
+	fakeQuestionID      = "fake-question"
+	fakeHostFingerprint = "SHA256:fake-host-key"
+)
+
+func fakeHostEntry() string { return fmt.Sprintf("[%s]:%d", fakeHostAddress, fakeHostPort) }
+
+func fakeHostLine() string {
+	return fmt.Sprintf("%s %s %s\n", fakeHostEntry(), fakeHostKeyType, fakeHostKey)
+}
+
 func refusalFor(mode string) error {
 	if mode != "unknown-host-key" && mode != "host-key-mismatch" {
 		return nil
 	}
 
 	store := os.Getenv(fakeProviderKnownHostsEnvVar)
-	trust := provider.HostTrust{
-		Host:       fakeHostName,
-		Address:    fakeHostAddress,
-		Port:       fakeHostPort,
-		KnownHosts: []string{store},
-		Got:        fakeKey(fakeHostKey),
-	}
-	entry := trust.KnownHostsEntry()
-
 	if mode == "host-key-mismatch" {
-		trust.Reason = provider.HostKeyMismatch
-		trust.Want = fakeKey(fakeOtherHostKey)
-		trust.Remedy = fmt.Sprintf("ssh-keygen -R '%s' -f %s", entry, store)
-		return provider.RefusalError(provider.RefuseHostTrust(trust))
+		return provider.RefusalError(refusal.Refuse(refusal.CodeDenied,
+			"the host key for %s changed\nIf it was rebuilt, drop the old key and try again:\n  ssh-keygen -R '%s' -f %s",
+			fakeHostName, fakeHostEntry(), store))
 	}
 
-	if alreadyRecorded(store, entry, trust.Got) {
+	if alreadyRecorded(store) {
 		return nil
 	}
-	trust.Reason = provider.UnknownHostKey
-	trust.Remedy = fmt.Sprintf("ssh-keyscan -t %s -p %d %s >> %s", trust.Got.Type, fakeHostPort, fakeHostAddress, store)
-	return provider.RefusalError(provider.RefuseHostTrust(trust))
+	finding := fmt.Sprintf("the host key for %s (%s) port %d is in none of %s\n  %s %s", fakeHostName, fakeHostAddress, fakeHostPort, store, fakeHostKeyType, fakeHostFingerprint)
+	return provider.RefusalError(provider.Ask(
+		fmt.Sprintf("%s\nCheck that fingerprint against the machine itself, then record it:\n  ssh-keyscan -t %s -p %d %s >> %s", finding, fakeHostKeyType, fakeHostPort, fakeHostAddress, store),
+		provider.Question{Finding: finding, Prompt: fmt.Sprintf("Trust that key and record %s in %s?", fakeHostEntry(), store)},
+	))
 }
 
-func fakeKey(encoded string) provider.HostKey {
-	key, err := (provider.HostKey{Type: fakeHostKeyType, Key: encoded}).Fingerprinted()
-	if err != nil {
-		panic(err)
+func askedOver(err error) error {
+	question, asked := provider.QuestionOf(err)
+	var wire *connect.Error
+	if !asked || !errors.As(err, &wire) {
+		return err
 	}
-	return key
+	detail, detailErr := connect.NewErrorDetail(&contractv1.Question{Id: fakeQuestionID, Finding: question.Finding, Prompt: question.Prompt})
+	if detailErr != nil {
+		return errors.Join(err, detailErr)
+	}
+	wire.AddDetail(detail)
+	return err
 }
 
-func alreadyRecorded(store, entry string, key provider.HostKey) bool {
+func (s *fakeProviderServer) Confirm(_ context.Context, req *contractv1.ConfirmRequest) (*contractv1.ConfirmResponse, error) {
+	if req.GetQuestionId() != fakeQuestionID {
+		return nil, provider.RefusalError(refusal.Refuse(refusal.CodeInvalid, "this provider is waiting on no question %q", req.GetQuestionId()))
+	}
+	store := os.Getenv(fakeProviderKnownHostsEnvVar)
+	if store == "" {
+		return &contractv1.ConfirmResponse{}, nil
+	}
+	if err := os.MkdirAll(filepath.Dir(store), 0o700); err != nil {
+		return nil, err
+	}
+	file, err := os.OpenFile(store, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	if _, err := file.WriteString(fakeHostLine()); err != nil {
+		return nil, err
+	}
+	return &contractv1.ConfirmResponse{}, nil
+}
+
+func alreadyRecorded(store string) bool {
 	content, err := os.ReadFile(store)
-	if err != nil {
-		return false
-	}
-	for _, line := range strings.Split(string(content), "\n") {
-		fields := strings.Fields(line)
-		if len(fields) >= 3 && fields[0] == entry && fields[1] == key.Type && fields[2] == key.Key {
-			return true
-		}
-	}
-	return false
+	return err == nil && strings.Contains(string(content), fakeHostLine())
 }
 
 func spawnGrandchildSurvivor(keepPipe, ownGroup bool) error {

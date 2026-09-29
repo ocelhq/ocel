@@ -23,10 +23,10 @@ func (c *Credentials) Deny(hint string) {
 	c.refusal = refusal.Refuse(refusal.CodeDenied, "%s", hint)
 }
 
-func (c *Credentials) RefuseHostKey(trust provider.HostTrust) {
+func (c *Credentials) Ask(message string, question provider.Question) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.refusal = provider.RefuseHostTrust(trust)
+	c.refusal = provider.Ask(message, question)
 }
 
 func (c *Credentials) Admit() {

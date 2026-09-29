@@ -15,7 +15,7 @@ type credentials struct{ provider *Provider }
 
 type hostSurvey interface {
 	Facts(ctx context.Context) (session.Facts, error)
-	HostKey() provider.HostKey
+	HostKey() session.HostKey
 	Destination() session.Destination
 }
 

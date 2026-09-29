@@ -1,6 +1,7 @@
-package provider
+package session
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
@@ -9,9 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	connect "connectrpc.com/connect"
-
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
@@ -50,7 +49,7 @@ func (k HostKey) Fingerprinted() (HostKey, error) {
 	sum := sha256.Sum256(blob)
 	fingerprint := "SHA256:" + base64.RawStdEncoding.EncodeToString(sum[:])
 	if k.Fingerprint != "" && k.Fingerprint != fingerprint {
-		return k, fmt.Errorf("the offered %s key hashes to %s, not the %s the provider named", k.Type, fingerprint, k.Fingerprint)
+		return k, fmt.Errorf("the offered %s key hashes to %s, not the %s it was named with", k.Type, fingerprint, k.Fingerprint)
 	}
 	k.Fingerprint = fingerprint
 	return k, nil
@@ -126,17 +125,52 @@ func (t HostTrust) Offer() string {
 }
 
 type HostTrustRefusal struct {
-	refusal.Refusal
+	error
 	Trust HostTrust
 }
 
-func (r HostTrustRefusal) Unwrap() error { return r.Refusal }
+func (r HostTrustRefusal) Unwrap() error { return r.error }
 
 func RefuseHostTrust(trust HostTrust) error {
-	return HostTrustRefusal{
-		Refusal: refusal.Refusal{Code: refusal.CodeDenied, Message: trust.Message()},
-		Trust:   trust,
+	denied := refusal.Refuse(refusal.CodeDenied, "%s", trust.Message())
+	if trust.Terminal() {
+		return HostTrustRefusal{error: denied, Trust: trust}
 	}
+	question, err := recording(trust)
+	if err != nil {
+		return HostTrustRefusal{error: errors.Join(denied, err), Trust: trust}
+	}
+	return HostTrustRefusal{error: provider.Ask(trust.Message(), question), Trust: trust}
+}
+
+func recording(trust HostTrust) (provider.Question, error) {
+	offered, err := trust.Got.Fingerprinted()
+	if err != nil {
+		return provider.Question{}, err
+	}
+	entry := trust.KnownHostsEntry()
+	if !ValidKnownHostsEntry(entry) {
+		return provider.Question{}, fmt.Errorf("%q is not a name a known_hosts entry can be keyed on", entry)
+	}
+	store, err := knownHostsStore(trust.KnownHosts)
+	if err != nil {
+		return provider.Question{}, err
+	}
+	trust.Got = offered
+	if len(trust.KnownHosts) == 0 {
+		trust.KnownHosts = []string{store}
+	}
+	line := entry + " " + offered.Type + " " + offered.Key + "\n"
+	return provider.Question{
+		Finding: trust.Offer(),
+		Prompt:  fmt.Sprintf("Trust that key and record %s in %s?", entry, store),
+		Confirm: func(context.Context) error {
+			if err := record(store, line); err != nil {
+				return fmt.Errorf("record the host key in %s: %w", store, err)
+			}
+			return nil
+		},
+	}, nil
 }
 
 func HostTrustOf(err error) (HostTrust, bool) {
@@ -144,78 +178,5 @@ func HostTrustOf(err error) (HostTrust, bool) {
 	if errors.As(err, &refused) {
 		return refused.Trust, true
 	}
-	var wire *connect.Error
-	if !errors.As(err, &wire) {
-		return HostTrust{}, false
-	}
-	for _, detail := range wire.Details() {
-		value, err := detail.Value()
-		if err != nil {
-			continue
-		}
-		if refused, ok := value.(*contractv1.HostTrustRefusal); ok {
-			return hostTrustFrom(refused), true
-		}
-	}
 	return HostTrust{}, false
-}
-
-var hostTrustReasons = map[HostTrustReason]contractv1.HostTrustReason{
-	UnknownHostKey:  contractv1.HostTrustReason_HOST_TRUST_REASON_UNKNOWN_HOST_KEY,
-	HostKeyMismatch: contractv1.HostTrustReason_HOST_TRUST_REASON_HOST_KEY_MISMATCH,
-}
-
-func HostTrustProto(trust HostTrust) *contractv1.HostTrustRefusal {
-	return &contractv1.HostTrustRefusal{
-		Reason:     hostTrustReasons[trust.Reason],
-		Host:       trust.Host,
-		Address:    trust.Address,
-		Port:       uint32(trust.Port),
-		Got:        hostKeyProto(trust.Got),
-		Want:       hostKeyProto(trust.Want),
-		KnownHosts: trust.KnownHosts,
-		Remedy:     trust.Remedy,
-		KeyAlias:   trust.KeyAlias,
-	}
-}
-
-func hostKeyProto(key HostKey) *contractv1.HostKey {
-	if key.IsZero() {
-		return nil
-	}
-	return &contractv1.HostKey{Type: key.Type, Key: key.Key, Fingerprint: key.Fingerprint}
-}
-
-func hostTrustFrom(refused *contractv1.HostTrustRefusal) HostTrust {
-	trust := HostTrust{
-		Host:       refused.GetHost(),
-		Address:    refused.GetAddress(),
-		Port:       int(refused.GetPort()),
-		Got:        hostKeyFrom(refused.GetGot()),
-		Want:       hostKeyFrom(refused.GetWant()),
-		KnownHosts: refused.GetKnownHosts(),
-		Remedy:     refused.GetRemedy(),
-		KeyAlias:   refused.GetKeyAlias(),
-	}
-	for reason, encoded := range hostTrustReasons {
-		if encoded == refused.GetReason() {
-			trust.Reason = reason
-		}
-	}
-	return trust
-}
-
-func hostTrustError(refused HostTrustRefusal) error {
-	wire := connect.NewError(connect.CodePermissionDenied, errors.New(refused.Message))
-	if detail, err := connect.NewErrorDetail(HostTrustProto(refused.Trust)); err == nil {
-		wire.AddDetail(detail)
-	}
-	return wire
-}
-
-func hostKeyFrom(key *contractv1.HostKey) HostKey {
-	if key == nil {
-		return HostKey{}
-	}
-	return HostKey{Type: key.GetType(), Key: key.GetKey(), Fingerprint: key.GetFingerprint()}
 }

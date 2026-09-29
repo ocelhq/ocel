@@ -78,6 +78,9 @@ func (s *eventStream) send(ev *progressv1.OperationEvent) {
 }
 
 func (s *eventStream) fail(err error) error {
+	if _, asked := provider.QuestionOf(err); asked {
+		return err
+	}
 	event := failureResult(err)
 	if s.detail != nil {
 		s.detail(event.GetResult())

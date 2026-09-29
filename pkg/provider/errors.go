@@ -24,9 +24,9 @@ func RefusalError(err error) error {
 	if err == nil {
 		return nil
 	}
-	var trust HostTrustRefusal
-	if errors.As(err, &trust) {
-		return hostTrustError(trust)
+	var asked QuestionRefusal
+	if errors.As(err, &asked) {
+		return questionError(err, asked)
 	}
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) {
@@ -42,6 +42,18 @@ func RefusalError(err error) error {
 	}
 	wire := connect.NewError(code, errors.New(refused.Message))
 	if detail, err := connect.NewErrorDetail(&contractv1.Refusal{Code: wireRefusalCodes[refused.Code]}); err == nil {
+		wire.AddDetail(detail)
+	}
+	return wire
+}
+
+func questionError(err error, asked QuestionRefusal) error {
+	var already *connect.Error
+	if errors.As(err, &already) {
+		return err
+	}
+	wire := connect.NewError(connect.CodePermissionDenied, asked)
+	if detail, err := connect.NewErrorDetail(&contractv1.Refusal{Code: contractv1.RefusalCode_REFUSAL_CODE_DENIED}); err == nil {
 		wire.AddDetail(detail)
 	}
 	return wire
