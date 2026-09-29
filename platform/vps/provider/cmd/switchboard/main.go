@@ -101,6 +101,8 @@ func run(ctx context.Context, argv []string, in io.Reader, out, errs io.Writer) 
 		return placeOrigin(rest, in, errs)
 	case "unplace-origins":
 		return unplaceOrigins(rest, errs)
+	case "origin-group":
+		return originGroup(rest, out, errs)
 	default:
 		return usage(errs)
 	}

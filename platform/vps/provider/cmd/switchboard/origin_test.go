@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -75,6 +76,21 @@ func TestUnplacingOriginsRemovesEveryOriginCertificateButTheOnesKeptAndNothingEl
 	}
 	if got, want := entries(t, dir), []string{"ocel.caddy", "yours.pem"}; !slices.Equal(got, want) {
 		t.Errorf("the directory contains %q, want %q", got, want)
+	}
+}
+
+func TestTheOriginGroupIsTheGroupOfTheDirectoryOriginCertificatesArePlacedIn(t *testing.T) {
+	dir := placing(t)
+	directory, err := os.Stat(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, out, errs := ran(t, "origin-group")
+	if code != 0 {
+		t.Fatalf("origin-group = %d: %s", code, errs)
+	}
+	if got, want := strings.TrimSpace(out), strconv.FormatUint(uint64(directory.Sys().(*syscall.Stat_t).Gid), 10); got != want {
+		t.Errorf("origin-group = %q, want %q: place-origin runs as that group, since the switchboard holds no CAP_CHOWN to give a file a group it is not in", got, want)
 	}
 }
 

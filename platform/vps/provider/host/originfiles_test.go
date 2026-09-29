@@ -13,6 +13,8 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
+const placedGroup = "4321"
+
 var shieldedOrigins = []proxy.OriginFile{
 	{Path: coolifyDynamic + "/" + switchboard.OriginPrefix + "shop.example.com-aaa.pem", Bundle: []byte("SHOP CERTIFICATE\nSHOP KEY\n")},
 	{Path: coolifyDynamic + "/" + switchboard.OriginPrefix + "_.preview.example.com-bbb.pem", Bundle: []byte("PREVIEW CERTIFICATE\nPREVIEW KEY\n")},
@@ -29,6 +31,7 @@ func shellLogging(t *testing.T) *loggingShell {
 	box.calls, box.feeds = filepath.Join(box.dir, "calls"), filepath.Join(box.dir, "feeds")
 	executable(t, filepath.Join(box.bin, "docker"), "#!/bin/sh\n"+
 		"printf '%s\\n' \"$*\" >> "+quoted(box.calls)+"\n"+
+		"case \"$*\" in *origin-group*) echo "+placedGroup+"; exit 0;; esac\n"+
 		"if [ \"$2\" = -i ]; then cat >> "+quoted(box.feeds)+"; printf '|\\n' >> "+quoted(box.feeds)+"; fi\n")
 	return box
 }
@@ -54,13 +57,14 @@ func switchboardAsked(argv ...string) string {
 func wantPlacedOrigins(t *testing.T, box *loggingShell, rendering string) {
 	t.Helper()
 	want := []string{
-		switchboardSaid("place-origin", shieldedOrigins[0].Path),
-		switchboardSaid("place-origin", shieldedOrigins[1].Path),
+		switchboardAsked("origin-group"),
+		"exec -i --user 0:" + placedGroup + " " + switchboardAsked("place-origin", shieldedOrigins[0].Path)[len("exec "):],
+		"exec -i --user 0:" + placedGroup + " " + switchboardAsked("place-origin", shieldedOrigins[1].Path)[len("exec "):],
 		switchboardSaid("place", coolifyFile),
 		switchboardAsked(append([]string{"unplace-origins"}, originPaths(shieldedOrigins)...)...),
 	}
 	if got := box.called(t); !slices.Equal(got, want) {
-		t.Errorf("docker was asked\n%q\nwant\n%q\nEach origin certificate is placed before the file naming it, and the ones it no longer names are unplaced only once it is placed", got, want)
+		t.Errorf("docker was asked\n%q\nwant\n%q\nEach origin certificate is placed, as the group of the directory it is placed in, before the file naming it, and the ones it no longer names are unplaced only once it is placed", got, want)
 	}
 	fed := []string{string(shieldedOrigins[0].Bundle), string(shieldedOrigins[1].Bundle), rendering}
 	if got := box.fedEach(t); !slices.Equal(got, fed) {
