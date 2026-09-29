@@ -13,6 +13,7 @@ import (
 	agtypes "github.com/aws/aws-sdk-go-v2/service/apigateway/types"
 
 	"github.com/ocelhq/ocel/pkg/router"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
 const (
@@ -281,6 +282,7 @@ func putEntryRoute(ctx context.Context, c Clients, spec apiSpec, api, resource s
 		Credentials:           aws.String(spec.role),
 		Uri:                   aws.String(entryURI(spec)),
 		ResponseTransferMode:  agtypes.ResponseTransferModeStream,
+		TimeoutInMillis:       aws.Int32(int32(awsports.RequestTimeout.Milliseconds())),
 	}); err != nil {
 		return fmt.Errorf("point REST API %s at the entry function: %w", api, err)
 	}

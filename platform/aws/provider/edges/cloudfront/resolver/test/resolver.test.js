@@ -185,6 +185,11 @@ describe("the resolver", () => {
     });
   });
 
+  it("waits a minute on the entry function rather than CloudFront's 30 second default", async () => {
+    const { origins } = await resolve(request("/blog"));
+    expect(origins[0].timeouts).toEqual({ readTimeout: 60 });
+  });
+
   it("sends everything else to the release's entry function with the secret it demands", async () => {
     const { answered, origins } = await resolve(request("/blog"));
 

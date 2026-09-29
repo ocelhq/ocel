@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"maps"
 	"slices"
-	"time"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
@@ -173,7 +172,6 @@ type FunctionSpec struct {
 	Image     string
 	Env       map[string]string
 	Memory    int
-	Timeout   time.Duration
 }
 
 type StackResult struct {

@@ -211,6 +211,9 @@ func TestReconcileShapesTheProductionAPI(t *testing.T) {
 	if entry.transfer != agtypes.ResponseTransferModeStream {
 		t.Errorf("catch-all response transfer mode = %q, want STREAM; the entry function answers as a stream", entry.transfer)
 	}
+	if entry.timeoutMillis != 60_000 {
+		t.Errorf("catch-all integration timeout = %dms, want 60000ms, the minute the entry function has to answer", entry.timeoutMillis)
+	}
 	if !strings.Contains(entry.uri, "function:${stageVariables."+entryVariable+"}") {
 		t.Errorf("catch-all URI = %q, want it to name the entry stage variable", entry.uri)
 	}

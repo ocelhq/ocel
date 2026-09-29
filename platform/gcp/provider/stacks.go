@@ -77,7 +77,6 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 			public:  true,
 			ingress: ingressFor(factsOf(spec.Edge)),
 			memory:  fn.Memory,
-			timeout: fn.Timeout,
 		}, progress)
 		if err != nil {
 			return nil, err

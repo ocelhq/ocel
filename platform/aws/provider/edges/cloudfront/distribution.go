@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudfront"
@@ -18,8 +19,8 @@ const (
 	assetOriginID     = "assets"
 	containerOriginID = "containers"
 
-	containerOriginReadTimeout      = 60
-	containerOriginKeepaliveTimeout = 5
+	originReadTimeoutSeconds               = int32(awsports.RequestTimeout / time.Second)
+	containerOriginKeepaliveTimeoutSeconds = 5
 
 	maxDistributionNameLen = 128
 )
@@ -78,8 +79,8 @@ func (p distributionSpec) origins() *cftypes.Origins {
 			DomainName: aws.String(p.front.Host),
 			VpcOriginConfig: &cftypes.VpcOriginConfig{
 				VpcOriginId:            aws.String(p.front.VPCOrigin),
-				OriginReadTimeout:      ptr(int32(containerOriginReadTimeout)),
-				OriginKeepaliveTimeout: ptr(int32(containerOriginKeepaliveTimeout)),
+				OriginReadTimeout:      ptr(originReadTimeoutSeconds),
+				OriginKeepaliveTimeout: ptr(int32(containerOriginKeepaliveTimeoutSeconds)),
 			},
 			OriginPath:         aws.String(""),
 			CustomHeaders:      &cftypes.CustomHeaders{Quantity: ptr(int32(0))},

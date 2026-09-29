@@ -405,7 +405,7 @@
         },
         "memory_size": 1769,
         "runtime": "nodejs24.x",
-        "timeout": 30
+        "timeout": 60
       }
     },
     {
