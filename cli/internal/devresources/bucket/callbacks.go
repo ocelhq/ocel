@@ -20,7 +20,7 @@ func (c callbacks) Post(ctx context.Context, target string, body []byte) error {
 	}
 	origin := parsed.Scheme + "://" + parsed.Host
 	if !slices.Contains(c.allowed, origin) {
-		return fmt.Errorf("the upload callback goes to %s, and no bucket allows that origin: serve the app there or add it to the bucket's allowed origins", origin)
+		return nil
 	}
 	return s3store.HTTPPoster{}.Post(ctx, target, body)
 }

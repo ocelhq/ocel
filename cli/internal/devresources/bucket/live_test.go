@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"google.golang.org/protobuf/encoding/protojson"
@@ -159,17 +160,23 @@ func TestDockerACompletedUploadCallsTheAppBackWithTheSignedFile(t *testing.T) {
 	}
 }
 
-func TestDockerAnUploadCallbackToAnOriginNoBucketAllowsIsRefused(t *testing.T) {
+func TestDockerAnUploadWhoseCallbackGoesToAnOriginNoBucketAllowsCompletesWithoutPostingIt(t *testing.T) {
+	var posts atomic.Int32
+	foreign := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { posts.Add(1) }))
+	t.Cleanup(foreign.Close)
+
 	live := startLive(t, "bucket-live-foreign-callback-test")
-	presigned := live.presign(t, "http://127.0.0.1:1/api/upload",
+	presigned := live.presign(t, foreign.URL+"/api/upload",
 		&bucketv1.PresignFile{Key: "a.txt", Name: "a.txt", Size: 5, MimeType: "text/plain"})
 	if resp := put(t, presigned.GetFiles()[0], "text/plain", "hello"); resp.StatusCode != http.StatusOK {
 		t.Fatalf("PUT to the presigned url answered %s", resp.Status)
 	}
 
-	_, err := live.backend.CompleteUpload(context.Background(), &bucketv1.CompleteUploadRequest{SessionId: presigned.GetSessionId()})
-	if err == nil || !strings.Contains(err.Error(), "http://127.0.0.1:1") {
-		t.Fatalf("CompleteUpload = %v, want the callback to a foreign origin refused", err)
+	if _, err := live.backend.CompleteUpload(context.Background(), &bucketv1.CompleteUploadRequest{SessionId: presigned.GetSessionId()}); err != nil {
+		t.Fatalf("CompleteUpload = %v, want the upload completed", err)
+	}
+	if got := posts.Load(); got != 0 {
+		t.Fatalf("the origin no bucket allows received %d callbacks, want 0", got)
 	}
 }
 
