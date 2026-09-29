@@ -106,6 +106,48 @@ service = "fallback"
 	}
 }
 
+func TestAHostnameAFileOfYoursRoutesThroughTraefiksTemplateFunctionsIsRefused(t *testing.T) {
+	t.Parallel()
+
+	for name, rule := range map[string]string{
+		"sprig.yml":     "Host(`{{ \"SHOP.example.com\" | lower }}`)",
+		"split.yml":     "Host(`{{ index (split \"shop.example.com\" \".\") 0 }}.example.com`)",
+		"normalize.yml": "Host(`{{ normalize \"shop\" }}.example.com`)",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			machine := &box{beside: []switchboard.SiblingFile{{Name: name, Content: []byte("http:\n  routers:\n    shop:\n      rule: " + rule + "\n      service: shop\n")}}}
+			front := traefik.Traefik{Box: machine, Directory: "/etc/traefik/dynamic", Resolver: "le", HTTP: "web", HTTPS: "websecure", Port: 8480}
+			refusedNaming(t, front.RefuseRouted(context.Background(), []string{"shop.example.com"}), "router shop", "/etc/traefik/dynamic/"+name)
+		})
+	}
+}
+
+func TestAClaimIsRefusedWhileAFileOfYoursCannotBeReadForItsRouters(t *testing.T) {
+	t.Parallel()
+
+	for name, content := range map[string]string{
+		"broken.yml":   "http:\n  routers:\n    web:\n      rule: Host(`a.example.com`)\n     service: web\n",
+		"broken.toml":  "[http.routers.web\nrule = 1\n",
+		"unknown.yml":  "http:\n  routers:\n    web:\n      rule: Host(`{{ nosuch }}`)\n",
+		"unparsed.yml": "http:\n  routers:\n    {{ if }}\n",
+		"env.yml":      "http:\n  routers:\n    web:\n      rule: Host(`{{ env \"SHOP\" }}`)\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			machine := &box{beside: []switchboard.SiblingFile{{Name: name, Content: []byte(content)}}}
+			front := traefik.Traefik{Box: machine, Directory: "/etc/traefik/dynamic", Resolver: "le", HTTP: "web", HTTPS: "websecure", Port: 8480}
+			err := front.RefuseRouted(context.Background(), []string{"shop.example.com"})
+			var refused refusal.Refusal
+			if !errors.As(err, &refused) || !strings.Contains(err.Error(), "/etc/traefik/dynamic/"+name) {
+				t.Errorf("RefuseRouted() = %v, want the claim refused naming the file: its routers may already take the hostname", err)
+			}
+		})
+	}
+}
+
 func TestAContainerYourTraefikIsToldToIgnoreRoutesNothing(t *testing.T) {
 	t.Parallel()
 

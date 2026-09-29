@@ -100,6 +100,20 @@ func TestAReloadStuckBehindAFileOfYoursThatDoesNotParseNamesIt(t *testing.T) {
 	}
 }
 
+func TestAReloadLeavesUnblamedAFileOfYoursThatReadsTraefiksOwnEnvironment(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{
+		spec:   claiming("shop.example.com"),
+		beside: append(besideIn(t, "dokploy"), switchboard.SiblingFile{Name: "env.yml", Content: []byte("http:\n  routers:\n    web:\n      rule: Host(`{{ env \"SHOP\" }}`)\n      service: web\n")}),
+	}
+	err := dokploys(machine).Reload(context.Background(), proxy.Spec{})
+	unreloaded(t, err, "shop.example.com")
+	if strings.Contains(err.Error(), "env.yml") {
+		t.Errorf("Reload() = %v, want env.yml left unblamed: Traefik reads its own environment into it, which ocel cannot see", err)
+	}
+}
+
 func TestAReloadOnABoxWhereCoolifyNowRunsCaddySaysSoAndWhatToWrite(t *testing.T) {
 	t.Parallel()
 

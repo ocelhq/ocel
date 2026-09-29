@@ -138,11 +138,19 @@ func (t Traefik) routingCheck(ctx context.Context, hostname string, diagnosis fu
 }
 
 func (t Traefik) outranked(ctx context.Context, hostnames []string) (proxy.Checks, error) {
-	routers, err := t.routers(ctx)
+	routers, unread, err := t.routers(ctx)
 	if err != nil {
 		return nil, err
 	}
 	var checks proxy.Checks
+	for _, file := range unread {
+		checks = append(checks, provider.HostCheck{
+			Subject: "routers in " + file.path,
+			Verdict: provider.HostFail,
+			Finding: file.said() + ", so it cannot tell whether one of them takes a hostname ocel serves",
+			Fix:     "fix or remove " + file.path,
+		})
+	}
 	for _, each := range collisions(hostnames, routers) {
 		checks = append(checks, provider.HostCheck{
 			Subject: "router " + each.router.name + " in " + each.router.where,
