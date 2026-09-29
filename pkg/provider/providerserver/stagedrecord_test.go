@@ -19,7 +19,7 @@ import (
 
 func builtEdgeBundle(t *testing.T, app string, bundle []byte) {
 	t.Helper()
-	path := filepath.Join(buildoutput.AppRoot(buildoutput.Root(""), app), filepath.FromSlash(edge.AppBundleFile))
+	path := filepath.Join(buildoutput.AppRoot(buildoutput.Root(workingDir(t)), app), filepath.FromSlash(edge.AppBundleFile))
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}

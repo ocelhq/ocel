@@ -12,7 +12,6 @@ import (
 
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
@@ -36,7 +35,7 @@ func varsServedBy(t *testing.T, p provider.Provider) envvarsv1connect.EnvVarsSer
 	t.Cleanup(server.Close)
 
 	contract := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)
-	if _, err := contract.Configure(context.Background(), &contractv1.ConfigureRequest{}); err != nil {
+	if _, err := contract.Configure(context.Background(), configureInWorkingDir(t)); err != nil {
 		t.Fatalf("Configure() error = %v", err)
 	}
 	return envvarsv1connect.NewEnvVarsServiceClient(server.Client(), server.URL)

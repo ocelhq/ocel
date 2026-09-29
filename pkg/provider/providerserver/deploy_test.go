@@ -596,7 +596,7 @@ func servedBy(t *testing.T, p provider.Provider) contractv1connect.ProviderServi
 	t.Cleanup(server.Close)
 
 	client := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)
-	if _, err := client.Configure(context.Background(), &contractv1.ConfigureRequest{}); err != nil {
+	if _, err := client.Configure(context.Background(), configureInWorkingDir(t)); err != nil {
 		t.Fatalf("Configure() error = %v", err)
 	}
 	bootstrappedOverRPC(t, client)
@@ -620,7 +620,7 @@ func bootstrappedOverRPC(t *testing.T, client contractv1connect.ProviderServiceC
 
 func declaresNeed(t *testing.T, app string, need edge.Need) {
 	t.Helper()
-	dir := buildoutput.AppRoot(buildoutput.Root(""), app)
+	dir := buildoutput.AppRoot(buildoutput.Root(workingDir(t)), app)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -760,7 +760,7 @@ func operatorServed(t *testing.T) (contractv1connect.ProviderServiceClient, envv
 	t.Cleanup(server.Close)
 
 	deploys := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)
-	if _, err := deploys.Configure(context.Background(), &contractv1.ConfigureRequest{}); err != nil {
+	if _, err := deploys.Configure(context.Background(), configureInWorkingDir(t)); err != nil {
 		t.Fatalf("Configure() error = %v", err)
 	}
 	bootstrappedOverRPC(t, deploys)

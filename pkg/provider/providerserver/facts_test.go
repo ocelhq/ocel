@@ -32,7 +32,7 @@ func servedListingTransforms(t *testing.T, p provider.Provider) contractv1connec
 
 	client := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)
 	if _, err := client.Configure(context.Background(), &contractv1.ConfigureRequest{
-		Config: &contractv1.ProviderConfig{Transforms: []string{"./transforms/tags.transform.ts"}},
+		Config: &contractv1.ProviderConfig{Transforms: []string{"./transforms/tags.transform.ts"}, ProjectDir: workingDir(t)},
 	}); err != nil {
 		t.Fatalf("Configure() error = %v", err)
 	}

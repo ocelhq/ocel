@@ -158,7 +158,7 @@ func TestAnAppThatRoutesAtItsOriginAndNamesNoEntryIsRefused(t *testing.T) {
 
 func builtRoutingApp(t *testing.T, app string, desc edge.ServeDescriptor, manifest []byte) {
 	t.Helper()
-	dir := filepath.Join(buildoutput.Root(""), "apps", app)
+	dir := filepath.Join(buildoutput.Root(workingDir(t)), "apps", app)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}

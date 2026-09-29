@@ -62,7 +62,7 @@ func stagedProject(t *testing.T, apps ...string) {
 	t.Helper()
 	builtApps(t, apps...)
 	for _, app := range apps {
-		dir := filepath.Join(buildoutput.Root(""), filepath.FromSlash(appArtifactPath(app)))
+		dir := filepath.Join(buildoutput.Root(workingDir(t)), filepath.FromSlash(appArtifactPath(app)))
 		raw, err := json.Marshal(map[string]any{
 			"framework": map[string]string{"name": "node", "arch": "x86_64"},
 			"entryFile": "index.handler",

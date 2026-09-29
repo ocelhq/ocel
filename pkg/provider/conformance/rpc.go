@@ -236,13 +236,13 @@ func bootstrapStream(t *testing.T, client contractv1connect.ProviderServiceClien
 func configureWith(t *testing.T, options provider.Options) *contractv1.ConfigureRequest {
 	t.Helper()
 	if options == nil {
-		return &contractv1.ConfigureRequest{Config: &contractv1.ProviderConfig{}}
+		return &contractv1.ConfigureRequest{Config: &contractv1.ProviderConfig{ProjectDir: t.TempDir()}}
 	}
 	fields, err := structpb.NewStruct(options)
 	if err != nil {
 		t.Fatalf("structpb.NewStruct(%v) error = %v", options, err)
 	}
-	return &contractv1.ConfigureRequest{Config: &contractv1.ProviderConfig{Options: fields}}
+	return &contractv1.ConfigureRequest{Config: &contractv1.ProviderConfig{Options: fields, ProjectDir: t.TempDir()}}
 }
 
 func client(httpClient connect.HTTPClient, url string) contractv1connect.ProviderServiceClient {

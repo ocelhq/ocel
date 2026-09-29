@@ -76,11 +76,11 @@ message ProviderConfig {
 
   string slug = 3;
 
-  string project_dir = 4;
+  string project_dir = 4 [(buf.validate.field).string.min_len = 1];
 }
 
 message ConfigureRequest {
-  ProviderConfig config = 1;
+  ProviderConfig config = 1 [(buf.validate.field).required = true];
 }
 
 message ConfigureResponse {

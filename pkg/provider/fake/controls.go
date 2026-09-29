@@ -3,6 +3,7 @@ package fake
 import (
 	"context"
 
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -20,6 +21,11 @@ func (p *Provider) WithHooks(set func(*provider.Hooks)) *Provider {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	set(&p.hooks)
+	return p
+}
+
+func (p *Provider) WithProjectDir(dir string) *Provider {
+	p.stacks.artifactRoot = buildoutput.Root(dir)
 	return p
 }
 

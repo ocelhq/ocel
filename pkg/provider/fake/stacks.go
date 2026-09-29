@@ -30,7 +30,7 @@ type Stacks struct {
 }
 
 func NewStacks(artifacts provider.ArtifactStore) *Stacks {
-	return &Stacks{artifacts: artifacts, artifactRoot: buildoutput.Root(""), stacks: map[string]provider.StackResult{}}
+	return &Stacks{artifacts: artifacts, stacks: map[string]provider.StackResult{}}
 }
 
 func (r *Stacks) journalling(journal *Journal) *Stacks {
@@ -136,6 +136,9 @@ func (r *Stacks) Inspect(ref provider.StackRef) provider.InspectedStack {
 }
 
 func (r *Stacks) deliveredEdgeBundle(spec provider.StackSpec) string {
+	if r.artifactRoot == "" {
+		return ""
+	}
 	root := buildoutput.AppRoot(r.artifactRoot, spec.App.App)
 	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(edge.AppBundleFile))); err != nil {
 		return ""

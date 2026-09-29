@@ -431,7 +431,7 @@ func (b *barrierArtifacts) Put(ctx context.Context, ref provider.ArtifactRef, bo
 func builtFunction(t *testing.T, name string) string {
 	t.Helper()
 	path := "apps/web/functions/" + name + ".func"
-	dir := filepath.Join(buildoutput.Root(""), filepath.FromSlash(path))
+	dir := filepath.Join(buildoutput.Root(workingDir(t)), filepath.FromSlash(path))
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}

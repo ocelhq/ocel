@@ -201,7 +201,7 @@ func configured(t *testing.T, options provider.Options) (contractv1connect.Provi
 	server := httptest.NewServer(providerserver.ConformanceMux(config))
 	t.Cleanup(server.Close)
 	client := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)
-	if _, err := client.Configure(context.Background(), &contractv1.ConfigureRequest{}); err != nil {
+	if _, err := client.Configure(context.Background(), &contractv1.ConfigureRequest{Config: &contractv1.ProviderConfig{ProjectDir: t.TempDir()}}); err != nil {
 		t.Fatalf("Configure(%v) error = %v, want it to answer: nothing has reached the cloud yet", options, err)
 	}
 	return client, costv1connect.NewCostServiceClient(server.Client(), server.URL)

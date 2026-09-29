@@ -37,7 +37,7 @@ func costServed(t *testing.T, p provider.Provider) (contractv1connect.ProviderSe
 	server := httptest.NewServer(providerserver.ConformanceMux(config))
 	t.Cleanup(server.Close)
 	client := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)
-	if _, err := client.Configure(context.Background(), &contractv1.ConfigureRequest{}); err != nil {
+	if _, err := client.Configure(context.Background(), configureInWorkingDir(t)); err != nil {
 		t.Fatalf("Configure() error = %v", err)
 	}
 	return client, costv1connect.NewCostServiceClient(server.Client(), server.URL)
@@ -125,7 +125,7 @@ func TestConfigureSaysWhetherTheProviderPricesADeploy(t *testing.T) {
 			t.Cleanup(server.Close)
 
 			configured, err := contractv1connect.NewProviderServiceClient(server.Client(), server.URL).
-				Configure(context.Background(), &contractv1.ConfigureRequest{})
+				Configure(context.Background(), configureInWorkingDir(t))
 			if err != nil {
 				t.Fatalf("Configure() error = %v", err)
 			}

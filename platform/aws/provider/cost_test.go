@@ -38,7 +38,7 @@ func costServed(t *testing.T) (contractv1connect.ProviderServiceClient, costv1co
 	server := httptest.NewServer(providerserver.ConformanceMux(config))
 	t.Cleanup(server.Close)
 	client := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)
-	if _, err := client.Configure(context.Background(), &contractv1.ConfigureRequest{}); err != nil {
+	if _, err := client.Configure(context.Background(), &contractv1.ConfigureRequest{Config: &contractv1.ProviderConfig{ProjectDir: t.TempDir()}}); err != nil {
 		t.Fatalf("Configure() error = %v", err)
 	}
 	return client, costv1connect.NewCostServiceClient(server.Client(), server.URL)
@@ -178,7 +178,7 @@ func TestShapeWithABroughtVarsKeyProvisionsNoKey(t *testing.T) {
 	server := httptest.NewServer(providerserver.ConformanceMux(config))
 	t.Cleanup(server.Close)
 	client := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)
-	if _, err := client.Configure(context.Background(), &contractv1.ConfigureRequest{}); err != nil {
+	if _, err := client.Configure(context.Background(), &contractv1.ConfigureRequest{Config: &contractv1.ProviderConfig{ProjectDir: t.TempDir()}}); err != nil {
 		t.Fatalf("Configure() error = %v", err)
 	}
 

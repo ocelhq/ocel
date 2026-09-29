@@ -44,7 +44,7 @@ func overTheContract(t *testing.T, p *vps.Provider) contractv1connect.ProviderSe
 	t.Cleanup(server.Close)
 
 	client := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)
-	if _, err := client.Configure(context.Background(), &contractv1.ConfigureRequest{}); err != nil {
+	if _, err := client.Configure(context.Background(), &contractv1.ConfigureRequest{Config: &contractv1.ProviderConfig{ProjectDir: t.TempDir()}}); err != nil {
 		t.Fatalf("Configure() = %v", err)
 	}
 	return client

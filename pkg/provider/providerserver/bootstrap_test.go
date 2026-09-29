@@ -28,7 +28,7 @@ import (
 func contractServed(t *testing.T, version string) (contractv1connect.ProviderServiceClient, *fake.Provider) {
 	t.Helper()
 
-	vendor := fake.NewProvider(fake.Options{Region: "nowhere"})
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t))
 	return servedProvider(t, version, vendor), vendor
 }
 
@@ -45,7 +45,7 @@ func servedProvider(t *testing.T, version string, p provider.Provider) contractv
 	t.Cleanup(server.Close)
 
 	client := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)
-	if _, err := client.Configure(context.Background(), &contractv1.ConfigureRequest{}); err != nil {
+	if _, err := client.Configure(context.Background(), configureInWorkingDir(t)); err != nil {
 		t.Fatalf("Configure() error = %v", err)
 	}
 	return client
