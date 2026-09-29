@@ -95,7 +95,7 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 		}
 		scope.End(nil)
 		if err := steps.run(cfg.Slug, "Building "+appList(cfg), func() (err error) {
-			built, err = deps.BuildApps(ctx, cfg, buildEnv(specs), containerArchs, steps.log("Building app "))
+			built, err = deps.BuildApps(ctx, cfg, build.Env(clients), containerArchs, steps.log("Building app "))
 			if err != nil {
 				return err
 			}
@@ -350,21 +350,6 @@ func appSpecs(cfg *projectconfig.Config, variables map[string][]manifestbuilder.
 		})
 	}
 	return specs
-}
-
-func buildEnv(specs []appSpec) map[string]map[string]string {
-	byApp := make(map[string]map[string]string, len(specs))
-	for _, spec := range specs {
-		env := make(map[string]string)
-		for _, v := range spec.variables {
-			if v.Class != resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN {
-				continue
-			}
-			env[v.Key] = v.Value
-		}
-		byApp[spec.name] = env
-	}
-	return byApp
 }
 
 func clientApps(specs []appSpec) []clientenv.App {

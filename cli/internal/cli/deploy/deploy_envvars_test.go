@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/attribution"
+	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/variables"
@@ -129,93 +130,20 @@ func TestAppVariables(t *testing.T) {
 	})
 }
 
-func TestBuildEnv(t *testing.T) {
+func TestTheRootStandInIsBuiltUnderNoAppName(t *testing.T) {
 	t.Parallel()
 
-	t.Run("exports every plaintext value under its own name and nothing else", func(t *testing.T) {
-		t.Parallel()
+	variables := map[string][]manifestbuilder.Variable{
+		variablescope.RootApp: {{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-123"}},
+	}
 
-		specs := []appSpec{{name: "storefront", variables: []manifestbuilder.Variable{
-			{Key: "NEXT_PUBLIC_SITE_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "https://example.com", ClientAccessible: true},
-			{Key: "INTERNAL_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "http://internal"},
-			{Key: "STRIPE_API_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Value: "sk-live"},
-		}}}
-
-		env := buildEnv(specs)["storefront"]
-		if got, want := env["NEXT_PUBLIC_SITE_URL"], "https://example.com"; got != want {
-			t.Errorf("NEXT_PUBLIC_SITE_URL = %q, want %q", got, want)
-		}
-		if got, want := env["INTERNAL_URL"], "http://internal"; got != want {
-			t.Errorf("INTERNAL_URL = %q, want %q: a build reads the plaintext class, client-accessible or not", got, want)
-		}
-		if _, ok := env["STRIPE_API_KEY"]; ok {
-			t.Error("env contains STRIPE_API_KEY; an encrypted class is nothing a build may read")
-		}
-		if _, ok := env["NEXT_PUBLIC_NEXT_PUBLIC_SITE_URL"]; ok {
-			t.Error("env contains a prefixed name; a key is delivered as it was declared")
-		}
-	})
-
-	t.Run("exports only plaintext values", func(t *testing.T) {
-		t.Parallel()
-
-		specs := []appSpec{
-			{name: "admin", variables: []manifestbuilder.Variable{
-				{Key: "SHARED_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "same"},
-				{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-admin"},
-				{Key: "STRIPE_API_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Value: "sk-live"},
-			}},
-			{name: "storefront", variables: []manifestbuilder.Variable{
-				{Key: "SHARED_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "same"},
-				{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-store"},
-				{Key: "STRIPE_API_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Value: "sk-live"},
-			}},
-		}
-
-		env := buildEnv(specs)
-		if got, want := env["admin"]["SHARED_ID"], "same"; got != want {
-			t.Errorf("admin SHARED_ID = %q, want %q", got, want)
-		}
-		if _, ok := env["admin"]["STRIPE_API_KEY"]; ok {
-			t.Errorf("admin env = %v, must not contain an encrypted-class value", env["admin"])
-		}
-		if _, ok := env["storefront"]["STRIPE_API_KEY"]; ok {
-			t.Errorf("storefront env = %v, must not contain an encrypted-class value", env["storefront"])
-		}
-	})
-
-	t.Run("gives each app its own value for a diverged key", func(t *testing.T) {
-		t.Parallel()
-
-		specs := []appSpec{
-			{name: "storefront", variables: []manifestbuilder.Variable{{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-store"}}},
-			{name: "admin", variables: []manifestbuilder.Variable{{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-admin"}}},
-		}
-
-		env := buildEnv(specs)
-		if got, want := env["storefront"]["POSTHOG_ID"], "ph-store"; got != want {
-			t.Errorf("storefront POSTHOG_ID = %q, want %q", got, want)
-		}
-		if got, want := env["admin"]["POSTHOG_ID"], "ph-admin"; got != want {
-			t.Errorf("admin POSTHOG_ID = %q, want %q", got, want)
-		}
-	})
-
-	t.Run("the root stand-in is keyed by no app at all", func(t *testing.T) {
-		t.Parallel()
-
-		variables := map[string][]manifestbuilder.Variable{
-			variablescope.RootApp: {{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-123"}},
-		}
-
-		env := buildEnv(appSpecs(&projectconfig.Config{Dir: t.TempDir()}, variables))
-		if _, ok := env[variablescope.RootApp]; ok {
-			t.Errorf("env = %v, still keyed by a placeholder name no build knows", env)
-		}
-		if got, want := env[""]["POSTHOG_ID"], "ph-123"; got != want {
-			t.Errorf("root env POSTHOG_ID = %q, want %q", got, want)
-		}
-	})
+	env := build.Env(clientApps(appSpecs(&projectconfig.Config{Dir: t.TempDir()}, variables)))
+	if _, ok := env[variablescope.RootApp]; ok {
+		t.Errorf("env = %v, still keyed by a placeholder name no build knows", env)
+	}
+	if got, want := env[""]["POSTHOG_ID"], "ph-123"; got != want {
+		t.Errorf("root env POSTHOG_ID = %q, want %q", got, want)
+	}
 }
 
 func TestVariablesByApp(t *testing.T) {

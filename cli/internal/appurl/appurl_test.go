@@ -1,7 +1,6 @@
 package appurl_test
 
 import (
-	"maps"
 	"slices"
 	"testing"
 
@@ -140,27 +139,6 @@ func TestPrepend(t *testing.T) {
 	}
 	if len(byApp["docs"]) != 0 {
 		t.Errorf("docs variables = %+v, want none where the app has no hostname", byApp["docs"])
-	}
-}
-
-func TestBuildEnv(t *testing.T) {
-	t.Parallel()
-
-	env := appurl.BuildEnv(&projectconfig.Config{}, map[string]string{variablescope.RootApp: "https://acme.com"})
-	if got, want := env[""][constants.AppURLEnvName], "https://acme.com"; got != want {
-		t.Errorf("build env = %v, want the unnamed app keyed as the builder keys it, set to %q", env, want)
-	}
-	if got, want := env[""][appbuild.ClientURLEnvName], "https://acme.com"; got != want {
-		t.Errorf("build env %s = %q, want %q: an app `apps` does not name is built by the node builder", appbuild.ClientURLEnvName, got, want)
-	}
-
-	cfg := &projectconfig.Config{Apps: []projectconfig.App{{Name: "api", Framework: projectconfig.Framework{Name: appbuild.FrameworkPython}}}}
-	if got := appurl.BuildEnv(cfg, map[string]string{"api": "https://api.acme.com"})["api"]; !maps.Equal(got, map[string]string{constants.AppURLEnvName: "https://api.acme.com"}) {
-		t.Errorf("build env = %v, want only %s for a python app", got, constants.AppURLEnvName)
-	}
-
-	if got := appurl.BuildEnv(cfg, map[string]string{"api": ""})["api"]; len(got) != 0 {
-		t.Errorf("build env = %v, want the key absent where the app is served on no hostname, rather than an empty string a build would parse", got)
 	}
 }
 

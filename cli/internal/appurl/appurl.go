@@ -75,26 +75,6 @@ func Prepend(cfg *projectconfig.Config, byApp map[string][]manifestbuilder.Varia
 	}
 }
 
-func BuildEnv(cfg *projectconfig.Config, byURL map[string]string) map[string]map[string]string {
-	bundles := clientBundles(cfg)
-	byApp := make(map[string]map[string]string, len(byURL))
-	for app, url := range byURL {
-		env := make(map[string]string, 2)
-		for _, v := range Variables(bundles[app], url) {
-			env[v.Key] = v.Value
-		}
-		byApp[BuildKey(app)] = env
-	}
-	return byApp
-}
-
-func BuildKey(app string) string {
-	if app == variablescope.RootApp {
-		return ""
-	}
-	return app
-}
-
 func first(hosts []string) string {
 	if len(hosts) == 0 {
 		return ""

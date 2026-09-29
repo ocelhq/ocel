@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
@@ -99,6 +100,32 @@ export default {
 			if !strings.Contains(stdout.String(), want) {
 				t.Errorf("stdout = %q, want it to name %q", stdout.String(), want)
 			}
+		}
+	})
+
+	t.Run("bakes each app's plaintext client values, as a deploy does", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  slug: "test-app",
+  apps: [{ name: "web", path: ".", framework: "next", domains: { production: ["shop.acme.com"] } }],
+};
+`)
+
+		var env map[string]map[string]string
+		deps := newDeps()
+		deps.BuildApps = func(_ context.Context, _ *projectconfig.Config, handed map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
+			env = handed
+			return build.Output{}, nil
+		}
+
+		if err := runBuild(context.Background(), deps, root, io.Discard, io.Discard); err != nil {
+			t.Fatalf("runBuild: %v", err)
+		}
+		if got, want := env["web"][appbuild.ClientURLEnvName], "https://shop.acme.com"; got != want {
+			t.Errorf("web was built with %s = %q, want %q", appbuild.ClientURLEnvName, got, want)
 		}
 	})
 

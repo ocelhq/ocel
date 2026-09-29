@@ -67,12 +67,12 @@ func runBuild(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr
 	}
 	defer run.Close()
 
-	urls := appurl.Production(cfg)
-	built, err := deps.BuildApps(ctx, cfg, appurl.BuildEnv(cfg, urls), declaredArchs(cfg), build.Log{Shared: stderr})
+	clients := builtInClients(cfg, appurl.Production(cfg))
+	built, err := deps.BuildApps(ctx, cfg, build.Env(clients), declaredArchs(cfg), build.Log{Shared: stderr})
 	if err != nil {
 		return err
 	}
-	if err := clientenv.Record(cfg.Dir, builtInClients(cfg, urls)); err != nil {
+	if err := clientenv.Record(cfg.Dir, clients); err != nil {
 		return err
 	}
 	reportBuilt(stdout, built)
