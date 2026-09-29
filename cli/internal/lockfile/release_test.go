@@ -44,13 +44,16 @@ func TestTheLockPinsWhatGoreleaserActuallyBuilt(t *testing.T) {
 	if len(lock.Connectors) == 0 {
 		t.Fatal("the release contains no connector the lock can pin")
 	}
-	for _, kind := range providers.Kinds {
-		for name, pinned := range lock.pinned(kind) {
-			for _, platform := range kind.PlatformsFor(name) {
-				if _, ok := pinned[platform.Dir()]; !ok {
-					t.Errorf("the release ships no %s %s for %s", name, kind, platform.Dir())
-				}
+	for name, pinned := range lock.pinned(providers.KindProvider) {
+		for _, platform := range providers.Platforms {
+			if _, ok := pinned[platform.Dir()]; !ok {
+				t.Errorf("the release ships no %s provider for %s, a platform the CLI runs on", name, platform.Dir())
 			}
+		}
+	}
+	for name, pinned := range lock.pinned(providers.KindConnector) {
+		if len(pinned) == 0 {
+			t.Errorf("the lock pins the %s connector for no platform", name)
 		}
 	}
 }

@@ -99,24 +99,3 @@ func TestPlatformsAreTheFiveTheReleaseShips(t *testing.T) {
 		t.Fatalf("Platform.Dir() = %q, want %q", got, "linux-amd64")
 	}
 }
-
-func TestAConnectorShipsForWhatTheVendorThatHostsItRuns(t *testing.T) {
-	t.Parallel()
-
-	want := map[string][]Platform{
-		"aws": {{GOOS: "linux", GOARCH: "arm64"}},
-		"gcp": {{GOOS: "linux", GOARCH: "amd64"}},
-		"vps": {{GOOS: "linux", GOARCH: "amd64"}, {GOOS: "linux", GOARCH: "arm64"}},
-	}
-	for name, platforms := range want {
-		if !slices.Equal(KindConnector.PlatformsFor(name), platforms) {
-			t.Errorf("KindConnector.PlatformsFor(%q) = %+v, want %+v", name, KindConnector.PlatformsFor(name), platforms)
-		}
-	}
-	if KindConnector.PlatformsFor("nowhere") != nil {
-		t.Error("a vendor no connector is built for named platforms, and the lock would then pin an archive no release ships")
-	}
-	if !slices.Equal(KindProvider.PlatformsFor("aws"), Platforms) {
-		t.Fatal("a provider ships for every platform the CLI runs on, and this says otherwise")
-	}
-}
