@@ -48,13 +48,16 @@ func ResolveComputes(cfg *projectconfig.Config, computes []string, vendor string
 	}
 	for i := range cfg.Apps {
 		cfg.Apps[i].Compute = resolved[i]
+		if resolved[i] == string(provider.ComputeContainer) && cfg.Apps[i].Framework.Detected {
+			cfg.Apps[i].Framework = projectconfig.Framework{Arch: cfg.Apps[i].Framework.Arch}
+		}
 	}
 	return fallback, nil
 }
 
 func containerOnly(app projectconfig.App, compute string) error {
 	if compute == string(provider.ComputeContainer) {
-		if app.Framework.Name != "" {
+		if app.Framework.Name != "" && !app.Framework.Detected {
 			return fmt.Errorf(
 				"app %q declares framework %q, and it runs on %q compute, which runs the image it is given: a framework names what a serverless app's functions are built with and nothing else — give %q `compute: \"serverless\"`, or remove its `framework`",
 				app.Name, app.Framework.Name, compute, app.Name,

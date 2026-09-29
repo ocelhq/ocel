@@ -180,6 +180,36 @@ func TestAContainerAppThatDeclaresAFrameworkFailsThePlanByTheKeyOcelJSONSets(t *
 	}
 }
 
+func TestAnAppWhoseFrameworkWasOnlyDetectedRunsOnAContainerOnlyProviderWithoutIt(t *testing.T) {
+	t.Parallel()
+
+	cfg := &projectconfig.Config{Apps: []projectconfig.App{
+		{Name: "web", Framework: projectconfig.Framework{Name: "next", Detected: true}},
+	}}
+
+	if _, err := ResolveComputes(cfg, []string{"container"}, "vps"); err != nil {
+		t.Fatalf("ResolveComputes() error = %v, want an app that declares neither compute nor framework to run on the provider's only compute", err)
+	}
+	if got := cfg.Apps[0]; got.Compute != "container" || got.Framework.Name != "" {
+		t.Errorf("app resolved to compute %q with framework %q, want container and no framework: a container runs the image it is given", got.Compute, got.Framework.Name)
+	}
+}
+
+func TestAnAppWhoseFrameworkWasOnlyDetectedKeepsItOnServerless(t *testing.T) {
+	t.Parallel()
+
+	cfg := &projectconfig.Config{Apps: []projectconfig.App{
+		{Name: "web", Framework: projectconfig.Framework{Name: "next", Detected: true}},
+	}}
+
+	if _, err := ResolveComputes(cfg, []string{"serverless", "container"}, "aws"); err != nil {
+		t.Fatalf("ResolveComputes() error = %v", err)
+	}
+	if got := cfg.Apps[0].Framework.Name; got != "next" {
+		t.Errorf("framework = %q, want next: serverless builds the app with the framework it detected", got)
+	}
+}
+
 func TestAnAppThatFallsBackToContainerIsRefusedItsRuntimeToo(t *testing.T) {
 	t.Parallel()
 

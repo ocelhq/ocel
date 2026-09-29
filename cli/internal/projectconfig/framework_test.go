@@ -221,8 +221,8 @@ export default {
 		if err != nil {
 			t.Fatalf("Resolve: %v", err)
 		}
-		if got, want := cfg.Apps[0].Framework, (Framework{Name: "next"}); got != want {
-			t.Fatalf("Apps[0].Framework = %+v, want %+v: the app's own manifest says what it is", got, want)
+		if got, want := cfg.Apps[0].Framework, (Framework{Name: "next", Detected: true}); got != want {
+			t.Fatalf("Apps[0].Framework = %+v, want %+v: the app's own manifest says what it is, and the config never named it", got, want)
 		}
 	})
 
