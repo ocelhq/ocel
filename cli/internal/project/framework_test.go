@@ -97,6 +97,21 @@ func TestDetectFramework(t *testing.T) {
 			want:  "python",
 		},
 		{
+			name:  "a package.json beside a go module lists the go app's tooling",
+			files: map[string]string{"package.json": `{}`, "go.mod": "module example.com/api\n"},
+			want:  "go",
+		},
+		{
+			name:  "a next manifest beside a go module is still the go app's tooling",
+			files: map[string]string{"package.json": nextManifest, "go.mod": "module example.com/api\n"},
+			want:  "go",
+		},
+		{
+			name:  "a go module comes before a cargo manifest beside it",
+			files: map[string]string{"Cargo.toml": "[package]\nname = \"api\"\n", "go.mod": "module example.com/api\n"},
+			want:  "go",
+		},
+		{
 			name:  "a next config decides it before the manifest is ever read",
 			files: map[string]string{"package.json": "{ not json", "next.config.ts": "export default {};"},
 			want:  "next",
@@ -137,54 +152,6 @@ func TestDetectFrameworkRefusals(t *testing.T) {
 		}
 	})
 
-	t.Run("a directory containing two frameworks' manifests is refused rather than guessed at", func(t *testing.T) {
-		t.Parallel()
-
-		dir := appDir(t, map[string]string{"package.json": `{}`, "go.mod": "module example.com/api\n"})
-
-		_, err := detectFramework(dir)
-		if err == nil {
-			t.Fatal("detectFramework = nil error, want a refusal: node and go both have manifests here")
-		}
-		for _, want := range []string{dir, "framework", "node", "go"} {
-			if !strings.Contains(err.Error(), want) {
-				t.Errorf("error = %q, missing %q", err, want)
-			}
-		}
-	})
-
-	t.Run("a next manifest beside a go module is refused, not read as next", func(t *testing.T) {
-		t.Parallel()
-
-		dir := appDir(t, map[string]string{"package.json": nextManifest, "go.mod": "module example.com/api\n"})
-
-		_, err := detectFramework(dir)
-		if err == nil {
-			t.Fatal("detectFramework = nil error, want a refusal: next does not decide what go also claims")
-		}
-		for _, want := range []string{dir, "framework", "node", "go"} {
-			if !strings.Contains(err.Error(), want) {
-				t.Errorf("error = %q, missing %q", err, want)
-			}
-		}
-	})
-
-	t.Run("a cargo manifest beside a go module is refused rather than guessed at", func(t *testing.T) {
-		t.Parallel()
-
-		dir := appDir(t, map[string]string{"Cargo.toml": "[package]\nname = \"api\"\n", "go.mod": "module example.com/api\n"})
-
-		_, err := detectFramework(dir)
-		if err == nil {
-			t.Fatal("detectFramework = nil error, want a refusal: go and rust both have manifests here")
-		}
-		for _, want := range []string{dir, "framework", "go", "rust"} {
-			if !strings.Contains(err.Error(), want) {
-				t.Errorf("error = %q, missing %q", err, want)
-			}
-		}
-	})
-
 	t.Run("a package.json that is not JSON is surfaced rather than read as plain node", func(t *testing.T) {
 		t.Parallel()
 
@@ -201,6 +168,8 @@ func TestDetectFrameworkRefusals(t *testing.T) {
 }
 
 const nextManifest = `{"dependencies":{"next":"15.0.0"}}`
+
+const nodeManifest = "package.json"
 
 func TestLoadReadsTheFrameworkOffTheAppItself(t *testing.T) {
 	t.Parallel()

@@ -46,6 +46,42 @@ func TestTheRootAppOfANextProjectIsBuiltWithNext(t *testing.T) {
 	}
 }
 
+func TestARootWithAGoModuleBesideAPackageJSONIsReadAsGoWhetherOrNotItNamesApps(t *testing.T) {
+	t.Parallel()
+
+	t.Run("naming no apps, it has no node app at its root", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		write(t, filepath.Join(dir, DefaultFileName), `{"slug":"shop"}`)
+		write(t, filepath.Join(dir, "go.mod"), "module example.com/shop\n")
+		write(t, filepath.Join(dir, nodeManifest), `{"devDependencies":{"tailwindcss":"4"}}`)
+
+		cfg, err := Load(context.Background(), dir, "")
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if len(cfg.Apps) != 0 {
+			t.Errorf("Apps = %+v, want none: the package.json beside a go module lists the go project's tooling", cfg.Apps)
+		}
+	})
+
+	t.Run("naming its root as an app, that app is built with go", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		write(t, filepath.Join(dir, DefaultFileName), `{"slug":"shop","apps":[{"name":"shop","path":"."}]}`)
+		write(t, filepath.Join(dir, "go.mod"), "module example.com/shop\n")
+		write(t, filepath.Join(dir, nodeManifest), `{"devDependencies":{"tailwindcss":"4"}}`)
+
+		cfg, err := Load(context.Background(), dir, "")
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if len(cfg.Apps) != 1 || cfg.Apps[0].Framework() != buildoutput.FrameworkGo {
+			t.Errorf("Apps = %+v, want one go app: the same root decides the same language however it is named", cfg.Apps)
+		}
+	})
+}
+
 func TestAProjectWithNoPackageJSONAtItsRootAndNoAppsDeploysNoApp(t *testing.T) {
 	t.Parallel()
 

@@ -11,7 +11,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/arch"
-	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/configdoc"
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -195,16 +194,9 @@ func shapeApp(app *App, a configdoc.AppConfig, dir string) error {
 }
 
 func rootApp(name, dir string) ([]App, error) {
-	if !isRegularFile(filepath.Join(dir, nodeManifest)) {
-		return nil, nil
-	}
-	framework := buildoutput.FrameworkNode
-	next, err := isNextApp(dir)
-	if err != nil {
+	framework, found, err := language.DetectFramework(dir)
+	if err != nil || !found || language.OfApp(framework, dir) != language.JS {
 		return nil, err
-	}
-	if next {
-		framework = buildoutput.FrameworkNext
 	}
 	return []App{{
 		Name:       name,

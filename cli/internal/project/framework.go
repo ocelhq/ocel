@@ -1,10 +1,7 @@
 package project
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 
 	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/language"
@@ -12,73 +9,15 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 )
 
-const (
-	nodeManifest   = "package.json"
-	nextDependency = "next"
-)
-
-var nextConfigNames = []string{"next.config.js", "next.config.mjs", "next.config.ts"}
-
-var languageFrameworks = map[language.Language]string{
-	language.JS:     buildoutput.FrameworkNode,
-	language.Go:     buildoutput.FrameworkGo,
-	language.Python: buildoutput.FrameworkPython,
-	language.Rust:   buildoutput.FrameworkRust,
-}
-
 func detectFramework(dir string) (string, error) {
-	found := language.Manifested(dir)
-	named := make([]string, 0, len(found))
-	for _, written := range found {
-		named = append(named, languageFrameworks[written])
+	framework, found, err := language.DetectFramework(dir)
+	if err != nil || found {
+		return framework, err
 	}
-	switch len(named) {
-	case 1:
-		if found[0] != language.JS {
-			return named[0], nil
-		}
-		next, err := isNextApp(dir)
-		if err != nil {
-			return "", err
-		}
-		if next {
-			return buildoutput.FrameworkNext, nil
-		}
-		return buildoutput.FrameworkNode, nil
-	case 0:
-		return "", fmt.Errorf(
-			"nothing in %s says what this app is built with: it contains no %s, so set \"framework\" to one of %s",
-			dir, english.Or(language.ManifestNames()), english.Or(english.Quoted(buildoutput.Frameworks())),
-		)
-	default:
-		return "", fmt.Errorf(
-			"%s contains the manifests of %s at once, and one app is built one way: set \"framework\" to the one this app is",
-			dir, english.And(english.Quoted(named)),
-		)
-	}
-}
-
-func isNextApp(dir string) (bool, error) {
-	for _, name := range nextConfigNames {
-		if isRegularFile(filepath.Join(dir, name)) {
-			return true, nil
-		}
-	}
-	path := filepath.Join(dir, nodeManifest)
-	body, err := os.ReadFile(path)
-	if err != nil {
-		return false, fmt.Errorf("read %s: %w", path, err)
-	}
-	var manifest struct {
-		Dependencies map[string]string `json:"dependencies"`
-		DevDeps      map[string]string `json:"devDependencies"`
-	}
-	if err := json.Unmarshal(body, &manifest); err != nil {
-		return false, fmt.Errorf("%s is not JSON: %w", path, err)
-	}
-	_, dep := manifest.Dependencies[nextDependency]
-	_, devDep := manifest.DevDeps[nextDependency]
-	return dep || devDep, nil
+	return "", fmt.Errorf(
+		"nothing in %s says what this app is built with: it contains no %s, so set \"framework\" to one of %s",
+		dir, english.Or(language.ManifestNames()), english.Or(english.Quoted(buildoutput.Frameworks())),
+	)
 }
 
 func frameworkOf(app string, dir string, named string) (string, error) {
