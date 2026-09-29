@@ -299,3 +299,75 @@ func TestAnOriginCertificateIssuedForAClaimTheRouterRefusesIsRevoked(t *testing.
 		t.Errorf("the edge revoked %v, want origin-certificate-1: a certificate nothing answers with stays valid for a year unless it is revoked", revoked)
 	}
 }
+
+func addWebHostnameRefused(t *testing.T, client contractv1connect.ProviderServiceClient, host string) {
+	t.Helper()
+	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
+		Slug:       "shop",
+		Configured: []*contractv1.ConfiguredHostname{{Hostname: host, App: "web"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result, err := drain(stream); err != nil || result.GetSuccess() {
+		t.Fatalf("AddHostname() succeeded = %t, %v, want it failed with the bind the edge refused", result.GetSuccess(), err)
+	}
+}
+
+func TestAHostnameWhoseFirstBindIsRefusedGivesItsClaimBackAndRevokesTheOriginCertificateIssuedForIt(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	relay := vendor.Edges().(*fake.Edges).Edge(fake.KindRelay)
+	relay.ProxiesRecords()
+	relay.IssuesOriginCertificates()
+	relay.RefusesBinds(errors.New("a record of that name was not written by ocel"))
+	deployed(t, vendor, environment.TierProduction, "shop")
+
+	addWebHostnameRefused(t, client, "app.acme.com")
+
+	if disclaimed := relay.Disclaimed(); !slices.Equal(disclaimed, []string{"app.acme.com"}) {
+		t.Errorf("the router gave back %v, want app.acme.com: no edge forwards a hostname whose bind failed", disclaimed)
+	}
+	if revoked := relay.RevokedOriginCertificates(); !slices.Equal(revoked, []string{"origin-certificate-1"}) {
+		t.Errorf("the edge revoked %v, want origin-certificate-1: nothing answers with the certificate of a claim given back", revoked)
+	}
+	if recorded := readStack(t, vendor, environment.TierProduction, "shop").Host("app.acme.com").OriginCertificateID; recorded != "" {
+		t.Errorf("the hostname records origin certificate %q, want none: the one issued for it is revoked", recorded)
+	}
+
+	relay.RefusesBinds(nil)
+	addWebHostname(t, client, "app.acme.com", nil)
+	if recorded := readStack(t, vendor, environment.TierProduction, "shop").Host("app.acme.com").OriginCertificateID; recorded != "origin-certificate-2" {
+		t.Errorf("the hostname records origin certificate %q, want origin-certificate-2, issued when it was claimed again: a certificate the hostname does not record is never renewed", recorded)
+	}
+}
+
+func TestAServedHostnameWhoseRenewalBindIsRefusedRecordsTheSuccessorTheRouterHoldsAndRevokesThePredecessor(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	relay := vendor.Edges().(*fake.Edges).Edge(fake.KindRelay)
+	relay.ProxiesRecords()
+	relay.IssuesOriginCertificates()
+	deployed(t, vendor, environment.TierProduction, "shop")
+	addWebHostname(t, client, "app.acme.com", nil)
+
+	relay.ForgetsOriginCertificate("app.acme.com")
+	state := readStack(t, vendor, environment.TierProduction, "shop")
+	hostState := state.Host("app.acme.com")
+	hostState.OriginCertificateExpiresAt = time.Now().Add(time.Hour)
+	state.SetHost("app.acme.com", hostState)
+	seedStack(t, vendor, environment.TierProduction, "shop", state)
+	relay.RefusesBinds(errors.New("cloudflare answered 500"))
+
+	addWebHostnameRefused(t, client, "app.acme.com")
+
+	if recorded := readStack(t, vendor, environment.TierProduction, "shop").Host("app.acme.com").OriginCertificateID; recorded != "origin-certificate-2" {
+		t.Errorf("the hostname records origin certificate %q, want origin-certificate-2, which the router answers it with: a certificate the hostname does not record is never renewed nor revoked", recorded)
+	}
+	if revoked := relay.RevokedOriginCertificates(); !slices.Equal(revoked, []string{"origin-certificate-1"}) {
+		t.Errorf("the edge revoked %v, want the predecessor origin-certificate-1, which nothing answers with any more", revoked)
+	}
+	if disclaimed := relay.Disclaimed(); len(disclaimed) != 0 {
+		t.Errorf("the router gave back %v, want nothing: the hostname is still served", disclaimed)
+	}
+}

@@ -142,6 +142,7 @@ type Edge struct {
 	purgeError error
 
 	refusesCertified error
+	refusesBinds     error
 	onIssued         func()
 	onEntryClaimed   func()
 }
@@ -150,6 +151,12 @@ func (e *Edge) RefusesClaimsCarryingAnOriginCertificate(err error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.refusesCertified = err
+}
+
+func (e *Edge) RefusesBinds(err error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.refusesBinds = err
 }
 
 func (e *Edge) OnOriginCertificateIssued(fn func()) {
@@ -347,6 +354,7 @@ func (e *Edge) recordDisclaim(hostname string) {
 	defer e.mu.Unlock()
 	e.disclaimed = append(e.disclaimed, hostname)
 	e.holding = slices.DeleteFunc(e.holding, func(held string) bool { return held == hostname })
+	delete(e.held, hostname)
 }
 
 func (e *Edge) listHeldClaims() []string {
@@ -373,14 +381,18 @@ func (e *Edge) Bindings() []edge.DomainBinding {
 	return slices.Clone(e.bindings)
 }
 
-func (e *Edge) bound(binding edge.DomainBinding) {
+func (e *Edge) bound(binding edge.DomainBinding) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if e.refusesBinds != nil {
+		return e.refusesBinds
+	}
 	e.bindings = append(e.bindings, binding)
 	e.serving[binding.Hostname] = binding.Certificate
 	if e.bindSays != "" && binding.Say != nil {
 		binding.Say(e.bindSays)
 	}
+	return nil
 }
 
 func (e *Edge) release(hostname string) error {
@@ -663,7 +675,9 @@ func (s *Stack) State() edge.StackState {
 }
 
 func (s *Stack) BindDomain(_ context.Context, binding edge.DomainBinding) error {
-	s.front.bound(binding)
+	if err := s.front.bound(binding); err != nil {
+		return err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.state.Bind(binding.Hostname)
