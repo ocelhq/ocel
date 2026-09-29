@@ -77,7 +77,7 @@ func (p *cloudflare) forwardOrigin(ctx context.Context, accountID, owner, hostna
 	if err := p.ensureTLSCover(ctx, zoneID, zoneName, hostname); err != nil {
 		return edge.Record{}, err
 	}
-	if err := p.requireEncryptedOrigin(ctx, zoneID, zoneName); err != nil {
+	if err := p.requireStrictOrigin(ctx, zoneID, zoneName); err != nil {
 		return edge.Record{}, err
 	}
 	want, err := proxiedRecord(hostname, origin)
@@ -105,9 +105,9 @@ func (p *cloudflare) unbindOrigin(ctx context.Context, state *edge.StackState, o
 	return nil
 }
 
-var plainOriginModes = []string{"off", "flexible"}
+var strictOriginModes = []string{string(zones.SSLValueStrict), string(zones.SSLValueOriginPull)}
 
-func (p *cloudflare) requireEncryptedOrigin(ctx context.Context, zoneID, zoneName string) error {
+func (p *cloudflare) requireStrictOrigin(ctx context.Context, zoneID, zoneName string) error {
 	setting, err := p.client.Zones.Settings.Get(ctx, "ssl", zones.SettingGetParams{ZoneID: cf.F(zoneID)})
 	if err != nil {
 		return fmt.Errorf("read the SSL mode of zone %s: %w", zoneName, err)
@@ -118,8 +118,8 @@ func (p *cloudflare) requireEncryptedOrigin(ctx context.Context, zoneID, zoneNam
 	if err := json.Unmarshal([]byte(setting.JSON.RawJSON()), &read); err != nil {
 		return fmt.Errorf("read the SSL mode of zone %s: %w", zoneName, err)
 	}
-	if slices.Contains(plainOriginModes, read.Value) {
-		return fmt.Errorf("zone %s reaches origins with SSL mode %q, which forwards over plain HTTP, and the origin answers only TLS carrying the client certificate the zone presents: set the zone's SSL mode to Full (strict) and bind it again", zoneName, read.Value)
+	if !slices.Contains(strictOriginModes, read.Value) {
+		return fmt.Errorf("zone %s reaches origins with SSL mode %q, which does not check the certificate the origin answers with, so Cloudflare would forward to anything answering its address: set the zone's SSL mode to Full (strict) and bind it again", zoneName, read.Value)
 	}
 	return nil
 }
