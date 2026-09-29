@@ -618,7 +618,7 @@ func (s *deployFakeProviderServer) DescribeBootstrap(ctx context.Context, req *c
 	}
 	fronting := func(name, summary, kind string, dependsOn ...string) *contractv1.Feature {
 		f := feature(name, summary, dependsOn...)
-		f.Needs = []string{"edge:" + kind}
+		f.Edges = []string{kind}
 		return f
 	}
 	journalDescribe(fmt.Sprintf("tier=%s withDependents=%t", req.GetTier(), req.GetWithDependents()))

@@ -2481,7 +2481,7 @@ type Feature struct {
 	DependsOn     []string               `protobuf:"bytes,3,rep,name=depends_on,json=dependsOn,proto3" json:"depends_on,omitempty"`
 	Enabled       bool                   `protobuf:"varint,4,opt,name=enabled,proto3" json:"enabled,omitempty"`
 	Dependents    []string               `protobuf:"bytes,5,rep,name=dependents,proto3" json:"dependents,omitempty"`
-	Needs         []string               `protobuf:"bytes,6,rep,name=needs,proto3" json:"needs,omitempty"`
+	Edges         []string               `protobuf:"bytes,6,rep,name=edges,proto3" json:"edges,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2551,9 +2551,9 @@ func (x *Feature) GetDependents() []string {
 	return nil
 }
 
-func (x *Feature) GetNeeds() []string {
+func (x *Feature) GetEdges() []string {
 	if x != nil {
-		return x.Needs
+		return x.Edges
 	}
 	return nil
 }
@@ -4952,7 +4952,7 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\n" +
 	"dependents\x18\x05 \x03(\tR\n" +
 	"dependents\x12\x14\n" +
-	"\x05needs\x18\x06 \x03(\tR\x05needs\"-\n" +
+	"\x05edges\x18\x06 \x03(\tR\x05edges\"-\n" +
 	"\x03Dns\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x12\n" +
 	"\x04zone\x18\x02 \x01(\tR\x04zone\"w\n" +

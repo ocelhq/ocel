@@ -400,7 +400,7 @@ message Feature {
 
   repeated string dependents = 5;
 
-  repeated string needs = 6;
+  repeated string edges = 6;
 }
 
 message Dns {

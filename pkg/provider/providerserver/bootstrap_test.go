@@ -321,6 +321,9 @@ func TestDescribeBootstrapAnswersTheCatalogueAndTheCurrentStatus(t *testing.T) {
 	if !slices.Equal(features[1].GetDependsOn(), []string{fake.FeatureCache}) {
 		t.Errorf("%s depends on %v, want %v", fake.FeatureImages, features[1].GetDependsOn(), fake.FeatureCache)
 	}
+	if !slices.Equal(features[1].GetEdges(), []string{string(fake.KindRelay)}) {
+		t.Errorf("%s fronts edges %v, want the %s edge its catalogue entry needs", fake.FeatureImages, features[1].GetEdges(), fake.KindRelay)
+	}
 
 	status := planned.GetBootstrap()
 	if !status.GetPresent() || status.GetSchema() != provider.BootstrapSchema {

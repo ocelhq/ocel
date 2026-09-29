@@ -9,7 +9,6 @@ import (
 
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 const (
@@ -32,9 +31,9 @@ func testCatalogue(enabled ...string) []*contractv1.Feature {
 		{Name: featureISR, Summary: "incremental static regeneration", Enabled: on(featureISR)},
 		{Name: featureImageOptimization, Summary: "on-demand image optimization", Enabled: on(featureImageOptimization)},
 		{Name: featureRelayEdge, Summary: "a relay front", DependsOn: []string{featureISR},
-			Needs: []string{provider.NeedsEdgePrefix + "relay"}, Enabled: on(featureRelayEdge)},
+			Edges: []string{"relay"}, Enabled: on(featureRelayEdge)},
 		{Name: featureDirectEdge, Summary: "a direct front",
-			Needs: []string{provider.NeedsEdgePrefix + "direct"}, Enabled: on(featureDirectEdge)},
+			Edges: []string{"direct"}, Enabled: on(featureDirectEdge)},
 	}
 }
 
