@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 func TestParseEvent(t *testing.T) {
@@ -443,5 +445,62 @@ func TestLoopbackClientDoesNotHangOnAConnectionPoisonedByAnUnreadBody(t *testing
 	defer resp2.Body.Close()
 	if resp2.StatusCode != http.StatusOK {
 		t.Errorf("status = %d, want 200", resp2.StatusCode)
+	}
+}
+
+func TestTheAppHearsTheAuthorizationTheClientSentBehindASigningEdge(t *testing.T) {
+	ev := &httpEvent{
+		RawPath: "/private",
+		Headers: map[string]string{
+			"authorization":                "AWS4-HMAC-SHA256 Credential=AKIAEXAMPLE/20260929/us-east-1/lambda/aws4_request",
+			edge.HeaderClientAuthorization: "Bearer client-token",
+		},
+	}
+	ev.RequestContext.HTTP.Method = http.MethodGet
+
+	req, err := buildLoopbackRequest(t.Context(), 4321, ev)
+	if err != nil {
+		t.Fatalf("buildLoopbackRequest: %v", err)
+	}
+	if got := req.Header.Get("Authorization"); got != "Bearer client-token" {
+		t.Errorf("Authorization = %q, want the client's own, which the edge carried past SigV4", got)
+	}
+	if got := req.Header.Values(edge.HeaderClientAuthorization); len(got) != 0 {
+		t.Errorf("%s = %q, want the carrier consumed before the app sees the request", edge.HeaderClientAuthorization, got)
+	}
+}
+
+func TestTheAppHearsTheClientsAuthorizationUntouchedWhenNothingCarriedIt(t *testing.T) {
+	ev := &httpEvent{
+		RawPath: "/private",
+		Headers: map[string]string{"authorization": "Bearer client-token"},
+	}
+	ev.RequestContext.HTTP.Method = http.MethodGet
+
+	req, err := buildLoopbackRequest(t.Context(), 4321, ev)
+	if err != nil {
+		t.Fatalf("buildLoopbackRequest: %v", err)
+	}
+	if got := req.Header.Get("Authorization"); got != "Bearer client-token" {
+		t.Errorf("Authorization = %q, want the client's own", got)
+	}
+}
+
+func TestTheAppNeverHearsTheEdgesOwnSignatureWhenTheClientSentNoAuthorization(t *testing.T) {
+	ev, err := parseEvent([]byte(`{
+		"rawPath": "/private",
+		"headers": {"authorization": "AWS4-HMAC-SHA256 Credential=AKIAEXAMPLE/20260929/us-east-1/lambda/aws4_request"},
+		"requestContext": {"http": {"method": "GET"}, "authorizer": {"iam": {"accessKey": "AKIAEXAMPLE"}}}
+	}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req, err := buildLoopbackRequest(t.Context(), 4321, ev)
+	if err != nil {
+		t.Fatalf("buildLoopbackRequest: %v", err)
+	}
+	if got := req.Header.Values("Authorization"); len(got) != 0 {
+		t.Errorf("Authorization = %q, want none: the signature on an IAM-signed call is the edge's, not the client's", got)
 	}
 }

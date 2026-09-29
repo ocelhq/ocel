@@ -1013,6 +1013,9 @@ importers:
       '@framework/node-runtime':
         specifier: workspace:*
         version: link:../../../frameworks/node/runtime
+      '@platform/edge-contract':
+        specifier: workspace:*
+        version: link:../../edge/contract
       aws4fetch:
         specifier: ^1.0.20
         version: 1.0.20
