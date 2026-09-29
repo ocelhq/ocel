@@ -164,7 +164,7 @@ func TestRunDevEnvironment(t *testing.T) {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }] };
 `)
-		clitest.WriteFile(t, filepath.Join(root, ".env"), "NEXT_PUBLIC_SITE_URL=https://example.com\nAWS_PROFILE=dev\napi_base=lower\nAPI_BASE=http://localhost:3000\nnot an assignment\n")
+		clitest.WriteFile(t, filepath.Join(root, ".env"), "NEXT_PUBLIC_SITE_URL=https://example.com\nLOG_LEVEL=debug\napi_base=lower\nAPI_BASE=http://localhost:3000\nnot an assignment\n")
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"API_BASE","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}`))
 
 		envDumpPath := filepath.Join(root, "env.out")
@@ -576,7 +576,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		}
 	})
 
-	t.Run("it resolves the dotfile and gates like dev", func(t *testing.T) {
+	t.Run("it resolves the dotfile into the app environment the way dev does", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("uses a POSIX shell fixture command")
 		}

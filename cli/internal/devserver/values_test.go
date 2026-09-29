@@ -141,7 +141,7 @@ func TestDeclareEnv(t *testing.T) {
 func TestCheckEnv(t *testing.T) {
 	t.Parallel()
 
-	t.Run("gates nothing when no values are installed", func(t *testing.T) {
+	t.Run("refuses nothing when no values are installed", func(t *testing.T) {
 		t.Parallel()
 		s, url := serveValues(t, nil, variables.Scope{})
 
