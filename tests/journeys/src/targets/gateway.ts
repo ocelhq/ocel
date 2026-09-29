@@ -4,8 +4,11 @@ import {
   request as httpRequest,
   type Server,
 } from "node:http";
+import { request as httpsRequest, Agent as SecureAgent } from "node:https";
 
-const EDGE_PORT = 80;
+export type Scheme = "http" | "https";
+
+const EDGE_PORTS: Record<Scheme, number> = { http: 80, https: 443 };
 
 export type Gateway = {
   serving: (hostname: string) => Promise<string>;
@@ -33,15 +36,19 @@ function closing(server: Server): Promise<void> {
   });
 }
 
-export type Edge = { host: string; port: number };
+export type Edge = { host: string; port: number; tls?: boolean };
 
 export function forwarder(edge: Edge, hostname: string): Server {
-  const unpooled = new Agent({ keepAlive: false });
+  const unpooled = edge.tls
+    ? new SecureAgent({ keepAlive: false, rejectUnauthorized: false, servername: hostname })
+    : new Agent({ keepAlive: false });
+  const request = edge.tls ? httpsRequest : httpRequest;
   const server = createHttpServer((from, to) => {
-    const upstream = httpRequest(
+    const upstream = request(
       {
         host: edge.host,
         port: edge.port,
+        servername: hostname,
         agent: unpooled,
         method: from.method,
         path: from.url,
@@ -53,6 +60,10 @@ export function forwarder(edge: Edge, hostname: string): Server {
       },
     );
     upstream.on("error", (error) => {
+      if (to.headersSent) {
+        to.destroy(error);
+        return;
+      }
       to.writeHead(502, { "content-type": "text/plain" }).end(String(error));
     });
     from.pipe(upstream);
@@ -61,7 +72,7 @@ export function forwarder(edge: Edge, hostname: string): Server {
   return server;
 }
 
-export function openGateway(box: string): Gateway {
+export function openGateway(box: string, scheme: Scheme): Gateway {
   const servers: Server[] = [];
   const forwarders = new Map<string, Promise<string>>();
 
@@ -69,7 +80,10 @@ export function openGateway(box: string): Gateway {
     serving(hostname) {
       let url = forwarders.get(hostname);
       if (!url) {
-        const server = forwarder({ host: box, port: EDGE_PORT }, hostname);
+        const server = forwarder(
+          { host: box, port: EDGE_PORTS[scheme], tls: scheme === "https" },
+          hostname,
+        );
         servers.push(server);
         url = listening(server);
         forwarders.set(hostname, url);

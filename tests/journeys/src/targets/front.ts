@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { stripVTControlCharacters } from "node:util";
 import { repoRoot } from "../paths";
+import type { Scheme } from "./gateway";
 
 export const FRONT_ENV = "OCEL_VPS_FRONT";
 
@@ -40,6 +41,11 @@ export function frontNamed(env: NodeJS.ProcessEnv, dir = frontsDir): Front | und
     );
   }
   return { name, dir: at, proxy: read.proxy };
+}
+
+export function schemeOf(front: Front | undefined): Scheme {
+  const proxy = front?.proxy;
+  return typeof proxy === "object" && proxy !== null && "caddy" in proxy ? "https" : "http";
 }
 
 const portOwners: Record<string, string> = {

@@ -28,9 +28,10 @@ import {
   frontStep,
   ownerOf,
   refusalMissed,
+  schemeOf,
   stepCommand,
 } from "./front";
-import { type Gateway, openGateway } from "./gateway";
+import { type Gateway, openGateway, type Scheme } from "./gateway";
 import { plannedWrites } from "./planStream";
 import type { Deployment, ReleaseCycle, Sweeper, Target } from "./types";
 
@@ -110,8 +111,8 @@ export function boxLane(said: string): Lane {
   );
 }
 
-export function appOrigin(hostname: string): string {
-  return `http://${hostname}`;
+export function appOrigin(hostname: string, scheme: Scheme): string {
+  return `${scheme}://${hostname}`;
 }
 
 export function hostnamesWithoutUrl(said: string, hostnames: string[]): string[] {
@@ -633,7 +634,7 @@ export class VpsTarget implements Target, ReleaseCycle {
     const urls = new Map<string, string>();
     for (const [app, hostname] of this.hostnamesOf(cell)) {
       await session.gateway.serving(hostname);
-      urls.set(app, appOrigin(hostname));
+      urls.set(app, appOrigin(hostname, schemeOf(this.front())));
     }
     await cell.evidence.write(
       "deploy",
@@ -675,7 +676,7 @@ export class VpsTarget implements Target, ReleaseCycle {
     }
     const session: BoxSession = {
       dir: await workTree(cell, "vps"),
-      gateway: openGateway(this.box().host),
+      gateway: openGateway(this.box().host, schemeOf(this.front())),
       env: this.boxEnv(DEPLOY_LOGIN),
     };
     this.sessions.set(cell.slug, session);

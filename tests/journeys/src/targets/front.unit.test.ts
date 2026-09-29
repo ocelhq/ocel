@@ -10,6 +10,7 @@ import {
   frontsDir,
   ownerOf,
   refusalMissed,
+  schemeOf,
   stepCommand,
 } from "./front";
 
@@ -41,6 +42,20 @@ describe("frontNamed", () => {
         await readFile(path.join(frontsDir, entry.name, "front.json"), "utf8"),
       );
       expect(Object.keys(read)).toEqual(["proxy"]);
+    }
+  });
+});
+
+describe("schemeOf", () => {
+  it("reaches ocel's own proxy and an nginx front over http", () => {
+    expect(schemeOf(undefined)).toBe("http");
+    expect(schemeOf(frontNamed({ [FRONT_ENV]: "nginx" }))).toBe("http");
+    expect(schemeOf(frontNamed({ [FRONT_ENV]: "nginx-container" }))).toBe("http");
+  });
+
+  it("reaches every Caddy front over https, since its Caddy redirects http to https", () => {
+    for (const name of ["caddy", "caddy-container", "coolify-caddy"]) {
+      expect(schemeOf(frontNamed({ [FRONT_ENV]: name }))).toBe("https");
     }
   });
 });
