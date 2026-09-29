@@ -262,7 +262,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 		dry:           req.GetDry(),
 		allowDegraded: req.GetEdge().GetAllowDegraded(),
 	}
-	if err := run.openImages(ctx, req.GetImageRegistry()); err != nil {
+	if err := run.openImages(ctx, req.GetProjectRegistry()); err != nil {
 		return nil, err
 	}
 	run.published = &publishedBindings{store: run.values, scope: run.scope, environment: bindingEnvironment(spec)}

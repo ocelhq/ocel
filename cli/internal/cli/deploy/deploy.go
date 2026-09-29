@@ -149,7 +149,7 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 		Tier:      environmentv1.Tier_TIER_PRODUCTION,
 		Lifecycle: environmentv1.Lifecycle_LIFECYCLE_UNSPECIFIED,
 	}
-	registry, err := imageRegistry(ctx, prov, cfg, env.GetTier())
+	registry, err := projectRegistry(cfg)
 	if err != nil {
 		return err
 	}
@@ -161,7 +161,7 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 		Edge:        cfg.EdgeSelection(),
 		Dry:         opts.dry,
 
-		ImageRegistry: registry,
+		ProjectRegistry: registry,
 	}
 
 	if opts.dry {

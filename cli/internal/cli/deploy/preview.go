@@ -256,7 +256,7 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 		return nil
 	}
 
-	registry, err := imageRegistry(ctx, prov, cfg, env.GetTier())
+	registry, err := projectRegistry(cfg)
 	if err != nil {
 		return err
 	}
@@ -267,7 +267,7 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 		Edge:        cfg.EdgeSelection(),
 		Dry:         opts.dry,
 
-		ImageRegistry: registry,
+		ProjectRegistry: registry,
 	}
 
 	if opts.dry {

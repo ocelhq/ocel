@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ocelhq/ocel/cli/internal/appregistry"
 	"github.com/ocelhq/ocel/cli/internal/appurl"
 	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
@@ -41,7 +40,7 @@ func preflightPreviewUp(ctx context.Context, deps cmddeps.Deps, policy consent.P
 	if err != nil {
 		return preflightFacts{}, err
 	}
-	if err := appregistry.RequireSecret(cfg); err != nil {
+	if err := requireProjectRegistryPassword(cfg); err != nil {
 		return preflightFacts{}, err
 	}
 	if err := deps.RefuseUnbuildableImages(ctx, check, cfg, resp.GetContainerArchs()); err != nil {
@@ -81,7 +80,7 @@ func preflightDeploy(ctx context.Context, deps cmddeps.Deps, policy consent.Poli
 	if err != nil {
 		return preflightFacts{}, err
 	}
-	if err := appregistry.RequireSecret(cfg); err != nil {
+	if err := requireProjectRegistryPassword(cfg); err != nil {
 		return preflightFacts{}, err
 	}
 	if err := deps.RefuseUnbuildableImages(ctx, check, cfg, resp.GetContainerArchs()); err != nil {

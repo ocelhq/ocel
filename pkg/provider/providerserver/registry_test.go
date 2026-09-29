@@ -7,11 +7,8 @@ import (
 	"sync"
 	"testing"
 
-	connect "connectrpc.com/connect"
-
 	"github.com/ocelhq/ocel/pkg/environment"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
@@ -21,7 +18,6 @@ type hosting struct {
 	*fake.Provider
 
 	mu    sync.Mutex
-	asked [][]string
 	tiers []environment.Tier
 
 	target  provider.RegistryTarget
@@ -34,10 +30,9 @@ func (h *hosting) Hooks() provider.Hooks {
 	return hooks
 }
 
-func (h *hosting) EnsureImageRegistry(_ context.Context, tier environment.Tier, repositories []string) (provider.RegistryTarget, error) {
+func (h *hosting) EnsureImageRegistry(_ context.Context, tier environment.Tier) (provider.RegistryTarget, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.asked = append(h.asked, repositories)
 	h.tiers = append(h.tiers, tier)
 	return h.target, h.refusal
 }
@@ -48,148 +43,119 @@ func (h *hosting) asking() []environment.Tier {
 	return h.tiers
 }
 
-func (h *hosting) repositories() [][]string {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	return h.asked
+var ownRegistry = provider.RegistryTarget{
+	Server:    "registry.invalid",
+	Namespace: "ocel/acme",
+	Username:  "robot",
+	Password:  "own-token",
 }
 
-func registryServed(t *testing.T, p provider.Provider) contractv1connect.ProviderServiceClient {
+func hostingServed(t *testing.T, target provider.RegistryTarget, refusal error) (contractv1connect.ProviderServiceClient, *hosting) {
 	t.Helper()
-	return servedProvider(t, "1.0.0", p)
+	daemonWithTheBuiltImage(t, "amd64")
+	builtProject(t)
+	vendor := &hosting{Provider: fake.NewProvider(fake.Options{Region: "nowhere"}), target: target, refusal: refusal}
+	return servedBy(t, vendor), vendor
 }
 
-func TestAProviderWithNoRegistryOfItsOwnLeavesTheResolveUnimplemented(t *testing.T) {
-	client := registryServed(t, fake.NewProvider(fake.Options{}))
+func TestADeployNamingNoRegistryPushesToTheProvidersOwn(t *testing.T) {
+	client, vendor := hostingServed(t, ownRegistry, nil)
 
-	_, err := client.ResolveImageRegistry(context.Background(), &contractv1.ResolveImageRegistryRequest{
-		Repositories: []string{"web"},
-	})
-
-	if got := connect.CodeOf(err); got != connect.CodeUnimplemented {
-		t.Errorf("ResolveImageRegistry() error code = %v, want %v: a provider that hosts no registry says so by not answering", got, connect.CodeUnimplemented)
-	}
-}
-
-func TestAProviderWithARegistryAnswersItsCoordinatesAndCredentials(t *testing.T) {
-	vendor := &hosting{Provider: fake.NewProvider(fake.Options{}), target: provider.RegistryTarget{
-		Server:    "registry.invalid",
-		Namespace: "ocel/acme",
-		Username:  "robot",
-		Password:  "hunter2",
-	}}
-	client := registryServed(t, vendor)
-
-	resp, err := client.ResolveImageRegistry(context.Background(), &contractv1.ResolveImageRegistryRequest{
-		Repositories: []string{"web", "api"},
-	})
-	if err != nil {
-		t.Fatalf("ResolveImageRegistry() error = %v, want the provider's own registry", err)
+	result, events := deploy(t, client, containerDeployRequest("/"))
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	if got := resp.GetServer(); got != "registry.invalid" {
-		t.Errorf("ResolveImageRegistry() server = %q, want %q", got, "registry.invalid")
+	opened := vendor.ImageStore().Opened()
+	if len(opened) != 1 || opened[0] != ownRegistry {
+		t.Fatalf("the registry was opened as %v, want the provider's own, resolved inside the deploy", opened)
 	}
-	if got := resp.GetNamespace(); got != "ocel/acme" {
-		t.Errorf("ResolveImageRegistry() namespace = %q, want %q", got, "ocel/acme")
+	pushed := vendor.ImageStore().Pushed()
+	if len(pushed) != 1 || !strings.HasPrefix(pushed[0].ImageRef, "registry.invalid/ocel/acme/web:") {
+		t.Errorf("the deploy pushed %v, want the image under the provider's own registry", pushed)
 	}
-	if got := resp.GetUsername(); got != "robot" {
-		t.Errorf("ResolveImageRegistry() username = %q, want %q", got, "robot")
-	}
-	if got := resp.GetPassword(); got != "hunter2" {
-		t.Errorf("ResolveImageRegistry() password = %q, want the token the push logs in with", got)
+	for _, event := range events {
+		if wireContains(t, event, ownRegistry.Password) {
+			t.Fatal("the deploy stream contains the provider's own registry password")
+		}
 	}
 }
 
-func TestTheProviderIsToldWhichRepositoriesTheDeployIntendsToPush(t *testing.T) {
-	vendor := &hosting{Provider: fake.NewProvider(fake.Options{}), target: provider.RegistryTarget{Server: "registry.invalid"}}
-	client := registryServed(t, vendor)
+func TestTheProvidersOwnRegistryIsResolvedForTheTierTheDeployTargets(t *testing.T) {
+	client, vendor := hostingServed(t, ownRegistry, nil)
 
-	if _, err := client.ResolveImageRegistry(context.Background(), &contractv1.ResolveImageRegistryRequest{
-		Repositories: []string{"web", "api"},
-	}); err != nil {
-		t.Fatalf("ResolveImageRegistry() error = %v", err)
-	}
+	req := containerDeployRequest("/")
+	req.Environment = &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-7"}
+	_, _, _ = deployStream(t, client, req)
 
-	asked := vendor.repositories()
-	if len(asked) != 1 {
-		t.Fatalf("the provider was asked %d times, want exactly one resolve per deploy", len(asked))
-	}
-	if strings.Join(asked[0], ",") != "web,api" {
-		t.Errorf("the provider was asked for %v, want the repositories the deploy intends to push, so it can ensure they exist", asked[0])
-	}
-}
-
-func TestTheProviderIsToldWhichTierTheDeployPushesFor(t *testing.T) {
-	vendor := &hosting{Provider: fake.NewProvider(fake.Options{}), target: provider.RegistryTarget{Server: "registry.invalid"}}
-	client := registryServed(t, vendor)
-
-	if _, err := client.ResolveImageRegistry(context.Background(), &contractv1.ResolveImageRegistryRequest{
-		Repositories: []string{"web"},
-		Tier:         environmentv1.Tier_TIER_PREVIEW,
-	}); err != nil {
-		t.Fatalf("ResolveImageRegistry() error = %v", err)
-	}
-
-	asking := vendor.asking()
-	if len(asking) != 1 || asking[0] != environment.TierPreview {
+	if asking := vendor.asking(); len(asking) != 1 || asking[0] != environment.TierPreview {
 		t.Errorf("the provider resolved a registry for %v, want %v: a tier keeps its images apart from the other tier's",
 			asking, environment.TierPreview)
 	}
 }
 
-func TestAResolveNamingNoRepositoryNeverReachesTheProvider(t *testing.T) {
-	vendor := &hosting{Provider: fake.NewProvider(fake.Options{}), target: provider.RegistryTarget{Server: "registry.invalid"}}
-	client := registryServed(t, vendor)
+func TestARegistryTheProjectNamesIsUsedWithoutAskingTheProvider(t *testing.T) {
+	client, vendor := hostingServed(t, ownRegistry, nil)
 
-	if _, err := client.ResolveImageRegistry(context.Background(), &contractv1.ResolveImageRegistryRequest{}); err == nil {
-		t.Fatal("ResolveImageRegistry() with nothing to push succeeded, want a resolve to happen only when something is pushed")
+	result, _ := deploy(t, client, registryDeployRequest())
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
-	if asked := vendor.repositories(); len(asked) != 0 {
-		t.Errorf("the provider was asked %v for a deploy that pushes nothing", asked)
+
+	if asking := vendor.asking(); len(asking) != 0 {
+		t.Errorf("the provider resolved its own registry %v times for a deploy that names one", len(asking))
 	}
-}
-
-func TestAProviderThatHostsNoRegistryForThisDeployLeavesTheResolveUnimplemented(t *testing.T) {
-	vendor := &hosting{Provider: fake.NewProvider(fake.Options{})}
-	client := registryServed(t, vendor)
-
-	_, err := client.ResolveImageRegistry(context.Background(), &contractv1.ResolveImageRegistryRequest{
-		Repositories: []string{"web"},
-	})
-
-	if got := connect.CodeOf(err); got != connect.CodeUnimplemented {
-		t.Errorf("ResolveImageRegistry() error code = %v, want %v: a provider hosting a registry on a real account and none "+
-			"against an emulator says which by answering an empty target, and the deploy then keeps its images where they were built", got, connect.CodeUnimplemented)
+	opened := vendor.ImageStore().Opened()
+	if len(opened) != 1 || opened[0].Server != "ghcr.io" || opened[0].Password != "hunter2" {
+		t.Errorf("the registry was opened as %v, want the one the deploy named", opened)
 	}
 }
 
-func TestARegistryWithNoServerIsRefusedRatherThanPassedOn(t *testing.T) {
-	vendor := &hosting{Provider: fake.NewProvider(fake.Options{}), target: provider.RegistryTarget{Namespace: "ocel/acme"}}
-	client := registryServed(t, vendor)
+func TestAProviderHostingNoRegistryForThisDeployLeavesItWithNone(t *testing.T) {
+	client, vendor := hostingServed(t, provider.RegistryTarget{}, nil)
 
-	_, err := client.ResolveImageRegistry(context.Background(), &contractv1.ResolveImageRegistryRequest{
-		Repositories: []string{"web"},
-	})
-	if err == nil {
-		t.Fatal("ResolveImageRegistry() answered a registry with no server, want the provider required to name one")
+	req := containerDeployRequest("/")
+	req.Dry = true
+	result, _, err := deployStream(t, client, req)
+	if err == nil && result.GetSuccess() {
+		t.Fatal("Deploy() succeeded where neither side names a registry and the provider takes no image directly")
 	}
-	if !strings.Contains(err.Error(), "server") {
-		t.Errorf("ResolveImageRegistry() error = %v, and the provider author never learns which half is missing", err)
+	if len(vendor.asking()) != 1 {
+		t.Errorf("the provider was asked %d times, want once", len(vendor.asking()))
+	}
+	if opened := vendor.ImageStore().Opened(); len(opened) != 0 {
+		t.Errorf("a registry was opened as %v where the provider answered none", opened)
 	}
 }
 
-func TestARegistryTheProviderRefusesToNameFailsTheResolve(t *testing.T) {
-	vendor := &hosting{Provider: fake.NewProvider(fake.Options{}), refusal: errors.New("the repository could not be created")}
-	client := registryServed(t, vendor)
+func TestAnOwnRegistryWithNoServerIsRefusedRatherThanUsed(t *testing.T) {
+	client, _ := hostingServed(t, provider.RegistryTarget{Namespace: "ocel/acme"}, nil)
 
-	_, err := client.ResolveImageRegistry(context.Background(), &contractv1.ResolveImageRegistryRequest{
-		Repositories: []string{"web"},
-	})
-	if err == nil {
-		t.Fatal("ResolveImageRegistry() succeeded over a provider that refused, want the refusal passed on")
+	result, _, err := deployStream(t, client, containerDeployRequest("/"))
+	if err == nil && result.GetSuccess() {
+		t.Fatal("Deploy() used a registry with no server, want the provider required to name one")
 	}
-	if !strings.Contains(err.Error(), "the repository could not be created") {
-		t.Errorf("ResolveImageRegistry() error = %v, want the provider's own reason", err)
+	refused := result.GetError()
+	if err != nil {
+		refused = err.Error()
+	}
+	if !strings.Contains(refused, "server") {
+		t.Errorf("Deploy() = %q, and the provider author never learns which half is missing", refused)
+	}
+}
+
+func TestAnOwnRegistryTheProviderCannotResolveFailsTheDeploy(t *testing.T) {
+	client, _ := hostingServed(t, provider.RegistryTarget{}, errors.New("the login could not be minted"))
+
+	result, _, err := deployStream(t, client, containerDeployRequest("/"))
+	if err == nil && result.GetSuccess() {
+		t.Fatal("Deploy() succeeded over a provider that could not resolve its registry")
+	}
+	refused := result.GetError()
+	if err != nil {
+		refused = err.Error()
+	}
+	if !strings.Contains(refused, "the login could not be minted") {
+		t.Errorf("Deploy() = %q, want the provider's own reason", refused)
 	}
 }

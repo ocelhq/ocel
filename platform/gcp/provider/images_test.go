@@ -38,21 +38,21 @@ func TestEachTierPushesToTheRepositoryItsBootstrapProvisioned(t *testing.T) {
 	p := pushing(t, "")
 
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		target, err := p.EnsureImageRegistry(context.Background(), tier, []string{"web"})
+		target, err := p.EnsureImageRegistry(context.Background(), tier)
 		if err != nil {
-			t.Fatalf("ImageRegistry(%s) = %v", tier, err)
+			t.Fatalf("EnsureImageRegistry(%s) = %v", tier, err)
 		}
 		if target.Server != "europe-west1-docker.pkg.dev" {
-			t.Errorf("ImageRegistry(%s) server = %q, want the region's own Artifact Registry host", tier, target.Server)
+			t.Errorf("EnsureImageRegistry(%s) server = %q, want the region's own Artifact Registry host", tier, target.Server)
 		}
 		if want := "acme-prod/" + p.resolved.Repository(tier); target.Namespace != want {
-			t.Errorf("ImageRegistry(%s) namespace = %q, want %q", tier, target.Namespace, want)
+			t.Errorf("EnsureImageRegistry(%s) namespace = %q, want %q", tier, target.Namespace, want)
 		}
 		if target.Username != "oauth2accesstoken" {
-			t.Errorf("ImageRegistry(%s) username = %q, want the name Artifact Registry takes a bearer token under", tier, target.Username)
+			t.Errorf("EnsureImageRegistry(%s) username = %q, want the name Artifact Registry takes a bearer token under", tier, target.Username)
 		}
 		if target.Password != "ya29.stub" {
-			t.Errorf("ImageRegistry(%s) password = %q, want the access token this deploy has", tier, target.Password)
+			t.Errorf("EnsureImageRegistry(%s) password = %q, want the access token this deploy has", tier, target.Password)
 		}
 	}
 	if p.resolved.Repository(environment.TierProduction) == p.resolved.Repository(environment.TierPreview) {
@@ -63,7 +63,7 @@ func TestEachTierPushesToTheRepositoryItsBootstrapProvisioned(t *testing.T) {
 func TestTheCoordinateAnImageLandsUnderIsTheRepositoryPathTheBootstrapNames(t *testing.T) {
 	p := pushing(t, "")
 
-	target, err := p.EnsureImageRegistry(context.Background(), environment.TierProduction, []string{"web"})
+	target, err := p.EnsureImageRegistry(context.Background(), environment.TierProduction)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,12 +86,12 @@ func TestAnEmulatedDeployLoadsItsImagesIntoTheDaemonTheEmulatorShares(t *testing
 		t.Errorf("OpenDirectImages() = %v, want the local docker daemon the emulator runs containers out of", direct)
 	}
 
-	target, err := emulated.EnsureImageRegistry(ctx, environment.TierProduction, []string{"web"})
+	target, err := emulated.EnsureImageRegistry(ctx, environment.TierProduction)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if target.Server != "" {
-		t.Errorf("ImageRegistry() = %+v under emulation, and no Artifact Registry is emulated: "+
+		t.Errorf("EnsureImageRegistry() = %+v under emulation, and no Artifact Registry is emulated: "+
 			"a deploy told of no registry writes its images to the daemon instead, under the names they were built with", target)
 	}
 }
@@ -100,12 +100,12 @@ func TestARealDeployPushesToTheRegistryItResolved(t *testing.T) {
 	ctx := context.Background()
 	p := pushing(t, "")
 
-	target, err := p.EnsureImageRegistry(ctx, environment.TierProduction, []string{"web"})
+	target, err := p.EnsureImageRegistry(ctx, environment.TierProduction)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if target.Server == "" {
-		t.Fatalf("ImageRegistry() = %v, want a registry a real deploy pushes to", target)
+		t.Fatalf("EnsureImageRegistry() = %v, want a registry a real deploy pushes to", target)
 	}
 	if p.Hooks().OpenRegistryImages != nil {
 		t.Error("the provider sets an OpenRegistryImages hook, and Artifact Registry takes its push from providerserver's own registry store")

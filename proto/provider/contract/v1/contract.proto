@@ -37,8 +37,6 @@ service ProviderService {
 
     rpc Preflight(PreflightRequest) returns (PreflightResponse);
 
-    rpc ResolveImageRegistry(ResolveImageRegistryRequest) returns (ResolveImageRegistryResponse);
-
     rpc ListPromotions(ListPromotionsRequest) returns (ListPromotionsResponse);
 
     rpc Rollback(RollbackRequest) returns (RollbackResponse);
@@ -275,7 +273,7 @@ message DeployRequest {
 
   bool dry = 5;
 
-  ImageRegistry image_registry = 6;
+  ImageRegistry project_registry = 6;
 }
 
 message ShapeRequest {
@@ -514,21 +512,6 @@ message PreflightResponse {
   map<string, string> container_archs = 12 [(buf.validate.field).map.values.string = {in: ["amd64", "arm64"]}];
 }
 
-message ResolveImageRegistryRequest {
-  repeated string repositories = 1 [(buf.validate.field).repeated = {min_items: 1, items: {string: {pattern: "^[a-z0-9]+([._-][a-z0-9]+)*$", max_len: 255}}}];
-
-  common.environment.v1.Tier tier = 2 [(buf.validate.field).enum.defined_only = true];
-}
-
-message ResolveImageRegistryResponse {
-  string server = 1;
-
-  string namespace = 2;
-
-  string username = 3;
-
-  string password = 4 [debug_redact = true];
-}
 
 message PreviewWildcard {
   string base_domain = 1;

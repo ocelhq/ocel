@@ -217,7 +217,7 @@ func TestAServerlessDeployNamesNoImageToPush(t *testing.T) {
 	client, vendor := deployServed(t)
 
 	req := deployRequest()
-	req.ImageRegistry = &contractv1.ImageRegistry{Server: "ghcr.io", Namespace: "acme", Password: "hunter2"}
+	req.ProjectRegistry = &contractv1.ImageRegistry{Server: "ghcr.io", Namespace: "acme", Password: "hunter2"}
 	result, _ := deploy(t, client, req)
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())

@@ -9,7 +9,7 @@ import (
 
 const registryUser = "oauth2accesstoken"
 
-func (p *Provider) EnsureImageRegistry(ctx context.Context, tier environment.Tier, _ []string) (provider.RegistryTarget, error) {
+func (p *Provider) EnsureImageRegistry(ctx context.Context, tier environment.Tier) (provider.RegistryTarget, error) {
 	if p.emulated() {
 		return provider.RegistryTarget{}, nil
 	}

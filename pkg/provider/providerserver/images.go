@@ -2,6 +2,7 @@ package providerserver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -66,19 +67,41 @@ func (r *deployRun) wrappedPush(ctx context.Context, entry provider.AppEntry) (p
 	}, nil
 }
 
-func (r *deployRun) openImages(ctx context.Context, wired *contractv1.ImageRegistry) error {
-	r.registry = provider.RegistryTarget{
-		Server:    wired.GetServer(),
-		Namespace: wired.GetNamespace(),
-		Username:  wired.GetUsername(),
-		Password:  wired.GetPassword(),
+func (r *deployRun) openImages(ctx context.Context, project *contractv1.ImageRegistry) error {
+	registry, err := r.registryTarget(ctx, project)
+	if err != nil {
+		return err
 	}
+	r.registry = registry
 	store, err := imageStoreFor(ctx, r.provider, r.registry)
 	if err != nil {
 		return err
 	}
 	r.images = store
 	return nil
+}
+
+func (r *deployRun) registryTarget(ctx context.Context, project *contractv1.ImageRegistry) (provider.RegistryTarget, error) {
+	if project.GetServer() != "" {
+		return provider.RegistryTarget{
+			Server:    project.GetServer(),
+			Namespace: project.GetNamespace(),
+			Username:  project.GetUsername(),
+			Password:  project.GetPassword(),
+		}, nil
+	}
+	ensure := r.provider.Hooks().EnsureImageRegistry
+	if ensure == nil || len(r.spec.Apps) == 0 {
+		return provider.RegistryTarget{}, nil
+	}
+	own, err := ensure(ctx, r.spec.Tier)
+	if err != nil {
+		return provider.RegistryTarget{}, fmt.Errorf("resolve the registry this provider hosts: %w", err)
+	}
+	if !own.Named() && own != (provider.RegistryTarget{}) {
+		return provider.RegistryTarget{}, errors.New("the provider answered an image registry with no server, which names nowhere to push to")
+	}
+	return own, nil
 }
 
 func (r *deployRun) containerPush(ctx context.Context, entry provider.AppEntry) (provider.ImagePush, error) {

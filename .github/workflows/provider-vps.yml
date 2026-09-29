@@ -42,7 +42,6 @@ on:
       - "cli/internal/cli/preflight/**"
       - "cli/internal/cli/doctor/**"
       - "cli/internal/build/**"
-      - "cli/internal/appregistry/**"
       - "cli/internal/incustest/**"
       - "cli/internal/cli/deploy/**"
       - "cli/internal/cli/permissions/**"

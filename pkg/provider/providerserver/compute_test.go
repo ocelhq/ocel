@@ -26,7 +26,7 @@ func containerDeployRequest(probe string) *contractv1.DeployRequest {
 }
 
 func namingARegistry(req *contractv1.DeployRequest) *contractv1.DeployRequest {
-	req.ImageRegistry = &contractv1.ImageRegistry{
+	req.ProjectRegistry = &contractv1.ImageRegistry{
 		Server:    "ghcr.io",
 		Namespace: "acme",
 		Username:  "acme-bot",

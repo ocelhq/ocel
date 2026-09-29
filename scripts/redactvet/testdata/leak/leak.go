@@ -36,8 +36,8 @@ func logged(logger *slog.Logger, value *envvarsv1.RevealedValue, postgres *bindi
 	slog.Info("bound", slog.Any("pg", postgres)) // want `bindingsv1.PostgresProperties renders`
 }
 
-func asserted(t *testing.T, got *contractv1.ResolveImageRegistryResponse) {
-	t.Errorf("resolved %v", got) // want `contractv1.ResolveImageRegistryResponse renders`
+func asserted(t *testing.T, got *contractv1.ImageRegistry) {
+	t.Errorf("resolved %v", got) // want `contractv1.ImageRegistry renders`
 }
 
 func text(req *contractv1.DeployRequest) string {
@@ -129,7 +129,7 @@ func owned(d described) string {
 }
 
 func fields(req *contractv1.DeployRequest) string {
-	return fmt.Sprintf("%s tagged %s", req.GetImageRegistry().GetServer(), req.GetTag())
+	return fmt.Sprintf("%s tagged %s", req.GetProjectRegistry().GetServer(), req.GetTag())
 }
 
 func clean(framework *contractv1.Framework, tier fmt.Stringer, n int) string {

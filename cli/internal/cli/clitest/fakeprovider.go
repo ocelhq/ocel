@@ -373,7 +373,7 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *contractv1.D
 		}
 	}
 
-	if registry := req.GetImageRegistry(); registry.GetServer() != "" {
+	if registry := req.GetProjectRegistry(); registry.GetServer() != "" {
 		if err := stream.Send(fakeProgress("REGISTRY " + describeRegistry(registry))); err != nil {
 			return err
 		}

@@ -218,7 +218,7 @@ func TestADeployThatNamesNoRegistrySendsNone(t *testing.T) {
 		t.Fatalf("runDeploy() err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	if strings.Contains(stdout.String(), "REGISTRY ") {
-		t.Errorf("stdout = %q, want no registry on a deploy neither the project nor the provider names one for", stdout.String())
+		t.Errorf("stdout = %q, want no registry on a deploy whose project names none: the provider resolves its own inside the deploy, so its credentials never cross the CLI", stdout.String())
 	}
 }
 

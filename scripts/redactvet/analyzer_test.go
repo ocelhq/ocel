@@ -23,7 +23,7 @@ func TestARedactingMessageWithNoGoTypeUnderItsNameIsReported(t *testing.T) {
 }
 
 func TestTheGeneratedStringOfADeployRequestStillPrintsItsRegistryPassword(t *testing.T) {
-	var req fmt.Stringer = &contractv1.DeployRequest{ImageRegistry: &contractv1.ImageRegistry{Server: "ghcr.io", Password: "ghp_livesecret"}}
+	var req fmt.Stringer = &contractv1.DeployRequest{ProjectRegistry: &contractv1.ImageRegistry{Server: "ghcr.io", Password: "ghp_livesecret"}}
 	if !strings.Contains(req.String(), "ghp_livesecret") {
 		t.Fatal("DeployRequest.String() redacts its registry password, so protobuf-go honours debug_redact now: retire redactvet and bump every module to that release")
 	}

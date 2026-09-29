@@ -20,7 +20,7 @@ type Hooks struct {
 	EmbedCode           func(ctx context.Context, function string, artifact ArtifactRef, progress progress.Log) error
 	WarmFunctions       func(ctx context.Context, targets []string, progress progress.Log) error
 	ProgramEdge         func(ctx context.Context, req EdgeProgramRequest) (EdgeProgram, error)
-	EnsureImageRegistry func(ctx context.Context, tier environment.Tier, repositories []string) (RegistryTarget, error)
+	EnsureImageRegistry func(ctx context.Context, tier environment.Tier) (RegistryTarget, error)
 	OpenRegistryImages  func(ctx context.Context, target RegistryTarget) (ImageStore, error)
 	OpenDirectImages    func(ctx context.Context) (ImageStore, error)
 	CheckHost           func(ctx context.Context, req HostCheckRequest) ([]HostCheck, error)

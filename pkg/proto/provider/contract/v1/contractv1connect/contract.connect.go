@@ -71,9 +71,6 @@ const (
 	// ProviderServicePreflightProcedure is the fully-qualified name of the ProviderService's Preflight
 	// RPC.
 	ProviderServicePreflightProcedure = "/provider.contract.v1.ProviderService/Preflight"
-	// ProviderServiceResolveImageRegistryProcedure is the fully-qualified name of the ProviderService's
-	// ResolveImageRegistry RPC.
-	ProviderServiceResolveImageRegistryProcedure = "/provider.contract.v1.ProviderService/ResolveImageRegistry"
 	// ProviderServiceListPromotionsProcedure is the fully-qualified name of the ProviderService's
 	// ListPromotions RPC.
 	ProviderServiceListPromotionsProcedure = "/provider.contract.v1.ProviderService/ListPromotions"
@@ -131,7 +128,6 @@ type ProviderServiceClient interface {
 	PlanRemoveProject(context.Context, *v1.ProjectRequest) (*v12.ChangePlan, error)
 	ListEnvironments(context.Context, *v1.ListEnvironmentsRequest) (*v1.ListEnvironmentsResponse, error)
 	Preflight(context.Context, *v1.PreflightRequest) (*v1.PreflightResponse, error)
-	ResolveImageRegistry(context.Context, *v1.ResolveImageRegistryRequest) (*v1.ResolveImageRegistryResponse, error)
 	ListPromotions(context.Context, *v1.ListPromotionsRequest) (*v1.ListPromotionsResponse, error)
 	Rollback(context.Context, *v1.RollbackRequest) (*v1.RollbackResponse, error)
 	RemoveStalePromotions(context.Context, *v1.RemoveStalePromotionsRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
@@ -229,12 +225,6 @@ func NewProviderServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+ProviderServicePreflightProcedure,
 			connect.WithSchema(providerServiceMethods.ByName("Preflight")),
-			connect.WithClientOptions(opts...),
-		),
-		resolveImageRegistry: connect.NewClient[v1.ResolveImageRegistryRequest, v1.ResolveImageRegistryResponse](
-			httpClient,
-			baseURL+ProviderServiceResolveImageRegistryProcedure,
-			connect.WithSchema(providerServiceMethods.ByName("ResolveImageRegistry")),
 			connect.WithClientOptions(opts...),
 		),
 		listPromotions: connect.NewClient[v1.ListPromotionsRequest, v1.ListPromotionsResponse](
@@ -338,7 +328,6 @@ type providerServiceClient struct {
 	planRemoveProject         *connect.Client[v1.ProjectRequest, v12.ChangePlan]
 	listEnvironments          *connect.Client[v1.ListEnvironmentsRequest, v1.ListEnvironmentsResponse]
 	preflight                 *connect.Client[v1.PreflightRequest, v1.PreflightResponse]
-	resolveImageRegistry      *connect.Client[v1.ResolveImageRegistryRequest, v1.ResolveImageRegistryResponse]
 	listPromotions            *connect.Client[v1.ListPromotionsRequest, v1.ListPromotionsResponse]
 	rollback                  *connect.Client[v1.RollbackRequest, v1.RollbackResponse]
 	removeStalePromotions     *connect.Client[v1.RemoveStalePromotionsRequest, v11.OperationEvent]
@@ -437,15 +426,6 @@ func (c *providerServiceClient) ListEnvironments(ctx context.Context, req *v1.Li
 // Preflight calls provider.contract.v1.ProviderService.Preflight.
 func (c *providerServiceClient) Preflight(ctx context.Context, req *v1.PreflightRequest) (*v1.PreflightResponse, error) {
 	response, err := c.preflight.CallUnary(ctx, connect.NewRequest(req))
-	if response != nil {
-		return response.Msg, err
-	}
-	return nil, err
-}
-
-// ResolveImageRegistry calls provider.contract.v1.ProviderService.ResolveImageRegistry.
-func (c *providerServiceClient) ResolveImageRegistry(ctx context.Context, req *v1.ResolveImageRegistryRequest) (*v1.ResolveImageRegistryResponse, error) {
-	response, err := c.resolveImageRegistry.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
 	}
@@ -564,7 +544,6 @@ type ProviderServiceHandler interface {
 	PlanRemoveProject(context.Context, *v1.ProjectRequest) (*v12.ChangePlan, error)
 	ListEnvironments(context.Context, *v1.ListEnvironmentsRequest) (*v1.ListEnvironmentsResponse, error)
 	Preflight(context.Context, *v1.PreflightRequest) (*v1.PreflightResponse, error)
-	ResolveImageRegistry(context.Context, *v1.ResolveImageRegistryRequest) (*v1.ResolveImageRegistryResponse, error)
 	ListPromotions(context.Context, *v1.ListPromotionsRequest) (*v1.ListPromotionsResponse, error)
 	Rollback(context.Context, *v1.RollbackRequest) (*v1.RollbackResponse, error)
 	RemoveStalePromotions(context.Context, *v1.RemoveStalePromotionsRequest, *connect.ServerStream[v11.OperationEvent]) error
@@ -658,12 +637,6 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 		ProviderServicePreflightProcedure,
 		svc.Preflight,
 		connect.WithSchema(providerServiceMethods.ByName("Preflight")),
-		connect.WithHandlerOptions(opts...),
-	)
-	providerServiceResolveImageRegistryHandler := connect.NewUnaryHandlerSimple(
-		ProviderServiceResolveImageRegistryProcedure,
-		svc.ResolveImageRegistry,
-		connect.WithSchema(providerServiceMethods.ByName("ResolveImageRegistry")),
 		connect.WithHandlerOptions(opts...),
 	)
 	providerServiceListPromotionsHandler := connect.NewUnaryHandlerSimple(
@@ -776,8 +749,6 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 			providerServiceListEnvironmentsHandler.ServeHTTP(w, r)
 		case ProviderServicePreflightProcedure:
 			providerServicePreflightHandler.ServeHTTP(w, r)
-		case ProviderServiceResolveImageRegistryProcedure:
-			providerServiceResolveImageRegistryHandler.ServeHTTP(w, r)
 		case ProviderServiceListPromotionsProcedure:
 			providerServiceListPromotionsHandler.ServeHTTP(w, r)
 		case ProviderServiceRollbackProcedure:
@@ -861,10 +832,6 @@ func (UnimplementedProviderServiceHandler) ListEnvironments(context.Context, *v1
 
 func (UnimplementedProviderServiceHandler) Preflight(context.Context, *v1.PreflightRequest) (*v1.PreflightResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.Preflight is not implemented"))
-}
-
-func (UnimplementedProviderServiceHandler) ResolveImageRegistry(context.Context, *v1.ResolveImageRegistryRequest) (*v1.ResolveImageRegistryResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.ResolveImageRegistry is not implemented"))
 }
 
 func (UnimplementedProviderServiceHandler) ListPromotions(context.Context, *v1.ListPromotionsRequest) (*v1.ListPromotionsResponse, error) {
