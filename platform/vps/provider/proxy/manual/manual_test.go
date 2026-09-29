@@ -22,6 +22,7 @@ type box struct {
 	listening  []listeners.Listener
 	publishing []string
 	claimed    []string
+	shielded   []string
 	answers    map[string]router.Kind
 	failures   map[string]string
 	unread     error
@@ -40,6 +41,11 @@ func (b *box) Publishing(_ context.Context, port string) ([]string, error) {
 func (b *box) Claimed(context.Context) ([]string, error) {
 	b.asked = append(b.asked, "claimed")
 	return b.claimed, nil
+}
+
+func (b *box) Shielded(context.Context) ([]string, error) {
+	b.asked = append(b.asked, "shielded")
+	return b.shielded, nil
 }
 
 func (b *box) Probe(_ context.Context, hostname string) (router.Kind, string, error) {
@@ -248,5 +254,35 @@ func TestTheRouteNamesTheLoopbackPortAndWhatYourProxyMustKeep(t *testing.T) {
 	want := "Route shop.example.com → http://127.0.0.1:8480 (keep Host, set X-Forwarded-Proto)"
 	if got := manual.Route("shop.example.com", 8480); got != want {
 		t.Errorf("Route() = %q, want %q", got, want)
+	}
+}
+
+func TestYourProxyFailsTheCheckWhenItAnswersAShieldedHostnameToAClientWithNoCertificate(t *testing.T) {
+	t.Parallel()
+
+	front := manual.Manual{Port: manual.DefaultPort, Box: &box{
+		listening: on443(),
+		claimed:   []string{"shop.example.com", "open.example.com"},
+		shielded:  []string{"shop.example.com", "guarded.example.com"},
+		answers:   map[string]router.Kind{"shop.example.com": "switchboard", "open.example.com": "switchboard"},
+		failures:  map[string]string{"guarded.example.com": "remote error: tls: certificate required"},
+	}}
+	checks, err := front.Inspect(context.Background())
+	if err != nil {
+		t.Fatalf("Inspect() = %v", err)
+	}
+	verdicts := map[string]provider.HostCheck{}
+	for _, check := range checks {
+		verdicts[check.Subject] = check
+	}
+	shop := verdicts["shop.example.com"]
+	if shop.Verdict != provider.HostFail || !strings.Contains(shop.Finding, "no certificate") || !strings.Contains(shop.Fix, "client certificate") {
+		t.Errorf("shop.example.com checks %+v, want a failure saying your proxy answers it without a client certificate and to require one: Cloudflare forwards it, and a request that skips Cloudflare must be refused", shop)
+	}
+	if guarded := verdicts["guarded.example.com"]; guarded.Verdict != provider.HostPass {
+		t.Errorf("guarded.example.com checks %+v, want a pass: your proxy refuses a client that presents no certificate", guarded)
+	}
+	if open := verdicts["open.example.com"]; open.Verdict != provider.HostPass {
+		t.Errorf("open.example.com checks %+v, want the routing pass it had: nothing forwards it through an edge", open)
 	}
 }

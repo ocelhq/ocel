@@ -205,7 +205,15 @@ func (s *stack) claimHostname(ctx context.Context, taken router.Claim) (address 
 			Pointer: router.DefaultPointer, App: switchboard.StoreLabel,
 		})
 	}
-	return address, certified, s.claim(ctx, claims)
+	if err := s.claim(ctx, claims); err != nil {
+		return "", false, err
+	}
+	if len(taken.ClientCertificates) > 0 {
+		if err := s.e.machine.RefuseUnshielded(ctx, taken.Hostname); err != nil {
+			return "", false, err
+		}
+	}
+	return address, certified, nil
 }
 
 func certifies(shield host.Shield, now time.Time) bool {

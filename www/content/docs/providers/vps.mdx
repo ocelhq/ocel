@@ -79,6 +79,13 @@ forwarded through Cloudflare yet.
 `ocel doctor` checks a hostname Cloudflare forwards by asking which router answers it, since
 it resolves to Cloudflare rather than to the box.
 
+Behind [your own proxy](#behind-your-own-proxy), ocel cannot make it refuse a request that
+skips Cloudflare. Configure it to require a client certificate for each hostname Cloudflare
+forwards, trusting only the certificates listed for that hostname under `shields` in
+`/var/lib/ocel/routing/table.json`, and serve it with the origin certificate listed beside
+them. A deploy refuses to forward a hostname your proxy answers to a client with no
+certificate, and `ocel doctor` fails it.
+
 ## Behind your own proxy
 
 If the machine already runs a proxy on ports 80 and 443, ocel can sit behind it instead of
