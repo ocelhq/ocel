@@ -15,7 +15,7 @@ import (
 const reloadWait = reloadPauses * reloadInterval
 
 func (t Traefik) reload(ctx context.Context) error {
-	spec, err := t.Box.Spec(ctx)
+	spec, err := t.Box.ReadSpec(ctx)
 	if err != nil {
 		return err
 	}
@@ -53,7 +53,7 @@ func (t Traefik) reload(ctx context.Context) error {
 }
 
 func (t Traefik) routed(ctx context.Context, hostname string) (string, error) {
-	answered, failure, err := t.Box.Routed(ctx, hostname)
+	answered, failure, err := t.Box.ProbeAnyCertificate(ctx, hostname)
 	switch {
 	case err != nil:
 		return "", err
@@ -81,13 +81,13 @@ func (t Traefik) diagnosed(ctx context.Context) string {
 			"Write `\"proxy\": { \"caddy\": { \"preset\": \"coolify\" } }` in this project's vps options, or switch Coolify back to Traefik",
 			coolifyProxy, strings.TrimSpace(image), t.Directory)
 	}
-	beside, err := t.Box.Beside(ctx, t.file())
+	beside, err := t.Box.ReadBeside(ctx, t.file())
 	if err != nil {
 		return fmt.Sprintf("\nread the files beside %s: %v", t.file(), err)
 	}
-	slices.SortFunc(beside, func(a, b switchboard.Neighbour) int { return strings.Compare(a.Name, b.Name) })
+	slices.SortFunc(beside, func(a, b switchboard.SiblingFile) int { return strings.Compare(a.Name, b.Name) })
 	for _, file := range beside {
-		if err := parses(file.Name, file.Content); err != nil {
+		if err := parseLikeTraefik(file.Name, file.Content); err != nil {
 			at := filepath.Join(filepath.Clean(t.Directory), file.Name)
 			return fmt.Sprintf("\n%s does not parse: %v\nWhile it does, your Traefik takes up no change to any file in %s, ocel's among them, and after a restart it serves none of them\nFix or remove %s",
 				at, oneLine(err), filepath.Clean(t.Directory), at)
@@ -103,7 +103,7 @@ var knownSections = map[string][]string{
 	"tls":  {"certificates", "options", "stores"},
 }
 
-func parses(name string, content []byte) error {
+func parseLikeTraefik(name string, content []byte) error {
 	tree, err := decoded(name, content)
 	if err != nil {
 		return err

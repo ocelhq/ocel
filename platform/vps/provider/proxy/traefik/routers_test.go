@@ -90,7 +90,7 @@ func TestAHostnameNothingOfYoursRoutesIsLetThroughPastEveryCatchAll(t *testing.T
 func TestAHostRegexpThatMatchesTheHostnameRefusesItAndOneThatMatchesAnythingDoesNot(t *testing.T) {
 	t.Parallel()
 
-	machine := &box{beside: []switchboard.Neighbour{{Name: "apps.toml", Content: []byte(`
+	machine := &box{beside: []switchboard.SiblingFile{{Name: "apps.toml", Content: []byte(`
 [http.routers.tenants]
 rule = "HostRegexp(` + "`" + `^[a-z]+\\.example\\.com$` + "`" + `)"
 service = "tenants"

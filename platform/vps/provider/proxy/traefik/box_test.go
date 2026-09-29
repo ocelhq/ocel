@@ -23,7 +23,7 @@ import (
 type box struct {
 	mu         sync.Mutex
 	asked      []string
-	beside     []switchboard.Neighbour
+	beside     []switchboard.SiblingFile
 	containers string
 	services   string
 	coolify    string
@@ -43,7 +43,7 @@ func (b *box) PlacedSum(_ context.Context, path string) (string, error) {
 	return b.placed[path], nil
 }
 
-func (b *box) Leaf(_ context.Context, hostname string) ([]byte, error) {
+func (b *box) ReadLeaf(_ context.Context, hostname string) ([]byte, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.asked = append(b.asked, "leaf "+hostname)
@@ -89,9 +89,9 @@ func (b *box) Ran(_ context.Context, _ string, argv []string) (string, error) {
 	}
 }
 
-func (b *box) Spec(context.Context) (proxy.Spec, error) { return b.spec, nil }
+func (b *box) ReadSpec(context.Context) (proxy.Spec, error) { return b.spec, nil }
 
-func (b *box) Routed(_ context.Context, hostname string) (string, string, error) {
+func (b *box) ProbeAnyCertificate(_ context.Context, hostname string) (string, string, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.asked = append(b.asked, "routed "+hostname)
@@ -116,7 +116,7 @@ func (b *box) Pause(_ context.Context, wait time.Duration) error {
 	return nil
 }
 
-func (b *box) Beside(_ context.Context, path string) ([]switchboard.Neighbour, error) {
+func (b *box) ReadBeside(_ context.Context, path string) ([]switchboard.SiblingFile, error) {
 	b.mu.Lock()
 	b.asked = append(b.asked, "beside "+path)
 	b.mu.Unlock()
@@ -132,18 +132,18 @@ func fixture(t *testing.T, path string) string {
 	return string(read)
 }
 
-func besideIn(t *testing.T, dir string) []switchboard.Neighbour {
+func besideIn(t *testing.T, dir string) []switchboard.SiblingFile {
 	t.Helper()
 	entries, err := os.ReadDir(filepath.Join("testdata", dir))
 	if err != nil {
 		t.Fatal(err)
 	}
-	var found []switchboard.Neighbour
+	var found []switchboard.SiblingFile
 	for _, entry := range entries {
 		if ext := filepath.Ext(entry.Name()); ext != ".yml" && ext != ".yaml" && ext != ".toml" {
 			continue
 		}
-		found = append(found, switchboard.Neighbour{Name: entry.Name(), Content: []byte(fixture(t, filepath.Join(dir, entry.Name())))})
+		found = append(found, switchboard.SiblingFile{Name: entry.Name(), Content: []byte(fixture(t, filepath.Join(dir, entry.Name())))})
 	}
 	return found
 }

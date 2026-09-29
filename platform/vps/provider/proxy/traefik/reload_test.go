@@ -87,7 +87,7 @@ func TestAReloadStuckBehindAFileOfYoursThatDoesNotParseNamesIt(t *testing.T) {
 
 			machine := &box{
 				spec:   claiming("shop.example.com"),
-				beside: append(besideIn(t, "dokploy"), switchboard.Neighbour{Name: name, Content: []byte(content)}),
+				beside: append(besideIn(t, "dokploy"), switchboard.SiblingFile{Name: name, Content: []byte(content)}),
 			}
 			err := dokploys(machine).Reload(context.Background())
 			unreloaded(t, err, dokployDynamic+"/"+name, "does not parse")

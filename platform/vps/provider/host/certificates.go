@@ -192,7 +192,7 @@ func (b frontBox) Probe(ctx context.Context, hostname string) (router.Kind, stri
 	return said.Router, said.Failure, err
 }
 
-func (b frontBox) Spec(ctx context.Context) (proxy.Spec, error) {
+func (b frontBox) ReadSpec(ctx context.Context) (proxy.Spec, error) {
 	state, err := b.h.routingTable(ctx)
 	if err != nil {
 		return proxy.Spec{}, err
@@ -200,18 +200,18 @@ func (b frontBox) Spec(ctx context.Context) (proxy.Spec, error) {
 	return proxySpec(state), nil
 }
 
-func (b frontBox) Routed(ctx context.Context, hostname string) (string, string, error) {
+func (b frontBox) ProbeAnyCertificate(ctx context.Context, hostname string) (string, string, error) {
 	said, err := b.h.probed(ctx, hostname, "--any-certificate")
 	return string(said.Router), said.Failure, err
 }
 
 func (b frontBox) Pause(ctx context.Context, wait time.Duration) error { return b.h.pause(ctx, wait) }
 
-func (b frontBox) Leaf(ctx context.Context, hostname string) ([]byte, error) {
+func (b frontBox) ReadLeaf(ctx context.Context, hostname string) ([]byte, error) {
 	return b.h.ServedCertificate(ctx, hostname)
 }
 
-func (b frontBox) Beside(ctx context.Context, path string) ([]switchboard.Neighbour, error) {
+func (b frontBox) ReadBeside(ctx context.Context, path string) ([]switchboard.SiblingFile, error) {
 	elevation, err := b.h.reachDocker(ctx)
 	if err != nil {
 		return nil, err
@@ -220,7 +220,7 @@ func (b frontBox) Beside(ctx context.Context, path string) ([]switchboard.Neighb
 	if err != nil {
 		return nil, err
 	}
-	var beside []switchboard.Neighbour
+	var beside []switchboard.SiblingFile
 	if err := json.Unmarshal([]byte(said), &beside); err != nil {
 		return nil, unread("what "+SwitchboardContainer+" read beside "+path, said)
 	}

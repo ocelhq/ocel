@@ -18,7 +18,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
-type yours struct {
+type userProxy struct {
 	file   string
 	handed *proxy.Spec
 	routes map[string]string
@@ -28,20 +28,20 @@ type yours struct {
 	unloaded *[]string
 }
 
-func (y yours) Guarantees() proxy.Guarantees { return proxy.Guarantees{} }
+func (y userProxy) Guarantees() proxy.Guarantees { return proxy.Guarantees{} }
 
-func (y yours) Render(spec proxy.Spec) ([]byte, error) {
+func (y userProxy) Render(spec proxy.Spec) ([]byte, error) {
 	if y.handed != nil {
 		*y.handed = spec
 	}
 	return []byte("routes " + strings.Join(spec.Hostnames, " ") + "\n"), nil
 }
 
-func (y yours) File() string { return y.file }
+func (y userProxy) File() string { return y.file }
 
-func (yours) Unrendered([]byte, proxy.Permission) string { return "" }
+func (userProxy) Unrendered([]byte, proxy.Permission) string { return "" }
 
-func (y yours) RefuseRouted(_ context.Context, hostnames []string) error {
+func (y userProxy) RefuseRouted(_ context.Context, hostnames []string) error {
 	if y.asked != nil {
 		*y.asked = append(*y.asked, hostnames)
 	}
@@ -53,14 +53,14 @@ func (y yours) RefuseRouted(_ context.Context, hostnames []string) error {
 	return nil
 }
 
-func (y yours) Validate(_ context.Context, rendered []byte) error {
+func (y userProxy) Validate(_ context.Context, rendered []byte) error {
 	if y.invalid != "" && len(rendered) > 0 {
 		return refusal.Refuse(refusal.CodeInvalid, "your proxy refuses %q: %s", rendered, y.invalid)
 	}
 	return nil
 }
 
-func (y yours) Reload(context.Context) error {
+func (y userProxy) Reload(context.Context) error {
 	if y.unloaded == nil || len(*y.unloaded) == 0 {
 		return nil
 	}
@@ -69,9 +69,9 @@ func (y yours) Reload(context.Context) error {
 	return refusal.Refuse(refusal.CodeNotReady, "%s", refused)
 }
 
-func (yours) Inspect(context.Context) (proxy.Checks, error) { return nil, nil }
+func (userProxy) Inspect(context.Context) (proxy.Checks, error) { return nil, nil }
 
-func (yours) Certificate(context.Context, string) (proxy.Certificate, error) {
+func (userProxy) Certificate(context.Context, string) (proxy.Certificate, error) {
 	return proxy.Certificate{}, nil
 }
 
@@ -85,7 +85,7 @@ func TestAProxyIsHandedEveryHostnameTheBoxServesAndThePreviewBase(t *testing.T) 
 	}
 	state.Connector = "console.example.com"
 	var handed proxy.Spec
-	if _, err := RenderProxyConfig(yours{handed: &handed}, state); err != nil {
+	if _, err := RenderProxyConfig(userProxy{handed: &handed}, state); err != nil {
 		t.Fatalf("RenderProxyConfig() = %v", err)
 	}
 	want := []string{"console.example.com", edge.ProbeHostname(edge.PreviewWildcard(previewBase)), "pr-7." + previewBase, claimed}
@@ -225,13 +225,13 @@ func adoptedBox(t *testing.T, state RoutingTable) *adoptedBench {
 
 func (a *adoptedBench) host() *Host {
 	h := a.fronted(routedByHand())
-	h.front = yours{file: coolifyFile}
+	h.front = userProxy{file: coolifyFile}
 	return h
 }
 
 func mustPlace(t *testing.T, state RoutingTable) []byte {
 	t.Helper()
-	rendered, err := RenderProxyConfig(yours{file: coolifyFile}, state)
+	rendered, err := RenderProxyConfig(userProxy{file: coolifyFile}, state)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -284,7 +284,7 @@ func TestAClaimOfAHostnameYourProxyAlreadyRoutesIsRefusedBeforeAnythingIsWritten
 	adopted := adoptedBox(t, routed())
 	prior, placedBefore := adopted.recorded, adopted.placed
 	h := adopted.host()
-	h.front = yours{file: coolifyFile, routes: map[string]string{claimed: "dapp-lekbai-router-websecure-1"}}
+	h.front = userProxy{file: coolifyFile, routes: map[string]string{claimed: "dapp-lekbai-router-websecure-1"}}
 	err := h.ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}})
 	if err == nil || !strings.Contains(err.Error(), "dapp-lekbai-router-websecure-1") {
 		t.Fatalf("ClaimHosts() = %v, want the claim refused naming the router that routes it", err)
@@ -305,7 +305,7 @@ func TestYourProxyIsAskedOnlyAboutTheHostnamesAWriteAdds(t *testing.T) {
 	adopted := adoptedBox(t, state)
 	var asked [][]string
 	h := adopted.host()
-	h.front = yours{file: coolifyFile, asked: &asked}
+	h.front = userProxy{file: coolifyFile, asked: &asked}
 	if err := h.ClaimHosts(context.Background(), state.Claims); err != nil {
 		t.Fatalf("ClaimHosts() = %v", err)
 	}
@@ -324,7 +324,7 @@ func TestARenderingYourProxyRefusesIsNeverPlacedAndNothingIsWritten(t *testing.T
 	adopted := adoptedBox(t, routed())
 	prior, placedBefore := adopted.recorded, adopted.placed
 	h := adopted.host()
-	h.front = yours{file: coolifyFile, invalid: "Error: /dev/stdin:2: unrecognized directive: bogus"}
+	h.front = userProxy{file: coolifyFile, invalid: "Error: /dev/stdin:2: unrecognized directive: bogus"}
 	err := h.ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}})
 	if err == nil || !strings.Contains(err.Error(), "unrecognized directive: bogus") {
 		t.Fatalf("ClaimHosts() = %v, want the claim refused with what your proxy said of the rendering", err)
@@ -345,7 +345,7 @@ func TestADriftedFileWhoseRenderingYourProxyRefusesIsNotPlacedAgain(t *testing.T
 	adopted := adoptedBox(t, state)
 	adopted.gone = true
 	h := adopted.host()
-	h.front = yours{file: coolifyFile, invalid: "Error: /dev/stdin:1: unexpected token"}
+	h.front = userProxy{file: coolifyFile, invalid: "Error: /dev/stdin:1: unexpected token"}
 	if err := h.ClaimHosts(context.Background(), state.Claims); err == nil || !strings.Contains(err.Error(), "unexpected token") {
 		t.Errorf("ClaimHosts() = %v, want it refused with what your proxy said of the rendering", err)
 	}
@@ -361,7 +361,7 @@ func TestAReloadYourProxyRefusesPutsThePreviousFileBackAndSaysWhatYourProxySaid(
 	prior, placedBefore := adopted.recorded, adopted.placed
 	said := `Error: sending configuration to instance: caddy responded with error: HTTP 400: {"error":"loading config: ambiguous site definition: shop.example.com"}`
 	h := adopted.host()
-	h.front = yours{file: coolifyFile, unloaded: &[]string{said}}
+	h.front = userProxy{file: coolifyFile, unloaded: &[]string{said}}
 	err := h.ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}})
 	if err == nil || !strings.Contains(err.Error(), said) {
 		t.Fatalf("ClaimHosts() = %v, want the claim refused carrying what your proxy said verbatim", err)
