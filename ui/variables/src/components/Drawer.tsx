@@ -1,7 +1,7 @@
 import { ArrowRightIcon } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
+import { cn } from "../lib/classnames";
 import { role } from "../lib/type";
-import { cn } from "../lib/utils";
 import {
   coordinateKey,
   folderName,

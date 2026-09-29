@@ -12,6 +12,7 @@ export { Checkbox } from "./components/ui/checkbox";
 export { Switch } from "./components/ui/switch";
 export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./components/ui/tooltip";
 export { parseDotenv } from "./dotenv";
+export { cn } from "./lib/classnames";
 export { glyph, role } from "./lib/type";
 export * from "./model";
 export * from "./port";

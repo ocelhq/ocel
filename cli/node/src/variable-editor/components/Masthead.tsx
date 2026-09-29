@@ -1,6 +1,7 @@
 import { CheckCircleIcon, WarningCircleIcon } from "@phosphor-icons/react";
 import {
   Button,
+  cn,
   doneLabel,
   glyph,
   role,
@@ -11,8 +12,6 @@ import {
   unfilledCount,
   useValue,
 } from "@ui/variables";
-
-import { cn } from "../lib/utils";
 
 export function Masthead({ current }: { current: State }) {
   const unfilled = unfilledCount(current);

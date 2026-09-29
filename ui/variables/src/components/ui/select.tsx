@@ -1,9 +1,8 @@
 import { Select as SelectPrimitive } from "@base-ui/react/select";
 import { CaretDownIcon, CheckIcon } from "@phosphor-icons/react";
 import type * as React from "react";
-
+import { cn } from "../../lib/classnames";
 import { role } from "../../lib/type";
-import { cn } from "../../lib/utils";
 
 const Select = SelectPrimitive.Root;
 

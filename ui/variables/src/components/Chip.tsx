@@ -1,6 +1,6 @@
 import type { ComponentProps } from "react";
+import { cn } from "../lib/classnames";
 import { role } from "../lib/type";
-import { cn } from "../lib/utils";
 import { Badge, badgeVariants } from "./ui/badge";
 
 const tones = {

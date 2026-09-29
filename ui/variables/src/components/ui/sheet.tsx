@@ -3,7 +3,7 @@
 import { Dialog as SheetPrimitive } from "@base-ui/react/dialog";
 import { XIcon } from "@phosphor-icons/react";
 import type * as React from "react";
-import { cn } from "../../lib/utils";
+import { cn } from "../../lib/classnames";
 import { Button } from "./button";
 
 function Sheet({ ...props }: SheetPrimitive.Root.Props) {

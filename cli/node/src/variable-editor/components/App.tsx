@@ -4,6 +4,7 @@ import {
   Button,
   Confirm,
   CopyPanel,
+  cn,
   Drawer,
   DropNotice,
   Note,
@@ -15,7 +16,6 @@ import {
   useValue,
 } from "@ui/variables";
 
-import { cn } from "../lib/utils";
 import { Masthead } from "./Masthead";
 
 function Code({ children }: { children: React.ReactNode }) {

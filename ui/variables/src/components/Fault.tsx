@@ -1,7 +1,7 @@
 import { WarningIcon } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
+import { cn } from "../lib/classnames";
 import { glyph, role } from "../lib/type";
-import { cn } from "../lib/utils";
 
 export function Fault({ children, className }: { children: ReactNode; className?: string }) {
   return (
