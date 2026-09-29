@@ -30,13 +30,13 @@ type Guarantees struct {
 }
 
 type Spec struct {
-	Pins               []Pin
-	ClientCertificates []ClientCertificate
-	Hostnames          []string
-	PreviewBase        string
-	Upstream           string
-	Router             router.Kind
-	Permission         Permission
+	Pins        []Pin
+	Shields     []Shield
+	Hostnames   []string
+	PreviewBase string
+	Upstream    string
+	Router      router.Kind
+	Permission  Permission
 }
 
 type Permission struct {
@@ -44,9 +44,9 @@ type Permission struct {
 	Path string
 }
 
-type ClientCertificate struct {
-	Hostname    string
-	Certificate string
+type Shield struct {
+	Hostname           string
+	ClientCertificates []string
 }
 
 type Pin struct {

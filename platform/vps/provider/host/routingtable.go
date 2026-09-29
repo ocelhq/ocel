@@ -15,6 +15,7 @@ type RoutingTable struct {
 	Claims      []HostClaim
 	Routes      []AppRoute
 	Pins        []Pin
+	Shields     []Shield
 	PreviewBase string
 	Connector   string
 }
@@ -24,6 +25,7 @@ type tableRows struct {
 	Claims      []HostClaim `json:"claims,omitempty"`
 	Routes      []AppRoute  `json:"routes,omitempty"`
 	Pins        []Pin       `json:"pins,omitempty"`
+	Shields     []Shield    `json:"shields,omitempty"`
 	PreviewBase string      `json:"preview,omitempty"`
 	Connector   string      `json:"connector,omitempty"`
 }
@@ -34,6 +36,7 @@ func WriteRoutingTable(table RoutingTable) ([]byte, error) {
 		Claims:      slices.SortedFunc(slices.Values(table.Claims), byClaimed),
 		Routes:      slices.SortedFunc(slices.Values(table.Routes), byKey),
 		Pins:        slices.SortedFunc(slices.Values(table.Pins), byPinned),
+		Shields:     slices.SortedFunc(slices.Values(table.Shields), byShielded),
 		PreviewBase: table.PreviewBase,
 		Connector:   table.Connector,
 	})
@@ -55,6 +58,7 @@ func ReadRoutingTable(document []byte) (RoutingTable, error) {
 		Claims:      rows.Claims,
 		Routes:      rows.Routes,
 		Pins:        rows.Pins,
+		Shields:     rows.Shields,
 		PreviewBase: rows.PreviewBase,
 		Connector:   rows.Connector,
 	}

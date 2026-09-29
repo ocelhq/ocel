@@ -93,7 +93,7 @@ func TestCloudflareFrontsTheBoxAsAProxyThatRunsNoCodeAndForwardsToTheSwitchboard
 	if facts := front.Facts(); facts.RunsCode || !facts.ProxiesRecords || facts.ServesUnbound {
 		t.Errorf("the cloudflare edge's facts = %+v, want a proxy that forwards records to an origin and runs no worker", facts)
 	}
-	if front.Hooks().EnsureClientCertificate == nil {
+	if front.Hooks().ClientCertificates == nil {
 		t.Error("the cloudflare edge presents no client certificate, so the box could not refuse a request that did not come through it")
 	}
 	if got := p.Facts().ListPairedRouters("cloudflare"); !slices.Equal(got, []router.Kind{switchboard.RouterKind}) {

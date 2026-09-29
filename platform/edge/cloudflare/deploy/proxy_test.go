@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/edge/edgeconformance"
@@ -166,33 +167,37 @@ func TestTheCloudflareProxyRefusesAPreviewWildcardItCannotServe(t *testing.T) {
 	}
 }
 
-func TestTheCloudflareProxyUploadsOneClientCertificateAZoneWithNoneOfItsOwnPresents(t *testing.T) {
+func TestTheCloudflareProxyStagesAClientCertificateForAZoneWithNoneAndUploadsItOnlyWhenPresented(t *testing.T) {
 	m := proxyZoneMock()
-	front := m.proxy(t)
+	hooks := m.proxy(t).Hooks().ClientCertificates
+	ctx := context.Background()
 
-	presented, err := front.Hooks().EnsureClientCertificate(context.Background(), "shop.app.com")
+	staged, err := hooks.Stage(ctx, "shop.app.com")
 	if err != nil {
-		t.Fatalf("EnsureClientCertificate: %v", err)
+		t.Fatalf("Stage: %v", err)
 	}
-	if len(m.clientCertificates) != 1 {
-		t.Fatalf("uploaded %d client certificates, want one", len(m.clientCertificates))
+	if len(staged) != 1 {
+		t.Fatalf("Stage = %d certificates, want the one it minted", len(staged))
 	}
-	if presented != m.clientCertificates[0]["certificate"] {
-		t.Errorf("EnsureClientCertificate named another certificate than the one uploaded")
+	if len(m.clientCertificates) != 0 {
+		t.Fatalf("uploaded %d client certificates before any origin trusted one, want none: the zone presents what it is given at once, and an origin that does not trust it yet refuses every request", len(m.clientCertificates))
 	}
-	block, _ := pem.Decode([]byte(presented))
-	if block == nil {
-		t.Fatalf("the uploaded certificate %q is no PEM", presented)
-	}
-	leaf, err := x509.ParseCertificate(block.Bytes)
-	if err != nil {
-		t.Fatalf("parse the uploaded certificate: %v", err)
-	}
+	leaf := parsedLeaf(t, staged[0])
 	if leaf.IsCA {
-		t.Error("the uploaded certificate is a CA, and Cloudflare refuses anything but a leaf for zone-level authenticated origin pulls")
+		t.Error("the staged certificate is a CA, and Cloudflare refuses anything but a leaf for zone-level authenticated origin pulls")
 	}
 	if len(leaf.DNSNames) == 0 {
-		t.Error("the uploaded certificate names no SAN, and a trust config allowlists only certificates whose SAN it can check")
+		t.Error("the staged certificate names no SAN, and a trust config allowlists only certificates whose SAN it can check")
+	}
+	if lifetime := leaf.NotAfter.Sub(leaf.NotBefore); lifetime > 400*24*time.Hour {
+		t.Errorf("the staged certificate is good for %s, want about a year: a leaked key stays good for as long as the certificate is", lifetime)
+	}
+
+	if err := hooks.Present(ctx, "shop.app.com"); err != nil {
+		t.Fatalf("Present: %v", err)
+	}
+	if len(m.clientCertificates) != 1 || m.clientCertificates[0]["certificate"] != staged[0] {
+		t.Fatalf("uploaded %v, want the one certificate staged", m.clientCertificates)
 	}
 	if !strings.Contains(m.uploadedKeys[0], "PRIVATE KEY") {
 		t.Errorf("uploaded key %q, want the certificate's private key in PEM", m.uploadedKeys[0])
@@ -201,16 +206,19 @@ func TestTheCloudflareProxyUploadsOneClientCertificateAZoneWithNoneOfItsOwnPrese
 		t.Errorf("zone-level authenticated origin pulls were set %v, want turned on once", m.originPullWrites)
 	}
 
-	again, err := front.Hooks().EnsureClientCertificate(context.Background(), "www.app.com")
+	again, err := hooks.Stage(ctx, "www.app.com")
 	if err != nil {
-		t.Fatalf("EnsureClientCertificate again: %v", err)
+		t.Fatalf("Stage again: %v", err)
 	}
-	if again != presented || len(m.clientCertificates) != 1 || len(m.originPullWrites) != 1 {
+	if err := hooks.Present(ctx, "www.app.com"); err != nil {
+		t.Fatalf("Present again: %v", err)
+	}
+	if !slices.Equal(again, staged) || len(m.clientCertificates) != 1 || len(m.originPullWrites) != 1 {
 		t.Errorf("a second hostname in the zone uploaded %d certificates and set pulls %v, want the one certificate the zone already presents", len(m.clientCertificates), m.originPullWrites)
 	}
 }
 
-func TestTheCloudflareProxyPresentsTheLatestCertificateAZoneAlreadyHas(t *testing.T) {
+func TestTheCloudflareProxyTrustsEveryCertificateAZoneMayPresent(t *testing.T) {
 	m := proxyZoneMock()
 	m.originPulls = true
 	m.clientCertificates = []map[string]any{
@@ -219,16 +227,68 @@ func TestTheCloudflareProxyPresentsTheLatestCertificateAZoneAlreadyHas(t *testin
 		{"id": "gone", "certificate": "GONE", "status": "pending_deletion", "uploaded_on": "2026-09-01T00:00:00Z"},
 	}
 
-	presented, err := m.proxy(t).Hooks().EnsureClientCertificate(context.Background(), "shop.app.com")
+	staged, err := m.proxy(t).Hooks().ClientCertificates.Stage(context.Background(), "shop.app.com")
 	if err != nil {
-		t.Fatalf("EnsureClientCertificate: %v", err)
+		t.Fatalf("Stage: %v", err)
 	}
-	if presented != "NEW" {
-		t.Errorf("EnsureClientCertificate = %q, want NEW, the latest the zone presents", presented)
+	if !slices.Equal(staged, []string{"NEW", "OLD"}) {
+		t.Errorf("Stage = %v, want NEW and OLD: two runs that each uploaded one leave the zone presenting the latest, and an origin that trusts only its own refuses it", staged)
 	}
-	if len(m.uploadedKeys) != 0 || len(m.originPullWrites) != 0 {
-		t.Errorf("uploaded %d certificates and set pulls %v, want nothing changed on a zone already presenting one", len(m.uploadedKeys), m.originPullWrites)
+	if len(m.uploadedKeys) != 0 || len(m.deletedClientCertificates) != 0 {
+		t.Errorf("uploaded %d and deleted %v, want nothing changed: ocel minted neither certificate the zone presents", len(m.uploadedKeys), m.deletedClientCertificates)
 	}
+}
+
+func TestTheCloudflareProxyRenewsTheClientCertificateItMintedBeforeItExpires(t *testing.T) {
+	m := proxyZoneMock()
+	m.originPulls = true
+	expiring, _, err := mintClientCertificate("app.com", time.Now().Add(-clientCertificateLifetime+10*24*time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.clientCertificates = []map[string]any{{"id": "expiring", "certificate": expiring, "status": "active", "uploaded_on": "2026-01-01T00:00:00Z"}}
+	hooks := m.proxy(t).Hooks().ClientCertificates
+	ctx := context.Background()
+
+	staged, err := hooks.Stage(ctx, "shop.app.com")
+	if err != nil {
+		t.Fatalf("Stage: %v", err)
+	}
+	if len(staged) != 2 || !slices.Contains(staged, expiring) {
+		t.Fatalf("Stage = %d certificates, want the expiring one and its successor: an origin trusts both before the zone switches", len(staged))
+	}
+	successor := staged[slices.IndexFunc(staged, func(certificate string) bool { return certificate != expiring })]
+	if err := hooks.Present(ctx, "shop.app.com"); err != nil {
+		t.Fatalf("Present: %v", err)
+	}
+	if len(m.clientCertificates) != 2 || m.clientCertificates[1]["certificate"] != successor {
+		t.Fatalf("the zone lists %v, want the successor uploaded beside the expiring certificate", m.clientCertificates)
+	}
+
+	m.clientCertificates[1]["status"] = "active"
+	presented, err := hooks.Stage(ctx, "shop.app.com")
+	if err != nil {
+		t.Fatalf("Stage once the successor is active: %v", err)
+	}
+	if !slices.Equal(presented, []string{successor}) {
+		t.Errorf("Stage = %d certificates once the successor is active, want the successor alone: the zone presents the latest it deployed, and an origin stops trusting the one it replaced", len(presented))
+	}
+	if !slices.Equal(m.deletedClientCertificates, []string{"expiring"}) {
+		t.Errorf("deleted %v, want the certificate the successor replaced: Cloudflare deletes none on its own", m.deletedClientCertificates)
+	}
+}
+
+func parsedLeaf(t *testing.T, certificate string) *x509.Certificate {
+	t.Helper()
+	block, _ := pem.Decode([]byte(certificate))
+	if block == nil {
+		t.Fatalf("%q is no PEM", certificate)
+	}
+	leaf, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		t.Fatalf("parse %q: %v", certificate, err)
+	}
+	return leaf
 }
 
 func TestTheCloudflareProxyPurgesHostnamesAHundredAtATime(t *testing.T) {

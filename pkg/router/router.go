@@ -52,10 +52,10 @@ type Router interface {
 }
 
 type Claim struct {
-	Hostname          string
-	App               string
-	Certificate       string
-	ClientCertificate string
+	Hostname           string
+	App                string
+	Certificate        string
+	ClientCertificates []string
 }
 
 type Stack interface {

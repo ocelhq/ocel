@@ -2,6 +2,7 @@ package box_test
 
 import (
 	"context"
+	"reflect"
 	"slices"
 	"testing"
 
@@ -24,31 +25,35 @@ func routedOn(t *testing.T) (*machine, router.Stack) {
 	return m, routed
 }
 
-func TestAClaimOnTheBoxTakesTheHostnameShieldedByTheClientCertificateAndNamesTheBoxAsItsOrigin(t *testing.T) {
+func TestAClaimOnTheBoxShieldsTheHostnameBeforeItTakesItAndNamesTheBoxAsItsOrigin(t *testing.T) {
 	m, routed := routedOn(t)
 
-	origin, err := routed.Claim(context.Background(), router.Claim{Hostname: "shop.example.com", App: "web", ClientCertificate: pulled})
+	origin, err := routed.Claim(context.Background(), router.Claim{Hostname: "shop.example.com", App: "web", ClientCertificates: []string{pulled}})
 	if err != nil {
 		t.Fatalf("Claim: %v", err)
 	}
 	if origin != (edge.Origin{Address: address}) {
 		t.Errorf("Claim named origin %+v, want the box at %s: the edge in front forwards the hostname there", origin, address)
 	}
-	want := host.HostClaim{
-		Owner: box.Surface(slug, environment.TierProduction), Hostname: "shop.example.com",
-		Pointer: router.DefaultPointer, App: "web", ClientCertificate: pulled,
+	surface := box.Surface(slug, environment.TierProduction)
+	want := host.Shield{Hostname: "shop.example.com", Owner: surface, ClientCertificates: []string{pulled}}
+	if len(m.shields) != 1 || !reflect.DeepEqual(m.shields[0], want) {
+		t.Errorf("the box shields %+v, want %+v: the proxy answers the hostname only to a client presenting that certificate", m.shields, want)
 	}
-	if !slices.Contains(m.claims, want) {
-		t.Errorf("the box claims %+v, want %+v among them: the proxy answers the hostname only to a client presenting that certificate", m.claims, want)
+	if !slices.Contains(m.claims, host.HostClaim{Owner: surface, Hostname: "shop.example.com", Pointer: router.DefaultPointer, App: "web"}) {
+		t.Errorf("the box claims %+v, want shop.example.com among them", m.claims)
+	}
+	if shielded, claimed := slices.Index(m.calls, "shield shop.example.com"), slices.Index(m.calls, "claim shop.example.com"); shielded < 0 || shielded > claimed {
+		t.Errorf("calls = %v, want the hostname shielded before it is claimed: a claimed hostname nothing shields is answered to anyone", m.calls)
 	}
 	if !slices.Contains(m.calls, "apply origins "+slug+"/"+string(environment.TierProduction)) {
 		t.Errorf("calls = %v, want the project's buckets brought in line with the hostname it now claims", m.calls)
 	}
 }
 
-func TestDisclaimingOnTheBoxGivesTheHostnameBack(t *testing.T) {
+func TestDisclaimingOnTheBoxGivesTheHostnameAndItsShieldBack(t *testing.T) {
 	m, routed := routedOn(t)
-	if _, err := routed.Claim(context.Background(), router.Claim{Hostname: "shop.example.com", App: "web", ClientCertificate: pulled}); err != nil {
+	if _, err := routed.Claim(context.Background(), router.Claim{Hostname: "shop.example.com", App: "web", ClientCertificates: []string{pulled}}); err != nil {
 		t.Fatalf("Claim: %v", err)
 	}
 
@@ -57,6 +62,9 @@ func TestDisclaimingOnTheBoxGivesTheHostnameBack(t *testing.T) {
 	}
 	if slices.ContainsFunc(m.claims, func(claim host.HostClaim) bool { return claim.Hostname == "shop.example.com" }) {
 		t.Errorf("the box still claims %+v, want shop.example.com given back", m.claims)
+	}
+	if len(m.shields) != 0 {
+		t.Errorf("the box still shields %+v, want nothing left of shop.example.com", m.shields)
 	}
 }
 

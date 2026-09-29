@@ -115,7 +115,7 @@ func TestCloudflareFrontsTheLoadBalancerAsAProxyThatRunsNoCode(t *testing.T) {
 		t.Errorf("the cloudflare edge's facts = %+v, want the origin shielded, so a Cloud Run service answers only its load balancer", facts)
 	}
 	hooks := front.Hooks()
-	if hooks.EnsureClientCertificate == nil || hooks.CheckBootstrapInstalled == nil || hooks.ListBoundHostnames == nil {
+	if hooks.ClientCertificates == nil || hooks.CheckBootstrapInstalled == nil || hooks.ListBoundHostnames == nil {
 		t.Error("the cloudflare edge presents no client certificate, or says nothing of the load balancer its bootstrap raises")
 	}
 	if got := p.Facts().ListPairedRouters(cloudflare.Kind); !slices.Equal(got, []router.Kind{router.Kind(alb.Kind)}) {

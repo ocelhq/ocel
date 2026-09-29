@@ -9,9 +9,11 @@ import (
 	"crypto/x509/pkix"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"math/big"
 	"slices"
+	"strings"
 	"time"
 
 	cf "github.com/cloudflare/cloudflare-go/v4"
@@ -20,81 +22,164 @@ import (
 
 const (
 	clientCertificateBits     = 2048
-	clientCertificateLifetime = 10 * 365 * 24 * time.Hour
+	clientCertificateLifetime = 365 * 24 * time.Hour
+	clientCertificateRenewal  = 30 * 24 * time.Hour
 	clientCertificateName     = "ocel origin pull"
+	activeStatus              = "active"
 )
 
-var presentedStatuses = []string{"initializing", "pending_deployment", "active"}
+var presentedStatuses = []string{"initializing", "pending_deployment", activeStatus}
 
 type zoneClientCertificate struct {
+	ID          string    `json:"id"`
 	Certificate string    `json:"certificate"`
 	Status      string    `json:"status"`
 	UploadedOn  time.Time `json:"uploaded_on"`
 }
 
-func (p *cloudflare) ensureClientCertificate(ctx context.Context, hostname string) (string, error) {
-	accountID := p.accountID()
-	if accountID == "" {
-		return "", fmt.Errorf("%s is not set; it is required to read the client certificate Cloudflare presents to origins", envAccountID)
-	}
-	zoneID, zoneName, err := p.resolveZone(ctx, accountID, routeBaseDomain(hostname))
-	if err != nil {
-		return "", err
-	}
-	presented, err := p.readPresentedClientCertificate(ctx, zoneID)
-	if err != nil {
-		return "", err
-	}
-	if presented == "" {
-		if err := p.uploadClientCertificate(ctx, zoneID, zoneName); err != nil {
-			return "", err
-		}
-		if presented, err = p.readPresentedClientCertificate(ctx, zoneID); err != nil {
-			return "", err
-		}
-		if presented == "" {
-			return "", fmt.Errorf("zone %s lists no client certificate it presents to origins after one was uploaded to it", zoneName)
-		}
-	}
-	return presented, p.ensureOriginPulls(ctx, zoneID, zoneName)
+type stagedClientCertificate struct {
+	certificate string
+	key         string
 }
 
-func (p *cloudflare) readPresentedClientCertificate(ctx context.Context, zoneID string) (string, error) {
+func (p *cloudflare) stageClientCertificates(ctx context.Context, hostname string) ([]string, error) {
+	zoneID, zoneName, err := p.clientCertificateZone(ctx, hostname)
+	if err != nil {
+		return nil, err
+	}
+	presented, err := p.readPresentedClientCertificates(ctx, zoneID)
+	if err != nil {
+		return nil, err
+	}
+	p.clientMu.Lock()
+	staged, pending := p.staged[zoneID]
+	p.clientMu.Unlock()
+	if !pending && dueForSuccessor(presented, time.Now()) {
+		certificate, key, err := mintClientCertificate(zoneName, time.Now())
+		if err != nil {
+			return nil, err
+		}
+		staged = stagedClientCertificate{certificate: certificate, key: key}
+		p.clientMu.Lock()
+		if p.staged == nil {
+			p.staged = map[string]stagedClientCertificate{}
+		}
+		p.staged[zoneID] = staged
+		p.clientMu.Unlock()
+		pending = true
+	}
+	if !pending {
+		if presented, err = p.retireSupersededClientCertificates(ctx, zoneID, presented); err != nil {
+			return nil, err
+		}
+	}
+	trusted := make([]string, 0, len(presented)+1)
+	for _, listed := range presented {
+		trusted = append(trusted, listed.Certificate)
+	}
+	if pending {
+		trusted = append(trusted, staged.certificate)
+	}
+	slices.Sort(trusted)
+	return slices.Compact(trusted), nil
+}
+
+func (p *cloudflare) presentClientCertificate(ctx context.Context, hostname string) error {
+	zoneID, zoneName, err := p.clientCertificateZone(ctx, hostname)
+	if err != nil {
+		return err
+	}
+	p.clientMu.Lock()
+	staged, pending := p.staged[zoneID]
+	p.clientMu.Unlock()
+	if pending {
+		if _, err := p.client.OriginTLSClientAuth.New(ctx, origin_tls_client_auth.OriginTLSClientAuthNewParams{
+			ZoneID:      cf.F(zoneID),
+			Certificate: cf.F(staged.certificate),
+			PrivateKey:  cf.F(staged.key),
+		}); err != nil {
+			return fmt.Errorf("upload the client certificate zone %s presents to origins: %w", zoneName, err)
+		}
+		p.clientMu.Lock()
+		delete(p.staged, zoneID)
+		p.clientMu.Unlock()
+	}
+	return p.ensureOriginPulls(ctx, zoneID, zoneName)
+}
+
+func (p *cloudflare) clientCertificateZone(ctx context.Context, hostname string) (id, name string, err error) {
+	accountID := p.accountID()
+	if accountID == "" {
+		return "", "", fmt.Errorf("%s is not set; it is required to read the client certificate Cloudflare presents to origins", envAccountID)
+	}
+	return p.resolveZone(ctx, accountID, routeBaseDomain(hostname))
+}
+
+func latestClientCertificate(presented []zoneClientCertificate) zoneClientCertificate {
+	return slices.MaxFunc(presented, func(a, b zoneClientCertificate) int {
+		return cmp.Or(a.UploadedOn.Compare(b.UploadedOn), cmp.Compare(a.Certificate, b.Certificate))
+	})
+}
+
+func dueForSuccessor(presented []zoneClientCertificate, now time.Time) bool {
+	if len(presented) == 0 {
+		return true
+	}
+	leaf, minted := mintedLeaf(latestClientCertificate(presented).Certificate)
+	return minted && now.Add(clientCertificateRenewal).After(leaf.NotAfter)
+}
+
+func mintedLeaf(certificate string) (*x509.Certificate, bool) {
+	block, _ := pem.Decode([]byte(certificate))
+	if block == nil || block.Type != "CERTIFICATE" {
+		return nil, false
+	}
+	leaf, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return nil, false
+	}
+	return leaf, strings.HasPrefix(leaf.Subject.CommonName, clientCertificateName+" ")
+}
+
+func (p *cloudflare) retireSupersededClientCertificates(ctx context.Context, zoneID string, presented []zoneClientCertificate) ([]zoneClientCertificate, error) {
+	if len(presented) < 2 {
+		return presented, nil
+	}
+	latest := latestClientCertificate(presented)
+	if latest.Status != activeStatus {
+		return presented, nil
+	}
+	kept := make([]zoneClientCertificate, 0, len(presented))
+	var errs []error
+	for _, listed := range presented {
+		if _, minted := mintedLeaf(listed.Certificate); !minted || listed.ID == latest.ID {
+			kept = append(kept, listed)
+			continue
+		}
+		if _, err := p.client.OriginTLSClientAuth.Delete(ctx, listed.ID, origin_tls_client_auth.OriginTLSClientAuthDeleteParams{ZoneID: cf.F(zoneID)}); err != nil {
+			errs = append(errs, fmt.Errorf("delete the client certificate %s zone %s no longer presents: %w", listed.ID, zoneID, err))
+			kept = append(kept, listed)
+		}
+	}
+	return kept, errors.Join(errs...)
+}
+
+func (p *cloudflare) readPresentedClientCertificates(ctx context.Context, zoneID string) ([]zoneClientCertificate, error) {
 	listed := p.client.OriginTLSClientAuth.ListAutoPaging(ctx, origin_tls_client_auth.OriginTLSClientAuthListParams{ZoneID: cf.F(zoneID)})
 	var presented []zoneClientCertificate
 	for listed.Next() {
 		var read zoneClientCertificate
 		if err := json.Unmarshal([]byte(listed.Current().JSON.RawJSON()), &read); err != nil {
-			return "", fmt.Errorf("read a client certificate of zone %s: %w", zoneID, err)
+			return nil, fmt.Errorf("read a client certificate of zone %s: %w", zoneID, err)
 		}
 		if slices.Contains(presentedStatuses, read.Status) && read.Certificate != "" {
 			presented = append(presented, read)
 		}
 	}
 	if err := listed.Err(); err != nil {
-		return "", fmt.Errorf("list the client certificates zone %s presents to origins: %w", zoneID, err)
+		return nil, fmt.Errorf("list the client certificates zone %s presents to origins: %w", zoneID, err)
 	}
-	if len(presented) == 0 {
-		return "", nil
-	}
-	return slices.MaxFunc(presented, func(a, b zoneClientCertificate) int {
-		return cmp.Or(a.UploadedOn.Compare(b.UploadedOn), cmp.Compare(a.Certificate, b.Certificate))
-	}).Certificate, nil
-}
-
-func (p *cloudflare) uploadClientCertificate(ctx context.Context, zoneID, zoneName string) error {
-	certificate, key, err := mintClientCertificate(zoneName, time.Now())
-	if err != nil {
-		return err
-	}
-	if _, err := p.client.OriginTLSClientAuth.New(ctx, origin_tls_client_auth.OriginTLSClientAuthNewParams{
-		ZoneID:      cf.F(zoneID),
-		Certificate: cf.F(certificate),
-		PrivateKey:  cf.F(key),
-	}); err != nil {
-		return fmt.Errorf("upload the client certificate zone %s presents to origins: %w", zoneName, err)
-	}
-	return nil
+	return presented, nil
 }
 
 func (p *cloudflare) ensureOriginPulls(ctx context.Context, zoneID, zoneName string) error {

@@ -111,6 +111,31 @@ func (h *Host) DisclaimPointer(ctx context.Context, owner, pointer string) error
 func (h *Host) DisclaimSurface(ctx context.Context, owner string) error {
 	return h.reshape(ctx, func(state RoutingTable) (RoutingTable, error) {
 		state.Claims = Disclaiming(state.Claims, func(claim HostClaim) bool { return claim.Owner == owner })
+		state.Shields = Unshielding(state.Shields, func(shield Shield) bool { return shield.Owner == owner })
+		return state, nil
+	})
+}
+
+func (h *Host) ShieldHost(ctx context.Context, shield Shield) error {
+	if err := validTable(RoutingTable{Shields: []Shield{shield}}); err != nil {
+		return err
+	}
+	return h.reshape(ctx, func(state RoutingTable) (RoutingTable, error) {
+		if at := slices.IndexFunc(state.Shields, func(held Shield) bool { return held.Hostname == shield.Hostname }); at >= 0 && state.Shields[at].Owner != shield.Owner {
+			return RoutingTable{}, refusal.Refuse(refusal.CodeBusy,
+				"%s is shielded on this box for %s\nUnbind it there before %s binds it",
+				shield.Hostname, state.Shields[at].Owner, shield.Owner)
+		}
+		state.Shields = Shielding(state.Shields, shield)
+		return state, nil
+	})
+}
+
+func (h *Host) UnshieldHost(ctx context.Context, hostname, owner string) error {
+	return h.reshape(ctx, func(state RoutingTable) (RoutingTable, error) {
+		state.Shields = Unshielding(state.Shields, func(shield Shield) bool {
+			return shield.Hostname == hostname && shield.Owner == owner
+		})
 		return state, nil
 	})
 }

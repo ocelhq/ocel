@@ -33,8 +33,41 @@ func (e *Edge) Shielded() *Edge {
 }
 
 type trustRecord struct {
-	Certificates []string `json:"certificates,omitempty"`
-	Raised       []string `json:"raised,omitempty"`
+	Lineages [][]string `json:"lineages,omitempty"`
+	Raised   []string   `json:"raised,omitempty"`
+}
+
+func (r trustRecord) trusted() []string {
+	var trusted []string
+	for _, lineage := range r.Lineages {
+		trusted = append(trusted, lineage...)
+	}
+	slices.Sort(trusted)
+	return slices.Compact(trusted)
+}
+
+func (r trustRecord) succeededBy(certificates []string, adding bool) (trustRecord, bool) {
+	lineage := slices.Compact(slices.Sorted(slices.Values(certificates)))
+	kept := make([][]string, 0, len(r.Lineages)+1)
+	replaced := false
+	for _, held := range r.Lineages {
+		if slices.ContainsFunc(held, func(certificate string) bool { return slices.Contains(lineage, certificate) }) {
+			replaced = true
+			continue
+		}
+		kept = append(kept, held)
+	}
+	if !replaced && !adding {
+		return r, false
+	}
+	kept = append(kept, lineage)
+	slices.SortFunc(kept, slices.Compare)
+	kept = slices.CompactFunc(kept, slices.Equal)
+	if slices.EqualFunc(kept, r.Lineages, slices.Equal) {
+		return r, false
+	}
+	r.Lineages = kept
+	return r, true
 }
 
 func (e *Edge) trustKey(tier environment.Tier) keyvalue.Key {
@@ -87,61 +120,71 @@ func (e *Edge) ensureTrusted(ctx context.Context, tier environment.Tier) ([]stri
 	if err != nil {
 		return nil, err
 	}
-	if len(record.Certificates) > 0 {
-		return record.Certificates, nil
+	if len(record.Lineages) > 0 {
+		return record.trusted(), nil
 	}
 	placeholder, err := mintUnpresentableCertificate(time.Now())
 	if err != nil {
 		return nil, err
 	}
 	record, err = e.changeTrust(ctx, tier, func(read trustRecord) (trustRecord, bool) {
-		if len(read.Certificates) > 0 {
+		if len(read.Lineages) > 0 {
 			return read, false
 		}
-		read.Certificates = []string{placeholder}
+		read.Lineages = [][]string{{placeholder}}
 		return read, true
 	})
-	return record.Certificates, err
+	return record.trusted(), err
 }
 
-func (e *Edge) shield(ctx context.Context, tier environment.Tier, certificate string) (Front, error) {
-	record, err := e.changeTrust(ctx, tier, func(read trustRecord) (trustRecord, bool) {
-		if slices.Contains(read.Certificates, certificate) {
-			return read, false
-		}
-		read.Certificates = append(read.Certificates, certificate)
-		slices.Sort(read.Certificates)
-		return read, true
-	})
+func (e *Edge) shield(ctx context.Context, tier environment.Tier, certificates []string) (Front, error) {
+	front, err := e.trust(ctx, tier, certificates, true)
 	if err != nil {
 		return Front{}, err
 	}
+	if _, err := e.trust(ctx, tier.Sibling(), certificates, false); err != nil {
+		return Front{}, err
+	}
+	return front, nil
+}
+
+func (e *Edge) trust(ctx context.Context, tier environment.Tier, certificates []string, adding bool) (Front, error) {
 	outputs, err := e.deps.Stacks.Outputs(ctx, e.frontTarget(tier))
 	if err != nil {
 		return Front{}, err
 	}
 	front := frontOf(outputs)
 	front.Shielded = true
-	if front.provisioned() && slices.Equal(record.Raised, record.Certificates) {
+	if !adding && !front.provisioned() {
 		return front, nil
 	}
-	front, err = e.raiseServing(ctx, tier, previewEntry{}, progress.DiscardProgress())
+	record, err := e.changeTrust(ctx, tier, func(read trustRecord) (trustRecord, bool) {
+		return read.succeededBy(certificates, adding)
+	})
+	if err != nil {
+		return Front{}, err
+	}
+	trusted := record.trusted()
+	if front.provisioned() && slices.Equal(record.Raised, trusted) {
+		return front, nil
+	}
+	front, err = e.raise(ctx, tier, progress.DiscardProgress())
 	if err != nil {
 		return Front{}, err
 	}
 	_, err = e.changeTrust(ctx, tier, func(read trustRecord) (trustRecord, bool) {
-		if !slices.Equal(read.Certificates, record.Certificates) {
+		if !slices.Equal(read.trusted(), trusted) {
 			return read, false
 		}
-		read.Raised = slices.Clone(record.Certificates)
+		read.Raised = trusted
 		return read, true
 	})
 	return front, err
 }
 
-func (e *Edge) ensureFront(ctx context.Context, tier environment.Tier, certificate string) (Front, error) {
-	if certificate != "" {
-		return e.shield(ctx, tier, certificate)
+func (e *Edge) ensureFront(ctx context.Context, tier environment.Tier, certificates []string) (Front, error) {
+	if len(certificates) > 0 {
+		return e.shield(ctx, tier, certificates)
 	}
 	outputs, err := e.deps.Stacks.Outputs(ctx, e.frontTarget(tier))
 	if err != nil {

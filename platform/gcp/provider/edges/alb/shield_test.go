@@ -98,7 +98,7 @@ func TestAClaimWithAClientCertificateAnswersTheHostnameOnTheShieldedFrontAndName
 	front, w := shielding(t)
 	routed := unreconciledRouter(t, front)
 
-	origin, err := routed.Claim(context.Background(), router.Claim{Hostname: "shop.example.com", App: "web", Certificate: "certs/shop", ClientCertificate: zonePull})
+	origin, err := routed.Claim(context.Background(), router.Claim{Hostname: "shop.example.com", App: "web", Certificate: "certs/shop", ClientCertificates: []string{zonePull}})
 	if err != nil {
 		t.Fatalf("Claim: %v", err)
 	}
@@ -127,7 +127,7 @@ func TestTheShieldedFrontIsRaisedAgainOnlyForACertificateItDoesNotYetTrust(t *te
 	routed := unreconciledRouter(t, front)
 	ctx := context.Background()
 	for _, hostname := range []string{"shop.example.com", "www.example.com"} {
-		if _, err := routed.Claim(ctx, router.Claim{Hostname: hostname, App: "web", Certificate: "certs/" + hostname, ClientCertificate: zonePull}); err != nil {
+		if _, err := routed.Claim(ctx, router.Claim{Hostname: hostname, App: "web", Certificate: "certs/" + hostname, ClientCertificates: []string{zonePull}}); err != nil {
 			t.Fatalf("Claim(%s): %v", hostname, err)
 		}
 	}
@@ -144,7 +144,7 @@ func TestTheShieldedFrontIsRaisedAgainOnlyForACertificateItDoesNotYetTrust(t *te
 		t.Errorf("the shielded front was raised %d times for two hostnames in one zone, want once", got)
 	}
 
-	if _, err := routed.Claim(ctx, router.Claim{Hostname: "shop.example.org", App: "web", Certificate: "certs/org", ClientCertificate: otherZonePull}); err != nil {
+	if _, err := routed.Claim(ctx, router.Claim{Hostname: "shop.example.org", App: "web", Certificate: "certs/org", ClientCertificates: []string{otherZonePull}}); err != nil {
 		t.Fatalf("Claim in another zone: %v", err)
 	}
 	if got := raised(); got != 2 {
@@ -152,6 +152,44 @@ func TestTheShieldedFrontIsRaisedAgainOnlyForACertificateItDoesNotYetTrust(t *te
 	}
 	if got, want := trustedBy(t, w), []string{zonePull, otherZonePull}; !slices.Equal(got, want) {
 		t.Errorf("the shielded front trusts %v, want both zones' certificates: every project forwarded through it keeps answering", got)
+	}
+}
+
+func TestTheShieldedFrontTrustsASuccessorBeforeTheZoneSwitchesAndStopsTrustingWhatItReplaced(t *testing.T) {
+	t.Parallel()
+
+	front, w := shielding(t)
+	w.outputs[ShieldedFrontStack(environment.TierPreview)] = shieldedFront()
+	routed := unreconciledRouter(t, front)
+	ctx := context.Background()
+	claim := func(hostname string, certificates ...string) {
+		t.Helper()
+		if _, err := routed.Claim(ctx, router.Claim{Hostname: hostname, App: "web", Certificate: "certs/" + hostname, ClientCertificates: certificates}); err != nil {
+			t.Fatalf("Claim(%s): %v", hostname, err)
+		}
+	}
+	const successor = "-----BEGIN CERTIFICATE-----\nzone one, renewed\n-----END CERTIFICATE-----\n"
+	claim("shop.example.com", zonePull)
+	claim("shop.example.org", otherZonePull)
+	if _, err := front.Shielded().shield(ctx, environment.TierPreview, []string{zonePull}); err != nil {
+		t.Fatal(err)
+	}
+
+	claim("shop.example.com", zonePull, successor)
+	if got, want := trustedBy(t, w), []string{zonePull, successor, otherZonePull}; !slices.Equal(got, want) {
+		t.Errorf("the shielded front trusts %v while the zone renews its certificate, want %v", got, want)
+	}
+	record, err := front.Shielded().changeTrust(ctx, environment.TierPreview, func(read trustRecord) (trustRecord, bool) { return read, false })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(record.trusted(), successor) {
+		t.Errorf("the preview tier's shielded front trusts %v, want the successor too: the zone presents one certificate to every origin it forwards to", record.trusted())
+	}
+
+	claim("shop.example.com", successor)
+	if got, want := trustedBy(t, w), []string{successor, otherZonePull}; !slices.Equal(got, want) {
+		t.Errorf("the shielded front trusts %v once the zone switched, want %v: a retired certificate's key opens nothing", got, want)
 	}
 }
 
@@ -169,7 +207,7 @@ func TestTheShieldedFrontComesUpAtBootstrapTrustingNothingAClientCouldPresent(t 
 	}
 
 	routed := unreconciledRouter(t, front)
-	if _, err := routed.Claim(context.Background(), router.Claim{Hostname: "shop.example.com", App: "web", Certificate: "certs/shop", ClientCertificate: zonePull}); err != nil {
+	if _, err := routed.Claim(context.Background(), router.Claim{Hostname: "shop.example.com", App: "web", Certificate: "certs/shop", ClientCertificates: []string{zonePull}}); err != nil {
 		t.Fatalf("Claim: %v", err)
 	}
 	if got := trustedBy(t, w); !slices.Contains(got, zonePull) {
@@ -198,7 +236,7 @@ func TestDestroyingTheALBRouterTakesDownWhatItsClaimsBound(t *testing.T) {
 
 	front, w := shielding(t)
 	routed := unreconciledRouter(t, front)
-	if _, err := routed.Claim(context.Background(), router.Claim{Hostname: "shop.example.com", App: "web", Certificate: "certs/shop", ClientCertificate: zonePull}); err != nil {
+	if _, err := routed.Claim(context.Background(), router.Claim{Hostname: "shop.example.com", App: "web", Certificate: "certs/shop", ClientCertificates: []string{zonePull}}); err != nil {
 		t.Fatalf("Claim: %v", err)
 	}
 	if err := routed.Destroy(context.Background()); err != nil {
