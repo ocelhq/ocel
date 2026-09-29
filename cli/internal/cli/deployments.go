@@ -14,6 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
@@ -44,10 +45,12 @@ var deploymentsLsCmd = &cobra.Command{
 
 const defaultPruneKeepN = 10
 
-var (
-	pruneKeepN int
-	pruneYes   bool
-)
+type pruneOptions struct {
+	keep int
+	yes  bool
+}
+
+var pruneOpts pruneOptions
 
 var deploymentsPruneCmd = &cobra.Command{
 	Use:   "prune",
@@ -58,14 +61,14 @@ var deploymentsPruneCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("determine working directory: %w", err)
 		}
-		return runPromotionsPrune(cmd.Context(), newDeps(), cwd, pruneKeepN)
+		return runPromotionsPrune(cmd.Context(), newDeps(), cwd, pruneOpts, cmd.OutOrStdout(), cmd.InOrStdin())
 	},
 }
 
 func init() {
 	deploymentsCmd.AddCommand(cmddeps.ReserveStdout(deploymentsLsCmd))
-	deploymentsPruneCmd.Flags().IntVar(&pruneKeepN, "keep", defaultPruneKeepN, "Number of most recent promotions to keep, always additionally pinning the active one")
-	cmddeps.Yes(deploymentsPruneCmd, &pruneYes)
+	deploymentsPruneCmd.Flags().IntVar(&pruneOpts.keep, "keep", defaultPruneKeepN, "Number of most recent promotions to keep, always additionally pinning the active one")
+	cmddeps.Yes(deploymentsPruneCmd, &pruneOpts.yes)
 	deploymentsCmd.AddCommand(deploymentsPruneCmd)
 }
 
@@ -118,13 +121,17 @@ func listPromotions(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.C
 	return listed.GetPromotions(), err
 }
 
-func runPromotionsPrune(ctx context.Context, deps cmddeps.Deps, cwd string, keepN int) (err error) {
+func runPromotionsPrune(ctx context.Context, deps cmddeps.Deps, cwd string, opts pruneOptions, stdout io.Writer, stdin io.Reader) (err error) {
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}
 
 	if _, err := cfg.RequireProvider(); err != nil {
+		return err
+	}
+	gate := deps.Gate(consent.PlanFirst, "ocel deployments prune", opts.yes, stdout, stdin)
+	if err := gate.Refuse(); err != nil {
 		return err
 	}
 
@@ -147,15 +154,27 @@ func runPromotionsPrune(ctx context.Context, deps cmddeps.Deps, cwd string, keep
 		return err
 	}
 
+	plan := run.Phase(progressv1.Phase_PHASE_PLAN)
+	plan.Say(fmt.Sprintf("This will reclaim every production promotion of project %q but the newest %d and the live one; none of them can be rolled back to afterwards", cfg.Slug, opts.keep))
+	granted, err := gate.Consent(ctx, plan, nil, fmt.Sprintf("Reclaim the older production promotions of %q?", cfg.Slug))
+	plan.End(err)
+	if err != nil {
+		return err
+	}
+	if !granted {
+		run.Finish(fmt.Sprintf("Nothing reclaimed: production of %s keeps every promotion", cfg.Slug))
+		return nil
+	}
+
 	req := &contractv1.RemoveStalePromotionsRequest{
 		Slug:  cfg.Slug,
-		KeepN: int32(keepN),
+		KeepN: int32(opts.keep),
 		Edge:  edgewire.Selection(cfg),
 	}
 	if _, err := providerclient.Stream(ctx, prov, "RemoveStalePromotions", req, contractv1connect.ProviderServiceClient.RemoveStalePromotions); err != nil {
 		return err
 	}
-	run.Finish(fmt.Sprintf("Pruned the production promotions of %s down to the newest %d", cfg.Slug, keepN))
+	run.Finish(fmt.Sprintf("Pruned the production promotions of %s down to the newest %d", cfg.Slug, opts.keep))
 	return nil
 }
 

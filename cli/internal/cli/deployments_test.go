@@ -123,7 +123,7 @@ func TestRunDeploymentsPrune(t *testing.T) {
 
 		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runPromotionsPrune(context.Background(), deps, root, 10); err != nil {
+		if err := runPromotionsPrune(context.Background(), deps, root, pruneOptions{keep: 10, yes: true}, &stdout, strings.NewReader("")); err != nil {
 			t.Fatalf("runPromotionsPrune err = %v; stdout=%s", err, stdout.String())
 		}
 
@@ -133,6 +133,46 @@ func TestRunDeploymentsPrune(t *testing.T) {
 		}
 
 		clitest.WaitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("it refuses without a terminal or --yes and reclaims nothing", func(t *testing.T) {
+		root, _ := clitest.SetUpDeployFixture(t)
+		deps := newTestDeps()
+		clitest.SetLoggedIn(&deps)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+
+		var stdout bytes.Buffer
+		clitest.AttachTerminalSink(deps, &stdout)
+		err := runPromotionsPrune(context.Background(), deps, root, pruneOptions{keep: 10}, &stdout, strings.NewReader(""))
+		if err == nil || !strings.Contains(err.Error(), "pass --yes") {
+			t.Fatalf("runPromotionsPrune without a terminal err = %v, want a refusal naming --yes", err)
+		}
+		if strings.Contains(stdout.String(), "Reclaimed") {
+			t.Errorf("stdout = %q, want nothing reclaimed without consent", stdout.String())
+		}
+	})
+
+	t.Run("a declined confirmation reclaims nothing", func(t *testing.T) {
+		root, _ := clitest.SetUpDeployFixture(t)
+		deps := newTestDeps()
+		clitest.SetLoggedIn(&deps)
+		deps.StdinIsTerminal = func(io.Reader) bool { return true }
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+
+		var stdout bytes.Buffer
+		clitest.AttachTerminalSink(deps, &stdout)
+		if err := runPromotionsPrune(context.Background(), deps, root, pruneOptions{keep: 10}, &stdout, strings.NewReader("n\n")); err != nil {
+			t.Fatalf("runPromotionsPrune err = %v; stdout=%s", err, stdout.String())
+		}
+		out := stdout.String()
+		if !strings.Contains(out, "Not confirmed, so this run changes nothing") {
+			t.Errorf("stdout = %q, want a declined confirmation to say so", out)
+		}
+		if strings.Contains(out, "Reclaimed") {
+			t.Errorf("stdout = %q, want nothing reclaimed behind a declined confirmation", out)
+		}
 	})
 
 	t.Run("it refuses on preview infrastructure", func(t *testing.T) {
@@ -145,7 +185,7 @@ func TestRunDeploymentsPrune(t *testing.T) {
 
 		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(deps, &stdout)
-		err := runPromotionsPrune(context.Background(), deps, root, 10)
+		err := runPromotionsPrune(context.Background(), deps, root, pruneOptions{keep: 10, yes: true}, &stdout, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runPromotionsPrune err = nil, want a tier-mismatch failure")
 		}
@@ -203,7 +243,7 @@ func TestPruningReportsWhatItReclaimedThroughTheRunsEvents(t *testing.T) {
 
 	var stream bytes.Buffer
 	clitest.AttachTerminalSink(deps, &stream)
-	if err := runPromotionsPrune(context.Background(), deps, root, 10); err != nil {
+	if err := runPromotionsPrune(context.Background(), deps, root, pruneOptions{keep: 10, yes: true}, &stream, strings.NewReader("")); err != nil {
 		t.Fatalf("runPromotionsPrune err = %v; stream=%s", err, stream.String())
 	}
 
