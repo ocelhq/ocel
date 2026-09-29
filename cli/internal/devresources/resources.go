@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -37,7 +36,7 @@ type Options struct {
 	Open       docker.OpenFunc
 	StateDir   string
 	AppOrigins func() []string
-	Stdout     io.Writer
+	Announce   func(line string)
 }
 
 const StopsWithin = docker.StopsWithin
@@ -65,8 +64,8 @@ func openUsersLock(stateDir string) (*flock.Flock, error) {
 }
 
 type Resources struct {
-	project string
-	stdout  io.Writer
+	project  string
+	announce func(line string)
 
 	backends map[resourcesv1.ResourceType]Backend
 
@@ -77,13 +76,13 @@ type Resources struct {
 }
 
 func New(project string, opts Options) *Resources {
-	if opts.Stdout == nil {
-		opts.Stdout = io.Discard
+	if opts.Announce == nil {
+		opts.Announce = func(string) {}
 	}
 	if opts.AppOrigins == nil {
 		opts.AppOrigins = func() []string { return nil }
 	}
-	r := &Resources{project: project, stdout: opts.Stdout, backends: map[resourcesv1.ResourceType]Backend{}, printed: map[string]struct{}{}}
+	r := &Resources{project: project, announce: opts.Announce, backends: map[resourcesv1.ResourceType]Backend{}, printed: map[string]struct{}{}}
 	open := opts.Open
 	opts.Open = func(ctx context.Context) (docker.Engine, error) {
 		r.mu.Lock()
@@ -151,7 +150,7 @@ func (r *Resources) Resolve(ctx context.Context, resources []declaration.Resourc
 			return nil, err
 		}
 		for _, one := range resolved {
-			r.announce(fmt.Sprintf("%s %q → %s", label(kind), one.Name, one.Origin))
+			r.announceOnce(fmt.Sprintf("%s %q → %s", label(kind), one.Name, one.Origin))
 		}
 		out = append(out, resolved...)
 	}
@@ -163,14 +162,14 @@ func label(kind resourcesv1.ResourceType) string {
 	return strings.ToLower(naming.EnvFragment(bound))
 }
 
-func (r *Resources) announce(line string) {
+func (r *Resources) announceOnce(line string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, said := r.printed[line]; said {
 		return
 	}
 	r.printed[line] = struct{}{}
-	fmt.Fprintln(r.stdout, line)
+	r.announce(line)
 }
 
 func (r *Resources) Close(ctx context.Context) error {

@@ -33,7 +33,7 @@ func startHost(ctx context.Context, opts Options, source valueSource) (*host, er
 		Open:       opts.OpenDocker,
 		StateDir:   stateDir(cfg),
 		AppOrigins: appOrigins(cfg.Dir, source),
-		Stdout:     opts.Stdout,
+		Announce:   opts.session().Say,
 	})
 
 	srv := devserver.New("http://"+address, resources)
@@ -45,7 +45,7 @@ func startHost(ctx context.Context, opts Options, source valueSource) (*host, er
 		stopping, cancel := context.WithTimeout(context.WithoutCancel(ctx), devresources.StopsWithin)
 		defer cancel()
 		if err := resources.Close(stopping); err != nil {
-			fmt.Fprintln(opts.Stderr, "stop dev resources:", err)
+			opts.session().Warn(fmt.Sprintf("Stopping the dev resources failed: %v", err))
 		}
 	}}, nil
 }

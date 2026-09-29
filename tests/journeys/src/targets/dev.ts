@@ -100,7 +100,7 @@ async function answering(port: number): Promise<boolean> {
 }
 
 export function startedResources(said: string): boolean {
-  return /^\S+ "[^"]+" → /m.test(said);
+  return /^INFO\s+\S+ "[^"]+" → /m.test(said);
 }
 
 export function devProject(dir: string): string {

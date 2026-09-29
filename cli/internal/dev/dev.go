@@ -12,7 +12,16 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
+	"github.com/ocelhq/ocel/pkg/progress"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+)
+
+var (
+	environmentTitle = progress.Title{Started: "Resolving the app's environment", Ended: "Resolved the app's environment"}
+	changeTitle      = progress.Title{Started: "Re-resolving the app's environment after a change", Ended: "Re-resolved the app's environment after a change"}
+	leaderTitle      = progress.Title{Started: "Connecting to the running `ocel dev`", Ended: "Connected to the running `ocel dev`"}
 )
 
 type Options struct {
@@ -23,6 +32,11 @@ type Options struct {
 	Stdout          io.Writer
 	Stderr          io.Writer
 	StdinIsTerminal bool
+	Run             *run.Run
+}
+
+func (o Options) session() *run.Span {
+	return o.Run.Phase(progressv1.Phase_PHASE_UNSPECIFIED)
 }
 
 func Run(ctx context.Context, opts Options, reset bool) error {
@@ -52,7 +66,7 @@ func RunOnce(ctx context.Context, opts Options, cwd string) error {
 		return fmt.Errorf("look for a running dev server: %w", err)
 	}
 	if found {
-		stream, env, err := subscribe(ctx, running)
+		stream, env, err := subscribe(ctx, opts, running)
 		if err != nil {
 			return err
 		}
@@ -62,8 +76,10 @@ func RunOnce(ctx context.Context, opts Options, cwd string) error {
 	return runStandalone(ctx, opts, cwd)
 }
 
-func lead(ctx context.Context, opts Options, reset bool) error {
+func lead(ctx context.Context, opts Options, reset bool) (err error) {
 	cfg := opts.Project
+	startup := opts.session().Unit("", environmentTitle)
+	defer func() { startup.End(err) }()
 	source, err := readValueSource(ctx, cfg)
 	if err != nil {
 		return err
@@ -72,7 +88,7 @@ func lead(ctx context.Context, opts Options, reset bool) error {
 	if err != nil {
 		return err
 	}
-	reportValues(opts.Stdout, cfg.Dir, values, true)
+	reportValues(startup, cfg.Dir, values, true)
 
 	if reset {
 		if err := devresources.Reset(ctx, opts.OpenDocker, stateDir(cfg), devresources.ProjectName(cfg.Dir)); err != nil {
@@ -92,7 +108,7 @@ func lead(ctx context.Context, opts Options, reset bool) error {
 		}
 	}()
 	srv := host.srv
-	run := invocation{name: "dev", source: source}
+	invoked := invocation{name: "dev", source: source}
 
 	background, stopBackground := context.WithCancel(ctx)
 	defer stopBackground()
@@ -102,12 +118,12 @@ func lead(ctx context.Context, opts Options, reset bool) error {
 	}
 	claimed = true
 
-	resolved, err := resolveOnce(ctx, srv, cfg, run, opts.Stdout, opts.Stderr)
+	resolved, err := resolveOnce(ctx, srv, cfg, invoked, startup)
 	if err != nil {
 		return err
 	}
 	updates := make(chan map[string]string, 1)
-	watching, err := startWatching(background, srv, cfg, run, opts.Stdout, opts.Stderr, func(env map[string]string) {
+	watching, err := startWatching(background, srv, cfg, invoked, opts.session(), func(env map[string]string) {
 		select {
 		case <-updates:
 		default:
@@ -122,6 +138,7 @@ func lead(ctx context.Context, opts Options, reset bool) error {
 		<-watching.Done()
 	}()
 	srv.PushEnv(resolved)
+	startup.End(nil)
 
 	child, err := startChild(ctx, opts, resolved)
 	if err != nil {
@@ -146,7 +163,7 @@ func lead(ctx context.Context, opts Options, reset bool) error {
 }
 
 func follow(ctx context.Context, opts Options, running leader.Leader) error {
-	stream, first, err := subscribe(ctx, running)
+	stream, first, err := subscribe(ctx, opts, running)
 	if err != nil {
 		return err
 	}
@@ -189,13 +206,14 @@ func follow(ctx context.Context, opts Options, running leader.Leader) error {
 			if ctx.Err() != nil {
 				return &exitcode.ExitError{Code: exitcode.Interrupt}
 			}
-			fmt.Fprintln(opts.Stderr, "Leader disconnected. Restart `ocel dev` in the leader's terminal, then re-run this command.")
-			return &exitcode.ExitError{Code: 1}
+			return errors.New("the leader disconnected: restart `ocel dev` in the leader's terminal, then re-run this command")
 		}
 	}
 }
 
-func subscribe(ctx context.Context, running leader.Leader) (*leader.EnvStream, map[string]string, error) {
+func subscribe(ctx context.Context, opts Options, running leader.Leader) (_ *leader.EnvStream, _ map[string]string, err error) {
+	connecting := opts.session().Unit("", leaderTitle)
+	defer func() { connecting.End(err) }()
 	stream, err := leader.Subscribe(ctx, running)
 	if err != nil {
 		return nil, nil, fmt.Errorf("connect to leader: %w", err)
@@ -213,6 +231,7 @@ func subscribe(ctx context.Context, running leader.Leader) (*leader.EnvStream, m
 
 func runStandalone(ctx context.Context, opts Options, cwd string) error {
 	cfg := opts.Project
+	startup := opts.session().Unit("", environmentTitle)
 	source, err := readValueSource(ctx, cfg)
 	if err != nil {
 		return err
@@ -221,8 +240,8 @@ func runStandalone(ctx context.Context, opts Options, cwd string) error {
 	if err != nil {
 		return err
 	}
-	reportUnreadableLines(opts.Stdout, values)
-	reportValues(opts.Stdout, cfg.Dir, values, false)
+	reportUnreadableLines(startup, values)
+	reportValues(startup, cfg.Dir, values, false)
 
 	host, err := startHost(ctx, opts, source)
 	if err != nil {
@@ -231,10 +250,11 @@ func runStandalone(ctx context.Context, opts Options, cwd string) error {
 	defer host.close()
 	host.srv.UseValues(values.merged(), variablescope.ForDev(cfg))
 
-	resolved, err := discoverAndSync(ctx, host.srv, cfg, values, targetScope(cfg, cwd), invocation{name: "run", source: source}, opts.Stdout, opts.Stderr)
+	resolved, err := discoverAndSync(ctx, host.srv, cfg, values, targetScope(cfg, cwd), invocation{name: "run", source: source}, startup)
 	if err != nil {
 		return err
 	}
+	startup.End(nil)
 
 	return runChild(ctx, opts, resolved)
 }

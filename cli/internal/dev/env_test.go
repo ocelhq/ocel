@@ -195,20 +195,20 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		})
 
 		t.Run("the notice accounts for every line of the file", func(t *testing.T) {
-			if !strings.Contains(stdout.String(), "API_BASE") {
-				t.Errorf("stdout = %q, want the divergence notice to name the key", stdout.String())
+			if !strings.Contains(stderr.String(), "API_BASE") {
+				t.Errorf("stderr = %q, want the divergence notice to name the key", stderr.String())
 			}
-			if !strings.Contains(stdout.String(), "line 5") {
-				t.Errorf("stdout = %q, want the line that assigns nothing reported by number", stdout.String())
+			if !strings.Contains(stderr.String(), "line 5") {
+				t.Errorf("stderr = %q, want the line that assigns nothing reported by number", stderr.String())
 			}
-			if strings.Contains(stdout.String(), "api_base") {
-				t.Errorf("stdout = %q, want a line Ocel could never be asked for passed over in silence", stdout.String())
+			if strings.Contains(stderr.String(), "api_base") {
+				t.Errorf("stderr = %q, want a line Ocel could never be asked for passed over in silence", stderr.String())
 			}
-			if !strings.Contains(stdout.String(), "NEXT_PUBLIC_SITE_URL") {
-				t.Errorf("stdout = %q, want a declarable key accounted for", stdout.String())
+			if !strings.Contains(stderr.String(), "NEXT_PUBLIC_SITE_URL") {
+				t.Errorf("stderr = %q, want a declarable key accounted for", stderr.String())
 			}
-			if !strings.Contains(stdout.String(), valueLayers{{from: dotfile.FileName, file: true}, {from: dotfile.LocalFileName, file: true}}.advice(true)) {
-				t.Errorf("stdout = %q, want the advice for a run that re-resolves on save", stdout.String())
+			if !strings.Contains(stderr.String(), valueLayers{{from: dotfile.FileName, file: true}, {from: dotfile.LocalFileName, file: true}}.advice(true)) {
+				t.Errorf("stderr = %q, want the advice for a run that re-resolves on save", stderr.String())
 			}
 		})
 	})
@@ -316,15 +316,15 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		clitest.WriteFile(t, filepath.Join(root, ".env"), "STRIPE_API_KEY=sk_from_dotenv\n")
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`))
 
-		env, stdout := dumpDevEnv(t, devDeps(), root)
+		env, reported := dumpDevEnv(t, devDeps(), root)
 		if env["STRIPE_API_KEY"] != "sk_from_source" {
 			t.Errorf("STRIPE_API_KEY = %q, want the dev source's value, and .env left unread under another source", env["STRIPE_API_KEY"])
 		}
-		if !strings.Contains(stdout, "STRIPE_API_KEY") || !strings.Contains(stdout, "exec") {
-			t.Errorf("stdout = %q, want it to say STRIPE_API_KEY came from exec", stdout)
+		if !strings.Contains(reported, "STRIPE_API_KEY") || !strings.Contains(reported, "exec") {
+			t.Errorf("reported = %q, want it to say STRIPE_API_KEY came from exec", reported)
 		}
-		if strings.Contains(stdout, "sk_from_source") {
-			t.Errorf("stdout = %q, want no value printed", stdout)
+		if strings.Contains(reported, "sk_from_source") {
+			t.Errorf("reported = %q, want no value printed", reported)
 		}
 		if reads := strings.Count(readTestFile(t, counted), "read"); reads != 1 {
 			t.Errorf("the source was read %d times, want once for the run", reads)
@@ -366,12 +366,12 @@ export default {
 		clitest.WriteFile(t, filepath.Join(root, dotfile.LocalFileName), "STRIPE_API_KEY=sk_mine\n")
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`))
 
-		env, stdout := dumpDevEnv(t, devDeps(), root)
+		env, reported := dumpDevEnv(t, devDeps(), root)
 		if env["STRIPE_API_KEY"] != "sk_mine" || env["LOG_LEVEL"] != "info" {
 			t.Errorf("STRIPE_API_KEY = %q, LOG_LEVEL = %q, want %s over the source and the source beneath it", env["STRIPE_API_KEY"], env["LOG_LEVEL"], dotfile.LocalFileName)
 		}
-		if !strings.Contains(stdout, dotfile.LocalFileName) {
-			t.Errorf("stdout = %q, want it to say what came from %s", stdout, dotfile.LocalFileName)
+		if !strings.Contains(reported, dotfile.LocalFileName) {
+			t.Errorf("reported = %q, want it to say what came from %s", reported, dotfile.LocalFileName)
 		}
 	})
 
@@ -452,12 +452,12 @@ export default {
 		writeDevSource(t, root, `{ infisical: { project: "p-1", environment: "dev", host: "`+server.URL+`" } }`)
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`))
 
-		env, stdout := dumpDevEnv(t, devDeps(), root)
+		env, reported := dumpDevEnv(t, devDeps(), root)
 		if env["STRIPE_API_KEY"] != "sk_from_infisical" {
 			t.Errorf("STRIPE_API_KEY = %q, want Infisical's value", env["STRIPE_API_KEY"])
 		}
-		if !strings.Contains(stdout, "infisical:p-1/dev") {
-			t.Errorf("stdout = %q, want it to name the Infisical source", stdout)
+		if !strings.Contains(reported, "infisical:p-1/dev") {
+			t.Errorf("reported = %q, want it to name the Infisical source", reported)
 		}
 	})
 
@@ -485,8 +485,8 @@ export default {
 		if _, statErr := os.Stat(startedPath); statErr != nil {
 			t.Fatalf("the app was not started: %v", statErr)
 		}
-		if !strings.Contains(stdout.String(), "DB_PASSWORD") {
-			t.Errorf("stdout = %q, want the live-value notice to name DB_PASSWORD", stdout.String())
+		if !strings.Contains(stderr.String(), "DB_PASSWORD") {
+			t.Errorf("stderr = %q, want the live-value notice to name DB_PASSWORD", stderr.String())
 		}
 	})
 
@@ -615,8 +615,8 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		if env[processenv.AppFolderEnvVar] != "/web" {
 			t.Errorf("%s = %q, want the folder the only app binds", processenv.AppFolderEnvVar, env[processenv.AppFolderEnvVar])
 		}
-		if !strings.Contains(stdout.String(), valueLayers{{from: dotfile.FileName, file: true}, {from: dotfile.LocalFileName, file: true}}.advice(false)) {
-			t.Errorf("stdout = %q, want the advice for a run that reads the file once", stdout.String())
+		if !strings.Contains(stderr.String(), valueLayers{{from: dotfile.FileName, file: true}, {from: dotfile.LocalFileName, file: true}}.advice(false)) {
+			t.Errorf("stderr = %q, want the advice for a run that reads the file once", stderr.String())
 		}
 	})
 
@@ -691,7 +691,7 @@ func dumpDevEnv(t *testing.T, deps testDeps, root string) (map[string]string, st
 	if !errors.As(err, &exitErr) || exitErr.Code != 7 {
 		t.Fatalf("runDev err = %v, want exit 7 (no refusal); stderr=%s", err, stderr.String())
 	}
-	return toMap(strings.Split(strings.TrimRight(readTestFile(t, envDumpPath), "\n"), "\n")), stdout.String()
+	return toMap(strings.Split(strings.TrimRight(readTestFile(t, envDumpPath), "\n"), "\n")), stderr.String()
 }
 
 func TestDevGivesEveryAppItsURL(t *testing.T) {

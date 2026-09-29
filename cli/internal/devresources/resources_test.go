@@ -1,7 +1,6 @@
 package devresources_test
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"strings"
@@ -62,8 +61,10 @@ func TestResolve(t *testing.T) {
 		t.Parallel()
 
 		engine := &dockertest.Engine{}
-		var out bytes.Buffer
-		stack := devresources.New("shop", devresources.Options{Open: engine.OpenFunc(), StateDir: t.TempDir(), Stdout: &out})
+		var announced []string
+		stack := devresources.New("shop", devresources.Options{Open: engine.OpenFunc(), StateDir: t.TempDir(), Announce: func(line string) {
+			announced = append(announced, line)
+		}})
 
 		for range 2 {
 			resolved, err := stack.Resolve(context.Background(), []declaration.Resource{postgres("main")})
@@ -75,8 +76,8 @@ func TestResolve(t *testing.T) {
 			}
 		}
 
-		if got, want := out.String(), "postgres \"main\" → postgres:17 @ 127.0.0.1:54001\n"; got != want {
-			t.Fatalf("printed %q, want %q exactly once", got, want)
+		if want := "postgres \"main\" → postgres:17 @ 127.0.0.1:54001"; len(announced) != 1 || announced[0] != want {
+			t.Fatalf("announced %q, want %q exactly once", announced, want)
 		}
 	})
 

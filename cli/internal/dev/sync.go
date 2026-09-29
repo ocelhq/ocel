@@ -3,7 +3,6 @@ package dev
 import (
 	"context"
 	"fmt"
-	"io"
 	"path/filepath"
 	"strings"
 
@@ -11,18 +10,20 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
-func resolveOnce(ctx context.Context, srv *devserver.Server, cfg *project.Project, run invocation, stdout, stderr io.Writer) (map[string]string, error) {
-	values, err := run.source.read(cfg.Dir)
+func resolveOnce(ctx context.Context, srv *devserver.Server, cfg *project.Project, invoked invocation, span *run.Span) (map[string]string, error) {
+	values, err := invoked.source.read(cfg.Dir)
 	if err != nil {
 		return nil, err
 	}
-	reportUnreadableLines(stdout, values)
+	reportUnreadableLines(span, values)
 	srv.UseValues(values.merged(), variablescope.ForDev(cfg))
-	return discoverAndSync(ctx, srv, cfg, values, variablescope.ForDev(cfg), run, stdout, stderr)
+	return discoverAndSync(ctx, srv, cfg, values, variablescope.ForDev(cfg), invoked, span)
 }
 
 func targetScope(cfg *project.Project, cwd string) variables.Scope {
@@ -43,17 +44,17 @@ func targetScope(cfg *project.Project, cwd string) variables.Scope {
 	return scope
 }
 
-func discoverAndSync(ctx context.Context, srv *devserver.Server, cfg *project.Project, values valueLayers, scope variables.Scope, run invocation, stdout, stderr io.Writer) (map[string]string, error) {
-	if err := discover(ctx, srv, cfg, stdout, stderr); err != nil {
+func discoverAndSync(ctx context.Context, srv *devserver.Server, cfg *project.Project, values valueLayers, scope variables.Scope, invoked invocation, span *run.Span) (map[string]string, error) {
+	if err := discover(ctx, srv, cfg, span); err != nil {
 		return nil, refusedSync(srv, err)
 	}
 
 	if err := srv.CheckEnv(ctx); err != nil {
-		return nil, describeRefusal(err, values.keys(), run)
+		return nil, describeRefusal(err, values.keys(), invoked)
 	}
 
 	appFolder := project.SharedFolder(cfg.Apps)
-	if err := refuseUnstatableBinding(run.source, cfg.Apps, appFolder, filepath.Base(cfg.Path), srv.ScopedFolders()); err != nil {
+	if err := refuseUnstatableBinding(invoked.source, cfg.Apps, appFolder, filepath.Base(cfg.Path), srv.ScopedFolders()); err != nil {
 		return nil, err
 	}
 
@@ -70,13 +71,11 @@ func discoverAndSync(ctx context.Context, srv *devserver.Server, cfg *project.Pr
 		return nil, fmt.Errorf("sync failed: %w", result.Err)
 	}
 
-	reportSecretValues(stdout, result.SecretKeys)
+	reportSecretValues(span, result.SecretKeys)
 	return resolvedEnv(result.SecretValues, values.merged(), result.Resources, runtimeAccess{url: result.DevServerURL, token: result.AppToken}, appFolder, scope), nil
 }
 
-// TODO: unlike build/deploy, ocel dev and ocel run begin no run on the bus, so
-// discovery here has no span to trace under and records no spans or logs.
-func discover(ctx context.Context, srv *devserver.Server, cfg *project.Project, stdout, stderr io.Writer) error {
+func discover(ctx context.Context, srv *devserver.Server, cfg *project.Project, span *run.Span) error {
 	roots, err := discovery.RootsOf(cfg)
 	if err != nil {
 		return err
@@ -88,7 +87,8 @@ func discover(ctx context.Context, srv *devserver.Server, cfg *project.Project, 
 	}
 
 	_ = srv.TakeSDKRefusal()
-	err = discovery.Run(ctx, cfg.Dir, prepared, srv.DiscoveryTarget(), stdout, stderr)
+	stdout, stderr := span.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_STDOUT), span.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_STDERR)
+	err = discovery.Run(run.ContextWithSpan(ctx, span), cfg.Dir, prepared, srv.DiscoveryTarget(), stdout, stderr)
 	if refused := srv.TakeSDKRefusal(); refused != nil {
 		return refused
 	}

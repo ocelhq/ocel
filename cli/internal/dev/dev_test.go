@@ -27,7 +27,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/filewatch"
 	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/processenv"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	"github.com/ocelhq/ocel/pkg/statedir"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
@@ -467,9 +471,9 @@ export default { slug: "test-app" };
 		}
 
 		stalled := startWatching
-		startWatching = func(ctx context.Context, srv *devserver.Server, cfg *project.Project, run invocation, stdout, stderr io.Writer, onResolved func(map[string]string)) (*filewatch.Watcher, error) {
+		startWatching = func(ctx context.Context, srv *devserver.Server, cfg *project.Project, invoked invocation, session *run.Span, onResolved func(map[string]string)) (*filewatch.Watcher, error) {
 			time.Sleep(300 * time.Millisecond)
-			return stalled(ctx, srv, cfg, run, stdout, stderr, onResolved)
+			return stalled(ctx, srv, cfg, invoked, session, onResolved)
 		}
 		t.Cleanup(func() { startWatching = stalled })
 
@@ -551,7 +555,7 @@ export default { slug: "test-app" };
 
 		waitForLeaderRecord(t, root)
 
-		waitForOutputAfter(t, &leaderStdout, "line 2", func() {
+		waitForOutputAfter(t, &leaderStderr, "line 2", func() {
 			clitest.WriteFile(t, filepath.Join(root, dotfile.FileName), "API_TOKEN=first\nnot a pair\n")
 		})
 
@@ -608,14 +612,10 @@ export default { slug: "test-app" };
 
 		select {
 		case err := <-followerDone:
-			var exitErr *exitcode.ExitError
-			if !errors.As(err, &exitErr) {
-				t.Fatalf("follower runDev err = %v, want *exitcode.ExitError; stderr=%s", err, stderr.String())
+			if err == nil {
+				t.Fatalf("follower runDev err = nil, want the disconnect to fail the run; stderr=%s", stderr.String())
 			}
-			if exitErr.Code == 0 {
-				t.Fatalf("follower ExitError.Code = 0, want non-zero")
-			}
-			if !strings.Contains(stderr.String(), "Restart") {
+			if !strings.Contains(stderr.String(), "restart `ocel dev`") {
 				t.Fatalf("stderr = %q, want it to mention restarting the leader", stderr.String())
 			}
 		case <-time.After(5 * time.Second):
@@ -653,8 +653,8 @@ func TestDevSuppliesDeclaredResourcesItself(t *testing.T) {
 		if raw := env["OCEL_RESOURCE_POSTGRES_main"]; !strings.Contains(raw, `"host":"127.0.0.1"`) || !strings.Contains(raw, `"database":"main"`) {
 			t.Errorf("OCEL_RESOURCE_POSTGRES_main = %q, want the binding of the container the run started", raw)
 		}
-		if !strings.Contains(stdout.String(), `postgres "main" → postgres:17 @ 127.0.0.1:`) {
-			t.Errorf("stdout = %q, want one line saying where postgres \"main\" landed", stdout.String())
+		if !strings.Contains(stderr.String(), `postgres "main" → postgres:17 @ 127.0.0.1:`) {
+			t.Errorf("stderr = %q, want one line saying where postgres \"main\" landed", stderr.String())
 		}
 		if len(engine.Specs) != 1 || engine.Specs[0].Labels["dev.ocel.project"] == "" {
 			t.Fatalf("ran %+v, want one container labelled with the project", engine.Specs)
@@ -840,10 +840,11 @@ func toMap(env []string) map[string]string {
 
 type testDeps struct {
 	OpenDocker docker.OpenFunc
+	LogFormat  terminal.Format
 }
 
 func devDeps() testDeps {
-	return testDeps{OpenDocker: (&dockertest.Engine{}).OpenFunc()}
+	return testDeps{OpenDocker: (&dockertest.Engine{}).OpenFunc(), LogFormat: terminal.FormatHuman}
 }
 
 func options(ctx context.Context, deps testDeps, cwd string, command []string, stdout, stderr io.Writer, stdin io.Reader) (Options, error) {
@@ -859,7 +860,9 @@ func runDev(ctx context.Context, deps testDeps, reset bool, cwd string, command 
 	if err != nil {
 		return err
 	}
-	return Run(ctx, opts, reset)
+	return underRun(ctx, deps, "ocel dev", opts, func(ctx context.Context, opts Options) error {
+		return Run(ctx, opts, reset)
+	})
 }
 
 func runRun(ctx context.Context, deps testDeps, cwd string, command []string, stdout, stderr io.Writer, stdin io.Reader) error {
@@ -867,7 +870,37 @@ func runRun(ctx context.Context, deps testDeps, cwd string, command []string, st
 	if err != nil {
 		return err
 	}
-	return RunOnce(ctx, opts, cwd)
+	return underRun(ctx, deps, "ocel run", opts, func(ctx context.Context, opts Options) error {
+		return RunOnce(ctx, opts, cwd)
+	})
+}
+
+func underRun(ctx context.Context, deps testDeps, command string, opts Options, body func(context.Context, Options) error) error {
+	output := &lockedWriter{w: opts.Stderr}
+	opts.Stderr = output
+	bus := run.NewBus(time.Now)
+	bus.Attach(terminal.NewSink(terminal.Resolve(terminal.Conditions{LogFormat: deps.LogFormat}), output))
+	defer bus.Close()
+	ctx, begun, err := bus.Begin(ctx, command, opts.Project.Dir)
+	if err != nil {
+		return err
+	}
+	opts.Run = begun
+	err = body(ctx, opts)
+	ended := err
+	begun.End(&ended)
+	return err
+}
+
+type lockedWriter struct {
+	mu sync.Mutex
+	w  io.Writer
+}
+
+func (l *lockedWriter) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.w.Write(p)
 }
 
 func waitForLeaderRecord(t *testing.T, root string) {
@@ -974,4 +1007,95 @@ func waitForOutput(t *testing.T, buf *syncBuffer, want string) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatalf("output = %q, never contained %q", buf.String(), want)
+}
+
+func TestDevReportsThroughItsRun(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell fixture command")
+	}
+
+	t.Run("a dev session writes a run log", func(t *testing.T) {
+		root := t.TempDir()
+		t.Cleanup(func() { _ = leader.Release(root) })
+		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
+
+		var stdout, stderr syncBuffer
+		if err := runDev(context.Background(), devDeps(), false, root, []string{"sh", "-c", "exit 0"}, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("runDev err = %v; stderr=%s", err, stderr.String())
+		}
+
+		logs, err := filepath.Glob(filepath.Join(root, statedir.Name, "runs", "*.ndjson"))
+		if err != nil || len(logs) != 1 {
+			t.Fatalf("run logs = %v (%v), want one", logs, err)
+		}
+		var resolved, summarized bool
+		for _, ev := range clitest.RunEvents(t, readTestFile(t, logs[0])) {
+			resolved = resolved || ev.GetEnded().GetTitle() == environmentTitle.Ended
+			summarized = summarized || ev.GetSummary().GetSuccess()
+		}
+		if !resolved || !summarized {
+			t.Errorf("run log records resolved=%v summarized=%v, want the resolved environment and a successful summary", resolved, summarized)
+		}
+	})
+
+	t.Run("a re-resolve that fails is a failed span, not a raw print", func(t *testing.T) {
+		root := t.TempDir()
+		t.Cleanup(func() { _ = leader.Release(root) })
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default { slug: "test-app" };
+`)
+		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"API_TOKEN","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+		clitest.WriteFile(t, filepath.Join(root, dotfile.FileName), "API_TOKEN=first\n")
+
+		deps := devDeps()
+		deps.LogFormat = terminal.FormatJSON
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		var stdout, stderr syncBuffer
+		done := make(chan error, 1)
+		go func() {
+			done <- runDev(ctx, deps, false, root, []string{"sleep", "10"}, &stdout, &stderr, strings.NewReader(""))
+		}()
+
+		waitForOutput(t, &stderr, environmentTitle.Ended)
+		clitest.WriteFile(t, filepath.Join(root, dotfile.FileName), "# the value the run needs, deleted\n")
+		waitForOutput(t, &stderr, "SPAN_STATUS_ERROR")
+
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatal("runDev did not exit after cancellation")
+		}
+
+		var failed bool
+		for _, ev := range clitest.RunEvents(t, stderr.String()) {
+			if ev.GetEnded().GetStatus() == progressv1.SpanStatus_SPAN_STATUS_ERROR && strings.Contains(ev.GetMessage(), "API_TOKEN") {
+				failed = true
+			}
+		}
+		if !failed {
+			t.Errorf("run events = %s, want a failed span naming API_TOKEN", stderr.String())
+		}
+	})
+
+	t.Run("with --log-format json every line the run writes parses and the child's stdout is its own", func(t *testing.T) {
+		root := t.TempDir()
+		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
+
+		deps := devDeps()
+		deps.LogFormat = terminal.FormatJSON
+		var stdout, stderr bytes.Buffer
+		if err := runRun(context.Background(), deps, root, []string{"sh", "-c", "echo hello"}, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("runRun err = %v; stderr=%s", err, stderr.String())
+		}
+
+		if stdout.String() != "hello\n" {
+			t.Errorf("stdout = %q, want only the child's own output", stdout.String())
+		}
+		events := clitest.RunEvents(t, stderr.String())
+		if len(events) == 0 || !events[len(events)-1].GetSummary().GetSuccess() {
+			t.Errorf("run events = %s, want them to end in a successful summary", stderr.String())
+		}
+	})
 }
