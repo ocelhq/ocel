@@ -793,20 +793,6 @@ func fakeBootstrap(tier environmentv1.Tier) *contractv1.BootstrapStatus {
 	return status
 }
 
-func (s *deployFakeProviderServer) GetCredentialPermissions(ctx context.Context, req *contractv1.CredentialPermissionsRequest) (*contractv1.CredentialPermissionsResponse, error) {
-	groups := []*contractv1.CredentialGroup{{
-		Heading:  "fake credentials",
-		Document: fmt.Sprintf(`{"purpose":%q}`, req.GetPurpose().String()),
-	}}
-	if resolvedEdgeKind(req.GetEdge().GetKind()) == "relay" {
-		groups = append(groups, &contractv1.CredentialGroup{
-			Heading:  "relay token",
-			Document: "Account · Relay Scripts · Edit",
-		})
-	}
-	return &contractv1.CredentialPermissionsResponse{Groups: groups}, nil
-}
-
 func (s *deployFakeProviderServer) Bootstrap(ctx context.Context, req *contractv1.BootstrapRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	if err := refuseToDrawThePlan(); err != nil {
 		return err
