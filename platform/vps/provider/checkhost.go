@@ -127,14 +127,14 @@ func proxiedVerdict(ctx context.Context, look Lookup, serving provider.Liveness,
 	switch {
 	case err != nil:
 		check.Verdict = provider.HostFail
-		check.Finding = fmt.Sprintf("ask %s which router answers it: %v", hostname, err)
+		check.Finding = fmt.Sprintf("ask %s through Cloudflare what answers it: %v", hostname, err)
 	case answered == switchboard.RouterKind:
 		check.Verdict = provider.HostPass
-		check.Finding = fmt.Sprintf("%s resolves to Cloudflare at %s, and the %s on this box answers it", hostname, spell(found), answered)
+		check.Finding = fmt.Sprintf("%s resolves to Cloudflare at %s, and this box answers it", hostname, spell(found))
 		return check
 	case answered != "":
 		check.Verdict = provider.HostFail
-		check.Finding = fmt.Sprintf("%s resolves to %s, and the %s answers it rather than the %s on this box", hostname, spell(found), answered, switchboard.RouterKind)
+		check.Finding = fmt.Sprintf("%s resolves to %s, and something other than this box answers it", hostname, spell(found))
 	default:
 		check.Verdict = provider.HostFail
 		check.Finding = fmt.Sprintf("%s resolves to %s, and nothing on this box answered it through Cloudflare", hostname, spell(found))

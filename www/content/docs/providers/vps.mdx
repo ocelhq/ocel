@@ -77,8 +77,8 @@ forwarded the same way, on a project's own `domains.preview` wildcard or the one
 }
 ```
 
-`ocel doctor` checks a hostname Cloudflare forwards by asking which router answers it, since
-it resolves to Cloudflare rather than to the box.
+`ocel doctor` checks a hostname Cloudflare forwards by requesting it through Cloudflare and
+checking this box answers, since it resolves to Cloudflare rather than to the box.
 
 Behind [your own proxy](#behind-your-own-proxy), ocel cannot make it refuse a request that
 skips Cloudflare. Configure it to require a client certificate for each hostname Cloudflare

@@ -126,11 +126,19 @@ func TestTheCloudflareProxyForwardsThroughAZoneThatValidatesTheOriginsCertificat
 }
 
 func TestTheCloudflareProxyRefusesAHostnameItHasNoOriginFor(t *testing.T) {
-	_, stack := reconciledProxy(t, proxyZoneMock())
+	m := proxyZoneMock()
+	_, stack := reconciledProxy(t, m)
 
 	err := stack.BindDomain(context.Background(), edge.DomainBinding{Hostname: "shop.app.com"})
 	if err == nil {
 		t.Fatal("BindDomain with no origin = nil, want a refusal: the proxy answers nothing itself")
+	}
+	if strings.Contains(err.Error(), "router") {
+		t.Errorf("BindDomain with no origin = %v, want no router named: the router is never yours to configure", err)
+	}
+	_, err = m.proxy(t).ReconcilePreviewWildcard(context.Background(), edge.PreviewWildcardSpec{BaseDomain: "preview.app.com"})
+	if err == nil || strings.Contains(err.Error(), "router") {
+		t.Errorf("ReconcilePreviewWildcard with no origin = %v, want a refusal naming no router", err)
 	}
 }
 
