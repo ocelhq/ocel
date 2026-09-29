@@ -136,14 +136,24 @@ type selection struct {
 }
 
 type route struct {
-	Handle []forward `json:"handle"`
+	Match  []requestMatch `json:"match,omitempty"`
+	Handle []handler      `json:"handle"`
 }
 
-type forward struct {
-	Handler     string `json:"handler"`
-	Upstreams   []dial `json:"upstreams"`
-	StreamDelay string `json:"stream_close_delay,omitempty"`
+type requestMatch struct {
+	Host     []string `json:"host"`
+	Protocol string   `json:"protocol"`
 }
+
+type handler struct {
+	Handler     string `json:"handler"`
+	Upstreams   []dial `json:"upstreams,omitempty"`
+	StreamDelay string `json:"stream_close_delay,omitempty"`
+	StatusCode  int    `json:"status_code,omitempty"`
+	Close       bool   `json:"close,omitempty"`
+}
+
+const plainHTTP = "http"
 
 type dial struct {
 	Dial string `json:"dial"`
@@ -199,11 +209,11 @@ func render(spec proxy.Spec) ([]byte, error) {
 		strict := true
 		front.StrictSNIHost = &strict
 	}
-	front.Routes = []route{{Handle: []forward{{
+	front.Routes = append(refusedOverPlainHTTP(spec.Shields), route{Handle: []handler{{
 		Handler:     forwardHandler,
 		Upstreams:   []dial{{Dial: spec.Upstream}},
 		StreamDelay: Grace.String(),
-	}}}}
+	}}})
 	front.Errors = &failing{Routes: []failure{{Handle: []answer{{
 		Handler: answerHandler,
 		Status:  errorStatus,
@@ -223,7 +233,7 @@ func render(spec proxy.Spec) ([]byte, error) {
 func relayTo(socket string) server {
 	return server{
 		Listen: []string{relayListen},
-		Routes: []route{{Handle: []forward{{Handler: forwardHandler, Upstreams: []dial{{Dial: socket}}}}}},
+		Routes: []route{{Handle: []handler{{Handler: forwardHandler, Upstreams: []dial{{Dial: socket}}}}}},
 	}
 }
 
@@ -309,6 +319,20 @@ func shieldPolicies(selecting []connectionPolicy, shields []proxy.Shield) ([]con
 		shielding = append(shielding, connectionPolicy{Match: &handshakeMatch{SNI: []string{hostname}}, Selection: chosen, Client: client})
 	}
 	return slices.Concat(shielding, selecting), nil
+}
+
+func refusedOverPlainHTTP(shields []proxy.Shield) []route {
+	if len(shields) == 0 {
+		return nil
+	}
+	hosts := make([]string, 0, len(shields))
+	for _, shield := range slices.SortedFunc(slices.Values(shields), byHostname) {
+		hosts = append(hosts, strings.ToLower(strings.TrimSpace(shield.Hostname)))
+	}
+	return []route{{
+		Match:  []requestMatch{{Host: slices.Compact(hosts), Protocol: plainHTTP}},
+		Handle: []handler{{Handler: answerHandler, StatusCode: http.StatusForbidden, Close: true}},
+	}}
 }
 
 func withOriginCertificates(loaded *certificates, shields []proxy.Shield) *certificates {

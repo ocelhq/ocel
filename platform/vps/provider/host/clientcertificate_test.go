@@ -10,6 +10,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"math/big"
+	"net/http"
 	"slices"
 	"strings"
 	"testing"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 func pulledCertificate(t *testing.T) (string, string) {
@@ -65,6 +67,24 @@ func TestAShieldedHostnameIsAnsweredOnlyToAClientPresentingACertificateItTrusts(
 	}
 	if len(read.Shields) != 1 || !slices.Equal(read.Shields[0].ClientCertificates, []string{certificate}) {
 		t.Errorf("the table reads back shields %+v, want the client certificate kept: the switchboard reads the same table and must accept it", read.Shields)
+	}
+}
+
+func TestARealProxyRefusesAShieldedHostnameOverPlainHTTPAndStillServesTheRest(t *testing.T) {
+	certificate, _ := pulledCertificate(t)
+	state := twoProjects()
+	state.Claims = []HostClaim{
+		{Hostname: claimed, Owner: surface, Pointer: pointed},
+		{Hostname: "blog.example.com", Owner: otherSurface, Pointer: pointed},
+	}
+	state.Shields = []Shield{{Hostname: claimed, Owner: surface, ClientCertificates: []string{certificate}}}
+	ask := probing(t, state)
+
+	if said := ask(claimed); said.status != http.StatusForbidden || said.router == switchboard.RouterKind {
+		t.Errorf("a shielded hostname over plain http answered %d from %q, want 403 before the switchboard: :80 carries no client certificate, so a request that skips the edge reaches the app", said.status, said.router)
+	}
+	if said := ask("blog.example.com"); said.router != switchboard.RouterKind {
+		t.Errorf("a hostname nothing shields over plain http answered %d from %q, want the switchboard: its http-01 challenge and plain-http leg go through here", said.status, said.router)
 	}
 }
 

@@ -191,3 +191,36 @@ func TestAShieldedPreviewWildcardIsMatchedAfterEveryHostnameShieldedByName(t *te
 		t.Errorf("connection policies %+v, want shop.preview.example.com, then the wildcard every preview under it matches, then the catch-all: caddy takes the first policy that matches", policies)
 	}
 }
+
+func TestAShieldedHostnameIsNeverForwardedOverPlainHTTP(t *testing.T) {
+	t.Parallel()
+
+	client, _ := clientCertificate(t)
+	spec := specified()
+	spec.Shields = []proxy.Shield{
+		{Hostname: "Shop.Example.com", ClientCertificates: []string{client}},
+		{Hostname: "*.preview.example.com", ClientCertificates: []string{client}},
+	}
+	_, read := render(t, spec)
+	routes := read.front().Routes
+
+	if len(routes) != 2 {
+		t.Fatalf("the front server runs routes %+v, want the plain-http refusal of what is shielded, then the catch-all forward", routes)
+	}
+	var refused struct {
+		Host     []string `json:"host"`
+		Protocol string   `json:"protocol"`
+	}
+	if len(routes[0].Match) != 1 || json.Unmarshal(routes[0].Match[0], &refused) != nil {
+		t.Fatalf("the first route matches %s, want one matcher naming the shielded hostnames over http", routes[0].Match)
+	}
+	if !slices.Equal(refused.Host, []string{"shop.example.com", "*.preview.example.com"}) || refused.Protocol != "http" {
+		t.Errorf("the first route matches hosts %v over %q, want every shielded hostname, the preview wildcard included, over http", refused.Host, refused.Protocol)
+	}
+	if len(routes[0].Handle) != 1 || routes[0].Handle[0]["handler"] != "static_response" || routes[0].Handle[0]["upstreams"] != nil {
+		t.Errorf("the first route handles %+v, want a refusal that forwards nothing: a request on :80 carries no client certificate, so the switchboard would answer anyone who skips the edge", routes[0].Handle)
+	}
+	if len(routes[1].Match) != 0 || routes[1].Handle[0]["handler"] != "reverse_proxy" {
+		t.Errorf("the second route is %+v, want the catch-all forward to the switchboard behind the refusal", routes[1])
+	}
+}
