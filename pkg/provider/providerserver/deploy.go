@@ -1280,10 +1280,14 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 			if err != nil {
 				return err
 			}
-			if _, err := r.sharedStack.promote(ctx, r.spec.Pointer, over, promotion, progress); err != nil {
+			pruned, err := r.sharedStack.promote(ctx, r.spec.Pointer, over, promotion, progress)
+			if err != nil {
 				return err
 			}
 			if err := r.checkpoint(ctx); err != nil {
+				return err
+			}
+			if err := reclaimDropped(ctx, r.provider, r.spec.Slug, r.spec.Tier, r.spec.Env, promotion.PromotionID, pruned, progress); err != nil {
 				return err
 			}
 			if r.spec.Tier != environment.TierPreview {
