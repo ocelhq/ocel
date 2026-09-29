@@ -30,7 +30,15 @@ describe("boxLane", () => {
 
 describe("appOrigin", () => {
   it("names the app's own hostname behind the box edge, never the forwarder's loopback port", () => {
-    expect(appOrigin("web-j-1-deploy-node.localhost")).toBe("http://web-j-1-deploy-node.localhost");
+    expect(appOrigin("web-j-1-deploy-node.localhost", "http")).toBe(
+      "http://web-j-1-deploy-node.localhost",
+    );
+  });
+
+  it("names it over https behind a front that serves the app only over https", () => {
+    expect(appOrigin("web-j-1-deploy-node.localhost", "https")).toBe(
+      "https://web-j-1-deploy-node.localhost",
+    );
   });
 });
 
