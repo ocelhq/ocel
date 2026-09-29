@@ -2,6 +2,8 @@ package alb
 
 import (
 	"context"
+	"fmt"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -189,8 +191,12 @@ func TestTheShieldedFrontTrustsExactlyWhatTheHostnamesClaimedOnItCarry(t *testin
 	}
 
 	claim("shop.example.com", uploaded)
+	if got := trustedBy(t, w); !slices.Contains(got, zonePull) {
+		t.Errorf("the shielded balancer trusts %v once shop.example.com dropped the zone's first certificate, want it kept until www.example.com, whose own claim carried it, is claimed again: another zone may still present it", got)
+	}
+	claim("www.example.com", uploaded)
 	if got, want := trustedBy(t, w), []string{uploaded, otherZonePull}; !slices.Equal(got, want) {
-		t.Errorf("the shielded balancer trusts %v once you deleted the zone's first certificate, want %v: a deleted certificate's key opens nothing", got, want)
+		t.Errorf("the shielded balancer trusts %v once every hostname that carried the zone's first certificate was claimed without it, want %v: a deleted certificate's key opens nothing", got, want)
 	}
 
 	for _, hostname := range []string{"shop.example.org", "shop.example.com", "www.example.com"} {
@@ -321,5 +327,84 @@ func TestThePreviewEntryAnEdgeForwardsIsServedByTheShieldedFrontAlone(t *testing
 	}
 	if _, routed := w.hosts("ocel-alb-shielded-preview-routes")["*.preview.example.com"]; routed {
 		t.Error("the shielded balancer still routes *.preview.example.com once the entry was given back")
+	}
+}
+
+func TestAClaimInOneZoneKeepsEveryCertificateAnotherZonesHostnamesCarry(t *testing.T) {
+	t.Parallel()
+
+	balancer, w := shielding(t)
+	w.outputs[ShieldedLoadBalancerStack(environment.TierPreview)] = shieldedPreviewFront()
+	routed := unreconciledRouter(t, balancer)
+	ctx := context.Background()
+	const uploaded = "-----BEGIN CERTIFICATE-----\nuploaded to both zones\n-----END CERTIFICATE-----\n"
+	if _, err := balancer.Shielded().trustClaim(ctx, environment.TierPreview, "*.preview.example.org", []string{uploaded, otherZonePull}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := routed.Claim(ctx, router.Claim{Hostname: "shop.example.org", App: "web", Certificate: "certs/org", ClientCertificates: []string{uploaded, otherZonePull}}); err != nil {
+		t.Fatalf("Claim in example.org: %v", err)
+	}
+	if _, err := routed.Claim(ctx, router.Claim{Hostname: "shop.example.com", App: "web", Certificate: "certs/com", ClientCertificates: []string{uploaded}}); err != nil {
+		t.Fatalf("Claim in example.com: %v", err)
+	}
+
+	if got := trustedBy(t, w); !slices.Contains(got, otherZonePull) {
+		t.Errorf("the shielded load balancer trusts %v once example.com was claimed, want example.org's own certificate still: example.org presents it, and dropping it refuses every hostname there", got)
+	}
+	_, preview, err := balancer.Shielded().readTrust(ctx, environment.TierPreview)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := preview.Hostnames["*.preview.example.org"]; !slices.Contains(got, otherZonePull) {
+		t.Errorf("the preview tier holds %v for *.preview.example.org, want example.org's own certificate still", got)
+	}
+}
+
+func TestAClaimTheAllowlistHasNoRoomForLeavesNoTrace(t *testing.T) {
+	t.Parallel()
+
+	balancer, _ := shielding(t)
+	shielded := balancer.Shielded()
+	ctx := context.Background()
+	full := make([]string, maxAllowlisted)
+	for i := range full {
+		full[i] = fmt.Sprintf("-----BEGIN CERTIFICATE-----\nheld %03d\n-----END CERTIFICATE-----\n", i)
+	}
+	if _, err := shielded.trustClaim(ctx, environment.TierProduction, "shop.example.com", full); err != nil {
+		t.Fatalf("a claim that fills the allowlist: %v", err)
+	}
+	_, before, err := shielded.readTrust(ctx, environment.TierProduction)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := shielded.trustClaim(ctx, environment.TierProduction, "shop.example.org", []string{otherZonePull}); err == nil {
+		t.Fatal("a claim past the allowlist's limit was taken, want it refused")
+	}
+	_, after, err := shielded.readTrust(ctx, environment.TierProduction)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(after, before) {
+		t.Errorf("the refused claim left the trust record holding %d hostnames, want it as it was: the next claim would find it past the limit and be refused too", len(after.Hostnames))
+	}
+}
+
+func TestAClaimWhoseRaiseOverlapsAnotherLeavesTheLoadBalancerTrustingBoth(t *testing.T) {
+	t.Parallel()
+
+	balancer, w := shielding(t)
+	routed := unreconciledRouter(t, balancer)
+	ctx := context.Background()
+	w.beforeNextUp(func() {
+		if _, err := routed.Claim(ctx, router.Claim{Hostname: "shop.example.org", App: "web", Certificate: "certs/org", ClientCertificates: []string{otherZonePull}}); err != nil {
+			t.Errorf("the overlapping Claim: %v", err)
+		}
+	})
+	if _, err := routed.Claim(ctx, router.Claim{Hostname: "shop.example.com", App: "web", Certificate: "certs/com", ClientCertificates: []string{zonePull}}); err != nil {
+		t.Fatalf("Claim: %v", err)
+	}
+	if got, want := trustedBy(t, w), []string{zonePull, otherZonePull}; !slices.Equal(got, want) {
+		t.Errorf("the shielded load balancer trusts %v after two claims raised it at once, want %v: the raise that finished last must not leave out what the other recorded", got, want)
 	}
 }

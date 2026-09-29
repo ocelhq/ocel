@@ -61,6 +61,8 @@ type LoadBalancer struct {
 	URLMap         string `json:"urlMap,omitempty"`
 	NotFound       string `json:"notFound,omitempty"`
 	Shielded       bool   `json:"shielded,omitempty"`
+
+	AllowlistFingerprint string `json:"-"`
 }
 
 func (f LoadBalancer) provisioned() bool {
@@ -72,6 +74,7 @@ const (
 	outputCertificateMap = "certificateMap"
 	outputURLMap         = "urlMap"
 	outputNotFound       = "notFound"
+	outputAllowlist      = "allowlistFingerprint"
 )
 
 func loadBalancerOf(outputs map[string]string) LoadBalancer {
@@ -80,6 +83,8 @@ func loadBalancerOf(outputs map[string]string) LoadBalancer {
 		CertificateMap: outputs[outputCertificateMap],
 		URLMap:         outputs[outputURLMap],
 		NotFound:       outputs[outputNotFound],
+
+		AllowlistFingerprint: outputs[outputAllowlist],
 	}
 }
 
