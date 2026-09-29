@@ -177,6 +177,22 @@ func TestTheShieldedFrontComesUpAtBootstrapTrustingNothingAClientCouldPresent(t 
 	}
 }
 
+func TestTheShieldedFrontLeavesThePreviewWildcardToTheFrontItWasBoundOn(t *testing.T) {
+	t.Parallel()
+
+	front, w := fronting(t)
+	w.outputs[ShieldedFrontStack(environment.TierPreview)] = shieldedFront()
+	if err := front.rememberPreview(context.Background(), previewEntry{BaseDomain: "preview.example.com", Certificate: "certs/preview"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := front.Shielded().Bootstrap(context.Background(), environment.TierPreview); err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	if _, declared := w.declarations(ShieldedFrontStack(environment.TierPreview))[previewNEGName("preview.example.com")]; declared {
+		t.Error("the shielded front declares the preview wildcard's network endpoint group, which the front it was bound on already owns under that name")
+	}
+}
+
 func TestDestroyingTheALBRouterTakesDownWhatItsClaimsBound(t *testing.T) {
 	t.Parallel()
 
