@@ -43,7 +43,7 @@ const recordKeyPrefix = "record:"
 
 func RecordKey(app, build string) string { return recordKeyPrefix + app + "/" + build }
 
-func splitRecordKey(key string) (string, string, bool) {
+func SplitRecordKey(key string) (string, string, bool) {
 	rest, prefixed := strings.CutPrefix(key, recordKeyPrefix)
 	app, build, split := strings.Cut(rest, "/")
 	return app, build, prefixed && split && app != "" && build != ""
@@ -133,7 +133,7 @@ func (l *Ledger) Record(ctx context.Context, app, build string) (router.Deployme
 func (l *Ledger) ReadRecords(ctx context.Context, keys []string) ([]router.DeploymentRecord, error) {
 	records := make([]router.DeploymentRecord, 0, len(keys))
 	for _, key := range keys {
-		app, build, ok := splitRecordKey(key)
+		app, build, ok := SplitRecordKey(key)
 		if !ok {
 			return nil, fmt.Errorf("read the deployment record %q: it names no app and build", key)
 		}
@@ -325,7 +325,7 @@ func (l *Ledger) ForgetUnnamedRecords(ctx context.Context, keys []string) error 
 	var errs []error
 	var stored []keyvalue.Entry
 	for _, key := range keys {
-		app, build, ok := splitRecordKey(key)
+		app, build, ok := SplitRecordKey(key)
 		if !ok {
 			errs = append(errs, fmt.Errorf("forget the deployment record %q: it names no app and build", key))
 			continue

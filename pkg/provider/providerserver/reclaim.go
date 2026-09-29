@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strings"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -118,30 +117,20 @@ func reclaimedPrefixes(slug, env, app string, release naming.Release, elsewhere,
 	return nil
 }
 
-const recordKeyPrefix = "record:"
-
 type appRelease struct {
 	app     string
 	release string
 }
 
-func splitRecordKey(key string) (string, provider.Build, bool) {
-	app, rendered, split := strings.Cut(strings.TrimPrefix(key, recordKeyPrefix), "/")
-	if !split || app == "" {
-		return "", provider.Build{}, false
-	}
-	identity, err := provider.ParseBuild(rendered)
-	if err != nil {
-		return "", provider.Build{}, false
-	}
-	return app, identity, true
-}
-
 func releasesOf(keys []string) map[appRelease]bool {
 	served := make(map[appRelease]bool, len(keys))
 	for _, key := range keys {
-		app, identity, ok := splitRecordKey(key)
+		app, build, ok := ledger.SplitRecordKey(key)
 		if !ok {
+			continue
+		}
+		identity, err := provider.ParseBuild(build)
+		if err != nil {
 			continue
 		}
 		served[appRelease{app: app, release: identity.Release().String()}] = true
