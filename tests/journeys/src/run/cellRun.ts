@@ -121,17 +121,23 @@ export class CellRun {
     });
   }
 
-  verifying(app: string, phase: Phase): CheckContext {
+  async verify(
+    app: string,
+    phase: Phase,
+    work: (ctx: CheckContext) => Promise<void>,
+  ): Promise<void> {
     assert.ok(this.deployment, "a check ran before the cell was deployed");
-    return {
+    const guard = secretGuarded(this.deployment.fetch);
+    await work({
       app,
       baseUrl: this.deployment.baseUrl(app),
       greeting: this.greeting,
       maxRequestBodyBytes: this.target.maxRequestBodyBytes,
       phase,
       notes: this.notes,
-      fetch: secretGuarded(this.deployment.fetch),
-    };
+      fetch: guard.fetch,
+    });
+    await guard.settle();
   }
 
   async finish(phases: Phase[]): Promise<void> {

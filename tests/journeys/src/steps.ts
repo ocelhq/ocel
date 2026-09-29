@@ -82,7 +82,7 @@ export function stepsOf(cell: Cell, phases: Phase[]): Step[] {
       phase,
       run: async (run: CellRun) => {
         await run.deploy();
-        await one.run(run.verifying(app, phase));
+        await run.verify(app, phase, (ctx) => one.run(ctx));
       },
     })),
     ...at("whileServing").map((one) => ({
@@ -91,7 +91,7 @@ export function stepsOf(cell: Cell, phases: Phase[]): Step[] {
       phase,
       run: async (run: CellRun) => {
         await run.deployStack();
-        await run.checkStack(one, run.verifying(app, phase));
+        await run.verify(app, phase, (ctx) => run.checkStack(one, ctx));
       },
     })),
   ];

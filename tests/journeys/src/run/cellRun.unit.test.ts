@@ -1,7 +1,12 @@
 import { describe, expect, it } from "bun:test";
-import { INITIAL_GREETING, REDEPLOY_GREETING } from "../checks/context";
+import {
+  type CheckContext,
+  INITIAL_GREETING,
+  REDEPLOY_GREETING,
+  SECRET_TOKEN,
+} from "../checks/context";
 import type { Evidence } from "../evidence";
-import { fixture } from "../matrix/types";
+import { fixture, type Phase } from "../matrix/types";
 import { defaults } from "../matrix/variants";
 import type { ExternalStack } from "../stacks";
 import type { Deployment, ReleaseCycle, Target } from "../targets/types";
@@ -9,14 +14,14 @@ import { CellRun } from "./cellRun";
 
 type Called = string[];
 
-function deployment(release: string): Deployment {
+function deployment(release: string, answer = ""): Deployment {
   return {
     baseUrl: (app) => `https://${app}.${release}.test`,
-    fetch: async () => new Response(),
+    fetch: async () => new Response(answer),
   };
 }
 
-function targetFor(called: Called, exists = false): Target & ReleaseCycle {
+function targetFor(called: Called, exists = false, answer = ""): Target & ReleaseCycle {
   return {
     name: "aws",
     workers: 1,
@@ -35,7 +40,7 @@ function targetFor(called: Called, exists = false): Target & ReleaseCycle {
     },
     deploy: async () => {
       called.push("deploy");
-      return deployment("first");
+      return deployment("first", answer);
     },
     redeploy: async (_cell, greeting) => {
       called.push(`redeploy ${greeting}`);
@@ -86,7 +91,13 @@ function recordingEvidence(written: Called): Evidence {
 
 function runOf(
   called: Called,
-  over: { keep?: boolean; prepareFailure?: string; exists?: boolean; written?: Called } = {},
+  over: {
+    keep?: boolean;
+    prepareFailure?: string;
+    exists?: boolean;
+    written?: Called;
+    answer?: string;
+  } = {},
 ) {
   const stacked = fixture("iac/with-sst", {
     apps: ["web"],
@@ -96,7 +107,7 @@ function runOf(
   });
   return new CellRun({
     cell: { name: stacked.name, fixture: stacked, variant: defaults },
-    target: targetFor(called, over.exists),
+    target: targetFor(called, over.exists, over.answer),
     runId: "1",
     keep: over.keep ?? false,
     evidence: recordingEvidence(over.written ?? []),
@@ -118,8 +129,8 @@ describe("a cell run", () => {
     expect(run.slug).toBe("j-1-iac-with-sst");
   });
 
-  it("refuses a check before the cell is deployed", () => {
-    expect(() => runOf([]).verifying("web", "verify")).toThrow(
+  it("refuses a check before the cell is deployed", async () => {
+    await expect(runOf([]).verify("web", "verify", async () => {})).rejects.toThrow(
       /a check ran before the cell was deployed/,
     );
   });
@@ -127,8 +138,16 @@ describe("a cell run", () => {
   it("verifies against the release and greeting it last deployed", async () => {
     const called: Called = [];
     const run = runOf(called);
+    const seen = (phase: Phase) => {
+      let handed: CheckContext | undefined;
+      return run
+        .verify("web", phase, async (ctx) => {
+          handed = ctx;
+        })
+        .then(() => handed);
+    };
     await run.deploy();
-    expect(run.verifying("web", "verify")).toMatchObject({
+    expect(await seen("verify")).toMatchObject({
       app: "web",
       baseUrl: "https://web.first.test",
       greeting: INITIAL_GREETING,
@@ -136,12 +155,12 @@ describe("a cell run", () => {
       phase: "verify",
     });
     await run.redeploy();
-    expect(run.verifying("web", "redeploy")).toMatchObject({
+    expect(await seen("redeploy")).toMatchObject({
       baseUrl: "https://web.second.test",
       greeting: REDEPLOY_GREETING,
     });
     await run.rollback();
-    expect(run.verifying("web", "rollback")).toMatchObject({
+    expect(await seen("rollback")).toMatchObject({
       baseUrl: "https://web.first.test",
       greeting: INITIAL_GREETING,
     });
@@ -150,6 +169,16 @@ describe("a cell run", () => {
       `redeploy ${REDEPLOY_GREETING}`,
       `rollback ${INITIAL_GREETING}`,
     ]);
+  });
+
+  it("fails a check whose response carried the secret, even when the check never read it", async () => {
+    const run = runOf([], { answer: `{"token":"${SECRET_TOKEN}"}` });
+    await run.deploy();
+    await expect(
+      run.verify("web", "verify", async (ctx) => {
+        await ctx.fetch(`${ctx.baseUrl}/api/probes/env`);
+      }),
+    ).rejects.toThrow(/\/api\/probes\/env leaked the secret value/);
   });
 
   it("deploys before it redeploys, however the steps are ordered", async () => {
@@ -180,7 +209,7 @@ describe("a cell run", () => {
     };
     await run.checkStack(check);
     await run.deploy();
-    await run.checkStack(check, run.verifying("web", "verify"));
+    await run.verify("web", "verify", (ctx) => run.checkStack(check, ctx));
     expect(seen).toEqual(["j-1-iac-with-sst unserved", "j-1-iac-with-sst web"]);
   });
 
