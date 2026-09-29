@@ -25,7 +25,7 @@ type inactivePromotion struct{ refusal.Refusal }
 
 func (i inactivePromotion) Unwrap() error { return i.Refusal }
 
-func promote(ctx context.Context, l projectLedger, pointer, over string, promoted router.Promotion, routers []appRouter, progress progress.Progress) (router.PruneResult, error) {
+func promote(ctx context.Context, l projectLedger, pointer, replaces string, promoted router.Promotion, routers []appRouter, progress progress.Progress) (router.PruneResult, error) {
 	flips := make([]router.Flip, len(routers))
 	for i, routed := range routers {
 		records, err := l.readRecords(ctx, promoted, routed.apps)
@@ -34,7 +34,7 @@ func promote(ctx context.Context, l projectLedger, pointer, over string, promote
 		}
 		flips[i] = router.Flip{Pointer: pointer, Promotion: promoted, Records: records, StillActive: newStillActive(l, pointer, promoted.PromotionID)}
 	}
-	pruned, err := l.Promote(ctx, promoted, pointer, over)
+	pruned, err := l.Promote(ctx, promoted, pointer, replaces)
 	if err != nil {
 		return router.PruneResult{}, err
 	}

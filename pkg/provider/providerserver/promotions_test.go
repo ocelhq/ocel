@@ -21,16 +21,16 @@ import (
 func seedPromotions(t *testing.T, provider *fake.Provider, tier environment.Tier, slug, pointer string, ids ...string) *ledger.Ledger {
 	t.Helper()
 	releases := ledger.New(provider.KeyValues(), tier, slug)
-	over := ""
+	replaces := ""
 	for i, id := range ids {
 		if err := releases.PutStaged(context.Background(), router.DeploymentRecord{App: "web", Build: buildIdentity(i)}); err != nil {
 			t.Fatal(err)
 		}
 		promotion := router.Promotion{PromotionID: id, Ts: int64(i + 1), Builds: map[string]string{"web": buildIdentity(i)}}
-		if _, err := releases.Promote(context.Background(), promotion, pointer, over); err != nil {
+		if _, err := releases.Promote(context.Background(), promotion, pointer, replaces); err != nil {
 			t.Fatal(err)
 		}
-		over = id
+		replaces = id
 	}
 	return releases
 }

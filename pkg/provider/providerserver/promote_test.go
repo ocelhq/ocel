@@ -67,12 +67,12 @@ func (w *promoteWorld) staged(t *testing.T, id string) router.Promotion {
 
 func (w *promoteWorld) promotes(t *testing.T, id string) error {
 	t.Helper()
-	return w.promotesOver(t, context.Background(), w.active(t), id)
+	return w.promotesReplacing(t, context.Background(), w.active(t), id)
 }
 
-func (w *promoteWorld) promotesOver(t *testing.T, ctx context.Context, over, id string) error {
+func (w *promoteWorld) promotesReplacing(t *testing.T, ctx context.Context, replaces, id string) error {
 	t.Helper()
-	_, err := promote(ctx, w.ledger, "", over, w.staged(t, id), w.appRouters(), progress.DiscardProgress())
+	_, err := promote(ctx, w.ledger, "", replaces, w.staged(t, id), w.appRouters(), progress.DiscardProgress())
 	return err
 }
 
@@ -212,7 +212,7 @@ func TestAPromoteInterruptedWhileItFlipsStillTakesItsPromotionBack(t *testing.T)
 	direct := w.routers.DataPlane(router.Kind(fake.KindDirect))
 	direct.BeforeNextFlip(cancel)
 	direct.FailNextFlip(errors.New("the flip was interrupted"))
-	if err := w.promotesOver(t, ctx, "p1", "p2"); err == nil {
+	if err := w.promotesReplacing(t, ctx, "p1", "p2"); err == nil {
 		t.Fatal("promote(p2) interrupted while it flipped = nil, want it unserved")
 	}
 
@@ -263,7 +263,7 @@ func TestAPromoteAnotherOvertookBeforeItsLedgerWriteIsRefusedBusyAndFlipsNothing
 	store.mu.Lock()
 	store.before = func() { raced = w.promotes(t, "p3") }
 	store.mu.Unlock()
-	err := w.promotesOver(t, context.Background(), "p1", "p2")
+	err := w.promotesReplacing(t, context.Background(), "p1", "p2")
 
 	if raced != nil {
 		t.Fatalf("the promote that overtook p2 = %v, want it served", raced)
