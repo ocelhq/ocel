@@ -102,8 +102,8 @@ func TestAClaimWithAClientCertificateAnswersTheHostnameOnTheShieldedFrontAndName
 	if err != nil {
 		t.Fatalf("Claim: %v", err)
 	}
-	if origin != (edge.Origin{Address: shieldedAddress}) {
-		t.Errorf("Claim named origin %+v, want the shielded front at %s", origin, shieldedAddress)
+	if origin != (edge.Origin{Address: shieldedAddress, Certified: true}) {
+		t.Errorf("Claim named origin %+v, want the shielded front at %s, certified by the certificate the claim entered in its map", origin, shieldedAddress)
 	}
 	if got := trustedBy(t, w); !slices.Equal(got, []string{zonePull}) {
 		t.Errorf("the shielded front trusts %v, want the client certificate the claim carried", got)

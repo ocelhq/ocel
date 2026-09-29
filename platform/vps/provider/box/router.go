@@ -46,11 +46,11 @@ func (r routerStack) State() router.StackState {
 }
 
 func (r routerStack) Claim(ctx context.Context, claim router.Claim) (edge.Origin, error) {
-	address, err := r.s.claimHostname(ctx, claim)
+	address, certified, err := r.s.claimHostname(ctx, claim)
 	if err != nil {
 		return edge.Origin{}, err
 	}
-	return edge.Origin{Address: address}, nil
+	return edge.Origin{Address: address, Certified: certified}, nil
 }
 
 func (r routerStack) Disclaim(ctx context.Context, hostname string) error {

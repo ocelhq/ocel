@@ -58,8 +58,17 @@ type tlsApp struct {
 }
 
 type certificates struct {
-	LoadFiles []loadFile `json:"load_files"`
+	LoadFiles []loadFile `json:"load_files,omitempty"`
+	LoadPEM   []loadPEM  `json:"load_pem,omitempty"`
 }
+
+type loadPEM struct {
+	Certificate string   `json:"certificate"`
+	Key         string   `json:"key"`
+	Tags        []string `json:"tags"`
+}
+
+const shieldTag = "shield:"
 
 type loadFile struct {
 	Certificate string   `json:"certificate"`
@@ -184,6 +193,7 @@ func render(spec proxy.Spec) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	pinned = withOriginCertificates(pinned, spec.Shields)
 	front.Policies = slices.Concat(selecting, []connectionPolicy{{}})
 	if slices.ContainsFunc(selecting, func(policy connectionPolicy) bool { return policy.Client != nil }) {
 		strict := true
@@ -285,13 +295,37 @@ func shieldPolicies(selecting []connectionPolicy, shields []proxy.Shield) ([]con
 			trusted = append(trusted, leaf)
 		}
 		client := &clientAuthentication{TrustedLeafCerts: trusted, Mode: requireClientCertificate}
+		var chosen *selection
+		if shield.Certificate != "" {
+			chosen = &selection{AnyTag: []string{shieldTag + hostname}}
+		}
 		if at := slices.IndexFunc(selecting, func(policy connectionPolicy) bool { return policy.Match.SNI[0] == hostname }); at >= 0 {
 			selecting[at].Client = client
+			if chosen != nil {
+				selecting[at].Selection = chosen
+			}
 			continue
 		}
-		shielding = append(shielding, connectionPolicy{Match: &handshakeMatch{SNI: []string{hostname}}, Client: client})
+		shielding = append(shielding, connectionPolicy{Match: &handshakeMatch{SNI: []string{hostname}}, Selection: chosen, Client: client})
 	}
 	return slices.Concat(shielding, selecting), nil
+}
+
+func withOriginCertificates(loaded *certificates, shields []proxy.Shield) *certificates {
+	for _, shield := range slices.SortedFunc(slices.Values(shields), byHostname) {
+		if shield.Certificate == "" {
+			continue
+		}
+		if loaded == nil {
+			loaded = &certificates{}
+		}
+		loaded.LoadPEM = append(loaded.LoadPEM, loadPEM{
+			Certificate: shield.Certificate,
+			Key:         shield.Key,
+			Tags:        []string{shieldTag + strings.ToLower(strings.TrimSpace(shield.Hostname))},
+		})
+	}
+	return loaded
 }
 
 func byHostname(a, b proxy.Shield) int {

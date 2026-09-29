@@ -3,6 +3,7 @@ package edge
 import (
 	"context"
 	"slices"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 )
@@ -113,7 +114,21 @@ type EdgeStack interface {
 }
 
 type Origin struct {
-	Address string
+	Address   string
+	Certified bool
+}
+
+type OriginCertificate struct {
+	ID          string
+	Certificate string
+	Key         string
+	ExpiresAt   time.Time
+}
+
+const OriginCertificateRenewal = 182 * 24 * time.Hour
+
+func (c OriginCertificate) IsDue(now time.Time) bool {
+	return now.Add(OriginCertificateRenewal).After(c.ExpiresAt)
 }
 
 type DomainBinding struct {

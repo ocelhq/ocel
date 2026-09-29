@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -161,5 +162,82 @@ func TestAServedHostnameIsClaimedAgainWhenTheCertificatesItsEdgePresentsChange(t
 	claims := relay.Claims()
 	if len(claims) != 2 || !slices.Equal(claims[1].ClientCertificates, rotated) {
 		t.Fatalf("the router took claims %+v, want app.acme.com claimed again trusting %v: the origin refuses the successor once the edge presents it unless it was told to trust it first", claims, rotated)
+	}
+}
+
+func TestAnOriginThatHoldsNoCertificateForAForwardedHostnameIsIssuedOneByTheEdge(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	relay := vendor.Edges().(*fake.Edges).Edge(fake.KindRelay)
+	relay.ProxiesRecords()
+	relay.IssuesOriginCertificates()
+	deployed(t, vendor, environment.TierProduction, "shop")
+
+	addWebHostname(t, client, "app.acme.com", nil)
+
+	claims := relay.Claims()
+	if len(claims) != 2 || claims[0].OriginCertificate.ID != "" || claims[1].OriginCertificate.ID != "origin-certificate-1" {
+		t.Fatalf("the router took claims %+v, want the hostname claimed, then claimed again with the certificate the edge issued once the origin said it holds none", claims)
+	}
+	if recorded := readStack(t, vendor, environment.TierProduction, "shop").Host("app.acme.com").OriginCertificate; recorded != "origin-certificate-1" {
+		t.Errorf("the hostname records origin certificate %q, want origin-certificate-1: it is revoked once nothing answers with it", recorded)
+	}
+
+	remove, err := client.RemoveHostname(context.Background(), &contractv1.HostnameRequest{Slug: "shop", Host: "app.acme.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result, err := drain(remove); err != nil || !result.GetSuccess() {
+		t.Fatalf("RemoveHostname() = %q, %v", result.GetError(), err)
+	}
+	if revoked := relay.RevokedOriginCertificates(); !slices.Equal(revoked, []string{"origin-certificate-1"}) {
+		t.Errorf("the edge revoked %v, want origin-certificate-1: an origin certificate left valid outlives the hostname it answered", revoked)
+	}
+}
+
+func TestAServedHostnameWhoseOriginCertificateIsDueIsIssuedASuccessorAndThePredecessorRevoked(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	relay := vendor.Edges().(*fake.Edges).Edge(fake.KindRelay)
+	relay.ProxiesRecords()
+	relay.IssuesOriginCertificates()
+	deployed(t, vendor, environment.TierProduction, "shop")
+	addWebHostname(t, client, "app.acme.com", nil)
+
+	relay.IssuesOriginCertificatesExpiringIn(time.Hour)
+	relay.ForgetsOriginCertificate("app.acme.com")
+	state := readStack(t, vendor, environment.TierProduction, "shop")
+	hostState := state.Host("app.acme.com")
+	hostState.OriginCertificateExpires = time.Now().Add(time.Hour)
+	state.SetHost("app.acme.com", hostState)
+	seedStack(t, vendor, environment.TierProduction, "shop", state)
+
+	addWebHostname(t, client, "app.acme.com", nil)
+	if recorded := readStack(t, vendor, environment.TierProduction, "shop").Host("app.acme.com").OriginCertificate; recorded != "origin-certificate-2" {
+		t.Errorf("the hostname records origin certificate %q, want its successor origin-certificate-2", recorded)
+	}
+	if revoked := relay.RevokedOriginCertificates(); !slices.Equal(revoked, []string{"origin-certificate-1"}) {
+		t.Errorf("the edge revoked %v, want the predecessor origin-certificate-1", revoked)
+	}
+}
+
+func TestRemovingAProjectRevokesTheOriginCertificatesItsHostnamesWereAnsweredWith(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	relay := vendor.Edges().(*fake.Edges).Edge(fake.KindRelay)
+	relay.ProxiesRecords()
+	relay.IssuesOriginCertificates()
+	deployed(t, vendor, environment.TierProduction, "shop")
+	addWebHostname(t, client, "app.acme.com", nil)
+
+	stream, err := client.RemoveProject(context.Background(), projectRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result, err := drain(stream); err != nil || !result.GetSuccess() {
+		t.Fatalf("RemoveProject() = %q, %v", result.GetError(), err)
+	}
+	if revoked := relay.RevokedOriginCertificates(); !slices.Equal(revoked, []string{"origin-certificate-1"}) {
+		t.Errorf("the edge revoked %v, want origin-certificate-1: nothing answers with it once the project is gone", revoked)
 	}
 }

@@ -4,9 +4,14 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"slices"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 type shieldedClaim func(ctx context.Context, clientCertificates []string) (edge.Origin, error)
@@ -59,4 +64,54 @@ func digestClientCertificates(certificates []string) []string {
 	}
 	slices.Sort(digests)
 	return slices.Compact(digests)
+}
+
+type originClaim struct {
+	origin  *edge.Origin
+	trusted []string
+	issued  edge.OriginCertificate
+}
+
+func (c originClaim) recordIssued(hostState *stackrecords.HostnameState) string {
+	if c.issued.ID == "" {
+		return ""
+	}
+	superseded := hostState.OriginCertificate
+	hostState.OriginCertificate, hostState.OriginCertificateExpires = c.issued.ID, c.issued.ExpiresAt
+	if superseded == c.issued.ID {
+		return ""
+	}
+	return superseded
+}
+
+func claimCertified(ctx context.Context, front edge.Edge, claim router.Claim, issued *edge.OriginCertificate,
+	take func(context.Context, router.Claim) (edge.Origin, error),
+) (edge.Origin, error) {
+	origin, err := take(ctx, claim)
+	certificates := front.Hooks().OriginCertificates
+	if err != nil || origin.Address == "" || origin.Certified || certificates == nil {
+		return origin, err
+	}
+	certificate, err := certificates.Issue(ctx, claim.Hostname)
+	if err != nil {
+		return edge.Origin{}, err
+	}
+	*issued = certificate
+	claim.OriginCertificate = certificate
+	return take(ctx, claim)
+}
+
+func originCertificateDue(hostState *stackrecords.HostnameState, now time.Time) bool {
+	return hostState.OriginCertificate != "" &&
+		edge.OriginCertificate{ExpiresAt: hostState.OriginCertificateExpires}.IsDue(now)
+}
+
+func revokeOriginCertificate(ctx context.Context, front edge.Edge, id string, runProgress progress.Progress) {
+	certificates := front.Hooks().OriginCertificates
+	if id == "" || certificates == nil {
+		return
+	}
+	if err := certificates.Revoke(ctx, id); err != nil {
+		runProgress.Warn(fmt.Sprintf("the origin certificate %s is no longer answered with, and stays valid until it expires: revoking it failed: %v", id, err))
+	}
 }

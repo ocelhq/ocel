@@ -33,7 +33,7 @@ type Machine interface {
 	Pins() []host.Pin
 	RouteBy(hostname string) string
 	ClaimHosts(ctx context.Context, claims []host.HostClaim) error
-	ShieldHost(ctx context.Context, shield host.Shield) error
+	ShieldHost(ctx context.Context, shield host.Shield) (host.Shield, error)
 	UnshieldHost(ctx context.Context, hostname, owner string) error
 	DisclaimHost(ctx context.Context, hostname, owner string) error
 	DisclaimPointer(ctx context.Context, owner, pointer string) error

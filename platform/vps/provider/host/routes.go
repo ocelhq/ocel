@@ -41,6 +41,8 @@ type Shield struct {
 	Hostname           string   `json:"hostname"`
 	Owner              string   `json:"owner"`
 	ClientCertificates []string `json:"clientCertificates,omitempty"`
+	Certificate        string   `json:"certificate,omitempty"`
+	Key                string   `json:"key,omitempty"`
 }
 
 func Shielding(shields []Shield, taken Shield) []Shield {
@@ -48,6 +50,9 @@ func Shielding(shields []Shield, taken Shield) []Shield {
 	kept := make([]Shield, 0, len(shields)+1)
 	for _, shield := range shields {
 		if shield.Hostname == taken.Hostname {
+			if taken.Certificate == "" && shield.Owner == taken.Owner {
+				taken.Certificate, taken.Key = shield.Certificate, shield.Key
+			}
 			continue
 		}
 		if slices.ContainsFunc(shield.ClientCertificates, func(certificate string) bool { return slices.Contains(taken.ClientCertificates, certificate) }) {
@@ -134,7 +139,10 @@ func proxySpec(state RoutingTable) proxy.Spec {
 	}
 	shields := make([]proxy.Shield, 0, len(state.Shields))
 	for _, shield := range state.Shields {
-		shields = append(shields, proxy.Shield{Hostname: shield.Hostname, ClientCertificates: shield.ClientCertificates})
+		shields = append(shields, proxy.Shield{
+			Hostname: shield.Hostname, ClientCertificates: shield.ClientCertificates,
+			Certificate: shield.Certificate, Key: shield.Key,
+		})
 	}
 	return proxy.Spec{
 		Pins:        pins,

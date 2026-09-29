@@ -2,10 +2,12 @@ package fake
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -124,6 +126,11 @@ type Edge struct {
 	entitlement *edge.CodeEntitlement
 
 	proxies    bool
+	issues     bool
+	originLife time.Duration
+	issued     int
+	held       map[string]string
+	revoked    []string
 	staged     []string
 	events     []string
 	claims     []router.Claim
@@ -165,7 +172,54 @@ func ClientCertificate(kind edge.Kind) string {
 }
 
 func Origin(kind router.Kind) edge.Origin {
-	return edge.Origin{Address: "origin." + string(kind) + ".fake.invalid"}
+	return edge.Origin{Address: "origin." + string(kind) + ".fake.invalid", Certified: true}
+}
+
+func (e *Edge) IssuesOriginCertificates() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.issues = true
+}
+
+func (e *Edge) IssuesOriginCertificatesExpiringIn(life time.Duration) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.originLife = life
+}
+
+func (e *Edge) ForgetsOriginCertificate(hostname string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	delete(e.held, hostname)
+}
+
+func (e *Edge) RevokedOriginCertificates() []string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return slices.Clone(e.revoked)
+}
+
+func (e *Edge) issueOriginCertificate(_ context.Context, hostname string) (edge.OriginCertificate, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.issued++
+	life := e.originLife
+	if life == 0 {
+		life = 365 * 24 * time.Hour
+	}
+	return edge.OriginCertificate{
+		ID:          fmt.Sprintf("origin-certificate-%d", e.issued),
+		Certificate: "origin certificate for " + hostname,
+		Key:         "origin key for " + hostname,
+		ExpiresAt:   time.Now().Add(life),
+	}, nil
+}
+
+func (e *Edge) revokeOriginCertificate(_ context.Context, id string) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.revoked = append(e.revoked, id)
+	return nil
 }
 
 func (e *Edge) StagesClientCertificates(certificates ...string) {
@@ -202,7 +256,15 @@ func (e *Edge) recordClaim(claim router.Claim) edge.Origin {
 	defer e.mu.Unlock()
 	e.events = append(e.events, "claim")
 	e.claims = append(e.claims, claim)
-	return Origin(e.routedBy)
+	if claim.OriginCertificate.ID != "" {
+		if e.held == nil {
+			e.held = map[string]string{}
+		}
+		e.held[claim.Hostname] = claim.OriginCertificate.ID
+	}
+	origin := Origin(e.routedBy)
+	origin.Certified = !e.issues || e.held[claim.Hostname] != ""
+	return origin
 }
 
 func (e *Edge) recordDisclaim(hostname string) {
@@ -366,6 +428,9 @@ func (e *Edge) Hooks() edge.Hooks {
 	if e.proxies {
 		hooks.ClientCertificates = &edge.ClientCertificateHooks{Stage: e.stageClientCertificates, Present: e.presentClientCertificate}
 		hooks.PurgeHostnames = e.purge
+	}
+	if e.issues {
+		hooks.OriginCertificates = &edge.OriginCertificateHooks{Issue: e.issueOriginCertificate, Revoke: e.revokeOriginCertificate}
 	}
 	if e.entitlement != nil {
 		granted := *e.entitlement

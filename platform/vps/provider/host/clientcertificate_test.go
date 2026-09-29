@@ -91,3 +91,13 @@ func TestShieldingAHostnameCarriesItsSuccessorCertificateToEveryHostnameThatTrus
 		}
 	}
 }
+
+func TestShieldingAHostnameAgainKeepsTheOriginCertificateItAlreadyHolds(t *testing.T) {
+	t.Parallel()
+
+	held := []Shield{{Hostname: "shop.example.com", Owner: "ocel-shop-production", ClientCertificates: []string{"zone"}, Certificate: "ORIGIN", Key: "KEY"}}
+	again := Shielding(held, Shield{Hostname: "shop.example.com", Owner: "ocel-shop-production", ClientCertificates: []string{"zone", "successor"}})
+	if len(again) != 1 || again[0].Certificate != "ORIGIN" || again[0].Key != "KEY" {
+		t.Errorf("shielding shop.example.com again leaves %+v, want the origin certificate it holds kept: a claim carries one only when the origin needs a new one", again)
+	}
+}

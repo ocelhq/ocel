@@ -22,8 +22,8 @@ worker: it forwards each hostname to the origin through a proxied record. The or
 only what arrives with the certificate your zone presents to origins (zone-level
 authenticated origin pulls, with a certificate of your own rather than Cloudflare's shared
 one). If the zone has none, ocel mints one good for a year, has every origin trust it, then
-uploads it and turns zone-level pulls on. A month before a certificate ocel minted expires,
-the next deploy mints its successor the same way: origins trust both, the zone switches, and
+uploads it and turns zone-level pulls on. Once a certificate ocel minted is half way through
+its year, the next deploy mints its successor the same way: origins trust both, the zone switches, and
 the certificate it replaced is deleted. To retire a leaked key sooner, delete that
 certificate from the zone; the next deploy of each project mints and trusts a new one. A
 promote purges what Cloudflare cached for the hostnames it flipped. The zone's SSL mode must

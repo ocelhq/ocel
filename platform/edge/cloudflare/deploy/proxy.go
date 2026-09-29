@@ -39,6 +39,10 @@ func (x *Proxy) Hooks() edge.Hooks {
 			Stage:   x.p.stageClientCertificates,
 			Present: x.p.presentClientCertificate,
 		},
+		OriginCertificates: &edge.OriginCertificateHooks{
+			Issue:  x.p.issueOriginCertificate,
+			Revoke: x.p.revokeOriginCertificate,
+		},
 		PurgeHostnames: x.p.purgeHostnames,
 	}
 }

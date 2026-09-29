@@ -2,6 +2,7 @@ package edgeconformance
 
 import (
 	"context"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
@@ -258,6 +259,36 @@ func Run(t *testing.T, suite Suite) {
 		}
 		if !slices.Equal(again, presented) {
 			t.Errorf("Stage(%q) = %d certificates, then %d with nothing due: an origin is claimed again every time what it trusts changes", suite.Hostname, len(presented), len(again))
+		}
+	})
+
+	t.Run("an origin certificate an edge issues covers the hostname and pairs with its key", func(t *testing.T) {
+		e, _ := suite.New(t)
+		certificates := e.Hooks().OriginCertificates
+		if certificates == nil {
+			t.Skip("this edge issues no origin certificate")
+		}
+		ctx := context.Background()
+		issued, err := certificates.Issue(ctx, suite.Hostname)
+		if err != nil {
+			t.Fatalf("Issue(%q): %v", suite.Hostname, err)
+		}
+		if issued.ID == "" {
+			t.Errorf("Issue(%q) names no id, so nothing can revoke it once it is replaced", suite.Hostname)
+		}
+		pair, err := tls.X509KeyPair([]byte(issued.Certificate), []byte(issued.Key))
+		if err != nil {
+			t.Fatalf("Issue(%q) handed a certificate and key that do not pair: %v", suite.Hostname, err)
+		}
+		leaf, err := x509.ParseCertificate(pair.Certificate[0])
+		if err != nil {
+			t.Fatalf("parse the origin certificate: %v", err)
+		}
+		if err := leaf.VerifyHostname(suite.Hostname); err != nil {
+			t.Errorf("the origin certificate does not cover %s: %v", suite.Hostname, err)
+		}
+		if err := certificates.Revoke(ctx, issued.ID); err != nil {
+			t.Errorf("Revoke(%q): %v", issued.ID, err)
 		}
 	})
 

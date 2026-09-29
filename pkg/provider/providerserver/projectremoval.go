@@ -270,9 +270,13 @@ func (r *projectRemoval) run(ctx context.Context, progress progress.Progress) er
 		errs = append(errs, err)
 	}
 	written, certificates := r.state.PointerRecords(), r.state.Certificates()
+	originCertificates := r.originCertificates()
 	if err := r.tearDownEdge(ctx, progress); err != nil {
 		errs = append(errs, err)
 	} else {
+		for _, id := range originCertificates {
+			revokeOriginCertificate(ctx, r.front, id, progress)
+		}
 		if err := r.releaseRecords(ctx, written, progress); err != nil {
 			errs = append(errs, err)
 		}
@@ -291,6 +295,16 @@ func (r *projectRemoval) run(ctx context.Context, progress progress.Progress) er
 		return err
 	}
 	return r.forgetProjectIfEmpty(ctx, progress)
+}
+
+func (r *projectRemoval) originCertificates() []string {
+	var ids []string
+	for _, hostname := range r.state.Hostnames() {
+		if id := r.state.Host(hostname).OriginCertificate; id != "" {
+			ids = append(ids, id)
+		}
+	}
+	return ids
 }
 
 func (r *projectRemoval) unbind(ctx context.Context, runProgress progress.Progress) error {
