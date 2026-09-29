@@ -3,10 +3,11 @@ package auth
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/ocelhq/ocel/cli/internal/console/httpapi"
 )
 
 func TestListOrganizations(t *testing.T) {
@@ -98,12 +99,12 @@ func TestSetActiveOrganization(t *testing.T) {
 		}
 	})
 
-	t.Run("surfaces an error response as an APIError", func(t *testing.T) {
+	t.Run("surfaces an error response with its code", func(t *testing.T) {
 		t.Parallel()
 
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(apiError{Error: "invalid_request", ErrorDescription: "organization not found"})
+			w.Write([]byte(`{"error":"invalid_request","error_description":"organization not found"}`))
 		}))
 		defer srv.Close()
 
@@ -112,22 +113,8 @@ func TestSetActiveOrganization(t *testing.T) {
 		if err == nil {
 			t.Fatal("SetActiveOrganization err = nil, want error")
 		}
-		var apiErr *APIError
-		if !isAPIError(err, &apiErr) {
-			t.Fatalf("err = %v (%T), want *APIError", err, err)
-		}
-		if apiErr.Code != "invalid_request" {
-			t.Fatalf("apiErr.Code = %q, want invalid_request", apiErr.Code)
+		if !httpapi.HasCode(err, "invalid_request") {
+			t.Fatalf("err = %v (%T), want the invalid_request code", err, err)
 		}
 	})
-}
-
-func isAPIError(err error, target **APIError) bool {
-	apiErr := &APIError{}
-	ok := errors.As(err, &apiErr)
-	if !ok {
-		return false
-	}
-	*target = apiErr
-	return true
 }

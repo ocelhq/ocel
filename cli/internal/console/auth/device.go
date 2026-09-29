@@ -2,7 +2,8 @@ package auth
 
 import (
 	"context"
-	"errors"
+
+	"github.com/ocelhq/ocel/cli/internal/console/httpapi"
 )
 
 const (
@@ -27,7 +28,7 @@ type DeviceCode struct {
 func (c *Client) RequestDeviceCode(ctx context.Context) (*DeviceCode, error) {
 	var out DeviceCode
 	body := map[string]string{"client_id": ClientID}
-	if err := c.postJSON(ctx, "/api/auth/device/code", body, &out); err != nil {
+	if err := c.api.Post(ctx, "/api/auth/device/code", "", body, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -47,32 +48,24 @@ func (c *Client) PollToken(ctx context.Context, deviceCode string) (*TokenResult
 		"device_code": deviceCode,
 		"client_id":   ClientID,
 	}
-	if err := c.postJSON(ctx, "/api/auth/device/token", body, &out); err != nil {
+	if err := c.api.Post(ctx, "/api/auth/device/token", "", body, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
 }
 
 func IsPending(err error) bool {
-	return hasCode(err, ErrCodeAuthorizationPending)
+	return httpapi.HasCode(err, ErrCodeAuthorizationPending)
 }
 
 func IsSlowDown(err error) bool {
-	return hasCode(err, ErrCodeSlowDown)
+	return httpapi.HasCode(err, ErrCodeSlowDown)
 }
 
 func IsAccessDenied(err error) bool {
-	return hasCode(err, ErrCodeAccessDenied)
+	return httpapi.HasCode(err, ErrCodeAccessDenied)
 }
 
 func IsExpired(err error) bool {
-	return hasCode(err, ErrCodeExpiredToken)
-}
-
-func hasCode(err error, code string) bool {
-	var apiErr *APIError
-	if errors.As(err, &apiErr) {
-		return apiErr.Code == code
-	}
-	return false
+	return httpapi.HasCode(err, ErrCodeExpiredToken)
 }

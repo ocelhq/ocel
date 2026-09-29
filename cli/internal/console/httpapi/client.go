@@ -25,8 +25,9 @@ func New(baseURL string) *Client {
 }
 
 type Error struct {
-	Message    string
 	StatusCode int
+	Code       string
+	Message    string
 }
 
 func (e *Error) Error() string {
@@ -36,6 +37,11 @@ func (e *Error) Error() string {
 func HasStatus(err error, status int) bool {
 	var apiErr *Error
 	return errors.As(err, &apiErr) && apiErr.StatusCode == status
+}
+
+func HasCode(err error, code string) bool {
+	var apiErr *Error
+	return errors.As(err, &apiErr) && apiErr.Code == code
 }
 
 func (c *Client) Get(ctx context.Context, path, accessToken string, out any) error {
@@ -78,7 +84,9 @@ func (c *Client) do(ctx context.Context, method, path, accessToken string, body 
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	req.Header.Set("Authorization", "Bearer "+accessToken)
+	if accessToken != "" {
+		req.Header.Set("Authorization", "Bearer "+accessToken)
+	}
 	req.Header.Set("User-Agent", "ocel-cli")
 
 	resp, err := c.HTTPClient.Do(req)
@@ -106,10 +114,15 @@ func (c *Client) do(ctx context.Context, method, path, accessToken string, body 
 
 func statusError(status int, data []byte) error {
 	var body struct {
-		Error string `json:"error"`
+		Error            string `json:"error"`
+		ErrorDescription string `json:"error_description"`
 	}
 	if err := json.Unmarshal(data, &body); err == nil && body.Error != "" {
-		return &Error{Message: body.Error, StatusCode: status}
+		message := body.Error
+		if body.ErrorDescription != "" {
+			message = body.ErrorDescription
+		}
+		return &Error{StatusCode: status, Code: body.Error, Message: message}
 	}
-	return &Error{Message: strings.TrimSpace(string(data)), StatusCode: status}
+	return &Error{StatusCode: status, Message: strings.TrimSpace(string(data))}
 }
