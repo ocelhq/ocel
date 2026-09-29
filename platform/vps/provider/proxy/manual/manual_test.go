@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
@@ -21,7 +22,7 @@ type box struct {
 	listening  []listeners.Listener
 	publishing []string
 	claimed    []string
-	answers    map[string]string
+	answers    map[string]router.Kind
 	failures   map[string]string
 	unread     error
 }
@@ -41,7 +42,7 @@ func (b *box) Claimed(context.Context) ([]string, error) {
 	return b.claimed, nil
 }
 
-func (b *box) Probe(_ context.Context, hostname string) (string, string, error) {
+func (b *box) Probe(_ context.Context, hostname string) (router.Kind, string, error) {
 	b.asked = append(b.asked, "probe "+hostname)
 	return b.answers[hostname], b.failures[hostname], nil
 }
@@ -123,7 +124,7 @@ func TestManualPassesWhenYourProxyListensOn443AndRoutesEveryClaimToTheSwitchboar
 	machine := &box{
 		listening: on443(),
 		claimed:   []string{"shop.example.com", "ocel-edge-probe.preview.example.com"},
-		answers:   map[string]string{"shop.example.com": "switchboard", "ocel-edge-probe.preview.example.com": "switchboard"},
+		answers:   map[string]router.Kind{"shop.example.com": "switchboard", "ocel-edge-probe.preview.example.com": "switchboard"},
 	}
 	inspected, err := (manual.Manual{Box: machine, Port: 8480}).Inspect(context.Background())
 	if err != nil {
@@ -190,7 +191,7 @@ func TestManualFailsAClaimYourProxyDoesNotRouteAndSaysWhereToRouteIt(t *testing.
 	machine := &box{
 		listening: on443(),
 		claimed:   []string{"shop.example.com", "api.example.com"},
-		answers:   map[string]string{"shop.example.com": "switchboard", "api.example.com": ""},
+		answers:   map[string]router.Kind{"shop.example.com": "switchboard", "api.example.com": ""},
 		failures:  map[string]string{"api.example.com": "api.example.com answered nothing over tls at 127.0.0.1:443"},
 	}
 	inspected, err := (manual.Manual{Box: machine, Port: 9000}).Inspect(context.Background())
@@ -215,7 +216,7 @@ func TestManualFailsAClaimAnsweredByAnotherEdge(t *testing.T) {
 	machine := &box{
 		listening: on443(),
 		claimed:   []string{"shop.example.com"},
-		answers:   map[string]string{"shop.example.com": "cloudflare"},
+		answers:   map[string]router.Kind{"shop.example.com": "cloudflare"},
 	}
 	inspected, err := (manual.Manual{Box: machine, Port: 8480}).Inspect(context.Background())
 	if err != nil {
@@ -223,7 +224,7 @@ func TestManualFailsAClaimAnsweredByAnotherEdge(t *testing.T) {
 	}
 	check := verdicts(inspected)["shop.example.com"]
 	if check.Verdict != provider.HostFail || !strings.Contains(check.Finding, "cloudflare") {
-		t.Errorf("shop.example.com = %+v, want it failed naming the edge that answered", check)
+		t.Errorf("shop.example.com = %+v, want it failed naming the router that answered", check)
 	}
 }
 

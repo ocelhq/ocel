@@ -446,7 +446,7 @@ export default {
 			"Requesting a certificate for shop.app.com, www.app.com",
 			"Binding shop.app.com to the cloudflare edge",
 			"Writing shop.app.com AAAA 100::",
-			"shop.app.com is served by the cloudflare edge",
+			"shop.app.com is served through the cloudflare edge",
 			"Binding www.app.com to the cloudflare edge",
 			"Serving shop.app.com, www.app.com",
 		} {
@@ -686,7 +686,7 @@ export default {
 			t.Fatalf("runDomainStatus err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
-		for _, want := range []string{"shop.app.com  PENDING", "Outstanding", "does not answer as the cloudflare edge yet"} {
+		for _, want := range []string{"shop.app.com  PENDING", "Outstanding", "does not answer through the cloudflare edge yet"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)
 			}

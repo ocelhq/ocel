@@ -151,7 +151,7 @@ func served(t *testing.T, table string, flags ...string) serving {
 	return running
 }
 
-func (s serving) ask(t *testing.T, host string) (int, string, string) {
+func (s serving) ask(t *testing.T, host string) (int, string, router.Kind) {
 	t.Helper()
 	request, err := http.NewRequest(http.MethodGet, "http://"+s.data+"/", nil)
 	if err != nil {
@@ -164,7 +164,7 @@ func (s serving) ask(t *testing.T, host string) (int, string, string) {
 	}
 	defer said.Body.Close()
 	body, _ := io.ReadAll(said.Body)
-	return said.StatusCode, string(body), said.Header.Get(router.HeaderRouter)
+	return said.StatusCode, string(body), router.Kind(said.Header.Get(router.HeaderRouter))
 }
 
 func TestServeAnswersEachHostnameItsTableClaimsAndNamesTheBox(t *testing.T) {

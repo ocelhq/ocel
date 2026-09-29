@@ -264,7 +264,7 @@ func TestLiveAPreviewTornDownLeavesNoRouteAndNoImageBehindAndKeepsItsCertificate
 	}
 	answered := vm.peers(t, "curl -sS -m 10 -o /dev/null -D - -H "+quote("Host: "+hostname)+" http://"+caddy.Container+"/")
 	if !strings.Contains(answered, "404") ||
-		!strings.Contains(strings.ToLower(answered), strings.ToLower(router.HeaderRouter)+": "+switchboard.RouterKind) {
+		!strings.Contains(strings.ToLower(answered), strings.ToLower(router.HeaderRouter)+": "+string(switchboard.RouterKind)) {
 		t.Errorf("%s was answered\n%s\nafter its preview came down, want the catch-all's 404 with %s: %s. A 404 from a route this teardown was meant to remove reads the same on the status line alone",
 			hostname, answered, router.HeaderRouter, switchboard.RouterKind)
 	}

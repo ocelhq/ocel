@@ -79,22 +79,22 @@ func probingAt(t *testing.T, header string) *vps.Provider {
 func TestTheBoxAnswersWhichRouterServesAHostnameOffTheHeaderItReadsOverTls(t *testing.T) {
 	t.Parallel()
 
-	for what, header := range map[string]string{
+	for what, header := range map[string]router.Kind{
 		"the box itself":     switchboard.RouterKind,
 		"a different router": "cloudfront",
 		"nothing ocel runs":  "",
 	} {
-		kind, err := probingAt(t, header).ServingRouter(context.Background(), "shop.example.com")
+		kind, err := probingAt(t, string(header)).ServingRouter(context.Background(), "shop.example.com")
 		if err != nil {
-			t.Fatalf("Serving() over %s = %v", what, err)
+			t.Fatalf("ServingRouter() over %s = %v", what, err)
 		}
-		if string(kind) != header {
-			t.Errorf("Serving() over %s = %q, want %q read off %s", what, kind, header, router.HeaderRouter)
+		if kind != header {
+			t.Errorf("ServingRouter() over %s = %q, want %q read off %s", what, kind, header, router.HeaderRouter)
 		}
 	}
 }
 
-func TestTheEdgeIsReadOffTheHostnameProbedAndNotOffWhereeverItPointsOn(t *testing.T) {
+func TestTheRouterIsReadOffTheHostnameProbedAndNotOffWhereverItPointsOn(t *testing.T) {
 	t.Parallel()
 
 	elsewhere := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -117,10 +117,10 @@ func TestTheEdgeIsReadOffTheHostnameProbedAndNotOffWhereeverItPointsOn(t *testin
 
 	kind, err := p.ServingRouter(context.Background(), "shop.example.com")
 	if err != nil {
-		t.Fatalf("Serving() over a hostname fronted by a redirect = %v", err)
+		t.Fatalf("ServingRouter() over a hostname fronted by a redirect = %v", err)
 	}
 	if kind != "" {
-		t.Errorf("Serving() = %q, want nothing: the probe followed a redirect and read the edge off wherever the chain landed, then attributed it to shop.example.com", kind)
+		t.Errorf("ServingRouter() = %q, want nothing: the probe followed a redirect and read the router off wherever the chain landed, then attributed it to shop.example.com", kind)
 	}
 }
 
@@ -128,7 +128,7 @@ func TestAHostnameServingACertificateNothingTrustsKeepsConvergingAndSaysWhy(t *t
 	t.Parallel()
 
 	served := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set(router.HeaderRouter, switchboard.RouterKind)
+		w.Header().Set(router.HeaderRouter, string(switchboard.RouterKind))
 		w.WriteHeader(http.StatusOK)
 	}))
 	t.Cleanup(served.Close)
@@ -142,11 +142,11 @@ func TestAHostnameServingACertificateNothingTrustsKeepsConvergingAndSaysWhy(t *t
 
 	kind, err := p.ServingRouter(context.Background(), "shop.example.com")
 	if err != nil {
-		t.Fatalf("Serving() over a certificate nothing trusts = %v, want it reported unserved: a cutover writes the record and probes at once, so for the whole of the old record's ttl the probe reaches the previous host, and a deploy that dies on attempt 1 there never moves the domain at all",
+		t.Fatalf("ServingRouter() over a certificate nothing trusts = %v, want it reported unserved: a cutover writes the record and probes at once, so for the whole of the old record's ttl the probe reaches the previous host, and a deploy that dies on attempt 1 there never moves the domain at all",
 			err)
 	}
 	if kind != "" {
-		t.Errorf("Serving() = %q, want nothing: no header is readable off a handshake the client refused", kind)
+		t.Errorf("ServingRouter() = %q, want nothing: no header is readable off a handshake the client refused", kind)
 	}
 	if cause := p.LastProbeFailure("shop.example.com"); !strings.Contains(cause, "x509") {
 		t.Errorf("LastProbeFailure() = %q, want the chain the client refused: the cutover gives up after a full minute with nothing for the operator to act on", cause)
@@ -157,7 +157,7 @@ func TestAHostnameThatAnswersClearsTheCauseTheLastAttemptLeft(t *testing.T) {
 	t.Parallel()
 
 	served := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set(router.HeaderRouter, switchboard.RouterKind)
+		w.Header().Set(router.HeaderRouter, string(switchboard.RouterKind))
 		w.WriteHeader(http.StatusOK)
 	}))
 	t.Cleanup(served.Close)
@@ -201,7 +201,7 @@ func TestAProbeTheRunGaveUpOnSaysSoRatherThanReportingTheHostnameUnserved(t *tes
 	stop()
 
 	if _, err := p.ServingRouter(ctx, "shop.example.com"); !errors.Is(err, context.Canceled) {
-		t.Errorf("Serving() under a cancelled context = %v, want the cancellation: a deploy the user stopped reads as a hostname that does not answer yet", err)
+		t.Errorf("ServingRouter() under a cancelled context = %v, want the cancellation: a deploy the user stopped reads as a hostname that does not answer yet", err)
 	}
 }
 
@@ -213,14 +213,14 @@ func TestAHostnameNothingAnswersIsNotAnErrorTheCutoverGivesUpOn(t *testing.T) {
 
 	kind, err := p.ServingRouter(context.Background(), "nothing.invalid")
 	if err != nil {
-		t.Fatalf("Serving() over a hostname that resolves to nothing = %v, want it reported as unserved: the cutover retries on an empty answer and gives up on an error", err)
+		t.Fatalf("ServingRouter() over a hostname that resolves to nothing = %v, want it reported as unserved: the cutover retries on an empty answer and gives up on an error", err)
 	}
 	if kind != "" {
-		t.Errorf("Serving() = %q, want nothing", kind)
+		t.Errorf("ServingRouter() = %q, want nothing", kind)
 	}
 }
 
-func TestAHostnameOneOfTheBoxesProjectsAnswersStillNamesTheBoxAsItsEdge(t *testing.T) {
+func TestAHostnameOneOfTheBoxesProjectsAnswersStillNamesTheSwitchboardAsItsRouter(t *testing.T) {
 	t.Parallel()
 
 	const hostname = "shop.example.com"
@@ -256,10 +256,10 @@ func TestAHostnameOneOfTheBoxesProjectsAnswersStillNamesTheBoxAsItsEdge(t *testi
 
 	kind, err := p.ServingRouter(context.Background(), hostname)
 	if err != nil {
-		t.Fatalf("Serving() = %v", err)
+		t.Fatalf("ServingRouter() = %v", err)
 	}
 	if kind != switchboard.RouterKind {
-		t.Errorf("Serving() over a hostname a project on the box claims and routes = %q, want %q: a box that names the edge only on the route nothing claims makes the first bind on a project already deployed probe its own app, read no header and burn every attempt before refusing", kind, switchboard.RouterKind)
+		t.Errorf("ServingRouter() over a hostname a project on the box claims and routes = %q, want %q: a box that names its router only on the route nothing claims makes the first bind on a project already deployed probe its own app, read no header and burn every attempt before refusing", kind, switchboard.RouterKind)
 	}
 }
 
@@ -286,14 +286,14 @@ func probedOnTheBox(t *testing.T, answer session.Result) (*vps.Provider, *box) {
 func TestALocalhostNameIsProbedOnTheBoxItResolvesOn(t *testing.T) {
 	t.Parallel()
 
-	p, machine := probedOnTheBox(t, session.Result{Stdout: switchboard.RouterKind + "\n"})
+	p, machine := probedOnTheBox(t, session.Result{Stdout: string(switchboard.RouterKind) + "\n"})
 
 	kind, err := p.ServingRouter(context.Background(), "web.localhost")
 	if err != nil {
-		t.Fatalf("Serving() = %v", err)
+		t.Fatalf("ServingRouter() = %v", err)
 	}
 	if kind != switchboard.RouterKind {
-		t.Errorf("Serving() = %q, want %q read off the box's own proxy", kind, switchboard.RouterKind)
+		t.Errorf("ServingRouter() = %q, want %q read off the box's own proxy", kind, switchboard.RouterKind)
 	}
 	if machine.at("ocel-switchboard' 'probe' 'web.localhost'") < 0 {
 		t.Errorf("the box was never asked to probe web.localhost: %v", machine.commands())
@@ -308,10 +308,10 @@ func TestALocalhostNameTheBoxCannotReachKeepsConvergingAndSaysWhy(t *testing.T) 
 
 	kind, err := p.ServingRouter(context.Background(), "web.localhost")
 	if err != nil {
-		t.Fatalf("Serving() = %v, want it reported unserved: the proxy obtains the name's certificate in the background after the bind", err)
+		t.Fatalf("ServingRouter() = %v, want it reported unserved: the proxy obtains the name's certificate in the background after the bind", err)
 	}
 	if kind != "" {
-		t.Errorf("Serving() = %q, want nothing", kind)
+		t.Errorf("ServingRouter() = %q, want nothing", kind)
 	}
 	if cause := p.LastProbeFailure("web.localhost"); !strings.Contains(cause, "fallback.localhost") {
 		t.Errorf("LastProbeFailure() = %q, want what stopped the probe on the box", cause)
@@ -324,6 +324,6 @@ func TestALocalhostProbeTheBoxRefusesIsAnError(t *testing.T) {
 	p, _ := probedOnTheBox(t, session.Result{Code: 2, Stderr: "usage: ocel-switchboard serve"})
 
 	if _, err := p.ServingRouter(context.Background(), "web.localhost"); err == nil {
-		t.Error("Serving() = nil over a proxy that could not be asked at all, and the cutover burns a minute on a box whose proxy is down")
+		t.Error("ServingRouter() = nil over a proxy that could not be asked at all, and the cutover burns a minute on a box whose proxy is down")
 	}
 }

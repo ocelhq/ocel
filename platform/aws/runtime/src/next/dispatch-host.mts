@@ -3,13 +3,9 @@ import type { RoutingManifest } from "@framework/next-protocol/routing-manifest"
 import { CONTROL_HEADERS, type RouteDeps, serve } from "@framework/next-router";
 import type { AssetBucket } from "@framework/next-router/assets";
 import { functionUrlImageOrigin } from "@framework/next-router/image";
-import {
-  invalidatesByCacheTag,
-  routingManifestPathVar,
-  withRouterHeader,
-} from "@framework/node-runtime/edge-kind";
 import { fetchToNodeHandler } from "@framework/node-runtime/fetch-bridge";
-import type { Invoke } from "@framework/node-runtime/host";
+import { type Invoke, invalidatesByCacheTag } from "@framework/node-runtime/host";
+import { withRouterHeader } from "@framework/node-runtime/router-header";
 import { s3AssetBucket, uncachedResponses } from "./dispatch-assets.mjs";
 import { credentialsOf, s3ObjectFetch, siblingOriginFetch } from "./dispatch-signing.mjs";
 
@@ -82,6 +78,8 @@ export function newDispatchInvoke(host: DispatchHost): Invoke {
   return (req, res, ocel) =>
     fetchToNodeHandler((request) => dispatchRequest(request, host, ocel.waitUntil))(req, res, ocel);
 }
+
+const routingManifestPathVar = "OCEL_ROUTING_MANIFEST";
 
 const functionUrlsVar = "OCEL_FUNCTION_URLS";
 

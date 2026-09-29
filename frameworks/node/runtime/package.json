@@ -8,7 +8,7 @@
   "exports": {
     "./background": "./src/background.mts",
     "./boot": "./src/boot.mts",
-    "./edge-kind": "./src/edge-kind.mts",
+    "./router-header": "./src/router-header.mts",
     "./entrypoint": "./src/entrypoint.mts",
     "./fetch-bridge": "./src/fetch-bridge.mts",
     "./host": "./src/host.mts",

@@ -1,6 +1,6 @@
 import type http from "node:http";
 import { storedCacheTags } from "@framework/next-cache";
-import { dispatchesAtOrigin, invalidatesByCacheTag } from "@framework/node-runtime/edge-kind";
+import { dispatchesAtOrigin, invalidatesByCacheTag } from "@framework/node-runtime/host";
 import { collectTags, notedTags } from "./origin-tags.mjs";
 import type { ProjectManifest } from "./project-manifest.mjs";
 

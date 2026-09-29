@@ -362,11 +362,11 @@ func TestAProbeTheBoxCannotAnswerYetFailsWithAOneLineReason(t *testing.T) {
 	}
 	said, err := box.host().ServedRouter(context.Background(), "web.localhost")
 	if err != nil || said.Failure == "" || strings.Contains(said.Failure, "\n") {
-		t.Errorf("ServedEdge() over a box not serving yet = %+v, %v, want its failure on one line", said, err)
+		t.Errorf("ServedRouter() over a box not serving yet = %+v, %v, want its failure on one line", said, err)
 	}
 	box.answer = func(string) (session.Result, bool) { return session.Result{Code: 2, Stderr: "usage"}, true }
 	if _, err := box.host().ServedRouter(context.Background(), "web.localhost"); err == nil {
-		t.Error("ServedEdge() over a probe that refused = nil, want the refusal")
+		t.Error("ServedRouter() over a probe that refused = nil, want the refusal")
 	}
 }
 

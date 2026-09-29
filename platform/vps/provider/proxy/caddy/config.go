@@ -158,7 +158,7 @@ func render(spec proxy.Spec) ([]byte, error) {
 	if strings.TrimSpace(spec.Upstream) == "" {
 		return nil, errors.New("a proxy spec names no upstream to forward to")
 	}
-	if strings.TrimSpace(spec.Router) == "" {
+	if strings.TrimSpace(string(spec.Router)) == "" {
 		return nil, errors.New("a proxy spec names no router for the proxy's answers to name")
 	}
 	if strings.TrimSpace(spec.Permission.Dial) == "" || !strings.HasPrefix(spec.Permission.Path, "/") {
@@ -177,7 +177,7 @@ func render(spec proxy.Spec) ([]byte, error) {
 	front.Errors = &failing{Routes: []failure{{Handle: []answer{{
 		Handler: answerHandler,
 		Status:  errorStatus,
-		Headers: map[string][]string{http.CanonicalHeaderKey(router.HeaderRouter): {spec.Router}},
+		Headers: map[string][]string{http.CanonicalHeaderKey(router.HeaderRouter): {string(spec.Router)}},
 	}}}}}
 	return json.Marshal(config{
 		Admin:   admin{Listen: Listen()},

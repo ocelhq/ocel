@@ -1313,11 +1313,11 @@ func (s *deployFakeProviderServer) AddHostname(ctx context.Context, req *contrac
 			return stream.Send(&progressv1.OperationEvent{
 				Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{
 					Success: false,
-					Error:   fmt.Sprintf("gave up after 5m0s waiting for https://%s/ to answer as the cloudflare edge; still outstanding: %s", host, outstanding),
+					Error:   fmt.Sprintf("gave up after 5m0s waiting for https://%s/ to answer through the cloudflare edge; still outstanding: %s", host, outstanding),
 				}},
 			})
 		}
-		if err := say(fmt.Sprintf("%s is served by the cloudflare edge", host)); err != nil {
+		if err := say(fmt.Sprintf("%s is served through the cloudflare edge", host)); err != nil {
 			return err
 		}
 	}
@@ -1404,7 +1404,7 @@ func (s *deployFakeProviderServer) GetHostnameStatus(ctx context.Context, req *c
 			Ready:          ready,
 		}
 		if !ready {
-			row.Pending = fmt.Sprintf("%s does not answer as the %s edge yet", host, edge.Kind("cloudflare"))
+			row.Pending = fmt.Sprintf("%s does not answer through the %s edge yet", host, edge.Kind("cloudflare"))
 		}
 		resp.Hostnames = append(resp.Hostnames, row)
 	}

@@ -1,7 +1,7 @@
 import type { Fetch } from "../../checks/context";
 
 const ROUTER_HEADER = "x-ocel-router";
-const STABLE_EDGE_ANSWERS = 6;
+const STABLE_ROUTER_ANSWERS = 6;
 
 export type ServingReport = {
   host: string;
@@ -46,9 +46,9 @@ export async function awaitServing(
     const host = new URL(baseUrl).host;
     let attempts = 0;
     let last = "no attempt completed";
-    let edged = 0;
-    let edgedSince = began;
-    let edgedStatus = 0;
+    let routed = 0;
+    let routedSince = began;
+    let routedStatus = 0;
     while (true) {
       attempts += 1;
       try {
@@ -59,28 +59,28 @@ export async function awaitServing(
         }
         last = `last status ${response.status}`;
         if (response.headers.get(ROUTER_HEADER)) {
-          if (edged === 0) {
-            edgedSince = now();
+          if (routed === 0) {
+            routedSince = now();
           }
-          edged += 1;
-          edgedStatus = response.status;
+          routed += 1;
+          routedStatus = response.status;
         } else {
-          edged = 0;
+          routed = 0;
         }
       } catch (refused) {
         last = described(refused);
-        edged = 0;
+        routed = 0;
       }
-      if (edged >= STABLE_EDGE_ANSWERS) {
+      if (routed >= STABLE_ROUTER_ANSWERS) {
         throw new Error(
-          `${host} is served by the ocel edge, which answered ${edgedStatus} for ${edged} ` +
-            `consecutive attempts over ${Math.round((now() - edgedSince) / 1000)}s: the app ` +
-            `behind the edge is broken, not still propagating`,
+          `${host} is served by the ocel router, which answered ${routedStatus} for ${routed} ` +
+            `consecutive attempts over ${Math.round((now() - routedSince) / 1000)}s: the app ` +
+            `behind the router is broken, not still propagating`,
         );
       }
       if (now() >= deadline) {
         throw new Error(
-          `${host} served no 2xx in the ${Math.round(timeoutMs / 1000)}s after the edge ` +
+          `${host} served no 2xx in the ${Math.round(timeoutMs / 1000)}s after the router ` +
             `said it was serving, across ${attempts} attempts: ${last}`,
         );
       }

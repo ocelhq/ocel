@@ -128,8 +128,8 @@ func TestARealProxyOrdersOnTheFirstHandshakeForAClaimedHostnameAndNeverForAnUncl
 		t.Errorf("a claimed hostname over plain http answers %d, want it served. Caddy appends its catch-all http->https redirect behind the one terminal forward this config renders, so a forward that stops being terminal turns the redirect on and takes the http-01 challenge and the journey's plain-http leg with it",
 			said.status)
 	}
-	if said := ask("unclaimed.example.com"); said.status != http.StatusNotFound || said.edge != switchboard.RouterKind {
-		t.Errorf("a hostname nothing claims answers %d as %q over plain http, want the box's own refusal on both ports", said.status, said.edge)
+	if said := ask("unclaimed.example.com"); said.status != http.StatusNotFound || said.router != switchboard.RouterKind {
+		t.Errorf("a hostname nothing claims answers %d as %q over plain http, want the box's own refusal on both ports", said.status, said.router)
 	}
 
 	proxyBox.handshake("unclaimed.example.com")

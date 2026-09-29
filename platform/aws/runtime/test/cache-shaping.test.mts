@@ -1,4 +1,4 @@
-import { dispatchesAtOrigin, invalidatesByCacheTag } from "@framework/node-runtime/edge-kind";
+import { dispatchesAtOrigin, invalidatesByCacheTag } from "@framework/node-runtime/host";
 import { expect, test } from "vitest";
 import {
   type OriginShaping,

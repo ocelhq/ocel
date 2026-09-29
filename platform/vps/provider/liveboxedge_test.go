@@ -214,7 +214,7 @@ func TestLiveAClaimedHostnameIsLoadedOntoTheProxyAndChangesNothingItServes(t *te
 		t.Errorf("the proxy served %q on the hostname it was already answering, want the release it served before the second claim: binding another name adds one, and a claim that moves what the names already bound answer breaks a site to add a domain to it", served)
 	}
 	refused := vm.peers(t, "curl -sS -m 10 -o /dev/null -D - -H "+quote("Host: unclaimed.example.invalid")+" http://"+caddy.Container+"/")
-	if !strings.Contains(refused, "404") || !strings.Contains(strings.ToLower(refused), strings.ToLower(router.HeaderRouter)+": "+switchboard.RouterKind) {
+	if !strings.Contains(refused, "404") || !strings.Contains(strings.ToLower(refused), strings.ToLower(router.HeaderRouter)+": "+string(switchboard.RouterKind)) {
 		t.Errorf("a hostname nothing on this box claims was answered with\n%s\nwant a bare 404 with %s: %s, because an empty 200 reads as healthy to everything that checks it", refused, router.HeaderRouter, switchboard.RouterKind)
 	}
 

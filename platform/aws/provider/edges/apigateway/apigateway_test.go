@@ -236,7 +236,7 @@ func TestReconcileShapesTheProductionAPI(t *testing.T) {
 	}
 }
 
-func TestOnlyTheRoutesThatCanSetTheEdgeHeaderDeclareIt(t *testing.T) {
+func TestOnlyTheRoutesThatCanSetTheRouterHeaderDeclareIt(t *testing.T) {
 	t.Parallel()
 
 	w := newWorld()
@@ -258,7 +258,7 @@ func TestOnlyTheRoutesThatCanSetTheEdgeHeaderDeclareIt(t *testing.T) {
 	}
 }
 
-func TestTheLivenessProbePathIsAnsweredByTheGatewayItselfWithTheEdgeMarker(t *testing.T) {
+func TestTheLivenessProbePathIsAnsweredByTheGatewayItselfNamingItsRouter(t *testing.T) {
 	t.Parallel()
 
 	w := newWorld()
