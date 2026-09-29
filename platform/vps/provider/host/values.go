@@ -109,7 +109,7 @@ func (h *Host) handed(ctx context.Context, spec Container) (Note, bool, error) {
 func RenderEnvFile(env map[string]string) ([]byte, error) {
 	var written bytes.Buffer
 	for _, key := range slices.Sorted(maps.Keys(env)) {
-		if err := writable(key, env[key]); err != nil {
+		if err := refuseUnwritableEnvLine(key, env[key]); err != nil {
 			return nil, err
 		}
 		written.WriteString(key + "=" + env[key] + "\n")
@@ -117,7 +117,7 @@ func RenderEnvFile(env map[string]string) ([]byte, error) {
 	return written.Bytes(), nil
 }
 
-func writable(key, value string) error {
+func refuseUnwritableEnvLine(key, value string) error {
 	switch {
 	case key == "":
 		return refusal.Refuse(refusal.CodeInvalid,
