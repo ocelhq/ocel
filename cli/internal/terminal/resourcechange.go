@@ -68,10 +68,10 @@ func resourceLabel(name, typ string) string {
 
 func (c resourceChange) render(present Presentation) string {
 	if c.failed && c.wording.verb == "" {
-		return unitMarks[progressv1.SpanStatus_SPAN_STATUS_ERROR].render(present) + " " + c.label + " failed"
+		return spanMarks[progressv1.SpanStatus_SPAN_STATUS_ERROR].render(present) + " " + c.label + " failed"
 	}
 	if c.failed {
-		return unitMarks[progressv1.SpanStatus_SPAN_STATUS_ERROR].render(present) + " " + c.label + " failed to " + c.wording.verb
+		return spanMarks[progressv1.SpanStatus_SPAN_STATUS_ERROR].render(present) + " " + c.label + " failed to " + c.wording.verb
 	}
 	return label{c.wording.sigil, sigilAttrs[c.wording.sigil]}.render(present) + " " + present.palette().Muted(c.label+" "+resourceChangesDone[c.wording.tallyAs])
 }

@@ -169,7 +169,7 @@ func destroyProject(ctx context.Context, invocation commands.Invocation, cfg *pr
 		place = "any preview"
 	}
 	planning := run.Phase(progressv1.Phase_PHASE_PLAN)
-	unit := planning.Unit(cfg.Slug, progress.Enumerating.Title(fmt.Sprintf("what %s has in %s to destroy", cfg.Slug, place)))
+	span := planning.Child(cfg.Slug, progress.Enumerating.Title(fmt.Sprintf("what %s has in %s to destroy", cfg.Slug, place)))
 	var plan *planv1.ChangePlan
 	err = provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		plan, err = client.PlanRemoveProject(ctx, &contractv1.ProjectRequest{
@@ -179,7 +179,7 @@ func destroyProject(ctx context.Context, invocation commands.Invocation, cfg *pr
 		})
 		return err
 	})
-	unit.End(err)
+	span.End(err)
 	if err != nil {
 		return err
 	}

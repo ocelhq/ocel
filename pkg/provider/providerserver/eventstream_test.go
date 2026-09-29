@@ -290,14 +290,14 @@ func TestAnUnimplementedFailureIsARefusalOnlyOnAStreamThatSaysSo(t *testing.T) {
 	}
 }
 
-var testSpan = environmentUnit(progressv1.Phase_PHASE_PROVISION)
+var testSpan = environmentSpan(progressv1.Phase_PHASE_PROVISION)
 
 func TestASpanSaysAMessageOnlyLineWritesOutputAndOpensAndEndsItsDetailSpans(t *testing.T) {
 	t.Parallel()
 
 	stream := &recordingStream{}
 	sender := newEventStream(context.Background(), stream.send)
-	span := environmentUnit(progressv1.Phase_PHASE_PROVISION)
+	span := environmentSpan(progressv1.Phase_PHASE_PROVISION)
 	progress := newSpanLog(sender, span)
 
 	progress.Say("provisioning the infra stack")
@@ -340,7 +340,7 @@ func TestEveryEventASpanSendsCarriesATimeALevelAndTheSpansPhase(t *testing.T) {
 
 	stream := &recordingStream{}
 	sender := newEventStream(context.Background(), stream.send)
-	span := environmentUnit(progressv1.Phase_PHASE_PROVISION)
+	span := environmentSpan(progressv1.Phase_PHASE_PROVISION)
 	progress := newSpanLog(sender, span)
 
 	before := time.Now().UnixNano()

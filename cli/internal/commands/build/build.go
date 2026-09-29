@@ -115,9 +115,9 @@ func resolveBuiltComputes(ctx context.Context, dependencies Dependencies, buildi
 func appBuildLog(phase *run.Span) build.Log {
 	return build.Log{
 		Shared: phase.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED),
-		Unit: func(app string) (io.Writer, func(error)) {
-			unit := phase.Unit(app, progress.Building.Title("app "+app))
-			return unit.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED), unit.End
+		AppLog: func(app string) (io.Writer, func(error)) {
+			span := phase.Child(app, progress.Building.Title("app "+app))
+			return span.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED), span.End
 		},
 	}
 }

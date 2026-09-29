@@ -186,7 +186,7 @@ func (s *fakeProviderServer) Configure(_ context.Context, req *contractv1.Config
 	return &contractv1.ConfigureResponse{}, nil
 }
 
-var fakeStageID = naming.UnitID(naming.UnitEnvironment)
+var fakeStageID = naming.SpanID(naming.SpanEnvironment)
 
 const fakeOversizedEventBytes = 1 << 16
 

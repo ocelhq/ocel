@@ -14,7 +14,7 @@ import (
 )
 
 func promotionHistory(ctx context.Context, check *run.Span, provider *providerprocess.Provider, cfg *project.Project) ([]*contractv1.PromotionHistoryEntry, error) {
-	unit := check.Unit(cfg.Slug, progress.Reading.Title("the promotion history of production"))
+	span := check.Child(cfg.Slug, progress.Reading.Title("the promotion history of production"))
 	var listed *contractv1.ListPromotionsResponse
 	err := provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		listed, err = client.ListPromotions(ctx, &contractv1.ListPromotionsRequest{
@@ -23,7 +23,7 @@ func promotionHistory(ctx context.Context, check *run.Span, provider *providerpr
 		})
 		return err
 	})
-	unit.End(err)
+	span.End(err)
 	return listed.GetPromotions(), err
 }
 

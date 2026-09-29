@@ -52,9 +52,9 @@ func sanitizeTitle(title progress.Title) progress.Title {
 	return progress.Title{Started: progress.SanitizeSpanName(title.Started), Ended: progress.SanitizeSpanName(title.Ended)}
 }
 
-func UnitSpan(name, subject string, title progress.Title, phase progressv1.Phase) Span {
+func RootSpan(name, subject string, title progress.Title, phase progressv1.Phase) Span {
 	return Span{
-		ID:      derivedSpanID(naming.UnitID(name)),
+		ID:      derivedSpanID(naming.SpanID(name)),
 		Title:   sanitizeTitle(title),
 		Phase:   phase,
 		Subject: subject,

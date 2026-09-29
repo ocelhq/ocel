@@ -122,7 +122,7 @@ func TestAWarningIsNotProgress(t *testing.T) {
 func TestARunThatStartsAScopeItNeverEndsFails(t *testing.T) {
 	t.Parallel()
 
-	found := faults(observed(planned()), observed(planned(), started("unit0001"), progressed(), started("phase001"), ended("phase001")))
+	found := faults(observed(planned()), observed(planned(), started("span0001"), progressed(), started("phase001"), ended("phase001")))
 	if len(found) != 1 || !strings.Contains(found[0], "never ended") {
 		t.Fatalf("the tier found %v against a run that left a scope open, want it failed for a scope it never ended", found)
 	}
@@ -131,7 +131,7 @@ func TestARunThatStartsAScopeItNeverEndsFails(t *testing.T) {
 func TestARunThatEndsEveryScopeItStartsPasses(t *testing.T) {
 	t.Parallel()
 
-	applied := observed(planned(), started("unit0001"), started("phase001"), progressed(), ended("phase001"), ended("unit0001"))
+	applied := observed(planned(), started("span0001"), started("phase001"), progressed(), ended("phase001"), ended("span0001"))
 	if found := faults(observed(planned()), applied); len(found) != 0 {
 		t.Fatalf("the tier found %v against a run that ended every scope it started", found)
 	}

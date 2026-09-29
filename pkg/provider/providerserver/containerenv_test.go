@@ -338,7 +338,7 @@ func TestAContainerAppsReservedNamesAreRefusedByThePlanRatherThanByTheDeploy(t *
 				t.Errorf("the refusal reads %q and never names the app that declares it", message)
 			}
 			if entered(t, events, "web") {
-				t.Error("the deploy was already provisioning web when the name was refused: planning is where a name a provider owns is read, and a refusal that waits for the app's own unit is one a user meets only once the deploy is under way")
+				t.Error("the deploy was already provisioning web when the name was refused: planning is where a name a provider owns is read, and a refusal that waits for the app's own span is one a user meets only once the deploy is under way")
 			}
 		})
 	}

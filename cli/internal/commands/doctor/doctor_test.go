@@ -633,7 +633,7 @@ func TestDoctorChecksTheSetupInTheCheckPhaseOfItsRunAndPrintsItsReportAloneOnStd
 		t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
-	var units []progressv1.Phase
+	var spans []progressv1.Phase
 	var result *streamv1.RunSummary
 	for _, line := range strings.Split(strings.TrimSpace(stderr.String()), "\n") {
 		event := &streamv1.RunEvent{}
@@ -641,14 +641,14 @@ func TestDoctorChecksTheSetupInTheCheckPhaseOfItsRunAndPrintsItsReportAloneOnStd
 			t.Fatalf("stream line %q is not a protojson RunEvent: %v", line, err)
 		}
 		if event.GetOperation().GetStarted() != nil && len(event.GetOperation().GetStarted().GetParentSpanId()) > 0 {
-			units = append(units, event.GetOperation().GetPhase())
+			spans = append(spans, event.GetOperation().GetPhase())
 		}
 		if event.GetSummary() != nil {
 			result = event.GetSummary()
 		}
 	}
-	if len(units) == 0 || units[0] != progressv1.Phase_PHASE_CHECK {
-		t.Errorf("unit phases = %v, want the setup checked in a unit of the check phase", units)
+	if len(spans) == 0 || spans[0] != progressv1.Phase_PHASE_CHECK {
+		t.Errorf("span phases = %v, want the setup checked in a span of the check phase", spans)
 	}
 	if !result.GetSuccess() {
 		t.Errorf("result = %v, want the doctor's run to succeed", result)

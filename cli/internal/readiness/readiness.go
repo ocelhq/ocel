@@ -34,13 +34,13 @@ type Request struct {
 }
 
 func Check(ctx context.Context, span *run.Span, provider *providerprocess.Provider, cfg *project.Project, req Request) (Preflight, error) {
-	unit := span.Unit(provider.Name(), checkingTitle(req.Tier, cfg.Slug))
+	child := span.Child(provider.Name(), checkingTitle(req.Tier, cfg.Slug))
 	read, err := Read(ctx, provider, cfg, req)
 	if err == nil {
 		span.Identity(identityEvent(cfg, req.Tier, read.Response.GetIdentity()))
 		err = RefuseUnready(read.Response, req.Tier, req.Require)
 	}
-	unit.End(err)
+	child.End(err)
 	if err != nil {
 		return Preflight{}, err
 	}

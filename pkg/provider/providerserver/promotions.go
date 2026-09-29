@@ -107,8 +107,8 @@ func rollbackTarget(history []router.HistoryEntry, to, tag string) (router.Promo
 }
 
 func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.RemoveStalePromotionsRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	unit := UnitSpan(naming.UnitPromotion, req.GetSlug(), pruneTitle(req), progressv1.Phase_PHASE_DESTROY)
-	return streamed(ctx, stream, unit, func(_ *eventStream, progress progress.Log) error {
+	root := RootSpan(naming.SpanPromotion, req.GetSlug(), pruneTitle(req), progressv1.Phase_PHASE_DESTROY)
+	return streamed(ctx, stream, root, func(_ *eventStream, progress progress.Log) error {
 		tier, err := decodeTier(req.GetEnvironment().GetTier())
 		if err != nil {
 			return err

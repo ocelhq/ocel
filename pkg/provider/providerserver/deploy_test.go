@@ -1081,7 +1081,7 @@ func TestADeployWhoseDNSWriterFailsPromotesNothing(t *testing.T) {
 	if result.GetSuccess() {
 		t.Fatalf("Deploy() succeeded, want it failed: the dns writer broke, which no one waiting fixes")
 	}
-	if _, promoted := spanStatuses(events)[promotionUnitSpan]; promoted {
+	if _, promoted := spanStatuses(events)[promotionSpan]; promoted {
 		t.Error("the run promoted, want nothing promoted once attaching a declared hostname failed")
 	}
 }
@@ -1101,7 +1101,7 @@ func TestADeployRefusedForAReasonNoWaitingFixesFailsWithThatReason(t *testing.T)
 	if !strings.Contains(result.GetError(), reason) {
 		t.Errorf("Deploy() = %q, want the refusal's own remedy", result.GetError())
 	}
-	if _, promoted := spanStatuses(events)[promotionUnitSpan]; promoted {
+	if _, promoted := spanStatuses(events)[promotionSpan]; promoted {
 		t.Error("the run promoted, want nothing promoted over a hostname that could not be attached")
 	}
 }

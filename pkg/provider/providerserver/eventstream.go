@@ -122,11 +122,11 @@ func streamResult(
 func streamed(
 	ctx context.Context,
 	stream *connect.ServerStream[progressv1.OperationEvent],
-	unit Span,
+	root Span,
 	do func(*eventStream, progress.Log) error,
 ) error {
 	return streamResult(ctx, stream, func(sender *eventStream) (*progressv1.OperationEvent, error) {
-		if err := inSpan(sender, unit, do); err != nil {
+		if err := inSpan(sender, root, do); err != nil {
 			return nil, err
 		}
 		return okResult(), nil
@@ -135,10 +135,10 @@ func streamed(
 
 func inSpan(
 	sender *eventStream,
-	unit Span,
+	root Span,
 	do func(*eventStream, progress.Log) error,
 ) error {
-	return newSpanEvents(sender).run(unit, func(u *spanRun) error {
+	return newSpanEvents(sender).run(root, func(u *spanRun) error {
 		return u.phase(func(progress progress.Log) error {
 			return do(sender, progress)
 		})

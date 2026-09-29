@@ -68,9 +68,9 @@ func globalPreviewBaseDomain(wildcard string) (string, error) {
 
 func readDomain(ctx context.Context, invocation commands.Invocation, cfg *project.Project, command string, tier environmentv1.Tier, reading progress.Title, read func(context.Context, contractv1connect.ProviderServiceClient) error) error {
 	return invocation.WithProvider(ctx, cfg, command, commands.OpenOptions{Tier: tier, Require: readiness.Features}, func(ctx context.Context, p commands.ProviderRun) error {
-		unit := p.Check.Unit(cfg.Slug, reading)
+		span := p.Check.Child(cfg.Slug, reading)
 		err := p.Provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) error { return read(ctx, client) })
-		unit.End(err)
+		span.End(err)
 		return err
 	})
 }

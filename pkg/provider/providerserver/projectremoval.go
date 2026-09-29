@@ -210,8 +210,8 @@ func certificateGroup(cert provider.Certificate) *planv1.ChangeGroup {
 }
 
 func (h *handlers) RemoveProject(ctx context.Context, req *contractv1.ProjectRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	unit := UnitSpan(naming.UnitEnvironment, req.GetSlug(), removalTitle(req.GetEnvironment()), progressv1.Phase_PHASE_DESTROY)
-	return streamed(ctx, stream, unit, func(_ *eventStream, progress progress.Log) error {
+	root := RootSpan(naming.SpanEnvironment, req.GetSlug(), removalTitle(req.GetEnvironment()), progressv1.Phase_PHASE_DESTROY)
+	return streamed(ctx, stream, root, func(_ *eventStream, progress progress.Log) error {
 		removal, err := h.openRemoval(ctx, req)
 		if err != nil {
 			return err

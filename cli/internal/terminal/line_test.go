@@ -54,7 +54,7 @@ func TestTheLevelFillsAFiveCharacterColumn(t *testing.T) {
 	}
 }
 
-func TestALineThatEndsAUnitMarksHowItEndedRightAfterThePhase(t *testing.T) {
+func TestALineThatEndsASpanMarksHowItEndedRightAfterThePhase(t *testing.T) {
 	ok := line{
 		level:   progressv1.Level_LEVEL_INFO,
 		phase:   progressv1.Phase_PHASE_DEPLOY,
@@ -141,12 +141,12 @@ func TestWithColourTheLevelThePhaseTheMarkAndTheSubjectArePaintedAndTheMessageIs
 			want: "\x1b[31;1mERROR\x1b[0;22m " + deployTag + " m",
 		},
 		{
-			name: "a unit that ended well has a green mark and a bold subject",
+			name: "a span that ended well has a green mark and a bold subject",
 			line: line{level: progressv1.Level_LEVEL_INFO, phase: progressv1.Phase_PHASE_DEPLOY, subject: "web", message: "m", status: progressv1.SpanStatus_SPAN_STATUS_OK},
 			want: "\x1b[90mINFO \x1b[0m " + deployTag + " \x1b[32m✓\x1b[0m \x1b[1mweb\x1b[22m: m",
 		},
 		{
-			name: "a unit that failed has a bold red mark",
+			name: "a span that failed has a bold red mark",
 			line: line{level: progressv1.Level_LEVEL_ERROR, phase: progressv1.Phase_PHASE_DEPLOY, subject: "api", message: "m", status: progressv1.SpanStatus_SPAN_STATUS_ERROR},
 			want: "\x1b[31;1mERROR\x1b[0;22m " + deployTag + " \x1b[31;1m✗\x1b[0;22m \x1b[1mapi\x1b[22m: m",
 		},

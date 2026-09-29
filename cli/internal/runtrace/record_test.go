@@ -83,17 +83,17 @@ func ended(id []byte, start, end time.Time, status progressv1.SpanStatus, attrs 
 
 func TestAnEndedScopeBecomesASpanInTheTraceWithItsAttributes(t *testing.T) {
 	r := startRun(t)
-	unit := []byte{1, 1, 1, 1, 1, 1, 1, 1}
+	child := []byte{1, 1, 1, 1, 1, 1, 1, 1}
 	phase := []byte{2, 2, 2, 2, 2, 2, 2, 2}
 	start := time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC)
 
-	r.Receive(started(unit, nil, "web"))
-	r.Receive(started(phase, unit, "Provisioning"))
+	r.Receive(started(child, nil, "web"))
+	r.Receive(started(phase, child, "Provisioning"))
 	r.Receive(ended(phase, start, start.Add(2*time.Second), progressv1.SpanStatus_SPAN_STATUS_ERROR,
 		&progressv1.SpanAttribute{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_TYPE, Value: "fake:bucket"},
 		&progressv1.SpanAttribute{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_COUNT, Value: "42"},
 	))
-	r.Receive(ended(unit, start, start.Add(3*time.Second), progressv1.SpanStatus_SPAN_STATUS_OK))
+	r.Receive(ended(child, start, start.Add(3*time.Second), progressv1.SpanStatus_SPAN_STATUS_OK))
 	if err := r.Close(); err != nil {
 		t.Fatalf("Close() = %v", err)
 	}
@@ -105,7 +105,7 @@ func TestAnEndedScopeBecomesASpanInTheTraceWithItsAttributes(t *testing.T) {
 		t.Errorf("span ids = %s, %s, want the scopes' own ids", web.SpanId, provisioning.SpanId)
 	}
 	if provisioning.ParentSpanId != web.SpanId {
-		t.Errorf("Provisioning's parent = %q, want the web unit %q it started under", provisioning.ParentSpanId, web.SpanId)
+		t.Errorf("Provisioning's parent = %q, want the web span %q it started under", provisioning.ParentSpanId, web.SpanId)
 	}
 	if provisioning.Status == nil || provisioning.Status.Code != "STATUS_CODE_ERROR" {
 		t.Errorf("Provisioning status = %+v, want STATUS_CODE_ERROR", provisioning.Status)

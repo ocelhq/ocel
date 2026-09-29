@@ -37,7 +37,7 @@ func runDomainRelease(ctx context.Context, invocation commands.Invocation, cwd s
 		p.Check.End(nil)
 		run, provider := p.Run, p.Provider
 		planning := run.Phase(progressv1.Phase_PHASE_PLAN)
-		unit := planning.Unit(cfg.Slug, progress.Enumerating.Title("what releasing the global preview domain would remove"))
+		span := planning.Child(cfg.Slug, progress.Enumerating.Title("what releasing the global preview domain would remove"))
 		var plan *planv1.ChangePlan
 		err := provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 			plan, err = client.PlanRemovePreviewWildcard(ctx, &contractv1.PreviewWildcardRequest{
@@ -45,7 +45,7 @@ func runDomainRelease(ctx context.Context, invocation commands.Invocation, cwd s
 			})
 			return err
 		})
-		unit.End(err)
+		span.End(err)
 		if err != nil {
 			return err
 		}

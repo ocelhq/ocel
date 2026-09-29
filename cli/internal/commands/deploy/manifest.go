@@ -190,23 +190,23 @@ func (b *buildSteps) takeLoose() []byte {
 func (b *buildSteps) log() build.Log {
 	return build.Log{
 		Shared: b,
-		Unit: func(app string) (io.Writer, func(error)) {
+		AppLog: func(app string) (io.Writer, func(error)) {
 			_, _ = b.shared.Write(b.takeLoose())
-			unit := b.phase.Unit(app, progress.Building.Title("app "+app))
-			return unit.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED), func(err error) {
+			child := b.phase.Child(app, progress.Building.Title("app "+app))
+			return child.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED), func(err error) {
 				if err != nil {
 					b.mu.Lock()
 					b.failed = true
 					b.mu.Unlock()
 				}
-				unit.End(err)
+				child.End(err)
 			}
 		},
 	}
 }
 
 func (b *buildSteps) run(subject string, title progress.Title, step func() error) error {
-	reserved := b.phase.ReserveUnit(subject, title)
+	reserved := b.phase.ReserveChild(subject, title)
 	b.mu.Lock()
 	b.failed = false
 	b.mu.Unlock()
@@ -219,9 +219,9 @@ func (b *buildSteps) run(subject string, title progress.Title, step func() error
 		_, _ = b.shared.Write(loose)
 		return err
 	}
-	unit := reserved.Open()
-	_, _ = unit.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED).Write(loose)
-	unit.End(err)
+	child := reserved.Open()
+	_, _ = child.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED).Write(loose)
+	child.End(err)
 	return err
 }
 

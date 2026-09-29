@@ -49,7 +49,7 @@ func (s *Transcript) printHeartbeat(at time.Time) {
 		described, _ := run.DescribePhase(phase)
 		doing := cmp.Or(described.Gerund, "running:")
 		message := fmt.Sprintf("Still %s %s — %d/%d done, %s elapsed",
-			doing, strings.Join(names[phase], ", "), tally.done, tally.units, formatDuration(at.Sub(tally.since)))
+			doing, strings.Join(names[phase], ", "), tally.done, tally.opened, formatDuration(at.Sub(tally.since)))
 		s.print(blockLine{text: line{level: progressv1.Level_LEVEL_INFO, phase: phase, message: message, dim: true}.render(s.present)})
 	}
 	s.nextHeartbeat = at.Add(heartbeatEvery)

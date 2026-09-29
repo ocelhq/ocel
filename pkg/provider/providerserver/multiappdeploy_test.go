@@ -18,7 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 )
 
-var promotionUnitSpan = progressv1.Phase_PHASE_PROMOTE.String()
+var promotionSpan = progressv1.Phase_PHASE_PROMOTE.String()
 
 const webRefusal = "the web stack could not be provisioned"
 
@@ -48,18 +48,18 @@ func appBarrier(t *testing.T, width int) func(provider.StackSpec) error {
 }
 
 func spanStatuses(events []*progressv1.OperationEvent) map[string]progressv1.SpanStatus {
-	units := map[string]string{}
+	roots := map[string]string{}
 	statuses := map[string]progressv1.SpanStatus{}
 	for _, event := range events {
 		if started := event.GetStarted(); started != nil && len(started.GetParentSpanId()) == 0 {
-			units[string(event.GetSpanId())] = event.GetSubject()
+			roots[string(event.GetSpanId())] = event.GetSubject()
 			if event.GetPhase() != progressv1.Phase_PHASE_DEPLOY {
-				units[string(event.GetSpanId())] = event.GetPhase().String()
+				roots[string(event.GetSpanId())] = event.GetPhase().String()
 			}
 		}
-		unit, ok := units[string(event.GetSpanId())]
+		root, ok := roots[string(event.GetSpanId())]
 		if ended := event.GetEnded(); ended != nil && ok {
-			statuses[unit] = ended.GetStatus()
+			statuses[root] = ended.GetStatus()
 		}
 	}
 	return statuses
@@ -182,12 +182,12 @@ func TestDeployFinishesASiblingOfAFailedAppAndWithholdsPromotion(t *testing.T) {
 
 	statuses := spanStatuses(events)
 	if got := statuses["web"]; got != progressv1.SpanStatus_SPAN_STATUS_ERROR {
-		t.Errorf("the web unit span is %s, want SPAN_STATUS_ERROR", got)
+		t.Errorf("the web span span is %s, want SPAN_STATUS_ERROR", got)
 	}
 	if got := statuses["admin"]; got != progressv1.SpanStatus_SPAN_STATUS_OK {
-		t.Errorf("the admin unit span is %s, want SPAN_STATUS_OK: a sibling of a failed app runs to completion", got)
+		t.Errorf("the admin span span is %s, want SPAN_STATUS_OK: a sibling of a failed app runs to completion", got)
 	}
-	if _, promoted := statuses[promotionUnitSpan]; promoted {
+	if _, promoted := statuses[promotionSpan]; promoted {
 		t.Error("the run promoted, want promotion withheld: it is withheld for every app unless every app succeeds")
 	}
 

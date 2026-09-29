@@ -69,18 +69,18 @@ func (r *deployRun) newSpans() deploySpans {
 		routes, infra, app, onto = progress.Reading, progress.Planning, progress.Planning, "for"
 	}
 	s := deploySpans{
-		Environment: UnitSpan(naming.UnitEnvironment, env,
+		Environment: RootSpan(naming.SpanEnvironment, env,
 			progress.Checking.Title("the bootstrap, domains and bindings for "+r.spec.Slug), progressv1.Phase_PHASE_PROVISION),
-		Infra: UnitSpan(r.spec.Infra.String(), env, infra.Title(r.describeInfra()), progressv1.Phase_PHASE_PROVISION),
-		Edge:  UnitSpan(naming.UnitEdge, kind, routes.Title(fmt.Sprintf("the routes for %s in %s", r.spec.Slug, where)), progressv1.Phase_PHASE_PROVISION),
-		Hostnames: UnitSpan(naming.UnitHostnames, kind,
+		Infra: RootSpan(r.spec.Infra.String(), env, infra.Title(r.describeInfra()), progressv1.Phase_PHASE_PROVISION),
+		Edge:  RootSpan(naming.SpanEdge, kind, routes.Title(fmt.Sprintf("the routes for %s in %s", r.spec.Slug, where)), progressv1.Phase_PHASE_PROVISION),
+		Hostnames: RootSpan(naming.SpanHostnames, kind,
 			progress.Attaching.Title(namedList("production hostname", "production hostnames", r.hostnames())), progressv1.Phase_PHASE_PROVISION),
-		Promotion: UnitSpan(naming.UnitPromotion, env,
+		Promotion: RootSpan(naming.SpanPromotion, env,
 			progress.Switching.Title("traffic to promotion "+r.spec.PromotionID), progressv1.Phase_PHASE_PROMOTE),
 		Apps: make(map[string]Span, len(r.spec.Apps)),
 	}
 	for _, entry := range r.spec.Apps {
-		s.Apps[entry.App] = UnitSpan(entry.Stack.String(), entry.App,
+		s.Apps[entry.App] = RootSpan(entry.Stack.String(), entry.App,
 			app.Title(fmt.Sprintf("the %s %s %s", appNoun(entry), onto, where)), progressv1.Phase_PHASE_DEPLOY)
 	}
 	return s
@@ -304,7 +304,7 @@ func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, er
 	}); err != nil {
 		return nil, err
 	}
-	if err := r.reconcileEdgeUnit(ctx); err != nil {
+	if err := r.reconcileEdgeSpan(ctx); err != nil {
 		return nil, err
 	}
 	if err := r.provision(ctx); err != nil {
@@ -441,7 +441,7 @@ func (r *deployRun) hostingMode() hostingMode {
 	return hostingProjectPreview
 }
 
-func (r *deployRun) reconcileEdgeUnit(ctx context.Context) error {
+func (r *deployRun) reconcileEdgeSpan(ctx context.Context) error {
 	return r.spanEvents.run(r.spans.Edge, func(u *spanRun) error {
 		return u.phase(func(progress progress.Log) error {
 			if r.dry {

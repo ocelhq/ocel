@@ -51,7 +51,7 @@ func TestASpanOnlyTheTraceRecordsIsNeverDrawn(t *testing.T) {
 	run, out, _ := groupedRun(t, Presentation{})
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
 	build.Trace("web", "build").End(errors.New("the node builder reported this stage failed"))
-	web := build.Unit("web", progress.Building.Title("app web"))
+	web := build.Child("web", progress.Building.Title("app web"))
 	web.Trace("web", "await_human_input").End(nil)
 	web.End(nil)
 
@@ -61,18 +61,18 @@ func TestASpanOnlyTheTraceRecordsIsNeverDrawn(t *testing.T) {
 	}
 }
 
-func TestAUnitsOutputPrintsWithItsHeaderWhenTheUnitEndsIndentedFourSpaces(t *testing.T) {
+func TestASpansOutputPrintsWithItsHeaderWhenTheSpanEndsIndentedFourSpaces(t *testing.T) {
 	t.Parallel()
 
 	run, out, c := groupedRun(t, Presentation{})
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	web := build.Unit("web", progress.Title{Started: "built 12 routes", Ended: "built 12 routes"})
+	web := build.Child("web", progress.Title{Started: "built 12 routes", Ended: "built 12 routes"})
 	w := web.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_STDOUT)
 	if _, err := w.Write([]byte("> next build\nCompiled successfully\n")); err != nil {
 		t.Fatalf("Write() = %v", err)
 	}
 	if got := out.String(); got != "" {
-		t.Fatalf("printed before the unit ended: %q", got)
+		t.Fatalf("printed before the span ended: %q", got)
 	}
 
 	c.pass(34 * time.Second)
@@ -122,7 +122,7 @@ func providerEnded(span byte, subject, title string, status progressv1.SpanStatu
 	})
 }
 
-func TestTwoParallelUnitsNeverInterleaveAndTheFirstToEndPrintsFirst(t *testing.T) {
+func TestTwoParallelSpansNeverInterleaveAndTheFirstToEndPrintsFirst(t *testing.T) {
 	t.Parallel()
 
 	run, out, c := groupedRun(t, Presentation{})
@@ -151,7 +151,7 @@ func TestTwoParallelUnitsNeverInterleaveAndTheFirstToEndPrintsFirst(t *testing.T
 	}
 }
 
-func TestAUnitEndingBesideOthersInItsPhaseSaysHowManyOfThemHaveFinished(t *testing.T) {
+func TestASpanEndingBesideOthersInItsPhaseSaysHowManyOfThemHaveFinished(t *testing.T) {
 	t.Parallel()
 
 	run, out, c := groupedRun(t, Presentation{})
@@ -169,14 +169,14 @@ func TestAUnitEndingBesideOthersInItsPhaseSaysHowManyOfThemHaveFinished(t *testi
 	}
 }
 
-func TestUnitsThatRanOneAfterAnotherCarryNoCount(t *testing.T) {
+func TestSpansThatRanOneAfterAnotherCarryNoCount(t *testing.T) {
 	t.Parallel()
 
 	run, out, c := groupedRun(t, Presentation{})
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	check.Unit("console.ocel.dev", progress.Title{Started: "loading your organizations", Ended: "loading your organizations"}).End(nil)
+	check.Child("console.ocel.dev", progress.Title{Started: "loading your organizations", Ended: "loading your organizations"}).End(nil)
 	c.pass(time.Second)
-	check.Unit("acme-inc", progress.Title{Started: "loading the projects in Acme Inc", Ended: "loading the projects in Acme Inc"}).End(nil)
+	check.Child("acme-inc", progress.Title{Started: "loading the projects in Acme Inc", Ended: "loading the projects in Acme Inc"}).End(nil)
 
 	want := "INFO  [check] ✓ console.ocel.dev: loading your organizations in 0s\n" +
 		"INFO  [check] ✓ acme-inc: loading the projects in Acme Inc in 0s\n"
@@ -185,7 +185,7 @@ func TestUnitsThatRanOneAfterAnotherCarryNoCount(t *testing.T) {
 	}
 }
 
-func TestASuccessfulUnitsHeaderSaysWhatItDidInThePastTenseAndAFailedOneWhatItWasDoing(t *testing.T) {
+func TestASuccessfulSpansHeaderSaysWhatItDidInThePastTenseAndAFailedOneWhatItWasDoing(t *testing.T) {
 	t.Parallel()
 
 	run, out, c := groupedRun(t, Presentation{})
@@ -206,7 +206,7 @@ func TestASuccessfulUnitsHeaderSaysWhatItDidInThePastTenseAndAFailedOneWhatItWas
 	}
 }
 
-func TestAUnitThatDidOnlyPartOfItsWorkEndsAtAWarningWithoutACheckmarkAndSaysWhatItDid(t *testing.T) {
+func TestASpanThatDidOnlyPartOfItsWorkEndsAtAWarningWithoutACheckmarkAndSaysWhatItDid(t *testing.T) {
 	t.Parallel()
 
 	run, out, c := groupedRun(t, Presentation{})
@@ -223,13 +223,13 @@ func TestAUnitThatDidOnlyPartOfItsWorkEndsAtAWarningWithoutACheckmarkAndSaysWhat
 	}
 }
 
-func TestOnceAUnitHasFailedALaterSuccessfulUnitShowsOnlyItsHeader(t *testing.T) {
+func TestOnceASpanHasFailedALaterSuccessfulSpanShowsOnlyItsHeader(t *testing.T) {
 	t.Parallel()
 
 	run, out, c := groupedRun(t, Presentation{})
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	web := build.Unit("web", progress.Building.Title("web"))
-	api := build.Unit("api", progress.Building.Title("api"))
+	web := build.Child("web", progress.Building.Title("web"))
+	api := build.Child("api", progress.Building.Title("api"))
 	output(t, web, "web compiled")
 	output(t, api, "api: missing module")
 	c.pass(3 * time.Second)
@@ -247,13 +247,13 @@ func TestOnceAUnitHasFailedALaterSuccessfulUnitShowsOnlyItsHeader(t *testing.T) 
 	}
 }
 
-func TestASuccessfulUnitAfterAFailureKeepsItsWarningsAndErrorsUnderItsHeader(t *testing.T) {
+func TestASuccessfulSpanAfterAFailureKeepsItsWarningsAndErrorsUnderItsHeader(t *testing.T) {
 	t.Parallel()
 
 	run, out, c := groupedRun(t, Presentation{})
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	web := build.Unit("web", progress.Building.Title("web"))
-	api := build.Unit("api", progress.Building.Title("api"))
+	web := build.Child("web", progress.Building.Title("web"))
+	api := build.Child("api", progress.Building.Title("api"))
 	output(t, web, "web compiled")
 	web.Say("bundled 12 routes")
 	web.Warn("next.config.js sets images.unoptimized")
@@ -276,7 +276,7 @@ func TestAFailureReasonThatRunsOverLinesContinuesDeeperThanTheBlocksDetailLines(
 	t.Parallel()
 
 	run, out, c := groupedRun(t, Presentation{})
-	api := run.Phase(progressv1.Phase_PHASE_BUILD).Unit("api", progress.Building.Title("api"))
+	api := run.Phase(progressv1.Phase_PHASE_BUILD).Child("api", progress.Building.Title("api"))
 	api.Warn("tsconfig.json has no strict mode")
 	c.pass(time.Second)
 	api.End(errors.New("npm run build exited with status 1\nsee the build log above"))
@@ -289,19 +289,19 @@ func TestAFailureReasonThatRunsOverLinesContinuesDeeperThanTheBlocksDetailLines(
 	}
 }
 
-func output(t *testing.T, unit *run.Span, text string) {
+func output(t *testing.T, tracked *run.Span, text string) {
 	t.Helper()
-	if _, err := unit.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_STDOUT).Write([]byte(text + "\n")); err != nil {
+	if _, err := tracked.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_STDOUT).Write([]byte(text + "\n")); err != nil {
 		t.Fatalf("Write() = %v", err)
 	}
 }
 
-func debugAndInfoInAUnit(t *testing.T, present Presentation) string {
+func debugAndInfoInASpan(t *testing.T, present Presentation) string {
 	t.Helper()
 	run, out, c := groupedRun(t, present)
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
 	build.Debug("resolved the node toolchain at /usr/bin/node")
-	web := build.Unit("web", progress.Building.Title("web"))
+	web := build.Child("web", progress.Building.Title("web"))
 	web.Debug("reusing 3 cached layers")
 	web.Say("bundled 12 routes")
 	if _, err := web.Output(progressv1.Level_LEVEL_DEBUG, progressv1.Stream_STREAM_STDERR).Write([]byte("npm timing ok\n")); err != nil {
@@ -312,17 +312,17 @@ func debugAndInfoInAUnit(t *testing.T, present Presentation) string {
 	return out.String()
 }
 
-func TestAUnitsMessagesAreIndentedUnderItsHeaderAndDebugIsHiddenUnlessVerbose(t *testing.T) {
+func TestASpansMessagesAreIndentedUnderItsHeaderAndDebugIsHiddenUnlessVerbose(t *testing.T) {
 	t.Parallel()
 
 	want := "INFO  [build] ✓ web: Built web in 2s\n" +
 		"      bundled 12 routes\n"
-	if got := debugAndInfoInAUnit(t, Presentation{}); got != want {
+	if got := debugAndInfoInASpan(t, Presentation{}); got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}
 }
 
-func TestVerboseShowsDebugLinesInTheirUnit(t *testing.T) {
+func TestVerboseShowsDebugLinesInTheirSpan(t *testing.T) {
 	t.Parallel()
 
 	want := "DEBUG [build] resolved the node toolchain at /usr/bin/node\n" +
@@ -331,12 +331,12 @@ func TestVerboseShowsDebugLinesInTheirUnit(t *testing.T) {
 		"      bundled 12 routes\n" +
 		"\n" +
 		"    npm timing ok\n"
-	if got := debugAndInfoInAUnit(t, Presentation{Verbose: true}); got != want {
+	if got := debugAndInfoInASpan(t, Presentation{Verbose: true}); got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}
 }
 
-func TestAUnitStillOpenWhenTheSinkClosesPrintsWhatItBufferedAsUnfinished(t *testing.T) {
+func TestASpanStillOpenWhenTheSinkClosesPrintsWhatItBufferedAsUnfinished(t *testing.T) {
 	t.Parallel()
 
 	var out bytes.Buffer
@@ -359,7 +359,7 @@ func TestAUnitStillOpenWhenTheSinkClosesPrintsWhatItBufferedAsUnfinished(t *test
 	}
 }
 
-func TestWhatAUnitsChildScopesSayBelongsToTheUnitsBlock(t *testing.T) {
+func TestWhatASpansChildScopesSayBelongsToTheSpansBlock(t *testing.T) {
 	t.Parallel()
 
 	run, out, c := groupedRun(t, Presentation{})
@@ -372,7 +372,7 @@ func TestWhatAUnitsChildScopesSayBelongsToTheUnitsBlock(t *testing.T) {
 	deploy.Forward(providerOutput(2, "web", "creating bucket assets"))
 	deploy.Forward(providerEnded(2, "web", "Uploaded", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(time.Second)))
 	if got := out.String(); got != "" {
-		t.Fatalf("printed before the unit ended: %q", got)
+		t.Fatalf("printed before the span ended: %q", got)
 	}
 	deploy.Forward(providerEnded(1, "web", "deployed 4 resources", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(2*time.Second)))
 
@@ -407,8 +407,8 @@ func TestThirtySecondsOfSilencePrintsAHeartbeatNamingWhatIsStillRunning(t *testi
 
 	run, sink, ticks, out, c := heartbeatRun(t)
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	build.Unit("web", progress.Building.Title("web"))
-	build.Unit("api", progress.Building.Title("api"))
+	build.Child("web", progress.Building.Title("web"))
+	build.Child("api", progress.Building.Title("api"))
 	start := c.now()
 	ticks <- start.Add(29 * time.Second)
 	ticks <- start.Add(30 * time.Second)
@@ -425,7 +425,7 @@ func TestTheNextHeartbeatComesSixtySecondsLater(t *testing.T) {
 	t.Parallel()
 
 	run, sink, ticks, out, c := heartbeatRun(t)
-	run.Phase(progressv1.Phase_PHASE_DEPLOY).Unit("api", progress.Title{Started: "deploying api", Ended: "deploying api"})
+	run.Phase(progressv1.Phase_PHASE_DEPLOY).Child("api", progress.Title{Started: "deploying api", Ended: "deploying api"})
 	start := c.now()
 	ticks <- start.Add(30 * time.Second)
 	ticks <- start.Add(89 * time.Second)
@@ -444,8 +444,8 @@ func TestAPrintedLineRestartsTheSilence(t *testing.T) {
 
 	run, sink, ticks, out, c := heartbeatRun(t)
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	web := build.Unit("web", progress.Building.Title("web"))
-	build.Unit("api", progress.Building.Title("api"))
+	web := build.Child("web", progress.Building.Title("web"))
+	build.Child("api", progress.Building.Title("api"))
 	start := c.now()
 	c.pass(30 * time.Second)
 	web.End(nil)
@@ -464,7 +464,7 @@ func TestSilenceWithNothingRunningPrintsNoHeartbeat(t *testing.T) {
 	t.Parallel()
 
 	run, sink, ticks, out, c := heartbeatRun(t)
-	web := run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", progress.Building.Title("web"))
+	web := run.Phase(progressv1.Phase_PHASE_BUILD).Child("web", progress.Building.Title("web"))
 	c.pass(time.Second)
 	web.End(nil)
 	ticks <- c.now().Add(5 * time.Minute)
@@ -479,7 +479,7 @@ func TestNoHeartbeatPrintsWhileTheRunWaitsOnSomeone(t *testing.T) {
 	t.Parallel()
 
 	run, sink, ticks, out, c := heartbeatRun(t)
-	run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", progress.Building.Title("web"))
+	run.Phase(progressv1.Phase_PHASE_BUILD).Child("web", progress.Building.Title("web"))
 	run.Hold(&streamv1.WaitingEvent{})
 	ticks <- c.now().Add(5 * time.Minute)
 
@@ -493,7 +493,7 @@ func TestTheSilenceRestartsWhenTheRunResumes(t *testing.T) {
 	t.Parallel()
 
 	run, sink, ticks, out, c := heartbeatRun(t)
-	run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", progress.Building.Title("web"))
+	run.Phase(progressv1.Phase_PHASE_BUILD).Child("web", progress.Building.Title("web"))
 	resume := run.Hold(&streamv1.WaitingEvent{})
 	start := c.now()
 	c.pass(2 * time.Minute)
@@ -513,7 +513,7 @@ func TestInGitHubActionsASuccessfulBlockIsACollapsedGroup(t *testing.T) {
 
 	run, out, c := groupedRun(t, Presentation{GitHubActions: true})
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	web := build.Unit("web", progress.Title{Started: "built 12 routes", Ended: "built 12 routes"})
+	web := build.Child("web", progress.Title{Started: "built 12 routes", Ended: "built 12 routes"})
 	output(t, web, "Compiled successfully")
 	c.pass(34 * time.Second)
 	web.End(nil)
@@ -534,7 +534,7 @@ func TestInGitHubActionsWithColourAGroupTitleIsStillPlainText(t *testing.T) {
 	t.Parallel()
 
 	run, out, c := groupedRun(t, Presentation{GitHubActions: true, Color: true})
-	web := run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", progress.Title{Started: "built 12 routes", Ended: "built 12 routes"})
+	web := run.Phase(progressv1.Phase_PHASE_BUILD).Child("web", progress.Title{Started: "built 12 routes", Ended: "built 12 routes"})
 	output(t, web, "Compiled successfully")
 	c.pass(34 * time.Second)
 	web.End(nil)
@@ -549,8 +549,8 @@ func TestInGitHubActionsAFailedBlockStaysExpandedAndALaterSuccessKeepsItsBodyFol
 
 	run, out, c := groupedRun(t, Presentation{GitHubActions: true})
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	web := build.Unit("web", progress.Building.Title("web"))
-	api := build.Unit("api", progress.Building.Title("api"))
+	web := build.Child("web", progress.Building.Title("web"))
+	api := build.Child("api", progress.Building.Title("api"))
 	output(t, web, "web compiled")
 	output(t, api, "api: missing module")
 	c.pass(3 * time.Second)
@@ -599,7 +599,7 @@ func TestInGitHubActionsNoLineOfAMessageCanStartAWorkflowCommandButVerbatimToolO
 
 	run, out, c := groupedRun(t, Presentation{GitHubActions: true})
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	web := build.Unit("web", progress.Building.Title("web"))
+	web := build.Child("web", progress.Building.Title("web"))
 	web.Warn("tsc reported\n\t::error::forged in a detail\n##[error]forged the old way")
 	output(t, web, "::error file=app.ts,line=3::Type 'string' is not assignable")
 	c.pass(time.Second)
@@ -624,7 +624,7 @@ func TestInGitHubActionsAGroupTitleCannotStartAWorkflowCommand(t *testing.T) {
 	t.Parallel()
 
 	run, out, c := groupedRun(t, Presentation{GitHubActions: true})
-	web := run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", progress.Title{Started: "built 100% of routes\n::error::forged", Ended: "built 100% of routes\n::error::forged"})
+	web := run.Phase(progressv1.Phase_PHASE_BUILD).Child("web", progress.Title{Started: "built 100% of routes\n::error::forged", Ended: "built 100% of routes\n::error::forged"})
 	output(t, web, "Compiled successfully")
 	c.pass(time.Second)
 	web.End(nil)
@@ -773,11 +773,11 @@ func TestWithColourABlockGraysItsTimingItsDetailAndWhatEachResourceIsButNotItsSi
 	}
 }
 
-func TestWithColourAUnitsProgressMessageIsGrayUnderItsHeader(t *testing.T) {
+func TestWithColourASpansProgressMessageIsGrayUnderItsHeader(t *testing.T) {
 	t.Parallel()
 
 	run, out, _ := groupedRun(t, Presentation{Color: true})
-	web := run.Phase(progressv1.Phase_PHASE_DEPLOY).Unit("web", progress.Deploying.Title("web"))
+	web := run.Phase(progressv1.Phase_PHASE_DEPLOY).Child("web", progress.Deploying.Title("web"))
 	web.Say("Uploading function web's artifact (1.2 MiB)")
 	web.Warn("the bundle is over 50 MiB")
 	web.End(nil)
@@ -916,7 +916,7 @@ func TestAFailedMultiAppDeploySaysWhatWasNotPromotedAndThatProductionStillServes
 	}
 }
 
-func TestAUnitStillOpenWhenTheResultArrivesPrintsAsUnfinishedAboveTheSummary(t *testing.T) {
+func TestASpanStillOpenWhenTheResultArrivesPrintsAsUnfinishedAboveTheSummary(t *testing.T) {
 	t.Parallel()
 
 	var out bytes.Buffer
@@ -975,7 +975,7 @@ func TestACancelledRunsSummarySaysSoAndWhatToRerunAfterAVerbatimBlockWithOneBlan
 	c := &clock{at: time.Unix(1_700_000_000, 0)}
 	_, run := onABus(t, ctx, c.now, newTranscript(&out, Presentation{}, nil))
 	deploy := run.Phase(progressv1.Phase_PHASE_DEPLOY)
-	web := deploy.Unit("web", progress.Title{Started: "deploying web", Ended: "deploying web"})
+	web := deploy.Child("web", progress.Title{Started: "deploying web", Ended: "deploying web"})
 	output(t, web, "creating function web")
 	web.End(nil)
 	c.pass(12 * time.Second)
@@ -1184,16 +1184,16 @@ func TestRecordsToAddAtTheDNSProviderAreAGateHeadedByTheirLevelAndPhase(t *testi
 	}
 }
 
-func TestTheVariablesGateIsSetApartByBlankLinesAndTheResumeIsALineNamingItsUnit(t *testing.T) {
+func TestTheVariablesGateIsSetApartByBlankLinesAndTheResumeIsALineNamingItsSpan(t *testing.T) {
 	t.Parallel()
 
 	run, out, _ := groupedRun(t, Presentation{})
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
 	build.Say("building 1 app")
-	unit := build.Unit("acme", progress.Building.Title("project"))
-	resume := unit.Hold(&streamv1.WaitingEvent{Url: "http://127.0.0.1:5555/#t=abc", Missing: missingStripeKey()})
+	tracked := build.Child("acme", progress.Building.Title("project"))
+	resume := tracked.Hold(&streamv1.WaitingEvent{Url: "http://127.0.0.1:5555/#t=abc", Missing: missingStripeKey()})
 	resume("the page was answered")
-	unit.End(nil)
+	tracked.End(nil)
 
 	want := "INFO  [build] building 1 app\n" +
 		"\n" +
@@ -1236,7 +1236,7 @@ func TestARunThatFailedBeforeAnyChangingPhaseSaysNothingChangedAndWhatProduction
 
 	run, out, _ := productionRun(t)
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	build.Unit("web", progress.Building.Title("web")).End(errors.New("npm run build exited with status 1"))
+	build.Child("web", progress.Building.Title("web")).End(errors.New("npm run build exited with status 1"))
 	ended(run, errors.New("building web: npm run build exited with status 1"))
 
 	want := "ERROR [build] ✗ web: Building web failed after 0s: npm run build exited with status 1\n" +
@@ -1252,7 +1252,7 @@ func TestARunThatFailedOnceAChangingPhaseStartedClaimsNothingChanged(t *testing.
 	t.Parallel()
 
 	run, out, _ := productionRun(t)
-	run.Phase(progressv1.Phase_PHASE_PROVISION).Unit("", progress.Title{Started: "Environment", Ended: "Environment"}).End(errors.New("the stack is locked"))
+	run.Phase(progressv1.Phase_PHASE_PROVISION).Child("", progress.Title{Started: "Environment", Ended: "Environment"}).End(errors.New("the stack is locked"))
 	ended(run, errors.New("the stack is locked"))
 
 	if got := out.String(); strings.Contains(got, "nothing was changed") || strings.Contains(got, "still serves") {

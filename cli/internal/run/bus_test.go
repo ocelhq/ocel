@@ -131,11 +131,11 @@ func TestSinksSeeEventsFromConcurrentSpansInTheSameOrder(t *testing.T) {
 	var wg sync.WaitGroup
 	for _, app := range []string{"web", "api", "worker"} {
 		wg.Go(func() {
-			unit := deploy.Unit(app, progress.Deploying.Title(app))
+			child := deploy.Child(app, progress.Deploying.Title(app))
 			for range 50 {
-				unit.Say("uploading " + app)
+				child.Say("uploading " + app)
 			}
-			unit.End(nil)
+			child.End(nil)
 		})
 	}
 	wg.Wait()
@@ -176,7 +176,7 @@ func TestASecondInterruptEndsTheOpenRunAsInterruptedOnEverySinkAndClosesThem(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	run.Phase(progressv1.Phase_PHASE_DEPLOY).Unit("web", progress.Deploying.Title("web"))
+	run.Phase(progressv1.Phase_PHASE_DEPLOY).Child("web", progress.Deploying.Title("web"))
 	cancel()
 
 	bus.Interrupt()

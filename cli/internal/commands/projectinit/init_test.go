@@ -32,7 +32,7 @@ func stubPackageManager(dependencies *Dependencies, result error) *[]string {
 	return &argv
 }
 
-func TestAddingTheSDKIsAUnitOnTheInitRunAndThePackageManagerSpeaksThroughIt(t *testing.T) {
+func TestAddingTheSDKIsASpanOnTheInitRunAndThePackageManagerSpeaksThroughIt(t *testing.T) {
 	t.Parallel()
 
 	dependencies := newTestDependencies()
@@ -55,7 +55,7 @@ func TestAddingTheSDKIsAUnitOnTheInitRunAndThePackageManagerSpeaksThroughIt(t *t
 		t.Fatalf("runInit err = %v", err)
 	}
 
-	var unit []byte
+	var span []byte
 	var said []string
 	for _, line := range strings.Split(strings.TrimSpace(stdout.String()), "\n") {
 		ev := &streamv1.RunEvent{}
@@ -64,17 +64,17 @@ func TestAddingTheSDKIsAUnitOnTheInitRunAndThePackageManagerSpeaksThroughIt(t *t
 		}
 		switch {
 		case ev.GetOperation().GetStarted() != nil && ev.GetOperation().GetSubject() == sdkPackage:
-			unit = ev.GetOperation().GetSpanId()
+			span = ev.GetOperation().GetSpanId()
 			said = append(said, "started: "+ev.GetOperation().GetMessage())
-		case ev.GetOperation().GetOutput() != nil && bytes.Equal(ev.GetOperation().GetSpanId(), unit):
+		case ev.GetOperation().GetOutput() != nil && bytes.Equal(ev.GetOperation().GetSpanId(), span):
 			said = append(said, "output: "+ev.GetOperation().GetMessage())
-		case ev.GetOperation().GetEnded() != nil && bytes.Equal(ev.GetOperation().GetSpanId(), unit):
+		case ev.GetOperation().GetEnded() != nil && bytes.Equal(ev.GetOperation().GetSpanId(), span):
 			said = append(said, "ended: "+ev.GetOperation().GetEnded().GetStatus().String())
 		}
 	}
 	want := []string{"started: Adding the SDK to this project with `pnpm add " + sdkPackage + "`", "output: added 1 package in 2s", "ended: SPAN_STATUS_OK"}
 	if !slices.Equal(said, want) {
-		t.Fatalf("the sdk unit said %q, want %q", said, want)
+		t.Fatalf("the sdk span said %q, want %q", said, want)
 	}
 	if stderr.String() != "" {
 		t.Fatalf("stderr = %q, want the package manager heard only through the run", stderr.String())

@@ -138,9 +138,9 @@ type linkRun struct {
 
 func (c linkRun) wait(phase progressv1.Phase, subject string, title progress.Title, fn func() error) error {
 	span := c.run.Phase(phase)
-	unit := span.Unit(subject, title)
+	child := span.Child(subject, title)
 	err := fn()
-	unit.End(err)
+	child.End(err)
 	span.End(err)
 	return err
 }

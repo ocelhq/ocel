@@ -80,9 +80,9 @@ func awaitDomainStatus(ctx context.Context, check *run.Span, slug string, read f
 		return resp, fmt.Errorf("this project declares no production hostname, so there is nothing to wait for: declare one under domains.production and run `ocel domain add`")
 	}
 
-	unit := check.Unit(slug, describeWait(declaredHosts(resp)))
+	span := check.Child(slug, describeWait(declaredHosts(resp)))
 	resp, err = pollDomainStatus(ctx, read, resp, schedule)
-	unit.End(err)
+	span.End(err)
 	return resp, err
 }
 

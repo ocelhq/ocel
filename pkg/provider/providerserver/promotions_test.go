@@ -157,7 +157,7 @@ func TestTheDeployFlipSpeaksThroughThePromotionSpansOwnProgress(t *testing.T) {
 	}
 	promotion := "Switching traffic to promotion " + result.GetPromotionId()
 	if titles[spoke] != promotion || parents[spoke] != "" {
-		t.Errorf("the flip spoke on span %q, want the unit %q", titles[spoke], promotion)
+		t.Errorf("the flip spoke on span %q, want the span %q", titles[spoke], promotion)
 	}
 }
 

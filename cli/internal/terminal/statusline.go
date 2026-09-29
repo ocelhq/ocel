@@ -28,19 +28,19 @@ type statusLine struct {
 	startedAt time.Time
 
 	phase      progressv1.Phase
-	spans      spanTree[statusUnit]
+	spans      spanTree[statusSpan]
 	shown      string
 	shownAt    time.Time
 	lastActive string
 }
 
-type statusUnit struct {
+type statusSpan struct {
 	opened   *streamv1.RunEvent
 	output   string
 	progress string
 }
 
-func (u *statusUnit) latest() string {
+func (u *statusSpan) latest() string {
 	return cmp.Or(u.output, u.progress)
 }
 
@@ -48,7 +48,7 @@ func newStatusLine(now func() time.Time, present Presentation) *statusLine {
 	return &statusLine{
 		now:     now,
 		present: present,
-		spans:   newSpanTree[statusUnit](),
+		spans:   newSpanTree[statusSpan](),
 	}
 }
 
@@ -67,12 +67,12 @@ func (l *statusLine) observe(ev *streamv1.RunEvent) {
 	case ev.GetOperation().GetLevel() == progressv1.Level_LEVEL_DEBUG:
 	case ev.GetOperation().GetOutput() != nil:
 		if text, ok := sanitize(ev.GetOperation().GetMessage()); ok {
-			l.record(span, at, func(u *statusUnit) { u.output = text })
+			l.record(span, at, func(u *statusSpan) { u.output = text })
 		}
 	case ev.GetOperation().GetBody() == nil && ev.GetCli() == nil:
 		first, _, _ := strings.Cut(ev.GetOperation().GetMessage(), "\n")
 		if text, ok := sanitize(first); ok {
-			l.record(span, at, func(u *statusUnit) { u.progress = text })
+			l.record(span, at, func(u *statusSpan) { u.progress = text })
 		}
 	}
 }
@@ -81,31 +81,31 @@ func (l *statusLine) open(span string, ev *streamv1.RunEvent, at time.Time) {
 	if !l.spans.joins(ev) {
 		l.phase = ev.GetOperation().GetPhase()
 	}
-	l.spans.open(span, ev, at, &statusUnit{opened: ev})
+	l.spans.open(span, ev, at, &statusSpan{opened: ev})
 }
 
 func (l *statusLine) end(span string) {
-	if unit, _, _ := l.spans.close(span); unit != nil && l.shown == span {
+	if tracked, _, _ := l.spans.close(span); tracked != nil && l.shown == span {
 		l.shown = ""
 	}
 }
 
-func (l *statusLine) record(span string, at time.Time, update func(*statusUnit)) {
-	unit := l.spans.ownerOf(span)
-	if unit == nil {
+func (l *statusLine) record(span string, at time.Time, update func(*statusSpan)) {
+	tracked := l.spans.ownerOf(span)
+	if tracked == nil {
 		return
 	}
-	update(unit)
+	update(tracked)
 	l.lastActive = l.spans.owners[span]
 	l.pick(at)
 }
 
 func (l *statusLine) pick(at time.Time) {
 	next := l.lastActive
-	if l.spans.units[next] == nil && len(l.spans.running) > 0 {
+	if l.spans.tracked[next] == nil && len(l.spans.running) > 0 {
 		next = l.spans.running[len(l.spans.running)-1]
 	}
-	if shown := l.spans.units[l.shown]; shown != nil && (next == l.shown || l.spans.units[l.lastActive] == nil ||
+	if shown := l.spans.tracked[l.shown]; shown != nil && (next == l.shown || l.spans.tracked[l.lastActive] == nil ||
 		shown.latest() != "" && at.Sub(l.shownAt) < liveHold) {
 		return
 	}
@@ -125,12 +125,12 @@ func (l *statusLine) render(width int) string {
 	}
 	head += l.present.palette().Accent(spinnerFrame(int(at.Sub(l.startedAt) / frameRate)))
 	spinnerEnds := displayWidth(head)
-	if unit := l.spans.units[l.shown]; unit != nil {
-		head += " " + l.naming(unit)
+	if tracked := l.spans.tracked[l.shown]; tracked != nil {
+		head += " " + l.naming(tracked)
 	}
 	took := formatDuration(at.Sub(tally.since))
-	if tally.units > 0 {
-		took = fmt.Sprintf("%d/%d · %s", tally.done, tally.units, took)
+	if tally.opened > 0 {
+		took = fmt.Sprintf("%d/%d · %s", tally.done, tally.opened, took)
 	}
 	room := width - 1 - displayWidth(took) - len(liveGutter)
 	if room < spinnerEnds {
@@ -143,18 +143,18 @@ func (l *statusLine) render(width int) string {
 	return head + strings.Repeat(" ", max(room-displayWidth(head), 0)) + liveGutter + l.present.palette().Muted(took)
 }
 
-func (l *statusLine) naming(unit *statusUnit) string {
-	said := unit.latest()
-	subject := unit.opened.GetOperation().GetSubject()
+func (l *statusLine) naming(tracked *statusSpan) string {
+	said := tracked.latest()
+	subject := tracked.opened.GetOperation().GetSubject()
 	if subject == "" {
-		named := unit.opened.GetOperation().GetMessage()
+		named := tracked.opened.GetOperation().GetMessage()
 		if said != "" {
 			named += liveGutter + l.present.palette().Muted(said)
 		}
 		return named
 	}
 	if said == "" {
-		title, _, _ := strings.Cut(unit.opened.GetOperation().GetMessage(), "\n")
+		title, _, _ := strings.Cut(tracked.opened.GetOperation().GetMessage(), "\n")
 		said, _ = sanitize(title)
 	}
 	named := l.present.palette().Bold(subject) + ":"

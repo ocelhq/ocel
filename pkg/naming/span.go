@@ -7,18 +7,18 @@ import (
 )
 
 const (
-	UnitEnvironment = "environment"
-	UnitEdge        = "edge"
-	UnitHostnames   = "hostnames"
-	UnitPromotion   = "promotion"
-	UnitConnector   = "connector"
+	SpanEnvironment = "environment"
+	SpanEdge        = "edge"
+	SpanHostnames   = "hostnames"
+	SpanPromotion   = "promotion"
+	SpanConnector   = "connector"
 
 	SpanIDLen = 8
 )
 
-func UnitID(unit string) []byte {
+func SpanID(name string) []byte {
 	h := sha256.New()
-	writeSpanField(h, unit)
+	writeSpanField(h, name)
 	return h.Sum(nil)[:SpanIDLen]
 }
 

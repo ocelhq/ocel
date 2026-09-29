@@ -112,7 +112,7 @@ var levelLabels = map[progressv1.Level]label{
 	progressv1.Level_LEVEL_ERROR: {"ERROR", []color.Attribute{color.FgRed, color.Bold}},
 }
 
-var unitMarks = map[progressv1.SpanStatus]label{
+var spanMarks = map[progressv1.SpanStatus]label{
 	progressv1.SpanStatus_SPAN_STATUS_OK:    {passGlyph, []color.Attribute{color.FgGreen}},
 	progressv1.SpanStatus_SPAN_STATUS_ERROR: {failGlyph, []color.Attribute{color.FgRed, color.Bold}},
 }

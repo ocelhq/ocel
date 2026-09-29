@@ -53,8 +53,8 @@ func declaredVariables(ctx context.Context, dependencies Dependencies, cfg *proj
 
 func collecting(run *run.Run, cfg *project.Project, collect func(output io.Writer) error) error {
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	unit := build.Unit(cfg.Slug, progress.Collecting.Title("the variables this project declares"))
-	err := collect(unit.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_STDERR))
+	span := build.Child(cfg.Slug, progress.Collecting.Title("the variables this project declares"))
+	err := collect(span.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_STDERR))
 	build.End(err)
 	return err
 }

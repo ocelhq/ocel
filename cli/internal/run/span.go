@@ -33,7 +33,7 @@ type Span struct {
 	endOnce    sync.Once
 }
 
-func (s *Span) Unit(subject string, title progress.Title) *Span {
+func (s *Span) Child(subject string, title progress.Title) *Span {
 	return s.run.begin(s, subject, title)
 }
 
@@ -47,18 +47,18 @@ func (s *Span) SetAttributes(attrs ...progress.Attr) {
 	s.attributes = append(s.attributes, progressproto.EncodeAttrs(attrs)...)
 }
 
-type ReservedUnit struct {
+type ReservedChild struct {
 	parent  *Span
 	subject string
 	title   progress.Title
 	start   time.Time
 }
 
-func (s *Span) ReserveUnit(subject string, title progress.Title) ReservedUnit {
-	return ReservedUnit{parent: s, subject: subject, title: title, start: s.run.bus.now()}
+func (s *Span) ReserveChild(subject string, title progress.Title) ReservedChild {
+	return ReservedChild{parent: s, subject: subject, title: title, start: s.run.bus.now()}
 }
 
-func (u ReservedUnit) Open() *Span {
+func (u ReservedChild) Open() *Span {
 	return u.parent.run.beginAt(u.parent, u.subject, u.title, u.start)
 }
 

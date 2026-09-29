@@ -221,9 +221,9 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier e
 			return req
 		}
 
-		unit := planning.Unit(readiness.TierName(tier), progress.Planning.Title(fmt.Sprintf("the changes to the %s bootstrap", readiness.TierName(tier))))
+		span := planning.Child(readiness.TierName(tier), progress.Planning.Title(fmt.Sprintf("the changes to the %s bootstrap", readiness.TierName(tier))))
 		plan, err := providerprocess.Plan(ctx, provider, "Bootstrap", request(true), contractv1connect.ProviderServiceClient.Bootstrap)
-		unit.End(err)
+		span.End(err)
 		if err != nil {
 			return err
 		}

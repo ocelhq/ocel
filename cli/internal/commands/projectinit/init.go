@@ -290,12 +290,12 @@ func addSDK(ctx context.Context, dependencies Dependencies, build *run.Span, dir
 	argv := addCommand(dir, lang)
 	command := strings.Join(argv, " ")
 
-	unit := build.Unit(sdkPackage, progress.Adding.Title(fmt.Sprintf("the SDK to this project with `%s`", command)))
-	err := dependencies.RunPackageManager(ctx, dir, argv, unit.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_STDERR))
+	span := build.Child(sdkPackage, progress.Adding.Title(fmt.Sprintf("the SDK to this project with `%s`", command)))
+	err := dependencies.RunPackageManager(ctx, dir, argv, span.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_STDERR))
 	if err != nil {
-		unit.Warn(fmt.Sprintf("Could not add %s — run `%s` yourself.", sdkPackage, command))
+		span.Warn(fmt.Sprintf("Could not add %s — run `%s` yourself.", sdkPackage, command))
 	}
-	unit.End(err)
+	span.End(err)
 }
 
 func RunPackageManager(ctx context.Context, dir string, argv []string, output io.Writer) error {

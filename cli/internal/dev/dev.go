@@ -78,7 +78,7 @@ func RunOnce(ctx context.Context, opts Options, cwd string) error {
 
 func lead(ctx context.Context, opts Options, reset bool) (err error) {
 	cfg := opts.Project
-	startup := opts.session().Unit("", environmentTitle)
+	startup := opts.session().Child("", environmentTitle)
 	defer func() { startup.End(err) }()
 	source, err := readValueSource(ctx, cfg)
 	if err != nil {
@@ -212,7 +212,7 @@ func follow(ctx context.Context, opts Options, running leader.Leader) error {
 }
 
 func subscribe(ctx context.Context, opts Options, running leader.Leader) (_ *leader.EnvStream, _ map[string]string, err error) {
-	connecting := opts.session().Unit("", leaderTitle)
+	connecting := opts.session().Child("", leaderTitle)
 	defer func() { connecting.End(err) }()
 	stream, err := leader.Subscribe(ctx, running)
 	if err != nil {
@@ -231,7 +231,7 @@ func subscribe(ctx context.Context, opts Options, running leader.Leader) (_ *lea
 
 func runStandalone(ctx context.Context, opts Options, cwd string) error {
 	cfg := opts.Project
-	startup := opts.session().Unit("", environmentTitle)
+	startup := opts.session().Child("", environmentTitle)
 	source, err := readValueSource(ctx, cfg)
 	if err != nil {
 		return err

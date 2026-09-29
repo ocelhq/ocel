@@ -31,7 +31,7 @@ type wildcards struct {
 	recorded       stackrecords.Wildcard
 	sel            *contractv1.EdgeSelection
 	progressStream *eventStream
-	progressUnit   Span
+	progressSpan   Span
 }
 
 func (h *handlers) wildcard(ctx context.Context, sel *contractv1.EdgeSelection) (*wildcards, error) {
@@ -54,7 +54,7 @@ func (w *wildcards) dnsCutover(front edge.Edge) (dnsCutover, error) {
 	}
 	s := newDNSCutover(front, writer, w.sel.GetDns().GetZone(), w.provider.Liveness())
 	if w.progressStream != nil {
-		s.waitForManualRecords(w.progressStream, w.progressUnit)
+		s.waitForManualRecords(w.progressStream, w.progressSpan)
 	}
 	return s, nil
 }
@@ -99,9 +99,9 @@ func (w *wildcards) readStored(ctx context.Context) (keyvalue.Entry, stackrecord
 }
 
 func (h *handlers) UsePreviewWildcard(ctx context.Context, req *contractv1.UsePreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	unit := UnitSpan(naming.UnitEdge, string(environment.TierPreview),
+	root := RootSpan(naming.SpanEdge, string(environment.TierPreview),
 		progress.Serving.Title("every project's previews on "+edge.PreviewWildcard(req.GetBaseDomain())), progressv1.Phase_PHASE_PROVISION)
-	return streamed(ctx, stream, unit, func(sender *eventStream, progress progress.Log) error {
+	return streamed(ctx, stream, root, func(sender *eventStream, progress progress.Log) error {
 		base, err := previewBaseDomain(req.GetBaseDomain())
 		if err != nil {
 			return err
@@ -110,7 +110,7 @@ func (h *handlers) UsePreviewWildcard(ctx context.Context, req *contractv1.UsePr
 		if err != nil {
 			return err
 		}
-		w.progressStream, w.progressUnit = sender, unit
+		w.progressStream, w.progressSpan = sender, root
 		front, err := h.edgeFor(w.provider, req.GetEdge())
 		if err != nil {
 			return err
@@ -535,8 +535,8 @@ func edgeGroupProto(group edge.PlanGroup) (*planv1.ChangeGroup, error) {
 }
 
 func (h *handlers) RemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	unit := UnitSpan(naming.UnitEdge, string(environment.TierPreview), progress.Releasing.Title("the global preview domain"), progressv1.Phase_PHASE_DESTROY)
-	return streamed(ctx, stream, unit, func(_ *eventStream, progress progress.Log) error {
+	root := RootSpan(naming.SpanEdge, string(environment.TierPreview), progress.Releasing.Title("the global preview domain"), progressv1.Phase_PHASE_DESTROY)
+	return streamed(ctx, stream, root, func(_ *eventStream, progress progress.Log) error {
 		w, err := h.wildcard(ctx, req.GetEdge())
 		if err != nil {
 			return err

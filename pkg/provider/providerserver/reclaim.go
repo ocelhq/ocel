@@ -227,7 +227,7 @@ func (r *deployRun) reclaimOwnRelease(ctx context.Context) {
 	}
 	ctx, stop := context.WithTimeout(context.WithoutCancel(ctx), ownReclaimWindow)
 	defer stop()
-	span := UnitSpan("reclaim/"+r.spec.PromotionID, environmentSubject(r.spec.Tier, r.spec.Env),
+	span := RootSpan("reclaim/"+r.spec.PromotionID, environmentSubject(r.spec.Tier, r.spec.Env),
 		progress.Reclaiming.Title("what this failed deploy provisioned"), progressv1.Phase_PHASE_DESTROY)
 	_ = r.spanEvents.run(span, func(*spanRun) error {
 		progress := newSpanLog(r.sender, span)

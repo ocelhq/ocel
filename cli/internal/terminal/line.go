@@ -30,7 +30,7 @@ func (l line) render(present Presentation) string {
 	if tag, ok := phaseTag(present, l.phase); ok {
 		b.WriteString(tag + " ")
 	}
-	if mark, ok := unitMarks[l.status]; ok {
+	if mark, ok := spanMarks[l.status]; ok {
 		b.WriteString(mark.render(present) + " ")
 	}
 	if l.subject != "" {

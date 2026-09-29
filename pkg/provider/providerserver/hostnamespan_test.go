@@ -13,15 +13,15 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
-type hostnameUnit struct {
+type hostnameSpan struct {
 	ended    *progressv1.OperationEvent
 	warnings []string
 }
 
-func hostnameUnitOf(t *testing.T, events []*progressv1.OperationEvent) hostnameUnit {
+func hostnameSpanOf(t *testing.T, events []*progressv1.OperationEvent) hostnameSpan {
 	t.Helper()
 	var spans [][]byte
-	var unit hostnameUnit
+	var root hostnameSpan
 	for _, event := range events {
 		started := event.GetStarted()
 		switch {
@@ -31,18 +31,18 @@ func hostnameUnitOf(t *testing.T, events []*progressv1.OperationEvent) hostnameU
 			spans = append(spans, event.GetSpanId())
 		case !slices.ContainsFunc(spans, func(span []byte) bool { return bytes.Equal(span, event.GetSpanId()) }):
 		case event.GetEnded() != nil && bytes.Equal(event.GetSpanId(), spans[0]):
-			unit.ended = event
+			root.ended = event
 		case event.GetEnded() == nil && event.GetLevel() == progressv1.Level_LEVEL_WARN:
-			unit.warnings = append(unit.warnings, event.GetMessage())
+			root.warnings = append(root.warnings, event.GetMessage())
 		}
 	}
-	if unit.ended == nil {
-		t.Fatal("the deploy ended no unit attaching hostnames")
+	if root.ended == nil {
+		t.Fatal("the deploy ended no span attaching hostnames")
 	}
-	return unit
+	return root
 }
 
-func TestAHostnameAnotherEdgeServesLeavesTheAttachingUnitAtAWarningNamingOnlyTheHostnamesItAttached(t *testing.T) {
+func TestAHostnameAnotherEdgeServesLeavesTheAttachingSpanAtAWarningNamingOnlyTheHostnamesItAttached(t *testing.T) {
 	builtProject(t)
 	client, _ := deployServed(t)
 
@@ -59,19 +59,19 @@ func TestAHostnameAnotherEdgeServesLeavesTheAttachingUnitAtAWarningNamingOnlyThe
 		t.Fatalf("Deploy() on the %s edge = %q", fake.KindDirect, result.GetError())
 	}
 
-	unit := hostnameUnitOf(t, events)
-	if unit.ended.GetLevel() != progressv1.Level_LEVEL_WARN || unit.ended.GetEnded().GetStatus() != progressv1.SpanStatus_SPAN_STATUS_OK {
-		t.Errorf("the unit ended %s at %s, want OK at WARN: the release succeeded, one hostname did not move", unit.ended.GetEnded().GetStatus(), unit.ended.GetLevel())
+	root := hostnameSpanOf(t, events)
+	if root.ended.GetLevel() != progressv1.Level_LEVEL_WARN || root.ended.GetEnded().GetStatus() != progressv1.SpanStatus_SPAN_STATUS_OK {
+		t.Errorf("the span ended %s at %s, want OK at WARN: the release succeeded, one hostname did not move", root.ended.GetEnded().GetStatus(), root.ended.GetLevel())
 	}
-	if want := "Attached production hostname www.shop.example but not shop.example"; unit.ended.GetEnded().GetTitle() != want {
-		t.Errorf("the unit ended titled %q, want %q", unit.ended.GetEnded().GetTitle(), want)
+	if want := "Attached production hostname www.shop.example but not shop.example"; root.ended.GetEnded().GetTitle() != want {
+		t.Errorf("the span ended titled %q, want %q", root.ended.GetEnded().GetTitle(), want)
 	}
-	if len(unit.warnings) != 1 || !strings.HasPrefix(unit.warnings[0], "shop.example is still served through the relay edge") {
-		t.Errorf("the unit warned %q, want one warning naming shop.example and the edge still serving it", unit.warnings)
+	if len(root.warnings) != 1 || !strings.HasPrefix(root.warnings[0], "shop.example is still served through the relay edge") {
+		t.Errorf("the span warned %q, want one warning naming shop.example and the edge still serving it", root.warnings)
 	}
 }
 
-func TestAHostnameWhoseCertificateIsStillIssuingLeavesTheAttachingUnitAtAWarning(t *testing.T) {
+func TestAHostnameWhoseCertificateIsStillIssuingLeavesTheAttachingSpanAtAWarning(t *testing.T) {
 	builtProject(t)
 	client, p := deployServed(t)
 	p.RequireValidationRecords(edge.Record{Name: "_acme.shop.example", Type: edge.RecordTypeCNAME, Value: "validate.example"})
@@ -84,19 +84,19 @@ func TestAHostnameWhoseCertificateIsStillIssuingLeavesTheAttachingUnitAtAWarning
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	unit := hostnameUnitOf(t, events)
-	if unit.ended.GetLevel() != progressv1.Level_LEVEL_WARN {
-		t.Errorf("the unit ended at %s, want WARN: its one hostname is not served yet", unit.ended.GetLevel())
+	root := hostnameSpanOf(t, events)
+	if root.ended.GetLevel() != progressv1.Level_LEVEL_WARN {
+		t.Errorf("the span ended at %s, want WARN: its one hostname is not served yet", root.ended.GetLevel())
 	}
-	if want := "Did not attach production hostname shop.example"; unit.ended.GetEnded().GetTitle() != want {
-		t.Errorf("the unit ended titled %q, want %q", unit.ended.GetEnded().GetTitle(), want)
+	if want := "Did not attach production hostname shop.example"; root.ended.GetEnded().GetTitle() != want {
+		t.Errorf("the span ended titled %q, want %q", root.ended.GetEnded().GetTitle(), want)
 	}
-	if want := "shop.example is not served yet: the certificate is still validating"; !slices.Contains(unit.warnings, want) {
-		t.Errorf("the unit warned %q, want %q among them", unit.warnings, want)
+	if want := "shop.example is not served yet: the certificate is still validating"; !slices.Contains(root.warnings, want) {
+		t.Errorf("the span warned %q, want %q among them", root.warnings, want)
 	}
 }
 
-func TestAHostnameUnitThatAttachesEveryHostnameEndsWithoutAWarning(t *testing.T) {
+func TestAHostnameSpanThatAttachesEveryHostnameEndsWithoutAWarning(t *testing.T) {
 	builtProject(t)
 	client, _ := deployServed(t)
 
@@ -106,9 +106,9 @@ func TestAHostnameUnitThatAttachesEveryHostnameEndsWithoutAWarning(t *testing.T)
 	if !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
-	unit := hostnameUnitOf(t, events)
-	title := unit.ended.GetEnded().GetTitle()
-	if unit.ended.GetLevel() != progressv1.Level_LEVEL_INFO || title != "Attached production hostname shop.example" || len(unit.warnings) != 0 {
-		t.Errorf("the unit ended at %s titled %q after warning %q, want INFO, the finished title and no warning", unit.ended.GetLevel(), title, unit.warnings)
+	root := hostnameSpanOf(t, events)
+	title := root.ended.GetEnded().GetTitle()
+	if root.ended.GetLevel() != progressv1.Level_LEVEL_INFO || title != "Attached production hostname shop.example" || len(root.warnings) != 0 {
+		t.Errorf("the span ended at %s titled %q after warning %q, want INFO, the finished title and no warning", root.ended.GetLevel(), title, root.warnings)
 	}
 }

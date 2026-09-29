@@ -451,7 +451,7 @@ func TestRunDeployRefusesAComputeTheProviderDoesNotRun(t *testing.T) {
 	}
 }
 
-func TestDeployChecksCredentialsAndTheProjectsBootstrapAsACheckUnitNamedForItsProviderThenSaysWhoItActsAs(t *testing.T) {
+func TestDeployChecksCredentialsAndTheProjectsBootstrapAsACheckSpanNamedForItsProviderThenSaysWhoItActsAs(t *testing.T) {
 	dependencies := newTestDependencies()
 	stubBuild(&dependencies, nil)
 	useJSONLogFormat(t, &dependencies)
@@ -464,14 +464,14 @@ func TestDeployChecksCredentialsAndTheProjectsBootstrapAsACheckUnitNamedForItsPr
 		return ev.GetOperation().GetStarted() != nil && ev.GetOperation().GetMessage() == "Checking your credentials and the production bootstrap for "+clitest.FixtureSlug
 	})
 	if started < 0 {
-		t.Fatalf("no unit started for the credential check: %s", out)
+		t.Fatalf("no span started for the credential check: %s", out)
 	}
-	unit := evs[started]
-	if unit.GetOperation().GetPhase() != progressv1.Phase_PHASE_CHECK || unit.GetOperation().GetSubject() != "fake" {
-		t.Errorf("credential check started in %s naming %q, want the check phase naming the provider %q", unit.GetOperation().GetPhase(), unit.GetOperation().GetSubject(), "fake")
+	span := evs[started]
+	if span.GetOperation().GetPhase() != progressv1.Phase_PHASE_CHECK || span.GetOperation().GetSubject() != "fake" {
+		t.Errorf("credential check started in %s naming %q, want the check phase naming the provider %q", span.GetOperation().GetPhase(), span.GetOperation().GetSubject(), "fake")
 	}
 	ended := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool {
-		return ev.GetOperation().GetEnded() != nil && bytes.Equal(ev.GetOperation().GetSpanId(), unit.GetOperation().GetSpanId())
+		return ev.GetOperation().GetEnded() != nil && bytes.Equal(ev.GetOperation().GetSpanId(), span.GetOperation().GetSpanId())
 	})
 	if ended < 0 || evs[ended].GetOperation().GetEnded().GetStatus() != progressv1.SpanStatus_SPAN_STATUS_OK {
 		t.Fatalf("the credential check never ended OK: %s", out)
@@ -485,7 +485,7 @@ func TestDeployChecksCredentialsAndTheProjectsBootstrapAsACheckUnitNamedForItsPr
 	}
 }
 
-func TestAnUnbootstrappedProductionFailsTheCheckUnitWithTheCommandThatBootstrapsIt(t *testing.T) {
+func TestAnUnbootstrappedProductionFailsTheCheckSpanWithTheCommandThatBootstrapsIt(t *testing.T) {
 	dependencies := newTestDependencies()
 	stubBuild(&dependencies, nil)
 	useJSONLogFormat(t, &dependencies)

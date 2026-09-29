@@ -42,9 +42,9 @@ type variablesRecovery struct {
 }
 
 func (r variablesRecovery) buildManifest(ctx context.Context, phase *run.Span, prebuilt bool) (*contractv1.Manifest, []*bindingsv1.Binding, error) {
-	unit := phase.Unit(r.cfg.Slug, buildTitle(r.cfg, prebuilt))
-	manifest, inline, err := r.build(ctx, phase, unit, prebuilt)
-	unit.End(err)
+	child := phase.Child(r.cfg.Slug, buildTitle(r.cfg, prebuilt))
+	manifest, inline, err := r.build(ctx, phase, child, prebuilt)
+	child.End(err)
 	return manifest, inline, err
 }
 
@@ -150,10 +150,10 @@ func (r variablesRecovery) createInEnvSource(ctx context.Context, span *run.Span
 	}
 }
 
-func (r variablesRecovery) attempt(ctx context.Context, phase, unit *run.Span, declarations *variables.Declarations, prebuilt bool, retry int) (*contractv1.Manifest, []*bindingsv1.Binding, error) {
-	attempt := unit.Trace(r.cfg.Slug, "build", progress.Attr{Key: progress.AttrKeyRetryCount, Value: strconv.Itoa(retry)})
+func (r variablesRecovery) attempt(ctx context.Context, phase, child *run.Span, declarations *variables.Declarations, prebuilt bool, retry int) (*contractv1.Manifest, []*bindingsv1.Binding, error) {
+	attempt := child.Trace(r.cfg.Slug, "build", progress.Attr{Key: progress.AttrKeyRetryCount, Value: strconv.Itoa(retry)})
 	manifest, inline, err := collectBuildAndAssemble(run.ContextWithSpan(ctx, attempt), r.dependencies, assembly{
-		cfg: r.cfg, declarations: declarations, prebuilt: prebuilt, dry: r.dry, phase: phase, span: unit,
+		cfg: r.cfg, declarations: declarations, prebuilt: prebuilt, dry: r.dry, phase: phase, span: child,
 		containerArchs: r.containerArchs, urls: r.urls,
 	})
 	attempt.End(err)

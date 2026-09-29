@@ -344,14 +344,14 @@ func checkSetup(ctx context.Context, invocation commands.Invocation, cfg *projec
 	}()
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	unit := check.Unit(cfg.Slug, progress.Checking.Title("your setup"))
-	err = askProvider(ctx, invocation, cfg, unit, got)
-	unit.End(err)
+	span := check.Child(cfg.Slug, progress.Checking.Title("your setup"))
+	err = askProvider(ctx, invocation, cfg, span, got)
+	span.End(err)
 	return err
 }
 
-func askProvider(ctx context.Context, invocation commands.Invocation, cfg *project.Project, unit *run.Span, got *answers) error {
-	provider, _, err := invocation.OpenProvider(ctx, unit, cfg, commands.OpenOptions{})
+func askProvider(ctx context.Context, invocation commands.Invocation, cfg *project.Project, span *run.Span, got *answers) error {
+	provider, _, err := invocation.OpenProvider(ctx, span, cfg, commands.OpenOptions{})
 	if err != nil {
 		return err
 	}

@@ -20,7 +20,7 @@ type Transcript struct {
 	verbatimText func(string) string
 
 	mu            sync.Mutex
-	spans         spanTree[unitBlock]
+	spans         spanTree[spanBlock]
 	verbatim      bool
 	failed        bool
 	nextHeartbeat time.Time
@@ -42,7 +42,7 @@ type blockLine struct {
 	from    line
 }
 
-type unitBlock struct {
+type spanBlock struct {
 	opened    *streamv1.RunEvent
 	body      []blockLine
 	resources resourceTally
@@ -60,7 +60,7 @@ func newTranscript(w io.Writer, present Presentation, ticks <-chan time.Time) *T
 	s := &Transcript{
 		w:                 w,
 		present:           present,
-		spans:             newSpanTree[unitBlock](),
+		spans:             newSpanTree[spanBlock](),
 		stopHeartbeats:    sync.OnceFunc(func() { close(stop) }),
 		stopTicks:         func() {},
 		heartbeatsStopped: make(chan struct{}),
@@ -78,7 +78,7 @@ func (s *Transcript) Receive(ev *streamv1.RunEvent) {
 	switch {
 	case isTraceOnly(ev):
 	case ev.GetOperation().GetStarted() != nil:
-		s.spans.open(span, ev, ev.GetOperation().GetTime().AsTime(), &unitBlock{opened: ev})
+		s.spans.open(span, ev, ev.GetOperation().GetTime().AsTime(), &spanBlock{opened: ev})
 	case ev.GetOperation().GetEnded() != nil:
 		s.end(span, ev)
 	case ev.GetWaiting() != nil:
@@ -104,9 +104,9 @@ func (s *Transcript) Receive(ev *streamv1.RunEvent) {
 	}
 }
 
-func (s *Transcript) within(span string, inUnit, standalone blockLine) {
-	if unit := s.spans.ownerOf(span); unit != nil {
-		unit.body = append(unit.body, inUnit)
+func (s *Transcript) within(span string, inSpan, standalone blockLine) {
+	if tracked := s.spans.ownerOf(span); tracked != nil {
+		tracked.body = append(tracked.body, inSpan)
 		return
 	}
 	s.print(standalone)
@@ -129,8 +129,8 @@ func (s *Transcript) detail(ev *streamv1.RunEvent) blockLine {
 }
 
 func (s *Transcript) end(span string, ev *streamv1.RunEvent) {
-	unit, _, tally := s.spans.close(span)
-	if unit == nil {
+	tracked, _, tally := s.spans.close(span)
+	if tracked == nil {
 		s.endResource(span, ev)
 		return
 	}
@@ -143,10 +143,10 @@ func (s *Transcript) end(span string, ev *streamv1.RunEvent) {
 		status:  ended.GetStatus(),
 		message: ended.GetTitle(),
 		timing:  " in " + took + tally.finished(),
-		outcome: unit.resources.summary(),
+		outcome: tracked.resources.summary(),
 	}
 	if failed {
-		head.message, head.timing = unit.opened.GetOperation().GetMessage()+" failed", " after "+took+tally.finished()
+		head.message, head.timing = tracked.opened.GetOperation().GetMessage()+" failed", " after "+took+tally.finished()
 		if reason := ev.GetOperation().GetMessage(); reason != "" {
 			head.outcome += ": " + reason
 		}
@@ -154,16 +154,16 @@ func (s *Transcript) end(span string, ev *streamv1.RunEvent) {
 	if partial {
 		head.status = progressv1.SpanStatus_SPAN_STATUS_UNSPECIFIED
 	}
-	header := unit.header(head, s.present)
-	if s.present.GitHubActions && !failed && !partial && len(unit.body) > 0 {
-		s.printGroup(header, unit.body)
+	header := tracked.header(head, s.present)
+	if s.present.GitHubActions && !failed && !partial && len(tracked.body) > 0 {
+		s.printGroup(header, tracked.body)
 		return
 	}
 	s.print(header)
 	if failed || !s.failed {
-		s.print(unit.body...)
+		s.print(tracked.body...)
 	} else {
-		s.print(slices.DeleteFunc(slices.Clone(unit.body), func(l blockLine) bool {
+		s.print(slices.DeleteFunc(slices.Clone(tracked.body), func(l blockLine) bool {
 			return l.raw || l.from.level < progressv1.Level_LEVEL_WARN
 		})...)
 	}
@@ -171,13 +171,13 @@ func (s *Transcript) end(span string, ev *streamv1.RunEvent) {
 }
 
 func (s *Transcript) endResource(span string, ev *streamv1.RunEvent) {
-	unit := s.spans.ownerOf(span)
+	tracked := s.spans.ownerOf(span)
 	change, ok := resourceChangeOf(ev)
-	if unit == nil || !ok {
+	if tracked == nil || !ok {
 		return
 	}
-	unit.resources.count(change)
-	unit.body = append(unit.body, blockLine{text: continuationIndent + change.render(s.present)})
+	tracked.resources.count(change)
+	tracked.body = append(tracked.body, blockLine{text: continuationIndent + change.render(s.present)})
 }
 
 func (s *Transcript) dnsRecords(ev *streamv1.RunEvent) {
@@ -262,7 +262,7 @@ func lineOf(ev *streamv1.RunEvent) line {
 	return line{level: ev.GetOperation().GetLevel(), phase: ev.GetOperation().GetPhase(), subject: ev.GetOperation().GetSubject(), message: ev.GetOperation().GetMessage()}
 }
 
-func (u *unitBlock) header(ended line, present Presentation) blockLine {
+func (u *spanBlock) header(ended line, present Presentation) blockLine {
 	ended.phase, ended.subject, ended.header = u.opened.GetOperation().GetPhase(), u.opened.GetOperation().GetSubject(), true
 	return blockLine{text: ended.render(present), from: ended}
 }
@@ -283,9 +283,9 @@ func (s *Transcript) Close() error {
 
 func (s *Transcript) printUnfinished() {
 	for _, span := range slices.Clone(s.spans.running) {
-		unit, _, _ := s.spans.close(span)
-		s.print(unit.header(line{level: progressv1.Level_LEVEL_WARN, message: unit.opened.GetOperation().GetMessage() + " did not finish"}, s.present))
-		s.print(unit.body...)
+		tracked, _, _ := s.spans.close(span)
+		s.print(tracked.header(line{level: progressv1.Level_LEVEL_WARN, message: tracked.opened.GetOperation().GetMessage() + " did not finish"}, s.present))
+		s.print(tracked.body...)
 	}
 }
 

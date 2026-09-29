@@ -93,7 +93,7 @@ func Run(ctx context.Context, dependencies Dependencies, cwd string, opts Option
 	return dependencies.WithProvider(ctx, cfg, "ocel cost scan", commands.OpenOptions{}, func(ctx context.Context, p commands.ProviderRun) error {
 		p.Check.End(nil)
 		run, provider := p.Run, p.Provider
-		pricing := run.Phase(progressv1.Phase_PHASE_PLAN).Unit(cfg.Slug, progress.Pricing.Title("what a deploy would provision"))
+		pricing := run.Phase(progressv1.Phase_PHASE_PLAN).Child(cfg.Slug, progress.Pricing.Title("what a deploy would provision"))
 		set, estimates, assumptions, err := price(ctx, dependencies, provider, cfg, env, overrides, pricing.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED))
 		pricing.End(err)
 		if err != nil {

@@ -27,9 +27,9 @@ func TestEverySpanARunOpensEndsExactlyOnceBeforeItsResultWhenTheRunFails(t *test
 	sink := &recording{}
 	run, _ := begin(t, sink)
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	check.Unit("fake", progress.Checking.Title("credentials")).End(nil)
+	check.Child("fake", progress.Checking.Title("credentials")).End(nil)
 	deploy := run.Phase(progressv1.Phase_PHASE_DEPLOY)
-	deploy.Unit("web", progress.Deploying.Title("web"))
+	deploy.Child("web", progress.Deploying.Title("web"))
 	check.End(nil)
 
 	err := errors.New("the upload was refused")
@@ -61,16 +61,16 @@ func TestEverySpanARunOpensEndsExactlyOnceBeforeItsResultWhenTheRunFails(t *test
 	}
 	web := got[len(got)-3]
 	if web.GetOperation().GetSubject() != "web" || web.GetOperation().GetLevel() != progressv1.Level_LEVEL_ERROR || web.GetOperation().GetMessage() != "the upload was refused" {
-		t.Fatalf("the open unit ended with level %s message %q, want the run's error", web.GetOperation().GetLevel(), web.GetOperation().GetMessage())
+		t.Fatalf("the open span ended with level %s message %q, want the run's error", web.GetOperation().GetLevel(), web.GetOperation().GetMessage())
 	}
 }
 
-func TestAUnitOpenedOnAnEndedSpanStillEndsOnceWhenTheRunEnds(t *testing.T) {
+func TestASpanOpenedOnAnEndedSpanStillEndsOnceWhenTheRunEnds(t *testing.T) {
 	sink := &recording{}
 	run, _ := begin(t, sink)
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
 	check.End(nil)
-	check.Unit("fake", progress.Checking.Title("credentials")).Say("still here")
+	check.Child("fake", progress.Checking.Title("credentials")).Say("still here")
 
 	var err error
 	run.End(&err)
@@ -83,7 +83,7 @@ func TestAUnitOpenedOnAnEndedSpanStillEndsOnceWhenTheRunEnds(t *testing.T) {
 		}
 	}
 	if ended != 1 {
-		t.Fatalf("the unit opened after its phase ended ended %d times before the result, want once", ended)
+		t.Fatalf("the span opened after its phase ended ended %d times before the result, want once", ended)
 	}
 }
 
@@ -208,15 +208,15 @@ func TestAnInterruptedRunWarnsOfPartlyCreatedResourcesOnlyOnceAPhaseThatChangesT
 			run.Phase(progressv1.Phase_PHASE_BUILD).Hold(&streamv1.WaitingEvent{})
 		}},
 		{name: "planning", work: func(run *run.Run) {
-			run.Phase(progressv1.Phase_PHASE_PLAN).Unit("shop", progress.Planning.Title("changes"))
+			run.Phase(progressv1.Phase_PHASE_PLAN).Child("shop", progress.Planning.Title("changes"))
 		}},
 		{name: "a phase the command opened to promote", detail: partly, work: func(run *run.Run) {
-			run.Phase(progressv1.Phase_PHASE_PROMOTE).Unit("shop", progress.Title{Started: "Promoting d-1", Ended: "Promoting d-1"})
+			run.Phase(progressv1.Phase_PHASE_PROMOTE).Child("shop", progress.Title{Started: "Promoting d-1", Ended: "Promoting d-1"})
 		}},
 		{name: "a phase the provider reported destroying in", detail: partly, work: func(run *run.Run) {
 			run.Phase(progressv1.Phase_PHASE_CHECK).Forward(&progressv1.OperationEvent{
 				Phase:  progressv1.Phase_PHASE_DESTROY,
-				SpanId: []byte("unit-env"),
+				SpanId: []byte("span-env"),
 				Body:   &progressv1.OperationEvent_Started{Started: &progressv1.Started{}},
 			})
 		}},
@@ -308,13 +308,13 @@ func TestAForwardedProviderEventReachesTheSinksAsARunEventWithItsEnvelope(t *tes
 		Phase:   progressv1.Phase_PHASE_PROVISION,
 		Subject: "web",
 		Message: "Provisioning web",
-		SpanId:  []byte("unit-web"),
+		SpanId:  []byte("span-web"),
 		Body:    &progressv1.OperationEvent_Started{Started: &progressv1.Started{ParentSpanId: []byte("phase-01")}},
 	})
 
 	ev := sink.received()[1]
 	if !ev.GetOperation().GetTime().AsTime().Equal(at) || ev.GetOperation().GetLevel() != progressv1.Level_LEVEL_WARN || ev.GetOperation().GetPhase() != progressv1.Phase_PHASE_PROVISION ||
-		ev.GetOperation().GetSubject() != "web" || ev.GetOperation().GetMessage() != "Provisioning web" || string(ev.GetOperation().GetSpanId()) != "unit-web" ||
+		ev.GetOperation().GetSubject() != "web" || ev.GetOperation().GetMessage() != "Provisioning web" || string(ev.GetOperation().GetSpanId()) != "span-web" ||
 		string(ev.GetOperation().GetStarted().GetParentSpanId()) != "phase-01" {
 		t.Fatalf("forwarded = time %s level %s phase %s subject %q message %q span %q parent %q, want the provider's envelope and body",
 			ev.GetOperation().GetTime().AsTime(), ev.GetOperation().GetLevel(), ev.GetOperation().GetPhase(), ev.GetOperation().GetSubject(), ev.GetOperation().GetMessage(), ev.GetOperation().GetSpanId(), ev.GetOperation().GetStarted().GetParentSpanId())
@@ -363,7 +363,7 @@ func TestAForwardedSpanThatEndsBeforeItStartedEndsWhenItArrives(t *testing.T) {
 
 	run.Phase(progressv1.Phase_PHASE_DEPLOY).Forward(&progressv1.OperationEvent{
 		Time:   timestamppb.New(started.Add(-time.Minute)),
-		SpanId: []byte("unit-web"),
+		SpanId: []byte("span-web"),
 		Body:   &progressv1.OperationEvent_Ended{Ended: &progressv1.Ended{StartTimeUnixNano: started.UnixNano()}},
 	})
 

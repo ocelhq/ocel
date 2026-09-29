@@ -76,7 +76,7 @@ func runDestroy(ctx context.Context, invocation commands.Invocation, cfg *projec
 	defer provider.Close()
 
 	planning := run.Phase(progressv1.Phase_PHASE_PLAN)
-	unit := planning.Unit(name, progress.Enumerating.Title(fmt.Sprintf("what removing the %s bootstrap would delete", name)))
+	span := planning.Child(name, progress.Enumerating.Title(fmt.Sprintf("what removing the %s bootstrap would delete", name)))
 	var plan *planv1.ChangePlan
 	err = provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		plan, err = client.PlanRemoveBootstrap(ctx, &contractv1.BootstrapScope{
@@ -85,7 +85,7 @@ func runDestroy(ctx context.Context, invocation commands.Invocation, cfg *projec
 		})
 		return err
 	})
-	unit.End(err)
+	span.End(err)
 	if err != nil {
 		return err
 	}

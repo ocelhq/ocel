@@ -20,7 +20,7 @@ import (
 
 type Log struct {
 	Shared io.Writer
-	Unit   func(app string) (log io.Writer, ended func(error))
+	AppLog func(app string) (log io.Writer, ended func(error))
 }
 
 func (l Log) shared() io.Writer {
@@ -31,10 +31,10 @@ func (l Log) shared() io.Writer {
 }
 
 func (l Log) App(name string) (io.Writer, func(error)) {
-	if l.Unit == nil {
+	if l.AppLog == nil {
 		return l.shared(), func(error) {}
 	}
-	return l.Unit(name)
+	return l.AppLog(name)
 }
 
 type Output struct {

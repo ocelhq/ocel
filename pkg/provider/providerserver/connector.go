@@ -53,8 +53,8 @@ func (h *handlers) InstallConnector(ctx context.Context, req *contractv1.Install
 	return streamResult(ctx, stream, func(sender *eventStream) (*progressv1.OperationEvent, error) {
 		sender.refusing(connect.CodeUnimplemented)
 		var at provider.ConnectorAddress
-		unit := UnitSpan(naming.UnitConnector, naming.UnitConnector, connectorInstallTitle(req), progressv1.Phase_PHASE_PROVISION)
-		err := inSpan(sender, unit, func(_ *eventStream, progress progress.Log) error {
+		root := RootSpan(naming.SpanConnector, naming.SpanConnector, connectorInstallTitle(req), progressv1.Phase_PHASE_PROVISION)
+		err := inSpan(sender, root, func(_ *eventStream, progress progress.Log) error {
 			at, err = connector.Install(ctx, provider.ConnectorInstall{
 				Binary:  req.GetBinary(),
 				Version: req.GetVersion(),
@@ -75,8 +75,8 @@ func (h *handlers) RemoveConnector(ctx context.Context, _ *contractv1.RemoveConn
 	if err != nil {
 		return err
 	}
-	unit := UnitSpan(naming.UnitConnector, naming.UnitConnector, progress.Removing.Title("the connector from this account"), progressv1.Phase_PHASE_DESTROY)
-	return streamed(ctx, stream, unit, func(sender *eventStream, progress progress.Log) error {
+	root := RootSpan(naming.SpanConnector, naming.SpanConnector, progress.Removing.Title("the connector from this account"), progressv1.Phase_PHASE_DESTROY)
+	return streamed(ctx, stream, root, func(sender *eventStream, progress progress.Log) error {
 		sender.refusing(connect.CodeUnimplemented)
 		return connector.Remove(ctx, progress)
 	})

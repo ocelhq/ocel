@@ -12,20 +12,20 @@ import (
 )
 
 type phaseTally struct {
-	since       time.Time
-	units, done int
-	overlapped  bool
+	since        time.Time
+	opened, done int
+	overlapped   bool
 }
 
 func (t *phaseTally) finished() string {
 	if !t.overlapped {
 		return ""
 	}
-	return fmt.Sprintf(" (%d/%d)", t.done, t.units)
+	return fmt.Sprintf(" (%d/%d)", t.done, t.opened)
 }
 
 type spanTree[U any] struct {
-	units   map[string]*U
+	tracked map[string]*U
 	opened  map[string]*streamv1.RunEvent
 	owners  map[string]string
 	running []string
@@ -34,7 +34,7 @@ type spanTree[U any] struct {
 
 func newSpanTree[U any]() spanTree[U] {
 	return spanTree[U]{
-		units:   make(map[string]*U),
+		tracked: make(map[string]*U),
 		opened:  make(map[string]*streamv1.RunEvent),
 		owners:  make(map[string]string),
 		tallies: make(map[progressv1.Phase]*phaseTally),
@@ -45,7 +45,7 @@ func (t *spanTree[U]) joins(ev *streamv1.RunEvent) bool {
 	return t.owners[spanKey(ev.GetOperation().GetStarted().GetParentSpanId())] != ""
 }
 
-func (t *spanTree[U]) open(span string, ev *streamv1.RunEvent, since time.Time, unit *U) {
+func (t *spanTree[U]) open(span string, ev *streamv1.RunEvent, since time.Time, state *U) {
 	if t.joins(ev) {
 		t.owners[span] = t.owners[spanKey(ev.GetOperation().GetStarted().GetParentSpanId())]
 		return
@@ -58,31 +58,31 @@ func (t *spanTree[U]) open(span string, ev *streamv1.RunEvent, since time.Time, 
 	if isPhaseSpan(ev) {
 		return
 	}
-	tally.overlapped = tally.overlapped || tally.units > tally.done
-	tally.units++
-	t.units[span] = unit
+	tally.overlapped = tally.overlapped || tally.opened > tally.done
+	tally.opened++
+	t.tracked[span] = state
 	t.opened[span] = ev
 	t.owners[span] = span
 	t.running = append(t.running, span)
 }
 
 func (t *spanTree[U]) close(span string) (*U, *streamv1.RunEvent, *phaseTally) {
-	unit, ok := t.units[span]
+	state, ok := t.tracked[span]
 	if !ok {
 		return nil, nil, nil
 	}
 	opened := t.opened[span]
 	tally := t.tallies[opened.GetOperation().GetPhase()]
 	tally.done++
-	delete(t.units, span)
+	delete(t.tracked, span)
 	delete(t.opened, span)
 	t.running = slices.DeleteFunc(t.running, func(id string) bool { return id == span })
 	maps.DeleteFunc(t.owners, func(_, owner string) bool { return owner == span })
-	return unit, opened, tally
+	return state, opened, tally
 }
 
 func (t *spanTree[U]) ownerOf(span string) *U {
-	return t.units[t.owners[span]]
+	return t.tracked[t.owners[span]]
 }
 
 func spanKey(id []byte) string {

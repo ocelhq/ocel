@@ -331,7 +331,7 @@ func TestLinkSelectsOrCreatesAConsoleProjectForThisDirectory(t *testing.T) {
 	})
 }
 
-func TestLinkingShowsEachConsoleWaitAsAUnitOnItsRunAndNothingElseWritesTheTerminal(t *testing.T) {
+func TestLinkingShowsEachConsoleWaitAsASpanOnItsRunAndNothingElseWritesTheTerminal(t *testing.T) {
 	t.Parallel()
 
 	dependencies := newTestDependencies()
@@ -349,19 +349,19 @@ func TestLinkingShowsEachConsoleWaitAsAUnitOnItsRunAndNothingElseWritesTheTermin
 	}
 
 	evs := runEvents(t, stdout.String())
-	var units []string
+	var spans []string
 	ended := map[string]bool{}
 	for _, ev := range evs {
 		switch {
 		case ev.GetOperation().GetStarted() != nil && ev.GetOperation().GetMessage() != "":
-			units = append(units, ev.GetOperation().GetSubject()+": "+ev.GetOperation().GetMessage())
+			spans = append(spans, ev.GetOperation().GetSubject()+": "+ev.GetOperation().GetMessage())
 		case ev.GetOperation().GetEnded() != nil:
 			ended[string(ev.GetOperation().GetSpanId())] = true
 		}
 	}
 	want := []string{"127.0.0.1: Loading your organizations", "acme-inc: Loading the projects in Acme Inc"}
-	if !slices.Equal(units, want) {
-		t.Fatalf("units = %q, want %q", units, want)
+	if !slices.Equal(spans, want) {
+		t.Fatalf("spans = %q, want %q", spans, want)
 	}
 	for _, ev := range evs {
 		if ev.GetOperation().GetStarted() != nil && !ended[string(ev.GetOperation().GetSpanId())] {

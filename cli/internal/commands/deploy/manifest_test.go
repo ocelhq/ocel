@@ -828,7 +828,7 @@ func TestAProjectWhoseAppsBuildNothingDeploysItsResourcesAlone(t *testing.T) {
 		t.Errorf("output = %q, want the infra-only note naming how many resources deploy", out)
 	}
 	if !strings.Contains(out, "INFO  [build] ✓ test-app: Collected the resources test-app declares in ") {
-		t.Errorf("output = %q, want the build unit to say it only collects what the project declares", out)
+		t.Errorf("output = %q, want the build span to say it only collects what the project declares", out)
 	}
 	if !strings.Contains(out, "Deployed") {
 		t.Errorf("output = %q, want resources to still deploy to success", out)
@@ -1033,7 +1033,7 @@ func buildScopes(t *testing.T, stream string) ([]*buildScope, []string) {
 	return scopes, phaseOutput
 }
 
-func TestEachAppBuildsAsAUnitOfItsOwnInTheBuildPhaseOnceTheDeclarationsAreCollected(t *testing.T) {
+func TestEachAppBuildsAsASpanOfItsOwnInTheBuildPhaseOnceTheDeclarationsAreCollected(t *testing.T) {
 	dependencies, fixture := twoAppProject(t)
 	dependencies.BuildApps = buildingEach("")
 
@@ -1053,14 +1053,14 @@ func TestEachAppBuildsAsAUnitOfItsOwnInTheBuildPhaseOnceTheDeclarationsAreCollec
 		"api: Building app api",
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
-		t.Fatalf("build units =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+		t.Fatalf("build spans =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 	for i, scope := range scopes {
 		if scope.status != progressv1.SpanStatus_SPAN_STATUS_OK {
 			t.Errorf("%s ended %s, want OK", scope.subject, scope.status)
 		}
 		if i > 0 && scopes[i-1].ended > scope.started {
-			t.Errorf("%s started before %s ended, want each unit to end before the next begins", scope.subject, scopes[i-1].subject)
+			t.Errorf("%s started before %s ended, want each span to end before the next begins", scope.subject, scopes[i-1].subject)
 		}
 	}
 	for _, scope := range scopes[1:] {
@@ -1073,7 +1073,7 @@ func TestEachAppBuildsAsAUnitOfItsOwnInTheBuildPhaseOnceTheDeclarationsAreCollec
 	}
 }
 
-func TestAnAppWhoseBuildFailsEndsItsOwnUnitInFailureAndTheDeployWithIt(t *testing.T) {
+func TestAnAppWhoseBuildFailsEndsItsOwnSpanInFailureAndTheDeployWithIt(t *testing.T) {
 	dependencies, fixture := twoAppProject(t)
 	dependencies.BuildApps = buildingEach("api")
 
@@ -1088,10 +1088,10 @@ func TestAnAppWhoseBuildFailsEndsItsOwnUnitInFailureAndTheDeployWithIt(t *testin
 		statuses[scope.subject] = scope.status
 	}
 	if statuses["web"] != progressv1.SpanStatus_SPAN_STATUS_OK || statuses["api"] != progressv1.SpanStatus_SPAN_STATUS_ERROR {
-		t.Errorf("unit statuses = %v, want web OK and api ERROR", statuses)
+		t.Errorf("span statuses = %v, want web OK and api ERROR", statuses)
 	}
 	if statuses[clitest.FixtureSlug] != progressv1.SpanStatus_SPAN_STATUS_OK {
-		t.Errorf("the collecting unit ended %s, want OK: it finished before any app built", statuses[clitest.FixtureSlug])
+		t.Errorf("the collecting span ended %s, want OK: it finished before any app built", statuses[clitest.FixtureSlug])
 	}
 }
 
@@ -1115,7 +1115,7 @@ func TestEachAppsBuildPrintsAsABlockOfItsOwnWhenThatAppFinishes(t *testing.T) {
 	}
 }
 
-func TestABuilderFailureOutsideEveryAppsBuildEndsAUnitOfItsOwnHoldingWhatTheBuilderSaid(t *testing.T) {
+func TestABuilderFailureOutsideEveryAppsBuildEndsASpanOfItsOwnHoldingWhatTheBuilderSaid(t *testing.T) {
 	dependencies, fixture := twoAppProject(t)
 	dependencies.BuildApps = func(_ context.Context, _ *project.Project, _ map[string]map[string]string, _ map[string]string, out build.Log) (build.Output, error) {
 		_, _ = io.WriteString(out.Shared, "Error: Cannot find module 'esbuild'\n")
@@ -1130,17 +1130,17 @@ func TestABuilderFailureOutsideEveryAppsBuildEndsAUnitOfItsOwnHoldingWhatTheBuil
 	scopes, phaseOutput := buildScopes(t, out)
 	last := scopes[len(scopes)-1]
 	if last.subject != clitest.FixtureSlug || last.message != "Building 2 apps (web and api)" || last.status != progressv1.SpanStatus_SPAN_STATUS_ERROR {
-		t.Fatalf("the last build unit = %s: %q ended %s, want %s: \"Building 2 apps (web and api)\" ended in error", last.subject, last.message, last.status, clitest.FixtureSlug)
+		t.Fatalf("the last build span = %s: %q ended %s, want %s: \"Building 2 apps (web and api)\" ended in error", last.subject, last.message, last.status, clitest.FixtureSlug)
 	}
 	if strings.Join(last.output, "\n") != "Error: Cannot find module 'esbuild'" {
-		t.Errorf("the failed unit's output = %q, want what the builder said", last.output)
+		t.Errorf("the failed span's output = %q, want what the builder said", last.output)
 	}
 	if len(phaseOutput) != 0 {
-		t.Errorf("build phase output = %q, want none: the builder's words belong to the unit that failed", phaseOutput)
+		t.Errorf("build phase output = %q, want none: the builder's words belong to the span that failed", phaseOutput)
 	}
 }
 
-func TestAnAppsOwnBuildFailureEndsNoSecondUnit(t *testing.T) {
+func TestAnAppsOwnBuildFailureEndsNoSecondSpan(t *testing.T) {
 	dependencies, fixture := twoAppProject(t)
 	dependencies.BuildApps = buildingEach("web")
 
@@ -1156,14 +1156,14 @@ func TestAnAppsOwnBuildFailureEndsNoSecondUnit(t *testing.T) {
 	}
 	want := []string{clitest.FixtureSlug + " SPAN_STATUS_OK", "web SPAN_STATUS_ERROR"}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
-		t.Errorf("build units = %q, want %q: web's unit already reports the failure", got, want)
+		t.Errorf("build spans = %q, want %q: web's span already reports the failure", got, want)
 	}
 	if strings.Join(phaseOutput, "\n") != "the builder started" {
 		t.Errorf("build phase output = %q, want what the builder said before web's build", phaseOutput)
 	}
 }
 
-func TestAFailureAssemblingTheManifestAfterTheBuildsEndsAUnitOfItsOwn(t *testing.T) {
+func TestAFailureAssemblingTheManifestAfterTheBuildsEndsASpanOfItsOwn(t *testing.T) {
 	dependencies, fixture := twoAppProject(t)
 	dependencies.BuildApps = buildingEach("")
 	dependencies.DeploymentID = func(string, string) (string, error) {
@@ -1178,7 +1178,7 @@ func TestAFailureAssemblingTheManifestAfterTheBuildsEndsAUnitOfItsOwn(t *testing
 	scopes, _ := buildScopes(t, out)
 	last := scopes[len(scopes)-1]
 	if last.subject != clitest.FixtureSlug || last.message != "Assembling the deploy manifest of "+clitest.FixtureSlug || last.status != progressv1.SpanStatus_SPAN_STATUS_ERROR {
-		t.Errorf("the last build unit = %s: %q ended %s, want the manifest's unit ended in error", last.subject, last.message, last.status)
+		t.Errorf("the last build span = %s: %q ended %s, want the manifest's span ended in error", last.subject, last.message, last.status)
 	}
 }
 

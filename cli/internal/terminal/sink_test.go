@@ -76,19 +76,19 @@ func TestProviderProcessOutputShowsOnlyWhenVerbose(t *testing.T) {
 	}
 }
 
-func TestAUnitRepaintingOneLineShowsOnlyTheDraftItLeft(t *testing.T) {
+func TestASpanRepaintingOneLineShowsOnlyTheDraftItLeft(t *testing.T) {
 	t.Parallel()
 	run, out, _ := groupedRun(t, Presentation{})
 
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	unit := build.Unit("shop", progress.Building.Title("project"))
-	w := unit.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED)
+	tracked := build.Child("shop", progress.Building.Title("project"))
+	w := tracked.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED)
 	for i := 1; i <= 500; i++ {
 		if _, err := fmt.Fprintf(w, "\rProgress: resolved %d", i); err != nil {
 			t.Fatalf("Write() = %v", err)
 		}
 	}
-	unit.End(nil)
+	tracked.End(nil)
 	build.End(nil)
 
 	got := out.String()
@@ -143,19 +143,19 @@ func TestAnEndedScopeWithoutAUsableEndRunsUntilItReachedTheBus(t *testing.T) {
 			}})
 
 			if want := "INFO  [deploy] ✓ web: deploying web in 2m00s\n"; out.String() != want {
-				t.Errorf("stdout = %q, want %q: the unit ran for the 2m until its end reached the bus", out.String(), want)
+				t.Errorf("stdout = %q, want %q: the span ran for the 2m until its end reached the bus", out.String(), want)
 			}
 		})
 	}
 }
 
-func TestAUnitsOutputKeepsItsRightHandWhitespace(t *testing.T) {
+func TestASpansOutputKeepsItsRightHandWhitespace(t *testing.T) {
 	t.Parallel()
 	run, out, _ := groupedRun(t, Presentation{})
 
 	const padded = "Route (app)                     Size     First Load JS   "
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	web := build.Unit("web", progress.Building.Title("web"))
+	web := build.Child("web", progress.Building.Title("web"))
 	output(t, web, padded)
 	web.End(nil)
 

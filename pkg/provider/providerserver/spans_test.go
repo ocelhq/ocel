@@ -127,7 +127,7 @@ func TestEverySpanADeployOpensIsEndedExactlyOnce(t *testing.T) {
 	}
 }
 
-func TestAUnitStartsWhenItRunsNotWhenTheDeployBegins(t *testing.T) {
+func TestASpanStartsWhenItRunsNotWhenTheDeployBegins(t *testing.T) {
 	builtProject(t)
 	client, _ := deployServed(t)
 
@@ -136,21 +136,21 @@ func TestAUnitStartsWhenItRunsNotWhenTheDeployBegins(t *testing.T) {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	units := map[string]string{}
+	roots := map[string]string{}
 	var sequence []string
 	for _, event := range events {
 		if started := event.GetStarted(); started != nil && len(started.GetParentSpanId()) == 0 {
-			units[string(event.GetSpanId())] = event.GetMessage()
+			roots[string(event.GetSpanId())] = event.GetMessage()
 			sequence = append(sequence, "started "+event.GetMessage())
 		}
-		if unit, ok := units[string(event.GetSpanId())]; ok && event.GetEnded() != nil {
-			sequence = append(sequence, "ended "+unit)
+		if root, ok := roots[string(event.GetSpanId())]; ok && event.GetEnded() != nil {
+			sequence = append(sequence, "ended "+root)
 		}
 	}
 	hostnamesEnded := slices.IndexFunc(sequence, func(step string) bool { return strings.HasPrefix(step, "ended Attaching") })
 	promotionStarted := slices.IndexFunc(sequence, func(step string) bool { return strings.HasPrefix(step, "started Switching traffic") })
 	if hostnamesEnded < 0 || promotionStarted < hostnamesEnded {
-		t.Errorf("units ran as %v, want Promotion started only after Hostnames ended: a started event says the unit is running", sequence)
+		t.Errorf("spans ran as %v, want Promotion started only after Hostnames ended: a started event says the span is running", sequence)
 	}
 }
 
@@ -177,7 +177,7 @@ func TestEverySpanADeployOpensStartsAndEndsInTheSamePhase(t *testing.T) {
 	}
 }
 
-func unitPhases(events []*progressv1.OperationEvent, title string) []progressv1.Phase {
+func spanPhases(events []*progressv1.OperationEvent, title string) []progressv1.Phase {
 	var phases []progressv1.Phase
 	for _, span := range startedSpans(events) {
 		if span.parent == "" && strings.HasPrefix(span.title, title) {
@@ -195,13 +195,13 @@ func TestADeploysPromotionRunsInThePromotePhase(t *testing.T) {
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
-	got := unitPhases(events, "Switching traffic")
+	got := spanPhases(events, "Switching traffic")
 	if len(got) != 1 || got[0] != progressv1.Phase_PHASE_PROMOTE {
-		t.Errorf("the Promotion unit runs in %v, want the promote phase", got)
+		t.Errorf("the Promotion span runs in %v, want the promote phase", got)
 	}
 }
 
-func TestAnAppUnitsEventsNameTheAppAsSubjectInTheDeployPhase(t *testing.T) {
+func TestAnAppSpansEventsNameTheAppAsSubjectInTheDeployPhase(t *testing.T) {
 	builtProject(t)
 	client, _ := deployServed(t)
 
@@ -209,8 +209,8 @@ func TestAnAppUnitsEventsNameTheAppAsSubjectInTheDeployPhase(t *testing.T) {
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
-	if got := unitPhases(events, "Deploying the serverless app"); len(got) != 1 || got[0] != progressv1.Phase_PHASE_DEPLOY {
-		t.Errorf("the web unit runs in %v, want the deploy phase", got)
+	if got := spanPhases(events, "Deploying the serverless app"); len(got) != 1 || got[0] != progressv1.Phase_PHASE_DEPLOY {
+		t.Errorf("the web span runs in %v, want the deploy phase", got)
 	}
 
 	app := map[string]bool{}
@@ -226,15 +226,15 @@ func TestAnAppUnitsEventsNameTheAppAsSubjectInTheDeployPhase(t *testing.T) {
 		}
 		scoped++
 		if event.GetSubject() != "web" || event.GetPhase() != progressv1.Phase_PHASE_DEPLOY {
-			t.Errorf("an event of the web unit is scoped %q in %v, want \"web\" in the deploy phase", event.GetSubject(), event.GetPhase())
+			t.Errorf("an event of the web span is scoped %q in %v, want \"web\" in the deploy phase", event.GetSubject(), event.GetPhase())
 		}
 	}
 	if scoped == 0 {
-		t.Fatal("no event names the web unit's span, want its progress and spans scoped to it")
+		t.Fatal("no event names the web span's span, want its progress and spans scoped to it")
 	}
 }
 
-func TestTheEdgeUnitsEventsNameTheEdgeKindAsSubject(t *testing.T) {
+func TestTheEdgeSpansEventsNameTheEdgeKindAsSubject(t *testing.T) {
 	builtProject(t)
 	client, _ := deployServed(t)
 
@@ -243,24 +243,24 @@ func TestTheEdgeUnitsEventsNameTheEdgeKindAsSubject(t *testing.T) {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	unit := map[string]bool{}
+	root := map[string]bool{}
 	for _, span := range startedSpans(events) {
-		if strings.HasPrefix(span.title, "Reconciling the routes") || unit[span.parent] {
-			unit[span.id] = true
+		if strings.HasPrefix(span.title, "Reconciling the routes") || root[span.parent] {
+			root[span.id] = true
 		}
 	}
 	var scoped int
 	for _, event := range events {
-		if !unit[string(event.GetSpanId())] {
+		if !root[string(event.GetSpanId())] {
 			continue
 		}
 		scoped++
 		if event.GetSubject() != string(fake.KindRelay) {
-			t.Errorf("an event of the Edge unit names %q, want the edge it deploys, %q", event.GetSubject(), fake.KindRelay)
+			t.Errorf("an event of the Edge span names %q, want the edge it deploys, %q", event.GetSubject(), fake.KindRelay)
 		}
 	}
 	if scoped == 0 {
-		t.Fatal("no event names the Edge unit's span, want its progress and spans scoped to it")
+		t.Fatal("no event names the Edge span's span, want its progress and spans scoped to it")
 	}
 }
 
@@ -276,7 +276,7 @@ func TestARemovalRunsInTheDestroyPhase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RemoveEnvironment() error = %v", err)
 	}
-	got := unitPhases(recorded(stream), "Removing the preview environment")
+	got := spanPhases(recorded(stream), "Removing the preview environment")
 	if len(got) != 1 || got[0] != progressv1.Phase_PHASE_DESTROY {
 		t.Errorf("the removal runs in %v, want the destroy phase", got)
 	}

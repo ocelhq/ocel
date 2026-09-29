@@ -17,11 +17,11 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
-func TestAUnitsEventsCarryItsPhaseSubjectAndSpanAndItsParentIsThePhaseSpan(t *testing.T) {
+func TestASpansEventsCarryItsPhaseSubjectAndSpanAndItsParentIsThePhaseSpan(t *testing.T) {
 	sink := &recording{}
 	run, _ := begin(t, sink)
 
-	web := run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", progress.Building.Title("web"))
+	web := run.Phase(progressv1.Phase_PHASE_BUILD).Child("web", progress.Building.Title("web"))
 	web.Say("Bundling")
 	web.Debug("esbuild 0.25")
 	web.Error("the bundle is too large")
@@ -30,35 +30,35 @@ func TestAUnitsEventsCarryItsPhaseSubjectAndSpanAndItsParentIsThePhaseSpan(t *te
 	if len(got) != 5 {
 		t.Fatalf("got %d events, want 5", len(got))
 	}
-	phase, unit := got[0], got[1]
-	if !bytes.Equal(unit.GetOperation().GetStarted().GetParentSpanId(), phase.GetOperation().GetSpanId()) || len(phase.GetOperation().GetSpanId()) != 8 {
-		t.Fatalf("unit parent = %x, want the phase span %x", unit.GetOperation().GetStarted().GetParentSpanId(), phase.GetOperation().GetSpanId())
+	phase, child := got[0], got[1]
+	if !bytes.Equal(child.GetOperation().GetStarted().GetParentSpanId(), phase.GetOperation().GetSpanId()) || len(phase.GetOperation().GetSpanId()) != 8 {
+		t.Fatalf("span parent = %x, want the phase span %x", child.GetOperation().GetStarted().GetParentSpanId(), phase.GetOperation().GetSpanId())
 	}
-	if unit.GetOperation().GetMessage() != "Building web" {
-		t.Fatalf("unit started message = %q, want %q", unit.GetOperation().GetMessage(), "Building web")
+	if child.GetOperation().GetMessage() != "Building web" {
+		t.Fatalf("span started message = %q, want %q", child.GetOperation().GetMessage(), "Building web")
 	}
 	levels := []progressv1.Level{progressv1.Level_LEVEL_INFO, progressv1.Level_LEVEL_DEBUG, progressv1.Level_LEVEL_ERROR}
 	for i, ev := range got[1:] {
-		if ev.GetOperation().GetPhase() != progressv1.Phase_PHASE_BUILD || ev.GetOperation().GetSubject() != "web" || !bytes.Equal(ev.GetOperation().GetSpanId(), unit.GetOperation().GetSpanId()) {
-			t.Fatalf("event %d = phase %s subject %q span %x, want the build phase, web and the unit's span %x",
-				i+1, ev.GetOperation().GetPhase(), ev.GetOperation().GetSubject(), ev.GetOperation().GetSpanId(), unit.GetOperation().GetSpanId())
+		if ev.GetOperation().GetPhase() != progressv1.Phase_PHASE_BUILD || ev.GetOperation().GetSubject() != "web" || !bytes.Equal(ev.GetOperation().GetSpanId(), child.GetOperation().GetSpanId()) {
+			t.Fatalf("event %d = phase %s subject %q span %x, want the build phase, web and the span's span %x",
+				i+1, ev.GetOperation().GetPhase(), ev.GetOperation().GetSubject(), ev.GetOperation().GetSpanId(), child.GetOperation().GetSpanId())
 		}
 		if i > 0 && ev.GetOperation().GetLevel() != levels[i-1] {
 			t.Fatalf("event %d level = %s, want %s", i+1, ev.GetOperation().GetLevel(), levels[i-1])
 		}
 	}
-	if bytes.Equal(unit.GetOperation().GetSpanId(), phase.GetOperation().GetSpanId()) {
-		t.Fatal("the unit shares its phase's span id")
+	if bytes.Equal(child.GetOperation().GetSpanId(), phase.GetOperation().GetSpanId()) {
+		t.Fatal("the span shares its phase's span id")
 	}
 }
 
-func TestAUnitThatSucceedsEndsTitledWithWhatItDidAndOneThatFailsWithNoTitle(t *testing.T) {
+func TestASpanThatSucceedsEndsTitledWithWhatItDidAndOneThatFailsWithNoTitle(t *testing.T) {
 	sink := &recording{}
 	run, _ := begin(t, sink)
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
 
-	build.Unit("web", progress.Building.Title("web")).End(nil)
-	build.Unit("api", progress.Building.Title("api")).End(errors.New("the bundle is too large"))
+	build.Child("web", progress.Building.Title("web")).End(nil)
+	build.Child("api", progress.Building.Title("api")).End(errors.New("the bundle is too large"))
 
 	var titles []string
 	for _, ev := range sink.received() {
@@ -74,7 +74,7 @@ func TestAUnitThatSucceedsEndsTitledWithWhatItDidAndOneThatFailsWithNoTitle(t *t
 func TestEndReportsTheErrorOnTheEndedEventAndTheDurationFromItsStart(t *testing.T) {
 	sink := &recording{}
 	run, clock := begin(t, sink)
-	web := run.Phase(progressv1.Phase_PHASE_DEPLOY).Unit("web", progress.Deploying.Title("web"))
+	web := run.Phase(progressv1.Phase_PHASE_DEPLOY).Child("web", progress.Deploying.Title("web"))
 	started := clock.read()
 
 	clock.advance(3 * time.Second)
@@ -88,7 +88,7 @@ func TestEndReportsTheErrorOnTheEndedEventAndTheDurationFromItsStart(t *testing.
 		t.Fatalf("ended message = %q, want the error", ended.GetOperation().GetMessage())
 	}
 	if !bytes.Equal(ended.GetOperation().GetSpanId(), sink.received()[1].GetOperation().GetSpanId()) || ended.GetOperation().GetSubject() != "web" {
-		t.Fatalf("ended span %x subject %q, want the unit's", ended.GetOperation().GetSpanId(), ended.GetOperation().GetSubject())
+		t.Fatalf("ended span %x subject %q, want the span's", ended.GetOperation().GetSpanId(), ended.GetOperation().GetSubject())
 	}
 	took := ended.GetOperation().GetTime().AsTime().Sub(time.Unix(0, ended.GetOperation().GetEnded().GetStartTimeUnixNano()))
 	if !started.Equal(time.Unix(0, ended.GetOperation().GetEnded().GetStartTimeUnixNano())) || took != 3*time.Second {
@@ -96,40 +96,40 @@ func TestEndReportsTheErrorOnTheEndedEventAndTheDurationFromItsStart(t *testing.
 	}
 }
 
-func TestAReservedUnitAnnouncesNothingUntilOpenedAndThenStartsWhenItWasReserved(t *testing.T) {
+func TestAReservedSpanAnnouncesNothingUntilOpenedAndThenStartsWhenItWasReserved(t *testing.T) {
 	sink := &recording{}
 	run, clock := begin(t, sink)
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	reserved := build.ReserveUnit("shop", progress.Building.Title("2 apps (web and api)"))
+	reserved := build.ReserveChild("shop", progress.Building.Title("2 apps (web and api)"))
 	reservedAt := clock.read()
 	before := len(sink.received())
 
 	clock.advance(4 * time.Second)
 	if got := len(sink.received()); got != before {
-		t.Fatalf("reserving a unit sent %d events, want none", got-before)
+		t.Fatalf("reserving a span sent %d events, want none", got-before)
 	}
-	unit := reserved.Open()
-	unit.End(errors.New("node not found on PATH"))
+	child := reserved.Open()
+	child.End(errors.New("node not found on PATH"))
 
 	got := sink.received()[before:]
 	if len(got) != 2 {
-		t.Fatalf("opening and ending the unit sent %d events, want 2", len(got))
+		t.Fatalf("opening and ending the span sent %d events, want 2", len(got))
 	}
 	if got[0].GetOperation().GetMessage() != "Building 2 apps (web and api)" || got[0].GetOperation().GetSubject() != "shop" {
-		t.Fatalf("the unit opened as %s: %q, want shop: %q", got[0].GetOperation().GetSubject(), got[0].GetOperation().GetMessage(), "Building 2 apps (web and api)")
+		t.Fatalf("the span opened as %s: %q, want shop: %q", got[0].GetOperation().GetSubject(), got[0].GetOperation().GetMessage(), "Building 2 apps (web and api)")
 	}
 	if !got[0].GetOperation().GetTime().AsTime().Equal(reservedAt) || got[1].GetOperation().GetEnded().GetStartTimeUnixNano() != reservedAt.UnixNano() {
-		t.Errorf("the unit started at %s, want %s: when it was reserved", got[0].GetOperation().GetTime().AsTime(), reservedAt)
+		t.Errorf("the span started at %s, want %s: when it was reserved", got[0].GetOperation().GetTime().AsTime(), reservedAt)
 	}
 	if took := got[1].GetOperation().GetTime().AsTime().Sub(reservedAt); took != 4*time.Second {
-		t.Errorf("the unit took %s, want 4s", took)
+		t.Errorf("the span took %s, want 4s", took)
 	}
 }
 
 func TestASpanThatSucceedsEndsOnceWithAnOKStatus(t *testing.T) {
 	sink := &recording{}
 	run, _ := begin(t, sink)
-	web := run.Phase(progressv1.Phase_PHASE_DEPLOY).Unit("web", progress.Deploying.Title("web"))
+	web := run.Phase(progressv1.Phase_PHASE_DEPLOY).Child("web", progress.Deploying.Title("web"))
 
 	web.End(nil)
 	web.End(errors.New("too late"))
@@ -148,7 +148,7 @@ func TestASpanEndedByAnInterruptIsAWarningNotAnError(t *testing.T) {
 	sink := &recording{}
 	ctx, cancel := context.WithCancel(context.Background())
 	run, _ := beginIn(t, ctx, sink)
-	web := run.Phase(progressv1.Phase_PHASE_DEPLOY).Unit("web", progress.Deploying.Title("web"))
+	web := run.Phase(progressv1.Phase_PHASE_DEPLOY).Child("web", progress.Deploying.Title("web"))
 
 	cancel()
 	web.End(context.Canceled)
@@ -333,19 +333,19 @@ func TestIdentityReachesTheSinksInItsSpansPhase(t *testing.T) {
 	}
 }
 
-func TestEndingAPhaseEndsItsOpenUnitsFirstWithTheSameError(t *testing.T) {
+func TestEndingAPhaseEndsItsOpenSpansFirstWithTheSameError(t *testing.T) {
 	sink := &recording{}
 	run, _ := begin(t, sink)
 	deploy := run.Phase(progressv1.Phase_PHASE_DEPLOY)
-	deploy.Unit("web", progress.Deploying.Title("web")).Unit("web", progress.Title{Started: "Uploading web", Ended: "Uploading web"})
-	deploy.Unit("api", progress.Deploying.Title("api")).End(nil)
+	deploy.Child("web", progress.Deploying.Title("web")).Child("web", progress.Title{Started: "Uploading web", Ended: "Uploading web"})
+	deploy.Child("api", progress.Deploying.Title("api")).End(nil)
 
 	deploy.End(errors.New("the stack is locked"))
 
 	opened, got := sink.received()[:5], sink.received()[5:]
 	want := [][]byte{opened[2].GetOperation().GetSpanId(), opened[1].GetOperation().GetSpanId(), opened[0].GetOperation().GetSpanId()}
 	if len(got) != len(want) {
-		t.Fatalf("got %v after the api unit ended, want three ended events", bodies(got))
+		t.Fatalf("got %v after the api span ended, want three ended events", bodies(got))
 	}
 	for i, ev := range got {
 		if !bytes.Equal(ev.GetOperation().GetSpanId(), want[i]) || ev.GetOperation().GetEnded() == nil || ev.GetOperation().GetMessage() != "the stack is locked" {

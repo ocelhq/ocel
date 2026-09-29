@@ -17,7 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-type appUnits struct {
+type appSpans struct {
 	mu     sync.Mutex
 	shared strings.Builder
 	opened []string
@@ -36,10 +36,10 @@ func (l lockedWriter) Write(p []byte) (int, error) {
 	return l.w.Write(p)
 }
 
-func (u *appUnits) output() Log {
+func (u *appSpans) output() Log {
 	return Log{
 		Shared: lockedWriter{&u.mu, &u.shared},
-		Unit: func(name string) (io.Writer, func(error)) {
+		AppLog: func(name string) (io.Writer, func(error)) {
 			u.mu.Lock()
 			defer u.mu.Unlock()
 			if u.logs == nil {
@@ -52,7 +52,7 @@ func (u *appUnits) output() Log {
 				u.mu.Lock()
 				defer u.mu.Unlock()
 				if _, twice := u.ended[name]; twice {
-					panic("unit " + name + " ended twice")
+					panic("span " + name + " ended twice")
 				}
 				u.ended[name] = err
 			}
@@ -60,7 +60,7 @@ func (u *appUnits) output() Log {
 	}
 }
 
-func (u *appUnits) log(name string) string {
+func (u *appSpans) log(name string) string {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	if log, ok := u.logs[name]; ok {
@@ -88,7 +88,7 @@ const req = JSON.parse(require("fs").readFileSync(0, "utf8"));
 	}
 }
 
-func TestEachJavaScriptAppsBuildOutputReachesTheUnitOpenedForThatApp(t *testing.T) {
+func TestEachJavaScriptAppsBuildOutputReachesTheSpanOpenedForThatApp(t *testing.T) {
 	t.Parallel()
 	cfg := nodeBuilder(t, `
 console.log("before any app");
@@ -100,29 +100,29 @@ for (const app of req.apps) {
 }
 `)
 
-	var units appUnits
-	if err := (nodeOnly{node: runNode}).Build(context.Background(), cfg, nil, units.output()); err != nil {
+	var spans appSpans
+	if err := (nodeOnly{node: runNode}).Build(context.Background(), cfg, nil, spans.output()); err != nil {
 		t.Fatalf("Build: %v", err)
 	}
 
-	if got := strings.Join(units.opened, ","); got != "web,api" {
-		t.Errorf("units opened = %s, want web then api", got)
+	if got := strings.Join(spans.opened, ","); got != "web,api" {
+		t.Errorf("spans opened = %s, want web then api", got)
 	}
 	for _, app := range []string{"web", "api"} {
 		want := "compiling " + app + "\na warning while building " + app + "\n"
-		if got := strings.TrimLeft(units.log(app), "\n"); !strings.HasPrefix(got, want) {
-			t.Errorf("%s's log = %q, want its own stdout and stderr lines %q", app, units.log(app), want)
+		if got := strings.TrimLeft(spans.log(app), "\n"); !strings.HasPrefix(got, want) {
+			t.Errorf("%s's log = %q, want its own stdout and stderr lines %q", app, spans.log(app), want)
 		}
-		if err, ok := units.ended[app]; !ok || err != nil {
+		if err, ok := spans.ended[app]; !ok || err != nil {
 			t.Errorf("%s ended = %v (ended %t), want it ended without error", app, err, ok)
 		}
 	}
-	if got := units.shared.String(); !strings.Contains(got, "before any app") || strings.Contains(got, "compiling") {
+	if got := spans.shared.String(); !strings.Contains(got, "before any app") || strings.Contains(got, "compiling") {
 		t.Errorf("shared output = %q, want only what no app's build said", got)
 	}
 }
 
-func TestAJavaScriptAppWhoseBuildFailsEndsItsUnitWithTheFailureTheBuilderReported(t *testing.T) {
+func TestAJavaScriptAppWhoseBuildFailsEndsItsSpanWithTheFailureTheBuilderReported(t *testing.T) {
 	t.Parallel()
 	cfg := nodeBuilder(t, `
 const app = req.apps[0].name;
@@ -133,52 +133,52 @@ emit({type: "span_end", id: "1", ok: false});
 process.exitCode = 1;
 `)
 
-	var units appUnits
-	if err := (nodeOnly{node: runNode}).Build(context.Background(), cfg, nil, units.output()); err == nil {
+	var spans appSpans
+	if err := (nodeOnly{node: runNode}).Build(context.Background(), cfg, nil, spans.output()); err == nil {
 		t.Fatal("Build succeeded, want the builder's failure")
 	}
-	err, ok := units.ended["web"]
+	err, ok := spans.ended["web"]
 	if !ok || err == nil || err.Error() != "Error: no entrypoint resolved" {
 		t.Errorf("web ended with %v (ended %t), want the first line of the error the builder reported", err, ok)
 	}
-	if _, opened := units.ended["api"]; opened {
-		t.Error("api's unit ended, want it never opened: the builder stopped at web")
+	if _, opened := spans.ended["api"]; opened {
+		t.Error("api's span ended, want it never opened: the builder stopped at web")
 	}
 }
 
-func TestAJavaScriptAppsUnitStillEndsWhenTheBuilderDiesMidBuild(t *testing.T) {
+func TestAJavaScriptAppsSpanStillEndsWhenTheBuilderDiesMidBuild(t *testing.T) {
 	t.Parallel()
 	cfg := nodeBuilder(t, `
 emit({type: "span_start", id: "1", stage: "build", app: "web"});
 process.exit(9);
 `)
 
-	var units appUnits
-	if err := (nodeOnly{node: runNode}).Build(context.Background(), cfg, nil, units.output()); err == nil {
+	var spans appSpans
+	if err := (nodeOnly{node: runNode}).Build(context.Background(), cfg, nil, spans.output()); err == nil {
 		t.Fatal("Build succeeded, want the builder's exit")
 	}
-	if err, ok := units.ended["web"]; !ok || err == nil {
+	if err, ok := spans.ended["web"]; !ok || err == nil {
 		t.Errorf("web ended with %v (ended %t), want it ended in failure", err, ok)
 	}
 }
 
-func TestAJavaScriptAppsUnitEndsInFailureWhenTheBuilderExitsCleanlyMidBuild(t *testing.T) {
+func TestAJavaScriptAppsSpanEndsInFailureWhenTheBuilderExitsCleanlyMidBuild(t *testing.T) {
 	t.Parallel()
 	cfg := nodeBuilder(t, `
 emit({type: "span_start", id: "1", stage: "build", app: "web"});
 process.exit(0);
 `)
 
-	var units appUnits
-	if err := (nodeOnly{node: runNode}).Build(context.Background(), cfg, nil, units.output()); err == nil {
+	var spans appSpans
+	if err := (nodeOnly{node: runNode}).Build(context.Background(), cfg, nil, spans.output()); err == nil {
 		t.Fatal("Build succeeded, want it failed: web's build never ended")
 	}
-	if err, ok := units.ended["web"]; !ok || err == nil {
+	if err, ok := spans.ended["web"]; !ok || err == nil {
 		t.Errorf("web ended with %v (ended %t), want it ended in failure", err, ok)
 	}
 }
 
-func TestAGoAppCompiledHereBuildsInAUnitOfItsOwnThatEndsWithItsCompileError(t *testing.T) {
+func TestAGoAppCompiledHereBuildsInASpanOfItsOwnThatEndsWithItsCompileError(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -192,15 +192,15 @@ func TestAGoAppCompiledHereBuildsInAUnitOfItsOwnThatEndsWithItsCompileError(t *t
 		Apps: []project.App{{Name: "api", Path: "apps/api", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: "go"}}},
 	}
 
-	var units appUnits
-	err := nodeOnly{node: func(context.Context, string, []byte, Log) error { return nil }}.Build(context.Background(), cfg, nil, units.output())
+	var spans appSpans
+	err := nodeOnly{node: func(context.Context, string, []byte, Log) error { return nil }}.Build(context.Background(), cfg, nil, spans.output())
 	if err == nil {
 		t.Fatal("Build succeeded, want the compile error")
 	}
-	if got := strings.Join(units.opened, ","); got != "api" {
-		t.Errorf("units opened = %s, want api's alone", got)
+	if got := strings.Join(spans.opened, ","); got != "api" {
+		t.Errorf("spans opened = %s, want api's alone", got)
 	}
-	if ended, ok := units.ended["api"]; !ok || ended == nil || ended.Error() != err.Error() {
+	if ended, ok := spans.ended["api"]; !ok || ended == nil || ended.Error() != err.Error() {
 		t.Errorf("api ended with %v (ended %t), want the compile error %q", ended, ok, err)
 	}
 }
