@@ -32,8 +32,19 @@ func runCost(t *testing.T, suite Suite) {
 	t.Cleanup(server.Close)
 
 	providerClient := client(server.Client(), server.URL)
-	if _, err := providerClient.Configure(context.Background(), configureWith(t, suite.Options)); err != nil {
+	configured, err := providerClient.Configure(context.Background(), configureWith(t, suite.Options))
+	if err != nil {
 		t.Fatalf("Configure() error = %v, want the session configured", err)
+	}
+	if !configured.GetFacts().GetPricesDeploys() {
+		_, err := providerClient.Shape(context.Background(), &contractv1.ShapeRequest{
+			Manifest:    CostManifest(),
+			Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
+		})
+		if connect.CodeOf(err) != connect.CodeUnimplemented {
+			t.Fatalf("Shape() error = %v from a provider that says it prices no deploy, want Unimplemented", err)
+		}
+		t.Skip("this provider prices no deploy, and says so")
 	}
 	vendor := ""
 	if suite.New != nil {
@@ -74,9 +85,6 @@ func RunCost(t *testing.T, client contractv1connect.ProviderServiceClient, rates
 		Manifest:    CostManifest(),
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
 	})
-	if connect.CodeOf(err) == connect.CodeUnimplemented {
-		t.Skip("this provider describes no resources to price, and says so")
-	}
 	if err != nil {
 		t.Fatalf("Shape() error = %v, want the resources a deploy would create", err)
 	}

@@ -7,8 +7,6 @@ import (
 	"slices"
 	"strings"
 
-	"connectrpc.com/connect"
-
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
@@ -120,9 +118,6 @@ func Offers(ctx context.Context, prov *providerclient.Provider, tier environment
 		return err
 	})
 	if err != nil {
-		if connect.CodeOf(err) == connect.CodeUnimplemented {
-			return false, nil
-		}
 		return false, err
 	}
 	return slices.ContainsFunc(described.GetFeatures(), func(f *contractv1.Feature) bool {

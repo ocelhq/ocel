@@ -14,7 +14,10 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/declaration"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -226,6 +229,27 @@ func lineNaming(out, name string) string {
 		}
 	}
 	return ""
+}
+
+func TestAScanAgainstAProviderThatPricesNothingSaysSoBeforeScanning(t *testing.T) {
+	root, p, deps := scanFixture(t)
+	p.WithHooks(func(hooks *provider.Hooks) { hooks.Cost = nil })
+	scanned := false
+	collect := deps.CollectDeclarations
+	deps.CollectDeclarations = func(ctx context.Context, cfg *project.Project, declarations *variables.Declarations, stdout, stderr io.Writer) ([]declaration.Resource, error) {
+		scanned = true
+		return collect(ctx, cfg, declarations, stdout, stderr)
+	}
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(deps, &stderr)
+	err := Run(context.Background(), deps, root, Options{}, &stdout)
+	if err == nil || !strings.Contains(stderr.String(), "fake does not price a deploy") {
+		t.Fatalf("Run err = %v, want it to say the provider does not price a deploy\n%s", err, stderr.String())
+	}
+	if scanned {
+		t.Error("the scan read the project before learning that nothing would price it")
+	}
 }
 
 func TestAScanStartsTheProviderInTheCheckPhaseOfItsRunAndPrintsItsEstimateAloneOnStdout(t *testing.T) {

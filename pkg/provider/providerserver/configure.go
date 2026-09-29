@@ -17,5 +17,13 @@ func (h *handlers) Configure(ctx context.Context, req *contractv1.ConfigureReque
 	if err := h.session.configure(ctx, settings); err != nil {
 		return nil, err
 	}
-	return &contractv1.ConfigureResponse{}, nil
+	p, err := h.session.use()
+	if err != nil {
+		return nil, err
+	}
+	return &contractv1.ConfigureResponse{Facts: factsProto(p)}, nil
+}
+
+func factsProto(p provider.Provider) *contractv1.ProviderFacts {
+	return &contractv1.ProviderFacts{PricesDeploys: p.Hooks().Cost != nil}
 }

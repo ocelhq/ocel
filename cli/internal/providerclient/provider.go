@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/run"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
@@ -65,6 +66,8 @@ func (p *Provider) current() *Runner {
 }
 
 func (p *Provider) Name() string { return p.config.ProviderName }
+
+func (p *Provider) Facts() *contractv1.ProviderFacts { return p.current().Facts() }
 
 func (p *Provider) Close() { p.current().Close() }
 

@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 
-	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
@@ -98,20 +97,10 @@ func credentialPermissions(ctx context.Context, deps cmddeps.Deps, cfg *project.
 		})
 		return err
 	})
-	if connect.CodeOf(err) == connect.CodeUnimplemented {
-		return nil, predates(prov.Name())
-	}
 	if err != nil {
 		return nil, err
 	}
-	if len(permissions.GetGroups()) == 0 {
-		return nil, predates(prov.Name())
-	}
 	return permissions.GetGroups(), nil
-}
-
-func predates(pkg string) error {
-	return fmt.Errorf("%s cannot say what permissions these credentials need; it predates them. Upgrade the provider pinned in this project and try again", pkg)
 }
 
 func purposeArg(args []string) (contractv1.CredentialPurpose, error) {

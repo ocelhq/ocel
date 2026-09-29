@@ -11,7 +11,6 @@ import (
 	"slices"
 	"strings"
 
-	"connectrpc.com/connect"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/structpb"
 	"gopkg.in/yaml.v3"
@@ -122,6 +121,9 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, opts Options, stdou
 }
 
 func price(ctx context.Context, deps cmddeps.Deps, prov *providerclient.Provider, cfg *project.Project, env *environmentv1.Environment, overrides map[string]*structpb.Struct, out io.Writer) (*costv1.ResourceSet, map[costv1.Profile]*costv1.Estimate, []string, error) {
+	if !prov.Facts().GetPricesDeploys() {
+		return nil, nil, nil, fmt.Errorf("%s does not price a deploy, so there is nothing to scan", prov.Name())
+	}
 	resolved, err := preflight.ResolveComputesFromProvider(ctx, prov, cfg)
 	if err != nil {
 		return nil, nil, nil, err
@@ -139,9 +141,6 @@ func price(ctx context.Context, deps cmddeps.Deps, prov *providerclient.Provider
 		})
 		return err
 	})
-	if connect.CodeOf(err) == connect.CodeUnimplemented {
-		return nil, nil, nil, predates(prov.Name())
-	}
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -155,19 +154,12 @@ func price(ctx context.Context, deps cmddeps.Deps, prov *providerclient.Provider
 			Resources: set,
 			Usage:     &costv1.Usage{Profile: profile, Resources: overrides},
 		})
-		if connect.CodeOf(err) == connect.CodeUnimplemented {
-			return nil, nil, nil, predates(prov.Name())
-		}
 		if err != nil {
 			return nil, nil, nil, err
 		}
 		estimates[profile] = estimate
 	}
 	return set, estimates, assumptions, nil
-}
-
-func predates(pkg string) error {
-	return fmt.Errorf("%s cannot say what a deploy would cost; it predates the estimate. Upgrade the provider pinned in this project and try again", pkg)
 }
 
 func environmentOf(name string) (*environmentv1.Environment, error) {

@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
@@ -282,14 +281,12 @@ func edgeText(cfg *project.Project) string {
 }
 
 type tierAnswer struct {
-	status  *contractv1.BootstrapStatus
-	problem string
+	status *contractv1.BootstrapStatus
 }
 
 type answers struct {
 	pkg        string
 	problem    string
-	fix        string
 	identity   *contractv1.Identity
 	problems   []*contractv1.CredentialProblem
 	tiers      map[environmentv1.Tier]*tierAnswer
@@ -374,11 +371,6 @@ func askProvider(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, u
 			return err
 		})
 		if err != nil {
-			if connect.CodeOf(err) == connect.CodeUnimplemented {
-				got.problem = got.pkg + " cannot check credentials; it predates the check"
-				got.fix = upgradeProvider
-				return nil
-			}
 			return err
 		}
 		if got.identity == nil {
@@ -396,10 +388,6 @@ func askProvider(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, u
 			return err
 		})
 		if err != nil {
-			if connect.CodeOf(err) == connect.CodeUnimplemented {
-				got.tiers[tier] = &tierAnswer{problem: got.pkg + " cannot report what a bootstrap has; it predates the report"}
-				continue
-			}
 			return err
 		}
 		got.tiers[tier] = &tierAnswer{status: planned.GetBootstrap()}
@@ -420,9 +408,6 @@ func askProvider(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, u
 			return err
 		})
 		if err != nil {
-			if connect.CodeOf(err) == connect.CodeUnimplemented {
-				continue
-			}
 			return err
 		}
 		got.hostnames = bound.GetHostnames()
@@ -452,10 +437,7 @@ func credentialSections(cfg *project.Project, got *answers) []section {
 			s.checks = append(s.checks, check{verdict: verdictFail, text: head, detail: strings.Split(rest, "\n")})
 			return []section{s}
 		}
-		head, hint, ok := splitHint(got.problem)
-		if !ok {
-			head, hint = got.problem, got.fix
-		}
+		head, hint, _ := splitHint(got.problem)
 		s.fail(head, hint)
 		return []section{s}
 	}
@@ -553,9 +535,6 @@ func tierSection(tier environmentv1.Tier, hosts []string, got *answers) section 
 	case answer == nil:
 		s.neutral("skipped — the provider did not answer")
 		return s
-	case answer.problem != "":
-		s.fail(answer.problem, upgradeProvider)
-		return s
 	case answer.status == nil:
 		s.fail("the provider said nothing about the "+name+" bootstrap", upgradeProvider)
 		return s
@@ -578,16 +557,6 @@ func tierSection(tier environmentv1.Tier, hosts []string, got *answers) section 
 	if status.GetUnfinished() {
 		s.fail("an apply never finished, so nothing recorded is a claim about what is provisioned",
 			"run `ocel bootstrap "+name+"` to plan the work that is left and finish it")
-		return s
-	}
-
-	schemas := fmt.Sprintf("bootstrap schema %d, this CLI speaks schema %d", status.GetSchema(), status.GetRequiredSchema())
-	switch {
-	case status.GetSchema() > status.GetRequiredSchema():
-		s.fail(schemas, "upgrade the Ocel CLI")
-		return s
-	case status.GetSchema() < status.GetRequiredSchema():
-		s.warn(schemas, "run `ocel bootstrap "+name+"` to upgrade it")
 		return s
 	}
 

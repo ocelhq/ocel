@@ -81,7 +81,13 @@ message ConfigureRequest {
   ProviderConfig config = 1;
 }
 
-message ConfigureResponse {}
+message ConfigureResponse {
+  ProviderFacts facts = 1;
+}
+
+message ProviderFacts {
+  bool prices_deploys = 1;
+}
 
 message UsePreviewWildcardRequest {
   common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.const = 1];

@@ -107,6 +107,35 @@ func TestPriceRefusesAUsageFileTheProviderCannotRead(t *testing.T) {
 	}
 }
 
+func TestConfigureSaysWhetherTheProviderPricesADeploy(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		served provider.Provider
+		want   bool
+	}{
+		{"a provider with cost hooks", fake.NewProvider(fake.Options{Region: "nowhere"}), true},
+		{"a provider without them", uncosted{fake.NewProvider(fake.Options{Region: "nowhere"})}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			config := providerserver.Config{
+				Version: "1.0.0",
+				New:     func(context.Context, provider.Settings) (provider.Provider, error) { return tc.served, nil },
+			}
+			server := httptest.NewServer(providerserver.ConformanceMux(config))
+			t.Cleanup(server.Close)
+
+			configured, err := contractv1connect.NewProviderServiceClient(server.Client(), server.URL).
+				Configure(context.Background(), &contractv1.ConfigureRequest{})
+			if err != nil {
+				t.Fatalf("Configure() error = %v", err)
+			}
+			if got := configured.GetFacts().GetPricesDeploys(); got != tc.want {
+				t.Errorf("Configure() says prices_deploys = %t, want %t", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestPriceRefusesAnEmptyResourceSet(t *testing.T) {
 	_, costs := costServed(t, fake.NewProvider(fake.Options{Region: "nowhere"}))
 

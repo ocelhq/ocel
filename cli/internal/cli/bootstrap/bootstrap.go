@@ -8,7 +8,6 @@ import (
 	"os"
 	"strings"
 
-	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
@@ -322,9 +321,6 @@ func describeBootstrap(ctx context.Context, check *run.Span, prov *providerclien
 		})
 		return err
 	})
-	if connect.CodeOf(err) == connect.CodeUnimplemented {
-		return nil, fmt.Errorf("%s cannot say which features a bootstrap has; it predates them. Upgrade the provider pinned in this project and try again", prov.Name())
-	}
 	return planned, err
 }
 

@@ -131,6 +131,7 @@ type Runner struct {
 	client           contractv1connect.ProviderServiceClient
 	vars             envvarsv1connect.EnvVarsServiceClient
 	cost             costv1connect.CostServiceClient
+	facts            *contractv1.ProviderFacts
 
 	closeOnce sync.Once
 }
@@ -286,7 +287,8 @@ func (r *Runner) configure(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if _, err := client.Configure(ctx, &contractv1.ConfigureRequest{Config: r.providerConfig}); err != nil {
+	configured, err := client.Configure(ctx, &contractv1.ConfigureRequest{Config: r.providerConfig})
+	if err != nil {
 		var rejected *connect.Error
 		if errors.As(err, &rejected) && rejected.Code() == connect.CodeInvalidArgument {
 			if code, named := provider.RefusedCode(err); named && code == refusal.CodeUnknownOption {
@@ -296,7 +298,16 @@ func (r *Runner) configure(ctx context.Context) error {
 		}
 		return fmt.Errorf("provider: configure the provider session: %w", err)
 	}
+	r.mu.Lock()
+	r.facts = configured.GetFacts()
+	r.mu.Unlock()
 	return nil
+}
+
+func (r *Runner) Facts() *contractv1.ProviderFacts {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.facts
 }
 
 func (r *Runner) dial(ready channel.Readiness) error {
