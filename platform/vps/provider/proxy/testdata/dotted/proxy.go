@@ -29,3 +29,5 @@ func (Dotted) Certificate(context.Context, string) (Certificate, error) {
 }
 
 func (Dotted) RefuseUnshielded(context.Context, string) error { return nil }
+
+func (Dotted) OriginFiles(Spec) ([]OriginFile, error) { return nil, nil }

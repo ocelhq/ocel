@@ -308,8 +308,9 @@ func requests(count string) string {
 }
 
 type routingPair struct {
-	table  []byte
-	config []byte
+	table   []byte
+	config  []byte
+	origins []proxy.OriginFile
 }
 
 func (d routingPair) digest() tableDigest { return tableDigest(contentSum(d.table)) }
@@ -433,6 +434,9 @@ func (h *Host) composeRouting(ctx context.Context, compose func(RoutingTable) (R
 				return shaped, err
 			}
 			fresh, shaped.restoring.config = sum == contentSum(rendered), rendered
+			if shaped.restoring.origins, err = RenderOriginFiles(h.front, table); err != nil {
+				return shaped, err
+			}
 		}
 		if bytes.Equal(before, after) && fresh {
 			return shaped, nil
@@ -442,10 +446,14 @@ func (h *Host) composeRouting(ctx context.Context, compose func(RoutingTable) (R
 				return shaped, err
 			}
 			shaped.reloading, shaped.admitted = true, proxySpec(table)
-			err = h.replace(ctx, pair.digest(), at, rendered)
+			err = h.replace(ctx, pair.digest(), at, rendered, shaped.restoring.origins)
 		} else {
 			var admitted []byte
 			if admitted, err = RenderProxyConfig(h.front, next); err != nil {
+				return shaped, err
+			}
+			var origins []proxy.OriginFile
+			if origins, err = RenderOriginFiles(h.front, next); err != nil {
 				return shaped, err
 			}
 			shaped.reloading = !bytes.Equal(shaped.restoring.config, admitted) || at != "" && !fresh
@@ -457,7 +465,7 @@ func (h *Host) composeRouting(ctx context.Context, compose func(RoutingTable) (R
 			if shaped.admitted = proxySpec(next); fresh {
 				shaped.served = proxySpec(table)
 			}
-			shaped.written, shaped.failedPlace, err = h.writePair(ctx, pair.digest(), routingPair{table: after, config: admitted}, shaped.reloading)
+			shaped.written, shaped.failedPlace, err = h.writePair(ctx, pair.digest(), routingPair{table: after, config: admitted, origins: origins}, shaped.reloading)
 			shaped.changed = true
 		}
 		rewrites++
@@ -468,7 +476,41 @@ func (h *Host) composeRouting(ctx context.Context, compose func(RoutingTable) (R
 }
 
 func pairFed(pair routingPair) string {
-	return base64.StdEncoding.EncodeToString(pair.table) + "\n" + base64.StdEncoding.EncodeToString(pair.config) + "\n"
+	return base64.StdEncoding.EncodeToString(pair.table) + "\n" + base64.StdEncoding.EncodeToString(pair.config) + "\n" + originsFed(pair.origins)
+}
+
+func originsFed(origins []proxy.OriginFile) string {
+	var fed strings.Builder
+	for _, origin := range origins {
+		fed.WriteString(base64.StdEncoding.EncodeToString(origin.Bundle) + "\n")
+	}
+	return fed.String()
+}
+
+func originPaths(origins []proxy.OriginFile) []string {
+	paths := make([]string, 0, len(origins))
+	for _, origin := range origins {
+		paths = append(paths, origin.Path)
+	}
+	return paths
+}
+
+func originReading(paths []string) []string {
+	reads := make([]string, 0, len(paths))
+	for at := range paths {
+		reads = append(reads, `IFS= read -r origin`+strconv.Itoa(at))
+	}
+	return reads
+}
+
+func originPlacing(paths []string) []string {
+	steps := make([]string, 0, len(paths)+1)
+	for at, path := range paths {
+		steps = append(steps, `if ! printf '%s' "$origin`+strconv.Itoa(at)+`" | base64 -d | `+words(switchboardFed("place-origin", path))+
+			`; then exit `+strconv.Itoa(routingPlaceFailed)+`; fi`)
+	}
+	return append(steps, `if ! `+words(switchboardCommand(append([]string{"unplace-origins"}, paths...)...))+
+		` </dev/null; then exit `+strconv.Itoa(routingPlaceFailed)+`; fi`)
 }
 
 func (h *Host) writePair(ctx context.Context, expected tableDigest, pair routingPair, placing bool) (tableDigest, error, error) {
@@ -477,7 +519,7 @@ func (h *Host) writePair(ctx context.Context, expected tableDigest, pair routing
 		file = ""
 	}
 	elevation, refused := h.elevate(ctx)
-	result, err := h.stream(ctx, stagedWrite(expected, file), strings.NewReader(pairFed(pair)), elevation)
+	result, err := h.stream(ctx, stagedWrite(expected, file, originPaths(pair.origins)), strings.NewReader(pairFed(pair)), elevation)
 	if err != nil {
 		return "", nil, err
 	}
@@ -524,12 +566,12 @@ func unelevated(refused, why error) error {
 
 type stagedFile struct{ at, staged, fed string }
 
-func stagedWrite(expected tableDigest, file string) string {
+func stagedWrite(expected tableDigest, file string, origins []string) string {
 	files := []stagedFile{{at: live.RoutingTable, staged: "staged", fed: "written"}}
 	if file == ProxyConfig {
 		files = append(files, stagedFile{at: ProxyConfig, staged: "rendered", fed: "rendering"})
 	}
-	var staging, taken, decoding, unseeded, owning, moving, placing []string
+	var staging, taken, decoding, unseeded, owning, moving, reading, placing []string
 	for _, file := range files {
 		at, staged := quoted(file.at), `"$`+file.staged+`"`
 		staging = append(staging, file.staged+`=$(mktemp `+quoted(file.at+".XXXXXX")+`)`)
@@ -540,12 +582,14 @@ func stagedWrite(expected tableDigest, file string) string {
 		moving = append(moving, `mv `+staged+` `+at)
 	}
 	if file != "" && file != ProxyConfig {
-		placing = append(placing, placeStep(`printf '%s' "$rendering" | base64 -d | `, file))
+		reading = originReading(origins)
+		placing = append(originPlacing(origins), placeStep(`printf '%s' "$rendering" | base64 -d | `, file))
 	}
 	return strings.Join(slices.Concat(
 		[]string{"set -e"},
 		staging,
 		[]string{`trap 'rm -f ` + strings.Join(taken, " ") + `' EXIT`, `IFS= read -r written`, `IFS= read -r rendering`},
+		reading,
 		decoding,
 		[]string{
 			strings.TrimSuffix(routingLocked("-x"), "\n"),
@@ -571,10 +615,13 @@ func placeStep(feed, at string) string {
 	return `if ! ` + feed + words(switchboardFed("place", at)) + `; then exit ` + strconv.Itoa(routingPlaceFailed) + `; fi`
 }
 
-func replacement(expected tableDigest, at string) string {
+func replacement(expected tableDigest, at string, origins []string) string {
 	return strings.Join(slices.Concat(
-		[]string{"set -e", strings.TrimSuffix(routingLocked("-x"), "\n")},
+		[]string{"set -e"},
+		originReading(origins),
+		[]string{strings.TrimSuffix(routingLocked("-x"), "\n")},
 		comparedUnder(expected),
+		originPlacing(origins),
 		[]string{placeStep("", at)},
 	), "\n")
 }
@@ -588,9 +635,9 @@ func (h *Host) destinationSum(ctx context.Context, at string) (string, error) {
 	return strings.TrimSpace(said), err
 }
 
-func (h *Host) replace(ctx context.Context, expected tableDigest, at string, rendering []byte) error {
+func (h *Host) replace(ctx context.Context, expected tableDigest, at string, rendering []byte, origins []proxy.OriginFile) error {
 	elevation, refused := h.elevate(ctx)
-	result, err := h.stream(ctx, replacement(expected, at), bytes.NewReader(rendering), elevation)
+	result, err := h.stream(ctx, replacement(expected, at, originPaths(origins)), strings.NewReader(originsFed(origins)+string(rendering)), elevation)
 	if err != nil {
 		return err
 	}

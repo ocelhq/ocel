@@ -18,6 +18,7 @@ type Proxy interface {
 	Inspect(ctx context.Context) (Checks, error)
 	Certificate(ctx context.Context, hostname string) (Certificate, error)
 	RefuseUnshielded(ctx context.Context, hostname string) error
+	OriginFiles(spec Spec) ([]OriginFile, error)
 }
 
 const (
@@ -54,6 +55,11 @@ type Shield struct {
 type CertificatePair struct {
 	Certificate string `json:"certificate"`
 	Key         string `json:"key"`
+}
+
+type OriginFile struct {
+	Path   string
+	Bundle []byte
 }
 
 type Pin struct {

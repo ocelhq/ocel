@@ -33,3 +33,5 @@ func (Ignored) Certificate(context.Context, string) (proxy.Certificate, error) {
 }
 
 func (Ignored) RefuseUnshielded(context.Context, string) error { return nil }
+
+func (Ignored) OriginFiles(proxy.Spec) ([]proxy.OriginFile, error) { return nil, nil }

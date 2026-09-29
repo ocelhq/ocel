@@ -33,3 +33,5 @@ func (*Grouped) Certificate(context.Context, string) (proxy.Certificate, error) 
 }
 
 func (*Grouped) RefuseUnshielded(context.Context, string) error { return nil }
+
+func (*Grouped) OriginFiles(proxy.Spec) ([]proxy.OriginFile, error) { return nil, nil }

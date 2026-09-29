@@ -81,3 +81,5 @@ func (b Builtin) Certificate(ctx context.Context, hostname string) (proxy.Certif
 	}
 	return certificate, nil
 }
+
+func (Builtin) OriginFiles(proxy.Spec) ([]proxy.OriginFile, error) { return nil, nil }

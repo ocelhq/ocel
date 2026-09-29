@@ -29,3 +29,5 @@ func (c *Conforming) Certificate(context.Context, string) (proxy.Certificate, er
 }
 
 func (c *Conforming) RefuseUnshielded(context.Context, string) error { return nil }
+
+func (c *Conforming) OriginFiles(proxy.Spec) ([]proxy.OriginFile, error) { return nil, nil }

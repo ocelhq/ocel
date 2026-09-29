@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 const (
@@ -484,12 +485,13 @@ func leavingKnownHosts(forget string) string {
 const dirNonEmpty = "dir=nonempty"
 
 type removal struct {
-	kind   string
-	path   string
-	reason string
-	action provider.ChangeAction
-	shared bool
-	reload string
+	kind    string
+	path    string
+	reason  string
+	action  provider.ChangeAction
+	shared  bool
+	reload  string
+	origins string
 }
 
 func (r removal) phrase() string { return phrase(r.kind, r.path) }
@@ -532,7 +534,11 @@ func (r removal) command() string {
 		if r.reload != "" {
 			unplaced += r.reload + "\n"
 		}
-		return "if [ -e " + quoted(r.path) + " ] || [ -L " + quoted(r.path) + " ]; then\n" + unplaced + "fi"
+		placed := "if [ -e " + quoted(r.path) + " ] || [ -L " + quoted(r.path) + " ]; then\n" + unplaced + "fi"
+		if r.origins == "" {
+			return placed
+		}
+		return placed + "\n" + words(switchboardCommand("unplace-origins")) + " 2>/dev/null || rm -f " + quoted(r.origins) + "/" + switchboard.OriginPrefix + "*.pem"
 	case r.kind == KindRoutingTable || r.kind == KindProxyConfig:
 		return routingLocked("-x") + "rm -f " + quoted(r.path)
 	case r.shared:

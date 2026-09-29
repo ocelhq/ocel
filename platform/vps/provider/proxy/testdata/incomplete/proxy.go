@@ -25,3 +25,5 @@ func (i *Incomplete) Reload(context.Context, proxy.Spec) error { return nil }
 func (i *Incomplete) Inspect(context.Context) (proxy.Checks, error) { return nil, nil }
 
 func (i *Incomplete) RefuseUnshielded(context.Context, string) error { return nil }
+
+func (i *Incomplete) OriginFiles(proxy.Spec) ([]proxy.OriginFile, error) { return nil, nil }

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 )
 
 type ran struct {
@@ -18,6 +19,7 @@ type box struct {
 	said     map[string]string
 	refused  map[string]string
 	claimed  []string
+	shields  []proxy.Shield
 	placed   string
 	answers  map[string]router.Kind
 	failures map[string]string
@@ -47,7 +49,9 @@ func (b *box) RanWithStdin(_ context.Context, _ string, argv []string, stdin []b
 	return b.answer(argv, stdin)
 }
 
-func (b *box) Claimed(context.Context) ([]string, error) { return b.claimed, nil }
+func (b *box) ReadSpec(context.Context) (proxy.Spec, error) {
+	return proxy.Spec{Hostnames: b.claimed, Shields: b.shields}, nil
+}
 
 func (b *box) PlacedSum(context.Context, string) (string, error) { return b.placed, nil }
 

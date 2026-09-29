@@ -29,3 +29,5 @@ func (*Generic[T]) Certificate(context.Context, string) (proxy.Certificate, erro
 }
 
 func (*Generic[T]) RefuseUnshielded(context.Context, string) error { return nil }
+
+func (*Generic[T]) OriginFiles(proxy.Spec) ([]proxy.OriginFile, error) { return nil, nil }

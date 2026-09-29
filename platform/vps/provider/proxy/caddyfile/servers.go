@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 )
 
 const (
@@ -30,10 +31,18 @@ type matcher struct {
 }
 
 type handler struct {
-	Handler   string     `json:"handler"`
-	Routes    []route    `json:"routes"`
-	Upstreams []upstream `json:"upstreams"`
+	Handler    string              `json:"handler"`
+	Routes     []route             `json:"routes"`
+	Upstreams  []upstream          `json:"upstreams"`
+	StatusCode json.RawMessage     `json:"status_code"`
+	Headers    map[string][]string `json:"headers"`
 }
+
+const (
+	redirectHandler  = "static_response"
+	redirectStatus   = "308"
+	redirectLocation = "https://{http.request.host}{http.request.uri}"
+)
 
 type upstream struct {
 	Dial string `json:"dial"`
@@ -44,14 +53,30 @@ type site struct {
 	route              int
 	hosts              []string
 	reachesSwitchboard bool
+	redirectsToHTTPS   bool
 }
 
 func (s site) String() string {
 	return fmt.Sprintf("server %s, route %d (%s)", s.server, s.route, strings.Join(s.hosts, ", "))
 }
 
-func (s site) isPlacedBlock(placed []string) bool {
-	return s.reachesSwitchboard && len(placed) > 0 && slices.Equal(hostSet(s.hosts), hostSet(placed))
+func (s site) isPlacedBlock(placed proxy.Spec) bool {
+	open, shielded := split(placed)
+	plain := make([]string, 0, len(shielded))
+	for _, each := range shielded {
+		plain = append(plain, each.hostname)
+	}
+	hosts := hostSet(s.hosts)
+	if len(hosts) == 0 {
+		return false
+	}
+	if s.redirectsToHTTPS {
+		return slices.Equal(hosts, hostSet(plain))
+	}
+	if !s.reachesSwitchboard {
+		return false
+	}
+	return slices.Equal(hosts, hostSet(open)) || len(hosts) == 1 && slices.Contains(hostSet(plain), hosts[0])
 }
 
 func hostSet(hosts []string) []string {
@@ -86,7 +111,8 @@ func (c Caddyfile) sites(ctx context.Context) ([]site, error) {
 	var found []site
 	for _, name := range slices.Sorted(maps.Keys(servers)) {
 		for at, top := range servers[name].Routes {
-			found = append(found, site{server: name, route: at + 1, hosts: top.hosts(), reachesSwitchboard: top.reaches(c.upstream())})
+			found = append(found, site{server: name, route: at + 1, hosts: top.hosts(),
+				reachesSwitchboard: top.reaches(c.upstream()), redirectsToHTTPS: top.redirects()})
 		}
 	}
 	return found, nil
@@ -117,6 +143,20 @@ func (r route) reaches(dial string) bool {
 	return false
 }
 
+func (r route) redirects() bool {
+	var answers []handler
+	for _, handle := range r.Handle {
+		if handle.Handler == redirectHandler {
+			answers = append(answers, handle)
+		}
+		for _, nested := range handle.Routes {
+			answers = append(answers, nested.Handle...)
+		}
+	}
+	return len(answers) == 1 && answers[0].Handler == redirectHandler && string(answers[0].StatusCode) == redirectStatus &&
+		slices.Equal(answers[0].Headers["Location"], []string{redirectLocation})
+}
+
 func covers(pattern, hostname string) bool {
 	want, got := strings.Split(strings.ToLower(pattern), "."), strings.Split(strings.ToLower(hostname), ".")
 	if len(want) != len(got) {
@@ -139,7 +179,7 @@ func (s site) covering(hostname string) (string, bool) {
 	return "", false
 }
 
-func collision(sites []site, placed []string, hostname string) (site, string, bool) {
+func collision(sites []site, placed proxy.Spec, hostname string) (site, string, bool) {
 	for _, each := range sites {
 		if each.isPlacedBlock(placed) {
 			continue

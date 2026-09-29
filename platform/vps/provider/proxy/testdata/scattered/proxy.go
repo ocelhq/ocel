@@ -25,3 +25,5 @@ func (s *Scattered) Reload(context.Context, proxy.Spec) error { return nil }
 func (s *Scattered) Inspect(context.Context) (proxy.Checks, error) { return nil, nil }
 
 func (s *Scattered) RefuseUnshielded(context.Context, string) error { return nil }
+
+func (s *Scattered) OriginFiles(proxy.Spec) ([]proxy.OriginFile, error) { return nil, nil }

@@ -39,3 +39,5 @@ func (c *Crowded) admit(_ context.Context, spec proxy.Spec) error {
 }
 
 func (c *Crowded) RefuseUnshielded(context.Context, string) error { return nil }
+
+func (c *Crowded) OriginFiles(proxy.Spec) ([]proxy.OriginFile, error) { return nil, nil }

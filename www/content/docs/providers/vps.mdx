@@ -92,8 +92,9 @@ with a redirect to https and forward them nowhere; refusing them instead leaves 
 who opens `http://` with an error. A deploy refuses to forward a hostname your proxy answers to a
 client with no certificate or forwards over plain http, and `ocel doctor` fails it.
 
-[Behind your Caddy](#behind-your-caddy), the site block ocel places requires no client
-certificate yet, so a deploy refuses to forward any hostname through Cloudflare there.
+[Behind your Caddy](#behind-your-caddy), `ocel.caddy` carries the shield itself: each
+hostname Cloudflare forwards gets a site of its own that requires the zone's client certificate
+and serves the origin certificate, and its `http://` is redirected to https.
 
 ## Behind your own proxy
 
@@ -327,7 +328,8 @@ and name the directory:
 Coolify's Caddy already imports `/dynamic/*.caddy`, so `"proxy": { "caddy": { "preset": "coolify" } }`
 needs no line of yours.
 
-Ocel writes `ocel.caddy` there and nothing else. It holds one site block over exactly the
+Ocel writes `ocel.caddy` there, and beside it the origin certificate of each hostname
+[Cloudflare forwards](#behind-cloudflare). `ocel.caddy` holds one site block over exactly the
 hostnames the box serves, the connector's and `ocel-edge-probe.<base>` among them, and never a
 bare port:
 
@@ -343,6 +345,30 @@ shop.example.com, ocel-edge-probe.preview.example.com, pr-12--web.preview.exampl
 Caddy 2.7 or later, which the official image and Coolify's Caddy are. A Caddy that runs as
 `caddy.service` gets the block without it, because the Debian and Ubuntu package is 2.6.2 on
 noble and refuses it.
+
+A hostname Cloudflare forwards leaves that block for a site of its own. The site requires the
+zone's client certificate and serves the origin certificate from
+`ocel-origin-<hostname>-<digest>.pem`. That file holds the certificate and its key and is mode
+0640 in the directory's group, so give the directory to the group your Caddy runs as (`chgrp
+caddy /etc/caddy/ocel.d` for `caddy.service`) or your Caddy refuses the reload. Caddy also turns on
+`strict_sni_host`, so a request can't reach the site under another hostname's handshake:
+
+```txt title="ocel.caddy"
+https://shop.example.com {
+	tls /etc/caddy/ocel.d/ocel-origin-shop.example.com-1f2e3d4c5b6a.pem /etc/caddy/ocel.d/ocel-origin-shop.example.com-1f2e3d4c5b6a.pem {
+		client_auth {
+			mode require
+			trusted_leaf_cert MIIC…
+		}
+	}
+	reverse_proxy ocel-switchboard:8443 {
+		stream_close_delay 30s
+	}
+}
+http://shop.example.com {
+	redir https://{host}{uri} 308
+}
+```
 
 Your Caddy reaches the switchboard by name on `network`, or on `127.0.0.1:<port>` without one. A
 Caddy in a container with no `network` must run with `network_mode: host`, because the loopback of
@@ -363,7 +389,8 @@ your Caddy in its own environment, where `{$VAR}` placeholders in your Caddyfile
 
 A reload your Caddy refuses leaves its old config running. Ocel puts the previous `ocel.caddy`
 back and refuses the claim with Caddy's error, which can come from your own Caddyfile. Ocel
-reloads only when the hostnames change, never on a release. A reload can drop about one request
+reloads only when `ocel.caddy` changes, never on a release. A renewed origin certificate gets a
+new file name, so it changes `ocel.caddy` too. A reload can drop about one request
 under load, and as `caddy.service` it also closes the WebSocket and other streaming connections
 your Caddy is proxying.
 
@@ -378,8 +405,9 @@ Caddy serves ocel's hostnames, that `ocel.caddy` is what ocel renders, and that 
 answers through the switchboard.
 
 A hostname that leaves `ocel.caddy` is no longer renewed after the next reload, and your Caddy
-deletes its certificate 14 days after it expires. `ocel destroy` removes `ocel.caddy`, reloads
-your Caddy, and removes the sudoers line. Your Caddyfile is never written.
+deletes its certificate 14 days after it expires. An origin certificate no site names any more
+is removed when `ocel.caddy` is placed. `ocel destroy` removes `ocel.caddy`, reloads your Caddy,
+removes the origin certificates, and removes the sudoers line. Your Caddyfile is never written.
 
 The switchboard hears your Caddy on a listener of its own, which takes every request as https,
 sets `X-Forwarded-Host` to `Host`, and drops every `X-Forwarded-*` header it is sent. Any

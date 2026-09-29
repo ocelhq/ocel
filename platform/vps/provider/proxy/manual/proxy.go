@@ -68,3 +68,5 @@ func (m Manual) RefuseUnshielded(ctx context.Context, hostname string) error {
 	return refusal.Refuse(refusal.CodeNotReady, "%s, so the edge in front would forward a hostname anyone reaches without it\n%s, then run this again",
 		check.Finding, check.Fix)
 }
+
+func (Manual) OriginFiles(proxy.Spec) ([]proxy.OriginFile, error) { return nil, nil }
