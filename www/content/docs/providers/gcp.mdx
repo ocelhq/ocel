@@ -35,9 +35,9 @@ ocel deploy
 
 ## Edge
 
-By default a deployment is answered on the URL Cloud Run gives each service. That edge is
-called `direct`, it costs nothing while it serves nothing, and it binds no hostname of
-your own.
+Leave `edge` out and a deployment has no edge in front of it: each service is answered on
+the URL Cloud Run gives it, which costs nothing while it serves nothing and binds no
+hostname of your own.
 
 A hostname on Google Cloud costs a load balancer. Name the `alb` edge and `ocel bootstrap`
 provisions one global external Application Load Balancer per tier — one address, one
