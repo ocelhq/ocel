@@ -1,5 +1,4 @@
 import { createHash, randomBytes } from "node:crypto";
-import { Readable } from "node:stream";
 import { setTimeout as delay } from "node:timers/promises";
 import { gzipSync } from "node:zlib";
 import linuxArm64 from "better-sqlite3/linux-arm64";
@@ -202,38 +201,36 @@ probes.post("/inflate", express.raw({ limit: MAX_BODY, type: () => true }), (req
   });
 });
 
-probes.post("/multipart", async (req, res) => {
-  const type = req.get("content-type");
-  if (!type?.startsWith("multipart/form-data")) {
-    res.status(415).json({ error: "multipart/form-data only" });
-    return;
-  }
-  const declared = req.get("content-length");
-  if (declared === undefined || !(Number(declared) <= MAX_BYTES)) {
-    res.status(413).json({ error: "request entity too large" });
-    return;
-  }
-  const form = await new Response(Readable.toWeb(req) as ReadableStream, {
-    headers: { "content-type": type },
-  }).formData();
-  const fields: Record<string, string> = {};
-  const files: { field: string; name: string; type: string; bytes: number; sha256: string }[] = [];
-  for (const [field, value] of form) {
-    if (typeof value === "string") {
-      fields[field] = value;
-    } else {
-      const bytes = Buffer.from(await value.arrayBuffer());
-      files.push({
-        field,
-        name: value.name,
-        type: value.type,
-        bytes: bytes.byteLength,
-        sha256: sha256(bytes),
-      });
+probes.post(
+  "/multipart",
+  express.raw({ limit: MAX_BODY, type: "multipart/form-data" }),
+  async (req, res) => {
+    const type = req.get("content-type");
+    if (!type?.startsWith("multipart/form-data")) {
+      res.status(415).json({ error: "multipart/form-data only" });
+      return;
     }
-  }
-  res.json({ fields, files });
-});
+    const form = await new Response(req.body, { headers: { "content-type": type } }).formData();
+    const fields: Record<string, string> = {};
+    const files: { field: string; name: string; type: string; bytes: number; sha256: string }[] =
+      [];
+    for (const [field, value] of form) {
+      if (typeof value === "string") {
+        fields[field] = value;
+      } else {
+        const bytes = Buffer.from(await value.arrayBuffer());
+        files.push({
+          field,
+          name: value.name,
+          type: value.type,
+          bytes: bytes.byteLength,
+          sha256: sha256(bytes),
+        });
+      }
+    }
+    res.json({ fields, files });
+  },
+);
 
 probes.post("/large", express.raw({ limit: MAX_BODY, type: () => true }), (req, res) => {
   const body = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
