@@ -46,6 +46,9 @@ const portOwners: Record<string, string> = {
   nginx: "nginx listens on :80 and :443",
   "nginx-container": "container ocel-front-nginx publishes :80 and :443",
   "nginx-network": "container ocel-front-nginx-network publishes :80 and :443",
+  caddy: "caddy listens on :80 and :443",
+  "caddy-container": "container ocel-front-caddy publishes :80 and :443",
+  "coolify-caddy": "container coolify-proxy publishes :80 and :443",
 };
 
 export function ownerOf(front: Front): string {

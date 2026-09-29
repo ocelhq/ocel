@@ -1,0 +1,3 @@
+{
+  "proxy": { "caddy": { "directory": "/etc/caddy/ocel.d" } }
+}
