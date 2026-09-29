@@ -159,6 +159,27 @@ func TestOpenRefusesADockerHostItCannotUseTheWayItRefusesADeadOne(t *testing.T) 
 	}
 }
 
+func TestOpenRefusesADaemonOnAnotherMachine(t *testing.T) {
+	for _, host := range []string{"tcp://build-box.internal:2375", "tcp://10.0.0.7:2375"} {
+		t.Run(host, func(t *testing.T) {
+			t.Setenv("DOCKER_HOST", host)
+
+			engine, err := docker.Open(context.Background())
+			if err == nil {
+				_ = engine.Close()
+				t.Fatal("Open = nil, want a refusal: dev resources take no credentials and would be published on every interface of that machine")
+			}
+			var unreachable *docker.Unreachable
+			if errors.As(err, &unreachable) {
+				t.Fatalf("Open = %v, want a refusal of the daemon's location, not a report that it is down", err)
+			}
+			if !strings.Contains(err.Error(), "DOCKER_HOST") || !strings.Contains(err.Error(), host) {
+				t.Errorf("Open = %v, want it to name DOCKER_HOST and %s", err, host)
+			}
+		})
+	}
+}
+
 func TestRunStartsWhatIsNotThereOnLoopback(t *testing.T) {
 	daemon := &fakeDaemon{}
 	engine := openFake(t, daemon)

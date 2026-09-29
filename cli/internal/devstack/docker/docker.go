@@ -103,15 +103,18 @@ func (e *ExecFailed) Error() string {
 }
 
 type daemon struct {
-	api       *client.Client
-	publishOn netip.Addr
-	reachedAt string
+	api *client.Client
 }
+
+var loopback = netip.AddrFrom4([4]byte{127, 0, 0, 1})
 
 func Open(ctx context.Context) (Engine, error) {
 	host, err := images.DockerHostFromEnv()
 	if err != nil {
 		return nil, &Unreachable{Address: cmp.Or(os.Getenv(images.DockerHostEnv), "its default address"), Err: err}
+	}
+	if err := refuseRemoteDaemon(host); err != nil {
+		return nil, err
 	}
 	api, err := client.New(
 		client.WithHost("tcp://docker"),
@@ -126,23 +129,21 @@ func Open(ctx context.Context) (Engine, error) {
 		_ = api.Close()
 		return nil, &Unreachable{Address: host.Address, Err: err}
 	}
-	publishOn, reachedAt := published(host)
-	return &daemon{api: api, publishOn: publishOn, reachedAt: reachedAt}, nil
+	return &daemon{api: api}, nil
 }
 
-func published(host images.DockerHost) (netip.Addr, string) {
-	loopback := netip.AddrFrom4([4]byte{127, 0, 0, 1})
+func refuseRemoteDaemon(host images.DockerHost) error {
 	if host.Network != "tcp" {
-		return loopback, loopback.String()
+		return nil
 	}
 	name, _, err := net.SplitHostPort(host.Target)
 	if err != nil {
 		name = host.Target
 	}
 	if ip, err := netip.ParseAddr(name); name == "localhost" || (err == nil && ip.IsLoopback()) {
-		return loopback, loopback.String()
+		return nil
 	}
-	return netip.IPv4Unspecified(), name
+	return fmt.Errorf("%s is %s, a docker daemon on another machine: dev resources take no credentials, so running them there would publish them on every interface of %s: point %s at a docker daemon on this machine, or unset it", images.DockerHostEnv, host.Address, name, images.DockerHostEnv)
 }
 
 func (d *daemon) Close() error { return d.api.Close() }
@@ -173,7 +174,7 @@ func (d *daemon) Run(ctx context.Context, spec Spec) (Container, error) {
 	}
 
 	hostConfig := &container.HostConfig{
-		PortBindings: network.PortMap{port: {{HostIP: d.publishOn}}},
+		PortBindings: network.PortMap{port: {{HostIP: loopback}}},
 	}
 	if spec.Volume != "" {
 		hostConfig.Mounts = []mount.Mount{{
@@ -254,7 +255,7 @@ func (d *daemon) reachable(inspected container.InspectResponse, name string, por
 	if len(bindings) == 0 {
 		return Container{}, fmt.Errorf("docker published no host port for %s", name)
 	}
-	return Container{ID: inspected.ID, Addr: net.JoinHostPort(d.reachedAt, bindings[0].HostPort)}, nil
+	return Container{ID: inspected.ID, Addr: net.JoinHostPort(loopback.String(), bindings[0].HostPort)}, nil
 }
 
 func (d *daemon) discard(ctx context.Context, id string) {
