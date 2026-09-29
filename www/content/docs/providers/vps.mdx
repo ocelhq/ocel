@@ -241,6 +241,12 @@ your Traefik orders one certificate for `*.<preview base>`, through a router on
 hostname is then served that certificate. Without `previewResolver`, each preview hostname
 gets a certificate of its own from `resolver`, the same as any other hostname.
 
+**Semicolons in the query.** Your Traefik rewrites every `;` in a query to `&` before any router
+sees the request, so `?x=1;2` reaches your app as `?x=1&2`. Ocel's routers can't change that,
+because it happens on the entry point. Set `http.encodeQuerySemicolons: true` on each entry point
+in Traefik's static configuration and the `;` reaches your app encoded as `%3B`, which a query
+parser reads back as `x=1;2`.
+
 **Certificate lifetimes.** Your Traefik renews every certificate it stores, for as long as its
 `acme.json` holds it, and it deletes none. A certificate for a hostname ocel no longer serves
 stays in `acme.json` and keeps being renewed until you remove it there. If Traefik fails to

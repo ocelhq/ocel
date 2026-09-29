@@ -29,8 +29,12 @@ cat > "$conf/traefik.yml" <<YML
 entryPoints:
   web:
     address: ":80"
+    http:
+      encodeQuerySemicolons: true
   websecure:
     address: ":443"
+    http:
+      encodeQuerySemicolons: true
 providers:
   file:
     directory: $conf/dynamic
