@@ -61,8 +61,8 @@ func TestTheBrowserIsReachableOnlyFromAnInteractiveTerminalThatHasNotOptedOut(t 
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv(commands.NoBrowserEnvVar, tc.noBrowser)
 			invocation := commands.Invocation{StdinIsTerminal: func(io.Reader) bool { return tc.terminal }}
-			if got := invocation.BrowserReachable(strings.NewReader("")); got != tc.want {
-				t.Errorf("BrowserReachable() = %v, want %v", got, tc.want)
+			if got := invocation.IsBrowserReachable(strings.NewReader("")); got != tc.want {
+				t.Errorf("IsBrowserReachable() = %v, want %v", got, tc.want)
 			}
 		})
 	}

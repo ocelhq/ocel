@@ -35,7 +35,7 @@ func (i Invocation) LoadOptionalProject(ctx context.Context, cwd string) (*proje
 	return project.LoadOptional(ctx, cwd, i.ConfigPath())
 }
 
-func (i Invocation) BrowserReachable(stdin io.Reader) bool {
+func (i Invocation) IsBrowserReachable(stdin io.Reader) bool {
 	return os.Getenv(NoBrowserEnvVar) == "" && i.StdinIsTerminal(stdin)
 }
 

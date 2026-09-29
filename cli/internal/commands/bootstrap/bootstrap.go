@@ -218,7 +218,7 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier e
 		run.Succeed(fmt.Sprintf("Left the %s bootstrap as it is", readiness.TierName(tier)))
 		return nil
 	}
-	if err := bothWays(requested, named); err != nil {
+	if err := refuseFeaturesNamedBothWays(requested, named); err != nil {
 		return err
 	}
 

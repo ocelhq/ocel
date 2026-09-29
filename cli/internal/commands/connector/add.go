@@ -20,16 +20,16 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
-func unfinished(err error) error {
+func explainUnfinishedAdd(err error) error {
 	return fmt.Errorf("%w; the console already has this target registered, so running ocel connector add again finishes it", err)
 }
 
 func runAdd(ctx context.Context, dependencies Dependencies, cfg *project.Project, link *console.Link, opts options) (err error) {
-	vendor, err := vendored(cfg)
+	vendor, err := requireProviderID(cfg)
 	if err != nil {
 		return err
 	}
-	access, err := token(dependencies)
+	access, err := readAccessToken(dependencies)
 	if err != nil {
 		return err
 	}
@@ -84,11 +84,11 @@ func runAdd(ctx context.Context, dependencies Dependencies, cfg *project.Project
 		Compute:    opts.compute,
 	}, contractv1connect.ProviderServiceClient.InstallConnector)
 	if err != nil {
-		return unfinished(err)
+		return explainUnfinishedAdd(err)
 	}
 	at := installed.GetConnector()
 	if at.GetUrl() == "" {
-		return unfinished(errors.New(
+		return explainUnfinishedAdd(errors.New(
 			"the provider installed the connector and named no address, so the console has nothing to dial"))
 	}
 
@@ -98,7 +98,7 @@ func runAdd(ctx context.Context, dependencies Dependencies, cfg *project.Project
 		Compute:   at.GetCompute(),
 	})
 	if err != nil {
-		return unfinished(fmt.Errorf("tell the console where to dial this connector: %w", err))
+		return explainUnfinishedAdd(fmt.Errorf("tell the console where to dial this connector: %w", err))
 	}
 
 	granting := run.Phase(progressv1.Phase_PHASE_PROVISION)

@@ -521,12 +521,12 @@ func TestTheVendorIsWhateverTheConfigPointsAtAndNoTableGatesIt(t *testing.T) {
 			Path:     "ocel." + vendor + ".json",
 			Provider: &project.Provider{ID: vendor},
 		}
-		named, err := vendored(cfg)
+		named, err := requireProviderID(cfg)
 		if err != nil {
-			t.Fatalf("vendored(%s) = %v, want the vendor the config names", vendor, err)
+			t.Fatalf("requireProviderID(%s) = %v, want the vendor the config names", vendor, err)
 		}
 		if named != vendor {
-			t.Errorf("vendored(%s) = %q, want %q", vendor, named, vendor)
+			t.Errorf("requireProviderID(%s) = %q, want %q", vendor, named, vendor)
 		}
 	}
 }

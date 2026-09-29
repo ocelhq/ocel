@@ -162,7 +162,7 @@ func reachTarget(ctx context.Context, dependencies Dependencies, cfg *project.Pr
 	return provider, described, nil
 }
 
-func token(dependencies Dependencies) (string, error) {
+func readAccessToken(dependencies Dependencies) (string, error) {
 	credentials, err := dependencies.LoadCredentials()
 	if err != nil {
 		return "", err
@@ -170,7 +170,7 @@ func token(dependencies Dependencies) (string, error) {
 	return credentials.AccessToken, nil
 }
 
-func vendored(cfg *project.Project) (string, error) {
+func requireProviderID(cfg *project.Project) (string, error) {
 	declared, err := cfg.RequireProvider()
 	if err != nil {
 		return "", err
@@ -178,24 +178,24 @@ func vendored(cfg *project.Project) (string, error) {
 	return declared.ID, nil
 }
 
-func printed(out io.Writer, registered console.Connector, live console.Liveness) {
+func printConnector(out io.Writer, registered console.Connector, live console.Liveness) {
 	fmt.Fprintf(out, "%s\n", terminal.PaletteFor(out).Bold(registered.Target))
-	fmt.Fprintf(out, "  compute %s over %s, %s\n", named(registered.Compute, "unset"), registered.Reach, live)
-	fmt.Fprintf(out, "  url %s\n", named(registered.URL, "none"))
-	fmt.Fprintf(out, "  can %s\n", listed(registered.Capabilities))
+	fmt.Fprintf(out, "  compute %s over %s, %s\n", formatOptional(registered.Compute, "unset"), registered.Reach, live)
+	fmt.Fprintf(out, "  url %s\n", formatOptional(registered.URL, "none"))
+	fmt.Fprintf(out, "  can %s\n", formatCapabilities(registered.Capabilities))
 	if registered.LastDenied != nil {
 		fmt.Fprintf(out, "  last refused %s at %s: %s\n", registered.LastDenied.Verb, registered.LastDenied.At, registered.LastDenied.Message)
 	}
 }
 
-func named(value *string, absent string) string {
+func formatOptional(value *string, absent string) string {
 	if value == nil || *value == "" {
 		return absent
 	}
 	return *value
 }
 
-func listed(values []string) string {
+func formatCapabilities(values []string) string {
 	if len(values) == 0 {
 		return "nothing yet"
 	}

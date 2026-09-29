@@ -130,7 +130,7 @@ func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts 
 	}
 	cfg = facts.project
 
-	browser := dependencies.BrowserReachable(stdin)
+	browser := dependencies.IsBrowserReachable(stdin)
 	scope := variablescope.Of(cfg, environmentv1.Tier_TIER_PRODUCTION, "")
 	scope.Browser = browser
 	recovery := variablesRecovery{

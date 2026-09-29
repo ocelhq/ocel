@@ -224,7 +224,7 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 	}
 	cfg = facts.project
 
-	browser := dependencies.BrowserReachable(stdin)
+	browser := dependencies.IsBrowserReachable(stdin)
 	scope := variablescope.Of(cfg, environmentv1.Tier_TIER_PREVIEW, env.GetIdentity())
 	scope.Browser = browser
 	recovery := variablesRecovery{

@@ -14,10 +14,10 @@ import (
 )
 
 func runRemove(ctx context.Context, dependencies Dependencies, cfg *project.Project, _ *console.Link, opts options) (err error) {
-	if _, err := vendored(cfg); err != nil {
+	if _, err := requireProviderID(cfg); err != nil {
 		return err
 	}
-	access, err := token(dependencies)
+	access, err := readAccessToken(dependencies)
 	if err != nil {
 		return err
 	}
@@ -28,12 +28,12 @@ func runRemove(ctx context.Context, dependencies Dependencies, cfg *project.Proj
 	}
 	defer run.End(&err)
 
-	fingerprint, unreached := taken(ctx, dependencies, run, cfg, opts)
+	fingerprint, unreached := removeFromTarget(ctx, dependencies, run, cfg, opts)
 	if fingerprint == "" {
 		if opts.target == "" {
 			return fmt.Errorf("%w\n\nThe console still has this target registered; nothing was forgotten. Reach the machine and run this again, or read the fingerprint with `ocel connector status` and run `ocel connector rm --target <fingerprint>` to forget it in the console alone", unreached)
 		}
-		return forgotten(ctx, run, opts, access, opts.target)
+		return forgetInConsole(ctx, run, opts, access, opts.target)
 	}
 
 	registered, err := opts.console.FindConnector(ctx, access, fingerprint)
@@ -55,7 +55,7 @@ func runRemove(ctx context.Context, dependencies Dependencies, cfg *project.Proj
 	return nil
 }
 
-func forgotten(ctx context.Context, run *run.Run, opts options, access, fingerprint string) error {
+func forgetInConsole(ctx context.Context, run *run.Run, opts options, access, fingerprint string) error {
 	registered, err := opts.console.FindConnector(ctx, access, fingerprint)
 	if err != nil {
 		return err
@@ -71,7 +71,7 @@ func forgotten(ctx context.Context, run *run.Run, opts options, access, fingerpr
 	return nil
 }
 
-func taken(ctx context.Context, dependencies Dependencies, run *run.Run, cfg *project.Project, opts options) (string, error) {
+func removeFromTarget(ctx context.Context, dependencies Dependencies, run *run.Run, cfg *project.Project, opts options) (string, error) {
 	if opts.target != "" {
 		return "", fmt.Errorf("this run names a target, so the machine behind %s was never asked", opts.target)
 	}

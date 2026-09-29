@@ -71,7 +71,7 @@ func serveAndOpenEditor(
 	}
 
 	fmt.Fprintf(stdout, "\nVariables for %s are at:\n\n  %s\n\n", cfg.Slug, editor.URL)
-	if !dependencies.BrowserReachable(stdin) {
+	if !dependencies.IsBrowserReachable(stdin) {
 		return editor, nil
 	}
 	if err := dependencies.OpenBrowser(editor.URL); err != nil {

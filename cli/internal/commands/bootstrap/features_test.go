@@ -122,12 +122,12 @@ func TestRemovingAFeatureTakesWhatDependsOnItAndNothingThatIsNotInstalled(t *tes
 func TestAFeatureCannotBeBothEnsuredAndRemovedInOneRun(t *testing.T) {
 	t.Parallel()
 
-	if err := bothWays([]string{featureISR}, []string{featureImageOptimization}); err != nil {
-		t.Errorf("bothWays = %v, want two disjoint sets admitted", err)
+	if err := refuseFeaturesNamedBothWays([]string{featureISR}, []string{featureImageOptimization}); err != nil {
+		t.Errorf("refuseFeaturesNamedBothWays = %v, want two disjoint sets admitted", err)
 	}
-	err := bothWays([]string{featureISR}, []string{featureISR})
+	err := refuseFeaturesNamedBothWays([]string{featureISR}, []string{featureISR})
 	if err == nil {
-		t.Fatal("bothWays admitted a feature named for both ensure and removal")
+		t.Fatal("refuseFeaturesNamedBothWays admitted a feature named for both ensure and removal")
 	}
 	for _, want := range []string{"--features", "--remove", featureISR} {
 		if !strings.Contains(err.Error(), want) {

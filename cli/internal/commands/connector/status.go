@@ -15,7 +15,7 @@ import (
 
 func runStatus(ctx context.Context, dependencies Dependencies, cfg *project.Project, _ *console.Link,
 	opts options, stdout io.Writer) error {
-	access, err := token(dependencies)
+	access, err := readAccessToken(dependencies)
 	if err != nil {
 		return err
 	}
@@ -25,7 +25,7 @@ func runStatus(ctx context.Context, dependencies Dependencies, cfg *project.Proj
 	}
 
 	if dependencies.ConfigPath() != "" {
-		fingerprint, err := fingerprinted(ctx, dependencies, cfg)
+		fingerprint, err := readFingerprint(ctx, dependencies, cfg)
 		if err != nil {
 			return err
 		}
@@ -53,12 +53,12 @@ func runStatus(ctx context.Context, dependencies Dependencies, cfg *project.Proj
 		if at > 0 {
 			fmt.Fprintln(stdout)
 		}
-		printed(stdout, row, row.Liveness())
+		printConnector(stdout, row, row.Liveness())
 	}
 	return nil
 }
 
-func fingerprinted(ctx context.Context, dependencies Dependencies, cfg *project.Project) (fingerprint string, err error) {
+func readFingerprint(ctx context.Context, dependencies Dependencies, cfg *project.Project) (fingerprint string, err error) {
 	if _, err := cfg.RequireProvider(); err != nil {
 		return "", err
 	}

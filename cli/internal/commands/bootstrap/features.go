@@ -369,7 +369,7 @@ func without(names, taken []string) []string {
 	return kept
 }
 
-func bothWays(requested, named []string) error {
+func refuseFeaturesNamedBothWays(requested, named []string) error {
 	var both []string
 	for _, name := range named {
 		if slices.Contains(requested, name) {

@@ -68,7 +68,7 @@ func run(ctx context.Context, dependencies Dependencies, force bool, stdin io.Re
 	p := terminal.PaletteFor(out)
 	fmt.Fprintf(out, "Code     %s\n", p.Bold(code))
 	fmt.Fprintf(out, "Confirm  %s\n\n", p.Link(confirmURL))
-	if dependencies.BrowserReachable(stdin) {
+	if dependencies.IsBrowserReachable(stdin) {
 		_ = dependencies.OpenBrowser(confirmURL)
 	}
 	fmt.Fprintln(out, p.Faint("Waiting for you to confirm the code…"))
