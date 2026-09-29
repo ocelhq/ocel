@@ -3,42 +3,32 @@ package bootstrap
 import (
 	"bytes"
 	"context"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
-func describeJournal(t *testing.T) string {
-	t.Helper()
-	path := filepath.Join(t.TempDir(), "describe.journal")
-	t.Setenv(clitest.FakeDescribeJournalEnvVar, path)
-	return path
-}
-
 func TestOnlyWhatRendersDependentsPaysForThem(t *testing.T) {
 	t.Run("bootstrap reads the catalogue, then plans the apply it is about to send", func(t *testing.T) {
-		root, _, deps := clitest.SetUpEdgeFixture(t, "")
-		journal := describeJournal(t)
-		t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr")
+		project, deps := bootstrapProject(t, "", featureISR)
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(deps, &stdout)
-		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := Run(context.Background(), deps, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stderr=%s", err, stderr.String())
 		}
-		got := clitest.ReadJournal(t, journal)
-		if len(got) != 2 {
-			t.Fatalf("the provider was asked %d times, want the catalogue and then the plan: %v", len(got), got)
+		described := clitest.RequestsTo[*contractv1.DescribeBootstrapRequest](t, project.Requests, contractv1connect.ProviderServiceDescribeBootstrapProcedure)
+		if len(described) != 1 || !described[0].GetWithDependents() {
+			t.Errorf("the catalogue was read %v; a provider that draws no plan leaves the dependent names nowhere else to come from", described)
 		}
-		if !strings.Contains(got[0], "withDependents=true") {
-			t.Errorf("bootstrap asked %v; a provider that draws no plan leaves the dependent names nowhere else to come from", got)
-		}
-		if strings.Contains(got[0], "intent=") || !strings.Contains(got[1], "intent=features=isr,force=false") {
-			t.Errorf("the provider was asked %v, want the second ask to include the apply it would send", got)
+		planned := clitest.RequestsTo[*contractv1.BootstrapRequest](t, project.Requests, contractv1connect.ProviderServiceBootstrapProcedure)
+		if len(planned) == 0 || !planned[0].GetDry() || strings.Join(planned[0].GetFeatures(), ",") != featureISR || planned[0].GetForce() {
+			t.Errorf("the provider was asked to plan %v, want the first ask to be the apply it would send, drawn dry", planned)
 		}
 	})
 }

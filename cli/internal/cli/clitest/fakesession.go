@@ -18,7 +18,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/channel"
-	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
@@ -55,28 +54,6 @@ func RunFakeSession() int {
 	defer stop()
 	<-ctx.Done()
 	return 0
-}
-
-type FakeProject struct {
-	Root     string
-	Provider *fake.Provider
-	Requests *ProviderRequests
-}
-
-func SetUpProject(t *testing.T) FakeProject {
-	t.Helper()
-
-	root := writeProject(t)
-	p := fake.NewForProject(fake.Options{}, root)
-	Bootstrap(t, p, environment.TierProduction)
-	return FakeProject{Root: root, Provider: p, Requests: ServeFake(t, p)}
-}
-
-func Bootstrap(t *testing.T, p *fake.Provider, tier environment.Tier, features ...string) {
-	t.Helper()
-	if err := p.FakeBootstrap().Apply(context.Background(), provider.BootstrapRequest{Tier: tier, Features: features}, nil); err != nil {
-		t.Fatalf("bootstrap the fake provider's %s tier: %v", tier, err)
-	}
 }
 
 func ServeFake(t *testing.T, p *fake.Provider) *ProviderRequests {

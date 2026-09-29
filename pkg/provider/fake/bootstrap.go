@@ -18,16 +18,20 @@ const (
 )
 
 type Bootstrap struct {
-	mu         sync.Mutex
-	applied    map[environment.Tier][]string
-	stale      map[string]bool
-	writer     string
-	schema     uint32
-	refusal    error
-	requests   []provider.BootstrapRequest
-	front      edge.Kind
-	raised     []edge.Kind
-	unfinished bool
+	mu          sync.Mutex
+	applied     map[environment.Tier][]string
+	stale       map[string]bool
+	writer      string
+	schema      uint32
+	refusal     error
+	requests    []provider.BootstrapRequest
+	front       edge.Kind
+	raised      []edge.Kind
+	unfinished  bool
+	catalogue   []provider.Feature
+	planned     *provider.Plan
+	planRefusal error
+	removal     *provider.Plan
 }
 
 func NewBootstrap() *Bootstrap {
@@ -57,7 +61,37 @@ func (b *Bootstrap) DefaultEdge() edge.Kind {
 	return b.front
 }
 
+func (b *Bootstrap) Offers(catalogue ...provider.Feature) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.catalogue = catalogue
+}
+
+func (b *Bootstrap) PlansWith(plan provider.Plan) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.planned = &plan
+}
+
+func (b *Bootstrap) RefusePlan(err error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.planRefusal = err
+}
+
+func (b *Bootstrap) PlansRemovalWith(plan provider.Plan) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.removal = &plan
+}
+
 func (b *Bootstrap) Catalogue() []provider.Feature {
+	b.mu.Lock()
+	offered := b.catalogue
+	b.mu.Unlock()
+	if offered != nil {
+		return slices.Clone(offered)
+	}
 	return []provider.Feature{
 		{
 			Name:    FeatureCache,
@@ -146,6 +180,15 @@ func (b *Bootstrap) stack(tier environment.Tier, feature string) provider.Bootst
 }
 
 func (b *Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (provider.Plan, error) {
+	b.mu.Lock()
+	planned, refusal := b.planned, b.planRefusal
+	b.mu.Unlock()
+	if refusal != nil {
+		return provider.Plan{}, refusal
+	}
+	if planned != nil {
+		return clonePlan(*planned), nil
+	}
 	described, err := b.Describe(ctx, req.Tier)
 	if err != nil {
 		return provider.Plan{}, err
@@ -188,6 +231,9 @@ func (b *Bootstrap) Apply(_ context.Context, req provider.BootstrapRequest, prog
 func (b *Bootstrap) PlanRemove(_ context.Context, tier environment.Tier) (provider.Plan, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	if b.removal != nil {
+		return clonePlan(*b.removal), nil
+	}
 	features, present := b.applied[tier]
 	if !present {
 		return provider.Plan{}, nil
@@ -241,4 +287,14 @@ func (b *Bootstrap) Remove(_ context.Context, tier environment.Tier, progress pr
 		progress.Say("Removed the " + string(tier) + " bootstrap")
 	}
 	return nil
+}
+
+func clonePlan(plan provider.Plan) provider.Plan {
+	groups := make([]provider.ChangeGroup, len(plan.Groups))
+	for i, group := range plan.Groups {
+		group.Changes = slices.Clone(group.Changes)
+		groups[i] = group
+	}
+	plan.Groups = groups
+	return plan
 }
