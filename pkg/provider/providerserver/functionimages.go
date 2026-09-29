@@ -42,10 +42,7 @@ func (r *deployRun) imageFunctions(
 	}
 	root := r.artifactRoot
 	var pushes []provider.ImagePush
-	for _, fn := range r.manifest.GetFunctions() {
-		if fn.GetApp() != entry.App {
-			continue
-		}
+	for _, fn := range entry.Manifest.GetServerless().GetFunctions() {
 		push, err := r.imageFunction(ctx, hooks, root, entry, fn, overlayFor(pack.Overlay, fn, routing))
 		if err != nil {
 			return nil, err

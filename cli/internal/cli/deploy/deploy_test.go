@@ -106,7 +106,7 @@ export default {
 			{
 				Route:        "api",
 				Framework:    manifestbuilder.Framework{Name: "node"},
-				Handler:      "src/server.js",
+				EntryFile:    "src/server.js",
 				ArtifactPath: "output/api",
 				App:          "api",
 			},
@@ -122,7 +122,7 @@ export default {
 		}
 
 		out := stdout.String()
-		if !strings.Contains(out, "FUNCTION logical_name=fn--api--api framework=node handler=src/server.js artifact_path=output/api app=api") {
+		if !strings.Contains(out, "FUNCTION logical_name=fn--api--api framework=node entry_file=src/server.js artifact_path=output/api app=api") {
 			t.Errorf("stdout = %q, want the function to have reached the manifest", out)
 		}
 		if strings.Contains(stderr.String(), "deploying infrastructure only") {
@@ -487,7 +487,7 @@ export default {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, []manifestbuilder.Function{
-			{Route: "api", Framework: manifestbuilder.Framework{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/api", App: "api"},
+			{Route: "api", Framework: manifestbuilder.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
 		})
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
@@ -515,7 +515,7 @@ export default {
 		if !strings.Contains(out, "deployment="+clitest.FixtureDeploymentID("api")) {
 			t.Errorf("stdout = %q, want the app deployed under the id its build recorded", out)
 		}
-		if !strings.Contains(out, "framework=node handler=src/server.js artifact_path=output/api app=api") {
+		if !strings.Contains(out, "framework=node entry_file=src/server.js artifact_path=output/api app=api") {
 			t.Errorf("stdout = %q, want the function attributed to the api app", out)
 		}
 
@@ -526,8 +526,8 @@ export default {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, []manifestbuilder.Function{
-			{Route: "web", Framework: manifestbuilder.Framework{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/web", App: "web"},
-			{Route: "admin", Framework: manifestbuilder.Framework{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/admin", App: "admin"},
+			{Route: "web", Framework: manifestbuilder.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/web", App: "web"},
+			{Route: "admin", Framework: manifestbuilder.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/admin", App: "admin"},
 		})
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
@@ -586,7 +586,7 @@ export default {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, []manifestbuilder.Function{
-			{Route: "index", Framework: manifestbuilder.Framework{Name: "next"}, Handler: "h.js", ArtifactPath: "output/index", App: "express-app"},
+			{Route: "index", Framework: manifestbuilder.Framework{Name: "next"}, EntryFile: "h.js", ArtifactPath: "output/index", App: "express-app"},
 		})
 		root, sockPath := clitest.SetUpDeployFixture(t)
 

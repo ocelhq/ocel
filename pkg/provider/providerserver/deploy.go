@@ -917,7 +917,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 				App: &provider.AppSpec{
 					App:             entry.App,
 					Framework:       entry.Manifest.GetFramework().GetName(),
-					Entry:           entryLogicalName(r.manifest, entry.App, facts.Entry),
+					Entry:           entryLogicalName(entry.Manifest, facts.Entry),
 					Deployment:      entry.Build.DeploymentID(),
 					Compute:         entry.Compute(),
 					Router:          r.readAppRouter(entry.App),
@@ -1125,15 +1125,12 @@ func (r *deployRun) manifestValues(entry provider.AppEntry, grants []provider.Bi
 
 func (r *deployRun) functionSpecs(entry provider.AppEntry) []provider.FunctionSpec {
 	var specs []provider.FunctionSpec
-	for _, fn := range r.manifest.GetFunctions() {
-		if fn.GetApp() != entry.App {
-			continue
-		}
+	for _, fn := range entry.Manifest.GetServerless().GetFunctions() {
 		artifact, _ := r.artifact(fn.GetLogicalName())
 		specs = append(specs, provider.FunctionSpec{
 			Name:      fn.GetLogicalName(),
 			Route:     fn.GetRouteId(),
-			Handler:   fn.GetHandler(),
+			EntryFile: fn.GetEntryFile(),
 			Framework: frameworkOf(fn),
 			Artifact:  artifact,
 			Image:     r.functionImage(fn.GetLogicalName()),
@@ -1153,12 +1150,12 @@ func frameworksOf(manifest *contractv1.Manifest) []string {
 	return frameworks
 }
 
-func entryLogicalName(manifest *contractv1.Manifest, app, entry string) string {
+func entryLogicalName(app *contractv1.ManifestApp, entry string) string {
 	if entry == "" {
 		return ""
 	}
-	for _, fn := range manifest.GetFunctions() {
-		if fn.GetApp() == app && routeOf(fn) == entry {
+	for _, fn := range app.GetServerless().GetFunctions() {
+		if routeOf(fn) == entry {
 			return fn.GetLogicalName()
 		}
 	}
@@ -1226,10 +1223,7 @@ func (r *deployRun) recordStagedDeployment(ctx context.Context, entry provider.A
 	}
 	urls := make(map[string]string, len(result.Functions))
 	var logical []string
-	for _, fn := range r.manifest.GetFunctions() {
-		if fn.GetApp() != entry.App {
-			continue
-		}
+	for _, fn := range entry.Manifest.GetServerless().GetFunctions() {
 		logical = append(logical, fn.GetLogicalName())
 		if url := urlByLogical[fn.GetLogicalName()]; url != "" {
 			urls[routeOf(fn)] = url
@@ -1247,7 +1241,7 @@ func (r *deployRun) recordStagedDeployment(ctx context.Context, entry provider.A
 		Build:            r.spec.Builds[entry.App],
 		DeploymentID:     entry.Build.DeploymentID(),
 		Entry:            facts.Entry,
-		EntryFunction:    physicalByLogical[entryLogicalName(r.manifest, entry.App, facts.Entry)],
+		EntryFunction:    physicalByLogical[entryLogicalName(entry.Manifest, facts.Entry)],
 		Image:            images.ImageRef(entry.App),
 		Physical:         physicalOf(result.Containers, entry.App),
 		Revisions:        revisionsOf(result, entry.App, logical),

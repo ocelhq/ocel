@@ -5,28 +5,40 @@ import (
 	"strings"
 	"testing"
 
-	validate "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
-	"google.golang.org/protobuf/proto"
+	"buf.build/go/protovalidate"
 
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-func TestTheWireAndTheContractNameTheSameComputes(t *testing.T) {
-	field := (&contractv1.ManifestApp{}).ProtoReflect().Descriptor().Fields().ByName("compute")
-	if field == nil {
-		t.Fatal("ManifestApp has no compute field, so nothing pins the vocabulary on the wire")
+func TestEveryArtifactAManifestAppCarriesNamesACompute(t *testing.T) {
+	apps := []*contractv1.ManifestApp{
+		{Artifact: &contractv1.ManifestApp_Serverless{Serverless: &contractv1.ServerlessArtifact{}}},
+		{Artifact: &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{}}},
+	}
+	cases := (&contractv1.ManifestApp{}).ProtoReflect().Descriptor().Oneofs().ByName("artifact").Fields().Len()
+	if cases != len(apps) {
+		t.Fatalf("ManifestApp.artifact has %d cases and this test reads %d, so a case would reach a provider with no compute it runs", cases, len(apps))
 	}
 
-	rules, ok := proto.GetExtension(field.Options(), validate.E_Field).(*validate.FieldRules)
-	if !ok || rules.GetString() == nil {
-		t.Fatal("ManifestApp.compute has no buf.validate string rule, so the wire admits any compute the contract has never heard of")
+	named := make([]provider.Compute, 0, len(apps))
+	for _, app := range apps {
+		named = append(named, provider.ComputeOf(app))
 	}
+	slices.Sort(named)
+	known := slices.Sorted(slices.Values(provider.Computes()))
+	if !slices.Equal(named, known) {
+		t.Errorf("the artifacts a ManifestApp carries name computes %v, Computes() names %v", named, known)
+	}
+}
 
-	pinned := slices.Sorted(slices.Values(rules.GetString().GetIn()))
-	known := slices.Sorted(slices.Values(provider.ComputeNames(provider.Computes())))
-	if !slices.Equal(pinned, known) {
-		t.Errorf("ManifestApp.compute pins %v, Computes() names %v — a compute in one list and not the other is either refused by a protovalidate error naming a field the user never wrote, or admitted onto the wire with no provider that runs it", pinned, known)
+func TestTheWireRefusesAnAppThatCarriesNoArtifact(t *testing.T) {
+	validator, err := protovalidate.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validator.Validate(&contractv1.ManifestApp{Name: "web"}); err == nil {
+		t.Fatal("a ManifestApp with neither functions nor a container image validated, so a provider would be handed an app with nothing to run")
 	}
 }
 

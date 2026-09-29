@@ -49,82 +49,15 @@ func buildDeploySpec(req *contractv1.DeployRequest, promotionID string) (provide
 	if !ephemeral(env) {
 		spec.Infra = naming.InfraStack(name)
 	}
-	containers, err := appContainers(manifest)
-	if err != nil {
-		return provider.DeploySpec{}, err
-	}
 	for _, app := range manifest.GetApps() {
 		entry, err := appEntry(app, name, promotionID)
 		if err != nil {
 			return provider.DeploySpec{}, err
 		}
-		if container, ours := containers[entry.App]; ours {
-			entry.Image = container.GetImage()
-			entry.HealthCheckPath = container.GetHealthCheckPath()
-			entry.Arch = container.GetArch()
-		}
 		spec.Builds[entry.App] = entry.Build.String()
 		spec.Apps = append(spec.Apps, entry)
 	}
-	if err := refuseOrphanFunctions(manifest, spec.Builds); err != nil {
-		return provider.DeploySpec{}, err
-	}
 	return spec, nil
-}
-
-func appContainers(manifest *contractv1.Manifest) (map[string]*contractv1.ManifestContainer, error) {
-	compute := make(map[string]string, len(manifest.GetApps()))
-	for _, app := range manifest.GetApps() {
-		compute[app.GetName()] = app.GetCompute()
-	}
-
-	containers := make(map[string]*contractv1.ManifestContainer, len(manifest.GetContainers()))
-	for _, container := range manifest.GetContainers() {
-		app := container.GetApp()
-		kind, declared := compute[app]
-		if !declared {
-			return nil, refusal.Refuse(refusal.CodeInvalid,
-				"a container names the app %q, which this manifest does not declare", app)
-		}
-		if kind != string(provider.ComputeContainer) {
-			return nil, refusal.Refuse(refusal.CodeInvalid,
-				"a container names the app %q, which this manifest says runs on %q compute", app, kind)
-		}
-		if _, twice := containers[app]; twice {
-			return nil, refusal.Refuse(refusal.CodeInvalid,
-				"app %q declares two containers, and an app is served by one process", app)
-		}
-		containers[app] = container
-	}
-	for app, kind := range compute {
-		if kind == string(provider.ComputeContainer) && containers[app].GetImage() == "" {
-			return nil, refusal.Refuse(refusal.CodeInvalid,
-				"app %q runs on container compute and this manifest names no image for it", app)
-		}
-	}
-	for _, fn := range manifest.GetFunctions() {
-		if _, served := containers[fn.GetApp()]; served {
-			return nil, refusal.Refuse(refusal.CodeInvalid,
-				"app %q runs on container compute and this manifest packs function %s into it as well, so two things would answer the same request",
-				fn.GetApp(), fn.GetLogicalName())
-		}
-	}
-	return containers, nil
-}
-
-func refuseOrphanFunctions(manifest *contractv1.Manifest, declared map[string]string) error {
-	for _, fn := range manifest.GetFunctions() {
-		app := fn.GetApp()
-		if app == "" {
-			return refusal.Refuse(refusal.CodeInvalid,
-				"function %s names no app, and a function ships inside the app that declares it", fn.GetLogicalName())
-		}
-		if _, ours := declared[app]; !ours {
-			return refusal.Refuse(refusal.CodeInvalid,
-				"function %s names the app %q, which this manifest does not declare", fn.GetLogicalName(), app)
-		}
-	}
-	return nil
 }
 
 func appEntry(app *contractv1.ManifestApp, env, promotionID string) (provider.AppEntry, error) {
@@ -143,11 +76,15 @@ func appEntry(app *contractv1.ManifestApp, env, promotionID string) (provider.Ap
 	if err != nil {
 		return provider.AppEntry{}, err
 	}
+	container := app.GetContainer()
 	return provider.AppEntry{
-		App:      name,
-		Stack:    naming.AppStack(env, name, identity.Release()),
-		Build:    identity,
-		Manifest: app,
+		App:             name,
+		Stack:           naming.AppStack(env, name, identity.Release()),
+		Build:           identity,
+		Manifest:        app,
+		Image:           container.GetImage(),
+		HealthCheckPath: container.GetHealthCheckPath(),
+		Arch:            container.GetArch(),
 	}, nil
 }
 

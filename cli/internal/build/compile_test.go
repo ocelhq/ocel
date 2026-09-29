@@ -59,7 +59,7 @@ func TestAGoAppIsCompiledHereRatherThanHandedToTheNodeBuildScript(t *testing.T) 
 	assertFunctions(t, "ReadFunctions", fns, []manifestbuilder.Function{{
 		Route:        "index",
 		Framework:    manifestbuilder.Framework{Name: "go", Arch: arch.X8664},
-		Handler:      "api",
+		EntryFile:    "api",
 		ArtifactPath: "apps/api/functions/index.func",
 		RouteID:      "/",
 		App:          "api",
@@ -112,7 +112,7 @@ func TestAPythonAppIsVendoredHereRatherThanHandedToTheNodeBuilder(t *testing.T) 
 	assertFunctions(t, "ReadFunctions", fns, []manifestbuilder.Function{{
 		Route:        "index",
 		Framework:    manifestbuilder.Framework{Name: "python", Arch: arch.X8664},
-		Handler:      "main.py",
+		EntryFile:    "main.py",
 		ArtifactPath: "apps/api/functions/index.func",
 		RouteID:      "/",
 		App:          "api",
@@ -168,7 +168,7 @@ func TestARustAppIsCompiledHereRatherThanHandedToTheNodeBuilder(t *testing.T) {
 	assertFunctions(t, "ReadFunctions", fns, []manifestbuilder.Function{{
 		Route:        "index",
 		Framework:    manifestbuilder.Framework{Name: "rust", Arch: arch.X8664},
-		Handler:      "api",
+		EntryFile:    "api",
 		ArtifactPath: "apps/api/functions/index.func",
 		RouteID:      "/",
 		App:          "api",

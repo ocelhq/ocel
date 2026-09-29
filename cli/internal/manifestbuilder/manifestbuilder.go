@@ -11,6 +11,7 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 const ContractVersion = "provider.v1"
@@ -82,7 +83,7 @@ type Variable struct {
 type Function struct {
 	Route        string
 	Framework    Framework
-	Handler      string
+	EntryFile    string
 	ArtifactPath string
 	App          string
 	RouteID      string
@@ -248,7 +249,7 @@ func Build(slug string, domains map[string][]string, apps []App, compute string,
 		return nil, err
 	}
 
-	manifestFunctions := make([]*contractv1.ManifestFunction, 0, len(functions))
+	functionsByApp := make(map[string][]*contractv1.ManifestFunction, len(apps))
 	for _, f := range functions {
 		if f.App == "" || f.Route == "" {
 			return nil, fmt.Errorf("manifestbuilder: function %q of app %q needs both an app and a route name", f.Route, f.App)
@@ -261,18 +262,14 @@ func Build(slug string, domains map[string][]string, apps []App, compute string,
 		}
 		named[logical] = described
 
-		manifestFunctions = append(manifestFunctions, &contractv1.ManifestFunction{
+		functionsByApp[f.App] = append(functionsByApp[f.App], &contractv1.ManifestFunction{
 			LogicalName:  logical,
 			Framework:    frameworkProto(f.Framework),
-			Handler:      f.Handler,
+			EntryFile:    f.EntryFile,
 			ArtifactPath: f.ArtifactPath,
 			RouteId:      f.RouteID,
-			App:          f.App,
 		})
 	}
-	slices.SortFunc(manifestFunctions, func(a, b *contractv1.ManifestFunction) int {
-		return strings.Compare(a.LogicalName, b.LogicalName)
-	})
 
 	usages, err := buildUsages(apps, seen)
 	if err != nil {
@@ -284,12 +281,7 @@ func Build(slug string, domains map[string][]string, apps []App, compute string,
 		return nil, err
 	}
 
-	manifestApps, err := buildApps(apps, compute, functions, variables)
-	if err != nil {
-		return nil, err
-	}
-
-	containers, err := buildContainers(manifestApps, apps, functions)
+	manifestApps, err := buildApps(apps, compute, functions, functionsByApp, variables)
 	if err != nil {
 		return nil, err
 	}
@@ -298,11 +290,9 @@ func Build(slug string, domains map[string][]string, apps []App, compute string,
 		SchemaVersion: ContractVersion,
 		Slug:          slug,
 		Resources:     resources,
-		Functions:     manifestFunctions,
 		Domains:       projectDomains,
 		Apps:          manifestApps,
 		Usages:        usages,
-		Containers:    containers,
 	}, nil
 }
 
@@ -395,7 +385,7 @@ func tierDomains(domains map[string][]string) ([]*contractv1.TierDomains, error)
 	return out, nil
 }
 
-func buildApps(apps []App, compute string, functions []Function, variables map[string][]Variable) ([]*contractv1.ManifestApp, error) {
+func buildApps(apps []App, compute string, functions []Function, functionsByApp map[string][]*contractv1.ManifestFunction, variables map[string][]Variable) ([]*contractv1.ManifestApp, error) {
 	frameworkByApp := make(map[string]Framework, len(functions))
 	for _, f := range functions {
 		if f.App != "" && f.Framework.Name != "" {
@@ -421,15 +411,18 @@ func buildApps(apps []App, compute string, functions []Function, variables map[s
 		if err != nil {
 			return nil, err
 		}
-		manifestApps = append(manifestApps, &contractv1.ManifestApp{
+		manifestApp := &contractv1.ManifestApp{
 			Name:         a.Name,
 			Framework:    frameworkProto(framework),
-			Compute:      appCompute,
 			Domains:      appDomains,
 			Variables:    manifestVariables(variables[a.Name]),
 			Folder:       a.Folder,
 			ClientBundle: a.ClientBundle,
-		})
+		}
+		if err := attachArtifact(manifestApp, a, appCompute, functionsByApp[a.Name]); err != nil {
+			return nil, err
+		}
+		manifestApps = append(manifestApps, manifestApp)
 	}
 
 	for _, f := range functions {
@@ -437,10 +430,13 @@ func buildApps(apps []App, compute string, functions []Function, variables map[s
 			continue
 		}
 		configured[f.App] = true
+		if compute == string(provider.ComputeContainer) {
+			return nil, fmt.Errorf("app %q runs on container compute and this project's config does not name it, so there is no directory to build its image from: give %q a name and a path under `apps`", f.App, f.App)
+		}
 		manifestApps = append(manifestApps, &contractv1.ManifestApp{
 			Name:         f.App,
 			Framework:    frameworkProto(frameworkByApp[f.App]),
-			Compute:      compute,
+			Artifact:     serverlessArtifact(functionsByApp[f.App]),
 			Variables:    manifestVariables(variables[f.App]),
 			ClientBundle: appbuild.FrameworkBundlesClient(frameworkByApp[f.App].Name),
 		})

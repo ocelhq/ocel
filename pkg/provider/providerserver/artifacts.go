@@ -56,12 +56,7 @@ func (r *deployRun) stageFunctions(
 
 func (r *deployRun) stageApp(entry provider.AppEntry, pack provider.PackAppResult, routing *provider.RoutingSpec) ([]provider.Upload, error) {
 	root := r.artifactRoot
-	var shipping []*contractv1.ManifestFunction
-	for _, fn := range r.manifest.GetFunctions() {
-		if fn.GetApp() == entry.App {
-			shipping = append(shipping, fn)
-		}
-	}
+	shipping := entry.Manifest.GetServerless().GetFunctions()
 	staged := make([]provider.Upload, len(shipping))
 	var group errgroup.Group
 	group.SetLimit(resources.UploadConcurrency)

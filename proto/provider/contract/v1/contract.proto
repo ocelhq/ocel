@@ -169,7 +169,6 @@ message ProductionHostname {
 message Manifest {
   string schema_version = 1 [(buf.validate.field).string.min_len = 1];
   repeated ManifestResource resources = 2;
-  repeated ManifestFunction functions = 3;
 
   string slug = 4 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
@@ -178,18 +177,18 @@ message Manifest {
   repeated ManifestApp apps = 6;
 
   repeated ManifestUsage usages = 7;
-
-  repeated ManifestContainer containers = 8;
 }
 
-message ManifestContainer {
-  string app = 1 [(buf.validate.field).string.min_len = 1];
+message ServerlessArtifact {
+  repeated ManifestFunction functions = 1;
+}
 
-  string image = 2 [(buf.validate.field).string.pattern = "^([^/@:[:space:]]+(:[0-9]+)?/)?[^/@:[:space:]]+(/[^/@:[:space:]]+)*@sha256:[0-9a-f]{64}$"];
+message ContainerArtifact {
+  string image = 1 [(buf.validate.field).string.pattern = "^([^/@:[:space:]]+(:[0-9]+)?/)?[^/@:[:space:]]+(/[^/@:[:space:]]+)*@sha256:[0-9a-f]{64}$"];
 
-  string health_check_path = 3 [(buf.validate.field).string.pattern = "^/[^#?[:space:][:cntrl:]]*$"];
+  string health_check_path = 2 [(buf.validate.field).string.pattern = "^/[^#?[:space:][:cntrl:]]*$"];
 
-  string arch = 4 [(buf.validate.field).string = {in: ["x86_64", "arm64"]}, (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
+  string arch = 3 [(buf.validate.field).string = {in: ["x86_64", "arm64"]}, (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
 }
 
 message ManifestUsage {
@@ -221,9 +220,15 @@ message ManifestApp {
 
   string deployment_id = 6;
 
-  string compute = 7 [(buf.validate.field).string = {in: ["serverless", "container"]}];
-
   bool client_bundle = 8;
+
+  oneof artifact {
+    option (buf.validate.oneof).required = true;
+
+    ServerlessArtifact serverless = 9;
+
+    ContainerArtifact container = 10;
+  }
 }
 
 message ManifestVariable {
@@ -242,10 +247,9 @@ message ManifestVariable {
 message ManifestFunction {
   string logical_name = 1;
   Framework framework = 2;
-  string handler = 3;
+  string entry_file = 3;
   string artifact_path = 4;
   string route_id = 6;
-  string app = 7;
 }
 
 message ManifestResource {

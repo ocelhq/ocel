@@ -203,7 +203,7 @@ func TestAnAppThatRoutesNothingStillGuardsItsEntry(t *testing.T) {
 	coord := storageCoordinate("prod", "shop", "api", fixedRelease(t))
 	spec := servingSpec(t, cfg, "api", "express", coord)
 	functions := []*contractv1.ManifestFunction{
-		{LogicalName: "fn--api--entry", App: "api", RouteId: "/"},
+		{LogicalName: "fn--api--entry", RouteId: "/"},
 	}
 
 	stack := testStack(t, "prod", "api")

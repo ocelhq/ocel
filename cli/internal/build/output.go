@@ -165,7 +165,7 @@ func readFunction(outputDir, functionsDir, funcDir string) (manifestbuilder.Func
 	return manifestbuilder.Function{
 		Route:        route,
 		Framework:    manifestbuilder.Framework{Name: fc.Framework.Name, Arch: fc.Framework.Arch},
-		Handler:      fc.Handler,
+		EntryFile:    fc.Handler,
 		ArtifactPath: filepath.ToSlash(artifactRel),
 		RouteID:      fc.ID,
 		App:          fc.App,

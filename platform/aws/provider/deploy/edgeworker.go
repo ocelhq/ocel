@@ -5,31 +5,10 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 func workerOutputName(app string) string {
 	return naming.Join(naming.WordSeparator, app, string(naming.KindWorker))
-}
-
-func manifestApps(manifest *contractv1.Manifest) []*contractv1.ManifestApp {
-	if apps := manifest.GetApps(); len(apps) > 0 {
-		return apps
-	}
-	var apps []*contractv1.ManifestApp
-	seen := map[string]bool{}
-	for _, fn := range manifest.GetFunctions() {
-		if name := fn.GetApp(); !seen[name] {
-			seen[name] = true
-			apps = append(apps, &contractv1.ManifestApp{
-				Name:      name,
-				Framework: fn.GetFramework(),
-				Compute:   string(provider.ComputeServerless),
-			})
-		}
-	}
-	return apps
 }
 
 const appsDirName = "apps"

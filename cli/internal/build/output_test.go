@@ -186,8 +186,8 @@ func TestReadFunctions(t *testing.T) {
 		}
 
 		assertFunctions(t, "ReadFunctions", fns, []manifestbuilder.Function{
-			{Route: "api/todos/[id]", Framework: manifestbuilder.Framework{Name: "next"}, Handler: "index.handler", ArtifactPath: "apps/web/functions/api/todos/[id].func", App: "web"},
-			{Route: "index", Framework: manifestbuilder.Framework{Name: "next"}, Handler: "index.handler", ArtifactPath: "apps/web/functions/index.func", App: "web"},
+			{Route: "api/todos/[id]", Framework: manifestbuilder.Framework{Name: "next"}, EntryFile: "index.handler", ArtifactPath: "apps/web/functions/api/todos/[id].func", App: "web"},
+			{Route: "index", Framework: manifestbuilder.Framework{Name: "next"}, EntryFile: "index.handler", ArtifactPath: "apps/web/functions/index.func", App: "web"},
 		})
 	})
 
@@ -220,8 +220,8 @@ func TestReadFunctions(t *testing.T) {
 				}
 			},
 			want: []manifestbuilder.Function{
-				{Route: "api/todos/[id]", Framework: manifestbuilder.Framework{Name: "next"}, Handler: "index.handler", ArtifactPath: "apps/web/functions/api/todos/[id].func", App: "web"},
-				{Route: "index", Framework: manifestbuilder.Framework{Name: "next"}, Handler: "index.handler", ArtifactPath: "apps/web/functions/index.func", App: "web"},
+				{Route: "api/todos/[id]", Framework: manifestbuilder.Framework{Name: "next"}, EntryFile: "index.handler", ArtifactPath: "apps/web/functions/api/todos/[id].func", App: "web"},
+				{Route: "index", Framework: manifestbuilder.Framework{Name: "next"}, EntryFile: "index.handler", ArtifactPath: "apps/web/functions/index.func", App: "web"},
 			},
 		},
 		{
@@ -233,8 +233,8 @@ func TestReadFunctions(t *testing.T) {
 				}
 			},
 			want: []manifestbuilder.Function{
-				{Route: "api/documents", Framework: manifestbuilder.Framework{Name: "next"}, Handler: "route.js", ArtifactPath: "apps/admin/functions/api/documents.func", RouteID: "/api/documents", App: "admin"},
-				{Route: "api/documents", Framework: manifestbuilder.Framework{Name: "next"}, Handler: "route.js", ArtifactPath: "apps/storefront/functions/api/documents.func", RouteID: "/api/documents", App: "storefront"},
+				{Route: "api/documents", Framework: manifestbuilder.Framework{Name: "next"}, EntryFile: "route.js", ArtifactPath: "apps/admin/functions/api/documents.func", RouteID: "/api/documents", App: "admin"},
+				{Route: "api/documents", Framework: manifestbuilder.Framework{Name: "next"}, EntryFile: "route.js", ArtifactPath: "apps/storefront/functions/api/documents.func", RouteID: "/api/documents", App: "storefront"},
 			},
 		},
 	}

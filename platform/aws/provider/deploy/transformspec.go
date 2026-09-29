@@ -100,8 +100,8 @@ func translateFunctionSpec(appFramework string, spec provider.FunctionSpec) (fun
 		return functionArgs{}, err
 	}
 	handler := defaultFunctionEntry
-	if spec.Handler != "" {
-		handler = spec.Handler
+	if spec.EntryFile != "" {
+		handler = spec.EntryFile
 	}
 	memoryMB := defaultFunctionMemoryMB
 	if appFramework == appbuild.FrameworkNext {

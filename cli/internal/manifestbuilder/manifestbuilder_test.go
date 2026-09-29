@@ -12,6 +12,7 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 const goldenPath = "testdata/golden_manifest.json"
@@ -32,7 +33,7 @@ type goldenFramework struct {
 type goldenFunction struct {
 	LogicalName  string          `json:"logical_name"`
 	Framework    goldenFramework `json:"framework"`
-	Handler      string          `json:"handler"`
+	EntryFile    string          `json:"entry_file"`
 	ArtifactPath string          `json:"artifact_path"`
 	RouteID      string          `json:"route_id"`
 }
@@ -61,16 +62,35 @@ func toGolden(m *contractv1.Manifest) goldenManifest {
 		}
 		g.Resources = append(g.Resources, gr)
 	}
-	for _, f := range m.GetFunctions() {
+	for _, f := range functionsOf(m) {
 		g.Functions = append(g.Functions, goldenFunction{
 			LogicalName:  f.GetLogicalName(),
 			Framework:    goldenFramework{Name: f.GetFramework().GetName(), Arch: f.GetFramework().GetArch()},
-			Handler:      f.GetHandler(),
+			EntryFile:    f.GetEntryFile(),
 			ArtifactPath: f.GetArtifactPath(),
 			RouteID:      f.GetRouteId(),
 		})
 	}
 	return g
+}
+
+func functionsOf(m *contractv1.Manifest) []*contractv1.ManifestFunction {
+	var functions []*contractv1.ManifestFunction
+	for _, a := range m.GetApps() {
+		functions = append(functions, a.GetServerless().GetFunctions()...)
+	}
+	return functions
+}
+
+func appOfFunction(m *contractv1.Manifest, logical string) string {
+	for _, a := range m.GetApps() {
+		for _, f := range a.GetServerless().GetFunctions() {
+			if f.GetLogicalName() == logical {
+				return a.GetName()
+			}
+		}
+	}
+	return ""
 }
 
 func marshal(t *testing.T, m *contractv1.Manifest) []byte {
@@ -91,8 +111,8 @@ func synthDeclarations() []Declaration {
 
 func synthFunctions() []Function {
 	return []Function{
-		{Route: "api/documents", App: "web", Framework: Framework{Name: "next"}, Handler: "app/api.ts", ArtifactPath: "dist/api.zip", RouteID: "/api/documents"},
-		{Route: "worker", App: "web", Framework: Framework{Name: "node"}, Handler: "app/worker.ts", ArtifactPath: "dist/worker.zip"},
+		{Route: "api/documents", App: "web", Framework: Framework{Name: "next"}, EntryFile: "app/api.ts", ArtifactPath: "dist/api.zip", RouteID: "/api/documents"},
+		{Route: "worker", App: "web", Framework: Framework{Name: "node"}, EntryFile: "app/worker.ts", ArtifactPath: "dist/worker.zip"},
 	}
 }
 
@@ -309,14 +329,14 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		manifest, err := Build("proj-1", nil, nil, "serverless", nil, nil, []Function{
-			{Route: "api/users", App: "web", Framework: Framework{Name: "node"}, Handler: "h.js", ArtifactPath: "a"},
-			{Route: "users", App: "web-api", Framework: Framework{Name: "node"}, Handler: "h.js", ArtifactPath: "b"},
+			{Route: "api/users", App: "web", Framework: Framework{Name: "node"}, EntryFile: "h.js", ArtifactPath: "a"},
+			{Route: "users", App: "web-api", Framework: Framework{Name: "node"}, EntryFile: "h.js", ArtifactPath: "b"},
 		}, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
 		}
 
-		names := []string{manifest.GetFunctions()[0].GetLogicalName(), manifest.GetFunctions()[1].GetLogicalName()}
+		names := []string{functionsOf(manifest)[0].GetLogicalName(), functionsOf(manifest)[1].GetLogicalName()}
 		if names[0] == names[1] {
 			t.Fatalf("both functions got the logical name %q; the app field must stay separable", names[0])
 		}
@@ -329,8 +349,8 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		_, err := Build("proj-1", nil, nil, "serverless", nil, nil, []Function{
-			{Route: "api/users", App: "web", Framework: Framework{Name: "node"}, Handler: "h.js", ArtifactPath: "a"},
-			{Route: "api_users", App: "web", Framework: Framework{Name: "node"}, Handler: "h.js", ArtifactPath: "b"},
+			{Route: "api/users", App: "web", Framework: Framework{Name: "node"}, EntryFile: "h.js", ArtifactPath: "a"},
+			{Route: "api_users", App: "web", Framework: Framework{Name: "node"}, EntryFile: "h.js", ArtifactPath: "b"},
 		}, nil)
 		if err == nil {
 			t.Fatal("Build: expected a collision error, got nil")
@@ -378,7 +398,7 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		_, err := Build("proj-1", nil, nil, "serverless", nil, nil, []Function{
-			{Route: "index", Framework: Framework{Name: "node"}, Handler: "h.js", ArtifactPath: "a"},
+			{Route: "index", Framework: Framework{Name: "node"}, EntryFile: "h.js", ArtifactPath: "a"},
 		}, nil)
 		if err == nil {
 			t.Fatal("Build: expected an error for a function with no app, got nil")
@@ -441,15 +461,15 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		manifest, err := Build("proj-1", nil, nil, "serverless", nil, nil, []Function{
-			{Route: "Web API", App: "web", Framework: Framework{Name: "node"}, Handler: "app/api.ts", ArtifactPath: "dist/api.zip"},
+			{Route: "Web API", App: "web", Framework: Framework{Name: "node"}, EntryFile: "app/api.ts", ArtifactPath: "dist/api.zip"},
 		}, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
 		}
-		if len(manifest.GetFunctions()) != 1 {
-			t.Fatalf("got %d functions, want 1", len(manifest.GetFunctions()))
+		if len(functionsOf(manifest)) != 1 {
+			t.Fatalf("got %d functions, want 1", len(functionsOf(manifest)))
 		}
-		if got := manifest.GetFunctions()[0].GetLogicalName(); got != "fn--web--web-api" {
+		if got := functionsOf(manifest)[0].GetLogicalName(); got != "fn--web--web-api" {
 			t.Fatalf("logical_name = %q, want %q", got, "fn--web--web-api")
 		}
 	})
@@ -458,12 +478,12 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		manifest, err := Build("proj-1", nil, nil, "serverless", nil, nil, []Function{
-			{Route: "api/documents", App: "web", Framework: Framework{Name: "next"}, Handler: "route.js", ArtifactPath: "functions/api/documents.func", RouteID: "/api/documents"},
+			{Route: "api/documents", App: "web", Framework: Framework{Name: "next"}, EntryFile: "route.js", ArtifactPath: "functions/api/documents.func", RouteID: "/api/documents"},
 		}, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
 		}
-		fn := manifest.GetFunctions()[0]
+		fn := functionsOf(manifest)[0]
 		if got, want := fn.GetLogicalName(), "fn--web--api-documents"; got != want {
 			t.Fatalf("logical_name = %q, want %q", got, want)
 		}
@@ -480,8 +500,8 @@ func TestBuild(t *testing.T) {
 			{Name: "admin"},
 		}
 		manifest, err := Build("proj-1", nil, apps, "serverless", nil, nil, []Function{
-			{Route: "web", Framework: Framework{Name: "next"}, Handler: "h.js", ArtifactPath: "a", App: "web"},
-			{Route: "admin", Framework: Framework{Name: "node"}, Handler: "h.js", ArtifactPath: "b", App: "admin"},
+			{Route: "web", Framework: Framework{Name: "next"}, EntryFile: "h.js", ArtifactPath: "a", App: "web"},
+			{Route: "admin", Framework: Framework{Name: "node"}, EntryFile: "h.js", ArtifactPath: "b", App: "admin"},
 		}, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
@@ -509,12 +529,12 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		manifest, err := Build("proj-1", nil, []App{{Name: "web"}}, "serverless", nil, nil, []Function{
-			{Route: "web", Framework: Framework{Name: "node"}, Handler: "h.js", ArtifactPath: "a", App: "web"},
+			{Route: "web", Framework: Framework{Name: "node"}, EntryFile: "h.js", ArtifactPath: "a", App: "web"},
 		}, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
 		}
-		if got := manifest.GetFunctions()[0].GetApp(); got != "web" {
+		if got := appOfFunction(manifest, functionsOf(manifest)[0].GetLogicalName()); got != "web" {
 			t.Fatalf("function app = %q, want %q", got, "web")
 		}
 	})
@@ -523,8 +543,8 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		manifest, err := Build("proj-1", nil, nil, "serverless", nil, nil, []Function{
-			{Route: "api/documents", Framework: Framework{Name: "next"}, Handler: "h.js", ArtifactPath: "a", App: "storefront"},
-			{Route: "index", Framework: Framework{Name: "next"}, Handler: "h.js", ArtifactPath: "b", App: "storefront"},
+			{Route: "api/documents", Framework: Framework{Name: "next"}, EntryFile: "h.js", ArtifactPath: "a", App: "storefront"},
+			{Route: "index", Framework: Framework{Name: "next"}, EntryFile: "h.js", ArtifactPath: "b", App: "storefront"},
 		}, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
@@ -539,8 +559,8 @@ func TestBuild(t *testing.T) {
 		if apps[0].GetFramework().GetName() != "next" {
 			t.Fatalf("app runtime = %q, want %q", apps[0].GetFramework().GetName(), "next")
 		}
-		if apps[0].GetCompute() != "serverless" {
-			t.Errorf("app compute = %q, want %q — an app nobody configured takes the compute preflight resolved", apps[0].GetCompute(), "serverless")
+		if got := provider.ComputeOf(apps[0]); got != provider.ComputeServerless {
+			t.Errorf("app compute = %q, want %q — an app nobody configured takes the compute preflight resolved", got, provider.ComputeServerless)
 		}
 	})
 
@@ -548,7 +568,7 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		manifest, err := Build("proj-1", nil, []App{{Name: "web"}}, "serverless", nil, nil, []Function{
-			{Route: "web", Framework: Framework{Name: "node"}, Handler: "h.js", ArtifactPath: "a", App: "web"},
+			{Route: "web", Framework: Framework{Name: "node"}, EntryFile: "h.js", ArtifactPath: "a", App: "web"},
 		}, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
@@ -568,7 +588,7 @@ func TestBuild(t *testing.T) {
 		if len(manifest.GetApps()) != 1 || manifest.GetApps()[0].GetName() != "web" {
 			t.Fatalf("apps = %v, want one app named web", appNames(manifest.GetApps()))
 		}
-		if got := manifest.GetApps()[0].GetCompute(); got != "container" {
+		if got := provider.ComputeOf(manifest.GetApps()[0]); got != provider.ComputeContainer {
 			t.Errorf("app compute = %q, want the %q the config asked for rather than the project default", got, "container")
 		}
 	})
@@ -580,7 +600,7 @@ func TestBuild(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Build: %v", err)
 		}
-		if got := manifest.GetApps()[0].GetCompute(); got != "container" {
+		if got := provider.ComputeOf(manifest.GetApps()[0]); got != provider.ComputeContainer {
 			t.Errorf("app compute = %q, want %q", got, "container")
 		}
 	})
@@ -619,7 +639,7 @@ func TestBuild(t *testing.T) {
 			},
 		}
 		manifest, err := Build("proj-1", nil, []App{{Name: "admin"}}, "serverless", nil, nil, []Function{
-			{Route: "index", Framework: Framework{Name: "next"}, Handler: "h.js", ArtifactPath: "a", App: "storefront"},
+			{Route: "index", Framework: Framework{Name: "next"}, EntryFile: "h.js", ArtifactPath: "a", App: "storefront"},
 		}, variables)
 		if err != nil {
 			t.Fatalf("Build: %v", err)

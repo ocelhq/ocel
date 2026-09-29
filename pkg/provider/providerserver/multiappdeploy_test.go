@@ -77,21 +77,18 @@ func queuedAppRequest(apps []string) *contractv1.DeployRequest {
 	req := deployRequest()
 	manifest := req.GetManifest()
 	manifest.Apps = nil
-	manifest.Functions = nil
 	manifest.Usages = nil
 	for slot, app := range apps {
 		manifest.Apps = append(manifest.Apps, &contractv1.ManifestApp{
 			Name:         app,
 			Framework:    &contractv1.Framework{Name: "next"},
-			Compute:      string(provider.ComputeServerless),
 			DeploymentId: fmt.Sprintf("%032x", slot+1),
-		})
-		manifest.Functions = append(manifest.Functions, &contractv1.ManifestFunction{
-			LogicalName:  app + "-server",
-			App:          app,
-			Framework:    &contractv1.Framework{Name: "next"},
-			Handler:      "index.handler",
-			ArtifactPath: appArtifactPath(app),
+			Artifact: serverless(&contractv1.ManifestFunction{
+				LogicalName:  app + "-server",
+				Framework:    &contractv1.Framework{Name: "next"},
+				EntryFile:    "index.handler",
+				ArtifactPath: appArtifactPath(app),
+			}),
 		})
 	}
 	return req
@@ -289,9 +286,9 @@ func TestDeployReportsAppOutcomesWhenAnAppRefusesTheRequest(t *testing.T) {
 	client, _ := deployServed(t)
 
 	req := twoAppRequest()
-	for _, fn := range req.GetManifest().GetFunctions() {
-		if fn.GetApp() == "admin" {
-			fn.ArtifactPath = ""
+	for _, app := range req.GetManifest().GetApps() {
+		if app.GetName() == "admin" {
+			app.GetServerless().GetFunctions()[0].ArtifactPath = ""
 		}
 	}
 

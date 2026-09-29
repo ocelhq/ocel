@@ -79,7 +79,7 @@ func stagedProject(t *testing.T, apps ...string) {
 
 func imagingDeployRequest() *contractv1.DeployRequest {
 	req := namingARegistry(deployRequest())
-	req.Manifest.Functions[0].Framework = &contractv1.Framework{Name: "node", Arch: "x86_64"}
+	webFunctions(req).Functions[0].Framework = &contractv1.Framework{Name: "node", Arch: "x86_64"}
 	return req
 }
 
@@ -139,7 +139,7 @@ func TestAFunctionsImageIsNeverMistakenForTheAppsOwn(t *testing.T) {
 	served, vendor := imagingServed(t)
 
 	req := imagingDeployRequest()
-	req.Manifest.Functions[0].LogicalName = "web"
+	webFunctions(req).Functions[0].LogicalName = "web"
 
 	result, _ := deploy(t, served, req)
 	if result == nil || !result.GetSuccess() {

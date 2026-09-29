@@ -96,7 +96,7 @@ func computeOf(t *testing.T, manifest *contractv1.Manifest, app string) string {
 	t.Helper()
 	for _, candidate := range manifest.GetApps() {
 		if candidate.GetName() == app {
-			return candidate.GetCompute()
+			return string(provider.ComputeOf(candidate))
 		}
 	}
 	names := make([]string, 0, len(manifest.GetApps()))

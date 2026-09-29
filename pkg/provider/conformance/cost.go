@@ -49,15 +49,15 @@ func CostManifest() *contractv1.Manifest {
 		SchemaVersion: "provider.v1",
 		Slug:          "conformance",
 		Apps: []*contractv1.ManifestApp{
-			{Name: "web", Framework: &contractv1.Framework{Name: "node"}, Compute: "serverless",
-				Domains: []*contractv1.TierDomains{{Tier: environmentv1.Tier_TIER_PRODUCTION, Hostnames: []string{"web.example.com"}}}},
-			{Name: "api", Framework: &contractv1.Framework{Name: "go"}, Compute: "container"},
-		},
-		Functions: []*contractv1.ManifestFunction{
-			{LogicalName: "fn--web--entry", App: "web", Framework: &contractv1.Framework{Name: "node"}},
-		},
-		Containers: []*contractv1.ManifestContainer{
-			{App: "api", Image: "registry.example.com/conformance/api@sha256:" + costImageDigest, HealthCheckPath: "/healthz"},
+			{Name: "web", Framework: &contractv1.Framework{Name: "node"},
+				Domains: []*contractv1.TierDomains{{Tier: environmentv1.Tier_TIER_PRODUCTION, Hostnames: []string{"web.example.com"}}},
+				Artifact: &contractv1.ManifestApp_Serverless{Serverless: &contractv1.ServerlessArtifact{Functions: []*contractv1.ManifestFunction{
+					{LogicalName: "fn--web--entry", Framework: &contractv1.Framework{Name: "node"}},
+				}}}},
+			{Name: "api", Framework: &contractv1.Framework{Name: "go"},
+				Artifact: &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{
+					Image: "registry.example.com/conformance/api@sha256:" + costImageDigest, HealthCheckPath: "/healthz",
+				}}},
 		},
 		Resources: []*contractv1.ManifestResource{
 			{LogicalName: "main", Resource: &resourcesv1.ResourceIdentifier{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main"}, Config: &contractv1.ManifestResource_Postgres{Postgres: &resourcesv1.PostgresConfig{}}},

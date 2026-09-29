@@ -166,7 +166,7 @@ type SecretRef struct {
 type FunctionSpec struct {
 	Name      string
 	Route     string
-	Handler   string
+	EntryFile string
 	Framework appbuild.Framework
 	Artifact  ArtifactRef
 	Image     string

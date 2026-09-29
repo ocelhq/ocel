@@ -12,51 +12,35 @@ import (
 
 const DefaultHealthCheckPath = "/"
 
-func buildContainers(manifestApps []*contractv1.ManifestApp, apps []App, functions []Function) ([]*contractv1.ManifestContainer, error) {
-	byName := make(map[string]App, len(apps))
-	for _, a := range apps {
-		byName[a.Name] = a
+func attachArtifact(manifestApp *contractv1.ManifestApp, app App, compute string, functions []*contractv1.ManifestFunction) error {
+	if compute != string(provider.ComputeContainer) {
+		manifestApp.Artifact = serverlessArtifact(functions)
+		return nil
 	}
-	packed := make(map[string]bool, len(functions))
-	for _, f := range functions {
-		packed[f.App] = true
+	if app.Image == "" {
+		return fmt.Errorf("manifestbuilder: app %q runs on container compute and names no image, so the manifest would hand a provider an app with nothing to run", app.Name)
 	}
+	if !appbuild.PinnedImage(app.Image) {
+		return fmt.Errorf("manifestbuilder: app %q names image %q, and a release pins one repository at one digest: a tag repoints under a running release, so it never rides in the identity", app.Name, app.Image)
+	}
+	if len(functions) > 0 {
+		return fmt.Errorf("manifestbuilder: app %q runs on container compute and was packed into functions as well, so two things would answer the same request", app.Name)
+	}
+	path := app.HealthCheckPath
+	if path == "" {
+		path = DefaultHealthCheckPath
+	}
+	manifestApp.Artifact = &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{
+		Image:           app.Image,
+		HealthCheckPath: path,
+		Arch:            app.Framework.Arch,
+	}}
+	return nil
+}
 
-	containers := make([]*contractv1.ManifestContainer, 0, len(manifestApps))
-	for _, a := range manifestApps {
-		if a.GetCompute() != string(provider.ComputeContainer) {
-			continue
-		}
-		name := a.GetName()
-		configured, named := byName[name]
-		if !named {
-			return nil, fmt.Errorf("manifestbuilder: app %q runs on container compute and this project's config does not name it, so there is no directory to build its image from: give %q a name and a path under `apps`", name, name)
-		}
-		if configured.Image == "" {
-			return nil, fmt.Errorf("manifestbuilder: app %q runs on container compute and names no image, so the manifest would hand a provider an app with nothing to run", name)
-		}
-		if !appbuild.PinnedImage(configured.Image) {
-			return nil, fmt.Errorf("manifestbuilder: app %q names image %q, and a release pins one repository at one digest: a tag repoints under a running release, so it never rides in the identity", name, configured.Image)
-		}
-		if packed[name] {
-			return nil, fmt.Errorf("manifestbuilder: app %q runs on container compute and was packed into functions as well, so two things would answer the same request", name)
-		}
-		path := configured.HealthCheckPath
-		if path == "" {
-			path = DefaultHealthCheckPath
-		}
-		containers = append(containers, &contractv1.ManifestContainer{
-			App:             name,
-			Image:           configured.Image,
-			HealthCheckPath: path,
-			Arch:            configured.Framework.Arch,
-		})
-	}
-	if len(containers) == 0 {
-		return nil, nil
-	}
-	slices.SortFunc(containers, func(a, b *contractv1.ManifestContainer) int {
-		return strings.Compare(a.GetApp(), b.GetApp())
+func serverlessArtifact(functions []*contractv1.ManifestFunction) *contractv1.ManifestApp_Serverless {
+	sorted := slices.SortedFunc(slices.Values(functions), func(a, b *contractv1.ManifestFunction) int {
+		return strings.Compare(a.GetLogicalName(), b.GetLogicalName())
 	})
-	return containers, nil
+	return &contractv1.ManifestApp_Serverless{Serverless: &contractv1.ServerlessArtifact{Functions: sorted}}
 }

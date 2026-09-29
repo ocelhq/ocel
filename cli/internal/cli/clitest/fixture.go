@@ -360,7 +360,7 @@ func SetUpEdgeFixture(t *testing.T, declaration string) (root, journal string, d
 	deps = NewDeps()
 	SetLoggedIn(&deps)
 	StubBuild(&deps, []manifestbuilder.Function{
-		{Route: "api", Framework: manifestbuilder.Framework{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/api", App: "api"},
+		{Route: "api", Framework: manifestbuilder.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
 	})
 	return root, journal, deps
 }

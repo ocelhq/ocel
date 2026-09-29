@@ -10,30 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/edge"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/provider"
 )
-
-func TestAnAppSynthesizedFromFunctionsNamesTheComputeItRunsOn(t *testing.T) {
-	t.Parallel()
-
-	apps := manifestApps(&contractv1.Manifest{
-		Functions: []*contractv1.ManifestFunction{
-			{App: "web", Framework: &contractv1.Framework{Name: "next"}},
-		},
-	})
-
-	if len(apps) != 1 {
-		names := make([]string, 0, len(apps))
-		for _, app := range apps {
-			names = append(names, app.GetName())
-		}
-		t.Fatalf("manifestApps() = %q, want one app synthesized from the function", names)
-	}
-	if got, want := apps[0].GetCompute(), string(provider.ComputeServerless); got != want {
-		t.Errorf("app compute = %q, want %q — every other ManifestApp answers the field, and this one is read by the same code", got, want)
-	}
-}
 
 func TestWorkerOutputName(t *testing.T) {
 	t.Parallel()

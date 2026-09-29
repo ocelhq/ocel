@@ -40,13 +40,15 @@ func warmTargets(manifest *contractv1.Manifest, bytecode map[string]*bytecodeCon
 		return nil
 	}
 	var targets []warmTarget
-	for _, fn := range manifest.GetFunctions() {
-		app := fn.GetApp()
-		physical := names[fn.GetLogicalName()]
-		if bytecode[app] == nil || physical == "" {
-			continue
+	for _, app := range manifest.GetApps() {
+		name := app.GetName()
+		for _, fn := range app.GetServerless().GetFunctions() {
+			physical := names[fn.GetLogicalName()]
+			if bytecode[name] == nil || physical == "" {
+				continue
+			}
+			targets = append(targets, warmTarget{App: name, LogicalName: fn.GetLogicalName(), FunctionName: physical})
 		}
-		targets = append(targets, warmTarget{App: app, LogicalName: fn.GetLogicalName(), FunctionName: physical})
 	}
 	return targets
 }

@@ -2,6 +2,8 @@ package provider
 
 import (
 	"slices"
+
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 type Compute string
@@ -25,4 +27,14 @@ func ComputeNames(computes []Compute) []string {
 		names = append(names, string(compute))
 	}
 	return names
+}
+
+func ComputeOf(app *contractv1.ManifestApp) Compute {
+	switch app.GetArtifact().(type) {
+	case *contractv1.ManifestApp_Serverless:
+		return ComputeServerless
+	case *contractv1.ManifestApp_Container:
+		return ComputeContainer
+	}
+	return ""
 }

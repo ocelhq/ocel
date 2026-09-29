@@ -293,7 +293,7 @@ func TestPreviewDeployOnItsOwnWildcardServesFromItsOwnWorker(t *testing.T) {
 
 func TestPreviewDeployWithNoAppsPrunesItsOwnWorker(t *testing.T) {
 	req := declaresPreview(previewDeployRequest(), "*.preview.shop.example")
-	req.Manifest.Apps, req.Manifest.Functions = nil, nil
+	req.Manifest.Apps = nil
 
 	vendor, result := previewDeployed(t, req)
 	if !result.GetSuccess() {

@@ -23,8 +23,8 @@ func TestAContainerAppIsRefusedBehindEveryEdgeButTheDefault(t *testing.T) {
 	t.Parallel()
 
 	apps := []provider.AppEntry{
-		{App: "web", Manifest: &contractv1.ManifestApp{Name: "web", Compute: string(provider.ComputeContainer)}},
-		{App: "api", Manifest: &contractv1.ManifestApp{Name: "api", Compute: string(provider.ComputeServerless)}},
+		{App: "web", Manifest: &contractv1.ManifestApp{Name: "web", Artifact: &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{}}}},
+		{App: "api", Manifest: &contractv1.ManifestApp{Name: "api", Artifact: &contractv1.ManifestApp_Serverless{Serverless: &contractv1.ServerlessArtifact{}}}},
 	}
 	err := refuseContainersBehindFunctionEdge(provider.DeployPreflight{Edge: apigateway.Kind, Deploy: provider.DeploySpec{Apps: apps}})
 	if err == nil || !strings.Contains(err.Error(), "web") || !strings.Contains(err.Error(), string(apigateway.Kind)) {

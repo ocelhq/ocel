@@ -118,19 +118,25 @@ func deployRequest() *contractv1.DeployRequest {
 			Apps: []*contractv1.ManifestApp{{
 				Name:         "web",
 				Framework:    &contractv1.Framework{Name: "next"},
-				Compute:      string(provider.ComputeServerless),
 				DeploymentId: webDeploymentID,
-			}},
-			Functions: []*contractv1.ManifestFunction{{
-				LogicalName:  "server",
-				App:          "web",
-				Framework:    &contractv1.Framework{Name: "next"},
-				Handler:      "index.handler",
-				ArtifactPath: artifactPath,
+				Artifact: serverless(&contractv1.ManifestFunction{
+					LogicalName:  "server",
+					Framework:    &contractv1.Framework{Name: "next"},
+					EntryFile:    "index.handler",
+					ArtifactPath: artifactPath,
+				}),
 			}},
 		},
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
 	}
+}
+
+func serverless(functions ...*contractv1.ManifestFunction) *contractv1.ManifestApp_Serverless {
+	return &contractv1.ManifestApp_Serverless{Serverless: &contractv1.ServerlessArtifact{Functions: functions}}
+}
+
+func webFunctions(req *contractv1.DeployRequest) *contractv1.ServerlessArtifact {
+	return req.GetManifest().GetApps()[0].GetServerless()
 }
 
 func deploy(t *testing.T, client contractv1connect.ProviderServiceClient, req *contractv1.DeployRequest) (*progressv1.OperationResult, []*progressv1.OperationEvent) {
@@ -247,15 +253,13 @@ func twoAppRequest() *contractv1.DeployRequest {
 	manifest.Apps = append(manifest.Apps, &contractv1.ManifestApp{
 		Name:         "admin",
 		Framework:    &contractv1.Framework{Name: "next"},
-		Compute:      string(provider.ComputeServerless),
 		DeploymentId: adminDeploymentID,
-	})
-	manifest.Functions = append(manifest.Functions, &contractv1.ManifestFunction{
-		LogicalName:  "admin-server",
-		App:          "admin",
-		Framework:    &contractv1.Framework{Name: "next"},
-		Handler:      "index.handler",
-		ArtifactPath: adminArtifactPath,
+		Artifact: serverless(&contractv1.ManifestFunction{
+			LogicalName:  "admin-server",
+			Framework:    &contractv1.Framework{Name: "next"},
+			EntryFile:    "index.handler",
+			ArtifactPath: adminArtifactPath,
+		}),
 	})
 	manifest.Usages = append(manifest.Usages,
 		&contractv1.ManifestUsage{App: "admin", Resource: "orders"},

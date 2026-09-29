@@ -18,10 +18,7 @@ const containerTestImage = "ocel/shop/web@sha256:0123456789abcdef0123456789abcde
 
 func containerDeployRequest(probe string) *contractv1.DeployRequest {
 	req := deployRequest()
-	req.Manifest.Apps[0].Compute = string(provider.ComputeContainer)
-	req.Manifest.Functions = nil
-	req.Manifest.Containers = []*contractv1.ManifestContainer{{
-		App:             req.Manifest.Apps[0].GetName(),
+	req.Manifest.Apps[0].Artifact = &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{
 		Image:           containerTestImage,
 		HealthCheckPath: probe,
 	}}
@@ -54,27 +51,15 @@ func TestTheWireAcceptsAnAppNamingContainer(t *testing.T) {
 	}
 }
 
-func TestTheWireRefusesAnAppThatNamesNoCompute(t *testing.T) {
+func TestTheWireRefusesAnAppThatCarriesNoArtifact(t *testing.T) {
 	client, _ := contractServed(t, "1.0.0")
 
 	req := deployRequest()
-	req.Manifest.Apps[0].Compute = ""
+	req.Manifest.Apps[0].Artifact = nil
 
 	_, _, err := deployStream(t, client, req)
 	if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
-		t.Fatalf("Deploy() with an app naming no compute: code = %v, want %v — the manifest pin is what makes compute non-empty by the time a provider reads it", got, connect.CodeInvalidArgument)
-	}
-}
-
-func TestTheWireRefusesAnAppNamingAComputeOutsideTheVocabulary(t *testing.T) {
-	client, _ := contractServed(t, "1.0.0")
-
-	req := deployRequest()
-	req.Manifest.Apps[0].Compute = "vm"
-
-	_, _, err := deployStream(t, client, req)
-	if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
-		t.Fatalf("Deploy() with an app naming %q: code = %v, want %v", "vm", got, connect.CodeInvalidArgument)
+		t.Fatalf("Deploy() with an app carrying neither functions nor an image: code = %v, want %v — the manifest pin is what gives every app a compute by the time a provider reads it", got, connect.CodeInvalidArgument)
 	}
 }
 

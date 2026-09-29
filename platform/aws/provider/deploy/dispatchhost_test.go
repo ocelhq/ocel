@@ -135,8 +135,8 @@ func TestDispatchHostNamesTheEntryAndWhatDispatchReads(t *testing.T) {
 
 func routedFunctions() []*contractv1.ManifestFunction {
 	return []*contractv1.ManifestFunction{
-		{LogicalName: "fn--web--entry", App: "web", Framework: &contractv1.Framework{Name: appbuild.FrameworkNext}, RouteId: "/"},
-		{LogicalName: "fn--web--admin", App: "web", Framework: &contractv1.Framework{Name: appbuild.FrameworkNext}, RouteId: "/admin"},
+		{LogicalName: "fn--web--entry", Framework: &contractv1.Framework{Name: appbuild.FrameworkNext}, RouteId: "/"},
+		{LogicalName: "fn--web--admin", Framework: &contractv1.Framework{Name: appbuild.FrameworkNext}, RouteId: "/admin"},
 	}
 }
 

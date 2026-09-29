@@ -9,7 +9,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -133,12 +132,6 @@ func TestClassifyStacksSplitsProductionFromPreview(t *testing.T) {
 	}
 }
 
-func functionRequest(fn *contractv1.ManifestFunction, apps ...*contractv1.ManifestApp) *contractv1.DeployRequest {
-	req := productionRequest(apps...)
-	req.Manifest.Functions = []*contractv1.ManifestFunction{fn}
-	return req
-}
-
 func TestBuildDeploySpecRefusesAnAppNameNoHostnameCanContain(t *testing.T) {
 	t.Parallel()
 
@@ -156,37 +149,6 @@ func TestBuildDeploySpecRefusesAnAppNameNoHostnameCanContain(t *testing.T) {
 	}
 }
 
-func TestBuildDeploySpecRefusesAFunctionNoDeclaredAppOwns(t *testing.T) {
-	t.Parallel()
-
-	web := &contractv1.ManifestApp{Name: "web", DeploymentId: deploymentID}
-
-	t.Run("an undeclared app", func(t *testing.T) {
-		_, err := buildDeploySpec(functionRequest(
-			&contractv1.ManifestFunction{LogicalName: "admin-server", App: "admin"}, web), "p1")
-		if err == nil {
-			t.Fatal("buildDeploySpec() accepted a function naming an app no stack provisions, so the deploy would succeed with the route 404ing")
-		}
-		if !strings.Contains(err.Error(), "admin") {
-			t.Errorf("buildDeploySpec() = %v, want the refusal to name the app it cannot find", err)
-		}
-	})
-
-	t.Run("no app at all", func(t *testing.T) {
-		if _, err := buildDeploySpec(functionRequest(
-			&contractv1.ManifestFunction{LogicalName: "server"}, web), "p1"); err == nil {
-			t.Fatal("buildDeploySpec() accepted a function naming no app, which would ship once into every app that deploys")
-		}
-	})
-
-	t.Run("a declared app", func(t *testing.T) {
-		if _, err := buildDeploySpec(functionRequest(
-			&contractv1.ManifestFunction{LogicalName: "server", App: "web"}, web), "p1"); err != nil {
-			t.Fatalf("buildDeploySpec() = %v, want a function its own app declares to be accepted", err)
-		}
-	})
-}
-
 const pinnedTestImage = "ocel/api@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
 func containerRequest(image string) *contractv1.DeployRequest {
@@ -194,11 +156,8 @@ func containerRequest(image string) *contractv1.DeployRequest {
 		Manifest: &contractv1.Manifest{
 			Slug: "shop",
 			Apps: []*contractv1.ManifestApp{
-				{Name: "api", DeploymentId: deploymentID, Compute: string(provider.ComputeContainer)},
-				{Name: "web", DeploymentId: deploymentID, Compute: string(provider.ComputeServerless)},
-			},
-			Containers: []*contractv1.ManifestContainer{
-				{App: "api", Image: image, HealthCheckPath: "/"},
+				{Name: "api", DeploymentId: deploymentID, Artifact: &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{Image: image, HealthCheckPath: "/"}}},
+				{Name: "web", DeploymentId: deploymentID, Artifact: &contractv1.ManifestApp_Serverless{Serverless: &contractv1.ServerlessArtifact{}}},
 			},
 		},
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
@@ -233,53 +192,6 @@ func TestTwoDeploysOfOneBuiltOutputNeverShareABuild(t *testing.T) {
 	for _, app := range []string{"api", "web"} {
 		if first.Builds[app] == second.Builds[app] {
 			t.Errorf("both deploys promote %s build %s, so the second's record would stand in for the first's when a rollback names it", app, first.Builds[app])
-		}
-	}
-}
-
-func TestAContainerNamingAnAppTheManifestDoesNotDeclareRefusesTheDeploy(t *testing.T) {
-	t.Parallel()
-
-	req := containerRequest(pinnedTestImage)
-	req.Manifest.Containers[0].App = "ghost"
-
-	_, err := buildDeploySpec(req, "p1")
-	if err == nil {
-		t.Fatal("buildDeploySpec() admitted a container for an app this manifest never declares, and nothing would ever run it")
-	}
-	if !strings.Contains(err.Error(), "ghost") {
-		t.Errorf("buildDeploySpec() error = %q, want it to name the app", err)
-	}
-}
-
-func TestAContainerAppWithNoContainerRefusesTheDeploy(t *testing.T) {
-	t.Parallel()
-
-	req := containerRequest(pinnedTestImage)
-	req.Manifest.Containers = nil
-
-	_, err := buildDeploySpec(req, "p1")
-	if err == nil {
-		t.Fatal("buildDeploySpec() admitted an app on container compute with no container, so the promotion would record no image to roll back to")
-	}
-	if !strings.Contains(err.Error(), "api") {
-		t.Errorf("buildDeploySpec() error = %q, want it to name the app", err)
-	}
-}
-
-func TestAContainerAppPackedIntoFunctionsRefusesTheDeploy(t *testing.T) {
-	t.Parallel()
-
-	req := containerRequest(pinnedTestImage)
-	req.Manifest.Functions = []*contractv1.ManifestFunction{{LogicalName: "api-server", App: "api"}}
-
-	_, err := buildDeploySpec(req, "p1")
-	if err == nil {
-		t.Fatal("buildDeploySpec() admitted a container app that was packed into functions too, so the process and a zip would both answer the same request with nothing to say which was meant to")
-	}
-	for _, want := range []string{"api", "api-server"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("buildDeploySpec() error = %q, want it to name %s", err, want)
 		}
 	}
 }

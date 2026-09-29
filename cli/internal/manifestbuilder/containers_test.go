@@ -9,18 +9,28 @@ import (
 
 const fakeDigest = "sha256:" + "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
-func containerOf(t *testing.T, m *contractv1.Manifest, app string) *contractv1.ManifestContainer {
+func containerOf(t *testing.T, m *contractv1.Manifest, app string) *contractv1.ContainerArtifact {
 	t.Helper()
-	for _, c := range m.GetContainers() {
-		if c.GetApp() == app {
-			return c
+	for _, a := range m.GetApps() {
+		if a.GetName() == app && a.GetContainer() != nil {
+			return a.GetContainer()
 		}
 	}
-	t.Fatalf("manifest has no container for app %q: %+v", app, m.GetContainers())
+	t.Fatalf("manifest has no container for app %q: %+v", app, m.GetApps())
 	return nil
 }
 
-func TestAContainerAppIsWrittenAsASiblingJoinedToItByName(t *testing.T) {
+func containerApps(m *contractv1.Manifest) []string {
+	var apps []string
+	for _, a := range m.GetApps() {
+		if a.GetContainer() != nil {
+			apps = append(apps, a.GetName())
+		}
+	}
+	return apps
+}
+
+func TestAContainerAppCarriesItsImageAsItsArtifact(t *testing.T) {
 	t.Parallel()
 
 	manifest, err := Build("proj-1", nil, []App{
@@ -31,8 +41,8 @@ func TestAContainerAppIsWrittenAsASiblingJoinedToItByName(t *testing.T) {
 		t.Fatalf("Build: %v", err)
 	}
 
-	if len(manifest.GetContainers()) != 1 {
-		t.Fatalf("manifest has %d containers, want only the one container app: %+v", len(manifest.GetContainers()), manifest.GetContainers())
+	if got := containerApps(manifest); len(got) != 1 {
+		t.Fatalf("manifest carries containers for %v, want only the one container app", got)
 	}
 	container := containerOf(t, manifest, "api")
 	if got, want := container.GetImage(), "ocel/api@"+fakeDigest; got != want {
@@ -89,7 +99,7 @@ func TestAnAppOnlyTheBuildNamesCannotLandOnContainerCompute(t *testing.T) {
 	t.Parallel()
 
 	_, err := Build("proj-1", nil, nil, "container", nil, nil, []Function{
-		{App: "api", Route: "index", Framework: Framework{Name: "node"}, Handler: "index.handler", ArtifactPath: "apps/api/functions/index"},
+		{App: "api", Route: "index", Framework: Framework{Name: "node"}, EntryFile: "index.handler", ArtifactPath: "apps/api/functions/index"},
 	}, nil)
 	if err == nil {
 		t.Fatal("Build() landed an app the config never names on container compute, and nothing would have told a provider what image to run")
@@ -128,13 +138,13 @@ func TestAServerlessAppIsWrittenAsNoContainerAtAll(t *testing.T) {
 	t.Parallel()
 
 	manifest, err := Build("proj-1", nil, []App{{Name: "web"}}, "serverless", nil, nil, []Function{
-		{App: "web", Route: "index", Framework: Framework{Name: "node"}, Handler: "index.handler", ArtifactPath: "apps/web/functions/index"},
+		{App: "web", Route: "index", Framework: Framework{Name: "node"}, EntryFile: "index.handler", ArtifactPath: "apps/web/functions/index"},
 	}, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	if len(manifest.GetContainers()) != 0 {
-		t.Errorf("manifest has %+v, want no container for an app that runs serverless", manifest.GetContainers())
+	if got := containerApps(manifest); len(got) != 0 {
+		t.Errorf("manifest carries containers for %v, want no container for an app that runs serverless", got)
 	}
 }
 
@@ -144,7 +154,7 @@ func TestACallerThatPacksAContainerAppIsRefusedByTheBuilder(t *testing.T) {
 	_, err := Build("proj-1", nil, []App{
 		{Name: "api", Compute: "container", Image: "ocel/api@" + fakeDigest},
 	}, "container", nil, nil, []Function{
-		{App: "api", Route: "index", Framework: Framework{Name: "node"}, Handler: "index.handler", ArtifactPath: "apps/api/functions/index"},
+		{App: "api", Route: "index", Framework: Framework{Name: "node"}, EntryFile: "index.handler", ArtifactPath: "apps/api/functions/index"},
 	}, nil)
 	if err == nil {
 		t.Fatal("Build() included both a container and a function for one app, so routing would have two answers for the same request")
@@ -165,10 +175,7 @@ func TestContainersAreOrderedByTheAppTheyServe(t *testing.T) {
 		t.Fatalf("Build: %v", err)
 	}
 
-	var order []string
-	for _, c := range manifest.GetContainers() {
-		order = append(order, c.GetApp())
-	}
+	order := containerApps(manifest)
 	if len(order) != 2 || order[0] != "api" || order[1] != "web" {
 		t.Errorf("containers ordered %v, want them ordered by app so the same project builds the same manifest twice", order)
 	}

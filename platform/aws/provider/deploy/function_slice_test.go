@@ -27,7 +27,7 @@ func TestTranslateFunctionSpec(t *testing.T) {
 		t.Parallel()
 		got, err := translateFunctionSpec("", provider.FunctionSpec{
 			Framework: appbuild.Framework{Name: appbuild.FrameworkNode},
-			Handler:   "src/server.js",
+			EntryFile: "src/server.js",
 		})
 		if err != nil {
 			t.Fatalf("translateFunctionSpec: %v", err)
@@ -169,7 +169,7 @@ func TestAnARM64FunctionTakesTheARM64RuntimeLayerAndNamesItsArchitecture(t *test
 		}
 		args, err := translateFunctionSpec(appbuild.FrameworkGo, provider.FunctionSpec{
 			Framework: appbuild.Framework{Name: appbuild.FrameworkGo, Arch: arch.ARM64},
-			Handler:   "web",
+			EntryFile: "web",
 		})
 		if err != nil {
 			return err
@@ -211,7 +211,7 @@ func TestAManagedRuntimeFunctionKeepsItsOwnEntryAsTheHandler(t *testing.T) {
 
 	args, err := translateFunctionSpec(appbuild.FrameworkNode, provider.FunctionSpec{
 		Framework: appbuild.Framework{Name: appbuild.FrameworkNode},
-		Handler:   "src/server.js",
+		EntryFile: "src/server.js",
 	})
 	if err != nil {
 		t.Fatalf("translateFunctionSpec: %v", err)
@@ -229,7 +229,7 @@ func TestACommandFunctionKeepsItsOwnEntryInTheEnvironment(t *testing.T) {
 
 	args, err := translateFunctionSpec(appbuild.FrameworkGo, provider.FunctionSpec{
 		Framework: appbuild.Framework{Name: appbuild.FrameworkGo},
-		Handler:   "web",
+		EntryFile: "web",
 	})
 	if err != nil {
 		t.Fatalf("translateFunctionSpec: %v", err)
@@ -247,7 +247,7 @@ func TestARustFunctionBootsItsOwnBinaryOnTheProvidedRuntime(t *testing.T) {
 
 	args, err := translateFunctionSpec(appbuild.FrameworkRust, provider.FunctionSpec{
 		Framework: appbuild.Framework{Name: appbuild.FrameworkRust, Arch: arch.ARM64},
-		Handler:   "web",
+		EntryFile: "web",
 	})
 	if err != nil {
 		t.Fatalf("translateFunctionSpec: %v", err)
@@ -272,7 +272,7 @@ func TestEveryFunctionBootsTheRuntimeWhateverRuntimeItServes(t *testing.T) {
 	for _, name := range appbuild.Frameworks() {
 		args, err := translateFunctionSpec(name, provider.FunctionSpec{
 			Framework: appbuild.Framework{Name: name},
-			Handler:   "web",
+			EntryFile: "web",
 		})
 		if err != nil {
 			t.Fatalf("translateFunctionSpec(%q): %v", name, err)
@@ -356,7 +356,7 @@ func TestAFunctionIsToldTheFileItBootsFrom(t *testing.T) {
 				}
 				args, err := translateFunctionSpec(tc.runtime, provider.FunctionSpec{
 					Framework: appbuild.Framework{Name: tc.runtime},
-					Handler:   tc.handler,
+					EntryFile: tc.handler,
 				})
 				if err != nil {
 					return err
@@ -395,7 +395,7 @@ func argsFor(functions []*contractv1.ManifestFunction) func(appFunction) functio
 		translated, err := translateFunctionSpec(fn.GetFramework().GetName(), provider.FunctionSpec{
 			Name:      fn.GetLogicalName(),
 			Framework: appbuild.Framework{Name: fn.GetFramework().GetName(), Arch: fn.GetFramework().GetArch()},
-			Handler:   fn.GetHandler(),
+			EntryFile: fn.GetEntryFile(),
 		})
 		if err != nil {
 			panic(err)

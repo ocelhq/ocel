@@ -72,13 +72,15 @@ func unshipped(manifest *contractv1.Manifest) *contractv1.Manifest {
 
 func shapedFunctions(manifest *contractv1.Manifest) map[string][]provider.FunctionSpec {
 	specs := make(map[string][]provider.FunctionSpec, len(manifest.GetApps()))
-	for _, fn := range manifest.GetFunctions() {
-		specs[fn.GetApp()] = append(specs[fn.GetApp()], provider.FunctionSpec{
-			Name:      fn.GetLogicalName(),
-			Route:     fn.GetRouteId(),
-			Handler:   fn.GetHandler(),
-			Framework: frameworkOf(fn),
-		})
+	for _, app := range manifest.GetApps() {
+		for _, fn := range app.GetServerless().GetFunctions() {
+			specs[app.GetName()] = append(specs[app.GetName()], provider.FunctionSpec{
+				Name:      fn.GetLogicalName(),
+				Route:     fn.GetRouteId(),
+				EntryFile: fn.GetEntryFile(),
+				Framework: frameworkOf(fn),
+			})
+		}
 	}
 	return specs
 }

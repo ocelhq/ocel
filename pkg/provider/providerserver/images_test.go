@@ -788,8 +788,10 @@ func TestAnAppsOwnDeclaredArchitectureIsTheOneItsImageIsBuiltFor(t *testing.T) {
 	client, vendor := wrappingServedOn(t, "amd64")
 
 	req := registryDeployRequest()
-	for _, container := range req.GetManifest().GetContainers() {
-		container.Arch = arch.ARM64
+	for _, app := range req.GetManifest().GetApps() {
+		if container := app.GetContainer(); container != nil {
+			container.Arch = arch.ARM64
+		}
 	}
 	result, _ := deploy(t, client, req)
 	if result == nil || !result.GetSuccess() {

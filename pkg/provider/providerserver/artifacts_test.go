@@ -300,14 +300,13 @@ func TestDeployPacksTheRoutingManifestIntoTheEntryFunctionAlone(t *testing.T) {
 
 	req := deployRequest()
 	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindDirect)}
-	manifest := req.GetManifest()
-	manifest.Functions[0].RouteId = "index"
-	manifest.Functions = append(manifest.Functions, &contractv1.ManifestFunction{
+	web := webFunctions(req)
+	web.Functions[0].RouteId = "index"
+	web.Functions = append(web.Functions, &contractv1.ManifestFunction{
 		LogicalName:  "feed",
-		App:          "web",
 		RouteId:      "feed",
 		Framework:    &contractv1.Framework{Name: "next"},
-		Handler:      "index.handler",
+		EntryFile:    "index.handler",
 		ArtifactPath: adminArtifactPath,
 	})
 
@@ -447,17 +446,16 @@ func TestAnAppsFunctionsAreUploadedTogether(t *testing.T) {
 	const functions = 4
 
 	req := deployRequest()
-	manifest := req.GetManifest()
-	manifest.Functions[0].RouteId = "index"
-	manifest.Functions[0].ArtifactPath = builtFunction(t, "index")
+	web := webFunctions(req)
+	web.Functions[0].RouteId = "index"
+	web.Functions[0].ArtifactPath = builtFunction(t, "index")
 	for i := 1; i < functions; i++ {
 		route := fmt.Sprintf("route-%d", i)
-		manifest.Functions = append(manifest.Functions, &contractv1.ManifestFunction{
+		web.Functions = append(web.Functions, &contractv1.ManifestFunction{
 			LogicalName:  route,
-			App:          "web",
 			RouteId:      route,
 			Framework:    &contractv1.Framework{Name: "next"},
-			Handler:      "index.handler",
+			EntryFile:    "index.handler",
 			ArtifactPath: builtFunction(t, route),
 		})
 	}

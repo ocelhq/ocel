@@ -25,7 +25,7 @@
       "framework": {
         "name": "next"
       },
-      "handler": "app/api.ts",
+      "entry_file": "app/api.ts",
       "artifact_path": "dist/api.zip",
       "route_id": "/api/documents"
     },
@@ -34,7 +34,7 @@
       "framework": {
         "name": "node"
       },
-      "handler": "app/worker.ts",
+      "entry_file": "app/worker.ts",
       "artifact_path": "dist/worker.zip",
       "route_id": ""
     }

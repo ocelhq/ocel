@@ -111,7 +111,6 @@ func TestPriceBehindCloudflareIncludesTheEdgesOwnBill(t *testing.T) {
 
 	manifest := shopManifest()
 	manifest.Apps = manifest.Apps[:1]
-	manifest.Containers = nil
 	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
 		Manifest:    manifest,
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},

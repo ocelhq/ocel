@@ -65,17 +65,17 @@ func TestTheWireAndAppbuildPinTheSameProbedPath(t *testing.T) {
 func assertFieldPattern(t *testing.T, name, want string) {
 	t.Helper()
 
-	field := (&contractv1.ManifestContainer{}).ProtoReflect().Descriptor().Fields().ByName(protoreflect.Name(name))
+	field := (&contractv1.ContainerArtifact{}).ProtoReflect().Descriptor().Fields().ByName(protoreflect.Name(name))
 	if field == nil {
-		t.Fatalf("ManifestContainer has no %s field, so nothing pins it on the wire", name)
+		t.Fatalf("ContainerArtifact has no %s field, so nothing pins it on the wire", name)
 	}
 
 	rules, ok := proto.GetExtension(field.Options(), validate.E_Field).(*validate.FieldRules)
 	if !ok || rules.GetString() == nil {
-		t.Fatalf("ManifestContainer.%s has no buf.validate string rule, so the wire admits anything at all there", name)
+		t.Fatalf("ContainerArtifact.%s has no buf.validate string rule, so the wire admits anything at all there", name)
 	}
 
 	if got := rules.GetString().GetPattern(); got != want {
-		t.Errorf("ManifestContainer.%s pins %q, appbuild pins %q — a value one admits and the other refuses is either a plan-time refusal of something the wire would have taken, or a protovalidate error naming a field the user never wrote", name, got, want)
+		t.Errorf("ContainerArtifact.%s pins %q, appbuild pins %q — a value one admits and the other refuses is either a plan-time refusal of something the wire would have taken, or a protovalidate error naming a field the user never wrote", name, got, want)
 	}
 }

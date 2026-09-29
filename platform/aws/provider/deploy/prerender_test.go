@@ -20,19 +20,20 @@ import (
 func nextManifest() *contractv1.Manifest {
 	return &contractv1.Manifest{
 		Slug: "proj",
-		Functions: []*contractv1.ManifestFunction{
-			{LogicalName: "web_index", Framework: &contractv1.Framework{Name: "next"}, App: "web"},
-		},
+		Apps: []*contractv1.ManifestApp{{Name: "web", Framework: &contractv1.Framework{Name: "next"},
+			Artifact: serverlessArtifact(&contractv1.ManifestFunction{LogicalName: "web_index", Framework: &contractv1.Framework{Name: "next"}})}},
 	}
+}
+
+func serverlessArtifact(functions ...*contractv1.ManifestFunction) *contractv1.ManifestApp_Serverless {
+	return &contractv1.ManifestApp_Serverless{Serverless: &contractv1.ServerlessArtifact{Functions: functions}}
 }
 
 func nodeManifest() *contractv1.Manifest {
 	return &contractv1.Manifest{
 		Slug: "proj",
-		Apps: []*contractv1.ManifestApp{{Name: "api", Framework: &contractv1.Framework{Name: "node"}}},
-		Functions: []*contractv1.ManifestFunction{
-			{LogicalName: "api_handler", Framework: &contractv1.Framework{Name: "node"}, App: "api", RouteId: "/"},
-		},
+		Apps: []*contractv1.ManifestApp{{Name: "api", Framework: &contractv1.Framework{Name: "node"},
+			Artifact: serverlessArtifact(&contractv1.ManifestFunction{LogicalName: "api_handler", Framework: &contractv1.Framework{Name: "node"}, RouteId: "/"})}},
 	}
 }
 
@@ -48,9 +49,11 @@ func nodeAppTree(t *testing.T) string {
 func twoAppManifest() *contractv1.Manifest {
 	return &contractv1.Manifest{
 		Slug: "proj",
-		Functions: []*contractv1.ManifestFunction{
-			{LogicalName: "web_index", Framework: &contractv1.Framework{Name: "next"}, App: "web"},
-			{LogicalName: "admin_index", Framework: &contractv1.Framework{Name: "next"}, App: "admin"},
+		Apps: []*contractv1.ManifestApp{
+			{Name: "web", Framework: &contractv1.Framework{Name: "next"},
+				Artifact: serverlessArtifact(&contractv1.ManifestFunction{LogicalName: "web_index", Framework: &contractv1.Framework{Name: "next"}})},
+			{Name: "admin", Framework: &contractv1.Framework{Name: "next"},
+				Artifact: serverlessArtifact(&contractv1.ManifestFunction{LogicalName: "admin_index", Framework: &contractv1.Framework{Name: "next"}})},
 		},
 	}
 }
@@ -74,13 +77,11 @@ func deployedConfig(cfg Config) Config {
 }
 
 func deployedManifest(manifest *contractv1.Manifest) *contractv1.Manifest {
-	apps := manifestApps(manifest)
-	for _, app := range apps {
+	for _, app := range manifest.GetApps() {
 		if app.GetDeploymentId() == "" {
 			app.DeploymentId = testDeploymentID
 		}
 	}
-	manifest.Apps = apps
 	return manifest
 }
 
@@ -106,7 +107,7 @@ func bakedBuilds(t *testing.T, cfg Config, manifest *contractv1.Manifest, baked 
 	if builds.baked == nil {
 		builds.baked = map[string]appBundle{}
 	}
-	for _, app := range manifestApps(manifest) {
+	for _, app := range manifest.GetApps() {
 		name := app.GetName()
 		id, err := provider.NewBuild(app.GetDeploymentId(), "p1", cfg.Env, builds.baked[name].Fingerprint)
 		if err != nil {
@@ -162,7 +163,7 @@ func pushStaticAssetSet(ctx context.Context, cfg Config, app, runtime string, co
 }
 
 func uploadStaticAssets(ctx context.Context, cfg Config, manifest *contractv1.Manifest, builds appBuilds) error {
-	for _, app := range manifestApps(deployedManifest(manifest)) {
+	for _, app := range deployedManifest(manifest).GetApps() {
 		name := app.GetName()
 		if err := pushStaticAssetSet(ctx, deployedConfig(cfg), name, app.GetFramework().GetName(), builds.coords[name]); err != nil {
 			return err
@@ -182,7 +183,7 @@ func uploadPrerenderAssets(ctx context.Context, cfg Config, builds appBuilds) er
 }
 
 func uploadEdgeBundles(ctx context.Context, cfg Config, manifest *contractv1.Manifest, builds appBuilds) error {
-	for _, app := range manifestApps(deployedManifest(manifest)) {
+	for _, app := range deployedManifest(manifest).GetApps() {
 		name := app.GetName()
 		set, _, err := edgeBundleSet(deployedConfig(cfg), name, builds.coords[name], builds.baked[name])
 		if err := pushSet(ctx, set, err); err != nil {

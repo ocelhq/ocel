@@ -48,15 +48,15 @@ func shopManifest() *contractv1.Manifest {
 		SchemaVersion: "provider.v1",
 		Slug:          "shop",
 		Apps: []*contractv1.ManifestApp{
-			{Name: "web", Framework: &contractv1.Framework{Name: "node"}, Compute: "serverless",
-				Domains: []*contractv1.TierDomains{{Tier: environmentv1.Tier_TIER_PRODUCTION, Hostnames: []string{"shop.example.com"}}}},
-			{Name: "api", Framework: &contractv1.Framework{Name: "go"}, Compute: "container"},
-		},
-		Functions: []*contractv1.ManifestFunction{
-			{LogicalName: "fn--web--entry", App: "web", Framework: &contractv1.Framework{Name: "node"}},
-		},
-		Containers: []*contractv1.ManifestContainer{
-			{App: "api", Image: "europe-west1-docker.pkg.dev/acme-prod/ocel/api@sha256:" + "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", HealthCheckPath: "/healthz"},
+			{Name: "web", Framework: &contractv1.Framework{Name: "node"},
+				Domains: []*contractv1.TierDomains{{Tier: environmentv1.Tier_TIER_PRODUCTION, Hostnames: []string{"shop.example.com"}}},
+				Artifact: &contractv1.ManifestApp_Serverless{Serverless: &contractv1.ServerlessArtifact{Functions: []*contractv1.ManifestFunction{
+					{LogicalName: "fn--web--entry", Framework: &contractv1.Framework{Name: "node"}},
+				}}}},
+			{Name: "api", Framework: &contractv1.Framework{Name: "go"},
+				Artifact: &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{
+					Image: "europe-west1-docker.pkg.dev/acme-prod/ocel/api@sha256:" + "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", HealthCheckPath: "/healthz",
+				}}},
 		},
 		Resources: []*contractv1.ManifestResource{
 			{LogicalName: "uploads", Resource: &resourcesv1.ResourceIdentifier{Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: "uploads"}, Config: &contractv1.ManifestResource_Bucket{Bucket: &resourcesv1.BucketConfig{}}},

@@ -33,7 +33,7 @@ func deployBound(t *testing.T, bindings string) (root string, stdout, stderr byt
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
 	clitest.StubBuild(&deps, []manifestbuilder.Function{
-		{Route: "api", Framework: manifestbuilder.Framework{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/api", App: "api"},
+		{Route: "api", Framework: manifestbuilder.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
 	})
 	root, _ = clitest.SetUpDeployFixture(t)
 	writeBoundMonorepo(t, root, bindings)

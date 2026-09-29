@@ -79,7 +79,7 @@ func TestRunPreviewUp(t *testing.T) {
 			{
 				Route:        "api",
 				Framework:    manifestbuilder.Framework{Name: "node"},
-				Handler:      "index.handler",
+				EntryFile:    "index.handler",
 				ArtifactPath: "output/api",
 				App:          "api",
 			},
@@ -91,7 +91,7 @@ func TestRunPreviewUp(t *testing.T) {
 			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
-		if !strings.Contains(stdout.String(), "FUNCTION logical_name=fn--api--api framework=node handler=index.handler artifact_path=output/api app=api") {
+		if !strings.Contains(stdout.String(), "FUNCTION logical_name=fn--api--api framework=node entry_file=index.handler artifact_path=output/api app=api") {
 			t.Errorf("stdout = %q, want the function to have reached the preview manifest", stdout.String())
 		}
 

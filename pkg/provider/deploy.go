@@ -33,4 +33,4 @@ type AppEntry struct {
 	Arch            string
 }
 
-func (e AppEntry) Compute() Compute { return Compute(e.Manifest.GetCompute()) }
+func (e AppEntry) Compute() Compute { return ComputeOf(e.Manifest) }

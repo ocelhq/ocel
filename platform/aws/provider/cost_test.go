@@ -49,14 +49,14 @@ func shopManifest() *contractv1.Manifest {
 		SchemaVersion: "provider.v1",
 		Slug:          "shop",
 		Apps: []*contractv1.ManifestApp{
-			{Name: "web", Framework: &contractv1.Framework{Name: "next", Arch: "arm64"}, Compute: "serverless"},
-			{Name: "api", Framework: &contractv1.Framework{Name: "go"}, Compute: "container"},
-		},
-		Functions: []*contractv1.ManifestFunction{
-			{LogicalName: "fn--web--entry", App: "web", Framework: &contractv1.Framework{Name: "next", Arch: "arm64"}},
-		},
-		Containers: []*contractv1.ManifestContainer{
-			{App: "api", Image: "ghcr.io/shop/api@sha256:" + "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", HealthCheckPath: "/healthz"},
+			{Name: "web", Framework: &contractv1.Framework{Name: "next", Arch: "arm64"},
+				Artifact: &contractv1.ManifestApp_Serverless{Serverless: &contractv1.ServerlessArtifact{Functions: []*contractv1.ManifestFunction{
+					{LogicalName: "fn--web--entry", Framework: &contractv1.Framework{Name: "next", Arch: "arm64"}},
+				}}}},
+			{Name: "api", Framework: &contractv1.Framework{Name: "go"},
+				Artifact: &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{
+					Image: "ghcr.io/shop/api@sha256:" + "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", HealthCheckPath: "/healthz",
+				}}},
 		},
 		Resources: []*contractv1.ManifestResource{
 			{LogicalName: "main", Resource: &resourcesv1.ResourceIdentifier{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main"}, Config: &contractv1.ManifestResource_Postgres{Postgres: &resourcesv1.PostgresConfig{}}},
@@ -154,7 +154,6 @@ func TestShapeBehindAPIGatewayProvisionsARestAPIPerDeploy(t *testing.T) {
 
 	manifest := shopManifest()
 	manifest.Apps = manifest.Apps[:1]
-	manifest.Containers = nil
 	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
 		Manifest:    manifest,
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},

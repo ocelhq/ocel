@@ -357,15 +357,19 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *contractv1.D
 		}
 	}
 
-	for _, f := range req.GetManifest().GetFunctions() {
-		if err := stream.Send(fakeProgress("FUNCTION " + describeFunction(f))); err != nil {
-			return err
+	for _, a := range req.GetManifest().GetApps() {
+		for _, f := range a.GetServerless().GetFunctions() {
+			if err := stream.Send(fakeProgress("FUNCTION " + describeFunction(a.GetName(), f))); err != nil {
+				return err
+			}
 		}
 	}
 
-	for _, c := range req.GetManifest().GetContainers() {
-		if err := stream.Send(fakeProgress("CONTAINER " + describeContainer(c))); err != nil {
-			return err
+	for _, a := range req.GetManifest().GetApps() {
+		if c := a.GetContainer(); c != nil {
+			if err := stream.Send(fakeProgress("CONTAINER " + describeContainer(a.GetName(), c))); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -453,18 +457,12 @@ func fakeDeployPlan(req *contractv1.DeployRequest) *planv1.ChangePlan {
 			Name:   "fake/" + manifest.GetSlug() + "--" + app.GetName(),
 			Action: planv1.Change_ACTION_CREATE,
 		}
-		for _, fn := range manifest.GetFunctions() {
-			if fn.GetApp() != app.GetName() {
-				continue
-			}
+		for _, fn := range app.GetServerless().GetFunctions() {
 			group.Changes = append(group.Changes,
 				&planv1.Change{Kind: "artifact", Name: fn.GetLogicalName(), Action: planv1.Change_ACTION_CREATE},
 				&planv1.Change{Kind: "function", Name: fn.GetLogicalName(), Action: planv1.Change_ACTION_CREATE})
 		}
-		for _, c := range manifest.GetContainers() {
-			if c.GetApp() != app.GetName() {
-				continue
-			}
+		if c := app.GetContainer(); c != nil {
 			group.Changes = append(group.Changes,
 				&planv1.Change{Kind: "container", Name: c.GetImage(), Action: planv1.Change_ACTION_CREATE})
 		}
@@ -1435,9 +1433,9 @@ func describeFramework(f *contractv1.Framework) string {
 	return f.GetName() + "/" + f.GetArch()
 }
 
-func describeFunction(f *contractv1.ManifestFunction) string {
-	return fmt.Sprintf("logical_name=%s framework=%s handler=%s artifact_path=%s app=%s",
-		f.GetLogicalName(), describeFramework(f.GetFramework()), f.GetHandler(), f.GetArtifactPath(), f.GetApp())
+func describeFunction(app string, f *contractv1.ManifestFunction) string {
+	return fmt.Sprintf("logical_name=%s framework=%s entry_file=%s artifact_path=%s app=%s",
+		f.GetLogicalName(), describeFramework(f.GetFramework()), f.GetEntryFile(), f.GetArtifactPath(), app)
 }
 
 func describeUsage(u *contractv1.ManifestUsage) string {
@@ -1488,8 +1486,8 @@ func namedComputes(named string) []string {
 	return computes
 }
 
-func describeContainer(c *contractv1.ManifestContainer) string {
-	return fmt.Sprintf("app=%s image=%s health=%s", c.GetApp(), c.GetImage(), c.GetHealthCheckPath())
+func describeContainer(app string, c *contractv1.ContainerArtifact) string {
+	return fmt.Sprintf("app=%s image=%s health=%s", app, c.GetImage(), c.GetHealthCheckPath())
 }
 
 func describeRegistry(r *contractv1.ImageRegistry) string {
@@ -1518,40 +1516,12 @@ func parseInfraTier(s string) environmentv1.Tier {
 
 var pinnedImage = regexp.MustCompile(`^([^/@:[:space:]]+(:[0-9]+)?/)?[^/@:[:space:]]+(/[^/@:[:space:]]+)*@sha256:[0-9a-f]{64}$`)
 
-func validateFixtureContainers(m *contractv1.Manifest) error {
-	compute := map[string]string{}
-	for _, a := range m.GetApps() {
-		compute[a.GetName()] = a.GetCompute()
+func validateFixtureContainer(app string, c *contractv1.ContainerArtifact) error {
+	if !pinnedImage.MatchString(c.GetImage()) {
+		return fmt.Errorf("container for %s names image %q, and a release pins one repository at one digest", app, c.GetImage())
 	}
-	served := map[string]bool{}
-	for _, c := range m.GetContainers() {
-		app := c.GetApp()
-		if _, ok := compute[app]; !ok {
-			return fmt.Errorf("container names the app %q, which this manifest does not declare", app)
-		}
-		if compute[app] != string(provider.ComputeContainer) {
-			return fmt.Errorf("container names the app %q, which this manifest says runs on %q", app, compute[app])
-		}
-		if served[app] {
-			return fmt.Errorf("app %s declares two containers, and an app is served by one process", app)
-		}
-		served[app] = true
-		if !pinnedImage.MatchString(c.GetImage()) {
-			return fmt.Errorf("container for %s names image %q, and a release pins one repository at one digest", app, c.GetImage())
-		}
-		if !strings.HasPrefix(c.GetHealthCheckPath(), "/") {
-			return fmt.Errorf("container for %s sets health_check_path %q, and a provider is never left to resolve one of its own", app, c.GetHealthCheckPath())
-		}
-	}
-	for app, kind := range compute {
-		if kind == string(provider.ComputeContainer) && !served[app] {
-			return fmt.Errorf("app %s runs on container compute and this manifest declares no container for it", app)
-		}
-	}
-	for _, fn := range m.GetFunctions() {
-		if served[fn.GetApp()] {
-			return fmt.Errorf("app %s is served by a container and function %s as well, so a request has two answers", fn.GetApp(), fn.GetLogicalName())
-		}
+	if !strings.HasPrefix(c.GetHealthCheckPath(), "/") {
+		return fmt.Errorf("container for %s sets health_check_path %q, and a provider is never left to resolve one of its own", app, c.GetHealthCheckPath())
 	}
 	return nil
 }
@@ -1564,12 +1534,15 @@ func validateFixtureManifest(m *contractv1.Manifest) error {
 		if err := naming.ValidateDeploymentID(a.GetDeploymentId()); err != nil {
 			return fmt.Errorf("app %s: %w", a.GetName(), err)
 		}
-		if !provider.KnownCompute(a.GetCompute()) {
-			return fmt.Errorf("app %s declares compute %q, and a provider only runs %v", a.GetName(), a.GetCompute(), provider.ComputeNames(provider.Computes()))
+		switch provider.ComputeOf(a) {
+		case provider.ComputeContainer:
+			if err := validateFixtureContainer(a.GetName(), a.GetContainer()); err != nil {
+				return err
+			}
+		case provider.ComputeServerless:
+		default:
+			return fmt.Errorf("app %s carries neither functions nor a container image, and a provider only runs %v", a.GetName(), provider.ComputeNames(provider.Computes()))
 		}
-	}
-	if err := validateFixtureContainers(m); err != nil {
-		return err
 	}
 	declared := map[string]bool{}
 	for _, r := range m.GetResources() {

@@ -141,7 +141,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 			t.Error("the app build ran under --prebuilt, want it skipped")
 		}
 
-		functions := manifest.GetFunctions()
+		functions := manifest.GetApps()[0].GetServerless().GetFunctions()
 		if len(functions) != 1 {
 			t.Fatalf("manifest has %d functions, want the prebuilt one: %+v", len(functions), functions)
 		}
@@ -406,8 +406,8 @@ func TestPrebuiltDeploysTheImageTheBuildRecordedRatherThanBuildingOne(t *testing
 	if !maps.Equal(asked, archs) {
 		t.Errorf("the prebuilt image was checked against %v, want the %v the provider runs", asked, archs)
 	}
-	containers := manifest.GetContainers()
-	if len(containers) != 1 || containers[0].GetImage() != clitest.FixtureImage("api") {
-		t.Errorf("the manifest deploys the containers %v, want api on the prebuilt %q", containers, clitest.FixtureImage("api"))
+	apps := manifest.GetApps()
+	if len(apps) != 1 || apps[0].GetContainer().GetImage() != clitest.FixtureImage("api") {
+		t.Errorf("the manifest deploys the apps %v, want api on the prebuilt %q", apps, clitest.FixtureImage("api"))
 	}
 }

@@ -35,7 +35,7 @@ func TestTheStagedRecordKeysFunctionURLsByTheRouteTheManifestNames(t *testing.T)
 
 	req := deployRequest()
 	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}
-	req.Manifest.Functions[0].RouteId = "bundle-0"
+	webFunctions(req).Functions[0].RouteId = "bundle-0"
 
 	result, _ := deploy(t, client, req)
 	if result == nil || !result.GetSuccess() {
@@ -71,7 +71,7 @@ func TestTheStagedRecordNamesTheEntryTheBuildRoutesThrough(t *testing.T) {
 
 	req := deployRequest()
 	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}
-	req.Manifest.Functions[0].RouteId = "/"
+	webFunctions(req).Functions[0].RouteId = "/"
 
 	result, _ := deploy(t, client, req)
 	if result == nil || !result.GetSuccess() {

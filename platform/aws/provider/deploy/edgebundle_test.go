@@ -166,10 +166,8 @@ func edgeVarsManifest(variables ...*contractv1.ManifestVariable) *contractv1.Man
 	return &contractv1.Manifest{
 		Slug: "proj",
 		Apps: []*contractv1.ManifestApp{
-			{Name: "web", Framework: &contractv1.Framework{Name: appbuild.FrameworkNext}, Folder: "/shop", Variables: variables},
-		},
-		Functions: []*contractv1.ManifestFunction{
-			{LogicalName: "web_index", Framework: &contractv1.Framework{Name: "next"}, App: "web"},
+			{Name: "web", Framework: &contractv1.Framework{Name: appbuild.FrameworkNext}, Folder: "/shop", Variables: variables,
+				Artifact: serverlessArtifact(&contractv1.ManifestFunction{LogicalName: "web_index", Framework: &contractv1.Framework{Name: "next"}})},
 		},
 	}
 }
@@ -177,7 +175,7 @@ func edgeVarsManifest(variables ...*contractv1.ManifestVariable) *contractv1.Man
 func edgeBuilds(t *testing.T, cfg Config, manifest *contractv1.Manifest) appBuilds {
 	t.Helper()
 	bundles := map[string]appBundle{}
-	for _, app := range manifestApps(manifest) {
+	for _, app := range manifest.GetApps() {
 		sensitive := map[string]string{}
 		var keys []live.Key
 		for _, v := range app.GetVariables() {
