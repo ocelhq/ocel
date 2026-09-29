@@ -26,7 +26,7 @@ func preflightPreview(ctx context.Context, check *run.Span, prov *providerclient
 
 type preflightFacts struct {
 	declined       bool
-	compute        string
+	project        *project.Project
 	containerArchs map[string]string
 	urls           map[string]string
 }
@@ -36,14 +36,8 @@ func preflightPreviewUp(ctx context.Context, deps cmddeps.Deps, policy consent.P
 	if err != nil {
 		return preflightFacts{}, err
 	}
-	compute, err := preflight.ResolveComputes(cfg, resp.GetComputes(), prov.Name())
+	resolved, archs, err := resolveContainers(ctx, deps, check, prov, cfg, resp)
 	if err != nil {
-		return preflightFacts{}, err
-	}
-	if err := requireProjectRegistryPassword(cfg); err != nil {
-		return preflightFacts{}, err
-	}
-	if err := deps.RefuseUnbuildableImages(ctx, check, cfg, resp.GetContainerArchs()); err != nil {
 		return preflightFacts{}, err
 	}
 	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path), check.Warn); err != nil {
@@ -62,9 +56,9 @@ func preflightPreviewUp(ctx context.Context, deps cmddeps.Deps, policy consent.P
 	}
 	return preflightFacts{
 		declined:       !proceed,
-		compute:        compute,
-		containerArchs: resp.GetContainerArchs(),
-		urls: appurl.Preview(cfg, func(app string) string {
+		project:        resolved,
+		containerArchs: archs,
+		urls: appurl.Preview(resolved, func(app string) string {
 			return site.Host(pointer, app)
 		}),
 	}, nil
@@ -76,14 +70,8 @@ func preflightDeploy(ctx context.Context, deps cmddeps.Deps, policy consent.Poli
 	if err != nil {
 		return preflightFacts{}, err
 	}
-	compute, err := preflight.ResolveComputes(cfg, resp.GetComputes(), prov.Name())
+	resolved, archs, err := resolveContainers(ctx, deps, check, prov, cfg, resp)
 	if err != nil {
-		return preflightFacts{}, err
-	}
-	if err := requireProjectRegistryPassword(cfg); err != nil {
-		return preflightFacts{}, err
-	}
-	if err := deps.RefuseUnbuildableImages(ctx, check, cfg, resp.GetContainerArchs()); err != nil {
 		return preflightFacts{}, err
 	}
 	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path), check.Warn); err != nil {
@@ -96,7 +84,22 @@ func preflightDeploy(ctx context.Context, deps cmddeps.Deps, policy consent.Poli
 	if err != nil {
 		return preflightFacts{}, err
 	}
-	return preflightFacts{declined: !proceed, compute: compute, containerArchs: resp.GetContainerArchs(), urls: appurl.Production(cfg)}, nil
+	return preflightFacts{declined: !proceed, project: resolved, containerArchs: archs, urls: appurl.Production(resolved)}, nil
+}
+
+func resolveContainers(ctx context.Context, deps cmddeps.Deps, check *run.Span, prov *providerclient.Provider, cfg *project.Project, resp *contractv1.PreflightResponse) (*project.Project, map[string]string, error) {
+	resolved, err := cfg.ResolveComputes(resp.GetComputes(), prov.Name())
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := requireProjectRegistryPassword(resolved); err != nil {
+		return nil, nil, err
+	}
+	archs := resp.GetContainerArchs()
+	if err := deps.RefuseUnbuildableImages(ctx, check, resolved, archs); err != nil {
+		return nil, nil, err
+	}
+	return resolved, archs, nil
 }
 
 func ensureBootstrap(ctx context.Context, policy consent.Policy, check *run.Span, prov *providerclient.Provider, cfg *project.Project, status *contractv1.BootstrapStatus, tier environmentv1.Tier, out io.Writer, in io.Reader) error {

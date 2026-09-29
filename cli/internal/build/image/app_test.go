@@ -36,7 +36,7 @@ func TestABuildContextTheAppDoesNotSitUnderIsRefusedByName(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(cfg.Dir, "elsewhere"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	cfg.Apps[0].Build = &project.Build{Context: "elsewhere"}
+	cfg.Apps[0].Container = &project.Container{Build: &project.Build{Context: "elsewhere"}}
 
 	_, err := Describe(cfg, cfg.Apps[0])
 	if err == nil {

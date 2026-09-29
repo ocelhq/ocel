@@ -25,7 +25,7 @@ func TestTheManifestNamesEveryAppsCompute(t *testing.T) {
 			Apps: []project.App{{Name: "api", Path: ".", Compute: "container"}},
 		}
 		clitest.StubAppImages(&deps, "api")
-		manifest, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: cfg, declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s, compute: "serverless"})
+		manifest, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: onCompute(cfg, "serverless"), declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s})
 		if err != nil {
 			t.Fatalf("collectBuildAndAssemble: %v", err)
 		}
@@ -42,7 +42,7 @@ func TestTheManifestNamesEveryAppsCompute(t *testing.T) {
 
 		s, _ := newBuildSpan(t)
 		cfg := &project.Project{Dir: root, Slug: "prebuilt"}
-		_, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: cfg, declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s, compute: "container"})
+		_, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: onCompute(cfg, "container"), declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s})
 		if err == nil {
 			t.Fatal("collectBuildAndAssemble() landed an app the config never names on container compute, so a provider would be handed an app with no image")
 		}
@@ -50,6 +50,18 @@ func TestTheManifestNamesEveryAppsCompute(t *testing.T) {
 			t.Errorf("collectBuildAndAssemble() error = %q, want it to name the app", err)
 		}
 	})
+}
+
+func onCompute(cfg *project.Project, compute provider.Compute) *project.Project {
+	resolved := *cfg
+	resolved.Apps = make([]project.App, len(cfg.Apps))
+	for i, app := range cfg.Apps {
+		if app.Compute == "" {
+			app.Compute = compute
+		}
+		resolved.Apps[i] = app
+	}
+	return &resolved
 }
 
 func computeOf(t *testing.T, manifest *contractv1.Manifest, app string) string {
@@ -81,7 +93,7 @@ func TestAContainerAppThatNamesNoRuntimeStillReachesTheProvider(t *testing.T) {
 	}
 	clitest.StubAppImages(&deps, "api")
 
-	manifest, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: cfg, declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s, compute: "container"})
+	manifest, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: onCompute(cfg, "container"), declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s})
 	if err != nil {
 		t.Fatalf("collectBuildAndAssemble over a container app with no runtime: %v", err)
 	}

@@ -18,15 +18,15 @@ func compiledFromSource(framework string) bool {
 
 func compile(ctx context.Context, cfg *project.Project, a project.App, outputDir string, log io.Writer) error {
 	appDir := appbuild.AppArtifactRoot(outputDir, a.Name)
-	roots, err := discoveryRootsFor(cfg, a.Framework.Name)
+	roots, err := discoveryRootsFor(cfg, a.Framework())
 	if err != nil {
 		return err
 	}
 	return toolchain.Compile(ctx, toolchain.Compilation{
 		App:            a.Name,
-		Framework:      appbuild.Framework{Name: a.Framework.Name, Arch: a.Framework.Architecture()},
+		Framework:      appbuild.Framework{Name: a.Framework(), Arch: a.Architecture()},
 		Source:         filepath.Join(cfg.Dir, a.Path),
-		Entrypoint:     a.Entrypoint,
+		Entrypoint:     a.Serverless.Entrypoint,
 		FuncDir:        filepath.Join(appDir, functionsDirName, entryFuncDirName),
 		AppDir:         appDir,
 		DiscoveryRoots: roots,

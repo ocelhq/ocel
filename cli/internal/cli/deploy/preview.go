@@ -219,6 +219,7 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 		run.Succeed("Nothing deployed to preview " + env.GetIdentity())
 		return nil
 	}
+	cfg = facts.project
 
 	browser := deps.BrowserReachable(stdin)
 	scope := variablescope.Of(cfg, environmentv1.Tier_TIER_PREVIEW, env.GetIdentity())
@@ -238,7 +239,6 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 			}, scope)
 		},
 		command:        "ocel preview up",
-		compute:        facts.compute,
 		containerArchs: facts.containerArchs,
 		urls:           facts.urls,
 		dry:            opts.dry,

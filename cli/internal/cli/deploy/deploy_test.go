@@ -649,7 +649,7 @@ export default {
   slug: "test-app",
   provider: { fake: {} },
   domains: { preview: "*.preview.acme.com" },
-  apps: [{ name: "api", path: "apps/api", framework: "node", compute: "container" }],
+  apps: [{ name: "api", path: "apps/api", compute: "container" }],
 };
 `)
 	writeAppSource(t, root, "api")

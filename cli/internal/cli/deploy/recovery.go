@@ -35,7 +35,6 @@ type variablesRecovery struct {
 	newDeclarations func(variables.EnvSource) *variables.Declarations
 
 	command        string
-	compute        string
 	containerArchs map[string]string
 	urls           map[string]string
 
@@ -156,7 +155,7 @@ func (r variablesRecovery) attempt(ctx context.Context, phase, unit *run.Span, d
 	attempt := unit.Trace(r.cfg.Slug, "build", progress.Attr{Key: progress.AttrKeyRetryCount, Value: strconv.Itoa(retry)})
 	manifest, inline, err := collectBuildAndAssemble(run.ContextWithSpan(ctx, attempt), r.deps, assembly{
 		cfg: r.cfg, declarations: declarations, prebuilt: prebuilt, dry: r.dry, phase: phase, span: unit,
-		compute: r.compute, containerArchs: r.containerArchs, urls: r.urls,
+		containerArchs: r.containerArchs, urls: r.urls,
 	})
 	attempt.End(err)
 	return manifest, inline, err

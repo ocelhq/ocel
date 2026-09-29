@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/nodeprotocol"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/node"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 type appUnits struct {
@@ -188,7 +189,7 @@ func TestAGoAppCompiledHereBuildsInAUnitOfItsOwnThatEndsWithItsCompileError(t *t
 	}
 	cfg := &project.Project{
 		Dir:  root,
-		Apps: []project.App{{Name: "api", Path: "apps/api", Framework: project.Framework{Name: "go"}}},
+		Apps: []project.App{{Name: "api", Path: "apps/api", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: "go"}}},
 	}
 
 	var units appUnits

@@ -20,7 +20,6 @@ const ContractVersion = "provider.v1"
 type Input struct {
 	Project      *project.Project
 	Tier         environmentv1.Tier
-	Compute      string
 	Resources    []declaration.Resource
 	Variables    map[string][]variables.Variable
 	Built        build.Output
@@ -32,7 +31,7 @@ func Assemble(in Input) (*contractv1.Manifest, error) {
 	cfg := in.Project
 	functions := servedByFunctions(in.Built.Functions, cfg)
 	apps := appsOf(cfg.Dir, cfg.Apps, in.Usages, in.Built.Images)
-	manifest, err := assemble(cfg.Slug, cfg.Domains, apps, in.Compute, declaredResources(cfg.Dir, in.Resources), bindingsOf(cfg.BindingsFor(in.Tier)), functions, in.Variables)
+	manifest, err := assemble(cfg.Slug, cfg.Domains, apps, declaredResources(cfg.Dir, in.Resources), bindingsOf(cfg.BindingsFor(in.Tier)), functions, in.Variables)
 	if err != nil || in.DeploymentID == nil {
 		return manifest, err
 	}
@@ -46,11 +45,7 @@ func Assemble(in Input) (*contractv1.Manifest, error) {
 	return manifest, nil
 }
 
-func assemble(slug string, domains project.Domains, apps []app, compute string, declarations []declaredResource, bindings []binding, functions []build.Function, values map[string][]variables.Variable) (*contractv1.Manifest, error) {
-	if compute == "" {
-		return nil, fmt.Errorf("project %q was built with no compute resolved — every app on the wire has to name the compute it runs on, and the manifest is built after preflight so that a provider's own answer is what fills it", slug)
-	}
-
+func assemble(slug string, domains project.Domains, apps []app, declarations []declaredResource, bindings []binding, functions []build.Function, values map[string][]variables.Variable) (*contractv1.Manifest, error) {
 	named := make(map[string]string, len(declarations)+len(functions))
 	resources, seen, err := manifestResources(declarations, named)
 	if err != nil {
@@ -70,7 +65,7 @@ func assemble(slug string, domains project.Domains, apps []app, compute string, 
 		return nil, err
 	}
 
-	manifestApps, err := manifestAppsOf(apps, compute, functions, functionsByApp, values)
+	manifestApps, err := manifestAppsOf(apps, functions, functionsByApp, values)
 	if err != nil {
 		return nil, err
 	}

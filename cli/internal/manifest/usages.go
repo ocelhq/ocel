@@ -1,7 +1,6 @@
 package manifest
 
 import (
-	"cmp"
 	"context"
 	"fmt"
 	"path/filepath"
@@ -41,8 +40,8 @@ func (e *DanglingUsageError) Error() string {
 	)
 }
 
-func FindUsages(ctx context.Context, cfg *project.Project, built build.Output, compute string, resources []declaration.Resource) ([]attribution.Usage, error) {
-	apps, err := attributionApps(cfg, servedByFunctions(built.Functions, cfg), compute)
+func FindUsages(ctx context.Context, cfg *project.Project, built build.Output, resources []declaration.Resource) ([]attribution.Usage, error) {
+	apps, err := attributionApps(cfg, servedByFunctions(built.Functions, cfg))
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +52,7 @@ func FindUsages(ctx context.Context, cfg *project.Project, built build.Output, c
 	return attribution.FindUsages(ctx, cfg.Dir, apps, declared)
 }
 
-func attributionApps(cfg *project.Project, functions []build.Function, compute string) ([]attribution.App, error) {
+func attributionApps(cfg *project.Project, functions []build.Function) ([]attribution.App, error) {
 	configName := filepath.Base(cfg.Path)
 	detected := detectedApps(functions)
 	roots, err := discovery.RootsOf(cfg)
@@ -64,12 +63,12 @@ func attributionApps(cfg *project.Project, functions []build.Function, compute s
 	out := make([]attribution.App, 0, len(cfg.Apps))
 	for _, a := range cfg.Apps {
 		named[a.Name] = true
-		inAnImage := cmp.Or(a.Compute, compute) == string(provider.ComputeContainer)
+		inAnImage := a.RunsOn(provider.ComputeContainer)
 		appDir := filepath.Join(cfg.Dir, a.Path)
 		out = append(out, attribution.App{
 			Name:      a.Name,
 			Path:      a.Path,
-			Language:  language.OfApp(a.Framework.Name, appDir),
+			Language:  language.OfApp(a.Framework(), appDir),
 			Roots:     roots,
 			Container: inAnImage,
 			Members:   workspaceMembers(inAnImage, appDir),

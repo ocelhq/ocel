@@ -1,7 +1,6 @@
 package manifest
 
 import (
-	"cmp"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -15,13 +14,15 @@ import (
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 type app struct {
 	Name            string
-	Framework       appbuild.Framework
+	Framework       string
+	Arch            string
 	ClientBundle    bool
-	Compute         string
+	Compute         provider.Compute
 	Domains         []string
 	Folder          string
 	Usages          []usage
@@ -39,8 +40,9 @@ func appsOf(projectDir string, configured []project.App, usages []attribution.Us
 	for _, a := range configured {
 		out = append(out, app{
 			Name:            a.Name,
-			Framework:       appbuild.Framework{Name: a.Framework.Name, Arch: a.Framework.Arch},
-			ClientBundle:    language.HasClientBundle(a.Framework.Name, filepath.Join(projectDir, a.Path)),
+			Framework:       a.Framework(),
+			Arch:            a.Arch,
+			ClientBundle:    language.HasClientBundle(a.Framework(), filepath.Join(projectDir, a.Path)),
 			Compute:         a.Compute,
 			Domains:         a.ProductionDomains,
 			Folder:          a.Folder,
@@ -53,10 +55,10 @@ func appsOf(projectDir string, configured []project.App, usages []attribution.Us
 }
 
 func healthPathOf(app project.App) string {
-	if app.Health == nil {
+	if app.Container == nil || app.Container.Health == nil {
 		return ""
 	}
-	return app.Health.Path
+	return app.Container.Health.Path
 }
 
 func servedByFunctions(functions []build.Function, cfg *project.Project) []build.Function {
@@ -72,7 +74,7 @@ func servedByFunctions(functions []build.Function, cfg *project.Project) []build
 	})
 }
 
-func manifestAppsOf(apps []app, compute string, functions []build.Function, functionsByApp map[string][]*contractv1.ManifestFunction, values map[string][]variables.Variable) ([]*contractv1.ManifestApp, error) {
+func manifestAppsOf(apps []app, functions []build.Function, functionsByApp map[string][]*contractv1.ManifestFunction, values map[string][]variables.Variable) ([]*contractv1.ManifestApp, error) {
 	frameworkByApp := make(map[string]appbuild.Framework, len(functions))
 	for _, f := range functions {
 		if f.App != "" && f.Framework.Name != "" {
@@ -86,7 +88,10 @@ func manifestAppsOf(apps []app, compute string, functions []build.Function, func
 	configured := make(map[string]bool, len(apps))
 	for _, a := range apps {
 		configured[a.Name] = true
-		framework := a.Framework
+		if a.Compute == "" {
+			return nil, fmt.Errorf("app %q reached the manifest with no compute resolved — every app on the wire names the compute it runs on, and the manifest is built after preflight so that a provider's own answer is what fills it", a.Name)
+		}
+		framework := appbuild.Framework{Name: a.Framework, Arch: a.Arch}
 		if framework.Name == "" {
 			framework = frameworkByApp[a.Name]
 		}
@@ -98,7 +103,7 @@ func manifestAppsOf(apps []app, compute string, functions []build.Function, func
 			Folder:       a.Folder,
 			ClientBundle: a.ClientBundle,
 		}
-		if err := attachArtifact(manifestApp, a, cmp.Or(a.Compute, compute), functionsByApp[a.Name]); err != nil {
+		if err := attachArtifact(manifestApp, a, functionsByApp[a.Name]); err != nil {
 			return nil, err
 		}
 		manifestApps = append(manifestApps, manifestApp)

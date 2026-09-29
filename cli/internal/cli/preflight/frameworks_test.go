@@ -26,24 +26,24 @@ func TestProjectRuntimes(t *testing.T) {
 		{
 			name: "each app's framework is named",
 			cfg: &project.Project{Apps: []project.App{
-				{Framework: project.Framework{Name: "next"}},
-				{Framework: project.Framework{Name: "node"}},
+				{Serverless: &project.Serverless{Framework: "next"}},
+				{Serverless: &project.Serverless{Framework: "node"}},
 			}},
 			want: []string{"next", "node"},
 		},
 		{
 			name: "an arch does not split one runtime in two",
 			cfg: &project.Project{Apps: []project.App{
-				{Framework: project.Framework{Name: "next"}},
-				{Framework: project.Framework{Name: "next", Arch: "x86_64"}},
+				{Serverless: &project.Serverless{Framework: "next"}},
+				{Serverless: &project.Serverless{Framework: "next"}, Arch: "x86_64"},
 			}},
 			want: []string{"next"},
 		},
 		{
 			name: "two apps on one runtime name it once",
 			cfg: &project.Project{Apps: []project.App{
-				{Framework: project.Framework{Name: "next"}},
-				{Framework: project.Framework{Name: "next"}},
+				{Serverless: &project.Serverless{Framework: "next"}},
+				{Serverless: &project.Serverless{Framework: "next"}},
 			}},
 			want: []string{"next"},
 		},

@@ -6,17 +6,17 @@ import (
 )
 
 func ImageApps(apps []project.App) []project.App {
-	return appsWhere(apps, true)
+	return appsOn(apps, provider.ComputeContainer)
 }
 
 func FunctionApps(apps []project.App) []project.App {
-	return appsWhere(apps, false)
+	return appsOn(apps, provider.ComputeServerless)
 }
 
-func appsWhere(apps []project.App, inImage bool) []project.App {
+func appsOn(apps []project.App, compute provider.Compute) []project.App {
 	var selected []project.App
 	for _, a := range apps {
-		if a.RunsOn(provider.ComputeContainer) == inImage {
+		if a.RunsOn(compute) {
 			selected = append(selected, a)
 		}
 	}

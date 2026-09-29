@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/build/image"
 	"github.com/ocelhq/ocel/cli/internal/build/toolchain"
+	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/node"
 	"github.com/ocelhq/ocel/pkg/appbuild"
@@ -64,6 +65,9 @@ func ReadPrebuilt(ctx context.Context, cfg *project.Project, archs map[string]st
 }
 
 func (t tools) apps(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, log Log) (Output, error) {
+	if unresolved := cfg.UnresolvedApps(); len(unresolved) > 0 {
+		return Output{}, fmt.Errorf("the build reached %s with no compute resolved, and an app is built for the compute it runs on", english.And(english.Quoted(unresolved)))
+	}
 	if err := t.functions(ctx, cfg, env, log); err != nil {
 		return Output{}, err
 	}
@@ -102,7 +106,7 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, envByApp map
 	var req nodeBuildRequest
 	var traced []toolchain.Target
 	for _, a := range FunctionApps(cfg.Apps) {
-		switch name := a.Framework.Name; {
+		switch name := a.Framework(); {
 		case compiledFromSource(name):
 			appLog, ended := log.App(a.Name)
 			err := compile(ctx, cfg, a, outputDir, appLog)
@@ -148,8 +152,6 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, envByApp map
 			if err != nil {
 				return err
 			}
-		case a.Framework.Missing != nil:
-			return a.Framework.Missing
 		default:
 			return fmt.Errorf("app %q: nothing in %s says what it is built with; set \"framework\" in the app config", a.Name, filepath.Join(cfg.Dir, a.Path))
 		}
@@ -178,14 +180,14 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, envByApp map
 
 func nodeTarget(cfg *project.Project, a project.App, outputDir string) (toolchain.Target, error) {
 	source := filepath.Join(cfg.Dir, a.Path)
-	entrypoint, err := toolchain.NodeEntrypoint(source, a.Entrypoint)
+	entrypoint, err := toolchain.NodeEntrypoint(source, a.Serverless.Entrypoint)
 	if err != nil {
 		return toolchain.Target{}, fmt.Errorf("app %q: %w", a.Name, err)
 	}
 	appDir := appbuild.AppArtifactRoot(outputDir, a.Name)
 	return toolchain.Target{
 		App:        a.Name,
-		Framework:  appbuild.Framework{Name: appbuild.FrameworkNode, Arch: a.Framework.Arch},
+		Framework:  appbuild.Framework{Name: appbuild.FrameworkNode, Arch: a.Arch},
 		Source:     source,
 		Entrypoint: entrypoint,
 		FuncDir:    filepath.Join(appDir, functionsDirName, entryFuncDirName),

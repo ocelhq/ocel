@@ -42,7 +42,7 @@ func AppsOf(cfg *project.Project, values map[string][]variables.Variable) []App 
 		apps = append(apps, App{
 			Name:         a.Name,
 			Dir:          dir,
-			ClientBundle: language.HasClientBundle(a.Framework.Name, dir),
+			ClientBundle: language.HasClientBundle(a.Framework(), dir),
 			Variables:    values[a.Name],
 		})
 	}

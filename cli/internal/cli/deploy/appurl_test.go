@@ -51,7 +51,7 @@ func TestTheDeploymentURLReachesEveryDeliverySite(t *testing.T) {
 	s, _ := newBuildSpan(t)
 	cfg := prebuiltConfig(root)
 	urls := map[string]string{"api": "https://api.acme.com"}
-	manifest, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: cfg, declarations: emptyDeclarations(cfg), phase: s, span: s, compute: "serverless", urls: urls})
+	manifest, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: onCompute(cfg, "serverless"), declarations: emptyDeclarations(cfg), phase: s, span: s, urls: urls})
 	if err != nil {
 		t.Fatalf("collectBuildAndAssemble: %v", err)
 	}
@@ -93,12 +93,12 @@ func TestPrebuiltRefusesAnOutputBuiltForAnotherURL(t *testing.T) {
 	cfg := prebuiltConfig(root)
 
 	s, _ := newBuildSpan(t)
-	if _, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: cfg, declarations: emptyDeclarations(cfg), phase: s, span: s, compute: "serverless", urls: map[string]string{"api": "https://api.acme.com"}}); err != nil {
+	if _, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: onCompute(cfg, "serverless"), declarations: emptyDeclarations(cfg), phase: s, span: s, urls: map[string]string{"api": "https://api.acme.com"}}); err != nil {
 		t.Fatalf("collectBuildAndAssemble: %v", err)
 	}
 
 	s, _ = newBuildSpan(t)
-	_, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: cfg, declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s, compute: "serverless", urls: map[string]string{"api": "https://pr-1.preview.acme.com"}})
+	_, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: onCompute(cfg, "serverless"), declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s, urls: map[string]string{"api": "https://pr-1.preview.acme.com"}})
 	if err == nil {
 		t.Fatal("collectBuildAndAssemble = nil for output built against another hostname, want a refusal: the url is inlined into the browser bundle, so this deploy would serve the wrong one")
 	}

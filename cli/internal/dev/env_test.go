@@ -743,11 +743,11 @@ func TestRunWritesTheBrowsersURLForTheAppItRunsIn(t *testing.T) {
 	t.Setenv("PORT", "")
 	root := t.TempDir()
 	cfg := &project.Project{Dir: root, Apps: []project.App{
-		{Name: "web", Path: filepath.Join("apps", "web"), Folder: "/web", Framework: project.Framework{Name: appbuild.FrameworkNext}},
-		{Name: "api", Path: filepath.Join("apps", "api"), Folder: "/api", Framework: project.Framework{Name: appbuild.FrameworkGo}},
-		{Name: "webhooks", Path: filepath.Join("apps", "web-hooks"), Framework: project.Framework{Name: appbuild.FrameworkPython}},
-		{Name: "store", Path: filepath.Join("apps", "store"), Folder: "/store", Compute: string(provider.ComputeContainer)},
-		{Name: "worker", Path: filepath.Join("apps", "worker"), Folder: "/worker", Compute: string(provider.ComputeContainer)},
+		{Name: "web", Path: filepath.Join("apps", "web"), Folder: "/web", Serverless: &project.Serverless{Framework: appbuild.FrameworkNext}},
+		{Name: "api", Path: filepath.Join("apps", "api"), Folder: "/api", Serverless: &project.Serverless{Framework: appbuild.FrameworkGo}},
+		{Name: "webhooks", Path: filepath.Join("apps", "web-hooks"), Serverless: &project.Serverless{Framework: appbuild.FrameworkPython}},
+		{Name: "store", Path: filepath.Join("apps", "store"), Folder: "/store", Compute: provider.ComputeContainer},
+		{Name: "worker", Path: filepath.Join("apps", "worker"), Folder: "/worker", Compute: provider.ComputeContainer},
 	}}
 	writeApp(t, filepath.Join(root, "apps", "store", "package.json"), "{}")
 	writeApp(t, filepath.Join(root, "apps", "worker", "go.mod"), "module example.com/worker")

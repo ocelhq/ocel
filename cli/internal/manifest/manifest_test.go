@@ -54,14 +54,23 @@ type goldenPostgres struct {
 	Version string `json:"version"`
 }
 
-func assembleBuiltApps(slug string, compute string, declarations []declaredResource, bindings []binding, functions []build.Function, values map[string][]variables.Variable) (*contractv1.Manifest, error) {
+func assembleBuiltApps(slug string, compute provider.Compute, declarations []declaredResource, bindings []binding, functions []build.Function, values map[string][]variables.Variable) (*contractv1.Manifest, error) {
 	var apps []app
 	for _, f := range functions {
 		if !slices.ContainsFunc(apps, func(a app) bool { return a.Name == f.App }) {
 			apps = append(apps, app{Name: f.App})
 		}
 	}
-	return assemble(slug, project.Domains{}, apps, compute, declarations, bindings, functions, values)
+	return assembleOn(compute, slug, project.Domains{}, apps, declarations, bindings, functions, values)
+}
+
+func assembleOn(compute provider.Compute, slug string, domains project.Domains, apps []app, declarations []declaredResource, bindings []binding, functions []build.Function, values map[string][]variables.Variable) (*contractv1.Manifest, error) {
+	for i := range apps {
+		if apps[i].Compute == "" {
+			apps[i].Compute = compute
+		}
+	}
+	return assemble(slug, domains, apps, declarations, bindings, functions, values)
 }
 
 func toGolden(m *contractv1.Manifest) goldenManifest {
@@ -446,7 +455,7 @@ func TestTheManifestAssemblesTheProjectsAppsResourcesAndFunctions(t *testing.T) 
 		t.Parallel()
 
 		domains := project.Domains{Production: []string{"app.acme.com", "www.acme.com"}}
-		manifest, err := assemble("proj-1", domains, nil, "serverless", nil, nil, nil, nil)
+		manifest, err := assembleOn("serverless", "proj-1", domains, nil, nil, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("assemble: %v", err)
 		}
@@ -500,7 +509,7 @@ func TestTheManifestAssemblesTheProjectsAppsResourcesAndFunctions(t *testing.T) 
 			{Name: "web", Domains: []string{"example.com"}},
 			{Name: "admin"},
 		}
-		manifest, err := assemble("proj-1", project.Domains{}, apps, "serverless", nil, nil, []build.Function{
+		manifest, err := assembleOn("serverless", "proj-1", project.Domains{}, apps, nil, nil, []build.Function{
 			{Route: "web", Framework: appbuild.Framework{Name: "next"}, EntryFile: "h.js", ArtifactPath: "a", App: "web"},
 			{Route: "admin", Framework: appbuild.Framework{Name: "node"}, EntryFile: "h.js", ArtifactPath: "b", App: "admin"},
 		}, nil)
@@ -529,7 +538,7 @@ func TestTheManifestAssemblesTheProjectsAppsResourcesAndFunctions(t *testing.T) 
 	t.Run("records the app a function belongs to", func(t *testing.T) {
 		t.Parallel()
 
-		manifest, err := assemble("proj-1", project.Domains{}, []app{{Name: "web"}}, "serverless", nil, nil, []build.Function{
+		manifest, err := assembleOn("serverless", "proj-1", project.Domains{}, []app{{Name: "web"}}, nil, nil, []build.Function{
 			{Route: "web", Framework: appbuild.Framework{Name: "node"}, EntryFile: "h.js", ArtifactPath: "a", App: "web"},
 		}, nil)
 		if err != nil {
@@ -543,7 +552,7 @@ func TestTheManifestAssemblesTheProjectsAppsResourcesAndFunctions(t *testing.T) 
 	t.Run("fills a configured app's runtime from its functions", func(t *testing.T) {
 		t.Parallel()
 
-		manifest, err := assemble("proj-1", project.Domains{}, []app{{Name: "web"}}, "serverless", nil, nil, []build.Function{
+		manifest, err := assembleOn("serverless", "proj-1", project.Domains{}, []app{{Name: "web"}}, nil, nil, []build.Function{
 			{Route: "web", Framework: appbuild.Framework{Name: "node"}, EntryFile: "h.js", ArtifactPath: "a", App: "web"},
 		}, nil)
 		if err != nil {
@@ -557,7 +566,7 @@ func TestTheManifestAssemblesTheProjectsAppsResourcesAndFunctions(t *testing.T) 
 	t.Run("a configured app with no functions still appears", func(t *testing.T) {
 		t.Parallel()
 
-		manifest, err := assemble("proj-1", project.Domains{}, []app{{Name: "web", Compute: "container", Image: "ocel/web@" + fakeDigest}}, "serverless", nil, nil, nil, nil)
+		manifest, err := assembleOn("serverless", "proj-1", project.Domains{}, []app{{Name: "web", Compute: "container", Image: "ocel/web@" + fakeDigest}}, nil, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("assemble: %v", err)
 		}
@@ -572,7 +581,7 @@ func TestTheManifestAssemblesTheProjectsAppsResourcesAndFunctions(t *testing.T) 
 	t.Run("a configured app that names no compute takes the resolved one", func(t *testing.T) {
 		t.Parallel()
 
-		manifest, err := assemble("proj-1", project.Domains{}, []app{{Name: "web", Image: "ocel/web@" + fakeDigest}}, "container", nil, nil, nil, nil)
+		manifest, err := assembleOn("container", "proj-1", project.Domains{}, []app{{Name: "web", Image: "ocel/web@" + fakeDigest}}, nil, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("assemble: %v", err)
 		}
@@ -584,7 +593,7 @@ func TestTheManifestAssemblesTheProjectsAppsResourcesAndFunctions(t *testing.T) 
 	t.Run("refuses to build with no compute resolved", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := assemble("proj-1", project.Domains{}, []app{{Name: "web"}}, "", nil, nil, nil, nil)
+		_, err := assembleOn("", "proj-1", project.Domains{}, []app{{Name: "web"}}, nil, nil, nil, nil)
 		if err == nil || !strings.Contains(err.Error(), "compute") {
 			t.Fatalf("assemble err = %v, want a refusal naming the compute the manifest was never given", err)
 		}
@@ -614,7 +623,7 @@ func TestTheManifestAssemblesTheProjectsAppsResourcesAndFunctions(t *testing.T) 
 				{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-store"},
 			},
 		}
-		manifest, err := assemble("proj-1", project.Domains{}, []app{{Name: "admin"}, {Name: "storefront"}}, "serverless", nil, nil, []build.Function{
+		manifest, err := assembleOn("serverless", "proj-1", project.Domains{}, []app{{Name: "admin"}, {Name: "storefront"}}, nil, nil, []build.Function{
 			{Route: "index", Framework: appbuild.Framework{Name: "next"}, EntryFile: "h.js", ArtifactPath: "a", App: "storefront"},
 		}, variables)
 		if err != nil {
@@ -649,10 +658,10 @@ func TestTheManifestAssemblesTheProjectsAppsResourcesAndFunctions(t *testing.T) 
 	t.Run("includes the app's folder binding", func(t *testing.T) {
 		t.Parallel()
 
-		manifest, err := assemble("proj-1", project.Domains{}, []app{
+		manifest, err := assembleOn("serverless", "proj-1", project.Domains{}, []app{
 			{Name: "admin", Folder: "/admin"},
 			{Name: "web"},
-		}, "serverless", nil, nil, nil, nil)
+		}, nil, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("assemble: %v", err)
 		}
@@ -678,7 +687,7 @@ func TestTheManifestAssemblesTheProjectsAppsResourcesAndFunctions(t *testing.T) 
 				{Key: "ROOT_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET},
 			},
 		}
-		manifest, err := assemble("proj-1", project.Domains{}, []app{{Name: "admin", Folder: "/admin"}}, "serverless", nil, nil, nil, variables)
+		manifest, err := assembleOn("serverless", "proj-1", project.Domains{}, []app{{Name: "admin", Folder: "/admin"}}, nil, nil, nil, variables)
 		if err != nil {
 			t.Fatalf("assemble: %v", err)
 		}
@@ -798,7 +807,7 @@ func TestUsagesLandAsOneEdgePerAppAndResource(t *testing.T) {
 	t.Run("lands one edge per app and resource, files deduped and sorted", func(t *testing.T) {
 		t.Parallel()
 
-		manifest, err := assemble("proj-1", project.Domains{}, []app{
+		manifest, err := assembleOn("serverless", "proj-1", project.Domains{}, []app{
 			{Name: "api", Usages: []usage{
 				{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main", Files: []string{"apps/api/src/server.ts"}},
 				{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main", Files: []string{"apps/api/src/reports.ts", "apps/api/src/server.ts"}},
@@ -807,7 +816,7 @@ func TestUsagesLandAsOneEdgePerAppAndResource(t *testing.T) {
 			{Name: "worker", Usages: []usage{
 				{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main", Files: []string{"apps/worker/src/worker.ts"}},
 			}},
-		}, "serverless", declarations, nil, nil, nil)
+		}, declarations, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("assemble err = %v", err)
 		}
@@ -829,9 +838,9 @@ func TestUsagesLandAsOneEdgePerAppAndResource(t *testing.T) {
 	t.Run("an orphan resource still reaches the manifest", func(t *testing.T) {
 		t.Parallel()
 
-		manifest, err := assemble("proj-1", project.Domains{}, []app{
+		manifest, err := assembleOn("serverless", "proj-1", project.Domains{}, []app{
 			{Name: "api", Usages: []usage{{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main", Files: []string{"apps/api/src/server.ts"}}}},
-		}, "serverless", declarations, nil, nil, nil)
+		}, declarations, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("assemble err = %v", err)
 		}
@@ -847,9 +856,9 @@ func TestUsagesLandAsOneEdgePerAppAndResource(t *testing.T) {
 	t.Run("a usage naming an undeclared resource fails validation", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := assemble("proj-1", project.Domains{}, []app{
+		_, err := assembleOn("serverless", "proj-1", project.Domains{}, []app{
 			{Name: "api", Usages: []usage{{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "ghost", Files: []string{"apps/api/src/server.ts"}}}},
-		}, "serverless", declarations, nil, nil, nil)
+		}, declarations, nil, nil, nil)
 
 		var dangling *DanglingUsageError
 		if !errors.As(err, &dangling) {
@@ -866,7 +875,7 @@ func TestUsagesLandAsOneEdgePerAppAndResource(t *testing.T) {
 	t.Run("no usages leaves the edge list empty", func(t *testing.T) {
 		t.Parallel()
 
-		manifest, err := assemble("proj-1", project.Domains{}, []app{{Name: "api"}}, "serverless", declarations, nil, nil, nil)
+		manifest, err := assembleOn("serverless", "proj-1", project.Domains{}, []app{{Name: "api"}}, declarations, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("assemble err = %v", err)
 		}

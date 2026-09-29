@@ -98,7 +98,7 @@ func prebuiltConfig(root string) *project.Project {
 	return &project.Project{
 		Dir:  root,
 		Slug: "prebuilt",
-		Apps: []project.App{{Name: "api", Path: ".", Compute: "serverless", Framework: project.Framework{Name: appbuild.FrameworkNode}}},
+		Apps: []project.App{{Name: "api", Path: ".", Compute: "serverless", Serverless: &project.Serverless{Framework: appbuild.FrameworkNode}}},
 	}
 }
 
@@ -132,7 +132,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 
 		s, out := newBuildSpan(t)
 		cfg := prebuiltConfig(root)
-		manifest, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: cfg, declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s, compute: "serverless"})
+		manifest, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: onCompute(cfg, "serverless"), declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s})
 		if err != nil {
 			t.Fatalf("collectBuildAndAssemble: %v", err)
 		}
@@ -163,7 +163,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 
 		s, _ := newBuildSpan(t)
 		cfg := prebuiltConfig(root)
-		if _, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: cfg, declarations: emptyDeclarations(cfg), phase: s, span: s, compute: "serverless"}); err != nil {
+		if _, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: onCompute(cfg, "serverless"), declarations: emptyDeclarations(cfg), phase: s, span: s}); err != nil {
 			t.Fatalf("collectBuildAndAssemble: %v", err)
 		}
 		if !*ran {
@@ -177,7 +177,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 
 		s, _ := newBuildSpan(t)
 		cfg := prebuiltConfig(t.TempDir())
-		_, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: cfg, declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s, compute: "serverless"})
+		_, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: onCompute(cfg, "serverless"), declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s})
 		if err == nil {
 			t.Fatal("collectBuildAndAssemble succeeded with no build output, want error")
 		}
@@ -195,7 +195,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 
 		s, _ := newBuildSpan(t)
 		cfg := prebuiltConfig(root)
-		manifest, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: cfg, declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s, compute: "serverless"})
+		manifest, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: onCompute(cfg, "serverless"), declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s})
 		if err != nil {
 			t.Fatalf("collectBuildAndAssemble: %v", err)
 		}
@@ -216,7 +216,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 
 		s, _ := newBuildSpan(t)
 		cfg := prebuiltConfig(root)
-		_, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: cfg, declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s, compute: "serverless"})
+		_, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: onCompute(cfg, "serverless"), declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s})
 		if err == nil {
 			t.Fatal("collectBuildAndAssemble succeeded for an app no build stamped, want error")
 		}
@@ -242,7 +242,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 
 		s, _ := newBuildSpan(t)
 		cfg := prebuiltConfig(root)
-		if _, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: cfg, declarations: declarationsWithClientValue(t, cfg, "https://example.com"), phase: s, span: s, compute: "serverless"}); err != nil {
+		if _, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: onCompute(cfg, "serverless"), declarations: declarationsWithClientValue(t, cfg, "https://example.com"), phase: s, span: s}); err != nil {
 			t.Fatalf("collectBuildAndAssemble: %v", err)
 		}
 
@@ -267,7 +267,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 
 		s, _ := newBuildSpan(t)
 		declarations := declarationsWithClientValue(t, cfg, "https://rotated.example.com")
-		_, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: cfg, declarations: declarations, prebuilt: true, phase: s, span: s, compute: "serverless"})
+		_, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: onCompute(cfg, "serverless"), declarations: declarations, prebuilt: true, phase: s, span: s})
 		if err == nil {
 			t.Fatal("collectBuildAndAssemble = nil for a build predating the client value, want a refusal")
 		}
@@ -290,7 +290,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 		}
 
 		s, _ := newBuildSpan(t)
-		_, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: cfg, declarations: declarationsWithClientValue(t, cfg, "https://example.com"), prebuilt: true, phase: s, span: s, compute: "serverless"})
+		_, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: onCompute(cfg, "serverless"), declarations: declarationsWithClientValue(t, cfg, "https://example.com"), prebuilt: true, phase: s, span: s})
 		if err == nil {
 			t.Fatal("collectBuildAndAssemble = nil for an `ocel build` output, want a refusal")
 		}
@@ -317,7 +317,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 
 		s, _ := newBuildSpan(t)
 		declarations := declarationsWithClientValue(t, cfg, "https://example.com")
-		if _, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: cfg, declarations: declarations, prebuilt: true, phase: s, span: s, compute: "serverless"}); err != nil {
+		if _, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: onCompute(cfg, "serverless"), declarations: declarations, prebuilt: true, phase: s, span: s}); err != nil {
 			t.Fatalf("collectBuildAndAssemble: %v", err)
 		}
 	})
@@ -395,7 +395,7 @@ func TestPrebuiltDeploysTheImageTheBuildRecordedRatherThanBuildingOne(t *testing
 		Apps: []project.App{{Name: "api", Path: ".", Compute: "container"}},
 	}
 	archs := map[string]string{"api": "arm64"}
-	manifest, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: cfg, declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s, compute: "container", containerArchs: archs})
+	manifest, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: onCompute(cfg, "container"), declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s, containerArchs: archs})
 	if err != nil {
 		t.Fatalf("collectBuildAndAssemble: %v", err)
 	}

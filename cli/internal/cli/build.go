@@ -14,9 +14,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/appurl"
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/node"
 	"github.com/ocelhq/ocel/pkg/appbuild"
@@ -47,31 +49,35 @@ var buildCmd = &cobra.Command{
 }
 
 func runBuild(ctx context.Context, deps cmddeps.Deps, cwd string) (err error) {
-	cfg, err := project.Resolve(ctx, cwd, explicitConfigPath())
+	declared, err := project.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}
-	for _, a := range build.FunctionApps(cfg.Apps) {
-		if a.Framework.Missing != nil {
-			return a.Framework.Missing
+	if declared.Provider == nil {
+		if _, err := declared.ResolveDeclaredComputes(); err != nil {
+			return fmt.Errorf("%w: give each a `compute` under `apps`, or name the provider in %s", err, filepath.Base(declared.Path))
 		}
 	}
 
-	hasJS, err := build.HasJS(cfg)
+	hasJS, err := build.HasJS(declared)
 	if err != nil {
 		return err
 	}
 	if hasJS {
-		if err := node.Ensure(cfg.Dir); err != nil {
+		if err := node.Ensure(declared.Dir); err != nil {
 			return err
 		}
 	}
 
-	ctx, building, err := deps.Events.Begin(ctx, "ocel build", cfg.Dir)
+	ctx, building, err := deps.Events.Begin(ctx, "ocel build", declared.Dir)
 	if err != nil {
 		return err
 	}
 	defer building.End(&err)
+	cfg, err := resolveBuiltComputes(ctx, deps, building, declared)
+	if err != nil {
+		return err
+	}
 	phase := building.Phase(progressv1.Phase_PHASE_BUILD)
 
 	clients := builtInClients(cfg, appurl.Production(cfg))
@@ -90,6 +96,20 @@ func runBuild(ctx context.Context, deps cmddeps.Deps, cwd string) (err error) {
 	return nil
 }
 
+func resolveBuiltComputes(ctx context.Context, deps cmddeps.Deps, building *run.Run, declared *project.Project) (resolved *project.Project, err error) {
+	if len(declared.UnresolvedApps()) == 0 {
+		return declared.ResolveDeclaredComputes()
+	}
+	check := building.Phase(progressv1.Phase_PHASE_CHECK)
+	defer func() { check.End(err) }()
+	prov, err := providerclient.Start(ctx, declared, check, deps.HostTrust, providerclient.PinToLock)
+	if err != nil {
+		return nil, err
+	}
+	defer prov.Close()
+	return preflight.ResolveComputesFromProvider(ctx, prov, declared)
+}
+
 func appBuildLog(phase *run.Span) build.Log {
 	return build.Log{
 		Shared: phase.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED),
@@ -104,8 +124,8 @@ func declaredArchs(cfg *project.Project) map[string]string {
 	archs := map[string]string{}
 	for _, a := range build.ImageApps(cfg.Apps) {
 		archs[a.Name] = ""
-		if a.Framework.Arch != "" {
-			archs[a.Name], _ = arch.GoArch(a.Framework.Arch)
+		if a.Arch != "" {
+			archs[a.Name], _ = arch.GoArch(a.Arch)
 		}
 	}
 	return archs
@@ -137,7 +157,7 @@ func builtInClients(cfg *project.Project, urls map[string]string) []clientenv.Ap
 	apps := make([]clientenv.App, 0, len(cfg.Apps))
 	for _, a := range cfg.Apps {
 		dir := filepath.Join(cfg.Dir, a.Path)
-		bundle := language.HasClientBundle(a.Framework.Name, dir)
+		bundle := language.HasClientBundle(a.Framework(), dir)
 		apps = append(apps, clientenv.App{
 			Name:         a.Name,
 			Dir:          dir,

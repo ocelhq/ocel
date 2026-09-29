@@ -10,8 +10,8 @@ import (
 
 const defaultHealthCheckPath = "/"
 
-func attachArtifact(manifestApp *contractv1.ManifestApp, a app, compute string, functions []*contractv1.ManifestFunction) error {
-	if compute != string(provider.ComputeContainer) {
+func attachArtifact(manifestApp *contractv1.ManifestApp, a app, functions []*contractv1.ManifestFunction) error {
+	if a.Compute != provider.ComputeContainer {
 		manifestApp.Artifact = serverlessArtifact(functions)
 		return nil
 	}
@@ -31,7 +31,7 @@ func attachArtifact(manifestApp *contractv1.ManifestApp, a app, compute string, 
 	manifestApp.Artifact = &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{
 		Image:           a.Image,
 		HealthCheckPath: path,
-		Arch:            a.Framework.Arch,
+		Arch:            a.Arch,
 	}}
 	return nil
 }

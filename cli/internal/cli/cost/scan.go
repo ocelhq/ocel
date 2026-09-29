@@ -122,11 +122,11 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, opts Options, stdou
 }
 
 func price(ctx context.Context, deps cmddeps.Deps, prov *providerclient.Provider, cfg *project.Project, env *environmentv1.Environment, overrides map[string]*structpb.Struct, out io.Writer) (*costv1.ResourceSet, map[costv1.Profile]*costv1.Estimate, []string, error) {
-	compute, err := preflight.ResolveComputesFromProvider(ctx, prov, cfg)
+	resolved, err := preflight.ResolveComputesFromProvider(ctx, prov, cfg)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	manifest, assumptions, err := scanManifest(ctx, deps, cfg, env, compute, out)
+	manifest, assumptions, err := scanManifest(ctx, deps, resolved, env, out)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -229,7 +229,7 @@ func (unread) Reveal(context.Context, []variables.Coordinate) (map[variables.Coo
 
 const unbuiltDigest = "0000000000000000000000000000000000000000000000000000000000000000"
 
-func scanManifest(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, env *environmentv1.Environment, compute string, out io.Writer) (*contractv1.Manifest, []string, error) {
+func scanManifest(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, env *environmentv1.Environment, out io.Writer) (*contractv1.Manifest, []string, error) {
 	declarations := variables.NewDeclarations(unread{}, variablescope.Of(cfg, env.GetTier(), ""))
 	resources, err := deps.CollectDeclarations(ctx, cfg, declarations, out, out)
 	if err != nil {
@@ -242,7 +242,6 @@ func scanManifest(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, 
 	scanned, err := manifest.Assemble(manifest.Input{
 		Project:   cfg,
 		Tier:      env.GetTier(),
-		Compute:   compute,
 		Resources: resources,
 		Built:     built,
 	})
@@ -270,15 +269,9 @@ func scannedOutput(deps cmddeps.Deps, cfg *project.Project) (build.Output, []str
 }
 
 func unbuiltFunctions(cfg *project.Project) []build.Function {
-	if len(cfg.Apps) == 0 {
-		return []build.Function{{Route: cfg.Slug, App: cfg.Slug}}
-	}
 	functions := make([]build.Function, 0, len(cfg.Apps))
-	for _, a := range cfg.Apps {
-		if a.RunsOn(provider.ComputeContainer) {
-			continue
-		}
-		functions = append(functions, build.Function{Route: a.Name, App: a.Name, Framework: appbuild.Framework{Name: a.Framework.Name, Arch: a.Framework.Arch}})
+	for _, a := range build.FunctionApps(cfg.Apps) {
+		functions = append(functions, build.Function{Route: a.Name, App: a.Name, Framework: appbuild.Framework{Name: a.Framework(), Arch: a.Arch}})
 	}
 	return functions
 }

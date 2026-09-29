@@ -142,7 +142,7 @@ func TestAContainerAppRailpackBuildsAnnouncesNothing(t *testing.T) {
 func TestABuildDockerfileNamingNothingStopsTheDeployBeforeTheDaemonIsAsked(t *testing.T) {
 	awayFromAnyDaemon(t)
 	cfg := containerProject(t, "")
-	cfg.Apps[0].Build = &project.Build{Dockerfile: "../shared/Dockerfile"}
+	cfg.Apps[0].Container = &project.Container{Build: &project.Build{Dockerfile: "../shared/Dockerfile"}}
 	rep, _ := said(t)
 
 	err := RefuseUnbuildableImages(context.Background(), rep, cfg, nil)

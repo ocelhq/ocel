@@ -30,7 +30,7 @@ func TestRunBuild(t *testing.T) {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  apps: [{ name: "api", path: ".", framework: "node" }],
+  apps: [{ name: "api", path: ".", framework: "node", compute: "serverless" }],
 };
 `)
 
@@ -72,7 +72,7 @@ export default {
 export default {
   slug: "test-app",
   apps: [
-    { name: "api", path: "api", framework: "node" },
+    { name: "api", path: "api", framework: "node", compute: "serverless" },
     { name: "web", path: "web", compute: "container", arch: "arm64" },
   ],
 };
@@ -114,7 +114,7 @@ export default {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  apps: [{ name: "web", path: ".", framework: "next", domains: { production: ["shop.acme.com"] } }],
+  apps: [{ name: "web", path: ".", framework: "next", compute: "serverless", domains: { production: ["shop.acme.com"] } }],
 };
 `)
 

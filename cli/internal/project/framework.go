@@ -10,7 +10,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
-	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 const (
@@ -82,14 +81,14 @@ func isNextApp(dir string) (bool, error) {
 	return dep || devDep, nil
 }
 
-func frameworkOf(app string, dir string, named string, compute string) (string, error) {
+func frameworkOf(app string, dir string, named string) (string, error) {
 	if named != "" {
 		if !appbuild.KnownFramework(named) {
 			return "", fmt.Errorf("app %q declares framework %q, which nothing builds: the frameworks are %s", app, named, english.And(english.Quoted(appbuild.Frameworks())))
 		}
 		return named, nil
 	}
-	if compute == string(provider.ComputeContainer) || !isDir(dir) {
+	if !isDir(dir) {
 		return "", nil
 	}
 	framework, err := detectFramework(dir)

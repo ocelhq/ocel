@@ -36,10 +36,10 @@ func containerApps(m *contractv1.Manifest) []string {
 func TestAContainerAppCarriesItsImageAsItsArtifact(t *testing.T) {
 	t.Parallel()
 
-	manifest, err := assemble("proj-1", project.Domains{}, []app{
+	manifest, err := assembleOn("serverless", "proj-1", project.Domains{}, []app{
 		{Name: "api", Compute: "container", Image: "ocel/api@" + fakeDigest},
 		{Name: "web", Compute: "serverless"},
-	}, "serverless", nil, nil, nil, nil)
+	}, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("assemble: %v", err)
 	}
@@ -56,9 +56,9 @@ func TestAContainerAppCarriesItsImageAsItsArtifact(t *testing.T) {
 func TestAContainerNamesTheHealthPathTheAppAsksFor(t *testing.T) {
 	t.Parallel()
 
-	manifest, err := assemble("proj-1", project.Domains{}, []app{
+	manifest, err := assembleOn("container", "proj-1", project.Domains{}, []app{
 		{Name: "api", Compute: "container", Image: "ocel/api@" + fakeDigest, HealthCheckPath: "/healthz"},
-	}, "container", nil, nil, nil, nil)
+	}, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("assemble: %v", err)
 	}
@@ -71,9 +71,9 @@ func TestAContainerNamesTheHealthPathTheAppAsksFor(t *testing.T) {
 func TestAContainerNamesTheArchitectureItsAppDeclares(t *testing.T) {
 	t.Parallel()
 
-	manifest, err := assemble("proj-1", project.Domains{}, []app{
-		{Name: "api", Compute: "container", Image: "ocel/api@" + fakeDigest, Framework: appbuild.Framework{Arch: "arm64"}},
-	}, "container", nil, nil, nil, nil)
+	manifest, err := assembleOn("container", "proj-1", project.Domains{}, []app{
+		{Name: "api", Compute: "container", Image: "ocel/api@" + fakeDigest, Arch: "arm64"},
+	}, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("assemble: %v", err)
 	}
@@ -86,9 +86,9 @@ func TestAContainerNamesTheArchitectureItsAppDeclares(t *testing.T) {
 func TestAContainerThatAsksForNoHealthPathIsWrittenWithTheDefaultOne(t *testing.T) {
 	t.Parallel()
 
-	manifest, err := assemble("proj-1", project.Domains{}, []app{
+	manifest, err := assembleOn("container", "proj-1", project.Domains{}, []app{
 		{Name: "api", Compute: "container", Image: "ocel/api@" + fakeDigest},
-	}, "container", nil, nil, nil, nil)
+	}, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("assemble: %v", err)
 	}
@@ -101,7 +101,7 @@ func TestAContainerThatAsksForNoHealthPathIsWrittenWithTheDefaultOne(t *testing.
 func TestAnAppOnlyTheBuildNamesCannotLandOnContainerCompute(t *testing.T) {
 	t.Parallel()
 
-	_, err := assemble("proj-1", project.Domains{}, nil, "container", nil, nil, []build.Function{
+	_, err := assembleOn("container", "proj-1", project.Domains{}, nil, nil, nil, []build.Function{
 		{App: "api", Route: "index", Framework: appbuild.Framework{Name: "node"}, EntryFile: "index.handler", ArtifactPath: "apps/api/functions/index"},
 	}, nil)
 	if err == nil {
@@ -117,7 +117,7 @@ func TestAnAppOnlyTheBuildNamesCannotLandOnContainerCompute(t *testing.T) {
 func TestAContainerAppWithNoImageRefusesTheManifest(t *testing.T) {
 	t.Parallel()
 
-	_, err := assemble("proj-1", project.Domains{}, []app{{Name: "api", Compute: "container"}}, "container", nil, nil, nil, nil)
+	_, err := assembleOn("container", "proj-1", project.Domains{}, []app{{Name: "api", Compute: "container"}}, nil, nil, nil, nil)
 	if err == nil {
 		t.Fatal("assemble() included a container app with no image, so a provider would be handed an app it has nothing to run")
 	}
@@ -130,7 +130,7 @@ func TestAnImageNamesADigestAndNeverATag(t *testing.T) {
 	t.Parallel()
 
 	for _, ref := range []string{"ocel/api:latest", "ocel/api", "ocel/api@sha256:short"} {
-		_, err := assemble("proj-1", project.Domains{}, []app{{Name: "api", Compute: "container", Image: ref}}, "container", nil, nil, nil, nil)
+		_, err := assembleOn("container", "proj-1", project.Domains{}, []app{{Name: "api", Compute: "container", Image: ref}}, nil, nil, nil, nil)
 		if err == nil {
 			t.Errorf("assemble() kept %q as an image identity, want only a digest-pinned ref, since a tag is repointable and a release is not", ref)
 		}
@@ -140,7 +140,7 @@ func TestAnImageNamesADigestAndNeverATag(t *testing.T) {
 func TestAServerlessAppIsWrittenAsNoContainerAtAll(t *testing.T) {
 	t.Parallel()
 
-	manifest, err := assemble("proj-1", project.Domains{}, []app{{Name: "web"}}, "serverless", nil, nil, []build.Function{
+	manifest, err := assembleOn("serverless", "proj-1", project.Domains{}, []app{{Name: "web"}}, nil, nil, []build.Function{
 		{App: "web", Route: "index", Framework: appbuild.Framework{Name: "node"}, EntryFile: "index.handler", ArtifactPath: "apps/web/functions/index"},
 	}, nil)
 	if err != nil {
@@ -154,9 +154,9 @@ func TestAServerlessAppIsWrittenAsNoContainerAtAll(t *testing.T) {
 func TestAContainerAppPackedIntoFunctionsIsRefused(t *testing.T) {
 	t.Parallel()
 
-	_, err := assemble("proj-1", project.Domains{}, []app{
+	_, err := assembleOn("container", "proj-1", project.Domains{}, []app{
 		{Name: "api", Compute: "container", Image: "ocel/api@" + fakeDigest},
-	}, "container", nil, nil, []build.Function{
+	}, nil, nil, []build.Function{
 		{App: "api", Route: "index", Framework: appbuild.Framework{Name: "node"}, EntryFile: "index.handler", ArtifactPath: "apps/api/functions/index"},
 	}, nil)
 	if err == nil {
@@ -170,10 +170,10 @@ func TestAContainerAppPackedIntoFunctionsIsRefused(t *testing.T) {
 func TestContainersAreOrderedByTheAppTheyServe(t *testing.T) {
 	t.Parallel()
 
-	manifest, err := assemble("proj-1", project.Domains{}, []app{
+	manifest, err := assembleOn("container", "proj-1", project.Domains{}, []app{
 		{Name: "web", Compute: "container", Image: "ocel/web@" + fakeDigest},
 		{Name: "api", Compute: "container", Image: "ocel/api@" + fakeDigest},
-	}, "container", nil, nil, nil, nil)
+	}, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("assemble: %v", err)
 	}

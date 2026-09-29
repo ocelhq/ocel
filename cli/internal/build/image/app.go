@@ -23,15 +23,16 @@ func Describe(cfg *project.Project, app project.App) (App, error) {
 		return App{}, fmt.Errorf("app %q: %w", app.Name, err)
 	}
 	described := App{Slug: cfg.Slug, Name: app.Name}
-	if app.Build != nil {
-		if app.Build.Context != "" {
-			located, err = located.Rebase(filepath.Join(cfg.Dir, filepath.FromSlash(app.Build.Context)))
+	if app.Container != nil && app.Container.Build != nil {
+		build := app.Container.Build
+		if build.Context != "" {
+			located, err = located.Rebase(filepath.Join(cfg.Dir, filepath.FromSlash(build.Context)))
 			if err != nil {
-				return App{}, fmt.Errorf("app %q sets build.context to %q: %w", app.Name, app.Build.Context, err)
+				return App{}, fmt.Errorf("app %q sets build.context to %q: %w", app.Name, build.Context, err)
 			}
 		}
-		located.BuildCommand = app.Build.Command
-		described.Dockerfile = app.Build.Dockerfile
+		located.BuildCommand = build.Command
+		described.Dockerfile = build.Dockerfile
 	}
 	described.Workspace = located
 	return described, nil

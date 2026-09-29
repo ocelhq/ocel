@@ -221,8 +221,8 @@ export default {
 		if err != nil {
 			t.Fatalf("Resolve: %v", err)
 		}
-		if got, want := cfg.Apps[0].Framework, (Framework{Name: "next", Detected: true}); got != want {
-			t.Fatalf("Apps[0].Framework = %+v, want %+v: the app's own manifest says what it is, and the config never named it", got, want)
+		if got, want := cfg.Apps[0].Serverless, (&Serverless{Framework: "next", Detected: true}); *got != *want {
+			t.Fatalf("Apps[0].Serverless = %+v, want %+v: the app's own manifest says what it is, and the config never named it", got, want)
 		}
 	})
 
@@ -242,8 +242,8 @@ export default {
 		if err != nil {
 			t.Fatalf("Resolve: %v", err)
 		}
-		if got, want := cfg.Apps[0].Framework, (Framework{Name: "node"}); got != want {
-			t.Fatalf("Apps[0].Framework = %+v, want %+v: a named framework decides it", got, want)
+		if got, want := cfg.Apps[0].Serverless, (&Serverless{Framework: "node"}); *got != *want {
+			t.Fatalf("Apps[0].Serverless = %+v, want %+v: a named framework decides it", got, want)
 		}
 	})
 
@@ -286,16 +286,16 @@ export default {
 		if err != nil {
 			t.Fatalf("Resolve: %v — the provider may run web as a container, which needs no framework", err)
 		}
-		framework := cfg.Apps[0].Framework
-		if framework.Name != "" {
-			t.Fatalf("Apps[0].Framework.Name = %q, want none", framework.Name)
+		if framework := cfg.Apps[0].Framework(); framework != "" {
+			t.Fatalf("Apps[0].Framework() = %q, want none", framework)
 		}
-		if framework.Missing == nil {
-			t.Fatal("Apps[0].Framework.Missing = nil, want the refusal a serverless compute raises")
+		_, err = cfg.ResolveComputes([]string{"serverless"}, "aws")
+		if err == nil {
+			t.Fatal("ResolveComputes(serverless) = nil error, want the refusal the undetected framework holds")
 		}
 		for _, want := range []string{`app "web"`, "framework"} {
-			if !strings.Contains(framework.Missing.Error(), want) {
-				t.Errorf("Missing = %q, missing %q", framework.Missing, want)
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("error = %q, missing %q", err, want)
 			}
 		}
 	})
@@ -315,8 +315,8 @@ export default {
 		if err != nil {
 			t.Fatalf("Resolve: %v", err)
 		}
-		if cfg.Apps[0].Framework != (Framework{}) {
-			t.Fatalf("Apps[0].Framework = %+v, want none: nothing exists at the path to be read", cfg.Apps[0].Framework)
+		if cfg.Apps[0].Serverless != nil {
+			t.Fatalf("Apps[0].Serverless = %+v, want none: nothing exists at the path to be read", cfg.Apps[0].Serverless)
 		}
 	})
 
@@ -336,8 +336,8 @@ export default {
 		if err != nil {
 			t.Fatalf("Resolve: %v", err)
 		}
-		if cfg.Apps[0].Framework != (Framework{}) {
-			t.Fatalf("Apps[0].Framework = %+v, want none: a container runs the image it is given", cfg.Apps[0].Framework)
+		if cfg.Apps[0].Serverless != nil || cfg.Apps[0].Container == nil {
+			t.Fatalf("Apps[0] = %+v, want a container shape and no framework: a container runs the image it is given", cfg.Apps[0])
 		}
 	})
 }

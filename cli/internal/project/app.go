@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
@@ -13,6 +14,29 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
+
+type App struct {
+	Name              string
+	Path              string
+	Folder            string
+	Arch              string
+	ProductionDomains []string
+	Compute           provider.Compute
+	Serverless        *Serverless
+	Container         *Container
+	undetected        error
+}
+
+type Serverless struct {
+	Framework  string
+	Detected   bool
+	Entrypoint string
+}
+
+type Container struct {
+	Build  *Build
+	Health *Health
+}
 
 type Build struct {
 	Dockerfile string
@@ -24,28 +48,16 @@ type Health struct {
 	Path string
 }
 
-type Framework struct {
-	Name     string
-	Arch     string
-	Detected bool
-	Missing  error
+func (a App) RunsOn(compute provider.Compute) bool { return a.Compute == compute }
+
+func (a App) Framework() string {
+	if a.Serverless == nil {
+		return ""
+	}
+	return a.Serverless.Framework
 }
 
-func (r Framework) Architecture() string { return arch.Architecture(r.Arch) }
-
-type App struct {
-	Name              string
-	Path              string
-	Framework         Framework
-	Entrypoint        string
-	ProductionDomains []string
-	Compute           string
-	Build             *Build
-	Health            *Health
-	Folder            string
-}
-
-func (a App) RunsOn(compute provider.Compute) bool { return a.Compute == string(compute) }
+func (a App) Architecture() string { return arch.Architecture(a.Arch) }
 
 func SharedFolder(apps []App) string {
 	if len(apps) == 0 {
@@ -111,32 +123,66 @@ func normalizeApps(raw []configdoc.AppConfig, dir string) ([]App, error) {
 		if err != nil {
 			return nil, fmt.Errorf("app %q: %w", a.Name, err)
 		}
-		framework, err := resolveFramework(a.Name, filepath.Join(dir, filepath.FromSlash(a.Path)), a.Framework, a.Arch, a.Compute)
+		architecture, err := architectureOf(a.Name, strings.TrimSpace(a.Arch))
 		if err != nil {
 			return nil, err
 		}
-		build, err := normalizeBuild(a)
-		if err != nil {
-			return nil, err
-		}
-		health, err := normalizeHealth(a)
-		if err != nil {
-			return nil, err
-		}
-		apps = append(apps, App{
+		app := App{
 			Name:              a.Name,
 			Path:              a.Path,
-			Framework:         framework,
-			Entrypoint:        a.Entrypoint,
-			ProductionDomains: domains,
-			Compute:           a.Compute,
-			Build:             build,
-			Health:            health,
 			Folder:            a.Folder,
-		})
+			Arch:              architecture,
+			ProductionDomains: domains,
+		}
+		if err := shapeApp(&app, a, filepath.Join(dir, filepath.FromSlash(a.Path))); err != nil {
+			return nil, err
+		}
+		apps = append(apps, app)
 	}
 
 	return apps, nil
+}
+
+func shapeApp(app *App, a configdoc.AppConfig, dir string) error {
+	compute := provider.Compute(strings.TrimSpace(a.Compute))
+	if compute != "" && !provider.KnownCompute(string(compute)) {
+		return fmt.Errorf("app %q asks for compute %q, which ocel does not know: the computes are %s", a.Name, compute, english.Or(english.Quoted(provider.ComputeNames(provider.Computes()))))
+	}
+	app.Compute = compute
+
+	build, err := normalizeBuild(a)
+	if err != nil {
+		return err
+	}
+	health, err := normalizeHealth(a)
+	if err != nil {
+		return err
+	}
+	if compute != provider.ComputeServerless {
+		app.Container = &Container{Build: build, Health: health}
+	}
+
+	named := strings.TrimSpace(a.Framework)
+	if compute == provider.ComputeContainer {
+		if named != "" {
+			return frameworkOnContainer(a.Name, named, compute)
+		}
+		return nil
+	}
+
+	framework, err := frameworkOf(a.Name, dir, named)
+	switch {
+	case err != nil && compute == "" && named == "":
+		app.undetected = err
+	case err != nil:
+		return err
+	case framework != "":
+		app.Serverless = &Serverless{Framework: framework, Detected: named == "", Entrypoint: a.Entrypoint}
+	}
+	if compute == provider.ComputeServerless {
+		return refuseContainerConfig(*app, compute, build, health)
+	}
+	return nil
 }
 
 func rootApp(name, dir string) ([]App, error) {
@@ -151,7 +197,12 @@ func rootApp(name, dir string) ([]App, error) {
 	if next {
 		framework = appbuild.FrameworkNext
 	}
-	return []App{{Name: name, Path: ".", Framework: Framework{Name: framework, Detected: true}}}, nil
+	return []App{{
+		Name:       name,
+		Path:       ".",
+		Serverless: &Serverless{Framework: framework, Detected: true},
+		Container:  &Container{},
+	}}, nil
 }
 
 func normalizeBuild(a configdoc.AppConfig) (*Build, error) {
@@ -187,20 +238,25 @@ func normalizeHealth(a configdoc.AppConfig) (*Health, error) {
 	return &Health{Path: path}, nil
 }
 
-func resolveFramework(app, dir, framework, declared, compute string) (Framework, error) {
-	named := strings.TrimSpace(framework)
-	compute = strings.TrimSpace(compute)
-	name, err := frameworkOf(app, dir, named, compute)
-	var missing error
-	if err != nil && named == "" && compute == "" {
-		missing, err = err, nil
+func frameworkOnContainer(app, framework string, compute provider.Compute) error {
+	return fmt.Errorf(
+		"app %q declares framework %q, and it runs on %q compute, which runs the image it is given: a framework names what a serverless app's functions are built with and nothing else — give %q `compute: \"serverless\"`, or remove its `framework`",
+		app, framework, compute, app,
+	)
+}
+
+func refuseContainerConfig(app App, compute provider.Compute, build *Build, health *Health) error {
+	if build != nil {
+		return fmt.Errorf(
+			"app %q configures a `build`, and it runs on %q compute, which builds no image: `build` configures a container image and nothing else — give %q `compute: \"container\"`, or remove its `build`",
+			app.Name, compute, app.Name,
+		)
 	}
-	if err != nil {
-		return Framework{}, err
+	if health != nil {
+		return fmt.Errorf(
+			"app %q configures a `health` check, and it runs on %q compute, which runs no process to probe: `health` gates a container release and nothing else — give %q `compute: \"container\"`, or remove its `health`",
+			app.Name, compute, app.Name,
+		)
 	}
-	architecture, err := architectureOf(app, strings.TrimSpace(declared))
-	if err != nil {
-		return Framework{}, err
-	}
-	return Framework{Name: name, Arch: architecture, Detected: named == "" && name != "", Missing: missing}, nil
+	return nil
 }

@@ -36,7 +36,6 @@ type assembly struct {
 	dry            bool
 	phase          *run.Span
 	span           *run.Span
-	compute        string
 	containerArchs map[string]string
 	urls           map[string]string
 }
@@ -147,14 +146,13 @@ func assembleManifest(ctx context.Context, deps cmddeps.Deps, a assembly, resour
 		a.phase.Say(fmt.Sprintf("No app has a function or image to deploy, so this deploys only the %s %s declares", countOf(len(resources), "resource"), cfg.Slug))
 	}
 
-	usages, err := manifest.FindUsages(ctx, cfg, built, a.compute, resources)
+	usages, err := manifest.FindUsages(ctx, cfg, built, resources)
 	if err != nil {
 		return nil, err
 	}
 	return manifest.Assemble(manifest.Input{
 		Project:      cfg,
 		Tier:         a.declarations.Scope().Tier,
-		Compute:      a.compute,
 		Resources:    resources,
 		Variables:    values,
 		Built:        built,

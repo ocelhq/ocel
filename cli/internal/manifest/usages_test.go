@@ -21,9 +21,9 @@ func TestANamedRuntimeTellsOcelWhichLanguageAnAppIs(t *testing.T) {
 
 	cfg := &project.Project{
 		Dir:  root,
-		Apps: []project.App{{Name: "web", Path: "server", Framework: project.Framework{Name: "python"}}},
+		Apps: []project.App{{Name: "web", Path: "server", Serverless: &project.Serverless{Framework: "python"}}},
 	}
-	apps, err := attributionApps(cfg, []build.Function{{App: "web"}}, "")
+	apps, err := attributionApps(cfg, []build.Function{{App: "web"}})
 	if err != nil {
 		t.Fatalf("attributionApps: %v", err)
 	}
@@ -40,9 +40,9 @@ func TestTheFixturePythonAppIsReadAsPython(t *testing.T) {
 
 	cfg := &project.Project{
 		Dir:  root,
-		Apps: []project.App{{Name: "web", Path: "server", Framework: project.Framework{Name: "python"}}},
+		Apps: []project.App{{Name: "web", Path: "server", Serverless: &project.Serverless{Framework: "python"}}},
 	}
-	apps, err := attributionApps(cfg, []build.Function{{App: "web"}}, "")
+	apps, err := attributionApps(cfg, []build.Function{{App: "web"}})
 	if err != nil {
 		t.Fatalf("attributionApps: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestAContainerAppWithACrateBesideItsPackageJSONIsReadAsJS(t *testing.T) {
 		Dir:  root,
 		Apps: []project.App{{Name: "web", Path: "web", Compute: "container"}},
 	}
-	apps, err := attributionApps(cfg, nil, "container")
+	apps, err := attributionApps(cfg, nil)
 	if err != nil {
 		t.Fatalf("attributionApps: %v", err)
 	}

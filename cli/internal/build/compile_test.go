@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 func writeGoApp(t *testing.T, root, path string) {
@@ -37,7 +38,7 @@ func TestAGoAppIsCompiledHereRatherThanHandedToTheNodeBuildScript(t *testing.T) 
 	writeGoApp(t, root, "apps/api")
 	cfg := &project.Project{
 		Dir:  root,
-		Apps: []project.App{{Name: "api", Path: "apps/api", Framework: project.Framework{Name: "go"}}},
+		Apps: []project.App{{Name: "api", Path: "apps/api", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: "go"}}},
 	}
 
 	ran := false
@@ -90,7 +91,7 @@ func TestAPythonAppIsVendoredHereRatherThanHandedToTheNodeBuilder(t *testing.T) 
 	writePythonApp(t, root, "apps/api")
 	cfg := &project.Project{
 		Dir:  root,
-		Apps: []project.App{{Name: "api", Path: "apps/api", Framework: project.Framework{Name: "python"}}},
+		Apps: []project.App{{Name: "api", Path: "apps/api", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: "python"}}},
 	}
 
 	ran := false
@@ -146,7 +147,7 @@ func TestARustAppIsCompiledHereRatherThanHandedToTheNodeBuilder(t *testing.T) {
 	}
 	cfg := &project.Project{
 		Dir:  root,
-		Apps: []project.App{{Name: "api", Path: "apps/api", Framework: project.Framework{Name: "rust"}}},
+		Apps: []project.App{{Name: "api", Path: "apps/api", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: "rust"}}},
 	}
 
 	ran := false

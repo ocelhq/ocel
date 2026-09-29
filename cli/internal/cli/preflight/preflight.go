@@ -93,8 +93,8 @@ func Credentials(ctx context.Context, span *run.Span, prov *providerclient.Provi
 func Frameworks(cfg *project.Project) []string {
 	var frameworks []string
 	for _, app := range cfg.Apps {
-		if app.Framework.Name != "" {
-			frameworks = append(frameworks, app.Framework.Name)
+		if framework := app.Framework(); framework != "" {
+			frameworks = append(frameworks, framework)
 		}
 	}
 	slices.Sort(frameworks)
@@ -104,7 +104,7 @@ func Frameworks(cfg *project.Project) []string {
 func Containers(cfg *project.Project) []*contractv1.ContainerApp {
 	var containers []*contractv1.ContainerApp
 	for _, app := range build.ImageApps(cfg.Apps) {
-		containers = append(containers, &contractv1.ContainerApp{App: app.Name, Arch: app.Framework.Arch})
+		containers = append(containers, &contractv1.ContainerApp{App: app.Name, Arch: app.Arch})
 	}
 	return containers
 }

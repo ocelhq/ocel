@@ -21,10 +21,10 @@ func TestTheManifestNamesWhichAppsBundleReadsTheClientURL(t *testing.T) {
 		manifest string
 		want     bool
 	}{
-		{name: "a next app", app: project.App{Name: "web", Framework: project.Framework{Name: appbuild.FrameworkNext}}, want: true},
-		{name: "a go app", app: project.App{Name: "api", Framework: project.Framework{Name: appbuild.FrameworkGo}}, manifest: "go.mod"},
-		{name: "a container app containing a package.json", app: project.App{Name: "store", Compute: string(provider.ComputeContainer)}, manifest: "package.json", want: true},
-		{name: "a container app containing a go.mod", app: project.App{Name: "worker", Compute: string(provider.ComputeContainer)}, manifest: "go.mod"},
+		{name: "a next app", app: project.App{Name: "web", Serverless: &project.Serverless{Framework: appbuild.FrameworkNext}}, want: true},
+		{name: "a go app", app: project.App{Name: "api", Serverless: &project.Serverless{Framework: appbuild.FrameworkGo}}, manifest: "go.mod"},
+		{name: "a container app containing a package.json", app: project.App{Name: "store", Compute: provider.ComputeContainer}, manifest: "package.json", want: true},
+		{name: "a container app containing a go.mod", app: project.App{Name: "worker", Compute: provider.ComputeContainer}, manifest: "go.mod"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

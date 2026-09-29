@@ -258,12 +258,12 @@ export default {
 				}
 
 				api := cfg.Apps[0]
-				if api.Name != "api" || api.Path != "services/api" || api.Framework != (Framework{Name: "node"}) || api.Entrypoint != "src/main.ts" {
+				if api.Name != "api" || api.Path != "services/api" || *api.Serverless != (Serverless{Framework: "node", Entrypoint: "src/main.ts"}) {
 					t.Fatalf("Apps[0] = %+v, unexpected fields", api)
 				}
 
 				web := cfg.Apps[1]
-				if web.Name != "web" || web.Path != "services/web" || web.Framework != (Framework{Name: "node"}) || web.Entrypoint != "" {
+				if web.Name != "web" || web.Path != "services/web" || *web.Serverless != (Serverless{Framework: "node"}) {
 					t.Fatalf("Apps[1] = %+v, unexpected fields", web)
 				}
 			},
@@ -385,7 +385,7 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  apps: [{ name: "api", path: "services/api", framework: "node", compute: "container" }],
+  apps: [{ name: "api", path: "services/api", compute: "container" }],
 };
 `,
 			check: func(t *testing.T, root string, cfg *Project) {
@@ -403,11 +403,11 @@ export default {
 };
 `,
 			check: func(t *testing.T, root string, cfg *Project) {
-				if cfg.Apps[0].Build == nil {
-					t.Fatalf("Apps[0].Build = nil, want the build the config writes")
+				if cfg.Apps[0].Container == nil || cfg.Apps[0].Container.Build == nil {
+					t.Fatalf("Apps[0].Container = %+v, want the build the config writes", cfg.Apps[0].Container)
 				}
-				if got, want := cfg.Apps[0].Build.Dockerfile, "../shared/Dockerfile"; got != want {
-					t.Fatalf("Apps[0].Build.Dockerfile = %q, want %q, resolved against the app's own directory", got, want)
+				if got, want := cfg.Apps[0].Container.Build.Dockerfile, "../shared/Dockerfile"; got != want {
+					t.Fatalf("Apps[0].Container.Build.Dockerfile = %q, want %q, resolved against the app's own directory", got, want)
 				}
 			},
 		},
@@ -420,11 +420,11 @@ export default {
 };
 `,
 			check: func(t *testing.T, root string, cfg *Project) {
-				if cfg.Apps[0].Health == nil {
-					t.Fatalf("Apps[0].Health = nil, want the health check the config writes")
+				if cfg.Apps[0].Container == nil || cfg.Apps[0].Container.Health == nil {
+					t.Fatalf("Apps[0].Container = %+v, want the health check the config writes", cfg.Apps[0].Container)
 				}
-				if got, want := cfg.Apps[0].Health.Path, "/healthz"; got != want {
-					t.Fatalf("Apps[0].Health.Path = %q, want %q", got, want)
+				if got, want := cfg.Apps[0].Container.Health.Path, "/healthz"; got != want {
+					t.Fatalf("Apps[0].Container.Health.Path = %q, want %q", got, want)
 				}
 			},
 		},
@@ -437,8 +437,8 @@ export default {
 };
 `,
 			check: func(t *testing.T, root string, cfg *Project) {
-				if got, want := cfg.Apps[0].Framework, (Framework{Name: "next"}); got != want {
-					t.Fatalf("Apps[0].Framework = %+v, want %+v", got, want)
+				if got, want := cfg.Apps[0].Framework(), "next"; got != want {
+					t.Fatalf("Apps[0].Framework() = %q, want %q", got, want)
 				}
 			},
 		},
@@ -451,8 +451,8 @@ export default {
 };
 `,
 			check: func(t *testing.T, root string, cfg *Project) {
-				if got, want := cfg.Apps[0].Framework, (Framework{Name: "go"}); got != want {
-					t.Fatalf("Apps[0].Framework = %+v, want %+v", got, want)
+				if got, want := cfg.Apps[0].Framework(), "go"; got != want {
+					t.Fatalf("Apps[0].Framework() = %q, want %q", got, want)
 				}
 			},
 		},
@@ -465,8 +465,8 @@ export default {
 };
 `,
 			check: func(t *testing.T, root string, cfg *Project) {
-				if got, want := cfg.Apps[0].Framework, (Framework{Name: "node", Arch: "arm64"}); got != want {
-					t.Fatalf("Apps[0].Framework = %+v, want %+v", got, want)
+				if got := cfg.Apps[0]; got.Framework() != "node" || got.Arch != "arm64" {
+					t.Fatalf("Apps[0] = %+v, want a node app built for arm64", got)
 				}
 			},
 		},
@@ -479,8 +479,8 @@ export default {
 };
 `,
 			check: func(t *testing.T, root string, cfg *Project) {
-				if cfg.Apps[0].Health != nil {
-					t.Fatalf("Apps[0].Health = %+v, want nil where the app configures no health check", cfg.Apps[0].Health)
+				if cfg.Apps[0].Container.Health != nil {
+					t.Fatalf("Apps[0].Container.Health = %+v, want nil where the app configures no health check", cfg.Apps[0].Container.Health)
 				}
 			},
 		},
@@ -493,11 +493,11 @@ export default {
 };
 `,
 			check: func(t *testing.T, root string, cfg *Project) {
-				if cfg.Apps[0].Build != nil {
-					t.Fatalf("Apps[0].Build = %+v, want nil where the app configures no build", cfg.Apps[0].Build)
+				if cfg.Apps[0].Container.Build != nil {
+					t.Fatalf("Apps[0].Container.Build = %+v, want nil where the app configures no build", cfg.Apps[0].Container.Build)
 				}
-				if cfg.Apps[0].Framework != (Framework{}) {
-					t.Fatalf("Apps[0].Framework = %+v, want a container app to load with none", cfg.Apps[0].Framework)
+				if cfg.Apps[0].Serverless != nil {
+					t.Fatalf("Apps[0].Serverless = %+v, want a container app to load with none", cfg.Apps[0].Serverless)
 				}
 			},
 		},

@@ -109,6 +109,7 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 		run.Succeed("Nothing deployed to production")
 		return nil
 	}
+	cfg = facts.project
 
 	browser := deps.BrowserReachable(stdin)
 	scope := variablescope.Of(cfg, environmentv1.Tier_TIER_PRODUCTION, "")
@@ -128,7 +129,6 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 			}, scope)
 		},
 		command:        "ocel deploy",
-		compute:        facts.compute,
 		containerArchs: facts.containerArchs,
 		urls:           facts.urls,
 		dry:            opts.dry,
