@@ -57,11 +57,11 @@ func TestTheEdgeRegistryOpensTheEdgesThisProviderFronts(t *testing.T) {
 	if got := facts.DefaultEdge; got != edge.None {
 		t.Errorf("Facts().DefaultEdge = %q, want no edge: a deploy that names none is answered on the url Cloud Run gave it", got)
 	}
-	if got := facts.PairedRouters(edge.None); !slices.Equal(got, []router.Kind{cloudrun.RouterKind}) {
-		t.Errorf("PairedRouters(no edge) = %v, want Cloud Run alone", got)
+	if got := facts.ListPairedRouters(edge.None); !slices.Equal(got, []router.Kind{cloudrun.RouterKind}) {
+		t.Errorf("ListPairedRouters(no edge) = %v, want Cloud Run alone", got)
 	}
-	if got := facts.PairedRouters(alb.Kind); !slices.Equal(got, []router.Kind{router.Kind(alb.Kind)}) {
-		t.Errorf("PairedRouters(alb) = %v, want the load balancer, which is edge and router in one", got)
+	if got := facts.ListPairedRouters(alb.Kind); !slices.Equal(got, []router.Kind{router.Kind(alb.Kind)}) {
+		t.Errorf("ListPairedRouters(alb) = %v, want the load balancer, which is edge and router in one", got)
 	}
 	for _, gone := range []edge.Kind{"direct", "cloud-run"} {
 		if _, err := p.Edges().Open(gone); err == nil {

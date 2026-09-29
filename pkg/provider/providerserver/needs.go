@@ -45,7 +45,7 @@ func (e *UnsupportedNeedError) Error() string {
 	return fmt.Sprintf(
 		"app %s needs %s and %s does not serve it: %s. It affects %s. "+
 			"Add %q to `allowDegraded` in %s to deploy it degraded, or move the app to an edge that serves %s",
-		e.App, e.Need, frontPhrase(e.Edge), degradeOf[e.Need], affected(e.Detail),
+		e.App, e.Need, describeFront(e.Edge), degradeOf[e.Need], affected(e.Detail),
 		string(e.Need), configFileName, e.Need,
 	)
 }

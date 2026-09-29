@@ -88,7 +88,7 @@ type ServeProbe struct {
 	Router router.Kind `json:"router,omitempty"`
 }
 
-func (s HostnameState) Serving() (edge.Kind, bool) { return s.Edge, s.Probe.OK }
+func (s HostnameState) ServedEdge() (edge.Kind, bool) { return s.Edge, s.Probe.OK }
 
 type Wildcard struct {
 	BaseDomain string        `json:"base_domain,omitempty"`
@@ -101,7 +101,7 @@ type Wildcard struct {
 
 func (w Wildcard) Hostname() string { return edge.PreviewWildcard(w.BaseDomain) }
 
-func (w Wildcard) OwningEdge() (edge.Kind, bool) { return w.Edge, w.BaseDomain != "" }
+func (w Wildcard) IsRecorded() bool { return w.BaseDomain != "" }
 
 func (s EdgeState) Host(hostname string) HostnameState { return s.Hosts[hostname] }
 

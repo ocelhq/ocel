@@ -16,22 +16,22 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
-func pairedRouter(p provider.Provider, front edge.Kind) (router.Kind, error) {
-	kinds := p.Facts().PairedRouters(front)
+func findPairedRouter(p provider.Provider, front edge.Kind) (router.Kind, error) {
+	kinds := p.Facts().ListPairedRouters(front)
 	switch {
 	case len(kinds) == 0:
 		return "", refusal.Refuse(refusal.CodeInvalid,
-			"this provider serves no project through %s", frontPhrase(front))
+			"this provider serves no project through %s", describeFront(front))
 	case len(kinds) > 1:
 		// TODO(#1363): a project whose apps pair with different routers opens one stack per router.
 		return "", refusal.Refuse(refusal.CodeInvalid,
-			"this provider serves the apps behind %s in more than one way, and a project is served one way", frontPhrase(front))
+			"this provider serves the apps behind %s in more than one way, and a project is served one way", describeFront(front))
 	}
 	return kinds[0], nil
 }
 
 func openSharedStack(p provider.Provider, front edge.Edge, tier environment.Tier, slug string) (*sharedStack, error) {
-	kind, err := pairedRouter(p, front.Kind())
+	kind, err := findPairedRouter(p, front.Kind())
 	if err != nil {
 		return nil, err
 	}

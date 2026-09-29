@@ -185,7 +185,7 @@ func (s dnsCutover) await(ctx context.Context, hostname string, answering router
 		if !s.now().Add(s.wait).Before(deadline) {
 			break
 		}
-		say(fmt.Sprintf("Waiting for %s to answer through %s", hostname, frontPhrase(s.kind)))
+		say(fmt.Sprintf("Waiting for %s to answer through %s", hostname, describeFront(s.kind)))
 		if err := s.sleep(bounded, s.wait); err != nil {
 			if ctx.Err() != nil {
 				return stackrecords.ServeProbe{At: s.now().Unix(), Router: serving}, ctx.Err()
@@ -211,11 +211,11 @@ func (s dnsCutover) unresolved(hostname string, serving router.Kind, began time.
 		}
 		return provider.Resumable(refusal.Refuse(refusal.CodeNotReady,
 			"%s does not answer through %s yet%s — this run gave up after about %s, and `ocel domain add` picks up where it stopped",
-			hostname, frontPhrase(s.kind), failure, waited))
+			hostname, describeFront(s.kind), failure, waited))
 	}
 	return provider.Resumable(refusal.Refuse(refusal.CodeNotReady,
 		"%s is answered by another front, not through %s this project deploys to — this run gave up after about %s",
-		hostname, frontPhrase(s.kind), waited))
+		hostname, describeFront(s.kind), waited))
 }
 
 func (s dnsCutover) lastProbeFailure(hostname string) string {

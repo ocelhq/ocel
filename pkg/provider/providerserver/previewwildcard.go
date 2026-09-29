@@ -101,7 +101,7 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progr
 	if err != nil {
 		return err
 	}
-	answering, err := pairedRouter(w.provider, front.Kind())
+	answering, err := findPairedRouter(w.provider, front.Kind())
 	if err != nil {
 		return err
 	}
@@ -154,7 +154,7 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progr
 		return err
 	}
 	written, werr := cutover.write(ctx, dnsRecords,
-		fmt.Sprintf("Point %s at %s", wildcard, frontPhrase(front.Kind())), progress.Say,
+		fmt.Sprintf("Point %s at %s", wildcard, describeFront(front.Kind())), progress.Say,
 		fmt.Sprintf("If this run gives up waiting, re-run `ocel domain use '%s' --preview`.", wildcard))
 	w.recorded.Host.Written, w.recorded.Host.Manual = written.Written, written.Manual
 	if err := w.save(ctx); err != nil {
@@ -172,7 +172,7 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progr
 	if aerr != nil {
 		return aerr
 	}
-	progress.Say(fmt.Sprintf("Previews are served on %s through %s", wildcard, frontPhrase(front.Kind())))
+	progress.Say(fmt.Sprintf("Previews are served on %s through %s", wildcard, describeFront(front.Kind())))
 	return nil
 }
 
@@ -192,13 +192,13 @@ func (w *wildcards) claimable(front edge.Edge, base string) error {
 			"this preview bootstrap already serves previews on %q: release it with `ocel domain release --preview` first, then use %q — every project on %q loses its preview hostnames the moment the bootstrap changes domain, so that is two deliberate commands",
 			w.recorded.BaseDomain, base, w.recorded.BaseDomain)
 	}
-	owningEdge, owned := w.recorded.OwningEdge()
-	if !owned || owningEdge == front.Kind() {
+	owningEdge := w.recorded.Edge
+	if !w.recorded.IsRecorded() || owningEdge == front.Kind() {
 		return nil
 	}
 	return refusal.Refuse(refusal.CodeNotReady,
 		"%s is already served through %s, and this project is served through %s: reconciling it here would raise a second wildcard through %s and leave the one through %s in place with nothing left to name it — release it with `ocel domain release --preview` from a project served through %s first, then use it again from here",
-		w.recorded.Hostname(), frontPhrase(owningEdge), frontPhrase(front.Kind()), frontPhrase(front.Kind()), frontPhrase(owningEdge), frontPhrase(owningEdge))
+		w.recorded.Hostname(), describeFront(owningEdge), describeFront(front.Kind()), describeFront(front.Kind()), describeFront(owningEdge), describeFront(owningEdge))
 }
 
 func (h *handlers) GetPreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest) (*contractv1.GetPreviewWildcardResponse, error) {
@@ -261,11 +261,10 @@ func (w *wildcards) proto(ctx context.Context) *contractv1.PreviewWildcard {
 }
 
 func (w *wildcards) routeInstalled(ctx context.Context) bool {
-	owningEdge, owned := w.recorded.OwningEdge()
-	if !owned {
+	if !w.recorded.IsRecorded() {
 		return false
 	}
-	front, err := w.provider.Edges().Open(owningEdge)
+	front, err := w.provider.Edges().Open(w.recorded.Edge)
 	if err != nil {
 		return false
 	}
