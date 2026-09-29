@@ -27,8 +27,8 @@ var destroyCmd = &cobra.Command{
 	Use:   "destroy",
 	Short: "Permanently destroy this project's deployment of one tier",
 	Long: "Permanently destroy what this project has deployed into one tier: `production` takes " +
-		"the edge stack (edge workers, custom-domain binding, deployments store), the infra stack " +
-		"(databases and buckets, including all their data), and every app-deploy stack; `preview` " +
+		"what the edge serves it with and the hostnames bound to it, its resources (databases and " +
+		"buckets, including all their data), and every app; `preview` " +
 		"takes the whole preview footprint and leaves the account-level preview bootstrap intact.\n\n" +
 		"Either is irreversible and requires typing the project name to confirm; --dry prints " +
 		"what would go and stops.\n\n" +

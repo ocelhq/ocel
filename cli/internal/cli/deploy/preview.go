@@ -352,12 +352,12 @@ func checkGlobalPreviewDomain(wildcard *contractv1.PreviewWildcard, id *contract
 	}
 	if !wildcard.GetRouteInstalled() {
 		return fmt.Errorf("the global preview domain *.%s is recorded, but its wildcard route is not installed, so nothing would answer a preview hostname: "+
-			"run `ocel domain use '*.%s' --preview` to reinstall the shared entry worker and reclaim the wildcard",
+			"run `ocel domain use '*.%s' --preview` to reinstall the edge's preview routing and reclaim the wildcard",
 			base, base)
 	}
 	if g := edge.PreviewGrammarMax; g < wildcard.GetGrammarMin() || g > wildcard.GetGrammarMax() {
-		return fmt.Errorf("this CLI names preview hostnames with grammar %d, but the shared entry worker on *.%s speaks %d–%d, so it would not route what this deploy creates: "+
-			"run `ocel domain use '*.%s' --preview` to upgrade the worker, or upgrade the CLI if it is the older half",
+		return fmt.Errorf("this CLI names preview hostnames with grammar %d, but the edge serving *.%s speaks %d–%d, so it would not route what this deploy creates: "+
+			"run `ocel domain use '*.%s' --preview` to upgrade the edge, or upgrade the CLI if it is the older half",
 			g, base, wildcard.GetGrammarMin(), wildcard.GetGrammarMax(), base)
 	}
 	return nil

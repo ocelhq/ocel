@@ -44,15 +44,14 @@ var domainCmd = &cobra.Command{
 	Long: "Manage this project's production hostnames, and the bootstrap-wide domain every project's previews are served on.\n\n" +
 		"`add`, `rm`, `ls` and `status` are project-scoped and read domains.production, which is the declaration: " +
 		"no command edits it. `use` and `release` take --preview and act on the bootstrap, where " +
-		"one shared entry worker on one wildcard serves every project bootstrapped into the preview " +
-		"tier, at \"<project>--<preview>[--<app>].<domain>\". A project that declares its own " +
+		"the edge serves every project bootstrapped into the preview tier on one wildcard, at \"<project>--<preview>[--<app>].<domain>\". A project that declares its own " +
 		"domains.preview keeps it and ignores this one.",
 	Args: cobra.NoArgs,
 }
 
 var domainUseCmd = &cobra.Command{
 	Use:   "use <wildcard>",
-	Short: "Install (or upgrade) the shared entry worker and serve every project's previews on this wildcard",
+	Short: "Install (or upgrade) the edge's preview routing and serve every project's previews on this wildcard",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cwd, err := os.Getwd()
@@ -78,7 +77,7 @@ var domainLsCmd = &cobra.Command{
 
 var domainReleaseCmd = &cobra.Command{
 	Use:   "release",
-	Short: "Tear down the shared entry worker and stop serving previews on the global domain",
+	Short: "Tear down the edge's preview routing and stop serving previews on the global domain",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cwd, err := os.Getwd()

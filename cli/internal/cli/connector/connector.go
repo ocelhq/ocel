@@ -50,7 +50,7 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "connector <command>",
 		Short:   "Manage the connector the console reads this target's variables through",
-		Example: "  $ ocel connector add --config ocel.vps.json\n  $ ocel connector status\n  $ ocel connector rm --config ocel.vps.json",
+		Example: "  $ ocel connector add --config ocel.staging.json\n  $ ocel connector status\n  $ ocel connector rm --config ocel.staging.json",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			_ = cmd.Help()
 			return &exitcode.ExitError{Code: 1}
@@ -65,7 +65,7 @@ func newAddCommand(deps cmddeps.Deps) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "add",
 		Short:   "Put a connector on this target and pair it with the console",
-		Example: "  $ ocel connector add --config ocel.vps.json\n  $ ocel connector add --config ocel.vps.json --allow-reveal",
+		Example: "  $ ocel connector add --config ocel.staging.json\n  $ ocel connector add --config ocel.staging.json --allow-reveal",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return withOptions(cmd, deps, &opts, func(ctx context.Context, cfg *projectconfig.Config, link *console.Link) error {
@@ -84,7 +84,7 @@ func newRemoveCommand(deps cmddeps.Deps) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "rm",
 		Short:   "Take the connector off this target and forget it in the console",
-		Example: "  $ ocel connector rm --config ocel.vps.json\n  $ ocel connector rm --target vps/sha256:abc/ocel",
+		Example: "  $ ocel connector rm --config ocel.staging.json\n  $ ocel connector rm --target <fingerprint>",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return withOptions(cmd, deps, &opts, func(ctx context.Context, cfg *projectconfig.Config, link *console.Link) error {
@@ -101,7 +101,7 @@ func newStatusCommand(deps cmddeps.Deps) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "status",
 		Short:   "Say what the console has registered for the connectors of this organization",
-		Example: "  $ ocel connector status\n  $ ocel connector status --config ocel.vps.json",
+		Example: "  $ ocel connector status\n  $ ocel connector status --config ocel.staging.json",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return withOptions(cmd, deps, &opts, func(ctx context.Context, cfg *projectconfig.Config, link *console.Link) error {
