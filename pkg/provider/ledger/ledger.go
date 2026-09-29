@@ -71,7 +71,7 @@ func (l *Ledger) PutStaged(ctx context.Context, record router.DeploymentRecord) 
 			return fmt.Errorf("read the deployment record for %s: %w", record.App, err)
 		}
 		if len(stored.Value) > 0 {
-			return refuseAnotherRecord(record, stored.Value, staging)
+			return refuseDifferentRecord(record, stored.Value, staging)
 		}
 		stored.Value = staging
 		_, err = l.keyValues.Write(ctx, stored)
@@ -86,7 +86,7 @@ func (l *Ledger) PutStaged(ctx context.Context, record router.DeploymentRecord) 
 	return fmt.Errorf("stage the deployment record %s/%s: it moved under %d attempts", record.App, record.Build, casAttempts)
 }
 
-func refuseAnotherRecord(record router.DeploymentRecord, stored, staging []byte) error {
+func refuseDifferentRecord(record router.DeploymentRecord, stored, staging []byte) error {
 	var held router.DeploymentRecord
 	if err := json.Unmarshal(stored, &held); err != nil {
 		return fmt.Errorf("decode the deployment record %s/%s: %w", record.App, record.Build, err)
