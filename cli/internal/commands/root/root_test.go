@@ -7,14 +7,12 @@ import (
 	"os"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/charmbracelet/x/ansi"
 	"github.com/creack/pty"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 )
 
@@ -31,12 +29,6 @@ func TestTheRootFlagsFeedTheOneResolver(t *testing.T) {
 	if !p.Verbose {
 		t.Errorf("Verbose = false, want the --verbose flag to reach the resolver")
 	}
-}
-
-func newTestDeps() cmddeps.Deps {
-	deps := newDeps()
-	deps.Events = run.NewBus(time.Now)
-	return deps
 }
 
 func executeRoot(t *testing.T, args ...string) (stdout, stderr string) {
@@ -232,7 +224,7 @@ func TestACommandWhoseStdoutIsItsDataDrawsItsRunOnStderr(t *testing.T) {
 	if !strings.Contains(stdout, "promo-2") || strings.Contains(stdout, "{") {
 		t.Errorf("stdout = %q, want the promotions table alone", stdout)
 	}
-	if evs := runEvents(t, stderr); len(evs) == 0 || !evs[len(evs)-1].GetSummary().GetSuccess() {
+	if evs := clitest.RunEvents(t, stderr); len(evs) == 0 || !evs[len(evs)-1].GetSummary().GetSuccess() {
 		t.Errorf("stderr = %q, want the run's events ending in its summary", stderr)
 	}
 }
@@ -307,5 +299,21 @@ func TestTheLiveLineIsErasedWhenTheRunsResultIsDrawnNotWhenTheCommandExits(t *te
 	}
 	if strings.Contains(afterResult, "[check]") {
 		t.Errorf("after the result the terminal shows %q, want the live line gone with the run", afterResult)
+	}
+}
+
+func TestGenerateBindingsAndLinkAreEachTheirOwnCommandOffTheRoot(t *testing.T) {
+	for _, name := range []string{"generate", "bindings", "link", "unlink"} {
+		if cmd, _, err := rootCmd.Find([]string{name}); err != nil || cmd.Name() != name || cmd.Parent() != rootCmd {
+			t.Errorf("`ocel %s` does not hang off the root command", name)
+		}
+	}
+	generate, _, _ := rootCmd.Find([]string{"generate"})
+	if !strings.Contains(generate.Long, "no login, no provider") {
+		t.Errorf("`ocel generate` long = %q, want the promise it keeps", generate.Long)
+	}
+	bindingsGenerate, _, _ := rootCmd.Find([]string{"bindings", "generate"})
+	if bindingsGenerate == generate || bindingsGenerate.Parent().Name() != "bindings" {
+		t.Errorf("`ocel bindings generate` resolves to %v, want the bindings command's own generate", bindingsGenerate.CommandPath())
 	}
 }

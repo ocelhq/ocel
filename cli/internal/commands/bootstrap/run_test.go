@@ -12,8 +12,6 @@ import (
 	"strings"
 	"testing"
 
-	"google.golang.org/protobuf/encoding/protojson"
-
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
@@ -302,7 +300,7 @@ func TestRemovingABootstrapAsksForItsNameWhileTheRunIsHeldAfterThePlanItShows(t 
 		t.Fatalf("RunDestroy err = %v; stream=%s stdout=%s", err, stream.String(), stdout.String())
 	}
 
-	evs := runEvents(t, stream.String())
+	evs := clitest.RunEvents(t, stream.String())
 	shown := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetPlan() != nil })
 	if shown < 0 || evs[shown].GetPhase() != progressv1.Phase_PHASE_PLAN {
 		t.Fatalf("the removal plan was not shown in the plan phase: %s", stream.String())
@@ -683,7 +681,7 @@ func TestTheBootstrapPlanIsAPlanPhaseEventBeforeTheConsentPrompt(t *testing.T) {
 		t.Fatalf("Run err = %v; stream=%s stdout=%s stderr=%s", err, stream.String(), stdout.String(), stderr.String())
 	}
 
-	evs := runEvents(t, stream.String())
+	evs := clitest.RunEvents(t, stream.String())
 	shown := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetPlan() != nil })
 	if shown < 0 || evs[shown].GetPhase() != progressv1.Phase_PHASE_PLAN {
 		t.Fatalf("the bootstrap plan was not shown in the plan phase: %s", stream.String())
@@ -704,21 +702,6 @@ func TestTheBootstrapPlanIsAPlanPhaseEventBeforeTheConsentPrompt(t *testing.T) {
 	}
 }
 
-func runEvents(t *testing.T, out string) []*streamv1.RunEvent {
-	t.Helper()
-	var evs []*streamv1.RunEvent
-	for _, line := range strings.Split(out, "\n") {
-		if line == "" {
-			continue
-		}
-		ev := &streamv1.RunEvent{}
-		if err := protojson.Unmarshal([]byte(line), ev); err != nil {
-			t.Fatalf("line %q is not a protojson RunEvent: %v", line, err)
-		}
-		evs = append(evs, ev)
-	}
-	return evs
-}
 func streamMessages(t *testing.T, out string) []string {
 	t.Helper()
 	var said []string
@@ -924,4 +907,88 @@ func TestBootstrapSaysWhatItAppliedBeyondWhatWasAsked(t *testing.T) {
 			t.Errorf("stdout = %q, want nothing said where the set named everything applied", stdout.String())
 		}
 	})
+}
+
+func TestBootstrapSendsTheFeatureSetAndNoEdge(t *testing.T) {
+	cases := []struct {
+		name        string
+		declaration string
+		features    string
+		want        string
+	}{
+		{"a named set reaches the provider whole", "  edge: \"relay\",\n", "isr,image-optimization", "features=isr,image-optimization force=false acceptReplacements=true"},
+		{"all names every feature the provider offers", "", "all", "features=isr,image-optimization,vars-key,relay-edge,direct-edge force=false acceptReplacements=true"},
+		{"none leaves the core alone", "", "none", "features= force=false acceptReplacements=true"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			root, journal, deps := clitest.SetUpEdgeFixture(t, tc.declaration)
+
+			var stdout, stderr bytes.Buffer
+			opts := Options{Yes: true, Features: tc.features, FeaturesDeclared: true}
+			clitest.AttachTerminalSink(deps, &stdout)
+			if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
+				t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+			}
+
+			got := clitest.ReadJournal(t, journal)
+			if len(got) != 1 {
+				t.Fatalf("bootstrap reached the provider %d times, want exactly 1: %v", len(got), got)
+			}
+			if got[0] != tc.want {
+				t.Errorf("provider saw %q, want %q", got[0], tc.want)
+			}
+			if strings.Contains(got[0], "kind=") {
+				t.Errorf("provider saw %q; bootstrap no longer includes an edge, the relay-edge feature does", got[0])
+			}
+		})
+	}
+}
+
+func TestBootstrapWithoutTheFlagKeepsWhatIsThere(t *testing.T) {
+	root, journal, deps := clitest.SetUpEdgeFixture(t, "")
+	t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr")
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(deps, &stdout)
+	if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	got := clitest.ReadJournal(t, journal)
+	if len(got) != 1 || got[0] != "features=isr force=false acceptReplacements=true" {
+		t.Errorf("provider saw %v, want the set the account already has", got)
+	}
+}
+
+func TestBootstrapLeavesOutWhatItWasNotAskedAbout(t *testing.T) {
+	root, journal, deps := clitest.SetUpEdgeFixture(t, "")
+	t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr,image-optimization")
+
+	var stdout, stderr bytes.Buffer
+	opts := Options{Yes: true, Features: "isr", FeaturesDeclared: true}
+	clitest.AttachTerminalSink(deps, &stdout)
+	if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	got := clitest.ReadJournal(t, journal)
+	if len(got) != 1 || got[0] != "features=isr force=false acceptReplacements=true" {
+		t.Errorf("provider saw %v; another project's feature goes only when a run names it", got)
+	}
+}
+
+func TestBootstrapRemovesWhatItIsTold(t *testing.T) {
+	root, journal, deps := clitest.SetUpEdgeFixture(t, "")
+	t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr,image-optimization")
+
+	var stdout, stderr bytes.Buffer
+	opts := Options{Yes: true, Remove: "image-optimization", Force: true}
+	clitest.AttachTerminalSink(deps, &stdout)
+	if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	got := clitest.ReadJournal(t, journal)
+	if len(got) != 1 || got[0] != "features=isr remove=image-optimization force=true acceptReplacements=true" {
+		t.Errorf("provider saw %v, want the named removal passed through", got)
+	}
 }

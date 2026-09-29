@@ -154,7 +154,7 @@ func TestListingValuesSaysWhoItActsAsInTheCheckPhaseOfItsRunAndPrintsTheListingA
 		t.Fatalf("runEnvLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
-	evs := runEvents(t, stderr.String())
+	evs := clitest.RunEvents(t, stderr.String())
 	identity := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetIdentity() != nil })
 	if identity < 0 || evs[identity].GetPhase() != progressv1.Phase_PHASE_CHECK {
 		t.Fatalf("the listing never said who it acts as in the check phase: %s", stderr.String())

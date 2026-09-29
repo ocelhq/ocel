@@ -1,0 +1,51 @@
+package dev
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"os"
+
+	"github.com/spf13/cobra"
+
+	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/dev"
+)
+
+func NewCommand(deps cmddeps.Deps) *cobra.Command {
+	var reset bool
+	cmd := &cobra.Command{
+		Use:   "dev -- <command> [args...]",
+		Short: "Run your project in development mode",
+		Args:  cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cwd, err := os.Getwd()
+			if err != nil {
+				return fmt.Errorf("determine working directory: %w", err)
+			}
+			opts, err := loadOptions(cmd.Context(), deps, cwd, args, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+			if err != nil {
+				return err
+			}
+			return dev.Run(cmd.Context(), opts, reset)
+		},
+	}
+	cmd.Flags().BoolVar(&reset, "reset", false, "Wipe the data this project's dev resources have kept, then start from empty ones")
+	return cmd
+}
+
+func loadOptions(ctx context.Context, deps cmddeps.Deps, cwd string, command []string, stdout, stderr io.Writer, stdin io.Reader) (dev.Options, error) {
+	cfg, err := deps.LoadOptionalProject(ctx, cwd)
+	if err != nil {
+		return dev.Options{}, err
+	}
+	return dev.Options{
+		Project:         cfg,
+		Command:         command,
+		OpenDocker:      deps.OpenDocker,
+		Stdin:           stdin,
+		Stdout:          stdout,
+		Stderr:          stderr,
+		StdinIsTerminal: deps.StdinIsTerminal(stdin),
+	}, nil
+}

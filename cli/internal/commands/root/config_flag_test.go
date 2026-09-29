@@ -62,11 +62,11 @@ export default { slug: "test-app" };
 `)
 
 	configFlag = filepath.Join(".", "nope.ts")
-	err := runBuild(context.Background(), newDeps(), root)
+	_, err := newDeps().LoadProject(context.Background(), root)
 	if err == nil {
-		t.Fatal("runBuild err = nil, want a refusal for a --config path that names nothing")
+		t.Fatal("LoadProject err = nil, want a refusal for a --config path that names nothing")
 	}
 	if !strings.Contains(err.Error(), filepath.Join(root, "nope.ts")) {
-		t.Fatalf("runBuild err = %v, want it to name the path --config asked for", err)
+		t.Fatalf("LoadProject err = %v, want it to name the path --config asked for", err)
 	}
 }

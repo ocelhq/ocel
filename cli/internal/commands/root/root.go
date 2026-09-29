@@ -15,15 +15,24 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/cli/doctor"
+	"github.com/ocelhq/ocel/cli/internal/commands/bindings"
 	"github.com/ocelhq/ocel/cli/internal/commands/bootstrap"
+	buildcommand "github.com/ocelhq/ocel/cli/internal/commands/build"
 	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/commands/connector"
 	"github.com/ocelhq/ocel/cli/internal/commands/cost"
 	"github.com/ocelhq/ocel/cli/internal/commands/deploy"
+	"github.com/ocelhq/ocel/cli/internal/commands/destroy"
+	"github.com/ocelhq/ocel/cli/internal/commands/dev"
+	"github.com/ocelhq/ocel/cli/internal/commands/domain"
 	"github.com/ocelhq/ocel/cli/internal/commands/env"
+	"github.com/ocelhq/ocel/cli/internal/commands/generate"
 	"github.com/ocelhq/ocel/cli/internal/commands/link"
+	"github.com/ocelhq/ocel/cli/internal/commands/lock"
 	"github.com/ocelhq/ocel/cli/internal/commands/login"
 	"github.com/ocelhq/ocel/cli/internal/commands/permissions"
+	"github.com/ocelhq/ocel/cli/internal/commands/projectinit"
+	"github.com/ocelhq/ocel/cli/internal/commands/promotions"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
@@ -84,6 +93,8 @@ func handleInterrupts(cmd *cobra.Command) {
 	stopInterruptHandler = stop
 }
 
+var devCmd, runCmd *cobra.Command
+
 func init() {
 	s := newDeps()
 	rootCmd.PersistentPreRun = func(cmd *cobra.Command, _ []string) {
@@ -95,17 +106,21 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&configFlag, "config", "c", "", "Project config `file` (default: $OCEL_CONFIG, else the nearest ocel.json, ocel.yaml, ocel.yml or ocel.config.ts)")
 	rootCmd.PersistentFlags().StringVar(&logFormatFlag, "log-format", string(terminal.FormatHuman), "Log output format: human or json")
 
+	devCmd, runCmd = dev.NewCommand(s), dev.NewRunCommand(s)
 	rootCmd.AddCommand(devCmd)
 	rootCmd.AddCommand(runCmd)
-	rootCmd.AddCommand(initCmd)
-	rootCmd.AddCommand(generateCmd)
-	rootCmd.AddCommand(buildCmd)
-	rootCmd.AddCommand(lockCmd)
+	rootCmd.AddCommand(projectinit.NewCommand(s))
+	rootCmd.AddCommand(generate.NewCommand(s))
+	rootCmd.AddCommand(buildcommand.NewCommand(s))
+	rootCmd.AddCommand(lock.NewCommand(s))
 	rootCmd.AddCommand(deploy.NewCommand(s))
 	rootCmd.AddCommand(deploy.NewPreviewCommand(s))
 	rootCmd.AddCommand(env.NewCommand(s))
-	rootCmd.AddCommand(rollbackCmd)
-	rootCmd.AddCommand(deploymentsCmd)
+	rootCmd.AddCommand(promotions.NewRollbackCommand(s))
+	rootCmd.AddCommand(promotions.NewDeploymentsCommand(s))
+	rootCmd.AddCommand(domain.NewCommand(s))
+	rootCmd.AddCommand(bindings.NewCommand(s))
+	rootCmd.AddCommand(destroy.NewCommand(s))
 
 	rootCmd.AddCommand(bootstrap.NewCommand(s))
 	rootCmd.AddCommand(permissions.NewCommand(s))

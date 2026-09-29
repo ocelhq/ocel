@@ -1,0 +1,995 @@
+package domain
+
+import (
+	"bytes"
+	"context"
+	"io"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/ocelhq/ocel/cli/internal/clitest"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+)
+
+func TestRequirePreviewTier(t *testing.T) {
+	t.Parallel()
+
+	if err := requirePreviewTier("ocel domain use", true); err != nil {
+		t.Fatalf("requirePreviewTier(preview) = %v, want nil", err)
+	}
+
+	err := requirePreviewTier("ocel domain use", false)
+	if err == nil {
+		t.Fatal("requirePreviewTier(no --preview) = nil, want a refusal")
+	}
+	for _, want := range []string{"--preview", "preview-only"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("err = %v, want it to contain %q", err, want)
+		}
+	}
+}
+
+func TestGlobalPreviewBaseDomain(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a leading wildcard label yields the base domain", func(t *testing.T) {
+		t.Parallel()
+
+		for arg, want := range map[string]string{
+			"*.preview.acme.com": "preview.acme.com",
+			" *.ACME.com ":       "acme.com", //nolint:gocritic // the whitespace is what the parser trims
+		} {
+			got, err := globalPreviewBaseDomain(arg)
+			if err != nil {
+				t.Fatalf("globalPreviewBaseDomain(%q) err = %v", arg, err)
+			}
+			if got != want {
+				t.Errorf("globalPreviewBaseDomain(%q) = %q, want %q", arg, got, want)
+			}
+		}
+	})
+
+	t.Run("anything but a single leading wildcard label is refused", func(t *testing.T) {
+		t.Parallel()
+
+		for _, arg := range []string{"acme.com", "*acme.com", "*.*.acme.com", "preview.*.acme.com", "*"} {
+			if _, err := globalPreviewBaseDomain(arg); err == nil {
+				t.Errorf("globalPreviewBaseDomain(%q) = nil error, want a refusal", arg)
+			}
+		}
+	})
+}
+
+func writeProductionConfig(t *testing.T, root string) {
+	t.Helper()
+	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  slug: "test-app",
+  provider: { fake: {} },
+  domains: { production: "shop.app.com" },
+  dns: "zone",
+};
+`)
+}
+
+func quickDomainWait(t *testing.T) {
+	t.Helper()
+	orig := domainWait
+	t.Cleanup(func() { domainWait = orig })
+	domainWait = domainWaitSchedule{initialInterval: time.Millisecond, maxInterval: 2 * time.Millisecond, deadline: 10 * time.Second}
+}
+
+func TestRunDomainStatusJSON(t *testing.T) {
+	root, sockPath := clitest.SetUpDeployFixture(t)
+	writeProductionConfig(t, root)
+	useJSONOutput(t)
+	deps := newTestDeps()
+	clitest.SetLoggedIn(&deps)
+	t.Setenv(clitest.FakeInfraTierEnvVar, "production")
+	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+	t.Setenv(clitest.FakeDomainCertEnvVar, "ISSUED fake-certificate/abcd-1234")
+	t.Setenv(clitest.FakeDomainExpiresEnvVar, "1757000000")
+	t.Setenv(clitest.FakeGlobalDomainManualRecordsEnvVar, "_ocel.shop.app.com CNAME _target.validations.fake.example")
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(deps, &stderr)
+	if err := runDomainStatus(context.Background(), deps, root, domainOptions{}, &stdout, &stderr); err != nil {
+		t.Fatalf("runDomainStatus err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	report := clitest.DecodeJSON(t, stdout.String())
+	if report["ready"] != true {
+		t.Errorf("json = %v, want it to report the project ready", report)
+	}
+	if owned, _ := report["manualRecords"].([]any); len(owned) != 1 || owned[0] != "_ocel.shop.app.com CNAME _target.validations.fake.example" {
+		t.Errorf("json manualRecords = %v, want the project's records the user has to write", report["manualRecords"])
+	}
+	hosts, ok := report["hosts"].([]any)
+	if !ok || len(hosts) != 1 {
+		t.Fatalf("json hosts = %v, want one host", report["hosts"])
+	}
+	host, _ := hosts[0].(map[string]any)
+	for field, want := range map[string]any{
+		"hostname":          "shop.app.com",
+		"declared":          true,
+		"ready":             true,
+		"certificate":       "fake-certificate/abcd-1234",
+		"certificateStatus": "ISSUED",
+		"expiresAt":         "2025-09-04T15:33:20Z",
+		"lastProbeAt":       "2025-08-18T06:53:20Z",
+		"lastProbeOk":       true,
+		"servingPointer":    "relay",
+	} {
+		if host[field] != want {
+			t.Errorf("json host %s = %v, want %v", field, host[field], want)
+		}
+	}
+	written, _ := host["recordsWritten"].([]any)
+	if len(written) != 1 || written[0] != "shop.app.com AAAA 100::" {
+		t.Errorf("json recordsWritten = %v, want the record ocel wrote", host["recordsWritten"])
+	}
+	manual, _ := host["manualRecords"].([]any)
+	if len(manual) != 1 || manual[0] != "_ocel.shop.app.com CNAME _target.validations.fake.example" {
+		t.Errorf("json manualRecords = %v, want the record the user has to write", host["manualRecords"])
+	}
+	clitest.WaitForNoStaleSocket(t, sockPath)
+}
+
+func TestRunDomain(t *testing.T) {
+	t.Run("the bootstrap-wide subcommands refuse without --preview", func(t *testing.T) {
+		root, _ := clitest.SetUpDeployFixture(t)
+		deps := newTestDeps()
+		clitest.SetLoggedIn(&deps)
+
+		var stdout, stderr bytes.Buffer
+		clitest.AttachTerminalSink(deps, &stdout)
+		runs := map[string]error{
+			"use":     runDomainUse(context.Background(), deps, root, "*.preview.acme.com", domainOptions{}, &stdout, &stderr),
+			"release": runDomainRelease(context.Background(), deps, root, domainOptions{}, &stdout, &stderr, strings.NewReader("")),
+		}
+		for name, err := range runs {
+			if err == nil {
+				t.Errorf("ocel domain %s without --preview = nil, want a refusal", name)
+				continue
+			}
+			if !strings.Contains(err.Error(), "preview-only") {
+				t.Errorf("ocel domain %s err = %v, want it to say global domains are preview-only", name, err)
+			}
+		}
+	})
+
+	t.Run("use claims the wildcard's base domain", func(t *testing.T) {
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		deps := newTestDeps()
+		clitest.SetLoggedIn(&deps)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+
+		var stdout, stderr bytes.Buffer
+		clitest.AttachTerminalSink(deps, &stdout)
+		if err := runDomainUse(context.Background(), deps, root, "*.preview.acme.com", domainOptions{preview: true}, &stdout, &stderr); err != nil {
+			t.Fatalf("runDomainUse err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		out := stdout.String()
+		for _, want := range []string{"USE DOMAIN tier=TIER_PREVIEW base=preview.acme.com", "Previews are served on *.preview.acme.com"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("stdout = %q, want it to contain %q", out, want)
+			}
+		}
+		clitest.WaitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("use without a dns prints the record to add", func(t *testing.T) {
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		deps := newTestDeps()
+		clitest.SetLoggedIn(&deps)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+
+		var stdout, stderr bytes.Buffer
+		clitest.AttachTerminalSink(deps, &stdout)
+		if err := runDomainUse(context.Background(), deps, root, "*.preview.acme.com", domainOptions{preview: true}, &stdout, &stderr); err != nil {
+			t.Fatalf("runDomainUse err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		out := stdout.String()
+		for _, want := range []string{"dns=", "add a DNS record at *.preview.acme.com proxied through the edge"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("stdout = %q, want it to contain %q", out, want)
+			}
+		}
+		if strings.Contains(out, "Writing") {
+			t.Errorf("stdout = %q, want no record written without a dns", out)
+		}
+		clitest.WaitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("use with a dns writes the record", func(t *testing.T) {
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  slug: "test-app",
+  provider: { fake: {} },
+  domains: { preview: "*.preview.acme.com" },
+  dns: "zone",
+};
+`)
+		deps := newTestDeps()
+		clitest.SetLoggedIn(&deps)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+
+		var stdout, stderr bytes.Buffer
+		clitest.AttachTerminalSink(deps, &stdout)
+		if err := runDomainUse(context.Background(), deps, root, "*.preview.acme.com", domainOptions{preview: true}, &stdout, &stderr); err != nil {
+			t.Fatalf("runDomainUse err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		out := stdout.String()
+		for _, want := range []string{"dns=zone", "Writing *.preview.acme.com AAAA 100::"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("stdout = %q, want it to contain %q", out, want)
+			}
+		}
+		clitest.WaitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("use refuses an argument that is not a leading wildcard", func(t *testing.T) {
+		root, _ := clitest.SetUpDeployFixture(t)
+		deps := newTestDeps()
+		clitest.SetLoggedIn(&deps)
+
+		var stdout, stderr bytes.Buffer
+		clitest.AttachTerminalSink(deps, &stdout)
+		err := runDomainUse(context.Background(), deps, root, "preview.acme.com", domainOptions{preview: true}, &stdout, &stderr)
+		if err == nil {
+			t.Fatal("runDomainUse err = nil, want a wildcard refusal")
+		}
+		if !strings.Contains(err.Error(), "wildcard") {
+			t.Errorf("err = %v, want it to name the wildcard requirement", err)
+		}
+	})
+
+	t.Run("ls names the domain and the projects served on it", func(t *testing.T) {
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		deps := newTestDeps()
+		clitest.SetLoggedIn(&deps)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+		t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.acme.com")
+		t.Setenv(clitest.FakeGlobalDomainEdgeScopeEnvVar, "cf-1")
+		t.Setenv(clitest.FakeGlobalDomainProjectsEnvVar, "shop,blog")
+
+		var stdout, stderr bytes.Buffer
+		clitest.AttachTerminalSink(deps, &stderr)
+		if err := runDomainList(context.Background(), deps, root, domainOptions{preview: true}, &stdout, &stderr); err != nil {
+			t.Fatalf("runDomainList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		out := stdout.String()
+		for _, want := range []string{"*.preview.acme.com", "cf-1", "1–1", "installed", "shop", "blog"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("stdout = %q, want it to contain %q", out, want)
+			}
+		}
+		clitest.WaitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("ls shows the certificate, the records and the last probe", func(t *testing.T) {
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		deps := newTestDeps()
+		clitest.SetLoggedIn(&deps)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+		t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.acme.com")
+		t.Setenv(clitest.FakeGlobalDomainCertEnvVar, "ISSUED fake-certificate/abcd-1234")
+		t.Setenv(clitest.FakeGlobalDomainRecordsEnvVar, "*.preview.acme.com AAAA 100::")
+		t.Setenv(clitest.FakeGlobalDomainManualRecordsEnvVar, "_ocel.preview.acme.com CNAME _target.validations.fake.example")
+		t.Setenv(clitest.FakeGlobalDomainProbeEnvVar, "1755500000")
+		t.Setenv(clitest.FakeGlobalDomainRenewalEnvVar, "you placed it on this box and you renew it")
+		t.Setenv(clitest.FakeGlobalDomainExpiresEnvVar, "1755500000")
+
+		var stdout, stderr bytes.Buffer
+		clitest.AttachTerminalSink(deps, &stderr)
+		if err := runDomainList(context.Background(), deps, root, domainOptions{preview: true}, &stdout, &stderr); err != nil {
+			t.Fatalf("runDomainList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		out := stdout.String()
+		for _, want := range []string{
+			"Certificate          ISSUED  fake-certificate/abcd-1234",
+			"Renewal              expires 2025-08-18T06:53:20Z, you placed it on this box and you renew it — EXPIRING SOON",
+			"Records ocel wrote   *.preview.acme.com AAAA 100::",
+			"Records you own      _ocel.preview.acme.com CNAME _target.validations.fake.example",
+			"Last probe           2025-08-18T06:53:20Z  answered",
+		} {
+			if !strings.Contains(out, want) {
+				t.Errorf("stdout = %q, want it to contain %q", out, want)
+			}
+		}
+		clitest.WaitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("ls says an unprobed domain has never been probed", func(t *testing.T) {
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		deps := newTestDeps()
+		clitest.SetLoggedIn(&deps)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+		t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.acme.com")
+
+		var stdout, stderr bytes.Buffer
+		clitest.AttachTerminalSink(deps, &stderr)
+		if err := runDomainList(context.Background(), deps, root, domainOptions{preview: true}, &stdout, &stderr); err != nil {
+			t.Fatalf("runDomainList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		out := stdout.String()
+		if !strings.Contains(out, "Last probe           never") {
+			t.Errorf("stdout = %q, want it to say the domain has never been probed", out)
+		}
+		if strings.Contains(out, "Certificate") {
+			t.Errorf("stdout = %q, want no certificate line when none is recorded", out)
+		}
+		for _, want := range []string{"Records ocel wrote   none", "Records you own      none outstanding"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("stdout = %q, want it to contain %q", out, want)
+			}
+		}
+		clitest.WaitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("ls says so when no global domain is configured", func(t *testing.T) {
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		deps := newTestDeps()
+		clitest.SetLoggedIn(&deps)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+
+		var stdout, stderr bytes.Buffer
+		clitest.AttachTerminalSink(deps, &stderr)
+		if err := runDomainList(context.Background(), deps, root, domainOptions{preview: true}, &stdout, &stderr); err != nil {
+			t.Fatalf("runDomainList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		out := stdout.String()
+		for _, want := range []string{"No global preview domain is configured", "ocel domain use"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("stdout = %q, want it to contain %q", out, want)
+			}
+		}
+		clitest.WaitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("release refuses while projects still have previews on the wildcard", func(t *testing.T) {
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		deps := newTestDeps()
+		clitest.SetLoggedIn(&deps)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+		t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.acme.com")
+		t.Setenv(clitest.FakeServedPreviewsEnvVar, "shop, blog")
+
+		var stdout, stderr bytes.Buffer
+		clitest.AttachTerminalSink(deps, &stdout)
+		err := runDomainRelease(context.Background(), deps, root, domainOptions{preview: true, yes: true}, &stdout, &stderr, strings.NewReader(""))
+		if err == nil {
+			t.Fatalf("runDomainRelease err = nil, want the release refused; stdout=%s", stdout.String())
+		}
+		for _, want := range []string{"shop", "blog", "ocel preview rm", "ocel destroy preview"} {
+			if !strings.Contains(stdout.String(), want) {
+				t.Errorf("stdout = %q, want the refusal to contain %q", stdout.String(), want)
+			}
+		}
+		if strings.Contains(stdout.String(), "RELEASE DOMAIN") {
+			t.Errorf("stdout = %q, want nothing released while previews are still served", stdout.String())
+		}
+		clitest.WaitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("release plans, then releases with --yes once nothing is served", func(t *testing.T) {
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		deps := newTestDeps()
+		clitest.SetLoggedIn(&deps)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+		t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.acme.com")
+
+		var stdout, stderr bytes.Buffer
+		clitest.AttachTerminalSink(deps, &stdout)
+		if err := runDomainRelease(context.Background(), deps, root, domainOptions{preview: true, yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("runDomainRelease err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		out := stdout.String()
+		for _, want := range []string{
+			"This will release *.preview.acme.com",
+			"fronted by the relay edge",
+			"– preview entry router *.preview.acme.com",
+			"This cannot be undone.",
+			"1 to delete, 1 unchanged.",
+			"RELEASE DOMAIN tier=TIER_PREVIEW",
+			"Released *.preview.acme.com",
+		} {
+			if !strings.Contains(out, want) {
+				t.Errorf("stdout = %q, want it to contain %q", out, want)
+			}
+		}
+		if strings.Contains(out, "you created it yourself") {
+			t.Errorf("stdout spent a row on a record nothing touches:\n%s", out)
+		}
+		clitest.WaitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("add renders every step over the configured hosts", func(t *testing.T) {
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  slug: "test-app",
+  provider: { fake: {} },
+  domains: { production: ["shop.app.com", "www.app.com"] },
+  dns: "zone",
+};
+`)
+		deps := newTestDeps()
+		clitest.SetLoggedIn(&deps)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+
+		var stdout, stderr bytes.Buffer
+		clitest.AttachTerminalSink(deps, &stdout)
+		if err := runDomainAdd(context.Background(), deps, root, "", &stdout, &stderr); err != nil {
+			t.Fatalf("runDomainAdd err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		out := stdout.String()
+		for _, want := range []string{
+			"DOMAIN ADD slug=test-app hosts=shop.app.com,www.app.com dns=zone edge=direct",
+			"Requesting a certificate for shop.app.com, www.app.com",
+			"Binding shop.app.com to the relay edge",
+			"Writing shop.app.com AAAA 100::",
+			"shop.app.com is served through the relay edge",
+			"Binding www.app.com to the relay edge",
+			"Serving shop.app.com, www.app.com",
+		} {
+			if !strings.Contains(out, want) {
+				t.Errorf("stdout = %q, want it to contain %q", out, want)
+			}
+		}
+		clitest.WaitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("add with a host attaches only that one", func(t *testing.T) {
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  slug: "test-app",
+  provider: { fake: {} },
+  domains: { production: ["shop.app.com", "www.app.com"] },
+};
+`)
+		deps := newTestDeps()
+		clitest.SetLoggedIn(&deps)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+
+		var stdout, stderr bytes.Buffer
+		clitest.AttachTerminalSink(deps, &stdout)
+		if err := runDomainAdd(context.Background(), deps, root, "www.app.com", &stdout, &stderr); err != nil {
+			t.Fatalf("runDomainAdd err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		out := stdout.String()
+		for _, want := range []string{"hosts=www.app.com", "add a DNS record at www.app.com proxied through the edge", "Serving www.app.com"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("stdout = %q, want it to contain %q", out, want)
+			}
+		}
+		if strings.Contains(out, "shop.app.com") {
+			t.Errorf("stdout = %q, want the host that was not named left out", out)
+		}
+		clitest.WaitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("add exits non-zero when a wait times out, naming what is outstanding", func(t *testing.T) {
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  slug: "test-app",
+  provider: { fake: {} },
+  domains: { production: "shop.app.com" },
+};
+`)
+		deps := newTestDeps()
+		clitest.SetLoggedIn(&deps)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+		t.Setenv(clitest.FakeDomainTimeoutEnvVar, "add a DNS record at shop.app.com proxied through the edge")
+
+		var stdout, stderr bytes.Buffer
+		clitest.AttachTerminalSink(deps, &stdout)
+		err := runDomainAdd(context.Background(), deps, root, "", &stdout, &stderr)
+		if err == nil {
+			t.Fatalf("runDomainAdd err = nil, want the timeout surfaced; stdout=%s", stdout.String())
+		}
+		rendered := stdout.String() + stderr.String()
+		for _, want := range []string{"gave up after", "still outstanding", "shop.app.com"} {
+			if !strings.Contains(rendered, want) {
+				t.Errorf("rendered output = %q, want it to contain %q", rendered, want)
+			}
+		}
+		clitest.WaitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("add refuses a host the config does not declare", func(t *testing.T) {
+		root, _ := clitest.SetUpDeployFixture(t)
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  slug: "test-app",
+  provider: { fake: {} },
+  domains: { production: "shop.app.com" },
+};
+`)
+		deps := newTestDeps()
+		clitest.SetLoggedIn(&deps)
+
+		var stdout, stderr bytes.Buffer
+		clitest.AttachTerminalSink(deps, &stdout)
+		err := runDomainAdd(context.Background(), deps, root, "other.app.com", &stdout, &stderr)
+		if err == nil {
+			t.Fatal("runDomainAdd err = nil, want a refusal: no command edits the config")
+		}
+		rendered := stdout.String() + stderr.String()
+		for _, want := range []string{"domains.production", "shop.app.com", "other.app.com"} {
+			if !strings.Contains(rendered, want) {
+				t.Errorf("rendered output = %q, want it to contain %q", rendered, want)
+			}
+		}
+	})
+
+	t.Run("add refuses a project that declares no production hostname", func(t *testing.T) {
+		root, _ := clitest.SetUpDeployFixture(t)
+		deps := newTestDeps()
+		clitest.SetLoggedIn(&deps)
+
+		var stdout, stderr bytes.Buffer
+		clitest.AttachTerminalSink(deps, &stdout)
+		err := runDomainAdd(context.Background(), deps, root, "", &stdout, &stderr)
+		if err == nil {
+			t.Fatal("runDomainAdd err = nil, want a refusal with nothing declared")
+		}
+		if !strings.Contains(err.Error(), "domains.production") {
+			t.Errorf("err = %v, want it to name what to declare", err)
+		}
+	})
+
+	t.Run("rm sends the configured set so the provider knows what was dropped", func(t *testing.T) {
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  slug: "test-app",
+  provider: { fake: {} },
+  domains: { production: "shop.app.com" },
+  dns: "zone",
+};
+`)
+		deps := newTestDeps()
+		clitest.SetLoggedIn(&deps)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+
+		var stdout, stderr bytes.Buffer
+		clitest.AttachTerminalSink(deps, &stdout)
+		if err := runDomainRemove(context.Background(), deps, root, "", domainOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("runDomainRemove err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		out := stdout.String()
+		for _, want := range []string{
+			"DOMAIN RM slug=test-app host= configured=shop.app.com dns=zone edge=direct",
+			"Removed every hostname this project no longer declares",
+		} {
+			if !strings.Contains(out, want) {
+				t.Errorf("stdout = %q, want it to contain %q", out, want)
+			}
+		}
+		clitest.WaitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("rm with a host unbinds it", func(t *testing.T) {
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		deps := newTestDeps()
+		clitest.SetLoggedIn(&deps)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+
+		var stdout, stderr bytes.Buffer
+		clitest.AttachTerminalSink(deps, &stdout)
+		if err := runDomainRemove(context.Background(), deps, root, "old.app.com", domainOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("runDomainRemove err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		out := stdout.String()
+		for _, want := range []string{"Unbinding old.app.com from the relay edge", "Removed old.app.com"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("stdout = %q, want it to contain %q", out, want)
+			}
+		}
+		clitest.WaitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("rm refuses without a terminal or --yes and removes nothing", func(t *testing.T) {
+		root, _ := clitest.SetUpDeployFixture(t)
+		deps := newTestDeps()
+		clitest.SetLoggedIn(&deps)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+
+		var stdout, stderr bytes.Buffer
+		clitest.AttachTerminalSink(deps, &stdout)
+		err := runDomainRemove(context.Background(), deps, root, "old.app.com", domainOptions{}, &stdout, &stderr, strings.NewReader(""))
+		if err == nil || !strings.Contains(err.Error(), "pass --yes") {
+			t.Fatalf("runDomainRemove without a terminal err = %v, want a refusal naming --yes", err)
+		}
+		if strings.Contains(stdout.String(), "Unbinding") {
+			t.Errorf("stdout = %q, want nothing unbound without consent", stdout.String())
+		}
+	})
+
+	t.Run("rm behind a declined confirmation removes nothing", func(t *testing.T) {
+		root, _ := clitest.SetUpDeployFixture(t)
+		deps := newTestDeps()
+		clitest.SetLoggedIn(&deps)
+		deps.StdinIsTerminal = func(io.Reader) bool { return true }
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+
+		var stdout, stderr bytes.Buffer
+		clitest.AttachTerminalSink(deps, &stdout)
+		if err := runDomainRemove(context.Background(), deps, root, "old.app.com", domainOptions{}, &stdout, &stderr, strings.NewReader("n\n")); err != nil {
+			t.Fatalf("runDomainRemove err = %v; stdout=%s", err, stdout.String())
+		}
+		out := stdout.String()
+		if !strings.Contains(out, "Not confirmed, so this run changes nothing") {
+			t.Errorf("stdout = %q, want a declined confirmation to say so", out)
+		}
+		if strings.Contains(out, "Unbinding") || strings.Contains(out, "Removed old.app.com") {
+			t.Errorf("stdout = %q, want nothing removed behind a declined confirmation", out)
+		}
+	})
+
+	t.Run("status shows the certificate, the records, the probe and what serves each host", func(t *testing.T) {
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		writeProductionConfig(t, root)
+		deps := newTestDeps()
+		clitest.SetLoggedIn(&deps)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+		t.Setenv(clitest.FakeDomainCertEnvVar, "ISSUED fake-certificate/abcd-1234")
+		t.Setenv(clitest.FakeDomainExpiresEnvVar, "1757000000")
+		t.Setenv(clitest.FakeGlobalDomainManualRecordsEnvVar, "_ocel.shop.app.com CNAME _target.validations.fake.example")
+
+		var stdout, stderr bytes.Buffer
+		clitest.AttachTerminalSink(deps, &stderr)
+		if err := runDomainStatus(context.Background(), deps, root, domainOptions{}, &stdout, &stderr); err != nil {
+			t.Fatalf("runDomainStatus err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		out := stdout.String()
+		for _, want := range []string{
+			"shop.app.com  READY",
+			"Certificate          ISSUED  fake-certificate/abcd-1234",
+			"Renewal              expires 2025-09-04T15:33:20Z",
+			"Records ocel wrote   shop.app.com AAAA 100::",
+			"Records you own      _ocel.shop.app.com CNAME _target.validations.fake.example",
+			"Last probe           2025-08-18T06:53:20Z  answered",
+			"Served by            relay",
+		} {
+			if !strings.Contains(out, want) {
+				t.Errorf("stdout = %q, want it to contain %q", out, want)
+			}
+		}
+		clitest.WaitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("status --wait polls until every hostname is ready", func(t *testing.T) {
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		writeProductionConfig(t, root)
+		deps := newTestDeps()
+		clitest.SetLoggedIn(&deps)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+		t.Setenv(clitest.FakeDomainReadyAfterEnvVar, "2")
+		quickDomainWait(t)
+
+		var stdout, stderr bytes.Buffer
+		clitest.AttachTerminalSink(deps, &stderr)
+		if err := runDomainStatus(context.Background(), deps, root, domainOptions{wait: true}, &stdout, &stderr); err != nil {
+			t.Fatalf("runDomainStatus --wait err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		out := stdout.String()
+		if !strings.Contains(out, "shop.app.com  READY") {
+			t.Errorf("stdout = %q, want --wait to keep polling until the host is ready", out)
+		}
+		if strings.Contains(out, "PENDING") {
+			t.Errorf("stdout = %q, want only the ready status rendered", out)
+		}
+		clitest.WaitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("status without --wait renders what is outstanding and does not poll", func(t *testing.T) {
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		writeProductionConfig(t, root)
+		deps := newTestDeps()
+		clitest.SetLoggedIn(&deps)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+		t.Setenv(clitest.FakeDomainReadyAfterEnvVar, "5")
+
+		var stdout, stderr bytes.Buffer
+		clitest.AttachTerminalSink(deps, &stderr)
+		if err := runDomainStatus(context.Background(), deps, root, domainOptions{}, &stdout, &stderr); err != nil {
+			t.Fatalf("runDomainStatus err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		out := stdout.String()
+		for _, want := range []string{"shop.app.com  PENDING", "Outstanding", "does not answer through the relay edge yet"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("stdout = %q, want it to contain %q", out, want)
+			}
+		}
+		clitest.WaitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("status says so when the project declares no production hostname", func(t *testing.T) {
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		deps := newTestDeps()
+		clitest.SetLoggedIn(&deps)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+
+		var stdout, stderr bytes.Buffer
+		clitest.AttachTerminalSink(deps, &stderr)
+		if err := runDomainStatus(context.Background(), deps, root, domainOptions{}, &stdout, &stderr); err != nil {
+			t.Fatalf("runDomainStatus err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "declares no domains.production") {
+			t.Errorf("stdout = %q, want it to say nothing is declared", stdout.String())
+		}
+		clitest.WaitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("status --wait rides out a provider that is briefly unreachable", func(t *testing.T) {
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		writeProductionConfig(t, root)
+		deps := newTestDeps()
+		clitest.SetLoggedIn(&deps)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+		t.Setenv(clitest.FakeDomainReadyAfterEnvVar, "3")
+		t.Setenv(clitest.FakeDomainFailUntilEnvVar, "3")
+		quickDomainWait(t)
+
+		var stdout, stderr bytes.Buffer
+		clitest.AttachTerminalSink(deps, &stderr)
+		if err := runDomainStatus(context.Background(), deps, root, domainOptions{wait: true}, &stdout, &stderr); err != nil {
+			t.Fatalf("runDomainStatus --wait err = %v, want a wait that outlasts a couple of failed checks; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "shop.app.com  READY") {
+			t.Errorf("stdout = %q, want the wait to reach ready", stdout.String())
+		}
+		clitest.WaitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("status --wait gives up once the provider keeps failing", func(t *testing.T) {
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		writeProductionConfig(t, root)
+		deps := newTestDeps()
+		clitest.SetLoggedIn(&deps)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+		t.Setenv(clitest.FakeDomainReadyAfterEnvVar, "99")
+		t.Setenv(clitest.FakeDomainFailUntilEnvVar, "99")
+		quickDomainWait(t)
+
+		var stdout, stderr bytes.Buffer
+		clitest.AttachTerminalSink(deps, &stderr)
+		err := runDomainStatus(context.Background(), deps, root, domainOptions{wait: true}, &stdout, &stderr)
+		if err == nil || !strings.Contains(stderr.String(), "failed checks in a row") {
+			t.Fatalf("runDomainStatus --wait err = %v; stderr=%s, want it to give up naming the repeated failures", err, stderr.String())
+		}
+		clitest.WaitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("status --wait fails fast when the project declares no production hostname", func(t *testing.T) {
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		deps := newTestDeps()
+		clitest.SetLoggedIn(&deps)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+		quickDomainWait(t)
+
+		var stdout, stderr bytes.Buffer
+		clitest.AttachTerminalSink(deps, &stderr)
+		err := runDomainStatus(context.Background(), deps, root, domainOptions{wait: true}, &stdout, &stderr)
+		if err == nil || !strings.Contains(stderr.String(), "nothing to wait for") {
+			t.Fatalf("runDomainStatus --wait err = %v; stderr=%s, want it to refuse at once with nothing declared", err, stderr.String())
+		}
+		clitest.WaitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("release refuses non-interactively without --yes", func(t *testing.T) {
+		root, _ := clitest.SetUpDeployFixture(t)
+		deps := newTestDeps()
+		clitest.SetLoggedIn(&deps)
+
+		var stdout, stderr bytes.Buffer
+		clitest.AttachTerminalSink(deps, &stdout)
+		err := runDomainRelease(context.Background(), deps, root, domainOptions{preview: true}, &stdout, &stderr, strings.NewReader(""))
+		if err == nil {
+			t.Fatal("runDomainRelease err = nil, want it to refuse without a terminal")
+		}
+		if !strings.Contains(err.Error(), "--yes") {
+			t.Errorf("err = %v, want it to point at --yes", err)
+		}
+	})
+}
+
+func TestDomainStatusNamesWhoRenewsACertificateOcelDoesNotOwn(t *testing.T) {
+	t.Parallel()
+
+	for what, host := range map[string]*contractv1.ProductionHostname{
+		"one the box's proxy obtained": {
+			Hostname: "shop.app.com",
+			Declared: true,
+			Ready:    true,
+			Certificate: &contractv1.CertificateState{
+				CertificateId:     "proxy:shop.app.com",
+				CertificateStatus: "SERVING",
+			},
+			RenewalStatus: "the proxy on this box obtained it over http-01 and renews it; ocel issues and renews nothing here",
+		},
+		"one the operator pinned": {
+			Hostname: "pr-7.preview.app.com",
+			Declared: true,
+			Ready:    true,
+			Certificate: &contractv1.CertificateState{
+				CertificateId:     "pem:/etc/ocel/preview/certs/wildcard",
+				CertificateStatus: "PINNED",
+			},
+			RenewalStatus: "you placed it on this box and you renew it; ocel issues and renews nothing here",
+			ExpiresAt:     1757000000,
+			ExpiringSoon:  true,
+		},
+	} {
+		var out bytes.Buffer
+		renderDomainStatus(&out, &contractv1.GetHostnameStatusResponse{
+			Hostnames: []*contractv1.ProductionHostname{host},
+		}, "ocel.config.ts")
+		rendered := out.String()
+
+		if !strings.Contains(rendered, "Certificate") || !strings.Contains(rendered, host.GetCertificate().GetCertificateId()) {
+			t.Errorf("status for %s prints no certificate line:\n%s", what, rendered)
+		}
+		if !strings.Contains(rendered, "Renewal") || !strings.Contains(rendered, host.GetRenewalStatus()) {
+			t.Errorf("status for %s prints no renewal line naming who renews it, which reads as no tls rather than tls you do not manage:\n%s", what, rendered)
+		}
+		if strings.Contains(rendered, "ocel renews") || strings.Contains(rendered, "ocel will renew") {
+			t.Errorf("status for %s claims ocel renews something:\n%s", what, rendered)
+		}
+	}
+}
+
+func TestDomainStatusSaysNothingAboutExpiryForACertificateSomethingElseRenews(t *testing.T) {
+	t.Parallel()
+
+	var out bytes.Buffer
+	renderDomainStatus(&out, &contractv1.GetHostnameStatusResponse{
+		Hostnames: []*contractv1.ProductionHostname{{
+			Hostname:      "shop.app.com",
+			Declared:      true,
+			Ready:         true,
+			Certificate:   &contractv1.CertificateState{CertificateId: "proxy:shop.app.com", CertificateStatus: "SERVING"},
+			RenewalStatus: "the proxy on this box obtained it over http-01 and renews it; ocel issues and renews nothing here",
+		}},
+	}, "ocel.config.ts")
+
+	if !strings.Contains(out.String(), "no expiry reported") {
+		t.Errorf("status reports an expiry for a certificate the proxy renews, and the number is decorative wherever renewal is healthy:\n%s", out.String())
+	}
+	if strings.Contains(out.String(), "EXPIRING SOON") {
+		t.Errorf("status warns about a certificate something else renews:\n%s", out.String())
+	}
+}
+
+func TestDomainLsListsThisProjectsOwnHostnamesWithoutPreview(t *testing.T) {
+	root, sockPath := clitest.SetUpDeployFixture(t)
+	writeProductionConfig(t, root)
+	deps := newTestDeps()
+	clitest.SetLoggedIn(&deps)
+	t.Setenv(clitest.FakeInfraTierEnvVar, "production")
+	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+	t.Setenv(clitest.FakeDomainCertEnvVar, "ISSUED proxy:shop.app.com")
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(deps, &stderr)
+	if err := runDomainList(context.Background(), deps, root, domainOptions{}, &stdout, &stderr); err != nil {
+		t.Fatalf("runDomainList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{"shop.app.com", "READY"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("stdout = %q, want it to name %q: `ocel domain ls` lists what this project has bound", out, want)
+		}
+	}
+	clitest.WaitForNoStaleSocket(t, sockPath)
+}
+
+func TestDomainLsReadsStateWhileStatusChecksTheEdgeLive(t *testing.T) {
+	root, sockPath := clitest.SetUpDeployFixture(t)
+	writeProductionConfig(t, root)
+	journal := filepath.Join(t.TempDir(), "hostname.journal")
+	t.Setenv(clitest.FakeHostnameJournalEnvVar, journal)
+	deps := newTestDeps()
+	clitest.SetLoggedIn(&deps)
+	t.Setenv(clitest.FakeInfraTierEnvVar, "production")
+	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(deps, &stderr)
+	if err := runDomainList(context.Background(), deps, root, domainOptions{}, &stdout, &stderr); err != nil {
+		t.Fatalf("runDomainList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	if asked := readJournal(t, journal); len(asked) != 1 || !strings.Contains(asked[0], "probe=false") {
+		t.Errorf("`ocel domain ls` asked %q, want it to read state: a probe reaches every declared hostname over the network on a timeout each, so listing waits as long as the project has hostnames", asked)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if err := runDomainStatus(context.Background(), deps, root, domainOptions{}, &stdout, &stderr); err != nil {
+		t.Fatalf("runDomainStatus err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	asked := readJournal(t, journal)
+	if len(asked) != 2 || !strings.Contains(asked[1], "probe=true") {
+		t.Errorf("`ocel domain status` asked %q, want it to check the edge live: it is the acceptance test for a bind, and a hostname that stopped answering looks served in the record until something asks", asked)
+	}
+	clitest.WaitForNoStaleSocket(t, sockPath)
+}
+
+func readJournal(t *testing.T, path string) []string {
+	t.Helper()
+	read, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read the journal the fake provider wrote: %v", err)
+	}
+	return strings.Split(strings.TrimSpace(string(read)), "\n")
+}
+
+func TestReleasingThePreviewDomainAsksForItsNameWhileTheRunIsHeldAfterThePlanItShows(t *testing.T) {
+	root, _ := clitest.SetUpDeployFixture(t)
+	deps := newTestDeps()
+	clitest.SetLoggedIn(&deps)
+	deps.StdinIsTerminal = func(io.Reader) bool { return true }
+	deps.Presentation = func(io.Writer) terminal.Presentation {
+		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
+	}
+	t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
+	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+	t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.acme.com")
+
+	var stream, stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(deps, &stream)
+	if err := runDomainRelease(context.Background(), deps, root, domainOptions{preview: true}, &stdout, &stderr, strings.NewReader("preview.acme.com\n")); err != nil {
+		t.Fatalf("runDomainRelease err = %v; stream=%s stdout=%s stderr=%s", err, stream.String(), stdout.String(), stderr.String())
+	}
+
+	evs := clitest.RunEvents(t, stream.String())
+	shown := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetPlan() != nil })
+	if shown < 0 || evs[shown].GetPhase() != progressv1.Phase_PHASE_PLAN {
+		t.Fatalf("the release plan was not shown in the plan phase: %s", stream.String())
+	}
+	waiting := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetWaiting() != nil })
+	if waiting < shown {
+		t.Fatalf("held at event %d, plan shown at %d: want the run held to ask once the plan is shown: %s", waiting, shown, stream.String())
+	}
+	resumed := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetResumed() != nil })
+	if resumed < waiting || evs[resumed].GetResumed().GetReason() != "answered" {
+		t.Fatalf("resumed at event %d, held at %d: want the run resumed once answered: %s", resumed, waiting, stream.String())
+	}
+	if result := evs[len(evs)-1].GetSummary(); !result.GetSuccess() || result.GetHeadline() != "Released *.preview.acme.com" {
+		t.Errorf("result = %v, want the run to end reporting the released domain", result)
+	}
+}

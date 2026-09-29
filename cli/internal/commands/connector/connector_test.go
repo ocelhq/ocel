@@ -15,8 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"google.golang.org/protobuf/encoding/protojson"
-
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/commands/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console"
@@ -220,7 +218,7 @@ func TestAddRelaysWhatTheProviderSaysWhileItInstallsThroughItsRun(t *testing.T) 
 		t.Fatalf("runAdd err = %v\n%s", err, stream.String())
 	}
 
-	evs := runEvents(t, stream.String())
+	evs := clitest.RunEvents(t, stream.String())
 	if !slices.ContainsFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetMessage() == "wrote the connector" }) {
 		t.Errorf("stream = %s, want the line the provider said while installing", stream.String())
 	}
@@ -597,7 +595,7 @@ func jsonDeps() cmddeps.Deps {
 
 func failure(t *testing.T, stream string) string {
 	t.Helper()
-	evs := runEvents(t, stream)
+	evs := clitest.RunEvents(t, stream)
 	if len(evs) == 0 || evs[len(evs)-1].GetSummary() == nil {
 		t.Fatalf("stream = %s, want it to end with the run's result", stream)
 	}
@@ -606,22 +604,6 @@ func failure(t *testing.T, stream string) string {
 		t.Fatalf("result = %v, want the run to fail", result)
 	}
 	return result.GetDetail()
-}
-
-func runEvents(t *testing.T, out string) []*streamv1.RunEvent {
-	t.Helper()
-	var evs []*streamv1.RunEvent
-	for _, line := range strings.Split(out, "\n") {
-		if line == "" {
-			continue
-		}
-		ev := &streamv1.RunEvent{}
-		if err := protojson.Unmarshal([]byte(line), ev); err != nil {
-			t.Fatalf("line %q is not a protojson RunEvent: %v", line, err)
-		}
-		evs = append(evs, ev)
-	}
-	return evs
 }
 
 func TestStatusForAConfigReadsItsTargetInTheCheckPhaseOfItsRunAndPrintsWhatTheConsoleHasAloneOnStdout(t *testing.T) {
@@ -641,7 +623,7 @@ func TestStatusForAConfigReadsItsTargetInTheCheckPhaseOfItsRunAndPrintsWhatTheCo
 		t.Fatalf("runStatus err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
-	evs := runEvents(t, stderr.String())
+	evs := clitest.RunEvents(t, stderr.String())
 	if len(evs) == 0 || evs[0].GetStarted() == nil || evs[0].GetPhase() != progressv1.Phase_PHASE_CHECK {
 		t.Fatalf("stream = %s, want a run that opens with the check phase that starts the provider", stderr.String())
 	}
