@@ -16,4 +16,5 @@ type Hooks struct {
 	CheckCodeEntitlement          func(ctx context.Context) (CodeEntitlement, error)
 	DescribeCredentialPermissions func(purpose CredentialPurpose) (CredentialDocument, error)
 	EnsureClientCertificate       func(ctx context.Context, hostname string) (string, error)
+	PurgeHostnames                func(ctx context.Context, hostnames []string) error
 }
