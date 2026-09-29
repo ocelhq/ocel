@@ -124,6 +124,14 @@ func TestNewBuildRefusesPartsNothingCanName(t *testing.T) {
 	}
 }
 
+func TestNewBuildRefusesABuildThatNamesNoPromotion(t *testing.T) {
+	t.Parallel()
+
+	if build, err := provider.NewBuild(deploymentID, "", "prod", ""); err == nil {
+		t.Errorf("NewBuild() with no promotion ID = %s, want a refusal: every deploy of that output would claim the one build and its stack", build)
+	}
+}
+
 func TestParseBuildRefusesARenderingThatIsNotOneIdAndOneFingerprint(t *testing.T) {
 	t.Parallel()
 

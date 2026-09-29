@@ -26,6 +26,9 @@ func NewBuild(deploymentID, promotionID, environment, values string) (Build, err
 	if err := naming.ValidateDeploymentID(deploymentID); err != nil {
 		return Build{}, refusal.Refuse(refusal.CodeInvalid, "deployment identity: %s", err.Error())
 	}
+	if promotionID == "" {
+		return Build{}, refusal.Refuse(refusal.CodeInvalid, "deployment identity for %q requires the promotion its deploy makes, so no two deploys claim one build", deploymentID)
+	}
 	if environment == "" {
 		return Build{}, refusal.Refuse(refusal.CodeInvalid, "deployment identity for %q requires an environment name", deploymentID)
 	}
