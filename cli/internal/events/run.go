@@ -34,7 +34,7 @@ type Run struct {
 	open    []*Scope
 	changed bool
 	apps    []*progressv1.AppResult
-	success *streamv1.RunResultEvent
+	success *streamv1.RunSummary
 
 	endOnce sync.Once
 }
@@ -53,7 +53,7 @@ func (r *Run) End(errp *error) {
 		if r.trace != nil {
 			result.LogPath = r.trace.LogPath()
 		}
-		r.bus.send(&streamv1.RunEvent{Level: resultLevel(result), Body: &streamv1.RunEvent_Result{Result: result}})
+		r.bus.send(&streamv1.RunEvent{Level: resultLevel(result), Body: &streamv1.RunEvent_Summary{Summary: result}})
 		if r.trace != nil {
 			r.bus.detach(r.trace)
 			_ = r.trace.Close()
@@ -70,24 +70,24 @@ func (r *Run) interrupt() {
 	r.End(&err)
 }
 
-func (r *Run) result(err error) (*streamv1.RunResultEvent, int) {
+func (r *Run) result(err error) (*streamv1.RunSummary, int) {
 	switch {
 	case err == nil:
 		r.mu.Lock()
 		defer r.mu.Unlock()
-		result := &streamv1.RunResultEvent{Success: true, Headline: r.verdict("finished")}
+		result := &streamv1.RunSummary{Success: true, Headline: r.verdict("finished")}
 		if r.success != nil {
 			result = r.success
 		}
 		return result, 0
 	case r.ctx.Err() != nil:
-		result := &streamv1.RunResultEvent{Interrupted: true, Headline: r.verdict("cancelled")}
+		result := &streamv1.RunSummary{Interrupted: true, Headline: r.verdict("cancelled")}
 		if r.mayHaveChanged() {
 			result.Detail = fmt.Sprintf("Resources may be partially created.\nRe-run `%s` to reconcile.", r.command)
 		}
 		return result, exitcode.Interrupt
 	}
-	result := &streamv1.RunResultEvent{Headline: r.verdict("failed"), Detail: err.Error()}
+	result := &streamv1.RunSummary{Headline: r.verdict("failed"), Detail: err.Error()}
 	var missing missingVariablesError
 	if errors.As(err, &missing) {
 		result.Missing = missing.Variables()
@@ -111,10 +111,10 @@ func (r *Run) Finish(headline string) {
 func (r *Run) Deployed(headline string, urlNotes []string, flip *progressv1.FlipBound) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.success = &streamv1.RunResultEvent{Success: true, Headline: headline, UrlNotes: urlNotes, FlipBound: flip}
+	r.success = &streamv1.RunSummary{Success: true, Headline: headline, UrlNotes: urlNotes, FlipBound: flip}
 }
 
-func resultLevel(result *streamv1.RunResultEvent) progressv1.Level {
+func resultLevel(result *streamv1.RunSummary) progressv1.Level {
 	switch {
 	case result.GetInterrupted():
 		return progressv1.Level_LEVEL_WARN

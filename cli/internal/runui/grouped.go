@@ -179,9 +179,9 @@ func (s *GroupedSink) Receive(ev *streamv1.RunEvent) {
 		s.gate(planLines(s.present, ev.GetPlan()))
 	case ev.GetDnsManualRecords() != nil:
 		s.dnsRecords(ev)
-	case ev.GetOutcome() != nil:
-		s.promotion = ev.GetOutcome().GetPromotionId()
 	case ev.GetResult() != nil:
+		s.promotion = ev.GetResult().GetPromotionId()
+	case ev.GetSummary() != nil:
 		s.conclude(ev)
 	case ev.GetLevel() == progressv1.Level_LEVEL_DEBUG && !s.present.Verbose:
 	case ev.GetOutput() != nil:

@@ -28,12 +28,12 @@ const (
 
 type RunEvent struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
-	Time    *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=time,proto3" json:"time,omitempty"`
-	Level   v1.Level               `protobuf:"varint,9,opt,name=level,proto3,enum=common.progress.v1.Level" json:"level,omitempty"`
-	Phase   v1.Phase               `protobuf:"varint,10,opt,name=phase,proto3,enum=common.progress.v1.Phase" json:"phase,omitempty"`
-	Subject string                 `protobuf:"bytes,11,opt,name=subject,proto3" json:"subject,omitempty"`
-	Message string                 `protobuf:"bytes,12,opt,name=message,proto3" json:"message,omitempty"`
-	SpanId  []byte                 `protobuf:"bytes,13,opt,name=span_id,json=spanId,proto3" json:"span_id,omitempty"`
+	Time    *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=time,proto3" json:"time,omitempty"`
+	Level   v1.Level               `protobuf:"varint,10,opt,name=level,proto3,enum=common.progress.v1.Level" json:"level,omitempty"`
+	Phase   v1.Phase               `protobuf:"varint,11,opt,name=phase,proto3,enum=common.progress.v1.Phase" json:"phase,omitempty"`
+	Subject string                 `protobuf:"bytes,12,opt,name=subject,proto3" json:"subject,omitempty"`
+	Message string                 `protobuf:"bytes,13,opt,name=message,proto3" json:"message,omitempty"`
+	SpanId  []byte                 `protobuf:"bytes,14,opt,name=span_id,json=spanId,proto3" json:"span_id,omitempty"`
 	// Types that are valid to be assigned to Body:
 	//
 	//	*RunEvent_Started
@@ -41,10 +41,10 @@ type RunEvent struct {
 	//	*RunEvent_Output
 	//	*RunEvent_Plan
 	//	*RunEvent_DnsManualRecords
-	//	*RunEvent_Outcome
+	//	*RunEvent_Result
 	//	*RunEvent_Waiting
 	//	*RunEvent_Resumed
-	//	*RunEvent_Result
+	//	*RunEvent_Summary
 	//	*RunEvent_Identity
 	Body          isRunEvent_Body `protobuf_oneof:"body"`
 	unknownFields protoimpl.UnknownFields
@@ -175,10 +175,10 @@ func (x *RunEvent) GetDnsManualRecords() *v1.DnsManualRecordsEvent {
 	return nil
 }
 
-func (x *RunEvent) GetOutcome() *v1.ResultEvent {
+func (x *RunEvent) GetResult() *v1.OperationResult {
 	if x != nil {
-		if x, ok := x.Body.(*RunEvent_Outcome); ok {
-			return x.Outcome
+		if x, ok := x.Body.(*RunEvent_Result); ok {
+			return x.Result
 		}
 	}
 	return nil
@@ -202,10 +202,10 @@ func (x *RunEvent) GetResumed() *ResumedEvent {
 	return nil
 }
 
-func (x *RunEvent) GetResult() *RunResultEvent {
+func (x *RunEvent) GetSummary() *RunSummary {
 	if x != nil {
-		if x, ok := x.Body.(*RunEvent_Result); ok {
-			return x.Result
+		if x, ok := x.Body.(*RunEvent_Summary); ok {
+			return x.Summary
 		}
 	}
 	return nil
@@ -225,43 +225,43 @@ type isRunEvent_Body interface {
 }
 
 type RunEvent_Started struct {
-	Started *v1.Started `protobuf:"bytes,14,opt,name=started,proto3,oneof"`
+	Started *v1.Started `protobuf:"bytes,15,opt,name=started,proto3,oneof"`
 }
 
 type RunEvent_Ended struct {
-	Ended *v1.Ended `protobuf:"bytes,15,opt,name=ended,proto3,oneof"`
+	Ended *v1.Ended `protobuf:"bytes,16,opt,name=ended,proto3,oneof"`
 }
 
 type RunEvent_Output struct {
-	Output *v1.Output `protobuf:"bytes,16,opt,name=output,proto3,oneof"`
+	Output *v1.Output `protobuf:"bytes,17,opt,name=output,proto3,oneof"`
 }
 
 type RunEvent_Plan struct {
-	Plan *v11.ChangePlan `protobuf:"bytes,1,opt,name=plan,proto3,oneof"`
+	Plan *v11.ChangePlan `protobuf:"bytes,8,opt,name=plan,proto3,oneof"`
 }
 
 type RunEvent_DnsManualRecords struct {
-	DnsManualRecords *v1.DnsManualRecordsEvent `protobuf:"bytes,18,opt,name=dns_manual_records,json=dnsManualRecords,proto3,oneof"`
-}
-
-type RunEvent_Outcome struct {
-	Outcome *v1.ResultEvent `protobuf:"bytes,19,opt,name=outcome,proto3,oneof"`
-}
-
-type RunEvent_Waiting struct {
-	Waiting *WaitingEvent `protobuf:"bytes,3,opt,name=waiting,proto3,oneof"`
-}
-
-type RunEvent_Resumed struct {
-	Resumed *ResumedEvent `protobuf:"bytes,4,opt,name=resumed,proto3,oneof"`
+	DnsManualRecords *v1.DnsManualRecordsEvent `protobuf:"bytes,7,opt,name=dns_manual_records,json=dnsManualRecords,proto3,oneof"`
 }
 
 type RunEvent_Result struct {
-	Result *RunResultEvent `protobuf:"bytes,5,opt,name=result,proto3,oneof"`
+	Result *v1.OperationResult `protobuf:"bytes,3,opt,name=result,proto3,oneof"`
+}
+
+type RunEvent_Waiting struct {
+	Waiting *WaitingEvent `protobuf:"bytes,20,opt,name=waiting,proto3,oneof"`
+}
+
+type RunEvent_Resumed struct {
+	Resumed *ResumedEvent `protobuf:"bytes,21,opt,name=resumed,proto3,oneof"`
+}
+
+type RunEvent_Summary struct {
+	Summary *RunSummary `protobuf:"bytes,22,opt,name=summary,proto3,oneof"`
 }
 
 type RunEvent_Identity struct {
-	Identity *IdentityEvent `protobuf:"bytes,7,opt,name=identity,proto3,oneof"`
+	Identity *IdentityEvent `protobuf:"bytes,23,opt,name=identity,proto3,oneof"`
 }
 
 func (*RunEvent_Started) isRunEvent_Body() {}
@@ -274,13 +274,13 @@ func (*RunEvent_Plan) isRunEvent_Body() {}
 
 func (*RunEvent_DnsManualRecords) isRunEvent_Body() {}
 
-func (*RunEvent_Outcome) isRunEvent_Body() {}
+func (*RunEvent_Result) isRunEvent_Body() {}
 
 func (*RunEvent_Waiting) isRunEvent_Body() {}
 
 func (*RunEvent_Resumed) isRunEvent_Body() {}
 
-func (*RunEvent_Result) isRunEvent_Body() {}
+func (*RunEvent_Summary) isRunEvent_Body() {}
 
 func (*RunEvent_Identity) isRunEvent_Body() {}
 
@@ -708,37 +708,36 @@ func (x *ResumedEvent) GetReason() string {
 	return ""
 }
 
-type RunResultEvent struct {
-	state       protoimpl.MessageState `protogen:"open.v1"`
-	Success     bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	Detail      string                 `protobuf:"bytes,2,opt,name=detail,proto3" json:"detail,omitempty"`
-	DurationMs  int64                  `protobuf:"varint,3,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
-	LogPath     string                 `protobuf:"bytes,4,opt,name=log_path,json=logPath,proto3" json:"log_path,omitempty"`
-	Headline    string                 `protobuf:"bytes,5,opt,name=headline,proto3" json:"headline,omitempty"`
-	UrlNotes    []string               `protobuf:"bytes,7,rep,name=url_notes,json=urlNotes,proto3" json:"url_notes,omitempty"`
-	FlipBound   *v1.FlipBound          `protobuf:"bytes,8,opt,name=flip_bound,json=flipBound,proto3" json:"flip_bound,omitempty"`
-	Interrupted bool                   `protobuf:"varint,9,opt,name=interrupted,proto3" json:"interrupted,omitempty"`
-	// common.progress.v1.ResultEvent.apps as the provider reported it.
-	Apps          []*v1.AppResult   `protobuf:"bytes,10,rep,name=apps,proto3" json:"apps,omitempty"`
-	Missing       *MissingVariables `protobuf:"bytes,11,opt,name=missing,proto3" json:"missing,omitempty"`
+type RunSummary struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Detail        string                 `protobuf:"bytes,2,opt,name=detail,proto3" json:"detail,omitempty"`
+	DurationMs    int64                  `protobuf:"varint,3,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
+	LogPath       string                 `protobuf:"bytes,4,opt,name=log_path,json=logPath,proto3" json:"log_path,omitempty"`
+	Headline      string                 `protobuf:"bytes,5,opt,name=headline,proto3" json:"headline,omitempty"`
+	UrlNotes      []string               `protobuf:"bytes,7,rep,name=url_notes,json=urlNotes,proto3" json:"url_notes,omitempty"`
+	FlipBound     *v1.FlipBound          `protobuf:"bytes,8,opt,name=flip_bound,json=flipBound,proto3" json:"flip_bound,omitempty"`
+	Interrupted   bool                   `protobuf:"varint,9,opt,name=interrupted,proto3" json:"interrupted,omitempty"`
+	Apps          []*v1.AppResult        `protobuf:"bytes,10,rep,name=apps,proto3" json:"apps,omitempty"`
+	Missing       *MissingVariables      `protobuf:"bytes,11,opt,name=missing,proto3" json:"missing,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *RunResultEvent) Reset() {
-	*x = RunResultEvent{}
+func (x *RunSummary) Reset() {
+	*x = RunSummary{}
 	mi := &file_cli_stream_v1_stream_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *RunResultEvent) String() string {
+func (x *RunSummary) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*RunResultEvent) ProtoMessage() {}
+func (*RunSummary) ProtoMessage() {}
 
-func (x *RunResultEvent) ProtoReflect() protoreflect.Message {
+func (x *RunSummary) ProtoReflect() protoreflect.Message {
 	mi := &file_cli_stream_v1_stream_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -750,75 +749,75 @@ func (x *RunResultEvent) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RunResultEvent.ProtoReflect.Descriptor instead.
-func (*RunResultEvent) Descriptor() ([]byte, []int) {
+// Deprecated: Use RunSummary.ProtoReflect.Descriptor instead.
+func (*RunSummary) Descriptor() ([]byte, []int) {
 	return file_cli_stream_v1_stream_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *RunResultEvent) GetSuccess() bool {
+func (x *RunSummary) GetSuccess() bool {
 	if x != nil {
 		return x.Success
 	}
 	return false
 }
 
-func (x *RunResultEvent) GetDetail() string {
+func (x *RunSummary) GetDetail() string {
 	if x != nil {
 		return x.Detail
 	}
 	return ""
 }
 
-func (x *RunResultEvent) GetDurationMs() int64 {
+func (x *RunSummary) GetDurationMs() int64 {
 	if x != nil {
 		return x.DurationMs
 	}
 	return 0
 }
 
-func (x *RunResultEvent) GetLogPath() string {
+func (x *RunSummary) GetLogPath() string {
 	if x != nil {
 		return x.LogPath
 	}
 	return ""
 }
 
-func (x *RunResultEvent) GetHeadline() string {
+func (x *RunSummary) GetHeadline() string {
 	if x != nil {
 		return x.Headline
 	}
 	return ""
 }
 
-func (x *RunResultEvent) GetUrlNotes() []string {
+func (x *RunSummary) GetUrlNotes() []string {
 	if x != nil {
 		return x.UrlNotes
 	}
 	return nil
 }
 
-func (x *RunResultEvent) GetFlipBound() *v1.FlipBound {
+func (x *RunSummary) GetFlipBound() *v1.FlipBound {
 	if x != nil {
 		return x.FlipBound
 	}
 	return nil
 }
 
-func (x *RunResultEvent) GetInterrupted() bool {
+func (x *RunSummary) GetInterrupted() bool {
 	if x != nil {
 		return x.Interrupted
 	}
 	return false
 }
 
-func (x *RunResultEvent) GetApps() []*v1.AppResult {
+func (x *RunSummary) GetApps() []*v1.AppResult {
 	if x != nil {
 		return x.Apps
 	}
 	return nil
 }
 
-func (x *RunResultEvent) GetMissing() *MissingVariables {
+func (x *RunSummary) GetMissing() *MissingVariables {
 	if x != nil {
 		return x.Missing
 	}
@@ -831,24 +830,24 @@ const file_cli_stream_v1_stream_proto_rawDesc = "" +
 	"\n" +
 	"\x1acli/stream/v1/stream.proto\x12\rcli.stream.v1\x1a\x1bbuf/validate/validate.proto\x1a'common/environment/v1/environment.proto\x1a\x19common/plan/v1/plan.proto\x1a!common/progress/v1/progress.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd0\x06\n" +
 	"\bRunEvent\x12.\n" +
-	"\x04time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12/\n" +
-	"\x05level\x18\t \x01(\x0e2\x19.common.progress.v1.LevelR\x05level\x12/\n" +
-	"\x05phase\x18\n" +
-	" \x01(\x0e2\x19.common.progress.v1.PhaseR\x05phase\x12\x18\n" +
-	"\asubject\x18\v \x01(\tR\asubject\x12\x18\n" +
-	"\amessage\x18\f \x01(\tR\amessage\x12#\n" +
-	"\aspan_id\x18\r \x01(\fB\n" +
+	"\x04time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12/\n" +
+	"\x05level\x18\n" +
+	" \x01(\x0e2\x19.common.progress.v1.LevelR\x05level\x12/\n" +
+	"\x05phase\x18\v \x01(\x0e2\x19.common.progress.v1.PhaseR\x05phase\x12\x18\n" +
+	"\asubject\x18\f \x01(\tR\asubject\x12\x18\n" +
+	"\amessage\x18\r \x01(\tR\amessage\x12#\n" +
+	"\aspan_id\x18\x0e \x01(\fB\n" +
 	"\xbaH\a\xd8\x01\x01z\x02h\bR\x06spanId\x127\n" +
-	"\astarted\x18\x0e \x01(\v2\x1b.common.progress.v1.StartedH\x00R\astarted\x121\n" +
-	"\x05ended\x18\x0f \x01(\v2\x19.common.progress.v1.EndedH\x00R\x05ended\x124\n" +
-	"\x06output\x18\x10 \x01(\v2\x1a.common.progress.v1.OutputH\x00R\x06output\x120\n" +
-	"\x04plan\x18\x01 \x01(\v2\x1a.common.plan.v1.ChangePlanH\x00R\x04plan\x12Y\n" +
-	"\x12dns_manual_records\x18\x12 \x01(\v2).common.progress.v1.DnsManualRecordsEventH\x00R\x10dnsManualRecords\x12;\n" +
-	"\aoutcome\x18\x13 \x01(\v2\x1f.common.progress.v1.ResultEventH\x00R\aoutcome\x127\n" +
-	"\awaiting\x18\x03 \x01(\v2\x1b.cli.stream.v1.WaitingEventH\x00R\awaiting\x127\n" +
-	"\aresumed\x18\x04 \x01(\v2\x1b.cli.stream.v1.ResumedEventH\x00R\aresumed\x127\n" +
-	"\x06result\x18\x05 \x01(\v2\x1d.cli.stream.v1.RunResultEventH\x00R\x06result\x12:\n" +
-	"\bidentity\x18\a \x01(\v2\x1c.cli.stream.v1.IdentityEventH\x00R\bidentityB\x06\n" +
+	"\astarted\x18\x0f \x01(\v2\x1b.common.progress.v1.StartedH\x00R\astarted\x121\n" +
+	"\x05ended\x18\x10 \x01(\v2\x19.common.progress.v1.EndedH\x00R\x05ended\x124\n" +
+	"\x06output\x18\x11 \x01(\v2\x1a.common.progress.v1.OutputH\x00R\x06output\x120\n" +
+	"\x04plan\x18\b \x01(\v2\x1a.common.plan.v1.ChangePlanH\x00R\x04plan\x12Y\n" +
+	"\x12dns_manual_records\x18\a \x01(\v2).common.progress.v1.DnsManualRecordsEventH\x00R\x10dnsManualRecords\x12=\n" +
+	"\x06result\x18\x03 \x01(\v2#.common.progress.v1.OperationResultH\x00R\x06result\x127\n" +
+	"\awaiting\x18\x14 \x01(\v2\x1b.cli.stream.v1.WaitingEventH\x00R\awaiting\x127\n" +
+	"\aresumed\x18\x15 \x01(\v2\x1b.cli.stream.v1.ResumedEventH\x00R\aresumed\x125\n" +
+	"\asummary\x18\x16 \x01(\v2\x19.cli.stream.v1.RunSummaryH\x00R\asummary\x12:\n" +
+	"\bidentity\x18\x17 \x01(\v2\x1c.cli.stream.v1.IdentityEventH\x00R\bidentityB\x06\n" +
 	"\x04body\"\xb2\x01\n" +
 	"\rIdentityEvent\x12\x18\n" +
 	"\aproject\x18\x01 \x01(\tR\aproject\x12/\n" +
@@ -877,8 +876,9 @@ const file_cli_stream_v1_stream_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$R\x03key\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\"&\n" +
 	"\fResumedEvent\x12\x16\n" +
-	"\x06reason\x18\x01 \x01(\tR\x06reason\"\x85\x03\n" +
-	"\x0eRunResultEvent\x12\x18\n" +
+	"\x06reason\x18\x01 \x01(\tR\x06reason\"\x81\x03\n" +
+	"\n" +
+	"RunSummary\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x16\n" +
 	"\x06detail\x18\x02 \x01(\tR\x06detail\x12\x1f\n" +
 	"\vduration_ms\x18\x03 \x01(\x03R\n" +
@@ -915,7 +915,7 @@ var file_cli_stream_v1_stream_proto_goTypes = []any{
 	(*MissingVariable)(nil),          // 5: cli.stream.v1.MissingVariable
 	(*MissingGroup)(nil),             // 6: cli.stream.v1.MissingGroup
 	(*ResumedEvent)(nil),             // 7: cli.stream.v1.ResumedEvent
-	(*RunResultEvent)(nil),           // 8: cli.stream.v1.RunResultEvent
+	(*RunSummary)(nil),               // 8: cli.stream.v1.RunSummary
 	(*timestamppb.Timestamp)(nil),    // 9: google.protobuf.Timestamp
 	(v1.Level)(0),                    // 10: common.progress.v1.Level
 	(v1.Phase)(0),                    // 11: common.progress.v1.Phase
@@ -924,7 +924,7 @@ var file_cli_stream_v1_stream_proto_goTypes = []any{
 	(*v1.Output)(nil),                // 14: common.progress.v1.Output
 	(*v11.ChangePlan)(nil),           // 15: common.plan.v1.ChangePlan
 	(*v1.DnsManualRecordsEvent)(nil), // 16: common.progress.v1.DnsManualRecordsEvent
-	(*v1.ResultEvent)(nil),           // 17: common.progress.v1.ResultEvent
+	(*v1.OperationResult)(nil),       // 17: common.progress.v1.OperationResult
 	(v12.Tier)(0),                    // 18: common.environment.v1.Tier
 	(*v1.FlipBound)(nil),             // 19: common.progress.v1.FlipBound
 	(*v1.AppResult)(nil),             // 20: common.progress.v1.AppResult
@@ -938,10 +938,10 @@ var file_cli_stream_v1_stream_proto_depIdxs = []int32{
 	14, // 5: cli.stream.v1.RunEvent.output:type_name -> common.progress.v1.Output
 	15, // 6: cli.stream.v1.RunEvent.plan:type_name -> common.plan.v1.ChangePlan
 	16, // 7: cli.stream.v1.RunEvent.dns_manual_records:type_name -> common.progress.v1.DnsManualRecordsEvent
-	17, // 8: cli.stream.v1.RunEvent.outcome:type_name -> common.progress.v1.ResultEvent
+	17, // 8: cli.stream.v1.RunEvent.result:type_name -> common.progress.v1.OperationResult
 	3,  // 9: cli.stream.v1.RunEvent.waiting:type_name -> cli.stream.v1.WaitingEvent
 	7,  // 10: cli.stream.v1.RunEvent.resumed:type_name -> cli.stream.v1.ResumedEvent
-	8,  // 11: cli.stream.v1.RunEvent.result:type_name -> cli.stream.v1.RunResultEvent
+	8,  // 11: cli.stream.v1.RunEvent.summary:type_name -> cli.stream.v1.RunSummary
 	1,  // 12: cli.stream.v1.RunEvent.identity:type_name -> cli.stream.v1.IdentityEvent
 	18, // 13: cli.stream.v1.IdentityEvent.tier:type_name -> common.environment.v1.Tier
 	2,  // 14: cli.stream.v1.IdentityEvent.origin:type_name -> cli.stream.v1.Party
@@ -949,9 +949,9 @@ var file_cli_stream_v1_stream_proto_depIdxs = []int32{
 	4,  // 16: cli.stream.v1.WaitingEvent.missing:type_name -> cli.stream.v1.MissingVariables
 	5,  // 17: cli.stream.v1.MissingVariables.cells:type_name -> cli.stream.v1.MissingVariable
 	6,  // 18: cli.stream.v1.MissingVariables.groups:type_name -> cli.stream.v1.MissingGroup
-	19, // 19: cli.stream.v1.RunResultEvent.flip_bound:type_name -> common.progress.v1.FlipBound
-	20, // 20: cli.stream.v1.RunResultEvent.apps:type_name -> common.progress.v1.AppResult
-	4,  // 21: cli.stream.v1.RunResultEvent.missing:type_name -> cli.stream.v1.MissingVariables
+	19, // 19: cli.stream.v1.RunSummary.flip_bound:type_name -> common.progress.v1.FlipBound
+	20, // 20: cli.stream.v1.RunSummary.apps:type_name -> common.progress.v1.AppResult
+	4,  // 21: cli.stream.v1.RunSummary.missing:type_name -> cli.stream.v1.MissingVariables
 	22, // [22:22] is the sub-list for method output_type
 	22, // [22:22] is the sub-list for method input_type
 	22, // [22:22] is the sub-list for extension type_name
@@ -970,10 +970,10 @@ func file_cli_stream_v1_stream_proto_init() {
 		(*RunEvent_Output)(nil),
 		(*RunEvent_Plan)(nil),
 		(*RunEvent_DnsManualRecords)(nil),
-		(*RunEvent_Outcome)(nil),
+		(*RunEvent_Result)(nil),
 		(*RunEvent_Waiting)(nil),
 		(*RunEvent_Resumed)(nil),
-		(*RunEvent_Result)(nil),
+		(*RunEvent_Summary)(nil),
 		(*RunEvent_Identity)(nil),
 	}
 	type x struct{}

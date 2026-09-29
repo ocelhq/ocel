@@ -344,7 +344,7 @@ func TestDestroyingProductionAsksForTheProjectNameWhileTheRunIsHeldAfterThePlanI
 	if resumed < waiting || evs[resumed].GetResumed().GetReason() != "answered" {
 		t.Fatalf("resumed at event %d, held at %d: want the run resumed once answered: %s", resumed, waiting, stream.String())
 	}
-	if result := evs[len(evs)-1].GetResult(); !result.GetSuccess() || result.GetHeadline() != "Destroyed project test-app" {
+	if result := evs[len(evs)-1].GetSummary(); !result.GetSuccess() || result.GetHeadline() != "Destroyed project test-app" {
 		t.Errorf("result = %v, want the run to end reporting the destroyed project", result)
 	}
 }

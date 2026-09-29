@@ -284,7 +284,7 @@ func pendingOutcomes(apps []provider.AppEntry) []*progressv1.AppResult {
 	return outcomes
 }
 
-func (r *deployRun) reportApps(result *progressv1.ResultEvent) {
+func (r *deployRun) reportApps(result *progressv1.OperationResult) {
 	result.Apps = r.outcomes
 }
 
@@ -1359,7 +1359,7 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 }
 
 func (r *deployRun) result(promotion router.Promotion, flip router.FlipBound) (*progressv1.OperationEvent, error) {
-	result := &progressv1.ResultEvent{
+	result := &progressv1.OperationResult{
 		Success:     true,
 		PromotionId: promotion.PromotionID,
 		FlipBound:   flipBoundProto(&flip),

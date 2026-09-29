@@ -127,7 +127,7 @@ func (s *LineSink) Receive(ev *streamv1.RunEvent) {
 	s.grouped.Receive(ev)
 	s.live.observe(ev)
 	switch {
-	case ev.GetResult() != nil:
+	case ev.GetSummary() != nil:
 		s.live = newLiveLine(s.now, s.present)
 	case ev.GetWaiting() != nil:
 		s.held = true

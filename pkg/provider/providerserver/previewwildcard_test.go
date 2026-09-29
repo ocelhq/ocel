@@ -24,7 +24,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
-func usePreviewWildcard(t *testing.T, client contractv1connect.ProviderServiceClient, base string, sel *contractv1.EdgeSelection) *progressv1.ResultEvent {
+func usePreviewWildcard(t *testing.T, client contractv1connect.ProviderServiceClient, base string, sel *contractv1.EdgeSelection) *progressv1.OperationResult {
 	t.Helper()
 	stream, err := client.UsePreviewWildcard(context.Background(), &contractv1.UsePreviewWildcardRequest{
 		Tier:       environmentv1.Tier_TIER_PREVIEW,

@@ -102,7 +102,7 @@ func (p *Provider) Call(ctx context.Context, call func(contractv1connect.Provide
 	})
 }
 
-func Stream[Req any](ctx context.Context, p *Provider, rpc string, req *Req, call streamCall[Req]) (*progressv1.ResultEvent, error) {
+func Stream[Req any](ctx context.Context, p *Provider, rpc string, req *Req, call streamCall[Req]) (*progressv1.OperationResult, error) {
 	return forward(ctx, p, rpc, req, call, p.scope.Forward)
 }
 
@@ -118,8 +118,8 @@ func Plan[Req any](ctx context.Context, p *Provider, rpc string, req *Req, call 
 	return plan, err
 }
 
-func forward[Req any](ctx context.Context, p *Provider, rpc string, req *Req, call streamCall[Req], each func(*progressv1.OperationEvent)) (*progressv1.ResultEvent, error) {
-	var result *progressv1.ResultEvent
+func forward[Req any](ctx context.Context, p *Provider, rpc string, req *Req, call streamCall[Req], each func(*progressv1.OperationEvent)) (*progressv1.OperationResult, error) {
+	var result *progressv1.OperationResult
 	err := p.callTrusting(ctx, func(r *Runner) error {
 		var err error
 		result, err = stream(ctx, r, rpc, req, call, each)

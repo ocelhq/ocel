@@ -379,7 +379,7 @@ func TestRemoveHostnameFinishesOverAnUnbindThatOnlyWarnsAndSaysWhat(t *testing.T
 		t.Fatalf("RemoveHostname() error = %v", err)
 	}
 	var warned []string
-	var result *progressv1.ResultEvent
+	var result *progressv1.OperationResult
 	for remove.Receive() {
 		if remove.Msg().GetLevel() == progressv1.Level_LEVEL_WARN {
 			warned = append(warned, remove.Msg().GetMessage())
@@ -558,7 +558,7 @@ var rotatedValidationRecord = edge.Record{
 	Value: "_rotated.validations.invalid",
 }
 
-func addHostname(t *testing.T, client contractv1connect.ProviderServiceClient) *progressv1.ResultEvent {
+func addHostname(t *testing.T, client contractv1connect.ProviderServiceClient) *progressv1.OperationResult {
 	t.Helper()
 	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
 		Slug:       "shop",

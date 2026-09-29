@@ -304,7 +304,7 @@ func TestDeploy(t *testing.T) {
 		}
 		result := events[1].GetResult()
 		if result == nil || !result.GetSuccess() {
-			t.Errorf("events[1] is %T failing with %q, want a successful ResultEvent", events[1].GetBody(), events[1].GetResult().GetError())
+			t.Errorf("events[1] is %T failing with %q, want a successful OperationResult", events[1].GetBody(), events[1].GetResult().GetError())
 		}
 
 		r.Close()
@@ -554,7 +554,7 @@ func TestBootstrap(t *testing.T) {
 			t.Fatalf("got %d events, want 2 (progress, result)", len(events))
 		}
 		if result := events[1].GetResult(); result == nil || !result.GetSuccess() {
-			t.Errorf("events[1] is %T failing with %q, want a successful ResultEvent", events[1].GetBody(), events[1].GetResult().GetError())
+			t.Errorf("events[1] is %T failing with %q, want a successful OperationResult", events[1].GetBody(), events[1].GetResult().GetError())
 		}
 
 		r.Close()

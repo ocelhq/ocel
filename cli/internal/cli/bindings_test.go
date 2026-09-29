@@ -579,7 +579,7 @@ func TestListingBindingsAsJSONSaysWhoItActsAsOnItsRunAndPrintsOneJSONDocumentAlo
 	if identity < 0 || evs[identity].GetPhase() != progressv1.Phase_PHASE_CHECK {
 		t.Fatalf("the listing never said who it acts as in the check phase: %s", stderr.String())
 	}
-	if result := evs[len(evs)-1].GetResult(); !result.GetSuccess() {
+	if result := evs[len(evs)-1].GetSummary(); !result.GetSuccess() {
 		t.Errorf("result = %v, want the listing's run to succeed", result)
 	}
 	if listed := asJSON(t, stdout.String()); listed["bindings"] == nil {

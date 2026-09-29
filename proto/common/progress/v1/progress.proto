@@ -6,9 +6,10 @@ option go_package = "github.com/ocelhq/ocel/pkg/proto/common/progress/v1;progres
 import "buf/validate/validate.proto";
 import "common/bindings/v1/bindings.proto";
 import "common/plan/v1/plan.proto";
+import "google/protobuf/timestamp.proto";
 
 message OperationEvent {
-  int64 time_unix_nano = 9;
+  google.protobuf.Timestamp time = 9;
   Level level = 10;
   Phase phase = 11;
   string subject = 12;
@@ -21,7 +22,7 @@ message OperationEvent {
     Output output = 17;
     common.plan.v1.ChangePlan plan = 8;
     DnsManualRecordsEvent dns_manual_records = 7;
-    ResultEvent result = 3;
+    OperationResult result = 3;
   }
 }
 
@@ -137,7 +138,7 @@ message AppResult {
   repeated string urls = 4;
 }
 
-message ResultEvent {
+message OperationResult {
   bool success = 1;
   string error = 2;
 

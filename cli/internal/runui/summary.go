@@ -21,7 +21,7 @@ const (
 )
 
 type summary struct {
-	result        *streamv1.RunResultEvent
+	result        *streamv1.RunSummary
 	tier          environmentv1.Tier
 	origin        *streamv1.Party
 	promotion     string
@@ -166,7 +166,7 @@ func (s summary) appURLs() []string {
 func (s *GroupedSink) conclude(ev *streamv1.RunEvent) {
 	s.unfinished()
 	s.gap()
-	result := summary{result: ev.GetResult(), tier: s.tier, origin: s.origin, promotion: s.promotion, changeStarted: s.changeStarted, present: s.present}
+	result := summary{result: ev.GetSummary(), tier: s.tier, origin: s.origin, promotion: s.promotion, changeStarted: s.changeStarted, present: s.present}
 	for _, text := range result.lines() {
 		s.print(blockLine{text: text})
 	}
@@ -192,7 +192,7 @@ func (s summary) annotation() string {
 	return text
 }
 
-func headlineOr(ev *streamv1.RunResultEvent, fallback string) string {
+func headlineOr(ev *streamv1.RunSummary, fallback string) string {
 	if h := ev.GetHeadline(); h != "" {
 		return h
 	}

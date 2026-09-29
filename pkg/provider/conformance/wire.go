@@ -190,7 +190,7 @@ type streamed struct {
 func (s streamed) worked() bool { return s.progress || s.logged }
 
 func (s *streamed) observe(event *progressv1.OperationEvent) {
-	if event.GetTimeUnixNano() == 0 || event.GetLevel() == progressv1.Level_LEVEL_UNSPECIFIED {
+	if event.GetTime() == nil || event.GetLevel() == progressv1.Level_LEVEL_UNSPECIFIED {
 		s.unstamped++
 	}
 	switch {

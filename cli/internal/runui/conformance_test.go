@@ -143,8 +143,8 @@ func reconstruct(events []*streamv1.RunEvent) reconstruction {
 			r.waits = append(r.waits, fmt.Sprintf("waiting on %d unset, remedy %q", len(ev.GetWaiting().GetMissing().GetCells()), ev.GetWaiting().GetMissing().GetRemedy()))
 		case ev.GetResumed() != nil:
 			r.waits = append(r.waits, "resumed "+ev.GetResumed().GetReason())
-		case ev.GetResult() != nil:
-			res := ev.GetResult()
+		case ev.GetSummary() != nil:
+			res := ev.GetSummary()
 			r.results = append(r.results, fmt.Sprintf("success=%v interrupted=%v headline=%q detail=%q duration_ms=%d",
 				res.GetSuccess(), res.GetInterrupted(), res.GetHeadline(), res.GetDetail(), res.GetDurationMs()))
 		case ev.GetStarted() != nil:

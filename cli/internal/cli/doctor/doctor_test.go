@@ -587,7 +587,7 @@ func TestDoctorChecksTheSetupInTheCheckPhaseOfItsRunAndPrintsItsReportAloneOnStd
 	}
 
 	var units []progressv1.Phase
-	var result *streamv1.RunResultEvent
+	var result *streamv1.RunSummary
 	for _, line := range strings.Split(strings.TrimSpace(stderr.String()), "\n") {
 		ev := &streamv1.RunEvent{}
 		if err := protojson.Unmarshal([]byte(line), ev); err != nil {
@@ -596,8 +596,8 @@ func TestDoctorChecksTheSetupInTheCheckPhaseOfItsRunAndPrintsItsReportAloneOnStd
 		if ev.GetStarted() != nil && len(ev.GetStarted().GetParentSpanId()) > 0 {
 			units = append(units, ev.GetPhase())
 		}
-		if ev.GetResult() != nil {
-			result = ev.GetResult()
+		if ev.GetSummary() != nil {
+			result = ev.GetSummary()
 		}
 	}
 	if len(units) == 0 || units[0] != progressv1.Phase_PHASE_CHECK {

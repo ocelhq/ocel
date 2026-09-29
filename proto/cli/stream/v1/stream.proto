@@ -10,24 +10,24 @@ import "common/progress/v1/progress.proto";
 import "google/protobuf/timestamp.proto";
 
 message RunEvent {
-  google.protobuf.Timestamp time = 8;
-  common.progress.v1.Level level = 9;
-  common.progress.v1.Phase phase = 10;
-  string subject = 11;
-  string message = 12;
-  bytes span_id = 13 [(buf.validate.field).bytes.len = 8, (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
+  google.protobuf.Timestamp time = 9;
+  common.progress.v1.Level level = 10;
+  common.progress.v1.Phase phase = 11;
+  string subject = 12;
+  string message = 13;
+  bytes span_id = 14 [(buf.validate.field).bytes.len = 8, (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
 
   oneof body {
-    common.progress.v1.Started started = 14;
-    common.progress.v1.Ended ended = 15;
-    common.progress.v1.Output output = 16;
-    common.plan.v1.ChangePlan plan = 1;
-    common.progress.v1.DnsManualRecordsEvent dns_manual_records = 18;
-    common.progress.v1.ResultEvent outcome = 19;
-    WaitingEvent waiting = 3;
-    ResumedEvent resumed = 4;
-    RunResultEvent result = 5;
-    IdentityEvent identity = 7;
+    common.progress.v1.Started started = 15;
+    common.progress.v1.Ended ended = 16;
+    common.progress.v1.Output output = 17;
+    common.plan.v1.ChangePlan plan = 8;
+    common.progress.v1.DnsManualRecordsEvent dns_manual_records = 7;
+    common.progress.v1.OperationResult result = 3;
+    WaitingEvent waiting = 20;
+    ResumedEvent resumed = 21;
+    RunSummary summary = 22;
+    IdentityEvent identity = 23;
   }
 }
 
@@ -91,7 +91,7 @@ message ResumedEvent {
   string reason = 1;
 }
 
-message RunResultEvent {
+message RunSummary {
   bool success = 1;
 
   string detail = 2;
@@ -108,7 +108,6 @@ message RunResultEvent {
 
   bool interrupted = 9;
 
-  // common.progress.v1.ResultEvent.apps as the provider reported it.
   repeated common.progress.v1.AppResult apps = 10;
 
   MissingVariables missing = 11;

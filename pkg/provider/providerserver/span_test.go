@@ -146,8 +146,8 @@ func TestAnEndedSpanNamesItsSpanEndsAtItsEndAndCarriesItsStartAndAttributes(t *t
 	if ended.GetStatus() != progressv1.SpanStatus_SPAN_STATUS_OK {
 		t.Errorf("status = %v, want OK", ended.GetStatus())
 	}
-	if ended.GetStartTimeUnixNano() != start.UnixNano() || event.GetTimeUnixNano() != end.UnixNano() {
-		t.Errorf("times = %d/%d, want the span's start %d and its end %d on the envelope", ended.GetStartTimeUnixNano(), event.GetTimeUnixNano(), start.UnixNano(), end.UnixNano())
+	if ended.GetStartTimeUnixNano() != start.UnixNano() || event.GetTime().AsTime().UnixNano() != end.UnixNano() {
+		t.Errorf("times = %d/%d, want the span's start %d and its end %d on the envelope", ended.GetStartTimeUnixNano(), event.GetTime().AsTime().UnixNano(), start.UnixNano(), end.UnixNano())
 	}
 	if got := attributeValue(ended.GetAttributes(), progressv1.AttributeKey_ATTRIBUTE_KEY_APP); got != "web" {
 		t.Errorf("APP attribute = %q, want the string key a provider sets mapped onto the wire enum", got)

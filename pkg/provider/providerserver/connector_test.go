@@ -73,14 +73,14 @@ func connectorServing(t *testing.T, p provider.Provider) contractv1connect.Provi
 	return client
 }
 
-func finalResult(t *testing.T, stream *connect.ServerStreamForClient[progressv1.OperationEvent], err error) *progressv1.ResultEvent {
+func finalResult(t *testing.T, stream *connect.ServerStreamForClient[progressv1.OperationEvent], err error) *progressv1.OperationResult {
 	t.Helper()
 
 	if err != nil {
 		t.Fatalf("call error = %v", err)
 	}
 	defer stream.Close()
-	var result *progressv1.ResultEvent
+	var result *progressv1.OperationResult
 	for stream.Receive() {
 		if got := stream.Msg().GetResult(); got != nil {
 			result = got

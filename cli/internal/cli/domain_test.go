@@ -989,7 +989,7 @@ func TestReleasingThePreviewDomainAsksForItsNameWhileTheRunIsHeldAfterThePlanItS
 	if resumed < waiting || evs[resumed].GetResumed().GetReason() != "answered" {
 		t.Fatalf("resumed at event %d, held at %d: want the run resumed once answered: %s", resumed, waiting, stream.String())
 	}
-	if result := evs[len(evs)-1].GetResult(); !result.GetSuccess() || result.GetHeadline() != "Released *.preview.acme.com" {
+	if result := evs[len(evs)-1].GetSummary(); !result.GetSuccess() || result.GetHeadline() != "Released *.preview.acme.com" {
 		t.Errorf("result = %v, want the run to end reporting the released domain", result)
 	}
 }

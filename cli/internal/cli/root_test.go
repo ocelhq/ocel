@@ -109,10 +109,10 @@ func TestLogFormatJSONAttachesOnlyTheJSONSink(t *testing.T) {
 		if err := json.Unmarshal([]byte(line), &ev); err != nil {
 			t.Fatalf("line %q is not JSON, want every line from the one JSON sink: %v", line, err)
 		}
-		_, ended = ev["result"]
+		_, ended = ev["summary"]
 	}
 	if !ended {
-		t.Errorf("stdout = %q, want the run's events ending in its result", stdout)
+		t.Errorf("stdout = %q, want the run's events ending in its summary", stdout)
 	}
 	if stderr != "" {
 		t.Errorf("stderr = %q, want nothing beside the one JSON stream", stderr)
@@ -232,8 +232,8 @@ func TestACommandWhoseStdoutIsItsDataDrawsItsRunOnStderr(t *testing.T) {
 	if !strings.Contains(stdout, "promo-2") || strings.Contains(stdout, "{") {
 		t.Errorf("stdout = %q, want the promotions table alone", stdout)
 	}
-	if evs := runEvents(t, stderr); len(evs) == 0 || !evs[len(evs)-1].GetResult().GetSuccess() {
-		t.Errorf("stderr = %q, want the run's events ending in its result", stderr)
+	if evs := runEvents(t, stderr); len(evs) == 0 || !evs[len(evs)-1].GetSummary().GetSuccess() {
+		t.Errorf("stderr = %q, want the run's events ending in its summary", stderr)
 	}
 }
 

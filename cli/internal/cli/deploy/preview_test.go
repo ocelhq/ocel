@@ -483,7 +483,7 @@ func TestTearingDownANamedPreviewAsksThroughConsentWhileTheRunIsHeld(t *testing.
 	if destroyed < resumed {
 		t.Errorf("teardown at event %d, resumed at %d: want nothing torn down until the question is answered: %s", destroyed, resumed, stream.String())
 	}
-	result := evs[len(evs)-1].GetResult()
+	result := evs[len(evs)-1].GetSummary()
 	if !result.GetSuccess() || result.GetHeadline() != "Tore down preview staging of "+clitest.FixtureSlug {
 		t.Errorf("result = %v, want the run to end reporting the preview torn down", result)
 	}
@@ -587,7 +587,7 @@ func TestListingPreviewsStartsTheProviderInTheCheckPhaseOfItsRunAndPrintsTheList
 	if opened < 0 || evs[opened].GetPhase() != progressv1.Phase_PHASE_CHECK {
 		t.Fatalf("the listing's run never opened the check phase that starts the provider: %s", stderr.String())
 	}
-	if result := evs[len(evs)-1].GetResult(); !result.GetSuccess() {
+	if result := evs[len(evs)-1].GetSummary(); !result.GetSuccess() {
 		t.Errorf("result = %v, want the listing's run to succeed", result)
 	}
 	if !strings.Contains(stdout.String(), "feature_login_ab12cd34") || strings.Contains(stderr.String(), "feature_login_ab12cd34") {

@@ -369,7 +369,7 @@ func TestLinkingShowsEachConsoleWaitAsAUnitOnItsRunAndNothingElseWritesTheTermin
 			t.Errorf("scope %q never ended", ev.GetMessage())
 		}
 	}
-	result := evs[len(evs)-1].GetResult()
+	result := evs[len(evs)-1].GetSummary()
 	if !result.GetSuccess() || result.GetHeadline() != "Linked this directory to other (Acme Inc)" {
 		t.Fatalf("result = %v, want the run to succeed saying what it linked", result)
 	}

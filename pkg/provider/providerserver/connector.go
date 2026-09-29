@@ -95,7 +95,7 @@ func connectorInstallTitle(req *contractv1.InstallConnectorRequest) progress.Tit
 
 func connectorResult(at provider.ConnectorAddress) *progressv1.OperationEvent {
 	return &progressv1.OperationEvent{
-		Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{
+		Body: &progressv1.OperationEvent_Result{Result: &progressv1.OperationResult{
 			Success: true,
 			Connector: &progressv1.ConnectorInstalled{
 				Url:       at.URL,

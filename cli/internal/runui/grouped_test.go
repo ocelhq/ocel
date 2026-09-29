@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	"github.com/ocelhq/ocel/cli/internal/events"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -78,9 +80,9 @@ func providerEvent(span byte, subject string, op *progressv1.OperationEvent) *pr
 
 func providerStarted(span byte, subject, message string, at time.Time) *progressv1.OperationEvent {
 	return providerEvent(span, subject, &progressv1.OperationEvent{
-		TimeUnixNano: at.UnixNano(),
-		Message:      message,
-		Body:         &progressv1.OperationEvent_Started{Started: &progressv1.Started{}},
+		Time:    timestamppb.New(at),
+		Message: message,
+		Body:    &progressv1.OperationEvent_Started{Started: &progressv1.Started{}},
 	})
 }
 
@@ -97,9 +99,9 @@ func providerEnded(span byte, subject, title string, status progressv1.SpanStatu
 		level = progressv1.Level_LEVEL_ERROR
 	}
 	return providerEvent(span, subject, &progressv1.OperationEvent{
-		TimeUnixNano: at.UnixNano(),
-		Level:        level,
-		Body:         &progressv1.OperationEvent_Ended{Ended: &progressv1.Ended{Status: status, StartTimeUnixNano: start.UnixNano(), Title: title}},
+		Time:  timestamppb.New(at),
+		Level: level,
+		Body:  &progressv1.OperationEvent_Ended{Ended: &progressv1.Ended{Status: status, StartTimeUnixNano: start.UnixNano(), Title: title}},
 	})
 }
 
@@ -657,7 +659,7 @@ func TestInGitHubActionsARunRefusedForMissingVariablesIsAnErrorAnnotationNamingH
 
 	var out bytes.Buffer
 	sink := newGroupedSink(&out, Presentation{GitHubActions: true}, nil)
-	sink.Receive(&streamv1.RunEvent{Level: progressv1.Level_LEVEL_ERROR, Body: &streamv1.RunEvent_Result{Result: &streamv1.RunResultEvent{
+	sink.Receive(&streamv1.RunEvent{Level: progressv1.Level_LEVEL_ERROR, Body: &streamv1.RunEvent_Summary{Summary: &streamv1.RunSummary{
 		Headline: "Deploy failed", DurationMs: 3000, Missing: missingStripeKey(),
 	}}})
 
@@ -845,7 +847,7 @@ func productionRun(t *testing.T) (*events.Run, *bytes.Buffer, *clock) {
 	return run, out, c
 }
 
-func forwardOutcome(run *events.Run, outcome *progressv1.ResultEvent) {
+func forwardOutcome(run *events.Run, outcome *progressv1.OperationResult) {
 	run.Phase(progressv1.Phase_PHASE_DEPLOY).Forward(&progressv1.OperationEvent{Body: &progressv1.OperationEvent_Result{Result: outcome}})
 }
 
@@ -857,7 +859,7 @@ func TestASuccessfulDeployNamesWhatProductionServesNowAndWhereEachAppIs(t *testi
 	t.Parallel()
 
 	run, out, c := productionRun(t)
-	forwardOutcome(run, &progressv1.ResultEvent{Success: true, PromotionId: "p-7f3a", Apps: []*progressv1.AppResult{
+	forwardOutcome(run, &progressv1.OperationResult{Success: true, PromotionId: "p-7f3a", Apps: []*progressv1.AppResult{
 		{App: "web", Outcome: progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED, Urls: []string{"https://acme.example.com"}},
 		{App: "api", Outcome: progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED, Urls: []string{"https://api.acme.example.com"}},
 	}})
@@ -880,7 +882,7 @@ func TestAFailedMultiAppDeploySaysWhatWasNotPromotedAndThatProductionStillServes
 
 	run, out, c := productionRun(t)
 	run.Phase(progressv1.Phase_PHASE_BUILD).Say("built 2 apps")
-	forwardOutcome(run, &progressv1.ResultEvent{Error: "api: the stack update failed", Apps: []*progressv1.AppResult{
+	forwardOutcome(run, &progressv1.OperationResult{Error: "api: the stack update failed", Apps: []*progressv1.AppResult{
 		{App: "web", Outcome: progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED, Urls: []string{"https://acme.example.com"}},
 		{App: "api", Outcome: progressv1.AppOutcome_APP_OUTCOME_FAILED, Error: "the stack update failed"},
 	}})
@@ -929,7 +931,7 @@ func TestTheSummaryEndsWithTheNotesOnItsUrlsAndWhereTheRunsLogIs(t *testing.T) {
 
 	var out bytes.Buffer
 	sink := newGroupedSink(&out, Presentation{}, nil)
-	sink.Receive(resultEvent(&streamv1.RunResultEvent{
+	sink.Receive(resultEvent(&streamv1.RunSummary{
 		Success:    true,
 		Headline:   "Preview pr-12 is up",
 		DurationMs: 41_000,
@@ -980,7 +982,7 @@ func TestARunRefusedForMissingVariablesListsThemAndWhereToFillThemIn(t *testing.
 
 	var out bytes.Buffer
 	sink := newGroupedSink(&out, Presentation{}, nil)
-	sink.Receive(resultEvent(&streamv1.RunResultEvent{DurationMs: 3000, Missing: missingStripeKey()}))
+	sink.Receive(resultEvent(&streamv1.RunSummary{DurationMs: 3000, Missing: missingStripeKey()}))
 
 	want := "✗ 1 variable is not ready — nothing has been built.\n" +
 		"\n" +
@@ -995,7 +997,7 @@ func TestARunRefusedForMissingVariablesListsThemAndWhereToFillThemIn(t *testing.
 func failedWith(t *testing.T, apps ...*progressv1.AppResult) string {
 	t.Helper()
 	run, out, _ := productionRun(t)
-	forwardOutcome(run, &progressv1.ResultEvent{Error: "deploy failed", Apps: apps})
+	forwardOutcome(run, &progressv1.OperationResult{Error: "deploy failed", Apps: apps})
 	ended(run, errors.New("deploy failed"))
 	return strings.TrimPrefix(out.String(), productionHead)
 }

@@ -12,6 +12,7 @@ import (
 	v1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -385,13 +386,13 @@ func (AppOutcome) EnumDescriptor() ([]byte, []int) {
 }
 
 type OperationEvent struct {
-	state        protoimpl.MessageState `protogen:"open.v1"`
-	TimeUnixNano int64                  `protobuf:"varint,9,opt,name=time_unix_nano,json=timeUnixNano,proto3" json:"time_unix_nano,omitempty"`
-	Level        Level                  `protobuf:"varint,10,opt,name=level,proto3,enum=common.progress.v1.Level" json:"level,omitempty"`
-	Phase        Phase                  `protobuf:"varint,11,opt,name=phase,proto3,enum=common.progress.v1.Phase" json:"phase,omitempty"`
-	Subject      string                 `protobuf:"bytes,12,opt,name=subject,proto3" json:"subject,omitempty"`
-	Message      string                 `protobuf:"bytes,13,opt,name=message,proto3" json:"message,omitempty"`
-	SpanId       []byte                 `protobuf:"bytes,14,opt,name=span_id,json=spanId,proto3" json:"span_id,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Time    *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=time,proto3" json:"time,omitempty"`
+	Level   Level                  `protobuf:"varint,10,opt,name=level,proto3,enum=common.progress.v1.Level" json:"level,omitempty"`
+	Phase   Phase                  `protobuf:"varint,11,opt,name=phase,proto3,enum=common.progress.v1.Phase" json:"phase,omitempty"`
+	Subject string                 `protobuf:"bytes,12,opt,name=subject,proto3" json:"subject,omitempty"`
+	Message string                 `protobuf:"bytes,13,opt,name=message,proto3" json:"message,omitempty"`
+	SpanId  []byte                 `protobuf:"bytes,14,opt,name=span_id,json=spanId,proto3" json:"span_id,omitempty"`
 	// Types that are valid to be assigned to Body:
 	//
 	//	*OperationEvent_Started
@@ -435,11 +436,11 @@ func (*OperationEvent) Descriptor() ([]byte, []int) {
 	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *OperationEvent) GetTimeUnixNano() int64 {
+func (x *OperationEvent) GetTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.TimeUnixNano
+		return x.Time
 	}
-	return 0
+	return nil
 }
 
 func (x *OperationEvent) GetLevel() Level {
@@ -529,7 +530,7 @@ func (x *OperationEvent) GetDnsManualRecords() *DnsManualRecordsEvent {
 	return nil
 }
 
-func (x *OperationEvent) GetResult() *ResultEvent {
+func (x *OperationEvent) GetResult() *OperationResult {
 	if x != nil {
 		if x, ok := x.Body.(*OperationEvent_Result); ok {
 			return x.Result
@@ -563,7 +564,7 @@ type OperationEvent_DnsManualRecords struct {
 }
 
 type OperationEvent_Result struct {
-	Result *ResultEvent `protobuf:"bytes,3,opt,name=result,proto3,oneof"`
+	Result *OperationResult `protobuf:"bytes,3,opt,name=result,proto3,oneof"`
 }
 
 func (*OperationEvent_Started) isOperationEvent_Body() {}
@@ -983,7 +984,7 @@ func (x *AppResult) GetUrls() []string {
 	return nil
 }
 
-type ResultEvent struct {
+type OperationResult struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	Success     bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
 	Error       string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
@@ -1001,20 +1002,20 @@ type ResultEvent struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ResultEvent) Reset() {
-	*x = ResultEvent{}
+func (x *OperationResult) Reset() {
+	*x = OperationResult{}
 	mi := &file_common_progress_v1_progress_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ResultEvent) String() string {
+func (x *OperationResult) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ResultEvent) ProtoMessage() {}
+func (*OperationResult) ProtoMessage() {}
 
-func (x *ResultEvent) ProtoReflect() protoreflect.Message {
+func (x *OperationResult) ProtoReflect() protoreflect.Message {
 	mi := &file_common_progress_v1_progress_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1026,68 +1027,68 @@ func (x *ResultEvent) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ResultEvent.ProtoReflect.Descriptor instead.
-func (*ResultEvent) Descriptor() ([]byte, []int) {
+// Deprecated: Use OperationResult.ProtoReflect.Descriptor instead.
+func (*OperationResult) Descriptor() ([]byte, []int) {
 	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *ResultEvent) GetSuccess() bool {
+func (x *OperationResult) GetSuccess() bool {
 	if x != nil {
 		return x.Success
 	}
 	return false
 }
 
-func (x *ResultEvent) GetError() string {
+func (x *OperationResult) GetError() string {
 	if x != nil {
 		return x.Error
 	}
 	return ""
 }
 
-func (x *ResultEvent) GetBindings() []*v11.Binding {
+func (x *OperationResult) GetBindings() []*v11.Binding {
 	if x != nil {
 		return x.Bindings
 	}
 	return nil
 }
 
-func (x *ResultEvent) GetPromotionId() string {
+func (x *OperationResult) GetPromotionId() string {
 	if x != nil {
 		return x.PromotionId
 	}
 	return ""
 }
 
-func (x *ResultEvent) GetFlipBound() *FlipBound {
+func (x *OperationResult) GetFlipBound() *FlipBound {
 	if x != nil {
 		return x.FlipBound
 	}
 	return nil
 }
 
-func (x *ResultEvent) GetUrlNotes() []string {
+func (x *OperationResult) GetUrlNotes() []string {
 	if x != nil {
 		return x.UrlNotes
 	}
 	return nil
 }
 
-func (x *ResultEvent) GetApps() []*AppResult {
+func (x *OperationResult) GetApps() []*AppResult {
 	if x != nil {
 		return x.Apps
 	}
 	return nil
 }
 
-func (x *ResultEvent) GetRefused() bool {
+func (x *OperationResult) GetRefused() bool {
 	if x != nil {
 		return x.Refused
 	}
 	return false
 }
 
-func (x *ResultEvent) GetConnector() *ConnectorInstalled {
+func (x *OperationResult) GetConnector() *ConnectorInstalled {
 	if x != nil {
 		return x.Connector
 	}
@@ -1210,9 +1211,9 @@ var File_common_progress_v1_progress_proto protoreflect.FileDescriptor
 
 const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\n" +
-	"!common/progress/v1/progress.proto\x12\x12common.progress.v1\x1a\x1bbuf/validate/validate.proto\x1a!common/bindings/v1/bindings.proto\x1a\x19common/plan/v1/plan.proto\"\xe3\x04\n" +
-	"\x0eOperationEvent\x12$\n" +
-	"\x0etime_unix_nano\x18\t \x01(\x03R\ftimeUnixNano\x12/\n" +
+	"!common/progress/v1/progress.proto\x12\x12common.progress.v1\x1a\x1bbuf/validate/validate.proto\x1a!common/bindings/v1/bindings.proto\x1a\x19common/plan/v1/plan.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xf1\x04\n" +
+	"\x0eOperationEvent\x12.\n" +
+	"\x04time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12/\n" +
 	"\x05level\x18\n" +
 	" \x01(\x0e2\x19.common.progress.v1.LevelR\x05level\x12/\n" +
 	"\x05phase\x18\v \x01(\x0e2\x19.common.progress.v1.PhaseR\x05phase\x12\x18\n" +
@@ -1224,8 +1225,8 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\x05ended\x18\x10 \x01(\v2\x19.common.progress.v1.EndedH\x00R\x05ended\x124\n" +
 	"\x06output\x18\x11 \x01(\v2\x1a.common.progress.v1.OutputH\x00R\x06output\x120\n" +
 	"\x04plan\x18\b \x01(\v2\x1a.common.plan.v1.ChangePlanH\x00R\x04plan\x12Y\n" +
-	"\x12dns_manual_records\x18\a \x01(\v2).common.progress.v1.DnsManualRecordsEventH\x00R\x10dnsManualRecords\x129\n" +
-	"\x06result\x18\x03 \x01(\v2\x1f.common.progress.v1.ResultEventH\x00R\x06resultB\x06\n" +
+	"\x12dns_manual_records\x18\a \x01(\v2).common.progress.v1.DnsManualRecordsEventH\x00R\x10dnsManualRecords\x12=\n" +
+	"\x06result\x18\x03 \x01(\v2#.common.progress.v1.OperationResultH\x00R\x06resultB\x06\n" +
 	"\x04body\";\n" +
 	"\aStarted\x120\n" +
 	"\x0eparent_span_id\x18\x01 \x01(\fB\n" +
@@ -1255,8 +1256,8 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\x03app\x18\x01 \x01(\tR\x03app\x128\n" +
 	"\aoutcome\x18\x02 \x01(\x0e2\x1e.common.progress.v1.AppOutcomeR\aoutcome\x12\x14\n" +
 	"\x05error\x18\x03 \x01(\tR\x05error\x12\x12\n" +
-	"\x04urls\x18\x04 \x03(\tR\x04urls\"\x87\x03\n" +
-	"\vResultEvent\x12\x18\n" +
+	"\x04urls\x18\x04 \x03(\tR\x04urls\"\x8b\x03\n" +
+	"\x0fOperationResult\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
 	"\x05error\x18\x02 \x01(\tR\x05error\x127\n" +
 	"\bbindings\x18\x03 \x03(\v2\x1b.common.bindings.v1.BindingR\bbindings\x12!\n" +
@@ -1358,36 +1359,38 @@ var file_common_progress_v1_progress_proto_goTypes = []any{
 	(*DnsRecord)(nil),             // 11: common.progress.v1.DnsRecord
 	(*DnsManualRecordsEvent)(nil), // 12: common.progress.v1.DnsManualRecordsEvent
 	(*AppResult)(nil),             // 13: common.progress.v1.AppResult
-	(*ResultEvent)(nil),           // 14: common.progress.v1.ResultEvent
+	(*OperationResult)(nil),       // 14: common.progress.v1.OperationResult
 	(*ConnectorInstalled)(nil),    // 15: common.progress.v1.ConnectorInstalled
 	(*FlipBound)(nil),             // 16: common.progress.v1.FlipBound
-	(*v1.ChangePlan)(nil),         // 17: common.plan.v1.ChangePlan
-	(*v11.Binding)(nil),           // 18: common.bindings.v1.Binding
+	(*timestamppb.Timestamp)(nil), // 17: google.protobuf.Timestamp
+	(*v1.ChangePlan)(nil),         // 18: common.plan.v1.ChangePlan
+	(*v11.Binding)(nil),           // 19: common.bindings.v1.Binding
 }
 var file_common_progress_v1_progress_proto_depIdxs = []int32{
-	1,  // 0: common.progress.v1.OperationEvent.level:type_name -> common.progress.v1.Level
-	2,  // 1: common.progress.v1.OperationEvent.phase:type_name -> common.progress.v1.Phase
-	7,  // 2: common.progress.v1.OperationEvent.started:type_name -> common.progress.v1.Started
-	8,  // 3: common.progress.v1.OperationEvent.ended:type_name -> common.progress.v1.Ended
-	9,  // 4: common.progress.v1.OperationEvent.output:type_name -> common.progress.v1.Output
-	17, // 5: common.progress.v1.OperationEvent.plan:type_name -> common.plan.v1.ChangePlan
-	12, // 6: common.progress.v1.OperationEvent.dns_manual_records:type_name -> common.progress.v1.DnsManualRecordsEvent
-	14, // 7: common.progress.v1.OperationEvent.result:type_name -> common.progress.v1.ResultEvent
-	3,  // 8: common.progress.v1.Ended.status:type_name -> common.progress.v1.SpanStatus
-	10, // 9: common.progress.v1.Ended.attributes:type_name -> common.progress.v1.SpanAttribute
-	0,  // 10: common.progress.v1.Output.stream:type_name -> common.progress.v1.Stream
-	4,  // 11: common.progress.v1.SpanAttribute.key:type_name -> common.progress.v1.AttributeKey
-	11, // 12: common.progress.v1.DnsManualRecordsEvent.records:type_name -> common.progress.v1.DnsRecord
-	5,  // 13: common.progress.v1.AppResult.outcome:type_name -> common.progress.v1.AppOutcome
-	18, // 14: common.progress.v1.ResultEvent.bindings:type_name -> common.bindings.v1.Binding
-	16, // 15: common.progress.v1.ResultEvent.flip_bound:type_name -> common.progress.v1.FlipBound
-	13, // 16: common.progress.v1.ResultEvent.apps:type_name -> common.progress.v1.AppResult
-	15, // 17: common.progress.v1.ResultEvent.connector:type_name -> common.progress.v1.ConnectorInstalled
-	18, // [18:18] is the sub-list for method output_type
-	18, // [18:18] is the sub-list for method input_type
-	18, // [18:18] is the sub-list for extension type_name
-	18, // [18:18] is the sub-list for extension extendee
-	0,  // [0:18] is the sub-list for field type_name
+	17, // 0: common.progress.v1.OperationEvent.time:type_name -> google.protobuf.Timestamp
+	1,  // 1: common.progress.v1.OperationEvent.level:type_name -> common.progress.v1.Level
+	2,  // 2: common.progress.v1.OperationEvent.phase:type_name -> common.progress.v1.Phase
+	7,  // 3: common.progress.v1.OperationEvent.started:type_name -> common.progress.v1.Started
+	8,  // 4: common.progress.v1.OperationEvent.ended:type_name -> common.progress.v1.Ended
+	9,  // 5: common.progress.v1.OperationEvent.output:type_name -> common.progress.v1.Output
+	18, // 6: common.progress.v1.OperationEvent.plan:type_name -> common.plan.v1.ChangePlan
+	12, // 7: common.progress.v1.OperationEvent.dns_manual_records:type_name -> common.progress.v1.DnsManualRecordsEvent
+	14, // 8: common.progress.v1.OperationEvent.result:type_name -> common.progress.v1.OperationResult
+	3,  // 9: common.progress.v1.Ended.status:type_name -> common.progress.v1.SpanStatus
+	10, // 10: common.progress.v1.Ended.attributes:type_name -> common.progress.v1.SpanAttribute
+	0,  // 11: common.progress.v1.Output.stream:type_name -> common.progress.v1.Stream
+	4,  // 12: common.progress.v1.SpanAttribute.key:type_name -> common.progress.v1.AttributeKey
+	11, // 13: common.progress.v1.DnsManualRecordsEvent.records:type_name -> common.progress.v1.DnsRecord
+	5,  // 14: common.progress.v1.AppResult.outcome:type_name -> common.progress.v1.AppOutcome
+	19, // 15: common.progress.v1.OperationResult.bindings:type_name -> common.bindings.v1.Binding
+	16, // 16: common.progress.v1.OperationResult.flip_bound:type_name -> common.progress.v1.FlipBound
+	13, // 17: common.progress.v1.OperationResult.apps:type_name -> common.progress.v1.AppResult
+	15, // 18: common.progress.v1.OperationResult.connector:type_name -> common.progress.v1.ConnectorInstalled
+	19, // [19:19] is the sub-list for method output_type
+	19, // [19:19] is the sub-list for method input_type
+	19, // [19:19] is the sub-list for extension type_name
+	19, // [19:19] is the sub-list for extension extendee
+	0,  // [0:19] is the sub-list for field type_name
 }
 
 func init() { file_common_progress_v1_progress_proto_init() }

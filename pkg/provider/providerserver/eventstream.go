@@ -8,6 +8,7 @@ import (
 	"time"
 
 	connect "connectrpc.com/connect"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -23,7 +24,7 @@ type eventStream struct {
 	done   chan struct{}
 	ctx    context.Context
 
-	detail  func(*progressv1.ResultEvent)
+	detail  func(*progressv1.OperationResult)
 	refuses []connect.Code
 
 	mu     sync.RWMutex
@@ -45,7 +46,7 @@ func (s *eventStream) refusing(code connect.Code) {
 	s.refuses = append(s.refuses, code)
 }
 
-func (s *eventStream) detailing(detail func(*progressv1.ResultEvent)) {
+func (s *eventStream) detailing(detail func(*progressv1.OperationResult)) {
 	s.detail = detail
 }
 
@@ -64,8 +65,8 @@ func (s *eventStream) send(ev *progressv1.OperationEvent) {
 	if s.closed {
 		return
 	}
-	if ev.GetTimeUnixNano() == 0 {
-		ev.TimeUnixNano = time.Now().UnixNano()
+	if ev.GetTime() == nil {
+		ev.Time = timestamppb.Now()
 	}
 	if ev.GetLevel() == progressv1.Level_LEVEL_UNSPECIFIED {
 		ev.Level = progressv1.Level_LEVEL_INFO
@@ -241,7 +242,7 @@ func refusedRequest(err error) bool {
 func failureResult(err error) *progressv1.OperationEvent {
 	return &progressv1.OperationEvent{
 		Level: progressv1.Level_LEVEL_ERROR,
-		Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{
+		Body: &progressv1.OperationEvent_Result{Result: &progressv1.OperationResult{
 			Success: false,
 			Error:   err.Error(),
 		}},
@@ -250,6 +251,6 @@ func failureResult(err error) *progressv1.OperationEvent {
 
 func okResult() *progressv1.OperationEvent {
 	return &progressv1.OperationEvent{
-		Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
+		Body: &progressv1.OperationEvent_Result{Result: &progressv1.OperationResult{Success: true}},
 	}
 }

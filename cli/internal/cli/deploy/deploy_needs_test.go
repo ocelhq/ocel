@@ -79,7 +79,7 @@ func TestDeployRendersTheNeedsRefusalInJSONMode(t *testing.T) {
 
 	var message string
 	for _, ev := range envelopes(t, stdout.String()) {
-		if res := ev.GetResult(); res != nil {
+		if res := ev.GetSummary(); res != nil {
 			if res.GetSuccess() {
 				t.Fatalf("run result reports success, want the unsupported need to fail the run: %s", stdout.String())
 			}

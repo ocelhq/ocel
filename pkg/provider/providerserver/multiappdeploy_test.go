@@ -65,7 +65,7 @@ func spanStatuses(events []*progressv1.OperationEvent) map[string]progressv1.Spa
 	return statuses
 }
 
-func outcomes(result *progressv1.ResultEvent) []string {
+func outcomes(result *progressv1.OperationResult) []string {
 	reported := make([]string, 0, len(result.GetApps()))
 	for _, app := range result.GetApps() {
 		reported = append(reported, app.GetApp()+"="+app.GetOutcome().String())

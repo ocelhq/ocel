@@ -19,6 +19,8 @@ import (
 	"sync"
 	"time"
 
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/encoding/protojson"
 
@@ -236,7 +238,7 @@ func (c *scopedConn) Send(msg any) error {
 	if ev, ok := msg.(*progressv1.OperationEvent); ok {
 		switch {
 		case ev.GetStarted() != nil:
-			c.open = append(c.open, &progressv1.OperationEvent{TimeUnixNano: time.Now().UnixNano(), Phase: ev.GetPhase(), SpanId: ev.GetSpanId()})
+			c.open = append(c.open, &progressv1.OperationEvent{Time: timestamppb.Now(), Phase: ev.GetPhase(), SpanId: ev.GetSpanId()})
 		case ev.GetEnded() != nil:
 			c.open = slices.DeleteFunc(c.open, func(open *progressv1.OperationEvent) bool { return bytes.Equal(open.GetSpanId(), ev.GetSpanId()) })
 		case ev.GetResult() != nil:
@@ -255,11 +257,11 @@ func (c *scopedConn) endOpen(succeeded bool, failure string) error {
 	}
 	if innermost := len(c.open) - 1; !succeeded && failure != "" && innermost >= 0 {
 		if err := c.StreamingHandlerConn.Send(&progressv1.OperationEvent{
-			TimeUnixNano: time.Now().UnixNano(),
-			Level:        progressv1.Level_LEVEL_ERROR,
-			Phase:        c.open[innermost].GetPhase(),
-			SpanId:       c.open[innermost].GetSpanId(),
-			Message:      failure,
+			Time:    timestamppb.Now(),
+			Level:   progressv1.Level_LEVEL_ERROR,
+			Phase:   c.open[innermost].GetPhase(),
+			SpanId:  c.open[innermost].GetSpanId(),
+			Message: failure,
 		}); err != nil {
 			return err
 		}
@@ -268,13 +270,13 @@ func (c *scopedConn) endOpen(succeeded bool, failure string) error {
 		started := c.open[len(c.open)-1]
 		c.open = c.open[:len(c.open)-1]
 		if err := c.StreamingHandlerConn.Send(&progressv1.OperationEvent{
-			TimeUnixNano: time.Now().UnixNano(),
-			Level:        level,
-			Phase:        started.GetPhase(),
-			SpanId:       started.GetSpanId(),
+			Time:   timestamppb.Now(),
+			Level:  level,
+			Phase:  started.GetPhase(),
+			SpanId: started.GetSpanId(),
 			Body: &progressv1.OperationEvent_Ended{Ended: &progressv1.Ended{
 				Status:            status,
-				StartTimeUnixNano: started.GetTimeUnixNano(),
+				StartTimeUnixNano: started.GetTime().AsTime().UnixNano(),
 			}},
 		}); err != nil {
 			return err
@@ -318,7 +320,7 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *contractv1.D
 
 	if err := validateFixtureManifest(req.GetManifest()); err != nil {
 		return stream.Send(&progressv1.OperationEvent{
-			Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: false, Error: err.Error()}},
+			Body: &progressv1.OperationEvent_Result{Result: &progressv1.OperationResult{Success: false, Error: err.Error()}},
 		})
 	}
 
@@ -329,7 +331,7 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *contractv1.D
 	}
 	if refusal := os.Getenv(FakeNeedsRefusalEnvVar); refusal != "" {
 		return stream.Send(&progressv1.OperationEvent{
-			Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: false, Error: refusal}},
+			Body: &progressv1.OperationEvent_Result{Result: &progressv1.OperationResult{Success: false, Error: refusal}},
 		})
 	}
 
@@ -380,7 +382,7 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *contractv1.D
 	}
 	if refusal := refuseUnpublishedFakeBindings(req.GetManifest(), req.GetEnvironment(), req.GetDry()); refusal != "" {
 		return stream.Send(&progressv1.OperationEvent{
-			Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: false, Error: refusal}},
+			Body: &progressv1.OperationEvent_Result{Result: &progressv1.OperationResult{Success: false, Error: refusal}},
 		})
 	}
 
@@ -403,7 +405,7 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *contractv1.D
 			return err
 		}
 		return stream.Send(&progressv1.OperationEvent{
-			Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
+			Body: &progressv1.OperationEvent_Result{Result: &progressv1.OperationResult{Success: true}},
 		})
 	}
 
@@ -413,11 +415,11 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *contractv1.D
 
 	if s.mode == "fail" {
 		return stream.Send(&progressv1.OperationEvent{
-			Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: false, Error: "simulated deploy failure"}},
+			Body: &progressv1.OperationEvent_Result{Result: &progressv1.OperationResult{Success: false, Error: "simulated deploy failure"}},
 		})
 	}
 	return stream.Send(&progressv1.OperationEvent{
-		Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{
+		Body: &progressv1.OperationEvent_Result{Result: &progressv1.OperationResult{
 			Success:     true,
 			Apps:        fakeAppResults(req.GetManifest()),
 			PromotionId: FakePromotionID,
@@ -688,12 +690,12 @@ func (s *deployFakeProviderServer) Bootstrap(ctx context.Context, req *contractv
 	}
 	if req.GetDry() {
 		return stream.Send(&progressv1.OperationEvent{
-			Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
+			Body: &progressv1.OperationEvent_Result{Result: &progressv1.OperationResult{Success: true}},
 		})
 	}
 	journalBootstrap(req)
 	return stream.Send(&progressv1.OperationEvent{
-		Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
+		Body: &progressv1.OperationEvent_Result{Result: &progressv1.OperationResult{Success: true}},
 	})
 }
 
@@ -773,7 +775,7 @@ func (s *deployFakeProviderServer) RemoveBootstrap(ctx context.Context, req *con
 		return err
 	}
 	return stream.Send(&progressv1.OperationEvent{
-		Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
+		Body: &progressv1.OperationEvent_Result{Result: &progressv1.OperationResult{Success: true}},
 	})
 }
 
@@ -1064,7 +1066,7 @@ func (s *deployFakeProviderServer) UsePreviewWildcard(ctx context.Context, req *
 		}
 	}
 	return stream.Send(&progressv1.OperationEvent{
-		Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
+		Body: &progressv1.OperationEvent_Result{Result: &progressv1.OperationResult{Success: true}},
 	})
 }
 
@@ -1111,7 +1113,7 @@ func (s *deployFakeProviderServer) RemovePreviewWildcard(ctx context.Context, re
 		return err
 	}
 	return stream.Send(&progressv1.OperationEvent{
-		Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
+		Body: &progressv1.OperationEvent_Result{Result: &progressv1.OperationResult{Success: true}},
 	})
 }
 
@@ -1126,7 +1128,7 @@ func (s *deployFakeProviderServer) AddHostname(ctx context.Context, req *contrac
 	}
 	if host := req.GetHost(); host != "" && !slices.Contains(fakeConfigured(req), host) {
 		return stream.Send(&progressv1.OperationEvent{
-			Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{
+			Body: &progressv1.OperationEvent_Result{Result: &progressv1.OperationResult{
 				Success: false,
 				Error:   fmt.Sprintf("this project does not declare %q: add it to domains.production and run this again — no command edits the config, which declares %s", host, strings.Join(fakeConfigured(req), ", ")),
 			}},
@@ -1158,7 +1160,7 @@ func (s *deployFakeProviderServer) AddHostname(ctx context.Context, req *contrac
 		}
 		if outstanding := os.Getenv(FakeDomainTimeoutEnvVar); outstanding != "" {
 			return stream.Send(&progressv1.OperationEvent{
-				Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{
+				Body: &progressv1.OperationEvent_Result{Result: &progressv1.OperationResult{
 					Success: false,
 					Error:   fmt.Sprintf("gave up after 5m0s waiting for https://%s/ to answer through the relay edge; still outstanding: %s", host, outstanding),
 				}},
@@ -1169,7 +1171,7 @@ func (s *deployFakeProviderServer) AddHostname(ctx context.Context, req *contrac
 		}
 	}
 	return stream.Send(&progressv1.OperationEvent{
-		Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
+		Body: &progressv1.OperationEvent_Result{Result: &progressv1.OperationResult{Success: true}},
 	})
 }
 
@@ -1189,7 +1191,7 @@ func (s *deployFakeProviderServer) RemoveHostname(ctx context.Context, req *cont
 		}
 	}
 	return stream.Send(&progressv1.OperationEvent{
-		Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
+		Body: &progressv1.OperationEvent_Result{Result: &progressv1.OperationResult{Success: true}},
 	})
 }
 
@@ -1274,7 +1276,7 @@ func (s *deployFakeProviderServer) RemoveEnvironment(ctx context.Context, req *c
 		return err
 	}
 	return stream.Send(&progressv1.OperationEvent{
-		Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
+		Body: &progressv1.OperationEvent_Result{Result: &progressv1.OperationResult{Success: true}},
 	})
 }
 
@@ -1370,7 +1372,7 @@ func (s *deployFakeProviderServer) RemoveProject(ctx context.Context, req *contr
 		return err
 	}
 	return stream.Send(&progressv1.OperationEvent{
-		Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
+		Body: &progressv1.OperationEvent_Result{Result: &progressv1.OperationResult{Success: true}},
 	})
 }
 

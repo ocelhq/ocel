@@ -27,7 +27,7 @@ func nothingToDeployHeadline(t *testing.T, config string) string {
 		t.Fatalf("runDeploy err = %v; stdout=%s", err, stdout.String())
 	}
 	evs := envelopes(t, stdout.String())
-	return evs[len(evs)-1].GetResult().GetHeadline()
+	return evs[len(evs)-1].GetSummary().GetHeadline()
 }
 
 func TestAProjectWithoutAppsOrResourcesHasNothingToDeploy(t *testing.T) {

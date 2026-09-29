@@ -4,12 +4,14 @@ import (
 	"strings"
 	"testing"
 
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
 func stamped(event *progressv1.OperationEvent) *progressv1.OperationEvent {
-	event.TimeUnixNano = 1
+	event.Time = timestamppb.Now()
 	event.Level = progressv1.Level_LEVEL_INFO
 	return event
 }
@@ -94,7 +96,7 @@ func TestARunThatSendsAnEventWithNoTimeOrLevelFails(t *testing.T) {
 	t.Parallel()
 
 	timeless := progressed()
-	timeless.TimeUnixNano = 0
+	timeless.Time = nil
 	unleveled := logged()
 	unleveled.Level = progressv1.Level_LEVEL_UNSPECIFIED
 

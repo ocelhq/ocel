@@ -331,7 +331,7 @@ func TestARollbackAsksWhileTheRunIsHeldAfterThePlanItShows(t *testing.T) {
 	if resumed < waiting || evs[resumed].GetResumed().GetReason() != "answered" {
 		t.Fatalf("resumed at event %d, held at %d: want the run resumed once answered: %s", resumed, waiting, stream.String())
 	}
-	result := evs[len(evs)-1].GetResult()
+	result := evs[len(evs)-1].GetSummary()
 	if !result.GetSuccess() || !strings.HasPrefix(result.GetHeadline(), "Rolled back to promotion promo-1") {
 		t.Errorf("result = %v, want the run to end reporting the rollback to promo-1", result)
 	}

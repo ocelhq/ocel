@@ -149,7 +149,7 @@ func TestPermissionsStartsTheProviderInTheCheckPhaseOfItsRunAndPrintsTheDocument
 	}
 
 	var phases []progressv1.Phase
-	var result *streamv1.RunResultEvent
+	var result *streamv1.RunSummary
 	for _, line := range strings.Split(strings.TrimSpace(stderr.String()), "\n") {
 		ev := &streamv1.RunEvent{}
 		if err := protojson.Unmarshal([]byte(line), ev); err != nil {
@@ -158,8 +158,8 @@ func TestPermissionsStartsTheProviderInTheCheckPhaseOfItsRunAndPrintsTheDocument
 		if ev.GetStarted() != nil && len(ev.GetStarted().GetParentSpanId()) == 0 {
 			phases = append(phases, ev.GetPhase())
 		}
-		if ev.GetResult() != nil {
-			result = ev.GetResult()
+		if ev.GetSummary() != nil {
+			result = ev.GetSummary()
 		}
 	}
 	if len(phases) == 0 || phases[0] != progressv1.Phase_PHASE_CHECK {

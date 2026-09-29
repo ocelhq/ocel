@@ -683,7 +683,7 @@ func TestADeploysResultNamesTheProjectAndProduction(t *testing.T) {
 	}
 
 	evs := envelopes(t, stream.String())
-	if headline := evs[len(evs)-1].GetResult().GetHeadline(); headline != "Deployed test-app to production" {
+	if headline := evs[len(evs)-1].GetSummary().GetHeadline(); headline != "Deployed test-app to production" {
 		t.Fatalf("result headline = %q, want it to name the project and production", headline)
 	}
 }

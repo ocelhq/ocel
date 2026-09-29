@@ -223,7 +223,7 @@ func TestListingDeploymentsSaysWhoItActsAsInTheCheckPhaseAndPrintsItsTableBeside
 	if identity < 0 || evs[identity].GetPhase() != progressv1.Phase_PHASE_CHECK {
 		t.Fatalf("the listing never said who it acts as in the check phase: %s", stream.String())
 	}
-	if result := evs[len(evs)-1].GetResult(); !result.GetSuccess() {
+	if result := evs[len(evs)-1].GetSummary(); !result.GetSuccess() {
 		t.Errorf("result = %v, want the listing's run to succeed", result)
 	}
 	if !strings.Contains(stdout.String(), "promo-2") || strings.Contains(stream.String(), "promo-2") {
@@ -256,7 +256,7 @@ func TestPruningReportsWhatItReclaimedThroughTheRunsEvents(t *testing.T) {
 	}) {
 		t.Errorf("the stream never said what was reclaimed: %s", stream.String())
 	}
-	if result := evs[len(evs)-1].GetResult(); !result.GetSuccess() || result.GetHeadline() != "Pruned the production promotions of "+clitest.FixtureSlug+" down to the newest 10" {
+	if result := evs[len(evs)-1].GetSummary(); !result.GetSuccess() || result.GetHeadline() != "Pruned the production promotions of "+clitest.FixtureSlug+" down to the newest 10" {
 		t.Errorf("result = %v, want the run to end reporting the prune", result)
 	}
 }

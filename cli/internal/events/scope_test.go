@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
@@ -345,5 +346,54 @@ func TestEndingAPhaseEndsItsOpenUnitsFirstWithTheSameError(t *testing.T) {
 		if !bytes.Equal(ev.GetSpanId(), want[i]) || ev.GetEnded() == nil || ev.GetMessage() != "the stack is locked" {
 			t.Fatalf("ended %d = span %x message %q, want span %x with the phase's error", i, ev.GetSpanId(), ev.GetMessage(), want[i])
 		}
+	}
+}
+
+func TestEveryFieldOfAProviderEventIsTheSameFieldOfARunEvent(t *testing.T) {
+	operation := (&progressv1.OperationEvent{}).ProtoReflect().Descriptor()
+	run := (&streamv1.RunEvent{}).ProtoReflect().Descriptor()
+	fields := operation.Fields()
+	for i := range fields.Len() {
+		want := fields.Get(i)
+		got := run.Fields().ByNumber(want.Number())
+		if got == nil || got.Name() != want.Name() || got.Kind() != want.Kind() ||
+			(want.Message() != nil && got.Message().FullName() != want.Message().FullName()) ||
+			(want.Enum() != nil && got.Enum().FullName() != want.Enum().FullName()) ||
+			(want.ContainingOneof() == nil) != (got.ContainingOneof() == nil) {
+			t.Errorf("OperationEvent field %d %s has no identical RunEvent field (got %v): the CLI forwards a provider's event by its wire bytes", want.Number(), want.Name(), got)
+		}
+	}
+}
+
+func TestAForwardedProviderEventKeepsEveryFieldItCarried(t *testing.T) {
+	sink := &recording{}
+	run, _ := begin(t, sink)
+	op := &progressv1.OperationEvent{
+		Time:    timestamppb.New(time.Unix(1790503200, 0)),
+		Level:   progressv1.Level_LEVEL_WARN,
+		Phase:   progressv1.Phase_PHASE_DEPLOY,
+		Subject: "web",
+		Message: "the certificate is still issuing",
+		SpanId:  []byte{1, 2, 3, 4, 5, 6, 7, 8},
+		Body: &progressv1.OperationEvent_Ended{Ended: &progressv1.Ended{
+			Status: progressv1.SpanStatus_SPAN_STATUS_OK,
+			Title:  "Attached production hostname www.shop.example",
+		}},
+	}
+
+	run.Phase(progressv1.Phase_PHASE_DEPLOY).Forward(op)
+
+	got := sink.received()[len(sink.received())-1]
+	want := &streamv1.RunEvent{
+		Time:    op.GetTime(),
+		Level:   op.GetLevel(),
+		Phase:   op.GetPhase(),
+		Subject: op.GetSubject(),
+		Message: op.GetMessage(),
+		SpanId:  op.GetSpanId(),
+		Body:    &streamv1.RunEvent_Ended{Ended: op.GetEnded()},
+	}
+	if !proto.Equal(got, want) {
+		t.Errorf("forwarded = %v, want %v", got, want)
 	}
 }

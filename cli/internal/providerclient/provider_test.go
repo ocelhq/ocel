@@ -82,7 +82,7 @@ func TestAStartedProvidersStreamEventsReachTheScope(t *testing.T) {
 	var said, outcome bool
 	for _, ev := range seen.received() {
 		said = said || ev.GetMessage() == "step 1"
-		outcome = outcome || ev.GetOutcome().GetSuccess()
+		outcome = outcome || ev.GetResult().GetSuccess()
 	}
 	if !said {
 		t.Error("the scope never saw the provider's \"step 1\" line")

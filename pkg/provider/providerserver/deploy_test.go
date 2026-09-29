@@ -133,7 +133,7 @@ func deployRequest() *contractv1.DeployRequest {
 	}
 }
 
-func deploy(t *testing.T, client contractv1connect.ProviderServiceClient, req *contractv1.DeployRequest) (*progressv1.ResultEvent, []*progressv1.OperationEvent) {
+func deploy(t *testing.T, client contractv1connect.ProviderServiceClient, req *contractv1.DeployRequest) (*progressv1.OperationResult, []*progressv1.OperationEvent) {
 	t.Helper()
 	result, events, err := deployStream(t, client, req)
 	if err != nil {
@@ -146,7 +146,7 @@ func deployStream(
 	t *testing.T,
 	client contractv1connect.ProviderServiceClient,
 	req *contractv1.DeployRequest,
-) (*progressv1.ResultEvent, []*progressv1.OperationEvent, error) {
+) (*progressv1.OperationResult, []*progressv1.OperationEvent, error) {
 	t.Helper()
 	stream, err := client.Deploy(context.Background(), req)
 	if err != nil {
@@ -155,7 +155,7 @@ func deployStream(
 	defer stream.Close()
 
 	var events []*progressv1.OperationEvent
-	var result *progressv1.ResultEvent
+	var result *progressv1.OperationResult
 	for stream.Receive() {
 		event := stream.Msg()
 		events = append(events, event)
@@ -903,7 +903,7 @@ func TestDeployRecordsTheFeaturesItsProjectDependsOn(t *testing.T) {
 	}
 }
 
-func servedURLs(result *progressv1.ResultEvent) []string {
+func servedURLs(result *progressv1.OperationResult) []string {
 	var urls []string
 	for _, app := range result.GetApps() {
 		urls = append(urls, app.GetUrls()...)
@@ -911,7 +911,7 @@ func servedURLs(result *progressv1.ResultEvent) []string {
 	return urls
 }
 
-func servedAppURLs(result *progressv1.ResultEvent, app string) []string {
+func servedAppURLs(result *progressv1.OperationResult, app string) []string {
 	for _, appResult := range result.GetApps() {
 		if appResult.GetApp() == app {
 			return appResult.GetUrls()
@@ -1447,7 +1447,7 @@ func TestADeployNamingNoEdgeGoesToTheEdgeTheProvidersFactsDefaultTo(t *testing.T
 	}
 }
 
-func noteOf(result *progressv1.ResultEvent) string {
+func noteOf(result *progressv1.OperationResult) string {
 	return strings.Join(result.GetUrlNotes(), "\n")
 }
 

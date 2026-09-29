@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
@@ -95,36 +94,20 @@ func (s *Scope) Identity(identity *streamv1.IdentityEvent) {
 func (s *Scope) Forward(op *progressv1.OperationEvent) {
 	ev := lift(op)
 	s.run.enter(ev.GetPhase())
-	if apps := ev.GetOutcome().GetApps(); len(apps) > 0 {
+	if apps := ev.GetResult().GetApps(); len(apps) > 0 {
 		s.run.record(apps)
 	}
 	s.run.bus.send(ev)
 }
 
 func lift(op *progressv1.OperationEvent) *streamv1.RunEvent {
-	ev := &streamv1.RunEvent{
-		Level:   op.GetLevel(),
-		Phase:   op.GetPhase(),
-		Subject: op.GetSubject(),
-		Message: op.GetMessage(),
-		SpanId:  op.GetSpanId(),
+	ev := &streamv1.RunEvent{}
+	wire, err := proto.Marshal(op)
+	if err == nil {
+		err = proto.Unmarshal(wire, ev)
 	}
-	if ns := op.GetTimeUnixNano(); ns > 0 {
-		ev.Time = timestamppb.New(time.Unix(0, ns))
-	}
-	switch body := op.GetBody().(type) {
-	case *progressv1.OperationEvent_Started:
-		ev.Body = &streamv1.RunEvent_Started{Started: body.Started}
-	case *progressv1.OperationEvent_Ended:
-		ev.Body = &streamv1.RunEvent_Ended{Ended: body.Ended}
-	case *progressv1.OperationEvent_Output:
-		ev.Body = &streamv1.RunEvent_Output{Output: body.Output}
-	case *progressv1.OperationEvent_Plan:
-		ev.Body = &streamv1.RunEvent_Plan{Plan: body.Plan}
-	case *progressv1.OperationEvent_DnsManualRecords:
-		ev.Body = &streamv1.RunEvent_DnsManualRecords{DnsManualRecords: body.DnsManualRecords}
-	case *progressv1.OperationEvent_Result:
-		ev.Body = &streamv1.RunEvent_Outcome{Outcome: body.Result}
+	if err != nil {
+		return &streamv1.RunEvent{Level: progressv1.Level_LEVEL_ERROR, Message: "the provider sent an event this CLI cannot read: " + err.Error()}
 	}
 	return ev
 }

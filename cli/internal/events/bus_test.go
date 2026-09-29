@@ -161,7 +161,7 @@ func TestNoSinkReceivesASecretABindingInTheOutcomeCarries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	outcome := &progressv1.ResultEvent{Success: true, Bindings: []*bindingsv1.Binding{
+	outcome := &progressv1.OperationResult{Success: true, Bindings: []*bindingsv1.Binding{
 		{Name: "db", Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{
 			Host:     "db.internal",
 			Username: "app",
@@ -227,16 +227,16 @@ func TestASecondInterruptEndsTheOpenRunAsInterruptedOnEverySinkAndClosesThem(t *
 
 	for name, sink := range map[string]*recording{"first": first, "second": second} {
 		received := sink.received()
-		var results []*streamv1.RunResultEvent
+		var results []*streamv1.RunSummary
 		for _, ev := range received {
-			if ev.GetResult() != nil {
-				results = append(results, ev.GetResult())
+			if ev.GetSummary() != nil {
+				results = append(results, ev.GetSummary())
 			}
 		}
 		if len(results) != 1 || !results[0].GetInterrupted() || results[0].GetHeadline() != "Deploy cancelled" {
 			t.Fatalf("%s sink got %d results (first interrupted: %t), want one interrupted result", name, len(results), len(results) > 0 && results[0].GetInterrupted())
 		}
-		if received[len(received)-1].GetResult() == nil {
+		if received[len(received)-1].GetSummary() == nil {
 			t.Fatalf("%s sink's last event is a %T, want the result after every scope ended", name, received[len(received)-1].GetBody())
 		}
 		if !sink.closed {

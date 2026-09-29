@@ -51,9 +51,9 @@ func servedProvider(t *testing.T, version string, p provider.Provider) contractv
 	return client
 }
 
-func drain(stream *connect.ServerStreamForClient[progressv1.OperationEvent]) (*progressv1.ResultEvent, error) {
+func drain(stream *connect.ServerStreamForClient[progressv1.OperationEvent]) (*progressv1.OperationResult, error) {
 	defer stream.Close()
-	var result *progressv1.ResultEvent
+	var result *progressv1.OperationResult
 	for stream.Receive() {
 		if event := stream.Msg().GetResult(); event != nil {
 			result = event

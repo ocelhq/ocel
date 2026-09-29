@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	"github.com/ocelhq/ocel/cli/internal/events"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -31,8 +33,8 @@ func (b *safeBuffer) String() string {
 	return b.buf.String()
 }
 
-func resultEvent(result *streamv1.RunResultEvent) *streamv1.RunEvent {
-	return &streamv1.RunEvent{Level: progressv1.Level_LEVEL_INFO, Body: &streamv1.RunEvent_Result{Result: result}}
+func resultEvent(result *streamv1.RunSummary) *streamv1.RunEvent {
+	return &streamv1.RunEvent{Level: progressv1.Level_LEVEL_INFO, Body: &streamv1.RunEvent_Summary{Summary: result}}
 }
 
 func missingStripeKey() *streamv1.MissingVariables {
@@ -123,10 +125,10 @@ func TestAnEndedScopeWithoutAUsableEndRunsUntilItReachedTheBus(t *testing.T) {
 
 	for _, tc := range []struct {
 		name string
-		end  int64
+		end  *timestamppb.Timestamp
 	}{
-		{"missing end", 0},
-		{"end before start", start.Add(-time.Minute).UnixNano()},
+		{"missing end", nil},
+		{"end before start", timestamppb.New(start.Add(-time.Minute))},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -135,7 +137,7 @@ func TestAnEndedScopeWithoutAUsableEndRunsUntilItReachedTheBus(t *testing.T) {
 
 			deploy := run.Phase(progressv1.Phase_PHASE_DEPLOY)
 			deploy.Forward(&progressv1.OperationEvent{Phase: progressv1.Phase_PHASE_DEPLOY, Subject: "web", SpanId: stage, Message: "deploying web", Body: &progressv1.OperationEvent_Started{Started: &progressv1.Started{}}})
-			deploy.Forward(&progressv1.OperationEvent{TimeUnixNano: tc.end, Phase: progressv1.Phase_PHASE_DEPLOY, Subject: "web", SpanId: stage, Body: &progressv1.OperationEvent_Ended{
+			deploy.Forward(&progressv1.OperationEvent{Time: tc.end, Phase: progressv1.Phase_PHASE_DEPLOY, Subject: "web", SpanId: stage, Body: &progressv1.OperationEvent_Ended{
 				Ended: &progressv1.Ended{Status: progressv1.SpanStatus_SPAN_STATUS_OK, StartTimeUnixNano: start.UnixNano(), Title: "deploying web"},
 			}})
 

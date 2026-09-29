@@ -73,13 +73,13 @@ type manualRecords struct {
 	notes   []string
 }
 
-func drained(t *testing.T, stream *connect.ServerStreamForClient[progressv1.OperationEvent]) (manualRecords, []string, *progressv1.ResultEvent) {
+func drained(t *testing.T, stream *connect.ServerStreamForClient[progressv1.OperationEvent]) (manualRecords, []string, *progressv1.OperationResult) {
 	t.Helper()
 	defer stream.Close()
 
 	var asked manualRecords
 	var said []string
-	var result *progressv1.ResultEvent
+	var result *progressv1.OperationResult
 	for stream.Receive() {
 		event := stream.Msg()
 		if dns := event.GetDnsManualRecords(); dns != nil {

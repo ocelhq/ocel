@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/ocelhq/ocel/cli/internal/events"
@@ -96,7 +98,7 @@ func TestAFailedRunEndsWithAnErrorResultAndExitsWithOne(t *testing.T) {
 	run.End(&err)
 
 	ev := sink.received()[len(sink.received())-1]
-	result := ev.GetResult()
+	result := ev.GetSummary()
 	if result.GetSuccess() || result.GetDetail() != "the upload was refused" || ev.GetLevel() != progressv1.Level_LEVEL_ERROR {
 		t.Fatalf("result = success %v detail %q level %s, want a failure carrying the error at ERROR",
 			result.GetSuccess(), result.GetDetail(), ev.GetLevel())
@@ -120,7 +122,7 @@ func TestAFailedRunForMissingVariablesCarriesThemOnItsResult(t *testing.T) {
 	}}}
 	run.End(&err)
 
-	result := sink.received()[len(sink.received())-1].GetResult()
+	result := sink.received()[len(sink.received())-1].GetSummary()
 	if cells := result.GetMissing().GetCells(); len(cells) != 1 || cells[0].GetKey() != "DATABASE_URL" {
 		t.Fatalf("missing = %v, want DATABASE_URL", cells)
 	}
@@ -140,9 +142,9 @@ func TestAnInterruptedRunEndsCancelledAtWarnAndExitsAsInterrupted(t *testing.T) 
 	run.End(&err)
 
 	ev := sink.received()[len(sink.received())-1]
-	if !ev.GetResult().GetInterrupted() || ev.GetResult().GetHeadline() != "Deploy cancelled" || ev.GetLevel() != progressv1.Level_LEVEL_WARN {
+	if !ev.GetSummary().GetInterrupted() || ev.GetSummary().GetHeadline() != "Deploy cancelled" || ev.GetLevel() != progressv1.Level_LEVEL_WARN {
 		t.Fatalf("result = interrupted %v headline %q level %s, want Deploy cancelled at WARN",
-			ev.GetResult().GetInterrupted(), ev.GetResult().GetHeadline(), ev.GetLevel())
+			ev.GetSummary().GetInterrupted(), ev.GetSummary().GetHeadline(), ev.GetLevel())
 	}
 	var exit *exitcode.ExitError
 	if !errors.As(err, &exit) || exit.Code != exitcode.Interrupt {
@@ -185,7 +187,7 @@ func TestAnInterruptedRunWarnsOfPartlyCreatedResourcesOnlyOnceAPhaseThatChangesT
 			err := context.Canceled
 			run.End(&err)
 
-			if got := sink.received()[len(sink.received())-1].GetResult().GetDetail(); got != tc.detail {
+			if got := sink.received()[len(sink.received())-1].GetSummary().GetDetail(); got != tc.detail {
 				t.Fatalf("detail = %q, want %q", got, tc.detail)
 			}
 		})
@@ -201,8 +203,8 @@ func TestASuccessfulRunEndsWithASuccessResultAndNoError(t *testing.T) {
 	run.End(&err)
 
 	got := sink.received()
-	if ev := got[len(got)-1]; !ev.GetResult().GetSuccess() || ev.GetLevel() != progressv1.Level_LEVEL_INFO {
-		t.Fatalf("result = success %v level %s, want success at INFO", ev.GetResult().GetSuccess(), ev.GetLevel())
+	if ev := got[len(got)-1]; !ev.GetSummary().GetSuccess() || ev.GetLevel() != progressv1.Level_LEVEL_INFO {
+		t.Fatalf("result = success %v level %s, want success at INFO", ev.GetSummary().GetSuccess(), ev.GetLevel())
 	}
 	if ended := got[len(got)-2]; ended.GetEnded().GetStatus() != progressv1.SpanStatus_SPAN_STATUS_OK {
 		t.Fatalf("the deploy phase ended %s, want OK", ended.GetEnded().GetStatus())
@@ -224,7 +226,7 @@ func TestADeployedRunsSuccessResultCarriesItsHeadlineURLNotesAndFlipBound(t *tes
 	var err error
 	run.End(&err)
 
-	result := sink.received()[len(sink.received())-1].GetResult()
+	result := sink.received()[len(sink.received())-1].GetSummary()
 	if !result.GetSuccess() || result.GetHeadline() != "Deployed" ||
 		strings.Join(result.GetUrlNotes(), ",") != "web: https://web.example.com" || result.GetFlipBound().GetTypicalMs() != 3000 {
 		t.Fatalf("result = %s, want a success headed Deployed with its url notes and flip bound", protojson.Format(result))
@@ -239,7 +241,7 @@ func TestARunThatFailsAfterReportingAHeadlineEndsWithTheFailureInstead(t *testin
 	err := errors.New("the service map could not be written")
 	run.End(&err)
 
-	result := sink.received()[len(sink.received())-1].GetResult()
+	result := sink.received()[len(sink.received())-1].GetSummary()
 	if result.GetSuccess() || result.GetHeadline() != "Deploy failed" || result.GetDetail() != "the service map could not be written" {
 		t.Fatalf("result = %s, want the failure headed Deploy failed, not the success headline", protojson.Format(result))
 	}
@@ -251,13 +253,13 @@ func TestAForwardedProviderEventReachesTheSinksAsARunEventWithItsEnvelope(t *tes
 	at := time.Date(2026, 9, 27, 12, 0, 5, 0, time.UTC)
 
 	run.Phase(progressv1.Phase_PHASE_DEPLOY).Forward(&progressv1.OperationEvent{
-		TimeUnixNano: at.UnixNano(),
-		Level:        progressv1.Level_LEVEL_WARN,
-		Phase:        progressv1.Phase_PHASE_PROVISION,
-		Subject:      "web",
-		Message:      "Provisioning web",
-		SpanId:       []byte("unit-web"),
-		Body:         &progressv1.OperationEvent_Started{Started: &progressv1.Started{ParentSpanId: []byte("phase-01")}},
+		Time:    timestamppb.New(at),
+		Level:   progressv1.Level_LEVEL_WARN,
+		Phase:   progressv1.Phase_PHASE_PROVISION,
+		Subject: "web",
+		Message: "Provisioning web",
+		SpanId:  []byte("unit-web"),
+		Body:    &progressv1.OperationEvent_Started{Started: &progressv1.Started{ParentSpanId: []byte("phase-01")}},
 	})
 
 	ev := sink.received()[1]
@@ -290,7 +292,7 @@ func TestAProviderLineRewrittenWithCarriageReturnsReachesEverySinkAsTheLastThing
 	for _, message := range []string{"uploading 10%\ruploading 60%\ruploaded", "carriage returned\r", "first of two\r\nsecond of two"} {
 		deploy.Forward(&progressv1.OperationEvent{Message: message, Body: &progressv1.OperationEvent_Output{Output: &progressv1.Output{}}})
 	}
-	deploy.Forward(&progressv1.OperationEvent{Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Error: "retrying 1\rgave up"}}})
+	deploy.Forward(&progressv1.OperationEvent{Body: &progressv1.OperationEvent_Result{Result: &progressv1.OperationResult{Error: "retrying 1\rgave up"}}})
 
 	got := sink.received()[1:]
 	want := []string{"uploaded", "carriage returned", "first of two\nsecond of two"}
@@ -299,7 +301,7 @@ func TestAProviderLineRewrittenWithCarriageReturnsReachesEverySinkAsTheLastThing
 			t.Errorf("line %d reached the sink as %q, want %q, the last thing it said", i, got[i].GetMessage(), message)
 		}
 	}
-	if outcome := got[3].GetOutcome().GetError(); outcome != "gave up" {
+	if outcome := got[3].GetResult().GetError(); outcome != "gave up" {
 		t.Errorf("the outcome's error reached the sink as %q, want the rewrite collapsed wherever it sits", outcome)
 	}
 }
@@ -310,9 +312,9 @@ func TestAForwardedScopeThatEndsBeforeItStartedEndsWhenItArrives(t *testing.T) {
 	started := c.read().Add(-time.Minute)
 
 	run.Phase(progressv1.Phase_PHASE_DEPLOY).Forward(&progressv1.OperationEvent{
-		TimeUnixNano: started.Add(-time.Minute).UnixNano(),
-		SpanId:       []byte("unit-web"),
-		Body:         &progressv1.OperationEvent_Ended{Ended: &progressv1.Ended{StartTimeUnixNano: started.UnixNano()}},
+		Time:   timestamppb.New(started.Add(-time.Minute)),
+		SpanId: []byte("unit-web"),
+		Body:   &progressv1.OperationEvent_Ended{Ended: &progressv1.Ended{StartTimeUnixNano: started.UnixNano()}},
 	})
 
 	if at := sink.received()[1].GetTime().AsTime(); !at.Equal(c.read()) {
@@ -325,16 +327,16 @@ func TestTheAppsAProvidersOutcomeReportsAreOnTheRunsResult(t *testing.T) {
 	run, _ := begin(t, sink)
 
 	run.Phase(progressv1.Phase_PHASE_DEPLOY).Forward(&progressv1.OperationEvent{Body: &progressv1.OperationEvent_Result{
-		Result: &progressv1.ResultEvent{Apps: []*progressv1.AppResult{{App: "web"}}},
+		Result: &progressv1.OperationResult{Apps: []*progressv1.AppResult{{App: "web"}}},
 	}})
 	var err error
 	run.End(&err)
 
 	got := sink.received()
-	if got[1].GetOutcome() == nil {
+	if got[1].GetResult() == nil {
 		t.Fatalf("the provider's result reached the sinks as %v, want an outcome", bodies(got[1:2]))
 	}
-	if apps := got[len(got)-1].GetResult().GetApps(); len(apps) != 1 || apps[0].GetApp() != "web" {
+	if apps := got[len(got)-1].GetSummary().GetApps(); len(apps) != 1 || apps[0].GetApp() != "web" {
 		t.Fatalf("result apps = %v, want web", apps)
 	}
 }
@@ -355,7 +357,7 @@ func TestARunInAProjectTracesItselfAndPointsItsResultAtItsLog(t *testing.T) {
 	}
 	run.End(&err)
 
-	logPath := sink.received()[0].GetResult().GetLogPath()
+	logPath := sink.received()[0].GetSummary().GetLogPath()
 	if logPath != traced.LogPath() || !strings.HasPrefix(logPath, filepath.Join(dir, constants.ProjectStateDirName, "runs")) {
 		t.Fatalf("log path = %q, want the trace's log %q under the project", logPath, traced.LogPath())
 	}
@@ -395,7 +397,7 @@ func TestARunInAProjectLogsEveryEventDebugIncludedUpToItsResultAndNothingAfter(t
 		}
 		got = append(got, bodies([]*streamv1.RunEvent{ev})[0]+" "+ev.GetLevel().String())
 	}
-	want := []string{"started LEVEL_INFO", "message LEVEL_DEBUG", "ended LEVEL_INFO", "result LEVEL_INFO"}
+	want := []string{"started LEVEL_INFO", "message LEVEL_DEBUG", "ended LEVEL_INFO", "summary LEVEL_INFO"}
 	if strings.Join(got, ", ") != strings.Join(want, ", ") {
 		t.Errorf("the run's log = %q, want %q", got, want)
 	}
@@ -430,7 +432,7 @@ func TestAFailedOrCancelledRunsHeadlineNamesTheCommandItEnded(t *testing.T) {
 			}
 			run.End(&failure)
 
-			if got := sink.received()[len(sink.received())-1].GetResult().GetHeadline(); got != tc.want {
+			if got := sink.received()[len(sink.received())-1].GetSummary().GetHeadline(); got != tc.want {
 				t.Errorf("`%s` ended with headline %q, want %q", tc.command, got, tc.want)
 			}
 		})
@@ -447,7 +449,7 @@ func TestASuccessfulRunThatReportedNoHeadlineIsHeadedByTheCommandItFinished(t *t
 	}
 	run.End(&err)
 
-	if got := sink.received()[len(sink.received())-1].GetResult().GetHeadline(); got != "Env ls finished" {
+	if got := sink.received()[len(sink.received())-1].GetSummary().GetHeadline(); got != "Env ls finished" {
 		t.Errorf("the run ended with headline %q, want Env ls finished", got)
 	}
 }

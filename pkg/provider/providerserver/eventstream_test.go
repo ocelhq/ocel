@@ -306,8 +306,8 @@ func TestASpanSaysAMessageOnlyLineWritesOutputAndOpensAndEndsItsDetailSpans(t *t
 	if closed.GetEnded() == nil || string(closed.GetSpanId()) != string(opened.GetSpanId()) {
 		t.Errorf("Span() closes %T %x, want the span it opened, %x", closed.GetBody(), closed.GetSpanId(), opened.GetSpanId())
 	}
-	if opened.GetTimeUnixNano() != time.Unix(1000, 0).UnixNano() || closed.GetTimeUnixNano() != time.Unix(1005, 0).UnixNano() {
-		t.Errorf("the detail span runs %d to %d, want its own start and end", opened.GetTimeUnixNano(), closed.GetTimeUnixNano())
+	if opened.GetTime().AsTime().UnixNano() != time.Unix(1000, 0).UnixNano() || closed.GetTime().AsTime().UnixNano() != time.Unix(1005, 0).UnixNano() {
+		t.Errorf("the detail span runs %d to %d, want its own start and end", opened.GetTime().AsTime().UnixNano(), closed.GetTime().AsTime().UnixNano())
 	}
 	for i, event := range events {
 		if err := protovalidate.Validate(event); err != nil {
@@ -338,7 +338,7 @@ func TestEveryEventASpanSendsCarriesATimeALevelAndTheSpansPhase(t *testing.T) {
 		t.Fatalf("got %d events, want 4", len(events))
 	}
 	for i, event := range events[:2] {
-		if at := event.GetTimeUnixNano(); at < before || at > after {
+		if at := event.GetTime().AsTime().UnixNano(); at < before || at > after {
 			t.Errorf("event %d is stamped %d, want the time it was sent, between %d and %d", i, at, before, after)
 		}
 		if string(event.GetSpanId()) != string(span.ID[:]) {

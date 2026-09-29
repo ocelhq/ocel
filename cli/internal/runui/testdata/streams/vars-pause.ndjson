@@ -9,4 +9,4 @@
 {"time":"2026-09-27T10:00:04Z","level":"LEVEL_INFO","spanId":"AwAAAAAAAAA=","phase":"PHASE_BUILD","subject":"web","message":" ✓ Compiled successfully","output":{"stream":"STREAM_STDOUT"}}
 {"time":"2026-09-27T10:00:05Z","level":"LEVEL_INFO","spanId":"AwAAAAAAAAA=","phase":"PHASE_BUILD","subject":"web","ended":{"title":"Built app web","status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503203000000000"}}
 {"time":"2026-09-27T10:00:05Z","level":"LEVEL_INFO","spanId":"AQAAAAAAAAA=","phase":"PHASE_BUILD","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503200000000000"}}
-{"time":"2026-09-27T10:00:12Z","level":"LEVEL_INFO","result":{"success":true,"headline":"Deployed acme to production","durationMs":"12000","apps":[{"app":"web","outcome":"APP_OUTCOME_SUCCEEDED","urls":["https://acme.example.com"]}]}}
+{"time":"2026-09-27T10:00:12Z","level":"LEVEL_INFO","summary":{"success":true,"headline":"Deployed acme to production","durationMs":"12000","apps":[{"app":"web","outcome":"APP_OUTCOME_SUCCEEDED","urls":["https://acme.example.com"]}]}}

@@ -315,7 +315,7 @@ func TestRemovingABootstrapAsksForItsNameWhileTheRunIsHeldAfterThePlanItShows(t 
 	if resumed < waiting || evs[resumed].GetResumed().GetReason() != "answered" {
 		t.Fatalf("resumed at event %d, held at %d: want the run resumed once answered: %s", resumed, waiting, stream.String())
 	}
-	if result := evs[len(evs)-1].GetResult(); !result.GetSuccess() || result.GetHeadline() != "Removed the production bootstrap" {
+	if result := evs[len(evs)-1].GetSummary(); !result.GetSuccess() || result.GetHeadline() != "Removed the production bootstrap" {
 		t.Errorf("result = %v, want the run to end reporting the removal", result)
 	}
 	if planned, removed := removalsAsked(t, project); planned != 1 || removed != 1 {
@@ -696,7 +696,7 @@ func TestTheBootstrapPlanIsAPlanPhaseEventBeforeTheConsentPrompt(t *testing.T) {
 	if resumed < waiting || evs[resumed].GetResumed().GetReason() != "answered" {
 		t.Fatalf("resumed at event %d, held at %d: want the run resumed once answered: %s", resumed, waiting, stream.String())
 	}
-	if result := evs[len(evs)-1].GetResult(); !result.GetSuccess() || result.GetHeadline() != "Bootstrapped the production environment" {
+	if result := evs[len(evs)-1].GetSummary(); !result.GetSuccess() || result.GetHeadline() != "Bootstrapped the production environment" {
 		t.Errorf("result = %v, want the run to end reporting the bootstrap", result)
 	}
 	if got := applies(t, project); len(got) != 1 {

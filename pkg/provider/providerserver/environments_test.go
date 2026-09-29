@@ -392,7 +392,7 @@ func seedContainerStack(t *testing.T, p *fake.Provider, slug, pointer, app, imag
 	return name
 }
 
-func removeEnvironment(t *testing.T, client contractv1connect.ProviderServiceClient, slug, pointer string) *progressv1.ResultEvent {
+func removeEnvironment(t *testing.T, client contractv1connect.ProviderServiceClient, slug, pointer string) *progressv1.OperationResult {
 	t.Helper()
 
 	stream, err := client.RemoveEnvironment(context.Background(), &contractv1.RemoveEnvironmentRequest{

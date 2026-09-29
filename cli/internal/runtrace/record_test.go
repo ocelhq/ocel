@@ -42,7 +42,7 @@ func TestEveryEventDebugIncludedLandsInTheRunsNDJSONFileAsARunEvent(t *testing.T
 	sent := []*streamv1.RunEvent{
 		{Time: at, Level: progressv1.Level_LEVEL_INFO, Phase: progressv1.Phase_PHASE_BUILD, Message: "Building project"},
 		{Time: at, Level: progressv1.Level_LEVEL_DEBUG, Subject: "aws", Message: "pulumi engine line", Body: &streamv1.RunEvent_Output{Output: &progressv1.Output{Stream: progressv1.Stream_STREAM_STDERR}}},
-		{Time: at, Level: progressv1.Level_LEVEL_ERROR, Body: &streamv1.RunEvent_Result{Result: &streamv1.RunResultEvent{Detail: "boom"}}},
+		{Time: at, Level: progressv1.Level_LEVEL_ERROR, Body: &streamv1.RunEvent_Summary{Summary: &streamv1.RunSummary{Detail: "boom"}}},
 	}
 	for _, ev := range sent {
 		r.Receive(ev)

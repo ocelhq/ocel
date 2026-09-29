@@ -195,7 +195,7 @@ func TestDeployRefusesAnEdgeThatRunsCodeForAProviderThatWritesNoProgram(t *testi
 	}
 }
 
-func previewDeployed(t *testing.T, req *contractv1.DeployRequest) (*fake.Provider, *progressv1.ResultEvent) {
+func previewDeployed(t *testing.T, req *contractv1.DeployRequest) (*fake.Provider, *progressv1.OperationResult) {
 	t.Helper()
 	builtProject(t)
 	client, vendor := contractServed(t, "1.0.0")

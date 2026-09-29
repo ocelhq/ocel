@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -151,8 +153,8 @@ func (t *spanEvents) run(span Span, do func(*spanRun) error) error {
 func (t *spanEvents) Start(at time.Time, spans ...Span) {
 	for _, s := range spans {
 		t.sender.send(s.event(&progressv1.OperationEvent{
-			TimeUnixNano: at.UnixNano(),
-			Message:      s.Title.Started,
+			Time:    timestamppb.New(at),
+			Message: s.Title.Started,
 			Body: &progressv1.OperationEvent_Started{Started: &progressv1.Started{
 				ParentSpanId: nonZeroSpanID(s.ParentID),
 			}},
@@ -180,11 +182,11 @@ func (t *spanEvents) ended(span Span, start, end time.Time, status progressv1.Sp
 	}
 
 	t.sender.send(&progressv1.OperationEvent{
-		TimeUnixNano: end.UnixNano(),
-		Level:        level,
-		Phase:        span.Phase,
-		Subject:      span.Subject,
-		SpanId:       span.ID[:],
+		Time:    timestamppb.New(end),
+		Level:   level,
+		Phase:   span.Phase,
+		Subject: span.Subject,
+		SpanId:  span.ID[:],
 		Body: &progressv1.OperationEvent_Ended{Ended: &progressv1.Ended{
 			Status:            status,
 			StartTimeUnixNano: start.UnixNano(),

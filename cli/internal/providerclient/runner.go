@@ -362,7 +362,7 @@ var ErrClientUnavailable = errors.New("provider: the provider was reached before
 
 type streamCall[Req any] func(contractv1connect.ProviderServiceClient, context.Context, *Req) (*connect.ServerStreamForClient[progressv1.OperationEvent], error)
 
-func stream[Req any](ctx context.Context, r *Runner, rpc string, req *Req, call streamCall[Req], onEvent func(*progressv1.OperationEvent)) (*progressv1.ResultEvent, error) {
+func stream[Req any](ctx context.Context, r *Runner, rpc string, req *Req, call streamCall[Req], onEvent func(*progressv1.OperationEvent)) (*progressv1.OperationResult, error) {
 	client, err := r.Client()
 	if err != nil {
 		return nil, err
@@ -371,7 +371,7 @@ func stream[Req any](ctx context.Context, r *Runner, rpc string, req *Req, call 
 	return r.driveStream(rpc, events, callErr, onEvent)
 }
 
-func (r *Runner) driveStream(rpc string, stream *connect.ServerStreamForClient[progressv1.OperationEvent], callErr error, onEvent func(*progressv1.OperationEvent)) (*progressv1.ResultEvent, error) {
+func (r *Runner) driveStream(rpc string, stream *connect.ServerStreamForClient[progressv1.OperationEvent], callErr error, onEvent func(*progressv1.OperationEvent)) (*progressv1.OperationResult, error) {
 	if callErr != nil {
 		if cancelled(callErr) {
 			return nil, fmt.Errorf("provider: %s was cancelled: %w", rpc, callErr)

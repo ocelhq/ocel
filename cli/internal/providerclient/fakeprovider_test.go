@@ -214,11 +214,11 @@ func (s *fakeProviderServer) Deploy(ctx context.Context, req *contractv1.DeployR
 	switch s.mode {
 	case "fail":
 		return stream.Send(&progressv1.OperationEvent{
-			Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: false, Error: "simulated deploy failure"}},
+			Body: &progressv1.OperationEvent_Result{Result: &progressv1.OperationResult{Success: false, Error: "simulated deploy failure"}},
 		})
 	case "refuse-deploy":
 		if err := stream.Send(&progressv1.OperationEvent{
-			Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{
+			Body: &progressv1.OperationEvent_Result{Result: &progressv1.OperationResult{
 				Refused: true,
 				Error:   "simulated deploy refusal",
 				Apps: []*progressv1.AppResult{
@@ -239,7 +239,7 @@ func (s *fakeProviderServer) Deploy(ctx context.Context, req *contractv1.DeployR
 		return nil
 	default:
 		return stream.Send(&progressv1.OperationEvent{
-			Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
+			Body: &progressv1.OperationEvent_Result{Result: &progressv1.OperationResult{Success: true}},
 		})
 	}
 }
@@ -267,11 +267,11 @@ func (s *fakeProviderServer) Bootstrap(ctx context.Context, req *contractv1.Boot
 	}
 	if s.mode == "fail" {
 		return stream.Send(&progressv1.OperationEvent{
-			Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: false, Error: "simulated bootstrap failure"}},
+			Body: &progressv1.OperationEvent_Result{Result: &progressv1.OperationResult{Success: false, Error: "simulated bootstrap failure"}},
 		})
 	}
 	return stream.Send(&progressv1.OperationEvent{
-		Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
+		Body: &progressv1.OperationEvent_Result{Result: &progressv1.OperationResult{Success: true}},
 	})
 }
 
