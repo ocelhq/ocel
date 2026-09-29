@@ -42,7 +42,7 @@ const loadScript = `dir=` + loadDir + `
 while [ ! -e "$dir/stop" ]; do
     at=$(date +%s.%N)
     said=$(curl -sk -m 10 -w ' %{http_code}' --resolve "$2:443:127.0.0.1" "https://$2/" || true)
-    printf '%s %s\n' "$at" "$said" >> "$dir/$1"
+    printf '%s %s %s\n' "$at" "$2" "$said" >> "$dir/$1"
 done
 `
 
@@ -88,17 +88,20 @@ func (vm machine) clock(t *testing.T) float64 {
 
 type answered struct {
 	at   float64
+	host string
 	body string
 	code string
 }
 
-func (vm machine) loads(t *testing.T, hostname string) {
+func (vm machine) loads(t *testing.T, hostnames ...string) {
 	t.Helper()
 	vm.ssh(t, "rm -rf "+loadDir+" && mkdir -p "+loadDir)
 	vm.feeds(t, "cat > "+loadDir+"/loop.sh", []byte(loadScript))
 	t.Cleanup(func() { vm.ssh(t, "touch "+loadDir+"/stop") })
-	vm.ssh(t, "for n in $(seq 1 "+strconv.Itoa(loadLoops)+"); do setsid sh "+loadDir+"/loop.sh \"$n\" "+quote(hostname)+
-		" </dev/null >/dev/null 2>&1 & done")
+	for at, hostname := range hostnames {
+		vm.ssh(t, "for n in $(seq 1 "+strconv.Itoa(loadLoops)+"); do setsid sh "+loadDir+"/loop.sh \""+strconv.Itoa(at)+"-$n\" "+quote(hostname)+
+			" </dev/null >/dev/null 2>&1 & done")
+	}
 }
 
 func (vm machine) answers(t *testing.T) []answered {
@@ -106,14 +109,14 @@ func (vm machine) answers(t *testing.T) []answered {
 	var read []answered
 	for _, line := range lines(vm.ssh(t, "cat "+loadDir+"/[0-9]* 2>/dev/null || true")) {
 		fields := strings.Fields(line)
-		if len(fields) < 2 {
+		if len(fields) < 3 {
 			continue
 		}
 		at, err := strconv.ParseFloat(fields[0], 64)
 		if err != nil {
 			t.Fatalf("a load line reads %q: %v", line, err)
 		}
-		read = append(read, answered{at: at, body: strings.Join(fields[1:len(fields)-1], " "), code: fields[len(fields)-1]})
+		read = append(read, answered{at: at, host: fields[1], body: strings.Join(fields[2:len(fields)-1], " "), code: fields[len(fields)-1]})
 	}
 	return read
 }

@@ -215,30 +215,33 @@ func servesBehindCaddy(t *testing.T, vm machine, cf caddyFront) {
 	}
 
 	two := provisioned(t, d, "two")
-	vm.loads(t, frontedHostname)
+	vm.loads(t, frontedHostname, cf.theirs)
 	vm.awaitAnswers(t, "of one before the flip", counting("one", 0))
+	vm.awaitAnswers(t, "of your own site before the flip", counting("mine", 0))
 	flipping := vm.clock(t)
 	promotes(t, d, stack, "p-two", "two", two, 2)
 	flipped := vm.clock(t)
 	vm.awaitAnswers(t, "of two after the flip", counting("two", flipped))
 	heard := vm.stopsLoad(t)
-	var during int
+	during := map[string]int{}
 	for _, answer := range heard {
 		if !strings.HasPrefix(answer.code, "2") {
-			t.Errorf("a request through %s asked at %.3f answered %s while the release flipped between %.3f and %.3f", cf.front, answer.at, answer.code, flipping, flipped)
+			t.Errorf("a request for %s through %s asked at %.3f answered %s while the release flipped between %.3f and %.3f", answer.host, cf.front, answer.at, answer.code, flipping, flipped)
 		}
 		if answer.at >= flipping && answer.at <= flipped {
-			during++
+			during[answer.host]++
 		}
-		if answer.at > flipped && answer.body != "two" {
+		if answer.host == cf.theirs && answer.body != "mine" {
+			t.Errorf("your own site %s asked at %.3f answered %q through %s, want mine: it keeps serving throughout the redeploy", cf.theirs, answer.at, answer.body, cf.front)
+		}
+		if answer.host == frontedHostname && answer.at > flipped && answer.body != "two" {
 			t.Errorf("a request through %s asked at %.3f, after the flip finished at %.3f, answered %q, want two", cf.front, answer.at, flipped, answer.body)
 		}
 	}
-	if during == 0 {
-		t.Errorf("no request through %s was asked while the release flipped between %.3f and %.3f, so the %d answered prove nothing about the flip", cf.front, flipping, flipped, len(heard))
-	}
-	if served := vm.servedThroughCaddy(t, cf.theirs); served != "mine" {
-		t.Errorf("%s answered %q after a redeploy, want your own site still serving", cf.theirs, served)
+	for _, hostname := range []string{frontedHostname, cf.theirs} {
+		if during[hostname] == 0 {
+			t.Errorf("no request for %s through %s was asked while the release flipped between %.3f and %.3f, so the %d answered prove nothing about the flip", hostname, cf.front, flipping, flipped, len(heard))
+		}
 	}
 
 	servesAPreviewBehindCaddy(t, vm, d, opened, cf)
