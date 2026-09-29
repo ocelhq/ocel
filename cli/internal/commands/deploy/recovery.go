@@ -200,8 +200,12 @@ type abandonedRefusal struct {
 }
 
 func (e *abandonedRefusal) Error() string {
-	return e.refusal.Error() + "\n\n" + variableeditor.AbandonedMessage + "."
+	return e.refusal.Error() + "\n\n" + e.Detail()
 }
+
+func (e *abandonedRefusal) Variables() *streamv1.MissingVariables { return e.refusal.Variables() }
+
+func (e *abandonedRefusal) Detail() string { return variableeditor.AbandonedMessage + "." }
 
 func (e *abandonedRefusal) Unwrap() []error {
 	return []error{e.refusal, variableeditor.ErrAbandoned}

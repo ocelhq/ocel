@@ -145,6 +145,36 @@ func TestAFailedRunForMissingVariablesCarriesThemOnItsResult(t *testing.T) {
 	}
 }
 
+func TestAFailedRunForMissingVariablesCarriesTheDetailItsErrorGivesBeyondThem(t *testing.T) {
+	sink := &recording{}
+	run, _ := begin(t, sink)
+
+	var err error = &refusalWithDetail{refusal: &variables.MissingError{Problems: []*resourcesv1.VariableProblem{{
+		Key:  "DATABASE_URL",
+		Kind: resourcesv1.VariableProblem_KIND_MISSING,
+	}}}, detail: "the page closed first"}
+	run.End(&err)
+
+	result := sink.received()[len(sink.received())-1].GetSummary()
+	if cells := result.GetMissing().GetCells(); len(cells) != 1 || cells[0].GetKey() != "DATABASE_URL" {
+		t.Fatalf("missing = %v, want DATABASE_URL", cells)
+	}
+	if result.GetDetail() != "the page closed first" {
+		t.Fatalf("detail = %q, want the error's own detail", result.GetDetail())
+	}
+}
+
+type refusalWithDetail struct {
+	refusal *variables.MissingError
+	detail  string
+}
+
+func (e *refusalWithDetail) Error() string { return e.refusal.Error() + "\n\n" + e.detail }
+
+func (e *refusalWithDetail) Variables() *streamv1.MissingVariables { return e.refusal.Variables() }
+
+func (e *refusalWithDetail) Detail() string { return e.detail }
+
 func TestAnInterruptedRunEndsCancelledAtWarnAndExitsAsInterrupted(t *testing.T) {
 	sink := &recording{}
 	ctx, cancel := context.WithCancel(context.Background())

@@ -22,6 +22,7 @@ import (
 type missingVariablesError interface {
 	error
 	Variables() *streamv1.MissingVariables
+	Detail() string
 }
 
 type Run struct {
@@ -99,7 +100,7 @@ func (r *Run) result(err error) (*streamv1.RunSummary, int) {
 	var missing missingVariablesError
 	if errors.As(err, &missing) {
 		result.Missing = missing.Variables()
-		result.Detail = strings.TrimLeft(strings.TrimPrefix(err.Error(), missing.Error()), "\n")
+		result.Detail = missing.Detail()
 	}
 	var exit *exitcode.ExitError
 	if errors.As(err, &exit) {

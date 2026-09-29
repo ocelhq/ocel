@@ -23,6 +23,8 @@ func (r *MissingError) Error() string {
 	return strings.Join(lines, "\n")
 }
 
+func (r *MissingError) Detail() string { return "" }
+
 func (r *MissingError) Variables() *streamv1.MissingVariables {
 	cells := make([]*streamv1.MissingVariable, 0, len(r.Problems))
 	groups := make([]*streamv1.MissingGroup, 0, len(r.Groups))
