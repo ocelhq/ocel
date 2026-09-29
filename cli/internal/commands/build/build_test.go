@@ -267,3 +267,25 @@ func TestBuildingAGoProjectUnpacksNoNodeBundle(t *testing.T) {
 		t.Fatalf("%s was unpacked for a project with no JavaScript", node.DistDir(root))
 	}
 }
+
+func TestBuildUnpacksTheNodeBundleForAJavaScriptAppBesideNoRootPackageJSON(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  slug: "test-app",
+  apps: [{ name: "web", path: "apps/web", compute: "serverless" }],
+};
+`)
+	clitest.WriteFile(t, filepath.Join(root, "apps", "web", "package.json"), `{"name":"web"}`)
+
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, nil)
+	if err := runBuild(context.Background(), dependencies, root); err != nil {
+		t.Fatalf("runBuild: %v", err)
+	}
+	if _, err := os.Stat(node.BuildScriptPath(root)); err != nil {
+		t.Fatalf("the node build script is not at %s: web is a node app, and its build runs through that script: %v", node.BuildScriptPath(root), err)
+	}
+}

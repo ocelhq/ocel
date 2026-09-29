@@ -220,7 +220,7 @@ func TestRunDoctorOnAHealthyProject(t *testing.T) {
 
 	want := strings.Join([]string{
 		"Project  my-shop · ocel.config.ts",
-		"  ✓ node is needed — ocel.config.ts is TypeScript, this project contains JavaScript — node vX on PATH",
+		"  ✓ node is needed — ocel.config.ts is TypeScript, an app is JavaScript, this project declares resources in JavaScript — node vX on PATH",
 		"  ✓ config loads — 2 apps (web, api)",
 		"  ✓ provider fake " + version.Version + "",
 		"  ✓ provider default edge",

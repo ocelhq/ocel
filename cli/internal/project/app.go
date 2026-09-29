@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/english"
+	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
@@ -59,6 +61,12 @@ func (a App) Framework() string {
 }
 
 func (a App) Architecture() string { return arch.Architecture(a.Arch) }
+
+func (p *Project) HasJSApp() bool {
+	return slices.ContainsFunc(p.Apps, func(a App) bool {
+		return language.OfApp(a.Framework(), filepath.Join(p.Dir, a.Path)) == language.JS
+	})
+}
 
 func SharedFolder(apps []App) string {
 	if len(apps) == 0 {

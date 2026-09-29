@@ -65,11 +65,7 @@ func runBuild(ctx context.Context, dependencies Dependencies, cwd string) (err e
 		}
 	}
 
-	hasJS, err := build.HasJS(declared)
-	if err != nil {
-		return err
-	}
-	if hasJS {
+	if declared.HasJSApp() {
 		if err := node.Ensure(declared.Dir); err != nil {
 			return err
 		}

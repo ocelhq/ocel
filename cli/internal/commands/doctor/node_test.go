@@ -8,7 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/discovery"
+	"github.com/ocelhq/ocel/cli/internal/fixturetest"
 	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 func goProject(t *testing.T, configName string) *project.Project {
@@ -53,15 +56,63 @@ func TestATypeScriptConfigNeedsNodeAndSaysSo(t *testing.T) {
 	}
 }
 
-func TestJavaScriptInTheProjectNeedsNode(t *testing.T) {
+func TestAJavaScriptAppNeedsNode(t *testing.T) {
 	t.Parallel()
 
 	cfg := goProject(t, "ocel.json")
-	if err := os.WriteFile(filepath.Join(cfg.Dir, "package.json"), []byte("{}\n"), 0o644); err != nil {
+	if err := os.MkdirAll(filepath.Join(cfg.Dir, "apps", "web"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if reasons := nodeReasons(cfg); !slices.Contains(reasons, "this project contains JavaScript") {
-		t.Fatalf("nodeReasons() = %v, want the JavaScript named", reasons)
+	if err := os.WriteFile(filepath.Join(cfg.Dir, "apps", "web", "package.json"), []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg.Apps = []project.App{{Name: "web", Path: "apps/web", Compute: provider.ComputeContainer}}
+	if reasons := nodeReasons(cfg); !slices.Contains(reasons, "an app is JavaScript") {
+		t.Fatalf("nodeReasons() = %v, want the JavaScript app named", reasons)
+	}
+}
+
+func TestADeclarationRootWrittenInJavaScriptNeedsNode(t *testing.T) {
+	t.Parallel()
+
+	cfg := goProject(t, "ocel.json")
+	dir := filepath.Join(cfg.Dir, discovery.DefaultRootDirName)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "main.ts"), []byte("export {};"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if reasons := nodeReasons(cfg); !slices.Contains(reasons, "this project declares resources in JavaScript") {
+		t.Fatalf("nodeReasons() = %v, want the JavaScript declarations named", reasons)
+	}
+}
+
+func TestADiscoveryPathThatIsNotThereNeedsNodeRatherThanPassingSilently(t *testing.T) {
+	t.Parallel()
+
+	cfg := goProject(t, "ocel.json")
+	cfg.DiscoveryPaths = []string{"nowhere"}
+	if reasons := nodeReasons(cfg); !slices.Contains(reasons, "this project declares resources in JavaScript") {
+		t.Fatalf("nodeReasons() = %v, want node checked for roots it could not read", reasons)
+	}
+}
+
+func TestTheFixturesOfAnotherLanguageNeedNoNode(t *testing.T) {
+	tried := 0
+	for _, dir := range fixturetest.Dirs(t) {
+		if fixturetest.IsNode(t, dir) {
+			continue
+		}
+		tried++
+		t.Run(filepath.Base(filepath.Dir(dir))+"/"+filepath.Base(dir), func(t *testing.T) {
+			if reasons := nodeReasons(&project.Project{Dir: dir}); len(reasons) != 0 {
+				t.Fatalf("nodeReasons() = %v for %s, and its own language is not js", reasons, dir)
+			}
+		})
+	}
+	if tried == 0 {
+		t.Fatal("no fixture is written in a language other than js")
 	}
 }
 
