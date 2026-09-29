@@ -27,7 +27,7 @@ func (t Traefik) Reload(ctx context.Context) error { return t.reload(ctx) }
 func (t Traefik) Inspect(ctx context.Context) (proxy.Checks, error) { return t.inspect(ctx) }
 
 func (t Traefik) Certificate(ctx context.Context, hostname string) (proxy.Certificate, error) {
-	spec, err := t.Box.Spec(ctx)
+	spec, err := t.Box.ReadSpec(ctx)
 	if err != nil {
 		return proxy.Certificate{}, err
 	}

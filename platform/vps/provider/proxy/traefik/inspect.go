@@ -19,14 +19,14 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
-var bootstrapFix = "run `" + provider.BootstrapCommand(environment.TierProduction) + "` to stand the switchboard where your Traefik reaches it"
+var bootstrapFix = "run `" + provider.BootstrapCommand(environment.TierProduction) + "` to recreate the switchboard where your Traefik reaches it"
 
 func (t Traefik) inspect(ctx context.Context) (proxy.Checks, error) {
-	spec, err := t.Box.Spec(ctx)
+	spec, err := t.Box.ReadSpec(ctx)
 	if err != nil {
 		return nil, err
 	}
-	checks, err := t.standing(ctx)
+	checks, err := t.switchboardChecks(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +65,7 @@ func (t Traefik) inspect(ctx context.Context) (proxy.Checks, error) {
 	return append(checks, outranked...), nil
 }
 
-func (t Traefik) standing(ctx context.Context) (proxy.Checks, error) {
+func (t Traefik) switchboardChecks(ctx context.Context) (proxy.Checks, error) {
 	said, err := t.Box.Ran(ctx, "read what "+switchboard.Name+" mounts and which networks it is on", switchboardFacts())
 	if err != nil {
 		return nil, err
@@ -160,7 +160,7 @@ func (t Traefik) outranked(ctx context.Context, hostnames []string) (proxy.Check
 func (t Traefik) certificate(ctx context.Context, spec proxy.Spec, hostname string) (proxy.Certificate, error) {
 	certificate := proxy.Certificate{Renewal: fmt.Sprintf("your Traefik renews it through %s, for as long as its acme.json holds it",
 		t.resolverOf(hostname, spec.PreviewBase))}
-	block, err := t.Box.Leaf(ctx, hostname)
+	block, err := t.Box.ReadLeaf(ctx, hostname)
 	if err != nil {
 		return certificate, err
 	}

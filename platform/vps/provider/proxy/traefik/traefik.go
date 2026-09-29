@@ -32,12 +32,12 @@ const (
 
 type Box interface {
 	Ran(ctx context.Context, what string, argv []string) (string, error)
-	Beside(ctx context.Context, path string) ([]switchboard.Neighbour, error)
-	Spec(ctx context.Context) (proxy.Spec, error)
-	Routed(ctx context.Context, hostname string) (answered, failure string, err error)
+	ReadBeside(ctx context.Context, path string) ([]switchboard.SiblingFile, error)
+	ReadSpec(ctx context.Context) (proxy.Spec, error)
+	ProbeAnyCertificate(ctx context.Context, hostname string) (answered, failure string, err error)
 	Pause(ctx context.Context, wait time.Duration) error
 	PlacedSum(ctx context.Context, path string) (string, error)
-	Leaf(ctx context.Context, hostname string) ([]byte, error)
+	ReadLeaf(ctx context.Context, hostname string) ([]byte, error)
 }
 
 type Traefik struct {

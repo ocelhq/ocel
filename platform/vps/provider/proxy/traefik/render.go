@@ -75,7 +75,7 @@ func (t Traefik) render(spec proxy.Spec) ([]byte, error) {
 			EntryPoints: []string{t.HTTPS},
 			Service:     service,
 			Priority:    priority,
-			TLS:         t.certified(hostname, spec.PreviewBase),
+			TLS:         t.tlsFor(hostname, spec.PreviewBase),
 		}
 		config.HTTP.Routers[name+httpSuffix] = router{
 			Rule:        rule,
@@ -103,20 +103,20 @@ func (t Traefik) validate(rendered []byte) error {
 			"the routes ocel would write to %s contain %s, which your Traefik reads as a template before it parses the file; take it out of the proxy option",
 			t.file(), templateOpen)
 	}
-	if err := strictly(rendered); err != nil {
+	if err := decodeStrictly(rendered); err != nil {
 		return refusal.Refuse(refusal.CodeInvalid, "the routes ocel would write to %s do not read back: %v", t.file(), err)
 	}
 	return nil
 }
 
-func strictly(rendered []byte) error {
+func decodeStrictly(rendered []byte) error {
 	decoder := yaml.NewDecoder(bytes.NewReader(rendered))
 	decoder.KnownFields(true)
 	var read dynamic
 	return decoder.Decode(&read)
 }
 
-func (t Traefik) certified(hostname, base string) *tls {
+func (t Traefik) tlsFor(hostname, base string) *tls {
 	if t.PreviewResolver == "" || base == "" {
 		return &tls{CertResolver: t.Resolver}
 	}

@@ -93,7 +93,7 @@ func TestYourTraefikIsAskedWhetherItRoutesAHostnameWhateverCertificateItHasForIt
 	t.Parallel()
 
 	box := machine(nil)
-	if _, _, err := (frontBox{box.host()}).Routed(context.Background(), "web.localhost"); err != nil {
+	if _, _, err := (frontBox{box.host()}).ProbeAnyCertificate(context.Background(), "web.localhost"); err != nil {
 		t.Fatalf("Routed() = %v", err)
 	}
 	want := words([]string{SwitchboardBinary, "probe", "--any-certificate", "web.localhost"})
@@ -171,7 +171,7 @@ func TestTheSwitchboardIsWrittenBesideYourTraefikOnlyOntoADirectoryTheBoxHas(t *
 	}
 }
 
-func TestADeployStandingTheSwitchboardAgainTakesADirectoryItCannotLookIntoAsThere(t *testing.T) {
+func TestADeployRecreatingTheSwitchboardTakesADirectoryItCannotLookIntoAsPresent(t *testing.T) {
 	t.Parallel()
 
 	if os.Geteuid() == 0 {
@@ -206,12 +206,12 @@ func TestADeployStandingTheSwitchboardAgainTakesADirectoryItCannotLookIntoAsTher
 		}
 		restored, err := exec.Command("sh", "-c", board.placePresent()).CombinedOutput()
 		if refused := err != nil; refused != missing {
-			t.Errorf("standing the switchboard onto %s = %v, %q; want it refused = %v", dir, err, restored, missing)
+			t.Errorf("recreating the switchboard onto %s = %v, %q; want it refused = %v", dir, err, restored, missing)
 		}
 	}
 }
 
-func TestASwitchboardADeployStandsAgainBesideYourTraefikHearsHTTPSWhereBootstrapHadIt(t *testing.T) {
+func TestASwitchboardADeployRecreatesBesideYourTraefikHearsHTTPSWhereBootstrapHadIt(t *testing.T) {
 	t.Parallel()
 
 	restored := switchboardBox(nil, coolifysTraefik()).restoring(containerRising)
@@ -220,7 +220,7 @@ func TestASwitchboardADeployStandsAgainBesideYourTraefikHearsHTTPSWhereBootstrap
 		words([]string{"--network", ProxyNetwork, "--network", "coolify"}),
 	} {
 		if !strings.Contains(restored, want) {
-			t.Errorf("a deploy stands the switchboard again as\n%s\nwithout %s", restored, want)
+			t.Errorf("a deploy recreates the switchboard as\n%s\nwithout %s", restored, want)
 		}
 	}
 }

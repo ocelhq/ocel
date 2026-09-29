@@ -232,7 +232,7 @@ func servesBehindTraefik(t *testing.T, vm machine, tf traefikFront) {
 		vm.ssh(t, "sudo docker stop "+host.SwitchboardContainer+" >/dev/null")
 		vm.feeds(t, "sudo sh -s", frontScript(t, tf.front, "cleanup.sh"))
 		if left := vm.ssh(t, "sudo docker network inspect "+host.ProxyNetwork+" >/dev/null 2>&1 && echo present || echo gone"); strings.TrimSpace(left) != "gone" {
-			t.Fatalf("%s's cleanup left the %s network behind a stopped switchboard, so it proves nothing about standing them again", tf.front, host.ProxyNetwork)
+			t.Fatalf("%s's cleanup left the %s network behind a stopped switchboard, so it proves nothing about recreating them", tf.front, host.ProxyNetwork)
 		}
 		if err := d.PreflightDeploy(ctx, provider.DeployPreflight{Deploy: provider.DeploySpec{
 			Slug: frontedSlug, Tier: environment.TierProduction, Apps: []provider.AppEntry{{App: liveApp, Image: fixtureAt("two")}},

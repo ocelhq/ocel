@@ -312,7 +312,7 @@ func TestBesideSaysEveryFileTraefikReadsAroundThePlacedOneAndFollowsNoLink(t *te
 	if code != 0 {
 		t.Fatalf("beside = %d: %s", code, errs)
 	}
-	var said []switchboard.Neighbour
+	var said []switchboard.SiblingFile
 	if err := json.Unmarshal([]byte(out), &said); err != nil {
 		t.Fatalf("beside said %q, which is not the files it read: %v", out, err)
 	}

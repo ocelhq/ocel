@@ -113,7 +113,7 @@ var readByTraefik = []string{".yml", ".yaml", ".toml"}
 func beside(argv []string, out, errs io.Writer) int {
 	return confined(argv, errs, func(path string) error {
 		dir := filepath.Dir(path)
-		found := []switchboard.Neighbour{}
+		found := []switchboard.SiblingFile{}
 		err := filepath.WalkDir(dir, func(at string, entry fs.DirEntry, err error) error {
 			if err != nil {
 				return err
@@ -129,7 +129,7 @@ func beside(argv []string, out, errs io.Writer) int {
 			if err != nil {
 				return err
 			}
-			found = append(found, switchboard.Neighbour{Name: name, Content: content})
+			found = append(found, switchboard.SiblingFile{Name: name, Content: content})
 			return nil
 		})
 		if err != nil {

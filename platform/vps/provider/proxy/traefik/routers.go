@@ -19,7 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
-type yours struct {
+type userRouter struct {
 	name  string
 	rule  string
 	where string
@@ -27,7 +27,7 @@ type yours struct {
 
 type collision struct {
 	hostname string
-	router   yours
+	router   userRouter
 }
 
 func (t Traefik) refuseRouted(ctx context.Context, hostnames []string) error {
@@ -52,18 +52,18 @@ func (c collision) said() string {
 	return fmt.Sprintf("%s is already routed by your Traefik: router %s in %s", c.hostname, c.router.name, c.router.where)
 }
 
-func (t Traefik) routers(ctx context.Context) ([]yours, error) {
-	beside, err := t.Box.Beside(ctx, t.file())
+func (t Traefik) routers(ctx context.Context) ([]userRouter, error) {
+	beside, err := t.Box.ReadBeside(ctx, t.file())
 	if err != nil {
 		return nil, err
 	}
-	var found []yours
+	var found []userRouter
 	for _, file := range beside {
 		tree, err := decoded(file.Name, file.Content)
 		if err != nil {
 			continue
 		}
-		found = append(found, filed(tree, filepath.Join(filepath.Clean(t.Directory), file.Name))...)
+		found = append(found, routersIn(tree, filepath.Join(filepath.Clean(t.Directory), file.Name))...)
 	}
 	for _, source := range []struct {
 		what  string
@@ -131,15 +131,15 @@ func keyed(tree any, key string) any {
 	return nil
 }
 
-func filed(tree map[string]any, where string) []yours {
+func routersIn(tree map[string]any, where string) []userRouter {
 	routers, ok := keyed(keyed(tree, "http"), "routers").(map[string]any)
 	if !ok {
 		return nil
 	}
-	var found []yours
+	var found []userRouter
 	for name, declared := range routers {
 		if rule, ok := keyed(declared, "rule").(string); ok {
-			found = append(found, yours{name: name, rule: rule, where: where})
+			found = append(found, userRouter{name: name, rule: rule, where: where})
 		}
 	}
 	return found
@@ -151,8 +151,8 @@ const (
 	enableLabel = "traefik.enable"
 )
 
-func labelledIn(said, where string) ([]yours, error) {
-	var found []yours
+func labelledIn(said, where string) ([]userRouter, error) {
+	var found []userRouter
 	for line := range strings.Lines(said) {
 		if strings.TrimSpace(line) == "" {
 			continue
@@ -166,7 +166,7 @@ func labelledIn(said, where string) ([]yours, error) {
 		if err := reading.Decode(&labels); err != nil && err != io.EOF {
 			return nil, fmt.Errorf("read the labels docker reported in %q: %w", line, err)
 		}
-		if ignored(labels) {
+		if isIgnored(labels) {
 			continue
 		}
 		for key, rule := range labels {
@@ -175,7 +175,7 @@ func labelledIn(said, where string) ([]yours, error) {
 			if !labelledRule || !strings.HasSuffix(router, ruleLabel) {
 				continue
 			}
-			found = append(found, yours{
+			found = append(found, userRouter{
 				name:  key[len(routerLabel) : len(key)-len(ruleLabel)],
 				rule:  rule,
 				where: where + " " + strings.TrimPrefix(name, "/"),
@@ -185,7 +185,7 @@ func labelledIn(said, where string) ([]yours, error) {
 	return found, nil
 }
 
-func ignored(labels map[string]string) bool {
+func isIgnored(labels map[string]string) bool {
 	for key, value := range labels {
 		if strings.EqualFold(key, enableLabel) && strings.EqualFold(strings.TrimSpace(value), "false") {
 			return true
@@ -194,8 +194,8 @@ func ignored(labels map[string]string) bool {
 	return false
 }
 
-func collisions(hostnames []string, routers []yours) []collision {
-	slices.SortFunc(routers, func(a, b yours) int {
+func collisions(hostnames []string, routers []userRouter) []collision {
+	slices.SortFunc(routers, func(a, b userRouter) int {
 		return strings.Compare(a.where+"\x00"+a.name, b.where+"\x00"+b.name)
 	})
 	var found []collision
@@ -209,7 +209,7 @@ func collisions(hostnames []string, routers []yours) []collision {
 	return found
 }
 
-const nobodysHostname = "ocel-unrouted.invalid"
+const unclaimedHostname = "ocel-unrouted.invalid"
 
 var matcher = regexp.MustCompile(`(?i)\b(HostRegexp|HostHeader|Host)\s*\(`)
 
@@ -224,7 +224,7 @@ func matches(rule, hostname string) bool {
 				continue
 			}
 			pattern, err := regexp.Compile(argument)
-			if err == nil && pattern.MatchString(strings.ToLower(hostname)) && !pattern.MatchString(nobodysHostname) {
+			if err == nil && pattern.MatchString(strings.ToLower(hostname)) && !pattern.MatchString(unclaimedHostname) {
 				return true
 			}
 		}
