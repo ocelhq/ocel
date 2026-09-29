@@ -438,6 +438,8 @@ export type VpsCaddy =
       config?: string;
       /** The container Caddy runs in; left out, Caddy runs as the systemd caddy.service. */
       container?: string;
+      /** Where directory is mounted in the container Caddy runs in; ocel.caddy names the origin certificates it places in directory by this path. Left out, directory itself. */
+      containerDirectory?: string;
       /** The directory the running Caddy imports site blocks from. */
       directory?: string;
       /** A docker network ocel's switchboard joins, so Caddy reaches it by name. Not with port. */
@@ -452,6 +454,8 @@ export type VpsCaddy =
       config?: string;
       /** The container Caddy runs in; left out, Caddy runs as the systemd caddy.service. */
       container?: string;
+      /** Where directory is mounted in the container Caddy runs in; ocel.caddy names the origin certificates it places in directory by this path. Left out, directory itself. */
+      containerDirectory?: string;
       /** The directory the running Caddy imports site blocks from. */
       directory: string;
       /** A docker network ocel's switchboard joins, so Caddy reaches it by name. Not with port. */

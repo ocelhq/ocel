@@ -8,13 +8,14 @@ import (
 
 func (f Front) caddyfile(box caddyfile.Box) caddyfile.Caddyfile {
 	return caddyfile.Caddyfile{
-		Box:       box,
-		Preset:    f.Caddy.Preset,
-		Directory: f.Caddy.Directory,
-		Container: f.Caddy.Container,
-		Config:    f.Caddy.Config,
-		Network:   f.Caddy.Network,
-		Port:      f.Caddy.Port,
+		Box:                box,
+		Preset:             f.Caddy.Preset,
+		Directory:          f.Caddy.Directory,
+		ContainerDirectory: f.Caddy.ContainerDirectory,
+		Container:          f.Caddy.Container,
+		Config:             f.Caddy.Config,
+		Network:            f.Caddy.Network,
+		Port:               f.Caddy.Port,
 	}
 }
 

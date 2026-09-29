@@ -56,7 +56,7 @@ func (c Caddyfile) render(spec proxy.Spec) ([]byte, error) {
 		}
 		rendered.WriteString("https://" + site.hostname + " {\n\ttls")
 		if site.shield.OriginCertificate.Certificate != "" {
-			bundle := c.originPath(site.shield)
+			bundle := filepath.Join(c.containerDirectory(), site.shield.OriginFileName())
 			rendered.WriteString(" " + bundle + " " + bundle)
 		}
 		rendered.WriteString(" {\n" + requiring + "\t}\n" + c.forwarding() + "}\n")
@@ -130,4 +130,11 @@ func encodeLeafDER(certificate string) (string, error) {
 
 func (c Caddyfile) originPath(shield proxy.Shield) string {
 	return filepath.Join(c.Directory, shield.OriginFileName())
+}
+
+func (c Caddyfile) containerDirectory() string {
+	if c.ContainerDirectory == "" {
+		return c.Directory
+	}
+	return c.ContainerDirectory
 }

@@ -314,7 +314,7 @@ func TestADeployOntoABoxRecordedForAnotherProxyIsRefusedNamingWhoSetIt(t *testin
 		},
 		"the box runs Coolify's Caddy": {
 			recorded: Front{Caddy: &CaddyFront{
-				Preset: "coolify", Directory: "/data/coolify/proxy/caddy/dynamic", Container: "coolify-proxy",
+				Preset: "coolify", Directory: "/data/coolify/proxy/caddy/dynamic", ContainerDirectory: "/dynamic", Container: "coolify-proxy",
 				Config: "/config/caddy/Caddyfile.autosave", Network: "coolify",
 			}},
 			ours:   coolifysTraefik(),

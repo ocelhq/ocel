@@ -45,7 +45,7 @@ func TestEveryPresetFillsInHowItsHostToolRunsItsProxy(t *testing.T) {
 		"Coolify's Caddy": {
 			proxy: map[string]any{"caddy": map[string]any{"preset": "coolify"}},
 			want: host.Front{Caddy: &host.CaddyFront{
-				Preset: "coolify", Directory: "/data/coolify/proxy/caddy/dynamic", Container: "coolify-proxy",
+				Preset: "coolify", Directory: "/data/coolify/proxy/caddy/dynamic", ContainerDirectory: "/dynamic", Container: "coolify-proxy",
 				Config: "/config/caddy/Caddyfile.autosave", Network: "coolify",
 			}},
 		},
@@ -98,14 +98,14 @@ func TestAFieldWrittenBesideAPresetOverridesItAndTheRestApply(t *testing.T) {
 		"Coolify's Caddy reaching the switchboard on a port in place of its network": {
 			proxy: map[string]any{"caddy": map[string]any{"preset": "coolify", "port": 9000}},
 			want: host.Front{Caddy: &host.CaddyFront{
-				Preset: "coolify", Directory: "/data/coolify/proxy/caddy/dynamic", Container: "coolify-proxy",
+				Preset: "coolify", Directory: "/data/coolify/proxy/caddy/dynamic", ContainerDirectory: "/dynamic", Container: "coolify-proxy",
 				Config: "/config/caddy/Caddyfile.autosave", Port: 9000,
 			}},
 		},
 		"Coolify's Caddy in a container of another name": {
 			proxy: map[string]any{"caddy": map[string]any{"preset": "coolify", "container": "edge"}},
 			want: host.Front{Caddy: &host.CaddyFront{
-				Preset: "coolify", Directory: "/data/coolify/proxy/caddy/dynamic", Container: "edge",
+				Preset: "coolify", Directory: "/data/coolify/proxy/caddy/dynamic", ContainerDirectory: "/dynamic", Container: "edge",
 				Config: "/config/caddy/Caddyfile.autosave", Network: "coolify",
 			}},
 		},

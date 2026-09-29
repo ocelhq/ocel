@@ -120,6 +120,7 @@ func (c CaddyFront) spelled() spelling {
 	var fields spelling
 	fields.text("preset", c.Preset, "")
 	fields.text("directory", c.Directory, base.Directory)
+	fields.text("containerDirectory", c.ContainerDirectory, base.ContainerDirectory)
 	fields.text("container", c.Container, base.Container)
 	fields.text("config", c.Config, base.Config)
 	fields.text("network", c.Network, base.Network)

@@ -18,11 +18,12 @@ type Box interface {
 }
 
 type Caddyfile struct {
-	Box       Box
-	Preset    string
-	Directory string
-	Container string
-	Config    string
-	Network   string
-	Port      int
+	Box                Box
+	Preset             string
+	Directory          string
+	ContainerDirectory string
+	Container          string
+	Config             string
+	Network            string
+	Port               int
 }
