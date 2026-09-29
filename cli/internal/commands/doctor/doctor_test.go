@@ -273,6 +273,65 @@ export default {
 	}
 }
 
+func TestDoctorAsksTheProviderAboutAnAppNamingNoComputeThatResolvesToAContainer(t *testing.T) {
+	project := healthyProject(t)
+	project.Provider.WithFacts(func(facts *provider.Facts) {
+		facts.Computes = []provider.Compute{provider.ComputeContainer, provider.ComputeServerless}
+	})
+	clitest.WriteFile(t, filepath.Join(project.Root, "ocel.config.ts"), `
+export default {
+  slug: "my-shop",
+  provider: { fake: {} },
+  apps: [{ name: "api", path: "apps/api" }],
+};
+`)
+	clitest.WriteFile(t, filepath.Join(project.Root, "apps", "api", "Dockerfile"), "FROM scratch\n")
+
+	invocation := clitest.NewInvocation()
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(invocation, &stderr)
+	if err := Run(context.Background(), invocation, project.Root, &stdout); err != nil {
+		t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	sent := clitest.RequestsTo[*contractv1.PreflightRequest](t, project.Requests, contractv1connect.ProviderServicePreflightProcedure)
+	asked := 0
+	for _, req := range sent {
+		if len(req.GetContainers()) == 1 && req.GetContainers()[0].GetApp() == "api" {
+			asked++
+		}
+	}
+	if asked != 2 {
+		t.Errorf("doctor named api as a container in %d of its preflights %v, want one per tier: api runs the container its provider resolves it to, as a deploy asks about", asked, sent)
+	}
+}
+
+func TestDoctorReportsAnAppNamingNoComputeThatItsProviderCannotBuild(t *testing.T) {
+	project := healthyProject(t)
+	project.Provider.WithFacts(func(facts *provider.Facts) {
+		facts.Computes = []provider.Compute{provider.ComputeServerless}
+	})
+	clitest.WriteFile(t, filepath.Join(project.Root, "ocel.config.ts"), `
+export default {
+  slug: "my-shop",
+  provider: { fake: {} },
+  apps: [{ name: "api", path: "apps/api" }],
+};
+`)
+	clitest.WriteFile(t, filepath.Join(project.Root, "apps", "api", "main.rb"), "puts 1\n")
+
+	invocation := clitest.NewInvocation()
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(invocation, &stderr)
+	err := Run(context.Background(), invocation, project.Root, &stdout)
+	if code := exitCode(t, err); code != 1 {
+		t.Fatalf("exit code = %d, want 1: api runs serverless, and nothing says what it is built with; stdout=%s", code, stdout.String())
+	}
+	if out := rendered(t, stdout.String()); !strings.Contains(out, `app "api"`) {
+		t.Errorf("stdout = %s, want the unbuildable app named", out)
+	}
+}
+
 func TestRunDoctorReportsACredentialProblem(t *testing.T) {
 	project := healthyProject(t)
 	project.Provider.Edges().(*fake.Edges).Verifies(fake.KindRelay, edge.CredentialIdentity{}, refusal.Refuse(refusal.CodeDenied, "configure the credential and re-run"))

@@ -26,16 +26,16 @@ func TestAnOpenedProviderIsAskedOnlyWhatTheCommandRequires(t *testing.T) {
 			t.Fatalf("Begin: %v", err)
 		}
 		defer run.End(&err)
-		provider, resp, err := invocation.OpenProvider(ctx, run.Phase(progressv1.Phase_PHASE_CHECK), cfg, opts)
+		provider, read, err := invocation.OpenProvider(ctx, run.Phase(progressv1.Phase_PHASE_CHECK), cfg, opts)
 		if err != nil {
 			return err
 		}
 		defer provider.Close()
-		if opts.Require == readiness.None && resp != nil {
-			t.Errorf("OpenProvider asked the provider %v although nothing was required of it", resp)
+		if opts.Require == readiness.None && read.Response != nil {
+			t.Errorf("OpenProvider asked the provider %v although nothing was required of it", read.Response)
 		}
-		if opts.Require != readiness.None && resp == nil {
-			t.Error("OpenProvider returned no readiness for a command that required some")
+		if opts.Require != readiness.None && (read.Response == nil || read.Project == nil) {
+			t.Error("OpenProvider returned no readiness or no resolved project for a command that required some")
 		}
 		return nil
 	}

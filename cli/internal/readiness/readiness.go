@@ -33,18 +33,18 @@ type Request struct {
 	HostCheckDomains []string
 }
 
-func Check(ctx context.Context, span *run.Span, provider *providerprocess.Provider, cfg *project.Project, req Request) (*contractv1.PreflightResponse, error) {
+func Check(ctx context.Context, span *run.Span, provider *providerprocess.Provider, cfg *project.Project, req Request) (Preflight, error) {
 	unit := span.Unit(provider.Name(), checkingTitle(req.Tier, cfg.Slug))
-	resp, err := Read(ctx, provider, cfg, req)
+	read, err := Read(ctx, provider, cfg, req)
 	if err == nil {
-		span.Identity(identityEvent(cfg, req.Tier, resp.GetIdentity()))
-		err = RefuseUnready(resp, req.Tier, req.Require)
+		span.Identity(identityEvent(cfg, req.Tier, read.Response.GetIdentity()))
+		err = RefuseUnready(read.Response, req.Tier, req.Require)
 	}
 	unit.End(err)
 	if err != nil {
-		return nil, err
+		return Preflight{}, err
 	}
-	return resp, nil
+	return read, nil
 }
 
 func RefuseUnready(resp *contractv1.PreflightResponse, tier environmentv1.Tier, require Requirement) error {

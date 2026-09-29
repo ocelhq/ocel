@@ -9,7 +9,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 type OpenOptions struct {
@@ -20,15 +19,15 @@ type OpenOptions struct {
 	Domains []string
 }
 
-func (i Invocation) OpenProvider(ctx context.Context, check *run.Span, cfg *project.Project, opts OpenOptions) (*providerprocess.Provider, *contractv1.PreflightResponse, error) {
+func (i Invocation) OpenProvider(ctx context.Context, check *run.Span, cfg *project.Project, opts OpenOptions) (*providerprocess.Provider, readiness.Preflight, error) {
 	provider, err := providerprocess.Start(ctx, cfg, check, i.Questions, opts.Pinning)
 	if err != nil {
-		return nil, nil, err
+		return nil, readiness.Preflight{}, err
 	}
 	if opts.Require == readiness.None {
-		return provider, nil, nil
+		return provider, readiness.Preflight{}, nil
 	}
-	resp, err := readiness.Check(ctx, check, provider, cfg, readiness.Request{
+	read, err := readiness.Check(ctx, check, provider, cfg, readiness.Request{
 		Tier:    opts.Tier,
 		Require: opts.Require,
 		Slug:    opts.Slug,
@@ -36,7 +35,7 @@ func (i Invocation) OpenProvider(ctx context.Context, check *run.Span, cfg *proj
 	})
 	if err != nil {
 		provider.Close()
-		return nil, nil, err
+		return nil, readiness.Preflight{}, err
 	}
-	return provider, resp, nil
+	return provider, read, nil
 }

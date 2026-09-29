@@ -8,19 +8,37 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
+
+	"google.golang.org/protobuf/proto"
 )
 
-func Read(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project, req Request) (*contractv1.PreflightResponse, error) {
+type Preflight struct {
+	Project  *project.Project
+	Response *contractv1.PreflightResponse
+}
+
+func Read(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project, req Request) (Preflight, error) {
 	sent := newPreflightRequest(cfg, req)
 	resp, err := preflight(ctx, provider, sent)
 	if err != nil {
-		return nil, err
+		return Preflight{}, err
 	}
-	resent, differs := resolvedPreflightRequest(cfg, req, provider.Name(), sent, resp)
-	if !differs {
-		return resp, nil
+	if len(resp.GetCredentialProblems()) > 0 {
+		return Preflight{Response: resp}, nil
 	}
-	return preflight(ctx, provider, resent)
+	resolved, err := cfg.ResolveComputes(resp.GetComputes(), provider.Name())
+	if err != nil {
+		return Preflight{}, err
+	}
+	resent := newPreflightRequest(resolved, req)
+	if isAskingTheSame(sent, resent) {
+		return Preflight{Project: resolved, Response: resp}, nil
+	}
+	resp, err = preflight(ctx, provider, resent)
+	if err != nil {
+		return Preflight{}, err
+	}
+	return Preflight{Project: resolved, Response: resp}, nil
 }
 
 func ResolveComputes(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project) (*project.Project, error) {
@@ -29,22 +47,6 @@ func ResolveComputes(ctx context.Context, provider *providerprocess.Provider, cf
 		return nil, err
 	}
 	return cfg.ResolveComputes(resp.GetComputes(), provider.Name())
-}
-
-func ReadContainerArchs(ctx context.Context, provider *providerprocess.Provider, resolved *project.Project, announced map[string]string) (map[string]string, error) {
-	named := containers(resolved)
-	missing := slices.ContainsFunc(named, func(container *contractv1.ContainerApp) bool {
-		_, ok := announced[container.GetApp()]
-		return !ok
-	})
-	if !missing {
-		return announced, nil
-	}
-	resp, err := preflight(ctx, provider, &contractv1.PreflightRequest{Edge: resolved.EdgeSelection(), Containers: named})
-	if err != nil {
-		return nil, err
-	}
-	return resp.GetContainerArchs(), nil
 }
 
 func preflight(ctx context.Context, provider *providerprocess.Provider, req *contractv1.PreflightRequest) (*contractv1.PreflightResponse, error) {
@@ -56,17 +58,9 @@ func preflight(ctx context.Context, provider *providerprocess.Provider, req *con
 	return resp, err
 }
 
-func resolvedPreflightRequest(cfg *project.Project, req Request, vendor string, sent *contractv1.PreflightRequest, resp *contractv1.PreflightResponse) (*contractv1.PreflightRequest, bool) {
-	if len(resp.GetCredentialProblems()) > 0 {
-		return nil, false
-	}
-	resolved, err := cfg.ResolveComputes(resp.GetComputes(), vendor)
-	if err != nil {
-		return nil, false
-	}
-	resent := newPreflightRequest(resolved, req)
-	if slices.Equal(resent.GetFrameworks(), sent.GetFrameworks()) {
-		return nil, false
-	}
-	return resent, true
+func isAskingTheSame(sent, resent *contractv1.PreflightRequest) bool {
+	return slices.Equal(sent.GetFrameworks(), resent.GetFrameworks()) &&
+		slices.EqualFunc(sent.GetContainers(), resent.GetContainers(), func(a, b *contractv1.ContainerApp) bool {
+			return proto.Equal(a, b)
+		})
 }

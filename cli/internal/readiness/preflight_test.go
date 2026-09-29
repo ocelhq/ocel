@@ -6,8 +6,16 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/project"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
+
+func isAskedAgainOnResolving(t *testing.T, cfg *project.Project, req Request, computes ...string) bool {
+	t.Helper()
+	resolved, err := cfg.ResolveComputes(computes, "fake")
+	if err != nil {
+		t.Fatalf("ResolveComputes: %v", err)
+	}
+	return !isAskingTheSame(newPreflightRequest(cfg, req), newPreflightRequest(resolved, req))
+}
 
 func TestAFrameworkAppThatFallsBackToAContainerIsAskedAboutAgainWithoutItsFramework(t *testing.T) {
 	t.Parallel()
@@ -24,8 +32,12 @@ func TestAFrameworkAppThatFallsBackToAContainerIsAskedAboutAgainWithoutItsFramew
 	t.Run("a provider that runs containers first", func(t *testing.T) {
 		t.Parallel()
 
-		resent, differs := resolvedPreflightRequest(cfg, req, "fake", sent, &contractv1.PreflightResponse{Computes: []string{"container", "serverless"}})
-		if !differs {
+		resolved, err := cfg.ResolveComputes([]string{"container", "serverless"}, "fake")
+		if err != nil {
+			t.Fatalf("ResolveComputes: %v", err)
+		}
+		resent := newPreflightRequest(resolved, req)
+		if isAskingTheSame(sent, resent) {
 			t.Fatal("the preflight is not asked again, so the bootstrap it reports still requires what next needs for an app that runs a container")
 		}
 		if len(resent.GetFrameworks()) != 0 {
@@ -39,20 +51,21 @@ func TestAFrameworkAppThatFallsBackToAContainerIsAskedAboutAgainWithoutItsFramew
 	t.Run("a provider that runs serverless first", func(t *testing.T) {
 		t.Parallel()
 
-		if _, differs := resolvedPreflightRequest(cfg, req, "fake", sent, &contractv1.PreflightResponse{Computes: []string{"serverless", "container"}}); differs {
+		if isAskedAgainOnResolving(t, cfg, req, "serverless", "container") {
 			t.Error("the preflight is asked again although web resolves serverless and its framework was already named")
 		}
 	})
+}
 
-	t.Run("credentials the provider refused", func(t *testing.T) {
-		t.Parallel()
+func TestAnAppNamingNoComputeOrFrameworkThatResolvesToAContainerIsAskedAboutAgain(t *testing.T) {
+	t.Parallel()
 
-		resp := &contractv1.PreflightResponse{
-			Computes:           []string{"container"},
-			CredentialProblems: []*contractv1.CredentialProblem{{Provider: "fake", Message: "could not authenticate"}},
-		}
-		if _, differs := resolvedPreflightRequest(cfg, req, "fake", sent, resp); differs {
-			t.Error("the preflight is asked again although the credentials it runs with were refused")
-		}
-	})
+	cfg := &project.Project{Apps: []project.App{{Name: "api", Container: &project.Container{}}}}
+	req := Request{Tier: environmentv1.Tier_TIER_PRODUCTION}
+	if named := newPreflightRequest(cfg, req).GetContainers(); len(named) != 0 {
+		t.Fatalf("first preflight names containers %v, want none: nothing yet says api runs a container", named)
+	}
+	if !isAskedAgainOnResolving(t, cfg, req, "container") {
+		t.Error("the preflight is not asked again, so api's architecture is never read in it: the request names no framework either way, and only its containers differ")
+	}
 }

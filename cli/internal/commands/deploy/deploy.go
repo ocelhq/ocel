@@ -112,14 +112,14 @@ func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts 
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	provider, resp, err := dependencies.OpenProvider(ctx, check, cfg, productionOpenOptions(opts.dry, policy.Interactive, cfg))
+	provider, read, err := dependencies.OpenProvider(ctx, check, cfg, productionOpenOptions(opts.dry, policy.Interactive, cfg))
 	if err != nil {
 		check.End(err)
 		return err
 	}
 	defer provider.Close()
 
-	facts, err := preflightDeploy(ctx, dependencies, policy, check, provider, cfg, resp, opts.prebuilt, stdout, stdin)
+	facts, err := preflightDeploy(ctx, dependencies, policy, check, provider, cfg, read, opts.prebuilt, stdout, stdin)
 	check.End(err)
 	if err != nil {
 		return err

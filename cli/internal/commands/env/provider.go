@@ -63,13 +63,13 @@ func runWithEnvProvider(ctx context.Context, dependencies Dependencies, cwd stri
 	defer opened.Close()
 
 	if keyOffer != nil {
-		err = offerVariablesKey(ctx, dependencies, check, opened, cfg, opts, status.GetBootstrap(), keyOffer.stdin, stderr)
+		err = offerVariablesKey(ctx, dependencies, check, opened, cfg, opts, status.Response.GetBootstrap(), keyOffer.stdin, stderr)
 	}
 	check.End(err)
 	if err != nil {
 		return err
 	}
-	return drive(ctx, run, opened, cfg, status)
+	return drive(ctx, run, opened, cfg, status.Response)
 }
 
 func offerVariablesKey(ctx context.Context, dependencies Dependencies, check *run.Span, opened *providerprocess.Provider, cfg *project.Project, opts envOptions, status *contractv1.BootstrapStatus, stdin io.Reader, stderr io.Writer) error {

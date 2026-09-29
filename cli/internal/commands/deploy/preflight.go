@@ -37,8 +37,9 @@ func previewOpenOptions(dry bool, cfg *project.Project) commands.OpenOptions {
 	}
 }
 
-func preflightPreviewUp(ctx context.Context, dependencies Dependencies, policy consent.Policy, check *run.Span, provider *providerprocess.Provider, cfg *project.Project, resp *contractv1.PreflightResponse, prebuilt bool, pointer string, out io.Writer, in io.Reader) (preflightFacts, error) {
-	resolved, archs, err := resolveContainers(ctx, dependencies, check, provider, cfg, resp, prebuilt)
+func preflightPreviewUp(ctx context.Context, dependencies Dependencies, policy consent.Policy, check *run.Span, provider *providerprocess.Provider, cfg *project.Project, read readiness.Preflight, prebuilt bool, pointer string, out io.Writer, in io.Reader) (preflightFacts, error) {
+	resp := read.Response
+	resolved, archs, err := resolveContainers(ctx, dependencies, check, read, prebuilt)
 	if err != nil {
 		return preflightFacts{}, err
 	}
@@ -77,8 +78,9 @@ func productionOpenOptions(dry, interactive bool, cfg *project.Project) commands
 	}
 }
 
-func preflightDeploy(ctx context.Context, dependencies Dependencies, policy consent.Policy, check *run.Span, provider *providerprocess.Provider, cfg *project.Project, resp *contractv1.PreflightResponse, prebuilt bool, out io.Writer, in io.Reader) (preflightFacts, error) {
-	resolved, archs, err := resolveContainers(ctx, dependencies, check, provider, cfg, resp, prebuilt)
+func preflightDeploy(ctx context.Context, dependencies Dependencies, policy consent.Policy, check *run.Span, provider *providerprocess.Provider, cfg *project.Project, read readiness.Preflight, prebuilt bool, out io.Writer, in io.Reader) (preflightFacts, error) {
+	resp := read.Response
+	resolved, archs, err := resolveContainers(ctx, dependencies, check, read, prebuilt)
 	if err != nil {
 		return preflightFacts{}, err
 	}
@@ -95,16 +97,9 @@ func preflightDeploy(ctx context.Context, dependencies Dependencies, policy cons
 	return preflightFacts{declined: !proceed, project: resolved, containerArchs: archs, urls: appurl.Production(resolved)}, nil
 }
 
-func resolveContainers(ctx context.Context, dependencies Dependencies, check *run.Span, provider *providerprocess.Provider, cfg *project.Project, resp *contractv1.PreflightResponse, prebuilt bool) (*project.Project, map[string]string, error) {
-	resolved, err := cfg.ResolveComputes(resp.GetComputes(), provider.Name())
-	if err != nil {
-		return nil, nil, err
-	}
+func resolveContainers(ctx context.Context, dependencies Dependencies, check *run.Span, read readiness.Preflight, prebuilt bool) (*project.Project, map[string]string, error) {
+	resolved, archs := read.Project, read.Response.GetContainerArchs()
 	if err := requireProjectRegistryPassword(resolved); err != nil {
-		return nil, nil, err
-	}
-	archs, err := readiness.ReadContainerArchs(ctx, provider, resolved, resp.GetContainerArchs())
-	if err != nil {
 		return nil, nil, err
 	}
 	if prebuilt {

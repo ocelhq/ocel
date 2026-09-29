@@ -206,14 +206,14 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	provider, resp, err := dependencies.OpenProvider(ctx, check, cfg, previewOpenOptions(opts.dry, cfg))
+	provider, read, err := dependencies.OpenProvider(ctx, check, cfg, previewOpenOptions(opts.dry, cfg))
 	if err != nil {
 		check.End(err)
 		return err
 	}
 	defer provider.Close()
 
-	facts, err := preflightPreviewUp(ctx, dependencies, policy, check, provider, cfg, resp, opts.prebuilt, env.GetIdentity(), stdout, stdin)
+	facts, err := preflightPreviewUp(ctx, dependencies, policy, check, provider, cfg, read, opts.prebuilt, env.GetIdentity(), stdout, stdin)
 	check.End(err)
 	if err != nil {
 		return err

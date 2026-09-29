@@ -358,7 +358,7 @@ func askProvider(ctx context.Context, invocation commands.Invocation, cfg *proje
 
 	for _, tier := range tiers {
 		checkHosts := tier == environmentv1.Tier_TIER_PRODUCTION
-		resp, err := readiness.Read(ctx, provider, cfg, readiness.Request{
+		read, err := readiness.Read(ctx, provider, cfg, readiness.Request{
 			Tier:             tier,
 			Slug:             cfg.Slug,
 			Domains:          cfg.HostnameNames(tier),
@@ -369,12 +369,12 @@ func askProvider(ctx context.Context, invocation commands.Invocation, cfg *proje
 			return err
 		}
 		if got.identity == nil {
-			got.identity = resp.GetIdentity()
+			got.identity = read.Response.GetIdentity()
 		}
-		got.keep(resp.GetCredentialProblems())
-		got.addHostChecks(resp.GetHostChecks())
+		got.keep(read.Response.GetCredentialProblems())
+		got.addHostChecks(read.Response.GetHostChecks())
 		if tier == environmentv1.Tier_TIER_PREVIEW {
-			got.wildcard = resp.GetPreviewWildcard()
+			got.wildcard = read.Response.GetPreviewWildcard()
 		}
 
 		var planned *contractv1.DescribeBootstrapResponse
