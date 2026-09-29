@@ -24,7 +24,7 @@ const (
 
 type dnsCutover struct {
 	kind     edge.Kind
-	unbound  bool
+	facts    edge.Facts
 	dns      edge.DNSRecords
 	zone     string
 	liveness provider.Liveness
@@ -61,7 +61,7 @@ func failOnManualRecords(sender *eventStream, unit Stage) manualRecordPolicy {
 func newDNSCutover(front edge.Edge, dns edge.DNSRecords, zone string, liveness provider.Liveness) dnsCutover {
 	return dnsCutover{
 		kind:     front.Kind(),
-		unbound:  front.Facts().ServesUnbound,
+		facts:    front.Facts(),
 		dns:      dns,
 		zone:     zone,
 		liveness: liveness,
@@ -85,7 +85,7 @@ func sleep(ctx context.Context, d time.Duration) error {
 }
 
 func (s dnsCutover) recordsFor(state edge.StackState, hostname string) ([]edge.Record, error) {
-	target := edge.TargetOf(s.kind, s.unbound, state)
+	target := edge.TargetOf(s.kind, s.facts, state)
 	if !edge.Pointable(target, state.Bound, hostname) {
 		return nil, nil
 	}

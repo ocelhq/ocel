@@ -11,6 +11,7 @@ const (
 	unboundKind      Kind = "serves-unbound"
 	frontedKind      Kind = "fronted"
 	otherFrontedKind Kind = "other-fronted"
+	proxyKind        Kind = "proxy"
 )
 
 func TestSelectZone(t *testing.T) {
@@ -69,7 +70,7 @@ func TestRecordsFor(t *testing.T) {
 	t.Run("an edge that serves unbound takes the proxied placeholder", func(t *testing.T) {
 		t.Parallel()
 
-		got, err := RecordsFor(DNSTarget{Kind: unboundKind, ServesUnbound: true}, []string{"*.preview.app.com"})
+		got, err := RecordsFor(DNSTarget{Kind: unboundKind, ServesUnbound: true, ProxiesRecords: true}, []string{"*.preview.app.com"})
 		if err != nil {
 			t.Fatalf("RecordsFor error = %v", err)
 		}
@@ -280,7 +281,7 @@ func TestRecordsForPerHostFronts(t *testing.T) {
 		var state StackState
 		state.PublishFront("shop.app.com", "d-shop.execute-api.eu-west-1.amazonaws.com")
 		state.PublishFront("www.app.com", "d-www.execute-api.eu-west-1.amazonaws.com")
-		got, err := RecordsFor(TargetOf(otherFrontedKind, false, state), []string{"shop.app.com", "www.app.com"})
+		got, err := RecordsFor(TargetOf(otherFrontedKind, Facts{}, state), []string{"shop.app.com", "www.app.com"})
 		if err != nil {
 			t.Fatalf("RecordsFor error = %v", err)
 		}
@@ -298,7 +299,7 @@ func TestRecordsForPerHostFronts(t *testing.T) {
 
 		state := StackState{Front: "d123.cloudfront.net"}
 		state.PublishFront("shop.app.com", "d-shop.execute-api.eu-west-1.amazonaws.com")
-		got, err := RecordsFor(TargetOf(frontedKind, false, state), []string{"shop.app.com", "www.app.com"})
+		got, err := RecordsFor(TargetOf(frontedKind, Facts{}, state), []string{"shop.app.com", "www.app.com"})
 		if err != nil {
 			t.Fatalf("RecordsFor error = %v", err)
 		}
@@ -316,7 +317,7 @@ func TestRecordsForPerHostFronts(t *testing.T) {
 
 		var state StackState
 		state.PublishFront("shop.app.com", "d-shop.execute-api.eu-west-1.amazonaws.com")
-		_, err := RecordsFor(TargetOf(otherFrontedKind, false, state), []string{"shop.app.com", "www.app.com"})
+		_, err := RecordsFor(TargetOf(otherFrontedKind, Facts{}, state), []string{"shop.app.com", "www.app.com"})
 		if err == nil {
 			t.Fatal("RecordsFor err = nil, want a refusal: nothing to point www.app.com at")
 		}
@@ -328,12 +329,49 @@ func TestRecordsForPerHostFronts(t *testing.T) {
 	t.Run("an edge that serves unbound needs no front at all", func(t *testing.T) {
 		t.Parallel()
 
-		got, err := RecordsFor(TargetOf(unboundKind, true, StackState{}), []string{"shop.app.com"})
+		got, err := RecordsFor(TargetOf(unboundKind, Facts{ServesUnbound: true, ProxiesRecords: true}, StackState{}), []string{"shop.app.com"})
 		if err != nil {
 			t.Fatalf("RecordsFor error = %v", err)
 		}
 		want := Record{Name: "shop.app.com", Type: RecordTypeAAAA, Value: ProxyPlaceholder, Proxied: true}
 		if len(got) != 1 || got[0] != want {
+			t.Errorf("RecordsFor = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("an edge that proxies records takes a proxied record to the origin a binding published", func(t *testing.T) {
+		t.Parallel()
+
+		var state StackState
+		state.PublishFront("shop.app.com", "203.0.113.7")
+		state.PublishFront("www.app.com", "origin.example.net")
+		got, err := RecordsFor(TargetOf(proxyKind, Facts{ProxiesRecords: true}, state), []string{"shop.app.com", "www.app.com"})
+		if err != nil {
+			t.Fatalf("RecordsFor error = %v", err)
+		}
+		want := []Record{
+			{Name: "shop.app.com", Type: RecordTypeA, Value: "203.0.113.7", Proxied: true},
+			{Name: "www.app.com", Type: RecordTypeCNAME, Value: "origin.example.net", Proxied: true},
+		}
+		if !slices.Equal(got, want) {
+			t.Errorf("RecordsFor = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("an edge that serves unbound and proxies records points a host with an origin at that origin", func(t *testing.T) {
+		t.Parallel()
+
+		var state StackState
+		state.PublishFront("shop.app.com", "203.0.113.7")
+		got, err := RecordsFor(TargetOf(unboundKind, Facts{ServesUnbound: true, ProxiesRecords: true}, state), []string{"shop.app.com", "www.app.com"})
+		if err != nil {
+			t.Fatalf("RecordsFor error = %v", err)
+		}
+		want := []Record{
+			{Name: "shop.app.com", Type: RecordTypeA, Value: "203.0.113.7", Proxied: true},
+			{Name: "www.app.com", Type: RecordTypeAAAA, Value: ProxyPlaceholder, Proxied: true},
+		}
+		if !slices.Equal(got, want) {
 			t.Errorf("RecordsFor = %v, want %v", got, want)
 		}
 	})
@@ -364,7 +402,7 @@ func TestPointable(t *testing.T) {
 		t.Parallel()
 
 		for _, kind := range []Kind{frontedKind, otherFrontedKind} {
-			target := TargetOf(kind, false, front)
+			target := TargetOf(kind, Facts{}, front)
 			if Pointable(target, nil, "shop.app.com") {
 				t.Errorf("Pointable(%s, unbound) = true, want the host left for the command that binds it", kind)
 			}
@@ -377,7 +415,7 @@ func TestPointable(t *testing.T) {
 	t.Run("an edge that serves unbound points a host it has not bound, because the record is what binds it", func(t *testing.T) {
 		t.Parallel()
 
-		if !Pointable(TargetOf(unboundKind, true, StackState{}), nil, "shop.app.com") {
+		if !Pointable(TargetOf(unboundKind, Facts{ServesUnbound: true, ProxiesRecords: true}, StackState{}), nil, "shop.app.com") {
 			t.Error("Pointable(serves-unbound, unbound) = false, want the proxied record that puts the host in service")
 		}
 	})
