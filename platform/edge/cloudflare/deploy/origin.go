@@ -150,35 +150,39 @@ func (p *cloudflare) forwardRecord(ctx context.Context, zoneID, owner string, wa
 	if err != nil {
 		return err
 	}
-	var ours *dns.RecordResponse
-	for i := range live {
-		held, written := parseCommentOwner(live[i].Comment)
+	for _, rec := range live {
+		held, written := parseCommentOwner(rec.Comment)
 		switch {
 		case !written:
-			return fmt.Errorf("%s already has a %s record ocel did not write, pointing at %s — delete it, and ocel writes the proxied record that forwards %s through Cloudflare", want.Name, live[i].Type, live[i].Content, want.Name)
+			return fmt.Errorf("%s already has a %s record ocel did not write, pointing at %s — delete it, and ocel writes the proxied record that forwards %s through Cloudflare", want.Name, rec.Type, rec.Content, want.Name)
 		case held != "" && held != owner:
 			return fmt.Errorf("%s is forwarded through Cloudflare for %s, and one hostname is served by one project: release it there with `ocel domain remove` first", want.Name, held)
 		}
-		ours = &live[i]
 	}
 	body, err := recordBody(want)
 	if err != nil {
 		return err
 	}
 	body = withOwnerComment(body, owner)
-	if ours == nil {
+	if len(live) == 0 {
 		if _, err := p.client.DNS.Records.New(ctx, dns.RecordNewParams{ZoneID: cf.F(zoneID), Body: body}); err != nil {
 			return fmt.Errorf("write DNS record %s: %w", want, err)
 		}
 		return nil
 	}
-	if ours.Content == want.Value && string(ours.Type) == string(want.Type) && ours.Proxied && ours.Comment == formatOwnerComment(owner) {
-		return nil
+	ours, extra := live[0], live[1:]
+	if ours.Content != want.Value || string(ours.Type) != string(want.Type) || !ours.Proxied || ours.Comment != formatOwnerComment(owner) {
+		if _, err := p.client.DNS.Records.Update(ctx, ours.ID, dns.RecordUpdateParams{ZoneID: cf.F(zoneID), Body: body}); err != nil {
+			return fmt.Errorf("repoint DNS record %s: %w", want, err)
+		}
 	}
-	if _, err := p.client.DNS.Records.Update(ctx, ours.ID, dns.RecordUpdateParams{ZoneID: cf.F(zoneID), Body: body}); err != nil {
-		return fmt.Errorf("repoint DNS record %s: %w", want, err)
+	var errs []error
+	for _, rec := range extra {
+		if _, err := p.client.DNS.Records.Delete(ctx, rec.ID, dns.RecordDeleteParams{ZoneID: cf.F(zoneID)}); err != nil {
+			errs = append(errs, fmt.Errorf("delete the second DNS record %s %s that forwards it: %w", want.Name, rec.Type, err))
+		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 func withOwnerComment(body recordParam, owner string) recordParam {

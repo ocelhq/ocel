@@ -98,6 +98,23 @@ func TestTheCloudflareProxyWritesOneProxiedRecordToTheOriginItForwardsTo(t *test
 	}
 }
 
+func TestTheCloudflareProxyRepointsAHostnameItForwardsTwiceAtOneRecordAndDeletesTheOther(t *testing.T) {
+	m := proxyZoneMock()
+	owned := formatOwnerComment(formatForwardingOwner(defaultNamespace, "acme", environment.TierProduction))
+	m.existingRecords = []map[string]any{
+		{"id": "first", "name": "shop.app.com", "type": "A", "content": "198.51.100.4", "proxied": true, "comment": owned},
+		{"id": "second", "name": "shop.app.com", "type": "A", "content": "198.51.100.4", "proxied": true, "comment": owned},
+	}
+	_, stack := reconciledProxy(t, m)
+
+	if err := stack.BindDomain(context.Background(), edge.DomainBinding{Hostname: "shop.app.com", Origin: &edge.Origin{Address: "198.51.100.9"}}); err != nil {
+		t.Fatalf("BindDomain onto a moved origin: %v", err)
+	}
+	if len(m.existingRecords) != 1 || m.existingRecords[0]["content"] != "198.51.100.9" {
+		t.Errorf("the zone holds %v for shop.app.com, want one record at the moved origin: a record left at the old origin keeps forwarding there", m.existingRecords)
+	}
+}
+
 func TestTheCloudflareProxyRefusesAZoneThatDoesNotValidateTheOriginsCertificate(t *testing.T) {
 	for _, mode := range []string{"off", "flexible", "full"} {
 		m := proxyZoneMock()
