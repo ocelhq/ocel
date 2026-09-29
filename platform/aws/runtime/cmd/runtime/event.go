@@ -99,6 +99,13 @@ func (ev *httpEvent) header() http.Header {
 		h.Del("Authorization")
 	}
 	h.Del(edge.HeaderClientAuthorization)
+	if client := h.Get(edge.HeaderClientAddress); client != "" && len(ev.RequestContext.Authorizer.IAM) > 0 {
+		if prior := h.Get("X-Forwarded-For"); prior != "" {
+			client = prior + ", " + client
+		}
+		h.Set("X-Forwarded-For", client)
+	}
+	h.Del(edge.HeaderClientAddress)
 	return h
 }
 
