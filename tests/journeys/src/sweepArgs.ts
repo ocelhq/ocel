@@ -2,7 +2,7 @@ import { currentRunIdentity } from "./identity";
 
 export type SweepArgs = { target: string; runId: string; oneRun: boolean };
 
-export const SWEEP_USAGE = "pnpm sweep[:registry] --target <name> [--own] [--run <id>]";
+export const SWEEP_USAGE = "pnpm sweep[:registry|:zone] --target <name> [--own] [--run <id>]";
 
 function flag(argv: string[], name: string): string | undefined {
   const index = argv.indexOf(`--${name}`);

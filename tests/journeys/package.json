@@ -18,6 +18,7 @@
     "plan": "bun src/report/lane.ts",
     "sweep": "bun src/sweep.ts",
     "sweep:registry": "bun src/sweepRegistry.ts",
+    "sweep:zone": "bun src/sweepZone.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

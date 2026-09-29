@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { deletePackages, type GitHubIo } from "./github";
+import type { HttpIo } from "../retry";
+import { deletePackages } from "./github";
 import type { Package } from "./packages";
 
 type Asked = { method: string; url: string; authorization: string | null };
@@ -17,7 +18,7 @@ function github(answers: Record<string, Response | Response[]>) {
     const next = Array.isArray(answer) ? (answer.length > 1 ? answer.shift() : answer[0]) : answer;
     return next?.clone() ?? new Response(null, { status: 204 });
   }) as typeof fetch;
-  const io: GitHubIo = {
+  const io: HttpIo = {
     api,
     sleep: async (ms) => {
       slept.push(ms);
