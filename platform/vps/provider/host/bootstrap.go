@@ -528,11 +528,11 @@ func (r removal) command() string {
 		return "if ! docker network rm " + quoted(r.path) + " >/dev/null 2>&1 && " +
 			"docker network inspect " + quoted(r.path) + " >/dev/null 2>&1; then printf '%s\\n' " + quoted(networkInUse) + "; fi"
 	case r.kind == KindPlaced:
-		unplaced := words(switchboardCommand("unplace", r.path)) + " 2>/dev/null || rm -f " + quoted(r.path)
-		if r.reload == "" {
-			return unplaced
+		unplaced := words(switchboardCommand("unplace", r.path)) + " 2>/dev/null || rm -f " + quoted(r.path) + "\n"
+		if r.reload != "" {
+			unplaced += r.reload + "\n"
 		}
-		return unplaced + "\n" + r.reload
+		return "if [ -e " + quoted(r.path) + " ] || [ -L " + quoted(r.path) + " ]; then\n" + unplaced + "fi"
 	case r.kind == KindRoutingTable || r.kind == KindProxyConfig:
 		return routingLocked("-x") + "rm -f " + quoted(r.path)
 	case r.shared:
