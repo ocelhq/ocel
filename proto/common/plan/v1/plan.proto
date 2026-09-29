@@ -3,8 +3,6 @@ package common.plan.v1;
 
 option go_package = "github.com/ocelhq/ocel/pkg/proto/common/plan/v1;planv1";
 
-// What a run would change in the customer's account, drawn before it changes anything.
-// A row is a remote mutation; a build is progress, not plan.
 message ChangePlan {
   string subject = 1;
 

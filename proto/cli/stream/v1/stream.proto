@@ -38,11 +38,9 @@ message IdentityEvent {
 
   Party origin = 3;
 
-  // Absent when the project has no edge.
   Party edge = 4;
 }
 
-// One account a run acts in, at the origin cloud or at the edge.
 message Party {
   string vendor = 1;
 
@@ -53,7 +51,6 @@ message Party {
   string location = 4;
 }
 
-// A pause the run opened for a human. `url` is where they answer.
 message WaitingEvent {
   string url = 2;
 
@@ -86,7 +83,6 @@ message MissingGroup {
   string description = 2;
 }
 
-// The end of a pause.
 message ResumedEvent {
   string reason = 1;
 }

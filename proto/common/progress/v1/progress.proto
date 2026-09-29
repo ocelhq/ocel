@@ -114,8 +114,6 @@ message DnsManualRecordsEvent {
   repeated string notes = 3;
 }
 
-// What became of one app in a multi-app apply. Promotion is the failure gate: unless
-// every app SUCCEEDED, none is promoted, so a run can include successes and still fail.
 enum AppOutcome {
   APP_OUTCOME_UNSPECIFIED = 0;
 
@@ -123,7 +121,6 @@ enum AppOutcome {
 
   APP_OUTCOME_FAILED = 2;
 
-  // The run failed before this app was reached, so nothing of it was attempted.
   APP_OUTCOME_NOT_RUN = 3;
 }
 
@@ -132,7 +129,6 @@ message AppResult {
 
   AppOutcome outcome = 2;
 
-  // Set only on APP_OUTCOME_FAILED.
   string error = 3;
 
   repeated string urls = 4;
@@ -150,11 +146,8 @@ message OperationResult {
 
   repeated string url_notes = 8;
 
-  // One entry per app the apply covered, in manifest order whatever order they finished in.
   repeated AppResult apps = 9;
 
-  // The request was refused: the stream's own error is the verdict, and this envelope
-  // reports only what the run learned before the refusal.
   bool refused = 10;
 
   ConnectorInstalled connector = 11;

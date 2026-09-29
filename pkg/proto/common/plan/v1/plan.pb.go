@@ -85,8 +85,6 @@ func (Change_Action) EnumDescriptor() ([]byte, []int) {
 	return file_common_plan_v1_plan_proto_rawDescGZIP(), []int{3, 0}
 }
 
-// What a run would change in the customer's account, drawn before it changes anything.
-// A row is a remote mutation; a build is progress, not plan.
 type ChangePlan struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Subject       string                 `protobuf:"bytes,1,opt,name=subject,proto3" json:"subject,omitempty"`

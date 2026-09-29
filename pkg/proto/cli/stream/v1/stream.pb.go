@@ -285,12 +285,11 @@ func (*RunEvent_Summary) isRunEvent_Body() {}
 func (*RunEvent_Identity) isRunEvent_Body() {}
 
 type IdentityEvent struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	Project string                 `protobuf:"bytes,1,opt,name=project,proto3" json:"project,omitempty"`
-	Tier    v12.Tier               `protobuf:"varint,2,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
-	Origin  *Party                 `protobuf:"bytes,3,opt,name=origin,proto3" json:"origin,omitempty"`
-	// Absent when the project has no edge.
-	Edge          *Party `protobuf:"bytes,4,opt,name=edge,proto3" json:"edge,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Project       string                 `protobuf:"bytes,1,opt,name=project,proto3" json:"project,omitempty"`
+	Tier          v12.Tier               `protobuf:"varint,2,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
+	Origin        *Party                 `protobuf:"bytes,3,opt,name=origin,proto3" json:"origin,omitempty"`
+	Edge          *Party                 `protobuf:"bytes,4,opt,name=edge,proto3" json:"edge,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -353,7 +352,6 @@ func (x *IdentityEvent) GetEdge() *Party {
 	return nil
 }
 
-// One account a run acts in, at the origin cloud or at the edge.
 type Party struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Vendor        string                 `protobuf:"bytes,1,opt,name=vendor,proto3" json:"vendor,omitempty"`
@@ -422,7 +420,6 @@ func (x *Party) GetLocation() string {
 	return ""
 }
 
-// A pause the run opened for a human. `url` is where they answer.
 type WaitingEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Url           string                 `protobuf:"bytes,2,opt,name=url,proto3" json:"url,omitempty"`
@@ -663,7 +660,6 @@ func (x *MissingGroup) GetDescription() string {
 	return ""
 }
 
-// The end of a pause.
 type ResumedEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Reason        string                 `protobuf:"bytes,1,opt,name=reason,proto3" json:"reason,omitempty"`

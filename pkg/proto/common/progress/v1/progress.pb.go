@@ -330,16 +330,13 @@ func (AttributeKey) EnumDescriptor() ([]byte, []int) {
 	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{4}
 }
 
-// What became of one app in a multi-app apply. Promotion is the failure gate: unless
-// every app SUCCEEDED, none is promoted, so a run can include successes and still fail.
 type AppOutcome int32
 
 const (
 	AppOutcome_APP_OUTCOME_UNSPECIFIED AppOutcome = 0
 	AppOutcome_APP_OUTCOME_SUCCEEDED   AppOutcome = 1
 	AppOutcome_APP_OUTCOME_FAILED      AppOutcome = 2
-	// The run failed before this app was reached, so nothing of it was attempted.
-	AppOutcome_APP_OUTCOME_NOT_RUN AppOutcome = 3
+	AppOutcome_APP_OUTCOME_NOT_RUN     AppOutcome = 3
 )
 
 // Enum value maps for AppOutcome.
@@ -916,12 +913,11 @@ func (x *DnsManualRecordsEvent) GetNotes() []string {
 }
 
 type AppResult struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	App     string                 `protobuf:"bytes,1,opt,name=app,proto3" json:"app,omitempty"`
-	Outcome AppOutcome             `protobuf:"varint,2,opt,name=outcome,proto3,enum=common.progress.v1.AppOutcome" json:"outcome,omitempty"`
-	// Set only on APP_OUTCOME_FAILED.
-	Error         string   `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
-	Urls          []string `protobuf:"bytes,4,rep,name=urls,proto3" json:"urls,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	App           string                 `protobuf:"bytes,1,opt,name=app,proto3" json:"app,omitempty"`
+	Outcome       AppOutcome             `protobuf:"varint,2,opt,name=outcome,proto3,enum=common.progress.v1.AppOutcome" json:"outcome,omitempty"`
+	Error         string                 `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	Urls          []string               `protobuf:"bytes,4,rep,name=urls,proto3" json:"urls,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -985,19 +981,16 @@ func (x *AppResult) GetUrls() []string {
 }
 
 type OperationResult struct {
-	state       protoimpl.MessageState `protogen:"open.v1"`
-	Success     bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	Error       string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
-	Bindings    []*v11.Binding         `protobuf:"bytes,3,rep,name=bindings,proto3" json:"bindings,omitempty"`
-	PromotionId string                 `protobuf:"bytes,6,opt,name=promotion_id,json=promotionId,proto3" json:"promotion_id,omitempty"`
-	FlipBound   *FlipBound             `protobuf:"bytes,7,opt,name=flip_bound,json=flipBound,proto3" json:"flip_bound,omitempty"`
-	UrlNotes    []string               `protobuf:"bytes,8,rep,name=url_notes,json=urlNotes,proto3" json:"url_notes,omitempty"`
-	// One entry per app the apply covered, in manifest order whatever order they finished in.
-	Apps []*AppResult `protobuf:"bytes,9,rep,name=apps,proto3" json:"apps,omitempty"`
-	// The request was refused: the stream's own error is the verdict, and this envelope
-	// reports only what the run learned before the refusal.
-	Refused       bool                `protobuf:"varint,10,opt,name=refused,proto3" json:"refused,omitempty"`
-	Connector     *ConnectorInstalled `protobuf:"bytes,11,opt,name=connector,proto3" json:"connector,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	Bindings      []*v11.Binding         `protobuf:"bytes,3,rep,name=bindings,proto3" json:"bindings,omitempty"`
+	PromotionId   string                 `protobuf:"bytes,6,opt,name=promotion_id,json=promotionId,proto3" json:"promotion_id,omitempty"`
+	FlipBound     *FlipBound             `protobuf:"bytes,7,opt,name=flip_bound,json=flipBound,proto3" json:"flip_bound,omitempty"`
+	UrlNotes      []string               `protobuf:"bytes,8,rep,name=url_notes,json=urlNotes,proto3" json:"url_notes,omitempty"`
+	Apps          []*AppResult           `protobuf:"bytes,9,rep,name=apps,proto3" json:"apps,omitempty"`
+	Refused       bool                   `protobuf:"varint,10,opt,name=refused,proto3" json:"refused,omitempty"`
+	Connector     *ConnectorInstalled    `protobuf:"bytes,11,opt,name=connector,proto3" json:"connector,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
