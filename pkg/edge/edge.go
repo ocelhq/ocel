@@ -59,6 +59,7 @@ type Facts struct {
 	Supported             []Need
 	Compatibility         Compatibility
 	RunsCode              bool
+	Entry                 WorkerModule
 	ServesUnbound         bool
 	ProxiesRecords        bool
 	ShieldsOrigin         bool

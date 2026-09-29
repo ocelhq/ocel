@@ -488,6 +488,11 @@ func (e *Edge) Facts() edge.Facts {
 	}
 	if e.kind == KindRelay {
 		facts.Compatibility = edge.Compatibility{Date: CompatDate, Flags: []string{CompatFlag}}
+		facts.Entry = edge.WorkerModule{
+			Name:        "index.js",
+			ContentType: "application/javascript+module",
+			Content:     []byte("the fake entry worker"),
+		}
 	}
 	return facts
 }

@@ -44,6 +44,17 @@ func Run(t *testing.T, suite Suite) {
 		}
 	})
 
+	t.Run("an edge that runs code names the entry module it runs, and one that does not names none", func(t *testing.T) {
+		e, _ := suite.New(t)
+		facts := e.Facts()
+		if names := len(facts.Entry.Content) > 0; facts.RunsCode != names {
+			t.Errorf("Facts().RunsCode = %v, but Facts().Entry names a module = %v; an origin programs the entry an edge runs from the module the edge names", facts.RunsCode, names)
+		}
+		if len(facts.Entry.Content) > 0 && (facts.Entry.Name == "" || facts.Entry.ContentType == "") {
+			t.Errorf("Facts().Entry = {Name: %q, ContentType: %q}, want both named so the edge can load the module", facts.Entry.Name, facts.Entry.ContentType)
+		}
+	})
+
 	t.Run("every declared need is a need, and declared once", func(t *testing.T) {
 		e, _ := suite.New(t)
 		supported := e.Facts().Supported

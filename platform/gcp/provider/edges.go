@@ -11,6 +11,8 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
 
+//go:generate go generate -C ../../edge/cloudflare/deploy ./...
+
 type edges struct {
 	namespace provider.Namespace
 	keyValues keyvalue.Store

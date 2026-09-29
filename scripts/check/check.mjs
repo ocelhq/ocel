@@ -22,6 +22,10 @@ const SETUP = new Map([
   ["platform/gcp/provider", [["go", "generate", "-C", "platform/gcp/provider", "./..."]]],
   ["platform/vps/provider", [["go", "generate", "-C", "platform/vps/provider", "./..."]]],
   ["pkg/provider/transform", [["go", "generate", "-C", "pkg/provider/transform", "./..."]]],
+  [
+    "platform/edge/cloudflare/deploy",
+    [["go", "generate", "-C", "platform/edge/cloudflare/deploy", "./..."]],
+  ],
 ]);
 
 function read(command, args) {

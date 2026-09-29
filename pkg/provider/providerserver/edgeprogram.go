@@ -20,5 +20,6 @@ func edgeProgramFor(ctx context.Context, p provider.Provider, front edge.Edge, r
 			front.Kind())
 	}
 	req.Kind = front.Kind()
+	req.Entry = front.Facts().Entry
 	return program(ctx, req)
 }

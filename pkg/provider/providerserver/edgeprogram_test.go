@@ -135,6 +135,10 @@ func TestDeploySendsTheProviderProgramToAnEdgeThatRunsCode(t *testing.T) {
 	if spec.Program == nil {
 		t.Fatal("the stack has no program, and the relay edge answers every request from an entry worker")
 	}
+	entry := vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).Facts().Entry
+	if main := spec.Program.Worker.Main; main.Name != entry.Name || string(main.Content) != string(entry.Content) {
+		t.Errorf("Worker.Main = %q %q, want the entry module the edge names, %q %q", main.Name, main.Content, entry.Name, entry.Content)
+	}
 	if spec.Program.Name != fake.ProgramName("shop", environment.TierProduction) {
 		t.Errorf("Name = %q, want %q", spec.Program.Name, fake.ProgramName("shop", environment.TierProduction))
 	}

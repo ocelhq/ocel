@@ -48,6 +48,7 @@ type EdgeProgramRequest struct {
 	Env               string
 	PreviewBaseDomain string
 	Apps              []string
+	Entry             edge.WorkerModule
 }
 
 type EdgeProgram struct {

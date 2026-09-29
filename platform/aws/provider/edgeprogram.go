@@ -19,6 +19,7 @@ func (p *Provider) ProgramEdge(ctx context.Context, req provider.EdgeProgramRequ
 	program := deploy.EdgeProgram{
 		Tier:              req.Tier,
 		Kind:              req.Kind,
+		Entry:             req.Entry,
 		Namespace:         string(p.namespace),
 		Slug:              req.Slug,
 		Env:               req.Env,

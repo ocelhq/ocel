@@ -2,7 +2,6 @@ package deploy
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -27,11 +26,11 @@ const (
 	storeServiceBinding = "DEPLOYMENTS"
 )
 
-func sharedWorker(kind edge.Kind, f WorkerFacts) (edge.Worker, error) {
-	worker, err := genericWorkerBundle(kind)
-	if err != nil {
-		return edge.Worker{}, err
+func sharedWorker(kind edge.Kind, entry edge.WorkerModule, f WorkerFacts) (edge.Worker, error) {
+	if len(entry.Content) == 0 {
+		return edge.Worker{}, fmt.Errorf("the %s edge names no entry module for its worker to run", kind)
 	}
+	worker := edge.Worker{Main: entry}
 	vars := map[string]string{}
 	for name, value := range map[string]string{
 		edge.AWSRegionVar:          f.Region,
@@ -89,28 +88,4 @@ func withService(worker edge.Worker, name, service string) edge.Worker {
 	services[name] = service
 	worker.Services = services
 	return worker
-}
-
-func genericWorkerBundle(kind edge.Kind) (edge.Worker, error) {
-	bundles, err := edge.LoadBundleManifest()
-	if err != nil {
-		return edge.Worker{}, err
-	}
-	path, err := bundles.Path(kind)
-	if err != nil {
-		return edge.Worker{}, err
-	}
-	return loadWorkerBundle(path)
-}
-
-func loadWorkerBundle(path string) (edge.Worker, error) {
-	main, err := os.ReadFile(path)
-	if err != nil {
-		return edge.Worker{}, fmt.Errorf("read worker bundle %s: %w", path, err)
-	}
-	return edge.Worker{Main: edge.WorkerModule{
-		Name:        "index.js",
-		ContentType: "application/javascript+module",
-		Content:     main,
-	}}, nil
 }

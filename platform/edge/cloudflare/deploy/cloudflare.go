@@ -27,6 +27,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/platform/edge/cloudflare/deploy/bundles"
 )
 
 const Kind edge.Kind = "cloudflare"
@@ -104,6 +105,7 @@ func (p *cloudflare) Facts() edge.Facts {
 		Supported:       edge.AllNeeds(),
 		Compatibility:   edge.Compatibility{Date: compatDate, Flags: slices.Clone(compatFlags)},
 		RunsCode:        true,
+		Entry:           workerModule(entryBundle),
 		ServesUnbound:   true,
 		ProxiesRecords:  true,
 		CredentialScope: readAccountID(),
@@ -248,18 +250,12 @@ func bootstrapWorkers(namespace string, tier environment.Tier) ([]bootstrapWorke
 	if err != nil {
 		return nil, err
 	}
-	storeWorker, err := storeWorkerBundle()
-	if err != nil {
-		return nil, err
-	}
+	storeWorker := edge.Worker{Main: workerModule(deploymentsStoreBundle)}
 	writerScript, err := isrWriterScriptNameFor(namespace, tier)
 	if err != nil {
 		return nil, err
 	}
-	writerWorker, err := isrWriterBundle()
-	if err != nil {
-		return nil, err
-	}
+	writerWorker := edge.Worker{Main: workerModule(isrWriterBundle)}
 	bucket, err := cacheStoreNameFor(namespace, tier)
 	if err != nil {
 		return nil, err
@@ -353,40 +349,18 @@ func (p *cloudflare) ensureSubdomain(ctx context.Context, up upload, on bool, wh
 	return endpoint, nil
 }
 
-func storeWorkerBundle() (edge.Worker, error) {
-	bundles, err := edge.LoadStoreBundleManifest()
-	if err != nil {
-		return edge.Worker{}, err
-	}
-	return bundleWorker(bundles)
-}
+var (
+	entryBundle            = bundles.Entry()
+	deploymentsStoreBundle = bundles.DeploymentsStore()
+	isrWriterBundle        = bundles.ISRWriter()
+)
 
-func isrWriterBundle() (edge.Worker, error) {
-	bundles, err := edge.LoadISRWriterBundleManifest()
-	if err != nil {
-		return edge.Worker{}, err
-	}
-	return bundleWorker(bundles)
-}
-
-func bundleWorker(bundles edge.KindBundleManifest) (edge.Worker, error) {
-	path, err := bundles.Path(Kind)
-	if err != nil {
-		return edge.Worker{}, err
-	}
-	return readWorkerBundle(path)
-}
-
-func readWorkerBundle(path string) (edge.Worker, error) {
-	main, err := os.ReadFile(path)
-	if err != nil {
-		return edge.Worker{}, fmt.Errorf("read worker bundle %s: %w", path, err)
-	}
-	return edge.Worker{Main: edge.WorkerModule{
+func workerModule(content []byte) edge.WorkerModule {
+	return edge.WorkerModule{
 		Name:        "index.js",
 		ContentType: "application/javascript+module",
-		Content:     main,
-	}}, nil
+		Content:     content,
+	}
 }
 
 func (p *cloudflare) findApp(ctx context.Context, name string) (bool, error) {

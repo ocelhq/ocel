@@ -2,11 +2,8 @@ package cloudflare
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -19,19 +16,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 )
 
-func seedBootstrapBundles(t *testing.T, store, writer string) (string, string) {
+func seedBootstrapBundles(t *testing.T, store, writer string) {
 	t.Helper()
-	dir := t.TempDir()
-	storePath := filepath.Join(dir, "store.js")
-	writerPath := filepath.Join(dir, "writer.js")
-	for path, content := range map[string]string{storePath: store, writerPath: writer} {
-		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
-			t.Fatalf("write bundle %s: %v", path, err)
-		}
-	}
-	t.Setenv(edge.EnvStoreWorkerBundles, fmt.Sprintf(`{"cloudflare":%q}`, storePath))
-	t.Setenv(edge.EnvISRWriterWorkerBundles, fmt.Sprintf(`{"cloudflare":%q}`, writerPath))
-	return storePath, writerPath
+	priorStore, priorWriter := deploymentsStoreBundle, isrWriterBundle
+	deploymentsStoreBundle, isrWriterBundle = []byte(store), []byte(writer)
+	t.Cleanup(func() { deploymentsStoreBundle, isrWriterBundle = priorStore, priorWriter })
 }
 
 func bootstrapMock(t *testing.T, provisioned bool) *cfMock {
@@ -128,15 +117,13 @@ func TestPlanBootstrap(t *testing.T) {
 	})
 
 	t.Run("a rebuilt bundle updates only the worker that drifted", func(t *testing.T) {
-		storePath, _ := seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
+		seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
 		m := bootstrapMock(t, true)
 		p := m.provider(t)
 		if _, err := p.Bootstrap(t.Context(), environment.TierProduction); err != nil {
 			t.Fatalf("Bootstrap: %v", err)
 		}
-		if err := os.WriteFile(storePath, []byte("export default {rebuilt:1}"), 0o600); err != nil {
-			t.Fatalf("rewrite bundle: %v", err)
-		}
+		deploymentsStoreBundle = []byte("export default {rebuilt:1}")
 
 		changes, err := p.planBootstrap(t.Context(), environment.TierProduction)
 		if err != nil {
@@ -269,15 +256,13 @@ func TestBootstrapConverges(t *testing.T) {
 	})
 
 	t.Run("a drifted bundle is re-uploaded inheriting the existing secret", func(t *testing.T) {
-		storePath, _ := seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
+		seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
 		m := bootstrapMock(t, true)
 		p := m.provider(t)
 		if _, err := p.Bootstrap(t.Context(), environment.TierProduction); err != nil {
 			t.Fatalf("Bootstrap: %v", err)
 		}
-		if err := os.WriteFile(storePath, []byte("export default {rebuilt:1}"), 0o600); err != nil {
-			t.Fatalf("rewrite bundle: %v", err)
-		}
+		deploymentsStoreBundle = []byte("export default {rebuilt:1}")
 
 		out, err := p.Bootstrap(t.Context(), environment.TierProduction)
 		if err != nil {

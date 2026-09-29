@@ -10,8 +10,7 @@ import (
 )
 
 const (
-	ProgramStore  = "fake-deployments-store"
-	ProgramSource = "the fake entry worker"
+	ProgramStore = "fake-deployments-store"
 
 	ProgramEdgeVar        = "OCEL_EDGE"
 	ProgramPreviewVar     = "OCEL_PREVIEW_BASE_DOMAIN"
@@ -30,11 +29,7 @@ func (p *Provider) ProgramEdge(_ context.Context, req provider.EdgeProgramReques
 		Spec: &edge.ProgramSpec{
 			Name: ProgramName(req.Slug, req.Tier),
 			Worker: edge.Worker{
-				Main: edge.WorkerModule{
-					Name:        "index.js",
-					ContentType: "application/javascript+module",
-					Content:     []byte(ProgramSource),
-				},
+				Main: req.Entry,
 				Vars: vars,
 			},
 			StoreScriptName: ProgramStore,

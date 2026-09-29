@@ -12,6 +12,7 @@ import (
 type EdgeProgram struct {
 	Tier              environment.Tier
 	Kind              edge.Kind
+	Entry             edge.WorkerModule
 	Namespace         string
 	Slug              string
 	Env               string
@@ -31,7 +32,7 @@ func (p EdgeProgram) Build() (provider.EdgeProgram, error) {
 	if p.Slug != "" && p.Namespace == "" {
 		return provider.EdgeProgram{}, fmt.Errorf("an edge worker is named for the namespace that installed its bootstrap, and this program names none; a name without it reaches whatever another namespace deployed for %s", p.Slug)
 	}
-	generic, err := sharedWorker(p.Kind, p.Worker)
+	generic, err := sharedWorker(p.Kind, p.Entry, p.Worker)
 	if err != nil {
 		return provider.EdgeProgram{}, err
 	}

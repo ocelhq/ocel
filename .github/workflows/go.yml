@@ -221,6 +221,10 @@ jobs:
         if: matrix.group.name == 'pkg, s3 and edge'
         run: go generate -C pkg/provider/transform ./...
 
+      - name: go generate (the worker bundles the cloudflare edge embeds)
+        if: matrix.group.name == 'pkg, s3 and edge'
+        run: go generate -C platform/edge/cloudflare/deploy ./...
+
       - name: go build
         run: |
           set -euo pipefail

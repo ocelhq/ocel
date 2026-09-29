@@ -65,6 +65,7 @@ func (f *recordingEdge) Facts() edge.Facts {
 		Supported:             declared.Supported,
 		Compatibility:         edge.Compatibility{Date: "2025-01-01", Flags: []string{"nodejs_compat"}},
 		RunsCode:              true,
+		Entry:                 edge.WorkerModule{Name: "index.js", ContentType: "application/javascript+module", Content: []byte("export default {}")},
 		ServesUnbound:         declared.ServesUnbound,
 		ProxiesRecords:        declared.ProxiesRecords,
 		InvalidatesByCacheTag: declared.InvalidatesByCacheTag,
@@ -289,6 +290,7 @@ type codelessEdge struct{ edge.Edge }
 func (u codelessEdge) Facts() edge.Facts {
 	facts := u.Edge.Facts()
 	facts.RunsCode = false
+	facts.Entry = edge.WorkerModule{}
 	facts.Compatibility = edge.Compatibility{}
 	return facts
 }

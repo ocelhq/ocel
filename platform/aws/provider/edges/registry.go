@@ -18,6 +18,8 @@ import (
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
+//go:generate go generate -C ../../../edge/cloudflare/deploy ./...
+
 type Deps struct {
 	AWS func(ctx context.Context) (aws.Config, error)
 

@@ -1,9 +1,6 @@
 package deploy
 
 import (
-	"encoding/json"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -13,23 +10,11 @@ import (
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
-func setWorkerBundle(t *testing.T) {
-	t.Helper()
-	bundle := filepath.Join(t.TempDir(), "index.js")
-	if err := os.WriteFile(bundle, []byte("export default {}"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	raw, err := json.Marshal(edge.KindBundleManifest{cloudflare.Kind: bundle})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv(edge.EnvWorkerBundles, string(raw))
-}
-
 func programmed(slug string, tier environment.Tier) EdgeProgram {
 	return EdgeProgram{
 		Tier:      tier,
 		Kind:      cloudflare.Kind,
+		Entry:     edge.WorkerModule{Name: "index.js", ContentType: "application/javascript+module", Content: []byte("export default {}")},
 		Namespace: defaultNamespace,
 		Slug:      slug,
 		Env:       "prod",
@@ -51,8 +36,6 @@ func programmed(slug string, tier environment.Tier) EdgeProgram {
 }
 
 func TestEdgeProgramForTheSharedPreviewEntry(t *testing.T) {
-	setWorkerBundle(t)
-
 	entry := programmed("", environment.TierPreview)
 	entry.PreviewBaseDomain = "preview.acme.com"
 
@@ -100,8 +83,6 @@ func TestEdgeProgramForTheSharedPreviewEntry(t *testing.T) {
 }
 
 func TestEdgeProgramRefusesAPreviewEntryWithNoStoreWorker(t *testing.T) {
-	setWorkerBundle(t)
-
 	entry := programmed("", environment.TierPreview)
 	entry.PreviewBaseDomain = "preview.acme.com"
 	entry.StoreScriptName = ""
@@ -116,8 +97,6 @@ func TestEdgeProgramRefusesAPreviewEntryWithNoStoreWorker(t *testing.T) {
 }
 
 func TestEdgeProgramForAPreviewProject(t *testing.T) {
-	setWorkerBundle(t)
-
 	project := programmed("proj", environment.TierPreview)
 	project.PreviewBaseDomain = "preview.acme.com"
 	project.Apps = []string{"web", "admin"}
@@ -154,8 +133,6 @@ func TestEdgeProgramForAPreviewProject(t *testing.T) {
 }
 
 func TestEdgeProgramForAPreviewProjectOnTheSharedWildcard(t *testing.T) {
-	setWorkerBundle(t)
-
 	project := programmed("proj", environment.TierPreview)
 	project.Apps = []string{"web", "admin"}
 
@@ -179,8 +156,6 @@ func TestEdgeProgramForAPreviewProjectOnTheSharedWildcard(t *testing.T) {
 }
 
 func TestEdgeProgramForAProductionProject(t *testing.T) {
-	setWorkerBundle(t)
-
 	built, err := programmed("proj", environment.TierProduction).Build()
 	if err != nil {
 		t.Fatalf("Build: %v", err)
@@ -195,5 +170,26 @@ func TestEdgeProgramForAProductionProject(t *testing.T) {
 		if _, set := built.Spec.Worker.Vars[unwanted]; set {
 			t.Errorf("Vars has %s, which belongs to a preview", unwanted)
 		}
+	}
+}
+
+func TestEdgeProgramRunsTheEntryModuleTheEdgeNames(t *testing.T) {
+	program := programmed("shop", environment.TierProduction)
+
+	built, err := program.Build()
+	if err != nil {
+		t.Fatalf("Build() = %v", err)
+	}
+	if main := built.Spec.Worker.Main; main.Name != program.Entry.Name || string(main.Content) != string(program.Entry.Content) {
+		t.Errorf("Worker.Main = %q %q, want the edge's entry %q %q", main.Name, main.Content, program.Entry.Name, program.Entry.Content)
+	}
+}
+
+func TestEdgeProgramRefusesAnEdgeThatNamesNoEntryModule(t *testing.T) {
+	program := programmed("shop", environment.TierProduction)
+	program.Entry = edge.WorkerModule{}
+
+	if _, err := program.Build(); err == nil || !strings.Contains(err.Error(), string(cloudflare.Kind)) {
+		t.Fatalf("Build() = %v, want a refusal naming the edge", err)
 	}
 }

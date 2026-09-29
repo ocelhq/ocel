@@ -14,6 +14,7 @@ packages:
   - platform/gcp/provider/suite
   - platform/vps/provider/host
   - platform/edge/contract
+  - platform/edge/cloudflare/deploy/bundles
   - platform/edge/cloudflare/workers/*
   - platform/edge/cloudflare/lib/*
   - scripts/*

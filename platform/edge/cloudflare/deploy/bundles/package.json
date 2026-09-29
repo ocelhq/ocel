@@ -1,0 +1,14 @@
+{
+  "name": "@platform/cf-bundles",
+  "version": "0.0.0",
+  "license": "Apache-2.0",
+  "private": true,
+  "scripts": {
+    "generate": "sh ./generate.sh"
+  },
+  "devDependencies": {
+    "@platform/cf-deployments-store": "workspace:*",
+    "@platform/cf-entry": "workspace:*",
+    "@platform/cf-isr-writer": "workspace:*"
+  }
+}

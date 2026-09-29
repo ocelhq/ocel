@@ -7,6 +7,8 @@ import (
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
+//go:generate go generate -C ../../edge/cloudflare/deploy ./...
+
 type dns struct{}
 
 const dnsCloudflare = provider.DNSKind(cloudflare.Kind)
