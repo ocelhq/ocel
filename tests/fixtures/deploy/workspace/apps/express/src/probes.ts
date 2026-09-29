@@ -208,6 +208,11 @@ probes.post("/multipart", async (req, res) => {
     res.status(415).json({ error: "multipart/form-data only" });
     return;
   }
+  const declared = req.get("content-length");
+  if (declared === undefined || !(Number(declared) <= MAX_BYTES)) {
+    res.status(413).json({ error: "request entity too large" });
+    return;
+  }
   const form = await new Response(Readable.toWeb(req) as ReadableStream, {
     headers: { "content-type": type },
   }).formData();
