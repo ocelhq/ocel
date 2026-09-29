@@ -123,6 +123,13 @@ function forwardedChain(dump: HeaderDump): string[] {
     .filter((entry) => entry.length > 0);
 }
 
+function hopsHeard(dump: HeaderDump): string {
+  const named = ["cf-connecting-ip", "x-real-ip", "true-client-ip", "forwarded"]
+    .map((name) => `${name}=${dump.headers[name] ?? "absent"}`)
+    .join(", ");
+  return `${named}, remote=${dump.remote ?? "unknown"}`;
+}
+
 function bareAddress(address: string | null): string | null {
   return address === null ? null : address.replace(/^::ffff:/i, "");
 }
@@ -179,12 +186,16 @@ export const nodeRuntimeChecks: Check[] = [
       assert.equal(res.status, 200, describeResponse(res, text));
       const probe = body as {
         nodeEnv: string | null;
+        tz: string | null;
         zone: string;
         offsetMinutes: number;
         now: string;
       };
       assert.equal(probe.nodeEnv, "production");
-      assert.ok(probe.zone === "UTC" || probe.zone === "Etc/UTC", `the zone is ${probe.zone}`);
+      assert.ok(
+        probe.zone === "UTC" || probe.zone === "Etc/UTC",
+        `the zone is ${probe.zone} under TZ=${probe.tz ?? "unset"}, offset ${probe.offsetMinutes} minutes`,
+      );
       assert.equal(probe.offsetMinutes, 0);
       assert.ok(
         Math.abs(Date.parse(probe.now) - Date.now()) < CLOCK_DRIFT_MS,
@@ -267,7 +278,7 @@ export const clientAddressCheck: Check = {
     const appended = chain.filter((entry) => entry !== FORGED_CLIENT);
     assert.ok(
       appended.length > 0,
-      `no hop appended the client address to the forged chain "${chain.join(", ")}"`,
+      `no hop appended the client address to the forged chain "${chain.join(", ")}" (${hopsHeard(forged)})`,
     );
     const client = bareAddress(appended[0] ?? null) ?? "";
     assert.ok(isIP(client) !== 0, `"${client}" is no address`);
