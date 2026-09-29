@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -89,7 +90,7 @@ func ReclaimTargets(slug, env string, removed []router.DeploymentRecord, survivi
 	var refused []string
 	var errs []error
 	for _, record := range removed {
-		if containersRetained && record.Image != "" {
+		if isRetainedContainer(containersRetained, record.Image) {
 			continue
 		}
 		identity, err := provider.ParseBuild(record.Build)
@@ -107,6 +108,10 @@ func ReclaimTargets(slug, env string, removed []router.DeploymentRecord, survivi
 		})
 	}
 	return targets, refused, errors.Join(errs...)
+}
+
+func isRetainedContainer(containersRetained bool, image string) bool {
+	return containersRetained && image != ""
 }
 
 func reclaimedPrefixes(slug, env, app string, release naming.Release, elsewhere, here map[appRelease]bool) []string {
@@ -202,4 +207,60 @@ func envFor(tier environment.Tier, pointer string) string {
 		return stackrecords.ProductionEnv
 	}
 	return pointer
+}
+
+func (r *deployRun) reclaimOwnRelease(ctx context.Context) {
+	if r.dry {
+		return
+	}
+	stage := UnitStage("reclaim/"+r.spec.PromotionID, environmentSubject(r.spec.Tier, r.spec.Env),
+		"Reclaiming what this failed deploy provisioned", progressv1.Phase_PHASE_DESTROY)
+	_ = r.tracked.unit(stage, func(*unitRun) error {
+		progress := newProgress(r.sender, stage)
+		if err := r.reclaimProvisioned(ctx, progress); err != nil {
+			progress.Warn(fmt.Sprintf("Promotion %s did not land, and reclaiming what its deploy provisioned failed, so what was not reclaimed stays until this environment is destroyed: %v",
+				r.spec.PromotionID, err))
+		}
+		return nil
+	})
+}
+
+func (r *deployRun) reclaimProvisioned(ctx context.Context, progress progress.Progress) error {
+	retained := r.provider.Facts().RetainsContainerReleases
+	var provisioned []provider.AppEntry
+	for _, entry := range r.spec.Apps {
+		if r.isProvisioning(entry.App) && !isRetainedContainer(retained, entry.Image) {
+			provisioned = append(provisioned, entry)
+		}
+	}
+	if len(provisioned) == 0 {
+		return nil
+	}
+	named, err := r.ledger.ReadNamedRecordKeys(ctx)
+	if err != nil {
+		return err
+	}
+	var targets []ReclaimTarget
+	for _, entry := range provisioned {
+		if named[ledger.RecordKey(entry.App, entry.Build.String())] {
+			continue
+		}
+		targets = append(targets, ReclaimTarget{
+			App:      entry.App,
+			Build:    entry.Build,
+			Stack:    entry.Stack,
+			Prefixes: []string{appCoordinate(r.spec, entry.App, entry.Build.Release()).StoragePrefix()},
+		})
+	}
+	var errs []error
+	reclaimed := make([]string, 0, len(targets))
+	for i, target := range targets {
+		progress.Say(fmt.Sprintf("Destroying the stack of %s build %s (%d of %d)", target.App, target.Build, i+1, len(targets)))
+		if err := destroyReclaimTarget(ctx, r.provider, r.spec.Slug, r.spec.Tier, target, progress); err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		reclaimed = append(reclaimed, ledger.RecordKey(target.App, target.Build.String()))
+	}
+	return errors.Join(append(errs, r.ledger.ForgetUnnamedRecords(ctx, reclaimed))...)
 }

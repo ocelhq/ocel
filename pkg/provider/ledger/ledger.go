@@ -339,7 +339,7 @@ func (l *Ledger) ForgetUnnamedRecords(ctx context.Context, keys []string) error 
 			stored = append(stored, entry)
 		}
 	}
-	named, err := l.readNamedRecordKeys(ctx)
+	named, err := l.ReadNamedRecordKeys(ctx)
 	if err != nil {
 		return errors.Join(append(errs, err)...)
 	}
@@ -388,7 +388,7 @@ func (l *Ledger) rewriteRecord(ctx context.Context, promotionID, app, build stri
 	return fmt.Errorf("rewrite the deployment record %s/%s: it moved under %d attempts", app, build, casAttempts)
 }
 
-func (l *Ledger) readNamedRecordKeys(ctx context.Context) (map[string]bool, error) {
+func (l *Ledger) ReadNamedRecordKeys(ctx context.Context) (map[string]bool, error) {
 	pointers, err := l.readPointers(ctx)
 	if err != nil {
 		return nil, err

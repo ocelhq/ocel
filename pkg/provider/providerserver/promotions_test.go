@@ -194,6 +194,148 @@ func TestADeployAnotherPromoteOvertookWhileItBuiltIsRefusedBusyAndFlipsNothing(t
 	}
 }
 
+func overtakenWhileItBuilds(t *testing.T, vendor *fake.Provider, releases *ledger.Ledger) {
+	t.Helper()
+	var overtook sync.Once
+	vendor.FakeStacks().Entering(func(provider.StackSpec) error {
+		overtook.Do(func() {
+			promotion := router.Promotion{PromotionID: "p2", Builds: map[string]string{"web": buildIdentity(0)}}
+			if _, err := releases.Promote(context.Background(), promotion, "", "p1"); err != nil {
+				t.Errorf("the promote that overtook the deploy = %v", err)
+			}
+		})
+		return nil
+	})
+}
+
+func stagedRecordKeys(t *testing.T, vendor *fake.Provider) []string {
+	t.Helper()
+	stored, err := vendor.KeyValues().List(context.Background(), ledger.Partition(environment.TierProduction, "shop"), "records")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var keys []string
+	for _, entry := range stored {
+		keys = append(keys, ledger.RecordKey(entry.Key.Path[1], entry.Key.Path[2]))
+	}
+	return keys
+}
+
+func appStacksRecorded(t *testing.T, vendor *fake.Provider) []string {
+	t.Helper()
+	stacks, err := stackrecords.List(context.Background(), vendor.KeyValues(), environment.TierProduction, "shop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, stack := range stacks {
+		if !stack.Name.IsInfra() {
+			names = append(names, stack.Name.String())
+		}
+	}
+	return names
+}
+
+func TestADeployRefusedBusyAfterItProvisionedReclaimsWhatItProvisioned(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	releases := seedPromotions(t, vendor, environment.TierProduction, "shop", "", "p1")
+	overtakenWhileItBuilds(t, vendor, releases)
+
+	result, _ := deploy(t, client, deployRequest())
+
+	if result.GetSuccess() {
+		t.Fatal("Deploy() overtaken while it built = success, want it refused")
+	}
+	if !strings.Contains(result.GetError(), "p2") {
+		t.Errorf("Deploy() said %q, want the refusal that stopped it, naming p2", result.GetError())
+	}
+	destroyed := destroyedStacks(vendor)
+	if !slices.ContainsFunc(destroyed, func(stack string) bool { return strings.HasPrefix(stack, "prod--web--") }) {
+		t.Errorf("the refused deploy destroyed %v, want the web stack it provisioned: no promotion names its build, so nothing else ever would", destroyed)
+	}
+	if left := appStacksRecorded(t, vendor); len(left) != 0 {
+		t.Errorf("the refused deploy left stack records %v, want none", left)
+	}
+	if want := []string{ledger.RecordKey("web", buildIdentity(0))}; !slices.Equal(stagedRecordKeys(t, vendor), want) {
+		t.Errorf("the ledger holds records %v after the refused deploy, want only %v: the record it staged names a build no promotion does", stagedRecordKeys(t, vendor), want)
+	}
+}
+
+func TestADeployThatFailsAfterProvisioningRemovesTheFunctionsItsStackHolds(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	var removed []string
+	var mu sync.Mutex
+	vendor.ResourceStacks(resources.Hooks{Functions: &resources.FunctionHooks{
+		Provision: vendor.ProvisionFunctions,
+		Remove: func(_ context.Context, _ provider.StackRef, functions []provider.Function, _ progress.Progress) error {
+			mu.Lock()
+			defer mu.Unlock()
+			for _, function := range functions {
+				removed = append(removed, function.Name)
+			}
+			return nil
+		},
+	}})
+	vendor.WithHooks(func(hooks *provider.Hooks) {
+		hooks.WarmFunctions = func(context.Context, []string, progress.Progress) error {
+			return errors.New("the function never answered its warm-up")
+		}
+	})
+	req := deployRequest()
+	req.Manifest.Resources, req.Manifest.Usages = nil, nil
+
+	result, _ := deploy(t, client, req)
+
+	if result.GetSuccess() || !strings.Contains(result.GetError(), "the function never answered its warm-up") {
+		t.Fatalf("Deploy() whose warm-up failed = %v, %q, want it failed with the warm-up's reason", result.GetSuccess(), result.GetError())
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if !slices.Contains(removed, "server") {
+		t.Errorf("the failed deploy removed functions %v, want the server function its stack provisioned", removed)
+	}
+	if left := appStacksRecorded(t, vendor); len(left) != 0 {
+		t.Errorf("the failed deploy left stack records %v, want none", left)
+	}
+}
+
+func TestADeployWhoseOwnReclaimFailsStillSaysWhyItFailedAndWarnsOfTheReclaim(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	releases := seedPromotions(t, vendor, environment.TierProduction, "shop", "", "p1")
+	overtakenWhileItBuilds(t, vendor, releases)
+	vendor.FakeStacks().RefuseNextDestroy(errors.New("the stack is locked by another run"))
+
+	result, events := deploy(t, client, deployRequest())
+
+	if result.GetSuccess() || !strings.Contains(result.GetError(), "p2") {
+		t.Fatalf("Deploy() = %v, %q, want the busy refusal it failed with, not the reclaim that followed", result.GetSuccess(), result.GetError())
+	}
+	if warned := strings.Join(warnings(events), "\n"); !strings.Contains(warned, "the stack is locked by another run") {
+		t.Errorf("the deploy warned %q, want the reclaim that failed named", warned)
+	}
+	if left := appStacksRecorded(t, vendor); len(left) != 1 {
+		t.Errorf("the deploy whose stack could not be destroyed left stack records %v, want its own kept for a later teardown", left)
+	}
+}
+
+func TestADeployWhosePromotionTheLedgerStillNamesKeepsItsStacksWhenItFails(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	relayPlane(vendor).FailNextFlip(errors.New("the data plane refused the write"))
+
+	result, _ := deploy(t, client, deployRequest())
+
+	if result.GetSuccess() {
+		t.Fatal("Deploy() with a router that refused its flip = success, want it to fail")
+	}
+	if destroyed := destroyedStacks(vendor); len(destroyed) != 0 {
+		t.Errorf("the deploy destroyed %v, want its stacks kept: the ledger still records its promotion, and a later reclaim of that promotion owns them", destroyed)
+	}
+}
+
 func TestTheRollbackFlipIsHandedProgressThatDiscards(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")

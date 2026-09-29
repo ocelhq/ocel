@@ -185,6 +185,7 @@ type deployRun struct {
 	appRouters     map[string]router.Kind
 	bindings       []provider.Binding
 	functions      map[string][]provider.Function
+	provisioning   map[string]bool
 }
 
 func (r *deployRun) recordArtifact(logical string, ref provider.ArtifactRef) {
@@ -198,6 +199,18 @@ func (r *deployRun) artifact(logical string) (provider.ArtifactRef, bool) {
 	defer r.mu.Unlock()
 	ref, ok := r.artifacts[logical]
 	return ref, ok
+}
+
+func (r *deployRun) recordProvisioning(app string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.provisioning[app] = true
+}
+
+func (r *deployRun) isProvisioning(app string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.provisioning[app]
 }
 
 func (r *deployRun) recordFunctions(app string, functions []provider.Function) {
@@ -250,6 +263,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 		artifacts:      map[string]provider.ArtifactRef{},
 		functionImages: map[string]string{},
 		functions:      map[string][]provider.Function{},
+		provisioning:   map[string]bool{},
 
 		dry:           req.GetDry(),
 		allowDegraded: req.GetEdge().GetAllowDegraded(),
@@ -292,12 +306,18 @@ func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, er
 		return nil, err
 	}
 	if err := r.provision(ctx); err != nil {
+		r.reclaimOwnRelease(ctx)
 		return nil, err
 	}
 	if err := r.attachHostnames(ctx); err != nil {
+		r.reclaimOwnRelease(ctx)
 		return nil, err
 	}
-	return r.promote(ctx)
+	result, err := r.promote(ctx)
+	if err != nil {
+		r.reclaimOwnRelease(ctx)
+	}
+	return result, err
 }
 
 func (r *deployRun) prepare(ctx context.Context, progress progress.Progress) error {
@@ -899,8 +919,20 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 				r.dryRunPlan.apps[slot] = planned
 				return nil
 			}
+			r.recordProvisioning(entry.App)
 			result, err := r.provider.Stacks().Provision(ctx, spec, progress)
 			if err != nil {
+				return err
+			}
+			if err := stackrecords.Write(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, entry.Stack, stackrecords.Stack{
+				Kind:       provider.StackApp,
+				App:        entry.App,
+				Release:    entry.Build.Release().String(),
+				Build:      entry.Build.String(),
+				Functions:  result.Functions,
+				Containers: result.Containers,
+				WrittenBy:  provider.WrittenByVersion(""),
+			}); err != nil {
 				return err
 			}
 			r.recordFunctions(entry.App, result.Functions)
@@ -910,18 +942,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 			if err := r.embedBytecodeCaches(ctx, entry, result.Functions, progress); err != nil {
 				return err
 			}
-			if err := r.recordStagedDeployment(ctx, entry, facts, images, values, result); err != nil {
-				return err
-			}
-			return stackrecords.Write(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, entry.Stack, stackrecords.Stack{
-				Kind:       provider.StackApp,
-				App:        entry.App,
-				Release:    entry.Build.Release().String(),
-				Build:      entry.Build.String(),
-				Functions:  result.Functions,
-				Containers: result.Containers,
-				WrittenBy:  provider.WrittenByVersion(""),
-			})
+			return r.recordStagedDeployment(ctx, entry, facts, images, values, result)
 		})
 	})
 }
