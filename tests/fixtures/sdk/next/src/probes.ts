@@ -293,13 +293,17 @@ async function inflateProbe(request: Request): Promise<Response> {
 }
 
 async function multipartProbe(request: Request): Promise<Response> {
-  if (!request.headers.get("content-type")?.startsWith("multipart/form-data")) {
+  const type = request.headers.get("content-type");
+  if (!type?.startsWith("multipart/form-data")) {
     return json({ error: "multipart/form-data only" }, { status: 415 });
   }
-  if (request.headers.get("content-length") === null || isDeclaredTooLarge(request)) {
+  const body = await readBounded(request);
+  if (body === undefined) {
     return tooLarge();
   }
-  const form = await request.formData();
+  const form = await new Response(new Uint8Array(body), {
+    headers: { "content-type": type },
+  }).formData();
   const fields: Record<string, string> = {};
   const files: { field: string; name: string; type: string; bytes: number; sha256: string }[] = [];
   for (const [field, value] of form) {
