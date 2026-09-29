@@ -25,7 +25,7 @@ func forwardingOwner(namespace, slug string, tier environment.Tier) string {
 
 func ownerComment(owner string) string { return recordComment + ownerSeparator + owner }
 
-func commentOwner(comment string) (owner string, ocels bool) {
+func parseCommentOwner(comment string) (owner string, ocels bool) {
 	if comment == recordComment {
 		return "", true
 	}
@@ -116,7 +116,7 @@ func (p *cloudflare) requireEncryptedOrigin(ctx context.Context, zoneID, zoneNam
 	return nil
 }
 
-func forwards(state edge.StackState, hostname string) bool {
+func isForwarded(state edge.StackState, hostname string) bool {
 	return slices.ContainsFunc(state.Records, func(rec edge.Record) bool { return rec.Name == hostname })
 }
 
@@ -124,7 +124,7 @@ func recordsBesides(records []edge.Record, hostname string) []edge.Record {
 	return slices.DeleteFunc(slices.Clone(records), func(rec edge.Record) bool { return rec.Name == hostname })
 }
 
-func (p *cloudflare) addressRecords(ctx context.Context, zoneID, hostname string) ([]dns.RecordResponse, error) {
+func (p *cloudflare) listAddressRecords(ctx context.Context, zoneID, hostname string) ([]dns.RecordResponse, error) {
 	listed := p.client.DNS.Records.ListAutoPaging(ctx, dns.RecordListParams{
 		ZoneID: cf.F(zoneID),
 		Name:   cf.F(dns.RecordListParamsName{Exact: cf.F(hostname)}),
@@ -142,13 +142,13 @@ func (p *cloudflare) addressRecords(ctx context.Context, zoneID, hostname string
 }
 
 func (p *cloudflare) forwardRecord(ctx context.Context, zoneID, owner string, want edge.Record) error {
-	live, err := p.addressRecords(ctx, zoneID, want.Name)
+	live, err := p.listAddressRecords(ctx, zoneID, want.Name)
 	if err != nil {
 		return err
 	}
 	var ours *dns.RecordResponse
 	for i := range live {
-		held, ocels := commentOwner(live[i].Comment)
+		held, ocels := parseCommentOwner(live[i].Comment)
 		switch {
 		case !ocels:
 			return fmt.Errorf("%s already has a %s record ocel did not write, pointing at %s — delete it, and ocel writes the proxied record that forwards %s through Cloudflare", want.Name, live[i].Type, live[i].Content, want.Name)
@@ -161,7 +161,7 @@ func (p *cloudflare) forwardRecord(ctx context.Context, zoneID, owner string, wa
 	if err != nil {
 		return err
 	}
-	body = ownedBody(body, owner)
+	body = withOwnerComment(body, owner)
 	if ours == nil {
 		if _, err := p.client.DNS.Records.New(ctx, dns.RecordNewParams{ZoneID: cf.F(zoneID), Body: body}); err != nil {
 			return fmt.Errorf("write DNS record %s: %w", want, err)
@@ -177,7 +177,7 @@ func (p *cloudflare) forwardRecord(ctx context.Context, zoneID, owner string, wa
 	return nil
 }
 
-func ownedBody(body recordParam, owner string) recordParam {
+func withOwnerComment(body recordParam, owner string) recordParam {
 	switch typed := body.(type) {
 	case dns.ARecordParam:
 		typed.Comment = cf.F(ownerComment(owner))
@@ -193,13 +193,13 @@ func ownedBody(body recordParam, owner string) recordParam {
 }
 
 func (p *cloudflare) dropForwardRecords(ctx context.Context, zoneID, owner, hostname string) error {
-	live, err := p.addressRecords(ctx, zoneID, hostname)
+	live, err := p.listAddressRecords(ctx, zoneID, hostname)
 	if err != nil {
 		return err
 	}
 	var errs []error
 	for _, rec := range live {
-		if held, _ := commentOwner(rec.Comment); held != owner {
+		if held, _ := parseCommentOwner(rec.Comment); held != owner {
 			continue
 		}
 		if _, err := p.client.DNS.Records.Delete(ctx, rec.ID, dns.RecordDeleteParams{ZoneID: cf.F(zoneID)}); err != nil {
@@ -209,13 +209,13 @@ func (p *cloudflare) dropForwardRecords(ctx context.Context, zoneID, owner, host
 	return errors.Join(errs...)
 }
 
-func (p *cloudflare) forwardedOwner(ctx context.Context, zoneID, hostname string) (string, error) {
-	live, err := p.addressRecords(ctx, zoneID, hostname)
+func (p *cloudflare) readForwardedOwner(ctx context.Context, zoneID, hostname string) (string, error) {
+	live, err := p.listAddressRecords(ctx, zoneID, hostname)
 	if err != nil {
 		return "", err
 	}
 	for _, rec := range live {
-		if held, _ := commentOwner(rec.Comment); held != "" && rec.Proxied {
+		if held, _ := parseCommentOwner(rec.Comment); held != "" && rec.Proxied {
 			return held, nil
 		}
 	}

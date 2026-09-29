@@ -54,7 +54,7 @@ func (r routerStack) Claim(ctx context.Context, claim router.Claim) (edge.Origin
 		fronted = s.e.Shielded()
 	}
 	if claim.ClientCertificate != "" || !s.recorded.Front.provisioned() {
-		front, err := fronted.frontFor(ctx, s.state.Tier, claim.ClientCertificate)
+		front, err := fronted.ensureFront(ctx, s.state.Tier, claim.ClientCertificate)
 		if err != nil {
 			return edge.Origin{}, err
 		}
