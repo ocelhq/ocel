@@ -110,6 +110,22 @@ func TestAFailedRunEndsWithAnErrorResultAndExitsWithOne(t *testing.T) {
 	}
 }
 
+func TestARunThatFailsWithAnExitCodeExitsWithThatCode(t *testing.T) {
+	sink := &recording{}
+	run, _ := begin(t, sink)
+
+	var err error = &exitcode.ExitError{Code: 7}
+	run.End(&err)
+
+	if result := sink.received()[len(sink.received())-1].GetSummary(); result.GetSuccess() || result.GetDetail() != "exit status 7" {
+		t.Fatalf("result = success %v detail %q, want a failure naming the exit status", result.GetSuccess(), result.GetDetail())
+	}
+	var exit *exitcode.ExitError
+	if !errors.As(err, &exit) || exit.Code != 7 {
+		t.Fatalf("err = %v, want an exit with code 7", err)
+	}
+}
+
 func TestAFailedRunForMissingVariablesCarriesThemOnItsResult(t *testing.T) {
 	sink := &recording{}
 	run, _ := begin(t, sink)

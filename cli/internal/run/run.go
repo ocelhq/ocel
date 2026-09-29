@@ -101,6 +101,10 @@ func (r *Run) result(err error) (*streamv1.RunSummary, int) {
 		result.Missing = missing.Variables()
 		result.Detail = strings.TrimLeft(strings.TrimPrefix(err.Error(), missing.Error()), "\n")
 	}
+	var exit *exitcode.ExitError
+	if errors.As(err, &exit) {
+		return result, exit.Code
+	}
 	return result, 1
 }
 
