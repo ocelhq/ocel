@@ -128,3 +128,21 @@ func TestParseEnvSetPairs(t *testing.T) {
 		}
 	}
 }
+
+func TestAnArgumentEnvSetCannotReadIsRefusedByPositionWithoutEchoingIt(t *testing.T) {
+	_, err := parseEnvSetPairs([]string{"LOG_LEVEL=debug", "sk_live_pasted_without_a_key", "=hunter2"})
+	if err == nil {
+		t.Fatal("parseEnvSetPairs = nil, want an error")
+	}
+	if strings.Contains(err.Error(), "sk_live_pasted_without_a_key") {
+		t.Errorf("parseEnvSetPairs = %q, echoes the argument it refused", err)
+	}
+	if !strings.Contains(err.Error(), "argument 2") {
+		t.Errorf("parseEnvSetPairs = %q, want it to name the argument by position", err)
+	}
+
+	_, err = parseEnvSetPairs([]string{"=hunter2"})
+	if err == nil || strings.Contains(err.Error(), "hunter2") {
+		t.Errorf("parseEnvSetPairs(=VALUE) = %v, want a refusal that echoes no value", err)
+	}
+}

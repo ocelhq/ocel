@@ -82,10 +82,13 @@ type envSetPair struct {
 
 func parseEnvSetPairs(args []string) ([]envSetPair, error) {
 	pairs := make([]envSetPair, 0, len(args))
-	for _, arg := range args {
+	for i, arg := range args {
 		key, value, ok := strings.Cut(arg, "=")
-		if !ok || key == "" {
-			return nil, fmt.Errorf("expected KEY=VALUE, got %q", arg)
+		switch {
+		case !ok:
+			return nil, fmt.Errorf("argument %d has no =: `ocel env set` takes KEY=VALUE, and that argument is not repeated here in case it is a value", i+1)
+		case key == "":
+			return nil, fmt.Errorf("argument %d starts with =, so it names no key: `ocel env set` takes KEY=VALUE", i+1)
 		}
 		pairs = append(pairs, envSetPair{key: key, value: value})
 	}
