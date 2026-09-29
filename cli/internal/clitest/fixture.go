@@ -4,9 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"io"
-	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -63,21 +61,6 @@ func WritePrebuiltFunction(t *testing.T, root, app, route string) {
 	}
 	if err := os.WriteFile(filepath.Join(dir, "config.json"), config, 0o644); err != nil {
 		t.Fatal(err)
-	}
-}
-
-func WaitForNoStaleSocket(t *testing.T, sockPath string) {
-	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for {
-		if _, err := os.Stat(sockPath); errors.Is(err, fs.ErrNotExist) {
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Errorf("stale socket file left behind at %s", sockPath)
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
 	}
 }
 

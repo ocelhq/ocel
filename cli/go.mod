@@ -245,7 +245,6 @@ tool (
 	google.golang.org/protobuf/cmd/protoc-gen-go
 )
 
-replace github.com/ocelhq/ocel/platform/aws/provider => ../platform/aws/provider
 
 replace github.com/ocelhq/ocel/platform/s3 => ../platform/s3
 
