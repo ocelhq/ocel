@@ -119,6 +119,7 @@ func TestAnEndedScopeBecomesASpanInTheTraceWithItsAttributes(t *testing.T) {
 		t.Errorf("Provisioning ran %s..%s, want its start and its ended event's time", provisioning.Start, provisioning.End)
 	}
 	want := map[string]map[string]any{
+		"ocel.phase":          {"stringValue": "provision"},
 		"ocel.resource_type":  {"stringValue": "aws:s3:Bucket"},
 		"ocel.resource_count": {"intValue": "42"},
 	}
@@ -164,7 +165,7 @@ func TestANonNumericValueForANumericKeyIsKeptAsAString(t *testing.T) {
 	}
 
 	attrs := spanNamed(t, readTraceDoc(t, r), "malformed byte count").Attributes
-	if len(attrs) != 1 || attrs[0].Key != "ocel.bytes" || attrs[0].Value["stringValue"] != "not-a-number" {
+	if len(attrs) != 2 || attrs[1].Key != "ocel.bytes" || attrs[1].Value["stringValue"] != "not-a-number" {
 		t.Errorf("attributes = %v, want ocel.bytes kept as the string it was sent as", attrs)
 	}
 }

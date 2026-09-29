@@ -19,6 +19,7 @@ const maxSpanNameLen = 200
 type startedScope struct {
 	parentID trace.SpanID
 	name     string
+	phase    string
 }
 
 func (r *Run) remember(ev *streamv1.RunEvent) {
@@ -27,13 +28,17 @@ func (r *Run) remember(ev *streamv1.RunEvent) {
 		return
 	}
 	parentID, _ := spanID(ev.GetStarted().GetParentSpanId())
+	phase := strings.ToLower(strings.TrimPrefix(ev.GetPhase().String(), "PHASE_"))
 	name := ev.GetMessage()
 	if name == "" {
-		name = strings.ToLower(strings.TrimPrefix(ev.GetPhase().String(), "PHASE_")) + " phase"
+		name = phase + " phase"
+	}
+	if ev.GetPhase() == progressv1.Phase_PHASE_UNSPECIFIED {
+		phase = ""
 	}
 	r.scopesMu.Lock()
 	defer r.scopesMu.Unlock()
-	r.scopes[id] = startedScope{parentID: parentID, name: name}
+	r.scopes[id] = startedScope{parentID: parentID, name: name, phase: phase}
 }
 
 func (r *Run) ingestEnded(ev *streamv1.RunEvent) {
@@ -52,7 +57,11 @@ func (r *Run) ingestEnded(ev *streamv1.RunEvent) {
 	if ns := ended.GetStartTimeUnixNano(); ns > 0 && !time.Unix(0, ns).After(end) {
 		start = time.Unix(0, ns).UTC()
 	}
-	r.ingestSpan(id, scope.parentID, scope.name, start, end, ended.GetStatus(), spanAttributes(ended.GetAttributes()))
+	attrs := spanAttributes(ended.GetAttributes())
+	if scope.phase != "" {
+		attrs = append([]attribute.KeyValue{AttrPhase.String(scope.phase)}, attrs...)
+	}
+	r.ingestSpan(id, scope.parentID, scope.name, start, end, ended.GetStatus(), attrs)
 }
 
 func spanID(raw []byte) (trace.SpanID, bool) {

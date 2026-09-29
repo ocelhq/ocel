@@ -67,7 +67,7 @@ func Start(ctx context.Context, projectDir, command string) (context.Context, *R
 		sdktrace.WithSpanProcessor(sdktrace.NewSimpleSpanProcessor(allowlistExporter{inner: fileExp})),
 	}
 	if netExp, netErr := newNetworkExporter(ctx); netErr == nil && netExp != nil {
-		opts = append(opts, sdktrace.WithSpanProcessor(sdktrace.NewBatchSpanProcessor(allowlistExporter{inner: netExp})))
+		opts = append(opts, sdktrace.WithSpanProcessor(sdktrace.NewBatchSpanProcessor(networkExporter{inner: netExp})))
 	}
 	tp := sdktrace.NewTracerProvider(opts...)
 
