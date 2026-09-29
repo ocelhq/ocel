@@ -2,7 +2,6 @@ package runtrace
 
 import (
 	"context"
-	"strconv"
 	"strings"
 	"time"
 
@@ -10,6 +9,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/ocelhq/ocel/pkg/progress"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
@@ -59,7 +59,7 @@ func (r *Run) ingestEnded(ev *streamv1.RunEvent) {
 	}
 	attrs := spanAttributes(ended.GetAttributes())
 	if scope.phase != "" {
-		attrs = append([]attribute.KeyValue{AttrPhase.String(scope.phase)}, attrs...)
+		attrs = append([]attribute.KeyValue{Attribute(progress.AttrKeyPhase, scope.phase)}, attrs...)
 	}
 	r.ingestSpan(id, scope.parentID, scope.name, start, end, ended.GetStatus(), attrs)
 }
@@ -127,71 +127,17 @@ func sanitizeSpanName(name string) string {
 	return out
 }
 
-var numericAttributeKeys = map[attribute.Key]struct{}{
-	AttrExitCode:      {},
-	AttrResourceCount: {},
-	AttrBytes:         {},
-	AttrRetryCount:    {},
-	AttrDurationMS:    {},
-}
-
 func spanAttributes(attrs []*progressv1.SpanAttribute) []attribute.KeyValue {
 	if len(attrs) == 0 {
 		return nil
 	}
 	out := make([]attribute.KeyValue, 0, len(attrs))
 	for _, a := range attrs {
-		key, ok := attributeKey(a.GetKey())
+		key, ok := progress.FindAttrKey(a.GetKey())
 		if !ok {
 			continue
 		}
-		out = append(out, attributeValue(key, a.GetValue()))
+		out = append(out, Attribute(key, a.GetValue()))
 	}
 	return out
-}
-
-func attributeValue(key attribute.Key, value string) attribute.KeyValue {
-	if _, numeric := numericAttributeKeys[key]; numeric {
-		if n, err := strconv.ParseInt(value, 10, 64); err == nil {
-			return key.Int64(n)
-		}
-	}
-	return key.String(value)
-}
-
-func attributeKey(k progressv1.AttributeKey) (attribute.Key, bool) {
-	switch k {
-	case progressv1.AttributeKey_ATTRIBUTE_KEY_COMMAND:
-		return AttrCommand, true
-	case progressv1.AttributeKey_ATTRIBUTE_KEY_SPAN_NAME:
-		return AttrSpanName, true
-	case progressv1.AttributeKey_ATTRIBUTE_KEY_APP:
-		return AttrApp, true
-	case progressv1.AttributeKey_ATTRIBUTE_KEY_PHASE:
-		return AttrPhase, true
-	case progressv1.AttributeKey_ATTRIBUTE_KEY_PROVIDER:
-		return AttrProvider, true
-	case progressv1.AttributeKey_ATTRIBUTE_KEY_EXIT_CODE:
-		return AttrExitCode, true
-	case progressv1.AttributeKey_ATTRIBUTE_KEY_ERROR_KIND:
-		return AttrErrorKind, true
-	case progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_COUNT:
-		return AttrResourceCount, true
-	case progressv1.AttributeKey_ATTRIBUTE_KEY_BYTES:
-		return AttrBytes, true
-	case progressv1.AttributeKey_ATTRIBUTE_KEY_RETRY_COUNT:
-		return AttrRetryCount, true
-	case progressv1.AttributeKey_ATTRIBUTE_KEY_DURATION_MS:
-		return AttrDurationMS, true
-	case progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_TYPE:
-		return AttrResourceType, true
-	case progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_NAME:
-		return AttrResourceName, true
-	case progressv1.AttributeKey_ATTRIBUTE_KEY_CACHED:
-		return AttrCached, true
-	case progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_ACTION:
-		return AttrResourceAction, true
-	default:
-		return "", false
-	}
 }

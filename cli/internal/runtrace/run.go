@@ -14,6 +14,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/progress"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
@@ -83,7 +84,7 @@ func Start(ctx context.Context, projectDir, command string) (context.Context, *R
 	}
 	r.send = r.record
 
-	ctx, root := r.tracer.Start(ctx, command, trace.WithAttributes(AttrCommand.String(command)))
+	ctx, root := r.tracer.Start(ctx, command, trace.WithAttributes(Attribute(progress.AttrKeyCommand, command)))
 	r.rootSpan = root
 	ctx = context.WithValue(ctx, ctxKey{}, r)
 
@@ -113,7 +114,7 @@ func (r *Run) Tracer() trace.Tracer {
 }
 
 func (r *Run) StartSpan(ctx context.Context, name string, attrs ...attribute.KeyValue) (context.Context, trace.Span) {
-	opts := []trace.SpanStartOption{trace.WithAttributes(attribute.KeyValue{Key: AttrSpanName, Value: attribute.StringValue(name)})}
+	opts := []trace.SpanStartOption{trace.WithAttributes(Attribute(progress.AttrKeySpanName, name))}
 	if len(attrs) > 0 {
 		opts = append(opts, trace.WithAttributes(attrs...))
 	}

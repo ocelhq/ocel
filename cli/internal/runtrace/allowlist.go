@@ -1,41 +1,26 @@
 package runtrace
 
-import "go.opentelemetry.io/otel/attribute"
+import (
+	"slices"
+	"strconv"
 
-const (
-	AttrCommand        = attribute.Key("ocel.command")
-	AttrSpanName       = attribute.Key("ocel.span_name")
-	AttrApp            = attribute.Key("ocel.app")
-	AttrPhase          = attribute.Key("ocel.phase")
-	AttrProvider       = attribute.Key("ocel.provider")
-	AttrExitCode       = attribute.Key("ocel.exit_code")
-	AttrErrorKind      = attribute.Key("ocel.error_kind")
-	AttrResourceCount  = attribute.Key("ocel.resource_count")
-	AttrBytes          = attribute.Key("ocel.bytes")
-	AttrRetryCount     = attribute.Key("ocel.retry_count")
-	AttrDurationMS     = attribute.Key("ocel.duration_ms")
-	AttrResourceType   = attribute.Key("ocel.resource_type")
-	AttrResourceName   = attribute.Key("ocel.resource_name")
-	AttrCached         = attribute.Key("ocel.cached")
-	AttrResourceAction = attribute.Key("ocel.resource_action")
+	"go.opentelemetry.io/otel/attribute"
+
+	"github.com/ocelhq/ocel/pkg/progress"
 )
 
-var allowedAttributes = map[attribute.Key]struct{}{
-	AttrCommand:        {},
-	AttrSpanName:       {},
-	AttrApp:            {},
-	AttrPhase:          {},
-	AttrProvider:       {},
-	AttrExitCode:       {},
-	AttrErrorKind:      {},
-	AttrResourceCount:  {},
-	AttrBytes:          {},
-	AttrRetryCount:     {},
-	AttrDurationMS:     {},
-	AttrResourceType:   {},
-	AttrResourceName:   {},
-	AttrCached:         {},
-	AttrResourceAction: {},
+func Attribute(key progress.AttrKey, value string) attribute.KeyValue {
+	name := attribute.Key(key.Name)
+	if key.Numeric {
+		if n, err := strconv.ParseInt(value, 10, 64); err == nil {
+			return name.Int64(n)
+		}
+	}
+	return name.String(value)
+}
+
+func isAllowed(key attribute.Key) bool {
+	return slices.ContainsFunc(progress.AttrKeys, func(allowed progress.AttrKey) bool { return allowed.Name == string(key) })
 }
 
 func filterAttributes(attrs []attribute.KeyValue) []attribute.KeyValue {
@@ -47,7 +32,7 @@ func filterAttributes(attrs []attribute.KeyValue) []attribute.KeyValue {
 		if !a.Valid() {
 			continue
 		}
-		if _, ok := allowedAttributes[a.Key]; ok {
+		if isAllowed(a.Key) {
 			out = append(out, a)
 		}
 	}

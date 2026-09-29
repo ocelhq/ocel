@@ -170,18 +170,6 @@ func TestANonNumericValueForANumericKeyIsKeptAsAString(t *testing.T) {
 	}
 }
 
-func TestEveryWireAttributeKeyMapsToATraceAttribute(t *testing.T) {
-	for raw, name := range progressv1.AttributeKey_name {
-		k := progressv1.AttributeKey(raw)
-		if k == progressv1.AttributeKey_ATTRIBUTE_KEY_UNSPECIFIED {
-			continue
-		}
-		if _, ok := attributeKey(k); !ok {
-			t.Errorf("attributeKey(%s) = (_, false), want every declared AttributeKey to map somewhere: an unmapped key is silently dropped", name)
-		}
-	}
-}
-
 func TestARunClosedByItsBusAndByItsOwnerClosesOnce(t *testing.T) {
 	r := startRun(t)
 	if err := r.Close(); err != nil {

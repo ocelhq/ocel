@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"go.opentelemetry.io/otel/codes"
@@ -20,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/variableeditor"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
+	"github.com/ocelhq/ocel/pkg/progress"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -157,7 +159,7 @@ func (r variablesRecovery) attempt(ctx context.Context, phase, scope *events.Sco
 	attemptCtx := ctx
 	var span trace.Span
 	if run := runtrace.FromContext(ctx); run != nil {
-		attemptCtx, span = run.StartSpan(ctx, "build", runtrace.AttrRetryCount.Int(retry))
+		attemptCtx, span = run.StartSpan(ctx, "build", runtrace.Attribute(progress.AttrKeyRetryCount, strconv.Itoa(retry)))
 	}
 	manifest, inline, err := collectAndBuildManifest(attemptCtx, r.deps, r.cfg, declarations, prebuilt, r.dry, phase, scope, r.compute, r.containerArchs, r.urls)
 	endAttemptSpan(span, err)

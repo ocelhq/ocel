@@ -12,7 +12,6 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
 
 	"github.com/ocelhq/ocel/pkg/progress"
-	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 type recordedSpan struct {
@@ -47,9 +46,9 @@ func (r *fakeProgress) Span(name string, _, _ time.Time, err error, attrs ...pro
 func TestTheBatchSpanHasNoResourceIdentityAndTheSlowOpDoes(t *testing.T) {
 	t.Parallel()
 
-	progress := &fakeProgress{}
+	recorded := &fakeProgress{}
 	start := time.Unix(6000, 0)
-	reportTrace(progress, engineTrace{
+	reportTrace(recorded, engineTrace{
 		ResourceCount: 2,
 		Start:         start,
 		End:           start.Add(5 * time.Second),
@@ -64,29 +63,29 @@ func TestTheBatchSpanHasNoResourceIdentityAndTheSlowOpDoes(t *testing.T) {
 		}},
 	}, nil)
 
-	if len(progress.spans) != 2 {
-		t.Fatalf("got %d spans, want 2 (batch + the failed op)", len(progress.spans))
+	if len(recorded.spans) != 2 {
+		t.Fatalf("got %d spans, want 2 (batch + the failed op)", len(recorded.spans))
 	}
 
-	batch := progress.spans[0]
+	batch := recorded.spans[0]
 	if batch.name != engineBatchSpanName {
 		t.Fatalf("spans[0].name = %q, want the batch span name", batch.name)
 	}
 	for _, a := range batch.attrs {
-		if a.Key == provider.AttrKeyResourceType || a.Key == provider.AttrKeyResourceName {
+		if a.Key == progress.AttrKeyResourceType || a.Key == progress.AttrKeyResourceName {
 			t.Errorf("batch span has resource identity attr %+v; it covers many resources", a)
 		}
 	}
 
 	var sawType, sawName bool
-	for _, a := range progress.spans[1].attrs {
+	for _, a := range recorded.spans[1].attrs {
 		switch a.Key {
-		case provider.AttrKeyResourceType:
+		case progress.AttrKeyResourceType:
 			sawType = true
 			if a.Value != "aws:s3/bucket:Bucket" {
 				t.Errorf("RESOURCE_TYPE = %q, want the type token", a.Value)
 			}
-		case provider.AttrKeyResourceName:
+		case progress.AttrKeyResourceName:
 			sawName = true
 			if a.Value != "my-bucket" {
 				t.Errorf("RESOURCE_NAME = %q, want the logical name", a.Value)
@@ -107,9 +106,9 @@ func TestTheBatchSpanHasNoResourceIdentityAndTheSlowOpDoes(t *testing.T) {
 func TestASlowOpWhoseURNDidNotParseHasNoResourceIdentity(t *testing.T) {
 	t.Parallel()
 
-	progress := &fakeProgress{}
+	recorded := &fakeProgress{}
 	start := time.Unix(7000, 0)
-	reportTrace(progress, engineTrace{
+	reportTrace(recorded, engineTrace{
 		ResourceCount: 1,
 		Start:         start,
 		End:           start.Add(time.Second),
@@ -119,11 +118,11 @@ func TestASlowOpWhoseURNDidNotParseHasNoResourceIdentity(t *testing.T) {
 		},
 	}, nil)
 
-	if len(progress.spans) != 2 {
-		t.Fatalf("got %d spans, want 2", len(progress.spans))
+	if len(recorded.spans) != 2 {
+		t.Fatalf("got %d spans, want 2", len(recorded.spans))
 	}
-	for _, a := range progress.spans[1].attrs {
-		if a.Key == provider.AttrKeyResourceType || a.Key == provider.AttrKeyResourceName {
+	for _, a := range recorded.spans[1].attrs {
+		if a.Key == progress.AttrKeyResourceType || a.Key == progress.AttrKeyResourceName {
 			t.Errorf("slow-op span has resource identity attr %+v despite an unparseable URN", a)
 		}
 	}
@@ -132,14 +131,14 @@ func TestASlowOpWhoseURNDidNotParseHasNoResourceIdentity(t *testing.T) {
 func TestARunThatFailedBeforeTouchingAResourceStillLeavesASpan(t *testing.T) {
 	t.Parallel()
 
-	progress := &fakeProgress{}
+	recorded := &fakeProgress{}
 	start := time.Unix(8000, 0)
-	reportTrace(progress, engineTrace{Start: start, End: start.Add(time.Second)}, errors.New("plugin failed to start"))
+	reportTrace(recorded, engineTrace{Start: start, End: start.Add(time.Second)}, errors.New("plugin failed to start"))
 
-	if len(progress.spans) != 1 {
-		t.Fatalf("got %d spans, want 1", len(progress.spans))
+	if len(recorded.spans) != 1 {
+		t.Fatalf("got %d spans, want 1", len(recorded.spans))
 	}
-	if progress.spans[0].err == nil {
+	if recorded.spans[0].err == nil {
 		t.Error("batch span not recorded as failed")
 	}
 }
@@ -147,11 +146,11 @@ func TestARunThatFailedBeforeTouchingAResourceStillLeavesASpan(t *testing.T) {
 func TestAQuietSuccessfulRunSaysNothing(t *testing.T) {
 	t.Parallel()
 
-	progress := &fakeProgress{}
-	reportTrace(progress, engineTrace{}, nil)
+	recorded := &fakeProgress{}
+	reportTrace(recorded, engineTrace{}, nil)
 
-	if len(progress.spans) != 0 {
-		t.Fatalf("got %d spans, want 0: nothing happened and nothing failed", len(progress.spans))
+	if len(recorded.spans) != 0 {
+		t.Fatalf("got %d spans, want 0: nothing happened and nothing failed", len(recorded.spans))
 	}
 }
 
@@ -184,20 +183,20 @@ func TestAnEventStreamThatIsNeverClosedLeavesTheRunToFinish(t *testing.T) {
 func TestTheEngineLogIsForwardedToDebugALineAtATime(t *testing.T) {
 	t.Parallel()
 
-	progress := &fakeProgress{}
-	lines := engineLines(progress)
+	recorded := &fakeProgress{}
+	lines := engineLines(recorded)
 	if _, err := lines.Write([]byte("creating bucket\r\nupdating role\npart")); err != nil {
 		t.Fatal(err)
 	}
-	if want := []string{"creating bucket", "updating role"}; !reflect.DeepEqual(progress.debugs, want) {
-		t.Fatalf("forwarded %q to debug, want %q", progress.debugs, want)
+	if want := []string{"creating bucket", "updating role"}; !reflect.DeepEqual(recorded.debugs, want) {
+		t.Fatalf("forwarded %q to debug, want %q", recorded.debugs, want)
 	}
 	lines.Flush()
-	if len(progress.debugs) != 3 || progress.debugs[2] != "part" {
-		t.Errorf("forwarded %q to debug, want the trailing partial line flushed", progress.debugs)
+	if len(recorded.debugs) != 3 || recorded.debugs[2] != "part" {
+		t.Errorf("forwarded %q to debug, want the trailing partial line flushed", recorded.debugs)
 	}
-	if len(progress.details) != 0 {
-		t.Errorf("the engine's own output reached Detail: %q", progress.details)
+	if len(recorded.details) != 0 {
+		t.Errorf("the engine's own output reached Detail: %q", recorded.details)
 	}
 }
 
@@ -208,12 +207,12 @@ func reported(secrets []string, engineEvents ...events.EngineEvent) *fakeProgres
 		collector.consume(ev, at)
 		at = at.Add(time.Second)
 	}
-	progress := &fakeProgress{}
-	reportTrace(progress, collector.result(), nil)
-	return progress
+	recorded := &fakeProgress{}
+	reportTrace(recorded, collector.result(), nil)
+	return recorded
 }
 
-func attrValue(span recordedSpan, key string) string {
+func attrValue(span recordedSpan, key progress.AttrKey) string {
 	for _, a := range span.attrs {
 		if a.Key == key {
 			return a.Value
@@ -222,11 +221,11 @@ func attrValue(span recordedSpan, key string) string {
 	return ""
 }
 
-func changes(progress *fakeProgress) []string {
+func changes(recorded *fakeProgress) []string {
 	var changed []string
-	for _, span := range progress.spans {
-		if action := attrValue(span, provider.AttrKeyResourceAction); action != "" {
-			changed = append(changed, action+" "+attrValue(span, provider.AttrKeyResourceType)+" "+attrValue(span, provider.AttrKeyResourceName))
+	for _, span := range recorded.spans {
+		if action := attrValue(span, progress.AttrKeyResourceAction); action != "" {
+			changed = append(changed, action+" "+attrValue(span, progress.AttrKeyResourceType)+" "+attrValue(span, progress.AttrKeyResourceName))
 		}
 	}
 	return changed
@@ -238,14 +237,14 @@ func TestEveryResourceTheRunChangedIsReportedWithItsActionHoweverFastItWas(t *te
 	t.Parallel()
 
 	bucket, role, old := urnOf("aws:s3/bucket:Bucket", "assets"), urnOf("aws:iam/role:Role", "api"), urnOf("aws:sqs/queue:Queue", "old")
-	progress := reported(nil,
+	recorded := reported(nil,
 		preEvent(bucket, "aws:s3/bucket:Bucket"), outputsEvent(bucket, "aws:s3/bucket:Bucket", apitype.OpCreate),
 		preEvent(role, "aws:iam/role:Role"), outputsEvent(role, "aws:iam/role:Role", apitype.OpUpdate),
 		preEvent(old, "aws:sqs/queue:Queue"), outputsEvent(old, "aws:sqs/queue:Queue", apitype.OpDelete),
 	)
 
 	want := []string{"create aws:s3/bucket:Bucket assets", "update aws:iam/role:Role api", "delete aws:sqs/queue:Queue old"}
-	if got := changes(progress); !reflect.DeepEqual(got, want) {
+	if got := changes(recorded); !reflect.DeepEqual(got, want) {
 		t.Fatalf("reported changes %q, want %q", got, want)
 	}
 }
@@ -254,13 +253,13 @@ func TestAnUnchangedResourceAndTheStackItselfAreNeverReportedAsChanges(t *testin
 	t.Parallel()
 
 	kept, stack, bucket := urnOf("aws:iam/role:Role", "api"), urnOf(stackResourceType, "proj-prod"), urnOf("aws:s3/bucket:Bucket", "assets")
-	progress := reported(nil,
+	recorded := reported(nil,
 		preEvent(stack, stackResourceType), outputsEvent(stack, stackResourceType, apitype.OpCreate),
 		preEvent(kept, "aws:iam/role:Role"), outputsEvent(kept, "aws:iam/role:Role", apitype.OpSame),
 		preEvent(bucket, "aws:s3/bucket:Bucket"), outputsEvent(bucket, "aws:s3/bucket:Bucket", apitype.OpCreate),
 	)
 
-	if got, want := changes(progress), []string{"create aws:s3/bucket:Bucket assets"}; !reflect.DeepEqual(got, want) {
+	if got, want := changes(recorded), []string{"create aws:s3/bucket:Bucket assets"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("reported changes %q, want only %q", got, want)
 	}
 }
@@ -269,7 +268,7 @@ func TestAReplacedResourceIsReportedOnceAsReplacedAndAFailedReplacementAsAFailed
 	t.Parallel()
 
 	fn, db := urnOf("aws:lambda/function:Function", "api"), urnOf("aws:rds/instance:Instance", "main")
-	progress := reported(nil,
+	recorded := reported(nil,
 		preEvent(fn, "aws:lambda/function:Function"), outputsEvent(fn, "aws:lambda/function:Function", apitype.OpCreateReplacement),
 		preEvent(fn, "aws:lambda/function:Function"), outputsEvent(fn, "aws:lambda/function:Function", apitype.OpReplace),
 		preEvent(fn, "aws:lambda/function:Function"), outputsEvent(fn, "aws:lambda/function:Function", apitype.OpDeleteReplaced),
@@ -277,10 +276,10 @@ func TestAReplacedResourceIsReportedOnceAsReplacedAndAFailedReplacementAsAFailed
 	)
 
 	want := []string{"replace aws:lambda/function:Function api", "replace aws:rds/instance:Instance main"}
-	if got := changes(progress); !reflect.DeepEqual(got, want) {
+	if got := changes(recorded); !reflect.DeepEqual(got, want) {
 		t.Fatalf("reported changes %q, want %q", got, want)
 	}
-	if failed := progress.spans[len(progress.spans)-1]; failed.err == nil {
+	if failed := recorded.spans[len(recorded.spans)-1]; failed.err == nil {
 		t.Error("the failed replacement was reported as a success")
 	}
 }
@@ -295,7 +294,7 @@ func TestAFailedResourcesErrorDiagnosticIsReportedAsAnErrorNamingTheResource(t *
 	t.Parallel()
 
 	logs, assets := urnOf("aws:s3/bucket:Bucket", "logs"), urnOf("aws:s3/bucket:Bucket", "assets")
-	progress := reported(nil,
+	recorded := reported(nil,
 		preEvent(assets, "aws:s3/bucket:Bucket"),
 		diagnostic(assets, "warning", "the bucket's ACL is deprecated"),
 		outputsEvent(assets, "aws:s3/bucket:Bucket", apitype.OpCreate),
@@ -305,11 +304,11 @@ func TestAFailedResourcesErrorDiagnosticIsReportedAsAnErrorNamingTheResource(t *
 	)
 
 	want := []string{"logs (aws:s3/bucket:Bucket): creating S3 Bucket (logs): BucketAlreadyExists status code: 409"}
-	if !reflect.DeepEqual(progress.errors, want) {
-		t.Fatalf("reported errors %q, want %q", progress.errors, want)
+	if !reflect.DeepEqual(recorded.errors, want) {
+		t.Fatalf("reported errors %q, want %q", recorded.errors, want)
 	}
-	if len(progress.debugs) != 0 || len(progress.warned) != 0 {
-		t.Errorf("reported %q as debug and %q as warnings, want the failure's diagnostic as an error alone", progress.debugs, progress.warned)
+	if len(recorded.debugs) != 0 || len(recorded.warned) != 0 {
+		t.Errorf("reported %q as debug and %q as warnings, want the failure's diagnostic as an error alone", recorded.debugs, recorded.warned)
 	}
 }
 
@@ -318,7 +317,7 @@ func TestAFailedResourcesDiagnosticNeverCarriesASecretTheStackIsConfiguredWith(t
 
 	db := urnOf("aws:rds/instance:Instance", "main")
 	secret := "hunter2-p4ssw0rd"
-	progress := reported(secretValues(auto.ConfigMap{
+	recorded := reported(secretValues(auto.ConfigMap{
 		"aws:region":      {Value: "us-east-1"},
 		"app:dbPassword":  {Value: secret, Secret: true},
 		"app:emptySecret": {Value: "", Secret: true},
@@ -329,7 +328,7 @@ func TestAFailedResourcesDiagnosticNeverCarriesASecretTheStackIsConfiguredWith(t
 	)
 
 	want := []string{"main (aws:rds/instance:Instance): creating RDS DB Instance: InvalidParameterValue: MasterUserPassword [secret] is not valid in us-east-1"}
-	if !reflect.DeepEqual(progress.errors, want) {
-		t.Fatalf("reported errors %q, want %q", progress.errors, want)
+	if !reflect.DeepEqual(recorded.errors, want) {
+		t.Fatalf("reported errors %q, want %q", recorded.errors, want)
 	}
 }

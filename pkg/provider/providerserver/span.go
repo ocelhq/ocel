@@ -94,19 +94,6 @@ func NewSpan(parent Span, name string) Span {
 	return Span{ID: newSpanID(), ParentID: parent.ID, Title: progress.Title{Started: name, Ended: name}, Phase: parent.Phase, Subject: parent.Subject}
 }
 
-var attributeKeys = map[string]progressv1.AttributeKey{
-	provider.AttrKeyApp:            progressv1.AttributeKey_ATTRIBUTE_KEY_APP,
-	provider.AttrKeyResourceCount:  progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_COUNT,
-	provider.AttrKeyBytes:          progressv1.AttributeKey_ATTRIBUTE_KEY_BYTES,
-	provider.AttrKeyDurationMS:     progressv1.AttributeKey_ATTRIBUTE_KEY_DURATION_MS,
-	provider.AttrKeyResourceType:   progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_TYPE,
-	provider.AttrKeyResourceName:   progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_NAME,
-	provider.AttrKeyErrorKind:      progressv1.AttributeKey_ATTRIBUTE_KEY_ERROR_KIND,
-	provider.AttrKeyResourceAction: progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_ACTION,
-}
-
-func AttributeKey(key string) progressv1.AttributeKey { return attributeKeys[key] }
-
 type spanRun struct {
 	events  *spanEvents
 	span    Span
@@ -164,7 +151,7 @@ func (t *spanEvents) Start(at time.Time, spans ...Span) {
 
 func (t *spanEvents) End(span Span, start, end time.Time, err error, attrs ...progress.Attr) {
 	if err != nil {
-		attrs = append(attrs, progress.Attr{Key: provider.AttrKeyErrorKind, Value: provider.ClassifyError(err)})
+		attrs = append(attrs, progress.Attr{Key: progress.AttrKeyErrorKind, Value: provider.ClassifyError(err)})
 		t.ended(span, start, end, progressv1.SpanStatus_SPAN_STATUS_ERROR, progressv1.Level_LEVEL_ERROR, "", attrs)
 		return
 	}
@@ -178,7 +165,7 @@ func (t *spanEvents) EndPartial(span Span, start, end time.Time, result string) 
 func (t *spanEvents) ended(span Span, start, end time.Time, status progressv1.SpanStatus, level progressv1.Level, title string, attrs []progress.Attr) {
 	pbAttrs := make([]*progressv1.SpanAttribute, len(attrs))
 	for i, a := range attrs {
-		pbAttrs[i] = &progressv1.SpanAttribute{Key: attributeKeys[a.Key], Value: a.Value}
+		pbAttrs[i] = &progressv1.SpanAttribute{Key: a.Key.Wire, Value: a.Value}
 	}
 
 	t.sender.send(&progressv1.OperationEvent{

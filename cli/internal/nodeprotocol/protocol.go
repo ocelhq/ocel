@@ -16,6 +16,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
+	"github.com/ocelhq/ocel/pkg/progress"
 )
 
 const Prefix = "@@OCEL_V1@@"
@@ -251,7 +252,7 @@ func (p *Processor) startSpan(ctx context.Context, rec record) {
 	}
 	var attrs []attribute.KeyValue
 	if rec.App != "" {
-		attrs = append(attrs, runtrace.AttrApp.String(rec.App))
+		attrs = append(attrs, runtrace.Attribute(progress.AttrKeyApp, rec.App))
 	}
 	spanCtx, span := p.Run.StartSpan(ctx, rec.Stage, attrs...)
 

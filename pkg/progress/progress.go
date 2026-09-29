@@ -19,11 +19,6 @@ type Log interface {
 	Span(name string, start, end time.Time, err error, attrs ...Attr)
 }
 
-type Attr struct {
-	Key   string
-	Value string
-}
-
 type discarded struct{}
 
 func Discard() Log { return discarded{} }

@@ -38,7 +38,7 @@ func (s *said) Span(name string, _, _ time.Time, err error, attrs ...progress.At
 		s.lines = append(s.lines, err.Error())
 	}
 	for _, attr := range attrs {
-		s.lines = append(s.lines, attr.Key, attr.Value)
+		s.lines = append(s.lines, attr.Key.Name, attr.Value)
 	}
 }
 

@@ -7,6 +7,8 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+
+	"github.com/ocelhq/ocel/pkg/progress"
 )
 
 var otlpEndpointEnvVars = []string{
@@ -51,17 +53,17 @@ type networkSpan struct {
 }
 
 func (s networkSpan) Name() string {
-	values := map[attribute.Key]string{}
+	values := map[string]string{}
 	for _, a := range s.ReadOnlySpan.Attributes() {
-		values[a.Key] = a.Value.AsString()
+		values[string(a.Key)] = a.Value.AsString()
 	}
 	switch {
-	case values[AttrSpanName] != "":
-		return values[AttrSpanName]
-	case values[AttrCommand] != "":
-		return values[AttrCommand]
-	case values[AttrPhase] != "":
-		return values[AttrPhase] + " phase"
+	case values[progress.AttrKeySpanName.Name] != "":
+		return values[progress.AttrKeySpanName.Name]
+	case values[progress.AttrKeyCommand.Name] != "":
+		return values[progress.AttrKeyCommand.Name]
+	case values[progress.AttrKeyPhase.Name] != "":
+		return values[progress.AttrKeyPhase.Name] + " phase"
 	default:
 		return "span"
 	}
