@@ -84,7 +84,7 @@ func TestRecordsFor(t *testing.T) {
 		t.Run("a "+string(kind)+" edge takes a grey-cloud CNAME to the front", func(t *testing.T) {
 			t.Parallel()
 
-			got, err := RecordsFor(DNSTarget{Kind: kind, Front: "front.example.net"}, []string{"shop.app.com"})
+			got, err := RecordsFor(DNSTarget{Kind: kind, Address: "front.example.net"}, []string{"shop.app.com"})
 			if err != nil {
 				t.Fatalf("RecordsFor error = %v", err)
 			}
@@ -110,7 +110,7 @@ func TestRecordsFor(t *testing.T) {
 		t.Parallel()
 
 		for _, target := range []DNSTarget{
-			{Kind: frontedKind, Front: "203.0.113.7"},
+			{Kind: frontedKind, Address: "203.0.113.7"},
 			{Kind: unboundKind, ServesUnbound: true},
 		} {
 			got, err := RecordsFor(target, []string{"localhost", "web.localhost", "Web.J-1.LOCALHOST", "shop.app.com"})
@@ -161,7 +161,7 @@ func TestRecordsForReadsTheTypeOutOfTheFront(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := RecordsFor(DNSTarget{Kind: frontedKind, Front: tc.front}, []string{"shop.app.com"})
+			got, err := RecordsFor(DNSTarget{Kind: frontedKind, Address: tc.front}, []string{"shop.app.com"})
 			if err != nil {
 				t.Fatalf("RecordsFor error = %v", err)
 			}
@@ -279,8 +279,8 @@ func TestRecordsForPerHostFronts(t *testing.T) {
 		t.Parallel()
 
 		var state StackState
-		state.PublishFront("shop.app.com", "d-shop.execute-api.eu-west-1.amazonaws.com")
-		state.PublishFront("www.app.com", "d-www.execute-api.eu-west-1.amazonaws.com")
+		state.PublishAddress("shop.app.com", "d-shop.execute-api.eu-west-1.amazonaws.com")
+		state.PublishAddress("www.app.com", "d-www.execute-api.eu-west-1.amazonaws.com")
 		got, err := RecordsFor(TargetOf(otherFrontedKind, Facts{}, state), []string{"shop.app.com", "www.app.com"})
 		if err != nil {
 			t.Fatalf("RecordsFor error = %v", err)
@@ -297,8 +297,8 @@ func TestRecordsForPerHostFronts(t *testing.T) {
 	t.Run("one front serves every host that has none of its own", func(t *testing.T) {
 		t.Parallel()
 
-		state := StackState{Front: "d123.cloudfront.net"}
-		state.PublishFront("shop.app.com", "d-shop.execute-api.eu-west-1.amazonaws.com")
+		state := StackState{Address: "d123.cloudfront.net"}
+		state.PublishAddress("shop.app.com", "d-shop.execute-api.eu-west-1.amazonaws.com")
 		got, err := RecordsFor(TargetOf(frontedKind, Facts{}, state), []string{"shop.app.com", "www.app.com"})
 		if err != nil {
 			t.Fatalf("RecordsFor error = %v", err)
@@ -316,7 +316,7 @@ func TestRecordsForPerHostFronts(t *testing.T) {
 		t.Parallel()
 
 		var state StackState
-		state.PublishFront("shop.app.com", "d-shop.execute-api.eu-west-1.amazonaws.com")
+		state.PublishAddress("shop.app.com", "d-shop.execute-api.eu-west-1.amazonaws.com")
 		_, err := RecordsFor(TargetOf(otherFrontedKind, Facts{}, state), []string{"shop.app.com", "www.app.com"})
 		if err == nil {
 			t.Fatal("RecordsFor err = nil, want a refusal: nothing to point www.app.com at")
@@ -343,8 +343,8 @@ func TestRecordsForPerHostFronts(t *testing.T) {
 		t.Parallel()
 
 		var state StackState
-		state.PublishFront("shop.app.com", "203.0.113.7")
-		state.PublishFront("www.app.com", "origin.example.net")
+		state.PublishAddress("shop.app.com", "203.0.113.7")
+		state.PublishAddress("www.app.com", "origin.example.net")
 		got, err := RecordsFor(TargetOf(proxyKind, Facts{ProxiesRecords: true}, state), []string{"shop.app.com", "www.app.com"})
 		if err != nil {
 			t.Fatalf("RecordsFor error = %v", err)
@@ -362,7 +362,7 @@ func TestRecordsForPerHostFronts(t *testing.T) {
 		t.Parallel()
 
 		var state StackState
-		state.PublishFront("shop.app.com", "203.0.113.7")
+		state.PublishAddress("shop.app.com", "203.0.113.7")
 		got, err := RecordsFor(TargetOf(unboundKind, Facts{ServesUnbound: true, ProxiesRecords: true}, state), []string{"shop.app.com", "www.app.com"})
 		if err != nil {
 			t.Fatalf("RecordsFor error = %v", err)
@@ -380,15 +380,15 @@ func TestRecordsForPerHostFronts(t *testing.T) {
 		t.Parallel()
 
 		var state StackState
-		state.PublishFront("shop.app.com", "d-shop")
-		state.PublishFront("www.app.com", "d-www")
+		state.PublishAddress("shop.app.com", "d-shop")
+		state.PublishAddress("www.app.com", "d-www")
 		left := state
-		left.PublishFront("shop.app.com", "")
-		if len(left.Fronts) != 1 || left.Fronts["www.app.com"] != "d-www" {
-			t.Errorf("host fronts = %v, want only www.app.com", left.Fronts)
+		left.PublishAddress("shop.app.com", "")
+		if len(left.Addresses) != 1 || left.Addresses["www.app.com"] != "d-www" {
+			t.Errorf("host fronts = %v, want only www.app.com", left.Addresses)
 		}
-		if len(state.Fronts) != 2 {
-			t.Errorf("host fronts on the state copied off = %v, want both: forgetting one must not reach back", state.Fronts)
+		if len(state.Addresses) != 2 {
+			t.Errorf("host fronts on the state copied off = %v, want both: forgetting one must not reach back", state.Addresses)
 		}
 	})
 }
@@ -396,7 +396,7 @@ func TestRecordsForPerHostFronts(t *testing.T) {
 func TestPointable(t *testing.T) {
 	t.Parallel()
 
-	front := StackState{Front: "d111111abcdef8.cloudfront.net"}
+	front := StackState{Address: "d111111abcdef8.cloudfront.net"}
 
 	t.Run("an edge that binds a host before serving it points only what it bound", func(t *testing.T) {
 		t.Parallel()

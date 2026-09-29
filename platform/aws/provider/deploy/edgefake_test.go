@@ -171,12 +171,12 @@ func (s *recordingStack) BindDomain(_ context.Context, binding edge.DomainBindin
 	switch s.edge.Kind() {
 	case cloudflare.Kind:
 		if binding.Origin != nil {
-			s.state.PublishFront(binding.Hostname, binding.Origin.Address)
+			s.state.PublishAddress(binding.Hostname, binding.Origin.Address)
 		}
 	case apigateway.Kind:
-		s.state.PublishFront(binding.Hostname, "front-"+binding.Hostname+".fake")
+		s.state.PublishAddress(binding.Hostname, "front-"+binding.Hostname+".fake")
 	default:
-		s.state.Front = "front-" + s.state.Slug + ".fake"
+		s.state.Address = "front-" + s.state.Slug + ".fake"
 	}
 	return nil
 }
@@ -185,7 +185,7 @@ func (s *recordingStack) UnbindDomain(_ context.Context, hostname string) error 
 	s.edge.recordCall("unbind " + hostname)
 	delete(s.edge.bound, hostname)
 	s.state.Release(hostname)
-	s.state.PublishFront(hostname, "")
+	s.state.PublishAddress(hostname, "")
 	return nil
 }
 

@@ -645,7 +645,7 @@ func TestAddHostnameRebindsAServedHostnameWhoseCertificateChanged(t *testing.T) 
 			Slug:     "shop",
 			Tier:     environment.TierProduction,
 			Endpoint: "https://shop.fake.invalid",
-			Front:    "shop.relay.fake.invalid",
+			Address:  "shop.relay.fake.invalid",
 			Bound:    []string{"app.acme.com"},
 		},
 		Hosts: map[string]stackrecords.HostnameState{
@@ -685,7 +685,7 @@ func TestHostnameStatusReportsWhatTheProviderSaysOfTheCertificate(t *testing.T) 
 			Slug:     "shop",
 			Tier:     environment.TierProduction,
 			Endpoint: "https://shop.fake.invalid",
-			Front:    "shop.relay.fake.invalid",
+			Address:  "shop.relay.fake.invalid",
 			Bound:    []string{"app.acme.com"},
 		},
 		Hosts: map[string]stackrecords.HostnameState{
@@ -731,11 +731,11 @@ func TestGetHostnameStatusReadsTheRecordedProbeUnlessAskedToCheckLive(t *testing
 	client, vendor := contractServed(t, "1.0.0")
 	seedStack(t, vendor, environment.TierProduction, "shop", stackrecords.EdgeState{
 		Edge: edge.StackState{
-			Slug:     "shop",
-			Tier:     environment.TierProduction,
-			Endpoint: "https://shop.fake.invalid",
-			Bound:    []string{"app.acme.com"},
-			Fronts:   map[string]string{"app.acme.com": "shop.relay.fake.invalid"},
+			Slug:      "shop",
+			Tier:      environment.TierProduction,
+			Endpoint:  "https://shop.fake.invalid",
+			Bound:     []string{"app.acme.com"},
+			Addresses: map[string]string{"app.acme.com": "shop.relay.fake.invalid"},
 		},
 		Hosts: map[string]stackrecords.HostnameState{
 			"app.acme.com": {Edge: fake.KindRelay, Probe: stackrecords.ServeProbe{At: 1755500000, OK: true, Router: fake.RouterRelay}},

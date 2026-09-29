@@ -34,7 +34,7 @@ type Deps struct {
 
 type Edge struct{ deps Deps }
 
-func (e *Edge) frontTarget(tier environment.Tier) Target {
+func (e *Edge) loadBalancerTarget(tier environment.Tier) Target {
 	return Target{Tier: tier, Shielded: e.deps.Shielded}
 }
 
@@ -64,24 +64,24 @@ func (e *Edge) Bootstrap(ctx context.Context, tier environment.Tier) (edge.Boots
 		return edge.BootstrapOutput{}, refusal.Refuse(refusal.CodeInvalid,
 			"the %q edge provisions one load balancer per tier, and this bootstrap names none", Kind)
 	}
-	front, err := e.raise(ctx, tier, progress.DiscardProgress())
+	balancer, err := e.raise(ctx, tier, progress.DiscardProgress())
 	if err != nil {
 		return edge.BootstrapOutput{}, err
 	}
 	return edge.BootstrapOutput{Trust: edge.TrustExternal, Values: map[string]string{
-		outputAddress:        front.Address,
-		outputCertificateMap: front.CertificateMap,
-		outputURLMap:         front.URLMap,
-		outputNotFound:       front.NotFound,
+		outputAddress:        balancer.Address,
+		outputCertificateMap: balancer.CertificateMap,
+		outputURLMap:         balancer.URLMap,
+		outputNotFound:       balancer.NotFound,
 	}}, nil
 }
 
-func (e *Edge) raise(ctx context.Context, tier environment.Tier, progress progress.Progress) (Front, error) {
+func (e *Edge) raise(ctx context.Context, tier environment.Tier, progress progress.Progress) (LoadBalancer, error) {
 	var preview previewEntry
 	if tier == environment.TierPreview {
 		recorded, err := e.recordedPreview(ctx)
 		if err != nil {
-			return Front{}, err
+			return LoadBalancer{}, err
 		}
 		if recorded.Shielded == e.deps.Shielded {
 			preview = recorded
@@ -90,54 +90,54 @@ func (e *Edge) raise(ctx context.Context, tier environment.Tier, progress progre
 	return e.raiseServing(ctx, tier, preview, progress)
 }
 
-func (e *Edge) raiseServing(ctx context.Context, tier environment.Tier, preview previewEntry, progress progress.Progress) (Front, error) {
-	spec := frontSpec{
+func (e *Edge) raiseServing(ctx context.Context, tier environment.Tier, preview previewEntry, progress progress.Progress) (LoadBalancer, error) {
+	spec := loadBalancerSpec{
 		Region:  e.deps.Region,
-		Names:   frontNames(tier, e.deps.Shielded),
+		Names:   loadBalancerNames(tier, e.deps.Shielded),
 		Preview: preview,
 	}
 	if e.deps.Shielded {
 		trusted, err := e.ensureAllowlist(ctx, tier)
 		if err != nil {
-			return Front{}, err
+			return LoadBalancer{}, err
 		}
 		spec.ClientCertificates = trusted
 	}
-	outputs, err := e.deps.Stacks.Up(ctx, e.frontTarget(tier), frontProgram(spec), progress)
+	outputs, err := e.deps.Stacks.Up(ctx, e.loadBalancerTarget(tier), loadBalancerProgram(spec), progress)
 	if err != nil {
-		return Front{}, err
+		return LoadBalancer{}, err
 	}
-	front := frontOf(outputs)
-	front.Shielded = e.deps.Shielded
-	if !front.provisioned() {
-		return Front{}, fmt.Errorf(
+	balancer := loadBalancerOf(outputs)
+	balancer.Shielded = e.deps.Shielded
+	if !balancer.provisioned() {
+		return LoadBalancer{}, fmt.Errorf(
 			"provision the %s load balancer for tier %s: it reported %+v, and a hostname is bound by writing into its certificate map and its url map",
-			Kind, tier, front)
+			Kind, tier, balancer)
 	}
-	return front, nil
+	return balancer, nil
 }
 
 func (e *Edge) bootstrapInstalled(ctx context.Context, tier environment.Tier) (bool, error) {
-	outputs, err := e.deps.Stacks.Outputs(ctx, e.frontTarget(tier))
+	outputs, err := e.deps.Stacks.Outputs(ctx, e.loadBalancerTarget(tier))
 	if err != nil {
 		return false, err
 	}
-	return frontOf(outputs).provisioned(), nil
+	return loadBalancerOf(outputs).provisioned(), nil
 }
 
 func (e *Edge) boundHostnames(ctx context.Context, tier environment.Tier) ([]string, error) {
 	if e.deps.Entries == nil {
 		return nil, nil
 	}
-	outputs, err := e.deps.Stacks.Outputs(ctx, e.frontTarget(tier))
+	outputs, err := e.deps.Stacks.Outputs(ctx, e.loadBalancerTarget(tier))
 	if err != nil {
 		return nil, err
 	}
-	front := frontOf(outputs)
-	if front.CertificateMap == "" {
+	balancer := loadBalancerOf(outputs)
+	if balancer.CertificateMap == "" {
 		return nil, nil
 	}
-	return e.deps.Entries.Entered(ctx, front.CertificateMap)
+	return e.deps.Entries.Entered(ctx, balancer.CertificateMap)
 }
 
 func (e *Edge) Teardown(ctx context.Context, tier environment.Tier) error {
@@ -147,16 +147,16 @@ func (e *Edge) Teardown(ctx context.Context, tier environment.Tier) error {
 	}
 	if len(bound) > 0 {
 		return refusal.Refuse(refusal.CodeInvalid,
-			"the %s front of tier %s still serves %s, and Google will not delete a certificate map that has entries: "+
+			"the %s load balancer of tier %s still serves %s, and Google will not delete a certificate map that has entries: "+
 				"release those hostnames with `ocel domain remove` in the projects that bound them, then take this bootstrap down",
 			Kind, tier, strings.Join(bound, ", "))
 	}
-	return e.deps.Stacks.Destroy(ctx, e.frontTarget(tier), progress.DiscardProgress())
+	return e.deps.Stacks.Destroy(ctx, e.loadBalancerTarget(tier), progress.DiscardProgress())
 }
 
 type edgeRecord struct {
-	Front Front           `json:"front,omitzero"`
-	Hosts map[string]Host `json:"hosts,omitempty"`
+	LoadBalancer LoadBalancer    `json:"front,omitzero"`
+	Hosts        map[string]Host `json:"hosts,omitempty"`
 }
 
 type Host struct {
@@ -175,12 +175,12 @@ func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.St
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"the %q edge serves a project by slug, and this stack names none", Kind)
 	}
-	outputs, err := e.deps.Stacks.Outputs(ctx, e.frontTarget(spec.Tier))
+	outputs, err := e.deps.Stacks.Outputs(ctx, e.loadBalancerTarget(spec.Tier))
 	if err != nil {
 		return nil, err
 	}
-	front := frontOf(outputs)
-	if !front.provisioned() {
+	balancer := loadBalancerOf(outputs)
+	if !balancer.provisioned() {
 		return nil, refusal.Refuse(refusal.CodeNotReady,
 			"no %s load balancer is provisioned for tier %s: the %q edge fronts every project in a tier from one that the bootstrap raises, at %s. Run `ocel bootstrap` for this tier first",
 			Kind, spec.Tier, Kind, BaselineCost)
@@ -189,7 +189,7 @@ func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.St
 	next.Slug = spec.Slug
 	next.Tier = spec.Tier
 	s := &stack{e: e, state: next}
-	if err := s.adopt(front); err != nil {
+	if err := s.adopt(balancer); err != nil {
 		return nil, err
 	}
 	return s, nil
@@ -264,7 +264,7 @@ func (e *Edge) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
 			Kind:   edge.EdgeGroupKind,
 			Name:   edge.EdgeGroupName(Kind) + "/front",
 			Action: edge.PlanKeep,
-			Reason: "the load balancer this project was fronted by is one per bootstrap tier and every other project in the tier is answered by it, " +
+			Reason: "the load balancer this project was balancing by is one per bootstrap tier and every other project in the tier is answered by it, " +
 				"so it stays provisioned and keeps costing " + BaselineCost + "; `ocel bootstrap remove` is what takes it down",
 		},
 	}
@@ -291,7 +291,7 @@ func (e *Edge) SharedPreviewRemoval() edge.PlanGroup {
 		Name:   edge.EdgeGroupName(Kind) + "/front",
 		Action: edge.PlanKeep,
 		Reason: "previews are answered by the same load balancer production is, one per bootstrap tier at " + BaselineCost + ", " +
-			"so releasing a wildcard takes its host rule and leaves the front in place",
+			"so releasing a wildcard takes its host rule and leaves the balancer in place",
 	}
 }
 

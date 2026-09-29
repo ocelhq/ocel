@@ -250,7 +250,7 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 		}
 	}
 	s.state.Bind(binding.Hostname)
-	s.state.PublishFront(binding.Hostname, front)
+	s.state.PublishAddress(binding.Hostname, front)
 	return nil
 }
 
@@ -287,7 +287,7 @@ func regionalFrontOf(hostname, regional string) (string, error) {
 
 func (s *stack) publishDomainFronts(ctx context.Context, c Clients, warn func(string)) error {
 	for _, hostname := range s.state.Bound {
-		if s.state.Fronts[hostname] != "" {
+		if s.state.Addresses[hostname] != "" {
 			continue
 		}
 		current, err := c.APIGateway.GetDomainName(ctx, &apigateway.GetDomainNameInput{
@@ -296,7 +296,7 @@ func (s *stack) publishDomainFronts(ctx context.Context, c Clients, warn func(st
 		if err != nil {
 			if isNotFound(err) {
 				s.state.Release(hostname)
-				s.state.PublishFront(hostname, "")
+				s.state.PublishAddress(hostname, "")
 				if warn != nil {
 					warn(fmt.Sprintf("%s is no longer bound: the API Gateway domain name it was served on is gone, so nothing answers it and no record can point at it — run `ocel domain add` to bind it again", hostname))
 				}
@@ -308,7 +308,7 @@ func (s *stack) publishDomainFronts(ctx context.Context, c Clients, warn func(st
 		if err != nil {
 			return err
 		}
-		s.state.PublishFront(hostname, front)
+		s.state.PublishAddress(hostname, front)
 	}
 	return nil
 }
@@ -340,7 +340,7 @@ func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
 		return fmt.Errorf("delete the API Gateway domain name for %s: %w", hostname, err)
 	}
 	s.state.Release(hostname)
-	s.state.PublishFront(hostname, "")
+	s.state.PublishAddress(hostname, "")
 	return nil
 }
 

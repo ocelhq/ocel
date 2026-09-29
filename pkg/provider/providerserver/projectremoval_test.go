@@ -221,7 +221,7 @@ func cutOverProject(t *testing.T) (contractv1connect.ProviderServiceClient, *fak
 			Slug:     "shop",
 			Tier:     environment.TierProduction,
 			Endpoint: "https://shop.fake.invalid",
-			Front:    "shop.relay.fake.invalid",
+			Address:  "shop.relay.fake.invalid",
 			Bound:    []string{"app.acme.com"},
 		},
 		Hosts: map[string]stackrecords.HostnameState{
@@ -309,7 +309,7 @@ func TestRemoveProjectDiscardsTheCertificateOcelRequested(t *testing.T) {
 			Slug:     "shop",
 			Tier:     environment.TierProduction,
 			Endpoint: "https://shop.fake.invalid",
-			Front:    "shop.relay.fake.invalid",
+			Address:  "shop.relay.fake.invalid",
 			Bound:    []string{"app.acme.com"},
 		},
 		Hosts: map[string]stackrecords.HostnameState{

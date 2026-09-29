@@ -40,8 +40,8 @@ type world struct {
 func newWorld() *world {
 	return &world{
 		outputs: map[string]map[string]string{
-			FrontStack(environment.TierProduction): front(),
-			FrontStack(environment.TierPreview):    front(),
+			LoadBalancerStack(environment.TierProduction): balancer(),
+			LoadBalancerStack(environment.TierPreview):    balancer(),
 		},
 		routed:   map[string]map[string]string{},
 		backends: map[string]map[string]bool{"": {notFoundBackend: true}},
@@ -51,7 +51,7 @@ func newWorld() *world {
 	}
 }
 
-func front() map[string]string {
+func balancer() map[string]string {
 	return map[string]string{
 		"address":        frontAddress,
 		"certificateMap": "ocel-alb-production-certs",

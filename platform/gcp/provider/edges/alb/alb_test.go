@@ -40,13 +40,13 @@ func TestTheALBEdgeBehavesAsEveryEdgeMust(t *testing.T) {
 
 	edgeconformance.Run(t, edgeconformance.Suite{
 		New: func(t *testing.T) (edge.Edge, edge.StackSpec) {
-			front, _ := fronting(t)
-			return front, edge.StackSpec{Slug: "shop", Tier: environment.TierProduction}
+			balancer, _ := fronting(t)
+			return balancer, edge.StackSpec{Slug: "shop", Tier: environment.TierProduction}
 		},
 		Hostname: "shop.example.com",
 		Previews: func(t *testing.T) (edge.Edge, edge.StackSpec, edge.PreviewWildcardSpec) {
-			front, _ := fronting(t)
-			return front, edge.StackSpec{Slug: "shop", Tier: environment.TierPreview, PruneOnly: true}, previewWildcard()
+			balancer, _ := fronting(t)
+			return balancer, edge.StackSpec{Slug: "shop", Tier: environment.TierPreview, PruneOnly: true}, previewWildcard()
 		},
 	})
 }
@@ -56,12 +56,12 @@ const conformanceService = "ocel-shop-production-web"
 func TestTheALBRouterBehavesAsEveryRouterMust(t *testing.T) {
 	routerconformance.Run(t, routerconformance.Suite{
 		New: func(t *testing.T) routerconformance.Fixture {
-			front, w, stack := reconciled(t)
-			w.outputs[ShieldedFrontStack(environment.TierProduction)] = shieldedFront()
-			w.outputs[ShieldedFrontStack(environment.TierPreview)] = shieldedPreviewFront()
+			balancer, w, stack := reconciled(t)
+			w.outputs[ShieldedLoadBalancerStack(environment.TierProduction)] = shieldedFront()
+			w.outputs[ShieldedLoadBalancerStack(environment.TierPreview)] = shieldedPreviewFront()
 			state := stack.State()
 			return routerconformance.Fixture{
-				Router: NewRouter(front),
+				Router: NewRouter(balancer),
 				Spec:   router.StackSpec{Tier: state.Tier, Slug: state.Slug},
 				Prior:  router.NewStackState(state),
 				Serving: func(string) string {
@@ -80,13 +80,13 @@ func TestTheALBRouterBehavesAsEveryRouterMust(t *testing.T) {
 
 func reconciled(t *testing.T) (*Edge, *world, edge.EdgeStack) {
 	t.Helper()
-	front, w := fronting(t)
-	stack, err := front.Reconcile(context.Background(),
+	balancer, w := fronting(t)
+	stack, err := balancer.Reconcile(context.Background(),
 		edge.StackSpec{Slug: "shop", Tier: environment.TierProduction}, edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile(shop) = %v", err)
 	}
-	return front, w, stack
+	return balancer, w, stack
 }
 
 func TestBindingAHostnameRaisesTheProjectsStackAndRoutesItThroughTheTierUrlMap(t *testing.T) {
@@ -107,19 +107,19 @@ func TestBindingAHostnameRaisesTheProjectsStackAndRoutesItThroughTheTierUrlMap(t
 	if backend, found := routed["shop.example.com"]; !found || backend == "" {
 		t.Errorf("the tier url map routes %v, want shop.example.com onto the backend the bind provisioned", routed)
 	}
-	if front := stack.State().Fronts["shop.example.com"]; front != frontAddress {
-		t.Errorf("the bind published %q as the front, want the load balancer's address %q for DNS to point at", front, frontAddress)
+	if balancer := stack.State().Addresses["shop.example.com"]; balancer != frontAddress {
+		t.Errorf("the bind published %q as the balancer, want the load balancer's address %q for DNS to point at", balancer, frontAddress)
 	}
 }
 
 func TestTwoProjectsClaimingOneHostnameAtOnceLeaveItWithExactlyOne(t *testing.T) {
 	t.Parallel()
 
-	front, w := fronting(t)
+	balancer, w := fronting(t)
 	ctx := context.Background()
 	stacks := map[string]edge.EdgeStack{}
 	for _, slug := range []string{"shop", "store"} {
-		stack, err := front.Reconcile(ctx, edge.StackSpec{Slug: slug, Tier: environment.TierProduction}, edge.StackState{})
+		stack, err := balancer.Reconcile(ctx, edge.StackSpec{Slug: slug, Tier: environment.TierProduction}, edge.StackState{})
 		if err != nil {
 			t.Fatalf("Reconcile(%s) = %v", slug, err)
 		}
@@ -146,7 +146,7 @@ func TestTwoProjectsClaimingOneHostnameAtOnceLeaveItWithExactlyOne(t *testing.T)
 		t.Errorf("the losing bind failed with %v, want a refusal that says who serves the hostname", refused[0])
 	}
 
-	owner, err := front.DomainOwner(ctx, "shop.example.com")
+	owner, err := balancer.DomainOwner(ctx, "shop.example.com")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,16 +164,16 @@ func TestTwoProjectsClaimingOneHostnameAtOnceLeaveItWithExactlyOne(t *testing.T)
 func TestAHostnameAnotherProjectServesIsRefusedRatherThanTakenOver(t *testing.T) {
 	t.Parallel()
 
-	front, w := fronting(t)
+	balancer, w := fronting(t)
 	ctx := context.Background()
-	shop, err := front.Reconcile(ctx, edge.StackSpec{Slug: "shop", Tier: environment.TierProduction}, edge.StackState{})
+	shop, err := balancer.Reconcile(ctx, edge.StackSpec{Slug: "shop", Tier: environment.TierProduction}, edge.StackState{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := shop.BindDomain(ctx, edge.DomainBinding{Hostname: "shop.example.com", App: "web"}); err != nil {
 		t.Fatalf("BindDomain(shop) = %v", err)
 	}
-	store, err := front.Reconcile(ctx, edge.StackSpec{Slug: "store", Tier: environment.TierProduction}, edge.StackState{})
+	store, err := balancer.Reconcile(ctx, edge.StackSpec{Slug: "store", Tier: environment.TierProduction}, edge.StackState{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,7 +191,7 @@ func TestAHostnameAnotherProjectServesIsRefusedRatherThanTakenOver(t *testing.T)
 	if len(w.raised()) != raised {
 		t.Errorf("the refused bind raised %v, and a stack for a hostname another project serves is one nothing routes to", w.raised()[raised:])
 	}
-	if owner, _ := front.DomainOwner(ctx, "shop.example.com"); owner != Surface("shop", environment.TierProduction) {
+	if owner, _ := balancer.DomainOwner(ctx, "shop.example.com"); owner != Surface("shop", environment.TierProduction) {
 		t.Errorf("the refused bind left the claim naming %q", owner)
 	}
 }
@@ -246,14 +246,14 @@ func TestAPromotionUnderTheLoadBalancerPinsCloudRunBecauseTheUrlMapNeverMoves(t 
 func TestAProjectReconciledBeforeItsTierHasALoadBalancerIsToldToBootstrapIt(t *testing.T) {
 	t.Parallel()
 
-	front, w := fronting(t)
-	delete(w.outputs, FrontStack(environment.TierProduction))
+	balancer, w := fronting(t)
+	delete(w.outputs, LoadBalancerStack(environment.TierProduction))
 
 	var refused refusal.Refusal
-	_, err := front.Reconcile(context.Background(),
+	_, err := balancer.Reconcile(context.Background(),
 		edge.StackSpec{Slug: "shop", Tier: environment.TierProduction}, edge.StackState{})
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
-		t.Fatalf("Reconcile with no front provisioned = %v, want a %s refusal", err, refusal.CodeNotReady)
+		t.Fatalf("Reconcile with no balancer provisioned = %v, want a %s refusal", err, refusal.CodeNotReady)
 	}
 	if !strings.Contains(refused.Message, "$18") {
 		t.Errorf("the refusal reads %q, and the consent for a recurring cost is the price said out loud", refused.Message)
@@ -271,13 +271,13 @@ func previewWildcard() edge.PreviewWildcardSpec {
 func TestOneHostRuleAndOneMaskedNegAnswerEveryPreviewHostname(t *testing.T) {
 	t.Parallel()
 
-	front, w := fronting(t)
-	published, err := front.ReconcilePreviewWildcard(context.Background(), previewWildcard())
+	balancer, w := fronting(t)
+	published, err := balancer.ReconcilePreviewWildcard(context.Background(), previewWildcard())
 	if err != nil {
 		t.Fatalf("ReconcilePreviewWildcard = %v", err)
 	}
 	if published != frontAddress {
-		t.Errorf("ReconcilePreviewWildcard published %q, want the tier front's address %q for DNS to point the wildcard at", published, frontAddress)
+		t.Errorf("ReconcilePreviewWildcard published %q, want the tier balancer's address %q for DNS to point the wildcard at", published, frontAddress)
 	}
 
 	routed := w.hosts("ocel-alb-production-routes")
@@ -286,17 +286,17 @@ func TestOneHostRuleAndOneMaskedNegAnswerEveryPreviewHostname(t *testing.T) {
 		t.Fatalf("the tier url map routes %v, want one host rule for %s: every preview resolves through it and none writes its own",
 			routed, edge.PreviewWildcard(previewBase))
 	}
-	resources := w.declarations(FrontStack(environment.TierPreview))
+	resources := w.declarations(LoadBalancerStack(environment.TierPreview))
 	neg, declared := resources[previewNEGName(previewBase)]
 	if !declared {
-		t.Fatalf("the preview front declares %v, want a serverless network endpoint group the host rule's backend reaches Cloud Run through", keys(resources))
+		t.Fatalf("the preview balancer declares %v, want a serverless network endpoint group the host rule's backend reaches Cloud Run through", keys(resources))
 	}
 	if mask := cloudRunMask(neg); mask != "<service>."+previewBase {
 		t.Errorf("the neg has the url mask %q, want %q: the mask is what turns a hostname's label into the Cloud Run service that answers it",
 			mask, "<service>."+previewBase)
 	}
 	if _, present := resources[backend]; !present {
-		t.Errorf("the host rule points at the backend %q, and the front declares only %v", backend, keys(resources))
+		t.Errorf("the host rule points at the backend %q, and the balancer declares only %v", backend, keys(resources))
 	}
 	if !cachesByHost(resources[backend]) {
 		t.Errorf("the preview backend declares the cache key policy %v, want the host in it: one backend answers every preview "+
@@ -304,7 +304,7 @@ func TestOneHostRuleAndOneMaskedNegAnswerEveryPreviewHostname(t *testing.T) {
 			cacheKeyPolicy(resources[backend]))
 	}
 	if _, entered := resources[previewEntryName(previewBase)]; !entered {
-		t.Errorf("the preview front declares %v, want a certificate map entry: nothing terminates TLS for %s without one",
+		t.Errorf("the preview balancer declares %v, want a certificate map entry: nothing terminates TLS for %s without one",
 			keys(resources), edge.PreviewWildcard(previewBase))
 	}
 }
@@ -313,12 +313,12 @@ func TestTheWildcardIsOwnedByTheSharedPreviewEntryRatherThanByAProject(t *testin
 	t.Parallel()
 
 	ctx := context.Background()
-	front, _ := fronting(t)
-	if _, err := front.ReconcilePreviewWildcard(ctx, previewWildcard()); err != nil {
+	balancer, _ := fronting(t)
+	if _, err := balancer.ReconcilePreviewWildcard(ctx, previewWildcard()); err != nil {
 		t.Fatalf("ReconcilePreviewWildcard = %v", err)
 	}
 
-	owner, err := front.DomainOwner(ctx, edge.PreviewWildcard(previewBase))
+	owner, err := balancer.DomainOwner(ctx, edge.PreviewWildcard(previewBase))
 	if err != nil {
 		t.Fatalf("DomainOwner = %v", err)
 	}
@@ -326,7 +326,7 @@ func TestTheWildcardIsOwnedByTheSharedPreviewEntryRatherThanByAProject(t *testin
 		t.Errorf("DomainOwner(%s) = %q, want %q: the wildcard is the bootstrap's, and a project that asks whether it may bind it "+
 			"has to be told it is already served", edge.PreviewWildcard(previewBase), owner, edge.PreviewEntryOwner)
 	}
-	if owner, err := front.DomainOwner(ctx, edge.PreviewWildcard("other.example.com")); err != nil || owner != "" {
+	if owner, err := balancer.DomainOwner(ctx, edge.PreviewWildcard("other.example.com")); err != nil || owner != "" {
 		t.Errorf("DomainOwner(%s) = %q, %v, want nothing: no wildcard but the one raised is served", edge.PreviewWildcard("other.example.com"), owner, err)
 	}
 }
@@ -334,9 +334,9 @@ func TestTheWildcardIsOwnedByTheSharedPreviewEntryRatherThanByAProject(t *testin
 func TestAPreviewWildcardWithNoCertificateIsRefusedRatherThanServedOnPlainHttp(t *testing.T) {
 	t.Parallel()
 
-	front, _ := fronting(t)
+	balancer, _ := fronting(t)
 	var refused refusal.Refusal
-	_, err := front.ReconcilePreviewWildcard(context.Background(), edge.PreviewWildcardSpec{BaseDomain: previewBase})
+	_, err := balancer.ReconcilePreviewWildcard(context.Background(), edge.PreviewWildcardSpec{BaseDomain: previewBase})
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("ReconcilePreviewWildcard with no certificate = %v, want an %s refusal", err, refusal.CodeInvalid)
 	}
@@ -346,17 +346,17 @@ func TestRaisingTheTierFrontAgainLeavesTheWildcardRouting(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	front, w := fronting(t)
-	if _, err := front.ReconcilePreviewWildcard(ctx, previewWildcard()); err != nil {
+	balancer, w := fronting(t)
+	if _, err := balancer.ReconcilePreviewWildcard(ctx, previewWildcard()); err != nil {
 		t.Fatalf("ReconcilePreviewWildcard = %v", err)
 	}
-	if _, err := front.Bootstrap(ctx, environment.TierPreview); err != nil {
+	if _, err := balancer.Bootstrap(ctx, environment.TierPreview); err != nil {
 		t.Fatalf("Bootstrap = %v", err)
 	}
 
-	resources := w.declarations(FrontStack(environment.TierPreview))
+	resources := w.declarations(LoadBalancerStack(environment.TierPreview))
 	if _, declared := resources[previewNEGName(previewBase)]; !declared {
-		t.Errorf("the front raised again declares %v, and the wildcard's neg is gone from it: a bootstrap that reruns would "+
+		t.Errorf("the balancer raised again declares %v, and the wildcard's neg is gone from it: a bootstrap that reruns would "+
 			"take every preview in the tier down", keys(resources))
 	}
 }
@@ -365,29 +365,29 @@ func TestDestroyingThePreviewWildcardTakesItsRouteAndLeavesTheFrontInPlace(t *te
 	t.Parallel()
 
 	ctx := context.Background()
-	front, w := fronting(t)
-	if _, err := front.ReconcilePreviewWildcard(ctx, previewWildcard()); err != nil {
+	balancer, w := fronting(t)
+	if _, err := balancer.ReconcilePreviewWildcard(ctx, previewWildcard()); err != nil {
 		t.Fatalf("ReconcilePreviewWildcard = %v", err)
 	}
-	if err := front.DestroyPreviewWildcard(ctx, previewBase); err != nil {
+	if err := balancer.DestroyPreviewWildcard(ctx, previewBase); err != nil {
 		t.Fatalf("DestroyPreviewWildcard = %v", err)
 	}
 
 	if routed := w.hosts("ocel-alb-production-routes"); routed[edge.PreviewWildcard(previewBase)] != "" {
 		t.Errorf("the tier url map still routes %v after the wildcard was released", routed)
 	}
-	resources := w.declarations(FrontStack(environment.TierPreview))
+	resources := w.declarations(LoadBalancerStack(environment.TierPreview))
 	if _, declared := resources[previewNEGName(previewBase)]; declared {
-		t.Errorf("the front still declares %v after the wildcard was released: bytes a release leaves behind must be zero", keys(resources))
+		t.Errorf("the balancer still declares %v after the wildcard was released: bytes a release leaves behind must be zero", keys(resources))
 	}
-	if slices.Contains(w.torn(), FrontStack(environment.TierPreview)) {
-		t.Error("releasing the wildcard destroyed the tier front, which every project in the tier is answered by")
+	if slices.Contains(w.torn(), LoadBalancerStack(environment.TierPreview)) {
+		t.Error("releasing the wildcard destroyed the tier balancer, which every project in the tier is answered by")
 	}
-	owner, err := front.DomainOwner(ctx, edge.PreviewWildcard(previewBase))
+	owner, err := balancer.DomainOwner(ctx, edge.PreviewWildcard(previewBase))
 	if err != nil || owner != "" {
 		t.Errorf("DomainOwner(%s) = %q, %v, want nothing serving a released wildcard", edge.PreviewWildcard(previewBase), owner, err)
 	}
-	if err := front.DestroyPreviewWildcard(ctx, previewBase); err != nil {
+	if err := balancer.DestroyPreviewWildcard(ctx, previewBase); err != nil {
 		t.Errorf("DestroyPreviewWildcard again = %v, want a release to be re-entrant", err)
 	}
 }
@@ -396,16 +396,16 @@ func TestAWildcardWhoseFrontFailsToRiseIsOwnedByNothing(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	front, w := fronting(t)
-	w.breakUp(FrontStack(environment.TierPreview), errors.New("the preview front would not rise"))
+	balancer, w := fronting(t)
+	w.breakUp(LoadBalancerStack(environment.TierPreview), errors.New("the preview balancer would not rise"))
 
-	if _, err := front.ReconcilePreviewWildcard(ctx, previewWildcard()); err == nil {
-		t.Fatal("ReconcilePreviewWildcard = nil, want the failure the front reported")
+	if _, err := balancer.ReconcilePreviewWildcard(ctx, previewWildcard()); err == nil {
+		t.Fatal("ReconcilePreviewWildcard = nil, want the failure the balancer reported")
 	}
 
-	owner, err := front.DomainOwner(ctx, edge.PreviewWildcard(previewBase))
+	owner, err := balancer.DomainOwner(ctx, edge.PreviewWildcard(previewBase))
 	if err != nil || owner != "" {
-		t.Errorf("DomainOwner(%s) = %q, %v, want nothing: a reconcile that never raised a front serves no wildcard, "+
+		t.Errorf("DomainOwner(%s) = %q, %v, want nothing: a reconcile that never raised a balancer serves no wildcard, "+
 			"and a record claiming it would refuse every project that asks to bind one", edge.PreviewWildcard(previewBase), owner, err)
 	}
 }
@@ -414,17 +414,17 @@ func TestAWildcardWhoseTeardownFailsIsStillOwnedSoTheRetryStillTearsItDown(t *te
 	t.Parallel()
 
 	ctx := context.Background()
-	front, w := fronting(t)
-	if _, err := front.ReconcilePreviewWildcard(ctx, previewWildcard()); err != nil {
+	balancer, w := fronting(t)
+	if _, err := balancer.ReconcilePreviewWildcard(ctx, previewWildcard()); err != nil {
 		t.Fatalf("ReconcilePreviewWildcard = %v", err)
 	}
-	w.breakUp(FrontStack(environment.TierPreview), errors.New("the preview front would not rise"))
+	w.breakUp(LoadBalancerStack(environment.TierPreview), errors.New("the preview balancer would not rise"))
 
-	if err := front.DestroyPreviewWildcard(ctx, previewBase); err == nil {
-		t.Fatal("DestroyPreviewWildcard = nil, want the failure the front reported")
+	if err := balancer.DestroyPreviewWildcard(ctx, previewBase); err == nil {
+		t.Fatal("DestroyPreviewWildcard = nil, want the failure the balancer reported")
 	}
 
-	owner, err := front.DomainOwner(ctx, edge.PreviewWildcard(previewBase))
+	owner, err := balancer.DomainOwner(ctx, edge.PreviewWildcard(previewBase))
 	if err != nil || owner != edge.PreviewEntryOwner {
 		t.Errorf("DomainOwner(%s) = %q, %v, want %q: the neg and the certificate map entry are still provisioned, "+
 			"and a retry that read the wildcard as gone would leave them there forever",
@@ -436,14 +436,14 @@ func TestThePreviewWildcardIsKeptWhileAProjectIsStillServedOnIt(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	front, _ := fronting(t)
-	if _, err := front.ReconcilePreviewWildcard(ctx, previewWildcard()); err != nil {
+	balancer, _ := fronting(t)
+	if _, err := balancer.ReconcilePreviewWildcard(ctx, previewWildcard()); err != nil {
 		t.Fatalf("ReconcilePreviewWildcard = %v", err)
 	}
-	servedOnPreview(t, front, "shop", previewBase)
+	servedOnPreview(t, balancer, "shop", previewBase)
 
 	var refused refusal.Refusal
-	err := front.DestroyPreviewWildcard(ctx, previewBase)
+	err := balancer.DestroyPreviewWildcard(ctx, previewBase)
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("DestroyPreviewWildcard with a project still served = %v, want an %s refusal", err, refusal.CodeInvalid)
 	}
@@ -456,11 +456,11 @@ func TestAPromotionOfAPreviewOnTheGlobalWildcardWritesNoHostRule(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	front, w := fronting(t)
-	if _, err := front.ReconcilePreviewWildcard(ctx, previewWildcard()); err != nil {
+	balancer, w := fronting(t)
+	if _, err := balancer.ReconcilePreviewWildcard(ctx, previewWildcard()); err != nil {
 		t.Fatalf("ReconcilePreviewWildcard = %v", err)
 	}
-	stack, err := front.Reconcile(ctx,
+	stack, err := balancer.Reconcile(ctx,
 		edge.StackSpec{Slug: "shop", Tier: environment.TierPreview, PruneOnly: true},
 		edge.StackState{GlobalPreview: previewBase})
 	if err != nil {
@@ -506,8 +506,8 @@ func TestAProjectsOwnPreviewWildcardIsRefusedOnTheLoadBalancer(t *testing.T) {
 func TestTheWildcardRemovalPlanNamesWhatComesDownAndWhatStays(t *testing.T) {
 	t.Parallel()
 
-	front, _ := fronting(t)
-	removed, kept := front.PreviewWildcardRemovals(edge.PreviewWildcard(previewBase))
+	balancer, _ := fronting(t)
+	removed, kept := balancer.PreviewWildcardRemovals(edge.PreviewWildcard(previewBase))
 	named := map[string]bool{}
 	for _, change := range removed.Changes {
 		named[change.Kind] = true
@@ -523,7 +523,7 @@ func TestTheWildcardRemovalPlanNamesWhatComesDownAndWhatStays(t *testing.T) {
 		}
 	}
 	if kept.Action != edge.PlanKeep || kept.Reason == "" {
-		t.Errorf("the kept group = %+v, want the front kept with a reason", kept)
+		t.Errorf("the kept group = %+v, want the balancer kept with a reason", kept)
 	}
 }
 
@@ -556,19 +556,19 @@ func cachesByHost(backend declaration) bool {
 
 func reconciledPreview(t *testing.T) (*Edge, *world, edge.EdgeStack) {
 	t.Helper()
-	front, w := fronting(t)
-	stack, err := front.Reconcile(context.Background(),
+	balancer, w := fronting(t)
+	stack, err := balancer.Reconcile(context.Background(),
 		edge.StackSpec{Slug: "shop", Tier: environment.TierPreview}, edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile(shop) = %v", err)
 	}
-	return front, w, stack
+	return balancer, w, stack
 }
 
-func servedOnPreview(t *testing.T, front *Edge, slug, base string) {
+func servedOnPreview(t *testing.T, balancer *Edge, slug, base string) {
 	t.Helper()
 	ctx := context.Background()
-	stack, err := front.Reconcile(ctx,
+	stack, err := balancer.Reconcile(ctx,
 		edge.StackSpec{Slug: slug, Tier: environment.TierPreview, PruneOnly: true},
 		edge.StackState{GlobalPreview: base})
 	if err != nil {
@@ -580,12 +580,12 @@ func servedOnPreview(t *testing.T, front *Edge, slug, base string) {
 		t.Fatal(err)
 	}
 	name := stackrecords.EdgeStackKey(environment.TierPreview, slug)
-	entry, err := keyvalue.ReadOrEmpty(ctx, front.deps.KeyValues, name)
+	entry, err := keyvalue.ReadOrEmpty(ctx, balancer.deps.KeyValues, name)
 	if err != nil {
 		t.Fatal(err)
 	}
 	entry.Value = encoded
-	if _, err := front.deps.KeyValues.Write(ctx, entry); err != nil {
+	if _, err := balancer.deps.KeyValues.Write(ctx, entry); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -593,8 +593,8 @@ func servedOnPreview(t *testing.T, front *Edge, slug, base string) {
 func TestARemovalPlanNamesTheRecurringCostItLeavesBehind(t *testing.T) {
 	t.Parallel()
 
-	front, _ := fronting(t)
-	groups := front.ProjectRemovals(edge.ProjectScope{
+	balancer, _ := fronting(t)
+	groups := balancer.ProjectRemovals(edge.ProjectScope{
 		Slug: "shop", Tier: environment.TierProduction, Hostnames: []string{"shop.example.com"},
 	})
 	var kept edge.PlanGroup
@@ -614,11 +614,11 @@ func TestARemovalPlanNamesTheRecurringCostItLeavesBehind(t *testing.T) {
 func TestTheFrontIsNotTakenDownWhileAHostnameIsStillEnteredInItsCertificateMap(t *testing.T) {
 	t.Parallel()
 
-	front, w := fronting(t)
+	balancer, w := fronting(t)
 	w.enter("ocel-alb-production-certs", "shop.example.com")
 
 	var refused refusal.Refusal
-	err := front.Teardown(context.Background(), environment.TierProduction)
+	err := balancer.Teardown(context.Background(), environment.TierProduction)
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("Teardown with a hostname still bound = %v, want an %s refusal", err, refusal.CodeInvalid)
 	}
@@ -634,11 +634,11 @@ func TestTheFrontIsNotTakenDownWhileAHostnameIsStillEnteredInItsCertificateMap(t
 func TestTheFrontComesDownOnceNothingIsBoundToIt(t *testing.T) {
 	t.Parallel()
 
-	front, w := fronting(t)
-	if err := front.Teardown(context.Background(), environment.TierProduction); err != nil {
+	balancer, w := fronting(t)
+	if err := balancer.Teardown(context.Background(), environment.TierProduction); err != nil {
 		t.Fatalf("Teardown = %v", err)
 	}
-	if want := FrontStack(environment.TierProduction); !slices.Contains(w.torn(), want) {
+	if want := LoadBalancerStack(environment.TierProduction); !slices.Contains(w.torn(), want) {
 		t.Errorf("the teardown destroyed %v, want %q among them", w.torn(), want)
 	}
 }
@@ -737,7 +737,7 @@ func TestAPromotionOfAnotherAppLeavesAHostnameServingNotFound(t *testing.T) {
 	}
 
 	if got := w.hosts("ocel-alb-production-routes")["shop.example.com"]; got != notFoundBackend {
-		t.Errorf("the tier url map routes shop.example.com onto %q, want it still on the front's 404: the app it was bound to has "+
+		t.Errorf("the tier url map routes shop.example.com onto %q, want it still on the balancer's 404: the app it was bound to has "+
 			"still released nothing", got)
 	}
 }
@@ -751,7 +751,7 @@ func TestAHostnameBoundBeforeItsAppReleasedIsRoutedToTheFrontsNotFoundBackend(t 
 	}
 
 	if got := w.hosts("ocel-alb-production-routes")["shop.example.com"]; got != notFoundBackend {
-		t.Errorf("the tier url map routes shop.example.com onto %q, want the front's not-found backend %q: the bind declared no backend "+
+		t.Errorf("the tier url map routes shop.example.com onto %q, want the balancer's not-found backend %q: the bind declared no backend "+
 			"for an app that has released nothing, and Compute rejects a url map naming a backend that is not there", got, notFoundBackend)
 	}
 }

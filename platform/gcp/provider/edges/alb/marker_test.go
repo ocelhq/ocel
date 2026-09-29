@@ -10,7 +10,7 @@ import (
 func TestEveryResponseTheLoadBalancerSendsNamesItAsTheRouter(t *testing.T) {
 	t.Parallel()
 
-	seen, err := declared(frontProgram(frontSpec{Names: frontNames(environment.TierProduction, false)}))
+	seen, err := declared(loadBalancerProgram(loadBalancerSpec{Names: loadBalancerNames(environment.TierProduction, false)}))
 	if err != nil {
 		t.Fatalf("the frontend program = %v", err)
 	}

@@ -37,7 +37,7 @@ func newProxiedRecord(hostname string, origin edge.Origin) (edge.Record, error) 
 	records, err := edge.RecordsFor(edge.DNSTarget{
 		Kind:           Kind,
 		ProxiesRecords: true,
-		FrontByHost:    map[string]string{hostname: origin.Address},
+		AddressByHost:  map[string]string{hostname: origin.Address},
 	}, []string{hostname})
 	if err != nil {
 		return edge.Record{}, err
@@ -61,7 +61,7 @@ func (p *cloudflare) bindOrigin(ctx context.Context, state *edge.StackState, own
 		return err
 	}
 	state.Bind(binding.Hostname)
-	state.PublishFront(binding.Hostname, binding.Origin.Address)
+	state.PublishAddress(binding.Hostname, binding.Origin.Address)
 	state.RecordWrites(append(removeRecordsNamed(state.Records, binding.Hostname), want))
 	return nil
 }
@@ -100,7 +100,7 @@ func (p *cloudflare) unbindOrigin(ctx context.Context, state *edge.StackState, o
 		return err
 	}
 	state.Release(hostname)
-	state.PublishFront(hostname, "")
+	state.PublishAddress(hostname, "")
 	state.RecordWrites(removeRecordsNamed(state.Records, hostname))
 	return nil
 }

@@ -102,7 +102,7 @@ func TestTheBoxRoutersRemovalPlanNamesTheRouteOfEveryHostnameAnEdgeForwardsToIt(
 
 	var routes []string
 	for _, group := range box.NewRouter(front.Edge).Hooks().Origin.PlanProjectRemoval(edge.ProjectScope{
-		Slug: slug, Tier: environment.TierProduction, Hostnames: []string{"shop.example.com"}, Front: address,
+		Slug: slug, Tier: environment.TierProduction, Hostnames: []string{"shop.example.com"}, Address: address,
 	}) {
 		for _, change := range group.Changes {
 			if change.Kind == box.RouteKind && change.Action == edge.PlanDelete {

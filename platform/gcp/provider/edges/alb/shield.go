@@ -94,12 +94,12 @@ func (e *Edge) trustKey(tier environment.Tier) keyvalue.Key {
 func (e *Edge) readTrust(ctx context.Context, tier environment.Tier) (keyvalue.Entry, trustRecord, error) {
 	entry, err := keyvalue.ReadOrEmpty(ctx, e.deps.KeyValues, e.trustKey(tier))
 	if err != nil {
-		return keyvalue.Entry{}, trustRecord{}, fmt.Errorf("read which client certificates the %s front of tier %s trusts: %w", Kind, tier, err)
+		return keyvalue.Entry{}, trustRecord{}, fmt.Errorf("read which client certificates the %s load balancer of tier %s trusts: %w", Kind, tier, err)
 	}
 	var read trustRecord
 	if len(entry.Value) > 0 {
 		if err := json.Unmarshal(entry.Value, &read); err != nil {
-			return keyvalue.Entry{}, trustRecord{}, fmt.Errorf("decode which client certificates the %s front of tier %s trusts: %w", Kind, tier, err)
+			return keyvalue.Entry{}, trustRecord{}, fmt.Errorf("decode which client certificates the %s load balancer of tier %s trusts: %w", Kind, tier, err)
 		}
 	}
 	return entry, read, nil
@@ -123,11 +123,11 @@ func (e *Edge) changeTrust(ctx context.Context, tier environment.Tier, change fu
 			continue
 		}
 		if err != nil {
-			return trustRecord{}, fmt.Errorf("record which client certificates the %s front of tier %s trusts: %w", Kind, tier, err)
+			return trustRecord{}, fmt.Errorf("record which client certificates the %s load balancer of tier %s trusts: %w", Kind, tier, err)
 		}
 		return changed, nil
 	}
-	return trustRecord{}, fmt.Errorf("record which client certificates the %s front of tier %s trusts: it changed under every one of %d attempts", Kind, tier, trustAttempts)
+	return trustRecord{}, fmt.Errorf("record which client certificates the %s load balancer of tier %s trusts: it changed under every one of %d attempts", Kind, tier, trustAttempts)
 }
 
 func (e *Edge) ensureAllowlist(ctx context.Context, tier environment.Tier) ([]string, error) {
@@ -151,20 +151,20 @@ func (e *Edge) ensureAllowlist(ctx context.Context, tier environment.Tier) ([]st
 	return record.allowlist(), err
 }
 
-func (e *Edge) trustClaim(ctx context.Context, tier environment.Tier, hostname string, certificates []string) (Front, error) {
-	front, record, err := e.applyTrust(ctx, tier, func(read trustRecord) trustRecord { return read.withClaim(hostname, certificates) })
+func (e *Edge) trustClaim(ctx context.Context, tier environment.Tier, hostname string, certificates []string) (LoadBalancer, error) {
+	balancer, record, err := e.applyTrust(ctx, tier, func(read trustRecord) trustRecord { return read.withClaim(hostname, certificates) })
 	if err != nil {
-		return Front{}, err
+		return LoadBalancer{}, err
 	}
-	if !front.provisioned() {
-		if front, err = e.raiseTrusting(ctx, tier, record.allowlist()); err != nil {
-			return Front{}, err
+	if !balancer.provisioned() {
+		if balancer, err = e.raiseTrusting(ctx, tier, record.allowlist()); err != nil {
+			return LoadBalancer{}, err
 		}
 	}
 	if _, _, err := e.applyTrust(ctx, tier.Sibling(), func(read trustRecord) trustRecord { return read.withCarried(certificates) }); err != nil {
-		return Front{}, err
+		return LoadBalancer{}, err
 	}
-	return front, nil
+	return balancer, nil
 }
 
 func (e *Edge) withdrawClaims(ctx context.Context, tier environment.Tier, hostnames ...string) error {
@@ -172,33 +172,33 @@ func (e *Edge) withdrawClaims(ctx context.Context, tier environment.Tier, hostna
 	return err
 }
 
-func (e *Edge) applyTrust(ctx context.Context, tier environment.Tier, change func(trustRecord) trustRecord) (Front, trustRecord, error) {
-	outputs, err := e.deps.Stacks.Outputs(ctx, e.frontTarget(tier))
+func (e *Edge) applyTrust(ctx context.Context, tier environment.Tier, change func(trustRecord) trustRecord) (LoadBalancer, trustRecord, error) {
+	outputs, err := e.deps.Stacks.Outputs(ctx, e.loadBalancerTarget(tier))
 	if err != nil {
-		return Front{}, trustRecord{}, err
+		return LoadBalancer{}, trustRecord{}, err
 	}
-	front := frontOf(outputs)
-	front.Shielded = true
+	balancer := loadBalancerOf(outputs)
+	balancer.Shielded = true
 	record, err := e.changeTrust(ctx, tier, change)
 	if err != nil {
-		return Front{}, trustRecord{}, err
+		return LoadBalancer{}, trustRecord{}, err
 	}
 	allowlist := record.allowlist()
 	if len(allowlist) > maxAllowlisted {
-		return Front{}, trustRecord{}, fmt.Errorf("the %s front of tier %s would trust %d client certificates, and a Certificate Manager trust config allowlists at most %d: delete the client certificates your Cloudflare zones no longer present, and deploy again",
+		return LoadBalancer{}, trustRecord{}, fmt.Errorf("the %s load balancer of tier %s would trust %d client certificates, and a Certificate Manager trust config allowlists at most %d: delete the client certificates your Cloudflare zones no longer present, and deploy again",
 			Kind, tier, len(allowlist), maxAllowlisted)
 	}
-	if !front.provisioned() || slices.Equal(record.Provisioned, allowlist) {
-		return front, record, nil
+	if !balancer.provisioned() || slices.Equal(record.Provisioned, allowlist) {
+		return balancer, record, nil
 	}
-	front, err = e.raiseTrusting(ctx, tier, allowlist)
-	return front, record, err
+	balancer, err = e.raiseTrusting(ctx, tier, allowlist)
+	return balancer, record, err
 }
 
-func (e *Edge) raiseTrusting(ctx context.Context, tier environment.Tier, allowlist []string) (Front, error) {
-	front, err := e.raise(ctx, tier, progress.DiscardProgress())
+func (e *Edge) raiseTrusting(ctx context.Context, tier environment.Tier, allowlist []string) (LoadBalancer, error) {
+	balancer, err := e.raise(ctx, tier, progress.DiscardProgress())
 	if err != nil {
-		return Front{}, err
+		return LoadBalancer{}, err
 	}
 	_, err = e.changeTrust(ctx, tier, func(read trustRecord) trustRecord {
 		if slices.Equal(read.allowlist(), allowlist) {
@@ -206,27 +206,27 @@ func (e *Edge) raiseTrusting(ctx context.Context, tier environment.Tier, allowli
 		}
 		return read
 	})
-	return front, err
+	return balancer, err
 }
 
-func (e *Edge) frontFor(claim router.Claim) *Edge {
+func (e *Edge) loadBalancerFor(claim router.Claim) *Edge {
 	if len(claim.ClientCertificates) > 0 {
 		return e.Shielded()
 	}
 	return e
 }
 
-func (e *Edge) readProvisionedFront(ctx context.Context, tier environment.Tier) (Front, error) {
-	outputs, err := e.deps.Stacks.Outputs(ctx, e.frontTarget(tier))
+func (e *Edge) readProvisionedLoadBalancer(ctx context.Context, tier environment.Tier) (LoadBalancer, error) {
+	outputs, err := e.deps.Stacks.Outputs(ctx, e.loadBalancerTarget(tier))
 	if err != nil {
-		return Front{}, err
+		return LoadBalancer{}, err
 	}
-	front := frontOf(outputs)
-	if !front.provisioned() {
-		return Front{}, refusal.Refuse(refusal.CodeNotReady,
+	balancer := loadBalancerOf(outputs)
+	if !balancer.provisioned() {
+		return LoadBalancer{}, refusal.Refuse(refusal.CodeNotReady,
 			"no %s load balancer is provisioned for tier %s: run `ocel bootstrap` for this tier first", Kind, tier)
 	}
-	return front, nil
+	return balancer, nil
 }
 
 func mintUnpresentableCertificate(now time.Time) (string, error) {

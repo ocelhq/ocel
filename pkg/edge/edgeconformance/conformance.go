@@ -64,7 +64,7 @@ func Run(t *testing.T, suite Suite) {
 			Slug:      spec.Slug,
 			Tier:      spec.Tier,
 			Hostnames: []string{suite.Hostname},
-			Front:     "front.example.net",
+			Address:   "front.example.net",
 		})
 		if len(groups) == 0 {
 			t.Fatal("ProjectRemovals = none, want what a project with a bound hostname depends on")
@@ -392,7 +392,7 @@ func frontedRecords(t *testing.T, e edge.Edge, state edge.StackState, hostname s
 		t.Fatalf("bound domains = %v, want %q among them", bound, hostname)
 	}
 	target := edge.TargetFor(e, state)
-	front := target.FrontFor(hostname)
+	front := target.AddressFor(hostname)
 	if target.ServesUnbound {
 		if front != "" {
 			t.Errorf("the front for %q is %q, but a %s edge answers on the zone itself and publishes none", hostname, front, e.Kind())
@@ -463,7 +463,7 @@ func roundTrip(t *testing.T, state edge.StackState) edge.StackState {
 }
 
 func withoutFronts(state edge.StackState) edge.StackState {
-	state.Front, state.Fronts = "", nil
+	state.Address, state.Addresses = "", nil
 	return state
 }
 

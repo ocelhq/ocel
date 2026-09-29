@@ -100,7 +100,7 @@ type ProjectScope struct {
 	Slug      string
 	Tier      environment.Tier
 	Hostnames []string
-	Front     string
+	Address   string
 }
 
 type EdgeStack interface {

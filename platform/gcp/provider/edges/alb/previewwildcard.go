@@ -66,17 +66,17 @@ func (e *Edge) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewWi
 			Kind, wildcard)
 	}
 	entry := previewEntry{BaseDomain: spec.BaseDomain, Certificate: spec.Certificate, Shielded: e.deps.Shielded}
-	front, err := e.raiseServing(ctx, environment.TierPreview, entry, progress.DiscardProgress())
+	balancer, err := e.raiseServing(ctx, environment.TierPreview, entry, progress.DiscardProgress())
 	if err != nil {
 		return "", err
 	}
-	if err := e.deps.Routes.Route(ctx, front.URLMap, wildcard, previewBackendName(spec.BaseDomain)); err != nil {
+	if err := e.deps.Routes.Route(ctx, balancer.URLMap, wildcard, previewBackendName(spec.BaseDomain)); err != nil {
 		return "", err
 	}
 	if err := e.rememberPreview(ctx, entry); err != nil {
 		return "", err
 	}
-	return front.Address, nil
+	return balancer.Address, nil
 }
 
 func (e *Edge) DestroyPreviewWildcard(ctx context.Context, baseDomain string) error {
@@ -90,21 +90,21 @@ func (e *Edge) DestroyPreviewWildcard(ctx context.Context, baseDomain string) er
 	}
 	if len(served) > 0 {
 		return refusal.Refuse(refusal.CodeInvalid,
-			"%s still serves the previews of %s on the %s front of tier %s, and releasing the host rule would leave every one of them "+
+			"%s still serves the previews of %s on the %s load balancer of tier %s, and releasing the host rule would leave every one of them "+
 				"answering a 404 from the load balancer: take those previews down with `ocel destroy preview` in each project first",
 			wildcard, strings.Join(served, ", "), Kind, environment.TierPreview)
 	}
-	outputs, err := e.deps.Stacks.Outputs(ctx, e.frontTarget(environment.TierPreview))
+	outputs, err := e.deps.Stacks.Outputs(ctx, e.loadBalancerTarget(environment.TierPreview))
 	if err != nil {
 		return err
 	}
-	front := frontOf(outputs)
-	if front.URLMap != "" {
-		if err := e.deps.Routes.Unroute(ctx, front.URLMap, wildcard); err != nil {
+	balancer := loadBalancerOf(outputs)
+	if balancer.URLMap != "" {
+		if err := e.deps.Routes.Unroute(ctx, balancer.URLMap, wildcard); err != nil {
 			return err
 		}
 	}
-	if front.provisioned() {
+	if balancer.provisioned() {
 		if _, err := e.raiseServing(ctx, environment.TierPreview, previewEntry{}, progress.DiscardProgress()); err != nil {
 			return err
 		}

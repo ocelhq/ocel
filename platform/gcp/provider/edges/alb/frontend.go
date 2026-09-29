@@ -38,7 +38,7 @@ type names struct {
 
 func dashed(parts ...string) string { return strings.Join(parts, "-") }
 
-func frontNames(tier environment.Tier, shielded bool) names {
+func loadBalancerNames(tier environment.Tier, shielded bool) names {
 	stem := dashed("ocel", string(Kind), string(tier))
 	if shielded {
 		stem = dashed("ocel", string(Kind), shieldedNameSegment, string(tier))
@@ -55,7 +55,7 @@ func frontNames(tier environment.Tier, shielded bool) names {
 	}
 }
 
-type frontSpec struct {
+type loadBalancerSpec struct {
 	Region             string
 	Names              names
 	Preview            previewEntry
@@ -87,7 +87,7 @@ func markingHeaderAction() compute.URLMapHeaderActionPtrInput {
 	}
 }
 
-func previewWildcardResources(ctx *pulumi.Context, spec frontSpec, project string) error {
+func previewWildcardResources(ctx *pulumi.Context, spec loadBalancerSpec, project string) error {
 	base := spec.Preview.BaseDomain
 	if base == "" {
 		return nil
@@ -148,7 +148,7 @@ const (
 	globalLocation       = "global"
 )
 
-func clientValidation(ctx *pulumi.Context, spec frontSpec, project string) (pulumi.Resource, error) {
+func clientValidation(ctx *pulumi.Context, spec loadBalancerSpec, project string) (pulumi.Resource, error) {
 	allowed := certificatemanager.TrustConfigAllowlistedCertificateArray{}
 	for _, pem := range spec.ClientCertificates {
 		allowed = append(allowed, &certificatemanager.TrustConfigAllowlistedCertificateArgs{PemCertificate: pulumi.String(pem)})
@@ -158,7 +158,7 @@ func clientValidation(ctx *pulumi.Context, spec frontSpec, project string) (pulu
 		Project:                 pulumi.String(project),
 		Location:                pulumi.String(globalLocation),
 		AllowlistedCertificates: allowed,
-		Description:             pulumi.String("the client certificates the edge in front of this load balancer presents, and nothing else"),
+		Description:             pulumi.String("the client certificates the edge in balancer of this load balancer presents, and nothing else"),
 	})
 	if err != nil {
 		return nil, err
@@ -178,7 +178,7 @@ func clientValidation(ctx *pulumi.Context, spec frontSpec, project string) (pulu
 	return policy, nil
 }
 
-func frontProgram(spec frontSpec) Program {
+func loadBalancerProgram(spec loadBalancerSpec) Program {
 	return func(ctx *pulumi.Context, project string) error {
 		projectID := pulumi.String(project)
 		address, err := compute.NewGlobalAddress(ctx, spec.Names.Address, &compute.GlobalAddressArgs{

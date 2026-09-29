@@ -51,12 +51,12 @@ func TestStackState(t *testing.T) {
 			Endpoint:      "https://store.example",
 			Secret:        "s3cr3t",
 			OwnerToken:    "owner",
-			Front:         "d123.cloudfront.net",
+			Address:       "d123.cloudfront.net",
 			GlobalPreview: "preview.acme.com",
 			Private:       Own(samplePrivateState{Distribution: "E123", Region: "eu-west-1"}),
 		}
 		state.Bind("shop.app.com")
-		state.PublishFront("shop.app.com", "d-shop.example.net")
+		state.PublishAddress("shop.app.com", "d-shop.example.net")
 		state.RecordWrites([]Record{{Name: "shop.app.com", Type: RecordTypeCNAME, Value: "d123.cloudfront.net"}})
 		return state
 	}
@@ -69,7 +69,7 @@ func TestStackState(t *testing.T) {
 		}
 		for name, state := range map[string]StackState{
 			"a slug":          {Slug: "shop"},
-			"a front":         {Front: "d123.cloudfront.net"},
+			"a front":         {Address: "d123.cloudfront.net"},
 			"a private state": {Private: Own(samplePrivateState{Distribution: "E123"})},
 		} {
 			if state.Empty() {
@@ -124,8 +124,8 @@ func TestStackState(t *testing.T) {
 			"a slug":           func(s *StackState) { s.Slug = "other" },
 			"a tier":           func(s *StackState) { s.Tier = environment.TierPreview },
 			"a secret":         func(s *StackState) { s.Secret = "rotated" },
-			"a front":          func(s *StackState) { s.Front = "d456.cloudfront.net" },
-			"a host front":     func(s *StackState) { s.PublishFront("shop.app.com", "moved.example.net") },
+			"a front":          func(s *StackState) { s.Address = "d456.cloudfront.net" },
+			"a host front":     func(s *StackState) { s.PublishAddress("shop.app.com", "moved.example.net") },
 			"a bound domain":   func(s *StackState) { s.Bind("www.app.com") },
 			"a written record": func(s *StackState) { s.RecordWrites(nil) },
 			"a global preview": func(s *StackState) { s.GlobalPreview = "" },

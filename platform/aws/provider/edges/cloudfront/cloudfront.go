@@ -136,10 +136,10 @@ const (
 
 func (p *cloudFront) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
 	var changes []edge.PlanChange
-	if scope.Front != "" {
+	if scope.Address != "" {
 		changes = append(changes, edge.PlanChange{
 			Kind:   typeDistribution,
-			Name:   scope.Front,
+			Name:   scope.Address,
 			Action: edge.PlanDisableThenDelete,
 			Reason: distributionDeleteReason,
 			Slow:   true,

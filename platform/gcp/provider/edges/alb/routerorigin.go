@@ -19,13 +19,13 @@ func (r Router) claimPreviewEntry(ctx context.Context, claim router.Claim) (edge
 	if !wild {
 		return edge.Origin{}, refusal.Refuse(refusal.CodeInvalid, "a preview entry is a wildcard, and %q is none", claim.Hostname)
 	}
-	fronted := r.e.frontFor(claim)
+	balancing := r.e.loadBalancerFor(claim)
 	if len(claim.ClientCertificates) > 0 {
-		if _, err := fronted.trustClaim(ctx, environment.TierPreview, claim.Hostname, claim.ClientCertificates); err != nil {
+		if _, err := balancing.trustClaim(ctx, environment.TierPreview, claim.Hostname, claim.ClientCertificates); err != nil {
 			return edge.Origin{}, err
 		}
 	}
-	address, err := fronted.ReconcilePreviewWildcard(ctx, edge.PreviewWildcardSpec{BaseDomain: base, Certificate: claim.Certificate})
+	address, err := balancing.ReconcilePreviewWildcard(ctx, edge.PreviewWildcardSpec{BaseDomain: base, Certificate: claim.Certificate})
 	if err != nil {
 		return edge.Origin{}, err
 	}
