@@ -1,11 +1,14 @@
 package runtrace
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -41,8 +44,14 @@ func (f filteredSpan) Attributes() []attribute.KeyValue {
 type fileExporter struct {
 	path string
 
-	mu    sync.Mutex
-	spans []otlpSpan
+	mu      sync.Mutex
+	partial *os.File
+	written int
+	layout  documentLayout
+}
+
+type documentLayout struct {
+	head, listIndent, tail string
 }
 
 func newFileExporter(path string) *fileExporter {
@@ -52,36 +61,87 @@ func newFileExporter(path string) *fileExporter {
 func (e *fileExporter) ExportSpans(_ context.Context, spans []sdktrace.ReadOnlySpan) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	for _, s := range spans {
-		e.spans = append(e.spans, convertSpan(s))
+	if err := e.openPartial(); err != nil {
+		return err
 	}
-	return nil
+	var buf bytes.Buffer
+	for _, s := range spans {
+		raw, err := json.MarshalIndent(convertSpan(s), e.layout.listIndent+"  ", "  ")
+		if err != nil {
+			return err
+		}
+		if e.written > 0 {
+			buf.WriteByte(',')
+		}
+		buf.WriteString("\n" + e.layout.listIndent + "  ")
+		buf.Write(raw)
+		e.written++
+	}
+	_, err := e.partial.Write(buf.Bytes())
+	return err
 }
 
 func (e *fileExporter) Shutdown(context.Context) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	doc := otlpTracesData{
+	if err := e.openPartial(); err != nil {
+		return err
+	}
+	tail := e.layout.tail
+	if e.written > 0 {
+		tail = "\n" + e.layout.listIndent + tail
+	}
+	_, writeErr := e.partial.WriteString(tail)
+	closeErr := e.partial.Close()
+	if err := errors.Join(writeErr, closeErr); err != nil {
+		return err
+	}
+	return os.Rename(e.partial.Name(), e.path)
+}
+
+func (e *fileExporter) openPartial() error {
+	if e.partial != nil {
+		return nil
+	}
+	layout, err := newDocumentLayout()
+	if err != nil {
+		return err
+	}
+	partial, err := os.OpenFile(e.path+".partial", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		return err
+	}
+	if _, err := partial.WriteString(layout.head); err != nil {
+		_ = partial.Close()
+		return err
+	}
+	e.partial, e.layout = partial, layout
+	return nil
+}
+
+func newDocumentLayout() (documentLayout, error) {
+	empty := otlpTracesData{
 		ResourceSpans: []otlpResourceSpans{{
 			Resource: otlpResource{
 				Attributes: []otlpKeyValue{stringKV("service.name", "ocel")},
 			},
 			ScopeSpans: []otlpScopeSpans{{
 				Scope: otlpScope{Name: "github.com/ocelhq/ocel/cli"},
-				Spans: e.spans,
+				Spans: []otlpSpan{},
 			}},
 		}},
 	}
-	raw, err := json.MarshalIndent(doc, "", "  ")
+	raw, err := json.MarshalIndent(empty, "", "  ")
 	if err != nil {
-		return err
+		return documentLayout{}, err
 	}
-
-	tmp := e.path + ".tmp"
-	if err := os.WriteFile(tmp, raw, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, e.path)
+	head, tail, _ := strings.Cut(string(raw), `"spans": []`)
+	lineStart := strings.LastIndexByte(head, '\n') + 1
+	return documentLayout{
+		head:       head + `"spans": [`,
+		listIndent: head[lineStart:],
+		tail:       "]" + tail,
+	}, nil
 }
 
 type otlpTracesData struct {
