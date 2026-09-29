@@ -171,7 +171,7 @@ func bucketProperties(b *project.BucketInline, read func(string) (string, error)
 	var err error
 	for _, field := range []struct {
 		into *string
-		from project.Value
+		from project.Text
 	}{
 		{&props.Endpoint, b.Endpoint},
 		{&props.Region, b.Region},

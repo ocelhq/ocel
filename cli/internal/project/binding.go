@@ -29,34 +29,34 @@ type Inline struct {
 }
 
 type BucketInline struct {
-	Endpoint        Value
-	Region          Value
-	Bucket          Value
-	Prefix          Value
+	Endpoint        Text
+	Region          Text
+	Bucket          Text
+	Prefix          Text
 	PathStyle       bool
 	AccessKeyID     string
 	SecretAccessKey string
-	PublicBaseURL   Value
+	PublicBaseURL   Text
 }
 
-type Value struct {
+type Text struct {
 	Literal  string
 	Variable string
 }
 
-func (v Value) Resolve(read func(variable string) (string, error)) (string, error) {
-	if v.Variable == "" {
-		return v.Literal, nil
+func (t Text) Resolve(read func(variable string) (string, error)) (string, error) {
+	if t.Variable == "" {
+		return t.Literal, nil
 	}
-	return read(v.Variable)
+	return read(t.Variable)
 }
 
 type PostgresInline struct {
 	URL      string
-	Host     Value
+	Host     Text
 	Port     int
-	Database Value
-	Username Value
+	Database Text
+	Username Text
 	Password string
 	TLS      *PostgresTLS
 }
@@ -250,20 +250,20 @@ func requiredVariable(path, field string, ref *configdoc.Ref) (string, error) {
 	return variableOf(path+"."+field, ref)
 }
 
-func textOf(path, field string, text *configdoc.Text) (Value, error) {
+func textOf(path, field string, text *configdoc.Text) (Text, error) {
 	at := path + "." + field
 	if text == nil {
-		return Value{}, fmt.Errorf("`%s` has no %s", path, field)
+		return Text{}, fmt.Errorf("`%s` has no %s", path, field)
 	}
 	if text.Ref != nil {
 		variable, err := variableOf(at, text.Ref)
-		return Value{Variable: variable}, err
+		return Text{Variable: variable}, err
 	}
 	literal := strings.TrimSpace(text.Literal)
 	if literal == "" {
-		return Value{}, fmt.Errorf("`%s` is empty — give it a value, or an ocel variable written { \"$env\": \"NAME\" }", at)
+		return Text{}, fmt.Errorf("`%s` is empty — give it a value, or an ocel variable written { \"$env\": \"NAME\" }", at)
 	}
-	return Value{Literal: literal}, nil
+	return Text{Literal: literal}, nil
 }
 
 func normalizePostgres(path string, raw *configdoc.PostgresBinding) (*PostgresInline, error) {
@@ -305,9 +305,9 @@ func normalizePostgres(path string, raw *configdoc.PostgresBinding) (*PostgresIn
 	return out, nil
 }
 
-func optionalText(path, field string, text *configdoc.Text) (Value, error) {
+func optionalText(path, field string, text *configdoc.Text) (Text, error) {
 	if text == nil || (text.Ref == nil && strings.TrimSpace(text.Literal) == "") {
-		return Value{}, nil
+		return Text{}, nil
 	}
 	return textOf(path, field, text)
 }

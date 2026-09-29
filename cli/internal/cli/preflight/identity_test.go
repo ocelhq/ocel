@@ -15,7 +15,7 @@ import (
 func TestIdentityEvent(t *testing.T) {
 	t.Parallel()
 
-	cfg := &project.Project{Slug: "acme", Edge: &project.EdgeDescriptor{ID: "relay"}}
+	cfg := &project.Project{Slug: "acme", Edge: &project.Edge{Kind: "relay"}}
 
 	t.Run("names the project, the tier and both parties", func(t *testing.T) {
 		t.Parallel()

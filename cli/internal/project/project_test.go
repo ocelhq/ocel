@@ -123,8 +123,8 @@ export default {
 				if cfg.Slug != "test-app" {
 					t.Fatalf("Slug = %q, want %q", cfg.Slug, "test-app")
 				}
-				if len(cfg.Discovery.Paths) != 1 || cfg.Discovery.Paths[0] != "resources" {
-					t.Fatalf("Discovery.Paths = %v, want [resources]", cfg.Discovery.Paths)
+				if len(cfg.DiscoveryPaths) != 1 || cfg.DiscoveryPaths[0] != "resources" {
+					t.Fatalf("Discovery.Paths = %v, want [resources]", cfg.DiscoveryPaths)
 				}
 			},
 		},
@@ -176,8 +176,8 @@ export default {
 };
 `,
 			check: func(t *testing.T, root string, cfg *Project) {
-				if cfg.Discovery.Paths != nil {
-					t.Fatalf("Discovery.Paths = %v, want them unset so discovery uses its defaults", cfg.Discovery.Paths)
+				if cfg.DiscoveryPaths != nil {
+					t.Fatalf("Discovery.Paths = %v, want them unset so discovery uses its defaults", cfg.DiscoveryPaths)
 				}
 			},
 		},
@@ -685,8 +685,8 @@ export default {
 				if cfg.Edge != nil {
 					t.Fatalf("Edge = %v, want an omitted edge to name nothing", cfg.Edge)
 				}
-				if got := cfg.EdgeID(); got != "" {
-					t.Fatalf("EdgeID() = %q, want nothing: the provider chooses when the config names no edge", got)
+				if got := cfg.EdgeKind(); got != "" {
+					t.Fatalf("EdgeKind() = %q, want nothing: the provider chooses when the config names no edge", got)
 				}
 			},
 		},
@@ -699,7 +699,7 @@ export default {
 };
 `,
 			check: func(t *testing.T, root string, cfg *Project) {
-				if cfg.Edge == nil || cfg.Edge.ID != "cloudflare" {
+				if cfg.Edge == nil || cfg.Edge.Kind != "cloudflare" {
 					t.Fatalf("Edge = %v, want cloudflare", cfg.Edge)
 				}
 			},
@@ -713,8 +713,8 @@ export default {
 };
 `,
 			check: func(t *testing.T, root string, cfg *Project) {
-				if got := cfg.EdgeID(); got != "cloudflare" {
-					t.Fatalf("EdgeID() = %q, want cloudflare", got)
+				if got := cfg.EdgeKind(); got != "cloudflare" {
+					t.Fatalf("EdgeKind() = %q, want cloudflare", got)
 				}
 			},
 		},
@@ -727,7 +727,7 @@ export default {
 };
 `,
 			check: func(t *testing.T, root string, cfg *Project) {
-				if cfg.DNS == nil || cfg.DNS.ID != "route53" || cfg.DNS.Zone != "Z123" {
+				if cfg.DNS == nil || cfg.DNS.Kind != "route53" || cfg.DNS.Zone != "Z123" {
 					t.Fatalf("DNS = %v, want route53 in zone Z123", cfg.DNS)
 				}
 			},
@@ -756,7 +756,7 @@ export default {
 };
 `,
 			check: func(t *testing.T, root string, cfg *Project) {
-				if cfg.DNS == nil || cfg.DNS.ID != "cloudflare" {
+				if cfg.DNS == nil || cfg.DNS.Kind != "cloudflare" {
 					t.Fatalf("DNS = %v, want cloudflare", cfg.DNS)
 				}
 			},
@@ -771,7 +771,7 @@ export default {
 };
 `,
 			check: func(t *testing.T, root string, cfg *Project) {
-				if cfg.DNS == nil || cfg.DNS.ID != "route53" {
+				if cfg.DNS == nil || cfg.DNS.Kind != "route53" {
 					t.Fatalf("DNS = %v, want route53", cfg.DNS)
 				}
 			},
@@ -1491,8 +1491,8 @@ func TestResolveOptional(t *testing.T) {
 		if cfg.Dir != root {
 			t.Fatalf("Dir = %q, want %q", cfg.Dir, root)
 		}
-		if cfg.Discovery.Paths != nil {
-			t.Fatalf("Discovery.Paths = %v, want them unset so discovery uses its defaults", cfg.Discovery.Paths)
+		if cfg.DiscoveryPaths != nil {
+			t.Fatalf("Discovery.Paths = %v, want them unset so discovery uses its defaults", cfg.DiscoveryPaths)
 		}
 		if cfg.Slug != "" || cfg.Provider != nil || len(cfg.Apps) != 0 {
 			t.Fatalf("cfg = %+v, want the deploy-only fields empty", cfg)
@@ -1535,8 +1535,8 @@ export default {
 		if cfg.Dir != root {
 			t.Fatalf("Dir = %q, want %q", cfg.Dir, root)
 		}
-		if len(cfg.Discovery.Paths) != 1 || cfg.Discovery.Paths[0] != "resources" {
-			t.Fatalf("Discovery.Paths = %v, want [resources]", cfg.Discovery.Paths)
+		if len(cfg.DiscoveryPaths) != 1 || cfg.DiscoveryPaths[0] != "resources" {
+			t.Fatalf("Discovery.Paths = %v, want [resources]", cfg.DiscoveryPaths)
 		}
 	})
 
@@ -1615,7 +1615,7 @@ func TestConfigRequireProvider(t *testing.T) {
 	t.Run("returns the descriptor when the provider is present", func(t *testing.T) {
 		t.Parallel()
 
-		cfg := &Project{Provider: &ProviderDescriptor{ID: "aws", Options: []byte(`{}`)}}
+		cfg := &Project{Provider: &Provider{ID: "aws", Options: []byte(`{}`)}}
 
 		provider, err := cfg.RequireProvider()
 		if err != nil {
@@ -1869,7 +1869,7 @@ func TestTwoConfigsInOneDirDoNotShareABundle(t *testing.T) {
 	}
 }
 
-func TestEdgeID(t *testing.T) {
+func TestAProjectIsFrontedByTheEdgeItsConfigNames(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -1878,13 +1878,13 @@ func TestEdgeID(t *testing.T) {
 		want   edge.Kind
 	}{
 		{name: "a config that names no edge leaves the choice to the provider", config: Project{}, want: ""},
-		{name: "a config that names one is fronted by that one", config: Project{Edge: &EdgeDescriptor{ID: "cloudflare"}}, want: edge.Kind("cloudflare")},
+		{name: "a config that names one is fronted by that one", config: Project{Edge: &Edge{Kind: "cloudflare"}}, want: edge.Kind("cloudflare")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			if got := tc.config.EdgeID(); got != tc.want {
-				t.Errorf("EdgeID() = %q, want %q", got, tc.want)
+			if got := tc.config.EdgeKind(); got != tc.want {
+				t.Errorf("EdgeKind() = %q, want %q", got, tc.want)
 			}
 		})
 	}

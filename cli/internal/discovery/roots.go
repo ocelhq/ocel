@@ -32,7 +32,7 @@ var languageExtensions = map[string]language.Language{
 }
 
 func RootsOf(cfg *project.Project) ([]Root, error) {
-	roots, err := Roots(cfg.Dir, cfg.Discovery.Paths)
+	roots, err := Roots(cfg.Dir, cfg.DiscoveryPaths)
 	if err != nil {
 		return nil, err
 	}

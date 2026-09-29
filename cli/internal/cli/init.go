@@ -165,7 +165,7 @@ func runInit(ctx context.Context, deps cmddeps.Deps, cwd, slug string, opts init
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return fmt.Errorf("check for existing %s: %w", name, err)
 	}
-	if others := project.Counterparts(configPath); len(others) > 0 {
+	if others := project.OtherConfigFiles(configPath); len(others) > 0 {
 		return fmt.Errorf("%s already contains %s, and one project reads one config: keep it, or delete it before writing %s", projectDir, strings.Join(others, " and "), name)
 	}
 
@@ -220,7 +220,7 @@ func initConfigPath(cwd string, opts initOptions) (string, error) {
 	switch {
 	case !project.IsConfig(name):
 		return "", fmt.Errorf("%s (from --config / OCEL_CONFIG) is not a config ocel reads — name it %s, %s or %s, with an optional target before the suffix", name, project.DefaultFileName, project.YAMLFileName, project.TSFileName)
-	case opts.ts && !project.IsProgram(name):
+	case opts.ts && !project.IsTypeScript(name):
 		return "", fmt.Errorf("--ts writes a TypeScript config, and %s (from --config / OCEL_CONFIG) is not one: name it %s, or drop --ts", name, project.TSFileName)
 	case opts.yaml && !project.IsYAML(name):
 		return "", fmt.Errorf("--yaml writes a YAML config, and %s (from --config / OCEL_CONFIG) is not one: name it %s, or drop --yaml", name, project.YAMLFileName)
@@ -260,7 +260,7 @@ func schemaURL() string {
 }
 
 func configTemplate(name, slug, provider string) string {
-	if project.IsProgram(name) {
+	if project.IsTypeScript(name) {
 		return typescriptTemplate(slug, provider)
 	}
 	if project.IsYAML(name) {

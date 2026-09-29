@@ -36,9 +36,9 @@ func TestDefineEnvDeclaresThroughTheDevServer(t *testing.T) {
 		}})
 
 		cfg := &project.Project{
-			Slug:      "devserver",
-			Dir:       root,
-			Discovery: project.Discovery{Paths: []string{filepath.Base(clitest.DiscoveryDir(root))}},
+			Slug:           "devserver",
+			Dir:            root,
+			DiscoveryPaths: []string{filepath.Base(clitest.DiscoveryDir(root))},
 		}
 
 		var stdout, stderr strings.Builder

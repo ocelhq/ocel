@@ -74,9 +74,9 @@ export {};
 `)
 
 		cfg := &project.Project{
-			Slug:      "test-app",
-			Dir:       root,
-			Discovery: project.Discovery{Paths: []string{constants.DefaultDiscoveryDirName}},
+			Slug:           "test-app",
+			Dir:            root,
+			DiscoveryPaths: []string{constants.DefaultDiscoveryDirName},
 		}
 
 		var stdout, stderr bytes.Buffer
@@ -151,9 +151,9 @@ export {};
 `)
 
 	cfg := &project.Project{
-		Slug:      "test-app",
-		Dir:       root,
-		Discovery: project.Discovery{Paths: []string{constants.DefaultDiscoveryDirName}},
+		Slug:           "test-app",
+		Dir:            root,
+		DiscoveryPaths: []string{constants.DefaultDiscoveryDirName},
 	}
 
 	var stdout, stderr bytes.Buffer
@@ -247,9 +247,9 @@ globalThis.__ocelRegister.push(
 export {};
 `)
 	cfg := &project.Project{
-		Slug:      "test-app",
-		Dir:       root,
-		Discovery: project.Discovery{Paths: []string{constants.DefaultDiscoveryDirName}},
+		Slug:           "test-app",
+		Dir:            root,
+		DiscoveryPaths: []string{constants.DefaultDiscoveryDirName},
 	}
 
 	var stdout, stderr bytes.Buffer

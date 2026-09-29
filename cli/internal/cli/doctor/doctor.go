@@ -270,12 +270,12 @@ func appsText(cfg *project.Project) string {
 	return fmt.Sprintf("config loads — %s (%s)", plural(len(names), "app"), strings.Join(names, ", "))
 }
 
-func providerText(descriptor *project.ProviderDescriptor) string {
+func providerText(descriptor *project.Provider) string {
 	return "provider " + descriptor.ID + " " + version.Version
 }
 
 func edgeText(cfg *project.Project) string {
-	if id := cfg.EdgeID(); id != "" {
+	if id := cfg.EdgeKind(); id != "" {
 		return "edge " + string(id)
 	}
 	return "provider default edge"
@@ -480,7 +480,7 @@ func credentialSections(cfg *project.Project, got *answers) []section {
 		take(identity.GetProvider()),
 	)}
 	if scope := identity.GetEdgeScope(); scope != "" {
-		edgeID := string(cfg.EdgeID())
+		edgeID := string(cfg.EdgeKind())
 		sections = append(sections, credentialsSection(titleOr(edgeID, "Edge"), scope, take(edgeID)))
 	}
 

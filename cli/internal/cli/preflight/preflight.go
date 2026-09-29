@@ -201,7 +201,7 @@ func IdentityEvent(cfg *project.Project, tier environmentv1.Tier, id *contractv1
 }
 
 func edgeVendor(cfg *project.Project) string {
-	if id := string(cfg.EdgeID()); id != "" {
+	if id := string(cfg.EdgeKind()); id != "" {
 		return id
 	}
 	return "edge"

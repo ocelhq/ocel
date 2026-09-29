@@ -62,9 +62,9 @@ func TestAnInlineBindingServesTheTiersItNames(t *testing.T) {
 				t.Fatalf("billing = %+v, want the inline record", b)
 			}
 			want := PostgresInline{
-				Host:     Value{Literal: "db.example.com"},
-				Database: Value{Literal: "billing"},
-				Username: Value{Literal: "app"},
+				Host:     Text{Literal: "db.example.com"},
+				Database: Text{Literal: "billing"},
+				Username: Text{Literal: "app"},
 				Password: "BILLING_PASSWORD",
 			}
 			if !reflect.DeepEqual(*b.Inline.Postgres, want) {
@@ -161,13 +161,13 @@ func TestAnInlineBucketNamesItsStoreAndTheVariablesItReads(t *testing.T) {
 		t.Fatalf("bound = %+v, want the inline bucket", bound)
 	}
 	want := BucketInline{
-		Endpoint:        Value{Literal: "https://abc.r2.cloudflarestorage.com"},
-		Region:          Value{Literal: "auto"},
-		Bucket:          Value{Variable: "UPLOADS_BUCKET"},
-		Prefix:          Value{Literal: "uploads/"},
+		Endpoint:        Text{Literal: "https://abc.r2.cloudflarestorage.com"},
+		Region:          Text{Literal: "auto"},
+		Bucket:          Text{Variable: "UPLOADS_BUCKET"},
+		Prefix:          Text{Literal: "uploads/"},
 		AccessKeyID:     "R2_KEY",
 		SecretAccessKey: "R2_SECRET",
-		PublicBaseURL:   Value{Literal: "https://cdn.acme.com"},
+		PublicBaseURL:   Text{Literal: "https://cdn.acme.com"},
 	}
 	if !reflect.DeepEqual(*bound[0].Inline.Bucket, want) {
 		t.Errorf("bucket = %+v, want %+v", *bound[0].Inline.Bucket, want)
@@ -186,7 +186,7 @@ func TestAnInlineBucketsBlankOptionalFieldIsUnset(t *testing.T) {
 	if len(bound) != 1 || bound[0].Inline == nil || bound[0].Inline.Bucket == nil {
 		t.Fatalf("bound = %+v, want the inline bucket", bound)
 	}
-	if got := bound[0].Inline.Bucket; got.Prefix != (Value{}) || got.PublicBaseURL != (Value{}) {
+	if got := bound[0].Inline.Bucket; got.Prefix != (Text{}) || got.PublicBaseURL != (Text{}) {
 		t.Errorf("prefix = %+v, publicBaseUrl = %+v, want both unset, as if left out", got.Prefix, got.PublicBaseURL)
 	}
 }

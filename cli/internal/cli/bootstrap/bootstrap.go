@@ -204,7 +204,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 
 	asking := policy.IsAsking()
 	picked := asking && !opts.FeaturesDeclared
-	requested, selected, err := chooseFeatures(ctx, planning, opts, catalogue, installed, going, string(cfg.EdgeID()), tier, asking, stdout, stdin)
+	requested, selected, err := chooseFeatures(ctx, planning, opts, catalogue, installed, going, string(cfg.EdgeKind()), tier, asking, stdout, stdin)
 	if err != nil {
 		return err
 	}
@@ -258,7 +258,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 	if !picked {
 		edgeID := plan.GetEdgeKind()
 		if edgeID == "" {
-			edgeID = string(cfg.EdgeID())
+			edgeID = string(cfg.EdgeKind())
 		}
 		sayImplied(planning, tier, impliedFeatures(catalogue, requested, edgeID))
 	}

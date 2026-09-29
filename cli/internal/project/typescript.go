@@ -26,7 +26,7 @@ func recognizedErrorKinds() string {
 	return string(encoded)
 }
 
-func readTS(ctx context.Context, configPath string) ([]byte, error) {
+func evaluateTypeScript(ctx context.Context, configPath string) ([]byte, error) {
 	dir := filepath.Dir(configPath)
 	outDir := filepath.Join(dir, constants.ProjectStateDirName)
 	if err := os.MkdirAll(outDir, 0o755); err != nil {

@@ -22,8 +22,8 @@ func TestAScopeNamesTheVariablesATiersInlineBindingsRead(t *testing.T) {
 		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "analytics", External: "warehouse"},
 		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "orders", Tier: environmentv1.Tier_TIER_PRODUCTION, Inline: &project.Inline{
 			Postgres: &project.PostgresInline{
-				Host: project.Value{Literal: "db"}, Database: project.Value{Literal: "orders"},
-				Username: project.Value{Variable: "ORDERS_USER"}, Password: "ORDERS_PASSWORD",
+				Host: project.Text{Literal: "db"}, Database: project.Text{Literal: "orders"},
+				Username: project.Text{Variable: "ORDERS_USER"}, Password: "ORDERS_PASSWORD",
 			},
 		}},
 	}}

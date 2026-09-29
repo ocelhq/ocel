@@ -223,7 +223,7 @@ func TestEveryCommittedConfigValidatesAgainstTheSchema(t *testing.T) {
 	root := fixturetest.RepoDir(t)
 	schema := committedSchema(t, root)
 	for _, path := range committedConfigs(t, root) {
-		if project.IsProgram(path) {
+		if project.IsTypeScript(path) {
 			continue
 		}
 		source, err := os.ReadFile(path)
@@ -240,7 +240,7 @@ func TestEveryCommittedConfigNamesTheCommittedSchema(t *testing.T) {
 	root := fixturetest.RepoDir(t)
 	want := schemaID(t, root)
 	for _, path := range committedConfigs(t, root) {
-		if project.IsProgram(path) {
+		if project.IsTypeScript(path) {
 			continue
 		}
 		source, err := os.ReadFile(path)
@@ -277,7 +277,7 @@ func TestACommentedVariantUncommentsIntoAConfigThatOnlyDiffers(t *testing.T) {
 	root := fixturetest.RepoDir(t)
 	schema := committedSchema(t, root)
 	for _, path := range committedConfigs(t, root) {
-		if project.IsProgram(path) {
+		if project.IsTypeScript(path) {
 			continue
 		}
 		source, err := os.ReadFile(path)
@@ -308,7 +308,7 @@ func TestOnlyTheNodeFixtureHasTheTypeScriptConfig(t *testing.T) {
 	var configured []string
 	for _, dir := range fixturetest.Dirs(t) {
 		for _, path := range fixturetest.ConfigsIn(t, dir) {
-			if project.IsProgram(path) {
+			if project.IsTypeScript(path) {
 				configured = append(configured, dir)
 				break
 			}
@@ -346,7 +346,7 @@ func TestAFixtureOfAnotherLanguageHasNoNodeFiles(t *testing.T) {
 func TestTheGoFixtureDeploysFromJSONAlone(t *testing.T) {
 	dir := filepath.Join(fixturetest.RepoDir(t), "tests", "fixtures", "deploy", "go")
 	for _, path := range fixturetest.ConfigsIn(t, dir) {
-		if project.IsProgram(path) {
+		if project.IsTypeScript(path) {
 			t.Fatalf("the go fixture still contains %s", filepath.Base(path))
 		}
 	}
@@ -370,7 +370,7 @@ func TestTheGoFixtureDeploysFromJSONAlone(t *testing.T) {
 func TestTheRustFixtureDeploysFromJSONAlone(t *testing.T) {
 	dir := filepath.Join(fixturetest.RepoDir(t), "tests", "fixtures", "deploy", "rust")
 	for _, path := range fixturetest.ConfigsIn(t, dir) {
-		if project.IsProgram(path) {
+		if project.IsTypeScript(path) {
 			t.Fatalf("the rust fixture still contains %s", filepath.Base(path))
 		}
 	}

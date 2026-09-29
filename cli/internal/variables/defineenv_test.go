@@ -147,9 +147,9 @@ func runDiscovery(t *testing.T, root string, declarations *variables.Declaration
 	t.Helper()
 
 	cfg := &project.Project{
-		Slug:      "collector",
-		Dir:       root,
-		Discovery: project.Discovery{Paths: []string{filepath.Base(clitest.DiscoveryDir(root))}},
+		Slug:           "collector",
+		Dir:            root,
+		DiscoveryPaths: []string{filepath.Base(clitest.DiscoveryDir(root))},
 	}
 
 	var stdout, stderr strings.Builder

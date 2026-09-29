@@ -301,10 +301,10 @@ dns:
 	if cfg.Provider == nil || cfg.Provider.ID != "aws" || string(cfg.Provider.Options) != `{}` {
 		t.Fatalf("provider = %+v, want aws with no options", cfg.Provider)
 	}
-	if cfg.EdgeID() != "cloudflare" {
-		t.Fatalf("edge = %q, want cloudflare", cfg.EdgeID())
+	if cfg.EdgeKind() != "cloudflare" {
+		t.Fatalf("edge = %q, want cloudflare", cfg.EdgeKind())
 	}
-	if cfg.DNS == nil || cfg.DNS.ID != "cloudflare" || cfg.DNS.Zone != "example.com" {
+	if cfg.DNS == nil || cfg.DNS.Kind != "cloudflare" || cfg.DNS.Zone != "example.com" {
 		t.Fatalf("dns = %+v, want cloudflare in example.com", cfg.DNS)
 	}
 }

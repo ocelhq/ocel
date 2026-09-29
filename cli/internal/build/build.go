@@ -122,7 +122,7 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, envByApp map
 				DeploymentID:  deploymentIDs[a.Name],
 				Folder:        a.Folder,
 				Env:           envOf(cfg, envByApp, a.Name),
-				EdgeKind:      string(cfg.EdgeID()),
+				EdgeKind:      string(cfg.EdgeKind()),
 				AllowDegraded: cfg.AllowDegraded,
 			})
 		case name == appbuild.FrameworkNode:

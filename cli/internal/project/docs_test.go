@@ -17,6 +17,12 @@ const docsDir = "www/content/docs"
 
 const typescriptPage = "typescript-config.mdx"
 
+var typeScriptConfigName = regexp.MustCompile(`ocel(\.[^.\s"'` + "`" + `]+)?\.config\.ts`)
+
+func typeScriptConfigNamedIn(source string) string {
+	return typeScriptConfigName.FindString(source)
+}
+
 var fenceTitle = regexp.MustCompile(`title="([^"]+)"`)
 
 type block struct {
@@ -80,7 +86,7 @@ func configBlocks(t *testing.T, root string) []block {
 }
 
 func configTitled(title string) bool {
-	return project.IsConfig(title) && !project.IsProgram(title)
+	return project.IsConfig(title) && !project.IsTypeScript(title)
 }
 
 func TestEveryDocumentedConfigValidatesAgainstTheSchema(t *testing.T) {
@@ -111,7 +117,7 @@ func TestOnlyTheTypeScriptPageShowsAConfigWrittenAsAProgram(t *testing.T) {
 		if page == typescriptPage {
 			continue
 		}
-		if named := project.ProgramNamedIn(source); named != "" {
+		if named := typeScriptConfigNamedIn(source); named != "" {
 			t.Errorf("%s shows %s, and only %s shows a config written as a program", page, named, typescriptPage)
 		}
 	}
@@ -144,11 +150,11 @@ func TestAConfigWrittenAsAProgramIsFoundUnderAnyTarget(t *testing.T) {
 		"the gcp target reads `ocel.gcp.config.ts` instead",
 		"```ts title=\"ocel.vps.config.ts\"",
 	} {
-		if project.ProgramNamedIn(page) == "" {
+		if typeScriptConfigNamedIn(page) == "" {
 			t.Errorf("%q shows a config written as a program and went unfound", page)
 		}
 	}
-	if named := project.ProgramNamedIn("run `ocel deploy` against next.config.ts"); named != "" {
+	if named := typeScriptConfigNamedIn("run `ocel deploy` against next.config.ts"); named != "" {
 		t.Errorf("found %q in a page that shows no ocel config", named)
 	}
 }

@@ -35,7 +35,7 @@ func prepareLaunch(ctx context.Context, cfg *project.Project, pins Pinning) (Con
 	}, nil
 }
 
-func providerConfig(cfg *project.Project, desc *project.ProviderDescriptor) (*contractv1.ProviderConfig, error) {
+func providerConfig(cfg *project.Project, desc *project.Provider) (*contractv1.ProviderConfig, error) {
 	config := &contractv1.ProviderConfig{Transforms: cfg.Transforms, Slug: cfg.Slug, ProjectDir: cfg.Dir}
 	if desc == nil || len(desc.Options) == 0 {
 		return config, nil

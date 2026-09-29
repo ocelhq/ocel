@@ -72,7 +72,7 @@ func IsNode(t *testing.T, dir string) bool {
 		return true
 	}
 	for _, path := range ConfigsIn(t, dir) {
-		if project.IsProgram(path) {
+		if project.IsTypeScript(path) {
 			return true
 		}
 	}

@@ -11,7 +11,7 @@ import (
 
 func TestProviderConfigIncludesTheProjectTransformModules(t *testing.T) {
 	modules := []string{"./transforms/network.transform.ts"}
-	config, err := providerConfig(&project.Project{Transforms: modules}, &project.ProviderDescriptor{ID: "aws"})
+	config, err := providerConfig(&project.Project{Transforms: modules}, &project.Provider{ID: "aws"})
 	if err != nil {
 		t.Fatalf("providerConfig: %v", err)
 	}
@@ -21,7 +21,7 @@ func TestProviderConfigIncludesTheProjectTransformModules(t *testing.T) {
 }
 
 func TestProviderConfigNamesTheProjectDirectoryTheBuildIsUnder(t *testing.T) {
-	config, err := providerConfig(&project.Project{Dir: "/work/shop"}, &project.ProviderDescriptor{ID: "vps"})
+	config, err := providerConfig(&project.Project{Dir: "/work/shop"}, &project.Provider{ID: "vps"})
 	if err != nil {
 		t.Fatalf("providerConfig: %v", err)
 	}
@@ -31,7 +31,7 @@ func TestProviderConfigNamesTheProjectDirectoryTheBuildIsUnder(t *testing.T) {
 }
 
 func TestProviderConfigIncludesTheProjectItConfigures(t *testing.T) {
-	config, err := providerConfig(&project.Project{Slug: "shop"}, &project.ProviderDescriptor{ID: "vps"})
+	config, err := providerConfig(&project.Project{Slug: "shop"}, &project.Provider{ID: "vps"})
 	if err != nil {
 		t.Fatalf("providerConfig: %v", err)
 	}
@@ -41,7 +41,7 @@ func TestProviderConfigIncludesTheProjectItConfigures(t *testing.T) {
 }
 
 func TestProviderConfigIncludesTheDescriptorOptionsOpaquely(t *testing.T) {
-	config, err := providerConfig(&project.Project{}, &project.ProviderDescriptor{
+	config, err := providerConfig(&project.Project{}, &project.Provider{
 		ID:      "aws",
 		Options: json.RawMessage(`{"region":"us-east-1"}`),
 	})
@@ -54,7 +54,7 @@ func TestProviderConfigIncludesTheDescriptorOptionsOpaquely(t *testing.T) {
 }
 
 func TestProviderConfigRefusesOptionsThatAreNotAJSONObject(t *testing.T) {
-	_, err := providerConfig(&project.Project{}, &project.ProviderDescriptor{
+	_, err := providerConfig(&project.Project{}, &project.Provider{
 		ID:      "aws",
 		Options: json.RawMessage(`["us-east-1"]`),
 	})
@@ -67,7 +67,7 @@ func TestProviderConfigRefusesOptionsThatAreNotAJSONObject(t *testing.T) {
 }
 
 func TestProviderConfigLeavesAnUnconfiguredProviderWithoutOptions(t *testing.T) {
-	config, err := providerConfig(&project.Project{}, &project.ProviderDescriptor{
+	config, err := providerConfig(&project.Project{}, &project.Provider{
 		ID:      "aws",
 		Options: json.RawMessage(`{}`),
 	})

@@ -33,7 +33,7 @@ func TestHasJS(t *testing.T) {
 	t.Run("a discovery path that is not there is an error, not a JS project", func(t *testing.T) {
 		root := t.TempDir()
 		cfg := &project.Project{Dir: root}
-		cfg.Discovery.Paths = []string{"nowhere"}
+		cfg.DiscoveryPaths = []string{"nowhere"}
 
 		hasJS, err := HasJS(cfg)
 		if err == nil {

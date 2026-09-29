@@ -44,9 +44,9 @@ func TestBuild(t *testing.T) {
 
 	t.Run("a host binding reads each field from its literal or its variable", func(t *testing.T) {
 		records, err := Build([]project.Binding{inline(project.PostgresInline{
-			Host:     project.Value{Literal: "db.example.com"},
-			Database: project.Value{Variable: "ORDERS_DB"},
-			Username: project.Value{Literal: "app"},
+			Host:     project.Text{Literal: "db.example.com"},
+			Database: project.Text{Variable: "ORDERS_DB"},
+			Username: project.Text{Literal: "app"},
 			Password: "ORDERS_PASSWORD",
 			TLS:      &project.PostgresTLS{Mode: "verify-full", CA: "ORDERS_CA"},
 		})}, map[string]string{"ORDERS_DB": "orders", "ORDERS_PASSWORD": "hunter2", "ORDERS_CA": "-----BEGIN CERTIFICATE-----"}, "ocel.json")
@@ -176,13 +176,13 @@ func TestBuildABucket(t *testing.T) {
 	records, err := Build([]project.Binding{{
 		Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: "uploads",
 		Inline: &project.Inline{Bucket: &project.BucketInline{
-			Endpoint:        project.Value{Literal: "https://abc.r2.cloudflarestorage.com"},
-			Region:          project.Value{Literal: "auto"},
-			Bucket:          project.Value{Variable: "UPLOADS_BUCKET"},
-			Prefix:          project.Value{Literal: "uploads/"},
+			Endpoint:        project.Text{Literal: "https://abc.r2.cloudflarestorage.com"},
+			Region:          project.Text{Literal: "auto"},
+			Bucket:          project.Text{Variable: "UPLOADS_BUCKET"},
+			Prefix:          project.Text{Literal: "uploads/"},
 			AccessKeyID:     "R2_KEY",
 			SecretAccessKey: "R2_SECRET",
-			PublicBaseURL:   project.Value{Literal: "https://cdn.acme.com/uploads"},
+			PublicBaseURL:   project.Text{Literal: "https://cdn.acme.com/uploads"},
 		}},
 	}}, map[string]string{"UPLOADS_BUCKET": "acme", "R2_KEY": "AKID", "R2_SECRET": "s3cr3t"}, "ocel.json")
 	if err != nil {
