@@ -58,7 +58,7 @@ func (x *Proxy) Reconcile(_ context.Context, spec edge.StackSpec, prior edge.Sta
 }
 
 func previewsUnserved(wildcard string) error {
-	// TODO(#1362): forward a preview wildcard to the router's preview entry once a proxied *.preview.<base> has an edge certificate (Advanced Certificate Manager) to answer it with.
+	// TODO(#1396): forward a preview wildcard to the router's preview entry once a proxied *.preview.<base> has an edge certificate (Advanced Certificate Manager) to answer it with.
 	return refusal.Refuse(refusal.CodeInvalid,
 		"the %q edge forwards production hostnames to this provider's router, and does not forward the preview wildcard %s yet: "+
 			"leave `edge` out to serve previews from the origin", Kind, wildcard)
