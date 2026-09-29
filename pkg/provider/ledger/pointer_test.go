@@ -44,14 +44,14 @@ func TestAPromoteOverWhatThePointerNamesMakesItActiveAndRecordsWhatItDisplaced(t
 	if pointer.Active != "p2" {
 		t.Errorf("Active = %q, want p2", pointer.Active)
 	}
-	if len(pointer.Entries) != 2 || pointer.Entries[0].PromotionID != "p2" || pointer.Entries[1].PromotionID != "p1" {
-		t.Fatalf("Entries = %+v, want p2 then p1", pointer.Entries)
+	if len(pointer.Promotions) != 2 || pointer.Promotions[0].PromotionID != "p2" || pointer.Promotions[1].PromotionID != "p1" {
+		t.Fatalf("Promotions = %+v, want p2 then p1", pointer.Promotions)
 	}
-	if pointer.Entries[0].Displaced != "p1" || pointer.Entries[1].Displaced != "" {
-		t.Errorf("Displaced = %q, %q, want p1 and nothing", pointer.Entries[0].Displaced, pointer.Entries[1].Displaced)
+	if pointer.Promotions[0].Displaced != "p1" || pointer.Promotions[1].Displaced != "" {
+		t.Errorf("Displaced = %q, %q, want p1 and nothing", pointer.Promotions[0].Displaced, pointer.Promotions[1].Displaced)
 	}
-	if pointer.Entries[0].Seq != 2 || pointer.Entries[1].Seq != 1 || pointer.Seq != 2 {
-		t.Errorf("Seq = %d, %d on a pointer at %d, want 2, 1 on a pointer at 2", pointer.Entries[0].Seq, pointer.Entries[1].Seq, pointer.Seq)
+	if pointer.Promotions[0].Sequence != 2 || pointer.Promotions[1].Sequence != 1 || pointer.Sequence != 2 {
+		t.Errorf("Sequence = %d, %d on a pointer at %d, want 2, 1 on a pointer at 2", pointer.Promotions[0].Sequence, pointer.Promotions[1].Sequence, pointer.Sequence)
 	}
 }
 
@@ -62,18 +62,18 @@ func TestAPromoteOverAPromotionThePointerNoLongerNamesIsRefusedBusy(t *testing.T
 
 	after, _, err := pointer.Promote(promotion("p3"), "p1", ledger.KeptPromotions)
 	refusedWith(t, err, refusal.CodeBusy)
-	if after.Active != "" || len(after.Entries) != 0 {
+	if after.Active != "" || len(after.Promotions) != 0 {
 		t.Errorf("a refused promote returned %+v, want nothing", after)
 	}
-	if pointer.Active != "p2" || len(pointer.Entries) != 2 {
+	if pointer.Active != "p2" || len(pointer.Promotions) != 2 {
 		t.Errorf("a refused promote changed the pointer it was asked of: %+v", pointer)
 	}
 }
 
-func ids(entries []ledger.Entry) string {
-	named := make([]string, 0, len(entries))
-	for _, entry := range entries {
-		named = append(named, entry.PromotionID)
+func ids(promotions []ledger.RecordedPromotion) string {
+	named := make([]string, 0, len(promotions))
+	for _, recorded := range promotions {
+		named = append(named, recorded.PromotionID)
 	}
 	return strings.Join(named, ",")
 }
@@ -87,7 +87,7 @@ func TestAPromoteKeepsTheNewestPromotionsAndDropsTheRest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := ids(after.Entries); got != "p4,p3" {
+	if got := ids(after.Promotions); got != "p4,p3" {
 		t.Errorf("kept %s, want p4,p3", got)
 	}
 	if got := ids(dropped); got != "p2,p1" {
@@ -98,7 +98,7 @@ func TestAPromoteKeepsTheNewestPromotionsAndDropsTheRest(t *testing.T) {
 func recorded(active string, promotionIDs ...string) ledger.Pointer {
 	pointer := ledger.Pointer{Name: router.DefaultPointer, Active: active}
 	for _, id := range promotionIDs {
-		pointer.Entries = append(pointer.Entries, ledger.Entry{Promotion: promotion(id)})
+		pointer.Promotions = append(pointer.Promotions, ledger.RecordedPromotion{Promotion: promotion(id)})
 	}
 	return pointer
 }
@@ -107,7 +107,7 @@ func TestRetainNeverDropsWhatIsServingNow(t *testing.T) {
 	t.Parallel()
 
 	kept, dropped := recorded("p2", "p4", "p3", "p2", "p1").Retain(1)
-	if got := ids(kept.Entries); got != "p4,p2" {
+	if got := ids(kept.Promotions); got != "p4,p2" {
 		t.Errorf("kept %s, want p4 and the promotion the pointer serves however old it is", got)
 	}
 	if got := ids(dropped); got != "p3,p1" {
@@ -119,7 +119,7 @@ func TestRetainKeepingNoneStillKeepsWhatIsServing(t *testing.T) {
 	t.Parallel()
 
 	kept, dropped := recorded("p1", "p2", "p1").Retain(0)
-	if got := ids(kept.Entries); got != "p1" {
+	if got := ids(kept.Promotions); got != "p1" {
 		t.Errorf("kept %s, want only the active promotion", got)
 	}
 	if got := ids(dropped); got != "p2" {
@@ -131,8 +131,8 @@ func TestRetainOverNothingDropsNothing(t *testing.T) {
 	t.Parallel()
 
 	kept, dropped := recorded("").Retain(3)
-	if len(kept.Entries) != 0 || len(dropped) != 0 {
-		t.Errorf("Retain() over an empty pointer = %+v / %+v, want nothing either way", kept.Entries, dropped)
+	if len(kept.Promotions) != 0 || len(dropped) != 0 {
+		t.Errorf("Retain() over an empty pointer = %+v / %+v, want nothing either way", kept.Promotions, dropped)
 	}
 }
 
@@ -180,11 +180,11 @@ func TestUnpromotingPutsThePointerBackOnThePromotionItDisplacedAndKeepsItRecorde
 	if pointer.Active != "p1" {
 		t.Errorf("Active = %q, want p1: a router that could not serve p2 still serves p1", pointer.Active)
 	}
-	if got := ids(pointer.Entries); got != "p2,p1" {
-		t.Fatalf("entries %s, want p2 still recorded beside p1", got)
+	if got := ids(pointer.Promotions); got != "p2,p1" {
+		t.Fatalf("promotions %s, want p2 still recorded beside p1", got)
 	}
-	if !pointer.Entries[0].Unpromoted || pointer.Entries[1].Unpromoted {
-		t.Errorf("Unpromoted = %v, %v, want only p2 marked", pointer.Entries[0].Unpromoted, pointer.Entries[1].Unpromoted)
+	if !pointer.Promotions[0].Unpromoted || pointer.Promotions[1].Unpromoted {
+		t.Errorf("Unpromoted = %v, %v, want only p2 marked", pointer.Promotions[0].Unpromoted, pointer.Promotions[1].Unpromoted)
 	}
 }
 
@@ -225,9 +225,9 @@ func TestATagOnAPromotionTakenBackIsFreeForTheDeployThatRetriesIt(t *testing.T) 
 	if err != nil {
 		t.Fatalf("a retried deploy tagged v1 = %v, want the tag free: p1 never served", err)
 	}
-	for _, entry := range after.Entries {
-		if entry.Tag == "v1" && entry.PromotionID != "p2" {
-			t.Errorf("%s is still tagged v1 beside p2, so `ocel rollback --tag v1` names two releases", entry.PromotionID)
+	for _, recorded := range after.Promotions {
+		if recorded.Tag == "v1" && recorded.PromotionID != "p2" {
+			t.Errorf("%s is still tagged v1 beside p2, so `ocel rollback --tag v1` names two releases", recorded.PromotionID)
 		}
 	}
 }
@@ -247,7 +247,7 @@ func TestAPromoteKeepsThePromotionItDisplacedHoweverFarDownItHasFallen(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := ids(after.Entries); got != "p5,p4,p1" {
+	if got := ids(after.Promotions); got != "p5,p4,p1" {
 		t.Errorf("kept %s, want p5,p4 and p1: p1 still serves until p5 flips, and taking p5 back returns to it", got)
 	}
 	if got := ids(dropped); got != "p3,p2" {

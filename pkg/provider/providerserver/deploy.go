@@ -1276,11 +1276,11 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 	}
 	if err := r.tracked.unit(r.stages.Promotion, func(u *unitRun) error {
 		return u.phase(func(progress progress.Progress) error {
-			over, err := r.ledger.ActivePromotionID(ctx, r.spec.Pointer)
+			replaces, err := r.ledger.ActivePromotionID(ctx, r.spec.Pointer)
 			if err != nil {
 				return err
 			}
-			pruned, err := r.sharedStack.promote(ctx, r.spec.Pointer, over, promotion, progress)
+			pruned, err := r.sharedStack.promote(ctx, r.spec.Pointer, replaces, promotion, progress)
 			if err != nil {
 				return err
 			}

@@ -28,11 +28,11 @@ func (s PromotingStack) Flip(ctx context.Context, flip router.Flip, progress pro
 		}
 		flip.Records[app] = record
 	}
-	over, err := s.Ledger.ActivePromotionID(ctx, flip.Pointer)
+	replaces, err := s.Ledger.ActivePromotionID(ctx, flip.Pointer)
 	if err != nil {
 		return err
 	}
-	if _, err := s.Ledger.Promote(ctx, flip.Promotion, flip.Pointer, over); err != nil {
+	if _, err := s.Ledger.Promote(ctx, flip.Promotion, flip.Pointer, replaces); err != nil {
 		return err
 	}
 	asked := flip.StillActive

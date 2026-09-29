@@ -118,11 +118,11 @@ func staged(t *testing.T, l *Ledger, id string) router.Promotion {
 func promoting(t *testing.T, l *Ledger, pointer string, promotionIDs ...string) {
 	t.Helper()
 	for _, id := range promotionIDs {
-		over, err := l.ActivePromotionID(context.Background(), pointer)
+		replaces, err := l.ActivePromotionID(context.Background(), pointer)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := l.Promote(context.Background(), staged(t, l, id), pointer, over); err != nil {
+		if _, err := l.Promote(context.Background(), staged(t, l, id), pointer, replaces); err != nil {
 			t.Fatalf("Promote(%s) = %v", id, err)
 		}
 	}
@@ -222,9 +222,9 @@ func TestAPromoteRemovesTheRecordsOfTheBuildsItDropped(t *testing.T) {
 	for i := range KeptPromotions {
 		promoting(t, l, "", fmt.Sprintf("p%02d", i))
 	}
-	over := activeIn(t, l, "")
+	replaces := activeIn(t, l, "")
 
-	pruned, err := l.Promote(ctx, staged(t, l, "latest"), "", over)
+	pruned, err := l.Promote(ctx, staged(t, l, "latest"), "", replaces)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -450,16 +450,16 @@ func TestThePointerDocumentIsJSONACustomerCanRead(t *testing.T) {
 	promoting(t, l, "", "p1")
 
 	var document struct {
-		Name    string `json:"name"`
-		Active  string `json:"active"`
-		Entries []struct {
+		Name       string `json:"name"`
+		Active     string `json:"active"`
+		Promotions []struct {
 			PromotionID string `json:"promotionId"`
-		} `json:"entries"`
+		} `json:"promotions"`
 	}
 	if err := json.Unmarshal(store.rows[l.pointerKey(router.DefaultPointer).String()].Value, &document); err != nil {
 		t.Fatal(err)
 	}
-	if document.Name != router.DefaultPointer || document.Active != "p1" || len(document.Entries) != 1 || document.Entries[0].PromotionID != "p1" {
+	if document.Name != router.DefaultPointer || document.Active != "p1" || len(document.Promotions) != 1 || document.Promotions[0].PromotionID != "p1" {
 		t.Errorf("the pointer document reads %+v, want @production naming p1", document)
 	}
 }
