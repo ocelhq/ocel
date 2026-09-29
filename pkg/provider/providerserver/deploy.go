@@ -1075,13 +1075,8 @@ func (r *deployRun) grants(ctx context.Context, entry provider.AppEntry) ([]prov
 		if !used[binding.Name] {
 			continue
 		}
-		at := slices.IndexFunc(grants, func(grant provider.Binding) bool { return grant.Name == binding.Name })
-		if at < 0 {
+		if !slices.ContainsFunc(grants, func(grant provider.Binding) bool { return grant.Name == binding.Name }) {
 			grants = append(grants, binding)
-			continue
-		}
-		if len(grants[at].Wire) == 0 {
-			grants[at].Wire = binding.Wire
 		}
 	}
 	slices.SortFunc(grants, func(a, b provider.Binding) int {
@@ -1524,7 +1519,6 @@ func bindingPublished(name string, published envvars.StoredBinding) (provider.Bi
 	}
 	binding := provider.BindingOf(message)
 	binding.Version = published.Version
-	binding.Wire = published.Value
 	return binding, nil
 }
 

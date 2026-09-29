@@ -196,7 +196,6 @@ type Binding struct {
 	Properties map[string]string `json:"properties,omitempty"`
 	Grants     []Grant           `json:"grants,omitempty"`
 	Version    int64             `json:"version,omitempty"`
-	Wire       []byte            `json:"-"`
 }
 
 type Grant struct {
