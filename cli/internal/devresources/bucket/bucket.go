@@ -74,7 +74,10 @@ func (c *Backend) Resolve(ctx context.Context, project string, resources []decla
 		name := bucketName(resource.Name)
 		origins := append(slices.Clone(resource.Bucket.GetAllowedOrigins()), c.appOrigins()...)
 		if provisioned, known := c.buckets[name]; !known || !slices.Equal(provisioned, origins) {
-			if err := store.EnsureBucket(ctx, name, origins); err != nil {
+			if err := store.EnsureBucket(ctx, name); err != nil {
+				return nil, fmt.Errorf("bucket %q: %w", resource.Name, err)
+			}
+			if err := store.SetUploadOrigins(ctx, name, origins); err != nil {
 				return nil, fmt.Errorf("bucket %q: %w", resource.Name, err)
 			}
 			c.buckets[name] = origins
@@ -156,7 +159,7 @@ func (c *Backend) running(ctx context.Context, project string) (*s3store.Store, 
 	if err := waitReady(ctx, store.Endpoint); err != nil {
 		return nil, err
 	}
-	if err := store.EnsureBucket(ctx, s3store.SessionsBucket(), nil); err != nil {
+	if err := store.EnsureBucket(ctx, s3store.SessionsBucket()); err != nil {
 		return nil, fmt.Errorf("keep upload sessions: %w", err)
 	}
 	c.store = &store

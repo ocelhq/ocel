@@ -35,18 +35,31 @@ func (s Store) Presigner() *s3.PresignClient {
 	return s3.NewPresignClient(s.Client())
 }
 
-func (s Store) EnsureBucket(ctx context.Context, name string, origins []string) error {
-	client := s.Client()
-	_, err := client.CreateBucket(ctx, &s3.CreateBucketInput{Bucket: aws.String(name)})
+var ErrBucketTaken = errors.New("the bucket name belongs to another account")
+
+func (s Store) EnsureBucket(ctx context.Context, name string) error {
+	_, err := s.Client().CreateBucket(ctx, &s3.CreateBucketInput{Bucket: aws.String(name)})
 	var owned *s3types.BucketAlreadyOwnedByYou
 	var taken *s3types.BucketAlreadyExists
-	if err != nil && !errors.As(err, &owned) && !errors.As(err, &taken) {
+	switch {
+	case err == nil, errors.As(err, &owned):
+		return nil
+	case errors.As(err, &taken):
+		return fmt.Errorf("bucket %s exists and these credentials do not own it: pick another name: %w", name, ErrBucketTaken)
+	default:
 		return fmt.Errorf("create bucket %s: %w", name, err)
 	}
+}
+
+func (s Store) SetUploadOrigins(ctx context.Context, name string, origins []string) error {
+	client := s.Client()
 	if len(origins) == 0 {
+		if _, err := client.DeleteBucketCors(ctx, &s3.DeleteBucketCorsInput{Bucket: aws.String(name)}); err != nil {
+			return fmt.Errorf("stop browsers uploading to bucket %s: %w", name, err)
+		}
 		return nil
 	}
-	_, err = client.PutBucketCors(ctx, &s3.PutBucketCorsInput{
+	_, err := client.PutBucketCors(ctx, &s3.PutBucketCorsInput{
 		Bucket: aws.String(name),
 		CORSConfiguration: &s3types.CORSConfiguration{CORSRules: []s3types.CORSRule{{
 			AllowedOrigins: origins,
