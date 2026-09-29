@@ -1,4 +1,4 @@
-package declcache
+package env
 
 import (
 	"crypto/sha256"
@@ -14,41 +14,41 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
-type Cache struct {
+type variableCache struct {
 	dir string
 }
 
-type entry struct {
+type variableCacheEntry struct {
 	Fingerprint string            `json:"fingerprint"`
 	Definitions []json.RawMessage `json:"definitions"`
 	Groups      []json.RawMessage `json:"groups,omitempty"`
 }
 
-func Open() (*Cache, error) {
+func openVariableCache() (*variableCache, error) {
 	base, err := os.UserConfigDir()
 	if err != nil {
 		return nil, fmt.Errorf("resolve user config directory: %w", err)
 	}
-	return OpenAt(filepath.Join(base, "ocel", "declaration-cache"))
+	return openVariableCacheAt(filepath.Join(base, "ocel", "variable-cache"))
 }
 
-func OpenAt(dir string) (*Cache, error) {
+func openVariableCacheAt(dir string) (*variableCache, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return nil, fmt.Errorf("create declaration cache directory: %w", err)
+		return nil, fmt.Errorf("create variable cache directory: %w", err)
 	}
-	return &Cache{dir: dir}, nil
+	return &variableCache{dir: dir}, nil
 }
 
-func (c *Cache) LoadContaining(projectDir, fingerprint, key string) (definitions []*resourcesv1.VariableDefinition, groups []*resourcesv1.GroupDefinition, ok bool) {
+func (c *variableCache) LoadContaining(projectDir, fingerprint, key string) (definitions []*resourcesv1.VariableDefinition, groups []*resourcesv1.GroupDefinition, ok bool) {
 	data, err := os.ReadFile(c.path(projectDir))
 	if err != nil {
 		return nil, nil, false
 	}
-	var e entry
+	var e variableCacheEntry
 	if err := json.Unmarshal(data, &e); err != nil {
 		return nil, nil, false
 	}
-	if e.Fingerprint != stamp(fingerprint, e) {
+	if e.Fingerprint != stampVariableCacheEntry(fingerprint, e) {
 		return nil, nil, false
 	}
 	for _, raw := range e.Definitions {
@@ -73,34 +73,34 @@ func (c *Cache) LoadContaining(projectDir, fingerprint, key string) (definitions
 	return nil, nil, false
 }
 
-func (c *Cache) Save(projectDir, fingerprint string, definitions []*resourcesv1.VariableDefinition, groups []*resourcesv1.GroupDefinition) error {
-	var e entry
+func (c *variableCache) Save(projectDir, fingerprint string, definitions []*resourcesv1.VariableDefinition, groups []*resourcesv1.GroupDefinition) error {
+	var e variableCacheEntry
 	for _, definition := range definitions {
 		raw, err := protojson.Marshal(definition)
 		if err != nil {
-			return fmt.Errorf("encode declaration cache entry: %w", err)
+			return fmt.Errorf("encode variable cache entry: %w", err)
 		}
 		e.Definitions = append(e.Definitions, raw)
 	}
 	for _, group := range groups {
 		raw, err := protojson.Marshal(group)
 		if err != nil {
-			return fmt.Errorf("encode declaration cache entry: %w", err)
+			return fmt.Errorf("encode variable cache entry: %w", err)
 		}
 		e.Groups = append(e.Groups, raw)
 	}
-	e.Fingerprint = stamp(fingerprint, e)
+	e.Fingerprint = stampVariableCacheEntry(fingerprint, e)
 	data, err := json.Marshal(e)
 	if err != nil {
-		return fmt.Errorf("encode declaration cache entry: %w", err)
+		return fmt.Errorf("encode variable cache entry: %w", err)
 	}
 	if err := os.WriteFile(c.path(projectDir), data, 0o600); err != nil {
-		return fmt.Errorf("write declaration cache entry: %w", err)
+		return fmt.Errorf("write variable cache entry: %w", err)
 	}
 	return nil
 }
 
-func stamp(fingerprint string, e entry) string {
+func stampVariableCacheEntry(fingerprint string, e variableCacheEntry) string {
 	e.Fingerprint = fingerprint
 	data, err := json.Marshal(e)
 	if err != nil {
@@ -109,11 +109,11 @@ func stamp(fingerprint string, e entry) string {
 	return hashString(string(data))
 }
 
-func (c *Cache) path(projectDir string) string {
+func (c *variableCache) path(projectDir string) string {
 	return filepath.Join(c.dir, hashString(projectDir)+".json")
 }
 
-func ContentHash(entryPath string) (string, error) {
+func hashBundledEntry(entryPath string) (string, error) {
 	f, err := os.Open(entryPath)
 	if err != nil {
 		return "", fmt.Errorf("read the bundled discovery entrypoint: %w", err)

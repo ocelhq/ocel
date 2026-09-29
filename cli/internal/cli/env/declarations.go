@@ -6,7 +6,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
-	"github.com/ocelhq/ocel/cli/internal/declcache"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
@@ -24,12 +23,12 @@ func declaredVariables(ctx context.Context, deps cmddeps.Deps, cfg *projectconfi
 	}
 	var fingerprint string
 	if prepared.Entry() != "" {
-		if fingerprint, err = declcache.ContentHash(prepared.Entry()); err != nil {
+		if fingerprint, err = hashBundledEntry(prepared.Entry()); err != nil {
 			return nil, nil, err
 		}
 	}
 
-	cache, cacheErr := declcache.Open()
+	cache, cacheErr := openVariableCache()
 	if cacheErr == nil {
 		if definitions, groups, ok := cache.LoadContaining(cfg.Dir, fingerprint, key); ok {
 			return withImpliedDeclarations(cfg, opts, definitions, groups)
