@@ -96,7 +96,7 @@ func TestABindingOnStdinThatCannotBeReadIsRefusedNamingWhereWithoutItsValue(t *t
 	}
 }
 
-func TestRunBindingsSet(t *testing.T) {
+func TestBindingsSetPublishesOneRecordUnderItsPublishersName(t *testing.T) {
 	t.Run("the record it publishes is what ls shows, and rm takes it away", func(t *testing.T) {
 		root := setUpBindingFixture(t)
 
@@ -248,7 +248,7 @@ func TestRunBindingsSet(t *testing.T) {
 	})
 }
 
-func TestRunBindingsLs(t *testing.T) {
+func TestBindingsListNamesEachRecordWithoutItsValues(t *testing.T) {
 	t.Run("never prints a property value", func(t *testing.T) {
 		root := setUpBindingFixture(t)
 		bindingSet(t, root, postgresBindingJSON("main", "db.internal"), bindingsOptions{})
@@ -332,7 +332,7 @@ func renderedPropertyTypes(t *testing.T, written string) []string {
 	return types
 }
 
-func TestRunBindingsGenerate(t *testing.T) {
+func TestBindingsGenerateWritesTheShapeOfEveryPublishedRecord(t *testing.T) {
 	t.Run("writes the shape of every published record and none of its values", func(t *testing.T) {
 		root := setUpBindingFixture(t)
 		bindingSet(t, root, postgresBindingJSON("orders", "db.internal"), bindingsOptions{})
@@ -409,7 +409,7 @@ func TestRunBindingsGenerate(t *testing.T) {
 	})
 }
 
-func TestBindingBootstrap(t *testing.T) {
+func TestABindingBelongsToTheBootstrapItsFlagsAddress(t *testing.T) {
 	t.Run("refuses --environment without --preview", func(t *testing.T) {
 		root := setUpBindingFixture(t)
 
@@ -485,7 +485,7 @@ func TestRunBindingsJSONOutput(t *testing.T) {
 	}
 }
 
-func TestBindingCommands(t *testing.T) {
+func TestEveryBindingsSubcommandAddressesABootstrapAndOnlySetTakesAnOwner(t *testing.T) {
 	t.Parallel()
 
 	bindings := NewCommand(clitest.NewInvocation())

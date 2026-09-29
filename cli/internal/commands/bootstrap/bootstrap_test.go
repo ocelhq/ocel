@@ -12,6 +12,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/clitest"
+	"github.com/ocelhq/ocel/cli/internal/commands"
+	"github.com/ocelhq/ocel/cli/internal/consent"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
+	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
@@ -20,13 +25,143 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
-
-	"github.com/ocelhq/ocel/cli/internal/clitest"
-	"github.com/ocelhq/ocel/cli/internal/commands"
-	"github.com/ocelhq/ocel/cli/internal/consent"
-	"github.com/ocelhq/ocel/cli/internal/terminal"
-	"github.com/ocelhq/ocel/cli/internal/version"
 )
+
+func runCommand(t *testing.T, args ...string) (string, error) {
+	t.Helper()
+
+	cmd := NewCommand(commands.Invocation{})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs(args)
+	err := cmd.Execute()
+	return out.String(), err
+}
+
+func TestBootstrapNeedsASubcommand(t *testing.T) {
+	t.Parallel()
+
+	t.Run("bare, it prints its help and fails", func(t *testing.T) {
+		t.Parallel()
+
+		out, err := runCommand(t)
+		if err == nil {
+			t.Fatal("Execute err = nil, want bootstrap without a subcommand to be a failure")
+		}
+		for _, want := range []string{"production", "preview", "destroy", "status"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("output = %q, want the help to list %q", out, want)
+			}
+		}
+	})
+
+	t.Run("a subcommand that is not one fails", func(t *testing.T) {
+		t.Parallel()
+
+		if _, err := runCommand(t, "staging"); err == nil {
+			t.Fatal("Execute err = nil, want a subcommand that is not one to be a failure")
+		}
+	})
+}
+
+func TestBootstrapTakesTheTierAsASubcommandOrItsAlias(t *testing.T) {
+	t.Parallel()
+
+	cmd := NewCommand(commands.Invocation{})
+	for _, tc := range []struct {
+		typed string
+		want  string
+	}{
+		{"production", "production"},
+		{"prod", "production"},
+		{"preview", "preview"},
+	} {
+		found, _, err := cmd.Find([]string{tc.typed})
+		if err != nil {
+			t.Fatalf("Find(%q) err = %v", tc.typed, err)
+		}
+		if found.Name() != tc.want {
+			t.Errorf("Find(%q) = %q, want %q", tc.typed, found.Name(), tc.want)
+		}
+		for _, flag := range []string{"yes", "dry", "features", "force", "repair"} {
+			if found.Flags().Lookup(flag) == nil {
+				t.Errorf("%s has no --%s", found.Name(), flag)
+			}
+		}
+	}
+
+	for _, gone := range []string{"preview", "destroy", "print-policy"} {
+		if cmd.Flags().Lookup(gone) != nil {
+			t.Errorf("bootstrap still has --%s", gone)
+		}
+	}
+}
+
+func TestBootstrapDestroyNeedsATier(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		args []string
+	}{
+		{"no tier", []string{"destroy"}},
+		{"a tier that is not one", []string{"destroy", "staging"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			out, err := runCommand(t, tc.args...)
+			if err == nil {
+				t.Fatal("Execute err = nil, want a destroy without a tier to be a failure")
+			}
+			if !strings.Contains(err.Error(), "preview") || !strings.Contains(err.Error(), "production") {
+				t.Errorf("err = %v, want it to name both tiers", err)
+			}
+			if !strings.Contains(out, "destroy <production|preview>") {
+				t.Errorf("output = %q, want the destroy help", out)
+			}
+		})
+	}
+}
+
+func TestBootstrapDestroyTakesTheTierOrItsAliasAsItsArgument(t *testing.T) {
+	t.Parallel()
+
+	for typed, want := range map[string]environmentv1.Tier{
+		"preview":    environmentv1.Tier_TIER_PREVIEW,
+		"production": environmentv1.Tier_TIER_PRODUCTION,
+		"prod":       environmentv1.Tier_TIER_PRODUCTION,
+	} {
+		got, err := environmentArg([]string{typed})
+		if err != nil {
+			t.Fatalf("environmentArg(%q) err = %v", typed, err)
+		}
+		if got != want {
+			t.Errorf("environmentArg(%q) = %v, want %v", typed, got, want)
+		}
+	}
+}
+
+func TestOnlyWhatRendersDependentsPaysForThem(t *testing.T) {
+	t.Run("bootstrap reads the catalogue, then plans the apply it is about to send", func(t *testing.T) {
+		project, invocation := bootstrapProject(t, "", featureISR)
+
+		var stdout, stderr bytes.Buffer
+		clitest.AttachTerminalSink(invocation, &stdout)
+		if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("runBootstrap err = %v; stderr=%s", err, stderr.String())
+		}
+		described := clitest.RequestsTo[*contractv1.DescribeBootstrapRequest](t, project.Requests, contractv1connect.ProviderServiceDescribeBootstrapProcedure)
+		if len(described) != 1 || !described[0].GetWithDependents() {
+			t.Errorf("the catalogue was read %v; a provider that draws no plan leaves the dependent names nowhere else to come from", described)
+		}
+		planned := clitest.RequestsTo[*contractv1.BootstrapRequest](t, project.Requests, contractv1connect.ProviderServiceBootstrapProcedure)
+		if len(planned) == 0 || !planned[0].GetDry() || strings.Join(planned[0].GetFeatures(), ",") != featureISR || planned[0].GetForce() {
+			t.Errorf("the provider was asked to plan %v, want the first ask to be the apply it would send, drawn dry", planned)
+		}
+	})
+}
 
 func catalogue() []provider.Feature {
 	return []provider.Feature{
@@ -145,7 +280,7 @@ func writtenByANewerOcel(t *testing.T, project clitest.FakeProject) {
 	project.Provider.FakeBootstrap().SetWriter("1.9.0")
 }
 
-func TestRunBootstrapDestroy(t *testing.T) {
+func TestBootstrapDestroyShowsItsPlanAndTakesConsentBeforeRemovingAnything(t *testing.T) {
 	t.Run("--yes skips the phrase and the terminal requirement", func(t *testing.T) {
 		project, invocation := bootstrapProject(t, "")
 
@@ -322,7 +457,7 @@ func TestRemovingABootstrapAsksForItsNameWhileTheRunIsHeldAfterThePlanItShows(t 
 	}
 }
 
-func TestRunBootstrap(t *testing.T) {
+func TestBootstrapRefusesBeforeStartingAProviderWhenTheConfigCannotNameOne(t *testing.T) {
 	t.Parallel()
 
 	t.Run("a missing config errors before any spawn", func(t *testing.T) {

@@ -16,7 +16,7 @@ func shape(name, jsonType string, list bool) *envvarsv1.PropertyShape {
 	return &envvarsv1.PropertyShape{Name: name, JsonType: jsonType, List: list}
 }
 
-func TestRenderBindingTypes(t *testing.T) {
+func TestTheBindingTypesNameEveryRecordAndPropertyAndNoValue(t *testing.T) {
 	t.Run("writes what the checked-in fixture the transform package typechecks contains", func(t *testing.T) {
 		got := renderBindingTypes("production", []project.Binding{
 			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "orders", External: "sst-pg-orders"},

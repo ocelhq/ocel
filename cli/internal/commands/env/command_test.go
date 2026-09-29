@@ -10,7 +10,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 )
 
-func TestCommandHelp(t *testing.T) {
+func TestEnvHelpListsEverySubcommandWithExamples(t *testing.T) {
 	cmd := NewCommand(newTestDependencies())
 	if got := cmd.Use; got != "env <command>" {
 		t.Errorf("Use = %q, want %q", got, "env <command>")
@@ -33,7 +33,7 @@ func TestCommandHelp(t *testing.T) {
 	}
 }
 
-func TestCommandNeedsSubcommand(t *testing.T) {
+func TestEnvNeedsASubcommand(t *testing.T) {
 	cmd := NewCommand(newTestDependencies())
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -48,7 +48,7 @@ func TestCommandNeedsSubcommand(t *testing.T) {
 	}
 }
 
-func TestCommandFlags(t *testing.T) {
+func TestEnvSubcommandsNameTheirFlagsTheSameWay(t *testing.T) {
 	cmd := NewCommand(newTestDependencies())
 	cases := map[string]map[string]string{
 		"ls":  {"preview": "Use preview values"},
@@ -83,7 +83,7 @@ func TestNoEnvCommandAddressesDevValues(t *testing.T) {
 	}
 }
 
-func TestCommandArguments(t *testing.T) {
+func TestEveryEnvSubcommandTakesTheArgumentsItNames(t *testing.T) {
 	cmd := NewCommand(newTestDependencies())
 	for _, test := range []struct {
 		name string
@@ -107,7 +107,7 @@ func TestCommandArguments(t *testing.T) {
 	}
 }
 
-func TestParseEnvSetPairs(t *testing.T) {
+func TestEnvSetReadsEachArgumentAsAKeyEqualsValuePair(t *testing.T) {
 	pairs, err := parseEnvSetPairs([]string{"LOG_LEVEL=debug", "DATABASE_URL=postgres://db?sslmode=require", "EMPTY="})
 	if err != nil {
 		t.Fatalf("parseEnvSetPairs() = %v", err)

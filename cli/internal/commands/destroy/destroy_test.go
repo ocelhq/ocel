@@ -20,7 +20,7 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
-func TestRunDestroyPreviewProject(t *testing.T) {
+func TestDestroyingPreviewTakesTheWholePreviewFootprintOnceConsented(t *testing.T) {
 	t.Run("--yes skips the terminal check and the typed name", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		invocation := clitest.NewInvocation()
@@ -126,7 +126,7 @@ export default {
 	})
 }
 
-func TestRunDestroy(t *testing.T) {
+func TestDestroyingProductionShowsThePlanAndTakesTheProjectNameBeforeDestroying(t *testing.T) {
 	t.Run("it refuses without a terminal", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		invocation := clitest.NewInvocation()
@@ -369,7 +369,7 @@ func TestDestroyNamesATierItDoesNotKnow(t *testing.T) {
 	}
 }
 
-func TestDestroyTierCommands(t *testing.T) {
+func TestDestroyTakesTheTierAsASubcommandOrItsAlias(t *testing.T) {
 	command := NewCommand(clitest.NewInvocation())
 	for typed, want := range map[string]string{
 		"production": "production",

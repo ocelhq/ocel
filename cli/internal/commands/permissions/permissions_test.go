@@ -53,7 +53,7 @@ func TestPermissionsNeedsATier(t *testing.T) {
 	}
 }
 
-func TestPermissionsPurposeArg(t *testing.T) {
+func TestPermissionsTakesDeployOrBootstrapAsItsPurpose(t *testing.T) {
 	t.Parallel()
 
 	for typed, want := range map[string]contractv1.CredentialPurpose{
@@ -73,7 +73,7 @@ func TestPermissionsPurposeArg(t *testing.T) {
 	}
 }
 
-func TestRunPermissions(t *testing.T) {
+func TestPermissionsWritesTheDocumentTheProviderRendersForThePurpose(t *testing.T) {
 	t.Run("it writes the document the provider renders for the purpose", func(t *testing.T) {
 		project := clitest.SetUpProject(t)
 		invocation := clitest.NewInvocation()

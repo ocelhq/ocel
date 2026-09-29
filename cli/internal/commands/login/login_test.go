@@ -11,7 +11,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/console"
 )
 
-func TestRun(t *testing.T) {
+func TestLoginKeepsTheConsoleInEffectAndStartsANewOneElsewhere(t *testing.T) {
 	unreachable := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))

@@ -101,7 +101,7 @@ func readConfig(t *testing.T, dir string) string {
 	return string(data)
 }
 
-func TestRunInit(t *testing.T) {
+func TestInitWritesADeployableConfigForTheSlugAndProviderItIsGiven(t *testing.T) {
 	t.Parallel()
 
 	t.Run("no argument defaults the slug to the directory name", func(t *testing.T) {
@@ -359,7 +359,7 @@ func TestRunInit(t *testing.T) {
 	})
 }
 
-func TestProviderIdentifier(t *testing.T) {
+func TestAProviderIDBecomesACamelCaseIdentifierInTheTypeScriptConfig(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string]string{

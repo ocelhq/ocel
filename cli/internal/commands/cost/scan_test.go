@@ -55,7 +55,7 @@ type scanJSON struct {
 	Assumptions []string        `json:"assumptions"`
 }
 
-func TestScan(t *testing.T) {
+func TestCostScanPricesEveryResourceUnderTheProfileAskedFor(t *testing.T) {
 	t.Run("it tables every resource under its scope with the fixed and moderate cost beside it", func(t *testing.T) {
 		root, _, dependencies := scanFixture(t)
 

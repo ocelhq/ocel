@@ -25,7 +25,7 @@ func bootstrapOf(stacks ...*contractv1.BootstrapStack) *contractv1.BootstrapStat
 	}
 }
 
-func TestPlanBootstrap(t *testing.T) {
+func TestTheBootstrapPlanAsksOnlyForWhatIsMissingOrStale(t *testing.T) {
 	core := &contractv1.BootstrapStack{Name: "ocel-bootstrap", Present: true, DigestCurrent: true, Required: true}
 
 	tests := []struct {

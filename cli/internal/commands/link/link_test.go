@@ -87,7 +87,7 @@ func readLink(t *testing.T, dir, apiURL string) *console.Link {
 	return record
 }
 
-func TestRunLink(t *testing.T) {
+func TestLinkSelectsOrCreatesAConsoleProjectForThisDirectory(t *testing.T) {
 	t.Parallel()
 
 	t.Run("not logged in returns an exit error pointing at `ocel login`", func(t *testing.T) {
@@ -425,7 +425,7 @@ func runEvents(t *testing.T, out string) []*streamv1.RunEvent {
 	return evs
 }
 
-func TestRunUnlink(t *testing.T) {
+func TestUnlinkRemovesTheLinkRecord(t *testing.T) {
 	t.Parallel()
 
 	t.Run("it removes the record", func(t *testing.T) {
@@ -461,7 +461,7 @@ func TestRunUnlink(t *testing.T) {
 	})
 }
 
-func TestProjectDir(t *testing.T) {
+func TestASubdirectoryLinksTheProjectRoot(t *testing.T) {
 	t.Parallel()
 
 	t.Run("a subdirectory links the project root, where dev and run read the link", func(t *testing.T) {

@@ -21,7 +21,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 )
 
-func TestDeployE2E(t *testing.T) {
+func TestDeployThroughARealBuiltProviderServesTheAppItDeployed(t *testing.T) {
 	t.Run("a real built provider reports the typed resource output it decoded", func(t *testing.T) {
 		root, binPath := setUpRealProviderFixture(t)
 

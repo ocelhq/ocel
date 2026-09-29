@@ -37,7 +37,7 @@ func testCatalogue(enabled ...string) []*contractv1.Feature {
 	}
 }
 
-func TestParseFeatureFlag(t *testing.T) {
+func TestTheFeaturesFlagKeepsTheProvidersOrderAndTakesAllOrNone(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -91,7 +91,7 @@ func TestParseFeatureFlag(t *testing.T) {
 	})
 }
 
-func TestParseRemoveFlag(t *testing.T) {
+func TestTheRemoveFlagNamesOnlyFeaturesTheProviderOffers(t *testing.T) {
 	t.Parallel()
 
 	got, err := parseRemoveFlag(" relay-edge , isr ", testCatalogue())
@@ -106,7 +106,7 @@ func TestParseRemoveFlag(t *testing.T) {
 	}
 }
 
-func TestGoingFeatures(t *testing.T) {
+func TestRemovingAFeatureTakesWhatDependsOnItAndNothingThatIsNotInstalled(t *testing.T) {
 	t.Parallel()
 
 	installed := []string{featureISR, featureImageOptimization, featureRelayEdge}
@@ -119,7 +119,7 @@ func TestGoingFeatures(t *testing.T) {
 	}
 }
 
-func TestBothWays(t *testing.T) {
+func TestAFeatureCannotBeBothEnsuredAndRemovedInOneRun(t *testing.T) {
 	t.Parallel()
 
 	if err := bothWays([]string{featureISR}, []string{featureImageOptimization}); err != nil {
@@ -160,7 +160,7 @@ func TestAFeatureForAnotherEdgeIsStillOffered(t *testing.T) {
 	}
 }
 
-func TestPrintIncluded(t *testing.T) {
+func TestTheIncludedListingNamesEveryInstalledFeatureAndIsSilentWhenThereIsNone(t *testing.T) {
 	t.Parallel()
 
 	var out strings.Builder
@@ -183,7 +183,7 @@ func TestPrintIncluded(t *testing.T) {
 	}
 }
 
-func TestPrintRequired(t *testing.T) {
+func TestTheRequiredListingNamesTheFeatureTheProjectsEdgeNeeds(t *testing.T) {
 	t.Parallel()
 
 	catalogue := testCatalogue()
@@ -258,7 +258,7 @@ func TestThePickerSaysWhenThereIsNothingLeft(t *testing.T) {
 	}
 }
 
-func TestWithDependencies(t *testing.T) {
+func TestAFeatureBringsTheFeaturesItDependsOn(t *testing.T) {
 	t.Parallel()
 
 	got := withDependencies(testCatalogue(), []string{featureRelayEdge})
@@ -267,7 +267,7 @@ func TestWithDependencies(t *testing.T) {
 	}
 }
 
-func TestPrintAdded(t *testing.T) {
+func TestTheAddedListingOpensWithWhatWasPickedAndNamesWhatPulledInEachDependency(t *testing.T) {
 	t.Parallel()
 
 	var out strings.Builder

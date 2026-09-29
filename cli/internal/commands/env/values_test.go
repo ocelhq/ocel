@@ -11,14 +11,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
-
-	"github.com/ocelhq/ocel/cli/internal/clitest"
 )
 
 func setUpEnvFixture(t *testing.T) string {
@@ -752,4 +751,237 @@ func TestWhatTheDeclarationCollectorPrintsReachesTheRunAsOutputAndNeverRawStderr
 	if evs[said].GetPhase() != progressv1.Phase_PHASE_BUILD {
 		t.Errorf("the collector's line is in %v, want the build phase that ran it", evs[said].GetPhase())
 	}
+}
+
+func setUpInlineBindingFixture(t *testing.T) string {
+	t.Helper()
+	root := setUpEnvFixture(t)
+	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  slug: "`+clitest.FixtureSlug+`",
+  provider: { fake: {} },
+  domains: { preview: "*.preview.acme.com" },
+  bindings: { postgres: { main: { url: { $env: "MAIN_DATABASE_URL" } } } },
+};
+`)
+	return root
+}
+
+func TestRunEnvSetTakesAVariableABindingReads(t *testing.T) {
+	t.Run("sets it at the project root", func(t *testing.T) {
+		root := setUpInlineBindingFixture(t)
+		if out := envSet(t, root, "MAIN_DATABASE_URL", "postgres://u:p@db/main", envOptions{}); !strings.Contains(out, "MAIN_DATABASE_URL") {
+			t.Errorf("set stdout = %q, want it to name the key it set", out)
+		}
+	})
+
+	t.Run("refuses it in a folder, since the binding reads the root value", func(t *testing.T) {
+		root := setUpInlineBindingFixture(t)
+		var stdout, stderr bytes.Buffer
+		err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), root, "MAIN_DATABASE_URL", "postgres://u:p@db/main", envOptions{folder: "/web"}, nil, &stdout, &stderr)
+		if err == nil {
+			t.Fatal("runEnvSet --folder err = nil, want a folder value for a binding's variable refused")
+		}
+		for _, want := range []string{"MAIN_DATABASE_URL", "bindings.postgres.main", "--folder"} {
+			if !strings.Contains(stderr.String(), want) {
+				t.Errorf("stream = %q, want %q named", stderr.String(), want)
+			}
+		}
+	})
+}
+
+func TestSettingAValueForAnAppOnALiveComputePromisesNoDeploy(t *testing.T) {
+	root := setUpEnvFixture(t)
+	t.Setenv(clitest.FakeComputesEnvVar, "serverless")
+
+	said := envSet(t, root, "API_TOKEN", "sk-live", envOptions{})
+	if strings.Contains(said, "next deploy") {
+		t.Errorf("`ocel env set` against an app on a compute the provider bakes nothing into said\n%s\nand a live value there is picked up without one", said)
+	}
+}
+
+func TestSettingAValueForAContainerAppTheProviderReadsLivePromisesNoDeploy(t *testing.T) {
+	root := setUpEnvFixture(t)
+	t.Setenv(clitest.FakeComputesEnvVar, "container")
+
+	said := envSet(t, root, "API_TOKEN", "sk-live", envOptions{})
+	if strings.Contains(said, "next deploy") {
+		t.Errorf("`ocel env set` against a container app said\n%s\nand this provider names no compute it bakes values into, so the running container reads this one without a deploy", said)
+	}
+}
+
+func envRemove(t *testing.T, root, key string, opts envOptions) string {
+	t.Helper()
+	var stdout, stderr bytes.Buffer
+	if err := runEnvRemove(context.Background(), newStreamedDependencies(&stderr), root, key, opts, &stdout, &stderr); err != nil {
+		t.Fatalf("runEnvRemove(%s) err = %v; stdout=%s stderr=%s", key, err, stdout.String(), stderr.String())
+	}
+	return stdout.String()
+}
+
+func TestRemovingAValueForAnAppOnALiveComputePromisesNoDeploy(t *testing.T) {
+	root := setUpEnvFixture(t)
+	t.Setenv(clitest.FakeComputesEnvVar, "serverless")
+	envSet(t, root, "API_TOKEN", "sk-live", envOptions{})
+
+	said := envRemove(t, root, "API_TOKEN", envOptions{})
+	if strings.Contains(said, "next deploy") {
+		t.Errorf("`ocel env rm` against an app on a compute the provider bakes nothing into said\n%s\nand a removed value stops being read there without one", said)
+	}
+}
+
+func TestRemovingAValueForAContainerAppTheProviderReadsLivePromisesNoDeploy(t *testing.T) {
+	root := setUpEnvFixture(t)
+	t.Setenv(clitest.FakeComputesEnvVar, "container")
+	envSet(t, root, "API_TOKEN", "sk-live", envOptions{})
+
+	said := envRemove(t, root, "API_TOKEN", envOptions{})
+	if strings.Contains(said, "next deploy") {
+		t.Errorf("`ocel env rm` against a container app said\n%s\nand this provider names no compute it bakes values into, so the running container stops reading this one without a deploy", said)
+	}
+}
+
+func TestAWriteWithoutTheVariablesKeyOffersTheBootstrapThatAddsIt(t *testing.T) {
+	t.Run("a write with no key to seal under names the bootstrap that adds one", func(t *testing.T) {
+		t.Setenv(clitest.FakeBootstrapEnvVar, "current")
+		root := setUpEnvFixture(t)
+
+		var stdout, stderr bytes.Buffer
+		err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), root, "LOG_LEVEL", "debug", envOptions{}, nil, &stdout, &stderr)
+		if err == nil {
+			t.Fatalf("runEnvSet err = nil, want it refused for want of a key; stdout=%s stderr=%s", stdout.String(), stderr.String())
+		}
+		if want := "vars-key"; !strings.Contains(stderr.String(), want) {
+			t.Errorf("stream = %q, want it to name %s", stderr.String(), want)
+		}
+		if want := "ocel bootstrap production --features"; !strings.Contains(stderr.String(), want) {
+			t.Errorf("stream = %q, want it to name `%s`", stderr.String(), want)
+		}
+	})
+
+	t.Run("a read asks for no key at all", func(t *testing.T) {
+		t.Setenv(clitest.FakeBootstrapEnvVar, "current")
+		root := setUpEnvFixture(t)
+
+		var stdout, stderr bytes.Buffer
+		if err := runEnvList(context.Background(), newStreamedDependencies(&stderr), root, envOptions{}, &stdout, &stderr); err != nil {
+			t.Fatalf("runEnvList err = %v, want a read to go through a bootstrap with no key; stderr=%s", err, stderr.String())
+		}
+	})
+
+	t.Run("a write goes through where the key is installed", func(t *testing.T) {
+		t.Setenv(clitest.FakeBootstrapEnvVar, "vars-key")
+		root := setUpEnvFixture(t)
+
+		var stdout, stderr bytes.Buffer
+		if err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), root, "LOG_LEVEL", "debug", envOptions{}, nil, &stdout, &stderr); err != nil {
+			t.Fatalf("runEnvSet err = %v, want the write to land; stderr=%s", err, stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "Set LOG_LEVEL") {
+			t.Errorf("stdout = %q, want the write reported", stdout.String())
+		}
+	})
+
+	t.Run("a write asks for the key and for nothing else the bootstrap lacks", func(t *testing.T) {
+		t.Setenv(clitest.FakeBootstrapEnvVar, "missing")
+		root := setUpEnvFixture(t)
+
+		var stdout, stderr bytes.Buffer
+		err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), root, "LOG_LEVEL", "debug", envOptions{}, nil, &stdout, &stderr)
+		if err == nil {
+			t.Fatalf("runEnvSet err = nil, want it refused for want of a key; stdout=%s stderr=%s", stdout.String(), stderr.String())
+		}
+		if want := "ocel bootstrap production --features vars-key"; !strings.Contains(stderr.String(), want) {
+			t.Errorf("stream = %q, want it to name `%s` alone", stderr.String(), want)
+		}
+		if strings.Contains(err.Error(), "image-optimization") {
+			t.Errorf("runEnvSet err = %v, want a write to ask for the key it seals under, not for what a deploy would need", err)
+		}
+	})
+
+	t.Run("removing a value seals nothing, so it asks for no key", func(t *testing.T) {
+		t.Setenv(clitest.FakeBootstrapEnvVar, "current")
+		root := setUpEnvFixture(t)
+
+		var stdout, stderr bytes.Buffer
+		if err := runEnvRemove(context.Background(), newStreamedDependencies(&stderr), root, "STRIPE_API_KEY", envOptions{}, &stdout, &stderr); err != nil {
+			t.Fatalf("runEnvRemove err = %v, want a removal to go through a bootstrap with no key; stderr=%s", err, stderr.String())
+		}
+	})
+
+	t.Run("pointing a value at another seals nothing, so it asks for no key", func(t *testing.T) {
+		t.Setenv(clitest.FakeBootstrapEnvVar, "current")
+		root := setUpEnvFixture(t)
+
+		var stdout, stderr bytes.Buffer
+		ref := envRefOptions{project: "platform"}
+		if err := runEnvRef(context.Background(), newStreamedDependencies(&stderr), root, "STRIPE_API_KEY", envOptions{}, ref, &stdout, &stderr); err != nil {
+			t.Fatalf("runEnvRef err = %v, want a reference to go through a bootstrap with no key; stderr=%s", err, stderr.String())
+		}
+	})
+
+	t.Run("a terminal is offered the key and the bootstrap runs where it is taken", func(t *testing.T) {
+		t.Setenv(clitest.FakeBootstrapEnvVar, "current")
+		journal := filepath.Join(t.TempDir(), "edge.journal")
+		t.Setenv(clitest.FakeEdgeJournalEnvVar, journal)
+		root := setUpEnvFixture(t)
+		dependencies := newTestDependencies()
+		dependencies.StdinIsTerminal = func(io.Reader) bool { return true }
+
+		var stdout, stderr bytes.Buffer
+		err := runEnvSet(context.Background(), dependencies, root, "LOG_LEVEL", "debug", envOptions{}, strings.NewReader("y\n"), &stdout, &stderr)
+		if err != nil {
+			t.Fatalf("runEnvSet err = %v, want the offer taken and the write landed; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		if want := "Run `ocel bootstrap production --features vars-key` now?"; !strings.Contains(stderr.String(), want) {
+			t.Errorf("stderr = %q, want the offer put to whoever is at the terminal", stderr.String())
+		}
+		if strings.Contains(stdout.String(), "Run `ocel bootstrap") {
+			t.Errorf("stdout = %q, want the offer kept off the stream a script reads", stdout.String())
+		}
+		written, err := os.ReadFile(journal)
+		if err != nil {
+			t.Fatalf("the bootstrap the offer accepted never reached the provider: %v", err)
+		}
+		if !strings.Contains(string(written), "features=vars-key") {
+			t.Errorf("the provider was asked for %q, want the key alone", strings.TrimSpace(string(written)))
+		}
+	})
+}
+
+func TestAProviderWithoutTheVariablesKeyFeatureIsOfferedNothing(t *testing.T) {
+	t.Run("a write against a catalogue that never lists the key goes straight through", func(t *testing.T) {
+		t.Setenv(clitest.FakeBootstrapEnvVar, "current")
+		t.Setenv(clitest.FakeCatalogueEnvVar, clitest.FakeCatalogueNone)
+		root := setUpEnvFixture(t)
+
+		var stdout, stderr bytes.Buffer
+		if err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), root, "LOG_LEVEL", "debug", envOptions{}, nil, &stdout, &stderr); err != nil {
+			t.Fatalf("runEnvSet err = %v, want a provider that has no such feature never asked for it; stderr=%s", err, stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "Set LOG_LEVEL") {
+			t.Errorf("stdout = %q, want the write reported", stdout.String())
+		}
+	})
+
+	t.Run("a terminal is offered nothing and the provider is left unbootstrapped", func(t *testing.T) {
+		t.Setenv(clitest.FakeBootstrapEnvVar, "current")
+		t.Setenv(clitest.FakeCatalogueEnvVar, clitest.FakeCatalogueNone)
+		journal := filepath.Join(t.TempDir(), "edge.journal")
+		t.Setenv(clitest.FakeEdgeJournalEnvVar, journal)
+		root := setUpEnvFixture(t)
+		dependencies := newTestDependencies()
+		dependencies.StdinIsTerminal = func(io.Reader) bool { return true }
+
+		var stdout, stderr bytes.Buffer
+		if err := runEnvSet(context.Background(), dependencies, root, "LOG_LEVEL", "debug", envOptions{}, strings.NewReader("y\n"), &stdout, &stderr); err != nil {
+			t.Fatalf("runEnvSet err = %v, want the write to land unbidden; stderr=%s", err, stderr.String())
+		}
+		if strings.Contains(stderr.String(), "Run `ocel bootstrap") {
+			t.Errorf("stderr = %q, want no offer of a feature this provider has no name for", stderr.String())
+		}
+		if _, err := os.Stat(journal); !os.IsNotExist(err) {
+			t.Errorf("the provider was bootstrapped for a feature it does not offer: %v", err)
+		}
+	})
 }

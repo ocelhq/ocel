@@ -52,7 +52,7 @@ const generateSoloConfig = `
 export default { slug: "test-app" };
 `
 
-func TestRunGenerate(t *testing.T) {
+func TestGenerateWritesTheClientAccessorWithoutALoginOrAProvider(t *testing.T) {
 	t.Run("writes the accessor without a login or a provider", func(t *testing.T) {
 		root := setUpGenerateFixture(t, `
 export default {

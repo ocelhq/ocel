@@ -2,15 +2,16 @@ package root
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
 	"github.com/creack/pty"
-
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
@@ -315,5 +316,67 @@ func TestGenerateBindingsAndLinkAreEachTheirOwnCommandOffTheRoot(t *testing.T) {
 	bindingsGenerate, _, _ := rootCmd.Find([]string{"bindings", "generate"})
 	if bindingsGenerate == generate || bindingsGenerate.Parent().Name() != "bindings" {
 		t.Errorf("`ocel bindings generate` resolves to %v, want the bindings command's own generate", bindingsGenerate.CommandPath())
+	}
+}
+
+func TestTheConfigFlagWinsOverTheConfigEnvironmentVariable(t *testing.T) {
+	orig := configFlag
+	t.Cleanup(func() { configFlag = orig })
+
+	flag := rootCmd.PersistentFlags().Lookup("config")
+	if flag == nil {
+		t.Fatal("`ocel` does not accept --config")
+	}
+	if flag.Shorthand != "c" {
+		t.Errorf("--config shorthand = %q, want %q", flag.Shorthand, "c")
+	}
+
+	t.Run("neither the flag nor the env is set", func(t *testing.T) {
+		configFlag = ""
+		if got := explicitConfigPath(); got != "" {
+			t.Errorf("explicitConfigPath() = %q, want the empty path that leaves discovery alone", got)
+		}
+	})
+
+	t.Run("the env alone is honoured", func(t *testing.T) {
+		t.Setenv("OCEL_CONFIG", "from-env.ts")
+		configFlag = ""
+		if got := explicitConfigPath(); got != "from-env.ts" {
+			t.Errorf("explicitConfigPath() = %q, want %q", got, "from-env.ts")
+		}
+	})
+
+	t.Run("the flag alone is honoured", func(t *testing.T) {
+		configFlag = "from-flag.ts"
+		if got := explicitConfigPath(); got != "from-flag.ts" {
+			t.Errorf("explicitConfigPath() = %q, want %q", got, "from-flag.ts")
+		}
+	})
+
+	t.Run("the flag wins over the env", func(t *testing.T) {
+		t.Setenv("OCEL_CONFIG", "from-env.ts")
+		configFlag = "from-flag.ts"
+		if got := explicitConfigPath(); got != "from-flag.ts" {
+			t.Errorf("explicitConfigPath() = %q, want --config to win over OCEL_CONFIG", got)
+		}
+	})
+}
+
+func TestConfigFlagPathThatNamesNothingRefuses(t *testing.T) {
+	orig := configFlag
+	t.Cleanup(func() { configFlag = orig })
+
+	root := t.TempDir()
+	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default { slug: "test-app" };
+`)
+
+	configFlag = filepath.Join(".", "nope.ts")
+	_, err := newInvocation().LoadProject(context.Background(), root)
+	if err == nil {
+		t.Fatal("LoadProject err = nil, want a refusal for a --config path that names nothing")
+	}
+	if !strings.Contains(err.Error(), filepath.Join(root, "nope.ts")) {
+		t.Fatalf("LoadProject err = %v, want it to name the path --config asked for", err)
 	}
 }

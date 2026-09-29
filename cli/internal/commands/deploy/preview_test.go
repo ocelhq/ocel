@@ -33,7 +33,7 @@ func stubGit(dependencies *Dependencies, branch, pr string) {
 
 var errNotARepo = errors.New("determine current git branch: not a git repository")
 
-func TestRunPreviewUp(t *testing.T) {
+func TestPreviewUpSendsThePreviewEnvironmentItsFlagsName(t *testing.T) {
 	t.Run("an ephemeral preview sends a preview, ephemeral environment", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		dependencies := newTestDependencies()
@@ -357,7 +357,7 @@ export default {
 	})
 }
 
-func TestRunPreviewRm(t *testing.T) {
+func TestPreviewRemoveDestroysThePreviewItsFlagsName(t *testing.T) {
 	t.Run("an ephemeral preview for the current branch is destroyed without prompting", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		dependencies := newTestDependencies()
@@ -474,7 +474,7 @@ func TestTearingDownANamedPreviewAsksThroughConsentWhileTheRunIsHeld(t *testing.
 	}
 }
 
-func TestRunPreviewPrune(t *testing.T) {
+func TestPreviewPruneReclaimsThePreviewItsFlagsName(t *testing.T) {
 	t.Run("with no flags it prunes the current branch's preview", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		dependencies := newTestDependencies()
@@ -576,7 +576,7 @@ func TestListingPreviewsStartsTheProviderInTheCheckPhaseOfItsRunAndPrintsTheList
 	}
 }
 
-func TestRunPreviewLs(t *testing.T) {
+func TestPreviewListRendersEveryEnvironment(t *testing.T) {
 	t.Run("it renders every environment", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		dependencies := newTestDependencies()
@@ -607,7 +607,7 @@ func TestRunPreviewLs(t *testing.T) {
 	})
 }
 
-func TestPreviewEnvironmentFlags(t *testing.T) {
+func TestAPreviewIsNamedByOneFlagThatFitsASubdomainLabel(t *testing.T) {
 	t.Parallel()
 
 	t.Run("--name and --ref are mutually exclusive", func(t *testing.T) {
@@ -815,7 +815,7 @@ func checkSpan(t *testing.T, w io.Writer) *run.Span {
 	return run.Phase(progressv1.Phase_PHASE_CHECK)
 }
 
-func TestRequirePreviewDomain(t *testing.T) {
+func TestAPreviewNeedsADomainWhoseLabelsFit(t *testing.T) {
 	t.Parallel()
 
 	declared := &project.Project{Domains: project.Domains{Preview: "*.preview.acme.com"}}
