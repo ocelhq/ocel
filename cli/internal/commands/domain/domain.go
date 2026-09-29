@@ -12,7 +12,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
@@ -67,29 +66,13 @@ func globalPreviewBaseDomain(wildcard string) (string, error) {
 	return project.PreviewBaseDomain(host), nil
 }
 
-func readDomain(ctx context.Context, invocation commands.Invocation, cfg *project.Project, command string, tier environmentv1.Tier, reading progress.Title, read func(context.Context, contractv1connect.ProviderServiceClient) error) (err error) {
-	if _, err := cfg.RequireProvider(); err != nil {
+func readDomain(ctx context.Context, invocation commands.Invocation, cfg *project.Project, command string, tier environmentv1.Tier, reading progress.Title, read func(context.Context, contractv1connect.ProviderServiceClient) error) error {
+	return invocation.WithProvider(ctx, cfg, command, commands.OpenOptions{Tier: tier, Require: readiness.Features}, func(ctx context.Context, p commands.ProviderRun) error {
+		unit := p.Check.Unit(cfg.Slug, reading)
+		err := p.Provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) error { return read(ctx, client) })
+		unit.End(err)
 		return err
-	}
-
-	ctx, run, err := invocation.Events.Begin(ctx, command, cfg.Dir)
-	if err != nil {
-		return err
-	}
-	defer run.End(&err)
-
-	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	provider, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{Tier: tier, Require: readiness.Features})
-	if err != nil {
-		return err
-	}
-	defer provider.Close()
-
-	unit := check.Unit(cfg.Slug, reading)
-	err = provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) error { return read(ctx, client) })
-	unit.End(err)
-	check.End(err)
-	return err
+	})
 }
 
 func wildcardOf(base string) string {

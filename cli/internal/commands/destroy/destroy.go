@@ -116,8 +116,7 @@ func runDestroyProduction(ctx context.Context, invocation commands.Invocation, c
 		return err
 	}
 
-	policy := consent.NewPolicy("ocel destroy production", yes || bypass, invocation.StdinIsTerminal(stdin), stdout, stdin)
-	policy.ConfirmsPlan = true
+	policy := consent.NewPlanPolicy("ocel destroy production", yes || bypass, invocation.StdinIsTerminal(stdin), stdout, stdin)
 	policy.DryRun = dry
 	policy.UnattendedRemedy = fmt.Sprintf("pass --yes, or set %s to the project name", consent.BypassEnv)
 	return destroyProject(ctx, invocation, cfg, policy, environmentv1.Tier_TIER_PRODUCTION, notice)
@@ -129,8 +128,7 @@ func runDestroyPreviewProject(ctx context.Context, invocation commands.Invocatio
 		return err
 	}
 
-	policy := consent.NewPolicy("ocel destroy preview", yes, invocation.StdinIsTerminal(stdin), stdout, stdin)
-	policy.ConfirmsPlan = true
+	policy := consent.NewPlanPolicy("ocel destroy preview", yes, invocation.StdinIsTerminal(stdin), stdout, stdin)
 	policy.DryRun = dry
 	return destroyProject(ctx, invocation, cfg, policy, environmentv1.Tier_TIER_PREVIEW, "")
 }

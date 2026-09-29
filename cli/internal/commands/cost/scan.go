@@ -72,7 +72,7 @@ type Options struct {
 	Usage   string
 }
 
-func Run(ctx context.Context, dependencies Dependencies, cwd string, opts Options, stdout io.Writer) (err error) {
+func Run(ctx context.Context, dependencies Dependencies, cwd string, opts Options, stdout io.Writer) error {
 	env, err := environmentOf(opts.Env)
 	if err != nil {
 		return err
@@ -90,34 +90,20 @@ func Run(ctx context.Context, dependencies Dependencies, cwd string, opts Option
 		return err
 	}
 
-	if _, err := cfg.RequireProvider(); err != nil {
-		return err
-	}
-
-	ctx, run, err := dependencies.Events.Begin(ctx, "ocel cost scan", cfg.Dir)
-	if err != nil {
-		return err
-	}
-	defer run.End(&err)
-
-	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	provider, _, err := dependencies.OpenProvider(ctx, check, cfg, commands.OpenOptions{})
-	check.End(err)
-	if err != nil {
-		return err
-	}
-	defer provider.Close()
-
-	pricing := run.Phase(progressv1.Phase_PHASE_PLAN).Unit(cfg.Slug, progress.Pricing.Title("what a deploy would provision"))
-	set, estimates, assumptions, err := price(ctx, dependencies, provider, cfg, env, overrides, pricing.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED))
-	pricing.End(err)
-	if err != nil {
-		return err
-	}
-	if dependencies.Presentation(stdout).Format == terminal.FormatJSON {
-		return writeJSON(stdout, set, estimates[profile], assumptions)
-	}
-	return render(stdout, cfg.Slug, set, estimates, profile, assumptions)
+	return dependencies.WithProvider(ctx, cfg, "ocel cost scan", commands.OpenOptions{}, func(ctx context.Context, p commands.ProviderRun) error {
+		p.Check.End(nil)
+		run, provider := p.Run, p.Provider
+		pricing := run.Phase(progressv1.Phase_PHASE_PLAN).Unit(cfg.Slug, progress.Pricing.Title("what a deploy would provision"))
+		set, estimates, assumptions, err := price(ctx, dependencies, provider, cfg, env, overrides, pricing.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED))
+		pricing.End(err)
+		if err != nil {
+			return err
+		}
+		if dependencies.Presentation(stdout).Format == terminal.FormatJSON {
+			return writeJSON(stdout, set, estimates[profile], assumptions)
+		}
+		return render(stdout, cfg.Slug, set, estimates, profile, assumptions)
+	})
 }
 
 func price(ctx context.Context, dependencies Dependencies, provider *providerprocess.Provider, cfg *project.Project, env *environmentv1.Environment, overrides map[string]*structpb.Struct, out io.Writer) (*costv1.ResourceSet, map[costv1.Profile]*costv1.Estimate, []string, error) {

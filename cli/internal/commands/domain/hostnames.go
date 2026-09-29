@@ -98,49 +98,36 @@ type hostnameConsent struct {
 	declined string
 }
 
-func changeHostnames(ctx context.Context, invocation commands.Invocation, cfg *project.Project, change hostnameChange) (err error) {
-	if _, err := cfg.RequireProvider(); err != nil {
-		return err
-	}
+func changeHostnames(ctx context.Context, invocation commands.Invocation, cfg *project.Project, change hostnameChange) error {
 	if change.asks != nil {
 		if err := change.asks.policy.Refuse(); err != nil {
 			return err
 		}
 	}
 
-	ctx, run, err := invocation.Events.Begin(ctx, change.command, cfg.Dir)
-	if err != nil {
-		return err
-	}
-	defer run.End(&err)
+	return invocation.WithProvider(ctx, cfg, change.command, commands.OpenOptions{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: readiness.Features}, func(ctx context.Context, p commands.ProviderRun) error {
+		p.Check.End(nil)
+		run, provider := p.Run, p.Provider
+		if change.asks != nil {
+			planning := run.Phase(progressv1.Phase_PHASE_PLAN)
+			planning.Say(change.asks.plan)
+			granted, err := change.asks.policy.ConfirmPlan(ctx, planning, nil, change.asks.question)
+			planning.End(err)
+			if err != nil {
+				return err
+			}
+			if !granted {
+				run.Succeed(change.asks.declined)
+				return nil
+			}
+		}
 
-	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	provider, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: readiness.Features})
-	check.End(err)
-	if err != nil {
-		return err
-	}
-	defer provider.Close()
-
-	if change.asks != nil {
-		planning := run.Phase(progressv1.Phase_PHASE_PLAN)
-		planning.Say(change.asks.plan)
-		granted, err := change.asks.policy.ConfirmPlan(ctx, planning, nil, change.asks.question)
-		planning.End(err)
-		if err != nil {
+		if _, err := providerprocess.Stream(ctx, provider, change.rpc, change.req, change.call); err != nil {
 			return err
 		}
-		if !granted {
-			run.Succeed(change.asks.declined)
-			return nil
-		}
-	}
-
-	if _, err := providerprocess.Stream(ctx, provider, change.rpc, change.req, change.call); err != nil {
-		return err
-	}
-	run.Succeed(change.headline)
-	return nil
+		run.Succeed(change.headline)
+		return nil
+	})
 }
 
 func addedHosts(configured []string, host string) []string {
@@ -167,8 +154,7 @@ func runDomainRemove(ctx context.Context, invocation commands.Invocation, cwd, h
 		headline = fmt.Sprintf("Removed %s", host)
 		plan = fmt.Sprintf("This will unbind %s from production of project %q, and remove the certificate and DNS records ocel created for it", host, cfg.Slug)
 	}
-	policy := consent.NewPolicy("ocel domain rm", opts.yes, invocation.StdinIsTerminal(stdin), stdout, stdin)
-	policy.ConfirmsPlan = true
+	policy := consent.NewPlanPolicy("ocel domain rm", opts.yes, invocation.StdinIsTerminal(stdin), stdout, stdin)
 	return changeHostnames(ctx, invocation, cfg, hostnameChange{
 		command:  "ocel domain rm",
 		rpc:      "RemoveHostname",

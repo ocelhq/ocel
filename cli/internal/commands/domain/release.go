@@ -20,7 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
-func runDomainRelease(ctx context.Context, invocation commands.Invocation, cwd string, opts domainOptions, stdout, stderr io.Writer, stdin io.Reader) (err error) {
+func runDomainRelease(ctx context.Context, invocation commands.Invocation, cwd string, opts domainOptions, stdout, stderr io.Writer, stdin io.Reader) error {
 	if err := requirePreviewTier("ocel domain release", opts.preview); err != nil {
 		return err
 	}
@@ -28,67 +28,52 @@ func runDomainRelease(ctx context.Context, invocation commands.Invocation, cwd s
 	if err != nil {
 		return err
 	}
-	if _, err := cfg.RequireProvider(); err != nil {
-		return err
-	}
-
-	policy := consent.NewPolicy("ocel domain release", opts.yes, invocation.StdinIsTerminal(stdin), stdout, stdin)
-	policy.ConfirmsPlan = true
+	policy := consent.NewPlanPolicy("ocel domain release", opts.yes, invocation.StdinIsTerminal(stdin), stdout, stdin)
 	if err := policy.Refuse(); err != nil {
 		return err
 	}
 
-	ctx, run, err := invocation.Events.Begin(ctx, policy.Command, cfg.Dir)
-	if err != nil {
-		return err
-	}
-	defer run.End(&err)
-
-	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	provider, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{Tier: environmentv1.Tier_TIER_PREVIEW, Require: readiness.Features})
-	check.End(err)
-	if err != nil {
-		return err
-	}
-	defer provider.Close()
-
-	planning := run.Phase(progressv1.Phase_PHASE_PLAN)
-	unit := planning.Unit(cfg.Slug, progress.Enumerating.Title("what releasing the global preview domain would remove"))
-	var plan *planv1.ChangePlan
-	err = provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
-		plan, err = client.PlanRemovePreviewWildcard(ctx, &contractv1.PreviewWildcardRequest{
-			Tier: environmentv1.Tier_TIER_PREVIEW,
+	return invocation.WithProvider(ctx, cfg, policy.Command, commands.OpenOptions{Tier: environmentv1.Tier_TIER_PREVIEW, Require: readiness.Features}, func(ctx context.Context, p commands.ProviderRun) error {
+		p.Check.End(nil)
+		run, provider := p.Run, p.Provider
+		planning := run.Phase(progressv1.Phase_PHASE_PLAN)
+		unit := planning.Unit(cfg.Slug, progress.Enumerating.Title("what releasing the global preview domain would remove"))
+		var plan *planv1.ChangePlan
+		err := provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
+			plan, err = client.PlanRemovePreviewWildcard(ctx, &contractv1.PreviewWildcardRequest{
+				Tier: environmentv1.Tier_TIER_PREVIEW,
+			})
+			return err
 		})
-		return err
+		unit.End(err)
+		if err != nil {
+			return err
+		}
+		base := plan.GetSubject()
+		if base == "" {
+			run.Succeed("No global preview domain is configured")
+			return nil
+		}
+
+		shown := planning.Plan(fmt.Sprintf("This will release %s and stop serving every project's previews on it", wildcardOf(base)), plan,
+			&planv1.Note{Text: "This cannot be undone."})
+		granted, err := policy.ConfirmPlanByName(ctx, planning, shown, "domain", base)
+		planning.End(err)
+		if err != nil {
+			return err
+		}
+		if !granted {
+			run.Succeed(fmt.Sprintf("Nothing released: previews stay on %s", wildcardOf(base)))
+			return nil
+		}
+
+		req := &contractv1.PreviewWildcardRequest{Tier: environmentv1.Tier_TIER_PREVIEW, Edge: cfg.EdgeSelection()}
+		if _, err := providerprocess.Stream(ctx, provider, "RemovePreviewWildcard", req, contractv1connect.ProviderServiceClient.RemovePreviewWildcard); err != nil {
+			return err
+		}
+		run.Succeed(fmt.Sprintf("Released %s", wildcardOf(base)))
+		return nil
 	})
-	unit.End(err)
-	if err != nil {
-		return err
-	}
-	base := plan.GetSubject()
-	if base == "" {
-		run.Succeed("No global preview domain is configured")
-		return nil
-	}
-
-	shown := planning.Plan(fmt.Sprintf("This will release %s and stop serving every project's previews on it", wildcardOf(base)), plan,
-		&planv1.Note{Text: "This cannot be undone."})
-	granted, err := policy.ConfirmPlanByName(ctx, planning, shown, "domain", base)
-	planning.End(err)
-	if err != nil {
-		return err
-	}
-	if !granted {
-		run.Succeed(fmt.Sprintf("Nothing released: previews stay on %s", wildcardOf(base)))
-		return nil
-	}
-
-	req := &contractv1.PreviewWildcardRequest{Tier: environmentv1.Tier_TIER_PREVIEW, Edge: cfg.EdgeSelection()}
-	if _, err := providerprocess.Stream(ctx, provider, "RemovePreviewWildcard", req, contractv1connect.ProviderServiceClient.RemovePreviewWildcard); err != nil {
-		return err
-	}
-	run.Succeed(fmt.Sprintf("Released %s", wildcardOf(base)))
-	return nil
 }
 
 func newReleaseCommand(invocation commands.Invocation) *cobra.Command {

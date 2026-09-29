@@ -13,7 +13,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	providercontract "github.com/ocelhq/ocel/pkg/provider"
 )
@@ -36,7 +35,7 @@ func withEnvProviderOfferingVariablesKey(ctx context.Context, dependencies Depen
 	return runWithEnvProvider(ctx, dependencies, cwd, opts, command, &variablesKeyOffer{stdin: stdin}, stderr, drive)
 }
 
-func runWithEnvProvider(ctx context.Context, dependencies Dependencies, cwd string, opts envOptions, command string, keyOffer *variablesKeyOffer, stderr io.Writer, drive func(context.Context, *run.Run, *providerprocess.Provider, *project.Project, *contractv1.PreflightResponse) error) (err error) {
+func runWithEnvProvider(ctx context.Context, dependencies Dependencies, cwd string, opts envOptions, command string, keyOffer *variablesKeyOffer, stderr io.Writer, drive func(context.Context, *run.Run, *providerprocess.Provider, *project.Project, *contractv1.PreflightResponse) error) error {
 	if err := opts.checkEnvironment(); err != nil {
 		return err
 	}
@@ -44,32 +43,16 @@ func runWithEnvProvider(ctx context.Context, dependencies Dependencies, cwd stri
 	if err != nil {
 		return err
 	}
-	if _, err := cfg.RequireProvider(); err != nil {
-		return err
-	}
-
-	ctx, run, err := dependencies.Events.Begin(ctx, command, cfg.Dir)
-	if err != nil {
-		return err
-	}
-	defer run.End(&err)
-
-	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	provider, status, err := dependencies.OpenProvider(ctx, check, cfg, commands.OpenOptions{Tier: opts.tier(), Require: readiness.Infrastructure})
-	if err != nil {
-		check.End(err)
-		return err
-	}
-	defer provider.Close()
-
-	if keyOffer != nil {
-		err = offerVariablesKey(ctx, dependencies, check, provider, cfg, opts, status.Response.GetBootstrap(), keyOffer.stdin, stderr)
-	}
-	check.End(err)
-	if err != nil {
-		return err
-	}
-	return drive(ctx, run, provider, cfg, status.Response)
+	return dependencies.WithProvider(ctx, cfg, command, commands.OpenOptions{Tier: opts.tier(), Require: readiness.Infrastructure}, func(ctx context.Context, p commands.ProviderRun) error {
+		run, check, provider, status := p.Run, p.Check, p.Provider, p.Preflight
+		if keyOffer != nil {
+			if err := offerVariablesKey(ctx, dependencies, check, provider, cfg, opts, status.Response.GetBootstrap(), keyOffer.stdin, stderr); err != nil {
+				return err
+			}
+		}
+		check.End(nil)
+		return drive(ctx, run, provider, cfg, status.Response)
+	})
 }
 
 func offerVariablesKey(ctx context.Context, dependencies Dependencies, check *run.Span, provider *providerprocess.Provider, cfg *project.Project, opts envOptions, status *contractv1.BootstrapStatus, stdin io.Reader, stderr io.Writer) error {

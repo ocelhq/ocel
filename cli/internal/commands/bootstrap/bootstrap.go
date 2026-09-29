@@ -150,168 +150,153 @@ func environmentArg(args []string) (environmentv1.Tier, error) {
 	}
 }
 
-func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier environmentv1.Tier, opts Options, stdout, stderr io.Writer, stdin io.Reader) (err error) {
+func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier environmentv1.Tier, opts Options, stdout, stderr io.Writer, stdin io.Reader) error {
 	cfg, err := resolveProject(ctx, invocation, cwd)
 	if err != nil {
 		return err
 	}
 
-	if _, err := cfg.RequireProvider(); err != nil {
-		return err
-	}
 	command := readiness.BootstrapCommand(tier)
-	policy := consent.NewPolicy(command, opts.Yes, invocation.StdinIsTerminal(stdin), stdout, stdin)
-	policy.ConfirmsPlan = true
+	policy := consent.NewPlanPolicy(command, opts.Yes, invocation.StdinIsTerminal(stdin), stdout, stdin)
 	policy.DryRun = opts.Dry
 	if err := policy.Refuse(); err != nil {
 		return err
 	}
 
-	ctx, run, err := invocation.Events.Begin(ctx, command, cfg.Dir)
-	if err != nil {
-		return err
-	}
-	defer run.End(&err)
-
-	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	provider, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{
+	return invocation.WithProvider(ctx, cfg, command, commands.OpenOptions{
 		Pinning: executables.ChoosePinning(opts.Dry),
 		Tier:    tier,
 		Require: readiness.Credentials,
 		Slug:    cfg.Slug,
-	})
-	if err != nil {
+	}, func(ctx context.Context, p commands.ProviderRun) error {
+		run, check, provider := p.Run, p.Check, p.Provider
+		planned, err := describeBootstrap(ctx, provider, cfg, tier)
 		check.End(err)
-		return err
-	}
-	defer provider.Close()
-
-	planned, err := describeBootstrap(ctx, provider, cfg, tier)
-	check.End(err)
-	if err != nil {
-		return err
-	}
-	catalogue := planned.GetFeatures()
-
-	named, err := parseRemoveFlag(opts.Remove, catalogue)
-	if err != nil {
-		return err
-	}
-	installed := enabledFeatures(catalogue)
-	going := goingFeatures(catalogue, installed, named)
-	planning := run.Phase(progressv1.Phase_PHASE_PLAN)
-	if absent := without(named, installed); len(absent) > 0 {
-		planning.Say(fmt.Sprintf("%s is not in the %s bootstrap, so there is nothing to remove.", strings.Join(absent, ", "), readiness.TierName(tier)))
-	}
-	if len(named) > 0 && len(going) == 0 && !opts.FeaturesDeclared {
-		return nil
-	}
-
-	asking := policy.IsAsking()
-	picked := asking && !opts.FeaturesDeclared
-	requested, selected, err := chooseFeatures(ctx, planning, opts, catalogue, installed, going, string(cfg.EdgeKind()), tier, asking, stdout, stdin)
-	if err != nil {
-		return err
-	}
-	if !selected {
-		planning.Say("No feature was picked")
-		run.Succeed(fmt.Sprintf("Left the %s bootstrap as it is", readiness.TierName(tier)))
-		return nil
-	}
-	if err := refuseFeaturesNamedBothWays(requested, named); err != nil {
-		return err
-	}
-
-	request := func(dry bool) *contractv1.BootstrapRequest {
-		req := &contractv1.BootstrapRequest{
-			Tier:     tier,
-			Features: requested,
-			Remove:   going,
-			Force:    opts.Force,
-			Edge:     cfg.EdgeSelection(),
-			Dry:      dry,
-		}
-		if opts.RepairDeclared {
-			req.RepairOnDeploy = &opts.Repair
-		}
-		return req
-	}
-
-	unit := planning.Unit(readiness.TierName(tier), progress.Planning.Title(fmt.Sprintf("the changes to the %s bootstrap", readiness.TierName(tier))))
-	plan, err := providerprocess.Plan(ctx, provider, "Bootstrap", request(true), contractv1connect.ProviderServiceClient.Bootstrap)
-	unit.End(err)
-	if err != nil {
-		return err
-	}
-	var consented *planv1.ChangePlan
-	rendered := len(plan.GetGroups()) > 0
-	switch {
-	case rendered:
-		var notes []*planv1.Note
-		if !consent.Mutates(plan) {
-			notes = append(notes, &planv1.Note{Text: unchanged(tier)})
-		}
-		consented = planning.Plan(fmt.Sprintf("Proposed changes to the %s bootstrap", readiness.TierName(tier)), plan, notes...)
-	case len(going) > 0:
-		planning.Warn(fmt.Sprintf("Removing %s from the %s bootstrap tears down what it installed.", strings.Join(going, ", "), readiness.TierName(tier)))
-		if dependents := dependentProjects(catalogue, going); len(dependents) > 0 {
-			planning.Warn(fmt.Sprintf("These projects were deployed against it and break when it goes: %s", strings.Join(dependents, ", ")))
-		}
-	default:
-		planning.Say(unchanged(tier))
-	}
-	if !picked {
-		edgeID := plan.GetEdgeKind()
-		if edgeID == "" {
-			edgeID = string(cfg.EdgeKind())
-		}
-		sayImplied(planning, tier, impliedFeatures(catalogue, requested, edgeID))
-	}
-	status := planned.GetBootstrap()
-	if status.GetDowngrade() {
-		planning.Warn(downgradeWarning(tier, status))
-	}
-	if opts.Dry {
-		planning.Say("Run without --dry to apply.")
-		run.Succeed(fmt.Sprintf("Planned the %s bootstrap", readiness.TierName(tier)))
-		return nil
-	}
-
-	if status.GetDowngrade() {
-		proceed, err := policy.Confirm(ctx, planning, "Write the older content anyway?")
 		if err != nil {
 			return err
 		}
-		if !proceed {
+		catalogue := planned.GetFeatures()
+
+		named, err := parseRemoveFlag(opts.Remove, catalogue)
+		if err != nil {
+			return err
+		}
+		installed := enabledFeatures(catalogue)
+		going := goingFeatures(catalogue, installed, named)
+		planning := run.Phase(progressv1.Phase_PHASE_PLAN)
+		if absent := without(named, installed); len(absent) > 0 {
+			planning.Say(fmt.Sprintf("%s is not in the %s bootstrap, so there is nothing to remove.", strings.Join(absent, ", "), readiness.TierName(tier)))
+		}
+		if len(named) > 0 && len(going) == 0 && !opts.FeaturesDeclared {
+			return nil
+		}
+
+		asking := policy.IsAsking()
+		picked := asking && !opts.FeaturesDeclared
+		requested, selected, err := chooseFeatures(ctx, planning, opts, catalogue, installed, going, string(cfg.EdgeKind()), tier, asking, stdout, stdin)
+		if err != nil {
+			return err
+		}
+		if !selected {
+			planning.Say("No feature was picked")
 			run.Succeed(fmt.Sprintf("Left the %s bootstrap as it is", readiness.TierName(tier)))
 			return nil
 		}
-	}
+		if err := refuseFeaturesNamedBothWays(requested, named); err != nil {
+			return err
+		}
 
-	title := fmt.Sprintf("Bootstrap %s infrastructure with %s?", readiness.TierName(tier), provider.Name())
-	if rendered {
-		title = fmt.Sprintf("%s with %s?", consent.ConfirmVerb(consented), provider.Name())
-	}
-	granted, err := policy.ConfirmPlan(ctx, planning, consented, title)
-	if err != nil {
-		return err
-	}
-	if !granted {
-		run.Succeed(fmt.Sprintf("Left the %s bootstrap as it is", readiness.TierName(tier)))
+		request := func(dry bool) *contractv1.BootstrapRequest {
+			req := &contractv1.BootstrapRequest{
+				Tier:     tier,
+				Features: requested,
+				Remove:   going,
+				Force:    opts.Force,
+				Edge:     cfg.EdgeSelection(),
+				Dry:      dry,
+			}
+			if opts.RepairDeclared {
+				req.RepairOnDeploy = &opts.Repair
+			}
+			return req
+		}
+
+		unit := planning.Unit(readiness.TierName(tier), progress.Planning.Title(fmt.Sprintf("the changes to the %s bootstrap", readiness.TierName(tier))))
+		plan, err := providerprocess.Plan(ctx, provider, "Bootstrap", request(true), contractv1connect.ProviderServiceClient.Bootstrap)
+		unit.End(err)
+		if err != nil {
+			return err
+		}
+		var consented *planv1.ChangePlan
+		rendered := len(plan.GetGroups()) > 0
+		switch {
+		case rendered:
+			var notes []*planv1.Note
+			if !consent.Mutates(plan) {
+				notes = append(notes, &planv1.Note{Text: unchanged(tier)})
+			}
+			consented = planning.Plan(fmt.Sprintf("Proposed changes to the %s bootstrap", readiness.TierName(tier)), plan, notes...)
+		case len(going) > 0:
+			planning.Warn(fmt.Sprintf("Removing %s from the %s bootstrap tears down what it installed.", strings.Join(going, ", "), readiness.TierName(tier)))
+			if dependents := dependentProjects(catalogue, going); len(dependents) > 0 {
+				planning.Warn(fmt.Sprintf("These projects were deployed against it and break when it goes: %s", strings.Join(dependents, ", ")))
+			}
+		default:
+			planning.Say(unchanged(tier))
+		}
+		if !picked {
+			edgeID := plan.GetEdgeKind()
+			if edgeID == "" {
+				edgeID = string(cfg.EdgeKind())
+			}
+			sayImplied(planning, tier, impliedFeatures(catalogue, requested, edgeID))
+		}
+		status := planned.GetBootstrap()
+		if status.GetDowngrade() {
+			planning.Warn(downgradeWarning(tier, status))
+		}
+		if opts.Dry {
+			planning.Say("Run without --dry to apply.")
+			run.Succeed(fmt.Sprintf("Planned the %s bootstrap", readiness.TierName(tier)))
+			return nil
+		}
+
+		if status.GetDowngrade() {
+			proceed, err := policy.Confirm(ctx, planning, "Write the older content anyway?")
+			if err != nil {
+				return err
+			}
+			if !proceed {
+				run.Succeed(fmt.Sprintf("Left the %s bootstrap as it is", readiness.TierName(tier)))
+				return nil
+			}
+		}
+
+		title := fmt.Sprintf("Bootstrap %s infrastructure with %s?", readiness.TierName(tier), provider.Name())
+		if rendered {
+			title = fmt.Sprintf("%s with %s?", consent.ConfirmVerb(consented), provider.Name())
+		}
+		granted, err := policy.ConfirmPlan(ctx, planning, consented, title)
+		if err != nil {
+			return err
+		}
+		if !granted {
+			run.Succeed(fmt.Sprintf("Left the %s bootstrap as it is", readiness.TierName(tier)))
+			return nil
+		}
+		planning.End(nil)
+
+		req := request(false)
+		req.Consented = consented
+		req.AcceptReplacements = rendered
+		req.Force = req.Force || len(going) > 0
+
+		if _, err := providerprocess.Stream(ctx, provider, "Bootstrap", req, contractv1connect.ProviderServiceClient.Bootstrap); err != nil {
+			return err
+		}
+		run.Succeed(fmt.Sprintf("Bootstrapped the %s environment", readiness.TierName(tier)))
 		return nil
-	}
-	planning.End(nil)
-
-	req := request(false)
-	req.Consented = consented
-	req.AcceptReplacements = rendered
-	req.Force = req.Force || len(going) > 0
-
-	if _, err := providerprocess.Stream(ctx, provider, "Bootstrap", req, contractv1connect.ProviderServiceClient.Bootstrap); err != nil {
-		return err
-	}
-	run.Succeed(fmt.Sprintf("Bootstrapped the %s environment", readiness.TierName(tier)))
-	return nil
+	})
 }
 
 func describeBootstrap(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project, tier environmentv1.Tier) (*contractv1.DescribeBootstrapResponse, error) {

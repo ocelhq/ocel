@@ -173,7 +173,7 @@ func previewUpRunE(dependencies Dependencies, upOpts *previewUpOptions) func(cmd
 	}
 }
 
-func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, opts previewUpOptions, stdout, stderr io.Writer, stdin io.Reader) (err error) {
+func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, opts previewUpOptions, stdout, stderr io.Writer, stdin io.Reader) error {
 	cfg, err := dependencies.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
@@ -190,107 +190,93 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 		}
 	}
 
-	if _, err := cfg.RequireProvider(); err != nil {
-		return err
-	}
 	policy := consent.NewPolicy("ocel preview up", opts.yes, dependencies.StdinIsTerminal(stdin), stdout, stdin)
 	policy.DryRun = opts.dry
 	if err := policy.Refuse(); err != nil {
 		return err
 	}
 
-	ctx, run, err := dependencies.Events.Begin(ctx, "ocel preview up", cfg.Dir)
-	if err != nil {
-		return err
-	}
-	defer run.End(&err)
-
-	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	provider, read, err := dependencies.OpenProvider(ctx, check, cfg, previewOpenOptions(opts.dry, cfg))
-	if err != nil {
+	return dependencies.WithProvider(ctx, cfg, "ocel preview up", previewOpenOptions(opts.dry, cfg), func(ctx context.Context, p commands.ProviderRun) error {
+		run, check, provider, read := p.Run, p.Check, p.Provider, p.Preflight
+		facts, err := preflightPreviewUp(ctx, dependencies, policy, check, provider, cfg, read, opts.prebuilt, env.GetIdentity(), stdout, stdin)
 		check.End(err)
-		return err
-	}
-	defer provider.Close()
+		if err != nil {
+			return err
+		}
+		if facts.declined {
+			run.Succeed("Nothing deployed to preview " + env.GetIdentity())
+			return nil
+		}
+		cfg = facts.project
 
-	facts, err := preflightPreviewUp(ctx, dependencies, policy, check, provider, cfg, read, opts.prebuilt, env.GetIdentity(), stdout, stdin)
-	check.End(err)
-	if err != nil {
-		return err
-	}
-	if facts.declined {
-		run.Succeed("Nothing deployed to preview " + env.GetIdentity())
+		browser := dependencies.IsBrowserReachable(stdin)
+		scope := variablescope.Of(cfg, environmentv1.Tier_TIER_PREVIEW, env.GetIdentity())
+		scope.Browser = browser
+		recovery := variablesRecovery{
+			dependencies: dependencies,
+			cfg:          cfg,
+			provider:     provider,
+			tier:         environmentv1.Tier_TIER_PREVIEW,
+			newDeclarations: func(synced variables.EnvSource) *variables.Declarations {
+				scope := scope
+				scope.EnvSource = synced
+				return variables.NewDeclarations(valuestore.Store{
+					Provider: provider,
+					Project:  cfg,
+					Tier:     environmentv1.Tier_TIER_PREVIEW,
+				}, scope)
+			},
+			command:        "ocel preview up",
+			containerArchs: facts.containerArchs,
+			urls:           facts.urls,
+			dry:            opts.dry,
+			enabled:        !opts.dry && browser,
+		}
+		build := run.Phase(progressv1.Phase_PHASE_BUILD)
+		manifest, inline, err := recovery.buildManifest(ctx, build, opts.prebuilt)
+		build.End(err)
+		if err != nil {
+			return err
+		}
+		if manifest == nil {
+			run.Succeed(nothingToDeploy(cfg))
+			return nil
+		}
+
+		registry, err := projectRegistry(cfg)
+		if err != nil {
+			return err
+		}
+
+		req := &contractv1.DeployRequest{
+			Manifest:    manifest,
+			Environment: env,
+			Edge:        cfg.EdgeSelection(),
+			Dry:         opts.dry,
+
+			ProjectRegistry: registry,
+			InlineBindings:  inline,
+		}
+
+		if opts.dry {
+			return showDeployPlan(ctx, run, provider, req, fmt.Sprintf("Proposed changes to preview %s", env.GetIdentity()), cfg.Slug, "preview "+env.GetIdentity())
+		}
+
+		out, err := streamDeploy(ctx, provider, req)
+		if err != nil {
+			return err
+		}
+
+		record, err := deployrecord.New(cfg, manifest, env, "", out.promotionID, out.apps)
+		if err != nil {
+			return err
+		}
+		if err := deployrecord.Write(cfg.Dir, record); err != nil {
+			return err
+		}
+		run.Succeed(fmt.Sprintf("Deployed %s to preview %s", cfg.Slug, env.GetIdentity()))
 		return nil
-	}
-	cfg = facts.project
-
-	browser := dependencies.IsBrowserReachable(stdin)
-	scope := variablescope.Of(cfg, environmentv1.Tier_TIER_PREVIEW, env.GetIdentity())
-	scope.Browser = browser
-	recovery := variablesRecovery{
-		dependencies: dependencies,
-		cfg:          cfg,
-		provider:     provider,
-		tier:         environmentv1.Tier_TIER_PREVIEW,
-		newDeclarations: func(synced variables.EnvSource) *variables.Declarations {
-			scope := scope
-			scope.EnvSource = synced
-			return variables.NewDeclarations(valuestore.Store{
-				Provider: provider,
-				Project:  cfg,
-				Tier:     environmentv1.Tier_TIER_PREVIEW,
-			}, scope)
-		},
-		command:        "ocel preview up",
-		containerArchs: facts.containerArchs,
-		urls:           facts.urls,
-		dry:            opts.dry,
-		enabled:        !opts.dry && browser,
-	}
-	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	manifest, inline, err := recovery.buildManifest(ctx, build, opts.prebuilt)
-	build.End(err)
-	if err != nil {
-		return err
-	}
-	if manifest == nil {
-		run.Succeed(nothingToDeploy(cfg))
-		return nil
-	}
-
-	registry, err := projectRegistry(cfg)
-	if err != nil {
-		return err
-	}
-
-	req := &contractv1.DeployRequest{
-		Manifest:    manifest,
-		Environment: env,
-		Edge:        cfg.EdgeSelection(),
-		Dry:         opts.dry,
-
-		ProjectRegistry: registry,
-		InlineBindings:  inline,
-	}
-
-	if opts.dry {
-		return showDeployPlan(ctx, run, provider, req, fmt.Sprintf("Proposed changes to preview %s", env.GetIdentity()), cfg.Slug, "preview "+env.GetIdentity())
-	}
-
-	out, err := streamDeploy(ctx, provider, req)
-	if err != nil {
-		return err
-	}
-
-	record, err := deployrecord.New(cfg, manifest, env, "", out.promotionID, out.apps)
-	if err != nil {
-		return err
-	}
-	if err := deployrecord.Write(cfg.Dir, record); err != nil {
-		return err
-	}
-	run.Succeed(fmt.Sprintf("Deployed %s to preview %s", cfg.Slug, env.GetIdentity()))
-	return nil
+	})
 }
 
 func requirePreviewDomain(cfg *project.Project, wildcard *contractv1.PreviewWildcard, id *contractv1.Identity, pointer string, check *run.Span) (edge.PreviewSite, error) {
@@ -358,7 +344,7 @@ func checkGlobalPreviewDomain(wildcard *contractv1.PreviewWildcard, id *contract
 	return nil
 }
 
-func runPreviewRemove(ctx context.Context, dependencies Dependencies, cwd string, opts previewRemoveOptions, stdout, stderr io.Writer, stdin io.Reader) (err error) {
+func runPreviewRemove(ctx context.Context, dependencies Dependencies, cwd string, opts previewRemoveOptions, stdout, stderr io.Writer, stdin io.Reader) error {
 	cfg, err := dependencies.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
@@ -369,48 +355,34 @@ func runPreviewRemove(ctx context.Context, dependencies Dependencies, cwd string
 		return err
 	}
 
-	if _, err := cfg.RequireProvider(); err != nil {
-		return err
-	}
 	policy := consent.NewPolicy("ocel preview rm", opts.yes, dependencies.StdinIsTerminal(stdin), stdout, stdin)
 
-	ctx, run, err := dependencies.Events.Begin(ctx, "ocel preview rm", cfg.Dir)
-	if err != nil {
-		return err
-	}
-	defer run.End(&err)
+	return dependencies.WithProvider(ctx, cfg, "ocel preview rm", commands.OpenOptions{Tier: environmentv1.Tier_TIER_PREVIEW, Require: readiness.Features}, func(ctx context.Context, p commands.ProviderRun) error {
+		run, check, provider := p.Run, p.Check, p.Provider
+		if env.GetLifecycle() == environmentv1.Lifecycle_LIFECYCLE_PERSISTENT {
+			proceed, err := policy.Confirm(ctx, check, fmt.Sprintf("Tear down the named preview %q?", env.GetIdentity()))
+			if err != nil {
+				return err
+			}
+			if !proceed {
+				run.Succeed(fmt.Sprintf("Nothing torn down: preview %s stays", env.GetIdentity()))
+				return nil
+			}
+		}
 
-	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	provider, _, err := dependencies.OpenProvider(ctx, check, cfg, commands.OpenOptions{Tier: environmentv1.Tier_TIER_PREVIEW, Require: readiness.Features})
-	if err != nil {
-		check.End(err)
-		return err
-	}
-	defer provider.Close()
+		check.End(nil)
 
-	if env.GetLifecycle() == environmentv1.Lifecycle_LIFECYCLE_PERSISTENT {
-		proceed, err := policy.Confirm(ctx, check, fmt.Sprintf("Tear down the named preview %q?", env.GetIdentity()))
-		if err != nil {
+		req := &contractv1.RemoveEnvironmentRequest{
+			Environment: env,
+			Slug:        cfg.Slug,
+			Edge:        cfg.EdgeSelection(),
+		}
+		if _, err := providerprocess.Stream(ctx, provider, "RemoveEnvironment", req, contractv1connect.ProviderServiceClient.RemoveEnvironment); err != nil {
 			return err
 		}
-		if !proceed {
-			run.Succeed(fmt.Sprintf("Nothing torn down: preview %s stays", env.GetIdentity()))
-			return nil
-		}
-	}
-
-	check.End(nil)
-
-	req := &contractv1.RemoveEnvironmentRequest{
-		Environment: env,
-		Slug:        cfg.Slug,
-		Edge:        cfg.EdgeSelection(),
-	}
-	if _, err := providerprocess.Stream(ctx, provider, "RemoveEnvironment", req, contractv1connect.ProviderServiceClient.RemoveEnvironment); err != nil {
-		return err
-	}
-	run.Succeed(fmt.Sprintf("Tore down preview %s of %s", env.GetIdentity(), cfg.Slug))
-	return nil
+		run.Succeed(fmt.Sprintf("Tore down preview %s of %s", env.GetIdentity(), cfg.Slug))
+		return nil
+	})
 }
 
 func runPreviewList(ctx context.Context, dependencies Dependencies, cwd string, stdout io.Writer) error {
@@ -427,33 +399,18 @@ func runPreviewList(ctx context.Context, dependencies Dependencies, cwd string, 
 }
 
 func listPreviews(ctx context.Context, dependencies Dependencies, cfg *project.Project) (previews []*contractv1.PreviewEnvironment, err error) {
-	if _, err := cfg.RequireProvider(); err != nil {
-		return nil, err
-	}
-
-	ctx, run, err := dependencies.Events.Begin(ctx, "ocel preview ls", cfg.Dir)
-	if err != nil {
-		return nil, err
-	}
-	defer run.End(&err)
-
-	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	provider, _, err := dependencies.OpenProvider(ctx, check, cfg, commands.OpenOptions{})
-	check.End(err)
-	if err != nil {
-		return nil, err
-	}
-	defer provider.Close()
-
-	var listed *contractv1.ListEnvironmentsResponse
-	err = provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
-		listed, err = client.ListEnvironments(ctx, &contractv1.ListEnvironmentsRequest{Slug: cfg.Slug})
-		return err
+	err = dependencies.WithProvider(ctx, cfg, "ocel preview ls", commands.OpenOptions{}, func(ctx context.Context, p commands.ProviderRun) error {
+		p.Check.End(nil)
+		return p.Provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) error {
+			listed, err := client.ListEnvironments(ctx, &contractv1.ListEnvironmentsRequest{Slug: cfg.Slug})
+			previews = listed.GetEnvironments()
+			return err
+		})
 	})
-	return listed.GetEnvironments(), err
+	return previews, err
 }
 
-func runPreviewPrune(ctx context.Context, dependencies Dependencies, cwd string, opts previewPruneOptions, stdout, stderr io.Writer, stdin io.Reader) (err error) {
+func runPreviewPrune(ctx context.Context, dependencies Dependencies, cwd string, opts previewPruneOptions, stdout, stderr io.Writer, stdin io.Reader) error {
 	env, err := resolvePreviewEnvironment(dependencies, cwd, opts.name, opts.ref)
 	if err != nil {
 		return err
@@ -464,35 +421,21 @@ func runPreviewPrune(ctx context.Context, dependencies Dependencies, cwd string,
 		return err
 	}
 
-	if _, err := cfg.RequireProvider(); err != nil {
-		return err
-	}
-
-	ctx, run, err := dependencies.Events.Begin(ctx, "ocel preview prune", cfg.Dir)
-	if err != nil {
-		return err
-	}
-	defer run.End(&err)
-
-	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	provider, _, err := dependencies.OpenProvider(ctx, check, cfg, commands.OpenOptions{Tier: environmentv1.Tier_TIER_PREVIEW, Require: readiness.Features})
-	check.End(err)
-	if err != nil {
-		return err
-	}
-	defer provider.Close()
-
-	req := &contractv1.RemoveStalePromotionsRequest{
-		Slug:        cfg.Slug,
-		KeepN:       int32(opts.keep),
-		Environment: env,
-		Edge:        cfg.EdgeSelection(),
-	}
-	if _, err := providerprocess.Stream(ctx, provider, "RemoveStalePromotions", req, contractv1connect.ProviderServiceClient.RemoveStalePromotions); err != nil {
-		return err
-	}
-	run.Succeed(fmt.Sprintf("Pruned the promotions of preview %s down to the newest %d", env.GetIdentity(), opts.keep))
-	return nil
+	return dependencies.WithProvider(ctx, cfg, "ocel preview prune", commands.OpenOptions{Tier: environmentv1.Tier_TIER_PREVIEW, Require: readiness.Features}, func(ctx context.Context, p commands.ProviderRun) error {
+		p.Check.End(nil)
+		run, provider := p.Run, p.Provider
+		req := &contractv1.RemoveStalePromotionsRequest{
+			Slug:        cfg.Slug,
+			KeepN:       int32(opts.keep),
+			Environment: env,
+			Edge:        cfg.EdgeSelection(),
+		}
+		if _, err := providerprocess.Stream(ctx, provider, "RemoveStalePromotions", req, contractv1connect.ProviderServiceClient.RemoveStalePromotions); err != nil {
+			return err
+		}
+		run.Succeed(fmt.Sprintf("Pruned the promotions of preview %s down to the newest %d", env.GetIdentity(), opts.keep))
+		return nil
+	})
 }
 
 func persistentPreviewEnvironment(name string) (*environmentv1.Environment, error) {

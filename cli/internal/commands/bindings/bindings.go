@@ -28,7 +28,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 )
 
@@ -41,17 +40,11 @@ type bindingsOptions struct {
 }
 
 func (o bindingsOptions) checkEnvironment() error {
-	if o.environment == "" || o.preview {
-		return nil
-	}
-	return fmt.Errorf("--environment addresses one preview environment's override, and production has a single environment; pass --preview, or leave --environment off to address the production value")
+	return commands.RefuseEnvironmentWithoutPreview(o.preview, o.environment)
 }
 
 func (o bindingsOptions) tier() environmentv1.Tier {
-	if o.preview {
-		return environmentv1.Tier_TIER_PREVIEW
-	}
-	return environmentv1.Tier_TIER_PRODUCTION
+	return commands.ChooseTier(o.preview)
 }
 
 func (o bindingsOptions) ownerOrDefault() string {
@@ -166,7 +159,7 @@ func withBindingCommand(cmd *cobra.Command, run func(context.Context, string) er
 	return run(cmd.Context(), cwd)
 }
 
-func withBindingProvider(ctx context.Context, invocation commands.Invocation, cwd string, opts bindingsOptions, command string, drive func(context.Context, *providerprocess.Provider, *project.Project) (string, error)) (err error) {
+func withBindingProvider(ctx context.Context, invocation commands.Invocation, cwd string, opts bindingsOptions, command string, drive func(context.Context, *providerprocess.Provider, *project.Project) (string, error)) error {
 	if err := opts.checkEnvironment(); err != nil {
 		return err
 	}
@@ -174,28 +167,15 @@ func withBindingProvider(ctx context.Context, invocation commands.Invocation, cw
 	if err != nil {
 		return err
 	}
-	if _, err := cfg.RequireProvider(); err != nil {
+	return invocation.WithProvider(ctx, cfg, command, commands.OpenOptions{Tier: opts.tier(), Require: readiness.Infrastructure}, func(ctx context.Context, p commands.ProviderRun) error {
+		p.Check.End(nil)
+		run, provider := p.Run, p.Provider
+		headline, err := drive(ctx, provider, cfg)
+		if err == nil && headline != "" {
+			run.Succeed(headline)
+		}
 		return err
-	}
-
-	ctx, run, err := invocation.Events.Begin(ctx, command, cfg.Dir)
-	if err != nil {
-		return err
-	}
-	defer run.End(&err)
-
-	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	provider, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{Tier: opts.tier(), Require: readiness.Infrastructure})
-	check.End(err)
-	if err != nil {
-		return err
-	}
-	defer provider.Close()
-	headline, err := drive(ctx, provider, cfg)
-	if err == nil && headline != "" {
-		run.Succeed(headline)
-	}
-	return err
+	})
 }
 
 func runBindingsSet(ctx context.Context, invocation commands.Invocation, cwd string, stdin io.Reader, opts bindingsOptions, stdout io.Writer) error {

@@ -21,7 +21,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
@@ -47,31 +46,16 @@ func runDomainStatus(ctx context.Context, invocation commands.Invocation, cwd st
 }
 
 func readDomainStatus(ctx context.Context, invocation commands.Invocation, cfg *project.Project, wait bool, schedule domainWaitSchedule) (resp *contractv1.GetHostnameStatusResponse, err error) {
-	if _, err := cfg.RequireProvider(); err != nil {
-		return nil, err
-	}
-
-	ctx, run, err := invocation.Events.Begin(ctx, "ocel domain status", cfg.Dir)
-	if err != nil {
-		return nil, err
-	}
-	defer run.End(&err)
-
-	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	provider, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: readiness.Features})
-	if err != nil {
-		return nil, err
-	}
-	defer provider.Close()
-
-	req := &contractv1.HostnameRequest{
-		Slug:       cfg.Slug,
-		Configured: cfg.ConfiguredHostnames(environmentv1.Tier_TIER_PRODUCTION),
-		Edge:       cfg.EdgeSelection(),
-		Probe:      true,
-	}
-	resp, err = awaitDomainStatus(ctx, check, cfg.Slug, hostnameStatus(provider, req), wait, schedule)
-	check.End(err)
+	err = invocation.WithProvider(ctx, cfg, "ocel domain status", commands.OpenOptions{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: readiness.Features}, func(ctx context.Context, p commands.ProviderRun) (err error) {
+		req := &contractv1.HostnameRequest{
+			Slug:       cfg.Slug,
+			Configured: cfg.ConfiguredHostnames(environmentv1.Tier_TIER_PRODUCTION),
+			Edge:       cfg.EdgeSelection(),
+			Probe:      true,
+		}
+		resp, err = awaitDomainStatus(ctx, p.Check, cfg.Slug, hostnameStatus(p.Provider, req), wait, schedule)
+		return err
+	})
 	return resp, err
 }
 

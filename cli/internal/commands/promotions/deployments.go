@@ -86,33 +86,18 @@ func runPromotionsList(ctx context.Context, invocation commands.Invocation, cwd 
 }
 
 func listPromotions(ctx context.Context, invocation commands.Invocation, cfg *project.Project) (promotions []*contractv1.PromotionHistoryEntry, err error) {
-	if _, err := cfg.RequireProvider(); err != nil {
-		return nil, err
-	}
-
-	ctx, run, err := invocation.Events.Begin(ctx, "ocel deployments ls", cfg.Dir)
-	if err != nil {
-		return nil, err
-	}
-	defer run.End(&err)
-
-	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	provider, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: readiness.Features})
-	check.End(err)
-	if err != nil {
-		return nil, err
-	}
-	defer provider.Close()
-
-	var listed *contractv1.ListPromotionsResponse
-	err = provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
-		listed, err = client.ListPromotions(ctx, &contractv1.ListPromotionsRequest{
-			Slug: cfg.Slug,
-			Edge: cfg.EdgeSelection(),
+	err = invocation.WithProvider(ctx, cfg, "ocel deployments ls", commands.OpenOptions{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: readiness.Features}, func(ctx context.Context, p commands.ProviderRun) error {
+		p.Check.End(nil)
+		return p.Provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) error {
+			listed, err := client.ListPromotions(ctx, &contractv1.ListPromotionsRequest{
+				Slug: cfg.Slug,
+				Edge: cfg.EdgeSelection(),
+			})
+			promotions = listed.GetPromotions()
+			return err
 		})
-		return err
 	})
-	return listed.GetPromotions(), err
+	return promotions, err
 }
 
 func runPromotionsPrune(ctx context.Context, invocation commands.Invocation, cwd string, opts pruneOptions, stdout io.Writer, stdin io.Reader) (err error) {
@@ -121,51 +106,36 @@ func runPromotionsPrune(ctx context.Context, invocation commands.Invocation, cwd
 		return err
 	}
 
-	if _, err := cfg.RequireProvider(); err != nil {
-		return err
-	}
-	policy := consent.NewPolicy("ocel deployments prune", opts.yes, invocation.StdinIsTerminal(stdin), stdout, stdin)
-	policy.ConfirmsPlan = true
+	policy := consent.NewPlanPolicy("ocel deployments prune", opts.yes, invocation.StdinIsTerminal(stdin), stdout, stdin)
 	if err := policy.Refuse(); err != nil {
 		return err
 	}
 
-	ctx, run, err := invocation.Events.Begin(ctx, "ocel deployments prune", cfg.Dir)
-	if err != nil {
-		return err
-	}
-	defer run.End(&err)
+	return invocation.WithProvider(ctx, cfg, policy.Command, commands.OpenOptions{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: readiness.Features}, func(ctx context.Context, p commands.ProviderRun) error {
+		p.Check.End(nil)
+		plan := p.Run.Phase(progressv1.Phase_PHASE_PLAN)
+		plan.Say(fmt.Sprintf("This will reclaim every production promotion of project %q but the newest %d and the live one; none of them can be rolled back to afterwards", cfg.Slug, opts.keep))
+		granted, err := policy.ConfirmPlan(ctx, plan, nil, fmt.Sprintf("Reclaim the older production promotions of %q?", cfg.Slug))
+		plan.End(err)
+		if err != nil {
+			return err
+		}
+		if !granted {
+			p.Run.Succeed(fmt.Sprintf("Nothing reclaimed: production of %s keeps every promotion", cfg.Slug))
+			return nil
+		}
 
-	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	provider, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: readiness.Features})
-	check.End(err)
-	if err != nil {
-		return err
-	}
-	defer provider.Close()
-
-	plan := run.Phase(progressv1.Phase_PHASE_PLAN)
-	plan.Say(fmt.Sprintf("This will reclaim every production promotion of project %q but the newest %d and the live one; none of them can be rolled back to afterwards", cfg.Slug, opts.keep))
-	granted, err := policy.ConfirmPlan(ctx, plan, nil, fmt.Sprintf("Reclaim the older production promotions of %q?", cfg.Slug))
-	plan.End(err)
-	if err != nil {
-		return err
-	}
-	if !granted {
-		run.Succeed(fmt.Sprintf("Nothing reclaimed: production of %s keeps every promotion", cfg.Slug))
+		req := &contractv1.RemoveStalePromotionsRequest{
+			Slug:  cfg.Slug,
+			KeepN: int32(opts.keep),
+			Edge:  cfg.EdgeSelection(),
+		}
+		if _, err := providerprocess.Stream(ctx, p.Provider, "RemoveStalePromotions", req, contractv1connect.ProviderServiceClient.RemoveStalePromotions); err != nil {
+			return err
+		}
+		p.Run.Succeed(fmt.Sprintf("Pruned the production promotions of %s down to the newest %d", cfg.Slug, opts.keep))
 		return nil
-	}
-
-	req := &contractv1.RemoveStalePromotionsRequest{
-		Slug:  cfg.Slug,
-		KeepN: int32(opts.keep),
-		Edge:  cfg.EdgeSelection(),
-	}
-	if _, err := providerprocess.Stream(ctx, provider, "RemoveStalePromotions", req, contractv1connect.ProviderServiceClient.RemoveStalePromotions); err != nil {
-		return err
-	}
-	run.Succeed(fmt.Sprintf("Pruned the production promotions of %s down to the newest %d", cfg.Slug, opts.keep))
-	return nil
+	})
 }
 
 func renderPromotions(stdout io.Writer, promotions []*contractv1.PromotionHistoryEntry) {

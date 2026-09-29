@@ -1,8 +1,7 @@
 package env
 
 import (
-	"fmt"
-
+	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
@@ -17,10 +16,7 @@ type envOptions struct {
 }
 
 func (o envOptions) checkEnvironment() error {
-	if o.environment == "" || o.preview {
-		return nil
-	}
-	return fmt.Errorf("--environment addresses one preview environment's override, and production has a single environment; pass --preview, or leave --environment off to address the production value")
+	return commands.RefuseEnvironmentWithoutPreview(o.preview, o.environment)
 }
 
 type envRefOptions struct {
@@ -41,10 +37,7 @@ func (o envRefOptions) target(slug, key string) *envvarsv1.Coordinate {
 }
 
 func (o envOptions) tier() environmentv1.Tier {
-	if o.preview {
-		return environmentv1.Tier_TIER_PREVIEW
-	}
-	return environmentv1.Tier_TIER_PRODUCTION
+	return commands.ChooseTier(o.preview)
 }
 
 func wireCoordinate(slug, key string, opts envOptions) *envvarsv1.Coordinate {

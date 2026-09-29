@@ -55,7 +55,7 @@ func NewRollbackCommand(invocation commands.Invocation) *cobra.Command {
 	return cmd
 }
 
-func runRollback(ctx context.Context, invocation commands.Invocation, cwd string, opts rollbackOptions, stdout, stderr io.Writer, stdin io.Reader) (err error) {
+func runRollback(ctx context.Context, invocation commands.Invocation, cwd string, opts rollbackOptions, stdout, stderr io.Writer, stdin io.Reader) error {
 	if opts.to != "" && opts.tag != "" {
 		return fmt.Errorf("--to and --tag are mutually exclusive; pass just one")
 	}
@@ -64,84 +64,69 @@ func runRollback(ctx context.Context, invocation commands.Invocation, cwd string
 		return err
 	}
 
-	if _, err := cfg.RequireProvider(); err != nil {
-		return err
-	}
-	policy := consent.NewPolicy("ocel rollback", opts.yes, invocation.StdinIsTerminal(stdin), stdout, stdin)
-	policy.ConfirmsPlan = true
+	policy := consent.NewPlanPolicy("ocel rollback", opts.yes, invocation.StdinIsTerminal(stdin), stdout, stdin)
 	policy.DryRun = opts.dry
 	if err := policy.Refuse(); err != nil {
 		return err
 	}
 
-	ctx, run, err := invocation.Events.Begin(ctx, "ocel rollback", cfg.Dir)
-	if err != nil {
-		return err
-	}
-	defer run.End(&err)
-
-	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	provider, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{
+	return invocation.WithProvider(ctx, cfg, "ocel rollback", commands.OpenOptions{
 		Pinning: executables.ChoosePinning(opts.dry),
 		Tier:    environmentv1.Tier_TIER_PRODUCTION,
 		Require: readiness.Features,
-	})
-	if err != nil {
+	}, func(ctx context.Context, p commands.ProviderRun) error {
+		run, check, provider := p.Run, p.Check, p.Provider
+		history, err := promotionHistory(ctx, check, provider, cfg)
 		check.End(err)
-		return err
-	}
-	defer provider.Close()
+		if err != nil {
+			return err
+		}
+		live := activePromotion(history)
+		target, err := rollbackTarget(history, opts.to, opts.tag)
+		if err != nil {
+			return err
+		}
 
-	history, err := promotionHistory(ctx, check, provider, cfg)
-	check.End(err)
-	if err != nil {
-		return err
-	}
-	live := activePromotion(history)
-	target, err := rollbackTarget(history, opts.to, opts.tag)
-	if err != nil {
-		return err
-	}
+		plan := run.Phase(progressv1.Phase_PHASE_PLAN)
+		showRollbackPlan(plan, cfg.Slug, live, target)
+		if opts.dry {
+			plan.Say("Run without --dry to roll back.")
+			plan.End(nil)
+			return nil
+		}
 
-	plan := run.Phase(progressv1.Phase_PHASE_PLAN)
-	showRollbackPlan(plan, cfg.Slug, live, target)
-	if opts.dry {
-		plan.Say("Run without --dry to roll back.")
-		plan.End(nil)
+		granted, err := policy.ConfirmPlan(ctx, plan, nil, fmt.Sprintf("Roll production of %q back to promotion %s?", cfg.Slug, target.GetPromotionId()))
+		plan.End(err)
+		if err != nil {
+			return err
+		}
+		if !granted {
+			run.Succeed(fmt.Sprintf("Nothing rolled back: production of %s stays on its live promotion", cfg.Slug))
+			return nil
+		}
+
+		promoting := run.Phase(progressv1.Phase_PHASE_PROMOTE)
+		rolled, err := promote(ctx, promoting, provider, cfg, target)
+		for _, warning := range rolled.GetWarnings() {
+			promoting.Warn(warning)
+		}
+		promoting.End(err)
+		if err != nil {
+			return err
+		}
+		promoted := rolled.GetPromoted()
+		tagSuffix := ""
+		if target.GetTag() != "" {
+			tagSuffix = fmt.Sprintf(", tag %s", target.GetTag())
+		}
+		flipSuffix := ""
+		if note := terminal.PropagationNote(promoted.GetPropagation()); note != "" {
+			flipSuffix = "; " + note
+		}
+		run.Succeed(fmt.Sprintf("Rolled back to promotion %s (created %s%s) as promotion %s%s",
+			target.GetPromotionId(), terminal.EpochDate(target.GetTs()), tagSuffix, promoted.GetPromotionId(), flipSuffix))
 		return nil
-	}
-
-	granted, err := policy.ConfirmPlan(ctx, plan, nil, fmt.Sprintf("Roll production of %q back to promotion %s?", cfg.Slug, target.GetPromotionId()))
-	plan.End(err)
-	if err != nil {
-		return err
-	}
-	if !granted {
-		run.Succeed(fmt.Sprintf("Nothing rolled back: production of %s stays on its live promotion", cfg.Slug))
-		return nil
-	}
-
-	promoting := run.Phase(progressv1.Phase_PHASE_PROMOTE)
-	rolled, err := promote(ctx, promoting, provider, cfg, target)
-	for _, warning := range rolled.GetWarnings() {
-		promoting.Warn(warning)
-	}
-	promoting.End(err)
-	if err != nil {
-		return err
-	}
-	promoted := rolled.GetPromoted()
-	tagSuffix := ""
-	if target.GetTag() != "" {
-		tagSuffix = fmt.Sprintf(", tag %s", target.GetTag())
-	}
-	flipSuffix := ""
-	if note := terminal.PropagationNote(promoted.GetPropagation()); note != "" {
-		flipSuffix = "; " + note
-	}
-	run.Succeed(fmt.Sprintf("Rolled back to promotion %s (created %s%s) as promotion %s%s",
-		target.GetPromotionId(), terminal.EpochDate(target.GetTs()), tagSuffix, promoted.GetPromotionId(), flipSuffix))
-	return nil
+	})
 }
 
 func promote(ctx context.Context, phase *run.Span, provider *providerprocess.Provider, cfg *project.Project, target *contractv1.Promotion) (*contractv1.RollbackResponse, error) {

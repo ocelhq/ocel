@@ -2,11 +2,13 @@ package commands_test
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/commands"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/readiness"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -70,4 +72,49 @@ func TestAnOpenedProviderIsAskedOnlyWhatTheCommandRequires(t *testing.T) {
 			t.Fatalf("OpenProvider err = %v, want the refused credentials named", err)
 		}
 	})
+}
+
+func TestWithProviderHandsTheWorkAnOpenProviderAndEndsTheRunWithItsError(t *testing.T) {
+	fixture := clitest.SetUpProject(t)
+	invocation := clitest.NewInvocation()
+	var rendered strings.Builder
+	clitest.AttachTerminalSink(invocation, &rendered)
+	cfg, err := invocation.LoadProject(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("LoadProject: %v", err)
+	}
+
+	refused := errors.New("the work refused")
+	var named string
+	err = invocation.WithProvider(context.Background(), cfg, "ocel test", commands.OpenOptions{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: readiness.Infrastructure}, func(_ context.Context, p commands.ProviderRun) error {
+		named = p.Provider.Name()
+		if p.Preflight.Project == nil {
+			t.Error("the work was handed no resolved project for a command that required infrastructure")
+		}
+		return refused
+	})
+	if err == nil {
+		t.Fatal("WithProvider err = nil, want the work's error to fail the run")
+	}
+	if !strings.Contains(rendered.String(), refused.Error()) {
+		t.Errorf("the run rendered %q, want the work's error in its result", rendered.String())
+	}
+	if named == "" {
+		t.Error("the work was handed no provider")
+	}
+}
+
+func TestWithProviderRefusesAProjectNamingNoProviderBeforeAnyWork(t *testing.T) {
+	invocation := clitest.NewInvocation()
+	worked := false
+	err := invocation.WithProvider(context.Background(), &project.Project{Slug: "no-provider", Dir: t.TempDir(), Path: "ocel.json"}, "ocel test", commands.OpenOptions{}, func(context.Context, commands.ProviderRun) error {
+		worked = true
+		return nil
+	})
+	if err == nil {
+		t.Fatal("WithProvider err = nil, want a project naming no provider refused")
+	}
+	if worked {
+		t.Error("the work ran for a project naming no provider")
+	}
 }

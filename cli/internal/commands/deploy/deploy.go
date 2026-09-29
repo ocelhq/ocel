@@ -84,7 +84,7 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 	return cmd
 }
 
-func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts deployOptions, stdout, stderr io.Writer, stdin io.Reader) (err error) {
+func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts deployOptions, stdout, stderr io.Writer, stdin io.Reader) error {
 	cfg, err := dependencies.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
@@ -96,110 +96,96 @@ func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts 
 		}
 	}
 
-	if _, err := cfg.RequireProvider(); err != nil {
-		return err
-	}
 	policy := consent.NewPolicy("ocel deploy", opts.yes, dependencies.StdinIsTerminal(stdin), stdout, stdin)
 	policy.DryRun = opts.dry
 	if err := policy.Refuse(); err != nil {
 		return err
 	}
 
-	ctx, run, err := dependencies.Events.Begin(ctx, "ocel deploy", cfg.Dir)
-	if err != nil {
-		return err
-	}
-	defer run.End(&err)
-
-	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	provider, read, err := dependencies.OpenProvider(ctx, check, cfg, productionOpenOptions(opts.dry, policy.Interactive, cfg))
-	if err != nil {
+	return dependencies.WithProvider(ctx, cfg, "ocel deploy", productionOpenOptions(opts.dry, policy.Interactive, cfg), func(ctx context.Context, p commands.ProviderRun) error {
+		run, check, provider, read := p.Run, p.Check, p.Provider, p.Preflight
+		facts, err := preflightDeploy(ctx, dependencies, policy, check, provider, cfg, read, opts.prebuilt, stdout, stdin)
 		check.End(err)
-		return err
-	}
-	defer provider.Close()
+		if err != nil {
+			return err
+		}
+		if facts.declined {
+			run.Succeed("Nothing deployed to production")
+			return nil
+		}
+		cfg = facts.project
 
-	facts, err := preflightDeploy(ctx, dependencies, policy, check, provider, cfg, read, opts.prebuilt, stdout, stdin)
-	check.End(err)
-	if err != nil {
-		return err
-	}
-	if facts.declined {
-		run.Succeed("Nothing deployed to production")
+		browser := dependencies.IsBrowserReachable(stdin)
+		scope := variablescope.Of(cfg, environmentv1.Tier_TIER_PRODUCTION, "")
+		scope.Browser = browser
+		recovery := variablesRecovery{
+			dependencies: dependencies,
+			cfg:          cfg,
+			provider:     provider,
+			tier:         environmentv1.Tier_TIER_PRODUCTION,
+			newDeclarations: func(synced variables.EnvSource) *variables.Declarations {
+				scope := scope
+				scope.EnvSource = synced
+				return variables.NewDeclarations(valuestore.Store{
+					Provider: provider,
+					Project:  cfg,
+					Tier:     environmentv1.Tier_TIER_PRODUCTION,
+				}, scope)
+			},
+			command:        "ocel deploy",
+			containerArchs: facts.containerArchs,
+			urls:           facts.urls,
+			dry:            opts.dry,
+			enabled:        !opts.dry && browser,
+		}
+		build := run.Phase(progressv1.Phase_PHASE_BUILD)
+		manifest, inline, err := recovery.buildManifest(ctx, build, opts.prebuilt)
+		build.End(err)
+		if err != nil {
+			return err
+		}
+		if manifest == nil {
+			run.Succeed(nothingToDeploy(cfg))
+			return nil
+		}
+
+		env := &environmentv1.Environment{
+			Tier:      environmentv1.Tier_TIER_PRODUCTION,
+			Lifecycle: environmentv1.Lifecycle_LIFECYCLE_UNSPECIFIED,
+		}
+		registry, err := projectRegistry(cfg)
+		if err != nil {
+			return err
+		}
+
+		req := &contractv1.DeployRequest{
+			Manifest:    manifest,
+			Environment: env,
+			Tag:         opts.tag,
+			Edge:        cfg.EdgeSelection(),
+			Dry:         opts.dry,
+
+			ProjectRegistry: registry,
+			InlineBindings:  inline,
+		}
+
+		if opts.dry {
+			return showDeployPlan(ctx, run, provider, req, "Proposed changes to production", cfg.Slug, "production")
+		}
+
+		out, err := streamDeploy(ctx, provider, req)
+		if err != nil {
+			return err
+		}
+
+		record, err := deployrecord.New(cfg, manifest, env, opts.tag, out.promotionID, out.apps)
+		if err != nil {
+			return err
+		}
+		if err := deployrecord.Write(cfg.Dir, record); err != nil {
+			return err
+		}
+		run.Succeed(fmt.Sprintf("Deployed %s to production", cfg.Slug))
 		return nil
-	}
-	cfg = facts.project
-
-	browser := dependencies.IsBrowserReachable(stdin)
-	scope := variablescope.Of(cfg, environmentv1.Tier_TIER_PRODUCTION, "")
-	scope.Browser = browser
-	recovery := variablesRecovery{
-		dependencies: dependencies,
-		cfg:          cfg,
-		provider:     provider,
-		tier:         environmentv1.Tier_TIER_PRODUCTION,
-		newDeclarations: func(synced variables.EnvSource) *variables.Declarations {
-			scope := scope
-			scope.EnvSource = synced
-			return variables.NewDeclarations(valuestore.Store{
-				Provider: provider,
-				Project:  cfg,
-				Tier:     environmentv1.Tier_TIER_PRODUCTION,
-			}, scope)
-		},
-		command:        "ocel deploy",
-		containerArchs: facts.containerArchs,
-		urls:           facts.urls,
-		dry:            opts.dry,
-		enabled:        !opts.dry && browser,
-	}
-	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	manifest, inline, err := recovery.buildManifest(ctx, build, opts.prebuilt)
-	build.End(err)
-	if err != nil {
-		return err
-	}
-	if manifest == nil {
-		run.Succeed(nothingToDeploy(cfg))
-		return nil
-	}
-
-	env := &environmentv1.Environment{
-		Tier:      environmentv1.Tier_TIER_PRODUCTION,
-		Lifecycle: environmentv1.Lifecycle_LIFECYCLE_UNSPECIFIED,
-	}
-	registry, err := projectRegistry(cfg)
-	if err != nil {
-		return err
-	}
-
-	req := &contractv1.DeployRequest{
-		Manifest:    manifest,
-		Environment: env,
-		Tag:         opts.tag,
-		Edge:        cfg.EdgeSelection(),
-		Dry:         opts.dry,
-
-		ProjectRegistry: registry,
-		InlineBindings:  inline,
-	}
-
-	if opts.dry {
-		return showDeployPlan(ctx, run, provider, req, "Proposed changes to production", cfg.Slug, "production")
-	}
-
-	out, err := streamDeploy(ctx, provider, req)
-	if err != nil {
-		return err
-	}
-
-	record, err := deployrecord.New(cfg, manifest, env, opts.tag, out.promotionID, out.apps)
-	if err != nil {
-		return err
-	}
-	if err := deployrecord.Write(cfg.Dir, record); err != nil {
-		return err
-	}
-	run.Succeed(fmt.Sprintf("Deployed %s to production", cfg.Slug))
-	return nil
+	})
 }

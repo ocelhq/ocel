@@ -11,7 +11,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
@@ -70,36 +69,21 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, purpos
 }
 
 func credentialPermissions(ctx context.Context, invocation commands.Invocation, cfg *project.Project, purpose contractv1.CredentialPurpose) (groups []*contractv1.CredentialGroup, err error) {
-	if _, err := cfg.RequireProvider(); err != nil {
-		return nil, err
-	}
-
-	ctx, run, err := invocation.Events.Begin(ctx, "ocel permissions", cfg.Dir)
-	if err != nil {
-		return nil, err
-	}
-	defer run.End(&err)
-
-	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	provider, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{})
-	check.End(err)
-	if err != nil {
-		return nil, err
-	}
-	defer provider.Close()
-
-	var permissions *contractv1.CredentialPermissionsResponse
-	err = provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
-		permissions, err = client.GetCredentialPermissions(ctx, &contractv1.CredentialPermissionsRequest{
-			Purpose: purpose,
-			Edge:    cfg.EdgeSelection(),
+	err = invocation.WithProvider(ctx, cfg, "ocel permissions", commands.OpenOptions{}, func(ctx context.Context, p commands.ProviderRun) error {
+		p.Check.End(nil)
+		return p.Provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) error {
+			permissions, err := client.GetCredentialPermissions(ctx, &contractv1.CredentialPermissionsRequest{
+				Purpose: purpose,
+				Edge:    cfg.EdgeSelection(),
+			})
+			groups = permissions.GetGroups()
+			return err
 		})
-		return err
 	})
 	if err != nil {
 		return nil, err
 	}
-	return permissions.GetGroups(), nil
+	return groups, nil
 }
 
 func purposeArg(args []string) (contractv1.CredentialPurpose, error) {

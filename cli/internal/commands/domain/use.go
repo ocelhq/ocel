@@ -12,12 +12,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/readiness"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
-func runDomainUse(ctx context.Context, invocation commands.Invocation, cwd, wildcard string, opts domainOptions, stdout, stderr io.Writer) (err error) {
+func runDomainUse(ctx context.Context, invocation commands.Invocation, cwd, wildcard string, opts domainOptions, stdout, stderr io.Writer) error {
 	if err := requirePreviewTier("ocel domain use", opts.preview); err != nil {
 		return err
 	}
@@ -30,34 +29,20 @@ func runDomainUse(ctx context.Context, invocation commands.Invocation, cwd, wild
 	if err != nil {
 		return err
 	}
-	if _, err := cfg.RequireProvider(); err != nil {
-		return err
-	}
-
-	ctx, run, err := invocation.Events.Begin(ctx, "ocel domain use", cfg.Dir)
-	if err != nil {
-		return err
-	}
-	defer run.End(&err)
-
-	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	provider, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{Tier: environmentv1.Tier_TIER_PREVIEW, Require: readiness.Features})
-	check.End(err)
-	if err != nil {
-		return err
-	}
-	defer provider.Close()
-
-	req := &contractv1.UsePreviewWildcardRequest{
-		Tier:       environmentv1.Tier_TIER_PREVIEW,
-		BaseDomain: base,
-		Edge:       cfg.EdgeSelection(),
-	}
-	if _, err := providerprocess.Stream(ctx, provider, "UsePreviewWildcard", req, contractv1connect.ProviderServiceClient.UsePreviewWildcard); err != nil {
-		return err
-	}
-	run.Succeed(fmt.Sprintf("Previews are served on %s", wildcardOf(base)))
-	return nil
+	return invocation.WithProvider(ctx, cfg, "ocel domain use", commands.OpenOptions{Tier: environmentv1.Tier_TIER_PREVIEW, Require: readiness.Features}, func(ctx context.Context, p commands.ProviderRun) error {
+		p.Check.End(nil)
+		run, provider := p.Run, p.Provider
+		req := &contractv1.UsePreviewWildcardRequest{
+			Tier:       environmentv1.Tier_TIER_PREVIEW,
+			BaseDomain: base,
+			Edge:       cfg.EdgeSelection(),
+		}
+		if _, err := providerprocess.Stream(ctx, provider, "UsePreviewWildcard", req, contractv1connect.ProviderServiceClient.UsePreviewWildcard); err != nil {
+			return err
+		}
+		run.Succeed(fmt.Sprintf("Previews are served on %s", wildcardOf(base)))
+		return nil
+	})
 }
 
 func newUseCommand(invocation commands.Invocation) *cobra.Command {

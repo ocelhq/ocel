@@ -25,6 +25,12 @@ func NewPolicy(command string, yes, interactive bool, out io.Writer, in io.Reade
 	return Policy{Command: command, Yes: yes, Interactive: interactive, In: in, Out: out}
 }
 
+func NewPlanPolicy(command string, yes, interactive bool, out io.Writer, in io.Reader) Policy {
+	policy := NewPolicy(command, yes, interactive, out, in)
+	policy.ConfirmsPlan = true
+	return policy
+}
+
 func (p Policy) IsAsking() bool { return p.Interactive && !p.Yes }
 
 func (p Policy) Refuse() error {

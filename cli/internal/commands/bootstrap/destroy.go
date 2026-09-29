@@ -46,8 +46,7 @@ func runDestroy(ctx context.Context, invocation commands.Invocation, cfg *projec
 	if _, err := cfg.RequireProvider(); err != nil {
 		return err
 	}
-	policy := consent.NewPolicy(destroyCommand(tier), opts.Yes || bypass, invocation.StdinIsTerminal(stdin), stdout, stdin)
-	policy.ConfirmsPlan = true
+	policy := consent.NewPlanPolicy(destroyCommand(tier), opts.Yes || bypass, invocation.StdinIsTerminal(stdin), stdout, stdin)
 	policy.DryRun = opts.Dry
 	policy.UnattendedRemedy = fmt.Sprintf("pass --yes, or set %s to %q", consent.BypassEnv, name)
 	if err := policy.Refuse(); err != nil {
