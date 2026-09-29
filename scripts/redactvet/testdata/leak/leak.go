@@ -15,7 +15,7 @@ import (
 
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 )
 
 func printed(req *contractv1.DeployRequest) string {
@@ -31,8 +31,8 @@ func nested(manifest *contractv1.Manifest, apps []*contractv1.ManifestApp) {
 	log.Println(apps)           // want `\[\]\*contractv1.ManifestApp renders`
 }
 
-func logged(logger *slog.Logger, value *envvarsv1.RevealedValue, postgres *bindingsv1.PostgresProperties) {
-	logger.Info("revealed", "value", value)      // want `envvarsv1.RevealedValue renders`
+func logged(logger *slog.Logger, value *variablestorev1.RevealedValue, postgres *bindingsv1.PostgresProperties) {
+	logger.Info("revealed", "value", value)      // want `variablestorev1.RevealedValue renders`
 	slog.Info("bound", slog.Any("pg", postgres)) // want `bindingsv1.PostgresProperties renders`
 }
 
@@ -169,8 +169,8 @@ func indented(registry contractv1.ImageRegistry) ([]byte, error) {
 	return json.MarshalIndent(registry, "", "  ") // want `contractv1.ImageRegistry encodes`
 }
 
-func streamed(w io.Writer, values map[string]*envvarsv1.RevealedValue) error {
-	return json.NewEncoder(w).Encode(values) // want `map\[string\]\*envvarsv1.RevealedValue encodes`
+func streamed(w io.Writer, values map[string]*variablestorev1.RevealedValue) error {
+	return json.NewEncoder(w).Encode(values) // want `map\[string\]\*variablestorev1.RevealedValue encodes`
 }
 
 func followed(i indirect, h requestPointer, m proto.Message) ([]byte, error) {

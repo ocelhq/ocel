@@ -227,18 +227,18 @@ in:
 - the role or user you deploy as, the one `aws sts get-caller-identity` names. It signs in
   when a deploy reads the source and when you run `ocel env sync`.
 - the env source sync's role, which reads the source once a minute between deploys. It is
-  the `EnvSourceSyncRole` of the `<namespace>-bootstrap-vars-key` stack, or
-  `<namespace>-bootstrap-vars-key-preview` for preview. The namespace is `ocel` unless
+  the `EnvSourceSyncRole` of the `<namespace>-bootstrap-variables-key` stack, or
+  `<namespace>-bootstrap-variables-key-preview` for preview. The namespace is `ocel` unless
   you set `OCEL_NAMESPACE`:
 
 ```bash
-aws cloudformation describe-stack-resource --stack-name ocel-bootstrap-vars-key \
+aws cloudformation describe-stack-resource --stack-name ocel-bootstrap-variables-key \
   --logical-resource-id EnvSourceSyncRole \
   --query StackResourceDetail.PhysicalResourceId --output text
 ```
 
 That prints the role's name; its ARN is `arn:aws:iam::<account>:role/<name>`.
-`ocel bootstrap production --features vars-key` makes the stack, and the same for preview.
+`ocel bootstrap production --features variables-key` makes the stack, and the same for preview.
 `arn:aws:iam::<account>:*` allows every principal in the account instead.
 
 If the console writes values into Infisical through a [connector](/docs/cli/connector), also

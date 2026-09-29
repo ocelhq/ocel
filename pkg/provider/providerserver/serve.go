@@ -14,13 +14,13 @@ import (
 	"connectrpc.com/validate"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
-	"github.com/ocelhq/ocel/pkg/envvarsserver"
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
-	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
+	"github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1/variablestorev1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/variablestoreserver"
 )
 
 type Config struct {
@@ -82,12 +82,12 @@ func newMux(config Config) *http.ServeMux {
 	)
 
 	s := &session{config: config, writer: provider.WrittenByVersion(config.Version)}
-	services := &handlers{session: s, questions: asked, Service: &envvarsserver.Service{Source: sessionBackend{session: s}, CallerNamesEnvSource: true}}
+	services := &handlers{session: s, questions: asked, Service: &variablestoreserver.Service{Source: sessionBackend{session: s}, CallerNamesEnvSource: true}}
 
 	path, handler := contractv1connect.NewProviderServiceHandler(services, interceptors)
 	mux.Handle(path, handler)
 
-	path, handler = envvarsv1connect.NewEnvVarsServiceHandler(services, interceptors)
+	path, handler = variablestorev1connect.NewVariableStoreServiceHandler(services, interceptors)
 	mux.Handle(path, handler)
 
 	path, handler = costv1connect.NewCostServiceHandler(services, interceptors)
@@ -97,29 +97,29 @@ func newMux(config Config) *http.ServeMux {
 }
 
 type handlers struct {
-	*envvarsserver.Service
+	*variablestoreserver.Service
 
 	session   *session
 	questions *questions
 }
 
 var (
-	_ contractv1connect.ProviderServiceHandler = (*handlers)(nil)
-	_ envvarsv1connect.EnvVarsServiceHandler   = (*handlers)(nil)
-	_ costv1connect.CostServiceHandler         = (*handlers)(nil)
+	_ contractv1connect.ProviderServiceHandler           = (*handlers)(nil)
+	_ variablestorev1connect.VariableStoreServiceHandler = (*handlers)(nil)
+	_ costv1connect.CostServiceHandler                   = (*handlers)(nil)
 )
 
 type sessionBackend struct {
 	session *session
 }
 
-func (s sessionBackend) Read() (envvarsserver.Backend, error) {
+func (s sessionBackend) Read() (variablestoreserver.Backend, error) {
 	vendor, err := s.session.use()
 	if err != nil {
-		return envvarsserver.Backend{}, err
+		return variablestoreserver.Backend{}, err
 	}
 	hooks := vendor.Hooks()
-	return envvarsserver.Backend{
+	return variablestoreserver.Backend{
 		KeyValues:     vendor.KeyValues(),
 		Cipher:        vendor.Cipher(),
 		VerifyGrants:  hooks.VerifyGrants,

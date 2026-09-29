@@ -16,7 +16,7 @@ import (
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
-	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
+	variables "github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
@@ -229,7 +229,7 @@ func bindingBucket() provider.Binding {
 	}
 }
 
-func storeManifest(t *testing.T, machine *box, options vps.Options) vars.Manifest {
+func storeManifest(t *testing.T, machine *box, options vps.Options) variables.Manifest {
 	t.Helper()
 	app := anApp()
 	app.Values = provider.AppValues{Bindings: []provider.Binding{bindingBucket()}}
@@ -240,20 +240,20 @@ func storeManifest(t *testing.T, machine *box, options vps.Options) vars.Manifes
 	return manifestIn(t, machine)
 }
 
-func manifestIn(t *testing.T, machine *box) vars.Manifest {
+func manifestIn(t *testing.T, machine *box) variables.Manifest {
 	t.Helper()
 	return manifestFed(t, machine.feeds())
 }
 
-func manifestFed(t *testing.T, fed []string) vars.Manifest {
+func manifestFed(t *testing.T, fed []string) variables.Manifest {
 	t.Helper()
 	for _, sent := range fed {
 		for line := range strings.SplitSeq(sent, "\n") {
-			raw, found := strings.CutPrefix(line, vars.EnvVar+"=")
+			raw, found := strings.CutPrefix(line, variables.EnvVar+"=")
 			if !found {
 				continue
 			}
-			parsed, err := vars.Parse([]byte(raw))
+			parsed, err := variables.Parse([]byte(raw))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -261,7 +261,7 @@ func manifestFed(t *testing.T, fed []string) vars.Manifest {
 		}
 	}
 	t.Fatal("nothing the deploy sent to the box contained a live manifest for the app")
-	return vars.Manifest{}
+	return variables.Manifest{}
 }
 
 func TestAnAppBindingABucketIsHandedItsStoreSealedAndNeverInPlaintext(t *testing.T) {
@@ -356,7 +356,7 @@ func TestTheAssociatedDataTheRuntimeOpensTheStoreSecretUnderIsTheOneTheDeploySea
 	if manifest.Store == nil {
 		t.Fatal("the app binding a bucket was handed no store")
 	}
-	opened, err := vars.NewStoreSecretAssociatedData(manifest.Slug, environment.Tier(manifest.Tier), manifest.Store.Env)
+	opened, err := variables.NewStoreSecretAssociatedData(manifest.Slug, environment.Tier(manifest.Tier), manifest.Store.Env)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -449,7 +449,7 @@ func TestAProvisionedStoreIsRoutedOnTheBoxsProxyUnderALabelOfItsOwn(t *testing.T
 		t.Fatalf("provisioning a store left the proxy routing %v, and nothing off the box reaches it", state.Routes)
 	}
 	route := state.Routes[at]
-	if route.Owner != vars.Surface("shop", "production") || route.Pointer != router.DefaultPointer {
+	if route.Owner != variables.Surface("shop", "production") || route.Pointer != router.DefaultPointer {
 		t.Errorf("the store is routed under %s/%s, want the surface and pointer its project's domains are claimed under", route.Owner, route.Pointer)
 	}
 	if !strings.HasSuffix(route.Upstream, ":9000") || !strings.Contains(route.Upstream, "store-s3") {

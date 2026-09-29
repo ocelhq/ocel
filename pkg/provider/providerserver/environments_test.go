@@ -13,8 +13,6 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/envvars"
-	"github.com/ocelhq/ocel/pkg/envvarsserver"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -31,6 +29,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/pkg/variablestore"
+	"github.com/ocelhq/ocel/pkg/variablestoreserver"
 )
 
 func TestAPreviewIdentityThatNamesProductionIsRefused(t *testing.T) {
@@ -207,20 +207,20 @@ func TestRemoveEnvironmentRemovesTheRecordsOcelKeptThere(t *testing.T) {
 	deployed(t, vendor, environment.TierPreview, "shop")
 	seedPromotions(t, vendor, environment.TierPreview, "shop", "pr-7", "p1")
 
-	store := envvars.Store{KeyValues: vendor.KeyValues(), Cipher: vendor.Cipher()}
-	scope := envvars.Scope{Project: "shop", Tier: environment.TierPreview}
+	store := variablestore.Store{KeyValues: vendor.KeyValues(), Cipher: vendor.Cipher()}
+	scope := variablestore.Scope{Project: "shop", Tier: environment.TierPreview}
 	publish := func(environment, owner string, binding *bindingsv1.Binding) {
-		pair, err := envvarsserver.BindingPair(owner, binding)
+		pair, err := variablestoreserver.BindingPair(owner, binding)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := store.SetBindings(context.Background(), scope, environment, owner, []envvars.NamedBindingWrite{{Name: binding.GetName(), Write: pair}}); err != nil {
+		if _, err := store.SetBindings(context.Background(), scope, environment, owner, []variablestore.NamedBindingWrite{{Name: binding.GetName(), Write: pair}}); err != nil {
 			t.Fatal(err)
 		}
 	}
 	inline := naming.InlineRecordName(resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, "orders")
 	publish("pr-7", naming.InlineRecordOwner, postgresRecord(inline, "ocel.json"))
-	publish("pr-7", envvars.OwnerOcel, postgresRecord("db--cache", ""))
+	publish("pr-7", variablestore.OwnerOcel, postgresRecord("db--cache", ""))
 	publish("pr-7", "terraform", postgresRecord("warehouse", "terraform"))
 	publish("pr-8", naming.InlineRecordOwner, postgresRecord(inline, "ocel.json"))
 

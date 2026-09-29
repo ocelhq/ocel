@@ -269,10 +269,10 @@ func (p *Provider) ensureConnectorAccount(ctx context.Context, grants []string, 
 
 func keyRolesFor(grants []string) []string {
 	var roles []string
-	if slices.Contains(grants, connectorserver.CapabilityEnvVarsWrite) {
+	if slices.Contains(grants, connectorserver.CapabilityVariablesWrite) {
 		roles = append(roles, connectorSealingRole)
 	}
-	if slices.Contains(grants, connectorserver.CapabilityEnvVarsReveal) {
+	if slices.Contains(grants, connectorserver.CapabilityVariablesReveal) {
 		roles = append(roles, connectorOpeningRole)
 	}
 	return roles

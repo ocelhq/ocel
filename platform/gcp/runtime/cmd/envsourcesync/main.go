@@ -11,8 +11,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
-	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -82,7 +82,7 @@ func newSync(getenv func(string) string) (*envsource.Sync, error) {
 		Region:    named[ports.RegionEnvVar],
 	}
 	return &envsource.Sync{
-		Store: envvars.Store{
+		Store: variablestore.Store{
 			KeyValues: ports.KeyValues{Clients: clients},
 			Cipher:    ports.Cipher{Clients: clients},
 		},

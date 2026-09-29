@@ -708,7 +708,7 @@ func TestISRPolicy(t *testing.T) {
 			}
 			for _, key := range []string{
 				naming.ProjectKey("proj"),
-				naming.VarsKey("proj", "production"),
+				naming.VariablesKey("proj", "production"),
 				naming.StackKey("proj", web.Coord.Stack()),
 			} {
 				if admits(t, keys[0], key) {
@@ -929,14 +929,14 @@ func TestFunctionLogGroup(t *testing.T) {
 	}
 }
 
-func TestAFunctionsEnvironmentIsSealedUnderTheTierVarsKey(t *testing.T) {
+func TestAFunctionsEnvironmentIsSealedUnderTheTierVariablesKey(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
 		name string
 		key  string
 	}{
-		{"an account with a vars key seals every function's environment under it", productionVarsKeyARN},
+		{"an account with a variables key seals every function's environment under it", productionVariablesKeyARN},
 		{"an account without one leaves Lambda's own key in place", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -971,7 +971,7 @@ func TestAFunctionsEnvironmentIsSealedUnderTheTierVarsKey(t *testing.T) {
 				return
 			}
 			if !set || !got.IsString() || got.StringValue() != tc.key {
-				t.Errorf("kmsKeyArn = %v, want %q: the data key in OCEL_VARS_ENVELOPE is otherwise readable by anyone in the account with lambda:GetFunctionConfiguration", got, tc.key)
+				t.Errorf("kmsKeyArn = %v, want %q: the data key in OCEL_VARIABLES_ENVELOPE is otherwise readable by anyone in the account with lambda:GetFunctionConfiguration", got, tc.key)
 			}
 		})
 	}

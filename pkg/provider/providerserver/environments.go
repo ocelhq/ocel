@@ -7,7 +7,6 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -17,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
 func envName(env *environmentv1.Environment) (string, error) {
@@ -109,8 +109,8 @@ func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.Remove
 }
 
 func removeOcelOwnedBindings(ctx context.Context, p provider.Provider, slug, preview string) error {
-	store := envvars.Store{KeyValues: p.KeyValues(), Cipher: p.Cipher()}
-	scope := envvars.Scope{Project: slug, Tier: environment.TierPreview}
+	store := variablestore.Store{KeyValues: p.KeyValues(), Cipher: p.Cipher()}
+	scope := variablestore.Scope{Project: slug, Tier: environment.TierPreview}
 	published, err := store.ListBindings(ctx, scope, preview)
 	if err != nil {
 		return fmt.Errorf("read the records kept for preview %s: %w", preview, err)
@@ -120,7 +120,7 @@ func removeOcelOwnedBindings(ctx context.Context, p provider.Provider, slug, pre
 		if record.Environment != preview {
 			continue
 		}
-		if record.Owner == envvars.OwnerOcel || record.Owner == naming.InlineRecordOwner {
+		if record.Owner == variablestore.OwnerOcel || record.Owner == naming.InlineRecordOwner {
 			kept = append(kept, record.Name)
 		}
 	}

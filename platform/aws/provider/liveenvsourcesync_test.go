@@ -12,18 +12,18 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-func TestLiveTheVarsKeyMakesAnEnvSourceSyncAndRemovingTheTierRemovesIt(t *testing.T) {
+func TestLiveTheVariablesKeyMakesAnEnvSourceSyncAndRemovingTheTierRemovesIt(t *testing.T) {
 	a := live(t)
 	tier := environment.TierProduction
 	boot := a.emptied(t, tier)
 	ctx := context.Background()
 
-	req := provider.BootstrapRequest{Tier: tier, WrittenBy: liveWriter, Features: []string{provider.FeatureVarsKey}}
+	req := provider.BootstrapRequest{Tier: tier, WrittenBy: liveWriter, Features: []string{provider.FeatureVariablesKey}}
 	if err := boot.Apply(ctx, req, nil); err != nil {
-		t.Fatalf("Apply(%s) = %v", provider.FeatureVarsKey, err)
+		t.Fatalf("Apply(%s) = %v", provider.FeatureVariablesKey, err)
 	}
 
-	name := defaultNamespace.FeatureStackName(provider.FeatureVarsKey, tier)
+	name := defaultNamespace.FeatureStackName(provider.FeatureVariablesKey, tier)
 	if status := a.stackStatus(t, name); status != "CREATE_COMPLETE" {
 		t.Fatalf("%s is in state %q in CloudFormation, want CREATE_COMPLETE", name, status)
 	}

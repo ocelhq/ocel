@@ -293,10 +293,10 @@ func TestTheConnectorHasOnlyTheKeyRolesItsGrantsCallFor(t *testing.T) {
 		grants []string
 		roles  []string
 	}{
-		"read alone":           {grants: []string{connectorserver.CapabilityEnvVarsRead}},
-		"read and write":       {grants: []string{connectorserver.CapabilityEnvVarsRead, connectorserver.CapabilityEnvVarsWrite}, roles: []string{connectorSealingRole}},
-		"read and reveal":      {grants: []string{connectorserver.CapabilityEnvVarsRead, connectorserver.CapabilityEnvVarsReveal}, roles: []string{connectorOpeningRole}},
-		"every grant there is": {grants: []string{connectorserver.CapabilityEnvVarsRead, connectorserver.CapabilityEnvVarsWrite, connectorserver.CapabilityEnvVarsReveal}, roles: []string{connectorSealingRole, connectorOpeningRole}},
+		"read alone":           {grants: []string{connectorserver.CapabilityVariablesRead}},
+		"read and write":       {grants: []string{connectorserver.CapabilityVariablesRead, connectorserver.CapabilityVariablesWrite}, roles: []string{connectorSealingRole}},
+		"read and reveal":      {grants: []string{connectorserver.CapabilityVariablesRead, connectorserver.CapabilityVariablesReveal}, roles: []string{connectorOpeningRole}},
+		"every grant there is": {grants: []string{connectorserver.CapabilityVariablesRead, connectorserver.CapabilityVariablesWrite, connectorserver.CapabilityVariablesReveal}, roles: []string{connectorSealingRole, connectorOpeningRole}},
 		"no grant at all":      {},
 	} {
 		t.Run(name, func(t *testing.T) {

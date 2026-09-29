@@ -425,7 +425,7 @@ jobs:
       OCEL_JOURNEY_TOUCHED: ${{ needs.binary.outputs.touched }}
       CLOUDFLARE_ACCOUNT_ID: ${{ needs.binary.outputs.real == 'true' && secrets.E2E_CLOUDFLARE_ACCOUNT_ID || '' }}
       CLOUDFLARE_API_TOKEN: ${{ needs.binary.outputs.real == 'true' && secrets.E2E_CLOUDFLARE_API_TOKEN || '' }}
-      OCEL_AWS_VARS_KEY: ${{ needs.binary.outputs.real == 'true' && vars.DOGFOOD_AWS_VARS_KEY || '' }}
+      OCEL_AWS_VARIABLES_KEY: ${{ needs.binary.outputs.real == 'true' && vars.DOGFOOD_AWS_VARS_KEY || '' }}
       REAL: ${{ needs.binary.outputs.real }}
       OCEL_JOURNEY_COVERAGE: ${{ needs.binary.outputs.coverage }}
       OCEL_JOURNEY_VARIANTS: ${{ needs.binary.outputs.variants }}
@@ -697,7 +697,7 @@ jobs:
       OCEL_JOURNEY_KEEP: "1"
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.E2E_CLOUDFLARE_API_TOKEN }}
-      OCEL_AWS_VARS_KEY: ${{ vars.DOGFOOD_AWS_VARS_KEY }}
+      OCEL_AWS_VARIABLES_KEY: ${{ vars.DOGFOOD_AWS_VARS_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1048,7 +1048,7 @@ jobs:
           expected-aws-account-id: ${{ secrets.DOGFOOD_EXPECTED_AWS_ACCOUNT_ID }}
           cloudflare-api-token: ${{ secrets.DOGFOOD_CLOUDFLARE_API_TOKEN }}
           cloudflare-account-id: ${{ secrets.DOGFOOD_CLOUDFLARE_ACCOUNT_ID }}
-          vars-key: ${{ vars.DOGFOOD_AWS_VARS_KEY }}
+          variables-key: ${{ vars.DOGFOOD_AWS_VARS_KEY }}
 
       - name: Tell the app the preview has started
         id: report-started
@@ -1159,7 +1159,7 @@ jobs:
           expected-aws-account-id: ${{ secrets.DOGFOOD_EXPECTED_AWS_ACCOUNT_ID }}
           cloudflare-api-token: ${{ secrets.DOGFOOD_CLOUDFLARE_API_TOKEN }}
           cloudflare-account-id: ${{ secrets.DOGFOOD_CLOUDFLARE_ACCOUNT_ID }}
-          vars-key: ${{ vars.DOGFOOD_AWS_VARS_KEY }}
+          variables-key: ${{ vars.DOGFOOD_AWS_VARS_KEY }}
 
       - name: Tear the preview down
         env:
@@ -1208,7 +1208,7 @@ jobs:
       OCEL_TARGET: aws
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.E2E_CLOUDFLARE_API_TOKEN }}
-      OCEL_AWS_VARS_KEY: ${{ vars.DOGFOOD_AWS_VARS_KEY }}
+      OCEL_AWS_VARIABLES_KEY: ${{ vars.DOGFOOD_AWS_VARS_KEY }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout

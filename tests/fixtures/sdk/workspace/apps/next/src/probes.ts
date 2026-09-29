@@ -3,7 +3,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { gunzipSync, gzipSync } from "node:zlib";
 import linuxArm64 from "better-sqlite3/linux-arm64";
 import linuxX64 from "better-sqlite3/linux-x64";
-import { env } from "../../../infra/vars";
+import { env } from "../../../infra/variables";
 
 const MOUNT = "/api/probes";
 const MAX_SLEEP_MS = 60_000;

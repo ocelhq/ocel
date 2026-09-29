@@ -35,12 +35,12 @@ type options struct {
 }
 
 func (o options) grants() []string {
-	capabilities := []string{connectorserver.CapabilityEnvVarsRead}
+	capabilities := []string{connectorserver.CapabilityVariablesRead}
 	if o.write {
-		capabilities = append(capabilities, connectorserver.CapabilityEnvVarsWrite)
+		capabilities = append(capabilities, connectorserver.CapabilityVariablesWrite)
 	}
 	if o.reveal {
-		capabilities = append(capabilities, connectorserver.CapabilityEnvVarsReveal)
+		capabilities = append(capabilities, connectorserver.CapabilityVariablesReveal)
 	}
 	return capabilities
 }

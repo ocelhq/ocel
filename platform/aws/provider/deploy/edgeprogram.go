@@ -58,7 +58,7 @@ func (p EdgeProgram) Build() (provider.EdgeProgram, error) {
 	if p.Tier == environment.TierPreview {
 		spec.Name = previewWorkerName(p.Namespace, p.Slug)
 		spec.PruneWorkerStem = previewWorkerStem(p.Namespace, p.Slug)
-		spec.Worker = withPreviewVars(generic, p.PreviewBaseDomain, p.Apps)
+		spec.Worker = withPreviewVariables(generic, p.PreviewBaseDomain, p.Apps)
 		return provider.EdgeProgram{Spec: spec, Values: p.Values}, nil
 	}
 	spec.Name = rootWorkerName(p.Namespace, p.Slug, p.Env)

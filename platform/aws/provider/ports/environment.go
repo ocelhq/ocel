@@ -1,7 +1,7 @@
 package ports
 
 const (
-	TierEnvVar      = "OCEL_INFRA_TIER"
-	VarsTableEnvVar = "OCEL_VARS_TABLE"
-	VarsKeyEnvVar   = "OCEL_VARS_KEY"
+	TierEnvVar           = "OCEL_INFRA_TIER"
+	VariablesTableEnvVar = "OCEL_VARIABLES_TABLE"
+	VariablesKeyEnvVar   = "OCEL_VARIABLES_KEY"
 )

@@ -34,7 +34,7 @@ func TestLiveBootstrapProvisionsTheAccountAndASecondRunPlansNothing(t *testing.T
 	if core.Action != provider.ActionCreate {
 		t.Errorf("Plan() against a fresh account plans %s as %q, want %q", core.Name, core.Action, provider.ActionCreate)
 	}
-	for _, want := range []string{"StateBucket", "StateTable", "ArtifactBucket", "AssetBucket", "VarsTable", "AppBoundary"} {
+	for _, want := range []string{"StateBucket", "StateTable", "ArtifactBucket", "AssetBucket", "VariablesTable", "AppBoundary"} {
 		if planned := changeFor(core, want); planned.Action != provider.ActionCreate {
 			t.Errorf("Plan() shows %s as %q, want it created", want, planned.Action)
 		}
@@ -87,7 +87,7 @@ func TestLiveBootstrapProvisionsTheAccountAndASecondRunPlansNothing(t *testing.T
 			t.Errorf("%s is named by the stack but no bucket answers for it", bucket)
 		}
 	}
-	for _, table := range []string{deployed.StateTable, deployed.VarsTable} {
+	for _, table := range []string{deployed.StateTable, deployed.VariablesTable} {
 		if table == "" {
 			t.Fatalf("the stack names no table for one of its outputs: %+v", deployed)
 		}
@@ -98,8 +98,8 @@ func TestLiveBootstrapProvisionsTheAccountAndASecondRunPlansNothing(t *testing.T
 	if deployed.AppBoundaryARN == "" {
 		t.Errorf("the bootstrap is installed without an app boundary: %+v", deployed)
 	}
-	if deployed.VarsKeyARN != "" {
-		t.Errorf("a run that never asked for %s made a key anyway: %+v", provider.FeatureVarsKey, deployed)
+	if deployed.VariablesKeyARN != "" {
+		t.Errorf("a run that never asked for %s made a key anyway: %+v", provider.FeatureVariablesKey, deployed)
 	}
 	for _, param := range []string{origin, passphraseParam} {
 		if !a.paramExists(t, param) {

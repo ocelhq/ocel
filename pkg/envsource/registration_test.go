@@ -7,7 +7,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
-	"github.com/ocelhq/ocel/pkg/envvars"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
 var universal = envsource.InfisicalAuth{Method: envsource.AuthUniversal, ClientIDVariable: "INFISICAL_CLIENT_ID", ClientSecretVariable: "INFISICAL_CLIENT_SECRET"}
@@ -45,7 +45,7 @@ func TestARegistrationIsReadBackPerProjectWithItsFoldersSortedOnce(t *testing.T)
 	if !slices.Equal(shop.Folders, []string{"", "/web"}) || shop.Descriptor.ID() != "infisical:p-1/prod" {
 		t.Fatalf("Registered() = %+v, want the folders sorted once and the descriptor kept", shop)
 	}
-	if want := []envvars.Cell{{Key: "INFISICAL_CLIENT_ID"}, {Key: "INFISICAL_CLIENT_SECRET"}}; !slices.Equal(shop.Credentials(), want) {
+	if want := []variablestore.Cell{{Key: "INFISICAL_CLIENT_ID"}, {Key: "INFISICAL_CLIENT_SECRET"}}; !slices.Equal(shop.Credentials(), want) {
 		t.Fatalf("Credentials() = %v, want %v", shop.Credentials(), want)
 	}
 	if _, registered, _ := envsource.Registered(ctx, keyValues, environment.TierPreview, "shop"); registered {

@@ -10,11 +10,11 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/envvars"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
-	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 )
@@ -58,7 +58,7 @@ func TestTheListingShowsMetadataButNeverValues(t *testing.T) {
 	t.Run("a production override is orphaned though a preview shares its name", func(t *testing.T) {
 		project := setUpEnvFixture(t)
 		seedValue(t, project, environment.TierProduction, clitest.FixtureSlug,
-			envvars.Coordinate{Cell: envvars.Cell{Key: "STRIPE_API_KEY"}, Environment: "staging"}, "sk_stray")
+			variablestore.Coordinate{Cell: variablestore.Cell{Key: "STRIPE_API_KEY"}, Environment: "staging"}, "sk_stray")
 		seedEnvironment(t, project, "staging")
 
 		var ls bytes.Buffer
@@ -78,8 +78,8 @@ func TestTheListingNamesFoldersOrphansAndDescriptions(t *testing.T) {
 		t.Parallel()
 
 		var stdout bytes.Buffer
-		renderValues(&stdout, []*envvarsv1.ValueMetadata{
-			{Coordinate: &envvarsv1.Coordinate{Key: "STRIPE_API_KEY", Folder: ""}},
+		renderValues(&stdout, []*variablestorev1.ValueMetadata{
+			{Coordinate: &variablestorev1.Coordinate{Key: "STRIPE_API_KEY", Folder: ""}},
 		}, nil, nil, nil)
 
 		out := stdout.String()
@@ -101,10 +101,10 @@ func TestTheListingNamesFoldersOrphansAndDescriptions(t *testing.T) {
 		const note = "orphaned"
 
 		var withOrphan bytes.Buffer
-		renderValues(&withOrphan, []*envvarsv1.ValueMetadata{
-			{Coordinate: &envvarsv1.Coordinate{Key: "STRIPE_API_KEY"}},
-			{Coordinate: &envvarsv1.Coordinate{Key: "STRIPE_API_KEY", Environment: "pr-42"}},
-			{Coordinate: &envvarsv1.Coordinate{Key: "STRIPE_API_KEY", Environment: "staging"}},
+		renderValues(&withOrphan, []*variablestorev1.ValueMetadata{
+			{Coordinate: &variablestorev1.Coordinate{Key: "STRIPE_API_KEY"}},
+			{Coordinate: &variablestorev1.Coordinate{Key: "STRIPE_API_KEY", Environment: "pr-42"}},
+			{Coordinate: &variablestorev1.Coordinate{Key: "STRIPE_API_KEY", Environment: "staging"}},
 		}, []string{"staging"}, nil, nil)
 
 		out := withOrphan.String()
@@ -121,8 +121,8 @@ func TestTheListingNamesFoldersOrphansAndDescriptions(t *testing.T) {
 		}
 
 		var live bytes.Buffer
-		renderValues(&live, []*envvarsv1.ValueMetadata{
-			{Coordinate: &envvarsv1.Coordinate{Key: "STRIPE_API_KEY", Environment: "staging"}},
+		renderValues(&live, []*variablestorev1.ValueMetadata{
+			{Coordinate: &variablestorev1.Coordinate{Key: "STRIPE_API_KEY", Environment: "staging"}},
 		}, []string{"staging"}, nil, nil)
 		if out := live.String(); strings.Contains(out, note) {
 			t.Errorf("ls stdout = %q, want no orphan note when every override has its environment", out)
@@ -133,7 +133,7 @@ func TestTheListingNamesFoldersOrphansAndDescriptions(t *testing.T) {
 		t.Parallel()
 
 		var stdout bytes.Buffer
-		renderValues(&stdout, []*envvarsv1.ValueMetadata{{Coordinate: &envvarsv1.Coordinate{Key: "STRIPE_API_KEY"}}}, nil,
+		renderValues(&stdout, []*variablestorev1.ValueMetadata{{Coordinate: &variablestorev1.Coordinate{Key: "STRIPE_API_KEY"}}}, nil,
 			[]*resourcesv1.VariableDefinition{{Key: "STRIPE_API_KEY", Description: "Used to call Stripe"}}, nil)
 		if out := stdout.String(); !strings.Contains(out, "Used to call Stripe") {
 			t.Errorf("ls stdout = %q, want the variable description", out)

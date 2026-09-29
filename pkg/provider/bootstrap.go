@@ -66,7 +66,7 @@ type BootstrapRequest struct {
 	VendorState any
 }
 
-const FeatureVarsKey = "vars-key"
+const FeatureVariablesKey = "variables-key"
 
 func BootstrapCommand(tier environment.Tier) string {
 	if tier == environment.TierPreview {
@@ -79,6 +79,6 @@ func BootstrapFeaturesCommand(tier environment.Tier) string {
 	return BootstrapCommand(tier) + " --features"
 }
 
-func BootstrapVarsKeyCommand(tier environment.Tier) string {
-	return BootstrapFeaturesCommand(tier) + " " + FeatureVarsKey
+func BootstrapVariablesKeyCommand(tier environment.Tier) string {
+	return BootstrapFeaturesCommand(tier) + " " + FeatureVariablesKey
 }

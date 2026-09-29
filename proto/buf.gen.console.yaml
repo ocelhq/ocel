@@ -3,7 +3,7 @@ clean: true
 inputs:
   - directory: proto
     paths:
-      - proto/provider/envvars
+      - proto/provider/variablestore
       - proto/common/environment
       - proto/common/bindings
 plugins:

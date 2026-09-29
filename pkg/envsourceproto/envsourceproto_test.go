@@ -6,8 +6,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/envsourceproto"
-	"github.com/ocelhq/ocel/pkg/envvars"
-	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
 func TestAnEnvSourceDecodesToWhatWasEncoded(t *testing.T) {
@@ -21,7 +21,7 @@ func TestAnEnvSourceDecodesToWhatWasEncoded(t *testing.T) {
 	for _, c := range []struct {
 		name       string
 		descriptor envsource.Descriptor
-		read       map[envvars.Cell]envsource.Value
+		read       map[variablestore.Cell]envsource.Value
 	}{
 		{name: "builtin", descriptor: envsource.Descriptor{Kind: envsource.Builtin}},
 		{name: "infisical with universal auth that may create a missing key", descriptor: infisical(envsource.InfisicalAuth{
@@ -32,7 +32,7 @@ func TestAnEnvSourceDecodesToWhatWasEncoded(t *testing.T) {
 		{
 			name:       "exec with what its command printed",
 			descriptor: envsource.Descriptor{Kind: envsource.Exec, Exec: &envsource.ExecOptions{Command: []string{"vault", "export", "{folder}"}}},
-			read: map[envvars.Cell]envsource.Value{
+			read: map[variablestore.Cell]envsource.Value{
 				{Key: "DATABASE_URL"}:               {Plaintext: []byte("postgres://db")},
 				{Folder: "/web", Key: "STRIPE_KEY"}: {Plaintext: []byte("sk_live")},
 			},
@@ -53,12 +53,12 @@ func TestAnEnvSourceDecodesToWhatWasEncoded(t *testing.T) {
 
 func TestAnExecValueArrivesWithNoVersionItsSenderChose(t *testing.T) {
 	t.Parallel()
-	sent := envsourceproto.Encode(envsource.Descriptor{Kind: envsource.Exec, Exec: &envsource.ExecOptions{Command: []string{"true"}}}, map[envvars.Cell]envsource.Value{
+	sent := envsourceproto.Encode(envsource.Descriptor{Kind: envsource.Exec, Exec: &envsource.ExecOptions{Command: []string{"true"}}}, map[variablestore.Cell]envsource.Value{
 		{Key: "A"}: {Plaintext: []byte("1"), Version: "s1@999"},
 	})
 
-	if _, read := envsourceproto.Decode(sent); read[envvars.Cell{Key: "A"}].Version != "" {
-		t.Errorf("A decoded at version %q, want none: only the store it is copied into versions a value", read[envvars.Cell{Key: "A"}].Version)
+	if _, read := envsourceproto.Decode(sent); read[variablestore.Cell{Key: "A"}].Version != "" {
+		t.Errorf("A decoded at version %q, want none: only the store it is copied into versions a value", read[variablestore.Cell{Key: "A"}].Version)
 	}
 }
 
@@ -68,7 +68,7 @@ func TestADecodedInfisicalEnvSourceIsNormalized(t *testing.T) {
 		Project: "p-1", Environment: "prod", Auth: envsource.InfisicalAuth{Method: envsource.AuthIdentity, IdentityID: "id"},
 	}}, nil)
 
-	if sent.GetInfisical().GetWrite() != envvarsv1.WritePolicy_WRITE_POLICY_NEVER {
+	if sent.GetInfisical().GetWrite() != variablestorev1.WritePolicy_WRITE_POLICY_NEVER {
 		t.Errorf("write = %v, want never sent for a write left off", sent.GetInfisical().GetWrite())
 	}
 	descriptor, _ := envsourceproto.Decode(sent)
@@ -79,7 +79,7 @@ func TestADecodedInfisicalEnvSourceIsNormalized(t *testing.T) {
 
 func TestAnExecEnvSourceSendsItsValuesInFolderThenKeyOrder(t *testing.T) {
 	t.Parallel()
-	sent := envsourceproto.Encode(envsource.Descriptor{Kind: envsource.Exec, Exec: &envsource.ExecOptions{Command: []string{"true"}}}, map[envvars.Cell]envsource.Value{
+	sent := envsourceproto.Encode(envsource.Descriptor{Kind: envsource.Exec, Exec: &envsource.ExecOptions{Command: []string{"true"}}}, map[variablestore.Cell]envsource.Value{
 		{Folder: "/web", Key: "A"}: {Plaintext: []byte("3")},
 		{Key: "B"}:                 {Plaintext: []byte("2")},
 		{Key: "A"}:                 {Plaintext: []byte("1")},

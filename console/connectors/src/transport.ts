@@ -7,10 +7,10 @@ import {
 } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-node";
 
-import { EnvVarsService } from "./gen/provider/envvars/v1/envvars_pb";
+import { VariableStoreService } from "./gen/provider/variablestore/v1/variablestore_pb";
 import { type Outcome, refuse, ValueError } from "./item";
 
-export const SCOPES = ["envvars.read", "envvars.write", "envvars.reveal"] as const;
+export const SCOPES = ["variables.read", "variables.write", "variables.reveal"] as const;
 
 export type Scope = (typeof SCOPES)[number];
 
@@ -21,7 +21,7 @@ export interface Connector {
   capabilities: readonly string[];
 }
 
-export type Vars = Client<typeof EnvVarsService>;
+export type VariableStore = Client<typeof VariableStoreService>;
 
 function bearing(token: string): Interceptor {
   return (next) => (request) => {
@@ -30,9 +30,9 @@ function bearing(token: string): Interceptor {
   };
 }
 
-export function vars(connector: Connector): Vars {
+export function variableStore(connector: Connector): VariableStore {
   return createClient(
-    EnvVarsService,
+    VariableStoreService,
     createConnectTransport({
       baseUrl: connector.url,
       httpVersion: "1.1",

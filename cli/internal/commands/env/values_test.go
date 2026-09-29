@@ -14,18 +14,18 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
-	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
-	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1/variablestorev1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
 func setUpEnvFixture(t *testing.T) clitest.FakeProject {
@@ -62,17 +62,17 @@ func envSet(t *testing.T, root, key, value string, opts envOptions) string {
 	return stdout.String()
 }
 
-func valuesOf(project clitest.FakeProject) envvars.Store {
-	return envvars.Store{KeyValues: project.Provider.KeyValues(), Cipher: project.Provider.Cipher()}
+func valuesOf(project clitest.FakeProject) variablestore.Store {
+	return variablestore.Store{KeyValues: project.Provider.KeyValues(), Cipher: project.Provider.Cipher()}
 }
 
-func cellAt(key string) envvars.Coordinate {
-	return envvars.Coordinate{Cell: envvars.Cell{Key: key}}
+func cellAt(key string) variablestore.Coordinate {
+	return variablestore.Coordinate{Cell: variablestore.Cell{Key: key}}
 }
 
-func seedValue(t *testing.T, project clitest.FakeProject, tier environment.Tier, slug string, at envvars.Coordinate, value string) {
+func seedValue(t *testing.T, project clitest.FakeProject, tier environment.Tier, slug string, at variablestore.Coordinate, value string) {
 	t.Helper()
-	if _, err := valuesOf(project).Set(context.Background(), envvars.Scope{Project: slug, Tier: tier}, at, value, nil); err != nil {
+	if _, err := valuesOf(project).Set(context.Background(), variablestore.Scope{Project: slug, Tier: tier}, at, value, nil); err != nil {
 		t.Fatalf("seed %s in %s's %s values: %v", at, slug, tier, err)
 	}
 }
@@ -100,8 +100,8 @@ func bootstrapOnlyPreview(t *testing.T, project clitest.FakeProject) {
 }
 
 func moveBeforeTheNextWrite(project clitest.FakeProject, key string) {
-	scope := envvars.Scope{Project: clitest.FixtureSlug, Tier: environment.TierProduction}
-	project.Provider.KeyValues().(*fake.KeyValues).MoveBeforeNextWrite(envvars.CellKey(scope, cellAt(key)))
+	scope := variablestore.Scope{Project: clitest.FixtureSlug, Tier: environment.TierProduction}
+	project.Provider.KeyValues().(*fake.KeyValues).MoveBeforeNextWrite(variablestore.CellKey(scope, cellAt(key)))
 }
 
 func envDeclaringScript(definitions string) string {
@@ -599,10 +599,10 @@ func TestSettingSeveralPairsValidatesEveryPairBeforeWritingAny(t *testing.T) {
 		if err == nil {
 			t.Fatal("runEnvSetPairs() = nil, want an undeclared key refusal")
 		}
-		if sent := clitest.RequestsTo[*envvarsv1.SetValueRequest](t, project.Requests, envvarsv1connect.EnvVarsServiceSetValueProcedure); len(sent) != 0 {
+		if sent := clitest.RequestsTo[*variablestorev1.SetValueRequest](t, project.Requests, variablestorev1connect.VariableStoreServiceSetValueProcedure); len(sent) != 0 {
 			t.Errorf("the CLI sent %d writes, want none", len(sent))
 		}
-		stored, err := valuesOf(project).List(context.Background(), envvars.Scope{Project: clitest.FixtureSlug, Tier: environment.TierProduction})
+		stored, err := valuesOf(project).List(context.Background(), variablestore.Scope{Project: clitest.FixtureSlug, Tier: environment.TierProduction})
 		if err != nil {
 			t.Fatalf("list the stored values: %v", err)
 		}
@@ -890,7 +890,7 @@ func TestRemovingAValueForAContainerAppTheProviderReadsLivePromisesNoDeploy(t *t
 	}
 }
 
-var variablesKey = provider.Feature{Name: provider.FeatureVarsKey, Summary: "a key the variables are sealed under"}
+var variablesKey = provider.Feature{Name: provider.FeatureVariablesKey, Summary: "a key the variables are sealed under"}
 
 func setUpVariablesKeyFixture(t *testing.T) clitest.FakeProject {
 	t.Helper()
@@ -913,7 +913,7 @@ func TestAWriteWithoutTheVariablesKeyOffersTheBootstrapThatAddsIt(t *testing.T) 
 		if err == nil {
 			t.Fatalf("runEnvSet err = nil, want it refused for want of a key; stdout=%s stderr=%s", stdout.String(), stderr.String())
 		}
-		if want := provider.FeatureVarsKey; !strings.Contains(stderr.String(), want) {
+		if want := provider.FeatureVariablesKey; !strings.Contains(stderr.String(), want) {
 			t.Errorf("stream = %q, want it to name %s", stderr.String(), want)
 		}
 		if want := "ocel bootstrap production --features"; !strings.Contains(stderr.String(), want) {
@@ -932,7 +932,7 @@ func TestAWriteWithoutTheVariablesKeyOffersTheBootstrapThatAddsIt(t *testing.T) 
 
 	t.Run("a write goes through where the key is installed", func(t *testing.T) {
 		project := setUpVariablesKeyFixture(t)
-		clitest.Bootstrap(t, project.Provider, environment.TierProduction, provider.FeatureVarsKey)
+		clitest.Bootstrap(t, project.Provider, environment.TierProduction, provider.FeatureVariablesKey)
 
 		var stdout, stderr bytes.Buffer
 		if err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), project.Root, "LOG_LEVEL", "debug", envOptions{}, nil, &stdout, &stderr); err != nil {
@@ -952,7 +952,7 @@ func TestAWriteWithoutTheVariablesKeyOffersTheBootstrapThatAddsIt(t *testing.T) 
 		if err == nil {
 			t.Fatalf("runEnvSet err = nil, want it refused for want of a key; stdout=%s stderr=%s", stdout.String(), stderr.String())
 		}
-		if want := "ocel bootstrap production --features " + provider.FeatureVarsKey; !strings.Contains(stderr.String(), want) {
+		if want := "ocel bootstrap production --features " + provider.FeatureVariablesKey; !strings.Contains(stderr.String(), want) {
 			t.Errorf("stream = %q, want it to name `%s` alone", stderr.String(), want)
 		}
 		if strings.Contains(err.Error(), fake.FeatureImages) {
@@ -989,7 +989,7 @@ func TestAWriteWithoutTheVariablesKeyOffersTheBootstrapThatAddsIt(t *testing.T) 
 		if err != nil {
 			t.Fatalf("runEnvSet err = %v, want the offer taken and the write landed; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
-		if want := "Run `ocel bootstrap production --features " + provider.FeatureVarsKey + "` now?"; !strings.Contains(stderr.String(), want) {
+		if want := "Run `ocel bootstrap production --features " + provider.FeatureVariablesKey + "` now?"; !strings.Contains(stderr.String(), want) {
 			t.Errorf("stderr = %q, want the offer put to whoever is at the terminal", stderr.String())
 		}
 		if strings.Contains(stdout.String(), "Run `ocel bootstrap") {
@@ -999,7 +999,7 @@ func TestAWriteWithoutTheVariablesKeyOffersTheBootstrapThatAddsIt(t *testing.T) 
 		if len(requested) == 0 {
 			t.Fatal("the bootstrap the offer accepted never reached the provider")
 		}
-		if got := requested[len(requested)-1].GetFeatures(); !slices.Equal(got, []string{provider.FeatureVarsKey}) {
+		if got := requested[len(requested)-1].GetFeatures(); !slices.Equal(got, []string{provider.FeatureVariablesKey}) {
 			t.Errorf("the provider was asked for %q, want the key alone", got)
 		}
 	})

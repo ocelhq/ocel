@@ -17,13 +17,13 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
@@ -275,19 +275,19 @@ func TestABindingValueTheSealHelperSealedUnderItsNameOpensThroughTheBoxCipher(t 
 		t.Fatal(err)
 	}
 	rows := fake.NewKeyValues()
-	scope := envvars.Scope{Project: "shop", Tier: sealTier}
+	scope := variablestore.Scope{Project: "shop", Tier: sealTier}
 	for name, body := range map[string]string{
 		"records": `{"version":1,"record":"eyJuYW1lIjoib3JkZXJzIn0=","owner":"ocel"}`,
 		"values":  `{"version":1,"sealed":"CX0mtCiLOU33J+IBAIofm6utJftVMG2ehAO1QnHkyAdwJtmaBxEIsCZIQtFxqRz0OdtdvSg0/g=="}`,
 	} {
 		if _, err := rows.Write(context.Background(), keyvalue.Entry{
-			Key:   envvars.ValuesPartition(scope).Key("bindings", "orders", name, "*"),
+			Key:   variablestore.ValuesPartition(scope).Key("bindings", "orders", name, "*"),
 			Value: []byte(body),
 		}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	store := envvars.Store{KeyValues: rows, Cipher: boxstore.NewCipher(scratchHelper{script: writeRootedHelper(t, root)})}
+	store := variablestore.Store{KeyValues: rows, Cipher: boxstore.NewCipher(scratchHelper{script: writeRootedHelper(t, root)})}
 
 	resolved, err := store.ResolveBinding(context.Background(), scope, "", "orders")
 	if err != nil || string(resolved.Value) != `{"url":"postgres://orders"}` {

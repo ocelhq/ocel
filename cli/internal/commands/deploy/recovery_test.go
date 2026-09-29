@@ -30,13 +30,13 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
-	"github.com/ocelhq/ocel/pkg/envvars"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/statedir"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
 func recordBrowser(dependencies *Dependencies, opened *[]string, mu *sync.Mutex) {
@@ -595,7 +595,7 @@ func TestADeployMissingVariablesOpensTheEditorAndResumesOnceTheyAreSet(t *testin
 		}
 	})
 
-	t.Run("interactivity alone decides whether a vars requirement can pause", func(t *testing.T) {
+	t.Run("interactivity alone decides whether a variables requirement can pause", func(t *testing.T) {
 		for _, tc := range []struct {
 			name     string
 			terminal bool
@@ -628,7 +628,7 @@ func TestADeployMissingVariablesOpensTheEditorAndResumesOnceTheyAreSet(t *testin
 				clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
 				err := runDeploy(ctx, dependencies, root, tc.opts, &stdout, &stderr, strings.NewReader(""))
 				if err == nil {
-					t.Fatal("runDeploy err = nil, want the vars requirement to be terminal")
+					t.Fatal("runDeploy err = nil, want the variables requirement to be terminal")
 				}
 				for _, want := range []string{"STRIPE_API_KEY", "ocel env set STRIPE_API_KEY"} {
 					if !strings.Contains(stdout.String(), want) {
@@ -1629,22 +1629,22 @@ func captureBuildEnv(dependencies *Dependencies) *map[string]map[string]string {
 
 func ownedElsewhere(t *testing.T, fixture clitest.FakeProject, owner, key, value string) {
 	t.Helper()
-	setValue(t, fixture, envvars.Scope{Project: owner, Tier: environment.TierProduction}, key, value, envOptions{})
+	setValue(t, fixture, variablestore.Scope{Project: owner, Tier: environment.TierProduction}, key, value, envOptions{})
 }
 
 func envRef(t *testing.T, fixture clitest.FakeProject, key, owner string) {
 	t.Helper()
-	scope := envvars.Scope{Project: clitest.FixtureSlug, Tier: environment.TierProduction}
-	at := envvars.Coordinate{Cell: envvars.Cell{Key: key}}
-	if _, err := valueStore(fixture).SetReference(context.Background(), scope, at, envvars.Target{Project: owner, Cell: envvars.Cell{Key: key}}); err != nil {
+	scope := variablestore.Scope{Project: clitest.FixtureSlug, Tier: environment.TierProduction}
+	at := variablestore.Coordinate{Cell: variablestore.Cell{Key: key}}
+	if _, err := valueStore(fixture).SetReference(context.Background(), scope, at, variablestore.Target{Project: owner, Cell: variablestore.Cell{Key: key}}); err != nil {
 		t.Fatalf("reference %s in %s: %v", key, owner, err)
 	}
 }
 
-func storedValue(t *testing.T, fixture clitest.FakeProject, key string) envvars.Value {
+func storedValue(t *testing.T, fixture clitest.FakeProject, key string) variablestore.Value {
 	t.Helper()
-	scope := envvars.Scope{Project: clitest.FixtureSlug, Tier: environment.TierProduction}
-	value, err := valueStore(fixture).Get(context.Background(), scope, envvars.Coordinate{Cell: envvars.Cell{Key: key}}, true)
+	scope := variablestore.Scope{Project: clitest.FixtureSlug, Tier: environment.TierProduction}
+	value, err := valueStore(fixture).Get(context.Background(), scope, variablestore.Coordinate{Cell: variablestore.Cell{Key: key}}, true)
 	if err != nil {
 		t.Fatalf("read %s: %v", key, err)
 	}

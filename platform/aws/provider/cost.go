@@ -22,12 +22,12 @@ func (p *Provider) ShapeCost(ctx context.Context, req provider.ShapeRequest) (*c
 	environment := tree.Scope(project, pricing.ScopeEnvironment, req.Deploy.Env)
 
 	var options []bootstrap.ShapeOption
-	if p.options.VarsKey != "" {
-		options = append(options, bootstrap.WithVarsKey(p.options.VarsKey))
+	if p.options.VariablesKey != "" {
+		options = append(options, bootstrap.WithVariablesKey(p.options.VariablesKey))
 	}
 	features := req.Features
-	if !slices.Contains(features, provider.FeatureVarsKey) {
-		features = append(slices.Clone(features), provider.FeatureVarsKey)
+	if !slices.Contains(features, provider.FeatureVariablesKey) {
+		features = append(slices.Clone(features), provider.FeatureVariablesKey)
 	}
 	bootstrapShape, err := bootstrap.Shape(p.namespace, req.Deploy.Tier, features, options...)
 	if err != nil {

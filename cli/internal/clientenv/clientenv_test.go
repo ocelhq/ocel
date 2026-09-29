@@ -494,7 +494,7 @@ func TestCheckFresh(t *testing.T) {
 			serverVar("STRIPE_API_KEY", "sk-rotated"),
 		}}}
 		if err := CheckFresh(root, rotated); err != nil {
-			t.Errorf("CheckFresh = %v, want a vars-only deploy of a server value to proceed", err)
+			t.Errorf("CheckFresh = %v, want a variables-only deploy of a server value to proceed", err)
 		}
 	})
 

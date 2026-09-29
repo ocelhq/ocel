@@ -123,14 +123,14 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 	}
 	role := executionRole{
 		App: app.App, Cache: cache, Bytecode: bytecode,
-		VarsKeyARN: r.cfg.VarsKeyARN, Boundary: r.cfg.AppBoundaryARN,
+		VariablesKeyARN: r.cfg.VariablesKeyARN, Boundary: r.cfg.AppBoundaryARN,
 		Tags: roleTags, BindingPolicies: policies, VPCAccess: vpcAccess, Dispatch: dispatch,
 	}
 	if bundle.hasLive() {
-		role.ValuesTableARN = r.cfg.VarsTableARN
-		role.VarsReferenced = bundle.Referenced
+		role.ValuesTableARN = r.cfg.VariablesTableARN
+		role.VariablesReferenced = bundle.Referenced
 		role.Slug = r.cfg.Slug
-		role.VarsTier = string(r.cfg.Tier)
+		role.VariablesTier = string(r.cfg.Tier)
 	}
 
 	r.served.plan(r, app.App, logical, bytecode)
@@ -161,7 +161,7 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 			Bytecode:  bytecode,
 			Dispatch:  dispatch,
 			Guard:     guard,
-			KmsKeyARN: r.cfg.VarsKeyARN,
+			KmsKeyARN: r.cfg.VariablesKeyARN,
 			Layers:    layers,
 		},
 	}, nil

@@ -30,8 +30,8 @@ type stackRefs struct {
 	stateTable          string
 	stateTableARN       string
 	stateTableStreamARN string
-	varsTable           string
-	varsTableARN        string
+	variablesTable      string
+	variablesTableARN   string
 	revalidateQueueARN  string
 	imageOptimizerARN   string
 }
@@ -43,7 +43,7 @@ type featureInputs struct {
 	code           stackPayloads
 	refs           stackRefs
 	alongside      FeatureSet
-	varsKey        string
+	variablesKey   string
 }
 
 type featureStack struct {
@@ -110,7 +110,7 @@ var featureRegistry = []feature{
 	cloudflareEdgeFeature,
 	cloudFrontEdgeFeature,
 	apiGatewayEdgeFeature,
-	varsKeyFeature,
+	variablesKeyFeature,
 }
 
 func Catalogue() []provider.Feature {
@@ -197,8 +197,8 @@ const (
 	paramStateTableStreamARN = "StateTableStreamArn"
 	paramRevalidateQueueARN  = "RevalidateQueueArn"
 	paramImageOptimizerARN   = "ImageOptimizerArn"
-	paramVarsTableName       = "VarsTableName"
-	paramVarsTableARN        = "VarsTableArn"
+	paramVariablesTableName  = "VariablesTableName"
+	paramVariablesTableARN   = "VariablesTableArn"
 )
 
 type crossStackParam struct {

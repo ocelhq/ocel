@@ -9,36 +9,36 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/envvars"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	"github.com/ocelhq/ocel/platform/aws/provider/vars/baked"
-	vars "github.com/ocelhq/ocel/platform/aws/provider/vars/live"
+	"github.com/ocelhq/ocel/pkg/variablestore"
+	"github.com/ocelhq/ocel/platform/aws/provider/variables/baked"
+	variables "github.com/ocelhq/ocel/platform/aws/provider/variables/live"
 )
 
 const (
 	stateTable     = "ocel-state"
-	valuesTable    = "ocel-vars"
-	valuesTableARN = "arn:aws:dynamodb:us-east-1:1234:table/ocel-vars"
-	varsTier       = "production"
+	valuesTable    = "ocel-variables"
+	valuesTableARN = "arn:aws:dynamodb:us-east-1:1234:table/ocel-variables"
+	variablesTier  = "production"
 )
 
 func liveConfig() Config {
 	return Config{
-		VarsKeyARN:    productionVarsKeyARN,
-		StateTable:    stateTable,
-		StateTableARN: stateTableARN,
-		VarsTable:     valuesTable,
-		VarsTableARN:  valuesTableARN,
-		Tier:          varsTier,
+		VariablesKeyARN:   productionVariablesKeyARN,
+		StateTable:        stateTable,
+		StateTableARN:     stateTableARN,
+		VariablesTable:    valuesTable,
+		VariablesTableARN: valuesTableARN,
+		Tier:              variablesTier,
 	}
 }
 
 func partitionOf(t *testing.T, slug string) string {
 	t.Helper()
-	return valuePartition(slug, varsTier)
+	return valuePartition(slug, variablesTier)
 }
 
 func scopedVariable(key, folder string, class resourcesv1.VariableClass) *contractv1.ManifestVariable {
@@ -77,11 +77,11 @@ func TestRenderAppBundle(t *testing.T) {
 			t.Fatalf("renderAppBundle: %v", err)
 		}
 
-		manifest, err := vars.Parse(bundle.Live)
+		manifest, err := variables.Parse(bundle.Live)
 		if err != nil {
 			t.Fatalf("parse the live manifest: %v", err)
 		}
-		if manifest.Slug != "shop" || manifest.Table != valuesTable || manifest.KeyARN != productionVarsKeyARN || manifest.Tier != varsTier {
+		if manifest.Slug != "shop" || manifest.Table != valuesTable || manifest.KeyARN != productionVariablesKeyARN || manifest.Tier != variablesTier {
 			t.Errorf("manifest = %+v, want the bootstrap's own store", manifest)
 		}
 		want := []live.Key{{Key: "DB_PASSWORD"}, {Key: "SESSION_SECRET", Folder: "/web"}}
@@ -127,7 +127,7 @@ func TestRenderAppBundle(t *testing.T) {
 				if err != nil {
 					t.Fatalf("renderAppBundle: %v", err)
 				}
-				manifest, err := vars.Parse(bundle.Live)
+				manifest, err := variables.Parse(bundle.Live)
 				if err != nil {
 					t.Fatalf("parse the live manifest: %v", err)
 				}
@@ -145,7 +145,7 @@ func TestRenderAppBundle(t *testing.T) {
 			Variables: []*contractv1.ManifestVariable{scopedVariable("DB_PASSWORD", "", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET)},
 		}
 
-		if _, err := renderAppBundle(Config{VarsKeyARN: productionVarsKeyARN}, "shop", app, nil); err == nil {
+		if _, err := renderAppBundle(Config{VariablesKeyARN: productionVariablesKeyARN}, "shop", app, nil); err == nil {
 			t.Fatal("renderAppBundle accepted a live value with no store to read it from")
 		}
 	})
@@ -164,7 +164,7 @@ func TestRenderAppBundle(t *testing.T) {
 		if len(bundle.Live) != 0 {
 			t.Errorf("Live = %q, want nothing", bundle.Live)
 		}
-		if _, ok := bundle.overlay()[vars.FilePath]; ok {
+		if _, ok := bundle.overlay()[variables.FilePath]; ok {
 			t.Error("an app with no live values still includes a live manifest file")
 		}
 	})
@@ -172,11 +172,11 @@ func TestRenderAppBundle(t *testing.T) {
 	t.Run("references only the owners of its own live values", func(t *testing.T) {
 		t.Parallel()
 		cfg := previewOf(liveConfig(), "pr-42")
-		cfg.VarsReferenced = map[envvars.Coordinate]string{
-			{Cell: envvars.Cell{Key: "DB_PASSWORD"}}:                                          "platform",
-			{Cell: envvars.Cell{Folder: "/web", Key: "SESSION_SECRET"}, Environment: "pr-42"}: "identity",
-			{Cell: envvars.Cell{Key: "ADMIN_TOKEN"}}:                                          "ops",
-			{Cell: envvars.Cell{Key: "POSTHOG_ID"}}:                                           "analytics",
+		cfg.VariablesReferenced = map[variablestore.Coordinate]string{
+			{Cell: variablestore.Cell{Key: "DB_PASSWORD"}}:                                          "platform",
+			{Cell: variablestore.Cell{Folder: "/web", Key: "SESSION_SECRET"}, Environment: "pr-42"}: "identity",
+			{Cell: variablestore.Cell{Key: "ADMIN_TOKEN"}}:                                          "ops",
+			{Cell: variablestore.Cell{Key: "POSTHOG_ID"}}:                                           "analytics",
 		}
 
 		app := &contractv1.ManifestApp{
@@ -196,12 +196,12 @@ func TestRenderAppBundle(t *testing.T) {
 		}
 
 		role := appExecutionRole(cfg, "web", nil, nil, bundle, nil, nil, false, nil)
-		if !slices.Equal(role.VarsReferenced, bundle.Referenced) {
-			t.Errorf("role VarsReferenced = %v, want the app's own owners %v", role.VarsReferenced, bundle.Referenced)
+		if !slices.Equal(role.VariablesReferenced, bundle.Referenced) {
+			t.Errorf("role VariablesReferenced = %v, want the app's own owners %v", role.VariablesReferenced, bundle.Referenced)
 		}
 		other := appExecutionRole(cfg, "admin", nil, nil, appBundle{Live: []byte(`{"slug":"shop"}`)}, nil, nil, false, nil)
-		if len(other.VarsReferenced) != 0 {
-			t.Errorf("an app reading no reference took %v, want no partition but its own", other.VarsReferenced)
+		if len(other.VariablesReferenced) != 0 {
+			t.Errorf("an app reading no reference took %v, want no partition but its own", other.VariablesReferenced)
 		}
 	})
 }
@@ -218,8 +218,8 @@ func TestAppBundle(t *testing.T) {
 		if got := overlay[baked.FilePath]; !bytes.Equal(got, []byte("sealed")) {
 			t.Errorf("overlay[%q] = %q, want the sealed bytes", baked.FilePath, got)
 		}
-		if got := overlay[vars.FilePath]; !bytes.Equal(got, []byte(`{"slug":"shop"}`)) {
-			t.Errorf("overlay[%q] = %q, want the live manifest", vars.FilePath, got)
+		if got := overlay[variables.FilePath]; !bytes.Equal(got, []byte(`{"slug":"shop"}`)) {
+			t.Errorf("overlay[%q] = %q, want the live manifest", variables.FilePath, got)
 		}
 	})
 
@@ -244,7 +244,7 @@ func TestAppBundle(t *testing.T) {
 		if bundle.Envelope != "" || len(bundle.Ciphertext) != 0 {
 			t.Errorf("bundle = %+v, want no sealed half", bundle)
 		}
-		if _, ok := bundle.overlay()[vars.FilePath]; !ok {
+		if _, ok := bundle.overlay()[variables.FilePath]; !ok {
 			t.Error("the live manifest is not in the package")
 		}
 		if len(bundle.env()) != 0 {
@@ -253,12 +253,12 @@ func TestAppBundle(t *testing.T) {
 	})
 }
 
-func TestVarsReadPolicy(t *testing.T) {
+func TestTheVariablesReadPolicyScopesTheTableToTheProjectsPartition(t *testing.T) {
 	t.Run("scopes the table grant to the project's own partition", func(t *testing.T) {
 		t.Parallel()
-		raw, err := varsReadPolicy(executionRole{VarsKeyARN: productionVarsKeyARN, ValuesTableARN: valuesTableARN, Slug: "shop", VarsTier: varsTier})
+		raw, err := variablesReadPolicy(executionRole{VariablesKeyARN: productionVariablesKeyARN, ValuesTableARN: valuesTableARN, Slug: "shop", VariablesTier: variablesTier})
 		if err != nil {
-			t.Fatalf("varsReadPolicy: %v", err)
+			t.Fatalf("variablesReadPolicy: %v", err)
 		}
 
 		var doc struct {
@@ -289,16 +289,16 @@ func TestVarsReadPolicy(t *testing.T) {
 		}
 
 		kms := doc.Statement[0]
-		if want := []string{"kms:Decrypt"}; !slices.Equal(kms.Action, want) || kms.Resource != productionVarsKeyARN {
+		if want := []string{"kms:Decrypt"}; !slices.Equal(kms.Action, want) || kms.Resource != productionVariablesKeyARN {
 			t.Errorf("statement 0 = %+v, want the unchanged decrypt grant", kms)
 		}
 	})
 
 	t.Run("without a table is the decrypt grant alone", func(t *testing.T) {
 		t.Parallel()
-		raw, err := varsReadPolicy(executionRole{VarsKeyARN: productionVarsKeyARN})
+		raw, err := variablesReadPolicy(executionRole{VariablesKeyARN: productionVariablesKeyARN})
 		if err != nil {
-			t.Fatalf("varsReadPolicy: %v", err)
+			t.Fatalf("variablesReadPolicy: %v", err)
 		}
 		if strings.Contains(raw, "dynamodb") {
 			t.Errorf("policy = %s, want no table grant at all", raw)
@@ -307,9 +307,9 @@ func TestVarsReadPolicy(t *testing.T) {
 
 	t.Run("without a key is the table grant alone", func(t *testing.T) {
 		t.Parallel()
-		raw, err := varsReadPolicy(executionRole{ValuesTableARN: valuesTableARN, Slug: "shop", VarsTier: varsTier})
+		raw, err := variablesReadPolicy(executionRole{ValuesTableARN: valuesTableARN, Slug: "shop", VariablesTier: variablesTier})
 		if err != nil {
-			t.Fatalf("varsReadPolicy: %v", err)
+			t.Fatalf("variablesReadPolicy: %v", err)
 		}
 		if strings.Contains(raw, "kms") {
 			t.Errorf("policy = %s, want no decrypt grant when this bootstrap made no key", raw)
@@ -321,9 +321,9 @@ func TestVarsReadPolicy(t *testing.T) {
 
 	t.Run("reaches the partitions of the projects this one references", func(t *testing.T) {
 		t.Parallel()
-		raw, err := varsReadPolicy(executionRole{VarsKeyARN: productionVarsKeyARN, ValuesTableARN: valuesTableARN, Slug: "shop", VarsTier: varsTier, VarsReferenced: []string{"platform", "shop", "billing"}})
+		raw, err := variablesReadPolicy(executionRole{VariablesKeyARN: productionVariablesKeyARN, ValuesTableARN: valuesTableARN, Slug: "shop", VariablesTier: variablesTier, VariablesReferenced: []string{"platform", "shop", "billing"}})
 		if err != nil {
-			t.Fatalf("varsReadPolicy: %v", err)
+			t.Fatalf("variablesReadPolicy: %v", err)
 		}
 
 		var doc struct {
@@ -356,7 +356,7 @@ func TestAppExecutionRoleLiveValues(t *testing.T) {
 		if withLive.ValuesTableARN != valuesTableARN {
 			t.Errorf("ValuesTableARN = %q, want the table the values live in", withLive.ValuesTableARN)
 		}
-		if withLive.Slug != "shop" || withLive.VarsTier != varsTier {
+		if withLive.Slug != "shop" || withLive.VariablesTier != variablesTier {
 			t.Errorf("role = %+v, want the partition it may read named", withLive)
 		}
 
@@ -364,8 +364,8 @@ func TestAppExecutionRoleLiveValues(t *testing.T) {
 		if withoutLive.ValuesTableARN != "" {
 			t.Errorf("ValuesTableARN = %q, want no table grant for an app with no live values", withoutLive.ValuesTableARN)
 		}
-		if withoutLive.VarsKeyARN != productionVarsKeyARN {
-			t.Errorf("VarsKeyARN = %q, want the decrypt grant every app keeps", withoutLive.VarsKeyARN)
+		if withoutLive.VariablesKeyARN != productionVariablesKeyARN {
+			t.Errorf("VariablesKeyARN = %q, want the decrypt grant every app keeps", withoutLive.VariablesKeyARN)
 		}
 	})
 }

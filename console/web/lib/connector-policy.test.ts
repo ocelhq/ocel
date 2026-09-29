@@ -1,23 +1,23 @@
 import { describe, expect, it } from "vitest";
 import { abilityOf, scopesFor } from "./connector-policy";
 
-const everything = ["envvars.read", "envvars.write", "envvars.reveal"];
+const everything = ["variables.read", "variables.write", "variables.reveal"];
 
 describe("scopesFor", () => {
   it("gives an owner read, write and reveal", () => {
     expect(scopesFor("owner", everything)).toEqual([
-      "envvars.read",
-      "envvars.write",
-      "envvars.reveal",
+      "variables.read",
+      "variables.write",
+      "variables.reveal",
     ]);
   });
 
   it("stops an admin short of reveal", () => {
-    expect(scopesFor("admin", everything)).toEqual(["envvars.read", "envvars.write"]);
+    expect(scopesFor("admin", everything)).toEqual(["variables.read", "variables.write"]);
   });
 
   it("leaves a member reading", () => {
-    expect(scopesFor("member", everything)).toEqual(["envvars.read"]);
+    expect(scopesFor("member", everything)).toEqual(["variables.read"]);
   });
 
   it("gives an unknown role nothing", () => {
@@ -25,11 +25,11 @@ describe("scopesFor", () => {
   });
 
   it("unions the roles a member has at once", () => {
-    expect(scopesFor("member,admin", everything)).toEqual(["envvars.read", "envvars.write"]);
+    expect(scopesFor("member,admin", everything)).toEqual(["variables.read", "variables.write"]);
   });
 
   it("drops what the connector does not answer", () => {
-    expect(scopesFor("owner", ["envvars.read"])).toEqual(["envvars.read"]);
+    expect(scopesFor("owner", ["variables.read"])).toEqual(["variables.read"]);
   });
 });
 
@@ -47,7 +47,7 @@ describe("abilityOf", () => {
   });
 
   it("takes nothing the connector does not advertise", () => {
-    expect(abilityOf(scopesFor("owner", ["envvars.read"]))).toEqual({
+    expect(abilityOf(scopesFor("owner", ["variables.read"]))).toEqual({
       write: false,
       reveal: false,
     });

@@ -280,7 +280,7 @@ func TestLifecycleTheWholeBootstrapRunsOnTheRealBinaryAndGivesTheAccountBack(t *
 		t.Errorf("a re-plan over a bootstrapped account would write %v:\n%s", writes, replanned)
 	}
 	destroyed := run.must(t, "bootstrap", "destroy", "production", "--yes")
-	for _, unrecoverable := range []string{"StateBucket", "VarsTable"} {
+	for _, unrecoverable := range []string{"StateBucket", "VariablesTable"} {
 		if !strings.Contains(destroyed, unrecoverable) {
 			t.Errorf("`ocel bootstrap destroy production` never named %s, and a user confirms without knowing what is unrecoverable:\n%s", unrecoverable, destroyed)
 		}

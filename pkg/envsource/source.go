@@ -4,15 +4,15 @@ import (
 	"context"
 	"errors"
 
-	"github.com/ocelhq/ocel/pkg/envvars"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
 type Source interface {
 	ID() string
-	Read(ctx context.Context, folders []string) (map[envvars.Cell]Value, error)
-	Create(ctx context.Context, at envvars.Cell, value []byte, description string) error
-	Update(ctx context.Context, at envvars.Cell, value []byte, copiedVersion string) error
-	URL(at envvars.Cell) string
+	Read(ctx context.Context, folders []string) (map[variablestore.Cell]Value, error)
+	Create(ctx context.Context, at variablestore.Cell, value []byte, description string) error
+	Update(ctx context.Context, at variablestore.Cell, value []byte, copiedVersion string) error
+	URL(at variablestore.Cell) string
 }
 
 type Value struct {

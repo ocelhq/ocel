@@ -61,15 +61,15 @@ func TestEdgeProgramForTheSharedPreviewEntry(t *testing.T) {
 		edge.RevalidateQueueURLVar: "https://queue.example",
 		edge.EdgeAccessKeyIDVar:    "AKIA",
 	} {
-		if worker.Vars[name] != want {
-			t.Errorf("Vars[%s] = %q, want %q", name, worker.Vars[name], want)
+		if worker.Variables[name] != want {
+			t.Errorf("Variables[%s] = %q, want %q", name, worker.Variables[name], want)
 		}
 	}
 	if worker.Secrets[edge.EdgeSecretKeyVar] != "secret" {
 		t.Errorf("Secrets[%s] missing, want the edge credential delivered as a secret", edge.EdgeSecretKeyVar)
 	}
-	if _, set := worker.Vars[envPreviewApps]; set {
-		t.Errorf("Vars has %s, which is per-project", envPreviewApps)
+	if _, set := worker.Variables[envPreviewApps]; set {
+		t.Errorf("Variables has %s, which is per-project", envPreviewApps)
 	}
 	if built.Spec.Name != "" {
 		t.Errorf("Name = %q, want empty: the edge names the shared entry itself", built.Spec.Name)
@@ -119,8 +119,8 @@ func TestEdgeProgramForAPreviewProject(t *testing.T) {
 		envPreviewApps:       "web,admin",
 		envPreviewBaseDomain: "preview.acme.com",
 	} {
-		if built.Spec.Worker.Vars[name] != want {
-			t.Errorf("Vars[%s] = %q, want %q", name, built.Spec.Worker.Vars[name], want)
+		if built.Spec.Worker.Variables[name] != want {
+			t.Errorf("Variables[%s] = %q, want %q", name, built.Spec.Worker.Variables[name], want)
 		}
 	}
 	if _, bound := built.Spec.Worker.Services[storeServiceBinding]; bound {
@@ -140,13 +140,13 @@ func TestEdgeProgramForAPreviewProjectOnTheSharedWildcard(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	if _, set := built.Spec.Worker.Vars[envPreviewBaseDomain]; set {
-		t.Errorf("Vars has %s = %q, want none: the shared preview entry has the base domain, not the project's worker",
-			envPreviewBaseDomain, built.Spec.Worker.Vars[envPreviewBaseDomain])
+	if _, set := built.Spec.Worker.Variables[envPreviewBaseDomain]; set {
+		t.Errorf("Variables has %s = %q, want none: the shared preview entry has the base domain, not the project's worker",
+			envPreviewBaseDomain, built.Spec.Worker.Variables[envPreviewBaseDomain])
 	}
 	for name, want := range map[string]string{envPreview: "1", envPreviewApps: "web,admin"} {
-		if built.Spec.Worker.Vars[name] != want {
-			t.Errorf("Vars[%s] = %q, want %q", name, built.Spec.Worker.Vars[name], want)
+		if built.Spec.Worker.Variables[name] != want {
+			t.Errorf("Variables[%s] = %q, want %q", name, built.Spec.Worker.Variables[name], want)
 		}
 	}
 	if built.Spec.Name != previewWorkerName(defaultNamespace, "proj") || built.Spec.PruneWorkerStem != previewWorkerStem(defaultNamespace, "proj") {
@@ -167,8 +167,8 @@ func TestEdgeProgramForAProductionProject(t *testing.T) {
 		t.Errorf("PruneWorkerStem = %q, want empty: a production spec sweeps its own script alone", built.Spec.PruneWorkerStem)
 	}
 	for _, unwanted := range []string{envPreview, envPreviewGlobal, envPreviewApps, envPreviewBaseDomain} {
-		if _, set := built.Spec.Worker.Vars[unwanted]; set {
-			t.Errorf("Vars has %s, which belongs to a preview", unwanted)
+		if _, set := built.Spec.Worker.Variables[unwanted]; set {
+			t.Errorf("Variables has %s, which belongs to a preview", unwanted)
 		}
 	}
 }

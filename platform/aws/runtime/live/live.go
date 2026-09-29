@@ -14,16 +14,16 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
-	vars "github.com/ocelhq/ocel/platform/aws/provider/vars/live"
+	variables "github.com/ocelhq/ocel/platform/aws/provider/variables/live"
 )
 
 type storeSource struct {
-	reader   envvars.EnvironmentReader
-	cells    []envvars.Cell
+	reader   variablestore.EnvironmentReader
+	cells    []variablestore.Cell
 	bindings []live.Binding
 
 	mu       sync.Mutex
@@ -45,7 +45,7 @@ func (f *storeSource) Fetch(ctx context.Context) (map[string]string, error) {
 	return merged(resolved, f.bindings, records), nil
 }
 
-func (f *storeSource) unreportedGrantLag(records []envvars.StoredBinding) []string {
+func (f *storeSource) unreportedGrantLag(records []variablestore.StoredBinding) []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.reported == nil {
@@ -69,7 +69,7 @@ type lagged struct {
 	Message string
 }
 
-func grantLag(bindings []live.Binding, records []envvars.StoredBinding) []lagged {
+func grantLag(bindings []live.Binding, records []variablestore.StoredBinding) []lagged {
 	var out []lagged
 	for i, record := range records {
 		granted := bindings[i].Granted
@@ -100,7 +100,7 @@ func bindingNames(bindings []live.Binding) []string {
 	return names
 }
 
-func merged(resolved map[string]string, bindings []live.Binding, records []envvars.StoredBinding) map[string]string {
+func merged(resolved map[string]string, bindings []live.Binding, records []variablestore.StoredBinding) map[string]string {
 	out := make(map[string]string, len(resolved)+len(records))
 	maps.Copy(out, resolved)
 	for i, record := range records {
@@ -110,18 +110,18 @@ func merged(resolved map[string]string, bindings []live.Binding, records []envva
 }
 
 func Resolve(ctx context.Context, taskRoot string) (*live.Values, error) {
-	raw, err := os.ReadFile(filepath.Join(taskRoot, vars.FilePath))
+	raw, err := os.ReadFile(filepath.Join(taskRoot, variables.FilePath))
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", vars.FilePath, err)
+		return nil, fmt.Errorf("read %s: %w", variables.FilePath, err)
 	}
 	return FromManifest(ctx, raw)
 }
 
 func FromManifest(ctx context.Context, raw []byte) (*live.Values, error) {
-	manifest, err := vars.Parse(raw)
+	manifest, err := variables.Parse(raw)
 	if err != nil {
 		return nil, err
 	}
@@ -134,10 +134,10 @@ func FromManifest(ctx context.Context, raw []byte) (*live.Values, error) {
 		return nil, fmt.Errorf("load aws config: %w", err)
 	}
 	return live.New(&storeSource{
-		reader: envvars.EnvironmentReader{
+		reader: variablestore.EnvironmentReader{
 			KeyValues:   awsports.KeyValues{Dynamo: dynamodb.NewFromConfig(cfg), Tables: awsports.Table(manifest.Table)},
 			Cipher:      awsports.Cipher{KMS: kms.NewFromConfig(cfg), Keys: awsports.Key(manifest.KeyARN)},
-			Scope:       envvars.Scope{Project: manifest.Slug, Tier: environment.Tier(manifest.Tier)},
+			Scope:       variablestore.Scope{Project: manifest.Slug, Tier: environment.Tier(manifest.Tier)},
 			Environment: manifest.Environment,
 		},
 		cells:    manifestCells(manifest),
@@ -145,10 +145,10 @@ func FromManifest(ctx context.Context, raw []byte) (*live.Values, error) {
 	}, live.Keys(manifest.Keys, manifest.Bindings), manifest.Bindings, nil), nil
 }
 
-func manifestCells(m vars.Manifest) []envvars.Cell {
-	cells := make([]envvars.Cell, 0, len(m.Keys))
+func manifestCells(m variables.Manifest) []variablestore.Cell {
+	cells := make([]variablestore.Cell, 0, len(m.Keys))
 	for _, k := range m.Keys {
-		cells = append(cells, envvars.Cell{Folder: k.Folder, Key: k.Key})
+		cells = append(cells, variablestore.Cell{Folder: k.Folder, Key: k.Key})
 	}
 	return cells
 }

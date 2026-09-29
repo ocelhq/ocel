@@ -16,11 +16,11 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
@@ -44,8 +44,8 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 	if err != nil {
 		return deploy.Config{}, err
 	}
-	store := envvars.Store{KeyValues: p.KeyValues(), Cipher: p.Cipher()}
-	referenced, err := store.ReferenceOwners(ctx, envvars.Scope{Project: scope.Slug, Tier: scope.Tier})
+	store := variablestore.Store{KeyValues: p.KeyValues(), Cipher: p.Cipher()}
+	referenced, err := store.ReferenceOwners(ctx, variablestore.Scope{Project: scope.Slug, Tier: scope.Tier})
 	if err != nil {
 		return deploy.Config{}, err
 	}
@@ -66,16 +66,16 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 		KeyValues: p.KeyValues(),
 		Rules:     elasticloadbalancingv2.NewFromConfig(p.aws),
 
-		Tier:           scope.Tier,
-		Slug:           scope.Slug,
-		Env:            scope.Env,
-		StateTable:     deployed.StateTable,
-		StateTableARN:  tableARN(p.aws.Region, account, deployed.StateTable),
-		VarsTable:      deployed.VarsTable,
-		VarsTableARN:   tableARN(p.aws.Region, account, deployed.VarsTable),
-		VarsKeyARN:     deployed.VarsKeyARN,
-		AppBoundaryARN: deployed.AppBoundaryARN,
-		VarsReferenced: referenced,
+		Tier:                scope.Tier,
+		Slug:                scope.Slug,
+		Env:                 scope.Env,
+		StateTable:          deployed.StateTable,
+		StateTableARN:       tableARN(p.aws.Region, account, deployed.StateTable),
+		VariablesTable:      deployed.VariablesTable,
+		VariablesTableARN:   tableARN(p.aws.Region, account, deployed.VariablesTable),
+		VariablesKeyARN:     deployed.VariablesKeyARN,
+		AppBoundaryARN:      deployed.AppBoundaryARN,
+		VariablesReferenced: referenced,
 
 		RuntimeLayers: deployed.RuntimeLayers,
 
@@ -127,7 +127,7 @@ func (p *Provider) requireBootstrapped(deployed bootstrap.Deployed, tier environ
 		{deployed.ArtifactBucket, "artifact bucket"},
 		{deployed.AssetBucket, "asset bucket"},
 		{deployed.StateTable, "state table"},
-		{deployed.VarsTable, "variable store"},
+		{deployed.VariablesTable, "variable store"},
 	} {
 		if missing.value == "" {
 			return refusal.Refuse(refusal.CodeNotReady,

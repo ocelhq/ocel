@@ -1,0 +1,741 @@
+package variablestore_test
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"sync"
+	"testing"
+
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/seal"
+	"github.com/ocelhq/ocel/pkg/variablestore"
+)
+
+func fixture() (variablestore.Store, variablestore.Scope) {
+	return variablestore.Store{KeyValues: fake.NewKeyValues(), Cipher: fake.NewCipher()},
+		variablestore.Scope{Project: "shop", Tier: environment.TierProduction}
+}
+
+func at(key string) variablestore.Coordinate {
+	return variablestore.Coordinate{Cell: variablestore.Cell{Key: key}}
+}
+
+func TestAValueIsSealedAndComesBackVersioned(t *testing.T) {
+	store, scope := fixture()
+	ctx := context.Background()
+
+	first, err := store.Set(ctx, scope, at("DATABASE_URL"), "postgres://one", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Version != 1 || first.Size != int64(len("postgres://one")) {
+		t.Fatalf("first Set() = %+v, want version 1 sized to the plaintext", first)
+	}
+
+	value, err := store.Get(ctx, scope, at("DATABASE_URL"), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value.Plaintext != "" {
+		t.Fatal("Get() without reveal returned the plaintext")
+	}
+
+	revealed, err := store.Get(ctx, scope, at("DATABASE_URL"), true)
+	if err != nil || revealed.Plaintext != "postgres://one" {
+		t.Fatalf("Get() with reveal = %q, %v", revealed.Plaintext, err)
+	}
+}
+
+func TestAWriteAtTheVersionSeenWinsAndAStaleOneLoses(t *testing.T) {
+	store, scope := fixture()
+	ctx := context.Background()
+
+	if _, err := store.Set(ctx, scope, at("KEY"), "one", nil); err != nil {
+		t.Fatal(err)
+	}
+	seen := int64(1)
+	if _, err := store.Set(ctx, scope, at("KEY"), "two", &seen); err != nil {
+		t.Fatalf("Set() at the version seen = %v, want it written", err)
+	}
+	if _, err := store.Set(ctx, scope, at("KEY"), "three", &seen); !errors.Is(err, variablestore.ErrStaleVersion) {
+		t.Fatalf("Set() at a version that moved = %v, want ErrStaleVersion", err)
+	}
+}
+
+func TestADeletedValueIsGoneButItsVersionsSurvive(t *testing.T) {
+	store, scope := fixture()
+	ctx := context.Background()
+
+	for _, value := range []string{"one", "two", "three"} {
+		if _, err := store.Set(ctx, scope, at("KEY"), value, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	deleted, err := store.Delete(ctx, scope, at("KEY"), nil)
+	if err != nil || !deleted {
+		t.Fatalf("Delete() = %v, %v", deleted, err)
+	}
+	if _, err := store.Get(ctx, scope, at("KEY"), false); !errors.Is(err, variablestore.ErrNotFound) {
+		t.Fatalf("Get() after Delete() = %v, want ErrNotFound", err)
+	}
+	listed, err := store.List(ctx, scope)
+	if err != nil || len(listed) != 0 {
+		t.Fatalf("List() after Delete() = %d values, %v, want the tombstone hidden", len(listed), err)
+	}
+
+	versions, err := store.Versions(ctx, scope, at("KEY"))
+	if err != nil || len(versions) != 3 {
+		t.Fatalf("Versions() = %d entries, %v, want one per write", len(versions), err)
+	}
+	if versions[0].Version != 1 || versions[2].Version != 3 {
+		t.Fatalf("Versions() = %+v, want them oldest first", versions)
+	}
+
+	again, err := store.Delete(ctx, scope, at("KEY"), nil)
+	if err != nil || again {
+		t.Fatalf("a second Delete() = %v, %v, want it report nothing removed", again, err)
+	}
+	written, err := store.Set(ctx, scope, at("KEY"), "four", nil)
+	if err != nil || written.Version != 4 {
+		t.Fatalf("Set() after Delete() = %+v, %v, want the version to continue", written, err)
+	}
+}
+
+func TestAValueOverTheCapIsRefused(t *testing.T) {
+	store, scope := fixture()
+	ctx := context.Background()
+
+	if _, err := store.Set(ctx, scope, at("KEY"), strings.Repeat("x", variablestore.MaxValueBytes), nil); err != nil {
+		t.Fatalf("Set() at the cap = %v, want it written", err)
+	}
+	_, err := store.Set(ctx, scope, at("KEY"), strings.Repeat("x", variablestore.MaxValueBytes+1), nil)
+	if !errors.Is(err, variablestore.ErrTooLarge) {
+		t.Fatalf("Set() over the cap = %v, want ErrTooLarge", err)
+	}
+}
+
+func TestAnEnvironmentValueShadowsTheTierWideOne(t *testing.T) {
+	store, scope := fixture()
+	ctx := context.Background()
+
+	if _, err := store.Set(ctx, scope, at("KEY"), "tier-wide", nil); err != nil {
+		t.Fatal(err)
+	}
+	scoped := variablestore.Coordinate{Cell: variablestore.Cell{Key: "KEY"}, Environment: "pr-7"}
+	if _, err := store.Set(ctx, scope, scoped, "pr-7 only", nil); err != nil {
+		t.Fatal(err)
+	}
+
+	reader := variablestore.EnvironmentReader{KeyValues: store.KeyValues, Cipher: store.Cipher, Scope: scope, Environment: "pr-7"}
+	seen, err := reader.Values(ctx, []variablestore.Cell{{Key: "KEY"}})
+	if err != nil || seen["KEY"] != "pr-7 only" {
+		t.Fatalf("the environment's reader saw %q, %v, want the environment's own value", seen["KEY"], err)
+	}
+
+	tierWide := variablestore.EnvironmentReader{KeyValues: store.KeyValues, Cipher: store.Cipher, Scope: scope}
+	seen, err = tierWide.Values(ctx, []variablestore.Cell{{Key: "KEY"}})
+	if err != nil || seen["KEY"] != "tier-wide" {
+		t.Fatalf("the tier-wide reader saw %q, %v", seen["KEY"], err)
+	}
+}
+
+func TestAReferenceResolvesOneHopAndNoFurther(t *testing.T) {
+	store, scope := fixture()
+	ctx := context.Background()
+	shared := variablestore.Scope{Project: "platform", Tier: environment.TierProduction}
+
+	if _, err := store.Set(ctx, shared, at("DATABASE_URL"), "postgres://shared", nil); err != nil {
+		t.Fatal(err)
+	}
+	target := variablestore.Target{Project: "platform", Cell: variablestore.Cell{Key: "DATABASE_URL"}}
+	if _, err := store.SetReference(ctx, scope, at("DATABASE_URL"), target); err != nil {
+		t.Fatal(err)
+	}
+
+	revealed, err := store.Get(ctx, scope, at("DATABASE_URL"), true)
+	if err != nil || revealed.Plaintext != "postgres://shared" {
+		t.Fatalf("Get() through a reference = %q, %v", revealed.Plaintext, err)
+	}
+	if revealed.Target == nil || revealed.Target.Project != "platform" {
+		t.Fatalf("the reference's metadata names %v, want the target it points at", revealed.Target)
+	}
+
+	deeper := variablestore.Scope{Project: "web", Tier: environment.TierProduction}
+	_, err = store.SetReference(ctx, deeper, at("DATABASE_URL"), variablestore.Target{Project: "shop", Cell: variablestore.Cell{Key: "DATABASE_URL"}})
+	if !errors.Is(err, variablestore.ErrWouldDeepen) {
+		t.Fatalf("a reference to a reference = %v, want ErrWouldDeepen", err)
+	}
+}
+
+func TestAReferenceRefusesToShadowAValueItsOwnConsumersRead(t *testing.T) {
+	store, scope := fixture()
+	ctx := context.Background()
+	shared := variablestore.Scope{Project: "platform", Tier: environment.TierProduction}
+	consumer := variablestore.Scope{Project: "web", Tier: environment.TierProduction}
+
+	if _, err := store.Set(ctx, scope, at("KEY"), "set here", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SetReference(ctx, consumer, at("KEY"), variablestore.Target{Project: "shop", Cell: variablestore.Cell{Key: "KEY"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Set(ctx, shared, at("KEY"), "set elsewhere", nil); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := store.SetReference(ctx, scope, at("KEY"), variablestore.Target{Project: "platform", Cell: variablestore.Cell{Key: "KEY"}})
+	if !errors.Is(err, variablestore.ErrWouldDeepen) {
+		t.Fatalf("making a referenced cell a reference = %v, want ErrWouldDeepen", err)
+	}
+	if !strings.Contains(err.Error(), "web") {
+		t.Fatalf("the refusal does not name the consumer: %v", err)
+	}
+}
+
+func TestSettingAValueOverAReferenceIsRefused(t *testing.T) {
+	store, scope := fixture()
+	ctx := context.Background()
+	shared := variablestore.Scope{Project: "platform", Tier: environment.TierProduction}
+
+	if _, err := store.Set(ctx, shared, at("KEY"), "set elsewhere", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SetReference(ctx, scope, at("KEY"), variablestore.Target{Project: "platform", Cell: variablestore.Cell{Key: "KEY"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Set(ctx, scope, at("KEY"), "set here now", nil); !errors.Is(err, variablestore.ErrIsReference) {
+		t.Fatalf("Set() over a reference = %v, want ErrIsReference", err)
+	}
+}
+
+func TestTheReverseIndexAnswersWhoReadsACell(t *testing.T) {
+	store, scope := fixture()
+	ctx := context.Background()
+
+	if _, err := store.Set(ctx, scope, at("KEY"), "set here", nil); err != nil {
+		t.Fatal(err)
+	}
+	target := variablestore.Target{Project: "shop", Cell: variablestore.Cell{Key: "KEY"}}
+	for _, project := range []string{"web", "worker"} {
+		consumer := variablestore.Scope{Project: project, Tier: environment.TierProduction}
+		if _, err := store.SetReference(ctx, consumer, at("KEY"), target); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	found, err := store.References(ctx, scope, at("KEY"))
+	if err != nil || len(found) != 2 {
+		t.Fatalf("References() = %+v, %v, want both consumers", found, err)
+	}
+	if found[0].Project != "web" || found[1].Project != "worker" {
+		t.Fatalf("References() = %+v, want them sorted", found)
+	}
+
+	consumer := variablestore.Scope{Project: "web", Tier: environment.TierProduction}
+	if _, err := store.Delete(ctx, consumer, at("KEY"), nil); err != nil {
+		t.Fatal(err)
+	}
+	found, err = store.References(ctx, scope, at("KEY"))
+	if err != nil || len(found) != 1 || found[0].Project != "worker" {
+		t.Fatalf("References() after a consumer deleted its reference = %+v, %v", found, err)
+	}
+}
+
+func TestRevealAnswersOnlyTheCellsThatHaveValues(t *testing.T) {
+	store, scope := fixture()
+	ctx := context.Background()
+
+	if _, err := store.Set(ctx, scope, at("A"), "one", nil); err != nil {
+		t.Fatal(err)
+	}
+	found, err := store.Reveal(ctx, scope, []variablestore.Coordinate{at("A"), at("B")})
+	if err != nil || len(found) != 1 || found[0].Plaintext != "one" {
+		t.Fatalf("Reveal() = %+v, %v, want only the cell that has a value", found, err)
+	}
+}
+
+func TestARevealOverABrokenReferenceFailsRatherThanOmittingIt(t *testing.T) {
+	store, scope := fixture()
+	ctx := context.Background()
+	shared := variablestore.Scope{Project: "platform", Tier: environment.TierProduction}
+
+	if _, err := store.Set(ctx, shared, at("DATABASE_URL"), "postgres://shared", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SetReference(ctx, scope, at("DATABASE_URL"), variablestore.Target{Project: "platform", Cell: variablestore.Cell{Key: "DATABASE_URL"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Delete(ctx, shared, at("DATABASE_URL"), nil); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := store.Reveal(ctx, scope, []variablestore.Coordinate{at("DATABASE_URL")})
+	if !errors.Is(err, variablestore.ErrDangling) {
+		t.Fatalf("Reveal() over a reference to a value that is gone = %v, want ErrDangling rather than a quietly missing variable", err)
+	}
+	if !strings.Contains(err.Error(), "platform") {
+		t.Fatalf("the failure does not name the broken reference: %v", err)
+	}
+
+	reader := variablestore.EnvironmentReader{KeyValues: store.KeyValues, Cipher: store.Cipher, Scope: scope}
+	if _, err := reader.Values(ctx, []variablestore.Cell{{Key: "DATABASE_URL"}}); !errors.Is(err, variablestore.ErrDangling) {
+		t.Fatalf("a reader over a broken reference = %v, want it to refuse to boot the app", err)
+	}
+}
+
+func TestPurgeFreesTheCellsTheProjectWasReading(t *testing.T) {
+	store, scope := fixture()
+	ctx := context.Background()
+	consumer := variablestore.Scope{Project: "web", Tier: environment.TierProduction}
+
+	if _, err := store.Set(ctx, scope, at("KEY"), "set here", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SetReference(ctx, consumer, at("KEY"), variablestore.Target{Project: "shop", Cell: variablestore.Cell{Key: "KEY"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := store.Purge(ctx, consumer); err != nil {
+		t.Fatal(err)
+	}
+	found, err := store.References(ctx, scope, at("KEY"))
+	if err != nil || len(found) != 0 {
+		t.Fatalf("References() after the consuming project was purged = %+v, %v, want nothing reading it", found, err)
+	}
+
+	shared := variablestore.Scope{Project: "platform", Tier: environment.TierProduction}
+	if _, err := store.Set(ctx, shared, at("KEY"), "set elsewhere", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SetReference(ctx, scope, at("KEY"), variablestore.Target{Project: "platform", Cell: variablestore.Cell{Key: "KEY"}}); err != nil {
+		t.Fatalf("SetReference() over a cell only a purged project read = %v, want it taken", err)
+	}
+}
+
+func TestPurgeTakesEveryRecordAProjectOwns(t *testing.T) {
+	store, scope := fixture()
+	ctx := context.Background()
+
+	if _, err := store.Set(ctx, scope, at("KEY"), "one", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SetBinding(ctx, scope, "", "OCEL", "db", variablestore.BindingWrite{Record: []byte("{}"), Value: []byte("{}")}); err != nil {
+		t.Fatal(err)
+	}
+	consumer := variablestore.Scope{Project: "web", Tier: environment.TierProduction}
+	if _, err := store.SetReference(ctx, consumer, at("KEY"), variablestore.Target{Project: "shop", Cell: variablestore.Cell{Key: "KEY"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := store.Purge(ctx, scope); err != nil {
+		t.Fatal(err)
+	}
+	listed, err := store.List(ctx, scope)
+	if err != nil || len(listed) != 0 {
+		t.Fatalf("List() after Purge() = %d values, %v", len(listed), err)
+	}
+	names, err := store.PublishedNames(ctx, scope, "")
+	if err != nil || len(names) != 0 {
+		t.Fatalf("PublishedNames() after Purge() = %v, %v", names, err)
+	}
+	found, err := store.References(ctx, scope, at("KEY"))
+	if err != nil || len(found) != 0 {
+		t.Fatalf("References() after Purge() = %+v, %v", found, err)
+	}
+}
+
+func TestAKeyKeepsItsShapeThroughTheRecordTree(t *testing.T) {
+	store, scope := fixture()
+	ctx := context.Background()
+
+	awkward := []variablestore.Coordinate{
+		{Cell: variablestore.Cell{Key: "A/B"}},
+		{Cell: variablestore.Cell{Key: "A%2FB"}},
+		{Cell: variablestore.Cell{Folder: "/apps/web", Key: "KEY"}},
+		{Cell: variablestore.Cell{Folder: "/apps/web/inner", Key: "KEY"}},
+		{Cell: variablestore.Cell{Key: "KEY"}, Environment: "pr/7"},
+	}
+	for i, cell := range awkward {
+		if _, err := store.Set(ctx, scope, cell, string(rune('a'+i)), nil); err != nil {
+			t.Fatalf("Set(%+v) = %v", cell, err)
+		}
+	}
+	for i, cell := range awkward {
+		value, err := store.Get(ctx, scope, cell, true)
+		if err != nil || value.Plaintext != string(rune('a'+i)) {
+			t.Fatalf("Get(%+v) = %q, %v, want the value written there and no other", cell, value.Plaintext, err)
+		}
+	}
+	listed, err := store.List(ctx, scope)
+	if err != nil || len(listed) != len(awkward) {
+		t.Fatalf("List() = %d values, %v, want the %d written", len(listed), err, len(awkward))
+	}
+	for _, m := range listed {
+		if m.Coordinate.Key == "" {
+			t.Fatalf("List() returned a value whose coordinate did not survive the round trip: %+v", m)
+		}
+	}
+}
+
+func TestABindingNameBelongsToOnePublisher(t *testing.T) {
+	store, scope := fixture()
+	ctx := context.Background()
+	pair := variablestore.BindingWrite{Record: []byte("{}"), Value: []byte(`{"name":"db"}`)}
+
+	if _, err := store.SetBinding(ctx, scope, "", "neon", "db", pair); err != nil {
+		t.Fatal(err)
+	}
+	_, err := store.SetBinding(ctx, scope, "", "supabase", "db", pair)
+	if !errors.Is(err, variablestore.ErrClaimed) {
+		t.Fatalf("a second publisher taking the name = %v, want ErrClaimed", err)
+	}
+	if !strings.Contains(err.Error(), "neon") {
+		t.Fatalf("the refusal does not name the owner: %v", err)
+	}
+
+	version, err := store.SetBinding(ctx, scope, "", "neon", "db", pair)
+	if err != nil || version != 2 {
+		t.Fatalf("the owner republishing = %d, %v, want version 2", version, err)
+	}
+}
+
+func TestABindingIsRemovedAndItsNameFreed(t *testing.T) {
+	store, scope := fixture()
+	ctx := context.Background()
+	pair := variablestore.BindingWrite{Record: []byte("{}"), Value: []byte(`{"name":"db"}`)}
+
+	if _, err := store.SetBinding(ctx, scope, "", "neon", "db", pair); err != nil {
+		t.Fatal(err)
+	}
+	removed, err := store.RemoveBinding(ctx, scope, "", "db")
+	if err != nil || !removed {
+		t.Fatalf("RemoveBinding() = %v, %v", removed, err)
+	}
+	if again, err := store.RemoveBinding(ctx, scope, "", "db"); err != nil || again {
+		t.Fatalf("a second RemoveBinding() = %v, %v, want it report nothing removed", again, err)
+	}
+	if _, err := store.SetBinding(ctx, scope, "", "supabase", "db", pair); err != nil {
+		t.Fatalf("publishing to the freed name = %v, want it allowed", err)
+	}
+}
+
+func TestABindingPublishedToAnEnvironmentShadowsTheTierWidePair(t *testing.T) {
+	store, scope := fixture()
+	ctx := context.Background()
+
+	if _, err := store.SetBinding(ctx, scope, "", "OCEL", "db", variablestore.BindingWrite{Record: []byte(`{"tier":true}`), Value: []byte("tier-wide")}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SetBinding(ctx, scope, "pr-7", "OCEL", "db", variablestore.BindingWrite{Record: []byte(`{"env":true}`), Value: []byte("pr-7 only")}); err != nil {
+		t.Fatal(err)
+	}
+
+	published, err := store.ResolveBinding(ctx, scope, "pr-7", "db")
+	if err != nil || string(published.Value) != "pr-7 only" {
+		t.Fatalf("ResolveBinding() in the environment = %q, %v", published.Value, err)
+	}
+	published, err = store.ResolveBinding(ctx, scope, "", "db")
+	if err != nil || string(published.Value) != "tier-wide" {
+		t.Fatalf("ResolveBinding() tier-wide = %q, %v", published.Value, err)
+	}
+
+	summaries, err := store.ListBindings(ctx, scope, "pr-7")
+	if err != nil || len(summaries) != 1 || string(summaries[0].Record) != `{"env":true}` {
+		t.Fatalf("ListBindings() in the environment = %+v, %v, want the environment's own record", summaries, err)
+	}
+}
+
+func TestAViewResolvesTheBindingsADeploymentWasBuiltToRead(t *testing.T) {
+	store, scope := fixture()
+	ctx := context.Background()
+
+	if _, err := store.SetBinding(ctx, scope, "", "OCEL", "db", variablestore.BindingWrite{Record: []byte("{}"), Value: []byte("the sealed record")}); err != nil {
+		t.Fatal(err)
+	}
+	reader := variablestore.EnvironmentReader{KeyValues: store.KeyValues, Cipher: store.Cipher, Scope: scope}
+
+	found, err := reader.Bindings(ctx, []string{"db"})
+	if err != nil || len(found) != 1 || string(found[0].Value) != "the sealed record" {
+		t.Fatalf("Bindings() = %+v, %v", found, err)
+	}
+	if _, err := reader.Bindings(ctx, []string{"db", "cache"}); !errors.Is(err, variablestore.ErrNotPublished) {
+		t.Fatalf("Bindings() naming a binding nobody published = %v, want ErrNotPublished", err)
+	}
+}
+
+func TestReferenceOwnersNamesTheProjectsAValueIsBorrowedFrom(t *testing.T) {
+	store, scope := fixture()
+	ctx := context.Background()
+	shared := variablestore.Scope{Project: "platform", Tier: environment.TierProduction}
+
+	if _, err := store.Set(ctx, shared, at("DATABASE_URL"), "postgres://shared", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Set(ctx, scope, at("OWN"), "set here", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SetReference(ctx, scope, at("DATABASE_URL"), variablestore.Target{Project: "platform", Cell: variablestore.Cell{Key: "DATABASE_URL"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	owners, err := store.ReferenceOwners(ctx, scope)
+	if err != nil || len(owners) != 1 {
+		t.Fatalf("ReferenceOwners() = %v, %v, want only the borrowed cell", owners, err)
+	}
+	if owners[at("DATABASE_URL")] != "platform" {
+		t.Fatalf("ReferenceOwners() = %v, want the borrowed cell to name the project that owns it", owners)
+	}
+}
+
+func TestAnUnpublishedBindingIsNotFound(t *testing.T) {
+	store, scope := fixture()
+
+	_, err := store.ResolveBinding(context.Background(), scope, "", "db")
+	if !errors.Is(err, variablestore.ErrNotPublished) {
+		t.Fatalf("ResolveBinding() of a binding nobody published = %v, want ErrNotPublished", err)
+	}
+}
+
+func TestTheTierWideEnvironmentIsReserved(t *testing.T) {
+	store, scope := fixture()
+	ctx := context.Background()
+
+	if err := variablestore.ValidateBindingEnvironment("*"); err == nil {
+		t.Fatal("the tier-wide token was accepted as an environment name")
+	}
+	if _, err := store.SetBinding(ctx, scope, "*", "neon", "db", variablestore.BindingWrite{}); err == nil {
+		t.Fatal("SetBinding() to the tier-wide token succeeded, want it refused")
+	}
+	if _, err := store.SetBinding(ctx, scope, "", "", "db", variablestore.BindingWrite{}); err == nil {
+		t.Fatal("SetBinding() with no publisher succeeded, want it refused")
+	}
+}
+
+type counted struct {
+	keyvalue.Store
+	seal.Cipher
+	mu     sync.Mutex
+	reads  int
+	lists  int
+	opened int
+	under  [][]string
+}
+
+func (c *counted) Read(ctx context.Context, name keyvalue.Key) (keyvalue.Entry, error) {
+	c.mu.Lock()
+	c.reads++
+	c.mu.Unlock()
+	return c.Store.Read(ctx, name)
+}
+
+func (c *counted) List(ctx context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
+	c.mu.Lock()
+	c.lists++
+	c.under = append(c.under, append([]string{in.String()}, under...))
+	c.mu.Unlock()
+	return c.Store.List(ctx, in, under...)
+}
+
+func (c *counted) Open(ctx context.Context, tier environment.Tier, bound seal.AssociatedData, sealed []byte) ([]byte, error) {
+	c.mu.Lock()
+	c.opened++
+	c.mu.Unlock()
+	return c.Cipher.Open(ctx, tier, bound, sealed)
+}
+
+func TestRevealReadsTheProjectOnceAndOpensEachCiphertextOnce(t *testing.T) {
+	store, scope := fixture()
+	ctx := context.Background()
+	shared := variablestore.Scope{Project: "platform", Tier: environment.TierProduction}
+
+	if _, err := store.Set(ctx, shared, at("DATABASE_URL"), "postgres://shared", nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"A", "B", "C"} {
+		if _, err := store.Set(ctx, scope, at(key), "value "+key, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	target := variablestore.Target{Project: "platform", Cell: variablestore.Cell{Key: "DATABASE_URL"}}
+	for _, key := range []string{"PRIMARY_URL", "REPLICA_URL"} {
+		if _, err := store.SetReference(ctx, scope, at(key), target); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	watched := &counted{Store: store.KeyValues, Cipher: store.Cipher}
+	store.KeyValues, store.Cipher = watched, watched
+	found, err := store.Reveal(ctx, scope, []variablestore.Coordinate{
+		at("A"), at("B"), at("C"), at("PRIMARY_URL"), at("REPLICA_URL"), at("NEVER_SET"),
+	})
+	if err != nil || len(found) != 5 {
+		t.Fatalf("Reveal() = %d values, %v, want the five that have one", len(found), err)
+	}
+	if watched.lists != 1 {
+		t.Errorf("Reveal() listed the project's cells %d times, want one query for the whole batch", watched.lists)
+	}
+	if watched.reads != 1 {
+		t.Errorf("Reveal() read %d cells one at a time, want only the borrowed cell in the other project", watched.reads)
+	}
+	if watched.opened != 4 {
+		t.Errorf("Reveal() opened %d ciphertexts, want one per distinct cell behind the six asked for", watched.opened)
+	}
+}
+
+func TestResolvingABatchOfBindingsReadsEachEnvironmentOnce(t *testing.T) {
+	store, scope := fixture()
+	ctx := context.Background()
+
+	publishing := make([]variablestore.NamedBindingWrite, 0, 3)
+	for _, name := range []string{"db", "cache", "queue"} {
+		publishing = append(publishing, variablestore.NamedBindingWrite{Name: name, Write: variablestore.BindingWrite{Record: []byte("{}"), Value: []byte(`"` + name + `"`)}})
+	}
+	if _, err := store.SetBindings(ctx, scope, "", "OCEL", publishing); err != nil {
+		t.Fatal(err)
+	}
+
+	watched := &counted{Store: store.KeyValues, Cipher: store.Cipher}
+	store.KeyValues, store.Cipher = watched, watched
+	resolved, err := store.ResolveBindings(ctx, scope, "", []string{"db", "cache", "queue"})
+	if err != nil || len(resolved) != 3 {
+		t.Fatalf("ResolveBindings() = %+v, %v, want all three", resolved, err)
+	}
+	for i, name := range []string{"db", "cache", "queue"} {
+		if string(resolved[i].Value) != `"`+name+`"` {
+			t.Fatalf("ResolveBindings() answered %q for %s", resolved[i].Value, name)
+		}
+	}
+	if watched.reads != 0 || watched.lists != 1 {
+		t.Errorf("ResolveBindings() made %d point reads and %d queries, want one query serving the whole batch", watched.reads, watched.lists)
+	}
+}
+
+func TestResolvingOneBindingReadsThatBindingAlone(t *testing.T) {
+	store, scope := fixture()
+	ctx := context.Background()
+
+	for _, name := range []string{"db", "cache", "queue"} {
+		if _, err := store.SetBinding(ctx, scope, "", "OCEL", name, variablestore.BindingWrite{Record: []byte("{}"), Value: []byte(`"` + name + `"`)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := store.SetBinding(ctx, scope, "pr-7", "OCEL", "db", variablestore.BindingWrite{Record: []byte("{}"), Value: []byte(`"pr-7 db"`)}); err != nil {
+		t.Fatal(err)
+	}
+
+	watched := &counted{Store: store.KeyValues, Cipher: store.Cipher}
+	store.KeyValues, store.Cipher = watched, watched
+	resolved, err := store.ResolveBinding(ctx, scope, "pr-7", "db")
+	if err != nil || string(resolved.Value) != `"pr-7 db"` {
+		t.Fatalf("ResolveBinding() = %q, %v, want the pair published to the environment", resolved.Value, err)
+	}
+	if watched.reads != 0 || watched.lists != 1 {
+		t.Fatalf("ResolveBinding() made %d point reads and %d queries, want one query returning the whole pair", watched.reads, watched.lists)
+	}
+	if under := strings.Join(watched.under[0], "/"); !strings.HasSuffix(under, "bindings/db") {
+		t.Errorf("ResolveBinding() queried under %q, want the prefix one binding's records and values share", under)
+	}
+}
+
+func TestRevealUnderACancelledContextNeverReadsAsEmptyValues(t *testing.T) {
+	store, scope := fixture()
+	var wanted []variablestore.Coordinate
+	for _, key := range []string{"A", "B", "C", "D", "E", "F", "G", "H"} {
+		if _, err := store.Set(context.Background(), scope, at(key), "value "+key, nil); err != nil {
+			t.Fatal(err)
+		}
+		wanted = append(wanted, at(key))
+	}
+
+	ctx, stop := context.WithCancel(context.Background())
+	stop()
+
+	found, err := store.Reveal(ctx, scope, wanted)
+	if err != nil {
+		return
+	}
+	for _, value := range found {
+		if value.Plaintext == "" {
+			t.Fatalf("Reveal() = %+v with no error, want either a refusal or the value: an empty secret read as a success boots the function with a blank variable", value)
+		}
+	}
+}
+
+func TestABindingWriteAtTheVersionSeenWinsAndAStaleOneLoses(t *testing.T) {
+	store, scope := fixture()
+	ctx := context.Background()
+	pair := variablestore.BindingWrite{Record: []byte("{}"), Value: []byte(`{"name":"db"}`)}
+	absent, seen := int64(0), int64(1)
+
+	if _, err := store.SetBindings(ctx, scope, "", "neon", []variablestore.NamedBindingWrite{{Name: "db", Write: pair, Expected: &absent}}); err != nil {
+		t.Fatalf("publishing a binding expected absent = %v", err)
+	}
+	stale := variablestore.BindingWrite{Record: []byte("{}"), Value: []byte(`{"name":"stale"}`)}
+	_, err := store.SetBindings(ctx, scope, "", "neon", []variablestore.NamedBindingWrite{{Name: "db", Write: stale, Expected: &absent}})
+	if !errors.Is(err, variablestore.ErrBindingChanged) {
+		t.Fatalf("a write expecting the binding absent after it was published = %v, want ErrBindingChanged", err)
+	}
+	resolved, err := store.ResolveBinding(ctx, scope, "", "db")
+	if err != nil || string(resolved.Value) != `{"name":"db"}` || resolved.Version != 1 {
+		t.Fatalf("ResolveBinding() = %q v%d, %v, want the first publish untouched", resolved.Value, resolved.Version, err)
+	}
+	versions, err := store.SetBindings(ctx, scope, "", "neon", []variablestore.NamedBindingWrite{{Name: "db", Write: pair, Expected: &seen}})
+	if err != nil || versions[0] != 2 {
+		t.Fatalf("a write at the version seen = %v, %v, want version 2", versions, err)
+	}
+}
+
+func TestARemovalAtTheVersionsSeenLeavesARepublishedBinding(t *testing.T) {
+	store, scope := fixture()
+	ctx := context.Background()
+	pair := variablestore.BindingWrite{Record: []byte("{}"), Value: []byte(`{"name":"db"}`)}
+	for _, name := range []string{"db", "cache", "db"} {
+		if _, err := store.SetBinding(ctx, scope, "", "neon", name, pair); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	removed, err := store.RemoveUnchangedBindings(ctx, scope, "", map[string]int64{"db": 1, "cache": 1})
+	if err != nil {
+		t.Fatalf("RemoveUnchangedBindings() = %v", err)
+	}
+	if strings.Join(removed, ",") != "cache" {
+		t.Errorf("removed %v, want only cache: db was republished after version 1 was seen", removed)
+	}
+	listed, err := store.ListBindings(ctx, scope, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 1 || listed[0].Name != "db" || listed[0].Version != 2 {
+		t.Errorf("ListBindings() = %+v, want db at version 2 still published", listed)
+	}
+}
+
+func TestConcurrentWritesAtOneVersionSeenLetExactlyOneWin(t *testing.T) {
+	store, scope := fixture()
+	ctx := context.Background()
+	pair := variablestore.BindingWrite{Record: []byte("{}"), Value: []byte(`{"name":"db"}`)}
+	absent := int64(0)
+
+	const writers = 8
+	var wg sync.WaitGroup
+	errs := make([]error, writers)
+	for i := range writers {
+		wg.Go(func() {
+			_, errs[i] = store.SetBindings(ctx, scope, "", "neon", []variablestore.NamedBindingWrite{{Name: "db", Write: pair, Expected: &absent}})
+		})
+	}
+	wg.Wait()
+	won := 0
+	for _, err := range errs {
+		if err == nil {
+			won++
+		}
+	}
+	if won != 1 {
+		t.Errorf("%d of %d writers expecting the binding absent won, want exactly one: %v", won, writers, errs)
+	}
+}

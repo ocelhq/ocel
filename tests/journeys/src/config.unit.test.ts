@@ -75,7 +75,7 @@ describe("awsSweepOverlay", () => {
       awsSweepOverlay(cell(deploy.node), "j-9-deploy-node", {
         OCEL_JOURNEY_DNS: "cloudflare",
         OCEL_JOURNEY_ZONE: "j.example",
-        OCEL_AWS_VARS_KEY: "arn:aws:kms:key/k",
+        OCEL_AWS_VARIABLES_KEY: "arn:aws:kms:key/k",
       }),
     ).toEqual({
       base: DEFAULT_BASE,
@@ -120,19 +120,19 @@ describe("overlayFor", () => {
     });
   });
 
-  it("seals an aws cell's vars under the key the account brought", () => {
+  it("seals an aws cell's variables under the key the account brought", () => {
     expect(
-      overlayFor(cell(deploy.node), "aws", { OCEL_AWS_VARS_KEY: " arn:aws:kms:key/k " }),
+      overlayFor(cell(deploy.node), "aws", { OCEL_AWS_VARIABLES_KEY: " arn:aws:kms:key/k " }),
     ).toEqual({
       base: DEFAULT_BASE,
       slug: "j-1-deploy-node",
-      varsKey: "arn:aws:kms:key/k",
+      variablesKey: "arn:aws:kms:key/k",
     });
   });
 
   it("hangs a vps cell's hostnames under the box's zone, and takes no key", () => {
     expect(
-      overlayFor(cell(deploy.node), "vps", { OCEL_AWS_VARS_KEY: "arn:aws:kms:key/k" }),
+      overlayFor(cell(deploy.node), "vps", { OCEL_AWS_VARIABLES_KEY: "arn:aws:kms:key/k" }),
     ).toEqual({
       base: VPS_BASE,
       slug: "j-1-deploy-node",
@@ -232,7 +232,7 @@ describe("overlayFor", () => {
     expect(
       overlayFor(cell(deploy.node), "dev", {
         OCEL_JOURNEY_ZONE: "j.example",
-        OCEL_AWS_VARS_KEY: "arn:aws:kms:key/k",
+        OCEL_AWS_VARIABLES_KEY: "arn:aws:kms:key/k",
       }),
     ).toEqual({
       base: DEFAULT_BASE,
@@ -302,11 +302,11 @@ export default defineConfig({
     expect(renderConfig({ base: TS_BASE, slug: "j-1-node" })).not.toContain("provider:");
   });
 
-  it("keeps the fixture's own provider options under the key it seals vars with", () => {
+  it("keeps the fixture's own provider options under the key it seals variables with", () => {
     expect(
-      renderConfig({ base: TS_BASE, slug: "j-1-node", varsKey: "arn:aws:kms:key/k" }),
+      renderConfig({ base: TS_BASE, slug: "j-1-node", variablesKey: "arn:aws:kms:key/k" }),
     ).toContain(
-      `  provider: { aws: { ...(base.provider !== null && typeof base.provider === "object" ? base.provider.aws : {}), varsKey: "arn:aws:kms:key/k" } },`,
+      `  provider: { aws: { ...(base.provider !== null && typeof base.provider === "object" ? base.provider.aws : {}), variablesKey: "arn:aws:kms:key/k" } },`,
     );
   });
 
@@ -414,13 +414,13 @@ describe("renderJsonConfig", () => {
           edge: "api-gateway",
           dns: "cloudflare",
           hostnames: { web: "web-j-1-go.j.example" },
-          varsKey: "arn:aws:kms:key/k",
+          variablesKey: "arn:aws:kms:key/k",
         }),
       ),
     ).toEqual({
       $schema: "https://ocel.dev/schema/0.0.0/ocel.schema.json",
       slug: "j-1-go",
-      provider: { aws: { varsKey: "arn:aws:kms:key/k" } },
+      provider: { aws: { variablesKey: "arn:aws:kms:key/k" } },
       edge: "api-gateway",
       dns: "cloudflare",
       apps: [
@@ -452,10 +452,10 @@ describe("renderJsonConfig", () => {
         renderJsonConfig(`{"slug":"go","provider":{"aws":{"region":"eu-west-1"}}}`, {
           base: "./ocel.json",
           slug: "j-1-go",
-          varsKey: "arn:aws:kms:key/k",
+          variablesKey: "arn:aws:kms:key/k",
         }),
       ).provider,
-    ).toEqual({ aws: { region: "eu-west-1", varsKey: "arn:aws:kms:key/k" } });
+    ).toEqual({ aws: { region: "eu-west-1", variablesKey: "arn:aws:kms:key/k" } });
   });
 
   it("keeps the box the fixture's vps provider reaches under the proxy it runs behind", () => {
@@ -470,16 +470,16 @@ describe("renderJsonConfig", () => {
     ).toEqual({ vps: { ssh: { host: "box" }, proxy: { manual: { port: 9000 } } } });
   });
 
-  it("seals vars under aws when the fixture's provider is null", () => {
+  it("seals variables under aws when the fixture's provider is null", () => {
     expect(
       JSON.parse(
         renderJsonConfig(`{"slug":"go","provider":null}`, {
           base: "./ocel.json",
           slug: "j-1-go",
-          varsKey: "arn:aws:kms:key/k",
+          variablesKey: "arn:aws:kms:key/k",
         }),
       ).provider,
-    ).toEqual({ aws: { varsKey: "arn:aws:kms:key/k" } });
+    ).toEqual({ aws: { variablesKey: "arn:aws:kms:key/k" } });
   });
 });
 

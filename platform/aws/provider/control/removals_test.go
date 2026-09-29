@@ -42,18 +42,18 @@ func removingBootstrapper(t *testing.T, tier environment.Tier) Bootstrap {
 		t.Fatalf("StackNameFor(%s): %v", tier, err)
 	}
 	isrStack := defaultNamespace.FeatureStackName(bootstrap.FeatureISR, tier)
-	varsKeyStack := defaultNamespace.FeatureStackName(provider.FeatureVarsKey, tier)
+	variablesKeyStack := defaultNamespace.FeatureStackName(provider.FeatureVariablesKey, tier)
 	cfn := b.CFN.(*teardownCFN)
 	cfn.present[isrStack] = bootstrap.Deployed{Present: true}
-	cfn.present[varsKeyStack] = bootstrap.Deployed{Present: true}
+	cfn.present[variablesKeyStack] = bootstrap.Deployed{Present: true}
 	cfn.resources = map[string][]cfntypes.StackResourceSummary{
 		stackName: {
 			summary("StateBucket", "AWS::S3::Bucket"),
 			summary("StateTable", "AWS::DynamoDB::Table"),
 			summary("AssetBucket", "AWS::S3::Bucket"),
 		},
-		isrStack:     {summary("RevalidationQueue", "AWS::SQS::Queue")},
-		varsKeyStack: {summary("VarsKey", "AWS::KMS::Key")},
+		isrStack:          {summary("RevalidationQueue", "AWS::SQS::Queue")},
+		variablesKeyStack: {summary("VariablesKey", "AWS::KMS::Key")},
 	}
 	b.Edge = &planningEdge{removals: []edge.PlanChange{
 		{Kind: "Cloudflare::Worker", Name: "ocel-deployments-store", Action: edge.PlanDelete},
@@ -374,7 +374,7 @@ func TestRemoveLeavesAloneAnEdgeThisAccountStoresNothingFor(t *testing.T) {
 	}
 }
 
-func TestPlanRemovalSaysWhatDroppingTheVarsKeyStrands(t *testing.T) {
+func TestPlanRemovalSaysWhatDroppingTheVariablesKeyStrands(t *testing.T) {
 	t.Parallel()
 
 	b := removingBootstrapper(t, environment.TierProduction)
@@ -384,12 +384,12 @@ func TestPlanRemovalSaysWhatDroppingTheVarsKeyStrands(t *testing.T) {
 		t.Fatalf("PlanRemove: %v", err)
 	}
 
-	group := groupNamed(plan, "aws/"+defaultNamespace.FeatureStackName(provider.FeatureVarsKey, environment.TierProduction))
+	group := groupNamed(plan, "aws/"+defaultNamespace.FeatureStackName(provider.FeatureVariablesKey, environment.TierProduction))
 	if group == nil {
-		t.Fatalf("plan groups = %s, want the stack the vars key is provisioned in", groupNames(plan))
+		t.Fatalf("plan groups = %s, want the stack the variables key is provisioned in", groupNames(plan))
 	}
-	key := changeNamed(group, "VarsKey")
+	key := changeNamed(group, "VariablesKey")
 	if key == nil || key.Reason == "" {
-		t.Errorf("the vars key row = %+v, want the note that every value sealed under it is stranded", key)
+		t.Errorf("the variables key row = %+v, want the note that every value sealed under it is stranded", key)
 	}
 }

@@ -16,7 +16,7 @@ import (
 )
 
 func TestNoNetworkExporterWithoutAnExplicitEndpoint(t *testing.T) {
-	for _, v := range otlpEndpointEnvVars {
+	for _, v := range otlpEndpointEnvVariables {
 		t.Setenv(v, "")
 	}
 

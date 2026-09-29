@@ -11,7 +11,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
-	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -25,6 +24,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
 type projectRemoval struct {
@@ -390,11 +390,11 @@ func (r *projectRemoval) discardCertificates(ctx context.Context, certificates [
 
 func (r *projectRemoval) purgeValues(ctx context.Context, progress progress.Log) error {
 	progress.Say(fmt.Sprintf("Removing the stored variable values of %s in %s", r.slug, r.tier))
-	store := envvars.Store{KeyValues: r.provider.KeyValues(), Cipher: r.provider.Cipher()}
+	store := variablestore.Store{KeyValues: r.provider.KeyValues(), Cipher: r.provider.Cipher()}
 	if err := envsource.ForgetProject(ctx, store, r.tier, r.slug); err != nil {
 		return fmt.Errorf("forget %s's env source: %w", r.slug, err)
 	}
-	if _, err := store.Purge(ctx, envvars.Scope{Project: r.slug, Tier: r.tier}); err != nil {
+	if _, err := store.Purge(ctx, variablestore.Scope{Project: r.slug, Tier: r.tier}); err != nil {
 		return fmt.Errorf("remove %s's stored variable values: %w", r.slug, err)
 	}
 	return nil

@@ -11,7 +11,7 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
-	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -22,11 +22,11 @@ type Store struct {
 }
 
 func (s Store) List(ctx context.Context) ([]variables.ValueMetadata, error) {
-	envVars, err := s.Provider.EnvVars()
+	variableStore, err := s.Provider.VariableStore()
 	if err != nil {
 		return nil, err
 	}
-	resp, err := envVars.ListValues(ctx, &envvarsv1.ListValuesRequest{
+	resp, err := variableStore.ListValues(ctx, &variablestorev1.ListValuesRequest{
 		Tier: s.Tier,
 		Slug: s.Project.Slug,
 	})
@@ -46,11 +46,11 @@ func (s Store) List(ctx context.Context) ([]variables.ValueMetadata, error) {
 	return stored, nil
 }
 
-func coordinateOf(c *envvarsv1.Coordinate) variables.Coordinate {
+func coordinateOf(c *variablestorev1.Coordinate) variables.Coordinate {
 	return variables.Coordinate{Cell: variables.Cell{Key: c.GetKey(), Folder: c.GetFolder()}, Environment: c.GetEnvironment()}
 }
 
-func referenceOf(target *envvarsv1.Coordinate) *variables.Reference {
+func referenceOf(target *variablestorev1.Coordinate) *variables.Reference {
 	if target == nil {
 		return nil
 	}
@@ -58,15 +58,15 @@ func referenceOf(target *envvarsv1.Coordinate) *variables.Reference {
 }
 
 func (s Store) Reveal(ctx context.Context, rows []variables.Coordinate) (map[variables.Coordinate]string, error) {
-	named := make([]*envvarsv1.Coordinate, 0, len(rows))
+	named := make([]*variablestorev1.Coordinate, 0, len(rows))
 	for _, row := range rows {
 		named = append(named, s.coordinate(row))
 	}
-	envVars, err := s.Provider.EnvVars()
+	variableStore, err := s.Provider.VariableStore()
 	if err != nil {
 		return nil, err
 	}
-	resp, err := envVars.RevealValues(ctx, &envvarsv1.RevealValuesRequest{
+	resp, err := variableStore.RevealValues(ctx, &variablestorev1.RevealValuesRequest{
 		Tier:  s.Tier,
 		Slug:  s.Project.Slug,
 		Cells: named,
@@ -81,16 +81,16 @@ func (s Store) Reveal(ctx context.Context, rows []variables.Coordinate) (map[var
 	return found, nil
 }
 
-func (s Store) coordinate(at variables.Coordinate) *envvarsv1.Coordinate {
-	return &envvarsv1.Coordinate{Slug: s.Project.Slug, Folder: at.Cell.Folder, Key: at.Cell.Key, Environment: at.Environment}
+func (s Store) coordinate(at variables.Coordinate) *variablestorev1.Coordinate {
+	return &variablestorev1.Coordinate{Slug: s.Project.Slug, Folder: at.Cell.Folder, Key: at.Cell.Key, Environment: at.Environment}
 }
 
 func (s Store) Version(ctx context.Context, at variables.Coordinate) (int64, error) {
-	envVars, err := s.Provider.EnvVars()
+	variableStore, err := s.Provider.VariableStore()
 	if err != nil {
 		return 0, err
 	}
-	resp, err := envVars.GetValue(ctx, &envvarsv1.GetValueRequest{
+	resp, err := variableStore.GetValue(ctx, &variablestorev1.GetValueRequest{
 		Tier:       s.Tier,
 		Coordinate: s.coordinate(at),
 	})
@@ -101,11 +101,11 @@ func (s Store) Version(ctx context.Context, at variables.Coordinate) (int64, err
 }
 
 func (s Store) Set(ctx context.Context, at variables.Coordinate, value string, expected *int64) (int64, error) {
-	envVars, err := s.Provider.EnvVars()
+	variableStore, err := s.Provider.VariableStore()
 	if err != nil {
 		return 0, err
 	}
-	resp, err := envVars.SetValue(ctx, &envvarsv1.SetValueRequest{
+	resp, err := variableStore.SetValue(ctx, &variablestorev1.SetValueRequest{
 		Tier:            s.Tier,
 		Coordinate:      s.coordinate(at),
 		Value:           value,
@@ -118,11 +118,11 @@ func (s Store) Set(ctx context.Context, at variables.Coordinate, value string, e
 }
 
 func (s Store) Delete(ctx context.Context, at variables.Coordinate, expected *int64) (bool, error) {
-	envVars, err := s.Provider.EnvVars()
+	variableStore, err := s.Provider.VariableStore()
 	if err != nil {
 		return false, err
 	}
-	resp, err := envVars.DeleteValue(ctx, &envvarsv1.DeleteValueRequest{
+	resp, err := variableStore.DeleteValue(ctx, &variablestorev1.DeleteValueRequest{
 		Tier:            s.Tier,
 		Coordinate:      s.coordinate(at),
 		ExpectedVersion: expected,
@@ -144,11 +144,11 @@ func staleValueError(err error) error {
 }
 
 func (s Store) History(ctx context.Context, at variables.Coordinate) ([]variables.Version, error) {
-	envVars, err := s.Provider.EnvVars()
+	variableStore, err := s.Provider.VariableStore()
 	if err != nil {
 		return nil, err
 	}
-	resp, err := envVars.ListVersions(ctx, &envvarsv1.ListVersionsRequest{
+	resp, err := variableStore.ListVersions(ctx, &variablestorev1.ListVersionsRequest{
 		Tier:       s.Tier,
 		Coordinate: s.coordinate(at),
 	})

@@ -593,7 +593,7 @@ func scriptBindings(worker edge.Worker, includeAssets bool) []map[string]any {
 			"service": service,
 		})
 	}
-	for name, text := range worker.Vars {
+	for name, text := range worker.Variables {
 		bindings = append(bindings, map[string]any{
 			"type": "plain_text",
 			"name": name,

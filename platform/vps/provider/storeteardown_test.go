@@ -12,11 +12,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
-	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
+	variables "github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
-func manifestAfterBucket(t *testing.T, machine *box) vars.Manifest {
+func manifestAfterBucket(t *testing.T, machine *box) variables.Manifest {
 	t.Helper()
 	p := over(machine)
 	binding, err := p.ProvisionBucket(context.Background(), aBucket(t, "uploads", false), nil)

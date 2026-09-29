@@ -156,8 +156,8 @@ func TestDynamoKeysLeadWithTheProject(t *testing.T) {
 	for _, key := range []string{
 		ProjectKey("shop"),
 		StackKey("shop", stack),
-		VarsKey("shop", "production"),
-		BindingVarsKey("shop", "production", "main"),
+		VariablesKey("shop", "production"),
+		BindingVariablesKey("shop", "production", "main"),
 		ISRTagKey("shop", stack, "products"),
 	} {
 		project, err := ProjectOf(key)
@@ -170,10 +170,10 @@ func TestDynamoKeysLeadWithTheProject(t *testing.T) {
 	}
 }
 
-func TestBindingVarsKeysArePerBindingPartitions(t *testing.T) {
-	shared := VarsKey("shop", "production")
-	main := BindingVarsKey("shop", "production", "main")
-	uploads := BindingVarsKey("shop", "production", "uploads")
+func TestBindingVariablesKeysArePerBindingPartitions(t *testing.T) {
+	shared := VariablesKey("shop", "production")
+	main := BindingVariablesKey("shop", "production", "main")
+	uploads := BindingVariablesKey("shop", "production", "uploads")
 
 	if main == uploads {
 		t.Fatalf("both bindings partition to %q; an IAM LeadingKeys condition could never separate them", main)
@@ -182,9 +182,9 @@ func TestBindingVarsKeysArePerBindingPartitions(t *testing.T) {
 		t.Fatalf("binding values partition to %q, the same partition a user's own values live in", shared)
 	}
 	if !strings.HasPrefix(main, shared+KeySeparator) {
-		t.Errorf("BindingVarsKey = %q, want it under %q so one tier's bindings stay one tier's", main, shared)
+		t.Errorf("BindingVariablesKey = %q, want it under %q so one tier's bindings stay one tier's", main, shared)
 	}
-	if BindingVarsKey("shop", "preview", "main") == main {
+	if BindingVariablesKey("shop", "preview", "main") == main {
 		t.Errorf("preview and production share the binding partition %q", main)
 	}
 }
@@ -217,8 +217,8 @@ func TestStackKeysRoundTrip(t *testing.T) {
 	if _, _, err := ParseStackKey(ProjectKey("shop")); err == nil {
 		t.Error("a project key names no stack and must be rejected")
 	}
-	if _, _, err := ParseStackKey(VarsKey("shop", "production")); err == nil {
-		t.Error("a vars key names no stack and must be rejected")
+	if _, _, err := ParseStackKey(VariablesKey("shop", "production")); err == nil {
+		t.Error("a variables key names no stack and must be rejected")
 	}
 }
 

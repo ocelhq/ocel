@@ -9,7 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
-	"github.com/ocelhq/ocel/pkg/envvars"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
@@ -80,15 +80,15 @@ func (vm machine) setsInInfisical(t *testing.T, value string, version int) {
 	vm.feeds(t, "sudo tee "+fakeInfisicalSecret+" >/dev/null", []byte(value+"\n"+strings.Repeat("1", version)+"\n"))
 }
 
-func copied(ctx context.Context, store envvars.Store, scope envvars.Scope, want string, within time.Duration) (envvars.Value, error) {
+func copied(ctx context.Context, store variablestore.Store, scope variablestore.Scope, want string, within time.Duration) (variablestore.Value, error) {
 	deadline := time.Now().Add(within)
 	for {
-		found, err := store.Get(ctx, scope, envvars.Coordinate{Cell: envvars.Cell{Key: "DATABASE_URL"}}, true)
+		found, err := store.Get(ctx, scope, variablestore.Coordinate{Cell: variablestore.Cell{Key: "DATABASE_URL"}}, true)
 		if err == nil && found.Plaintext == want {
 			return found, nil
 		}
-		if err != nil && !errors.Is(err, envvars.ErrNotFound) {
-			return envvars.Value{}, err
+		if err != nil && !errors.Is(err, variablestore.ErrNotFound) {
+			return variablestore.Value{}, err
 		}
 		if time.Now().After(deadline) {
 			return found, errors.New("never copied")
@@ -111,10 +111,10 @@ func TestLiveTheEnvSourceSyncKeepsATiersValuesInStepWithItsEnvSourceAndGoesWithT
 	}
 
 	vm.startsFakeInfisical(t)
-	store := envvars.Store{KeyValues: p.KeyValues(), Cipher: p.Cipher()}
-	scope := envvars.Scope{Project: "shop", Tier: tier}
+	store := variablestore.Store{KeyValues: p.KeyValues(), Cipher: p.Cipher()}
+	scope := variablestore.Scope{Project: "shop", Tier: tier}
 	for key, value := range map[string]string{"INFISICAL_CLIENT_ID": "id", "INFISICAL_CLIENT_SECRET": "secret"} {
-		if _, err := store.Set(ctx, scope, envvars.Coordinate{Cell: envvars.Cell{Key: key}}, value, nil); err != nil {
+		if _, err := store.Set(ctx, scope, variablestore.Coordinate{Cell: variablestore.Cell{Key: key}}, value, nil); err != nil {
 			t.Fatalf("Set(%s) = %v", key, err)
 		}
 	}

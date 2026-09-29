@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/envvars"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
 type Credential interface {
@@ -30,7 +30,7 @@ type CredentialError struct {
 
 func (e *CredentialError) Error() string { return e.Variable + " " + e.Reason }
 
-func ReadCredential(ctx context.Context, store envvars.Store, scope envvars.Scope, descriptor Descriptor, login Login) (Credential, error) {
+func ReadCredential(ctx context.Context, store variablestore.Store, scope variablestore.Scope, descriptor Descriptor, login Login) (Credential, error) {
 	if descriptor.Kind != Infisical || descriptor.Infisical == nil {
 		return nil, fmt.Errorf("a %s env source is read where ocel runs, never with a credential a target stores", descriptor.Kind)
 	}
@@ -60,10 +60,10 @@ func ReadCredential(ctx context.Context, store envvars.Store, scope envvars.Scop
 	return nil, fmt.Errorf("%s names no identity to log in to Infisical as", descriptor.ID())
 }
 
-func readCredentialValue(ctx context.Context, store envvars.Store, scope envvars.Scope, name string) (string, error) {
-	found, err := store.GetDereferenced(ctx, scope, envvars.Coordinate{Cell: envvars.Cell{Key: name}}, true)
+func readCredentialValue(ctx context.Context, store variablestore.Store, scope variablestore.Scope, name string) (string, error) {
+	found, err := store.GetDereferenced(ctx, scope, variablestore.Coordinate{Cell: variablestore.Cell{Key: name}}, true)
 	switch {
-	case errors.Is(err, envvars.ErrNotFound), errors.Is(err, envvars.ErrDangling):
+	case errors.Is(err, variablestore.ErrNotFound), errors.Is(err, variablestore.ErrDangling):
 		return "", &CredentialError{Variable: name, Unset: true, Reason: fmt.Sprintf("has no value in %s: set it with `%s`", scope.Tier, SetCommand(scope.Tier, name))}
 	case err != nil:
 		return "", fmt.Errorf("read %s: %w", name, err)

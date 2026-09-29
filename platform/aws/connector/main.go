@@ -24,9 +24,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/connectorserver"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/envvarsserver"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/target"
+	"github.com/ocelhq/ocel/pkg/variablestoreserver"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	awsconnector "github.com/ocelhq/ocel/platform/aws/provider/connector"
@@ -85,12 +85,12 @@ func run(addr, region, config, keyParameter string) error {
 	}
 
 	spec := connectorserver.Spec{
-		Config:     trust,
-		Version:    version,
-		Vendor:     "aws",
-		Addr:       addr,
-		ConfigPath: config,
-		EnvVars:    envVars(cfg, bootstraps),
+		Config:        trust,
+		Version:       version,
+		Vendor:        "aws",
+		Addr:          addr,
+		ConfigPath:    config,
+		VariableStore: variableStore(cfg, bootstraps),
 	}
 	if keyParameter != "" {
 		if spec.Identity, err = keyed(ctx, ssm.NewFromConfig(cfg), keyParameter); err != nil {
@@ -110,8 +110,8 @@ func run(addr, region, config, keyParameter string) error {
 	return nil
 }
 
-func envVars(cfg aws.Config, bootstraps *deployments) envvarsserver.Backend {
-	return envvarsserver.Backend{
+func variableStore(cfg aws.Config, bootstraps *deployments) variablestoreserver.Backend {
+	return variablestoreserver.Backend{
 		KeyValues:     awsports.KeyValues{Dynamo: dynamodb.NewFromConfig(cfg), Tables: bootstraps},
 		Cipher:        awsports.Cipher{KMS: kms.NewFromConfig(cfg), Keys: bootstraps},
 		ProveIdentity: awsports.CallerIdentity{Config: cfg}.Prove,
@@ -205,10 +205,10 @@ func (d *deployments) Table(ctx context.Context, tier environment.Tier) (string,
 
 func (d *deployments) ValuesTable(ctx context.Context, tier environment.Tier) (string, error) {
 	deployed, err := d.resolve(ctx, tier)
-	return deployed.VarsTable, err
+	return deployed.VariablesTable, err
 }
 
 func (d *deployments) Key(ctx context.Context, tier environment.Tier) (string, error) {
 	deployed, err := d.resolve(ctx, tier)
-	return deployed.VarsKeyARN, err
+	return deployed.VariablesKeyARN, err
 }

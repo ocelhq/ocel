@@ -18,13 +18,13 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/envvars"
-	"github.com/ocelhq/ocel/pkg/envvarsserver"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/seal"
-	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/pkg/variablestore"
+	"github.com/ocelhq/ocel/pkg/variablestoreserver"
+	variables "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 type memKeyValues struct {
@@ -113,7 +113,7 @@ func (s goCipher) Seal(_ context.Context, _ environment.Tier, bound seal.Associa
 }
 
 func (s goCipher) Open(_ context.Context, _ environment.Tier, bound seal.AssociatedData, sealed []byte) ([]byte, error) {
-	return vars.Open(s.key, bound, sealed)
+	return variables.Open(s.key, bound, sealed)
 }
 
 type box struct {
@@ -132,28 +132,30 @@ func aBox(t *testing.T, root string) *box {
 	}
 	b := &box{tierRoot: filepath.Join(root, "etc"), stateRoot: filepath.Join(root, "state"), keyValues: &memKeyValues{}, cipher: goCipher{key: key}}
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		if err := os.MkdirAll(filepath.Dir(vars.KeyPath(b.tierRoot, tier)), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(variables.KeyPath(b.tierRoot, tier)), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(vars.KeyPath(b.tierRoot, tier), key, 0o400); err != nil {
+		if err := os.WriteFile(variables.KeyPath(b.tierRoot, tier), key, 0o400); err != nil {
 			t.Fatal(err)
 		}
 	}
 	return b
 }
 
-func (b *box) store() envvars.Store { return envvars.Store{KeyValues: b.keyValues, Cipher: b.cipher} }
+func (b *box) store() variablestore.Store {
+	return variablestore.Store{KeyValues: b.keyValues, Cipher: b.cipher}
+}
 
-func (b *box) set(t *testing.T, scope envvars.Scope, at envvars.Coordinate, plaintext string) {
+func (b *box) set(t *testing.T, scope variablestore.Scope, at variablestore.Coordinate, plaintext string) {
 	t.Helper()
 	if _, err := b.store().Set(context.Background(), scope, at, plaintext, nil); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func (b *box) bind(t *testing.T, scope envvars.Scope, environment, name string, binding *bindingsv1.Binding) {
+func (b *box) bind(t *testing.T, scope variablestore.Scope, environment, name string, binding *bindingsv1.Binding) {
 	t.Helper()
-	pair, err := envvarsserver.BindingPair("terraform", binding)
+	pair, err := variablestoreserver.BindingPair("terraform", binding)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,11 +169,11 @@ func (b *box) dump(t *testing.T) {
 	b.keyValues.mu.Lock()
 	defer b.keyValues.mu.Unlock()
 	for _, entry := range b.keyValues.entries {
-		encoded, err := vars.PathOf(entry.Key)
+		encoded, err := variables.PathOf(entry.Key)
 		if err != nil {
 			t.Fatal(err)
 		}
-		path := filepath.Join(vars.KeyValuesDir(b.stateRoot, entry.Key.Partition.Tier), encoded+vars.EntrySuffix)
+		path := filepath.Join(variables.KeyValuesDir(b.stateRoot, entry.Key.Partition.Tier), encoded+variables.EntrySuffix)
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -196,11 +198,11 @@ func (b *box) claims(t *testing.T, document string) {
 	}
 }
 
-func aStoreManifest(sealed string) vars.Manifest {
-	return vars.Manifest{
+func aStoreManifest(sealed string) variables.Manifest {
+	return variables.Manifest{
 		Slug: "shop", Tier: "production",
 		Keys: []live.Key{{Key: "DATABASE_URL"}},
-		Store: &vars.Store{
+		Store: &variables.Store{
 			Env: "shop-prod", Endpoint: "http://shop-prod-store-s3:9000", Region: "us-east-1",
 			AccessKeyID: "ocel", Pointer: "@production", Sealed: sealed,
 		},
@@ -221,9 +223,9 @@ func TestTheStoresPublicAddressIsWhateverTheBoxClaimsForItNow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve() = %v", err)
 	}
-	if resolved[vars.StorePublicKey] != "https://storage.shop.example.com" {
+	if resolved[variables.StorePublicKey] != "https://storage.shop.example.com" {
 		t.Errorf("Resolve() handed %q under %s, want the name this box claims for the store right now",
-			resolved[vars.StorePublicKey], vars.StorePublicKey)
+			resolved[variables.StorePublicKey], variables.StorePublicKey)
 	}
 }
 
@@ -237,23 +239,23 @@ func TestAStoreNoDomainPointsAtHasNoPublicAddress(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve() = %v", err)
 	}
-	if address := resolved[vars.StorePublicKey]; address != "" {
+	if address := resolved[variables.StorePublicKey]; address != "" {
 		t.Errorf("Resolve() handed %q as the store's public address on a box claiming nothing for it", address)
 	}
 }
 
-var shop = envvars.Scope{Project: "shop", Tier: environment.TierProduction}
+var shop = variablestore.Scope{Project: "shop", Tier: environment.TierProduction}
 
 func TestTheStoreResolvesEachKeyOffTheBoxUnderTheCallersOwnScopeAndEnvironment(t *testing.T) {
 	t.Parallel()
 	b := aBox(t, t.TempDir())
-	b.set(t, shop, envvars.Coordinate{Cell: envvars.Cell{Key: "DATABASE_URL"}}, "postgres://tier-wide")
-	b.set(t, shop, envvars.Coordinate{Cell: envvars.Cell{Key: "DATABASE_URL"}, Environment: "pr-7"}, "postgres://pr-7")
-	b.set(t, shop, envvars.Coordinate{Cell: envvars.Cell{Key: "SESSION", Folder: "/web"}}, "s3cret")
-	b.set(t, envvars.Scope{Project: "other", Tier: environment.TierProduction}, envvars.Coordinate{Cell: envvars.Cell{Key: "DATABASE_URL"}}, "postgres://other")
+	b.set(t, shop, variablestore.Coordinate{Cell: variablestore.Cell{Key: "DATABASE_URL"}}, "postgres://tier-wide")
+	b.set(t, shop, variablestore.Coordinate{Cell: variablestore.Cell{Key: "DATABASE_URL"}, Environment: "pr-7"}, "postgres://pr-7")
+	b.set(t, shop, variablestore.Coordinate{Cell: variablestore.Cell{Key: "SESSION", Folder: "/web"}}, "s3cret")
+	b.set(t, variablestore.Scope{Project: "other", Tier: environment.TierProduction}, variablestore.Coordinate{Cell: variablestore.Cell{Key: "DATABASE_URL"}}, "postgres://other")
 	b.dump(t)
 
-	resolved, err := b.resolver().Resolve(context.Background(), vars.Manifest{
+	resolved, err := b.resolver().Resolve(context.Background(), variables.Manifest{
 		Slug: "shop", Tier: "production",
 		Keys: []live.Key{{Key: "DATABASE_URL"}, {Key: "SESSION", Folder: "/web"}, {Key: "MISSING"}},
 	})
@@ -266,7 +268,7 @@ func TestTheStoreResolvesEachKeyOffTheBoxUnderTheCallersOwnScopeAndEnvironment(t
 	if _, found := resolved["MISSING"]; found {
 		t.Errorf("Resolve() handed back MISSING, which nothing stored: the runtime is what says it is unset")
 	}
-	preview, err := b.resolver().Resolve(context.Background(), vars.Manifest{
+	preview, err := b.resolver().Resolve(context.Background(), variables.Manifest{
 		Slug: "shop", Tier: "production", Environment: "pr-7", Keys: []live.Key{{Key: "DATABASE_URL"}},
 	})
 	if err != nil || preview["DATABASE_URL"] != "postgres://pr-7" {
@@ -287,7 +289,7 @@ func TestTheStoreResolvesABindingRecordUnderTheKeyTheRuntimeReadsItBy(t *testing
 	b.dump(t)
 
 	bindings := []live.Binding{{Name: "main", Key: "OCEL_RESOURCE_POSTGRES_main", Type: bindingsv1.BindingType_BINDING_TYPE_POSTGRES}}
-	resolved, err := b.resolver().Resolve(context.Background(), vars.Manifest{Slug: "shop", Tier: "production", Bindings: bindings})
+	resolved, err := b.resolver().Resolve(context.Background(), variables.Manifest{Slug: "shop", Tier: "production", Bindings: bindings})
 	if err != nil {
 		t.Fatalf("Resolve() = %v", err)
 	}
@@ -303,12 +305,12 @@ func TestTheStoreResolvesABindingRecordUnderTheKeyTheRuntimeReadsItBy(t *testing
 func TestTheStoreOpensNothingUnderATierWhoseKeyIsGone(t *testing.T) {
 	t.Parallel()
 	b := aBox(t, t.TempDir())
-	b.set(t, shop, envvars.Coordinate{Cell: envvars.Cell{Key: "DATABASE_URL"}}, "postgres://tier-wide")
+	b.set(t, shop, variablestore.Coordinate{Cell: variablestore.Cell{Key: "DATABASE_URL"}}, "postgres://tier-wide")
 	b.dump(t)
-	if err := os.Remove(vars.KeyPath(b.tierRoot, environment.TierProduction)); err != nil {
+	if err := os.Remove(variables.KeyPath(b.tierRoot, environment.TierProduction)); err != nil {
 		t.Fatal(err)
 	}
-	_, err := b.resolver().Resolve(context.Background(), vars.Manifest{Slug: "shop", Tier: "production", Keys: []live.Key{{Key: "DATABASE_URL"}}})
+	_, err := b.resolver().Resolve(context.Background(), variables.Manifest{Slug: "shop", Tier: "production", Keys: []live.Key{{Key: "DATABASE_URL"}}})
 	if err == nil || !errors.Is(err, os.ErrNotExist) && !strings.Contains(err.Error(), "seal key") {
 		t.Errorf("Resolve() with no key = %v, want a refusal naming the key", err)
 	}
@@ -317,7 +319,7 @@ func TestTheStoreOpensNothingUnderATierWhoseKeyIsGone(t *testing.T) {
 func TestTheStoreOpensTheObjectStoreCredentialSealedIntoTheCallersManifest(t *testing.T) {
 	t.Parallel()
 	b := aBox(t, t.TempDir())
-	bound, err := vars.NewStoreSecretAssociatedData("shop", environment.TierProduction, "shop-prod")
+	bound, err := variables.NewStoreSecretAssociatedData("shop", environment.TierProduction, "shop-prod")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -331,10 +333,10 @@ func TestTheStoreOpensTheObjectStoreCredentialSealedIntoTheCallersManifest(t *te
 	})
 	b.dump(t)
 
-	resolved, err := b.resolver().Resolve(context.Background(), vars.Manifest{
+	resolved, err := b.resolver().Resolve(context.Background(), variables.Manifest{
 		Slug: "shop", Tier: "production",
 		Bindings: []live.Binding{{Name: "uploads", Key: "OCEL_RESOURCE_BUCKET_uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET}},
-		Store: &vars.Store{
+		Store: &variables.Store{
 			Env: "shop-prod", Endpoint: "http://shop-prod-store-s3:9000", Region: "us-east-1",
 			AccessKeyID: "ocel", Sealed: base64.StdEncoding.EncodeToString(sealed),
 		},
@@ -342,16 +344,16 @@ func TestTheStoreOpensTheObjectStoreCredentialSealedIntoTheCallersManifest(t *te
 	if err != nil {
 		t.Fatalf("Resolve() = %v", err)
 	}
-	if resolved[vars.StoreSecretKey] != "s3cr3t" {
+	if resolved[variables.StoreSecretKey] != "s3cr3t" {
 		t.Errorf("Resolve() handed %q under %s, want the store credential the deploy sealed for this box's runtime",
-			resolved[vars.StoreSecretKey], vars.StoreSecretKey)
+			resolved[variables.StoreSecretKey], variables.StoreSecretKey)
 	}
 }
 
 func TestTheStoreRefusesAStoreCredentialSealedForAnotherProject(t *testing.T) {
 	t.Parallel()
 	b := aBox(t, t.TempDir())
-	elsewhere, err := vars.NewStoreSecretAssociatedData("other", environment.TierProduction, "other-prod")
+	elsewhere, err := variables.NewStoreSecretAssociatedData("other", environment.TierProduction, "other-prod")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -360,12 +362,12 @@ func TestTheStoreRefusesAStoreCredentialSealedForAnotherProject(t *testing.T) {
 		t.Fatal(err)
 	}
 	b.dump(t)
-	_, err = b.resolver().Resolve(context.Background(), vars.Manifest{
+	_, err = b.resolver().Resolve(context.Background(), variables.Manifest{
 		Slug: "shop", Tier: "production",
 		Keys:  []live.Key{{Key: "DATABASE_URL"}},
-		Store: &vars.Store{Env: "shop-prod", Sealed: base64.StdEncoding.EncodeToString(sealed)},
+		Store: &variables.Store{Env: "shop-prod", Sealed: base64.StdEncoding.EncodeToString(sealed)},
 	})
-	if err == nil || !strings.Contains(err.Error(), vars.StoreSecretName) {
+	if err == nil || !strings.Contains(err.Error(), variables.StoreSecretName) {
 		t.Errorf("Resolve() = %v, want a refusal: a credential sealed for another project must not open here", err)
 	}
 }
@@ -386,7 +388,7 @@ func aBucketBinding(t *testing.T, b *box, public bool) []live.Binding {
 
 func resolvedBucket(t *testing.T, b *box, bindings []live.Binding) *bindingsv1.BucketProperties {
 	t.Helper()
-	resolved, err := b.resolver().Resolve(context.Background(), vars.Manifest{
+	resolved, err := b.resolver().Resolve(context.Background(), variables.Manifest{
 		Slug: "shop", Tier: "production", Bindings: bindings,
 		Store: aStoreManifest("").Store,
 	})

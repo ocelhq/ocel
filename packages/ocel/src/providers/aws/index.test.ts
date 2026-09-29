@@ -39,8 +39,10 @@ describe("awsProvider", () => {
   });
 
   it("passes the arn of a key the account brought through to the provider", () => {
-    expect(awsProvider({ varsKey: "arn:aws:kms:eu-west-1:111122223333:key/abcd-1234" })).toEqual({
-      aws: { varsKey: "arn:aws:kms:eu-west-1:111122223333:key/abcd-1234" },
+    expect(
+      awsProvider({ variablesKey: "arn:aws:kms:eu-west-1:111122223333:key/abcd-1234" }),
+    ).toEqual({
+      aws: { variablesKey: "arn:aws:kms:eu-west-1:111122223333:key/abcd-1234" },
     });
   });
 

@@ -16,7 +16,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/envsource"
-	"github.com/ocelhq/ocel/pkg/envvars"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
 type fakeSecret struct {
@@ -324,7 +324,7 @@ func infisicalAt(server *httptest.Server, path string, write envsource.WritePoli
 	}.Normalize()
 }
 
-func cell(folder, key string) envvars.Cell { return envvars.Cell{Folder: folder, Key: key} }
+func cell(folder, key string) variablestore.Cell { return variablestore.Cell{Folder: folder, Key: key} }
 
 func signedIn(server *httptest.Server, path string, write envsource.WritePolicy) envsource.Source {
 	return envsource.NewInfisical(infisicalAt(server, path, write), envsource.UniversalAuth("client-id", "client-secret"), server.Client())
@@ -347,7 +347,7 @@ func TestInfisicalReadsEachFolderUnderItsPathWithImportsBeneathItsOwnValues(t *t
 	if err != nil {
 		t.Fatalf("Read() = %v", err)
 	}
-	want := map[envvars.Cell]envsource.Value{
+	want := map[variablestore.Cell]envsource.Value{
 		cell("", "DATABASE_URL"):   {Plaintext: []byte("postgres://root"), Version: "s1@3"},
 		cell("/web", "API_KEY"):    {Plaintext: []byte("web-key"), Version: "s2@1"},
 		cell("/web", "SENTRY_DSN"): {Plaintext: []byte("https://sentry"), Version: "s4@2"},

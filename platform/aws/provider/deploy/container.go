@@ -29,7 +29,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
-	vars "github.com/ocelhq/ocel/platform/aws/provider/vars/live"
+	variables "github.com/ocelhq/ocel/platform/aws/provider/variables/live"
 )
 
 const (
@@ -156,12 +156,12 @@ func (r *release) checkContainer(spec provider.StackSpec) (*containerWork, error
 	if err != nil {
 		return nil, err
 	}
-	values := executionRole{App: app.App, VarsKeyARN: r.cfg.VarsKeyARN}
+	values := executionRole{App: app.App, VariablesKeyARN: r.cfg.VariablesKeyARN}
 	if bundle.hasLive() {
-		values.ValuesTableARN = r.cfg.VarsTableARN
-		values.VarsReferenced = bundle.Referenced
+		values.ValuesTableARN = r.cfg.VariablesTableARN
+		values.VariablesReferenced = bundle.Referenced
 		values.Slug = r.cfg.Slug
-		values.VarsTier = string(r.cfg.Tier)
+		values.VariablesTier = string(r.cfg.Tier)
 	}
 	return &containerWork{
 		app:        app.App,
@@ -292,7 +292,7 @@ func containerEnv(app string, values provider.AppValues, originSecret, previousS
 		env[edge.OriginSecretPreviousVar] = previousSecret
 	}
 	if len(manifest) > 0 {
-		env[vars.EnvVar] = string(manifest)
+		env[variables.EnvVar] = string(manifest)
 	}
 	return env, nil
 }
@@ -496,11 +496,11 @@ func (w *containerWork) taskRole(ctx *pulumi.Context) (*iam.Role, []pulumi.Resou
 		granted = append(granted, policy)
 	}
 	if w.readsLive() {
-		rendered, err := varsReadPolicy(w.values)
+		rendered, err := variablesReadPolicy(w.values)
 		if err != nil {
 			return nil, nil, err
 		}
-		policy, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "vars", "read"), &iam.RolePolicyArgs{
+		policy, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "variables", "read"), &iam.RolePolicyArgs{
 			Role:   role.Name,
 			Policy: pulumi.String(rendered),
 		})

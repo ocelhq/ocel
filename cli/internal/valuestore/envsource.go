@@ -13,17 +13,17 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/envsourceproto"
-	"github.com/ocelhq/ocel/pkg/envvars"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
 func (s Store) DescribeEnvSource(ctx context.Context) (variables.EnvSource, error) {
-	envVars, err := s.Provider.EnvVars()
+	variableStore, err := s.Provider.VariableStore()
 	if err != nil {
 		return variables.EnvSource{}, err
 	}
-	resp, err := envVars.DescribeEnvSource(ctx, &envvarsv1.DescribeEnvSourceRequest{Tier: s.Tier, Slug: s.Project.Slug})
+	resp, err := variableStore.DescribeEnvSource(ctx, &variablestorev1.DescribeEnvSourceRequest{Tier: s.Tier, Slug: s.Project.Slug})
 	if err != nil {
 		return variables.EnvSource{}, err
 	}
@@ -33,7 +33,7 @@ func (s Store) DescribeEnvSource(ctx context.Context) (variables.EnvSource, erro
 func (s Store) SyncEnvSource(ctx context.Context) (variables.EnvSource, error) {
 	descriptor := variablescope.EnvSourceDescriptor(s.Project, s.Tier)
 	folders := syncedFolders(s.Project)
-	var read map[envvars.Cell]envsource.Value
+	var read map[variablestore.Cell]envsource.Value
 	if descriptor.Kind == envsource.Exec {
 		source, err := envsource.Open(descriptor, s.Project.Dir, os.LookupEnv)
 		if err != nil {
@@ -43,14 +43,14 @@ func (s Store) SyncEnvSource(ctx context.Context) (variables.EnvSource, error) {
 			return variables.EnvSource{}, err
 		}
 	}
-	envVars, err := s.Provider.EnvVars()
+	variableStore, err := s.Provider.VariableStore()
 	if err != nil {
 		return variables.EnvSource{}, err
 	}
-	resp, err := envVars.SyncEnvSource(ctx, &envvarsv1.SyncEnvSourceRequest{
+	resp, err := variableStore.SyncEnvSource(ctx, &variablestorev1.SyncEnvSourceRequest{
 		Tier:    s.Tier,
 		Slug:    s.Project.Slug,
-		From:    &envvarsv1.SyncEnvSourceRequest_EnvSource{EnvSource: envsourceproto.Encode(descriptor, read)},
+		From:    &variablestorev1.SyncEnvSourceRequest_EnvSource{EnvSource: envsourceproto.Encode(descriptor, read)},
 		Folders: folders,
 	})
 	if err != nil {
@@ -70,26 +70,26 @@ func syncedFolders(cfg *project.Project) []string {
 	return folders
 }
 
-func (s Store) SyncRegisteredEnvSource(ctx context.Context) (*envvarsv1.SyncEnvSourceResponse, error) {
-	envVars, err := s.Provider.EnvVars()
+func (s Store) SyncRegisteredEnvSource(ctx context.Context) (*variablestorev1.SyncEnvSourceResponse, error) {
+	variableStore, err := s.Provider.VariableStore()
 	if err != nil {
 		return nil, err
 	}
-	return envVars.SyncEnvSource(ctx, &envvarsv1.SyncEnvSourceRequest{
+	return variableStore.SyncEnvSource(ctx, &variablestorev1.SyncEnvSourceRequest{
 		Tier: s.Tier,
 		Slug: s.Project.Slug,
-		From: &envvarsv1.SyncEnvSourceRequest_Registered{Registered: &envvarsv1.RegisteredEnvSource{}},
+		From: &variablestorev1.SyncEnvSourceRequest_Registered{Registered: &variablestorev1.RegisteredEnvSource{}},
 	})
 }
 
 func (s Store) SetInEnvSource(ctx context.Context, at variables.Cell, value, description string) (bool, error) {
-	envVars, err := s.Provider.EnvVars()
+	variableStore, err := s.Provider.VariableStore()
 	if err != nil {
 		return false, err
 	}
-	resp, err := envVars.SetEnvSourceValue(ctx, &envvarsv1.SetEnvSourceValueRequest{
+	resp, err := variableStore.SetEnvSourceValue(ctx, &variablestorev1.SetEnvSourceValueRequest{
 		Tier:        s.Tier,
-		Coordinate:  &envvarsv1.Coordinate{Slug: s.Project.Slug, Folder: at.Folder, Key: at.Key},
+		Coordinate:  &variablestorev1.Coordinate{Slug: s.Project.Slug, Folder: at.Folder, Key: at.Key},
 		Value:       value,
 		Description: description,
 	})
@@ -110,7 +110,7 @@ func CredentialProblems(err error) []*resourcesv1.VariableProblem {
 		if err != nil {
 			continue
 		}
-		refused, ok := value.(*envvarsv1.CredentialRefusal)
+		refused, ok := value.(*variablestorev1.CredentialRefusal)
 		if !ok {
 			continue
 		}
@@ -123,7 +123,7 @@ func CredentialProblems(err error) []*resourcesv1.VariableProblem {
 	return out
 }
 
-func envSourceOf(resp *envvarsv1.SyncEnvSourceResponse) variables.EnvSource {
+func envSourceOf(resp *variablestorev1.SyncEnvSourceResponse) variables.EnvSource {
 	out := EnvSourceOfStatus(resp.GetStatus())
 	for _, cell := range resp.GetPresent() {
 		out.Present = append(out.Present, variables.Cell{Key: cell.GetKey(), Folder: cell.GetFolder()})
@@ -131,7 +131,7 @@ func envSourceOf(resp *envvarsv1.SyncEnvSourceResponse) variables.EnvSource {
 	return out
 }
 
-func EnvSourceOfStatus(status *envvarsv1.EnvSourceStatus) variables.EnvSource {
+func EnvSourceOfStatus(status *variablestorev1.EnvSourceStatus) variables.EnvSource {
 	out := variables.EnvSource{ID: status.GetEnvSource(), CanCreate: status.GetCanCreate(), CanUpdate: status.GetCanUpdate(), Credentials: status.GetCredentials()}
 	for _, link := range status.GetLinks() {
 		if out.URLs == nil {

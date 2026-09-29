@@ -30,7 +30,7 @@ func TestTheCoreShapesItsBucketsTablesAndLayers(t *testing.T) {
 	}
 	tables := shapedOf(shaped, "aws_dynamodb_table")
 	if len(tables) != 2 {
-		t.Fatalf("tables = %d, want state and vars", len(tables))
+		t.Fatalf("tables = %d, want state and variables", len(tables))
 	}
 	for _, table := range tables {
 		if table.Properties["billing_mode"] != "PAY_PER_REQUEST" {
@@ -41,14 +41,14 @@ func TestTheCoreShapesItsBucketsTablesAndLayers(t *testing.T) {
 		t.Errorf("layers = %d, want one per architecture", got)
 	}
 	if got := len(shapedOf(shaped, "aws_kms_key")); got != 0 {
-		t.Errorf("a core without the vars-key feature shaped %d KMS keys", got)
+		t.Errorf("a core without the variables-key feature shaped %d KMS keys", got)
 	}
 }
 
 func TestFeaturesShapeTheirFunctionsAsTheTemplateSizesThem(t *testing.T) {
 	t.Parallel()
 
-	shaped, err := Shape(Namespace("ocel"), environment.TierProduction, []string{FeatureISR, FeatureImageOptimization, provider.FeatureVarsKey, FeatureCloudflareEdge})
+	shaped, err := Shape(Namespace("ocel"), environment.TierProduction, []string{FeatureISR, FeatureImageOptimization, provider.FeatureVariablesKey, FeatureCloudflareEdge})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func TestFeaturesShapeTheirFunctionsAsTheTemplateSizesThem(t *testing.T) {
 		t.Errorf("functions = %v", memory)
 	}
 	if got := len(shapedOf(shaped, "aws_kms_key")); got != 1 {
-		t.Errorf("KMS keys = %d, want the vars key", got)
+		t.Errorf("KMS keys = %d, want the variables key", got)
 	}
 	queues := shapedOf(shaped, "aws_sqs_queue")
 	if len(queues) != 4 {
@@ -77,10 +77,10 @@ func TestFeaturesShapeTheirFunctionsAsTheTemplateSizesThem(t *testing.T) {
 	}
 }
 
-func TestABroughtVarsKeyShapesNoKey(t *testing.T) {
+func TestABroughtVariablesKeyShapesNoKey(t *testing.T) {
 	t.Parallel()
 
-	shaped, err := Shape(Namespace("ocel"), environment.TierPreview, []string{provider.FeatureVarsKey}, WithVarsKey("arn:aws:kms:us-east-1:1:key/k"))
+	shaped, err := Shape(Namespace("ocel"), environment.TierPreview, []string{provider.FeatureVariablesKey}, WithVariablesKey("arn:aws:kms:us-east-1:1:key/k"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -5,10 +5,10 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/envvarsserver"
 	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
+	"github.com/ocelhq/ocel/pkg/variablestoreserver"
 )
 
 func provisionedBindings() []*bindingsv1.Binding {
@@ -41,7 +41,7 @@ func TestPublishedRecordsMeetWhatTheManifestDeclares(t *testing.T) {
 		t.Fatalf("what this deploy publishes drifts from what it tells the app to expect: %v", err)
 	}
 	for _, l := range bindings {
-		binding, err := envvarsserver.DecodeBinding([]byte(published[l.Key]))
+		binding, err := variablestoreserver.DecodeBinding([]byte(published[l.Key]))
 		if err != nil {
 			t.Fatalf("binding %s conformed to %q, which no app can parse: %v", l.Name, published[l.Key], err)
 		}
@@ -60,7 +60,7 @@ func publishedRecords(t *testing.T, bindings []live.Binding) (map[string]string,
 	}
 	out := make(map[string]string, len(records))
 	for _, r := range records {
-		encoded, err := envvarsserver.EncodeBinding(r)
+		encoded, err := variablestoreserver.EncodeBinding(r)
 		if err != nil {
 			return nil, err
 		}
@@ -69,16 +69,16 @@ func publishedRecords(t *testing.T, bindings []live.Binding) (map[string]string,
 	return out, nil
 }
 
-func TestVarsReadPolicyReachesOneValuePartitionPerProject(t *testing.T) {
+func TestVariablesReadPolicyReachesOneValuePartitionPerProject(t *testing.T) {
 	t.Parallel()
-	raw, err := varsReadPolicy(executionRole{
-		VarsKeyARN:     productionVarsKeyARN,
-		ValuesTableARN: valuesTableARN,
-		Slug:           "shop",
-		VarsTier:       varsTier,
+	raw, err := variablesReadPolicy(executionRole{
+		VariablesKeyARN: productionVariablesKeyARN,
+		ValuesTableARN:  valuesTableARN,
+		Slug:            "shop",
+		VariablesTier:   variablesTier,
 	})
 	if err != nil {
-		t.Fatalf("varsReadPolicy: %v", err)
+		t.Fatalf("variablesReadPolicy: %v", err)
 	}
 
 	var doc struct {

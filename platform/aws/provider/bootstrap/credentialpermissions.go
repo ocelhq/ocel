@@ -84,7 +84,7 @@ type ScopedARNs struct {
 	schedule            string
 	edgeUser            string
 	appBoundary         string
-	varsAlias           string
+	variablesAlias      string
 	passphraseParam     string
 	edgeParam           string
 	originParam         string
@@ -111,7 +111,7 @@ func (n Namespace) ScopedARNs() ScopedARNs {
 		schedule:           "arn:aws:scheduler:*:*:schedule/" + core + "*/*",
 		edgeUser:           "arn:aws:iam::*:user/" + string(n) + "-edge*",
 		appBoundary:        "arn:aws:iam::*:policy/" + n.AppBoundaryNameFor(environment.TierProduction) + "*",
-		varsAlias:          "arn:aws:kms:*:*:alias/" + string(n) + "-vars-*",
+		variablesAlias:     "arn:aws:kms:*:*:alias/" + string(n) + "-variables-*",
 		passphraseParam:    parameterARNPrefix + n.PassphraseParamName(),
 		edgeParam:          parameterARNPrefix + n.paramRoot() + "/edge/*",
 		originParam:        parameterARNPrefix + n.paramRoot() + "/origin/*",
@@ -202,7 +202,7 @@ func passedTo(service any, resourceTagged bool) map[string]any {
 	return condition
 }
 
-func varsKeyLifecycleActions() []string {
+func variablesKeyLifecycleActions() []string {
 	return []string{
 		"kms:CancelKeyDeletion",
 		"kms:DescribeKey",
@@ -263,14 +263,14 @@ func bootstrapAccess(r ScopedARNs) []GrantStatement {
 			Actions:   []string{"kms:Decrypt", "kms:DescribeKey", "kms:Encrypt", "kms:GenerateDataKey"},
 			Resources: []string{AnyKeyARN},
 			Condition: map[string]any{
-				"StringEquals": map[string]any{"aws:ResourceTag/" + VarsKeyComponentTagKey: VarsKeyComponentTagValue},
+				"StringEquals": map[string]any{"aws:ResourceTag/" + VariablesKeyComponentTagKey: VariablesKeyComponentTagValue},
 			},
 		},
 		{
 			Actions:   []string{"kms:CreateGrant"},
 			Resources: []string{AnyKeyARN},
 			Condition: map[string]any{
-				"StringEquals": map[string]any{"aws:ResourceTag/" + VarsKeyComponentTagKey: VarsKeyComponentTagValue},
+				"StringEquals": map[string]any{"aws:ResourceTag/" + VariablesKeyComponentTagKey: VariablesKeyComponentTagValue},
 				"Bool":         map[string]any{"kms:GrantIsForAWSResource": "true"},
 			},
 		},
@@ -712,32 +712,32 @@ func bootstrapProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 			Actions:   []string{"kms:CreateKey"},
 			Resources: []string{UnscopedResource},
 			Condition: map[string]any{
-				"StringEquals": map[string]any{"aws:RequestTag/" + VarsKeyComponentTagKey: VarsKeyComponentTagValue},
+				"StringEquals": map[string]any{"aws:RequestTag/" + VariablesKeyComponentTagKey: VariablesKeyComponentTagValue},
 			},
 		},
 		{
-			Actions:   varsKeyLifecycleActions(),
+			Actions:   variablesKeyLifecycleActions(),
 			Resources: []string{AnyKeyARN},
 			Condition: map[string]any{
-				"StringEquals": map[string]any{"aws:ResourceTag/" + VarsKeyComponentTagKey: VarsKeyComponentTagValue},
+				"StringEquals": map[string]any{"aws:ResourceTag/" + VariablesKeyComponentTagKey: VariablesKeyComponentTagValue},
 			},
 		},
 		{
 			Actions:   []string{"kms:DescribeKey", "kms:GetKeyPolicy", "kms:GetKeyRotationStatus", "kms:ListResourceTags"},
 			Resources: []string{AnyKeyARN},
 			Condition: map[string]any{
-				"ForAnyValue:StringLike": map[string]any{"kms:ResourceAliases": ns.varsKeyAliasFor("*")},
+				"ForAnyValue:StringLike": map[string]any{"kms:ResourceAliases": ns.variablesKeyAliasFor("*")},
 			},
 		},
 		{
 			Actions:   []string{"kms:CreateAlias", "kms:DeleteAlias", "kms:UpdateAlias"},
-			Resources: []string{r.varsAlias},
+			Resources: []string{r.variablesAlias},
 		},
 		{
 			Actions:   []string{"kms:CreateAlias", "kms:DeleteAlias", "kms:UpdateAlias"},
 			Resources: []string{AnyKeyARN},
 			Condition: map[string]any{
-				"StringEquals": map[string]any{"aws:ResourceTag/" + VarsKeyComponentTagKey: VarsKeyComponentTagValue},
+				"StringEquals": map[string]any{"aws:ResourceTag/" + VariablesKeyComponentTagKey: VariablesKeyComponentTagValue},
 			},
 		},
 		{

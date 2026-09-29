@@ -1,0 +1,461 @@
+syntax = "proto3";
+package provider.variablestore.v1;
+
+option go_package = "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1;variablestorev1";
+
+import "buf/validate/validate.proto";
+import "common/environment/v1/environment.proto";
+import "common/bindings/v1/bindings.proto";
+
+service VariableStoreService {
+    rpc SetValue(SetValueRequest) returns (SetValueResponse);
+
+    rpc ListValues(ListValuesRequest) returns (ListValuesResponse);
+
+    rpc GetValue(GetValueRequest) returns (GetValueResponse);
+
+    rpc RevealValues(RevealValuesRequest) returns (RevealValuesResponse);
+
+    rpc DeleteValue(DeleteValueRequest) returns (DeleteValueResponse);
+
+    rpc SetReference(SetReferenceRequest) returns (SetReferenceResponse);
+
+    rpc ListReferences(ListReferencesRequest) returns (ListReferencesResponse);
+
+    rpc ListVersions(ListVersionsRequest) returns (ListVersionsResponse);
+
+    rpc SetBinding(SetBindingRequest) returns (SetBindingResponse);
+
+    rpc RemoveBinding(RemoveBindingRequest) returns (RemoveBindingResponse);
+
+    rpc ListBindings(ListBindingsRequest) returns (ListBindingsResponse);
+
+    rpc SyncEnvSource(SyncEnvSourceRequest) returns (SyncEnvSourceResponse);
+
+    rpc DescribeEnvSource(DescribeEnvSourceRequest) returns (DescribeEnvSourceResponse);
+
+    rpc SetEnvSourceValue(SetEnvSourceValueRequest) returns (SetEnvSourceValueResponse);
+}
+
+message Coordinate {
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  string folder = 2 [
+    (buf.validate.field).string.pattern = "^(/([^/#.[:cntrl:]][^/#[:cntrl:]]*|\\.[^/#.[:cntrl:]][^/#[:cntrl:]]*|\\.\\.[^/#[:cntrl:]]+))*$",
+    (buf.validate.field).cel = {
+      id: "variablestore.coordinate.folder.root"
+      message: "\"/\" is the project root, which is what an unbound app already reads; leave the folder off instead"
+      expression: "this != '/'"
+    }
+  ];
+
+  string key = 3 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#[:cntrl:]]*$"}];
+
+  string environment = 4 [
+    (buf.validate.field).string.pattern = "^[^#[:cntrl:]]*$",
+    (buf.validate.field).cel = {
+      id: "variablestore.environment.tier_wide"
+      message: "\"*\" is reserved: it names the value that binds tier-wide"
+      expression: "!this.contains('*')"
+    }
+  ];
+}
+
+message ValueMetadata {
+  Coordinate coordinate = 1;
+
+  int64 version = 2;
+
+  int64 updated_at = 3;
+
+  int64 size = 4;
+
+  optional Coordinate target = 5;
+
+  string env_source = 6;
+}
+
+message VersionEntry {
+  int64 version = 1;
+  int64 created_at = 2;
+  int64 size = 3;
+}
+
+message SetValueRequest {
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
+
+  Coordinate coordinate = 2 [(buf.validate.field).required = true];
+  string value = 3 [debug_redact = true];
+
+  optional int64 expected_version = 4;
+}
+
+message SetValueResponse {
+  ValueMetadata metadata = 1;
+}
+
+message ListValuesRequest {
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
+
+  string slug = 2 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+}
+
+message ListValuesResponse {
+  repeated ValueMetadata values = 1;
+}
+
+message GetValueRequest {
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
+  Coordinate coordinate = 2 [(buf.validate.field).required = true];
+
+  bool reveal = 3;
+}
+
+message GetValueResponse {
+  bool found = 1;
+  ValueMetadata metadata = 2;
+
+  string value = 3 [debug_redact = true];
+}
+
+message RevealValuesRequest {
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
+
+  string slug = 2 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+  repeated Coordinate cells = 3;
+}
+
+message RevealValuesResponse {
+  repeated RevealedValue values = 1;
+}
+
+message RevealedValue {
+  ValueMetadata metadata = 1;
+  string value = 2 [debug_redact = true];
+}
+
+message DeleteValueRequest {
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
+  Coordinate coordinate = 2 [(buf.validate.field).required = true];
+
+  optional int64 expected_version = 3;
+}
+
+message DeleteValueResponse {
+  bool deleted = 1;
+}
+
+message SetReferenceRequest {
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
+
+  Coordinate coordinate = 2 [(buf.validate.field).required = true];
+  Coordinate target = 3 [(buf.validate.field).required = true];
+}
+
+message SetReferenceResponse {
+  ValueMetadata metadata = 1;
+}
+
+message ListReferencesRequest {
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
+
+  Coordinate coordinate = 2 [(buf.validate.field).required = true];
+}
+
+message ListReferencesResponse {
+  repeated Coordinate references = 1;
+}
+
+message ListVersionsRequest {
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
+  Coordinate coordinate = 2 [(buf.validate.field).required = true];
+}
+
+message ListVersionsResponse {
+  repeated VersionEntry versions = 1;
+}
+
+message SetBindingRequest {
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  common.environment.v1.Tier tier = 2 [(buf.validate.field).cel = {
+    id: "variablestore.binding.tier"
+    message: "a binding is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier"
+    expression: "this in [1, 2]"
+  }];
+
+  string environment = 3 [
+    (buf.validate.field).string.pattern = "^[^#[:cntrl:]]*$",
+    (buf.validate.field).cel = {
+      id: "variablestore.environment.tier_wide"
+      message: "\"*\" is reserved: it names the value that binds tier-wide"
+      expression: "!this.contains('*')"
+    }
+  ];
+
+  common.bindings.v1.Binding binding = 4 [(buf.validate.field).required = true];
+
+  string owner = 5;
+}
+
+message SetBindingResponse {
+  uint64 version = 1;
+}
+
+message RemoveBindingRequest {
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  common.environment.v1.Tier tier = 2 [(buf.validate.field).cel = {
+    id: "variablestore.binding.tier"
+    message: "a binding is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier"
+    expression: "this in [1, 2]"
+  }];
+
+  string environment = 3 [
+    (buf.validate.field).string.pattern = "^[^#[:cntrl:]]*$",
+    (buf.validate.field).cel = {
+      id: "variablestore.environment.tier_wide"
+      message: "\"*\" is reserved: it names the value that binds tier-wide"
+      expression: "!this.contains('*')"
+    }
+  ];
+
+  string name = 4 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#[:cntrl:]]*$"}];
+}
+
+message RemoveBindingResponse {
+  bool removed = 1;
+}
+
+message ListBindingsRequest {
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  common.environment.v1.Tier tier = 2 [(buf.validate.field).cel = {
+    id: "variablestore.binding.tier"
+    message: "a binding is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier"
+    expression: "this in [1, 2]"
+  }];
+
+  string environment = 3 [
+    (buf.validate.field).string.pattern = "^[^#[:cntrl:]]*$",
+    (buf.validate.field).cel = {
+      id: "variablestore.environment.tier_wide"
+      message: "\"*\" is reserved: it names the value that binds tier-wide"
+      expression: "!this.contains('*')"
+    }
+  ];
+}
+
+message ListBindingsResponse {
+  repeated BindingSummary bindings = 1;
+}
+
+message BindingSummary {
+  string name = 1;
+
+  common.bindings.v1.BindingType type = 2;
+
+  string source = 3;
+
+  string owner = 4;
+
+  uint64 version = 5;
+
+  repeated PropertyShape properties = 6;
+}
+
+message PropertyShape {
+  string name = 1;
+
+  string json_type = 2;
+
+  bool list = 3;
+}
+
+message EnvSource {
+  oneof kind {
+    option (buf.validate.oneof).required = true;
+
+    BuiltinEnvSource builtin = 1;
+
+    InfisicalEnvSource infisical = 2;
+
+    ExecEnvSource exec = 3;
+  }
+}
+
+message BuiltinEnvSource {
+}
+
+message InfisicalEnvSource {
+  string project = 1 [(buf.validate.field).string.min_len = 1];
+
+  string environment = 2 [(buf.validate.field).string.min_len = 1];
+
+  string path = 3 [(buf.validate.field).string.pattern = "^(/.*)?$"];
+
+  string host = 4 [(buf.validate.field).string.pattern = "^(https?://.+)?$"];
+
+  InfisicalAuth auth = 5 [(buf.validate.field).required = true];
+
+  WritePolicy write = 6 [(buf.validate.field).enum = {defined_only: true, not_in: [0]}];
+}
+
+enum WritePolicy {
+  WRITE_POLICY_UNSPECIFIED = 0;
+  WRITE_POLICY_NEVER = 1;
+  WRITE_POLICY_MISSING = 2;
+  WRITE_POLICY_VALUES = 3;
+}
+
+message InfisicalAuth {
+  oneof method {
+    option (buf.validate.oneof).required = true;
+
+    InfisicalUniversalAuth universal = 1;
+
+    InfisicalIdentityAuth identity = 2;
+  }
+}
+
+message InfisicalUniversalAuth {
+  string client_id_variable = 1 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#[:cntrl:]]*$"}];
+
+  string client_secret_variable = 2 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#[:cntrl:]]*$"}];
+}
+
+message InfisicalIdentityAuth {
+  string identity_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message ExecEnvSource {
+  repeated string command = 1 [(buf.validate.field).repeated.min_items = 1];
+
+  repeated EnvSourceValue values = 2;
+}
+
+message EnvSourceValue {
+  Cell cell = 1 [(buf.validate.field).required = true];
+
+  string value = 2 [debug_redact = true];
+}
+
+message Cell {
+  string folder = 1 [(buf.validate.field).string.pattern = "^(/([^/#.[:cntrl:]][^/#[:cntrl:]]*|\\.[^/#.[:cntrl:]][^/#[:cntrl:]]*|\\.\\.[^/#[:cntrl:]]+))*$"];
+
+  string key = 2 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#[:cntrl:]]*$"}];
+}
+
+message EnvSourceStatus {
+  string env_source = 1;
+
+  bool scheduled = 2;
+
+  bool can_create = 3;
+
+  bool can_update = 9;
+
+  int64 last_attempt_at = 4;
+
+  int64 last_success_at = 5;
+
+  string last_error = 6;
+
+  repeated FolderLink links = 7;
+
+  repeated string credentials = 8;
+}
+
+message FolderLink {
+  string folder = 1;
+
+  string url = 2;
+}
+
+message RefusedCell {
+  Cell cell = 1;
+
+  string reason = 2;
+}
+
+message CredentialRefusal {
+  string variable = 1;
+
+  bool unset = 2;
+
+  string reason = 3;
+}
+
+message SyncEnvSourceRequest {
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).cel = {
+    id: "variablestore.envsource.tier"
+    message: "an env source is kept per deployed tier: name the preview or the production tier"
+    expression: "this in [1, 2]"
+  }];
+
+  string slug = 2 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  oneof from {
+    option (buf.validate.oneof).required = true;
+
+    EnvSource env_source = 3;
+
+    RegisteredEnvSource registered = 5;
+  }
+
+  repeated string folders = 4 [(buf.validate.field).repeated = {
+    unique: true
+    items: {string: {pattern: "^(/([^/#.[:cntrl:]][^/#[:cntrl:]]*|\\.[^/#.[:cntrl:]][^/#[:cntrl:]]*|\\.\\.[^/#[:cntrl:]]+))*$"}}
+  }];
+}
+
+message RegisteredEnvSource {
+}
+
+message SyncEnvSourceResponse {
+  EnvSourceStatus status = 1;
+
+  repeated Cell present = 2;
+
+  int32 written = 3;
+
+  int32 removed = 4;
+
+  repeated RefusedCell refused = 5;
+}
+
+message DescribeEnvSourceRequest {
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).cel = {
+    id: "variablestore.envsource.tier"
+    message: "an env source is kept per deployed tier: name the preview or the production tier"
+    expression: "this in [1, 2]"
+  }];
+
+  string slug = 2 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+}
+
+message DescribeEnvSourceResponse {
+  EnvSourceStatus status = 1;
+}
+
+message SetEnvSourceValueRequest {
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).cel = {
+    id: "variablestore.envsource.tier"
+    message: "an env source is kept per deployed tier: name the preview or the production tier"
+    expression: "this in [1, 2]"
+  }];
+
+  Coordinate coordinate = 2 [(buf.validate.field).required = true];
+
+  string value = 3 [debug_redact = true];
+
+  string description = 4 [(buf.validate.field).string.max_len = 120];
+}
+
+message SetEnvSourceValueResponse {
+  bool awaiting_approval = 1;
+
+  optional ValueMetadata metadata = 2;
+
+  bool created = 3;
+}

@@ -115,7 +115,7 @@ func TestRoleCoordinate(t *testing.T) {
 	}{
 		{[]string{"policy", "logs"}, "role-app-policy-logs"},
 		{[]string{"policy", "isr", "cache"}, "role-app-policy-isr-cache"},
-		{[]string{"policy", "vars", "read"}, "role-app-policy-vars-read"},
+		{[]string{"policy", "variables", "read"}, "role-app-policy-variables-read"},
 	} {
 		if got := naming.ResourceID(naming.KindRole, roleLocalName, tc.parts...); got != tc.want {
 			t.Errorf("resource id = %q, want %q", got, tc.want)

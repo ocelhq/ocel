@@ -1,6 +1,6 @@
 import { createServer, type Server } from "node:http";
 import { afterEach, expect, it } from "vitest";
-import { capabilities, capabilitiesURL, vars } from "./transport";
+import { capabilities, capabilitiesURL, variableStore } from "./transport";
 
 let server: Server | undefined;
 
@@ -48,7 +48,12 @@ it("sends the token as a bearer credential", async () => {
   const seen: string[] = [];
   const url = await answering(seen);
 
-  await vars({ id: "conn-1", url, token: "minted.jwt.value", capabilities: [] }).listValues({
+  await variableStore({
+    id: "conn-1",
+    url,
+    token: "minted.jwt.value",
+    capabilities: [],
+  }).listValues({
     slug: "shop",
   });
 
@@ -67,14 +72,14 @@ it("asks for capabilities under the path the connector is published at", () => {
 
 it("sends the console's token when it probes for capabilities", async () => {
   const seen: string[] = [];
-  const url = await probing(seen, 200, { capabilities: ["envvars.read"] });
+  const url = await probing(seen, 200, { capabilities: ["variables.read"] });
 
   const answer = await capabilities(url, "minted.jwt.value");
 
   expect(seen).toEqual(["Bearer minted.jwt.value"]);
   expect(answer.done).toBe(true);
   if (answer.done) {
-    expect(answer.result).toEqual(["envvars.read"]);
+    expect(answer.result).toEqual(["variables.read"]);
   }
 });
 

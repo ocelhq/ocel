@@ -13,7 +13,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
-	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
+	"github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1/variablestorev1connect"
 )
 
 type Provider struct {
@@ -96,8 +96,8 @@ func forward[Req any](ctx context.Context, p *Provider, rpc string, req *Req, ca
 	return result, err
 }
 
-func (p *Provider) EnvVars() (envvarsv1connect.EnvVarsServiceClient, error) {
-	return p.process.EnvVars()
+func (p *Provider) VariableStore() (variablestorev1connect.VariableStoreServiceClient, error) {
+	return p.process.VariableStore()
 }
 
 func (p *Provider) Cost() (costv1connect.CostServiceClient, error) {

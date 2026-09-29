@@ -2,9 +2,9 @@ import type { Scope } from "@console/connectors";
 import type { Ability } from "@ui/variables";
 
 const byRole: Record<string, readonly Scope[]> = {
-  owner: ["envvars.read", "envvars.write", "envvars.reveal"],
-  admin: ["envvars.read", "envvars.write"],
-  member: ["envvars.read"],
+  owner: ["variables.read", "variables.write", "variables.reveal"],
+  admin: ["variables.read", "variables.write"],
+  member: ["variables.read"],
 };
 
 export function scopesFor(role: string, capabilities: readonly string[]): Scope[] {
@@ -19,7 +19,7 @@ export function scopesFor(role: string, capabilities: readonly string[]): Scope[
 
 export function abilityOf(scopes: readonly Scope[]): Ability {
   return {
-    write: scopes.includes("envvars.write"),
-    reveal: scopes.includes("envvars.reveal"),
+    write: scopes.includes("variables.write"),
+    reveal: scopes.includes("variables.reveal"),
   };
 }

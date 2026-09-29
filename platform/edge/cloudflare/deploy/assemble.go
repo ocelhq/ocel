@@ -37,7 +37,7 @@ func (p *cloudflare) assembleApp(src edge.WorkerSource, r edge.Addresses) (edge.
 	if err := validateEntry(src.Entry, routed, r); err != nil {
 		return edge.Worker{}, err
 	}
-	vars, secrets, err := signingBindings(r)
+	variables, secrets, err := signingBindings(r)
 	if err != nil {
 		return edge.Worker{}, err
 	}
@@ -49,7 +49,7 @@ func (p *cloudflare) assembleApp(src edge.WorkerSource, r edge.Addresses) (edge.
 			Content:     main,
 		},
 		Modules:      modules,
-		Vars:         vars,
+		Variables:    variables,
 		Secrets:      secrets,
 		AssetBinding: assetBinding,
 		Assets:       assets,
@@ -113,7 +113,7 @@ func validateRoutes(routes []string, r edge.Addresses) error {
 	return nil
 }
 
-func signingBindings(r edge.Addresses) (vars, secrets map[string]string, err error) {
+func signingBindings(r edge.Addresses) (variables, secrets map[string]string, err error) {
 	creds, ok := r.EdgeCredentials()
 	if !ok || creds.AccessKeyID == "" || creds.SecretKey == "" {
 		return nil, nil, errors.New("the Cloudflare edge signs every forward to the origin, and this bootstrap has no edge credentials to sign with; re-run bootstrap so the origin mints them before deploying")

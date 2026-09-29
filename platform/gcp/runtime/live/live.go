@@ -5,18 +5,18 @@ import (
 	"maps"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/seal"
-	vars "github.com/ocelhq/ocel/platform/gcp/provider/live"
+	"github.com/ocelhq/ocel/pkg/variablestore"
+	variables "github.com/ocelhq/ocel/platform/gcp/provider/live"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
 type storeSource struct {
-	reader   envvars.EnvironmentReader
-	cells    []envvars.Cell
+	reader   variablestore.EnvironmentReader
+	cells    []variablestore.Cell
 	bindings []live.Binding
 }
 
@@ -40,7 +40,7 @@ func bindingNames(bindings []live.Binding) []string {
 	return names
 }
 
-func merged(resolved map[string]string, bindings []live.Binding, stored []envvars.StoredBinding) map[string]string {
+func merged(resolved map[string]string, bindings []live.Binding, stored []variablestore.StoredBinding) map[string]string {
 	out := make(map[string]string, len(resolved)+len(stored))
 	maps.Copy(out, resolved)
 	for i, record := range stored {
@@ -50,7 +50,7 @@ func merged(resolved map[string]string, bindings []live.Binding, stored []envvar
 }
 
 func FromManifest(raw []byte) (*live.Values, error) {
-	manifest, err := vars.Parse(raw)
+	manifest, err := variables.Parse(raw)
 	if err != nil {
 		return nil, err
 	}
@@ -66,12 +66,12 @@ func FromManifest(raw []byte) (*live.Values, error) {
 	return Over(manifest, ports.KeyValues{Clients: clients}, ports.Cipher{Clients: clients}), nil
 }
 
-func Over(manifest vars.Manifest, store keyvalue.Store, cipher seal.Cipher) *live.Values {
+func Over(manifest variables.Manifest, store keyvalue.Store, cipher seal.Cipher) *live.Values {
 	return live.New(&storeSource{
-		reader: envvars.EnvironmentReader{
+		reader: variablestore.EnvironmentReader{
 			KeyValues:   store,
 			Cipher:      cipher,
-			Scope:       envvars.Scope{Project: manifest.Slug, Tier: environment.Tier(manifest.Tier)},
+			Scope:       variablestore.Scope{Project: manifest.Slug, Tier: environment.Tier(manifest.Tier)},
 			Environment: manifest.Environment,
 		},
 		cells:    manifestCells(manifest),
@@ -79,10 +79,10 @@ func Over(manifest vars.Manifest, store keyvalue.Store, cipher seal.Cipher) *liv
 	}, live.Keys(manifest.Keys, manifest.Bindings), manifest.Bindings, nil)
 }
 
-func manifestCells(m vars.Manifest) []envvars.Cell {
-	cells := make([]envvars.Cell, 0, len(m.Keys))
+func manifestCells(m variables.Manifest) []variablestore.Cell {
+	cells := make([]variablestore.Cell, 0, len(m.Keys))
 	for _, k := range m.Keys {
-		cells = append(cells, envvars.Cell{Folder: k.Folder, Key: k.Key})
+		cells = append(cells, variablestore.Cell{Folder: k.Folder, Key: k.Key})
 	}
 	return cells
 }

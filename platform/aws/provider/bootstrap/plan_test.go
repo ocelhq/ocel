@@ -352,7 +352,7 @@ func TestRemovalTakesNoKeyFromAnAccountThatBroughtItsOwn(t *testing.T) {
 	stacks := newFakeCFN()
 	frontedBy(t, &fakeEdge{kind: "cloudflare"})
 	apis := apisOf(stacks, newFakeSSM(), &fakeIAM{}, preloadedStore())
-	req := Request{Features: []string{provider.FeatureVarsKey}, VarsKey: broughtKeyARN}
+	req := Request{Features: []string{provider.FeatureVariablesKey}, VariablesKey: broughtKeyARN}
 	if err := Run(ctx, apis, defaultNamespace, environment.TierProduction, req, nil); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -365,9 +365,9 @@ func TestRemovalTakesNoKeyFromAnAccountThatBroughtItsOwn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PlanRemove: %v", err)
 	}
-	group := groupNamed(t, groups, defaultNamespace.FeatureStackName(provider.FeatureVarsKey, environment.TierProduction))
+	group := groupNamed(t, groups, defaultNamespace.FeatureStackName(provider.FeatureVariablesKey, environment.TierProduction))
 	for _, change := range group.Changes {
-		if change.Name == "VarsKey" || change.Name == "VarsKeyAlias" {
+		if change.Name == "VariablesKey" || change.Name == "VariablesKeyAlias" {
 			t.Errorf("the removal plan takes %s from a stack that owns no key, and a destroy must not claim to take a key or an alias this account brought", change.Name)
 		}
 	}

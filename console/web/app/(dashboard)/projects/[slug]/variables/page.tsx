@@ -1,4 +1,4 @@
-import { envvars, type Stored } from "@console/connectors";
+import { type Stored, variables } from "@console/connectors";
 import { db } from "@console/db";
 import { project } from "@console/db/schema";
 import { and, eq } from "drizzle-orm";
@@ -56,7 +56,7 @@ export default async function VariablesPage({
   let refusal = null;
   const dialled = connector === null ? null : await dial(session, connector);
   if (dialled !== null) {
-    const answer = await envvars.list(dialled, environmentClass, found.slug);
+    const answer = await variables.list(dialled, environmentClass, found.slug);
     if (answer.done) {
       stored = answer.result;
     } else {

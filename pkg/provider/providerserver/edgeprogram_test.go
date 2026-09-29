@@ -70,9 +70,9 @@ func TestUsePreviewWildcardSendsTheProviderProgramToAnEdgeThatRunsCode(t *testin
 	if spec.Program.StoreScriptName != fake.ProgramStore {
 		t.Errorf("StoreScriptName = %q, want %q", spec.Program.StoreScriptName, fake.ProgramStore)
 	}
-	if spec.Program.Worker.Vars[fake.ProgramPreviewVar] != "preview.acme.com" {
-		t.Errorf("Vars[%s] = %q, want the wildcard's base domain",
-			fake.ProgramPreviewVar, spec.Program.Worker.Vars[fake.ProgramPreviewVar])
+	if spec.Program.Worker.Variables[fake.ProgramPreviewVar] != "preview.acme.com" {
+		t.Errorf("Variables[%s] = %q, want the wildcard's base domain",
+			fake.ProgramPreviewVar, spec.Program.Worker.Variables[fake.ProgramPreviewVar])
 	}
 	if spec.Values[fake.ProgramEdgeVar] != string(fake.KindRelay) {
 		t.Errorf("Values = %v, want the values the provider hands the entry", spec.Values)
@@ -142,9 +142,9 @@ func TestDeploySendsTheProviderProgramToAnEdgeThatRunsCode(t *testing.T) {
 	if spec.Program.Name != fake.ProgramName("shop", environment.TierProduction) {
 		t.Errorf("Name = %q, want %q", spec.Program.Name, fake.ProgramName("shop", environment.TierProduction))
 	}
-	if spec.Program.Worker.Vars[fake.ProgramPreviewAppsVar] != "web" {
-		t.Errorf("Vars[%s] = %q, want the manifest's app names",
-			fake.ProgramPreviewAppsVar, spec.Program.Worker.Vars[fake.ProgramPreviewAppsVar])
+	if spec.Program.Worker.Variables[fake.ProgramPreviewAppsVar] != "web" {
+		t.Errorf("Variables[%s] = %q, want the manifest's app names",
+			fake.ProgramPreviewAppsVar, spec.Program.Worker.Variables[fake.ProgramPreviewAppsVar])
 	}
 	if spec.Values[fake.ProgramEdgeVar] != string(fake.KindRelay) {
 		t.Errorf("Values = %v, want the values the provider hands the entry", spec.Values)
@@ -263,8 +263,8 @@ func TestPreviewDeployOnTheSharedWildcardPrunesItsOwnWorker(t *testing.T) {
 	if len(spec.Domains) != 0 {
 		t.Errorf("Domains = %v, want none: the shared entry owns the route", spec.Domains)
 	}
-	if got := spec.Program.Worker.Vars[fake.ProgramPreviewVar]; got != "" {
-		t.Errorf("Vars[%s] = %q, want empty: the shared entry has the base domain, not the project's worker",
+	if got := spec.Program.Worker.Variables[fake.ProgramPreviewVar]; got != "" {
+		t.Errorf("Variables[%s] = %q, want empty: the shared entry has the base domain, not the project's worker",
 			fake.ProgramPreviewVar, got)
 	}
 }
@@ -286,8 +286,8 @@ func TestPreviewDeployOnItsOwnWildcardServesFromItsOwnWorker(t *testing.T) {
 	if !slices.Equal(spec.Domains, []string{"*.preview.shop.example"}) {
 		t.Errorf("Domains = %v, want the project's preview wildcard", spec.Domains)
 	}
-	if got := spec.Program.Worker.Vars[fake.ProgramPreviewVar]; got != "preview.shop.example" {
-		t.Errorf("Vars[%s] = %q, want the base under the project's own wildcard", fake.ProgramPreviewVar, got)
+	if got := spec.Program.Worker.Variables[fake.ProgramPreviewVar]; got != "preview.shop.example" {
+		t.Errorf("Variables[%s] = %q, want the base under the project's own wildcard", fake.ProgramPreviewVar, got)
 	}
 }
 

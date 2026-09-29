@@ -42,7 +42,11 @@ export function VariablesTable({
   }
 
   return (
-    <div data-vars data-read-only={readOnly || undefined} className="flex flex-1 flex-col gap-4">
+    <div
+      data-variables
+      data-read-only={readOnly || undefined}
+      className="flex flex-1 flex-col gap-4"
+    >
       <DropNotice />
       <Table />
       {!readOnly && <BulkBar />}

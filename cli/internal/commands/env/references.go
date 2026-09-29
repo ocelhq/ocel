@@ -11,7 +11,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 )
 
 func runEnvRef(ctx context.Context, dependencies Dependencies, cwd, key string, opts envOptions, ref envRefOptions, stdout, stderr io.Writer) error {
@@ -32,11 +32,11 @@ func runEnvRef(ctx context.Context, dependencies Dependencies, cwd, key string, 
 			return err
 		}
 		target := ref.target(cfg.Slug, key)
-		envVars, err := provider.EnvVars()
+		variableStore, err := provider.VariableStore()
 		if err != nil {
 			return err
 		}
-		resp, err := envVars.SetReference(ctx, &envvarsv1.SetReferenceRequest{
+		resp, err := variableStore.SetReference(ctx, &variablestorev1.SetReferenceRequest{
 			Tier:       opts.tier(),
 			Coordinate: wireCoordinate(cfg.Slug, key, opts),
 			Target:     target,
@@ -51,11 +51,11 @@ func runEnvRef(ctx context.Context, dependencies Dependencies, cwd, key string, 
 
 func runEnvRefs(ctx context.Context, dependencies Dependencies, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
 	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env refs", stderr, func(ctx context.Context, _ *run.Run, provider *providerprocess.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
-		envVars, err := provider.EnvVars()
+		variableStore, err := provider.VariableStore()
 		if err != nil {
 			return err
 		}
-		resp, err := envVars.ListReferences(ctx, &envvarsv1.ListReferencesRequest{
+		resp, err := variableStore.ListReferences(ctx, &variablestorev1.ListReferencesRequest{
 			Tier:       opts.tier(),
 			Coordinate: wireCoordinate(cfg.Slug, key, opts),
 		})
@@ -67,7 +67,7 @@ func runEnvRefs(ctx context.Context, dependencies Dependencies, cwd, key string,
 	})
 }
 
-func renderReferences(stdout io.Writer, cell string, references []*envvarsv1.Coordinate) {
+func renderReferences(stdout io.Writer, cell string, references []*variablestorev1.Coordinate) {
 	if len(references) == 0 {
 		fmt.Fprintf(stdout, "Nothing references %s.\n", cell)
 		return

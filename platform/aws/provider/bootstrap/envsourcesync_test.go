@@ -95,32 +95,32 @@ func valuesOf(value any) []string {
 	return nil
 }
 
-type varsKeyStackCase struct {
+type variablesKeyStackCase struct {
 	name string
 	tier environment.Tier
 	body string
 	key  string
 }
 
-func varsKeyStackCases() []varsKeyStackCase {
-	var cases []varsKeyStackCase
+func variablesKeyStackCases() []variablesKeyStackCase {
+	var cases []variablesKeyStackCase
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 		cases = append(cases,
-			varsKeyStackCase{"made/" + string(tier), tier, featureTemplate(provider.FeatureVarsKey, tier), "VarsKey.Arn"},
-			varsKeyStackCase{"brought/" + string(tier), tier, varsKeyFeature.template(featureInputs{
-				ns: defaultNamespace, tier: tier, code: fixturePayloads(), refs: fixtureRefs(), varsKey: broughtKeyARN,
+			variablesKeyStackCase{"made/" + string(tier), tier, featureTemplate(provider.FeatureVariablesKey, tier), "VariablesKey.Arn"},
+			variablesKeyStackCase{"brought/" + string(tier), tier, variablesKeyFeature.template(featureInputs{
+				ns: defaultNamespace, tier: tier, code: fixturePayloads(), refs: fixtureRefs(), variablesKey: broughtKeyARN,
 			}).body, broughtKeyARN},
 		)
 	}
 	return cases
 }
 
-func TestEveryVarsKeyStackMakesAnEnvSourceSync(t *testing.T) {
-	for _, tc := range varsKeyStackCases() {
+func TestEveryVariablesKeyStackMakesAnEnvSourceSync(t *testing.T) {
+	for _, tc := range variablesKeyStackCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			fn, ok := parseEnvSourceSyncTemplate(t, tc.body).Resources["EnvSourceSync"]
 			if !ok || fn.Type != "AWS::Lambda::Function" {
-				t.Fatal("the vars-key stack declares no EnvSourceSync function, so a scheduled env source is only ever read at deploy")
+				t.Fatal("the variables-key stack declares no EnvSourceSync function, so a scheduled env source is only ever read at deploy")
 			}
 			if code := fixtureEnvSourceSyncCode(); fn.Properties.Code.S3Bucket != code.Bucket || fn.Properties.Code.S3Key != code.Key {
 				t.Errorf("EnvSourceSync Code = %+v, want the placed envsourcesync payload", fn.Properties.Code)
@@ -132,9 +132,9 @@ func TestEveryVarsKeyStackMakesAnEnvSourceSync(t *testing.T) {
 				t.Errorf("EnvSourceSync Role = %q, want its own EnvSourceSyncRole", fn.Properties.Role)
 			}
 			want := map[string]string{
-				"OCEL_VARS_TABLE": paramVarsTableName,
-				"OCEL_VARS_KEY":   tc.key,
-				"OCEL_INFRA_TIER": string(tc.tier),
+				"OCEL_VARIABLES_TABLE": paramVariablesTableName,
+				"OCEL_VARIABLES_KEY":   tc.key,
+				"OCEL_INFRA_TIER":      string(tc.tier),
 			}
 			if got := fn.Properties.Environment.Variables; !maps.Equal(got, want) {
 				t.Errorf("EnvSourceSync environment = %v, want exactly %v: where the tier's values are, never a value itself", got, want)
@@ -144,13 +144,13 @@ func TestEveryVarsKeyStackMakesAnEnvSourceSync(t *testing.T) {
 }
 
 func TestTheEnvSourceSyncRunsEveryMinuteThroughItsOwnInvokeRole(t *testing.T) {
-	for _, tc := range varsKeyStackCases() {
+	for _, tc := range variablesKeyStackCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			tmpl := parseEnvSourceSyncTemplate(t, tc.body)
 
 			group, ok := tmpl.Resources["EnvSourceSyncScheduleGroup"]
 			if !ok || group.Type != "AWS::Scheduler::ScheduleGroup" {
-				t.Fatal("the vars-key stack declares no EnvSourceSyncScheduleGroup, so its schedule has no group the bootstrap credential is scoped to")
+				t.Fatal("the variables-key stack declares no EnvSourceSyncScheduleGroup, so its schedule has no group the bootstrap credential is scoped to")
 			}
 			if want := defaultNamespace.envSourceSyncScheduleGroupName(tc.tier); group.Properties.Name != want {
 				t.Errorf("EnvSourceSyncScheduleGroup Name = %q, want %q, the name the bootstrap credential is scoped to", group.Properties.Name, want)
@@ -158,7 +158,7 @@ func TestTheEnvSourceSyncRunsEveryMinuteThroughItsOwnInvokeRole(t *testing.T) {
 
 			schedule, ok := tmpl.Resources["EnvSourceSyncSchedule"]
 			if !ok || schedule.Type != "AWS::Scheduler::Schedule" {
-				t.Fatal("the vars-key stack declares no EnvSourceSyncSchedule, so the sync never runs")
+				t.Fatal("the variables-key stack declares no EnvSourceSyncSchedule, so the sync never runs")
 			}
 			p := schedule.Properties
 			if want := defaultNamespace.envSourceSyncScheduleName(tc.tier); p.Name != want || p.GroupName != "EnvSourceSyncScheduleGroup" {
@@ -182,7 +182,7 @@ func TestTheEnvSourceSyncRunsEveryMinuteThroughItsOwnInvokeRole(t *testing.T) {
 
 			role := tmpl.Resources["EnvSourceSyncScheduleRole"]
 			if role.Type != "AWS::IAM::Role" {
-				t.Fatal("the vars-key stack declares no EnvSourceSyncScheduleRole for the schedule to invoke through")
+				t.Fatal("the variables-key stack declares no EnvSourceSyncScheduleRole for the schedule to invoke through")
 			}
 			trust := role.Properties.AssumeRolePolicyDocument.Statement
 			if len(trust) != 1 || trust[0].Principal["Service"] != "scheduler.amazonaws.com" {
@@ -214,15 +214,15 @@ func TestTheEnvSourceSyncRunsEveryMinuteThroughItsOwnInvokeRole(t *testing.T) {
 	}
 }
 
-func TestNoTwoVarsKeyStacksInOneAccountNameTheSameSchedule(t *testing.T) {
+func TestNoTwoVariablesKeyStacksInOneAccountNameTheSameSchedule(t *testing.T) {
 	seen := map[string]string{}
 	for _, ns := range []Namespace{defaultNamespace, Namespace("j-1-deploy-next"), Namespace("j-2-deploy-next")} {
 		for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-			body := varsKeyFeature.template(featureInputs{
-				ns: ns, tier: tier, code: fixturePayloads(), refs: fixtureRefs(), varsKey: broughtKeyARN,
+			body := variablesKeyFeature.template(featureInputs{
+				ns: ns, tier: tier, code: fixturePayloads(), refs: fixtureRefs(), variablesKey: broughtKeyARN,
 			}).body
 			name := parseEnvSourceSyncTemplate(t, body).Resources["EnvSourceSyncSchedule"].Properties.Name
-			stack := ns.featureStackName(provider.FeatureVarsKey, tier)
+			stack := ns.featureStackName(provider.FeatureVariablesKey, tier)
 			if other, taken := seen[name]; taken {
 				t.Errorf("%s and %s both name their schedule %q, and CloudFormation identifies a schedule by its name alone, whatever its group, so the second stack fails to create", other, stack, name)
 			}
@@ -232,11 +232,11 @@ func TestNoTwoVarsKeyStacksInOneAccountNameTheSameSchedule(t *testing.T) {
 }
 
 func TestAnEnvSourceSyncThatFailsOrIsThrottledIsNeverRunLateOverTheNextMinutes(t *testing.T) {
-	for _, tc := range varsKeyStackCases() {
+	for _, tc := range variablesKeyStackCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			config, ok := parseEnvSourceSyncTemplate(t, tc.body).Resources["EnvSourceSyncInvokeConfig"]
 			if !ok || config.Type != "AWS::Lambda::EventInvokeConfig" {
-				t.Fatal("the vars-key stack declares no EnvSourceSyncInvokeConfig, so Lambda retries a failed sync twice and a throttled one for six hours, over the syncs after it")
+				t.Fatal("the variables-key stack declares no EnvSourceSyncInvokeConfig, so Lambda retries a failed sync twice and a throttled one for six hours, over the syncs after it")
 			}
 			p := config.Properties
 			if p.FunctionName != "EnvSourceSync" || p.Qualifier != "$LATEST" {
@@ -259,7 +259,7 @@ func TestTheBootstrapCredentialConfiguresHowTheEnvSourceSyncIsInvokedAndNoOtherF
 		"lambda:UpdateFunctionEventInvokeConfig", "lambda:DeleteFunctionEventInvokeConfig",
 	}
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		function := "arn:aws:lambda:us-east-1:111122223333:function:" + defaultNamespace.featureStackName(provider.FeatureVarsKey, tier) + "-EnvSourceSync-A1B2C3"
+		function := "arn:aws:lambda:us-east-1:111122223333:function:" + defaultNamespace.featureStackName(provider.FeatureVariablesKey, tier) + "-EnvSourceSync-A1B2C3"
 		for _, action := range actions {
 			reached := false
 			for g := range bootstrapGrants {
@@ -282,12 +282,12 @@ func TestTheBootstrapCredentialConfiguresHowTheEnvSourceSyncIsInvokedAndNoOtherF
 	}
 }
 
-func TestTheEnvSourceSyncReachesOnlyTheVarsTableTheKeyAndItsLogs(t *testing.T) {
-	for _, tc := range varsKeyStackCases() {
+func TestTheEnvSourceSyncReachesOnlyTheVariablesTableTheKeyAndItsLogs(t *testing.T) {
+	for _, tc := range variablesKeyStackCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			role := parseEnvSourceSyncTemplate(t, tc.body).Resources["EnvSourceSyncRole"]
 			if role.Type != "AWS::IAM::Role" {
-				t.Fatal("the vars-key stack declares no EnvSourceSyncRole")
+				t.Fatal("the variables-key stack declares no EnvSourceSyncRole")
 			}
 			trust := role.Properties.AssumeRolePolicyDocument.Statement
 			if len(trust) != 1 || trust[0].Principal["Service"] != LambdaServicePrincipal {
@@ -311,7 +311,7 @@ func TestTheEnvSourceSyncReachesOnlyTheVarsTableTheKeyAndItsLogs(t *testing.T) {
 				slices.Sort(granted[resource])
 			}
 			want := map[string][]string{
-				paramVarsTableARN:           {"dynamodb:DeleteItem", "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Query"},
+				paramVariablesTableARN:      {"dynamodb:DeleteItem", "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Query"},
 				tc.key:                      {"kms:Decrypt", "kms:Encrypt"},
 				"EnvSourceSyncLogGroup.Arn": {"logs:CreateLogStream", "logs:PutLogEvents"},
 			}

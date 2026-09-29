@@ -38,7 +38,7 @@ func beating(t *testing.T, origin string) (heartbeat *beat, keyPath, configPath 
 	return &beat{
 		connectorID:  "conn-1",
 		version:      "0.0.0-alpha",
-		capabilities: []string{CapabilityEnvVarsRead},
+		capabilities: []string{CapabilityVariablesRead},
 		identity:     identity,
 		keyPath:      keyPath,
 		configPath:   configPath,
@@ -117,7 +117,7 @@ func TestOneHeartbeatIsSentForAHostThatIsWokenOnASchedule(t *testing.T) {
 		t.Fatal(err)
 	}
 	spec := Spec{
-		Config:   Config{Console: server.URL, ConnectorID: "conn-1", OrganizationID: "org-1", Grants: []string{CapabilityEnvVarsRead}},
+		Config:   Config{Console: server.URL, ConnectorID: "conn-1", OrganizationID: "org-1", Grants: []string{CapabilityVariablesRead}},
 		Version:  "0.0.0-alpha",
 		Identity: identity,
 	}
@@ -165,7 +165,7 @@ func TestHeartbeatWipesAfterA404ThatFollowsASuccess(t *testing.T) {
 		t.Fatalf("the console saw %d beats, want 2", count.Load())
 	}
 	if len(*bodies) == 0 || (*bodies)[0].Version != "0.0.0-alpha" ||
-		len((*bodies)[0].Capabilities) != 1 || (*bodies)[0].Capabilities[0] != CapabilityEnvVarsRead {
+		len((*bodies)[0].Capabilities) != 1 || (*bodies)[0].Capabilities[0] != CapabilityVariablesRead {
 		t.Fatalf("the beat sent %+v", *bodies)
 	}
 }

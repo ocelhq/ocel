@@ -1,6 +1,6 @@
 import express from "express";
 import { orders } from "../infra/index";
-import { env } from "../infra/vars";
+import { env } from "../infra/variables";
 
 const APP_NAME = "web";
 const PORT = Number(process.env.PORT ?? 3402);

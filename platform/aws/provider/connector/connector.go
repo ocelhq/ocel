@@ -137,18 +137,18 @@ func Read(ctx context.Context, api cfn.StacksAPI, ns bootstrap.Namespace) (Insta
 	}, nil
 }
 
-func varsKeys(ctx context.Context, api cfn.StacksAPI, ns bootstrap.Namespace) ([]string, error) {
+func variablesKeys(ctx context.Context, api cfn.StacksAPI, ns bootstrap.Namespace) ([]string, error) {
 	keys := make([]string, 0, 2)
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 		deployed, err := bootstrap.CheckDeployedFor(ctx, api, ns, tier)
 		if err != nil {
 			return nil, err
 		}
-		if !deployed.Present || deployed.VarsKeyARN == "" {
+		if !deployed.Present || deployed.VariablesKeyARN == "" {
 			continue
 		}
-		if !slices.Contains(keys, deployed.VarsKeyARN) {
-			keys = append(keys, deployed.VarsKeyARN)
+		if !slices.Contains(keys, deployed.VariablesKeyARN) {
+			keys = append(keys, deployed.VariablesKeyARN)
 		}
 	}
 	if len(keys) == 0 {
@@ -161,7 +161,7 @@ func varsKeys(ctx context.Context, api cfn.StacksAPI, ns bootstrap.Namespace) ([
 
 func Install(ctx context.Context, apis APIs, ns bootstrap.Namespace, release Release,
 	writer provider.WrittenBy, progress progress.Log) (Installation, error) {
-	keys, err := varsKeys(ctx, apis.CFN, ns)
+	keys, err := variablesKeys(ctx, apis.CFN, ns)
 	if err != nil {
 		return Installation{}, err
 	}
@@ -503,7 +503,7 @@ func grants(ns bootstrap.Namespace, keys []string) []bootstrap.GrantStatement {
 			Actions:   []string{"kms:Decrypt", "kms:Encrypt"},
 			Resources: keys,
 			Condition: map[string]any{
-				"StringEquals": map[string]any{"aws:ResourceTag/" + bootstrap.VarsKeyComponentTagKey: bootstrap.VarsKeyComponentTagValue},
+				"StringEquals": map[string]any{"aws:ResourceTag/" + bootstrap.VariablesKeyComponentTagKey: bootstrap.VariablesKeyComponentTagValue},
 			},
 		},
 		{

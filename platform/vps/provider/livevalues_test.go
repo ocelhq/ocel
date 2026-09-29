@@ -9,11 +9,11 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/envvars"
-	"github.com/ocelhq/ocel/pkg/envvarsserver"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
+	"github.com/ocelhq/ocel/pkg/variablestore"
+	"github.com/ocelhq/ocel/pkg/variablestoreserver"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
@@ -25,12 +25,12 @@ const (
 	liveBindingPassword = "opensesame-9f21"
 )
 
-func liveScope() envvars.Scope {
-	return envvars.Scope{Project: "shop", Tier: environment.TierProduction}
+func liveScope() variablestore.Scope {
+	return variablestore.Scope{Project: "shop", Tier: environment.TierProduction}
 }
 
-func liveStore(p *vps.Provider) envvars.Store {
-	return envvars.Store{KeyValues: p.KeyValues(), Cipher: p.Cipher()}
+func liveStore(p *vps.Provider) variablestore.Store {
+	return variablestore.Store{KeyValues: p.KeyValues(), Cipher: p.Cipher()}
 }
 
 type liveValues struct {
@@ -42,10 +42,10 @@ func resolving(t *testing.T, p *vps.Provider) liveValues {
 	t.Helper()
 	ctx := context.Background()
 	store := liveStore(p)
-	if _, err := store.Set(ctx, liveScope(), envvars.Coordinate{Cell: envvars.Cell{Key: "DATABASE_URL"}}, liveSecretValue, nil); err != nil {
+	if _, err := store.Set(ctx, liveScope(), variablestore.Coordinate{Cell: variablestore.Cell{Key: "DATABASE_URL"}}, liveSecretValue, nil); err != nil {
 		t.Fatalf("sealing a secret through the box's own helper = %v", err)
 	}
-	pair, err := envvarsserver.BindingPair("terraform", &bindingsv1.Binding{
+	pair, err := variablestoreserver.BindingPair("terraform", &bindingsv1.Binding{
 		Name:   "main",
 		Source: "terraform",
 		Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{
@@ -59,7 +59,7 @@ func resolving(t *testing.T, p *vps.Provider) liveValues {
 		t.Fatalf("publishing a binding onto the box = %v", err)
 	}
 
-	reader := envvars.EnvironmentReader{KeyValues: p.KeyValues(), Cipher: p.Cipher(), Scope: liveScope()}
+	reader := variablestore.EnvironmentReader{KeyValues: p.KeyValues(), Cipher: p.Cipher(), Scope: liveScope()}
 	records, err := reader.Bindings(ctx, []string{"main"})
 	if err != nil {
 		t.Fatalf("resolving a binding back through the helper = %v", err)
@@ -159,7 +159,7 @@ func TestLiveAContainerReadsEveryValueClassOffItsOwnEnvironmentAndNothingIsLeftO
 	}
 
 	rotated := liveSecretValue + "-rotated"
-	if _, err := liveStore(p).Set(context.Background(), liveScope(), envvars.Coordinate{Cell: envvars.Cell{Key: "DATABASE_URL"}}, rotated, nil); err != nil {
+	if _, err := liveStore(p).Set(context.Background(), liveScope(), variablestore.Coordinate{Cell: variablestore.Cell{Key: "DATABASE_URL"}}, rotated, nil); err != nil {
 		t.Fatalf("rotating the secret after the deploy = %v", err)
 	}
 	deadline := time.Now().Add(3 * live.StalenessBound)

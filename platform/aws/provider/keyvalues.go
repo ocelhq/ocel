@@ -19,5 +19,5 @@ func (p *Provider) ValuesTable(ctx context.Context, tier environment.Tier) (stri
 	if err != nil {
 		return "", err
 	}
-	return deployed.VarsTable, nil
+	return deployed.VariablesTable, nil
 }

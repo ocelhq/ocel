@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/runtime/live"
-	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
+	variables "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 const answerCeiling = 1 << 20
@@ -21,7 +21,7 @@ type socketSource struct {
 }
 
 func (f *socketSource) Fetch(ctx context.Context) (map[string]string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://ocel-live"+vars.ValuesPath, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://ocel-live"+variables.ValuesPath, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -37,7 +37,7 @@ func (f *socketSource) Fetch(ctx context.Context) (map[string]string, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("the box answered %q for this deployment's values: %s", resp.Status, strings.TrimSpace(string(body)))
 	}
-	var answer vars.Answer
+	var answer variables.Answer
 	if err := json.Unmarshal(body, &answer); err != nil {
 		return nil, fmt.Errorf("decode the box's values: %w", err)
 	}
@@ -47,7 +47,7 @@ func (f *socketSource) Fetch(ctx context.Context) (map[string]string, error) {
 func (f *socketSource) FreeSpace() (uint64, uint64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), live.FetchBudget)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://ocel-live"+vars.SpacePath, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://ocel-live"+variables.SpacePath, nil)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -63,7 +63,7 @@ func (f *socketSource) FreeSpace() (uint64, uint64, error) {
 	if resp.StatusCode != http.StatusOK {
 		return 0, 0, fmt.Errorf("the box answered %q for the store volume: %s", resp.Status, strings.TrimSpace(string(body)))
 	}
-	var space vars.Space
+	var space variables.Space
 	if err := json.Unmarshal(body, &space); err != nil {
 		return 0, 0, fmt.Errorf("decode the box's volume size: %w", err)
 	}
@@ -75,7 +75,7 @@ func FreeSpace(socket string) func() (uint64, uint64, error) {
 }
 
 func FromManifest(raw []byte, socket string) (*live.Values, error) {
-	manifest, err := vars.Parse(raw)
+	manifest, err := variables.Parse(raw)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +85,7 @@ func FromManifest(raw []byte, socket string) (*live.Values, error) {
 	return Over(manifest, socket), nil
 }
 
-func Over(manifest vars.Manifest, socket string) *live.Values {
+func Over(manifest variables.Manifest, socket string) *live.Values {
 	return live.New(over(socket), live.Keys(manifest.Keys, manifest.Bindings), manifest.Bindings, nil)
 }
 

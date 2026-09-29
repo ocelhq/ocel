@@ -12,10 +12,10 @@ import (
 
 	"cloud.google.com/go/kms/apiv1/kmspb"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/seal"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -165,13 +165,13 @@ func TestAValueSealedUnderItsTierKeyAndAssociatedDataBytesOpens(t *testing.T) {
 
 func TestACellAndABindingAreSealedUnderTheAssociatedDataBytesEveryStoredValueIsBoundTo(t *testing.T) {
 	clients, kms := serveRecordingKMS(t)
-	store := envvars.Store{KeyValues: fake.NewKeyValues(), Cipher: Cipher{Clients: clients}}
-	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
+	store := variablestore.Store{KeyValues: fake.NewKeyValues(), Cipher: Cipher{Clients: clients}}
+	scope := variablestore.Scope{Project: "shop", Tier: environment.TierProduction}
 
-	if _, err := store.Set(context.Background(), scope, envvars.Coordinate{Cell: envvars.Cell{Folder: "/web", Key: "STRIPE_API_KEY"}, Environment: "staging"}, "sk_live_secret", nil); err != nil {
+	if _, err := store.Set(context.Background(), scope, variablestore.Coordinate{Cell: variablestore.Cell{Folder: "/web", Key: "STRIPE_API_KEY"}, Environment: "staging"}, "sk_live_secret", nil); err != nil {
 		t.Fatalf("Set() = %v", err)
 	}
-	if _, err := store.SetBinding(context.Background(), scope, "", envvars.OwnerOcel, "orders", envvars.BindingWrite{Record: []byte("{}"), Value: []byte("{}")}); err != nil {
+	if _, err := store.SetBinding(context.Background(), scope, "", variablestore.OwnerOcel, "orders", variablestore.BindingWrite{Record: []byte("{}"), Value: []byte("{}")}); err != nil {
 		t.Fatalf("SetBinding() = %v", err)
 	}
 

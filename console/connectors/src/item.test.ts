@@ -3,7 +3,7 @@ import { REFUSALS, refuse, statusOf } from "./item";
 
 describe("statusOf", () => {
   it("answers 403 for a connector that denied the scope", () => {
-    const refused = refuse("denied", "the token has no envvars.write scope");
+    const refused = refuse("denied", "the token has no variables.write scope");
     expect(refused.done).toBe(false);
     if (!refused.done) {
       expect(statusOf(refused.refusal)).toBe(403);

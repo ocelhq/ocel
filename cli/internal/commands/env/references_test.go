@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/envvars"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 )
@@ -103,9 +103,9 @@ func TestListingReferencesNamesWhatReadsAValue(t *testing.T) {
 		root := project.Root
 		envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
 
-		billing := envvars.Scope{Project: "billing", Tier: environment.TierProduction}
-		consumer := envvars.Coordinate{Cell: envvars.Cell{Folder: "/api", Key: "STRIPE_API_KEY"}}
-		target := envvars.Target{Project: clitest.FixtureSlug, Cell: envvars.Cell{Key: "STRIPE_API_KEY"}}
+		billing := variablestore.Scope{Project: "billing", Tier: environment.TierProduction}
+		consumer := variablestore.Coordinate{Cell: variablestore.Cell{Folder: "/api", Key: "STRIPE_API_KEY"}}
+		target := variablestore.Target{Project: clitest.FixtureSlug, Cell: variablestore.Cell{Key: "STRIPE_API_KEY"}}
 		if _, err := valuesOf(project).SetReference(context.Background(), billing, consumer, target); err != nil {
 			t.Fatalf("seed the consumer: %v", err)
 		}
@@ -183,7 +183,7 @@ func TestEveryEnvCommandTreatsAReferenceAsAPointer(t *testing.T) {
 			t.Errorf("rm stdout = %q, want the reference removed in one step", stdout.String())
 		}
 
-		platform := envvars.Scope{Project: "platform", Tier: environment.TierProduction}
+		platform := variablestore.Scope{Project: "platform", Tier: environment.TierProduction}
 		source, err := valuesOf(project).Get(context.Background(), platform, cellAt("STRIPE_API_KEY"), true)
 		if err != nil {
 			t.Fatalf("the source value went with the reference, want removing a consumer to leave it alone: %v", err)

@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -16,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
 func declaring(req *contractv1.DeployRequest, class resourcesv1.VariableClass, key, value string) *contractv1.DeployRequest {
@@ -27,9 +27,9 @@ func declaring(req *contractv1.DeployRequest, class resourcesv1.VariableClass, k
 
 func sealValue(t *testing.T, p *fake.Provider, key, plaintext string) {
 	t.Helper()
-	store := envvars.Store{KeyValues: p.KeyValues(), Cipher: p.Cipher()}
-	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
-	if _, err := store.Set(context.Background(), scope, envvars.Coordinate{Cell: envvars.Cell{Key: key}}, plaintext, nil); err != nil {
+	store := variablestore.Store{KeyValues: p.KeyValues(), Cipher: p.Cipher()}
+	scope := variablestore.Scope{Project: "shop", Tier: environment.TierProduction}
+	if _, err := store.Set(context.Background(), scope, variablestore.Coordinate{Cell: variablestore.Cell{Key: key}}, plaintext, nil); err != nil {
 		t.Fatalf("Set(%s): %v", key, err)
 	}
 }

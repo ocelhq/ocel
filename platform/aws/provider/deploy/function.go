@@ -311,30 +311,30 @@ func artifactArchivePath(root, artifactPath string) string {
 }
 
 type executionRole struct {
-	App        string
-	Tags       map[string]string
-	Cache      *isrConfig
-	Bytecode   *bytecodeConfig
-	VarsKeyARN string
-	Boundary   string
-	VPCAccess  bool
-	Dispatch   *dispatchHost
+	App             string
+	Tags            map[string]string
+	Cache           *isrConfig
+	Bytecode        *bytecodeConfig
+	VariablesKeyARN string
+	Boundary        string
+	VPCAccess       bool
+	Dispatch        *dispatchHost
 
-	ValuesTableARN string
-	Slug           string
-	VarsTier       string
-	VarsReferenced []string
+	ValuesTableARN      string
+	Slug                string
+	VariablesTier       string
+	VariablesReferenced []string
 
 	BindingPolicies []bindingPolicy
 }
 
 func appExecutionRole(cfg Config, app string, caches map[string]*isrConfig, bytecode map[string]*bytecodeConfig, bundle appBundle, tags map[string]string, policies []bindingPolicy, vpcAccess bool, dispatch *dispatchHost) executionRole {
-	role := executionRole{App: app, Cache: caches[app], Bytecode: bytecode[app], VarsKeyARN: cfg.VarsKeyARN, Boundary: cfg.AppBoundaryARN, Tags: tags, BindingPolicies: policies, VPCAccess: vpcAccess, Dispatch: dispatch}
+	role := executionRole{App: app, Cache: caches[app], Bytecode: bytecode[app], VariablesKeyARN: cfg.VariablesKeyARN, Boundary: cfg.AppBoundaryARN, Tags: tags, BindingPolicies: policies, VPCAccess: vpcAccess, Dispatch: dispatch}
 	if bundle.hasLive() {
-		role.ValuesTableARN = cfg.VarsTableARN
-		role.VarsReferenced = bundle.Referenced
+		role.ValuesTableARN = cfg.VariablesTableARN
+		role.VariablesReferenced = bundle.Referenced
 		role.Slug = cfg.Slug
-		role.VarsTier = string(cfg.Tier)
+		role.VariablesTier = string(cfg.Tier)
 	}
 	return role
 }
@@ -416,13 +416,13 @@ func newFunctionRole(ctx *pulumi.Context, coord naming.Coordinate, r executionRo
 			return nil, err
 		}
 	}
-	varsPolicy, err := varsReadPolicy(r)
+	variablesPolicy, err := variablesReadPolicy(r)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "vars", "read"), &iam.RolePolicyArgs{
+	if _, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "variables", "read"), &iam.RolePolicyArgs{
 		Role:   role.Name,
-		Policy: pulumi.String(varsPolicy),
+		Policy: pulumi.String(variablesPolicy),
 	}); err != nil {
 		return nil, err
 	}

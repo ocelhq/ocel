@@ -9,8 +9,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
-	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
 type listing struct {
@@ -71,7 +71,7 @@ func (w *watchedKeyValues) lists() []listing {
 	return slices.Clone(w.listed)
 }
 
-func statusesIn(t *testing.T, store envvars.Store) []keyvalue.Entry {
+func statusesIn(t *testing.T, store variablestore.Store) []keyvalue.Entry {
 	t.Helper()
 	found, err := store.KeyValues.List(context.Background(), keyvalue.Partition{Tier: environment.TierProduction, Root: keyvalue.RootEnvSourceStatus})
 	if err != nil {
@@ -80,10 +80,10 @@ func statusesIn(t *testing.T, store envvars.Store) []keyvalue.Entry {
 	return found
 }
 
-func referenceCredentials(t *testing.T, store envvars.Store, project, owner string) {
+func referenceCredentials(t *testing.T, store variablestore.Store, project, owner string) {
 	t.Helper()
 	for _, key := range []string{"INFISICAL_CLIENT_ID", "INFISICAL_CLIENT_SECRET"} {
-		if _, err := store.SetReference(context.Background(), scopeOf(project), tierWide("", key), envvars.Target{Project: owner, Cell: envvars.Cell{Key: key}}); err != nil {
+		if _, err := store.SetReference(context.Background(), scopeOf(project), tierWide("", key), variablestore.Target{Project: owner, Cell: variablestore.Cell{Key: key}}); err != nil {
 			t.Fatal(err)
 		}
 	}

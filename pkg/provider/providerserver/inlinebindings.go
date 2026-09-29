@@ -9,14 +9,14 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/envvars"
-	"github.com/ocelhq/ocel/pkg/envvarsserver"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/variablestore"
+	"github.com/ocelhq/ocel/pkg/variablestoreserver"
 )
 
 type inlineBinding struct {
@@ -33,13 +33,13 @@ func readInlineBindings(req *contractv1.DeployRequest) ([]inlineBinding, error) 
 	inline := make([]inlineBinding, 0, len(req.GetInlineBindings()))
 	for _, record := range req.GetInlineBindings() {
 		name := record.GetName()
-		if err := envvarsserver.ValidateInlineClaim(naming.InlineRecordOwner, name); err != nil {
+		if err := variablestoreserver.ValidateInlineClaim(naming.InlineRecordOwner, name); err != nil {
 			return nil, refusal.Refuse(refusal.CodeInvalid, "%s", err)
 		}
-		if err := envvarsserver.VerifyBinding(record); err != nil {
+		if err := variablestoreserver.VerifyBinding(record); err != nil {
 			return nil, refusal.Refuse(refusal.CodeInvalid, "%s", err)
 		}
-		if err := envvarsserver.RefuseUnsourced(naming.InlineRecordOwner, record); err != nil {
+		if err := variablestoreserver.RefuseUnsourced(naming.InlineRecordOwner, record); err != nil {
 			return nil, refusal.Refuse(refusal.CodeInvalid, "%s", err)
 		}
 		bound := slices.IndexFunc(resources, func(resource provider.Resource) bool { return resource.Binding == name })
@@ -150,8 +150,8 @@ func redact(message string, secrets []string) string {
 
 type inlineRecords struct {
 	versions map[string]int64
-	previous map[string]envvars.StoredBinding
-	writes   map[string]envvars.BindingWrite
+	previous map[string]variablestore.StoredBinding
+	writes   map[string]variablestore.BindingWrite
 	written  map[string]int64
 }
 
@@ -162,15 +162,15 @@ func (r *deployRun) readInlineRecords(ctx context.Context) error {
 	}
 	records := inlineRecords{
 		versions: versions,
-		previous: map[string]envvars.StoredBinding{},
-		writes:   map[string]envvars.BindingWrite{},
+		previous: map[string]variablestore.StoredBinding{},
+		writes:   map[string]variablestore.BindingWrite{},
 		written:  map[string]int64{},
 	}
 	var present []string
 	carried := make([]provider.Binding, 0, len(r.inline))
 	for _, bound := range r.inline {
 		name := bound.record.GetName()
-		pair, err := envvarsserver.BindingPair(naming.InlineRecordOwner, bound.record)
+		pair, err := variablestoreserver.BindingPair(naming.InlineRecordOwner, bound.record)
 		if err != nil {
 			return err
 		}
@@ -178,7 +178,7 @@ func (r *deployRun) readInlineRecords(ctx context.Context) error {
 		if versions[name] > 0 {
 			present = append(present, name)
 		}
-		binding, err := bindingPublished(name, envvars.StoredBinding{Value: pair.Value, Version: versions[name] + 1})
+		binding, err := bindingPublished(name, variablestore.StoredBinding{Value: pair.Value, Version: versions[name] + 1})
 		if err != nil {
 			return err
 		}
@@ -201,8 +201,8 @@ func (r *deployRun) publishInlineBindings(ctx context.Context) error {
 	for _, bound := range r.inline {
 		name := bound.record.GetName()
 		expected := r.inlineRecords.versions[name]
-		write := envvars.NamedBindingWrite{Name: name, Write: r.inlineRecords.writes[name], Expected: &expected}
-		versions, err := r.values.SetBindings(ctx, r.scope, bindingEnvironment(r.spec), naming.InlineRecordOwner, []envvars.NamedBindingWrite{write})
+		write := variablestore.NamedBindingWrite{Name: name, Write: r.inlineRecords.writes[name], Expected: &expected}
+		versions, err := r.values.SetBindings(ctx, r.scope, bindingEnvironment(r.spec), naming.InlineRecordOwner, []variablestore.NamedBindingWrite{write})
 		if err != nil {
 			return fmt.Errorf("publish the records %s's inline bindings keep: %w", r.scope.Project, err)
 		}
@@ -235,12 +235,12 @@ func (r *deployRun) restoreInlineBindings(ctx context.Context, progress progress
 			unwritten[name] = written
 			continue
 		}
-		write := envvars.NamedBindingWrite{
+		write := variablestore.NamedBindingWrite{
 			Name:     name,
-			Write:    envvars.BindingWrite{Record: previous.Record, Shapes: previous.Shapes, Value: previous.Value, Owner: previous.Owner},
+			Write:    variablestore.BindingWrite{Record: previous.Record, Shapes: previous.Shapes, Value: previous.Value, Owner: previous.Owner},
 			Expected: &written,
 		}
-		if _, err := r.values.SetBindings(ctx, r.scope, environment, naming.InlineRecordOwner, []envvars.NamedBindingWrite{write}); err != nil && !errors.Is(err, envvars.ErrBindingChanged) {
+		if _, err := r.values.SetBindings(ctx, r.scope, environment, naming.InlineRecordOwner, []variablestore.NamedBindingWrite{write}); err != nil && !errors.Is(err, variablestore.ErrBindingChanged) {
 			errs = append(errs, err)
 		}
 	}

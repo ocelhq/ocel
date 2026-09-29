@@ -8,7 +8,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
-	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 )
 
 const (
@@ -25,10 +25,10 @@ type PropertyShape struct {
 	List     bool   `json:"list,omitempty"`
 }
 
-func PropertyShapeMessages(shapes []PropertyShape) []*envvarsv1.PropertyShape {
-	out := make([]*envvarsv1.PropertyShape, 0, len(shapes))
+func PropertyShapeMessages(shapes []PropertyShape) []*variablestorev1.PropertyShape {
+	out := make([]*variablestorev1.PropertyShape, 0, len(shapes))
 	for _, s := range shapes {
-		out = append(out, &envvarsv1.PropertyShape{Name: s.Name, JsonType: s.JSONType, List: s.List})
+		out = append(out, &variablestorev1.PropertyShape{Name: s.Name, JsonType: s.JSONType, List: s.List})
 	}
 	return out
 }

@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/ocelhq/ocel/pkg/connectorserver"
-	"github.com/ocelhq/ocel/pkg/envvarsserver"
+	"github.com/ocelhq/ocel/pkg/variablestoreserver"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
@@ -54,7 +54,7 @@ func run(listen, config string, printing, reporting bool) error {
 		Vendor:     "vps",
 		Addr:       listen,
 		ConfigPath: config,
-		EnvVars: envvarsserver.Backend{
+		VariableStore: variablestoreserver.Backend{
 			KeyValues: boxstore.NewKeyValues(boxstore.LocalTransport{}),
 			Cipher:    boxstore.NewCipher(boxstore.LocalTransport{Elevation: []string{"sudo", "-n"}}),
 		},

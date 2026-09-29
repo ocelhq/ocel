@@ -86,7 +86,7 @@ jobs:
       OCEL_TARGET: aws
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.E2E_CLOUDFLARE_API_TOKEN }}
-      OCEL_AWS_VARS_KEY: ${{ vars.DOGFOOD_AWS_VARS_KEY }}
+      OCEL_AWS_VARIABLES_KEY: ${{ vars.DOGFOOD_AWS_VARS_KEY }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout
@@ -209,7 +209,7 @@ jobs:
           expected-aws-account-id: ${{ secrets.DOGFOOD_EXPECTED_AWS_ACCOUNT_ID }}
           cloudflare-api-token: ${{ secrets.DOGFOOD_CLOUDFLARE_API_TOKEN }}
           cloudflare-account-id: ${{ secrets.DOGFOOD_CLOUDFLARE_ACCOUNT_ID }}
-          vars-key: ${{ vars.DOGFOOD_AWS_VARS_KEY }}
+          variables-key: ${{ vars.DOGFOOD_AWS_VARS_KEY }}
 
       - name: Reclaim the previews whose pull request has closed
         env:

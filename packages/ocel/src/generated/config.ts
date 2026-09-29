@@ -341,8 +341,8 @@ export interface AwsProviderOptions {
   certificates?: Record<string, string>;
   /** The AWS region to deploy into. */
   region?: string;
-  /** ARN of a KMS key to encrypt this account's variables under. Omit it and ocel bootstrap --features vars-key makes a key ocel owns. */
-  varsKey?: string;
+  /** ARN of a KMS key to encrypt this account's variables under. Omit it and ocel bootstrap --features variables-key makes a key ocel owns. */
+  variablesKey?: string;
 }
 
 export interface GcpProviderOptions {

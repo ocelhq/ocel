@@ -522,11 +522,11 @@ func withService(worker edge.Worker, name, service string) edge.Worker {
 }
 
 func withVar(worker edge.Worker, name, value string) edge.Worker {
-	vars := make(map[string]string, len(worker.Vars)+1)
-	for k, v := range worker.Vars {
-		vars[k] = v
+	variables := make(map[string]string, len(worker.Variables)+1)
+	for k, v := range worker.Variables {
+		variables[k] = v
 	}
-	vars[name] = value
-	worker.Vars = vars
+	variables[name] = value
+	worker.Variables = variables
 	return worker
 }

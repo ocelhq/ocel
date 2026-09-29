@@ -14,7 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
-	vars "github.com/ocelhq/ocel/platform/gcp/provider/live"
+	variables "github.com/ocelhq/ocel/platform/gcp/provider/live"
 )
 
 func serviceFor(names Names, spec provider.StackSpec, app *provider.AppSpec, function string) (string, error) {
@@ -256,7 +256,7 @@ func (p *Provider) runtimeEnv(names Names, spec provider.StackSpec) (map[string]
 	if app.HealthCheckPath != "" {
 		env[originguard.HealthPathVar] = app.HealthCheckPath
 	}
-	manifest, err := vars.Render(vars.Manifest{
+	manifest, err := variables.Render(variables.Manifest{
 		Project:     names.project,
 		Region:      p.options.Region,
 		Namespace:   string(names.namespace),
@@ -271,7 +271,7 @@ func (p *Provider) runtimeEnv(names Names, spec provider.StackSpec) (map[string]
 		return nil, fmt.Errorf("pin %s's live values: %w", app.App, err)
 	}
 	if len(manifest) > 0 {
-		env[vars.EnvVar] = string(manifest)
+		env[variables.EnvVar] = string(manifest)
 	}
 	return env, nil
 }

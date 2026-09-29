@@ -18,7 +18,7 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 )
 
 func envValues(provider *providerprocess.Provider, cfg *project.Project, opts envOptions) valuestore.Store {
@@ -60,7 +60,7 @@ func runEnvSetPairs(ctx context.Context, dependencies Dependencies, cwd string, 
 				return err
 			}
 		}
-		envVars, err := provider.EnvVars()
+		variableStore, err := provider.VariableStore()
 		if err != nil {
 			return err
 		}
@@ -89,7 +89,7 @@ func runEnvSetPairs(ctx context.Context, dependencies Dependencies, cwd string, 
 			}
 			fmt.Fprintf(stdout, "Set %s (version %d).\n", describeCell(pair.key, opts), version)
 		}
-		if err := printGroupProgress(ctx, envVars, cfg.Slug, definitions, groups, opts, pairs, stdout); err != nil {
+		if err := printGroupProgress(ctx, variableStore, cfg.Slug, definitions, groups, opts, pairs, stdout); err != nil {
 			return err
 		}
 		return nil
@@ -123,11 +123,11 @@ func runEnvGet(ctx context.Context, dependencies Dependencies, cwd, key string, 
 		if err != nil {
 			return err
 		}
-		envVars, err := provider.EnvVars()
+		variableStore, err := provider.VariableStore()
 		if err != nil {
 			return err
 		}
-		resp, err := envVars.GetValue(ctx, &envvarsv1.GetValueRequest{
+		resp, err := variableStore.GetValue(ctx, &variablestorev1.GetValueRequest{
 			Tier:       opts.tier(),
 			Coordinate: wireCoordinate(cfg.Slug, key, opts),
 			Reveal:     opts.reveal,
@@ -181,7 +181,7 @@ func consentToReveal(definitions []*resourcesv1.VariableDefinition, key string, 
 
 func runEnvRemove(ctx context.Context, dependencies Dependencies, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
 	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env rm", stderr, func(ctx context.Context, run *run.Run, provider *providerprocess.Provider, cfg *project.Project, status *contractv1.PreflightResponse) error {
-		envVars, err := provider.EnvVars()
+		variableStore, err := provider.VariableStore()
 		if err != nil {
 			return err
 		}
@@ -204,7 +204,7 @@ func runEnvRemove(ctx context.Context, dependencies Dependencies, cwd, key strin
 		if err != nil {
 			return err
 		}
-		if err := printGroupProgress(ctx, envVars, cfg.Slug, definitions, groups, opts, []envSetPair{{key: key}}, stdout); err != nil {
+		if err := printGroupProgress(ctx, variableStore, cfg.Slug, definitions, groups, opts, []envSetPair{{key: key}}, stdout); err != nil {
 			return err
 		}
 		return nil
@@ -213,11 +213,11 @@ func runEnvRemove(ctx context.Context, dependencies Dependencies, cwd, key strin
 
 func runEnvHistory(ctx context.Context, dependencies Dependencies, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
 	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env history", stderr, func(ctx context.Context, _ *run.Run, provider *providerprocess.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
-		envVars, err := provider.EnvVars()
+		variableStore, err := provider.VariableStore()
 		if err != nil {
 			return err
 		}
-		resp, err := envVars.ListVersions(ctx, &envvarsv1.ListVersionsRequest{
+		resp, err := variableStore.ListVersions(ctx, &variablestorev1.ListVersionsRequest{
 			Tier:       opts.tier(),
 			Coordinate: wireCoordinate(cfg.Slug, key, opts),
 		})
@@ -229,7 +229,7 @@ func runEnvHistory(ctx context.Context, dependencies Dependencies, cwd, key stri
 	})
 }
 
-func renderVersions(stdout io.Writer, cell string, versions []*envvarsv1.VersionEntry) {
+func renderVersions(stdout io.Writer, cell string, versions []*variablestorev1.VersionEntry) {
 	if len(versions) == 0 {
 		fmt.Fprintf(stdout, "No history for %s.\n", cell)
 		return

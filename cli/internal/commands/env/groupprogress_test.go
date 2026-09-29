@@ -9,7 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/envvars"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
 const groupedDefinitions = `[
@@ -34,7 +34,7 @@ func setUpGroupedFixture(t *testing.T) clitest.FakeProject {
 func seedProductionValue(t *testing.T, project clitest.FakeProject, key, folder, value string) {
 	t.Helper()
 	seedValue(t, project, environment.TierProduction, clitest.FixtureSlug,
-		envvars.Coordinate{Cell: envvars.Cell{Folder: folder, Key: key}}, value)
+		variablestore.Coordinate{Cell: variablestore.Cell{Folder: folder, Key: key}}, value)
 }
 
 func TestSettingAGroupMemberNamesWhatTheGroupStillLacks(t *testing.T) {

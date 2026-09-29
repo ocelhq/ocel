@@ -13,10 +13,10 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/ocelhq/ocel/pkg/envvars"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
-	vars "github.com/ocelhq/ocel/platform/aws/provider/vars/live"
+	"github.com/ocelhq/ocel/pkg/variablestore"
+	variables "github.com/ocelhq/ocel/platform/aws/provider/variables/live"
 )
 
 type sink struct {
@@ -45,7 +45,7 @@ func unsetAWS(t *testing.T) {
 func plant(t *testing.T, raw []byte) string {
 	t.Helper()
 	root := t.TempDir()
-	path := filepath.Join(root, vars.FilePath)
+	path := filepath.Join(root, variables.FilePath)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -93,9 +93,9 @@ func TestResolveLiveValues(t *testing.T) {
 	})
 
 	t.Run("addresses each binding by the partition its pair lives in", func(t *testing.T) {
-		manifest := vars.Manifest{
+		manifest := variables.Manifest{
 			Slug:        "shop",
-			Table:       "ocel-vars",
+			Table:       "ocel-variables",
 			KeyARN:      "arn:aws:kms:us-east-1:1234:key/abcd",
 			Tier:        "preview",
 			Environment: "pr-42",
@@ -115,7 +115,7 @@ func TestResolveLiveValues(t *testing.T) {
 			}
 		}
 
-		resolved := merged(nil, manifest.Bindings, []envvars.StoredBinding{
+		resolved := merged(nil, manifest.Bindings, []variablestore.StoredBinding{
 			publishedRecord(t, &bindingsv1.Binding{Name: "db--main", Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{Host: "h", Database: "d", Username: "u"}}}, 1),
 			publishedRecord(t, &bindingsv1.Binding{Name: "bucket--uploads", Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: "shop-uploads"}}}, 1),
 		})
@@ -132,9 +132,9 @@ func TestResolveLiveValues(t *testing.T) {
 	})
 
 	t.Run("reads the pinned coordinates and never the sentinels", func(t *testing.T) {
-		manifest := vars.Manifest{
+		manifest := variables.Manifest{
 			Slug:   "shop",
-			Table:  "ocel-vars",
+			Table:  "ocel-variables",
 			KeyARN: "arn:aws:kms:us-east-1:1234:key/abcd",
 			Tier:   "production",
 			Keys:   []live.Key{{Key: "DB_PASSWORD"}, {Key: "SESSION_SECRET", Folder: "/web"}},
@@ -153,20 +153,20 @@ func TestResolveLiveValues(t *testing.T) {
 	})
 
 	t.Run("a preview names each cell once and reads its environment through the reader", func(t *testing.T) {
-		manifest := vars.Manifest{
+		manifest := variables.Manifest{
 			Slug:        "shop",
 			Environment: "pr-42",
 			Keys:        []live.Key{{Key: "DB_PASSWORD"}, {Key: "SESSION_SECRET", Folder: "/web"}},
 		}
 
-		want := []envvars.Cell{{Key: "DB_PASSWORD"}, {Key: "SESSION_SECRET", Folder: "/web"}}
+		want := []variablestore.Cell{{Key: "DB_PASSWORD"}, {Key: "SESSION_SECRET", Folder: "/web"}}
 		if cells := manifestCells(manifest); !reflect.DeepEqual(cells, want) {
 			t.Errorf("cells = %+v, want %+v: the override is the reader's environment, not a cell of its own", cells, want)
 		}
 	})
 
 	t.Run("production asks for one cell per key", func(t *testing.T) {
-		cells := manifestCells(vars.Manifest{
+		cells := manifestCells(variables.Manifest{
 			Slug: "shop",
 			Keys: []live.Key{{Key: "DB_PASSWORD"}, {Key: "SESSION_SECRET", Folder: "/web"}},
 		})
@@ -193,7 +193,7 @@ func TestResolveLiveValues(t *testing.T) {
 		for name, sabotage := range cases {
 			t.Run(name, func(t *testing.T) {
 				root := t.TempDir()
-				path := filepath.Join(root, vars.FilePath)
+				path := filepath.Join(root, variables.FilePath)
 				if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 					t.Fatal(err)
 				}
@@ -207,7 +207,7 @@ func TestResolveLiveValues(t *testing.T) {
 	})
 
 	t.Run("a manifest naming no keys builds nothing", func(t *testing.T) {
-		root := plant(t, []byte(`{"slug":"shop","table":"ocel-vars","keyArn":"arn","tier":"production","keys":[]}`))
+		root := plant(t, []byte(`{"slug":"shop","table":"ocel-variables","keyArn":"arn","tier":"production","keys":[]}`))
 		unsetAWS(t)
 
 		l, err := Resolve(context.Background(), root)
@@ -220,9 +220,9 @@ func TestResolveLiveValues(t *testing.T) {
 	})
 
 	t.Run("declares exactly the pinned keys", func(t *testing.T) {
-		rendered, err := vars.Render(vars.Manifest{
+		rendered, err := variables.Render(variables.Manifest{
 			Slug:   "shop",
-			Table:  "ocel-vars",
+			Table:  "ocel-variables",
 			KeyARN: "arn:aws:kms:us-east-1:1234:key/abcd",
 			Tier:   "production",
 			Keys:   []live.Key{{Key: "DB_PASSWORD"}, {Key: "SESSION_SECRET", Folder: "/web"}},
@@ -251,9 +251,9 @@ func TestResolveLiveValues(t *testing.T) {
 
 	t.Run("reads the same manifest from the file and from the bytes a container is handed", func(t *testing.T) {
 		binding := postgresBinding()
-		rendered, err := vars.Render(vars.Manifest{
+		rendered, err := variables.Render(variables.Manifest{
 			Slug:        "shop",
-			Table:       "ocel-vars",
+			Table:       "ocel-variables",
 			KeyARN:      "arn:aws:kms:us-east-1:1234:key/abcd",
 			Tier:        "preview",
 			Environment: "pr-42",
@@ -293,7 +293,7 @@ func TestMerged(t *testing.T) {
 		Name:       "db--main",
 		Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{Host: "ocel", Port: 5432}},
 	}
-	records := []envvars.StoredBinding{publishedRecord(t, published, 1)}
+	records := []variablestore.StoredBinding{publishedRecord(t, published, 1)}
 
 	t.Run("a binding is never shadowed by a secret that shares its name", func(t *testing.T) {
 		got := merged(map[string]string{"OCEL_RESOURCE_POSTGRES_main": "postgres://mine"}, bindings, records)
@@ -313,13 +313,13 @@ func TestMerged(t *testing.T) {
 	})
 }
 
-func publishedRecord(t *testing.T, binding *bindingsv1.Binding, version int64) envvars.StoredBinding {
+func publishedRecord(t *testing.T, binding *bindingsv1.Binding, version int64) variablestore.StoredBinding {
 	t.Helper()
 	encoded, err := protojson.Marshal(binding)
 	if err != nil {
 		t.Fatalf("render the binding: %v", err)
 	}
-	return envvars.StoredBinding{Name: binding.GetName(), Value: encoded, Version: version}
+	return variablestore.StoredBinding{Name: binding.GetName(), Value: encoded, Version: version}
 }
 
 func TestEnv(t *testing.T) {
@@ -380,8 +380,8 @@ func TestGrantLag(t *testing.T) {
 		binding.Granted = granted
 		return binding
 	}
-	published := func(version int64) []envvars.StoredBinding {
-		return []envvars.StoredBinding{{Name: "main", Version: version}}
+	published := func(version int64) []variablestore.StoredBinding {
+		return []variablestore.StoredBinding{{Name: "main", Version: version}}
 	}
 
 	t.Run("names the publishes an app's grants are behind", func(t *testing.T) {

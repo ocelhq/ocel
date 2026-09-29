@@ -86,8 +86,8 @@ func (n Namespace) EdgeParamPrefix(tier environment.Tier, kind edge.Kind) (strin
 	}
 }
 
-func (n Namespace) varsKeyAliasFor(tier environment.Tier) string {
-	return "alias/" + string(n) + "-vars-" + string(tier)
+func (n Namespace) variablesKeyAliasFor(tier environment.Tier) string {
+	return "alias/" + string(n) + "-variables-" + string(tier)
 }
 
 func (n Namespace) EdgeInvokeRoleName(tier environment.Tier) string {

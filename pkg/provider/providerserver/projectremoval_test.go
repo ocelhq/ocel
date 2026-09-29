@@ -10,7 +10,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
-	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -23,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
 func projectRequest() *contractv1.ProjectRequest {
@@ -162,8 +162,8 @@ func TestRemoveProjectPurgesTheValuesAndObjectsItsReleasesWrote(t *testing.T) {
 		t.Errorf("the artifact at %s survived the removal, want the project's whole prefix gone", ref.Key)
 	}
 
-	store := envvars.Store{KeyValues: vendor.KeyValues(), Cipher: vendor.Cipher()}
-	names, err := store.PublishedNames(ctx, envvars.Scope{Project: "shop", Tier: environment.TierProduction}, stackrecords.ProductionEnv)
+	store := variablestore.Store{KeyValues: vendor.KeyValues(), Cipher: vendor.Cipher()}
+	names, err := store.PublishedNames(ctx, variablestore.Scope{Project: "shop", Tier: environment.TierProduction}, stackrecords.ProductionEnv)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +175,7 @@ func TestRemoveProjectPurgesTheValuesAndObjectsItsReleasesWrote(t *testing.T) {
 func TestRemoveProjectForgetsItsEnvSourceAndHowItsSyncsWent(t *testing.T) {
 	client, vendor := deployedProject(t)
 	ctx := context.Background()
-	store := envvars.Store{KeyValues: vendor.KeyValues(), Cipher: vendor.Cipher()}
+	store := variablestore.Store{KeyValues: vendor.KeyValues(), Cipher: vendor.Cipher()}
 	registration := envsource.Registration{Project: "shop", Descriptor: envsource.Descriptor{Kind: envsource.Exec, Exec: &envsource.ExecOptions{Command: []string{"op"}}}, Folders: []string{""}}
 	if _, err := envsource.Register(ctx, store, environment.TierProduction, registration); err != nil {
 		t.Fatal(err)

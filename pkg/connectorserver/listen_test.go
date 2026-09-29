@@ -71,7 +71,7 @@ func TestTheKeyIsMintedOnceAndThePublicHalfIsWhatIsPrinted(t *testing.T) {
 		ConnectorID:    "con_1",
 		OrganizationID: "org_1",
 		Target:         "vps/SHA256:AAAA/ocel",
-		Grants:         []string{CapabilityEnvVarsRead},
+		Grants:         []string{CapabilityVariablesRead},
 		KeyPath:        key,
 	})
 	if err != nil {

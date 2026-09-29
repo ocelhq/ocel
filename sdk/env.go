@@ -141,8 +141,8 @@ type group struct {
 }
 
 type declaration struct {
-	vars   []variable
-	groups []group
+	variables []variable
+	groups    []group
 }
 
 func (d declaration) group(key string) *group {
@@ -252,7 +252,7 @@ func definitions(t reflect.Type, source string) (declaration, error) {
 			if err != nil {
 				return declaration{}, err
 			}
-			decl.vars = append(decl.vars, v)
+			decl.variables = append(decl.variables, v)
 			continue
 		}
 		g, err := groupDefinition(field)
@@ -270,20 +270,20 @@ func definitions(t reflect.Type, source string) (declaration, error) {
 			return declaration{}, err
 		}
 		for _, member := range members {
-			g.members = append(g.members, len(decl.vars))
-			decl.vars = append(decl.vars, member)
+			g.members = append(g.members, len(decl.variables))
+			decl.variables = append(decl.variables, member)
 		}
 		decl.groups = append(decl.groups, g)
 	}
-	for _, v := range decl.vars {
-		if slices.ContainsFunc(decl.vars, func(seen variable) bool { return seen.key == v.key && !slices.Equal(seen.index, v.index) }) {
+	for _, v := range decl.variables {
+		if slices.ContainsFunc(decl.variables, func(seen variable) bool { return seen.key == v.key && !slices.Equal(seen.index, v.index) }) {
 			return declaration{}, &EnvDefinitionError{Key: v.key, Detail: "is declared by two fields of the same struct. A key is declared by exactly one field."}
 		}
 		if claimed, ok := owner[v.key]; ok && claimed != source {
 			return declaration{}, &EnvDefinitionError{Key: v.key, Detail: fmt.Sprintf("is already declared in %s. A key may be defined by exactly one file.", claimed)}
 		}
 	}
-	for _, v := range decl.vars {
+	for _, v := range decl.variables {
 		owner[v.key] = source
 	}
 	return decl, nil
@@ -328,7 +328,7 @@ func groupDefinition(field reflect.StructField) (group, error) {
 }
 
 func groupVariables(t reflect.Type, prefix []int, key string) ([]variable, error) {
-	var vars []variable
+	var variables []variable
 	for i := range t.NumField() {
 		field := t.Field(i)
 		if groupType(field.Type) != nil {
@@ -339,12 +339,12 @@ func groupVariables(t reflect.Type, prefix []int, key string) ([]variable, error
 			return nil, err
 		}
 		v.group = key
-		vars = append(vars, v)
+		variables = append(variables, v)
 	}
-	if len(vars) == 0 {
+	if len(variables) == 0 {
 		return nil, &EnvDefinitionError{Detail: fmt.Sprintf("group %s declares no variables. A group contains the variables an app takes together, so it has at least one.", key)}
 	}
-	return vars, nil
+	return variables, nil
 }
 
 func satisfiable(key string, members []variable) error {
@@ -492,7 +492,7 @@ func declareEnv(decl declaration, source string) error {
 	for _, g := range decl.groups {
 		req.Groups = append(req.Groups, &resourcesv1.GroupDefinition{Key: g.key, Required: g.required, Description: g.description})
 	}
-	for _, v := range decl.vars {
+	for _, v := range decl.variables {
 		req.Definitions = append(req.Definitions, &resourcesv1.VariableDefinition{
 			Key:         v.key,
 			Class:       v.class,
@@ -517,7 +517,7 @@ func declareEnv(decl declaration, source string) error {
 
 func validate(decl declaration, cells []*resourcesv1.VariableCell) []*resourcesv1.VariableProblem {
 	var problems []*resourcesv1.VariableProblem
-	for _, v := range decl.vars {
+	for _, v := range decl.variables {
 		stored := slices.DeleteFunc(slices.Clone(cells), func(c *resourcesv1.VariableCell) bool { return c.GetKey() != v.key })
 
 		if v.required() {
@@ -545,7 +545,7 @@ func validate(decl declaration, cells []*resourcesv1.VariableCell) []*resourcesv
 
 func switchedOn(decl declaration, g group, cells []*resourcesv1.VariableCell, folder string) bool {
 	for _, member := range g.members {
-		if hasCell(decl.vars[member], cells, folder) {
+		if hasCell(decl.variables[member], cells, folder) {
 			return true
 		}
 	}
@@ -576,7 +576,7 @@ func problem(key, folder string, kind resourcesv1.VariableProblem_Kind, detail s
 }
 
 func resolve(target reflect.Value, decl declaration) error {
-	for i, v := range decl.vars {
+	for i, v := range decl.variables {
 		g := decl.group(v.group)
 		if g == nil {
 			if err := resolveVariable(target, v); err != nil {
@@ -595,7 +595,7 @@ func resolve(target reflect.Value, decl declaration) error {
 			field.Set(reflect.New(field.Type().Elem()))
 		}
 		for _, member := range g.members {
-			if err := resolveVariable(target, decl.vars[member]); err != nil {
+			if err := resolveVariable(target, decl.variables[member]); err != nil {
 				return err
 			}
 		}
@@ -605,7 +605,7 @@ func resolve(target reflect.Value, decl declaration) error {
 
 func groupDelivered(decl declaration, g group) bool {
 	for _, member := range g.members {
-		if _, ok := readDelivered(decl.vars[member].key); ok {
+		if _, ok := readDelivered(decl.variables[member].key); ok {
 			return true
 		}
 	}

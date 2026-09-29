@@ -1557,7 +1557,7 @@ describe("the variables a deployment declares", () => {
      return async () => new Response(String(++served))
    })()`;
 
-  interface VarsBundle {
+  interface VariablesBundle {
     handler?: string;
     bundleEnv?: Record<string, string>;
     variables?: EdgeVariables;
@@ -1566,12 +1566,12 @@ describe("the variables a deployment declares", () => {
     id?: string;
   }
 
-  function varsInvoker(bundle: VarsBundle): {
+  function variablesInvoker(bundle: VariablesBundle): {
     edge: EdgeInvoker;
     reads: string[];
   } {
     const seq = bundles++;
-    const prefix = `edge/vars/${seq}`;
+    const prefix = `edge/variables/${seq}`;
     const bundleKey = `${prefix}/bundle.json`;
     const entries = { e: { chunks: ["c/0.js"], handlerExport: "handler" } };
     const json = JSON.stringify({
@@ -1603,7 +1603,7 @@ describe("the variables a deployment declares", () => {
       env.LOADER,
       {
         bundleKey,
-        id: bundle.id ?? `vars-${seq}`,
+        id: bundle.id ?? `variables-${seq}`,
         compatDate: "2026-03-10",
         compatFlags: ["nodejs_compat"],
       },
@@ -1618,7 +1618,7 @@ describe("the variables a deployment declares", () => {
     JSON.parse(await (await edge("e", new Request("https://x/"))).text()) as Record<string, string>;
 
   it("hands a plain value to the worker under its own name", async () => {
-    const { edge } = varsInvoker({ variables: { env: { API_URL: "https://api" } } });
+    const { edge } = variablesInvoker({ variables: { env: { API_URL: "https://api" } } });
 
     expect(await workerEnv(edge)).toMatchObject({
       API_URL: "https://api",
@@ -1627,7 +1627,7 @@ describe("the variables a deployment declares", () => {
   });
 
   it("hands the deployment url to an edge entry like any other plain value", async () => {
-    const { edge } = varsInvoker({
+    const { edge } = variablesInvoker({
       variables: {
         env: { OCEL_URL: "https://shop.example", NEXT_PUBLIC_OCEL_URL: "https://shop.example" },
       },
@@ -1640,7 +1640,7 @@ describe("the variables a deployment declares", () => {
   });
 
   it("lets a declared value win over the bundle's own env", async () => {
-    const { edge } = varsInvoker({
+    const { edge } = variablesInvoker({
       bundleEnv: { __NEXT_BUILD_ID: "t", SHARED: "from-bundle" },
       variables: { env: { SHARED: "from-record" } },
     });
@@ -1649,7 +1649,7 @@ describe("the variables a deployment declares", () => {
   });
 
   it("keeps the names it owns for itself", async () => {
-    const { edge } = varsInvoker({
+    const { edge } = variablesInvoker({
       cache: { rpc: remoteStub(), scope: "prod/p/app/b1" },
       variables: {
         env: { OCEL_CACHE_SCOPE: "hijacked", OCEL_CACHE_RPC: "hijacked" },
@@ -1665,7 +1665,7 @@ describe("the variables a deployment declares", () => {
     const sealed = bytesOf(GO_SEALED);
     expect(sealed.length).toBe(NONCE_BYTES + JSON.stringify(GO_VALUES).length + TAG_BYTES);
 
-    const { edge } = varsInvoker({
+    const { edge } = variablesInvoker({
       variables: { envelope: GO_ENVELOPE },
       sealed,
     });
@@ -1682,7 +1682,7 @@ describe("the variables a deployment declares", () => {
     const sealed = await seal(GO_ENVELOPE, JSON.stringify(values));
     expect(sealed.length).toBe(NONCE_BYTES + JSON.stringify(values).length + TAG_BYTES);
 
-    const { edge } = varsInvoker({ variables: { envelope: GO_ENVELOPE }, sealed });
+    const { edge } = variablesInvoker({ variables: { envelope: GO_ENVELOPE }, sealed });
 
     expect((await workerEnv(edge)).OCEL_VAR_TOKEN).toBe("t0ken");
   });
@@ -1709,7 +1709,7 @@ describe("the variables a deployment declares", () => {
 
   it("unwraps the envelope with the worker's own key before unsealing", async () => {
     const sealed = bytesOf(GO_SEALED);
-    const { edge } = varsInvoker({
+    const { edge } = variablesInvoker({
       variables: { envelope: await wrap(WRAPPING_KEY, GO_ENVELOPE), envelopeKey: WRAPPING_KEY },
       sealed,
     });
@@ -1723,7 +1723,7 @@ describe("the variables a deployment declares", () => {
     const GO_WRAPPING_KEY = "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8=";
     const GO_WRAPPED =
       "UE2Q24dOC8dGzwjPRGx8m2WTic1ZsjF5ExTE/LLYg+aA7BMnZbTrTCQswobxFS0ot4qk4AKLEnMQZFfS";
-    const { edge } = varsInvoker({
+    const { edge } = variablesInvoker({
       variables: { envelope: GO_WRAPPED, envelopeKey: GO_WRAPPING_KEY },
       sealed: bytesOf(GO_SEALED),
     });
@@ -1733,7 +1733,7 @@ describe("the variables a deployment declares", () => {
 
   it("refuses an envelope wrapped for another worker", async () => {
     const other = "//////////////////////////////////////////8=";
-    const { edge } = varsInvoker({
+    const { edge } = variablesInvoker({
       variables: { envelope: await wrap(other, GO_ENVELOPE), envelopeKey: WRAPPING_KEY },
       sealed: bytesOf(GO_SEALED),
     });
@@ -1744,7 +1744,7 @@ describe("the variables a deployment declares", () => {
   });
 
   it("refuses a bare envelope once it has a key, rather than trusting the record", async () => {
-    const { edge } = varsInvoker({
+    const { edge } = variablesInvoker({
       variables: { envelope: GO_ENVELOPE, envelopeKey: WRAPPING_KEY },
       sealed: bytesOf(GO_SEALED),
     });
@@ -1758,7 +1758,7 @@ describe("the variables a deployment declares", () => {
     const plaintext = "sk-live-abc is not JSON";
     const sealed = await seal(GO_ENVELOPE, plaintext);
 
-    const { edge } = varsInvoker({ variables: { envelope: GO_ENVELOPE }, sealed });
+    const { edge } = variablesInvoker({ variables: { envelope: GO_ENVELOPE }, sealed });
 
     const failure = await edge("e", new Request("https://x/")).then(
       () => null,
@@ -1768,7 +1768,7 @@ describe("the variables a deployment declares", () => {
   });
 
   it("refuses to load when the envelope names bytes the store has not got", async () => {
-    const { edge } = varsInvoker({ variables: { envelope: GO_ENVELOPE } });
+    const { edge } = variablesInvoker({ variables: { envelope: GO_ENVELOPE } });
 
     await expect(edge("e", new Request("https://x/"))).rejects.toThrow(
       /no sealed edge variables at .*\/sealed\.bin/,
@@ -1776,7 +1776,7 @@ describe("the variables a deployment declares", () => {
   });
 
   it("never reads the sealed object when nothing was sealed", async () => {
-    const { edge, reads } = varsInvoker({ variables: { env: { A: "one" } } });
+    const { edge, reads } = variablesInvoker({ variables: { env: { A: "one" } } });
 
     await workerEnv(edge);
     expect(reads.filter((key) => key.endsWith("/sealed.bin"))).toEqual([]);
@@ -1784,9 +1784,9 @@ describe("the variables a deployment declares", () => {
 
   it("reloads the isolate when only the build changed", async () => {
     const deployment = (buildFingerprint: string) =>
-      varsInvoker({
+      variablesInvoker({
         handler: COUNTER,
-        id: "shared-bundle-vars",
+        id: "shared-bundle-variables",
         cache: { rpc: remoteStub(), scope: "prod/p/app/b1" },
         variables: { buildFingerprint },
       }).edge;

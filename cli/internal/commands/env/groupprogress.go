@@ -8,11 +8,11 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
-	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1/variablestorev1connect"
 )
 
-func printGroupProgress(ctx context.Context, vars envvarsv1connect.EnvVarsServiceClient, slug string, definitions []*resourcesv1.VariableDefinition, groups []*resourcesv1.GroupDefinition, opts envOptions, changed []envSetPair, stdout io.Writer) error {
+func printGroupProgress(ctx context.Context, store variablestorev1connect.VariableStoreServiceClient, slug string, definitions []*resourcesv1.VariableDefinition, groups []*resourcesv1.GroupDefinition, opts envOptions, changed []envSetPair, stdout io.Writer) error {
 	touched := map[string]bool{}
 	for _, pair := range changed {
 		for _, definition := range definitions {
@@ -24,7 +24,7 @@ func printGroupProgress(ctx context.Context, vars envvarsv1connect.EnvVarsServic
 	if len(touched) == 0 {
 		return nil
 	}
-	listed, err := vars.ListValues(ctx, &envvarsv1.ListValuesRequest{Tier: opts.tier(), Slug: slug})
+	listed, err := store.ListValues(ctx, &variablestorev1.ListValuesRequest{Tier: opts.tier(), Slug: slug})
 	if err != nil {
 		return err
 	}
@@ -39,7 +39,7 @@ func printGroupProgress(ctx context.Context, vars envvarsv1connect.EnvVarsServic
 	return nil
 }
 
-func presentCells(values []*envvarsv1.ValueMetadata, environment string) []variables.Cell {
+func presentCells(values []*variablestorev1.ValueMetadata, environment string) []variables.Cell {
 	var out []variables.Cell
 	for _, value := range values {
 		coordinate := value.GetCoordinate()

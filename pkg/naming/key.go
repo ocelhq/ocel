@@ -27,12 +27,12 @@ func StackKey(project string, stack StackName) string {
 	return token(tokenProject, project) + KeySeparator + token(tokenStack, stack.String())
 }
 
-func VarsKey(project, tier string) string {
+func VariablesKey(project, tier string) string {
 	return token(tokenProject, project) + KeySeparator + token(tokenClass, tier)
 }
 
-func BindingVarsKey(project, tier, binding string) string {
-	return VarsKey(project, tier) + KeySeparator + token(tokenBinding, binding)
+func BindingVariablesKey(project, tier, binding string) string {
+	return VariablesKey(project, tier) + KeySeparator + token(tokenBinding, binding)
 }
 
 func ISRTagPrefix(project string, stack StackName) string {

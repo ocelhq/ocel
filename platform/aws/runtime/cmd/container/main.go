@@ -19,7 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/runtime/child"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
-	vars "github.com/ocelhq/ocel/platform/aws/provider/vars/live"
+	variables "github.com/ocelhq/ocel/platform/aws/provider/variables/live"
 	source "github.com/ocelhq/ocel/platform/aws/runtime/live"
 	s3store "github.com/ocelhq/ocel/platform/s3"
 )
@@ -50,7 +50,7 @@ func run(ctx context.Context, command []string, environ []string) int {
 		case containerimage.PortEnvVar:
 			exposed = value
 			continue
-		case vars.EnvVar:
+		case variables.EnvVar:
 			manifest = value
 			continue
 		case originguard.HealthPathVar:

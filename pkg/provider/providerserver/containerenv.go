@@ -7,11 +7,11 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
-	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
 const ownedPrefix = "OCEL_"
@@ -44,7 +44,7 @@ func (r *deployRun) refuseUnsetSecret(app, key string) error {
 }
 
 func (r *deployRun) refuseContainerValues(ctx context.Context) error {
-	var stored map[envvars.Cell]bool
+	var stored map[variablestore.Cell]bool
 	for _, entry := range r.spec.Apps {
 		if !runsFromImage(r.provider, entry.Compute()) {
 			continue
@@ -65,7 +65,7 @@ func (r *deployRun) refuseContainerValues(ctx context.Context) error {
 			}
 		}
 		for _, secret := range values.Secrets {
-			if !stored[envvars.Cell{Folder: secret.Folder, Key: secret.Key}] {
+			if !stored[variablestore.Cell{Folder: secret.Folder, Key: secret.Key}] {
 				return r.refuseUnsetSecret(entry.App, secret.Key)
 			}
 		}
@@ -73,13 +73,13 @@ func (r *deployRun) refuseContainerValues(ctx context.Context) error {
 	return nil
 }
 
-func (r *deployRun) storedCells(ctx context.Context) (map[envvars.Cell]bool, error) {
+func (r *deployRun) storedCells(ctx context.Context) (map[variablestore.Cell]bool, error) {
 	listed, err := r.values.List(ctx, r.scope)
 	if err != nil {
 		return nil, err
 	}
 	shadowed := map[string]bool{"": true, bindingEnvironment(r.spec): true}
-	stored := make(map[envvars.Cell]bool, len(listed))
+	stored := make(map[variablestore.Cell]bool, len(listed))
 	for _, metadata := range listed {
 		if shadowed[metadata.Coordinate.Environment] {
 			stored[metadata.Coordinate.Cell] = true

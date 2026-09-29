@@ -10,7 +10,7 @@ import (
 	s3store "github.com/ocelhq/ocel/platform/s3"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
-	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
+	variables "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 func TestABucketAnswersTheHostnamesItsOwnProjectClaims(t *testing.T) {
@@ -20,7 +20,7 @@ func TestABucketAnswersTheHostnamesItsOwnProjectClaims(t *testing.T) {
 	written, err := host.WriteRoutingTable(host.RoutingTable{
 		Grace: host.DrainWindow,
 		Claims: []host.HostClaim{{
-			Hostname: "shop.example.com", Owner: vars.Surface("shop", "production"),
+			Hostname: "shop.example.com", Owner: variables.Surface("shop", "production"),
 			Pointer: "@production", App: "web",
 		}},
 	})
@@ -49,7 +49,7 @@ func grantedBucket() provider.Binding {
 	}
 }
 
-func manifestFor(t *testing.T, machine *box, options vps.Options, app provider.AppSpec) vars.Manifest {
+func manifestFor(t *testing.T, machine *box, options vps.Options, app provider.AppSpec) variables.Manifest {
 	t.Helper()
 	p := vps.ProviderOver(options, func(context.Context) (host.Conn, error) { return machine, nil })
 	if _, err := p.ProvisionContainers(context.Background(), aStack(t, app), nil); err != nil {
@@ -94,7 +94,7 @@ func TestAnAppsUploadSessionsLiveWhereNoOtherAppsAccountReaches(t *testing.T) {
 		t.Fatalf("both apps keep their upload sessions at %q, so either reads the other's session secrets and forges its callbacks",
 			web.Store.Sessions)
 	}
-	for _, store := range []*vars.Store{web.Store, admin.Store} {
+	for _, store := range []*variables.Store{web.Store, admin.Store} {
 		if !strings.HasPrefix(store.Sessions, s3store.SessionsBucket()+"/") {
 			t.Errorf("upload sessions live at %q, want a prefix inside the store's own sessions bucket", store.Sessions)
 		}

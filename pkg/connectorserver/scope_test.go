@@ -15,33 +15,33 @@ import (
 	"github.com/lestrrat-go/jwx/v3/jwk"
 	"github.com/lestrrat-go/jwx/v3/jwt"
 
-	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
-	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1/variablestorev1connect"
 )
 
-const sneakProcedure = "/provider.envvars.v1.EnvVarsService/Sneak"
+const sneakProcedure = "/provider.variablestore.v1.VariableStoreService/Sneak"
 
 func TestEveryProcedureTheServiceDeclaresMapsToAScope(t *testing.T) {
 	declared := map[string]string{
-		envvarsv1connect.EnvVarsServiceSetValueProcedure:          CapabilityEnvVarsWrite,
-		envvarsv1connect.EnvVarsServiceDeleteValueProcedure:       CapabilityEnvVarsWrite,
-		envvarsv1connect.EnvVarsServiceSetReferenceProcedure:      CapabilityEnvVarsWrite,
-		envvarsv1connect.EnvVarsServiceSetBindingProcedure:        CapabilityEnvVarsWrite,
-		envvarsv1connect.EnvVarsServiceRemoveBindingProcedure:     CapabilityEnvVarsWrite,
-		envvarsv1connect.EnvVarsServiceSyncEnvSourceProcedure:     CapabilityEnvVarsWrite,
-		envvarsv1connect.EnvVarsServiceSetEnvSourceValueProcedure: CapabilityEnvVarsWrite,
-		envvarsv1connect.EnvVarsServiceRevealValuesProcedure:      CapabilityEnvVarsReveal,
-		envvarsv1connect.EnvVarsServiceGetValueProcedure:          CapabilityEnvVarsRead,
-		envvarsv1connect.EnvVarsServiceListValuesProcedure:        CapabilityEnvVarsRead,
-		envvarsv1connect.EnvVarsServiceListReferencesProcedure:    CapabilityEnvVarsRead,
-		envvarsv1connect.EnvVarsServiceListVersionsProcedure:      CapabilityEnvVarsRead,
-		envvarsv1connect.EnvVarsServiceListBindingsProcedure:      CapabilityEnvVarsRead,
-		envvarsv1connect.EnvVarsServiceDescribeEnvSourceProcedure: CapabilityEnvVarsRead,
+		variablestorev1connect.VariableStoreServiceSetValueProcedure:          CapabilityVariablesWrite,
+		variablestorev1connect.VariableStoreServiceDeleteValueProcedure:       CapabilityVariablesWrite,
+		variablestorev1connect.VariableStoreServiceSetReferenceProcedure:      CapabilityVariablesWrite,
+		variablestorev1connect.VariableStoreServiceSetBindingProcedure:        CapabilityVariablesWrite,
+		variablestorev1connect.VariableStoreServiceRemoveBindingProcedure:     CapabilityVariablesWrite,
+		variablestorev1connect.VariableStoreServiceSyncEnvSourceProcedure:     CapabilityVariablesWrite,
+		variablestorev1connect.VariableStoreServiceSetEnvSourceValueProcedure: CapabilityVariablesWrite,
+		variablestorev1connect.VariableStoreServiceRevealValuesProcedure:      CapabilityVariablesReveal,
+		variablestorev1connect.VariableStoreServiceGetValueProcedure:          CapabilityVariablesRead,
+		variablestorev1connect.VariableStoreServiceListValuesProcedure:        CapabilityVariablesRead,
+		variablestorev1connect.VariableStoreServiceListReferencesProcedure:    CapabilityVariablesRead,
+		variablestorev1connect.VariableStoreServiceListVersionsProcedure:      CapabilityVariablesRead,
+		variablestorev1connect.VariableStoreServiceListBindingsProcedure:      CapabilityVariablesRead,
+		variablestorev1connect.VariableStoreServiceDescribeEnvSourceProcedure: CapabilityVariablesRead,
 	}
 
-	methods := envvarsv1.File_provider_envvars_v1_envvars_proto.Services().ByName("EnvVarsService").Methods()
+	methods := variablestorev1.File_provider_variablestore_v1_variablestore_proto.Services().ByName("VariableStoreService").Methods()
 	for index := range methods.Len() {
-		procedure := "/provider.envvars.v1.EnvVarsService/" + string(methods.Get(index).Name())
+		procedure := "/provider.variablestore.v1.VariableStoreService/" + string(methods.Get(index).Name())
 		want, listed := declared[procedure]
 		if !listed {
 			t.Fatalf("%s is declared by the service and this test names no scope for it", procedure)
@@ -54,13 +54,13 @@ func TestEveryProcedureTheServiceDeclaresMapsToAScope(t *testing.T) {
 }
 
 func TestSyncingAnEnvSourceAsksForWriteWhateverItNames(t *testing.T) {
-	for name, req := range map[string]*envvarsv1.SyncEnvSourceRequest{
-		"registered": {From: &envvarsv1.SyncEnvSourceRequest_Registered{Registered: &envvarsv1.RegisteredEnvSource{}}},
-		"infisical":  {From: &envvarsv1.SyncEnvSourceRequest_EnvSource{EnvSource: &envvarsv1.EnvSource{Kind: &envvarsv1.EnvSource_Infisical{Infisical: &envvarsv1.InfisicalEnvSource{}}}}},
+	for name, req := range map[string]*variablestorev1.SyncEnvSourceRequest{
+		"registered": {From: &variablestorev1.SyncEnvSourceRequest_Registered{Registered: &variablestorev1.RegisteredEnvSource{}}},
+		"infisical":  {From: &variablestorev1.SyncEnvSourceRequest_EnvSource{EnvSource: &variablestorev1.EnvSource{Kind: &variablestorev1.EnvSource_Infisical{Infisical: &variablestorev1.InfisicalEnvSource{}}}}},
 	} {
-		got, mapped := scopeOf(envvarsv1connect.EnvVarsServiceSyncEnvSourceProcedure, req)
-		if !mapped || got != CapabilityEnvVarsWrite {
-			t.Errorf("scopeOf(SyncEnvSource, %s) = (%q, %v), want (%q, true): a connector syncs only what a deploy registered, so no sync sends anything a caller named", name, got, mapped, CapabilityEnvVarsWrite)
+		got, mapped := scopeOf(variablestorev1connect.VariableStoreServiceSyncEnvSourceProcedure, req)
+		if !mapped || got != CapabilityVariablesWrite {
+			t.Errorf("scopeOf(SyncEnvSource, %s) = (%q, %v), want (%q, true): a connector syncs only what a deploy registered, so no sync sends anything a caller named", name, got, mapped, CapabilityVariablesWrite)
 		}
 	}
 }
@@ -119,7 +119,7 @@ func signingConsole(t *testing.T) (origin string, token string) {
 		IssuedAt(time.Now()).
 		Expiration(time.Now().Add(60*time.Second)).
 		Claim("act", "user-1").
-		Claim("scope", []string{CapabilityEnvVarsRead, CapabilityEnvVarsWrite, CapabilityEnvVarsReveal}).
+		Claim("scope", []string{CapabilityVariablesRead, CapabilityVariablesWrite, CapabilityVariablesReveal}).
 		Build()
 	if err != nil {
 		t.Fatalf("Build() error = %v", err)
@@ -139,9 +139,9 @@ func TestAnUnlistedProcedureIsDeniedUnderEveryScope(t *testing.T) {
 		ConnectorID:    "conn-shop",
 		OrganizationID: "org-shop",
 		Grants: []string{
-			CapabilityEnvVarsRead,
-			CapabilityEnvVarsWrite,
-			CapabilityEnvVarsReveal,
+			CapabilityVariablesRead,
+			CapabilityVariablesWrite,
+			CapabilityVariablesReveal,
 		},
 	}})
 	if err != nil {
@@ -150,9 +150,9 @@ func TestAnUnlistedProcedureIsDeniedUnderEveryScope(t *testing.T) {
 
 	reached := false
 	handler := connect.NewUnaryHandler(sneakProcedure,
-		func(context.Context, *connect.Request[envvarsv1.ListValuesRequest]) (*connect.Response[envvarsv1.ListValuesResponse], error) {
+		func(context.Context, *connect.Request[variablestorev1.ListValuesRequest]) (*connect.Response[variablestorev1.ListValuesResponse], error) {
 			reached = true
-			return connect.NewResponse(&envvarsv1.ListValuesResponse{}), nil
+			return connect.NewResponse(&variablestorev1.ListValuesResponse{}), nil
 		},
 		connect.WithInterceptors(guard.interceptor()),
 	)
@@ -161,9 +161,9 @@ func TestAnUnlistedProcedureIsDeniedUnderEveryScope(t *testing.T) {
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
 
-	client := connect.NewClient[envvarsv1.ListValuesRequest, envvarsv1.ListValuesResponse](
+	client := connect.NewClient[variablestorev1.ListValuesRequest, variablestorev1.ListValuesResponse](
 		server.Client(), server.URL+sneakProcedure)
-	request := connect.NewRequest(&envvarsv1.ListValuesRequest{})
+	request := connect.NewRequest(&variablestorev1.ListValuesRequest{})
 	request.Header().Set("Authorization", "Bearer "+token)
 
 	_, err = client.CallUnary(context.Background(), request)

@@ -23,11 +23,11 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/images"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
-	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/pkg/variablestore"
+	variables "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 const (
@@ -91,7 +91,7 @@ type Inspector interface {
 }
 
 type Resolver interface {
-	Resolve(ctx context.Context, manifest vars.Manifest) (map[string]string, error)
+	Resolve(ctx context.Context, manifest variables.Manifest) (map[string]string, error)
 }
 
 type Measurer interface {
@@ -133,41 +133,41 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc(http.MethodGet+" "+vars.ValuesPath, s.answer)
-	mux.HandleFunc(http.MethodGet+" "+vars.SpacePath, s.measure)
+	mux.HandleFunc(http.MethodGet+" "+variables.ValuesPath, s.answer)
+	mux.HandleFunc(http.MethodGet+" "+variables.SpacePath, s.measure)
 	return mux
 }
 
-func (s *Server) manifestOf(w http.ResponseWriter, r *http.Request) (vars.Manifest, bool) {
+func (s *Server) manifestOf(w http.ResponseWriter, r *http.Request) (variables.Manifest, bool) {
 	caller, _ := r.Context().Value(peerKey{}).(peer)
 	if caller.err != nil {
 		http.Error(w, "the caller could not be identified: "+caller.err.Error(), http.StatusForbidden)
-		return vars.Manifest{}, false
+		return variables.Manifest{}, false
 	}
 	container, err := s.containerOf(caller.pid)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusForbidden)
-		return vars.Manifest{}, false
+		return variables.Manifest{}, false
 	}
 	inspecting, cancel := context.WithTimeout(r.Context(), inspectWindow)
 	defer cancel()
 	raw, err := s.Inspect.Manifest(inspecting, container)
 	if err != nil {
 		http.Error(w, "read the caller's container: "+err.Error(), http.StatusBadGateway)
-		return vars.Manifest{}, false
+		return variables.Manifest{}, false
 	}
 	if raw == "" {
 		http.Error(w, "the caller's container has no live-value manifest", http.StatusNotFound)
-		return vars.Manifest{}, false
+		return variables.Manifest{}, false
 	}
-	manifest, err := vars.Parse([]byte(raw))
+	manifest, err := variables.Parse([]byte(raw))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
-		return vars.Manifest{}, false
+		return variables.Manifest{}, false
 	}
 	if !manifest.Live() {
 		http.Error(w, "the caller's manifest names nothing live", http.StatusNotFound)
-		return vars.Manifest{}, false
+		return variables.Manifest{}, false
 	}
 	return manifest, true
 }
@@ -187,7 +187,7 @@ func (s *Server) measure(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(vars.Space{Free: free, Total: total})
+	_ = json.NewEncoder(w).Encode(variables.Space{Free: free, Total: total})
 }
 
 func (s *Server) answer(w http.ResponseWriter, r *http.Request) {
@@ -201,7 +201,7 @@ func (s *Server) answer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(vars.Answer{Values: resolved})
+	_ = json.NewEncoder(w).Encode(variables.Answer{Values: resolved})
 }
 
 func (s *Server) containerOf(pid int) (string, error) {
@@ -293,7 +293,7 @@ func (d *Docker) Space(ctx context.Context, volume string) (uint64, uint64, erro
 
 func ManifestIn(env []string) string {
 	for _, entry := range env {
-		if value, named := strings.CutPrefix(entry, vars.EnvVar+"="); named {
+		if value, named := strings.CutPrefix(entry, variables.EnvVar+"="); named {
 			return value
 		}
 	}
@@ -306,16 +306,16 @@ type Store struct {
 	RoutingTable string
 }
 
-func (s Store) Resolve(ctx context.Context, manifest vars.Manifest) (map[string]string, error) {
-	reader := envvars.EnvironmentReader{
-		KeyValues:   vars.KeyValues{Root: s.StateRoot},
-		Cipher:      vars.Cipher{Root: s.TierRoot},
-		Scope:       envvars.Scope{Project: manifest.Slug, Tier: environment.Tier(manifest.Tier)},
+func (s Store) Resolve(ctx context.Context, manifest variables.Manifest) (map[string]string, error) {
+	reader := variablestore.EnvironmentReader{
+		KeyValues:   variables.KeyValues{Root: s.StateRoot},
+		Cipher:      variables.Cipher{Root: s.TierRoot},
+		Scope:       variablestore.Scope{Project: manifest.Slug, Tier: environment.Tier(manifest.Tier)},
 		Environment: manifest.Environment,
 	}
-	cells := make([]envvars.Cell, 0, len(manifest.Keys))
+	cells := make([]variablestore.Cell, 0, len(manifest.Keys))
 	for _, key := range manifest.Keys {
-		cells = append(cells, envvars.Cell{Folder: key.Folder, Key: key.Key})
+		cells = append(cells, variablestore.Cell{Folder: key.Folder, Key: key.Key})
 	}
 	resolved, err := reader.Values(ctx, cells)
 	if err != nil {
@@ -334,7 +334,7 @@ func (s Store) Resolve(ctx context.Context, manifest vars.Manifest) (map[string]
 		return answer, nil
 	}
 	if base := s.storeBase(manifest); base != "" {
-		answer[vars.StorePublicKey] = base
+		answer[variables.StorePublicKey] = base
 		published(answer, manifest.Bindings, base)
 	}
 	if manifest.Store.Sealed == "" {
@@ -344,39 +344,39 @@ func (s Store) Resolve(ctx context.Context, manifest vars.Manifest) (map[string]
 	if err != nil {
 		return nil, err
 	}
-	answer[vars.StoreSecretKey] = secret
+	answer[variables.StoreSecretKey] = secret
 	return answer, nil
 }
 
-func (s Store) storeBase(manifest vars.Manifest) string {
+func (s Store) storeBase(manifest variables.Manifest) string {
 	if manifest.Store.Pointer == "" {
 		return ""
 	}
 	at := s.RoutingTable
 	if at == "" {
-		at = vars.RoutingTable
+		at = variables.RoutingTable
 	}
 	table, err := os.ReadFile(at)
 	if err != nil {
 		return ""
 	}
-	claims, err := vars.ClaimedIn(table)
+	claims, err := variables.ClaimedIn(table)
 	if err != nil {
 		return ""
 	}
-	return vars.StoreBase(claims, vars.Surface(manifest.Slug, manifest.Tier), manifest.Store.Pointer)
+	return variables.StoreBase(claims, variables.Surface(manifest.Slug, manifest.Tier), manifest.Store.Pointer)
 }
 
-func (s Store) storeSecret(ctx context.Context, manifest vars.Manifest) (string, error) {
+func (s Store) storeSecret(ctx context.Context, manifest variables.Manifest) (string, error) {
 	sealed, err := base64.StdEncoding.DecodeString(manifest.Store.Sealed)
 	if err != nil {
-		return "", fmt.Errorf("the manifest's %s is not valid base64", vars.StoreSecretName)
+		return "", fmt.Errorf("the manifest's %s is not valid base64", variables.StoreSecretName)
 	}
-	bound, err := vars.NewStoreSecretAssociatedData(manifest.Slug, environment.Tier(manifest.Tier), manifest.Store.Env)
+	bound, err := variables.NewStoreSecretAssociatedData(manifest.Slug, environment.Tier(manifest.Tier), manifest.Store.Env)
 	if err != nil {
 		return "", err
 	}
-	opened, err := (vars.Cipher{Root: s.TierRoot}).Open(ctx, environment.Tier(manifest.Tier), bound, sealed)
+	opened, err := (variables.Cipher{Root: s.TierRoot}).Open(ctx, environment.Tier(manifest.Tier), bound, sealed)
 	if err != nil {
 		return "", err
 	}
@@ -409,7 +409,7 @@ func published(answer map[string]string, bindings []live.Binding, base string) {
 	}
 }
 
-func merged(resolved map[string]string, bindings []live.Binding, records []envvars.StoredBinding) map[string]string {
+func merged(resolved map[string]string, bindings []live.Binding, records []variablestore.StoredBinding) map[string]string {
 	out := make(map[string]string, len(resolved)+len(records))
 	maps.Copy(out, resolved)
 	for i, record := range records {

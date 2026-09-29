@@ -20,13 +20,13 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -296,18 +296,18 @@ func (o envOptions) tier() environment.Tier {
 	return environment.TierProduction
 }
 
-func valueStore(fixture clitest.FakeProject) envvars.Store {
-	return envvars.Store{KeyValues: fixture.Provider.KeyValues(), Cipher: fixture.Provider.Cipher()}
+func valueStore(fixture clitest.FakeProject) variablestore.Store {
+	return variablestore.Store{KeyValues: fixture.Provider.KeyValues(), Cipher: fixture.Provider.Cipher()}
 }
 
 func envSet(t *testing.T, fixture clitest.FakeProject, key, value string, opts envOptions) {
 	t.Helper()
-	setValue(t, fixture, envvars.Scope{Project: clitest.FixtureSlug, Tier: opts.tier()}, key, value, opts)
+	setValue(t, fixture, variablestore.Scope{Project: clitest.FixtureSlug, Tier: opts.tier()}, key, value, opts)
 }
 
-func setValue(t *testing.T, fixture clitest.FakeProject, scope envvars.Scope, key, value string, opts envOptions) {
+func setValue(t *testing.T, fixture clitest.FakeProject, scope variablestore.Scope, key, value string, opts envOptions) {
 	t.Helper()
-	at := envvars.Coordinate{Cell: envvars.Cell{Folder: opts.folder, Key: key}, Environment: opts.environment}
+	at := variablestore.Coordinate{Cell: variablestore.Cell{Folder: opts.folder, Key: key}, Environment: opts.environment}
 	if _, err := valueStore(fixture).Set(context.Background(), scope, at, value, nil); err != nil {
 		t.Fatalf("set %s for %s: %v", key, scope.Project, err)
 	}

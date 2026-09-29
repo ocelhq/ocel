@@ -14,7 +14,7 @@ import (
 
 func TestAWriteThatLostAVersionRaceIsAStaleValue(t *testing.T) {
 	t.Run("a version conflict is a stale value", func(t *testing.T) {
-		conflict := connect.NewError(connect.CodeAborted, errors.New("envvars: stale version"))
+		conflict := connect.NewError(connect.CodeAborted, errors.New("variablestore: stale version"))
 		if err := staleValueError(conflict); !errors.Is(err, variables.ErrStaleValue) {
 			t.Errorf("staleValueError = %v, want variables.ErrStaleValue", err)
 		}

@@ -72,11 +72,11 @@
       "properties": {}
     },
     {
-      "id": "project:shop/shared:preview/aws_dynamodb_table:VarsTable",
+      "id": "project:shop/shared:preview/aws_dynamodb_table:VariablesTable",
       "scope": "project:shop/shared:preview",
       "vendor": "aws",
       "type": "aws_dynamodb_table",
-      "name": "VarsTable",
+      "name": "VariablesTable",
       "region": "us-east-1",
       "properties": {
         "billing_mode": "PAY_PER_REQUEST",
@@ -270,11 +270,11 @@
       "properties": {}
     },
     {
-      "id": "project:shop/shared:preview/aws_kms_key:VarsKey",
+      "id": "project:shop/shared:preview/aws_kms_key:VariablesKey",
       "scope": "project:shop/shared:preview",
       "vendor": "aws",
       "type": "aws_kms_key",
-      "name": "VarsKey",
+      "name": "VariablesKey",
       "region": "us-east-1",
       "properties": {}
     },

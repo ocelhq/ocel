@@ -6,19 +6,19 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 )
 
 func TestASyncedEnvSourceIsWhatTheProviderSaysItRead(t *testing.T) {
-	synced := envSourceOf(&envvarsv1.SyncEnvSourceResponse{
-		Status: &envvarsv1.EnvSourceStatus{
+	synced := envSourceOf(&variablestorev1.SyncEnvSourceResponse{
+		Status: &variablestorev1.EnvSourceStatus{
 			EnvSource:   "infisical:p-1/prod",
 			CanCreate:   true,
 			CanUpdate:   true,
-			Links:       []*envvarsv1.FolderLink{{Folder: "", Url: "https://infisical.example/root"}},
+			Links:       []*variablestorev1.FolderLink{{Folder: "", Url: "https://infisical.example/root"}},
 			Credentials: []string{"INFISICAL_CLIENT_ID", "INFISICAL_CLIENT_SECRET"},
 		},
-		Present: []*envvarsv1.Cell{{Key: "STRIPE_KEY"}, {Folder: "/web", Key: "API_URL"}},
+		Present: []*variablestorev1.Cell{{Key: "STRIPE_KEY"}, {Folder: "/web", Key: "API_URL"}},
 	})
 
 	want := variables.EnvSource{

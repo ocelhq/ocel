@@ -24,7 +24,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
-	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
+	"github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1/variablestorev1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
@@ -129,7 +129,7 @@ type Process struct {
 	mu               sync.Mutex
 	network, address string
 	client           contractv1connect.ProviderServiceClient
-	envVars          envvarsv1connect.EnvVarsServiceClient
+	variableStore    variablestorev1connect.VariableStoreServiceClient
 	cost             costv1connect.CostServiceClient
 	facts            *contractv1.ProviderFacts
 
@@ -331,7 +331,7 @@ func (r *Process) dial(ready localrpc.Readiness) error {
 	defer r.mu.Unlock()
 	r.network, r.address = network, address
 	r.client = contractv1connect.NewProviderServiceClient(httpClient, "https://localhost", opts)
-	r.envVars = envvarsv1connect.NewEnvVarsServiceClient(httpClient, "https://localhost", opts)
+	r.variableStore = variablestorev1connect.NewVariableStoreServiceClient(httpClient, "https://localhost", opts)
 	r.cost = costv1connect.NewCostServiceClient(httpClient, "https://localhost", opts)
 	return nil
 }
@@ -349,13 +349,13 @@ func (r *Process) Cost() (costv1connect.CostServiceClient, error) {
 	return r.cost, nil
 }
 
-func (r *Process) EnvVars() (envvarsv1connect.EnvVarsServiceClient, error) {
+func (r *Process) VariableStore() (variablestorev1connect.VariableStoreServiceClient, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.envVars == nil {
-		return nil, ErrEnvVarsUnavailable
+	if r.variableStore == nil {
+		return nil, ErrVariableStoreUnavailable
 	}
-	return r.envVars, nil
+	return r.variableStore, nil
 }
 
 func (r *Process) Client() (contractv1connect.ProviderServiceClient, error) {
@@ -367,7 +367,7 @@ func (r *Process) Client() (contractv1connect.ProviderServiceClient, error) {
 	return r.client, nil
 }
 
-var ErrEnvVarsUnavailable = errors.New("provider: the variable store was reached before a successful Ready")
+var ErrVariableStoreUnavailable = errors.New("provider: the variable store was reached before a successful Ready")
 
 var ErrClientUnavailable = errors.New("provider: the provider was reached before a successful Ready")
 

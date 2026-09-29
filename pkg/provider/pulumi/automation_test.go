@@ -162,11 +162,11 @@ func TestWorkspacePassesThePassphraseAndTheVendorsOwnEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Workspace() = %v", err)
 	}
-	if setup.EnvVars["PULUMI_CONFIG_PASSPHRASE"] != "a-passphrase" {
+	if setup.EnvVariables["PULUMI_CONFIG_PASSPHRASE"] != "a-passphrase" {
 		t.Error("the workspace does not include the passphrase, so the state it writes would be unsealed")
 	}
-	if setup.EnvVars["VENDOR_REGION"] != "nowhere" {
-		t.Errorf("the workspace's environment is %v, want the vendor's own variables passed through", setup.EnvVars)
+	if setup.EnvVariables["VENDOR_REGION"] != "nowhere" {
+		t.Errorf("the workspace's environment is %v, want the vendor's own variables passed through", setup.EnvVariables)
 	}
 }
 

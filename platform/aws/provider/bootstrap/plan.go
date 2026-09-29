@@ -61,7 +61,7 @@ func PlanChanges(ctx context.Context, stacks cfn.API, read Reading, req Request,
 			artifactBucket: deployed.ArtifactBucket,
 			refs:           refs,
 			alongside:      alongside,
-			varsKey:        req.VarsKey,
+			variablesKey:   req.VariablesKey,
 		})
 		switch {
 		case !ok:
@@ -124,7 +124,7 @@ func PlanRemove(ctx context.Context, stacks cfn.API, read Reading) ([]provider.C
 			artifactBucket: read.Deployed.ArtifactBucket,
 			refs:           read.refs,
 			alongside:      alongside,
-			varsKey:        broughtVarsKey(read.Deployed.Outputs),
+			variablesKey:   broughtVariablesKey(read.Deployed.Outputs),
 		})
 		if ok {
 			group = noteStranded(planDelete(ctx, stacks, group, stack.body))
@@ -144,8 +144,8 @@ var stranded = map[string]provider.Change{
 		Reason: "every build's static assets, prerender fallbacks and edge fetch cache",
 		Slow:   true,
 	},
-	"VarsTable": {Reason: "every variable value this tier stores, and their history"},
-	"VarsKey":   {Reason: "the key those values are encrypted under"},
+	"VariablesTable": {Reason: "every variable value this tier stores, and their history"},
+	"VariablesKey":   {Reason: "the key those values are encrypted under"},
 }
 
 func noteStranded(group provider.ChangeGroup) provider.ChangeGroup {
@@ -161,7 +161,7 @@ func noteStranded(group provider.ChangeGroup) provider.ChangeGroup {
 
 func renderGroup(target spec, feature string, in featureInputs) (featureStack, bool) {
 	if feature == "" {
-		return featureStack{body: target.core(coreVarsKey(in.alongside, in.varsKey))}, true
+		return featureStack{body: target.core(coreVariablesKey(in.alongside, in.variablesKey))}, true
 	}
 	f, ok := featureNamed(feature)
 	if !ok {

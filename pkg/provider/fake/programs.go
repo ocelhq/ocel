@@ -18,19 +18,19 @@ const (
 )
 
 func (p *Provider) ProgramEdge(_ context.Context, req provider.EdgeProgramRequest) (provider.EdgeProgram, error) {
-	vars := map[string]string{ProgramEdgeVar: string(req.Kind)}
+	variables := map[string]string{ProgramEdgeVar: string(req.Kind)}
 	if req.PreviewBaseDomain != "" {
-		vars[ProgramPreviewVar] = req.PreviewBaseDomain
+		variables[ProgramPreviewVar] = req.PreviewBaseDomain
 	}
 	if len(req.Apps) > 0 {
-		vars[ProgramPreviewAppsVar] = strings.Join(req.Apps, ",")
+		variables[ProgramPreviewAppsVar] = strings.Join(req.Apps, ",")
 	}
 	return provider.EdgeProgram{
 		Spec: &edge.ProgramSpec{
 			Name: ProgramName(req.Slug, req.Tier),
 			Worker: edge.Worker{
-				Main: req.Entry,
-				Vars: vars,
+				Main:      req.Entry,
+				Variables: variables,
 			},
 			StoreScriptName: ProgramStore,
 		},

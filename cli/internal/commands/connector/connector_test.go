@@ -170,7 +170,7 @@ func TestAddPairsTheTargetWithTheConsoleAndInstallsTheAsset(t *testing.T) {
 		t.Errorf("config target = %v, want %q", config["target"], fingerprint)
 	}
 	grants, _ := config["grants"].([]any)
-	if len(grants) != 2 || grants[0] != "envvars.read" || grants[1] != "envvars.write" {
+	if len(grants) != 2 || grants[0] != "variables.read" || grants[1] != "variables.write" {
 		t.Errorf("grants = %v, want read and write and no reveal", grants)
 	}
 	if !strings.Contains(stdout.String(), fingerprint) {
@@ -222,11 +222,11 @@ func TestAddRelaysWhatTheProviderSaysWhileItInstallsThroughItsRun(t *testing.T) 
 		t.Errorf("stream = %s, want the line the provider said while installing", stream.String())
 	}
 	result := events[len(events)-1].GetSummary()
-	if !result.GetSuccess() || !strings.Contains(result.GetHeadline(), fingerprint) || strings.Contains(result.GetHeadline(), "envvars") {
+	if !result.GetSuccess() || !strings.Contains(result.GetHeadline(), fingerprint) || strings.Contains(result.GetHeadline(), "variablestore") {
 		t.Errorf("result = %v, want a success that names the paired target and leaves the grants to their own line", result)
 	}
 	if !slices.ContainsFunc(events, func(event *streamv1.RunEvent) bool {
-		return event.GetOperation().GetBody() == nil && event.GetCli() == nil && event.GetOperation().GetMessage() == "The console may use this connector for envvars.read and envvars.write"
+		return event.GetOperation().GetBody() == nil && event.GetCli() == nil && event.GetOperation().GetMessage() == "The console may use this connector for variables.read and variables.write"
 	}) {
 		t.Errorf("stream = %s, want the grants said on a line of their own", stream.String())
 	}
@@ -257,7 +257,7 @@ func TestAddGrantsRevealOnlyWhenItIsAskedFor(t *testing.T) {
 		t.Fatal(err)
 	}
 	grants, _ := config["grants"].([]any)
-	if len(grants) != 2 || grants[0] != "envvars.read" || grants[1] != "envvars.reveal" {
+	if len(grants) != 2 || grants[0] != "variables.read" || grants[1] != "variables.reveal" {
 		t.Errorf("grants = %v, want read and reveal and no write", grants)
 	}
 }
@@ -321,7 +321,7 @@ func TestRemoveTakesTheConnectorOffTheBoxAndForgetsTheRow(t *testing.T) {
 	root := project.Root
 	srv := newConsoleServer(t, map[string]any{
 		"id": "con_1", "target": fingerprint, "vendor": "fake", "compute": "container", "reach": "dial",
-		"capabilities": []string{"envvars.read"},
+		"capabilities": []string{"variables.read"},
 	})
 	linked(t, root, srv.URL)
 
@@ -430,7 +430,7 @@ func TestStatusSaysWhatTheConsoleHasRegistered(t *testing.T) {
 	seen := time.Now().Add(-10 * time.Second)
 	srv := newConsoleServer(t, map[string]any{
 		"id": "con_1", "target": fingerprint, "vendor": "fake", "compute": "container", "reach": "dial",
-		"url": "https://" + hostname + "/" + statedir.Name + "/connector", "capabilities": []string{"envvars.read", "envvars.write"},
+		"url": "https://" + hostname + "/" + statedir.Name + "/connector", "capabilities": []string{"variables.read", "variables.write"},
 		"connectedAt": seen, "lastSeenAt": seen, "online": true,
 	})
 	linked(t, root, srv.URL)
@@ -443,7 +443,7 @@ func TestStatusSaysWhatTheConsoleHasRegistered(t *testing.T) {
 	if err := runStatus(context.Background(), dependencies, resolved(t, root), read(t, root, srv.URL), opened(t, srv), &stdout); err != nil {
 		t.Fatalf("runStatus err = %v", err)
 	}
-	for _, want := range []string{fingerprint, "container over dial", "online", "envvars.read, envvars.write"} {
+	for _, want := range []string{fingerprint, "container over dial", "online", "variables.read, variables.write"} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Errorf("stdout = %q, want it to contain %q", stdout.String(), want)
 		}

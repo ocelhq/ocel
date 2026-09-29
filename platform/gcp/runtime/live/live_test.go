@@ -9,13 +9,13 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/seal"
-	vars "github.com/ocelhq/ocel/platform/gcp/provider/live"
+	"github.com/ocelhq/ocel/pkg/variablestore"
+	variables "github.com/ocelhq/ocel/platform/gcp/provider/live"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -28,24 +28,24 @@ func fakeStores() stores {
 	return stores{keyValues: fake.NewKeyValues(), cipher: fake.NewCipher()}
 }
 
-func (s stores) store() envvars.Store {
-	return envvars.Store{KeyValues: s.keyValues, Cipher: s.cipher}
+func (s stores) store() variablestore.Store {
+	return variablestore.Store{KeyValues: s.keyValues, Cipher: s.cipher}
 }
 
-func (s stores) set(t *testing.T, scope envvars.Scope, at envvars.Coordinate, plaintext string) {
+func (s stores) set(t *testing.T, scope variablestore.Scope, at variablestore.Coordinate, plaintext string) {
 	t.Helper()
 	if _, err := s.store().Set(context.Background(), scope, at, plaintext, nil); err != nil {
 		t.Fatalf("Set(%s) = %v", at, err)
 	}
 }
 
-func (s stores) publish(t *testing.T, scope envvars.Scope, environment, name string, binding *bindingsv1.Binding) {
+func (s stores) publish(t *testing.T, scope variablestore.Scope, environment, name string, binding *bindingsv1.Binding) {
 	t.Helper()
 	encoded, err := protojson.Marshal(binding)
 	if err != nil {
 		t.Fatal(err)
 	}
-	pair := envvars.BindingWrite{Record: encoded, Value: encoded, Owner: "ocel"}
+	pair := variablestore.BindingWrite{Record: encoded, Value: encoded, Owner: "ocel"}
 	if _, err := s.store().SetBinding(context.Background(), scope, environment, "ocel", name, pair); err != nil {
 		t.Fatalf("SetBinding(%s) = %v", name, err)
 	}
@@ -77,8 +77,8 @@ func (s *sink) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func manifestOf(keys ...string) vars.Manifest {
-	manifest := vars.Manifest{Project: "acme-prod", Region: "europe-west1", Namespace: "ocel", Slug: "shop", Tier: "production"}
+func manifestOf(keys ...string) variables.Manifest {
+	manifest := variables.Manifest{Project: "acme-prod", Region: "europe-west1", Namespace: "ocel", Slug: "shop", Tier: "production"}
 	for _, key := range keys {
 		manifest.Keys = append(manifest.Keys, live.Key{Key: key})
 	}
@@ -88,9 +88,9 @@ func manifestOf(keys ...string) vars.Manifest {
 func TestASecretIsOpenedFromTheProjectsOwnRecordsUnderTheTierKey(t *testing.T) {
 	t.Parallel()
 	fakes := fakeStores()
-	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
-	fakes.set(t, scope, envvars.Coordinate{Cell: envvars.Cell{Key: "DATABASE_URL"}}, "postgres://live")
-	fakes.set(t, scope, envvars.Coordinate{Cell: envvars.Cell{Key: "SESSION_SECRET", Folder: "/web"}}, "s3ss10n")
+	scope := variablestore.Scope{Project: "shop", Tier: environment.TierProduction}
+	fakes.set(t, scope, variablestore.Coordinate{Cell: variablestore.Cell{Key: "DATABASE_URL"}}, "postgres://live")
+	fakes.set(t, scope, variablestore.Coordinate{Cell: variablestore.Cell{Key: "SESSION_SECRET", Folder: "/web"}}, "s3ss10n")
 
 	manifest := manifestOf("DATABASE_URL")
 	manifest.Keys = append(manifest.Keys, live.Key{Key: "SESSION_SECRET", Folder: "/web"})
@@ -104,9 +104,9 @@ func TestASecretIsOpenedFromTheProjectsOwnRecordsUnderTheTierKey(t *testing.T) {
 func TestAPreviewReadsItsEnvironmentsValueOverTheTierWideOne(t *testing.T) {
 	t.Parallel()
 	fakes := fakeStores()
-	scope := envvars.Scope{Project: "shop", Tier: environment.TierPreview}
-	fakes.set(t, scope, envvars.Coordinate{Cell: envvars.Cell{Key: "MARK"}}, "tier-wide")
-	fakes.set(t, scope, envvars.Coordinate{Cell: envvars.Cell{Key: "MARK"}, Environment: "pr-7"}, "pr-7-only")
+	scope := variablestore.Scope{Project: "shop", Tier: environment.TierPreview}
+	fakes.set(t, scope, variablestore.Coordinate{Cell: variablestore.Cell{Key: "MARK"}}, "tier-wide")
+	fakes.set(t, scope, variablestore.Coordinate{Cell: variablestore.Cell{Key: "MARK"}, Environment: "pr-7"}, "pr-7-only")
 
 	manifest := manifestOf("MARK")
 	manifest.Tier, manifest.Environment = "preview", "pr-7"
@@ -131,7 +131,7 @@ func TestAnUnsetSecretIsReportedMissingRatherThanResolvedEmpty(t *testing.T) {
 func TestABindingRecordReachesTheAppUnderTheKeyTheSdkReadsItBy(t *testing.T) {
 	t.Parallel()
 	fakes := fakeStores()
-	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
+	scope := variablestore.Scope{Project: "shop", Tier: environment.TierProduction}
 	fakes.publish(t, scope, "", "db--main", &bindingsv1.Binding{
 		Name:       "db--main",
 		Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{Host: "h", Database: "d", Username: "u"}},
@@ -180,12 +180,12 @@ func TestTheManifestDrivesTheFirestoreAndKmsClientsTheRuntimeOpens(t *testing.T)
 	endpoint := servingFirestoreAndKMS(t)
 	clients := &ports.Clients{Namespace: "ocel", Project: "acme-prod", Region: "europe-west1", Endpoint: endpoint}
 	seeded := stores{keyValues: ports.KeyValues{Clients: clients}, cipher: ports.Cipher{Clients: clients}}
-	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
-	seeded.set(t, scope, envvars.Coordinate{Cell: envvars.Cell{Key: "DATABASE_URL"}}, "postgres://through-kms")
+	scope := variablestore.Scope{Project: "shop", Tier: environment.TierProduction}
+	seeded.set(t, scope, variablestore.Coordinate{Cell: variablestore.Cell{Key: "DATABASE_URL"}}, "postgres://through-kms")
 
 	manifest := manifestOf("DATABASE_URL")
 	manifest.Endpoint = endpoint
-	raw, err := vars.Render(manifest)
+	raw, err := variables.Render(manifest)
 	if err != nil {
 		t.Fatal(err)
 	}

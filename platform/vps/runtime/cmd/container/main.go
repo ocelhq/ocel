@@ -22,7 +22,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	s3store "github.com/ocelhq/ocel/platform/s3"
-	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
+	variables "github.com/ocelhq/ocel/platform/vps/provider/live"
 	source "github.com/ocelhq/ocel/platform/vps/runtime/live"
 )
 
@@ -52,7 +52,7 @@ func run(ctx context.Context, command []string, environ []string) int {
 		case containerimage.PortEnvVar:
 			exposed = value
 			continue
-		case vars.EnvVar:
+		case variables.EnvVar:
 			manifest = value
 			continue
 		case originguard.HealthPathVar:
@@ -62,7 +62,7 @@ func run(ctx context.Context, command []string, environ []string) int {
 	}
 	guard, env := originguard.GuardFromEnv(env)
 
-	values, err := resolve(ctx, manifest, vars.SocketPath, containerimage.LivePath)
+	values, err := resolve(ctx, manifest, variables.SocketPath, containerimage.LivePath)
 	if err != nil {
 		return fatal(err.Error())
 	}
@@ -77,7 +77,7 @@ func run(ctx context.Context, command []string, environ []string) int {
 	}
 	app := "127.0.0.1:" + strconv.Itoa(internal)
 
-	fronting, err := proxying(pinned, values, vars.SocketPath, app)
+	fronting, err := proxying(pinned, values, variables.SocketPath, app)
 	if err != nil {
 		return fatal(err.Error())
 	}
@@ -155,21 +155,21 @@ func exitCode(exit child.Exit) int {
 	return exit.Code
 }
 
-func pinned(manifest string) (vars.Manifest, error) {
+func pinned(manifest string) (variables.Manifest, error) {
 	if manifest == "" {
-		return vars.Manifest{}, nil
+		return variables.Manifest{}, nil
 	}
-	return vars.Parse([]byte(manifest))
+	return variables.Parse([]byte(manifest))
 }
 
-func proxying(manifest vars.Manifest, values *live.Values, socket, app string) (bindingproxy.Served, error) {
+func proxying(manifest variables.Manifest, values *live.Values, socket, app string) (bindingproxy.Served, error) {
 	if values == nil {
 		return bindingproxy.Served{}, nil
 	}
 	if manifest.Store == nil {
 		return s3store.ServeBound(values, app)
 	}
-	secret := values.Value(vars.StoreSecretKey)
+	secret := values.Value(variables.StoreSecretKey)
 	if secret == "" {
 		return bindingproxy.Served{}, fmt.Errorf("this deployment binds a bucket but has no credential for the store at %s", manifest.Store.Endpoint)
 	}
@@ -204,7 +204,7 @@ func publishing(store s3store.Store, values *live.Values) func(context.Context) 
 	var signer s3store.PresignAPI
 	var looked time.Time
 	return func(ctx context.Context) (s3store.PresignAPI, string) {
-		claimed := values.Value(vars.StorePublicKey)
+		claimed := values.Value(variables.StorePublicKey)
 		if claimed == "" {
 			mu.Lock()
 			stale := time.Since(looked) >= unclaimedWindow
@@ -214,7 +214,7 @@ func publishing(store s3store.Store, values *live.Values) func(context.Context) 
 			mu.Unlock()
 			if stale {
 				values.Reread(ctx)
-				claimed = values.Value(vars.StorePublicKey)
+				claimed = values.Value(variables.StorePublicKey)
 			}
 		}
 		now := claimed

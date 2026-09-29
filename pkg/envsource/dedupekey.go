@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/envvars"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
 const dedupeKeySeparator = "\x00"
 
-func DedupeKey(ctx context.Context, store envvars.Store, scope envvars.Scope, descriptor Descriptor) (string, error) {
+func DedupeKey(ctx context.Context, store variablestore.Store, scope variablestore.Scope, descriptor Descriptor) (string, error) {
 	options := descriptor.Infisical
 	if options == nil {
 		return string(descriptor.Kind) + dedupeKeySeparator + scope.Project, nil
@@ -22,9 +22,9 @@ func DedupeKey(ctx context.Context, store envvars.Store, scope envvars.Scope, de
 		parts = append(parts, options.Auth.IdentityID)
 	case AuthUniversal:
 		for _, name := range options.Auth.Variables() {
-			found, err := store.GetDereferenced(ctx, scope, envvars.Coordinate{Cell: envvars.Cell{Key: name}}, false)
+			found, err := store.GetDereferenced(ctx, scope, variablestore.Coordinate{Cell: variablestore.Cell{Key: name}}, false)
 			switch {
-			case errors.Is(err, envvars.ErrNotFound), errors.Is(err, envvars.ErrDangling):
+			case errors.Is(err, variablestore.ErrNotFound), errors.Is(err, variablestore.ErrDangling):
 				parts = append(parts, "unset", scope.Project, name)
 				continue
 			case err != nil:

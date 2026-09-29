@@ -10,8 +10,8 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
 const registerAttempts = 5
@@ -23,10 +23,10 @@ type Registration struct {
 	DedupeKey  string     `json:"dedupeKey"`
 }
 
-func (r Registration) Credentials() []envvars.Cell {
-	var out []envvars.Cell
+func (r Registration) Credentials() []variablestore.Cell {
+	var out []variablestore.Cell
 	for _, name := range r.Descriptor.CredentialVariables() {
-		out = append(out, envvars.Cell{Key: name})
+		out = append(out, variablestore.Cell{Key: name})
 	}
 	return out
 }
@@ -39,8 +39,8 @@ func registrationKey(tier environment.Tier, project string) keyvalue.Key {
 	return registrationsPartition(tier).Key(project)
 }
 
-func Register(ctx context.Context, store envvars.Store, tier environment.Tier, registration Registration) (Registration, error) {
-	key, err := DedupeKey(ctx, store, envvars.Scope{Project: registration.Project, Tier: tier}, registration.Descriptor)
+func Register(ctx context.Context, store variablestore.Store, tier environment.Tier, registration Registration) (Registration, error) {
+	key, err := DedupeKey(ctx, store, variablestore.Scope{Project: registration.Project, Tier: tier}, registration.Descriptor)
 	if err != nil {
 		return Registration{}, err
 	}
@@ -73,7 +73,7 @@ func Register(ctx context.Context, store envvars.Store, tier environment.Tier, r
 	return Registration{}, fmt.Errorf("%s's env source registration was rewritten under every attempt to record it; another deploy of it is still running", registration.Project)
 }
 
-func RestoreRegistration(ctx context.Context, store envvars.Store, tier environment.Tier, replacing Registration, previous *Registration) error {
+func RestoreRegistration(ctx context.Context, store variablestore.Store, tier environment.Tier, replacing Registration, previous *Registration) error {
 	name := registrationKey(tier, replacing.Project)
 	recorded, err := store.KeyValues.Read(ctx, name)
 	if errors.Is(err, keyvalue.ErrNotFound) {
@@ -109,7 +109,7 @@ func RestoreRegistration(ctx context.Context, store envvars.Store, tier environm
 	return moveSharer(ctx, store.KeyValues, tier, replacing.Project, replacing.DedupeKey, previous.DedupeKey)
 }
 
-func rekey(ctx context.Context, store envvars.Store, tier environment.Tier, project string) error {
+func rekey(ctx context.Context, store variablestore.Store, tier environment.Tier, project string) error {
 	recorded, err := store.KeyValues.Read(ctx, registrationKey(tier, project))
 	if errors.Is(err, keyvalue.ErrNotFound) {
 		return nil
@@ -121,7 +121,7 @@ func rekey(ctx context.Context, store envvars.Store, tier environment.Tier, proj
 	if err != nil {
 		return err
 	}
-	key, err := DedupeKey(ctx, store, envvars.Scope{Project: project, Tier: tier}, current.Descriptor)
+	key, err := DedupeKey(ctx, store, variablestore.Scope{Project: project, Tier: tier}, current.Descriptor)
 	if err != nil || key == current.DedupeKey {
 		return err
 	}

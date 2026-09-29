@@ -22,7 +22,7 @@ import (
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 )
 
 type variablesRecovery struct {
@@ -126,7 +126,7 @@ func (r variablesRecovery) createInEnvSource(ctx context.Context, span *run.Span
 	if !source.CanCreate || r.dry {
 		return
 	}
-	envVars, err := r.provider.EnvVars()
+	variableStore, err := r.provider.VariableStore()
 	if err != nil {
 		return
 	}
@@ -134,9 +134,9 @@ func (r variablesRecovery) createInEnvSource(ctx context.Context, span *run.Span
 		if problem.GetKind() != resourcesv1.VariableProblem_KIND_MISSING {
 			continue
 		}
-		resp, err := envVars.SetEnvSourceValue(ctx, &envvarsv1.SetEnvSourceValueRequest{
+		resp, err := variableStore.SetEnvSourceValue(ctx, &variablestorev1.SetEnvSourceValueRequest{
 			Tier:        declarations.Scope().Tier,
-			Coordinate:  &envvarsv1.Coordinate{Slug: r.cfg.Slug, Folder: problem.GetFolder(), Key: problem.GetKey()},
+			Coordinate:  &variablestorev1.Coordinate{Slug: r.cfg.Slug, Folder: problem.GetFolder(), Key: problem.GetKey()},
 			Description: refusal.Description(problem.GetKey()),
 		})
 		switch {

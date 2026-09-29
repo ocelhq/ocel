@@ -7,11 +7,11 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
 func (r *deployRun) admitBindings(ctx context.Context, progress progress.Log) error {
@@ -111,7 +111,7 @@ func (r *deployRun) publishingTiers(ctx context.Context, missing []string) map[s
 		if tier == r.spec.Tier {
 			continue
 		}
-		names, err := r.values.PublishedNames(ctx, envvars.Scope{Project: r.spec.Slug, Tier: tier}, bindingEnvironment(r.spec))
+		names, err := r.values.PublishedNames(ctx, variablestore.Scope{Project: r.spec.Slug, Tier: tier}, bindingEnvironment(r.spec))
 		if err != nil {
 			continue
 		}

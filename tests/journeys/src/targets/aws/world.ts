@@ -2,7 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { Lane } from "../../matrix/types";
 import { outputRoot } from "../../paths";
-import { accountFiles, PROFILE_VARS, pinnedEnv } from "./account";
+import { accountFiles, PROFILE_VARIABLES, pinnedEnv } from "./account";
 import { answersAsFloci, awsStore } from "./store";
 
 export type World = "floci" | "real";
@@ -63,7 +63,7 @@ async function pinAccountFiles(): Promise<void> {
   await writeFile(config, "", "utf8");
   await writeFile(credentials, "", "utf8");
   const pinned = pinnedEnv(process.env, PINNED_DIR);
-  for (const name of PROFILE_VARS) {
+  for (const name of PROFILE_VARIABLES) {
     delete process.env[name];
   }
   Object.assign(process.env, pinned);

@@ -25,7 +25,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
-	vars "github.com/ocelhq/ocel/platform/aws/provider/vars/live"
+	variables "github.com/ocelhq/ocel/platform/aws/provider/variables/live"
 )
 
 const (
@@ -53,14 +53,14 @@ func fixtureContainerInfra() containerInfra {
 func containerStackSpec(t *testing.T) (Config, provider.StackSpec) {
 	t.Helper()
 	cfg := Config{
-		Region:         "us-east-1",
-		AppBoundaryARN: "arn:aws:iam::123456789012:policy/ocel-app-boundary",
-		OriginSecret:   fixtureSecret,
-		Slug:           "shop",
-		Tier:           environment.TierProduction,
-		VarsTable:      "ocel-vars",
-		VarsTableARN:   "arn:aws:dynamodb:us-east-1:123456789012:table/ocel-vars",
-		VarsKeyARN:     "arn:aws:kms:us-east-1:123456789012:key/abcd",
+		Region:            "us-east-1",
+		AppBoundaryARN:    "arn:aws:iam::123456789012:policy/ocel-app-boundary",
+		OriginSecret:      fixtureSecret,
+		Slug:              "shop",
+		Tier:              environment.TierProduction,
+		VariablesTable:    "ocel-variables",
+		VariablesTableARN: "arn:aws:dynamodb:us-east-1:123456789012:table/ocel-variables",
+		VariablesKeyARN:   "arn:aws:kms:us-east-1:123456789012:key/abcd",
 	}
 	stack := naming.AppStack("prod", "web", fixedRelease(t))
 	spec := provider.StackSpec{
@@ -133,8 +133,8 @@ func TestAContainerIsHandedItsValuesAndThePortItListensOn(t *testing.T) {
 	if work.env[edge.OriginSecretVar] != fixtureSecret {
 		t.Errorf("%s = %q, want the tier's origin secret: the runtime in the container guards with it the way the node runtime does on Lambda", edge.OriginSecretVar, work.env[edge.OriginSecretVar])
 	}
-	if _, pinned := work.env[vars.EnvVar]; pinned {
-		t.Errorf("env contains %s for an app that declares no secret and no binding, so the runtime would open a store it has nothing to read from", vars.EnvVar)
+	if _, pinned := work.env[variables.EnvVar]; pinned {
+		t.Errorf("env contains %s for an app that declares no secret and no binding, so the runtime would open a store it has nothing to read from", variables.EnvVar)
 	}
 	if work.readsLive() {
 		t.Error("an app with nothing live is granted a read on the variable table")
@@ -433,11 +433,11 @@ func TestAContainerDeclaringASecretIsHandedAManifestAndAFencedReadRatherThanTheP
 	if err != nil {
 		t.Fatalf("containerWork() = %v", err)
 	}
-	manifest, err := vars.Parse([]byte(work.env[vars.EnvVar]))
+	manifest, err := variables.Parse([]byte(work.env[variables.EnvVar]))
 	if err != nil {
-		t.Fatalf("%s = %q, which the runtime cannot read: %v", vars.EnvVar, work.env[vars.EnvVar], err)
+		t.Fatalf("%s = %q, which the runtime cannot read: %v", variables.EnvVar, work.env[variables.EnvVar], err)
 	}
-	if len(manifest.Keys) != 1 || manifest.Keys[0].Key != "DATABASE_URL" || manifest.Table != cfg.VarsTable || manifest.KeyARN != cfg.VarsKeyARN || manifest.Slug != "shop" {
+	if len(manifest.Keys) != 1 || manifest.Keys[0].Key != "DATABASE_URL" || manifest.Table != cfg.VariablesTable || manifest.KeyARN != cfg.VariablesKeyARN || manifest.Slug != "shop" {
 		t.Errorf("manifest = %+v, want the secret pinned by name with the table and key the runtime reads it through", manifest)
 	}
 	for name, value := range work.definitionEnv() {
@@ -463,10 +463,10 @@ func TestAContainerDeclaringASecretIsHandedAManifestAndAFencedReadRatherThanTheP
 		}
 	}
 	if len(policies) != 1 {
-		t.Fatalf("the task role has %d policies, want the one vars read policy Lambda's execution role gets", len(policies))
+		t.Fatalf("the task role has %d policies, want the one variables read policy Lambda's execution role gets", len(policies))
 	}
 	own := valuePartition("shop", string(environment.TierProduction))
-	for _, want := range []string{"kms:Decrypt", cfg.VarsKeyARN, "dynamodb:Query", cfg.VarsTableARN, own} {
+	for _, want := range []string{"kms:Decrypt", cfg.VariablesKeyARN, "dynamodb:Query", cfg.VariablesTableARN, own} {
 		if !strings.Contains(policies[0], want) {
 			t.Errorf("policy = %s, want it to contain %q: the read is fenced to this project's partition and the tier key", policies[0], want)
 		}

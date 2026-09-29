@@ -11,5 +11,5 @@ func (p *Provider) Key(ctx context.Context, tier environment.Tier) (string, erro
 	if err != nil {
 		return "", err
 	}
-	return deployed.VarsKeyARN, nil
+	return deployed.VariablesKeyARN, nil
 }

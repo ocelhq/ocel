@@ -167,7 +167,7 @@ func catalogue() []provider.Feature {
 	return []provider.Feature{
 		{Name: featureISR, Summary: "incremental static regeneration"},
 		{Name: featureImageOptimization, Summary: "on-demand image optimization"},
-		{Name: provider.FeatureVarsKey, Summary: "a key the variables are sealed under"},
+		{Name: provider.FeatureVariablesKey, Summary: "a key the variables are sealed under"},
 		{Name: featureRelayEdge, Summary: "a relay front", DependsOn: []string{featureISR}, Edges: []edge.Kind{"relay"}},
 		{Name: featureDirectEdge, Summary: "a direct front", Edges: []edge.Kind{"direct"}},
 	}
@@ -1057,7 +1057,7 @@ func TestBootstrapSendsTheFeatureSetItWasGiven(t *testing.T) {
 		want        string
 	}{
 		{"a named set reaches the provider whole", "  edge: \"relay\",\n", "isr,image-optimization", "features=isr,image-optimization force=false acceptReplacements=true"},
-		{"all names every feature the provider offers", "", "all", "features=isr,image-optimization,vars-key,relay-edge,direct-edge force=false acceptReplacements=true"},
+		{"all names every feature the provider offers", "", "all", "features=isr,image-optimization,variables-key,relay-edge,direct-edge force=false acceptReplacements=true"},
 		{"none leaves the core alone", "", "none", "features= force=false acceptReplacements=true"},
 	}
 	for _, tc := range cases {

@@ -27,7 +27,7 @@ import (
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
-	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
+	variables "github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
@@ -115,7 +115,7 @@ func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (sessio
 }
 
 func (b *box) proxying(command, input string) (session.Result, bool) {
-	if !strings.Contains(command, quote(vars.RoutingTable)) {
+	if !strings.Contains(command, quote(variables.RoutingTable)) {
 		return session.Result{}, false
 	}
 	if b.routingDoc == "" {

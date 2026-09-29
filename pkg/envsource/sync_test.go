@@ -11,7 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
-	"github.com/ocelhq/ocel/pkg/envvars"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
 type clock struct {
@@ -31,7 +31,7 @@ func (c *clock) advance(by time.Duration) {
 	c.at = c.at.Add(by)
 }
 
-func syncFixture(t *testing.T) (*envsource.Sync, envvars.Store, *fakeInfisical, string, *clock) {
+func syncFixture(t *testing.T) (*envsource.Sync, variablestore.Store, *fakeInfisical, string, *clock) {
 	t.Helper()
 	fake, server := newFakeInfisical(t)
 	store, _ := storeFixture()
@@ -44,14 +44,14 @@ func syncFixture(t *testing.T) (*envsource.Sync, envvars.Store, *fakeInfisical, 
 	}, store, fake, server.URL, at
 }
 
-func register(t *testing.T, store envvars.Store, registration envsource.Registration) {
+func register(t *testing.T, store variablestore.Store, registration envsource.Registration) {
 	t.Helper()
 	if _, err := envsource.Register(context.Background(), store, environment.TierProduction, registration); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func statusOf(t *testing.T, store envvars.Store, registration envsource.Registration) envsource.Status {
+func statusOf(t *testing.T, store variablestore.Store, registration envsource.Registration) envsource.Status {
 	t.Helper()
 	status, err := envsource.StatusOf(context.Background(), store, environment.TierProduction, registration)
 	if err != nil {
@@ -84,7 +84,7 @@ func TestProjectsSharingOneSourceCoordinateCostOneReadAPoll(t *testing.T) {
 	if shared := reveal(t, store, scopeOf("admin"), tierWide("", "SHARED")); shared.Plaintext != "root" {
 		t.Fatalf("admin SHARED = %q", shared.Plaintext)
 	}
-	if _, err := store.Get(ctx, scopeOf("shop"), tierWide("/api", "API"), false); !errors.Is(err, envvars.ErrNotFound) {
+	if _, err := store.Get(ctx, scopeOf("shop"), tierWide("/api", "API"), false); !errors.Is(err, variablestore.ErrNotFound) {
 		t.Fatalf("shop got a folder it never registered: %v", err)
 	}
 	status := statusOf(t, store, shop)
@@ -160,7 +160,7 @@ func TestAnEnvSourceWhoseRootIsGoneKeepsEveryValueItCopied(t *testing.T) {
 	if err := sync.CopyScheduled(ctx); err != nil {
 		t.Fatal(err)
 	}
-	for _, at := range []envvars.Coordinate{tierWide("", "DATABASE_URL"), tierWide("/web", "API_KEY")} {
+	for _, at := range []variablestore.Coordinate{tierWide("", "DATABASE_URL"), tierWide("/web", "API_KEY")} {
 		if _, err := store.Get(ctx, scopeOf("shop"), at, false); err != nil {
 			t.Errorf("%s after its env source's root went missing = %v, want the copied value kept", at, err)
 		}
@@ -264,7 +264,7 @@ func TestAnUnsetCredentialIsRecordedAndTheSourceNeverLoggedInTo(t *testing.T) {
 	setCredentials(t, store, "shop", "client-id", "client-secret")
 	fake.put("/", fakeSecret{id: "s1", key: "K", value: "v", version: 1})
 	result, err := sync.CopyProject(context.Background(), registration)
-	if err != nil || !slices.Equal(result.Written, []envvars.Cell{cell("", "K")}) {
+	if err != nil || !slices.Equal(result.Written, []variablestore.Cell{cell("", "K")}) {
 		t.Fatalf("CopyProject() with the credential set = %+v, %v", result, err)
 	}
 }
@@ -333,10 +333,10 @@ func TestCopyingAProjectFromASourceAlreadyReadCopiesWhatItHoldsAndRecordsTheSucc
 	sync, store, _, _, _ := syncFixture(t)
 	registration := envsource.Registration{Project: "shop", Descriptor: execDescriptor(envsource.FormatJSON, "vault"), Folders: []string{"", "/web"}}
 	register(t, store, registration)
-	source := envsource.NewFixed("exec", map[envvars.Cell]envsource.Value{cell("/web", "WEB"): value("w", "v1")})
+	source := envsource.NewFixed("exec", map[variablestore.Cell]envsource.Value{cell("/web", "WEB"): value("w", "v1")})
 
 	result, err := sync.CopyProjectFrom(context.Background(), registration, source)
-	if err != nil || !slices.Equal(result.Written, []envvars.Cell{cell("/web", "WEB")}) {
+	if err != nil || !slices.Equal(result.Written, []variablestore.Cell{cell("/web", "WEB")}) {
 		t.Fatalf("CopyProjectFrom() = %+v, %v", result, err)
 	}
 	if web := reveal(t, store, scopeOf("shop"), tierWide("/web", "WEB")); web.Provenance.EnvSource != "exec" {

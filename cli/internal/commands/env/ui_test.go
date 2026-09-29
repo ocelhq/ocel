@@ -24,7 +24,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/envsource"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 )
 
 func withProviderValues(t *testing.T, root string, opts envOptions, drive func(ctx context.Context, slug string, provider *providerprocess.Provider, values valuestore.Store) error) {
@@ -41,13 +41,13 @@ func withProviderValues(t *testing.T, root string, opts envOptions, drive func(c
 	}
 }
 
-func storeValue(t *testing.T, ctx context.Context, provider *providerprocess.Provider, tier environmentv1.Tier, coordinate *envvarsv1.Coordinate, value string) {
+func storeValue(t *testing.T, ctx context.Context, provider *providerprocess.Provider, tier environmentv1.Tier, coordinate *variablestorev1.Coordinate, value string) {
 	t.Helper()
-	envVars, err := provider.EnvVars()
+	variableStore, err := provider.VariableStore()
 	if err != nil {
 		t.Fatalf("reach the provider's variable store: %v", err)
 	}
-	if _, err := envVars.SetValue(ctx, &envvarsv1.SetValueRequest{
+	if _, err := variableStore.SetValue(ctx, &variablestorev1.SetValueRequest{
 		Tier:       tier,
 		Coordinate: coordinate,
 		Value:      value,
@@ -85,8 +85,8 @@ func TestTheValuesTheVariablesPageShowsAndChangesAreTheProvidersAnswers(t *testi
 		preview := envOptions{preview: true}
 
 		withProviderValues(t, root, preview, func(ctx context.Context, slug string, provider *providerprocess.Provider, values valuestore.Store) error {
-			storeValue(t, ctx, provider, preview.tier(), &envvarsv1.Coordinate{Slug: slug, Key: "API_URL"}, "https://root.example")
-			storeValue(t, ctx, provider, preview.tier(), &envvarsv1.Coordinate{Slug: slug, Key: "STRIPE_API_KEY", Environment: "staging"}, "sk_pr")
+			storeValue(t, ctx, provider, preview.tier(), &variablestorev1.Coordinate{Slug: slug, Key: "API_URL"}, "https://root.example")
+			storeValue(t, ctx, provider, preview.tier(), &variablestorev1.Coordinate{Slug: slug, Key: "STRIPE_API_KEY", Environment: "staging"}, "sk_pr")
 
 			rows, err := values.List(ctx)
 			if err != nil {
@@ -112,22 +112,22 @@ func TestTheValuesTheVariablesPageShowsAndChangesAreTheProvidersAnswers(t *testi
 		root := setUpEnvFixture(t).Root
 
 		withProviderValues(t, root, envOptions{}, func(ctx context.Context, slug string, provider *providerprocess.Provider, values valuestore.Store) error {
-			envVars, err := provider.EnvVars()
+			variableStore, err := provider.VariableStore()
 			if err != nil {
 				t.Fatalf("reach the provider's variable store: %v", err)
 			}
-			if _, err := envVars.SetReference(ctx, &envvarsv1.SetReferenceRequest{
+			if _, err := variableStore.SetReference(ctx, &variablestorev1.SetReferenceRequest{
 				Tier:       envOptions{}.tier(),
-				Coordinate: &envvarsv1.Coordinate{Slug: slug, Key: "STRIPE_API_KEY"},
-				Target:     &envvarsv1.Coordinate{Slug: "platform", Key: "STRIPE_API_KEY"},
+				Coordinate: &variablestorev1.Coordinate{Slug: slug, Key: "STRIPE_API_KEY"},
+				Target:     &variablestorev1.Coordinate{Slug: "platform", Key: "STRIPE_API_KEY"},
 			}); err != nil {
 				t.Fatalf("SetReference: %v", err)
 			}
 
-			_, direct := envVars.RevealValues(ctx, &envvarsv1.RevealValuesRequest{
+			_, direct := variableStore.RevealValues(ctx, &variablestorev1.RevealValuesRequest{
 				Tier:  envOptions{}.tier(),
 				Slug:  slug,
-				Cells: []*envvarsv1.Coordinate{{Slug: slug, Key: "STRIPE_API_KEY"}},
+				Cells: []*variablestorev1.Coordinate{{Slug: slug, Key: "STRIPE_API_KEY"}},
 			})
 
 			_, _, err = revealOne(ctx, values, variables.Cell{Key: "STRIPE_API_KEY"})
@@ -146,7 +146,7 @@ func TestTheValuesTheVariablesPageShowsAndChangesAreTheProvidersAnswers(t *testi
 		root := setUpEnvFixture(t).Root
 
 		withProviderValues(t, root, envOptions{}, func(ctx context.Context, slug string, provider *providerprocess.Provider, values valuestore.Store) error {
-			storeValue(t, ctx, provider, envOptions{}.tier(), &envvarsv1.Coordinate{Slug: slug, Key: "API_URL"}, "https://someone-elses.example")
+			storeValue(t, ctx, provider, envOptions{}.tier(), &variablestorev1.Coordinate{Slug: slug, Key: "API_URL"}, "https://someone-elses.example")
 			at := variables.Coordinate{Cell: variables.Cell{Key: "API_URL"}}
 
 			unset := int64(0)
@@ -172,7 +172,7 @@ func TestTheValuesTheVariablesPageShowsAndChangesAreTheProvidersAnswers(t *testi
 		root := setUpEnvFixture(t).Root
 
 		withProviderValues(t, root, envOptions{}, func(ctx context.Context, slug string, provider *providerprocess.Provider, values valuestore.Store) error {
-			coordinate := &envvarsv1.Coordinate{Slug: slug, Key: "API_URL"}
+			coordinate := &variablestorev1.Coordinate{Slug: slug, Key: "API_URL"}
 			storeValue(t, ctx, provider, envOptions{}.tier(), coordinate, "https://first.example")
 			storeValue(t, ctx, provider, envOptions{}.tier(), coordinate, "https://someone-elses.example")
 			at := variables.Coordinate{Cell: variables.Cell{Key: "API_URL"}}

@@ -122,7 +122,7 @@ func appBoundaryKeyStatement(ns Namespace, tier environment.Tier, broughtKey str
             Condition:
               ForAnyValue:StringEquals:
                 kms:ResourceAliases: %s
-`, yamlActions(appBoundaryKeyActions()), ns.varsKeyAliasFor(tier))
+`, yamlActions(appBoundaryKeyActions()), ns.variablesKeyAliasFor(tier))
 }
 
 func appBoundaryResource(ns Namespace, tier environment.Tier, broughtKey string) string {

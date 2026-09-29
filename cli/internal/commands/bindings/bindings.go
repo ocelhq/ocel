@@ -28,7 +28,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
-	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 )
 
 const defaultBindingOwner = "cli"
@@ -188,11 +188,11 @@ func runBindingsSet(ctx context.Context, invocation commands.Invocation, cwd str
 		return fmt.Errorf("publisher %q is the one ocel writes an inline binding's record as, at deploy, from the config; publish as your own tool with --owner", owner)
 	}
 	return withBindingProvider(ctx, invocation, cwd, opts, "ocel bindings set", func(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project) (string, error) {
-		client, err := provider.EnvVars()
+		client, err := provider.VariableStore()
 		if err != nil {
 			return "", err
 		}
-		resp, err := client.SetBinding(ctx, &envvarsv1.SetBindingRequest{
+		resp, err := client.SetBinding(ctx, &variablestorev1.SetBindingRequest{
 			Slug:        cfg.Slug,
 			Tier:        opts.tier(),
 			Environment: opts.environment,
@@ -307,11 +307,11 @@ func runBindingsRemove(ctx context.Context, invocation commands.Invocation, cwd,
 		return fmt.Errorf("%s is the record ocel keeps for a binding written inline in `bindings`, and the next deploy writes it again: remove that binding from the config, and the deploy after removes the record", name)
 	}
 	return withBindingProvider(ctx, invocation, cwd, opts, "ocel bindings rm", func(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project) (string, error) {
-		client, err := provider.EnvVars()
+		client, err := provider.VariableStore()
 		if err != nil {
 			return "", err
 		}
-		resp, err := client.RemoveBinding(ctx, &envvarsv1.RemoveBindingRequest{
+		resp, err := client.RemoveBinding(ctx, &variablestorev1.RemoveBindingRequest{
 			Slug:        cfg.Slug,
 			Tier:        opts.tier(),
 			Environment: opts.environment,
@@ -333,11 +333,11 @@ func runBindingsRemove(ctx context.Context, invocation commands.Invocation, cwd,
 
 func runBindingsList(ctx context.Context, invocation commands.Invocation, cwd string, opts bindingsOptions, stdout io.Writer) error {
 	return withBindingProvider(ctx, invocation, cwd, opts, "ocel bindings ls", func(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project) (string, error) {
-		client, err := provider.EnvVars()
+		client, err := provider.VariableStore()
 		if err != nil {
 			return "", err
 		}
-		resp, err := client.ListBindings(ctx, &envvarsv1.ListBindingsRequest{
+		resp, err := client.ListBindings(ctx, &variablestorev1.ListBindingsRequest{
 			Slug:        cfg.Slug,
 			Tier:        opts.tier(),
 			Environment: opts.environment,
@@ -355,11 +355,11 @@ func runBindingsList(ctx context.Context, invocation commands.Invocation, cwd st
 
 func runBindingsGenerate(ctx context.Context, invocation commands.Invocation, cwd string, opts bindingsOptions, stdout io.Writer) error {
 	return withBindingProvider(ctx, invocation, cwd, opts, "ocel bindings generate", func(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project) (string, error) {
-		client, err := provider.EnvVars()
+		client, err := provider.VariableStore()
 		if err != nil {
 			return "", err
 		}
-		resp, err := client.ListBindings(ctx, &envvarsv1.ListBindingsRequest{
+		resp, err := client.ListBindings(ctx, &variablestorev1.ListBindingsRequest{
 			Slug:        cfg.Slug,
 			Tier:        opts.tier(),
 			Environment: opts.environment,
@@ -422,7 +422,7 @@ type bindingReport struct {
 	Version uint64 `json:"version"`
 }
 
-func bindingReports(bindings []*envvarsv1.BindingSummary) []bindingReport {
+func bindingReports(bindings []*variablestorev1.BindingSummary) []bindingReport {
 	out := make([]bindingReport, 0, len(bindings))
 	for _, l := range bindings {
 		out = append(out, bindingReport{
@@ -442,7 +442,7 @@ func writeBindingJSON(stdout io.Writer, report any) error {
 	return encoder.Encode(report)
 }
 
-func renderBindings(stdout io.Writer, bindings []*envvarsv1.BindingSummary) {
+func renderBindings(stdout io.Writer, bindings []*variablestorev1.BindingSummary) {
 	if len(bindings) == 0 {
 		fmt.Fprintln(stdout, "No bindings published. Publish one with `ocel bindings set < binding.json`.")
 		return

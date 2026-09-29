@@ -164,12 +164,12 @@ func TestHoldEmitsWaitingThenResumedAroundTheInteraction(t *testing.T) {
 	run, _ := begin(t, sink)
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
 
-	resume := build.Hold(&streamv1.WaitingEvent{Url: "https://ocel.dev/vars#token"})
+	resume := build.Hold(&streamv1.WaitingEvent{Url: "https://ocel.dev/variables#token"})
 	build.Say("the page was answered")
 	resume("the page was answered")
 
 	got := sink.received()[1:]
-	if len(got) != 3 || got[0].GetWaiting().GetUrl() != "https://ocel.dev/vars#token" || got[1].GetWaiting() != nil ||
+	if len(got) != 3 || got[0].GetWaiting().GetUrl() != "https://ocel.dev/variables#token" || got[1].GetWaiting() != nil ||
 		got[2].GetResumed().GetReason() != "the page was answered" {
 		t.Fatalf("events = %v, want waiting, the message, then resumed", bodies(got))
 	}

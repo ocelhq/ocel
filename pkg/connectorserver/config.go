@@ -18,7 +18,7 @@ type Config struct {
 	KeyPath        string   `json:"keyPath"`
 }
 
-var grantable = []string{CapabilityEnvVarsRead, CapabilityEnvVarsWrite, CapabilityEnvVarsReveal}
+var grantable = []string{CapabilityVariablesRead, CapabilityVariablesWrite, CapabilityVariablesReveal}
 
 func ReadConfig(path string) (Config, error) {
 	if raw := os.Getenv(provider.ConnectorConfigEnvVar); raw != "" {

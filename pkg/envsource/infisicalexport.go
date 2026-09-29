@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"regexp"
 
-	"github.com/ocelhq/ocel/pkg/envvars"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
 const infisicalCLIName = "infisical"
@@ -20,8 +20,8 @@ type infisicalExport struct {
 
 func (s infisicalExport) ID() string { return s.options.ID() }
 
-func (s infisicalExport) Read(ctx context.Context, folders []string) (map[envvars.Cell]Value, error) {
-	out := map[envvars.Cell]Value{}
+func (s infisicalExport) Read(ctx context.Context, folders []string) (map[variablestore.Cell]Value, error) {
+	out := map[variablestore.Cell]Value{}
 	for _, folder := range folders {
 		at, err := s.options.secretPath(folder)
 		if err != nil {
@@ -53,7 +53,7 @@ func (s infisicalExport) Read(ctx context.Context, folders []string) (map[envvar
 			if secret.Value == "" {
 				continue
 			}
-			out[envvars.Cell{Folder: folder, Key: secret.Key}] = Value{Plaintext: []byte(secret.Value)}
+			out[variablestore.Cell{Folder: folder, Key: secret.Key}] = Value{Plaintext: []byte(secret.Value)}
 		}
 	}
 	return out, nil
@@ -66,12 +66,12 @@ func isMissingFolder(err error) bool {
 	return errors.As(err, &failed) && infisicalNotFound.MatchString(failed.stderr)
 }
 
-func (infisicalExport) Create(context.Context, envvars.Cell, []byte, string) error {
+func (infisicalExport) Create(context.Context, variablestore.Cell, []byte, string) error {
 	return ErrReadOnly
 }
 
-func (infisicalExport) Update(context.Context, envvars.Cell, []byte, string) error {
+func (infisicalExport) Update(context.Context, variablestore.Cell, []byte, string) error {
 	return ErrReadOnly
 }
 
-func (infisicalExport) URL(envvars.Cell) string { return "" }
+func (infisicalExport) URL(variablestore.Cell) string { return "" }

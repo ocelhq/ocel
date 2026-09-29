@@ -83,22 +83,22 @@ func TestAssembleApp(t *testing.T) {
 			t.Fatalf("assemble: %v", err)
 		}
 
-		wantVars := map[string]string{
+		wantVariables := map[string]string{
 			"OCEL_EDGE_ACCESS_KEY_ID": "AKIAEDGE",
 		}
-		if len(w.Vars) != len(wantVars) {
-			t.Errorf("got %d vars, want %d: %v", len(w.Vars), len(wantVars), w.Vars)
+		if len(w.Variables) != len(wantVariables) {
+			t.Errorf("got %d variables, want %d: %v", len(w.Variables), len(wantVariables), w.Variables)
 		}
-		for k, want := range wantVars {
-			if got := w.Vars[k]; got != want {
-				t.Errorf("Vars[%s] = %q, want %q", k, got, want)
+		for k, want := range wantVariables {
+			if got := w.Variables[k]; got != want {
+				t.Errorf("Variables[%s] = %q, want %q", k, got, want)
 			}
 		}
 		if len(w.Secrets) != 1 || w.Secrets["OCEL_EDGE_SECRET_KEY"] != "secret-edge" {
 			t.Errorf("Secrets = %v, want only OCEL_EDGE_SECRET_KEY", w.Secrets)
 		}
-		if _, leaked := w.Vars["OCEL_EDGE_SECRET_KEY"]; leaked {
-			t.Error("the signing secret must never appear in plain-text Vars")
+		if _, leaked := w.Variables["OCEL_EDGE_SECRET_KEY"]; leaked {
+			t.Error("the signing secret must never appear in plain-text Variables")
 		}
 
 		if string(w.Main.Content) != "export default {}" || w.Main.Name != "index.js" {

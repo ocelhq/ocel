@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/dotenv"
-	"github.com/ocelhq/ocel/pkg/envvars"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
 const (
@@ -28,8 +28,8 @@ type execSource struct {
 
 func (execSource) ID() string { return string(Exec) }
 
-func (s execSource) Read(ctx context.Context, folders []string) (map[envvars.Cell]Value, error) {
-	out := map[envvars.Cell]Value{}
+func (s execSource) Read(ctx context.Context, folders []string) (map[variablestore.Cell]Value, error) {
+	out := map[variablestore.Cell]Value{}
 	for _, folder := range folders {
 		argv := make([]string, len(s.options.Command))
 		for i, arg := range s.options.Command {
@@ -47,17 +47,21 @@ func (s execSource) Read(ctx context.Context, folders []string) (map[envvars.Cel
 			if value == "" {
 				continue
 			}
-			out[envvars.Cell{Folder: folder, Key: key}] = Value{Plaintext: []byte(value)}
+			out[variablestore.Cell{Folder: folder, Key: key}] = Value{Plaintext: []byte(value)}
 		}
 	}
 	return out, nil
 }
 
-func (execSource) Create(context.Context, envvars.Cell, []byte, string) error { return ErrReadOnly }
+func (execSource) Create(context.Context, variablestore.Cell, []byte, string) error {
+	return ErrReadOnly
+}
 
-func (execSource) Update(context.Context, envvars.Cell, []byte, string) error { return ErrReadOnly }
+func (execSource) Update(context.Context, variablestore.Cell, []byte, string) error {
+	return ErrReadOnly
+}
 
-func (execSource) URL(envvars.Cell) string { return "" }
+func (execSource) URL(variablestore.Cell) string { return "" }
 
 func folderArgument(folder string) string {
 	if folder == "" {

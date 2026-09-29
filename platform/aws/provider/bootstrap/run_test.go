@@ -422,7 +422,7 @@ func syntheticOutput(stackName, key, declared string) string {
 		return "ocel-assets-test"
 	case outputStateTable:
 		return "ocel-statetable-test"
-	case outputVarsKeyBrought:
+	case outputVariablesKeyBrought:
 		return declared
 	}
 	if strings.HasPrefix(declared, "arn:") {
@@ -1143,9 +1143,9 @@ func TestRunPreview(t *testing.T) {
 			t.Errorf("edge values after a re-run = %v, want %v", got, values)
 		}
 
-		tmpl := parseVarsTemplate(t, stacks.template(previewStackName))
-		if _, ok := tmpl.Resources["VarsTable"]; !ok {
-			t.Error("the preview stack no longer declares VarsTable after a re-run")
+		tmpl := parseVariablesTemplate(t, stacks.template(previewStackName))
+		if _, ok := tmpl.Resources["VariablesTable"]; !ok {
+			t.Error("the preview stack no longer declares VariablesTable after a re-run")
 		}
 	})
 }

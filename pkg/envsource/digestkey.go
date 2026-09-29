@@ -14,9 +14,9 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/seal"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
 const (
@@ -45,14 +45,14 @@ func newDigestKeyAssociatedData(tier environment.Tier) seal.AssociatedData {
 	return seal.AssociatedData{
 		{Name: "project", Value: everyProject},
 		{Name: "class", Value: string(tier)},
-		{Name: "environment", Value: envvars.TierWideEnvironment},
+		{Name: "environment", Value: variablestore.TierWideEnvironment},
 		{Name: "folder", Value: digestKeyFolder},
 		{Name: "binding", Value: digestKeyBinding},
 		{Name: "key", Value: digestKeyName},
 	}
 }
 
-func EnsureDigestKey(ctx context.Context, store envvars.Store, tier environment.Tier) (DigestKey, error) {
+func EnsureDigestKey(ctx context.Context, store variablestore.Store, tier environment.Tier) (DigestKey, error) {
 	for range digestKeyAttempts {
 		recorded, err := keyvalue.ReadOrEmpty(ctx, store.KeyValues, digestKeyAt(tier))
 		if err != nil {
@@ -104,7 +104,7 @@ func openDigestKey(ctx context.Context, cipher seal.Cipher, tier environment.Tie
 	return DigestKey{secret: secret}, nil
 }
 
-func (k DigestKey) version(scope envvars.Scope, at envvars.Cell, read Value) (string, error) {
+func (k DigestKey) version(scope variablestore.Scope, at variablestore.Cell, read Value) (string, error) {
 	if len(k.secret) != digestKeyBytes {
 		return "", errors.New("an env source value is versioned under its tier's digest key, and none was opened")
 	}

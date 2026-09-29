@@ -15,16 +15,16 @@ func env(values map[string]string) func(string) string {
 
 func complete() map[string]string {
 	return map[string]string{
-		"OCEL_VARS_TABLE": "ocel-bootstrap-VarsTable-1",
-		"OCEL_VARS_KEY":   "arn:aws:kms:us-east-1:111122223333:key/vars",
-		"OCEL_INFRA_TIER": "production",
+		"OCEL_VARIABLES_TABLE": "ocel-bootstrap-VariablesTable-1",
+		"OCEL_VARIABLES_KEY":   "arn:aws:kms:us-east-1:111122223333:key/variables",
+		"OCEL_INFRA_TIER":      "production",
 	}
 }
 
 func TestTheSyncStartsOnlyWithWhereItReadsAndWritesAndLogsInAsItsOwnRole(t *testing.T) {
 	t.Setenv("AWS_REGION", "us-east-1")
 
-	for _, missing := range []string{"OCEL_VARS_TABLE", "OCEL_VARS_KEY", "OCEL_INFRA_TIER"} {
+	for _, missing := range []string{"OCEL_VARIABLES_TABLE", "OCEL_VARIABLES_KEY", "OCEL_INFRA_TIER"} {
 		t.Run("refuses to start without "+missing, func(t *testing.T) {
 			values := complete()
 			delete(values, missing)
@@ -72,7 +72,7 @@ func TestAnInvocationSyncsOnce(t *testing.T) {
 		var logged strings.Builder
 		once := func(context.Context) error {
 			calls++
-			return errors.New("the vars table answered 500")
+			return errors.New("the variables table answered 500")
 		}
 		if err := (invocation{copyScheduled: once, log: &logged}).handle(context.Background()); err != nil {
 			t.Errorf("handle = %v, want nil: lambda retries a failed async invocation, and the status record already has the backoff", err)
@@ -80,7 +80,7 @@ func TestAnInvocationSyncsOnce(t *testing.T) {
 		if calls != 1 {
 			t.Errorf("CopyScheduled ran %d times, want once per invocation", calls)
 		}
-		if !strings.Contains(logged.String(), "the vars table answered 500") {
+		if !strings.Contains(logged.String(), "the variables table answered 500") {
 			t.Errorf("logged %q, want the failure in the function's log", logged.String())
 		}
 	})

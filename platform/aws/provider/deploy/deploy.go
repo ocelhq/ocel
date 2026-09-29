@@ -9,10 +9,10 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
@@ -33,14 +33,14 @@ type Config struct {
 
 	RequiredFeatures []string
 
-	StateTable     string
-	StateTableARN  string
-	VarsTable      string
-	VarsTableARN   string
-	VarsKeyARN     string
-	AppBoundaryARN string
-	Tier           environment.Tier
-	VarsReferenced map[envvars.Coordinate]string
+	StateTable          string
+	StateTableARN       string
+	VariablesTable      string
+	VariablesTableARN   string
+	VariablesKeyARN     string
+	AppBoundaryARN      string
+	Tier                environment.Tier
+	VariablesReferenced map[variablestore.Coordinate]string
 
 	RuntimeLayers map[string]string
 

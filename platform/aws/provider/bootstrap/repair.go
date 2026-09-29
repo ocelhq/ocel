@@ -198,7 +198,7 @@ func repairStack(ctx context.Context, apis APIs, ns Namespace, tier environment.
 		artifactBucket: deployed.ArtifactBucket,
 		refs:           refs,
 		alongside:      deployed.Features,
-		varsKey:        broughtVarsKey(deployed.Outputs),
+		variablesKey:   broughtVariablesKey(deployed.Outputs),
 	})
 	if err != nil {
 		return false, err

@@ -123,7 +123,7 @@ func TestScriptBindings(t *testing.T) {
 		},
 		{
 			name:   "a var becomes a plain_text binding",
-			worker: edge.Worker{Main: mainModule(), Vars: map[string]string{"OCEL_EDGE_ACCESS_KEY_ID": "AKIA"}},
+			worker: edge.Worker{Main: mainModule(), Variables: map[string]string{"OCEL_EDGE_ACCESS_KEY_ID": "AKIA"}},
 			typ:    "plain_text",
 			want:   []map[string]string{{"name": "OCEL_EDGE_ACCESS_KEY_ID", "text": "AKIA"}},
 		},
@@ -191,10 +191,10 @@ func TestScriptBindings(t *testing.T) {
 		})
 	}
 
-	t.Run("a worker with only vars emits no other binding", func(t *testing.T) {
+	t.Run("a worker with only variables emits no other binding", func(t *testing.T) {
 		meta := metadataFromMultipart(t, edge.Worker{
-			Main: mainModule(),
-			Vars: map[string]string{"FUNCTION_URLS": "{}"},
+			Main:      mainModule(),
+			Variables: map[string]string{"FUNCTION_URLS": "{}"},
 		}, "")
 		for _, typ := range []string{"r2_bucket", "worker_loader", "service", "secret_text", "assets"} {
 			if got := bindingsByType(meta, typ); len(got) != 0 {
@@ -202,7 +202,7 @@ func TestScriptBindings(t *testing.T) {
 			}
 		}
 		if got := len(bindingsByType(meta, "plain_text")); got != 1 {
-			t.Errorf("plain_text bindings = %d, want the worker's vars unchanged", got)
+			t.Errorf("plain_text bindings = %d, want the worker's variables unchanged", got)
 		}
 	})
 }
@@ -212,7 +212,7 @@ func TestBuildScriptMultipart(t *testing.T) {
 		worker := edge.Worker{
 			AssetBinding: "ASSETS",
 			Main:         mainModule(),
-			Vars:         map[string]string{"FUNCTION_URLS": "{}"},
+			Variables:    map[string]string{"FUNCTION_URLS": "{}"},
 			Assets:       []edge.StaticAsset{{Path: "/a.svg", Content: []byte("a")}},
 		}
 

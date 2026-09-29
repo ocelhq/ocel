@@ -24,8 +24,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/envvars"
-	"github.com/ocelhq/ocel/pkg/envvarsserver"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -34,6 +32,8 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/statedir"
+	"github.com/ocelhq/ocel/pkg/variablestore"
+	"github.com/ocelhq/ocel/pkg/variablestoreserver"
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -1185,12 +1185,12 @@ func TestAFailureAssemblingTheManifestAfterTheBuildsEndsAUnitOfItsOwn(t *testing
 func publishBinding(t *testing.T, fixture clitest.FakeProject, binding *bindingsv1.Binding) {
 	t.Helper()
 	const owner = "infra-repo"
-	pair, err := envvarsserver.BindingPair(owner, binding)
+	pair, err := variablestoreserver.BindingPair(owner, binding)
 	if err != nil {
 		t.Fatalf("BindingPair: %v", err)
 	}
-	scope := envvars.Scope{Project: clitest.FixtureSlug, Tier: environment.TierProduction}
-	if _, err := valueStore(fixture).SetBindings(context.Background(), scope, "", owner, []envvars.NamedBindingWrite{{Name: binding.GetName(), Write: pair}}); err != nil {
+	scope := variablestore.Scope{Project: clitest.FixtureSlug, Tier: environment.TierProduction}
+	if _, err := valueStore(fixture).SetBindings(context.Background(), scope, "", owner, []variablestore.NamedBindingWrite{{Name: binding.GetName(), Write: pair}}); err != nil {
 		t.Fatalf("publish %s: %v", binding.GetName(), err)
 	}
 }

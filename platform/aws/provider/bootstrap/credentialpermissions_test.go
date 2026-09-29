@@ -480,7 +480,7 @@ func TestNoCredentialTagsAKeyItDoesNotAlreadyOwn(t *testing.T) {
 			if len(tagging) == 0 {
 				continue
 			}
-			if !conditionNames(statement.Condition, "aws:ResourceTag/"+VarsKeyComponentTagKey) {
+			if !conditionNames(statement.Condition, "aws:ResourceTag/"+VariablesKeyComponentTagKey) {
 				t.Errorf(
 					"the %s credential grants %s on %s with no aws:ResourceTag condition, so it may tag a key ocel never made and then open what that key seals",
 					purpose, strings.Join(tagging, ", "), strings.Join(stringsOf(t, statement.Resource, "Resource"), ", "),
@@ -616,15 +616,15 @@ func TestOnlyTheBootstrapCredentialDeletesThePulumiPassphraseAndOnlyByItsExactPa
 	}
 }
 
-func TestEveryCredentialMayGrantLambdaTheVarsKeyAndNoOther(t *testing.T) {
+func TestEveryCredentialMayGrantLambdaTheVariablesKeyAndNoOther(t *testing.T) {
 	want := conditionJSON(t, map[string]any{
-		"StringEquals": map[string]any{"aws:ResourceTag/" + VarsKeyComponentTagKey: VarsKeyComponentTagValue},
+		"StringEquals": map[string]any{"aws:ResourceTag/" + VariablesKeyComponentTagKey: VariablesKeyComponentTagValue},
 		"Bool":         map[string]any{"kms:GrantIsForAWSResource": "true"},
 	})
 	for purpose, document := range bothCredentials(t) {
 		grants := grantsOf(t, document)
 		if !grants[grant{action: "kms:CreateGrant", resource: AnyKeyARN, condition: want}] {
-			t.Errorf("the %s credential does not grant kms:CreateGrant on a vars key for an AWS service, so Lambda cannot seal a function's environment under it", purpose)
+			t.Errorf("the %s credential does not grant kms:CreateGrant on a variables key for an AWS service, so Lambda cannot seal a function's environment under it", purpose)
 		}
 		for g := range grants {
 			if g.action == "kms:CreateGrant" && g.condition != want {

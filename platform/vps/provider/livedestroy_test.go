@@ -13,7 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
-	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
+	variables "github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
@@ -187,7 +187,7 @@ func TestLiveTheSingletonsRemainWhileASiblingTierDoesAndGoWithTheLast(t *testing
 	defer vm.ssh(t, "sudo docker rm -f "+workload+" >/dev/null 2>&1 || true")
 
 	singletons := []string{"/var/lib/ocel", "/usr/local/lib/ocel", "/usr/local/lib/ocel/seal", "/usr/local/lib/ocel/keyvalues",
-		host.SwitchboardBinary, host.ProxyConfig, vars.RoutingTable, "/etc/ocel"}
+		host.SwitchboardBinary, host.ProxyConfig, variables.RoutingTable, "/etc/ocel"}
 	sealGrant := func(tier environment.Tier) string { return "/etc/sudoers.d/ocel-seal-" + string(tier) }
 
 	first, err := bootstrap.PlanRemove(ctx, production)

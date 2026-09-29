@@ -57,11 +57,11 @@ func runWithEnvProvider(ctx context.Context, dependencies Dependencies, cwd stri
 
 func offerVariablesKey(ctx context.Context, dependencies Dependencies, check *run.Span, provider *providerprocess.Provider, cfg *project.Project, opts envOptions, status *contractv1.BootstrapStatus, stdin io.Reader, stderr io.Writer) error {
 	edge := cfg.EdgeSelection()
-	offered, err := readiness.HasOffer(ctx, provider, opts.tier(), edge, providercontract.FeatureVarsKey)
+	offered, err := readiness.HasOffer(ctx, provider, opts.tier(), edge, providercontract.FeatureVariablesKey)
 	if err != nil || !offered {
 		return err
 	}
-	gap := readiness.NewFeatureGap(status, providercontract.FeatureVarsKey)
+	gap := readiness.NewFeatureGap(status, providercontract.FeatureVariablesKey)
 	return readiness.OfferRepair(ctx, check, provider, gap, opts.tier(), edge,
 		dependencies.StdinIsTerminal(stdin), stderr, stdin)
 }

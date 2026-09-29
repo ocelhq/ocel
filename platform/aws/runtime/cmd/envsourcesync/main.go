@@ -14,7 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
-	"github.com/ocelhq/ocel/pkg/envvars"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 )
@@ -45,13 +45,13 @@ func main() {
 }
 
 func newSync(ctx context.Context, getenv func(string) string) (*envsource.Sync, error) {
-	table := getenv(awsports.VarsTableEnvVar)
+	table := getenv(awsports.VariablesTableEnvVar)
 	if table == "" {
-		return nil, fmt.Errorf("%s is not set, so there is no table to read registrations from or write values into", awsports.VarsTableEnvVar)
+		return nil, fmt.Errorf("%s is not set, so there is no table to read registrations from or write values into", awsports.VariablesTableEnvVar)
 	}
-	key := getenv(awsports.VarsKeyEnvVar)
+	key := getenv(awsports.VariablesKeyEnvVar)
 	if key == "" {
-		return nil, fmt.Errorf("%s is not set, so no value this sync writes could be encrypted", awsports.VarsKeyEnvVar)
+		return nil, fmt.Errorf("%s is not set, so no value this sync writes could be encrypted", awsports.VariablesKeyEnvVar)
 	}
 	tier := environment.Tier(getenv(awsports.TierEnvVar))
 	switch tier {
@@ -64,7 +64,7 @@ func newSync(ctx context.Context, getenv func(string) string) (*envsource.Sync, 
 		return nil, fmt.Errorf("load aws config: %w", err)
 	}
 	return &envsource.Sync{
-		Store: envvars.Store{
+		Store: variablestore.Store{
 			KeyValues: awsports.KeyValues{Dynamo: dynamodb.NewFromConfig(cfg), Tables: awsports.Table(table)},
 			Cipher:    awsports.Cipher{KMS: kms.NewFromConfig(cfg), Keys: awsports.Key(key)},
 		},

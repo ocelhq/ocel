@@ -14,8 +14,8 @@ import (
 	"github.com/lestrrat-go/jwx/v3/jws"
 	"github.com/lestrrat-go/jwx/v3/jwt"
 
-	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
-	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1/variablestorev1connect"
 )
 
 const skew = 30 * time.Second
@@ -192,27 +192,27 @@ func stringsOf(claimed any) ([]string, bool) {
 
 func scopeOf(procedure string, message any) (string, bool) {
 	switch procedure {
-	case envvarsv1connect.EnvVarsServiceSetValueProcedure,
-		envvarsv1connect.EnvVarsServiceDeleteValueProcedure,
-		envvarsv1connect.EnvVarsServiceSetReferenceProcedure,
-		envvarsv1connect.EnvVarsServiceSetBindingProcedure,
-		envvarsv1connect.EnvVarsServiceRemoveBindingProcedure,
-		envvarsv1connect.EnvVarsServiceSyncEnvSourceProcedure,
-		envvarsv1connect.EnvVarsServiceSetEnvSourceValueProcedure:
-		return CapabilityEnvVarsWrite, true
-	case envvarsv1connect.EnvVarsServiceRevealValuesProcedure:
-		return CapabilityEnvVarsReveal, true
-	case envvarsv1connect.EnvVarsServiceGetValueProcedure:
-		if asked, ok := message.(*envvarsv1.GetValueRequest); ok && asked.GetReveal() {
-			return CapabilityEnvVarsReveal, true
+	case variablestorev1connect.VariableStoreServiceSetValueProcedure,
+		variablestorev1connect.VariableStoreServiceDeleteValueProcedure,
+		variablestorev1connect.VariableStoreServiceSetReferenceProcedure,
+		variablestorev1connect.VariableStoreServiceSetBindingProcedure,
+		variablestorev1connect.VariableStoreServiceRemoveBindingProcedure,
+		variablestorev1connect.VariableStoreServiceSyncEnvSourceProcedure,
+		variablestorev1connect.VariableStoreServiceSetEnvSourceValueProcedure:
+		return CapabilityVariablesWrite, true
+	case variablestorev1connect.VariableStoreServiceRevealValuesProcedure:
+		return CapabilityVariablesReveal, true
+	case variablestorev1connect.VariableStoreServiceGetValueProcedure:
+		if asked, ok := message.(*variablestorev1.GetValueRequest); ok && asked.GetReveal() {
+			return CapabilityVariablesReveal, true
 		}
-		return CapabilityEnvVarsRead, true
-	case envvarsv1connect.EnvVarsServiceListValuesProcedure,
-		envvarsv1connect.EnvVarsServiceListReferencesProcedure,
-		envvarsv1connect.EnvVarsServiceListVersionsProcedure,
-		envvarsv1connect.EnvVarsServiceListBindingsProcedure,
-		envvarsv1connect.EnvVarsServiceDescribeEnvSourceProcedure:
-		return CapabilityEnvVarsRead, true
+		return CapabilityVariablesRead, true
+	case variablestorev1connect.VariableStoreServiceListValuesProcedure,
+		variablestorev1connect.VariableStoreServiceListReferencesProcedure,
+		variablestorev1connect.VariableStoreServiceListVersionsProcedure,
+		variablestorev1connect.VariableStoreServiceListBindingsProcedure,
+		variablestorev1connect.VariableStoreServiceDescribeEnvSourceProcedure:
+		return CapabilityVariablesRead, true
 	}
 	return "", false
 }

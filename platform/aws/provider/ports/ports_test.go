@@ -14,18 +14,18 @@ import (
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
 const (
-	keyARN        = "arn:aws:kms:us-east-1:123456789012:key/ocel-vars"
-	previewKeyARN = "arn:aws:kms:us-east-1:123456789012:key/ocel-vars-preview"
+	keyARN        = "arn:aws:kms:us-east-1:123456789012:key/ocel-variables"
+	previewKeyARN = "arn:aws:kms:us-east-1:123456789012:key/ocel-variables-preview"
 )
 
 type tierTables struct{}
@@ -35,7 +35,7 @@ func (tierTables) Table(_ context.Context, tier environment.Tier) (string, error
 }
 
 func (tierTables) ValuesTable(_ context.Context, tier environment.Tier) (string, error) {
-	return "ocel-" + string(tier) + "-vars", nil
+	return "ocel-" + string(tier) + "-variables", nil
 }
 
 func newKeyValues(t *testing.T) (awsports.KeyValues, *fakeDynamo) {
@@ -68,14 +68,14 @@ func TestTheCipherSealsAsEveryCipherMust(t *testing.T) {
 
 func TestValueEntriesPartitionOnTheProjectAndTier(t *testing.T) {
 	table, ddb := newKeyValues(t)
-	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
-	store := envvars.Store{KeyValues: table, Cipher: newCipherIgnoringKMSCalls()}
+	scope := variablestore.Scope{Project: "shop", Tier: environment.TierProduction}
+	store := variablestore.Store{KeyValues: table, Cipher: newCipherIgnoringKMSCalls()}
 
-	if _, err := store.Set(context.Background(), scope, envvars.Coordinate{Cell: envvars.Cell{Key: "STRIPE_API_KEY"}}, "sk_live_secret", nil); err != nil {
+	if _, err := store.Set(context.Background(), scope, variablestore.Coordinate{Cell: variablestore.Cell{Key: "STRIPE_API_KEY"}}, "sk_live_secret", nil); err != nil {
 		t.Fatalf("Set err = %v", err)
 	}
 
-	partition := awsports.PartitionKey(envvars.ValuesPartition(scope))
+	partition := awsports.PartitionKey(variablestore.ValuesPartition(scope))
 	for _, written := range ddb.partitions() {
 		if written != partition {
 			t.Errorf("a value write landed in partition %q, and a function's role is scoped to %q alone", written, partition)
@@ -84,7 +84,7 @@ func TestValueEntriesPartitionOnTheProjectAndTier(t *testing.T) {
 	if partition != "values#shop" {
 		t.Errorf("value partition = %q, want it to name the project a role is granted", partition)
 	}
-	if got := ddb.tablesUsed(); !slices.Equal(got, []string{"ocel-production-vars"}) {
+	if got := ddb.tablesUsed(); !slices.Equal(got, []string{"ocel-production-variables"}) {
 		t.Errorf("a production value reached tables %v, want the production values table alone: the table is the tier a role is granted", got)
 	}
 }
@@ -121,14 +121,14 @@ func TestAnItemWithNoValueIsRefusedRatherThanReadAsEmpty(t *testing.T) {
 func TestASealedValueIsOpaqueAtRest(t *testing.T) {
 	table, _ := newKeyValues(t)
 	cipher, _ := newCipher()
-	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
-	store := envvars.Store{KeyValues: table, Cipher: cipher}
+	scope := variablestore.Scope{Project: "shop", Tier: environment.TierProduction}
+	store := variablestore.Store{KeyValues: table, Cipher: cipher}
 
-	if _, err := store.Set(context.Background(), scope, envvars.Coordinate{Cell: envvars.Cell{Key: "STRIPE_API_KEY"}}, "sk_live_secret", nil); err != nil {
+	if _, err := store.Set(context.Background(), scope, variablestore.Coordinate{Cell: variablestore.Cell{Key: "STRIPE_API_KEY"}}, "sk_live_secret", nil); err != nil {
 		t.Fatalf("Set err = %v", err)
 	}
 
-	stored, err := table.List(context.Background(), envvars.ValuesPartition(scope))
+	stored, err := table.List(context.Background(), variablestore.ValuesPartition(scope))
 	if err != nil {
 		t.Fatalf("List err = %v", err)
 	}
@@ -142,9 +142,9 @@ func TestASealedValueIsOpaqueAtRest(t *testing.T) {
 func TestACellIsSealedUnderAnEncryptionContextNamingItsProjectClassEnvironmentFolderAndKey(t *testing.T) {
 	table, _ := newKeyValues(t)
 	cipher, crypto := newCipher()
-	store := envvars.Store{KeyValues: table, Cipher: cipher}
-	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
-	at := envvars.Coordinate{Cell: envvars.Cell{Folder: "/web", Key: "STRIPE_API_KEY"}, Environment: "staging"}
+	store := variablestore.Store{KeyValues: table, Cipher: cipher}
+	scope := variablestore.Scope{Project: "shop", Tier: environment.TierProduction}
+	at := variablestore.Coordinate{Cell: variablestore.Cell{Folder: "/web", Key: "STRIPE_API_KEY"}, Environment: "staging"}
 
 	if _, err := store.Set(context.Background(), scope, at, "sk_live_secret", nil); err != nil {
 		t.Fatalf("Set err = %v", err)
@@ -175,15 +175,15 @@ func TestACellWhoseEncryptionContextNamesItsTierClassOpens(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := table.Write(context.Background(), keyvalue.Entry{
-		Key:   envvars.ValuesPartition(envvars.Scope{Project: "shop", Tier: environment.TierProduction}).Key("cells", "/web", "STRIPE_API_KEY", "staging"),
+		Key:   variablestore.ValuesPartition(variablestore.Scope{Project: "shop", Tier: environment.TierProduction}).Key("cells", "/web", "STRIPE_API_KEY", "staging"),
 		Value: body,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	store := envvars.Store{KeyValues: table, Cipher: cipher}
-	at := envvars.Coordinate{Cell: envvars.Cell{Folder: "/web", Key: "STRIPE_API_KEY"}, Environment: "staging"}
+	store := variablestore.Store{KeyValues: table, Cipher: cipher}
+	at := variablestore.Coordinate{Cell: variablestore.Cell{Folder: "/web", Key: "STRIPE_API_KEY"}, Environment: "staging"}
 
-	value, err := store.Get(context.Background(), envvars.Scope{Project: "shop", Tier: environment.TierProduction}, at, true)
+	value, err := store.Get(context.Background(), variablestore.Scope{Project: "shop", Tier: environment.TierProduction}, at, true)
 	if err != nil || value.Plaintext != "sk_live_secret" {
 		t.Fatalf("Get() = %q, %v, want the value KMS sealed under class=production to open: the encryption context is data every stored value is bound to", value.Plaintext, err)
 	}
@@ -192,10 +192,10 @@ func TestACellWhoseEncryptionContextNamesItsTierClassOpens(t *testing.T) {
 func TestABindingIsSealedUnderAnEncryptionContextThatNamesIt(t *testing.T) {
 	table, _ := newKeyValues(t)
 	cipher, crypto := newCipher()
-	store := envvars.Store{KeyValues: table, Cipher: cipher}
-	scope := envvars.Scope{Project: "shop", Tier: environment.TierPreview}
+	store := variablestore.Store{KeyValues: table, Cipher: cipher}
+	scope := variablestore.Scope{Project: "shop", Tier: environment.TierPreview}
 
-	if _, err := store.SetBinding(context.Background(), scope, "", envvars.OwnerOcel, "orders", envvars.BindingWrite{Record: []byte("{}"), Value: []byte("{}")}); err != nil {
+	if _, err := store.SetBinding(context.Background(), scope, "", variablestore.OwnerOcel, "orders", variablestore.BindingWrite{Record: []byte("{}"), Value: []byte("{}")}); err != nil {
 		t.Fatalf("SetBinding err = %v", err)
 	}
 
@@ -215,7 +215,7 @@ func TestABindingIsSealedUnderAnEncryptionContextThatNamesIt(t *testing.T) {
 func TestABindingWhoseEncryptionContextNamesItOpens(t *testing.T) {
 	table, _ := newKeyValues(t)
 	cipher, _ := newCipher()
-	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
+	scope := variablestore.Scope{Project: "shop", Tier: environment.TierProduction}
 	sealed := fakeCipherMarker + keyARN + "#binding=orders,class=production,environment=*,folder=/,key=PROPERTIES,project=shop|" +
 		base64.StdEncoding.EncodeToString([]byte(`{"url":"postgres://orders"}`))
 	value, err := json.Marshal(map[string]any{"version": 1, "sealed": []byte(sealed)})
@@ -227,13 +227,13 @@ func TestABindingWhoseEncryptionContextNamesItOpens(t *testing.T) {
 		"values":  value,
 	} {
 		if _, err := table.Write(context.Background(), keyvalue.Entry{
-			Key:   envvars.ValuesPartition(scope).Key("bindings", "orders", name, "*"),
+			Key:   variablestore.ValuesPartition(scope).Key("bindings", "orders", name, "*"),
 			Value: body,
 		}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	store := envvars.Store{KeyValues: table, Cipher: cipher}
+	store := variablestore.Store{KeyValues: table, Cipher: cipher}
 
 	resolved, err := store.ResolveBinding(context.Background(), scope, "", "orders")
 	if err != nil || string(resolved.Value) != `{"url":"postgres://orders"}` {
@@ -329,7 +329,7 @@ func TestAPartitionIsItsRootAndPathAndNothingElse(t *testing.T) {
 		{stackrecords.ProjectsPartition(environment.TierProduction), "projects"},
 		{stackrecords.StacksPartition(environment.TierProduction, "shop"), "stacks#shop"},
 		{stackrecords.EnvironmentsPartition(environment.TierPreview, "shop"), "environments#shop"},
-		{envvars.ValuesPartition(envvars.Scope{Project: "a#b", Tier: environment.TierPreview}), "values#a%23b"},
+		{variablestore.ValuesPartition(variablestore.Scope{Project: "a#b", Tier: environment.TierPreview}), "values#a%23b"},
 	} {
 		if got := awsports.PartitionKey(c.in); got != c.want {
 			t.Errorf("PartitionKey(%s) = %q, want %q", c.in, got, c.want)
@@ -350,15 +350,15 @@ func TestOneProjectsStacksDoNotShareAPartitionWithAnothers(t *testing.T) {
 
 func TestABindingsPairSharesOnePrefixInsideTheProjectPartition(t *testing.T) {
 	table, ddb := newKeyValues(t)
-	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
-	store := envvars.Store{KeyValues: table, Cipher: newCipherIgnoringKMSCalls()}
+	scope := variablestore.Scope{Project: "shop", Tier: environment.TierProduction}
+	store := variablestore.Store{KeyValues: table, Cipher: newCipherIgnoringKMSCalls()}
 
-	if _, err := store.SetBinding(context.Background(), scope, "", envvars.OwnerOcel, "db",
-		envvars.BindingWrite{Record: []byte("{}"), Value: []byte("{}")}); err != nil {
+	if _, err := store.SetBinding(context.Background(), scope, "", variablestore.OwnerOcel, "db",
+		variablestore.BindingWrite{Record: []byte("{}"), Value: []byte("{}")}); err != nil {
 		t.Fatalf("SetBinding err = %v", err)
 	}
 
-	partition := awsports.PartitionKey(envvars.ValuesPartition(scope))
+	partition := awsports.PartitionKey(variablestore.ValuesPartition(scope))
 	for _, written := range ddb.partitions() {
 		if written != partition {
 			t.Errorf("a binding write landed in partition %q, and a function's role is scoped to %q alone", written, partition)

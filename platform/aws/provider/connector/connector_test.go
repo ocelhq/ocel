@@ -325,7 +325,7 @@ func (noStacks) DescribeStacks(context.Context, *cloudformation.DescribeStacksIn
 func TestAnAccountWithNoBootstrappedKeyRefusesTheInstall(t *testing.T) {
 	t.Parallel()
 
-	_, err := varsKeys(context.Background(), noStacks{}, defaultNamespace)
+	_, err := variablesKeys(context.Background(), noStacks{}, defaultNamespace)
 	if err == nil {
 		t.Fatal("an account with neither tier bootstrapped rendered a policy, and it would name no key to scope the grant to")
 	}

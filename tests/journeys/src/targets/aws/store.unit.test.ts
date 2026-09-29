@@ -11,13 +11,13 @@ import {
 
 const TABLES: Record<string, string> = {
   StateTableName: "ocel-state",
-  VarsTableName: "ocel-vars",
+  VariablesTableName: "ocel-variables",
   StateBucketName: "ocel-statebucket",
 };
 
 const STATE_TABLE = TABLES.StateTableName as string;
 
-const VARS_TABLE = TABLES.VarsTableName as string;
+const VARIABLES_TABLE = TABLES.VariablesTableName as string;
 
 function page(slugs: string[], next?: string): string {
   return JSON.stringify({
@@ -230,14 +230,14 @@ describe("awsBindingStore", () => {
   const owner =
     "urn:pulumi:j-1::with-sst::pulumi:pulumi:Stack$pulumi-nodejs:dynamic:Resource::ocel-binding-orders";
 
-  it("asks for the vars table the provider writes binding values into", async () => {
+  it("asks for the variables table the provider writes binding values into", async () => {
     const { cli, calls } = cliOver((args) =>
       describeStacks(args) ? tableAsked(args) : bindingsPage([]),
     );
     await awsBindingStore(undefined, cli).records(SLUG);
-    assert.deepEqual(outputsAsked(calls), ["VarsTableName"]);
+    assert.deepEqual(outputsAsked(calls), ["VariablesTableName"]);
     const queried = calls.find((args) => args[0] === "dynamodb");
-    assert.ok(queried?.includes(VARS_TABLE));
+    assert.ok(queried?.includes(VARIABLES_TABLE));
     assert.ok(
       queried?.includes(
         JSON.stringify({ ":pk": { S: `values#${SLUG}` }, ":sk": { S: "bindings#" } }),
@@ -245,11 +245,11 @@ describe("awsBindingStore", () => {
     );
   });
 
-  it("refuses when the stack publishes no vars table name", async () => {
+  it("refuses when the stack publishes no variables table name", async () => {
     const { cli } = cliOver(() => "None");
     await assert.rejects(
       awsBindingStore(undefined, cli).records(SLUG),
-      /publishes no VarsTableName output, so no binding can be read/,
+      /publishes no VariablesTableName output, so no binding can be read/,
     );
   });
 

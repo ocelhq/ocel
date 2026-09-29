@@ -13,13 +13,13 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
-	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/control"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
@@ -88,7 +88,7 @@ func keyedAs(keys ...string) func(context.Context, environment.Tier) (string, er
 func digestKeyAfter(t *testing.T, req provider.BootstrapRequest, keys ...string) error {
 	t.Helper()
 	ctx := context.Background()
-	store := envvars.Store{KeyValues: fake.NewKeyValues(), Cipher: fake.NewCipher()}
+	store := variablestore.Store{KeyValues: fake.NewKeyValues(), Cipher: fake.NewCipher()}
 	if _, err := envsource.EnsureDigestKey(ctx, store, req.Tier); err != nil {
 		t.Fatal(err)
 	}
@@ -100,24 +100,24 @@ func digestKeyAfter(t *testing.T, req provider.BootstrapRequest, keys ...string)
 	return err
 }
 
-func TestAnApplyThatTakesTheVarsKeyAwayForgetsTheDigestKeySealedUnderIt(t *testing.T) {
-	req := provider.BootstrapRequest{Tier: environment.TierProduction, Remove: []string{provider.FeatureVarsKey}}
+func TestAnApplyThatTakesTheVariablesKeyAwayForgetsTheDigestKeySealedUnderIt(t *testing.T) {
+	req := provider.BootstrapRequest{Tier: environment.TierProduction, Remove: []string{provider.FeatureVariablesKey}}
 	if err := digestKeyAfter(t, req, "arn:aws:kms:us-east-1:111122223333:key/one", ""); !errors.Is(err, keyvalue.ErrNotFound) {
-		t.Fatalf("the digest key after the vars key was removed reads %v, want it forgotten: nothing opens it once its key is gone, and a sync never replaces a key it cannot open", err)
+		t.Fatalf("the digest key after the variables key was removed reads %v, want it forgotten: nothing opens it once its key is gone, and a sync never replaces a key it cannot open", err)
 	}
 }
 
-func TestAnApplyThatBringsAnotherVarsKeyForgetsTheDigestKeySealedUnderTheOldOne(t *testing.T) {
+func TestAnApplyThatBringsAnotherVariablesKeyForgetsTheDigestKeySealedUnderTheOldOne(t *testing.T) {
 	req := provider.BootstrapRequest{Tier: environment.TierPreview}
 	if err := digestKeyAfter(t, req, "arn:aws:kms:us-east-1:111122223333:key/one", "arn:aws:kms:us-east-1:111122223333:key/two"); !errors.Is(err, keyvalue.ErrNotFound) {
-		t.Fatalf("the digest key after the vars key changed reads %v, want it forgotten", err)
+		t.Fatalf("the digest key after the variables key changed reads %v, want it forgotten", err)
 	}
 }
 
-func TestAnApplyThatKeepsTheVarsKeyKeepsTheDigestKey(t *testing.T) {
+func TestAnApplyThatKeepsTheVariablesKeyKeepsTheDigestKey(t *testing.T) {
 	req := provider.BootstrapRequest{Tier: environment.TierProduction}
 	if err := digestKeyAfter(t, req, "arn:aws:kms:us-east-1:111122223333:key/one", "arn:aws:kms:us-east-1:111122223333:key/one"); err != nil {
-		t.Fatalf("the digest key after an apply that kept the vars key reads %v, want it kept", err)
+		t.Fatalf("the digest key after an apply that kept the variables key reads %v, want it kept", err)
 	}
 }
 
@@ -324,14 +324,14 @@ func TestBucketsSweepTheCacheStoreOfEveryInstalledEdge(t *testing.T) {
 	}
 }
 
-func TestBootstrapReadyWithoutAVarsKey(t *testing.T) {
+func TestBootstrapReadyWithoutAVariablesKey(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
 	deployed := bootstrap.Deployed{
 		StateBucket:    "state",
 		ArtifactBucket: "artifacts",
 		AssetBucket:    "assets",
 		StateTable:     "state-table",
-		VarsTable:      "vars-table",
+		VariablesTable: "variables-table",
 	}
 
 	if err := p.requireBootstrapped(deployed, environment.TierProduction); err != nil {
@@ -361,15 +361,15 @@ func TestTheIdentityNamesTheVendorTheProviderNamesItself(t *testing.T) {
 	}
 }
 
-func TestAVarsKeyThatNamesNoKMSKeyIsRefused(t *testing.T) {
-	if _, err := provider.Decode[Options](Vendor, provider.Options{"varsKey": "arn:aws:kms:eu-west-1:111122223333:key/abcd"}); err != nil {
+func TestAVariablesKeyThatNamesNoKMSKeyIsRefused(t *testing.T) {
+	if _, err := provider.Decode[Options](Vendor, provider.Options{"variablesKey": "arn:aws:kms:eu-west-1:111122223333:key/abcd"}); err != nil {
 		t.Fatalf("a kms key arn was refused: %v", err)
 	}
-	_, err := provider.Decode[Options](Vendor, provider.Options{"varsKey": "arn:aws:s3:::a-bucket"})
+	_, err := provider.Decode[Options](Vendor, provider.Options{"variablesKey": "arn:aws:s3:::a-bucket"})
 	if err == nil {
-		t.Fatal("a varsKey that names no kms key was taken")
+		t.Fatal("a variablesKey that names no kms key was taken")
 	}
-	if !strings.Contains(err.Error(), "varsKey") {
+	if !strings.Contains(err.Error(), "variablesKey") {
 		t.Errorf("error = %q, want it to name the option", err)
 	}
 }

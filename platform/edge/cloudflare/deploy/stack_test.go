@@ -957,8 +957,8 @@ func TestWorkerDecoration(t *testing.T) {
 		if worker.Services[genericISRWriterBinding] != "ocel-isr-writer" {
 			t.Errorf("Services[%s] = %q", genericISRWriterBinding, worker.Services[genericISRWriterBinding])
 		}
-		if worker.Vars[genericSlugBinding] != "acme-web" {
-			t.Errorf("Vars[%s] = %q", genericSlugBinding, worker.Vars[genericSlugBinding])
+		if worker.Variables[genericSlugBinding] != "acme-web" {
+			t.Errorf("Variables[%s] = %q", genericSlugBinding, worker.Variables[genericSlugBinding])
 		}
 	})
 
@@ -995,8 +995,8 @@ func TestGenericWorkerReceivesTheHostnamesEachAppAnswersFor(t *testing.T) {
 		}
 
 		want := `{"admin.shop.example":"admin","shop.example":"web"}`
-		if worker.Vars[genericDomainAppsBinding] != want {
-			t.Errorf("Vars[%s] = %q, want %q", genericDomainAppsBinding, worker.Vars[genericDomainAppsBinding], want)
+		if worker.Variables[genericDomainAppsBinding] != want {
+			t.Errorf("Variables[%s] = %q, want %q", genericDomainAppsBinding, worker.Variables[genericDomainAppsBinding], want)
 		}
 	})
 
@@ -1010,8 +1010,8 @@ func TestGenericWorkerReceivesTheHostnamesEachAppAnswersFor(t *testing.T) {
 			t.Fatalf("genericWorker: %v", err)
 		}
 
-		if _, bound := worker.Vars[genericDomainAppsBinding]; bound {
-			t.Errorf("Vars = %v, want no %s: the entry falls back to the pointer", worker.Vars, genericDomainAppsBinding)
+		if _, bound := worker.Variables[genericDomainAppsBinding]; bound {
+			t.Errorf("Variables = %v, want no %s: the entry falls back to the pointer", worker.Variables, genericDomainAppsBinding)
 		}
 	})
 

@@ -35,34 +35,34 @@ type IAMAPI interface {
 }
 
 type Bootstrap struct {
-	CFN     cfn.API
-	SSM     SSMAPI
-	IAM     IAMAPI
-	KMS     bootstrap.KeyAPI
-	Store   bootstrap.ObjectStore
-	Buckets cfn.BucketEmptierAPI
-	Edge    edge.Edge
-	Edges   provider.Edges
-	Kinds   []edge.Kind
-	Region  string
-	VarsKey string
+	CFN          cfn.API
+	SSM          SSMAPI
+	IAM          IAMAPI
+	KMS          bootstrap.KeyAPI
+	Store        bootstrap.ObjectStore
+	Buckets      cfn.BucketEmptierAPI
+	Edge         edge.Edge
+	Edges        provider.Edges
+	Kinds        []edge.Kind
+	Region       string
+	VariablesKey string
 
 	Namespace bootstrap.Namespace
 }
 
-func BootstrapFor(cfg aws.Config, front edge.Edge, registry provider.Edges, kinds []edge.Kind, varsKey string, ns bootstrap.Namespace) Bootstrap {
+func BootstrapFor(cfg aws.Config, front edge.Edge, registry provider.Edges, kinds []edge.Kind, variablesKey string, ns bootstrap.Namespace) Bootstrap {
 	return Bootstrap{
-		CFN:     cloudformation.NewFromConfig(cfg),
-		SSM:     ssm.NewFromConfig(cfg),
-		IAM:     iam.NewFromConfig(cfg),
-		KMS:     kms.NewFromConfig(cfg),
-		Store:   s3.NewFromConfig(cfg),
-		Buckets: s3.NewFromConfig(cfg),
-		Edge:    front,
-		Edges:   registry,
-		Kinds:   kinds,
-		Region:  cfg.Region,
-		VarsKey: varsKey,
+		CFN:          cloudformation.NewFromConfig(cfg),
+		SSM:          ssm.NewFromConfig(cfg),
+		IAM:          iam.NewFromConfig(cfg),
+		KMS:          kms.NewFromConfig(cfg),
+		Store:        s3.NewFromConfig(cfg),
+		Buckets:      s3.NewFromConfig(cfg),
+		Edge:         front,
+		Edges:        registry,
+		Kinds:        kinds,
+		Region:       cfg.Region,
+		VariablesKey: variablesKey,
 
 		Namespace: ns,
 	}
@@ -74,7 +74,7 @@ func (b Bootstrap) paramAPIs() bootstrap.ParamAPIs {
 
 func (b Bootstrap) request(req provider.BootstrapRequest) bootstrap.Request {
 	return bootstrap.Request{
-		VarsKey:            b.VarsKey,
+		VariablesKey:       b.VariablesKey,
 		Features:           req.Features,
 		Remove:             req.Remove,
 		Writer:             req.WrittenBy,

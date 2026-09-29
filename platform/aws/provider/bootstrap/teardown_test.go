@@ -443,7 +443,7 @@ func TestTeardownRemovesEachFeatureStackBeforeCore(t *testing.T) {
 		defaultNamespace.FeatureStackName(FeatureImageOptimization, environment.TierProduction),
 		defaultNamespace.FeatureStackName(FeatureCloudFrontEdge, environment.TierProduction),
 		defaultNamespace.FeatureStackName(FeatureAPIGatewayEdge, environment.TierProduction),
-		defaultNamespace.FeatureStackName(provider.FeatureVarsKey, environment.TierProduction),
+		defaultNamespace.FeatureStackName(provider.FeatureVariablesKey, environment.TierProduction),
 		coreStackName,
 	}
 	if !slices.Equal(cfnc.deleted, want) {

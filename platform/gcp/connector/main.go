@@ -7,9 +7,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/connectorserver"
 	"github.com/ocelhq/ocel/pkg/containerimage"
-	"github.com/ocelhq/ocel/pkg/envvarsserver"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/target"
+	"github.com/ocelhq/ocel/pkg/variablestoreserver"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -65,17 +65,17 @@ func run(listen, config string, reporting bool) error {
 
 	bindings := &ports.Clients{Namespace: ns, Project: project, Region: region}
 	return connectorserver.Serve(connectorserver.Spec{
-		Config:     trust,
-		Version:    version,
-		Vendor:     vendor,
-		Addr:       listen,
-		ConfigPath: config,
-		EnvVars:    envVars(bindings),
+		Config:        trust,
+		Version:       version,
+		Vendor:        vendor,
+		Addr:          listen,
+		ConfigPath:    config,
+		VariableStore: variableStore(bindings),
 	})
 }
 
-func envVars(bindings *ports.Clients) envvarsserver.Backend {
-	return envvarsserver.Backend{
+func variableStore(bindings *ports.Clients) variablestoreserver.Backend {
+	return variablestoreserver.Backend{
 		KeyValues:     ports.KeyValues{Clients: bindings},
 		Cipher:        ports.Cipher{Clients: bindings},
 		ProveIdentity: ports.ProveIdentity,

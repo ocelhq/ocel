@@ -402,7 +402,7 @@ func TestCheckDeployed(t *testing.T) {
 				{Name: coreStackName + "-" + FeatureCloudflareEdge, Feature: FeatureCloudflareEdge},
 				{Name: coreStackName + "-" + FeatureCloudFrontEdge, Feature: FeatureCloudFrontEdge},
 				{Name: coreStackName + "-" + FeatureAPIGatewayEdge, Feature: FeatureAPIGatewayEdge},
-				{Name: coreStackName + "-" + provider.FeatureVarsKey, Feature: provider.FeatureVarsKey},
+				{Name: coreStackName + "-" + provider.FeatureVariablesKey, Feature: provider.FeatureVariablesKey},
 			},
 		}
 		if !reflect.DeepEqual(got, want) {
@@ -531,7 +531,7 @@ func TestEdgeTagKeys(t *testing.T) {
 		for _, key := range []string{
 			"PROJECTS",
 			naming.ProjectKey("shop"),
-			naming.VarsKey("shop", "production"),
+			naming.VariablesKey("shop", "production"),
 			naming.StackKey("shop", stack),
 			naming.SessionKeyPrefix("shop", "prod") + "01hxyz",
 		} {

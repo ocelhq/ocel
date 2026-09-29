@@ -4,7 +4,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
-	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 )
 
 type envOptions struct {
@@ -25,7 +25,7 @@ type envRefOptions struct {
 	key     string
 }
 
-func (o envRefOptions) target(slug, key string) *envvarsv1.Coordinate {
+func (o envRefOptions) target(slug, key string) *variablestorev1.Coordinate {
 	project, name := o.project, o.key
 	if project == "" {
 		project = slug
@@ -33,15 +33,15 @@ func (o envRefOptions) target(slug, key string) *envvarsv1.Coordinate {
 	if name == "" {
 		name = key
 	}
-	return &envvarsv1.Coordinate{Slug: project, Folder: o.folder, Key: name}
+	return &variablestorev1.Coordinate{Slug: project, Folder: o.folder, Key: name}
 }
 
 func (o envOptions) tier() environmentv1.Tier {
 	return commands.ChooseTier(o.preview)
 }
 
-func wireCoordinate(slug, key string, opts envOptions) *envvarsv1.Coordinate {
-	return &envvarsv1.Coordinate{Slug: slug, Folder: opts.folder, Key: key, Environment: opts.environment}
+func wireCoordinate(slug, key string, opts envOptions) *variablestorev1.Coordinate {
+	return &variablestorev1.Coordinate{Slug: slug, Folder: opts.folder, Key: key, Environment: opts.environment}
 }
 
 func envCoordinate(key string, opts envOptions) variables.Coordinate {
@@ -59,7 +59,7 @@ func describeCell(key string, opts envOptions) string {
 	return out
 }
 
-func describeCoordinate(c *envvarsv1.Coordinate) string {
+func describeCoordinate(c *variablestorev1.Coordinate) string {
 	out := c.GetSlug() + "/" + c.GetKey()
 	if c.GetFolder() != "" {
 		out += " in " + c.GetFolder()

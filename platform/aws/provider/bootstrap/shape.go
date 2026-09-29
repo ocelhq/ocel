@@ -14,8 +14,8 @@ import (
 
 type ShapeOption func(*featureInputs)
 
-func WithVarsKey(arn string) ShapeOption {
-	return func(in *featureInputs) { in.varsKey = arn }
+func WithVariablesKey(arn string) ShapeOption {
+	return func(in *featureInputs) { in.variablesKey = arn }
 }
 
 const shapedArtifactBucket = "artifacts"
@@ -49,7 +49,7 @@ func Shape(ns Namespace, tier environment.Tier, features []string, options ...Sh
 	for _, name := range features {
 		in.alongside[name] = true
 	}
-	bodies := []string{coreStackTemplate(ns, tier, coreVarsKey(in.alongside, in.varsKey)), runtimeLayerTemplate(ns, tier, shapedLayerPlacements())}
+	bodies := []string{coreStackTemplate(ns, tier, coreVariablesKey(in.alongside, in.variablesKey)), runtimeLayerTemplate(ns, tier, shapedLayerPlacements())}
 	for _, name := range features {
 		f, known := featureNamed(name)
 		if !known {

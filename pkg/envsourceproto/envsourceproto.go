@@ -5,15 +5,15 @@ import (
 	"slices"
 
 	"github.com/ocelhq/ocel/pkg/envsource"
-	"github.com/ocelhq/ocel/pkg/envvars"
-	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
-func Encode(descriptor envsource.Descriptor, read map[envvars.Cell]envsource.Value) *envvarsv1.EnvSource {
+func Encode(descriptor envsource.Descriptor, read map[variablestore.Cell]envsource.Value) *variablestorev1.EnvSource {
 	switch {
 	case descriptor.Kind == envsource.Infisical && descriptor.Infisical != nil:
 		options := descriptor.Infisical
-		return &envvarsv1.EnvSource{Kind: &envvarsv1.EnvSource_Infisical{Infisical: &envvarsv1.InfisicalEnvSource{
+		return &variablestorev1.EnvSource{Kind: &variablestorev1.EnvSource_Infisical{Infisical: &variablestorev1.InfisicalEnvSource{
 			Project:     options.Project,
 			Environment: options.Environment,
 			Path:        options.Path,
@@ -22,30 +22,30 @@ func Encode(descriptor envsource.Descriptor, read map[envvars.Cell]envsource.Val
 			Write:       writePolicies[options.Normalize().Write],
 		}}}
 	case descriptor.Kind == envsource.Exec && descriptor.Exec != nil:
-		sent := &envvarsv1.ExecEnvSource{Command: descriptor.Exec.Command}
-		for _, at := range slices.SortedFunc(maps.Keys(read), envvars.Cell.Compare) {
-			sent.Values = append(sent.Values, &envvarsv1.EnvSourceValue{
-				Cell:  &envvarsv1.Cell{Folder: at.Folder, Key: at.Key},
+		sent := &variablestorev1.ExecEnvSource{Command: descriptor.Exec.Command}
+		for _, at := range slices.SortedFunc(maps.Keys(read), variablestore.Cell.Compare) {
+			sent.Values = append(sent.Values, &variablestorev1.EnvSourceValue{
+				Cell:  &variablestorev1.Cell{Folder: at.Folder, Key: at.Key},
 				Value: string(read[at].Plaintext),
 			})
 		}
-		return &envvarsv1.EnvSource{Kind: &envvarsv1.EnvSource_Exec{Exec: sent}}
+		return &variablestorev1.EnvSource{Kind: &variablestorev1.EnvSource_Exec{Exec: sent}}
 	}
-	return &envvarsv1.EnvSource{Kind: &envvarsv1.EnvSource_Builtin{Builtin: &envvarsv1.BuiltinEnvSource{}}}
+	return &variablestorev1.EnvSource{Kind: &variablestorev1.EnvSource_Builtin{Builtin: &variablestorev1.BuiltinEnvSource{}}}
 }
 
-var writePolicies = map[envsource.WritePolicy]envvarsv1.WritePolicy{
-	envsource.WriteNever:   envvarsv1.WritePolicy_WRITE_POLICY_NEVER,
-	envsource.WriteMissing: envvarsv1.WritePolicy_WRITE_POLICY_MISSING,
-	envsource.WriteValues:  envvarsv1.WritePolicy_WRITE_POLICY_VALUES,
+var writePolicies = map[envsource.WritePolicy]variablestorev1.WritePolicy{
+	envsource.WriteNever:   variablestorev1.WritePolicy_WRITE_POLICY_NEVER,
+	envsource.WriteMissing: variablestorev1.WritePolicy_WRITE_POLICY_MISSING,
+	envsource.WriteValues:  variablestorev1.WritePolicy_WRITE_POLICY_VALUES,
 }
 
-func encodeAuth(auth envsource.InfisicalAuth) *envvarsv1.InfisicalAuth {
+func encodeAuth(auth envsource.InfisicalAuth) *variablestorev1.InfisicalAuth {
 	switch auth.Method {
 	case envsource.AuthIdentity:
-		return &envvarsv1.InfisicalAuth{Method: &envvarsv1.InfisicalAuth_Identity{Identity: &envvarsv1.InfisicalIdentityAuth{IdentityId: auth.IdentityID}}}
+		return &variablestorev1.InfisicalAuth{Method: &variablestorev1.InfisicalAuth_Identity{Identity: &variablestorev1.InfisicalIdentityAuth{IdentityId: auth.IdentityID}}}
 	case envsource.AuthUniversal:
-		return &envvarsv1.InfisicalAuth{Method: &envvarsv1.InfisicalAuth_Universal{Universal: &envvarsv1.InfisicalUniversalAuth{
+		return &variablestorev1.InfisicalAuth{Method: &variablestorev1.InfisicalAuth_Universal{Universal: &variablestorev1.InfisicalUniversalAuth{
 			ClientIdVariable:     auth.ClientIDVariable,
 			ClientSecretVariable: auth.ClientSecretVariable,
 		}}}
@@ -53,7 +53,7 @@ func encodeAuth(auth envsource.InfisicalAuth) *envvarsv1.InfisicalAuth {
 	return nil
 }
 
-func Decode(message *envvarsv1.EnvSource) (envsource.Descriptor, map[envvars.Cell]envsource.Value) {
+func Decode(message *variablestorev1.EnvSource) (envsource.Descriptor, map[variablestore.Cell]envsource.Value) {
 	switch {
 	case message.GetInfisical() != nil:
 		sent := message.GetInfisical()
@@ -74,9 +74,9 @@ func Decode(message *envvarsv1.EnvSource) (envsource.Descriptor, map[envvars.Cel
 		return envsource.Descriptor{Kind: envsource.Infisical, Infisical: &options}, nil
 	case message.GetExec() != nil:
 		sent := message.GetExec()
-		read := make(map[envvars.Cell]envsource.Value, len(sent.GetValues()))
+		read := make(map[variablestore.Cell]envsource.Value, len(sent.GetValues()))
 		for _, value := range sent.GetValues() {
-			at := envvars.Cell{Folder: value.GetCell().GetFolder(), Key: value.GetCell().GetKey()}
+			at := variablestore.Cell{Folder: value.GetCell().GetFolder(), Key: value.GetCell().GetKey()}
 			read[at] = envsource.Value{Plaintext: []byte(value.GetValue())}
 		}
 		return envsource.Descriptor{Kind: envsource.Exec, Exec: &envsource.ExecOptions{Command: sent.GetCommand()}}, read
@@ -84,7 +84,7 @@ func Decode(message *envvarsv1.EnvSource) (envsource.Descriptor, map[envvars.Cel
 	return envsource.Descriptor{Kind: envsource.Builtin}, nil
 }
 
-func decodeAuth(method *envvarsv1.InfisicalAuth) envsource.InfisicalAuth {
+func decodeAuth(method *variablestorev1.InfisicalAuth) envsource.InfisicalAuth {
 	switch {
 	case method.GetUniversal() != nil:
 		return envsource.InfisicalAuth{

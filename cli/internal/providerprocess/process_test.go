@@ -584,7 +584,7 @@ func TestBootstrap(t *testing.T) {
 	})
 }
 
-func TestVars(t *testing.T) {
+func TestTheVariableStoreAnswersOnlyAfterASuccessfulReady(t *testing.T) {
 	t.Parallel()
 
 	t.Run("reaching the store before a successful Ready refuses", func(t *testing.T) {
@@ -593,8 +593,8 @@ func TestVars(t *testing.T) {
 		ctx := context.Background()
 		r, _ := spawnFake(t, ctx, "never-ready", LaunchSpec{ReadyTimeout: 50 * time.Millisecond})
 
-		if _, err := r.EnvVars(); !errors.Is(err, ErrEnvVarsUnavailable) {
-			t.Fatalf("Vars() error = %v, want ErrEnvVarsUnavailable", err)
+		if _, err := r.VariableStore(); !errors.Is(err, ErrVariableStoreUnavailable) {
+			t.Fatalf("VariableStore() error = %v, want ErrVariableStoreUnavailable", err)
 		}
 	})
 
@@ -607,8 +607,8 @@ func TestVars(t *testing.T) {
 			t.Fatalf("Ready() error = %v, want nil", err)
 		}
 
-		if envVars, err := r.EnvVars(); err != nil || envVars == nil {
-			t.Errorf("Vars() = %v, %v, want a client and no error", envVars, err)
+		if variableStore, err := r.VariableStore(); err != nil || variableStore == nil {
+			t.Errorf("VariableStore() = %v, %v, want a client and no error", variableStore, err)
 		}
 		if client, err := r.Client(); err != nil || client == nil {
 			t.Errorf("Client() = %v, %v, want a client and no error", client, err)

@@ -109,7 +109,7 @@ type WorkspaceSpec struct {
 
 	Program pulumi.RunFunc
 
-	EnvVars map[string]string
+	EnvVariables map[string]string
 
 	Options []auto.LocalWorkspaceOption
 
@@ -152,13 +152,13 @@ func (a *Automation) workspace(spec provider.StackSpec, op Operation) (Workspace
 	program := func(ctx *pulumi.Context) error { return a.config.Program(ctx, spec) }
 
 	return WorkspaceSpec{
-		Ref:      spec.Ref,
-		Stack:    a.StackName(spec.Ref),
-		Project:  project,
-		Program:  program,
-		EnvVars:  env,
-		Parallel: a.parallel(),
-		Refresh:  a.refreshes(spec.Ref, op),
+		Ref:          spec.Ref,
+		Stack:        a.StackName(spec.Ref),
+		Project:      project,
+		Program:      program,
+		EnvVariables: env,
+		Parallel:     a.parallel(),
+		Refresh:      a.refreshes(spec.Ref, op),
 		Options: []auto.LocalWorkspaceOption{
 			auto.Project(project),
 			auto.EnvVars(env),

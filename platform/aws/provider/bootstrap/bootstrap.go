@@ -53,8 +53,8 @@ type Deployed struct {
 	StateTable         string
 	ArtifactBucket     string
 	AssetBucket        string
-	VarsTable          string
-	VarsKeyARN         string
+	VariablesTable     string
+	VariablesKeyARN    string
 	ImageOptimizerURL  string
 	RevalidateQueueURL string
 	AppBoundaryARN     string
@@ -81,7 +81,7 @@ type APIs struct {
 }
 
 type Request struct {
-	VarsKey            string
+	VariablesKey       string
 	Features           []string
 	Remove             []string
 	Writer             provider.WrittenBy
@@ -178,7 +178,7 @@ func readBootstrap(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier en
 		Name:      target.stackName,
 		Present:   true,
 		Digest:    coreStamp.Digest,
-		Intended:  cfn.TemplateDigest(target.core(broughtVarsKey(d.Outputs))),
+		Intended:  cfn.TemplateDigest(target.core(broughtVariablesKey(d.Outputs))),
 		WrittenBy: coreStamp.WrittenBy,
 	})
 	for _, f := range featureRegistry {
@@ -198,7 +198,7 @@ func readBootstrap(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier en
 				artifactBucket: d.ArtifactBucket,
 				refs:           refs,
 				alongside:      d.Features,
-				varsKey:        broughtVarsKey(d.Outputs),
+				variablesKey:   broughtVariablesKey(d.Outputs),
 			}).body),
 			WrittenBy: stamp.WrittenBy,
 		})
@@ -228,11 +228,11 @@ func readRuntimeLayers(ctx context.Context, api cfn.StacksAPI, d *Deployed, refs
 	return nil
 }
 
-func broughtVarsKey(outputs map[string]string) string {
-	if outputs[outputVarsKeyBrought] != "true" {
+func broughtVariablesKey(outputs map[string]string) string {
+	if outputs[outputVariablesKeyBrought] != "true" {
 		return ""
 	}
-	return outputs[outputVarsKeyARN]
+	return outputs[outputVariablesKeyARN]
 }
 
 func installedFeatures(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier environment.Tier) (FeatureSet, error) {
@@ -267,12 +267,12 @@ func absorb(d *Deployed, refs *stackRefs, out map[string]string) error {
 			d.AssetBucket, refs.assetBucket = value, value
 		case outputAssetBucketARN:
 			refs.assetBucketARN = value
-		case outputVarsTable:
-			d.VarsTable, refs.varsTable = value, value
-		case outputVarsTableARN:
-			refs.varsTableARN = value
-		case outputVarsKeyARN:
-			d.VarsKeyARN = value
+		case outputVariablesTable:
+			d.VariablesTable, refs.variablesTable = value, value
+		case outputVariablesTableARN:
+			refs.variablesTableARN = value
+		case outputVariablesKeyARN:
+			d.VariablesKeyARN = value
 		case outputImageOptimizerURL:
 			d.ImageOptimizerURL = value
 		case outputImageOptimizerARN:
@@ -402,7 +402,7 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress prog
 	progress.Say(target.stackStep)
 	namedIAM := []cfntypes.Capability{cfntypes.CapabilityCapabilityNamedIam}
 	review := AdmitReplacements(target.ns, req.AcceptReplacements, progress)
-	coreBody := target.core(coreVarsKey(alongside, req.VarsKey))
+	coreBody := target.core(coreVariablesKey(alongside, req.VariablesKey))
 	coreTags := stampTags(target.ns, Stamp{Digest: cfn.TemplateDigest(coreBody), WrittenBy: req.Writer.String()})
 	if err := cfn.Upsert(ctx, apis.CFN, target.ns.ChangeSetNameFor, target.stackName, coreBody, nil, namedIAM, coreTags, review); err != nil {
 		return err
@@ -452,7 +452,7 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress prog
 					artifactBucket: deployed.ArtifactBucket,
 					refs:           refs,
 					alongside:      alongside,
-					varsKey:        req.VarsKey,
+					variablesKey:   req.VariablesKey,
 				})
 				if err != nil {
 					return fmt.Errorf("%s: %w", name, err)
@@ -651,8 +651,8 @@ func generatePassphrase() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
 
-func coreVarsKey(alongside FeatureSet, brought string) string {
-	if alongside.Has(provider.FeatureVarsKey) {
+func coreVariablesKey(alongside FeatureSet, brought string) string {
+	if alongside.Has(provider.FeatureVariablesKey) {
 		return brought
 	}
 	return ""
@@ -670,9 +670,9 @@ Resources:
     Description: "The tier this bootstrap was installed for: production or preview."
     Value: '%s'
 `, coreStackDescription(tier),
-		stateBucketResource(tier), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), varsResources(tier), appBoundaryResource(ns, tier, broughtKey),
+		stateBucketResource(tier), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), variablesResources(tier), appBoundaryResource(ns, tier, broughtKey),
 		outputStateBucket, tier, scopeOf(tier),
-		stateTableOutputs(), artifactBucketOutput(), assetBucketOutputs(), varsOutputs(), appBoundaryOutput(), outputInfraTier, tier)
+		stateTableOutputs(), artifactBucketOutput(), assetBucketOutputs(), variablesOutputs(), appBoundaryOutput(), outputInfraTier, tier)
 }
 
 func coreStackDescription(tier environment.Tier) string {

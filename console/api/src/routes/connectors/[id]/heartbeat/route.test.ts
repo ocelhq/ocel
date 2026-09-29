@@ -42,7 +42,7 @@ async function stale(privateKey: KeyObject, id: string) {
 
 function beat(
   token: string | null,
-  body: unknown = { version: "0.0.0-alpha", capabilities: ["envvars.read"] },
+  body: unknown = { version: "0.0.0-alpha", capabilities: ["variables.read"] },
 ) {
   return new Request("http://localhost/api/connectors/x/heartbeat", {
     method: "POST",
@@ -107,7 +107,7 @@ describe("POST /api/connectors/{id}/heartbeat", () => {
       expect(row.connectedAt).not.toBeNull();
       expect(row.lastSeenAt).not.toBeNull();
       expect(row.version).toBe("0.0.0-alpha");
-      expect(row.capabilities).toEqual(["envvars.read"]);
+      expect(row.capabilities).toEqual(["variables.read"]);
 
       const first = row.connectedAt;
       await connectorHeartbeat(beat(await bearer(keys.privateKey, id)), id);

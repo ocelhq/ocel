@@ -174,7 +174,7 @@ func serveUnder(t *testing.T, ctx context.Context, store *fakeStore, declaration
 
 func serveWith(t *testing.T, ctx context.Context, opts variableeditor.Options) *variableeditor.Session {
 	t.Helper()
-	opts.Assets = fstest.MapFS{"index.html": {Data: []byte("<title>vars</title>")}}
+	opts.Assets = fstest.MapFS{"index.html": {Data: []byte("<title>variables</title>")}}
 	opts.Slug = "shop"
 	s, err := variableeditor.Serve(ctx, opts)
 	if err != nil {
@@ -325,7 +325,7 @@ func TestASessionServesThePageOnLoopbackBehindAToken(t *testing.T) {
 		s := session(t, newFakeStore(), def("API_URL"))
 
 		resp := do(t, mustGet(t, s.URL))
-		if resp.StatusCode != http.StatusOK || !strings.Contains(bodyOf(t, resp), "<title>vars</title>") {
+		if resp.StatusCode != http.StatusOK || !strings.Contains(bodyOf(t, resp), "<title>variables</title>") {
 			t.Errorf("GET / = %d, want the embedded page — it contains no secrets and must load before the token is read", resp.StatusCode)
 		}
 	})

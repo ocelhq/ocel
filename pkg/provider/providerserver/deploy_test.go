@@ -17,7 +17,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/progress"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -25,8 +24,8 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
-	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
-	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1/variablestorev1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
@@ -35,6 +34,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/pkg/statedir"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
 const webDeploymentID = "0123456789abcdef0123456789abcdef"
@@ -183,7 +183,7 @@ func TestDeployProvisionsInfraThenAppsAndPromotes(t *testing.T) {
 	if result.GetPromotionId() == "" {
 		t.Error("Deploy() promoted nothing: the result names no promotion, so nothing can be rolled back to")
 	}
-	if published := storedBindings(t, p); len(published) != 1 || published["orders"].Owner != envvars.OwnerOcel {
+	if published := storedBindings(t, p); len(published) != 1 || published["orders"].Owner != variablestore.OwnerOcel {
 		t.Fatalf("Deploy() published %v, want only orders, the one the manifest declares", published)
 	}
 
@@ -749,7 +749,7 @@ func TestDeployRefusesANeedTheProjectDoesNotWaive(t *testing.T) {
 	}
 }
 
-func operatorServed(t *testing.T) (contractv1connect.ProviderServiceClient, envvarsv1connect.EnvVarsServiceClient) {
+func operatorServed(t *testing.T) (contractv1connect.ProviderServiceClient, variablestorev1connect.VariableStoreServiceClient) {
 	t.Helper()
 	p := fake.NewProvider(fake.Options{})
 	config := providerserver.Config{
@@ -764,19 +764,19 @@ func operatorServed(t *testing.T) (contractv1connect.ProviderServiceClient, envv
 		t.Fatalf("Configure() error = %v", err)
 	}
 	bootstrappedOverRPC(t, deploys)
-	return deploys, envvarsv1connect.NewEnvVarsServiceClient(server.Client(), server.URL)
+	return deploys, variablestorev1connect.NewVariableStoreServiceClient(server.Client(), server.URL)
 }
 
 func TestDeployPublishesBindingsWhereTheOperatorReadsThem(t *testing.T) {
 	builtProject(t)
-	deploys, vars := operatorServed(t)
+	deploys, variables := operatorServed(t)
 	ctx := context.Background()
 
 	if result, _ := deploy(t, deploys, deployRequest()); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	listed, err := vars.ListBindings(ctx, &envvarsv1.ListBindingsRequest{
+	listed, err := variables.ListBindings(ctx, &variablestorev1.ListBindingsRequest{
 		Slug: "shop",
 		Tier: environmentv1.Tier_TIER_PRODUCTION,
 	})
@@ -787,7 +787,7 @@ func TestDeployPublishesBindingsWhereTheOperatorReadsThem(t *testing.T) {
 		t.Fatalf("ListBindings() after a production deploy = %+v, want the binding the deploy published", listed.GetBindings())
 	}
 
-	removed, err := vars.RemoveBinding(ctx, &envvarsv1.RemoveBindingRequest{
+	removed, err := variables.RemoveBinding(ctx, &variablestorev1.RemoveBindingRequest{
 		Slug: "shop",
 		Tier: environmentv1.Tier_TIER_PRODUCTION,
 		Name: "orders",
@@ -799,7 +799,7 @@ func TestDeployPublishesBindingsWhereTheOperatorReadsThem(t *testing.T) {
 
 func TestDeployPrunesTheBindingItStoppedProvisioning(t *testing.T) {
 	builtProject(t)
-	deploys, vars := operatorServed(t)
+	deploys, variables := operatorServed(t)
 	ctx := context.Background()
 
 	if result, _ := deploy(t, deploys, deployRequest()); !result.GetSuccess() {
@@ -812,7 +812,7 @@ func TestDeployPrunesTheBindingItStoppedProvisioning(t *testing.T) {
 		t.Fatalf("Deploy() without the resource = %q", result.GetError())
 	}
 
-	listed, err := vars.ListBindings(ctx, &envvarsv1.ListBindingsRequest{
+	listed, err := variables.ListBindings(ctx, &variablestorev1.ListBindingsRequest{
 		Slug: "shop",
 		Tier: environmentv1.Tier_TIER_PRODUCTION,
 	})
@@ -826,10 +826,10 @@ func TestDeployPrunesTheBindingItStoppedProvisioning(t *testing.T) {
 
 func TestDeployLeavesAnotherPublishersBindingAlone(t *testing.T) {
 	builtProject(t)
-	deploys, vars := operatorServed(t)
+	deploys, variables := operatorServed(t)
 	ctx := context.Background()
 
-	if _, err := vars.SetBinding(ctx, &envvarsv1.SetBindingRequest{
+	if _, err := variables.SetBinding(ctx, &variablestorev1.SetBindingRequest{
 		Slug:  "shop",
 		Tier:  environmentv1.Tier_TIER_PRODUCTION,
 		Owner: "acme",
@@ -846,7 +846,7 @@ func TestDeployLeavesAnotherPublishersBindingAlone(t *testing.T) {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	listed, err := vars.ListBindings(ctx, &envvarsv1.ListBindingsRequest{
+	listed, err := variables.ListBindings(ctx, &variablestorev1.ListBindingsRequest{
 		Slug: "shop",
 		Tier: environmentv1.Tier_TIER_PRODUCTION,
 	})

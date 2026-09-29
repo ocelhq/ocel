@@ -78,8 +78,8 @@ func TestPriceOfAProductionDeployBehindCloudFront(t *testing.T) {
 	if got := componentNamed(t, est, instance, "Aurora Serverless v2 capacity"); got.GetMonthlyCost() != "87.60" || got.GetAssumption() != "moderate profile: 730 ACU-hours" {
 		t.Errorf("aurora capacity = %v, want 87.60 at the midpoint of 0 and 2 ACU", got)
 	}
-	if got := componentNamed(t, est, "project:shop/shared:production/aws_dynamodb_table:VarsTable", "Storage"); got.GetMonthlyCost() != "0.00" {
-		t.Errorf("vars table storage = %v, want the account's 25 GB allowance to cover 1 GB", got)
+	if got := componentNamed(t, est, "project:shop/shared:production/aws_dynamodb_table:VariablesTable", "Storage"); got.GetMonthlyCost() != "0.00" {
+		t.Errorf("variables table storage = %v, want the account's 25 GB allowance to cover 1 GB", got)
 	}
 	if cov := est.GetCoverage(); cov.GetUnsupported() != 0 || cov.GetNoPrice() != 0 {
 		t.Errorf("coverage = %v, want everything the shape lists priced or free", cov)
@@ -134,7 +134,7 @@ func TestPriceBehindCloudflareIncludesTheEdgesOwnBill(t *testing.T) {
 		t.Errorf("vendors = %v, want the plan, cache, store, writer and entry beside the AWS origin", vendors)
 	}
 	if typeCounts(set)["aws_lambda_function"] != 1+1+4+1 {
-		t.Errorf("lambdas = %d, want the app's, the upload completer's, the four that isr, image optimization and the cloudflare edge provision, and the vars key's env source sync", typeCounts(set)["aws_lambda_function"])
+		t.Errorf("lambdas = %d, want the app's, the upload completer's, the four that isr, image optimization and the cloudflare edge provision, and the variables key's env source sync", typeCounts(set)["aws_lambda_function"])
 	}
 	if cov := est.GetCoverage(); cov.GetUnsupported() != 0 {
 		t.Errorf("coverage = %v, want every cloudflare resource priced by the edge's own card", cov)

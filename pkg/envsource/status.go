@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
 const (
@@ -51,8 +51,8 @@ type sharer struct {
 	Project string `json:"project"`
 }
 
-func StatusOf(ctx context.Context, store envvars.Store, tier environment.Tier, registration Registration) (Status, error) {
-	key, err := DedupeKey(ctx, store, envvars.Scope{Project: registration.Project, Tier: tier}, registration.Descriptor)
+func StatusOf(ctx context.Context, store variablestore.Store, tier environment.Tier, registration Registration) (Status, error) {
+	key, err := DedupeKey(ctx, store, variablestore.Scope{Project: registration.Project, Tier: tier}, registration.Descriptor)
 	if err != nil {
 		return Status{}, err
 	}
@@ -99,7 +99,7 @@ func writeStatus(ctx context.Context, store keyvalue.Store, tier environment.Tie
 	return fmt.Errorf("the %s env source status was rewritten under each of %d attempts to record this sync, so this sync's outcome is lost", tier, statusAttempts)
 }
 
-func ForgetProject(ctx context.Context, store envvars.Store, tier environment.Tier, project string) error {
+func ForgetProject(ctx context.Context, store variablestore.Store, tier environment.Tier, project string) error {
 	registration, registered, err := Registered(ctx, store.KeyValues, tier, project)
 	if err != nil || !registered {
 		return err

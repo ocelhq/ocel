@@ -29,7 +29,7 @@ export type Overlay = {
   edge?: Edge;
   dns?: "cloudflare";
   hostnames?: Record<string, string>;
-  varsKey?: string;
+  variablesKey?: string;
   registry?: RegistryConfig;
   proxy?: unknown;
 };
@@ -85,14 +85,14 @@ export function overlayFor(
   const zone = env.OCEL_JOURNEY_ZONE?.trim() || undefined;
   switch (target) {
     case "aws": {
-      const varsKey = env.OCEL_AWS_VARS_KEY?.trim() || undefined;
+      const variablesKey = env.OCEL_AWS_VARIABLES_KEY?.trim() || undefined;
       return {
         base: DEFAULT_BASE,
         slug: cell.slug,
         ...cell.variant.config,
         ...dnsOf(env),
         ...(zone ? { hostnames: hostnamesOf(cell, zone) } : {}),
-        ...(varsKey ? { varsKey } : {}),
+        ...(variablesKey ? { variablesKey } : {}),
       };
     }
     case "gcp": {
@@ -151,9 +151,9 @@ export function renderConfig(overlay: Overlay): string {
   imports.push(`import base from ${JSON.stringify(overlay.base)};`);
 
   const fields = [`  ...base,`, `  slug: ${JSON.stringify(overlay.slug)},`];
-  if (overlay.varsKey) {
+  if (overlay.variablesKey) {
     fields.push(
-      `  provider: { aws: { ...(base.provider !== null && typeof base.provider === "object" ? base.provider.aws : {}), varsKey: ${JSON.stringify(overlay.varsKey)} } },`,
+      `  provider: { aws: { ...(base.provider !== null && typeof base.provider === "object" ? base.provider.aws : {}), variablesKey: ${JSON.stringify(overlay.variablesKey)} } },`,
     );
   }
   if (overlay.proxy !== undefined) {
@@ -208,10 +208,10 @@ function appDocument(app: App, overlay: Overlay): App {
 export function renderJsonConfig(base: string, overlay: Overlay): string {
   const read = JSON.parse(stripJsonComments(base)) as Document;
   const written: Document = { ...read, slug: overlay.slug };
-  if (overlay.varsKey) {
+  if (overlay.variablesKey) {
     const options =
       read.provider !== null && typeof read.provider === "object" ? read.provider.aws : undefined;
-    written.provider = { aws: { ...options, varsKey: overlay.varsKey } };
+    written.provider = { aws: { ...options, variablesKey: overlay.variablesKey } };
   }
   if (overlay.proxy !== undefined) {
     const options =

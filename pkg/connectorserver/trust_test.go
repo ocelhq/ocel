@@ -19,11 +19,11 @@ import (
 	"github.com/lestrrat-go/jwx/v3/jwt"
 
 	"github.com/ocelhq/ocel/pkg/connectorserver"
-	"github.com/ocelhq/ocel/pkg/envvarsserver"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
-	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
-	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1/variablestorev1connect"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/variablestoreserver"
 )
 
 const (
@@ -132,7 +132,7 @@ func servedConnector(t *testing.T, at *console, grants []string) *httptest.Serve
 		},
 		Version: "test",
 		Vendor:  "fake",
-		EnvVars: envvarsserver.Backend{
+		VariableStore: variablestoreserver.Backend{
 			KeyValues: fake.NewKeyValues(),
 			Cipher:    fake.NewCipher(),
 		},
@@ -145,11 +145,11 @@ func servedConnector(t *testing.T, at *console, grants []string) *httptest.Serve
 	return server
 }
 
-func connectorServing(t *testing.T, at *console, grants []string, options ...connect.ClientOption) envvarsv1connect.EnvVarsServiceClient {
+func connectorServing(t *testing.T, at *console, grants []string, options ...connect.ClientOption) variablestorev1connect.VariableStoreServiceClient {
 	t.Helper()
 
 	server := servedConnector(t, at, grants)
-	return envvarsv1connect.NewEnvVarsServiceClient(server.Client(), server.URL, options...)
+	return variablestorev1connect.NewVariableStoreServiceClient(server.Client(), server.URL, options...)
 }
 
 func probed(t *testing.T, server *httptest.Server, token string) *http.Response {
@@ -182,7 +182,7 @@ func TestAnUnauthenticatedCapabilitiesProbeIsRefused(t *testing.T) {
 func TestACapabilitiesProbeUnderAnotherAccountsTokenIsRefused(t *testing.T) {
 	at := consoleServing(t)
 	server := servedConnector(t, at, everything())
-	token := at.token(t, minted{subject: "org:someone-else", scope: []string{connectorserver.CapabilityEnvVarsRead}})
+	token := at.token(t, minted{subject: "org:someone-else", scope: []string{connectorserver.CapabilityVariablesRead}})
 
 	if response := probed(t, server, token); response.StatusCode != http.StatusForbidden {
 		t.Errorf("a capabilities probe for another account answered %s, want 403", response.Status)
@@ -192,7 +192,7 @@ func TestACapabilitiesProbeUnderAnotherAccountsTokenIsRefused(t *testing.T) {
 func TestACapabilitiesProbeUnderAConsoleTokenAnswers(t *testing.T) {
 	at := consoleServing(t)
 	server := servedConnector(t, at, everything())
-	token := at.token(t, minted{scope: []string{connectorserver.CapabilityEnvVarsRead}})
+	token := at.token(t, minted{scope: []string{connectorserver.CapabilityVariablesRead}})
 
 	response := probed(t, server, token)
 	if response.StatusCode != http.StatusOK {
@@ -221,7 +221,7 @@ func bearer(token string) connect.ClientOption {
 	))
 }
 
-func withBearer(t *testing.T, at *console, grants []string, token string) envvarsv1connect.EnvVarsServiceClient {
+func withBearer(t *testing.T, at *console, grants []string, token string) variablestorev1connect.VariableStoreServiceClient {
 	t.Helper()
 
 	return connectorServing(t, at, grants, bearer(token))
@@ -229,17 +229,17 @@ func withBearer(t *testing.T, at *console, grants []string, token string) envvar
 
 func everything() []string {
 	return []string{
-		connectorserver.CapabilityEnvVarsRead,
-		connectorserver.CapabilityEnvVarsWrite,
-		connectorserver.CapabilityEnvVarsReveal,
+		connectorserver.CapabilityVariablesRead,
+		connectorserver.CapabilityVariablesWrite,
+		connectorserver.CapabilityVariablesReveal,
 	}
 }
 
 func TestReadPassesUnderAValidToken(t *testing.T) {
 	at := consoleServing(t)
-	vars := withBearer(t, at, everything(), at.token(t, minted{scope: []string{connectorserver.CapabilityEnvVarsRead}}))
+	variables := withBearer(t, at, everything(), at.token(t, minted{scope: []string{connectorserver.CapabilityVariablesRead}}))
 
-	if _, err := vars.ListValues(context.Background(), &envvarsv1.ListValuesRequest{
+	if _, err := variables.ListValues(context.Background(), &variablestorev1.ListValuesRequest{
 		Tier: environmentv1.Tier_TIER_PRODUCTION,
 		Slug: "shop",
 	}); err != nil {
@@ -249,9 +249,9 @@ func TestReadPassesUnderAValidToken(t *testing.T) {
 
 func TestAMissingTokenIsUnauthenticated(t *testing.T) {
 	at := consoleServing(t)
-	vars := connectorServing(t, at, everything())
+	variables := connectorServing(t, at, everything())
 
-	_, err := vars.ListValues(context.Background(), &envvarsv1.ListValuesRequest{
+	_, err := variables.ListValues(context.Background(), &variablestorev1.ListValuesRequest{
 		Tier: environmentv1.Tier_TIER_PRODUCTION,
 		Slug: "shop",
 	})
@@ -262,12 +262,12 @@ func TestAMissingTokenIsUnauthenticated(t *testing.T) {
 
 func TestAnotherAudienceIsUnauthenticated(t *testing.T) {
 	at := consoleServing(t)
-	vars := withBearer(t, at, everything(), at.token(t, minted{
+	variables := withBearer(t, at, everything(), at.token(t, minted{
 		audience: "conn-other",
-		scope:    []string{connectorserver.CapabilityEnvVarsRead},
+		scope:    []string{connectorserver.CapabilityVariablesRead},
 	}))
 
-	_, err := vars.ListValues(context.Background(), &envvarsv1.ListValuesRequest{
+	_, err := variables.ListValues(context.Background(), &variablestorev1.ListValuesRequest{
 		Tier: environmentv1.Tier_TIER_PRODUCTION,
 		Slug: "shop",
 	})
@@ -278,12 +278,12 @@ func TestAnotherAudienceIsUnauthenticated(t *testing.T) {
 
 func TestAnotherAccountIsDenied(t *testing.T) {
 	at := consoleServing(t)
-	vars := withBearer(t, at, everything(), at.token(t, minted{
+	variables := withBearer(t, at, everything(), at.token(t, minted{
 		subject: "org:other",
-		scope:   []string{connectorserver.CapabilityEnvVarsRead},
+		scope:   []string{connectorserver.CapabilityVariablesRead},
 	}))
 
-	_, err := vars.ListValues(context.Background(), &envvarsv1.ListValuesRequest{
+	_, err := variables.ListValues(context.Background(), &variablestorev1.ListValuesRequest{
 		Tier: environmentv1.Tier_TIER_PRODUCTION,
 		Slug: "shop",
 	})
@@ -294,11 +294,11 @@ func TestAnotherAccountIsDenied(t *testing.T) {
 
 func TestWritingWithoutTheScopeIsDenied(t *testing.T) {
 	at := consoleServing(t)
-	vars := withBearer(t, at, everything(), at.token(t, minted{scope: []string{connectorserver.CapabilityEnvVarsRead}}))
+	variables := withBearer(t, at, everything(), at.token(t, minted{scope: []string{connectorserver.CapabilityVariablesRead}}))
 
-	_, err := vars.SetValue(context.Background(), &envvarsv1.SetValueRequest{
+	_, err := variables.SetValue(context.Background(), &variablestorev1.SetValueRequest{
 		Tier:       environmentv1.Tier_TIER_PRODUCTION,
-		Coordinate: &envvarsv1.Coordinate{Slug: "shop", Key: "DATABASE_URL"},
+		Coordinate: &variablestorev1.Coordinate{Slug: "shop", Key: "DATABASE_URL"},
 		Value:      "postgres://",
 	})
 	if connect.CodeOf(err) != connect.CodePermissionDenied {
@@ -308,13 +308,13 @@ func TestWritingWithoutTheScopeIsDenied(t *testing.T) {
 
 func TestRevealingWithoutTheGrantIsDenied(t *testing.T) {
 	at := consoleServing(t)
-	grants := []string{connectorserver.CapabilityEnvVarsRead, connectorserver.CapabilityEnvVarsWrite}
-	vars := withBearer(t, at, grants, at.token(t, minted{scope: everything()}))
+	grants := []string{connectorserver.CapabilityVariablesRead, connectorserver.CapabilityVariablesWrite}
+	variables := withBearer(t, at, grants, at.token(t, minted{scope: everything()}))
 
-	_, err := vars.RevealValues(context.Background(), &envvarsv1.RevealValuesRequest{
+	_, err := variables.RevealValues(context.Background(), &variablestorev1.RevealValuesRequest{
 		Tier:  environmentv1.Tier_TIER_PRODUCTION,
 		Slug:  "shop",
-		Cells: []*envvarsv1.Coordinate{{Slug: "shop", Key: "DATABASE_URL"}},
+		Cells: []*variablestorev1.Coordinate{{Slug: "shop", Key: "DATABASE_URL"}},
 	})
 	if connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Fatalf("RevealValues() code = %v, want %v (err = %v)", connect.CodeOf(err), connect.CodePermissionDenied, err)
@@ -323,19 +323,19 @@ func TestRevealingWithoutTheGrantIsDenied(t *testing.T) {
 
 func TestGetValueAsksForRevealOnlyWhenItReveals(t *testing.T) {
 	at := consoleServing(t)
-	reading := at.token(t, minted{scope: []string{connectorserver.CapabilityEnvVarsRead}})
+	reading := at.token(t, minted{scope: []string{connectorserver.CapabilityVariablesRead}})
 
 	plain := withBearer(t, at, everything(), reading)
-	if _, err := plain.GetValue(context.Background(), &envvarsv1.GetValueRequest{
+	if _, err := plain.GetValue(context.Background(), &variablestorev1.GetValueRequest{
 		Tier:       environmentv1.Tier_TIER_PRODUCTION,
-		Coordinate: &envvarsv1.Coordinate{Slug: "shop", Key: "DATABASE_URL"},
+		Coordinate: &variablestorev1.Coordinate{Slug: "shop", Key: "DATABASE_URL"},
 	}); connect.CodeOf(err) == connect.CodePermissionDenied {
 		t.Fatalf("GetValue() without reveal = %v, want it past the guard", err)
 	}
 
-	_, err := plain.GetValue(context.Background(), &envvarsv1.GetValueRequest{
+	_, err := plain.GetValue(context.Background(), &variablestorev1.GetValueRequest{
 		Tier:       environmentv1.Tier_TIER_PRODUCTION,
-		Coordinate: &envvarsv1.Coordinate{Slug: "shop", Key: "DATABASE_URL"},
+		Coordinate: &variablestorev1.Coordinate{Slug: "shop", Key: "DATABASE_URL"},
 		Reveal:     true,
 	})
 	if connect.CodeOf(err) != connect.CodePermissionDenied {
@@ -343,9 +343,9 @@ func TestGetValueAsksForRevealOnlyWhenItReveals(t *testing.T) {
 	}
 
 	revealing := withBearer(t, at, everything(), at.token(t, minted{scope: everything()}))
-	if _, err := revealing.GetValue(context.Background(), &envvarsv1.GetValueRequest{
+	if _, err := revealing.GetValue(context.Background(), &variablestorev1.GetValueRequest{
 		Tier:       environmentv1.Tier_TIER_PRODUCTION,
-		Coordinate: &envvarsv1.Coordinate{Slug: "shop", Key: "DATABASE_URL"},
+		Coordinate: &variablestorev1.Coordinate{Slug: "shop", Key: "DATABASE_URL"},
 		Reveal:     true,
 	}); connect.CodeOf(err) == connect.CodePermissionDenied {
 		t.Fatalf("GetValue(reveal) under the reveal scope = %v, want it past the guard", err)
@@ -354,26 +354,26 @@ func TestGetValueAsksForRevealOnlyWhenItReveals(t *testing.T) {
 
 func TestAConnectorSyncsOnlyTheEnvSourceADeployRegistered(t *testing.T) {
 	at := consoleServing(t)
-	vars := withBearer(t, at, everything(), at.token(t, minted{scope: []string{connectorserver.CapabilityEnvVarsWrite}}))
+	variables := withBearer(t, at, everything(), at.token(t, minted{scope: []string{connectorserver.CapabilityVariablesWrite}}))
 
-	synced, err := vars.SyncEnvSource(context.Background(), &envvarsv1.SyncEnvSourceRequest{
+	synced, err := variables.SyncEnvSource(context.Background(), &variablestorev1.SyncEnvSourceRequest{
 		Tier: environmentv1.Tier_TIER_PRODUCTION,
 		Slug: "shop",
-		From: &envvarsv1.SyncEnvSourceRequest_Registered{Registered: &envvarsv1.RegisteredEnvSource{}},
+		From: &variablestorev1.SyncEnvSourceRequest_Registered{Registered: &variablestorev1.RegisteredEnvSource{}},
 	})
 	if err != nil || synced.GetStatus().GetEnvSource() != "builtin" {
 		t.Fatalf("SyncEnvSource(registered) under the write scope = %+v, %v, want it synced", synced, err)
 	}
 
-	_, err = vars.SyncEnvSource(context.Background(), &envvarsv1.SyncEnvSourceRequest{
+	_, err = variables.SyncEnvSource(context.Background(), &variablestorev1.SyncEnvSourceRequest{
 		Tier: environmentv1.Tier_TIER_PRODUCTION,
 		Slug: "shop",
-		From: &envvarsv1.SyncEnvSourceRequest_EnvSource{EnvSource: &envvarsv1.EnvSource{Kind: &envvarsv1.EnvSource_Infisical{Infisical: &envvarsv1.InfisicalEnvSource{
+		From: &variablestorev1.SyncEnvSourceRequest_EnvSource{EnvSource: &variablestorev1.EnvSource{Kind: &variablestorev1.EnvSource_Infisical{Infisical: &variablestorev1.InfisicalEnvSource{
 			Project:     "p-1",
 			Environment: "prod",
 			Host:        "https://infisical.example.com",
-			Write:       envvarsv1.WritePolicy_WRITE_POLICY_NEVER,
-			Auth: &envvarsv1.InfisicalAuth{Method: &envvarsv1.InfisicalAuth_Universal{Universal: &envvarsv1.InfisicalUniversalAuth{
+			Write:       variablestorev1.WritePolicy_WRITE_POLICY_NEVER,
+			Auth: &variablestorev1.InfisicalAuth{Method: &variablestorev1.InfisicalAuth_Universal{Universal: &variablestorev1.InfisicalUniversalAuth{
 				ClientIdVariable:     "INFISICAL_CLIENT_ID",
 				ClientSecretVariable: "STRIPE_KEY",
 			}}},
@@ -409,25 +409,25 @@ func saying(t *testing.T, run func()) string {
 
 func TestEveryRequestSaysWhoAskedAndHowItWent(t *testing.T) {
 	at := consoleServing(t)
-	vars := withBearer(t, at, everything(), at.token(t, minted{scope: []string{connectorserver.CapabilityEnvVarsRead}}))
+	variables := withBearer(t, at, everything(), at.token(t, minted{scope: []string{connectorserver.CapabilityVariablesRead}}))
 
 	said := saying(t, func() {
-		if _, err := vars.ListValues(context.Background(), &envvarsv1.ListValuesRequest{
+		if _, err := variables.ListValues(context.Background(), &variablestorev1.ListValuesRequest{
 			Tier: environmentv1.Tier_TIER_PRODUCTION,
 			Slug: "shop",
 		}); err != nil {
 			t.Fatalf("ListValues() error = %v", err)
 		}
-		_, _ = vars.SetValue(context.Background(), &envvarsv1.SetValueRequest{
+		_, _ = variables.SetValue(context.Background(), &variablestorev1.SetValueRequest{
 			Tier:       environmentv1.Tier_TIER_PRODUCTION,
-			Coordinate: &envvarsv1.Coordinate{Slug: "shop", Key: "TOKEN"},
+			Coordinate: &variablestorev1.Coordinate{Slug: "shop", Key: "TOKEN"},
 			Value:      "denied",
 		})
 	})
 
 	want := []string{
-		"act=user-1 org=" + organizationID + " procedure=" + envvarsv1connect.EnvVarsServiceListValuesProcedure + " outcome=pass\n",
-		"act=user-1 org=" + organizationID + " procedure=" + envvarsv1connect.EnvVarsServiceSetValueProcedure + " outcome=denied\n",
+		"act=user-1 org=" + organizationID + " procedure=" + variablestorev1connect.VariableStoreServiceListValuesProcedure + " outcome=pass\n",
+		"act=user-1 org=" + organizationID + " procedure=" + variablestorev1connect.VariableStoreServiceSetValueProcedure + " outcome=denied\n",
 	}
 	for _, line := range want {
 		if !strings.Contains(said, line) {

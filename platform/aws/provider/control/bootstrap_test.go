@@ -54,7 +54,7 @@ func installedBootstrapper(t *testing.T, tier environment.Tier) Bootstrap {
 		ArtifactBucket: "ocel-artifacts",
 		AssetBucket:    "ocel-assets",
 		StateTable:     "ocel-state-table",
-		VarsTable:      "ocel-vars",
+		VariablesTable: "ocel-variables",
 	}
 	front := &teardownEdge{}
 	return Bootstrap{
@@ -441,7 +441,7 @@ func (c *teardownCFN) DescribeStacks(_ context.Context, in *cloudformation.Descr
 		{OutputKey: aws.String("ArtifactBucketName"), OutputValue: aws.String(deployed.ArtifactBucket)},
 		{OutputKey: aws.String("AssetBucketName"), OutputValue: aws.String(deployed.AssetBucket)},
 		{OutputKey: aws.String("StateTableName"), OutputValue: aws.String(deployed.StateTable)},
-		{OutputKey: aws.String("VarsTableName"), OutputValue: aws.String(deployed.VarsTable)},
+		{OutputKey: aws.String("VariablesTableName"), OutputValue: aws.String(deployed.VariablesTable)},
 	}
 	return &cloudformation.DescribeStacksOutput{Stacks: []cfntypes.Stack{{
 		StackName:   in.StackName,

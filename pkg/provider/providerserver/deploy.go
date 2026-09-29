@@ -23,8 +23,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/envvars"
-	"github.com/ocelhq/ocel/pkg/envvarsserver"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/processenv"
@@ -38,6 +36,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/pkg/variablestore"
+	"github.com/ocelhq/ocel/pkg/variablestoreserver"
 )
 
 const stackVersion = "1"
@@ -164,8 +164,8 @@ type deployRun struct {
 	configured []ConfiguredHost
 	pending    []string
 
-	values    envvars.Store
-	scope     envvars.Scope
+	values    variablestore.Store
+	scope     variablestore.Scope
 	published *publishedBindings
 
 	inline        []inlineBinding
@@ -260,8 +260,8 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 		manifest:       req.GetManifest(),
 		spec:           spec,
 		selection:      req.GetEdge(),
-		values:         envvars.Store{KeyValues: p.KeyValues(), Cipher: p.Cipher()},
-		scope:          envvars.Scope{Project: spec.Slug, Tier: spec.Tier},
+		values:         variablestore.Store{KeyValues: p.KeyValues(), Cipher: p.Cipher()},
+		scope:          variablestore.Scope{Project: spec.Slug, Tier: spec.Tier},
 		artifacts:      map[string]provider.ArtifactRef{},
 		functionImages: map[string]string{},
 		provisioning:   map[string]bool{},
@@ -1387,22 +1387,22 @@ func (r *deployRun) result(promotion router.Promotion, propagation router.Propag
 }
 
 func (r *deployRun) publish(ctx context.Context, bindings []provider.Binding) error {
-	publishing := make([]envvars.NamedBindingWrite, 0, len(bindings))
+	publishing := make([]variablestore.NamedBindingWrite, 0, len(bindings))
 	for _, binding := range bindings {
 		message, err := provider.BindingMessage(binding)
 		if err != nil {
 			return err
 		}
-		if err := envvarsserver.VerifyGrantScope(message); err != nil {
+		if err := variablestoreserver.VerifyGrantScope(message); err != nil {
 			return connect.NewError(connect.CodeInvalidArgument, err)
 		}
-		pair, err := envvarsserver.BindingPair(envvars.OwnerOcel, message)
+		pair, err := variablestoreserver.BindingPair(variablestore.OwnerOcel, message)
 		if err != nil {
 			return err
 		}
-		publishing = append(publishing, envvars.NamedBindingWrite{Name: binding.Name, Write: pair})
+		publishing = append(publishing, variablestore.NamedBindingWrite{Name: binding.Name, Write: pair})
 	}
-	if _, err := r.values.SetBindings(ctx, r.scope, bindingEnvironment(r.spec), envvars.OwnerOcel, publishing); err != nil {
+	if _, err := r.values.SetBindings(ctx, r.scope, bindingEnvironment(r.spec), variablestore.OwnerOcel, publishing); err != nil {
 		return fmt.Errorf("publish %s's bindings: %w", r.scope.Project, err)
 	}
 	if err := r.pruneBindings(ctx, bindings); err != nil {
@@ -1420,7 +1420,7 @@ func (r *deployRun) pruneBindings(ctx context.Context, bindings []provider.Bindi
 	}
 	stale := map[string]int64{}
 	for _, record := range published {
-		if record.Owner != envvars.OwnerOcel || record.Environment != environment {
+		if record.Owner != variablestore.OwnerOcel || record.Environment != environment {
 			continue
 		}
 		if slices.ContainsFunc(bindings, func(binding provider.Binding) bool { return binding.Name == record.Name }) {
@@ -1438,8 +1438,8 @@ func (r *deployRun) pruneBindings(ctx context.Context, bindings []provider.Bindi
 }
 
 type publishedBindings struct {
-	store       envvars.Store
-	scope       envvars.Scope
+	store       variablestore.Store
+	scope       variablestore.Scope
 	environment string
 
 	mu       sync.Mutex
@@ -1520,8 +1520,8 @@ func (p *publishedBindings) Named(ctx context.Context, name string) (provider.Bi
 	return bindingPublished(name, published)
 }
 
-func bindingPublished(name string, published envvars.StoredBinding) (provider.Binding, error) {
-	message, err := envvarsserver.DecodeBinding(published.Value)
+func bindingPublished(name string, published variablestore.StoredBinding) (provider.Binding, error) {
+	message, err := variablestoreserver.DecodeBinding(published.Value)
 	if err != nil {
 		return provider.Binding{}, fmt.Errorf("read binding %s: %w", name, err)
 	}

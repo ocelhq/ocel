@@ -162,7 +162,7 @@ func TestUploadEdgeBundles(t *testing.T) {
 	})
 }
 
-func edgeVarsManifest(variables ...*contractv1.ManifestVariable) *contractv1.Manifest {
+func edgeVariablesManifest(variables ...*contractv1.ManifestVariable) *contractv1.Manifest {
 	return &contractv1.Manifest{
 		Slug: "proj",
 		Apps: []*contractv1.ManifestApp{
@@ -215,7 +215,7 @@ func TestUploadEdgeSeal(t *testing.T) {
 		t.Parallel()
 		store := &fakeArtifactStore{exists: map[string]bool{}}
 		cfg := edgeStoreConfig(t, store)
-		manifest := edgeVarsManifest(
+		manifest := edgeVariablesManifest(
 			variable("POSTHOG_ID", "ph-123", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
 			variable("STRIPE_API_KEY", "sk-live", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE),
 		)
@@ -253,7 +253,7 @@ func TestUploadEdgeSeal(t *testing.T) {
 		t.Parallel()
 		store := &fakeArtifactStore{exists: map[string]bool{}}
 		cfg := edgeStoreConfig(t, store)
-		manifest := edgeVarsManifest(variable("POSTHOG_ID", "ph-123", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
+		manifest := edgeVariablesManifest(variable("POSTHOG_ID", "ph-123", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
 
 		if err := uploadEdgeBundles(context.Background(), cfg, manifest, edgeBuilds(t, cfg, manifest)); err != nil {
 			t.Fatalf("uploadEdgeBundles: %v", err)
@@ -280,7 +280,7 @@ func TestCheckAppEdgeVariables(t *testing.T) {
 	t.Run("a name the entry worker owns fails the deploy with no cache store", func(t *testing.T) {
 		t.Parallel()
 		cfg := Config{ArtifactRoot: edgeAppTree(t), Env: "prod"}
-		manifest := edgeVarsManifest(variable("OCEL_CACHE_SCOPE", "mine", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
+		manifest := edgeVariablesManifest(variable("OCEL_CACHE_SCOPE", "mine", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
 		app := manifest.GetApps()[0]
 
 		err := checkAppEdgeVariables(cfg, app.GetName(), appValuesOf(app), edgeBuilds(t, cfg, manifest).baked[app.GetName()])
@@ -295,7 +295,7 @@ func TestCheckAppEdgeVariables(t *testing.T) {
 	t.Run("an over-budget edge environment fails the deploy with no cache store", func(t *testing.T) {
 		t.Parallel()
 		cfg := Config{ArtifactRoot: edgeAppTree(t), Env: "prod"}
-		manifest := edgeVarsManifest(variable("BIG_ONE", strings.Repeat("a", functionEnvBudgetBytes), resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
+		manifest := edgeVariablesManifest(variable("BIG_ONE", strings.Repeat("a", functionEnvBudgetBytes), resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
 		app := manifest.GetApps()[0]
 
 		err := checkAppEdgeVariables(cfg, app.GetName(), appValuesOf(app), edgeBuilds(t, cfg, manifest).baked[app.GetName()])
@@ -310,7 +310,7 @@ func TestCheckAppEdgeVariables(t *testing.T) {
 	t.Run("an app with no edge output is left alone", func(t *testing.T) {
 		t.Parallel()
 		cfg := Config{ArtifactRoot: t.TempDir(), Env: "prod"}
-		manifest := edgeVarsManifest(variable("OCEL_CACHE_SCOPE", "mine", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
+		manifest := edgeVariablesManifest(variable("OCEL_CACHE_SCOPE", "mine", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
 
 		app := manifest.GetApps()[0]
 		if err := checkAppEdgeVariables(cfg, app.GetName(), appValuesOf(app), appBundle{}); err != nil {

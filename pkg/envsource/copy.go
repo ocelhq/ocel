@@ -9,35 +9,35 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/envvars"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
 type CopyResult struct {
 	EnvSource string
-	Present   []envvars.Cell
-	Written   []envvars.Cell
-	Unchanged []envvars.Cell
-	Removed   []envvars.Cell
-	Refused   map[envvars.Cell]string
+	Present   []variablestore.Cell
+	Written   []variablestore.Cell
+	Unchanged []variablestore.Cell
+	Removed   []variablestore.Cell
+	Refused   map[variablestore.Cell]string
 }
 
-func CopyValues(ctx context.Context, store envvars.Store, scope envvars.Scope, key DigestKey, envSource string, readAt time.Time, read map[envvars.Cell]Value, folders []string, keep []envvars.Cell) (CopyResult, error) {
+func CopyValues(ctx context.Context, store variablestore.Store, scope variablestore.Scope, key DigestKey, envSource string, readAt time.Time, read map[variablestore.Cell]Value, folders []string, keep []variablestore.Cell) (CopyResult, error) {
 	result := CopyResult{EnvSource: envSource}
 	listed, err := store.List(ctx, scope)
 	if err != nil {
 		return CopyResult{}, err
 	}
-	stored := map[envvars.Cell]envvars.Metadata{}
+	stored := map[variablestore.Cell]variablestore.Metadata{}
 	for _, metadata := range listed {
 		if metadata.Coordinate.Environment == "" {
 			stored[metadata.Coordinate.Cell] = metadata
 		}
 	}
-	copied := func(at envvars.Cell) bool {
+	copied := func(at variablestore.Cell) bool {
 		return slices.Contains(folders, at.Folder) && !slices.Contains(keep, at)
 	}
 
-	for _, at := range slices.SortedFunc(maps.Keys(read), envvars.Cell.Compare) {
+	for _, at := range slices.SortedFunc(maps.Keys(read), variablestore.Cell.Compare) {
 		if !copied(at) {
 			continue
 		}
@@ -56,12 +56,12 @@ func CopyValues(ctx context.Context, store envvars.Store, scope envvars.Scope, k
 		if found {
 			expected = current.Version
 		}
-		_, err = store.SetFromEnvSource(ctx, scope, envvars.Coordinate{Cell: at}, string(next.Plaintext), envvars.Provenance{EnvSource: envSource, Version: version, ReadAt: readAt}, expected)
+		_, err = store.SetFromEnvSource(ctx, scope, variablestore.Coordinate{Cell: at}, string(next.Plaintext), variablestore.Provenance{EnvSource: envSource, Version: version, ReadAt: readAt}, expected)
 		switch {
 		case err == nil:
 			result.Written = append(result.Written, at)
-		case errors.Is(err, envvars.ErrStaleVersion):
-		case errors.Is(err, envvars.ErrTooLarge), errors.Is(err, envvars.ErrIsReference):
+		case errors.Is(err, variablestore.ErrStaleVersion):
+		case errors.Is(err, variablestore.ErrTooLarge), errors.Is(err, variablestore.ErrIsReference):
 			result.refuse(at, err)
 		default:
 			return CopyResult{}, err
@@ -76,8 +76,8 @@ func CopyValues(ctx context.Context, store envvars.Store, scope envvars.Scope, k
 		if _, present := read[at]; present {
 			continue
 		}
-		removed, err := store.DeleteFromEnvSource(ctx, scope, metadata.Coordinate, envvars.Provenance{EnvSource: envSource, ReadAt: readAt}, metadata.Version)
-		if errors.Is(err, envvars.ErrStaleVersion) {
+		removed, err := store.DeleteFromEnvSource(ctx, scope, metadata.Coordinate, variablestore.Provenance{EnvSource: envSource, ReadAt: readAt}, metadata.Version)
+		if errors.Is(err, variablestore.ErrStaleVersion) {
 			continue
 		}
 		if err != nil {
@@ -90,7 +90,7 @@ func CopyValues(ctx context.Context, store envvars.Store, scope envvars.Scope, k
 	return result, nil
 }
 
-func ClearProvenance(ctx context.Context, store envvars.Store, scope envvars.Scope) error {
+func ClearProvenance(ctx context.Context, store variablestore.Store, scope variablestore.Scope) error {
 	listed, err := store.List(ctx, scope)
 	if err != nil {
 		return err
@@ -100,23 +100,23 @@ func ClearProvenance(ctx context.Context, store envvars.Store, scope envvars.Sco
 			continue
 		}
 		copied, err := store.Get(ctx, scope, metadata.Coordinate, true)
-		if errors.Is(err, envvars.ErrNotFound) {
+		if errors.Is(err, variablestore.ErrNotFound) {
 			continue
 		}
 		if err != nil {
 			return err
 		}
 		expected := copied.Version
-		if _, err := store.Set(ctx, scope, metadata.Coordinate, copied.Plaintext, &expected); err != nil && !errors.Is(err, envvars.ErrStaleVersion) {
+		if _, err := store.Set(ctx, scope, metadata.Coordinate, copied.Plaintext, &expected); err != nil && !errors.Is(err, variablestore.ErrStaleVersion) {
 			return err
 		}
 	}
 	return nil
 }
 
-func (r *CopyResult) refuse(at envvars.Cell, err error) {
+func (r *CopyResult) refuse(at variablestore.Cell, err error) {
 	if r.Refused == nil {
-		r.Refused = map[envvars.Cell]string{}
+		r.Refused = map[variablestore.Cell]string{}
 	}
 	r.Refused[at] = err.Error()
 }

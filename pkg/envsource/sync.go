@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/envvars"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
 const (
@@ -21,7 +21,7 @@ const (
 )
 
 type Sync struct {
-	Store    envvars.Store
+	Store    variablestore.Store
 	Tier     environment.Tier
 	Login    Login
 	Now      func() time.Time
@@ -227,7 +227,7 @@ func (s *Sync) readAndCopy(ctx context.Context, key string, group []Registration
 	}
 	urls := map[string]string{}
 	for _, folder := range folders {
-		if url := source.URL(envvars.Cell{Folder: folder}); url != "" {
+		if url := source.URL(variablestore.Cell{Folder: folder}); url != "" {
 			urls[folder] = url
 		}
 	}
@@ -277,6 +277,6 @@ func (s *Sync) backoff(failures int) time.Duration {
 	return ceiling/2 + time.Duration(rand.Int64N(int64(ceiling/2)+1))
 }
 
-func (s *Sync) scope(registration Registration) envvars.Scope {
-	return envvars.Scope{Project: registration.Project, Tier: s.Tier}
+func (s *Sync) scope(registration Registration) variablestore.Scope {
+	return variablestore.Scope{Project: registration.Project, Tier: s.Tier}
 }

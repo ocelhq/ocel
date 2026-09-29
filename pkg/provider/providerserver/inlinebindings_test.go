@@ -14,7 +14,6 @@ import (
 	"github.com/jackc/pgx/v5/pgproto3"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -23,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
 const inlinePassword = "s3cret-pw"
@@ -134,14 +134,14 @@ func inlineBucketRequest(bucket *resourcesv1.BucketConfig, props *bindingsv1.Buc
 	return req
 }
 
-func storedBindings(t *testing.T, vendor *fake.Provider) map[string]envvars.StoredBinding {
+func storedBindings(t *testing.T, vendor *fake.Provider) map[string]variablestore.StoredBinding {
 	t.Helper()
-	store := envvars.Store{KeyValues: vendor.KeyValues(), Cipher: vendor.Cipher()}
-	listed, err := store.ListBindings(context.Background(), envvars.Scope{Project: "shop", Tier: environment.TierProduction}, "")
+	store := variablestore.Store{KeyValues: vendor.KeyValues(), Cipher: vendor.Cipher()}
+	listed, err := store.ListBindings(context.Background(), variablestore.Scope{Project: "shop", Tier: environment.TierProduction}, "")
 	if err != nil {
 		t.Fatalf("ListBindings: %v", err)
 	}
-	stored := map[string]envvars.StoredBinding{}
+	stored := map[string]variablestore.StoredBinding{}
 	for _, binding := range listed {
 		stored[binding.Name] = binding
 	}
@@ -184,8 +184,8 @@ func TestDeployPublishesTheInlineBindingsItCarries(t *testing.T) {
 		if !published || stored.Owner != naming.InlineRecordOwner {
 			t.Fatalf("records = %v, want %s published by %s", storedBindings(t, vendor), inlineOrders, naming.InlineRecordOwner)
 		}
-		store := envvars.Store{KeyValues: vendor.KeyValues(), Cipher: vendor.Cipher()}
-		resolved, err := store.ResolveBinding(context.Background(), envvars.Scope{Project: "shop", Tier: environment.TierProduction}, "", inlineOrders)
+		store := variablestore.Store{KeyValues: vendor.KeyValues(), Cipher: vendor.Cipher()}
+		resolved, err := store.ResolveBinding(context.Background(), variablestore.Scope{Project: "shop", Tier: environment.TierProduction}, "", inlineOrders)
 		if err != nil || !strings.Contains(string(resolved.Value), inlinePassword) {
 			t.Errorf("ResolveBinding = %v, want the published record to keep the url the app connects with", err)
 		}
@@ -395,10 +395,10 @@ func inlineOrdersAt(url string) *bindingsv1.Binding {
 	}
 }
 
-func resolvedOrders(t *testing.T, vendor *fake.Provider) envvars.StoredBinding {
+func resolvedOrders(t *testing.T, vendor *fake.Provider) variablestore.StoredBinding {
 	t.Helper()
-	store := envvars.Store{KeyValues: vendor.KeyValues(), Cipher: vendor.Cipher()}
-	resolved, err := store.ResolveBinding(context.Background(), envvars.Scope{Project: "shop", Tier: environment.TierProduction}, "", inlineOrders)
+	store := variablestore.Store{KeyValues: vendor.KeyValues(), Cipher: vendor.Cipher()}
+	resolved, err := store.ResolveBinding(context.Background(), variablestore.Scope{Project: "shop", Tier: environment.TierProduction}, "", inlineOrders)
 	if err != nil {
 		t.Fatalf("ResolveBinding: %v", err)
 	}

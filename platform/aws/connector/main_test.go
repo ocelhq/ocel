@@ -102,7 +102,7 @@ func TestAScheduledWakeBeatsAndAnythingElseIsServedAsARequest(t *testing.T) {
 
 func TestTheConnectorProvesItsIdentityAsItsOwnRole(t *testing.T) {
 	cfg := aws.Config{Region: "eu-west-2", Credentials: credentials.NewStaticCredentialsProvider("AKID", "secret", "")}
-	prove := envVars(cfg, nil).ProveIdentity
+	prove := variableStore(cfg, nil).ProveIdentity
 	if prove == nil {
 		t.Fatal("the connector's backend has no ProveIdentity, so an Infisical env source with identity auth is refused through the console")
 	}

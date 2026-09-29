@@ -1,12 +1,3 @@
-export type {
-  Cell,
-  EnvironmentClass,
-  EnvSourceStatus,
-  Revealed,
-  Stored,
-  Version,
-} from "./envvars";
-export * as envvars from "./envvars";
 export * from "./item";
 export {
   type Connector,
@@ -15,3 +6,12 @@ export {
   SCOPES,
   type Scope,
 } from "./transport";
+export type {
+  Cell,
+  EnvironmentClass,
+  EnvSourceStatus,
+  Revealed,
+  Stored,
+  Version,
+} from "./variables";
+export * as variables from "./variables";

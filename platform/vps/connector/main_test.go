@@ -10,7 +10,7 @@ import (
 )
 
 func TestTheConfigTheEnvironmentContainsIsReadAheadOfTheFile(t *testing.T) {
-	t.Setenv(provider.ConnectorConfigEnvVar, `{"console":"https://console.example.com","connectorId":"con_1","organizationId":"org_1","grants":["envvars.read"]}`)
+	t.Setenv(provider.ConnectorConfigEnvVar, `{"console":"https://console.example.com","connectorId":"con_1","organizationId":"org_1","grants":["variables.read"]}`)
 	file := filepath.Join(t.TempDir(), "connector.json")
 	if err := os.WriteFile(file, []byte("not json"), 0o600); err != nil {
 		t.Fatal(err)

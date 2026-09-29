@@ -17,7 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/envsource"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 )
 
 func runEnvList(ctx context.Context, dependencies Dependencies, cwd string, opts envOptions, stdout, stderr io.Writer) error {
@@ -26,11 +26,11 @@ func runEnvList(ctx context.Context, dependencies Dependencies, cwd string, opts
 		if err != nil {
 			return err
 		}
-		envVars, err := provider.EnvVars()
+		variableStore, err := provider.VariableStore()
 		if err != nil {
 			return err
 		}
-		resp, err := envVars.ListValues(ctx, &envvarsv1.ListValuesRequest{
+		resp, err := variableStore.ListValues(ctx, &variablestorev1.ListValuesRequest{
 			Tier: opts.tier(),
 			Slug: cfg.Slug,
 		})
@@ -48,13 +48,13 @@ func runEnvList(ctx context.Context, dependencies Dependencies, cwd string, opts
 	})
 }
 
-func overridden(values []*envvarsv1.ValueMetadata) bool {
-	return slices.ContainsFunc(values, func(v *envvarsv1.ValueMetadata) bool {
+func overridden(values []*variablestorev1.ValueMetadata) bool {
+	return slices.ContainsFunc(values, func(v *variablestorev1.ValueMetadata) bool {
 		return v.GetCoordinate().GetEnvironment() != ""
 	})
 }
 
-func renderValues(stdout io.Writer, values []*envvarsv1.ValueMetadata, environments []string, definitions []*resourcesv1.VariableDefinition, groups []*resourcesv1.GroupDefinition) {
+func renderValues(stdout io.Writer, values []*variablestorev1.ValueMetadata, environments []string, definitions []*resourcesv1.VariableDefinition, groups []*resourcesv1.GroupDefinition) {
 	if len(values) == 0 {
 		fmt.Fprintln(stdout, "No values set. Set one with `ocel env set <KEY>=<VALUE>`.")
 		return
@@ -99,7 +99,7 @@ type listingRow struct {
 	cells    []string
 }
 
-func valueRow(v *envvarsv1.ValueMetadata, lead string, descriptions map[string]string, environments []string) (listingRow, bool) {
+func valueRow(v *variablestorev1.ValueMetadata, lead string, descriptions map[string]string, environments []string) (listingRow, bool) {
 	c := v.GetCoordinate()
 	environment := environmentOrAll(c.GetEnvironment())
 	orphaned := variables.IsOrphaned(environments, c.GetEnvironment())
@@ -163,8 +163,8 @@ func membership(definitions []*resourcesv1.VariableDefinition) map[string]string
 	return out
 }
 
-func valuesIn(group string, values []*envvarsv1.ValueMetadata, definitions []*resourcesv1.VariableDefinition) []*envvarsv1.ValueMetadata {
-	var out []*envvarsv1.ValueMetadata
+func valuesIn(group string, values []*variablestorev1.ValueMetadata, definitions []*resourcesv1.VariableDefinition) []*variablestorev1.ValueMetadata {
+	var out []*variablestorev1.ValueMetadata
 	for _, definition := range definitions {
 		if definition.GetGroup() != group {
 			continue

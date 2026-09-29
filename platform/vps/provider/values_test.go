@@ -15,7 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
-	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
+	variables "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 const (
@@ -89,13 +89,13 @@ func TestASecretAndABindingReachTheContainerAsAManifestRatherThanAsValues(t *tes
 	}
 	line := ""
 	for entry := range strings.Lines(file) {
-		if value, named := strings.CutPrefix(entry, vars.EnvVar+"="); named {
+		if value, named := strings.CutPrefix(entry, variables.EnvVar+"="); named {
 			line = strings.TrimSpace(value)
 		}
 	}
-	manifest, err := vars.Parse([]byte(line))
+	manifest, err := variables.Parse([]byte(line))
 	if err != nil {
-		t.Fatalf("%s = %q, which the runtime cannot read: %v", vars.EnvVar, line, err)
+		t.Fatalf("%s = %q, which the runtime cannot read: %v", variables.EnvVar, line, err)
 	}
 	if manifest.Slug != "shop" || manifest.Tier != "production" || manifest.Environment != "" {
 		t.Errorf("manifest = %+v, want the project slug and tier with no environment in production", manifest)
@@ -109,7 +109,7 @@ func TestASecretAndABindingReachTheContainerAsAManifestRatherThanAsValues(t *tes
 		t.Errorf("manifest pins %+v, want the binding by name, the key the app reads it under, its type and the version granted", manifest.Bindings)
 	}
 	joined := strings.Join(machine.commands(), "\n")
-	if !strings.Contains(joined, "src="+vars.SocketDir+",dst="+vars.SocketDir+",readonly") {
+	if !strings.Contains(joined, "src="+variables.SocketDir+",dst="+variables.SocketDir+",readonly") {
 		t.Errorf("the container is handed no socket to read its values through:\n%s", joined)
 	}
 }
@@ -162,7 +162,7 @@ func TestAnAppDeclaringNothingIsHandedTheHealthPathAloneAndNoSocket(t *testing.T
 		t.Errorf("an app declaring no value is handed %q, want the health path alone", file)
 	}
 	joined := strings.Join(machine.commands(), "\n")
-	if strings.Contains(joined, "--mount") || strings.Contains(joined, vars.SocketDir) {
+	if strings.Contains(joined, "--mount") || strings.Contains(joined, variables.SocketDir) {
 		t.Errorf("an app declaring nothing live is handed the box socket anyway:\n%s", joined)
 	}
 }
@@ -170,7 +170,7 @@ func TestAnAppDeclaringNothingIsHandedTheHealthPathAloneAndNoSocket(t *testing.T
 func TestAValueDeliveredUnderANameTheRuntimeReadsItsOwnFromIsRefused(t *testing.T) {
 	t.Parallel()
 
-	for _, owned := range []string{originguard.HealthPathVar, vars.EnvVar} {
+	for _, owned := range []string{originguard.HealthPathVar, variables.EnvVar} {
 		app := anApp()
 		app.Values = provider.AppValues{ContainerEnv: map[string]string{owned: "x"}}
 		_, err := over(&box{}).ProvisionContainers(context.Background(), aStack(t, app), nil)

@@ -182,7 +182,7 @@ type AppDeployment struct {
 type Worker struct {
 	Main          WorkerModule
 	Modules       []WorkerModule
-	Vars          map[string]string
+	Variables     map[string]string
 	Secrets       map[string]string
 	AssetBinding  string
 	LoaderBinding string

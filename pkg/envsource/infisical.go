@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ocelhq/ocel/pkg/envvars"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
 const infisicalHiddenValue = "<hidden-by-infisical>"
@@ -42,9 +42,9 @@ type infisicalSecret struct {
 	ValueHidden bool   `json:"secretValueHidden"`
 }
 
-func (s *infisical) Read(ctx context.Context, folders []string) (map[envvars.Cell]Value, error) {
+func (s *infisical) Read(ctx context.Context, folders []string) (map[variablestore.Cell]Value, error) {
 	s.cacheOrgID(ctx)
-	out := map[envvars.Cell]Value{}
+	out := map[variablestore.Cell]Value{}
 	for _, folder := range folders {
 		at, err := s.options.secretPath(folder)
 		if err != nil {
@@ -90,7 +90,7 @@ func (s *infisical) Read(ctx context.Context, folders []string) (map[envvars.Cel
 			if secret.Value == "" {
 				continue
 			}
-			out[envvars.Cell{Folder: folder, Key: key}] = Value{Plaintext: []byte(secret.Value), Version: infisicalVersion(secret)}
+			out[variablestore.Cell{Folder: folder, Key: key}] = Value{Plaintext: []byte(secret.Value), Version: infisicalVersion(secret)}
 		}
 	}
 	return out, nil
@@ -116,7 +116,7 @@ func (s *infisical) cacheOrgID(ctx context.Context) {
 	s.mu.Unlock()
 }
 
-func (s *infisical) Create(ctx context.Context, at envvars.Cell, value []byte, description string) error {
+func (s *infisical) Create(ctx context.Context, at variablestore.Cell, value []byte, description string) error {
 	if s.options.Write != WriteMissing && s.options.Write != WriteValues {
 		return ErrReadOnly
 	}
@@ -160,7 +160,7 @@ func (s *infisical) createSecret(ctx context.Context, key string, body map[strin
 	return nil
 }
 
-func (s *infisical) Update(ctx context.Context, at envvars.Cell, value []byte, copiedVersion string) error {
+func (s *infisical) Update(ctx context.Context, at variablestore.Cell, value []byte, copiedVersion string) error {
 	if s.options.Write != WriteValues {
 		return ErrReadOnly
 	}
@@ -239,7 +239,7 @@ func (s *infisical) ensureFolder(ctx context.Context, secretPath string) error {
 	return nil
 }
 
-func (s *infisical) URL(at envvars.Cell) string {
+func (s *infisical) URL(at variablestore.Cell) string {
 	s.mu.Lock()
 	org := s.orgID
 	s.mu.Unlock()

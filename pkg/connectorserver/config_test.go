@@ -11,7 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-const configJSON = `{"console":"https://console.example.com","connectorId":"con_1","organizationId":"org_1","grants":["envvars.read"]}`
+const configJSON = `{"console":"https://console.example.com","connectorId":"con_1","organizationId":"org_1","grants":["variables.read"]}`
 
 func TestAFormWithNoFilesystemReadsItsConfigOffTheEnvironment(t *testing.T) {
 	t.Setenv(provider.ConnectorConfigEnvVar, configJSON)

@@ -11,9 +11,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
-	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
 func digestKeyAt(tier environment.Tier) keyvalue.Key {
@@ -26,12 +26,12 @@ func unkeyedDigests(plaintext string) []string {
 	return []string{full[:16], full}
 }
 
-func everyRecord(t *testing.T, store envvars.Store) []byte {
+func everyRecord(t *testing.T, store variablestore.Store) []byte {
 	t.Helper()
 	var all []byte
 	var partitions []keyvalue.Partition
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		partitions = append(partitions, envvars.ValuesPartition(envvars.Scope{Project: "shop", Tier: tier}))
+		partitions = append(partitions, variablestore.ValuesPartition(variablestore.Scope{Project: "shop", Tier: tier}))
 		for _, root := range []keyvalue.Root{keyvalue.RootEnvSources, keyvalue.RootEnvSourceStatus, keyvalue.RootEnvSourceDigestKey} {
 			partitions = append(partitions, keyvalue.Partition{Tier: tier, Root: root})
 		}
@@ -77,7 +77,7 @@ func TestAValueCopiedUnderAnotherTierKeyGetsAnotherVersion(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		copyWith(t, store, scope, key, 1, map[envvars.Cell]envsource.Value{cell("", "K"): value("same", "s1@1")})
+		copyWith(t, store, scope, key, 1, map[variablestore.Cell]envsource.Value{cell("", "K"): value("same", "s1@1")})
 		return reveal(t, store, scope, tierWide("", "K")).Provenance.Version
 	}
 
@@ -135,12 +135,12 @@ func TestAValueStoredUnderAnUnkeyedVersionIsCopiedAgain(t *testing.T) {
 	ctx := context.Background()
 	unkeyed := unkeyedDigests("v")[0]
 	for key, stored := range map[string]string{"FROM_INFISICAL": "s1@1#" + unkeyed, "FROM_EXEC": unkeyed} {
-		if _, err := store.SetFromEnvSource(ctx, scope, tierWide("", key), "v", envvars.Provenance{EnvSource: fromInfisical, Version: stored, ReadAt: readAt(1)}, 0); err != nil {
+		if _, err := store.SetFromEnvSource(ctx, scope, tierWide("", key), "v", variablestore.Provenance{EnvSource: fromInfisical, Version: stored, ReadAt: readAt(1)}, 0); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	result := copyAt(t, store, scope, 2, map[envvars.Cell]envsource.Value{
+	result := copyAt(t, store, scope, 2, map[variablestore.Cell]envsource.Value{
 		cell("", "FROM_INFISICAL"): value("v", "s1@1"),
 		cell("", "FROM_EXEC"):      value("v", ""),
 	})
@@ -166,17 +166,17 @@ func TestADigestKeyThatWillNotOpenStopsTheCopyAndIsNeverReplaced(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	resealed := envvars.Store{KeyValues: store.KeyValues, Cipher: fake.NewCipher()}
+	resealed := variablestore.Store{KeyValues: store.KeyValues, Cipher: fake.NewCipher()}
 	if _, err := envsource.EnsureDigestKey(ctx, resealed, scope.Tier); err == nil {
 		t.Fatal("EnsureDigestKey() over a key sealed by another cipher succeeded, want the failure to open it")
 	}
 	sync := &envsource.Sync{Store: resealed, Tier: scope.Tier}
 	registration := envsource.Registration{Project: "shop", Descriptor: execDescriptor(envsource.FormatJSON, "vault"), Folders: []string{""}}
 	register(t, resealed, registration)
-	if _, err := sync.CopyProjectFrom(ctx, registration, envsource.NewFixed("exec", map[envvars.Cell]envsource.Value{cell("", "K"): value("v", "")})); err == nil {
+	if _, err := sync.CopyProjectFrom(ctx, registration, envsource.NewFixed("exec", map[variablestore.Cell]envsource.Value{cell("", "K"): value("v", "")})); err == nil {
 		t.Fatal("CopyProjectFrom() without a key it can open succeeded, want it refused rather than versioned some weaker way")
 	}
-	if _, err := store.Get(ctx, scope, tierWide("", "K"), false); !errors.Is(err, envvars.ErrNotFound) {
+	if _, err := store.Get(ctx, scope, tierWide("", "K"), false); !errors.Is(err, variablestore.ErrNotFound) {
 		t.Fatalf("K = %v, want nothing copied", err)
 	}
 	sealedAfter, err := store.KeyValues.Read(ctx, digestKeyAt(scope.Tier))
@@ -190,8 +190,8 @@ func TestEachTierVersionsAValueUnderItsOwnKey(t *testing.T) {
 	store, _ := storeFixture()
 	versions := map[environment.Tier]string{}
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		scope := envvars.Scope{Project: "shop", Tier: tier}
-		copyAt(t, store, scope, 1, map[envvars.Cell]envsource.Value{cell("", "K"): value("same", "s1@1")})
+		scope := variablestore.Scope{Project: "shop", Tier: tier}
+		copyAt(t, store, scope, 1, map[variablestore.Cell]envsource.Value{cell("", "K"): value("same", "s1@1")})
 		versions[tier] = reveal(t, store, scope, tierWide("", "K")).Provenance.Version
 	}
 	if versions[environment.TierProduction] == versions[environment.TierPreview] {
@@ -206,7 +206,7 @@ func TestTheDigestKeyIsBoundToEveryProjectInItsTierAtTheEnvSourceBinding(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	store := envvars.Store{
+	store := variablestore.Store{
 		KeyValues: fake.NewKeyValues(),
 		Cipher:    fake.NewCipherWithKeys(map[environment.Tier][]byte{environment.TierProduction: key}),
 	}

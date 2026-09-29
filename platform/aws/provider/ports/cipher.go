@@ -40,7 +40,7 @@ func (s Cipher) readKey(ctx context.Context, tier environment.Tier) (string, err
 	if s.Keys == nil {
 		return "", refusal.Refuse(refusal.CodeNotReady,
 			"nothing in this account has a key to seal a %s value under.\nRun `%s`, then try again",
-			tier, provider.BootstrapVarsKeyCommand(tier))
+			tier, provider.BootstrapVariablesKeyCommand(tier))
 	}
 	key, err := s.Keys.Key(ctx, tier)
 	if err != nil {
@@ -49,7 +49,7 @@ func (s Cipher) readKey(ctx context.Context, tier environment.Tier) (string, err
 	if key == "" {
 		return "", refusal.Refuse(refusal.CodeNotReady,
 			"the %s bootstrap has no key to seal a value under, and a key is the one bootstrap item with a recurring cost.\nRun `%s` to add one, then try again",
-			tier, provider.BootstrapVarsKeyCommand(tier))
+			tier, provider.BootstrapVariablesKeyCommand(tier))
 	}
 	return key, nil
 }

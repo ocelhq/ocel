@@ -7,8 +7,6 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/envvars"
-	"github.com/ocelhq/ocel/pkg/envvarsserver"
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -17,6 +15,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
+	"github.com/ocelhq/ocel/pkg/variablestore"
+	"github.com/ocelhq/ocel/pkg/variablestoreserver"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -45,13 +45,13 @@ func declaredAs(kind bindingsv1.BindingType) resourcesv1.ResourceType {
 
 func publishRecord(t *testing.T, vendor *fake.Provider, tier environment.Tier, owner string, binding *bindingsv1.Binding) {
 	t.Helper()
-	pair, err := envvarsserver.BindingPair(owner, binding)
+	pair, err := variablestoreserver.BindingPair(owner, binding)
 	if err != nil {
 		t.Fatalf("BindingPair: %v", err)
 	}
-	store := envvars.Store{KeyValues: vendor.KeyValues(), Cipher: vendor.Cipher()}
-	scope := envvars.Scope{Project: "shop", Tier: tier}
-	if _, err := store.SetBindings(context.Background(), scope, "", owner, []envvars.NamedBindingWrite{{Name: binding.GetName(), Write: pair}}); err != nil {
+	store := variablestore.Store{KeyValues: vendor.KeyValues(), Cipher: vendor.Cipher()}
+	scope := variablestore.Scope{Project: "shop", Tier: tier}
+	if _, err := store.SetBindings(context.Background(), scope, "", owner, []variablestore.NamedBindingWrite{{Name: binding.GetName(), Write: pair}}); err != nil {
 		t.Fatalf("SetBindings: %v", err)
 	}
 }

@@ -38,7 +38,7 @@ func envSourceSyncResources(ns Namespace, code payloads.Placement, tier environm
 	return fmt.Sprintf(`  EnvSourceSyncRole:
     Type: AWS::IAM::Role
     Properties:
-      Description: "Execution role for the %[1]s env source sync: items in the %[1]s vars table, encrypting and decrypting under its key, and its own log group."
+      Description: "Execution role for the %[1]s env source sync: items in the %[1]s variables table, encrypting and decrypting under its key, and its own log group."
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -71,7 +71,7 @@ func envSourceSyncResources(ns Namespace, code payloads.Placement, tier environm
   EnvSourceSync:
     Type: AWS::Lambda::Function
     Properties:
-      Description: "Ocel env source sync - reads each scheduled env source registered in the %[1]s tier and writes what changed into its vars table."
+      Description: "Ocel env source sync - reads each scheduled env source registered in the %[1]s tier and writes what changed into its variables table."
       Runtime: %[6]s
       Architectures:
         - %[7]s
@@ -139,10 +139,10 @@ func envSourceSyncResources(ns Namespace, code payloads.Placement, tier environm
         RoleArn: !GetAtt EnvSourceSyncScheduleRole.Arn
         RetryPolicy:
           MaximumRetryAttempts: 0
-`, tier, LambdaServicePrincipal, ns.PolicyName("envsourcesync"), paramVarsTableARN, key,
+`, tier, LambdaServicePrincipal, ns.PolicyName("envsourcesync"), paramVariablesTableARN, key,
 		envSourceSyncRuntime, envSourceSyncArchitecture, envSourceSyncHandler, envSourceSyncMemoryMB, envSourceSyncTimeoutSeconds,
 		code.Bucket, code.Key,
-		awsports.VarsTableEnvVar, paramVarsTableName, awsports.VarsKeyEnvVar, awsports.TierEnvVar,
+		awsports.VariablesTableEnvVar, paramVariablesTableName, awsports.VariablesKeyEnvVar, awsports.TierEnvVar,
 		ns.envSourceSyncScheduleGroupName(tier), schedulerServicePrincipal, ns.PolicyName("envsourcesync-schedule"),
 		ns.envSourceSyncScheduleName(tier), envSourceSyncRate)
 }

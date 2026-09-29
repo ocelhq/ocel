@@ -7,14 +7,14 @@ async function loadHandler(env: Record<string, string> = {}) {
   return (await import("../src/next/use-cache-default.mjs")).default;
 }
 
-const budgetVars = [
+const budgetVariables = [
   "OCEL_USE_CACHE_MAX_BYTES",
   "OCEL_USE_CACHE_MAX_ENTRY",
   "AWS_LAMBDA_FUNCTION_MEMORY_SIZE",
 ];
 
 afterEach(() => {
-  for (const v of budgetVars) delete process.env[v];
+  for (const v of budgetVariables) delete process.env[v];
 });
 
 function streamOf(body: string): ReadableStream<Uint8Array> {

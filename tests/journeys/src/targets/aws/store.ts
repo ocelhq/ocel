@@ -240,7 +240,7 @@ export type BindingStore = {
   ownerIndex(slug: string, owner: string): Promise<string[] | undefined>;
 };
 
-const VARS_TABLE_OUTPUT = "VarsTableName";
+const VARIABLES_TABLE_OUTPUT = "VariablesTableName";
 
 function bindingsPartition(slug: string): string {
   return partitionKey("values", slug);
@@ -278,10 +278,10 @@ export function awsBindingStore(
   const stack = bootstrapStackOf(namespace);
 
   async function bindingTableOrThrow(): Promise<string> {
-    const name = await bootstrapTable(cli, stack, VARS_TABLE_OUTPUT, "no binding can be read");
+    const name = await bootstrapTable(cli, stack, VARIABLES_TABLE_OUTPUT, "no binding can be read");
     if (!name) {
       throw new Error(
-        `the ${stack} stack publishes no ${VARS_TABLE_OUTPUT} output, so no binding can be read`,
+        `the ${stack} stack publishes no ${VARIABLES_TABLE_OUTPUT} output, so no binding can be read`,
       );
     }
     return name;

@@ -22,7 +22,7 @@ inputs:
   cloudflare-account-id:
     description: That Cloudflare account's id.
     required: true
-  vars-key:
+  variables-key:
     description: ARN of the KMS key the project's variables are sealed with.
     required: true
 
@@ -52,12 +52,12 @@ runs:
         TOKEN: ${{ inputs.cloudflare-api-token }}
         ACCOUNT: ${{ inputs.cloudflare-account-id }}
         REGION: ${{ inputs.aws-region }}
-        VARS_KEY: ${{ inputs.vars-key }}
+        VARIABLES_KEY: ${{ inputs.variables-key }}
       run: |
         set -euo pipefail
         {
           echo "CLOUDFLARE_API_TOKEN=$TOKEN"
           echo "CLOUDFLARE_ACCOUNT_ID=$ACCOUNT"
           echo "OCEL_AWS_REGION=$REGION"
-          echo "OCEL_AWS_VARS_KEY=$VARS_KEY"
+          echo "OCEL_AWS_VARIABLES_KEY=$VARIABLES_KEY"
         } >> "$GITHUB_ENV"

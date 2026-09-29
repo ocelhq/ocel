@@ -11,13 +11,13 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 )
 
-var otlpEndpointEnvVars = []string{
+var otlpEndpointEnvVariables = []string{
 	"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
 	"OTEL_EXPORTER_OTLP_ENDPOINT",
 }
 
 func otlpConfigured() bool {
-	for _, v := range otlpEndpointEnvVars {
+	for _, v := range otlpEndpointEnvVariables {
 		if os.Getenv(v) != "" {
 			return true
 		}

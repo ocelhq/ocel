@@ -156,7 +156,7 @@
       "monthlyUsage": "0.32"
     },
     {
-      "resource": "project:shop/shared:production/aws_dynamodb_table:VarsTable",
+      "resource": "project:shop/shared:production/aws_dynamodb_table:VariablesTable",
       "status": "STATUS_PRICED",
       "components": [
         {
@@ -514,7 +514,7 @@
       "monthlyUsage": "0.52"
     },
     {
-      "resource": "project:shop/shared:production/aws_kms_key:VarsKey",
+      "resource": "project:shop/shared:production/aws_kms_key:VariablesKey",
       "status": "STATUS_PRICED",
       "components": [
         {

@@ -4,7 +4,7 @@
   "edge": "cloudflare",
   "dns": "cloudflare",
   "provider": {
-    "aws": { "region": "${OCEL_AWS_REGION}", "varsKey": "${OCEL_AWS_VARS_KEY}" }
+    "aws": { "region": "${OCEL_AWS_REGION}", "variablesKey": "${OCEL_AWS_VARIABLES_KEY}" }
   },
   "apps": [
     { "name": "www", "path": "./www", "domains": { "production": "ocel.dev" } },

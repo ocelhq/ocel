@@ -15,7 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
-	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 )
 
 const infisicalConfig = `
@@ -363,10 +363,10 @@ func TestEnvSetKeepsACredentialInOcelsOwnStore(t *testing.T) {
 func TestTheSourceColumnNamesWhereEachValueComesFrom(t *testing.T) {
 	t.Parallel()
 	var stdout bytes.Buffer
-	renderValues(&stdout, []*envvarsv1.ValueMetadata{
-		{Coordinate: &envvarsv1.Coordinate{Key: "OWN"}},
-		{Coordinate: &envvarsv1.Coordinate{Key: "COPIED"}, EnvSource: "infisical:p-1/prod"},
-		{Coordinate: &envvarsv1.Coordinate{Key: "SHARED"}, Target: &envvarsv1.Coordinate{Slug: "platform", Key: "SHARED"}},
+	renderValues(&stdout, []*variablestorev1.ValueMetadata{
+		{Coordinate: &variablestorev1.Coordinate{Key: "OWN"}},
+		{Coordinate: &variablestorev1.Coordinate{Key: "COPIED"}, EnvSource: "infisical:p-1/prod"},
+		{Coordinate: &variablestorev1.Coordinate{Key: "SHARED"}, Target: &variablestorev1.Coordinate{Slug: "platform", Key: "SHARED"}},
 	}, nil, nil, nil)
 
 	sources := map[string]string{}

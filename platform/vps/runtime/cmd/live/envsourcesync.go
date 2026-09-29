@@ -12,7 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
-	"github.com/ocelhq/ocel/pkg/envvars"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
@@ -37,7 +37,7 @@ func envSourceSync(argv []string, errs io.Writer) int {
 	defer stop()
 	local := boxstore.LocalTransport{}
 	sync := &envsource.Sync{
-		Store: envvars.Store{KeyValues: boxstore.NewKeyValues(local), Cipher: boxstore.NewCipher(local)},
+		Store: variablestore.Store{KeyValues: boxstore.NewKeyValues(local), Cipher: boxstore.NewCipher(local)},
 		Tier:  environment.Tier(*tier),
 		Login: envsource.Login{Client: &http.Client{Timeout: envSourceRequestTimeout}},
 	}

@@ -46,7 +46,7 @@ func main() {
 	var resolved liveValues = values
 	prefetch := resolved.Prefetch(ctx)
 
-	bakedEnv, err := resolveBakedVarsEnv()
+	bakedEnv, err := resolveBakedVariablesEnv()
 	if err != nil {
 		fatalInit(fmt.Sprintf("failed to open this deployment's encrypted variables: %v", err))
 	}

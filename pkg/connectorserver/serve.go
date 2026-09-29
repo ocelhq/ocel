@@ -15,14 +15,14 @@ import (
 	connect "connectrpc.com/connect"
 	"connectrpc.com/validate"
 
-	"github.com/ocelhq/ocel/pkg/envvarsserver"
-	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
+	"github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1/variablestorev1connect"
+	"github.com/ocelhq/ocel/pkg/variablestoreserver"
 )
 
 const (
-	CapabilityEnvVarsRead   = "envvars.read"
-	CapabilityEnvVarsWrite  = "envvars.write"
-	CapabilityEnvVarsReveal = "envvars.reveal"
+	CapabilityVariablesRead   = "variables.read"
+	CapabilityVariablesWrite  = "variables.write"
+	CapabilityVariablesReveal = "variables.reveal"
 )
 
 type Spec struct {
@@ -34,7 +34,7 @@ type Spec struct {
 
 	Addr string
 
-	EnvVars envvarsserver.Backend
+	VariableStore variablestoreserver.Backend
 
 	Identity Identity
 
@@ -42,11 +42,11 @@ type Spec struct {
 }
 
 func Serve(spec Spec) error {
-	if spec.EnvVars.KeyValues == nil {
-		return errors.New("connectorserver: Spec.EnvVars.Records is required")
+	if spec.VariableStore.KeyValues == nil {
+		return errors.New("connectorserver: Spec.VariableStore.Records is required")
 	}
-	if spec.EnvVars.Cipher == nil {
-		return errors.New("connectorserver: Spec.EnvVars.Cipher is required")
+	if spec.VariableStore.Cipher == nil {
+		return errors.New("connectorserver: Spec.VariableStore.Cipher is required")
 	}
 
 	if spec.KeyPath != "" && !spec.Identity.HasKey() {
@@ -154,9 +154,9 @@ func Mux(spec Spec) (*http.ServeMux, error) {
 
 	mux := http.NewServeMux()
 
-	source := envvarsserver.FixedBackend(spec.EnvVars)
-	path, handler := envvarsv1connect.NewEnvVarsServiceHandler(
-		&envvarsserver.Service{Source: source},
+	source := variablestoreserver.FixedBackend(spec.VariableStore)
+	path, handler := variablestorev1connect.NewVariableStoreServiceHandler(
+		&variablestoreserver.Service{Source: source},
 		connect.WithInterceptors(validate.NewInterceptor(), guard.interceptor()),
 	)
 	mux.Handle(path, handler)

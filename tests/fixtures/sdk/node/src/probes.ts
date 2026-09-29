@@ -4,7 +4,7 @@ import { gzipSync } from "node:zlib";
 import linuxArm64 from "better-sqlite3/linux-arm64";
 import linuxX64 from "better-sqlite3/linux-x64";
 import express, { type Request, Router } from "express";
-import { env } from "../infra/vars";
+import { env } from "../infra/variables";
 
 const MAX_SLEEP_MS = 60_000;
 const MAX_BODY = "8mb";

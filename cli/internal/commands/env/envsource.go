@@ -18,7 +18,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 )
 
 func newEnvSourceCommand(dependencies Dependencies) *cobra.Command {
@@ -92,11 +92,11 @@ func runEnvSync(ctx context.Context, dependencies Dependencies, cwd string, opts
 
 func runEnvSource(ctx context.Context, dependencies Dependencies, cwd string, opts envOptions, stdout, stderr io.Writer) error {
 	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env source", stderr, func(ctx context.Context, _ *run.Run, provider *providerprocess.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
-		envVars, err := provider.EnvVars()
+		variableStore, err := provider.VariableStore()
 		if err != nil {
 			return err
 		}
-		described, err := envVars.DescribeEnvSource(ctx, &envvarsv1.DescribeEnvSourceRequest{Tier: opts.tier(), Slug: cfg.Slug})
+		described, err := variableStore.DescribeEnvSource(ctx, &variablestorev1.DescribeEnvSourceRequest{Tier: opts.tier(), Slug: cfg.Slug})
 		if err != nil {
 			return err
 		}
@@ -107,7 +107,7 @@ func runEnvSource(ctx context.Context, dependencies Dependencies, cwd string, op
 	})
 }
 
-func renderEnvSource(stdout io.Writer, tier string, status *envvarsv1.EnvSourceStatus, now time.Time) {
+func renderEnvSource(stdout io.Writer, tier string, status *variablestorev1.EnvSourceStatus, now time.Time) {
 	fmt.Fprintf(stdout, "%s reads from %s\n", tier, status.GetEnvSource())
 	if !valuestore.EnvSourceOfStatus(status).OwnsValues() {
 		return
@@ -138,7 +138,7 @@ func renderEnvSource(stdout io.Writer, tier string, status *envvarsv1.EnvSourceS
 	}
 }
 
-func renderConfiguredEnvSource(stdout io.Writer, status *envvarsv1.EnvSourceStatus, configured envsource.Descriptor, opts envOptions) {
+func renderConfiguredEnvSource(stdout io.Writer, status *variablestorev1.EnvSourceStatus, configured envsource.Descriptor, opts envOptions) {
 	if configured.ID() == status.GetEnvSource() {
 		return
 	}

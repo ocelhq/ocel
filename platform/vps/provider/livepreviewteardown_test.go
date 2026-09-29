@@ -18,7 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
-	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
+	variables "github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
@@ -212,7 +212,7 @@ func (vm machine) teardownImages(t *testing.T) string {
 func (vm machine) routedHosts(t *testing.T) []string {
 	t.Helper()
 
-	table, err := host.ReadRoutingTable([]byte(vm.ssh(t, "sudo cat "+quote(vars.RoutingTable))))
+	table, err := host.ReadRoutingTable([]byte(vm.ssh(t, "sudo cat "+quote(variables.RoutingTable))))
 	if err != nil {
 		t.Fatalf("read the routing table the switchboard serves: %v", err)
 	}

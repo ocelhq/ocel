@@ -73,7 +73,7 @@ func TestTheAppBoundaryFencesKeysSecretsAndParametersToWhatAnAppOfItsTierOwns(t 
 						t.Errorf("the boundary admits %s; the only parameters under Ocel's name are the passphrase, the edge credentials and the origin secret, and no app may read them", action)
 					case "kms":
 						aliases, _ := st.Condition["ForAnyValue:StringEquals"].(map[string]any)
-						if got, want := aliases["kms:ResourceAliases"], defaultNamespace.varsKeyAliasFor(tier); got != want {
+						if got, want := aliases["kms:ResourceAliases"], defaultNamespace.variablesKeyAliasFor(tier); got != want {
 							t.Errorf("%s is admitted under %v, want it pinned to %s alone: a %s role must not open what the other tier sealed", action, st.Condition, want, tier)
 						}
 						if st.Resource != "*" {
