@@ -2,6 +2,7 @@ package alb
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"slices"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
@@ -229,6 +231,22 @@ func TestTheShieldedLoadBalancerComesUpAtBootstrapTrustingNothingAClientCouldPre
 	}
 	if got := trustedBy(t, w); !slices.Equal(got, []string{zonePull}) {
 		t.Errorf("the shielded balancer trusts %v after a claim, want the zone's certificate alone: the placeholder stands in only while nothing is claimed", got)
+	}
+}
+
+func TestTakingTheShieldedLoadBalancerDownForgetsWhichCertificatesItTrusted(t *testing.T) {
+	t.Parallel()
+
+	balancer, _ := shielding(t)
+	shielded := balancer.Shielded()
+	if _, err := shielded.Bootstrap(context.Background(), environment.TierProduction); err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	if err := shielded.Teardown(context.Background(), environment.TierProduction); err != nil {
+		t.Fatalf("Teardown: %v", err)
+	}
+	if _, err := balancer.deps.KeyValues.Read(context.Background(), balancer.trustKey(environment.TierProduction)); !errors.Is(err, keyvalue.ErrNotFound) {
+		t.Errorf("reading the trust record after teardown = %v, want %v: a teardown reclaims what its load balancer wrote", err, keyvalue.ErrNotFound)
 	}
 }
 

@@ -151,6 +151,20 @@ func (e *Edge) changeTrust(ctx context.Context, tier environment.Tier, change fu
 	return trustRecord{}, fmt.Errorf("record which client certificates the %s load balancer of tier %s trusts: it changed under every one of %d attempts", Kind, tier, trustAttempts)
 }
 
+func (e *Edge) forgetTrust(ctx context.Context, tier environment.Tier) error {
+	entry, err := e.deps.KeyValues.Read(ctx, e.trustKey(tier))
+	if errors.Is(err, keyvalue.ErrNotFound) {
+		return nil
+	}
+	if err == nil {
+		err = e.deps.KeyValues.Remove(ctx, entry.Key, entry.Revision)
+	}
+	if err != nil && !errors.Is(err, keyvalue.ErrNotFound) {
+		return fmt.Errorf("forget which client certificates the %s load balancer of tier %s trusted: %w", Kind, tier, err)
+	}
+	return nil
+}
+
 func (e *Edge) ensureAllowlist(ctx context.Context, tier environment.Tier) ([]string, error) {
 	_, record, err := e.readTrust(ctx, tier)
 	if err != nil {
