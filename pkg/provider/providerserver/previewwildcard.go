@@ -61,17 +61,41 @@ func (w *wildcards) dnsCutover(front edge.Edge) (dnsCutover, error) {
 
 func (w *wildcards) save(ctx context.Context) error {
 	name := stackrecords.WildcardKey(environment.TierPreview)
+	for range reservationAttempts {
+		entry, stored, err := w.readStored(ctx)
+		if err != nil {
+			return err
+		}
+		w.recorded.Host.OriginCertificateID = stored.Host.OriginCertificateID
+		w.recorded.Host.OriginCertificateExpiresAt = stored.Host.OriginCertificateExpiresAt
+		if entry.Value, err = json.Marshal(w.recorded); err != nil {
+			return fmt.Errorf("record %s: %w", name, err)
+		}
+		_, err = w.keyValues.Write(ctx, entry)
+		if errors.Is(err, keyvalue.ErrStale) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("record %s: %w", name, err)
+		}
+		return nil
+	}
+	return fmt.Errorf("record %s: it changed under every one of %d attempts", name, reservationAttempts)
+}
+
+func (w *wildcards) readStored(ctx context.Context) (keyvalue.Entry, stackrecords.Wildcard, error) {
+	name := stackrecords.WildcardKey(environment.TierPreview)
 	entry, err := keyvalue.ReadOrEmpty(ctx, w.keyValues, name)
 	if err != nil {
-		return fmt.Errorf("read %s: %w", name, err)
+		return keyvalue.Entry{}, stackrecords.Wildcard{}, fmt.Errorf("read %s: %w", name, err)
 	}
-	if entry.Value, err = json.Marshal(w.recorded); err != nil {
-		return fmt.Errorf("record %s: %w", name, err)
+	var stored stackrecords.Wildcard
+	if len(entry.Value) > 0 {
+		if err := json.Unmarshal(entry.Value, &stored); err != nil {
+			return keyvalue.Entry{}, stackrecords.Wildcard{}, fmt.Errorf("read %s: %w", name, err)
+		}
 	}
-	if _, err := w.keyValues.Write(ctx, entry); err != nil {
-		return fmt.Errorf("record %s: %w", name, err)
-	}
-	return nil
+	return entry, stored, nil
 }
 
 func (h *handlers) UsePreviewWildcard(ctx context.Context, req *contractv1.UsePreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
@@ -233,15 +257,9 @@ func (w *wildcards) reserveOriginCertificate(ctx context.Context, issued edge.Or
 func (w *wildcards) swapOriginCertificate(ctx context.Context, from, to string, expiresAt time.Time) error {
 	name := stackrecords.WildcardKey(environment.TierPreview)
 	for range reservationAttempts {
-		entry, err := keyvalue.ReadOrEmpty(ctx, w.keyValues, name)
+		entry, recorded, err := w.readStored(ctx)
 		if err != nil {
-			return fmt.Errorf("read %s: %w", name, err)
-		}
-		var recorded stackrecords.Wildcard
-		if len(entry.Value) > 0 {
-			if err := json.Unmarshal(entry.Value, &recorded); err != nil {
-				return fmt.Errorf("read %s: %w", name, err)
-			}
+			return err
 		}
 		if recorded.Host.OriginCertificateID != from {
 			return fmt.Errorf("%w on %s: deploy again once it finishes", errPreviewEntryRenewing, w.recorded.Hostname())
