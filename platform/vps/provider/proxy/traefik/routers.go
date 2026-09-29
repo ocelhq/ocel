@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -12,8 +13,10 @@ import (
 	"strconv"
 	"strings"
 	"text/template"
+	"unicode"
 
 	"github.com/BurntSushi/toml"
+	"github.com/Masterminds/sprig/v3"
 	"gopkg.in/yaml.v3"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -31,9 +34,18 @@ type collision struct {
 }
 
 func (t Traefik) refuseRouted(ctx context.Context, hostnames []string) error {
-	routers, err := t.routers(ctx)
+	routers, unread, err := t.routers(ctx)
 	if err != nil {
 		return err
+	}
+	if len(unread) > 0 {
+		lines := make([]string, 0, len(unread))
+		for _, file := range unread {
+			lines = append(lines, file.said())
+		}
+		return refusal.Refuse(refusal.CodeInvalid,
+			"%s\nOcel never takes a hostname your Traefik may already route, and a router in a file it cannot read may route %s; fix or remove that file",
+			strings.Join(lines, "\n"), strings.Join(hostnames, ", "))
 	}
 	found := collisions(hostnames, routers)
 	if len(found) == 0 {
@@ -52,18 +64,30 @@ func (c collision) said() string {
 	return fmt.Sprintf("%s is already routed by your Traefik: router %s in %s", c.hostname, c.router.name, c.router.where)
 }
 
-func (t Traefik) routers(ctx context.Context) ([]userRouter, error) {
+type unreadFile struct {
+	path string
+	err  error
+}
+
+func (u unreadFile) said() string {
+	return fmt.Sprintf("ocel cannot read %s for the routers in it: %s", u.path, oneLine(u.err))
+}
+
+func (t Traefik) routers(ctx context.Context) ([]userRouter, []unreadFile, error) {
 	beside, err := t.Box.ReadBeside(ctx, t.file())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var found []userRouter
+	var unread []unreadFile
 	for _, file := range beside {
-		tree, err := decoded(file.Name, file.Content)
+		path := filepath.Join(t.directory(), file.Name)
+		tree, err := decodeDynamic(file.Name, file.Content)
 		if err != nil {
+			unread = append(unread, unreadFile{path: path, err: err})
 			continue
 		}
-		found = append(found, routersIn(tree, filepath.Join(t.directory(), file.Name))...)
+		found = append(found, routersIn(tree, path)...)
 	}
 	for _, source := range []struct {
 		what  string
@@ -75,43 +99,52 @@ func (t Traefik) routers(ctx context.Context) ([]userRouter, error) {
 	} {
 		said, err := t.Box.Ran(ctx, source.what, source.argv)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		labelled, err := labelledIn(said, source.where)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		found = append(found, labelled...)
 	}
-	return found, nil
+	return found, unread, nil
 }
 
-var undefinedFunction = regexp.MustCompile(`function "[^"]+" not defined`)
+var errOnlyTraefikSees = errors.New("it reads what only your Traefik sees")
 
-func decoded(name string, content []byte) (map[string]any, error) {
-	text := string(content)
-	if strings.Contains(text, templateOpen) {
-		parsed, err := template.New(name).Parse(text)
-		if err != nil && undefinedFunction.MatchString(err.Error()) {
-			return map[string]any{}, nil
+func templateFunctions() template.FuncMap {
+	functions := sprig.TxtFuncMap()
+	functions["normalize"] = normalize
+	functions["split"] = strings.Split
+	for _, unseen := range []string{"env", "expandenv", "getHostByName"} {
+		functions[unseen] = func(...any) (string, error) {
+			return "", fmt.Errorf("%s: %w", unseen, errOnlyTraefikSees)
 		}
-		if err != nil {
-			return nil, err
-		}
-		var executed bytes.Buffer
-		if err := parsed.Execute(&executed, nil); err != nil {
-			return nil, err
-		}
-		text = executed.String()
+	}
+	return functions
+}
+
+func normalize(name string) string {
+	return strings.Join(strings.FieldsFunc(name, func(c rune) bool { return !unicode.IsLetter(c) && !unicode.IsNumber(c) }), "-")
+}
+
+func decodeDynamic(name string, content []byte) (map[string]any, error) {
+	parsed, err := template.New(name).Funcs(templateFunctions()).Parse(string(content))
+	if err != nil {
+		return nil, err
+	}
+	var executed bytes.Buffer
+	if err := parsed.Execute(&executed, false); err != nil {
+		return nil, err
 	}
 	tree := map[string]any{}
 	switch strings.ToLower(filepath.Ext(name)) {
 	case ".toml":
-		if _, err := toml.Decode(text, &tree); err != nil {
+		if _, err := toml.Decode(executed.String(), &tree); err != nil {
 			return nil, err
 		}
 	default:
-		if err := yaml.Unmarshal([]byte(text), &tree); err != nil {
+		if err := yaml.Unmarshal(executed.Bytes(), &tree); err != nil {
 			return nil, err
 		}
 	}

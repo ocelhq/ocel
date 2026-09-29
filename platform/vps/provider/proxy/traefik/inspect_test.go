@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/traefik"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 const (
@@ -156,6 +157,17 @@ func TestARouterOfYoursAddedAfterTheBindThatOcelNowOutranksFailsNamingIt(t *test
 		if !strings.Contains(check.Finding, "container z1jkcokc10dwzdk8i5huimhi-122346088210") || !strings.Contains(check.Fix, "ocel domain rm web.p1305.test") {
 			t.Errorf("%s = %+v, want it named with where it is defined and how to hand the hostname back", check.Subject, check)
 		}
+	}
+}
+
+func TestAFileOfYoursOcelCannotReadForRoutersFailsNamingIt(t *testing.T) {
+	t.Parallel()
+
+	machine, front := healthy(t)
+	machine.beside = append(machine.beside, switchboard.SiblingFile{Name: "broken.yml", Content: []byte("http:\n  routers:\n    web:\n      rule: Host(`a.example.com`)\n     service: web\n")})
+	check, ok := inspected(t, front)["routers in "+coolifyDynamic+"/broken.yml"]
+	if !ok || check.Verdict != provider.HostFail || check.Fix == "" {
+		t.Errorf("Inspect() checked broken.yml as %+v, want it failed with a fix: ocel cannot see which hostnames its routers take", check)
 	}
 }
 

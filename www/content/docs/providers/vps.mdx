@@ -227,7 +227,11 @@ the directory besides `ocel.yml`, the `traefik.http.routers.<name>.rule` labels 
 running container, and the same labels on swarm services when the box manages a swarm. A
 `Host()` equal to the hostname, or a `HostRegexp` that matches it, refuses the claim and names
 the router and where it is defined. A `HostRegexp` that matches any hostname at all is a
-catch-all and claims nothing. `ocel doctor` runs the same check, so a router you add after the
+catch-all and claims nothing. Ocel reads each file the way Traefik does, through the same
+template functions. If it can't read a file, a router in it could already route the hostname,
+so the claim is refused and the refusal names the file. A template that calls `env`,
+`expandenv` or `getHostByName` counts as unreadable too, because it reads what only your
+Traefik can see. `ocel doctor` runs the same check, so a router you add after the
 bind, which ocel's priority now wins over, is named too. Routers from Traefik's other
 providers, such as Consul or Kubernetes, are invisible to ocel, so it can't check them.
 

@@ -2,6 +2,7 @@ package traefik
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"path/filepath"
@@ -101,7 +102,7 @@ func (t Traefik) diagnose(ctx context.Context) string {
 	}
 	slices.SortFunc(beside, func(a, b switchboard.SiblingFile) int { return strings.Compare(a.Name, b.Name) })
 	for _, file := range beside {
-		if err := parseLikeTraefik(file.Name, file.Content); err != nil {
+		if err := parseLikeTraefik(file.Name, file.Content); err != nil && !errors.Is(err, errOnlyTraefikSees) {
 			at := filepath.Join(t.directory(), file.Name)
 			return fmt.Sprintf("\n%s does not parse: %v\nWhile it does, your Traefik takes up no change to any file in %s, ocel's among them, and after a restart it serves none of them\nFix or remove %s",
 				at, oneLine(err), t.directory(), at)
@@ -118,7 +119,7 @@ var knownSections = map[string][]string{
 }
 
 func parseLikeTraefik(name string, content []byte) error {
-	tree, err := decoded(name, content)
+	tree, err := decodeDynamic(name, content)
 	if err != nil {
 		return err
 	}
