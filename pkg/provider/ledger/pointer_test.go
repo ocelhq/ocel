@@ -270,6 +270,45 @@ func TestHistoryReadsNewestFirstAndMarksOnlyTheActivePromotion(t *testing.T) {
 	if history[0].Active || !history[1].Active || history[2].Active {
 		t.Errorf("history = %+v, want only p2, the promotion p3 was taken back to, active", history)
 	}
+	if !history[0].Unpromoted || history[1].Unpromoted || history[2].Unpromoted {
+		t.Errorf("history = %+v, want only p3 marked as taken back", history)
+	}
+}
+
+func TestARollbackPromotesTheTargetsBuildsAsANewPromotion(t *testing.T) {
+	t.Parallel()
+
+	pointer := promoted(t, promotion("p1"), promotion("p2"))
+	rolled := router.Promotion{PromotionID: "r1", Builds: pointer.Promotions[1].Builds}
+
+	after, _, err := pointer.Rollback("p1", rolled, "p2", ledger.KeptPromotions)
+	if err != nil {
+		t.Fatalf("Rollback(p1) = %v", err)
+	}
+	if after.Active != "r1" || ids(after.Promotions) != "r1,p2,p1" {
+		t.Errorf("after the rollback the pointer is at %q with %s, want r1 active beside p2 and p1", after.Active, ids(after.Promotions))
+	}
+}
+
+func TestARollbackToAPromotionTakenBackIsRefused(t *testing.T) {
+	t.Parallel()
+
+	pointer := unpromoted(t, promoted(t, promotion("p1"), promotion("p2"), promotion("p3")), "p2")
+
+	_, _, err := pointer.Rollback("p2", router.Promotion{PromotionID: "r1", Builds: promotion("p2").Builds}, "p3", ledger.KeptPromotions)
+	refused := refusedWith(t, err, refusal.CodeInvalid)
+	if !strings.Contains(refused.Message, "p2") {
+		t.Errorf("the refusal does not name the promotion taken back: %s", refused.Message)
+	}
+}
+
+func TestARollbackToAPromotionThePointerNoLongerRecordsIsRefused(t *testing.T) {
+	t.Parallel()
+
+	pointer, _ := promoted(t, promotion("p1"), promotion("p2"), promotion("p3")).Retain(0)
+
+	_, _, err := pointer.Rollback("p1", router.Promotion{PromotionID: "r1", Builds: promotion("p1").Builds}, "p3", ledger.KeptPromotions)
+	refusedWith(t, err, refusal.CodeInvalid)
 }
 
 func TestUnpromotingAPromotionThePointerNeverRecordedIsAnError(t *testing.T) {

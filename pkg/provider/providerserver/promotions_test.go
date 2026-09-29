@@ -171,6 +171,70 @@ func TestTheRollbackFlipIsHandedProgressThatDiscards(t *testing.T) {
 	}
 }
 
+func seedTakenBack(t *testing.T, provider *fake.Provider) {
+	t.Helper()
+	releases := seedPromotions(t, provider, environment.TierProduction, "shop", "", "p1")
+	for i, id := range []string{"p2", "p3"} {
+		build := buildIdentity(i + 1)
+		if err := releases.PutStaged(context.Background(), router.DeploymentRecord{App: "web", Build: build}); err != nil {
+			t.Fatal(err)
+		}
+		promotion := router.Promotion{PromotionID: id, Ts: int64(i + 2), Builds: map[string]string{"web": build}}
+		if _, err := releases.Promote(context.Background(), promotion, "", "p1"); err != nil {
+			t.Fatal(err)
+		}
+		if id == "p2" {
+			if err := releases.Unpromote(context.Background(), "p2", ""); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+}
+
+func TestListPromotionsMarksAPromotionTakenBack(t *testing.T) {
+	t.Parallel()
+	client, provider := contractServed(t, "1.0.0")
+	edgeProvisioned(t, provider, environment.TierProduction, "shop")
+	seedTakenBack(t, provider)
+
+	listed, err := client.ListPromotions(context.Background(), &contractv1.ListPromotionsRequest{Slug: "shop"})
+	if err != nil {
+		t.Fatalf("ListPromotions() error = %v", err)
+	}
+	for _, entry := range listed.GetPromotions() {
+		if want := entry.GetPromotion().GetPromotionId() == "p2"; entry.GetUnpromoted() != want {
+			t.Errorf("ListPromotions() marks %s unpromoted %v, want %v: only p2 was taken back", entry.GetPromotion().GetPromotionId(), entry.GetUnpromoted(), want)
+		}
+	}
+}
+
+func TestRollbackPassesOverAPromotionTakenBack(t *testing.T) {
+	t.Parallel()
+	client, provider := contractServed(t, "1.0.0")
+	edgeProvisioned(t, provider, environment.TierProduction, "shop")
+	seedTakenBack(t, provider)
+
+	rolled, err := client.Rollback(context.Background(), &contractv1.RollbackRequest{Slug: "shop"})
+	if err != nil {
+		t.Fatalf("Rollback() error = %v", err)
+	}
+	if build := rolled.GetPromoted().GetBuilds()["web"]; build != buildIdentity(0) {
+		t.Errorf("Rollback() promoted web build %q, want %q, the build p1 served: p2 was taken back and never served", build, buildIdentity(0))
+	}
+}
+
+func TestRollbackToAPromotionTakenBackIsRefused(t *testing.T) {
+	t.Parallel()
+	client, provider := contractServed(t, "1.0.0")
+	edgeProvisioned(t, provider, environment.TierProduction, "shop")
+	seedTakenBack(t, provider)
+
+	_, err := client.Rollback(context.Background(), &contractv1.RollbackRequest{Slug: "shop", To: "p2"})
+	if connect.CodeOf(err) != connect.CodeInvalidArgument || !strings.Contains(err.Error(), "p2") {
+		t.Fatalf("Rollback() to p2 = %v, want it refused as an invalid argument naming p2, which was taken back", err)
+	}
+}
+
 func TestRollbackRefusesAPromotionTheHistoryDoesNotContain(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")

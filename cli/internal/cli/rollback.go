@@ -183,9 +183,13 @@ func rollbackTarget(history []*contractv1.PromotionHistoryEntry, to, tag string)
 	switch {
 	case to != "":
 		for _, entry := range history {
-			if entry.GetPromotion().GetPromotionId() == to {
-				return entry.GetPromotion(), nil
+			if entry.GetPromotion().GetPromotionId() != to {
+				continue
 			}
+			if entry.GetUnpromoted() {
+				return nil, fmt.Errorf("promotion %s was taken back when a router could not serve it, so it never served and there is nothing of it to roll back to: `ocel deployments ls` marks it unpromoted", to)
+			}
+			return entry.GetPromotion(), nil
 		}
 		return nil, fmt.Errorf("no promotion %q in this project's production history, which contains %s: `ocel deployments ls` lists them all", to, promotionIDs(history))
 	case tag != "":
@@ -208,10 +212,12 @@ func rollbackTarget(history []*contractv1.PromotionHistoryEntry, to, tag string)
 		if !entry.GetActive() {
 			continue
 		}
-		if i+1 >= len(history) {
-			return nil, fmt.Errorf("promotion %s is live and is the earliest in this project's production history, so there is nothing earlier to roll back to", entry.GetPromotion().GetPromotionId())
+		for _, earlier := range history[i+1:] {
+			if !earlier.GetUnpromoted() {
+				return earlier.GetPromotion(), nil
+			}
 		}
-		return history[i+1].GetPromotion(), nil
+		return nil, fmt.Errorf("promotion %s is live and no earlier promotion in this project's production history served, so there is nothing earlier to roll back to", entry.GetPromotion().GetPromotionId())
 	}
 	return nil, fmt.Errorf("no promotion in this project's production history is live, so there is nothing to roll back from: pass --to with the promotion id to serve")
 }

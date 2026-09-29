@@ -72,7 +72,7 @@ func (w *promoteWorld) promotes(t *testing.T, id string) error {
 
 func (w *promoteWorld) promotesReplacing(t *testing.T, ctx context.Context, replaces, id string) error {
 	t.Helper()
-	_, err := promote(ctx, w.ledger, "", replaces, w.staged(t, id), w.appRouters(), progress.DiscardProgress())
+	_, err := promote(ctx, w.ledger, promoteRequest{replaces: replaces, promotion: w.staged(t, id)}, w.appRouters(), progress.DiscardProgress())
 	return err
 }
 

@@ -3932,6 +3932,7 @@ type PromotionHistoryEntry struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Promotion     *Promotion             `protobuf:"bytes,1,opt,name=promotion,proto3" json:"promotion,omitempty"`
 	Active        bool                   `protobuf:"varint,2,opt,name=active,proto3" json:"active,omitempty"`
+	Unpromoted    bool                   `protobuf:"varint,3,opt,name=unpromoted,proto3" json:"unpromoted,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3976,6 +3977,13 @@ func (x *PromotionHistoryEntry) GetPromotion() *Promotion {
 func (x *PromotionHistoryEntry) GetActive() bool {
 	if x != nil {
 		return x.Active
+	}
+	return false
+}
+
+func (x *PromotionHistoryEntry) GetUnpromoted() bool {
+	if x != nil {
+		return x.Unpromoted
 	}
 	return false
 }
@@ -5060,10 +5068,13 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"flip_bound\x18\x05 \x01(\v2\x1d.common.progress.v1.FlipBoundR\tflipBound\x1a9\n" +
 	"\vBuildsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"n\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8e\x01\n" +
 	"\x15PromotionHistoryEntry\x12=\n" +
 	"\tpromotion\x18\x01 \x01(\v2\x1f.provider.contract.v1.PromotionR\tpromotion\x12\x16\n" +
-	"\x06active\x18\x02 \x01(\bR\x06active\"\x87\x01\n" +
+	"\x06active\x18\x02 \x01(\bR\x06active\x12\x1e\n" +
+	"\n" +
+	"unpromoted\x18\x03 \x01(\bR\n" +
+	"unpromoted\"\x87\x01\n" +
 	"\x15ListPromotionsRequest\x125\n" +
 	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x127\n" +
 	"\x04edge\x18\x02 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\"e\n" +

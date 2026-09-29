@@ -146,9 +146,19 @@ func (l *Ledger) write(ctx context.Context, stored keyvalue.Entry, next Pointer)
 }
 
 func (l *Ledger) Promote(ctx context.Context, promotion router.Promotion, pointer, replaces string) (router.PruneResult, error) {
-	kept, dropped, err := l.change(ctx, router.ResolvePointer(pointer), func(current Pointer) (Pointer, []RecordedPromotion, error) {
+	return l.recordPromotion(ctx, pointer, func(current Pointer) (Pointer, []RecordedPromotion, error) {
 		return current.Promote(promotion, replaces, KeptPromotions)
 	})
+}
+
+func (l *Ledger) Rollback(ctx context.Context, target string, promotion router.Promotion, pointer, replaces string) (router.PruneResult, error) {
+	return l.recordPromotion(ctx, pointer, func(current Pointer) (Pointer, []RecordedPromotion, error) {
+		return current.Rollback(target, promotion, replaces, KeptPromotions)
+	})
+}
+
+func (l *Ledger) recordPromotion(ctx context.Context, pointer string, apply func(Pointer) (Pointer, []RecordedPromotion, error)) (router.PruneResult, error) {
+	kept, dropped, err := l.change(ctx, router.ResolvePointer(pointer), apply)
 	if err != nil {
 		return router.PruneResult{}, err
 	}

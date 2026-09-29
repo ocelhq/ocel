@@ -179,8 +179,11 @@ func renderPromotions(stdout io.Writer, promotions []*contractv1.PromotionHistor
 			tag = "—"
 		}
 		status := ""
-		if entry.GetActive() {
+		switch {
+		case entry.GetActive():
 			status = activeStatus
+		case entry.GetUnpromoted():
+			status = "unpromoted"
 		}
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", p.GetPromotionId(), tag, runui.EpochDateTime(p.GetTs()), deployedIdentities(p.GetBuilds()), status)
 	}

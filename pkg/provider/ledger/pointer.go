@@ -50,6 +50,21 @@ func (p Pointer) Promote(promotion router.Promotion, replaces string, keep int) 
 	return kept, dropped, nil
 }
 
+func (p Pointer) Rollback(target string, promotion router.Promotion, replaces string, keep int) (Pointer, []RecordedPromotion, error) {
+	at := p.findPromotion(target)
+	if at < 0 {
+		return Pointer{}, nil, refusal.Refuse(refusal.CodeInvalid,
+			"roll %s back to promotion %s: %s no longer records it, because a prune or a promote dropped it while this rollback ran. `ocel deployments ls` lists the promotions a rollback can reach",
+			p.Name, target, p.Name)
+	}
+	if p.Promotions[at].Unpromoted {
+		return Pointer{}, nil, refusal.Refuse(refusal.CodeInvalid,
+			"roll %s back to promotion %s: it was taken back when a router could not serve it, so it never served. Roll back to a promotion `ocel deployments ls` does not mark unpromoted",
+			p.Name, target)
+	}
+	return p.Promote(promotion, replaces, keep)
+}
+
 func (p Pointer) Retain(keep int) (Pointer, []RecordedPromotion) {
 	pinned := append([]string{p.Active}, p.findFallbackChain(p.Active)...)
 	kept := p
@@ -83,7 +98,11 @@ func (p Pointer) Unpromote(promotionID string) (Pointer, error) {
 func (p Pointer) History() []router.HistoryEntry {
 	history := make([]router.HistoryEntry, 0, len(p.Promotions))
 	for _, recorded := range p.Promotions {
-		history = append(history, router.HistoryEntry{Promotion: recorded.Promotion, Active: recorded.PromotionID == p.Active})
+		history = append(history, router.HistoryEntry{
+			Promotion:  recorded.Promotion,
+			Active:     recorded.PromotionID == p.Active,
+			Unpromoted: recorded.Unpromoted,
+		})
 	}
 	return history
 }

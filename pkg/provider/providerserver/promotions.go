@@ -62,7 +62,7 @@ func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest
 		Builds:      target.Builds,
 		Flip:        &flip,
 	}
-	pruned, err := session.promote(ctx, "", current.Active, promoted, progress.DiscardProgress())
+	pruned, err := session.promote(ctx, promoteRequest{replaces: current.Active, rollsBackTo: target.PromotionID, promotion: promoted}, progress.DiscardProgress())
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
@@ -96,10 +96,12 @@ func rollbackTarget(history []router.HistoryEntry, to, tag string) (router.Promo
 		if !entry.Active {
 			continue
 		}
-		if i+1 >= len(history) {
-			return router.Promotion{}, refusal.Refuse(refusal.CodeNotReady, "this project has no earlier promotion to roll back to")
+		for _, earlier := range history[i+1:] {
+			if !earlier.Unpromoted {
+				return earlier.Promotion, nil
+			}
 		}
-		return history[i+1].Promotion, nil
+		return router.Promotion{}, refusal.Refuse(refusal.CodeNotReady, "this project has no earlier promotion that served to roll back to")
 	}
 	return router.Promotion{}, refusal.Refuse(refusal.CodeNotReady, "this project has no active promotion to roll back from")
 }
@@ -182,8 +184,9 @@ func promotionHistoryProto(history []router.HistoryEntry) []*contractv1.Promotio
 	out := make([]*contractv1.PromotionHistoryEntry, 0, len(history))
 	for _, entry := range history {
 		out = append(out, &contractv1.PromotionHistoryEntry{
-			Promotion: promotionProto(entry.Promotion),
-			Active:    entry.Active,
+			Promotion:  promotionProto(entry.Promotion),
+			Active:     entry.Active,
+			Unpromoted: entry.Unpromoted,
 		})
 	}
 	return out

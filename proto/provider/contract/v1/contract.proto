@@ -616,6 +616,7 @@ message Promotion {
 message PromotionHistoryEntry {
   Promotion promotion = 1;
   bool active = 2;
+  bool unpromoted = 3;
 }
 
 message ListPromotionsRequest {
