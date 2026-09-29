@@ -17,6 +17,7 @@ import (
 const (
 	FakeConnectorTargetEnvVar = "OCEL_TEST_FAKE_CONNECTOR_TARGET"
 	FakeConnectorHostEnvVar   = "OCEL_TEST_FAKE_CONNECTOR_HOST"
+	FakeConnectorOSEnvVar     = "OCEL_TEST_FAKE_CONNECTOR_OS"
 	FakeConnectorArchEnvVar   = "OCEL_TEST_FAKE_CONNECTOR_ARCH"
 	FakeConnectorLogEnvVar    = "OCEL_TEST_FAKE_CONNECTOR_LOG"
 	FakeConnectorRefuseEnvVar = "OCEL_TEST_FAKE_CONNECTOR_REFUSE"
@@ -67,6 +68,7 @@ func (s *deployFakeProviderServer) DescribeConnectorTarget(context.Context, *con
 	return &contractv1.DescribeConnectorTargetResponse{
 		TargetFingerprint: os.Getenv(FakeConnectorTargetEnvVar),
 		Hostname:          os.Getenv(FakeConnectorHostEnvVar),
+		Os:                os.Getenv(FakeConnectorOSEnvVar),
 		Arch:              os.Getenv(FakeConnectorArchEnvVar),
 	}, nil
 }

@@ -30,6 +30,7 @@ func (h *connectorHost) Target(context.Context) (provider.ConnectorTarget, error
 	return provider.ConnectorTarget{
 		Fingerprint: "vps/SHA256:AAAA/ocel",
 		Hostname:    "box.example.com",
+		OS:          "linux",
 		Arch:        "arm64",
 		Installed:   &provider.ConnectorRelease{Version: "0.4.1", PublicKey: "ZmFrZQ==", Compute: provider.ComputeContainer},
 	}, nil
@@ -122,8 +123,8 @@ func TestDescribingAConnectorTargetIncludesWhatTheConsoleKeysItBy(t *testing.T) 
 	if described.GetTargetFingerprint() != "vps/SHA256:AAAA/ocel" {
 		t.Errorf("fingerprint = %q", described.GetTargetFingerprint())
 	}
-	if described.GetHostname() != "box.example.com" || described.GetArch() != "arm64" {
-		t.Errorf("hostname/arch = %q/%q", described.GetHostname(), described.GetArch())
+	if described.GetHostname() != "box.example.com" || described.GetOs() != "linux" || described.GetArch() != "arm64" {
+		t.Errorf("hostname/os/arch = %q/%q/%q, want the platform the connector binary is built for", described.GetHostname(), described.GetOs(), described.GetArch())
 	}
 	if described.GetInstalled().GetVersion() != "0.4.1" || described.GetInstalled().GetPublicKey() != "ZmFrZQ==" {
 		t.Errorf("installed = %v, want the version and key installed on the target", described.GetInstalled())

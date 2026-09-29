@@ -40,6 +40,7 @@ func SetUpConnectorFixture(t *testing.T, fingerprint, hostname string) string {
 	t.Setenv(fakeProviderSockEnvVar, filepath.Join(t.TempDir(), "connector-provider.sock"))
 	t.Setenv(FakeConnectorTargetEnvVar, fingerprint)
 	t.Setenv(FakeConnectorHostEnvVar, hostname)
+	t.Setenv(FakeConnectorOSEnvVar, "linux")
 	t.Setenv(FakeConnectorArchEnvVar, "amd64")
 	t.Setenv(FakeConnectorLogEnvVar, filepath.Join(t.TempDir(), "connector.json"))
 

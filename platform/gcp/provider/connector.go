@@ -24,6 +24,7 @@ import (
 )
 
 const (
+	ConnectorOS   = "linux"
 	ConnectorArch = "amd64"
 
 	connectorImageName   = "ocel-connector"
@@ -54,7 +55,7 @@ func (p connector) Target(ctx context.Context) (provider.ConnectorTarget, error)
 	if err != nil {
 		return provider.ConnectorTarget{}, err
 	}
-	described := provider.ConnectorTarget{Fingerprint: fingerprint, Arch: ConnectorArch}
+	described := provider.ConnectorTarget{Fingerprint: fingerprint, OS: ConnectorOS, Arch: ConnectorArch}
 
 	deployed, err := p.connectorService(ctx)
 	if err != nil {

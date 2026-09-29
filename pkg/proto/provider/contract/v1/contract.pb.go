@@ -4526,6 +4526,7 @@ type DescribeConnectorTargetResponse struct {
 	Hostname          string                 `protobuf:"bytes,2,opt,name=hostname,proto3" json:"hostname,omitempty"`
 	Arch              string                 `protobuf:"bytes,3,opt,name=arch,proto3" json:"arch,omitempty"`
 	Installed         *InstalledConnector    `protobuf:"bytes,4,opt,name=installed,proto3" json:"installed,omitempty"`
+	Os                string                 `protobuf:"bytes,5,opt,name=os,proto3" json:"os,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -4586,6 +4587,13 @@ func (x *DescribeConnectorTargetResponse) GetInstalled() *InstalledConnector {
 		return x.Installed
 	}
 	return nil
+}
+
+func (x *DescribeConnectorTargetResponse) GetOs() string {
+	if x != nil {
+		return x.Os
+	}
+	return ""
 }
 
 type InstalledConnector struct {
@@ -5121,12 +5129,13 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\vfingerprint\x18\x03 \x01(\tR\vfingerprint\"@\n" +
 	"\aRefusal\x125\n" +
 	"\x04code\x18\x01 \x01(\x0e2!.provider.contract.v1.RefusalCodeR\x04code\" \n" +
-	"\x1eDescribeConnectorTargetRequest\"\xc8\x01\n" +
+	"\x1eDescribeConnectorTargetRequest\"\xd8\x01\n" +
 	"\x1fDescribeConnectorTargetResponse\x12-\n" +
 	"\x12target_fingerprint\x18\x01 \x01(\tR\x11targetFingerprint\x12\x1a\n" +
 	"\bhostname\x18\x02 \x01(\tR\bhostname\x12\x12\n" +
 	"\x04arch\x18\x03 \x01(\tR\x04arch\x12F\n" +
-	"\tinstalled\x18\x04 \x01(\v2(.provider.contract.v1.InstalledConnectorR\tinstalled\"g\n" +
+	"\tinstalled\x18\x04 \x01(\v2(.provider.contract.v1.InstalledConnectorR\tinstalled\x12\x0e\n" +
+	"\x02os\x18\x05 \x01(\tR\x02os\"g\n" +
 	"\x12InstalledConnector\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x1d\n" +
 	"\n" +

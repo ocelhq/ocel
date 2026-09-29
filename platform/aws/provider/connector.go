@@ -43,6 +43,7 @@ func (p connector) Target(ctx context.Context) (provider.ConnectorTarget, error)
 	described := provider.ConnectorTarget{
 		Fingerprint: fingerprint,
 		Hostname:    hostOf(installation.URL),
+		OS:          awsconnector.OS,
 		Arch:        awsconnector.Arch,
 	}
 	if installation.Present {

@@ -181,6 +181,32 @@ func TestAddPairsTheTargetWithTheConsoleAndInstallsTheAsset(t *testing.T) {
 	}
 }
 
+func TestAddInstallsTheConnectorBuiltForThePlatformTheProviderNames(t *testing.T) {
+	root := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	clitest.InstallConnector(t, "vps", providers.Platform{GOOS: "freebsd", GOARCH: "amd64"}, []byte("freebsd connector"))
+	t.Setenv(clitest.FakeConnectorOSEnvVar, "freebsd")
+	srv := newConsoleServer(t)
+	linked(t, root, srv.URL)
+
+	deps := clitest.NewDeps()
+	clitest.SetLoggedIn(&deps)
+	deps.ConfigPath = func() string { return filepath.Join(root, "ocel.vps.json") }
+
+	var stdout bytes.Buffer
+	clitest.AttachTerminalSink(deps, &stdout)
+	if err := runAdd(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv)); err != nil {
+		t.Fatalf("runAdd err = %v\n%s", err, stdout.String())
+	}
+
+	log, err := clitest.LoadFakeConnectorLog(os.Getenv(clitest.FakeConnectorLogEnvVar))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(log.Binary) != "freebsd connector" {
+		t.Errorf("the provider was handed %q, want the connector built for the freebsd target it described", string(log.Binary))
+	}
+}
+
 func TestAddRelaysWhatTheProviderSaysWhileItInstallsThroughItsRun(t *testing.T) {
 	root := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
 	srv := newConsoleServer(t)

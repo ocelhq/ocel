@@ -32,6 +32,7 @@ func (h *handlers) DescribeConnectorTarget(ctx context.Context, _ *contractv1.De
 	resp := &contractv1.DescribeConnectorTargetResponse{
 		TargetFingerprint: described.Fingerprint,
 		Hostname:          described.Hostname,
+		Os:                described.OS,
 		Arch:              described.Arch,
 	}
 	if described.Installed != nil {

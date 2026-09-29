@@ -718,6 +718,8 @@ message DescribeConnectorTargetResponse {
   string arch = 3;
 
   InstalledConnector installed = 4;
+
+  string os = 5;
 }
 
 message InstalledConnector {

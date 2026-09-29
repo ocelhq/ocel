@@ -14,6 +14,7 @@ const ConnectorConfigEnvVar = "OCEL_CONNECTOR_CONFIG_JSON"
 type ConnectorTarget struct {
 	Fingerprint string
 	Hostname    string
+	OS          string
 	Arch        string
 	Installed   *ConnectorRelease
 }

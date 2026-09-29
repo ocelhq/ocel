@@ -57,13 +57,14 @@ func runAdd(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, l
 		return fmt.Errorf("record this target in the console: %w", err)
 	}
 
-	binary, err := providerclient.Connector(ctx, cfg.Dir, vendor, providers.Platform{GOOS: "linux", GOARCH: described.GetArch()})
+	platform := providers.Platform{GOOS: described.GetOs(), GOARCH: described.GetArch()}
+	binary, err := providerclient.Connector(ctx, cfg.Dir, vendor, platform)
 	if err != nil {
 		return err
 	}
 	if len(binary) > providerclient.MaxMessageBytes {
-		return fmt.Errorf("the %s connector built for linux/%s is %d bytes, over the %d the provider channel accepts in one message",
-			vendor, described.GetArch(), len(binary), providerclient.MaxMessageBytes)
+		return fmt.Errorf("the %s connector built for %s/%s is %d bytes, over the %d the provider channel accepts in one message",
+			vendor, platform.GOOS, platform.GOARCH, len(binary), providerclient.MaxMessageBytes)
 	}
 	config, err := json.Marshal(connectorserver.Config{
 		Console:        opts.apiURL,

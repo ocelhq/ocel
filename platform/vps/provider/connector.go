@@ -16,7 +16,10 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
-const connectorCompute = provider.ComputeContainer
+const (
+	connectorCompute = provider.ComputeContainer
+	connectorOS      = "linux"
+)
 
 func dialable(hostname string) error {
 	if hostname == "" {
@@ -75,6 +78,7 @@ func (p connector) Target(ctx context.Context) (provider.ConnectorTarget, error)
 	described := provider.ConnectorTarget{
 		Fingerprint: fingerprint,
 		Hostname:    hostname,
+		OS:          connectorOS,
 		Arch:        arch,
 	}
 	current, err := host.NewConnector(p.host).Describe(ctx)

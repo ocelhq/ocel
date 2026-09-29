@@ -28,6 +28,7 @@ import (
 )
 
 const (
+	OS   = "linux"
 	Arch = "arm64"
 
 	runtime = "provided.al2023"
