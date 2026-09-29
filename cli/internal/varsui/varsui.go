@@ -384,7 +384,7 @@ func (s *Session) read(ctx context.Context, from Reader, rows []envgate.Address)
 
 func (s *Session) secrets() map[string]bool {
 	out := map[string]bool{}
-	for _, definition := range s.opts.Gate.Definitions() {
+	for _, definition := range s.opts.Gate.Declared() {
 		if definition.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_SECRET {
 			out[definition.GetKey()] = true
 		}

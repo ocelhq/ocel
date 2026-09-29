@@ -1039,6 +1039,19 @@ func TestReveal(t *testing.T) {
 		}
 	})
 
+	t.Run("a credential the env source logs in with is never sent to the browser", func(t *testing.T) {
+		t.Parallel()
+		source := &fakeEnvSource{store: newFakeStore(), described: infisical}
+		source.store.cells[envgate.Cell{Key: "INFISICAL_CLIENT_ID"}] = "machine-identity"
+		s := envSourceSession(t, source, nil)
+
+		resp := request(t, s, http.MethodPost, "/api/reveal", map[string]any{"cells": []map[string]string{{"key": "INFISICAL_CLIENT_ID"}}})
+		body := bodyOf(t, resp)
+		if resp.StatusCode != http.StatusBadRequest || strings.Contains(body, "machine-identity") {
+			t.Errorf("POST /api/reveal = %d: %s, want the credential refused as a secret", resp.StatusCode, body)
+		}
+	})
+
 	t.Run("a store that cannot read reports every cell asked for", func(t *testing.T) {
 		t.Parallel()
 		store := newFakeStore()
