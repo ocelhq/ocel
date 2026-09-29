@@ -17,9 +17,10 @@ import (
 )
 
 type answered struct {
-	status int
-	router router.Kind
-	body   string
+	status   int
+	router   router.Kind
+	body     string
+	location string
 }
 
 func probing(t *testing.T, state RoutingTable) func(hostname string) answered {
@@ -56,7 +57,8 @@ func probedBox(t *testing.T, state RoutingTable, rendered []byte, joined ...stri
 		if hostname != "" {
 			request.Host = hostname
 		}
-		said, err := http.DefaultClient.Do(request)
+		asking := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+		said, err := asking.Do(request)
 		if err != nil {
 			t.Fatalf("ask the running proxy for %q: %v\n%s\n%s", hostname, err,
 				strings.TrimSpace(logsOf(proxy.name)), strings.TrimSpace(logsOf(proxy.board)))
@@ -66,7 +68,7 @@ func probedBox(t *testing.T, state RoutingTable, rendered []byte, joined ...stri
 		if err != nil {
 			t.Fatal(err)
 		}
-		return answered{status: said.StatusCode, router: router.Kind(said.Header.Get(router.HeaderRouter)), body: string(body)}
+		return answered{status: said.StatusCode, router: router.Kind(said.Header.Get(router.HeaderRouter)), body: string(body), location: said.Header.Get("Location")}
 	}
 }
 

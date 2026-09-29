@@ -61,7 +61,9 @@ Name the `cloudflare` edge and each hostname is forwarded to the box through Clo
 writes a proxied record pointing at the box, and a deploy flips which release answers it on
 the box, with no DNS change. The proxy on the box answers that hostname only to a client
 presenting the certificate your Cloudflare zone presents to origins, so a request that
-skips Cloudflare is refused: on port 443 without that certificate, and on port 80 always.
+skips Cloudflare is refused on port 443. On port 80 it answers that hostname with a redirect
+to https and forwards nothing, so a visitor who opens `http://` lands on https through
+Cloudflare, which reaches the box over plain http whenever the visitor did.
 It answers with a certificate from Cloudflare's origin CA, which ocel issues for the hostname and renews half way through its year, rather than one ordered
 from a public CA through Cloudflare. Set the zone's SSL mode to Full (strict). Previews are
 forwarded the same way, on a project's own `domains.preview` wildcard or the one
@@ -84,8 +86,9 @@ Behind [your own proxy](#behind-your-own-proxy), ocel cannot make it refuse a re
 skips Cloudflare. Configure it to require a client certificate for each hostname Cloudflare
 forwards, trusting only the certificates listed for that hostname under `shields` in
 `/var/lib/ocel/routing/table.json`, and serve it with the origin certificate listed beside
-them. On port 80 a request carries no client certificate, so refuse those hostnames there
-or redirect them to https. A deploy refuses to forward a hostname your proxy answers to a
+them. On port 80 a request carries no client certificate, so answer those hostnames there
+with a redirect to https and forward them nowhere; refusing them instead leaves a visitor
+who opens `http://` with an error. A deploy refuses to forward a hostname your proxy answers to a
 client with no certificate or forwards over plain http, and `ocel doctor` fails it.
 
 [Behind your Caddy](#behind-your-caddy), the site block ocel places requires no client

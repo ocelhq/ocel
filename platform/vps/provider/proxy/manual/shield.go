@@ -30,7 +30,7 @@ func (m Manual) checkShield(ctx context.Context, hostname string) (provider.Host
 		return provider.HostCheck{
 			Subject: hostname, Verdict: provider.HostFail,
 			Finding: fmt.Sprintf("your proxy forwards %s over plain http, where no client certificate is ever presented", hostname),
-			Fix:     fmt.Sprintf("in your proxy, stop forwarding %s on port 80: refuse it there or redirect it to https", hostname),
+			Fix:     fmt.Sprintf("in your proxy, answer %s on port 80 with a redirect to https and forward it nowhere", hostname),
 		}, nil
 	}
 	return provider.HostCheck{

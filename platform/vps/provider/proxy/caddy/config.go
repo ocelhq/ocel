@@ -146,14 +146,17 @@ type requestMatch struct {
 }
 
 type handler struct {
-	Handler     string `json:"handler"`
-	Upstreams   []dial `json:"upstreams,omitempty"`
-	StreamDelay string `json:"stream_close_delay,omitempty"`
-	StatusCode  int    `json:"status_code,omitempty"`
-	Close       bool   `json:"close,omitempty"`
+	Handler     string              `json:"handler"`
+	Upstreams   []dial              `json:"upstreams,omitempty"`
+	StreamDelay string              `json:"stream_close_delay,omitempty"`
+	StatusCode  int                 `json:"status_code,omitempty"`
+	Headers     map[string][]string `json:"headers,omitempty"`
 }
 
-const plainHTTP = "http"
+const (
+	plainHTTP      = "http"
+	sameURLOnHTTPS = "https://{http.request.host}{http.request.uri}"
+)
 
 type dial struct {
 	Dial string `json:"dial"`
@@ -209,7 +212,7 @@ func render(spec proxy.Spec) ([]byte, error) {
 		strict := true
 		front.StrictSNIHost = &strict
 	}
-	front.Routes = append(refusedOverPlainHTTP(spec.Shields), route{Handle: []handler{{
+	front.Routes = append(redirectShieldedToHTTPS(spec.Shields), route{Handle: []handler{{
 		Handler:     forwardHandler,
 		Upstreams:   []dial{{Dial: spec.Upstream}},
 		StreamDelay: Grace.String(),
@@ -321,7 +324,7 @@ func shieldPolicies(selecting []connectionPolicy, shields []proxy.Shield) ([]con
 	return slices.Concat(shielding, selecting), nil
 }
 
-func refusedOverPlainHTTP(shields []proxy.Shield) []route {
+func redirectShieldedToHTTPS(shields []proxy.Shield) []route {
 	if len(shields) == 0 {
 		return nil
 	}
@@ -330,8 +333,12 @@ func refusedOverPlainHTTP(shields []proxy.Shield) []route {
 		hosts = append(hosts, strings.ToLower(strings.TrimSpace(shield.Hostname)))
 	}
 	return []route{{
-		Match:  []requestMatch{{Host: slices.Compact(hosts), Protocol: plainHTTP}},
-		Handle: []handler{{Handler: answerHandler, StatusCode: http.StatusForbidden, Close: true}},
+		Match: []requestMatch{{Host: slices.Compact(hosts), Protocol: plainHTTP}},
+		Handle: []handler{{
+			Handler:    answerHandler,
+			StatusCode: http.StatusPermanentRedirect,
+			Headers:    map[string][]string{"Location": {sameURLOnHTTPS}},
+		}},
 	}}
 }
 

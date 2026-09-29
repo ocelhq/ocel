@@ -192,7 +192,7 @@ func TestAShieldedPreviewWildcardIsMatchedAfterEveryHostnameShieldedByName(t *te
 	}
 }
 
-func TestAShieldedHostnameIsNeverForwardedOverPlainHTTP(t *testing.T) {
+func TestAShieldedHostnameOverPlainHTTPIsRedirectedToHTTPSAndNeverForwarded(t *testing.T) {
 	t.Parallel()
 
 	client, _ := clientCertificate(t)
@@ -205,22 +205,28 @@ func TestAShieldedHostnameIsNeverForwardedOverPlainHTTP(t *testing.T) {
 	routes := read.front().Routes
 
 	if len(routes) != 2 {
-		t.Fatalf("the front server runs routes %+v, want the plain-http refusal of what is shielded, then the catch-all forward", routes)
+		t.Fatalf("the front server runs routes %+v, want the plain-http redirect of what is shielded, then the catch-all forward", routes)
 	}
-	var refused struct {
+	var redirected struct {
 		Host     []string `json:"host"`
 		Protocol string   `json:"protocol"`
 	}
-	if len(routes[0].Match) != 1 || json.Unmarshal(routes[0].Match[0], &refused) != nil {
+	if len(routes[0].Match) != 1 || json.Unmarshal(routes[0].Match[0], &redirected) != nil {
 		t.Fatalf("the first route matches %s, want one matcher naming the shielded hostnames over http", routes[0].Match)
 	}
-	if !slices.Equal(refused.Host, []string{"shop.example.com", "*.preview.example.com"}) || refused.Protocol != "http" {
-		t.Errorf("the first route matches hosts %v over %q, want every shielded hostname, the preview wildcard included, over http", refused.Host, refused.Protocol)
+	if !slices.Equal(redirected.Host, []string{"shop.example.com", "*.preview.example.com"}) || redirected.Protocol != "http" {
+		t.Errorf("the first route matches hosts %v over %q, want every shielded hostname, the preview wildcard included, over http", redirected.Host, redirected.Protocol)
 	}
 	if len(routes[0].Handle) != 1 || routes[0].Handle[0]["handler"] != "static_response" || routes[0].Handle[0]["upstreams"] != nil {
-		t.Errorf("the first route handles %+v, want a refusal that forwards nothing: a request on :80 carries no client certificate, so the switchboard would answer anyone who skips the edge", routes[0].Handle)
+		t.Fatalf("the first route handles %+v, want an answer that forwards nothing: a request on :80 carries no client certificate, so the switchboard would answer anyone who skips the edge", routes[0].Handle)
+	}
+	answer := routes[0].Handle[0]
+	headers, _ := answer["headers"].(map[string]any)
+	location, _ := headers["Location"].([]any)
+	if answer["status_code"] != float64(308) || len(location) != 1 || location[0] != "https://{http.request.host}{http.request.uri}" {
+		t.Errorf("the first route answers %v with Location %v, want 308 to the same hostname and path over https: Cloudflare reaches the origin over plain http when the visitor did, and the visitor must land on https", answer["status_code"], location)
 	}
 	if len(routes[1].Match) != 0 || routes[1].Handle[0]["handler"] != "reverse_proxy" {
-		t.Errorf("the second route is %+v, want the catch-all forward to the switchboard behind the refusal", routes[1])
+		t.Errorf("the second route is %+v, want the catch-all forward to the switchboard behind the redirect", routes[1])
 	}
 }
