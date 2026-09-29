@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	connect "connectrpc.com/connect"
 
@@ -398,6 +399,46 @@ func TestADeployWhoseSharedProvisionFailsRemovesWhatItsVendorNamed(t *testing.T)
 	}
 	if left := appStacksRecorded(t, vendor); len(left) != 0 {
 		t.Errorf("the failed deploy left stack records %v, want none", left)
+	}
+}
+
+func TestADeployWhoseCallerHungUpStillReclaimsWhatItProvisioned(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	removedUnder := make(chan error, 1)
+	vendor.ResourceStacks(resources.Hooks{Functions: &resources.FunctionHooks{
+		Provision: vendor.ProvisionFunctions,
+		Remove: func(ctx context.Context, _ provider.StackRef, _ []provider.Function, _ progress.Progress) error {
+			removedUnder <- ctx.Err()
+			return nil
+		},
+	}})
+	ctx, hangUp := context.WithCancel(context.Background())
+	defer hangUp()
+	vendor.WithHooks(func(hooks *provider.Hooks) {
+		hooks.WarmFunctions = func(ctx context.Context, _ []string, _ progress.Progress) error {
+			hangUp()
+			<-ctx.Done()
+			return ctx.Err()
+		}
+	})
+	req := deployRequest()
+	req.Manifest.Resources, req.Manifest.Usages = nil, nil
+
+	stream, err := client.Deploy(ctx, req)
+	if err == nil {
+		for stream.Receive() {
+		}
+		_ = stream.Close()
+	}
+
+	select {
+	case err := <-removedUnder:
+		if err != nil {
+			t.Errorf("the reclaim removed the deploy's functions under a context that was already %v, want one the hang-up did not cancel", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the deploy whose caller hung up never reclaimed the functions it provisioned")
 	}
 }
 
