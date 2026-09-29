@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -19,7 +18,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/runui"
-	"github.com/ocelhq/ocel/cli/internal/servicemap"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -95,36 +93,6 @@ func TestRunPreviewUp(t *testing.T) {
 
 		if !strings.Contains(stdout.String(), "FUNCTION logical_name=fn--api--api framework=node handler=index.handler artifact_path=output/api app=api") {
 			t.Errorf("stdout = %q, want the function to have reached the preview manifest", stdout.String())
-		}
-
-		clitest.WaitForNoStaleSocket(t, sockPath)
-	})
-
-	t.Run("a preview publishes a map whose edges are the manifest's usages", func(t *testing.T) {
-		root, sockPath := clitest.SetUpDeployFixture(t)
-		clitest.WriteUsageMonorepo(t, root)
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		stubGit(&deps, "feature/login", "")
-		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
-		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
-		clitest.StubBuild(&deps, []manifestbuilder.Function{
-			{Route: "api", Framework: manifestbuilder.Framework{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/api", App: "api"},
-		})
-
-		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(deps, &stdout)
-		if err := runPreviewUp(context.Background(), deps, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
-			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
-		}
-
-		got := readServiceMap(t, root)
-		want := []servicemap.Usage{{App: "api", Resource: "db--main", Files: []string{"apps/api/src/server.ts"}}}
-		if !reflect.DeepEqual(got.Usages, want) {
-			t.Errorf("usages = %+v, want %+v", got.Usages, want)
-		}
-		if got.Environment.Tier != "preview" {
-			t.Errorf("environment = %+v, want the preview's own context", got.Environment)
 		}
 
 		clitest.WaitForNoStaleSocket(t, sockPath)

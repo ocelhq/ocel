@@ -16,11 +16,10 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/deployresult"
+	"github.com/ocelhq/ocel/cli/internal/deployrecord"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
-	"github.com/ocelhq/ocel/cli/internal/servicemap"
 	"github.com/ocelhq/ocel/cli/internal/variableeditor"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/constants"
@@ -78,11 +77,8 @@ func TestADryDeployShowsThePlanAndWritesNothing(t *testing.T) {
 	if !strings.Contains(out, "✓ Planned the deploy of "+clitest.FixtureSlug+" to production in ") {
 		t.Errorf("stdout = %q, want the run to end naming what it planned and where", out)
 	}
-	if !absent(t, deployresult.Path(root)) {
+	if !absent(t, deployrecord.Path(root)) {
 		t.Error("a dry deploy wrote the deploy result, want a run that records nothing it did not do")
-	}
-	if !absent(t, servicemap.Path(root)) {
-		t.Error("a dry deploy published the service map, want a run that records nothing it did not do")
 	}
 }
 
@@ -109,11 +105,8 @@ func TestADryPreviewUpShowsThePlanAndWritesNothing(t *testing.T) {
 	if strings.Contains(out, "Deployed ") {
 		t.Errorf("stdout = %q, want a dry run to report a plan, never a preview being provisioned", out)
 	}
-	if !absent(t, deployresult.Path(root)) {
+	if !absent(t, deployrecord.Path(root)) {
 		t.Error("a dry preview up wrote the deploy result, want a run that records nothing it did not do")
-	}
-	if !absent(t, servicemap.Path(root)) {
-		t.Error("a dry preview up published the service map, want a run that records nothing it did not do")
 	}
 }
 

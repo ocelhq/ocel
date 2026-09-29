@@ -13,13 +13,12 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/consent"
-	"github.com/ocelhq/ocel/cli/internal/deployresult"
+	"github.com/ocelhq/ocel/cli/internal/deployrecord"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runui"
-	"github.com/ocelhq/ocel/cli/internal/servicemap"
 	"github.com/ocelhq/ocel/cli/internal/valuestore"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
@@ -186,10 +185,7 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 	}
 
 	if !opts.dry {
-		if err := deployresult.Clear(cfg.Dir); err != nil {
-			return err
-		}
-		if err := servicemap.Clear(cfg.Dir); err != nil {
+		if err := deployrecord.Clear(cfg.Dir); err != nil {
 			return err
 		}
 	}
@@ -284,10 +280,11 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 		return err
 	}
 
-	if err := recordDeployResult(cfg, manifest, env, "", out.promotionID, out.apps); err != nil {
+	record, err := deployrecord.New(cfg, manifest, env, "", out.promotionID, out.apps)
+	if err != nil {
 		return err
 	}
-	if err := publishServiceMap(cfg, manifest, env, "", out.promotionID, out.bindings); err != nil {
+	if err := deployrecord.Write(cfg.Dir, record); err != nil {
 		return err
 	}
 	run.Deployed(fmt.Sprintf("Deployed %s to preview %s", cfg.Slug, env.GetIdentity()), out.urlNotes, out.flip)

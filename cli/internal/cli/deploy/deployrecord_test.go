@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/deployresult"
+	"github.com/ocelhq/ocel/cli/internal/deployrecord"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -19,7 +19,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
-func TestDeployResult(t *testing.T) {
+func TestADeployRecordsWhatItDeployed(t *testing.T) {
 	t.Run("a successful deploy records the promotion, the tag and every app", func(t *testing.T) {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
@@ -37,7 +37,7 @@ func TestDeployResult(t *testing.T) {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
-		got := readDeployResult(t, root)
+		got := readDeployRecord(t, root)
 		if got.Slug != "test-app" {
 			t.Errorf("slug = %q, want the resolved config's", got.Slug)
 		}
@@ -69,7 +69,7 @@ func TestDeployResult(t *testing.T) {
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, nil)
 		root, _ := clitest.SetUpDeployFixture(t)
-		if err := deployresult.Write(root, deployresult.Result{PromotionID: "prm_previous_run"}); err != nil {
+		if err := deployrecord.Write(root, deployrecord.Record{PromotionID: "prm_previous_run"}); err != nil {
 			t.Fatalf("seed stale result: %v", err)
 		}
 		t.Setenv(clitest.FakeProviderModeEnvVar, "fail")
@@ -81,8 +81,8 @@ func TestDeployResult(t *testing.T) {
 			t.Fatalf("runDeploy err = nil, want the simulated failure; stdout=%s", stdout.String())
 		}
 
-		if _, statErr := os.Stat(deployresult.Path(root)); !errors.Is(statErr, fs.ErrNotExist) {
-			t.Errorf("stat %s = %v, want no result file after a failed deploy", deployresult.Path(root), statErr)
+		if _, statErr := os.Stat(deployrecord.Path(root)); !errors.Is(statErr, fs.ErrNotExist) {
+			t.Errorf("stat %s = %v, want no result file after a failed deploy", deployrecord.Path(root), statErr)
 		}
 	})
 
@@ -104,7 +104,7 @@ func TestDeployResult(t *testing.T) {
 			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
-		got := readDeployResult(t, root)
+		got := readDeployRecord(t, root)
 		if got.Environment.Tier != "preview" || got.Environment.Identity != "e2e-42" {
 			t.Errorf("environment = %+v, want the named preview", got.Environment)
 		}
@@ -117,13 +117,13 @@ func TestDeployResult(t *testing.T) {
 	})
 }
 
-func readDeployResult(t *testing.T, root string) deployresult.Result {
+func readDeployRecord(t *testing.T, root string) deployrecord.Record {
 	t.Helper()
-	raw, err := os.ReadFile(deployresult.Path(root))
+	raw, err := os.ReadFile(deployrecord.Path(root))
 	if err != nil {
 		t.Fatalf("read deploy result: %v", err)
 	}
-	var got deployresult.Result
+	var got deployrecord.Record
 	if err := json.Unmarshal(raw, &got); err != nil {
 		t.Fatalf("deploy result is not valid JSON: %v", err)
 	}

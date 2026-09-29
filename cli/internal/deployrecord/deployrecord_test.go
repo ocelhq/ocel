@@ -1,4 +1,4 @@
-package deployresult
+package deployrecord
 
 import (
 	"encoding/json"
@@ -12,14 +12,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 )
 
-func TestWrite(t *testing.T) {
+func TestWriteLeavesTheDocumentedRecordInTheProjectStateDir(t *testing.T) {
 	t.Parallel()
 
 	t.Run("writes the documented shape", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
 
-		err := Write(dir, Result{
+		err := Write(dir, Record{
 			Slug:        "proj-123",
 			Environment: Environment{Tier: "preview", Identity: "e2e-42"},
 			Provider:    Provider{Name: "fake"},
@@ -67,7 +67,7 @@ func TestWrite(t *testing.T) {
 		dir := t.TempDir()
 
 		before := time.Now().Add(-time.Second)
-		if err := Write(dir, Result{Slug: "proj-123"}); err != nil {
+		if err := Write(dir, Record{Slug: "proj-123"}); err != nil {
 			t.Fatalf("Write() error = %v", err)
 		}
 
@@ -88,14 +88,14 @@ func TestWrite(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
 
-		if err := Write(dir, Result{PromotionID: "first", Tag: "old"}); err != nil {
+		if err := Write(dir, Record{PromotionID: "first", Tag: "old"}); err != nil {
 			t.Fatalf("first Write() error = %v", err)
 		}
-		if err := Write(dir, Result{PromotionID: "second"}); err != nil {
+		if err := Write(dir, Record{PromotionID: "second"}); err != nil {
 			t.Fatalf("second Write() error = %v", err)
 		}
 
-		var got Result
+		var got Record
 		readInto(t, Path(dir), &got)
 		if got.PromotionID != "second" {
 			t.Errorf("promotionId = %q, want the latest run's", got.PromotionID)
@@ -106,7 +106,7 @@ func TestWrite(t *testing.T) {
 	})
 }
 
-func TestClear(t *testing.T) {
+func TestClearRemovesAStaleRecordAndToleratesNone(t *testing.T) {
 	t.Parallel()
 
 	t.Run("tolerates the absence of a result", func(t *testing.T) {
@@ -120,7 +120,7 @@ func TestClear(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
 
-		if err := Write(dir, Result{PromotionID: "stale"}); err != nil {
+		if err := Write(dir, Record{PromotionID: "stale"}); err != nil {
 			t.Fatalf("Write() error = %v", err)
 		}
 		if err := Clear(dir); err != nil {
@@ -132,7 +132,7 @@ func TestClear(t *testing.T) {
 	})
 }
 
-func TestPath(t *testing.T) {
+func TestPathIsUnderTheProjectStateDir(t *testing.T) {
 	t.Parallel()
 
 	t.Run("is under the project scratch dir", func(t *testing.T) {

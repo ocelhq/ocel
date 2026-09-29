@@ -10,10 +10,9 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/consent"
-	"github.com/ocelhq/ocel/cli/internal/deployresult"
+	"github.com/ocelhq/ocel/cli/internal/deployrecord"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
-	"github.com/ocelhq/ocel/cli/internal/servicemap"
 	"github.com/ocelhq/ocel/cli/internal/valuestore"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
@@ -75,10 +74,7 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 	}
 
 	if !opts.dry {
-		if err := deployresult.Clear(cfg.Dir); err != nil {
-			return err
-		}
-		if err := servicemap.Clear(cfg.Dir); err != nil {
+		if err := deployrecord.Clear(cfg.Dir); err != nil {
 			return err
 		}
 	}
@@ -178,10 +174,11 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 		return err
 	}
 
-	if err := recordDeployResult(cfg, manifest, env, opts.tag, out.promotionID, out.apps); err != nil {
+	record, err := deployrecord.New(cfg, manifest, env, opts.tag, out.promotionID, out.apps)
+	if err != nil {
 		return err
 	}
-	if err := publishServiceMap(cfg, manifest, env, opts.tag, out.promotionID, out.bindings); err != nil {
+	if err := deployrecord.Write(cfg.Dir, record); err != nil {
 		return err
 	}
 	run.Deployed(fmt.Sprintf("Deployed %s to production", cfg.Slug), out.urlNotes, out.flip)

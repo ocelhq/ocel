@@ -1,4 +1,4 @@
-package deployresult
+package deployrecord
 
 import (
 	"encoding/json"
@@ -9,12 +9,17 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/ocelhq/ocel/cli/internal/appbuilder"
+	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/pkg/constants"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 const fileName = "deploy-result.json"
 
-type Result struct {
+type Record struct {
 	Slug        string      `json:"slug"`
 	Environment Environment `json:"environment"`
 	Provider    Provider    `json:"provider"`
@@ -40,11 +45,58 @@ type App struct {
 	URLs         []string `json:"urls"`
 }
 
+func New(cfg *projectconfig.Config, manifest *contractv1.Manifest, env *environmentv1.Environment, tag, promotionID string, results []*progressv1.AppResult) (Record, error) {
+	apps := make([]App, 0, len(manifest.GetApps()))
+	for _, a := range manifest.GetApps() {
+		apps = append(apps, App{
+			Name:         a.GetName(),
+			BuildID:      appbuilder.BuildID(cfg.Dir, a.GetName()),
+			DeploymentID: a.GetDeploymentId(),
+			URLs:         appURLs(results, a.GetName()),
+		})
+	}
+	return Record{
+		Slug:        cfg.Slug,
+		Environment: Environment{Tier: tierKey(env.GetTier()), Identity: env.GetIdentity()},
+		Provider:    providerOf(cfg),
+		PromotionID: promotionID,
+		Tag:         tag,
+		Apps:        apps,
+	}, nil
+}
+
+func providerOf(cfg *projectconfig.Config) Provider {
+	if cfg.Provider == nil {
+		return Provider{}
+	}
+	return Provider{Name: cfg.Provider.ID}
+}
+
+func appURLs(results []*progressv1.AppResult, name string) []string {
+	for _, result := range results {
+		if result.GetApp() == name {
+			return result.GetUrls()
+		}
+	}
+	return nil
+}
+
+func tierKey(tier environmentv1.Tier) string {
+	switch tier {
+	case environmentv1.Tier_TIER_PRODUCTION:
+		return "production"
+	case environmentv1.Tier_TIER_PREVIEW:
+		return "preview"
+	default:
+		return "unspecified"
+	}
+}
+
 func Path(projectDir string) string {
 	return filepath.Join(projectDir, constants.ProjectStateDirName, fileName)
 }
 
-func Write(projectDir string, r Result) error {
+func Write(projectDir string, r Record) error {
 	if r.DeployedAt.IsZero() {
 		r.DeployedAt = time.Now().UTC()
 	}

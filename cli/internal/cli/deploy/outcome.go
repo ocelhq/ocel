@@ -5,14 +5,12 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
-	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
 type deployOutcome struct {
-	bindings    []*bindingsv1.Binding
 	apps        []*progressv1.AppResult
 	urlNotes    []string
 	promotionID string
@@ -30,7 +28,6 @@ func streamDeploy(ctx context.Context, prov *providerclient.Provider, slug strin
 	err = inlinebinding.Deploy(ctx, records, at, inline, func() error {
 		res, err := providerclient.Stream(ctx, prov, "Deploy", req, contractv1connect.ProviderServiceClient.Deploy)
 		out = deployOutcome{
-			bindings:    res.GetBindings(),
 			apps:        res.GetApps(),
 			urlNotes:    res.GetUrlNotes(),
 			promotionID: res.GetPromotionId(),
