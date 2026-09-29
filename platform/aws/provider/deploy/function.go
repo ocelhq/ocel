@@ -16,7 +16,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/naming"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
@@ -309,10 +308,6 @@ func capDescription(described string, limit int) pulumi.String {
 
 func artifactArchivePath(root, artifactPath string) string {
 	return filepath.Join(root, artifactPath)
-}
-
-func collectFunctionOutput(logicalName, url string) *progressv1.FunctionOutput {
-	return &progressv1.FunctionOutput{LogicalName: logicalName, Url: url}
 }
 
 type executionRole struct {

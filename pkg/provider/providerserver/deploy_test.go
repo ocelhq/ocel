@@ -184,9 +184,6 @@ func TestDeployProvisionsInfraThenAppsAndPromotes(t *testing.T) {
 		}
 		t.Fatalf("Deploy() returned bindings %q, want only orders, the one the manifest declares", names)
 	}
-	if len(result.GetFunctions()) != 1 || result.GetFunctions()[0].GetUrl() == "" {
-		t.Fatalf("Deploy() returned functions %v, want the one it provisioned, with its url", result.GetFunctions())
-	}
 
 	if events[0].GetStarted() == nil {
 		t.Fatalf("the first event is %T, want a started scope: the CLI draws the tree before any work reports into it", events[0].GetBody())

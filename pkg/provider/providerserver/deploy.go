@@ -185,7 +185,6 @@ type deployRun struct {
 	needs          AppNeedVerdicts
 	appRouters     map[string]router.Kind
 	bindings       []provider.Binding
-	functions      map[string][]provider.Function
 	provisioning   map[string]bool
 }
 
@@ -212,12 +211,6 @@ func (r *deployRun) isProvisioning(app string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.provisioning[app]
-}
-
-func (r *deployRun) recordFunctions(app string, functions []provider.Function) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.functions[app] = functions
 }
 
 func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest, sender *eventStream) (*deployRun, error) {
@@ -264,7 +257,6 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 		scope:          envvars.Scope{Project: spec.Slug, Tier: spec.Tier},
 		artifacts:      map[string]provider.ArtifactRef{},
 		functionImages: map[string]string{},
-		functions:      map[string][]provider.Function{},
 		provisioning:   map[string]bool{},
 
 		dry:           req.GetDry(),
@@ -964,7 +956,6 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 			if err := r.recordAppStack(ctx, entry, result); err != nil {
 				return err
 			}
-			r.recordFunctions(entry.App, result.Functions)
 			if err := r.warmFunctions(ctx, result.Functions, progress); err != nil {
 				return err
 			}
@@ -1380,14 +1371,6 @@ func (r *deployRun) result(promotion router.Promotion, flip router.FlipBound) (*
 			return nil, err
 		}
 		result.Bindings = append(result.Bindings, message)
-	}
-	for _, entry := range r.spec.Apps {
-		for _, fn := range r.functions[entry.App] {
-			result.Functions = append(result.Functions, &progressv1.FunctionOutput{
-				LogicalName: fn.Name,
-				Url:         fn.URL,
-			})
-		}
 	}
 	for slot, hosts := range r.servedHostnames() {
 		for _, host := range hosts {

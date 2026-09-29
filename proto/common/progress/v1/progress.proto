@@ -142,8 +142,6 @@ message ResultEvent {
 
   repeated common.bindings.v1.Binding bindings = 3;
 
-  repeated FunctionOutput functions = 4;
-
   string promotion_id = 6;
 
   FlipBound flip_bound = 7;
@@ -166,11 +164,6 @@ message ConnectorInstalled {
   string public_key = 2;
 
   string compute = 3;
-}
-
-message FunctionOutput {
-  string logical_name = 2;
-  string url = 1;
 }
 
 message FlipBound {

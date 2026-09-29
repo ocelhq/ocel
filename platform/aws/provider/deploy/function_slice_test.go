@@ -764,18 +764,6 @@ func TestArtifactArchivePath(t *testing.T) {
 	})
 }
 
-func TestCollectFunctionOutput(t *testing.T) {
-	t.Run("reports the URL keyed by logical name", func(t *testing.T) {
-		out := collectFunctionOutput("api", "https://abc.lambda-url.us-east-1.on.aws/")
-		if out.GetLogicalName() != "api" {
-			t.Errorf("LogicalName = %q, want api", out.GetLogicalName())
-		}
-		if out.GetUrl() != "https://abc.lambda-url.us-east-1.on.aws/" {
-			t.Errorf("url = %q, want the Function URL", out.GetUrl())
-		}
-	})
-}
-
 type policyDoc struct {
 	Statement []struct {
 		Effect    string   `json:"Effect"`

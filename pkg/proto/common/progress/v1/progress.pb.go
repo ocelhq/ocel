@@ -980,7 +980,6 @@ type ResultEvent struct {
 	Success     bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
 	Error       string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
 	Bindings    []*v11.Binding         `protobuf:"bytes,3,rep,name=bindings,proto3" json:"bindings,omitempty"`
-	Functions   []*FunctionOutput      `protobuf:"bytes,4,rep,name=functions,proto3" json:"functions,omitempty"`
 	PromotionId string                 `protobuf:"bytes,6,opt,name=promotion_id,json=promotionId,proto3" json:"promotion_id,omitempty"`
 	FlipBound   *FlipBound             `protobuf:"bytes,7,opt,name=flip_bound,json=flipBound,proto3" json:"flip_bound,omitempty"`
 	UrlNotes    []string               `protobuf:"bytes,8,rep,name=url_notes,json=urlNotes,proto3" json:"url_notes,omitempty"`
@@ -1041,13 +1040,6 @@ func (x *ResultEvent) GetError() string {
 func (x *ResultEvent) GetBindings() []*v11.Binding {
 	if x != nil {
 		return x.Bindings
-	}
-	return nil
-}
-
-func (x *ResultEvent) GetFunctions() []*FunctionOutput {
-	if x != nil {
-		return x.Functions
 	}
 	return nil
 }
@@ -1154,58 +1146,6 @@ func (x *ConnectorInstalled) GetCompute() string {
 	return ""
 }
 
-type FunctionOutput struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	LogicalName   string                 `protobuf:"bytes,2,opt,name=logical_name,json=logicalName,proto3" json:"logical_name,omitempty"`
-	Url           string                 `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *FunctionOutput) Reset() {
-	*x = FunctionOutput{}
-	mi := &file_common_progress_v1_progress_proto_msgTypes[10]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *FunctionOutput) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*FunctionOutput) ProtoMessage() {}
-
-func (x *FunctionOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_common_progress_v1_progress_proto_msgTypes[10]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use FunctionOutput.ProtoReflect.Descriptor instead.
-func (*FunctionOutput) Descriptor() ([]byte, []int) {
-	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{10}
-}
-
-func (x *FunctionOutput) GetLogicalName() string {
-	if x != nil {
-		return x.LogicalName
-	}
-	return ""
-}
-
-func (x *FunctionOutput) GetUrl() string {
-	if x != nil {
-		return x.Url
-	}
-	return ""
-}
-
 type FlipBound struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TypicalMs     int64                  `protobuf:"varint,1,opt,name=typical_ms,json=typicalMs,proto3" json:"typical_ms,omitempty"`
@@ -1216,7 +1156,7 @@ type FlipBound struct {
 
 func (x *FlipBound) Reset() {
 	*x = FlipBound{}
-	mi := &file_common_progress_v1_progress_proto_msgTypes[11]
+	mi := &file_common_progress_v1_progress_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1228,7 +1168,7 @@ func (x *FlipBound) String() string {
 func (*FlipBound) ProtoMessage() {}
 
 func (x *FlipBound) ProtoReflect() protoreflect.Message {
-	mi := &file_common_progress_v1_progress_proto_msgTypes[11]
+	mi := &file_common_progress_v1_progress_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1241,7 +1181,7 @@ func (x *FlipBound) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FlipBound.ProtoReflect.Descriptor instead.
 func (*FlipBound) Descriptor() ([]byte, []int) {
-	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{11}
+	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *FlipBound) GetTypicalMs() int64 {
@@ -1306,12 +1246,11 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\x03app\x18\x01 \x01(\tR\x03app\x128\n" +
 	"\aoutcome\x18\x02 \x01(\x0e2\x1e.common.progress.v1.AppOutcomeR\aoutcome\x12\x14\n" +
 	"\x05error\x18\x03 \x01(\tR\x05error\x12\x12\n" +
-	"\x04urls\x18\x04 \x03(\tR\x04urls\"\xc9\x03\n" +
+	"\x04urls\x18\x04 \x03(\tR\x04urls\"\x87\x03\n" +
 	"\vResultEvent\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
 	"\x05error\x18\x02 \x01(\tR\x05error\x127\n" +
-	"\bbindings\x18\x03 \x03(\v2\x1b.common.bindings.v1.BindingR\bbindings\x12@\n" +
-	"\tfunctions\x18\x04 \x03(\v2\".common.progress.v1.FunctionOutputR\tfunctions\x12!\n" +
+	"\bbindings\x18\x03 \x03(\v2\x1b.common.bindings.v1.BindingR\bbindings\x12!\n" +
 	"\fpromotion_id\x18\x06 \x01(\tR\vpromotionId\x12<\n" +
 	"\n" +
 	"flip_bound\x18\a \x01(\v2\x1d.common.progress.v1.FlipBoundR\tflipBound\x12\x1b\n" +
@@ -1324,10 +1263,7 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12\x1d\n" +
 	"\n" +
 	"public_key\x18\x02 \x01(\tR\tpublicKey\x12\x18\n" +
-	"\acompute\x18\x03 \x01(\tR\acompute\"E\n" +
-	"\x0eFunctionOutput\x12!\n" +
-	"\flogical_name\x18\x02 \x01(\tR\vlogicalName\x12\x10\n" +
-	"\x03url\x18\x01 \x01(\tR\x03url\"H\n" +
+	"\acompute\x18\x03 \x01(\tR\acompute\"H\n" +
 	"\tFlipBound\x12\x1d\n" +
 	"\n" +
 	"typical_ms\x18\x01 \x01(\x03R\ttypicalMs\x12\x1c\n" +
@@ -1397,7 +1333,7 @@ func file_common_progress_v1_progress_proto_rawDescGZIP() []byte {
 }
 
 var file_common_progress_v1_progress_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
-var file_common_progress_v1_progress_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_common_progress_v1_progress_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_common_progress_v1_progress_proto_goTypes = []any{
 	(Stream)(0),                   // 0: common.progress.v1.Stream
 	(Level)(0),                    // 1: common.progress.v1.Level
@@ -1415,10 +1351,9 @@ var file_common_progress_v1_progress_proto_goTypes = []any{
 	(*AppResult)(nil),             // 13: common.progress.v1.AppResult
 	(*ResultEvent)(nil),           // 14: common.progress.v1.ResultEvent
 	(*ConnectorInstalled)(nil),    // 15: common.progress.v1.ConnectorInstalled
-	(*FunctionOutput)(nil),        // 16: common.progress.v1.FunctionOutput
-	(*FlipBound)(nil),             // 17: common.progress.v1.FlipBound
-	(*v1.ChangePlan)(nil),         // 18: common.plan.v1.ChangePlan
-	(*v11.Binding)(nil),           // 19: common.bindings.v1.Binding
+	(*FlipBound)(nil),             // 16: common.progress.v1.FlipBound
+	(*v1.ChangePlan)(nil),         // 17: common.plan.v1.ChangePlan
+	(*v11.Binding)(nil),           // 18: common.bindings.v1.Binding
 }
 var file_common_progress_v1_progress_proto_depIdxs = []int32{
 	1,  // 0: common.progress.v1.OperationEvent.level:type_name -> common.progress.v1.Level
@@ -1426,7 +1361,7 @@ var file_common_progress_v1_progress_proto_depIdxs = []int32{
 	7,  // 2: common.progress.v1.OperationEvent.started:type_name -> common.progress.v1.Started
 	8,  // 3: common.progress.v1.OperationEvent.ended:type_name -> common.progress.v1.Ended
 	9,  // 4: common.progress.v1.OperationEvent.output:type_name -> common.progress.v1.Output
-	18, // 5: common.progress.v1.OperationEvent.plan:type_name -> common.plan.v1.ChangePlan
+	17, // 5: common.progress.v1.OperationEvent.plan:type_name -> common.plan.v1.ChangePlan
 	12, // 6: common.progress.v1.OperationEvent.dns_manual_records:type_name -> common.progress.v1.DnsManualRecordsEvent
 	14, // 7: common.progress.v1.OperationEvent.result:type_name -> common.progress.v1.ResultEvent
 	3,  // 8: common.progress.v1.Ended.status:type_name -> common.progress.v1.SpanStatus
@@ -1435,16 +1370,15 @@ var file_common_progress_v1_progress_proto_depIdxs = []int32{
 	4,  // 11: common.progress.v1.SpanAttribute.key:type_name -> common.progress.v1.AttributeKey
 	11, // 12: common.progress.v1.DnsManualRecordsEvent.records:type_name -> common.progress.v1.DnsRecord
 	5,  // 13: common.progress.v1.AppResult.outcome:type_name -> common.progress.v1.AppOutcome
-	19, // 14: common.progress.v1.ResultEvent.bindings:type_name -> common.bindings.v1.Binding
-	16, // 15: common.progress.v1.ResultEvent.functions:type_name -> common.progress.v1.FunctionOutput
-	17, // 16: common.progress.v1.ResultEvent.flip_bound:type_name -> common.progress.v1.FlipBound
-	13, // 17: common.progress.v1.ResultEvent.apps:type_name -> common.progress.v1.AppResult
-	15, // 18: common.progress.v1.ResultEvent.connector:type_name -> common.progress.v1.ConnectorInstalled
-	19, // [19:19] is the sub-list for method output_type
-	19, // [19:19] is the sub-list for method input_type
-	19, // [19:19] is the sub-list for extension type_name
-	19, // [19:19] is the sub-list for extension extendee
-	0,  // [0:19] is the sub-list for field type_name
+	18, // 14: common.progress.v1.ResultEvent.bindings:type_name -> common.bindings.v1.Binding
+	16, // 15: common.progress.v1.ResultEvent.flip_bound:type_name -> common.progress.v1.FlipBound
+	13, // 16: common.progress.v1.ResultEvent.apps:type_name -> common.progress.v1.AppResult
+	15, // 17: common.progress.v1.ResultEvent.connector:type_name -> common.progress.v1.ConnectorInstalled
+	18, // [18:18] is the sub-list for method output_type
+	18, // [18:18] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_common_progress_v1_progress_proto_init() }
@@ -1466,7 +1400,7 @@ func file_common_progress_v1_progress_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_common_progress_v1_progress_proto_rawDesc), len(file_common_progress_v1_progress_proto_rawDesc)),
 			NumEnums:      6,
-			NumMessages:   12,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

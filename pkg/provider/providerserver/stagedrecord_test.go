@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 )
@@ -29,8 +30,8 @@ func builtEdgeBundle(t *testing.T, app string, bundle []byte) {
 
 func TestTheStagedRecordKeysFunctionURLsByTheRouteTheManifestNames(t *testing.T) {
 	builtProject(t)
-	client, provider := deployServed(t)
-	stager := staging(t, provider)
+	client, vendor := deployServed(t)
+	stager := staging(t, vendor)
 
 	req := deployRequest()
 	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}
@@ -46,13 +47,16 @@ func TestTheStagedRecordKeysFunctionURLsByTheRouteTheManifestNames(t *testing.T)
 		t.Fatalf("the deploy staged %d records, want the one app it released", len(staged))
 	}
 	urls := staged[0].FunctionURLs
-	functions := result.GetFunctions()
+	var functions []provider.Function
+	for _, spec := range vendor.FakeStacks().Provisioned() {
+		functions = append(functions, fake.ProvisionedFunctions(spec)...)
+	}
 	if len(functions) != 1 {
 		t.Fatalf("the deploy provisioned %d functions, want the one the manifest declares", len(functions))
 	}
-	if urls["bundle-0"] != functions[0].GetUrl() {
+	if urls["bundle-0"] != functions[0].URL {
 		t.Errorf("functionUrls[bundle-0] = %q, want the URL %q the function is reachable at: dispatch reaches a target by the route the manifest names, and a record keyed by logical name answers every page 502",
-			urls["bundle-0"], functions[0].GetUrl())
+			urls["bundle-0"], functions[0].URL)
 	}
 	if _, keyed := urls["server"]; keyed {
 		t.Errorf("functionUrls = %v, want no entry under the logical name", urls)
