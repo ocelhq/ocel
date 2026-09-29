@@ -124,7 +124,7 @@ export const gaps: Gap[] = [
       {
         on: ["vps", "vps.incus"],
         fixtures: [deploy.next, sdk.next, lifecycle.next],
-        variants: [defaults],
+        variants: [defaults, cloudflare],
         fails: [check(NEXT_CACHE)],
       },
     ],
@@ -307,6 +307,32 @@ export const gaps: Gap[] = [
         on: ["aws.floci"],
         fixtures: EVERY_NEXT_BEARING,
         variants: [cloudflare],
+        fails: [step.deploy],
+        skipsCell: true,
+      },
+      {
+        on: ["gcp.floci"],
+        variants: [cloudflare],
+        fails: [step.deploy],
+        skipsCell: true,
+      },
+    ],
+  },
+  {
+    id: "cloudflare-cannot-reach-the-vm",
+    reason:
+      "Cloudflare forwards to a public origin, and an incus VM is reachable only from the machine it runs on",
+    where: [{ on: ["vps.incus"], variants: [cloudflare], fails: [step.deploy], skipsCell: true }],
+  },
+  {
+    id: "no-cloudflare-zone",
+    reason:
+      "a cell Cloudflare fronts is answered on a hostname in a zone the run's Cloudflare token can write, and only a run that names both deploys it",
+    where: [
+      {
+        on: ["vps", "gcp"],
+        variants: [cloudflare],
+        whileUnset: ["OCEL_JOURNEY_ZONE", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"],
         fails: [step.deploy],
         skipsCell: true,
       },
