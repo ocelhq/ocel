@@ -55,17 +55,17 @@ func (c Caddyfile) adminReading() []string {
 }
 
 func (c Caddyfile) sites(ctx context.Context) ([]site, error) {
-	said, err := c.Box.Ran(ctx, "read what "+c.running()+" serves from its admin endpoint", c.adminReading())
+	said, err := c.Box.Ran(ctx, "read what "+c.named()+" serves from its admin endpoint", c.adminReading())
 	if err != nil {
 		return nil, refusal.Refuse(refusal.CodeNotReady,
 			"%s did not answer on its admin endpoint %s: %v\n"+
 				"Ocel reads what your Caddy serves and reloads it through that endpoint, so a Caddy run with `admin off` or with admin moved elsewhere cannot front ocel; restore the default `admin localhost:2019`",
-			c.running(), adminServers, err)
+			c.named(), adminServers, err)
 	}
 	var servers map[string]server
 	if err := json.Unmarshal([]byte(said), &servers); err != nil {
 		return nil, refusal.Refuse(refusal.CodeNotReady,
-			"%s answered %s with %q, which is no list of servers: %v", c.running(), adminServers, said, err)
+			"%s answered %s with %q, which is no list of servers: %v", c.named(), adminServers, said, err)
 	}
 	var found []site
 	for _, name := range slices.Sorted(maps.Keys(servers)) {
@@ -145,7 +145,7 @@ func (c Caddyfile) unrouted(ctx context.Context, hostnames []string) error {
 			return refusal.Refuse(refusal.CodeBusy,
 				"%s is already served by %s: %s matches host %s\n"+
 					"Ocel never takes a hostname your Caddy serves; remove it from that site and reload your Caddy, or bind another hostname",
-				hostname, c.running(), theirs, host)
+				hostname, c.named(), theirs, host)
 		}
 	}
 	return nil
