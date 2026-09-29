@@ -26,10 +26,10 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
-type Backend interface {
-	Resolve(ctx context.Context, project string, resources []declaration.Resource) ([]binding.Resolved, error)
-	Routes(mux *http.ServeMux, guard func(http.Handler) http.Handler, options ...connect.HandlerOption)
-	Close(ctx context.Context, stopContainers bool) error
+type Backend struct {
+	Resolve func(ctx context.Context, project string, resources []declaration.Resource) ([]binding.Resolved, error)
+	Routes  func(mux *http.ServeMux, guard func(http.Handler) http.Handler, options ...connect.HandlerOption)
+	Close   func(ctx context.Context, stopContainers bool) error
 }
 
 type Options struct {
@@ -39,14 +39,14 @@ type Options struct {
 	Announce   func(line string)
 }
 
-const StopsWithin = docker.StopsWithin
-
 var backends = map[resourcesv1.ResourceType]func(Options) Backend{
 	resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES: func(opts Options) Backend {
-		return postgres.New(opts.Open, filepath.Join(opts.StateDir, secretsDir))
+		servers := postgres.New(opts.Open, filepath.Join(opts.StateDir, secretsDir))
+		return Backend{Resolve: servers.Resolve, Close: servers.Close}
 	},
 	resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET: func(opts Options) Backend {
-		return bucket.New(opts.Open, filepath.Join(opts.StateDir, secretsDir), opts.AppOrigins)
+		buckets := bucket.New(opts.Open, filepath.Join(opts.StateDir, secretsDir), opts.AppOrigins)
+		return Backend{Resolve: buckets.Resolve, Routes: buckets.Routes, Close: buckets.Close}
 	},
 }
 
@@ -120,7 +120,9 @@ func ProjectName(dir string) string {
 
 func (r *Resources) Routes(mux *http.ServeMux, guard func(http.Handler) http.Handler, options ...connect.HandlerOption) {
 	for _, backend := range r.backends {
-		backend.Routes(mux, guard, options...)
+		if backend.Routes != nil {
+			backend.Routes(mux, guard, options...)
+		}
 	}
 }
 

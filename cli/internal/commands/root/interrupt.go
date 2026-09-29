@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/childprocess"
-	"github.com/ocelhq/ocel/cli/internal/devresources"
+	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 	"github.com/ocelhq/ocel/cli/internal/interrupt"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 )
@@ -15,7 +15,7 @@ const shutdownSlack = 3 * time.Second
 
 const gracefulShutdownWindow = max(providerprocess.DefaultGracePeriod+providerprocess.DefaultReapTimeout, childprocess.WaitDelay) + shutdownSlack
 
-const devShutdownWindow = childprocess.WaitDelay + devresources.StopsWithin + shutdownSlack
+const devShutdownWindow = childprocess.WaitDelay + docker.StopsWithin + shutdownSlack
 
 func installDevInterruptHandler(parent context.Context, stderr io.Writer) (context.Context, context.CancelFunc) {
 	return interrupt.Handle(parent, stderr, devShutdownWindow, bus.Interrupt, forceKillEverything)

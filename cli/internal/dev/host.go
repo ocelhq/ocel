@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 
 	"github.com/ocelhq/ocel/cli/internal/devresources"
+	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/statedir"
@@ -41,7 +42,7 @@ func startHost(ctx context.Context, opts Options, source valueSource) (*host, er
 	go httpSrv.Serve(listener)
 
 	return &host{srv: srv, address: address, close: func() {
-		stopping, cancel := context.WithTimeout(context.WithoutCancel(ctx), devresources.StopsWithin)
+		stopping, cancel := context.WithTimeout(context.WithoutCancel(ctx), docker.StopsWithin)
 		defer cancel()
 		if err := resources.Close(stopping); err != nil {
 			opts.session().Warn(fmt.Sprintf("Stopping the dev resources failed: %v", err))

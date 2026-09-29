@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"net/http"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -13,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/devresources/binding"
@@ -166,8 +164,6 @@ func bind(resource declaration.Resource, srv *server) (binding.Resolved, error) 
 		}},
 	})
 }
-
-func (c *Backend) Routes(*http.ServeMux, func(http.Handler) http.Handler, ...connect.HandlerOption) {}
 
 func (c *Backend) Close(ctx context.Context, stopContainers bool) error {
 	c.mu.Lock()
