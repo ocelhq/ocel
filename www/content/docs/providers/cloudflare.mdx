@@ -34,8 +34,9 @@ To rotate the certificate, or retire a leaked key, upload the new one to the zon
 (**SSL/TLS > Origin Server > Authenticated Origin Pulls**). Cloudflare presents the
 certificate uploaded last at once, so until the next step origins refuse it. Deploy one
 project on each VPS box and on each Google Cloud tier the zone forwards to: each origin
-then trusts both. Delete the old certificate from the zone, and deploy once more on each of
-them to stop trusting it. An origin keeps trusting the old certificate for a hostname until
+then trusts both. Delete the old certificate from the zone, then deploy every project with a
+hostname in the zone once more: an origin stops trusting the old certificate for a hostname
+once that hostname's own project deploys, since another zone may still present it. An origin keeps trusting the old certificate for a hostname until
 that hostname's own project deploys, so deploy every project with a hostname in the zone.
 
 Cloudflare reaches the origin over plain http when the visitor used it, and the origin
