@@ -24,7 +24,7 @@ func (Ignored) RefuseRouted(context.Context, []string) error { return nil }
 
 func (Ignored) Validate(context.Context, []byte) error { return nil }
 
-func (Ignored) Reload(context.Context) error { return nil }
+func (Ignored) Reload(context.Context, proxy.Spec) error { return nil }
 
 func (Ignored) Inspect(context.Context) (proxy.Checks, error) { return nil, nil }
 

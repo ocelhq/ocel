@@ -90,7 +90,7 @@ func TestManualTouchesNothingToReload(t *testing.T) {
 
 	machine := &box{}
 	front := manual.Manual{Box: machine}
-	if err := front.Reload(context.Background()); err != nil {
+	if err := front.Reload(context.Background(), proxy.Spec{}); err != nil {
 		t.Errorf("Reload() = %v, want nothing to do", err)
 	}
 	if len(machine.asked) != 0 {

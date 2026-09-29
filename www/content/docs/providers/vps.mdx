@@ -214,9 +214,10 @@ any file in that directory, and after a restart it serves none of them. If
 someone deletes `ocel.yml` or rewrites it, from a host tool's editor for instance, the next
 deploy writes it back.
 
-After each change, ocel waits up to 30 seconds for every hostname to answer on
-`127.0.0.1:443` through the switchboard, whatever certificate Traefik has for it yet. If one
-doesn't, the change is put back and the refusal says what the probe met. When a file of yours
+After each change, ocel waits up to 30 seconds for each hostname the change adds, or whose
+router it changes, to answer on `127.0.0.1:443` through the switchboard, whatever certificate
+Traefik has for it yet. A hostname the change leaves as it was isn't waited on, so one Traefik
+can't route for reasons of its own doesn't hold up the rest. If one doesn't answer, the change is put back and the refusal says what the probe met. When a file of yours
 in the directory fails to parse, it names that file. When Coolify has been switched to Caddy,
 it says so and gives `{ "caddy": { "preset": "coolify" } }` as the value to write.
 

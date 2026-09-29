@@ -26,6 +26,7 @@ type userProxy struct {
 
 	invalid  string
 	unloaded *[]string
+	reloaded *[]proxy.Spec
 }
 
 func (y userProxy) Guarantees() proxy.Guarantees { return proxy.Guarantees{} }
@@ -60,7 +61,10 @@ func (y userProxy) Validate(_ context.Context, rendered []byte) error {
 	return nil
 }
 
-func (y userProxy) Reload(context.Context) error {
+func (y userProxy) Reload(_ context.Context, served proxy.Spec) error {
+	if y.reloaded != nil {
+		*y.reloaded = append(*y.reloaded, served)
+	}
 	if y.unloaded == nil || len(*y.unloaded) == 0 {
 		return nil
 	}
@@ -371,6 +375,41 @@ func TestAReloadYourProxyRefusesPutsThePreviousFileBackAndSaysWhatYourProxySaid(
 	}
 	if adopted.recorded != prior {
 		t.Errorf("%s reads\n%s\nafter a reload your proxy refused, want the table before the claim\n%s", live.RoutingTable, adopted.recorded, prior)
+	}
+}
+
+func TestYourProxyIsToldWhatItServedBeforeAWriteSoItWaitsOnlyOnWhatTheWriteChanged(t *testing.T) {
+	t.Parallel()
+
+	state := routed()
+	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
+	adopted := adoptedBox(t, state)
+	var reloaded []proxy.Spec
+	h := adopted.host()
+	h.front = userProxy{file: coolifyFile, reloaded: &reloaded}
+	if err := h.InstallPreviewEntry(context.Background(), previewBase); err != nil {
+		t.Fatalf("InstallPreviewEntry() = %v", err)
+	}
+	if len(reloaded) != 1 || !slices.Equal(reloaded[0].Hostnames, []string{claimed}) {
+		t.Errorf("the reload was handed %+v, want once the spec of the table before the write, serving %s: a hostname the proxy already served as it was is not waited on again", reloaded, claimed)
+	}
+}
+
+func TestYourProxyIsToldItServedNothingKnownWhenThePlacedFileWasRewritten(t *testing.T) {
+	t.Parallel()
+
+	state := routed()
+	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
+	adopted := adoptedBox(t, state)
+	adopted.placed = "routes something a host tool's editor wrote\n"
+	var reloaded []proxy.Spec
+	h := adopted.host()
+	h.front = userProxy{file: coolifyFile, reloaded: &reloaded}
+	if err := h.InstallPreviewEntry(context.Background(), previewBase); err != nil {
+		t.Fatalf("InstallPreviewEntry() = %v", err)
+	}
+	if len(reloaded) != 1 || len(reloaded[0].Hostnames) != 0 {
+		t.Errorf("the reload was handed %+v, want once an empty spec: the file was not what ocel rendered, so every hostname in the new one is waited on", reloaded)
 	}
 }
 

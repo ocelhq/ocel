@@ -46,7 +46,7 @@ func (c Caddyfile) Validate(ctx context.Context, rendered []byte) error {
 	return nil
 }
 
-func (c Caddyfile) Reload(ctx context.Context) error {
+func (c Caddyfile) Reload(ctx context.Context, _ proxy.Spec) error {
 	if _, err := c.Box.Ran(ctx, "reload "+c.named(), c.Reloading()); err != nil {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"%s refused the reload and keeps serving the config it had: %v\nThe error can be in your own Caddyfile as well as in %s",

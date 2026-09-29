@@ -20,6 +20,6 @@ func (i *Incomplete) RefuseRouted(context.Context, []string) error { return nil 
 
 func (i *Incomplete) Validate(context.Context, []byte) error { return nil }
 
-func (i *Incomplete) Reload(context.Context) error { return nil }
+func (i *Incomplete) Reload(context.Context, proxy.Spec) error { return nil }
 
 func (i *Incomplete) Inspect(context.Context) (proxy.Checks, error) { return nil, nil }

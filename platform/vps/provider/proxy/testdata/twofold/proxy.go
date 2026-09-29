@@ -20,7 +20,7 @@ func (f *First) RefuseRouted(context.Context, []string) error { return nil }
 
 func (f *First) Validate(context.Context, []byte) error { return nil }
 
-func (f *First) Reload(context.Context) error { return nil }
+func (f *First) Reload(context.Context, proxy.Spec) error { return nil }
 
 func (f *First) Inspect(context.Context) (proxy.Checks, error) { return nil, nil }
 

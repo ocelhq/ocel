@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 )
 
 func (h *Host) Claims(ctx context.Context) ([]HostClaim, error) {
@@ -231,7 +232,7 @@ func (h *Host) recomposed(ctx context.Context, compose func(RoutingTable) (Routi
 func (h *Host) takenUp(ctx context.Context, shaped composed, loading bool, elevation string) error {
 	err := shaped.failedPlace
 	if err == nil {
-		err = h.serving(ctx, loading, shaped.reloading, elevation)
+		err = h.serving(ctx, loading, shaped.reloading, shaped.served, elevation)
 	}
 	if err != nil {
 		return h.reverted(ctx, shaped, loading, err, elevation)
@@ -239,7 +240,7 @@ func (h *Host) takenUp(ctx context.Context, shaped composed, loading bool, eleva
 	return nil
 }
 
-func (h *Host) serving(ctx context.Context, loading, reloading bool, elevation string) error {
+func (h *Host) serving(ctx context.Context, loading, reloading bool, served proxy.Spec, elevation string) error {
 	if loading {
 		if _, err := h.ran(ctx, "load the switchboard onto "+live.RoutingTable,
 			words(switchboardCommand("load", live.RoutingTable)), nil, elevation); err != nil {
@@ -249,7 +250,7 @@ func (h *Host) serving(ctx context.Context, loading, reloading bool, elevation s
 	if !reloading {
 		return nil
 	}
-	return h.front.Reload(ctx)
+	return h.front.Reload(ctx, served)
 }
 
 func (h *Host) reverted(ctx context.Context, shaped composed, loading bool, why error, elevation string) error {
@@ -259,7 +260,7 @@ func (h *Host) reverted(ctx context.Context, shaped composed, loading bool, why 
 			"serving %s failed: %v\nputting back %s also failed: %v",
 			written, why, written, errors.Join(err, failedPlace))
 	}
-	if err := h.serving(ctx, loading, shaped.reloading, elevation); err != nil {
+	if err := h.serving(ctx, loading, shaped.reloading, shaped.admitted, elevation); err != nil {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"serving %s failed: %v\nput back %s, but serving again failed too, so the box may still serve routes nothing records any more: %v\nRun the deploy again",
 			written, why, written, err)

@@ -5,21 +5,23 @@ import (
 	"fmt"
 	"maps"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 const reloadWait = reloadPauses * reloadInterval
 
-func (t Traefik) reload(ctx context.Context) error {
+func (t Traefik) reload(ctx context.Context, served proxy.Spec) error {
 	spec, err := t.Box.ReadSpec(ctx)
 	if err != nil {
 		return err
 	}
-	waiting := slices.Clone(spec.Hostnames)
+	waiting := t.changedHostnames(served, spec)
 	failures := map[string]string{}
 	for paused := 0; len(waiting) > 0; paused++ {
 		var still []string
@@ -50,6 +52,18 @@ func (t Traefik) reload(ctx context.Context) error {
 	return refusal.Refuse(refusal.CodeNotReady,
 		"your Traefik did not route %s to ocel's switchboard within %s:\n%s%s",
 		strings.Join(waiting, ", "), reloadWait, strings.Join(said, "\n"), t.diagnose(ctx))
+}
+
+func (t Traefik) changedHostnames(served, spec proxy.Spec) []string {
+	var changed []string
+	for _, hostname := range spec.Hostnames {
+		servedHTTPS, servedHTTP := t.routersFor(hostname, served.PreviewBase)
+		https, http := t.routersFor(hostname, spec.PreviewBase)
+		if !slices.Contains(served.Hostnames, hostname) || !reflect.DeepEqual(servedHTTPS, https) || !reflect.DeepEqual(servedHTTP, http) {
+			changed = append(changed, hostname)
+		}
+	}
+	return changed
 }
 
 func (t Traefik) probeRoute(ctx context.Context, hostname string) (bool, string, error) {

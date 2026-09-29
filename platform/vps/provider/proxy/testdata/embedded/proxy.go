@@ -7,5 +7,5 @@ import (
 
 type Proxy interface {
 	io.Closer
-	Reload(ctx context.Context) error
+	Reload(ctx context.Context, served Spec) error
 }

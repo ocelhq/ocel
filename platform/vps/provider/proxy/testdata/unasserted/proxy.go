@@ -18,7 +18,7 @@ func (u *Unasserted) RefuseRouted(context.Context, []string) error { return nil 
 
 func (u *Unasserted) Validate(context.Context, []byte) error { return nil }
 
-func (u *Unasserted) Reload(context.Context) error { return nil }
+func (u *Unasserted) Reload(context.Context, proxy.Spec) error { return nil }
 
 func (u *Unasserted) Inspect(context.Context) (proxy.Checks, error) { return nil, nil }
 
