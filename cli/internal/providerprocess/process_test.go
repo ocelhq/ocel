@@ -164,7 +164,7 @@ func TestHandshake(t *testing.T) {
 		ctx := context.Background()
 		r, _ := spawnFake(t, ctx, "impostor-cert", LaunchSpec{
 			ProviderConfig: &contractv1.ProviderConfig{},
-			ProviderName:   "aws",
+			ProviderName:   "fake",
 			ReadyTimeout:   5 * time.Second,
 		})
 
@@ -183,7 +183,7 @@ func TestHandshake(t *testing.T) {
 		ctx := context.Background()
 		r, _ := spawnFake(t, ctx, "plaintext", LaunchSpec{
 			ProviderConfig: &contractv1.ProviderConfig{},
-			ProviderName:   "aws",
+			ProviderName:   "fake",
 			ReadyTimeout:   5 * time.Second,
 		})
 
@@ -202,8 +202,8 @@ func TestConfigure(t *testing.T) {
 
 		ctx := context.Background()
 		r, _ := spawnFake(t, ctx, "reject-config", LaunchSpec{
-			ProviderConfig: fakeOptionsConfig(t, map[string]any{"regionn": "eu-west-2"}),
-			ProviderName:   "aws",
+			ProviderConfig: fakeOptionsConfig(t, map[string]any{"sizee": "large"}),
+			ProviderName:   "fake",
 			ReadyTimeout:   5 * time.Second,
 		})
 
@@ -212,8 +212,8 @@ func TestConfigure(t *testing.T) {
 			t.Fatal("Ready() error = nil, want the provider's refusal")
 		}
 		for _, want := range []string{
-			`configures provider "aws" with options it does not accept`,
-			`"provider.aws.regionn"`,
+			`configures provider "fake" with options it does not accept`,
+			`"provider.fake.sizee"`,
 		} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("Ready() error = %q, want it to contain %q", err, want)
@@ -229,8 +229,8 @@ func TestConfigure(t *testing.T) {
 
 		ctx := context.Background()
 		r, _ := spawnFake(t, ctx, "reject-config", LaunchSpec{
-			ProviderConfig: fakeOptionsConfig(t, map[string]any{"ssh": map[string]any{"hostt": "example.com"}}),
-			ProviderName:   "vps",
+			ProviderConfig: fakeOptionsConfig(t, map[string]any{"network": map[string]any{"hostt": "example.com"}}),
+			ProviderName:   "fake",
 			ReadyTimeout:   5 * time.Second,
 		})
 
@@ -238,7 +238,7 @@ func TestConfigure(t *testing.T) {
 		if err == nil {
 			t.Fatal("Ready() error = nil, want the provider's refusal")
 		}
-		if !strings.Contains(err.Error(), "provider.vps.ssh.hostt") {
+		if !strings.Contains(err.Error(), "provider.fake.network.hostt") {
 			t.Errorf("Ready() error = %q, want the option's path in the config", err)
 		}
 	})
@@ -249,7 +249,7 @@ func TestConfigure(t *testing.T) {
 		ctx := context.Background()
 		r, _ := spawnFake(t, ctx, "refuse-config", LaunchSpec{
 			ProviderConfig: &contractv1.ProviderConfig{},
-			ProviderName:   "aws",
+			ProviderName:   "fake",
 			ReadyTimeout:   5 * time.Second,
 		})
 

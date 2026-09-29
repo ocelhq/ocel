@@ -133,10 +133,10 @@ func TestDebugOutputNeverReachesTheLiveLine(t *testing.T) {
 	api := run.Phase(progressv1.Phase_PHASE_PROVISION).Unit("api", progress.Provisioning.Title("api"))
 	api.Say("Applying 12 changes")
 	w := api.Output(progressv1.Level_LEVEL_DEBUG, progressv1.Stream_STREAM_STDERR)
-	if _, err := w.Write([]byte("I0927 engine: refreshing aws:s3/bucket:Bucket\n")); err != nil {
+	if _, err := w.Write([]byte("I0927 engine: refreshing fake:bucket\n")); err != nil {
 		t.Fatalf("Write() = %v", err)
 	}
-	api.Debug("plugin aws 6.66.0 loaded")
+	api.Debug("plugin fake 6.66.0 loaded")
 
 	if got, want := shownText(t, live, 80), "      [provision] ⠋ api: Applying 12 changes"; got != want {
 		t.Fatalf("the live line shows\n%q\nwant\n%q", got, want)
@@ -274,12 +274,12 @@ func TestAUnitOutsideAnyPhaseIsShownWithoutABracket(t *testing.T) {
 	live := newStatusLine(c.now, Presentation{})
 	live.observe(&streamv1.RunEvent{
 		SpanId:  []byte{1, 2, 3, 4, 5, 6, 7, 8},
-		Subject: "aws",
+		Subject: "fake",
 		Message: "Checking credentials",
 		Body:    &streamv1.RunEvent_Started{Started: &progressv1.Started{}},
 	})
 
-	if got, want := shownText(t, live, 80), "      ⠋ aws: Checking credentials"; got != want {
+	if got, want := shownText(t, live, 80), "      ⠋ fake: Checking credentials"; got != want {
 		t.Fatalf("the live line shows\n%q\nwant\n%q", got, want)
 	}
 }

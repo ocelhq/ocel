@@ -8,8 +8,8 @@ import (
 
 var pinned = Lock{
 	CLI:        "0.2.0",
-	Providers:  map[string]map[string]string{"aws": {"linux-amd64": "0003", "darwin-arm64": "0002"}},
-	Connectors: map[string]map[string]string{"vps": {"linux-amd64": "0007"}},
+	Providers:  map[string]map[string]string{"fake": {"linux-amd64": "0003", "darwin-arm64": "0002"}},
+	Connectors: map[string]map[string]string{"fake": {"linux-amd64": "0007"}},
 }
 
 func rendered(t *testing.T, lock Lock) []byte {

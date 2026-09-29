@@ -56,7 +56,7 @@ func TestChecksumsSignedByTheReleaseWorkflowVerify(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewVirtualSigstore: %v", err)
 	}
-	checksums := []byte("0000  ocel-provider-aws_0.2.0_linux_amd64.tar.gz\n")
+	checksums := []byte("0000  ocel-provider-fake_0.2.0_linux_amd64.tar.gz\n")
 	identity := SignerIdentity("0.2.0")
 
 	signed, err := sigstore.Sign(identity, SignerIssuer, checksums)
@@ -75,14 +75,14 @@ func TestChecksumsAlteredAfterTheyWereSignedAreRefused(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewVirtualSigstore: %v", err)
 	}
-	checksums := []byte("0000  ocel-provider-aws_0.2.0_linux_amd64.tar.gz\n")
+	checksums := []byte("0000  ocel-provider-fake_0.2.0_linux_amd64.tar.gz\n")
 	identity := SignerIdentity("0.2.0")
 
 	signed, err := sigstore.Sign(identity, SignerIssuer, checksums)
 	if err != nil {
 		t.Fatalf("Sign: %v", err)
 	}
-	altered := []byte("1111  ocel-provider-aws_0.2.0_linux_amd64.tar.gz\n")
+	altered := []byte("1111  ocel-provider-fake_0.2.0_linux_amd64.tar.gz\n")
 	if err := verifySigned(verifierFor(t, sigstore), signed, altered, identity); err == nil {
 		t.Fatal("verifySigned() error = nil, want checksums altered after signing refused")
 	}
@@ -95,7 +95,7 @@ func TestASignatureMadeUnderAnotherIdentityIsRefusedNamingBoth(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewVirtualSigstore: %v", err)
 	}
-	checksums := []byte("0000  ocel-provider-aws_0.2.0_linux_amd64.tar.gz\n")
+	checksums := []byte("0000  ocel-provider-fake_0.2.0_linux_amd64.tar.gz\n")
 	elsewhere := "https://github.com/elsewhere/ocel/.github/workflows/binaries.yml@refs/tags/v0.2.0"
 
 	signed, err := sigstore.Sign(elsewhere, SignerIssuer, checksums)
@@ -120,7 +120,7 @@ func TestASignatureMadeUnderAnotherTagIsRefused(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewVirtualSigstore: %v", err)
 	}
-	checksums := []byte("0000  ocel-provider-aws_0.2.0_linux_amd64.tar.gz\n")
+	checksums := []byte("0000  ocel-provider-fake_0.2.0_linux_amd64.tar.gz\n")
 
 	signed, err := sigstore.Sign(SignerIdentity("0.3.0"), SignerIssuer, checksums)
 	if err != nil {
@@ -138,7 +138,7 @@ func TestASignatureMadeUnderAnotherIssuerIsRefused(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewVirtualSigstore: %v", err)
 	}
-	checksums := []byte("0000  ocel-provider-aws_0.2.0_linux_amd64.tar.gz\n")
+	checksums := []byte("0000  ocel-provider-fake_0.2.0_linux_amd64.tar.gz\n")
 	identity := SignerIdentity("0.2.0")
 
 	signed, err := sigstore.Sign(identity, "https://accounts.google.com", checksums)

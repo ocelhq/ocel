@@ -289,7 +289,7 @@ export default {
 		if framework := cfg.Apps[0].Framework(); framework != "" {
 			t.Fatalf("Apps[0].Framework() = %q, want none", framework)
 		}
-		_, err = cfg.ResolveComputes([]string{"serverless"}, "aws")
+		_, err = cfg.ResolveComputes([]string{"serverless"}, "fake")
 		if err == nil {
 			t.Fatal("ResolveComputes(serverless) = nil error, want the refusal the undetected framework holds")
 		}

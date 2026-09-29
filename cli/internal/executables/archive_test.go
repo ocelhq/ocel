@@ -157,14 +157,14 @@ func TestASymlinkMemberOfATarIsSkipped(t *testing.T) {
 
 	into := filepath.Join(t.TempDir(), "unpacked")
 	archive := tarball(t,
-		entry{name: "ocel-provider-vps", mode: 0o777, kind: tar.TypeSymlink, body: "/etc/passwd"},
+		entry{name: "ocel-provider-remote", mode: 0o777, kind: tar.TypeSymlink, body: "/etc/passwd"},
 		regular("README", "hello"),
 	)
 
 	if err := untar(archive, into); err != nil {
 		t.Fatalf("untar() error = %v", err)
 	}
-	if _, err := os.Lstat(filepath.Join(into, "ocel-provider-vps")); !os.IsNotExist(err) {
+	if _, err := os.Lstat(filepath.Join(into, "ocel-provider-remote")); !os.IsNotExist(err) {
 		t.Errorf("the symlink member was unpacked (lstat err = %v), want only regular files taken", err)
 	}
 	if got := readUnpacked(t, into, "README"); got != "hello" {
@@ -176,20 +176,20 @@ func TestASymlinkMemberOfAZipBecomesARegularFileNeverALink(t *testing.T) {
 	t.Parallel()
 
 	into := filepath.Join(t.TempDir(), "unpacked")
-	archive := zipped(t, entry{name: "ocel-provider-vps.exe", mode: os.ModeSymlink | 0o777, body: "/etc/passwd"})
+	archive := zipped(t, entry{name: "ocel-provider-remote.exe", mode: os.ModeSymlink | 0o777, body: "/etc/passwd"})
 
 	if err := unzip(archive, into); err != nil {
 		t.Fatalf("unzip() error = %v", err)
 	}
 
-	info, err := os.Lstat(filepath.Join(into, "ocel-provider-vps.exe"))
+	info, err := os.Lstat(filepath.Join(into, "ocel-provider-remote.exe"))
 	if err != nil {
 		t.Fatalf("lstat the member: %v", err)
 	}
 	if info.Mode()&os.ModeSymlink != 0 {
 		t.Errorf("the member is a symlink to %q, want a zip never able to plant a link", "/etc/passwd")
 	}
-	if got := readUnpacked(t, into, "ocel-provider-vps.exe"); got != "/etc/passwd" {
+	if got := readUnpacked(t, into, "ocel-provider-remote.exe"); got != "/etc/passwd" {
 		t.Errorf("the member contains %q, want the link target kept as the file's own content", got)
 	}
 }
@@ -209,18 +209,18 @@ func TestARegularMemberIsUnpackedWithItsMode(t *testing.T) {
 			t.Parallel()
 
 			into := filepath.Join(t.TempDir(), "unpacked")
-			archive := tc.archive(t, regular("bin/ocel-provider-vps", "binary"))
+			archive := tc.archive(t, regular("bin/ocel-provider-remote", "binary"))
 
 			if err := tc.unpack(archive, into); err != nil {
 				t.Fatalf("unpack error = %v", err)
 			}
-			if got := readUnpacked(t, into, "bin/ocel-provider-vps"); got != "binary" {
+			if got := readUnpacked(t, into, "bin/ocel-provider-remote"); got != "binary" {
 				t.Errorf("member = %q, want %q", got, "binary")
 			}
 			if runtime.GOOS == "windows" {
 				return
 			}
-			info, err := os.Stat(filepath.Join(into, "bin", "ocel-provider-vps"))
+			info, err := os.Stat(filepath.Join(into, "bin", "ocel-provider-remote"))
 			if err != nil {
 				t.Fatalf("stat the member: %v", err)
 			}
@@ -235,12 +235,12 @@ func TestAMemberNamedTwiceNeverOverwritesTheFirst(t *testing.T) {
 	t.Parallel()
 
 	into := filepath.Join(t.TempDir(), "unpacked")
-	archive := tarball(t, regular("ocel-provider-vps", "first"), regular("ocel-provider-vps", "second"))
+	archive := tarball(t, regular("ocel-provider-remote", "first"), regular("ocel-provider-remote", "second"))
 
 	if err := untar(archive, into); err == nil {
 		t.Fatal("untar() error = nil, want a second member claiming a name already taken refused")
 	}
-	if got := readUnpacked(t, into, "ocel-provider-vps"); got != "first" {
+	if got := readUnpacked(t, into, "ocel-provider-remote"); got != "first" {
 		t.Errorf("member = %q, want the first member left as it was written", got)
 	}
 }

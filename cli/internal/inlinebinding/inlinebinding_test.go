@@ -77,20 +77,20 @@ func TestBuildABucket(t *testing.T) {
 	records, err := Build([]project.Binding{{
 		Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: "uploads",
 		Inline: &project.Inline{Bucket: &project.BucketInline{
-			Endpoint:        project.Text{Literal: "https://abc.r2.cloudflarestorage.com"},
-			Region:          project.Text{Literal: "auto"},
+			Endpoint:        project.Text{Literal: "https://storage.example.com"},
+			Region:          project.Text{Literal: "example-region"},
 			Bucket:          project.Text{Variable: "UPLOADS_BUCKET"},
 			Prefix:          project.Text{Literal: "uploads/"},
-			AccessKeyID:     "R2_KEY",
-			SecretAccessKey: "R2_SECRET",
+			AccessKeyID:     "BUCKET_KEY",
+			SecretAccessKey: "BUCKET_SECRET",
 			PublicBaseURL:   project.Text{Literal: "https://cdn.acme.com/uploads"},
 		}},
-	}}, map[string]string{"UPLOADS_BUCKET": "acme", "R2_KEY": "AKID", "R2_SECRET": "s3cr3t"}, "ocel.json")
+	}}, map[string]string{"UPLOADS_BUCKET": "acme", "BUCKET_KEY": "AKID", "BUCKET_SECRET": "s3cr3t"}, "ocel.json")
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
 	want := &bindingsv1.BucketProperties{
-		Bucket: "acme", Endpoint: "https://abc.r2.cloudflarestorage.com", Region: "auto", Prefix: "uploads/",
+		Bucket: "acme", Endpoint: "https://storage.example.com", Region: "example-region", Prefix: "uploads/",
 		AccessKeyId: "AKID", SecretAccessKey: "s3cr3t", PublicBaseUrl: "https://cdn.acme.com/uploads",
 	}
 	if got := records[0].GetBucket(); !proto.Equal(got, want) {

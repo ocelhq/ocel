@@ -12,13 +12,13 @@ import (
 var validation = &progressv1.DnsRecord{
 	Name:  "_b833967e837b1a20c09460dc97096c55.prev.ocel.site",
 	Type:  "CNAME",
-	Value: "_5e03e7236ee0371f573dc3210d17afd9.jkddzztszm.acm-validations.aws",
+	Value: "_5e03e7236ee0371f573dc3210d17afd9.validations.example.net",
 }
 
 var wildcard = &progressv1.DnsRecord{
 	Name:  "*.prev.ocel.site",
 	Type:  "CNAME",
-	Value: "d1234.cloudfront.net",
+	Value: "d1234.cdn.example.net",
 }
 
 func TestDNSRows(t *testing.T) {

@@ -12,10 +12,10 @@ func TestAWarningReadsLevelPhaseSubjectAndMessage(t *testing.T) {
 	got := line{
 		level:   progressv1.Level_LEVEL_WARN,
 		phase:   progressv1.Phase_PHASE_CHECK,
-		subject: "cloudflare",
-		message: "the zone example.com has no Workers entitlement",
+		subject: "relay",
+		message: "the zone example.com has no edge entitlement",
 	}.render(Presentation{})
-	want := "WARN  [check] cloudflare: the zone example.com has no Workers entitlement"
+	want := "WARN  [check] relay: the zone example.com has no edge entitlement"
 	if got != want {
 		t.Fatalf("got  %q\nwant %q", got, want)
 	}

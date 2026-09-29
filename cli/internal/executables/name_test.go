@@ -11,7 +11,7 @@ import (
 func TestANameThatIsNotOneSegmentNeverReachesAPath(t *testing.T) {
 	t.Parallel()
 
-	for _, name := range []string{"", "..", "../..", "aws/../../etc", "aws/deploy", `aws\deploy`, "AWS", "aws_1"} {
+	for _, name := range []string{"", "..", "../..", "fake/../../etc", "fake/deploy", `fake\deploy`, "FAKE", "fake_1"} {
 		store := &Store{
 			Dir:      t.TempDir(),
 			Version:  testVersion,
@@ -51,7 +51,7 @@ func TestAnEscapingNameIsRefusedAgainstADirectoryOfProviders(t *testing.T) {
 func TestTheNamesTheReleaseShipsAreNames(t *testing.T) {
 	t.Parallel()
 
-	for _, name := range []string{"aws", "gcp", "vps", "a-second-cloud"} {
+	for _, name := range []string{"fake", "other", "remote", "a-second-cloud"} {
 		if err := refuseInvalidName(name); err != nil {
 			t.Errorf("refuseInvalidName(%q) = %v, want a name the store resolves", name, err)
 		}

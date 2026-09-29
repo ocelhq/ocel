@@ -11,7 +11,7 @@ import (
 
 func TestProviderConfigIncludesTheProjectTransformModules(t *testing.T) {
 	modules := []string{"./transforms/network.transform.ts"}
-	config, err := newProviderConfig(&project.Project{Transforms: modules}, &project.Provider{ID: "aws"})
+	config, err := newProviderConfig(&project.Project{Transforms: modules}, &project.Provider{ID: "fake"})
 	if err != nil {
 		t.Fatalf("newProviderConfig: %v", err)
 	}
@@ -21,7 +21,7 @@ func TestProviderConfigIncludesTheProjectTransformModules(t *testing.T) {
 }
 
 func TestProviderConfigNamesTheProjectDirectoryTheBuildIsUnder(t *testing.T) {
-	config, err := newProviderConfig(&project.Project{Dir: "/work/shop"}, &project.Provider{ID: "vps"})
+	config, err := newProviderConfig(&project.Project{Dir: "/work/shop"}, &project.Provider{ID: "fake"})
 	if err != nil {
 		t.Fatalf("newProviderConfig: %v", err)
 	}
@@ -31,7 +31,7 @@ func TestProviderConfigNamesTheProjectDirectoryTheBuildIsUnder(t *testing.T) {
 }
 
 func TestProviderConfigIncludesTheProjectItConfigures(t *testing.T) {
-	config, err := newProviderConfig(&project.Project{Slug: "shop"}, &project.Provider{ID: "vps"})
+	config, err := newProviderConfig(&project.Project{Slug: "shop"}, &project.Provider{ID: "fake"})
 	if err != nil {
 		t.Fatalf("newProviderConfig: %v", err)
 	}
@@ -42,21 +42,21 @@ func TestProviderConfigIncludesTheProjectItConfigures(t *testing.T) {
 
 func TestProviderConfigIncludesTheDescriptorOptionsOpaquely(t *testing.T) {
 	config, err := newProviderConfig(&project.Project{}, &project.Provider{
-		ID:      "aws",
-		Options: json.RawMessage(`{"region":"us-east-1"}`),
+		ID:      "fake",
+		Options: json.RawMessage(`{"size":"large"}`),
 	})
 	if err != nil {
 		t.Fatalf("newProviderConfig: %v", err)
 	}
-	if got := config.GetOptions().GetFields()["region"].GetStringValue(); got != "us-east-1" {
-		t.Errorf("region = %q, want us-east-1", got)
+	if got := config.GetOptions().GetFields()["size"].GetStringValue(); got != "large" {
+		t.Errorf("size = %q, want large", got)
 	}
 }
 
 func TestProviderConfigRefusesOptionsThatAreNotAJSONObject(t *testing.T) {
 	_, err := newProviderConfig(&project.Project{}, &project.Provider{
-		ID:      "aws",
-		Options: json.RawMessage(`["us-east-1"]`),
+		ID:      "fake",
+		Options: json.RawMessage(`["large"]`),
 	})
 	if err == nil {
 		t.Fatal("providerConfig err = nil, want a non-object options value refused")
@@ -68,7 +68,7 @@ func TestProviderConfigRefusesOptionsThatAreNotAJSONObject(t *testing.T) {
 
 func TestProviderConfigLeavesAnUnconfiguredProviderWithoutOptions(t *testing.T) {
 	config, err := newProviderConfig(&project.Project{}, &project.Provider{
-		ID:      "aws",
+		ID:      "fake",
 		Options: json.RawMessage(`{}`),
 	})
 	if err != nil {

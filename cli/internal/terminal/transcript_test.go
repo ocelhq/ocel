@@ -37,9 +37,9 @@ func TestAPhaseLevelLinePrintsTheMomentItLands(t *testing.T) {
 	t.Parallel()
 
 	run, out, _ := groupedRun(t, Presentation{})
-	run.Phase(progressv1.Phase_PHASE_CHECK).Warn("the zone example.com has no Workers entitlement")
+	run.Phase(progressv1.Phase_PHASE_CHECK).Warn("the zone example.com has no edge entitlement")
 
-	want := "WARN  [check] the zone example.com has no Workers entitlement\n"
+	want := "WARN  [check] the zone example.com has no edge entitlement\n"
 	if got := out.String(); got != want {
 		t.Fatalf("got  %q\nwant %q", got, want)
 	}
@@ -730,11 +730,11 @@ func TestADeployBlockCountsAndListsTheResourcesItChangedAndNeverOneItLeftAlone(t
 	deploy.Forward(providerStarted(1, "web", "Deploying web", start))
 	deploy.Forward(providerChild(2, 1, "web", "Deploying", start))
 	ok := progressv1.SpanStatus_SPAN_STATUS_OK
-	forwardResource(deploy, 3, 2, "web", provider.ActionCreate, "aws:s3/bucket:Bucket", "assets", ok, start)
-	forwardResource(deploy, 4, 2, "web", provider.ActionUpdate, "aws:iam/role:Role", "api", ok, start)
-	forwardResource(deploy, 5, 2, "web", provider.ActionCreate, "aws:sqs/queue:Queue", "jobs", ok, start)
-	forwardResource(deploy, 6, 2, "web", provider.ActionDelete, "aws:sqs/queue:Queue", "old", ok, start)
-	forwardResource(deploy, 7, 2, "web", provider.ActionReplace, "aws:lambda/function:Function", "handler", ok, start)
+	forwardResource(deploy, 3, 2, "web", provider.ActionCreate, "fake:bucket", "assets", ok, start)
+	forwardResource(deploy, 4, 2, "web", provider.ActionUpdate, "fake:role", "api", ok, start)
+	forwardResource(deploy, 5, 2, "web", provider.ActionCreate, "fake:queue", "jobs", ok, start)
+	forwardResource(deploy, 6, 2, "web", provider.ActionDelete, "fake:queue", "old", ok, start)
+	forwardResource(deploy, 7, 2, "web", provider.ActionReplace, "fake:function", "handler", ok, start)
 	slow := providerChild(8, 2, "web", "resource operation", start)
 	deploy.Forward(slow)
 	deploy.Forward(providerEnded(8, "web", "resource operation", ok, start, start.Add(40*time.Second)))
@@ -742,11 +742,11 @@ func TestADeployBlockCountsAndListsTheResourcesItChangedAndNeverOneItLeftAlone(t
 	deploy.Forward(providerEnded(1, "web", "Deployed web", ok, start, start.Add(42*time.Second)))
 
 	want := "INFO  [deploy] ✓ web: Deployed web in 42s — 5 resources: 2 created, 1 updated, 1 replaced, 1 deleted\n" +
-		"      + assets (aws:s3/bucket:Bucket) created\n" +
-		"      ~ api (aws:iam/role:Role) updated\n" +
-		"      + jobs (aws:sqs/queue:Queue) created\n" +
-		"      – old (aws:sqs/queue:Queue) deleted\n" +
-		"      ± handler (aws:lambda/function:Function) replaced\n"
+		"      + assets (fake:bucket) created\n" +
+		"      ~ api (fake:role) updated\n" +
+		"      + jobs (fake:queue) created\n" +
+		"      – old (fake:queue) deleted\n" +
+		"      ± handler (fake:function) replaced\n"
 	if got := out.String(); got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}
@@ -760,13 +760,13 @@ func TestWithColourABlockGraysItsTimingItsDetailAndWhatEachResourceIsButNotItsSi
 	start := c.now()
 	deploy.Forward(providerStarted(1, "web", "Deploying web", start))
 	deploy.Forward(providerChild(2, 1, "web", "Deploying", start))
-	forwardResource(deploy, 3, 2, "web", provider.ActionCreate, "aws:s3/bucket:Bucket", "assets", progressv1.SpanStatus_SPAN_STATUS_OK, start)
+	forwardResource(deploy, 3, 2, "web", provider.ActionCreate, "fake:bucket", "assets", progressv1.SpanStatus_SPAN_STATUS_OK, start)
 	deploy.Forward(providerEnded(2, "web", "Deployed", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(time.Second)))
 	deploy.Forward(providerEnded(1, "web", "Deployed web", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(8*time.Second)))
 
 	for _, want := range []string{
 		" \x1b[1mweb\x1b[22m: Deployed web\x1b[90m in 8s\x1b[0m — 1 resource created\n",
-		"      \x1b[32m+\x1b[0m \x1b[90massets (aws:s3/bucket:Bucket) created\x1b[0m\n",
+		"      \x1b[32m+\x1b[0m \x1b[90massets (fake:bucket) created\x1b[0m\n",
 	} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("got\n%q\nwant it to contain\n%q", out.String(), want)
@@ -801,13 +801,13 @@ func TestAResourceThatFailedWithoutChangingIsListedAndCountedAsFailed(t *testing
 	start := c.now()
 	deploy.Forward(providerStarted(1, "web", "Deploying web", start))
 	deploy.Forward(providerChild(2, 1, "web", "Deploying", start))
-	forwardResource(deploy, 3, 2, "web", "", "aws:ssm/parameter:Parameter", "config", progressv1.SpanStatus_SPAN_STATUS_OK, start)
-	forwardResource(deploy, 4, 2, "web", "", "aws:iam/role:Role", "runner", progressv1.SpanStatus_SPAN_STATUS_ERROR, start)
+	forwardResource(deploy, 3, 2, "web", "", "fake:parameter", "config", progressv1.SpanStatus_SPAN_STATUS_OK, start)
+	forwardResource(deploy, 4, 2, "web", "", "fake:role", "runner", progressv1.SpanStatus_SPAN_STATUS_ERROR, start)
 	deploy.Forward(providerEnded(2, "web", "", progressv1.SpanStatus_SPAN_STATUS_ERROR, start, start.Add(4*time.Second)))
 	deploy.Forward(providerEnded(1, "web", "", progressv1.SpanStatus_SPAN_STATUS_ERROR, start, start.Add(5*time.Second)))
 
 	want := "ERROR [deploy] ✗ web: Deploying web failed after 5s — 1 resource failed\n" +
-		"      ✗ runner (aws:iam/role:Role) failed\n"
+		"      ✗ runner (fake:role) failed\n"
 	if got := out.String(); got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}
@@ -820,15 +820,15 @@ func failedDeploy(t *testing.T, present Presentation) string {
 	start := c.now()
 	deploy.Forward(providerStarted(1, "", "Environment", start))
 	deploy.Forward(providerChild(2, 1, "", "Provisioning", start))
-	engine := providerOutput(2, "", "+  aws:s3:Bucket logs creating (0s) error: BucketAlreadyExists")
+	engine := providerOutput(2, "", "+  fake:bucket logs creating (0s) error: BucketAlreadyExists")
 	engine.Level = progressv1.Level_LEVEL_DEBUG
 	engine.GetOutput().Stream = progressv1.Stream_STREAM_UNSPECIFIED
 	deploy.Forward(engine)
-	forwardResource(deploy, 3, 2, "", provider.ActionCreate, "aws:s3/bucket:Bucket", "assets", progressv1.SpanStatus_SPAN_STATUS_OK, start)
-	forwardResource(deploy, 4, 2, "", provider.ActionCreate, "aws:s3/bucket:Bucket", "logs", progressv1.SpanStatus_SPAN_STATUS_ERROR, start)
+	forwardResource(deploy, 3, 2, "", provider.ActionCreate, "fake:bucket", "assets", progressv1.SpanStatus_SPAN_STATUS_OK, start)
+	forwardResource(deploy, 4, 2, "", provider.ActionCreate, "fake:bucket", "logs", progressv1.SpanStatus_SPAN_STATUS_ERROR, start)
 	deploy.Forward(providerEvent(2, "", &progressv1.OperationEvent{
 		Level:   progressv1.Level_LEVEL_ERROR,
-		Message: "logs (aws:s3/bucket:Bucket): creating S3 Bucket (logs): BucketAlreadyExists",
+		Message: "logs (fake:bucket): creating bucket (logs): BucketAlreadyExists",
 	}))
 	deploy.Forward(providerEnded(2, "", "", progressv1.SpanStatus_SPAN_STATUS_ERROR, start, start.Add(9*time.Second)))
 	deploy.Forward(providerEnded(1, "", "", progressv1.SpanStatus_SPAN_STATUS_ERROR, start, start.Add(10*time.Second)))
@@ -839,9 +839,9 @@ func TestAFailedResourcesDiagnosticIsUnderItsFailedBlockWhileTheEngineOutputStay
 	t.Parallel()
 
 	want := "ERROR [deploy] ✗ Environment failed after 10s — 2 resources: 1 created, 1 failed\n" +
-		"      + assets (aws:s3/bucket:Bucket) created\n" +
-		"      ✗ logs (aws:s3/bucket:Bucket) failed to create\n" +
-		"      ERROR logs (aws:s3/bucket:Bucket): creating S3 Bucket (logs): BucketAlreadyExists\n"
+		"      + assets (fake:bucket) created\n" +
+		"      ✗ logs (fake:bucket) failed to create\n" +
+		"      ERROR logs (fake:bucket): creating bucket (logs): BucketAlreadyExists\n"
 	if got := failedDeploy(t, Presentation{}); got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}
@@ -850,7 +850,7 @@ func TestAFailedResourcesDiagnosticIsUnderItsFailedBlockWhileTheEngineOutputStay
 func TestVerboseShowsTheEngineOutputInTheFailedBlockToo(t *testing.T) {
 	t.Parallel()
 
-	if got := failedDeploy(t, Presentation{Verbose: true}); !strings.Contains(got, "\n    +  aws:s3:Bucket logs creating (0s) error: BucketAlreadyExists\n") {
+	if got := failedDeploy(t, Presentation{Verbose: true}); !strings.Contains(got, "\n    +  fake:bucket logs creating (0s) error: BucketAlreadyExists\n") {
 		t.Fatalf("verbose output has no engine line:\n%s", got)
 	}
 }
@@ -1087,13 +1087,13 @@ func TestTheIdentityHeaderNamesEachAccountTheRunSignedInToAndIsSetApartByBlankLi
 	check.Identity(&streamv1.IdentityEvent{
 		Project: "acme",
 		Tier:    environmentv1.Tier_TIER_PRODUCTION,
-		Origin:  &streamv1.Party{Vendor: "aws", Account: "123456789012", Principal: "deploy", Location: "us-east-1"},
+		Origin:  &streamv1.Party{Vendor: "fake", Account: "123456789012", Principal: "deploy", Location: "example-region"},
 	})
 	check.Say("the credentials for 123456789012 are valid")
 
 	want := "ocel  dev  acme › production\n" +
 		"\n" +
-		"  aws  123456789012 · us-east-1 · as deploy\n" +
+		"  fake  123456789012 · example-region · as deploy\n" +
 		"\n" +
 		"INFO  [check] the credentials for 123456789012 are valid\n"
 	if got := out.String(); got != want {
@@ -1109,7 +1109,7 @@ func TestTheSummaryNamesTheAccountTheRunWasSignedInTo(t *testing.T) {
 		run.Phase(progressv1.Phase_PHASE_CHECK).Identity(&streamv1.IdentityEvent{
 			Project: "acme",
 			Tier:    environmentv1.Tier_TIER_PRODUCTION,
-			Origin:  &streamv1.Party{Vendor: "aws", Account: "123456789012", Principal: "deploy", Location: "us-east-1"},
+			Origin:  &streamv1.Party{Vendor: "fake", Account: "123456789012", Principal: "deploy", Location: "example-region"},
 		})
 		var err error
 		if !success {
@@ -1117,7 +1117,7 @@ func TestTheSummaryNamesTheAccountTheRunWasSignedInTo(t *testing.T) {
 		}
 		run.End(&err)
 
-		if want := "\n  on aws 123456789012 · us-east-1 · as deploy\n"; !strings.Contains(out.String(), want) {
+		if want := "\n  on fake 123456789012 · example-region · as deploy\n"; !strings.Contains(out.String(), want) {
 			t.Errorf("success=%v: got\n%s\nwant it to contain %q", success, out.String(), want)
 		}
 	}
@@ -1135,7 +1135,7 @@ func TestAPlanIsAGateSetApartByBlankLinesTheMomentItLands(t *testing.T) {
 			Name:    "ocel-production-queues",
 			Feature: "queues",
 			Action:  planv1.Change_ACTION_CREATE,
-			Changes: []*planv1.Change{{Kind: "AWS::SQS::Queue", Name: "OcelQueue", Action: planv1.Change_ACTION_CREATE}},
+			Changes: []*planv1.Change{{Kind: "Fake::Queue", Name: "OcelQueue", Action: planv1.Change_ACTION_CREATE}},
 		}},
 	})
 	run.Phase(progressv1.Phase_PHASE_PROVISION).Say("updating the bootstrap")
@@ -1145,7 +1145,7 @@ func TestAPlanIsAGateSetApartByBlankLinesTheMomentItLands(t *testing.T) {
 		"Proposed changes to the production bootstrap:\n" +
 		"\n" +
 		"+ ocel-production-queues  [queues]\n" +
-		"    + OcelQueue  AWS::SQS::Queue\n" +
+		"    + OcelQueue  Fake::Queue\n" +
 		"\n" +
 		"1 to create.\n" +
 		"\n" +
@@ -1163,7 +1163,7 @@ func TestRecordsToAddAtTheDNSProviderAreAGateHeadedByTheirLevelAndPhase(t *testi
 	provision.Forward(&progressv1.OperationEvent{
 		Level:   progressv1.Level_LEVEL_WARN,
 		Phase:   progressv1.Phase_PHASE_PROVISION,
-		Subject: "cloudflare",
+		Subject: "relay",
 		Body: &progressv1.OperationEvent_DnsManualRecords{DnsManualRecords: &progressv1.DnsManualRecordsEvent{
 			Headline: "Prove you own prev.ocel.site",
 			Records:  []*progressv1.DnsRecord{{Type: "TXT", Name: "_cf.prev.ocel.site", Value: "ca3-token"}},
@@ -1172,7 +1172,7 @@ func TestRecordsToAddAtTheDNSProviderAreAGateHeadedByTheirLevelAndPhase(t *testi
 	})
 	provision.Say("the edge is ready")
 
-	want := "WARN  [provision] cloudflare: Prove you own prev.ocel.site — add this record at your DNS provider\n" +
+	want := "WARN  [provision] relay: Prove you own prev.ocel.site — add this record at your DNS provider\n" +
 		"\n" +
 		"  TYPE  NAME                VALUE\n" +
 		"  TXT   _cf.prev.ocel.site  ca3-token\n" +

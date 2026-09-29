@@ -92,7 +92,7 @@ func TestCompileDeclaresTheCommandAPythonArtifactIsServedBy(t *testing.T) {
 	var config buildoutput.FunctionDescriptor
 	readJSON(t, filepath.Join(funcDir, buildoutput.FunctionDescriptorFile), &config)
 	if config.EntryFile != pythonEntryFile {
-		t.Errorf("entryFile = %q, want %q — Lambda refuses a package whose handler names no file in it", config.EntryFile, pythonEntryFile)
+		t.Errorf("entryFile = %q, want %q — a host refuses a package whose entry names no file in it", config.EntryFile, pythonEntryFile)
 	}
 	if len(config.Command) != 2 || config.Command[0] != pythonRuntimeCommand || config.Command[1] != pythonEntryFile {
 		t.Errorf("command = %q, want the interpreter and the module it runs, which whatever hosts the artifact execs", config.Command)

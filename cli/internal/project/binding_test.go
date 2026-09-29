@@ -152,8 +152,8 @@ func TestAnInlineBindingIsRefusedWhereItCannotConnect(t *testing.T) {
 
 func TestAnInlineBucketNamesItsStoreAndTheVariablesItReads(t *testing.T) {
 	cfg := mustLoadJSON(t, `{"slug":"shop","bindings":{"bucket":{"uploads":{
-		"endpoint":"https://abc.r2.cloudflarestorage.com","region":"auto","bucket":{"$env":"UPLOADS_BUCKET"},
-		"prefix":"uploads/","accessKeyId":{"$env":"R2_KEY"},"secretAccessKey":{"$env":"R2_SECRET"},
+		"endpoint":"https://storage.example.com","region":"example-region","bucket":{"$env":"UPLOADS_BUCKET"},
+		"prefix":"uploads/","accessKeyId":{"$env":"BUCKET_KEY"},"secretAccessKey":{"$env":"BUCKET_SECRET"},
 		"publicBaseUrl":"https://cdn.acme.com"
 	}}}}`)
 	bound := cfg.BindingsFor(environmentv1.Tier_TIER_PREVIEW)
@@ -161,26 +161,26 @@ func TestAnInlineBucketNamesItsStoreAndTheVariablesItReads(t *testing.T) {
 		t.Fatalf("bound = %+v, want the inline bucket", bound)
 	}
 	want := BucketInline{
-		Endpoint:        Text{Literal: "https://abc.r2.cloudflarestorage.com"},
-		Region:          Text{Literal: "auto"},
+		Endpoint:        Text{Literal: "https://storage.example.com"},
+		Region:          Text{Literal: "example-region"},
 		Bucket:          Text{Variable: "UPLOADS_BUCKET"},
 		Prefix:          Text{Literal: "uploads/"},
-		AccessKeyID:     "R2_KEY",
-		SecretAccessKey: "R2_SECRET",
+		AccessKeyID:     "BUCKET_KEY",
+		SecretAccessKey: "BUCKET_SECRET",
 		PublicBaseURL:   Text{Literal: "https://cdn.acme.com"},
 	}
 	if !reflect.DeepEqual(*bound[0].Inline.Bucket, want) {
 		t.Errorf("bucket = %+v, want %+v", *bound[0].Inline.Bucket, want)
 	}
-	if got := bound[0].Inline.Variables(); !slices.Equal(got, []string{"R2_KEY", "R2_SECRET", "UPLOADS_BUCKET"}) {
+	if got := bound[0].Inline.Variables(); !slices.Equal(got, []string{"BUCKET_KEY", "BUCKET_SECRET", "UPLOADS_BUCKET"}) {
 		t.Errorf("Variables() = %v", got)
 	}
 }
 
 func TestAnInlineBucketsBlankOptionalFieldIsUnset(t *testing.T) {
 	cfg := mustLoadJSON(t, `{"slug":"shop","bindings":{"bucket":{"uploads":{
-		"endpoint":"https://abc.r2.cloudflarestorage.com","region":"auto","bucket":"acme",
-		"prefix":"","publicBaseUrl":" ","accessKeyId":{"$env":"R2_KEY"},"secretAccessKey":{"$env":"R2_SECRET"}
+		"endpoint":"https://storage.example.com","region":"example-region","bucket":"acme",
+		"prefix":"","publicBaseUrl":" ","accessKeyId":{"$env":"BUCKET_KEY"},"secretAccessKey":{"$env":"BUCKET_SECRET"}
 	}}}}`)
 	bound := cfg.BindingsFor(environmentv1.Tier_TIER_PRODUCTION)
 	if len(bound) != 1 || bound[0].Inline == nil || bound[0].Inline.Bucket == nil {
@@ -193,9 +193,9 @@ func TestAnInlineBucketsBlankOptionalFieldIsUnset(t *testing.T) {
 
 func TestAnInlineBucketIsRefusedWhereNoStoreCouldBeReached(t *testing.T) {
 	for name, binding := range map[string]string{
-		"no secret":       `{"endpoint":"https://s3.example.com","region":"auto","bucket":"acme","accessKeyId":{"$env":"K"}}`,
-		"no endpoint":     `{"region":"auto","bucket":"acme","accessKeyId":{"$env":"K"},"secretAccessKey":{"$env":"S"}}`,
-		"a bare endpoint": `{"endpoint":"s3.example.com","region":"auto","bucket":"acme","accessKeyId":{"$env":"K"},"secretAccessKey":{"$env":"S"}}`,
+		"no secret":       `{"endpoint":"https://s3.example.com","region":"example-region","bucket":"acme","accessKeyId":{"$env":"K"}}`,
+		"no endpoint":     `{"region":"example-region","bucket":"acme","accessKeyId":{"$env":"K"},"secretAccessKey":{"$env":"S"}}`,
+		"a bare endpoint": `{"endpoint":"s3.example.com","region":"example-region","bucket":"acme","accessKeyId":{"$env":"K"},"secretAccessKey":{"$env":"S"}}`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := loadJSON(t, `{"slug":"shop","bindings":{"bucket":{"uploads":`+binding+`}}}`)

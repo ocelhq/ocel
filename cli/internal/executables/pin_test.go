@@ -50,7 +50,7 @@ func unsignedRelease(t *testing.T) *httptest.Server {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		fmt.Fprintf(w, "%064x  %s\n", 1, AssetName(KindProvider, "aws", pinnedVersion, "linux", "amd64"))
+		fmt.Fprintf(w, "%064x  %s\n", 1, AssetName(KindProvider, "fake", pinnedVersion, "linux", "amd64"))
 	}))
 	t.Cleanup(server.Close)
 	return server
@@ -80,11 +80,11 @@ func storeOn(t *testing.T, server *httptest.Server, goos, goarch string) *Store 
 func TestTheLockIsWrittenBesideTheConfigOnTheFirstRunOfAVersion(t *testing.T) {
 	t.Parallel()
 
-	server := releaseServing(t, "aws", "vps")
+	server := releaseServing(t, "fake", "remote")
 	store := storeOn(t, server, "linux", "amd64")
 	projectDir := t.TempDir()
 
-	if _, err := ensurePinned(context.Background(), store, KindProvider, projectDir, "aws", store.Platform, PinToLock); err == nil {
+	if _, err := ensurePinned(context.Background(), store, KindProvider, projectDir, "fake", store.Platform, PinToLock); err == nil {
 		t.Fatal("ensurePinned() error = nil, want the fetch of an archive this release does not serve to fail")
 	}
 
@@ -98,7 +98,7 @@ func TestTheLockIsWrittenBesideTheConfigOnTheFirstRunOfAVersion(t *testing.T) {
 	if lock.CLI != pinnedVersion {
 		t.Fatalf("lock.CLI = %q, want %q", lock.CLI, pinnedVersion)
 	}
-	for _, name := range []string{"aws", "vps"} {
+	for _, name := range []string{"fake", "remote"} {
 		if len(lock.Providers[name]) != len(Platforms) {
 			t.Fatalf("%s pins %d platforms, want all %d", name, len(lock.Providers[name]), len(Platforms))
 		}
@@ -108,15 +108,15 @@ func TestTheLockIsWrittenBesideTheConfigOnTheFirstRunOfAVersion(t *testing.T) {
 func TestADryRunWithNoLockPinsInMemoryAndWritesNothing(t *testing.T) {
 	t.Parallel()
 
-	server := releaseServing(t, "aws")
+	server := releaseServing(t, "fake")
 	store := storeOn(t, server, "linux", "amd64")
 	projectDir := t.TempDir()
 
-	_, err := ensurePinned(context.Background(), store, KindProvider, projectDir, "aws", store.Platform, PinInMemory)
+	_, err := ensurePinned(context.Background(), store, KindProvider, projectDir, "fake", store.Platform, PinInMemory)
 	if err == nil {
 		t.Fatal("ensurePinned() error = nil, want the fetch of an archive this release does not serve to fail")
 	}
-	archive := AssetName(KindProvider, "aws", pinnedVersion, "linux", "amd64")
+	archive := AssetName(KindProvider, "fake", pinnedVersion, "linux", "amd64")
 	if !strings.Contains(err.Error(), archive) {
 		t.Fatalf("error %q does not name %s, want the dry run pinned and on to fetching it", err.Error(), archive)
 	}
@@ -128,11 +128,11 @@ func TestADryRunWithNoLockPinsInMemoryAndWritesNothing(t *testing.T) {
 func TestADryRunAgainstALockPinningAnotherVersionPinsInMemoryAndLeavesTheLockAlone(t *testing.T) {
 	t.Parallel()
 
-	server := releaseServing(t, "aws")
+	server := releaseServing(t, "fake")
 	store := storeOn(t, server, "linux", "amd64")
 	projectDir := t.TempDir()
 
-	pinned := lockfile.Lock{CLI: "0.3.0", Providers: map[string]map[string]string{"aws": {"linux-amd64": "abc"}}}
+	pinned := lockfile.Lock{CLI: "0.3.0", Providers: map[string]map[string]string{"fake": {"linux-amd64": "abc"}}}
 	if err := lockfile.Write(projectDir, pinned); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
@@ -141,11 +141,11 @@ func TestADryRunAgainstALockPinningAnotherVersionPinsInMemoryAndLeavesTheLockAlo
 		t.Fatalf("read the lock: %v", err)
 	}
 
-	_, err = ensurePinned(context.Background(), store, KindProvider, projectDir, "aws", store.Platform, PinInMemory)
+	_, err = ensurePinned(context.Background(), store, KindProvider, projectDir, "fake", store.Platform, PinInMemory)
 	if err == nil {
 		t.Fatal("ensurePinned() error = nil, want the fetch of an archive this release does not serve to fail")
 	}
-	archive := AssetName(KindProvider, "aws", pinnedVersion, "linux", "amd64")
+	archive := AssetName(KindProvider, "fake", pinnedVersion, "linux", "amd64")
 	if !strings.Contains(err.Error(), archive) {
 		t.Fatalf("error %q does not name %s, want the dry run pinned from the release and on to fetching it", err.Error(), archive)
 	}
@@ -162,13 +162,13 @@ func TestADryRunAgainstALockPinningAnotherVersionPinsInMemoryAndLeavesTheLockAlo
 func TestALockWrittenOnOnePlatformMatchesTheOneWrittenOnAnother(t *testing.T) {
 	t.Parallel()
 
-	server := releaseServing(t, "aws", "gcp", "vps")
+	server := releaseServing(t, "fake", "other", "remote")
 
 	written := map[string][]byte{}
 	for _, host := range []Platform{{GOOS: "darwin", GOARCH: "arm64"}, {GOOS: "linux", GOARCH: "amd64"}} {
 		projectDir := t.TempDir()
 		store := storeOn(t, server, host.GOOS, host.GOARCH)
-		_, _ = ensurePinned(context.Background(), store, KindProvider, projectDir, "aws", store.Platform, PinToLock)
+		_, _ = ensurePinned(context.Background(), store, KindProvider, projectDir, "fake", store.Platform, PinToLock)
 
 		raw, err := os.ReadFile(lockfile.Path(projectDir))
 		if err != nil {
@@ -185,11 +185,11 @@ func TestALockWrittenOnOnePlatformMatchesTheOneWrittenOnAnother(t *testing.T) {
 func TestALockPinningAnotherVersionIsRefusedRatherThanRewritten(t *testing.T) {
 	t.Parallel()
 
-	server := releaseServing(t, "aws")
+	server := releaseServing(t, "fake")
 	store := storeOn(t, server, "linux", "amd64")
 	projectDir := t.TempDir()
 
-	pinned := lockfile.Lock{CLI: "0.3.0", Providers: map[string]map[string]string{"aws": {"linux-amd64": "abc"}}}
+	pinned := lockfile.Lock{CLI: "0.3.0", Providers: map[string]map[string]string{"fake": {"linux-amd64": "abc"}}}
 	if err := lockfile.Write(projectDir, pinned); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
@@ -198,7 +198,7 @@ func TestALockPinningAnotherVersionIsRefusedRatherThanRewritten(t *testing.T) {
 		t.Fatalf("read the lock: %v", err)
 	}
 
-	_, err = ensurePinned(context.Background(), store, KindProvider, projectDir, "aws", store.Platform, PinToLock)
+	_, err = ensurePinned(context.Background(), store, KindProvider, projectDir, "fake", store.Platform, PinToLock)
 	if err == nil {
 		t.Fatal("ensurePinned() error = nil, want a lock pinning another version refused")
 	}
@@ -220,11 +220,11 @@ func TestALockPinningAnotherVersionIsRefusedRatherThanRewritten(t *testing.T) {
 func TestPinRewritesALockThatPinsAnotherVersion(t *testing.T) {
 	t.Parallel()
 
-	server := releaseServing(t, "aws", "vps")
+	server := releaseServing(t, "fake", "remote")
 	store := storeOn(t, server, "linux", "amd64")
 	projectDir := t.TempDir()
 
-	stale := lockfile.Lock{CLI: "0.3.0", Providers: map[string]map[string]string{"aws": {"linux-amd64": "abc"}}}
+	stale := lockfile.Lock{CLI: "0.3.0", Providers: map[string]map[string]string{"fake": {"linux-amd64": "abc"}}}
 	if err := lockfile.Write(projectDir, stale); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
@@ -243,19 +243,19 @@ func TestPinRewritesALockThatPinsAnotherVersion(t *testing.T) {
 	if lock.CLI != pinnedVersion {
 		t.Fatalf("lock.CLI = %q, want %q", lock.CLI, pinnedVersion)
 	}
-	if len(lock.Providers["vps"]) != len(Platforms) {
-		t.Fatalf("vps pins %d platforms, want all %d", len(lock.Providers["vps"]), len(Platforms))
+	if len(lock.Providers["remote"]) != len(Platforms) {
+		t.Fatalf("remote pins %d platforms, want all %d", len(lock.Providers["remote"]), len(Platforms))
 	}
 }
 
 func TestAPinnedLockIsNotRewrittenOrRefetched(t *testing.T) {
 	t.Parallel()
 
-	server := releaseServing(t, "aws")
+	server := releaseServing(t, "fake")
 	store := storeOn(t, server, "linux", "amd64")
 	projectDir := t.TempDir()
 
-	_, _ = ensurePinned(context.Background(), store, KindProvider, projectDir, "aws", store.Platform, PinToLock)
+	_, _ = ensurePinned(context.Background(), store, KindProvider, projectDir, "fake", store.Platform, PinToLock)
 	first, err := os.ReadFile(lockfile.Path(projectDir))
 	if err != nil {
 		t.Fatalf("read the lock: %v", err)
@@ -263,7 +263,7 @@ func TestAPinnedLockIsNotRewrittenOrRefetched(t *testing.T) {
 
 	server.Close()
 
-	if _, err := ensurePinned(context.Background(), store, KindProvider, projectDir, "aws", store.Platform, PinToLock); err == nil {
+	if _, err := ensurePinned(context.Background(), store, KindProvider, projectDir, "fake", store.Platform, PinToLock); err == nil {
 		t.Fatal("ensurePinned() error = nil, want the fetch to fail against a closed release")
 	}
 	second, err := os.ReadFile(lockfile.Path(projectDir))
@@ -278,7 +278,7 @@ func TestAPinnedLockIsNotRewrittenOrRefetched(t *testing.T) {
 func TestAProviderTheLockDoesNotPinIsRefusedByName(t *testing.T) {
 	t.Parallel()
 
-	server := releaseServing(t, "aws")
+	server := releaseServing(t, "fake")
 	store := storeOn(t, server, "linux", "amd64")
 	projectDir := t.TempDir()
 
@@ -294,22 +294,22 @@ func TestAProviderTheLockDoesNotPinIsRefusedByName(t *testing.T) {
 }
 
 func TestAProvidersDirResolvesWithNothingOnPATH(t *testing.T) {
-	server := releaseServing(t, "aws")
+	server := releaseServing(t, "fake")
 	store := storeOn(t, server, "linux", "amd64")
 	store.Override = t.TempDir()
 	t.Setenv("PATH", t.TempDir())
 
-	dir := filepath.Join(store.Override, "provider", "aws", pinnedVersion, "linux-amd64")
+	dir := filepath.Join(store.Override, "provider", "fake", pinnedVersion, "linux-amd64")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	want := filepath.Join(dir, "provider-aws")
+	want := filepath.Join(dir, "provider-fake")
 	if err := os.WriteFile(want, []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
 	projectDir := t.TempDir()
-	got, err := ensurePinned(context.Background(), store, KindProvider, projectDir, "aws", store.Platform, PinToLock)
+	got, err := ensurePinned(context.Background(), store, KindProvider, projectDir, "fake", store.Platform, PinToLock)
 	if err != nil {
 		t.Fatalf("ensurePinned: %v", err)
 	}
@@ -331,7 +331,7 @@ func TestAReleaseThatSignsNoChecksumsPinsNothing(t *testing.T) {
 			store := storeOn(t, unsignedRelease(t), "linux", "amd64")
 			projectDir := t.TempDir()
 
-			_, err := ensurePinned(context.Background(), store, KindProvider, projectDir, "aws", store.Platform, tt.mode)
+			_, err := ensurePinned(context.Background(), store, KindProvider, projectDir, "fake", store.Platform, tt.mode)
 			if err == nil {
 				t.Fatal("ensurePinned() error = nil, want a release that signs no checksums refused")
 			}
@@ -352,13 +352,13 @@ func TestChecksumsTheSignatureDoesNotCoverPinNothing(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			store := storeOn(t, releaseServing(t, "aws"), "linux", "amd64")
+			store := storeOn(t, releaseServing(t, "fake"), "linux", "amd64")
 			store.Verify = func(checksums, signature []byte, identity string) error {
 				return countersigns(append(checksums, '\n'), signature, identity)
 			}
 			projectDir := t.TempDir()
 
-			if _, err := ensurePinned(context.Background(), store, KindProvider, projectDir, "aws", store.Platform, tt.mode); err == nil {
+			if _, err := ensurePinned(context.Background(), store, KindProvider, projectDir, "fake", store.Platform, tt.mode); err == nil {
 				t.Fatal("ensurePinned() error = nil, want checksums the signature does not cover refused")
 			}
 			if _, err := os.Stat(lockfile.Path(projectDir)); err == nil {
@@ -369,15 +369,15 @@ func TestChecksumsTheSignatureDoesNotCoverPinNothing(t *testing.T) {
 }
 
 const releaseChecksums = `d0d0 ocel_0.2.0_linux_amd64.tar.gz
-0002 ocel-provider-aws_0.2.0_darwin_arm64.tar.gz
-0001 ocel-provider-aws_0.2.0_darwin_amd64.tar.gz
-0003 ocel-provider-aws_0.2.0_linux_amd64.tar.gz
-0004 ocel-provider-aws_0.2.0_linux_arm64.tar.gz
-0005 ocel-provider-aws_0.2.0_windows_amd64.zip
-0006 ocel-provider-vps_0.2.0_linux_amd64.tar.gz
-0007 ocel-connector-vps_0.2.0_linux_amd64.tar.gz
-0008 ocel-connector-vps_0.2.0_linux_arm64.tar.gz
-beef ocel-provider-aws_0.1.0_linux_amd64.tar.gz
+0002 ocel-provider-fake_0.2.0_darwin_arm64.tar.gz
+0001 ocel-provider-fake_0.2.0_darwin_amd64.tar.gz
+0003 ocel-provider-fake_0.2.0_linux_amd64.tar.gz
+0004 ocel-provider-fake_0.2.0_linux_arm64.tar.gz
+0005 ocel-provider-fake_0.2.0_windows_amd64.zip
+0006 ocel-provider-remote_0.2.0_linux_amd64.tar.gz
+0007 ocel-connector-remote_0.2.0_linux_amd64.tar.gz
+0008 ocel-connector-remote_0.2.0_linux_arm64.tar.gz
+beef ocel-provider-fake_0.1.0_linux_amd64.tar.gz
 `
 
 func renderedLock(t *testing.T, lock lockfile.Lock) []byte {
@@ -396,7 +396,7 @@ func TestChecksumsParseTheDigestOfEveryProviderArchive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseChecksums: %v", err)
 	}
-	if got := sums["ocel-provider-aws_0.2.0_linux_amd64.tar.gz"]; got != "0003" {
+	if got := sums["ocel-provider-fake_0.2.0_linux_amd64.tar.gz"]; got != "0003" {
 		t.Fatalf("digest = %q, want %q", got, "0003")
 	}
 	if _, ok := sums["ocel_0.2.0_linux_amd64.tar.gz"]; !ok {
@@ -416,25 +416,25 @@ func TestTheLockListsEveryProviderOfTheVersionItPins(t *testing.T) {
 	if lock.CLI != "0.2.0" {
 		t.Fatalf("lock.CLI = %q, want %q", lock.CLI, "0.2.0")
 	}
-	if got, ok := pinnedDigest(lock, KindProvider, "aws", Platform{GOOS: "windows", GOARCH: "amd64"}); !ok || got != "0005" {
-		t.Fatalf("Digest(aws, windows-amd64) = %q, %v, want %q, true", got, ok, "0005")
+	if got, ok := pinnedDigest(lock, KindProvider, "fake", Platform{GOOS: "windows", GOARCH: "amd64"}); !ok || got != "0005" {
+		t.Fatalf("Digest(fake, windows-amd64) = %q, %v, want %q, true", got, ok, "0005")
 	}
-	if len(lock.Providers["aws"]) != 5 {
-		t.Fatalf("aws pins %d platforms, want the five the release ships", len(lock.Providers["aws"]))
+	if len(lock.Providers["fake"]) != 5 {
+		t.Fatalf("fake pins %d platforms, want the five the release ships", len(lock.Providers["fake"]))
 	}
-	if _, ok := pinnedDigest(lock, KindProvider, "aws", Platform{GOOS: "linux", GOARCH: "386"}); ok {
+	if _, ok := pinnedDigest(lock, KindProvider, "fake", Platform{GOOS: "linux", GOARCH: "386"}); ok {
 		t.Fatal("the lock pinned a platform the release does not ship")
 	}
 	if _, ok := lock.Providers["ocel"]; ok {
 		t.Fatal("the CLI's own archive was pinned as a provider")
 	}
-	if got, ok := pinnedDigest(lock, KindConnector, "vps", Platform{GOOS: "linux", GOARCH: "arm64"}); !ok || got != "0008" {
-		t.Fatalf("Digest(connector, vps, linux-arm64) = %q, %v, want %q, true", got, ok, "0008")
+	if got, ok := pinnedDigest(lock, KindConnector, "remote", Platform{GOOS: "linux", GOARCH: "arm64"}); !ok || got != "0008" {
+		t.Fatalf("Digest(connector, remote, linux-arm64) = %q, %v, want %q, true", got, ok, "0008")
 	}
-	if _, ok := lock.Providers["vps"]; !ok {
-		t.Fatal("the vps provider and the vps connector share a name, and pinning one dropped the other")
+	if _, ok := lock.Providers["remote"]; !ok {
+		t.Fatal("the remote provider and the remote connector share a name, and pinning one dropped the other")
 	}
-	if _, ok := pinnedDigest(lock, KindProvider, "vps", Platform{GOOS: "linux", GOARCH: "arm64"}); ok {
+	if _, ok := pinnedDigest(lock, KindProvider, "remote", Platform{GOOS: "linux", GOARCH: "arm64"}); ok {
 		t.Fatal("a connector archive was pinned as a provider")
 	}
 }
@@ -447,7 +447,7 @@ func TestAnotherVersionIsNotPinned(t *testing.T) {
 		t.Fatalf("ParseChecksums: %v", err)
 	}
 	lock := lockFromChecksums("0.2.0", sums)
-	for _, digest := range lock.Providers["aws"] {
+	for _, digest := range lock.Providers["fake"] {
 		if digest == "beef" {
 			t.Fatal("an archive of another version was pinned")
 		}

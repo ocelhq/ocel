@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/version"
+	"github.com/ocelhq/ocel/pkg/configdoc"
 )
 
 func manifestDir(t *testing.T, manifest string) string {
@@ -43,7 +45,7 @@ func TestInitWritesAConfigTheLoaderAccepts(t *testing.T) {
 
 			var stdout bytes.Buffer
 			clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-			if err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "aws"}); err != nil {
+			if err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "fake"}); err != nil {
 				t.Fatalf("runInit: %v — %s", err, stdout.String())
 			}
 
@@ -51,7 +53,7 @@ func TestInitWritesAConfigTheLoaderAccepts(t *testing.T) {
 			if err != nil {
 				t.Fatalf("the config init wrote does not load: %v", err)
 			}
-			if cfg.Slug != "acme" || cfg.Provider == nil || cfg.Provider.ID != "aws" {
+			if cfg.Slug != "acme" || cfg.Provider == nil || cfg.Provider.ID != "fake" {
 				t.Fatalf("config = %+v", cfg)
 			}
 			if strings.Join(*argv, " ") != strings.Join(want.add, " ") {
@@ -66,7 +68,7 @@ func TestInitWritesTheSchemaThisCLIShipsWith(t *testing.T) {
 	dependencies := newTestDependencies()
 	stubPackageManager(&dependencies, nil)
 
-	if err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "aws"}); err != nil {
+	if err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "fake"}); err != nil {
 		t.Fatalf("runInit: %v", err)
 	}
 
@@ -90,7 +92,7 @@ func TestInitWritesTypeScriptOnRequest(t *testing.T) {
 	dependencies := newTestDependencies()
 	stubPackageManager(&dependencies, nil)
 
-	if err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "aws", ts: true}); err != nil {
+	if err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "fake", ts: true}); err != nil {
 		t.Fatalf("runInit: %v", err)
 	}
 
@@ -101,7 +103,7 @@ func TestInitWritesTypeScriptOnRequest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read config: %v", err)
 	}
-	if !strings.Contains(string(written), `from "ocel/providers/aws"`) {
+	if !strings.Contains(string(written), `from "ocel/providers/fake"`) {
 		t.Fatalf("config =\n%s", written)
 	}
 }
@@ -111,7 +113,7 @@ func TestInitWritesYAMLOnRequest(t *testing.T) {
 	dependencies := newTestDependencies()
 	stubPackageManager(&dependencies, nil)
 
-	if err := runInit(context.Background(), dependencies, dir, "007", initOptions{provider: "aws", yaml: true}); err != nil {
+	if err := runInit(context.Background(), dependencies, dir, "007", initOptions{provider: "fake", yaml: true}); err != nil {
 		t.Fatalf("runInit: %v", err)
 	}
 
@@ -122,7 +124,7 @@ func TestInitWritesYAMLOnRequest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("the config init wrote does not load: %v", err)
 	}
-	if cfg.Path != filepath.Join(dir, project.YAMLFileName) || cfg.Slug != "007" || cfg.Provider == nil || cfg.Provider.ID != "aws" {
+	if cfg.Path != filepath.Join(dir, project.YAMLFileName) || cfg.Slug != "007" || cfg.Provider == nil || cfg.Provider.ID != "fake" {
 		t.Fatalf("config = %+v", cfg)
 	}
 	written, err := os.ReadFile(cfg.Path)
@@ -140,11 +142,11 @@ func TestInitRefusesToWriteASecondFormOfTheConfig(t *testing.T) {
 		opts     initOptions
 		refused  string
 	}{
-		{project.DefaultFileName, initOptions{provider: "aws", yaml: true}, project.YAMLFileName},
-		{project.TSFileName, initOptions{provider: "aws", yaml: true}, project.YAMLFileName},
-		{"ocel.yml", initOptions{provider: "aws", yaml: true}, project.YAMLFileName},
-		{project.YAMLFileName, initOptions{provider: "aws"}, project.DefaultFileName},
-		{project.YAMLFileName, initOptions{provider: "aws", ts: true}, project.TSFileName},
+		{project.DefaultFileName, initOptions{provider: "fake", yaml: true}, project.YAMLFileName},
+		{project.TSFileName, initOptions{provider: "fake", yaml: true}, project.YAMLFileName},
+		{"ocel.yml", initOptions{provider: "fake", yaml: true}, project.YAMLFileName},
+		{project.YAMLFileName, initOptions{provider: "fake"}, project.DefaultFileName},
+		{project.YAMLFileName, initOptions{provider: "fake", ts: true}, project.TSFileName},
 	} {
 		t.Run(tc.existing+" then "+tc.refused, func(t *testing.T) {
 			dir := manifestDir(t, "go.mod")
@@ -171,9 +173,9 @@ func TestInitRefusesAFormFlagTheExplicitPathContradicts(t *testing.T) {
 		opts initOptions
 		want string
 	}{
-		{project.DefaultFileName, initOptions{provider: "aws", yaml: true}, "--yaml"},
-		{"ocel.aws.yaml", initOptions{provider: "aws", ts: true}, "--ts"},
-		{"config.json", initOptions{provider: "aws"}, "config.json"},
+		{project.DefaultFileName, initOptions{provider: "fake", yaml: true}, "--yaml"},
+		{"ocel.staging.yaml", initOptions{provider: "fake", ts: true}, "--ts"},
+		{"config.json", initOptions{provider: "fake"}, "config.json"},
 	} {
 		t.Run(tc.path, func(t *testing.T) {
 			dir := manifestDir(t, "go.mod")
@@ -197,11 +199,11 @@ func TestInitWritesYAMLToAnExplicitYAMLPath(t *testing.T) {
 	dependencies := newTestDependencies()
 	stubPackageManager(&dependencies, nil)
 
-	opts := initOptions{provider: "aws", yaml: true, configPath: "ocel.aws.yml"}
+	opts := initOptions{provider: "fake", yaml: true, configPath: "ocel.staging.yml"}
 	if err := runInit(context.Background(), dependencies, dir, "acme", opts); err != nil {
 		t.Fatalf("runInit: %v", err)
 	}
-	cfg, err := project.Load(context.Background(), dir, "ocel.aws.yml")
+	cfg, err := project.Load(context.Background(), dir, "ocel.staging.yml")
 	if err != nil {
 		t.Fatalf("the config init wrote does not load: %v", err)
 	}
@@ -218,7 +220,7 @@ func TestInitRefusesADirectoryOfSeveralLanguages(t *testing.T) {
 	dependencies := newTestDependencies()
 	stubPackageManager(&dependencies, nil)
 
-	err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "aws"})
+	err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "fake"})
 	if err == nil {
 		t.Fatal("init picked a language from two manifests")
 	}
@@ -237,7 +239,7 @@ func TestInitReadsACrateBesideAPackageJSONAsANodeProject(t *testing.T) {
 	dependencies := newTestDependencies()
 	argv := stubPackageManager(&dependencies, nil)
 
-	if err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "aws"}); err != nil {
+	if err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "fake"}); err != nil {
 		t.Fatalf("runInit: %v", err)
 	}
 	if want := "npm install ocel"; strings.Join(*argv, " ") != want {
@@ -253,7 +255,7 @@ func TestInitTakesTheLanguageItIsGiven(t *testing.T) {
 	dependencies := newTestDependencies()
 	argv := stubPackageManager(&dependencies, nil)
 
-	if err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "aws", language: "rust"}); err != nil {
+	if err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "fake", language: "rust"}); err != nil {
 		t.Fatalf("runInit: %v", err)
 	}
 	if strings.Join(*argv, " ") != "cargo add ocel-sdk" {
@@ -266,7 +268,7 @@ func TestInitWritesOnlyTheConfigWhenNoManifestNamesALanguage(t *testing.T) {
 	dependencies := newTestDependencies()
 	argv := stubPackageManager(&dependencies, nil)
 
-	if err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "aws"}); err != nil {
+	if err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "fake"}); err != nil {
 		t.Fatalf("runInit: %v", err)
 	}
 	if len(*argv) != 0 {
@@ -281,16 +283,17 @@ func TestInitWritesOnlyTheConfigWhenNoManifestNamesALanguage(t *testing.T) {
 }
 
 func TestInitNamesTheProviderAloneWhereItNeedsNoOptionsAndKeysItElsewhere(t *testing.T) {
+	alone, keyed := providerNamedAlone(), providerKeyed()
 	for _, tc := range []struct {
 		opts    initOptions
 		written string
 		want    string
 	}{
-		{initOptions{provider: "aws"}, project.DefaultFileName, "  \"provider\": \"aws\"\n"},
-		{initOptions{provider: "aws", yaml: true}, project.YAMLFileName, "provider: aws\n"},
-		{initOptions{provider: "vps"}, project.DefaultFileName, "  \"provider\": { \"vps\": {} }\n"},
-		{initOptions{provider: "vps", yaml: true}, project.YAMLFileName, "provider:\n  vps: {}\n"},
-		{initOptions{provider: "aws", ts: true}, project.TSFileName, "  provider: awsProvider({}),\n"},
+		{initOptions{provider: alone}, project.DefaultFileName, fmt.Sprintf("  \"provider\": %q\n", alone)},
+		{initOptions{provider: alone, yaml: true}, project.YAMLFileName, "provider: " + alone + "\n"},
+		{initOptions{provider: keyed}, project.DefaultFileName, fmt.Sprintf("  \"provider\": { %q: {} }\n", keyed)},
+		{initOptions{provider: keyed, yaml: true}, project.YAMLFileName, "provider:\n  " + keyed + ": {}\n"},
+		{initOptions{provider: "fake", ts: true}, project.TSFileName, "  provider: fakeProvider({}),\n"},
 	} {
 		t.Run(tc.opts.provider+" in "+tc.written, func(t *testing.T) {
 			dir := manifestDir(t, "")
@@ -316,11 +319,11 @@ func TestInitRefusesAProviderOcelDoesNotShip(t *testing.T) {
 	dependencies := newTestDependencies()
 	stubPackageManager(&dependencies, nil)
 
-	err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "azure"})
+	err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "unshipped"})
 	if err == nil {
 		t.Fatal("init wrote a config naming a provider nothing ships")
 	}
-	for _, want := range []string{`"azure"`, "aws, gcp, vps"} {
+	for _, want := range []string{`"unshipped"`, strings.Join(configdoc.ProviderIDs(), ", ")} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q does not name %s", err, want)
 		}

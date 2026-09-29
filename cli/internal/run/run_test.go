@@ -27,7 +27,7 @@ func TestEverySpanARunOpensEndsExactlyOnceBeforeItsResultWhenTheRunFails(t *test
 	sink := &recording{}
 	run, _ := begin(t, sink)
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	check.Unit("aws", progress.Checking.Title("credentials")).End(nil)
+	check.Unit("fake", progress.Checking.Title("credentials")).End(nil)
 	deploy := run.Phase(progressv1.Phase_PHASE_DEPLOY)
 	deploy.Unit("web", progress.Deploying.Title("web"))
 	check.End(nil)
@@ -56,8 +56,8 @@ func TestEverySpanARunOpensEndsExactlyOnceBeforeItsResultWhenTheRunFails(t *test
 			t.Fatalf("span %s ended %d times, want once", id, ended[id])
 		}
 	}
-	if strings.Join(order, ",") != "aws,,web," {
-		t.Fatalf("ended subjects in order = %q, want aws, check, then web before its deploy phase", order)
+	if strings.Join(order, ",") != "fake,,web," {
+		t.Fatalf("ended subjects in order = %q, want fake, check, then web before its deploy phase", order)
 	}
 	web := got[len(got)-3]
 	if web.GetSubject() != "web" || web.GetLevel() != progressv1.Level_LEVEL_ERROR || web.GetMessage() != "the upload was refused" {
@@ -70,7 +70,7 @@ func TestAUnitOpenedOnAnEndedSpanStillEndsOnceWhenTheRunEnds(t *testing.T) {
 	run, _ := begin(t, sink)
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
 	check.End(nil)
-	check.Unit("aws", progress.Checking.Title("credentials")).Say("still here")
+	check.Unit("fake", progress.Checking.Title("credentials")).Say("still here")
 
 	var err error
 	run.End(&err)
@@ -78,7 +78,7 @@ func TestAUnitOpenedOnAnEndedSpanStillEndsOnceWhenTheRunEnds(t *testing.T) {
 	ended := 0
 	got := sink.received()
 	for _, ev := range got[:len(got)-1] {
-		if ev.GetEnded() != nil && ev.GetSubject() == "aws" {
+		if ev.GetEnded() != nil && ev.GetSubject() == "fake" {
 			ended++
 		}
 	}

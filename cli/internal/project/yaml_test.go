@@ -14,7 +14,7 @@ func TestLoadReadsYAMLWithoutNode(t *testing.T) {
 	write(t, filepath.Join(dir, YAMLFileName), `# the provider this project deploys into
 slug: yaml-only
 provider:
-  aws: { region: eu-west-2 }
+  fake: { size: large }
 apps:
   - name: web
     path: ./server
@@ -29,10 +29,10 @@ apps:
 	if cfg.Slug != "yaml-only" {
 		t.Fatalf("slug = %q", cfg.Slug)
 	}
-	if cfg.Provider == nil || cfg.Provider.ID != "aws" {
+	if cfg.Provider == nil || cfg.Provider.ID != "fake" {
 		t.Fatalf("provider = %+v", cfg.Provider)
 	}
-	if string(cfg.Provider.Options) != `{"region":"eu-west-2"}` {
+	if string(cfg.Provider.Options) != `{"size":"large"}` {
 		t.Fatalf("options = %s", cfg.Provider.Options)
 	}
 	if len(cfg.Apps) != 1 || cfg.Apps[0].Framework() != "go" {
@@ -59,13 +59,13 @@ func TestLoadReadsTheShortYAMLSuffix(t *testing.T) {
 func TestLoadReadsAYAMLVariantByName(t *testing.T) {
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, DefaultFileName), `{"slug":"acme"}`)
-	write(t, filepath.Join(dir, "ocel.vps.yaml"), "slug: acme-vps\n")
+	write(t, filepath.Join(dir, "ocel.staging.yaml"), "slug: acme-staging\n")
 
-	cfg, err := Load(context.Background(), dir, "ocel.vps.yaml")
+	cfg, err := Load(context.Background(), dir, "ocel.staging.yaml")
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
-	if cfg.Slug != "acme-vps" {
+	if cfg.Slug != "acme-staging" {
 		t.Fatalf("slug = %q", cfg.Slug)
 	}
 }
@@ -142,8 +142,8 @@ func TestLoadRefusesYAMLItCannotReadAsOneDocument(t *testing.T) {
 	for name, tc := range map[string]struct{ source, want string }{
 		"malformed":        {"slug: [acme\n", "not valid YAML"},
 		"two documents":    {"slug: acme\n---\nslug: other\n", "more than one YAML document"},
-		"aliased int key":  {"slug: acme\nprovider:\n  vps:\n    ssh: &n 1\n    *n : x\n", `has the key 1 under "provider.vps"`},
-		"infinite number":  {"slug: acme\nprovider:\n  aws: { weight: .inf }\n", `sets "provider.aws.weight" to +Inf`},
+		"aliased int key":  {"slug: acme\nprovider:\n  fake:\n    ssh: &n 1\n    *n : x\n", `has the key 1 under "provider.fake"`},
+		"infinite number":  {"slug: acme\nprovider:\n  fake: { weight: .inf }\n", `sets "provider.fake.weight" to +Inf`},
 		"duplicate key":    {"slug: acme\nslug: other\n", "already defined"},
 		"not an object":    {"- slug: acme\n", "must be an object"},
 		"empty":            {"", "must be an object"},
@@ -181,7 +181,7 @@ func TestLoadKeepsTheSourceTextOfWhatJSONHasNoTypeFor(t *testing.T) {
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, YAMLFileName), `slug: 2024-01-01
 provider:
-  vps:
+  fake:
     since: 2024-01-01
     at: 2001-12-14t21:59:43.10-05:00
     blob: !!binary aGVsbG8=
@@ -226,8 +226,8 @@ provider:
 
 func TestLoadReadsAYAMLNumberAsTheSameJSONNumberWouldBeRead(t *testing.T) {
 	yamlDir, jsonDir := t.TempDir(), t.TempDir()
-	write(t, filepath.Join(yamlDir, YAMLFileName), "slug: acme\nprovider:\n  vps: { version: 1.10, port: 22 }\n")
-	write(t, filepath.Join(jsonDir, DefaultFileName), `{"slug":"acme","provider":{"vps":{"version":1.10,"port":22}}}`)
+	write(t, filepath.Join(yamlDir, YAMLFileName), "slug: acme\nprovider:\n  fake: { version: 1.10, port: 22 }\n")
+	write(t, filepath.Join(jsonDir, DefaultFileName), `{"slug":"acme","provider":{"fake":{"version":1.10,"port":22}}}`)
 
 	fromYAML, err := Load(context.Background(), yamlDir, "")
 	if err != nil {
@@ -244,7 +244,7 @@ func TestLoadReadsAYAMLNumberAsTheSameJSONNumberWouldBeRead(t *testing.T) {
 
 func TestLoadReadsAYAMLFileWithEmptyDocumentsAroundItsOne(t *testing.T) {
 	for name, source := range map[string]string{
-		"trailing separator": "slug: acme\nprovider: aws\n---\n",
+		"trailing separator": "slug: acme\nprovider: " + providerNamedAlone() + "\n---\n",
 		"leading separator":  "---\nslug: acme\n",
 		"null document":      "slug: acme\n---\n~\n",
 	} {
@@ -267,14 +267,14 @@ func TestLoadReportsTheSameYAMLErrorOnEveryRun(t *testing.T) {
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, YAMLFileName), `slug: acme
 provider:
-  vps:
+  fake:
     z: .inf
     a: .nan
     m: -.inf
 `)
 
 	_, first := Load(context.Background(), dir, "")
-	if first == nil || !strings.Contains(first.Error(), `sets "provider.vps.a" to NaN`) {
+	if first == nil || !strings.Contains(first.Error(), `sets "provider.fake.a" to NaN`) {
 		t.Fatalf("error %v does not name the first bad key in order", first)
 	}
 	for range 50 {
@@ -286,11 +286,12 @@ provider:
 
 func TestLoadReadsYAMLSelectorsNamedAloneOrKeyed(t *testing.T) {
 	dir := t.TempDir()
+	namedAlone := providerNamedAlone()
 	write(t, filepath.Join(dir, YAMLFileName), `slug: acme
-provider: aws
-edge: cloudflare
+provider: `+namedAlone+`
+edge: relay
 dns:
-  cloudflare:
+  zone:
     zone: example.com
 `)
 
@@ -298,23 +299,23 @@ dns:
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
-	if cfg.Provider == nil || cfg.Provider.ID != "aws" || string(cfg.Provider.Options) != `{}` {
-		t.Fatalf("provider = %+v, want aws with no options", cfg.Provider)
+	if cfg.Provider == nil || cfg.Provider.ID != namedAlone || string(cfg.Provider.Options) != `{}` {
+		t.Fatalf("provider = %+v, want %s with no options", cfg.Provider, namedAlone)
 	}
-	if cfg.EdgeKind() != "cloudflare" {
-		t.Fatalf("edge = %q, want cloudflare", cfg.EdgeKind())
+	if cfg.EdgeKind() != "relay" {
+		t.Fatalf("edge = %q, want relay", cfg.EdgeKind())
 	}
-	if cfg.DNS == nil || cfg.DNS.Kind != "cloudflare" || cfg.DNS.Zone != "example.com" {
-		t.Fatalf("dns = %+v, want cloudflare in example.com", cfg.DNS)
+	if cfg.DNS == nil || cfg.DNS.Kind != "zone" || cfg.DNS.Zone != "example.com" {
+		t.Fatalf("dns = %+v, want zone in example.com", cfg.DNS)
 	}
 }
 
 func TestLoadRefusesAYAMLProviderKeyedWithNoValue(t *testing.T) {
 	dir := t.TempDir()
-	write(t, filepath.Join(dir, YAMLFileName), "slug: acme\nprovider:\n  aws:\n")
+	write(t, filepath.Join(dir, YAMLFileName), "slug: acme\nprovider:\n  fake:\n")
 
 	_, err := Load(context.Background(), dir, "")
-	if err == nil || !strings.Contains(err.Error(), `"provider.aws" must be an object of options`) {
-		t.Fatalf("error %v, want aws with no value refused as options that are not an object", err)
+	if err == nil || !strings.Contains(err.Error(), `"provider.fake" must be an object of options`) {
+		t.Fatalf("error %v, want fake with no value refused as options that are not an object", err)
 	}
 }

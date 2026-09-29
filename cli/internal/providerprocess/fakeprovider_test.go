@@ -29,19 +29,19 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
-const fakeProviderModeEnvVar = "OCEL_TEST_FAKE_PROVIDER_MODE"
+const fakeProviderModeEnvVar = "OCEL_TEST_PROVIDER_PROCESS_MODE"
 
-const fakeProviderSockEnvVar = "OCEL_TEST_FAKE_PROVIDER_SOCK"
+const fakeProviderSockEnvVar = "OCEL_TEST_PROVIDER_PROCESS_SOCK"
 
-const fakeProviderVendorEnvVar = "OCEL_TEST_FAKE_PROVIDER_VENDOR"
+const fakeProviderVendorEnvVar = "OCEL_TEST_PROVIDER_PROCESS_VENDOR"
 
-const fakeProviderGrandchildPidFileEnvVar = "OCEL_TEST_FAKE_PROVIDER_GRANDCHILD_PIDFILE"
+const fakeProviderGrandchildPidFileEnvVar = "OCEL_TEST_PROVIDER_PROCESS_GRANDCHILD_PIDFILE"
 
-const fakeProviderKnownHostsEnvVar = "OCEL_TEST_FAKE_PROVIDER_KNOWN_HOSTS"
+const fakeProviderKnownHostsEnvVar = "OCEL_TEST_PROVIDER_PROCESS_KNOWN_HOSTS"
 
-const fakeProviderDrivesEnvVar = "OCEL_TEST_FAKE_PROVIDER_DRIVES"
+const fakeProviderDrivesEnvVar = "OCEL_TEST_PROVIDER_PROCESS_DRIVES"
 
-const fakeProviderVersionEnvVar = "OCEL_TEST_FAKE_PROVIDER_VERSION"
+const fakeProviderVersionEnvVar = "OCEL_TEST_PROVIDER_PROCESS_VERSION"
 
 const fakeChattyLine = "fake provider: warming the cache"
 
@@ -53,7 +53,7 @@ func fakeProviderVersion() string {
 }
 
 const (
-	fakeHostName     = "vps.example.com"
+	fakeHostName     = "box.example.com"
 	fakeHostAddress  = "203.0.113.7"
 	fakeHostPort     = 2222
 	fakeHostKeyType  = "ssh-ed25519"
@@ -168,10 +168,10 @@ type fakeProviderServer struct {
 }
 
 type fakeOptions struct {
-	Region string `json:"region,omitempty"`
-	SSH    struct {
+	Size    string `json:"size,omitempty"`
+	Network struct {
 		Host string `json:"host,omitempty"`
-	} `json:"ssh,omitempty"`
+	} `json:"network,omitempty"`
 }
 
 func (s *fakeProviderServer) Configure(_ context.Context, req *contractv1.ConfigureRequest) (*contractv1.ConfigureResponse, error) {

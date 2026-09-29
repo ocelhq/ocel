@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
+	"github.com/ocelhq/ocel/pkg/configdoc"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 )
 
@@ -50,7 +51,7 @@ func TestAddingTheSDKIsAUnitOnTheInitRunAndThePackageManagerSpeaksThroughIt(t *t
 		t.Fatalf("write lockfile: %v", err)
 	}
 
-	if err := runInit(context.Background(), dependencies, dir, "my-app", initOptions{provider: "aws"}); err != nil {
+	if err := runInit(context.Background(), dependencies, dir, "my-app", initOptions{provider: "fake"}); err != nil {
 		t.Fatalf("runInit err = %v", err)
 	}
 
@@ -113,7 +114,7 @@ func TestInitWritesADeployableConfigForTheSlugAndProviderItIsGiven(t *testing.T)
 
 		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-		if err := runInit(context.Background(), dependencies, dir, "", initOptions{provider: "aws"}); err != nil {
+		if err := runInit(context.Background(), dependencies, dir, "", initOptions{provider: "fake"}); err != nil {
 			t.Fatalf("runInit err = %v; stdout=%s", err, stdout.String())
 		}
 
@@ -132,12 +133,12 @@ func TestInitWritesADeployableConfigForTheSlugAndProviderItIsGiven(t *testing.T)
 
 		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-		if err := runInit(context.Background(), dependencies, dir, "my-app", initOptions{provider: "aws"}); err != nil {
+		if err := runInit(context.Background(), dependencies, dir, "my-app", initOptions{provider: "fake"}); err != nil {
 			t.Fatalf("runInit err = %v; stdout=%s", err, stdout.String())
 		}
 
 		content := readConfig(t, dir)
-		for _, want := range []string{`"slug": "my-app"`, `"provider": "aws"`, `"$schema"`} {
+		for _, want := range []string{`"slug": "my-app"`, `"provider": { "fake": {} }`, `"$schema"`} {
 			if !strings.Contains(content, want) {
 				t.Errorf("config = %q, want it to contain %q", content, want)
 			}
@@ -155,7 +156,7 @@ func TestInitWritesADeployableConfigForTheSlugAndProviderItIsGiven(t *testing.T)
 				argv := stubPackageManager(&dependencies, nil)
 				dir := initTestDir(t, "proj")
 
-				err := runInit(context.Background(), dependencies, dir, slug, initOptions{provider: "aws"})
+				err := runInit(context.Background(), dependencies, dir, slug, initOptions{provider: "fake"})
 				if err == nil {
 					t.Fatal("runInit err = nil, want error")
 				}
@@ -176,7 +177,7 @@ func TestInitWritesADeployableConfigForTheSlugAndProviderItIsGiven(t *testing.T)
 		stubPackageManager(&dependencies, nil)
 		dir := initTestDir(t, "!!!")
 
-		err := runInit(context.Background(), dependencies, dir, "", initOptions{provider: "aws"})
+		err := runInit(context.Background(), dependencies, dir, "", initOptions{provider: "fake"})
 		if err == nil || !strings.Contains(err.Error(), "ocel init my-app") {
 			t.Fatalf("err = %v, want it to ask for a slug", err)
 		}
@@ -193,7 +194,7 @@ func TestInitWritesADeployableConfigForTheSlugAndProviderItIsGiven(t *testing.T)
 			t.Fatalf("write existing config: %v", err)
 		}
 
-		err := runInit(context.Background(), dependencies, dir, "my-app", initOptions{provider: "aws"})
+		err := runInit(context.Background(), dependencies, dir, "my-app", initOptions{provider: "fake"})
 		if err == nil || !strings.Contains(err.Error(), project.DefaultFileName) {
 			t.Fatalf("err = %v, want it to name the config already there", err)
 		}
@@ -213,13 +214,14 @@ func TestInitWritesADeployableConfigForTheSlugAndProviderItIsGiven(t *testing.T)
 		stubPackageManager(&dependencies, nil)
 		dir := initTestDir(t, "proj")
 
-		opts := initOptions{provider: "gcp"}
+		keyed := providerKeyed()
+		opts := initOptions{provider: keyed}
 		if err := runInit(context.Background(), dependencies, dir, "my-app", opts); err != nil {
 			t.Fatalf("runInit err = %v", err)
 		}
 
 		content := readConfig(t, dir)
-		if !strings.Contains(content, `"provider": { "gcp": {} }`) {
+		if !strings.Contains(content, fmt.Sprintf(`"provider": { %q: {} }`, keyed)) {
 			t.Fatalf("config = %q, want the provider asked for and options only the provider knows", content)
 		}
 	})
@@ -235,7 +237,7 @@ func TestInitWritesADeployableConfigForTheSlugAndProviderItIsGiven(t *testing.T)
 		if err == nil || !strings.Contains(err.Error(), "--provider") {
 			t.Fatalf("err = %v, want it to ask for --provider", err)
 		}
-		if !strings.Contains(err.Error(), "aws, gcp, vps") {
+		if !strings.Contains(err.Error(), strings.Join(configdoc.ProviderIDs(), ", ")) {
 			t.Fatalf("err = %v, want it to name the providers ocel ships", err)
 		}
 		if _, statErr := os.Stat(filepath.Join(dir, project.DefaultFileName)); statErr == nil {
@@ -266,7 +268,7 @@ func TestInitWritesADeployableConfigForTheSlugAndProviderItIsGiven(t *testing.T)
 					t.Fatalf("write lockfile: %v", err)
 				}
 
-				if err := runInit(context.Background(), dependencies, dir, "my-app", initOptions{provider: "aws"}); err != nil {
+				if err := runInit(context.Background(), dependencies, dir, "my-app", initOptions{provider: "fake"}); err != nil {
 					t.Fatalf("runInit err = %v", err)
 				}
 				if got := *argv; !slices.Equal(got, want) {
@@ -288,7 +290,7 @@ func TestInitWritesADeployableConfigForTheSlugAndProviderItIsGiven(t *testing.T)
 
 		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-		if err := runInit(context.Background(), dependencies, dir, "my-app", initOptions{provider: "aws"}); err != nil {
+		if err := runInit(context.Background(), dependencies, dir, "my-app", initOptions{provider: "fake"}); err != nil {
 			t.Fatalf("runInit err = %v, want the failed install to be non-fatal", err)
 		}
 		if !strings.Contains(readConfig(t, dir), `"slug": "my-app"`) {
@@ -319,7 +321,7 @@ func TestInitWritesADeployableConfigForTheSlugAndProviderItIsGiven(t *testing.T)
 
 		dependencies := newTestDependencies()
 		argv := stubPackageManager(&dependencies, nil)
-		opts := initOptions{provider: "aws", configPath: filepath.Join("..", "project", project.DefaultFileName)}
+		opts := initOptions{provider: "fake", configPath: filepath.Join("..", "project", project.DefaultFileName)}
 
 		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
@@ -349,7 +351,7 @@ func TestInitWritesADeployableConfigForTheSlugAndProviderItIsGiven(t *testing.T)
 		stubPackageManager(&dependencies, nil)
 		dir := initTestDir(t, "proj")
 
-		opts := initOptions{provider: "aws", configPath: filepath.Join("nested", "deep", project.DefaultFileName)}
+		opts := initOptions{provider: "fake", configPath: filepath.Join("nested", "deep", project.DefaultFileName)}
 		if err := runInit(context.Background(), dependencies, dir, "my-app", opts); err != nil {
 			t.Fatalf("runInit err = %v", err)
 		}
@@ -363,8 +365,8 @@ func TestAProviderIDBecomesACamelCaseIdentifierInTheTypeScriptConfig(t *testing.
 	t.Parallel()
 
 	cases := map[string]string{
-		"aws":        "awsProvider",
-		"gcp":        "gcpProvider",
+		"fake":       "fakeProvider",
+		"second":     "secondProvider",
 		"bare-metal": "bareMetalProvider",
 		"123":        "provider",
 	}

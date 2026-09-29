@@ -72,9 +72,9 @@ func TestADebugLineReachesNDJSONAtItsLevel(t *testing.T) {
 	t.Parallel()
 
 	var out safeBuffer
-	NewJSONLines(&out).Receive(&streamv1.RunEvent{Level: progressv1.Level_LEVEL_DEBUG, Message: "+  aws:s3:Bucket assets creating (0s)"})
+	NewJSONLines(&out).Receive(&streamv1.RunEvent{Level: progressv1.Level_LEVEL_DEBUG, Message: "+  fake:bucket assets creating (0s)"})
 	got := parseNDJSON(t, out.String())
-	if len(got) != 1 || got[0].GetLevel() != progressv1.Level_LEVEL_DEBUG || got[0].GetMessage() != "+  aws:s3:Bucket assets creating (0s)" {
+	if len(got) != 1 || got[0].GetLevel() != progressv1.Level_LEVEL_DEBUG || got[0].GetMessage() != "+  fake:bucket assets creating (0s)" {
 		var lines []string
 		for _, ev := range got {
 			lines = append(lines, ev.GetLevel().String()+" "+ev.GetMessage())

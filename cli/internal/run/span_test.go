@@ -230,8 +230,8 @@ func TestThePlanASpanDrawsIsThePlanEverySinkShowsInGroupOrder(t *testing.T) {
 	sink := &recording{}
 	run, _ := begin(t, sink)
 	plan := &planv1.ChangePlan{Groups: []*planv1.ChangeGroup{
-		{Kind: "edge", Name: "cloudflare/edge", Action: planv1.Change_ACTION_CREATE},
-		{Kind: "stack", Name: "aws/ocel-bootstrap", Action: planv1.Change_ACTION_UPDATE, Changes: []*planv1.Change{
+		{Kind: "edge", Name: "relay/edge", Action: planv1.Change_ACTION_CREATE},
+		{Kind: "stack", Name: "fake/ocel-bootstrap", Action: planv1.Change_ACTION_UPDATE, Changes: []*planv1.Change{
 			{Kind: "b", Name: "second", Action: planv1.Change_ACTION_UPDATE},
 			{Kind: "a", Name: "first", Action: planv1.Change_ACTION_CREATE},
 		}},
@@ -286,11 +286,11 @@ func TestPlanRowsReachEverySinkInOneOrderWhateverOrderTheyArriveIn(t *testing.T)
 
 func TestPlanGroupsReachEverySinkInGroupOrderWhateverOrderTheyArriveIn(t *testing.T) {
 	spine := []*planv1.ChangeGroup{
-		{Kind: "stack", Name: "aws/ocel-production-core"},
-		{Kind: "parameters", Name: "aws/parameters"},
-		{Kind: "stack", Name: "aws/shop--web--b1"},
-		{Kind: "stack", Name: "aws/shop--api--b1"},
-		{Kind: "edge", Name: "cloudfront/edge"},
+		{Kind: "stack", Name: "fake/ocel-production-core"},
+		{Kind: "parameters", Name: "fake/parameters"},
+		{Kind: "stack", Name: "fake/shop--web--b1"},
+		{Kind: "stack", Name: "fake/shop--api--b1"},
+		{Kind: "edge", Name: "direct/edge"},
 		{Kind: "certificate", Name: "ocels-cert"},
 		{Kind: "DNS record", Name: "shop.example"},
 		{Kind: "variable values", Name: "shop"},
@@ -307,8 +307,8 @@ func TestPlanGroupsReachEverySinkInGroupOrderWhateverOrderTheyArriveIn(t *testin
 		return strings.Join(names, " ")
 	}
 
-	want := "stack/aws/ocel-production-core parameters/aws/parameters stack/aws/shop--web--b1 " +
-		"stack/aws/shop--api--b1 edge/cloudfront/edge certificate/ocels-cert DNS record/shop.example " +
+	want := "stack/fake/ocel-production-core parameters/fake/parameters stack/fake/shop--web--b1 " +
+		"stack/fake/shop--api--b1 edge/direct/edge certificate/ocels-cert DNS record/shop.example " +
 		"variable values/shop stored objects/shop"
 	if names := groupNames(drawn(t, arrived...)); names != want {
 		t.Errorf("group order = %q, want %q — infra and apps in the order the plan names them, then edge, then what sits outside the spine", names, want)

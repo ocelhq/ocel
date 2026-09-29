@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-const fakeProviderEnvVar = "OCEL_TEST_FAKE_PROVIDER"
+const fakeProviderEnvVar = "OCEL_TEST_PROVIDER_PROCESS"
 
 func TestMain(m *testing.M) {
 	if os.Getenv(fakeProviderEnvVar) == "1" {

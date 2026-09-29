@@ -17,6 +17,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/fixturetest"
 	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/pkg/configdoc"
 	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
@@ -359,7 +360,7 @@ func TestTheGoFixtureDeploysFromJSONAlone(t *testing.T) {
 	if cfg.Path != filepath.Join(dir, project.DefaultFileName) {
 		t.Fatalf("path = %q", cfg.Path)
 	}
-	if cfg.Provider == nil || cfg.Provider.ID != "aws" {
+	if cfg.Provider == nil || !slices.Contains(configdoc.ProviderIDs(), cfg.Provider.ID) {
 		t.Fatalf("provider = %+v", cfg.Provider)
 	}
 	if len(cfg.Apps) != 1 || cfg.Apps[0].Framework() != "go" {
@@ -380,7 +381,7 @@ func TestTheRustFixtureDeploysFromJSONAlone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve the rust fixture with no node on PATH: %v", err)
 	}
-	if cfg.Provider == nil || cfg.Provider.ID != "aws" {
+	if cfg.Provider == nil || !slices.Contains(configdoc.ProviderIDs(), cfg.Provider.ID) {
 		t.Fatalf("provider = %+v", cfg.Provider)
 	}
 	if len(cfg.Apps) != 1 || cfg.Apps[0].Framework() != "rust" {

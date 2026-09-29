@@ -40,7 +40,7 @@ func TestEveryEventDebugIncludedLandsInTheRunsNDJSONFileAsARunEvent(t *testing.T
 	at := timestamppb.New(time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC))
 	sent := []*streamv1.RunEvent{
 		{Time: at, Level: progressv1.Level_LEVEL_INFO, Phase: progressv1.Phase_PHASE_BUILD, Message: "Building project"},
-		{Time: at, Level: progressv1.Level_LEVEL_DEBUG, Subject: "aws", Message: "pulumi engine line", Body: &streamv1.RunEvent_Output{Output: &progressv1.Output{Stream: progressv1.Stream_STREAM_STDERR}}},
+		{Time: at, Level: progressv1.Level_LEVEL_DEBUG, Subject: "fake", Message: "engine line", Body: &streamv1.RunEvent_Output{Output: &progressv1.Output{Stream: progressv1.Stream_STREAM_STDERR}}},
 		{Time: at, Level: progressv1.Level_LEVEL_ERROR, Body: &streamv1.RunEvent_Summary{Summary: &streamv1.RunSummary{Detail: "boom"}}},
 	}
 	for _, ev := range sent {
@@ -94,7 +94,7 @@ func TestAnEndedScopeBecomesASpanInTheTraceWithItsAttributes(t *testing.T) {
 	r.Receive(started(unit, nil, "web"))
 	r.Receive(started(phase, unit, "Provisioning"))
 	r.Receive(ended(phase, start, start.Add(2*time.Second), progressv1.SpanStatus_SPAN_STATUS_ERROR,
-		&progressv1.SpanAttribute{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_TYPE, Value: "aws:s3:Bucket"},
+		&progressv1.SpanAttribute{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_TYPE, Value: "fake:bucket"},
 		&progressv1.SpanAttribute{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_COUNT, Value: "42"},
 	))
 	r.Receive(ended(unit, start, start.Add(3*time.Second), progressv1.SpanStatus_SPAN_STATUS_OK))
@@ -119,7 +119,7 @@ func TestAnEndedScopeBecomesASpanInTheTraceWithItsAttributes(t *testing.T) {
 	}
 	want := map[string]map[string]any{
 		"ocel.phase":          {"stringValue": "provision"},
-		"ocel.resource_type":  {"stringValue": "aws:s3:Bucket"},
+		"ocel.resource_type":  {"stringValue": "fake:bucket"},
 		"ocel.resource_count": {"intValue": "42"},
 	}
 	if len(provisioning.Attributes) != len(want) {

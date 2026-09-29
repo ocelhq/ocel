@@ -11,14 +11,14 @@ import (
 
 func keepingPlan() *planv1.ChangePlan {
 	return &planv1.ChangePlan{Groups: []*planv1.ChangeGroup{
-		{Kind: "stack", Name: "aws/ocel-bootstrap", Action: planv1.Change_ACTION_KEEP, Reason: "already current"},
+		{Kind: "stack", Name: "fake/ocel-bootstrap", Action: planv1.Change_ACTION_KEEP, Reason: "already current"},
 	}}
 }
 
 func mutatingPlan() *planv1.ChangePlan {
 	return &planv1.ChangePlan{Groups: []*planv1.ChangeGroup{
-		{Kind: "edge", Name: "cloudflare/edge", Action: planv1.Change_ACTION_CREATE},
-		{Kind: "stack", Name: "aws/ocel-bootstrap", Action: planv1.Change_ACTION_KEEP, Reason: "already current"},
+		{Kind: "edge", Name: "relay/edge", Action: planv1.Change_ACTION_CREATE},
+		{Kind: "stack", Name: "fake/ocel-bootstrap", Action: planv1.Change_ACTION_KEEP, Reason: "already current"},
 	}}
 }
 
@@ -53,11 +53,11 @@ func TestAPlanThatChangesSomethingIsStillConfirmed(t *testing.T) {
 func mixedPlan() *planv1.ChangePlan {
 	return &planv1.ChangePlan{Groups: []*planv1.ChangeGroup{
 		{Kind: "stack", Name: "ocel-production-core", Action: planv1.Change_ACTION_UPDATE, Changes: []*planv1.Change{
-			{Kind: "AWS::Lambda::Function", Name: "OcelDispatchFunction", Action: planv1.Change_ACTION_UPDATE},
-			{Kind: "AWS::SecretsManager::Secret", Name: "OcelOriginSecret", Action: planv1.Change_ACTION_REPLACE},
+			{Kind: "Fake::Function", Name: "OcelDispatchFunction", Action: planv1.Change_ACTION_UPDATE},
+			{Kind: "Fake::Secret", Name: "OcelOriginSecret", Action: planv1.Change_ACTION_REPLACE},
 		}},
 		{Kind: "stack", Name: "ocel-production-queues", Action: planv1.Change_ACTION_CREATE, Changes: []*planv1.Change{
-			{Kind: "AWS::SQS::Queue", Name: "OcelQueue", Action: planv1.Change_ACTION_CREATE},
+			{Kind: "Fake::Queue", Name: "OcelQueue", Action: planv1.Change_ACTION_CREATE},
 		}},
 		{Kind: "stack", Name: "ocel-production-isr", Action: planv1.Change_ACTION_DELETE},
 	}}
@@ -86,7 +86,7 @@ func TestTheConfirmationNamesWhatThePlanActuallyDoes(t *testing.T) {
 
 func TestAnAdoptedRowIsNotWorkToConsentTo(t *testing.T) {
 	adopting := func(core planv1.Change_Action, rows ...*planv1.Change) *planv1.ChangePlan {
-		return &planv1.ChangePlan{Groups: []*planv1.ChangeGroup{{Kind: "stack", Name: "vps/ada@box", Action: core, Changes: rows}}}
+		return &planv1.ChangePlan{Groups: []*planv1.ChangeGroup{{Kind: "stack", Name: "fake/ada@box", Action: core, Changes: rows}}}
 	}
 	engine := &planv1.Change{Kind: "docker:engine", Name: "docker", Action: planv1.Change_ACTION_ADOPT}
 	dir := &planv1.Change{Kind: "fs:dir", Name: "/etc/ocel", Action: planv1.Change_ACTION_CREATE}

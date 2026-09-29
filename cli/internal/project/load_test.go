@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/configdoc"
 	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
@@ -25,7 +26,7 @@ func TestLoadReadsJSONWithoutNode(t *testing.T) {
 	write(t, filepath.Join(dir, DefaultFileName), `{
   // the provider this project deploys into
   "slug": "go-only",
-  "provider": { "aws": { "region": "eu-west-2" } },
+  "provider": { "fake": { "size": "large" } },
   "apps": [{ "name": "web", "path": "./server", "framework": "go" }],
 }`)
 
@@ -36,10 +37,10 @@ func TestLoadReadsJSONWithoutNode(t *testing.T) {
 	if cfg.Slug != "go-only" {
 		t.Fatalf("slug = %q", cfg.Slug)
 	}
-	if cfg.Provider == nil || cfg.Provider.ID != "aws" {
+	if cfg.Provider == nil || cfg.Provider.ID != "fake" {
 		t.Fatalf("provider = %+v", cfg.Provider)
 	}
-	if string(cfg.Provider.Options) != `{"region":"eu-west-2"}` {
+	if string(cfg.Provider.Options) != `{"size":"large"}` {
 		t.Fatalf("options = %s", cfg.Provider.Options)
 	}
 	if len(cfg.Apps) != 1 || cfg.Apps[0].Framework() != "go" {
@@ -69,7 +70,7 @@ func TestLoadRefusesBothFormsOfOneBaseName(t *testing.T) {
 func TestLoadAllowsAJSONDefaultBesideATSVariant(t *testing.T) {
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, DefaultFileName), `{"slug":"acme"}`)
-	write(t, filepath.Join(dir, "ocel.aws.config.ts"), `export default { slug: "acme-aws" };`)
+	write(t, filepath.Join(dir, "ocel.staging.config.ts"), `export default { slug: "acme-staging" };`)
 
 	cfg, err := Load(context.Background(), dir, "")
 	if err != nil {
@@ -83,13 +84,13 @@ func TestLoadAllowsAJSONDefaultBesideATSVariant(t *testing.T) {
 func TestLoadReadsAJSONVariantByName(t *testing.T) {
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, DefaultFileName), `{"slug":"acme"}`)
-	write(t, filepath.Join(dir, "ocel.vps.json"), `{"slug":"acme-vps"}`)
+	write(t, filepath.Join(dir, "ocel.staging.json"), `{"slug":"acme-staging"}`)
 
-	cfg, err := Load(context.Background(), dir, "ocel.vps.json")
+	cfg, err := Load(context.Background(), dir, "ocel.staging.json")
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
-	if cfg.Slug != "acme-vps" {
+	if cfg.Slug != "acme-staging" {
 		t.Fatalf("slug = %q", cfg.Slug)
 	}
 }
@@ -191,28 +192,28 @@ func TestLoadRefusesTheSameSelectorsInEveryForm(t *testing.T) {
 		json string
 		yaml string
 		ts   string
-		want string
+		want []string
 	}{
 		{
 			name: "a provider keyed twice",
-			json: `{"slug":"acme","provider":{"aws":{},"vps":{"ssh":"box"}}}`,
-			yaml: "slug: acme\nprovider:\n  aws: {}\n  vps:\n    ssh: box\n",
-			ts:   `export default { slug: "acme", provider: { aws: {}, vps: { ssh: "box" } } };`,
-			want: `"provider" is keyed by aws and vps, and a project has one provider — keep one of aws, gcp, vps`,
+			json: `{"slug":"acme","provider":{"fake":{},"other":{"host":"box"}}}`,
+			yaml: "slug: acme\nprovider:\n  fake: {}\n  other:\n    host: box\n",
+			ts:   `export default { slug: "acme", provider: { fake: {}, other: { host: "box" } } };`,
+			want: []string{`"provider" is keyed by fake and other, and a project has one provider — keep one of ` + strings.Join(configdoc.ProviderIDs(), ", ")},
 		},
 		{
 			name: "an edge nobody fronts with",
-			json: `{"slug":"acme","edge":"fastly"}`,
-			yaml: "slug: acme\nedge: fastly\n",
-			ts:   `export default { slug: "acme", edge: "fastly" };`,
-			want: `"edge" names "fastly", and ocel knows no such edge — name one of alb, api-gateway, cloudflare, cloudfront`,
+			json: `{"slug":"acme","edge":"unknown-edge"}`,
+			yaml: "slug: acme\nedge: unknown-edge\n",
+			ts:   `export default { slug: "acme", edge: "unknown-edge" };`,
+			want: []string{`"edge" names "unknown-edge", and ocel knows no such edge — name one of `, "relay, direct"},
 		},
 		{
 			name: "a dns keyed by nothing ocel writes with",
-			json: `{"slug":"acme","dns":{"gandi":{}}}`,
-			yaml: "slug: acme\ndns:\n  gandi: {}\n",
-			ts:   `export default { slug: "acme", dns: { gandi: {} } };`,
-			want: `"dns" names "gandi", and ocel knows no such DNS service — name one of cloudflare, route53`,
+			json: `{"slug":"acme","dns":{"unknown-dns":{}}}`,
+			yaml: "slug: acme\ndns:\n  unknown-dns: {}\n",
+			ts:   `export default { slug: "acme", dns: { "unknown-dns": {} } };`,
+			want: []string{`"dns" names "unknown-dns", and ocel knows no such DNS service — name one of `, "zone"},
 		},
 	}
 	for _, c := range cases {
@@ -222,8 +223,13 @@ func TestLoadRefusesTheSameSelectorsInEveryForm(t *testing.T) {
 				write(t, filepath.Join(dir, name), contents)
 
 				_, err := Load(context.Background(), dir, "")
-				if err == nil || !strings.Contains(err.Error(), c.want) {
-					t.Fatalf("error %v, want %q", err, c.want)
+				if err == nil {
+					t.Fatalf("error nil, want %q", c.want)
+				}
+				for _, want := range c.want {
+					if !strings.Contains(err.Error(), want) {
+						t.Fatalf("error %v, want %q", err, want)
+					}
 				}
 			})
 		}

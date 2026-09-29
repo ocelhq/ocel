@@ -13,10 +13,10 @@ func TestAssetName(t *testing.T) {
 		name, version, goos, goarch string
 		want                        string
 	}{
-		{KindProvider, "aws", "0.1.0", "linux", "amd64", "ocel-provider-aws_0.1.0_linux_amd64.tar.gz"},
-		{KindProvider, "gcp", "0.1.0-alpha.3", "darwin", "arm64", "ocel-provider-gcp_0.1.0-alpha.3_darwin_arm64.tar.gz"},
-		{KindProvider, "vps", "1.2.3", "windows", "amd64", "ocel-provider-vps_1.2.3_windows_amd64.zip"},
-		{KindConnector, "vps", "0.1.0", "linux", "arm64", "ocel-connector-vps_0.1.0_linux_arm64.tar.gz"},
+		{KindProvider, "fake", "0.1.0", "linux", "amd64", "ocel-provider-fake_0.1.0_linux_amd64.tar.gz"},
+		{KindProvider, "other", "0.1.0-alpha.3", "darwin", "arm64", "ocel-provider-other_0.1.0-alpha.3_darwin_arm64.tar.gz"},
+		{KindProvider, "remote", "1.2.3", "windows", "amd64", "ocel-provider-remote_1.2.3_windows_amd64.zip"},
+		{KindConnector, "remote", "0.1.0", "linux", "arm64", "ocel-connector-remote_0.1.0_linux_arm64.tar.gz"},
 	} {
 		if got := AssetName(tc.kind, tc.name, tc.version, tc.goos, tc.goarch); got != tc.want {
 			t.Errorf("AssetName(%s, %q, %q, %q, %q) = %q, want %q", tc.kind, tc.name, tc.version, tc.goos, tc.goarch, got, tc.want)
@@ -31,9 +31,9 @@ func TestAssetNameRoundTrips(t *testing.T) {
 		kind                        Kind
 		name, version, goos, goarch string
 	}{
-		{KindProvider, "aws", "0.1.0", "linux", "amd64"},
+		{KindProvider, "fake", "0.1.0", "linux", "amd64"},
 		{KindProvider, "a-long-hyphenated-name", "0.1.0-alpha.3+build.7", "windows", "amd64"},
-		{KindConnector, "vps", "0.1.0", "linux", "amd64"},
+		{KindConnector, "remote", "0.1.0", "linux", "amd64"},
 	} {
 		asset := AssetName(tc.kind, tc.name, tc.version, tc.goos, tc.goarch)
 		got, ok := ParseAssetName(asset)
@@ -54,13 +54,13 @@ func TestParseAssetNameRefusesWhatIsNotAProviderArchive(t *testing.T) {
 		"",
 		"checksums.txt",
 		"ocel_0.1.0_linux_amd64.tar.gz",
-		"ocel-provider-aws_0.1.0_linux_amd64",
-		"ocel-provider-aws_0.1.0_linux.tar.gz",
+		"ocel-provider-fake_0.1.0_linux_amd64",
+		"ocel-provider-fake_0.1.0_linux.tar.gz",
 		"ocel-provider-_0.1.0_linux_amd64.tar.gz",
-		"ocel-provider-aws__linux_amd64.tar.gz",
-		"ocel-provider-aws_0.1.0_linux_amd64_extra.tar.gz",
+		"ocel-provider-fake__linux_amd64.tar.gz",
+		"ocel-provider-fake_0.1.0_linux_amd64_extra.tar.gz",
 		"ocel-connector-_0.1.0_linux_amd64.tar.gz",
-		"ocel-thing-vps_0.1.0_linux_amd64.tar.gz",
+		"ocel-thing-remote_0.1.0_linux_amd64.tar.gz",
 	} {
 		if got, ok := ParseAssetName(asset); ok {
 			t.Errorf("ParseAssetName(%q) = %+v, ok = true, want false", asset, got)
@@ -71,14 +71,14 @@ func TestParseAssetNameRefusesWhatIsNotAProviderArchive(t *testing.T) {
 func TestExecutableName(t *testing.T) {
 	t.Parallel()
 
-	if got := ExecutableName(KindProvider, "aws", "linux"); got != "provider-aws" {
-		t.Errorf("ExecutableName(provider, aws, linux) = %q, want %q", got, "provider-aws")
+	if got := ExecutableName(KindProvider, "fake", "linux"); got != "provider-fake" {
+		t.Errorf("ExecutableName(provider, fake, linux) = %q, want %q", got, "provider-fake")
 	}
-	if got := ExecutableName(KindProvider, "aws", "windows"); got != "provider-aws.exe" {
-		t.Errorf("ExecutableName(provider, aws, windows) = %q, want %q", got, "provider-aws.exe")
+	if got := ExecutableName(KindProvider, "fake", "windows"); got != "provider-fake.exe" {
+		t.Errorf("ExecutableName(provider, fake, windows) = %q, want %q", got, "provider-fake.exe")
 	}
-	if got := ExecutableName(KindConnector, "vps", "linux"); got != "connector-vps" {
-		t.Errorf("ExecutableName(connector, vps, linux) = %q, want %q", got, "connector-vps")
+	if got := ExecutableName(KindConnector, "remote", "linux"); got != "connector-remote" {
+		t.Errorf("ExecutableName(connector, remote, linux) = %q, want %q", got, "connector-remote")
 	}
 }
 

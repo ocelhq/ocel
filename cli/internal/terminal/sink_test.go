@@ -65,7 +65,7 @@ func TestProviderProcessOutputShowsOnlyWhenVerbose(t *testing.T) {
 			sink := newTranscript(&out, Presentation{Verbose: verbose}, nil)
 
 			const marker = "raw subprocess output"
-			sink.Receive(&streamv1.RunEvent{Level: progressv1.Level_LEVEL_DEBUG, Phase: progressv1.Phase_PHASE_CHECK, Subject: "aws", Message: marker, Body: &streamv1.RunEvent_Output{
+			sink.Receive(&streamv1.RunEvent{Level: progressv1.Level_LEVEL_DEBUG, Phase: progressv1.Phase_PHASE_CHECK, Subject: "fake", Message: marker, Body: &streamv1.RunEvent_Output{
 				Output: &progressv1.Output{Stream: progressv1.Stream_STREAM_STDOUT},
 			}})
 

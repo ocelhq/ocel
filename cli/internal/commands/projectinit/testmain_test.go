@@ -2,15 +2,17 @@ package projectinit
 
 import (
 	"os"
+	"slices"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
+	"github.com/ocelhq/ocel/pkg/configdoc"
 )
 
 func TestMain(m *testing.M) {
 	clitest.AddFakeProviderIDs()
-	if os.Getenv(clitest.FakeProviderEnvVar) == "1" {
-		os.Exit(clitest.RunFakeProvider())
+	if clitest.IsFakeSession() {
+		os.Exit(clitest.RunFakeSession())
 	}
 	clitest.UnsetColorEnv()
 	done := clitest.IsolateConfigHome()
@@ -21,4 +23,21 @@ func TestMain(m *testing.M) {
 
 func newTestDependencies() Dependencies {
 	return Dependencies{Invocation: clitest.NewInvocation()}
+}
+
+func providerNamedAlone() string {
+	return providerWhere(configdoc.ProviderNamedAlone)
+}
+
+func providerKeyed() string {
+	return providerWhere(func(id string) bool { return !configdoc.ProviderNamedAlone(id) })
+}
+
+func providerWhere(matches func(id string) bool) string {
+	ids := configdoc.ProviderIDs()
+	i := slices.IndexFunc(ids, matches)
+	if i < 0 {
+		panic("no shipped provider is rendered that way")
+	}
+	return ids[i]
 }

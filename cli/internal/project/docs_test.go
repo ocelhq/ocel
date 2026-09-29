@@ -147,8 +147,8 @@ func TestOnlyTheConfigurationPageNamesTheDefaultDiscoveryDirectory(t *testing.T)
 func TestAConfigWrittenAsAProgramIsFoundUnderAnyTarget(t *testing.T) {
 	for _, page := range []string{
 		"deploy with `ocel.config.ts` at the root",
-		"the gcp target reads `ocel.gcp.config.ts` instead",
-		"```ts title=\"ocel.vps.config.ts\"",
+		"the staging target reads `ocel.staging.config.ts` instead",
+		"```ts title=\"ocel.preview.config.ts\"",
 	} {
 		if typeScriptConfigNamedIn(page) == "" {
 			t.Errorf("%q shows a config written as a program and went unfound", page)

@@ -22,8 +22,8 @@ func mixedPlan() *planv1.ChangePlan {
 				Name:   "ocel-production-core",
 				Action: planv1.Change_ACTION_UPDATE,
 				Changes: []*planv1.Change{
-					{Kind: "AWS::Lambda::Function", Name: "OcelDispatchFunction", Action: planv1.Change_ACTION_UPDATE},
-					{Kind: "AWS::SecretsManager::Secret", Name: "OcelOriginSecret", Action: planv1.Change_ACTION_REPLACE, Reason: "rotation forces replacement"},
+					{Kind: "Fake::Function", Name: "OcelDispatchFunction", Action: planv1.Change_ACTION_UPDATE},
+					{Kind: "Fake::Secret", Name: "OcelOriginSecret", Action: planv1.Change_ACTION_REPLACE, Reason: "rotation forces replacement"},
 				},
 			},
 			{
@@ -32,8 +32,8 @@ func mixedPlan() *planv1.ChangePlan {
 				Feature: "queues",
 				Action:  planv1.Change_ACTION_CREATE,
 				Changes: []*planv1.Change{
-					{Kind: "AWS::SQS::Queue", Name: "OcelQueue", Action: planv1.Change_ACTION_CREATE},
-					{Kind: "AWS::SQS::Queue", Name: "OcelQueueDLQ", Action: planv1.Change_ACTION_CREATE},
+					{Kind: "Fake::Queue", Name: "OcelQueue", Action: planv1.Change_ACTION_CREATE},
+					{Kind: "Fake::Queue", Name: "OcelQueueDLQ", Action: planv1.Change_ACTION_CREATE},
 				},
 			},
 			{
@@ -43,7 +43,7 @@ func mixedPlan() *planv1.ChangePlan {
 				Action:  planv1.Change_ACTION_DELETE,
 				Reason:  "web, api were deployed against it",
 				Changes: []*planv1.Change{
-					{Kind: "AWS::DynamoDB::Table", Name: "OcelRevalidationTable", Action: planv1.Change_ACTION_DELETE},
+					{Kind: "Fake::Table", Name: "OcelRevalidationTable", Action: planv1.Change_ACTION_DELETE},
 				},
 			},
 			{
@@ -52,7 +52,7 @@ func mixedPlan() *planv1.ChangePlan {
 				Feature: "secrets",
 				Action:  planv1.Change_ACTION_KEEP,
 				Reason:  "already current",
-				Changes: []*planv1.Change{{Kind: "AWS::SecretsManager::Secret", Name: "OcelSecret", Action: planv1.Change_ACTION_KEEP}},
+				Changes: []*planv1.Change{{Kind: "Fake::Secret", Name: "OcelSecret", Action: planv1.Change_ACTION_KEEP}},
 			},
 		},
 	}
@@ -65,15 +65,15 @@ func TestAPlanProjectsAsRowsOfRemoteMutationUnderOneTally(t *testing.T) {
 Proposed changes to the production bootstrap:
 
 ~ ocel-production-core  [core]
-    ~ OcelDispatchFunction  AWS::Lambda::Function
-    ± OcelOriginSecret      AWS::SecretsManager::Secret   — rotation forces replacement
+    ~ OcelDispatchFunction  Fake::Function
+    ± OcelOriginSecret      Fake::Secret   — rotation forces replacement
 
 + ocel-production-queues  [queues]
-    + OcelQueue     AWS::SQS::Queue
-    + OcelQueueDLQ  AWS::SQS::Queue
+    + OcelQueue     Fake::Queue
+    + OcelQueueDLQ  Fake::Queue
 
 – ocel-production-isr  [isr]  — web, api were deployed against it
-    – OcelRevalidationTable  AWS::DynamoDB::Table
+    – OcelRevalidationTable  Fake::Table
 
 2 to create, 1 to update, 1 to replace, 1 to delete, 1 unchanged.
 `
@@ -107,7 +107,7 @@ func TestAPlanPaintsTheSigilAndDimsWhatSaysWhy(t *testing.T) {
 				Name:    "ocel-production-queues",
 				Feature: "queues",
 				Action:  planv1.Change_ACTION_CREATE,
-				Changes: []*planv1.Change{{Kind: "AWS::SQS::Queue", Name: "OcelQueue", Action: planv1.Change_ACTION_CREATE}},
+				Changes: []*planv1.Change{{Kind: "Fake::Queue", Name: "OcelQueue", Action: planv1.Change_ACTION_CREATE}},
 			},
 			{
 				Kind:    "stack",
@@ -121,7 +121,7 @@ func TestAPlanPaintsTheSigilAndDimsWhatSaysWhy(t *testing.T) {
 
 	for _, want := range []string{
 		"\x1b[32m+\x1b[0m \x1b[1mocel-production-queues\x1b[22m  \x1b[90m[queues]\x1b[0m",
-		"\x1b[32m+\x1b[0m OcelQueue  \x1b[90mAWS::SQS::Queue\x1b[0m",
+		"\x1b[32m+\x1b[0m OcelQueue  \x1b[90mFake::Queue\x1b[0m",
 		"\x1b[31m–\x1b[0m \x1b[1mocel-production-isr\x1b[22m  \x1b[90m[isr]\x1b[0m\x1b[90m  — web, api were deployed against it\x1b[0m",
 	} {
 		if !strings.Contains(got, want) {
@@ -146,7 +146,7 @@ func TestAPlanIncludesItsNotesAndTheEdgeFrontingIt(t *testing.T) {
 	t.Parallel()
 
 	want := `
-This will permanently destroy production project "shop", fronted by the cloudflare edge:
+This will permanently destroy production project "shop", fronted by the relay edge:
 
 – edge stack shop
 – infra stack shop--infra  — databases and buckets, INCLUDING ALL DATA
@@ -158,7 +158,7 @@ This cannot be undone.
 `
 	got := projectPlan(t, &planv1.ChangePlan{
 		Headline: `This will permanently destroy production project "shop"`,
-		EdgeKind: "cloudflare",
+		EdgeKind: "relay",
 		Notes: []*planv1.Note{
 			{Action: planv1.Change_ACTION_DELETE, Text: "all stored assets belonging to this project"},
 			{Text: "This cannot be undone."},
@@ -185,14 +185,14 @@ Proposed changes to the production bootstrap:
 	got := projectPlan(t, &planv1.ChangePlan{
 		Headline: "Proposed changes to the production bootstrap",
 		Groups: []*planv1.ChangeGroup{
-			{Kind: "stack", Name: "aws/ocel-bootstrap", Action: planv1.Change_ACTION_KEEP, Reason: "already current"},
+			{Kind: "stack", Name: "fake/ocel-bootstrap", Action: planv1.Change_ACTION_KEEP, Reason: "already current"},
 			{
 				Kind:    "edge",
-				Name:    "cloudflare/edge",
-				Feature: "cloudflare-edge",
+				Name:    "relay/edge",
+				Feature: "relay-edge",
 				Action:  planv1.Change_ACTION_KEEP,
 				Reason:  "already current",
-				Changes: []*planv1.Change{{Kind: "Cloudflare::R2Bucket", Name: "ocel-edge-cache", Action: planv1.Change_ACTION_KEEP}},
+				Changes: []*planv1.Change{{Kind: "Fake::Bucket", Name: "ocel-edge-cache", Action: planv1.Change_ACTION_KEEP}},
 			},
 		},
 	})
@@ -207,8 +207,8 @@ func TestAGroupCalledKeptThatDeletesIsRenderedAsWhatItDoes(t *testing.T) {
 	want := `
 This will release the preview wildcard:
 
-~ cloudflare/edge
-    – *.preview.shop.com  Cloudflare::WorkerRoute
+~ relay/edge
+    – *.preview.shop.com  Fake::Route
 
 1 to delete, 1 unchanged.
 `
@@ -217,12 +217,12 @@ This will release the preview wildcard:
 		Groups: []*planv1.ChangeGroup{
 			{
 				Kind:   "edge",
-				Name:   "cloudflare/edge",
+				Name:   "relay/edge",
 				Action: planv1.Change_ACTION_KEEP,
 				Reason: "already current",
 				Changes: []*planv1.Change{
-					{Kind: "Cloudflare::WorkerRoute", Name: "*.preview.shop.com", Action: planv1.Change_ACTION_DELETE},
-					{Kind: "Cloudflare::Worker", Name: "ocel-preview-entry", Action: planv1.Change_ACTION_KEEP, Reason: "shared with every other wildcard"},
+					{Kind: "Fake::Route", Name: "*.preview.shop.com", Action: planv1.Change_ACTION_DELETE},
+					{Kind: "Fake::Worker", Name: "ocel-preview-entry", Action: planv1.Change_ACTION_KEEP, Reason: "shared with every other wildcard"},
 				},
 			},
 		},
@@ -261,7 +261,7 @@ func TestAnAdoptedRowIsShownWithWhyAndCountedApartFromWork(t *testing.T) {
 	adopting := func(core planv1.Change_Action, rows ...*planv1.Change) *planv1.ChangePlan {
 		return &planv1.ChangePlan{
 			Headline: "Proposed changes to the production bootstrap",
-			Groups:   []*planv1.ChangeGroup{{Kind: "stack", Name: "vps/ada@box", Action: core, Changes: rows}},
+			Groups:   []*planv1.ChangeGroup{{Kind: "stack", Name: "fake/ada@box", Action: core, Changes: rows}},
 		}
 	}
 	engine := &planv1.Change{Kind: "docker:engine", Name: "docker", Action: planv1.Change_ACTION_ADOPT, Reason: "docker 28.3.1, not managed by ocel: upgrading it is yours"}
@@ -271,7 +271,7 @@ func TestAnAdoptedRowIsShownWithWhyAndCountedApartFromWork(t *testing.T) {
 	fresh := `
 Proposed changes to the production bootstrap:
 
-+ vps/ada@box  [core]
++ fake/ada@box  [core]
     + /etc/ocel     fs:dir
     = adopt docker  docker:engine   — docker 28.3.1, not managed by ocel: upgrading it is yours
 
@@ -285,7 +285,7 @@ Proposed changes to the production bootstrap:
 	want := `
 Proposed changes to the production bootstrap:
 
-  vps/ada@box  [core]
+  fake/ada@box  [core]
     = adopt docker  docker:engine   — docker 28.3.1, not managed by ocel: upgrading it is yours
 
 1 adopted, 1 unchanged.

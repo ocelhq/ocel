@@ -442,25 +442,25 @@ func TestBuildLearnsTheEdge(t *testing.T) {
 			cfg: func(root string) *project.Project {
 				return &project.Project{
 					Dir:           root,
-					Edge:          &project.Edge{Kind: "cloudflare"},
+					Edge:          &project.Edge{Kind: "relay"},
 					AllowDegraded: []edge.Need{edge.NeedEdgeMiddleware, edge.NeedEdgeRuntime},
 					Apps:          []project.App{nextApp("web", "apps/web")},
 				}
 			},
-			wantKind:     "cloudflare",
+			wantKind:     "relay",
 			wantDegraded: []string{"edge-middleware", "edge-runtime"},
 		},
 		{
-			name: "a project on the API Gateway edge builds for that edge",
+			name: "a project on another edge builds for that edge, with only its own waivers",
 			cfg: func(root string) *project.Project {
 				return &project.Project{
 					Dir:           root,
-					Edge:          &project.Edge{Kind: "api-gateway"},
+					Edge:          &project.Edge{Kind: "direct"},
 					AllowDegraded: []edge.Need{edge.NeedEdgeMiddleware},
 					Apps:          []project.App{nextApp("web", "apps/web")},
 				}
 			},
-			wantKind:     "api-gateway",
+			wantKind:     "direct",
 			wantDegraded: []string{"edge-middleware"},
 		},
 	}

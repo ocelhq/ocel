@@ -11,14 +11,14 @@ func TestASpanStartedWithNoParentIsASpanUnderTheRunsRootSpan(t *testing.T) {
 	r := startRun(t)
 	id := []byte{1, 2, 3, 4, 5, 6, 7, 8}
 	now := time.Now()
-	r.Receive(started(id, nil, "aws:s3:Bucket create"))
+	r.Receive(started(id, nil, "fake:bucket create"))
 	r.Receive(ended(id, now, now.Add(time.Second), progressv1.SpanStatus_SPAN_STATUS_OK))
 	if err := r.Close(); err != nil {
 		t.Fatalf("Close() = %v", err)
 	}
 
 	spans := readTraceDoc(t, r)
-	ingested := spanNamed(t, spans, "aws:s3:Bucket create")
+	ingested := spanNamed(t, spans, "fake:bucket create")
 
 	var root *otlpTestSpan
 	for i := range spans {
