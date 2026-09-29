@@ -46,10 +46,11 @@ changes anything: stop it, or run ocel [behind it](#behind-your-own-proxy).
 | Docker | Installed once with Docker's install script, pinned by sha256. A Docker 28.0 or later that `docker.service` already runs is used as it is. Either way, upgrading it is yours. Bootstrap refuses a Docker older than 28.0, the snap package, a rootless Docker, and a masked `docker.service`, and says what to change. Docker stays after `ocel destroy`, and so do its containers. |
 | `/var/lib/ocel/proxy.json` | Which proxy fronts the box, and which project and tier set it. A deploy whose `proxy` option disagrees is refused. |
 | `ocel-proxy` container, `/var/lib/ocel/proxy/caddy.json` | Caddy on ports 80 and 443. It gets a certificate for a hostname the box serves the first time a client connects to it. Left out [behind your own proxy](#behind-your-own-proxy). |
-| `ocel-switchboard` container, the `ocel` network, `/usr/local/lib/ocel/switchboard`, `/run/ocel-switchboard`, `/run/ocel-front` | Routes each hostname to the app that serves it, and tells the proxy which hostnames it may get a certificate for. Behind your own proxy it is published on `127.0.0.1:8480`. If a prune removes it while it is stopped, the next deploy recreates it, with the `ocel` network if that went too, and `ocel doctor` says when. |
+| `ocel-switchboard` container, the `ocel` network, `/usr/local/lib/ocel/switchboard`, `/run/ocel-switchboard`, `/run/ocel-front` | Routes each hostname to the app that serves it, and tells the proxy which hostnames it may get a certificate for. Behind your own proxy it is published on `127.0.0.1:8480`, or joins the docker network your proxy is on. If a prune removes it while it is stopped, the next deploy recreates it, with the `ocel` network if that went too, and `ocel doctor` says when. |
 | `/var/lib/ocel/routing/table.json` | The routing table: which project claims each hostname, where each app is served from, and the certificates you pin. Deploys rewrite it and the proxy's config together. |
 | `/var/lib/ocel/proxy/data` | Certificates, their keys and the ACME account key. A certificate for a hostname the box stopped serving stays until it has been expired for 14 days, when Caddy removes it. If Caddy still has that certificate in memory when it removes it, the next TLS connection for the hostname can get a new certificate without the switchboard's confirmation. A restart of `ocel-proxy` clears that memory. Left out behind your own proxy. |
 | `/etc/ocel/certs` | Certificates you pin yourself. The proxy serves a pinned certificate for every hostname it covers, ahead of any certificate it got itself, and gets none of its own for those hostnames. Left out behind your own proxy. `ocel destroy` removes the directory only if it is empty. |
+| `/etc/sudoers.d/ocel-caddy-reload` | Only [behind your Caddy](#behind-your-caddy) when it runs as `caddy.service`: lets `ocel-deploy` run `systemctl reload caddy.service` and nothing else. |
 | `ocel-live.socket`, `ocel-live.service` | Serve each app container its secret values over a unix socket. |
 | `ocel-envsourcesync@<tier>.service` | Once a minute, copies each env source a deploy registered into the tier's values. It runs as root, and may write `/var/lib/ocel/<tier>/keyvalues` and nothing else. |
 | `ocel-backups.timer` | Dumps every resource once a day, and at boot if a day was missed. |
@@ -122,17 +123,18 @@ no `Forwarded`, `X-Real-Ip` or `True-Client-Ip` header, and none of these spelle
 Your proxy manages the certificates, so `certificates` and `proxy` can't be set together. One
 proxy fronts a box. Every project on it must name the same `proxy`, and a deploy that
 doesn't is refused with the value to write. Moving a box from one proxy to another isn't
-supported yet. `{ "traefik": … }` and `{ "caddy": … }`, below, are refused for now.
+supported yet. `{ "traefik": … }`, below, is refused for now.
 
-| | Ocel's own proxy | `manual` |
-| --- | --- | --- |
-| Listens on ports 80 and 443 | ocel | you |
-| Issues and renews certificates | ocel, over http-01 | your proxy |
-| Serves the certificates you pin | yes | no, configure them in your proxy |
-| Forgets a certificate when a hostname goes | yes | no, your proxy keeps it |
-| Reports a Let's Encrypt rate limit | yes | no |
-| Answers every preview hostname under a base | yes | once you route `*.<base>` |
-| Switches releases without dropping requests | yes | yes, the switchboard does it |
+| | Ocel's own proxy | `manual` | `caddy` |
+| --- | --- | --- | --- |
+| Listens on ports 80 and 443 | ocel | you | your Caddy |
+| Routes each hostname to ocel | ocel | you | ocel writes `ocel.caddy` |
+| Issues and renews certificates | ocel, over http-01 | your proxy | your Caddy |
+| Serves the certificates you pin | yes | no, configure them in your proxy | no, configure them in your Caddy |
+| Forgets a certificate when a hostname goes | yes | no, your proxy keeps it | yes, 14 days after it expires |
+| Reports a Let's Encrypt rate limit | yes | no | no |
+| Answers every preview hostname under a base | yes | once you route `*.<base>` | each preview hostname as it is claimed |
+| Switches releases without dropping requests | yes | yes, the switchboard does it | yes, the switchboard does it |
 
 ### The `proxy` option
 
@@ -182,6 +184,75 @@ always published and `network` is joined as well.
 
 A preset and the same fields written out are the same proxy, so projects on one box can name it
 either way.
+
+### Behind your Caddy
+
+With `{ "caddy": … }`, ocel writes one file into a directory your Caddy imports, and reloads
+your Caddy when the hostnames in it change. Add the import to your Caddyfile once:
+
+```txt title="/etc/caddy/Caddyfile"
+import /etc/caddy/ocel.d/*.caddy
+```
+
+and name the directory:
+
+```json
+"proxy": { "caddy": { "directory": "/etc/caddy/ocel.d" } }
+```
+
+Coolify's Caddy already imports `/dynamic/*.caddy`, so `"proxy": { "caddy": { "preset": "coolify" } }`
+needs no line of yours.
+
+Ocel writes `ocel.caddy` there and nothing else. It holds one site block over exactly the
+hostnames the box serves, the connector's and `ocel-edge-probe.<base>` among them, and never a
+bare port:
+
+```txt title="ocel.caddy"
+shop.example.com, ocel-edge-probe.preview.example.com, pr-12--web.preview.example.com {
+	reverse_proxy ocel-switchboard:8443
+}
+```
+
+Your Caddy reaches the switchboard by name on `network`, or on `127.0.0.1:<port>` without one. A
+Caddy in a container with no `network` must run with `network_mode: host`, because the loopback of
+any other container is its own, and bootstrap refuses one that doesn't. Because ocel's block names
+each hostname, your Caddy gets a certificate for each, preview hostnames included, as they are
+claimed; there is no wildcard.
+
+Before placing the file, ocel runs `caddy adapt` on it alone, inside `container` or as
+`/usr/bin/caddy`, and refuses a claim whose file your Caddy can't read. It is placed through the
+switchboard, which is the only thing ocel runs with that directory mounted. Then ocel reloads
+your Caddy in its own environment, where `{$VAR}` placeholders in your Caddyfile resolve:
+
+| Caddy runs | Reload |
+| --- | --- |
+| in `container` | `docker exec <container> caddy reload --config <config> --adapter caddyfile` |
+| in Coolify's `coolify-proxy` | `docker exec coolify-proxy caddy reload --config /config/caddy/Caddyfile.autosave`, Coolify's own |
+| as `caddy.service` | `sudo -n /usr/bin/systemctl reload caddy.service`, through the one line bootstrap writes to `/etc/sudoers.d/ocel-caddy-reload` |
+
+A reload your Caddy refuses leaves its old config running. Ocel puts the previous `ocel.caddy`
+back and refuses the claim with Caddy's error, which can come from your own Caddyfile. Ocel
+reloads only when the hostnames change, never on a release. A reload closes the WebSocket and
+other streaming connections your Caddy is proxying, and can drop about one request under load.
+
+`caddy reload` needs the admin endpoint, so bootstrap refuses a Caddy run with `admin off`.
+Ocel also reads what your Caddy serves from it (`GET /config/apps/http/servers` on
+`localhost:2019`) and never takes a hostname your Caddy already serves: a bind is refused when a
+host matcher outside ocel's block equals the hostname or is a wildcard that covers it, naming the
+server and route. Two sites for one hostname would otherwise either fail your whole config or
+shadow one another by file order. `ocel doctor` runs the same read, and also checks that your
+Caddy serves ocel's hostnames, that `ocel.caddy` is what ocel renders, and that each hostname
+answers through the switchboard.
+
+A hostname that leaves `ocel.caddy` is no longer renewed after the next reload, and your Caddy
+deletes its certificate 14 days after it expires. `ocel destroy` removes `ocel.caddy`, reloads
+your Caddy, and removes the sudoers line. Your Caddyfile is never written.
+
+The switchboard hears your Caddy on a listener of its own, which takes every request as https,
+sets `X-Forwarded-Host` to `Host`, and drops every `X-Forwarded-*` header it is sent. Any
+container on `network`, which on Coolify is every app it runs, can send a plaintext request
+there that your apps take as https, for a `Host` it could send anyway. None can choose
+`X-Forwarded-Host` or `X-Forwarded-For`.
 
 ## Postgres
 
