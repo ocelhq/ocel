@@ -247,14 +247,14 @@ export default {
 		}
 	})
 
-	t.Run("a directory saying nothing refuses the config and names the app", func(t *testing.T) {
+	t.Run("a serverless app whose directory says nothing refuses the config and names the app", func(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
 		writeConfig(t, root, `
 export default {
   slug: "test-app",
-  apps: [{ name: "web", path: "services/web" }],
+  apps: [{ name: "web", path: "services/web", compute: "serverless" }],
 };
 `)
 		writeFile(t, filepath.Join(root, "services", "web", "main.rb"), "puts 1\n")
@@ -266,6 +266,36 @@ export default {
 		for _, want := range []string{`app "web"`, "framework"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("error = %q, missing %q", err, want)
+			}
+		}
+	})
+
+	t.Run("an app naming no compute whose directory says nothing loads, holding the refusal for when it runs serverless", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		writeConfig(t, root, `
+export default {
+  slug: "test-app",
+  apps: [{ name: "web", path: "services/web" }],
+};
+`)
+		writeFile(t, filepath.Join(root, "services", "web", "Dockerfile"), "FROM scratch\n")
+
+		cfg, err := Resolve(context.Background(), root, "")
+		if err != nil {
+			t.Fatalf("Resolve: %v — the provider may run web as a container, which needs no framework", err)
+		}
+		framework := cfg.Apps[0].Framework
+		if framework.Name != "" {
+			t.Fatalf("Apps[0].Framework.Name = %q, want none", framework.Name)
+		}
+		if framework.Missing == nil {
+			t.Fatal("Apps[0].Framework.Missing = nil, want the refusal a serverless compute raises")
+		}
+		for _, want := range []string{`app "web"`, "framework"} {
+			if !strings.Contains(framework.Missing.Error(), want) {
+				t.Errorf("Missing = %q, missing %q", framework.Missing, want)
 			}
 		}
 	})

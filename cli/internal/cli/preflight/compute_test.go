@@ -1,6 +1,7 @@
 package preflight
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -207,6 +208,34 @@ func TestAnAppWhoseFrameworkWasOnlyDetectedKeepsItOnServerless(t *testing.T) {
 	}
 	if got := cfg.Apps[0].Framework.Name; got != "next" {
 		t.Errorf("framework = %q, want next: serverless builds the app with the framework it detected", got)
+	}
+}
+
+func TestAnAppWhoseFrameworkIsMissingRunsOnAContainerOnlyProvider(t *testing.T) {
+	t.Parallel()
+
+	cfg := &projectconfig.Config{Apps: []projectconfig.App{
+		{Name: "web", Framework: projectconfig.Framework{Missing: errors.New(`app "web": nothing says what it is built with`)}},
+	}}
+
+	if _, err := ResolveComputes(cfg, []string{"container"}, "fake"); err != nil {
+		t.Fatalf("ResolveComputes() error = %v, want a container app to need no framework", err)
+	}
+	if got := cfg.Apps[0].Framework; got != (projectconfig.Framework{}) {
+		t.Errorf("framework = %+v, want none: a container runs the image it is given", got)
+	}
+}
+
+func TestAnAppWhoseFrameworkIsMissingIsRefusedServerless(t *testing.T) {
+	t.Parallel()
+
+	missing := errors.New(`app "web": nothing says what it is built with`)
+	cfg := &projectconfig.Config{Apps: []projectconfig.App{
+		{Name: "web", Framework: projectconfig.Framework{Missing: missing}},
+	}}
+
+	if _, err := ResolveComputes(cfg, []string{"serverless", "container"}, "fake"); !errors.Is(err, missing) {
+		t.Fatalf("ResolveComputes() error = %v, want %v: serverless builds an app's functions with its framework", err, missing)
 	}
 }
 

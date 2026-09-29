@@ -58,6 +58,7 @@ type Framework struct {
 	Name     string
 	Arch     string
 	Detected bool
+	Missing  error
 }
 
 func (r Framework) Architecture() string { return arch.Architecture(r.Arch) }
@@ -447,7 +448,12 @@ func normalizeHealth(a configdoc.AppConfig) (*Health, error) {
 
 func resolveFramework(app, dir, framework, declared, compute string) (Framework, error) {
 	named := strings.TrimSpace(framework)
-	name, err := frameworkOf(app, dir, named, strings.TrimSpace(compute))
+	compute = strings.TrimSpace(compute)
+	name, err := frameworkOf(app, dir, named, compute)
+	var missing error
+	if err != nil && named == "" && compute == "" {
+		missing, err = err, nil
+	}
 	if err != nil {
 		return Framework{}, err
 	}
@@ -455,5 +461,5 @@ func resolveFramework(app, dir, framework, declared, compute string) (Framework,
 	if err != nil {
 		return Framework{}, err
 	}
-	return Framework{Name: name, Arch: architecture, Detected: named == "" && name != ""}, nil
+	return Framework{Name: name, Arch: architecture, Detected: named == "" && name != "", Missing: missing}, nil
 }

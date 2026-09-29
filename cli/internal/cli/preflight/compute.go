@@ -64,8 +64,9 @@ func ResolveComputes(cfg *projectconfig.Config, computes []string, vendor string
 	}
 	for i := range cfg.Apps {
 		cfg.Apps[i].Compute = resolved[i]
-		if resolved[i] == string(provider.ComputeContainer) && cfg.Apps[i].Framework.Detected {
-			cfg.Apps[i].Framework = projectconfig.Framework{Arch: cfg.Apps[i].Framework.Arch}
+		framework := cfg.Apps[i].Framework
+		if resolved[i] == string(provider.ComputeContainer) && (framework.Detected || framework.Missing != nil) {
+			cfg.Apps[i].Framework = projectconfig.Framework{Arch: framework.Arch}
 		}
 	}
 	return fallback, nil
@@ -80,6 +81,9 @@ func containerOnly(app projectconfig.App, compute string) error {
 			)
 		}
 		return nil
+	}
+	if app.Framework.Missing != nil {
+		return app.Framework.Missing
 	}
 	if app.Build != nil {
 		return fmt.Errorf(

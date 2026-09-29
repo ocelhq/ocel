@@ -50,6 +50,11 @@ func runBuild(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr
 	if err != nil {
 		return err
 	}
+	for _, a := range build.FunctionApps(cfg.Apps) {
+		if a.Framework.Missing != nil {
+			return a.Framework.Missing
+		}
+	}
 
 	hasJS, err := build.HasJS(cfg)
 	if err != nil {
