@@ -763,7 +763,11 @@ func TestAnAbandonedRecoveryIsBothTheRefusalAndTheAbandonment(t *testing.T) {
 		if !strings.Contains(err.Error(), "STRIPE_API_KEY") {
 			t.Errorf("err = %q, want the keys that are missing named", err)
 		}
-		if got, want := err.(*abandonedRefusal).Detail(), variableeditor.AbandonedMessage+"."; got != want {
+		var abandoned *abandonedRefusal
+		if !errors.As(err, &abandoned) {
+			t.Fatalf("errors.As(err, *abandonedRefusal) = false for %v", err)
+		}
+		if got, want := abandoned.Detail(), variableeditor.AbandonedMessage+"."; got != want {
 			t.Errorf("Detail = %q, want %q beyond the missing variables", got, want)
 		}
 	})

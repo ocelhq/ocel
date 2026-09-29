@@ -419,8 +419,8 @@ func (s *Session) handleOther(w http.ResponseWriter, r *http.Request) {
 		}
 		out.Values = append(out.Values, otherValue{
 			coordinateRequest: coordinateOf(row.Coordinate),
-			Version:        row.Version,
-			Class:          class,
+			Version:           row.Version,
+			Class:             class,
 		})
 		if class != "secret" {
 			readable = append(readable, row.Coordinate)

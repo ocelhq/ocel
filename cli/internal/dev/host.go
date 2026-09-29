@@ -17,7 +17,7 @@ import (
 )
 
 type host struct {
-	server     *devserver.Server
+	server  *devserver.Server
 	address string
 	close   func()
 }

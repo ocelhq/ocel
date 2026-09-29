@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/devresources/binding"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"

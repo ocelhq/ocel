@@ -18,9 +18,9 @@ const (
 )
 
 type MatrixCell struct {
-	Folder string    `json:"folder"`
+	Folder string          `json:"folder"`
 	State  CellRequirement `json:"state"`
-	Set    bool      `json:"set"`
+	Set    bool            `json:"set"`
 
 	Version int64 `json:"version"`
 
