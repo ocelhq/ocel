@@ -11,7 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
@@ -24,8 +24,8 @@ const degradedDetail = "web: middleware runs in the origin's Node server the way
 
 func useJSONLogFormat(t *testing.T, deps *cmddeps.Deps) {
 	t.Helper()
-	deps.Presentation = func(io.Writer) runui.Presentation {
-		return runui.Resolve(runui.Origin{LogFormat: runui.FormatJSON})
+	deps.Presentation = func(io.Writer) terminal.Presentation {
+		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
 	}
 }
 

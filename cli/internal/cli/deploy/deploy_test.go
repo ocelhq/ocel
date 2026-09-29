@@ -14,7 +14,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
@@ -609,8 +609,8 @@ export default {
 }
 
 func pretendStdoutIsTerminal(deps *cmddeps.Deps) {
-	deps.Presentation = func(io.Writer) runui.Presentation {
-		return runui.Resolve(runui.Origin{TTY: true})
+	deps.Presentation = func(io.Writer) terminal.Presentation {
+		return terminal.Resolve(terminal.Conditions{TTY: true})
 	}
 }
 

@@ -8,7 +8,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/fatih/color"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
+
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
@@ -21,8 +22,6 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
-
-var bold = color.New(color.Bold).SprintFunc()
 
 const reachDial = "dial"
 
@@ -175,7 +174,7 @@ func vendored(cfg *projectconfig.Config) (string, error) {
 }
 
 func printed(out io.Writer, registered console.Connector, live console.Liveness) {
-	fmt.Fprintf(out, "%s\n", bold(registered.Target))
+	fmt.Fprintf(out, "%s\n", terminal.PaletteFor(out).Bold(registered.Target))
 	fmt.Fprintf(out, "  compute %s over %s, %s\n", named(registered.Compute, "unset"), registered.Reach, live)
 	fmt.Fprintf(out, "  url %s\n", named(registered.URL, "none"))
 	fmt.Fprintf(out, "  can %s\n", listed(registered.Capabilities))

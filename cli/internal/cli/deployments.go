@@ -9,7 +9,6 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
@@ -17,7 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
-	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -183,10 +182,7 @@ func renderPromotions(stdout io.Writer, promotions []*contractv1.PromotionHistor
 		return
 	}
 
-	activeStatus := "active"
-	if runui.IsTerminal(stdout) {
-		activeStatus = color.New(color.FgGreen).Sprint("active")
-	}
+	activeStatus := terminal.PaletteFor(stdout).Success("active")
 
 	tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "ID\tTAG\tCREATED\tDEPLOYED\tSTATUS")
@@ -203,7 +199,7 @@ func renderPromotions(stdout io.Writer, promotions []*contractv1.PromotionHistor
 		case entry.GetUnpromoted():
 			status = "unpromoted"
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", p.GetPromotionId(), tag, runui.EpochDateTime(p.GetTs()), deployedIdentities(p.GetBuilds()), status)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", p.GetPromotionId(), tag, terminal.EpochDateTime(p.GetTs()), deployedIdentities(p.GetBuilds()), status)
 	}
 	_ = tw.Flush()
 }

@@ -7,12 +7,13 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/english"
+
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/valuestore"
 	"github.com/ocelhq/ocel/cli/internal/variableeditor"
 	"github.com/ocelhq/ocel/cli/internal/variables"
@@ -74,7 +75,7 @@ func appList(cfg *projectconfig.Config) string {
 	case len(names) == 1:
 		return "app " + names[0]
 	case len(names) <= 4:
-		return fmt.Sprintf("%d apps (%s)", len(names), runui.Listed(names))
+		return fmt.Sprintf("%d apps (%s)", len(names), english.And(names))
 	default:
 		return fmt.Sprintf("%d apps (%s and %d more)", len(names), strings.Join(names[:3], ", "), len(names)-3)
 	}

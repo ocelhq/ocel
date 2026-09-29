@@ -37,7 +37,7 @@ on:
       - "platform/edge/contract/**"
       - "platform/s3/**"
       - "cli/internal/providerclient/**"
-      - "cli/internal/prompt/**"
+      - "cli/internal/terminal/**"
       - "cli/internal/cli/bootstrap/**"
       - "cli/internal/cli/preflight/**"
       - "cli/internal/cli/doctor/**"

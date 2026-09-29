@@ -11,7 +11,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
-	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -306,8 +306,8 @@ func TestARollbackAsksWhileTheRunIsHeldAfterThePlanItShows(t *testing.T) {
 	deps := newTestDeps()
 	clitest.SetLoggedIn(&deps)
 	deps.StdinIsTerminal = func(io.Reader) bool { return true }
-	deps.Presentation = func(io.Writer) runui.Presentation {
-		return runui.Resolve(runui.Origin{LogFormat: runui.FormatJSON})
+	deps.Presentation = func(io.Writer) terminal.Presentation {
+		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
 	}
 	t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")

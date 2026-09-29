@@ -29,10 +29,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
 	"github.com/ocelhq/ocel/cli/internal/projecteditor"
-	"github.com/ocelhq/ocel/cli/internal/prompt"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/version"
 )
 
@@ -95,7 +94,7 @@ func init() {
 
 	rootCmd.PersistentFlags().BoolVarP(&verboseFlag, "verbose", "v", false, "Stream full logs instead of the progress view (also $OCEL_DEBUG)")
 	rootCmd.PersistentFlags().StringVarP(&configFlag, "config", "c", "", "Project config `file` (default: $OCEL_CONFIG, else the nearest ocel.json, ocel.yaml, ocel.yml or ocel.config.ts)")
-	rootCmd.PersistentFlags().StringVar(&logFormatFlag, "log-format", string(runui.FormatHuman), "Log output format: human or json")
+	rootCmd.PersistentFlags().StringVar(&logFormatFlag, "log-format", string(terminal.FormatHuman), "Log output format: human or json")
 
 	rootCmd.AddCommand(devCmd)
 	rootCmd.AddCommand(runCmd)
@@ -145,8 +144,8 @@ func newDeps() cmddeps.Deps {
 		CurrentGitBranch:        gitBranch,
 		DiscoverPRNumber:        prNumberFromEnv,
 		RunPackageManager:       runPackageManagerCommand,
-		HostTrust:               providerclient.Trust{Ask: prompt.New(os.Stderr, os.Stdin), Out: os.Stderr},
-		StdinIsTerminal:         prompt.Interactive,
+		HostTrust:               providerclient.Trust{Ask: terminal.NewPrompt(os.Stderr, os.Stdin), Out: os.Stderr},
+		StdinIsTerminal:         func(in io.Reader) bool { return terminal.IsTerminal(in) },
 		ConfigPath:              explicitConfigPath,
 		Presentation:            presentation,
 		Events:                  bus,
@@ -197,6 +196,6 @@ func runPackageManagerCommand(ctx context.Context, dir string, argv []string, ou
 	return cmd.Run()
 }
 
-func presentation(w io.Writer) runui.Presentation {
-	return runui.Detect(runui.Format(logFormatFlag), verboseEnabled(), w)
+func presentation(w io.Writer) terminal.Presentation {
+	return terminal.Detect(terminal.Format(logFormatFlag), verboseEnabled(), w)
 }

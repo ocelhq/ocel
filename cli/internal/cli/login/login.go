@@ -8,7 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fatih/color"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
+
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
@@ -31,13 +32,6 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 	cmd.Flags().BoolVar(&force, "force", false, "Log in again even if already logged in")
 	return cmd
 }
-
-var (
-	check = color.New(color.FgGreen).Sprint("✓")
-	bold  = color.New(color.Bold).SprintFunc()
-	link  = color.New(color.FgCyan, color.Underline).SprintFunc()
-	faint = color.New(color.Faint).SprintFunc()
-)
 
 func run(ctx context.Context, deps cmddeps.Deps, force bool, stdin io.Reader, out io.Writer) error {
 	existing, loadErr := deps.LoadCredentials()
@@ -63,12 +57,13 @@ func run(ctx context.Context, deps cmddeps.Deps, force bool, stdin io.Reader, ou
 		confirmURL = device.VerificationURI
 	}
 
-	fmt.Fprintf(out, "Code     %s\n", bold(code))
-	fmt.Fprintf(out, "Confirm  %s\n\n", link(confirmURL))
+	p := terminal.PaletteFor(out)
+	fmt.Fprintf(out, "Code     %s\n", p.Bold(code))
+	fmt.Fprintf(out, "Confirm  %s\n\n", p.Link(confirmURL))
 	if deps.BrowserReachable(stdin) {
 		_ = deps.OpenBrowser(confirmURL)
 	}
-	fmt.Fprintln(out, faint("Waiting for you to confirm the code…"))
+	fmt.Fprintln(out, p.Faint("Waiting for you to confirm the code…"))
 
 	token, err := pollForToken(ctx, client, device)
 	if err != nil {
@@ -89,9 +84,9 @@ func run(ctx context.Context, deps cmddeps.Deps, force bool, stdin io.Reader, ou
 		return fmt.Errorf("logged in, but failed to save credentials: %w", err)
 	}
 
-	fmt.Fprintf(out, "%s Logged in as %s\n", check, identity(creds))
+	fmt.Fprintf(out, "%s Logged in as %s\n", p.PassMark(), identity(creds))
 	if store == console.FileStore {
-		fmt.Fprintln(out, faint("  No OS keyring, so the token is saved to a file only you can read."))
+		fmt.Fprintln(out, p.Faint("  No OS keyring, so the token is saved to a file only you can read."))
 	}
 	return nil
 }

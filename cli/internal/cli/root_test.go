@@ -15,17 +15,17 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 )
 
 func TestTheRootFlagsFeedTheOneResolver(t *testing.T) {
 	origFormat, origVerbose := logFormatFlag, verboseFlag
 	t.Cleanup(func() { logFormatFlag, verboseFlag = origFormat, origVerbose })
 
-	logFormatFlag, verboseFlag = string(runui.FormatJSON), true
+	logFormatFlag, verboseFlag = string(terminal.FormatJSON), true
 
 	p := presentation(&bytes.Buffer{})
-	if p.Format != runui.FormatJSON {
+	if p.Format != terminal.FormatJSON {
 		t.Errorf("Format = %q, want the --log-format flag to reach the resolver", p.Format)
 	}
 	if !p.Verbose {

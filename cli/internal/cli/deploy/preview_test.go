@@ -17,7 +17,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -571,8 +571,8 @@ func TestListingPreviewsStartsTheProviderInTheCheckPhaseOfItsRunAndPrintsTheList
 	root, _ := clitest.SetUpDeployFixture(t)
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
-	deps.Presentation = func(io.Writer) runui.Presentation {
-		return runui.Resolve(runui.Origin{LogFormat: runui.FormatJSON})
+	deps.Presentation = func(io.Writer) terminal.Presentation {
+		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
 	}
 	t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
@@ -829,7 +829,7 @@ func readPreflightJournal(t *testing.T, path string) []preflightRecord {
 func checkSpan(t *testing.T, w io.Writer) *run.Span {
 	t.Helper()
 	bus := run.NewBus(time.Now)
-	bus.Attach(runui.NewTerminalSink(runui.Presentation{}, w))
+	bus.Attach(terminal.NewSink(terminal.Presentation{}, w))
 	_, run, err := bus.Begin(context.Background(), "ocel preview up", "")
 	if err != nil {
 		t.Fatalf("Begin() = %v", err)

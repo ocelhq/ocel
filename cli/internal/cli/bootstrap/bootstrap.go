@@ -204,7 +204,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 
 	asking := gate.Asking()
 	picked := asking && !opts.FeaturesDeclared
-	requested, selected, err := chooseFeatures(ctx, planning, opts, catalogue, installed, going, string(cfg.EdgeID()), tier, asking, stdout)
+	requested, selected, err := chooseFeatures(ctx, planning, opts, catalogue, installed, going, string(cfg.EdgeID()), tier, asking, stdout, stdin)
 	if err != nil {
 		return err
 	}

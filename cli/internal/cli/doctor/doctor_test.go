@@ -15,7 +15,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
-	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -67,7 +67,7 @@ func TestDoctorRendersEveryVerdict(t *testing.T) {
 	found.add(preview)
 
 	var out bytes.Buffer
-	found.render(&out, newPaint(&out))
+	found.render(&out, terminal.PaletteFor(&out))
 
 	want := strings.Join([]string{
 		"Project  my-shop · ocel.config.ts",
@@ -119,7 +119,7 @@ func TestDoctorSummaryCounts(t *testing.T) {
 			found.add(s)
 
 			var out bytes.Buffer
-			if got := found.summary(newPaint(&out)); got != tt.want {
+			if got := found.summary(terminal.PaletteFor(&out)); got != tt.want {
 				t.Errorf("summary = %q, want %q", got, tt.want)
 			}
 		})
@@ -536,7 +536,7 @@ func TestRunDoctorPrintsTheHostCheckFindingsAndTheCertificatesAndRefusesNothing(
 	if code := exitCode(t, err); code != 0 {
 		t.Errorf("exit code = %d over the output above, want 0: a host check is a report and never a gate, and a manual record is the normal state", code)
 	}
-	if strings.Contains(out, failGlyph) {
+	if strings.Contains(out, "✗") {
 		t.Errorf("doctor refused something on a bootstrapped box whose only finding is a manual record:\n%s", out)
 	}
 }
@@ -576,8 +576,8 @@ func TestDoctorChecksTheSetupInTheCheckPhaseOfItsRunAndPrintsItsReportAloneOnStd
 
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
-	deps.Presentation = func(io.Writer) runui.Presentation {
-		return runui.Resolve(runui.Origin{LogFormat: runui.FormatJSON})
+	deps.Presentation = func(io.Writer) terminal.Presentation {
+		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
 	}
 
 	var stdout, stderr bytes.Buffer

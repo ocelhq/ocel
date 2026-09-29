@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
@@ -33,10 +33,10 @@ func RefuseUnwritable(definitions []*resourcesv1.VariableDefinition, key, folder
 		}
 		if folder == "" {
 			return fmt.Errorf("%s is scoped to %s, so it has no value at the project root — nothing would read one. Set it with --folder %s instead%s",
-				key, strings.Join(scope, " and "), scope[0], runui.VariableDescriptionLine(definition.GetDescription()))
+				key, strings.Join(scope, " and "), scope[0], terminal.VariableDescriptionLine(definition.GetDescription()))
 		}
 		return fmt.Errorf("%s is scoped to %s, so %s has no value for it. Set it in one of the folders it names, or widen the scope where it is declared%s",
-			key, strings.Join(scope, " and "), folder, runui.VariableDescriptionLine(definition.GetDescription()))
+			key, strings.Join(scope, " and "), folder, terminal.VariableDescriptionLine(definition.GetDescription()))
 	}
 	return fmt.Errorf("no app in this project declares %s, so a value stored under it would be delivered to nothing: "+
 		"declare it in a defineEnv call — `defineEnv({ %s: { class: \"plain\" } })` — and set it again",

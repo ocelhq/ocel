@@ -18,7 +18,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/valuestore"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
@@ -580,7 +580,7 @@ func renderEnvironments(stdout io.Writer, envs []*contractv1.PreviewEnvironment)
 			e.GetIdentity(),
 			lifecycleTag(e.GetLifecycle()),
 			labelOrDash(e.GetLabel()),
-			runui.EpochDate(e.GetCreatedAt()),
+			terminal.EpochDate(e.GetCreatedAt()),
 		)
 	}
 }

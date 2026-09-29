@@ -11,10 +11,11 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/english"
+
 	"github.com/ocelhq/ocel/cli/internal/build/image"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/images"
 )
@@ -134,7 +135,7 @@ func RefuseUnbuildableImages(ctx context.Context, span *run.Span, cfg *projectco
 		}
 	}
 	if err := image.RefuseUnusableDaemon(ctx, slices.Sorted(maps.Values(archs))...); err != nil {
-		return fmt.Errorf("building the container image for %s happens on this machine, before anything is provisioned:\n    %w", runui.Quoted(containers), err)
+		return fmt.Errorf("building the container image for %s happens on this machine, before anything is provisioned:\n    %w", english.And(english.Quoted(containers)), err)
 	}
 	return nil
 }

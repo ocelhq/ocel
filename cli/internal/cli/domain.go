@@ -21,7 +21,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
@@ -597,7 +597,7 @@ func runDomainStatus(ctx context.Context, deps cmddeps.Deps, cwd string, opts do
 	if err != nil {
 		return err
 	}
-	if deps.Presentation(stdout).Format == runui.FormatJSON {
+	if deps.Presentation(stdout).Format == terminal.FormatJSON {
 		return writeDomainStatusJSON(stdout, resp)
 	}
 	renderDomainStatus(stdout, resp, filepath.Base(cfg.Path))

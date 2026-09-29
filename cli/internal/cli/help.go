@@ -2,9 +2,11 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
-	"github.com/fatih/color"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
+
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/console"
@@ -42,13 +44,10 @@ const (
 	envAnnotation = "environment"
 )
 
-var (
-	heading = color.New(color.Bold).SprintFunc()
-	envName = color.New(color.FgCyan).SprintFunc()
-)
+var helpPalette = terminal.PaletteFor(os.Stdout)
 
 var consoleEnv = fmt.Sprintf("  %s  Console to talk to; set it to use a self-hosted one\n  %*s  Default: the console you logged in to, else %s",
-	envName(console.URLEnvVar), len(console.URLEnvVar), "", console.DefaultBaseURL)
+	helpPalette.Accent(console.URLEnvVar), len(console.URLEnvVar), "", console.DefaultBaseURL)
 
 type commandGroup struct {
 	Title    string
@@ -98,8 +97,6 @@ func readsConsoleURL(cmds ...*cobra.Command) {
 }
 
 func colorExamples(s string) string {
-	prompt := color.New(color.Faint)
-	command := color.New(color.FgCyan)
 	lines := strings.Split(s, "\n")
 	for i, line := range lines {
 		trimmed := strings.TrimLeft(line, " ")
@@ -108,14 +105,14 @@ func colorExamples(s string) string {
 			continue
 		}
 		indent := line[:len(line)-len(trimmed)]
-		lines[i] = indent + prompt.Sprint("$ ") + command.Sprint(rest)
+		lines[i] = indent + helpPalette.Faint("$ ") + helpPalette.Accent(rest)
 	}
 	return strings.Join(lines, "\n")
 }
 
 func installHelpStyle(cmd *cobra.Command) {
 	cobra.AddTemplateFunc("colorExamples", colorExamples)
-	cobra.AddTemplateFunc("heading", heading)
+	cobra.AddTemplateFunc("heading", helpPalette.Bold)
 	cobra.AddTemplateFunc("commandGroups", commandGroups)
 	cmd.SetUsageTemplate(usageTemplate)
 	cmd.CompletionOptions.HiddenDefaultCmd = true

@@ -6,6 +6,8 @@ import (
 	"io"
 	"slices"
 
+	"github.com/ocelhq/ocel/cli/internal/terminal"
+
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -30,7 +32,7 @@ func runStatus(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config
 		}
 		registered = slices.DeleteFunc(registered, func(row console.Connector) bool { return row.Target != fingerprint })
 		if len(registered) == 0 {
-			fmt.Fprintf(stdout, "The console has no connector registered for %s. Run `ocel connector add` to put one there.\n", bold(fingerprint))
+			fmt.Fprintf(stdout, "The console has no connector registered for %s. Run `ocel connector add` to put one there.\n", terminal.PaletteFor(stdout).Bold(fingerprint))
 			return nil
 		}
 	}

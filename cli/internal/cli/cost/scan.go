@@ -22,7 +22,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/manifest"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
-	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/appbuild"
@@ -115,7 +115,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, opts Options, stdou
 	if err != nil {
 		return err
 	}
-	if deps.Presentation(stdout).Format == runui.FormatJSON {
+	if deps.Presentation(stdout).Format == terminal.FormatJSON {
 		return writeJSON(stdout, set, estimates[profile], assumptions)
 	}
 	return render(stdout, cfg.Slug, set, estimates, profile, assumptions)

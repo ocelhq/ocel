@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
@@ -19,7 +19,7 @@ type MissingError struct {
 
 func (r *MissingError) Error() string {
 	missing := r.Variables()
-	lines := append(runui.MissingVariablesLines(missing, runui.Presentation{}), "", runui.MissingVariablesRemedy(missing.GetRemedy()))
+	lines := append(terminal.MissingVariablesLines(missing, terminal.Presentation{}), "", terminal.MissingVariablesRemedy(missing.GetRemedy()))
 	return strings.Join(lines, "\n")
 }
 

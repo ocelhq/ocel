@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/ocelhq/ocel/cli/internal/english"
+
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
-	"github.com/ocelhq/ocel/cli/internal/runui"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -38,7 +39,7 @@ func ResolveComputes(cfg *projectconfig.Config, computes []string, vendor string
 		}
 		return "", fmt.Errorf(
 			"%s names %q among the computes it runs, and ocel knows no such compute — it knows %s: upgrade ocel if %q is newer than this build, or pin a provider version this ocel understands",
-			vendor, compute, runui.Quoted(provider.ComputeNames(provider.Computes())), compute,
+			vendor, compute, english.And(english.Quoted(provider.ComputeNames(provider.Computes()))), compute,
 		)
 	}
 
@@ -52,7 +53,7 @@ func ResolveComputes(cfg *projectconfig.Config, computes []string, vendor string
 		if !slices.Contains(computes, app.Compute) {
 			return "", fmt.Errorf(
 				"app %q asks for compute %q, which %s does not run — it runs %s: give %q a compute from that list, or deploy it to a provider that runs %q",
-				app.Name, app.Compute, vendor, runui.Quoted(computes), app.Name, app.Compute,
+				app.Name, app.Compute, vendor, english.And(english.Quoted(computes)), app.Name, app.Compute,
 			)
 		}
 		resolved[i] = app.Compute

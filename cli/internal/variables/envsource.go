@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
@@ -77,7 +77,7 @@ func (s EnvSource) remedy(problems []*resourcesv1.VariableProblem, scope Scope) 
 	var where []string
 	for _, folder := range folders {
 		if url := s.URLs[folder]; url != "" {
-			where = append(where, runui.VariableFolderName(folder)+" "+url)
+			where = append(where, terminal.VariableFolderName(folder)+" "+url)
 		}
 	}
 	out := remedyVerb(problems) + " in " + s.ID
@@ -129,7 +129,7 @@ func ListUndeclared(declared []*resourcesv1.VariableDefinition, source EnvSource
 			continue
 		}
 		out = append(out, fmt.Sprintf("%s has %s in %s, and nothing this project declares reads it there: declare it, or remove it from %s",
-			source.ID, cell.Key, runui.VariableFolderName(cell.Folder), source.ID))
+			source.ID, cell.Key, terminal.VariableFolderName(cell.Folder), source.ID))
 	}
 	return out
 }

@@ -2,20 +2,14 @@ package bootstrap
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"slices"
 	"strings"
 
-	"charm.land/huh/v2"
-	"github.com/fatih/color"
-
-	"github.com/ocelhq/ocel/cli/internal/cli/style"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/cli/internal/runui"
-	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
@@ -25,28 +19,7 @@ const (
 	noFeatures  = "none"
 )
 
-func tint(stdout io.Writer, attrs ...color.Attribute) *color.Color {
-	return gated(stdout, color.New(attrs...))
-}
-
-func gated(stdout io.Writer, c *color.Color) *color.Color {
-	if runui.IsColored(stdout) {
-		c.EnableColor()
-	} else {
-		c.DisableColor()
-	}
-	return c
-}
-
-func selectedMark(stdout io.Writer) string {
-	return tint(stdout, color.FgGreen).Sprint("✓")
-}
-
-func needsNote(stdout io.Writer, note string) string {
-	return gated(stdout, color.RGB(0xff, 0xb8, 0x6c)).Sprint(note)
-}
-
-func chooseFeatures(ctx context.Context, span *run.Span, opts Options, catalogue []*contractv1.Feature, installed, going []string, kind string, tier environmentv1.Tier, interactive bool, stdout io.Writer) ([]string, bool, error) {
+func chooseFeatures(ctx context.Context, span *run.Span, opts Options, catalogue []*contractv1.Feature, installed, going []string, kind string, tier environmentv1.Tier, interactive bool, stdout io.Writer, stdin io.Reader) ([]string, bool, error) {
 	if opts.FeaturesDeclared {
 		requested, err := parseFeatureFlag(opts.Features, catalogue)
 		return requested, err == nil, err
@@ -54,12 +27,16 @@ func chooseFeatures(ctx context.Context, span *run.Span, opts Options, catalogue
 	if !interactive {
 		return without(installed, going), true, nil
 	}
-	resume := span.Hold(&streamv1.WaitingEvent{})
-	defer resume("answered")
-	return pickFeatures(ctx, catalogue, installed, going, kind, tier, stdout)
+	var applied []string
+	picked := false
+	err := span.Ask(func() (err error) {
+		applied, picked, err = pickFeatures(ctx, catalogue, installed, going, kind, tier, stdout, stdin)
+		return err
+	})
+	return applied, picked, err
 }
 
-func pickFeatures(ctx context.Context, catalogue []*contractv1.Feature, installed, going []string, kind string, tier environmentv1.Tier, stdout io.Writer) ([]string, bool, error) {
+func pickFeatures(ctx context.Context, catalogue []*contractv1.Feature, installed, going []string, kind string, tier environmentv1.Tier, stdout io.Writer, stdin io.Reader) ([]string, bool, error) {
 	if len(catalogue) == 0 {
 		return nil, true, nil
 	}
@@ -72,9 +49,9 @@ func pickFeatures(ctx context.Context, catalogue []*contractv1.Feature, installe
 
 	addable := addableFeatures(catalogue, installed, required)
 	width := nameWidth(addable)
-	options := make([]huh.Option[string], 0, len(addable))
+	options := make([]terminal.Option, 0, len(addable))
 	for _, name := range addable {
-		options = append(options, huh.NewOption(featureRow(stdout, catalogue, name, width), name))
+		options = append(options, terminal.Option{Name: name, Label: featureRow(stdout, catalogue, name, width)})
 	}
 
 	var chosen []string
@@ -84,24 +61,11 @@ func pickFeatures(ctx context.Context, catalogue []*contractv1.Feature, installe
 			return kept, true, nil
 		}
 	} else {
-		field := huh.NewMultiSelect[string]().
-			Title("Select features to add").
-			Options(options...).
-			// FIXME: huh v2.0.3 subtracts the title height from the multiselect viewport
-			// instead of the frame, so an unset Height scrolls one option at a time.
-			// Drop this once the viewport sizing is fixed upstream.
-			Height(len(options) + 1).
-			Value(&chosen)
-
-		err := huh.NewForm(huh.NewGroup(field)).
-			WithTheme(style.Theme).
-			RunWithContext(ctx)
-		if errors.Is(err, huh.ErrUserAborted) {
-			return nil, false, nil
-		}
-		if err != nil {
+		picked, answered, err := terminal.NewPrompt(stdout, stdin).MultiSelect(ctx, "Select features to add", options)
+		if err != nil || !answered {
 			return nil, false, err
 		}
+		chosen = picked
 	}
 
 	if required != "" {
@@ -144,7 +108,7 @@ func featureRow(stdout io.Writer, catalogue []*contractv1.Feature, name string, 
 	f := catalogueEntry(catalogue, name)
 	row := fmt.Sprintf("%-*s   %s", width, name, f.GetSummary())
 	if deps := f.GetDependsOn(); len(deps) > 0 {
-		row += "  " + needsNote(stdout, "(needs "+strings.Join(deps, ", ")+")")
+		row += "  " + terminal.PaletteFor(stdout).Warning("(needs "+strings.Join(deps, ", ")+")")
 	}
 	return row
 }
@@ -179,7 +143,7 @@ func printSection(stdout io.Writer, catalogue []*contractv1.Feature, names []str
 	fmt.Fprintf(stdout, "%s\n\n", heading)
 	width := nameWidth(names)
 	for _, name := range names {
-		fmt.Fprintf(stdout, "  %s %s\n", selectedMark(stdout), featureRow(stdout, catalogue, name, width))
+		fmt.Fprintf(stdout, "  %s %s\n", terminal.PaletteFor(stdout).PassMark(), featureRow(stdout, catalogue, name, width))
 	}
 	fmt.Fprintf(stdout, "\n  %s\n\n", note)
 }
@@ -189,10 +153,10 @@ func printAdded(stdout io.Writer, catalogue []*contractv1.Feature, applied, incl
 		fmt.Fprintln(stdout, "Nothing to add.")
 		return
 	}
-	fmt.Fprintf(stdout, "%s Adding %s\n", selectedMark(stdout), strings.Join(picked, ", "))
+	p := terminal.PaletteFor(stdout)
+	fmt.Fprintf(stdout, "%s Adding %s\n", p.PassMark(), strings.Join(picked, ", "))
 	for _, name := range without(without(applied, included), picked) {
-		fmt.Fprintf(stdout, "  + %s %s\n", name,
-			needsNote(stdout, "— "+needsItPhrase(directDependents(catalogue, name, applied))))
+		fmt.Fprintf(stdout, "  + %s %s\n", name, p.Warning("— "+needsItPhrase(directDependents(catalogue, name, applied))))
 	}
 }
 

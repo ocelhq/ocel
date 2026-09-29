@@ -12,7 +12,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/valuestore"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/envsource"
@@ -78,7 +78,7 @@ func renderValues(stdout io.Writer, values []*envvarsv1.ValueMetadata, environme
 		if len(members) == 0 {
 			continue
 		}
-		rows = append(rows, listingRow{}, listingRow{headline: runui.VariableGroupHeadline(group.GetKey(), group.GetDescription())})
+		rows = append(rows, listingRow{}, listingRow{headline: terminal.VariableGroupHeadline(group.GetKey(), group.GetDescription())})
 		for _, v := range members {
 			row, orphaned := valueRow(v, listingIndent, described, environments)
 			rows = append(rows, row)
@@ -117,7 +117,7 @@ func valueRow(v *envvarsv1.ValueMetadata, lead string, descriptions map[string]s
 	}
 	return listingRow{lead: lead, cells: []string{
 		c.GetKey(), descriptions[c.GetKey()], folderOrRoot(c.GetFolder()), environment,
-		fmt.Sprint(v.GetVersion()), size, runui.EpochDate(v.GetUpdatedAt()), source,
+		fmt.Sprint(v.GetVersion()), size, terminal.EpochDate(v.GetUpdatedAt()), source,
 	}}, orphaned
 }
 

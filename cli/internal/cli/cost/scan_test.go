@@ -14,7 +14,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -122,8 +122,8 @@ func TestScan(t *testing.T) {
 
 	t.Run("it includes the unbuilt assumption in the JSON envelope and none when the build is read", func(t *testing.T) {
 		root, _, deps := scanFixture(t)
-		deps.Presentation = func(io.Writer) runui.Presentation {
-			return runui.Resolve(runui.Origin{LogFormat: runui.FormatJSON})
+		deps.Presentation = func(io.Writer) terminal.Presentation {
+			return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
 		}
 
 		var built scanJSON
@@ -192,8 +192,8 @@ export default {
 
 	t.Run("it writes the resource set and the estimate as JSON under --log-format json", func(t *testing.T) {
 		root, _, deps := scanFixture(t)
-		deps.Presentation = func(io.Writer) runui.Presentation {
-			return runui.Resolve(runui.Origin{LogFormat: runui.FormatJSON})
+		deps.Presentation = func(io.Writer) terminal.Presentation {
+			return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
 		}
 
 		out := scan(t, deps, root, Options{})
@@ -230,8 +230,8 @@ func lineNaming(out, name string) string {
 
 func TestAScanStartsTheProviderInTheCheckPhaseOfItsRunAndPrintsItsEstimateAloneOnStdout(t *testing.T) {
 	root, _, deps := scanFixture(t)
-	deps.Presentation = func(io.Writer) runui.Presentation {
-		return runui.Resolve(runui.Origin{LogFormat: runui.FormatJSON})
+	deps.Presentation = func(io.Writer) terminal.Presentation {
+		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
 	}
 
 	var stdout, stderr bytes.Buffer

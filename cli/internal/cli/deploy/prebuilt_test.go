@@ -18,7 +18,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
@@ -34,7 +34,7 @@ func newBuildSpan(t *testing.T) (*run.Span, *bytes.Buffer) {
 	t.Helper()
 	var out bytes.Buffer
 	bus := run.NewBus(time.Now)
-	bus.Attach(runui.NewTerminalSink(runui.Resolve(runui.Origin{Verbose: true}), &out))
+	bus.Attach(terminal.NewSink(terminal.Resolve(terminal.Conditions{Verbose: true}), &out))
 	t.Cleanup(func() { _ = bus.Close() })
 	_, run, err := bus.Begin(context.Background(), "ocel deploy", "")
 	if err != nil {

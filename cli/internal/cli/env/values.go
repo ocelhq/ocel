@@ -12,7 +12,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/valuestore"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
@@ -137,7 +137,7 @@ func runEnvGet(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts env
 			return err
 		}
 		if !resp.GetFound() {
-			return fmt.Errorf("no value is set for %s; set one with `ocel env set %s=<VALUE>`%s", describeCell(key, opts), key, runui.VariableDescriptionLine(descriptions(definitions)[key]))
+			return fmt.Errorf("no value is set for %s; set one with `ocel env set %s=<VALUE>`%s", describeCell(key, opts), key, terminal.VariableDescriptionLine(descriptions(definitions)[key]))
 		}
 
 		if opts.reveal {
@@ -149,11 +149,11 @@ func runEnvGet(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts env
 		}
 		m := resp.GetMetadata()
 		if target := m.GetTarget(); target != nil {
-			fmt.Fprintf(stdout, "%s references %s — version %d, pointed %s\n", describeCell(key, opts), describeCoordinate(target), m.GetVersion(), runui.EpochDate(m.GetUpdatedAt()))
+			fmt.Fprintf(stdout, "%s references %s — version %d, pointed %s\n", describeCell(key, opts), describeCoordinate(target), m.GetVersion(), terminal.EpochDate(m.GetUpdatedAt()))
 			fmt.Fprintln(stdout, "Pass --reveal to print the value it reads. Edit that value where it is set.")
 			return nil
 		}
-		fmt.Fprintf(stdout, "%s — version %d, %d bytes, updated %s\n", describeCell(key, opts), m.GetVersion(), m.GetSize(), runui.EpochDate(m.GetUpdatedAt()))
+		fmt.Fprintf(stdout, "%s — version %d, %d bytes, updated %s\n", describeCell(key, opts), m.GetVersion(), m.GetSize(), terminal.EpochDate(m.GetUpdatedAt()))
 		fmt.Fprintln(stdout, "Pass --reveal to print the value.")
 		return nil
 	})
@@ -238,7 +238,7 @@ func renderVersions(stdout io.Writer, cell string, versions []*envvarsv1.Version
 	tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "VERSION\tCREATED\tBYTES")
 	for _, v := range versions {
-		fmt.Fprintf(tw, "%d\t%s\t%d\n", v.GetVersion(), runui.EpochDate(v.GetCreatedAt()), v.GetSize())
+		fmt.Fprintf(tw, "%d\t%s\t%d\n", v.GetVersion(), terminal.EpochDate(v.GetCreatedAt()), v.GetSize())
 	}
 	_ = tw.Flush()
 }

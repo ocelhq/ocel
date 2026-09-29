@@ -13,7 +13,7 @@ import (
 
 	"github.com/creack/pty"
 
-	"github.com/ocelhq/ocel/cli/internal/prompt"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -168,7 +168,7 @@ func TestATrustBuiltOverAPipeNeverPromptsIntoABuffer(t *testing.T) {
 
 	fake := newHostTrustFake(t, "unknown-host-key")
 	var log bytes.Buffer
-	trust := Trust{Ask: prompt.New(&log, strings.NewReader("y\n")), Out: &log}
+	trust := Trust{Ask: terminal.NewPrompt(&log, strings.NewReader("y\n")), Out: &log}
 
 	err := fake.call(t, trust)
 	if err == nil {
@@ -204,7 +204,7 @@ func TestATrustWhoseQuestionLandsWhereNobodyCanReadItNeverAsks(t *testing.T) {
 	}
 
 	var log bytes.Buffer
-	trust := Trust{Ask: prompt.New(&log, tty), Out: &log}
+	trust := Trust{Ask: terminal.NewPrompt(&log, tty), Out: &log}
 
 	if err := fake.call(t, trust); err == nil {
 		t.Fatal("call error = nil, want a refusal when the question would go to a redirected stream")
@@ -237,10 +237,10 @@ func TestAPromptThatFailsStillIncludesTheRefusal(t *testing.T) {
 	t.Parallel()
 
 	fake := newHostTrustFake(t, "unknown-host-key")
-	asker := &scriptedAsker{attended: true, err: prompt.ErrStdinBusy}
+	asker := &scriptedAsker{attended: true, err: terminal.ErrStdinBusy}
 
 	err := fake.call(t, trustAsking(asker, io.Discard))
-	if !errors.Is(err, prompt.ErrStdinBusy) {
+	if !errors.Is(err, terminal.ErrStdinBusy) {
 		t.Errorf("err = %v, want it to include the prompt's own failure", err)
 	}
 	if !strings.Contains(err.Error(), "ssh-keyscan") {

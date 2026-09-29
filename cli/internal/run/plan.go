@@ -21,6 +21,21 @@ var groupRanks = map[string]int{
 	edge.EdgeGroupKind:          rankEdge,
 }
 
+func IsCoreGroupKind(kind string) bool {
+	_, core := groupRanks[kind]
+	return core
+}
+
+func ActingChanges(changes []*planv1.Change) []*planv1.Change {
+	acting := make([]*planv1.Change, 0, len(changes))
+	for _, change := range changes {
+		if change.GetAction() != planv1.Change_ACTION_KEEP {
+			acting = append(acting, change)
+		}
+	}
+	return acting
+}
+
 func groupRank(kind string) int {
 	if rank, named := groupRanks[kind]; named {
 		return rank

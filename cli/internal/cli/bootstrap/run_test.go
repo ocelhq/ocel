@@ -26,7 +26,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/consent"
-	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/version"
 )
 
@@ -292,8 +292,8 @@ func TestRunBootstrapDestroy(t *testing.T) {
 func TestRemovingABootstrapAsksForItsNameWhileTheRunIsHeldAfterThePlanItShows(t *testing.T) {
 	project, deps := bootstrapProject(t, "", featureISR)
 	deps.StdinIsTerminal = func(io.Reader) bool { return true }
-	deps.Presentation = func(io.Writer) runui.Presentation {
-		return runui.Resolve(runui.Origin{LogFormat: runui.FormatJSON})
+	deps.Presentation = func(io.Writer) terminal.Presentation {
+		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
 	}
 
 	var stream, stdout bytes.Buffer
@@ -646,8 +646,8 @@ func TestBootstrapYesMeansYes(t *testing.T) {
 
 	t.Run("what the removal takes rides the stream, so a json run consents to something it was shown", func(t *testing.T) {
 		project, deps := bootstrapProject(t, "", featureISR)
-		deps.Presentation = func(io.Writer) runui.Presentation {
-			return runui.Resolve(runui.Origin{LogFormat: runui.FormatJSON})
+		deps.Presentation = func(io.Writer) terminal.Presentation {
+			return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
 		}
 		project.Provider.FakeBootstrap().PlansWith(provider.Plan{})
 
@@ -671,8 +671,8 @@ func TestBootstrapYesMeansYes(t *testing.T) {
 func TestTheBootstrapPlanIsAPlanPhaseEventBeforeTheConsentPrompt(t *testing.T) {
 	project, deps := bootstrapProject(t, "", featureISR)
 	deps.StdinIsTerminal = func(io.Reader) bool { return true }
-	deps.Presentation = func(io.Writer) runui.Presentation {
-		return runui.Resolve(runui.Origin{LogFormat: runui.FormatJSON})
+	deps.Presentation = func(io.Writer) terminal.Presentation {
+		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
 	}
 	project.Provider.FakeBootstrap().PlansWith(mixedPlan())
 
@@ -780,8 +780,8 @@ func TestUnderJSONWhatABootstrapSaysRidesItsRunAndStdoutIsOnlyTheStream(t *testi
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			project, deps := bootstrapProject(t, tc.edge, tc.installed...)
-			deps.Presentation = func(io.Writer) runui.Presentation {
-				return runui.Resolve(runui.Origin{LogFormat: runui.FormatJSON})
+			deps.Presentation = func(io.Writer) terminal.Presentation {
+				return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
 			}
 			if tc.arrange != nil {
 				tc.arrange(t, project)

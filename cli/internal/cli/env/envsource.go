@@ -14,7 +14,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/valuestore"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/envsource"
@@ -150,7 +150,7 @@ func syncedAt(unixSeconds int64) string {
 	if unixSeconds == 0 {
 		return "never"
 	}
-	return runui.EpochDateTime(unixSeconds)
+	return terminal.EpochDateTime(unixSeconds)
 }
 
 func lag(now time.Time, unixSeconds int64) string {

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
@@ -162,7 +162,7 @@ func TestAMissingErrorsVariablesAreTheStreamFormOfItsMessage(t *testing.T) {
 	if missing.GetRemedy() != "ocel env ui" {
 		t.Errorf("Variables().Remedy = %q, want the editor", missing.GetRemedy())
 	}
-	plain := strings.Join(append(runui.MissingVariablesLines(missing, runui.Presentation{}), "", runui.MissingVariablesRemedy(missing.GetRemedy())), "\n")
+	plain := strings.Join(append(terminal.MissingVariablesLines(missing, terminal.Presentation{}), "", terminal.MissingVariablesRemedy(missing.GetRemedy())), "\n")
 	if plain != refusal.Error() {
 		t.Errorf("MissingVariablesLines(Variables()) =\n%s\nwant Error()\n%s", plain, refusal.Error())
 	}
@@ -210,7 +210,7 @@ func TestMissingVariablesCarryTheirGroupingOverTheWire(t *testing.T) {
 		t.Fatalf("Unmarshal: %v", err)
 	}
 
-	got := strings.Join(append(runui.MissingVariablesLines(wire, runui.Presentation{}), "", runui.MissingVariablesRemedy(wire.GetRemedy())), "\n")
+	got := strings.Join(append(terminal.MissingVariablesLines(wire, terminal.Presentation{}), "", terminal.MissingVariablesRemedy(wire.GetRemedy())), "\n")
 	if got != refusal.Error() {
 		t.Errorf("MissingVariablesLines(wire) =\n%s\nwant Error()\n%s", got, refusal.Error())
 	}

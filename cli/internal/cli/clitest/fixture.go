@@ -25,7 +25,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/providers"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/configdoc"
@@ -38,7 +38,7 @@ func DiscoveryDir(root string) string {
 }
 
 func AttachTerminalSink(deps cmddeps.Deps, w io.Writer) {
-	deps.Events.Attach(runui.NewTerminalSink(deps.Presentation(w), w))
+	deps.Events.Attach(terminal.NewSink(deps.Presentation(w), w))
 }
 
 func NewDeps() cmddeps.Deps {
@@ -58,7 +58,7 @@ func NewDeps() cmddeps.Deps {
 		DiscoverPRNumber:        func() string { return os.Getenv("OCEL_PR_NUMBER") },
 		StdinIsTerminal:         func(io.Reader) bool { return false },
 		ConfigPath:              func() string { return os.Getenv("OCEL_CONFIG") },
-		Presentation:            func(io.Writer) runui.Presentation { return runui.Resolve(runui.Origin{}) },
+		Presentation:            func(io.Writer) terminal.Presentation { return terminal.Resolve(terminal.Conditions{}) },
 		Events:                  run.NewBus(time.Now),
 	}
 }

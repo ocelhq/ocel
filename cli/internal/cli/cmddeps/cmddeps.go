@@ -16,7 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/variableeditor"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -43,7 +43,7 @@ type Deps struct {
 	HostTrust               providerclient.Trust
 	StdinIsTerminal         func(r io.Reader) bool
 	ConfigPath              func() string
-	Presentation            func(w io.Writer) runui.Presentation
+	Presentation            func(w io.Writer) terminal.Presentation
 	Events                  *run.Bus
 }
 
@@ -56,8 +56,8 @@ func (d Deps) BrowserReachable(stdin io.Reader) bool {
 func (d Deps) AttachCommandSink(cmd *cobra.Command) {
 	w := ChooseRunOutput(cmd)
 	present := d.Presentation(w)
-	present.SharedTerminal = isStdoutReserved(cmd) && runui.IsTerminal(cmd.OutOrStdout())
-	d.Events.Attach(runui.NewTerminalSink(present, w))
+	present.SharedTerminal = isStdoutReserved(cmd) && terminal.IsTerminal(cmd.OutOrStdout())
+	d.Events.Attach(terminal.NewSink(present, w))
 }
 
 const stdoutAnnotation = "ocel.stdout"

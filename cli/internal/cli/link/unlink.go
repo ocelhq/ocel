@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 
+	"github.com/ocelhq/ocel/cli/internal/terminal"
+
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
@@ -50,6 +52,6 @@ func runUnlink(projectDir string, stdout io.Writer) error {
 		fmt.Fprintln(stdout, "This directory isn't linked to a console project.")
 		return nil
 	}
-	fmt.Fprintf(stdout, "%s Unlinked\n", check)
+	fmt.Fprintf(stdout, "%s Unlinked\n", terminal.PaletteFor(stdout).PassMark())
 	return nil
 }

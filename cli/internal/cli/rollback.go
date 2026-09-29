@@ -15,7 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -131,11 +131,11 @@ func runRollback(ctx context.Context, deps cmddeps.Deps, cwd string, opts rollba
 		tagSuffix = fmt.Sprintf(", tag %s", target.GetTag())
 	}
 	flipSuffix := ""
-	if note := runui.PropagationNote(promoted.GetPropagation()); note != "" {
+	if note := terminal.PropagationNote(promoted.GetPropagation()); note != "" {
 		flipSuffix = "; " + note
 	}
 	run.Succeed(fmt.Sprintf("Rolled back to promotion %s (created %s%s) as promotion %s%s",
-		target.GetPromotionId(), runui.EpochDate(target.GetTs()), tagSuffix, promoted.GetPromotionId(), flipSuffix))
+		target.GetPromotionId(), terminal.EpochDate(target.GetTs()), tagSuffix, promoted.GetPromotionId(), flipSuffix))
 	return nil
 }
 
@@ -232,7 +232,7 @@ func showRollbackPlan(plan *run.Span, slug string, live, target *contractv1.Prom
 		lines = append(lines, "– live    "+promotionLine(live))
 	}
 	lines = append(lines, "– target  "+promotionLine(target))
-	if note := runui.PropagationNote(target.GetPropagation()); note != "" {
+	if note := terminal.PropagationNote(target.GetPropagation()); note != "" {
 		lines = append(lines, note)
 	}
 	lines = append(lines, "`ocel deploy` puts the current build back.")
@@ -244,7 +244,7 @@ func promotionLine(p *contractv1.Promotion) string {
 	if p.GetTag() != "" {
 		tag = "tag " + p.GetTag()
 	}
-	return fmt.Sprintf("%s  created %s  %s  %s", p.GetPromotionId(), runui.EpochDateTime(p.GetTs()), tag, deployedIdentities(p.GetBuilds()))
+	return fmt.Sprintf("%s  created %s  %s  %s", p.GetPromotionId(), terminal.EpochDateTime(p.GetTs()), tag, deployedIdentities(p.GetBuilds()))
 }
 
 func promotionIDs(history []*contractv1.PromotionHistoryEntry) string {

@@ -12,14 +12,13 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/prompt"
 	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/progress"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
@@ -63,8 +62,6 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 	cmd.Flags().BoolVar(&opts.create, "create", false, "Create the project, named [project] or after this directory")
 	return cmd
 }
-
-var check = color.New(color.FgGreen).Sprint("✓")
 
 func runLink(ctx context.Context, deps cmddeps.Deps, projectDir, projectRef string, opts options, stdout, stderr io.Writer, stdin io.Reader) (err error) {
 	creds, err := console.RequireLogin(deps.LoadCredentials, stderr)
@@ -201,7 +198,7 @@ func selectOrCreateProject(
 		return nil, fmt.Errorf("no project with slug %q in %s; available: %s (or pass --create)", projectRef, org.Name, joinProjectSlugs(projects))
 	}
 
-	if !prompt.Interactive(lr.stdin) {
+	if !terminal.IsTerminal(lr.stdin) {
 		if len(projects) == 0 {
 			return nil, errors.New("no project selected — pass --create to make one")
 		}
@@ -327,7 +324,7 @@ func pickOrganization(ctx context.Context, lr linkRun, client *console.Client, a
 		return &orgs[0], nil
 	}
 
-	if !prompt.Interactive(lr.stdin) {
+	if !terminal.IsTerminal(lr.stdin) {
 		return nil, fmt.Errorf("multiple organizations found; pass --org <slug>. available: %s", joinOrgSlugs(orgs))
 	}
 

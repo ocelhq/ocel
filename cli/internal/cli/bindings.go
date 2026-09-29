@@ -25,7 +25,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
-	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -206,7 +206,7 @@ func runBindingsSet(ctx context.Context, deps cmddeps.Deps, cwd string, stdin io
 		if err != nil {
 			return err
 		}
-		if deps.Presentation(stdout).Format == runui.FormatJSON {
+		if deps.Presentation(stdout).Format == terminal.FormatJSON {
 			return writeBindingJSON(stdout, bindingSetReport{Name: binding.GetName(), Owner: owner, Version: resp.GetVersion()})
 		}
 		fmt.Fprintf(stdout, "Published %s as %s (version %d).\n", describeBinding(binding.GetName(), opts), owner, resp.GetVersion())
@@ -324,7 +324,7 @@ func runBindingsRm(ctx context.Context, deps cmddeps.Deps, cwd, name string, opt
 		if err != nil {
 			return err
 		}
-		if deps.Presentation(stdout).Format == runui.FormatJSON {
+		if deps.Presentation(stdout).Format == terminal.FormatJSON {
 			return writeBindingJSON(stdout, bindingRemoveReport{Name: name, Removed: resp.GetRemoved()})
 		}
 		if !resp.GetRemoved() {
@@ -350,7 +350,7 @@ func runBindingsLs(ctx context.Context, deps cmddeps.Deps, cwd string, opts bind
 		if err != nil {
 			return err
 		}
-		if deps.Presentation(stdout).Format == runui.FormatJSON {
+		if deps.Presentation(stdout).Format == terminal.FormatJSON {
 			return writeBindingJSON(stdout, bindingListReport{Bindings: bindingReports(resp.GetBindings())})
 		}
 		renderBindings(stdout, resp.GetBindings())
@@ -378,7 +378,7 @@ func runBindingsGenerate(ctx context.Context, deps cmddeps.Deps, cwd string, opt
 			return fmt.Errorf("write %s: %w", bindingTypesFileName, err)
 		}
 
-		if deps.Presentation(stdout).Format == runui.FormatJSON {
+		if deps.Presentation(stdout).Format == terminal.FormatJSON {
 			return writeBindingJSON(stdout, bindingGenerateReport{Path: path, Bindings: bindingReports(resp.GetBindings())})
 		}
 		if len(resp.GetBindings()) == 0 {

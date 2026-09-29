@@ -227,7 +227,7 @@ func TestTheInteractivePathAppliesWhatTheEdgeRequires(t *testing.T) {
 	var out strings.Builder
 	names := []string{featureISR, featureImageOptimization, featureRelayEdge}
 	applied, selected, err := pickFeatures(context.Background(), testCatalogue(names...), names, nil, "direct",
-		environmentv1.Tier_TIER_PRODUCTION, &out)
+		environmentv1.Tier_TIER_PRODUCTION, &out, strings.NewReader(""))
 	if err != nil || !selected {
 		t.Fatalf("pickFeatures = %v, %v, want the only feature left to add applied without a prompt", selected, err)
 	}
@@ -246,7 +246,7 @@ func TestThePickerSaysWhenThereIsNothingLeft(t *testing.T) {
 	var out strings.Builder
 	names := []string{featureISR, featureImageOptimization, featureRelayEdge, featureDirectEdge}
 	applied, selected, err := pickFeatures(context.Background(), testCatalogue(names...), names, nil, "",
-		environmentv1.Tier_TIER_PRODUCTION, &out)
+		environmentv1.Tier_TIER_PRODUCTION, &out, strings.NewReader(""))
 	if err != nil || !selected {
 		t.Fatalf("pickFeatures = %v, %v, want an account with nothing left to add to skip the prompt", selected, err)
 	}

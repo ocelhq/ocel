@@ -11,10 +11,9 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/prompt"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -170,9 +169,9 @@ func OfferPlan(ctx context.Context, span *run.Span, prov *providerclient.Provide
 }
 
 func confirmHealing(ctx context.Context, plan Plan, tier environmentv1.Tier, span *run.Span, out io.Writer, in io.Reader) (bool, error) {
-	resume := span.Hold(&streamv1.WaitingEvent{})
-	defer resume("answered")
-	return prompt.New(out, in).Confirm(ctx, fmt.Sprintf("Run `%s` now?", plan.Command(tier)))
+	return span.Confirm(func() (bool, error) {
+		return terminal.NewPrompt(out, in).Confirm(ctx, fmt.Sprintf("Run `%s` now?", plan.Command(tier)))
+	})
 }
 
 func Ready(ctx context.Context, span *run.Span, prov *providerclient.Provider, cfg *projectconfig.Config, required environmentv1.Tier, hint string) error {

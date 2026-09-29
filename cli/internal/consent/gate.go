@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/ocelhq/ocel/cli/internal/prompt"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 )
@@ -54,24 +54,24 @@ func (g Gate) Guard(ctx context.Context, scope Scope, question string) (bool, er
 	if g.Dry || g.Yes || !g.Interactive {
 		return true, nil
 	}
-	return g.ask(scope, func(p prompt.Prompter) (bool, error) {
+	return g.ask(scope, func(p terminal.Prompt) (bool, error) {
 		return p.Confirm(ctx, question)
 	})
 }
 
 func (g Gate) Consent(ctx context.Context, scope Scope, shown *planv1.ChangePlan, question string) (bool, error) {
-	return g.consent(scope, shown, func(p prompt.Prompter) (bool, error) {
+	return g.consent(scope, shown, func(p terminal.Prompt) (bool, error) {
 		return p.Confirm(ctx, question)
 	})
 }
 
 func (g Gate) ConsentByName(ctx context.Context, scope Scope, shown *planv1.ChangePlan, label, name string) (bool, error) {
-	return g.consent(scope, shown, func(p prompt.Prompter) (bool, error) {
+	return g.consent(scope, shown, func(p terminal.Prompt) (bool, error) {
 		return p.Phrase(ctx, label, name)
 	})
 }
 
-func (g Gate) consent(scope Scope, shown *planv1.ChangePlan, ask func(prompt.Prompter) (bool, error)) (bool, error) {
+func (g Gate) consent(scope Scope, shown *planv1.ChangePlan, ask func(terminal.Prompt) (bool, error)) (bool, error) {
 	if nothingToChange(shown) || g.Yes {
 		return true, nil
 	}
@@ -85,9 +85,9 @@ func nothingToChange(shown *planv1.ChangePlan) bool {
 	return len(shown.GetGroups()) > 0 && !Mutates(shown)
 }
 
-func (g Gate) ask(scope Scope, ask func(prompt.Prompter) (bool, error)) (bool, error) {
+func (g Gate) ask(scope Scope, ask func(terminal.Prompt) (bool, error)) (bool, error) {
 	resume := scope.Hold(&streamv1.WaitingEvent{})
-	granted, err := ask(prompt.New(g.Out, g.In))
+	granted, err := ask(terminal.NewPrompt(g.Out, g.In))
 	resume("answered")
 	if err != nil || granted {
 		return granted, err

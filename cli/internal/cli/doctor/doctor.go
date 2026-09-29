@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
@@ -23,7 +22,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -54,19 +53,12 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 
 func Run(ctx context.Context, deps cmddeps.Deps, cwd string, stdout io.Writer) error {
 	found := diagnose(ctx, deps, cwd)
-	found.render(stdout, newPaint(stdout))
+	found.render(stdout, terminal.PaletteFor(stdout))
 	if found.failures() > 0 {
 		return &exitcode.ExitError{Code: 1}
 	}
 	return nil
 }
-
-const (
-	passGlyph    = "✓"
-	failGlyph    = "✗"
-	warnGlyph    = "⚠"
-	neutralGlyph = "–"
-)
 
 type verdict int
 
@@ -694,63 +686,20 @@ func firstLine(message string) string {
 	return strings.TrimSpace(line)
 }
 
-type paint struct {
-	bold    *color.Color
-	dim     *color.Color
-	good    *color.Color
-	pass    *color.Color
-	warn    *color.Color
-	fail    *color.Color
-	command *color.Color
-}
-
-func newPaint(out io.Writer) paint {
-	return paint{
-		bold:    tint(out, color.Bold),
-		dim:     tint(out, color.Faint),
-		good:    tint(out, color.FgGreen, color.Bold),
-		pass:    tint(out, color.FgGreen),
-		warn:    tint(out, color.FgYellow),
-		fail:    tint(out, color.FgRed, color.Bold),
-		command: tint(out, color.FgCyan),
-	}
-}
-
-func tint(out io.Writer, attrs ...color.Attribute) *color.Color {
-	c := color.New(attrs...)
-	if runui.IsColored(out) {
-		c.EnableColor()
-	} else {
-		c.DisableColor()
-	}
-	return c
-}
-
-func (p paint) glyph(v verdict) string {
+func mark(p terminal.Palette, v verdict) string {
 	switch v {
 	case verdictFail:
-		return p.fail.Sprint(failGlyph)
+		return p.FailMark()
 	case verdictWarn:
-		return p.warn.Sprint(warnGlyph)
+		return p.WarnMark()
 	case verdictNeutral:
-		return p.dim.Sprint(neutralGlyph)
+		return p.NeutralMark()
 	default:
-		return p.pass.Sprint(passGlyph)
+		return p.PassMark()
 	}
 }
 
-func (p paint) hint(text string) string {
-	parts := strings.Split(text, "`")
-	if len(parts)%2 == 0 {
-		return text
-	}
-	for i := 1; i < len(parts); i += 2 {
-		parts[i] = p.command.Sprint("`" + parts[i] + "`")
-	}
-	return strings.Join(parts, "")
-}
-
-func (r report) render(out io.Writer, p paint) {
+func (r report) render(out io.Writer, p terminal.Palette) {
 	for i, s := range r.sections {
 		if i > 0 {
 			fmt.Fprintln(out)
@@ -761,41 +710,41 @@ func (r report) render(out io.Writer, p paint) {
 	fmt.Fprintln(out, r.summary(p))
 }
 
-func (s section) render(out io.Writer, p paint) {
+func (s section) render(out io.Writer, p terminal.Palette) {
 	fmt.Fprintln(out, heading(p, s.name, s.identity))
 	for _, c := range s.checks {
 		if c.verdict == verdictNeutral {
-			fmt.Fprintf(out, "  %s\n", p.dim.Sprint(neutralGlyph+" "+c.text))
+			fmt.Fprintf(out, "  %s\n", p.Faint("– "+c.text))
 			continue
 		}
-		fmt.Fprintf(out, "  %s %s\n", p.glyph(c.verdict), c.text)
+		fmt.Fprintf(out, "  %s %s\n", mark(p, c.verdict), c.text)
 		for _, line := range c.detail {
 			fmt.Fprintf(out, "    %s\n", line)
 		}
 		if c.fix != "" {
-			fmt.Fprintf(out, "    %s %s\n", p.dim.Sprint("→"), p.hint(c.fix))
+			fmt.Fprintf(out, "    %s %s\n", p.Faint("→"), p.Commands(c.fix))
 		}
 	}
 }
 
-func (r report) summary(p paint) string {
+func (r report) summary(p terminal.Palette) string {
 	failures, warnings := r.count(verdictFail), r.count(verdictWarn)
 	if failures == 0 && warnings == 0 {
-		return p.good.Sprint("Good to go.")
+		return p.SuccessBold("Good to go.")
 	}
 	var parts []string
 	if failures > 0 {
-		parts = append(parts, p.fail.Sprint(plural(failures, "problem")))
+		parts = append(parts, p.FailureBold(plural(failures, "problem")))
 	}
 	if warnings > 0 {
-		parts = append(parts, p.warn.Sprint(plural(warnings, "warning")))
+		parts = append(parts, p.Warning(plural(warnings, "warning")))
 	}
 	return strings.Join(parts, ", ") + "."
 }
 
-func heading(p paint, name, identity string) string {
+func heading(p terminal.Palette, name, identity string) string {
 	if identity == "" {
-		return p.bold.Sprint(name)
+		return p.Bold(name)
 	}
-	return p.bold.Sprint(name) + "  " + p.dim.Sprint(identity)
+	return p.Bold(name) + "  " + p.Faint(identity)
 }

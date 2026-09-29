@@ -16,7 +16,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
@@ -83,7 +83,7 @@ func jsonOutput(t *testing.T) {
 	t.Helper()
 	orig := logFormatFlag
 	t.Cleanup(func() { logFormatFlag = orig })
-	logFormatFlag = string(runui.FormatJSON)
+	logFormatFlag = string(terminal.FormatJSON)
 }
 
 func TestABindingOnStdinThatCannotBeReadIsRefusedNamingWhereWithoutItsValue(t *testing.T) {
