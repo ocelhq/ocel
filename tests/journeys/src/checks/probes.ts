@@ -305,41 +305,134 @@ export const publicOriginCheck: Check = {
   },
 };
 
+export const sseCheck: Check = {
+  title: "GET /api/probes/sse delivers each event as it is sent, uncompressed",
+  run: async (ctx) => {
+    const res = await ctx.fetch(`${ctx.baseUrl}/api/probes/sse?events=3&gap=${SSE_SHORT_GAP_MS}`, {
+      headers: { accept: "text/event-stream", "accept-encoding": "gzip, br" },
+    });
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get("content-type") ?? "", /^text\/event-stream/);
+    assert.equal(res.headers.get("content-encoding"), null, "an event stream was compressed");
+    const seen = await readArrivals(res);
+    assert.deepEqual(eventsOf(seen), ["ocel-sse-1", "ocel-sse-2", "ocel-sse-3", "ocel-sse-end"]);
+    assert.ok(
+      distinctArrivals(seen) >= 3 && spreadMs(seen) >= SSE_SHORT_GAP_MS,
+      `three events a second apart landed in ${distinctArrivals(seen)} arrival(s) over ${spreadMs(seen)}ms`,
+    );
+  },
+};
+
+export const sseSilenceCheck: Check = {
+  title: "GET /api/probes/sse survives a forty-second silence between two events",
+  run: async (ctx) => {
+    const res = await ctx.fetch(`${ctx.baseUrl}/api/probes/sse?events=2&gap=${SSE_GAP_MS}`, {
+      headers: { accept: "text/event-stream" },
+    });
+    assert.equal(res.status, 200);
+    const seen = await readArrivals(res);
+    assert.deepEqual(eventsOf(seen), ["ocel-sse-1", "ocel-sse-2", "ocel-sse-end"]);
+    assert.ok(
+      spreadMs(seen) >= SSE_GAP_MS - 1_000,
+      `both sides of a ${SSE_GAP_MS}ms gap landed within ${spreadMs(seen)}ms`,
+    );
+  },
+};
+
+export const rewrittenQueryCheck: Check = {
+  title: "GET /api/probes/echo hands the app every query pair an edge likes to rewrite",
+  run: async (ctx) => {
+    const { res, text, body } = await json(ctx, `/api/probes/echo${REWRITTEN_QUERY}`);
+    assert.equal(res.status, 200, describeResponse(res, text));
+    const echo = body as Echo;
+    assert.deepEqual(
+      [...new URLSearchParams(echo.search)],
+      REWRITTEN_PAIRS,
+      `the app was handed ${echo.search}`,
+    );
+  },
+};
+
+export const malformedQueryCheck: Check = {
+  title: "GET /api/probes/echo answers 200 to a query no decoder accepts",
+  run: async (ctx) => {
+    const { res, text, body } = await json(ctx, `/api/probes/echo${MALFORMED_QUERY}`);
+    assert.equal(res.status, 200, describeResponse(res, text));
+    const echo = body as Echo;
+    assert.deepEqual(
+      [...new URLSearchParams(echo.search)],
+      MALFORMED_PAIRS,
+      `the app was handed ${echo.search}`,
+    );
+  },
+};
+
+export const encodedSlashCheck: Check = {
+  title: "GET /api/probes/echo decodes an encoded slash in a segment exactly once",
+  run: async (ctx) => {
+    const { res, text, body } = await json(ctx, "/api/probes/echo/a%2Fb%2Bc/caf%C3%A9");
+    assert.equal(res.status, 200, describeResponse(res, text));
+    const echo = body as Echo;
+    assert.deepEqual(echo.segments, ["a/b+c", "café"]);
+  },
+};
+
+export const corsCheck: Check = {
+  title: "OPTIONS /api/probes/cors carries exactly one Access-Control-Allow-Origin",
+  run: async (ctx) => {
+    const headers = {
+      origin: "https://app.ocel.test",
+      "access-control-request-method": "POST",
+      "access-control-request-headers": "content-type",
+    };
+    const preflight = await ctx.fetch(`${ctx.baseUrl}/api/probes/cors`, {
+      method: "OPTIONS",
+      headers,
+    });
+    await preflight.text();
+    assert.equal(preflight.status, 204);
+    assert.equal(preflight.headers.get("access-control-allow-origin"), "*");
+    assert.match(preflight.headers.get("access-control-allow-methods") ?? "", /\bPOST\b/);
+
+    const actual = await ctx.fetch(`${ctx.baseUrl}/api/probes/cors`, {
+      headers: { origin: headers.origin },
+    });
+    await actual.text();
+    assert.equal(actual.status, 200);
+    assert.equal(actual.headers.get("access-control-allow-origin"), "*");
+  },
+};
+
+export const inflateCheck: Check = {
+  title: "POST /api/probes/inflate reads a gzip request body as the bytes it compressed",
+  run: async (ctx) => {
+    const payload = Buffer.from(JSON.stringify({ filler: "ocel ".repeat(2048) }), "utf8");
+    const res = await ctx.fetch(`${ctx.baseUrl}/api/probes/inflate`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "content-encoding": "gzip" },
+      body: gzipSync(payload),
+    });
+    const text = await res.text();
+    assert.equal(res.status, 200, describeResponse(res, text));
+    const probe = JSON.parse(text) as { bytes: number; sha256: string };
+    assert.equal(probe.bytes, payload.byteLength);
+    assert.equal(probe.sha256, sha256(payload));
+  },
+};
+
+export const longSleepCheck: Check = {
+  title: "GET /api/probes/sleep holds the request open for forty-five seconds",
+  run: async (ctx) => {
+    const { res, text, body } = await json(ctx, `/api/probes/sleep?ms=${LONG_SLEEP_MS}`);
+    assert.equal(res.status, 200, describeResponse(res, text));
+    assert.deepEqual(body, { slept: LONG_SLEEP_MS }, describeResponse(res, text));
+  },
+};
+
 export const httpProbeChecks: Check[] = [
   streamCheck,
-  {
-    title: "GET /api/probes/sse delivers each event as it is sent, uncompressed",
-    run: async (ctx) => {
-      const res = await ctx.fetch(
-        `${ctx.baseUrl}/api/probes/sse?events=3&gap=${SSE_SHORT_GAP_MS}`,
-        { headers: { accept: "text/event-stream", "accept-encoding": "gzip, br" } },
-      );
-      assert.equal(res.status, 200);
-      assert.match(res.headers.get("content-type") ?? "", /^text\/event-stream/);
-      assert.equal(res.headers.get("content-encoding"), null, "an event stream was compressed");
-      const seen = await readArrivals(res);
-      assert.deepEqual(eventsOf(seen), ["ocel-sse-1", "ocel-sse-2", "ocel-sse-3", "ocel-sse-end"]);
-      assert.ok(
-        distinctArrivals(seen) >= 3 && spreadMs(seen) >= SSE_SHORT_GAP_MS,
-        `three events a second apart landed in ${distinctArrivals(seen)} arrival(s) over ${spreadMs(seen)}ms`,
-      );
-    },
-  },
-  {
-    title: "GET /api/probes/sse survives a forty-second silence between two events",
-    run: async (ctx) => {
-      const res = await ctx.fetch(`${ctx.baseUrl}/api/probes/sse?events=2&gap=${SSE_GAP_MS}`, {
-        headers: { accept: "text/event-stream" },
-      });
-      assert.equal(res.status, 200);
-      const seen = await readArrivals(res);
-      assert.deepEqual(eventsOf(seen), ["ocel-sse-1", "ocel-sse-2", "ocel-sse-end"]);
-      assert.ok(
-        spreadMs(seen) >= SSE_GAP_MS - 1_000,
-        `both sides of a ${SSE_GAP_MS}ms gap landed within ${spreadMs(seen)}ms`,
-      );
-    },
-  },
+  sseCheck,
+  sseSilenceCheck,
   {
     title: "GET /api/probes/status/:code passes every status through unchanged",
     run: async (ctx) => {
@@ -390,41 +483,9 @@ export const httpProbeChecks: Check[] = [
       }
     },
   },
-  {
-    title: "GET /api/probes/echo hands the app every query pair an edge likes to rewrite",
-    run: async (ctx) => {
-      const { res, text, body } = await json(ctx, `/api/probes/echo${REWRITTEN_QUERY}`);
-      assert.equal(res.status, 200, describeResponse(res, text));
-      const echo = body as Echo;
-      assert.deepEqual(
-        [...new URLSearchParams(echo.search)],
-        REWRITTEN_PAIRS,
-        `the app was handed ${echo.search}`,
-      );
-    },
-  },
-  {
-    title: "GET /api/probes/echo answers 200 to a query no decoder accepts",
-    run: async (ctx) => {
-      const { res, text, body } = await json(ctx, `/api/probes/echo${MALFORMED_QUERY}`);
-      assert.equal(res.status, 200, describeResponse(res, text));
-      const echo = body as Echo;
-      assert.deepEqual(
-        [...new URLSearchParams(echo.search)],
-        MALFORMED_PAIRS,
-        `the app was handed ${echo.search}`,
-      );
-    },
-  },
-  {
-    title: "GET /api/probes/echo decodes an encoded slash in a segment exactly once",
-    run: async (ctx) => {
-      const { res, text, body } = await json(ctx, "/api/probes/echo/a%2Fb%2Bc/caf%C3%A9");
-      assert.equal(res.status, 200, describeResponse(res, text));
-      const echo = body as Echo;
-      assert.deepEqual(echo.segments, ["a/b+c", "café"]);
-    },
-  },
+  rewrittenQueryCheck,
+  malformedQueryCheck,
+  encodedSlashCheck,
   {
     title:
       "GET /api/probes/echo takes oversized cookies and a nine-kilobyte URL without dropping the connection",
@@ -490,31 +551,7 @@ export const httpProbeChecks: Check[] = [
       assert.match(refused.res.headers.get("allow") ?? "", /\bGET\b/);
     },
   },
-  {
-    title: "OPTIONS /api/probes/cors carries exactly one Access-Control-Allow-Origin",
-    run: async (ctx) => {
-      const headers = {
-        origin: "https://app.ocel.test",
-        "access-control-request-method": "POST",
-        "access-control-request-headers": "content-type",
-      };
-      const preflight = await ctx.fetch(`${ctx.baseUrl}/api/probes/cors`, {
-        method: "OPTIONS",
-        headers,
-      });
-      await preflight.text();
-      assert.equal(preflight.status, 204);
-      assert.equal(preflight.headers.get("access-control-allow-origin"), "*");
-      assert.match(preflight.headers.get("access-control-allow-methods") ?? "", /\bPOST\b/);
-
-      const actual = await ctx.fetch(`${ctx.baseUrl}/api/probes/cors`, {
-        headers: { origin: headers.origin },
-      });
-      await actual.text();
-      assert.equal(actual.status, 200);
-      assert.equal(actual.headers.get("access-control-allow-origin"), "*");
-    },
-  },
+  corsCheck,
   {
     title: "GET /api/probes/cookies delivers one and three Set-Cookie lines unfolded",
     run: async (ctx) => {
@@ -556,22 +593,7 @@ export const httpProbeChecks: Check[] = [
       assert.equal(sha256(Buffer.from(text, "utf8")), plain.headers.get("x-ocel-sha256"));
     },
   },
-  {
-    title: "POST /api/probes/inflate reads a gzip request body as the bytes it compressed",
-    run: async (ctx) => {
-      const payload = Buffer.from(JSON.stringify({ filler: "ocel ".repeat(2048) }), "utf8");
-      const res = await ctx.fetch(`${ctx.baseUrl}/api/probes/inflate`, {
-        method: "POST",
-        headers: { "content-type": "application/json", "content-encoding": "gzip" },
-        body: gzipSync(payload),
-      });
-      const text = await res.text();
-      assert.equal(res.status, 200, describeResponse(res, text));
-      const probe = JSON.parse(text) as { bytes: number; sha256: string };
-      assert.equal(probe.bytes, payload.byteLength);
-      assert.equal(probe.sha256, sha256(payload));
-    },
-  },
+  inflateCheck,
   {
     title: "POST /api/probes/multipart keeps every byte value and a non-ASCII field",
     run: async (ctx) => {
@@ -657,12 +679,5 @@ export const httpProbeChecks: Check[] = [
       assert.deepEqual(body, { slept: SLEEP_MS }, describeResponse(res, text));
     },
   },
-  {
-    title: "GET /api/probes/sleep holds the request open for forty-five seconds",
-    run: async (ctx) => {
-      const { res, text, body } = await json(ctx, `/api/probes/sleep?ms=${LONG_SLEEP_MS}`);
-      assert.equal(res.status, 200, describeResponse(res, text));
-      assert.deepEqual(body, { slept: LONG_SLEEP_MS }, describeResponse(res, text));
-    },
-  },
+  longSleepCheck,
 ];
