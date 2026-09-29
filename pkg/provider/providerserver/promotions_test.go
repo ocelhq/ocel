@@ -414,6 +414,7 @@ func TestAPruneSaysWhichPromotionsItReclaimedAndHowManyItKept(t *testing.T) {
 
 type serviceEveryReleaseRevises struct {
 	mu               sync.Mutex
+	revisions        int
 	removed          []string
 	removedRevisions []string
 }
@@ -421,7 +422,10 @@ type serviceEveryReleaseRevises struct {
 func (s *serviceEveryReleaseRevises) hooks() resources.Hooks {
 	return resources.Hooks{Functions: &resources.FunctionHooks{
 		Provision: func(context.Context, provider.StackSpec, progress.Progress) ([]provider.Function, error) {
-			return nil, nil
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			s.revisions++
+			return []provider.Function{{Name: "api", Physical: "shop-web-api", Revision: fmt.Sprintf("shop-web-api-%05d", s.revisions)}}, nil
 		},
 		Remove: func(_ context.Context, _ provider.StackRef, functions []provider.Function, _ progress.Progress) error {
 			s.mu.Lock()
@@ -451,12 +455,24 @@ func TestAPruneTakesOnlyTheDroppedReleasesRevisionFromTheServiceTheKeptReleasesS
 	edgeProvisioned(t, vendor, environment.TierProduction, "shop")
 	seedPromotions(t, vendor, environment.TierProduction, "shop", "", "p1", "p2", "p3")
 	for i := range 3 {
-		name := naming.AppStack(stackrecords.ProductionEnv, "web", releaseOf(t, buildIdentity(i)))
-		if err := stackrecords.Write(context.Background(), vendor.KeyValues(), environment.TierProduction, "shop", name, stackrecords.Stack{
+		ref := provider.StackRef{
+			Project: "shop",
+			Tier:    environment.TierProduction,
+			Name:    naming.AppStack(stackrecords.ProductionEnv, "web", releaseOf(t, buildIdentity(i))),
+		}
+		result, err := vendor.Stacks().Provision(context.Background(), provider.StackSpec{
+			Ref:  ref,
+			Kind: provider.StackApp,
+			App:  &provider.AppSpec{App: "web", Compute: provider.ComputeServerless, Functions: []provider.FunctionSpec{{Name: "api"}}},
+		}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := stackrecords.Write(context.Background(), vendor.KeyValues(), ref.Tier, ref.Project, ref.Name, stackrecords.Stack{
 			Kind:      provider.StackApp,
 			App:       "web",
 			Build:     buildIdentity(i),
-			Functions: []provider.Function{{Name: "api", Physical: "shop-web-api", Revision: fmt.Sprintf("shop-web-api-%05d", i+1)}},
+			Functions: result.Functions,
 		}); err != nil {
 			t.Fatal(err)
 		}

@@ -162,6 +162,9 @@ func (f *hookStacks) computeProvisioner(spec provider.StackSpec) (computeProvisi
 		}
 		return func(ctx context.Context, progress progress.Progress) (provider.StackResult, error) {
 			functions, err := f.hooks.Functions.Provision(ctx, spec, progress)
+			if err == nil && f.hooks.Functions.RemoveRevisions != nil {
+				err = recordHeld(ctx, f, spec.Ref, functions, heldFunction)
+			}
 			return provider.StackResult{Functions: functions}, err
 		}, nil
 	case provider.ComputeContainer:
@@ -170,6 +173,9 @@ func (f *hookStacks) computeProvisioner(spec provider.StackSpec) (computeProvisi
 		}
 		return func(ctx context.Context, progress progress.Progress) (provider.StackResult, error) {
 			containers, err := f.hooks.Containers.Provision(ctx, spec, progress)
+			if err == nil && f.hooks.Containers.RemoveRevisions != nil {
+				err = recordHeld(ctx, f, spec.Ref, containers, heldContainer)
+			}
 			return provider.StackResult{Containers: containers}, err
 		}, nil
 	default:
@@ -282,17 +288,11 @@ func (f *hookStacks) removeFunctions(ctx context.Context, ref provider.StackRef,
 	if f.hooks.Functions == nil {
 		return refuseOrphans(ref, len(going), "function", because, "Functions")
 	}
-	elsewhere, err := f.readServedElsewhere(ctx, ref)
-	if err != nil {
-		return err
-	}
-	whole, revisions := splitShared(going, elsewhere, func(function provider.Function) physicalRevision {
-		return physicalRevision{physical: function.Physical, revision: function.Revision}
-	})
-	if err := removeAll(ctx, ref, whole, f.hooks.Functions.Remove, progress); err != nil {
-		return err
-	}
-	return removeAll(ctx, ref, revisions, f.hooks.Functions.RemoveRevisions, progress)
+	return removeHeld(ctx, f, ref, going, heldRemoval[provider.Function]{
+		remove:          f.hooks.Functions.Remove,
+		removeRevisions: f.hooks.Functions.RemoveRevisions,
+		held:            heldFunction,
+	}, progress)
 }
 
 func (f *hookStacks) removeContainers(ctx context.Context, ref provider.StackRef, going []provider.AppContainer, because string, progress progress.Progress) error {
@@ -302,62 +302,11 @@ func (f *hookStacks) removeContainers(ctx context.Context, ref provider.StackRef
 	if f.hooks.Containers == nil {
 		return refuseOrphans(ref, len(going), "container", because, "Containers")
 	}
-	elsewhere, err := f.readServedElsewhere(ctx, ref)
-	if err != nil {
-		return err
-	}
-	whole, revisions := splitShared(going, elsewhere, func(container provider.AppContainer) physicalRevision {
-		return physicalRevision{physical: container.Physical, revision: container.Revision}
-	})
-	if err := removeAll(ctx, ref, whole, f.hooks.Containers.Remove, progress); err != nil {
-		return err
-	}
-	return removeAll(ctx, ref, revisions, f.hooks.Containers.RemoveRevisions, progress)
-}
-
-type physicalRevision struct {
-	physical string
-	revision string
-}
-
-func (f *hookStacks) readServedElsewhere(ctx context.Context, ref provider.StackRef) (map[physicalRevision]bool, error) {
-	stacks, err := stackrecords.List(ctx, f.keyValues, ref.Tier, ref.Project)
-	if err != nil {
-		return nil, err
-	}
-	elsewhere := map[physicalRevision]bool{}
-	mark := func(physical, revision string) {
-		if physical == "" {
-			return
-		}
-		elsewhere[physicalRevision{physical: physical}] = true
-		elsewhere[physicalRevision{physical: physical, revision: revision}] = true
-	}
-	for _, stack := range stacks {
-		if stack.Name == ref.Name {
-			continue
-		}
-		for _, function := range stack.Functions {
-			mark(function.Physical, function.Revision)
-		}
-		for _, container := range stack.Containers {
-			mark(container.Physical, container.Revision)
-		}
-	}
-	return elsewhere, nil
-}
-
-func splitShared[T any](going []T, elsewhere map[physicalRevision]bool, revisionOf func(T) physicalRevision) (whole, revisions []T) {
-	for _, each := range going {
-		named := revisionOf(each)
-		switch {
-		case !elsewhere[physicalRevision{physical: named.physical}]:
-			whole = append(whole, each)
-		case named.revision != "" && !elsewhere[named]:
-			revisions = append(revisions, each)
-		}
-	}
-	return whole, revisions
+	return removeHeld(ctx, f, ref, going, heldRemoval[provider.AppContainer]{
+		remove:          f.hooks.Containers.Remove,
+		removeRevisions: f.hooks.Containers.RemoveRevisions,
+		held:            heldContainer,
+	}, progress)
 }
 
 func removeAll[T any](
