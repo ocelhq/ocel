@@ -17,7 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
-const frontAddress = "34.117.0.7"
+const loadBalancerAddress = "34.117.0.7"
 
 const notFoundBackend = "ocel-alb-production-notfound"
 
@@ -54,7 +54,7 @@ func newWorld() *world {
 
 func balancer() map[string]string {
 	return map[string]string{
-		"address":        frontAddress,
+		"address":        loadBalancerAddress,
 		"certificateMap": "ocel-alb-production-certs",
 		"urlMap":         "ocel-alb-production-routes",
 		"notFound":       notFoundBackend,
@@ -306,7 +306,7 @@ func (m mocks) NewResource(args pulumi.MockResourceArgs) (string, resource.Prope
 	outputs := args.Inputs.Copy()
 	outputs["selfLink"] = resource.NewStringProperty("https://compute.example.com/" + args.Name)
 	if args.TypeToken == "gcp:compute/globalAddress:GlobalAddress" {
-		outputs["address"] = resource.NewStringProperty(frontAddress)
+		outputs["address"] = resource.NewStringProperty(loadBalancerAddress)
 	}
 	return args.Name + "-id", outputs, nil
 }

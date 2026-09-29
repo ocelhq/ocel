@@ -155,7 +155,7 @@ func (e *Edge) Teardown(ctx context.Context, tier environment.Tier) error {
 }
 
 type edgeRecord struct {
-	LoadBalancer LoadBalancer    `json:"front,omitzero"`
+	LoadBalancer LoadBalancer    `json:"loadBalancer,omitzero"`
 	Hosts        map[string]Host `json:"hosts,omitempty"`
 }
 
@@ -182,7 +182,7 @@ func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.St
 	balancer := loadBalancerOf(outputs)
 	if !balancer.provisioned() {
 		return nil, refusal.Refuse(refusal.CodeNotReady,
-			"no %s load balancer is provisioned for tier %s: the %q edge fronts every project in a tier from one that the bootstrap raises, at %s. Run `ocel bootstrap` for this tier first",
+			"no %s load balancer is provisioned for tier %s: the %q edge serves every project in a tier from one that the bootstrap raises, at %s. Run `ocel bootstrap` for this tier first",
 			Kind, spec.Tier, Kind, BaselineCost)
 	}
 	next := prior
@@ -262,7 +262,7 @@ func (e *Edge) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
 		},
 		{
 			Kind:   edge.EdgeGroupKind,
-			Name:   edge.EdgeGroupName(Kind) + "/front",
+			Name:   edge.EdgeGroupName(Kind) + "/load-balancer",
 			Action: edge.PlanKeep,
 			Reason: "the load balancer this project was balancing by is one per bootstrap tier and every other project in the tier is answered by it, " +
 				"so it stays provisioned and keeps costing " + BaselineCost + "; `ocel bootstrap remove` is what takes it down",
@@ -288,7 +288,7 @@ func (e *Edge) PreviewWildcardRemovals(wildcard string) (removed, kept edge.Plan
 func (e *Edge) SharedPreviewRemoval() edge.PlanGroup {
 	return edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
-		Name:   edge.EdgeGroupName(Kind) + "/front",
+		Name:   edge.EdgeGroupName(Kind) + "/load-balancer",
 		Action: edge.PlanKeep,
 		Reason: "previews are answered by the same load balancer production is, one per bootstrap tier at " + BaselineCost + ", " +
 			"so releasing a wildcard takes its host rule and leaves the balancer in place",

@@ -8,7 +8,7 @@ import (
 )
 
 func (p *Provider) servedOnTheBox(ctx context.Context, hostname string) (router.Kind, error) {
-	said, err := p.host.ServedRouter(ctx, hostname)
+	said, err := p.host.ProbeRouter(ctx, hostname)
 	if err != nil {
 		return "", err
 	}

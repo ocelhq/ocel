@@ -28,7 +28,7 @@ const (
 	answerBodyCap  = 1 << 12
 )
 
-func loopback(flags *flag.FlagSet, argv []string, errs io.Writer) (string, string, bool) {
+func parseLoopbackTarget(flags *flag.FlagSet, argv []string, errs io.Writer) (string, string, bool) {
 	flags.SetOutput(errs)
 	at := flags.String("at", "", "")
 	if err := flags.Parse(argv); err != nil || flags.NArg() != 1 || flags.Arg(0) == "" {
@@ -55,7 +55,7 @@ func handshake(at, hostname string) (*tls.Conn, error) {
 }
 
 func leaf(argv []string, out, errs io.Writer) int {
-	at, hostname, ok := loopback(flag.NewFlagSet("leaf", flag.ContinueOnError), argv, errs)
+	at, hostname, ok := parseLoopbackTarget(flag.NewFlagSet("leaf", flag.ContinueOnError), argv, errs)
 	if !ok {
 		return usage(errs)
 	}
@@ -92,7 +92,7 @@ func probe(argv []string, out, errs io.Writer) int {
 	flags := flag.NewFlagSet("probe", flag.ContinueOnError)
 	anyCertificate := flags.Bool("any-certificate", false, "")
 	plain := flags.Bool("plain", false, "")
-	at, hostname, ok := loopback(flags, argv, errs)
+	at, hostname, ok := parseLoopbackTarget(flags, argv, errs)
 	if !ok {
 		return usage(errs)
 	}

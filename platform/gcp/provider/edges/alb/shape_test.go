@@ -44,7 +44,7 @@ func shapedCounts(shaped []pricing.Shaped) map[string]int {
 	return counts
 }
 
-func TestTheFrontShapeMatchesTheFrontProgram(t *testing.T) {
+func TestTheLoadBalancerShapeMatchesItsProgram(t *testing.T) {
 	t.Parallel()
 
 	spec := loadBalancerSpec{Region: "europe-west1", Names: loadBalancerNames(environment.TierPreview, false),

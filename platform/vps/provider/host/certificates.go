@@ -103,7 +103,7 @@ func (h *Host) PinnedCertificate(ctx context.Context, path string) ([]byte, erro
 
 func (h *Host) FrontProxy() proxy.Proxy { return h.front }
 
-func (h *Host) ServedCertificate(ctx context.Context, hostname string) ([]byte, error) {
+func (h *Host) ReadServedCertificate(ctx context.Context, hostname string) ([]byte, error) {
 	result, err := h.stream(ctx, words([]string{SwitchboardBinary, "leaf", hostname}), nil, "")
 	if err != nil {
 		return nil, err
@@ -123,15 +123,15 @@ type Answer struct {
 	Failure string
 }
 
-func (h *Host) ServedRouter(ctx context.Context, hostname string) (Answer, error) {
-	return h.probed(ctx, "probe "+hostname+" on this box's own https port", hostname)
+func (h *Host) ProbeRouter(ctx context.Context, hostname string) (Answer, error) {
+	return h.probe(ctx, "probe "+hostname+" on this box's own https port", hostname)
 }
 
-func (h *Host) ServedRouterOverPlainHTTP(ctx context.Context, hostname string) (Answer, error) {
-	return h.probed(ctx, "probe "+hostname+" on this box's own http port", hostname, "--plain")
+func (h *Host) ProbeRouterOverPlainHTTP(ctx context.Context, hostname string) (Answer, error) {
+	return h.probe(ctx, "probe "+hostname+" on this box's own http port", hostname, "--plain")
 }
 
-func (h *Host) probed(ctx context.Context, what, hostname string, flags ...string) (Answer, error) {
+func (h *Host) probe(ctx context.Context, what, hostname string, flags ...string) (Answer, error) {
 	result, err := h.stream(ctx, words(slices.Concat([]string{SwitchboardBinary, "probe"}, flags, []string{hostname})), nil, "")
 	if err != nil {
 		return Answer{}, err
@@ -208,7 +208,7 @@ func (h *Host) RefuseUnshielded(ctx context.Context, hostname string) error {
 }
 
 func (b frontBox) Probe(ctx context.Context, hostname string) (router.Kind, string, error) {
-	said, err := b.h.ServedRouter(ctx, hostname)
+	said, err := b.h.ProbeRouter(ctx, hostname)
 	return said.Router, said.Failure, err
 }
 
@@ -221,14 +221,14 @@ func (b frontBox) ReadSpec(ctx context.Context) (proxy.Spec, error) {
 }
 
 func (b frontBox) ProbeAnyCertificate(ctx context.Context, hostname string) (string, string, error) {
-	said, err := b.h.probed(ctx, "probe "+hostname+" on this box's own https port accepting any certificate", hostname, "--any-certificate")
+	said, err := b.h.probe(ctx, "probe "+hostname+" on this box's own https port accepting any certificate", hostname, "--any-certificate")
 	return string(said.Router), said.Failure, err
 }
 
 func (b frontBox) Pause(ctx context.Context, wait time.Duration) error { return b.h.pause(ctx, wait) }
 
 func (b frontBox) ReadLeaf(ctx context.Context, hostname string) ([]byte, error) {
-	return b.h.ServedCertificate(ctx, hostname)
+	return b.h.ReadServedCertificate(ctx, hostname)
 }
 
 func (b frontBox) ReadBeside(ctx context.Context, path string) ([]switchboard.SiblingFile, error) {
@@ -248,7 +248,7 @@ func (b frontBox) ReadBeside(ctx context.Context, path string) ([]switchboard.Si
 }
 
 func (b frontBox) ProbePlainHTTP(ctx context.Context, hostname string) (router.Kind, string, error) {
-	said, err := b.h.ServedRouterOverPlainHTTP(ctx, hostname)
+	said, err := b.h.ProbeRouterOverPlainHTTP(ctx, hostname)
 	return said.Router, said.Failure, err
 }
 

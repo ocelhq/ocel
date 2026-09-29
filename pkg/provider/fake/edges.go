@@ -131,7 +131,7 @@ type Edge struct {
 	issued     int
 	held       map[string]string
 	revoked    []string
-	staged     []string
+	presenting []string
 	events     []string
 	claims     []router.Claim
 	entries    []router.Claim
@@ -255,7 +255,7 @@ func (e *Edge) revokeOriginCertificate(_ context.Context, id string) error {
 func (e *Edge) HoldsClientCertificates(certificates ...string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	e.staged = certificates
+	e.presenting = certificates
 }
 
 func (e *Edge) ClientCertificateEvents() []string {
@@ -268,10 +268,10 @@ func (e *Edge) ensureClientCertificates(context.Context, string) ([]string, erro
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.events = append(e.events, "ensure")
-	if e.staged == nil {
+	if e.presenting == nil {
 		return []string{ClientCertificate(e.kind)}, nil
 	}
-	return slices.Clone(e.staged), nil
+	return slices.Clone(e.presenting), nil
 }
 
 func (e *Edge) presentClientCertificate(context.Context, string) error {

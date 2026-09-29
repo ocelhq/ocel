@@ -94,12 +94,12 @@ func servedByTheBox(t *testing.T, d *vps.Provider, hostname string) {
 	t.Helper()
 	deadline := time.Now().Add(traefikServeWait)
 	for {
-		said, err := d.Host().ServedRouter(context.Background(), hostname)
+		said, err := d.Host().ProbeRouter(context.Background(), hostname)
 		if err == nil && said.Router == switchboard.RouterKind {
 			return
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("ServedRouter(%s) = %+v, %v within %s, want the box proven with the certificate your Traefik ordered", hostname, said, err, traefikServeWait)
+			t.Fatalf("ProbeRouter(%s) = %+v, %v within %s, want the box proven with the certificate your Traefik ordered", hostname, said, err, traefikServeWait)
 		}
 		time.Sleep(2 * time.Second)
 	}

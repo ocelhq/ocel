@@ -390,8 +390,8 @@ func servesAPreviewBehind(t *testing.T, vm machine, d *vps.Provider, opened edge
 		t.Errorf("%s answered %q for the preview %s, want the release it was promoted to", front, served, hostname)
 	}
 	probe := edge.ProbeHostname(edge.PreviewWildcard(frontedPreview))
-	if said, err := d.Host().ServedRouter(ctx, probe); err != nil || said.Router != switchboard.RouterKind {
-		t.Errorf("ServedRouter(%s) = %+v, %v, want the preview catch-all answered by the box through %s", probe, said, err, front)
+	if said, err := d.Host().ProbeRouter(ctx, probe); err != nil || said.Router != switchboard.RouterKind {
+		t.Errorf("ProbeRouter(%s) = %+v, %v, want the preview catch-all answered by the box through %s", probe, said, err, front)
 	}
 
 	if err := previews.Destroy(ctx); err != nil {

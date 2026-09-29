@@ -25,7 +25,7 @@ const (
 	certificateHost    = "//certificatemanager.googleapis.com/projects/%s/locations/global/certificateMaps/%s"
 )
 
-var frontRouting = []string{"hostRules", "pathMatchers"}
+var claimedRouting = []string{"hostRules", "pathMatchers"}
 
 type names struct {
 	Address        string
@@ -166,7 +166,7 @@ func clientValidation(ctx *pulumi.Context, spec loadBalancerSpec, project string
 		Project:                 pulumi.String(project),
 		Location:                pulumi.String(globalLocation),
 		AllowlistedCertificates: allowed,
-		Description:             pulumi.String("the client certificates the edge in balancer of this load balancer presents, and nothing else"),
+		Description:             pulumi.String("the client certificates the edge in front of this load balancer presents, and nothing else"),
 	})
 	if err != nil {
 		return nil, err
@@ -256,7 +256,7 @@ func loadBalancerProgram(spec loadBalancerSpec) Program {
 			DefaultService:     notFound.SelfLink,
 			DefaultRouteAction: refusingRouteAction(),
 			HeaderAction:       markingHeaderAction(),
-		}, pulumi.IgnoreChanges(frontRouting))
+		}, pulumi.IgnoreChanges(claimedRouting))
 		if err != nil {
 			return err
 		}

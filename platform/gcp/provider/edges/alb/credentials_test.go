@@ -11,7 +11,7 @@ import (
 func TestTheAlbEdgeDocumentsTheCertificateManagerAndComputeRolesEachPurposeNeeds(t *testing.T) {
 	t.Parallel()
 
-	balancer, _ := fronting(t)
+	balancer, _ := balancing(t)
 	for _, purpose := range []edge.CredentialPurpose{edge.PurposeBootstrap, edge.PurposeDeploy} {
 		documented, err := balancer.Hooks().DescribeCredentialPermissions(purpose)
 		if err != nil {
