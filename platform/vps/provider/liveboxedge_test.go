@@ -2,10 +2,12 @@ package vps_test
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/edge/edgeconformance"
@@ -80,10 +82,21 @@ func promotes(t *testing.T, p *vps.Provider, stack edge.EdgeStack, id, tag strin
 	promotesRecord(t, p, stack, "", promotion, liveRecord(tag, staged))
 }
 
+var (
+	liveRun        = strconv.FormatInt(time.Now().UnixNano(), 36)
+	livePromotions atomic.Int64
+)
+
+func ownPromotion(promotion router.Promotion) router.Promotion {
+	promotion.PromotionID = fmt.Sprintf("%s-%s-%d", promotion.PromotionID, liveRun, livePromotions.Add(1))
+	return promotion
+}
+
 func promotesRecord(t *testing.T, p *vps.Provider, stack edge.EdgeStack, pointer string, promotion router.Promotion, record router.DeploymentRecord) {
 	t.Helper()
 
 	ctx := context.Background()
+	promotion = ownPromotion(promotion)
 	state := stack.State()
 	releases := ledger.New(p.KeyValues(), state.Tier, state.Slug)
 	if err := releases.PutStaged(ctx, record); err != nil {
