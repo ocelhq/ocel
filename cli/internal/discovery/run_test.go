@@ -17,7 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 )
 
-func jsFixture(t *testing.T, source string) (string, Prepared) {
+func jsFixture(t *testing.T, source string) (string, Programs) {
 	t.Helper()
 	root := t.TempDir()
 	write(t, filepath.Join(root, constants.DefaultDiscoveryDirName, "main.ts"), source)
@@ -25,7 +25,7 @@ func jsFixture(t *testing.T, source string) (string, Prepared) {
 	return root, prepare(t, root)
 }
 
-func prepare(t *testing.T, root string) Prepared {
+func prepare(t *testing.T, root string) Programs {
 	t.Helper()
 	roots, err := Roots(root, nil)
 	if err != nil {
@@ -191,9 +191,9 @@ func TestRunRefusesARootThisBuildCannotDiscover(t *testing.T) {
 	unknown := Root{Dir: filepath.Join(root, "unknown"), Language: language.Language("ruby")}
 
 	var stdout, stderr bytes.Buffer
-	err := Run(context.Background(), root, Prepared{Roots: []Root{unknown}}, okServer(t), &stdout, &stderr)
+	err := Run(context.Background(), root, Programs{Roots: []Root{unknown}}, okServer(t), &stdout, &stderr)
 	if err == nil {
-		t.Fatal("Run succeeded on a root written in a language ocel has no launcher for, want an error")
+		t.Fatal("Run succeeded on a root written in a language ocel runs no discovery for, want an error")
 	}
 	want := "is a ruby folder, and this build of ocel discovers only go, js, python and rust folders"
 	if !strings.Contains(err.Error(), want) {

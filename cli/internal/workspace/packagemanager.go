@@ -8,15 +8,15 @@ import (
 	"strings"
 )
 
-type Manager string
+type PackageManager string
 
 const (
-	Unknown     Manager = ""
-	Pnpm        Manager = "pnpm"
-	Npm         Manager = "npm"
-	YarnClassic Manager = "yarn"
-	YarnBerry   Manager = "yarn-berry"
-	Bun         Manager = "bun"
+	Unknown     PackageManager = ""
+	Pnpm        PackageManager = "pnpm"
+	Npm         PackageManager = "npm"
+	YarnClassic PackageManager = "yarn"
+	YarnBerry   PackageManager = "yarn-berry"
+	Bun         PackageManager = "bun"
 )
 
 const (
@@ -46,7 +46,7 @@ type behaviour struct {
 	replaces   []string
 }
 
-var behaviours = map[Manager]behaviour{
+var behaviours = map[PackageManager]behaviour{
 	Pnpm: {
 		declaredAs: "pnpm",
 		lockfiles:  []string{pnpmLock},
@@ -70,11 +70,11 @@ var behaviours = map[Manager]behaviour{
 	YarnBerry: {
 		runner:  "yarn",
 		runtime: "node",
-		install: byName(func(l Location) string { return fmt.Sprintf("yarn workspaces focus %s", l.App.Name) }),
+		install: byName(func(l Location) string { return fmt.Sprintf("yarn workspaces focus %s", l.Package.Name) }),
 		build: byName(func(l Location) string {
-			return fmt.Sprintf("yarn workspaces foreach -R -t --from %s run build", l.App.Name)
+			return fmt.Sprintf("yarn workspaces foreach -R -t --from %s run build", l.Package.Name)
 		}),
-		start:    byName(func(l Location) string { return fmt.Sprintf("yarn workspace %s run start", l.App.Name) }),
+		start:    byName(func(l Location) string { return fmt.Sprintf("yarn workspace %s run start", l.Package.Name) }),
 		replaces: []string{"yarn install --check-cache"},
 	},
 	YarnClassic: {
@@ -82,31 +82,31 @@ var behaviours = map[Manager]behaviour{
 		lockfiles:  []string{yarnLock},
 		runner:     "yarn",
 		runtime:    "node",
-		build:      byName(func(l Location) string { return fmt.Sprintf("yarn workspace %s run build", l.App.Name) }),
-		start:      byName(func(l Location) string { return fmt.Sprintf("yarn workspace %s run start", l.App.Name) }),
+		build:      byName(func(l Location) string { return fmt.Sprintf("yarn workspace %s run build", l.Package.Name) }),
+		start:      byName(func(l Location) string { return fmt.Sprintf("yarn workspace %s run start", l.Package.Name) }),
 	},
 	Bun: {
 		declaredAs: "bun",
 		lockfiles:  []string{bunLock, "bun.lockb"},
 		runner:     "bun",
 		runtime:    "bun",
-		build:      byName(func(l Location) string { return fmt.Sprintf("bun run --filter %s build", l.App.Name) }),
+		build:      byName(func(l Location) string { return fmt.Sprintf("bun run --filter %s build", l.Package.Name) }),
 		start:      func(l Location) string { return l.inAppDir("bun run start") },
 	},
 }
 
 func byName(command func(Location) string) func(Location) string {
 	return func(l Location) string {
-		if l.App.Name == "" {
+		if l.Package.Name == "" {
 			return ""
 		}
 		return command(l)
 	}
 }
 
-func detect(root string) Manager {
+func detect(root string) PackageManager {
 	declared := declaredManager(root)
-	present := map[Manager]bool{}
+	present := map[PackageManager]bool{}
 	for manager, m := range behaviours {
 		for _, lock := range m.lockfiles {
 			if _, err := os.Stat(filepath.Join(root, lock)); err != nil {
@@ -129,7 +129,7 @@ func detect(root string) Manager {
 	if declared != Unknown {
 		return declared
 	}
-	for _, manager := range []Manager{Pnpm, YarnBerry, YarnClassic, Bun, Npm} {
+	for _, manager := range []PackageManager{Pnpm, YarnBerry, YarnClassic, Bun, Npm} {
 		if present[manager] {
 			return manager
 		}
@@ -137,7 +137,7 @@ func detect(root string) Manager {
 	return Unknown
 }
 
-func yarnAt(root string, declared Manager) Manager {
+func yarnAt(root string, declared PackageManager) PackageManager {
 	if _, err := os.Stat(filepath.Join(root, yarnRcYml)); err == nil {
 		return YarnBerry
 	}
@@ -150,7 +150,7 @@ func yarnAt(root string, declared Manager) Manager {
 	return YarnClassic
 }
 
-func declaredManager(root string) Manager {
+func declaredManager(root string) PackageManager {
 	m, err := readManifest(filepath.Join(root, manifestName))
 	if err != nil {
 		return Unknown
@@ -168,7 +168,7 @@ func declaredManager(root string) Manager {
 	return Unknown
 }
 
-func yarnGeneration(version string) Manager {
+func yarnGeneration(version string) PackageManager {
 	major, _, _ := strings.Cut(strings.TrimSpace(version), ".")
 	if generation, err := strconv.Atoi(major); err == nil && generation < 2 {
 		return YarnClassic
@@ -178,7 +178,7 @@ func yarnGeneration(version string) Manager {
 
 func (l Location) Commands() (Commands, error) {
 	var commands Commands
-	if l.InWorkspace() {
+	if l.Member {
 		start := l.start()
 		if start == "" {
 			return Commands{}, fmt.Errorf(
@@ -195,24 +195,24 @@ func (l Location) Commands() (Commands, error) {
 }
 
 func (l Location) name() string {
-	if l.App.Name != "" {
-		return l.App.Name
+	if l.Package.Name != "" {
+		return l.Package.Name
 	}
 	return filepath.Base(l.Path)
 }
 
 func (l Location) install() string {
-	if install := behaviours[l.Manager].install; install != nil {
+	if install := behaviours[l.PackageManager].install; install != nil {
 		return install(l)
 	}
 	return ""
 }
 
 func (l Location) build() string {
-	if !l.App.Build {
+	if !l.Package.Build {
 		return ""
 	}
-	if build := behaviours[l.Manager].build; build != nil {
+	if build := behaviours[l.PackageManager].build; build != nil {
 		if scoped := build(l); scoped != "" {
 			return scoped
 		}
@@ -221,10 +221,10 @@ func (l Location) build() string {
 }
 
 func (l Location) start() string {
-	if !l.App.Start {
+	if !l.Package.Start {
 		return l.startsItself()
 	}
-	if start := behaviours[l.Manager].start; start != nil {
+	if start := behaviours[l.PackageManager].start; start != nil {
 		if scoped := start(l); scoped != "" {
 			return scoped
 		}
@@ -233,9 +233,9 @@ func (l Location) start() string {
 }
 
 func (l Location) startsItself() string {
-	entry := l.App.Main
+	entry := l.Package.Main
 	if entry == "" {
-		entry = l.App.Index
+		entry = l.Package.Index
 	}
 	if entry == "" {
 		return ""
@@ -248,19 +248,19 @@ func (l Location) inAppDir(command string) string {
 }
 
 func (l Location) runner() string {
-	if runner := behaviours[l.Manager].runner; runner != "" {
+	if runner := behaviours[l.PackageManager].runner; runner != "" {
 		return runner
 	}
 	return "npm"
 }
 
 func (l Location) runtime() string {
-	if runtime := behaviours[l.Manager].runtime; runtime != "" {
+	if runtime := behaviours[l.PackageManager].runtime; runtime != "" {
 		return runtime
 	}
 	return "node"
 }
 
-func ReplaceableInstalls(manager Manager) []string {
+func ReplaceableInstalls(manager PackageManager) []string {
 	return behaviours[manager].replaces
 }

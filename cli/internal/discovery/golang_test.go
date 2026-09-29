@@ -22,11 +22,11 @@ func goFixture(t *testing.T, module string) string {
 	return root
 }
 
-func TestTheGoLauncherDerivesTheImportedPackageFromTheRoot(t *testing.T) {
+func TestGoDiscoveryDerivesTheImportedPackageFromTheRoot(t *testing.T) {
 	configDir := goFixture(t, "example.com/web")
 	root := Root{Dir: filepath.Join(configDir, "declarations"), Language: language.Go}
 
-	cmd, err := launchers[language.Go].Command(context.Background(), configDir, root, testServer)
+	cmd, err := goCommand(context.Background(), configDir, root, testServer)
 	if err != nil {
 		t.Fatalf("Command: %v", err)
 	}
@@ -53,11 +53,11 @@ func TestTheGoLauncherDerivesTheImportedPackageFromTheRoot(t *testing.T) {
 	}
 }
 
-func TestTheGoLauncherRefusesARootWithNoModuleAboveIt(t *testing.T) {
+func TestGoDiscoveryRefusesARootWithNoModuleAboveIt(t *testing.T) {
 	configDir := t.TempDir()
 	write(t, filepath.Join(configDir, "declarations", "declarations.go"), "package declarations\n")
 
-	_, err := launchers[language.Go].Command(context.Background(), configDir, Root{Dir: filepath.Join(configDir, "declarations"), Language: language.Go}, testServer)
+	_, err := goCommand(context.Background(), configDir, Root{Dir: filepath.Join(configDir, "declarations"), Language: language.Go}, testServer)
 	if err == nil {
 		t.Fatal("Command succeeded with no go.mod above the root, want error")
 	}

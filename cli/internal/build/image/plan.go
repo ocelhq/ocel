@@ -154,7 +154,7 @@ func scope(built *railpackplan.BuildPlan, loc workspace.Location, commands works
 				return err
 			}
 		case buildStep:
-			if loc.InWorkspace() && commands.Build == "" {
+			if loc.Member && commands.Build == "" {
 				step.Commands = slices.DeleteFunc(step.Commands, func(command railpackplan.Command) bool {
 					_, ok := command.(railpackplan.ExecCommand)
 					return ok
@@ -169,7 +169,7 @@ func replaceInstall(step *railpackplan.Step, loc workspace.Location, scoped stri
 	if scoped == "" {
 		return nil
 	}
-	replaceable := workspace.ReplaceableInstalls(loc.Manager)
+	replaceable := workspace.ReplaceableInstalls(loc.PackageManager)
 	var ran []string
 	for i, command := range step.Commands {
 		exec, ok := command.(railpackplan.ExecCommand)

@@ -21,9 +21,7 @@ type goPackage struct {
 	Module     *goModule
 }
 
-type goReach struct{}
-
-func (goReach) Entries(ctx context.Context, root string, app App) (map[string]Reachability, error) {
+func readGoImports(ctx context.Context, root string, app App) (map[string]Reachability, error) {
 	dir := filepath.Join(root, filepath.FromSlash(app.Path))
 	packages, err := goList(ctx, app.Name, dir)
 	if err != nil {

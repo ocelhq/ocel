@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/nodeprotocol"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
@@ -30,29 +31,27 @@ func (s Server) Env() []string {
 	}
 }
 
-type Launcher interface {
-	Command(ctx context.Context, configDir string, root Root, server Server) (*exec.Cmd, error)
-}
+type rootCommand func(ctx context.Context, configDir string, root Root, server Server) (*exec.Cmd, error)
 
-var launchers = map[language.Language]Launcher{language.Go: goLauncher{}, language.Python: pythonLauncher{}, language.Rust: rustLauncher{}}
+var rootCommands = map[language.Language]rootCommand{language.Go: goCommand, language.Python: pythonCommand, language.Rust: rustCommand}
 
-type Prepared struct {
+type Programs struct {
 	Roots []Root
 	entry string
 }
 
-func Prepare(configDir string, roots []Root) (Prepared, error) {
+func Prepare(configDir string, roots []Root) (Programs, error) {
 	entry, err := BundleRoots(configDir, roots)
 	if err != nil {
-		return Prepared{}, err
+		return Programs{}, err
 	}
-	return Prepared{Roots: roots, entry: entry}, nil
+	return Programs{Roots: roots, entry: entry}, nil
 }
 
-func (p Prepared) Entry() string { return p.entry }
+func (p Programs) Entry() string { return p.entry }
 
-func Run(ctx context.Context, configDir string, prepared Prepared, server Server, stdout, stderr io.Writer) error {
-	commands, err := commandsFor(ctx, configDir, prepared.Roots, prepared.entry, server)
+func Run(ctx context.Context, configDir string, programs Programs, server Server, stdout, stderr io.Writer) error {
+	commands, err := commandsFor(ctx, configDir, programs.Roots, programs.entry, server)
 	if err != nil {
 		return err
 	}
@@ -76,11 +75,11 @@ func commandsFor(ctx context.Context, configDir string, roots []Root, entry stri
 		if root.Language == language.JS {
 			continue
 		}
-		launcher, ok := launchers[root.Language]
+		command, ok := rootCommands[root.Language]
 		if !ok {
 			return nil, fmt.Errorf("discovery: %s is a %s folder, and this build of ocel discovers only %s folders", root.Dir, root.Language, discoverable())
 		}
-		cmd, err := launcher.Command(ctx, configDir, root, server)
+		cmd, err := command(ctx, configDir, root, server)
 		if err != nil {
 			return nil, err
 		}
@@ -91,18 +90,11 @@ func commandsFor(ctx context.Context, configDir string, roots []Root, entry stri
 
 func discoverable() string {
 	languages := []string{string(language.JS)}
-	for written := range launchers {
+	for written := range rootCommands {
 		languages = append(languages, string(written))
 	}
 	slices.Sort(languages)
-	return listed(languages)
-}
-
-func listed(items []string) string {
-	if len(items) < 2 {
-		return strings.Join(items, "")
-	}
-	return strings.Join(items[:len(items)-1], ", ") + " and " + items[len(items)-1]
+	return english.And(languages)
 }
 
 func BundleRoots(configDir string, roots []Root) (string, error) {

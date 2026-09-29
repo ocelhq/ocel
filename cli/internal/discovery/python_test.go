@@ -21,11 +21,11 @@ func pythonFixture(t *testing.T) string {
 	return root
 }
 
-func TestThePythonLauncherDerivesTheImportedPackageFromTheRoot(t *testing.T) {
+func TestPythonDiscoveryDerivesTheImportedPackageFromTheRoot(t *testing.T) {
 	configDir := pythonFixture(t)
 	root := Root{Dir: filepath.Join(configDir, "declarations"), Language: language.Python}
 
-	cmd, err := launchers[language.Python].Command(context.Background(), configDir, root, testServer)
+	cmd, err := pythonCommand(context.Background(), configDir, root, testServer)
 	if err != nil {
 		t.Fatalf("Command: %v", err)
 	}
@@ -51,13 +51,13 @@ func TestThePythonLauncherDerivesTheImportedPackageFromTheRoot(t *testing.T) {
 	}
 }
 
-func TestThePythonLauncherRunsFromTheNearestProjectFileAboveTheRoot(t *testing.T) {
+func TestPythonDiscoveryRunsFromTheNearestProjectFileAboveTheRoot(t *testing.T) {
 	configDir := t.TempDir()
 	write(t, filepath.Join(configDir, "pyproject.toml"), "")
 	write(t, filepath.Join(configDir, "server", "requirements.txt"), "")
 	write(t, filepath.Join(configDir, "server", "declarations", "__init__.py"), "")
 
-	cmd, err := launchers[language.Python].Command(context.Background(), configDir, Root{Dir: filepath.Join(configDir, "server", "declarations"), Language: language.Python}, testServer)
+	cmd, err := pythonCommand(context.Background(), configDir, Root{Dir: filepath.Join(configDir, "server", "declarations"), Language: language.Python}, testServer)
 	if err != nil {
 		t.Fatalf("Command: %v", err)
 	}
@@ -66,13 +66,13 @@ func TestThePythonLauncherRunsFromTheNearestProjectFileAboveTheRoot(t *testing.T
 	}
 }
 
-func TestThePythonLauncherRefusesARootTooDeepToNameAPackage(t *testing.T) {
+func TestPythonDiscoveryRefusesARootTooDeepToNameAPackage(t *testing.T) {
 	configDir := t.TempDir()
 	write(t, filepath.Join(configDir, "requirements.txt"), "")
 	root := filepath.Join(configDir, "server", "declarations")
 	write(t, filepath.Join(root, "__init__.py"), "")
 
-	_, err := launchers[language.Python].Command(context.Background(), configDir, Root{Dir: root, Language: language.Python}, testServer)
+	_, err := pythonCommand(context.Background(), configDir, Root{Dir: root, Language: language.Python}, testServer)
 	if err == nil {
 		t.Fatal("Command succeeded on a root nested under the project file, want error")
 	}

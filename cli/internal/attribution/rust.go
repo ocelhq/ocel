@@ -10,9 +10,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cargo"
 )
 
-type rustReach struct{}
-
-func (rustReach) Entries(ctx context.Context, root string, app App) (map[string]Reachability, error) {
+func readRustImports(ctx context.Context, root string, app App) (map[string]Reachability, error) {
 	if resolved, err := filepath.EvalSymlinks(root); err == nil {
 		root = resolved
 	}

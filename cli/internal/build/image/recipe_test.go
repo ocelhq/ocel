@@ -66,7 +66,7 @@ func TestADockerfileInAWorkspaceIsToldWhereItsCopiesAreReadFrom(t *testing.T) {
 	root := t.TempDir()
 	appDir := filepath.Join(root, "apps", "web")
 	write(t, filepath.Join(appDir, image.DockerfileName))
-	member := workspace.Location{Root: root, Path: "apps/web", Member: true, Manager: workspace.Pnpm}
+	member := workspace.Location{Root: root, Path: "apps/web", Member: true, PackageManager: workspace.Pnpm}
 
 	notice := chosen(t, image.App{Name: "web", Workspace: member}).Notice()
 

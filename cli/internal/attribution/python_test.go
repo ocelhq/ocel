@@ -33,13 +33,13 @@ func pythonRoots(t *testing.T, root string, paths []string) []discovery.Root {
 
 func TestPythonReachGrantsAResourceTheAppsEntryImports(t *testing.T) {
 	root := pythonApp(t)
-	usages, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: language.Python, Roots: pythonRoots(t, root, nil)}}, []Declaration{{
+	usages, err := FindUsages(t.Context(), root, []App{{Name: "web", Path: "server", Language: language.Python, Roots: pythonRoots(t, root, nil)}}, []Declaration{{
 		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, constants.DefaultDiscoveryDirName, "__init__.py") + ":1",
 	}})
 	if err != nil {
-		t.Fatalf("Compute: %v", err)
+		t.Fatalf("FindUsages: %v", err)
 	}
 	want := []Usage{{App: "web", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main", Files: []string{"server/main.py"}}}
 	if !slices.EqualFunc(usages, want, func(a, b Usage) bool {
@@ -51,13 +51,13 @@ func TestPythonReachGrantsAResourceTheAppsEntryImports(t *testing.T) {
 
 func TestPythonReachGrantsNothingFromAModuleNoEntryImports(t *testing.T) {
 	root := pythonApp(t)
-	usages, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: language.Python, Roots: pythonRoots(t, root, nil)}}, []Declaration{{
+	usages, err := FindUsages(t.Context(), root, []App{{Name: "web", Path: "server", Language: language.Python, Roots: pythonRoots(t, root, nil)}}, []Declaration{{
 		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, "unused", "__init__.py") + ":1",
 	}})
 	if err != nil {
-		t.Fatalf("Compute: %v", err)
+		t.Fatalf("FindUsages: %v", err)
 	}
 	if len(usages) != 0 {
 		t.Errorf("usages = %+v, want none", usages)
@@ -68,14 +68,14 @@ func TestPythonReachRefusesAnImportOnlyRunningTheAppWouldResolve(t *testing.T) {
 	root := pythonApp(t)
 	write(t, filepath.Join(root, "server", "main.py"), "import importlib\n\nname = \""+constants.DefaultDiscoveryDirName+"\"\nmodule = importlib.import_module(name)\n")
 
-	_, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: language.Python, Roots: pythonRoots(t, root, nil)}}, []Declaration{{
+	_, err := FindUsages(t.Context(), root, []App{{Name: "web", Path: "server", Language: language.Python, Roots: pythonRoots(t, root, nil)}}, []Declaration{{
 		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, constants.DefaultDiscoveryDirName, "__init__.py") + ":1",
 	}})
 	var unresolved *UnresolvedImportError
 	if !errors.As(err, &unresolved) {
-		t.Fatalf("Compute err = %v, want an *UnresolvedImportError", err)
+		t.Fatalf("FindUsages err = %v, want an *UnresolvedImportError", err)
 	}
 	if unresolved.App != "web" || unresolved.File != "server/main.py" || unresolved.Line != 4 {
 		t.Errorf("error = %+v, want it to name server/main.py line 4 of web", unresolved)
@@ -88,13 +88,13 @@ func TestPythonReachGrantsTheFixtureResourceToItsApp(t *testing.T) {
 		t.Fatalf("locate the fixture: %v", err)
 	}
 
-	usages, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: language.Python, Roots: pythonRoots(t, root, nil)}}, []Declaration{{
+	usages, err := FindUsages(t.Context(), root, []App{{Name: "web", Path: "server", Language: language.Python, Roots: pythonRoots(t, root, nil)}}, []Declaration{{
 		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, constants.DefaultDiscoveryDirName, "__init__.py") + ":3",
 	}})
 	if err != nil {
-		t.Fatalf("Compute: %v", err)
+		t.Fatalf("FindUsages: %v", err)
 	}
 	if len(usages) != 1 {
 		t.Fatalf("usages = %+v, want one", usages)
@@ -110,13 +110,13 @@ func TestPythonReachSearchesTheDiscoveryPathsTheProjectConfigures(t *testing.T) 
 	write(t, filepath.Join(root, "server", "main.py"), "from decls import db\n\nprint(db)\n")
 
 	app := App{Name: "web", Path: "server", Language: language.Python, Roots: pythonRoots(t, root, []string{"decls"})}
-	usages, err := Compute(t.Context(), root, []App{app}, []Declaration{{
+	usages, err := FindUsages(t.Context(), root, []App{app}, []Declaration{{
 		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, "decls", "__init__.py") + ":1",
 	}})
 	if err != nil {
-		t.Fatalf("Compute: %v", err)
+		t.Fatalf("FindUsages: %v", err)
 	}
 	if len(usages) != 1 || !slices.Equal(usages[0].Files, []string{"server/main.py"}) {
 		t.Fatalf("usages = %+v, want main granted to web from entry server/main.py", usages)
@@ -127,13 +127,13 @@ func TestPythonReachFollowsAnImportModuleCallThatWritesTheModuleOut(t *testing.T
 	root := pythonApp(t)
 	write(t, filepath.Join(root, "server", "main.py"), "import importlib\n\nmodule = importlib.import_module(\""+constants.DefaultDiscoveryDirName+"\")\n")
 
-	usages, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: language.Python, Roots: pythonRoots(t, root, nil)}}, []Declaration{{
+	usages, err := FindUsages(t.Context(), root, []App{{Name: "web", Path: "server", Language: language.Python, Roots: pythonRoots(t, root, nil)}}, []Declaration{{
 		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, constants.DefaultDiscoveryDirName, "__init__.py") + ":1",
 	}})
 	if err != nil {
-		t.Fatalf("Compute: %v", err)
+		t.Fatalf("FindUsages: %v", err)
 	}
 	if len(usages) != 1 || !slices.Equal(usages[0].Files, []string{"server/main.py"}) {
 		t.Fatalf("usages = %+v, want main granted to web from entry server/main.py", usages)
@@ -144,13 +144,13 @@ func TestPythonReachReadsNoEntryFromTheAppsTestFiles(t *testing.T) {
 	root := pythonApp(t)
 	write(t, filepath.Join(root, "server", "conftest.py"), "import importlib\n\nname = \""+constants.DefaultDiscoveryDirName+"\"\nmodule = importlib.import_module(name)\n")
 
-	usages, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: language.Python, Roots: pythonRoots(t, root, nil)}}, []Declaration{{
+	usages, err := FindUsages(t.Context(), root, []App{{Name: "web", Path: "server", Language: language.Python, Roots: pythonRoots(t, root, nil)}}, []Declaration{{
 		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, constants.DefaultDiscoveryDirName, "__init__.py") + ":1",
 	}})
 	if err != nil {
-		t.Fatalf("Compute: %v", err)
+		t.Fatalf("FindUsages: %v", err)
 	}
 	if len(usages) != 1 || !slices.Equal(usages[0].Files, []string{"server/main.py"}) {
 		t.Fatalf("usages = %+v, want main granted to web from entry server/main.py", usages)
@@ -161,13 +161,13 @@ func TestPythonReachReportsASyntaxErrorWithoutTheLineItIsOn(t *testing.T) {
 	root := pythonApp(t)
 	write(t, filepath.Join(root, "server", "settings.py"), "password = \"s3cretpassword\" if\n")
 
-	_, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: language.Python, Roots: pythonRoots(t, root, nil)}}, []Declaration{{
+	_, err := FindUsages(t.Context(), root, []App{{Name: "web", Path: "server", Language: language.Python, Roots: pythonRoots(t, root, nil)}}, []Declaration{{
 		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, constants.DefaultDiscoveryDirName, "__init__.py") + ":1",
 	}})
 	if err == nil {
-		t.Fatal("Compute succeeded on a file python cannot parse, want an error")
+		t.Fatal("FindUsages succeeded on a file python cannot parse, want an error")
 	}
 	if strings.Contains(err.Error(), "s3cretpassword") {
 		t.Errorf("error = %q, want it to name the file and line without the source on it", err)

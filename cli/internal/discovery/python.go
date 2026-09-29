@@ -21,9 +21,7 @@ var pythonProjectFiles = []string{"pyproject.toml", "requirements.txt"}
 
 var pythonInterpreters = []string{".venv/bin/python", "venv/bin/python"}
 
-type pythonLauncher struct{}
-
-func (pythonLauncher) Command(ctx context.Context, configDir string, root Root, server Server) (*exec.Cmd, error) {
+func pythonCommand(ctx context.Context, configDir string, root Root, server Server) (*exec.Cmd, error) {
 	runRoot, err := pythonRunRoot(configDir, root.Dir)
 	if err != nil {
 		return nil, err

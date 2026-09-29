@@ -84,22 +84,20 @@ func installedFromARegistry(path string, members []string) bool {
 	return true
 }
 
-type jsReach struct{}
-
-func (jsReach) Entries(_ context.Context, root string, app App) (map[string]Reachability, error) {
-	survivors, err := shakenSurvivors(root, app)
+func readJSImports(_ context.Context, root string, app App) (map[string]Reachability, error) {
+	keptByEntry, err := treeShake(root, app)
 	if err != nil {
 		return nil, err
 	}
 
-	entries := make(map[string]Reachability, len(survivors))
-	for entry, kept := range survivors {
+	entries := make(map[string]Reachability, len(keptByEntry))
+	for entry, kept := range keptByEntry {
 		entries[entry] = func(file string) bool { return kept[file] }
 	}
 	return entries, nil
 }
 
-func shakenSurvivors(root string, app App) (map[string]map[string]bool, error) {
+func treeShake(root string, app App) (map[string]map[string]bool, error) {
 	entries, err := discovery.Discover(root, []string{app.Path})
 	if err != nil {
 		return nil, fmt.Errorf("attribution: list the source files of app %q: %w", app.Name, err)
@@ -141,7 +139,7 @@ func shakenSurvivors(root string, app App) (map[string]map[string]bool, error) {
 		return nil, fmt.Errorf("attribution: read the build metadata of app %q: %w", app.Name, err)
 	}
 
-	survivors := make(map[string]map[string]bool, len(entries))
+	keptByEntry := make(map[string]map[string]bool, len(entries))
 	for _, out := range meta.Outputs {
 		entry := filepath.ToSlash(out.EntryPoint)
 		if entry == "" || out.Inputs[out.EntryPoint].BytesInOutput == 0 {
@@ -153,9 +151,9 @@ func shakenSurvivors(root string, app App) (map[string]map[string]bool, error) {
 				kept[filepath.ToSlash(input)] = true
 			}
 		}
-		survivors[entry] = kept
+		keptByEntry[entry] = kept
 	}
-	return survivors, nil
+	return keptByEntry, nil
 }
 
 func unresolvableImport(root string, app App, warnings []api.Message) error {

@@ -24,9 +24,7 @@ type pythonWalk struct {
 	} `json:"error"`
 }
 
-type pythonReach struct{}
-
-func (pythonReach) Entries(ctx context.Context, root string, app App) (map[string]Reachability, error) {
+func readPythonImports(ctx context.Context, root string, app App) (map[string]Reachability, error) {
 	dir := filepath.Join(root, filepath.FromSlash(app.Path))
 	walked, err := walkPythonImports(ctx, app.Name, dir, pythonSearchDirs(app.Roots))
 	if err != nil {

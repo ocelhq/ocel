@@ -48,7 +48,7 @@ func (r Recipe) Notice() string {
 		return ""
 	case r.App.Dockerfile != "":
 		return fmt.Sprintf("%s builds from %s, the build.dockerfile it names — its build context is still %s", r.App.Name, r.Dockerfile, r.App.Workspace.Root)
-	case r.App.Workspace.InWorkspace():
+	case r.App.Workspace.Member:
 		return fmt.Sprintf("%s builds from the %s beside it rather than with railpack, and copies from the workspace root %s, which is its build context — rename or remove %s to go back", r.App.Name, DockerfileName, r.App.Workspace.Root, r.Dockerfile)
 	default:
 		return fmt.Sprintf("%s builds from the %s beside it rather than with railpack — rename or remove %s to go back", r.App.Name, DockerfileName, r.Dockerfile)

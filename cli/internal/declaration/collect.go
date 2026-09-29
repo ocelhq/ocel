@@ -13,10 +13,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/channel"
 )
 
-func Prepare(cfg *projectconfig.Config) (discovery.Prepared, error) {
+func Prepare(cfg *projectconfig.Config) (discovery.Programs, error) {
 	roots, err := discovery.RootsOf(cfg)
 	if err != nil {
-		return discovery.Prepared{}, err
+		return discovery.Programs{}, err
 	}
 	return discovery.Prepare(cfg.Dir, roots)
 }
@@ -29,7 +29,7 @@ func Collect(ctx context.Context, cfg *projectconfig.Config, declarations *varia
 	return CollectPrepared(ctx, cfg, declarations, prepared, stdout, stderr)
 }
 
-func CollectPrepared(ctx context.Context, cfg *projectconfig.Config, declarations *variables.Declarations, prepared discovery.Prepared, stdout, stderr io.Writer) ([]Resource, error) {
+func CollectPrepared(ctx context.Context, cfg *projectconfig.Config, declarations *variables.Declarations, prepared discovery.Programs, stdout, stderr io.Writer) ([]Resource, error) {
 	service := NewService(declarations)
 	if err := declarations.Prefetch(ctx); err != nil {
 		return nil, err

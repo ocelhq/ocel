@@ -167,7 +167,7 @@ const workspaceApp = "testdata/pnpmworkspace/apps/web"
 
 func TestAnAppInAWorkspaceInstallsFromTheRootLockfileAndOnlyWhatItReaches(t *testing.T) {
 	loc := located(t, workspaceApp)
-	if loc.Path != "apps/web" || loc.Manager != workspace.Pnpm {
+	if loc.Path != "apps/web" || loc.PackageManager != workspace.Pnpm {
 		t.Fatalf("Locate(%s) = %+v, want the app located inside the pnpm workspace above it", workspaceApp, loc)
 	}
 	plan := plannedFrom(t, loc)
@@ -202,7 +202,7 @@ func TestAnAppInAWorkspaceRunsItsOwnScriptsAndNeverTheRoots(t *testing.T) {
 
 func TestAWorkspaceAppWithABuildScriptBuildsWhatItDependsOnFirst(t *testing.T) {
 	loc := located(t, workspaceApp)
-	loc.App.Build = true
+	loc.Package.Build = true
 
 	plan := plannedFrom(t, loc)
 
@@ -214,7 +214,7 @@ func TestAWorkspaceAppWithABuildScriptBuildsWhatItDependsOnFirst(t *testing.T) {
 
 func TestAnInstallOcelCannotScopeStopsTheBuildRatherThanInstallingTheWholeWorkspace(t *testing.T) {
 	loc := located(t, workspaceApp)
-	loc.Manager = workspace.YarnBerry
+	loc.PackageManager = workspace.YarnBerry
 
 	_, err := image.Plan(loc)
 	if err == nil {
@@ -283,7 +283,7 @@ func TestThePlanNeverCopiesWhatTheContextNoLongerContains(t *testing.T) {
 
 func TestANextAppInAWorkspaceIsBuiltAndStartedAsTheAppRatherThanTheRoot(t *testing.T) {
 	loc := located(t, "testdata/nextworkspace/apps/web")
-	if !loc.InWorkspace() {
+	if !loc.Member {
 		t.Fatalf("Locate() = %+v, want the next app read as a member of the workspace above it", loc)
 	}
 

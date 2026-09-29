@@ -22,7 +22,7 @@ const (
 	vendorDir         = "node_modules"
 )
 
-type App struct {
+type Package struct {
 	Name  string
 	Build bool
 	Start bool
@@ -31,16 +31,14 @@ type App struct {
 }
 
 type Location struct {
-	Root         string
-	Path         string
-	Member       bool
-	Language     language.Language
-	Manager      Manager
-	App          App
-	BuildCommand string
+	Root           string
+	Path           string
+	Member         bool
+	Language       language.Language
+	PackageManager PackageManager
+	Package        Package
+	BuildCommand   string
 }
-
-func (l Location) InWorkspace() bool { return l.Member }
 
 func (l Location) Dir() string { return filepath.Join(l.Root, filepath.FromSlash(l.Path)) }
 
@@ -107,17 +105,17 @@ func locatedAt(dir, root string) (Location, error) {
 		return Location{}, err
 	}
 	located := Location{
-		Root:    root,
-		Path:    filepath.ToSlash(rel),
-		App:     describe(dir, app),
-		Manager: detect(root),
+		Root:           root,
+		Path:           filepath.ToSlash(rel),
+		Package:        describe(dir, app),
+		PackageManager: detect(root),
 	}
 	located.Language, _ = language.Of(dir)
 	if globs, ok := declaredPackages(root); ok {
 		_, located.Member = memberOf(root, dir, globs)
 	}
 
-	if dep := workspaceDependency(app); dep != "" && located.Manager == Unknown {
+	if dep := workspaceDependency(app); dep != "" && located.PackageManager == Unknown {
 		return Location{}, fmt.Errorf(
 			"app %q depends on %q as %q, and %s contains no lockfile: the image installs the app's dependencies from one, and no installer resolves a workspace: range without it — install in %s so it writes a %s, %s, %s or %s, and commit what it writes",
 			appName(app, dir), dep, workspaceRange(app, dep), located.Root, located.Root,
@@ -168,17 +166,17 @@ func isStandalone(dir string) bool {
 	return written != "" && written != language.JS
 }
 
-func regular(path string) bool {
+func isRegularFile(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && info.Mode().IsRegular()
 }
 
-func describe(dir string, m manifest) App {
-	app := App{Name: m.Name, Main: m.Main}
+func describe(dir string, m manifest) Package {
+	app := Package{Name: m.Name, Main: m.Main}
 	app.Build = strings.TrimSpace(m.Scripts["build"]) != ""
 	app.Start = strings.TrimSpace(m.Scripts["start"]) != ""
 	for _, name := range []string{"index.js", "index.mjs", "index.cjs", "index.ts"} {
-		if regular(filepath.Join(dir, name)) {
+		if isRegularFile(filepath.Join(dir, name)) {
 			app.Index = name
 			break
 		}

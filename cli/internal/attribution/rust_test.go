@@ -36,13 +36,13 @@ func rustApp(t *testing.T) string {
 func rustUsages(t *testing.T, root, source string) []Usage {
 	t.Helper()
 	app := App{Name: "web", Path: "app", Language: language.Rust}
-	usages, err := Compute(t.Context(), root, []App{app}, []Declaration{{
+	usages, err := FindUsages(t.Context(), root, []App{app}, []Declaration{{
 		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: source + ":1",
 	}})
 	if err != nil {
-		t.Fatalf("Compute: %v", err)
+		t.Fatalf("FindUsages: %v", err)
 	}
 	return usages
 }
@@ -96,13 +96,13 @@ func TestRustReachGrantsTheFixtureResourceToItsApp(t *testing.T) {
 	fetched(t, root)
 
 	app := App{Name: "web", Path: ".", Language: language.Rust}
-	usages, err := Compute(t.Context(), root, []App{app}, []Declaration{{
+	usages, err := FindUsages(t.Context(), root, []App{app}, []Declaration{{
 		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, "src", "main.rs") + ":4",
 	}})
 	if err != nil {
-		t.Fatalf("Compute: %v", err)
+		t.Fatalf("FindUsages: %v", err)
 	}
 	if len(usages) != 1 {
 		t.Fatalf("usages = %+v, want one", usages)
@@ -124,13 +124,13 @@ func TestRustReachGrantsASharedCrateResourceToEveryAppThatLinksIt(t *testing.T) 
 		{Name: "api", Path: "apps/api", Language: language.Rust},
 		{Name: "web", Path: "apps/web", Language: language.Rust},
 	}
-	usages, err := Compute(t.Context(), root, apps, []Declaration{{
+	usages, err := FindUsages(t.Context(), root, apps, []Declaration{{
 		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, "crates", "infra", "src", "lib.rs") + ":4",
 	}})
 	if err != nil {
-		t.Fatalf("Compute: %v", err)
+		t.Fatalf("FindUsages: %v", err)
 	}
 
 	want := []Usage{
@@ -155,7 +155,7 @@ func TestRustReachReadsCargoMetadataWithoutReachingTheRegistry(t *testing.T) {
 
 	root := t.TempDir()
 	write(t, filepath.Join(root, "Cargo.toml"), "[package]\nname = \"web\"\nversion = \"0.1.0\"\nedition = \"2021\"\n")
-	_, _ = rustReach{}.Entries(t.Context(), root, App{Name: "web", Path: ".", Language: language.Rust})
+	_, _ = readRustImports(t.Context(), root, App{Name: "web", Path: ".", Language: language.Rust})
 
 	args, err := os.ReadFile(recorded)
 	if err != nil {
@@ -179,13 +179,13 @@ func TestRustReachGrantsNothingFromASiblingCrateUnderTheConfigDir(t *testing.T) 
 		{Dir: root, Language: language.Rust},
 		{Dir: filepath.Join(root, "apps", "api"), Language: language.Rust},
 	}}
-	usages, err := Compute(t.Context(), root, []App{app}, []Declaration{{
+	usages, err := FindUsages(t.Context(), root, []App{app}, []Declaration{{
 		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, "apps", "web", "src", "main.rs") + ":1",
 	}})
 	if err != nil {
-		t.Fatalf("Compute: %v", err)
+		t.Fatalf("FindUsages: %v", err)
 	}
 	if len(usages) != 0 {
 		t.Errorf("usages = %+v, want none: apps/web is a crate of its own", usages)
@@ -199,7 +199,7 @@ func TestRustReachRefusesAnAppThatBuildsSeveralBinaries(t *testing.T) {
 	write(t, filepath.Join(root, "src", "main.rs"), "fn main() {}\n")
 	write(t, filepath.Join(root, "src", "worker.rs"), "fn main() {}\n")
 
-	_, err := rustReach{}.Entries(t.Context(), root, App{Name: "web", Path: ".", Language: language.Rust})
+	_, err := readRustImports(t.Context(), root, App{Name: "web", Path: ".", Language: language.Rust})
 	if err == nil {
 		t.Fatal("Entries succeeded on an app with two binaries, want an error")
 	}

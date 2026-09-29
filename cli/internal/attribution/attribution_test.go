@@ -59,13 +59,13 @@ func TestAContainerAppIsAttributedWithoutASecondInstallOnTheDevelopersDisk(t *te
 	declarations := []Declaration{{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main-db", Source: sourceAt(root, "shared/db.ts")}}
 
 	serverless := []App{{Name: "web", Path: "apps/web", Language: language.JS}}
-	if _, err := Compute(t.Context(), root, serverless, declarations); err == nil {
-		t.Fatal("Compute() over a serverless app read an import graph its node_modules cannot resolve, so the fixture proves nothing")
+	if _, err := FindUsages(t.Context(), root, serverless, declarations); err == nil {
+		t.Fatal("FindUsages() over a serverless app read an import graph its node_modules cannot resolve, so the fixture proves nothing")
 	}
 
-	usages, err := Compute(t.Context(), root, []App{{Name: "web", Path: "apps/web", Language: language.JS, Container: true}}, declarations)
+	usages, err := FindUsages(t.Context(), root, []App{{Name: "web", Path: "apps/web", Language: language.JS, Container: true}}, declarations)
 	if err != nil {
-		t.Fatalf("Compute() over a container app = %v — the image installs the app's dependencies, and the deploy already proved it", err)
+		t.Fatalf("FindUsages() over a container app = %v — the image installs the app's dependencies, and the deploy already proved it", err)
 	}
 
 	if want := []string{"web -> RESOURCE_TYPE_POSTGRES:main-db [apps/web/src/server.ts]"}; !reflect.DeepEqual(edgeStrings(usages), want) {
@@ -110,23 +110,23 @@ func TestAContainerAppsWorkspaceMembersAreReadRatherThanAssumedInstalled(t *test
 	t.Run("a member the developer has not installed stops the deploy", func(t *testing.T) {
 		root := workspaceFixture(t, false)
 
-		_, err := Compute(t.Context(), root, []App{{Name: "web", Path: "apps/web", Language: language.JS, Container: true, Members: members}},
+		_, err := FindUsages(t.Context(), root, []App{{Name: "web", Path: "apps/web", Language: language.JS, Container: true, Members: members}},
 			[]Declaration{{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main-db", Source: sourceAt(root, "packages/shared/index.ts")}})
 		if err == nil {
-			t.Fatal("Compute() read a workspace member as a registry package the image installs, so every resource the member declares reaches the app with no edge and no complaint")
+			t.Fatal("FindUsages() read a workspace member as a registry package the image installs, so every resource the member declares reaches the app with no edge and no complaint")
 		}
 		if !strings.Contains(err.Error(), "@fixture/shared") {
-			t.Errorf("Compute() = %v, and the reader is never told which import ocel could not follow", err)
+			t.Errorf("FindUsages() = %v, and the reader is never told which import ocel could not follow", err)
 		}
 	})
 
 	t.Run("a member linked into node_modules is followed to what it declares", func(t *testing.T) {
 		root := workspaceFixture(t, true)
 
-		usages, err := Compute(t.Context(), root, []App{{Name: "web", Path: "apps/web", Language: language.JS, Container: true, Members: members}},
+		usages, err := FindUsages(t.Context(), root, []App{{Name: "web", Path: "apps/web", Language: language.JS, Container: true, Members: members}},
 			[]Declaration{{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main-db", Source: sourceAt(root, "packages/shared/index.ts")}})
 		if err != nil {
-			t.Fatalf("Compute() = %v", err)
+			t.Fatalf("FindUsages() = %v", err)
 		}
 		if want := []string{"web -> RESOURCE_TYPE_POSTGRES:main-db [apps/web/src/server.ts]"}; !reflect.DeepEqual(edgeStrings(usages), want) {
 			t.Errorf("edges = %v, want %v — the app reaches the resource through a package of its own workspace", edgeStrings(usages), want)
@@ -136,19 +136,19 @@ func TestAContainerAppsWorkspaceMembersAreReadRatherThanAssumedInstalled(t *test
 	t.Run("a package from the registry is still left to the image to install", func(t *testing.T) {
 		root := workspaceFixture(t, true)
 
-		if _, err := Compute(t.Context(), root, []App{{Name: "web", Path: "apps/web", Language: language.JS, Container: true, Members: members}}, nil); err != nil {
-			t.Errorf("Compute() = %v, and express is installed by the image rather than declared by this workspace", err)
+		if _, err := FindUsages(t.Context(), root, []App{{Name: "web", Path: "apps/web", Language: language.JS, Container: true, Members: members}}, nil); err != nil {
+			t.Errorf("FindUsages() = %v, and express is installed by the image rather than declared by this workspace", err)
 		}
 	})
 }
 
-func TestCompute(t *testing.T) {
+func TestFindUsages(t *testing.T) {
 	t.Run("the fixture monorepo's edges match its declared ground truth", func(t *testing.T) {
 		root := fixtureRoot(t, "monorepo")
 
-		usages, err := Compute(t.Context(), root, monorepoApps(), monorepoDeclarations(root))
+		usages, err := FindUsages(t.Context(), root, monorepoApps(), monorepoDeclarations(root))
 		if err != nil {
-			t.Fatalf("Compute err = %v", err)
+			t.Fatalf("FindUsages err = %v", err)
 		}
 
 		want := []string{
@@ -166,9 +166,9 @@ func TestCompute(t *testing.T) {
 	t.Run("a side-effect-only import grants no usage edge", func(t *testing.T) {
 		root := fixtureRoot(t, "monorepo")
 
-		usages, err := Compute(t.Context(), root, monorepoApps(), monorepoDeclarations(root))
+		usages, err := FindUsages(t.Context(), root, monorepoApps(), monorepoDeclarations(root))
 		if err != nil {
-			t.Fatalf("Compute err = %v", err)
+			t.Fatalf("FindUsages err = %v", err)
 		}
 
 		for _, u := range usages {
@@ -181,9 +181,9 @@ func TestCompute(t *testing.T) {
 	t.Run("a barrel re-export grants no usage edge for the exports it does not use", func(t *testing.T) {
 		root := fixtureRoot(t, "monorepo")
 
-		usages, err := Compute(t.Context(), root, monorepoApps(), monorepoDeclarations(root))
+		usages, err := FindUsages(t.Context(), root, monorepoApps(), monorepoDeclarations(root))
 		if err != nil {
-			t.Fatalf("Compute err = %v", err)
+			t.Fatalf("FindUsages err = %v", err)
 		}
 
 		for _, u := range usages {
@@ -196,9 +196,9 @@ func TestCompute(t *testing.T) {
 	t.Run("a file inside an app that only re-exports the handle grants nothing", func(t *testing.T) {
 		root := fixtureRoot(t, "monorepo")
 
-		usages, err := Compute(t.Context(), root, monorepoApps(), monorepoDeclarations(root))
+		usages, err := FindUsages(t.Context(), root, monorepoApps(), monorepoDeclarations(root))
 		if err != nil {
-			t.Fatalf("Compute err = %v", err)
+			t.Fatalf("FindUsages err = %v", err)
 		}
 
 		for _, u := range usages {
@@ -211,9 +211,9 @@ func TestCompute(t *testing.T) {
 	t.Run("no app source to attribute against leaves the declaration unplaced rather than refused", func(t *testing.T) {
 		root := fixtureRoot(t, "monorepo")
 
-		usages, err := Compute(t.Context(), root, []App{{Name: "api"}}, monorepoDeclarations(root))
+		usages, err := FindUsages(t.Context(), root, []App{{Name: "api"}}, monorepoDeclarations(root))
 		if err != nil {
-			t.Fatalf("Compute err = %v", err)
+			t.Fatalf("FindUsages err = %v", err)
 		}
 		if len(usages) != 0 {
 			t.Errorf("usages = %v, want none for a path-less app", edgeStrings(usages))
@@ -223,11 +223,11 @@ func TestCompute(t *testing.T) {
 	t.Run("JSX in a .js file reads as the bundler reads it", func(t *testing.T) {
 		root := fixtureRoot(t, "jsx-in-js")
 
-		usages, err := Compute(t.Context(), root, []App{{Name: "web", Path: "apps/web", Language: language.JS}}, []Declaration{
+		usages, err := FindUsages(t.Context(), root, []App{{Name: "web", Path: "apps/web", Language: language.JS}}, []Declaration{
 			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "metrics-db", Source: sourceAt(root, "shared/metrics.ts")},
 		})
 		if err != nil {
-			t.Fatalf("Compute err = %v", err)
+			t.Fatalf("FindUsages err = %v", err)
 		}
 
 		want := []string{"web -> RESOURCE_TYPE_POSTGRES:metrics-db [apps/web/pages/index.js]"}
@@ -239,13 +239,13 @@ func TestCompute(t *testing.T) {
 	t.Run("a runtime-computed import specifier fails closed", func(t *testing.T) {
 		root := fixtureRoot(t, "computed-import")
 
-		_, err := Compute(t.Context(), root, []App{{Name: "worker", Path: "apps/worker", Language: language.JS}}, []Declaration{
+		_, err := FindUsages(t.Context(), root, []App{{Name: "worker", Path: "apps/worker", Language: language.JS}}, []Declaration{
 			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "metrics-db", Source: sourceAt(root, "shared/metrics.ts")},
 		})
 
 		var unresolved *UnresolvedImportError
 		if !errors.As(err, &unresolved) {
-			t.Fatalf("Compute err = %v, want an *UnresolvedImportError", err)
+			t.Fatalf("FindUsages err = %v, want an *UnresolvedImportError", err)
 		}
 		if unresolved.App != "worker" {
 			t.Errorf("App = %q, want %q", unresolved.App, "worker")
@@ -261,13 +261,13 @@ func TestCompute(t *testing.T) {
 	t.Run("a source with no line number fails closed", func(t *testing.T) {
 		root := fixtureRoot(t, "monorepo")
 
-		_, err := Compute(t.Context(), root, monorepoApps(), []Declaration{
+		_, err := FindUsages(t.Context(), root, monorepoApps(), []Declaration{
 			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main-db", Source: "shared/db.ts"},
 		})
 
 		var unresolved *UnresolvedDeclarationError
 		if !errors.As(err, &unresolved) {
-			t.Fatalf("Compute err = %v, want an *UnresolvedDeclarationError", err)
+			t.Fatalf("FindUsages err = %v, want an *UnresolvedDeclarationError", err)
 		}
 		if unresolved.Name != "main-db" {
 			t.Errorf("Name = %q, want %q", unresolved.Name, "main-db")
@@ -280,24 +280,24 @@ func TestCompute(t *testing.T) {
 	t.Run("an empty source fails closed", func(t *testing.T) {
 		root := fixtureRoot(t, "monorepo")
 
-		_, err := Compute(t.Context(), root, monorepoApps(), []Declaration{
+		_, err := FindUsages(t.Context(), root, monorepoApps(), []Declaration{
 			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main-db"},
 		})
 
 		var unresolved *UnresolvedDeclarationError
 		if !errors.As(err, &unresolved) {
-			t.Fatalf("Compute err = %v, want an *UnresolvedDeclarationError", err)
+			t.Fatalf("FindUsages err = %v, want an *UnresolvedDeclarationError", err)
 		}
 	})
 
 	t.Run("a relative source is resolved against the project root", func(t *testing.T) {
 		root := fixtureRoot(t, "monorepo")
 
-		usages, err := Compute(t.Context(), root, monorepoApps(), []Declaration{
+		usages, err := FindUsages(t.Context(), root, monorepoApps(), []Declaration{
 			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main-db", Source: "shared/db.ts:3"},
 		})
 		if err != nil {
-			t.Fatalf("Compute: %v", err)
+			t.Fatalf("FindUsages: %v", err)
 		}
 		if len(usages) == 0 {
 			t.Fatal("usages is empty, want the relative source to name shared/db.ts")
@@ -307,13 +307,13 @@ func TestCompute(t *testing.T) {
 	t.Run("a declaration inside node_modules fails closed", func(t *testing.T) {
 		root := fixtureRoot(t, "monorepo")
 
-		_, err := Compute(t.Context(), root, monorepoApps(), []Declaration{
+		_, err := FindUsages(t.Context(), root, monorepoApps(), []Declaration{
 			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main-db", Source: sourceAt(root, "node_modules/dep/index.ts")},
 		})
 
 		var unresolved *UnresolvedDeclarationError
 		if !errors.As(err, &unresolved) {
-			t.Fatalf("Compute err = %v, want an *UnresolvedDeclarationError", err)
+			t.Fatalf("FindUsages err = %v, want an *UnresolvedDeclarationError", err)
 		}
 		if !strings.Contains(err.Error(), "which is not a project file") {
 			t.Errorf("err = %v, want it to say the declaration names something that is not a project file", err)
@@ -323,26 +323,26 @@ func TestCompute(t *testing.T) {
 	t.Run("a declaration outside the project root fails closed", func(t *testing.T) {
 		root := fixtureRoot(t, "monorepo")
 
-		_, err := Compute(t.Context(), root, monorepoApps(), []Declaration{
+		_, err := FindUsages(t.Context(), root, monorepoApps(), []Declaration{
 			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main-db", Source: sourceAt(t.TempDir(), "elsewhere.ts")},
 		})
 
 		var unresolved *UnresolvedDeclarationError
 		if !errors.As(err, &unresolved) {
-			t.Fatalf("Compute err = %v, want an *UnresolvedDeclarationError", err)
+			t.Fatalf("FindUsages err = %v, want an *UnresolvedDeclarationError", err)
 		}
 	})
 }
 
-func TestComputeRefusesAnAppInALanguageThisBuildCannotRead(t *testing.T) {
+func TestFindUsagesRefusesAnAppInALanguageThisBuildCannotRead(t *testing.T) {
 	root := fixtureRoot(t, "monorepo")
 
 	apps := monorepoApps()
 	apps[0].Language = language.Language("ruby")
 
-	_, err := Compute(t.Context(), root, apps, monorepoDeclarations(root))
+	_, err := FindUsages(t.Context(), root, apps, monorepoDeclarations(root))
 	if err == nil {
-		t.Fatal("Compute succeeded on an app in a language ocel has no reach for, want an error")
+		t.Fatal("FindUsages succeeded on an app in a language ocel has no reach for, want an error")
 	}
 	want := "is a ruby app, and this build of ocel attributes only go, js, python and rust apps"
 	if !strings.Contains(err.Error(), want) {
@@ -350,13 +350,13 @@ func TestComputeRefusesAnAppInALanguageThisBuildCannotRead(t *testing.T) {
 	}
 }
 
-func TestComputeGrantsNothingWhenNothingWasDeclaredWhateverTheApp(t *testing.T) {
+func TestFindUsagesGrantsNothingWhenNothingWasDeclaredWhateverTheApp(t *testing.T) {
 	root := fixtureRoot(t, "monorepo")
 
 	apps := monorepoApps()
 	apps[0].Language = language.Python
 
-	usages, err := Compute(t.Context(), root, apps, nil)
+	usages, err := FindUsages(t.Context(), root, apps, nil)
 	if err != nil {
 		t.Fatalf("Compute with no declarations: %v", err)
 	}
@@ -371,9 +371,9 @@ func TestComputeRefusesAnAppThatNamesNoLanguage(t *testing.T) {
 	apps := monorepoApps()
 	apps[0].Language = ""
 
-	_, err := Compute(t.Context(), root, apps, monorepoDeclarations(root))
+	_, err := FindUsages(t.Context(), root, apps, monorepoDeclarations(root))
 	want := `attribution: app "api" names no language`
 	if err == nil || !strings.Contains(err.Error(), want) {
-		t.Errorf("Compute err = %v, want it to contain %q", err, want)
+		t.Errorf("FindUsages err = %v, want it to contain %q", err, want)
 	}
 }

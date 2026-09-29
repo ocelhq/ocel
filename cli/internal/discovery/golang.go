@@ -13,9 +13,7 @@ import (
 
 const goEntryDir = constants.ProjectStateDirName + "/discovery"
 
-type goLauncher struct{}
-
-func (goLauncher) Command(ctx context.Context, configDir string, root Root, server Server) (*exec.Cmd, error) {
+func goCommand(ctx context.Context, configDir string, root Root, server Server) (*exec.Cmd, error) {
 	moduleRoot, modulePath, err := goModule(configDir, root.Dir)
 	if err != nil {
 		return nil, err

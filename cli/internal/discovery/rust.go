@@ -14,9 +14,7 @@ import (
 
 const ocelCrate = "ocel-sdk"
 
-type rustLauncher struct{}
-
-func (rustLauncher) Command(ctx context.Context, _ string, root Root, server Server) (*exec.Cmd, error) {
+func rustCommand(ctx context.Context, _ string, root Root, server Server) (*exec.Cmd, error) {
 	workspace, err := cargo.Metadata(ctx, root.Dir, "--no-deps")
 	if err != nil {
 		return nil, fmt.Errorf("discovery: %w", err)

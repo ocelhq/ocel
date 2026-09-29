@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/discovery"
+	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/language"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
@@ -35,11 +36,7 @@ type App struct {
 
 type Reachability func(file string) bool
 
-type Reach interface {
-	Entries(ctx context.Context, root string, app App) (map[string]Reachability, error)
-}
-
-var reaches = map[language.Language]Reach{language.JS: jsReach{}, language.Go: goReach{}, language.Python: pythonReach{}, language.Rust: rustReach{}}
+var readImports = map[language.Language]func(ctx context.Context, root string, app App) (map[string]Reachability, error){language.JS: readJSImports, language.Go: readGoImports, language.Python: readPythonImports, language.Rust: readRustImports}
 
 type Usage struct {
 	App   string
@@ -81,22 +78,15 @@ func (e *UnresolvedImportError) Error() string {
 }
 
 func attributableLanguages() string {
-	languages := make([]string, 0, len(reaches))
-	for language := range reaches {
+	languages := make([]string, 0, len(readImports))
+	for language := range readImports {
 		languages = append(languages, string(language))
 	}
 	slices.Sort(languages)
-	return listed(languages)
+	return english.And(languages)
 }
 
-func listed(items []string) string {
-	if len(items) < 2 {
-		return strings.Join(items, "")
-	}
-	return strings.Join(items[:len(items)-1], ", ") + " and " + items[len(items)-1]
-}
-
-func Compute(ctx context.Context, root string, apps []App, declarations []Declaration) ([]Usage, error) {
+func FindUsages(ctx context.Context, root string, apps []App, declarations []Declaration) ([]Usage, error) {
 	if len(declarations) == 0 {
 		return nil, nil
 	}
@@ -109,11 +99,11 @@ func Compute(ctx context.Context, root string, apps []App, declarations []Declar
 		if app.Language == "" {
 			return nil, fmt.Errorf("attribution: app %q names no language", app.Name)
 		}
-		reach, ok := reaches[app.Language]
+		read, ok := readImports[app.Language]
 		if !ok {
 			return nil, fmt.Errorf("attribution: app %q is a %s app, and this build of ocel attributes only %s apps", app.Name, app.Language, attributableLanguages())
 		}
-		entries, err := reach.Entries(ctx, root, app)
+		entries, err := read(ctx, root, app)
 		if err != nil {
 			return nil, err
 		}

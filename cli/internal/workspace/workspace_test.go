@@ -29,7 +29,7 @@ func TestTheWorkspaceAnAppIsAMemberOfIsWhatTheImageIsBuiltFrom(t *testing.T) {
 		files   map[string]string
 		app     string
 		path    string
-		manager workspace.Manager
+		manager workspace.PackageManager
 	}{
 		{
 			name: "a pnpm workspace is found by its own file",
@@ -165,8 +165,8 @@ func TestTheWorkspaceAnAppIsAMemberOfIsWhatTheImageIsBuiltFrom(t *testing.T) {
 			if got.Path != tt.path {
 				t.Errorf("Locate().Path = %q, want %q", got.Path, tt.path)
 			}
-			if got.Manager != tt.manager {
-				t.Errorf("Locate().Manager = %q, want %q", got.Manager, tt.manager)
+			if got.PackageManager != tt.manager {
+				t.Errorf("Locate().PackageManager = %q, want %q", got.PackageManager, tt.manager)
 			}
 		})
 	}
@@ -245,13 +245,13 @@ func TestTheAppsOwnScriptsAreWhatTheImageRuns(t *testing.T) {
 		t.Fatalf("Locate() = %v", err)
 	}
 
-	if got.App.Name != "@acme/web" {
-		t.Errorf("Locate().App.Name = %q, want the app's own package name", got.App.Name)
+	if got.Package.Name != "@acme/web" {
+		t.Errorf("Locate().Package.Name = %q, want the app's own package name", got.Package.Name)
 	}
-	if got.App.Build {
+	if got.Package.Build {
 		t.Error("Locate() read a build script onto an app that declares none, so the root's build would run in its place")
 	}
-	if !got.App.Start {
+	if !got.Package.Start {
 		t.Error("Locate() missed the app's own start script")
 	}
 }
@@ -326,8 +326,8 @@ func TestWhatMakesAnAppAPythonProjectIsTheFileThatDeclaresItOne(t *testing.T) {
 			if loc.Root != wantRoot {
 				t.Errorf("Root = %s, want %s — an app with no python project file is built from the workspace it installs with", loc.Root, wantRoot)
 			}
-			if loc.InWorkspace() != wantMember {
-				t.Errorf("InWorkspace() = %v, want %v", loc.InWorkspace(), wantMember)
+			if loc.Member != wantMember {
+				t.Errorf("Member = %v, want %v", loc.Member, wantMember)
 			}
 		})
 	}
@@ -371,8 +371,8 @@ func TestACargoManifestMakesAnAppRustOnlyWhereNoNodeOrPythonProjectClaimsTheDire
 			if tt.rust && loc.Root != app {
 				t.Errorf("Root = %s, want %s — a crate roots its own build, and no node workspace installs it", loc.Root, app)
 			}
-			if tt.rust && loc.InWorkspace() {
-				t.Error("InWorkspace() = true, and a crate is a member of no node workspace")
+			if tt.rust && loc.Member {
+				t.Error("Member = true, and a crate is a member of no node workspace")
 			}
 		})
 	}
@@ -406,7 +406,7 @@ func TestABuildContextIsTakenOnlyWhereTheInstallStillHasEverythingItReads(t *tes
 		if err != nil {
 			t.Fatalf("Rebase() = %v", err)
 		}
-		if !rebased.InWorkspace() || rebased.Path != "apps/web" || rebased.Manager != workspace.Pnpm {
+		if !rebased.Member || rebased.Path != "apps/web" || rebased.PackageManager != workspace.Pnpm {
 			t.Errorf("Rebase() = %+v, want the app still a member of the workspace it was located in", rebased)
 		}
 	})
@@ -422,7 +422,7 @@ func TestABuildContextIsTakenOnlyWhereTheInstallStillHasEverythingItReads(t *tes
 		if rebased.Root != dir || rebased.Path != "repo/apps/web" {
 			t.Errorf("Rebase() = %+v, want the app addressed from the context it was pointed at", rebased)
 		}
-		if rebased.InWorkspace() {
+		if rebased.Member {
 			t.Errorf("Rebase() left the app a member of a workspace %s declares nothing about, so the install would be filtered against a workspace that is not there", dir)
 		}
 		commands, err := rebased.Commands()
@@ -497,7 +497,7 @@ func TestYarnBerryIsToldFromClassicByEverythingThatNamesIt(t *testing.T) {
 		declared string
 		lock     string
 		yarnrc   bool
-		want     workspace.Manager
+		want     workspace.PackageManager
 	}{
 		{
 			name:   "the .yarnrc.yml beside the lockfile names it",
@@ -543,8 +543,8 @@ func TestYarnBerryIsToldFromClassicByEverythingThatNamesIt(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Locate() = %v", err)
 			}
-			if got.Manager != tt.want {
-				t.Errorf("Locate().Manager = %q, want %q — a berry install is scoped by a command classic yarn does not have", got.Manager, tt.want)
+			if got.PackageManager != tt.want {
+				t.Errorf("Locate().PackageManager = %q, want %q — a berry install is scoped by a command classic yarn does not have", got.PackageManager, tt.want)
 			}
 		})
 	}

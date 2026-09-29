@@ -143,7 +143,7 @@ func assembleManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig
 	if err != nil {
 		return nil, err
 	}
-	usages, err := attribution.Compute(ctx, cfg.Dir, attributionApps, toAttributionDeclarations(resources))
+	usages, err := attribution.FindUsages(ctx, cfg.Dir, attributionApps, toAttributionDeclarations(resources))
 	if err != nil {
 		return nil, err
 	}

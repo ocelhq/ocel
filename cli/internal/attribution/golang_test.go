@@ -41,9 +41,9 @@ func TestGoReachGrantsAResourceTheAppsMainImports(t *testing.T) {
 		Source: filepath.Join(root, constants.DefaultDiscoveryDirName, "declarations.go") + ":1",
 	}}
 
-	usages, err := Compute(t.Context(), root, apps, declarations)
+	usages, err := FindUsages(t.Context(), root, apps, declarations)
 	if err != nil {
-		t.Fatalf("Compute: %v", err)
+		t.Fatalf("FindUsages: %v", err)
 	}
 	want := []Usage{{App: "web", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main", Files: []string{"server"}}}
 	if !slices.EqualFunc(usages, want, func(a, b Usage) bool {
@@ -62,9 +62,9 @@ func TestGoReachGrantsNothingFromAPackageNoMainImports(t *testing.T) {
 		Source: filepath.Join(root, "unused", "unused.go") + ":1",
 	}}
 
-	usages, err := Compute(t.Context(), root, apps, declarations)
+	usages, err := FindUsages(t.Context(), root, apps, declarations)
 	if err != nil {
-		t.Fatalf("Compute: %v", err)
+		t.Fatalf("FindUsages: %v", err)
 	}
 	if len(usages) != 0 {
 		t.Errorf("usages = %+v, want none", usages)
@@ -82,9 +82,9 @@ func TestGoReachReportsWhatGoListSaid(t *testing.T) {
 		Source: filepath.Join(root, "server", "main.go") + ":1",
 	}}
 
-	_, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: language.Go}}, declarations)
+	_, err := FindUsages(t.Context(), root, []App{{Name: "web", Path: "server", Language: language.Go}}, declarations)
 	if err == nil {
-		t.Fatal("Compute succeeded on a module that does not build, want error")
+		t.Fatal("FindUsages succeeded on a module that does not build, want error")
 	}
 	if !strings.Contains(err.Error(), `attribution: app "web": go list:`) {
 		t.Errorf("error = %q, want it to name the app and go list", err)
@@ -97,13 +97,13 @@ func TestGoReachGrantsTheFixtureResourceToItsApp(t *testing.T) {
 		t.Fatalf("locate the fixture: %v", err)
 	}
 
-	usages, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: language.Go}}, []Declaration{{
+	usages, err := FindUsages(t.Context(), root, []App{{Name: "web", Path: "server", Language: language.Go}}, []Declaration{{
 		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, constants.DefaultDiscoveryDirName, "infra.go") + ":5",
 	}})
 	if err != nil {
-		t.Fatalf("Compute: %v", err)
+		t.Fatalf("FindUsages: %v", err)
 	}
 	if len(usages) != 1 {
 		t.Fatalf("usages = %+v, want one", usages)
@@ -121,13 +121,13 @@ func TestGoReachStopsAtTheModuleTheAppLivesIn(t *testing.T) {
 	write(t, filepath.Join(root, "shared", "go.mod"), "module example.com/shared\n\ngo 1.27.0\n")
 	write(t, filepath.Join(root, "shared", constants.DefaultDiscoveryDirName, "declarations.go"), "package "+constants.DefaultDiscoveryDirName+"\n")
 
-	usages, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: language.Go}}, []Declaration{{
+	usages, err := FindUsages(t.Context(), root, []App{{Name: "web", Path: "server", Language: language.Go}}, []Declaration{{
 		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, "shared", constants.DefaultDiscoveryDirName, "declarations.go") + ":1",
 	}})
 	if err != nil {
-		t.Fatalf("Compute: %v", err)
+		t.Fatalf("FindUsages: %v", err)
 	}
 	if len(usages) != 0 {
 		t.Errorf("usages = %+v, want none: the declaration lives outside the app's module", usages)

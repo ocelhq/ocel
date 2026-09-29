@@ -33,12 +33,12 @@ func rustFixture(t *testing.T, manifest string) string {
 
 const rustBinManifest = "[package]\nname = \"web\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[workspace]\n"
 
-func TestTheRustLauncherRunsTheCratesBinaryFromTheWorkspaceRoot(t *testing.T) {
+func TestRustDiscoveryRunsTheCratesBinaryFromTheWorkspaceRoot(t *testing.T) {
 	needsCargo(t)
 	configDir := rustFixture(t, rustBinManifest)
 	root := Root{Dir: configDir, Language: language.Rust}
 
-	cmd, err := launchers[language.Rust].Command(context.Background(), configDir, root, testServer)
+	cmd, err := rustCommand(context.Background(), configDir, root, testServer)
 	if err != nil {
 		t.Fatalf("Command: %v", err)
 	}
@@ -57,7 +57,7 @@ func TestTheRustLauncherRunsTheCratesBinaryFromTheWorkspaceRoot(t *testing.T) {
 	}
 }
 
-func TestTheRustLauncherRunsTheAppCrateAndNotTheProjectAroundIt(t *testing.T) {
+func TestRustDiscoveryRunsTheAppCrateAndNotTheProjectAroundIt(t *testing.T) {
 	needsCargo(t)
 	configDir := t.TempDir()
 	write(t, filepath.Join(configDir, "package.json"), "{}\n")
@@ -65,7 +65,7 @@ func TestTheRustLauncherRunsTheAppCrateAndNotTheProjectAroundIt(t *testing.T) {
 	write(t, filepath.Join(crate, "Cargo.toml"), rustBinManifest)
 	write(t, filepath.Join(crate, "src", "main.rs"), "fn main() {}\n")
 
-	cmd, err := launchers[language.Rust].Command(context.Background(), configDir, Root{Dir: crate, Language: language.Rust}, testServer)
+	cmd, err := rustCommand(context.Background(), configDir, Root{Dir: crate, Language: language.Rust}, testServer)
 	if err != nil {
 		t.Fatalf("Command: %v", err)
 	}
@@ -74,13 +74,13 @@ func TestTheRustLauncherRunsTheAppCrateAndNotTheProjectAroundIt(t *testing.T) {
 	}
 }
 
-func TestTheRustLauncherRefusesADirThatIsNoCrate(t *testing.T) {
+func TestRustDiscoveryRefusesADirThatIsNoCrate(t *testing.T) {
 	needsCargo(t)
 	configDir := t.TempDir()
 	root := filepath.Join(configDir, "server")
 	write(t, filepath.Join(root, "src", "main.rs"), "fn main() {}\n")
 
-	_, err := launchers[language.Rust].Command(context.Background(), configDir, Root{Dir: root, Language: language.Rust}, testServer)
+	_, err := rustCommand(context.Background(), configDir, Root{Dir: root, Language: language.Rust}, testServer)
 	if err == nil {
 		t.Fatal("Command succeeded on a dir with no Cargo.toml, want an error")
 	}
@@ -89,13 +89,13 @@ func TestTheRustLauncherRefusesADirThatIsNoCrate(t *testing.T) {
 	}
 }
 
-func TestTheRustLauncherRefusesACrateThatBuildsNoBinary(t *testing.T) {
+func TestRustDiscoveryRefusesACrateThatBuildsNoBinary(t *testing.T) {
 	needsCargo(t)
 	configDir := t.TempDir()
 	write(t, filepath.Join(configDir, "Cargo.toml"), rustBinManifest)
 	write(t, filepath.Join(configDir, "src", "lib.rs"), "")
 
-	_, err := launchers[language.Rust].Command(context.Background(), configDir, Root{Dir: configDir, Language: language.Rust}, testServer)
+	_, err := rustCommand(context.Background(), configDir, Root{Dir: configDir, Language: language.Rust}, testServer)
 	if err == nil {
 		t.Fatal("Command succeeded on a crate with no binary, want an error")
 	}
@@ -104,14 +104,14 @@ func TestTheRustLauncherRefusesACrateThatBuildsNoBinary(t *testing.T) {
 	}
 }
 
-func TestTheRustLauncherRefusesACrateThatBuildsSeveralBinaries(t *testing.T) {
+func TestRustDiscoveryRefusesACrateThatBuildsSeveralBinaries(t *testing.T) {
 	needsCargo(t)
 	configDir := t.TempDir()
 	write(t, filepath.Join(configDir, "Cargo.toml"), rustBinManifest+"\n[[bin]]\nname = \"web\"\npath = \"src/main.rs\"\n\n[[bin]]\nname = \"worker\"\npath = \"src/worker.rs\"\n")
 	write(t, filepath.Join(configDir, "src", "main.rs"), "fn main() {}\n")
 	write(t, filepath.Join(configDir, "src", "worker.rs"), "fn main() {}\n")
 
-	_, err := launchers[language.Rust].Command(context.Background(), configDir, Root{Dir: configDir, Language: language.Rust}, testServer)
+	_, err := rustCommand(context.Background(), configDir, Root{Dir: configDir, Language: language.Rust}, testServer)
 	if err == nil {
 		t.Fatal("Command succeeded on a crate with two binaries, want an error")
 	}
@@ -264,7 +264,7 @@ func sourceFile(t *testing.T, source string) string {
 	return file
 }
 
-func TestTheRustLauncherRunsACrateReachedThroughASymlink(t *testing.T) {
+func TestRustDiscoveryRunsACrateReachedThroughASymlink(t *testing.T) {
 	needsCargo(t)
 	crate := rustFixture(t, rustBinManifest)
 	link := filepath.Join(t.TempDir(), "server")
@@ -272,7 +272,7 @@ func TestTheRustLauncherRunsACrateReachedThroughASymlink(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cmd, err := launchers[language.Rust].Command(context.Background(), link, Root{Dir: link, Language: language.Rust}, testServer)
+	cmd, err := rustCommand(context.Background(), link, Root{Dir: link, Language: language.Rust}, testServer)
 	if err != nil {
 		t.Fatalf("Command: %v", err)
 	}
