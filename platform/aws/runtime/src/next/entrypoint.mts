@@ -2,8 +2,8 @@ import type http from "node:http";
 import { dirname, isAbsolute, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 import { runWithWaitUntil } from "@framework/node-runtime/background";
-import { dispatchesAtOrigin } from "@framework/node-runtime/edge-kind";
 import {
+  dispatchesAtOrigin,
   type Invoke,
   installCompileCacheFlush,
   installCompileCacheWarm,

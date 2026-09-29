@@ -23,7 +23,7 @@ const (
 	servingAt      = "127.0.0.1:443"
 	servingTimeout = 10 * time.Second
 	exitUnservable = 6
-	edgeAnswerCap  = 1 << 12
+	answerBodyCap  = 1 << 12
 )
 
 func loopback(verb string, argv []string, errs io.Writer) (string, string, bool) {
@@ -122,7 +122,7 @@ func probe(argv []string, out, errs io.Writer) int {
 		return exitNotServingYet
 	}
 	defer answer.Body.Close()
-	_, _ = io.Copy(io.Discard, io.LimitReader(answer.Body, edgeAnswerCap))
+	_, _ = io.Copy(io.Discard, io.LimitReader(answer.Body, answerBodyCap))
 	answered := strings.TrimSpace(answer.Header.Get(router.HeaderRouter))
 	heard := answer.Header.Get(switchboard.HeardHeader)
 	if heard == "" {

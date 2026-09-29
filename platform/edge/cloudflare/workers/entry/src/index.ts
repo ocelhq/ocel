@@ -24,11 +24,11 @@ import { invalidateSnapshot } from "./tag-clock";
 export { CacheEntrypoint } from "./cache-entrypoint";
 export type { Env } from "./env";
 
-export const ROUTER_HEADER = "x-ocel-router";
+const ROUTER_HEADER = "x-ocel-router";
 
 const ROUTER_KIND = "cloudflare";
 
-export function withRouterHeader(response: Response): Response {
+function withRouterHeader(response: Response): Response {
   if (response.headers.get(ROUTER_HEADER) === ROUTER_KIND) return response;
   const marked = new Response(response.body, response);
   marked.headers.set(ROUTER_HEADER, ROUTER_KIND);

@@ -109,7 +109,7 @@ func switchboardAnswers(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(switchboard.HeardHeader, "https "+r.Host+" "+r.Host)
 }
 
-func TestTheProbeReadsTheEdgeTheBoxNamesForAHostnameItServesACertificateFor(t *testing.T) {
+func TestTheProbeReadsTheRouterTheBoxNamesForAHostnameItServesACertificateFor(t *testing.T) {
 	var asked, path string
 	at := answering(t, current(t, "web.localhost"), func(w http.ResponseWriter, r *http.Request) {
 		asked, path = r.Host, r.URL.Path
@@ -121,7 +121,7 @@ func TestTheProbeReadsTheEdgeTheBoxNamesForAHostnameItServesACertificateFor(t *t
 		t.Fatalf("probe = %d: %q", code, errs)
 	}
 	if strings.TrimSpace(out) != "switchboard" {
-		t.Errorf("probe printed %q, want the edge the box named for the hostname", out)
+		t.Errorf("probe printed %q, want the router the box named for the hostname", out)
 	}
 	if asked != "web.localhost" || path != edge.LivenessProbePath {
 		t.Errorf("the box was asked for %s%s, want %s%s: it routes on the name and not on the address it listens at", asked, path, "web.localhost", edge.LivenessProbePath)
@@ -157,7 +157,7 @@ func TestTheProbePassesABoxWhoseAppsHearHttpsForTheHostnameAsked(t *testing.T) {
 		w.Header().Set(switchboard.HeardHeader, "https web.localhost WEB.localhost")
 	})
 	if code, out, errs := ran(t, "probe", "--at", at, "web.localhost"); code != 0 || strings.TrimSpace(out) != "switchboard" {
-		t.Errorf("probe = %d %q %q, want box", code, out, errs)
+		t.Errorf("probe = %d %q %q, want switchboard", code, out, errs)
 	}
 }
 
@@ -178,7 +178,7 @@ func TestTheProbeTrustsNoAuthorityOfAnyOneFrontProxy(t *testing.T) {
 	at := answering(t, current(t, "web.localhost"), switchboardAnswers)
 
 	if code, out, errs := ran(t, "probe", "--at", at, "web.localhost"); code != 0 || strings.TrimSpace(out) != "switchboard" {
-		t.Errorf("probe over a certificate no public root vouches for = %d, %q, %q, want the edge read: a .localhost name is served under whatever authority the front proxy keeps, and the probe must not know which proxy that is", code, out, errs)
+		t.Errorf("probe over a certificate no public root vouches for = %d, %q, %q, want the router read: a .localhost name is served under whatever authority the front proxy keeps, and the probe must not know which proxy that is", code, out, errs)
 	}
 }
 
@@ -205,7 +205,7 @@ func TestTheProbeRefusesACertificateThatDoesNotServeTheName(t *testing.T) {
 	}
 }
 
-func TestTheProbeReadsTheEdgeOffTheHostnameAndNotOffWhereARedirectLands(t *testing.T) {
+func TestTheProbeReadsTheRouterOffTheHostnameAndNotOffWhereARedirectLands(t *testing.T) {
 	at := answering(t, current(t, "web.localhost"), func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/elsewhere" {
 			switchboardAnswers(w, r)
@@ -216,7 +216,7 @@ func TestTheProbeReadsTheEdgeOffTheHostnameAndNotOffWhereARedirectLands(t *testi
 
 	code, out, errs := ran(t, "probe", "--at", at, "web.localhost")
 	if code != exitNotServingYet || strings.TrimSpace(out) != "" {
-		t.Errorf("probe = %d %q %q, want %d and nothing printed: it followed a redirect and read the edge off wherever the chain landed", code, out, errs, exitNotServingYet)
+		t.Errorf("probe = %d %q %q, want %d and nothing printed: it followed a redirect and read the router off wherever the chain landed", code, out, errs, exitNotServingYet)
 	}
 }
 

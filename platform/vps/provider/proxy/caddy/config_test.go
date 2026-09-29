@@ -211,7 +211,7 @@ func labelwise(name, subject string) bool {
 	return true
 }
 
-func TestEveryErrorTheFrontProxyAnswersItselfNamesTheEdge(t *testing.T) {
+func TestEveryErrorTheFrontProxyAnswersItselfNamesTheRouter(t *testing.T) {
 	t.Parallel()
 
 	_, read := render(t, specified())
@@ -221,7 +221,7 @@ func TestEveryErrorTheFrontProxyAnswersItselfNamesTheEdge(t *testing.T) {
 		}
 		answered, _ := json.Marshal(server.Errors.Routes[0].Handle[0])
 		if want := `{"handler":"static_response","headers":{"` + http.CanonicalHeaderKey(router.HeaderRouter) + `":["` + routerName + `"]},"status_code":"{http.error.status_code}"}`; string(answered) != want {
-			t.Errorf("the front proxy answers its own errors with %s, want %s: caddy answers a 502 of its own while the switchboard is down or being recreated, and the bind's probe reads the edge off every answer the box gives", answered, want)
+			t.Errorf("the front proxy answers its own errors with %s, want %s: caddy answers a 502 of its own while the switchboard is down or being recreated, and the bind's probe reads the router off every answer the box gives", answered, want)
 		}
 	}
 }

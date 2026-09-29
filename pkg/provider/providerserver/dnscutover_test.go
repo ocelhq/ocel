@@ -86,7 +86,7 @@ func TestCutoverGivesUpAfterItsLastAttempt(t *testing.T) {
 	}
 }
 
-func TestCutoverStopsWhenAnotherEdgeAnswers(t *testing.T) {
+func TestCutoverStopsWhenAnotherRouterAnswers(t *testing.T) {
 	t.Parallel()
 	cutover, _ := waiting(&answering{kind: "direct"}, 2)
 

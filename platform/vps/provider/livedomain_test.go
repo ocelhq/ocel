@@ -172,7 +172,7 @@ func TestLiveDomainAddAsksForAnARecordNamingTheBoxAndTheBoxThenServesTheHostname
 	if served := vm.asks(t, hostname, "/"); served != "one" {
 		t.Errorf("the box answered %q for the hostname it just bound, want the release the project serves", served)
 	}
-	if head := vm.heads(t, hostname); !strings.Contains(strings.ToLower(head), strings.ToLower(router.HeaderRouter)+": "+switchboard.RouterKind) {
+	if head := vm.heads(t, hostname); !strings.Contains(strings.ToLower(head), strings.ToLower(router.HeaderRouter)+": "+string(switchboard.RouterKind)) {
 		t.Errorf("the box answered the bound hostname with\n%s\nwant %s: %s, which is what the serving check reads to decide this edge serves it",
 			head, router.HeaderRouter, switchboard.RouterKind)
 	}

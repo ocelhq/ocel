@@ -15,5 +15,5 @@ func (p *Provider) servedOnTheBox(ctx context.Context, hostname string) (router.
 	if said.Failure != "" {
 		return "", liveness.ProbeUnanswered{Cause: said.Failure}
 	}
-	return router.Kind(said.Router), nil
+	return said.Router, nil
 }

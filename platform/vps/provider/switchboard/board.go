@@ -19,7 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
-const RouterKind = "switchboard"
+const RouterKind router.Kind = "switchboard"
 
 var routerHeader = http.CanonicalHeaderKey(router.HeaderRouter)
 
@@ -181,7 +181,7 @@ func (b *Board) Load(path string) error {
 
 func (b *Board) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	named := func(header http.Header) {
-		header.Set(routerHeader, RouterKind)
+		header.Set(routerHeader, string(RouterKind))
 		if r.URL.Path == edge.LivenessProbePath {
 			header.Set(HeardHeader, b.heard(r))
 		}

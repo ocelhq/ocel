@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
 )
 
@@ -14,7 +15,7 @@ type Box interface {
 	Listening(ctx context.Context) ([]listeners.Listener, error)
 	Publishing(ctx context.Context, port string) ([]string, error)
 	Claimed(ctx context.Context) ([]string, error)
-	Probe(ctx context.Context, hostname string) (answered, failure string, err error)
+	Probe(ctx context.Context, hostname string) (answered router.Kind, failure string, err error)
 }
 
 type Manual struct {

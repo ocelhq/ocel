@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
@@ -114,7 +115,7 @@ func (h *Host) ServedCertificate(ctx context.Context, hostname string) ([]byte, 
 }
 
 type Answer struct {
-	Router  string
+	Router  router.Kind
 	Failure string
 }
 
@@ -125,7 +126,7 @@ func (h *Host) ServedRouter(ctx context.Context, hostname string) (Answer, error
 	}
 	switch result.Code {
 	case 0:
-		return Answer{Router: strings.TrimSpace(result.Stdout)}, nil
+		return Answer{Router: router.Kind(strings.TrimSpace(result.Stdout))}, nil
 	case proxyNotServingYet:
 		return Answer{Failure: spoken(result)}, nil
 	default:
@@ -159,7 +160,7 @@ func (b frontBox) Claimed(ctx context.Context) ([]string, error) {
 	return state.hostnames(), nil
 }
 
-func (b frontBox) Probe(ctx context.Context, hostname string) (string, string, error) {
+func (b frontBox) Probe(ctx context.Context, hostname string) (router.Kind, string, error) {
 	said, err := b.h.ServedRouter(ctx, hostname)
 	return said.Router, said.Failure, err
 }

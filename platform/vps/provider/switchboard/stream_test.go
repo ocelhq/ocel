@@ -74,8 +74,8 @@ func upgrading(t *testing.T, at, host string) socket {
 	if response.StatusCode != http.StatusSwitchingProtocols {
 		t.Fatalf("the upgrade answered %d, want 101", response.StatusCode)
 	}
-	if response.Header.Get(router.HeaderRouter) != switchboard.RouterKind {
-		t.Errorf("the upgrade answered naming the edge %q, want %q", response.Header.Get(router.HeaderRouter), switchboard.RouterKind)
+	if response.Header.Get(router.HeaderRouter) != string(switchboard.RouterKind) {
+		t.Errorf("the upgrade answered naming the router %q, want %q", response.Header.Get(router.HeaderRouter), switchboard.RouterKind)
 	}
 	return socket{conn: conn, reader: reader}
 }
@@ -293,7 +293,7 @@ func TestTheConnectorPathReachesTheConnectorOverItsSocketWithThePrefixStripped(t
 	if said.body != "connector" || said.header.Get("X-Served-Path") != "/connector.v1.Box/Describe" {
 		t.Errorf("the connector path answered %q asking for %q, want the connector asked for the procedure without the prefix", said.body, said.header.Get("X-Served-Path"))
 	}
-	if said.header.Get("X-Served-Host") != "box.example.com" || said.header.Get(router.HeaderRouter) != switchboard.RouterKind {
+	if said.header.Get("X-Served-Host") != "box.example.com" || said.header.Get(router.HeaderRouter) != string(switchboard.RouterKind) {
 		t.Errorf("the connector was asked for host %q and answered naming %q, want box.example.com and %s", said.header.Get("X-Served-Host"), said.header.Get(router.HeaderRouter), switchboard.RouterKind)
 	}
 	if said := ask(t, boardClient, at, "box.example.com", "/"); said.body != "web" {

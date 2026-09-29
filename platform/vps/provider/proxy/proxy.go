@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/router"
 )
 
 type Proxy interface {
@@ -31,7 +32,7 @@ type Spec struct {
 	Hostnames   []string
 	PreviewBase string
 	Upstream    string
-	Router      string
+	Router      router.Kind
 	Permission  Permission
 }
 

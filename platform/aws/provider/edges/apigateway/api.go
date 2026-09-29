@@ -312,7 +312,7 @@ func putProbeRoute(ctx context.Context, c Clients, api, resource string) error {
 		StatusCode:         aws.String("200"),
 		ResponseParameters: map[string]bool{routerHeaderParameter: true},
 	}); err != nil {
-		return fmt.Errorf("declare the liveness probe's edge header on REST API %s: %w", api, err)
+		return fmt.Errorf("declare the liveness probe's router header on REST API %s: %w", api, err)
 	}
 	if err := ensureIntegrationResponse(ctx, c, &apigateway.PutIntegrationResponseInput{
 		RestApiId:          aws.String(api),
@@ -321,7 +321,7 @@ func putProbeRoute(ctx context.Context, c Clients, api, resource string) error {
 		StatusCode:         aws.String("200"),
 		ResponseParameters: map[string]string{routerHeaderParameter: "'" + routerHeaderValue + "'"},
 	}); err != nil {
-		return fmt.Errorf("set the liveness probe's edge header on REST API %s: %w", api, err)
+		return fmt.Errorf("set the liveness probe's router header on REST API %s: %w", api, err)
 	}
 	return nil
 }

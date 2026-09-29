@@ -342,7 +342,7 @@ func TestATableAndAConfigMovedIntoPlaceAreWhatTheRunningBoxServes(t *testing.T) 
 		return said
 	}
 
-	if said := ask("unclaimed.example.com"); said.StatusCode != http.StatusNotFound || said.Header.Get(router.HeaderRouter) != switchboard.RouterKind {
+	if said := ask("unclaimed.example.com"); said.StatusCode != http.StatusNotFound || said.Header.Get(router.HeaderRouter) != string(switchboard.RouterKind) {
 		t.Errorf("a hostname nothing on this box claims was answered %d with %s: %q, want a 404 naming this edge",
 			said.StatusCode, router.HeaderRouter, said.Header.Get(router.HeaderRouter))
 	}
@@ -355,7 +355,7 @@ func TestATableAndAConfigMovedIntoPlaceAreWhatTheRunningBoxServes(t *testing.T) 
 		t.Errorf("the hostname %q claims was answered %d %q, want the body of the app running on %s: the switchboard is handed the directory the table is renamed into, and one handed the file keeps routing the seed",
 			surface, said.StatusCode, read, flipped.Routes[0].Upstream)
 	}
-	if said.Header.Get(router.HeaderRouter) != switchboard.RouterKind {
+	if said.Header.Get(router.HeaderRouter) != string(switchboard.RouterKind) {
 		t.Errorf("the surface's own route answered %s: %q, want %q", router.HeaderRouter, said.Header.Get(router.HeaderRouter), switchboard.RouterKind)
 	}
 }
@@ -395,7 +395,7 @@ func TestTheSwitchboardTrustsWhatTheFrontProxyForwardsAndNothingAClientSays(t *t
 	}
 }
 
-func TestTheFrontProxyNamesTheEdgeOnItsOwnAnswerWhileTheSwitchboardIsDown(t *testing.T) {
+func TestTheFrontProxyNamesTheRouterOnItsOwnAnswerWhileTheSwitchboardIsDown(t *testing.T) {
 	proxy := aLiveProxy(t)
 
 	state := routed()
@@ -417,14 +417,14 @@ func TestTheFrontProxyNamesTheEdgeOnItsOwnAnswerWhileTheSwitchboardIsDown(t *tes
 		return said
 	}
 
-	if said := ask(); said.StatusCode != http.StatusOK || !slices.Equal(said.Header.Values(router.HeaderRouter), []string{switchboard.RouterKind}) {
-		t.Errorf("%s was answered %d naming the edge %q, want 200 naming it once as %s", claimed, said.StatusCode, said.Header.Values(router.HeaderRouter), switchboard.RouterKind)
+	if said := ask(); said.StatusCode != http.StatusOK || !slices.Equal(said.Header.Values(router.HeaderRouter), []string{string(switchboard.RouterKind)}) {
+		t.Errorf("%s was answered %d naming the router %q, want 200 naming it once as %s", claimed, said.StatusCode, said.Header.Values(router.HeaderRouter), switchboard.RouterKind)
 	}
 	if out, err := exec.Command(dockerEngine, "stop", "--time", "1", proxy.board).CombinedOutput(); err != nil {
 		t.Fatalf("stop the switchboard: %v\n%s", err, out)
 	}
-	if said := ask(); said.StatusCode != http.StatusBadGateway || !slices.Equal(said.Header.Values(router.HeaderRouter), []string{switchboard.RouterKind}) {
-		t.Errorf("with the switchboard down %s was answered %d naming the edge %q, want caddy's own 502 naming it as %s: a bootstrap recreates the switchboard under a running caddy, and the bind's probe reads the edge off every answer the box gives",
+	if said := ask(); said.StatusCode != http.StatusBadGateway || !slices.Equal(said.Header.Values(router.HeaderRouter), []string{string(switchboard.RouterKind)}) {
+		t.Errorf("with the switchboard down %s was answered %d naming the router %q, want caddy's own 502 naming it as %s: a bootstrap recreates the switchboard under a running caddy, and the bind's probe reads the router off every answer the box gives",
 			claimed, said.StatusCode, said.Header.Values(router.HeaderRouter), switchboard.RouterKind)
 	}
 }

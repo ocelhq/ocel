@@ -15,10 +15,10 @@ function clock(timeoutMs: number) {
   };
 }
 
-type Answer = number | string | { edged: number };
+type Answer = number | string | { routed: number };
 
-function edged(status: number) {
-  return { edged: status };
+function routed(status: number) {
+  return { routed: status };
 }
 
 function answering(answers: Answer[]): Fetch {
@@ -34,7 +34,7 @@ function answering(answers: Answer[]): Fetch {
       return new Response(null, { status: answer });
     }
     return new Response(null, {
-      status: answer.edged,
+      status: answer.routed,
       headers: { "x-ocel-router": "cloudfront" },
     });
   }) as unknown as Fetch;
@@ -97,9 +97,9 @@ describe("awaitServing", () => {
     });
   });
 
-  it("gives up long before the deadline once the edge itself has answered six times", async () => {
+  it("gives up long before the deadline once the router itself has answered six times", async () => {
     await assert.rejects(
-      awaitServing(answering([edged(404)]), URLS, clock(900_000)),
+      awaitServing(answering([routed(404)]), URLS, clock(900_000)),
       (error: Error) => {
         assert.match(error.message, /app\.example\.com/);
         assert.match(error.message, /answered 404 for 6 consecutive attempts over 25s/);
@@ -109,9 +109,9 @@ describe("awaitServing", () => {
     );
   });
 
-  it("counts the run afresh when an answer comes back without the edge header", async () => {
+  it("counts the run afresh when an answer comes back without the router header", async () => {
     const served = await awaitServing(
-      answering([edged(502), edged(502), 403, edged(502), edged(502), edged(502), 200]),
+      answering([routed(502), routed(502), 403, routed(502), routed(502), routed(502), 200]),
       URLS,
       clock(900_000),
     );
@@ -120,9 +120,9 @@ describe("awaitServing", () => {
     });
   });
 
-  it("takes the 200 that lands one attempt short of the run the edge would end on", async () => {
+  it("takes the 200 that lands one attempt short of the run the router would end on", async () => {
     const served = await awaitServing(
-      answering([edged(502), edged(502), edged(502), edged(502), edged(502), 200]),
+      answering([routed(502), routed(502), routed(502), routed(502), routed(502), 200]),
       URLS,
       clock(900_000),
     );

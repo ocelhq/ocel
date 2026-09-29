@@ -88,8 +88,8 @@ func TestAnUnclaimedHostnameUnderThePreviewBaseIsToldNothingAboutTheBox(t *testi
 			t.Errorf("%s (%s) answers with a body of %q, want nothing: anyone who resolves a name under the base reaches this, and it names no project, no box and no other preview",
 				what, hostname, said.body)
 		}
-		if said.edge != switchboard.RouterKind {
-			t.Errorf("%s (%s) answers with %s: %q, want %q", what, hostname, router.HeaderRouter, said.edge, switchboard.RouterKind)
+		if said.router != switchboard.RouterKind {
+			t.Errorf("%s (%s) answers with %s: %q, want %q", what, hostname, router.HeaderRouter, said.router, switchboard.RouterKind)
 		}
 	}
 }

@@ -2,7 +2,7 @@ import http from "node:http";
 import v8 from "node:v8";
 import vm from "node:vm";
 import type { RoutingManifest } from "@framework/next-protocol/routing-manifest";
-import { dispatchesAtOrigin } from "@framework/node-runtime/edge-kind";
+import { dispatchesAtOrigin } from "@framework/node-runtime/host";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { s3AssetBucket } from "../src/next/dispatch-assets.mjs";
 import {
