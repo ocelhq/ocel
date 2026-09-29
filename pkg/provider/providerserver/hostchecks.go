@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ocelhq/ocel/pkg/environment"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
@@ -36,12 +35,12 @@ func verdictProto(verdict provider.HostVerdict) contractv1.HostCheck_Verdict {
 	}
 }
 
-func (h *handlers) hostChecks(ctx context.Context, p provider.Provider, tier environment.Tier, hostnames []string) []*contractv1.HostCheck {
+func (h *handlers) hostChecks(ctx context.Context, p provider.Provider, req provider.HostCheckRequest) []*contractv1.HostCheck {
 	checkHost := p.Hooks().CheckHost
 	if checkHost == nil {
 		return nil
 	}
-	checks, err := checkHost(ctx, provider.HostCheckRequest{Tier: tier, Hostnames: hostnames})
+	checks, err := checkHost(ctx, req)
 	if err != nil {
 		return HostChecksProto([]provider.HostCheck{{
 			Verdict: provider.HostFail,

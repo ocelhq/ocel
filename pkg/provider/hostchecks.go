@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 )
 
@@ -21,5 +22,6 @@ type HostCheck struct {
 
 type HostCheckRequest struct {
 	Tier      environment.Tier
+	Edge      edge.Kind
 	Hostnames []string
 }

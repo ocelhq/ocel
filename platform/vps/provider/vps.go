@@ -2,6 +2,7 @@ package vps
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"sync"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
@@ -76,8 +78,10 @@ func (p *Provider) Facts() provider.Facts {
 		Vendor:   Vendor,
 		Bindings: resources.ServedBindingTypes(p.resourceHooks()),
 		Computes: []provider.Compute{provider.ComputeContainer},
+		Edges:    slices.Clone(supportedEdges),
 		Pairings: []provider.Pairing{
 			{Edge: edge.None, Router: switchboard.RouterKind, Computes: []provider.Compute{provider.ComputeContainer}},
+			{Edge: cloudflare.Kind, Router: switchboard.RouterKind, Computes: []provider.Compute{provider.ComputeContainer}},
 		},
 		DNSKinds:                 []provider.DNSKind{dnsCloudflare},
 		RendersTransforms:        true,

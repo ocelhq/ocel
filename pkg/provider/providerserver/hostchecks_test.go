@@ -71,6 +71,16 @@ func TestTheHostCheckIsAskedAboutTheNamesTheCallerWillRenderRatherThanThisTiers(
 	}
 }
 
+func TestTheHostCheckIsToldWhichEdgeFrontsTheNamesItChecks(t *testing.T) {
+	t.Parallel()
+
+	p, _ := hostChecksServed(t, nil, nil)
+
+	if len(p.asked) != 1 || p.asked[0].Edge != fake.KindRelay {
+		t.Errorf("the host check was asked %+v, want it told the %s edge fronts these names: a name an edge proxies resolves to the edge, not to the box, and is checked through it", p.asked, fake.KindRelay)
+	}
+}
+
 func TestAPreflightThatWillRenderNoHostCheckSectionAsksTheBoxForNone(t *testing.T) {
 	t.Parallel()
 
