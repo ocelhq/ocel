@@ -1,4 +1,4 @@
-package appbundler
+package toolchain
 
 import (
 	"bytes"
@@ -35,7 +35,7 @@ type manifest struct {
 	Libc                 []string          `json:"libc"`
 }
 
-type platformPackages struct {
+type crossInstall struct {
 	arch string
 
 	mu       sync.Mutex
@@ -44,7 +44,7 @@ type platformPackages struct {
 	imported map[string]string
 }
 
-func (p *platformPackages) plugin() api.Plugin {
+func (p *crossInstall) plugin() api.Plugin {
 	return api.Plugin{
 		Name: "ocel-platform-package",
 		Setup: func(build api.PluginBuild) {
@@ -71,7 +71,7 @@ func (p *platformPackages) plugin() api.Plugin {
 	}
 }
 
-func (p *platformPackages) splitsByPlatform(root, imported string) bool {
+func (p *crossInstall) splitsByPlatform(root, imported string) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.split == nil {
@@ -135,8 +135,8 @@ func readManifest(dir string) (manifest, error) {
 
 func installedManifest(from, name string) (manifest, string, bool) {
 	for dir := from; ; dir = filepath.Dir(dir) {
-		if filepath.Base(dir) != nodeModulesDirName {
-			root := filepath.Join(dir, nodeModulesDirName, filepath.FromSlash(name))
+		if filepath.Base(dir) != nodeModulesDir {
+			root := filepath.Join(dir, nodeModulesDir, filepath.FromSlash(name))
 			if pkg, err := readManifest(root); err == nil {
 				return pkg, root, true
 			}
@@ -151,7 +151,7 @@ func (m manifest) platformVariant() bool {
 	return len(m.OS) > 0 || len(m.CPU) > 0
 }
 
-func (p *platformPackages) pins() map[string]any {
+func (p *crossInstall) pins() map[string]any {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	pins := map[string]any{}
@@ -193,7 +193,7 @@ func installedGraph(root string, pkg manifest, path []string) map[string]any {
 	return pinned
 }
 
-func (p *platformPackages) installInto(ctx context.Context, app, source, funcDir string) error {
+func (p *crossInstall) installInto(ctx context.Context, app, source, funcDir string) error {
 	p.mu.Lock()
 	reached := p.wanted
 	p.mu.Unlock()
@@ -242,12 +242,12 @@ func (p *platformPackages) installInto(ctx context.Context, app, source, funcDir
 		return fmt.Errorf("install %s for app %q on %s/%s (%w):\n%s", names, app, arch.NodePackageOS, cpu, err, said.String())
 	}
 	for _, name := range slices.Sorted(maps.Keys(wanted)) {
-		if !installedForTarget(filepath.Join(staging, nodeModulesDirName), name, cpu) {
+		if !installedForTarget(filepath.Join(staging, nodeModulesDir), name, cpu) {
 			return fmt.Errorf("npm installed %s for app %q without a package built for %s/%s/%s, so the function would fail at its first require of it; npm reported:\n%s",
 				name, app, arch.NodePackageOS, cpu, arch.NodePackageLibc, said.String())
 		}
 	}
-	staged := filepath.Join(staging, nodeModulesDirName)
+	staged := filepath.Join(staging, nodeModulesDir)
 	entries, err := os.ReadDir(staged)
 	if err != nil {
 		return err
@@ -256,7 +256,7 @@ func (p *platformPackages) installInto(ctx context.Context, app, source, funcDir
 		if slices.Contains(npmBookkeeping, entry.Name()) {
 			continue
 		}
-		if err := copyTree(filepath.Join(staged, entry.Name()), filepath.Join(funcDir, nodeModulesDirName, entry.Name()), func(string) bool { return false }); err != nil {
+		if err := copyTree(filepath.Join(staged, entry.Name()), filepath.Join(funcDir, nodeModulesDir, entry.Name()), func(string) bool { return false }); err != nil {
 			return err
 		}
 	}
@@ -274,7 +274,7 @@ func installedForTarget(nodeModules, name, cpu string) bool {
 	expected := false
 	for dep := range pkg.OptionalDependencies {
 		expected = expected || namesVariantFor(dep, cpu)
-		for _, dir := range []string{filepath.Join(root, nodeModulesDirName), nodeModules} {
+		for _, dir := range []string{filepath.Join(root, nodeModulesDir), nodeModules} {
 			variant, err := readManifest(filepath.Join(dir, filepath.FromSlash(dep)))
 			if err == nil && variant.platformVariant() && variant.runsOn(cpu) {
 				return true

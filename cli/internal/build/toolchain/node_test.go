@@ -1,4 +1,4 @@
-package appbundler
+package toolchain
 
 import (
 	"context"
@@ -83,9 +83,9 @@ func runNode(t *testing.T, funcDir string) string {
 	if _, err := exec.LookPath("node"); err != nil {
 		t.Skip("node not on PATH")
 	}
-	out, err := exec.Command("node", filepath.Join(funcDir, HandlerFile)).CombinedOutput()
+	out, err := exec.Command("node", filepath.Join(funcDir, handlerFile)).CombinedOutput()
 	if err != nil {
-		t.Fatalf("node %s: %v\n%s", HandlerFile, err, out)
+		t.Fatalf("node %s: %v\n%s", handlerFile, err, out)
 	}
 	return string(out)
 }
@@ -126,7 +126,7 @@ func TestBundle(t *testing.T) {
 		if err := json.Unmarshal([]byte(readFile(t, filepath.Join(l.funcDir, appbuild.FunctionConfigFile))), &cfg); err != nil {
 			t.Fatal(err)
 		}
-		want := appbuild.FunctionConfig{Framework: appbuild.Framework{Name: "node"}, Handler: HandlerFile, ID: entryRouteID, App: "api"}
+		want := appbuild.FunctionConfig{Framework: appbuild.Framework{Name: "node"}, Handler: handlerFile, ID: entryRouteID, App: "api"}
 		if !reflect.DeepEqual(cfg, want) {
 			t.Errorf("%s = %+v, want %+v", appbuild.FunctionConfigFile, cfg, want)
 		}
@@ -195,7 +195,7 @@ func TestBundle(t *testing.T) {
 		if got := readFile(t, copied); got != elfAddon(arch.X8664, "fake") {
 			t.Errorf("copied addon = %q, want the original bytes", got)
 		}
-		bundle := readFile(t, filepath.Join(l.funcDir, HandlerFile))
+		bundle := readFile(t, filepath.Join(l.funcDir, handlerFile))
 		if !strings.Contains(bundle, `"./node_modules/native-dep/build/Release/addon.node"`) {
 			t.Errorf("bundle does not require the copied addon by its output path:\n%s", bundle)
 		}
@@ -393,222 +393,4 @@ func TestBundle(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestArtifactHash(t *testing.T) {
-	t.Parallel()
-
-	hashOf := func(t *testing.T, files tree, prepare func(t *testing.T, root string)) string {
-		t.Helper()
-		root := t.TempDir()
-		writeTree(t, root, files)
-		if prepare != nil {
-			prepare(t, root)
-		}
-		sum, err := artifactHash(root)
-		if err != nil {
-			t.Fatalf("artifactHash: %v", err)
-		}
-		return sum
-	}
-
-	base := tree{"index.mjs": "one", "nested/dep.js": "two"}
-
-	t.Run("is 16 lowercase hex characters", func(t *testing.T) {
-		t.Parallel()
-
-		sum := hashOf(t, base, nil)
-		if len(sum) != buildIDLength {
-			t.Fatalf("hash = %q, want %d characters", sum, buildIDLength)
-		}
-		if sum != strings.ToLower(sum) {
-			t.Errorf("hash = %q, want lowercase", sum)
-		}
-		if strings.Trim(sum, "0123456789abcdef") != "" {
-			t.Errorf("hash = %q, want hex", sum)
-		}
-	})
-
-	t.Run("an empty directory still hashes", func(t *testing.T) {
-		t.Parallel()
-
-		if sum := hashOf(t, tree{}, nil); len(sum) != buildIDLength {
-			t.Errorf("hash = %q, want %d characters", sum, buildIDLength)
-		}
-	})
-
-	variants := []struct {
-		name  string
-		files tree
-		same  bool
-	}{
-		{name: "the same tree", files: tree{"index.mjs": "one", "nested/dep.js": "two"}, same: true},
-		{name: "different contents", files: tree{"index.mjs": "ONE", "nested/dep.js": "two"}},
-		{name: "a different path", files: tree{"index.mjs": "one", "nested/other.js": "two"}},
-		{name: "an extra file", files: tree{"index.mjs": "one", "nested/dep.js": "two", "extra.js": ""}},
-		{name: "contents swapped between paths", files: tree{"index.mjs": "two", "nested/dep.js": "one"}},
-	}
-	for _, tt := range variants {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			want := hashOf(t, base, nil)
-			got := hashOf(t, tt.files, nil)
-			if tt.same && got != want {
-				t.Errorf("hash = %q, want %q", got, want)
-			}
-			if !tt.same && got == want {
-				t.Errorf("hash = %q for %s, want it to differ", got, tt.name)
-			}
-		})
-	}
-
-	t.Run("directories and symlinks do not count", func(t *testing.T) {
-		t.Parallel()
-
-		want := hashOf(t, base, nil)
-		got := hashOf(t, base, func(t *testing.T, root string) {
-			if err := os.MkdirAll(filepath.Join(root, "empty", "deeper"), 0o755); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.Symlink(filepath.Join(root, "index.mjs"), filepath.Join(root, "link.mjs")); err != nil {
-				t.Skipf("symlinks unavailable: %v", err)
-			}
-		})
-		if got != want {
-			t.Errorf("hash = %q, want %q — only regular files count", got, want)
-		}
-	})
-}
-
-func TestANativeAddonMatchesTheArchitectureTheAppDeclares(t *testing.T) {
-	t.Parallel()
-
-	const addonPath = "node_modules/native-dep/build/Release/addon.node"
-	treeWith := func(addon string) tree {
-		return tree{
-			"package.json":                         appPkg,
-			"server.js":                            "import native from 'native-dep';\nconsole.log(native);\n",
-			"node_modules/native-dep/package.json": `{"name":"native-dep","main":"index.js"}`,
-			"node_modules/native-dep/index.js":     "module.exports = require('./build/Release/addon.node');\n",
-			addonPath:                              addon,
-		}
-	}
-	on := func(l layout, architecture string) Target {
-		target := l.target("server.js")
-		target.Framework.Arch = architecture
-		return target
-	}
-
-	t.Run("an addon built for the declared architecture is placed", func(t *testing.T) {
-		t.Parallel()
-
-		l := newLayout(t, treeWith(elfAddon(arch.ARM64, "aarch64")))
-		if err := Bundle(context.Background(), on(l, arch.ARM64)); err != nil {
-			t.Fatalf("Bundle: %v", err)
-		}
-		if got := readFile(t, filepath.Join(l.funcDir, filepath.FromSlash(addonPath))); got != elfAddon(arch.ARM64, "aarch64") {
-			t.Errorf("copied addon = %q, want the original bytes", got)
-		}
-	})
-
-	t.Run("an addon built for another architecture fails the build", func(t *testing.T) {
-		t.Parallel()
-
-		l := newLayout(t, treeWith(elfAddon(arch.X8664, "amd64")))
-		err := Bundle(context.Background(), on(l, arch.ARM64))
-		if err == nil {
-			t.Fatal("Bundle succeeded, want a refusal rather than a function that dies at its first require")
-		}
-		for _, want := range []string{"addon.node", arch.X8664, arch.ARM64, `"compute": "container"`} {
-			if !strings.Contains(err.Error(), want) {
-				t.Errorf("error = %q, want it to name %q", err, want)
-			}
-		}
-	})
-
-	t.Run("a package shipping one prebuild per platform keeps only the declared one", func(t *testing.T) {
-		t.Parallel()
-
-		prebuilt := tree{
-			"package.json":                        appPkg,
-			"server.js":                           "import native from 'multi-dep';\nconsole.log(native);\n",
-			"node_modules/multi-dep/package.json": `{"name":"multi-dep","main":"index.js"}`,
-			"node_modules/multi-dep/index.js": "module.exports = process.arch === 'arm64'\n" +
-				"  ? require('./prebuilds/linux-arm64.node')\n" +
-				"  : process.platform === 'darwin'\n" +
-				"    ? require('./prebuilds/darwin-arm64.node')\n" +
-				"    : require('./prebuilds/linux-x64.node');\n",
-			"node_modules/multi-dep/prebuilds/linux-x64.node":    elfAddon(arch.X8664, "amd64"),
-			"node_modules/multi-dep/prebuilds/linux-arm64.node":  elfAddon(arch.ARM64, "aarch64"),
-			"node_modules/multi-dep/prebuilds/darwin-arm64.node": "\xcf\xfa\xed\xfe" + strings.Repeat("\x00", 28),
-		}
-		kept := map[string]string{
-			arch.X8664: "node_modules/multi-dep/prebuilds/linux-x64.node",
-			arch.ARM64: "node_modules/multi-dep/prebuilds/linux-arm64.node",
-		}
-		for _, architecture := range []string{arch.X8664, arch.ARM64} {
-			t.Run(architecture, func(t *testing.T) {
-				t.Parallel()
-
-				l := newLayout(t, prebuilt)
-				if err := Bundle(context.Background(), on(l, architecture)); err != nil {
-					t.Fatalf("Bundle: %v", err)
-				}
-				for name, rel := range kept {
-					dest := filepath.Join(l.funcDir, filepath.FromSlash(rel))
-					_, err := os.Stat(dest)
-					if name == architecture && err != nil {
-						t.Errorf("%s is not in the bundle: %v", rel, err)
-					}
-					if name != architecture && err == nil {
-						t.Errorf("%s is in the bundle, want only what %s loads", rel, architecture)
-					}
-				}
-				if _, err := os.Stat(filepath.Join(l.funcDir, filepath.FromSlash(
-					"node_modules/multi-dep/prebuilds/darwin-arm64.node"))); err == nil {
-					t.Error("a mach-o prebuild is in the bundle, want only what linux loads")
-				}
-			})
-		}
-	})
-
-	t.Run("a package with nothing loadable on the declared architecture fails the build", func(t *testing.T) {
-		t.Parallel()
-
-		l := newLayout(t, tree{
-			"package.json":                        appPkg,
-			"server.js":                           "import native from 'multi-dep';\nconsole.log(native);\n",
-			"node_modules/multi-dep/package.json": `{"name":"multi-dep","main":"index.js"}`,
-			"node_modules/multi-dep/index.js": "module.exports = process.platform === 'darwin'\n" +
-				"  ? require('./prebuilds/darwin-arm64.node')\n" +
-				"  : require('./prebuilds/linux-arm64.node');\n",
-			"node_modules/multi-dep/prebuilds/linux-arm64.node":  elfAddon(arch.ARM64, "aarch64"),
-			"node_modules/multi-dep/prebuilds/darwin-arm64.node": "\xcf\xfa\xed\xfe" + strings.Repeat("\x00", 28),
-		})
-		err := Bundle(context.Background(), on(l, arch.X8664))
-		if err == nil {
-			t.Fatal("Bundle succeeded, want a refusal rather than a function that dies at its first require")
-		}
-		for _, want := range []string{"linux-arm64.node", "darwin-arm64.node", arch.ARM64, arch.X8664, "linux ELF"} {
-			if !strings.Contains(err.Error(), want) {
-				t.Errorf("error = %q, want it to name %q", err, want)
-			}
-		}
-	})
-
-	t.Run("an addon that is not a linux binary fails the build", func(t *testing.T) {
-		t.Parallel()
-
-		l := newLayout(t, treeWith("\xcf\xfa\xed\xfe"+strings.Repeat("\x00", 28)))
-		err := Bundle(context.Background(), on(l, arch.X8664))
-		if err == nil {
-			t.Fatal("Bundle succeeded, want a mach-o addon refused as not linux")
-		}
-		for _, want := range []string{"addon.node", "linux"} {
-			if !strings.Contains(err.Error(), want) {
-				t.Errorf("error = %q, want it to name %q", err, want)
-			}
-		}
-	})
 }

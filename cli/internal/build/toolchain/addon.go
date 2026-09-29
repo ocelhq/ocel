@@ -1,7 +1,6 @@
-package appbundler
+package toolchain
 
 import (
-	"context"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -14,159 +13,8 @@ import (
 	"sync"
 
 	"github.com/evanw/esbuild/pkg/api"
-	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
-	"github.com/ocelhq/ocel/pkg/edge"
 )
-
-const HandlerFile = "index.mjs"
-
-var engine = api.Engine{Name: api.EngineNode, Version: "24"}
-
-const entryRouteID = "/"
-
-const nativeDirName = "native"
-
-const nodeModulesDirName = "node_modules"
-
-const tracingHint = "set OCEL_BUILD_PREFER_TRACING=1 to build this app by tracing instead of bundling"
-
-const banner = `import { createRequire as __ocelCreateRequire } from "node:module";` +
-	`import { fileURLToPath as __ocelFileURLToPath } from "node:url";` +
-	`import { dirname as __ocelPathDirname } from "node:path";` +
-	`const require = __ocelCreateRequire(import.meta.url);` +
-	`const __ocelFilename = __ocelFileURLToPath(import.meta.url);` +
-	`const __ocelDirname = __ocelPathDirname(__ocelFilename);`
-
-type Target struct {
-	App        string
-	Framework  appbuild.Framework
-	Entrypoint string
-	FuncDir    string
-	AppDir     string
-	Log        io.Writer
-}
-
-func Bundle(ctx context.Context, t Target) error {
-	if err := t.validate(); err != nil {
-		return err
-	}
-	if err := os.RemoveAll(t.FuncDir); err != nil {
-		return fmt.Errorf("reset %s: %w", t.FuncDir, err)
-	}
-	if err := os.MkdirAll(t.FuncDir, 0o755); err != nil {
-		return fmt.Errorf("create %s: %w", t.FuncDir, err)
-	}
-
-	native := &addons{arch: t.Framework.Arch}
-	platform := &platformPackages{arch: t.Framework.Arch}
-	result := api.Build(api.BuildOptions{
-		EntryPoints:       []string{t.Entrypoint},
-		AbsWorkingDir:     filepath.Dir(t.Entrypoint),
-		Bundle:            true,
-		Platform:          api.PlatformNode,
-		Format:            api.FormatESModule,
-		Engines:           []api.Engine{engine},
-		MinifyWhitespace:  true,
-		MinifyIdentifiers: true,
-		MinifySyntax:      true,
-		Outfile:           filepath.Join(t.FuncDir, HandlerFile),
-		Write:             true,
-		Metafile:          true,
-		LogLevel:          api.LogLevelSilent,
-		Banner:            map[string]string{"js": banner},
-		Define: map[string]string{
-			"__dirname":  "__ocelDirname",
-			"__filename": "__ocelFilename",
-		},
-		Plugins: []api.Plugin{platform.plugin(), native.plugin()},
-	})
-	if len(result.Errors) > 0 {
-		msgs := api.FormatMessages(result.Errors, api.FormatMessagesOptions{Color: false})
-		return fmt.Errorf("bundle %s for app %q failed:\n%s", t.Entrypoint, t.App, strings.Join(msgs, "\n"))
-	}
-	if t.Log != nil && len(result.Warnings) > 0 {
-		msgs := api.FormatMessages(result.Warnings, api.FormatMessagesOptions{Color: false, Kind: api.WarningMessage})
-		fmt.Fprintf(t.Log, "ocel: bundling %s reported:\n%s\n", t.App, strings.Join(msgs, "\n"))
-	}
-	reportRuntimeFileRisk(t.Log, t.App, result.Metafile, filepath.Dir(t.Entrypoint))
-
-	if err := native.verify(); err != nil {
-		return err
-	}
-	if err := native.copyInto(t.FuncDir); err != nil {
-		return err
-	}
-	if err := platform.installInto(ctx, t.App, filepath.Dir(t.Entrypoint), t.FuncDir); err != nil {
-		return err
-	}
-	return describeArtifact(t.App, t.Framework, HandlerFile, nil, t.FuncDir, t.AppDir)
-}
-
-func describeArtifact(app string, framework appbuild.Framework, handler string, command []string, funcDir, appDir string) error {
-	if err := writeJSON(filepath.Join(funcDir, appbuild.FunctionConfigFile), appbuild.FunctionConfig{
-		Framework: framework,
-		Handler:   handler,
-		Command:   command,
-		ID:        entryRouteID,
-		App:       app,
-	}); err != nil {
-		return err
-	}
-
-	buildID, err := artifactHash(funcDir)
-	if err != nil {
-		return err
-	}
-	return writeJSON(filepath.Join(appDir, edge.ServeDescriptorFile), edge.ServeDescriptor{
-		Framework: framework.Name,
-		BuildID:   buildID,
-		Entry:     entryRouteID,
-		Needs:     map[edge.Need]edge.NeedDetail{},
-	})
-}
-
-func (t Target) validate() error {
-	stated := []struct {
-		name  string
-		value string
-	}{
-		{"app", t.App},
-		{"appDir", t.AppDir},
-		{"entrypoint", t.Entrypoint},
-		{"framework", t.Framework.Name},
-		{"funcDir", t.FuncDir},
-	}
-	var missing []string
-	for _, field := range stated {
-		if field.value == "" {
-			missing = append(missing, field.name)
-		}
-	}
-	if len(missing) > 0 {
-		return fmt.Errorf("cannot bundle: %s not stated", strings.Join(missing, ", "))
-	}
-	if info, err := os.Stat(t.Entrypoint); err != nil {
-		return fmt.Errorf("entrypoint %s for app %q: %w", t.Entrypoint, t.App, err)
-	} else if info.IsDir() {
-		return fmt.Errorf("entrypoint %s for app %q is a directory", t.Entrypoint, t.App)
-	}
-	return nil
-}
-
-func writeJSON(dest string, value any) error {
-	data, err := json.MarshalIndent(value, "", "  ")
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
-		return err
-	}
-	if err := os.WriteFile(dest, append(data, '\n'), 0o644); err != nil {
-		return fmt.Errorf("write %s: %w", dest, err)
-	}
-	return nil
-}
 
 type addon struct {
 	source   string
@@ -351,7 +199,7 @@ func (a *addons) copyInto(funcDir string) error {
 func addonDest(source, root, name string, inPackage bool) string {
 	if inPackage {
 		if rel, err := filepath.Rel(root, source); err == nil {
-			return path.Join(nodeModulesDirName, name, filepath.ToSlash(rel))
+			return path.Join(nodeModulesDir, name, filepath.ToSlash(rel))
 		}
 	}
 	return path.Join(nativeDirName, filepath.Base(source))

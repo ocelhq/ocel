@@ -38,11 +38,11 @@ type Resolve struct {
 }
 
 type Workspace struct {
-	Packages []Package `json:"packages"`
-	Members  []string  `json:"workspace_members"`
-	Root     string    `json:"workspace_root"`
-	Target   string    `json:"target_directory"`
-	Resolve  *Resolve  `json:"resolve"`
+	Packages  []Package `json:"packages"`
+	MemberIDs []string  `json:"workspace_members"`
+	Root      string    `json:"workspace_root"`
+	Target    string    `json:"target_directory"`
+	Resolve   *Resolve  `json:"resolve"`
 }
 
 func (p Package) Dir() string { return filepath.Dir(p.ManifestPath) }
@@ -79,9 +79,9 @@ func (w Workspace) PackageByID(id string) (Package, bool) {
 	return Package{}, false
 }
 
-func (w Workspace) WorkspaceMembers() []Package {
+func (w Workspace) Members() []Package {
 	var members []Package
-	for _, id := range w.Members {
+	for _, id := range w.MemberIDs {
 		if member, ok := w.PackageByID(id); ok {
 			members = append(members, member)
 		}

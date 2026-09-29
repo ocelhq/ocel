@@ -1,4 +1,4 @@
-package appbundler
+package toolchain
 
 import (
 	"context"
@@ -360,7 +360,7 @@ func TestAPlatformPackageKeepsItsOwnDotfilesAndLeavesNpmsBookkeepingBehind(t *te
 		t.Fatalf("Bundle: %v", err)
 	}
 	for _, left := range []string{".package-lock.json", ".bin"} {
-		if _, err := os.Stat(filepath.Join(l.funcDir, nodeModulesDirName, left)); err == nil {
+		if _, err := os.Stat(filepath.Join(l.funcDir, nodeModulesDir, left)); err == nil {
 			t.Errorf("the function contains npm's %s", left)
 		}
 	}

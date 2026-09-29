@@ -1,20 +1,15 @@
-package appbundler
+package toolchain
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
-	"github.com/ocelhq/ocel/pkg/arch"
 )
-
-const goModuleFile = "go.mod"
 
 type Compilation struct {
 	App            string
@@ -49,35 +44,6 @@ func Compile(ctx context.Context, c Compilation) error {
 	return fmt.Errorf("app %q is built with %q, which is not built from its own source tree", c.App, c.Framework.Name)
 }
 
-func (c Compilation) compileGo(ctx context.Context) error {
-	module, err := os.Stat(filepath.Join(c.Source, goModuleFile))
-	if err != nil || !module.Mode().IsRegular() {
-		return fmt.Errorf("app %q is built with go and %s has no %s: an app is compiled from the module rooted in its own directory", c.App, c.Source, goModuleFile)
-	}
-	goarch, runs := arch.GoArch(c.Framework.Arch)
-	if !runs {
-		return fmt.Errorf("app %q asks to be compiled for %q, which names no architecture go builds for", c.App, c.Framework.Arch)
-	}
-	if _, err := exec.LookPath("go"); err != nil {
-		return fmt.Errorf("app %q is built with go and no go toolchain is on PATH: %w", c.App, err)
-	}
-	if err := os.MkdirAll(c.FuncDir, 0o755); err != nil {
-		return err
-	}
-	binary := filepath.Join(c.FuncDir, c.App)
-	cmd := exec.CommandContext(ctx, "go", "build", "-trimpath", "-ldflags=-s -w", "-o", binary, ".")
-	cmd.Dir = c.pkg()
-	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOWORK=off", "GOOS=linux", "GOARCH="+goarch)
-	var said bytes.Buffer
-	cmd.Stdout = &said
-	cmd.Stderr = &said
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("compile app %q in %s for linux/%s (%w):\n%s", c.App, c.pkg(), goarch, err, said.String())
-	}
-	c.report("compiling", said.String())
-	return describeArtifact(c.App, c.Framework, c.App, []string{"./" + c.App}, c.FuncDir, c.AppDir)
-}
-
 func (c Compilation) report(what, said string) {
 	if c.Log != nil && strings.TrimSpace(said) != "" {
 		fmt.Fprintf(c.Log, "ocel: %s %s reported:\n%s\n", what, c.App, strings.TrimRight(said, "\n"))
@@ -85,24 +51,14 @@ func (c Compilation) report(what, said string) {
 }
 
 func (c Compilation) validate() error {
-	stated := []struct {
-		name  string
-		value string
-	}{
+	if err := refuseUnstated("compile", []statedField{
 		{"app", c.App},
 		{"appDir", c.AppDir},
 		{"source", c.Source},
 		{"framework", c.Framework.Name},
 		{"funcDir", c.FuncDir},
-	}
-	var missing []string
-	for _, field := range stated {
-		if field.value == "" {
-			missing = append(missing, field.name)
-		}
-	}
-	if len(missing) > 0 {
-		return fmt.Errorf("cannot compile: %s not stated", strings.Join(missing, ", "))
+	}); err != nil {
+		return err
 	}
 	if c.Framework.Name == appbuild.FrameworkPython && c.Entrypoint != "" {
 		return fmt.Errorf("app %q is built with python and names entrypoint %q: a python app is served by the %s in its own directory, and both the artifact and the image are built from that, so an entrypoint here would name a file nothing boots", c.App, c.Entrypoint, pythonEntryFile)
@@ -117,6 +73,24 @@ func (c Compilation) validate() error {
 	}
 	if !info.IsDir() {
 		return fmt.Errorf("package %s for app %q is not a directory containing a main package", pkg, c.App)
+	}
+	return nil
+}
+
+type statedField struct {
+	name  string
+	value string
+}
+
+func refuseUnstated(action string, fields []statedField) error {
+	var missing []string
+	for _, field := range fields {
+		if field.value == "" {
+			missing = append(missing, field.name)
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("cannot %s: %s not stated", action, strings.Join(missing, ", "))
 	}
 	return nil
 }

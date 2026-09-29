@@ -1,4 +1,4 @@
-package appbundler
+package toolchain
 
 import (
 	"encoding/json"
@@ -49,7 +49,7 @@ func scanRuntimeFileRisk(metafile, root string) []string {
 
 	paths := make([]string, 0, len(meta.Inputs))
 	for input := range meta.Inputs {
-		if strings.Contains(input, nodeModulesDirName+"/") {
+		if strings.Contains(input, nodeModulesDir+"/") {
 			continue
 		}
 		paths = append(paths, input)

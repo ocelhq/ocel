@@ -67,7 +67,7 @@ func workspaceDependencies(workspace cargo.Workspace, crate cargo.Package) []car
 		nodes[node.ID] = node
 	}
 	inWorkspace := map[string]bool{}
-	for _, member := range workspace.WorkspaceMembers() {
+	for _, member := range workspace.Members() {
 		inWorkspace[member.ID] = true
 	}
 

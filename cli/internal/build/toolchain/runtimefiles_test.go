@@ -1,4 +1,4 @@
-package appbundler
+package toolchain
 
 import (
 	"bytes"

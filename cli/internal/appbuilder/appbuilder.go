@@ -16,7 +16,7 @@ import (
 	"sync"
 	"unicode"
 
-	"github.com/ocelhq/ocel/cli/internal/appbundler"
+	"github.com/ocelhq/ocel/cli/internal/build/toolchain"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/nodeprotocol"
@@ -268,7 +268,7 @@ func compile(ctx context.Context, cfg *projectconfig.Config, a projectconfig.App
 	if err != nil {
 		return err
 	}
-	return appbundler.Compile(ctx, appbundler.Compilation{
+	return toolchain.Compile(ctx, toolchain.Compilation{
 		App:            a.Name,
 		Framework:      appbuild.Framework{Name: a.Framework.Name, Arch: a.Framework.Architecture()},
 		Source:         filepath.Join(cfg.Dir, a.Path),
@@ -358,7 +358,7 @@ func bundlePlanned(ctx context.Context, outputDir string, stderr io.Writer) erro
 		if err != nil {
 			return err
 		}
-		if err := appbundler.Bundle(ctx, appbundler.Target{
+		if err := toolchain.Bundle(ctx, toolchain.Target{
 			App:        filepath.Base(appDir),
 			Framework:  fn.Framework,
 			Entrypoint: fn.Entrypoint,

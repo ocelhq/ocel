@@ -1,8 +1,9 @@
-package appbundler
+package toolchain
 
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -10,6 +11,9 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 const buildIDLength = 16
@@ -63,4 +67,41 @@ func fileHash(path string) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(digest.Sum(nil)), nil
+}
+
+func describeArtifact(app string, framework appbuild.Framework, handler string, command []string, funcDir, appDir string) error {
+	if err := writeJSON(filepath.Join(funcDir, appbuild.FunctionConfigFile), appbuild.FunctionConfig{
+		Framework: framework,
+		Handler:   handler,
+		Command:   command,
+		ID:        entryRouteID,
+		App:       app,
+	}); err != nil {
+		return err
+	}
+
+	buildID, err := artifactHash(funcDir)
+	if err != nil {
+		return err
+	}
+	return writeJSON(filepath.Join(appDir, edge.ServeDescriptorFile), edge.ServeDescriptor{
+		Framework: framework.Name,
+		BuildID:   buildID,
+		Entry:     entryRouteID,
+		Needs:     map[edge.Need]edge.NeedDetail{},
+	})
+}
+
+func writeJSON(dest string, value any) error {
+	data, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(dest, append(data, '\n'), 0o644); err != nil {
+		return fmt.Errorf("write %s: %w", dest, err)
+	}
+	return nil
 }

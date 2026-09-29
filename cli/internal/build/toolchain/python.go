@@ -1,4 +1,4 @@
-package appbundler
+package toolchain
 
 import (
 	"bytes"
@@ -22,7 +22,6 @@ const (
 	pythonRuntimeCommand   = "python3"
 	pythonBytecodeDir      = "__pycache__"
 	pythonVirtualenvDir    = "venv"
-	nodeVendorDir          = "node_modules"
 )
 
 func (c Compilation) vendorPython(ctx context.Context) error {
@@ -140,7 +139,7 @@ func leftBehindByTheBuildHost(name string) bool {
 		return true
 	}
 	switch name {
-	case pythonBytecodeDir, pythonVirtualenvDir, nodeVendorDir:
+	case pythonBytecodeDir, pythonVirtualenvDir, nodeModulesDir:
 		return true
 	}
 	return false
