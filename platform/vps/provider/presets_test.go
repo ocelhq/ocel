@@ -31,7 +31,7 @@ func TestEveryPresetFillsInHowItsHostToolRunsItsProxy(t *testing.T) {
 		"Coolify's Traefik": {
 			proxy: map[string]any{"traefik": map[string]any{"preset": "coolify"}},
 			want: host.Front{Traefik: &host.TraefikFront{
-				Preset: "coolify", Directory: "/data/coolify/proxy/dynamic", Resolver: "letsencrypt",
+				Preset: "coolify", Directory: "/data/coolify/proxy/dynamic", ContainerDirectory: "/traefik/dynamic", Resolver: "letsencrypt",
 				Entrypoints: host.Entrypoints{HTTP: "http", HTTPS: "https"}, Network: "coolify",
 			}},
 		},
@@ -70,7 +70,14 @@ func TestAFieldWrittenBesideAPresetOverridesItAndTheRestApply(t *testing.T) {
 		"Coolify's Traefik with a DNS resolver of its own": {
 			proxy: map[string]any{"traefik": map[string]any{"preset": "coolify", "resolver": "le-dns", "previewResolver": "cloudflare"}},
 			want: host.Front{Traefik: &host.TraefikFront{
-				Preset: "coolify", Directory: "/data/coolify/proxy/dynamic", Resolver: "le-dns", PreviewResolver: "cloudflare",
+				Preset: "coolify", Directory: "/data/coolify/proxy/dynamic", ContainerDirectory: "/traefik/dynamic", Resolver: "le-dns", PreviewResolver: "cloudflare",
+				Entrypoints: host.Entrypoints{HTTP: "http", HTTPS: "https"}, Network: "coolify",
+			}},
+		},
+		"Coolify's Traefik reading a directory of your own, mounted where Coolify mounts none": {
+			proxy: map[string]any{"traefik": map[string]any{"preset": "coolify", "directory": "/srv/traefik/dynamic"}},
+			want: host.Front{Traefik: &host.TraefikFront{
+				Preset: "coolify", Directory: "/srv/traefik/dynamic", Resolver: "letsencrypt",
 				Entrypoints: host.Entrypoints{HTTP: "http", HTTPS: "https"}, Network: "coolify",
 			}},
 		},
@@ -84,7 +91,7 @@ func TestAFieldWrittenBesideAPresetOverridesItAndTheRestApply(t *testing.T) {
 		"Coolify's Traefik reaching the switchboard on a port in place of its network": {
 			proxy: map[string]any{"traefik": map[string]any{"preset": "coolify", "port": 9000}},
 			want: host.Front{Traefik: &host.TraefikFront{
-				Preset: "coolify", Directory: "/data/coolify/proxy/dynamic", Resolver: "letsencrypt",
+				Preset: "coolify", Directory: "/data/coolify/proxy/dynamic", ContainerDirectory: "/traefik/dynamic", Resolver: "letsencrypt",
 				Entrypoints: host.Entrypoints{HTTP: "http", HTTPS: "https"}, Port: 9000,
 			}},
 		},

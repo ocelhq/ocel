@@ -388,6 +388,8 @@ export type VpsProxy =
 /** A Traefik the machine already runs, reading ocel's routes from a directory its file provider watches. */
 export type VpsTraefik =
   | {
+      /** Where directory is mounted in the container your Traefik runs in, as its providers.file.directory names it; ocel.yml names the origin certificates it places in directory by this path. Left out, directory itself. */
+      containerDirectory?: string;
       /** The directory Traefik's file provider watches, where ocel writes its routers. */
       directory?: string;
       /** The entry points ocel's routers attach to. */
@@ -404,6 +406,8 @@ export type VpsTraefik =
       resolver?: string;
     }
   | {
+      /** Where directory is mounted in the container your Traefik runs in, as its providers.file.directory names it; ocel.yml names the origin certificates it places in directory by this path. Left out, directory itself. */
+      containerDirectory?: string;
       /** The directory Traefik's file provider watches, where ocel writes its routers. */
       directory: string;
       /** The entry points ocel's routers attach to. */

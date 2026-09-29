@@ -95,8 +95,10 @@ client with no certificate or forwards over plain http, and `ocel doctor` fails 
 [Behind your Caddy](#behind-your-caddy), `ocel.caddy` carries the shield itself: each
 hostname Cloudflare forwards gets a site of its own that requires the zone's client certificate
 and serves the origin certificate, and its `http://` is redirected to https.
-[Behind your Traefik](#behind-your-traefik), the routers ocel places require no client
-certificate, so a deploy refuses to forward a hostname through Cloudflare there.
+[Behind your Traefik](#behind-your-traefik), `ocel.yml` carries it too: the router of each
+hostname Cloudflare forwards names TLS options of its own that require the zone's client
+certificate, the origin certificate is listed under `tls.certificates`, and its http router
+only redirects to https.
 
 ## Behind your own proxy
 
@@ -202,7 +204,8 @@ preset overrides it, for a proxy whose configuration you have edited.
 | Field | On | What it is | Left out |
 | --- | --- | --- | --- |
 | `preset` | `traefik`: `coolify`, `dokploy`; `caddy`: `coolify` | The tool that runs the proxy. Fills every other field. | |
-| `directory` | `traefik`, `caddy` | The directory the proxy reads ocel's file from: Traefik's `providers.file.directory`, or the directory Caddy imports. | Required, unless `preset` |
+| `directory` | `traefik`, `caddy` | The directory on the box that the proxy reads ocel's file from, and that the switchboard mounts to write it. | Required, unless `preset` |
+| `containerDirectory` | `traefik` | Where `directory` is mounted in the container Traefik runs in: its `providers.file.directory`. `ocel.yml` names the origin certificates it places in `directory` by this path. | `directory` |
 | `resolver` | `traefik` | The `certResolver` every hostname's router names. | Required, unless `preset` |
 | `previewResolver` | `traefik` | A resolver that can issue `*.<preview base>` over DNS-01. Set, previews share one wildcard certificate. | Each preview hostname gets its own from `resolver` |
 | `entrypoints.https` | `traefik` | The entry point ocel's hostname routers attach to. | `websecure` |
@@ -219,6 +222,7 @@ always published and `network` is joined as well.
 | | `traefik` + `coolify` | `traefik` + `dokploy` | `caddy` + `coolify` |
 | --- | --- | --- | --- |
 | `directory` | `/data/coolify/proxy/dynamic` | `/etc/dokploy/traefik/dynamic` | `/data/coolify/proxy/caddy/dynamic` |
+| `containerDirectory` | `/traefik/dynamic` | | |
 | `resolver` | `letsencrypt` | `letsencrypt` | |
 | `entrypoints` | `http` / `https` | `web` / `websecure` | |
 | `network` | `coolify` | `dokploy-network` | `coolify` |
@@ -283,6 +287,21 @@ your Traefik orders one certificate for `*.<preview base>`, through a router on
 `ocel-edge-probe.<preview base>` that ocel writes as soon as the preview base is set. Each preview
 hostname is then served that certificate. Without `previewResolver`, each preview hostname
 gets a certificate of its own from `resolver`, the same as any other hostname.
+
+**Behind Cloudflare.** For a hostname Cloudflare forwards, the https router names no
+`resolver`. It names TLS options `ocel-shield-<hostname with dashes>-<hash>`, which set
+`clientAuth.clientAuthType: RequireAndVerifyClientCert` with the zone's client certificates
+inline under `caFiles`, and `sniStrict: true`. Your Traefik picks TLS options by the name the
+client asks for, so a handshake for the hostname without the zone's certificate is refused, and a
+request that asks for another name, or none, and sends the hostname as `Host` is answered 421.
+The hostname is served its origin certificate, which the switchboard places beside `ocel.yml` as
+`ocel-origin-<hostname>-<digest>.pem`, readable only by the directory's group, and which
+`ocel.yml` lists under `tls.certificates` by its path in `containerDirectory`. Its http router
+redirects to https and forwards nothing: Traefik's permanent redirect answers 301 to a `GET`
+or `HEAD` and 308 to any other method. Traefik checks a client certificate's expiry, so it
+refuses the zone's certificate once it lapses: rotate it before then. After a change, ocel waits
+for your Traefik to refuse the hostname to a client with no certificate, and `ocel doctor` fails
+a hostname your Traefik answers without one.
 
 **Semicolons in the query.** Your Traefik rewrites every `;` in a query to `&` before any router
 sees the request, so `?x=1;2` reaches your app as `?x=1&2`. Ocel's routers can't change that,

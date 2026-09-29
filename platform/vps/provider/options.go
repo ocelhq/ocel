@@ -32,13 +32,14 @@ type Proxy struct {
 }
 
 type Traefik struct {
-	Preset          string       `json:"preset,omitempty" enum:"coolify,dokploy" doc:"The host tool whose Traefik this is. It fills in every other field, and a field written beside it overrides."`
-	Directory       string       `json:"directory" unless:"preset" doc:"The directory Traefik's file provider watches, where ocel writes its routers."`
-	Resolver        string       `json:"resolver" unless:"preset" doc:"The certificate resolver every hostname router ocel writes names."`
-	PreviewResolver string       `json:"previewResolver,omitempty" doc:"A resolver that can issue the preview base's wildcard over DNS-01. Set, previews share one wildcard certificate; left out, each preview hostname gets its own from resolver."`
-	Entrypoints     *Entrypoints `json:"entrypoints,omitempty" doc:"The entry points ocel's routers attach to."`
-	Network         string       `json:"network,omitempty" doc:"A docker network ocel's switchboard joins, so Traefik reaches it by name. Not with port."`
-	Port            int          `json:"port,omitempty" doc:"The loopback port ocel's switchboard is published on for Traefik to reach, in place of the network a preset fills; 8480 when left out. Not with network."`
+	Preset             string       `json:"preset,omitempty" enum:"coolify,dokploy" doc:"The host tool whose Traefik this is. It fills in every other field, and a field written beside it overrides."`
+	Directory          string       `json:"directory" unless:"preset" doc:"The directory Traefik's file provider watches, where ocel writes its routers."`
+	ContainerDirectory string       `json:"containerDirectory,omitempty" doc:"Where directory is mounted in the container your Traefik runs in, as its providers.file.directory names it; ocel.yml names the origin certificates it places in directory by this path. Left out, directory itself."`
+	Resolver           string       `json:"resolver" unless:"preset" doc:"The certificate resolver every hostname router ocel writes names."`
+	PreviewResolver    string       `json:"previewResolver,omitempty" doc:"A resolver that can issue the preview base's wildcard over DNS-01. Set, previews share one wildcard certificate; left out, each preview hostname gets its own from resolver."`
+	Entrypoints        *Entrypoints `json:"entrypoints,omitempty" doc:"The entry points ocel's routers attach to."`
+	Network            string       `json:"network,omitempty" doc:"A docker network ocel's switchboard joins, so Traefik reaches it by name. Not with port."`
+	Port               int          `json:"port,omitempty" doc:"The loopback port ocel's switchboard is published on for Traefik to reach, in place of the network a preset fills; 8480 when left out. Not with network."`
 }
 
 type Entrypoints struct {
@@ -129,13 +130,14 @@ func (t *Traefik) written() host.TraefikFront {
 		entrypoints = host.Entrypoints{HTTP: t.Entrypoints.HTTP, HTTPS: t.Entrypoints.HTTPS}
 	}
 	return host.TraefikFront{
-		Preset:          t.Preset,
-		Directory:       t.Directory,
-		Resolver:        t.Resolver,
-		PreviewResolver: t.PreviewResolver,
-		Entrypoints:     entrypoints,
-		Network:         t.Network,
-		Port:            t.Port,
+		Preset:             t.Preset,
+		Directory:          t.Directory,
+		ContainerDirectory: t.ContainerDirectory,
+		Resolver:           t.Resolver,
+		PreviewResolver:    t.PreviewResolver,
+		Entrypoints:        entrypoints,
+		Network:            t.Network,
+		Port:               t.Port,
 	}
 }
 

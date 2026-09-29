@@ -27,7 +27,8 @@ zone-level pulls on. Two deploys that find the zone holding none at once each up
 and the one that uploaded second deletes its own, so the zone keeps one. Past that, ocel
 never replaces or deletes a zone's client certificate: it is shared by every origin the
 zone forwards to. The origins ocel runs accept it past its
-expiry, as Cloudflare keeps presenting it. A zone that already presents Cloudflare's shared
+expiry, as Cloudflare keeps presenting it, except a VPS box behind your own Traefik, which
+refuses it once it lapses. A zone that already presents Cloudflare's shared
 certificate (global pulls on, or zone-level pulls on with no certificate of the zone's own)
 is refused, since another origin in it may trust only that one: upload a certificate of
 your own first.

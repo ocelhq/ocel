@@ -18,10 +18,11 @@ var hostTools = map[string]hostTool{
 	"coolify": {
 		name: "Coolify",
 		traefik: &TraefikFront{
-			Directory:   "/data/coolify/proxy/dynamic",
-			Resolver:    "letsencrypt",
-			Entrypoints: Entrypoints{HTTP: "http", HTTPS: "https"},
-			Network:     "coolify",
+			Directory:          "/data/coolify/proxy/dynamic",
+			ContainerDirectory: "/traefik/dynamic",
+			Resolver:           "letsencrypt",
+			Entrypoints:        Entrypoints{HTTP: "http", HTTPS: "https"},
+			Network:            "coolify",
 		},
 		caddy: &CaddyFront{
 			Directory: "/data/coolify/proxy/caddy/dynamic",
@@ -71,7 +72,10 @@ func (t TraefikFront) Filled() TraefikFront {
 		filled = *tool
 	}
 	filled.Preset = t.Preset
-	filled.Directory = cmp.Or(t.Directory, filled.Directory)
+	if t.Directory != "" {
+		filled.Directory, filled.ContainerDirectory = t.Directory, ""
+	}
+	filled.ContainerDirectory = cmp.Or(t.ContainerDirectory, filled.ContainerDirectory)
 	filled.Resolver = cmp.Or(t.Resolver, filled.Resolver)
 	filled.PreviewResolver = cmp.Or(t.PreviewResolver, filled.PreviewResolver)
 	filled.Entrypoints.HTTP = cmp.Or(t.Entrypoints.HTTP, filled.Entrypoints.HTTP, traefikHTTP)

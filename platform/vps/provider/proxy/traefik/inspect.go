@@ -20,6 +20,8 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
+const originRenewal = "ocel renews the origin certificate the edge in front issues it, and your Traefik serves it from " + FileName
+
 var bootstrapFix = "run `" + provider.BootstrapCommand(environment.TierProduction) + "` to recreate the switchboard where your Traefik reaches it"
 
 func (t Traefik) inspect(ctx context.Context) (proxy.Checks, error) {
@@ -38,6 +40,14 @@ func (t Traefik) inspect(ctx context.Context) (proxy.Checks, error) {
 	checks = append(checks, placed)
 	diagnosis := sync.OnceValue(func() string { return t.diagnose(ctx) })
 	for _, hostname := range spec.Hostnames {
+		if _, shielded := spec.ShieldOf(hostname); shielded {
+			check, err := t.shieldCheck(ctx, hostname)
+			if err != nil {
+				return nil, err
+			}
+			checks = append(checks, check)
+			continue
+		}
 		routing, err := t.routingCheck(ctx, hostname, diagnosis)
 		if err != nil {
 			return nil, err
@@ -137,6 +147,19 @@ func (t Traefik) routingCheck(ctx context.Context, hostname string, diagnosis fu
 		Fix: "check your Traefik reads " + t.directory() + " and runs its " + t.HTTPS + " entry point on 443"}, nil
 }
 
+func (t Traefik) shieldCheck(ctx context.Context, hostname string) (provider.HostCheck, error) {
+	refused, said, err := t.probeShield(ctx, hostname)
+	if err != nil {
+		return provider.HostCheck{}, err
+	}
+	if !refused {
+		return provider.HostCheck{Subject: hostname, Verdict: provider.HostFail, Finding: said,
+			Fix: "check your Traefik reads " + t.directory() + " and runs its " + t.HTTPS + " entry point on 443"}, nil
+	}
+	return provider.HostCheck{Subject: hostname, Verdict: provider.HostPass,
+		Finding: fmt.Sprintf("your Traefik refuses %s to a client that presents no certificate (%s)", hostname, said)}, nil
+}
+
 func (t Traefik) outranked(ctx context.Context, hostnames []string) (proxy.Checks, error) {
 	routers, unread, err := t.routers(ctx)
 	if err != nil {
@@ -163,6 +186,9 @@ func (t Traefik) outranked(ctx context.Context, hostnames []string) (proxy.Check
 }
 
 func (t Traefik) certificate(ctx context.Context, spec proxy.Spec, hostname string) (proxy.Certificate, error) {
+	if shield, shielded := spec.ShieldOf(hostname); shielded && shield.OriginCertificate.Certificate != "" {
+		return proxy.Certificate{Renewal: originRenewal}, nil
+	}
 	certificate := proxy.Certificate{Renewal: fmt.Sprintf("your Traefik renews it through %s, for as long as its acme.json holds it",
 		t.resolverOf(hostname, spec.PreviewBase))}
 	block, err := t.Box.ReadLeaf(ctx, hostname)

@@ -102,6 +102,7 @@ func (t TraefikFront) spelled() spelling {
 	var fields, entrypoints spelling
 	fields.text("preset", t.Preset, "")
 	fields.text("directory", t.Directory, base.Directory)
+	fields.text("containerDirectory", t.ContainerDirectory, base.ContainerDirectory)
 	fields.text("resolver", t.Resolver, base.Resolver)
 	fields.text("previewResolver", t.PreviewResolver, base.PreviewResolver)
 	entrypoints.text("http", t.Entrypoints.HTTP, base.Entrypoints.HTTP)

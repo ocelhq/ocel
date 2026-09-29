@@ -1,10 +1,8 @@
 package caddyfile
 
 import (
-	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -19,9 +17,8 @@ import (
 )
 
 const (
-	streamCloseDelay  = "30s"
-	originDigestChars = 12
-	redirectToHTTPS   = "redir https://{host}{uri} 308"
+	streamCloseDelay = "30s"
+	redirectToHTTPS  = "redir https://{host}{uri} 308"
 )
 
 type shieldedSite struct {
@@ -86,7 +83,7 @@ func (c Caddyfile) originFiles(spec proxy.Spec) []proxy.OriginFile {
 		if slices.ContainsFunc(files, func(file proxy.OriginFile) bool { return file.Path == path }) {
 			continue
 		}
-		files = append(files, proxy.OriginFile{Path: path, Bundle: bundled(pair)})
+		files = append(files, proxy.OriginFile{Path: path, Bundle: pair.Bundle()})
 	}
 	slices.SortFunc(files, func(a, b proxy.OriginFile) int { return strings.Compare(a.Path, b.Path) })
 	return files
@@ -96,28 +93,13 @@ func split(spec proxy.Spec) ([]string, []shieldedSite) {
 	var open []string
 	var shielded []shieldedSite
 	for _, hostname := range spec.Hostnames {
-		if shield, found := shieldOf(spec.Shields, hostname); found {
+		if shield, found := spec.ShieldOf(hostname); found {
 			shielded = append(shielded, shieldedSite{hostname: hostname, shield: shield})
 			continue
 		}
 		open = append(open, hostname)
 	}
 	return open, shielded
-}
-
-func shieldOf(shields []proxy.Shield, hostname string) (proxy.Shield, bool) {
-	if at := slices.IndexFunc(shields, func(shield proxy.Shield) bool {
-		return strings.EqualFold(strings.TrimSpace(shield.Hostname), hostname)
-	}); at >= 0 {
-		return shields[at], true
-	}
-	if at := slices.IndexFunc(shields, func(shield proxy.Shield) bool {
-		pattern := strings.TrimSpace(shield.Hostname)
-		return strings.HasPrefix(pattern, "*.") && covers(pattern, hostname)
-	}); at >= 0 {
-		return shields[at], true
-	}
-	return proxy.Shield{}, false
 }
 
 func clientAuthentication(site shieldedSite) (string, error) {
@@ -147,15 +129,5 @@ func encodeLeafDER(certificate string) (string, error) {
 }
 
 func (c Caddyfile) originPath(shield proxy.Shield) string {
-	digest := sha256.Sum256(bundled(shield.OriginCertificate))
-	hostname := strings.ReplaceAll(strings.ToLower(strings.TrimSpace(shield.Hostname)), "*", "_")
-	return filepath.Join(c.Directory, switchboard.OriginPrefix+hostname+"-"+hex.EncodeToString(digest[:])[:originDigestChars]+".pem")
-}
-
-func bundled(pair proxy.CertificatePair) []byte {
-	certificate := pair.Certificate
-	if !strings.HasSuffix(certificate, "\n") {
-		certificate += "\n"
-	}
-	return []byte(certificate + pair.Key)
+	return filepath.Join(c.Directory, shield.OriginFileName())
 }

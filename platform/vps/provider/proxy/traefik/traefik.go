@@ -41,14 +41,15 @@ type Box interface {
 }
 
 type Traefik struct {
-	Box             Box
-	Directory       string
-	Resolver        string
-	PreviewResolver string
-	HTTP            string
-	HTTPS           string
-	Network         string
-	Port            int
+	Box                Box
+	Directory          string
+	ContainerDirectory string
+	Resolver           string
+	PreviewResolver    string
+	HTTP               string
+	HTTPS              string
+	Network            string
+	Port               int
 }
 
 func routerName(hostname string) string {
@@ -57,6 +58,13 @@ func routerName(hostname string) string {
 }
 
 func (t Traefik) directory() string { return filepath.Clean(t.Directory) }
+
+func (t Traefik) containerDirectory() string {
+	if t.ContainerDirectory == "" {
+		return t.directory()
+	}
+	return filepath.Clean(t.ContainerDirectory)
+}
 
 func (t Traefik) file() string { return filepath.Join(t.directory(), FileName) }
 

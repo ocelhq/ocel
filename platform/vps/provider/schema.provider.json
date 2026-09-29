@@ -38,6 +38,10 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "containerDirectory": {
+                        "description": "Where directory is mounted in the container your Traefik runs in, as its providers.file.directory names it; ocel.yml names the origin certificates it places in directory by this path. Left out, directory itself.",
+                        "type": "string"
+                      },
                       "directory": {
                         "description": "The directory Traefik's file provider watches, where ocel writes its routers.",
                         "type": "string"
@@ -91,6 +95,10 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "containerDirectory": {
+                        "description": "Where directory is mounted in the container your Traefik runs in, as its providers.file.directory names it; ocel.yml names the origin certificates it places in directory by this path. Left out, directory itself.",
+                        "type": "string"
+                      },
                       "directory": {
                         "description": "The directory Traefik's file provider watches, where ocel writes its routers.",
                         "type": "string"
