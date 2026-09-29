@@ -30,7 +30,7 @@ export default {
   apps: [{ name: "api", path: "apps/api", compute: "container" }],
 };
 `)
-	copyFixtureApp(t, "../../imagebuild/testdata/dockerfileapp", filepath.Join(root, "apps", "api"))
+	copyFixtureApp(t, "../../build/image/testdata/dockerfileapp", filepath.Join(root, "apps", "api"))
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(deps, &stdout)

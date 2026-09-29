@@ -1,4 +1,4 @@
-package imagebuild
+package image
 
 import (
 	"maps"
@@ -107,11 +107,11 @@ func dockerfileSolve(t *testing.T) client.SolveOpt {
 
 func dockerfileSolveFor(t *testing.T, arch string) client.SolveOpt {
 	t.Helper()
-	choice, err := Choose(App{Name: "web", Workspace: at(t, "testdata/dockerfileapp")})
+	recipe, err := ChooseRecipe(App{Name: "web", Workspace: at(t, "testdata/dockerfileapp")})
 	if err != nil {
-		t.Fatalf("Choose() = %v", err)
+		t.Fatalf("ChooseRecipe() = %v", err)
 	}
-	opt, done, err := choice.solve(arch)
+	opt, done, err := recipe.solve(arch)
 	if err != nil {
 		t.Fatalf("solve() = %v", err)
 	}
@@ -120,9 +120,9 @@ func dockerfileSolveFor(t *testing.T, arch string) client.SolveOpt {
 }
 
 func TestEitherBuilderIsPinnedToTheArchitectureTheTargetRuns(t *testing.T) {
-	planned, err := Choose(App{Name: "web", Workspace: at(t, "testdata/plainserver")})
+	planned, err := ChooseRecipe(App{Name: "web", Workspace: at(t, "testdata/plainserver")})
 	if err != nil {
-		t.Fatalf("Choose() = %v", err)
+		t.Fatalf("ChooseRecipe() = %v", err)
 	}
 	railpacked, done, err := planned.solve("arm64")
 	if err != nil {

@@ -6,7 +6,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/cli/internal/imagebuild"
+	"github.com/ocelhq/ocel/cli/internal/build/image"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/pkg/naming"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -21,7 +21,7 @@ type Host interface {
 func repositories(cfg *projectconfig.Config) ([]string, error) {
 	repositories := make([]string, 0, len(cfg.Apps))
 	for _, app := range cfg.Apps {
-		repository, err := imagebuild.Repository(cfg.Slug, app.Name)
+		repository, err := image.Repository(cfg.Slug, app.Name)
 		if err != nil {
 			return nil, err
 		}

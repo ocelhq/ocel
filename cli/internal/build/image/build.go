@@ -1,4 +1,4 @@
-package imagebuild
+package image
 
 import (
 	"context"
@@ -25,13 +25,8 @@ const (
 	platformAttr       = "platform"
 )
 
-type Builder struct {
-	Progress io.Writer
-	Arch     string
-}
-
-func (b Builder) Build(ctx context.Context, app App) (Image, error) {
-	choice, err := Choose(app)
+func Build(ctx context.Context, app App, arch string, progress io.Writer) (Image, error) {
+	recipe, err := ChooseRecipe(app)
 	if err != nil {
 		return Image{}, err
 	}
@@ -39,17 +34,17 @@ func (b Builder) Build(ctx context.Context, app App) (Image, error) {
 	if err != nil {
 		return Image{}, err
 	}
-	builder, err := d.builder(ctx)
+	buildkit, err := d.buildkit(ctx)
 	if err != nil {
 		return Image{}, d.unreachable(err)
 	}
-	defer func() { _ = builder.Close() }()
+	defer func() { _ = buildkit.Close() }()
 
-	if err := d.usable(ctx, builder, b.Arch); err != nil {
+	if err := d.usable(ctx, buildkit, arch); err != nil {
 		return Image{}, err
 	}
 
-	opt, done, err := choice.solve(b.Arch)
+	opt, done, err := recipe.solve(arch)
 	if err != nil {
 		return Image{}, err
 	}
@@ -59,9 +54,9 @@ func (b Builder) Build(ctx context.Context, app App) (Image, error) {
 	reported := make(chan struct{})
 	go func() {
 		defer close(reported)
-		report(status, b.Progress)
+		report(status, progress)
 	}()
-	resp, err := choice.run(ctx, builder, opt, status)
+	resp, err := recipe.run(ctx, buildkit, opt, status)
 	<-reported
 	if err != nil {
 		return Image{}, fmt.Errorf("build %s: %w", app.Name, err)
@@ -77,10 +72,10 @@ func (b Builder) Build(ctx context.Context, app App) (Image, error) {
 	return image, nil
 }
 
-func (c Choice) railpack() bool { return c.Dockerfile == "" }
+func (r Recipe) railpack() bool { return r.Dockerfile == "" }
 
-func (c Choice) solve(arch string) (client.SolveOpt, func(), error) {
-	opt, done, err := c.unpinned()
+func (r Recipe) solve(arch string) (client.SolveOpt, func(), error) {
+	opt, done, err := r.unpinned()
 	if err != nil || arch == "" {
 		return opt, done, err
 	}
@@ -91,12 +86,12 @@ func (c Choice) solve(arch string) (client.SolveOpt, func(), error) {
 	return opt, done, nil
 }
 
-func (c Choice) unpinned() (client.SolveOpt, func(), error) {
-	if !c.railpack() {
-		opt, err := dockerfileOptions(c.App.Workspace.Root, c.Dockerfile)
+func (r Recipe) unpinned() (client.SolveOpt, func(), error) {
+	if !r.railpack() {
+		opt, err := dockerfileOptions(r.App.Workspace.Root, r.Dockerfile)
 		return opt, func() {}, err
 	}
-	plan, err := Plan(c.App.Workspace)
+	plan, err := Plan(r.App.Workspace)
 	if err != nil {
 		return client.SolveOpt{}, nil, err
 	}
@@ -104,7 +99,7 @@ func (c Choice) unpinned() (client.SolveOpt, func(), error) {
 	if err != nil {
 		return client.SolveOpt{}, nil, err
 	}
-	opt, err := solveOptions(c.App.Workspace.Root, planDir)
+	opt, err := solveOptions(r.App.Workspace.Root, planDir)
 	if err != nil {
 		_ = os.RemoveAll(planDir)
 		return client.SolveOpt{}, nil, err
@@ -112,11 +107,11 @@ func (c Choice) unpinned() (client.SolveOpt, func(), error) {
 	return opt, func() { _ = os.RemoveAll(planDir) }, nil
 }
 
-func (c Choice) run(ctx context.Context, builder *client.Client, opt client.SolveOpt, status chan *client.SolveStatus) (*client.SolveResponse, error) {
-	if c.railpack() {
-		return builder.Build(ctx, opt, "", railpack.Build, status)
+func (r Recipe) run(ctx context.Context, buildkit *client.Client, opt client.SolveOpt, status chan *client.SolveStatus) (*client.SolveResponse, error) {
+	if r.railpack() {
+		return buildkit.Build(ctx, opt, "", railpack.Build, status)
 	}
-	return builder.Solve(ctx, nil, opt, status)
+	return buildkit.Solve(ctx, nil, opt, status)
 }
 
 func stagePlan(plan []byte) (string, error) {

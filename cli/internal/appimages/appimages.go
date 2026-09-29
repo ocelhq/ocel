@@ -2,25 +2,22 @@ package appimages
 
 import (
 	"context"
-	"fmt"
-	"path/filepath"
 
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
-	"github.com/ocelhq/ocel/cli/internal/imagebuild"
+	"github.com/ocelhq/ocel/cli/internal/build/image"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/workspace"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 func Build(ctx context.Context, cfg *projectconfig.Config, archs map[string]string, out appbuilder.Output) (map[string]string, error) {
 	var refs map[string]string
 	for _, app := range Apps(cfg) {
-		built, err := Describe(cfg, app)
+		described, err := image.Describe(cfg, app)
 		if err != nil {
 			return nil, err
 		}
 		log, ended := out.App(app.Name)
-		image, err := imagebuild.Builder{Progress: log, Arch: archs[app.Name]}.Build(ctx, built)
+		built, err := image.Build(ctx, described, archs[app.Name], log)
 		ended(err)
 		if err != nil {
 			return nil, err
@@ -28,26 +25,9 @@ func Build(ctx context.Context, cfg *projectconfig.Config, archs map[string]stri
 		if refs == nil {
 			refs = map[string]string{}
 		}
-		refs[app.Name] = image.Ref
+		refs[app.Name] = built.Ref
 	}
 	return refs, nil
-}
-
-func Describe(cfg *projectconfig.Config, app projectconfig.App) (imagebuild.App, error) {
-	located, err := workspace.Locate(filepath.Join(cfg.Dir, app.Path))
-	if err != nil {
-		return imagebuild.App{}, fmt.Errorf("app %q: %w", app.Name, err)
-	}
-	if app.Build != nil {
-		if app.Build.Context != "" {
-			located, err = located.Rebase(filepath.Join(cfg.Dir, filepath.FromSlash(app.Build.Context)))
-			if err != nil {
-				return imagebuild.App{}, fmt.Errorf("app %q sets build.context to %q: %w", app.Name, app.Build.Context, err)
-			}
-		}
-		located.BuildCommand = app.Build.Command
-	}
-	return imagebuild.App{Slug: cfg.Slug, Name: app.Name, Workspace: located, Configured: DockerfileOf(app)}, nil
 }
 
 func Apps(cfg *projectconfig.Config) []projectconfig.App {
@@ -58,11 +38,4 @@ func Apps(cfg *projectconfig.Config) []projectconfig.App {
 		}
 	}
 	return containers
-}
-
-func DockerfileOf(app projectconfig.App) string {
-	if app.Build == nil {
-		return ""
-	}
-	return app.Build.Dockerfile
 }

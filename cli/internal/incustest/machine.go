@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/imagebuild"
+	"github.com/ocelhq/ocel/cli/internal/build/image"
 	"github.com/ocelhq/ocel/pkg/images"
 )
 
@@ -124,7 +124,7 @@ func (vm Machine) Forward(t *testing.T) {
 	t.Setenv(images.DockerHostEnv, "unix://"+socket)
 	deadline := time.Now().Add(30 * time.Second)
 	for {
-		err := imagebuild.Reachable(context.Background())
+		err := image.RefuseUnusableDaemon(context.Background())
 		if err == nil {
 			return
 		}

@@ -1,4 +1,4 @@
-package imagebuild_test
+package image_test
 
 import (
 	"encoding/json"
@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/imagebuild"
+	"github.com/ocelhq/ocel/cli/internal/build/image"
 	"github.com/ocelhq/ocel/cli/internal/workspace"
 )
 
@@ -82,7 +82,7 @@ func planned(t *testing.T, dir string) builtPlan {
 
 func plannedFrom(t *testing.T, loc workspace.Location) builtPlan {
 	t.Helper()
-	raw, err := imagebuild.Plan(loc)
+	raw, err := image.Plan(loc)
 	if err != nil {
 		t.Fatalf("Plan(%s) = %v", loc.Root, err)
 	}
@@ -141,7 +141,7 @@ func TestNoVariableOcelRunsUnderAppearsAnywhereInThePlanItHandsTheFrontend(t *te
 	const leak = "a value the plan must never contain"
 	t.Setenv("OCEL_PLAN_LEAK", leak)
 
-	raw, err := imagebuild.Plan(located(t, "testdata/plainserver"))
+	raw, err := image.Plan(located(t, "testdata/plainserver"))
 	if err != nil {
 		t.Fatalf("Plan() = %v", err)
 	}
@@ -154,7 +154,7 @@ func TestNoVariableOcelRunsUnderAppearsAnywhereInThePlanItHandsTheFrontend(t *te
 }
 
 func TestADirectoryRailpackCannotReadSaysWhyInsteadOfPlanningNothing(t *testing.T) {
-	_, err := imagebuild.Plan(located(t, t.TempDir()))
+	_, err := image.Plan(located(t, t.TempDir()))
 	if err == nil {
 		t.Fatal("Plan() over an empty directory succeeded, so a build with nothing in it would be attempted")
 	}
@@ -216,7 +216,7 @@ func TestAnInstallOcelCannotScopeStopsTheBuildRatherThanInstallingTheWholeWorksp
 	loc := located(t, workspaceApp)
 	loc.Manager = workspace.YarnBerry
 
-	_, err := imagebuild.Plan(loc)
+	_, err := image.Plan(loc)
 	if err == nil {
 		t.Fatal("Plan() dropped a scoped install it could not place, so the image installs every package in the workspace to serve one app")
 	}
@@ -403,7 +403,7 @@ func TestTheRootsOwnRailpackFileStillShapesAPlanOcelForcesTheProviderOn(t *testi
 
 	apt := strings.Join(plan.step(t, "packages:apt:build"), "\n")
 	if !strings.Contains(apt, "libvips-dev") {
-		t.Errorf("the apt step runs:\n%s\nand the root's %s asks for libvips-dev: naming the provider replaced the file the user wrote rather than adding to it", apt, imagebuild.ConfigFileName)
+		t.Errorf("the apt step runs:\n%s\nand the root's %s asks for libvips-dev: naming the provider replaced the file the user wrote rather than adding to it", apt, image.ConfigFileName)
 	}
 }
 

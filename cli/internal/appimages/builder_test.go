@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/cli/internal/build/image"
 	"github.com/ocelhq/ocel/cli/internal/events"
-	"github.com/ocelhq/ocel/cli/internal/imagebuild"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/pkg/images"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
@@ -37,44 +37,6 @@ func TestAContainerAppWithNoDaemonToBuildItIsRefusedBeforeAnythingIsBuilt(t *tes
 	}
 	if !strings.Contains(err.Error(), images.DockerHostEnv) {
 		t.Errorf("RequireBuilder() = %v, and the reader is never told which variable points ocel at a daemon", err)
-	}
-}
-
-func TestAContainerAppIsBuiltFromTheWorkspaceItIsAMemberOf(t *testing.T) {
-	cfg := containerProject(t, "")
-	if err := os.WriteFile(filepath.Join(cfg.Dir, "pnpm-workspace.yaml"), []byte("packages:\n  - services/*\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(cfg.Dir, "pnpm-lock.yaml"), []byte("lockfileVersion: '9.0'\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	built, err := Describe(cfg, cfg.Apps[0])
-	if err != nil {
-		t.Fatalf("Describe() = %v", err)
-	}
-
-	if built.Workspace.Root != cfg.Dir {
-		t.Errorf("the image is built from %q, want the workspace root %q, where the lockfile the install reads lives", built.Workspace.Root, cfg.Dir)
-	}
-	if built.Workspace.Path != "services/web" {
-		t.Errorf("the app sits at %q inside the context, want %q, which is what scopes the install and the build to it", built.Workspace.Path, "services/web")
-	}
-}
-
-func TestABuildContextTheAppDoesNotSitUnderIsRefusedByName(t *testing.T) {
-	cfg := containerProject(t, "")
-	if err := os.MkdirAll(filepath.Join(cfg.Dir, "elsewhere"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	cfg.Apps[0].Build = &projectconfig.Build{Context: "elsewhere"}
-
-	_, err := Describe(cfg, cfg.Apps[0])
-	if err == nil {
-		t.Fatal("Describe() accepted a build.context the app is not inside, so the image would be built without the app in it")
-	}
-	if !strings.Contains(err.Error(), "build.context") || !strings.Contains(err.Error(), "web") {
-		t.Errorf("Describe() = %v, want the app and the key it got wrong named", err)
 	}
 }
 
@@ -154,7 +116,7 @@ func TestTheDeployAnnouncesTheDockerfileAnAppSwitchedItselfTo(t *testing.T) {
 	}
 
 	notice := out.String()
-	if !strings.Contains(notice, "web") || !strings.Contains(notice, imagebuild.DockerfileName) {
+	if !strings.Contains(notice, "web") || !strings.Contains(notice, image.DockerfileName) {
 		t.Errorf("the deploy said %q, and never announced that a Dockerfile changed how %q is built", notice, "web")
 	}
 }

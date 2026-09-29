@@ -1,4 +1,4 @@
-package imagebuild
+package image
 
 import (
 	"context"

@@ -1,4 +1,4 @@
-package imagebuild
+package image
 
 import (
 	"bufio"
@@ -101,7 +101,7 @@ type hijacked struct {
 
 func (h *hijacked) Read(p []byte) (int, error) { return h.reader.Read(p) }
 
-func (d daemon) builder(ctx context.Context) (*client.Client, error) {
+func (d daemon) buildkit(ctx context.Context) (*client.Client, error) {
 	return client.New(ctx, "",
 		client.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
 			return d.handshake(ctx, buildPath, upgradeTo, nil)
@@ -112,8 +112,8 @@ func (d daemon) builder(ctx context.Context) (*client.Client, error) {
 	)
 }
 
-func (d daemon) usable(ctx context.Context, builder *client.Client, arches ...string) error {
-	workers, err := builder.ListWorkers(ctx)
+func (d daemon) usable(ctx context.Context, buildkit *client.Client, arches ...string) error {
+	workers, err := buildkit.ListWorkers(ctx)
 	if err != nil {
 		return d.noBuilder(err)
 	}
@@ -182,17 +182,17 @@ func (d daemon) noBuilder(err error) error {
 	return fmt.Errorf("the daemon at %s never named a builder to run the build on: start docker, or set %s to a daemon that is running\n    %w", d.Address, images.DockerHostEnv, err)
 }
 
-func Reachable(ctx context.Context, arches ...string) error {
+func RefuseUnusableDaemon(ctx context.Context, arches ...string) error {
 	d, err := openDaemon()
 	if err != nil {
 		return err
 	}
 	ctx, cancel := context.WithTimeout(ctx, handshakeTimeout)
 	defer cancel()
-	builder, err := d.builder(ctx)
+	buildkit, err := d.buildkit(ctx)
 	if err != nil {
 		return d.unreachable(err)
 	}
-	defer func() { _ = builder.Close() }()
-	return d.usable(ctx, builder, arches...)
+	defer func() { _ = buildkit.Close() }()
+	return d.usable(ctx, buildkit, arches...)
 }

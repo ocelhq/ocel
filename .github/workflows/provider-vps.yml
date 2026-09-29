@@ -41,7 +41,7 @@ on:
       - "cli/internal/cli/bootstrap/**"
       - "cli/internal/cli/preflight/**"
       - "cli/internal/cli/doctor/**"
-      - "cli/internal/imagebuild/**"
+      - "cli/internal/build/**"
       - "cli/internal/appbuilder/**"
       - "cli/internal/appimages/**"
       - "cli/internal/appregistry/**"
