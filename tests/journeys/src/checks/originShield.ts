@@ -5,6 +5,10 @@ import type { Check } from "./context";
 
 const CLOUDFLARE_API = "https://api.cloudflare.com/client/v4";
 const ORIGIN_TIMEOUT_MS = 10_000;
+const ORIGIN_RECORD_TYPES = ["A", "AAAA", "CNAME"];
+const MAX_TLS_VERSION = "TLSv1.2";
+const CLIENT_CERTIFICATE_REFUSALS =
+  /certificate[ _]required|handshake[ _]failure|bad[ _]certificate|access[ _]denied/i;
 
 type Listed<T> = { success: boolean; result: T[] };
 
@@ -27,66 +31,156 @@ export async function readOriginAddress(hostname: string, token: string): Promis
       `/zones/${found.id}/dns_records?name=${hostname}`,
       token,
     );
-    const forwarded = records.find(
-      (record) => record.proxied && ["A", "AAAA", "CNAME"].includes(record.type),
-    );
+    const forwarded = ORIGIN_RECORD_TYPES.map((type) =>
+      records.find((record) => record.proxied && record.type === type),
+    ).find((record) => record !== undefined);
     assert.ok(forwarded, `${hostname} has no proxied record in zone ${zone} naming its origin`);
     return forwarded.content;
   }
   throw new Error(`no Cloudflare zone the token reads serves ${hostname}`);
 }
 
-export function answerOverTLS(address: string, hostname: string): Promise<string> {
-  return new Promise((resolve) => {
-    const socket = tls.connect({
-      host: address,
-      port: 443,
-      servername: hostname,
-      rejectUnauthorized: false,
-      timeout: ORIGIN_TIMEOUT_MS,
-    });
-    let said = "";
-    const done = () => {
-      socket.destroy();
-      resolve(said);
-    };
-    socket.on("secureConnect", () => {
-      socket.write(`GET / HTTP/1.1\r\nHost: ${hostname}\r\nConnection: close\r\n\r\n`);
-    });
-    socket.on("data", (chunk: Buffer) => {
-      said += chunk.toString("latin1");
-    });
-    socket.on("timeout", done);
-    socket.on("error", done);
-    socket.on("end", done);
-    socket.on("close", done);
-  });
-}
+export type Origin = { address: string; port: number; hostname: string; timeoutMs?: number };
 
-export function answerOverPlainHTTP(address: string, hostname: string): Promise<string> {
-  return new Promise((resolve) => {
-    const socket = net.connect({ host: address, port: 80, timeout: ORIGIN_TIMEOUT_MS });
-    let said = "";
-    const done = () => {
-      socket.destroy();
-      resolve(said);
-    };
-    socket.on("connect", () => {
-      socket.write(`GET / HTTP/1.1\r\nHost: ${hostname}\r\nConnection: close\r\n\r\n`);
-    });
-    socket.on("data", (chunk: Buffer) => {
-      said += chunk.toString("latin1");
-    });
-    socket.on("timeout", done);
-    socket.on("error", done);
-    socket.on("end", done);
-    socket.on("close", done);
-  });
-}
+export type Outcome =
+  | { kind: "unreachable"; reason: string }
+  | { kind: "refused"; reason: string }
+  | { kind: "answered"; status: number | undefined; location: string | undefined; said: string }
+  | { kind: "undecided"; reason: string };
 
 export function statusOf(answer: string): number | undefined {
   const status = /^HTTP\/1\.[01] (\d{3})/.exec(answer)?.[1];
   return status === undefined ? undefined : Number(status);
+}
+
+function locationOf(answer: string): string | undefined {
+  const head = answer.split("\r\n\r\n")[0] ?? "";
+  return /^location:\s*(.+)$/im.exec(head)?.[1]?.trim();
+}
+
+function answered(said: string): Outcome {
+  return { kind: "answered", status: statusOf(said), location: locationOf(said), said };
+}
+
+function reasonOf(error: Error & { code?: string }): string {
+  return [error.code, error.message].filter(Boolean).join(": ");
+}
+
+function ask(
+  origin: Origin,
+  speak: (connected: net.Socket) => net.Socket,
+  refusal: (error: Error & { code?: string }) => boolean,
+): Promise<Outcome> {
+  return new Promise((resolve) => {
+    const raw = net.connect({ host: origin.address, port: origin.port });
+    let connected = false;
+    let spoken: net.Socket | undefined;
+    let said = "";
+    let settled = false;
+    const settle = (outcome: Outcome) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      spoken?.destroy();
+      raw.destroy();
+      resolve(outcome);
+    };
+    const timer = setTimeout(
+      () =>
+        settle(
+          connected
+            ? {
+                kind: "undecided",
+                reason: `nothing decided within ${origin.timeoutMs ?? ORIGIN_TIMEOUT_MS}ms after connecting`,
+              }
+            : {
+                kind: "unreachable",
+                reason: `no connection within ${origin.timeoutMs ?? ORIGIN_TIMEOUT_MS}ms`,
+              },
+        ),
+      origin.timeoutMs ?? ORIGIN_TIMEOUT_MS,
+    );
+    raw.once("error", (error: Error & { code?: string }) => {
+      if (!connected) settle({ kind: "unreachable", reason: reasonOf(error) });
+    });
+    raw.once("connect", () => {
+      connected = true;
+      spoken = speak(raw);
+      spoken.on("data", (chunk: Buffer) => {
+        said += chunk.toString("latin1");
+      });
+      spoken.on("error", (error: Error & { code?: string }) => {
+        if (said !== "") settle(answered(said));
+        else if (refusal(error)) settle({ kind: "refused", reason: reasonOf(error) });
+        else settle({ kind: "undecided", reason: reasonOf(error) });
+      });
+      spoken.on("end", () =>
+        settle(
+          said === "" ? { kind: "undecided", reason: "closed with nothing said" } : answered(said),
+        ),
+      );
+      spoken.on("close", () =>
+        settle(
+          said === "" ? { kind: "undecided", reason: "closed with nothing said" } : answered(said),
+        ),
+      );
+    });
+  });
+}
+
+function request(hostname: string): string {
+  return `GET / HTTP/1.1\r\nHost: ${hostname}\r\nConnection: close\r\n\r\n`;
+}
+
+export function askOverTLS(origin: Origin): Promise<Outcome> {
+  return ask(
+    origin,
+    (socket) => {
+      const spoken = tls.connect({
+        socket,
+        servername: origin.hostname,
+        rejectUnauthorized: false,
+        maxVersion: MAX_TLS_VERSION,
+      });
+      spoken.once("secureConnect", () => spoken.write(request(origin.hostname)));
+      return spoken;
+    },
+    (error) => CLIENT_CERTIFICATE_REFUSALS.test(reasonOf(error)),
+  );
+}
+
+export function askOverPlainHTTP(origin: Origin): Promise<Outcome> {
+  return ask(
+    origin,
+    (socket) => {
+      socket.write(request(origin.hostname));
+      return socket;
+    },
+    () => false,
+  );
+}
+
+export function assertRefused(outcome: Outcome, where: string): void {
+  if (outcome.kind === "refused") return;
+  const seen =
+    outcome.kind === "answered"
+      ? `answered ${outcome.status ?? "without a status line"}:\n${outcome.said.slice(0, 300)}`
+      : `${outcome.kind === "unreachable" ? "was never reached" : "connected and then"}: ${outcome.reason}`;
+  throw new assert.AssertionError({
+    message: `${where} was asked with no client certificate and ${seen}; want the TLS handshake refused for want of one`,
+  });
+}
+
+export function assertRedirectedToHTTPS(outcome: Outcome, where: string, hostname: string): void {
+  const want = `https://${hostname}/`;
+  if (outcome.kind === "answered" && outcome.status === 308 && outcome.location === want) return;
+  const seen =
+    outcome.kind === "answered"
+      ? `answered ${outcome.status ?? "without a status line"} to ${outcome.location ?? "nowhere"}:\n${outcome.said.slice(0, 300)}`
+      : `${outcome.kind === "unreachable" ? "was never reached" : "connected and then"}: ${outcome.reason}`;
+  throw new assert.AssertionError({
+    message: `${where} over plain http ${seen}; want 308 to ${want}, forwarding nothing`,
+  });
 }
 
 function token(): string {
@@ -103,29 +197,20 @@ const refusedOverTLS: Check = {
   run: async (ctx) => {
     const hostname = new URL(ctx.baseUrl).hostname;
     const address = await readOriginAddress(hostname, token());
-    const answer = await answerOverTLS(address, hostname);
-    assert.equal(
-      statusOf(answer),
-      undefined,
-      `${address}:443 answered ${hostname} to a client presenting no certificate:\n${answer.slice(0, 300)}`,
-    );
+    const outcome = await askOverTLS({ address, port: 443, hostname });
+    assertRefused(outcome, `${address}:443 for ${hostname}`);
   },
 };
 
-const refusedOverPlainHTTP: Check = {
-  title: "the origin refuses a request that skips Cloudflare, over plain HTTP",
+const redirectedOverPlainHTTP: Check = {
+  title:
+    "the origin redirects a request that skips Cloudflare over plain HTTP to https, forwarding nothing",
   run: async (ctx) => {
     const hostname = new URL(ctx.baseUrl).hostname;
     const address = await readOriginAddress(hostname, token());
-    const answer = await answerOverPlainHTTP(address, hostname);
-    const status = statusOf(answer);
-    assert.ok(
-      status === undefined || status >= 400,
-      `${address}:80 answered ${hostname} with ${status}, which no request that skips Cloudflare may reach:\n${answer.slice(0, 300)}`,
-    );
+    const outcome = await askOverPlainHTTP({ address, port: 80, hostname });
+    assertRedirectedToHTTPS(outcome, `${address}:80 for ${hostname}`, hostname);
   },
 };
 
-export const SHIELDED_ORIGIN_CHECKS: Check[] = [refusedOverTLS];
-
-export const SHIELDED_BOX_CHECKS: Check[] = [refusedOverTLS, refusedOverPlainHTTP];
+export const SHIELDED_ORIGIN_CHECKS: Check[] = [refusedOverTLS, redirectedOverPlainHTTP];
