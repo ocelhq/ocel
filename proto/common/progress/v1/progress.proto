@@ -4,7 +4,6 @@ package common.progress.v1;
 option go_package = "github.com/ocelhq/ocel/pkg/proto/common/progress/v1;progressv1";
 
 import "buf/validate/validate.proto";
-import "common/bindings/v1/bindings.proto";
 import "common/plan/v1/plan.proto";
 import "google/protobuf/timestamp.proto";
 
@@ -137,8 +136,6 @@ message AppResult {
 message OperationResult {
   bool success = 1;
   string error = 2;
-
-  repeated common.bindings.v1.Binding bindings = 3;
 
   string promotion_id = 6;
 

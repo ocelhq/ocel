@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/progress"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -182,12 +183,8 @@ func TestDeployProvisionsInfraThenAppsAndPromotes(t *testing.T) {
 	if result.GetPromotionId() == "" {
 		t.Error("Deploy() promoted nothing: the result names no promotion, so nothing can be rolled back to")
 	}
-	if len(result.GetBindings()) != 1 || result.GetBindings()[0].GetName() != "orders" {
-		names := make([]string, 0, len(result.GetBindings()))
-		for _, binding := range result.GetBindings() {
-			names = append(names, binding.GetName())
-		}
-		t.Fatalf("Deploy() returned bindings %q, want only orders, the one the manifest declares", names)
+	if published := storedBindings(t, p); len(published) != 1 || published["orders"].Owner != envvars.OwnerOcel {
+		t.Fatalf("Deploy() published %v, want only orders, the one the manifest declares", published)
 	}
 
 	if events[0].GetStarted() == nil {

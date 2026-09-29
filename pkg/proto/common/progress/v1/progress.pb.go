@@ -8,7 +8,6 @@ package progressv1
 
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
-	v11 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	v1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -984,7 +983,6 @@ type OperationResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
 	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
-	Bindings      []*v11.Binding         `protobuf:"bytes,3,rep,name=bindings,proto3" json:"bindings,omitempty"`
 	PromotionId   string                 `protobuf:"bytes,6,opt,name=promotion_id,json=promotionId,proto3" json:"promotion_id,omitempty"`
 	Propagation   *Propagation           `protobuf:"bytes,7,opt,name=propagation,proto3" json:"propagation,omitempty"`
 	UrlNotes      []string               `protobuf:"bytes,8,rep,name=url_notes,json=urlNotes,proto3" json:"url_notes,omitempty"`
@@ -1037,13 +1035,6 @@ func (x *OperationResult) GetError() string {
 		return x.Error
 	}
 	return ""
-}
-
-func (x *OperationResult) GetBindings() []*v11.Binding {
-	if x != nil {
-		return x.Bindings
-	}
-	return nil
 }
 
 func (x *OperationResult) GetPromotionId() string {
@@ -1204,7 +1195,7 @@ var File_common_progress_v1_progress_proto protoreflect.FileDescriptor
 
 const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\n" +
-	"!common/progress/v1/progress.proto\x12\x12common.progress.v1\x1a\x1bbuf/validate/validate.proto\x1a!common/bindings/v1/bindings.proto\x1a\x19common/plan/v1/plan.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xf1\x04\n" +
+	"!common/progress/v1/progress.proto\x12\x12common.progress.v1\x1a\x1bbuf/validate/validate.proto\x1a\x19common/plan/v1/plan.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xf1\x04\n" +
 	"\x0eOperationEvent\x12.\n" +
 	"\x04time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12/\n" +
 	"\x05level\x18\n" +
@@ -1249,11 +1240,10 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\x03app\x18\x01 \x01(\tR\x03app\x128\n" +
 	"\aoutcome\x18\x02 \x01(\x0e2\x1e.common.progress.v1.AppOutcomeR\aoutcome\x12\x14\n" +
 	"\x05error\x18\x03 \x01(\tR\x05error\x12\x12\n" +
-	"\x04urls\x18\x04 \x03(\tR\x04urls\"\x90\x03\n" +
+	"\x04urls\x18\x04 \x03(\tR\x04urls\"\xd7\x02\n" +
 	"\x0fOperationResult\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error\x127\n" +
-	"\bbindings\x18\x03 \x03(\v2\x1b.common.bindings.v1.BindingR\bbindings\x12!\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\x12!\n" +
 	"\fpromotion_id\x18\x06 \x01(\tR\vpromotionId\x12A\n" +
 	"\vpropagation\x18\a \x01(\v2\x1f.common.progress.v1.PropagationR\vpropagation\x12\x1b\n" +
 	"\turl_notes\x18\b \x03(\tR\burlNotes\x121\n" +
@@ -1356,7 +1346,6 @@ var file_common_progress_v1_progress_proto_goTypes = []any{
 	(*Propagation)(nil),           // 16: common.progress.v1.Propagation
 	(*timestamppb.Timestamp)(nil), // 17: google.protobuf.Timestamp
 	(*v1.ChangePlan)(nil),         // 18: common.plan.v1.ChangePlan
-	(*v11.Binding)(nil),           // 19: common.bindings.v1.Binding
 }
 var file_common_progress_v1_progress_proto_depIdxs = []int32{
 	17, // 0: common.progress.v1.OperationEvent.time:type_name -> google.protobuf.Timestamp
@@ -1374,15 +1363,14 @@ var file_common_progress_v1_progress_proto_depIdxs = []int32{
 	4,  // 12: common.progress.v1.SpanAttribute.key:type_name -> common.progress.v1.AttributeKey
 	11, // 13: common.progress.v1.DnsManualRecordsEvent.records:type_name -> common.progress.v1.DnsRecord
 	5,  // 14: common.progress.v1.AppResult.outcome:type_name -> common.progress.v1.AppOutcome
-	19, // 15: common.progress.v1.OperationResult.bindings:type_name -> common.bindings.v1.Binding
-	16, // 16: common.progress.v1.OperationResult.propagation:type_name -> common.progress.v1.Propagation
-	13, // 17: common.progress.v1.OperationResult.apps:type_name -> common.progress.v1.AppResult
-	15, // 18: common.progress.v1.OperationResult.connector:type_name -> common.progress.v1.ConnectorInstalled
-	19, // [19:19] is the sub-list for method output_type
-	19, // [19:19] is the sub-list for method input_type
-	19, // [19:19] is the sub-list for extension type_name
-	19, // [19:19] is the sub-list for extension extendee
-	0,  // [0:19] is the sub-list for field type_name
+	16, // 15: common.progress.v1.OperationResult.propagation:type_name -> common.progress.v1.Propagation
+	13, // 16: common.progress.v1.OperationResult.apps:type_name -> common.progress.v1.AppResult
+	15, // 17: common.progress.v1.OperationResult.connector:type_name -> common.progress.v1.ConnectorInstalled
+	18, // [18:18] is the sub-list for method output_type
+	18, // [18:18] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_common_progress_v1_progress_proto_init() }

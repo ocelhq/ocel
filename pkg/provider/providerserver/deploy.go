@@ -1374,13 +1374,6 @@ func (r *deployRun) result(promotion router.Promotion, propagation router.Propag
 		Propagation: propagationProto(&propagation),
 	}
 	r.reportApps(result)
-	for _, binding := range r.bindings {
-		message, err := provider.BindingMessage(binding)
-		if err != nil {
-			return nil, err
-		}
-		result.Bindings = append(result.Bindings, message)
-	}
 	for slot, hosts := range r.servedHostnames() {
 		for _, host := range hosts {
 			if r.hostingMode() == hostingProduction && !r.state.Ready(host, r.front.Kind(), r.readAppRouter(r.spec.Apps[slot].App)) {

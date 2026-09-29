@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	"google.golang.org/protobuf/proto"
 )
 
 type Sink interface {
@@ -75,7 +76,7 @@ func (b *Bus) detach(s Sink) {
 
 func (b *Bus) send(ev *streamv1.RunEvent) *streamv1.RunEvent {
 	b.stamp(ev)
-	shown := withoutSecrets(ev)
+	shown := proto.CloneOf(ev)
 	collapse(shown.ProtoReflect())
 	orderPlan(shown.GetPlan())
 	b.mu.Lock()
