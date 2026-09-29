@@ -12,8 +12,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/commands/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/consent"
+	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -97,7 +98,7 @@ func listPromotions(ctx context.Context, invocation commands.Invocation, cfg *pr
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := providerclient.Start(ctx, cfg, check, invocation.Questions, providerclient.PinToLock)
+	prov, err := providerprocess.Start(ctx, cfg, check, invocation.Questions, executables.PinToLock)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +143,7 @@ func runPromotionsPrune(ctx context.Context, invocation commands.Invocation, cwd
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := providerclient.Start(ctx, cfg, check, invocation.Questions, providerclient.PinToLock)
+	prov, err := providerprocess.Start(ctx, cfg, check, invocation.Questions, executables.PinToLock)
 	if err != nil {
 		return err
 	}
@@ -171,7 +172,7 @@ func runPromotionsPrune(ctx context.Context, invocation commands.Invocation, cwd
 		KeepN: int32(opts.keep),
 		Edge:  cfg.EdgeSelection(),
 	}
-	if _, err := providerclient.Stream(ctx, prov, "RemoveStalePromotions", req, contractv1connect.ProviderServiceClient.RemoveStalePromotions); err != nil {
+	if _, err := providerprocess.Stream(ctx, prov, "RemoveStalePromotions", req, contractv1connect.ProviderServiceClient.RemoveStalePromotions); err != nil {
 		return err
 	}
 	run.Succeed(fmt.Sprintf("Pruned the production promotions of %s down to the newest %d", cfg.Slug, opts.keep))

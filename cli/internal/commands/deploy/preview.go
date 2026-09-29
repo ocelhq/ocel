@@ -13,9 +13,10 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/deployrecord"
+	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/valuestore"
@@ -205,7 +206,7 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := providerclient.Start(ctx, cfg, check, dependencies.Questions, providerclient.ChoosePinning(opts.dry))
+	prov, err := providerprocess.Start(ctx, cfg, check, dependencies.Questions, executables.ChoosePinning(opts.dry))
 	if err != nil {
 		return err
 	}
@@ -379,7 +380,7 @@ func runPreviewRemove(ctx context.Context, dependencies Dependencies, cwd string
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := providerclient.Start(ctx, cfg, check, dependencies.Questions, providerclient.PinToLock)
+	prov, err := providerprocess.Start(ctx, cfg, check, dependencies.Questions, executables.PinToLock)
 	if err != nil {
 		return err
 	}
@@ -407,7 +408,7 @@ func runPreviewRemove(ctx context.Context, dependencies Dependencies, cwd string
 		Slug:        cfg.Slug,
 		Edge:        cfg.EdgeSelection(),
 	}
-	if _, err := providerclient.Stream(ctx, prov, "RemoveEnvironment", req, contractv1connect.ProviderServiceClient.RemoveEnvironment); err != nil {
+	if _, err := providerprocess.Stream(ctx, prov, "RemoveEnvironment", req, contractv1connect.ProviderServiceClient.RemoveEnvironment); err != nil {
 		return err
 	}
 	run.Succeed(fmt.Sprintf("Tore down preview %s of %s", env.GetIdentity(), cfg.Slug))
@@ -439,7 +440,7 @@ func listPreviews(ctx context.Context, dependencies Dependencies, cfg *project.P
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := providerclient.Start(ctx, cfg, check, dependencies.Questions, providerclient.PinToLock)
+	prov, err := providerprocess.Start(ctx, cfg, check, dependencies.Questions, executables.PinToLock)
 	check.End(err)
 	if err != nil {
 		return nil, err
@@ -476,7 +477,7 @@ func runPreviewPrune(ctx context.Context, dependencies Dependencies, cwd string,
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := providerclient.Start(ctx, cfg, check, dependencies.Questions, providerclient.PinToLock)
+	prov, err := providerprocess.Start(ctx, cfg, check, dependencies.Questions, executables.PinToLock)
 	if err != nil {
 		return err
 	}
@@ -494,7 +495,7 @@ func runPreviewPrune(ctx context.Context, dependencies Dependencies, cwd string,
 		Environment: env,
 		Edge:        cfg.EdgeSelection(),
 	}
-	if _, err := providerclient.Stream(ctx, prov, "RemoveStalePromotions", req, contractv1connect.ProviderServiceClient.RemoveStalePromotions); err != nil {
+	if _, err := providerprocess.Stream(ctx, prov, "RemoveStalePromotions", req, contractv1connect.ProviderServiceClient.RemoveStalePromotions); err != nil {
 		return err
 	}
 	run.Succeed(fmt.Sprintf("Pruned the promotions of preview %s down to the newest %d", env.GetIdentity(), opts.keep))

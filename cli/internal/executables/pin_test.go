@@ -1,9 +1,7 @@
-package providerclient
+package executables
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha256"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -14,29 +12,28 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/lockfile"
-	"github.com/ocelhq/ocel/cli/internal/providers"
 )
 
-const locatedVersion = "0.4.1"
+const pinnedVersion = "0.4.1"
 
 func releaseServing(t *testing.T, names ...string) *httptest.Server {
 	t.Helper()
 
 	var checksums strings.Builder
 	for _, name := range names {
-		for i, platform := range providers.Platforms {
-			asset := providers.AssetName(providers.KindProvider, name, locatedVersion, platform.GOOS, platform.GOARCH)
+		for i, platform := range Platforms {
+			asset := AssetName(KindProvider, name, pinnedVersion, platform.GOOS, platform.GOARCH)
 			fmt.Fprintf(&checksums, "%064x  %s\n", i+1, asset)
 		}
 	}
-	fmt.Fprintf(&checksums, "%064x  ocel_%s_linux_amd64.tar.gz\n", 99, locatedVersion)
+	fmt.Fprintf(&checksums, "%064x  ocel_%s_linux_amd64.tar.gz\n", 99, pinnedVersion)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch filepath.Base(r.URL.Path) {
-		case providers.ChecksumsAsset:
+		case ChecksumsAsset:
 			_, _ = w.Write([]byte(checksums.String()))
-		case providers.SignatureAsset:
-			_, _ = w.Write(countersigned(checksums.String()))
+		case SignatureAsset:
+			_, _ = w.Write(countersigned(checksums.String(), SignerIdentity(pinnedVersion)))
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -45,27 +42,15 @@ func releaseServing(t *testing.T, names ...string) *httptest.Server {
 	return server
 }
 
-func countersigned(checksums string) []byte {
-	sum := sha256.Sum256([]byte(checksums))
-	return fmt.Appendf(nil, "%s signs %x", providers.SignerIdentity(locatedVersion), sum)
-}
-
-func countersigns(checksums, signature []byte, identity string) error {
-	if want := countersigned(string(checksums)); !bytes.Equal(signature, want) || identity != providers.SignerIdentity(locatedVersion) {
-		return fmt.Errorf("%s contains %q, want %q signed as %s", providers.SignatureAsset, signature, want, identity)
-	}
-	return nil
-}
-
 func unsignedRelease(t *testing.T) *httptest.Server {
 	t.Helper()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if filepath.Base(r.URL.Path) != providers.ChecksumsAsset {
+		if filepath.Base(r.URL.Path) != ChecksumsAsset {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		fmt.Fprintf(w, "%064x  %s\n", 1, providers.AssetName(providers.KindProvider, "aws", locatedVersion, "linux", "amd64"))
+		fmt.Fprintf(w, "%064x  %s\n", 1, AssetName(KindProvider, "aws", pinnedVersion, "linux", "amd64"))
 	}))
 	t.Cleanup(server.Close)
 	return server
@@ -79,12 +64,12 @@ var pinningModes = []struct {
 	{"in memory", PinInMemory},
 }
 
-func storeOn(t *testing.T, server *httptest.Server, goos, goarch string) *providers.Store {
+func storeOn(t *testing.T, server *httptest.Server, goos, goarch string) *Store {
 	t.Helper()
-	return &providers.Store{
+	return &Store{
 		Dir:      t.TempDir(),
-		Version:  locatedVersion,
-		Platform: providers.Platform{GOOS: goos, GOARCH: goarch},
+		Version:  pinnedVersion,
+		Platform: Platform{GOOS: goos, GOARCH: goarch},
 		BaseURL:  server.URL,
 		HTTP:     server.Client(),
 		Sleep:    func(time.Duration) {},
@@ -99,8 +84,8 @@ func TestTheLockIsWrittenBesideTheConfigOnTheFirstRunOfAVersion(t *testing.T) {
 	store := storeOn(t, server, "linux", "amd64")
 	projectDir := t.TempDir()
 
-	if _, err := locate(context.Background(), store, providers.KindProvider, projectDir, "aws", store.Platform, PinToLock); err == nil {
-		t.Fatal("locate() error = nil, want the fetch of an archive this release does not serve to fail")
+	if _, err := ensurePinned(context.Background(), store, KindProvider, projectDir, "aws", store.Platform, PinToLock); err == nil {
+		t.Fatal("ensurePinned() error = nil, want the fetch of an archive this release does not serve to fail")
 	}
 
 	lock, found, err := lockfile.Read(projectDir)
@@ -110,12 +95,12 @@ func TestTheLockIsWrittenBesideTheConfigOnTheFirstRunOfAVersion(t *testing.T) {
 	if !found {
 		t.Fatalf("no %s was written beside the config", lockfile.Name)
 	}
-	if lock.CLI != locatedVersion {
-		t.Fatalf("lock.CLI = %q, want %q", lock.CLI, locatedVersion)
+	if lock.CLI != pinnedVersion {
+		t.Fatalf("lock.CLI = %q, want %q", lock.CLI, pinnedVersion)
 	}
 	for _, name := range []string{"aws", "vps"} {
-		if len(lock.Providers[name]) != len(providers.Platforms) {
-			t.Fatalf("%s pins %d platforms, want all %d", name, len(lock.Providers[name]), len(providers.Platforms))
+		if len(lock.Providers[name]) != len(Platforms) {
+			t.Fatalf("%s pins %d platforms, want all %d", name, len(lock.Providers[name]), len(Platforms))
 		}
 	}
 }
@@ -127,11 +112,11 @@ func TestADryRunWithNoLockPinsInMemoryAndWritesNothing(t *testing.T) {
 	store := storeOn(t, server, "linux", "amd64")
 	projectDir := t.TempDir()
 
-	_, err := locate(context.Background(), store, providers.KindProvider, projectDir, "aws", store.Platform, PinInMemory)
+	_, err := ensurePinned(context.Background(), store, KindProvider, projectDir, "aws", store.Platform, PinInMemory)
 	if err == nil {
-		t.Fatal("locate() error = nil, want the fetch of an archive this release does not serve to fail")
+		t.Fatal("ensurePinned() error = nil, want the fetch of an archive this release does not serve to fail")
 	}
-	archive := providers.AssetName(providers.KindProvider, "aws", locatedVersion, "linux", "amd64")
+	archive := AssetName(KindProvider, "aws", pinnedVersion, "linux", "amd64")
 	if !strings.Contains(err.Error(), archive) {
 		t.Fatalf("error %q does not name %s, want the dry run pinned and on to fetching it", err.Error(), archive)
 	}
@@ -156,11 +141,11 @@ func TestADryRunAgainstALockPinningAnotherVersionPinsInMemoryAndLeavesTheLockAlo
 		t.Fatalf("read the lock: %v", err)
 	}
 
-	_, err = locate(context.Background(), store, providers.KindProvider, projectDir, "aws", store.Platform, PinInMemory)
+	_, err = ensurePinned(context.Background(), store, KindProvider, projectDir, "aws", store.Platform, PinInMemory)
 	if err == nil {
-		t.Fatal("locate() error = nil, want the fetch of an archive this release does not serve to fail")
+		t.Fatal("ensurePinned() error = nil, want the fetch of an archive this release does not serve to fail")
 	}
-	archive := providers.AssetName(providers.KindProvider, "aws", locatedVersion, "linux", "amd64")
+	archive := AssetName(KindProvider, "aws", pinnedVersion, "linux", "amd64")
 	if !strings.Contains(err.Error(), archive) {
 		t.Fatalf("error %q does not name %s, want the dry run pinned from the release and on to fetching it", err.Error(), archive)
 	}
@@ -180,10 +165,10 @@ func TestALockWrittenOnOnePlatformMatchesTheOneWrittenOnAnother(t *testing.T) {
 	server := releaseServing(t, "aws", "gcp", "vps")
 
 	written := map[string][]byte{}
-	for _, host := range []providers.Platform{{GOOS: "darwin", GOARCH: "arm64"}, {GOOS: "linux", GOARCH: "amd64"}} {
+	for _, host := range []Platform{{GOOS: "darwin", GOARCH: "arm64"}, {GOOS: "linux", GOARCH: "amd64"}} {
 		projectDir := t.TempDir()
 		store := storeOn(t, server, host.GOOS, host.GOARCH)
-		_, _ = locate(context.Background(), store, providers.KindProvider, projectDir, "aws", store.Platform, PinToLock)
+		_, _ = ensurePinned(context.Background(), store, KindProvider, projectDir, "aws", store.Platform, PinToLock)
 
 		raw, err := os.ReadFile(lockfile.Path(projectDir))
 		if err != nil {
@@ -213,11 +198,11 @@ func TestALockPinningAnotherVersionIsRefusedRatherThanRewritten(t *testing.T) {
 		t.Fatalf("read the lock: %v", err)
 	}
 
-	_, err = locate(context.Background(), store, providers.KindProvider, projectDir, "aws", store.Platform, PinToLock)
+	_, err = ensurePinned(context.Background(), store, KindProvider, projectDir, "aws", store.Platform, PinToLock)
 	if err == nil {
-		t.Fatal("locate() error = nil, want a lock Pinning another version refused")
+		t.Fatal("ensurePinned() error = nil, want a lock pinning another version refused")
 	}
-	for _, want := range []string{lockfile.Name, "0.3.0", locatedVersion, "ocel lock"} {
+	for _, want := range []string{lockfile.Name, "0.3.0", pinnedVersion, "ocel lock"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q does not name %q", err.Error(), want)
 		}
@@ -244,8 +229,8 @@ func TestPinRewritesALockThatPinsAnotherVersion(t *testing.T) {
 		t.Fatalf("Write: %v", err)
 	}
 
-	if _, err := pin(context.Background(), store, projectDir); err != nil {
-		t.Fatalf("pin: %v", err)
+	if _, err := writeReleaseLock(context.Background(), store, projectDir); err != nil {
+		t.Fatalf("writeReleaseLock: %v", err)
 	}
 
 	lock, found, err := lockfile.Read(projectDir)
@@ -255,11 +240,11 @@ func TestPinRewritesALockThatPinsAnotherVersion(t *testing.T) {
 	if !found {
 		t.Fatalf("no %s was left beside the config", lockfile.Name)
 	}
-	if lock.CLI != locatedVersion {
-		t.Fatalf("lock.CLI = %q, want %q", lock.CLI, locatedVersion)
+	if lock.CLI != pinnedVersion {
+		t.Fatalf("lock.CLI = %q, want %q", lock.CLI, pinnedVersion)
 	}
-	if len(lock.Providers["vps"]) != len(providers.Platforms) {
-		t.Fatalf("vps pins %d platforms, want all %d", len(lock.Providers["vps"]), len(providers.Platforms))
+	if len(lock.Providers["vps"]) != len(Platforms) {
+		t.Fatalf("vps pins %d platforms, want all %d", len(lock.Providers["vps"]), len(Platforms))
 	}
 }
 
@@ -270,7 +255,7 @@ func TestAPinnedLockIsNotRewrittenOrRefetched(t *testing.T) {
 	store := storeOn(t, server, "linux", "amd64")
 	projectDir := t.TempDir()
 
-	_, _ = locate(context.Background(), store, providers.KindProvider, projectDir, "aws", store.Platform, PinToLock)
+	_, _ = ensurePinned(context.Background(), store, KindProvider, projectDir, "aws", store.Platform, PinToLock)
 	first, err := os.ReadFile(lockfile.Path(projectDir))
 	if err != nil {
 		t.Fatalf("read the lock: %v", err)
@@ -278,8 +263,8 @@ func TestAPinnedLockIsNotRewrittenOrRefetched(t *testing.T) {
 
 	server.Close()
 
-	if _, err := locate(context.Background(), store, providers.KindProvider, projectDir, "aws", store.Platform, PinToLock); err == nil {
-		t.Fatal("locate() error = nil, want the fetch to fail against a closed release")
+	if _, err := ensurePinned(context.Background(), store, KindProvider, projectDir, "aws", store.Platform, PinToLock); err == nil {
+		t.Fatal("ensurePinned() error = nil, want the fetch to fail against a closed release")
 	}
 	second, err := os.ReadFile(lockfile.Path(projectDir))
 	if err != nil {
@@ -297,11 +282,11 @@ func TestAProviderTheLockDoesNotPinIsRefusedByName(t *testing.T) {
 	store := storeOn(t, server, "linux", "amd64")
 	projectDir := t.TempDir()
 
-	_, err := locate(context.Background(), store, providers.KindProvider, projectDir, "nowhere", store.Platform, PinToLock)
+	_, err := ensurePinned(context.Background(), store, KindProvider, projectDir, "nowhere", store.Platform, PinToLock)
 	if err == nil {
-		t.Fatal("locate() error = nil, want the unpinned provider refused")
+		t.Fatal("ensurePinned() error = nil, want the unpinned provider refused")
 	}
-	for _, want := range []string{lockfile.Name, "nowhere", locatedVersion} {
+	for _, want := range []string{lockfile.Name, "nowhere", pinnedVersion} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q does not name %q", err.Error(), want)
 		}
@@ -314,7 +299,7 @@ func TestAProvidersDirResolvesWithNothingOnPATH(t *testing.T) {
 	store.Override = t.TempDir()
 	t.Setenv("PATH", t.TempDir())
 
-	dir := filepath.Join(store.Override, "provider", "aws", locatedVersion, "linux-amd64")
+	dir := filepath.Join(store.Override, "provider", "aws", pinnedVersion, "linux-amd64")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -324,12 +309,12 @@ func TestAProvidersDirResolvesWithNothingOnPATH(t *testing.T) {
 	}
 
 	projectDir := t.TempDir()
-	got, err := locate(context.Background(), store, providers.KindProvider, projectDir, "aws", store.Platform, PinToLock)
+	got, err := ensurePinned(context.Background(), store, KindProvider, projectDir, "aws", store.Platform, PinToLock)
 	if err != nil {
-		t.Fatalf("locate: %v", err)
+		t.Fatalf("ensurePinned: %v", err)
 	}
 	if got != want {
-		t.Fatalf("locate() = %q, want %q", got, want)
+		t.Fatalf("ensurePinned() = %q, want %q", got, want)
 	}
 	if _, err := os.Stat(lockfile.Path(projectDir)); err == nil {
 		t.Fatalf("%s was written for a run that fetched nothing", lockfile.Name)
@@ -346,11 +331,11 @@ func TestAReleaseThatSignsNoChecksumsPinsNothing(t *testing.T) {
 			store := storeOn(t, unsignedRelease(t), "linux", "amd64")
 			projectDir := t.TempDir()
 
-			_, err := locate(context.Background(), store, providers.KindProvider, projectDir, "aws", store.Platform, tt.mode)
+			_, err := ensurePinned(context.Background(), store, KindProvider, projectDir, "aws", store.Platform, tt.mode)
 			if err == nil {
-				t.Fatal("locate() error = nil, want a release that signs no checksums refused")
+				t.Fatal("ensurePinned() error = nil, want a release that signs no checksums refused")
 			}
-			if !strings.Contains(err.Error(), providers.SignatureAsset) {
+			if !strings.Contains(err.Error(), SignatureAsset) {
 				t.Errorf("error %q does not name the signature it looked for", err.Error())
 			}
 			if _, err := os.Stat(lockfile.Path(projectDir)); err == nil {
@@ -373,12 +358,119 @@ func TestChecksumsTheSignatureDoesNotCoverPinNothing(t *testing.T) {
 			}
 			projectDir := t.TempDir()
 
-			if _, err := locate(context.Background(), store, providers.KindProvider, projectDir, "aws", store.Platform, tt.mode); err == nil {
-				t.Fatal("locate() error = nil, want checksums the signature does not cover refused")
+			if _, err := ensurePinned(context.Background(), store, KindProvider, projectDir, "aws", store.Platform, tt.mode); err == nil {
+				t.Fatal("ensurePinned() error = nil, want checksums the signature does not cover refused")
 			}
 			if _, err := os.Stat(lockfile.Path(projectDir)); err == nil {
 				t.Fatalf("%s was written from checksums the signature does not cover", lockfile.Name)
 			}
 		})
+	}
+}
+
+const releaseChecksums = `d0d0 ocel_0.2.0_linux_amd64.tar.gz
+0002 ocel-provider-aws_0.2.0_darwin_arm64.tar.gz
+0001 ocel-provider-aws_0.2.0_darwin_amd64.tar.gz
+0003 ocel-provider-aws_0.2.0_linux_amd64.tar.gz
+0004 ocel-provider-aws_0.2.0_linux_arm64.tar.gz
+0005 ocel-provider-aws_0.2.0_windows_amd64.zip
+0006 ocel-provider-vps_0.2.0_linux_amd64.tar.gz
+0007 ocel-connector-vps_0.2.0_linux_amd64.tar.gz
+0008 ocel-connector-vps_0.2.0_linux_arm64.tar.gz
+beef ocel-provider-aws_0.1.0_linux_amd64.tar.gz
+`
+
+func renderedLock(t *testing.T, lock lockfile.Lock) []byte {
+	t.Helper()
+	raw, err := lock.Bytes()
+	if err != nil {
+		t.Fatalf("Bytes: %v", err)
+	}
+	return raw
+}
+
+func TestChecksumsParseTheDigestOfEveryProviderArchive(t *testing.T) {
+	t.Parallel()
+
+	sums, err := ParseChecksums(strings.NewReader(releaseChecksums))
+	if err != nil {
+		t.Fatalf("ParseChecksums: %v", err)
+	}
+	if got := sums["ocel-provider-aws_0.2.0_linux_amd64.tar.gz"]; got != "0003" {
+		t.Fatalf("digest = %q, want %q", got, "0003")
+	}
+	if _, ok := sums["ocel_0.2.0_linux_amd64.tar.gz"]; !ok {
+		t.Fatal("the CLI's own archive was dropped; the parse reads the file, it does not filter it")
+	}
+}
+
+func TestTheLockListsEveryProviderOfTheVersionItPins(t *testing.T) {
+	t.Parallel()
+
+	sums, err := ParseChecksums(strings.NewReader(releaseChecksums))
+	if err != nil {
+		t.Fatalf("ParseChecksums: %v", err)
+	}
+	lock := lockFromChecksums("0.2.0", sums)
+
+	if lock.CLI != "0.2.0" {
+		t.Fatalf("lock.CLI = %q, want %q", lock.CLI, "0.2.0")
+	}
+	if got, ok := pinnedDigest(lock, KindProvider, "aws", Platform{GOOS: "windows", GOARCH: "amd64"}); !ok || got != "0005" {
+		t.Fatalf("Digest(aws, windows-amd64) = %q, %v, want %q, true", got, ok, "0005")
+	}
+	if len(lock.Providers["aws"]) != 5 {
+		t.Fatalf("aws pins %d platforms, want the five the release ships", len(lock.Providers["aws"]))
+	}
+	if _, ok := pinnedDigest(lock, KindProvider, "aws", Platform{GOOS: "linux", GOARCH: "386"}); ok {
+		t.Fatal("the lock pinned a platform the release does not ship")
+	}
+	if _, ok := lock.Providers["ocel"]; ok {
+		t.Fatal("the CLI's own archive was pinned as a provider")
+	}
+	if got, ok := pinnedDigest(lock, KindConnector, "vps", Platform{GOOS: "linux", GOARCH: "arm64"}); !ok || got != "0008" {
+		t.Fatalf("Digest(connector, vps, linux-arm64) = %q, %v, want %q, true", got, ok, "0008")
+	}
+	if _, ok := lock.Providers["vps"]; !ok {
+		t.Fatal("the vps provider and the vps connector share a name, and pinning one dropped the other")
+	}
+	if _, ok := pinnedDigest(lock, KindProvider, "vps", Platform{GOOS: "linux", GOARCH: "arm64"}); ok {
+		t.Fatal("a connector archive was pinned as a provider")
+	}
+}
+
+func TestAnotherVersionIsNotPinned(t *testing.T) {
+	t.Parallel()
+
+	sums, err := ParseChecksums(strings.NewReader(releaseChecksums))
+	if err != nil {
+		t.Fatalf("ParseChecksums: %v", err)
+	}
+	lock := lockFromChecksums("0.2.0", sums)
+	for _, digest := range lock.Providers["aws"] {
+		if digest == "beef" {
+			t.Fatal("an archive of another version was pinned")
+		}
+	}
+}
+
+func TestTheLockIsWrittenInOneOrderWhateverOrderItWasBuiltIn(t *testing.T) {
+	t.Parallel()
+
+	forward, err := ParseChecksums(strings.NewReader(releaseChecksums))
+	if err != nil {
+		t.Fatalf("ParseChecksums: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(releaseChecksums), "\n")
+	for i, j := 0, len(lines)-1; i < j; i, j = i+1, j-1 {
+		lines[i], lines[j] = lines[j], lines[i]
+	}
+	backward, err := ParseChecksums(strings.NewReader(strings.Join(lines, "\n") + "\n"))
+	if err != nil {
+		t.Fatalf("ParseChecksums: %v", err)
+	}
+
+	if a, b := renderedLock(t, lockFromChecksums("0.2.0", forward)), renderedLock(t, lockFromChecksums("0.2.0", backward)); string(a) != string(b) {
+		t.Fatalf("the lock is not byte-identical across build order:\n%s\nvs\n%s", a, b)
 	}
 }

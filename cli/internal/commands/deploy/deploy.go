@@ -13,8 +13,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/deployrecord"
+	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/valuestore"
 	"github.com/ocelhq/ocel/cli/internal/variableeditor"
@@ -43,7 +44,7 @@ type Dependencies struct {
 	DeploymentID            func(projectDir, app string) (string, error)
 	CollectDeclarations     func(ctx context.Context, cfg *project.Project, declarations *variables.Declarations, stdout, stderr io.Writer) ([]declaration.Resource, error)
 	OpenBrowser             func(url string) error
-	ServeVariableEditor     func(ctx context.Context, cfg *project.Project, provider *providerclient.Provider, tier environmentv1.Tier, declarations *variables.Declarations, recovery *variableeditor.Recovery) (*variableeditor.Session, error)
+	ServeVariableEditor     func(ctx context.Context, cfg *project.Project, provider *providerprocess.Provider, tier environmentv1.Tier, declarations *variables.Declarations, recovery *variableeditor.Recovery) (*variableeditor.Session, error)
 	ReadGitBranch           func(dir string) (string, error)
 	DiscoverPRNumber        func() string
 }
@@ -112,7 +113,7 @@ func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts 
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := providerclient.Start(ctx, cfg, check, dependencies.Questions, providerclient.ChoosePinning(opts.dry))
+	prov, err := providerprocess.Start(ctx, cfg, check, dependencies.Questions, executables.ChoosePinning(opts.dry))
 	if err != nil {
 		return err
 	}

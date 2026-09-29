@@ -39,7 +39,7 @@ on:
       - "platform/edge/cloudflare/deploy/**"
       - "platform/edge/contract/**"
       - "platform/s3/**"
-      - "cli/internal/providerclient/**"
+      - "cli/internal/providerprocess/**"
       - "cli/internal/terminal/**"
       - "cli/internal/commands/bootstrap/**"
       - "cli/internal/preflight/**"

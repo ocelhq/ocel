@@ -34,7 +34,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 	"github.com/ocelhq/ocel/cli/internal/projecteditor"
-	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/version"
@@ -162,7 +162,7 @@ func newInvocation() commands.Invocation {
 		Events:          bus,
 		Presentation:    presentation,
 		StdinIsTerminal: func(in io.Reader) bool { return terminal.IsTerminal(in) },
-		Questions:       providerclient.Questions{Prompt: terminal.NewPrompt(os.Stderr, os.Stdin), Out: os.Stderr},
+		Questions:       providerprocess.Questions{Prompt: terminal.NewPrompt(os.Stderr, os.Stdin), Out: os.Stderr},
 		ConfigPath:      explicitConfigPath,
 	}
 }

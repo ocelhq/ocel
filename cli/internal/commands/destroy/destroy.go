@@ -12,8 +12,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/commands/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/consent"
+	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -152,7 +153,7 @@ func destroyProject(ctx context.Context, invocation commands.Invocation, cfg *pr
 	if bypassNotice != "" {
 		check.Warn(bypassNotice)
 	}
-	prov, err := providerclient.Start(ctx, cfg, check, invocation.Questions, providerclient.ChoosePinning(policy.DryRun))
+	prov, err := providerprocess.Start(ctx, cfg, check, invocation.Questions, executables.ChoosePinning(policy.DryRun))
 	if err != nil {
 		return err
 	}
@@ -216,7 +217,7 @@ func destroyProject(ctx context.Context, invocation commands.Invocation, cfg *pr
 		Edge:        cfg.EdgeSelection(),
 		Consented:   consented,
 	}
-	if _, err := providerclient.Stream(ctx, prov, "RemoveProject", req, contractv1connect.ProviderServiceClient.RemoveProject); err != nil {
+	if _, err := providerprocess.Stream(ctx, prov, "RemoveProject", req, contractv1connect.ProviderServiceClient.RemoveProject); err != nil {
 		return err
 	}
 	if preview {

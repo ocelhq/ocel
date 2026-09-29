@@ -12,10 +12,11 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/consent"
+	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/preflight"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -174,7 +175,7 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier e
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := providerclient.Start(ctx, cfg, check, invocation.Questions, providerclient.ChoosePinning(opts.Dry))
+	prov, err := providerprocess.Start(ctx, cfg, check, invocation.Questions, executables.ChoosePinning(opts.Dry))
 	if err != nil {
 		return err
 	}
@@ -232,7 +233,7 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier e
 	}
 
 	unit := planning.Unit(Name(tier), progress.Planning.Title(fmt.Sprintf("the changes to the %s bootstrap", Name(tier))))
-	plan, err := providerclient.Plan(ctx, prov, "Bootstrap", request(true), contractv1connect.ProviderServiceClient.Bootstrap)
+	plan, err := providerprocess.Plan(ctx, prov, "Bootstrap", request(true), contractv1connect.ProviderServiceClient.Bootstrap)
 	unit.End(err)
 	if err != nil {
 		return err
@@ -301,14 +302,14 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier e
 	req.AcceptReplacements = rendered
 	req.Force = req.Force || len(going) > 0
 
-	if _, err := providerclient.Stream(ctx, prov, "Bootstrap", req, contractv1connect.ProviderServiceClient.Bootstrap); err != nil {
+	if _, err := providerprocess.Stream(ctx, prov, "Bootstrap", req, contractv1connect.ProviderServiceClient.Bootstrap); err != nil {
 		return err
 	}
 	run.Succeed(fmt.Sprintf("Bootstrapped the %s environment", Name(tier)))
 	return nil
 }
 
-func describeBootstrap(ctx context.Context, check *run.Span, prov *providerclient.Provider, cfg *project.Project, tier environmentv1.Tier) (*contractv1.DescribeBootstrapResponse, error) {
+func describeBootstrap(ctx context.Context, check *run.Span, prov *providerprocess.Provider, cfg *project.Project, tier environmentv1.Tier) (*contractv1.DescribeBootstrapResponse, error) {
 	if err := preflight.Announce(ctx, check, prov, cfg, tier); err != nil {
 		return nil, err
 	}

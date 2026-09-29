@@ -3,7 +3,7 @@ package deploy
 import (
 	"context"
 
-	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -14,7 +14,7 @@ type deployOutcome struct {
 	promotionID string
 }
 
-func streamDeploy(ctx context.Context, prov *providerclient.Provider, req *contractv1.DeployRequest) (deployOutcome, error) {
-	res, err := providerclient.Stream(ctx, prov, "Deploy", req, contractv1connect.ProviderServiceClient.Deploy)
+func streamDeploy(ctx context.Context, prov *providerprocess.Provider, req *contractv1.DeployRequest) (deployOutcome, error) {
+	res, err := providerprocess.Stream(ctx, prov, "Deploy", req, contractv1connect.ProviderServiceClient.Deploy)
 	return deployOutcome{apps: res.GetApps(), promotionID: res.GetPromotionId()}, err
 }

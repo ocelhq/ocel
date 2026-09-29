@@ -1,4 +1,4 @@
-package providerclient
+package providerprocess
 
 import (
 	"bufio"
@@ -39,7 +39,7 @@ const DefaultReapTimeout = 2 * time.Second
 
 const MaxMessageBytes = 128 << 20
 
-type Config struct {
+type LaunchSpec struct {
 	BinaryPath      string
 	Args            []string
 	Env             []string
@@ -104,7 +104,7 @@ func (e *OperationFailedError) Error() string {
 	return e.Message
 }
 
-type Runner struct {
+type Process struct {
 	cmd             *exec.Cmd
 	identity        *localrpc.Identity
 	providerConfig  *contractv1.ProviderConfig
@@ -136,8 +136,8 @@ type Runner struct {
 	closeOnce sync.Once
 }
 
-func Spawn(ctx context.Context, cfg Config) (*Runner, error) {
-	if cfg.BinaryPath == "" {
+func Spawn(ctx context.Context, spec LaunchSpec) (*Process, error) {
+	if spec.BinaryPath == "" {
 		return nil, errors.New("provider: BinaryPath is required")
 	}
 
@@ -146,7 +146,7 @@ func Spawn(ctx context.Context, cfg Config) (*Runner, error) {
 		return nil, err
 	}
 
-	base := cfg.Env
+	base := spec.Env
 	if base == nil {
 		base = os.Environ()
 	}
@@ -154,7 +154,7 @@ func Spawn(ctx context.Context, cfg Config) (*Runner, error) {
 	env = append(env, base...)
 	env = append(env, localrpc.ClientCertEnvVar+"="+identity.CertificatePEM())
 
-	cmd := exec.Command(cfg.BinaryPath, cfg.Args...)
+	cmd := exec.Command(spec.BinaryPath, spec.Args...)
 	cmd.Env = env
 	childprocess.SetOwnGroup(cmd)
 
@@ -168,20 +168,20 @@ func Spawn(ctx context.Context, cfg Config) (*Runner, error) {
 	}
 
 	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("provider: spawn provider %q: %w", cfg.BinaryPath, err)
+		return nil, fmt.Errorf("provider: spawn provider %q: %w", spec.BinaryPath, err)
 	}
 
-	r := &Runner{
+	r := &Process{
 		cmd:             cmd,
 		identity:        identity,
-		providerConfig:  cfg.ProviderConfig,
-		providerName:    cfg.ProviderName,
-		stdout:          cfg.Stdout,
-		stderr:          cfg.Stderr,
-		readyTimeout:    resolveReadyTimeout(cfg.ReadyTimeout),
-		gracePeriod:     resolveDuration(cfg.GracePeriod, DefaultGracePeriod),
-		reapTimeout:     resolveDuration(cfg.ReapTimeout, DefaultReapTimeout),
-		maxMessageBytes: resolveBytes(cfg.MaxMessageBytes, MaxMessageBytes),
+		providerConfig:  spec.ProviderConfig,
+		providerName:    spec.ProviderName,
+		stdout:          spec.Stdout,
+		stderr:          spec.Stderr,
+		readyTimeout:    resolveReadyTimeout(spec.ReadyTimeout),
+		gracePeriod:     resolveDuration(spec.GracePeriod, DefaultGracePeriod),
+		reapTimeout:     resolveDuration(spec.ReapTimeout, DefaultReapTimeout),
+		maxMessageBytes: resolveBytes(spec.MaxMessageBytes, MaxMessageBytes),
 		readyCh:         make(chan localrpc.Readiness, 1),
 		scanErr:         make(chan error, 1),
 		done:            make(chan struct{}),
@@ -238,7 +238,7 @@ func resolveBytes(override, def int) int {
 	return def
 }
 
-func (r *Runner) Ready(ctx context.Context) error {
+func (r *Process) Ready(ctx context.Context) error {
 	timer := time.NewTimer(r.readyTimeout)
 	defer timer.Stop()
 
@@ -269,7 +269,7 @@ func (r *Runner) Ready(ctx context.Context) error {
 	}
 }
 
-func (r *Runner) open(ctx context.Context, ready localrpc.Readiness) error {
+func (r *Process) open(ctx context.Context, ready localrpc.Readiness) error {
 	if ready.Version != version.Version {
 		return &VersionMismatchError{Name: r.providerName, Announced: ready.Version, Expected: version.Version}
 	}
@@ -279,7 +279,7 @@ func (r *Runner) open(ctx context.Context, ready localrpc.Readiness) error {
 	return r.configure(ctx)
 }
 
-func (r *Runner) configure(ctx context.Context) error {
+func (r *Process) configure(ctx context.Context) error {
 	if r.providerConfig == nil {
 		return nil
 	}
@@ -304,13 +304,13 @@ func (r *Runner) configure(ctx context.Context) error {
 	return nil
 }
 
-func (r *Runner) Facts() *contractv1.ProviderFacts {
+func (r *Process) Facts() *contractv1.ProviderFacts {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.facts
 }
 
-func (r *Runner) dial(ready localrpc.Readiness) error {
+func (r *Process) dial(ready localrpc.Readiness) error {
 	network, address, err := localrpc.ParseAddress(ready.Address)
 	if err != nil {
 		return fmt.Errorf("provider: parse readiness address: %w", err)
@@ -336,11 +336,11 @@ func (r *Runner) dial(ready localrpc.Readiness) error {
 	return nil
 }
 
-func (r *Runner) Name() string {
+func (r *Process) Name() string {
 	return r.providerName
 }
 
-func (r *Runner) Cost() (costv1connect.CostServiceClient, error) {
+func (r *Process) Cost() (costv1connect.CostServiceClient, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.cost == nil {
@@ -349,7 +349,7 @@ func (r *Runner) Cost() (costv1connect.CostServiceClient, error) {
 	return r.cost, nil
 }
 
-func (r *Runner) Vars() (envvarsv1connect.EnvVarsServiceClient, error) {
+func (r *Process) Vars() (envvarsv1connect.EnvVarsServiceClient, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.vars == nil {
@@ -358,7 +358,7 @@ func (r *Runner) Vars() (envvarsv1connect.EnvVarsServiceClient, error) {
 	return r.vars, nil
 }
 
-func (r *Runner) Client() (contractv1connect.ProviderServiceClient, error) {
+func (r *Process) Client() (contractv1connect.ProviderServiceClient, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.client == nil {
@@ -373,7 +373,7 @@ var ErrClientUnavailable = errors.New("provider: the provider was reached before
 
 type streamCall[Req any] func(contractv1connect.ProviderServiceClient, context.Context, *Req) (*connect.ServerStreamForClient[progressv1.OperationEvent], error)
 
-func stream[Req any](ctx context.Context, r *Runner, rpc string, req *Req, call streamCall[Req], onEvent func(*progressv1.OperationEvent)) (*progressv1.OperationResult, error) {
+func stream[Req any](ctx context.Context, r *Process, rpc string, req *Req, call streamCall[Req], onEvent func(*progressv1.OperationEvent)) (*progressv1.OperationResult, error) {
 	client, err := r.Client()
 	if err != nil {
 		return nil, err
@@ -382,7 +382,7 @@ func stream[Req any](ctx context.Context, r *Runner, rpc string, req *Req, call 
 	return r.driveStream(rpc, events, callErr, onEvent)
 }
 
-func (r *Runner) driveStream(rpc string, stream *connect.ServerStreamForClient[progressv1.OperationEvent], callErr error, onEvent func(*progressv1.OperationEvent)) (*progressv1.OperationResult, error) {
+func (r *Process) driveStream(rpc string, stream *connect.ServerStreamForClient[progressv1.OperationEvent], callErr error, onEvent func(*progressv1.OperationEvent)) (*progressv1.OperationResult, error) {
 	if callErr != nil {
 		if cancelled(callErr) {
 			return nil, fmt.Errorf("provider: %s was cancelled: %w", rpc, callErr)
@@ -427,7 +427,7 @@ const (
 	exitStderrTail = 20
 )
 
-func (r *Runner) withExitStderr(err error) error {
+func (r *Process) withExitStderr(err error) error {
 	select {
 	case <-r.done:
 	case <-time.After(exitGrace):
@@ -451,16 +451,16 @@ func cancelled(err error) bool {
 
 var (
 	liveMu sync.Mutex
-	live   = map[*Runner]struct{}{}
+	live   = map[*Process]struct{}{}
 )
 
-func registerLive(r *Runner) {
+func registerLive(r *Process) {
 	liveMu.Lock()
 	live[r] = struct{}{}
 	liveMu.Unlock()
 }
 
-func deregisterLive(r *Runner) {
+func deregisterLive(r *Process) {
 	liveMu.Lock()
 	delete(live, r)
 	liveMu.Unlock()
@@ -468,18 +468,18 @@ func deregisterLive(r *Runner) {
 
 func KillAllLive() {
 	liveMu.Lock()
-	runners := make([]*Runner, 0, len(live))
+	processes := make([]*Process, 0, len(live))
 	for r := range live {
-		runners = append(runners, r)
+		processes = append(processes, r)
 	}
 	liveMu.Unlock()
 
-	for _, r := range runners {
+	for _, r := range processes {
 		_ = childprocess.KillGroup(r.cmd)
 	}
 }
 
-func (r *Runner) Close() {
+func (r *Process) Close() {
 	r.closeOnce.Do(func() {
 		r.teardown()
 
@@ -494,7 +494,7 @@ func (r *Runner) Close() {
 	})
 }
 
-func (r *Runner) teardown() {
+func (r *Process) teardown() {
 	if r.cmd.Process == nil {
 		return
 	}
@@ -528,13 +528,13 @@ func (r *Runner) teardown() {
 	}
 }
 
-func (r *Runner) mute() {
+func (r *Process) mute() {
 	r.outMu.Lock()
 	defer r.outMu.Unlock()
 	r.stdout, r.stderr = nil, nil
 }
 
-func (r *Runner) writeStdout(line string) {
+func (r *Process) writeStdout(line string) {
 	r.outMu.Lock()
 	defer r.outMu.Unlock()
 	if r.stdout != nil {
@@ -542,7 +542,7 @@ func (r *Runner) writeStdout(line string) {
 	}
 }
 
-func (r *Runner) writeStderr(line string) {
+func (r *Process) writeStderr(line string) {
 	r.outMu.Lock()
 	defer r.outMu.Unlock()
 	if r.stderr != nil {
@@ -550,7 +550,7 @@ func (r *Runner) writeStderr(line string) {
 	}
 }
 
-func (r *Runner) drainStdout(stdout io.Reader) {
+func (r *Process) drainStdout(stdout io.Reader) {
 	ready := false
 	scanner := bufio.NewScanner(stdout)
 	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
@@ -578,7 +578,7 @@ func (r *Runner) drainStdout(stdout io.Reader) {
 	}
 }
 
-func (r *Runner) drainStderr(stderr io.Reader) {
+func (r *Process) drainStderr(stderr io.Reader) {
 	scanner := bufio.NewScanner(stderr)
 	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
 	for scanner.Scan() {
@@ -592,7 +592,7 @@ func (r *Runner) drainStderr(stderr io.Reader) {
 	}
 }
 
-func (r *Runner) record(line string) {
+func (r *Process) record(line string) {
 	r.stderrMu.Lock()
 	defer r.stderrMu.Unlock()
 	r.stderrBuf.WriteString(line)

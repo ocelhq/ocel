@@ -1,4 +1,4 @@
-package providerclient
+package providerprocess
 
 import (
 	"context"
@@ -23,19 +23,19 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
-func spawnFake(t *testing.T, ctx context.Context, mode string, cfg Config) (*Runner, string) {
+func spawnFake(t *testing.T, ctx context.Context, mode string, spec LaunchSpec) (*Process, string) {
 	t.Helper()
 
-	cfg = fakeConfig(t, mode, cfg)
-	r, err := Spawn(ctx, cfg)
+	spec = fakeSpec(t, mode, spec)
+	r, err := Spawn(ctx, spec)
 	if err != nil {
 		t.Fatalf("Spawn() error = %v", err)
 	}
 	t.Cleanup(r.Close)
-	return r, fakeSocket(cfg)
+	return r, fakeSocket(spec)
 }
 
-func fakeConfig(t *testing.T, mode string, cfg Config) Config {
+func fakeSpec(t *testing.T, mode string, spec LaunchSpec) LaunchSpec {
 	t.Helper()
 
 	sockDir, err := os.MkdirTemp("", "ocel-provider-*")
@@ -43,18 +43,18 @@ func fakeConfig(t *testing.T, mode string, cfg Config) Config {
 		t.Fatalf("reserve the socket directory: %v", err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(sockDir) })
-	cfg.BinaryPath = os.Args[0]
-	cfg.Env = append([]string{
+	spec.BinaryPath = os.Args[0]
+	spec.Env = append([]string{
 		fakeProviderEnvVar + "=1",
 		fakeProviderModeEnvVar + "=" + mode,
 		fakeProviderSockEnvVar + "=" + filepath.Join(sockDir, "provider.sock"),
-		fakeProviderVendorEnvVar + "=" + cfg.ProviderName,
-	}, cfg.Env...)
-	return cfg
+		fakeProviderVendorEnvVar + "=" + spec.ProviderName,
+	}, spec.Env...)
+	return spec
 }
 
-func fakeSocket(cfg Config) string {
-	for _, kv := range cfg.Env {
+func fakeSocket(spec LaunchSpec) string {
+	for _, kv := range spec.Env {
 		if path, ok := strings.CutPrefix(kv, fakeProviderSockEnvVar+"="); ok {
 			return path
 		}
@@ -68,7 +68,7 @@ func TestSpawn(t *testing.T) {
 	t.Run("a missing binary fails with a distinct error, not a readiness one", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := Spawn(context.Background(), Config{BinaryPath: filepath.Join(t.TempDir(), "does-not-exist")})
+		_, err := Spawn(context.Background(), LaunchSpec{BinaryPath: filepath.Join(t.TempDir(), "does-not-exist")})
 		if err == nil {
 			t.Fatal("Spawn() error = nil, want an error for a missing binary")
 		}
@@ -88,7 +88,7 @@ func TestReady(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, _ := spawnFake(t, ctx, "exit-before-ready", Config{ReadyTimeout: 5 * time.Second})
+		r, _ := spawnFake(t, ctx, "exit-before-ready", LaunchSpec{ReadyTimeout: 5 * time.Second})
 
 		start := time.Now()
 		err := r.Ready(ctx)
@@ -115,7 +115,7 @@ func TestReady(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, sockPath := spawnFake(t, ctx, "never-ready", Config{ReadyTimeout: 150 * time.Millisecond})
+		r, sockPath := spawnFake(t, ctx, "never-ready", LaunchSpec{ReadyTimeout: 150 * time.Millisecond})
 
 		err := r.Ready(ctx)
 
@@ -133,7 +133,7 @@ func TestReady(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, _ := spawnFake(t, ctx, "oversized-line", Config{ReadyTimeout: 10 * time.Second})
+		r, _ := spawnFake(t, ctx, "oversized-line", LaunchSpec{ReadyTimeout: 10 * time.Second})
 
 		start := time.Now()
 		err := r.Ready(ctx)
@@ -162,7 +162,7 @@ func TestHandshake(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, _ := spawnFake(t, ctx, "impostor-cert", Config{
+		r, _ := spawnFake(t, ctx, "impostor-cert", LaunchSpec{
 			ProviderConfig: &contractv1.ProviderConfig{},
 			ProviderName:   "aws",
 			ReadyTimeout:   5 * time.Second,
@@ -181,7 +181,7 @@ func TestHandshake(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, _ := spawnFake(t, ctx, "plaintext", Config{
+		r, _ := spawnFake(t, ctx, "plaintext", LaunchSpec{
 			ProviderConfig: &contractv1.ProviderConfig{},
 			ProviderName:   "aws",
 			ReadyTimeout:   5 * time.Second,
@@ -201,7 +201,7 @@ func TestConfigure(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, _ := spawnFake(t, ctx, "reject-config", Config{
+		r, _ := spawnFake(t, ctx, "reject-config", LaunchSpec{
 			ProviderConfig: fakeOptionsConfig(t, map[string]any{"regionn": "eu-west-2"}),
 			ProviderName:   "aws",
 			ReadyTimeout:   5 * time.Second,
@@ -228,7 +228,7 @@ func TestConfigure(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, _ := spawnFake(t, ctx, "reject-config", Config{
+		r, _ := spawnFake(t, ctx, "reject-config", LaunchSpec{
 			ProviderConfig: fakeOptionsConfig(t, map[string]any{"ssh": map[string]any{"hostt": "example.com"}}),
 			ProviderName:   "vps",
 			ReadyTimeout:   5 * time.Second,
@@ -247,7 +247,7 @@ func TestConfigure(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, _ := spawnFake(t, ctx, "refuse-config", Config{
+		r, _ := spawnFake(t, ctx, "refuse-config", LaunchSpec{
 			ProviderConfig: &contractv1.ProviderConfig{},
 			ProviderName:   "aws",
 			ReadyTimeout:   5 * time.Second,
@@ -282,7 +282,7 @@ func TestDeploy(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, sockPath := spawnFake(t, ctx, "success", Config{})
+		r, sockPath := spawnFake(t, ctx, "success", LaunchSpec{})
 
 		if err := r.Ready(ctx); err != nil {
 			t.Fatalf("Ready() error = %v, want nil", err)
@@ -316,7 +316,7 @@ func TestDeploy(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, sockPath := spawnFake(t, ctx, "hang-deploy", Config{})
+		r, sockPath := spawnFake(t, ctx, "hang-deploy", LaunchSpec{})
 
 		if err := r.Ready(ctx); err != nil {
 			t.Fatalf("Ready() error = %v, want nil", err)
@@ -361,7 +361,7 @@ func TestDeploy(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, _ := spawnFake(t, ctx, "crash-deploy", Config{})
+		r, _ := spawnFake(t, ctx, "crash-deploy", LaunchSpec{})
 		if err := r.Ready(ctx); err != nil {
 			t.Fatalf("Ready() error = %v, want nil", err)
 		}
@@ -381,7 +381,7 @@ func TestDeploy(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, _ := spawnFake(t, ctx, "hang-deploy", Config{})
+		r, _ := spawnFake(t, ctx, "hang-deploy", LaunchSpec{})
 
 		if err := r.Ready(ctx); err != nil {
 			t.Fatalf("Ready() error = %v, want nil", err)
@@ -430,7 +430,7 @@ func TestDeploy(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, _ := spawnFake(t, ctx, "fail", Config{})
+		r, _ := spawnFake(t, ctx, "fail", LaunchSpec{})
 
 		if err := r.Ready(ctx); err != nil {
 			t.Fatalf("Ready() error = %v, want nil", err)
@@ -454,7 +454,7 @@ func TestDeploy(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, _ := spawnFake(t, ctx, "refuse-deploy", Config{})
+		r, _ := spawnFake(t, ctx, "refuse-deploy", LaunchSpec{})
 
 		if err := r.Ready(ctx); err != nil {
 			t.Fatalf("Ready() error = %v, want nil", err)
@@ -487,7 +487,7 @@ func TestDeploy(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, _ := spawnFake(t, ctx, "oversized-event", Config{MaxMessageBytes: fakeOversizedEventBytes / 4})
+		r, _ := spawnFake(t, ctx, "oversized-event", LaunchSpec{MaxMessageBytes: fakeOversizedEventBytes / 4})
 
 		if err := r.Ready(ctx); err != nil {
 			t.Fatalf("Ready() error = %v, want nil", err)
@@ -510,7 +510,7 @@ func TestDeploy(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, _ := spawnFake(t, ctx, "never-ready", Config{ReadyTimeout: 50 * time.Millisecond})
+		r, _ := spawnFake(t, ctx, "never-ready", LaunchSpec{ReadyTimeout: 50 * time.Millisecond})
 
 		err := streamed(ctx, r, "Deploy", &contractv1.DeployRequest{Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"}}, contractv1connect.ProviderServiceClient.Deploy, nil)
 		if !errors.Is(err, ErrClientUnavailable) {
@@ -539,7 +539,7 @@ func TestBootstrap(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, sockPath := spawnFake(t, ctx, "success", Config{})
+		r, sockPath := spawnFake(t, ctx, "success", LaunchSpec{})
 
 		if err := r.Ready(ctx); err != nil {
 			t.Fatalf("Ready() error = %v, want nil", err)
@@ -566,7 +566,7 @@ func TestBootstrap(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, _ := spawnFake(t, ctx, "fail", Config{})
+		r, _ := spawnFake(t, ctx, "fail", LaunchSpec{})
 
 		if err := r.Ready(ctx); err != nil {
 			t.Fatalf("Ready() error = %v, want nil", err)
@@ -591,7 +591,7 @@ func TestVars(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, _ := spawnFake(t, ctx, "never-ready", Config{ReadyTimeout: 50 * time.Millisecond})
+		r, _ := spawnFake(t, ctx, "never-ready", LaunchSpec{ReadyTimeout: 50 * time.Millisecond})
 
 		if _, err := r.Vars(); !errors.Is(err, ErrVarsUnavailable) {
 			t.Fatalf("Vars() error = %v, want ErrVarsUnavailable", err)
@@ -602,7 +602,7 @@ func TestVars(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, _ := spawnFake(t, ctx, "success", Config{})
+		r, _ := spawnFake(t, ctx, "success", LaunchSpec{})
 		if err := r.Ready(ctx); err != nil {
 			t.Fatalf("Ready() error = %v, want nil", err)
 		}
@@ -623,7 +623,7 @@ func TestClose(t *testing.T) {
 		t.Parallel()
 
 		ctx, cancel := context.WithCancel(context.Background())
-		r, sockPath := spawnFake(t, ctx, "success", Config{})
+		r, sockPath := spawnFake(t, ctx, "success", LaunchSpec{})
 
 		if err := r.Ready(ctx); err != nil {
 			t.Fatalf("Ready() error = %v, want nil", err)
@@ -652,7 +652,7 @@ func TestClose(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, _ := spawnFake(t, ctx, "success", Config{})
+		r, _ := spawnFake(t, ctx, "success", LaunchSpec{})
 		if err := r.Ready(ctx); err != nil {
 			t.Fatalf("Ready() error = %v, want nil", err)
 		}
@@ -666,7 +666,7 @@ func TestClose(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, sockPath := spawnFake(t, ctx, "success", Config{})
+		r, sockPath := spawnFake(t, ctx, "success", LaunchSpec{})
 		if err := r.Ready(ctx); err != nil {
 			t.Fatalf("Ready() error = %v, want nil", err)
 		}
@@ -691,7 +691,7 @@ func TestTeardownReapIsBounded(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = cmd.Process.Kill() })
 
-	r := &Runner{
+	r := &Process{
 		cmd:         cmd,
 		gracePeriod: 50 * time.Millisecond,
 		reapTimeout: 100 * time.Millisecond,
@@ -708,7 +708,7 @@ func TestTeardownReapIsBounded(t *testing.T) {
 	}
 }
 
-func assertProcessGone(t *testing.T, r *Runner) {
+func assertProcessGone(t *testing.T, r *Process) {
 	t.Helper()
 	select {
 	case <-r.done:
@@ -741,7 +741,7 @@ func init() {
 	}
 }
 
-func streamed[Req any](ctx context.Context, r *Runner, rpc string, req *Req, call streamCall[Req], onEvent func(*progressv1.OperationEvent)) error {
+func streamed[Req any](ctx context.Context, r *Process, rpc string, req *Req, call streamCall[Req], onEvent func(*progressv1.OperationEvent)) error {
 	_, err := stream(ctx, r, rpc, req, call, onEvent)
 	return err
 }

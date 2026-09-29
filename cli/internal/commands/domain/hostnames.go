@@ -15,7 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/preflight"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -137,7 +137,7 @@ func changeHostnames(ctx context.Context, invocation commands.Invocation, cfg *p
 		}
 	}
 
-	if _, err := providerclient.Stream(ctx, prov, change.rpc, change.req, change.call); err != nil {
+	if _, err := providerprocess.Stream(ctx, prov, change.rpc, change.req, change.call); err != nil {
 		return err
 	}
 	run.Succeed(change.headline)

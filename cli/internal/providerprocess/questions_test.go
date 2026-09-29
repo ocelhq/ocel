@@ -1,4 +1,4 @@
-package providerclient
+package providerprocess
 
 import (
 	"bytes"
@@ -68,7 +68,7 @@ func callRefusing(t *testing.T, questions Questions, call func() error) error {
 
 	ctx, span, _ := deploySpan(t)
 	p := startFake(t, ctx, "success", span, questions)
-	return p.callAnswering(ctx, func(*Runner) error { return call() })
+	return p.callAnswering(ctx, func(*Process) error { return call() })
 }
 
 func (f questionFake) env() []string {

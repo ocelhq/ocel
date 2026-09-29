@@ -1,4 +1,4 @@
-package providers
+package executables
 
 import (
 	"bytes"
@@ -33,13 +33,13 @@ const installedDigestFile = ".executable.sha256"
 var hexDigest = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 const (
-	attempts       = 5
-	firstBackoff   = 500 * time.Millisecond
-	maxBackoff     = 8 * time.Second
-	archiveCeiling = 512 << 20
+	attempts            = 5
+	firstBackoff        = 500 * time.Millisecond
+	maxBackoff          = 8 * time.Second
+	archiveCeilingBytes = 512 << 20
 )
 
-type Doer interface {
+type HTTPClient interface {
 	Do(*http.Request) (*http.Response, error)
 }
 
@@ -50,9 +50,9 @@ type Store struct {
 	Platform Platform
 	BaseURL  string
 	Token    string
-	HTTP     Doer
+	HTTP     HTTPClient
 	Sleep    func(time.Duration)
-	Verify   ChecksumVerifier
+	Verify   func(checksums, signature []byte, identity string) error
 }
 
 func DefaultDir() (string, error) {
@@ -81,10 +81,10 @@ func New(version string) (*Store, error) {
 	}, nil
 }
 
-func (s *Store) Fetches() bool { return s.Override == "" }
+func (s *Store) HasOverride() bool { return s.Override != "" }
 
-func (s *Store) Binary(ctx context.Context, kind Kind, name string, platform Platform, digest string) (string, error) {
-	if err := checkName(name); err != nil {
+func (s *Store) EnsureBinary(ctx context.Context, kind Kind, name string, platform Platform, digest string) (string, error) {
+	if err := refuseInvalidName(name); err != nil {
 		return "", err
 	}
 	executable := ExecutableName(kind, name, platform.GOOS)
@@ -108,7 +108,7 @@ func (s *Store) Binary(ctx context.Context, kind Kind, name string, platform Pla
 	dir := filepath.Join(s.Dir, string(kind), name, s.Version, platform.Dir(), digest)
 	path := filepath.Join(dir, executable)
 
-	if err := installed(dir, executable); err == nil {
+	if err := verifyInstalled(dir, executable); err == nil {
 		return path, nil
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		if err := os.RemoveAll(dir); err != nil {
@@ -122,7 +122,7 @@ func (s *Store) Binary(ctx context.Context, kind Kind, name string, platform Pla
 	return path, nil
 }
 
-func installed(dir, executable string) error {
+func verifyInstalled(dir, executable string) error {
 	recorded, err := os.ReadFile(filepath.Join(dir, installedDigestFile))
 	if err != nil {
 		return err
@@ -179,7 +179,7 @@ func (s *Store) read(ctx context.Context, asset string) ([]byte, error) {
 	defer body.Close()
 
 	var downloaded bytes.Buffer
-	if err := fill(&downloaded, body); err != nil {
+	if err := copyWithinCeiling(&downloaded, body); err != nil {
 		return nil, fmt.Errorf("download %s: %w", asset, err)
 	}
 	return downloaded.Bytes(), nil
@@ -225,7 +225,7 @@ func (s *Store) install(ctx context.Context, kind Kind, name string, platform Pl
 		return fmt.Errorf("make room in the provider cache: %w", err)
 	}
 	if err := os.Rename(unpacked, dir); err != nil {
-		if raced := installed(dir, executable); raced == nil {
+		if raced := verifyInstalled(dir, executable); raced == nil {
 			return nil
 		}
 		return fmt.Errorf("move %s into the provider cache: %w", asset, err)
@@ -247,7 +247,7 @@ func (s *Store) download(ctx context.Context, asset, into, digest string) error 
 	defer file.Close()
 
 	sum := sha256.New()
-	if err := fill(io.MultiWriter(file, sum), body); err != nil {
+	if err := copyWithinCeiling(io.MultiWriter(file, sum), body); err != nil {
 		return fmt.Errorf("download %s: %w", asset, err)
 	}
 	if got := hex.EncodeToString(sum.Sum(nil)); got != digest {
@@ -297,7 +297,7 @@ func (s *Store) get(ctx context.Context, asset string) (io.ReadCloser, error) {
 
 		refused := &statusError{status: resp.StatusCode, asset: asset, after: resp.Header.Get("Retry-After")}
 		resp.Body.Close()
-		if !worthRetrying(resp.StatusCode) {
+		if !isRetryable(resp.StatusCode) {
 			return nil, refused
 		}
 		last = refused
@@ -317,7 +317,7 @@ func retryAfter(err error) time.Duration {
 	return time.Duration(seconds) * time.Second
 }
 
-func worthRetrying(status int) bool {
+func isRetryable(status int) bool {
 	return status == http.StatusTooManyRequests || status >= 500
 }
 

@@ -14,7 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
-	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -617,7 +617,7 @@ func TestDoctorPassesOnAGoProjectWithNoNode(t *testing.T) {
 	clitest.Bootstrap(t, p, environment.TierProduction)
 	clitest.Bootstrap(t, p, environment.TierPreview)
 	clitest.ServeFake(t, p)
-	t.Setenv(providerclient.ReadyTimeoutEnvVar, "5s")
+	t.Setenv(providerprocess.ReadyTimeoutEnvVar, "5s")
 	t.Setenv("PATH", t.TempDir())
 
 	invocation := clitest.NewInvocation()

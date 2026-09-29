@@ -7,8 +7,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/commands"
+	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/lockfile"
-	"github.com/ocelhq/ocel/cli/internal/providerclient"
 )
 
 func NewCommand(invocation commands.Invocation) *cobra.Command {
@@ -32,7 +32,7 @@ func NewCommand(invocation commands.Invocation) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := providerclient.Pin(ctx, cfg.Dir); err != nil {
+			if err := executables.Pin(ctx, cfg.Dir); err != nil {
 				return err
 			}
 

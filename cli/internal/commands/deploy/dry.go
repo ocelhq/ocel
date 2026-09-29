@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -13,8 +13,8 @@ import (
 
 const dryFlagUsage = "Build, then print every change this would make to your account and stop without applying any of it"
 
-func showDeployPlan(ctx context.Context, run *run.Run, prov *providerclient.Provider, req *contractv1.DeployRequest, headline, slug, place string) error {
-	plan, err := providerclient.Plan(ctx, prov, "Deploy", req, contractv1connect.ProviderServiceClient.Deploy)
+func showDeployPlan(ctx context.Context, run *run.Run, prov *providerprocess.Provider, req *contractv1.DeployRequest, headline, slug, place string) error {
+	plan, err := providerprocess.Plan(ctx, prov, "Deploy", req, contractv1connect.ProviderServiceClient.Deploy)
 	if err != nil {
 		return err
 	}

@@ -6,7 +6,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/valuestore"
 	"github.com/ocelhq/ocel/cli/internal/variables"
@@ -16,7 +16,7 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
-func declaredVariables(ctx context.Context, dependencies Dependencies, cfg *project.Project, prov *providerclient.Provider, key string, opts envOptions, run *run.Run) ([]*resourcesv1.VariableDefinition, []*resourcesv1.GroupDefinition, error) {
+func declaredVariables(ctx context.Context, dependencies Dependencies, cfg *project.Project, prov *providerprocess.Provider, key string, opts envOptions, run *run.Run) ([]*resourcesv1.VariableDefinition, []*resourcesv1.GroupDefinition, error) {
 	prepared, err := declaration.Prepare(cfg)
 	if err != nil {
 		return nil, nil, err
@@ -64,7 +64,7 @@ func withImpliedDeclarations(cfg *project.Project, opts envOptions, definitions 
 	return append(definitions, implied...), append(groups, impliedGroups...), nil
 }
 
-func discoverVariables(ctx context.Context, cfg *project.Project, prov *providerclient.Provider, opts envOptions, run *run.Run) (*variables.Declarations, error) {
+func discoverVariables(ctx context.Context, cfg *project.Project, prov *providerprocess.Provider, opts envOptions, run *run.Run) (*variables.Declarations, error) {
 	declarations := projectDeclarations(cfg, prov, opts)
 	err := collecting(run, cfg, func(output io.Writer) error {
 		_, err := declaration.Collect(ctx, cfg, declarations, io.Discard, output)
@@ -76,7 +76,7 @@ func discoverVariables(ctx context.Context, cfg *project.Project, prov *provider
 	return declarations, nil
 }
 
-func projectDeclarations(cfg *project.Project, prov *providerclient.Provider, opts envOptions) *variables.Declarations {
+func projectDeclarations(cfg *project.Project, prov *providerprocess.Provider, opts envOptions) *variables.Declarations {
 	return variables.NewDeclarations(valuestore.Store{
 		Provider: prov,
 		Project:  cfg,

@@ -1,4 +1,4 @@
-package providerclient
+package providerprocess
 
 import (
 	"context"
@@ -33,7 +33,7 @@ func (q Questions) holding(ask func() error) error {
 	return q.run.Ask(ask)
 }
 
-func (q Questions) answer(ctx context.Context, runner *Runner, err error) (bool, error) {
+func (q Questions) answer(ctx context.Context, process *Process, err error) (bool, error) {
 	question, asked := questionIn(err)
 	if !asked || !q.attended() {
 		return false, err
@@ -45,7 +45,7 @@ func (q Questions) answer(ctx context.Context, runner *Runner, err error) (bool,
 	if !confirmed {
 		return false, err
 	}
-	client, confirmErr := runner.Client()
+	client, confirmErr := process.Client()
 	if confirmErr == nil {
 		_, confirmErr = client.Confirm(ctx, &contractv1.ConfirmRequest{QuestionId: question.GetId()})
 	}

@@ -1,10 +1,11 @@
-package providerclient
+package providerprocess
 
 import (
 	"context"
 	"fmt"
 	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
@@ -18,49 +19,49 @@ import (
 type Provider struct {
 	span      *run.Span
 	questions Questions
-	config    Config
-	runner    *Runner
+	spec      LaunchSpec
+	process   *Process
 }
 
-func Start(ctx context.Context, cfg *project.Project, span *run.Span, questions Questions, pins Pinning) (*Provider, error) {
-	config, err := prepareLaunch(ctx, cfg, pins)
+func Start(ctx context.Context, cfg *project.Project, span *run.Span, questions Questions, pinning executables.Pinning) (*Provider, error) {
+	spec, err := newLaunchSpec(ctx, cfg, pinning)
 	if err != nil {
 		return nil, err
 	}
-	return start(ctx, span, questions, config)
+	return start(ctx, span, questions, spec)
 }
 
-func start(ctx context.Context, span *run.Span, questions Questions, config Config) (*Provider, error) {
-	config.Stdout = processLines{span: span, subject: config.ProviderName, stream: progressv1.Stream_STREAM_STDOUT}
-	config.Stderr = processLines{span: span, subject: config.ProviderName, stream: progressv1.Stream_STREAM_STDERR}
+func start(ctx context.Context, span *run.Span, questions Questions, spec LaunchSpec) (*Provider, error) {
+	spec.Stdout = processLines{span: span, subject: spec.ProviderName, stream: progressv1.Stream_STREAM_STDOUT}
+	spec.Stderr = processLines{span: span, subject: spec.ProviderName, stream: progressv1.Stream_STREAM_STDERR}
 	questions.run = span.Run()
-	runner, err := Spawn(ctx, config)
+	process, err := Spawn(ctx, spec)
 	if err != nil {
 		return nil, fmt.Errorf("spawn provider: %w", err)
 	}
-	if err := runner.Ready(ctx); err != nil {
-		runner.Close()
+	if err := process.Ready(ctx); err != nil {
+		process.Close()
 		return nil, err
 	}
-	return &Provider{span: span, questions: questions, config: config, runner: runner}, nil
+	return &Provider{span: span, questions: questions, spec: spec, process: process}, nil
 }
 
-func (p *Provider) Name() string { return p.config.ProviderName }
+func (p *Provider) Name() string { return p.spec.ProviderName }
 
-func (p *Provider) Facts() *contractv1.ProviderFacts { return p.runner.Facts() }
+func (p *Provider) Facts() *contractv1.ProviderFacts { return p.process.Facts() }
 
-func (p *Provider) Close() { p.runner.Close() }
+func (p *Provider) Close() { p.process.Close() }
 
-func (p *Provider) callAnswering(ctx context.Context, call func(*Runner) error) error {
-	err := call(p.runner)
-	if confirmed, err := p.questions.answer(ctx, p.runner, err); !confirmed {
+func (p *Provider) callAnswering(ctx context.Context, call func(*Process) error) error {
+	err := call(p.process)
+	if confirmed, err := p.questions.answer(ctx, p.process, err); !confirmed {
 		return err
 	}
-	return call(p.runner)
+	return call(p.process)
 }
 
 func (p *Provider) Call(ctx context.Context, call func(contractv1connect.ProviderServiceClient) error) error {
-	return p.callAnswering(ctx, func(r *Runner) error {
+	return p.callAnswering(ctx, func(r *Process) error {
 		client, err := r.Client()
 		if err != nil {
 			return err
@@ -87,7 +88,7 @@ func Plan[Req any](ctx context.Context, p *Provider, rpc string, req *Req, call 
 
 func forward[Req any](ctx context.Context, p *Provider, rpc string, req *Req, call streamCall[Req], each func(*progressv1.OperationEvent)) (*progressv1.OperationResult, error) {
 	var result *progressv1.OperationResult
-	err := p.callAnswering(ctx, func(r *Runner) error {
+	err := p.callAnswering(ctx, func(r *Process) error {
 		var err error
 		result, err = stream(ctx, r, rpc, req, call, each)
 		return err
@@ -96,11 +97,11 @@ func forward[Req any](ctx context.Context, p *Provider, rpc string, req *Req, ca
 }
 
 func (p *Provider) Vars() (envvarsv1connect.EnvVarsServiceClient, error) {
-	return p.runner.Vars()
+	return p.process.Vars()
 }
 
 func (p *Provider) Cost() (costv1connect.CostServiceClient, error) {
-	return p.runner.Cost()
+	return p.process.Cost()
 }
 
 type processLines struct {

@@ -1,4 +1,4 @@
-package providerclient
+package providerprocess
 
 import (
 	"encoding/json"
@@ -11,9 +11,9 @@ import (
 
 func TestProviderConfigIncludesTheProjectTransformModules(t *testing.T) {
 	modules := []string{"./transforms/network.transform.ts"}
-	config, err := providerConfig(&project.Project{Transforms: modules}, &project.Provider{ID: "aws"})
+	config, err := newProviderConfig(&project.Project{Transforms: modules}, &project.Provider{ID: "aws"})
 	if err != nil {
-		t.Fatalf("providerConfig: %v", err)
+		t.Fatalf("newProviderConfig: %v", err)
 	}
 	if !slices.Equal(config.GetTransforms(), modules) {
 		t.Errorf("transforms = %v, want %v", config.GetTransforms(), modules)
@@ -21,9 +21,9 @@ func TestProviderConfigIncludesTheProjectTransformModules(t *testing.T) {
 }
 
 func TestProviderConfigNamesTheProjectDirectoryTheBuildIsUnder(t *testing.T) {
-	config, err := providerConfig(&project.Project{Dir: "/work/shop"}, &project.Provider{ID: "vps"})
+	config, err := newProviderConfig(&project.Project{Dir: "/work/shop"}, &project.Provider{ID: "vps"})
 	if err != nil {
-		t.Fatalf("providerConfig: %v", err)
+		t.Fatalf("newProviderConfig: %v", err)
 	}
 	if config.GetProjectDir() != "/work/shop" {
 		t.Errorf("project dir = %q, want /work/shop: the provider reads the build from the project, not from whatever directory the CLI ran in", config.GetProjectDir())
@@ -31,9 +31,9 @@ func TestProviderConfigNamesTheProjectDirectoryTheBuildIsUnder(t *testing.T) {
 }
 
 func TestProviderConfigIncludesTheProjectItConfigures(t *testing.T) {
-	config, err := providerConfig(&project.Project{Slug: "shop"}, &project.Provider{ID: "vps"})
+	config, err := newProviderConfig(&project.Project{Slug: "shop"}, &project.Provider{ID: "vps"})
 	if err != nil {
-		t.Fatalf("providerConfig: %v", err)
+		t.Fatalf("newProviderConfig: %v", err)
 	}
 	if config.GetSlug() != "shop" {
 		t.Errorf("slug = %q, want shop: a provider that records what it set on a shared machine names the project that set it", config.GetSlug())
@@ -41,12 +41,12 @@ func TestProviderConfigIncludesTheProjectItConfigures(t *testing.T) {
 }
 
 func TestProviderConfigIncludesTheDescriptorOptionsOpaquely(t *testing.T) {
-	config, err := providerConfig(&project.Project{}, &project.Provider{
+	config, err := newProviderConfig(&project.Project{}, &project.Provider{
 		ID:      "aws",
 		Options: json.RawMessage(`{"region":"us-east-1"}`),
 	})
 	if err != nil {
-		t.Fatalf("providerConfig: %v", err)
+		t.Fatalf("newProviderConfig: %v", err)
 	}
 	if got := config.GetOptions().GetFields()["region"].GetStringValue(); got != "us-east-1" {
 		t.Errorf("region = %q, want us-east-1", got)
@@ -54,7 +54,7 @@ func TestProviderConfigIncludesTheDescriptorOptionsOpaquely(t *testing.T) {
 }
 
 func TestProviderConfigRefusesOptionsThatAreNotAJSONObject(t *testing.T) {
-	_, err := providerConfig(&project.Project{}, &project.Provider{
+	_, err := newProviderConfig(&project.Project{}, &project.Provider{
 		ID:      "aws",
 		Options: json.RawMessage(`["us-east-1"]`),
 	})
@@ -67,12 +67,12 @@ func TestProviderConfigRefusesOptionsThatAreNotAJSONObject(t *testing.T) {
 }
 
 func TestProviderConfigLeavesAnUnconfiguredProviderWithoutOptions(t *testing.T) {
-	config, err := providerConfig(&project.Project{}, &project.Provider{
+	config, err := newProviderConfig(&project.Project{}, &project.Provider{
 		ID:      "aws",
 		Options: json.RawMessage(`{}`),
 	})
 	if err != nil {
-		t.Fatalf("providerConfig: %v", err)
+		t.Fatalf("newProviderConfig: %v", err)
 	}
 	if len(config.GetOptions().GetFields()) != 0 {
 		t.Errorf("options = %v, want none for a descriptor declaring no options", config.GetOptions())

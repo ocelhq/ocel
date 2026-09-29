@@ -1,4 +1,4 @@
-package providers
+package executables
 
 import (
 	"bytes"
@@ -21,8 +21,6 @@ const (
 //go:embed trustedroot.json
 var trustedRoot []byte
 
-type ChecksumVerifier func(checksums, signature []byte, identity string) error
-
 func SignerIdentity(version string) string {
 	return SignerWorkflow + "@refs/tags/v" + version
 }
@@ -32,7 +30,7 @@ func VerifyChecksums(checksums, signature []byte, identity string) error {
 	if err != nil {
 		return fmt.Errorf("read the sigstore trusted root this CLI was built with: %w", err)
 	}
-	verifier, err := publicGood(material)
+	verifier, err := newPublicGoodVerifier(material)
 	if err != nil {
 		return err
 	}
@@ -43,7 +41,7 @@ func VerifyChecksums(checksums, signature []byte, identity string) error {
 	return verifySigned(verifier, &signed, checksums, identity)
 }
 
-func publicGood(material root.TrustedMaterial) (*verify.Verifier, error) {
+func newPublicGoodVerifier(material root.TrustedMaterial) (*verify.Verifier, error) {
 	verifier, err := verify.NewVerifier(material,
 		verify.WithSignedCertificateTimestamps(1),
 		verify.WithTransparencyLog(1),

@@ -1,6 +1,6 @@
 //go:build unix
 
-package providerclient
+package providerprocess
 
 import (
 	"bytes"
@@ -31,13 +31,13 @@ func (b *syncBuffer) Len() int {
 	return b.buf.Len()
 }
 
-func spawnOrphan(t *testing.T, ctx context.Context, mode string, cfg Config) (*Runner, string) {
+func spawnOrphan(t *testing.T, ctx context.Context, mode string, spec LaunchSpec) (*Process, string) {
 	t.Helper()
 
 	pidFile := filepath.Join(t.TempDir(), "grandchild.pid")
-	cfg.Env = append([]string{fakeProviderGrandchildPidFileEnvVar + "=" + pidFile}, cfg.Env...)
+	spec.Env = append([]string{fakeProviderGrandchildPidFileEnvVar + "=" + pidFile}, spec.Env...)
 
-	r, _ := spawnFake(t, ctx, mode, cfg)
+	r, _ := spawnFake(t, ctx, mode, spec)
 	return r, pidFile
 }
 
@@ -85,7 +85,7 @@ func TestTeardownBound(t *testing.T) {
 
 		ctx := context.Background()
 		out := &syncBuffer{}
-		r, pidFile := spawnOrphan(t, ctx, "orphan-keeps-pipe-open", Config{
+		r, pidFile := spawnOrphan(t, ctx, "orphan-keeps-pipe-open", LaunchSpec{
 			Stdout:      out,
 			GracePeriod: 100 * time.Millisecond,
 			ReapTimeout: 200 * time.Millisecond,
@@ -123,7 +123,7 @@ func TestTeardownBound(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, pidFile := spawnOrphan(t, ctx, "orphan-detached-pipe", Config{
+		r, pidFile := spawnOrphan(t, ctx, "orphan-detached-pipe", LaunchSpec{
 			GracePeriod: 2 * time.Second,
 			ReapTimeout: 200 * time.Millisecond,
 		})
@@ -146,7 +146,7 @@ func TestTeardownBound(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, pidFile := spawnOrphan(t, ctx, "orphan-detached-pipe", Config{
+		r, pidFile := spawnOrphan(t, ctx, "orphan-detached-pipe", LaunchSpec{
 			GracePeriod: 2 * time.Second,
 			ReapTimeout: 200 * time.Millisecond,
 		})

@@ -1,4 +1,4 @@
-package providers
+package executables
 
 import (
 	"encoding/json"
@@ -29,9 +29,9 @@ func TestTheSigstoreTrustedRootThisCLIWasBuiltWithVerifiesARealFulcioBundle(t *t
 	if err != nil {
 		t.Fatalf("NewTrustedRootFromJSON: %v", err)
 	}
-	verifier, err := publicGood(material)
+	verifier, err := newPublicGoodVerifier(material)
 	if err != nil {
-		t.Fatalf("publicGood: %v", err)
+		t.Fatalf("newPublicGoodVerifier: %v", err)
 	}
 
 	raw, err := os.ReadFile("testdata/fulcio-signed.sigstore.json")

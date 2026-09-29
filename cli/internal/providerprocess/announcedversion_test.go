@@ -1,4 +1,4 @@
-package providerclient
+package providerprocess
 
 import (
 	"context"
@@ -12,11 +12,11 @@ import (
 func TestAProviderOfAnotherVersionIsRefusedBeforeAnyRPC(t *testing.T) {
 	t.Parallel()
 
-	runner, _ := spawnFake(t, context.Background(), "", Config{
+	process, _ := spawnFake(t, context.Background(), "", LaunchSpec{
 		Env: []string{fakeProviderVersionEnvVar + "=9.9.9-from-another-release"},
 	})
 
-	err := runner.Ready(context.Background())
+	err := process.Ready(context.Background())
 	if err == nil {
 		t.Fatal("Ready() error = nil, want the mismatched version refused")
 	}
@@ -34,7 +34,7 @@ func TestAProviderOfAnotherVersionIsRefusedBeforeAnyRPC(t *testing.T) {
 		}
 	}
 
-	if _, err := runner.Client(); !errors.Is(err, ErrClientUnavailable) {
+	if _, err := process.Client(); !errors.Is(err, ErrClientUnavailable) {
 		t.Fatalf("Client() error = %v, want %v — the refusal must land before the channel is opened", err, ErrClientUnavailable)
 	}
 }
@@ -42,8 +42,8 @@ func TestAProviderOfAnotherVersionIsRefusedBeforeAnyRPC(t *testing.T) {
 func TestAProviderOfThisVersionIsAccepted(t *testing.T) {
 	t.Parallel()
 
-	runner, _ := spawnFake(t, context.Background(), "", Config{})
-	if err := runner.Ready(context.Background()); err != nil {
+	process, _ := spawnFake(t, context.Background(), "", LaunchSpec{})
+	if err := process.Ready(context.Background()); err != nil {
 		t.Fatalf("Ready() error = %v, want the provider of this CLI's own version accepted", err)
 	}
 }

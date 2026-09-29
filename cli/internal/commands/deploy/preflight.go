@@ -13,13 +13,13 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/preflight"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-func preflightPreview(ctx context.Context, check *run.Span, prov *providerclient.Provider, cfg *project.Project) error {
+func preflightPreview(ctx context.Context, check *run.Span, prov *providerprocess.Provider, cfg *project.Project) error {
 	return bootstrap.Ready(ctx, check, prov, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview")
 }
 
@@ -30,7 +30,7 @@ type preflightFacts struct {
 	urls           map[string]string
 }
 
-func preflightPreviewUp(ctx context.Context, dependencies Dependencies, policy consent.Policy, check *run.Span, prov *providerclient.Provider, cfg *project.Project, prebuilt bool, pointer string, out io.Writer, in io.Reader) (preflightFacts, error) {
+func preflightPreviewUp(ctx context.Context, dependencies Dependencies, policy consent.Policy, check *run.Span, prov *providerprocess.Provider, cfg *project.Project, prebuilt bool, pointer string, out io.Writer, in io.Reader) (preflightFacts, error) {
 	resp, err := preflight.Run(ctx, check, prov, cfg, environmentv1.Tier_TIER_PREVIEW, cfg.Slug, preflight.Names(preflight.Hostnames(cfg, environmentv1.Tier_TIER_PREVIEW)), preflight.Frameworks(cfg), "ocel bootstrap preview")
 	if err != nil {
 		return preflightFacts{}, err
@@ -63,7 +63,7 @@ func preflightPreviewUp(ctx context.Context, dependencies Dependencies, policy c
 	}, nil
 }
 
-func preflightDeploy(ctx context.Context, dependencies Dependencies, policy consent.Policy, check *run.Span, prov *providerclient.Provider, cfg *project.Project, prebuilt bool, out io.Writer, in io.Reader) (preflightFacts, error) {
+func preflightDeploy(ctx context.Context, dependencies Dependencies, policy consent.Policy, check *run.Span, prov *providerprocess.Provider, cfg *project.Project, prebuilt bool, out io.Writer, in io.Reader) (preflightFacts, error) {
 	domains := preflight.Names(preflight.Hostnames(cfg, environmentv1.Tier_TIER_PRODUCTION))
 	resp, err := preflight.Run(ctx, check, prov, cfg, environmentv1.Tier_TIER_PRODUCTION, slugToScopeBy(policy.Interactive, domains, cfg), domains, preflight.Frameworks(cfg), "ocel bootstrap production")
 	if err != nil {
@@ -86,7 +86,7 @@ func preflightDeploy(ctx context.Context, dependencies Dependencies, policy cons
 	return preflightFacts{declined: !proceed, project: resolved, containerArchs: archs, urls: appurl.Production(resolved)}, nil
 }
 
-func resolveContainers(ctx context.Context, dependencies Dependencies, check *run.Span, prov *providerclient.Provider, cfg *project.Project, resp *contractv1.PreflightResponse, prebuilt bool) (*project.Project, map[string]string, error) {
+func resolveContainers(ctx context.Context, dependencies Dependencies, check *run.Span, prov *providerprocess.Provider, cfg *project.Project, resp *contractv1.PreflightResponse, prebuilt bool) (*project.Project, map[string]string, error) {
 	resolved, err := cfg.ResolveComputes(resp.GetComputes(), prov.Name())
 	if err != nil {
 		return nil, nil, err
@@ -107,7 +107,7 @@ func resolveContainers(ctx context.Context, dependencies Dependencies, check *ru
 	return resolved, archs, nil
 }
 
-func ensureBootstrap(ctx context.Context, policy consent.Policy, check *run.Span, prov *providerclient.Provider, cfg *project.Project, status *contractv1.BootstrapStatus, tier environmentv1.Tier, out io.Writer, in io.Reader) error {
+func ensureBootstrap(ctx context.Context, policy consent.Policy, check *run.Span, prov *providerprocess.Provider, cfg *project.Project, status *contractv1.BootstrapStatus, tier environmentv1.Tier, out io.Writer, in io.Reader) error {
 	if policy.DryRun {
 		return bootstrap.PlanFor(status).Insist(tier)
 	}

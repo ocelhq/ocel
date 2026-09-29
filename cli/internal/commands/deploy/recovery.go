@@ -10,7 +10,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/english"
 
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/valuestore"
 	"github.com/ocelhq/ocel/cli/internal/variableeditor"
@@ -28,7 +28,7 @@ import (
 type variablesRecovery struct {
 	dependencies Dependencies
 	cfg          *project.Project
-	prov         *providerclient.Provider
+	prov         *providerprocess.Provider
 	tier         environmentv1.Tier
 
 	newDeclarations func(variables.EnvSource) *variables.Declarations

@@ -1,4 +1,4 @@
-package providers
+package executables
 
 import (
 	"archive/tar"
@@ -71,11 +71,11 @@ func untar(archive, into string) error {
 		if header.Typeflag != tar.TypeReg {
 			continue
 		}
-		path, err := member(into, header.Name)
+		path, err := memberPath(into, header.Name)
 		if err != nil {
 			return err
 		}
-		if err := spill(path, reader, os.FileMode(header.Mode).Perm()); err != nil {
+		if err := writeMember(path, reader, os.FileMode(header.Mode).Perm()); err != nil {
 			return err
 		}
 	}
@@ -92,7 +92,7 @@ func unzip(archive, into string) error {
 		if entry.FileInfo().IsDir() {
 			continue
 		}
-		path, err := member(into, entry.Name)
+		path, err := memberPath(into, entry.Name)
 		if err != nil {
 			return err
 		}
@@ -100,7 +100,7 @@ func unzip(archive, into string) error {
 		if err != nil {
 			return err
 		}
-		err = spill(path, body, entry.Mode().Perm())
+		err = writeMember(path, body, entry.Mode().Perm())
 		body.Close()
 		if err != nil {
 			return err
@@ -109,7 +109,7 @@ func unzip(archive, into string) error {
 	return nil
 }
 
-func member(into, name string) (string, error) {
+func memberPath(into, name string) (string, error) {
 	path := filepath.Join(into, filepath.FromSlash(name))
 	if !strings.HasPrefix(path, filepath.Clean(into)+string(os.PathSeparator)) {
 		return "", fmt.Errorf("the archive names %q, which lands outside the directory it unpacks into", name)
@@ -117,7 +117,7 @@ func member(into, name string) (string, error) {
 	return path, nil
 }
 
-func spill(path string, body io.Reader, mode os.FileMode) error {
+func writeMember(path string, body io.Reader, mode os.FileMode) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
@@ -128,20 +128,20 @@ func spill(path string, body io.Reader, mode os.FileMode) error {
 	if err != nil {
 		return err
 	}
-	if err := fill(file, body); err != nil {
+	if err := copyWithinCeiling(file, body); err != nil {
 		file.Close()
 		return err
 	}
 	return file.Close()
 }
 
-func fill(into io.Writer, body io.Reader) error {
-	spilled, err := io.Copy(into, io.LimitReader(body, archiveCeiling+1))
+func copyWithinCeiling(into io.Writer, body io.Reader) error {
+	copied, err := io.Copy(into, io.LimitReader(body, archiveCeilingBytes+1))
 	if err != nil {
 		return err
 	}
-	if spilled > archiveCeiling {
-		return fmt.Errorf("the archive contains a member larger than %d bytes", archiveCeiling)
+	if copied > archiveCeilingBytes {
+		return fmt.Errorf("the archive contains a member larger than %d bytes", archiveCeilingBytes)
 	}
 	return nil
 }

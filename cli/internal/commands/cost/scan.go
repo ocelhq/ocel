@@ -16,10 +16,11 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/ocelhq/ocel/cli/internal/build"
+	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/manifest"
 	"github.com/ocelhq/ocel/cli/internal/preflight"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
@@ -100,7 +101,7 @@ func Run(ctx context.Context, dependencies Dependencies, cwd string, opts Option
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := providerclient.Start(ctx, cfg, check, dependencies.Questions, providerclient.PinToLock)
+	prov, err := providerprocess.Start(ctx, cfg, check, dependencies.Questions, executables.PinToLock)
 	check.End(err)
 	if err != nil {
 		return err
@@ -119,7 +120,7 @@ func Run(ctx context.Context, dependencies Dependencies, cwd string, opts Option
 	return render(stdout, cfg.Slug, set, estimates, profile, assumptions)
 }
 
-func price(ctx context.Context, dependencies Dependencies, prov *providerclient.Provider, cfg *project.Project, env *environmentv1.Environment, overrides map[string]*structpb.Struct, out io.Writer) (*costv1.ResourceSet, map[costv1.Profile]*costv1.Estimate, []string, error) {
+func price(ctx context.Context, dependencies Dependencies, prov *providerprocess.Provider, cfg *project.Project, env *environmentv1.Environment, overrides map[string]*structpb.Struct, out io.Writer) (*costv1.ResourceSet, map[costv1.Profile]*costv1.Estimate, []string, error) {
 	if !prov.Facts().GetPricesDeploys() {
 		return nil, nil, nil, fmt.Errorf("%s does not price a deploy, so there is nothing to scan", prov.Name())
 	}

@@ -1,4 +1,4 @@
-package providers
+package executables
 
 import (
 	"io"
@@ -18,9 +18,9 @@ func (endless) Read(p []byte) (int, error) {
 func TestABodyOverTheCeilingIsRefusedRatherThanTruncated(t *testing.T) {
 	t.Parallel()
 
-	err := fill(io.Discard, endless{})
+	err := copyWithinCeiling(io.Discard, endless{})
 	if err == nil {
-		t.Fatal("fill() error = nil, want a body past the ceiling refused rather than cut short")
+		t.Fatal("copyWithinCeiling() error = nil, want a body past the ceiling refused rather than cut short")
 	}
 	if !strings.Contains(err.Error(), "larger than") {
 		t.Errorf("error %q does not say the member outgrew the ceiling", err.Error())
@@ -31,7 +31,7 @@ func TestABodyUnderTheCeilingSpillsWhole(t *testing.T) {
 	t.Parallel()
 
 	var got strings.Builder
-	if err := fill(&got, strings.NewReader("provider")); err != nil {
+	if err := copyWithinCeiling(&got, strings.NewReader("provider")); err != nil {
 		t.Fatalf("fill: %v", err)
 	}
 	if got.String() != "provider" {

@@ -19,8 +19,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
-	"github.com/ocelhq/ocel/cli/internal/providerclient"
-	"github.com/ocelhq/ocel/cli/internal/providers"
+	"github.com/ocelhq/ocel/cli/internal/executables"
+	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/version"
@@ -128,7 +128,7 @@ func writeProject(t *testing.T) string {
 		t.Skip("node not found on PATH")
 	}
 
-	t.Setenv(providerclient.ReadyTimeoutEnvVar, "5s")
+	t.Setenv(providerprocess.ReadyTimeoutEnvVar, "5s")
 
 	root := t.TempDir()
 	WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
@@ -167,16 +167,16 @@ export {};
 func InstallProvider(t *testing.T, name string, place func(dest string) error) string {
 	t.Helper()
 
-	dir := os.Getenv(providers.OverrideEnvVar)
+	dir := os.Getenv(executables.OverrideEnvVar)
 	if dir == "" {
 		dir = t.TempDir()
-		t.Setenv(providers.OverrideEnvVar, dir)
+		t.Setenv(executables.OverrideEnvVar, dir)
 	}
-	binary := filepath.Join(dir, string(providers.KindProvider), name, version.Version, runtime.GOOS+"-"+runtime.GOARCH)
+	binary := filepath.Join(dir, string(executables.KindProvider), name, version.Version, runtime.GOOS+"-"+runtime.GOARCH)
 	if err := os.MkdirAll(binary, 0o755); err != nil {
 		t.Fatalf("mkdir %s: %v", binary, err)
 	}
-	dest := filepath.Join(binary, providers.ExecutableName(providers.KindProvider, name, runtime.GOOS))
+	dest := filepath.Join(binary, executables.ExecutableName(executables.KindProvider, name, runtime.GOOS))
 	if err := place(dest); err != nil {
 		t.Fatalf("install the %s provider at %s: %v", name, dest, err)
 	}

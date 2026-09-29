@@ -7,8 +7,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-
-	"github.com/ocelhq/ocel/cli/internal/providers"
 )
 
 const Name = "ocel.lock"
@@ -17,41 +15,6 @@ type Lock struct {
 	CLI        string                       `json:"cli"`
 	Providers  map[string]map[string]string `json:"providers"`
 	Connectors map[string]map[string]string `json:"connectors"`
-}
-
-func FromChecksums(version string, sums map[string]string) Lock {
-	lock := Lock{
-		CLI:        version,
-		Providers:  map[string]map[string]string{},
-		Connectors: map[string]map[string]string{},
-	}
-	for asset, digest := range sums {
-		parsed, ok := providers.ParseAssetName(asset)
-		if !ok || parsed.Version != version {
-			continue
-		}
-		platform := providers.Platform{GOOS: parsed.GOOS, GOARCH: parsed.GOARCH}
-		kindPins := lock.pinned(parsed.Kind)
-		pinned, known := kindPins[parsed.Name]
-		if !known {
-			pinned = map[string]string{}
-			kindPins[parsed.Name] = pinned
-		}
-		pinned[platform.Dir()] = digest
-	}
-	return lock
-}
-
-func (l Lock) pinned(kind providers.Kind) map[string]map[string]string {
-	if kind == providers.KindConnector {
-		return l.Connectors
-	}
-	return l.Providers
-}
-
-func (l Lock) Digest(kind providers.Kind, name, platform string) (string, bool) {
-	digest, ok := l.pinned(kind)[name][platform]
-	return digest, ok
 }
 
 func (l Lock) Bytes() ([]byte, error) {

@@ -22,9 +22,10 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/commands/bootstrap"
+	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/preflight"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -167,7 +168,7 @@ func withBindingCommand(cmd *cobra.Command, run func(context.Context, string) er
 	return run(cmd.Context(), cwd)
 }
 
-func withBindingProvider(ctx context.Context, invocation commands.Invocation, cwd string, opts bindingsOptions, command string, drive func(context.Context, *providerclient.Provider, *project.Project) (string, error)) (err error) {
+func withBindingProvider(ctx context.Context, invocation commands.Invocation, cwd string, opts bindingsOptions, command string, drive func(context.Context, *providerprocess.Provider, *project.Project) (string, error)) (err error) {
 	if err := opts.checkEnvironment(); err != nil {
 		return err
 	}
@@ -186,7 +187,7 @@ func withBindingProvider(ctx context.Context, invocation commands.Invocation, cw
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := providerclient.Start(ctx, cfg, check, invocation.Questions, providerclient.PinToLock)
+	prov, err := providerprocess.Start(ctx, cfg, check, invocation.Questions, executables.PinToLock)
 	if err != nil {
 		return err
 	}
@@ -213,7 +214,7 @@ func runBindingsSet(ctx context.Context, invocation commands.Invocation, cwd str
 	if owner == naming.InlineRecordOwner {
 		return fmt.Errorf("publisher %q is the one ocel writes an inline binding's record as, at deploy, from the config; publish as your own tool with --owner", owner)
 	}
-	return withBindingProvider(ctx, invocation, cwd, opts, "ocel bindings set", func(ctx context.Context, prov *providerclient.Provider, cfg *project.Project) (string, error) {
+	return withBindingProvider(ctx, invocation, cwd, opts, "ocel bindings set", func(ctx context.Context, prov *providerprocess.Provider, cfg *project.Project) (string, error) {
 		client, err := prov.Vars()
 		if err != nil {
 			return "", err
@@ -332,7 +333,7 @@ func runBindingsRemove(ctx context.Context, invocation commands.Invocation, cwd,
 	if naming.IsInlineRecord(name) {
 		return fmt.Errorf("%s is the record ocel keeps for a binding written inline in `bindings`, and the next deploy writes it again: remove that binding from the config, and the deploy after removes the record", name)
 	}
-	return withBindingProvider(ctx, invocation, cwd, opts, "ocel bindings rm", func(ctx context.Context, prov *providerclient.Provider, cfg *project.Project) (string, error) {
+	return withBindingProvider(ctx, invocation, cwd, opts, "ocel bindings rm", func(ctx context.Context, prov *providerprocess.Provider, cfg *project.Project) (string, error) {
 		client, err := prov.Vars()
 		if err != nil {
 			return "", err
@@ -358,7 +359,7 @@ func runBindingsRemove(ctx context.Context, invocation commands.Invocation, cwd,
 }
 
 func runBindingsList(ctx context.Context, invocation commands.Invocation, cwd string, opts bindingsOptions, stdout io.Writer) error {
-	return withBindingProvider(ctx, invocation, cwd, opts, "ocel bindings ls", func(ctx context.Context, prov *providerclient.Provider, cfg *project.Project) (string, error) {
+	return withBindingProvider(ctx, invocation, cwd, opts, "ocel bindings ls", func(ctx context.Context, prov *providerprocess.Provider, cfg *project.Project) (string, error) {
 		client, err := prov.Vars()
 		if err != nil {
 			return "", err
@@ -380,7 +381,7 @@ func runBindingsList(ctx context.Context, invocation commands.Invocation, cwd st
 }
 
 func runBindingsGenerate(ctx context.Context, invocation commands.Invocation, cwd string, opts bindingsOptions, stdout io.Writer) error {
-	return withBindingProvider(ctx, invocation, cwd, opts, "ocel bindings generate", func(ctx context.Context, prov *providerclient.Provider, cfg *project.Project) (string, error) {
+	return withBindingProvider(ctx, invocation, cwd, opts, "ocel bindings generate", func(ctx context.Context, prov *providerprocess.Provider, cfg *project.Project) (string, error) {
 		client, err := prov.Vars()
 		if err != nil {
 			return "", err

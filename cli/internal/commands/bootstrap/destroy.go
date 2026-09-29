@@ -7,9 +7,10 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/consent"
+	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/preflight"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
@@ -63,7 +64,7 @@ func runDestroy(ctx context.Context, invocation commands.Invocation, cfg *projec
 	if notice != "" {
 		check.Warn(notice)
 	}
-	prov, err := providerclient.Start(ctx, cfg, check, invocation.Questions, providerclient.ChoosePinning(opts.Dry))
+	prov, err := providerprocess.Start(ctx, cfg, check, invocation.Questions, executables.ChoosePinning(opts.Dry))
 	if err != nil {
 		return err
 	}
@@ -115,7 +116,7 @@ func runDestroy(ctx context.Context, invocation commands.Invocation, cfg *projec
 		Edge:      cfg.EdgeSelection(),
 		Consented: consented,
 	}
-	if _, err := providerclient.Stream(ctx, prov, "RemoveBootstrap", req, contractv1connect.ProviderServiceClient.RemoveBootstrap); err != nil {
+	if _, err := providerprocess.Stream(ctx, prov, "RemoveBootstrap", req, contractv1connect.ProviderServiceClient.RemoveBootstrap); err != nil {
 		return err
 	}
 	run.Succeed(fmt.Sprintf("Removed the %s bootstrap", name))

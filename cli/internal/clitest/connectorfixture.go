@@ -6,8 +6,8 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/providerclient"
-	"github.com/ocelhq/ocel/cli/internal/providers"
+	"github.com/ocelhq/ocel/cli/internal/executables"
+	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
@@ -22,7 +22,7 @@ func SetUpConnectorFixture(t *testing.T, fingerprint, hostname string) FakeProje
 		t.Skip("uses a Unix-domain-socket fake provider and POSIX symlinks")
 	}
 
-	t.Setenv(providerclient.ReadyTimeoutEnvVar, "5s")
+	t.Setenv(providerprocess.ReadyTimeoutEnvVar, "5s")
 
 	root := t.TempDir()
 	WriteFile(t, filepath.Join(root, "ocel.fake.json"), `{
@@ -34,23 +34,23 @@ func SetUpConnectorFixture(t *testing.T, fingerprint, hostname string) FakeProje
 	p := fake.NewForProject(fake.Options{}, root)
 	p.FakeConnector().Runs(provider.ConnectorTarget{Fingerprint: fingerprint, Hostname: hostname, OS: "linux", Arch: "amd64"})
 	requests := ServeFake(t, p)
-	InstallConnector(t, string(fake.Vendor), providers.Platform{GOOS: "linux", GOARCH: "amd64"}, []byte(FakeConnectorBinary))
+	InstallConnector(t, string(fake.Vendor), executables.Platform{GOOS: "linux", GOARCH: "amd64"}, []byte(FakeConnectorBinary))
 	return FakeProject{Root: root, Provider: p, Requests: requests}
 }
 
-func InstallConnector(t *testing.T, name string, platform providers.Platform, content []byte) string {
+func InstallConnector(t *testing.T, name string, platform executables.Platform, content []byte) string {
 	t.Helper()
 
-	dir := os.Getenv(providers.OverrideEnvVar)
+	dir := os.Getenv(executables.OverrideEnvVar)
 	if dir == "" {
 		dir = t.TempDir()
-		t.Setenv(providers.OverrideEnvVar, dir)
+		t.Setenv(executables.OverrideEnvVar, dir)
 	}
-	binary := filepath.Join(dir, string(providers.KindConnector), name, version.Version, platform.Dir())
+	binary := filepath.Join(dir, string(executables.KindConnector), name, version.Version, platform.Dir())
 	if err := os.MkdirAll(binary, 0o755); err != nil {
 		t.Fatalf("mkdir %s: %v", binary, err)
 	}
-	dest := filepath.Join(binary, providers.ExecutableName(providers.KindConnector, name, platform.GOOS))
+	dest := filepath.Join(binary, executables.ExecutableName(executables.KindConnector, name, platform.GOOS))
 	if err := os.WriteFile(dest, content, 0o755); err != nil {
 		t.Fatalf("install the %s connector at %s: %v", name, dest, err)
 	}

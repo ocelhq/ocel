@@ -9,7 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/progress"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
@@ -18,7 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
-func Run(ctx context.Context, span *run.Span, prov *providerclient.Provider, cfg *project.Project, required environmentv1.Tier, slug string, domains []string, frameworks []string, bootstrapHint string) (*contractv1.PreflightResponse, error) {
+func Run(ctx context.Context, span *run.Span, prov *providerprocess.Provider, cfg *project.Project, required environmentv1.Tier, slug string, domains []string, frameworks []string, bootstrapHint string) (*contractv1.PreflightResponse, error) {
 	return announce(ctx, span, prov, cfg, required, slug, domains, frameworks, func(resp *contractv1.PreflightResponse) error {
 		if !resp.GetInfrastructurePresent() {
 			return fmt.Errorf("no infrastructure is set up yet; run `%s` to create it", bootstrapHint)
@@ -27,12 +27,12 @@ func Run(ctx context.Context, span *run.Span, prov *providerclient.Provider, cfg
 	})
 }
 
-func Announce(ctx context.Context, span *run.Span, prov *providerclient.Provider, cfg *project.Project, required environmentv1.Tier) error {
+func Announce(ctx context.Context, span *run.Span, prov *providerprocess.Provider, cfg *project.Project, required environmentv1.Tier) error {
 	_, err := announce(ctx, span, prov, cfg, required, cfg.Slug, nil, Frameworks(cfg), func(*contractv1.PreflightResponse) error { return nil })
 	return err
 }
 
-func announce(ctx context.Context, span *run.Span, prov *providerclient.Provider, cfg *project.Project, required environmentv1.Tier, slug string, domains []string, frameworks []string, ready func(*contractv1.PreflightResponse) error) (*contractv1.PreflightResponse, error) {
+func announce(ctx context.Context, span *run.Span, prov *providerprocess.Provider, cfg *project.Project, required environmentv1.Tier, slug string, domains []string, frameworks []string, ready func(*contractv1.PreflightResponse) error) (*contractv1.PreflightResponse, error) {
 	unit := span.Unit(prov.Name(), checking(required, cfg.Slug))
 	resp, err := answer(ctx, span, prov, cfg, required, NewRequest(cfg, required, slug, domains, frameworks), ready)
 	unit.End(err)
@@ -53,7 +53,7 @@ func NewRequest(cfg *project.Project, required environmentv1.Tier, slug string, 
 	}
 }
 
-func answer(ctx context.Context, span *run.Span, prov *providerclient.Provider, cfg *project.Project, required environmentv1.Tier, req *contractv1.PreflightRequest, ready func(*contractv1.PreflightResponse) error) (*contractv1.PreflightResponse, error) {
+func answer(ctx context.Context, span *run.Span, prov *providerprocess.Provider, cfg *project.Project, required environmentv1.Tier, req *contractv1.PreflightRequest, ready func(*contractv1.PreflightResponse) error) (*contractv1.PreflightResponse, error) {
 	var resp *contractv1.PreflightResponse
 	err := prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) error {
 		var err error
@@ -85,7 +85,7 @@ func checking(required environmentv1.Tier, slug string) progress.Title {
 	return progress.Checking.Title(object)
 }
 
-func Credentials(ctx context.Context, span *run.Span, prov *providerclient.Provider, cfg *project.Project, required environmentv1.Tier, bootstrapHint string) error {
+func Credentials(ctx context.Context, span *run.Span, prov *providerprocess.Provider, cfg *project.Project, required environmentv1.Tier, bootstrapHint string) error {
 	_, err := Run(ctx, span, prov, cfg, required, "", nil, nil, bootstrapHint)
 	return err
 }

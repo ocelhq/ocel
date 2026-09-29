@@ -16,7 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/preflight"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -77,7 +77,7 @@ func readDomainStatus(ctx context.Context, invocation commands.Invocation, cfg *
 	return resp, err
 }
 
-func hostnameStatus(prov *providerclient.Provider, req *contractv1.HostnameRequest) func(context.Context) (*contractv1.GetHostnameStatusResponse, error) {
+func hostnameStatus(prov *providerprocess.Provider, req *contractv1.HostnameRequest) func(context.Context) (*contractv1.GetHostnameStatusResponse, error) {
 	return func(ctx context.Context) (resp *contractv1.GetHostnameStatusResponse, err error) {
 		err = prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 			resp, err = client.GetHostnameStatus(ctx, req)

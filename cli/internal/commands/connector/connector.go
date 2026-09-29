@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 
 	"github.com/spf13/cobra"
@@ -16,7 +17,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/connectorserver"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -145,8 +146,8 @@ func withOptions(cmd *cobra.Command, dependencies Dependencies, opts *options,
 	return run(ctx, cfg, link)
 }
 
-func reachTarget(ctx context.Context, dependencies Dependencies, cfg *project.Project, check *run.Span) (*providerclient.Provider, *contractv1.DescribeConnectorTargetResponse, error) {
-	prov, err := providerclient.Start(ctx, cfg, check, dependencies.Questions, providerclient.PinToLock)
+func reachTarget(ctx context.Context, dependencies Dependencies, cfg *project.Project, check *run.Span) (*providerprocess.Provider, *contractv1.DescribeConnectorTargetResponse, error) {
+	prov, err := providerprocess.Start(ctx, cfg, check, dependencies.Questions, executables.PinToLock)
 	if err != nil {
 		return nil, nil, err
 	}

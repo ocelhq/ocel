@@ -11,8 +11,9 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/consent"
+	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -78,7 +79,7 @@ func runRollback(ctx context.Context, invocation commands.Invocation, cwd string
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := providerclient.Start(ctx, cfg, check, invocation.Questions, providerclient.ChoosePinning(opts.dry))
+	prov, err := providerprocess.Start(ctx, cfg, check, invocation.Questions, executables.ChoosePinning(opts.dry))
 	if err != nil {
 		return err
 	}
@@ -136,7 +137,7 @@ func runRollback(ctx context.Context, invocation commands.Invocation, cwd string
 	return nil
 }
 
-func promote(ctx context.Context, phase *run.Span, prov *providerclient.Provider, cfg *project.Project, target *contractv1.Promotion) (*contractv1.RollbackResponse, error) {
+func promote(ctx context.Context, phase *run.Span, prov *providerprocess.Provider, cfg *project.Project, target *contractv1.Promotion) (*contractv1.RollbackResponse, error) {
 	unit := phase.Unit(cfg.Slug, progress.Switching.Title("production traffic back to promotion "+target.GetPromotionId()))
 	var resp *contractv1.RollbackResponse
 	err := prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {

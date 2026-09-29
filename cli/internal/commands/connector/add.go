@@ -10,9 +10,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/english"
 
 	"github.com/ocelhq/ocel/cli/internal/console"
+	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/cli/internal/providerclient"
-	"github.com/ocelhq/ocel/cli/internal/providers"
+	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/connectorserver"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -57,14 +57,14 @@ func runAdd(ctx context.Context, dependencies Dependencies, cfg *project.Project
 		return fmt.Errorf("record this target in the console: %w", err)
 	}
 
-	platform := providers.Platform{GOOS: described.GetOs(), GOARCH: described.GetArch()}
-	binary, err := providerclient.Connector(ctx, cfg.Dir, vendor, platform)
+	platform := executables.Platform{GOOS: described.GetOs(), GOARCH: described.GetArch()}
+	binary, err := executables.EnsureConnector(ctx, cfg.Dir, vendor, platform)
 	if err != nil {
 		return err
 	}
-	if len(binary) > providerclient.MaxMessageBytes {
+	if len(binary) > providerprocess.MaxMessageBytes {
 		return fmt.Errorf("the %s connector built for %s/%s is %d bytes, over the %d the provider channel accepts in one message",
-			vendor, platform.GOOS, platform.GOARCH, len(binary), providerclient.MaxMessageBytes)
+			vendor, platform.GOOS, platform.GOARCH, len(binary), providerprocess.MaxMessageBytes)
 	}
 	config, err := json.Marshal(connectorserver.Config{
 		Console:        opts.apiURL,
@@ -77,7 +77,7 @@ func runAdd(ctx context.Context, dependencies Dependencies, cfg *project.Project
 		return err
 	}
 
-	installed, err := providerclient.Stream(ctx, prov, "InstallConnector", &contractv1.InstallConnectorRequest{
+	installed, err := providerprocess.Stream(ctx, prov, "InstallConnector", &contractv1.InstallConnectorRequest{
 		Binary:     binary,
 		Version:    version.Version,
 		ConfigJson: config,

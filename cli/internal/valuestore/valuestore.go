@@ -6,7 +6,7 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -16,7 +16,7 @@ import (
 )
 
 type Store struct {
-	Provider *providerclient.Provider
+	Provider *providerprocess.Provider
 	Project  *project.Project
 	Tier     environmentv1.Tier
 }
@@ -167,7 +167,7 @@ func (s Store) History(ctx context.Context, at variables.Coordinate) ([]variable
 	return versions, nil
 }
 
-func ListEnvironmentNames(ctx context.Context, prov *providerclient.Provider, slug string) ([]string, error) {
+func ListEnvironmentNames(ctx context.Context, prov *providerprocess.Provider, slug string) ([]string, error) {
 	var resp *contractv1.ListEnvironmentsResponse
 	err := prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) error {
 		var err error

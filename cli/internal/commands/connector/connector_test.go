@@ -17,10 +17,10 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/console"
+	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/cli/internal/providerclient"
-	"github.com/ocelhq/ocel/cli/internal/providers"
+	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -181,7 +181,7 @@ func TestAddPairsTheTargetWithTheConsoleAndInstallsTheAsset(t *testing.T) {
 func TestAddInstallsTheConnectorBuiltForThePlatformTheProviderNames(t *testing.T) {
 	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
 	root := project.Root
-	clitest.InstallConnector(t, "fake", providers.Platform{GOOS: "freebsd", GOARCH: "amd64"}, []byte("freebsd connector"))
+	clitest.InstallConnector(t, "fake", executables.Platform{GOOS: "freebsd", GOARCH: "amd64"}, []byte("freebsd connector"))
 	project.Provider.FakeConnector().Runs(provider.ConnectorTarget{Fingerprint: fingerprint, Hostname: hostname, OS: "freebsd", Arch: "amd64"})
 	srv := newConsoleServer(t)
 	linked(t, root, srv.URL)
@@ -268,8 +268,8 @@ func TestAConnectorOverTheChannelCeilingIsRefusedBeforeItIsSent(t *testing.T) {
 	srv := newConsoleServer(t)
 	linked(t, root, srv.URL)
 
-	binary := clitest.InstallConnector(t, "fake", providers.Platform{GOOS: "linux", GOARCH: "amd64"}, []byte(clitest.FakeConnectorBinary))
-	if err := os.Truncate(binary, providerclient.MaxMessageBytes+1); err != nil {
+	binary := clitest.InstallConnector(t, "fake", executables.Platform{GOOS: "linux", GOARCH: "amd64"}, []byte(clitest.FakeConnectorBinary))
+	if err := os.Truncate(binary, providerprocess.MaxMessageBytes+1); err != nil {
 		t.Fatalf("grow the connector past the ceiling: %v", err)
 	}
 

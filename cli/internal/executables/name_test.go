@@ -1,4 +1,4 @@
-package providers
+package executables
 
 import (
 	"context"
@@ -17,7 +17,7 @@ func TestANameThatIsNotOneSegmentNeverReachesAPath(t *testing.T) {
 			Version:  testVersion,
 			Platform: Platform{GOOS: "linux", GOARCH: "amd64"},
 		}
-		_, err := store.Binary(context.Background(), KindProvider, name, store.Platform, "deadbeef")
+		_, err := store.EnsureBinary(context.Background(), KindProvider, name, store.Platform, "deadbeef")
 		if err == nil {
 			t.Errorf("Binary(%q) error = nil, want the name refused before it is joined into a path", name)
 			continue
@@ -43,7 +43,7 @@ func TestAnEscapingNameIsRefusedAgainstADirectoryOfProviders(t *testing.T) {
 		Version:  testVersion,
 		Platform: Platform{GOOS: "linux", GOARCH: "amd64"},
 	}
-	if _, err := store.Binary(context.Background(), KindProvider, "../outside", store.Platform, "deadbeef"); err == nil {
+	if _, err := store.EnsureBinary(context.Background(), KindProvider, "../outside", store.Platform, "deadbeef"); err == nil {
 		t.Fatal("Binary() error = nil, want a name climbing out of the providers directory refused")
 	}
 }
@@ -52,8 +52,8 @@ func TestTheNamesTheReleaseShipsAreNames(t *testing.T) {
 	t.Parallel()
 
 	for _, name := range []string{"aws", "gcp", "vps", "a-second-cloud"} {
-		if err := checkName(name); err != nil {
-			t.Errorf("checkName(%q) = %v, want a name the store resolves", name, err)
+		if err := refuseInvalidName(name); err != nil {
+			t.Errorf("refuseInvalidName(%q) = %v, want a name the store resolves", name, err)
 		}
 	}
 }

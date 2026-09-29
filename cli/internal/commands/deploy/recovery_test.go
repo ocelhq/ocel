@@ -22,7 +22,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/variableeditor"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
@@ -54,7 +54,7 @@ type editorSessions struct {
 func captureEditorSessions(dependencies *Dependencies) *editorSessions {
 	sessions := &editorSessions{}
 	prev := dependencies.ServeVariableEditor
-	dependencies.ServeVariableEditor = func(ctx context.Context, cfg *project.Project, prov *providerclient.Provider, tier environmentv1.Tier, declarations *variables.Declarations, recovery *variableeditor.Recovery) (*variableeditor.Session, error) {
+	dependencies.ServeVariableEditor = func(ctx context.Context, cfg *project.Project, prov *providerprocess.Provider, tier environmentv1.Tier, declarations *variables.Declarations, recovery *variableeditor.Recovery) (*variableeditor.Session, error) {
 		session, err := prev(ctx, cfg, prov, tier, declarations, recovery)
 		if err == nil {
 			sessions.mu.Lock()

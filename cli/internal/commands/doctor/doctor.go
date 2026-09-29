@@ -16,10 +16,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/commands/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/english"
+	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/preflight"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/version"
@@ -351,7 +352,7 @@ func checkSetup(ctx context.Context, invocation commands.Invocation, cfg *projec
 }
 
 func askProvider(ctx context.Context, invocation commands.Invocation, cfg *project.Project, unit *run.Span, got *answers) error {
-	prov, err := providerclient.Start(ctx, cfg, unit, invocation.Questions, providerclient.PinToLock)
+	prov, err := providerprocess.Start(ctx, cfg, unit, invocation.Questions, executables.PinToLock)
 	if err != nil {
 		return err
 	}

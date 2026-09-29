@@ -1,4 +1,4 @@
-package providers
+package executables
 
 import (
 	"archive/tar"
@@ -100,7 +100,7 @@ func TestAMemberThatLandsOutsideTheDirectoryIsRefused(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			path, err := member(into, name)
+			path, err := memberPath(into, name)
 			if err == nil {
 				t.Fatalf("member(%q) = %q, want it refused for landing outside %s", name, path, into)
 			}
@@ -115,7 +115,7 @@ func TestAnAbsoluteMemberIsPinnedUnderTheDirectoryRatherThanRefused(t *testing.T
 	t.Parallel()
 
 	into := filepath.Join(t.TempDir(), "unpacked")
-	got, err := member(into, "/etc/passwd")
+	got, err := memberPath(into, "/etc/passwd")
 	if err != nil {
 		t.Fatalf("member() error = %v", err)
 	}

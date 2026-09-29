@@ -9,7 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/preflight"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -110,7 +110,7 @@ func (p Plan) Advise(tier environmentv1.Tier, span *run.Span) error {
 	return nil
 }
 
-func Offers(ctx context.Context, prov *providerclient.Provider, tier environmentv1.Tier, front *contractv1.EdgeSelection, feature string) (bool, error) {
+func Offers(ctx context.Context, prov *providerprocess.Provider, tier environmentv1.Tier, front *contractv1.EdgeSelection, feature string) (bool, error) {
 	var described *contractv1.DescribeBootstrapResponse
 	err := prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) error {
 		var err error
@@ -139,11 +139,11 @@ func PlanOnly(status *contractv1.BootstrapStatus, feature string) Plan {
 	return plan
 }
 
-func Offer(ctx context.Context, span *run.Span, prov *providerclient.Provider, status *contractv1.BootstrapStatus, tier environmentv1.Tier, front *contractv1.EdgeSelection, interactive bool, out io.Writer, in io.Reader) error {
+func Offer(ctx context.Context, span *run.Span, prov *providerprocess.Provider, status *contractv1.BootstrapStatus, tier environmentv1.Tier, front *contractv1.EdgeSelection, interactive bool, out io.Writer, in io.Reader) error {
 	return OfferPlan(ctx, span, prov, PlanFor(status), tier, front, interactive, out, in)
 }
 
-func OfferPlan(ctx context.Context, span *run.Span, prov *providerclient.Provider, plan Plan, tier environmentv1.Tier, front *contractv1.EdgeSelection, interactive bool, out io.Writer, in io.Reader) error {
+func OfferPlan(ctx context.Context, span *run.Span, prov *providerprocess.Provider, plan Plan, tier environmentv1.Tier, front *contractv1.EdgeSelection, interactive bool, out io.Writer, in io.Reader) error {
 	if plan.Empty() {
 		return nil
 	}
@@ -159,7 +159,7 @@ func OfferPlan(ctx context.Context, span *run.Span, prov *providerclient.Provide
 	if !proceed {
 		return plan.Advise(tier, span)
 	}
-	_, err = providerclient.Stream(ctx, prov, "Bootstrap", plan.Request(tier, front), contractv1connect.ProviderServiceClient.Bootstrap)
+	_, err = providerprocess.Stream(ctx, prov, "Bootstrap", plan.Request(tier, front), contractv1connect.ProviderServiceClient.Bootstrap)
 	return err
 }
 
@@ -169,7 +169,7 @@ func confirmRepair(ctx context.Context, plan Plan, tier environmentv1.Tier, span
 	})
 }
 
-func Ready(ctx context.Context, span *run.Span, prov *providerclient.Provider, cfg *project.Project, required environmentv1.Tier, hint string) error {
+func Ready(ctx context.Context, span *run.Span, prov *providerprocess.Provider, cfg *project.Project, required environmentv1.Tier, hint string) error {
 	resp, err := preflight.Run(ctx, span, prov, cfg, required, "", nil, preflight.Frameworks(cfg), hint)
 	if err != nil {
 		return err

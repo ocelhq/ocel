@@ -1,4 +1,4 @@
-package providerclient
+package providerprocess
 
 import (
 	"bytes"
@@ -54,7 +54,7 @@ func deploySpan(t *testing.T) (context.Context, *run.Span, *recording) {
 func startFake(t *testing.T, ctx context.Context, mode string, span *run.Span, questions Questions, env ...string) *Provider {
 	t.Helper()
 
-	p, err := start(ctx, span, questions, fakeConfig(t, mode, Config{ProviderName: "fake", Env: env}))
+	p, err := start(ctx, span, questions, fakeSpec(t, mode, LaunchSpec{ProviderName: "fake", Env: env}))
 	if err != nil {
 		t.Fatalf("start() error = %v", err)
 	}

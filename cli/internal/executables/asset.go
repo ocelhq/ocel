@@ -1,4 +1,4 @@
-package providers
+package executables
 
 import (
 	"fmt"
@@ -8,7 +8,7 @@ import (
 
 var providerName = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
-func checkName(name string) error {
+func refuseInvalidName(name string) error {
 	if !providerName.MatchString(name) {
 		return fmt.Errorf("%q is not a provider name", name)
 	}

@@ -8,12 +8,12 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/childprocess"
 	"github.com/ocelhq/ocel/cli/internal/devresources"
 	"github.com/ocelhq/ocel/cli/internal/interrupt"
-	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 )
 
 const shutdownSlack = 3 * time.Second
 
-const gracefulShutdownWindow = max(providerclient.DefaultGracePeriod+providerclient.DefaultReapTimeout, childprocess.WaitDelay) + shutdownSlack
+const gracefulShutdownWindow = max(providerprocess.DefaultGracePeriod+providerprocess.DefaultReapTimeout, childprocess.WaitDelay) + shutdownSlack
 
 const devShutdownWindow = childprocess.WaitDelay + devresources.StopsWithin + shutdownSlack
 
@@ -26,6 +26,6 @@ func installInterruptHandler(parent context.Context, stderr io.Writer) (context.
 }
 
 func forceKillEverything() {
-	providerclient.KillAllLive()
+	providerprocess.KillAllLive()
 	childprocess.KillAll()
 }

