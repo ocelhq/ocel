@@ -1,7 +1,9 @@
 package host
 
 import (
+	"bytes"
 	"context"
+	"io"
 	"slices"
 	"strings"
 	"time"
@@ -137,11 +139,30 @@ func (h *Host) ServedRouter(ctx context.Context, hostname string) (Answer, error
 type frontBox struct{ h *Host }
 
 func (b frontBox) Ran(ctx context.Context, what string, argv []string) (string, error) {
-	elevation, err := b.h.reachDocker(ctx)
+	return b.Fed(ctx, what, argv, nil)
+}
+
+func (b frontBox) Fed(ctx context.Context, what string, argv []string, stdin []byte) (string, error) {
+	elevation, err := b.elevation(ctx, argv)
 	if err != nil {
 		return "", err
 	}
-	return b.h.ran(ctx, what, words(argv), nil, elevation)
+	var fed io.Reader
+	if stdin != nil {
+		fed = bytes.NewReader(stdin)
+	}
+	return b.h.ran(ctx, what, words(argv), fed, elevation)
+}
+
+func (b frontBox) elevation(ctx context.Context, argv []string) (string, error) {
+	if len(argv) == 0 || argv[0] != "docker" {
+		return "", nil
+	}
+	return b.h.reachDocker(ctx)
+}
+
+func (b frontBox) Placed(ctx context.Context, path string) (string, error) {
+	return b.h.destinationSum(ctx, path)
 }
 
 func (b frontBox) Listening(ctx context.Context) ([]listeners.Listener, error) {

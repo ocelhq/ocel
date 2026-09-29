@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddyfile"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
@@ -19,6 +21,7 @@ const (
 	KindContainer    = "docker:container"
 	KindProxyConfig  = "ocel:proxy-config"
 	KindRoutingTable = "ocel:routing-table"
+	KindPlaced       = "ocel:placed-file"
 )
 
 const (
@@ -105,7 +108,7 @@ func ProxyItems(arch string, front Front) []Item {
 	binary := switchboardBinary(arch)
 	board := switchboardBox(binary, front)
 	if front.adopted() {
-		return []Item{
+		return append([]Item{
 			dir(SwitchboardDir, 0o755, rootOwner, ""),
 			{Kind: KindFile, Name: SwitchboardBinary, Mode: 0o755, Owner: rootOwner, Content: binary,
 				Note: "routes every hostname and switches releases"},
@@ -114,8 +117,8 @@ func ProxyItems(arch string, front Front) []Item {
 			networkItem(),
 			dir(switchboard.ControlDir, 0o755, rootOwner, "the switchboard's control socket"),
 			dir(switchboard.FrontDir, 0o700, rootOwner, ""),
-			board.item("routes what your proxy forwards to " + board.ports[0].String()),
-		}
+			board.item(front.reachedAt()),
+		}, front.reloadGrant()...)
 	}
 	return []Item{
 		dir(SwitchboardDir, 0o755, rootOwner, ""),
@@ -272,6 +275,9 @@ type boxContainer struct {
 	migrates bool
 	restored bool
 	networks []userNetwork
+
+	placesIn    string
+	placeOption string
 }
 
 func frontProxy() boxContainer {
@@ -403,6 +409,7 @@ func (s boxContainer) run(sysctls ...string) []string {
 func (s boxContainer) writing(attempts int) string {
 	written := "set -e\n" +
 		s.networksPresent() +
+		s.placePresent() +
 		bindsPresent(s.files) +
 		imagePulled(s.image, containerPulls) +
 		"docker rm --force " + quoted(s.name) + " >/dev/null 2>&1 || true\n" +
@@ -434,6 +441,22 @@ func (s boxContainer) networksPresent() string {
 			"fi\n"
 	}
 	return checks
+}
+
+func (s boxContainer) placePresent() string {
+	if s.placesIn == "" {
+		return ""
+	}
+	missing := fmt.Sprintf("option %q names the directory %s, which this box does not have: name the directory your proxy reads, or create it",
+		s.placeOption, s.placesIn)
+	return "if " + s.placeGone() + "; then\n" +
+		"printf '%s\\n' " + quoted(missing) + " >&2\n" +
+		"exit 1\n" +
+		"fi\n"
+}
+
+func (s boxContainer) placeGone() string {
+	return "[ ! -d " + quoted(s.placesIn) + " ] && [ -x " + quoted(filepath.Dir(s.placesIn)) + " ]"
 }
 
 func joinedFact(joined userNetwork) string { return "network:" + joined.name + "=" }
@@ -522,6 +545,42 @@ func (s boxContainer) mountsProbe() string {
 		"else case $? in " + execUnstarted + ") mounts=" + mountsMoved + " ;; esac\n" +
 		"fi\n" +
 		"facts=\"$facts\n" + mountsFact + "$mounts\"\n"
+}
+
+func (f Front) reloadGrant() []Item {
+	if f.Caddy == nil || f.Caddy.Container != "" {
+		return nil
+	}
+	return []Item{{Kind: KindFile, Name: sudoersCaddyReload, Mode: 0o440, Owner: rootOwner, Content: caddyReloadSudoers(),
+		Note: "sudo for reloading your Caddy"}}
+}
+
+func caddyReloadSudoers() []byte {
+	return []byte(deployUser + " ALL=(root) NOPASSWD: " + strings.Join(caddyfile.ServiceReload(), " ") + "\n")
+}
+
+func (f Front) placedRemovals() []removal {
+	at := destination(openFront(f, frontBox{}))
+	if at == "" {
+		return nil
+	}
+	placed := taking(KindPlaced, at, "ocel's routes in your proxy's directory")
+	if f.Caddy != nil {
+		placed.reload = f.caddyUnloading()
+	}
+	removals := []removal{placed}
+	for _, grant := range f.reloadGrant() {
+		removals = append(removals, taking(KindFile, grant.Name, ""))
+	}
+	return removals
+}
+
+func (f Front) caddyUnloading() string {
+	reload := words(f.caddyfile(frontBox{}).Reloading())
+	if f.Caddy.Container == "" {
+		return "if systemctl is-active --quiet caddy.service; then " + reload + "; fi"
+	}
+	return "if [ \"$(docker inspect --type container --format '{{.State.Running}}' " + quoted(f.Caddy.Container) + " 2>/dev/null)\" = true ]; then " + reload + "; fi"
 }
 
 func proxyRemovals() []removal {

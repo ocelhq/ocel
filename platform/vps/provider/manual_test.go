@@ -13,6 +13,7 @@ import (
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddyfile"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
@@ -41,6 +42,23 @@ func TestACertificateYourProxyServesIsRenewedByYourProxy(t *testing.T) {
 		if strings.Contains(command, "docker") {
 			t.Errorf("reading what your proxy serves ran %q, want the handshake alone asked", command)
 		}
+	}
+}
+
+func TestACertificateYourCaddyServesSaysYourCaddyRenewsIt(t *testing.T) {
+	t.Parallel()
+
+	served := selfSigned(t, []string{"shop.example.com"}, 60*24*time.Hour)
+	p := vps.ProviderOver(
+		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}, Proxy: &vps.Proxy{Caddy: &vps.Caddy{Directory: "/etc/caddy/ocel.d"}}},
+		func(context.Context) (host.Conn, error) { return &box{leaf: string(served)}, nil },
+	)
+	health, err := p.Certificates().Inspect(context.Background(), edge.None, "shop.example.com", certificateFor(t, p, "shop.example.com"))
+	if err != nil {
+		t.Fatalf("InspectCertificate() = %v", err)
+	}
+	if health.Renewal != caddyfile.Renewal {
+		t.Errorf("InspectCertificate() = %+v, want renewal %q, from the proxy that fronts the box", health, caddyfile.Renewal)
 	}
 }
 

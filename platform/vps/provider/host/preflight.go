@@ -427,6 +427,9 @@ func withOwner(owners []portOwner, name string, container bool, port string) []p
 }
 
 func (h *Host) servingFree(ctx context.Context, read Reading) error {
+	if h.proxyOption.Caddy != nil {
+		return h.proxyOption.caddyfile(frontBox{h}).RefuseUnreachable(ctx)
+	}
 	if h.proxyOption.adopted() {
 		return nil
 	}

@@ -489,6 +489,7 @@ type removal struct {
 	reason string
 	action provider.ChangeAction
 	shared bool
+	reload string
 }
 
 func (r removal) phrase() string { return phrase(r.kind, r.path) }
@@ -526,6 +527,12 @@ func (r removal) command() string {
 	case r.kind == KindNetwork:
 		return "if ! docker network rm " + quoted(r.path) + " >/dev/null 2>&1 && " +
 			"docker network inspect " + quoted(r.path) + " >/dev/null 2>&1; then printf '%s\\n' " + quoted(networkInUse) + "; fi"
+	case r.kind == KindPlaced:
+		unplaced := words(switchboardCommand("unplace", r.path)) + " 2>/dev/null || rm -f " + quoted(r.path)
+		if r.reload == "" {
+			return unplaced
+		}
+		return unplaced + "\n" + r.reload
 	case r.kind == KindRoutingTable || r.kind == KindProxyConfig:
 		return routingLocked("-x") + "rm -f " + quoted(r.path)
 	case r.shared:
@@ -614,6 +621,7 @@ func removing(read, sibling Reading, apps appsPresent) []removal {
 		"")}
 	var above []removal
 	if last {
+		beneath = append(beneath, read.Front.placedRemovals()...)
 		beneath = append(beneath, proxyRemovals()...)
 		beneath = append(beneath, liveRemovals()...)
 		beneath = append(beneath, envSourceSyncRemovals()...)
@@ -637,7 +645,7 @@ func removing(read, sibling Reading, apps appsPresent) []removal {
 
 	present := make([]removal, 0, len(ordered))
 	for _, candidate := range ordered {
-		if candidate.kind == KindApps || candidate.kind == KindResourceVolumes || candidate.kind == KindAppNetworks ||
+		if candidate.kind == KindApps || candidate.kind == KindResourceVolumes || candidate.kind == KindAppNetworks || candidate.kind == KindPlaced ||
 			read.observed(candidate.kind, candidate.path) || sibling.observed(candidate.kind, candidate.path) {
 			present = append(present, candidate)
 		}

@@ -53,8 +53,12 @@ func (p certificates) Inspect(ctx context.Context, _ edge.Kind, hostname string,
 		return health, nil
 	}
 	health.Renewal = certs.Renewal(cert.ID)
-	if !p.host.FrontProxy().Guarantees().OwnsPorts {
-		health.Renewal = certs.AdoptedRenewal
+	if front := p.host.FrontProxy(); !front.Guarantees().OwnsPorts {
+		current, err := front.Certificate(ctx, hostname)
+		if err != nil {
+			return health, err
+		}
+		health.Renewal = current.Renewal
 	}
 	if path, pinned := certs.Pinned(cert.ID); pinned {
 		return p.pinnedHealth(ctx, path, hostname, health)

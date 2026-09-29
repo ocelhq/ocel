@@ -35,8 +35,9 @@ const (
 	stampFile   = "stamp.json"
 	sealKeyFile = "seal.key"
 
-	sudoersRoot       = "/etc/sudoers.d"
-	sudoersSealPrefix = sudoersRoot + "/ocel-seal-"
+	sudoersRoot        = "/etc/sudoers.d"
+	sudoersSealPrefix  = sudoersRoot + "/ocel-seal-"
+	sudoersCaddyReload = sudoersRoot + "/ocel-caddy-reload"
 )
 
 const rootOwner = "root"

@@ -363,7 +363,7 @@ func (h *Host) remove(ctx context.Context, taken removal) (bool, error) {
 		}
 		_, err := h.run(ctx, "remove "+taken.kind+" "+taken.path, taken.command(), nil)
 		return err == nil, err
-	case KindDir, KindFile, KindSealKey, KindProxyConfig, KindRoutingTable:
+	case KindDir, KindFile, KindSealKey, KindProxyConfig, KindRoutingTable, KindPlaced:
 		if !strings.HasPrefix(taken.path, "/") {
 			return false, refusal.Refuse(refusal.CodeInvalid,
 				"%q is not an absolute path", taken.path)

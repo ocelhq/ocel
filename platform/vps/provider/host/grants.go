@@ -60,6 +60,11 @@ func grants(tier environment.Tier, arch string) []Grant {
 		})
 	}
 	grants = append(grants, sealing(items, tier, deployer)...)
+	grants = append(grants, Grant{
+		Name: "reloads your Caddy as root, through one line in " + sudoersCaddyReload + ", behind a caddy option with no container",
+		Detail: "the line is\n\n      " + strings.TrimSpace(string(caddyReloadSudoers())) +
+			"\n\n    which runs the unit's own `caddy reload`, in Caddy's environment. Bootstrap writes it only for a Caddy that runs as caddy.service, and `ocel destroy` removes it",
+	})
 	if agent := written(items, KindFile, LiveBinary); agent.Name != "" {
 		grants = append(grants, Grant{
 			Name: "no hand in " + LiveSocket,
