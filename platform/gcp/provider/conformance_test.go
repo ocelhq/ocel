@@ -51,8 +51,8 @@ func TestTheEdgeRegistryOpensTheEdgesThisProviderFronts(t *testing.T) {
 
 	conformance.RunEdges(t, facts, p.Edges())
 
-	if got := facts.Edges; !slices.Equal(got, []edge.Kind{alb.Kind}) {
-		t.Errorf("Facts().Edges = %v, want %q alone", got, alb.Kind)
+	if got := facts.Edges; !slices.Equal(got, []edge.Kind{alb.Kind, "cloudflare"}) {
+		t.Errorf("Facts().Edges = %v, want %q and cloudflare", got, alb.Kind)
 	}
 	if got := facts.DefaultEdge; got != edge.None {
 		t.Errorf("Facts().DefaultEdge = %q, want no edge: a deploy that names none is answered on the url Cloud Run gave it", got)

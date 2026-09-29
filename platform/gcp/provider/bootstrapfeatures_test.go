@@ -44,6 +44,45 @@ func TestTheLoadBalancerIsAFeatureOnlyTheEdgeThatNeedsItPullsIn(t *testing.T) {
 	}
 }
 
+func TestTheShieldedLoadBalancerIsAFeatureOnlyTheCloudflareEdgePullsIn(t *testing.T) {
+	t.Parallel()
+
+	catalogue := bootstrap{}.Catalogue()
+	at := slices.IndexFunc(catalogue, func(f provider.Feature) bool { return f.Name == albShieldedFeature })
+	if at < 0 {
+		t.Fatalf("Catalogue() = %v, want the %q feature: the load balancer Cloudflare forwards to costs every month, and a recurring cost is consented to by being planned", catalogue, albShieldedFeature)
+	}
+	if !strings.Contains(catalogue[at].Summary, "$18") {
+		t.Errorf("the %q feature reads %q, want the price in the plan", albShieldedFeature, catalogue[at].Summary)
+	}
+	proxied, err := bootstrapplan.RequiredFeatures(catalogue, nil, "cloudflare")
+	if err != nil {
+		t.Fatalf("RequiredFeatures(cloudflare) = %v", err)
+	}
+	if !slices.Contains(proxied, albShieldedFeature) || slices.Contains(proxied, albFeature) {
+		t.Errorf("a cloudflare bootstrap requires %v, want %q and not the front browsers reach directly", proxied, albShieldedFeature)
+	}
+	fronted, err := bootstrapplan.RequiredFeatures(catalogue, nil, string(alb.Kind))
+	if err != nil {
+		t.Fatalf("RequiredFeatures(alb) = %v", err)
+	}
+	if slices.Contains(fronted, albShieldedFeature) {
+		t.Errorf("an %q bootstrap requires %v, and a load balancer only Cloudflare reaches serves nothing it binds", alb.Kind, fronted)
+	}
+
+	for _, api := range []string{"compute.googleapis.com", "certificatemanager.googleapis.com", "networksecurity.googleapis.com"} {
+		if !slices.Contains(apisFor([]string{albShieldedFeature}), api) {
+			t.Errorf("a %q bootstrap checks %v, want %s among them", albShieldedFeature, apisFor([]string{albShieldedFeature}), api)
+		}
+	}
+	if !slices.Contains(permissionsFor([]string{albShieldedFeature}), "networksecurity.serverTlsPolicies.create") {
+		t.Errorf("a %q bootstrap checks %v, want the permission its server tls policy is raised with", albShieldedFeature, permissionsFor([]string{albShieldedFeature}))
+	}
+	if !slices.Contains(rolesCovering([]string{albShieldedFeature}), "roles/compute.securityAdmin") {
+		t.Errorf("the refusal for a %q bootstrap names %v, want the role that covers its server tls policy", albShieldedFeature, rolesCovering([]string{albShieldedFeature}))
+	}
+}
+
 func TestTheServicesTheLoadBalancerNeedsAreOnlyDemandedWhenItIsBeingProvisioned(t *testing.T) {
 	t.Parallel()
 

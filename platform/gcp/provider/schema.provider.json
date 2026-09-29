@@ -3,7 +3,8 @@
     "cloudflare"
   ],
   "edges": [
-    "alb"
+    "alb",
+    "cloudflare"
   ],
   "id": "gcp",
   "options": {

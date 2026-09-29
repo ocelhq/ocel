@@ -9,6 +9,7 @@ import (
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
@@ -155,7 +156,7 @@ func (p *Provider) EstimateCost(_ context.Context, req *costv1.PriceRequest) (*c
 }
 
 func edgeShape(kind edge.Kind, site pricing.EdgeSite) (pricing.EdgeShape, error) {
-	if kind != alb.Kind {
+	if kind != alb.Kind && kind != cloudflare.Kind {
 		return pricing.EdgeShape{}, nil
 	}
 	return alb.Shape(site)

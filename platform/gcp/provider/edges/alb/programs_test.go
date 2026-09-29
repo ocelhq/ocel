@@ -19,7 +19,7 @@ func binding(hosts map[string]Host) Program {
 func TestTheFrontendProvisionsOneLoadBalancerForTheWholeTier(t *testing.T) {
 	t.Parallel()
 
-	seen, err := declared(frontProgram(frontSpec{Names: frontNames(environment.TierProduction)}))
+	seen, err := declared(frontProgram(frontSpec{Names: frontNames(environment.TierProduction, false)}))
 	if err != nil {
 		t.Fatalf("the frontend program = %v", err)
 	}

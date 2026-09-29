@@ -10,12 +10,19 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
-const albFeature = "alb-edge"
+const (
+	albFeature         = "alb-edge"
+	albShieldedFeature = "alb-cloudflare-origin"
+)
 
-var albAPIs = []string{"compute.googleapis.com", "certificatemanager.googleapis.com"}
+var (
+	albAPIs         = []string{"compute.googleapis.com", "certificatemanager.googleapis.com"}
+	albShieldedAPIs = slices.Concat(albAPIs, []string{"networksecurity.googleapis.com"})
+)
 
 func (bootstrap) Catalogue() []provider.Feature {
 	return []provider.Feature{{
@@ -23,6 +30,11 @@ func (bootstrap) Catalogue() []provider.Feature {
 		Summary: "a global external Application Load Balancer as the front: one address, one certificate map, one URL map — " +
 			"the one bootstrap item with a recurring cost, about $18 a month plus egress",
 		Needs: []string{provider.NeedsEdgePrefix + string(alb.Kind)},
+	}, {
+		Name: albShieldedFeature,
+		Summary: "a global external Application Load Balancer that Cloudflare forwards to and that refuses any client without the certificate the zone presents — " +
+			"a recurring cost, about $18 a month plus egress",
+		Needs: []string{provider.NeedsEdgePrefix + string(cloudflare.Kind)},
 	}}
 }
 
@@ -156,8 +168,11 @@ func (b bootstrap) frontsFree(ctx context.Context, tier environment.Tier, featur
 }
 
 func apisFor(features []string) []string {
-	if !slices.Contains(features, albFeature) {
-		return slices.Clone(BootstrapAPIs)
+	switch {
+	case slices.Contains(features, albShieldedFeature):
+		return slices.Concat(BootstrapAPIs, albShieldedAPIs)
+	case slices.Contains(features, albFeature):
+		return slices.Concat(BootstrapAPIs, albAPIs)
 	}
-	return slices.Concat(BootstrapAPIs, albAPIs)
+	return slices.Clone(BootstrapAPIs)
 }
