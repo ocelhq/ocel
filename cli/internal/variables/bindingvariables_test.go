@@ -115,7 +115,7 @@ func TestTheVariablesABindingReadsAreDeclaredForIt(t *testing.T) {
 		}
 		var refusal *variables.MissingError
 		if errors.As(err, &refusal) {
-			t.Errorf("DeclareEnv = %v, a collision is no missing value the vars editor can fill", err)
+			t.Errorf("DeclareEnv = %v, a collision is no missing value the variables editor can fill", err)
 		}
 		for _, want := range []string{"ORDERS_PASSWORD", "resources/env.ts", "bindings.postgres.orders"} {
 			if !strings.Contains(err.Error(), want) {
