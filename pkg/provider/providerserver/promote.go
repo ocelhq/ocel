@@ -54,6 +54,9 @@ func promote(ctx context.Context, l projectLedger, req promoteRequest, routers [
 	if err != nil {
 		return nil, err
 	}
+	if err := l.RewriteRecords(ctx, promoted); err != nil {
+		return dropped, errors.Join(err, unpromote(ctx, l, pointer, promoted.PromotionID, nil))
+	}
 	for i, routed := range routers {
 		err := routed.stack.Flip(ctx, flips[i], progress)
 		var unserved router.Unserved

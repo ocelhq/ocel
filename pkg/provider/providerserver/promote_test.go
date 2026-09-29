@@ -282,3 +282,39 @@ func TestAPromoteAnotherOvertookBeforeItsLedgerWriteIsRefusedBusyAndFlipsNothing
 		t.Errorf("the direct router serves api %q, want api-p3", served)
 	}
 }
+
+func TestAPromoteWhoseRecordAReclaimRemovedAsItLandedIsTakenBackAndFlipsNothing(t *testing.T) {
+	w := newPromoteWorld(t)
+	vendor := fake.NewProvider(fake.Options{})
+	store := &overtaking{Store: vendor.KeyValues()}
+	w.ledger = projectLedger{
+		Ledger: ledger.New(store, environment.TierProduction, promotedSlug),
+		cipher: vendor.Cipher(),
+		tier:   environment.TierProduction,
+		slug:   promotedSlug,
+	}
+	if err := w.promotes(t, "p1"); err != nil {
+		t.Fatalf("promote(p1) = %v", err)
+	}
+
+	record := ledger.Partition(environment.TierProduction, promotedSlug).Key("records", "web", "web-p2")
+	store.mu.Lock()
+	store.before = func() {
+		if err := keyvalue.Forget(context.Background(), vendor.KeyValues(), record); err != nil {
+			t.Errorf("forget web-p2 = %v", err)
+		}
+	}
+	store.mu.Unlock()
+	err := w.promotesReplacing(t, context.Background(), "p1", "p2")
+
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
+		t.Fatalf("promote(p2) whose record a reclaim removed = %v, want a busy refusal", err)
+	}
+	if active := w.active(t); active != "p1" {
+		t.Errorf("the ledger names %q, want p1: p2 was taken back", active)
+	}
+	if served := w.serves(fake.KindRelay, "web"); served != "web-p1" {
+		t.Errorf("the relay router serves web %q, want web-p1", served)
+	}
+}

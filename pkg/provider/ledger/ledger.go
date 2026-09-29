@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
@@ -262,17 +263,83 @@ func (l *Ledger) ReadUnnamedRecords(ctx context.Context, pointer string, dropped
 
 func (l *Ledger) ForgetUnnamedRecords(ctx context.Context, keys []string) error {
 	var errs []error
+	var stored []keyvalue.Entry
 	for _, key := range keys {
 		app, build, ok := splitRecordKey(key)
 		if !ok {
 			errs = append(errs, fmt.Errorf("forget the deployment record %q: it names no app and build", key))
 			continue
 		}
-		if err := keyvalue.Forget(ctx, l.keyValues, l.deploymentKey(app, build)); err != nil {
-			errs = append(errs, fmt.Errorf("remove the deployment record %s/%s no promotion names: %w", app, build, err))
+		entry, err := keyvalue.ReadOrEmpty(ctx, l.keyValues, l.deploymentKey(app, build))
+		if err != nil {
+			errs = append(errs, fmt.Errorf("read the deployment record %s/%s: %w", app, build, err))
+			continue
+		}
+		if len(entry.Value) > 0 {
+			stored = append(stored, entry)
+		}
+	}
+	named, err := l.readNamedRecordKeys(ctx)
+	if err != nil {
+		return errors.Join(append(errs, err)...)
+	}
+	for _, entry := range stored {
+		rest, _ := entry.Key.Under("records")
+		if named[RecordKey(rest[0], rest[1])] {
+			continue
+		}
+		err := l.keyValues.Remove(ctx, entry.Key, entry.Revision)
+		if err != nil && !errors.Is(err, keyvalue.ErrStale) && !errors.Is(err, keyvalue.ErrNotFound) {
+			errs = append(errs, fmt.Errorf("remove the deployment record %s/%s no promotion names: %w", rest[0], rest[1], err))
 		}
 	}
 	return errors.Join(errs...)
+}
+
+func (l *Ledger) RewriteRecords(ctx context.Context, promotion router.Promotion) error {
+	for app, build := range promotion.Builds {
+		if err := l.rewriteRecord(ctx, promotion.PromotionID, app, build); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (l *Ledger) rewriteRecord(ctx context.Context, promotionID, app, build string) error {
+	for range casAttempts {
+		stored, err := keyvalue.ReadOrEmpty(ctx, l.keyValues, l.deploymentKey(app, build))
+		if err != nil {
+			return fmt.Errorf("read the deployment record %s/%s: %w", app, build, err)
+		}
+		if len(stored.Value) == 0 {
+			return refusal.Refuse(refusal.CodeBusy,
+				"promote %s: the record of %s build %s was removed while this promote landed, by a reclaim that found no promotion naming it. Nothing was flipped. Run `ocel deploy` again to stage and promote it anew",
+				promotionID, app, build)
+		}
+		_, err = l.keyValues.Write(ctx, stored)
+		if errors.Is(err, keyvalue.ErrStale) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("rewrite the deployment record %s/%s: %w", app, build, err)
+		}
+		return nil
+	}
+	return fmt.Errorf("rewrite the deployment record %s/%s: it moved under %d attempts", app, build, casAttempts)
+}
+
+func (l *Ledger) readNamedRecordKeys(ctx context.Context) (map[string]bool, error) {
+	pointers, err := l.readPointers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	named := map[string]bool{}
+	for _, read := range pointers {
+		for _, key := range collectRecordKeys(read.Promotions) {
+			named[key] = true
+		}
+	}
+	return named, nil
 }
 
 func (l *Ledger) readPointers(ctx context.Context) ([]Pointer, error) {

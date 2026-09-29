@@ -17,11 +17,13 @@ import (
 )
 
 type store struct {
-	rows        map[string]keyvalue.Entry
-	rev         int
-	reads       map[string]int
-	writes      map[string]int
-	beforeWrite func(key string)
+	rows         map[string]keyvalue.Entry
+	rev          int
+	reads        map[string]int
+	writes       map[string]int
+	beforeWrite  func(key string)
+	beforeList   func()
+	beforeRemove func()
 }
 
 func newStore() *store {
@@ -76,6 +78,10 @@ func (s *store) Remove(ctx context.Context, key keyvalue.Key, expected keyvalue.
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	if before := s.beforeRemove; before != nil {
+		s.beforeRemove = nil
+		before()
+	}
 	recorded, ok := s.rows[key.String()]
 	if !ok {
 		return keyvalue.ErrNotFound
@@ -88,6 +94,10 @@ func (s *store) Remove(ctx context.Context, key keyvalue.Key, expected keyvalue.
 }
 
 func (s *store) List(_ context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
+	if before := s.beforeList; before != nil {
+		s.beforeList = nil
+		before()
+	}
 	var out []keyvalue.Entry
 	for _, entry := range s.rows {
 		if entry.Key.Partition.String() != in.String() || len(entry.Key.Path) < len(under) || !slices.Equal(entry.Key.Path[:len(under)], under) {
@@ -278,6 +288,93 @@ func TestTheRecordsOfTheBuildsAPromoteDroppedStayUntilTheyAreForgotten(t *testin
 	}
 	if _, found, err := l.Record(ctx, "web", "web-p01"); err != nil || !found {
 		t.Errorf("the record of a kept build = found %v, %v, want it kept", found, err)
+	}
+}
+
+func TestForgettingARecordAnotherPointerNamedSinceTheReclaimReadItKeepsIt(t *testing.T) {
+	l, store := fixture()
+	ctx := context.Background()
+	dropped := promotedPastTheKept(t, l)
+	unnamed, err := l.ReadUnnamedRecords(ctx, "", dropped)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.beforeList = func() {
+		shared := router.Promotion{PromotionID: "s1", Builds: map[string]string{"web": "web-p00"}}
+		if _, err := l.Promote(ctx, shared, "staging", ""); err != nil {
+			t.Fatalf("the promote on staging = %v", err)
+		}
+	}
+
+	if err := l.ForgetUnnamedRecords(ctx, unnamed.UnnamedRecordKeys); err != nil {
+		t.Fatal(err)
+	}
+	if _, found, err := l.Record(ctx, "web", "web-p00"); err != nil || !found {
+		t.Errorf("the record staging promoted during the reclaim = found %v, %v, want it kept", found, err)
+	}
+}
+
+func TestForgettingARecordRestagedSinceTheReclaimReadItKeepsIt(t *testing.T) {
+	l, store := fixture()
+	ctx := context.Background()
+	dropped := promotedPastTheKept(t, l)
+	unnamed, err := l.ReadUnnamedRecords(ctx, "", dropped)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.beforeList = func() {
+		if err := l.PutStaged(ctx, router.DeploymentRecord{App: "web", Build: "web-p00"}); err != nil {
+			t.Fatalf("restage web-p00 = %v", err)
+		}
+	}
+
+	if err := l.ForgetUnnamedRecords(ctx, unnamed.UnnamedRecordKeys); err != nil {
+		t.Fatal(err)
+	}
+	if _, found, err := l.Record(ctx, "web", "web-p00"); err != nil || !found {
+		t.Errorf("the record a deploy restaged during the reclaim = found %v, %v, want it kept", found, err)
+	}
+}
+
+func TestARecordAPromoteRewroteAfterTheReclaimReadThePointersIsKept(t *testing.T) {
+	l, store := fixture()
+	ctx := context.Background()
+	dropped := promotedPastTheKept(t, l)
+	unnamed, err := l.ReadUnnamedRecords(ctx, "", dropped)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.beforeRemove = func() {
+		shared := router.Promotion{PromotionID: "s1", Builds: map[string]string{"web": "web-p00"}}
+		if _, err := l.Promote(ctx, shared, "staging", ""); err != nil {
+			t.Fatalf("the promote on staging = %v", err)
+		}
+		if err := l.RewriteRecords(ctx, shared); err != nil {
+			t.Fatalf("RewriteRecords(s1) = %v", err)
+		}
+	}
+
+	if err := l.ForgetUnnamedRecords(ctx, unnamed.UnnamedRecordKeys); err != nil {
+		t.Fatal(err)
+	}
+	if _, found, err := l.Record(ctx, "web", "web-p00"); err != nil || !found {
+		t.Errorf("the record staging promoted once the reclaim had read the pointers = found %v, %v, want it kept", found, err)
+	}
+}
+
+func TestRewritingARecordAReclaimRemovedIsRefusedBusy(t *testing.T) {
+	l, _ := fixture()
+	ctx := context.Background()
+	promotion := staged(t, l, "p1")
+	if err := keyvalue.Forget(ctx, l.keyValues, l.deploymentKey("web", "web-p1")); err != nil {
+		t.Fatal(err)
+	}
+
+	err := l.RewriteRecords(ctx, promotion)
+
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy || !strings.Contains(refused.Message, "web-p1") {
+		t.Fatalf("RewriteRecords over a record a reclaim removed = %v, want a busy refusal naming web-p1", err)
 	}
 }
 
