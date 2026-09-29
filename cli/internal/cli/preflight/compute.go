@@ -1,13 +1,30 @@
 package preflight
 
 import (
+	"context"
 	"fmt"
 	"slices"
 
+	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runui"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
+
+func ResolveComputesFromProvider(ctx context.Context, prov *providerclient.Provider, cfg *projectconfig.Config) (string, error) {
+	var resp *contractv1.PreflightResponse
+	err := prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
+		resp, err = client.Preflight(ctx, &contractv1.PreflightRequest{Edge: edgewire.Selection(cfg)})
+		return err
+	})
+	if err != nil {
+		return "", err
+	}
+	return ResolveComputes(cfg, resp.GetComputes(), prov.Name())
+}
 
 func ResolveComputes(cfg *projectconfig.Config, computes []string, vendor string) (string, error) {
 	if len(computes) == 0 {

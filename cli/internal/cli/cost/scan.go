@@ -18,6 +18,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/manifestwire"
@@ -121,7 +122,11 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, opts Options, stdou
 }
 
 func price(ctx context.Context, deps cmddeps.Deps, prov *providerclient.Provider, cfg *projectconfig.Config, env *environmentv1.Environment, overrides map[string]*structpb.Struct, out io.Writer) (*costv1.ResourceSet, map[costv1.Profile]*costv1.Estimate, []string, error) {
-	manifest, assumptions, err := scanManifest(ctx, deps, cfg, env, out)
+	compute, err := preflight.ResolveComputesFromProvider(ctx, prov, cfg)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	manifest, assumptions, err := scanManifest(ctx, deps, cfg, env, compute, out)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -224,7 +229,7 @@ func (unread) Reveal(context.Context, []variables.Coordinate) (map[variables.Coo
 
 const unbuiltDigest = "0000000000000000000000000000000000000000000000000000000000000000"
 
-func scanManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, env *environmentv1.Environment, out io.Writer) (*contractv1.Manifest, []string, error) {
+func scanManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, env *environmentv1.Environment, compute string, out io.Writer) (*contractv1.Manifest, []string, error) {
 	declarations := variables.NewDeclarations(unread{}, variablescope.Of(cfg, env.GetTier(), ""))
 	resources, err := deps.CollectDeclarations(ctx, cfg, declarations, out, out)
 	if err != nil {
@@ -238,7 +243,7 @@ func scanManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Con
 	} else if err != nil {
 		return nil, nil, err
 	}
-	manifest, err := manifestbuilder.Build(cfg.Slug, cfg.Domains, scannedApps(cfg), string(provider.ComputeServerless), manifestwire.Declarations(cfg.Dir, resources), manifestwire.Bindings(cfg.BindingsFor(env.GetTier())), functions, nil)
+	manifest, err := manifestbuilder.Build(cfg.Slug, cfg.Domains, scannedApps(cfg), compute, manifestwire.Declarations(cfg.Dir, resources), manifestwire.Bindings(cfg.BindingsFor(env.GetTier())), functions, nil)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -142,6 +142,28 @@ func TestScan(t *testing.T) {
 		}
 	})
 
+	t.Run("an app naming no compute is priced on the compute its provider runs first", func(t *testing.T) {
+		root, deps := scanFixture(t)
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  slug: "`+clitest.FixtureSlug+`",
+  provider: { aws: {} },
+  apps: [{ name: "api", path: "apps/api" }],
+};
+`)
+		clitest.WriteFile(t, filepath.Join(root, "apps", "api", "package.json"), `{}`)
+		t.Setenv(clitest.FakeComputesEnvVar, "container")
+		deps.CollectAppFunctions = func(string) ([]manifestbuilder.Function, error) {
+			return nil, appbuilder.ErrNoBuildOutput
+		}
+
+		out := scan(t, deps, root, Options{})
+
+		if !strings.Contains(out, "fake_container") || strings.Contains(out, "fake_function") {
+			t.Errorf("stdout = %q, want the api app priced as the container its provider runs, not as a serverless function", out)
+		}
+	})
+
 	t.Run("it prices the preview environment when asked", func(t *testing.T) {
 		root, deps := scanFixture(t)
 
