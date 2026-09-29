@@ -271,7 +271,7 @@ func TestLifecycleTheWholeBootstrapRunsOnTheRealBinaryAndGivesTheAccountBack(t *
 	}
 
 	diagnosis := run.must(t, "doctor")
-	if !strings.Contains(diagnosis, "bootstrapped — schema") {
+	if !strings.Contains(diagnosis, "bootstrapped, current") {
 		t.Fatalf("`ocel doctor` after an apply still calls production unbootstrapped:\n%s", diagnosis)
 	}
 
