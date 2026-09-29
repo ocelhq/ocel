@@ -3,8 +3,10 @@ package providerserver_test
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	connect "connectrpc.com/connect"
@@ -13,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/router"
@@ -148,6 +151,40 @@ func TestTheDeployFlipSpeaksThroughThePromotionStagesOwnProgress(t *testing.T) {
 	promotion := "Switching traffic to promotion " + result.GetPromotionId()
 	if titles[spoke] != promotion || parents[spoke] != "" {
 		t.Errorf("the flip spoke on stage %q, want the unit %q", titles[spoke], promotion)
+	}
+}
+
+func TestADeployAnotherPromoteOvertookWhileItBuiltIsRefusedBusyAndFlipsNothing(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	releases := seedPromotions(t, vendor, environment.TierProduction, "shop", "", "p1")
+	var overtook sync.Once
+	vendor.FakeStacks().Entering(func(provider.StackSpec) error {
+		overtook.Do(func() {
+			promotion := router.Promotion{PromotionID: "p2", Builds: map[string]string{"web": buildIdentity(0)}}
+			if _, err := releases.Promote(context.Background(), promotion, "", "p1"); err != nil {
+				t.Errorf("the promote that overtook the deploy = %v", err)
+			}
+		})
+		return nil
+	})
+	flipsBefore := relayPlane(vendor).Builds("shop", environment.TierProduction, router.DefaultPointer)
+
+	result, _ := deploy(t, client, deployRequest())
+
+	if result.GetSuccess() {
+		t.Fatal("Deploy() overtaken while it built = success, want it refused")
+	}
+	for _, want := range []string{"p1", "p2", "ocel deploy"} {
+		if !strings.Contains(result.GetError(), want) {
+			t.Errorf("Deploy() overtaken while it built said %q, want it to name %q", result.GetError(), want)
+		}
+	}
+	if active, err := releases.ActivePromotionID(context.Background(), ""); err != nil || active != "p2" {
+		t.Errorf("the pointer names %q, %v, want p2, the promote that overtook the deploy", active, err)
+	}
+	if flipped := relayPlane(vendor).Builds("shop", environment.TierProduction, router.DefaultPointer); !maps.Equal(flipped, flipsBefore) {
+		t.Errorf("the router serves %v after the refused deploy, want %v: a refused deploy flips nothing", flipped, flipsBefore)
 	}
 }
 
