@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/configdoc"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -80,6 +81,9 @@ func normalizeApps(raw []configdoc.AppConfig, dir string) ([]App, error) {
 		if !validAppName(a.Name) {
 			return nil, fmt.Errorf("invalid app name %q — an app name must be a DNS label: lowercase letters, digits and hyphens, 1–63 characters, not starting or ending with a hyphen. It is served as a label of a preview hostname (\"<preview>--%s.<your-preview-domain>\") and is a segment of every resource name this app deploys", a.Name, a.Name)
 		}
+		if a.Name == naming.InfraApp {
+			return nil, fmt.Errorf("app name %q is reserved — it names the stack holding each environment's shared infrastructure, so no app may take it: rename the app", a.Name)
+		}
 		if seen[a.Name] {
 			return nil, fmt.Errorf("duplicate app name %q — app names must be unique", a.Name)
 		}
@@ -133,6 +137,21 @@ func normalizeApps(raw []configdoc.AppConfig, dir string) ([]App, error) {
 	}
 
 	return apps, nil
+}
+
+func rootApp(name, dir string) ([]App, error) {
+	if !isRegularFile(filepath.Join(dir, nodeManifest)) {
+		return nil, nil
+	}
+	framework := appbuild.FrameworkNode
+	next, err := isNextApp(dir)
+	if err != nil {
+		return nil, err
+	}
+	if next {
+		framework = appbuild.FrameworkNext
+	}
+	return []App{{Name: name, Path: ".", Framework: Framework{Name: framework, Detected: true}}}, nil
 }
 
 func normalizeBuild(a configdoc.AppConfig) (*Build, error) {

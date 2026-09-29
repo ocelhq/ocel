@@ -127,7 +127,7 @@ func buildApps(ctx context.Context, deps cmddeps.Deps, a assembly, steps *buildS
 
 func assembleManifest(ctx context.Context, deps cmddeps.Deps, a assembly, resources []declaration.Resource, values map[string][]variables.Variable, built build.Output) (*contractv1.Manifest, error) {
 	cfg := a.cfg
-	onEdge, err := edgeApps(cfg)
+	onEdge, err := build.EdgeApps(cfg.Dir)
 	if err != nil {
 		return nil, err
 	}
@@ -315,20 +315,6 @@ func appVariables(definitions []*resourcesv1.VariableDefinition, resolved map[st
 		})
 	}
 	return values
-}
-
-func edgeApps(cfg *project.Project) ([]string, error) {
-	built, err := build.EdgeApps(cfg.Dir)
-	if err != nil {
-		return nil, err
-	}
-	if len(cfg.Apps) > 0 {
-		return built, nil
-	}
-	if len(built) == 0 {
-		return nil, nil
-	}
-	return []string{variablescope.RootApp}, nil
 }
 
 func checkAppPaths(cfg *project.Project, configName string) error {

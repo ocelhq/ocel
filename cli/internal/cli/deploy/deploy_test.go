@@ -582,13 +582,14 @@ export default {
 		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
-	t.Run("a detected app appears in the manifest", func(t *testing.T) {
+	t.Run("the app at the root of a project naming none appears in the manifest under its slug", func(t *testing.T) {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, []build.Function{
-			{Route: "index", Framework: appbuild.Framework{Name: "next"}, EntryFile: "h.js", ArtifactPath: "output/index", App: "express-app"},
+			{Route: "index", Framework: appbuild.Framework{Name: "next"}, EntryFile: "h.js", ArtifactPath: "output/index", App: clitest.FixtureSlug},
 		})
 		root, sockPath := clitest.SetUpDeployFixture(t)
+		writeRootApp(t, root)
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(deps, &stdout)
@@ -600,8 +601,8 @@ export default {
 		if got := strings.Count(out, "APP "); got != 1 {
 			t.Fatalf("stdout echoed %d apps, want exactly 1:\n%s", got, out)
 		}
-		if !strings.Contains(out, "APP name=express-app framework=next production_domain=") {
-			t.Errorf("stdout = %q, want the detected app named in the manifest", out)
+		if !strings.Contains(out, "APP name="+clitest.FixtureSlug+" framework=node production_domain=") {
+			t.Errorf("stdout = %q, want the root app named after the slug in the manifest", out)
 		}
 
 		clitest.WaitForNoStaleSocket(t, sockPath)

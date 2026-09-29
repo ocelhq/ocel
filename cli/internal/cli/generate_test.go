@@ -42,6 +42,7 @@ func setUpGenerateFixture(t *testing.T, config, tsconfig string) string {
 	t.Helper()
 	root := t.TempDir()
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), config)
+	clitest.WriteFile(t, filepath.Join(root, "package.json"), "{}\n")
 	if tsconfig != "" {
 		clitest.WriteFile(t, filepath.Join(root, "tsconfig.json"), tsconfig)
 	}

@@ -7,7 +7,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/appurl"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -16,11 +15,11 @@ import (
 func TestProduction(t *testing.T) {
 	t.Parallel()
 
-	t.Run("an unnamed app takes the project's first production hostname", func(t *testing.T) {
+	t.Run("a project's only app takes the project's first production hostname", func(t *testing.T) {
 		t.Parallel()
-		cfg := &project.Project{Domains: project.Domains{Production: []string{"acme.com", "www.acme.com"}}}
+		cfg := &project.Project{Apps: []project.App{{Name: "shop"}}, Domains: project.Domains{Production: []string{"acme.com", "www.acme.com"}}}
 
-		if got, want := appurl.Production(cfg)[variablescope.RootApp], "https://acme.com"; got != want {
+		if got, want := appurl.Production(cfg)["shop"], "https://acme.com"; got != want {
 			t.Errorf("url = %q, want %q", got, want)
 		}
 	})

@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/configdoc"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/envsource"
+	"github.com/ocelhq/ocel/pkg/naming"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
@@ -94,6 +95,15 @@ func normalize(doc *configdoc.Document, configPath string) (*Project, error) {
 	apps, err := normalizeApps(doc.Apps, filepath.Dir(configPath))
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", configPath, err)
+	}
+	if len(doc.Apps) == 0 {
+		apps, err = rootApp(doc.Slug, filepath.Dir(configPath))
+		if err != nil {
+			return nil, err
+		}
+		if len(apps) > 0 && doc.Slug == naming.InfraApp {
+			return nil, fmt.Errorf("%s names no apps, so the app at the project root is named after the slug, and %q is reserved for the stack holding each environment's shared infrastructure: list the app under \"apps\" with another name, or change the slug", configPath, naming.InfraApp)
+		}
 	}
 
 	domains, err := normalizeProjectDomains(doc.Domains)

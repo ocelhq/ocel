@@ -31,8 +31,8 @@ type Input struct {
 func Assemble(in Input) (*contractv1.Manifest, error) {
 	cfg := in.Project
 	functions := servedByFunctions(in.Built.Functions, cfg)
-	apps := appsOf(cfg.Dir, cfg.Apps, in.Usages, in.Compute, in.Built.Images, functions)
-	manifest, err := assemble(cfg.Slug, cfg.Domains, apps, in.Compute, declaredResources(cfg.Dir, in.Resources), bindingsOf(cfg.BindingsFor(in.Tier)), functions, variablesByApp(in.Variables, functions))
+	apps := appsOf(cfg.Dir, cfg.Apps, in.Usages, in.Built.Images)
+	manifest, err := assemble(cfg.Slug, cfg.Domains, apps, in.Compute, declaredResources(cfg.Dir, in.Resources), bindingsOf(cfg.BindingsFor(in.Tier)), functions, in.Variables)
 	if err != nil || in.DeploymentID == nil {
 		return manifest, err
 	}

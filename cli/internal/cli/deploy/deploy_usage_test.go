@@ -125,9 +125,10 @@ func TestDeployAttributesAnUnconfiguredProjectToItsOnlyApp(t *testing.T) {
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
 	clitest.StubBuild(&deps, []build.Function{
-		{Route: "index", Framework: appbuild.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output", App: "web"},
+		{Route: "index", Framework: appbuild.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output", App: clitest.FixtureSlug},
 	})
 	root, sockPath := clitest.SetUpDeployFixture(t)
+	writeRootApp(t, root)
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(deps, &stdout)
@@ -137,7 +138,7 @@ func TestDeployAttributesAnUnconfiguredProjectToItsOnlyApp(t *testing.T) {
 	}
 
 	out := stdout.String()
-	if !strings.Contains(out, "DELIVER app=web resources=db--main") {
+	if !strings.Contains(out, "DELIVER app="+clitest.FixtureSlug+" resources=db--main") {
 		t.Errorf("stdout = %q, want the only app of a project that configures none to still reach what it declares", out)
 	}
 

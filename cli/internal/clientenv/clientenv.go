@@ -15,7 +15,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -37,9 +36,6 @@ type App struct {
 }
 
 func AppsOf(cfg *project.Project, values map[string][]variables.Variable) []App {
-	if len(cfg.Apps) == 0 {
-		return []App{{Dir: cfg.Dir, ClientBundle: language.HasClientBundle(appbuild.FrameworkNode, cfg.Dir), Variables: values[variablescope.RootApp]}}
-	}
 	apps := make([]App, 0, len(cfg.Apps))
 	for _, a := range cfg.Apps {
 		dir := filepath.Join(cfg.Dir, a.Path)
@@ -97,7 +93,7 @@ func MapAppEnvImport(projectDir string, app App) error {
 }
 
 func accessorPath(projectDir, appName, appDir string) string {
-	if appName != "" && filepath.Clean(appDir) != filepath.Clean(projectDir) {
+	if filepath.Clean(appDir) != filepath.Clean(projectDir) {
 		return filepath.Join(projectDir, constants.ProjectStateDirName, "apps", appName, accessorFile)
 	}
 	return filepath.Join(projectDir, constants.ProjectStateDirName, accessorFile)

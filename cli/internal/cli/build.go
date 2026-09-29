@@ -18,7 +18,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/cli/node"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
@@ -135,10 +134,6 @@ func plural(n int, one, many string) string {
 }
 
 func builtInClients(cfg *project.Project, urls map[string]string) []clientenv.App {
-	if len(cfg.Apps) == 0 {
-		bundle := language.HasClientBundle(appbuild.FrameworkNode, cfg.Dir)
-		return []clientenv.App{{Dir: cfg.Dir, ClientBundle: bundle, Variables: appurl.Variables(bundle, urls[variablescope.RootApp])}}
-	}
 	apps := make([]clientenv.App, 0, len(cfg.Apps))
 	for _, a := range cfg.Apps {
 		dir := filepath.Join(cfg.Dir, a.Path)

@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
+	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/workspace"
@@ -59,29 +60,6 @@ func attributionApps(cfg *project.Project, functions []build.Function, compute s
 	if err != nil {
 		return nil, err
 	}
-	container := compute == string(provider.ComputeContainer)
-
-	if len(cfg.Apps) == 0 {
-		if len(detected) > 1 {
-			return nil, fmt.Errorf(
-				"this project builds %d apps (%s) but names none of them, so ocel cannot tell which source belongs to which and refuses to hand every app every resource: give each one a name and a path under `apps` in %s",
-				len(detected), strings.Join(detected, ", "), configName,
-			)
-		}
-		out := make([]attribution.App, 0, len(detected))
-		for _, name := range detected {
-			out = append(out, attribution.App{
-				Name:      name,
-				Path:      ".",
-				Language:  language.OfApp("", cfg.Dir),
-				Roots:     roots,
-				Container: container,
-				Members:   workspaceMembers(container, cfg.Dir),
-			})
-		}
-		return out, nil
-	}
-
 	named := make(map[string]bool, len(cfg.Apps))
 	out := make([]attribution.App, 0, len(cfg.Apps))
 	for _, a := range cfg.Apps {
@@ -107,7 +85,7 @@ func attributionApps(cfg *project.Project, functions []build.Function, compute s
 	if len(unnamed) > 0 {
 		return nil, fmt.Errorf(
 			"this project builds %s, which `apps` in %s does not name: ocel reads a named app's source to tell which resources it may be handed, and refuses to deploy an app it can attribute nothing to — give each one a name and a path under `apps`",
-			strings.Join(unnamed, ", "), configName,
+			english.And(english.Quoted(unnamed)), configName,
 		)
 	}
 	return out, nil

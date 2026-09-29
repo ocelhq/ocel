@@ -25,6 +25,11 @@ func stubAppBuildRecorder(deps *cmddeps.Deps, built *bool) {
 	}
 }
 
+func writeRootApp(t *testing.T, root string) {
+	t.Helper()
+	clitest.WriteFile(t, filepath.Join(root, "package.json"), "{}\n")
+}
+
 func captureBuildEnv(deps *cmddeps.Deps) *map[string]map[string]string {
 	clitest.StubRecordedDeploymentIDs(deps)
 	var got map[string]map[string]string
@@ -278,6 +283,7 @@ func TestADeployIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 		root := clitest.SetUpVariablesFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
 		ownedElsewhere(t, "POSTHOG_ID", "ph_owned_by_platform")
 		envRef(t, root, "POSTHOG_ID", envOptions{}, envRefOptions{project: "platform"})
+		writeRootApp(t, root)
 
 		deps := clitest.NewDeps()
 		got := captureBuildEnv(&deps)
@@ -287,7 +293,7 @@ func TestADeployIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
-		if (*got)[""]["POSTHOG_ID"] != "ph_owned_by_platform" {
+		if (*got)[clitest.FixtureSlug]["POSTHOG_ID"] != "ph_owned_by_platform" {
 			t.Errorf("build environment = %v, want the value the other project stores", *got)
 		}
 	})
@@ -331,6 +337,7 @@ func TestAPreviewIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 		} {
 			t.Run(name, func(t *testing.T) {
 				root := clitest.SetUpVariablesFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
+				writeRootApp(t, root)
 				deps := clitest.NewDeps()
 				stubGit(&deps, "feature/login", "")
 				t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
@@ -360,6 +367,7 @@ func TestAPreviewIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 
 	t.Run("an override is the only value its own environment needs", func(t *testing.T) {
 		root := clitest.SetUpVariablesFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
+		writeRootApp(t, root)
 		deps := clitest.NewDeps()
 		stubGit(&deps, "feature/login", "")
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
@@ -386,6 +394,7 @@ func TestAPreviewIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 
 	t.Run("a redeployed branch finds the override it already had", func(t *testing.T) {
 		root := clitest.SetUpVariablesFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
+		writeRootApp(t, root)
 		deps := clitest.NewDeps()
 		stubGit(&deps, "feature/login", "")
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")

@@ -3,11 +3,7 @@ package deploy
 import (
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/build"
-	"github.com/ocelhq/ocel/cli/internal/clientenv"
-	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
@@ -126,20 +122,4 @@ func TestAppVariables(t *testing.T) {
 			t.Errorf("SCOPED_KEY = %+v, want the folder it resolved from", got[1])
 		}
 	})
-}
-
-func TestTheRootStandInIsBuiltUnderNoAppName(t *testing.T) {
-	t.Parallel()
-
-	variables := map[string][]variables.Variable{
-		variablescope.RootApp: {{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-123"}},
-	}
-
-	env := build.Env(clientenv.AppsOf(&project.Project{Dir: t.TempDir()}, variables))
-	if _, ok := env[variablescope.RootApp]; ok {
-		t.Errorf("env = %v, still keyed by a placeholder name no build knows", env)
-	}
-	if got, want := env[""]["POSTHOG_ID"], "ph-123"; got != want {
-		t.Errorf("root env POSTHOG_ID = %q, want %q", got, want)
-	}
 }

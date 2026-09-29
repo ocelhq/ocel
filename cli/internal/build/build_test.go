@@ -216,34 +216,6 @@ func TestBuild(t *testing.T) {
 		}
 	})
 
-	t.Run("an unconfigured next project is one app named for its directory, built with the root's values", func(t *testing.T) {
-		t.Parallel()
-
-		root := filepath.Join(t.TempDir(), "My Shop!")
-		writeFile(t, filepath.Join(root, "package.json"), `{"dependencies":{"next":"16"}}`)
-		writeBuildScript(t, root)
-
-		var got nodeBuildRequest
-		vars := map[string]map[string]string{rootAppEnv: {"POSTHOG_ID": "ph-123"}}
-		if err := (nodeOnly{node: requestOf(&got)}).Build(context.Background(), &project.Project{Dir: root}, vars, Log{}); err != nil {
-			t.Fatalf("Build: %v", err)
-		}
-
-		if len(got.Apps) != 1 {
-			t.Fatalf("request had %d apps, want the project root alone", len(got.Apps))
-		}
-		app := got.Apps[0]
-		if app.Name != "My-Shop" || app.Framework != "next" || app.Cwd != root {
-			t.Errorf("app = %+v, want next app My-Shop at %s", app, root)
-		}
-		if app.Env["POSTHOG_ID"] != "ph-123" {
-			t.Errorf("POSTHOG_ID = %q, want the resolved root value", app.Env["POSTHOG_ID"])
-		}
-		if recorded, err := DeploymentID(root, "My-Shop"); err != nil || recorded != app.DeploymentID {
-			t.Errorf("DeploymentID = %q, %v, want the id the build ran under, %q", recorded, err, app.DeploymentID)
-		}
-	})
-
 	t.Run("refuses a resolved value the build environment owns", func(t *testing.T) {
 		t.Parallel()
 
@@ -346,29 +318,6 @@ func TestBuild(t *testing.T) {
 		})
 	})
 
-	t.Run("over real node, an unconfigured project is one node app named for its directory", func(t *testing.T) {
-		if testing.Short() {
-			t.Skip("integration test: bundles a real app")
-		}
-
-		fixtureRoot := expressFixture(t)
-
-		var stderr bytes.Buffer
-		if err := (nodeOnly{node: runNode}).Build(context.Background(), &project.Project{Dir: fixtureRoot}, nil, Log{Shared: &stderr}); err != nil {
-			t.Fatalf("Build: %v; stderr=%s", err, stderr.String())
-		}
-
-		fns, err := ReadFunctions(fixtureRoot)
-		if err != nil {
-			t.Fatalf("ReadFunctions: %v", err)
-		}
-		if len(fns) != 1 || fns[0].App != "express-app" || fns[0].Framework.Name != "node" {
-			t.Fatalf("ReadFunctions = %+v, want one node function of app express-app", fns)
-		}
-		if id, err := DeploymentID(fixtureRoot, "express-app"); err != nil || len(id) != 32 {
-			t.Errorf("DeploymentID = %q, %v, want the id the build minted", id, err)
-		}
-	})
 }
 
 func TestBuildTracesANodeAppWhenTracingIsPreferred(t *testing.T) {

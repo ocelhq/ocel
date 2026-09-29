@@ -10,25 +10,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 )
 
-func TestADetectedAppIsReadInTheLanguageOfTheProjectItSitsIn(t *testing.T) {
-	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/web\n"), 0o644); err != nil {
-		t.Fatalf("write go.mod: %v", err)
-	}
-
-	cfg := &project.Project{Dir: root}
-	apps, err := attributionApps(cfg, []build.Function{{App: "web"}}, "")
-	if err != nil {
-		t.Fatalf("attributionApps: %v", err)
-	}
-	if len(apps) != 1 {
-		t.Fatalf("attributionApps returned %d apps, want 1", len(apps))
-	}
-	if apps[0].Language != language.Go {
-		t.Errorf("Language = %q, want %q", apps[0].Language, language.Go)
-	}
-}
-
 func TestANamedRuntimeTellsOcelWhichLanguageAnAppIs(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "server"), 0o755); err != nil {

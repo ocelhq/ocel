@@ -26,9 +26,6 @@ func Preview(cfg *project.Project, host func(app string) string) map[string]stri
 
 func byApp(cfg *project.Project, projectHosts []string, declared func(project.App) []string) map[string]string {
 	apps := cfg.Apps
-	if len(apps) == 0 {
-		apps = []project.App{{Name: variablescope.RootApp}}
-	}
 	own := make([][]string, len(apps))
 	for slot, app := range apps {
 		own[slot] = declared(app)

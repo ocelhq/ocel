@@ -18,7 +18,7 @@ func manifestDir(t *testing.T, manifest string) string {
 	t.Helper()
 	dir := t.TempDir()
 	if manifest != "" {
-		if err := os.WriteFile(filepath.Join(dir, manifest), []byte("\n"), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, manifest), []byte("{}\n"), 0o644); err != nil {
 			t.Fatalf("write %s: %v", manifest, err)
 		}
 	}

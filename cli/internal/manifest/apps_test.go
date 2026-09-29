@@ -7,48 +7,11 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/attribution"
-	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
-
-func TestAnAppOnlyItsUsagesNameGetsTheRuntimeItsURLIsWrittenFor(t *testing.T) {
-	t.Parallel()
-	usages := []attribution.Usage{{App: "web", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main"}}
-
-	t.Run("the node builder's runtime where no function names one", func(t *testing.T) {
-		t.Parallel()
-		got := appsOf(t.TempDir(), nil, usages, "container", nil, nil)
-		if len(got) != 1 || got[0].Framework.Name != appbuild.FrameworkNode {
-			t.Errorf("appsOf() = %+v, want web on %q: the CLI writes %s for this project's unnamed app, so the provider must read the same runtime or record ocel's copy as declared", got, appbuild.FrameworkNode, appbuild.ClientURLEnvName)
-		}
-	})
-
-	t.Run("the runtime its own functions name", func(t *testing.T) {
-		t.Parallel()
-		functions := []build.Function{{App: "web", Framework: appbuild.Framework{Name: appbuild.FrameworkNext}}}
-		got := appsOf(t.TempDir(), nil, usages, "serverless", nil, functions)
-		if len(got) != 1 || got[0].Framework.Name != appbuild.FrameworkNext {
-			t.Errorf("appsOf() = %+v, want web on %q: a next app keeps the runtime that serves its cache", got, appbuild.FrameworkNext)
-		}
-	})
-}
-
-func TestAnAppOnlyItsUsagesNameTakesTheProvidersDefaultCompute(t *testing.T) {
-	t.Parallel()
-
-	got := appsOf(t.TempDir(), nil, []attribution.Usage{
-		{App: "web", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main"},
-	}, "container", nil, nil)
-
-	if len(got) != 1 || got[0].Compute != "container" {
-		t.Errorf("appsOf() = %+v, want the one attributed app with %q", got, "container")
-	}
-}
 
 func TestTheManifestNamesWhichAppsBundleReadsTheClientURL(t *testing.T) {
 	t.Parallel()
@@ -77,51 +40,12 @@ func TestTheManifestNamesWhichAppsBundleReadsTheClientURL(t *testing.T) {
 				}
 			}
 
-			got := appsOf(root, []project.App{tc.app}, nil, "serverless", nil, nil)
+			got := appsOf(root, []project.App{tc.app}, nil, nil)
 			if len(got) != 1 || got[0].ClientBundle != tc.want {
 				t.Errorf("appsOf() = %+v, want ClientBundle %v: the provider reads it off the manifest, and a container app has no runtime to read instead", got, tc.want)
 			}
 		})
 	}
-}
-
-func TestTheRootResolutionReachesTheAppNothingConfigured(t *testing.T) {
-	t.Parallel()
-
-	t.Run("root resolution reaches the app nothing configured", func(t *testing.T) {
-		t.Parallel()
-
-		root := []variables.Variable{
-			{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-123"},
-		}
-		functions := []build.Function{{Route: "index", App: "storefront"}}
-
-		got := variablesByApp(map[string][]variables.Variable{variablescope.RootApp: root}, functions)
-		if len(got[variablescope.RootApp]) != 0 {
-			t.Errorf("variables are still keyed by the placeholder root name: %v", got)
-		}
-		if len(got["storefront"]) != 1 || got["storefront"][0].Value != "ph-123" {
-			t.Fatalf("storefront = %v, want the root resolution", got["storefront"])
-		}
-	})
-
-	t.Run("configured apps keep their own resolution", func(t *testing.T) {
-		t.Parallel()
-
-		resolved := map[string][]variables.Variable{
-			"admin":      {{Key: "POSTHOG_ID", Value: "ph-admin"}},
-			"storefront": {{Key: "POSTHOG_ID", Value: "ph-store"}},
-		}
-		functions := []build.Function{{Route: "index", App: "storefront"}}
-
-		got := variablesByApp(resolved, functions)
-		if len(got["admin"]) != 1 || got["admin"][0].Value != "ph-admin" {
-			t.Fatalf("admin = %v, want its own resolution", got["admin"])
-		}
-		if got["storefront"][0].Value != "ph-store" {
-			t.Fatalf("storefront = %v, want its own resolution", got["storefront"])
-		}
-	})
 }
 
 func TestAConfiguredAppCarriesItsFolderAndOnlyItsOwnUsages(t *testing.T) {
@@ -133,7 +57,7 @@ func TestAConfiguredAppCarriesItsFolderAndOnlyItsOwnUsages(t *testing.T) {
 		got := appsOf(t.TempDir(), []project.App{
 			{Name: "admin", Folder: "/admin"},
 			{Name: "web"},
-		}, nil, "serverless", nil, nil)
+		}, nil, nil)
 
 		want := []app{
 			{Name: "admin", Folder: "/admin"},
@@ -150,7 +74,7 @@ func TestAConfiguredAppCarriesItsFolderAndOnlyItsOwnUsages(t *testing.T) {
 		got := appsOf(t.TempDir(), []project.App{{Name: "admin"}, {Name: "web"}}, []attribution.Usage{
 			{App: "web", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main", Files: []string{"apps/web/src/server.ts"}},
 			{App: "admin", Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: "uploads", Files: []string{"apps/admin/src/upload.ts"}},
-		}, "serverless", nil, nil)
+		}, nil)
 
 		want := []app{
 			{Name: "admin", Usages: []usage{{Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: "uploads", Files: []string{"apps/admin/src/upload.ts"}}}},

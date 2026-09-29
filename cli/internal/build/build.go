@@ -93,11 +93,7 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, envByApp map
 		return fmt.Errorf("create %s: %w", appbuild.ArtifactRootDir, err)
 	}
 
-	apps, err := appsToBuild(cfg)
-	if err != nil {
-		return err
-	}
-	deploymentIDs, err := recordDeploymentIDs(cfg, apps)
+	deploymentIDs, err := recordDeploymentIDs(cfg, cfg.Apps)
 	if err != nil {
 		return err
 	}
@@ -105,7 +101,7 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, envByApp map
 	preferTracing := os.Getenv(toolchain.PreferTracingEnv) == "1"
 	var req nodeBuildRequest
 	var traced []toolchain.Target
-	for _, a := range FunctionApps(apps) {
+	for _, a := range FunctionApps(cfg.Apps) {
 		switch name := a.Framework.Name; {
 		case compiledFromSource(name):
 			appLog, ended := log.App(a.Name)
@@ -122,7 +118,7 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, envByApp map
 				OutputDir:     appbuild.AppArtifactRoot(outputDir, a.Name),
 				DeploymentID:  deploymentIDs[a.Name],
 				Folder:        a.Folder,
-				Env:           envOf(cfg, envByApp, a.Name),
+				Env:           envByApp[a.Name],
 				EdgeKind:      string(cfg.EdgeKind()),
 				AllowDegraded: edge.NeedNames(cfg.AllowDegraded),
 			})
@@ -195,11 +191,4 @@ func nodeTarget(cfg *project.Project, a project.App, outputDir string) (toolchai
 		FuncDir:    filepath.Join(appDir, functionsDirName, entryFuncDirName),
 		AppDir:     appDir,
 	}, nil
-}
-
-func envOf(cfg *project.Project, envByApp map[string]map[string]string, app string) map[string]string {
-	if len(cfg.Apps) == 0 {
-		return envByApp[rootAppEnv]
-	}
-	return envByApp[app]
 }

@@ -498,6 +498,7 @@ export default {
 		t.Cleanup(func() { _ = leader.Release(root) })
 
 		deps := devDeps()
+		clitest.WriteFile(t, filepath.Join(root, "package.json"), "{}\n")
 		clitest.WriteFile(t, filepath.Join(root, "tsconfig.json"), "{\n  \"compilerOptions\": {}\n}\n")
 		clitest.WriteFile(t, filepath.Join(root, ".env"), "PUBLIC_SITE_URL=https://local.example.com\nSTRIPE_API_KEY=sk_local\n")
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(

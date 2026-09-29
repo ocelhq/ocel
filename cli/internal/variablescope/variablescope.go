@@ -6,12 +6,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
-
-const RootApp = "this project's app"
 
 func Of(cfg *project.Project, tier environmentv1.Tier, environment string) variables.Scope {
 	return variables.Scope{
@@ -51,9 +48,6 @@ func BindingVariables(cfg *project.Project, tier environmentv1.Tier) []variables
 }
 
 func Apps(cfg *project.Project) []variables.App {
-	if len(cfg.Apps) == 0 {
-		return []variables.App{{Name: RootApp, ClientBundle: language.HasClientBundle(appbuild.FrameworkNode, cfg.Dir)}}
-	}
 	apps := make([]variables.App, 0, len(cfg.Apps))
 	for _, a := range cfg.Apps {
 		apps = append(apps, variables.App{

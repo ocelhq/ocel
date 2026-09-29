@@ -3,7 +3,6 @@ package manifest
 import (
 	"cmp"
 	"fmt"
-	"maps"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -13,11 +12,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 type app struct {
@@ -32,16 +29,14 @@ type app struct {
 	HealthCheckPath string
 }
 
-func appsOf(projectDir string, configured []project.App, usages []attribution.Usage, compute string, images map[string]string, functions []build.Function) []app {
+func appsOf(projectDir string, configured []project.App, usages []attribution.Usage, images map[string]string) []app {
 	byApp := make(map[string][]usage, len(configured))
 	for _, u := range usages {
 		byApp[u.App] = append(byApp[u.App], usage{Type: u.Type, Name: u.Name, Files: u.Files})
 	}
 
 	out := make([]app, 0, len(configured))
-	named := make(map[string]bool, len(configured))
 	for _, a := range configured {
-		named[a.Name] = true
 		out = append(out, app{
 			Name:            a.Name,
 			Framework:       appbuild.Framework{Name: a.Framework.Name, Arch: a.Framework.Arch},
@@ -54,28 +49,7 @@ func appsOf(projectDir string, configured []project.App, usages []attribution.Us
 			HealthCheckPath: healthPathOf(a),
 		})
 	}
-	for _, name := range slices.Sorted(maps.Keys(byApp)) {
-		if !named[name] {
-			framework := unnamedFramework(name, functions)
-			out = append(out, app{
-				Name:         name,
-				Framework:    framework,
-				ClientBundle: appbuild.FrameworkBundlesClient(framework.Name),
-				Compute:      compute,
-				Usages:       byApp[name],
-			})
-		}
-	}
 	return out
-}
-
-func unnamedFramework(app string, functions []build.Function) appbuild.Framework {
-	for _, f := range functions {
-		if f.App == app && f.Framework.Name != "" {
-			return f.Framework
-		}
-	}
-	return appbuild.Framework{Name: appbuild.FrameworkNode}
 }
 
 func healthPathOf(app project.App) string {
@@ -96,18 +70,6 @@ func servedByFunctions(functions []build.Function, cfg *project.Project) []build
 	return slices.DeleteFunc(slices.Clone(functions), func(f build.Function) bool {
 		return containers[f.App]
 	})
-}
-
-func variablesByApp(values map[string][]variables.Variable, functions []build.Function) map[string][]variables.Variable {
-	root, ok := values[variablescope.RootApp]
-	if !ok {
-		return values
-	}
-	byApp := make(map[string][]variables.Variable, len(functions))
-	for _, f := range functions {
-		byApp[f.App] = root
-	}
-	return byApp
 }
 
 func manifestAppsOf(apps []app, compute string, functions []build.Function, functionsByApp map[string][]*contractv1.ManifestFunction, values map[string][]variables.Variable) ([]*contractv1.ManifestApp, error) {
@@ -143,20 +105,9 @@ func manifestAppsOf(apps []app, compute string, functions []build.Function, func
 	}
 
 	for _, f := range functions {
-		if f.App == "" || configured[f.App] {
-			continue
+		if !configured[f.App] {
+			return nil, fmt.Errorf("the build output holds functions of app %q, which this project's config does not name: run `ocel build` again, or give %q a name and a path under `apps`", f.App, f.App)
 		}
-		configured[f.App] = true
-		if compute == string(provider.ComputeContainer) {
-			return nil, fmt.Errorf("app %q runs on container compute and this project's config does not name it, so there is no directory to build its image from: give %q a name and a path under `apps`", f.App, f.App)
-		}
-		manifestApps = append(manifestApps, &contractv1.ManifestApp{
-			Name:         f.App,
-			Framework:    frameworkProto(frameworkByApp[f.App].Name, frameworkByApp[f.App].Arch),
-			Artifact:     serverlessArtifact(functionsByApp[f.App]),
-			Variables:    manifestVariables(values[f.App]),
-			ClientBundle: appbuild.FrameworkBundlesClient(frameworkByApp[f.App].Name),
-		})
 	}
 
 	slices.SortFunc(manifestApps, func(a, b *contractv1.ManifestApp) int { return strings.Compare(a.GetName(), b.GetName()) })

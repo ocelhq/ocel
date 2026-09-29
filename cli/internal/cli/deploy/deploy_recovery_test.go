@@ -277,6 +277,7 @@ func TestADeployMissingVariablesOpensTheEditorAndResumesOnceTheyAreSet(t *testin
 
 	t.Run("the resumed pass declares each variable once", func(t *testing.T) {
 		root := clitest.SetUpVariablesFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
+		writeRootApp(t, root)
 		problems := problemsFile(t, missingStripeKey)
 		deps := clitest.NewDeps()
 		terminalStdin(&deps)
@@ -284,7 +285,7 @@ func TestADeployMissingVariablesOpensTheEditorAndResumesOnceTheyAreSet(t *testin
 		var opened []string
 		recordBrowser(&deps, &opened, &mu)
 		clitest.StubBuild(&deps, []build.Function{
-			{Route: "api", Framework: appbuild.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
+			{Route: "api", Framework: appbuild.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: clitest.FixtureSlug},
 		})
 
 		var out syncBuffer

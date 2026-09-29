@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/constants"
@@ -27,9 +28,9 @@ func lintEdgeWarnings(t *testing.T, cfg *project.Project) []string {
 		Class:  resourcesv1.VariableClass_VARIABLE_CLASS_SECRET,
 		Source: "env.ts",
 	}
-	onEdge, err := edgeApps(cfg)
+	onEdge, err := build.EdgeApps(cfg.Dir)
 	if err != nil {
-		t.Fatalf("edgeApps: %v", err)
+		t.Fatalf("EdgeApps: %v", err)
 	}
 	warnings, err := variables.LintEdgeSecrets(
 		[]*resourcesv1.VariableDefinition{definition},
@@ -48,11 +49,11 @@ func TestEdgeAppsReadsTheNeeds(t *testing.T) {
 	t.Run("a need for edge code names the app and warns about the secret", func(t *testing.T) {
 		t.Parallel()
 
-		cfg := &project.Project{Dir: t.TempDir()}
+		cfg := &project.Project{Dir: t.TempDir(), Apps: []project.App{{Name: "web", Path: "."}}}
 		writeAppNeeds(t, cfg.Dir, "web", "next", `{"edge-runtime":{"count":1,"routes":["/edgy"]}}`)
 
-		if apps, err := edgeApps(cfg); err != nil || len(apps) != 1 || apps[0] != variablescope.RootApp {
-			t.Fatalf("edgeApps = %v, want the project's sole app", apps)
+		if apps, err := build.EdgeApps(cfg.Dir); err != nil || len(apps) != 1 || apps[0] != "web" {
+			t.Fatalf("EdgeApps = %v, want the project's sole app", apps)
 		}
 		if warnings := lintEdgeWarnings(t, cfg); len(warnings) != 1 {
 			t.Fatalf("warnings = %q, want the secret warning", warnings)
@@ -62,11 +63,11 @@ func TestEdgeAppsReadsTheNeeds(t *testing.T) {
 	t.Run("a node app needs nothing and lints clean", func(t *testing.T) {
 		t.Parallel()
 
-		cfg := &project.Project{Dir: t.TempDir()}
+		cfg := &project.Project{Dir: t.TempDir(), Apps: []project.App{{Name: "api", Path: "."}}}
 		writeAppNeeds(t, cfg.Dir, "api", "express", `{}`)
 
-		if apps, err := edgeApps(cfg); err != nil || len(apps) != 0 {
-			t.Fatalf("edgeApps = %v, want none", apps)
+		if apps, err := build.EdgeApps(cfg.Dir); err != nil || len(apps) != 0 {
+			t.Fatalf("EdgeApps = %v, want none", apps)
 		}
 		if warnings := lintEdgeWarnings(t, cfg); len(warnings) != 0 {
 			t.Fatalf("warnings = %q, want none", warnings)
@@ -80,8 +81,8 @@ func TestEdgeAppsReadsTheNeeds(t *testing.T) {
 		writeAppNeeds(t, cfg.Dir, "web", "next",
 			`{"edge-cache":{"count":3},"streaming":{"count":2},"ppr-resume":{"count":1,"routes":["/"]}}`)
 
-		if apps, err := edgeApps(cfg); err != nil || len(apps) != 0 {
-			t.Fatalf("edgeApps = %v, want none", apps)
+		if apps, err := build.EdgeApps(cfg.Dir); err != nil || len(apps) != 0 {
+			t.Fatalf("EdgeApps = %v, want none", apps)
 		}
 	})
 }

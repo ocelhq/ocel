@@ -37,7 +37,11 @@ func resolve(ctx context.Context, startDir, explicitPath string, optional bool) 
 	configPath := defaultConfigFile(root)
 	if configPath == "" {
 		if optional {
-			return &Project{Dir: root, Path: filepath.Join(root, DefaultFileName), EnvSource: envsource.DefaultTiers()}, nil
+			apps, err := rootApp(DeriveSlug(filepath.Base(root)), root)
+			if err != nil {
+				return nil, err
+			}
+			return &Project{Dir: root, Path: filepath.Join(root, DefaultFileName), EnvSource: envsource.DefaultTiers(), Apps: apps}, nil
 		}
 		return nil, NoConfigError{Names: fileNames(""), StartDir: startDir}
 	}

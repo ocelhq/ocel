@@ -5,17 +5,13 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/pkg/appbuild"
 )
 
 func GenerateProjectAccessors(cfg *project.Project, keys []Key) (int, error) {
-	apps := []App{{Dir: cfg.Dir, ClientBundle: language.HasClientBundle(appbuild.FrameworkNode, cfg.Dir)}}
-	if len(cfg.Apps) > 0 {
-		apps = apps[:0]
-		for _, a := range cfg.Apps {
-			dir := filepath.Join(cfg.Dir, a.Path)
-			apps = append(apps, App{Name: a.Name, Dir: dir, ClientBundle: language.HasClientBundle(a.Framework.Name, dir)})
-		}
+	apps := make([]App, 0, len(cfg.Apps))
+	for _, a := range cfg.Apps {
+		dir := filepath.Join(cfg.Dir, a.Path)
+		apps = append(apps, App{Name: a.Name, Dir: dir, ClientBundle: language.HasClientBundle(a.Framework.Name, dir)})
 	}
 	named := 0
 	for _, app := range apps {
