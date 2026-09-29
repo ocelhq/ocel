@@ -15,7 +15,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/cli/internal/projecteditor"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/valuestore"
@@ -205,7 +204,7 @@ func withEditor(t *testing.T, root string, drive func(s *variableeditor.Session)
 		if err != nil {
 			return err
 		}
-		s, err := projecteditor.Serve(ctx, cfg, provider, environmentv1.Tier_TIER_PRODUCTION, declarations, nil)
+		s, err := ServeVariableEditor(ctx, cfg, provider, environmentv1.Tier_TIER_PRODUCTION, declarations, nil)
 		if err != nil {
 			return err
 		}

@@ -1,4 +1,4 @@
-package projecteditor
+package env
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
 
-func Serve(ctx context.Context, cfg *project.Project, provider *providerprocess.Provider, tier environmentv1.Tier, declarations *variables.Declarations, recovery *variableeditor.Recovery) (*variableeditor.Session, error) {
+func ServeVariableEditor(ctx context.Context, cfg *project.Project, provider *providerprocess.Provider, tier environmentv1.Tier, declarations *variables.Declarations, recovery *variableeditor.Recovery) (*variableeditor.Session, error) {
 	assets, err := node.VariableEditor()
 	if err != nil {
 		return nil, fmt.Errorf("read the bundled variables UI: %w", err)

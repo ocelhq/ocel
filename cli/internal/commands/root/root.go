@@ -33,7 +33,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
-	"github.com/ocelhq/ocel/cli/internal/projecteditor"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
@@ -128,13 +127,13 @@ func newCommand() *command {
 		DeploymentID:            build.DeploymentID,
 		CollectDeclarations:     declaration.Collect,
 		OpenBrowser:             browser.OpenURL,
-		ServeVariableEditor:     projecteditor.Serve,
+		ServeVariableEditor:     env.ServeVariableEditor,
 		ReadGitBranch:           deploy.ReadGitBranch,
 		DiscoverPRNumber:        deploy.DiscoverPRNumber,
 	}
 	rootCmd.AddCommand(deploy.NewCommand(deployDependencies))
 	rootCmd.AddCommand(deploy.NewPreviewCommand(deployDependencies))
-	rootCmd.AddCommand(env.NewCommand(env.Dependencies{Invocation: invocation, OpenBrowser: browser.OpenURL, ServeVariableEditor: projecteditor.Serve}))
+	rootCmd.AddCommand(env.NewCommand(env.Dependencies{Invocation: invocation, OpenBrowser: browser.OpenURL, ServeVariableEditor: env.ServeVariableEditor}))
 	rootCmd.AddCommand(promotions.NewRollbackCommand(invocation))
 	rootCmd.AddCommand(promotions.NewDeploymentsCommand(invocation))
 	rootCmd.AddCommand(domain.NewCommand(invocation))
