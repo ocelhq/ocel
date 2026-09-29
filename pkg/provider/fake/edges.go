@@ -143,6 +143,7 @@ type Edge struct {
 
 	refusesCertified error
 	onIssued         func()
+	onEntryClaimed   func()
 }
 
 func (e *Edge) RefusesClaimsCarryingAnOriginCertificate(err error) {
@@ -155,6 +156,12 @@ func (e *Edge) OnOriginCertificateIssued(fn func()) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.onIssued = fn
+}
+
+func (e *Edge) OnPreviewEntryClaimed(fn func()) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.onEntryClaimed = fn
 }
 
 func (e *Edge) RefusePurges(err error) {
@@ -290,13 +297,19 @@ func (e *Edge) recordClaim(claim router.Claim) (edge.Origin, error) {
 
 func (e *Edge) recordPreviewEntryClaim(claim router.Claim) (edge.Origin, error) {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 	if claim.OriginCertificate.ID != "" && e.refusesCertified != nil {
+		e.mu.Unlock()
 		return edge.Origin{}, e.refusesCertified
 	}
 	e.events = append(e.events, "claim")
 	e.entries = append(e.entries, claim)
-	return e.holdOriginCertificate(claim), nil
+	origin := e.holdOriginCertificate(claim)
+	then := e.onEntryClaimed
+	e.mu.Unlock()
+	if then != nil {
+		then()
+	}
+	return origin, nil
 }
 
 func (e *Edge) recordPreviewEntryDisclaim(baseDomain string) {
