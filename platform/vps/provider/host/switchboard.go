@@ -33,14 +33,7 @@ var switchboardCapabilities = []string{"DAC_OVERRIDE", "DAC_READ_SEARCH"}
 func switchboardBinary(arch string) []byte { return embedded(switchboard.Name, arch) }
 
 func switchboardBox(binary []byte, front Front) boxContainer {
-	var relaying []string
-	if front.adopted() {
-		relaying = []string{"--relay-network", ProxyNetwork}
-	}
-	for _, joined := range front.joined() {
-		relaying = append(relaying, "--relay-network", joined.name)
-	}
-	return boundToPlace(boxContainer{
+	board := boundToPlace(boxContainer{
 		name:  SwitchboardContainer,
 		image: SwitchboardImage,
 		command: append([]string{SwitchboardMounted, "serve",
@@ -48,7 +41,7 @@ func switchboardBox(binary []byte, front Front) boxContainer {
 			"--front", switchboard.FrontSocket,
 			"--admit", switchboard.AdmitSocket,
 			"--table", live.RoutingTable,
-		}, relaying...),
+		}, front.listening()...),
 		ports:    front.published(),
 		networks: front.joined(),
 		config:   contentSum(binary),
@@ -66,6 +59,8 @@ func switchboardBox(binary []byte, front Front) boxContainer {
 		inodes:  []string{SwitchboardMounted, "inodes"},
 		joins:   true,
 	}, destination(openFront(front, frontBox{})))
+	board.placeOption = front.directoryOption()
+	return board
 }
 
 func boundToPlace(board boxContainer, at string) boxContainer {
@@ -75,6 +70,7 @@ func boundToPlace(board boxContainer, at string) boxContainer {
 	dir := filepath.Dir(at)
 	board.binds = append(board.binds, dir+":"+dir)
 	board.env = append(board.env, switchboard.PlaceEnv+"="+dir)
+	board.placesIn = dir
 	return board
 }
 
@@ -106,7 +102,12 @@ func presenceRead(board boxContainer) string {
 		script = append(script, "[ "+test+" "+quoted(path)+" ] || printf 'missing=%s\\n' "+quoted(path))
 	}
 	for _, source := range board.sources() {
-		missing("-d", source)
+		if source != board.placesIn {
+			missing("-d", source)
+		}
+	}
+	if board.placesIn != "" {
+		script = append(script, board.placeGone()+" && printf 'missing=%s\\n' "+quoted(board.placesIn)+" || :")
 	}
 	for _, file := range board.files {
 		missing("-f", file)
@@ -121,6 +122,7 @@ func (s boxContainer) restoring(attempts int) string {
 		routingLocked("-x") +
 		"if ! docker inspect --type container --format " + quoted("{{.Id}}") + " " + quoted(s.name) + " >/dev/null 2>&1; then\n" +
 		s.networksPresent() +
+		s.placePresent() +
 		networkCommand() + "\n" +
 		bindsPresent(s.files) +
 		imagePulled(s.image, containerPulls) +

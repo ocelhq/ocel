@@ -1,6 +1,7 @@
 package host
 
 import (
+	"cmp"
 	"context"
 	"slices"
 	"strconv"
@@ -10,7 +11,9 @@ import (
 
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddyfile"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/manual"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 type Front struct {
@@ -52,6 +55,8 @@ func openFront(front Front, box frontBox) proxy.Proxy {
 	switch {
 	case front.Manual != nil:
 		return manual.Manual{Box: box, Port: front.Manual.Port}
+	case front.Caddy != nil:
+		return front.caddyfile(box)
 	case front.adopted():
 		return unservedFront{named: front.named()}
 	default:
@@ -64,6 +69,18 @@ func destination(front proxy.Proxy) string {
 		return file
 	}
 	return ""
+}
+
+func (f Front) caddyfile(box caddyfile.Box) caddyfile.Caddyfile {
+	return caddyfile.Caddyfile{
+		Box:       box,
+		Preset:    f.Caddy.Preset,
+		Directory: f.Caddy.Directory,
+		Container: f.Caddy.Container,
+		Config:    f.Caddy.Config,
+		Network:   f.Caddy.Network,
+		Port:      f.Caddy.Port,
+	}
 }
 
 type unservedFront struct{ named string }
@@ -128,17 +145,62 @@ type userNetwork struct {
 }
 
 func (f Front) joined() []userNetwork {
-	if f.Manual == nil || f.Manual.Network == "" || f.Manual.Network == ProxyNetwork {
+	switch {
+	case f.Manual != nil && f.Manual.Network != "" && f.Manual.Network != ProxyNetwork:
+		return []userNetwork{{name: f.Manual.Network, option: "proxy.manual.network"}}
+	case f.Caddy != nil && f.Caddy.Network != "" && f.Caddy.Network != ProxyNetwork:
+		return []userNetwork{{name: f.Caddy.Network, option: "proxy.caddy.network"}}
+	default:
 		return nil
 	}
-	return []userNetwork{{name: f.Manual.Network, option: "proxy.manual.network"}}
 }
 
 func (f Front) published() []publish {
-	if f.Manual == nil {
+	switch {
+	case f.Manual != nil:
+		return []publish{{addr: loopbackAddr, port: strconv.Itoa(f.Manual.Port), target: switchboardPort}}
+	case f.Caddy != nil && f.Caddy.Network == "":
+		return []publish{{addr: loopbackAddr, port: strconv.Itoa(f.Caddy.Port), target: switchboard.HTTPSListenPort}}
+	default:
 		return nil
 	}
-	return []publish{{addr: loopbackAddr, port: strconv.Itoa(f.Manual.Port), target: switchboardPort}}
+}
+
+func (f Front) listening() []string {
+	switch {
+	case f.Manual != nil:
+		relaying := []string{"--relay-network", ProxyNetwork}
+		for _, joined := range f.joined() {
+			relaying = append(relaying, "--relay-network", joined.name)
+		}
+		return relaying
+	case f.Caddy != nil:
+		return []string{"--https-listen", cmp.Or(f.Caddy.Network, ProxyNetwork) + ":" + switchboard.HTTPSListenPort}
+	default:
+		return nil
+	}
+}
+
+func (f Front) directoryOption() string {
+	switch {
+	case f.Traefik != nil:
+		return "proxy.traefik.directory"
+	case f.Caddy != nil:
+		return "proxy.caddy.directory"
+	default:
+		return ""
+	}
+}
+
+func (f Front) reachedAt() string {
+	if published := f.published(); len(published) > 0 {
+		return "routes what your proxy forwards to " + published[0].String()
+	}
+	joined := f.joined()
+	if len(joined) == 0 {
+		return "routes what your proxy forwards on the " + ProxyNetwork + " network"
+	}
+	return "routes what your proxy forwards on the " + joined[0].name + " network"
 }
 
 const loopbackAddr = "127.0.0.1"

@@ -41,6 +41,25 @@ func TestTheProxyOptionReadsEveryFormItTakes(t *testing.T) {
 	}
 }
 
+func TestACaddyOptionFrontsTheBox(t *testing.T) {
+	t.Parallel()
+
+	for name, option := range map[string]map[string]any{
+		"a Caddy service":           {"directory": "/etc/caddy/ocel.d"},
+		"a Caddy container":         {"directory": "/etc/caddy/ocel.d", "container": "caddy", "network": "web"},
+		"Coolify's Caddy":           {"preset": "coolify"},
+		"Coolify's Caddy on a port": {"preset": "coolify", "port": 9000},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			if _, err := vps.New(context.Background(), provider.Settings{Options: proxied(map[string]any{"caddy": option})}); err != nil {
+				t.Errorf("New() with %s = %v, want it served", name, err)
+			}
+		})
+	}
+}
+
 func TestTheProxyOptionRefusesWhatThisOcelDoesNotServe(t *testing.T) {
 	t.Parallel()
 
@@ -75,11 +94,8 @@ func TestTheProxyOptionRefusesWhatThisOcelDoesNotServe(t *testing.T) {
 		"coolify, which runs a proxy and is none":     {options: proxied("coolify"), mention: []string{`"provider.vps.proxy"`, `must be one of "manual", or`, "traefik, caddy, manual"}},
 		"dokploy, which runs a proxy and is none":     {options: proxied("dokploy"), mention: []string{`"provider.vps.proxy"`, `must be one of "manual", or`, "traefik, caddy, manual"}},
 		"traefik, not served yet":                     {options: proxied(map[string]any{"traefik": map[string]any{"directory": "/d", "resolver": "le"}}), mention: []string{`"traefik"`, "not supported yet"}},
-		"caddy, not served yet":                       {options: proxied(map[string]any{"caddy": map[string]any{"directory": "/d"}}), mention: []string{`"caddy"`, "not supported yet"}},
 		"Coolify's Traefik, not served yet":           {options: proxied(map[string]any{"traefik": map[string]any{"preset": "coolify"}}), mention: []string{`"traefik"`, "not supported yet"}},
-		"Coolify's Caddy, not served yet":             {options: proxied(map[string]any{"caddy": map[string]any{"preset": "coolify"}}), mention: []string{`"caddy"`, "not supported yet"}},
 		"Coolify's Traefik on a port, not served yet": {options: proxied(map[string]any{"traefik": map[string]any{"preset": "coolify", "port": 9000}}), mention: []string{`"traefik"`, "not supported yet"}},
-		"Coolify's Caddy on a port, not served yet":   {options: proxied(map[string]any{"caddy": map[string]any{"preset": "coolify", "port": 9000}}), mention: []string{`"caddy"`, "not supported yet"}},
 		"certificates with manual":                    {options: provider.Options{"ssh": "prod", "proxy": "manual", "certificates": map[string]any{"shop.example.com": "/etc/ocel/certs/shop"}}, mention: []string{"your proxy serves certificates; configure them there"}},
 	} {
 		t.Run(name, func(t *testing.T) {

@@ -525,7 +525,6 @@ func TestAProxyThisOcelDoesNotServeYetIsRefusedNamedRatherThanRunAsOcelsOwn(t *t
 		named string
 	}{
 		"Coolify's Traefik": {front: coolifysTraefik(), named: "Coolify's Traefik"},
-		"your Caddy":        {front: Front{Caddy: &CaddyFront{Directory: "/etc/caddy/ocel.d", Config: "/etc/caddy/Caddyfile", Port: 8480}}, named: "your Caddy"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

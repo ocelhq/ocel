@@ -131,7 +131,7 @@ func TestASwitchboardRestartedAfterAPruneIsBoundToPlaceOnlyWhileTheDirectoryIsTh
 	t.Parallel()
 
 	board := boundToPlace(switchboardBox(nil, routedByHand()), coolifyDynamic+"/ocel.yml")
-	if read := presenceRead(board); !strings.Contains(read, "[ -d "+quoted(coolifyDynamic)+" ]") {
+	if read := presenceRead(board); !strings.Contains(read, "-d "+quoted(coolifyDynamic)+" ]") {
 		t.Errorf("a deploy restarting the switchboard reads\n%s\nand never checks %s is there, so docker creates it empty and root-owned where the proxy reads its routes", read, coolifyDynamic)
 	}
 	restored := board.restoring(1)

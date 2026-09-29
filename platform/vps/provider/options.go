@@ -170,10 +170,7 @@ func (p *Proxy) usable(certificates map[string]string) error {
 		}
 		return unsupported(proxyTraefik)
 	case p.Caddy != nil:
-		if err := p.Caddy.usable(); err != nil {
-			return err
-		}
-		return unsupported(proxyCaddy)
+		return p.Caddy.usable()
 	}
 	return reaching("proxy.manual", p.Manual.Network, p.Manual.Port)
 }
