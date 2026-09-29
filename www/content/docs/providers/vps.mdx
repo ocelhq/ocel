@@ -95,6 +95,8 @@ client with no certificate or forwards over plain http, and `ocel doctor` fails 
 [Behind your Caddy](#behind-your-caddy), `ocel.caddy` carries the shield itself: each
 hostname Cloudflare forwards gets a site of its own that requires the zone's client certificate
 and serves the origin certificate, and its `http://` is redirected to https.
+[Behind your Traefik](#behind-your-traefik), the routers ocel places require no client
+certificate, so a deploy refuses to forward a hostname through Cloudflare there.
 
 ## Behind your own proxy
 
