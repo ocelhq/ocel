@@ -126,7 +126,7 @@ func TestReady(t *testing.T) {
 
 		r.Close()
 		assertProcessGone(t, r)
-		assertNoStaleSocket(t, sockPath)
+		awaitSocketRemovedAfterReap(t, sockPath)
 	})
 
 	t.Run("an unreadable stdout surfaces the scanner error instead of waiting out the timeout", func(t *testing.T) {
@@ -309,7 +309,7 @@ func TestDeploy(t *testing.T) {
 
 		r.Close()
 		assertProcessGone(t, r)
-		assertNoStaleSocket(t, sockPath)
+		awaitSocketRemovedAfterReap(t, sockPath)
 	})
 
 	t.Run("killing the provider mid-call fails the call rather than hanging", func(t *testing.T) {
@@ -354,7 +354,7 @@ func TestDeploy(t *testing.T) {
 		}
 
 		r.Close()
-		assertNoStaleSocket(t, sockPath)
+		awaitSocketRemovedAfterReap(t, sockPath)
 	})
 
 	t.Run("a provider that crashes mid-call shows what it printed to stderr in the error", func(t *testing.T) {
@@ -559,7 +559,7 @@ func TestBootstrap(t *testing.T) {
 
 		r.Close()
 		assertProcessGone(t, r)
-		assertNoStaleSocket(t, sockPath)
+		awaitSocketRemovedAfterReap(t, sockPath)
 	})
 
 	t.Run("a terminal failure includes the provider's message", func(t *testing.T) {
@@ -645,7 +645,7 @@ func TestClose(t *testing.T) {
 			break
 		}
 
-		assertNoStaleSocket(t, sockPath)
+		awaitSocketRemovedAfterReap(t, sockPath)
 	})
 
 	t.Run("closing twice is a no-op the second time", func(t *testing.T) {
@@ -672,7 +672,7 @@ func TestClose(t *testing.T) {
 		}
 
 		r.Close()
-		assertNoStaleSocket(t, sockPath)
+		awaitSocketRemovedAfterReap(t, sockPath)
 
 		if _, err := os.Stat(filepath.Dir(sockPath)); !errors.Is(err, fs.ErrNotExist) {
 			t.Errorf("socket directory %s survives Close() (stat err = %v), want one temp directory per run reclaimed", filepath.Dir(sockPath), err)
@@ -717,9 +717,7 @@ func assertProcessGone(t *testing.T, r *Process) {
 	}
 }
 
-// Close removes the socket after teardown has reaped the process, so r.done
-// closing does not imply the file is gone yet; poll rather than race it.
-func assertNoStaleSocket(t *testing.T, sockPath string) {
+func awaitSocketRemovedAfterReap(t *testing.T, sockPath string) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
 	for {
