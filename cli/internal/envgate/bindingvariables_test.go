@@ -3,6 +3,7 @@ package envgate_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -105,22 +106,40 @@ func TestBindingVariables(t *testing.T) {
 		values.set("ORDERS_HOST", "", "db.example.com")
 		values.set("ORDERS_PASSWORD", "", "hunter2")
 		g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "api"}}, Bindings: []envgate.BindingVariables{ordersBinding}})
-		declare(t, g, &resourcesv1.VariableDefinition{
+		_, err := g.DeclareEnv(context.Background(), &resourcesv1.DeclareEnvRequest{Definitions: []*resourcesv1.VariableDefinition{{
 			Key: "ORDERS_PASSWORD", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, Required: true, Source: "resources/env.ts",
-		})
-
-		err := g.Check()
+		}}})
 		if err == nil {
-			t.Fatal("Check = nil, want the collision refused")
+			t.Fatal("DeclareEnv = nil, want the collision refused")
 		}
 		var refusal *envgate.Refusal
 		if errors.As(err, &refusal) {
-			t.Errorf("Check = %v, a collision is no missing value the vars editor can fill", err)
+			t.Errorf("DeclareEnv = %v, a collision is no missing value the vars editor can fill", err)
 		}
 		for _, want := range []string{"ORDERS_PASSWORD", "resources/env.ts", "bindings.postgres.orders"} {
 			if !strings.Contains(err.Error(), want) {
-				t.Errorf("Check = %q, want it to name %q", err, want)
+				t.Errorf("DeclareEnv = %q, want it to name %q", err, want)
 			}
+		}
+	})
+
+	t.Run("a key a binding reads declared as plain is refused without its value reaching the app", func(t *testing.T) {
+		t.Parallel()
+		values := newFakeValues()
+		values.set("ORDERS_HOST", "", "db.example.com")
+		values.set("ORDERS_PASSWORD", "", "hunter2")
+		g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "api"}}, Bindings: []envgate.BindingVariables{ordersBinding}})
+		resp, err := g.DeclareEnv(context.Background(), &resourcesv1.DeclareEnvRequest{Definitions: []*resourcesv1.VariableDefinition{
+			def("ORDERS_PASSWORD", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
+		}})
+		if err == nil {
+			t.Fatal("DeclareEnv = nil, want the collision refused")
+		}
+		if strings.Contains(resp.String(), "hunter2") || strings.Contains(err.Error(), "hunter2") {
+			t.Errorf("DeclareEnv = %v, %v, revealed the binding's password", resp, err)
+		}
+		if slices.ContainsFunc(g.Definitions(), func(d *resourcesv1.VariableDefinition) bool { return d.GetKey() == "ORDERS_PASSWORD" }) {
+			t.Errorf("Definitions() = %v, kept the refused declaration", g.Definitions())
 		}
 	})
 
@@ -130,17 +149,15 @@ func TestBindingVariables(t *testing.T) {
 		if err := g.Check(); err != nil {
 			t.Fatalf("Check = %v, want nothing missing for a binding this tier does not take", err)
 		}
-		declare(t, g, &resourcesv1.VariableDefinition{
+		_, err := g.DeclareEnv(context.Background(), &resourcesv1.DeclareEnvRequest{Definitions: []*resourcesv1.VariableDefinition{{
 			Key: "ORDERS_PASSWORD", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, Required: false, Source: "resources/env.ts",
-		})
-
-		err := g.Check()
+		}}})
 		if err == nil {
-			t.Fatal("Check = nil, want the collision refused in every tier")
+			t.Fatal("DeclareEnv = nil, want the collision refused in every tier")
 		}
 		for _, want := range []string{"ORDERS_PASSWORD", "resources/env.ts", "bindings.postgres.orders"} {
 			if !strings.Contains(err.Error(), want) {
-				t.Errorf("Check = %q, want it to name %q", err, want)
+				t.Errorf("DeclareEnv = %q, want it to name %q", err, want)
 			}
 		}
 	})

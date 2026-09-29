@@ -1,6 +1,7 @@
 package envgate_test
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"slices"
@@ -177,19 +178,33 @@ func TestTheCredentialsAnEnvSourceLogsInWithAreImpliedDeclarations(t *testing.T)
 	t.Run("an app declaring one is refused, naming the env source", func(t *testing.T) {
 		t.Parallel()
 		g := prefetched(t, newFakeValues(), envgate.Scope{EnvSource: infisicalEnvSource})
-		declare(t, g, &resourcesv1.VariableDefinition{
+		_, err := g.DeclareEnv(context.Background(), &resourcesv1.DeclareEnvRequest{Definitions: []*resourcesv1.VariableDefinition{{
 			Key: "INFISICAL_CLIENT_SECRET", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, Source: "resources/env.ts",
-		})
-
-		err := g.Check()
+		}}})
 		var refusal *envgate.Refusal
 		if err == nil || errors.As(err, &refusal) {
-			t.Fatalf("Check = %v, want the collision refused", err)
+			t.Fatalf("DeclareEnv = %v, want the collision refused", err)
 		}
 		for _, want := range []string{"INFISICAL_CLIENT_SECRET", "resources/env.ts", "infisical:p-1/prod"} {
 			if !strings.Contains(err.Error(), want) {
-				t.Errorf("Check = %q, want it to name %q", err, want)
+				t.Errorf("DeclareEnv = %q, want it to name %q", err, want)
 			}
+		}
+	})
+
+	t.Run("an app declaring one as sensitive is refused before its value is read", func(t *testing.T) {
+		t.Parallel()
+		values := newFakeValues()
+		values.set("INFISICAL_CLIENT_SECRET", "", "machine-identity-secret")
+		g := prefetched(t, values, envgate.Scope{EnvSource: infisicalEnvSource})
+		resp, err := g.DeclareEnv(context.Background(), &resourcesv1.DeclareEnvRequest{Definitions: []*resourcesv1.VariableDefinition{
+			def("INFISICAL_CLIENT_SECRET", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE),
+		}})
+		if err == nil {
+			t.Fatal("DeclareEnv = nil, want the collision refused")
+		}
+		if strings.Contains(resp.String(), "machine-identity-secret") {
+			t.Errorf("DeclareEnv = %v, revealed the env source's credential", resp)
 		}
 	})
 

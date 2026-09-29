@@ -204,6 +204,9 @@ func (g *Gate) DeclareEnv(ctx context.Context, req *resourcesv1.DeclareEnvReques
 			return nil, fmt.Errorf("environment group %s has no members", group.GetKey())
 		}
 	}
+	if err := collision(req.GetDefinitions(), g.scope); err != nil {
+		return nil, err
+	}
 
 	present, err := g.claim(req)
 	if err != nil {
@@ -291,9 +294,6 @@ func (g *Gate) Check() error {
 	present := g.resolvedCells()
 	g.mu.Unlock()
 
-	if err := collision(definitions, g.scope); err != nil {
-		return err
-	}
 	bound := g.scope.bindingDefinitions()
 	problems = append(problems, unresolved(definitions, groups, apps, present, problems)...)
 	problems = append(problems, unsetBindingVariables(bound, present)...)
