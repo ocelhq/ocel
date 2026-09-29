@@ -44,7 +44,7 @@ func postgresContainer(in resources.ProvisionRequest) (host.ResourceContainer, e
 			in.Resource.Name, version, strings.Join(constants.PostgresVersions(), ", "))
 	}
 	return host.ResourceContainer{
-		Name:     host.ResourceName(in.Ref.Name.String(), in.Resource.Name, postgresKind),
+		Name:     host.ResourceName(in.Ref.Project, in.Ref.Name.String(), in.Resource.Name, postgresKind),
 		Project:  in.Ref.Project,
 		Resource: in.Resource.Name,
 		Tier:     in.Ref.Tier,

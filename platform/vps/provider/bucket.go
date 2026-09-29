@@ -101,7 +101,7 @@ func storeRef(ref provider.StackRef) provider.StackRef {
 }
 
 func storeName(ref provider.StackRef) string {
-	return host.ResourceName(storeRef(ref).Name.String(), storeResource, storeKind)
+	return host.ResourceName(ref.Project, storeRef(ref).Name.String(), storeResource, storeKind)
 }
 
 var unsafeInBucketName = regexp.MustCompile(`[^a-z0-9]+`)

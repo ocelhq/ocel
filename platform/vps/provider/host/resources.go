@@ -23,6 +23,8 @@ const (
 	nameTaken  = "is already in use"
 	readyTries = 120
 	keptDir    = "kept"
+
+	resourceNameMax = 63
 )
 
 func KeptPath(tier environment.Tier, name string) string {
@@ -153,8 +155,9 @@ type ResourceContainer struct {
 	Database   string
 }
 
-func ResourceName(stack, resource, kind string) string {
-	return naming.Sanitize(stack) + "-" + naming.Sanitize(resource) + "-" + kind
+func ResourceName(project, stack, resource, kind string) string {
+	return naming.Fit(resourceNameMax, naming.WordSeparator,
+		naming.Compressible(project), naming.Fixed(stack), naming.Fixed(resource), naming.Fixed(kind))
 }
 
 func (r ResourceContainer) digest() (string, error) {
