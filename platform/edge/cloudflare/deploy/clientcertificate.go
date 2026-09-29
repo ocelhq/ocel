@@ -40,12 +40,19 @@ func (p *cloudflare) ensureClientCertificates(ctx context.Context, hostname stri
 	if err != nil {
 		return nil, err
 	}
-	held, err := p.listClientCertificates(ctx, zoneID)
-	if err != nil || len(held) > 0 {
-		return held, err
-	}
-	if err := p.refuseSharedOriginPull(ctx, zoneID, zoneName); err != nil {
+	pulls, err := p.readOriginPulls(ctx, zoneID, zoneName)
+	if err != nil {
 		return nil, err
+	}
+	held, err := p.listClientCertificates(ctx, zoneID)
+	if err != nil {
+		return nil, err
+	}
+	if err := pulls.refuseShared(zoneName, len(held) > 0); err != nil {
+		return nil, err
+	}
+	if len(held) > 0 {
+		return held, nil
 	}
 	certificate, key, err := mintClientCertificate(zoneName, time.Now())
 	if err != nil {
@@ -66,14 +73,14 @@ func (p *cloudflare) presentClientCertificates(ctx context.Context, hostname str
 	if err != nil {
 		return err
 	}
-	current, err := p.client.OriginTLSClientAuth.Settings.Get(ctx, origin_tls_client_auth.SettingGetParams{ZoneID: cf.F(zoneID)})
+	pulls, err := p.readOriginPulls(ctx, zoneID, zoneName)
 	if err != nil {
-		return fmt.Errorf("read whether zone %s presents a client certificate to origins: %w", zoneName, err)
+		return err
 	}
-	if current.Enabled {
+	if pulls.ZoneLevel {
 		return nil
 	}
-	if err := p.refuseSharedOriginPull(ctx, zoneID, zoneName); err != nil {
+	if err := pulls.refuseShared(zoneName, true); err != nil {
 		return err
 	}
 	if _, err := p.client.OriginTLSClientAuth.Settings.Update(ctx, origin_tls_client_auth.SettingUpdateParams{
@@ -85,28 +92,42 @@ func (p *cloudflare) presentClientCertificates(ctx context.Context, hostname str
 	return nil
 }
 
-func (p *cloudflare) refuseSharedOriginPull(ctx context.Context, zoneID, zoneName string) error {
+type originPulls struct {
+	ZoneLevel bool
+	Global    bool
+}
+
+func (p *cloudflare) readOriginPulls(ctx context.Context, zoneID, zoneName string) (originPulls, error) {
 	zoneLevel, err := p.client.OriginTLSClientAuth.Settings.Get(ctx, origin_tls_client_auth.SettingGetParams{ZoneID: cf.F(zoneID)})
 	if err != nil {
-		return fmt.Errorf("read whether zone %s presents a client certificate to origins: %w", zoneName, err)
+		return originPulls{}, fmt.Errorf("read whether zone %s presents a client certificate to origins: %w", zoneName, err)
 	}
 	global, err := p.client.Zones.Settings.Get(ctx, globalOriginPullsSetting, zones.SettingGetParams{ZoneID: cf.F(zoneID)})
 	if err != nil {
-		return fmt.Errorf("read whether zone %s presents Cloudflare's shared client certificate to origins: %w", zoneName, err)
+		return originPulls{}, fmt.Errorf("read whether zone %s presents Cloudflare's shared client certificate to origins: %w", zoneName, err)
 	}
 	var read struct {
 		Value string `json:"value"`
 	}
 	if err := json.Unmarshal([]byte(global.JSON.RawJSON()), &read); err != nil {
-		return fmt.Errorf("read whether zone %s presents Cloudflare's shared client certificate to origins: %w", zoneName, err)
+		return originPulls{}, fmt.Errorf("read whether zone %s presents Cloudflare's shared client certificate to origins: %w", zoneName, err)
 	}
-	if !zoneLevel.Enabled && read.Value != settingOn {
-		return nil
+	return originPulls{ZoneLevel: zoneLevel.Enabled, Global: read.Value == settingOn}, nil
+}
+
+func (o originPulls) refuseShared(zoneName string, holdsOwn bool) error {
+	const fix = "make every origin you run in it trust a client certificate of your own uploaded to the zone (SSL/TLS > Origin Server > Authenticated Origin Pulls), turn zone-level authenticated origin pulls on, and deploy again"
+	switch {
+	case o.ZoneLevel && !holdsOwn:
+		return refusal.Refuse(refusal.CodeInvalid,
+			"zone %s presents Cloudflare's shared client certificate to origins: zone-level authenticated origin pulls are on and the zone holds no certificate of its own, and an origin in it may trust only that one: "+fix,
+			zoneName)
+	case !o.ZoneLevel && o.Global:
+		return refusal.Refuse(refusal.CodeInvalid,
+			"zone %s presents Cloudflare's shared client certificate to origins: global authenticated origin pulls are on and zone-level ones are off, and turning zone-level ones on would switch every origin in it to the zone's own certificate at once: "+fix,
+			zoneName)
 	}
-	return refusal.Refuse(refusal.CodeInvalid,
-		"zone %s presents Cloudflare's shared client certificate to origins (authenticated origin pulls are on and the zone holds no certificate of its own), and an origin in it may trust only that one: "+
-			"upload a client certificate of your own to the zone (SSL/TLS > Origin Server > Authenticated Origin Pulls), make every origin you run in it trust that certificate, and deploy again",
-		zoneName)
+	return nil
 }
 
 func (p *cloudflare) resolveHostnameZone(ctx context.Context, hostname, doing string) (id, name string, err error) {
