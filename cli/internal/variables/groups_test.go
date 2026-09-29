@@ -227,7 +227,7 @@ func TestGroupPresenceFollowsFolderInheritance(t *testing.T) {
 	}
 }
 
-func TestGroupStatesListWhatEachGroupHasSetAndMissing(t *testing.T) {
+func TestReadGroupCompletenessListsWhatEachGroupHasSetAndMissing(t *testing.T) {
 	t.Parallel()
 
 	groups := []*resourcesv1.GroupDefinition{groupOf("github", false, "Sign in with GitHub"), groupOf("stripe", true, "")}
@@ -240,7 +240,7 @@ func TestGroupStatesListWhatEachGroupHasSetAndMissing(t *testing.T) {
 
 	t.Run("the groups come back in declaration order", func(t *testing.T) {
 		t.Parallel()
-		states := variables.GroupStates(definitions, groups, nil, "")
+		states := variables.ReadGroupCompleteness(definitions, groups, nil, "")
 		if len(states) != 2 {
 			t.Fatalf("states = %+v, want one per group", states)
 		}
@@ -251,7 +251,7 @@ func TestGroupStatesListWhatEachGroupHasSetAndMissing(t *testing.T) {
 
 	t.Run("nothing set leaves an optional group needing nothing and a required one needing", func(t *testing.T) {
 		t.Parallel()
-		states := variables.GroupStates(definitions, groups, nil, "")
+		states := variables.ReadGroupCompleteness(definitions, groups, nil, "")
 		if len(states[0].Set) != 0 || len(states[0].Missing) != 0 {
 			t.Errorf("github = %+v, want an off group needing nothing", states[0])
 		}
@@ -262,7 +262,7 @@ func TestGroupStatesListWhatEachGroupHasSetAndMissing(t *testing.T) {
 
 	t.Run("one member set leaves the rest missing, in declaration order", func(t *testing.T) {
 		t.Parallel()
-		states := variables.GroupStates(definitions, groups, []variables.Cell{{Key: "GITHUB_CLIENT_ID"}}, "")
+		states := variables.ReadGroupCompleteness(definitions, groups, []variables.Cell{{Key: "GITHUB_CLIENT_ID"}}, "")
 		if !reflect.DeepEqual(states[0].Set, []string{"GITHUB_CLIENT_ID"}) || !reflect.DeepEqual(states[0].Missing, []string{"GITHUB_CLIENT_SECRET"}) {
 			t.Errorf("github = %+v, want the set and the missing named", states[0])
 		}
@@ -271,7 +271,7 @@ func TestGroupStatesListWhatEachGroupHasSetAndMissing(t *testing.T) {
 	t.Run("a member spelled optional is neither set nor missing until it has a value", func(t *testing.T) {
 		t.Parallel()
 		optional := append(slices.Clone(definitions), member("GITHUB_SCOPES", "github", false))
-		states := variables.GroupStates(optional, groups, []variables.Cell{{Key: "GITHUB_CLIENT_ID"}}, "")
+		states := variables.ReadGroupCompleteness(optional, groups, []variables.Cell{{Key: "GITHUB_CLIENT_ID"}}, "")
 		if len(states[0].Set)+len(states[0].Missing) != 2 {
 			t.Errorf("github = %+v, want the optional member out of the count: it is never missing", states[0])
 		}
@@ -280,7 +280,7 @@ func TestGroupStatesListWhatEachGroupHasSetAndMissing(t *testing.T) {
 	t.Run("a value at the root completes a group read from a folder", func(t *testing.T) {
 		t.Parallel()
 		present := []variables.Cell{{Key: "GITHUB_CLIENT_ID"}, {Key: "GITHUB_CLIENT_SECRET", Folder: "/web"}}
-		states := variables.GroupStates(definitions, groups, present, "/web")
+		states := variables.ReadGroupCompleteness(definitions, groups, present, "/web")
 		if len(states[0].Missing) != 0 {
 			t.Errorf("github = %+v, want nothing missing: /web inherits the root value", states[0])
 		}

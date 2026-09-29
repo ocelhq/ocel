@@ -60,8 +60,8 @@ func TestDeclareEnv(t *testing.T) {
 		if cells[0].GetValue() != "postgres://localhost/app" {
 			t.Errorf("value = %q, want the dotfile's plaintext", cells[0].GetValue())
 		}
-		if err := s.CheckEnv(context.Background()); err != nil {
-			t.Errorf("CheckEnv = %v, want nil — the value is there", err)
+		if err := s.RefuseIncompleteEnv(context.Background()); err != nil {
+			t.Errorf("RefuseIncompleteEnv = %v, want nil — the value is there", err)
 		}
 	})
 
@@ -104,8 +104,8 @@ func TestDeclareEnv(t *testing.T) {
 		if want := []string{"/admin", "/web"}; !slices.Equal(folders, want) {
 			t.Fatalf("folders = %v, want one cell per folder in the scope", folders)
 		}
-		if err := s.CheckEnv(context.Background()); err != nil {
-			t.Errorf("CheckEnv = %v, want nil — the broadcast covers every required cell", err)
+		if err := s.RefuseIncompleteEnv(context.Background()); err != nil {
+			t.Errorf("RefuseIncompleteEnv = %v, want nil — the broadcast covers every required cell", err)
 		}
 	})
 
@@ -132,13 +132,13 @@ func TestDeclareEnv(t *testing.T) {
 		if want := []string{"/admin", "/web"}; !slices.Equal(folders, want) {
 			t.Fatalf("folders = %v, want both declarations' folders listed", folders)
 		}
-		if err := s.CheckEnv(context.Background()); err != nil {
-			t.Fatalf("CheckEnv = %v, want nil", err)
+		if err := s.RefuseIncompleteEnv(context.Background()); err != nil {
+			t.Fatalf("RefuseIncompleteEnv = %v, want nil", err)
 		}
 	})
 }
 
-func TestCheckEnv(t *testing.T) {
+func TestRefuseIncompleteEnv(t *testing.T) {
 	t.Parallel()
 
 	t.Run("refuses nothing when no values are installed", func(t *testing.T) {
@@ -151,8 +151,8 @@ func TestCheckEnv(t *testing.T) {
 		if len(msg.GetCells()) != 0 {
 			t.Errorf("cells = %v, want none", msg.GetCells())
 		}
-		if err := s.CheckEnv(context.Background()); err != nil {
-			t.Errorf("CheckEnv = %v, want nil", err)
+		if err := s.RefuseIncompleteEnv(context.Background()); err != nil {
+			t.Errorf("RefuseIncompleteEnv = %v, want nil", err)
 		}
 	})
 
@@ -164,10 +164,10 @@ func TestCheckEnv(t *testing.T) {
 			Key: "DATABASE_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Required: true,
 		})
 
-		err := s.CheckEnv(context.Background())
+		err := s.RefuseIncompleteEnv(context.Background())
 		var refusal *variables.MissingError
 		if !errors.As(err, &refusal) {
-			t.Fatalf("CheckEnv = %v (%T), want *variables.MissingError", err, err)
+			t.Fatalf("RefuseIncompleteEnv = %v (%T), want *variables.MissingError", err, err)
 		}
 		if len(refusal.Problems) != 1 || refusal.Problems[0].GetKey() != "DATABASE_URL" {
 			t.Fatalf("problems = %v, want one naming DATABASE_URL", refusal.Problems)
@@ -188,9 +188,9 @@ func TestCheckEnv(t *testing.T) {
 			Key: "PORT", Kind: resourcesv1.VariableProblem_KIND_INVALID, Detail: "expected a number",
 		})
 
-		err := s.CheckEnv(context.Background())
+		err := s.RefuseIncompleteEnv(context.Background())
 		if err == nil || !strings.Contains(err.Error(), "PORT") {
-			t.Fatalf("CheckEnv = %v, want a refusal naming PORT", err)
+			t.Fatalf("RefuseIncompleteEnv = %v, want a refusal naming PORT", err)
 		}
 	})
 
@@ -215,8 +215,8 @@ func TestCheckEnv(t *testing.T) {
 			t.Fatalf("DeclareEnv: %v", err)
 		}
 
-		if err := s.CheckEnv(ctx); err != nil {
-			t.Fatalf("CheckEnv = %v, want nil: the file has a value for every folder the declaration names", err)
+		if err := s.RefuseIncompleteEnv(ctx); err != nil {
+			t.Fatalf("RefuseIncompleteEnv = %v, want nil: the file has a value for every folder the declaration names", err)
 		}
 	})
 
@@ -232,8 +232,8 @@ func TestCheckEnv(t *testing.T) {
 			t.Fatalf("cells = %v, want one presence cell with no plaintext", msg.GetCells())
 		}
 
-		if err := s.CheckEnv(ctx); err != nil {
-			t.Fatalf("CheckEnv = %v, want nil — a secret key is resolved at sync, not from the file", err)
+		if err := s.RefuseIncompleteEnv(ctx); err != nil {
+			t.Fatalf("RefuseIncompleteEnv = %v, want nil — a secret key is resolved at sync, not from the file", err)
 		}
 
 		store, _ := s.env.current()
@@ -255,10 +255,10 @@ func TestCheckEnv(t *testing.T) {
 			&resourcesv1.VariableDefinition{Key: "DATABASE_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Required: true},
 		)
 
-		err := s.CheckEnv(context.Background())
+		err := s.RefuseIncompleteEnv(context.Background())
 		var refusal *variables.MissingError
 		if !errors.As(err, &refusal) {
-			t.Fatalf("CheckEnv = %v (%T), want *variables.MissingError", err, err)
+			t.Fatalf("RefuseIncompleteEnv = %v (%T), want *variables.MissingError", err, err)
 		}
 		if len(refusal.Problems) != 1 || refusal.Problems[0].GetKey() != "DATABASE_URL" {
 			t.Fatalf("problems = %v, want exactly the plain key named", refusal.Problems)
@@ -284,8 +284,8 @@ func TestCheckEnv(t *testing.T) {
 		if want := []string{"/admin", "/web"}; !slices.Equal(folders, want) {
 			t.Fatalf("folders = %v, want one presence cell per folder in the scope", folders)
 		}
-		if err := s.CheckEnv(context.Background()); err != nil {
-			t.Fatalf("CheckEnv = %v, want nil", err)
+		if err := s.RefuseIncompleteEnv(context.Background()); err != nil {
+			t.Fatalf("RefuseIncompleteEnv = %v, want nil", err)
 		}
 	})
 }
@@ -300,14 +300,14 @@ func TestResetManifest(t *testing.T) {
 		declareEnv(t, url, &resourcesv1.VariableDefinition{
 			Key: "GONE", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Required: true,
 		})
-		if err := s.CheckEnv(context.Background()); err == nil {
-			t.Fatal("CheckEnv = nil, want a refusal before the reset")
+		if err := s.RefuseIncompleteEnv(context.Background()); err == nil {
+			t.Fatal("RefuseIncompleteEnv = nil, want a refusal before the reset")
 		}
 
 		s.ResetDeclarations()
 
-		if err := s.CheckEnv(context.Background()); err != nil {
-			t.Fatalf("CheckEnv = %v, want nil — the declaration that failed is gone", err)
+		if err := s.RefuseIncompleteEnv(context.Background()); err != nil {
+			t.Fatalf("RefuseIncompleteEnv = %v, want nil — the declaration that failed is gone", err)
 		}
 	})
 
@@ -330,8 +330,8 @@ func TestResetManifest(t *testing.T) {
 		if len(msg.GetCells()) != 1 || msg.GetCells()[0].GetFolder() != "" {
 			t.Fatalf("cells = %v, want one root cell: the folder scope belonged to the discovery that is gone", msg.GetCells())
 		}
-		if err := s.CheckEnv(context.Background()); err != nil {
-			t.Fatalf("CheckEnv = %v, want nil", err)
+		if err := s.RefuseIncompleteEnv(context.Background()); err != nil {
+			t.Fatalf("RefuseIncompleteEnv = %v, want nil", err)
 		}
 	})
 }

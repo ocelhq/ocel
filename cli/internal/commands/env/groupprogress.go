@@ -29,12 +29,12 @@ func printGroupProgress(ctx context.Context, vars envvarsv1connect.EnvVarsServic
 		return err
 	}
 	present := presentCells(listed.GetValues(), opts.environment)
-	for _, state := range variables.GroupStates(definitions, groups, present, opts.folder) {
-		if !touched[state.Key] || len(state.Missing) == 0 {
+	for _, completeness := range variables.ReadGroupCompleteness(definitions, groups, present, opts.folder) {
+		if !touched[completeness.Key] || len(completeness.Missing) == 0 {
 			continue
 		}
 		fmt.Fprintf(stdout, "%s: %d of %d set. Set together: %s\n",
-			state.Key, len(state.Set), len(state.Set)+len(state.Missing), strings.Join(state.Missing, ", "))
+			completeness.Key, len(completeness.Set), len(completeness.Set)+len(completeness.Missing), strings.Join(completeness.Missing, ", "))
 	}
 	return nil
 }

@@ -4,33 +4,33 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
-type GroupState struct {
+type GroupCompleteness struct {
 	Key     string
 	Set     []string
 	Missing []string
 }
 
-func GroupStates(definitions []*resourcesv1.VariableDefinition, groups []*resourcesv1.GroupDefinition, present []Cell, folder string) []GroupState {
+func ReadGroupCompleteness(definitions []*resourcesv1.VariableDefinition, groups []*resourcesv1.GroupDefinition, present []Cell, folder string) []GroupCompleteness {
 	cells := make(presentCells, len(present))
 	for _, cell := range present {
 		cells[cell] = 0
 	}
 
-	out := make([]GroupState, 0, len(groups))
+	out := make([]GroupCompleteness, 0, len(groups))
 	for _, group := range groups {
-		state := GroupState{Key: group.GetKey()}
+		completeness := GroupCompleteness{Key: group.GetKey()}
 		for _, definition := range definitions {
 			if definition.GetGroup() != group.GetKey() {
 				continue
 			}
 			switch {
 			case resolves(definition, folder, cells):
-				state.Set = append(state.Set, definition.GetKey())
+				completeness.Set = append(completeness.Set, definition.GetKey())
 			case needsValue(definition, definitions, groups, folder, cells):
-				state.Missing = append(state.Missing, definition.GetKey())
+				completeness.Missing = append(completeness.Missing, definition.GetKey())
 			}
 		}
-		out = append(out, state)
+		out = append(out, completeness)
 	}
 	return out
 }

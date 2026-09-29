@@ -1,4 +1,4 @@
-export type CellState = "required" | "optional" | "forbidden";
+export type CellRequirement = "required" | "optional" | "forbidden";
 
 export type Class = "plain" | "sensitive" | "secret";
 
@@ -26,7 +26,7 @@ export interface Override {
 
 export interface MatrixCell {
   folder: string;
-  state: CellState;
+  state: CellRequirement;
   set: boolean;
   version: number;
   overrides?: Override[];
@@ -118,7 +118,7 @@ export interface Variant {
   kind: VariantKind;
   unknown: boolean;
   class: Class;
-  state: CellState;
+  state: CellRequirement;
   set: boolean;
   version: number;
   orphaned: boolean;

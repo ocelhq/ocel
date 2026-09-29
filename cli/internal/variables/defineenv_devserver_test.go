@@ -72,11 +72,11 @@ func TestDefineEnvDeclaresThroughTheDevServer(t *testing.T) {
 		})
 
 		t.Run("the verdict is exactly the cells dev's store leaves short", func(t *testing.T) {
-			err := srv.CheckEnv(context.Background())
+			err := srv.RefuseIncompleteEnv(context.Background())
 			refusal := &variables.MissingError{}
 			ok := errors.As(err, &refusal)
 			if !ok {
-				t.Fatalf("CheckEnv() = %v, want a *Refusal", err)
+				t.Fatalf("RefuseIncompleteEnv() = %v, want a *Refusal", err)
 			}
 			got := describeProblems(refusal.Problems)
 			want := []string{

@@ -74,7 +74,7 @@ func (s *Server) UseValues(values map[string]string, scope variables.Scope) {
 	s.env.use(values, scope)
 }
 
-func (s *Server) CheckEnv(ctx context.Context) error {
+func (s *Server) RefuseIncompleteEnv(ctx context.Context) error {
 	_, declarations := s.env.current()
 	if declarations == nil {
 		return nil

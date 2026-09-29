@@ -9,17 +9,17 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
-type CellState string
+type CellRequirement string
 
 const (
-	CellRequired  CellState = "required"
-	CellOptional  CellState = "optional"
-	CellForbidden CellState = "forbidden"
+	CellRequired  CellRequirement = "required"
+	CellOptional  CellRequirement = "optional"
+	CellForbidden CellRequirement = "forbidden"
 )
 
 type MatrixCell struct {
 	Folder string    `json:"folder"`
-	State  CellState `json:"state"`
+	State  CellRequirement `json:"state"`
 	Set    bool      `json:"set"`
 
 	Version int64 `json:"version"`
@@ -165,7 +165,7 @@ func (d *Declarations) Matrix(environments []string) Matrix {
 	return m
 }
 
-func state(definition *resourcesv1.VariableDefinition, folder string) CellState {
+func state(definition *resourcesv1.VariableDefinition, folder string) CellRequirement {
 	if scope := definition.GetFolders(); len(scope) > 0 {
 		if !slices.Contains(scope, folder) {
 			return CellForbidden

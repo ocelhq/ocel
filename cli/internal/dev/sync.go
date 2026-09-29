@@ -49,7 +49,7 @@ func discoverAndSync(ctx context.Context, server *devserver.Server, cfg *project
 		return nil, refusedSync(server, err)
 	}
 
-	if err := server.CheckEnv(ctx); err != nil {
+	if err := server.RefuseIncompleteEnv(ctx); err != nil {
 		return nil, describeRefusal(err, values.keys(), invoked)
 	}
 
