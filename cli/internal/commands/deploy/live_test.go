@@ -18,7 +18,6 @@ func TestLiveADryRunOfAContainerAppSendsTheDigestTheDaemonBuilt(t *testing.T) {
 	vm.Forward(t)
 
 	dependencies := newTestDependencies()
-	stubBuild(&dependencies, nil)
 
 	fixture := setUpDeployProject(t)
 	root := fixture.Root
