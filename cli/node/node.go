@@ -29,24 +29,6 @@ func AdapterPath(projectDir string) string {
 	return filepath.Join(DistDir(projectDir), "next-adapter", "next-adapter.mjs")
 }
 
-func WorkerBundles(projectDir string) map[string]string {
-	return map[string]string{
-		"cloudflare": filepath.Join(DistDir(projectDir), "workers", "entry-cloudflare.js"),
-	}
-}
-
-func StoreWorkerBundles(projectDir string) map[string]string {
-	return map[string]string{
-		"cloudflare": filepath.Join(DistDir(projectDir), "workers", "store-cloudflare.js"),
-	}
-}
-
-func ISRWriterBundles(projectDir string) map[string]string {
-	return map[string]string{
-		"cloudflare": filepath.Join(DistDir(projectDir), "workers", "isr-writer-cloudflare.js"),
-	}
-}
-
 const variableEditorDir = "variable-editor"
 
 func VariableEditor() (fs.FS, error) {

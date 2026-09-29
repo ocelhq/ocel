@@ -2,9 +2,7 @@ package providerclient
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"os"
 
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -26,17 +24,12 @@ func prepareLaunch(ctx context.Context, cfg *projectconfig.Config, pins Pinning)
 	if err != nil {
 		return Config{}, err
 	}
-	env, err := workerBundleEnv(cfg.Dir)
-	if err != nil {
-		return Config{}, err
-	}
 	providerConfig, err := providerConfig(cfg, desc)
 	if err != nil {
 		return Config{}, err
 	}
 	return Config{
 		BinaryPath:     binPath,
-		Env:            env,
 		ProviderConfig: providerConfig,
 		ProviderName:   desc.ID,
 	}, nil
@@ -53,24 +46,4 @@ func providerConfig(cfg *projectconfig.Config, desc *projectconfig.ProviderDescr
 	}
 	config.Options = options
 	return config, nil
-}
-
-func workerBundleEnv(projectDir string) ([]string, error) {
-	bundles, err := json.Marshal(node.WorkerBundles(projectDir))
-	if err != nil {
-		return nil, fmt.Errorf("marshal worker bundles: %w", err)
-	}
-	store, err := json.Marshal(node.StoreWorkerBundles(projectDir))
-	if err != nil {
-		return nil, fmt.Errorf("marshal store worker bundles: %w", err)
-	}
-	isrWriter, err := json.Marshal(node.ISRWriterBundles(projectDir))
-	if err != nil {
-		return nil, fmt.Errorf("marshal isr writer worker bundles: %w", err)
-	}
-	return append(os.Environ(),
-		"OCEL_WORKER_BUNDLES="+string(bundles),
-		"OCEL_STORE_WORKER_BUNDLES="+string(store),
-		"OCEL_ISR_WRITER_WORKER_BUNDLES="+string(isrWriter),
-	), nil
 }

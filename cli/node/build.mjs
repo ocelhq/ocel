@@ -9,7 +9,6 @@ import { runtimeFiles } from "../../frameworks/next/adapter/scripts/runtime-file
 const platformDir = dirname(fileURLToPath(import.meta.url));
 const root = dirname(dirname(platformDir));
 const dist = join(platformDir, "dist");
-const workers = join(root, "platform/edge/cloudflare/workers");
 
 async function bundle(entry, outfile, options) {
   const result = await Bun.build({
@@ -25,7 +24,7 @@ async function bundle(entry, outfile, options) {
 }
 
 await rm(dist, { recursive: true, force: true });
-await mkdir(join(dist, "workers"), { recursive: true });
+await mkdir(dist, { recursive: true });
 
 await bundle(join(platformDir, "src/builder/cli.ts"), join(dist, "builder/cli.cjs"), {
   target: "node",
@@ -65,15 +64,6 @@ await copyFile(
 await Promise.all([
   ...runtimeFiles.map((name) =>
     copyFile(join(root, "frameworks/next/adapter/src", name), join(dist, "next-adapter", name)),
-  ),
-  copyFile(join(workers, "entry/dist/index.js"), join(dist, "workers/entry-cloudflare.js")),
-  copyFile(
-    join(workers, "deployments-store/dist/index.js"),
-    join(dist, "workers/store-cloudflare.js"),
-  ),
-  copyFile(
-    join(workers, "isr-writer/dist/index.js"),
-    join(dist, "workers/isr-writer-cloudflare.js"),
   ),
 ]);
 

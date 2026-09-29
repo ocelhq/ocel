@@ -268,15 +268,6 @@ importers:
       '@framework/next-adapter':
         specifier: workspace:^
         version: link:../../frameworks/next/adapter
-      '@platform/cf-deployments-store':
-        specifier: workspace:^
-        version: link:../../platform/edge/cloudflare/workers/deployments-store
-      '@platform/cf-entry':
-        specifier: workspace:^
-        version: link:../../platform/edge/cloudflare/workers/entry
-      '@platform/cf-isr-writer':
-        specifier: workspace:^
-        version: link:../../platform/edge/cloudflare/workers/isr-writer
       '@ui/theme':
         specifier: workspace:^
         version: link:../../ui/theme
