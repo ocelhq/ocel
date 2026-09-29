@@ -11,7 +11,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console"
-	"github.com/ocelhq/ocel/cli/internal/console/credentials"
 )
 
 func TestRun(t *testing.T) {
@@ -22,8 +21,8 @@ func TestRun(t *testing.T) {
 
 	loggedInAt := func(apiURL string) cmddeps.Deps {
 		deps := clitest.NewDeps()
-		deps.LoadCredentials = func() (credentials.Credentials, error) {
-			return credentials.Credentials{AccessToken: "tok", APIURL: apiURL, Email: "ada@example.com"}, nil
+		deps.LoadCredentials = func() (console.Credentials, error) {
+			return console.Credentials{AccessToken: "tok", APIURL: apiURL, Email: "ada@example.com"}, nil
 		}
 		return deps
 	}

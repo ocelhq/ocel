@@ -9,7 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/consent"
-	"github.com/ocelhq/ocel/cli/internal/console/credentials"
+	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/devstack/docker"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
@@ -23,7 +23,7 @@ import (
 )
 
 type Deps struct {
-	LoadCredentials     func() (credentials.Credentials, error)
+	LoadCredentials     func() (console.Credentials, error)
 	OpenDocker          docker.Opener
 	BuildApp            func(ctx context.Context, cfg *projectconfig.Config, envByApp map[string]map[string]string, out appbuilder.Output) error
 	RequireImageBuilder func(ctx context.Context, scope *events.Scope, cfg *projectconfig.Config, archs map[string]string) error

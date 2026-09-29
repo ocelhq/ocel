@@ -1,20 +1,18 @@
-package credentials
+package console
 
 import (
 	"errors"
 	"testing"
-
-	"github.com/ocelhq/ocel/cli/internal/console"
 )
 
-func TestLoad(t *testing.T) {
+func TestLoadCredentials(t *testing.T) {
 	t.Run("an env token overrides everything else", func(t *testing.T) {
-		t.Setenv(envAccessToken, "env-token-123")
-		t.Setenv(console.URLEnvVar, "http://localhost:3000")
+		t.Setenv(accessTokenEnvVar, "env-token-123")
+		t.Setenv(URLEnvVar, "http://localhost:3000")
 
-		creds, err := Load()
+		creds, err := LoadCredentials()
 		if err != nil {
-			t.Fatalf("Load() returned error: %v", err)
+			t.Fatalf("LoadCredentials() returned error: %v", err)
 		}
 		if creds.AccessToken != "env-token-123" {
 			t.Errorf("AccessToken = %q, want %q", creds.AccessToken, "env-token-123")
@@ -25,12 +23,12 @@ func TestLoad(t *testing.T) {
 	})
 
 	t.Run("an env token without an API URL", func(t *testing.T) {
-		t.Setenv(envAccessToken, "env-token-only")
-		t.Setenv(console.URLEnvVar, "")
+		t.Setenv(accessTokenEnvVar, "env-token-only")
+		t.Setenv(URLEnvVar, "")
 
-		creds, err := Load()
+		creds, err := LoadCredentials()
 		if err != nil {
-			t.Fatalf("Load() returned error: %v", err)
+			t.Fatalf("LoadCredentials() returned error: %v", err)
 		}
 		if creds.AccessToken != "env-token-only" {
 			t.Errorf("AccessToken = %q, want %q", creds.AccessToken, "env-token-only")
@@ -41,16 +39,16 @@ func TestLoad(t *testing.T) {
 	})
 
 	t.Run("an empty env token falls through", func(t *testing.T) {
-		t.Setenv(envAccessToken, "")
+		t.Setenv(accessTokenEnvVar, "")
 		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 		t.Setenv("HOME", t.TempDir())
 
-		_, err := Load()
+		_, err := LoadCredentials()
 		if err == nil {
 			t.Skip("machine has ambient keyring/file credentials; env fallthrough still verified by the token being empty")
 		}
 		if !errors.Is(err, ErrNotLoggedIn) {
-			t.Logf("Load() without env token returned: %v", err)
+			t.Logf("LoadCredentials() without env token returned: %v", err)
 		}
 	})
 }

@@ -18,8 +18,7 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 
-	"github.com/ocelhq/ocel/cli/internal/console/credentials"
-	consolelink "github.com/ocelhq/ocel/cli/internal/console/link"
+	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
@@ -80,9 +79,9 @@ func projectRow(id, name, slug string) map[string]string {
 	return map[string]string{"id": id, "organizationId": "org_1", "name": name, "slug": slug}
 }
 
-func readLink(t *testing.T, dir, apiURL string) *consolelink.Link {
+func readLink(t *testing.T, dir, apiURL string) *console.Link {
 	t.Helper()
-	record, err := consolelink.Read(dir, apiURL)
+	record, err := console.ReadLink(dir, apiURL)
 	if err != nil {
 		t.Fatalf("consolelink.Read: %v", err)
 	}
@@ -96,8 +95,8 @@ func TestRunLink(t *testing.T) {
 		t.Parallel()
 
 		deps := clitest.NewDeps()
-		deps.LoadCredentials = func() (credentials.Credentials, error) {
-			return credentials.Credentials{}, credentials.ErrNotLoggedIn
+		deps.LoadCredentials = func() (console.Credentials, error) {
+			return console.Credentials{}, console.ErrNotLoggedIn
 		}
 
 		var stderr bytes.Buffer
@@ -129,7 +128,7 @@ func TestRunLink(t *testing.T) {
 		if record == nil {
 			t.Fatal("no link written")
 		}
-		want := consolelink.Link{APIURL: srv.URL, OrganizationID: "org_1", ProjectID: "p2", ProjectName: "Other"}
+		want := console.Link{APIURL: srv.URL, OrganizationID: "org_1", ProjectID: "p2", ProjectName: "Other"}
 		if *record != want {
 			t.Fatalf("link = %+v, want %+v", *record, want)
 		}
@@ -281,7 +280,7 @@ func TestRunLink(t *testing.T) {
 		srv := newCloudServer(t, projectRow("p1", "My App", "my-app"), projectRow("p2", "Other", "other"))
 
 		dir := t.TempDir()
-		if err := consolelink.Write(dir, consolelink.Link{
+		if err := console.WriteLink(dir, console.Link{
 			APIURL: srv.URL, OrganizationID: "org_1", ProjectID: "p1", ProjectName: "My App",
 		}); err != nil {
 			t.Fatalf("seed link: %v", err)
@@ -309,7 +308,7 @@ func TestRunLink(t *testing.T) {
 		srv := newCloudServer(t, projectRow("p1", "My App", "my-app"))
 
 		dir := t.TempDir()
-		if err := consolelink.Write(dir, consolelink.Link{
+		if err := console.WriteLink(dir, console.Link{
 			APIURL: "https://elsewhere.example.com", OrganizationID: "org_9", ProjectID: "p9", ProjectName: "Elsewhere",
 		}); err != nil {
 			t.Fatalf("seed link: %v", err)
@@ -434,7 +433,7 @@ func TestRunUnlink(t *testing.T) {
 		t.Parallel()
 
 		dir := t.TempDir()
-		if err := consolelink.Write(dir, consolelink.Link{APIURL: "https://ocel.app", ProjectID: "p1"}); err != nil {
+		if err := console.WriteLink(dir, console.Link{APIURL: "https://ocel.app", ProjectID: "p1"}); err != nil {
 			t.Fatalf("seed link: %v", err)
 		}
 

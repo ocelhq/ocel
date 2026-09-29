@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	consolelink "github.com/ocelhq/ocel/cli/internal/console/link"
+	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 )
 
@@ -42,7 +42,7 @@ func projectDir(ctx context.Context, deps cmddeps.Deps, cwd string) (string, err
 }
 
 func runUnlink(projectDir string, stdout io.Writer) error {
-	removed, err := consolelink.Clear(projectDir)
+	removed, err := console.DeleteLink(projectDir)
 	if err != nil {
 		return err
 	}

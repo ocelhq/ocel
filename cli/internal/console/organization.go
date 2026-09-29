@@ -1,6 +1,9 @@
-package auth
+package console
 
-import "context"
+import (
+	"context"
+	"net/http"
+)
 
 type Organization struct {
 	ID   string `json:"id"`
@@ -10,7 +13,7 @@ type Organization struct {
 
 func (c *Client) ListOrganizations(ctx context.Context, accessToken string) ([]Organization, error) {
 	var out []Organization
-	if err := c.api.Get(ctx, "/api/auth/organization/list", accessToken, &out); err != nil {
+	if err := c.send(ctx, http.MethodGet, "/api/auth/organization/list", accessToken, nil, &out); err != nil {
 		return nil, err
 	}
 	return out, nil
@@ -18,5 +21,5 @@ func (c *Client) ListOrganizations(ctx context.Context, accessToken string) ([]O
 
 func (c *Client) SetActiveOrganization(ctx context.Context, accessToken, organizationID string) error {
 	body := map[string]string{"organizationId": organizationID}
-	return c.api.Post(ctx, "/api/auth/organization/set-active", accessToken, body, nil)
+	return c.send(ctx, http.MethodPost, "/api/auth/organization/set-active", accessToken, body, nil)
 }

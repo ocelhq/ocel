@@ -1,4 +1,4 @@
-package credentials
+package console
 
 import (
 	"encoding/json"
@@ -10,20 +10,20 @@ import (
 	"time"
 
 	"github.com/zalando/go-keyring"
-
-	"github.com/ocelhq/ocel/cli/internal/console"
 )
 
 const (
-	service = "ocel-cli"
-	user    = "default"
+	keyringService      = "ocel-cli"
+	keyringUser         = "default"
+	credentialsFileName = "credentials.json"
+	accessTokenEnvVar   = "OCEL_ACCESS_TOKEN"
 )
 
-type Backend string
+type CredentialStore string
 
 const (
-	BackendKeyring Backend = "keyring"
-	BackendFile    Backend = "file"
+	KeyringStore CredentialStore = "keyring"
+	FileStore    CredentialStore = "file"
 )
 
 var ErrNotLoggedIn = errors.New("not logged in")
@@ -35,7 +35,7 @@ type Credentials struct {
 	ExpiresAt   time.Time `json:"expires_at,omitempty"`
 }
 
-func configDir() (string, error) {
+func ensureConfigDir() (string, error) {
 	base, err := os.UserConfigDir()
 	if err != nil {
 		return "", fmt.Errorf("resolve user config directory: %w", err)
@@ -47,57 +47,55 @@ func configDir() (string, error) {
 	return dir, nil
 }
 
-func credentialsFilePath() (string, error) {
-	dir, err := configDir()
+func ensureCredentialsFilePath() (string, error) {
+	dir, err := ensureConfigDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(dir, "credentials.json"), nil
+	return filepath.Join(dir, credentialsFileName), nil
 }
 
-func Save(creds Credentials) (Backend, error) {
+func SaveCredentials(creds Credentials) (CredentialStore, error) {
 	data, err := json.Marshal(creds)
 	if err != nil {
 		return "", fmt.Errorf("encode credentials: %w", err)
 	}
 
-	if err := keyring.Set(service, user, string(data)); err == nil {
-		if path, pathErr := credentialsFilePath(); pathErr == nil {
+	if err := keyring.Set(keyringService, keyringUser, string(data)); err == nil {
+		if path, pathErr := ensureCredentialsFilePath(); pathErr == nil {
 			_ = os.Remove(path)
 		}
-		return BackendKeyring, nil
+		return KeyringStore, nil
 	}
 
-	path, err := credentialsFilePath()
+	path, err := ensureCredentialsFilePath()
 	if err != nil {
 		return "", err
 	}
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return "", fmt.Errorf("write credentials file: %w", err)
 	}
-	return BackendFile, nil
+	return FileStore, nil
 }
 
-const envAccessToken = "OCEL_ACCESS_TOKEN"
-
-func Load() (Credentials, error) {
+func LoadCredentials() (Credentials, error) {
 	var creds Credentials
 
-	if token := os.Getenv(envAccessToken); token != "" {
+	if token := os.Getenv(accessTokenEnvVar); token != "" {
 		return Credentials{
 			AccessToken: token,
-			APIURL:      os.Getenv(console.URLEnvVar),
+			APIURL:      os.Getenv(URLEnvVar),
 		}, nil
 	}
 
-	if secret, err := keyring.Get(service, user); err == nil {
+	if secret, err := keyring.Get(keyringService, keyringUser); err == nil {
 		if err := json.Unmarshal([]byte(secret), &creds); err != nil {
 			return Credentials{}, fmt.Errorf("decode stored credentials: %w", err)
 		}
 		return creds, nil
 	}
 
-	path, err := credentialsFilePath()
+	path, err := ensureCredentialsFilePath()
 	if err != nil {
 		return Credentials{}, err
 	}
@@ -114,12 +112,12 @@ func Load() (Credentials, error) {
 	return creds, nil
 }
 
-func Delete() error {
-	if err := keyring.Delete(service, user); err != nil && !errors.Is(err, keyring.ErrNotFound) {
+func DeleteCredentials() error {
+	if err := keyring.Delete(keyringService, keyringUser); err != nil && !errors.Is(err, keyring.ErrNotFound) {
 		return fmt.Errorf("remove credentials from keyring: %w", err)
 	}
 
-	path, err := credentialsFilePath()
+	path, err := ensureCredentialsFilePath()
 	if err != nil {
 		return err
 	}

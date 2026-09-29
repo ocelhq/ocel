@@ -1,6 +1,9 @@
-package auth
+package console
 
-import "context"
+import (
+	"context"
+	"net/http"
+)
 
 type Session struct {
 	Session struct {
@@ -14,12 +17,12 @@ type Session struct {
 
 func (c *Client) GetSession(ctx context.Context, accessToken string) (*Session, error) {
 	var out *Session
-	if err := c.api.Get(ctx, "/api/auth/get-session", accessToken, &out); err != nil {
+	if err := c.send(ctx, http.MethodGet, "/api/auth/get-session", accessToken, nil, &out); err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
 func (c *Client) SignOut(ctx context.Context, accessToken string) error {
-	return c.api.Post(ctx, "/api/auth/sign-out", accessToken, struct{}{}, nil)
+	return c.send(ctx, http.MethodPost, "/api/auth/sign-out", accessToken, struct{}{}, nil)
 }

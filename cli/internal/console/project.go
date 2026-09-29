@@ -1,10 +1,8 @@
-package project
+package console
 
 import (
 	"context"
 	"net/http"
-
-	"github.com/ocelhq/ocel/cli/internal/console/httpapi"
 )
 
 type Project struct {
@@ -15,25 +13,15 @@ type Project struct {
 	Description    *string `json:"description"`
 }
 
-type Client struct {
-	api *httpapi.Client
-}
-
-func New(baseURL string) *Client {
-	return &Client{api: httpapi.New(baseURL)}
-}
+const projectsRoute = "/api/projects"
 
 func IsConflict(err error) bool {
-	return httpapi.HasStatus(err, http.StatusConflict)
-}
-
-func IsUnauthorized(err error) bool {
-	return httpapi.HasStatus(err, http.StatusUnauthorized)
+	return hasStatus(err, http.StatusConflict)
 }
 
 func (c *Client) ListProjects(ctx context.Context, accessToken string) ([]Project, error) {
 	var projects []Project
-	if err := c.api.Get(ctx, "/api/projects", accessToken, &projects); err != nil {
+	if err := c.send(ctx, http.MethodGet, projectsRoute, accessToken, nil, &projects); err != nil {
 		return nil, err
 	}
 	return projects, nil
@@ -42,7 +30,7 @@ func (c *Client) ListProjects(ctx context.Context, accessToken string) ([]Projec
 func (c *Client) CreateProject(ctx context.Context, accessToken, name, slug string) (*Project, error) {
 	var project Project
 	body := map[string]string{"name": name, "slug": slug}
-	if err := c.api.Post(ctx, "/api/projects", accessToken, body, &project); err != nil {
+	if err := c.send(ctx, http.MethodPost, projectsRoute, accessToken, body, &project); err != nil {
 		return nil, err
 	}
 	return &project, nil

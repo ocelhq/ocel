@@ -7,19 +7,18 @@ import (
 	"slices"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	consoleconnector "github.com/ocelhq/ocel/cli/internal/console/connector"
-	consolelink "github.com/ocelhq/ocel/cli/internal/console/link"
+	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
-func runStatus(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, _ *consolelink.Link,
+func runStatus(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, _ *console.Link,
 	opts options, stdout io.Writer) error {
 	access, err := token(deps)
 	if err != nil {
 		return err
 	}
-	registered, err := opts.console.List(ctx, access)
+	registered, err := opts.console.ListConnectors(ctx, access)
 	if err != nil {
 		return err
 	}
@@ -29,7 +28,7 @@ func runStatus(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config
 		if err != nil {
 			return err
 		}
-		registered = slices.DeleteFunc(registered, func(row consoleconnector.Connector) bool { return row.Target != fingerprint })
+		registered = slices.DeleteFunc(registered, func(row console.Connector) bool { return row.Target != fingerprint })
 		if len(registered) == 0 {
 			fmt.Fprintf(stdout, "The console has no connector registered for %s. Run `ocel connector add` to put one there.\n", bold(fingerprint))
 			return nil
@@ -40,7 +39,7 @@ func runStatus(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config
 		return nil
 	}
 
-	slices.SortFunc(registered, func(a, b consoleconnector.Connector) int {
+	slices.SortFunc(registered, func(a, b console.Connector) int {
 		if a.Target < b.Target {
 			return -1
 		}

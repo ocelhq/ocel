@@ -1,4 +1,4 @@
-package link
+package console
 
 import (
 	"encoding/json"
@@ -11,7 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 )
 
-const fileName = "console.json"
+const linkFileName = "console.json"
 
 type Link struct {
 	APIURL         string `json:"apiUrl"`
@@ -20,22 +20,22 @@ type Link struct {
 	ProjectName    string `json:"projectName"`
 }
 
-func path(projectDir string) string {
-	return filepath.Join(projectDir, constants.ProjectStateDirName, fileName)
+func linkPath(projectDir string) string {
+	return filepath.Join(projectDir, constants.ProjectStateDirName, linkFileName)
 }
 
-func Read(projectDir, apiURL string) (*Link, error) {
-	data, err := os.ReadFile(path(projectDir))
+func ReadLink(projectDir, apiURL string) (*Link, error) {
+	data, err := os.ReadFile(linkPath(projectDir))
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("read %s: %w", path(projectDir), err)
+		return nil, fmt.Errorf("read %s: %w", linkPath(projectDir), err)
 	}
 
 	var link Link
 	if err := json.Unmarshal(data, &link); err != nil {
-		return nil, fmt.Errorf("read %s: %w (run `ocel unlink` to clear it)", path(projectDir), err)
+		return nil, fmt.Errorf("read %s: %w (run `ocel unlink` to clear it)", linkPath(projectDir), err)
 	}
 
 	if normalizeAPIURL(link.APIURL) != normalizeAPIURL(apiURL) {
@@ -44,7 +44,7 @@ func Read(projectDir, apiURL string) (*Link, error) {
 	return &link, nil
 }
 
-func Write(projectDir string, link Link) error {
+func WriteLink(projectDir string, link Link) error {
 	link.APIURL = normalizeAPIURL(link.APIURL)
 
 	doc, err := json.MarshalIndent(link, "", "  ")
@@ -53,11 +53,11 @@ func Write(projectDir string, link Link) error {
 	}
 	doc = append(doc, '\n')
 
-	dest := path(projectDir)
+	dest := linkPath(projectDir)
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return fmt.Errorf("create %s: %w", filepath.Dir(dest), err)
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(dest), fileName+".*")
+	tmp, err := os.CreateTemp(filepath.Dir(dest), linkFileName+".*")
 	if err != nil {
 		return fmt.Errorf("create %s: %w", dest, err)
 	}
@@ -75,12 +75,12 @@ func Write(projectDir string, link Link) error {
 	return nil
 }
 
-func Clear(projectDir string) (bool, error) {
-	if err := os.Remove(path(projectDir)); err != nil {
+func DeleteLink(projectDir string) (bool, error) {
+	if err := os.Remove(linkPath(projectDir)); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return false, nil
 		}
-		return false, fmt.Errorf("remove %s: %w", path(projectDir), err)
+		return false, fmt.Errorf("remove %s: %w", linkPath(projectDir), err)
 	}
 	return true, nil
 }

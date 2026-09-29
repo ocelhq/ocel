@@ -1,4 +1,4 @@
-package link
+package console
 
 import (
 	"os"
@@ -20,7 +20,7 @@ func sample() Link {
 	}
 }
 
-func TestRead(t *testing.T) {
+func TestReadLink(t *testing.T) {
 	t.Parallel()
 
 	fromAnotherControlPlane := sample()
@@ -48,17 +48,17 @@ func TestRead(t *testing.T) {
 
 			dir := t.TempDir()
 			if tt.stored != nil {
-				if err := Write(dir, *tt.stored); err != nil {
-					t.Fatalf("Write err = %v", err)
+				if err := WriteLink(dir, *tt.stored); err != nil {
+					t.Fatalf("WriteLink err = %v", err)
 				}
 			}
 
-			link, err := Read(dir, apiURL)
+			link, err := ReadLink(dir, apiURL)
 			if err != nil {
-				t.Fatalf("Read err = %v, want nil", err)
+				t.Fatalf("ReadLink err = %v, want nil", err)
 			}
 			if link != nil {
-				t.Fatalf("Read = %+v, %s", link, tt.reason)
+				t.Fatalf("ReadLink = %+v, %s", link, tt.reason)
 			}
 		})
 	}
@@ -69,16 +69,16 @@ func TestRead(t *testing.T) {
 		dir := t.TempDir()
 		link := sample()
 		link.APIURL = apiURL + "/"
-		if err := Write(dir, link); err != nil {
-			t.Fatalf("Write err = %v", err)
+		if err := WriteLink(dir, link); err != nil {
+			t.Fatalf("WriteLink err = %v", err)
 		}
 
-		got, err := Read(dir, apiURL)
+		got, err := ReadLink(dir, apiURL)
 		if err != nil {
-			t.Fatalf("Read err = %v", err)
+			t.Fatalf("ReadLink err = %v", err)
 		}
 		if got == nil {
-			t.Fatal("Read = nil, want the record (a trailing slash is the same origin)")
+			t.Fatal("ReadLink = nil, want the record (a trailing slash is the same origin)")
 		}
 		if got.APIURL != apiURL {
 			t.Fatalf("APIURL = %q, want it normalized to %q", got.APIURL, apiURL)
@@ -96,34 +96,34 @@ func TestRead(t *testing.T) {
 			t.Fatalf("write: %v", err)
 		}
 
-		if _, err := Read(dir, apiURL); err == nil {
-			t.Fatal("Read err = nil, want an error for a malformed record")
+		if _, err := ReadLink(dir, apiURL); err == nil {
+			t.Fatal("ReadLink err = nil, want an error for a malformed record")
 		} else if !strings.Contains(err.Error(), "ocel unlink") {
 			t.Fatalf("err = %v, want it to suggest `ocel unlink`", err)
 		}
 	})
 }
 
-func TestWrite(t *testing.T) {
+func TestWriteLink(t *testing.T) {
 	t.Parallel()
 
 	t.Run("then read round trips", func(t *testing.T) {
 		t.Parallel()
 
 		dir := t.TempDir()
-		if err := Write(dir, sample()); err != nil {
-			t.Fatalf("Write err = %v", err)
+		if err := WriteLink(dir, sample()); err != nil {
+			t.Fatalf("WriteLink err = %v", err)
 		}
 
-		link, err := Read(dir, apiURL)
+		link, err := ReadLink(dir, apiURL)
 		if err != nil {
-			t.Fatalf("Read err = %v", err)
+			t.Fatalf("ReadLink err = %v", err)
 		}
 		if link == nil {
-			t.Fatal("Read = nil, want the record just written")
+			t.Fatal("ReadLink = nil, want the record just written")
 		}
 		if *link != sample() {
-			t.Fatalf("Read = %+v, want %+v", *link, sample())
+			t.Fatalf("ReadLink = %+v, want %+v", *link, sample())
 		}
 	})
 
@@ -131,8 +131,8 @@ func TestWrite(t *testing.T) {
 		t.Parallel()
 
 		dir := t.TempDir()
-		if err := Write(dir, sample()); err != nil {
-			t.Fatalf("Write err = %v", err)
+		if err := WriteLink(dir, sample()); err != nil {
+			t.Fatalf("WriteLink err = %v", err)
 		}
 		if _, err := os.Stat(filepath.Join(dir, constants.ProjectStateDirName, "console.json")); err != nil {
 			t.Fatalf("stat %s/console.json: %v", constants.ProjectStateDirName, err)
@@ -143,26 +143,26 @@ func TestWrite(t *testing.T) {
 		t.Parallel()
 
 		dir := t.TempDir()
-		if err := Write(dir, sample()); err != nil {
-			t.Fatalf("Write err = %v", err)
+		if err := WriteLink(dir, sample()); err != nil {
+			t.Fatalf("WriteLink err = %v", err)
 		}
 
 		replacement := Link{APIURL: apiURL, OrganizationID: "org_2", ProjectID: "proj_2", ProjectName: "Other"}
-		if err := Write(dir, replacement); err != nil {
-			t.Fatalf("Write err = %v", err)
+		if err := WriteLink(dir, replacement); err != nil {
+			t.Fatalf("WriteLink err = %v", err)
 		}
 
-		link, err := Read(dir, apiURL)
+		link, err := ReadLink(dir, apiURL)
 		if err != nil {
-			t.Fatalf("Read err = %v", err)
+			t.Fatalf("ReadLink err = %v", err)
 		}
 		if link == nil || *link != replacement {
-			t.Fatalf("Read = %+v, want %+v", link, replacement)
+			t.Fatalf("ReadLink = %+v, want %+v", link, replacement)
 		}
 	})
 }
 
-func TestClear(t *testing.T) {
+func TestDeleteLink(t *testing.T) {
 	t.Parallel()
 
 	bound := sample()
@@ -200,25 +200,25 @@ func TestClear(t *testing.T) {
 
 			dir := t.TempDir()
 			if tt.stored != nil {
-				if err := Write(dir, *tt.stored); err != nil {
-					t.Fatalf("Write err = %v", err)
+				if err := WriteLink(dir, *tt.stored); err != nil {
+					t.Fatalf("WriteLink err = %v", err)
 				}
 			}
 
-			removed, err := Clear(dir)
+			removed, err := DeleteLink(dir)
 			if err != nil {
-				t.Fatalf("Clear err = %v, want nil", err)
+				t.Fatalf("DeleteLink err = %v, want nil", err)
 			}
 			if removed != tt.wantRemoved {
-				t.Fatalf("Clear removed = %v, %s", removed, tt.reason)
+				t.Fatalf("DeleteLink removed = %v, %s", removed, tt.reason)
 			}
 
-			link, err := Read(dir, apiURL)
+			link, err := ReadLink(dir, apiURL)
 			if err != nil {
-				t.Fatalf("Read err = %v", err)
+				t.Fatalf("ReadLink err = %v", err)
 			}
 			if link != nil {
-				t.Fatalf("Read = %+v after Clear, want nil", link)
+				t.Fatalf("ReadLink = %+v after DeleteLink, want nil", link)
 			}
 		})
 	}

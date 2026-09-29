@@ -1,12 +1,10 @@
-package connector
+package console
 
 import (
 	"context"
 	"net/http"
 	"slices"
 	"time"
-
-	"github.com/ocelhq/ocel/cli/internal/console/httpapi"
 )
 
 type Denial struct {
@@ -36,15 +34,15 @@ type Connector struct {
 type Liveness string
 
 const (
-	Online  Liveness = "online"
-	Offline Liveness = "offline"
-	Never   Liveness = "never"
+	Online         Liveness = "online"
+	Offline        Liveness = "offline"
+	NeverConnected Liveness = "never"
 )
 
 func (c Connector) Liveness() Liveness {
 	switch {
 	case c.ConnectedAt == nil:
-		return Never
+		return NeverConnected
 	case c.Online:
 		return Online
 	default:
@@ -52,72 +50,56 @@ func (c Connector) Liveness() Liveness {
 	}
 }
 
-type Upsert struct {
+type ConnectorRegistration struct {
 	Target string `json:"target"`
 	Vendor string `json:"vendor"`
 	Reach  string `json:"reach"`
 }
 
-type Address struct {
+type ConnectorAddress struct {
 	URL       string `json:"url"`
 	PublicKey string `json:"publicKey,omitempty"`
 	Compute   string `json:"compute,omitempty"`
 }
 
-type Client struct {
-	api *httpapi.Client
-}
+const connectorsRoute = "/api/connectors"
 
-func New(baseURL string) *Client {
-	return &Client{api: httpapi.New(baseURL)}
-}
-
-func IsUnauthorized(err error) bool {
-	return httpapi.HasStatus(err, http.StatusUnauthorized)
-}
-
-func IsNotFound(err error) bool {
-	return httpapi.HasStatus(err, http.StatusNotFound)
-}
-
-const route = "/api/connectors"
-
-func (c *Client) List(ctx context.Context, accessToken string) ([]Connector, error) {
+func (c *Client) ListConnectors(ctx context.Context, accessToken string) ([]Connector, error) {
 	var listed []Connector
-	if err := c.api.Get(ctx, route, accessToken, &listed); err != nil {
+	if err := c.send(ctx, http.MethodGet, connectorsRoute, accessToken, nil, &listed); err != nil {
 		return nil, err
 	}
 	return listed, nil
 }
 
-func (c *Client) ByTarget(ctx context.Context, accessToken, fingerprint string) (*Connector, error) {
-	listed, err := c.List(ctx, accessToken)
+func (c *Client) FindConnector(ctx context.Context, accessToken, target string) (*Connector, error) {
+	listed, err := c.ListConnectors(ctx, accessToken)
 	if err != nil {
 		return nil, err
 	}
-	at := slices.IndexFunc(listed, func(row Connector) bool { return row.Target == fingerprint })
+	at := slices.IndexFunc(listed, func(row Connector) bool { return row.Target == target })
 	if at < 0 {
 		return nil, nil
 	}
 	return &listed[at], nil
 }
 
-func (c *Client) Upsert(ctx context.Context, accessToken string, taken Upsert) (*Connector, error) {
+func (c *Client) UpsertConnector(ctx context.Context, accessToken string, registration ConnectorRegistration) (*Connector, error) {
 	var registered Connector
-	if err := c.api.Put(ctx, route, accessToken, taken, &registered); err != nil {
+	if err := c.send(ctx, http.MethodPut, connectorsRoute, accessToken, registration, &registered); err != nil {
 		return nil, err
 	}
 	return &registered, nil
 }
 
-func (c *Client) Address(ctx context.Context, accessToken, id string, at Address) (*Connector, error) {
+func (c *Client) SetConnectorAddress(ctx context.Context, accessToken, id string, address ConnectorAddress) (*Connector, error) {
 	var registered Connector
-	if err := c.api.Patch(ctx, route+"/"+id, accessToken, at, &registered); err != nil {
+	if err := c.send(ctx, http.MethodPatch, connectorsRoute+"/"+id, accessToken, address, &registered); err != nil {
 		return nil, err
 	}
 	return &registered, nil
 }
 
-func (c *Client) Remove(ctx context.Context, accessToken, id string) error {
-	return c.api.Delete(ctx, route+"/"+id, accessToken, nil)
+func (c *Client) RemoveConnector(ctx context.Context, accessToken, id string) error {
+	return c.send(ctx, http.MethodDelete, connectorsRoute+"/"+id, accessToken, nil, nil)
 }

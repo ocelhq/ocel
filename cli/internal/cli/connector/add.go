@@ -8,8 +8,7 @@ import (
 	"slices"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	consoleconnector "github.com/ocelhq/ocel/cli/internal/console/connector"
-	consolelink "github.com/ocelhq/ocel/cli/internal/console/link"
+	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/providers"
@@ -25,7 +24,7 @@ func unfinished(err error) error {
 	return fmt.Errorf("%w; the console already has this target registered, so running ocel connector add again finishes it", err)
 }
 
-func runAdd(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, link *consolelink.Link, opts options) (err error) {
+func runAdd(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, link *console.Link, opts options) (err error) {
 	vendor, err := vendored(cfg)
 	if err != nil {
 		return err
@@ -49,7 +48,7 @@ func runAdd(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, l
 	}
 	defer prov.Close()
 
-	registered, err := opts.console.Upsert(ctx, access, consoleconnector.Upsert{
+	registered, err := opts.console.UpsertConnector(ctx, access, console.ConnectorRegistration{
 		Target: described.GetTargetFingerprint(),
 		Vendor: vendor,
 		Reach:  reachDial,
@@ -92,7 +91,7 @@ func runAdd(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, l
 			"the provider installed the connector and named no address, so the console has nothing to dial"))
 	}
 
-	paired, err := opts.console.Address(ctx, access, registered.ID, consoleconnector.Address{
+	paired, err := opts.console.SetConnectorAddress(ctx, access, registered.ID, console.ConnectorAddress{
 		URL:       at.GetUrl(),
 		PublicKey: at.GetPublicKey(),
 		Compute:   at.GetCompute(),

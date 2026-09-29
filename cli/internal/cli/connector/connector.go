@@ -13,8 +13,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console"
-	consoleconnector "github.com/ocelhq/ocel/cli/internal/console/connector"
-	consolelink "github.com/ocelhq/ocel/cli/internal/console/link"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -34,7 +32,7 @@ type options struct {
 	reveal  bool
 	write   bool
 	apiURL  string
-	console *consoleconnector.Client
+	console *console.Client
 }
 
 func (o options) grants() []string {
@@ -70,7 +68,7 @@ func newAddCommand(deps cmddeps.Deps) *cobra.Command {
 		Example: "  $ ocel connector add --config ocel.vps.json\n  $ ocel connector add --config ocel.vps.json --allow-reveal",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return withOptions(cmd, deps, &opts, func(ctx context.Context, cfg *projectconfig.Config, link *consolelink.Link) error {
+			return withOptions(cmd, deps, &opts, func(ctx context.Context, cfg *projectconfig.Config, link *console.Link) error {
 				return runAdd(ctx, deps, cfg, link, opts)
 			})
 		},
@@ -89,7 +87,7 @@ func newRemoveCommand(deps cmddeps.Deps) *cobra.Command {
 		Example: "  $ ocel connector rm --config ocel.vps.json\n  $ ocel connector rm --target vps/sha256:abc/ocel",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return withOptions(cmd, deps, &opts, func(ctx context.Context, cfg *projectconfig.Config, link *consolelink.Link) error {
+			return withOptions(cmd, deps, &opts, func(ctx context.Context, cfg *projectconfig.Config, link *console.Link) error {
 				return runRemove(ctx, deps, cfg, link, opts)
 			})
 		},
@@ -106,7 +104,7 @@ func newStatusCommand(deps cmddeps.Deps) *cobra.Command {
 		Example: "  $ ocel connector status\n  $ ocel connector status --config ocel.vps.json",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return withOptions(cmd, deps, &opts, func(ctx context.Context, cfg *projectconfig.Config, link *consolelink.Link) error {
+			return withOptions(cmd, deps, &opts, func(ctx context.Context, cfg *projectconfig.Config, link *console.Link) error {
 				return runStatus(ctx, deps, cfg, link, opts, cmd.OutOrStdout())
 			})
 		},
@@ -115,7 +113,7 @@ func newStatusCommand(deps cmddeps.Deps) *cobra.Command {
 }
 
 func withOptions(cmd *cobra.Command, deps cmddeps.Deps, opts *options,
-	run func(context.Context, *projectconfig.Config, *consolelink.Link) error) error {
+	run func(context.Context, *projectconfig.Config, *console.Link) error) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("determine working directory: %w", err)
@@ -130,10 +128,10 @@ func withOptions(cmd *cobra.Command, deps cmddeps.Deps, opts *options,
 		fmt.Fprintln(cmd.ErrOrStderr(), "You're not logged in. Run `ocel login` first.")
 		return &exitsig.ExitError{Code: 1}
 	}
-	opts.apiURL = console.EffectiveBaseURL(creds.APIURL)
-	opts.console = consoleconnector.New(opts.apiURL)
+	opts.apiURL = console.BaseURL(creds.APIURL)
+	opts.console = console.New(opts.apiURL)
 
-	link, err := consolelink.Read(cfg.Dir, opts.apiURL)
+	link, err := console.ReadLink(cfg.Dir, opts.apiURL)
 	if err != nil {
 		return err
 	}
@@ -177,7 +175,7 @@ func vendored(cfg *projectconfig.Config) (string, error) {
 	return desc.ID, nil
 }
 
-func printed(out io.Writer, registered consoleconnector.Connector, live consoleconnector.Liveness) {
+func printed(out io.Writer, registered console.Connector, live console.Liveness) {
 	fmt.Fprintf(out, "%s\n", bold(registered.Target))
 	fmt.Fprintf(out, "  compute %s over %s, %s\n", named(registered.Compute, "unset"), registered.Reach, live)
 	fmt.Fprintf(out, "  url %s\n", named(registered.URL, "none"))

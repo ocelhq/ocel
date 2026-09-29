@@ -25,7 +25,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/link"
 	"github.com/ocelhq/ocel/cli/internal/cli/login"
 	"github.com/ocelhq/ocel/cli/internal/cli/permissions"
-	"github.com/ocelhq/ocel/cli/internal/console/credentials"
+	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
 	"github.com/ocelhq/ocel/cli/internal/devstack/docker"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
@@ -130,7 +130,7 @@ func init() {
 
 func newDeps() cmddeps.Deps {
 	return cmddeps.Deps{
-		LoadCredentials:     credentials.Load,
+		LoadCredentials:     console.LoadCredentials,
 		OpenDocker:          docker.Open,
 		BuildApp:            appbuilder.Build,
 		RequireImageBuilder: appimages.RequireBuilder,

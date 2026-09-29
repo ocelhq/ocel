@@ -13,8 +13,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console"
-	"github.com/ocelhq/ocel/cli/internal/console/auth"
-	"github.com/ocelhq/ocel/cli/internal/console/credentials"
 )
 
 func NewCommand(deps cmddeps.Deps) *cobra.Command {
@@ -43,14 +41,14 @@ var (
 
 func run(ctx context.Context, deps cmddeps.Deps, force bool, stdin io.Reader, out io.Writer) error {
 	existing, loadErr := deps.LoadCredentials()
-	apiURL := strings.TrimRight(console.EffectiveBaseURL(existing.APIURL), "/")
+	apiURL := console.BaseURL(existing.APIURL)
 
 	if loadErr == nil && !force && sameConsole(existing.APIURL, apiURL) {
 		fmt.Fprintf(out, "Already logged in as %s at %s. Pass --force to log in again.\n", identity(existing), apiURL)
 		return nil
 	}
 
-	client := auth.New(apiURL)
+	client := console.New(apiURL)
 	device, err := client.RequestDeviceCode(ctx)
 	if err != nil {
 		return fmt.Errorf("could not start login at %s (set $%s to use another console): %w", apiURL, console.URLEnvVar, err)
@@ -77,7 +75,7 @@ func run(ctx context.Context, deps cmddeps.Deps, force bool, stdin io.Reader, ou
 		return err
 	}
 
-	creds := credentials.Credentials{
+	creds := console.Credentials{
 		AccessToken: token.AccessToken,
 		APIURL:      apiURL,
 		ExpiresAt:   time.Now().Add(time.Duration(token.ExpiresIn) * time.Second),
@@ -86,13 +84,13 @@ func run(ctx context.Context, deps cmddeps.Deps, force bool, stdin io.Reader, ou
 		creds.Email = session.User.Email
 	}
 
-	backend, err := credentials.Save(creds)
+	backend, err := console.SaveCredentials(creds)
 	if err != nil {
 		return fmt.Errorf("logged in, but failed to save credentials: %w", err)
 	}
 
 	fmt.Fprintf(out, "%s Logged in as %s\n", check, identity(creds))
-	if backend == credentials.BackendFile {
+	if backend == console.FileStore {
 		fmt.Fprintln(out, faint("  No OS keyring, so the token is saved to a file only you can read."))
 	}
 	return nil
@@ -103,14 +101,14 @@ func sameConsole(stored, target string) bool {
 	return stored == "" || stored == target
 }
 
-func identity(creds credentials.Credentials) string {
+func identity(creds console.Credentials) string {
 	if creds.Email != "" {
 		return creds.Email
 	}
 	return "your account"
 }
 
-func pollForToken(ctx context.Context, client *auth.Client, device *auth.DeviceCode) (*auth.TokenResult, error) {
+func pollForToken(ctx context.Context, client *console.Client, device *console.DeviceCode) (*console.Token, error) {
 	interval := time.Duration(device.Interval) * time.Second
 	if interval <= 0 {
 		interval = 5 * time.Second
@@ -129,14 +127,14 @@ func pollForToken(ctx context.Context, client *auth.Client, device *auth.DeviceC
 		}
 
 		switch {
-		case auth.IsPending(err):
+		case console.IsAuthorizationPending(err):
 			continue
-		case auth.IsSlowDown(err):
+		case console.IsSlowDown(err):
 			interval += 5 * time.Second
 			continue
-		case auth.IsAccessDenied(err):
+		case console.IsAccessDenied(err):
 			return nil, errors.New("login request was denied")
-		case auth.IsExpired(err):
+		case console.IsDeviceCodeExpired(err):
 			return nil, errors.New("the login code expired before it was confirmed — run `ocel login` again")
 		default:
 			return nil, fmt.Errorf("login failed: %w", err)

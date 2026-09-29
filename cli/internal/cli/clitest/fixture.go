@@ -19,7 +19,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/appimages"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/console/credentials"
+	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/events"
@@ -42,7 +42,7 @@ func AttachTerminalSink(deps cmddeps.Deps, w io.Writer) {
 
 func NewDeps() cmddeps.Deps {
 	return cmddeps.Deps{
-		LoadCredentials:     credentials.Load,
+		LoadCredentials:     console.LoadCredentials,
 		BuildApp:            appbuilder.Build,
 		RequireImageBuilder: appimages.RequireBuilder,
 		BuildAppImages:      appimages.Build,
@@ -343,7 +343,7 @@ func SetUpEdgeFixture(t *testing.T, declaration string) (root, journal string, d
 }
 
 func SetLoggedIn(deps *cmddeps.Deps) {
-	deps.LoadCredentials = func() (credentials.Credentials, error) {
-		return credentials.Credentials{APIURL: "https://api.example.com", AccessToken: "tok"}, nil
+	deps.LoadCredentials = func() (console.Credentials, error) {
+		return console.Credentials{APIURL: "https://api.example.com", AccessToken: "tok"}, nil
 	}
 }

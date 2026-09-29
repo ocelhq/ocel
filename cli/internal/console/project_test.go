@@ -1,4 +1,4 @@
-package project
+package console
 
 import (
 	"context"
@@ -106,8 +106,8 @@ func TestCreateProject(t *testing.T) {
 			if got := IsConflict(err); got != tc.wantConflict {
 				t.Fatalf("IsConflict(%v) = %t, want %t", err, got, tc.wantConflict)
 			}
-			if got := IsUnauthorized(err); got != tc.wantUnauthorized {
-				t.Fatalf("IsUnauthorized(%v) = %t, want %t", err, got, tc.wantUnauthorized)
+			if got := hasStatus(err, http.StatusUnauthorized); got != tc.wantUnauthorized {
+				t.Fatalf("hasStatus(%v, http.StatusUnauthorized) = %t, want %t", err, got, tc.wantUnauthorized)
 			}
 		})
 	}
@@ -126,8 +126,8 @@ func TestCreateProject(t *testing.T) {
 		if !IsConflict(wrapped) {
 			t.Errorf("IsConflict(%v) = false, want true", wrapped)
 		}
-		if IsUnauthorized(wrapped) {
-			t.Errorf("IsUnauthorized(%v) = true, want false", wrapped)
+		if hasStatus(wrapped, http.StatusUnauthorized) {
+			t.Errorf("hasStatus(%v, http.StatusUnauthorized) = true, want false", wrapped)
 		}
 	})
 }
@@ -168,7 +168,7 @@ func TestListProjects(t *testing.T) {
 		srv := statusServer(t, http.StatusUnauthorized, `{"error":"Unauthorized"}`)
 
 		_, err := New(srv.URL).ListProjects(context.Background(), "tok")
-		if err == nil || !IsUnauthorized(err) {
+		if err == nil || !hasStatus(err, http.StatusUnauthorized) {
 			t.Fatalf("ListProjects err = %v, want an unauthorized error", err)
 		}
 	})

@@ -12,8 +12,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console"
-	"github.com/ocelhq/ocel/cli/internal/console/auth"
-	"github.com/ocelhq/ocel/cli/internal/console/credentials"
 )
 
 func NewLogoutCommand(deps cmddeps.Deps) *cobra.Command {
@@ -33,7 +31,7 @@ var warn = color.New(color.FgYellow).Sprint("⚠")
 func runLogout(ctx context.Context, deps cmddeps.Deps, stdout, stderr io.Writer) error {
 	creds, err := deps.LoadCredentials()
 	if err != nil {
-		if errors.Is(err, credentials.ErrNotLoggedIn) {
+		if errors.Is(err, console.ErrNotLoggedIn) {
 			fmt.Fprintln(stdout, "Not logged in.")
 			return nil
 		}
@@ -42,11 +40,11 @@ func runLogout(ctx context.Context, deps cmddeps.Deps, stdout, stderr io.Writer)
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	if err := auth.New(console.EffectiveBaseURL(creds.APIURL)).SignOut(ctx, creds.AccessToken); err != nil {
+	if err := console.New(console.BaseURL(creds.APIURL)).SignOut(ctx, creds.AccessToken); err != nil {
 		fmt.Fprintf(stderr, "%s Couldn't revoke the session on the console: %v\n", warn, err)
 	}
 
-	if err := credentials.Delete(); err != nil {
+	if err := console.DeleteCredentials(); err != nil {
 		return fmt.Errorf("failed to clear local credentials: %w", err)
 	}
 	fmt.Fprintf(stdout, "%s Logged out\n", check)

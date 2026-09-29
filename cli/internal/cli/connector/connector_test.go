@@ -19,9 +19,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	consoleconnector "github.com/ocelhq/ocel/cli/internal/console/connector"
-	"github.com/ocelhq/ocel/cli/internal/console/credentials"
-	consolelink "github.com/ocelhq/ocel/cli/internal/console/link"
+	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
@@ -91,7 +89,7 @@ func newConsoleServer(t *testing.T, rows ...map[string]any) *consoleServer {
 func linked(t *testing.T, dir, apiURL string) {
 	t.Helper()
 
-	if err := consolelink.Write(dir, consolelink.Link{
+	if err := console.WriteLink(dir, console.Link{
 		APIURL:         apiURL,
 		OrganizationID: "org_1",
 		ProjectID:      "p1",
@@ -114,7 +112,7 @@ func resolved(t *testing.T, root string) *projectconfig.Config {
 func opened(t *testing.T, srv *consoleServer) options {
 	t.Helper()
 
-	return options{write: true, apiURL: srv.URL, console: consoleconnector.New(srv.URL)}
+	return options{write: true, apiURL: srv.URL, console: console.New(srv.URL)}
 }
 
 func TestAddPairsTheTargetWithTheConsoleAndInstallsTheAsset(t *testing.T) {
@@ -468,8 +466,8 @@ func TestBeingLoggedOutIsPointedAtOcelLogin(t *testing.T) {
 	root := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
 
 	deps := clitest.NewDeps()
-	deps.LoadCredentials = func() (credentials.Credentials, error) {
-		return credentials.Credentials{}, credentials.ErrNotLoggedIn
+	deps.LoadCredentials = func() (console.Credentials, error) {
+		return console.Credentials{}, console.ErrNotLoggedIn
 	}
 	deps.ConfigPath = func() string { return filepath.Join(root, "ocel.vps.json") }
 
@@ -530,10 +528,10 @@ func TestTheComputeGoesToTheProviderUntouched(t *testing.T) {
 	}
 }
 
-func read(t *testing.T, dir, apiURL string) *consolelink.Link {
+func read(t *testing.T, dir, apiURL string) *console.Link {
 	t.Helper()
 
-	linked, err := consolelink.Read(dir, apiURL)
+	linked, err := console.ReadLink(dir, apiURL)
 	if err != nil {
 		t.Fatalf("consolelink.Read: %v", err)
 	}

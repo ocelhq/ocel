@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	consolelink "github.com/ocelhq/ocel/cli/internal/console/link"
+	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
@@ -14,7 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
-func runRemove(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, _ *consolelink.Link, opts options) (err error) {
+func runRemove(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, _ *console.Link, opts options) (err error) {
 	if _, err := vendored(cfg); err != nil {
 		return err
 	}
@@ -37,7 +37,7 @@ func runRemove(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config
 		return forgotten(ctx, run, opts, access, opts.target)
 	}
 
-	registered, err := opts.console.ByTarget(ctx, access, fingerprint)
+	registered, err := opts.console.FindConnector(ctx, access, fingerprint)
 	if err != nil {
 		return err
 	}
@@ -45,7 +45,7 @@ func runRemove(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config
 		run.Finish(fmt.Sprintf("The console has no connector registered for %s", fingerprint))
 		return nil
 	}
-	if err := opts.console.Remove(ctx, access, registered.ID); err != nil {
+	if err := opts.console.RemoveConnector(ctx, access, registered.ID); err != nil {
 		return fmt.Errorf("forget this connector in the console: %w", err)
 	}
 	if unreached != nil {
@@ -57,7 +57,7 @@ func runRemove(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config
 }
 
 func forgotten(ctx context.Context, run *events.Run, opts options, access, fingerprint string) error {
-	registered, err := opts.console.ByTarget(ctx, access, fingerprint)
+	registered, err := opts.console.FindConnector(ctx, access, fingerprint)
 	if err != nil {
 		return err
 	}
@@ -65,7 +65,7 @@ func forgotten(ctx context.Context, run *events.Run, opts options, access, finge
 		run.Finish(fmt.Sprintf("The console has no connector registered for %s", fingerprint))
 		return nil
 	}
-	if err := opts.console.Remove(ctx, access, registered.ID); err != nil {
+	if err := opts.console.RemoveConnector(ctx, access, registered.ID); err != nil {
 		return fmt.Errorf("forget this connector in the console: %w", err)
 	}
 	run.Finish(fmt.Sprintf("The console has forgotten %s; the target itself was never reached, so what is on it stays", fingerprint))

@@ -1,4 +1,4 @@
-package auth
+package console
 
 import (
 	"context"
@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"github.com/ocelhq/ocel/cli/internal/console/httpapi"
 )
 
 func TestListOrganizations(t *testing.T) {
@@ -113,7 +111,7 @@ func TestSetActiveOrganization(t *testing.T) {
 		if err == nil {
 			t.Fatal("SetActiveOrganization err = nil, want error")
 		}
-		if !httpapi.HasCode(err, "invalid_request") {
+		if !hasCode(err, "invalid_request") {
 			t.Fatalf("err = %v (%T), want the invalid_request code", err, err)
 		}
 	})

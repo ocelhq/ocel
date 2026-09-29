@@ -17,9 +17,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console"
-	"github.com/ocelhq/ocel/cli/internal/console/auth"
-	consolelink "github.com/ocelhq/ocel/cli/internal/console/link"
-	"github.com/ocelhq/ocel/cli/internal/console/project"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/prompt"
@@ -59,7 +56,7 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 			}
 			opts := opts
 			creds, _ := deps.LoadCredentials()
-			opts.apiURL = console.EffectiveBaseURL(creds.APIURL)
+			opts.apiURL = console.BaseURL(creds.APIURL)
 			return run(cmd.Context(), deps, dir, projectRef, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 		},
 	}
@@ -83,31 +80,30 @@ func run(ctx context.Context, deps cmddeps.Deps, projectDir, projectRef string, 
 	}
 	defer linking.End(&err)
 
-	apiURL := strings.TrimRight(opts.apiURL, "/")
+	apiURL := opts.apiURL
 	scanner := bufio.NewScanner(stdin)
 	projectRef = strings.TrimSpace(projectRef)
 
-	if existing, err := consolelink.Read(projectDir, apiURL); err != nil {
+	if existing, err := console.ReadLink(projectDir, apiURL); err != nil {
 		return err
 	} else if existing != nil {
 		linking.Phase(progressv1.Phase_PHASE_CHECK).Say(fmt.Sprintf("This directory is linked to %s now; linking it again", existing.ProjectName))
 	}
 
-	authClient := auth.New(apiURL)
-	projectClient := project.New(apiURL)
+	client := console.New(apiURL)
 	lr := linkRun{run: linking, stdout: stdout, stdin: stdin, scanner: scanner}
 
-	org, err := pickOrganization(ctx, lr, authClient, creds.AccessToken, apiURL, opts)
+	org, err := pickOrganization(ctx, lr, client, creds.AccessToken, apiURL, opts)
 	if err != nil {
 		return err
 	}
-	if err := authClient.SetActiveOrganization(ctx, creds.AccessToken, org.ID); err != nil {
+	if err := client.SetActiveOrganization(ctx, creds.AccessToken, org.ID); err != nil {
 		return fmt.Errorf("failed to set active organization: %w", err)
 	}
 
-	var projects []project.Project
+	var projects []console.Project
 	err = lr.wait(progressv1.Phase_PHASE_CHECK, org.Slug, fmt.Sprintf("Loading the projects in %s", org.Name), func() error {
-		list, listErr := projectClient.ListProjects(ctx, creds.AccessToken)
+		list, listErr := client.ListProjects(ctx, creds.AccessToken)
 		projects = list
 		return listErr
 	})
@@ -115,12 +111,12 @@ func run(ctx context.Context, deps cmddeps.Deps, projectDir, projectRef string, 
 		return fmt.Errorf("failed to list projects: %w", err)
 	}
 
-	selected, err := selectOrCreateProject(ctx, lr, projectClient, creds.AccessToken, projectDir, projectRef, opts, projects, org)
+	selected, err := selectOrCreateProject(ctx, lr, client, creds.AccessToken, projectDir, projectRef, opts, projects, org)
 	if err != nil {
 		return err
 	}
 
-	if err := consolelink.Write(projectDir, consolelink.Link{
+	if err := console.WriteLink(projectDir, console.Link{
 		APIURL:         apiURL,
 		OrganizationID: org.ID,
 		ProjectID:      selected.ID,
@@ -179,13 +175,13 @@ func consoleHost(apiURL string) string {
 func selectOrCreateProject(
 	ctx context.Context,
 	lr linkRun,
-	client *project.Client,
+	client *console.Client,
 	accessToken, projectDir, projectRef string,
 	opts options,
-	projects []project.Project,
-	org *auth.Organization,
-) (*project.Project, error) {
-	create := func(name string) (*project.Project, error) {
+	projects []console.Project,
+	org *console.Organization,
+) (*console.Project, error) {
+	create := func(name string) (*console.Project, error) {
 		return createProject(ctx, lr, client, accessToken, name, org)
 	}
 
@@ -256,7 +252,7 @@ func selectOrCreateProject(
 	return nil, fmt.Errorf("invalid selection %q; rerun `ocel link`", selection)
 }
 
-func createProject(ctx context.Context, lr linkRun, client *project.Client, accessToken, name string, org *auth.Organization) (*project.Project, error) {
+func createProject(ctx context.Context, lr linkRun, client *console.Client, accessToken, name string, org *console.Organization) (*console.Project, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil, errors.New("project name required — pass it as an argument, e.g. `ocel link --create my-app`")
@@ -266,14 +262,14 @@ func createProject(ctx context.Context, lr linkRun, client *project.Client, acce
 		return nil, fmt.Errorf("could not derive a valid slug from %q — try a name with at least one alphanumeric character", name)
 	}
 
-	var created *project.Project
+	var created *console.Project
 	err := lr.wait(progressv1.Phase_PHASE_PROVISION, projectSlug, fmt.Sprintf("Creating the project in %s", org.Name), func() error {
 		p, createErr := client.CreateProject(ctx, accessToken, name, projectSlug)
 		created = p
 		return createErr
 	})
 	if err != nil {
-		if project.IsConflict(err) {
+		if console.IsConflict(err) {
 			return nil, fmt.Errorf("a project with slug %q already exists in %s — run `ocel link %s` to link to it", projectSlug, org.Name, projectSlug)
 		}
 		return nil, fmt.Errorf("failed to create project: %w", err)
@@ -303,8 +299,8 @@ func promptProjectName(ctx context.Context, lr linkRun, projectDir, lead string)
 	return name, nil
 }
 
-func pickOrganization(ctx context.Context, lr linkRun, client *auth.Client, accessToken, apiURL string, opts options) (*auth.Organization, error) {
-	var orgs []auth.Organization
+func pickOrganization(ctx context.Context, lr linkRun, client *console.Client, accessToken, apiURL string, opts options) (*console.Organization, error) {
+	var orgs []console.Organization
 	err := lr.wait(progressv1.Phase_PHASE_CHECK, consoleHost(apiURL), "Loading your organizations", func() error {
 		list, listErr := client.ListOrganizations(ctx, accessToken)
 		orgs = list
@@ -363,7 +359,7 @@ func pickOrganization(ctx context.Context, lr linkRun, client *auth.Client, acce
 	return nil, fmt.Errorf("invalid selection %q; rerun `ocel link`", selection)
 }
 
-func joinOrgSlugs(orgs []auth.Organization) string {
+func joinOrgSlugs(orgs []console.Organization) string {
 	slugs := make([]string, len(orgs))
 	for i, org := range orgs {
 		slugs[i] = org.Slug
@@ -371,7 +367,7 @@ func joinOrgSlugs(orgs []auth.Organization) string {
 	return strings.Join(slugs, ", ")
 }
 
-func joinProjectSlugs(projects []project.Project) string {
+func joinProjectSlugs(projects []console.Project) string {
 	slugs := make([]string, len(projects))
 	for i, p := range projects {
 		slugs[i] = p.Slug
