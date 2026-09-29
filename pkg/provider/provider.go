@@ -37,6 +37,8 @@ type Facts struct {
 	DNSKinds          []DNSKind
 	RendersTransforms bool
 	StoresArtifacts   bool
+
+	RetainsContainerReleases bool
 }
 
 type EdgeProgramRequest struct {

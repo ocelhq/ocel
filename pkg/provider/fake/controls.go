@@ -15,6 +15,13 @@ func (p *Provider) WithHooks(set func(*provider.Hooks)) *Provider {
 	return p
 }
 
+func (p *Provider) WithFacts(set func(*provider.Facts)) *Provider {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.setFacts = set
+	return p
+}
+
 func (p *Provider) everyHook(hooks *provider.Hooks) {
 	hooks.WarmFunctions = func(context.Context, []string, progress.Progress) error { return nil }
 	hooks.EmbedCode = func(context.Context, string, provider.ArtifactRef, progress.Progress) error { return nil }
