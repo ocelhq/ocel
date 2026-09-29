@@ -245,7 +245,8 @@ your Caddy is proxying.
 
 `caddy reload` needs the admin endpoint, so bootstrap refuses a Caddy run with `admin off`.
 Ocel also reads what your Caddy serves from it (`GET /config/apps/http/servers` on
-`localhost:2019`) and never takes a hostname your Caddy already serves: a bind is refused when a
+`localhost:2019`, with `wget` inside `container`, or with the box's `curl` for `caddy.service`,
+so bootstrap refuses a box without `curl` there) and never takes a hostname your Caddy already serves: a bind is refused when a
 host matcher outside ocel's block equals the hostname or is a wildcard that covers it, naming the
 server and route. Two sites for one hostname would otherwise either fail your whole config or
 shadow one another by file order. `ocel doctor` runs the same read, and also checks that your
