@@ -21,7 +21,7 @@ func (r Router) Kind() router.Kind { return router.Kind(Kind) }
 
 func (r Router) Facts() router.Facts {
 	return router.Facts{
-		FlipBound:                   router.FlipBound{Typical: propagationBound},
+		Propagation:                 router.Propagation{Typical: propagationBound},
 		SignsOriginForwards:         true,
 		ReachesFunctions:            true,
 		AnswersHostnames:            true,

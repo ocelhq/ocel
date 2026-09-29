@@ -5,7 +5,7 @@ type Promotion struct {
 	Ts          int64             `json:"ts"`
 	Builds      map[string]string `json:"builds"`
 	Tag         string            `json:"tag,omitempty"`
-	Flip        *FlipBound        `json:"flip,omitempty"`
+	Propagation *Propagation      `json:"propagation,omitempty"`
 }
 
 type HistoryEntry struct {

@@ -40,7 +40,7 @@ func rollbackResponseFor(entry *contractv1.PromotionHistoryEntry) *contractv1.Ro
 			PromotionId: FakeRollbackPromotionID,
 			Ts:          9999,
 			Builds:      entry.GetPromotion().GetBuilds(),
-			FlipBound:   fakeFlipBound(),
+			Propagation: fakePropagation(),
 		},
 	}
 	if warning := os.Getenv(FakeRollbackWarningEnvVar); warning != "" {

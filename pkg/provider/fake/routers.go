@@ -176,7 +176,7 @@ func (e *Edge) routerFacts() router.Facts {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return router.Facts{
-		FlipBound:                   router.FlipBound{Typical: 30 * time.Second, Published: true},
+		Propagation:                 router.Propagation{Typical: 30 * time.Second, Published: true},
 		SignsOriginForwards:         true,
 		RoutesPreviewsByLabel:       e.byLabel,
 		ReachesFunctions:            true,

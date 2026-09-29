@@ -217,10 +217,10 @@ func TestASuccessfulRunEndsWithASuccessResultAndNoError(t *testing.T) {
 	}
 }
 
-func TestADeployedRunsSuccessResultCarriesItsHeadlineURLNotesAndFlipBound(t *testing.T) {
+func TestADeployedRunsSuccessResultCarriesItsHeadlineURLNotesAndPropagation(t *testing.T) {
 	sink := &recording{}
 	run, _ := begin(t, sink)
-	flip := &progressv1.FlipBound{TypicalMs: 3000, Published: true}
+	flip := &progressv1.Propagation{TypicalMs: 3000, Published: true}
 	run.Deployed("Deployed", []string{"web: https://web.example.com"}, flip)
 
 	var err error
@@ -228,8 +228,8 @@ func TestADeployedRunsSuccessResultCarriesItsHeadlineURLNotesAndFlipBound(t *tes
 
 	result := sink.received()[len(sink.received())-1].GetSummary()
 	if !result.GetSuccess() || result.GetHeadline() != "Deployed" ||
-		strings.Join(result.GetUrlNotes(), ",") != "web: https://web.example.com" || result.GetFlipBound().GetTypicalMs() != 3000 {
-		t.Fatalf("result = %s, want a success headed Deployed with its url notes and flip bound", protojson.Format(result))
+		strings.Join(result.GetUrlNotes(), ",") != "web: https://web.example.com" || result.GetPropagation().GetTypicalMs() != 3000 {
+		t.Fatalf("result = %s, want a success headed Deployed with its url notes and propagation", protojson.Format(result))
 	}
 }
 

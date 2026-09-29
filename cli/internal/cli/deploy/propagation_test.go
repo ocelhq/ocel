@@ -9,7 +9,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
-var flipBoundCases = []struct {
+var propagationCases = []struct {
 	name  string
 	spec  string
 	want  string
@@ -34,14 +34,14 @@ var flipBoundCases = []struct {
 	},
 }
 
-func TestFlipBoundOnTheProductionDeployPromotionLine(t *testing.T) {
-	for _, tc := range flipBoundCases {
+func TestPropagationOnTheProductionDeployPromotionLine(t *testing.T) {
+	for _, tc := range propagationCases {
 		t.Run(tc.name, func(t *testing.T) {
 			root, sockPath := clitest.SetUpDeployFixture(t)
 			deps := clitest.NewDeps()
 			clitest.SetLoggedIn(&deps)
 			clitest.StubBuild(&deps, nil)
-			t.Setenv(clitest.FakeFlipBoundEnvVar, tc.spec)
+			t.Setenv(clitest.FakePropagationEnvVar, tc.spec)
 
 			var stdout, stderr bytes.Buffer
 			clitest.AttachTerminalSink(deps, &stdout)
@@ -49,14 +49,14 @@ func TestFlipBoundOnTheProductionDeployPromotionLine(t *testing.T) {
 				t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 			}
 
-			assertFlipNote(t, stdout.String(), tc.want, tc.other)
+			assertPropagationNote(t, stdout.String(), tc.want, tc.other)
 			clitest.WaitForNoStaleSocket(t, sockPath)
 		})
 	}
 }
 
-func TestFlipBoundOnThePreviewDeployPromotionLine(t *testing.T) {
-	for _, tc := range flipBoundCases {
+func TestPropagationOnThePreviewDeployPromotionLine(t *testing.T) {
+	for _, tc := range propagationCases {
 		t.Run(tc.name, func(t *testing.T) {
 			root, sockPath := clitest.SetUpDeployFixture(t)
 			deps := clitest.NewDeps()
@@ -65,7 +65,7 @@ func TestFlipBoundOnThePreviewDeployPromotionLine(t *testing.T) {
 			stubGit(&deps, "feature/login", "")
 			t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 			t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
-			t.Setenv(clitest.FakeFlipBoundEnvVar, tc.spec)
+			t.Setenv(clitest.FakePropagationEnvVar, tc.spec)
 
 			var stdout, stderr bytes.Buffer
 			clitest.AttachTerminalSink(deps, &stdout)
@@ -73,13 +73,13 @@ func TestFlipBoundOnThePreviewDeployPromotionLine(t *testing.T) {
 				t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 			}
 
-			assertFlipNote(t, stdout.String(), tc.want, tc.other)
+			assertPropagationNote(t, stdout.String(), tc.want, tc.other)
 			clitest.WaitForNoStaleSocket(t, sockPath)
 		})
 	}
 }
 
-func assertFlipNote(t *testing.T, out, want string, absent []string) {
+func assertPropagationNote(t *testing.T, out, want string, absent []string) {
 	t.Helper()
 	if want != "" && !strings.Contains(out, want) {
 		t.Errorf("output = %q, want it to include %q", out, want)

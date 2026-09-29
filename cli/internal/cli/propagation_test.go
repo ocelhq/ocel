@@ -9,7 +9,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
-var flipBoundCases = []struct {
+var propagationCases = []struct {
 	name  string
 	spec  string
 	want  string
@@ -34,8 +34,8 @@ var flipBoundCases = []struct {
 	},
 }
 
-func TestFlipBoundOnTheRollbackPromotionLine(t *testing.T) {
-	for _, tc := range flipBoundCases {
+func TestPropagationOnTheRollbackPromotionLine(t *testing.T) {
+	for _, tc := range propagationCases {
 		t.Run(tc.name, func(t *testing.T) {
 			root, sockPath := clitest.SetUpDeployFixture(t)
 			deps := newTestDeps()
@@ -43,7 +43,7 @@ func TestFlipBoundOnTheRollbackPromotionLine(t *testing.T) {
 			clitest.StubBuild(&deps, nil)
 			t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 			t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
-			t.Setenv(clitest.FakeFlipBoundEnvVar, tc.spec)
+			t.Setenv(clitest.FakePropagationEnvVar, tc.spec)
 
 			var stdout, stderr bytes.Buffer
 			clitest.AttachTerminalSink(deps, &stdout)
@@ -61,21 +61,21 @@ func TestFlipBoundOnTheRollbackPromotionLine(t *testing.T) {
 			if line == "" {
 				t.Fatalf("stdout = %q, want a rolled-back line", out)
 			}
-			assertFlipNote(t, line, tc.want, tc.other)
+			assertPropagationNote(t, line, tc.want, tc.other)
 
 			clitest.WaitForNoStaleSocket(t, sockPath)
 		})
 	}
 }
 
-func TestFlipBoundIsAbsentFromThePromotionList(t *testing.T) {
+func TestPropagationIsAbsentFromThePromotionList(t *testing.T) {
 	root, sockPath := clitest.SetUpDeployFixture(t)
 	deps := newTestDeps()
 	clitest.SetLoggedIn(&deps)
 	clitest.StubBuild(&deps, nil)
 	t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
-	t.Setenv(clitest.FakeFlipBoundEnvVar, "5000")
+	t.Setenv(clitest.FakePropagationEnvVar, "5000")
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(deps, &stdout)
@@ -90,7 +90,7 @@ func TestFlipBoundIsAbsentFromThePromotionList(t *testing.T) {
 	clitest.WaitForNoStaleSocket(t, sockPath)
 }
 
-func assertFlipNote(t *testing.T, out, want string, absent []string) {
+func assertPropagationNote(t *testing.T, out, want string, absent []string) {
 	t.Helper()
 	if want != "" && !strings.Contains(out, want) {
 		t.Errorf("output = %q, want it to contain %q", out, want)

@@ -287,7 +287,7 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 	if err := deployrecord.Write(cfg.Dir, record); err != nil {
 		return err
 	}
-	run.Deployed(fmt.Sprintf("Deployed %s to preview %s", cfg.Slug, env.GetIdentity()), out.urlNotes, out.flip)
+	run.Deployed(fmt.Sprintf("Deployed %s to preview %s", cfg.Slug, env.GetIdentity()), out.urlNotes, out.propagation)
 	return nil
 }
 

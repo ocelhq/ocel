@@ -97,8 +97,8 @@ func TestRollbackPromotesTheBuildsOfTheEarlierPromotionAsANewOne(t *testing.T) {
 	if build := promoted.GetBuilds()["web"]; build != buildIdentity(0) {
 		t.Errorf("Rollback() promoted web build %q, want %q, the build p1 promoted", build, buildIdentity(0))
 	}
-	if promoted.GetFlipBound() == nil {
-		t.Error("Rollback() reported no flip bound, so nothing tells the user how long the flip takes")
+	if promoted.GetPropagation() == nil {
+		t.Error("Rollback() reported no propagation, so nothing tells the user how long the flip takes")
 	}
 
 	listed, err := client.ListPromotions(context.Background(), &contractv1.ListPromotionsRequest{Slug: "shop"})

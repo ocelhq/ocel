@@ -17,7 +17,7 @@ func (s *deployFakeProviderServer) ListPromotions(ctx context.Context, req *cont
 	history := make([]*contractv1.PromotionHistoryEntry, 0, len(fakePromotions))
 	for _, entry := range fakePromotions {
 		p := proto.Clone(entry.GetPromotion()).(*contractv1.Promotion)
-		p.FlipBound = fakeFlipBound()
+		p.Propagation = fakePropagation()
 		history = append(history, &contractv1.PromotionHistoryEntry{Promotion: p, Active: entry.GetActive(), Unpromoted: entry.GetUnpromoted()})
 	}
 	return &contractv1.ListPromotionsResponse{Promotions: history}, nil

@@ -428,12 +428,12 @@ func TestTheEdgeAnswersTheFactsABoxCanSitBehind(t *testing.T) {
 func TestTheFlipReturnsNoPropagationNoteToPrint(t *testing.T) {
 	t.Parallel()
 
-	bound := box.NewRouter(edgeOver(aMachine(), fake.NewKeyValues()).Edge).Facts().FlipBound
+	bound := box.NewRouter(edgeOver(aMachine(), fake.NewKeyValues()).Edge).Facts().Propagation
 	if bound.Typical > 0 {
-		t.Errorf("Facts().FlipBound = %+v, and a bound above zero is rendered to the user as a propagation note; when the flip call returns on a box the gate has passed, the config is loaded and the retired upstream has drained, so there is no window to advertise", bound)
+		t.Errorf("Facts().Propagation = %+v, and a propagation above zero is rendered to the user as a propagation note; when the flip call returns on a box the gate has passed, the config is loaded and the retired upstream has drained, so there is no window to advertise", bound)
 	}
 	if bound.Published {
-		t.Errorf("Facts().FlipBound = %+v, which publishes a bound it declares instant", bound)
+		t.Errorf("Facts().Propagation = %+v, which publishes a propagation it declares instant", bound)
 	}
 }
 

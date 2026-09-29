@@ -932,13 +932,13 @@ func TestTheSummaryEndsWithTheNotesOnItsUrlsAndWhereTheRunsLogIs(t *testing.T) {
 	var out bytes.Buffer
 	sink := newGroupedSink(&out, Presentation{}, nil)
 	sink.Receive(resultEvent(&streamv1.RunSummary{
-		Success:    true,
-		Headline:   "Preview pr-12 is up",
-		DurationMs: 41_000,
-		Apps:       []*progressv1.AppResult{{App: "web", Outcome: progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED, Urls: []string{"https://pr-12.acme.example.com"}}},
-		UrlNotes:   []string{"web: the custom domain shop.acme.com is not attached to previews"},
-		FlipBound:  &progressv1.FlipBound{TypicalMs: 5000, Published: true},
-		LogPath:    "/var/ocel-runs/0af3.ndjson",
+		Success:     true,
+		Headline:    "Preview pr-12 is up",
+		DurationMs:  41_000,
+		Apps:        []*progressv1.AppResult{{App: "web", Outcome: progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED, Urls: []string{"https://pr-12.acme.example.com"}}},
+		UrlNotes:    []string{"web: the custom domain shop.acme.com is not attached to previews"},
+		Propagation: &progressv1.Propagation{TypicalMs: 5000, Published: true},
+		LogPath:     "/var/ocel-runs/0af3.ndjson",
 	}))
 
 	want := "✓ Preview pr-12 is up in 41s\n" +

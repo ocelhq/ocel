@@ -58,17 +58,17 @@ func Run(t *testing.T, suite Suite) {
 		record = functionRecord
 	}
 
-	t.Run("the flip bound is one a caller can wait out", func(t *testing.T) {
+	t.Run("the propagation is one a caller can wait out", func(t *testing.T) {
 		facts := suite.New(t).Router.Facts()
-		bound := facts.FlipBound
+		bound := facts.Propagation
 		if bound.Typical < 0 {
-			t.Errorf("Facts().FlipBound.Typical = %v, want a duration a caller can wait out", bound.Typical)
+			t.Errorf("Facts().Propagation.Typical = %v, want a duration a caller can wait out", bound.Typical)
 		}
 		if bound.Typical == 0 && bound.Published {
-			t.Error("Facts().FlipBound publishes a bound it declares instant; Published is read only when Typical > 0")
+			t.Error("Facts().Propagation publishes a propagation it declares instant; Published is read only when Typical > 0")
 		}
 		if facts.CachesRecords && bound.Typical == 0 {
-			t.Error("Facts().FlipBound.Typical = 0 on a router whose Facts().CachesRecords is true; a router that serves a promotion from a cached record keeps serving the old one until the cache lapses, and a caller waiting on the flip needs that bound")
+			t.Error("Facts().Propagation.Typical = 0 on a router whose Facts().CachesRecords is true; a router that serves a promotion from a cached record keeps serving the old one until the cache lapses, and a caller waiting on the flip needs that propagation")
 		}
 	})
 

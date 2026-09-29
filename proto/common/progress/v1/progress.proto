@@ -142,7 +142,7 @@ message OperationResult {
 
   string promotion_id = 6;
 
-  FlipBound flip_bound = 7;
+  Propagation propagation = 7;
 
   repeated string url_notes = 8;
 
@@ -161,7 +161,7 @@ message ConnectorInstalled {
   string compute = 3;
 }
 
-message FlipBound {
+message Propagation {
   int64 typical_ms = 1;
   bool published = 2;
 }

@@ -54,12 +54,12 @@ func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest
 		return nil, provider.RefusalError(err)
 	}
 
-	flip := session.router.Facts().FlipBound
+	propagation := session.router.Facts().Propagation
 	promoted := router.Promotion{
 		PromotionID: promotionID,
 		Ts:          time.Now().Unix(),
 		Builds:      target.Builds,
-		Flip:        &flip,
+		Propagation: &propagation,
 	}
 	dropped, err := session.promote(ctx, promoteRequest{replaces: current.Active, rollsBackTo: target.PromotionID, promotion: promoted}, progress.Discard())
 	if err != nil {
@@ -194,15 +194,15 @@ func promotionProto(promotion router.Promotion) *contractv1.Promotion {
 		Ts:          promotion.Ts,
 		Builds:      promotion.Builds,
 		Tag:         promotion.Tag,
-		FlipBound:   flipBoundProto(promotion.Flip),
+		Propagation: propagationProto(promotion.Propagation),
 	}
 }
 
-func flipBoundProto(flip *router.FlipBound) *progressv1.FlipBound {
+func propagationProto(flip *router.Propagation) *progressv1.Propagation {
 	if flip == nil {
 		return nil
 	}
-	return &progressv1.FlipBound{TypicalMs: flip.Typical.Milliseconds(), Published: flip.Published}
+	return &progressv1.Propagation{TypicalMs: flip.Typical.Milliseconds(), Published: flip.Published}
 }
 
 func newPromotionID() (string, error) {

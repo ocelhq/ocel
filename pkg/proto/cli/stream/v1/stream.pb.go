@@ -712,7 +712,7 @@ type RunSummary struct {
 	LogPath       string                 `protobuf:"bytes,4,opt,name=log_path,json=logPath,proto3" json:"log_path,omitempty"`
 	Headline      string                 `protobuf:"bytes,5,opt,name=headline,proto3" json:"headline,omitempty"`
 	UrlNotes      []string               `protobuf:"bytes,7,rep,name=url_notes,json=urlNotes,proto3" json:"url_notes,omitempty"`
-	FlipBound     *v1.FlipBound          `protobuf:"bytes,8,opt,name=flip_bound,json=flipBound,proto3" json:"flip_bound,omitempty"`
+	Propagation   *v1.Propagation        `protobuf:"bytes,8,opt,name=propagation,proto3" json:"propagation,omitempty"`
 	Interrupted   bool                   `protobuf:"varint,9,opt,name=interrupted,proto3" json:"interrupted,omitempty"`
 	Apps          []*v1.AppResult        `protobuf:"bytes,10,rep,name=apps,proto3" json:"apps,omitempty"`
 	Missing       *MissingVariables      `protobuf:"bytes,11,opt,name=missing,proto3" json:"missing,omitempty"`
@@ -792,9 +792,9 @@ func (x *RunSummary) GetUrlNotes() []string {
 	return nil
 }
 
-func (x *RunSummary) GetFlipBound() *v1.FlipBound {
+func (x *RunSummary) GetPropagation() *v1.Propagation {
 	if x != nil {
-		return x.FlipBound
+		return x.Propagation
 	}
 	return nil
 }
@@ -872,7 +872,7 @@ const file_cli_stream_v1_stream_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$R\x03key\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\"&\n" +
 	"\fResumedEvent\x12\x16\n" +
-	"\x06reason\x18\x01 \x01(\tR\x06reason\"\x81\x03\n" +
+	"\x06reason\x18\x01 \x01(\tR\x06reason\"\x86\x03\n" +
 	"\n" +
 	"RunSummary\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x16\n" +
@@ -881,9 +881,8 @@ const file_cli_stream_v1_stream_proto_rawDesc = "" +
 	"durationMs\x12\x19\n" +
 	"\blog_path\x18\x04 \x01(\tR\alogPath\x12\x1a\n" +
 	"\bheadline\x18\x05 \x01(\tR\bheadline\x12\x1b\n" +
-	"\turl_notes\x18\a \x03(\tR\burlNotes\x12<\n" +
-	"\n" +
-	"flip_bound\x18\b \x01(\v2\x1d.common.progress.v1.FlipBoundR\tflipBound\x12 \n" +
+	"\turl_notes\x18\a \x03(\tR\burlNotes\x12A\n" +
+	"\vpropagation\x18\b \x01(\v2\x1f.common.progress.v1.PropagationR\vpropagation\x12 \n" +
 	"\vinterrupted\x18\t \x01(\bR\vinterrupted\x121\n" +
 	"\x04apps\x18\n" +
 	" \x03(\v2\x1d.common.progress.v1.AppResultR\x04apps\x129\n" +
@@ -922,7 +921,7 @@ var file_cli_stream_v1_stream_proto_goTypes = []any{
 	(*v1.DnsManualRecordsEvent)(nil), // 16: common.progress.v1.DnsManualRecordsEvent
 	(*v1.OperationResult)(nil),       // 17: common.progress.v1.OperationResult
 	(v12.Tier)(0),                    // 18: common.environment.v1.Tier
-	(*v1.FlipBound)(nil),             // 19: common.progress.v1.FlipBound
+	(*v1.Propagation)(nil),           // 19: common.progress.v1.Propagation
 	(*v1.AppResult)(nil),             // 20: common.progress.v1.AppResult
 }
 var file_cli_stream_v1_stream_proto_depIdxs = []int32{
@@ -945,7 +944,7 @@ var file_cli_stream_v1_stream_proto_depIdxs = []int32{
 	4,  // 16: cli.stream.v1.WaitingEvent.missing:type_name -> cli.stream.v1.MissingVariables
 	5,  // 17: cli.stream.v1.MissingVariables.cells:type_name -> cli.stream.v1.MissingVariable
 	6,  // 18: cli.stream.v1.MissingVariables.groups:type_name -> cli.stream.v1.MissingGroup
-	19, // 19: cli.stream.v1.RunSummary.flip_bound:type_name -> common.progress.v1.FlipBound
+	19, // 19: cli.stream.v1.RunSummary.propagation:type_name -> common.progress.v1.Propagation
 	20, // 20: cli.stream.v1.RunSummary.apps:type_name -> common.progress.v1.AppResult
 	4,  // 21: cli.stream.v1.RunSummary.missing:type_name -> cli.stream.v1.MissingVariables
 	22, // [22:22] is the sub-list for method output_type

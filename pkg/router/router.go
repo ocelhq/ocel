@@ -21,13 +21,13 @@ func IsDefaultPointer(pointer string) bool { return ResolvePointer(pointer) == D
 
 type Kind string
 
-type FlipBound struct {
+type Propagation struct {
 	Typical   time.Duration `json:"typical"`
 	Published bool          `json:"published"`
 }
 
 type Facts struct {
-	FlipBound                   FlipBound
+	Propagation                 Propagation
 	CachesRecords               bool
 	RoutesPreviewsByLabel       bool
 	AddressesItself             bool

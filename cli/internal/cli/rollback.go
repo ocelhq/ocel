@@ -130,7 +130,7 @@ func runRollback(ctx context.Context, deps cmddeps.Deps, cwd string, opts rollba
 		tagSuffix = fmt.Sprintf(", tag %s", target.GetTag())
 	}
 	flipSuffix := ""
-	if note := runui.FlipNote(promoted.GetFlipBound()); note != "" {
+	if note := runui.PropagationNote(promoted.GetPropagation()); note != "" {
 		flipSuffix = "; " + note
 	}
 	run.Finish(fmt.Sprintf("Rolled back to promotion %s (created %s%s) as promotion %s%s",
@@ -231,7 +231,7 @@ func showRollbackPlan(plan *events.Scope, slug string, live, target *contractv1.
 		lines = append(lines, "– live    "+promotionLine(live))
 	}
 	lines = append(lines, "– target  "+promotionLine(target))
-	if note := runui.FlipNote(target.GetFlipBound()); note != "" {
+	if note := runui.PropagationNote(target.GetPropagation()); note != "" {
 		lines = append(lines, note)
 	}
 	lines = append(lines, "`ocel deploy` puts the current build back.")

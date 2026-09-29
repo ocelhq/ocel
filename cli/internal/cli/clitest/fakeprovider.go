@@ -59,7 +59,7 @@ const (
 	FakeCredProblemEnvVar = "OCEL_TEST_FAKE_CRED_PROBLEM"
 )
 
-const FakeFlipBoundEnvVar = "OCEL_TEST_FAKE_FLIP_BOUND"
+const FakePropagationEnvVar = "OCEL_TEST_FAKE_PROPAGATION"
 
 const FakeRollbackWarningEnvVar = "OCEL_TEST_FAKE_ROLLBACK_WARNING"
 
@@ -423,7 +423,7 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *contractv1.D
 			Success:     true,
 			Apps:        fakeAppResults(req.GetManifest()),
 			PromotionId: FakePromotionID,
-			FlipBound:   fakeFlipBound(),
+			Propagation: fakePropagation(),
 			Bindings:    fakeBindings(req.GetManifest()),
 		}},
 	})
@@ -483,8 +483,8 @@ func fakeDeployPlan(req *contractv1.DeployRequest) *planv1.ChangePlan {
 	return plan
 }
 
-func fakeFlipBound() *progressv1.FlipBound {
-	spec := os.Getenv(FakeFlipBoundEnvVar)
+func fakePropagation() *progressv1.Propagation {
+	spec := os.Getenv(FakePropagationEnvVar)
 	if spec == "" {
 		return nil
 	}
@@ -493,7 +493,7 @@ func fakeFlipBound() *progressv1.FlipBound {
 	if err != nil {
 		return nil
 	}
-	return &progressv1.FlipBound{TypicalMs: ms, Published: published == "published"}
+	return &progressv1.Propagation{TypicalMs: ms, Published: published == "published"}
 }
 
 func fakePublishedBindings() []string {

@@ -3858,7 +3858,7 @@ type Promotion struct {
 	Ts            int64                  `protobuf:"varint,2,opt,name=ts,proto3" json:"ts,omitempty"`
 	Builds        map[string]string      `protobuf:"bytes,3,rep,name=builds,proto3" json:"builds,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	Tag           string                 `protobuf:"bytes,4,opt,name=tag,proto3" json:"tag,omitempty"`
-	FlipBound     *v13.FlipBound         `protobuf:"bytes,5,opt,name=flip_bound,json=flipBound,proto3" json:"flip_bound,omitempty"`
+	Propagation   *v13.Propagation       `protobuf:"bytes,5,opt,name=propagation,proto3" json:"propagation,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3921,9 +3921,9 @@ func (x *Promotion) GetTag() string {
 	return ""
 }
 
-func (x *Promotion) GetFlipBound() *v13.FlipBound {
+func (x *Promotion) GetPropagation() *v13.Propagation {
 	if x != nil {
-		return x.FlipBound
+		return x.Propagation
 	}
 	return nil
 }
@@ -5075,14 +5075,13 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x11CredentialProblem\x12\x1a\n" +
 	"\bprovider\x18\x01 \x01(\tR\bprovider\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12\x12\n" +
-	"\x04hint\x18\x03 \x01(\tR\x04hint\"\x8e\x02\n" +
+	"\x04hint\x18\x03 \x01(\tR\x04hint\"\x93\x02\n" +
 	"\tPromotion\x12!\n" +
 	"\fpromotion_id\x18\x01 \x01(\tR\vpromotionId\x12\x0e\n" +
 	"\x02ts\x18\x02 \x01(\x03R\x02ts\x12C\n" +
 	"\x06builds\x18\x03 \x03(\v2+.provider.contract.v1.Promotion.BuildsEntryR\x06builds\x12\x10\n" +
-	"\x03tag\x18\x04 \x01(\tR\x03tag\x12<\n" +
-	"\n" +
-	"flip_bound\x18\x05 \x01(\v2\x1d.common.progress.v1.FlipBoundR\tflipBound\x1a9\n" +
+	"\x03tag\x18\x04 \x01(\tR\x03tag\x12A\n" +
+	"\vpropagation\x18\x05 \x01(\v2\x1f.common.progress.v1.PropagationR\vpropagation\x1a9\n" +
 	"\vBuildsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8e\x01\n" +
@@ -5290,7 +5289,7 @@ var file_provider_contract_v1_contract_proto_goTypes = []any{
 	(*v1.Environment)(nil),                  // 79: common.environment.v1.Environment
 	(*v12.ChangePlan)(nil),                  // 80: common.plan.v1.ChangePlan
 	(v1.Lifecycle)(0),                       // 81: common.environment.v1.Lifecycle
-	(*v13.FlipBound)(nil),                   // 82: common.progress.v1.FlipBound
+	(*v13.Propagation)(nil),                 // 82: common.progress.v1.Propagation
 	(*v13.OperationEvent)(nil),              // 83: common.progress.v1.OperationEvent
 	(*v14.ResourceSet)(nil),                 // 84: provider.cost.v1.ResourceSet
 }
@@ -5368,7 +5367,7 @@ var file_provider_contract_v1_contract_proto_depIdxs = []int32{
 	4,   // 70: provider.contract.v1.DomainClaim.status:type_name -> provider.contract.v1.DomainClaim.Status
 	54,  // 71: provider.contract.v1.Identity.details:type_name -> provider.contract.v1.Detail
 	72,  // 72: provider.contract.v1.Promotion.builds:type_name -> provider.contract.v1.Promotion.BuildsEntry
-	82,  // 73: provider.contract.v1.Promotion.flip_bound:type_name -> common.progress.v1.FlipBound
+	82,  // 73: provider.contract.v1.Promotion.propagation:type_name -> common.progress.v1.Propagation
 	56,  // 74: provider.contract.v1.PromotionHistoryEntry.promotion:type_name -> provider.contract.v1.Promotion
 	38,  // 75: provider.contract.v1.ListPromotionsRequest.edge:type_name -> provider.contract.v1.EdgeSelection
 	57,  // 76: provider.contract.v1.ListPromotionsResponse.promotions:type_name -> provider.contract.v1.PromotionHistoryEntry

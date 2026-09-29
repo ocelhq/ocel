@@ -20,7 +20,7 @@ func (r Router) Kind() router.Kind { return router.Kind(Kind) }
 
 func (r Router) Facts() router.Facts {
 	return router.Facts{
-		FlipBound:                   router.FlipBound{Typical: recordTTL},
+		Propagation:                 router.Propagation{Typical: recordTTL},
 		CachesRecords:               true,
 		SignsOriginForwards:         true,
 		ReachesFunctions:            true,

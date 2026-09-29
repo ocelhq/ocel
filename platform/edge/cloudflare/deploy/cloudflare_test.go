@@ -408,15 +408,15 @@ func TestHashAsset(t *testing.T) {
 	})
 }
 
-func TestFlipBoundIsTheRecordCacheWindow(t *testing.T) {
+func TestPropagationIsTheRecordCacheWindow(t *testing.T) {
 	t.Parallel()
 
 	p := Router{p: &cloudflare{}}
 	if !p.Facts().CachesRecords {
 		t.Fatal("Facts().CachesRecords = false, but the entry worker serves a promotion from a cached record for RECORD_TTL_MS")
 	}
-	if got := p.Facts().FlipBound; got.Typical != recordTTL || got.Published {
-		t.Errorf("Facts().FlipBound = %+v, want the entry worker's record cache window %v, unpublished", got, recordTTL)
+	if got := p.Facts().Propagation; got.Typical != recordTTL || got.Published {
+		t.Errorf("Facts().Propagation = %+v, want the entry worker's record cache window %v, unpublished", got, recordTTL)
 	}
 }
 

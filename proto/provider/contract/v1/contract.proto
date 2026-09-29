@@ -610,7 +610,7 @@ message Promotion {
   int64 ts = 2;
   map<string, string> builds = 3;
   string tag = 4;
-  common.progress.v1.FlipBound flip_bound = 5;
+  common.progress.v1.Propagation propagation = 5;
 }
 
 message PromotionHistoryEntry {

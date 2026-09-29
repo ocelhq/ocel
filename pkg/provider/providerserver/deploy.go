@@ -1326,13 +1326,13 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 		r.sender.send(planEvent(r.dryRunPlanProto()))
 		return okResult(), nil
 	}
-	flip := r.router.Facts().FlipBound
+	propagation := r.router.Facts().Propagation
 	promotion := router.Promotion{
 		PromotionID: r.spec.PromotionID,
 		Ts:          time.Now().Unix(),
 		Builds:      r.spec.Builds,
 		Tag:         r.spec.Tag,
-		Flip:        &flip,
+		Propagation: &propagation,
 	}
 	if err := r.spanEvents.run(r.spans.Promotion, func(u *spanRun) error {
 		return u.phase(func(progress progress.Log) error {
@@ -1355,14 +1355,14 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 	}); err != nil {
 		return nil, err
 	}
-	return r.result(promotion, flip)
+	return r.result(promotion, propagation)
 }
 
-func (r *deployRun) result(promotion router.Promotion, flip router.FlipBound) (*progressv1.OperationEvent, error) {
+func (r *deployRun) result(promotion router.Promotion, propagation router.Propagation) (*progressv1.OperationEvent, error) {
 	result := &progressv1.OperationResult{
 		Success:     true,
 		PromotionId: promotion.PromotionID,
-		FlipBound:   flipBoundProto(&flip),
+		Propagation: propagationProto(&propagation),
 	}
 	r.reportApps(result)
 	for _, binding := range r.bindings {

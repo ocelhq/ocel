@@ -58,7 +58,7 @@ func (s summary) succeeded(took string) []string {
 	for _, note := range result.GetUrlNotes() {
 		out = append(out, blockIndent+note)
 	}
-	if note := FlipNote(result.GetFlipBound()); note != "" {
+	if note := PropagationNote(result.GetPropagation()); note != "" {
 		out = append(out, muted(s.present, blockIndent+note))
 	}
 	return out

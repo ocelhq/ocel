@@ -14,7 +14,7 @@ type deployOutcome struct {
 	apps        []*progressv1.AppResult
 	urlNotes    []string
 	promotionID string
-	flip        *progressv1.FlipBound
+	propagation *progressv1.Propagation
 }
 
 func streamDeploy(ctx context.Context, prov *providerclient.Provider, slug string, req *contractv1.DeployRequest, inline []inlinebinding.Record) (deployOutcome, error) {
@@ -31,7 +31,7 @@ func streamDeploy(ctx context.Context, prov *providerclient.Provider, slug strin
 			apps:        res.GetApps(),
 			urlNotes:    res.GetUrlNotes(),
 			promotionID: res.GetPromotionId(),
-			flip:        res.GetFlipBound(),
+			propagation: res.GetPropagation(),
 		}
 		return err
 	})

@@ -986,7 +986,7 @@ type OperationResult struct {
 	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
 	Bindings      []*v11.Binding         `protobuf:"bytes,3,rep,name=bindings,proto3" json:"bindings,omitempty"`
 	PromotionId   string                 `protobuf:"bytes,6,opt,name=promotion_id,json=promotionId,proto3" json:"promotion_id,omitempty"`
-	FlipBound     *FlipBound             `protobuf:"bytes,7,opt,name=flip_bound,json=flipBound,proto3" json:"flip_bound,omitempty"`
+	Propagation   *Propagation           `protobuf:"bytes,7,opt,name=propagation,proto3" json:"propagation,omitempty"`
 	UrlNotes      []string               `protobuf:"bytes,8,rep,name=url_notes,json=urlNotes,proto3" json:"url_notes,omitempty"`
 	Apps          []*AppResult           `protobuf:"bytes,9,rep,name=apps,proto3" json:"apps,omitempty"`
 	Refused       bool                   `protobuf:"varint,10,opt,name=refused,proto3" json:"refused,omitempty"`
@@ -1053,9 +1053,9 @@ func (x *OperationResult) GetPromotionId() string {
 	return ""
 }
 
-func (x *OperationResult) GetFlipBound() *FlipBound {
+func (x *OperationResult) GetPropagation() *Propagation {
 	if x != nil {
-		return x.FlipBound
+		return x.Propagation
 	}
 	return nil
 }
@@ -1148,7 +1148,7 @@ func (x *ConnectorInstalled) GetCompute() string {
 	return ""
 }
 
-type FlipBound struct {
+type Propagation struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TypicalMs     int64                  `protobuf:"varint,1,opt,name=typical_ms,json=typicalMs,proto3" json:"typical_ms,omitempty"`
 	Published     bool                   `protobuf:"varint,2,opt,name=published,proto3" json:"published,omitempty"`
@@ -1156,20 +1156,20 @@ type FlipBound struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *FlipBound) Reset() {
-	*x = FlipBound{}
+func (x *Propagation) Reset() {
+	*x = Propagation{}
 	mi := &file_common_progress_v1_progress_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *FlipBound) String() string {
+func (x *Propagation) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*FlipBound) ProtoMessage() {}
+func (*Propagation) ProtoMessage() {}
 
-func (x *FlipBound) ProtoReflect() protoreflect.Message {
+func (x *Propagation) ProtoReflect() protoreflect.Message {
 	mi := &file_common_progress_v1_progress_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1181,19 +1181,19 @@ func (x *FlipBound) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use FlipBound.ProtoReflect.Descriptor instead.
-func (*FlipBound) Descriptor() ([]byte, []int) {
+// Deprecated: Use Propagation.ProtoReflect.Descriptor instead.
+func (*Propagation) Descriptor() ([]byte, []int) {
 	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{10}
 }
 
-func (x *FlipBound) GetTypicalMs() int64 {
+func (x *Propagation) GetTypicalMs() int64 {
 	if x != nil {
 		return x.TypicalMs
 	}
 	return 0
 }
 
-func (x *FlipBound) GetPublished() bool {
+func (x *Propagation) GetPublished() bool {
 	if x != nil {
 		return x.Published
 	}
@@ -1249,14 +1249,13 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\x03app\x18\x01 \x01(\tR\x03app\x128\n" +
 	"\aoutcome\x18\x02 \x01(\x0e2\x1e.common.progress.v1.AppOutcomeR\aoutcome\x12\x14\n" +
 	"\x05error\x18\x03 \x01(\tR\x05error\x12\x12\n" +
-	"\x04urls\x18\x04 \x03(\tR\x04urls\"\x8b\x03\n" +
+	"\x04urls\x18\x04 \x03(\tR\x04urls\"\x90\x03\n" +
 	"\x0fOperationResult\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
 	"\x05error\x18\x02 \x01(\tR\x05error\x127\n" +
 	"\bbindings\x18\x03 \x03(\v2\x1b.common.bindings.v1.BindingR\bbindings\x12!\n" +
-	"\fpromotion_id\x18\x06 \x01(\tR\vpromotionId\x12<\n" +
-	"\n" +
-	"flip_bound\x18\a \x01(\v2\x1d.common.progress.v1.FlipBoundR\tflipBound\x12\x1b\n" +
+	"\fpromotion_id\x18\x06 \x01(\tR\vpromotionId\x12A\n" +
+	"\vpropagation\x18\a \x01(\v2\x1f.common.progress.v1.PropagationR\vpropagation\x12\x1b\n" +
 	"\turl_notes\x18\b \x03(\tR\burlNotes\x121\n" +
 	"\x04apps\x18\t \x03(\v2\x1d.common.progress.v1.AppResultR\x04apps\x12\x18\n" +
 	"\arefused\x18\n" +
@@ -1266,8 +1265,8 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12\x1d\n" +
 	"\n" +
 	"public_key\x18\x02 \x01(\tR\tpublicKey\x12\x18\n" +
-	"\acompute\x18\x03 \x01(\tR\acompute\"H\n" +
-	"\tFlipBound\x12\x1d\n" +
+	"\acompute\x18\x03 \x01(\tR\acompute\"J\n" +
+	"\vPropagation\x12\x1d\n" +
 	"\n" +
 	"typical_ms\x18\x01 \x01(\x03R\ttypicalMs\x12\x1c\n" +
 	"\tpublished\x18\x02 \x01(\bR\tpublished*F\n" +
@@ -1354,7 +1353,7 @@ var file_common_progress_v1_progress_proto_goTypes = []any{
 	(*AppResult)(nil),             // 13: common.progress.v1.AppResult
 	(*OperationResult)(nil),       // 14: common.progress.v1.OperationResult
 	(*ConnectorInstalled)(nil),    // 15: common.progress.v1.ConnectorInstalled
-	(*FlipBound)(nil),             // 16: common.progress.v1.FlipBound
+	(*Propagation)(nil),           // 16: common.progress.v1.Propagation
 	(*timestamppb.Timestamp)(nil), // 17: google.protobuf.Timestamp
 	(*v1.ChangePlan)(nil),         // 18: common.plan.v1.ChangePlan
 	(*v11.Binding)(nil),           // 19: common.bindings.v1.Binding
@@ -1376,7 +1375,7 @@ var file_common_progress_v1_progress_proto_depIdxs = []int32{
 	11, // 13: common.progress.v1.DnsManualRecordsEvent.records:type_name -> common.progress.v1.DnsRecord
 	5,  // 14: common.progress.v1.AppResult.outcome:type_name -> common.progress.v1.AppOutcome
 	19, // 15: common.progress.v1.OperationResult.bindings:type_name -> common.bindings.v1.Binding
-	16, // 16: common.progress.v1.OperationResult.flip_bound:type_name -> common.progress.v1.FlipBound
+	16, // 16: common.progress.v1.OperationResult.propagation:type_name -> common.progress.v1.Propagation
 	13, // 17: common.progress.v1.OperationResult.apps:type_name -> common.progress.v1.AppResult
 	15, // 18: common.progress.v1.OperationResult.connector:type_name -> common.progress.v1.ConnectorInstalled
 	19, // [19:19] is the sub-list for method output_type

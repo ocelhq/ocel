@@ -108,10 +108,10 @@ func (r *Run) Finish(headline string) {
 	r.Deployed(headline, nil, nil)
 }
 
-func (r *Run) Deployed(headline string, urlNotes []string, flip *progressv1.FlipBound) {
+func (r *Run) Deployed(headline string, urlNotes []string, propagation *progressv1.Propagation) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.success = &streamv1.RunSummary{Success: true, Headline: headline, UrlNotes: urlNotes, FlipBound: flip}
+	r.success = &streamv1.RunSummary{Success: true, Headline: headline, UrlNotes: urlNotes, Propagation: propagation}
 }
 
 func resultLevel(result *streamv1.RunSummary) progressv1.Level {
