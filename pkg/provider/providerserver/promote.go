@@ -25,29 +25,30 @@ type inactivePromotion struct{ refusal.Refusal }
 
 func (i inactivePromotion) Unwrap() error { return i.Refusal }
 
-func promote(ctx context.Context, l projectLedger, pointer string, promoted router.Promotion, routers []appRouter, progress progress.Progress) error {
+func promote(ctx context.Context, l projectLedger, pointer, over string, promoted router.Promotion, routers []appRouter, progress progress.Progress) (router.PruneResult, error) {
 	flips := make([]router.Flip, len(routers))
 	for i, routed := range routers {
 		records, err := l.readRecords(ctx, promoted, routed.apps)
 		if err != nil {
-			return err
+			return router.PruneResult{}, err
 		}
 		flips[i] = router.Flip{Pointer: pointer, Promotion: promoted, Records: records, StillActive: newStillActive(l, pointer, promoted.PromotionID)}
 	}
-	if err := l.Promote(ctx, promoted, pointer, progress); err != nil {
-		return err
+	pruned, err := l.Promote(ctx, promoted, pointer, over)
+	if err != nil {
+		return router.PruneResult{}, err
 	}
 	for i, routed := range routers {
 		err := routed.stack.Flip(ctx, flips[i], progress)
 		var unserved router.Unserved
 		if errors.As(err, &unserved) {
-			return errors.Join(err, unpromote(ctx, l, pointer, promoted.PromotionID, routers[:i]))
+			return pruned, errors.Join(err, unpromote(ctx, l, pointer, promoted.PromotionID, routers[:i]))
 		}
 		if err != nil {
-			return err
+			return pruned, err
 		}
 	}
-	return nil
+	return pruned, nil
 }
 
 func unpromote(ctx context.Context, l projectLedger, pointer, promotionID string, flipped []appRouter) error {

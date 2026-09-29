@@ -123,14 +123,15 @@ func runRollback(ctx context.Context, deps cmddeps.Deps, cwd string, opts rollba
 		return err
 	}
 	tagSuffix := ""
-	if promoted.GetTag() != "" {
-		tagSuffix = fmt.Sprintf(", tag %s", promoted.GetTag())
+	if target.GetTag() != "" {
+		tagSuffix = fmt.Sprintf(", tag %s", target.GetTag())
 	}
 	flipSuffix := ""
 	if note := runui.FlipNote(promoted.GetFlipBound()); note != "" {
 		flipSuffix = "; " + note
 	}
-	run.Finish(fmt.Sprintf("Rolled back to promotion %s (created %s%s)%s", promoted.GetPromotionId(), runui.EpochDate(promoted.GetTs()), tagSuffix, flipSuffix))
+	run.Finish(fmt.Sprintf("Rolled back to promotion %s (created %s%s) as promotion %s%s",
+		target.GetPromotionId(), runui.EpochDate(target.GetTs()), tagSuffix, promoted.GetPromotionId(), flipSuffix))
 	return nil
 }
 

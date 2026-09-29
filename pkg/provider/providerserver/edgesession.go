@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"slices"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -130,11 +129,8 @@ func (s *edgeSession) checkpoint(ctx context.Context) error {
 }
 
 func (s *edgeSession) promoted(ctx context.Context) (bool, error) {
-	history, err := s.ledger.History(ctx, router.DefaultPointer)
-	if err != nil {
-		return false, err
-	}
-	return slices.ContainsFunc(history, func(entry router.HistoryEntry) bool { return entry.Active }), nil
+	active, err := s.ledger.ActivePromotionID(ctx, router.DefaultPointer)
+	return active != "", err
 }
 
 func (s *edgeSession) on(kind edge.Kind) (edge.EdgeStack, error) {

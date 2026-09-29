@@ -89,7 +89,11 @@ func promotesRecord(t *testing.T, p *vps.Provider, stack edge.EdgeStack, pointer
 	if err := releases.PutStaged(ctx, record); err != nil {
 		t.Fatalf("PutStaged(%s/%s): %v", record.App, record.Build, err)
 	}
-	if err := releases.Promote(ctx, promotion, pointer, progress.DiscardProgress()); err != nil {
+	over, err := releases.ActivePromotionID(ctx, pointer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := releases.Promote(ctx, promotion, pointer, over); err != nil {
 		t.Fatalf("Promote(%s): %v", promotion.PromotionID, err)
 	}
 	if err := routed(t, p, stack).Flip(ctx, router.Flip{
