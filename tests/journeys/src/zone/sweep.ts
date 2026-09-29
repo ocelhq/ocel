@@ -15,6 +15,9 @@ import {
 const OWNER_SEPARATOR = " for ";
 const OWNER_FIELD_SEPARATOR = "--";
 const OCEL_CERTIFICATE_TYPE = "origin-ecc";
+const OCEL_CERTIFICATE_ORGANIZATION = "ocel";
+const ORGANIZATION_ATTRIBUTE = [0x06, 0x03, 0x55, 0x04, 0x0a];
+const STRING_TYPES = [0x0c, 0x13];
 
 type Leftovers = {
   records: { record: DnsRecord; slug: string }[];
@@ -61,6 +64,19 @@ function isWrittenFor(record: DnsRecord, slug: string): boolean {
   return owner.split(OWNER_FIELD_SEPARATOR).includes(slug);
 }
 
+function isRequestedByOcel(csr: string): boolean {
+  const der = Buffer.from(csr.replace(/-----[^-]+-----/g, "").replace(/\s+/g, ""), "base64");
+  return STRING_TYPES.some((type) =>
+    der.includes(
+      Buffer.concat([
+        Buffer.from(ORGANIZATION_ATTRIBUTE),
+        Buffer.from([type, OCEL_CERTIFICATE_ORGANIZATION.length]),
+        Buffer.from(OCEL_CERTIFICATE_ORGANIZATION, "ascii"),
+      ]),
+    ),
+  );
+}
+
 function leftoversOf(
   records: DnsRecord[],
   certificates: OriginCertificate[],
@@ -80,7 +96,8 @@ function leftoversOf(
     if (
       hostname === undefined ||
       certificate.hostnames.length !== 1 ||
-      certificate.request_type !== OCEL_CERTIFICATE_TYPE
+      certificate.request_type !== OCEL_CERTIFICATE_TYPE ||
+      !isRequestedByOcel(certificate.csr)
     ) {
       continue;
     }

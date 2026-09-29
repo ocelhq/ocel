@@ -70,6 +70,7 @@ type cfMock struct {
 	deletedClientCertificates []string
 
 	originRequests   [][]string
+	originCSRs       []string
 	revokedOrigin    []string
 	uploadedKeys     []string
 	originPulls      bool
@@ -394,6 +395,7 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 		}
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		m.originRequests = append(m.originRequests, body.Hostnames)
+		m.originCSRs = append(m.originCSRs, body.CSR)
 		certificate, err := signOriginCertificate(body.CSR, body.Hostnames, time.Duration(body.Validity)*24*time.Hour)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
