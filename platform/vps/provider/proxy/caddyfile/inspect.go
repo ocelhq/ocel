@@ -23,8 +23,8 @@ func (c Caddyfile) inspect(ctx context.Context) (proxy.Checks, error) {
 	if err != nil {
 		return nil, err
 	}
-	admin := provider.HostCheck{Subject: c.running() + " admin endpoint", Verdict: provider.HostPass,
-		Finding: fmt.Sprintf("%s answers on %s", c.running(), adminServers)}
+	admin := provider.HostCheck{Subject: c.named() + " admin endpoint", Verdict: provider.HostPass,
+		Finding: fmt.Sprintf("%s answers on %s", c.named(), adminServers)}
 	sites, unread := c.sites(ctx)
 	if unread != nil {
 		admin.Verdict, admin.Finding, admin.Fix = provider.HostFail, unread.Error(), "restore `admin localhost:2019` in your Caddy's global options"
@@ -53,7 +53,7 @@ func (c Caddyfile) inspect(ctx context.Context) (proxy.Checks, error) {
 
 func (c Caddyfile) imported(sites []site, claimed []string) provider.HostCheck {
 	check := provider.HostCheck{Subject: "import of " + c.File(), Verdict: provider.HostPass,
-		Finding: fmt.Sprintf("%s serves every hostname %s names", c.running(), FileName)}
+		Finding: fmt.Sprintf("%s serves every hostname %s names", c.named(), FileName)}
 	var served []string
 	for _, each := range sites {
 		if each.ocels {
@@ -69,7 +69,7 @@ func (c Caddyfile) imported(sites []site, claimed []string) provider.HostCheck {
 	if len(missing) > 0 {
 		check.Verdict = provider.HostFail
 		check.Finding = fmt.Sprintf("the config %s runs holds no route of ocel's for %s, so the import of %s is not in effect",
-			c.running(), strings.Join(missing, ", "), c.File())
+			c.named(), strings.Join(missing, ", "), c.File())
 		check.Fix = fmt.Sprintf("add `import %s` to your Caddyfile and reload your Caddy", filepath.Join(c.Directory, "*.caddy"))
 	}
 	return check
@@ -130,7 +130,7 @@ func (c Caddyfile) memberCheck(ctx context.Context) provider.HostCheck {
 
 func (c Caddyfile) routing(ctx context.Context, hostname string) (provider.HostCheck, error) {
 	check := provider.HostCheck{Subject: hostname, Verdict: provider.HostFail,
-		Fix: fmt.Sprintf("check %s imports %s and was reloaded", c.running(), c.File())}
+		Fix: fmt.Sprintf("check %s imports %s and was reloaded", c.named(), c.File())}
 	answered, failure, err := c.Box.Probe(ctx, hostname)
 	switch {
 	case err != nil:

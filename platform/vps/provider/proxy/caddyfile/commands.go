@@ -35,7 +35,7 @@ func (c Caddyfile) Reloading() []string {
 	}
 }
 
-func (c Caddyfile) running() string {
+func (c Caddyfile) named() string {
 	if c.Container == "" {
 		return "your Caddy (" + service + ")"
 	}

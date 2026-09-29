@@ -566,7 +566,7 @@ func (f Front) placedRemovals() []removal {
 	}
 	placed := taking(KindPlaced, at, "ocel's routes in your proxy's directory")
 	if f.Caddy != nil {
-		placed.reload = f.caddyUnloading()
+		placed.reload = f.caddyReloadCommand()
 	}
 	removals := []removal{placed}
 	for _, grant := range f.reloadGrant() {
@@ -575,7 +575,7 @@ func (f Front) placedRemovals() []removal {
 	return removals
 }
 
-func (f Front) caddyUnloading() string {
+func (f Front) caddyReloadCommand() string {
 	reload := words(f.caddyfile(frontBox{}).Reloading())
 	if f.Caddy.Container == "" {
 		return "if systemctl is-active --quiet caddy.service; then " + reload + "; fi"
