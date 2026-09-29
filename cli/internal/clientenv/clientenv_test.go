@@ -63,11 +63,11 @@ func appDir(t *testing.T) string {
 	return dir
 }
 
-func generateAndPoint(projectDir string, apps []App) error {
+func generateAndMap(projectDir string, apps []App) error {
 	if err := Generate(projectDir, apps); err != nil {
 		return err
 	}
-	return PointImports(projectDir, apps)
+	return MapEnvImports(projectDir, apps)
 }
 
 func TestGenerate(t *testing.T) {
@@ -244,8 +244,8 @@ func TestGenerate(t *testing.T) {
 
 		dir := appDir(t)
 
-		if err := generateAndPoint(dir, []App{{Dir: dir, Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}}); err != nil {
-			t.Fatalf("generateAndPoint: %v", err)
+		if err := generateAndMap(dir, []App{{Dir: dir, Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}}); err != nil {
+			t.Fatalf("generateAndMap: %v", err)
 		}
 
 		tsconfig := read(t, filepath.Join(dir, "tsconfig.json"))
@@ -264,8 +264,8 @@ func TestGenerate(t *testing.T) {
 		source := "{\n  // the compiler options this project has always had\n  \"compilerOptions\": {\n    \"paths\": {\n      \"@/*\": [\"./src/*\"] // app aliases\n    }\n  }\n}\n"
 		write(t, filepath.Join(dir, "tsconfig.json"), source)
 
-		if err := generateAndPoint(dir, []App{{Dir: dir, Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}}); err != nil {
-			t.Fatalf("generateAndPoint: %v", err)
+		if err := generateAndMap(dir, []App{{Dir: dir, Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}}); err != nil {
+			t.Fatalf("generateAndMap: %v", err)
 		}
 
 		tsconfig := read(t, filepath.Join(dir, "tsconfig.json"))
@@ -295,8 +295,8 @@ func TestGenerate(t *testing.T) {
 				dir := t.TempDir()
 				write(t, filepath.Join(dir, "tsconfig.json"), source)
 
-				if err := generateAndPoint(dir, []App{{Dir: dir, Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}}); err != nil {
-					t.Fatalf("generateAndPoint: %v", err)
+				if err := generateAndMap(dir, []App{{Dir: dir, Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}}); err != nil {
+					t.Fatalf("generateAndMap: %v", err)
 				}
 
 				updated := read(t, filepath.Join(dir, "tsconfig.json"))
@@ -421,8 +421,8 @@ func TestGenerate(t *testing.T) {
 		dir := nestedApp(t, root, "storefront")
 
 		app := App{Name: "storefront", Dir: dir, Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://store.example.com")}}
-		if err := generateAndPoint(root, []App{app}); err != nil {
-			t.Fatalf("generateAndPoint: %v", err)
+		if err := generateAndMap(root, []App{app}); err != nil {
+			t.Fatalf("generateAndMap: %v", err)
 		}
 
 		got := mapped(t, filepath.Join(dir, "tsconfig.json"))

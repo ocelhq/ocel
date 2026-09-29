@@ -19,7 +19,7 @@ func generate(t *testing.T, dir string) error {
 	if err := Generate(dir, apps); err != nil {
 		return err
 	}
-	return PointImports(dir, apps)
+	return MapEnvImports(dir, apps)
 }
 
 func mapped(t *testing.T, path string) []string {

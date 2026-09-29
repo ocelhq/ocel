@@ -86,7 +86,7 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 			return nil, nil, err
 		}
 		if !dry {
-			if err := clientenv.PointImports(cfg.Dir, clients); err != nil {
+			if err := clientenv.MapEnvImports(cfg.Dir, clients); err != nil {
 				return nil, nil, err
 			}
 		}

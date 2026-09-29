@@ -92,7 +92,7 @@ func generateClientAccessor(projectDir string, app clientenv.App, keys []cliente
 	if err := clientenv.GenerateKeys(projectDir, app, keys); err != nil {
 		return err
 	}
-	return clientenv.PointAppImports(projectDir, app)
+	return clientenv.MapAppEnvImport(projectDir, app)
 }
 
 type noValues struct{}

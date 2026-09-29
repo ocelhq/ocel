@@ -63,16 +63,16 @@ func GenerateKeys(projectDir string, app App, keys []Key) error {
 	return nil
 }
 
-func PointImports(projectDir string, apps []App) error {
+func MapEnvImports(projectDir string, apps []App) error {
 	for _, app := range apps {
-		if err := PointAppImports(projectDir, app); err != nil {
+		if err := MapAppEnvImport(projectDir, app); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func PointAppImports(projectDir string, app App) error {
+func MapAppEnvImport(projectDir string, app App) error {
 	return mapSpecifier(app.Dir, accessorPath(projectDir, app.Name, app.Dir))
 }
 
