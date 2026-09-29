@@ -313,13 +313,13 @@ func runDomainRelease(ctx context.Context, deps cmddeps.Deps, cwd string, opts d
 		return err
 	}
 
-	gate := deps.Gate(consent.PlanFirst, "ocel domain release", opts.yes, stdout, stdin)
-	gate.Unattended = "pass --yes"
-	if err := gate.Refuse(); err != nil {
+	policy := deps.ConsentPolicy("ocel domain release", opts.yes, stdout, stdin)
+	policy.ConfirmsPlan = true
+	if err := policy.Refuse(); err != nil {
 		return err
 	}
 
-	ctx, run, err := deps.Events.Begin(ctx, gate.Command, cfg.Dir)
+	ctx, run, err := deps.Events.Begin(ctx, policy.Command, cfg.Dir)
 	if err != nil {
 		return err
 	}
@@ -354,7 +354,7 @@ func runDomainRelease(ctx context.Context, deps cmddeps.Deps, cwd string, opts d
 
 	shown := planning.Plan(fmt.Sprintf("This will release %s and stop serving every project's previews on it", wildcardOf(base)), plan,
 		&planv1.Note{Text: "This cannot be undone."})
-	granted, err := gate.ConsentByName(ctx, planning, shown, "domain", base)
+	granted, err := policy.ConfirmPlanByName(ctx, planning, shown, "domain", base)
 	planning.End(err)
 	if err != nil {
 		return err
@@ -407,7 +407,7 @@ type hostnameChange struct {
 }
 
 type hostnameConsent struct {
-	gate     consent.Gate
+	policy   consent.Policy
 	plan     string
 	question string
 	declined string
@@ -418,7 +418,7 @@ func changeHostnames(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.
 		return err
 	}
 	if change.asks != nil {
-		if err := change.asks.gate.Refuse(); err != nil {
+		if err := change.asks.policy.Refuse(); err != nil {
 			return err
 		}
 	}
@@ -440,7 +440,7 @@ func changeHostnames(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.
 	if change.asks != nil {
 		planning := run.Phase(progressv1.Phase_PHASE_PLAN)
 		planning.Say(change.asks.plan)
-		granted, err := change.asks.gate.Consent(ctx, planning, nil, change.asks.question)
+		granted, err := change.asks.policy.ConfirmPlan(ctx, planning, nil, change.asks.question)
 		planning.End(err)
 		if err != nil {
 			return err
@@ -482,6 +482,8 @@ func runDomainRm(ctx context.Context, deps cmddeps.Deps, cwd, host string, opts 
 		headline = fmt.Sprintf("Removed %s", host)
 		plan = fmt.Sprintf("This will unbind %s from production of project %q, and remove the certificate and DNS records ocel created for it", host, cfg.Slug)
 	}
+	policy := deps.ConsentPolicy("ocel domain rm", opts.yes, stdout, stdin)
+	policy.ConfirmsPlan = true
 	return changeHostnames(ctx, deps, cfg, hostnameChange{
 		command:  "ocel domain rm",
 		rpc:      "RemoveHostname",
@@ -489,7 +491,7 @@ func runDomainRm(ctx context.Context, deps cmddeps.Deps, cwd, host string, opts 
 		call:     contractv1connect.ProviderServiceClient.RemoveHostname,
 		headline: headline,
 		asks: &hostnameConsent{
-			gate:     deps.Gate(consent.PlanFirst, "ocel domain rm", opts.yes, stdout, stdin),
+			policy:   policy,
 			plan:     plan,
 			question: "Remove them?",
 			declined: "Nothing removed: every production hostname stays as it is",

@@ -9,21 +9,21 @@ import (
 const BypassEnv = "OCEL_DESTROY_BYPASS_CONFIRMATION"
 
 type Bypass struct {
-	Noun          string
-	Subject       string
-	Action        string
-	Verb          string
-	Yes           bool
-	Dry           bool
-	GrantsWhenDry bool
-	TTY           bool
+	Noun         string
+	Subject      string
+	Action       string
+	Verb         string
+	Yes          bool
+	DryRun       bool
+	GrantsDryRun bool
+	TTY          bool
 }
 
 func (b Bypass) Granted() (granted bool, notice string, err error) {
 	requested := strings.TrimSpace(os.Getenv(BypassEnv))
 	switch {
-	case b.Dry:
-		return b.GrantsWhenDry && requested == b.Subject, "", nil
+	case b.DryRun:
+		return b.GrantsDryRun && requested == b.Subject, "", nil
 	case requested == b.Subject:
 		return true, fmt.Sprintf("%s=%s: %s without confirmation", BypassEnv, b.Subject, b.Action), nil
 	case requested == "" || b.Yes:

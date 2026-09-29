@@ -82,35 +82,35 @@ func spanOn(t *testing.T, term *terminal) *run.Span {
 	return run.Phase(progressv1.Phase_PHASE_PLAN)
 }
 
-func askingGate(term *terminal, answer string) consent.Gate {
-	return consent.Gate{Command: "ocel test", Interactive: true, In: strings.NewReader(answer), Out: term}
+func askingPolicy(term *terminal, answer string) consent.Policy {
+	return consent.Policy{Command: "ocel test", Interactive: true, In: strings.NewReader(answer), Out: term}
 }
 
 func TestAnInteractionHoldsTheStreamWhileItAsks(t *testing.T) {
 	term := &terminal{}
 	span := spanOn(t, term)
 
-	granted, err := askingGate(term, "y\n").Guard(context.Background(), span, `Tear down the named preview "staging"?`)
+	granted, err := askingPolicy(term, "y\n").Confirm(context.Background(), span, `Tear down the named preview "staging"?`)
 	if err != nil || !granted {
-		t.Fatalf("Guard() = %v, %v, want the answered yes to grant it", granted, err)
+		t.Fatalf("Confirm() = %v, %v, want the answered yes to grant it", granted, err)
 	}
 	if !strings.Contains(term.whileHeld, "Tear down the named preview") {
 		t.Errorf("written while the stream was held = %q, all written = %q, want the question put while the sinks yield the terminal", term.whileHeld, term.written())
 	}
 }
 
-func TestTheConvergentClassGatesNothingOfItsOwn(t *testing.T) {
-	if err := (consent.Gate{Command: "ocel test", Class: consent.Convergent}).Refuse(); err != nil {
+func TestAPolicyThatConfirmsNoPlanRefusesNothingOfItsOwn(t *testing.T) {
+	if err := (consent.Policy{Command: "ocel test"}).Refuse(); err != nil {
 		t.Errorf("Refuse() = %v, want a convergent command to proceed with no terminal and no --yes", err)
 	}
 }
 
-func planFirst() consent.Gate {
-	return consent.Gate{Command: "ocel test", Class: consent.PlanFirst, Unattended: "pass --yes"}
+func confirmingPlan() consent.Policy {
+	return consent.Policy{Command: "ocel test", ConfirmsPlan: true}
 }
 
-func TestThePlanFirstClassRefusesOffATerminalAndSaysHowToProceed(t *testing.T) {
-	err := planFirst().Refuse()
+func TestAPolicyThatConfirmsThePlanRefusesOffATerminalAndSaysHowToProceed(t *testing.T) {
+	err := confirmingPlan().Refuse()
 	if err == nil {
 		t.Fatal("Refuse() = nil, want a refusal with no terminal to consent on")
 	}
@@ -119,8 +119,8 @@ func TestThePlanFirstClassRefusesOffATerminalAndSaysHowToProceed(t *testing.T) {
 	}
 }
 
-func TestThePlanFirstClassTakesYesInPlaceOfATerminal(t *testing.T) {
-	g := planFirst()
+func TestAPolicyThatConfirmsThePlanTakesYesInPlaceOfATerminal(t *testing.T) {
+	g := confirmingPlan()
 	g.Yes = true
 	if err := g.Refuse(); err != nil {
 		t.Errorf("Refuse() = %v, want --yes to answer in place of the terminal", err)
@@ -128,23 +128,23 @@ func TestThePlanFirstClassTakesYesInPlaceOfATerminal(t *testing.T) {
 }
 
 func TestADryRunNeedsNoConsentAtAll(t *testing.T) {
-	g := planFirst()
-	g.Dry = true
+	g := confirmingPlan()
+	g.DryRun = true
 	if err := g.Refuse(); err != nil {
 		t.Errorf("Refuse() = %v, want --dry to reach the plan with nothing to consent to", err)
 	}
 }
 
-func TestThePlanFirstClassTakesATerminalInPlaceOfYes(t *testing.T) {
-	g := planFirst()
+func TestAPolicyThatConfirmsThePlanTakesATerminalInPlaceOfYes(t *testing.T) {
+	g := confirmingPlan()
 	g.Interactive = true
 	if err := g.Refuse(); err != nil {
 		t.Errorf("Refuse() = %v, want a terminal to be consent enough to reach the plan", err)
 	}
 }
 
-func TestThePlanFirstRefusalReadsTrueForACommandThatCreates(t *testing.T) {
-	g := planFirst()
+func TestThePlanRefusalReadsTrueForACommandThatCreates(t *testing.T) {
+	g := confirmingPlan()
 	g.Command = "ocel bootstrap production"
 	err := g.Refuse()
 	if err == nil {
@@ -156,9 +156,9 @@ func TestThePlanFirstRefusalReadsTrueForACommandThatCreates(t *testing.T) {
 }
 
 func TestTheRefusalNamesTheCommandAndTheRemedyThatCommandOffers(t *testing.T) {
-	g := planFirst()
+	g := confirmingPlan()
 	g.Command = "ocel destroy production"
-	g.Unattended = "set OCEL_DESTROY_BYPASS_CONFIRMATION to the project name"
+	g.UnattendedRemedy = "set OCEL_DESTROY_BYPASS_CONFIRMATION to the project name"
 	err := g.Refuse()
 	if err == nil {
 		t.Fatal("Refuse() = nil, want a refusal with no terminal to consent on")
@@ -173,64 +173,64 @@ func TestTheRefusalNamesTheCommandAndTheRemedyThatCommandOffers(t *testing.T) {
 
 const teardown = `Tear down the named preview "staging"?`
 
-func TestAConvergentGuardIsGrantedInAdvanceByYes(t *testing.T) {
+func TestAConfirmationIsGrantedInAdvanceByYes(t *testing.T) {
 	term := &terminal{}
-	g := askingGate(term, "n\n")
+	g := askingPolicy(term, "n\n")
 	g.Yes = true
 
-	granted, err := g.Guard(context.Background(), spanOn(t, term), teardown)
+	granted, err := g.Confirm(context.Background(), spanOn(t, term), teardown)
 	if err != nil || !granted {
-		t.Errorf("Guard() = %v, %v, want --yes to answer it in advance", granted, err)
+		t.Errorf("Confirm() = %v, %v, want --yes to answer it in advance", granted, err)
 	}
 	if strings.Contains(term.written(), "Tear down") {
-		t.Errorf("written = %q, want --yes to leave the guard unasked", term.written())
+		t.Errorf("written = %q, want --yes to leave the confirmation unasked", term.written())
 	}
 }
 
-func TestAConvergentDryRunAsksNothing(t *testing.T) {
+func TestADryRunAsksNoConfirmation(t *testing.T) {
 	term := &terminal{}
-	g := askingGate(term, "n\n")
-	g.Dry = true
+	g := askingPolicy(term, "n\n")
+	g.DryRun = true
 
-	granted, err := g.Guard(context.Background(), spanOn(t, term), teardown)
+	granted, err := g.Confirm(context.Background(), spanOn(t, term), teardown)
 	if err != nil || !granted {
-		t.Errorf("Guard() = %v, %v, want a run that changes nothing to need no guard", granted, err)
+		t.Errorf("Confirm() = %v, %v, want a run that changes nothing to need no confirmation", granted, err)
 	}
 	if strings.Contains(term.written(), "Tear down") {
-		t.Errorf("written = %q, want --dry to leave the guard unasked: there is nothing to guard against", term.written())
+		t.Errorf("written = %q, want --dry to leave the confirmation unasked: there is nothing to confirm", term.written())
 	}
 }
 
-func TestAConvergentGuardSkipsWhenThereIsNoTerminalToAskOn(t *testing.T) {
+func TestAConfirmationSkipsWhenThereIsNoTerminalToAskOn(t *testing.T) {
 	term := &terminal{}
-	g := askingGate(term, "")
+	g := askingPolicy(term, "")
 	g.Interactive = false
 
-	granted, err := g.Guard(context.Background(), spanOn(t, term), teardown)
+	granted, err := g.Confirm(context.Background(), spanOn(t, term), teardown)
 	if err != nil || !granted {
-		t.Errorf("Guard() = %v, %v, want a guard to skip and proceed off a terminal", granted, err)
+		t.Errorf("Confirm() = %v, %v, want a confirmation to skip and proceed off a terminal", granted, err)
 	}
 	if strings.Contains(term.written(), "Tear down") {
 		t.Errorf("written = %q, want no question asked where nothing can answer it", term.written())
 	}
 }
 
-func TestAConvergentGuardIsAskedOnATerminalAndANoStopsTheCommand(t *testing.T) {
+func TestAConfirmationIsAskedOnATerminalAndANoStopsTheCommand(t *testing.T) {
 	term := &terminal{}
 
-	granted, err := askingGate(term, "n\n").Guard(context.Background(), spanOn(t, term), teardown)
+	granted, err := askingPolicy(term, "n\n").Confirm(context.Background(), spanOn(t, term), teardown)
 	if err != nil || granted {
-		t.Errorf("Guard() = %v, %v, want the answered no to withhold it", granted, err)
+		t.Errorf("Confirm() = %v, %v, want the answered no to withhold it", granted, err)
 	}
 	if !strings.Contains(term.written(), "Tear down the named preview") {
-		t.Errorf("written = %q, want the guard's question put to the terminal", term.written())
+		t.Errorf("written = %q, want the confirmation's question put to the terminal", term.written())
 	}
 }
 
-func TestADeclinedGuardSaysSoOnTheStreamOnceTheStreamIsResumed(t *testing.T) {
+func TestADeclinedConfirmationSaysSoOnTheStreamOnceTheStreamIsResumed(t *testing.T) {
 	term := &terminal{}
 
-	if _, err := askingGate(term, "n\n").Guard(context.Background(), spanOn(t, term), teardown); err != nil {
+	if _, err := askingPolicy(term, "n\n").Confirm(context.Background(), spanOn(t, term), teardown); err != nil {
 		t.Fatal(err)
 	}
 	got := term.received()
@@ -242,12 +242,12 @@ func TestADeclinedGuardSaysSoOnTheStreamOnceTheStreamIsResumed(t *testing.T) {
 
 func TestPlanConsentIsGrantedInAdvanceByYesWithoutAskingAgain(t *testing.T) {
 	term := &terminal{}
-	g := askingGate(term, "")
-	g.Class, g.Yes, g.Interactive = consent.PlanFirst, true, false
+	g := askingPolicy(term, "")
+	g.ConfirmsPlan, g.Yes, g.Interactive = true, true, false
 
-	granted, err := g.ConsentByName(context.Background(), spanOn(t, term), nil, "project name", "acme")
+	granted, err := g.ConfirmPlanByName(context.Background(), spanOn(t, term), nil, "project name", "acme")
 	if err != nil || !granted {
-		t.Errorf("ConsentByName() = %v, %v, want --yes to grant the gate this class raises", granted, err)
+		t.Errorf("ConfirmPlanByName() = %v, %v, want --yes to grant the plan it confirms", granted, err)
 	}
 	if strings.Contains(term.written(), "project name") {
 		t.Errorf("written = %q, want --yes to leave the ceremony unasked", term.written())
@@ -256,21 +256,21 @@ func TestPlanConsentIsGrantedInAdvanceByYesWithoutAskingAgain(t *testing.T) {
 
 func TestPlanConsentOffATerminalIsRefusedWithTheRemedy(t *testing.T) {
 	term := &terminal{}
-	g := planFirst()
+	g := confirmingPlan()
 	g.Out = term
 
-	granted, err := g.ConsentByName(context.Background(), spanOn(t, term), nil, "project name", "acme")
+	granted, err := g.ConfirmPlanByName(context.Background(), spanOn(t, term), nil, "project name", "acme")
 	if granted || err == nil || !strings.Contains(err.Error(), "--yes") {
-		t.Errorf("ConsentByName() = %v, %v, want a refusal naming --yes where nothing can answer", granted, err)
+		t.Errorf("ConfirmPlanByName() = %v, %v, want a refusal naming --yes where nothing can answer", granted, err)
 	}
 }
 
 func TestPlanConsentOnATerminalIsTheTypedNameCeremony(t *testing.T) {
 	term := &terminal{}
 
-	granted, err := askingGate(term, "acme\n").ConsentByName(context.Background(), spanOn(t, term), nil, "project name", "acme")
+	granted, err := askingPolicy(term, "acme\n").ConfirmPlanByName(context.Background(), spanOn(t, term), nil, "project name", "acme")
 	if err != nil || !granted {
-		t.Errorf("ConsentByName() = %v, %v, want the typed name to grant it", granted, err)
+		t.Errorf("ConfirmPlanByName() = %v, %v, want the typed name to grant it", granted, err)
 	}
 	if !strings.Contains(term.written(), "project name") {
 		t.Errorf("written = %q, want the ceremony to name what has to be typed", term.written())
@@ -280,9 +280,9 @@ func TestPlanConsentOnATerminalIsTheTypedNameCeremony(t *testing.T) {
 func TestPlanConsentIsWithheldWhenTheNameIsNotTypedBack(t *testing.T) {
 	term := &terminal{}
 
-	granted, err := askingGate(term, "something else\n").ConsentByName(context.Background(), spanOn(t, term), nil, "project name", "acme")
+	granted, err := askingPolicy(term, "something else\n").ConfirmPlanByName(context.Background(), spanOn(t, term), nil, "project name", "acme")
 	if err != nil || granted {
-		t.Errorf("ConsentByName() = %v, %v, want a mistyped name to withhold it", granted, err)
+		t.Errorf("ConfirmPlanByName() = %v, %v, want a mistyped name to withhold it", granted, err)
 	}
 	if got := term.received(); got[len(got)-1].GetMessage() != "Not confirmed, so this run changes nothing" {
 		t.Errorf("stream = %q, want a withheld consent to say the command stopped", shape(got))
@@ -301,9 +301,9 @@ func TestYesTakesTheCommandOutOfTheAskingBusinessAltogether(t *testing.T) {
 		{"no terminal", false, false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			g := consent.Gate{Yes: tc.yes, Interactive: tc.interactive}
-			if got := g.Asking(); got != tc.want {
-				t.Errorf("Asking() = %v, want %v", got, tc.want)
+			g := consent.Policy{Yes: tc.yes, Interactive: tc.interactive}
+			if got := g.IsAsking(); got != tc.want {
+				t.Errorf("IsAsking() = %v, want %v", got, tc.want)
 			}
 		})
 	}

@@ -1,6 +1,7 @@
 package consent
 
 import (
+	"github.com/ocelhq/ocel/cli/internal/run"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
@@ -18,8 +19,11 @@ func written(plan *planv1.ChangePlan) map[provider.ChangeAction]bool {
 	actions := map[provider.ChangeAction]bool{}
 	for _, group := range plan.GetGroups() {
 		acting := []planv1.Change_Action{group.GetAction()}
-		if changes := actingChanges(group.GetChanges()); len(changes) > 0 {
-			acting = changes
+		if changes := run.ActingChanges(group.GetChanges()); len(changes) > 0 {
+			acting = acting[:0]
+			for _, change := range changes {
+				acting = append(acting, change.GetAction())
+			}
 		}
 		for _, drawn := range acting {
 			if action, known := provider.ActionFromProto(drawn); known && action != "" && action.Writes() {
@@ -28,14 +32,4 @@ func written(plan *planv1.ChangePlan) map[provider.ChangeAction]bool {
 		}
 	}
 	return actions
-}
-
-func actingChanges(changes []*planv1.Change) []planv1.Change_Action {
-	var acting []planv1.Change_Action
-	for _, change := range changes {
-		if change.GetAction() != planv1.Change_ACTION_KEEP {
-			acting = append(acting, change.GetAction())
-		}
-	}
-	return acting
 }

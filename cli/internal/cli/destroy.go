@@ -108,17 +108,18 @@ func runDestroyProduction(ctx context.Context, deps cmddeps.Deps, cwd string, ye
 		Action:  "destroying production",
 		Verb:    "destroyed",
 		Yes:     yes,
-		Dry:     dry,
+		DryRun:  dry,
 		TTY:     deps.StdinIsTerminal(stdin),
 	}.Granted()
 	if err != nil {
 		return err
 	}
 
-	gate := deps.Gate(consent.PlanFirst, "ocel destroy production", yes || bypass, stdout, stdin)
-	gate.Dry = dry
-	gate.Unattended = fmt.Sprintf("pass --yes, or set %s to the project name", consent.BypassEnv)
-	return destroyProject(ctx, deps, cfg, gate, environmentv1.Tier_TIER_PRODUCTION, notice)
+	policy := deps.ConsentPolicy("ocel destroy production", yes || bypass, stdout, stdin)
+	policy.ConfirmsPlan = true
+	policy.DryRun = dry
+	policy.UnattendedRemedy = fmt.Sprintf("pass --yes, or set %s to the project name", consent.BypassEnv)
+	return destroyProject(ctx, deps, cfg, policy, environmentv1.Tier_TIER_PRODUCTION, notice)
 }
 
 func runDestroyPreviewProject(ctx context.Context, deps cmddeps.Deps, cwd string, yes, dry bool, stdout io.Writer, stdin io.Reader) error {
@@ -127,21 +128,21 @@ func runDestroyPreviewProject(ctx context.Context, deps cmddeps.Deps, cwd string
 		return err
 	}
 
-	gate := deps.Gate(consent.PlanFirst, "ocel destroy preview", yes, stdout, stdin)
-	gate.Dry = dry
-	gate.Unattended = "pass --yes"
-	return destroyProject(ctx, deps, cfg, gate, environmentv1.Tier_TIER_PREVIEW, "")
+	policy := deps.ConsentPolicy("ocel destroy preview", yes, stdout, stdin)
+	policy.ConfirmsPlan = true
+	policy.DryRun = dry
+	return destroyProject(ctx, deps, cfg, policy, environmentv1.Tier_TIER_PREVIEW, "")
 }
 
-func destroyProject(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, gate consent.Gate, tier environmentv1.Tier, bypassNotice string) (err error) {
+func destroyProject(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, policy consent.Policy, tier environmentv1.Tier, bypassNotice string) (err error) {
 	if _, err := cfg.RequireProvider(); err != nil {
 		return err
 	}
-	if err := gate.Refuse(); err != nil {
+	if err := policy.Refuse(); err != nil {
 		return err
 	}
 
-	ctx, run, err := deps.Events.Begin(ctx, gate.Command, cfg.Dir)
+	ctx, run, err := deps.Events.Begin(ctx, policy.Command, cfg.Dir)
 	if err != nil {
 		return err
 	}
@@ -151,7 +152,7 @@ func destroyProject(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.C
 	if bypassNotice != "" {
 		check.Warn(bypassNotice)
 	}
-	prov, err := providerclient.Start(ctx, cfg, check, deps.HostTrust, providerclient.ChoosePinning(gate.Dry))
+	prov, err := providerclient.Start(ctx, cfg, check, deps.HostTrust, providerclient.ChoosePinning(policy.DryRun))
 	if err != nil {
 		return err
 	}
@@ -194,12 +195,12 @@ func destroyProject(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.C
 	}
 
 	consented := showDestroyPlan(planning, cfg.Slug, preview, plan)
-	if gate.Dry {
+	if policy.DryRun {
 		planning.Say("Run without --dry to destroy.")
 		run.Succeed(fmt.Sprintf("Planned the destroy of what %s has in %s", cfg.Slug, place))
 		return nil
 	}
-	granted, err := gate.ConsentByName(ctx, planning, consented, "project name", plan.GetSubject())
+	granted, err := policy.ConfirmPlanByName(ctx, planning, consented, "project name", plan.GetSubject())
 	planning.End(err)
 	if err != nil {
 		return err

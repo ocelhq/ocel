@@ -13,7 +13,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
@@ -128,8 +127,9 @@ func runPromotionsPrune(ctx context.Context, deps cmddeps.Deps, cwd string, opts
 	if _, err := cfg.RequireProvider(); err != nil {
 		return err
 	}
-	gate := deps.Gate(consent.PlanFirst, "ocel deployments prune", opts.yes, stdout, stdin)
-	if err := gate.Refuse(); err != nil {
+	policy := deps.ConsentPolicy("ocel deployments prune", opts.yes, stdout, stdin)
+	policy.ConfirmsPlan = true
+	if err := policy.Refuse(); err != nil {
 		return err
 	}
 
@@ -154,7 +154,7 @@ func runPromotionsPrune(ctx context.Context, deps cmddeps.Deps, cwd string, opts
 
 	plan := run.Phase(progressv1.Phase_PHASE_PLAN)
 	plan.Say(fmt.Sprintf("This will reclaim every production promotion of project %q but the newest %d and the live one; none of them can be rolled back to afterwards", cfg.Slug, opts.keep))
-	granted, err := gate.Consent(ctx, plan, nil, fmt.Sprintf("Reclaim the older production promotions of %q?", cfg.Slug))
+	granted, err := policy.ConfirmPlan(ctx, plan, nil, fmt.Sprintf("Reclaim the older production promotions of %q?", cfg.Slug))
 	plan.End(err)
 	if err != nil {
 		return err

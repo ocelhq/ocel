@@ -9,28 +9,28 @@ import (
 	"path/filepath"
 	"strings"
 
-	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-type Confirmer interface {
+type Prompt interface {
 	Attended() bool
 	Confirm(ctx context.Context, question string) (bool, error)
 }
 
 type Trust struct {
-	Ask  Confirmer
-	Out  io.Writer
-	Hold func(waiting *streamv1.WaitingEvent) (resume func(reason string))
+	Prompt Prompt
+	Out    io.Writer
+	run    *run.Run
 }
 
-func (t Trust) attended() bool { return t.Ask != nil && t.Out != nil && t.Ask.Attended() }
+func (t Trust) attended() bool { return t.Prompt != nil && t.Out != nil && t.Prompt.Attended() }
 
-func (t Trust) hold() func(reason string) {
-	if t.Hold == nil {
-		return func(string) {}
+func (t Trust) holding(ask func() error) error {
+	if t.run == nil {
+		return ask()
 	}
-	return t.Hold(&streamv1.WaitingEvent{})
+	return t.run.Ask(ask)
 }
 
 func (t Trust) acceptKey(ctx context.Context, err error) (bool, error) {
@@ -71,11 +71,13 @@ func (t Trust) acceptKey(ctx context.Context, err error) (bool, error) {
 }
 
 func (t Trust) ask(ctx context.Context, refusal provider.HostTrust, entry, store string) (bool, error) {
-	resume := t.hold()
-	defer resume("answered")
-
-	fmt.Fprintln(t.Out, refusal.Offer())
-	return t.Ask.Confirm(ctx, fmt.Sprintf("Trust that key and record %s in %s?", entry, store))
+	var accepted bool
+	err := t.holding(func() (err error) {
+		fmt.Fprintln(t.Out, refusal.Offer())
+		accepted, err = t.Prompt.Confirm(ctx, fmt.Sprintf("Trust that key and record %s in %s?", entry, store))
+		return err
+	})
+	return accepted, err
 }
 
 func knownHostsStore(trust provider.HostTrust) (string, error) {

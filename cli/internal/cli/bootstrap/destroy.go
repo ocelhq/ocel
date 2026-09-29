@@ -29,14 +29,14 @@ func RunDestroy(ctx context.Context, deps cmddeps.Deps, cwd string, tier environ
 func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, tier environmentv1.Tier, opts Options, stdout io.Writer, stdin io.Reader) (err error) {
 	name := Name(tier)
 	bypass, notice, err := consent.Bypass{
-		Noun:          "bootstrap",
-		Subject:       name,
-		Action:        fmt.Sprintf("removing the %s bootstrap", name),
-		Verb:          "removed",
-		Yes:           opts.Yes,
-		Dry:           opts.Dry,
-		GrantsWhenDry: true,
-		TTY:           deps.StdinIsTerminal(stdin),
+		Noun:         "bootstrap",
+		Subject:      name,
+		Action:       fmt.Sprintf("removing the %s bootstrap", name),
+		Verb:         "removed",
+		Yes:          opts.Yes,
+		DryRun:       opts.Dry,
+		GrantsDryRun: true,
+		TTY:          deps.StdinIsTerminal(stdin),
 	}.Granted()
 	if err != nil {
 		return err
@@ -45,10 +45,11 @@ func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Confi
 	if _, err := cfg.RequireProvider(); err != nil {
 		return err
 	}
-	gate := deps.Gate(consent.PlanFirst, destroyCommand(tier), opts.Yes || bypass, stdout, stdin)
-	gate.Dry = opts.Dry
-	gate.Unattended = fmt.Sprintf("pass --yes, or set %s to %q", consent.BypassEnv, name)
-	if err := gate.Refuse(); err != nil {
+	policy := deps.ConsentPolicy(destroyCommand(tier), opts.Yes || bypass, stdout, stdin)
+	policy.ConfirmsPlan = true
+	policy.DryRun = opts.Dry
+	policy.UnattendedRemedy = fmt.Sprintf("pass --yes, or set %s to %q", consent.BypassEnv, name)
+	if err := policy.Refuse(); err != nil {
 		return err
 	}
 
@@ -99,7 +100,7 @@ func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Confi
 		run.Succeed(fmt.Sprintf("Planned the removal of the %s bootstrap", name))
 		return nil
 	}
-	granted, err := gate.ConsentByName(ctx, planning, consented, "environment name", plan.GetSubject())
+	granted, err := policy.ConfirmPlanByName(ctx, planning, consented, "environment name", plan.GetSubject())
 	planning.End(err)
 	if err != nil {
 		return err

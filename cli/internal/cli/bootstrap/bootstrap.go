@@ -161,10 +161,10 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 		return err
 	}
 	command := "ocel bootstrap " + Name(tier)
-	gate := deps.Gate(consent.PlanFirst, command, opts.Yes, stdout, stdin)
-	gate.Dry = opts.Dry
-	gate.Unattended = "pass --yes"
-	if err := gate.Refuse(); err != nil {
+	policy := deps.ConsentPolicy(command, opts.Yes, stdout, stdin)
+	policy.ConfirmsPlan = true
+	policy.DryRun = opts.Dry
+	if err := policy.Refuse(); err != nil {
 		return err
 	}
 
@@ -202,7 +202,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 		return nil
 	}
 
-	asking := gate.Asking()
+	asking := policy.IsAsking()
 	picked := asking && !opts.FeaturesDeclared
 	requested, selected, err := chooseFeatures(ctx, planning, opts, catalogue, installed, going, string(cfg.EdgeID()), tier, asking, stdout, stdin)
 	if err != nil {
@@ -273,7 +273,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 	}
 
 	if status.GetDowngrade() {
-		proceed, err := gate.Guard(ctx, planning, "Write the older content anyway?")
+		proceed, err := policy.Confirm(ctx, planning, "Write the older content anyway?")
 		if err != nil {
 			return err
 		}
@@ -287,7 +287,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 	if rendered {
 		title = fmt.Sprintf("%s with %s?", consent.ConfirmVerb(consented), prov.Name())
 	}
-	granted, err := gate.Consent(ctx, planning, consented, title)
+	granted, err := policy.ConfirmPlan(ctx, planning, consented, title)
 	if err != nil {
 		return err
 	}

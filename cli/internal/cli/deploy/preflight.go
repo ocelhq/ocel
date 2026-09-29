@@ -32,7 +32,7 @@ type preflightFacts struct {
 	urls           map[string]string
 }
 
-func preflightPreviewUp(ctx context.Context, deps cmddeps.Deps, gate consent.Gate, check *run.Span, prov *providerclient.Provider, cfg *projectconfig.Config, pointer string, out io.Writer, in io.Reader) (preflightFacts, error) {
+func preflightPreviewUp(ctx context.Context, deps cmddeps.Deps, policy consent.Policy, check *run.Span, prov *providerclient.Provider, cfg *projectconfig.Config, pointer string, out io.Writer, in io.Reader) (preflightFacts, error) {
 	resp, err := preflight.Run(ctx, check, prov, cfg, environmentv1.Tier_TIER_PREVIEW, cfg.Slug, preflight.Names(preflight.Hostnames(cfg, "preview")), preflight.Frameworks(cfg), "ocel bootstrap preview")
 	if err != nil {
 		return preflightFacts{}, err
@@ -50,14 +50,14 @@ func preflightPreviewUp(ctx context.Context, deps cmddeps.Deps, gate consent.Gat
 	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path), check.Warn); err != nil {
 		return preflightFacts{}, err
 	}
-	if err := ensureBootstrap(ctx, gate, check, prov, cfg, resp.GetBootstrap(), environmentv1.Tier_TIER_PREVIEW, out, in); err != nil {
+	if err := ensureBootstrap(ctx, policy, check, prov, cfg, resp.GetBootstrap(), environmentv1.Tier_TIER_PREVIEW, out, in); err != nil {
 		return preflightFacts{}, err
 	}
 	site, err := requirePreviewDomain(cfg, resp.GetPreviewWildcard(), resp.GetIdentity(), pointer, check)
 	if err != nil {
 		return preflightFacts{}, err
 	}
-	proceed, err := guardNewProject(ctx, gate, check, cfg, resp.GetKnownSlugs())
+	proceed, err := guardNewProject(ctx, policy, check, cfg, resp.GetKnownSlugs())
 	if err != nil {
 		return preflightFacts{}, err
 	}
@@ -71,9 +71,9 @@ func preflightPreviewUp(ctx context.Context, deps cmddeps.Deps, gate consent.Gat
 	}, nil
 }
 
-func preflightDeploy(ctx context.Context, deps cmddeps.Deps, gate consent.Gate, check *run.Span, prov *providerclient.Provider, cfg *projectconfig.Config, out io.Writer, in io.Reader) (preflightFacts, error) {
+func preflightDeploy(ctx context.Context, deps cmddeps.Deps, policy consent.Policy, check *run.Span, prov *providerclient.Provider, cfg *projectconfig.Config, out io.Writer, in io.Reader) (preflightFacts, error) {
 	domains := preflight.Names(preflight.Hostnames(cfg, "production"))
-	resp, err := preflight.Run(ctx, check, prov, cfg, environmentv1.Tier_TIER_PRODUCTION, slugToScopeBy(gate.Interactive, domains, cfg), domains, preflight.Frameworks(cfg), "ocel bootstrap production")
+	resp, err := preflight.Run(ctx, check, prov, cfg, environmentv1.Tier_TIER_PRODUCTION, slugToScopeBy(policy.Interactive, domains, cfg), domains, preflight.Frameworks(cfg), "ocel bootstrap production")
 	if err != nil {
 		return preflightFacts{}, err
 	}
@@ -90,21 +90,21 @@ func preflightDeploy(ctx context.Context, deps cmddeps.Deps, gate consent.Gate, 
 	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path), check.Warn); err != nil {
 		return preflightFacts{}, err
 	}
-	if err := ensureBootstrap(ctx, gate, check, prov, cfg, resp.GetBootstrap(), environmentv1.Tier_TIER_PRODUCTION, out, in); err != nil {
+	if err := ensureBootstrap(ctx, policy, check, prov, cfg, resp.GetBootstrap(), environmentv1.Tier_TIER_PRODUCTION, out, in); err != nil {
 		return preflightFacts{}, err
 	}
-	proceed, err := guardNewProject(ctx, gate, check, cfg, resp.GetKnownSlugs())
+	proceed, err := guardNewProject(ctx, policy, check, cfg, resp.GetKnownSlugs())
 	if err != nil {
 		return preflightFacts{}, err
 	}
 	return preflightFacts{declined: !proceed, compute: compute, containerArchs: resp.GetContainerArchs(), urls: appurl.Production(cfg)}, nil
 }
 
-func ensureBootstrap(ctx context.Context, gate consent.Gate, check *run.Span, prov *providerclient.Provider, cfg *projectconfig.Config, status *contractv1.BootstrapStatus, tier environmentv1.Tier, out io.Writer, in io.Reader) error {
-	if gate.Dry {
+func ensureBootstrap(ctx context.Context, policy consent.Policy, check *run.Span, prov *providerclient.Provider, cfg *projectconfig.Config, status *contractv1.BootstrapStatus, tier environmentv1.Tier, out io.Writer, in io.Reader) error {
+	if policy.DryRun {
 		return bootstrap.PlanFor(status).Insist(tier)
 	}
-	return bootstrap.Offer(ctx, check, prov, status, tier, cfg.EdgeSelection(), gate.Interactive, out, in)
+	return bootstrap.Offer(ctx, check, prov, status, tier, cfg.EdgeSelection(), policy.Interactive, out, in)
 }
 
 func slugToScopeBy(interactive bool, domains []string, cfg *projectconfig.Config) string {
@@ -114,13 +114,13 @@ func slugToScopeBy(interactive bool, domains []string, cfg *projectconfig.Config
 	return ""
 }
 
-func guardNewProject(ctx context.Context, gate consent.Gate, check *run.Span, cfg *projectconfig.Config, knownSlugs []string) (bool, error) {
+func guardNewProject(ctx context.Context, policy consent.Policy, check *run.Span, cfg *projectconfig.Config, knownSlugs []string) (bool, error) {
 	if len(knownSlugs) == 0 {
 		return true, nil
 	}
 	check.Warn(fmt.Sprintf("No existing deployment for slug %q.\nThis will create a NEW project.\nThis backend already has: %s",
 		cfg.Slug, strings.Join(knownSlugs, ", ")))
-	return gate.Guard(ctx, check, "Continue?")
+	return policy.Confirm(ctx, check, "Continue?")
 }
 
 func refuseClaimedDomains(claims []*contractv1.DomainClaim, configName string, warn func(string)) error {

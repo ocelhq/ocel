@@ -160,7 +160,7 @@ func TestAnUnknownHostKeyOnAStreamIsAskedOnceUnderAHoldRecordedAndThatCallRetrie
 
 	ctx, span, seen := deploySpan(t)
 	fake := newHostTrustFake(t, "unknown-host-key")
-	asker := &scriptedAsker{attended: true, answer: true}
+	asker := &scriptedPrompt{attended: true, answer: true}
 	var out bytes.Buffer
 	p := startFake(t, ctx, "unknown-host-key", span, trustAsking(asker, &out), fake.env()...)
 
@@ -201,7 +201,7 @@ func TestAHostKeyPromptAfterTheStartingPhaseEndedHoldsTheRunNotThatPhase(t *test
 	}
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
 	fake := newHostTrustFake(t, "unknown-host-key")
-	p := startFake(t, ctx, "unknown-host-key", check, trustAsking(&scriptedAsker{attended: true, answer: true}, io.Discard), fake.env()...)
+	p := startFake(t, ctx, "unknown-host-key", check, trustAsking(&scriptedPrompt{attended: true, answer: true}, io.Discard), fake.env()...)
 	check.End(nil)
 
 	if _, err := Stream(ctx, p, "Bootstrap", &contractv1.BootstrapRequest{}, contractv1connect.ProviderServiceClient.Bootstrap); err != nil {
@@ -228,7 +228,7 @@ func TestAnUnknownHostKeyOnAUnaryCallIsAskedOnceRecordedAndThatCallRetried(t *te
 
 	ctx, span, _ := deploySpan(t)
 	fake := newHostTrustFake(t, "unknown-host-key")
-	asker := &scriptedAsker{attended: true, answer: true}
+	asker := &scriptedPrompt{attended: true, answer: true}
 	p := startFake(t, ctx, "unknown-host-key", span, trustAsking(asker, io.Discard), fake.env()...)
 
 	err := p.Call(ctx, func(client contractv1connect.ProviderServiceClient) error {
@@ -254,7 +254,7 @@ func TestAHostKeyRefusedAtThePromptLeavesTheCallsErrorStandingAndRetriesNothing(
 
 	ctx, span, seen := deploySpan(t)
 	fake := newHostTrustFake(t, "unknown-host-key")
-	asker := &scriptedAsker{attended: true, answer: false}
+	asker := &scriptedPrompt{attended: true, answer: false}
 	p := startFake(t, ctx, "unknown-host-key", span, trustAsking(asker, io.Discard), fake.env()...)
 
 	_, err := Stream(ctx, p, "Bootstrap", &contractv1.BootstrapRequest{}, contractv1connect.ProviderServiceClient.Bootstrap)

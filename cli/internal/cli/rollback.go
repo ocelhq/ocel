@@ -11,7 +11,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/run"
@@ -67,10 +66,10 @@ func runRollback(ctx context.Context, deps cmddeps.Deps, cwd string, opts rollba
 	if _, err := cfg.RequireProvider(); err != nil {
 		return err
 	}
-	gate := deps.Gate(consent.PlanFirst, "ocel rollback", opts.yes, stdout, stdin)
-	gate.Dry = opts.dry
-	gate.Unattended = "pass --yes"
-	if err := gate.Refuse(); err != nil {
+	policy := deps.ConsentPolicy("ocel rollback", opts.yes, stdout, stdin)
+	policy.ConfirmsPlan = true
+	policy.DryRun = opts.dry
+	if err := policy.Refuse(); err != nil {
 		return err
 	}
 
@@ -106,7 +105,7 @@ func runRollback(ctx context.Context, deps cmddeps.Deps, cwd string, opts rollba
 		return nil
 	}
 
-	granted, err := gate.Consent(ctx, plan, nil, fmt.Sprintf("Roll production of %q back to promotion %s?", cfg.Slug, target.GetPromotionId()))
+	granted, err := policy.ConfirmPlan(ctx, plan, nil, fmt.Sprintf("Roll production of %q back to promotion %s?", cfg.Slug, target.GetPromotionId()))
 	plan.End(err)
 	if err != nil {
 		return err

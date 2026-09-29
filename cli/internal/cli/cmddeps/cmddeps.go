@@ -92,10 +92,9 @@ func Yes(cmd *cobra.Command, into *bool) {
 	cmd.Flags().BoolVarP(into, "yes", "y", false, YesUsage)
 }
 
-func (d Deps) Gate(class consent.Class, command string, yes bool, stdout io.Writer, stdin io.Reader) consent.Gate {
-	return consent.Gate{
+func (d Deps) ConsentPolicy(command string, yes bool, stdout io.Writer, stdin io.Reader) consent.Policy {
+	return consent.Policy{
 		Command:     command,
-		Class:       class,
 		Yes:         yes,
 		Interactive: d.StdinIsTerminal(stdin),
 		In:          stdin,

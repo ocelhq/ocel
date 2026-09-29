@@ -22,28 +22,28 @@ func mutatingPlan() *planv1.ChangePlan {
 	}}
 }
 
-func TestAPlanThatChangesNothingRaisesNoGateToConsentTo(t *testing.T) {
+func TestAPlanThatChangesNothingHasNothingToConfirm(t *testing.T) {
 	term := &terminal{}
-	g := askingGate(term, "n\n")
-	g.Class = consent.PlanFirst
+	g := askingPolicy(term, "n\n")
+	g.ConfirmsPlan = true
 
-	granted, err := g.Consent(context.Background(), spanOn(t, term), keepingPlan(), "Apply these changes?")
+	granted, err := g.ConfirmPlan(context.Background(), spanOn(t, term), keepingPlan(), "Apply these changes?")
 	if err != nil || !granted {
-		t.Errorf("Consent() = %v, %v, want a plan of nothing but keeps to have nothing to consent to", granted, err)
+		t.Errorf("ConfirmPlan() = %v, %v, want a plan of nothing but keeps to have nothing to consent to", granted, err)
 	}
 	if strings.Contains(term.written(), "Apply these changes?") {
 		t.Errorf("written = %q, want no question where the plan shows no change", term.written())
 	}
 }
 
-func TestAPlanThatChangesSomethingStillRaisesTheGate(t *testing.T) {
+func TestAPlanThatChangesSomethingIsStillConfirmed(t *testing.T) {
 	term := &terminal{}
-	g := askingGate(term, "n\n")
-	g.Class = consent.PlanFirst
+	g := askingPolicy(term, "n\n")
+	g.ConfirmsPlan = true
 
-	granted, err := g.Consent(context.Background(), spanOn(t, term), mutatingPlan(), "Apply these changes?")
+	granted, err := g.ConfirmPlan(context.Background(), spanOn(t, term), mutatingPlan(), "Apply these changes?")
 	if err != nil || granted {
-		t.Errorf("Consent() = %v, %v, want one create among the keeps to keep the gate up and the no to withhold it", granted, err)
+		t.Errorf("ConfirmPlan() = %v, %v, want one create among the keeps to still be confirmed and the no to withhold it", granted, err)
 	}
 	if !strings.Contains(term.written(), "Apply these changes?") {
 		t.Errorf("written = %q, want the plan's own confirmation put to the terminal", term.written())
@@ -106,6 +106,6 @@ func TestAGroupWithNoActionWhoseRowsAreAllKeptIsNotWork(t *testing.T) {
 			{Name: "a", Action: planv1.Change_ACTION_KEEP},
 		}},
 	}}) {
-		t.Error("Mutates() = true for a group whose only rows are kept, want what the plan tallies as unchanged to raise no gate")
+		t.Error("Mutates() = true for a group whose only rows are kept, want what the plan tallies as unchanged to need no confirmation")
 	}
 }

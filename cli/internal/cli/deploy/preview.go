@@ -12,7 +12,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
-	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/deployrecord"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -193,9 +192,9 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 	if _, err := cfg.RequireProvider(); err != nil {
 		return err
 	}
-	gate := deps.Gate(consent.Convergent, "ocel preview up", opts.yes, stdout, stdin)
-	gate.Dry = opts.dry
-	if err := gate.Refuse(); err != nil {
+	policy := deps.ConsentPolicy("ocel preview up", opts.yes, stdout, stdin)
+	policy.DryRun = opts.dry
+	if err := policy.Refuse(); err != nil {
 		return err
 	}
 
@@ -212,7 +211,7 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 	}
 	defer prov.Close()
 
-	facts, err := preflightPreviewUp(ctx, deps, gate, check, prov, cfg, env.GetIdentity(), stdout, stdin)
+	facts, err := preflightPreviewUp(ctx, deps, policy, check, prov, cfg, env.GetIdentity(), stdout, stdin)
 	check.End(err)
 	if err != nil {
 		return err
@@ -373,7 +372,7 @@ func runPreviewRm(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 	if _, err := cfg.RequireProvider(); err != nil {
 		return err
 	}
-	gate := deps.Gate(consent.Convergent, "ocel preview rm", opts.yes, stdout, stdin)
+	policy := deps.ConsentPolicy("ocel preview rm", opts.yes, stdout, stdin)
 
 	ctx, run, err := deps.Events.Begin(ctx, "ocel preview rm", cfg.Dir)
 	if err != nil {
@@ -389,7 +388,7 @@ func runPreviewRm(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 	defer prov.Close()
 
 	if env.GetLifecycle() == environmentv1.Lifecycle_LIFECYCLE_PERSISTENT {
-		proceed, err := gate.Guard(ctx, check, fmt.Sprintf("Tear down the named preview %q?", env.GetIdentity()))
+		proceed, err := policy.Confirm(ctx, check, fmt.Sprintf("Tear down the named preview %q?", env.GetIdentity()))
 		if err != nil {
 			return err
 		}

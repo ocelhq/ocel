@@ -9,7 +9,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/deployrecord"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
@@ -82,9 +81,9 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 	if _, err := cfg.RequireProvider(); err != nil {
 		return err
 	}
-	gate := deps.Gate(consent.Convergent, "ocel deploy", opts.yes, stdout, stdin)
-	gate.Dry = opts.dry
-	if err := gate.Refuse(); err != nil {
+	policy := deps.ConsentPolicy("ocel deploy", opts.yes, stdout, stdin)
+	policy.DryRun = opts.dry
+	if err := policy.Refuse(); err != nil {
 		return err
 	}
 
@@ -101,7 +100,7 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 	}
 	defer prov.Close()
 
-	facts, err := preflightDeploy(ctx, deps, gate, check, prov, cfg, stdout, stdin)
+	facts, err := preflightDeploy(ctx, deps, policy, check, prov, cfg, stdout, stdin)
 	check.End(err)
 	if err != nil {
 		return err

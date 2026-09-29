@@ -19,22 +19,22 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-type scriptedAsker struct {
+type scriptedPrompt struct {
 	attended bool
 	answer   bool
 	err      error
 	asked    []string
 }
 
-func (a *scriptedAsker) Attended() bool { return a.attended }
+func (a *scriptedPrompt) Attended() bool { return a.attended }
 
-func (a *scriptedAsker) Confirm(_ context.Context, question string) (bool, error) {
+func (a *scriptedPrompt) Confirm(_ context.Context, question string) (bool, error) {
 	a.asked = append(a.asked, question)
 	return a.answer, a.err
 }
 
-func trustAsking(asker Confirmer, out io.Writer) Trust {
-	return Trust{Ask: asker, Out: out}
+func trustAsking(prompt Prompt, out io.Writer) Trust {
+	return Trust{Prompt: prompt, Out: out}
 }
 
 type hostTrustFake struct {
@@ -125,7 +125,7 @@ func TestUnknownHostKeyKeepsTheRestOfKnownHostsIntact(t *testing.T) {
 		t.Fatalf("seed known_hosts: %v", err)
 	}
 
-	trust := trustAsking(&scriptedAsker{attended: true, answer: true}, io.Discard)
+	trust := trustAsking(&scriptedPrompt{attended: true, answer: true}, io.Discard)
 	if err := fake.call(t, trust); err != nil {
 		t.Fatalf("call error = %v", err)
 	}
@@ -140,7 +140,7 @@ func TestUnknownHostKeyWithoutATTYNeverAsksAndIncludesTheRemedy(t *testing.T) {
 	t.Parallel()
 
 	fake := newHostTrustFake(t, "unknown-host-key")
-	asker := &scriptedAsker{attended: false, answer: true}
+	asker := &scriptedPrompt{attended: false, answer: true}
 
 	err := fake.call(t, trustAsking(asker, io.Discard))
 	if err == nil {
@@ -168,7 +168,7 @@ func TestATrustBuiltOverAPipeNeverPromptsIntoABuffer(t *testing.T) {
 
 	fake := newHostTrustFake(t, "unknown-host-key")
 	var log bytes.Buffer
-	trust := Trust{Ask: terminal.NewPrompt(&log, strings.NewReader("y\n")), Out: &log}
+	trust := Trust{Prompt: terminal.NewPrompt(&log, strings.NewReader("y\n")), Out: &log}
 
 	err := fake.call(t, trust)
 	if err == nil {
@@ -204,7 +204,7 @@ func TestATrustWhoseQuestionLandsWhereNobodyCanReadItNeverAsks(t *testing.T) {
 	}
 
 	var log bytes.Buffer
-	trust := Trust{Ask: terminal.NewPrompt(&log, tty), Out: &log}
+	trust := Trust{Prompt: terminal.NewPrompt(&log, tty), Out: &log}
 
 	if err := fake.call(t, trust); err == nil {
 		t.Fatal("call error = nil, want a refusal when the question would go to a redirected stream")
@@ -220,7 +220,7 @@ func TestATrustWhoseQuestionLandsWhereNobodyCanReadItNeverAsks(t *testing.T) {
 	}
 }
 
-func TestATrustWithNoConfirmerNeverAsks(t *testing.T) {
+func TestATrustWithNoPromptNeverAsks(t *testing.T) {
 	t.Parallel()
 
 	fake := newHostTrustFake(t, "unknown-host-key")
@@ -237,7 +237,7 @@ func TestAPromptThatFailsStillIncludesTheRefusal(t *testing.T) {
 	t.Parallel()
 
 	fake := newHostTrustFake(t, "unknown-host-key")
-	asker := &scriptedAsker{attended: true, err: terminal.ErrStdinBusy}
+	asker := &scriptedPrompt{attended: true, err: terminal.ErrStdinBusy}
 
 	err := fake.call(t, trustAsking(asker, io.Discard))
 	if !errors.Is(err, terminal.ErrStdinBusy) {
@@ -256,7 +256,7 @@ func TestHostKeyMismatchNeverAsksAndNeverRetries(t *testing.T) {
 			t.Parallel()
 
 			fake := newHostTrustFake(t, "host-key-mismatch")
-			asker := &scriptedAsker{attended: interactive, answer: true}
+			asker := &scriptedPrompt{attended: interactive, answer: true}
 
 			err := fake.call(t, trustAsking(asker, io.Discard))
 			if err == nil {
@@ -281,7 +281,7 @@ func TestHostKeyMismatchNeverAsksAndNeverRetries(t *testing.T) {
 func TestACallThatNeverRefusesIsLeftAlone(t *testing.T) {
 	t.Parallel()
 
-	asker := &scriptedAsker{attended: true, answer: true}
+	asker := &scriptedPrompt{attended: true, answer: true}
 	trust := trustAsking(asker, io.Discard)
 
 	calls := 0
@@ -306,7 +306,7 @@ func TestARetriedCallThatRefusesAgainNeverAsksTwice(t *testing.T) {
 	t.Parallel()
 
 	fake := newHostTrustFake(t, "unknown-host-key")
-	asker := &scriptedAsker{attended: true, answer: true}
+	asker := &scriptedPrompt{attended: true, answer: true}
 
 	calls := 0
 	refusal := provider.RefuseHostTrust(provider.HostTrust{
@@ -335,7 +335,7 @@ func TestAKeyThatDoesNotHashToItsFingerprintIsNeverOffered(t *testing.T) {
 	t.Parallel()
 
 	store := filepath.Join(t.TempDir(), "known_hosts")
-	asker := &scriptedAsker{attended: true, answer: true}
+	asker := &scriptedPrompt{attended: true, answer: true}
 	refusal := provider.RefuseHostTrust(provider.HostTrust{
 		Reason:     provider.UnknownHostKey,
 		Address:    fakeHostAddress,
@@ -373,7 +373,7 @@ func TestAProviderThatSpeaksInControlCharactersIsNeverOffered(t *testing.T) {
 			store := filepath.Join(t.TempDir(), "known_hosts")
 			tc.trust.Reason = provider.UnknownHostKey
 			tc.trust.KnownHosts = []string{store}
-			asker := &scriptedAsker{attended: true, answer: true}
+			asker := &scriptedPrompt{attended: true, answer: true}
 			var out bytes.Buffer
 
 			refusal := provider.RefuseHostTrust(tc.trust)
