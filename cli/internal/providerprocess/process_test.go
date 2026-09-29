@@ -163,7 +163,7 @@ func TestHandshake(t *testing.T) {
 
 		ctx := context.Background()
 		r, _ := spawnFake(t, ctx, "impostor-cert", LaunchSpec{
-			ProviderConfig: &contractv1.ProviderConfig{},
+			ProviderConfig: &contractv1.ProviderConfig{ProjectDir: t.TempDir()},
 			ProviderName:   "fake",
 			ReadyTimeout:   5 * time.Second,
 		})
@@ -182,7 +182,7 @@ func TestHandshake(t *testing.T) {
 
 		ctx := context.Background()
 		r, _ := spawnFake(t, ctx, "plaintext", LaunchSpec{
-			ProviderConfig: &contractv1.ProviderConfig{},
+			ProviderConfig: &contractv1.ProviderConfig{ProjectDir: t.TempDir()},
 			ProviderName:   "fake",
 			ReadyTimeout:   5 * time.Second,
 		})
@@ -248,7 +248,7 @@ func TestConfigure(t *testing.T) {
 
 		ctx := context.Background()
 		r, _ := spawnFake(t, ctx, "refuse-config", LaunchSpec{
-			ProviderConfig: &contractv1.ProviderConfig{},
+			ProviderConfig: &contractv1.ProviderConfig{ProjectDir: t.TempDir()},
 			ProviderName:   "fake",
 			ReadyTimeout:   5 * time.Second,
 		})
@@ -272,7 +272,7 @@ func fakeOptionsConfig(t *testing.T, options map[string]any) *contractv1.Provide
 	if err != nil {
 		t.Fatalf("provider options: %v", err)
 	}
-	return &contractv1.ProviderConfig{Options: shaped}
+	return &contractv1.ProviderConfig{Options: shaped, ProjectDir: t.TempDir()}
 }
 
 func TestDeploy(t *testing.T) {
