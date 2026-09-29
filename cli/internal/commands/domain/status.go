@@ -30,14 +30,12 @@ type domainWaitSchedule struct {
 	initialInterval, maxInterval, deadline time.Duration
 }
 
-var domainWait = domainWaitSchedule{initialInterval: 2 * time.Second, maxInterval: 30 * time.Second, deadline: 15 * time.Minute}
-
-func runDomainStatus(ctx context.Context, invocation commands.Invocation, cwd string, opts domainOptions, stdout, stderr io.Writer) error {
+func runDomainStatus(ctx context.Context, invocation commands.Invocation, cwd string, opts domainOptions, schedule domainWaitSchedule, stdout, stderr io.Writer) error {
 	cfg, err := invocation.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
 	}
-	resp, err := readDomainStatus(ctx, invocation, cfg, opts.wait)
+	resp, err := readDomainStatus(ctx, invocation, cfg, opts.wait, schedule)
 	if err != nil {
 		return err
 	}
@@ -48,7 +46,7 @@ func runDomainStatus(ctx context.Context, invocation commands.Invocation, cwd st
 	return nil
 }
 
-func readDomainStatus(ctx context.Context, invocation commands.Invocation, cfg *project.Project, wait bool) (resp *contractv1.GetHostnameStatusResponse, err error) {
+func readDomainStatus(ctx context.Context, invocation commands.Invocation, cfg *project.Project, wait bool, schedule domainWaitSchedule) (resp *contractv1.GetHostnameStatusResponse, err error) {
 	if _, err := cfg.RequireProvider(); err != nil {
 		return nil, err
 	}
@@ -72,7 +70,7 @@ func readDomainStatus(ctx context.Context, invocation commands.Invocation, cfg *
 		Edge:       cfg.EdgeSelection(),
 		Probe:      true,
 	}
-	resp, err = awaitDomainStatus(ctx, check, cfg.Slug, hostnameStatus(provider, req), wait)
+	resp, err = awaitDomainStatus(ctx, check, cfg.Slug, hostnameStatus(provider, req), wait, schedule)
 	check.End(err)
 	return resp, err
 }
@@ -89,7 +87,7 @@ func hostnameStatus(provider *providerprocess.Provider, req *contractv1.Hostname
 
 const domainWaitFailures = 4
 
-func awaitDomainStatus(ctx context.Context, check *run.Span, slug string, read func(context.Context) (*contractv1.GetHostnameStatusResponse, error), wait bool) (*contractv1.GetHostnameStatusResponse, error) {
+func awaitDomainStatus(ctx context.Context, check *run.Span, slug string, read func(context.Context) (*contractv1.GetHostnameStatusResponse, error), wait bool, schedule domainWaitSchedule) (*contractv1.GetHostnameStatusResponse, error) {
 	resp, err := read(ctx)
 	if err != nil || !wait || resp.GetReady() {
 		return resp, err
@@ -99,21 +97,21 @@ func awaitDomainStatus(ctx context.Context, check *run.Span, slug string, read f
 	}
 
 	unit := check.Unit(slug, awaiting(declaredHosts(resp)))
-	resp, err = pollDomainStatus(ctx, read, resp)
+	resp, err = pollDomainStatus(ctx, read, resp, schedule)
 	unit.End(err)
 	return resp, err
 }
 
-func pollDomainStatus(ctx context.Context, read func(context.Context) (*contractv1.GetHostnameStatusResponse, error), resp *contractv1.GetHostnameStatusResponse) (*contractv1.GetHostnameStatusResponse, error) {
-	giveUp := time.Now().Add(domainWait.deadline)
-	every := domainWait.initialInterval
+func pollDomainStatus(ctx context.Context, read func(context.Context) (*contractv1.GetHostnameStatusResponse, error), resp *contractv1.GetHostnameStatusResponse, schedule domainWaitSchedule) (*contractv1.GetHostnameStatusResponse, error) {
+	giveUp := time.Now().Add(schedule.deadline)
+	every := schedule.initialInterval
 	var failures int
 	var lastErr error
 	for {
 		if err := sleepOrCancel(ctx, jittered(every)); err != nil {
 			return nil, err
 		}
-		every = min(every*2, domainWait.maxInterval)
+		every = min(every*2, schedule.maxInterval)
 		next, err := read(ctx)
 		switch {
 		case err != nil:
@@ -129,9 +127,9 @@ func pollDomainStatus(ctx context.Context, read func(context.Context) (*contract
 		}
 		if time.Now().After(giveUp) {
 			if lastErr != nil {
-				return resp, fmt.Errorf("gave up after %s waiting for every production hostname to answer; the last check failed: %w", domainWait.deadline, lastErr)
+				return resp, fmt.Errorf("gave up after %s waiting for every production hostname to answer; the last check failed: %w", schedule.deadline, lastErr)
 			}
-			return resp, fmt.Errorf("gave up after %s waiting for every production hostname to answer; still outstanding: %s", domainWait.deadline, outstandingHosts(resp))
+			return resp, fmt.Errorf("gave up after %s waiting for every production hostname to answer; still outstanding: %s", schedule.deadline, outstandingHosts(resp))
 		}
 	}
 }
@@ -254,7 +252,8 @@ func newStatusCommand(invocation commands.Invocation) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
-			return runDomainStatus(cmd.Context(), invocation, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			schedule := domainWaitSchedule{initialInterval: 2 * time.Second, maxInterval: 30 * time.Second, deadline: 15 * time.Minute}
+			return runDomainStatus(cmd.Context(), invocation, cwd, opts, schedule, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		},
 	}
 	cmd.Flags().BoolVar(&opts.wait, "wait", false, "Keep polling until every declared hostname is served, or give up")

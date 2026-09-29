@@ -13,8 +13,9 @@ import (
 const rootArgsEnvVar = "OCEL_TEST_ROOT_ARGS"
 
 func runRootSubprocess(args []string) int {
-	rootCmd.SetArgs(args)
-	err := Execute()
+	ocel := newCommand()
+	ocel.root.SetArgs(args)
+	err := ocel.execute()
 	if err == nil {
 		return 0
 	}

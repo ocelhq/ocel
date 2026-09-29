@@ -119,7 +119,9 @@ func (r report) count(want verdict) int {
 	return n
 }
 
-var tiers = []environmentv1.Tier{environmentv1.Tier_TIER_PRODUCTION, environmentv1.Tier_TIER_PREVIEW}
+func checkedTiers() []environmentv1.Tier {
+	return []environmentv1.Tier{environmentv1.Tier_TIER_PRODUCTION, environmentv1.Tier_TIER_PREVIEW}
+}
 
 func diagnose(ctx context.Context, invocation commands.Invocation, cwd string) report {
 	var found report
@@ -148,14 +150,14 @@ func diagnose(ctx context.Context, invocation commands.Invocation, cwd string) r
 	checked.checks = append(checked.checks, sdkChecks(cfg, version.Version)...)
 
 	hosts := map[environmentv1.Tier][]string{}
-	for _, tier := range tiers {
+	for _, tier := range checkedTiers() {
 		hosts[tier] = cfg.HostnameNames(tier)
 	}
 	found.add(checked)
 
 	if providerErr != nil {
 		found.add(skippedSection("Credentials"))
-		for _, tier := range tiers {
+		for _, tier := range checkedTiers() {
 			found.add(skippedSection(title(readiness.TierName(tier))))
 		}
 		return found
@@ -163,7 +165,7 @@ func diagnose(ctx context.Context, invocation commands.Invocation, cwd string) r
 
 	answers := gather(ctx, invocation, cfg)
 	found.add(credentialSections(cfg, answers)...)
-	for _, tier := range tiers {
+	for _, tier := range checkedTiers() {
 		found.add(tierSection(tier, hosts[tier], answers))
 	}
 	if checks, applies := hostCheckSection(answers); applies {
@@ -313,7 +315,7 @@ func hostCheckDomains(asking bool, cfg *project.Project) []string {
 		return nil
 	}
 	var named []string
-	for _, tier := range tiers {
+	for _, tier := range checkedTiers() {
 		for _, hostname := range cfg.HostnameNames(tier) {
 			if !slices.Contains(named, hostname) {
 				named = append(named, hostname)
@@ -356,7 +358,7 @@ func askProvider(ctx context.Context, invocation commands.Invocation, cfg *proje
 	defer provider.Close()
 	got.providerName = provider.Name()
 
-	for _, tier := range tiers {
+	for _, tier := range checkedTiers() {
 		checkHosts := tier == environmentv1.Tier_TIER_PRODUCTION
 		read, err := readiness.Read(ctx, provider, cfg, readiness.Request{
 			Tier:             tier,

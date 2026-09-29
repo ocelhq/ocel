@@ -9,21 +9,20 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/x/ansi"
 	"github.com/creack/pty"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/commands"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 )
 
 func TestTheRootFlagsFeedTheOneResolver(t *testing.T) {
-	origFormat, origVerbose := logFormatFlag, verboseFlag
-	t.Cleanup(func() { logFormatFlag, verboseFlag = origFormat, origVerbose })
+	set := &flags{logFormat: string(terminal.FormatJSON), verbose: true}
 
-	logFormatFlag, verboseFlag = string(terminal.FormatJSON), true
-
-	p := presentation(&bytes.Buffer{})
+	p := set.presentation(&bytes.Buffer{})
 	if p.Format != terminal.FormatJSON {
 		t.Errorf("Format = %q, want the --log-format flag to reach the resolver", p.Format)
 	}
@@ -41,17 +40,11 @@ func executeRoot(t *testing.T, args ...string) (stdout, stderr string) {
 
 func executeRootOn(t *testing.T, stdout, stderr io.Writer, args ...string) {
 	t.Helper()
-	origFormat := logFormatFlag
-	rootCmd.SetArgs(args)
-	rootCmd.SetOut(stdout)
-	rootCmd.SetErr(stderr)
-	t.Cleanup(func() {
-		logFormatFlag = origFormat
-		rootCmd.SetArgs(nil)
-		rootCmd.SetOut(nil)
-		rootCmd.SetErr(nil)
-	})
-	if err := Execute(); err != nil {
+	ocel := newCommand()
+	ocel.root.SetArgs(args)
+	ocel.root.SetOut(stdout)
+	ocel.root.SetErr(stderr)
+	if err := ocel.execute(); err != nil {
 		t.Fatalf("ocel %s: %v", strings.Join(args, " "), err)
 	}
 }
@@ -243,14 +236,13 @@ func TestEveryCommandWhoseStdoutIsItsDataIsMarkedToDrawItsRunOnStderr(t *testing
 		{"connector", "status"},
 		{"doctor"},
 	} {
-		cmd, _, err := rootCmd.Find(path)
+		cmd, _, err := newCommand().root.Find(path)
 		if err != nil {
 			t.Fatalf("find %q: %v", path, err)
 		}
 		var stdout, stderr bytes.Buffer
 		cmd.SetOut(&stdout)
 		cmd.SetErr(&stderr)
-		t.Cleanup(func() { cmd.SetOut(nil); cmd.SetErr(nil) })
 		if got := commands.ChooseRunOutput(cmd); got != &stderr {
 			t.Errorf("ocel %s draws its run on stdout, want stderr so stdout holds only its data", strings.Join(path, " "))
 		}
@@ -259,14 +251,13 @@ func TestEveryCommandWhoseStdoutIsItsDataIsMarkedToDrawItsRunOnStderr(t *testing
 
 func TestEveryCommandThatReportsThroughItsRunIsMarkedToDrawItOnStdout(t *testing.T) {
 	for _, path := range [][]string{{"deploy"}, {"domain", "use"}, {"domain", "add"}, {"connector", "add"}, {"connector", "rm"}, {"deployments", "prune"}} {
-		cmd, _, err := rootCmd.Find(path)
+		cmd, _, err := newCommand().root.Find(path)
 		if err != nil {
 			t.Fatalf("find %q: %v", path, err)
 		}
 		var stdout, stderr bytes.Buffer
 		cmd.SetOut(&stdout)
 		cmd.SetErr(&stderr)
-		t.Cleanup(func() { cmd.SetOut(nil); cmd.SetErr(nil) })
 		if got := commands.ChooseRunOutput(cmd); got != &stdout {
 			t.Errorf("ocel %s draws its run on stderr, want stdout", strings.Join(path, " "))
 		}
@@ -305,6 +296,7 @@ func TestTheLiveLineIsErasedWhenTheRunsResultIsDrawnNotWhenTheCommandExits(t *te
 }
 
 func TestGenerateBindingsAndLinkAreEachTheirOwnCommandOffTheRoot(t *testing.T) {
+	rootCmd := newCommand().root
 	for _, name := range []string{"generate", "bindings", "link", "unlink"} {
 		if cmd, _, err := rootCmd.Find([]string{name}); err != nil || cmd.Name() != name || cmd.Parent() != rootCmd {
 			t.Errorf("`ocel %s` does not hang off the root command", name)
@@ -321,10 +313,7 @@ func TestGenerateBindingsAndLinkAreEachTheirOwnCommandOffTheRoot(t *testing.T) {
 }
 
 func TestTheConfigFlagWinsOverTheConfigEnvironmentVariable(t *testing.T) {
-	orig := configFlag
-	t.Cleanup(func() { configFlag = orig })
-
-	flag := rootCmd.PersistentFlags().Lookup("config")
+	flag := newCommand().root.PersistentFlags().Lookup("config")
 	if flag == nil {
 		t.Fatal("`ocel` does not accept --config")
 	}
@@ -333,47 +322,44 @@ func TestTheConfigFlagWinsOverTheConfigEnvironmentVariable(t *testing.T) {
 	}
 
 	t.Run("neither the flag nor the env is set", func(t *testing.T) {
-		configFlag = ""
-		if got := explicitConfigPath(); got != "" {
+		set := &flags{config: ""}
+		if got := set.explicitConfigPath(); got != "" {
 			t.Errorf("explicitConfigPath() = %q, want the empty path that leaves discovery alone", got)
 		}
 	})
 
 	t.Run("the env alone is honoured", func(t *testing.T) {
 		t.Setenv("OCEL_CONFIG", "from-env.ts")
-		configFlag = ""
-		if got := explicitConfigPath(); got != "from-env.ts" {
+		set := &flags{config: ""}
+		if got := set.explicitConfigPath(); got != "from-env.ts" {
 			t.Errorf("explicitConfigPath() = %q, want %q", got, "from-env.ts")
 		}
 	})
 
 	t.Run("the flag alone is honoured", func(t *testing.T) {
-		configFlag = "from-flag.ts"
-		if got := explicitConfigPath(); got != "from-flag.ts" {
+		set := &flags{config: "from-flag.ts"}
+		if got := set.explicitConfigPath(); got != "from-flag.ts" {
 			t.Errorf("explicitConfigPath() = %q, want %q", got, "from-flag.ts")
 		}
 	})
 
 	t.Run("the flag wins over the env", func(t *testing.T) {
 		t.Setenv("OCEL_CONFIG", "from-env.ts")
-		configFlag = "from-flag.ts"
-		if got := explicitConfigPath(); got != "from-flag.ts" {
+		set := &flags{config: "from-flag.ts"}
+		if got := set.explicitConfigPath(); got != "from-flag.ts" {
 			t.Errorf("explicitConfigPath() = %q, want --config to win over OCEL_CONFIG", got)
 		}
 	})
 }
 
 func TestConfigFlagPathThatNamesNothingRefuses(t *testing.T) {
-	orig := configFlag
-	t.Cleanup(func() { configFlag = orig })
-
 	root := t.TempDir()
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
 
-	configFlag = filepath.Join(".", "nope.ts")
-	_, err := newInvocation().LoadProject(context.Background(), root)
+	set := &flags{config: filepath.Join(".", "nope.ts")}
+	_, err := newInvocation(run.NewBus(time.Now), set).LoadProject(context.Background(), root)
 	if err == nil {
 		t.Fatal("LoadProject err = nil, want a refusal for a --config path that names nothing")
 	}

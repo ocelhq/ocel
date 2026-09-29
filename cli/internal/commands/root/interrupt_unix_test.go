@@ -148,9 +148,10 @@ func runProcessTreeSubprocess() int {
 	}
 
 	argv := append([]string{"run", "--"}, strings.Split(os.Getenv("OCEL_TEST_PROCTREE_ARGS"), procTreeArgsSep)...)
-	rootCmd.SetArgs(argv)
+	ocel := newCommand()
+	ocel.root.SetArgs(argv)
 
-	err := Execute()
+	err := ocel.execute()
 	if err == nil {
 		return 0
 	}

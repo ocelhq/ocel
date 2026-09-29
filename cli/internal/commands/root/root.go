@@ -40,71 +40,80 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/version"
 )
 
-var verboseFlag bool
+type flags struct {
+	verbose   bool
+	config    string
+	logFormat string
+}
 
-var configFlag string
-
-func explicitConfigPath() string {
-	if configFlag != "" {
-		return configFlag
+func (f *flags) explicitConfigPath() string {
+	if f.config != "" {
+		return f.config
 	}
 	return os.Getenv(commands.ConfigEnvVar)
 }
 
-func verboseEnabled() bool {
-	if verboseFlag {
+func (f *flags) isVerbose() bool {
+	if f.verbose {
 		return true
 	}
 	_, ok := os.LookupEnv(commands.DebugEnvVar)
 	return ok
 }
 
-var logFormatFlag string
-
-var bus = run.NewBus(time.Now)
-
-var rootCmd = &cobra.Command{
-	Use:           "ocel <command>",
-	Short:         "Ocel CLI",
-	Long:          "Ocel CLI\n\nocel deploys apps to your own infrastructure",
-	Version:       version.Version,
-	SilenceUsage:  true,
-	SilenceErrors: true,
+func (f *flags) presentation(w io.Writer) terminal.Presentation {
+	return terminal.Detect(terminal.Format(f.logFormat), f.isVerbose(), w)
 }
 
-var stopInterruptHandler context.CancelFunc = func() {}
+type command struct {
+	root                 *cobra.Command
+	bus                  *run.Bus
+	stopInterruptHandler context.CancelFunc
+}
 
 func Execute() error {
-	err := rootCmd.Execute()
-	stopInterruptHandler()
-	return errors.Join(err, bus.Close())
+	return newCommand().execute()
 }
 
-func handleInterrupts(cmd *cobra.Command) {
-	install := installInterruptHandler
-	if cmd == devCmd || cmd == runCmd {
-		install = installDevInterruptHandler
-	}
-	ctx, stop := install(cmd.Root().Context(), cmd.ErrOrStderr())
-	cmd.SetContext(ctx)
-	stopInterruptHandler = stop
+func (c *command) execute() error {
+	err := c.root.Execute()
+	c.stopInterruptHandler()
+	return errors.Join(err, c.bus.Close())
 }
 
-var devCmd, runCmd *cobra.Command
-
-func init() {
-	invocation := newInvocation()
-	rootCmd.PersistentPreRun = func(cmd *cobra.Command, _ []string) {
-		invocation.AttachCommandSink(cmd)
-		handleInterrupts(cmd)
+func newCommand() *command {
+	c := &command{
+		root: &cobra.Command{
+			Use:           "ocel <command>",
+			Short:         "Ocel CLI",
+			Long:          "Ocel CLI\n\nocel deploys apps to your own infrastructure",
+			Version:       version.Version,
+			SilenceUsage:  true,
+			SilenceErrors: true,
+		},
+		bus:                  run.NewBus(time.Now),
+		stopInterruptHandler: func() {},
 	}
+	rootCmd := c.root
+	set := &flags{}
+	invocation := newInvocation(c.bus, set)
 
-	rootCmd.PersistentFlags().BoolVarP(&verboseFlag, "verbose", "v", false, "Stream full logs instead of the progress view (also $OCEL_DEBUG)")
-	rootCmd.PersistentFlags().StringVarP(&configFlag, "config", "c", "", "Project config `file` (default: $OCEL_CONFIG, else the nearest ocel.json, ocel.yaml, ocel.yml or ocel.config.ts)")
-	rootCmd.PersistentFlags().StringVar(&logFormatFlag, "log-format", string(terminal.FormatHuman), "Log output format: human or json")
+	rootCmd.PersistentFlags().BoolVarP(&set.verbose, "verbose", "v", false, "Stream full logs instead of the progress view (also $OCEL_DEBUG)")
+	rootCmd.PersistentFlags().StringVarP(&set.config, "config", "c", "", "Project config `file` (default: $OCEL_CONFIG, else the nearest ocel.json, ocel.yaml, ocel.yml or ocel.config.ts)")
+	rootCmd.PersistentFlags().StringVar(&set.logFormat, "log-format", string(terminal.FormatHuman), "Log output format: human or json")
 
 	devDependencies := dev.Dependencies{Invocation: invocation, OpenDocker: docker.Open}
-	devCmd, runCmd = dev.NewCommand(devDependencies), dev.NewRunCommand(devDependencies)
+	devCmd, runCmd := dev.NewCommand(devDependencies), dev.NewRunCommand(devDependencies)
+	rootCmd.PersistentPreRun = func(cmd *cobra.Command, _ []string) {
+		invocation.AttachCommandSink(cmd)
+		install := installInterruptHandler
+		if cmd == devCmd || cmd == runCmd {
+			install = installDevInterruptHandler
+		}
+		ctx, stop := install(cmd.Root().Context(), cmd.ErrOrStderr(), c.bus)
+		cmd.SetContext(ctx)
+		c.stopInterruptHandler = stop
+	}
 	rootCmd.AddCommand(devCmd)
 	rootCmd.AddCommand(runCmd)
 	rootCmd.AddCommand(projectinit.NewCommand(projectinit.Dependencies{Invocation: invocation, RunPackageManager: projectinit.RunPackageManager}))
@@ -155,18 +164,15 @@ func init() {
 	addConsoleCommands(rootCmd, loginCmd, logoutCmd, linkCmd, link.NewUnlinkCommand(linkDependencies), connectorCmd)
 
 	installHelpStyle(rootCmd)
+	return c
 }
 
-func newInvocation() commands.Invocation {
+func newInvocation(bus *run.Bus, set *flags) commands.Invocation {
 	return commands.Invocation{
 		Events:          bus,
-		Presentation:    presentation,
+		Presentation:    set.presentation,
 		StdinIsTerminal: func(in io.Reader) bool { return terminal.IsTerminal(in) },
 		Questions:       providerprocess.Questions{Prompt: terminal.NewPrompt(os.Stderr, os.Stdin), Out: os.Stderr},
-		ConfigPath:      explicitConfigPath,
+		ConfigPath:      set.explicitConfigPath,
 	}
-}
-
-func presentation(w io.Writer) terminal.Presentation {
-	return terminal.Detect(terminal.Format(logFormatFlag), verboseEnabled(), w)
 }

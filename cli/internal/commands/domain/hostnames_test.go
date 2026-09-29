@@ -445,7 +445,7 @@ func TestDomainListReadsStateWhileStatusChecksTheEdgeLive(t *testing.T) {
 
 	stdout.Reset()
 	stderr.Reset()
-	if err := runDomainStatus(context.Background(), invocation, project.Root, domainOptions{}, &stdout, &stderr); err != nil {
+	if err := runDomainStatus(context.Background(), invocation, project.Root, domainOptions{}, quickDomainWait, &stdout, &stderr); err != nil {
 		t.Fatalf("runDomainStatus err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	asked = clitest.RequestsTo[*contractv1.HostnameRequest](t, project.Requests, contractv1connect.ProviderServiceGetHostnameStatusProcedure)
