@@ -12,9 +12,9 @@ import (
 const hostnamesPerPurge = 100
 
 func (p *cloudflare) purgeHostnames(ctx context.Context, hostnames []string) error {
-	accountID := p.accountID()
-	if accountID == "" {
-		return fmt.Errorf("%s is not set; it is required to purge what Cloudflare cached", envAccountID)
+	accountID, err := requireAccountID("purge what Cloudflare cached")
+	if err != nil {
+		return err
 	}
 	byZone := map[string][]string{}
 	var zones []string

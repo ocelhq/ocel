@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"slices"
 	"strings"
 
@@ -22,7 +21,8 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 		return errors.New("binding a domain to a Cloudflare stack needs a hostname")
 	}
 	if binding.Origin != nil {
-		return s.p.bindOrigin(ctx, &s.state, forwardingOwner(s.p.namespace, s.state.Slug, s.state.Tier), binding)
+		return refusal.Refuse(refusal.CodeInvalid,
+			"the %q edge answers %s with its worker, and this binding names an origin to forward it to", Kind, binding.Hostname)
 	}
 	accountID, script, err := s.soleEntryWorker("bind")
 	if err != nil {
@@ -49,9 +49,6 @@ func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
 	if hostname == "" {
 		return errors.New("unbinding a domain from a Cloudflare stack needs a hostname")
 	}
-	if isForwarded(s.state, hostname) {
-		return s.p.unbindOrigin(ctx, &s.state, forwardingOwner(s.p.namespace, s.state.Slug, s.state.Tier), hostname)
-	}
 	accountID, scripts, err := s.entryWorkers("unbind")
 	if err != nil {
 		return err
@@ -68,9 +65,9 @@ func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
 }
 
 func (s *stack) entryWorkers(verb string) (accountID string, scriptNames []string, err error) {
-	accountID = os.Getenv(envAccountID)
-	if accountID == "" {
-		return "", nil, fmt.Errorf("%s is not set; it is required to %s a domain on the Cloudflare edge", envAccountID, verb)
+	accountID, err = requireAccountID(fmt.Sprintf("%s a domain on the Cloudflare edge", verb))
+	if err != nil {
+		return "", nil, err
 	}
 	scriptNames = s.own.EntryWorkers
 	if len(scriptNames) == 0 {

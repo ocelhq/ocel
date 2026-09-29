@@ -3,7 +3,6 @@ package cloudflare
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 
 	cf "github.com/cloudflare/cloudflare-go/v4"
@@ -14,7 +13,7 @@ import (
 )
 
 func (p *cloudflare) codeEntitlement(ctx context.Context) (edge.CodeEntitlement, error) {
-	accountID := os.Getenv(envAccountID)
+	accountID := readAccountID()
 	if accountID == "" {
 		return edge.CodeEntitlement{}, fmt.Errorf("%s is not set", envAccountID)
 	}

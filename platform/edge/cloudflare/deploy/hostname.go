@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"slices"
 	"strings"
 
@@ -156,9 +155,9 @@ func routePattern(hostname string) string {
 func (p *cloudflare) ProjectOwner(string, environment.Tier) string { return "" }
 
 func (p *cloudflare) DomainOwner(ctx context.Context, hostname string) (string, error) {
-	accountID := os.Getenv(envAccountID)
-	if accountID == "" {
-		return "", fmt.Errorf("%s is not set; it is required to read Cloudflare worker routes", envAccountID)
+	accountID, err := requireAccountID("read Cloudflare worker routes")
+	if err != nil {
+		return "", err
 	}
 	zoneID, _, err := p.resolveZone(ctx, accountID, routeBaseDomain(hostname))
 	if err != nil {

@@ -81,10 +81,10 @@ const clientMaxRetries = 5
 
 func (p *cloudflare) Kind() edge.Kind { return Kind }
 
-func (p *cloudflare) accountID() string { return os.Getenv(envAccountID) }
+func readAccountID() string { return os.Getenv(envAccountID) }
 
-func (p *cloudflare) requireAccountID(doing string) (string, error) {
-	accountID := p.accountID()
+func requireAccountID(doing string) (string, error) {
+	accountID := readAccountID()
 	if accountID == "" {
 		return "", fmt.Errorf("%s is not set; it is required to %s", envAccountID, doing)
 	}
@@ -106,7 +106,7 @@ func (p *cloudflare) Facts() edge.Facts {
 		RunsCode:        true,
 		ServesUnbound:   true,
 		ProxiesRecords:  true,
-		CredentialScope: p.accountID(),
+		CredentialScope: readAccountID(),
 	}
 }
 
@@ -204,9 +204,9 @@ func (p *cloudflare) Bootstrap(ctx context.Context, tier environment.Tier) (edge
 }
 
 func (p *cloudflare) Teardown(ctx context.Context, tier environment.Tier) error {
-	accountID := os.Getenv(envAccountID)
-	if accountID == "" {
-		return fmt.Errorf("%s is not set; it is required to tear the Cloudflare edge down", envAccountID)
+	accountID, err := requireAccountID("tear the Cloudflare edge down")
+	if err != nil {
+		return err
 	}
 	storeScript, err := storeScriptNameFor(p.namespace, tier)
 	if err != nil {
@@ -390,11 +390,11 @@ func readWorkerBundle(path string) (edge.Worker, error) {
 }
 
 func (p *cloudflare) findApp(ctx context.Context, name string) (bool, error) {
-	accountID := os.Getenv(envAccountID)
-	if accountID == "" {
-		return false, fmt.Errorf("%s is not set; it is required to query the Cloudflare edge", envAccountID)
+	accountID, err := requireAccountID("query the Cloudflare edge")
+	if err != nil {
+		return false, err
 	}
-	_, err := p.client.Workers.Scripts.Settings.Get(ctx, name, workers.ScriptSettingGetParams{
+	_, err = p.client.Workers.Scripts.Settings.Get(ctx, name, workers.ScriptSettingGetParams{
 		AccountID: cf.F(accountID),
 	})
 	var apiErr *cf.Error
@@ -405,9 +405,9 @@ func (p *cloudflare) findApp(ctx context.Context, name string) (bool, error) {
 }
 
 func (p *cloudflare) deployApp(ctx context.Context, app edge.AppDeployment) (edge.AppResult, error) {
-	accountID := os.Getenv(envAccountID)
-	if accountID == "" {
-		return edge.AppResult{}, fmt.Errorf("%s is not set; it is required to deploy to the Cloudflare edge", envAccountID)
+	accountID, err := requireAccountID("deploy to the Cloudflare edge")
+	if err != nil {
+		return edge.AppResult{}, err
 	}
 	up := upload{accountID: accountID, scriptName: app.Name, worker: bindCodeLoader(bindObjectStore(app.Worker, app.Values))}
 
