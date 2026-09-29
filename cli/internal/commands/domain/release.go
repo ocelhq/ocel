@@ -20,7 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
-func runDomainRelease(ctx context.Context, invocation commands.Invocation, cwd string, opts domainOptions, stdout, stderr io.Writer, stdin io.Reader) error {
+func runDomainRelease(ctx context.Context, invocation commands.Invocation, cwd string, opts domainOptions, stdout io.Writer, stdin io.Reader) error {
 	if err := requirePreviewTier("ocel domain release", opts.preview); err != nil {
 		return err
 	}
@@ -87,7 +87,7 @@ func newReleaseCommand(invocation commands.Invocation) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
-			return runDomainRelease(cmd.Context(), invocation, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+			return runDomainRelease(cmd.Context(), invocation, cwd, opts, cmd.OutOrStdout(), cmd.InOrStdin())
 		},
 	}
 	cmd.Flags().BoolVar(&opts.preview, "preview", false, "Act on the preview tier (required)")

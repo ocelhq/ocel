@@ -29,7 +29,7 @@ type domainWaitSchedule struct {
 	initialInterval, maxInterval, deadline time.Duration
 }
 
-func runDomainStatus(ctx context.Context, invocation commands.Invocation, cwd string, opts domainOptions, schedule domainWaitSchedule, stdout, stderr io.Writer) error {
+func runDomainStatus(ctx context.Context, invocation commands.Invocation, cwd string, opts domainOptions, schedule domainWaitSchedule, stdout io.Writer) error {
 	cfg, err := invocation.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
@@ -237,7 +237,7 @@ func newStatusCommand(invocation commands.Invocation) *cobra.Command {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
 			schedule := domainWaitSchedule{initialInterval: 2 * time.Second, maxInterval: 30 * time.Second, deadline: 15 * time.Minute}
-			return runDomainStatus(cmd.Context(), invocation, cwd, opts, schedule, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return runDomainStatus(cmd.Context(), invocation, cwd, opts, schedule, cmd.OutOrStdout())
 		},
 	}
 	cmd.Flags().BoolVar(&opts.wait, "wait", false, "Keep polling until every declared hostname is served, or give up")

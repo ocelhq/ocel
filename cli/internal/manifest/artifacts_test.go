@@ -153,19 +153,25 @@ func TestAServerlessAppIsWrittenAsNoContainerAtAll(t *testing.T) {
 	}
 }
 
-func TestAContainerAppPackedIntoFunctionsIsRefused(t *testing.T) {
+func TestAContainerAppIsServedByItsImageAloneWhateverFunctionsTheBuildLeftForIt(t *testing.T) {
 	t.Parallel()
 
-	_, err := assembleOn("container", "proj-1", project.Domains{}, []app{
-		{Name: "api", Compute: "container", Image: "ocel/api@" + fakeDigest},
-	}, nil, nil, []build.Function{
-		{App: "api", Route: "index", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "index.handler", ArtifactPath: "apps/api/functions/index"},
-	}, nil)
-	if err == nil {
-		t.Fatal("assemble() included both a container and a function for one app, so routing would have two answers for the same request")
+	cfg := &project.Project{Slug: "proj-1", Dir: t.TempDir(), Apps: []project.App{
+		{Name: "api", Path: "api", Compute: "container", Container: &project.Container{}},
+	}}
+	manifest, err := Assemble(Input{
+		Project: cfg,
+		Built: build.Output{
+			Functions: []build.Function{{App: "api", Route: "index", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "index.handler", ArtifactPath: "apps/api/functions/index"}},
+			Images:    map[string]string{"api": "ocel/api@" + fakeDigest},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
 	}
-	if !strings.Contains(err.Error(), `"api"`) {
-		t.Errorf("assemble() error = %q, want it to name the app", err)
+	apps := manifest.GetApps()
+	if len(apps) != 1 || apps[0].GetContainer().GetImage() == "" || apps[0].GetServerless() != nil {
+		t.Errorf("apps = %v, want api served by its image and by no function, so routing has one answer per request", apps)
 	}
 }
 

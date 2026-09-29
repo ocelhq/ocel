@@ -40,7 +40,7 @@ func TestDomainStatusAsJSONIsOneDocumentPerHostname(t *testing.T) {
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(invocation, &stderr)
-	if err := runDomainStatus(context.Background(), invocation, project.Root, domainOptions{}, quickDomainWait, &stdout, &stderr); err != nil {
+	if err := runDomainStatus(context.Background(), invocation, project.Root, domainOptions{}, quickDomainWait, &stdout); err != nil {
 		t.Fatalf("runDomainStatus err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	report := clitest.DecodeJSON(t, stdout.String())
@@ -106,7 +106,7 @@ func TestDomainStatusShowsEachHostnamesCertificateRecordsProbeAndWhatIsOutstandi
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stderr)
-		if err := runDomainStatus(context.Background(), invocation, project.Root, domainOptions{}, quickDomainWait, &stdout, &stderr); err != nil {
+		if err := runDomainStatus(context.Background(), invocation, project.Root, domainOptions{}, quickDomainWait, &stdout); err != nil {
 			t.Fatalf("runDomainStatus err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
@@ -134,7 +134,7 @@ func TestDomainStatusShowsEachHostnamesCertificateRecordsProbeAndWhatIsOutstandi
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stderr)
-		if err := runDomainStatus(context.Background(), invocation, project.Root, domainOptions{wait: true}, quickDomainWait, &stdout, &stderr); err != nil {
+		if err := runDomainStatus(context.Background(), invocation, project.Root, domainOptions{wait: true}, quickDomainWait, &stdout); err != nil {
 			t.Fatalf("runDomainStatus --wait err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
@@ -157,7 +157,7 @@ func TestDomainStatusShowsEachHostnamesCertificateRecordsProbeAndWhatIsOutstandi
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stderr)
-		if err := runDomainStatus(context.Background(), invocation, project.Root, domainOptions{}, quickDomainWait, &stdout, &stderr); err != nil {
+		if err := runDomainStatus(context.Background(), invocation, project.Root, domainOptions{}, quickDomainWait, &stdout); err != nil {
 			t.Fatalf("runDomainStatus err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
@@ -177,7 +177,7 @@ func TestDomainStatusShowsEachHostnamesCertificateRecordsProbeAndWhatIsOutstandi
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stderr)
-		if err := runDomainStatus(context.Background(), invocation, project.Root, domainOptions{}, quickDomainWait, &stdout, &stderr); err != nil {
+		if err := runDomainStatus(context.Background(), invocation, project.Root, domainOptions{}, quickDomainWait, &stdout); err != nil {
 			t.Fatalf("runDomainStatus err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "declares no domains.production") {
@@ -195,7 +195,7 @@ func TestDomainStatusShowsEachHostnamesCertificateRecordsProbeAndWhatIsOutstandi
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stderr)
-		if err := runDomainStatus(context.Background(), invocation, project.Root, domainOptions{wait: true}, quickDomainWait, &stdout, &stderr); err != nil {
+		if err := runDomainStatus(context.Background(), invocation, project.Root, domainOptions{wait: true}, quickDomainWait, &stdout); err != nil {
 			t.Fatalf("runDomainStatus --wait err = %v, want a wait that outlasts a couple of failed checks; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "shop.app.com  READY") {
@@ -213,7 +213,7 @@ func TestDomainStatusShowsEachHostnamesCertificateRecordsProbeAndWhatIsOutstandi
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stderr)
-		err := runDomainStatus(context.Background(), invocation, project.Root, domainOptions{wait: true}, quickDomainWait, &stdout, &stderr)
+		err := runDomainStatus(context.Background(), invocation, project.Root, domainOptions{wait: true}, quickDomainWait, &stdout)
 		if err == nil || !strings.Contains(stderr.String(), "failed checks in a row") {
 			t.Fatalf("runDomainStatus --wait err = %v; stderr=%s, want it to give up naming the repeated failures", err, stderr.String())
 		}
@@ -225,7 +225,7 @@ func TestDomainStatusShowsEachHostnamesCertificateRecordsProbeAndWhatIsOutstandi
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stderr)
-		err := runDomainStatus(context.Background(), invocation, project.Root, domainOptions{wait: true}, quickDomainWait, &stdout, &stderr)
+		err := runDomainStatus(context.Background(), invocation, project.Root, domainOptions{wait: true}, quickDomainWait, &stdout)
 		if err == nil || !strings.Contains(stderr.String(), "nothing to wait for") {
 			t.Fatalf("runDomainStatus --wait err = %v; stderr=%s, want it to refuse at once with nothing declared", err, stderr.String())
 		}

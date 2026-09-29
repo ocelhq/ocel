@@ -144,10 +144,6 @@ func Check(written language.Language, sdk, cli string) error {
 	return &MismatchError{Language: written, SDK: sdk, CLI: cli}
 }
 
-func Format(written language.Language, version string) string {
-	return string(written) + "/" + version
-}
-
 func Parse(header string) (written language.Language, version string, ok bool) {
 	name, version, ok := strings.Cut(header, "/")
 	return language.Language(name), version, ok && name != ""

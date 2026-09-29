@@ -16,7 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
-func runDomainUse(ctx context.Context, invocation commands.Invocation, cwd, wildcard string, opts domainOptions, stdout, stderr io.Writer) error {
+func runDomainUse(ctx context.Context, invocation commands.Invocation, cwd, wildcard string, opts domainOptions, stdout io.Writer) error {
 	if err := requirePreviewTier("ocel domain use", opts.preview); err != nil {
 		return err
 	}
@@ -56,7 +56,7 @@ func newUseCommand(invocation commands.Invocation) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
-			return runDomainUse(cmd.Context(), invocation, cwd, args[0], opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return runDomainUse(cmd.Context(), invocation, cwd, args[0], opts, cmd.OutOrStdout())
 		},
 	}
 	cmd.Flags().BoolVar(&opts.preview, "preview", false, "Act on the preview tier (required)")

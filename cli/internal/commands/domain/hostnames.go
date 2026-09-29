@@ -23,7 +23,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
-func runDomainList(ctx context.Context, invocation commands.Invocation, cwd string, opts domainOptions, stdout, stderr io.Writer) error {
+func runDomainList(ctx context.Context, invocation commands.Invocation, cwd string, opts domainOptions, stdout io.Writer) error {
 	cfg, err := invocation.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
@@ -58,7 +58,7 @@ func listProductionHostnames(ctx context.Context, invocation commands.Invocation
 	return resp, err
 }
 
-func runDomainAdd(ctx context.Context, invocation commands.Invocation, cwd, host string, stdout, stderr io.Writer) error {
+func runDomainAdd(ctx context.Context, invocation commands.Invocation, cwd, host string, stdout io.Writer) error {
 	cfg, err := invocation.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
@@ -137,7 +137,7 @@ func addedHosts(configured []string, host string) []string {
 	return []string{host}
 }
 
-func runDomainRemove(ctx context.Context, invocation commands.Invocation, cwd, host string, opts domainOptions, stdout, stderr io.Writer, stdin io.Reader) error {
+func runDomainRemove(ctx context.Context, invocation commands.Invocation, cwd, host string, opts domainOptions, stdout io.Writer, stdin io.Reader) error {
 	cfg, err := invocation.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
@@ -190,7 +190,7 @@ func newListCommand(invocation commands.Invocation) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
-			return runDomainList(cmd.Context(), invocation, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return runDomainList(cmd.Context(), invocation, cwd, opts, cmd.OutOrStdout())
 		},
 	}
 	cmd.Flags().BoolVar(&opts.preview, "preview", false, "List the global preview domain and the projects served on it instead of this project's own hostnames")
@@ -207,7 +207,7 @@ func newAddCommand(invocation commands.Invocation) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
-			return runDomainAdd(cmd.Context(), invocation, cwd, firstArg(args), cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return runDomainAdd(cmd.Context(), invocation, cwd, firstArg(args), cmd.OutOrStdout())
 		},
 	}
 }
@@ -223,7 +223,7 @@ func newRemoveCommand(invocation commands.Invocation) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
-			return runDomainRemove(cmd.Context(), invocation, cwd, firstArg(args), opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+			return runDomainRemove(cmd.Context(), invocation, cwd, firstArg(args), opts, cmd.OutOrStdout(), cmd.InOrStdin())
 		},
 	}
 	commands.AddYesFlag(cmd, &opts.yes)

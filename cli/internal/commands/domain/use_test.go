@@ -45,7 +45,7 @@ func useWildcard(t *testing.T, project clitest.FakeProject) {
 	invocation := newTestInvocation()
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(invocation, &stdout)
-	if err := runDomainUse(context.Background(), invocation, project.Root, "*.preview.acme.com", domainOptions{preview: true}, &stdout, &stderr); err != nil {
+	if err := runDomainUse(context.Background(), invocation, project.Root, "*.preview.acme.com", domainOptions{preview: true}, &stdout); err != nil {
 		t.Fatalf("use the global preview domain: %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 }
@@ -90,7 +90,7 @@ func TestDomainUseServesEveryProjectsPreviewsOnTheWildcard(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := runDomainUse(context.Background(), invocation, project.Root, "*.preview.acme.com", domainOptions{preview: true}, &stdout, &stderr); err != nil {
+		if err := runDomainUse(context.Background(), invocation, project.Root, "*.preview.acme.com", domainOptions{preview: true}, &stdout); err != nil {
 			t.Fatalf("runDomainUse err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if out := stdout.String(); !strings.Contains(out, "Previews are served on *.preview.acme.com") {
@@ -111,7 +111,7 @@ func TestDomainUseServesEveryProjectsPreviewsOnTheWildcard(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := runDomainUse(context.Background(), invocation, project.Root, "*.preview.acme.com", domainOptions{preview: true}, &stdout, &stderr); err != nil {
+		if err := runDomainUse(context.Background(), invocation, project.Root, "*.preview.acme.com", domainOptions{preview: true}, &stdout); err != nil {
 			t.Fatalf("runDomainUse err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
@@ -132,7 +132,7 @@ func TestDomainUseServesEveryProjectsPreviewsOnTheWildcard(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := runDomainUse(context.Background(), invocation, project.Root, "*.preview.acme.com", domainOptions{preview: true}, &stdout, &stderr); err != nil {
+		if err := runDomainUse(context.Background(), invocation, project.Root, "*.preview.acme.com", domainOptions{preview: true}, &stdout); err != nil {
 			t.Fatalf("runDomainUse err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if out := stdout.String(); !strings.Contains(out, "Writing *.preview.acme.com CNAME preview.relay.fake.invalid") {
@@ -148,9 +148,9 @@ func TestDomainUseServesEveryProjectsPreviewsOnTheWildcard(t *testing.T) {
 		project := previewProject(t)
 		invocation := newTestInvocation()
 
-		var stdout, stderr bytes.Buffer
+		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		err := runDomainUse(context.Background(), invocation, project.Root, "preview.acme.com", domainOptions{preview: true}, &stdout, &stderr)
+		err := runDomainUse(context.Background(), invocation, project.Root, "preview.acme.com", domainOptions{preview: true}, &stdout)
 		if err == nil {
 			t.Fatal("runDomainUse err = nil, want a wildcard refusal")
 		}

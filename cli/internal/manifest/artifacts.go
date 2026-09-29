@@ -21,9 +21,6 @@ func attachArtifact(manifestApp *contractv1.ManifestApp, a app, functions []*con
 	if !containerimage.IsPinned(a.Image) {
 		return fmt.Errorf("app %q names image %q, and a release pins one repository at one digest: a tag repoints under a running release, so it never rides in the identity", a.Name, a.Image)
 	}
-	if len(functions) > 0 {
-		return fmt.Errorf("app %q runs on container compute and was packed into functions as well, so two things would answer the same request", a.Name)
-	}
 	path := a.HealthCheckPath
 	if path == "" {
 		path = defaultHealthCheckPath

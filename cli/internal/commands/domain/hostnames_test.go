@@ -47,7 +47,7 @@ func attach(t *testing.T, project clitest.FakeProject) {
 	invocation := newTestInvocation()
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(invocation, &stdout)
-	if err := runDomainAdd(context.Background(), invocation, project.Root, "", &stdout, &stderr); err != nil {
+	if err := runDomainAdd(context.Background(), invocation, project.Root, "", &stdout); err != nil {
 		t.Fatalf("attach the production hostnames: %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 }
@@ -91,7 +91,7 @@ func TestDomainListWithPreviewShowsTheGlobalDomainAndTheProjectsOnIt(t *testing.
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stderr)
-		if err := runDomainList(context.Background(), invocation, project.Root, domainOptions{preview: true}, &stdout, &stderr); err != nil {
+		if err := runDomainList(context.Background(), invocation, project.Root, domainOptions{preview: true}, &stdout); err != nil {
 			t.Fatalf("runDomainList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
@@ -120,7 +120,7 @@ func TestDomainListWithPreviewShowsTheGlobalDomainAndTheProjectsOnIt(t *testing.
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stderr)
-		if err := runDomainList(context.Background(), invocation, project.Root, domainOptions{preview: true}, &stdout, &stderr); err != nil {
+		if err := runDomainList(context.Background(), invocation, project.Root, domainOptions{preview: true}, &stdout); err != nil {
 			t.Fatalf("runDomainList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
@@ -146,7 +146,7 @@ func TestDomainListWithPreviewShowsTheGlobalDomainAndTheProjectsOnIt(t *testing.
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stderr)
-		if err := runDomainList(context.Background(), invocation, project.Root, domainOptions{preview: true}, &stdout, &stderr); err != nil {
+		if err := runDomainList(context.Background(), invocation, project.Root, domainOptions{preview: true}, &stdout); err != nil {
 			t.Fatalf("runDomainList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
@@ -168,7 +168,7 @@ func TestDomainListWithPreviewShowsTheGlobalDomainAndTheProjectsOnIt(t *testing.
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stderr)
-		if err := runDomainList(context.Background(), invocation, project.Root, domainOptions{preview: true}, &stdout, &stderr); err != nil {
+		if err := runDomainList(context.Background(), invocation, project.Root, domainOptions{preview: true}, &stdout); err != nil {
 			t.Fatalf("runDomainList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
@@ -191,7 +191,7 @@ func TestDomainListWithPreviewShowsTheGlobalDomainAndTheProjectsOnIt(t *testing.
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stderr)
-		if err := runDomainList(context.Background(), invocation, project.Root, domainOptions{preview: true}, &stdout, &stderr); err != nil {
+		if err := runDomainList(context.Background(), invocation, project.Root, domainOptions{preview: true}, &stdout); err != nil {
 			t.Fatalf("runDomainList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
@@ -210,7 +210,7 @@ func TestDomainAddProvisionsOnlyTheHostnamesTheConfigDeclares(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := runDomainAdd(context.Background(), invocation, project.Root, "", &stdout, &stderr); err != nil {
+		if err := runDomainAdd(context.Background(), invocation, project.Root, "", &stdout); err != nil {
 			t.Fatalf("runDomainAdd err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
@@ -245,7 +245,7 @@ func TestDomainAddProvisionsOnlyTheHostnamesTheConfigDeclares(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := runDomainAdd(context.Background(), invocation, project.Root, "www.app.com", &stdout, &stderr); err != nil {
+		if err := runDomainAdd(context.Background(), invocation, project.Root, "www.app.com", &stdout); err != nil {
 			t.Fatalf("runDomainAdd err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
@@ -269,7 +269,7 @@ func TestDomainAddProvisionsOnlyTheHostnamesTheConfigDeclares(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		err := runDomainAdd(context.Background(), invocation, project.Root, "", &stdout, &stderr)
+		err := runDomainAdd(context.Background(), invocation, project.Root, "", &stdout)
 		if err == nil {
 			t.Fatalf("runDomainAdd err = nil, want the failed probe surfaced; stdout=%s", stdout.String())
 		}
@@ -284,7 +284,7 @@ func TestDomainAddProvisionsOnlyTheHostnamesTheConfigDeclares(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		err := runDomainAdd(context.Background(), invocation, project.Root, "other.app.com", &stdout, &stderr)
+		err := runDomainAdd(context.Background(), invocation, project.Root, "other.app.com", &stdout)
 		if err == nil {
 			t.Fatal("runDomainAdd err = nil, want a refusal: no command edits the config")
 		}
@@ -303,9 +303,9 @@ func TestDomainAddProvisionsOnlyTheHostnamesTheConfigDeclares(t *testing.T) {
 		project := clitest.SetUpProject(t)
 		invocation := newTestInvocation()
 
-		var stdout, stderr bytes.Buffer
+		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		err := runDomainAdd(context.Background(), invocation, project.Root, "", &stdout, &stderr)
+		err := runDomainAdd(context.Background(), invocation, project.Root, "", &stdout)
 		if err == nil {
 			t.Fatal("runDomainAdd err = nil, want a refusal with nothing declared")
 		}
@@ -332,7 +332,7 @@ func TestDomainRemoveUnbindsWhatTheConfigNoLongerDeclares(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := runDomainRemove(context.Background(), invocation, project.Root, "", domainOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runDomainRemove(context.Background(), invocation, project.Root, "", domainOptions{yes: true}, &stdout, strings.NewReader("")); err != nil {
 			t.Fatalf("runDomainRemove err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
@@ -357,7 +357,7 @@ func TestDomainRemoveUnbindsWhatTheConfigNoLongerDeclares(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := runDomainRemove(context.Background(), invocation, project.Root, "old.app.com", domainOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runDomainRemove(context.Background(), invocation, project.Root, "old.app.com", domainOptions{yes: true}, &stdout, strings.NewReader("")); err != nil {
 			t.Fatalf("runDomainRemove err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
@@ -376,9 +376,9 @@ func TestDomainRemoveUnbindsWhatTheConfigNoLongerDeclares(t *testing.T) {
 		attach(t, project)
 		invocation := newTestInvocation()
 
-		var stdout, stderr bytes.Buffer
+		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		err := runDomainRemove(context.Background(), invocation, project.Root, "old.app.com", domainOptions{}, &stdout, &stderr, strings.NewReader(""))
+		err := runDomainRemove(context.Background(), invocation, project.Root, "old.app.com", domainOptions{}, &stdout, strings.NewReader(""))
 		if err == nil || !strings.Contains(err.Error(), "pass --yes") {
 			t.Fatalf("runDomainRemove without a terminal err = %v, want a refusal naming --yes", err)
 		}
@@ -393,9 +393,9 @@ func TestDomainRemoveUnbindsWhatTheConfigNoLongerDeclares(t *testing.T) {
 		invocation := newTestInvocation()
 		invocation.StdinIsTerminal = func(io.Reader) bool { return true }
 
-		var stdout, stderr bytes.Buffer
+		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := runDomainRemove(context.Background(), invocation, project.Root, "old.app.com", domainOptions{}, &stdout, &stderr, strings.NewReader("n\n")); err != nil {
+		if err := runDomainRemove(context.Background(), invocation, project.Root, "old.app.com", domainOptions{}, &stdout, strings.NewReader("n\n")); err != nil {
 			t.Fatalf("runDomainRemove err = %v; stdout=%s", err, stdout.String())
 		}
 		out := stdout.String()
@@ -418,7 +418,7 @@ func TestDomainListListsThisProjectsOwnHostnamesWithoutPreview(t *testing.T) {
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(invocation, &stderr)
-	if err := runDomainList(context.Background(), invocation, project.Root, domainOptions{}, &stdout, &stderr); err != nil {
+	if err := runDomainList(context.Background(), invocation, project.Root, domainOptions{}, &stdout); err != nil {
 		t.Fatalf("runDomainList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	out := stdout.String()
@@ -435,7 +435,7 @@ func TestDomainListReadsStateWhileStatusChecksTheEdgeLive(t *testing.T) {
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(invocation, &stderr)
-	if err := runDomainList(context.Background(), invocation, project.Root, domainOptions{}, &stdout, &stderr); err != nil {
+	if err := runDomainList(context.Background(), invocation, project.Root, domainOptions{}, &stdout); err != nil {
 		t.Fatalf("runDomainList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	asked := clitest.RequestsTo[*contractv1.HostnameRequest](t, project.Requests, contractv1connect.ProviderServiceGetHostnameStatusProcedure)
@@ -445,7 +445,7 @@ func TestDomainListReadsStateWhileStatusChecksTheEdgeLive(t *testing.T) {
 
 	stdout.Reset()
 	stderr.Reset()
-	if err := runDomainStatus(context.Background(), invocation, project.Root, domainOptions{}, quickDomainWait, &stdout, &stderr); err != nil {
+	if err := runDomainStatus(context.Background(), invocation, project.Root, domainOptions{}, quickDomainWait, &stdout); err != nil {
 		t.Fatalf("runDomainStatus err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	asked = clitest.RequestsTo[*contractv1.HostnameRequest](t, project.Requests, contractv1connect.ProviderServiceGetHostnameStatusProcedure)

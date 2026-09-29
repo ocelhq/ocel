@@ -26,18 +26,24 @@ func (p *Project) ResolveComputes(runs []string, vendor string) (*Project, error
 		computes = append(computes, provider.Compute(name))
 	}
 
+	for _, app := range p.Apps {
+		if app.Compute != "" && !slices.Contains(computes, app.Compute) {
+			return nil, fmt.Errorf(
+				"app %q asks for compute %q, which %s does not run — it runs %s: give %q a compute from that list, or deploy it to a provider that runs %q",
+				app.Name, app.Compute, vendor, english.And(english.Quoted(runs)), app.Name, app.Compute,
+			)
+		}
+	}
+	return p.resolveOn(computes)
+}
+
+func (p *Project) resolveOn(computes []provider.Compute) (*Project, error) {
 	resolved := *p
 	resolved.Apps = make([]App, 0, len(p.Apps))
 	for _, app := range p.Apps {
 		compute := app.Compute
 		if compute == "" {
 			compute = computes[0]
-		}
-		if !slices.Contains(computes, compute) {
-			return nil, fmt.Errorf(
-				"app %q asks for compute %q, which %s does not run — it runs %s: give %q a compute from that list, or deploy it to a provider that runs %q",
-				app.Name, compute, vendor, english.And(english.Quoted(runs)), app.Name, compute,
-			)
 		}
 		shaped, err := app.runningOn(compute)
 		if err != nil {
@@ -52,7 +58,7 @@ func (p *Project) ResolveDeclaredComputes() (*Project, error) {
 	if names := p.UnresolvedApps(); len(names) > 0 {
 		return nil, fmt.Errorf("%s %s no compute, and only the provider this project deploys through can say which one an app that names none runs on", english.And(english.Quoted(names)), nameOrNames(len(names)))
 	}
-	return p.ResolveComputes(provider.ComputeNames(provider.Computes()), "ocel")
+	return p.resolveOn(provider.Computes())
 }
 
 func nameOrNames(n int) string {

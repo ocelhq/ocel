@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
@@ -21,7 +20,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/version"
-	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/configdoc"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
@@ -239,12 +237,6 @@ export default {
   apps: [{ name: "api", path: "apps/api", framework: "node" }],
 `+declaration+`};
 `)
-}
-
-func UsageMonorepoFunctions() []build.Function {
-	return []build.Function{
-		{Route: "api", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
-	}
 }
 
 func LoadLoggedInCredentials() (console.Credentials, error) {

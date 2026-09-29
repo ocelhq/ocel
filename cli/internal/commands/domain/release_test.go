@@ -22,9 +22,9 @@ func TestDomainReleaseTearsDownTheGlobalDomainOnlyOnceNothingIsServedOnIt(t *tes
 		servedOnWildcard(t, project, "blog", "pr-9")
 		invocation := newTestInvocation()
 
-		var stdout, stderr bytes.Buffer
+		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		err := runDomainRelease(context.Background(), invocation, project.Root, domainOptions{preview: true, yes: true}, &stdout, &stderr, strings.NewReader(""))
+		err := runDomainRelease(context.Background(), invocation, project.Root, domainOptions{preview: true, yes: true}, &stdout, strings.NewReader(""))
 		if err == nil {
 			t.Fatalf("runDomainRelease err = nil, want the release refused; stdout=%s", stdout.String())
 		}
@@ -45,7 +45,7 @@ func TestDomainReleaseTearsDownTheGlobalDomainOnlyOnceNothingIsServedOnIt(t *tes
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := runDomainRelease(context.Background(), invocation, project.Root, domainOptions{preview: true, yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runDomainRelease(context.Background(), invocation, project.Root, domainOptions{preview: true, yes: true}, &stdout, strings.NewReader("")); err != nil {
 			t.Fatalf("runDomainRelease err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
@@ -74,9 +74,9 @@ func TestDomainReleaseTearsDownTheGlobalDomainOnlyOnceNothingIsServedOnIt(t *tes
 		project := previewProject(t)
 		invocation := newTestInvocation()
 
-		var stdout, stderr bytes.Buffer
+		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		err := runDomainRelease(context.Background(), invocation, project.Root, domainOptions{preview: true}, &stdout, &stderr, strings.NewReader(""))
+		err := runDomainRelease(context.Background(), invocation, project.Root, domainOptions{preview: true}, &stdout, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDomainRelease err = nil, want it to refuse without a terminal")
 		}
@@ -97,7 +97,7 @@ func TestReleasingThePreviewDomainAsksForItsNameWhileTheRunIsHeldAfterThePlanItS
 
 	var stream, stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(invocation, &stream)
-	if err := runDomainRelease(context.Background(), invocation, project.Root, domainOptions{preview: true}, &stdout, &stderr, strings.NewReader("preview.acme.com\n")); err != nil {
+	if err := runDomainRelease(context.Background(), invocation, project.Root, domainOptions{preview: true}, &stdout, strings.NewReader("preview.acme.com\n")); err != nil {
 		t.Fatalf("runDomainRelease err = %v; stream=%s stdout=%s stderr=%s", err, stream.String(), stdout.String(), stderr.String())
 	}
 

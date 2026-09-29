@@ -63,11 +63,11 @@ func TestTheBootstrapWideDomainCommandsRefuseWithoutPreview(t *testing.T) {
 		project := previewProject(t)
 		invocation := newTestInvocation()
 
-		var stdout, stderr bytes.Buffer
+		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
 		runs := map[string]error{
-			"use":     runDomainUse(context.Background(), invocation, project.Root, "*.preview.acme.com", domainOptions{}, &stdout, &stderr),
-			"release": runDomainRelease(context.Background(), invocation, project.Root, domainOptions{}, &stdout, &stderr, strings.NewReader("")),
+			"use":     runDomainUse(context.Background(), invocation, project.Root, "*.preview.acme.com", domainOptions{}, &stdout),
+			"release": runDomainRelease(context.Background(), invocation, project.Root, domainOptions{}, &stdout, strings.NewReader("")),
 		}
 		for name, err := range runs {
 			if err == nil {
