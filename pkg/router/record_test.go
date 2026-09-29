@@ -15,7 +15,7 @@ func TestADeploymentRecordMarshalsUnderItsWireNamesAndOmitsWhatIsAbsent(t *testi
 		t.Parallel()
 
 		raw := marshalRecord(t, DeploymentRecord{App: "web", Build: "b1"})
-		for _, absent := range []string{"valueFingerprint", "variables"} {
+		for _, absent := range []string{"buildFingerprint", "variables"} {
 			if strings.Contains(raw, absent) {
 				t.Errorf("record = %s, want no %q for a Deployment that baked nothing", raw, absent)
 			}
@@ -28,7 +28,7 @@ func TestADeploymentRecordMarshalsUnderItsWireNamesAndOmitsWhatIsAbsent(t *testi
 		raw := marshalRecord(t, DeploymentRecord{
 			App:              "web",
 			Build:            "b1~fp",
-			ValueFingerprint: "fp",
+			BuildFingerprint: "fp",
 			Variables: []VariableRecord{
 				{Key: "PLAIN_KEY", Version: 2},
 				{Key: "LIVE_KEY", Folder: "/api", Live: true},
@@ -36,14 +36,14 @@ func TestADeploymentRecordMarshalsUnderItsWireNamesAndOmitsWhatIsAbsent(t *testi
 		})
 
 		var got struct {
-			ValueFingerprint string           `json:"valueFingerprint"`
+			BuildFingerprint string           `json:"buildFingerprint"`
 			Variables        []VariableRecord `json:"variables"`
 		}
 		if err := json.Unmarshal([]byte(raw), &got); err != nil {
 			t.Fatalf("Unmarshal: %v", err)
 		}
-		if got.ValueFingerprint != "fp" {
-			t.Errorf("valueFingerprint = %q, want %q", got.ValueFingerprint, "fp")
+		if got.BuildFingerprint != "fp" {
+			t.Errorf("buildFingerprint = %q, want %q", got.BuildFingerprint, "fp")
 		}
 		if len(got.Variables) != 2 {
 			t.Fatalf("variables = %v, want both entries", got.Variables)

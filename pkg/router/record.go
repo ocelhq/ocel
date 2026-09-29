@@ -21,7 +21,7 @@ type DeploymentRecord struct {
 	IsrWriteSecret   string            `json:"isrWriteSecret,omitempty"`
 	CreatedAt        int64             `json:"createdAt"`
 	EdgeWorkers      *Code             `json:"edgeWorkers,omitempty"`
-	ValueFingerprint string            `json:"valueFingerprint,omitempty"`
+	BuildFingerprint string            `json:"buildFingerprint,omitempty"`
 	Variables        []VariableRecord  `json:"variables,omitempty"`
 	Env              map[string]string `json:"env,omitempty"`
 	Envelope         string            `json:"envelope,omitempty"`

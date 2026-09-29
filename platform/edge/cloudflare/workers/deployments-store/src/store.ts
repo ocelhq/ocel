@@ -15,7 +15,7 @@ export interface DeploymentRecord {
   isrWriteSecret?: string;
   createdAt: number;
   edgeWorkers?: EdgeWorkers;
-  valueFingerprint?: string;
+  buildFingerprint?: string;
   variables?: VariableRecord[];
 }
 

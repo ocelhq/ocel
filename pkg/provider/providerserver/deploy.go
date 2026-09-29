@@ -1205,7 +1205,7 @@ func (r *deployRun) recordStagedDeployment(ctx context.Context, entry provider.A
 		IsrPrefix:        withoutSlash(coordinate.ISRPrefix()),
 		IsrWriteSecret:   result.ISRWriteSecret,
 		CreatedAt:        time.Now().Unix(),
-		ValueFingerprint: entry.Build.Fingerprint(),
+		BuildFingerprint: entry.Build.Fingerprint(),
 		Variables:        declaredVariables(entry.Manifest.GetClientBundle(), values),
 		Needs:            r.needs[entry.App].Needs,
 		SupportInEffect:  r.needs[entry.App].InEffect,
