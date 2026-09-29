@@ -125,7 +125,7 @@ func (d *hostnames) attachHostname(ctx context.Context, target ConfiguredHost, p
 		return false, certifying.discardSuperseded(ctx, progress)
 	}
 
-	origin, err := d.claimOrigin(ctx, target)
+	origin, err := d.claimOrigin(ctx, target, hostState.Certificate.ID)
 	if err != nil {
 		return true, err
 	}
@@ -173,11 +173,11 @@ func (d *hostnames) attachHostname(ctx context.Context, target ConfiguredHost, p
 	return true, d.unbindPreviousEdge(ctx, host, previous, progress)
 }
 
-func (d *hostnames) claimOrigin(ctx context.Context, target ConfiguredHost) (*edge.Origin, error) {
+func (d *hostnames) claimOrigin(ctx context.Context, target ConfiguredHost, certificate string) (*edge.Origin, error) {
 	if !d.front.Facts().ProxiesRecords {
 		return nil, nil
 	}
-	claim := router.Claim{Hostname: target.Hostname, App: target.App}
+	claim := router.Claim{Hostname: target.Hostname, App: target.App, Certificate: certificate}
 	if ensure := d.front.Hooks().EnsureClientCertificate; ensure != nil {
 		certificate, err := ensure(ctx, target.Hostname)
 		if err != nil {
