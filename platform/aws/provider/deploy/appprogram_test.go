@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 )
 
@@ -37,6 +38,7 @@ func appStackSpec(t *testing.T) (Config, provider.StackSpec) {
 		App: &provider.AppSpec{
 			App:        "web",
 			Framework:  appbuild.FrameworkNext,
+			Router:     router.Kind(cloudfront.Kind),
 			Entry:      "fn--web--entry",
 			Deployment: "d1",
 			Functions: []provider.FunctionSpec{
@@ -70,8 +72,8 @@ func TestAnAppStackIsProvisionedFromTheSpecAlone(t *testing.T) {
 	}
 
 	entry := functionEnvOf(t, rec, functionCoordinate("shop", stack, "fn--web--entry").PhysicalName(maxLambdaBaseNameLen))
-	if entry[edgeKindEnv] != string(cloudfront.Kind) {
-		t.Errorf("%s = %q, want the edge kind the deploy chose", edgeKindEnv, entry[edgeKindEnv])
+	if entry[routerKindEnv] != string(cloudfront.Kind) {
+		t.Errorf("%s = %q, want the router the spec named", routerKindEnv, entry[routerKindEnv])
 	}
 	if entry[routingManifestEnv] != routingManifestInTask {
 		t.Errorf("%s = %q, want the routing manifest the spec passed", routingManifestEnv, entry[routingManifestEnv])

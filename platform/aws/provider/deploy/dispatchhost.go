@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	edgeKindEnv           = "OCEL_EDGE_KIND"
+	routerKindEnv         = "OCEL_ROUTER_KIND"
 	routingManifestEnv    = "OCEL_ROUTING_MANIFEST"
 	functionURLsEnv       = "OCEL_FUNCTION_URLS"
 	assetBucketEnv        = "OCEL_ASSET_BUCKET"

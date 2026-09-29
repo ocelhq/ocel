@@ -28,7 +28,7 @@ beforeAll(async () => {
   const launcherPath = join(projectDir, "__next_launcher.cjs");
   await writeFile(launcherPath, launcherModule);
 
-  process.env.OCEL_EDGE_KIND = "cloudfront";
+  process.env.OCEL_ROUTER_KIND = "cloudfront";
   process.env.OCEL_ORIGIN_DISPATCH = "1";
   delete process.env.OCEL_ROUTING_MANIFEST;
   process.env.OCEL_CONTROL_SOCKET = sockPath;

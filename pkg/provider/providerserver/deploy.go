@@ -894,6 +894,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 					Entry:           entryLogicalName(r.manifest, entry.App, facts.Entry),
 					Deployment:      entry.Build.DeploymentID(),
 					Compute:         entry.Compute(),
+					Router:          r.readAppRouter(entry.App),
 					Functions:       r.functionSpecs(entry),
 					Image:           imageToRun(images, entry),
 					HealthCheckPath: entry.HealthCheckPath,
