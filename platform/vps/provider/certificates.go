@@ -111,7 +111,7 @@ func pinnedStatus(leaf certs.Leaf, hostname string, now time.Time) string {
 }
 
 func (p *Provider) servedHealth(ctx context.Context, served, hostname string, health provider.CertificateHealth) (provider.CertificateHealth, error) {
-	block, err := p.host.ServedCertificate(ctx, served)
+	block, err := p.host.ReadServedCertificate(ctx, served)
 	if err != nil {
 		return health, err
 	}

@@ -317,8 +317,11 @@ func TestTheBoxProbesWhatItServesOnItsOwnHttpsPortWithoutDocker(t *testing.T) {
 	t.Parallel()
 
 	for verb, probe := range map[string]func(h *Host) error{
-		"probe": func(h *Host) error { _, err := h.ServedRouter(context.Background(), "web.localhost"); return err },
-		"leaf":  func(h *Host) error { _, err := h.ServedCertificate(context.Background(), "web.localhost"); return err },
+		"probe": func(h *Host) error { _, err := h.ProbeRouter(context.Background(), "web.localhost"); return err },
+		"leaf": func(h *Host) error {
+			_, err := h.ReadServedCertificate(context.Background(), "web.localhost")
+			return err
+		},
 	} {
 		box := machine(nil)
 		if err := probe(box.host()); err != nil {
@@ -360,13 +363,13 @@ func TestAProbeTheBoxCannotAnswerYetFailsWithAOneLineReason(t *testing.T) {
 		}
 		return session.Result{}, false
 	}
-	said, err := box.host().ServedRouter(context.Background(), "web.localhost")
+	said, err := box.host().ProbeRouter(context.Background(), "web.localhost")
 	if err != nil || said.Failure == "" || strings.Contains(said.Failure, "\n") {
-		t.Errorf("ServedRouter() over a box not serving yet = %+v, %v, want its failure on one line", said, err)
+		t.Errorf("ProbeRouter() over a box not serving yet = %+v, %v, want its failure on one line", said, err)
 	}
 	box.answer = func(string) (session.Result, bool) { return session.Result{Code: 2, Stderr: "usage"}, true }
-	if _, err := box.host().ServedRouter(context.Background(), "web.localhost"); err == nil {
-		t.Error("ServedRouter() over a probe that refused = nil, want the refusal")
+	if _, err := box.host().ProbeRouter(context.Background(), "web.localhost"); err == nil {
+		t.Error("ProbeRouter() over a probe that refused = nil, want the refusal")
 	}
 }
 

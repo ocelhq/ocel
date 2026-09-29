@@ -19,7 +19,7 @@ const (
 	otherZonePull   = "-----BEGIN CERTIFICATE-----\nzone two\n-----END CERTIFICATE-----\n"
 )
 
-func shieldedFront() map[string]string {
+func shieldedLoadBalancer() map[string]string {
 	return map[string]string{
 		"address":        shieldedAddress,
 		"certificateMap": "ocel-alb-shielded-production-certs",
@@ -30,8 +30,8 @@ func shieldedFront() map[string]string {
 
 func shielding(t *testing.T) (*Edge, *world) {
 	t.Helper()
-	balancer, w := fronting(t)
-	w.outputs[ShieldedLoadBalancerStack(environment.TierProduction)] = shieldedFront()
+	balancer, w := balancing(t)
+	w.outputs[ShieldedLoadBalancerStack(environment.TierProduction)] = shieldedLoadBalancer()
 	return balancer, w
 }
 
@@ -58,7 +58,7 @@ func trustedBy(t *testing.T, w *world) []string {
 	return pems
 }
 
-func TestTheShieldedFrontRefusesEveryConnectionThatPresentsNoCertificateItTrusts(t *testing.T) {
+func TestTheShieldedLoadBalancerRefusesEveryConnectionThatPresentsNoCertificateItTrusts(t *testing.T) {
 	t.Parallel()
 
 	seen, err := declared(loadBalancerProgram(loadBalancerSpec{Names: loadBalancerNames(environment.TierProduction, true), ClientCertificates: []string{zonePull}}))
@@ -94,7 +94,7 @@ func TestTheShieldedFrontRefusesEveryConnectionThatPresentsNoCertificateItTrusts
 	}
 }
 
-func TestAClaimWithAClientCertificateAnswersTheHostnameOnTheShieldedFrontAndNamesItAsTheOrigin(t *testing.T) {
+func TestAClaimWithAClientCertificateAnswersTheHostnameOnTheShieldedLoadBalancerAndNamesItAsTheOrigin(t *testing.T) {
 	t.Parallel()
 
 	balancer, w := shielding(t)
@@ -122,7 +122,7 @@ func TestAClaimWithAClientCertificateAnswersTheHostnameOnTheShieldedFrontAndName
 	}
 }
 
-func TestTheShieldedFrontIsRaisedAgainOnlyForACertificateItDoesNotYetTrust(t *testing.T) {
+func TestTheShieldedLoadBalancerIsRaisedAgainOnlyForACertificateItDoesNotYetTrust(t *testing.T) {
 	t.Parallel()
 
 	balancer, w := shielding(t)
@@ -157,11 +157,11 @@ func TestTheShieldedFrontIsRaisedAgainOnlyForACertificateItDoesNotYetTrust(t *te
 	}
 }
 
-func TestTheShieldedFrontTrustsExactlyWhatTheHostnamesClaimedOnItCarry(t *testing.T) {
+func TestTheShieldedLoadBalancerTrustsExactlyWhatTheHostnamesClaimedOnItCarry(t *testing.T) {
 	t.Parallel()
 
 	balancer, w := shielding(t)
-	w.outputs[ShieldedLoadBalancerStack(environment.TierPreview)] = shieldedFront()
+	w.outputs[ShieldedLoadBalancerStack(environment.TierPreview)] = shieldedLoadBalancer()
 	routed := unreconciledRouter(t, balancer)
 	ctx := context.Background()
 	claim := func(hostname string, certificates ...string) {
@@ -210,7 +210,7 @@ func TestTheShieldedFrontTrustsExactlyWhatTheHostnamesClaimedOnItCarry(t *testin
 	}
 }
 
-func TestTheShieldedFrontComesUpAtBootstrapTrustingNothingAClientCouldPresent(t *testing.T) {
+func TestTheShieldedLoadBalancerComesUpAtBootstrapTrustingNothingAClientCouldPresent(t *testing.T) {
 	t.Parallel()
 
 	balancer, w := shielding(t)
@@ -232,11 +232,11 @@ func TestTheShieldedFrontComesUpAtBootstrapTrustingNothingAClientCouldPresent(t 
 	}
 }
 
-func TestTheShieldedFrontLeavesThePreviewWildcardToTheFrontItWasBoundOn(t *testing.T) {
+func TestTheShieldedLoadBalancerLeavesThePreviewWildcardToTheLoadBalancerItWasBoundOn(t *testing.T) {
 	t.Parallel()
 
-	balancer, w := fronting(t)
-	w.outputs[ShieldedLoadBalancerStack(environment.TierPreview)] = shieldedFront()
+	balancer, w := balancing(t)
+	w.outputs[ShieldedLoadBalancerStack(environment.TierPreview)] = shieldedLoadBalancer()
 	if err := balancer.rememberPreview(context.Background(), previewEntry{BaseDomain: "preview.example.com", Certificate: "certs/preview"}); err != nil {
 		t.Fatal(err)
 	}
@@ -263,7 +263,7 @@ func TestDestroyingTheALBRouterTakesDownWhatItsClaimsBound(t *testing.T) {
 		t.Errorf("the shielded balancer still routes %v", hosts)
 	}
 	if !slices.Contains(w.torn(), BindingStack("shop", environment.TierProduction)) {
-		t.Errorf("stacks torn down %v, want the project's binding stack: an edge in balancer of the router takes none of it down", w.torn())
+		t.Errorf("stacks torn down %v, want the project's binding stack: an edge in front of the router takes none of it down", w.torn())
 	}
 }
 
@@ -282,11 +282,11 @@ func TestTheALBRoutersRemovalPlanNamesTheHostRuleOfEveryHostnameAnEdgeForwardsTo
 		}
 	}
 	if !slices.Equal(rules, []string{"shop.example.com"}) {
-		t.Errorf("the alb router plans to delete host rules %v, want shop.example.com: an edge in balancer lists only what it forwards, and the plan must name what the load balancer takes down", rules)
+		t.Errorf("the alb router plans to delete host rules %v, want shop.example.com: an edge in front lists only what it forwards, and the plan must name what the load balancer takes down", rules)
 	}
 }
 
-func shieldedPreviewFront() map[string]string {
+func shieldedPreviewLoadBalancer() map[string]string {
 	return map[string]string{
 		"address":        shieldedAddress,
 		"certificateMap": "ocel-alb-shielded-preview-certs",
@@ -295,11 +295,11 @@ func shieldedPreviewFront() map[string]string {
 	}
 }
 
-func TestThePreviewEntryAnEdgeForwardsIsServedByTheShieldedFrontAlone(t *testing.T) {
+func TestThePreviewEntryAnEdgeForwardsIsServedByTheShieldedLoadBalancerAlone(t *testing.T) {
 	t.Parallel()
 
-	balancer, w := fronting(t)
-	w.outputs[ShieldedLoadBalancerStack(environment.TierPreview)] = shieldedPreviewFront()
+	balancer, w := balancing(t)
+	w.outputs[ShieldedLoadBalancerStack(environment.TierPreview)] = shieldedPreviewLoadBalancer()
 	ctx := context.Background()
 
 	origin, err := NewRouter(balancer).Hooks().Origin.ClaimPreviewEntry(ctx, router.Claim{Hostname: "*.preview.example.com", Certificate: "certs/preview", ClientCertificates: []string{zonePull}})
@@ -334,7 +334,7 @@ func TestAClaimInOneZoneKeepsEveryCertificateAnotherZonesHostnamesCarry(t *testi
 	t.Parallel()
 
 	balancer, w := shielding(t)
-	w.outputs[ShieldedLoadBalancerStack(environment.TierPreview)] = shieldedPreviewFront()
+	w.outputs[ShieldedLoadBalancerStack(environment.TierPreview)] = shieldedPreviewLoadBalancer()
 	routed := unreconciledRouter(t, balancer)
 	ctx := context.Background()
 	const uploaded = "-----BEGIN CERTIFICATE-----\nuploaded to both zones\n-----END CERTIFICATE-----\n"
