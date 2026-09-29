@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -133,7 +133,7 @@ func printRequired(stdout io.Writer, catalogue []*contractv1.Feature, required, 
 		return
 	}
 	printSection(stdout, catalogue, []string{required}, "Required by this project:",
-		fmt.Sprintf("Your edge is %s. Change it in %s.", kind, projectconfig.DefaultFileName))
+		fmt.Sprintf("Your edge is %s. Change it in %s.", kind, project.DefaultFileName))
 }
 
 func printSection(stdout io.Writer, catalogue []*contractv1.Feature, names []string, heading, note string) {

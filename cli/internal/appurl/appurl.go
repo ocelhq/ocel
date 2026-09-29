@@ -1,7 +1,7 @@
 package appurl
 
 import (
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/appbuild"
@@ -9,14 +9,14 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
-func Production(cfg *projectconfig.Config) map[string]string {
-	return byApp(cfg, cfg.Domains["production"], func(app projectconfig.App) []string {
+func Production(cfg *project.Project) map[string]string {
+	return byApp(cfg, cfg.Domains["production"], func(app project.App) []string {
 		return app.Domains["production"]
 	})
 }
 
-func Preview(cfg *projectconfig.Config, host func(app string) string) map[string]string {
-	return byApp(cfg, nil, func(app projectconfig.App) []string {
+func Preview(cfg *project.Project, host func(app string) string) map[string]string {
+	return byApp(cfg, nil, func(app project.App) []string {
 		if len(cfg.Apps) < 2 {
 			return []string{host("")}
 		}
@@ -24,10 +24,10 @@ func Preview(cfg *projectconfig.Config, host func(app string) string) map[string
 	})
 }
 
-func byApp(cfg *projectconfig.Config, project []string, declared func(projectconfig.App) []string) map[string]string {
+func byApp(cfg *project.Project, projectHosts []string, declared func(project.App) []string) map[string]string {
 	apps := cfg.Apps
 	if len(apps) == 0 {
-		apps = []projectconfig.App{{Name: variablescope.RootApp}}
+		apps = []project.App{{Name: variablescope.RootApp}}
 	}
 	own := make([][]string, len(apps))
 	for slot, app := range apps {
@@ -35,7 +35,7 @@ func byApp(cfg *projectconfig.Config, project []string, declared func(projectcon
 	}
 
 	urls := make(map[string]string, len(apps))
-	for slot, served := range appbuild.AttributeHostnames(project, own) {
+	for slot, served := range appbuild.AttributeHostnames(projectHosts, own) {
 		if host := first(served); host != "" {
 			urls[apps[slot].Name] = "https://" + host
 		}
@@ -59,7 +59,7 @@ func Variables(clientBundle bool, url string) []variables.Variable {
 	return written
 }
 
-func clientBundles(cfg *projectconfig.Config) map[string]bool {
+func clientBundles(cfg *project.Project) map[string]bool {
 	apps := variablescope.Apps(cfg)
 	byName := make(map[string]bool, len(apps))
 	for _, a := range apps {
@@ -68,7 +68,7 @@ func clientBundles(cfg *projectconfig.Config) map[string]bool {
 	return byName
 }
 
-func Prepend(cfg *projectconfig.Config, byApp map[string][]variables.Variable, byURL map[string]string) {
+func Prepend(cfg *project.Project, byApp map[string][]variables.Variable, byURL map[string]string) {
 	bundles := clientBundles(cfg)
 	for app, variables := range byApp {
 		byApp[app] = append(Variables(bundles[app], byURL[app]), variables...)

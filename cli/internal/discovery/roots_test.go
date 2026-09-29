@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/language"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/constants"
 )
 
@@ -196,7 +196,7 @@ func TestRootsOfAddsTheCratesAProjectDeclaresFrom(t *testing.T) {
 		write(t, filepath.Join(root, "apps", "api", "Cargo.toml"), rustWorkspaceManifest)
 		write(t, filepath.Join(root, "apps", "web", "package.json"), "{}")
 
-		roots, err := RootsOf(&projectconfig.Config{Dir: root, Apps: []projectconfig.App{
+		roots, err := RootsOf(&project.Project{Dir: root, Apps: []project.App{
 			{Name: "api", Path: "apps/api"},
 			{Name: "web", Path: "apps/web"},
 		}})
@@ -219,7 +219,7 @@ func TestRootsOfAddsTheCratesAProjectDeclaresFrom(t *testing.T) {
 		write(t, filepath.Join(root, "Cargo.toml"), rustBinManifest)
 		write(t, filepath.Join(root, "apps", "web", "Cargo.toml"), rustBinManifest)
 
-		roots, err := RootsOf(&projectconfig.Config{Dir: root, Apps: []projectconfig.App{{Name: "web", Path: "apps/web"}}})
+		roots, err := RootsOf(&project.Project{Dir: root, Apps: []project.App{{Name: "web", Path: "apps/web"}}})
 		if err != nil {
 			t.Fatalf("RootsOf: %v", err)
 		}
@@ -232,7 +232,7 @@ func TestRootsOfAddsTheCratesAProjectDeclaresFrom(t *testing.T) {
 		root := t.TempDir()
 		write(t, filepath.Join(root, "apps", "api", "Cargo.toml"), rustRenamedManifest)
 
-		roots, err := RootsOf(&projectconfig.Config{Dir: root, Apps: []projectconfig.App{{Name: "api", Path: "apps/api"}}})
+		roots, err := RootsOf(&project.Project{Dir: root, Apps: []project.App{{Name: "api", Path: "apps/api"}}})
 		if err != nil {
 			t.Fatalf("RootsOf: %v", err)
 		}
@@ -245,7 +245,7 @@ func TestRootsOfAddsTheCratesAProjectDeclaresFrom(t *testing.T) {
 		root := t.TempDir()
 		write(t, filepath.Join(root, "apps", "api", "Cargo.toml"), rustOtherOcelManifest)
 
-		roots, err := RootsOf(&projectconfig.Config{Dir: root, Apps: []projectconfig.App{{Name: "api", Path: "apps/api"}}})
+		roots, err := RootsOf(&project.Project{Dir: root, Apps: []project.App{{Name: "api", Path: "apps/api"}}})
 		if err != nil {
 			t.Fatalf("RootsOf: %v", err)
 		}
@@ -258,7 +258,7 @@ func TestRootsOfAddsTheCratesAProjectDeclaresFrom(t *testing.T) {
 		root := t.TempDir()
 		write(t, filepath.Join(root, "apps", "api", "Cargo.toml"), rustTargetManifest)
 
-		roots, err := RootsOf(&projectconfig.Config{Dir: root, Apps: []projectconfig.App{{Name: "api", Path: "apps/api"}}})
+		roots, err := RootsOf(&project.Project{Dir: root, Apps: []project.App{{Name: "api", Path: "apps/api"}}})
 		if err != nil {
 			t.Fatalf("RootsOf: %v", err)
 		}
@@ -271,7 +271,7 @@ func TestRootsOfAddsTheCratesAProjectDeclaresFrom(t *testing.T) {
 		root := t.TempDir()
 		write(t, filepath.Join(root, "apps", "api", "Cargo.toml"), rustDevOnlyManifest)
 
-		roots, err := RootsOf(&projectconfig.Config{Dir: root, Apps: []projectconfig.App{{Name: "api", Path: "apps/api"}}})
+		roots, err := RootsOf(&project.Project{Dir: root, Apps: []project.App{{Name: "api", Path: "apps/api"}}})
 		if err != nil {
 			t.Fatalf("RootsOf: %v", err)
 		}
@@ -286,7 +286,7 @@ func TestRootsOfAddsTheCratesAProjectDeclaresFrom(t *testing.T) {
 		write(t, filepath.Join(root, "package.json"), "{}")
 		write(t, filepath.Join(root, "ocel.config.ts"), "export default {};")
 
-		roots, err := RootsOf(&projectconfig.Config{Dir: root, Apps: []projectconfig.App{{Name: "web", Path: "."}}})
+		roots, err := RootsOf(&project.Project{Dir: root, Apps: []project.App{{Name: "web", Path: "."}}})
 		if err != nil {
 			t.Fatalf("RootsOf: %v", err)
 		}
@@ -300,7 +300,7 @@ func TestRootsOfAddsTheCratesAProjectDeclaresFrom(t *testing.T) {
 		write(t, filepath.Join(root, constants.DefaultDiscoveryDirName, "main.ts"), "export {};")
 		write(t, filepath.Join(root, "apps", "web", "package.json"), "{}")
 
-		roots, err := RootsOf(&projectconfig.Config{Dir: root, Apps: []projectconfig.App{{Name: "web", Path: "apps/web"}}})
+		roots, err := RootsOf(&project.Project{Dir: root, Apps: []project.App{{Name: "web", Path: "apps/web"}}})
 		if err != nil {
 			t.Fatalf("RootsOf: %v", err)
 		}

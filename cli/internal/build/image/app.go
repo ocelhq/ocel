@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/workspace"
 )
 
@@ -17,7 +17,7 @@ type App struct {
 
 func (a App) Dir() string { return a.Workspace.Dir() }
 
-func Describe(cfg *projectconfig.Config, app projectconfig.App) (App, error) {
+func Describe(cfg *project.Project, app project.App) (App, error) {
 	located, err := workspace.Locate(filepath.Join(cfg.Dir, app.Path))
 	if err != nil {
 		return App{}, fmt.Errorf("app %q: %w", app.Name, err)

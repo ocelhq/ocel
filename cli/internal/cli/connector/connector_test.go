@@ -21,7 +21,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/providers"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
@@ -101,12 +101,12 @@ func linked(t *testing.T, dir, apiURL string) {
 	}
 }
 
-func resolved(t *testing.T, root string) *projectconfig.Config {
+func resolved(t *testing.T, root string) *project.Project {
 	t.Helper()
 
-	cfg, err := projectconfig.Resolve(context.Background(), root, filepath.Join(root, "ocel.fake.json"))
+	cfg, err := project.Resolve(context.Background(), root, filepath.Join(root, "ocel.fake.json"))
 	if err != nil {
-		t.Fatalf("projectconfig.Resolve: %v", err)
+		t.Fatalf("project.Resolve: %v", err)
 	}
 	return cfg
 }
@@ -520,9 +520,9 @@ func TestTheVendorIsWhateverTheConfigPointsAtAndNoTableGatesIt(t *testing.T) {
 	t.Parallel()
 
 	for _, vendor := range []string{"fake", "elsewhere", "nowhere"} {
-		cfg := &projectconfig.Config{
+		cfg := &project.Project{
 			Path:     "ocel." + vendor + ".json",
-			Provider: &projectconfig.ProviderDescriptor{ID: vendor},
+			Provider: &project.ProviderDescriptor{ID: vendor},
 		}
 		named, err := vendored(cfg)
 		if err != nil {

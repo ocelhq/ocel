@@ -8,7 +8,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build/toolchain"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/language"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 )
 
@@ -16,7 +16,7 @@ func compiledFromSource(framework string) bool {
 	return framework == appbuild.FrameworkGo || framework == appbuild.FrameworkPython || framework == appbuild.FrameworkRust
 }
 
-func compile(ctx context.Context, cfg *projectconfig.Config, a projectconfig.App, outputDir string, log io.Writer) error {
+func compile(ctx context.Context, cfg *project.Project, a project.App, outputDir string, log io.Writer) error {
 	appDir := appbuild.AppArtifactRoot(outputDir, a.Name)
 	roots, err := discoveryRootsFor(cfg, a.Framework.Name)
 	if err != nil {
@@ -34,7 +34,7 @@ func compile(ctx context.Context, cfg *projectconfig.Config, a projectconfig.App
 	})
 }
 
-func discoveryRootsFor(cfg *projectconfig.Config, framework string) ([]string, error) {
+func discoveryRootsFor(cfg *project.Project, framework string) ([]string, error) {
 	if framework != appbuild.FrameworkPython {
 		return nil, nil
 	}

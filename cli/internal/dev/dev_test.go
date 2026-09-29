@@ -26,7 +26,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/dotfile"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/filewatch"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/constants"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
@@ -467,7 +467,7 @@ export default { slug: "test-app" };
 		}
 
 		stalled := startWatching
-		startWatching = func(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, run invocation, stdout, stderr io.Writer, onResolved func(map[string]string)) (*filewatch.Watcher, error) {
+		startWatching = func(ctx context.Context, srv *devserver.Server, cfg *project.Project, run invocation, stdout, stderr io.Writer, onResolved func(map[string]string)) (*filewatch.Watcher, error) {
 			time.Sleep(300 * time.Millisecond)
 			return stalled(ctx, srv, cfg, run, stdout, stderr, onResolved)
 		}
@@ -847,11 +847,11 @@ func devDeps() testDeps {
 }
 
 func options(ctx context.Context, deps testDeps, cwd string, command []string, stdout, stderr io.Writer, stdin io.Reader) (Options, error) {
-	cfg, err := projectconfig.ResolveOptional(ctx, cwd, "")
+	cfg, err := project.ResolveOptional(ctx, cwd, "")
 	if err != nil {
 		return Options{}, err
 	}
-	return Options{Config: cfg, Command: command, OpenDocker: deps.OpenDocker, Stdin: stdin, Stdout: stdout, Stderr: stderr}, nil
+	return Options{Project: cfg, Command: command, OpenDocker: deps.OpenDocker, Stdin: stdin, Stdout: stdout, Stderr: stderr}, nil
 }
 
 func runDev(ctx context.Context, deps testDeps, reset bool, cwd string, command []string, stdout, stderr io.Writer, stdin io.Reader) error {

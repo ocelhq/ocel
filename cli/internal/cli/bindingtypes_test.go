@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
@@ -18,7 +18,7 @@ func shape(name, jsonType string, list bool) *envvarsv1.PropertyShape {
 
 func TestRenderBindingTypes(t *testing.T) {
 	t.Run("writes what the checked-in fixture the transform package typechecks contains", func(t *testing.T) {
-		got := renderBindingTypes("production", []projectconfig.Binding{
+		got := renderBindingTypes("production", []project.Binding{
 			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "orders", External: "sst-pg-orders"},
 		}, []*envvarsv1.BindingSummary{
 			{
@@ -101,8 +101,8 @@ func TestRenderBindingTypes(t *testing.T) {
 	})
 
 	t.Run("types a binding written inline from the record ocel keeps for it", func(t *testing.T) {
-		got := renderBindingTypes("production", []projectconfig.Binding{
-			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "orders", Inline: &projectconfig.Inline{Postgres: &projectconfig.PostgresInline{URL: "ORDERS_URL"}}},
+		got := renderBindingTypes("production", []project.Binding{
+			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "orders", Inline: &project.Inline{Postgres: &project.PostgresInline{URL: "ORDERS_URL"}}},
 		}, []*envvarsv1.BindingSummary{
 			{
 				Name:       "ocel:postgres.orders",
@@ -116,7 +116,7 @@ func TestRenderBindingTypes(t *testing.T) {
 	})
 
 	t.Run("gives every resource bound to one record its own entry", func(t *testing.T) {
-		got := renderBindingTypes("production", []projectconfig.Binding{
+		got := renderBindingTypes("production", []project.Binding{
 			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "orders", External: "shared-pg"},
 			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "invoices", External: "shared-pg"},
 		}, []*envvarsv1.BindingSummary{

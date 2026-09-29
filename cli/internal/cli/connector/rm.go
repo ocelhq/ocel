@@ -6,7 +6,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -14,7 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
-func runRemove(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, _ *console.Link, opts options) (err error) {
+func runRemove(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, _ *console.Link, opts options) (err error) {
 	if _, err := vendored(cfg); err != nil {
 		return err
 	}
@@ -72,7 +72,7 @@ func forgotten(ctx context.Context, run *run.Run, opts options, access, fingerpr
 	return nil
 }
 
-func taken(ctx context.Context, deps cmddeps.Deps, run *run.Run, cfg *projectconfig.Config, opts options) (string, error) {
+func taken(ctx context.Context, deps cmddeps.Deps, run *run.Run, cfg *project.Project, opts options) (string, error) {
 	if opts.target != "" {
 		return "", fmt.Errorf("this run names a target, so the machine behind %s was never asked", opts.target)
 	}

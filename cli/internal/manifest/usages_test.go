@@ -7,7 +7,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/language"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 )
 
 func TestADetectedAppIsReadInTheLanguageOfTheProjectItSitsIn(t *testing.T) {
@@ -16,7 +16,7 @@ func TestADetectedAppIsReadInTheLanguageOfTheProjectItSitsIn(t *testing.T) {
 		t.Fatalf("write go.mod: %v", err)
 	}
 
-	cfg := &projectconfig.Config{Dir: root}
+	cfg := &project.Project{Dir: root}
 	apps, err := attributionApps(cfg, []build.Function{{App: "web"}}, "")
 	if err != nil {
 		t.Fatalf("attributionApps: %v", err)
@@ -38,9 +38,9 @@ func TestANamedRuntimeTellsOcelWhichLanguageAnAppIs(t *testing.T) {
 		t.Fatalf("write main.py: %v", err)
 	}
 
-	cfg := &projectconfig.Config{
+	cfg := &project.Project{
 		Dir:  root,
-		Apps: []projectconfig.App{{Name: "web", Path: "server", Framework: projectconfig.Framework{Name: "python"}}},
+		Apps: []project.App{{Name: "web", Path: "server", Framework: project.Framework{Name: "python"}}},
 	}
 	apps, err := attributionApps(cfg, []build.Function{{App: "web"}}, "")
 	if err != nil {
@@ -57,9 +57,9 @@ func TestTheFixturePythonAppIsReadAsPython(t *testing.T) {
 		t.Fatalf("locate the fixture: %v", err)
 	}
 
-	cfg := &projectconfig.Config{
+	cfg := &project.Project{
 		Dir:  root,
-		Apps: []projectconfig.App{{Name: "web", Path: "server", Framework: projectconfig.Framework{Name: "python"}}},
+		Apps: []project.App{{Name: "web", Path: "server", Framework: project.Framework{Name: "python"}}},
 	}
 	apps, err := attributionApps(cfg, []build.Function{{App: "web"}}, "")
 	if err != nil {
@@ -82,9 +82,9 @@ func TestAContainerAppWithACrateBesideItsPackageJSONIsReadAsJS(t *testing.T) {
 		}
 	}
 
-	cfg := &projectconfig.Config{
+	cfg := &project.Project{
 		Dir:  root,
-		Apps: []projectconfig.App{{Name: "web", Path: "web", Compute: "container"}},
+		Apps: []project.App{{Name: "web", Path: "web", Compute: "container"}},
 	}
 	apps, err := attributionApps(cfg, nil, "container")
 	if err != nil {

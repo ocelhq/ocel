@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -46,7 +46,7 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 }
 
 func Run(ctx context.Context, deps cmddeps.Deps, cwd string, purpose contractv1.CredentialPurpose, stdout io.Writer) error {
-	cfg, err := projectconfig.Resolve(ctx, cwd, deps.ConfigPath())
+	cfg, err := project.Resolve(ctx, cwd, deps.ConfigPath())
 	if err != nil {
 		return err
 	}
@@ -71,7 +71,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, purpose contractv1.
 	return nil
 }
 
-func credentialPermissions(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, purpose contractv1.CredentialPurpose) (groups []*contractv1.CredentialGroup, err error) {
+func credentialPermissions(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, purpose contractv1.CredentialPurpose) (groups []*contractv1.CredentialGroup, err error) {
 	if _, err := cfg.RequireProvider(); err != nil {
 		return nil, err
 	}

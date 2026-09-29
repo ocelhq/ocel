@@ -5,7 +5,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -17,7 +17,7 @@ import (
 
 type Store struct {
 	Provider *providerclient.Provider
-	Config   *projectconfig.Config
+	Project  *project.Project
 	Tier     environmentv1.Tier
 }
 
@@ -28,7 +28,7 @@ func (s Store) List(ctx context.Context) ([]variables.ValueMetadata, error) {
 	}
 	resp, err := vars.ListValues(ctx, &envvarsv1.ListValuesRequest{
 		Tier: s.Tier,
-		Slug: s.Config.Slug,
+		Slug: s.Project.Slug,
 	})
 	if err != nil {
 		return nil, err
@@ -68,7 +68,7 @@ func (s Store) Reveal(ctx context.Context, rows []variables.Coordinate) (map[var
 	}
 	resp, err := vars.RevealValues(ctx, &envvarsv1.RevealValuesRequest{
 		Tier:  s.Tier,
-		Slug:  s.Config.Slug,
+		Slug:  s.Project.Slug,
 		Cells: named,
 	})
 	if err != nil {
@@ -82,7 +82,7 @@ func (s Store) Reveal(ctx context.Context, rows []variables.Coordinate) (map[var
 }
 
 func (s Store) coordinate(at variables.Coordinate) *envvarsv1.Coordinate {
-	return &envvarsv1.Coordinate{Slug: s.Config.Slug, Folder: at.Cell.Folder, Key: at.Cell.Key, Environment: at.Environment}
+	return &envvarsv1.Coordinate{Slug: s.Project.Slug, Folder: at.Cell.Folder, Key: at.Cell.Key, Environment: at.Environment}
 }
 
 func (s Store) Version(ctx context.Context, at variables.Coordinate) (int64, error) {

@@ -13,7 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/build/toolchain"
 	"github.com/ocelhq/ocel/cli/internal/fixturetest"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/node"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
@@ -82,8 +82,8 @@ func expressFixture(t *testing.T) string {
 	return fixtureRoot
 }
 
-func nextApp(name, path string) projectconfig.App {
-	return projectconfig.App{Name: name, Path: path, Framework: projectconfig.Framework{Name: appbuild.FrameworkNext}}
+func nextApp(name, path string) project.App {
+	return project.App{Name: name, Path: path, Framework: project.Framework{Name: appbuild.FrameworkNext}}
 }
 
 func requestOf(got *nodeBuildRequest) nodeRun {
@@ -100,7 +100,7 @@ func TestBuild(t *testing.T) {
 		scriptPath := writeBuildScript(t, root)
 		web := nextApp("web", "apps/web")
 		web.Folder = "/web"
-		cfg := &projectconfig.Config{Dir: root, Apps: []projectconfig.App{web, nextApp("docs", "apps/docs")}}
+		cfg := &project.Project{Dir: root, Apps: []project.App{web, nextApp("docs", "apps/docs")}}
 
 		var gotScript string
 		var got nodeBuildRequest
@@ -164,7 +164,7 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
-		cfg := &projectconfig.Config{Dir: root, Apps: []projectconfig.App{nextApp("web", "apps/web")}}
+		cfg := &project.Project{Dir: root, Apps: []project.App{nextApp("web", "apps/web")}}
 
 		err := nodeOnly{node: runNode}.Build(context.Background(), cfg, nil, Log{})
 		if err == nil {
@@ -187,7 +187,7 @@ func TestBuild(t *testing.T) {
 			ran = true
 			return nil
 		}}
-		if err := builder.Build(context.Background(), &projectconfig.Config{Dir: root}, nil, Log{}); err != nil {
+		if err := builder.Build(context.Background(), &project.Project{Dir: root}, nil, Log{}); err != nil {
 			t.Fatalf("Build: %v", err)
 		}
 
@@ -204,7 +204,7 @@ func TestBuild(t *testing.T) {
 
 		root := t.TempDir()
 		writeBuildScript(t, root)
-		cfg := &projectconfig.Config{Dir: root, Apps: []projectconfig.App{nextApp("web", "apps/web")}}
+		cfg := &project.Project{Dir: root, Apps: []project.App{nextApp("web", "apps/web")}}
 
 		builder := nodeOnly{node: func(context.Context, string, []byte, Log) error {
 			return errors.New("node build failed: web has no build script")
@@ -225,7 +225,7 @@ func TestBuild(t *testing.T) {
 
 		var got nodeBuildRequest
 		vars := map[string]map[string]string{rootAppEnv: {"POSTHOG_ID": "ph-123"}}
-		if err := (nodeOnly{node: requestOf(&got)}).Build(context.Background(), &projectconfig.Config{Dir: root}, vars, Log{}); err != nil {
+		if err := (nodeOnly{node: requestOf(&got)}).Build(context.Background(), &project.Project{Dir: root}, vars, Log{}); err != nil {
 			t.Fatalf("Build: %v", err)
 		}
 
@@ -259,7 +259,7 @@ func TestBuild(t *testing.T) {
 					return nil
 				}}
 
-				cfg := &projectconfig.Config{Dir: root, Apps: []projectconfig.App{nextApp("web", "apps/web")}}
+				cfg := &project.Project{Dir: root, Apps: []project.App{nextApp("web", "apps/web")}}
 				err := builder.Build(context.Background(), cfg, map[string]map[string]string{"web": {name: "hijacked"}}, Log{})
 				if err == nil || !strings.Contains(err.Error(), name) {
 					t.Errorf("Build err = %v, want a refusal naming %q", err, name)
@@ -282,7 +282,7 @@ func TestBuild(t *testing.T) {
 			ran = true
 			return nil
 		}}
-		cfg := &projectconfig.Config{Dir: root, Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Framework: projectconfig.Framework{Name: "node"}}}}
+		cfg := &project.Project{Dir: root, Apps: []project.App{{Name: "api", Path: "apps/api", Framework: project.Framework{Name: "node"}}}}
 		if err := builder.Build(context.Background(), cfg, nil, Log{}); err != nil {
 			t.Fatalf("Build: %v", err)
 		}
@@ -306,7 +306,7 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
-		cfg := &projectconfig.Config{Dir: root, Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Framework: projectconfig.Framework{Name: "node"}}}}
+		cfg := &project.Project{Dir: root, Apps: []project.App{{Name: "api", Path: "apps/api", Framework: project.Framework{Name: "node"}}}}
 		err := nodeOnly{node: runNode}.Build(context.Background(), cfg, nil, Log{})
 		if err == nil || !strings.Contains(err.Error(), "src/server.ts") || !strings.Contains(err.Error(), `"api"`) {
 			t.Errorf("Build err = %v, want the app and the entrypoints tried named", err)
@@ -317,7 +317,7 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
-		cfg := &projectconfig.Config{Dir: root, Apps: []projectconfig.App{{Name: "api", Path: "apps/api"}}}
+		cfg := &project.Project{Dir: root, Apps: []project.App{{Name: "api", Path: "apps/api"}}}
 		err := nodeOnly{node: runNode}.Build(context.Background(), cfg, nil, Log{})
 		if err == nil || !strings.Contains(err.Error(), `"framework"`) {
 			t.Errorf("Build err = %v, want the app told to state its framework", err)
@@ -330,7 +330,7 @@ func TestBuild(t *testing.T) {
 		}
 
 		fixtureRoot := expressFixture(t)
-		cfg := &projectconfig.Config{Dir: fixtureRoot, Apps: []projectconfig.App{{Name: "api", Path: ".", Framework: projectconfig.Framework{Name: "node"}}}}
+		cfg := &project.Project{Dir: fixtureRoot, Apps: []project.App{{Name: "api", Path: ".", Framework: project.Framework{Name: "node"}}}}
 
 		var stderr bytes.Buffer
 		if err := (nodeOnly{node: runNode}).Build(context.Background(), cfg, nil, Log{Shared: &stderr}); err != nil {
@@ -354,7 +354,7 @@ func TestBuild(t *testing.T) {
 		fixtureRoot := expressFixture(t)
 
 		var stderr bytes.Buffer
-		if err := (nodeOnly{node: runNode}).Build(context.Background(), &projectconfig.Config{Dir: fixtureRoot}, nil, Log{Shared: &stderr}); err != nil {
+		if err := (nodeOnly{node: runNode}).Build(context.Background(), &project.Project{Dir: fixtureRoot}, nil, Log{Shared: &stderr}); err != nil {
 			t.Fatalf("Build: %v; stderr=%s", err, stderr.String())
 		}
 
@@ -388,7 +388,7 @@ func TestBuildTracesANodeAppWhenTracingIsPreferred(t *testing.T) {
 			writeFile(t, filepath.Join(got.Apps[0].FuncDir, "src", "server.js"), "export default {};\n")
 			return nil
 		}}
-		cfg := &projectconfig.Config{Dir: root, Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Framework: projectconfig.Framework{Name: "node", Arch: "arm64"}}}}
+		cfg := &project.Project{Dir: root, Apps: []project.App{{Name: "api", Path: "apps/api", Framework: project.Framework{Name: "node", Arch: "arm64"}}}}
 		if err := builder.Build(context.Background(), cfg, nil, Log{}); err != nil {
 			t.Fatalf("Build: %v", err)
 		}
@@ -428,7 +428,7 @@ func TestBuildTracesANodeAppWhenTracingIsPreferred(t *testing.T) {
 			ran = true
 			return nil
 		}}
-		cfg := &projectconfig.Config{Dir: root, Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Entrypoint: "../../shared/server.js", Framework: projectconfig.Framework{Name: "node"}}}}
+		cfg := &project.Project{Dir: root, Apps: []project.App{{Name: "api", Path: "apps/api", Entrypoint: "../../shared/server.js", Framework: project.Framework{Name: "node"}}}}
 		err := builder.Build(context.Background(), cfg, nil, Log{})
 		if err == nil || !strings.Contains(err.Error(), toolchain.PreferTracingEnv) {
 			t.Errorf("Build err = %v, want a refusal that names how to bundle instead", err)
@@ -444,7 +444,7 @@ func TestBuildTracesANodeAppWhenTracingIsPreferred(t *testing.T) {
 		}
 
 		fixtureRoot := expressFixture(t)
-		cfg := &projectconfig.Config{Dir: fixtureRoot, Apps: []projectconfig.App{{Name: "api", Path: ".", Framework: projectconfig.Framework{Name: "node"}}}}
+		cfg := &project.Project{Dir: fixtureRoot, Apps: []project.App{{Name: "api", Path: ".", Framework: project.Framework{Name: "node"}}}}
 
 		var stderr bytes.Buffer
 		if err := (nodeOnly{node: runNode}).Build(context.Background(), cfg, nil, Log{Shared: &stderr}); err != nil {
@@ -475,25 +475,25 @@ func TestBuildLearnsTheEdge(t *testing.T) {
 
 	cases := []struct {
 		name         string
-		cfg          func(root string) *projectconfig.Config
+		cfg          func(root string) *project.Project
 		wantKind     string
 		wantDegraded []string
 	}{
 		{
 			name: "a project naming no edge names none to the build either",
-			cfg: func(root string) *projectconfig.Config {
-				return &projectconfig.Config{Dir: root, Apps: []projectconfig.App{nextApp("web", "apps/web")}}
+			cfg: func(root string) *project.Project {
+				return &project.Project{Dir: root, Apps: []project.App{nextApp("web", "apps/web")}}
 			},
 			wantKind: "",
 		},
 		{
 			name: "a project naming an edge builds for that edge, with its waivers",
-			cfg: func(root string) *projectconfig.Config {
-				return &projectconfig.Config{
+			cfg: func(root string) *project.Project {
+				return &project.Project{
 					Dir:           root,
-					Edge:          &projectconfig.EdgeDescriptor{ID: "cloudflare"},
+					Edge:          &project.EdgeDescriptor{ID: "cloudflare"},
 					AllowDegraded: []string{"edge-middleware", "edge-runtime"},
-					Apps:          []projectconfig.App{nextApp("web", "apps/web")},
+					Apps:          []project.App{nextApp("web", "apps/web")},
 				}
 			},
 			wantKind:     "cloudflare",
@@ -501,12 +501,12 @@ func TestBuildLearnsTheEdge(t *testing.T) {
 		},
 		{
 			name: "a project on the API Gateway edge builds for that edge",
-			cfg: func(root string) *projectconfig.Config {
-				return &projectconfig.Config{
+			cfg: func(root string) *project.Project {
+				return &project.Project{
 					Dir:           root,
-					Edge:          &projectconfig.EdgeDescriptor{ID: "api-gateway"},
+					Edge:          &project.EdgeDescriptor{ID: "api-gateway"},
 					AllowDegraded: []string{"edge-middleware"},
-					Apps:          []projectconfig.App{nextApp("web", "apps/web")},
+					Apps:          []project.App{nextApp("web", "apps/web")},
 				}
 			},
 			wantKind:     "api-gateway",
@@ -543,6 +543,6 @@ type nodeOnly struct {
 	node nodeRun
 }
 
-func (n nodeOnly) Build(ctx context.Context, cfg *projectconfig.Config, env map[string]map[string]string, log Log) error {
+func (n nodeOnly) Build(ctx context.Context, cfg *project.Project, env map[string]map[string]string, log Log) error {
 	return tools{node: n.node}.functions(ctx, cfg, env, log)
 }

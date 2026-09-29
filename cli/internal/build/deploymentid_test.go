@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/constants"
 )
 
@@ -16,7 +16,7 @@ func TestAFreshBuildSupersedesTheDeploymentIDTheLastOneRecorded(t *testing.T) {
 
 	root := t.TempDir()
 	writeBuildScript(t, root)
-	cfg := &projectconfig.Config{Dir: root, Apps: []projectconfig.App{nextApp("web", "apps/web")}}
+	cfg := &project.Project{Dir: root, Apps: []project.App{nextApp("web", "apps/web")}}
 	builder := nodeOnly{node: func(context.Context, string, []byte, Log) error { return nil }}
 
 	if err := builder.Build(context.Background(), cfg, nil, Log{}); err != nil {

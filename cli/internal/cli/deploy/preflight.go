@@ -13,14 +13,14 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/consent"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-func preflightPreview(ctx context.Context, check *run.Span, prov *providerclient.Provider, cfg *projectconfig.Config) error {
+func preflightPreview(ctx context.Context, check *run.Span, prov *providerclient.Provider, cfg *project.Project) error {
 	return bootstrap.Ready(ctx, check, prov, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview")
 }
 
@@ -31,7 +31,7 @@ type preflightFacts struct {
 	urls           map[string]string
 }
 
-func preflightPreviewUp(ctx context.Context, deps cmddeps.Deps, policy consent.Policy, check *run.Span, prov *providerclient.Provider, cfg *projectconfig.Config, pointer string, out io.Writer, in io.Reader) (preflightFacts, error) {
+func preflightPreviewUp(ctx context.Context, deps cmddeps.Deps, policy consent.Policy, check *run.Span, prov *providerclient.Provider, cfg *project.Project, pointer string, out io.Writer, in io.Reader) (preflightFacts, error) {
 	resp, err := preflight.Run(ctx, check, prov, cfg, environmentv1.Tier_TIER_PREVIEW, cfg.Slug, preflight.Names(preflight.Hostnames(cfg, "preview")), preflight.Frameworks(cfg), "ocel bootstrap preview")
 	if err != nil {
 		return preflightFacts{}, err
@@ -70,7 +70,7 @@ func preflightPreviewUp(ctx context.Context, deps cmddeps.Deps, policy consent.P
 	}, nil
 }
 
-func preflightDeploy(ctx context.Context, deps cmddeps.Deps, policy consent.Policy, check *run.Span, prov *providerclient.Provider, cfg *projectconfig.Config, out io.Writer, in io.Reader) (preflightFacts, error) {
+func preflightDeploy(ctx context.Context, deps cmddeps.Deps, policy consent.Policy, check *run.Span, prov *providerclient.Provider, cfg *project.Project, out io.Writer, in io.Reader) (preflightFacts, error) {
 	domains := preflight.Names(preflight.Hostnames(cfg, "production"))
 	resp, err := preflight.Run(ctx, check, prov, cfg, environmentv1.Tier_TIER_PRODUCTION, slugToScopeBy(policy.Interactive, domains, cfg), domains, preflight.Frameworks(cfg), "ocel bootstrap production")
 	if err != nil {
@@ -99,21 +99,21 @@ func preflightDeploy(ctx context.Context, deps cmddeps.Deps, policy consent.Poli
 	return preflightFacts{declined: !proceed, compute: compute, containerArchs: resp.GetContainerArchs(), urls: appurl.Production(cfg)}, nil
 }
 
-func ensureBootstrap(ctx context.Context, policy consent.Policy, check *run.Span, prov *providerclient.Provider, cfg *projectconfig.Config, status *contractv1.BootstrapStatus, tier environmentv1.Tier, out io.Writer, in io.Reader) error {
+func ensureBootstrap(ctx context.Context, policy consent.Policy, check *run.Span, prov *providerclient.Provider, cfg *project.Project, status *contractv1.BootstrapStatus, tier environmentv1.Tier, out io.Writer, in io.Reader) error {
 	if policy.DryRun {
 		return bootstrap.PlanFor(status).Insist(tier)
 	}
 	return bootstrap.Offer(ctx, check, prov, status, tier, cfg.EdgeSelection(), policy.Interactive, out, in)
 }
 
-func slugToScopeBy(interactive bool, domains []string, cfg *projectconfig.Config) string {
+func slugToScopeBy(interactive bool, domains []string, cfg *project.Project) string {
 	if interactive || len(domains) > 0 {
 		return cfg.Slug
 	}
 	return ""
 }
 
-func guardNewProject(ctx context.Context, policy consent.Policy, check *run.Span, cfg *projectconfig.Config, knownSlugs []string) (bool, error) {
+func guardNewProject(ctx context.Context, policy consent.Policy, check *run.Span, cfg *project.Project, knownSlugs []string) (bool, error) {
 	if len(knownSlugs) == 0 {
 		return true, nil
 	}

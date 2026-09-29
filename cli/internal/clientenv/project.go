@@ -4,11 +4,11 @@ import (
 	"path/filepath"
 
 	"github.com/ocelhq/ocel/cli/internal/language"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 )
 
-func GenerateProjectAccessors(cfg *projectconfig.Config, keys []Key) (int, error) {
+func GenerateProjectAccessors(cfg *project.Project, keys []Key) (int, error) {
 	apps := []App{{Dir: cfg.Dir, ClientBundle: language.HasClientBundle(appbuild.FrameworkNode, cfg.Dir)}}
 	if len(cfg.Apps) > 0 {
 		apps = apps[:0]

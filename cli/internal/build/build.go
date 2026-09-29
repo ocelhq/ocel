@@ -10,7 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/build/image"
 	"github.com/ocelhq/ocel/cli/internal/build/toolchain"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/node"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/images"
@@ -54,15 +54,15 @@ type tools struct {
 
 var installed = tools{node: runNode, image: image.Build, architecture: images.BuiltArchitecture}
 
-func Apps(ctx context.Context, cfg *projectconfig.Config, env map[string]map[string]string, archs map[string]string, log Log) (Output, error) {
+func Apps(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, log Log) (Output, error) {
 	return installed.apps(ctx, cfg, env, archs, log)
 }
 
-func ReadPrebuilt(ctx context.Context, cfg *projectconfig.Config, archs map[string]string) (Output, error) {
+func ReadPrebuilt(ctx context.Context, cfg *project.Project, archs map[string]string) (Output, error) {
 	return installed.readPrebuilt(ctx, cfg, archs)
 }
 
-func (t tools) apps(ctx context.Context, cfg *projectconfig.Config, env map[string]map[string]string, archs map[string]string, log Log) (Output, error) {
+func (t tools) apps(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, log Log) (Output, error) {
 	if err := t.functions(ctx, cfg, env, log); err != nil {
 		return Output{}, err
 	}
@@ -77,7 +77,7 @@ func (t tools) apps(ctx context.Context, cfg *projectconfig.Config, env map[stri
 	return Output{Functions: functions, Images: images}, nil
 }
 
-func (t tools) functions(ctx context.Context, cfg *projectconfig.Config, envByApp map[string]map[string]string, log Log) error {
+func (t tools) functions(ctx context.Context, cfg *project.Project, envByApp map[string]map[string]string, log Log) error {
 	for _, env := range envByApp {
 		if err := checkVariableNames(env); err != nil {
 			return err
@@ -179,7 +179,7 @@ func (t tools) functions(ctx context.Context, cfg *projectconfig.Config, envByAp
 	return nil
 }
 
-func nodeTarget(cfg *projectconfig.Config, a projectconfig.App, outputDir string) (toolchain.Target, error) {
+func nodeTarget(cfg *project.Project, a project.App, outputDir string) (toolchain.Target, error) {
 	source := filepath.Join(cfg.Dir, a.Path)
 	entrypoint, err := toolchain.NodeEntrypoint(source, a.Entrypoint)
 	if err != nil {
@@ -196,7 +196,7 @@ func nodeTarget(cfg *projectconfig.Config, a projectconfig.App, outputDir string
 	}, nil
 }
 
-func envOf(cfg *projectconfig.Config, envByApp map[string]map[string]string, app string) map[string]string {
+func envOf(cfg *project.Project, envByApp map[string]map[string]string, app string) map[string]string {
 	if len(cfg.Apps) == 0 {
 		return envByApp[rootAppEnv]
 	}

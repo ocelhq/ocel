@@ -12,7 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
@@ -146,10 +146,10 @@ func TestDefineEnvDeclaresThroughDeclarationCollection(t *testing.T) {
 func runDiscovery(t *testing.T, root string, declarations *variables.Declarations) {
 	t.Helper()
 
-	cfg := &projectconfig.Config{
+	cfg := &project.Project{
 		Slug:      "collector",
 		Dir:       root,
-		Discovery: projectconfig.Discovery{Paths: []string{filepath.Base(clitest.DiscoveryDir(root))}},
+		Discovery: project.Discovery{Paths: []string{filepath.Base(clitest.DiscoveryDir(root))}},
 	}
 
 	var stdout, stderr strings.Builder

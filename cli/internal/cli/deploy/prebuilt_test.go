@@ -16,7 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/variables"
@@ -46,14 +46,14 @@ func newBuildSpan(t *testing.T) (*run.Span, *bytes.Buffer) {
 func recordBuildApp(deps *cmddeps.Deps) *bool {
 	clitest.StubRecordedDeploymentIDs(deps)
 	ran := false
-	deps.BuildApps = func(_ context.Context, cfg *projectconfig.Config, _ map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
+	deps.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
 		ran = true
 		return functionsOnDisk(deps, cfg)
 	}
 	return &ran
 }
 
-func functionsOnDisk(deps *cmddeps.Deps, cfg *projectconfig.Config) (build.Output, error) {
+func functionsOnDisk(deps *cmddeps.Deps, cfg *project.Project) (build.Output, error) {
 	functions, err := deps.ReadFunctions(cfg.Dir)
 	if errors.Is(err, build.ErrNoBuildOutput) {
 		return build.Output{}, nil
@@ -61,7 +61,7 @@ func functionsOnDisk(deps *cmddeps.Deps, cfg *projectconfig.Config) (build.Outpu
 	return build.Output{Functions: functions}, err
 }
 
-func declarationsWithClientValue(t *testing.T, cfg *projectconfig.Config, value string) *variables.Declarations {
+func declarationsWithClientValue(t *testing.T, cfg *project.Project, value string) *variables.Declarations {
 	t.Helper()
 	cell := variables.Cell{Key: "PUBLIC_SITE_URL"}
 	declarations := variables.NewDeclarations(oneValue{cell: cell, value: value}, variablescope.Of(cfg, environmentv1.Tier_TIER_PRODUCTION, ""))
@@ -94,15 +94,15 @@ func (v oneValue) Reveal(context.Context, []variables.Coordinate) (map[variables
 	return map[variables.Coordinate]string{{Cell: v.cell}: v.value}, nil
 }
 
-func prebuiltConfig(root string) *projectconfig.Config {
-	return &projectconfig.Config{
+func prebuiltConfig(root string) *project.Project {
+	return &project.Project{
 		Dir:  root,
 		Slug: "prebuilt",
-		Apps: []projectconfig.App{{Name: "api", Path: ".", Compute: "serverless", Framework: projectconfig.Framework{Name: appbuild.FrameworkNode}}},
+		Apps: []project.App{{Name: "api", Path: ".", Compute: "serverless", Framework: project.Framework{Name: appbuild.FrameworkNode}}},
 	}
 }
 
-func emptyDeclarations(cfg *projectconfig.Config) *variables.Declarations {
+func emptyDeclarations(cfg *project.Project) *variables.Declarations {
 	return variables.NewDeclarations(emptyValues{}, variablescope.Of(cfg, environmentv1.Tier_TIER_PRODUCTION, ""))
 }
 
@@ -231,7 +231,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 		generated := ""
 		deps := clitest.NewDeps()
 		clitest.StubRecordedDeploymentIDs(&deps)
-		deps.BuildApps = func(_ context.Context, cfg *projectconfig.Config, _ map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
+		deps.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
 			data, err := os.ReadFile(filepath.Join(root, constants.ProjectStateDirName, "env-client.ts"))
 			if err != nil {
 				return build.Output{}, err
@@ -383,16 +383,16 @@ func TestPrebuiltDeploysTheImageTheBuildRecordedRatherThanBuildingOne(t *testing
 	deps := clitest.NewDeps()
 	ran := recordBuildApp(&deps)
 	var asked map[string]string
-	deps.ReadPrebuilt = func(_ context.Context, _ *projectconfig.Config, archs map[string]string) (build.Output, error) {
+	deps.ReadPrebuilt = func(_ context.Context, _ *project.Project, archs map[string]string) (build.Output, error) {
 		asked = archs
 		return build.Output{Images: map[string]string{"api": clitest.FixtureImage("api")}}, nil
 	}
 
 	s, _ := newBuildSpan(t)
-	cfg := &projectconfig.Config{
+	cfg := &project.Project{
 		Dir:  root,
 		Slug: "prebuilt",
-		Apps: []projectconfig.App{{Name: "api", Path: ".", Compute: "container"}},
+		Apps: []project.App{{Name: "api", Path: ".", Compute: "container"}},
 	}
 	archs := map[string]string{"api": "arm64"}
 	manifest, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: cfg, declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s, compute: "container", containerArchs: archs})

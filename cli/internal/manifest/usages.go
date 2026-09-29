@@ -13,7 +13,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/language"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/workspace"
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -40,7 +40,7 @@ func (e *DanglingUsageError) Error() string {
 	)
 }
 
-func FindUsages(ctx context.Context, cfg *projectconfig.Config, built build.Output, compute string, resources []declaration.Resource) ([]attribution.Usage, error) {
+func FindUsages(ctx context.Context, cfg *project.Project, built build.Output, compute string, resources []declaration.Resource) ([]attribution.Usage, error) {
 	apps, err := attributionApps(cfg, servedByFunctions(built.Functions, cfg), compute)
 	if err != nil {
 		return nil, err
@@ -52,7 +52,7 @@ func FindUsages(ctx context.Context, cfg *projectconfig.Config, built build.Outp
 	return attribution.FindUsages(ctx, cfg.Dir, apps, declared)
 }
 
-func attributionApps(cfg *projectconfig.Config, functions []build.Function, compute string) ([]attribution.App, error) {
+func attributionApps(cfg *project.Project, functions []build.Function, compute string) ([]attribution.App, error) {
 	configName := filepath.Base(cfg.Path)
 	detected := detectedApps(functions)
 	roots, err := discovery.RootsOf(cfg)

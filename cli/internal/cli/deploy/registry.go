@@ -3,11 +3,11 @@ package deploy
 import (
 	"fmt"
 
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-func projectRegistry(cfg *projectconfig.Config) (*contractv1.ImageRegistry, error) {
+func projectRegistry(cfg *project.Project) (*contractv1.ImageRegistry, error) {
 	if cfg.Registry == nil || len(cfg.Apps) == 0 {
 		return nil, nil
 	}
@@ -23,7 +23,7 @@ func projectRegistry(cfg *projectconfig.Config) (*contractv1.ImageRegistry, erro
 	}, nil
 }
 
-func requireProjectRegistryPassword(cfg *projectconfig.Config) error {
+func requireProjectRegistryPassword(cfg *project.Project) error {
 	if cfg.Registry == nil || len(cfg.Apps) == 0 {
 		return nil
 	}
@@ -31,8 +31,8 @@ func requireProjectRegistryPassword(cfg *projectconfig.Config) error {
 	return err
 }
 
-func projectRegistryPassword(cfg *projectconfig.Config) (string, error) {
-	lookup, err := projectconfig.EnvLookup(cfg.Dir)
+func projectRegistryPassword(cfg *project.Project) (string, error) {
+	lookup, err := project.EnvLookup(cfg.Dir)
 	if err != nil {
 		return "", err
 	}

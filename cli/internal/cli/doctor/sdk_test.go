@@ -5,10 +5,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 )
 
-func sdkProject(t *testing.T, files map[string]string) *projectconfig.Config {
+func sdkProject(t *testing.T, files map[string]string) *project.Project {
 	t.Helper()
 
 	dir := t.TempDir()
@@ -21,11 +21,11 @@ func sdkProject(t *testing.T, files map[string]string) *projectconfig.Config {
 			t.Fatal(err)
 		}
 	}
-	return &projectconfig.Config{
+	return &project.Project{
 		Slug: "fixture",
 		Dir:  dir,
 		Path: filepath.Join(dir, "ocel.json"),
-		Apps: []projectconfig.App{{Name: "web", Path: "apps/web"}, {Name: "api", Path: "apps/api"}},
+		Apps: []project.App{{Name: "web", Path: "apps/web"}, {Name: "api", Path: "apps/api"}},
 	}
 }
 

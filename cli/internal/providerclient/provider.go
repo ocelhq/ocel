@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -25,7 +25,7 @@ type Provider struct {
 	runner *Runner
 }
 
-func Start(ctx context.Context, cfg *projectconfig.Config, span *run.Span, trust Trust, pins Pinning) (*Provider, error) {
+func Start(ctx context.Context, cfg *project.Project, span *run.Span, trust Trust, pins Pinning) (*Provider, error) {
 	config, err := prepareLaunch(ctx, cfg, pins)
 	if err != nil {
 		return nil, err

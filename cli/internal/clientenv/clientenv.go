@@ -13,7 +13,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/language"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/appbuild"
@@ -36,7 +36,7 @@ type App struct {
 	Variables    []variables.Variable
 }
 
-func AppsOf(cfg *projectconfig.Config, values map[string][]variables.Variable) []App {
+func AppsOf(cfg *project.Project, values map[string][]variables.Variable) []App {
 	if len(cfg.Apps) == 0 {
 		return []App{{Dir: cfg.Dir, ClientBundle: language.HasClientBundle(appbuild.FrameworkNode, cfg.Dir), Variables: values[variablescope.RootApp]}}
 	}

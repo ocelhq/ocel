@@ -15,7 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/connectorserver"
@@ -67,7 +67,7 @@ func newAddCommand(deps cmddeps.Deps) *cobra.Command {
 		Example: "  $ ocel connector add --config ocel.staging.json\n  $ ocel connector add --config ocel.staging.json --allow-reveal",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return withOptions(cmd, deps, &opts, func(ctx context.Context, cfg *projectconfig.Config, link *console.Link) error {
+			return withOptions(cmd, deps, &opts, func(ctx context.Context, cfg *project.Project, link *console.Link) error {
 				return runAdd(ctx, deps, cfg, link, opts)
 			})
 		},
@@ -86,7 +86,7 @@ func newRemoveCommand(deps cmddeps.Deps) *cobra.Command {
 		Example: "  $ ocel connector rm --config ocel.staging.json\n  $ ocel connector rm --target <fingerprint>",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return withOptions(cmd, deps, &opts, func(ctx context.Context, cfg *projectconfig.Config, link *console.Link) error {
+			return withOptions(cmd, deps, &opts, func(ctx context.Context, cfg *project.Project, link *console.Link) error {
 				return runRemove(ctx, deps, cfg, link, opts)
 			})
 		},
@@ -103,7 +103,7 @@ func newStatusCommand(deps cmddeps.Deps) *cobra.Command {
 		Example: "  $ ocel connector status\n  $ ocel connector status --config ocel.staging.json",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return withOptions(cmd, deps, &opts, func(ctx context.Context, cfg *projectconfig.Config, link *console.Link) error {
+			return withOptions(cmd, deps, &opts, func(ctx context.Context, cfg *project.Project, link *console.Link) error {
 				return runStatus(ctx, deps, cfg, link, opts, cmd.OutOrStdout())
 			})
 		},
@@ -112,13 +112,13 @@ func newStatusCommand(deps cmddeps.Deps) *cobra.Command {
 }
 
 func withOptions(cmd *cobra.Command, deps cmddeps.Deps, opts *options,
-	run func(context.Context, *projectconfig.Config, *console.Link) error) error {
+	run func(context.Context, *project.Project, *console.Link) error) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("determine working directory: %w", err)
 	}
 	ctx := cmd.Context()
-	cfg, err := projectconfig.Resolve(ctx, cwd, deps.ConfigPath())
+	cfg, err := project.Resolve(ctx, cwd, deps.ConfigPath())
 	if err != nil {
 		return err
 	}
@@ -140,7 +140,7 @@ func withOptions(cmd *cobra.Command, deps cmddeps.Deps, opts *options,
 	return run(ctx, cfg, link)
 }
 
-func reachTarget(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, check *run.Span) (*providerclient.Provider, *contractv1.DescribeConnectorTargetResponse, error) {
+func reachTarget(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, check *run.Span) (*providerclient.Provider, *contractv1.DescribeConnectorTargetResponse, error) {
 	prov, err := providerclient.Start(ctx, cfg, check, deps.HostTrust, providerclient.PinToLock)
 	if err != nil {
 		return nil, nil, err
@@ -165,7 +165,7 @@ func token(deps cmddeps.Deps) (string, error) {
 	return creds.AccessToken, nil
 }
 
-func vendored(cfg *projectconfig.Config) (string, error) {
+func vendored(cfg *project.Project) (string, error) {
 	desc, err := cfg.RequireProvider()
 	if err != nil {
 		return "", err

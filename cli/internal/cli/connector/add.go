@@ -11,7 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/providers"
 	"github.com/ocelhq/ocel/cli/internal/version"
@@ -25,7 +25,7 @@ func unfinished(err error) error {
 	return fmt.Errorf("%w; the console already has this target registered, so running ocel connector add again finishes it", err)
 }
 
-func runAdd(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, link *console.Link, opts options) (err error) {
+func runAdd(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, link *console.Link, opts options) (err error) {
 	vendor, err := vendored(cfg)
 	if err != nil {
 		return err

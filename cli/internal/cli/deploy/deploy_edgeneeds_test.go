@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -20,7 +20,7 @@ func writeAppNeeds(t *testing.T, root, app, framework, needs string) {
 		`{"framework":"`+framework+`","buildId":"b1","needs":`+needs+`}`)
 }
 
-func lintEdgeWarnings(t *testing.T, cfg *projectconfig.Config) []string {
+func lintEdgeWarnings(t *testing.T, cfg *project.Project) []string {
 	t.Helper()
 	definition := &resourcesv1.VariableDefinition{
 		Key:    "STRIPE_KEY",
@@ -48,7 +48,7 @@ func TestEdgeAppsReadsTheNeeds(t *testing.T) {
 	t.Run("a need for edge code names the app and warns about the secret", func(t *testing.T) {
 		t.Parallel()
 
-		cfg := &projectconfig.Config{Dir: t.TempDir()}
+		cfg := &project.Project{Dir: t.TempDir()}
 		writeAppNeeds(t, cfg.Dir, "web", "next", `{"edge-runtime":{"count":1,"routes":["/edgy"]}}`)
 
 		if apps, err := edgeApps(cfg); err != nil || len(apps) != 1 || apps[0] != variablescope.RootApp {
@@ -62,7 +62,7 @@ func TestEdgeAppsReadsTheNeeds(t *testing.T) {
 	t.Run("a node app needs nothing and lints clean", func(t *testing.T) {
 		t.Parallel()
 
-		cfg := &projectconfig.Config{Dir: t.TempDir()}
+		cfg := &project.Project{Dir: t.TempDir()}
 		writeAppNeeds(t, cfg.Dir, "api", "express", `{}`)
 
 		if apps, err := edgeApps(cfg); err != nil || len(apps) != 0 {
@@ -76,7 +76,7 @@ func TestEdgeAppsReadsTheNeeds(t *testing.T) {
 	t.Run("needs that ship no customer code name no edge app", func(t *testing.T) {
 		t.Parallel()
 
-		cfg := &projectconfig.Config{Dir: t.TempDir()}
+		cfg := &project.Project{Dir: t.TempDir()}
 		writeAppNeeds(t, cfg.Dir, "web", "next",
 			`{"edge-cache":{"count":3},"streaming":{"count":2},"ppr-resume":{"count":1,"routes":["/"]}}`)
 

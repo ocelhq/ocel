@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 )
 
 func TestAContainerAppIsBuiltFromTheWorkspaceItIsAMemberOf(t *testing.T) {
@@ -36,7 +36,7 @@ func TestABuildContextTheAppDoesNotSitUnderIsRefusedByName(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(cfg.Dir, "elsewhere"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	cfg.Apps[0].Build = &projectconfig.Build{Context: "elsewhere"}
+	cfg.Apps[0].Build = &project.Build{Context: "elsewhere"}
 
 	_, err := Describe(cfg, cfg.Apps[0])
 	if err == nil {
@@ -47,7 +47,7 @@ func TestABuildContextTheAppDoesNotSitUnderIsRefusedByName(t *testing.T) {
 	}
 }
 
-func containerProject(t *testing.T, dockerfile string) *projectconfig.Config {
+func containerProject(t *testing.T, dockerfile string) *project.Project {
 	t.Helper()
 	root := t.TempDir()
 	appDir := filepath.Join(root, "services", "web")
@@ -59,8 +59,8 @@ func containerProject(t *testing.T, dockerfile string) *projectconfig.Config {
 			t.Fatal(err)
 		}
 	}
-	return &projectconfig.Config{
+	return &project.Project{
 		Dir:  root,
-		Apps: []projectconfig.App{{Name: "web", Path: "services/web", Compute: "container"}},
+		Apps: []project.App{{Name: "web", Path: "services/web", Compute: "container"}},
 	}
 }

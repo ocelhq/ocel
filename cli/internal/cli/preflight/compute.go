@@ -7,14 +7,14 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/english"
 
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-func ResolveComputesFromProvider(ctx context.Context, prov *providerclient.Provider, cfg *projectconfig.Config) (string, error) {
+func ResolveComputesFromProvider(ctx context.Context, prov *providerclient.Provider, cfg *project.Project) (string, error) {
 	var resp *contractv1.PreflightResponse
 	err := prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		resp, err = client.Preflight(ctx, &contractv1.PreflightRequest{Edge: cfg.EdgeSelection()})
@@ -26,7 +26,7 @@ func ResolveComputesFromProvider(ctx context.Context, prov *providerclient.Provi
 	return ResolveComputes(cfg, resp.GetComputes(), prov.Name())
 }
 
-func ResolveComputes(cfg *projectconfig.Config, computes []string, vendor string) (string, error) {
+func ResolveComputes(cfg *project.Project, computes []string, vendor string) (string, error) {
 	if len(computes) == 0 {
 		return "", fmt.Errorf(
 			"%s names no compute it runs, so there is nothing for this project's apps to run on: a provider must name at least one in its preflight answer, and ocel will not guess one for it",
@@ -67,13 +67,13 @@ func ResolveComputes(cfg *projectconfig.Config, computes []string, vendor string
 		cfg.Apps[i].Compute = resolved[i]
 		framework := cfg.Apps[i].Framework
 		if resolved[i] == string(provider.ComputeContainer) && (framework.Detected || framework.Missing != nil) {
-			cfg.Apps[i].Framework = projectconfig.Framework{Arch: framework.Arch}
+			cfg.Apps[i].Framework = project.Framework{Arch: framework.Arch}
 		}
 	}
 	return fallback, nil
 }
 
-func containerOnly(app projectconfig.App, compute string) error {
+func containerOnly(app project.App, compute string) error {
 	if compute == string(provider.ComputeContainer) {
 		if app.Framework.Name != "" && !app.Framework.Detected {
 			return fmt.Errorf(

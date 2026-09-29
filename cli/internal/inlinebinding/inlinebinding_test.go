@@ -9,20 +9,20 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 )
 
 const postgres = resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES
 
-func inline(p projectconfig.PostgresInline) projectconfig.Binding {
-	return projectconfig.Binding{Type: postgres, Name: "orders", Inline: &projectconfig.Inline{Postgres: &p}}
+func inline(p project.PostgresInline) project.Binding {
+	return project.Binding{Type: postgres, Name: "orders", Inline: &project.Inline{Postgres: &p}}
 }
 
 func TestBuild(t *testing.T) {
 	t.Run("a url binding keeps the url whole", func(t *testing.T) {
-		records, err := Build([]projectconfig.Binding{inline(projectconfig.PostgresInline{URL: "ORDERS_URL"})},
+		records, err := Build([]project.Binding{inline(project.PostgresInline{URL: "ORDERS_URL"})},
 			map[string]string{"ORDERS_URL": "postgres://u:p@ep-cool.neon.tech/orders?sslmode=require&options=endpoint%3Dep-cool"}, "ocel.json")
 		if err != nil {
 			t.Fatalf("Build: %v", err)
@@ -43,12 +43,12 @@ func TestBuild(t *testing.T) {
 	})
 
 	t.Run("a host binding reads each field from its literal or its variable", func(t *testing.T) {
-		records, err := Build([]projectconfig.Binding{inline(projectconfig.PostgresInline{
-			Host:     projectconfig.Value{Literal: "db.example.com"},
-			Database: projectconfig.Value{Variable: "ORDERS_DB"},
-			Username: projectconfig.Value{Literal: "app"},
+		records, err := Build([]project.Binding{inline(project.PostgresInline{
+			Host:     project.Value{Literal: "db.example.com"},
+			Database: project.Value{Variable: "ORDERS_DB"},
+			Username: project.Value{Literal: "app"},
 			Password: "ORDERS_PASSWORD",
-			TLS:      &projectconfig.PostgresTLS{Mode: "verify-full", CA: "ORDERS_CA"},
+			TLS:      &project.PostgresTLS{Mode: "verify-full", CA: "ORDERS_CA"},
 		})}, map[string]string{"ORDERS_DB": "orders", "ORDERS_PASSWORD": "hunter2", "ORDERS_CA": "-----BEGIN CERTIFICATE-----"}, "ocel.json")
 		if err != nil {
 			t.Fatalf("Build: %v", err)
@@ -65,14 +65,14 @@ func TestBuild(t *testing.T) {
 	})
 
 	t.Run("a published binding is no record ocel writes", func(t *testing.T) {
-		records, err := Build([]projectconfig.Binding{{Type: postgres, Name: "analytics", External: "warehouse"}}, nil, "ocel.json")
+		records, err := Build([]project.Binding{{Type: postgres, Name: "analytics", External: "warehouse"}}, nil, "ocel.json")
 		if err != nil || len(records) != 0 {
 			t.Fatalf("Build = %d records, %v, want nothing", len(records), err)
 		}
 	})
 
 	t.Run("a variable with no value is refused naming it", func(t *testing.T) {
-		_, err := Build([]projectconfig.Binding{inline(projectconfig.PostgresInline{URL: "ORDERS_URL"})}, map[string]string{}, "ocel.json")
+		_, err := Build([]project.Binding{inline(project.PostgresInline{URL: "ORDERS_URL"})}, map[string]string{}, "ocel.json")
 		if err == nil || !strings.Contains(err.Error(), "ORDERS_URL") {
 			t.Fatalf("Build = %v, want ORDERS_URL named", err)
 		}
@@ -173,16 +173,16 @@ func bucketRecord(props *bindingsv1.BucketProperties) Record {
 }
 
 func TestBuildABucket(t *testing.T) {
-	records, err := Build([]projectconfig.Binding{{
+	records, err := Build([]project.Binding{{
 		Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: "uploads",
-		Inline: &projectconfig.Inline{Bucket: &projectconfig.BucketInline{
-			Endpoint:        projectconfig.Value{Literal: "https://abc.r2.cloudflarestorage.com"},
-			Region:          projectconfig.Value{Literal: "auto"},
-			Bucket:          projectconfig.Value{Variable: "UPLOADS_BUCKET"},
-			Prefix:          projectconfig.Value{Literal: "uploads/"},
+		Inline: &project.Inline{Bucket: &project.BucketInline{
+			Endpoint:        project.Value{Literal: "https://abc.r2.cloudflarestorage.com"},
+			Region:          project.Value{Literal: "auto"},
+			Bucket:          project.Value{Variable: "UPLOADS_BUCKET"},
+			Prefix:          project.Value{Literal: "uploads/"},
 			AccessKeyID:     "R2_KEY",
 			SecretAccessKey: "R2_SECRET",
-			PublicBaseURL:   projectconfig.Value{Literal: "https://cdn.acme.com/uploads"},
+			PublicBaseURL:   project.Value{Literal: "https://cdn.acme.com/uploads"},
 		}},
 	}}, map[string]string{"UPLOADS_BUCKET": "acme", "R2_KEY": "AKID", "R2_SECRET": "s3cr3t"}, "ocel.json")
 	if err != nil {

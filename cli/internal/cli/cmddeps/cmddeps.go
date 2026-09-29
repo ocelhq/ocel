@@ -13,7 +13,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
@@ -27,16 +27,16 @@ type Deps struct {
 	SaveCredentials         func(console.Credentials) (console.CredentialStore, error)
 	DeleteCredentials       func() error
 	OpenDocker              docker.OpenFunc
-	BuildApps               func(ctx context.Context, cfg *projectconfig.Config, env map[string]map[string]string, archs map[string]string, log build.Log) (build.Output, error)
-	RefuseUnbuildableImages func(ctx context.Context, span *run.Span, cfg *projectconfig.Config, archs map[string]string) error
-	ReadPrebuilt            func(ctx context.Context, cfg *projectconfig.Config, archs map[string]string) (build.Output, error)
+	BuildApps               func(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, log build.Log) (build.Output, error)
+	RefuseUnbuildableImages func(ctx context.Context, span *run.Span, cfg *project.Project, archs map[string]string) error
+	ReadPrebuilt            func(ctx context.Context, cfg *project.Project, archs map[string]string) (build.Output, error)
 	ReadFunctions           func(projectDir string) ([]build.Function, error)
 	DeploymentID            func(projectDir, app string) (string, error)
-	CollectDeclarations     func(ctx context.Context, cfg *projectconfig.Config, declarations *variables.Declarations, stdout, stderr io.Writer) ([]declaration.Resource, error)
+	CollectDeclarations     func(ctx context.Context, cfg *project.Project, declarations *variables.Declarations, stdout, stderr io.Writer) ([]declaration.Resource, error)
 	OpenBrowser             func(url string) error
 	ProbePostgres           inlinebinding.PostgresProbe
 	ProbeBucket             inlinebinding.BucketProbe
-	ServeVariableEditor     func(ctx context.Context, cfg *projectconfig.Config, prov *providerclient.Provider, tier environmentv1.Tier, declarations *variables.Declarations, recovery *variableeditor.Recovery) (*variableeditor.Session, error)
+	ServeVariableEditor     func(ctx context.Context, cfg *project.Project, prov *providerclient.Provider, tier environmentv1.Tier, declarations *variables.Declarations, recovery *variableeditor.Recovery) (*variableeditor.Session, error)
 	CurrentGitBranch        func(dir string) (string, error)
 	DiscoverPRNumber        func() string
 	RunPackageManager       func(ctx context.Context, dir string, argv []string, output io.Writer) error

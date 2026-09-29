@@ -7,10 +7,10 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/language"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 )
 
-func HasJS(cfg *projectconfig.Config) (bool, error) {
+func HasJS(cfg *project.Project) (bool, error) {
 	if _, err := os.Stat(filepath.Join(cfg.Dir, "package.json")); err == nil {
 		return true, nil
 	}

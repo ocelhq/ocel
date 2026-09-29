@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 )
 
@@ -16,7 +16,7 @@ const rootAppFallbackName = "app"
 
 var unsafeNameRun = regexp.MustCompile(`[^A-Za-z0-9_-]+`)
 
-func appsToBuild(cfg *projectconfig.Config) ([]projectconfig.App, error) {
+func appsToBuild(cfg *project.Project) ([]project.App, error) {
 	if len(cfg.Apps) > 0 {
 		return cfg.Apps, nil
 	}
@@ -25,17 +25,17 @@ func appsToBuild(cfg *projectconfig.Config) ([]projectconfig.App, error) {
 		return nil, nil
 	}
 	framework := appbuild.FrameworkNode
-	next, err := projectconfig.IsNextApp(cfg.Dir)
+	next, err := project.IsNextApp(cfg.Dir)
 	if err != nil {
 		return nil, err
 	}
 	if next {
 		framework = appbuild.FrameworkNext
 	}
-	return []projectconfig.App{{
+	return []project.App{{
 		Name:      rootAppName(cfg.Dir),
 		Path:      ".",
-		Framework: projectconfig.Framework{Name: framework, Detected: true},
+		Framework: project.Framework{Name: framework, Detected: true},
 	}}, nil
 }
 

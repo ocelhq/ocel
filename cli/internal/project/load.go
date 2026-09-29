@@ -1,4 +1,4 @@
-package projectconfig
+package project
 
 import (
 	"context"
@@ -125,15 +125,15 @@ func Counterparts(configPath string) []string {
 	return found
 }
 
-func Resolve(ctx context.Context, startDir, explicitPath string) (*Config, error) {
+func Resolve(ctx context.Context, startDir, explicitPath string) (*Project, error) {
 	return resolve(ctx, startDir, explicitPath, false)
 }
 
-func ResolveOptional(ctx context.Context, startDir, explicitPath string) (*Config, error) {
+func ResolveOptional(ctx context.Context, startDir, explicitPath string) (*Project, error) {
 	return resolve(ctx, startDir, explicitPath, true)
 }
 
-func resolve(ctx context.Context, startDir, explicitPath string, optional bool) (*Config, error) {
+func resolve(ctx context.Context, startDir, explicitPath string, optional bool) (*Project, error) {
 	if explicitPath != "" {
 		configPath, err := explicitConfigFile(startDir, explicitPath)
 		if err != nil {
@@ -150,7 +150,7 @@ func resolve(ctx context.Context, startDir, explicitPath string, optional bool) 
 	configPath := defaultConfigFile(root)
 	if configPath == "" {
 		if optional {
-			return &Config{Dir: root, Path: filepath.Join(root, DefaultFileName), EnvSource: envsource.DefaultTiers()}, nil
+			return &Project{Dir: root, Path: filepath.Join(root, DefaultFileName), EnvSource: envsource.DefaultTiers()}, nil
 		}
 		return nil, NoConfigError{Names: fileNames(""), StartDir: startDir}
 	}
@@ -185,7 +185,7 @@ func explicitConfigFile(startDir, explicitPath string) (string, error) {
 	return abs, nil
 }
 
-func load(ctx context.Context, configPath string) (*Config, error) {
+func load(ctx context.Context, configPath string) (*Project, error) {
 	base := filepath.Base(configPath)
 	_, f, ok := formOf(base)
 	if !ok {

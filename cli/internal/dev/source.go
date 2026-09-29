@@ -7,7 +7,7 @@ import (
 	"os"
 
 	"github.com/ocelhq/ocel/cli/internal/dotfile"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/envsource"
 )
 
@@ -16,7 +16,7 @@ type valueSource struct {
 	values map[string]string
 }
 
-func readValueSource(ctx context.Context, cfg *projectconfig.Config) (valueSource, error) {
+func readValueSource(ctx context.Context, cfg *project.Project) (valueSource, error) {
 	descriptor := cfg.EnvSource.Dev
 	if descriptor.Kind == envsource.Dotenv {
 		return valueSource{id: descriptor.ID()}, nil
@@ -26,7 +26,7 @@ func readValueSource(ctx context.Context, cfg *projectconfig.Config) (valueSourc
 		return valueSource{}, err
 	}
 	folders := []string{""}
-	if folder := projectconfig.SharedFolder(cfg.Apps); folder != "" {
+	if folder := project.SharedFolder(cfg.Apps); folder != "" {
 		folders = append(folders, folder)
 	}
 	read, err := source.Read(ctx, folders)

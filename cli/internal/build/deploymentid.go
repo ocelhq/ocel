@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/naming"
 )
@@ -60,7 +60,7 @@ func DeploymentID(projectDir, app string) (string, error) {
 	return id, nil
 }
 
-func recordDeploymentIDs(cfg *projectconfig.Config, apps []projectconfig.App) (map[string]string, error) {
+func recordDeploymentIDs(cfg *project.Project, apps []project.App) (map[string]string, error) {
 	ids := make(map[string]string, len(apps))
 	for _, a := range apps {
 		id, err := mintDeploymentID()

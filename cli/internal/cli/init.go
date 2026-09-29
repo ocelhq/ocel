@@ -15,7 +15,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/language"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/configdoc"
@@ -165,7 +165,7 @@ func runInit(ctx context.Context, deps cmddeps.Deps, cwd, slug string, opts init
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return fmt.Errorf("check for existing %s: %w", name, err)
 	}
-	if others := projectconfig.Counterparts(configPath); len(others) > 0 {
+	if others := project.Counterparts(configPath); len(others) > 0 {
 		return fmt.Errorf("%s already contains %s, and one project reads one config: keep it, or delete it before writing %s", projectDir, strings.Join(others, " and "), name)
 	}
 
@@ -218,12 +218,12 @@ func initConfigPath(cwd string, opts initOptions) (string, error) {
 	}
 	name := filepath.Base(path)
 	switch {
-	case !projectconfig.IsConfig(name):
-		return "", fmt.Errorf("%s (from --config / OCEL_CONFIG) is not a config ocel reads — name it %s, %s or %s, with an optional target before the suffix", name, projectconfig.DefaultFileName, projectconfig.YAMLFileName, projectconfig.TSFileName)
-	case opts.ts && !projectconfig.IsProgram(name):
-		return "", fmt.Errorf("--ts writes a TypeScript config, and %s (from --config / OCEL_CONFIG) is not one: name it %s, or drop --ts", name, projectconfig.TSFileName)
-	case opts.yaml && !projectconfig.IsYAML(name):
-		return "", fmt.Errorf("--yaml writes a YAML config, and %s (from --config / OCEL_CONFIG) is not one: name it %s, or drop --yaml", name, projectconfig.YAMLFileName)
+	case !project.IsConfig(name):
+		return "", fmt.Errorf("%s (from --config / OCEL_CONFIG) is not a config ocel reads — name it %s, %s or %s, with an optional target before the suffix", name, project.DefaultFileName, project.YAMLFileName, project.TSFileName)
+	case opts.ts && !project.IsProgram(name):
+		return "", fmt.Errorf("--ts writes a TypeScript config, and %s (from --config / OCEL_CONFIG) is not one: name it %s, or drop --ts", name, project.TSFileName)
+	case opts.yaml && !project.IsYAML(name):
+		return "", fmt.Errorf("--yaml writes a YAML config, and %s (from --config / OCEL_CONFIG) is not one: name it %s, or drop --yaml", name, project.YAMLFileName)
 	}
 	return path, nil
 }
@@ -231,25 +231,25 @@ func initConfigPath(cwd string, opts initOptions) (string, error) {
 func configFileName(opts initOptions) string {
 	switch {
 	case opts.ts:
-		return projectconfig.TSFileName
+		return project.TSFileName
 	case opts.yaml:
-		return projectconfig.YAMLFileName
+		return project.YAMLFileName
 	}
-	return projectconfig.DefaultFileName
+	return project.DefaultFileName
 }
 
 func resolveSlug(projectDir, requested string) (string, error) {
 	requested = strings.TrimSpace(requested)
 	if requested == "" {
 		dir := filepath.Base(projectDir)
-		derived := projectconfig.DeriveSlug(dir)
+		derived := project.DeriveSlug(dir)
 		if derived == "" {
 			return "", fmt.Errorf("could not derive a slug from directory %q — pass one, e.g. `ocel init my-app`", dir)
 		}
 		return derived, nil
 	}
 
-	if err := projectconfig.ValidateSlug(requested); err != nil {
+	if err := project.ValidateSlug(requested); err != nil {
 		return "", fmt.Errorf("invalid slug %w", err)
 	}
 	return requested, nil
@@ -260,10 +260,10 @@ func schemaURL() string {
 }
 
 func configTemplate(name, slug, provider string) string {
-	if projectconfig.IsProgram(name) {
+	if project.IsProgram(name) {
 		return typescriptTemplate(slug, provider)
 	}
-	if projectconfig.IsYAML(name) {
+	if project.IsYAML(name) {
 		return yamlTemplate(slug, provider)
 	}
 	selected := fmt.Sprintf("{ %q: {} }", provider)
@@ -301,7 +301,7 @@ export default defineConfig({
 }
 
 func providerIdentifier(provider string) string {
-	name := projectconfig.DeriveSlug(provider)
+	name := project.DeriveSlug(provider)
 	if name == "" || (name[0] >= '0' && name[0] <= '9') {
 		return "provider"
 	}

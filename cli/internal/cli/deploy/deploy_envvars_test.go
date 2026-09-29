@@ -5,7 +5,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -135,7 +135,7 @@ func TestTheRootStandInIsBuiltUnderNoAppName(t *testing.T) {
 		variablescope.RootApp: {{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-123"}},
 	}
 
-	env := build.Env(clientenv.AppsOf(&projectconfig.Config{Dir: t.TempDir()}, variables))
+	env := build.Env(clientenv.AppsOf(&project.Project{Dir: t.TempDir()}, variables))
 	if _, ok := env[variablescope.RootApp]; ok {
 		t.Errorf("env = %v, still keyed by a placeholder name no build knows", env)
 	}

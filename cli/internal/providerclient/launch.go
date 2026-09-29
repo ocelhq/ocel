@@ -7,12 +7,12 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/node"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-func prepareLaunch(ctx context.Context, cfg *projectconfig.Config, pins Pinning) (Config, error) {
+func prepareLaunch(ctx context.Context, cfg *project.Project, pins Pinning) (Config, error) {
 	if err := node.Ensure(cfg.Dir); err != nil {
 		return Config{}, err
 	}
@@ -35,7 +35,7 @@ func prepareLaunch(ctx context.Context, cfg *projectconfig.Config, pins Pinning)
 	}, nil
 }
 
-func providerConfig(cfg *projectconfig.Config, desc *projectconfig.ProviderDescriptor) (*contractv1.ProviderConfig, error) {
+func providerConfig(cfg *project.Project, desc *project.ProviderDescriptor) (*contractv1.ProviderConfig, error) {
 	config := &contractv1.ProviderConfig{Transforms: cfg.Transforms, Slug: cfg.Slug, ProjectDir: cfg.Dir}
 	if desc == nil || len(desc.Options) == 0 {
 		return config, nil

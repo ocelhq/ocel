@@ -14,7 +14,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/deployrecord"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
@@ -173,7 +173,7 @@ func previewUpRunE(deps cmddeps.Deps, upOpts *previewUpOptions) func(cmd *cobra.
 }
 
 func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previewUpOptions, stdout, stderr io.Writer, stdin io.Reader) (err error) {
-	cfg, err := projectconfig.Resolve(ctx, cwd, deps.ConfigPath())
+	cfg, err := project.Resolve(ctx, cwd, deps.ConfigPath())
 	if err != nil {
 		return err
 	}
@@ -234,7 +234,7 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 			scope.EnvSource = synced
 			return variables.NewDeclarations(valuestore.Store{
 				Provider: prov,
-				Config:   cfg,
+				Project:  cfg,
 				Tier:     environmentv1.Tier_TIER_PREVIEW,
 			}, scope)
 		},
@@ -290,7 +290,7 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 	return nil
 }
 
-func requirePreviewDomain(cfg *projectconfig.Config, wildcard *contractv1.PreviewWildcard, id *contractv1.Identity, pointer string, check *run.Span) (edge.PreviewSite, error) {
+func requirePreviewDomain(cfg *project.Project, wildcard *contractv1.PreviewWildcard, id *contractv1.Identity, pointer string, check *run.Span) (edge.PreviewSite, error) {
 	declared := ""
 	if hosts := preflight.Hostnames(cfg, "preview"); len(hosts) > 0 {
 		declared = hosts[0].Name
@@ -329,7 +329,7 @@ func requirePreviewDomain(cfg *projectconfig.Config, wildcard *contractv1.Previe
 	return site, nil
 }
 
-func previewAppNames(cfg *projectconfig.Config) []string {
+func previewAppNames(cfg *project.Project) []string {
 	names := make([]string, 0, len(cfg.Apps))
 	for _, app := range cfg.Apps {
 		names = append(names, app.Name)
@@ -359,7 +359,7 @@ func checkGlobalPreviewDomain(wildcard *contractv1.PreviewWildcard, id *contract
 }
 
 func runPreviewRm(ctx context.Context, deps cmddeps.Deps, cwd string, opts previewRmOptions, stdout, stderr io.Writer, stdin io.Reader) (err error) {
-	cfg, err := projectconfig.Resolve(ctx, cwd, deps.ConfigPath())
+	cfg, err := project.Resolve(ctx, cwd, deps.ConfigPath())
 	if err != nil {
 		return err
 	}
@@ -417,7 +417,7 @@ func runPreviewRm(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 }
 
 func runPreviewLs(ctx context.Context, deps cmddeps.Deps, cwd string, stdout io.Writer) error {
-	cfg, err := projectconfig.Resolve(ctx, cwd, deps.ConfigPath())
+	cfg, err := project.Resolve(ctx, cwd, deps.ConfigPath())
 	if err != nil {
 		return err
 	}
@@ -429,7 +429,7 @@ func runPreviewLs(ctx context.Context, deps cmddeps.Deps, cwd string, stdout io.
 	return nil
 }
 
-func listPreviews(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config) (previews []*contractv1.PreviewEnvironment, err error) {
+func listPreviews(ctx context.Context, deps cmddeps.Deps, cfg *project.Project) (previews []*contractv1.PreviewEnvironment, err error) {
 	if _, err := cfg.RequireProvider(); err != nil {
 		return nil, err
 	}
@@ -462,7 +462,7 @@ func runPreviewPrune(ctx context.Context, deps cmddeps.Deps, cwd string, opts pr
 		return err
 	}
 
-	cfg, err := projectconfig.Resolve(ctx, cwd, deps.ConfigPath())
+	cfg, err := project.Resolve(ctx, cwd, deps.ConfigPath())
 	if err != nil {
 		return err
 	}

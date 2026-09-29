@@ -1,4 +1,4 @@
-package projectconfig
+package project
 
 import (
 	"encoding/json"
@@ -90,7 +90,7 @@ func SharedFolder(apps []App) string {
 	return folder
 }
 
-type Config struct {
+type Project struct {
 	Slug          string
 	Transforms    []string
 	Discovery     Discovery
@@ -107,32 +107,32 @@ type Config struct {
 	Path          string
 }
 
-func (c *Config) EdgeID() edge.Kind {
-	if c.Edge == nil {
+func (p *Project) EdgeID() edge.Kind {
+	if p.Edge == nil {
 		return ""
 	}
-	return edge.Kind(c.Edge.ID)
+	return edge.Kind(p.Edge.ID)
 }
 
-func (c *Config) EdgeSelection() *contractv1.EdgeSelection {
+func (p *Project) EdgeSelection() *contractv1.EdgeSelection {
 	selection := &contractv1.EdgeSelection{
-		Kind:          string(c.EdgeID()),
-		AllowDegraded: c.AllowDegraded,
+		Kind:          string(p.EdgeID()),
+		AllowDegraded: p.AllowDegraded,
 	}
-	if c.DNS != nil {
-		selection.Dns = &contractv1.Dns{Kind: c.DNS.ID, Zone: c.DNS.Zone}
+	if p.DNS != nil {
+		selection.Dns = &contractv1.Dns{Kind: p.DNS.ID, Zone: p.DNS.Zone}
 	}
 	return selection
 }
 
-func (c *Config) RequireProvider() (*ProviderDescriptor, error) {
-	if c.Provider == nil {
-		return nil, fmt.Errorf("no provider configured in %s — add `\"provider\": { \"<id>\": { … } }` keyed by the provider this project deploys through, one of %s", filepath.Base(c.Path), strings.Join(configdoc.ProviderIDs(), ", "))
+func (p *Project) RequireProvider() (*ProviderDescriptor, error) {
+	if p.Provider == nil {
+		return nil, fmt.Errorf("no provider configured in %s — add `\"provider\": { \"<id>\": { … } }` keyed by the provider this project deploys through, one of %s", filepath.Base(p.Path), strings.Join(configdoc.ProviderIDs(), ", "))
 	}
-	return c.Provider, nil
+	return p.Provider, nil
 }
 
-func normalize(doc *configdoc.Document, configPath string) (*Config, error) {
+func normalize(doc *configdoc.Document, configPath string) (*Project, error) {
 	if doc.Slug == "" {
 		return nil, fmt.Errorf("%s is missing required \"slug\" — %s", configPath, initHint)
 	}
@@ -180,7 +180,7 @@ func normalize(doc *configdoc.Document, configPath string) (*Config, error) {
 		discovery.Paths = doc.Discovery.Paths
 	}
 
-	return &Config{
+	return &Project{
 		Slug:          doc.Slug,
 		Transforms:    doc.Transforms,
 		Discovery:     discovery,

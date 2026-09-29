@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 )
 
-func goProject(t *testing.T, configName string) *projectconfig.Config {
+func goProject(t *testing.T, configName string) *project.Project {
 	t.Helper()
 
 	dir := t.TempDir()
@@ -20,7 +20,7 @@ func goProject(t *testing.T, configName string) *projectconfig.Config {
 			t.Fatal(err)
 		}
 	}
-	return &projectconfig.Config{Slug: "fixture", Dir: dir, Path: filepath.Join(dir, configName)}
+	return &project.Project{Slug: "fixture", Dir: dir, Path: filepath.Join(dir, configName)}
 }
 
 func TestAGoProjectNeedsNoNode(t *testing.T) {

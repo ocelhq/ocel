@@ -11,7 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/devresources"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/constants"
 )
 
@@ -22,7 +22,7 @@ type host struct {
 }
 
 func startHost(ctx context.Context, opts Options, source valueSource) (*host, error) {
-	cfg := opts.Config
+	cfg := opts.Project
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, fmt.Errorf("start dev server: %w", err)
@@ -50,7 +50,7 @@ func startHost(ctx context.Context, opts Options, source valueSource) (*host, er
 	}}, nil
 }
 
-func stateDir(cfg *projectconfig.Config) string {
+func stateDir(cfg *project.Project) string {
 	return filepath.Join(cfg.Dir, constants.ProjectStateDirName, "devresources")
 }
 

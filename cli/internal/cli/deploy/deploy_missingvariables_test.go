@@ -13,13 +13,13 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
 func stubAppBuildRecorder(deps *cmddeps.Deps, built *bool) {
-	deps.BuildApps = func(_ context.Context, cfg *projectconfig.Config, _ map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
+	deps.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
 		*built = true
 		return functionsOnDisk(deps, cfg)
 	}
@@ -28,7 +28,7 @@ func stubAppBuildRecorder(deps *cmddeps.Deps, built *bool) {
 func captureBuildEnv(deps *cmddeps.Deps) *map[string]map[string]string {
 	clitest.StubRecordedDeploymentIDs(deps)
 	var got map[string]map[string]string
-	deps.BuildApps = func(_ context.Context, cfg *projectconfig.Config, envByApp map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
+	deps.BuildApps = func(_ context.Context, cfg *project.Project, envByApp map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
 		got = envByApp
 		return functionsOnDisk(deps, cfg)
 	}

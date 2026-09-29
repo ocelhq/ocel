@@ -20,7 +20,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devresources/binding"
 	"github.com/ocelhq/ocel/cli/internal/dotfile"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/channel"
@@ -417,7 +417,7 @@ export default {
 		root := t.TempDir()
 		t.Cleanup(func() { _ = leader.Release(root) })
 
-		clitest.WriteFile(t, filepath.Join(root, projectconfig.DefaultFileName), `{"slug":"test-app","envSource":{"dev":{"infisical":{"project":"p-1","environment":"dev"}}}}`)
+		clitest.WriteFile(t, filepath.Join(root, project.DefaultFileName), `{"slug":"test-app","envSource":{"dev":{"infisical":{"project":"p-1","environment":"dev"}}}}`)
 		t.Setenv("PATH", t.TempDir())
 		t.Setenv("INFISICAL_TOKEN", "")
 
@@ -741,10 +741,10 @@ func TestDevGivesEveryAppItsURL(t *testing.T) {
 func TestRunWritesTheBrowsersURLForTheAppItRunsIn(t *testing.T) {
 	t.Setenv("PORT", "")
 	root := t.TempDir()
-	cfg := &projectconfig.Config{Dir: root, Apps: []projectconfig.App{
-		{Name: "web", Path: filepath.Join("apps", "web"), Folder: "/web", Framework: projectconfig.Framework{Name: appbuild.FrameworkNext}},
-		{Name: "api", Path: filepath.Join("apps", "api"), Folder: "/api", Framework: projectconfig.Framework{Name: appbuild.FrameworkGo}},
-		{Name: "webhooks", Path: filepath.Join("apps", "web-hooks"), Framework: projectconfig.Framework{Name: appbuild.FrameworkPython}},
+	cfg := &project.Project{Dir: root, Apps: []project.App{
+		{Name: "web", Path: filepath.Join("apps", "web"), Folder: "/web", Framework: project.Framework{Name: appbuild.FrameworkNext}},
+		{Name: "api", Path: filepath.Join("apps", "api"), Folder: "/api", Framework: project.Framework{Name: appbuild.FrameworkGo}},
+		{Name: "webhooks", Path: filepath.Join("apps", "web-hooks"), Framework: project.Framework{Name: appbuild.FrameworkPython}},
 		{Name: "store", Path: filepath.Join("apps", "store"), Folder: "/store", Compute: string(provider.ComputeContainer)},
 		{Name: "worker", Path: filepath.Join("apps", "worker"), Folder: "/worker", Compute: string(provider.ComputeContainer)},
 	}}

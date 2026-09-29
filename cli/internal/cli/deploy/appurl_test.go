@@ -9,7 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -43,7 +43,7 @@ func TestTheDeploymentURLReachesEveryDeliverySite(t *testing.T) {
 	clitest.StubRecordedDeploymentIDs(&deps)
 
 	var built map[string]map[string]string
-	deps.BuildApps = func(_ context.Context, cfg *projectconfig.Config, env map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
+	deps.BuildApps = func(_ context.Context, cfg *project.Project, env map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
 		built = env
 		return functionsOnDisk(&deps, cfg)
 	}

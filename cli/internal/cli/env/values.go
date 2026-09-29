@@ -9,7 +9,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
@@ -22,8 +22,8 @@ import (
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 )
 
-func envValues(prov *providerclient.Provider, cfg *projectconfig.Config, opts envOptions) valuestore.Store {
-	return valuestore.Store{Provider: prov, Config: cfg, Tier: opts.tier()}
+func envValues(prov *providerclient.Provider, cfg *project.Project, opts envOptions) valuestore.Store {
+	return valuestore.Store{Provider: prov, Project: cfg, Tier: opts.tier()}
 }
 
 func staleCell(err error, key string, opts envOptions) error {
@@ -48,7 +48,7 @@ func runEnvSetPairs(ctx context.Context, deps cmddeps.Deps, cwd string, pairs []
 	if len(pairs) > 0 {
 		key = pairs[0].key
 	}
-	return withEnvProviderOfferingVariablesKey(ctx, deps, cwd, opts, "ocel env set", stdin, stderr, func(ctx context.Context, run *run.Run, prov *providerclient.Provider, cfg *projectconfig.Config, status *contractv1.PreflightResponse) error {
+	return withEnvProviderOfferingVariablesKey(ctx, deps, cwd, opts, "ocel env set", stdin, stderr, func(ctx context.Context, run *run.Run, prov *providerclient.Provider, cfg *project.Project, status *contractv1.PreflightResponse) error {
 		definitions, groups, err := declaredVariables(ctx, deps, cfg, prov, key, opts, run)
 		if err != nil {
 			return err
@@ -119,7 +119,7 @@ func setInEnvSource(ctx context.Context, values valuestore.Store, id string, at 
 }
 
 func runEnvGet(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
-	return withEnvProvider(ctx, deps, cwd, opts, "ocel env get", stderr, func(ctx context.Context, run *run.Run, prov *providerclient.Provider, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
+	return withEnvProvider(ctx, deps, cwd, opts, "ocel env get", stderr, func(ctx context.Context, run *run.Run, prov *providerclient.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
 		definitions, _, err := declaredVariables(ctx, deps, cfg, prov, key, opts, run)
 		if err != nil {
 			return err
@@ -181,7 +181,7 @@ func consentToReveal(definitions []*resourcesv1.VariableDefinition, key string, 
 }
 
 func runEnvRm(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
-	return withEnvProvider(ctx, deps, cwd, opts, "ocel env rm", stderr, func(ctx context.Context, run *run.Run, prov *providerclient.Provider, cfg *projectconfig.Config, status *contractv1.PreflightResponse) error {
+	return withEnvProvider(ctx, deps, cwd, opts, "ocel env rm", stderr, func(ctx context.Context, run *run.Run, prov *providerclient.Provider, cfg *project.Project, status *contractv1.PreflightResponse) error {
 		vars, err := prov.Vars()
 		if err != nil {
 			return err
@@ -213,7 +213,7 @@ func runEnvRm(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts envO
 }
 
 func runEnvHistory(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
-	return withEnvProvider(ctx, deps, cwd, opts, "ocel env history", stderr, func(ctx context.Context, _ *run.Run, prov *providerclient.Provider, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
+	return withEnvProvider(ctx, deps, cwd, opts, "ocel env history", stderr, func(ctx context.Context, _ *run.Run, prov *providerclient.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
 		vars, err := prov.Vars()
 		if err != nil {
 			return err

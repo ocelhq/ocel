@@ -1,4 +1,4 @@
-package projectconfig
+package project
 
 import (
 	"cmp"
@@ -66,9 +66,9 @@ type PostgresTLS struct {
 	CA   string
 }
 
-func (c *Config) BindingsFor(tier environmentv1.Tier) []Binding {
-	out := make([]Binding, 0, len(c.Bindings))
-	for _, b := range c.Bindings {
+func (p *Project) BindingsFor(tier environmentv1.Tier) []Binding {
+	out := make([]Binding, 0, len(p.Bindings))
+	for _, b := range p.Bindings {
 		if b.Tier == environmentv1.Tier_TIER_UNSPECIFIED || b.Tier == tier {
 			out = append(out, b)
 		}

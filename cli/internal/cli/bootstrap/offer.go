@@ -10,7 +10,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
@@ -174,7 +174,7 @@ func confirmHealing(ctx context.Context, plan Plan, tier environmentv1.Tier, spa
 	})
 }
 
-func Ready(ctx context.Context, span *run.Span, prov *providerclient.Provider, cfg *projectconfig.Config, required environmentv1.Tier, hint string) error {
+func Ready(ctx context.Context, span *run.Span, prov *providerclient.Provider, cfg *project.Project, required environmentv1.Tier, hint string) error {
 	resp, err := preflight.Run(ctx, span, prov, cfg, required, "", nil, preflight.Frameworks(cfg), hint)
 	if err != nil {
 		return err

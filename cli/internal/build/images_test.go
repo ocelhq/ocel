@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/build/image"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/images"
@@ -29,7 +29,7 @@ func awayFromAnyDaemon(t *testing.T) {
 func TestAContainerAppWithNoDaemonToBuildItIsRefusedBeforeAnythingIsBuilt(t *testing.T) {
 	awayFromAnyDaemon(t)
 	cfg := containerProject(t, "")
-	cfg.Apps = append([]projectconfig.App{{Name: "api", Compute: "serverless"}}, cfg.Apps...)
+	cfg.Apps = append([]project.App{{Name: "api", Compute: "serverless"}}, cfg.Apps...)
 	rep, _ := said(t)
 
 	err := RefuseUnbuildableImages(context.Background(), rep, cfg, nil)
@@ -46,7 +46,7 @@ func TestAContainerAppWithNoDaemonToBuildItIsRefusedBeforeAnythingIsBuilt(t *tes
 
 func TestAProjectOfServerlessAppsNeverAsksForADaemon(t *testing.T) {
 	awayFromAnyDaemon(t)
-	cfg := &projectconfig.Config{Apps: []projectconfig.App{
+	cfg := &project.Project{Apps: []project.App{
 		{Name: "api", Compute: "serverless"},
 		{Name: "web", Compute: "serverless"},
 	}}
@@ -58,7 +58,7 @@ func TestAProjectOfServerlessAppsNeverAsksForADaemon(t *testing.T) {
 	}
 }
 
-func containerProject(t *testing.T, dockerfile string) *projectconfig.Config {
+func containerProject(t *testing.T, dockerfile string) *project.Project {
 	t.Helper()
 	root := t.TempDir()
 	appDir := filepath.Join(root, "services", "web")
@@ -70,9 +70,9 @@ func containerProject(t *testing.T, dockerfile string) *projectconfig.Config {
 			t.Fatal(err)
 		}
 	}
-	return &projectconfig.Config{
+	return &project.Project{
 		Dir:  root,
-		Apps: []projectconfig.App{{Name: "web", Path: "services/web", Compute: "container"}},
+		Apps: []project.App{{Name: "web", Path: "services/web", Compute: "container"}},
 	}
 }
 
@@ -142,7 +142,7 @@ func TestAContainerAppRailpackBuildsAnnouncesNothing(t *testing.T) {
 func TestABuildDockerfileNamingNothingStopsTheDeployBeforeTheDaemonIsAsked(t *testing.T) {
 	awayFromAnyDaemon(t)
 	cfg := containerProject(t, "")
-	cfg.Apps[0].Build = &projectconfig.Build{Dockerfile: "../shared/Dockerfile"}
+	cfg.Apps[0].Build = &project.Build{Dockerfile: "../shared/Dockerfile"}
 	rep, _ := said(t)
 
 	err := RefuseUnbuildableImages(context.Background(), rep, cfg, nil)
@@ -185,7 +185,7 @@ func TestAContainerAppIsBuiltIntoAnImageForTheArchitectureItIsAskedAndNeverHande
 	}
 }
 
-func builtImage(t *testing.T, cfg *projectconfig.Config) Output {
+func builtImage(t *testing.T, cfg *project.Project) Output {
 	t.Helper()
 	built, err := tools{
 		image: func(_ context.Context, app image.App, _ string, _ io.Writer) (image.Image, error) {

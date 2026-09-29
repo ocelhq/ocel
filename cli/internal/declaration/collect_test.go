@@ -11,7 +11,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/sdkversion"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/version"
@@ -25,7 +25,7 @@ func TestCollectReturnsEveryResourceTheProgramDeclares(t *testing.T) {
 			t.Skip("uses a POSIX-style fixture entrypoint")
 		}
 
-		cfg := &projectconfig.Config{
+		cfg := &project.Project{
 			Slug: "test-app",
 			Dir:  t.TempDir(),
 		}
@@ -73,10 +73,10 @@ declareResource({
 export {};
 `)
 
-		cfg := &projectconfig.Config{
+		cfg := &project.Project{
 			Slug:      "test-app",
 			Dir:       root,
-			Discovery: projectconfig.Discovery{Paths: []string{constants.DefaultDiscoveryDirName}},
+			Discovery: project.Discovery{Paths: []string{constants.DefaultDiscoveryDirName}},
 		}
 
 		var stdout, stderr bytes.Buffer
@@ -150,10 +150,10 @@ globalThis.__ocelRegister.push(
 export {};
 `)
 
-	cfg := &projectconfig.Config{
+	cfg := &project.Project{
 		Slug:      "test-app",
 		Dir:       root,
-		Discovery: projectconfig.Discovery{Paths: []string{constants.DefaultDiscoveryDirName}},
+		Discovery: project.Discovery{Paths: []string{constants.DefaultDiscoveryDirName}},
 	}
 
 	var stdout, stderr bytes.Buffer
@@ -186,7 +186,7 @@ func TestCollectPreparedRunsTheBundlePrepareAlreadyBuilt(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, constants.DefaultDiscoveryDirName, "main.ts"), "export {};\n")
 
-	cfg := &projectconfig.Config{Slug: "test-app", Dir: root}
+	cfg := &project.Project{Slug: "test-app", Dir: root}
 	prepared, err := Prepare(cfg)
 	if err != nil {
 		t.Fatalf("Prepare: %v", err)
@@ -246,10 +246,10 @@ globalThis.__ocelRegister.push(
 );
 export {};
 `)
-	cfg := &projectconfig.Config{
+	cfg := &project.Project{
 		Slug:      "test-app",
 		Dir:       root,
-		Discovery: projectconfig.Discovery{Paths: []string{constants.DefaultDiscoveryDirName}},
+		Discovery: project.Discovery{Paths: []string{constants.DefaultDiscoveryDirName}},
 	}
 
 	var stdout, stderr bytes.Buffer

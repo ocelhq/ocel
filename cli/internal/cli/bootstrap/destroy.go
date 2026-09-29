@@ -8,7 +8,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/consent"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -26,7 +26,7 @@ func RunDestroy(ctx context.Context, deps cmddeps.Deps, cwd string, tier environ
 	return runDestroy(ctx, deps, cfg, tier, opts, stdout, stdin)
 }
 
-func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, tier environmentv1.Tier, opts Options, stdout io.Writer, stdin io.Reader) (err error) {
+func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, tier environmentv1.Tier, opts Options, stdout io.Writer, stdin io.Reader) (err error) {
 	name := Name(tier)
 	bypass, notice, err := consent.Bypass{
 		Noun:         "bootstrap",

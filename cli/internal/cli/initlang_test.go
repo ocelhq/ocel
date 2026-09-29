@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/version"
 )
 
@@ -47,7 +47,7 @@ func TestInitWritesAConfigTheLoaderAccepts(t *testing.T) {
 				t.Fatalf("runInit: %v — %s", err, stdout.String())
 			}
 
-			cfg, err := projectconfig.Resolve(context.Background(), dir, "")
+			cfg, err := project.Resolve(context.Background(), dir, "")
 			if err != nil {
 				t.Fatalf("the config init wrote does not load: %v", err)
 			}
@@ -70,7 +70,7 @@ func TestInitWritesTheSchemaThisCLIShipsWith(t *testing.T) {
 		t.Fatalf("runInit: %v", err)
 	}
 
-	raw, err := os.ReadFile(filepath.Join(dir, projectconfig.DefaultFileName))
+	raw, err := os.ReadFile(filepath.Join(dir, project.DefaultFileName))
 	if err != nil {
 		t.Fatalf("read config: %v", err)
 	}
@@ -94,10 +94,10 @@ func TestInitWritesTypeScriptOnRequest(t *testing.T) {
 		t.Fatalf("runInit: %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(dir, projectconfig.DefaultFileName)); err == nil {
+	if _, err := os.Stat(filepath.Join(dir, project.DefaultFileName)); err == nil {
 		t.Fatal("--ts wrote a JSON config as well")
 	}
-	written, err := os.ReadFile(filepath.Join(dir, projectconfig.TSFileName))
+	written, err := os.ReadFile(filepath.Join(dir, project.TSFileName))
 	if err != nil {
 		t.Fatalf("read config: %v", err)
 	}
@@ -115,14 +115,14 @@ func TestInitWritesYAMLOnRequest(t *testing.T) {
 		t.Fatalf("runInit: %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(dir, projectconfig.DefaultFileName)); err == nil {
+	if _, err := os.Stat(filepath.Join(dir, project.DefaultFileName)); err == nil {
 		t.Fatal("--yaml wrote a JSON config as well")
 	}
-	cfg, err := projectconfig.Resolve(context.Background(), dir, "")
+	cfg, err := project.Resolve(context.Background(), dir, "")
 	if err != nil {
 		t.Fatalf("the config init wrote does not load: %v", err)
 	}
-	if cfg.Path != filepath.Join(dir, projectconfig.YAMLFileName) || cfg.Slug != "007" || cfg.Provider == nil || cfg.Provider.ID != "aws" {
+	if cfg.Path != filepath.Join(dir, project.YAMLFileName) || cfg.Slug != "007" || cfg.Provider == nil || cfg.Provider.ID != "aws" {
 		t.Fatalf("config = %+v", cfg)
 	}
 	written, err := os.ReadFile(cfg.Path)
@@ -140,11 +140,11 @@ func TestInitRefusesToWriteASecondFormOfTheConfig(t *testing.T) {
 		opts     initOptions
 		refused  string
 	}{
-		{projectconfig.DefaultFileName, initOptions{provider: "aws", yaml: true}, projectconfig.YAMLFileName},
-		{projectconfig.TSFileName, initOptions{provider: "aws", yaml: true}, projectconfig.YAMLFileName},
-		{"ocel.yml", initOptions{provider: "aws", yaml: true}, projectconfig.YAMLFileName},
-		{projectconfig.YAMLFileName, initOptions{provider: "aws"}, projectconfig.DefaultFileName},
-		{projectconfig.YAMLFileName, initOptions{provider: "aws", ts: true}, projectconfig.TSFileName},
+		{project.DefaultFileName, initOptions{provider: "aws", yaml: true}, project.YAMLFileName},
+		{project.TSFileName, initOptions{provider: "aws", yaml: true}, project.YAMLFileName},
+		{"ocel.yml", initOptions{provider: "aws", yaml: true}, project.YAMLFileName},
+		{project.YAMLFileName, initOptions{provider: "aws"}, project.DefaultFileName},
+		{project.YAMLFileName, initOptions{provider: "aws", ts: true}, project.TSFileName},
 	} {
 		t.Run(tc.existing+" then "+tc.refused, func(t *testing.T) {
 			dir := manifestDir(t, "go.mod")
@@ -171,7 +171,7 @@ func TestInitRefusesAFormFlagTheExplicitPathContradicts(t *testing.T) {
 		opts initOptions
 		want string
 	}{
-		{projectconfig.DefaultFileName, initOptions{provider: "aws", yaml: true}, "--yaml"},
+		{project.DefaultFileName, initOptions{provider: "aws", yaml: true}, "--yaml"},
 		{"ocel.aws.yaml", initOptions{provider: "aws", ts: true}, "--ts"},
 		{"config.json", initOptions{provider: "aws"}, "config.json"},
 	} {
@@ -201,7 +201,7 @@ func TestInitWritesYAMLToAnExplicitYAMLPath(t *testing.T) {
 	if err := runInit(context.Background(), deps, dir, "acme", opts); err != nil {
 		t.Fatalf("runInit: %v", err)
 	}
-	cfg, err := projectconfig.Resolve(context.Background(), dir, "ocel.aws.yml")
+	cfg, err := project.Resolve(context.Background(), dir, "ocel.aws.yml")
 	if err != nil {
 		t.Fatalf("the config init wrote does not load: %v", err)
 	}
@@ -275,7 +275,7 @@ func TestInitWritesOnlyTheConfigWhenNoManifestNamesALanguage(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "package.json")); err == nil {
 		t.Fatal("init wrote a package.json into a directory that had none")
 	}
-	if _, err := projectconfig.Resolve(context.Background(), dir, ""); err != nil {
+	if _, err := project.Resolve(context.Background(), dir, ""); err != nil {
 		t.Fatalf("the config init wrote does not load: %v", err)
 	}
 }
@@ -286,11 +286,11 @@ func TestInitNamesTheProviderAloneWhereItNeedsNoOptionsAndKeysItElsewhere(t *tes
 		written string
 		want    string
 	}{
-		{initOptions{provider: "aws"}, projectconfig.DefaultFileName, "  \"provider\": \"aws\"\n"},
-		{initOptions{provider: "aws", yaml: true}, projectconfig.YAMLFileName, "provider: aws\n"},
-		{initOptions{provider: "vps"}, projectconfig.DefaultFileName, "  \"provider\": { \"vps\": {} }\n"},
-		{initOptions{provider: "vps", yaml: true}, projectconfig.YAMLFileName, "provider:\n  vps: {}\n"},
-		{initOptions{provider: "aws", ts: true}, projectconfig.TSFileName, "  provider: awsProvider({}),\n"},
+		{initOptions{provider: "aws"}, project.DefaultFileName, "  \"provider\": \"aws\"\n"},
+		{initOptions{provider: "aws", yaml: true}, project.YAMLFileName, "provider: aws\n"},
+		{initOptions{provider: "vps"}, project.DefaultFileName, "  \"provider\": { \"vps\": {} }\n"},
+		{initOptions{provider: "vps", yaml: true}, project.YAMLFileName, "provider:\n  vps: {}\n"},
+		{initOptions{provider: "aws", ts: true}, project.TSFileName, "  provider: awsProvider({}),\n"},
 	} {
 		t.Run(tc.opts.provider+" in "+tc.written, func(t *testing.T) {
 			dir := manifestDir(t, "")
@@ -325,7 +325,7 @@ func TestInitRefusesAProviderOcelDoesNotShip(t *testing.T) {
 			t.Errorf("error %q does not name %s", err, want)
 		}
 	}
-	if _, err := os.Stat(filepath.Join(dir, projectconfig.DefaultFileName)); err == nil {
+	if _, err := os.Stat(filepath.Join(dir, project.DefaultFileName)); err == nil {
 		t.Fatal("a config was written for a provider nothing ships")
 	}
 }

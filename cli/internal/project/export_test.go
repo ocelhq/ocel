@@ -1,3 +1,3 @@
-package projectconfig
+package project
 
 var YAMLToJSON = yamlToJSON

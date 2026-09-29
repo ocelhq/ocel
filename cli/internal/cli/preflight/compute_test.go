@@ -5,13 +5,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 )
 
 func TestAnAppThatNamesNoComputeTakesTheOneItsProviderNamesFirst(t *testing.T) {
 	t.Parallel()
 
-	cfg := &projectconfig.Config{Apps: []projectconfig.App{{Name: "api"}, {Name: "web"}}}
+	cfg := &project.Project{Apps: []project.App{{Name: "api"}, {Name: "web"}}}
 
 	fallback, err := ResolveComputes(cfg, []string{"container", "serverless"}, "fake")
 	if err != nil {
@@ -30,7 +30,7 @@ func TestAnAppThatNamesNoComputeTakesTheOneItsProviderNamesFirst(t *testing.T) {
 func TestAnAppThatNamesAComputeItsProviderRunsKeepsIt(t *testing.T) {
 	t.Parallel()
 
-	cfg := &projectconfig.Config{Apps: []projectconfig.App{{Name: "api", Compute: "container"}, {Name: "web"}}}
+	cfg := &project.Project{Apps: []project.App{{Name: "api", Compute: "container"}, {Name: "web"}}}
 
 	if _, err := ResolveComputes(cfg, []string{"serverless", "container"}, "fake"); err != nil {
 		t.Fatalf("ResolveComputes() error = %v, want a compute the provider runs admitted", err)
@@ -46,7 +46,7 @@ func TestAnAppThatNamesAComputeItsProviderRunsKeepsIt(t *testing.T) {
 func TestAnAppThatNamesAComputeItsProviderDoesNotRunFailsThePlanByName(t *testing.T) {
 	t.Parallel()
 
-	cfg := &projectconfig.Config{Apps: []projectconfig.App{{Name: "web"}, {Name: "api", Compute: "container"}}}
+	cfg := &project.Project{Apps: []project.App{{Name: "web"}, {Name: "api", Compute: "container"}}}
 
 	_, err := ResolveComputes(cfg, []string{"serverless"}, "fake")
 	if err == nil {
@@ -62,7 +62,7 @@ func TestAnAppThatNamesAComputeItsProviderDoesNotRunFailsThePlanByName(t *testin
 func TestAProviderThatNamesNoComputeFailsThePlanByName(t *testing.T) {
 	t.Parallel()
 
-	cfg := &projectconfig.Config{Apps: []projectconfig.App{{Name: "api"}}}
+	cfg := &project.Project{Apps: []project.App{{Name: "api"}}}
 
 	_, err := ResolveComputes(cfg, nil, "fake")
 	if err == nil {
@@ -79,7 +79,7 @@ func TestAProviderThatNamesNoComputeFailsThePlanByName(t *testing.T) {
 func TestAProviderNamingAComputeOcelDoesNotKnowFailsThePlanByName(t *testing.T) {
 	t.Parallel()
 
-	cfg := &projectconfig.Config{Apps: []projectconfig.App{{Name: "api"}}}
+	cfg := &project.Project{Apps: []project.App{{Name: "api"}}}
 
 	_, err := ResolveComputes(cfg, []string{"vm"}, "fake")
 	if err == nil {
@@ -98,7 +98,7 @@ func TestAProviderNamingAComputeOcelDoesNotKnowFailsThePlanByName(t *testing.T) 
 func TestARefusedPlanLeavesNoAppHalfResolved(t *testing.T) {
 	t.Parallel()
 
-	cfg := &projectconfig.Config{Apps: []projectconfig.App{{Name: "web"}, {Name: "api", Compute: "container"}}}
+	cfg := &project.Project{Apps: []project.App{{Name: "web"}, {Name: "api", Compute: "container"}}}
 
 	if _, err := ResolveComputes(cfg, []string{"serverless"}, "fake"); err == nil {
 		t.Fatal("ResolveComputes() admitted a compute the provider does not run, want the plan refused")
@@ -111,7 +111,7 @@ func TestARefusedPlanLeavesNoAppHalfResolved(t *testing.T) {
 func TestAProviderWhoseIdentityIsEmptyIsStillNamedByThePlan(t *testing.T) {
 	t.Parallel()
 
-	cfg := &projectconfig.Config{Apps: []projectconfig.App{{Name: "api"}}}
+	cfg := &project.Project{Apps: []project.App{{Name: "api"}}}
 
 	_, err := ResolveComputes(cfg, nil, "fake")
 	if err == nil {
@@ -125,9 +125,9 @@ func TestAProviderWhoseIdentityIsEmptyIsStillNamedByThePlan(t *testing.T) {
 func TestAServerlessAppThatConfiguresABuildFailsThePlanByName(t *testing.T) {
 	t.Parallel()
 
-	cfg := &projectconfig.Config{Apps: []projectconfig.App{
+	cfg := &project.Project{Apps: []project.App{
 		{Name: "web"},
-		{Name: "api", Compute: "serverless", Build: &projectconfig.Build{Dockerfile: "Dockerfile"}},
+		{Name: "api", Compute: "serverless", Build: &project.Build{Dockerfile: "Dockerfile"}},
 	}}
 
 	_, err := ResolveComputes(cfg, []string{"serverless", "container"}, "fake")
@@ -147,8 +147,8 @@ func TestAServerlessAppThatConfiguresABuildFailsThePlanByName(t *testing.T) {
 func TestAnAppThatFallsBackToServerlessIsRefusedItsBuildToo(t *testing.T) {
 	t.Parallel()
 
-	cfg := &projectconfig.Config{Apps: []projectconfig.App{
-		{Name: "api", Build: &projectconfig.Build{Dockerfile: "Dockerfile"}},
+	cfg := &project.Project{Apps: []project.App{
+		{Name: "api", Build: &project.Build{Dockerfile: "Dockerfile"}},
 	}}
 
 	if _, err := ResolveComputes(cfg, []string{"serverless"}, "fake"); err == nil {
@@ -159,9 +159,9 @@ func TestAnAppThatFallsBackToServerlessIsRefusedItsBuildToo(t *testing.T) {
 func TestAContainerAppThatDeclaresAFrameworkFailsThePlanByTheKeyOcelJSONSets(t *testing.T) {
 	t.Parallel()
 
-	cfg := &projectconfig.Config{Apps: []projectconfig.App{
+	cfg := &project.Project{Apps: []project.App{
 		{Name: "web"},
-		{Name: "api", Compute: "container", Framework: projectconfig.Framework{Name: "next"}},
+		{Name: "api", Compute: "container", Framework: project.Framework{Name: "next"}},
 	}}
 
 	_, err := ResolveComputes(cfg, []string{"serverless", "container"}, "fake")
@@ -184,8 +184,8 @@ func TestAContainerAppThatDeclaresAFrameworkFailsThePlanByTheKeyOcelJSONSets(t *
 func TestAnAppWhoseFrameworkWasOnlyDetectedRunsOnAContainerOnlyProviderWithoutIt(t *testing.T) {
 	t.Parallel()
 
-	cfg := &projectconfig.Config{Apps: []projectconfig.App{
-		{Name: "web", Framework: projectconfig.Framework{Name: "next", Detected: true}},
+	cfg := &project.Project{Apps: []project.App{
+		{Name: "web", Framework: project.Framework{Name: "next", Detected: true}},
 	}}
 
 	if _, err := ResolveComputes(cfg, []string{"container"}, "fake"); err != nil {
@@ -199,8 +199,8 @@ func TestAnAppWhoseFrameworkWasOnlyDetectedRunsOnAContainerOnlyProviderWithoutIt
 func TestAnAppWhoseFrameworkWasOnlyDetectedKeepsItOnServerless(t *testing.T) {
 	t.Parallel()
 
-	cfg := &projectconfig.Config{Apps: []projectconfig.App{
-		{Name: "web", Framework: projectconfig.Framework{Name: "next", Detected: true}},
+	cfg := &project.Project{Apps: []project.App{
+		{Name: "web", Framework: project.Framework{Name: "next", Detected: true}},
 	}}
 
 	if _, err := ResolveComputes(cfg, []string{"serverless", "container"}, "fake"); err != nil {
@@ -214,14 +214,14 @@ func TestAnAppWhoseFrameworkWasOnlyDetectedKeepsItOnServerless(t *testing.T) {
 func TestAnAppWhoseFrameworkIsMissingRunsOnAContainerOnlyProvider(t *testing.T) {
 	t.Parallel()
 
-	cfg := &projectconfig.Config{Apps: []projectconfig.App{
-		{Name: "web", Framework: projectconfig.Framework{Missing: errors.New(`app "web": nothing says what it is built with`)}},
+	cfg := &project.Project{Apps: []project.App{
+		{Name: "web", Framework: project.Framework{Missing: errors.New(`app "web": nothing says what it is built with`)}},
 	}}
 
 	if _, err := ResolveComputes(cfg, []string{"container"}, "fake"); err != nil {
 		t.Fatalf("ResolveComputes() error = %v, want a container app to need no framework", err)
 	}
-	if got := cfg.Apps[0].Framework; got != (projectconfig.Framework{}) {
+	if got := cfg.Apps[0].Framework; got != (project.Framework{}) {
 		t.Errorf("framework = %+v, want none: a container runs the image it is given", got)
 	}
 }
@@ -230,8 +230,8 @@ func TestAnAppWhoseFrameworkIsMissingIsRefusedServerless(t *testing.T) {
 	t.Parallel()
 
 	missing := errors.New(`app "web": nothing says what it is built with`)
-	cfg := &projectconfig.Config{Apps: []projectconfig.App{
-		{Name: "web", Framework: projectconfig.Framework{Missing: missing}},
+	cfg := &project.Project{Apps: []project.App{
+		{Name: "web", Framework: project.Framework{Missing: missing}},
 	}}
 
 	if _, err := ResolveComputes(cfg, []string{"serverless", "container"}, "fake"); !errors.Is(err, missing) {
@@ -242,8 +242,8 @@ func TestAnAppWhoseFrameworkIsMissingIsRefusedServerless(t *testing.T) {
 func TestAnAppThatFallsBackToContainerIsRefusedItsRuntimeToo(t *testing.T) {
 	t.Parallel()
 
-	cfg := &projectconfig.Config{Apps: []projectconfig.App{
-		{Name: "api", Framework: projectconfig.Framework{Name: "node"}},
+	cfg := &project.Project{Apps: []project.App{
+		{Name: "api", Framework: project.Framework{Name: "node"}},
 	}}
 
 	if _, err := ResolveComputes(cfg, []string{"container"}, "fake"); err == nil {
@@ -254,9 +254,9 @@ func TestAnAppThatFallsBackToContainerIsRefusedItsRuntimeToo(t *testing.T) {
 func TestAServerlessAppThatConfiguresAHealthCheckFailsThePlanByName(t *testing.T) {
 	t.Parallel()
 
-	cfg := &projectconfig.Config{Apps: []projectconfig.App{
+	cfg := &project.Project{Apps: []project.App{
 		{Name: "web"},
-		{Name: "api", Compute: "serverless", Health: &projectconfig.Health{Path: "/healthz"}},
+		{Name: "api", Compute: "serverless", Health: &project.Health{Path: "/healthz"}},
 	}}
 
 	_, err := ResolveComputes(cfg, []string{"serverless", "container"}, "fake")
@@ -276,8 +276,8 @@ func TestAServerlessAppThatConfiguresAHealthCheckFailsThePlanByName(t *testing.T
 func TestAnAppThatFallsBackToServerlessIsRefusedItsHealthCheckToo(t *testing.T) {
 	t.Parallel()
 
-	cfg := &projectconfig.Config{Apps: []projectconfig.App{
-		{Name: "api", Health: &projectconfig.Health{Path: "/healthz"}},
+	cfg := &project.Project{Apps: []project.App{
+		{Name: "api", Health: &project.Health{Path: "/healthz"}},
 	}}
 
 	if _, err := ResolveComputes(cfg, []string{"serverless"}, "fake"); err == nil {
@@ -288,8 +288,8 @@ func TestAnAppThatFallsBackToServerlessIsRefusedItsHealthCheckToo(t *testing.T) 
 func TestAContainerAppKeepsItsHealthCheck(t *testing.T) {
 	t.Parallel()
 
-	cfg := &projectconfig.Config{Apps: []projectconfig.App{
-		{Name: "api", Compute: "container", Health: &projectconfig.Health{Path: "/healthz"}},
+	cfg := &project.Project{Apps: []project.App{
+		{Name: "api", Compute: "container", Health: &project.Health{Path: "/healthz"}},
 	}}
 
 	if _, err := ResolveComputes(cfg, []string{"serverless", "container"}, "fake"); err != nil {
@@ -300,8 +300,8 @@ func TestAContainerAppKeepsItsHealthCheck(t *testing.T) {
 func TestAContainerAppKeepsItsBuild(t *testing.T) {
 	t.Parallel()
 
-	cfg := &projectconfig.Config{Apps: []projectconfig.App{
-		{Name: "api", Compute: "container", Build: &projectconfig.Build{Dockerfile: "Dockerfile"}},
+	cfg := &project.Project{Apps: []project.App{
+		{Name: "api", Compute: "container", Build: &project.Build{Dockerfile: "Dockerfile"}},
 	}}
 
 	if _, err := ResolveComputes(cfg, []string{"serverless", "container"}, "fake"); err != nil {

@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/lockfile"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 )
 
@@ -27,7 +27,7 @@ var lockCmd = &cobra.Command{
 
 		ctx := cmd.Context()
 
-		cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
+		cfg, err := project.Resolve(ctx, cwd, explicitConfigPath())
 		if err != nil {
 			return err
 		}

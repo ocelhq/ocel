@@ -11,7 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
@@ -58,7 +58,7 @@ func runRollback(ctx context.Context, deps cmddeps.Deps, cwd string, opts rollba
 	if opts.to != "" && opts.tag != "" {
 		return fmt.Errorf("--to and --tag are mutually exclusive; pass just one")
 	}
-	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
+	cfg, err := project.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}
@@ -138,7 +138,7 @@ func runRollback(ctx context.Context, deps cmddeps.Deps, cwd string, opts rollba
 	return nil
 }
 
-func promotionHistory(ctx context.Context, check *run.Span, prov *providerclient.Provider, cfg *projectconfig.Config) ([]*contractv1.PromotionHistoryEntry, error) {
+func promotionHistory(ctx context.Context, check *run.Span, prov *providerclient.Provider, cfg *project.Project) ([]*contractv1.PromotionHistoryEntry, error) {
 	if err := bootstrap.Ready(ctx, check, prov, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production"); err != nil {
 		return nil, err
 	}
@@ -155,7 +155,7 @@ func promotionHistory(ctx context.Context, check *run.Span, prov *providerclient
 	return listed.GetPromotions(), err
 }
 
-func promote(ctx context.Context, phase *run.Span, prov *providerclient.Provider, cfg *projectconfig.Config, target *contractv1.Promotion) (*contractv1.RollbackResponse, error) {
+func promote(ctx context.Context, phase *run.Span, prov *providerclient.Provider, cfg *project.Project, target *contractv1.Promotion) (*contractv1.RollbackResponse, error) {
 	unit := phase.Unit(cfg.Slug, progress.Switching.Title("production traffic back to promotion "+target.GetPromotionId()))
 	var resp *contractv1.RollbackResponse
 	err := prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {

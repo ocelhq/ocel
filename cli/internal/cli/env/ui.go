@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/variableeditor"
@@ -36,7 +36,7 @@ func newUICommand(deps cmddeps.Deps) *cobra.Command {
 }
 
 func runEnvUI(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, stdin io.Reader, stdout, stderr io.Writer) error {
-	return withEnvProviderOfferingVariablesKey(ctx, deps, cwd, opts, "ocel env ui", stdin, stderr, func(ctx context.Context, run *run.Run, prov *providerclient.Provider, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
+	return withEnvProviderOfferingVariablesKey(ctx, deps, cwd, opts, "ocel env ui", stdin, stderr, func(ctx context.Context, run *run.Run, prov *providerclient.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
 		declarations, err := discoverVariables(ctx, cfg, prov, opts, run)
 		if err != nil {
 			return err
@@ -59,7 +59,7 @@ func runEnvUI(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOption
 func serveAndOpenEditor(
 	deps cmddeps.Deps,
 	ctx context.Context,
-	cfg *projectconfig.Config,
+	cfg *project.Project,
 	prov *providerclient.Provider,
 	tier environmentv1.Tier,
 	declarations *variables.Declarations,

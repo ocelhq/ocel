@@ -18,7 +18,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/deployrecord"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/variableeditor"
 	"github.com/ocelhq/ocel/cli/internal/variables"
@@ -211,7 +211,7 @@ func TestADryRunNeverOpensTheVariableEditor(t *testing.T) {
 			deps := clitest.NewDeps()
 			terminalStdin(&deps)
 			served := 0
-			deps.ServeVariableEditor = func(context.Context, *projectconfig.Config, *providerclient.Provider, environmentv1.Tier, *variables.Declarations, *variableeditor.Recovery) (*variableeditor.Session, error) {
+			deps.ServeVariableEditor = func(context.Context, *project.Project, *providerclient.Provider, environmentv1.Tier, *variables.Declarations, *variableeditor.Recovery) (*variableeditor.Session, error) {
 				served++
 				return nil, errors.New("a dry run must never serve the variables UI")
 			}

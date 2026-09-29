@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/build"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/constants"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -45,7 +45,7 @@ type App struct {
 	URLs         []string `json:"urls"`
 }
 
-func New(cfg *projectconfig.Config, manifest *contractv1.Manifest, env *environmentv1.Environment, tag, promotionID string, results []*progressv1.AppResult) (Record, error) {
+func New(cfg *project.Project, manifest *contractv1.Manifest, env *environmentv1.Environment, tag, promotionID string, results []*progressv1.AppResult) (Record, error) {
 	apps := make([]App, 0, len(manifest.GetApps()))
 	for _, a := range manifest.GetApps() {
 		buildID, err := build.BuildID(cfg.Dir, a.GetName())
@@ -69,7 +69,7 @@ func New(cfg *projectconfig.Config, manifest *contractv1.Manifest, env *environm
 	}, nil
 }
 
-func providerOf(cfg *projectconfig.Config) Provider {
+func providerOf(cfg *project.Project) Provider {
 	if cfg.Provider == nil {
 		return Provider{}
 	}

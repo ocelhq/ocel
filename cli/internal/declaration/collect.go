@@ -8,12 +8,12 @@ import (
 	"net/http"
 
 	"github.com/ocelhq/ocel/cli/internal/discovery"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/channel"
 )
 
-func Prepare(cfg *projectconfig.Config) (discovery.Programs, error) {
+func Prepare(cfg *project.Project) (discovery.Programs, error) {
 	roots, err := discovery.RootsOf(cfg)
 	if err != nil {
 		return discovery.Programs{}, err
@@ -21,7 +21,7 @@ func Prepare(cfg *projectconfig.Config) (discovery.Programs, error) {
 	return discovery.Prepare(cfg.Dir, roots)
 }
 
-func Collect(ctx context.Context, cfg *projectconfig.Config, declarations *variables.Declarations, stdout, stderr io.Writer) ([]Resource, error) {
+func Collect(ctx context.Context, cfg *project.Project, declarations *variables.Declarations, stdout, stderr io.Writer) ([]Resource, error) {
 	prepared, err := Prepare(cfg)
 	if err != nil {
 		return nil, err
@@ -29,7 +29,7 @@ func Collect(ctx context.Context, cfg *projectconfig.Config, declarations *varia
 	return CollectPrepared(ctx, cfg, declarations, prepared, stdout, stderr)
 }
 
-func CollectPrepared(ctx context.Context, cfg *projectconfig.Config, declarations *variables.Declarations, prepared discovery.Programs, stdout, stderr io.Writer) ([]Resource, error) {
+func CollectPrepared(ctx context.Context, cfg *project.Project, declarations *variables.Declarations, prepared discovery.Programs, stdout, stderr io.Writer) ([]Resource, error) {
 	service := NewService(declarations)
 	if err := declarations.Prefetch(ctx); err != nil {
 		return nil, err

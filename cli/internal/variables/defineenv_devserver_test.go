@@ -16,7 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/devresources"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 )
 
@@ -35,10 +35,10 @@ func TestDefineEnvDeclaresThroughTheDevServer(t *testing.T) {
 			{Name: "admin", Folder: "/admin"},
 		}})
 
-		cfg := &projectconfig.Config{
+		cfg := &project.Project{
 			Slug:      "devserver",
 			Dir:       root,
-			Discovery: projectconfig.Discovery{Paths: []string{filepath.Base(clitest.DiscoveryDir(root))}},
+			Discovery: project.Discovery{Paths: []string{filepath.Base(clitest.DiscoveryDir(root))}},
 		}
 
 		var stdout, stderr strings.Builder
@@ -90,7 +90,7 @@ func TestDefineEnvDeclaresThroughTheDevServer(t *testing.T) {
 	})
 }
 
-func discover(cfg *projectconfig.Config, srv *devserver.Server, stdout, stderr io.Writer) error {
+func discover(cfg *project.Project, srv *devserver.Server, stdout, stderr io.Writer) error {
 	roots, err := discovery.RootsOf(cfg)
 	if err != nil {
 		return err

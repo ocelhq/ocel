@@ -6,14 +6,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 )
 
-func registryConfig(registry *projectconfig.Registry) *projectconfig.Config {
-	return &projectconfig.Config{
+func registryConfig(registry *project.Registry) *project.Project {
+	return &project.Project{
 		Path:     "/repo/ocel.config.ts",
 		Slug:     "shop",
-		Apps:     []projectconfig.App{{Name: "web", Path: "services/web", Compute: "container"}},
+		Apps:     []project.App{{Name: "web", Path: "services/web", Compute: "container"}},
 		Registry: registry,
 	}
 }
@@ -21,7 +21,7 @@ func registryConfig(registry *projectconfig.Registry) *projectconfig.Config {
 func TestAProjectRegistryRidesTheDeployWithItsPasswordReadFromTheEnvironment(t *testing.T) {
 	t.Setenv("GHCR_TOKEN", "hunter2")
 
-	registry, err := projectRegistry(registryConfig(&projectconfig.Registry{
+	registry, err := projectRegistry(registryConfig(&project.Registry{
 		Server: "ghcr.io", Namespace: "acme", Username: "acme-bot", Password: "GHCR_TOKEN",
 	}))
 	if err != nil {
@@ -46,7 +46,7 @@ func TestAProjectNamingNoRegistrySendsNone(t *testing.T) {
 
 func TestAProjectWithNoAppSendsNoRegistry(t *testing.T) {
 	t.Setenv("GHCR_TOKEN", "hunter2")
-	cfg := registryConfig(&projectconfig.Registry{Server: "ghcr.io", Password: "GHCR_TOKEN"})
+	cfg := registryConfig(&project.Registry{Server: "ghcr.io", Password: "GHCR_TOKEN"})
 	cfg.Apps = nil
 
 	registry, err := projectRegistry(cfg)
@@ -56,7 +56,7 @@ func TestAProjectWithNoAppSendsNoRegistry(t *testing.T) {
 }
 
 func TestARegistryWhoseVariableIsUnsetIsRefusedBeforeAnythingIsBuilt(t *testing.T) {
-	cfg := registryConfig(&projectconfig.Registry{Server: "ghcr.io", Password: "GHCR_TOKEN"})
+	cfg := registryConfig(&project.Registry{Server: "ghcr.io", Password: "GHCR_TOKEN"})
 
 	err := requireProjectRegistryPassword(cfg)
 	if err == nil {
@@ -71,7 +71,7 @@ func TestARegistryWhoseVariableIsUnsetIsRefusedBeforeAnythingIsBuilt(t *testing.
 
 func TestARegistryWhoseVariableIsEmptyIsRefusedToo(t *testing.T) {
 	t.Setenv("GHCR_TOKEN", "")
-	cfg := registryConfig(&projectconfig.Registry{Server: "ghcr.io", Password: "GHCR_TOKEN"})
+	cfg := registryConfig(&project.Registry{Server: "ghcr.io", Password: "GHCR_TOKEN"})
 
 	if err := requireProjectRegistryPassword(cfg); err == nil {
 		t.Fatal("requireProjectRegistryPassword() passed with the registry's variable empty, which authenticates as nobody")
@@ -79,7 +79,7 @@ func TestARegistryWhoseVariableIsEmptyIsRefusedToo(t *testing.T) {
 }
 
 func TestAProjectWithNoAppIsAskedForNoRegistryPassword(t *testing.T) {
-	cfg := registryConfig(&projectconfig.Registry{Server: "ghcr.io", Password: "GHCR_TOKEN"})
+	cfg := registryConfig(&project.Registry{Server: "ghcr.io", Password: "GHCR_TOKEN"})
 	cfg.Apps = nil
 
 	if err := requireProjectRegistryPassword(cfg); err != nil {
@@ -94,7 +94,7 @@ func TestAProjectWithNoRegistryIsAskedForNoPassword(t *testing.T) {
 }
 
 func TestTheRegistryPasswordIsReadWhenTheRequestIsBuiltAndNowhereEarlier(t *testing.T) {
-	cfg := registryConfig(&projectconfig.Registry{Server: "ghcr.io", Password: "GHCR_TOKEN"})
+	cfg := registryConfig(&project.Registry{Server: "ghcr.io", Password: "GHCR_TOKEN"})
 
 	t.Setenv("GHCR_TOKEN", "the-one-checked-at-preflight")
 	if err := requireProjectRegistryPassword(cfg); err != nil {
@@ -112,7 +112,7 @@ func TestTheRegistryPasswordIsReadWhenTheRequestIsBuiltAndNowhereEarlier(t *test
 }
 
 func TestTheRegistryPasswordIsReadFromTheProjectsDotenvWhenTheShellLacksIt(t *testing.T) {
-	cfg := registryConfig(&projectconfig.Registry{Server: "ghcr.io", Password: "GHCR_TOKEN"})
+	cfg := registryConfig(&project.Registry{Server: "ghcr.io", Password: "GHCR_TOKEN"})
 	cfg.Dir = t.TempDir()
 	if err := os.WriteFile(filepath.Join(cfg.Dir, ".env"), []byte("GHCR_TOKEN=from-dotenv\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -131,7 +131,7 @@ func TestTheRegistryPasswordIsReadFromTheProjectsDotenvWhenTheShellLacksIt(t *te
 }
 
 func TestTheShellsRegistryPasswordWinsOverTheProjectsDotenv(t *testing.T) {
-	cfg := registryConfig(&projectconfig.Registry{Server: "ghcr.io", Password: "GHCR_TOKEN"})
+	cfg := registryConfig(&project.Registry{Server: "ghcr.io", Password: "GHCR_TOKEN"})
 	cfg.Dir = t.TempDir()
 	if err := os.WriteFile(filepath.Join(cfg.Dir, ".env"), []byte("GHCR_TOKEN=from-dotenv\n"), 0o600); err != nil {
 		t.Fatal(err)

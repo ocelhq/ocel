@@ -10,12 +10,12 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 )
 
-func resolveOnce(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, run invocation, stdout, stderr io.Writer) (map[string]string, error) {
+func resolveOnce(ctx context.Context, srv *devserver.Server, cfg *project.Project, run invocation, stdout, stderr io.Writer) (map[string]string, error) {
 	values, err := run.source.read(cfg.Dir)
 	if err != nil {
 		return nil, err
@@ -25,7 +25,7 @@ func resolveOnce(ctx context.Context, srv *devserver.Server, cfg *projectconfig.
 	return discoverAndSync(ctx, srv, cfg, values, variablescope.ForDev(cfg), run, stdout, stderr)
 }
 
-func targetScope(cfg *projectconfig.Config, cwd string) variables.Scope {
+func targetScope(cfg *project.Project, cwd string) variables.Scope {
 	scope := variablescope.ForDev(cfg)
 	target, deepest := -1, -1
 	for i, app := range cfg.Apps {
@@ -43,7 +43,7 @@ func targetScope(cfg *projectconfig.Config, cwd string) variables.Scope {
 	return scope
 }
 
-func discoverAndSync(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, values valueLayers, scope variables.Scope, run invocation, stdout, stderr io.Writer) (map[string]string, error) {
+func discoverAndSync(ctx context.Context, srv *devserver.Server, cfg *project.Project, values valueLayers, scope variables.Scope, run invocation, stdout, stderr io.Writer) (map[string]string, error) {
 	if err := discover(ctx, srv, cfg, stdout, stderr); err != nil {
 		return nil, refusedSync(srv, err)
 	}
@@ -52,7 +52,7 @@ func discoverAndSync(ctx context.Context, srv *devserver.Server, cfg *projectcon
 		return nil, describeRefusal(err, values.keys(), run)
 	}
 
-	appFolder := projectconfig.SharedFolder(cfg.Apps)
+	appFolder := project.SharedFolder(cfg.Apps)
 	if err := refuseUnstatableBinding(run.source, cfg.Apps, appFolder, filepath.Base(cfg.Path), srv.ScopedFolders()); err != nil {
 		return nil, err
 	}
@@ -76,7 +76,7 @@ func discoverAndSync(ctx context.Context, srv *devserver.Server, cfg *projectcon
 
 // TODO: unlike build/deploy, ocel dev and ocel run begin no run on the bus, so
 // discovery here has no span to trace under and records no spans or logs.
-func discover(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, stdout, stderr io.Writer) error {
+func discover(ctx context.Context, srv *devserver.Server, cfg *project.Project, stdout, stderr io.Writer) error {
 	roots, err := discovery.RootsOf(cfg)
 	if err != nil {
 		return err

@@ -10,7 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/cli/node"
@@ -35,7 +35,7 @@ var generateCmd = &cobra.Command{
 }
 
 func runGenerate(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr io.Writer) error {
-	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
+	cfg, err := project.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}

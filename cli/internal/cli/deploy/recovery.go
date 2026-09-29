@@ -11,7 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/valuestore"
@@ -28,7 +28,7 @@ import (
 
 type variablesRecovery struct {
 	deps cmddeps.Deps
-	cfg  *projectconfig.Config
+	cfg  *project.Project
 	prov *providerclient.Provider
 	tier environmentv1.Tier
 
@@ -50,21 +50,21 @@ func (r variablesRecovery) buildManifest(ctx context.Context, phase *run.Span, p
 	return manifest, inline, err
 }
 
-func buildTitle(cfg *projectconfig.Config, prebuilt bool) progress.Title {
+func buildTitle(cfg *project.Project, prebuilt bool) progress.Title {
 	if !prebuilt || len(cfg.Apps) == 0 {
 		return progress.Collecting.Title("the resources " + cfg.Slug + " declares")
 	}
 	return progress.Reading.Title("the prebuilt output of " + appList(cfg))
 }
 
-func nothingToDeploy(cfg *projectconfig.Config) string {
+func nothingToDeploy(cfg *project.Project) string {
 	if len(cfg.Apps) == 0 {
 		return "Nothing to deploy: " + cfg.Slug + " declares no apps or resources"
 	}
 	return "Nothing to deploy: " + appList(cfg) + " built no function or image, and " + cfg.Slug + " declares no resources"
 }
 
-func appList(cfg *projectconfig.Config) string {
+func appList(cfg *project.Project) string {
 	names := make([]string, 0, len(cfg.Apps))
 	for _, app := range cfg.Apps {
 		names = append(names, app.Name)
@@ -112,7 +112,7 @@ func (r variablesRecovery) build(ctx context.Context, phase, span *run.Span, pre
 }
 
 func (r variablesRecovery) declarations(ctx context.Context) (*variables.Declarations, error) {
-	synced, err := valuestore.Store{Provider: r.prov, Config: r.cfg, Tier: r.tier}.SyncEnvSource(ctx)
+	synced, err := valuestore.Store{Provider: r.prov, Project: r.cfg, Tier: r.tier}.SyncEnvSource(ctx)
 	if problems := valuestore.CredentialProblems(err); len(problems) > 0 {
 		declarations := r.newDeclarations(variablescope.ConfiguredEnvSource(r.cfg, r.tier))
 		return declarations, declarations.RefuseCredentials(problems)

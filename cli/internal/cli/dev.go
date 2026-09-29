@@ -10,7 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/dev"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 )
 
 var devReset bool
@@ -37,12 +37,12 @@ func init() {
 }
 
 func devOptions(ctx context.Context, deps cmddeps.Deps, cwd string, command []string, stdout, stderr io.Writer, stdin io.Reader) (dev.Options, error) {
-	cfg, err := projectconfig.ResolveOptional(ctx, cwd, explicitConfigPath())
+	cfg, err := project.ResolveOptional(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return dev.Options{}, err
 	}
 	return dev.Options{
-		Config:          cfg,
+		Project:         cfg,
 		Command:         command,
 		OpenDocker:      deps.OpenDocker,
 		Stdin:           stdin,

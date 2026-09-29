@@ -13,7 +13,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -40,8 +40,8 @@ export default {
 	return deps, root
 }
 
-func buildingEach(failing string) func(context.Context, *projectconfig.Config, map[string]map[string]string, map[string]string, build.Log) (build.Output, error) {
-	return func(_ context.Context, cfg *projectconfig.Config, _ map[string]map[string]string, _ map[string]string, out build.Log) (build.Output, error) {
+func buildingEach(failing string) func(context.Context, *project.Project, map[string]map[string]string, map[string]string, build.Log) (build.Output, error) {
+	return func(_ context.Context, cfg *project.Project, _ map[string]map[string]string, _ map[string]string, out build.Log) (build.Output, error) {
 		_, _ = io.WriteString(out.Shared, "the builder started\n")
 		for _, app := range cfg.Apps {
 			log, ended := out.App(app.Name)
@@ -186,7 +186,7 @@ func TestEachAppsBuildPrintsAsABlockOfItsOwnWhenThatAppFinishes(t *testing.T) {
 
 func TestABuilderFailureOutsideEveryAppsBuildEndsAUnitOfItsOwnHoldingWhatTheBuilderSaid(t *testing.T) {
 	deps, root := twoAppFixture(t)
-	deps.BuildApps = func(_ context.Context, _ *projectconfig.Config, _ map[string]map[string]string, _ map[string]string, out build.Log) (build.Output, error) {
+	deps.BuildApps = func(_ context.Context, _ *project.Project, _ map[string]map[string]string, _ map[string]string, out build.Log) (build.Output, error) {
 		_, _ = io.WriteString(out.Shared, "Error: Cannot find module 'esbuild'\n")
 		return build.Output{}, errors.New("node-builder failed (exit status 1): Error: Cannot find module 'esbuild'")
 	}

@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/nodeprotocol"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/node"
 )
 
@@ -68,7 +68,7 @@ func (u *appUnits) log(name string) string {
 	return ""
 }
 
-func nodeBuilder(t *testing.T, script string) *projectconfig.Config {
+func nodeBuilder(t *testing.T, script string) *project.Project {
 	t.Helper()
 	if _, err := exec.LookPath("node"); err != nil {
 		t.Skip("node not on PATH")
@@ -81,9 +81,9 @@ const req = JSON.parse(require("fs").readFileSync(0, "utf8"));
 	if err := os.WriteFile(node.BuildScriptPath(root), []byte(emit+script), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	return &projectconfig.Config{
+	return &project.Project{
 		Dir:  root,
-		Apps: []projectconfig.App{nextApp("web", "."), nextApp("api", ".")},
+		Apps: []project.App{nextApp("web", "."), nextApp("api", ".")},
 	}
 }
 
@@ -186,9 +186,9 @@ func TestAGoAppCompiledHereBuildsInAUnitOfItsOwnThatEndsWithItsCompileError(t *t
 	if err := os.WriteFile(filepath.Join(root, "apps/api/main.go"), []byte("package main\n\nfunc main() {\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg := &projectconfig.Config{
+	cfg := &project.Project{
 		Dir:  root,
-		Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Framework: projectconfig.Framework{Name: "go"}}},
+		Apps: []project.App{{Name: "api", Path: "apps/api", Framework: project.Framework{Name: "go"}}},
 	}
 
 	var units appUnits

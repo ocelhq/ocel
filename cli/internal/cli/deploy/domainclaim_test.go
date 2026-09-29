@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
@@ -43,7 +43,7 @@ func TestRefuseClaimedDomains(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := refuseClaimedDomains(tc.claims, projectconfig.DefaultFileName, func(string) {})
+			err := refuseClaimedDomains(tc.claims, project.DefaultFileName, func(string) {})
 			if !tc.refuse {
 				if err != nil {
 					t.Fatalf("refuseClaimedDomains err = %v, want nil", err)
@@ -67,7 +67,7 @@ func TestRefuseClaimedDomains(t *testing.T) {
 		var warned []string
 		err := refuseClaimedDomains([]*contractv1.DomainClaim{
 			{Hostname: "acme.com", Cause: "the edge was throttled listing what it serves"},
-		}, projectconfig.DefaultFileName, func(message string) { warned = append(warned, message) })
+		}, project.DefaultFileName, func(message string) { warned = append(warned, message) })
 		if err != nil {
 			t.Fatalf("refuseClaimedDomains err = %v, want a deploy that continues when the provider could not say who serves the hostname", err)
 		}
@@ -83,7 +83,7 @@ func TestRefuseClaimedDomains(t *testing.T) {
 			{Hostname: "acme.com", Status: contractv1.DomainClaim_STATUS_CLAIMED, Owner: "ocel-other-production-web"},
 			{Hostname: "www.acme.com", Status: contractv1.DomainClaim_STATUS_UNCLAIMED},
 			{Hostname: "shop.acme.com", Status: contractv1.DomainClaim_STATUS_CLAIMED, Owner: "ocel-third-production-web"},
-		}, projectconfig.DefaultFileName, func(string) {})
+		}, project.DefaultFileName, func(string) {})
 		if err == nil {
 			t.Fatal("refuseClaimedDomains err = nil, want a refusal")
 		}

@@ -7,10 +7,10 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/build"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 )
 
-func nodeReasons(cfg *projectconfig.Config) []string {
+func nodeReasons(cfg *project.Project) []string {
 	var reasons []string
 	if strings.HasSuffix(cfg.Path, ".ts") {
 		reasons = append(reasons, filepath.Base(cfg.Path)+" is TypeScript")
@@ -24,7 +24,7 @@ func nodeReasons(cfg *projectconfig.Config) []string {
 	return reasons
 }
 
-func nodeCheck(ctx context.Context, cfg *projectconfig.Config) (check, bool) {
+func nodeCheck(ctx context.Context, cfg *project.Project) (check, bool) {
 	reasons := nodeReasons(cfg)
 	if len(reasons) == 0 {
 		return check{}, false

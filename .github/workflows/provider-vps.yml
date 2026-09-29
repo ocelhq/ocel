@@ -52,7 +52,7 @@ on:
       - "cli/internal/envgate/**"
       - "cli/internal/discovery/**"
       - "cli/internal/manifest/**"
-      - "cli/internal/projectconfig/**"
+      - "cli/internal/project/**"
       - "packages/ocel/**"
       - "proto/**"
       - "pnpm-lock.yaml"

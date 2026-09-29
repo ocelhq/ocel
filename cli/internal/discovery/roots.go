@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/language"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/constants"
 )
 
@@ -31,7 +31,7 @@ var languageExtensions = map[string]language.Language{
 	".cjs": language.JS,
 }
 
-func RootsOf(cfg *projectconfig.Config) ([]Root, error) {
+func RootsOf(cfg *project.Project) ([]Root, error) {
 	roots, err := Roots(cfg.Dir, cfg.Discovery.Paths)
 	if err != nil {
 		return nil, err
@@ -39,7 +39,7 @@ func RootsOf(cfg *projectconfig.Config) ([]Root, error) {
 	return append(roots, crateRoots(cfg)...), nil
 }
 
-func crateRoots(cfg *projectconfig.Config) []Root {
+func crateRoots(cfg *project.Project) []Root {
 	dirs := []string{filepath.Clean(cfg.Dir)}
 	for _, app := range cfg.Apps {
 		dirs = append(dirs, filepath.Join(cfg.Dir, app.Path))

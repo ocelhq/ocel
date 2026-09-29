@@ -1,4 +1,4 @@
-package projectconfig
+package project
 
 import (
 	"context"
@@ -13,14 +13,14 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
 
-func resolveJSON(t *testing.T, config string) (*Config, error) {
+func resolveJSON(t *testing.T, config string) (*Project, error) {
 	t.Helper()
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, DefaultFileName), config)
 	return Resolve(context.Background(), dir, "")
 }
 
-func mustResolveJSON(t *testing.T, config string) *Config {
+func mustResolveJSON(t *testing.T, config string) *Project {
 	t.Helper()
 	cfg, err := resolveJSON(t, config)
 	if err != nil {

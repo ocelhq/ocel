@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/appurl"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/appbuild"
@@ -18,7 +18,7 @@ func TestProduction(t *testing.T) {
 
 	t.Run("an unnamed app takes the project's first production hostname", func(t *testing.T) {
 		t.Parallel()
-		cfg := &projectconfig.Config{Domains: map[string][]string{"production": {"acme.com", "www.acme.com"}}}
+		cfg := &project.Project{Domains: map[string][]string{"production": {"acme.com", "www.acme.com"}}}
 
 		if got, want := appurl.Production(cfg)[variablescope.RootApp], "https://acme.com"; got != want {
 			t.Errorf("url = %q, want %q", got, want)
@@ -27,9 +27,9 @@ func TestProduction(t *testing.T) {
 
 	t.Run("an app's own domain wins over the project's", func(t *testing.T) {
 		t.Parallel()
-		cfg := &projectconfig.Config{
+		cfg := &project.Project{
 			Domains: map[string][]string{"production": {"acme.com"}},
-			Apps: []projectconfig.App{
+			Apps: []project.App{
 				{Name: "web"},
 				{Name: "api", Domains: map[string][]string{"production": {"api.acme.com", "api2.acme.com"}}},
 			},
@@ -46,7 +46,7 @@ func TestProduction(t *testing.T) {
 
 	t.Run("an app with nothing declared is given no url at all", func(t *testing.T) {
 		t.Parallel()
-		cfg := &projectconfig.Config{Apps: []projectconfig.App{{Name: "web"}}}
+		cfg := &project.Project{Apps: []project.App{{Name: "web"}}}
 
 		if urls := appurl.Production(cfg); len(urls) != 0 {
 			t.Errorf("urls = %v, want none: a project that declares no production domain has no hostname to hand out", urls)
@@ -55,9 +55,9 @@ func TestProduction(t *testing.T) {
 
 	t.Run("hands a project-level domain to the app the deploy serves it on, and no other", func(t *testing.T) {
 		t.Parallel()
-		cfg := &projectconfig.Config{
+		cfg := &project.Project{
 			Domains: map[string][]string{"production": {"acme.com"}},
-			Apps:    []projectconfig.App{{Name: "web"}, {Name: "api"}},
+			Apps:    []project.App{{Name: "web"}, {Name: "api"}},
 		}
 
 		served := appbuild.AttributeHostnames(cfg.Domains["production"], [][]string{nil, nil})
@@ -76,7 +76,7 @@ func TestPreview(t *testing.T) {
 
 	t.Run("one app is served on the preview's single hostname", func(t *testing.T) {
 		t.Parallel()
-		cfg := &projectconfig.Config{Apps: []projectconfig.App{{Name: "web"}}}
+		cfg := &project.Project{Apps: []project.App{{Name: "web"}}}
 
 		urls := appurl.Preview(cfg, func(app string) string {
 			if app != "" {
@@ -91,7 +91,7 @@ func TestPreview(t *testing.T) {
 
 	t.Run("two apps are each served on their own labelled hostname", func(t *testing.T) {
 		t.Parallel()
-		cfg := &projectconfig.Config{Apps: []projectconfig.App{{Name: "web"}, {Name: "api"}}}
+		cfg := &project.Project{Apps: []project.App{{Name: "web"}, {Name: "api"}}}
 
 		urls := appurl.Preview(cfg, func(app string) string { return "pr-1--" + app + ".preview.acme.com" })
 		if got, want := urls["api"], "https://pr-1--api.preview.acme.com"; got != want {
@@ -103,9 +103,9 @@ func TestPreview(t *testing.T) {
 func TestPrepend(t *testing.T) {
 	t.Parallel()
 
-	cfg := &projectconfig.Config{Apps: []projectconfig.App{
-		{Name: "web", Framework: projectconfig.Framework{Name: appbuild.FrameworkNext}},
-		{Name: "api", Framework: projectconfig.Framework{Name: appbuild.FrameworkGo}},
+	cfg := &project.Project{Apps: []project.App{
+		{Name: "web", Framework: project.Framework{Name: appbuild.FrameworkNext}},
+		{Name: "api", Framework: project.Framework{Name: appbuild.FrameworkGo}},
 		{Name: "docs"},
 	}}
 	byApp := map[string][]variables.Variable{

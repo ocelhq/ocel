@@ -11,7 +11,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/attribution"
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/language"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/appbuild"
@@ -32,7 +32,7 @@ type app struct {
 	HealthCheckPath string
 }
 
-func appsOf(projectDir string, configured []projectconfig.App, usages []attribution.Usage, compute string, images map[string]string, functions []build.Function) []app {
+func appsOf(projectDir string, configured []project.App, usages []attribution.Usage, compute string, images map[string]string, functions []build.Function) []app {
 	byApp := make(map[string][]usage, len(configured))
 	for _, u := range usages {
 		byApp[u.App] = append(byApp[u.App], usage{Type: u.Type, Name: u.Name, Files: u.Files})
@@ -78,14 +78,14 @@ func unnamedFramework(app string, functions []build.Function) appbuild.Framework
 	return appbuild.Framework{Name: appbuild.FrameworkNode}
 }
 
-func healthPathOf(app projectconfig.App) string {
+func healthPathOf(app project.App) string {
 	if app.Health == nil {
 		return ""
 	}
 	return app.Health.Path
 }
 
-func servedByFunctions(functions []build.Function, cfg *projectconfig.Config) []build.Function {
+func servedByFunctions(functions []build.Function, cfg *project.Project) []build.Function {
 	containers := make(map[string]bool, len(cfg.Apps))
 	for _, a := range build.ImageApps(cfg.Apps) {
 		containers[a.Name] = true

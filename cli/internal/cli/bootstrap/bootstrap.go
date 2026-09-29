@@ -15,7 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -309,7 +309,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 	return nil
 }
 
-func describeBootstrap(ctx context.Context, check *run.Span, prov *providerclient.Provider, cfg *projectconfig.Config, tier environmentv1.Tier) (*contractv1.DescribeBootstrapResponse, error) {
+func describeBootstrap(ctx context.Context, check *run.Span, prov *providerclient.Provider, cfg *project.Project, tier environmentv1.Tier) (*contractv1.DescribeBootstrapResponse, error) {
 	if err := preflight.Announce(ctx, check, prov, cfg, tier); err != nil {
 		return nil, err
 	}
@@ -328,8 +328,8 @@ func describeBootstrap(ctx context.Context, check *run.Span, prov *providerclien
 	return planned, err
 }
 
-func resolveProject(ctx context.Context, deps cmddeps.Deps, cwd string) (*projectconfig.Config, error) {
-	cfg, err := projectconfig.Resolve(ctx, cwd, deps.ConfigPath())
+func resolveProject(ctx context.Context, deps cmddeps.Deps, cwd string) (*project.Project, error) {
+	cfg, err := project.Resolve(ctx, cwd, deps.ConfigPath())
 	if err != nil {
 		return nil, err
 	}

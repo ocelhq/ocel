@@ -11,12 +11,12 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devresources"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 )
 
 type Options struct {
-	Config          *projectconfig.Config
+	Project         *project.Project
 	Command         []string
 	OpenDocker      docker.OpenFunc
 	Stdin           io.Reader
@@ -27,7 +27,7 @@ type Options struct {
 
 func Run(ctx context.Context, opts Options, reset bool) error {
 	for range 3 {
-		running, found, err := leader.Find(opts.Config.Dir)
+		running, found, err := leader.Find(opts.Project.Dir)
 		if err != nil {
 			return fmt.Errorf("look for a running ocel dev: %w", err)
 		}
@@ -47,7 +47,7 @@ func Run(ctx context.Context, opts Options, reset bool) error {
 }
 
 func RunOnce(ctx context.Context, opts Options, cwd string) error {
-	running, found, err := leader.Find(opts.Config.Dir)
+	running, found, err := leader.Find(opts.Project.Dir)
 	if err != nil {
 		return fmt.Errorf("look for a running dev server: %w", err)
 	}
@@ -63,7 +63,7 @@ func RunOnce(ctx context.Context, opts Options, cwd string) error {
 }
 
 func lead(ctx context.Context, opts Options, reset bool) error {
-	cfg := opts.Config
+	cfg := opts.Project
 	source, err := readValueSource(ctx, cfg)
 	if err != nil {
 		return err
@@ -212,7 +212,7 @@ func subscribe(ctx context.Context, running leader.Leader) (*leader.EnvStream, m
 }
 
 func runStandalone(ctx context.Context, opts Options, cwd string) error {
-	cfg := opts.Config
+	cfg := opts.Project
 	source, err := readValueSource(ctx, cfg)
 	if err != nil {
 		return err

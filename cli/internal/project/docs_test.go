@@ -1,4 +1,4 @@
-package projectconfig_test
+package project_test
 
 import (
 	"io/fs"
@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/fixturetest"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/constants"
 )
 
@@ -80,7 +80,7 @@ func configBlocks(t *testing.T, root string) []block {
 }
 
 func configTitled(title string) bool {
-	return projectconfig.IsConfig(title) && !projectconfig.IsProgram(title)
+	return project.IsConfig(title) && !project.IsProgram(title)
 }
 
 func TestEveryDocumentedConfigValidatesAgainstTheSchema(t *testing.T) {
@@ -111,12 +111,12 @@ func TestOnlyTheTypeScriptPageShowsAConfigWrittenAsAProgram(t *testing.T) {
 		if page == typescriptPage {
 			continue
 		}
-		if named := projectconfig.ProgramNamedIn(source); named != "" {
+		if named := project.ProgramNamedIn(source); named != "" {
 			t.Errorf("%s shows %s, and only %s shows a config written as a program", page, named, typescriptPage)
 		}
 	}
 	if _, err := os.Stat(filepath.Join(root, docsDir, typescriptPage)); err != nil {
-		t.Fatalf("the page that shows %s is missing: %v", projectconfig.TSFileName, err)
+		t.Fatalf("the page that shows %s is missing: %v", project.TSFileName, err)
 	}
 }
 
@@ -144,11 +144,11 @@ func TestAConfigWrittenAsAProgramIsFoundUnderAnyTarget(t *testing.T) {
 		"the gcp target reads `ocel.gcp.config.ts` instead",
 		"```ts title=\"ocel.vps.config.ts\"",
 	} {
-		if projectconfig.ProgramNamedIn(page) == "" {
+		if project.ProgramNamedIn(page) == "" {
 			t.Errorf("%q shows a config written as a program and went unfound", page)
 		}
 	}
-	if named := projectconfig.ProgramNamedIn("run `ocel deploy` against next.config.ts"); named != "" {
+	if named := project.ProgramNamedIn("run `ocel deploy` against next.config.ts"); named != "" {
 		t.Errorf("found %q in a page that shows no ocel config", named)
 	}
 }

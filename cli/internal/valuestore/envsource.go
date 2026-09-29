@@ -8,7 +8,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/envsource"
@@ -23,7 +23,7 @@ func (s Store) DescribeEnvSource(ctx context.Context) (variables.EnvSource, erro
 	if err != nil {
 		return variables.EnvSource{}, err
 	}
-	resp, err := vars.DescribeEnvSource(ctx, &envvarsv1.DescribeEnvSourceRequest{Tier: s.Tier, Slug: s.Config.Slug})
+	resp, err := vars.DescribeEnvSource(ctx, &envvarsv1.DescribeEnvSourceRequest{Tier: s.Tier, Slug: s.Project.Slug})
 	if err != nil {
 		return variables.EnvSource{}, err
 	}
@@ -31,11 +31,11 @@ func (s Store) DescribeEnvSource(ctx context.Context) (variables.EnvSource, erro
 }
 
 func (s Store) SyncEnvSource(ctx context.Context) (variables.EnvSource, error) {
-	descriptor := variablescope.EnvSourceDescriptor(s.Config, s.Tier)
-	folders := syncedFolders(s.Config)
+	descriptor := variablescope.EnvSourceDescriptor(s.Project, s.Tier)
+	folders := syncedFolders(s.Project)
 	var read map[envvars.Cell]envsource.Value
 	if descriptor.Kind == envsource.Exec {
-		source, err := envsource.Open(descriptor, s.Config.Dir, os.LookupEnv)
+		source, err := envsource.Open(descriptor, s.Project.Dir, os.LookupEnv)
 		if err != nil {
 			return variables.EnvSource{}, err
 		}
@@ -49,7 +49,7 @@ func (s Store) SyncEnvSource(ctx context.Context) (variables.EnvSource, error) {
 	}
 	resp, err := vars.SyncEnvSource(ctx, &envvarsv1.SyncEnvSourceRequest{
 		Tier:    s.Tier,
-		Slug:    s.Config.Slug,
+		Slug:    s.Project.Slug,
 		From:    &envvarsv1.SyncEnvSourceRequest_EnvSource{EnvSource: envsourcewire.Encode(descriptor, read)},
 		Folders: folders,
 	})
@@ -59,7 +59,7 @@ func (s Store) SyncEnvSource(ctx context.Context) (variables.EnvSource, error) {
 	return envSourceOf(resp), nil
 }
 
-func syncedFolders(cfg *projectconfig.Config) []string {
+func syncedFolders(cfg *project.Project) []string {
 	folders := []string{""}
 	for _, app := range cfg.Apps {
 		if !slices.Contains(folders, app.Folder) {
@@ -77,7 +77,7 @@ func (s Store) SyncRegisteredEnvSource(ctx context.Context) (*envvarsv1.SyncEnvS
 	}
 	return vars.SyncEnvSource(ctx, &envvarsv1.SyncEnvSourceRequest{
 		Tier: s.Tier,
-		Slug: s.Config.Slug,
+		Slug: s.Project.Slug,
 		From: &envvarsv1.SyncEnvSourceRequest_Registered{Registered: &envvarsv1.RegisteredEnvSource{}},
 	})
 }
@@ -89,7 +89,7 @@ func (s Store) SetInEnvSource(ctx context.Context, at variables.Cell, value, des
 	}
 	resp, err := vars.SetEnvSourceValue(ctx, &envvarsv1.SetEnvSourceValueRequest{
 		Tier:        s.Tier,
-		Coordinate:  &envvarsv1.Coordinate{Slug: s.Config.Slug, Folder: at.Folder, Key: at.Key},
+		Coordinate:  &envvarsv1.Coordinate{Slug: s.Project.Slug, Folder: at.Folder, Key: at.Key},
 		Value:       value,
 		Description: description,
 	})

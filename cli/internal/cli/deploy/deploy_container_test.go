@@ -11,7 +11,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 )
@@ -25,7 +25,7 @@ func registryProject(t *testing.T, registry string) (cmddeps.Deps, string, func(
 	clitest.StubAppImages(&deps, "api")
 	built := false
 	buildApps := deps.BuildApps
-	deps.BuildApps = func(ctx context.Context, cfg *projectconfig.Config, env map[string]map[string]string, archs map[string]string, log build.Log) (build.Output, error) {
+	deps.BuildApps = func(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, log build.Log) (build.Output, error) {
 		built = true
 		return buildApps(ctx, cfg, env, archs, log)
 	}
@@ -256,12 +256,12 @@ func TestTheImageIsBuiltForTheArchitectureTheProviderSaysItsContainersRunOn(t *t
 	deps, root, _ := registryProject(t, "")
 	t.Setenv(clitest.FakeContainerArchEnvVar, "arm64")
 	var required, built map[string]string
-	deps.RefuseUnbuildableImages = func(_ context.Context, _ *run.Span, _ *projectconfig.Config, archs map[string]string) error {
+	deps.RefuseUnbuildableImages = func(_ context.Context, _ *run.Span, _ *project.Project, archs map[string]string) error {
 		required = archs
 		return nil
 	}
 	buildApps := deps.BuildApps
-	deps.BuildApps = func(ctx context.Context, cfg *projectconfig.Config, env map[string]map[string]string, archs map[string]string, log build.Log) (build.Output, error) {
+	deps.BuildApps = func(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, log build.Log) (build.Output, error) {
 		built = archs
 		return buildApps(ctx, cfg, env, archs, log)
 	}

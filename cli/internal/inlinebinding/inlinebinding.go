@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 )
@@ -49,7 +49,7 @@ type Declared struct {
 	Buckets  map[string]*resourcesv1.BucketConfig
 }
 
-func Build(bound []projectconfig.Binding, values map[string]string, source string) ([]Record, error) {
+func Build(bound []project.Binding, values map[string]string, source string) ([]Record, error) {
 	var out []Record
 	for _, b := range bound {
 		if b.Inline == nil {
@@ -83,7 +83,7 @@ func Build(bound []projectconfig.Binding, values map[string]string, source strin
 	return out, nil
 }
 
-func postgresProperties(p *projectconfig.PostgresInline, read func(string) (string, error)) (*bindingsv1.PostgresProperties, error) {
+func postgresProperties(p *project.PostgresInline, read func(string) (string, error)) (*bindingsv1.PostgresProperties, error) {
 	if p.URL != "" {
 		value, err := read(p.URL)
 		return &bindingsv1.PostgresProperties{Url: value}, err
@@ -166,12 +166,12 @@ func verifyBucket(ctx context.Context, r Record, props *bindingsv1.BucketPropert
 	return warnings, nil
 }
 
-func bucketProperties(b *projectconfig.BucketInline, read func(string) (string, error)) (*bindingsv1.BucketProperties, error) {
+func bucketProperties(b *project.BucketInline, read func(string) (string, error)) (*bindingsv1.BucketProperties, error) {
 	props := &bindingsv1.BucketProperties{PathStyle: b.PathStyle}
 	var err error
 	for _, field := range []struct {
 		into *string
-		from projectconfig.Value
+		from project.Value
 	}{
 		{&props.Endpoint, b.Endpoint},
 		{&props.Region, b.Region},

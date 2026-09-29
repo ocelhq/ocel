@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/envsource"
@@ -18,12 +18,12 @@ const (
 )
 
 func TestAScopeNamesTheVariablesATiersInlineBindingsRead(t *testing.T) {
-	cfg := &projectconfig.Config{Bindings: []projectconfig.Binding{
+	cfg := &project.Project{Bindings: []project.Binding{
 		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "analytics", External: "warehouse"},
-		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "orders", Tier: environmentv1.Tier_TIER_PRODUCTION, Inline: &projectconfig.Inline{
-			Postgres: &projectconfig.PostgresInline{
-				Host: projectconfig.Value{Literal: "db"}, Database: projectconfig.Value{Literal: "orders"},
-				Username: projectconfig.Value{Variable: "ORDERS_USER"}, Password: "ORDERS_PASSWORD",
+		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "orders", Tier: environmentv1.Tier_TIER_PRODUCTION, Inline: &project.Inline{
+			Postgres: &project.PostgresInline{
+				Host: project.Value{Literal: "db"}, Database: project.Value{Literal: "orders"},
+				Username: project.Value{Variable: "ORDERS_USER"}, Password: "ORDERS_PASSWORD",
 			},
 		}},
 	}}
@@ -46,13 +46,13 @@ func TestAScopeNamesTheVariablesATiersInlineBindingsRead(t *testing.T) {
 	}
 }
 
-func infisicalConfig() *projectconfig.Config {
+func infisicalConfig() *project.Project {
 	tiers := envsource.DefaultTiers()
 	tiers.Production = envsource.Descriptor{Kind: envsource.Infisical, Infisical: &envsource.InfisicalOptions{
 		Project: "p-1", Environment: "prod",
 		Auth: envsource.InfisicalAuth{Method: envsource.AuthUniversal, ClientIDVariable: "INFISICAL_CLIENT_ID", ClientSecretVariable: "INFISICAL_CLIENT_SECRET"},
 	}}
-	return &projectconfig.Config{EnvSource: tiers}
+	return &project.Project{EnvSource: tiers}
 }
 
 func TestAScopeNamesTheEnvSourceATierReadsAndTheCredentialsItLogsInWith(t *testing.T) {

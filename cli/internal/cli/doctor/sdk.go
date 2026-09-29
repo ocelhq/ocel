@@ -12,7 +12,7 @@ import (
 	"golang.org/x/mod/modfile"
 
 	"github.com/ocelhq/ocel/cli/internal/language"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/sdkversion"
 )
 
@@ -22,7 +22,7 @@ type declaredSDK struct {
 	spec     string
 }
 
-func sdkDirs(cfg *projectconfig.Config) []string {
+func sdkDirs(cfg *project.Project) []string {
 	dirs := []string{filepath.Clean(cfg.Dir)}
 	for _, app := range cfg.Apps {
 		dir := filepath.Join(cfg.Dir, app.Path)
@@ -33,7 +33,7 @@ func sdkDirs(cfg *projectconfig.Config) []string {
 	return dirs
 }
 
-func declaredSDKs(cfg *projectconfig.Config) []declaredSDK {
+func declaredSDKs(cfg *project.Project) []declaredSDK {
 	var found []declaredSDK
 	for _, dir := range sdkDirs(cfg) {
 		for _, read := range []func(string) (declaredSDK, bool){npmSDK, pythonSDK, rustSDK, goSDK} {
@@ -162,7 +162,7 @@ func goSDK(dir string) (declaredSDK, bool) {
 
 var pinnedVersion = regexp.MustCompile(`\d+\.\d+\.\d+(?:-rc\.\d+|rc\d+|-0\.nightly\.\d{8}\.g[0-9a-f]{7}|\.dev\d{8})?`)
 
-func sdkChecks(cfg *projectconfig.Config, cli string) []check {
+func sdkChecks(cfg *project.Project, cli string) []check {
 	var checks []check
 	for _, sdk := range declaredSDKs(cfg) {
 		checks = append(checks, sdkCheck(cfg.Dir, sdk, cli))

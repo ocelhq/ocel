@@ -20,7 +20,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/projecteditor"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/providers"
@@ -199,10 +199,10 @@ func InstallProvider(t *testing.T, name string, place func(dest string) error) s
 }
 
 func StubBuild(deps *cmddeps.Deps, functions []build.Function) {
-	deps.BuildApps = func(context.Context, *projectconfig.Config, map[string]map[string]string, map[string]string, build.Log) (build.Output, error) {
+	deps.BuildApps = func(context.Context, *project.Project, map[string]map[string]string, map[string]string, build.Log) (build.Output, error) {
 		return build.Output{Functions: functions}, nil
 	}
-	deps.ReadPrebuilt = func(context.Context, *projectconfig.Config, map[string]string) (build.Output, error) {
+	deps.ReadPrebuilt = func(context.Context, *project.Project, map[string]string) (build.Output, error) {
 		return build.Output{Functions: functions}, nil
 	}
 	deps.ReadFunctions = func(string) ([]build.Function, error) {
@@ -227,16 +227,16 @@ func StubAppImages(deps *cmddeps.Deps, apps ...string) {
 	for _, app := range apps {
 		refs[app] = FixtureImage(app)
 	}
-	deps.RefuseUnbuildableImages = func(context.Context, *run.Span, *projectconfig.Config, map[string]string) error {
+	deps.RefuseUnbuildableImages = func(context.Context, *run.Span, *project.Project, map[string]string) error {
 		return nil
 	}
 	buildApps := deps.BuildApps
-	deps.BuildApps = func(ctx context.Context, cfg *projectconfig.Config, env map[string]map[string]string, archs map[string]string, log build.Log) (build.Output, error) {
+	deps.BuildApps = func(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, log build.Log) (build.Output, error) {
 		built, err := buildApps(ctx, cfg, env, archs, log)
 		built.Images = refs
 		return built, err
 	}
-	deps.ReadPrebuilt = func(_ context.Context, cfg *projectconfig.Config, _ map[string]string) (build.Output, error) {
+	deps.ReadPrebuilt = func(_ context.Context, cfg *project.Project, _ map[string]string) (build.Output, error) {
 		functions, err := deps.ReadFunctions(cfg.Dir)
 		return build.Output{Functions: functions, Images: refs}, err
 	}

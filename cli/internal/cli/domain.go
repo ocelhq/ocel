@@ -18,7 +18,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/consent"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
@@ -157,15 +157,15 @@ func requirePreviewTier(command string, preview bool) error {
 		return nil
 	}
 	return fmt.Errorf("`%s` needs --preview: a global domain is preview-only — a production hostname belongs to one project and is declared in that project's %s, so there is no global production domain to manage",
-		command, projectconfig.DefaultFileName)
+		command, project.DefaultFileName)
 }
 
 func globalPreviewBaseDomain(wildcard string) (string, error) {
 	host := strings.ToLower(strings.TrimSpace(wildcard))
-	if err := projectconfig.ValidatePreviewDomain(host); err != nil {
+	if err := project.ValidatePreviewDomain(host); err != nil {
 		return "", err
 	}
-	return projectconfig.PreviewBaseDomain(host), nil
+	return project.PreviewBaseDomain(host), nil
 }
 
 func runDomainUse(ctx context.Context, deps cmddeps.Deps, cwd, wildcard string, opts domainOptions, stdout, stderr io.Writer) (err error) {
@@ -177,7 +177,7 @@ func runDomainUse(ctx context.Context, deps cmddeps.Deps, cwd, wildcard string, 
 		return err
 	}
 
-	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
+	cfg, err := project.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}
@@ -211,7 +211,7 @@ func runDomainUse(ctx context.Context, deps cmddeps.Deps, cwd, wildcard string, 
 	return nil
 }
 
-func startReadyProvider(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, check *run.Span, tier environmentv1.Tier) (*providerclient.Provider, error) {
+func startReadyProvider(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, check *run.Span, tier environmentv1.Tier) (*providerclient.Provider, error) {
 	prov, err := providerclient.Start(ctx, cfg, check, deps.HostTrust, providerclient.PinToLock)
 	if err != nil {
 		return nil, err
@@ -224,7 +224,7 @@ func startReadyProvider(ctx context.Context, deps cmddeps.Deps, cfg *projectconf
 }
 
 func runDomainLs(ctx context.Context, deps cmddeps.Deps, cwd string, opts domainOptions, stdout, stderr io.Writer) error {
-	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
+	cfg, err := project.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}
@@ -245,7 +245,7 @@ func runDomainLs(ctx context.Context, deps cmddeps.Deps, cwd string, opts domain
 	return nil
 }
 
-func listProductionHostnames(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config) (resp *contractv1.GetHostnameStatusResponse, err error) {
+func listProductionHostnames(ctx context.Context, deps cmddeps.Deps, cfg *project.Project) (resp *contractv1.GetHostnameStatusResponse, err error) {
 	err = readDomain(ctx, deps, cfg, "ocel domain ls", environmentv1.Tier_TIER_PRODUCTION, progress.Reading.Title("the hostnames this project serves"),
 		func(ctx context.Context, client contractv1connect.ProviderServiceClient) (err error) {
 			resp, err = client.GetHostnameStatus(ctx, &contractv1.HostnameRequest{
@@ -258,7 +258,7 @@ func listProductionHostnames(ctx context.Context, deps cmddeps.Deps, cfg *projec
 	return resp, err
 }
 
-func readDomain(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, command string, tier environmentv1.Tier, reading progress.Title, read func(context.Context, contractv1connect.ProviderServiceClient) error) (err error) {
+func readDomain(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, command string, tier environmentv1.Tier, reading progress.Title, read func(context.Context, contractv1connect.ProviderServiceClient) error) (err error) {
 	if _, err := cfg.RequireProvider(); err != nil {
 		return err
 	}
@@ -305,7 +305,7 @@ func runDomainRelease(ctx context.Context, deps cmddeps.Deps, cwd string, opts d
 	if err := requirePreviewTier("ocel domain release", opts.preview); err != nil {
 		return err
 	}
-	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
+	cfg, err := project.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}
@@ -373,7 +373,7 @@ func runDomainRelease(ctx context.Context, deps cmddeps.Deps, cwd string, opts d
 }
 
 func runDomainAdd(ctx context.Context, deps cmddeps.Deps, cwd, host string, stdout, stderr io.Writer) error {
-	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
+	cfg, err := project.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}
@@ -413,7 +413,7 @@ type hostnameConsent struct {
 	declined string
 }
 
-func changeHostnames(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, change hostnameChange) (err error) {
+func changeHostnames(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, change hostnameChange) (err error) {
 	if _, err := cfg.RequireProvider(); err != nil {
 		return err
 	}
@@ -466,7 +466,7 @@ func addedHosts(configured []string, host string) []string {
 }
 
 func runDomainRm(ctx context.Context, deps cmddeps.Deps, cwd, host string, opts domainOptions, stdout, stderr io.Writer, stdin io.Reader) error {
-	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
+	cfg, err := project.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}
@@ -499,7 +499,7 @@ func runDomainRm(ctx context.Context, deps cmddeps.Deps, cwd, host string, opts 
 	})
 }
 
-func listGlobalPreviewDomain(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config) (resp *contractv1.GetPreviewWildcardResponse, err error) {
+func listGlobalPreviewDomain(ctx context.Context, deps cmddeps.Deps, cfg *project.Project) (resp *contractv1.GetPreviewWildcardResponse, err error) {
 	err = readDomain(ctx, deps, cfg, "ocel domain ls", environmentv1.Tier_TIER_PREVIEW, progress.Reading.Title("the global preview domain"),
 		func(ctx context.Context, client contractv1connect.ProviderServiceClient) (err error) {
 			resp, err = client.GetPreviewWildcard(ctx, &contractv1.PreviewWildcardRequest{Tier: environmentv1.Tier_TIER_PREVIEW})
@@ -591,7 +591,7 @@ type domainWaitSchedule struct {
 var domainWait = domainWaitSchedule{initialInterval: 2 * time.Second, maxInterval: 30 * time.Second, deadline: 15 * time.Minute}
 
 func runDomainStatus(ctx context.Context, deps cmddeps.Deps, cwd string, opts domainOptions, stdout, stderr io.Writer) error {
-	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
+	cfg, err := project.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}
@@ -606,7 +606,7 @@ func runDomainStatus(ctx context.Context, deps cmddeps.Deps, cwd string, opts do
 	return nil
 }
 
-func readDomainStatus(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, wait bool) (resp *contractv1.GetHostnameStatusResponse, err error) {
+func readDomainStatus(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, wait bool) (resp *contractv1.GetHostnameStatusResponse, err error) {
 	if _, err := cfg.RequireProvider(); err != nil {
 		return nil, err
 	}

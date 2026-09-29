@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
@@ -19,10 +19,10 @@ func TestTheManifestNamesEveryAppsCompute(t *testing.T) {
 		recordBuildApp(&deps)
 
 		s, _ := newBuildSpan(t)
-		cfg := &projectconfig.Config{
+		cfg := &project.Project{
 			Dir:  root,
 			Slug: "prebuilt",
-			Apps: []projectconfig.App{{Name: "api", Path: ".", Compute: "container"}},
+			Apps: []project.App{{Name: "api", Path: ".", Compute: "container"}},
 		}
 		clitest.StubAppImages(&deps, "api")
 		manifest, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: cfg, declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s, compute: "serverless"})
@@ -41,7 +41,7 @@ func TestTheManifestNamesEveryAppsCompute(t *testing.T) {
 		recordBuildApp(&deps)
 
 		s, _ := newBuildSpan(t)
-		cfg := &projectconfig.Config{Dir: root, Slug: "prebuilt"}
+		cfg := &project.Project{Dir: root, Slug: "prebuilt"}
 		_, _, err := collectBuildAndAssemble(context.Background(), deps, assembly{cfg: cfg, declarations: emptyDeclarations(cfg), prebuilt: true, phase: s, span: s, compute: "container"})
 		if err == nil {
 			t.Fatal("collectBuildAndAssemble() landed an app the config never names on container compute, so a provider would be handed an app with no image")
@@ -74,10 +74,10 @@ func TestAContainerAppThatNamesNoRuntimeStillReachesTheProvider(t *testing.T) {
 	recordBuildApp(&deps)
 
 	s, _ := newBuildSpan(t)
-	cfg := &projectconfig.Config{
+	cfg := &project.Project{
 		Dir:  root,
 		Slug: "prebuilt",
-		Apps: []projectconfig.App{{Name: "api", Path: ".", Compute: "container"}},
+		Apps: []project.App{{Name: "api", Path: ".", Compute: "container"}},
 	}
 	clitest.StubAppImages(&deps, "api")
 

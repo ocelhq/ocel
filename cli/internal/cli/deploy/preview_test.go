@@ -15,7 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/appbuild"
@@ -840,8 +840,8 @@ func checkSpan(t *testing.T, w io.Writer) *run.Span {
 func TestRequirePreviewDomain(t *testing.T) {
 	t.Parallel()
 
-	declared := &projectconfig.Config{Domains: map[string][]string{"preview": {"*.preview.acme.com"}}}
-	bare := &projectconfig.Config{}
+	declared := &project.Project{Domains: map[string][]string{"preview": {"*.preview.acme.com"}}}
+	bare := &project.Project{}
 	global := &contractv1.PreviewWildcard{
 		BaseDomain:     "preview.ocel.app",
 		GrammarMin:     1,
@@ -881,7 +881,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 	t.Run("the slug prefix pushing a global label past 63 characters refuses", func(t *testing.T) {
 		t.Parallel()
 
-		cfg := &projectconfig.Config{Slug: "acme", Apps: []projectconfig.App{{Name: "admin"}, {Name: "web"}}}
+		cfg := &project.Project{Slug: "acme", Apps: []project.App{{Name: "admin"}, {Name: "web"}}}
 		var out bytes.Buffer
 		_, err := requirePreviewDomain(cfg, global, nil, strings.Repeat("b", 60), checkSpan(t, &out))
 		if err == nil {
@@ -897,7 +897,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 	t.Run("a single-app project with no apps array still has its global label capped", func(t *testing.T) {
 		t.Parallel()
 
-		cfg := &projectconfig.Config{Slug: "acme"}
+		cfg := &project.Project{Slug: "acme"}
 		pointer := strings.Repeat("b", 63)
 		var out bytes.Buffer
 		_, err := requirePreviewDomain(cfg, global, nil, pointer, checkSpan(t, &out))
@@ -914,9 +914,9 @@ func TestRequirePreviewDomain(t *testing.T) {
 	t.Run("an app-level preview domain counts as declared", func(t *testing.T) {
 		t.Parallel()
 
-		cfg := &projectconfig.Config{
+		cfg := &project.Project{
 			Slug: "acme",
-			Apps: []projectconfig.App{{Name: "web", Domains: map[string][]string{"preview": {"*.preview.acme.com"}}}},
+			Apps: []project.App{{Name: "web", Domains: map[string][]string{"preview": {"*.preview.acme.com"}}}},
 		}
 		broken := &contractv1.PreviewWildcard{BaseDomain: "preview.ocel.app", GrammarMin: 1, GrammarMax: 1}
 		var out bytes.Buffer
@@ -931,9 +931,9 @@ func TestRequirePreviewDomain(t *testing.T) {
 	t.Run("the same label fits without the slug prefix on a declared domain", func(t *testing.T) {
 		t.Parallel()
 
-		cfg := &projectconfig.Config{
+		cfg := &project.Project{
 			Slug:    "acme",
-			Apps:    []projectconfig.App{{Name: "admin"}, {Name: "web"}},
+			Apps:    []project.App{{Name: "admin"}, {Name: "web"}},
 			Domains: map[string][]string{"preview": {"*.preview.acme.com"}},
 		}
 		var out bytes.Buffer
@@ -971,7 +971,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 	t.Run("a declared domain equal to the global one serves as the project's own and calls nothing ignored", func(t *testing.T) {
 		t.Parallel()
 
-		same := &projectconfig.Config{Slug: "acme", Domains: map[string][]string{"preview": {"*.preview.ocel.app"}}}
+		same := &project.Project{Slug: "acme", Domains: map[string][]string{"preview": {"*.preview.ocel.app"}}}
 		var out bytes.Buffer
 		if _, err := requirePreviewDomain(same, global, nil, "pr-1", checkSpan(t, &out)); err != nil {
 			t.Fatalf("requirePreviewDomain err = %v, want nil", err)

@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/fixturetest"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/constants"
 )
 
@@ -21,7 +21,7 @@ func TestHasJS(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		hasJS, err := HasJS(&projectconfig.Config{Dir: root})
+		hasJS, err := HasJS(&project.Project{Dir: root})
 		if err != nil {
 			t.Fatalf("HasJS: %v", err)
 		}
@@ -32,7 +32,7 @@ func TestHasJS(t *testing.T) {
 
 	t.Run("a discovery path that is not there is an error, not a JS project", func(t *testing.T) {
 		root := t.TempDir()
-		cfg := &projectconfig.Config{Dir: root}
+		cfg := &project.Project{Dir: root}
 		cfg.Discovery.Paths = []string{"nowhere"}
 
 		hasJS, err := HasJS(cfg)
@@ -53,7 +53,7 @@ func TestTheFixturesOfAnotherLanguageHaveNoJS(t *testing.T) {
 		}
 		tried++
 		t.Run(filepath.Base(filepath.Dir(dir))+"/"+filepath.Base(dir), func(t *testing.T) {
-			hasJS, err := HasJS(&projectconfig.Config{Dir: dir})
+			hasJS, err := HasJS(&project.Project{Dir: dir})
 			if err != nil {
 				t.Fatalf("HasJS: %v", err)
 			}

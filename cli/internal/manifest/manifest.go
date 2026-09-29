@@ -8,7 +8,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/attribution"
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/naming"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -18,7 +18,7 @@ import (
 const ContractVersion = "provider.v1"
 
 type Input struct {
-	Config       *projectconfig.Config
+	Project      *project.Project
 	Tier         environmentv1.Tier
 	Compute      string
 	Resources    []declaration.Resource
@@ -29,7 +29,7 @@ type Input struct {
 }
 
 func Assemble(in Input) (*contractv1.Manifest, error) {
-	cfg := in.Config
+	cfg := in.Project
 	functions := servedByFunctions(in.Built.Functions, cfg)
 	apps := appsOf(cfg.Dir, cfg.Apps, in.Usages, in.Compute, in.Built.Images, functions)
 	manifest, err := assemble(cfg.Slug, cfg.Domains, apps, in.Compute, declaredResources(cfg.Dir, in.Resources), bindingsOf(cfg.BindingsFor(in.Tier)), functions, variablesByApp(in.Variables, functions))

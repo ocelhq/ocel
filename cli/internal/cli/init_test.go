@@ -18,7 +18,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
@@ -102,9 +102,9 @@ func initTestDir(t *testing.T, name string) string {
 
 func readConfig(t *testing.T, dir string) string {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join(dir, projectconfig.DefaultFileName))
+	data, err := os.ReadFile(filepath.Join(dir, project.DefaultFileName))
 	if err != nil {
-		t.Fatalf("read %s: %v", projectconfig.DefaultFileName, err)
+		t.Fatalf("read %s: %v", project.DefaultFileName, err)
 	}
 	return string(data)
 }
@@ -167,7 +167,7 @@ func TestRunInit(t *testing.T) {
 				if err == nil {
 					t.Fatal("runInit err = nil, want error")
 				}
-				if _, statErr := os.Stat(filepath.Join(dir, projectconfig.DefaultFileName)); statErr == nil {
+				if _, statErr := os.Stat(filepath.Join(dir, project.DefaultFileName)); statErr == nil {
 					t.Fatal("a config was written for an invalid slug")
 				}
 				if *argv != nil {
@@ -196,13 +196,13 @@ func TestRunInit(t *testing.T) {
 		deps := initDeps()
 		argv := stubPackageManager(&deps, nil)
 		dir := initTestDir(t, "proj")
-		configPath := filepath.Join(dir, projectconfig.DefaultFileName)
+		configPath := filepath.Join(dir, project.DefaultFileName)
 		if err := os.WriteFile(configPath, []byte("existing"), 0o644); err != nil {
 			t.Fatalf("write existing config: %v", err)
 		}
 
 		err := runInit(context.Background(), deps, dir, "my-app", initOptions{provider: "aws"})
-		if err == nil || !strings.Contains(err.Error(), projectconfig.DefaultFileName) {
+		if err == nil || !strings.Contains(err.Error(), project.DefaultFileName) {
 			t.Fatalf("err = %v, want it to name the config already there", err)
 		}
 		content, readErr := os.ReadFile(configPath)
@@ -246,7 +246,7 @@ func TestRunInit(t *testing.T) {
 		if !strings.Contains(err.Error(), "aws, gcp, vps") {
 			t.Fatalf("err = %v, want it to name the providers ocel ships", err)
 		}
-		if _, statErr := os.Stat(filepath.Join(dir, projectconfig.DefaultFileName)); statErr == nil {
+		if _, statErr := os.Stat(filepath.Join(dir, project.DefaultFileName)); statErr == nil {
 			t.Fatal("a config was written with no provider named")
 		}
 		if *argv != nil {
@@ -315,19 +315,19 @@ func TestRunInit(t *testing.T) {
 		if err := os.MkdirAll(cwd, 0o755); err != nil {
 			t.Fatalf("create cwd: %v", err)
 		}
-		project := filepath.Join(root, "project")
-		if err := os.MkdirAll(project, 0o755); err != nil {
+		projectDir := filepath.Join(root, "project")
+		if err := os.MkdirAll(projectDir, 0o755); err != nil {
 			t.Fatalf("create project dir: %v", err)
 		}
 		for _, name := range []string{"package.json", "pnpm-lock.yaml"} {
-			if err := os.WriteFile(filepath.Join(project, name), []byte("{}\n"), 0o644); err != nil {
+			if err := os.WriteFile(filepath.Join(projectDir, name), []byte("{}\n"), 0o644); err != nil {
 				t.Fatalf("write %s: %v", name, err)
 			}
 		}
 
 		deps := initDeps()
 		argv := stubPackageManager(&deps, nil)
-		opts := initOptions{provider: "aws", configPath: filepath.Join("..", "project", projectconfig.DefaultFileName)}
+		opts := initOptions{provider: "aws", configPath: filepath.Join("..", "project", project.DefaultFileName)}
 
 		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(deps, &stdout)
@@ -335,7 +335,7 @@ func TestRunInit(t *testing.T) {
 			t.Fatalf("runInit err = %v; stdout=%s", err, stdout.String())
 		}
 
-		content, err := os.ReadFile(filepath.Join(project, projectconfig.DefaultFileName))
+		content, err := os.ReadFile(filepath.Join(projectDir, project.DefaultFileName))
 		if err != nil {
 			t.Fatalf("read the config --config named: %v", err)
 		}
@@ -345,7 +345,7 @@ func TestRunInit(t *testing.T) {
 		if got := *argv; !slices.Equal(got, []string{"pnpm", "add", sdkPackage}) {
 			t.Errorf("ran %v, want the sdk added beside the config, not beside the working directory", got)
 		}
-		if !strings.Contains(stdout.String(), "Wrote "+projectconfig.DefaultFileName+" for project ") {
+		if !strings.Contains(stdout.String(), "Wrote "+project.DefaultFileName+" for project ") {
 			t.Errorf("stdout = %q, want it to name the config written", stdout.String())
 		}
 	})
@@ -357,11 +357,11 @@ func TestRunInit(t *testing.T) {
 		stubPackageManager(&deps, nil)
 		dir := initTestDir(t, "proj")
 
-		opts := initOptions{provider: "aws", configPath: filepath.Join("nested", "deep", projectconfig.DefaultFileName)}
+		opts := initOptions{provider: "aws", configPath: filepath.Join("nested", "deep", project.DefaultFileName)}
 		if err := runInit(context.Background(), deps, dir, "my-app", opts); err != nil {
 			t.Fatalf("runInit err = %v", err)
 		}
-		if _, err := os.Stat(filepath.Join(dir, "nested", "deep", projectconfig.DefaultFileName)); err != nil {
+		if _, err := os.Stat(filepath.Join(dir, "nested", "deep", project.DefaultFileName)); err != nil {
 			t.Fatalf("stat the config --config named: %v", err)
 		}
 	})

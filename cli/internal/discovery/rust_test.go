@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/language"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
@@ -125,7 +125,7 @@ func TestRunDeclaresWhatTheRustFixtureDeclares(t *testing.T) {
 	needsCargo(t)
 	configDir := repoFixture(t, filepath.Join("sdk", "rust"))
 
-	roots, err := RootsOf(&projectconfig.Config{Dir: configDir, Apps: []projectconfig.App{{Name: "web", Path: "."}}})
+	roots, err := RootsOf(&project.Project{Dir: configDir, Apps: []project.App{{Name: "web", Path: "."}}})
 	if err != nil {
 		t.Fatalf("RootsOf: %v", err)
 	}
@@ -188,7 +188,7 @@ func TestRunDeclaresWhatASharedRustCrateDeclares(t *testing.T) {
 	needsCargo(t)
 	configDir := repoFixture(t, filepath.Join("sdk", "rust-workspace"))
 
-	roots, err := RootsOf(&projectconfig.Config{Dir: configDir, Apps: []projectconfig.App{
+	roots, err := RootsOf(&project.Project{Dir: configDir, Apps: []project.App{
 		{Name: "api", Path: "./apps/api"},
 		{Name: "web", Path: "./apps/web"},
 	}})

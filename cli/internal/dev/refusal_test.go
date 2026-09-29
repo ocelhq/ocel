@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/dotfile"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
@@ -141,7 +141,7 @@ func TestRefusalsNameTheCommandThatRan(t *testing.T) {
 func TestADevRunRefusesAScopedValueNoChildItStartsCouldRead(t *testing.T) {
 	t.Parallel()
 
-	apps := []projectconfig.App{
+	apps := []project.App{
 		{Name: "web", Path: "apps/web", Folder: "/web"},
 		{Name: "api", Path: "apps/api", Folder: "/api"},
 	}
@@ -149,16 +149,16 @@ func TestADevRunRefusesAScopedValueNoChildItStartsCouldRead(t *testing.T) {
 	t.Run("it refuses when the apps do not agree on one", func(t *testing.T) {
 		t.Parallel()
 
-		if err := refuseUnstatableBinding(valueSource{id: "dotenv"}, apps, "", projectconfig.DefaultFileName, nil); err != nil {
+		if err := refuseUnstatableBinding(valueSource{id: "dotenv"}, apps, "", project.DefaultFileName, nil); err != nil {
 			t.Errorf("refuseUnstatableBinding = %v, want nil with no scoped variable declared", err)
 		}
 
-		agreed := []projectconfig.App{{Name: "web", Folder: "/web"}, {Name: "admin", Folder: "/web"}}
-		if err := refuseUnstatableBinding(valueSource{id: "dotenv"}, agreed, "/web", projectconfig.DefaultFileName, map[string][]string{"API_BASE": {"/web"}}); err != nil {
+		agreed := []project.App{{Name: "web", Folder: "/web"}, {Name: "admin", Folder: "/web"}}
+		if err := refuseUnstatableBinding(valueSource{id: "dotenv"}, agreed, "/web", project.DefaultFileName, map[string][]string{"API_BASE": {"/web"}}); err != nil {
 			t.Errorf("refuseUnstatableBinding = %v, want nil when every app binds the folder dev states", err)
 		}
 
-		err := refuseUnstatableBinding(valueSource{id: "dotenv"}, apps, "", projectconfig.DefaultFileName, map[string][]string{"API_BASE": {"/web", "/api"}})
+		err := refuseUnstatableBinding(valueSource{id: "dotenv"}, apps, "", project.DefaultFileName, map[string][]string{"API_BASE": {"/web", "/api"}})
 		if err == nil {
 			t.Fatal("refuseUnstatableBinding = nil, want a refusal: no child of this run could read API_BASE")
 		}
@@ -176,12 +176,12 @@ func TestADevRunRefusesAScopedValueNoChildItStartsCouldRead(t *testing.T) {
 	t.Run("it starts when no app binds the key's scope", func(t *testing.T) {
 		t.Parallel()
 
-		if err := refuseUnstatableBinding(valueSource{id: "dotenv"}, apps, "", projectconfig.DefaultFileName, map[string][]string{"NOBODY": {"/nowhere"}}); err != nil {
+		if err := refuseUnstatableBinding(valueSource{id: "dotenv"}, apps, "", project.DefaultFileName, map[string][]string{"NOBODY": {"/nowhere"}}); err != nil {
 			t.Errorf("refuseUnstatableBinding = %v, want nil: no app binds /nowhere, so no read is lost", err)
 		}
 
 		scoped := map[string][]string{"NOBODY": {"/nowhere"}, "API_BASE": {"/web"}}
-		err := refuseUnstatableBinding(valueSource{id: "dotenv"}, apps, "", projectconfig.DefaultFileName, scoped)
+		err := refuseUnstatableBinding(valueSource{id: "dotenv"}, apps, "", project.DefaultFileName, scoped)
 		if err == nil {
 			t.Fatal("refuseUnstatableBinding = nil, want a refusal for API_BASE, which web would read under its own binding")
 		}
@@ -193,7 +193,7 @@ func TestADevRunRefusesAScopedValueNoChildItStartsCouldRead(t *testing.T) {
 	t.Run("it names where the dev tier reads its values from", func(t *testing.T) {
 		t.Parallel()
 
-		err := refuseUnstatableBinding(valueSource{id: "infisical:p-1/dev"}, apps, "", projectconfig.DefaultFileName, map[string][]string{"API_BASE": {"/web"}})
+		err := refuseUnstatableBinding(valueSource{id: "infisical:p-1/dev"}, apps, "", project.DefaultFileName, map[string][]string{"API_BASE": {"/web"}})
 		if err == nil {
 			t.Fatal("refuseUnstatableBinding = nil, want a refusal: web would read API_BASE under its own binding")
 		}
@@ -205,7 +205,7 @@ func TestADevRunRefusesAScopedValueNoChildItStartsCouldRead(t *testing.T) {
 	t.Run("it names only the apps binding the key's scope", func(t *testing.T) {
 		t.Parallel()
 
-		err := refuseUnstatableBinding(valueSource{id: "dotenv"}, apps, "", projectconfig.DefaultFileName, map[string][]string{"API_BASE": {"/web"}})
+		err := refuseUnstatableBinding(valueSource{id: "dotenv"}, apps, "", project.DefaultFileName, map[string][]string{"API_BASE": {"/web"}})
 		if err == nil {
 			t.Fatal("refuseUnstatableBinding = nil, want a refusal: web would read API_BASE under its own binding")
 		}
@@ -235,7 +235,7 @@ func TestADevRunRefusesAScopedValueNoChildItStartsCouldRead(t *testing.T) {
 			"fix: bind every app to the same folder in ocel.json, or drop `folders:` from those declarations"
 
 		for range 50 {
-			err := refuseUnstatableBinding(valueSource{id: "dotenv"}, apps, "", projectconfig.DefaultFileName, scoped)
+			err := refuseUnstatableBinding(valueSource{id: "dotenv"}, apps, "", project.DefaultFileName, scoped)
 			if err == nil {
 				t.Fatal("refuseUnstatableBinding = nil, want a refusal: both apps lose a read")
 			}

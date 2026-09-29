@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/constants"
@@ -35,9 +35,9 @@ func TestAGoAppIsCompiledHereRatherThanHandedToTheNodeBuildScript(t *testing.T) 
 	root := t.TempDir()
 	writeBuildScript(t, root)
 	writeGoApp(t, root, "apps/api")
-	cfg := &projectconfig.Config{
+	cfg := &project.Project{
 		Dir:  root,
-		Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Framework: projectconfig.Framework{Name: "go"}}},
+		Apps: []project.App{{Name: "api", Path: "apps/api", Framework: project.Framework{Name: "go"}}},
 	}
 
 	ran := false
@@ -88,9 +88,9 @@ func TestAPythonAppIsVendoredHereRatherThanHandedToTheNodeBuilder(t *testing.T) 
 	root := t.TempDir()
 	writeBuildScript(t, root)
 	writePythonApp(t, root, "apps/api")
-	cfg := &projectconfig.Config{
+	cfg := &project.Project{
 		Dir:  root,
-		Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Framework: projectconfig.Framework{Name: "python"}}},
+		Apps: []project.App{{Name: "api", Path: "apps/api", Framework: project.Framework{Name: "python"}}},
 	}
 
 	ran := false
@@ -144,9 +144,9 @@ func TestARustAppIsCompiledHereRatherThanHandedToTheNodeBuilder(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	cfg := &projectconfig.Config{
+	cfg := &project.Project{
 		Dir:  root,
-		Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Framework: projectconfig.Framework{Name: "rust"}}},
+		Apps: []project.App{{Name: "api", Path: "apps/api", Framework: project.Framework{Name: "rust"}}},
 	}
 
 	ran := false

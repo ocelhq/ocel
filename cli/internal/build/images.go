@@ -14,13 +14,13 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/english"
 
 	"github.com/ocelhq/ocel/cli/internal/build/image"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/images"
 )
 
-func (t tools) images(ctx context.Context, cfg *projectconfig.Config, archs map[string]string, log Log) (map[string]string, error) {
+func (t tools) images(ctx context.Context, cfg *project.Project, archs map[string]string, log Log) (map[string]string, error) {
 	var refs map[string]string
 	for _, app := range ImageApps(cfg.Apps) {
 		described, err := image.Describe(cfg, app)
@@ -44,7 +44,7 @@ func (t tools) images(ctx context.Context, cfg *projectconfig.Config, archs map[
 	return refs, nil
 }
 
-func (t tools) readPrebuilt(ctx context.Context, cfg *projectconfig.Config, archs map[string]string) (Output, error) {
+func (t tools) readPrebuilt(ctx context.Context, cfg *project.Project, archs map[string]string) (Output, error) {
 	functions, err := ReadFunctions(cfg.Dir)
 	if err != nil {
 		return Output{}, err
@@ -111,7 +111,7 @@ func readImageRef(projectDir, app string) (string, error) {
 	return ref, nil
 }
 
-func RefuseUnbuildableImages(ctx context.Context, span *run.Span, cfg *projectconfig.Config, archs map[string]string) error {
+func RefuseUnbuildableImages(ctx context.Context, span *run.Span, cfg *project.Project, archs map[string]string) error {
 	var recipes []image.Recipe
 	for _, app := range ImageApps(cfg.Apps) {
 		described, err := image.Describe(cfg, app)

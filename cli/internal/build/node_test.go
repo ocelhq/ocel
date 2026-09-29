@@ -16,7 +16,7 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 
 	"github.com/ocelhq/ocel/cli/internal/nodeprotocol"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
 )
 
@@ -28,7 +28,7 @@ func TestAProjectWithNoJavaScriptNeverRunsTheNodeBuildScript(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module fixture\n\ngo 1.24\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg := &projectconfig.Config{Dir: root}
+	cfg := &project.Project{Dir: root}
 
 	ran := false
 	builder := nodeOnly{node: func(context.Context, string, []byte, Log) error {

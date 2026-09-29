@@ -6,18 +6,18 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 )
 
 func TestHostnames(t *testing.T) {
 	t.Parallel()
 
-	cfg := &projectconfig.Config{
+	cfg := &project.Project{
 		Domains: map[string][]string{
 			"production": {"acme.com", "www.acme.com"},
 			"preview":    {"*.preview.acme.com"},
 		},
-		Apps: []projectconfig.App{
+		Apps: []project.App{
 			{Name: "web", Domains: map[string][]string{"production": {"app.acme.com", "acme.com"}}},
 			{Name: "api", Domains: map[string][]string{"production": {"api.acme.com"}}},
 			{Name: "admin"},
@@ -45,7 +45,7 @@ func TestHostnames(t *testing.T) {
 	t.Run("a domain-less project declares nothing", func(t *testing.T) {
 		t.Parallel()
 
-		if got := Hostnames(&projectconfig.Config{}, "production"); len(got) != 0 {
+		if got := Hostnames(&project.Project{}, "production"); len(got) != 0 {
 			t.Errorf("Hostnames of a domain-less project = %v, want none", got)
 		}
 	})

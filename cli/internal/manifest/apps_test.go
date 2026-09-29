@@ -8,7 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/attribution"
 	"github.com/ocelhq/ocel/cli/internal/build"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/appbuild"
@@ -54,14 +54,14 @@ func TestTheManifestNamesWhichAppsBundleReadsTheClientURL(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name     string
-		app      projectconfig.App
+		app      project.App
 		manifest string
 		want     bool
 	}{
-		{name: "a next app", app: projectconfig.App{Name: "web", Framework: projectconfig.Framework{Name: appbuild.FrameworkNext}}, want: true},
-		{name: "a go app", app: projectconfig.App{Name: "api", Framework: projectconfig.Framework{Name: appbuild.FrameworkGo}}, manifest: "go.mod"},
-		{name: "a container app containing a package.json", app: projectconfig.App{Name: "store", Compute: string(provider.ComputeContainer)}, manifest: "package.json", want: true},
-		{name: "a container app containing a go.mod", app: projectconfig.App{Name: "worker", Compute: string(provider.ComputeContainer)}, manifest: "go.mod"},
+		{name: "a next app", app: project.App{Name: "web", Framework: project.Framework{Name: appbuild.FrameworkNext}}, want: true},
+		{name: "a go app", app: project.App{Name: "api", Framework: project.Framework{Name: appbuild.FrameworkGo}}, manifest: "go.mod"},
+		{name: "a container app containing a package.json", app: project.App{Name: "store", Compute: string(provider.ComputeContainer)}, manifest: "package.json", want: true},
+		{name: "a container app containing a go.mod", app: project.App{Name: "worker", Compute: string(provider.ComputeContainer)}, manifest: "go.mod"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -77,7 +77,7 @@ func TestTheManifestNamesWhichAppsBundleReadsTheClientURL(t *testing.T) {
 				}
 			}
 
-			got := appsOf(root, []projectconfig.App{tc.app}, nil, "serverless", nil, nil)
+			got := appsOf(root, []project.App{tc.app}, nil, "serverless", nil, nil)
 			if len(got) != 1 || got[0].ClientBundle != tc.want {
 				t.Errorf("appsOf() = %+v, want ClientBundle %v: the provider reads it off the manifest, and a container app has no runtime to read instead", got, tc.want)
 			}
@@ -130,7 +130,7 @@ func TestAConfiguredAppCarriesItsFolderAndOnlyItsOwnUsages(t *testing.T) {
 	t.Run("passes the folder binding into the manifest", func(t *testing.T) {
 		t.Parallel()
 
-		got := appsOf(t.TempDir(), []projectconfig.App{
+		got := appsOf(t.TempDir(), []project.App{
 			{Name: "admin", Folder: "/admin"},
 			{Name: "web"},
 		}, nil, "serverless", nil, nil)
@@ -147,7 +147,7 @@ func TestAConfiguredAppCarriesItsFolderAndOnlyItsOwnUsages(t *testing.T) {
 	t.Run("hands each app only the usage edges attributed to it", func(t *testing.T) {
 		t.Parallel()
 
-		got := appsOf(t.TempDir(), []projectconfig.App{{Name: "admin"}, {Name: "web"}}, []attribution.Usage{
+		got := appsOf(t.TempDir(), []project.App{{Name: "admin"}, {Name: "web"}}, []attribution.Usage{
 			{App: "web", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main", Files: []string{"apps/web/src/server.ts"}},
 			{App: "admin", Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: "uploads", Files: []string{"apps/admin/src/upload.ts"}},
 		}, "serverless", nil, nil)

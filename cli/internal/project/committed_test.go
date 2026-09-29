@@ -1,4 +1,4 @@
-package projectconfig_test
+package project_test
 
 import (
 	"bytes"
@@ -16,7 +16,7 @@ import (
 	"github.com/tailscale/hujson"
 
 	"github.com/ocelhq/ocel/cli/internal/fixturetest"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/constants"
 )
 
@@ -91,8 +91,8 @@ func documentOf(t *testing.T, label, file string, source []byte) any {
 }
 
 func parseConfig(file string, source []byte) (any, error) {
-	if projectconfig.IsYAML(file) {
-		standard, err := projectconfig.YAMLToJSON(source)
+	if project.IsYAML(file) {
+		standard, err := project.YAMLToJSON(source)
 		if err != nil {
 			return nil, err
 		}
@@ -106,7 +106,7 @@ func parseConfig(file string, source []byte) (any, error) {
 }
 
 func schemaNamed(file string, source []byte, document any) string {
-	if projectconfig.IsYAML(file) {
+	if project.IsYAML(file) {
 		if named := yamlSchemaLine.FindSubmatch(source); named != nil {
 			return string(named[1])
 		}
@@ -128,7 +128,7 @@ func committedConfigs(t *testing.T, root string) []string {
 type commentBlock struct{ first, last int }
 
 func commentPrefix(file string) string {
-	if projectconfig.IsYAML(file) {
+	if project.IsYAML(file) {
 		return "#"
 	}
 	return "//"
@@ -223,7 +223,7 @@ func TestEveryCommittedConfigValidatesAgainstTheSchema(t *testing.T) {
 	root := fixturetest.RepoDir(t)
 	schema := committedSchema(t, root)
 	for _, path := range committedConfigs(t, root) {
-		if projectconfig.IsProgram(path) {
+		if project.IsProgram(path) {
 			continue
 		}
 		source, err := os.ReadFile(path)
@@ -240,7 +240,7 @@ func TestEveryCommittedConfigNamesTheCommittedSchema(t *testing.T) {
 	root := fixturetest.RepoDir(t)
 	want := schemaID(t, root)
 	for _, path := range committedConfigs(t, root) {
-		if projectconfig.IsProgram(path) {
+		if project.IsProgram(path) {
 			continue
 		}
 		source, err := os.ReadFile(path)
@@ -277,7 +277,7 @@ func TestACommentedVariantUncommentsIntoAConfigThatOnlyDiffers(t *testing.T) {
 	root := fixturetest.RepoDir(t)
 	schema := committedSchema(t, root)
 	for _, path := range committedConfigs(t, root) {
-		if projectconfig.IsProgram(path) {
+		if project.IsProgram(path) {
 			continue
 		}
 		source, err := os.ReadFile(path)
@@ -308,7 +308,7 @@ func TestOnlyTheNodeFixtureHasTheTypeScriptConfig(t *testing.T) {
 	var configured []string
 	for _, dir := range fixturetest.Dirs(t) {
 		for _, path := range fixturetest.ConfigsIn(t, dir) {
-			if projectconfig.IsProgram(path) {
+			if project.IsProgram(path) {
 				configured = append(configured, dir)
 				break
 			}
@@ -346,17 +346,17 @@ func TestAFixtureOfAnotherLanguageHasNoNodeFiles(t *testing.T) {
 func TestTheGoFixtureDeploysFromJSONAlone(t *testing.T) {
 	dir := filepath.Join(fixturetest.RepoDir(t), "tests", "fixtures", "deploy", "go")
 	for _, path := range fixturetest.ConfigsIn(t, dir) {
-		if projectconfig.IsProgram(path) {
+		if project.IsProgram(path) {
 			t.Fatalf("the go fixture still contains %s", filepath.Base(path))
 		}
 	}
 
 	t.Setenv("PATH", "")
-	cfg, err := projectconfig.Resolve(t.Context(), dir, "")
+	cfg, err := project.Resolve(t.Context(), dir, "")
 	if err != nil {
 		t.Fatalf("resolve the go fixture with no node on PATH: %v", err)
 	}
-	if cfg.Path != filepath.Join(dir, projectconfig.DefaultFileName) {
+	if cfg.Path != filepath.Join(dir, project.DefaultFileName) {
 		t.Fatalf("path = %q", cfg.Path)
 	}
 	if cfg.Provider == nil || cfg.Provider.ID != "aws" {
@@ -370,13 +370,13 @@ func TestTheGoFixtureDeploysFromJSONAlone(t *testing.T) {
 func TestTheRustFixtureDeploysFromJSONAlone(t *testing.T) {
 	dir := filepath.Join(fixturetest.RepoDir(t), "tests", "fixtures", "deploy", "rust")
 	for _, path := range fixturetest.ConfigsIn(t, dir) {
-		if projectconfig.IsProgram(path) {
+		if project.IsProgram(path) {
 			t.Fatalf("the rust fixture still contains %s", filepath.Base(path))
 		}
 	}
 
 	t.Setenv("PATH", "")
-	cfg, err := projectconfig.Resolve(t.Context(), dir, "")
+	cfg, err := project.Resolve(t.Context(), dir, "")
 	if err != nil {
 		t.Fatalf("resolve the rust fixture with no node on PATH: %v", err)
 	}

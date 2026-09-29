@@ -12,7 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 )
 
 func NewUnlinkCommand(deps cmddeps.Deps) *cobra.Command {
@@ -36,7 +36,7 @@ func NewUnlinkCommand(deps cmddeps.Deps) *cobra.Command {
 }
 
 func projectDir(ctx context.Context, deps cmddeps.Deps, cwd string) (string, error) {
-	cfg, err := projectconfig.ResolveOptional(ctx, cwd, deps.ConfigPath())
+	cfg, err := project.ResolveOptional(ctx, cwd, deps.ConfigPath())
 	if err != nil {
 		return "", err
 	}

@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 )
@@ -35,7 +35,7 @@ func TestASyncedEnvSourceIsWhatTheProviderSaysItRead(t *testing.T) {
 }
 
 func TestAnEnvSourceIsSyncedForTheRootAndEveryAppFolder(t *testing.T) {
-	cfg := &projectconfig.Config{Apps: []projectconfig.App{{Name: "web", Folder: "/web"}, {Name: "api", Folder: "/api"}, {Name: "admin", Folder: "/web"}}}
+	cfg := &project.Project{Apps: []project.App{{Name: "web", Folder: "/web"}, {Name: "api", Folder: "/api"}, {Name: "admin", Folder: "/web"}}}
 	if got, want := syncedFolders(cfg), []string{"", "/api", "/web"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("syncedFolders = %q, want %q", got, want)
 	}

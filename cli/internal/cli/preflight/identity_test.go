@@ -6,7 +6,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -15,7 +15,7 @@ import (
 func TestIdentityEvent(t *testing.T) {
 	t.Parallel()
 
-	cfg := &projectconfig.Config{Slug: "acme", Edge: &projectconfig.EdgeDescriptor{ID: "relay"}}
+	cfg := &project.Project{Slug: "acme", Edge: &project.EdgeDescriptor{ID: "relay"}}
 
 	t.Run("names the project, the tier and both parties", func(t *testing.T) {
 		t.Parallel()

@@ -3,7 +3,7 @@ package manifest
 import (
 	"fmt"
 
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -41,7 +41,7 @@ func (e *BindingTypeError) Error() string {
 	)
 }
 
-func bindingsOf(configured []projectconfig.Binding) []binding {
+func bindingsOf(configured []project.Binding) []binding {
 	out := make([]binding, 0, len(configured))
 	for _, b := range configured {
 		out = append(out, binding{Type: b.Type, Name: b.Name, External: b.RecordName()})

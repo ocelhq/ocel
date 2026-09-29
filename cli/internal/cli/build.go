@@ -16,7 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/language"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/cli/node"
@@ -48,7 +48,7 @@ var buildCmd = &cobra.Command{
 }
 
 func runBuild(ctx context.Context, deps cmddeps.Deps, cwd string) (err error) {
-	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
+	cfg, err := project.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}
@@ -101,7 +101,7 @@ func appBuildLog(phase *run.Span) build.Log {
 	}
 }
 
-func declaredArchs(cfg *projectconfig.Config) map[string]string {
+func declaredArchs(cfg *project.Project) map[string]string {
 	archs := map[string]string{}
 	for _, a := range build.ImageApps(cfg.Apps) {
 		archs[a.Name] = ""
@@ -134,7 +134,7 @@ func plural(n int, one, many string) string {
 	return many
 }
 
-func builtInClients(cfg *projectconfig.Config, urls map[string]string) []clientenv.App {
+func builtInClients(cfg *project.Project, urls map[string]string) []clientenv.App {
 	if len(cfg.Apps) == 0 {
 		bundle := language.HasClientBundle(appbuild.FrameworkNode, cfg.Dir)
 		return []clientenv.App{{Dir: cfg.Dir, ClientBundle: bundle, Variables: appurl.Variables(bundle, urls[variablescope.RootApp])}}

@@ -17,7 +17,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
 	"github.com/ocelhq/ocel/cli/internal/manifest"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
@@ -29,7 +29,7 @@ import (
 )
 
 type assembly struct {
-	cfg            *projectconfig.Config
+	cfg            *project.Project
 	declarations   *variables.Declarations
 	prebuilt       bool
 	dry            bool
@@ -151,7 +151,7 @@ func assembleManifest(ctx context.Context, deps cmddeps.Deps, a assembly, resour
 		return nil, err
 	}
 	return manifest.Assemble(manifest.Input{
-		Config:       cfg,
+		Project:      cfg,
 		Tier:         a.declarations.Scope().Tier,
 		Compute:      a.compute,
 		Resources:    resources,
@@ -227,7 +227,7 @@ func (b *buildSteps) run(subject string, title progress.Title, step func() error
 	return err
 }
 
-func inlineRecords(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, declarations *variables.Declarations, resources []declaration.Resource, span *run.Span) ([]inlinebinding.Record, error) {
+func inlineRecords(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, declarations *variables.Declarations, resources []declaration.Resource, span *run.Span) ([]inlinebinding.Record, error) {
 	values, err := declarations.ResolveBindingVariables(ctx)
 	if err != nil {
 		return nil, err
@@ -281,7 +281,7 @@ func (c *boundedCapture) annotate(err error) error {
 	return fmt.Errorf("%w\n%s", err, text)
 }
 
-func resolveVariables(ctx context.Context, declarations *variables.Declarations, cfg *projectconfig.Config) (map[string][]variables.Variable, error) {
+func resolveVariables(ctx context.Context, declarations *variables.Declarations, cfg *project.Project) (map[string][]variables.Variable, error) {
 	definitions := declarations.Definitions()
 	values := make(map[string][]variables.Variable, len(cfg.Apps))
 	for _, app := range variablescope.Apps(cfg) {
@@ -317,7 +317,7 @@ func appVariables(definitions []*resourcesv1.VariableDefinition, resolved map[st
 	return values
 }
 
-func edgeApps(cfg *projectconfig.Config) ([]string, error) {
+func edgeApps(cfg *project.Project) ([]string, error) {
 	built, err := build.EdgeApps(cfg.Dir)
 	if err != nil {
 		return nil, err
@@ -331,7 +331,7 @@ func edgeApps(cfg *projectconfig.Config) ([]string, error) {
 	return []string{variablescope.RootApp}, nil
 }
 
-func checkAppPaths(cfg *projectconfig.Config, configName string) error {
+func checkAppPaths(cfg *project.Project, configName string) error {
 	for _, a := range cfg.Apps {
 		if info, err := os.Stat(filepath.Join(cfg.Dir, a.Path)); err != nil || !info.IsDir() {
 			return fmt.Errorf(

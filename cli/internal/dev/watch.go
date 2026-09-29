@@ -10,7 +10,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/filewatch"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 )
 
 var (
@@ -18,7 +18,7 @@ var (
 	startWatching = watchAndResolve
 )
 
-func watchAndResolve(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, run invocation, stdout, stderr io.Writer, onResolved func(map[string]string)) (*filewatch.Watcher, error) {
+func watchAndResolve(ctx context.Context, srv *devserver.Server, cfg *project.Project, run invocation, stdout, stderr io.Writer, onResolved func(map[string]string)) (*filewatch.Watcher, error) {
 	roots, err := discovery.RootsOf(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("resolve watch directories: %w", err)

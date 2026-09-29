@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 )
 
 func TestProjectRuntimes(t *testing.T) {
@@ -12,38 +12,38 @@ func TestProjectRuntimes(t *testing.T) {
 
 	for _, tc := range []struct {
 		name string
-		cfg  *projectconfig.Config
+		cfg  *project.Project
 		want []string
 	}{
 		{
 			name: "a project with no apps names no framework",
-			cfg:  &projectconfig.Config{},
+			cfg:  &project.Project{},
 		},
 		{
 			name: "an app with no framework is left out",
-			cfg:  &projectconfig.Config{Apps: []projectconfig.App{{Name: "web"}}},
+			cfg:  &project.Project{Apps: []project.App{{Name: "web"}}},
 		},
 		{
 			name: "each app's framework is named",
-			cfg: &projectconfig.Config{Apps: []projectconfig.App{
-				{Framework: projectconfig.Framework{Name: "next"}},
-				{Framework: projectconfig.Framework{Name: "node"}},
+			cfg: &project.Project{Apps: []project.App{
+				{Framework: project.Framework{Name: "next"}},
+				{Framework: project.Framework{Name: "node"}},
 			}},
 			want: []string{"next", "node"},
 		},
 		{
 			name: "an arch does not split one runtime in two",
-			cfg: &projectconfig.Config{Apps: []projectconfig.App{
-				{Framework: projectconfig.Framework{Name: "next"}},
-				{Framework: projectconfig.Framework{Name: "next", Arch: "x86_64"}},
+			cfg: &project.Project{Apps: []project.App{
+				{Framework: project.Framework{Name: "next"}},
+				{Framework: project.Framework{Name: "next", Arch: "x86_64"}},
 			}},
 			want: []string{"next"},
 		},
 		{
 			name: "two apps on one runtime name it once",
-			cfg: &projectconfig.Config{Apps: []projectconfig.App{
-				{Framework: projectconfig.Framework{Name: "next"}},
-				{Framework: projectconfig.Framework{Name: "next"}},
+			cfg: &project.Project{Apps: []project.App{
+				{Framework: project.Framework{Name: "next"}},
+				{Framework: project.Framework{Name: "next"}},
 			}},
 			want: []string{"next"},
 		},

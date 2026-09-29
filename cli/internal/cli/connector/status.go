@@ -10,11 +10,11 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
-func runStatus(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, _ *console.Link,
+func runStatus(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, _ *console.Link,
 	opts options, stdout io.Writer) error {
 	access, err := token(deps)
 	if err != nil {
@@ -59,7 +59,7 @@ func runStatus(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config
 	return nil
 }
 
-func fingerprinted(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config) (fingerprint string, err error) {
+func fingerprinted(ctx context.Context, deps cmddeps.Deps, cfg *project.Project) (fingerprint string, err error) {
 	if _, err := cfg.RequireProvider(); err != nil {
 		return "", err
 	}

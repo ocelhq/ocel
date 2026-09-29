@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 )
 
 func RepoDir(t *testing.T) string {
@@ -59,7 +59,7 @@ func ConfigsIn(t *testing.T, dir string) []string {
 		t.Fatalf("read %s: %v", dir, err)
 	}
 	for _, entry := range entries {
-		if !entry.IsDir() && projectconfig.IsConfig(entry.Name()) {
+		if !entry.IsDir() && project.IsConfig(entry.Name()) {
 			found = append(found, filepath.Join(dir, entry.Name()))
 		}
 	}
@@ -72,7 +72,7 @@ func IsNode(t *testing.T, dir string) bool {
 		return true
 	}
 	for _, path := range ConfigsIn(t, dir) {
-		if projectconfig.IsProgram(path) {
+		if project.IsProgram(path) {
 			return true
 		}
 	}

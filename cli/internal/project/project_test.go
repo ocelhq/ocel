@@ -1,4 +1,4 @@
-package projectconfig
+package project
 
 import (
 	"context"
@@ -109,7 +109,7 @@ func TestResolve(t *testing.T) {
 	accepted := []struct {
 		name   string
 		config string
-		check  func(t *testing.T, root string, cfg *Config)
+		check  func(t *testing.T, root string, cfg *Project)
 	}{
 		{
 			name: "parses a valid config",
@@ -119,7 +119,7 @@ export default {
   discovery: { paths: ["resources"] },
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				if cfg.Slug != "test-app" {
 					t.Fatalf("Slug = %q, want %q", cfg.Slug, "test-app")
 				}
@@ -136,7 +136,7 @@ export default {
   domains: { production: "App.Acme.com" },
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				if got := cfg.Domains["production"]; len(got) != 1 || got[0] != "app.acme.com" {
 					t.Fatalf("Domains[production] = %v, want [%q] (lowercased)", got, "app.acme.com")
 				}
@@ -149,7 +149,7 @@ export default {
   slug: "test-app",
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				if len(cfg.Domains) != 0 {
 					t.Fatalf("Domains = %v, want empty", cfg.Domains)
 				}
@@ -162,7 +162,7 @@ export default {
   slug: "test-app",
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				if cfg.Dir != root {
 					t.Fatalf("Dir = %q, want %q", cfg.Dir, root)
 				}
@@ -175,7 +175,7 @@ export default {
   slug: "test-app",
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				if cfg.Discovery.Paths != nil {
 					t.Fatalf("Discovery.Paths = %v, want them unset so discovery uses its defaults", cfg.Discovery.Paths)
 				}
@@ -188,7 +188,7 @@ export default {
   slug: "acme-web-1",
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				if cfg.Slug != "acme-web-1" {
 					t.Errorf("Slug = %q, want acme-web-1", cfg.Slug)
 				}
@@ -202,7 +202,7 @@ export default {
   provider: { aws: { region: "us-east-1" } },
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				if cfg.Provider == nil {
 					t.Fatal("Provider = nil, want a descriptor")
 				}
@@ -222,7 +222,7 @@ export default {
   provider: "aws",
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				if got, want := string(cfg.Provider.Options), `{}`; got != want {
 					t.Fatalf("Provider.Options = %s, want %s", got, want)
 				}
@@ -235,7 +235,7 @@ export default {
   slug: "test-app",
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				if cfg.Provider != nil {
 					t.Fatalf("Provider = %+v, want nil", cfg.Provider)
 				}
@@ -252,7 +252,7 @@ export default {
   ],
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				if len(cfg.Apps) != 2 {
 					t.Fatalf("Apps = %v, want 2 entries", cfg.Apps)
 				}
@@ -276,7 +276,7 @@ export default {
   registry: { server: "ghcr.io", username: "acme-bot", password: "${GHCR_TOKEN}" },
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				if cfg.Registry == nil {
 					t.Fatalf("Registry = nil, want the registry the config names")
 				}
@@ -302,7 +302,7 @@ export default {
   registry: { server: "ghcr.io/acme/team-1", password: "${GHCR_TOKEN}" },
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				if got, want := cfg.Registry.Server, "ghcr.io"; got != want {
 					t.Errorf("Registry.Server = %q, want %q", got, want)
 				}
@@ -318,7 +318,7 @@ export default {
   slug: "test-app",
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				if cfg.Registry != nil {
 					t.Fatalf("Registry = %+v, want nil where the project names none", cfg.Registry)
 				}
@@ -332,7 +332,7 @@ export default {
   registry: { server: "registry.fly.io", password: "${FLY_TOKEN}" },
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				if cfg.Registry.Username != "" {
 					t.Errorf("Registry.Username = %q, want none where the config writes none", cfg.Registry.Username)
 				}
@@ -347,7 +347,7 @@ export default {
   registry: { server: "ghcr.io", password: "${GHCR_TOKEN}" },
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				if got := string(cfg.Provider.Options); strings.Contains(got, "registry") || strings.Contains(got, "ghcr.io") {
 					t.Errorf("the provider is configured with %s, and the registry the project chose for itself crossed the provider boundary", got)
 				}
@@ -360,7 +360,7 @@ export default {
   slug: "test-app",
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				if len(cfg.Apps) != 0 {
 					t.Fatalf("Apps = %v, want empty", cfg.Apps)
 				}
@@ -374,7 +374,7 @@ export default {
   apps: [{ name: "api", path: "services/api", framework: "node" }],
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				if cfg.Apps[0].Compute != "" {
 					t.Fatalf("Apps[0].Compute = %q, want it empty until the provider names its computes", cfg.Apps[0].Compute)
 				}
@@ -388,7 +388,7 @@ export default {
   apps: [{ name: "api", path: "services/api", framework: "node", compute: "container" }],
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				if cfg.Apps[0].Compute != "container" {
 					t.Fatalf("Apps[0].Compute = %q, want %q", cfg.Apps[0].Compute, "container")
 				}
@@ -402,7 +402,7 @@ export default {
   apps: [{ name: "api", path: "services/api", compute: "container", build: { dockerfile: "../shared/Dockerfile" } }],
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				if cfg.Apps[0].Build == nil {
 					t.Fatalf("Apps[0].Build = nil, want the build the config writes")
 				}
@@ -419,7 +419,7 @@ export default {
   apps: [{ name: "api", path: "services/api", compute: "container", health: { path: "/healthz" } }],
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				if cfg.Apps[0].Health == nil {
 					t.Fatalf("Apps[0].Health = nil, want the health check the config writes")
 				}
@@ -436,7 +436,7 @@ export default {
   apps: [{ name: "api", path: "services/api", framework: "next" }],
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				if got, want := cfg.Apps[0].Framework, (Framework{Name: "next"}); got != want {
 					t.Fatalf("Apps[0].Framework = %+v, want %+v", got, want)
 				}
@@ -450,7 +450,7 @@ export default {
   apps: [{ name: "api", path: "services/api", framework: "go" }],
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				if got, want := cfg.Apps[0].Framework, (Framework{Name: "go"}); got != want {
 					t.Fatalf("Apps[0].Framework = %+v, want %+v", got, want)
 				}
@@ -464,7 +464,7 @@ export default {
   apps: [{ name: "api", path: "services/api", framework: "node", arch: "arm64" }],
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				if got, want := cfg.Apps[0].Framework, (Framework{Name: "node", Arch: "arm64"}); got != want {
 					t.Fatalf("Apps[0].Framework = %+v, want %+v", got, want)
 				}
@@ -478,7 +478,7 @@ export default {
   apps: [{ name: "api", path: "services/api", compute: "container" }],
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				if cfg.Apps[0].Health != nil {
 					t.Fatalf("Apps[0].Health = %+v, want nil where the app configures no health check", cfg.Apps[0].Health)
 				}
@@ -492,7 +492,7 @@ export default {
   apps: [{ name: "api", path: "services/api", compute: "container" }],
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				if cfg.Apps[0].Build != nil {
 					t.Fatalf("Apps[0].Build = %+v, want nil where the app configures no build", cfg.Apps[0].Build)
 				}
@@ -508,7 +508,7 @@ export default {
   slug: "test-app",
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				artifact := filepath.Join(root, constants.ProjectStateDirName, "config.mjs")
 				if _, err := os.Stat(artifact); err != nil {
 					t.Fatalf("expected build artifact at %s: %v", artifact, err)
@@ -527,7 +527,7 @@ export default {
   ],
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				if len(cfg.Apps) != 2 {
 					t.Fatalf("got %d apps, want 2", len(cfg.Apps))
 				}
@@ -553,7 +553,7 @@ export default {
   ],
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				if got := cfg.Apps[0].Domains["production"]; len(got) != 1 || got[0] != "app.acme.com" {
 					t.Fatalf("Apps[0].Domains[production] = %v, want [app.acme.com]", got)
 				}
@@ -567,7 +567,7 @@ export default {
   domains: { production: "acme.com", preview: "*.Preview.Acme.com" },
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				if got := cfg.Domains["preview"]; len(got) != 1 || got[0] != "*.preview.acme.com" {
 					t.Fatalf("Domains[preview] = %v, want [%q] (lowercased)", got, "*.preview.acme.com")
 				}
@@ -581,7 +581,7 @@ export default {
   domains: { production: ["Acme.com", "www.acme.com", "acme.com"] },
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				if got := cfg.Domains["production"]; len(got) != 2 || got[0] != "acme.com" || got[1] != "www.acme.com" {
 					t.Fatalf("Domains[production] = %v, want [acme.com www.acme.com]", got)
 				}
@@ -598,7 +598,7 @@ export default {
   ],
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				if cfg.Apps[0].Folder != "/web" {
 					t.Errorf("Apps[0].Folder = %q, want %q", cfg.Apps[0].Folder, "/web")
 				}
@@ -618,7 +618,7 @@ export default {
   },
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				want := []Binding{
 					{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main", External: "sst-pg-main"},
 					{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "orders", External: "sst-pg-orders"},
@@ -640,7 +640,7 @@ export default {
   },
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				if len(cfg.Bindings) != 2 {
 					t.Fatalf("Bindings = %v, want both: postgres(\"orders\") and bucket(\"orders\") are different resources", cfg.Bindings)
 				}
@@ -654,7 +654,7 @@ export default {
   bindings: { postgres: { analytics: "@@warehouse" } },
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				want := []Binding{{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "analytics", External: "@warehouse"}}
 				if !reflect.DeepEqual(cfg.Bindings, want) {
 					t.Fatalf("Bindings = %v, want %v", cfg.Bindings, want)
@@ -668,7 +668,7 @@ export default {
   slug: "test-app",
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				if len(cfg.Bindings) != 0 {
 					t.Fatalf("Bindings = %v, want nothing bound where nothing is written", cfg.Bindings)
 				}
@@ -681,7 +681,7 @@ export default {
   slug: "test-app",
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				if cfg.Edge != nil {
 					t.Fatalf("Edge = %v, want an omitted edge to name nothing", cfg.Edge)
 				}
@@ -698,7 +698,7 @@ export default {
   edge: { cloudflare: {} },
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				if cfg.Edge == nil || cfg.Edge.ID != "cloudflare" {
 					t.Fatalf("Edge = %v, want cloudflare", cfg.Edge)
 				}
@@ -712,7 +712,7 @@ export default {
   edge: "cloudflare",
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				if got := cfg.EdgeID(); got != "cloudflare" {
 					t.Fatalf("EdgeID() = %q, want cloudflare", got)
 				}
@@ -726,7 +726,7 @@ export default {
   dns: { route53: { zone: "Z123" } },
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				if cfg.DNS == nil || cfg.DNS.ID != "route53" || cfg.DNS.Zone != "Z123" {
 					t.Fatalf("DNS = %v, want route53 in zone Z123", cfg.DNS)
 				}
@@ -740,7 +740,7 @@ export default {
   allowDegraded: ["edge-middleware", "streaming"],
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				if !slices.Equal(cfg.AllowDegraded, []string{"edge-middleware", "streaming"}) {
 					t.Fatalf("AllowDegraded = %v, want [edge-middleware streaming]", cfg.AllowDegraded)
 				}
@@ -755,7 +755,7 @@ export default {
   dns: "cloudflare",
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				if cfg.DNS == nil || cfg.DNS.ID != "cloudflare" {
 					t.Fatalf("DNS = %v, want cloudflare", cfg.DNS)
 				}
@@ -770,7 +770,7 @@ export default {
   dns: { route53: {} },
 };
 `,
-			check: func(t *testing.T, root string, cfg *Config) {
+			check: func(t *testing.T, root string, cfg *Project) {
 				if cfg.DNS == nil || cfg.DNS.ID != "route53" {
 					t.Fatalf("DNS = %v, want route53", cfg.DNS)
 				}
@@ -1598,7 +1598,7 @@ func TestConfigRequireProvider(t *testing.T) {
 	t.Run("errors when the provider is absent", func(t *testing.T) {
 		t.Parallel()
 
-		cfg := &Config{}
+		cfg := &Project{}
 
 		_, err := cfg.RequireProvider()
 		if err == nil {
@@ -1615,7 +1615,7 @@ func TestConfigRequireProvider(t *testing.T) {
 	t.Run("returns the descriptor when the provider is present", func(t *testing.T) {
 		t.Parallel()
 
-		cfg := &Config{Provider: &ProviderDescriptor{ID: "aws", Options: []byte(`{}`)}}
+		cfg := &Project{Provider: &ProviderDescriptor{ID: "aws", Options: []byte(`{}`)}}
 
 		provider, err := cfg.RequireProvider()
 		if err != nil {
@@ -1847,7 +1847,7 @@ func TestTwoConfigsInOneDirDoNotShareABundle(t *testing.T) {
 
 	type result struct {
 		name string
-		cfg  *Config
+		cfg  *Project
 		err  error
 	}
 	results := make(chan result, len(slugs))
@@ -1874,11 +1874,11 @@ func TestEdgeID(t *testing.T) {
 
 	for _, tc := range []struct {
 		name   string
-		config Config
+		config Project
 		want   edge.Kind
 	}{
-		{name: "a config that names no edge leaves the choice to the provider", config: Config{}, want: ""},
-		{name: "a config that names one is fronted by that one", config: Config{Edge: &EdgeDescriptor{ID: "cloudflare"}}, want: edge.Kind("cloudflare")},
+		{name: "a config that names no edge leaves the choice to the provider", config: Project{}, want: ""},
+		{name: "a config that names one is fronted by that one", config: Project{Edge: &EdgeDescriptor{ID: "cloudflare"}}, want: edge.Kind("cloudflare")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

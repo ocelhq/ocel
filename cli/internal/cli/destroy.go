@@ -12,7 +12,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/consent"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -97,7 +97,7 @@ func init() {
 }
 
 func runDestroyProduction(ctx context.Context, deps cmddeps.Deps, cwd string, yes, dry bool, stdout io.Writer, stdin io.Reader) error {
-	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
+	cfg, err := project.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}
@@ -123,7 +123,7 @@ func runDestroyProduction(ctx context.Context, deps cmddeps.Deps, cwd string, ye
 }
 
 func runDestroyPreviewProject(ctx context.Context, deps cmddeps.Deps, cwd string, yes, dry bool, stdout io.Writer, stdin io.Reader) error {
-	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
+	cfg, err := project.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}
@@ -134,7 +134,7 @@ func runDestroyPreviewProject(ctx context.Context, deps cmddeps.Deps, cwd string
 	return destroyProject(ctx, deps, cfg, policy, environmentv1.Tier_TIER_PREVIEW, "")
 }
 
-func destroyProject(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, policy consent.Policy, tier environmentv1.Tier, bypassNotice string) (err error) {
+func destroyProject(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, policy consent.Policy, tier environmentv1.Tier, bypassNotice string) (err error) {
 	if _, err := cfg.RequireProvider(); err != nil {
 		return err
 	}

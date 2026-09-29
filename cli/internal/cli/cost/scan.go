@@ -20,7 +20,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/manifest"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/variables"
@@ -86,7 +86,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, opts Options, stdou
 	if err != nil {
 		return err
 	}
-	cfg, err := projectconfig.Resolve(ctx, cwd, deps.ConfigPath())
+	cfg, err := project.Resolve(ctx, cwd, deps.ConfigPath())
 	if err != nil {
 		return err
 	}
@@ -121,7 +121,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, opts Options, stdou
 	return render(stdout, cfg.Slug, set, estimates, profile, assumptions)
 }
 
-func price(ctx context.Context, deps cmddeps.Deps, prov *providerclient.Provider, cfg *projectconfig.Config, env *environmentv1.Environment, overrides map[string]*structpb.Struct, out io.Writer) (*costv1.ResourceSet, map[costv1.Profile]*costv1.Estimate, []string, error) {
+func price(ctx context.Context, deps cmddeps.Deps, prov *providerclient.Provider, cfg *project.Project, env *environmentv1.Environment, overrides map[string]*structpb.Struct, out io.Writer) (*costv1.ResourceSet, map[costv1.Profile]*costv1.Estimate, []string, error) {
 	compute, err := preflight.ResolveComputesFromProvider(ctx, prov, cfg)
 	if err != nil {
 		return nil, nil, nil, err
@@ -229,7 +229,7 @@ func (unread) Reveal(context.Context, []variables.Coordinate) (map[variables.Coo
 
 const unbuiltDigest = "0000000000000000000000000000000000000000000000000000000000000000"
 
-func scanManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, env *environmentv1.Environment, compute string, out io.Writer) (*contractv1.Manifest, []string, error) {
+func scanManifest(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, env *environmentv1.Environment, compute string, out io.Writer) (*contractv1.Manifest, []string, error) {
 	declarations := variables.NewDeclarations(unread{}, variablescope.Of(cfg, env.GetTier(), ""))
 	resources, err := deps.CollectDeclarations(ctx, cfg, declarations, out, out)
 	if err != nil {
@@ -240,7 +240,7 @@ func scanManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Con
 		return nil, nil, err
 	}
 	scanned, err := manifest.Assemble(manifest.Input{
-		Config:    cfg,
+		Project:   cfg,
 		Tier:      env.GetTier(),
 		Compute:   compute,
 		Resources: resources,
@@ -252,7 +252,7 @@ func scanManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Con
 	return scanned, assumptions, nil
 }
 
-func scannedOutput(deps cmddeps.Deps, cfg *projectconfig.Config) (build.Output, []string, error) {
+func scannedOutput(deps cmddeps.Deps, cfg *project.Project) (build.Output, []string, error) {
 	images := make(map[string]string, len(cfg.Apps))
 	for _, a := range cfg.Apps {
 		if a.RunsOn(provider.ComputeContainer) {
@@ -269,7 +269,7 @@ func scannedOutput(deps cmddeps.Deps, cfg *projectconfig.Config) (build.Output, 
 	return build.Output{Functions: functions, Images: images}, nil, nil
 }
 
-func unbuiltFunctions(cfg *projectconfig.Config) []build.Function {
+func unbuiltFunctions(cfg *project.Project) []build.Function {
 	if len(cfg.Apps) == 0 {
 		return []build.Function{{Route: cfg.Slug, App: cfg.Slug}}
 	}

@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
@@ -88,7 +88,7 @@ func readBy(apps []variables.App, folder string) string {
 	return ", read by " + strings.Join(names, ", ")
 }
 
-func refuseUnstatableBinding(source valueSource, apps []projectconfig.App, stated, configName string, scoped map[string][]string) error {
+func refuseUnstatableBinding(source valueSource, apps []project.App, stated, configName string, scoped map[string][]string) error {
 	var keys []string
 	losing := make([]bool, len(apps))
 	for key, folders := range scoped {

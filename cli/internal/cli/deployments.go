@@ -13,7 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -70,7 +70,7 @@ func init() {
 }
 
 func runPromotionsLs(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr io.Writer) error {
-	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
+	cfg, err := project.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}
@@ -83,7 +83,7 @@ func runPromotionsLs(ctx context.Context, deps cmddeps.Deps, cwd string, stdout,
 	return nil
 }
 
-func listPromotions(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config) (promotions []*contractv1.PromotionHistoryEntry, err error) {
+func listPromotions(ctx context.Context, deps cmddeps.Deps, cfg *project.Project) (promotions []*contractv1.PromotionHistoryEntry, err error) {
 	if _, err := cfg.RequireProvider(); err != nil {
 		return nil, err
 	}
@@ -119,7 +119,7 @@ func listPromotions(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.C
 }
 
 func runPromotionsPrune(ctx context.Context, deps cmddeps.Deps, cwd string, opts pruneOptions, stdout io.Writer, stdin io.Reader) (err error) {
-	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
+	cfg, err := project.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}

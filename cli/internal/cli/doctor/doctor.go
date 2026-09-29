@@ -19,7 +19,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
@@ -126,35 +126,35 @@ var tiers = []environmentv1.Tier{environmentv1.Tier_TIER_PRODUCTION, environment
 
 func diagnose(ctx context.Context, deps cmddeps.Deps, cwd string) report {
 	var found report
-	project := section{name: "Project"}
+	checked := section{name: "Project"}
 
-	cfg, err := projectconfig.Resolve(ctx, cwd, deps.ConfigPath())
+	cfg, err := project.Resolve(ctx, cwd, deps.ConfigPath())
 	if err != nil {
-		project.fail(configFailure(err))
-		found.add(project)
+		checked.fail(configFailure(err))
+		found.add(checked)
 		return found
 	}
 
 	if needed, applies := nodeCheck(ctx, cfg); applies {
-		project.checks = append(project.checks, needed)
+		checked.checks = append(checked.checks, needed)
 	}
-	project.identity = join(cfg.Slug, filepath.Base(cfg.Path))
-	project.pass(appsText(cfg))
+	checked.identity = join(cfg.Slug, filepath.Base(cfg.Path))
+	checked.pass(appsText(cfg))
 
 	descriptor, providerErr := cfg.RequireProvider()
 	if providerErr != nil {
-		project.fail(firstLine(providerErr.Error()), "")
+		checked.fail(firstLine(providerErr.Error()), "")
 	} else {
-		project.pass(providerText(descriptor))
+		checked.pass(providerText(descriptor))
 	}
-	project.pass(edgeText(cfg))
-	project.checks = append(project.checks, sdkChecks(cfg, version.Version)...)
+	checked.pass(edgeText(cfg))
+	checked.checks = append(checked.checks, sdkChecks(cfg, version.Version)...)
 
 	hosts := map[environmentv1.Tier][]string{}
 	for _, tier := range tiers {
 		hosts[tier] = preflight.Names(preflight.Hostnames(cfg, bootstrap.Name(tier)))
 	}
-	found.add(project)
+	found.add(checked)
 
 	if providerErr != nil {
 		found.add(skippedSection("Credentials"))
@@ -238,7 +238,7 @@ func skippedSection(name string) section {
 
 func configFailure(err error) (string, string) {
 	message := firstLine(err.Error())
-	var missing projectconfig.NoConfigError
+	var missing project.NoConfigError
 	if errors.As(err, &missing) {
 		return "no " + english.Or(missing.Names) + " found in this directory or any parent",
 			"run `ocel init` to set up this project"
@@ -259,7 +259,7 @@ func splitHint(message string) (string, string, bool) {
 	return message, "", false
 }
 
-func appsText(cfg *projectconfig.Config) string {
+func appsText(cfg *project.Project) string {
 	if len(cfg.Apps) == 0 {
 		return "config loads — no apps declared"
 	}
@@ -270,11 +270,11 @@ func appsText(cfg *projectconfig.Config) string {
 	return fmt.Sprintf("config loads — %s (%s)", plural(len(names), "app"), strings.Join(names, ", "))
 }
 
-func providerText(descriptor *projectconfig.ProviderDescriptor) string {
+func providerText(descriptor *project.ProviderDescriptor) string {
 	return "provider " + descriptor.ID + " " + version.Version
 }
 
-func edgeText(cfg *projectconfig.Config) string {
+func edgeText(cfg *project.Project) string {
 	if id := cfg.EdgeID(); id != "" {
 		return "edge " + string(id)
 	}
@@ -315,7 +315,7 @@ func (a *answers) addHostChecks(checks []*contractv1.HostCheck) {
 
 const upgradeProvider = "upgrade the provider pinned in this project"
 
-func hostCheckDomains(asking bool, cfg *projectconfig.Config) []string {
+func hostCheckDomains(asking bool, cfg *project.Project) []string {
 	if !asking {
 		return nil
 	}
@@ -330,7 +330,7 @@ func hostCheckDomains(asking bool, cfg *projectconfig.Config) []string {
 	return named
 }
 
-func gather(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config) *answers {
+func gather(ctx context.Context, deps cmddeps.Deps, cfg *project.Project) *answers {
 	got := &answers{tiers: map[environmentv1.Tier]*tierAnswer{}}
 	if err := checkSetup(ctx, deps, cfg, got); err != nil && got.problem == "" {
 		got.problem = strings.TrimSpace(err.Error())
@@ -338,7 +338,7 @@ func gather(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config) *
 	return got
 }
 
-func checkSetup(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, got *answers) error {
+func checkSetup(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, got *answers) error {
 	ctx, run, err := deps.Events.Begin(ctx, "ocel doctor", cfg.Dir)
 	if err != nil {
 		return err
@@ -355,7 +355,7 @@ func checkSetup(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Confi
 	return err
 }
 
-func askProvider(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, unit *run.Span, got *answers) error {
+func askProvider(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, unit *run.Span, got *answers) error {
 	prov, err := providerclient.Start(ctx, cfg, unit, deps.HostTrust, providerclient.PinToLock)
 	if err != nil {
 		return err
@@ -445,7 +445,7 @@ func (a *answers) keep(problems []*contractv1.CredentialProblem) {
 	}
 }
 
-func credentialSections(cfg *projectconfig.Config, got *answers) []section {
+func credentialSections(cfg *project.Project, got *answers) []section {
 	if got.problem != "" {
 		s := section{name: "Provider", identity: got.pkg}
 		if head, rest, multiline := strings.Cut(got.problem, "\n"); multiline {

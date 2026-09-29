@@ -12,7 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -21,7 +21,7 @@ import (
 )
 
 func declaring(deps *cmddeps.Deps, definitions ...*resourcesv1.VariableDefinition) {
-	deps.CollectDeclarations = func(ctx context.Context, _ *projectconfig.Config, declarations *variables.Declarations, _, _ io.Writer) ([]declaration.Resource, error) {
+	deps.CollectDeclarations = func(ctx context.Context, _ *project.Project, declarations *variables.Declarations, _, _ io.Writer) ([]declaration.Resource, error) {
 		if _, err := declarations.DeclareEnv(ctx, &resourcesv1.DeclareEnvRequest{Definitions: definitions}); err != nil {
 			return nil, err
 		}
@@ -171,7 +171,7 @@ export default {
 		root := setUpGenerateFixture(t, generateSoloConfig, "")
 
 		deps := newDeps()
-		deps.CollectDeclarations = func(context.Context, *projectconfig.Config, *variables.Declarations, io.Writer, io.Writer) ([]declaration.Resource, error) {
+		deps.CollectDeclarations = func(context.Context, *project.Project, *variables.Declarations, io.Writer, io.Writer) ([]declaration.Resource, error) {
 			return nil, errors.New("discovery blew up")
 		}
 

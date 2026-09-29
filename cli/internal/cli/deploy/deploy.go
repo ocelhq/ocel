@@ -10,7 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/deployrecord"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/valuestore"
 	"github.com/ocelhq/ocel/cli/internal/variables"
@@ -67,7 +67,7 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 }
 
 func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOptions, stdout, stderr io.Writer, stdin io.Reader) (err error) {
-	cfg, err := projectconfig.Resolve(ctx, cwd, deps.ConfigPath())
+	cfg, err := project.Resolve(ctx, cwd, deps.ConfigPath())
 	if err != nil {
 		return err
 	}
@@ -123,7 +123,7 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 			scope.EnvSource = synced
 			return variables.NewDeclarations(valuestore.Store{
 				Provider: prov,
-				Config:   cfg,
+				Project:  cfg,
 				Tier:     environmentv1.Tier_TIER_PRODUCTION,
 			}, scope)
 		},

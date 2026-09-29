@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/build"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
 
@@ -34,9 +34,9 @@ export default {
 };
 `)
 
-		var built *projectconfig.Config
+		var built *project.Project
 		deps := newDeps()
-		deps.BuildApps = func(_ context.Context, cfg *projectconfig.Config, _ map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
+		deps.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
 			built = cfg
 			return build.Output{Functions: []build.Function{{Route: "index", App: "api"}}}, nil
 		}
@@ -82,7 +82,7 @@ export default {
 
 		var archs map[string]string
 		deps := newDeps()
-		deps.BuildApps = func(_ context.Context, _ *projectconfig.Config, _ map[string]map[string]string, asked map[string]string, _ build.Log) (build.Output, error) {
+		deps.BuildApps = func(_ context.Context, _ *project.Project, _ map[string]map[string]string, asked map[string]string, _ build.Log) (build.Output, error) {
 			archs = asked
 			return build.Output{
 				Functions: []build.Function{{Route: "index", App: "api"}},
@@ -120,7 +120,7 @@ export default {
 
 		var env map[string]map[string]string
 		deps := newDeps()
-		deps.BuildApps = func(_ context.Context, _ *projectconfig.Config, handed map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
+		deps.BuildApps = func(_ context.Context, _ *project.Project, handed map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
 			env = handed
 			return build.Output{}, nil
 		}
@@ -143,7 +143,7 @@ export default { slug: "test-app" };
 `)
 
 		deps := newDeps()
-		deps.BuildApps = func(context.Context, *projectconfig.Config, map[string]map[string]string, map[string]string, build.Log) (build.Output, error) {
+		deps.BuildApps = func(context.Context, *project.Project, map[string]map[string]string, map[string]string, build.Log) (build.Output, error) {
 			return build.Output{}, errors.New("boom: app build failed")
 		}
 
