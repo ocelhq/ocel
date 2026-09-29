@@ -20,7 +20,7 @@ func routedByHand() Front { return Front{Manual: &ManualFront{Port: manual.Defau
 
 func coolifysTraefik() Front {
 	return Front{Traefik: &TraefikFront{
-		Preset: "coolify", Directory: "/data/coolify/proxy/dynamic", Resolver: "letsencrypt",
+		Preset: "coolify", Directory: "/data/coolify/proxy/dynamic", ContainerDirectory: "/traefik/dynamic", Resolver: "letsencrypt",
 		Entrypoints: Entrypoints{HTTP: "http", HTTPS: "https"}, Network: "coolify",
 	}}
 }
@@ -359,7 +359,7 @@ func TestAPresetAndTheSameProxySpelledOutAreOneProxy(t *testing.T) {
 	t.Parallel()
 
 	spelled := Front{Traefik: &TraefikFront{
-		Directory: "/data/coolify/proxy/dynamic", Resolver: "letsencrypt",
+		Directory: "/data/coolify/proxy/dynamic", ContainerDirectory: "/traefik/dynamic", Resolver: "letsencrypt",
 		Entrypoints: Entrypoints{HTTP: "http", HTTPS: "https"}, Network: "coolify",
 	}}
 	for name, tc := range map[string]struct{ recorded, ours Front }{

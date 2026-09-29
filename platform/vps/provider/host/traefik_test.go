@@ -40,7 +40,7 @@ func TestYourTraefikOpensAsTheTraefikProxyWithEverythingTheOptionFills(t *testin
 	if !ok {
 		t.Fatalf("Coolify's Traefik opens as %T, want the traefik proxy", openFront(coolifysTraefik(), frontBox{}))
 	}
-	want := traefik.Traefik{Box: frontBox{}, Directory: "/data/coolify/proxy/dynamic", Resolver: "letsencrypt", HTTP: "http", HTTPS: "https", Network: "coolify"}
+	want := traefik.Traefik{Box: frontBox{}, Directory: "/data/coolify/proxy/dynamic", ContainerDirectory: "/traefik/dynamic", Resolver: "letsencrypt", HTTP: "http", HTTPS: "https", Network: "coolify"}
 	if opened != want {
 		t.Errorf("Coolify's Traefik opens as %+v, want %+v", opened, want)
 	}

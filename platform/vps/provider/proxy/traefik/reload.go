@@ -27,7 +27,7 @@ func (t Traefik) reload(ctx context.Context, served proxy.Spec) error {
 	for paused := 0; len(waiting) > 0; paused++ {
 		var still []string
 		for _, hostname := range waiting {
-			routed, reason, err := t.probeRoute(ctx, hostname)
+			routed, reason, err := t.probeServed(ctx, spec, hostname)
 			if err != nil {
 				return err
 			}
@@ -58,13 +58,35 @@ func (t Traefik) reload(ctx context.Context, served proxy.Spec) error {
 func (t Traefik) changedHostnames(served, spec proxy.Spec) []string {
 	var changed []string
 	for _, hostname := range spec.Hostnames {
-		servedHTTPS, servedHTTP := t.routersFor(hostname, served.PreviewBase)
-		https, http := t.routersFor(hostname, spec.PreviewBase)
-		if !slices.Contains(served.Hostnames, hostname) || !reflect.DeepEqual(servedHTTPS, https) || !reflect.DeepEqual(servedHTTP, http) {
+		servedHTTPS, servedHTTP := t.routersFor(hostname, served)
+		https, http := t.routersFor(hostname, spec)
+		servedShield, _ := served.ShieldOf(hostname)
+		shield, _ := spec.ShieldOf(hostname)
+		if !slices.Contains(served.Hostnames, hostname) || !reflect.DeepEqual(servedHTTPS, https) || !reflect.DeepEqual(servedHTTP, http) ||
+			!reflect.DeepEqual(servedShield, shield) {
 			changed = append(changed, hostname)
 		}
 	}
 	return changed
+}
+
+func (t Traefik) probeServed(ctx context.Context, spec proxy.Spec, hostname string) (bool, string, error) {
+	if _, shielded := spec.ShieldOf(hostname); shielded {
+		return t.probeShield(ctx, hostname)
+	}
+	return t.probeRoute(ctx, hostname)
+}
+
+func (t Traefik) probeShield(ctx context.Context, hostname string) (bool, string, error) {
+	answered, failure, err := t.Box.ProbeAnyCertificate(ctx, hostname)
+	switch {
+	case err != nil:
+		return false, "", err
+	case answered != "":
+		return false, fmt.Sprintf("%s answers on this box's 443 to a client that presents no certificate, so the shield in %s is not in effect", hostname, FileName), nil
+	default:
+		return true, failure, nil
+	}
 }
 
 func (t Traefik) probeRoute(ctx context.Context, hostname string) (bool, string, error) {

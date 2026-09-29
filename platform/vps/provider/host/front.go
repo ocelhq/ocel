@@ -25,13 +25,14 @@ type ManualFront struct {
 }
 
 type TraefikFront struct {
-	Preset          string      `json:"preset,omitempty"`
-	Directory       string      `json:"directory"`
-	Resolver        string      `json:"resolver"`
-	PreviewResolver string      `json:"previewResolver,omitempty"`
-	Entrypoints     Entrypoints `json:"entrypoints"`
-	Network         string      `json:"network,omitempty"`
-	Port            int         `json:"port,omitempty"`
+	Preset             string      `json:"preset,omitempty"`
+	Directory          string      `json:"directory"`
+	ContainerDirectory string      `json:"containerDirectory,omitempty"`
+	Resolver           string      `json:"resolver"`
+	PreviewResolver    string      `json:"previewResolver,omitempty"`
+	Entrypoints        Entrypoints `json:"entrypoints"`
+	Network            string      `json:"network,omitempty"`
+	Port               int         `json:"port,omitempty"`
 }
 
 type Entrypoints struct {
