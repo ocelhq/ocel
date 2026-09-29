@@ -1,0 +1,36 @@
+{
+	email admin@p1305.test
+}
+
+shop.p1305.test, ocel-edge-probe.preview.p1305.test {
+	reverse_proxy ocel-switchboard:8443
+}
+
+:80, :443 {
+	respond 503
+}
+
+coolify.p1305.test {
+	handle /terminal/ws {
+		reverse_proxy coolify-realtime:6002
+	}
+	reverse_proxy coolify:8080
+}
+
+http://web.p1305.test {
+	encode zstd gzip
+	reverse_proxy 10.0.1.7:80
+}
+
+https://web.p1305.test {
+	encode zstd gzip
+	reverse_proxy 10.0.1.7:80
+}
+
+*.apps.p1305.test {
+	@api host api.apps.p1305.test
+	handle @api {
+		reverse_proxy 10.0.1.9:3000
+	}
+	respond 404
+}
