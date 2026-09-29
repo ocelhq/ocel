@@ -136,14 +136,14 @@ func RefuseHostTrust(trust HostTrust) error {
 	if trust.Terminal() {
 		return HostTrustRefusal{error: denied, Trust: trust}
 	}
-	question, err := recording(trust)
+	question, err := newRecordHostKeyQuestion(trust)
 	if err != nil {
 		return HostTrustRefusal{error: errors.Join(denied, err), Trust: trust}
 	}
 	return HostTrustRefusal{error: provider.Ask(trust.Message(), question), Trust: trust}
 }
 
-func recording(trust HostTrust) (provider.Question, error) {
+func newRecordHostKeyQuestion(trust HostTrust) (provider.Question, error) {
 	offered, err := trust.Got.Fingerprinted()
 	if err != nil {
 		return provider.Question{}, err

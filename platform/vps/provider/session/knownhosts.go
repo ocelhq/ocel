@@ -10,28 +10,34 @@ import (
 )
 
 func knownHostsStore(files []string) (string, error) {
+	store := ""
 	if len(files) > 0 && files[0] != "" {
-		return writable(files[0])
+		store = files[0]
+	} else {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		store = filepath.Join(home, ".ssh", "known_hosts")
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
+	if err := refuseIrregularStore(store); err != nil {
 		return "", err
-	}
-	return writable(filepath.Join(home, ".ssh", "known_hosts"))
-}
-
-func writable(store string) (string, error) {
-	info, err := os.Stat(store)
-	if errors.Is(err, os.ErrNotExist) {
-		return store, nil
-	}
-	if err != nil {
-		return "", err
-	}
-	if !info.Mode().IsRegular() {
-		return "", fmt.Errorf("%s is not a regular file, so a host key recorded there would be thrown away", store)
 	}
 	return store, nil
+}
+
+func refuseIrregularStore(store string) error {
+	info, err := os.Stat(store)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("%s is not a regular file, so a host key recorded there would be thrown away", store)
+	}
+	return nil
 }
 
 func record(store, line string) error {
