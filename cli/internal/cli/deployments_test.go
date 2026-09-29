@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 func TestRunDeploymentsLs(t *testing.T) {
@@ -217,5 +218,22 @@ func TestPruningReportsWhatItReclaimedThroughTheRunsEvents(t *testing.T) {
 	}
 	if result := evs[len(evs)-1].GetResult(); !result.GetSuccess() || result.GetHeadline() != "Pruned the production promotions of "+clitest.FixtureSlug+" down to the newest 10" {
 		t.Errorf("result = %v, want the run to end reporting the prune", result)
+	}
+}
+
+func TestTheDeploymentsListMarksAPromotionTakenBack(t *testing.T) {
+	var stdout bytes.Buffer
+	renderPromotions(&stdout, []*contractv1.PromotionHistoryEntry{
+		{Promotion: &contractv1.Promotion{PromotionId: "p2"}, Unpromoted: true},
+		{Promotion: &contractv1.Promotion{PromotionId: "p1"}, Active: true},
+	})
+
+	for _, line := range strings.Split(stdout.String(), "\n") {
+		if strings.HasPrefix(line, "p2") && !strings.HasSuffix(strings.TrimSpace(line), "unpromoted") {
+			t.Errorf("the row of p2 reads %q, want it marked unpromoted", line)
+		}
+	}
+	if !strings.Contains(stdout.String(), "unpromoted") {
+		t.Errorf("stdout = %q, want p2 marked unpromoted", stdout.String())
 	}
 }

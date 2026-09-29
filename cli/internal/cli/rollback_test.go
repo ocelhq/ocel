@@ -411,3 +411,23 @@ func TestARollbackGoesToThePromotionBeforeTheLiveOneAndRefusesWhenThereIsNoneToN
 		}
 	})
 }
+
+func TestARollbackPassesOverAPromotionTakenBackAndRefusesToNameOne(t *testing.T) {
+	history := []*contractv1.PromotionHistoryEntry{
+		{Promotion: &contractv1.Promotion{PromotionId: "p3"}, Active: true},
+		{Promotion: &contractv1.Promotion{PromotionId: "p2"}, Unpromoted: true},
+		{Promotion: &contractv1.Promotion{PromotionId: "p1"}},
+	}
+
+	target, err := rollbackTarget(history, "", "")
+	if err != nil {
+		t.Fatalf("rollbackTarget err = %v", err)
+	}
+	if target.GetPromotionId() != "p1" {
+		t.Errorf("target = %q, want p1: p2 was taken back and never served", target.GetPromotionId())
+	}
+
+	if _, err := rollbackTarget(history, "p2", ""); err == nil || !strings.Contains(err.Error(), "p2") || !strings.Contains(err.Error(), "never served") {
+		t.Errorf("rollbackTarget(--to p2) err = %v, want p2 refused as a promotion that never served", err)
+	}
+}

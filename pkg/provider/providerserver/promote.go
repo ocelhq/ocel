@@ -25,7 +25,22 @@ type inactivePromotion struct{ refusal.Refusal }
 
 func (i inactivePromotion) Unwrap() error { return i.Refusal }
 
-func promote(ctx context.Context, l projectLedger, pointer, replaces string, promoted router.Promotion, routers []appRouter, progress progress.Progress) (router.PruneResult, error) {
+type promoteRequest struct {
+	pointer     string
+	replaces    string
+	rollsBackTo string
+	promotion   router.Promotion
+}
+
+func (r promoteRequest) record(ctx context.Context, l projectLedger) (router.PruneResult, error) {
+	if r.rollsBackTo != "" {
+		return l.Rollback(ctx, r.rollsBackTo, r.promotion, r.pointer, r.replaces)
+	}
+	return l.Promote(ctx, r.promotion, r.pointer, r.replaces)
+}
+
+func promote(ctx context.Context, l projectLedger, req promoteRequest, routers []appRouter, progress progress.Progress) (router.PruneResult, error) {
+	pointer, promoted := req.pointer, req.promotion
 	flips := make([]router.Flip, len(routers))
 	for i, routed := range routers {
 		records, err := l.readRecords(ctx, promoted, routed.apps)
@@ -34,7 +49,7 @@ func promote(ctx context.Context, l projectLedger, pointer, replaces string, pro
 		}
 		flips[i] = router.Flip{Pointer: pointer, Promotion: promoted, Records: records, StillActive: newStillActive(l, pointer, promoted.PromotionID)}
 	}
-	pruned, err := l.Promote(ctx, promoted, pointer, replaces)
+	pruned, err := req.record(ctx, l)
 	if err != nil {
 		return router.PruneResult{}, err
 	}

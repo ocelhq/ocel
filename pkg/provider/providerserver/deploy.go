@@ -1280,7 +1280,7 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 			if err != nil {
 				return err
 			}
-			pruned, err := r.sharedStack.promote(ctx, r.spec.Pointer, replaces, promotion, progress)
+			pruned, err := r.sharedStack.promote(ctx, promoteRequest{pointer: r.spec.Pointer, replaces: replaces, promotion: promotion}, progress)
 			if err != nil {
 				return err
 			}

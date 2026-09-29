@@ -10,7 +10,8 @@ type Promotion struct {
 
 type HistoryEntry struct {
 	Promotion
-	Active bool `json:"active"`
+	Active     bool `json:"active"`
+	Unpromoted bool `json:"unpromoted"`
 }
 
 type PruneResult struct {
