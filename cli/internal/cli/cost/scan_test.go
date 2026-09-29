@@ -27,7 +27,8 @@ const apiFunction = "environment:prod/app:api/fake_function:fn--api--api"
 
 func scanFixture(t *testing.T) (string, *fake.Provider, cmddeps.Deps) {
 	t.Helper()
-	root, p := clitest.SetUpProject(t)
+	project := clitest.SetUpProject(t)
+	root, p := project.Root, project.Provider
 	clitest.WriteUsageMonorepo(t, root)
 	deps := clitest.NewDeps()
 	clitest.StubBuild(&deps, []manifestbuilder.Function{

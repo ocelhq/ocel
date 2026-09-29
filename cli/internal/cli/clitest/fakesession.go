@@ -57,19 +57,29 @@ func RunFakeSession() int {
 	return 0
 }
 
-func SetUpProject(t *testing.T) (root string, p *fake.Provider) {
-	t.Helper()
-
-	root = writeProject(t)
-	p = fake.NewForProject(fake.Options{}, root)
-	if err := p.FakeBootstrap().Apply(context.Background(), provider.BootstrapRequest{Tier: environment.TierProduction}, nil); err != nil {
-		t.Fatalf("bootstrap the fake provider: %v", err)
-	}
-	ServeFake(t, p)
-	return root, p
+type FakeProject struct {
+	Root     string
+	Provider *fake.Provider
+	Requests *ProviderRequests
 }
 
-func ServeFake(t *testing.T, p *fake.Provider) {
+func SetUpProject(t *testing.T) FakeProject {
+	t.Helper()
+
+	root := writeProject(t)
+	p := fake.NewForProject(fake.Options{}, root)
+	Bootstrap(t, p, environment.TierProduction)
+	return FakeProject{Root: root, Provider: p, Requests: ServeFake(t, p)}
+}
+
+func Bootstrap(t *testing.T, p *fake.Provider, tier environment.Tier, features ...string) {
+	t.Helper()
+	if err := p.FakeBootstrap().Apply(context.Background(), provider.BootstrapRequest{Tier: tier, Features: features}, nil); err != nil {
+		t.Fatalf("bootstrap the fake provider's %s tier: %v", tier, err)
+	}
+}
+
+func ServeFake(t *testing.T, p *fake.Provider) *ProviderRequests {
 	t.Helper()
 
 	dir, err := os.MkdirTemp("", "ocel-fake-")
@@ -83,7 +93,7 @@ func ServeFake(t *testing.T, p *fake.Provider) {
 	if err != nil {
 		t.Fatalf("listen for fake provider sessions: %v", err)
 	}
-	sessions := &fakeSessions{dir: dir, provider: p}
+	sessions := &fakeSessions{dir: dir, provider: p, requests: &ProviderRequests{}}
 	server := &http.Server{Handler: http.HandlerFunc(sessions.open)}
 	go server.Serve(control)
 	t.Cleanup(func() {
@@ -97,11 +107,13 @@ func ServeFake(t *testing.T, p *fake.Provider) {
 	}
 	InstallProvider(t, string(fake.Vendor), func(dest string) error { return os.Symlink(testBinary, dest) })
 	t.Setenv(fakeSessionsEnvVar, controlPath)
+	return sessions.requests
 }
 
 type fakeSessions struct {
 	dir      string
 	provider *fake.Provider
+	requests *ProviderRequests
 
 	mu      sync.Mutex
 	servers []*http.Server
@@ -142,12 +154,12 @@ func (s *fakeSessions) serve(clientPEM string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	server := &http.Server{Handler: providerserver.ConformanceMux(providerserver.Config{
+	server := &http.Server{Handler: s.requests.record(providerserver.ConformanceMux(providerserver.Config{
 		Version: version.Version,
 		New: func(context.Context, provider.Settings) (provider.Provider, error) {
 			return s.provider, nil
 		},
-	})}
+	}))}
 	s.servers = append(s.servers, server)
 	go func() {
 		if err := server.Serve(tls.NewListener(ln, config)); err != nil && !errors.Is(err, http.ErrServerClosed) {
