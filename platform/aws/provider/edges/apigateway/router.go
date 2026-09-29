@@ -59,9 +59,9 @@ func (r routerStack) Claim(context.Context, router.Claim) (edge.Origin, error) {
 
 func (r routerStack) Disclaim(context.Context, string) error { return nil }
 
-func (r routerStack) Flip(ctx context.Context, flip router.Flip, _ progress.Log) error {
-	s, pointer := r.s, flip.Pointer
-	patch, err := stagePatch(flip.Promotion.PromotionID, flip.Records)
+func (r routerStack) MovePointer(ctx context.Context, move router.PointerMove, _ progress.Log) error {
+	s, pointer := r.s, move.Pointer
+	patch, err := stagePatch(move.Promotion.PromotionID, move.Records)
 	if err != nil {
 		return router.Unserved{Err: err}
 	}
@@ -70,8 +70,8 @@ func (r routerStack) Flip(ctx context.Context, flip router.Flip, _ progress.Log)
 		return router.Unserved{Err: err}
 	}
 	stageWritten := false
-	err = s.newStageLease(c, pointer, flip.Promotion.PromotionID).hold(ctx, func(held *heldLease) error {
-		if err := flip.RefuseInactive(ctx); err != nil {
+	err = s.newStageLease(c, pointer, move.Promotion.PromotionID).hold(ctx, func(held *heldLease) error {
+		if err := move.RefuseInactive(ctx); err != nil {
 			return err
 		}
 		id, err := s.ensureAPI(ctx, c, pointer)
@@ -83,7 +83,7 @@ func (r routerStack) Flip(ctx context.Context, flip router.Flip, _ progress.Log)
 			return err
 		}
 		defer stop()
-		if err := moveStage(bounded, c, id, flip.Promotion.PromotionID, patch); err != nil {
+		if err := moveStage(bounded, c, id, move.Promotion.PromotionID, patch); err != nil {
 			return err
 		}
 		stageWritten = true

@@ -109,12 +109,12 @@ func promotesRecord(t *testing.T, p *vps.Provider, stack edge.EdgeStack, pointer
 	if _, err := releases.Promote(ctx, promotion, pointer, replaces); err != nil {
 		t.Fatalf("Promote(%s): %v", promotion.PromotionID, err)
 	}
-	if err := routed(t, p, stack).Flip(ctx, router.Flip{
+	if err := routed(t, p, stack).MovePointer(ctx, router.PointerMove{
 		Pointer:   pointer,
 		Promotion: promotion,
 		Records:   map[string]router.DeploymentRecord{record.App: record},
 	}, progress.Discard()); err != nil {
-		t.Fatalf("Flip(%s): %v", promotion.PromotionID, err)
+		t.Fatalf("MovePointer(%s): %v", promotion.PromotionID, err)
 	}
 }
 
@@ -136,7 +136,7 @@ func TestLiveARetiredContainerIsStoppedRatherThanRemovedAndARollbackRunsItAgain(
 		t.Fatalf("the proxy served %q after the second promotion, want the release it was pointed at", served)
 	}
 	if state := vm.state(t, one.physical); state != "exited" {
-		t.Fatalf("the retired container reads as %q, want it stopped and still present: this release loop stops what it retires and never removes it, so the release it rolled off can still be read for logs and an exit code after the flip", state)
+		t.Fatalf("the retired container reads as %q, want it stopped and still present: this release loop stops what it retires and never removes it, so the release it rolled off can still be read for logs and an exit code after the cutover", state)
 	}
 
 	promotes(t, p, f.stack, "p-rollback", "one", one, 3)
@@ -265,7 +265,7 @@ func TestLiveARollbackOntoAnImageTheBoxHasSweptIsRefusedAndLeavesTheSiteServing(
 	vm.ssh(t, "sudo docker rm --force "+quote(one.physical)+" >/dev/null 2>&1 || true")
 	vm.ssh(t, "sudo docker rmi "+quote(fixtureAt("one")))
 
-	err := f.routes.Flip(context.Background(), router.Flip{
+	err := f.routes.MovePointer(context.Background(), router.PointerMove{
 		Promotion: router.Promotion{PromotionID: "p-rollback", Ts: 3, Builds: map[string]string{liveApp: "one"}},
 		Records:   map[string]router.DeploymentRecord{liveApp: liveRecord("one", one)},
 	}, progress.Discard())
@@ -276,6 +276,6 @@ func TestLiveARollbackOntoAnImageTheBoxHasSweptIsRefusedAndLeavesTheSiteServing(
 		t.Errorf("the refusal reads %q and never says what to do instead", err)
 	}
 	if served := f.serves(t, vm, "/"); served != "two" {
-		t.Errorf("the proxy served %q after a refused rollback, want the release that was serving before it: the ensure runs before the flip, so a rollback that cannot serve moves nothing", served)
+		t.Errorf("the proxy served %q after a refused rollback, want the release that was serving before it: the ensure runs before the cutover, so a rollback that cannot serve moves nothing", served)
 	}
 }

@@ -119,12 +119,12 @@ func runRollback(ctx context.Context, invocation commands.Invocation, cwd string
 		if target.GetTag() != "" {
 			tagSuffix = fmt.Sprintf(", tag %s", target.GetTag())
 		}
-		flipSuffix := ""
+		noteSuffix := ""
 		if note := terminal.PropagationNote(promoted.GetPropagation()); note != "" {
-			flipSuffix = "; " + note
+			noteSuffix = "; " + note
 		}
 		run.Succeed(fmt.Sprintf("Rolled back to promotion %s (created %s%s) as promotion %s%s",
-			target.GetPromotionId(), terminal.EpochDate(target.GetTs()), tagSuffix, promoted.GetPromotionId(), flipSuffix))
+			target.GetPromotionId(), terminal.EpochDate(target.GetTs()), tagSuffix, promoted.GetPromotionId(), noteSuffix))
 		return nil
 	})
 }

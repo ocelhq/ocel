@@ -68,11 +68,11 @@ func (r routerStack) Disclaim(ctx context.Context, hostname string) error {
 	return nil
 }
 
-func (r routerStack) Flip(ctx context.Context, flip router.Flip, progress progress.Log) error {
+func (r routerStack) MovePointer(ctx context.Context, move router.PointerMove, progress progress.Log) error {
 	s := r.s
-	ready := make([]promotable, 0, len(flip.Records))
-	for _, app := range slices.Sorted(maps.Keys(flip.Records)) {
-		release, serves, err := s.readyRelease(ctx, flip.Pointer, flip.Promotion.PromotionID, flip.Records[app])
+	ready := make([]promotable, 0, len(move.Records))
+	for _, app := range slices.Sorted(maps.Keys(move.Records)) {
+		release, serves, err := s.readyRelease(ctx, move.Pointer, move.Promotion.PromotionID, move.Records[app])
 		if err != nil {
 			return router.Unserved{Err: err}
 		}
@@ -80,7 +80,7 @@ func (r routerStack) Flip(ctx context.Context, flip router.Flip, progress progre
 			ready = append(ready, release)
 		}
 	}
-	return s.serve(ctx, flip, ready, progress)
+	return s.serve(ctx, move, ready, progress)
 }
 
 func (r routerStack) RemovePointer(ctx context.Context, pointer string, progress progress.Log) error {

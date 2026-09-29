@@ -98,7 +98,7 @@ func promotePreview(t *testing.T, stack edge.EdgeStack, pointer string) {
 	t.Helper()
 	ctx := context.Background()
 	staged(t, stack, fakeEntryURL, fakeAssetPrefix)
-	if err := openRouter(stack).Flip(ctx, router.Flip{Pointer: pointer, Promotion: router.Promotion{
+	if err := openRouter(stack).MovePointer(ctx, router.PointerMove{Pointer: pointer, Promotion: router.Promotion{
 		PromotionID: "preview-" + pointer,
 		Ts:          1,
 		Builds:      map[string]string{"web": "d1.f1"},
@@ -453,7 +453,7 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 		recordFront(t, w, environment.TierPreview)
 		w.front.calls = nil
 
-		if err := openRouter(stack).Flip(context.Background(), router.Flip{Pointer: previewPointer, Promotion: router.Promotion{
+		if err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Pointer: previewPointer, Promotion: router.Promotion{
 			PromotionID: "preview-" + previewPointer,
 			Ts:          1,
 			Builds:      map[string]string{"web": "d1.f1"},
@@ -502,20 +502,20 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 		}
 	})
 
-	t.Run("a store that refuses the write leaves the flip unserved", func(t *testing.T) {
+	t.Run("a store that refuses the write leaves the pointer move unserved", func(t *testing.T) {
 		w := newWorld()
 		_, stack := previewing(t, w)
 		w.store.updateErr = errors.New("the store is closed")
 
 		record := staged(t, stack, fakeEntryURL, fakeAssetPrefix)
-		err := openRouter(stack).Stack.Flip(context.Background(), router.Flip{
+		err := openRouter(stack).Stack.MovePointer(context.Background(), router.PointerMove{
 			Pointer:   previewPointer,
 			Promotion: router.Promotion{PromotionID: "refused", Ts: 1, Builds: map[string]string{"web": "d1.f1"}},
 			Records:   map[string]router.DeploymentRecord{record.App: record},
 		}, progress.Discard())
 		var unserved router.Unserved
 		if !errors.As(err, &unserved) {
-			t.Errorf("Flip = %v, want router.Unserved: the hostname was never published, so the ledger must take the promotion back", err)
+			t.Errorf("MovePointer = %v, want router.Unserved: the hostname was never published, so the ledger must take the promotion back", err)
 		}
 	})
 
@@ -594,7 +594,7 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 		staged(t, stack, fakeEntryURL, fakeAssetPrefix)
 		w.dynamo.putErr = errors.New("the table is closed")
 
-		if err := openRouter(stack).Flip(context.Background(), router.Flip{Pointer: previewPointer, Promotion: router.Promotion{
+		if err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Pointer: previewPointer, Promotion: router.Promotion{
 			PromotionID: "orphan",
 			Ts:          1,
 			Builds:      map[string]string{"web": "d1.f1"},

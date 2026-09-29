@@ -314,11 +314,11 @@ func (p liveProxy) runsApp(t *testing.T, upstream, body string) {
 func TestATableAndAConfigMovedIntoPlaceAreWhatTheRunningBoxServes(t *testing.T) {
 	proxy := aLiveProxy(t)
 
-	flipped := routed()
-	proxy.runsApp(t, flipped.Routes[0].Upstream, "the app answered")
-	flipped.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
+	cutOver := routed()
+	proxy.runsApp(t, cutOver.Routes[0].Upstream, "the app answered")
+	cutOver.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 	const moved = `"grace_period":"29s"`
-	proxy.stages(t, routingTableItem().Content, flipped, bytes.Replace(mustRender(t, flipped), []byte(`"grace_period":"30s"`), []byte(moved), 1))
+	proxy.stages(t, routingTableItem().Content, cutOver, bytes.Replace(mustRender(t, cutOver), []byte(`"grace_period":"30s"`), []byte(moved), 1))
 	proxy.drives(t, "load", proxy.table)
 	proxy.reloads(t)
 
@@ -353,7 +353,7 @@ func TestATableAndAConfigMovedIntoPlaceAreWhatTheRunningBoxServes(t *testing.T) 
 	}
 	if said.StatusCode != http.StatusOK || string(read) != "the app answered" {
 		t.Errorf("the hostname %q claims was answered %d %q, want the body of the app running on %s: the switchboard is handed the directory the table is renamed into, and one handed the file keeps routing the seed",
-			surface, said.StatusCode, read, flipped.Routes[0].Upstream)
+			surface, said.StatusCode, read, cutOver.Routes[0].Upstream)
 	}
 	if said.Header.Get(router.HeaderRouter) != string(switchboard.RouterKind) {
 		t.Errorf("the surface's own route answered %s: %q, want %q", router.HeaderRouter, said.Header.Get(router.HeaderRouter), switchboard.RouterKind)
@@ -450,7 +450,7 @@ func (p liveProxy) moves(t *testing.T, current []byte, state RoutingTable) []byt
 	t.Helper()
 
 	written := p.writes(t, current, state)
-	p.drives(t, "flip", p.table)
+	p.drives(t, "cutover", p.table)
 	p.reloads(t)
 	return written
 }
@@ -471,7 +471,7 @@ func (p liveProxy) runsSlowApp(t *testing.T, upstream string, slow time.Duration
 	t.Cleanup(func() { exec.Command(dockerEngine, "rm", "--force", name).Run() })
 }
 
-func TestARealProxyDropsNoRequestWhileAFlipMovesAnExistingRouteBetweenUpstreams(t *testing.T) {
+func TestARealProxyDropsNoRequestWhileACutoverMovesAnExistingRouteBetweenUpstreams(t *testing.T) {
 	proxy := aLiveProxy(t)
 
 	one, two := "shop-web-1111:"+containerimage.PortText, "shop-web-2222:"+containerimage.PortText
@@ -486,21 +486,21 @@ func TestARealProxyDropsNoRequestWhileAFlipMovesAnExistingRouteBetweenUpstreams(
 	}
 	table := proxy.moves(t, routingTableItem().Content, serving(one))
 
-	flips := 0
+	cutovers := 0
 	dropped, bodies := underLoad(func() {
 		for _, upstream := range []string{two, one, two, one, two, one, two, one, two, one} {
 			table = proxy.moves(t, table, serving(upstream))
-			flips++
+			cutovers++
 			time.Sleep(200 * time.Millisecond)
 		}
 	})
 
 	if len(dropped) > 0 {
-		t.Errorf("%d of the requests made while %d flips moved %s between two running upstreams went unanswered, and a release is meant to drop nothing while one release takes over from the other: %v",
-			len(dropped), flips, claimed, dropped[:min(len(dropped), 5)])
+		t.Errorf("%d of the requests made while %d cutovers moved %s between two running upstreams went unanswered, and a release is meant to drop nothing while one release takes over from the other: %v",
+			len(dropped), cutovers, claimed, dropped[:min(len(dropped), 5)])
 	}
 	if bodies["one"] == 0 || bodies["two"] == 0 {
-		t.Errorf("the requests made across the flips were answered %v, want both upstreams: a flip that never moved the route drops nothing and proves nothing", bodies)
+		t.Errorf("the requests made across the cutovers were answered %v, want both upstreams: a cutover that never moved the route drops nothing and proves nothing", bodies)
 	}
 }
 
@@ -612,7 +612,7 @@ func TestARealBoxServesTheNewReleaseTheMomentTheRetiredOneIsRemoved(t *testing.T
 	table := proxy.moves(t, routingTableItem().Content, serving(retired))
 	proxy.writes(t, table, serving(next))
 	proxy.drives(t, "gate", "--deploy-timeout", "10", next+"/up")
-	proxy.drives(t, "flip", "--drain-timeout", "30", "--retire", retired, proxy.table)
+	proxy.drives(t, "cutover", "--drain-timeout", "30", "--retire", retired, proxy.table)
 	name, _, _ := strings.Cut(retired, ":")
 	if out, err := exec.Command(dockerEngine, "rm", "--force", name).CombinedOutput(); err != nil {
 		t.Fatalf("stop the retired release: %v\n%s", err, out)
@@ -658,7 +658,7 @@ func askedFor(hostname string, timeout time.Duration) (string, error) {
 	return string(body), err
 }
 
-func TestARealProxyCallsAnUpstreamIdleOnlyOnceTheFlipRetiringItHasDrainedIt(t *testing.T) {
+func TestARealProxyCallsAnUpstreamIdleOnlyOnceTheCutoverRetiringItHasDrainedIt(t *testing.T) {
 	proxy := aLiveProxy(t)
 
 	retired, next := "shop-web-1111:"+containerimage.PortText, "shop-web-2222:"+containerimage.PortText
@@ -683,29 +683,29 @@ func TestARealProxyCallsAnUpstreamIdleOnlyOnceTheFlipRetiringItHasDrainedIt(t *t
 	}()
 	time.Sleep(500 * time.Millisecond)
 	proxy.writes(t, table, serving(next))
-	flipped := make(chan string, 1)
+	cutOver := make(chan string, 1)
 	go func() {
 		said, err := exec.Command(dockerEngine, "exec", proxy.board, SwitchboardMounted,
-			"flip", "--drain-timeout", "30", "--retire", retired, proxy.table).CombinedOutput()
-		flipped <- fmt.Sprintf("%v %s", err, said)
+			"cutover", "--drain-timeout", "30", "--retire", retired, proxy.table).CombinedOutput()
+		cutOver <- fmt.Sprintf("%v %s", err, said)
 	}()
 	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(100 * time.Millisecond) {
 		if body, err := askedFor(claimed, 2*time.Second); err == nil && body == "two" {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("%s never answered from %s after the flip: %s", claimed, next, <-flipped)
+			t.Fatalf("%s never answered from %s after the cutover: %s", claimed, next, <-cutOver)
 		}
 	}
 
 	if idle := strings.TrimSpace(proxy.drives(t, "idle", retired, next)); idle != "" {
-		t.Errorf("idle named %q while the flip that retired %s was still draining a request from it: a failed release that removes what idle names cuts that request", idle, retired)
+		t.Errorf("idle named %q while the cutover that retired %s was still draining a request from it: a failed release that removes what idle names cuts that request", idle, retired)
 	}
 	if err := <-inFlight; err != nil {
 		t.Errorf("the request in flight when the route moved was answered %v", err)
 	}
-	t.Logf("the flip said %s", <-flipped)
+	t.Logf("the cutover said %s", <-cutOver)
 	if idle := strings.TrimSpace(proxy.drives(t, "idle", retired, next)); idle != retired {
-		t.Errorf("idle named %q once the flip retiring %s had drained it and returned, want %s alone", idle, retired, retired)
+		t.Errorf("idle named %q once the cutover retiring %s had drained it and returned, want %s alone", idle, retired, retired)
 	}
 }

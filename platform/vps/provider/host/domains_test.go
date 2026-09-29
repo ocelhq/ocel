@@ -688,16 +688,16 @@ func TestAWildcardIsRefusedAsAnOrdinaryClaim(t *testing.T) {
 	}
 }
 
-func flippingBox(t *testing.T, config *string, flipped func(at int) session.Result) *claimBench {
+func cuttingOverBox(t *testing.T, config *string, cutOver func(at int) session.Result) *claimBench {
 	t.Helper()
 
 	box := claimingBox(t, routed())
 	proxied := servesPair(box.bench, &box.recorded, config)
-	flips := 0
+	cutovers := 0
 	box.answer = func(command string) (session.Result, bool) {
 		if reloadsFront(command) {
-			flips++
-			return flipped(flips), true
+			cutovers++
+			return cutOver(cutovers), true
 		}
 		return proxied(command)
 	}
@@ -709,7 +709,7 @@ func TestAReloadThatFailsPutsBackTheExactBytesOfBothFilesAndReloadsThem(t *testi
 
 	older := olderRendering(t, routed())
 	config := older
-	box := flippingBox(t, &config, func(at int) session.Result {
+	box := cuttingOverBox(t, &config, func(at int) session.Result {
 		if at == 1 {
 			return session.Result{Code: 1, Stderr: "the connection dropped before the reload answered"}
 		}
@@ -740,7 +740,7 @@ func TestAReloadThatFailsTwiceSaysTheProxyMayServeWhatTheFilesNoLongerRecord(t *
 	t.Parallel()
 
 	config := olderRendering(t, routed())
-	box := flippingBox(t, &config, func(int) session.Result {
+	box := cuttingOverBox(t, &config, func(int) session.Result {
 		return session.Result{Code: 1, Stderr: "the connection dropped before the reload answered"}
 	})
 	err := box.host().rerender(context.Background())

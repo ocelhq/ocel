@@ -29,7 +29,7 @@ func cloudflareRouterFixture(t *testing.T) routerconformance.Fixture {
 	var failing atomic.Pointer[error]
 	handler := store.Config.Handler
 	store.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, "/flip") {
+		if strings.HasSuffix(r.URL.Path, "/move-pointer") {
 			if failure := failing.Swap(nil); failure != nil {
 				http.Error(w, (*failure).Error(), http.StatusUnprocessableEntity)
 				return
@@ -51,7 +51,7 @@ func cloudflareRouterFixture(t *testing.T) routerconformance.Fixture {
 		Serving: func(pointer string) string {
 			return served.serving(pointer, routerconformance.App)
 		},
-		FailNextFlip: func(err error) { failing.Store(&err) },
+		FailNextPointerMove: func(err error) { failing.Store(&err) },
 	}
 }
 

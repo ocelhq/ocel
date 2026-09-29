@@ -26,11 +26,11 @@ const App = "web"
 const raceChecks = 16
 
 type Fixture struct {
-	Router       router.Router
-	Spec         router.StackSpec
-	Prior        router.StackState
-	Serving      func(pointer string) string
-	FailNextFlip func(err error)
+	Router              router.Router
+	Spec                router.StackSpec
+	Prior               router.StackState
+	Serving             func(pointer string) string
+	FailNextPointerMove func(err error)
 }
 
 type Suite struct {
@@ -42,7 +42,7 @@ type Suite struct {
 	Record      func(app, build string) router.DeploymentRecord
 }
 
-var errDisplaced = errors.New("conformance: another promotion displaced this one while it flipped")
+var errDisplaced = errors.New("conformance: another promotion displaced this one while it moved")
 
 var errDataPlane = errors.New("conformance: the data plane refused the write")
 
@@ -68,7 +68,7 @@ func Run(t *testing.T, suite Suite) {
 			t.Error("Facts().Propagation publishes a propagation it declares instant; Published is read only when Typical > 0")
 		}
 		if facts.CachesRecords && bound.Typical == 0 {
-			t.Error("Facts().Propagation.Typical = 0 on a router whose Facts().CachesRecords is true; a router that serves a promotion from a cached record keeps serving the old one until the cache lapses, and a caller waiting on the flip needs that propagation")
+			t.Error("Facts().Propagation.Typical = 0 on a router whose Facts().CachesRecords is true; a router that serves a promotion from a cached record keeps serving the old one until the cache lapses, and a caller waiting on the pointer move needs that propagation")
 		}
 	})
 
@@ -79,37 +79,37 @@ func Run(t *testing.T, suite Suite) {
 		}
 	})
 
-	t.Run("a flip serves the release it names on its pointer", func(t *testing.T) {
+	t.Run("a pointer move serves the release it names on its pointer", func(t *testing.T) {
 		fixture := suite.New(t)
 		stack := reconciled(t, fixture)
-		flips(t, stack, pointer, "conformance-b1", record(App, "b1"))
+		movePointer(t, stack, pointer, "conformance-b1", record(App, "b1"))
 		if served := fixture.Serving(pointer); served != "b1" {
-			t.Fatalf("%s serves %q after a flip onto b1, want b1", pointer, served)
+			t.Fatalf("%s serves %q after a pointer move onto b1, want b1", pointer, served)
 		}
-		flips(t, stack, pointer, "conformance-b2", record(App, "b2"))
+		movePointer(t, stack, pointer, "conformance-b2", record(App, "b2"))
 		if served := fixture.Serving(pointer); served != "b2" {
-			t.Errorf("%s serves %q after a flip onto b2, want b2", pointer, served)
+			t.Errorf("%s serves %q after a pointer move onto b2, want b2", pointer, served)
 		}
 	})
 
-	t.Run("a flip whose promotion is no longer active moves nothing and is unserved", func(t *testing.T) {
+	t.Run("a pointer move whose promotion is no longer active moves nothing and is unserved", func(t *testing.T) {
 		fixture := suite.New(t)
 		stack := reconciled(t, fixture)
-		flips(t, stack, pointer, "conformance-b1", record(App, "b1"))
+		movePointer(t, stack, pointer, "conformance-b1", record(App, "b1"))
 
-		displaced := newFlip("conformance-b2", record(App, "b2"))
+		displaced := newPointerMove("conformance-b2", record(App, "b2"))
 		displaced.Pointer = pointer
 		displaced.StillActive = func(context.Context) error { return errDisplaced }
-		err := stack.Flip(context.Background(), displaced, progress.Discard())
+		err := stack.MovePointer(context.Background(), displaced, progress.Discard())
 		if !errors.Is(err, errDisplaced) {
-			t.Fatalf("Flip with a StillActive that refuses = %v, want that refusal", err)
+			t.Fatalf("MovePointer with a StillActive that refuses = %v, want that refusal", err)
 		}
 		var unserved router.Unserved
 		if !errors.As(err, &unserved) {
-			t.Errorf("Flip with a StillActive that refuses = %v, want it reported as router.Unserved: nothing moved, so the caller may unwind", err)
+			t.Errorf("MovePointer with a StillActive that refuses = %v, want it reported as router.Unserved: nothing moved, so the caller may unwind", err)
 		}
 		if served := fixture.Serving(pointer); served != "b1" {
-			t.Errorf("%s serves %q after a flip StillActive refused, want the b1 it served before", pointer, served)
+			t.Errorf("%s serves %q after a pointer move StillActive refused, want the b1 it served before", pointer, served)
 		}
 	})
 
@@ -123,34 +123,34 @@ func Run(t *testing.T, suite Suite) {
 				return
 			}
 		}
-		t.Fatalf("Flip asked StillActive more than %d times, and the suite races a promote after each one", raceChecks)
+		t.Fatalf("MovePointer asked StillActive more than %d times, and the suite races a promote after each one", raceChecks)
 	})
 
-	t.Run("a flip the data plane refuses is unserved and leaves the release it served", func(t *testing.T) {
+	t.Run("a pointer move the data plane refuses is unserved and leaves the release it served", func(t *testing.T) {
 		fixture := suite.New(t)
-		if fixture.FailNextFlip == nil {
-			t.Fatal("the fixture cannot make the data plane refuse a flip, and every router must say when a flip did not move it")
+		if fixture.FailNextPointerMove == nil {
+			t.Fatal("the fixture cannot make the data plane refuse a pointer move, and every router must say when a pointer move did not move the pointer")
 		}
 		stack := reconciled(t, fixture)
-		flips(t, stack, pointer, "conformance-b1", record(App, "b1"))
+		movePointer(t, stack, pointer, "conformance-b1", record(App, "b1"))
 
-		refused := newFlip("conformance-b2", record(App, "b2"))
+		refused := newPointerMove("conformance-b2", record(App, "b2"))
 		refused.Pointer = pointer
-		fixture.FailNextFlip(errDataPlane)
-		err := stack.Flip(context.Background(), refused, progress.Discard())
+		fixture.FailNextPointerMove(errDataPlane)
+		err := stack.MovePointer(context.Background(), refused, progress.Discard())
 		var unserved router.Unserved
 		if !errors.As(err, &unserved) {
-			t.Fatalf("Flip the data plane refused = %v, want router.Unserved", err)
+			t.Fatalf("MovePointer the data plane refused = %v, want router.Unserved", err)
 		}
 		if served := fixture.Serving(pointer); served != "b1" {
-			t.Errorf("%s serves %q after a flip the data plane refused, want the b1 it served before", pointer, served)
+			t.Errorf("%s serves %q after a pointer move the data plane refused, want the b1 it served before", pointer, served)
 		}
 	})
 
 	t.Run("removing a pointer stops serving it on a router whose facts say so, and leaves it serving on one torn down with its compute", func(t *testing.T) {
 		fixture := suite.New(t)
 		stack := reconciled(t, fixture)
-		flips(t, stack, pointer, "conformance-b1", record(App, "b1"))
+		movePointer(t, stack, pointer, "conformance-b1", record(App, "b1"))
 
 		removesPointer(t, stack, pointer)
 		served := fixture.Serving(pointer)
@@ -195,33 +195,33 @@ func Run(t *testing.T, suite Suite) {
 		}
 	})
 
-	t.Run("a reconciled stack reopens onto the data plane it flipped", func(t *testing.T) {
+	t.Run("a reconciled stack reopens onto the data plane it moved", func(t *testing.T) {
 		fixture := suite.New(t)
 		stack := reconciled(t, fixture)
-		flips(t, stack, pointer, "conformance-b1", record(App, "b1"))
+		movePointer(t, stack, pointer, "conformance-b1", record(App, "b1"))
 
 		reopened, err := fixture.Router.Open(stack.State())
 		if err != nil {
 			t.Fatalf("Open: %v", err)
 		}
-		flips(t, reopened, pointer, "conformance-b2", record(App, "b2"))
+		movePointer(t, reopened, pointer, "conformance-b2", record(App, "b2"))
 		if served := fixture.Serving(pointer); served != "b2" {
-			t.Errorf("%s serves %q after the reopened stack flipped onto b2, want b2", pointer, served)
+			t.Errorf("%s serves %q after the reopened stack moved onto b2, want b2", pointer, served)
 		}
 	})
 
 	t.Run("state survives the seam it is persisted through", func(t *testing.T) {
 		fixture := suite.New(t)
 		stack := reconciled(t, fixture)
-		flips(t, stack, pointer, "conformance-b1", record(App, "b1"))
+		movePointer(t, stack, pointer, "conformance-b1", record(App, "b1"))
 
 		reopened, err := fixture.Router.Open(roundTrip(t, stack.State()))
 		if err != nil {
 			t.Fatalf("Open a persisted state: %v", err)
 		}
-		flips(t, reopened, pointer, "conformance-b2", record(App, "b2"))
+		movePointer(t, reopened, pointer, "conformance-b2", record(App, "b2"))
 		if served := fixture.Serving(pointer); served != "b2" {
-			t.Errorf("%s serves %q after a stack reopened from its persisted state flipped onto b2, want b2", pointer, served)
+			t.Errorf("%s serves %q after a stack reopened from its persisted state moved onto b2, want b2", pointer, served)
 		}
 	})
 
@@ -375,9 +375,9 @@ func runPreviews(t *testing.T, suite Suite, record func(app, build string) route
 		fixture := suite.Previews(t)
 		stack := reconciled(t, fixture)
 		const pointer = "conformance-preview"
-		flips(t, stack, pointer, "previewed", record(App, "b1"))
+		movePointer(t, stack, pointer, "previewed", record(App, "b1"))
 		if served := fixture.Serving(pointer); served != "b1" {
-			t.Fatalf("%s serves %q, want the b1 this preview flipped onto; a preview that never landed makes every assertion after it vacuous", pointer, served)
+			t.Fatalf("%s serves %q, want the b1 this preview moved onto; a preview that never landed makes every assertion after it vacuous", pointer, served)
 		}
 
 		removesPointer(t, stack, pointer)
@@ -392,16 +392,16 @@ func racesAfterCheck(t *testing.T, fixture Fixture, pointer string, record func(
 	t.Helper()
 	ctx := context.Background()
 	stack := reconciled(t, fixture)
-	flips(t, stack, pointer, "conformance-b1", record(App, "b1"))
+	movePointer(t, stack, pointer, "conformance-b1", record(App, "b1"))
 	racing, err := fixture.Router.Open(stack.State())
 	if err != nil {
 		t.Fatalf("Open a second stack onto the same state: %v", err)
 	}
 
 	ledger := &memoryLedger{active: "conformance-b1"}
-	later := newFlip("conformance-b3", record(App, "b3"))
+	later := newPointerMove("conformance-b3", record(App, "b3"))
 	later.Pointer = pointer
-	earlier := newFlip("conformance-b2", record(App, "b2"))
+	earlier := newPointerMove("conformance-b2", record(App, "b2"))
 	earlier.Pointer = pointer
 	var raced error
 	checks := 0
@@ -416,17 +416,17 @@ func racesAfterCheck(t *testing.T, fixture Fixture, pointer string, record func(
 		return nil
 	}
 
-	flipped := ledger.promote(ctx, stack, earlier, earlier.StillActive)
+	moved := ledger.promote(ctx, stack, earlier, earlier.StillActive)
 	if checks < check {
 		if check == 1 {
-			t.Fatalf("Flip never asked StillActive (it returned %v), so no promote could race it", flipped)
+			t.Fatalf("MovePointer never asked StillActive (it returned %v), so no promote could race it", moved)
 		}
-		t.Skipf("Flip asked StillActive %d times, so no promote races it after call %d", checks, check)
+		t.Skipf("MovePointer asked StillActive %d times, so no promote races it after call %d", checks, check)
 	}
 	builds := map[string]string{"conformance-b1": "b1", "conformance-b2": "b2", "conformance-b3": "b3"}
 	if served, named := fixture.Serving(pointer), builds[ledger.active]; served != named {
-		t.Errorf("%s serves %q while the ledger names %s (%s): a promote whose StillActive answered before another promoted and flipped must not land over it (the flip it raced returned %v, its own flip %v)",
-			pointer, served, ledger.active, named, raced, flipped)
+		t.Errorf("%s serves %q while the ledger names %s (%s): a promote whose StillActive answered before another promoted and moved must not land over it (the pointer move it raced returned %v, its own pointer move %v)",
+			pointer, served, ledger.active, named, raced, moved)
 	}
 	return true
 }
@@ -452,24 +452,24 @@ func reconciled(t *testing.T, fixture Fixture) router.Stack {
 	return stack
 }
 
-func newFlip(promotionID string, records ...router.DeploymentRecord) router.Flip {
-	flip := router.Flip{
+func newPointerMove(promotionID string, records ...router.DeploymentRecord) router.PointerMove {
+	move := router.PointerMove{
 		Promotion: router.Promotion{PromotionID: promotionID, Ts: 1, Builds: map[string]string{}},
 		Records:   map[string]router.DeploymentRecord{},
 	}
 	for _, record := range records {
-		flip.Promotion.Builds[record.App] = record.Build
-		flip.Records[record.App] = record
+		move.Promotion.Builds[record.App] = record.Build
+		move.Records[record.App] = record
 	}
-	return flip
+	return move
 }
 
-func flips(t *testing.T, stack router.Stack, pointer, promotionID string, records ...router.DeploymentRecord) {
+func movePointer(t *testing.T, stack router.Stack, pointer, promotionID string, records ...router.DeploymentRecord) {
 	t.Helper()
-	flip := newFlip(promotionID, records...)
-	flip.Pointer = pointer
-	if err := stack.Flip(context.Background(), flip, progress.Discard()); err != nil {
-		t.Fatalf("Flip(%s onto %q): %v", promotionID, pointer, err)
+	move := newPointerMove(promotionID, records...)
+	move.Pointer = pointer
+	if err := stack.MovePointer(context.Background(), move, progress.Discard()); err != nil {
+		t.Fatalf("MovePointer(%s onto %q): %v", promotionID, pointer, err)
 	}
 }
 
@@ -506,16 +506,16 @@ func (l *memoryLedger) stillActive(promotionID string) router.StillActive {
 	}
 }
 
-func (l *memoryLedger) promote(ctx context.Context, stack router.Stack, flip router.Flip, stillActive router.StillActive) error {
+func (l *memoryLedger) promote(ctx context.Context, stack router.Stack, move router.PointerMove, stillActive router.StillActive) error {
 	displaced := l.active
-	l.active = flip.Promotion.PromotionID
+	l.active = move.Promotion.PromotionID
 	if stillActive == nil {
-		stillActive = l.stillActive(flip.Promotion.PromotionID)
+		stillActive = l.stillActive(move.Promotion.PromotionID)
 	}
-	flip.StillActive = stillActive
-	err := stack.Flip(ctx, flip, progress.Discard())
+	move.StillActive = stillActive
+	err := stack.MovePointer(ctx, move, progress.Discard())
 	var unserved router.Unserved
-	if errors.As(err, &unserved) && l.active == flip.Promotion.PromotionID {
+	if errors.As(err, &unserved) && l.active == move.Promotion.PromotionID {
 		l.active = displaced
 	}
 	return err

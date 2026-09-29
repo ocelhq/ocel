@@ -10,7 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
-const flipAttempts = 5
+const moveAttempts = 5
 
 type Router struct{ p *cloudflare }
 
@@ -57,35 +57,35 @@ func (r routerStack) Claim(context.Context, router.Claim) (edge.Origin, error) {
 
 func (r routerStack) Disclaim(context.Context, string) error { return nil }
 
-func (r routerStack) Flip(ctx context.Context, flip router.Flip, _ progress.Log) error {
-	records, err := r.s.wrapEnvelopes(flip.Records)
+func (r routerStack) MovePointer(ctx context.Context, move router.PointerMove, _ progress.Log) error {
+	records, err := r.s.wrapEnvelopes(move.Records)
 	if err != nil {
 		return router.Unserved{Err: err}
 	}
-	for attempt := range flipAttempts {
+	for attempt := range moveAttempts {
 		if attempt > 0 {
 			if err := waitBeforeRetry(ctx, storeRetryDelay(nil, attempt-1, retryJitter())); err != nil {
 				return router.Unserved{Err: err}
 			}
 		}
-		replaces, err := r.s.readServedPromotion(ctx, flip.Pointer)
+		replaces, err := r.s.readServedPromotion(ctx, move.Pointer)
 		if err != nil {
 			return router.Unserved{Err: err}
 		}
-		if err := flip.RefuseInactive(ctx); err != nil {
+		if err := move.RefuseInactive(ctx); err != nil {
 			return err
 		}
-		stale, err := r.s.flip(ctx, flipBody{
-			Pointer:     flip.Pointer,
+		stale, err := r.s.movePointer(ctx, pointerMoveBody{
+			Pointer:     move.Pointer,
 			Replaces:    replaces,
-			PromotionID: flip.Promotion.PromotionID,
+			PromotionID: move.Promotion.PromotionID,
 			Records:     records,
 		})
 		if err != nil || !stale {
 			return err
 		}
 	}
-	return router.Unserved{Err: fmt.Errorf("flip promotion %s: the deployments store served another promotion on every one of %d attempts, so this flip stopped rather than overwrite it", flip.Promotion.PromotionID, flipAttempts)}
+	return router.Unserved{Err: fmt.Errorf("move the pointer to promotion %s: the deployments store served another promotion on every one of %d attempts, so this move stopped rather than overwrite it", move.Promotion.PromotionID, moveAttempts)}
 }
 
 func (r routerStack) RemovePointer(ctx context.Context, pointer string, _ progress.Log) error {

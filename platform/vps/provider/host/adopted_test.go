@@ -221,7 +221,7 @@ func adoptedBox(t *testing.T, state RoutingTable) *adoptedBench {
 			}
 			adopted.placed, adopted.gone = adopted.fed[len(adopted.fed)-1], false
 			return session.Result{}, true
-		case gates(command), flips(command):
+		case gates(command), cutsOver(command):
 			return session.Result{}, true
 		case idles(command):
 			return everyIdle(command), true

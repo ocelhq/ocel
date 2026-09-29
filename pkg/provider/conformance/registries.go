@@ -82,7 +82,7 @@ func RunRouters(t *testing.T, facts provider.Facts, edges provider.Edges, router
 	t.Run("every edge a request can reach pairs with a router", func(t *testing.T) {
 		for _, kind := range listReachableEdges(facts) {
 			if len(facts.ListPairedRouters(kind)) == 0 {
-				t.Errorf("Facts.Pairings pairs no router with the %q edge, so no app deployed through it could be flipped", kind)
+				t.Errorf("Facts.Pairings pairs no router with the %q edge, so no app deployed through it could have its pointer moved", kind)
 			}
 		}
 	})

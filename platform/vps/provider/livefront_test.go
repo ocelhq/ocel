@@ -280,26 +280,26 @@ func servesBehind(t *testing.T, front string, meanwhile func(vm machine)) machin
 
 	two := provisioned(t, d, "two")
 	vm.loads(t, frontedHostname)
-	vm.awaitAnswers(t, "of one before the flip", counting("one", 0))
-	flipping := vm.clock(t)
+	vm.awaitAnswers(t, "of one before the cutover", counting("one", 0))
+	cuttingOver := vm.clock(t)
 	promotes(t, d, stack, "p-two", "two", two, 2)
-	flipped := vm.clock(t)
-	vm.awaitAnswers(t, "of two after the flip", counting("two", flipped))
+	cutOver := vm.clock(t)
+	vm.awaitAnswers(t, "of two after the cutover", counting("two", cutOver))
 	heard := vm.stopsLoad(t)
 	var during int
 	for _, answer := range heard {
 		if !strings.HasPrefix(answer.code, "2") {
-			t.Errorf("a request through %s asked at %.3f answered %s while the release flipped between %.3f and %.3f", front, answer.at, answer.code, flipping, flipped)
+			t.Errorf("a request through %s asked at %.3f answered %s while the release cut over between %.3f and %.3f", front, answer.at, answer.code, cuttingOver, cutOver)
 		}
-		if answer.at >= flipping && answer.at <= flipped {
+		if answer.at >= cuttingOver && answer.at <= cutOver {
 			during++
 		}
-		if answer.at > flipped && answer.body != "two" {
-			t.Errorf("a request through %s asked at %.3f, after the flip finished at %.3f, answered %q, want two", front, answer.at, flipped, answer.body)
+		if answer.at > cutOver && answer.body != "two" {
+			t.Errorf("a request through %s asked at %.3f, after the cutover finished at %.3f, answered %q, want two", front, answer.at, cutOver, answer.body)
 		}
 	}
 	if during == 0 {
-		t.Errorf("no request through %s was asked while the release flipped between %.3f and %.3f, so the %d answered prove nothing about the flip", front, flipping, flipped, len(heard))
+		t.Errorf("no request through %s was asked while the release cut over between %.3f and %.3f, so the %d answered prove nothing about the cutover", front, cuttingOver, cutOver, len(heard))
 	}
 
 	servesAPreviewBehind(t, vm, d, opened, front)

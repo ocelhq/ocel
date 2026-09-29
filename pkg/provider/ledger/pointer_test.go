@@ -248,7 +248,7 @@ func TestAPromoteKeepsThePromotionItDisplacedHoweverFarDownItHasFallen(t *testin
 		t.Fatal(err)
 	}
 	if got := ids(after.Promotions); got != "p5,p4,p1" {
-		t.Errorf("kept %s, want p5,p4 and p1: p1 still serves until p5 flips, and taking p5 back returns to it", got)
+		t.Errorf("kept %s, want p5,p4 and p1: p1 still serves until the pointer moves to p5, and taking p5 back returns to it", got)
 	}
 	if got := ids(dropped); got != "p3,p2" {
 		t.Errorf("dropped %s, want p3,p2", got)
@@ -324,7 +324,7 @@ func TestRetainKeepsWhatTakingTheActivePromotionBackWouldServe(t *testing.T) {
 
 	kept, dropped := promoted(t, promotion("p1"), promotion("p2"), promotion("p3")).Retain(0)
 	if got := ids(kept.Promotions); got != "p3,p2" {
-		t.Errorf("kept %s, want p3 and p2: a prune racing p3's flip must leave the promotion a failed flip falls back to", got)
+		t.Errorf("kept %s, want p3 and p2: a prune racing p3's pointer move must leave the promotion a failed pointer move falls back to", got)
 	}
 	if got := ids(dropped); got != "p1" {
 		t.Errorf("dropped %s, want p1", got)

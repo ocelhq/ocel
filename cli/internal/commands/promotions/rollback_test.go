@@ -88,7 +88,7 @@ func TestRollbackMovesProductionToTheChosenPromotionOnceConsented(t *testing.T) 
 
 		out := stdout.String()
 		if !strings.Contains(out, `Roll production of "test-app" back to promotion promo-1?`) {
-			t.Errorf("stdout = %q, want the rollback to ask before it flips production", out)
+			t.Errorf("stdout = %q, want the rollback to ask before it moves production", out)
 		}
 		if !strings.Contains(out, "Rolled back to promotion promo-1") {
 			t.Errorf("stdout = %q, want it to report rolling back to promo-1", out)

@@ -17,7 +17,7 @@ const (
 
 const (
 	LoadPath      = "/load"
-	FlipPath      = "/flip"
+	CutoverPath   = "/cutover"
 	IdlePath      = "/idle"
 	UpstreamsPath = "/upstreams"
 )
@@ -32,7 +32,7 @@ const (
 func (b *Board) Control() http.Handler {
 	control := http.NewServeMux()
 	control.HandleFunc("POST "+LoadPath, b.serveLoad)
-	control.HandleFunc("POST "+FlipPath, b.serveFlip)
+	control.HandleFunc("POST "+CutoverPath, b.serveCutover)
 	control.HandleFunc("POST "+IdlePath, b.serveIdle)
 	control.HandleFunc("GET "+UpstreamsPath, b.serveUpstreams)
 	return control
@@ -48,7 +48,7 @@ func (b *Board) serveLoad(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (b *Board) serveFlip(w http.ResponseWriter, r *http.Request) {
+func (b *Board) serveCutover(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		unprocessable(w, err)
 		return
@@ -65,7 +65,7 @@ func (b *Board) serveFlip(w http.ResponseWriter, r *http.Request) {
 	}
 	told := false
 	answer := http.NewResponseController(w)
-	err := b.Flip(r.Context(), r.PostFormValue(TableField), retiring, window, func(drain Drain) {
+	err := b.Cutover(r.Context(), r.PostFormValue(TableField), retiring, window, func(drain Drain) {
 		told = true
 		fmt.Fprintln(w, drain)
 		_ = answer.Flush()

@@ -239,7 +239,7 @@ func TestLiveTheFiveProxyStatesAreFiveInducedConditionsAndFiveMessages(t *testin
 			defer induced.restore()
 			err := preflightedOn(t, vm.deploying(t))
 			if err == nil {
-				t.Fatalf("PreflightDeploy() let a deploy past a box where %s, and a deploy into a proxy that cannot be flipped is a green deploy nothing routes to", induced.what)
+				t.Fatalf("PreflightDeploy() let a deploy past a box where %s, and a deploy into a proxy that cannot be cut over is a green deploy nothing routes to", induced.what)
 			}
 			said := err.Error()
 			for _, want := range induced.wants {

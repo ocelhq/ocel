@@ -50,12 +50,12 @@ function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {
   };
 }
 
-function flipBody(over: Record<string, unknown> = {}) {
+function pointerMoveBody(over: Record<string, unknown> = {}) {
   return JSON.stringify({ promotionId: "promo-1", records: [makeRecord()], ...over });
 }
 
-async function flip(over: Record<string, unknown> = {}) {
-  return SELF.fetch(authedReq("/flip", { method: "POST", body: flipBody(over) }));
+async function movePointer(over: Record<string, unknown> = {}) {
+  return SELF.fetch(authedReq("/move-pointer", { method: "POST", body: pointerMoveBody(over) }));
 }
 
 describe("initialize", () => {
@@ -74,7 +74,7 @@ describe("initialize", () => {
     expect(res.status).toBe(204);
     expect(await res.text()).toBe("");
 
-    expect((await flip()).status).toBe(204);
+    expect((await movePointer()).status).toBe(204);
   });
 
   it("refuses to re-seed an initialized instance and never discloses what it stores", async () => {
@@ -121,27 +121,32 @@ describe("initialize", () => {
 });
 
 describe("authenticated endpoints", () => {
-  it("rejects a flip before the instance is initialized", async () => {
-    expect((await flip()).status).toBe(401);
+  it("rejects a pointer move before the instance is initialized", async () => {
+    expect((await movePointer()).status).toBe(401);
   });
 
-  it("rejects a flip with no authorization header", async () => {
-    await initialize();
-    const res = await SELF.fetch(req(`/${SLUG}/flip`, { method: "POST", body: flipBody() }));
-    expect(res.status).toBe(401);
-  });
-
-  it("rejects a flip with an incorrect project secret", async () => {
+  it("rejects a pointer move with no authorization header", async () => {
     await initialize();
     const res = await SELF.fetch(
-      bearerReq(`/${SLUG}/flip`, "wrong-secret", { method: "POST", body: flipBody() }),
+      req(`/${SLUG}/move-pointer`, { method: "POST", body: pointerMoveBody() }),
     );
     expect(res.status).toBe(401);
   });
 
-  it("flips, then reports the promotion the pointer serves", async () => {
+  it("rejects a pointer move with an incorrect project secret", async () => {
     await initialize();
-    expect((await flip()).status).toBe(204);
+    const res = await SELF.fetch(
+      bearerReq(`/${SLUG}/move-pointer`, "wrong-secret", {
+        method: "POST",
+        body: pointerMoveBody(),
+      }),
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it("moves, then reports the promotion the pointer serves", async () => {
+    await initialize();
+    expect((await movePointer()).status).toBe(204);
 
     const served = await SELF.fetch(authedReq("/pointer"));
     expect(await served.json()).toEqual({ promotionId: "promo-1" });
@@ -149,11 +154,11 @@ describe("authenticated endpoints", () => {
     expect(await preview.json()).toEqual({ promotionId: null });
   });
 
-  it("refuses with 409 a flip that names a promotion the pointer no longer serves", async () => {
+  it("refuses with 409 a pointer move that names a promotion the pointer no longer serves", async () => {
     await initialize();
-    await flip();
+    await movePointer();
 
-    const res = await flip({ promotionId: "promo-2", replaces: "promo-0" });
+    const res = await movePointer({ promotionId: "promo-2", replaces: "promo-0" });
     expect(res.status).toBe(409);
 
     const served = await SELF.fetch(authedReq("/pointer"));
@@ -162,7 +167,7 @@ describe("authenticated endpoints", () => {
 
   it("removes a pointer, leaving nothing served on it", async () => {
     await initialize();
-    await flip({ pointer: "pr-42" });
+    await movePointer({ pointer: "pr-42" });
 
     const res = await SELF.fetch(
       authedReq("/remove-pointer", { method: "POST", body: JSON.stringify({ pointer: "pr-42" }) }),
@@ -181,9 +186,9 @@ describe("authenticated endpoints", () => {
     expect(res.status).toBe(400);
   });
 
-  it("names every app it has flipped", async () => {
+  it("names every app it has moved", async () => {
     await initialize();
-    await flip({ records: [makeRecord(), makeRecord({ app: "admin" })] });
+    await movePointer({ records: [makeRecord(), makeRecord({ app: "admin" })] });
 
     const res = await SELF.fetch(authedReq("/apps"));
     expect(await res.json()).toEqual(["admin", "web"]);
@@ -205,24 +210,27 @@ describe("authenticated endpoints", () => {
 
   it("destroys the instance, freeing the slug", async () => {
     await initialize();
-    await flip();
+    await movePointer();
 
     const destroyRes = await SELF.fetch(authedReq("/destroy", { method: "POST" }));
     expect(destroyRes.status).toBe(204);
 
-    expect((await flip()).status).toBe(401);
+    expect((await movePointer()).status).toBe(401);
   });
 
   it("returns 400 on a malformed body", async () => {
     await initialize();
-    const res = await SELF.fetch(authedReq("/flip", { method: "POST", body: "not json" }));
+    const res = await SELF.fetch(authedReq("/move-pointer", { method: "POST", body: "not json" }));
     expect(res.status).toBe(400);
   });
 
-  it("returns 400 on a flip that names no promotion", async () => {
+  it("returns 400 on a pointer move that names no promotion", async () => {
     await initialize();
     const res = await SELF.fetch(
-      authedReq("/flip", { method: "POST", body: JSON.stringify({ records: [makeRecord()] }) }),
+      authedReq("/move-pointer", {
+        method: "POST",
+        body: JSON.stringify({ records: [makeRecord()] }),
+      }),
     );
     expect(res.status).toBe(400);
   });
@@ -234,7 +242,7 @@ describe("authenticated endpoints", () => {
   });
 
   it("returns 404 when no slug is given", async () => {
-    const res = await SELF.fetch(bearerReq("/flip", SECRET, { method: "POST" }));
+    const res = await SELF.fetch(bearerReq("/move-pointer", SECRET, { method: "POST" }));
     expect(res.status).toBe(404);
   });
 });
@@ -242,7 +250,7 @@ describe("authenticated endpoints", () => {
 describe("service-binding read path", () => {
   it("needs no secret to resolve the served record", async () => {
     const store = env.DEPLOYMENTS_DO.get(env.DEPLOYMENTS_DO.idFromName(SLUG));
-    await store.flip({ promotionId: "promo-1", records: [makeRecord()] });
+    await store.movePointer({ promotionId: "promo-1", records: [makeRecord()] });
 
     const entry = new (await import("../src/index")).default(createExecutionContext(), env);
     expect(await entry.pointerRecord({ slug: SLUG, app: "web" })).toEqual({
@@ -258,14 +266,14 @@ describe("service-binding read path", () => {
     });
   });
 
-  it("routes a flip's pointer through to a named pointer", async () => {
+  it("routes a pointer move's pointer through to a named pointer", async () => {
     await initialize();
-    const flipRes = await flip({
+    const moveRes = await movePointer({
       promotionId: "prev-1",
       pointer: "flaky-web-2626",
       records: [makeRecord({ identity: "preview-deploy" })],
     });
-    expect(flipRes.status).toBe(204);
+    expect(moveRes.status).toBe(204);
 
     const entry = new (await import("../src/index")).default(createExecutionContext(), env);
     expect(
@@ -282,7 +290,7 @@ describe("service-binding read path", () => {
 
   it("resolves the app the pointer serves when the caller omits it", async () => {
     const store = env.DEPLOYMENTS_DO.get(env.DEPLOYMENTS_DO.idFromName(SLUG));
-    await store.flip({ promotionId: "promo-1", records: [makeRecord()] });
+    await store.movePointer({ promotionId: "promo-1", records: [makeRecord()] });
 
     const entry = new (await import("../src/index")).default(createExecutionContext(), env);
     expect(await entry.pointerRecord({ slug: SLUG })).toEqual({
@@ -294,7 +302,7 @@ describe("service-binding read path", () => {
 
   it("reports an ambiguous app when the pointer serves several", async () => {
     const store = env.DEPLOYMENTS_DO.get(env.DEPLOYMENTS_DO.idFromName(SLUG));
-    await store.flip({
+    await store.movePointer({
       promotionId: "promo-1",
       records: [makeRecord(), makeRecord({ app: "admin", identity: "deploy-9" })],
     });

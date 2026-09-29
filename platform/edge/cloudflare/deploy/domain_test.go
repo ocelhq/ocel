@@ -228,7 +228,7 @@ func TestAHostnameBoundAfterAPromotionRoutesToTheWorkerServingIt(t *testing.T) {
 	state.Private = edge.Own(private{EntryWorkers: []string{domainEntryScript}})
 	s := stackOn(m.provider(t), state)
 
-	flips(t, s.p, state, flipOf("promo-1", router.DefaultPointer, router.DeploymentRecord{App: "web", Build: "b1"}))
+	movePointer(t, s.p, state, pointerMoveOf("promo-1", router.DefaultPointer, router.DeploymentRecord{App: "web", Build: "b1"}))
 	if err := s.BindDomain(t.Context(), edge.DomainBinding{Hostname: "shop.app.com"}); err != nil {
 		t.Fatalf("BindDomain: %v", err)
 	}
@@ -241,7 +241,7 @@ func TestAHostnameBoundAfterAPromotionRoutesToTheWorkerServingIt(t *testing.T) {
 		t.Fatalf("readServedPromotion: %v", err)
 	}
 	if served != "promo-1" {
-		t.Errorf("the default pointer serves %q, want promo-1 still: the worker serves a bound hostname from it, with no promotion keyed by hostname to flip again", served)
+		t.Errorf("the default pointer serves %q, want promo-1 still: the worker serves a bound hostname from it, with no promotion keyed by hostname to move the pointer again", served)
 	}
 }
 

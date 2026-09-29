@@ -26,7 +26,7 @@ type fakeStore struct {
 	pointers map[string]string
 	served   map[string]map[string]router.DeploymentRecord
 	apps     map[string]bool
-	flips    []flipBody
+	moves    []pointerMoveBody
 	version  *string
 	owner    string
 	live     string
@@ -41,10 +41,10 @@ func (f *fakeStore) serving(pointer, app string) string {
 	return f.served[pointer][app].Build
 }
 
-func (f *fakeStore) flipped() []flipBody {
+func (f *fakeStore) moved() []pointerMoveBody {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return slices.Clone(f.flips)
+	return slices.Clone(f.moves)
 }
 
 func fakeStoreServer(t *testing.T, secret string) *httptest.Server {
@@ -113,8 +113,8 @@ func fakeStoreFor(t *testing.T, secret string) (*httptest.Server, *fakeStore) {
 		}
 		_ = json.NewEncoder(w).Encode(map[string]*string{"promotionId": served})
 	}))
-	mux.HandleFunc("POST /{slug}/flip", authed(func(w http.ResponseWriter, r *http.Request) {
-		var body flipBody
+	mux.HandleFunc("POST /{slug}/move-pointer", authed(func(w http.ResponseWriter, r *http.Request) {
+		var body pointerMoveBody
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.PromotionID == "" {
 			w.WriteHeader(http.StatusBadRequest)
 			return
@@ -124,7 +124,7 @@ func fakeStoreFor(t *testing.T, secret string) (*httptest.Server, *fakeStore) {
 			w.WriteHeader(http.StatusConflict)
 			return
 		}
-		f.flips = append(f.flips, body)
+		f.moves = append(f.moves, body)
 		f.served[pointer] = map[string]router.DeploymentRecord{}
 		for _, record := range body.Records {
 			f.served[pointer][record.App] = record
@@ -196,49 +196,49 @@ func testState(endpoint, secret string) edge.StackState {
 	}
 }
 
-func flips(t *testing.T, p *cloudflare, state edge.StackState, flip router.Flip) {
+func movePointer(t *testing.T, p *cloudflare, state edge.StackState, move router.PointerMove) {
 	t.Helper()
-	if err := (routerStack{s: stackOn(p, state)}).Flip(t.Context(), flip, progress.Discard()); err != nil {
-		t.Fatalf("Flip(%s): %v", flip.Promotion.PromotionID, err)
+	if err := (routerStack{s: stackOn(p, state)}).MovePointer(t.Context(), move, progress.Discard()); err != nil {
+		t.Fatalf("MovePointer(%s): %v", move.Promotion.PromotionID, err)
 	}
 }
 
-func flipOf(promotionID, pointer string, records ...router.DeploymentRecord) router.Flip {
-	flip := router.Flip{
+func pointerMoveOf(promotionID, pointer string, records ...router.DeploymentRecord) router.PointerMove {
+	move := router.PointerMove{
 		Pointer:   pointer,
 		Promotion: router.Promotion{PromotionID: promotionID, Ts: 1, Builds: map[string]string{}},
 		Records:   map[string]router.DeploymentRecord{},
 	}
 	for _, record := range records {
-		flip.Promotion.Builds[record.App] = record.Build
-		flip.Records[record.App] = record
+		move.Promotion.Builds[record.App] = record.Build
+		move.Records[record.App] = record
 	}
-	return flip
+	return move
 }
 
-func TestAFlipServesItsRecordsOnItsPointerInTheStore(t *testing.T) {
+func TestAPointerMoveServesItsRecordsOnItsPointerInTheStore(t *testing.T) {
 	t.Parallel()
 
 	srv, store := fakeStoreFor(t, "s3cr3t")
 	p := &cloudflare{}
 	state := testState(srv.URL, "s3cr3t")
 
-	flips(t, p, state, flipOf("promo-1", "", router.DeploymentRecord{App: "web", Build: "b1"}))
-	flips(t, p, state, flipOf("promo-preview", "pr-42", router.DeploymentRecord{App: "web", Build: "b2"}))
-	flips(t, p, state, flipOf("promo-2", "", router.DeploymentRecord{App: "web", Build: "b3"}))
+	movePointer(t, p, state, pointerMoveOf("promo-1", "", router.DeploymentRecord{App: "web", Build: "b1"}))
+	movePointer(t, p, state, pointerMoveOf("promo-preview", "pr-42", router.DeploymentRecord{App: "web", Build: "b2"}))
+	movePointer(t, p, state, pointerMoveOf("promo-2", "", router.DeploymentRecord{App: "web", Build: "b3"}))
 
 	if served := store.serving("", "web"); served != "b3" {
-		t.Errorf("the default pointer serves %q, want b3, the last promotion flipped onto it", served)
+		t.Errorf("the default pointer serves %q, want b3, the last promotion moved onto it", served)
 	}
 	if served := store.serving("pr-42", "web"); served != "b2" {
-		t.Errorf("pr-42 serves %q, want b2: a flip moves only the pointer it names", served)
+		t.Errorf("pr-42 serves %q, want b2: a pointer move moves only the pointer it names", served)
 	}
-	sent := store.flipped()
+	sent := store.moved()
 	if last := sent[len(sent)-1]; last.Replaces != "promo-1" {
-		t.Errorf("the last flip replaced %q, want promo-1, the promotion the store served when it read the pointer", last.Replaces)
+		t.Errorf("the last pointer move replaced %q, want promo-1, the promotion the store served when it read the pointer", last.Replaces)
 	}
 	if sent[1].Pointer != "pr-42" || sent[0].Pointer != "" {
-		t.Errorf("flips named pointers %q and %q, want the preview pointer sent and the default one left out", sent[1].Pointer, sent[0].Pointer)
+		t.Errorf("moves named pointers %q and %q, want the preview pointer sent and the default one left out", sent[1].Pointer, sent[0].Pointer)
 	}
 }
 
@@ -248,7 +248,7 @@ func TestRemovingAPointerLeavesNothingServedOnIt(t *testing.T) {
 	srv, store := fakeStoreFor(t, "s3cr3t")
 	p := &cloudflare{}
 	state := testState(srv.URL, "s3cr3t")
-	flips(t, p, state, flipOf("promo-preview", "pr-42", router.DeploymentRecord{App: "web", Build: "b1"}))
+	movePointer(t, p, state, pointerMoveOf("promo-preview", "pr-42", router.DeploymentRecord{App: "web", Build: "b1"}))
 
 	if err := (routerStack{s: stackOn(p, state)}).RemovePointer(t.Context(), "pr-42", progress.Discard()); err != nil {
 		t.Fatalf("RemovePointer: %v", err)
@@ -385,7 +385,7 @@ func TestDestroyInstance(t *testing.T) {
 		srv := fakeStoreServer(t, "s3cr3t")
 		p := &cloudflare{}
 		state := testState(srv.URL, "s3cr3t")
-		flips(t, p, state, flipOf("p1", "", router.DeploymentRecord{App: "web", Build: "b1"}))
+		movePointer(t, p, state, pointerMoveOf("p1", "", router.DeploymentRecord{App: "web", Build: "b1"}))
 		if err := p.destroyInstance(t.Context(), state); err != nil {
 			t.Fatalf("destroyInstance: %v", err)
 		}

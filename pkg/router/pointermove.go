@@ -4,7 +4,7 @@ import "context"
 
 type StillActive func(ctx context.Context) error
 
-type Flip struct {
+type PointerMove struct {
 	Pointer     string
 	Promotion   Promotion
 	Records     map[string]DeploymentRecord
@@ -12,11 +12,11 @@ type Flip struct {
 	StillActive StillActive
 }
 
-func (f Flip) RefuseInactive(ctx context.Context) error {
-	if f.StillActive == nil {
+func (m PointerMove) RefuseInactive(ctx context.Context) error {
+	if m.StillActive == nil {
 		return nil
 	}
-	if err := f.StillActive(ctx); err != nil {
+	if err := m.StillActive(ctx); err != nil {
 		return Unserved{Err: err}
 	}
 	return nil

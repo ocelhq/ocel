@@ -624,26 +624,26 @@ func TestLoadTakesATablePathRelativeToWhereItRan(t *testing.T) {
 	}
 }
 
-func TestFlipSwitchesThenPrintsEachRetireeTheMomentItDrains(t *testing.T) {
+func TestCutoverSwitchesThenPrintsEachRetireeTheMomentItDrains(t *testing.T) {
 	blue, green := backend(t, "blue"), backend(t, "green")
 	running := served(t, tableFile(t, map[string]string{"shop.example.com": blue}))
 
-	code, out, errs := ran(t, "flip", "--drain-timeout", "5", "--retire", "tcp/"+blue, tableFile(t, map[string]string{"shop.example.com": green}))
+	code, out, errs := ran(t, "cutover", "--drain-timeout", "5", "--retire", "tcp/"+blue, tableFile(t, map[string]string{"shop.example.com": green}))
 	if code != 0 {
-		t.Fatalf("flip = %d, %q %q", code, out, errs)
+		t.Fatalf("cutover = %d, %q %q", code, out, errs)
 	}
 	if out != switchboard.Drained+" "+blue+"\n" {
-		t.Errorf("flip printed %q, want %q: the release reads each retiree's outcome off these lines", out, switchboard.Drained+" "+blue+"\n")
+		t.Errorf("cutover printed %q, want %q: the release reads each retiree's outcome off these lines", out, switchboard.Drained+" "+blue+"\n")
 	}
 	if _, body, _ := running.ask(t, "shop.example.com"); body != "green" {
-		t.Errorf("after the flip shop.example.com answered %q, want green", body)
+		t.Errorf("after the cutover shop.example.com answered %q, want green", body)
 	}
-	if code, out, errs := ran(t, "flip", tableFile(t, map[string]string{"shop.example.com": blue})); code != 0 || out != "" {
-		t.Errorf("a flip retiring nothing = %d, %q %q, want it silent", code, out, errs)
+	if code, out, errs := ran(t, "cutover", tableFile(t, map[string]string{"shop.example.com": blue})); code != 0 || out != "" {
+		t.Errorf("a cutover retiring nothing = %d, %q %q, want it silent", code, out, errs)
 	}
 }
 
-func TestAFlipWhoseCeilingPassesPrintsWhatTheRetireeStillHadInFlightAndSucceeds(t *testing.T) {
+func TestACutoverWhoseCeilingPassesPrintsWhatTheRetireeStillHadInFlightAndSucceeds(t *testing.T) {
 	release := make(chan struct{})
 	arrived := make(chan struct{}, 1)
 	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -664,16 +664,16 @@ func TestAFlipWhoseCeilingPassesPrintsWhatTheRetireeStillHadInFlightAndSucceeds(
 	}()
 	<-arrived
 
-	code, out, errs := ran(t, "flip", "--drain-timeout", "1", "--retire", blue, tableFile(t, map[string]string{"shop.example.com": green}))
+	code, out, errs := ran(t, "cutover", "--drain-timeout", "1", "--retire", blue, tableFile(t, map[string]string{"shop.example.com": green}))
 	if code != 0 {
-		t.Fatalf("a flip whose drain expired = %d, %q, want it borne as a warning: the new release is serving", code, errs)
+		t.Fatalf("a cutover whose drain expired = %d, %q, want it borne as a warning: the new release is serving", code, errs)
 	}
 	if want := switchboard.DrainExpired + " " + blue + " 1\n"; out != want {
-		t.Errorf("flip printed %q, want %q", out, want)
+		t.Errorf("cutover printed %q, want %q", out, want)
 	}
 }
 
-func TestAFlipWhoseAnswerIsCutShortAfterADrainLineExitsRefused(t *testing.T) {
+func TestACutoverWhoseAnswerIsCutShortAfterADrainLineExitsRefused(t *testing.T) {
 	control := controlAt(t)
 	listener, err := net.Listen("unix", control)
 	if err != nil {
@@ -688,36 +688,36 @@ func TestAFlipWhoseAnswerIsCutShortAfterADrainLineExitsRefused(t *testing.T) {
 	partial.Start()
 	t.Cleanup(partial.Close)
 
-	code, out, errs := ran(t, "flip", "--drain-timeout", "5", "--retire", "127.0.0.1:1", "--retire", "127.0.0.1:2", tableFile(t, nil))
+	code, out, errs := ran(t, "cutover", "--drain-timeout", "5", "--retire", "127.0.0.1:1", "--retire", "127.0.0.1:2", tableFile(t, nil))
 	if code != exitRefused {
-		t.Errorf("a flip whose answer stopped after one of two retirees = %d, %q %q, want %d: a partial drain report is not a finished flip", code, out, errs, exitRefused)
+		t.Errorf("a cutover whose answer stopped after one of two retirees = %d, %q %q, want %d: a partial drain report is not a finished cutover", code, out, errs, exitRefused)
 	}
 	if !strings.Contains(errs, "short") {
 		t.Errorf("the refusal read %q, want it to say the switchboard cut its answer short", errs)
 	}
 }
 
-func TestAFlipTheSwitchboardRefusesSwitchesNothing(t *testing.T) {
+func TestACutoverTheSwitchboardRefusesSwitchesNothing(t *testing.T) {
 	blue := backend(t, "blue")
 	running := served(t, tableFile(t, map[string]string{"shop.example.com": blue}))
 
 	for what, argv := range map[string][]string{
-		"a table it cannot read":   {"flip", "--drain-timeout", "5", "--retire", blue, documentAt(t, []byte(`{}`))},
-		"a retiree with no port":   {"flip", "--drain-timeout", "5", "--retire", "blue", tableFile(t, nil)},
-		"a retiree and no ceiling": {"flip", "--retire", blue, tableFile(t, nil)},
-		"no table":                 {"flip"},
-		"two tables":               {"flip", tableFile(t, nil), tableFile(t, nil)},
+		"a table it cannot read":   {"cutover", "--drain-timeout", "5", "--retire", blue, documentAt(t, []byte(`{}`))},
+		"a retiree with no port":   {"cutover", "--drain-timeout", "5", "--retire", "blue", tableFile(t, nil)},
+		"a retiree and no ceiling": {"cutover", "--retire", blue, tableFile(t, nil)},
+		"no table":                 {"cutover"},
+		"two tables":               {"cutover", tableFile(t, nil), tableFile(t, nil)},
 	} {
 		if code, out, _ := ran(t, argv...); code != exitRefused || out != "" {
-			t.Errorf("a flip with %s = %d, %q, want %d and nothing drained", what, code, out, exitRefused)
+			t.Errorf("a cutover with %s = %d, %q, want %d and nothing drained", what, code, out, exitRefused)
 		}
 	}
 	if _, body, _ := running.ask(t, "shop.example.com"); body != "blue" {
-		t.Errorf("after the refused flips shop.example.com answered %q, want blue still serving", body)
+		t.Errorf("after the refused cutover shop.example.com answered %q, want blue still serving", body)
 	}
 }
 
-func TestIdleNamesOnlyTheTargetsNoRouteDialsAndNoFlipIsDraining(t *testing.T) {
+func TestIdleNamesOnlyTheTargetsNoRouteDialsAndNoCutoverIsDraining(t *testing.T) {
 	blue, green := backend(t, "blue"), backend(t, "green")
 	served(t, tableFile(t, map[string]string{"shop.example.com": blue}))
 
@@ -758,7 +758,7 @@ func TestUpstreamsListsWhatEachUpstreamHasInFlight(t *testing.T) {
 func TestEveryVerbThatSpeaksToTheSwitchboardNamesTheSocketItCouldNotReach(t *testing.T) {
 	control := controlAt(t)
 	for _, argv := range [][]string{
-		{"upstreams"}, {"load", tableFile(t, nil)}, {"flip", tableFile(t, nil)}, {"idle", "a:1"},
+		{"upstreams"}, {"load", tableFile(t, nil)}, {"cutover", tableFile(t, nil)}, {"idle", "a:1"},
 	} {
 		code, _, errs := ran(t, argv...)
 		if code != exitRefused || !strings.Contains(errs, control) {
@@ -865,7 +865,7 @@ func TestAVerbTheSwitchboardDoesNotKnowIsRefusedWithTheOnesItDoes(t *testing.T) 
 		if code != exitRefused {
 			t.Errorf("%v = %d, want the usage refusal", argv, code)
 		}
-		for _, verb := range []string{"serve", "load", "gate", "flip", "idle", "upstreams", "leaf", "probe", "inodes", "answers"} {
+		for _, verb := range []string{"serve", "load", "gate", "cutover", "idle", "upstreams", "leaf", "probe", "inodes", "answers"} {
 			if !strings.Contains(errs, verb) {
 				t.Errorf("the usage %q never names %s", errs, verb)
 			}

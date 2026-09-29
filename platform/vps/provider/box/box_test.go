@@ -370,7 +370,7 @@ func boxFixture(m *machine, front boxEdge, stack boxStack) routerconformance.Fix
 			physical, _, _ := strings.Cut(target, ":")
 			return strings.TrimPrefix(physical, routerconformance.App+"-")
 		},
-		FailNextFlip: func(err error) { m.refuseOn("Release", router.Unserved{Err: err}) },
+		FailNextPointerMove: func(err error) { m.refuseOn("Release", router.Unserved{Err: err}) },
 	}
 }
 
@@ -425,12 +425,12 @@ func TestTheEdgeAnswersTheFactsABoxCanSitBehind(t *testing.T) {
 	}
 }
 
-func TestTheFlipReturnsNoPropagationNoteToPrint(t *testing.T) {
+func TestTheCutoverReturnsNoPropagationNoteToPrint(t *testing.T) {
 	t.Parallel()
 
 	bound := box.NewRouter(edgeOver(aMachine(), fake.NewKeyValues()).Edge).Facts().Propagation
 	if bound.Typical > 0 {
-		t.Errorf("Facts().Propagation = %+v, and a propagation above zero is rendered to the user as a propagation note; when the flip call returns on a box the gate has passed, the config is loaded and the retired upstream has drained, so there is no window to advertise", bound)
+		t.Errorf("Facts().Propagation = %+v, and a propagation above zero is rendered to the user as a propagation note; when the cutover call returns on a box the gate has passed, the config is loaded and the retired upstream has drained, so there is no window to advertise", bound)
 	}
 	if bound.Published {
 		t.Errorf("Facts().Propagation = %+v, which publishes a propagation it declares instant", bound)
@@ -457,13 +457,13 @@ func TestBootstrappingTheEdgeTouchesTheBoxNotAtAll(t *testing.T) {
 	}
 }
 
-func TestPromoteEnsuresTheContainerIsRunningBeforeItFlips(t *testing.T) {
+func TestPromoteEnsuresTheContainerIsRunningBeforeItCutsOver(t *testing.T) {
 	t.Parallel()
 
 	m, _, stack := reconciled(t)
 	staged(t, stack, "web", "b1", "shop-web-1111")
 
-	if err := stack.Flip(context.Background(), router.Flip{Promotion: router.Promotion{
+	if err := stack.MovePointer(context.Background(), router.PointerMove{Promotion: router.Promotion{
 		PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"},
 	}}, progress.Discard()); err != nil {
 		t.Fatalf("Promote: %v", err)
@@ -471,21 +471,21 @@ func TestPromoteEnsuresTheContainerIsRunningBeforeItFlips(t *testing.T) {
 
 	want := []string{"run shop-web-1111", "head shop/web at " + imageFor("web", "b1"), "release web onto shop-web-1111:" + containerimage.PortText}
 	if !slices.Equal(m.calls, want) {
-		t.Fatalf("Promote drove the box as %v, want %v: it makes the promotion's containers running and only then flips", m.calls, want)
+		t.Fatalf("Promote drove the box as %v, want %v: it makes the promotion's containers running and only then cuts over", m.calls, want)
 	}
 	if m.releases[0].Apps[0].HealthPath != "/healthz" {
 		t.Errorf("the release is gated on %q, want the path the record names: up is a 2xx on the path the deploy request named", m.releases[0].Apps[0].HealthPath)
 	}
 }
 
-func TestAPromotionOfSeveralAppsFlipsThemAllInOneRelease(t *testing.T) {
+func TestAPromotionOfSeveralAppsCutsOverThemAllInOneRelease(t *testing.T) {
 	t.Parallel()
 
 	m, _, stack := reconciled(t)
 	staged(t, stack, "web", "b1", "shop-web-1111")
 	staged(t, stack, "api", "b1", "shop-api-1111")
 
-	if err := stack.Flip(context.Background(), router.Flip{Promotion: router.Promotion{
+	if err := stack.MovePointer(context.Background(), router.PointerMove{Promotion: router.Promotion{
 		PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1", "api": "b1"},
 	}}, progress.Discard()); err != nil {
 		t.Fatalf("Promote: %v", err)
@@ -497,7 +497,7 @@ func TestAPromotionOfSeveralAppsFlipsThemAllInOneRelease(t *testing.T) {
 		"release api onto shop-api-1111:" + containerimage.PortText + ", web onto shop-web-1111:" + containerimage.PortText,
 	}
 	if !slices.Equal(m.calls, want) {
-		t.Fatalf("a promotion of two apps drove the box as %v, want %v: every container is running before one release flips them all, so a failure on either leaves the box on the promotion it was serving", m.calls, want)
+		t.Fatalf("a promotion of two apps drove the box as %v, want %v: every container is running before one release cuts over them all, so a failure on either leaves the box on the promotion it was serving", m.calls, want)
 	}
 }
 
@@ -533,7 +533,7 @@ func TestAPromotionTheBoxNeverServedLeavesThePointerOnTheOneItServes(t *testing.
 	}
 }
 
-func TestAPromotionThatFailedAfterTheFlipKeepsThePointerOnTheReleaseTheBoxServes(t *testing.T) {
+func TestAPromotionThatFailedAfterTheCutoverKeepsThePointerOnTheReleaseTheBoxServes(t *testing.T) {
 	t.Parallel()
 
 	m, _, stack := reconciled(t)
@@ -542,17 +542,17 @@ func TestAPromotionThatFailedAfterTheFlipKeepsThePointerOnTheReleaseTheBoxServes
 	if err := promoted(t, stack, "p1", "web", "b1"); err != nil {
 		t.Fatalf("Promote(p1): %v", err)
 	}
-	m.refuseOn("Release", refusal.Refuse(refusal.CodeNotReady, "flipped onto shop-web-2222, which now serve, but shop-web-1111 was drained and unrouted but not stopped"))
+	m.refuseOn("Release", refusal.Refuse(refusal.CodeNotReady, "cut over to shop-web-2222, which now serve, but shop-web-1111 was drained and unrouted but not stopped"))
 
 	if err := promoted(t, stack, "p2", "web", "b2"); err == nil {
-		t.Fatal("a promotion whose retiree would not stop after the flip reported success")
+		t.Fatal("a promotion whose retiree would not stop after the cutover reported success")
 	}
 	if active := activePromotion(t, stack); active != "p2" {
-		t.Errorf("after a failure past the flip the pointer is at %q, want p2: the box is serving p2", active)
+		t.Errorf("after a failure past the cutover the pointer is at %q, want p2: the box is serving p2", active)
 	}
 }
 
-func TestAPromotionOvertakenWhileItGatedNeverFlipsTheBoxAwayFromTheOneThatOvertookIt(t *testing.T) {
+func TestAPromotionOvertakenWhileItGatedNeverCutsOverTheBoxAwayFromTheOneThatOvertookIt(t *testing.T) {
 	t.Parallel()
 
 	m := aMachine()
@@ -588,7 +588,7 @@ func TestAPromotionOvertakenWhileItGatedNeverFlipsTheBoxAwayFromTheOneThatOverto
 
 	err = promoted(t, stack, "p2", "web", "b2")
 	if err == nil {
-		t.Fatal("a promotion overtaken while it gated flipped the box onto a release the ledger no longer names")
+		t.Fatal("a promotion overtaken while it gated cut over the box onto a release the ledger no longer names")
 	}
 	if !strings.Contains(err.Error(), "p3") {
 		t.Errorf("the refusal reads %q and never names the promotion that overtook it", err)
@@ -611,7 +611,7 @@ func activePromotion(t *testing.T, stack boxStack) string {
 	return entries[at].PromotionID
 }
 
-func TestARollbackRestartsThePreviousContainerAndFlipsOntoIt(t *testing.T) {
+func TestARollbackRestartsThePreviousContainerAndCutsOverToIt(t *testing.T) {
 	t.Parallel()
 
 	m, _, stack := reconciled(t)
@@ -623,13 +623,13 @@ func TestARollbackRestartsThePreviousContainerAndFlipsOntoIt(t *testing.T) {
 		{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"}},
 		{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": "b2"}},
 	} {
-		if err := stack.Flip(ctx, router.Flip{Promotion: promotion}, progress.Discard()); err != nil {
+		if err := stack.MovePointer(ctx, router.PointerMove{Promotion: promotion}, progress.Discard()); err != nil {
 			t.Fatalf("Promote(%s): %v", promotion.PromotionID, err)
 		}
 	}
 	m.calls = nil
 
-	if err := stack.Flip(ctx, router.Flip{Promotion: router.Promotion{
+	if err := stack.MovePointer(ctx, router.PointerMove{Promotion: router.Promotion{
 		PromotionID: "p3", Ts: 3, Builds: map[string]string{"web": "b1"},
 	}}, progress.Discard()); err != nil {
 		t.Fatalf("Promote(rollback): %v", err)
@@ -641,13 +641,13 @@ func TestARollbackRestartsThePreviousContainerAndFlipsOntoIt(t *testing.T) {
 	}
 }
 
-func TestAnAppWithNoContainerOnThisBoxFlipsNothing(t *testing.T) {
+func TestAnAppWithNoContainerOnThisBoxCutsOverNothing(t *testing.T) {
 	t.Parallel()
 
 	m, _, stack := reconciled(t)
 	staged(t, stack, "web", "b1", "")
 
-	if err := stack.Flip(context.Background(), router.Flip{Promotion: router.Promotion{
+	if err := stack.MovePointer(context.Background(), router.PointerMove{Promotion: router.Promotion{
 		PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"},
 	}}, progress.Discard()); err != nil {
 		t.Fatalf("Promote: %v", err)
@@ -667,7 +667,7 @@ func TestARecordNamingAContainerAndNoHealthPathIsRefusedRatherThanGatedOnAGuess(
 		t.Fatal(err)
 	}
 
-	err := stack.Flip(context.Background(), router.Flip{Promotion: router.Promotion{
+	err := stack.MovePointer(context.Background(), router.PointerMove{Promotion: router.Promotion{
 		PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"},
 	}}, progress.Discard())
 	if err == nil {
@@ -953,7 +953,7 @@ func reconciledOn(t *testing.T, m *machine, named string) boxStack {
 
 func promoted(t *testing.T, stack boxStack, id, app, identity string) error {
 	t.Helper()
-	return stack.Flip(context.Background(), router.Flip{Promotion: router.Promotion{
+	return stack.MovePointer(context.Background(), router.PointerMove{Promotion: router.Promotion{
 		PromotionID: id, Ts: 1, Builds: map[string]string{app: identity},
 	}}, progress.Discard())
 }
@@ -999,7 +999,7 @@ func TestARollbackOntoASweptImageIsRefusedBeforeThePointerMoves(t *testing.T) {
 	m.swept[imageFor("web", "b1")] = true
 	m.calls = nil
 
-	err := stack.Flip(context.Background(), router.Flip{Promotion: router.Promotion{
+	err := stack.MovePointer(context.Background(), router.PointerMove{Promotion: router.Promotion{
 		PromotionID: "p3", Ts: 3, Builds: map[string]string{"web": "b1"},
 	}}, progress.Discard())
 	if err == nil {
@@ -1025,7 +1025,7 @@ func TestARollbackOntoASweptImageIsRefusedBeforeThePointerMoves(t *testing.T) {
 		t.Fatalf("the ledger records no active promotion after a refused rollback (%v), and a pointer at nothing is not the release still serving", entries)
 	}
 	if entries[at].PromotionID != "p2" {
-		t.Errorf("the pointer is at %s after a refused rollback, want the release still serving: the ensure runs before the flip so a rollback that cannot serve leaves nothing moved", entries[at].PromotionID)
+		t.Errorf("the pointer is at %s after a refused rollback, want the release still serving: the ensure runs before the cutover so a rollback that cannot serve leaves nothing moved", entries[at].PromotionID)
 	}
 }
 
@@ -1056,13 +1056,13 @@ func TestAPromotionSaysItIsRestartingTheContainerBeforeItStartsIt(t *testing.T) 
 	_, _, stack := reconciled(t)
 	staged(t, stack, "web", "b1", "shop-web-1111")
 	heard := &fake.Log{}
-	if err := stack.Flip(context.Background(), router.Flip{Promotion: router.Promotion{
+	if err := stack.MovePointer(context.Background(), router.PointerMove{Promotion: router.Promotion{
 		PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"},
 	}}, heard); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
 	if !slices.Contains(heard.Lines(), "INFO Starting web's container shop-web-1111 again") {
-		t.Errorf("the promotion reported %v and never named the container it started; a rollback provisions nothing, so this is the only row saying the box put a container back before the flip", heard.Lines())
+		t.Errorf("the promotion reported %v and never named the container it started; a rollback provisions nothing, so this is the only row saying the box put a container back before the cutover", heard.Lines())
 	}
 }
 
@@ -1092,7 +1092,7 @@ func TestRemovingAPointerTakesTheRouteOfAnAppTheLedgerNoLongerRemembers(t *testi
 	m, _, stack := reconciled(t)
 	staged(t, stack, "web", "b1", "shop-web-1111")
 	staged(t, stack, "worker", "b1", "shop-worker-1111")
-	if err := stack.Flip(context.Background(), router.Flip{Promotion: router.Promotion{
+	if err := stack.MovePointer(context.Background(), router.PointerMove{Promotion: router.Promotion{
 		PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1", "worker": "b1"},
 	}}, progress.Discard()); err != nil {
 		t.Fatalf("Promote(p1): %v", err)
@@ -1133,7 +1133,7 @@ func TestDestroyingAStackLeavesNoRouteOnTheBoxAtAll(t *testing.T) {
 	m, _, stack := reconciled(t)
 	staged(t, stack, "web", "b1", "shop-web-1111")
 	staged(t, stack, "worker", "b1", "shop-worker-1111")
-	if err := stack.Flip(context.Background(), router.Flip{Promotion: router.Promotion{
+	if err := stack.MovePointer(context.Background(), router.PointerMove{Promotion: router.Promotion{
 		PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1", "worker": "b1"},
 	}}, progress.Discard()); err != nil {
 		t.Fatalf("Promote: %v", err)
@@ -1239,7 +1239,7 @@ func TestAPromotionPassesTheNamesItsDeployResolvedSoTheBoxCanRefuseToServeNone(t
 		t.Fatalf("PutStaged: %v", err)
 	}
 
-	if err := stack.Flip(context.Background(), router.Flip{Promotion: router.Promotion{
+	if err := stack.MovePointer(context.Background(), router.PointerMove{Promotion: router.Promotion{
 		PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"},
 	}}, progress.Discard()); err != nil {
 		t.Fatalf("Promote: %v", err)

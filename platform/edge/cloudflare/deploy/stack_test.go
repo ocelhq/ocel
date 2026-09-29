@@ -623,24 +623,24 @@ func TestReconcileEnvelopeKey(t *testing.T) {
 	})
 }
 
-func TestAFlipWrapsTheEnvelope(t *testing.T) {
+func TestAPointerMoveWrapsTheEnvelope(t *testing.T) {
 	t.Parallel()
 
 	const dataKey = "Hx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8="
 
-	flipped := func(t *testing.T, own private, record router.DeploymentRecord) router.DeploymentRecord {
+	moved := func(t *testing.T, own private, record router.DeploymentRecord) router.DeploymentRecord {
 		t.Helper()
 		srv, store := fakeStoreFor(t, "s3cr3t")
 		state := keyedState(srv.URL, "s3cr3t")
 		state.Private = edge.Own(own)
-		flips(t, &cloudflare{}, state, flipOf("promo-1", "", record))
-		return store.flipped()[0].Records[0]
+		movePointer(t, &cloudflare{}, state, pointerMoveOf("promo-1", "", record))
+		return store.moved()[0].Records[0]
 	}
 
 	t.Run("a stack with a worker of its own serves a wrapped envelope only its worker can open", func(t *testing.T) {
 		t.Parallel()
 
-		got := flipped(t, private{EntryWorkers: []string{"ocel-acme-web-prod"}, EnvelopeKey: testEnvelopeKey},
+		got := moved(t, private{EntryWorkers: []string{"ocel-acme-web-prod"}, EnvelopeKey: testEnvelopeKey},
 			router.DeploymentRecord{App: "web", Build: "b1", Envelope: dataKey})
 
 		if got.Envelope == dataKey || got.Envelope == "" {
@@ -661,7 +661,7 @@ func TestAFlipWrapsTheEnvelope(t *testing.T) {
 	t.Run("a stack the shared entry serves serves the envelope as the origin sealed it", func(t *testing.T) {
 		t.Parallel()
 
-		got := flipped(t, private{}, router.DeploymentRecord{App: "web", Build: "b1", Envelope: dataKey})
+		got := moved(t, private{}, router.DeploymentRecord{App: "web", Build: "b1", Envelope: dataKey})
 		if got.Envelope != dataKey {
 			t.Errorf("served envelope = %q, want the bare data key: the shared entry has no key to unwrap with", got.Envelope)
 		}
@@ -670,7 +670,7 @@ func TestAFlipWrapsTheEnvelope(t *testing.T) {
 	t.Run("a record with nothing sealed serves no envelope", func(t *testing.T) {
 		t.Parallel()
 
-		got := flipped(t, private{EntryWorkers: []string{"ocel-acme-web-prod"}, EnvelopeKey: testEnvelopeKey},
+		got := moved(t, private{EntryWorkers: []string{"ocel-acme-web-prod"}, EnvelopeKey: testEnvelopeKey},
 			router.DeploymentRecord{App: "web", Build: "b1"})
 		if got.Envelope != "" {
 			t.Errorf("served envelope = %q, want none", got.Envelope)
@@ -686,8 +686,8 @@ func TestDestroy(t *testing.T) {
 		m := previewZoneMock()
 		p := m.provider(t)
 		state := testState(store.URL, "s3cr3t")
-		flips(t, p, state, flipOf("api-1", "", router.DeploymentRecord{App: "api", Build: "b1"}))
-		flips(t, p, state, flipOf("web-1", "", router.DeploymentRecord{App: "web", Build: "b2"}))
+		movePointer(t, p, state, pointerMoveOf("api-1", "", router.DeploymentRecord{App: "api", Build: "b1"}))
+		movePointer(t, p, state, pointerMoveOf("web-1", "", router.DeploymentRecord{App: "web", Build: "b2"}))
 		putStampSet(t, p, store.URL, "s3cr3t", stampSet{"ocel--acme-web--prod--web": "v1"})
 
 		if err := stackOn(p, state).Destroy(t.Context()); err != nil {

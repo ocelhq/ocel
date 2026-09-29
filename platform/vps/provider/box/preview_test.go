@@ -142,7 +142,7 @@ func previewed(t *testing.T, stack boxStack, pointer string, apps ...string) {
 		staged(t, stack, app, "b-"+pointer, slug+"-"+app+"-"+pointer)
 		builds[app] = "b-" + pointer
 	}
-	if err := stack.Flip(context.Background(), router.Flip{Pointer: pointer, Promotion: router.Promotion{
+	if err := stack.MovePointer(context.Background(), router.PointerMove{Pointer: pointer, Promotion: router.Promotion{
 		PromotionID: "p-" + pointer, Ts: 1, Builds: builds,
 	}}, progress.Discard()); err != nil {
 		t.Fatalf("Promote(%s): %v", pointer, err)
@@ -242,7 +242,7 @@ func TestAPreviewHostnameDnsWillNotResolveIsRefusedRatherThanClaimed(t *testing.
 	over := strings.Repeat("b", edge.PreviewLabelMaxLen)
 	staged(t, stack, "web", "b1", slug+"-web-1")
 
-	err := stack.Flip(context.Background(), router.Flip{Pointer: over, Promotion: router.Promotion{
+	err := stack.MovePointer(context.Background(), router.PointerMove{Pointer: over, Promotion: router.Promotion{
 		PromotionID: "p-over", Ts: 1, Builds: map[string]string{"web": "b1"},
 	}}, progress.Discard())
 	if err == nil {
@@ -302,7 +302,7 @@ func TestAProductionPromotionClaimsNoPreviewHostnameAtAll(t *testing.T) {
 	}
 	pointed := stackOn(front, pointedEdge)
 	staged(t, pointed, "web", "b2", "shop-web-2222")
-	if err := pointed.Flip(context.Background(), router.Flip{Pointer: "pr-7", Promotion: router.Promotion{
+	if err := pointed.MovePointer(context.Background(), router.PointerMove{Pointer: "pr-7", Promotion: router.Promotion{
 		PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": "b2"},
 	}}, progress.Discard()); err != nil {
 		t.Fatalf("Promote under a pointer: %v", err)

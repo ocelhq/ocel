@@ -33,14 +33,14 @@ export interface EdgeWorkers {
   compatFlags?: string[];
 }
 
-export interface Flip {
+export interface PointerMove {
   pointer?: string;
   replaces?: string | null;
   promotionId: string;
   records: DeploymentRecord[];
 }
 
-export type Flipped = "flipped" | "stale";
+export type PointerMoveOutcome = "moved" | "stale";
 
 export const SCHEMA_VERSION = 3;
 
@@ -113,13 +113,12 @@ export function readServedPromotion(
   return row?.promotion_id;
 }
 
-export function flip(store: SqlStore, flipped: Flip): Flipped {
-  const pointer = flipped.pointer || DEFAULT_POINTER;
+export function movePointer(store: SqlStore, move: PointerMove): PointerMoveOutcome {
+  const pointer = move.pointer || DEFAULT_POINTER;
   return store.transactionSync(() => {
-    if ((readServedPromotion(store, pointer) ?? null) !== (flipped.replaces || null))
-      return "stale";
+    if ((readServedPromotion(store, pointer) ?? null) !== (move.replaces || null)) return "stale";
     store.sql.exec(`DELETE FROM served WHERE pointer = ?`, pointer);
-    for (const record of flipped.records) {
+    for (const record of move.records) {
       store.sql.exec(
         `INSERT INTO served (pointer, app, identity, data) VALUES (?, ?, ?, ?)`,
         pointer,
@@ -133,9 +132,9 @@ export function flip(store: SqlStore, flipped: Flip): Flipped {
       `INSERT INTO pointers (name, promotion_id) VALUES (?, ?)
        ON CONFLICT(name) DO UPDATE SET promotion_id = excluded.promotion_id`,
       pointer,
-      flipped.promotionId,
+      move.promotionId,
     );
-    return "flipped";
+    return "moved";
   });
 }
 

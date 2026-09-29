@@ -47,6 +47,6 @@ func fakeFixture(t *testing.T, kind edge.Kind, routedBy router.Kind) routerconfo
 		Serving: func(pointer string) string {
 			return plane.Builds(spec.Slug, spec.Tier, pointer)[routerconformance.App]
 		},
-		FailNextFlip: plane.FailNextFlip,
+		FailNextPointerMove: plane.FailNextPointerMove,
 	}
 }

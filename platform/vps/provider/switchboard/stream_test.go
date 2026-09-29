@@ -102,7 +102,7 @@ func TestAnUpgradedConnectionIsPassedThroughBothWays(t *testing.T) {
 	}
 }
 
-func TestAnUpgradedConnectionOpenedBeforeAFlipDrainsWithItsRetireeAndIsCutAtTheCeiling(t *testing.T) {
+func TestAnUpgradedConnectionOpenedBeforeACutoverDrainsWithItsRetireeAndIsCutAtTheCeiling(t *testing.T) {
 	t.Parallel()
 
 	blue, green := echoing(t, "blue"), echoing(t, "green")
@@ -110,17 +110,17 @@ func TestAnUpgradedConnectionOpenedBeforeAFlipDrainsWithItsRetireeAndIsCutAtTheC
 	opened := upgrading(t, at, "shop.example.com")
 
 	var told drains
-	flipped := make(chan error, 1)
+	cutOver := make(chan error, 1)
 	go func() {
-		flipped <- board.Flip(t.Context(), tableAt(t, routing(t, map[string]string{"shop.example.com": green})), []string{blue}, 2*time.Second, told.tell)
+		cutOver <- board.Cutover(t.Context(), tableAt(t, routing(t, map[string]string{"shop.example.com": green})), []string{blue}, 2*time.Second, told.tell)
 	}()
 	switchedTo(t, at, "shop.example.com", "green")
 
 	if said, err := opened.exchange("still"); err != nil || said != "blue still" {
-		t.Errorf("the socket opened before the flip answered %q, %v, want its retiree still answering it through the drain", said, err)
+		t.Errorf("the socket opened before the cutover answered %q, %v, want its retiree still answering it through the drain", said, err)
 	}
 	if fresh, err := upgrading(t, at, "shop.example.com").exchange("new"); err != nil || fresh != "green new" {
-		t.Errorf("a socket opened after the flip answered %q, %v, want the new upstream", fresh, err)
+		t.Errorf("a socket opened after the cutover answered %q, %v, want the new upstream", fresh, err)
 	}
 	counted := map[string]int{}
 	for _, upstream := range board.Upstreams() {
@@ -133,18 +133,18 @@ func TestAnUpgradedConnectionOpenedBeforeAFlipDrainsWithItsRetireeAndIsCutAtTheC
 		t.Errorf("Idle(%s, %s) = %v, %v mid-drain, want neither: one is being drained and one is routed", blue, green, idle, err)
 	}
 
-	if err := <-flipped; err != nil {
+	if err := <-cutOver; err != nil {
 		t.Fatal(err)
 	}
 	if lines := told.lines(); !slices.Equal(lines, []string{switchboard.DrainExpired + " " + blue + " 1"}) {
-		t.Errorf("the flip told %v, want the socket still open when the ceiling passed", lines)
+		t.Errorf("the cutover told %v, want the socket still open when the ceiling passed", lines)
 	}
 	_ = opened.conn.SetDeadline(time.Now().Add(5 * time.Second))
 	if said, err := opened.exchange("after"); err == nil {
-		t.Errorf("the socket opened before the flip still answered %q after its drain expired, want the switchboard to have closed it", said)
+		t.Errorf("the socket opened before the cutover still answered %q after its drain expired, want the switchboard to have closed it", said)
 	}
 	if idle, err := board.Idle([]string{blue, green}); err != nil || !slices.Equal(idle, []string{blue}) {
-		t.Errorf("Idle(%s, %s) = %v, %v once the flip returned, want only the retiree", blue, green, idle, err)
+		t.Errorf("Idle(%s, %s) = %v, %v once the cutover returned, want only the retiree", blue, green, idle, err)
 	}
 }
 
@@ -176,11 +176,11 @@ func TestAnUpgradeTheRetireeAnswersOnlyAfterItsDrainExpiredIsNeverPassedThrough(
 	<-arrived
 
 	var told drains
-	if err := board.Flip(t.Context(), tableAt(t, routing(t, map[string]string{"shop.example.com": green})), []string{blue}, 200*time.Millisecond, told.tell); err != nil {
+	if err := board.Cutover(t.Context(), tableAt(t, routing(t, map[string]string{"shop.example.com": green})), []string{blue}, 200*time.Millisecond, told.tell); err != nil {
 		t.Fatal(err)
 	}
 	if lines := told.lines(); !slices.Equal(lines, []string{switchboard.DrainExpired + " " + blue + " 1"}) {
-		t.Fatalf("the flip told %v, want the pending upgrade still in flight when the ceiling passed", lines)
+		t.Fatalf("the cutover told %v, want the pending upgrade still in flight when the ceiling passed", lines)
 	}
 	close(release)
 
@@ -203,7 +203,7 @@ func TestAnExpiredDrainLeavesOpenTheSocketsOfAnUpstreamTheLiveTableStillRoutes(t
 	opened := upgrading(t, at, "shop.example.com")
 
 	var told drains
-	if err := board.Flip(t.Context(), tableAt(t, routing(t, map[string]string{"shop.example.com": blue})), []string{blue}, 500*time.Millisecond, told.tell); err != nil {
+	if err := board.Cutover(t.Context(), tableAt(t, routing(t, map[string]string{"shop.example.com": blue})), []string{blue}, 500*time.Millisecond, told.tell); err != nil {
 		t.Fatal(err)
 	}
 	if said, err := opened.exchange("still"); err != nil || said != "blue still" {

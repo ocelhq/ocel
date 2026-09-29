@@ -13,7 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
-func TestADeployRecordsTheRouterEachAppFlipsThrough(t *testing.T) {
+func TestADeployRecordsTheRouterEachAppPromotesThrough(t *testing.T) {
 	builtProject(t)
 	client, p := deployServed(t)
 
@@ -24,7 +24,7 @@ func TestADeployRecordsTheRouterEachAppFlipsThrough(t *testing.T) {
 	state := readStack(t, p, environment.TierProduction, "shop")
 	relay := fake.RouterRelay
 	if state.Apps["web"] != relay {
-		t.Errorf("the edge state pairs web with %q, want %q: a later rollback or removal reads which router an app flips through from here", state.Apps["web"], relay)
+		t.Errorf("the edge state pairs web with %q, want %q: a later rollback or removal reads which router an app promotes through from here", state.Apps["web"], relay)
 	}
 	recorded, found := state.Routers[relay]
 	if !found || recorded.Slug != "shop" || recorded.Tier != environment.TierProduction {
@@ -101,7 +101,7 @@ func TestAProjectWithNoEdgeIsServedByTheRouterNoEdgePairsWithAndRemovedThroughNo
 	}
 }
 
-func TestEachAppStackIsHandedTheRouterItsAppFlipsThroughAndNotItsEdge(t *testing.T) {
+func TestEachAppStackIsHandedTheRouterItsAppPromotesThroughAndNotItsEdge(t *testing.T) {
 	builtProject(t)
 	p := fake.NewProvider(fake.Options{})
 	client := servedBy(t, unfronted{p})
@@ -139,7 +139,7 @@ func TestAnAppWhoseComputeNoRouterIsPairedForDeploysThroughItsEdgeAsBefore(t *te
 
 	result, _ := deploy(t, client, deployRequest())
 	if result == nil || !result.GetSuccess() {
-		t.Fatalf("Deploy() of a serverless app on a provider that pairs its edge for containers only = %q, want it to deploy and flip through the edge's stack as it did before pairings were declared", result.GetError())
+		t.Fatalf("Deploy() of a serverless app on a provider that pairs its edge for containers only = %q, want it to deploy and move the pointer through the edge's stack as it did before pairings were declared", result.GetError())
 	}
 	routed := p.Routers().(*fake.Routers).DataPlane(fake.RouterRelay).Builds("shop", environment.TierProduction, router.DefaultPointer)
 	if routed["web"] == "" {
@@ -163,7 +163,7 @@ func TestAHostnameOfAnAppWhoseComputeNoRouterIsPairedForIsServedThroughTheRouter
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 	if !slices.Equal(servedURLs(result), []string{"https://shop.example"}) {
-		t.Errorf("the deploy served %v, want shop.example: web flips through %s, the router its edge opened, so that router answering the hostname serves it", servedURLs(result), fake.RouterRelay)
+		t.Errorf("the deploy served %v, want shop.example: web promotes through %s, the router its edge opened, so that router answering the hostname serves it", servedURLs(result), fake.RouterRelay)
 	}
 	if host := readStack(t, p, environment.TierProduction, "shop").Host("shop.example"); !host.Probe.OK || host.Probe.Router != fake.RouterRelay {
 		t.Errorf("shop.example is recorded %+v, want it answered by %s", host, fake.RouterRelay)

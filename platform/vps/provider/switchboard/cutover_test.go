@@ -75,13 +75,13 @@ func asking(at, host, path string) {
 	}
 }
 
-func TestAFlipUnderSustainedLoadDropsNothingAndEverythingAskedAfterItIsServedByTheNewUpstream(t *testing.T) {
+func TestACutoverUnderSustainedLoadDropsNothingAndEverythingAskedAfterItIsServedByTheNewUpstream(t *testing.T) {
 	t.Parallel()
 
 	for _, keepAlive := range []bool{true, false} {
 		blue, green := backend(t, "blue"), backend(t, "green")
 		board, at := served(t, routing(t, map[string]string{"shop.example.com": blue}))
-		flipped := tableAt(t, routing(t, map[string]string{"shop.example.com": green}))
+		cutOver := tableAt(t, routing(t, map[string]string{"shop.example.com": green}))
 
 		client := &http.Client{Transport: &http.Transport{DisableKeepAlives: !keepAlive, MaxIdleConnsPerHost: 16}}
 		var done atomic.Int64
@@ -111,7 +111,7 @@ func TestAFlipUnderSustainedLoadDropsNothingAndEverythingAskedAfterItIsServedByT
 						continue
 					}
 					served.Add(1)
-					if flippedAt := done.Load(); flippedAt != 0 && started > flippedAt && string(body) != "green" {
+					if cutOverAt := done.Load(); cutOverAt != 0 && started > cutOverAt && string(body) != "green" {
 						stale.Add(1)
 					}
 				}
@@ -121,7 +121,7 @@ func TestAFlipUnderSustainedLoadDropsNothingAndEverythingAskedAfterItIsServedByT
 			time.Sleep(time.Millisecond)
 		}
 		var told drains
-		if err := board.Flip(t.Context(), flipped, []string{blue}, 10*time.Second, told.tell); err != nil {
+		if err := board.Cutover(t.Context(), cutOver, []string{blue}, 10*time.Second, told.tell); err != nil {
 			t.Fatal(err)
 		}
 		done.Store(time.Now().UnixNano())
@@ -133,13 +133,13 @@ func TestAFlipUnderSustainedLoadDropsNothingAndEverythingAskedAfterItIsServedByT
 		asked.Wait()
 
 		if failed.Load() != 0 {
-			t.Errorf("keep-alive %t: %d of %d requests failed across the flip, want none", keepAlive, failed.Load(), served.Load()+failed.Load())
+			t.Errorf("keep-alive %t: %d of %d requests failed across the cutover, want none", keepAlive, failed.Load(), served.Load()+failed.Load())
 		}
 		if stale.Load() != 0 {
-			t.Errorf("keep-alive %t: %d requests asked after the flip returned were served by the retiree, want none", keepAlive, stale.Load())
+			t.Errorf("keep-alive %t: %d requests asked after the cutover returned were served by the retiree, want none", keepAlive, stale.Load())
 		}
 		if lines := told.lines(); !slices.Equal(lines, []string{switchboard.Drained + " " + blue}) {
-			t.Errorf("keep-alive %t: the flip told %v, want %s drained", keepAlive, lines, blue)
+			t.Errorf("keep-alive %t: the cutover told %v, want %s drained", keepAlive, lines, blue)
 		}
 	}
 }
@@ -157,9 +157,9 @@ func TestADrainIsAcknowledgedOnlyOnceTheLastRequestOnTheRetireeHasReturned(t *te
 	var told drains
 	var released atomic.Bool
 	early := make(chan string, 1)
-	flipped := make(chan error, 1)
+	cutOver := make(chan error, 1)
 	go func() {
-		flipped <- board.Flip(t.Context(), tableAt(t, routing(t, map[string]string{"shop.example.com": green})), []string{blue.address}, 30*time.Second, func(drain switchboard.Drain) {
+		cutOver <- board.Cutover(t.Context(), tableAt(t, routing(t, map[string]string{"shop.example.com": green})), []string{blue.address}, 30*time.Second, func(drain switchboard.Drain) {
 			if !released.Load() {
 				early <- drain.String()
 			}
@@ -173,19 +173,19 @@ func TestADrainIsAcknowledgedOnlyOnceTheLastRequestOnTheRetireeHasReturned(t *te
 		t.Errorf("the stalled request answered %d %q, want the retiree's own 200 once it returned", said.status, said.body)
 	}
 	select {
-	case err := <-flipped:
+	case err := <-cutOver:
 		if err != nil {
 			t.Fatal(err)
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("the flip never returned after the retiree's last request did")
+		t.Fatal("the cutover never returned after the retiree's last request did")
 	}
 	if lines := told.lines(); !slices.Equal(lines, []string{switchboard.Drained + " " + blue.address}) {
-		t.Errorf("the flip told %v, want %s drained", lines, blue.address)
+		t.Errorf("the cutover told %v, want %s drained", lines, blue.address)
 	}
 	select {
 	case line := <-early:
-		t.Errorf("the flip told %q while a request was still open on the retiree, want nothing until it returned", line)
+		t.Errorf("the cutover told %q while a request was still open on the retiree, want nothing until it returned", line)
 	default:
 	}
 }
@@ -202,38 +202,38 @@ func TestADrainWhoseCeilingPassesFirstNamesTheRetireeAndWhatItStillHadInFlight(t
 
 	var told drains
 	started := time.Now()
-	if err := board.Flip(t.Context(), tableAt(t, routing(t, map[string]string{"shop.example.com": green})), []string{blue.address}, time.Second, told.tell); err != nil {
+	if err := board.Cutover(t.Context(), tableAt(t, routing(t, map[string]string{"shop.example.com": green})), []string{blue.address}, time.Second, told.tell); err != nil {
 		t.Fatal(err)
 	}
 	if took := time.Since(started); took < time.Second || took > 3*time.Second {
-		t.Errorf("the flip returned after %s, want it to wait out its one second ceiling and no longer", took)
+		t.Errorf("the cutover returned after %s, want it to wait out its one second ceiling and no longer", took)
 	}
 	if lines := told.lines(); !slices.Equal(lines, []string{switchboard.DrainExpired + " " + blue.address + " 2"}) {
-		t.Errorf("the flip told %v, want %s %s 2", lines, switchboard.DrainExpired, blue.address)
+		t.Errorf("the cutover told %v, want %s %s 2", lines, switchboard.DrainExpired, blue.address)
 	}
 }
 
-func TestAFlipThatCannotReadItsTableRetiresNothingAndSwitchesNothing(t *testing.T) {
+func TestACutoverThatCannotReadItsTableRetiresNothingAndSwitchesNothing(t *testing.T) {
 	t.Parallel()
 
 	blue := backend(t, "blue")
 	board, at := served(t, routing(t, map[string]string{"shop.example.com": blue}))
 
 	var told drains
-	if err := board.Flip(t.Context(), tableAt(t, []byte(`{"grace":"soon"}`)), []string{blue}, time.Second, told.tell); err == nil {
-		t.Fatal("a flip onto a table that cannot be read was taken, want it refused")
+	if err := board.Cutover(t.Context(), tableAt(t, []byte(`{"grace":"soon"}`)), []string{blue}, time.Second, told.tell); err == nil {
+		t.Fatal("a cutover to a table that cannot be read was taken, want it refused")
 	}
-	if err := board.Flip(t.Context(), tableAt(t, routing(t, map[string]string{})), []string{"blue"}, time.Second, told.tell); err == nil {
-		t.Fatal("a flip retiring an address with no port was taken, want it refused before it switches anything")
+	if err := board.Cutover(t.Context(), tableAt(t, routing(t, map[string]string{})), []string{"blue"}, time.Second, told.tell); err == nil {
+		t.Fatal("a cutover retiring an address with no port was taken, want it refused before it switches anything")
 	}
 	if lines := told.lines(); len(lines) != 0 {
-		t.Errorf("the refused flips told %v, want nothing drained", lines)
+		t.Errorf("the refused cutovers told %v, want nothing drained", lines)
 	}
 	if said := ask(t, boardClient, at, "shop.example.com", "/"); said.body != "blue" {
-		t.Errorf("after the refused flips shop.example.com answered %q, want blue still serving", said.body)
+		t.Errorf("after the refused cutovers shop.example.com answered %q, want blue still serving", said.body)
 	}
 	if idle, err := board.Idle([]string{blue}); err != nil || len(idle) != 0 {
-		t.Errorf("Idle(%s) = %v, %v after refused flips, want it still routed", blue, idle, err)
+		t.Errorf("Idle(%s) = %v, %v after refused cutovers, want it still routed", blue, idle, err)
 	}
 	if idle, err := board.Idle([]string{"blue"}); err == nil {
 		t.Errorf("Idle(blue) = %v, want it refused: an address with no port keys no route and no drain, so it would read as idle whatever listens on it", idle)
@@ -290,11 +290,11 @@ func TestADrainCeilingCutsEveryRequestAndStreamStillOpenOnARetireeNoLongerRouted
 	<-arrived
 
 	var told drains
-	if err := board.Flip(t.Context(), tableAt(t, routing(t, map[string]string{"shop.example.com": green})), []string{blue}, 200*time.Millisecond, told.tell); err != nil {
+	if err := board.Cutover(t.Context(), tableAt(t, routing(t, map[string]string{"shop.example.com": green})), []string{blue}, 200*time.Millisecond, told.tell); err != nil {
 		t.Fatal(err)
 	}
 	if lines := told.lines(); !slices.Equal(lines, []string{switchboard.DrainExpired + " " + blue + " 2"}) {
-		t.Errorf("the flip told %v, want %s %s 2", lines, switchboard.DrainExpired, blue)
+		t.Errorf("the cutover told %v, want %s %s 2", lines, switchboard.DrainExpired, blue)
 	}
 	select {
 	case said := <-stalled:
@@ -316,7 +316,7 @@ func TestADrainCeilingCutsEveryRequestAndStreamStillOpenOnARetireeNoLongerRouted
 	}
 }
 
-func TestAFlipCutShortAfterItsFirstDrainLineEndsItsAnswerIncomplete(t *testing.T) {
+func TestACutoverCutShortAfterItsFirstDrainLineEndsItsAnswerIncomplete(t *testing.T) {
 	t.Parallel()
 
 	blue, green := aStallingBackend(t, "blue"), backend(t, "green")
@@ -335,18 +335,18 @@ func TestAFlipCutShortAfterItsFirstDrainLineEndsItsAnswerIncomplete(t *testing.T
 		switchboard.RetireField: {idle, blue.address},
 		switchboard.WindowField: {"30s"},
 	}
-	answer, err := http.PostForm(control.URL+switchboard.FlipPath, form)
+	answer, err := http.PostForm(control.URL+switchboard.CutoverPath, form)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer answer.Body.Close()
 	lines := bufio.NewReader(answer.Body)
 	if first, err := lines.ReadString('\n'); err != nil || first != switchboard.Drained+" "+idle+"\n" {
-		t.Fatalf("the flip first answered %q, %v, want the idle retiree drained", first, err)
+		t.Fatalf("the cutover first answered %q, %v, want the idle retiree drained", first, err)
 	}
 	stop()
 	if rest, err := io.ReadAll(lines); err == nil {
-		t.Errorf("a flip stopped while %s still drained ended its answer cleanly after %q, want it cut short so no caller reads a partial drain report as a whole one", blue.address, rest)
+		t.Errorf("a cutover stopped while %s still drained ended its answer cleanly after %q, want it cut short so no caller reads a partial drain report as a whole one", blue.address, rest)
 	}
 }
 
@@ -373,7 +373,7 @@ func TestARetireeKeepsNoConnectionFromTheSwitchboardOnceItHasDrained(t *testing.
 	board, at := served(t, routing(t, map[string]string{"shop.example.com": blue}))
 	for range 3 {
 		if said := ask(t, boardClient, at, "shop.example.com", "/"); said.body != "blue" {
-			t.Fatalf("shop.example.com answered %q before the flip, want blue", said.body)
+			t.Fatalf("shop.example.com answered %q before the cutover, want blue", said.body)
 		}
 	}
 	if open.Load() == 0 {
@@ -381,7 +381,7 @@ func TestARetireeKeepsNoConnectionFromTheSwitchboardOnceItHasDrained(t *testing.
 	}
 
 	var told drains
-	if err := board.Flip(t.Context(), tableAt(t, routing(t, map[string]string{"shop.example.com": green})), []string{blue}, 10*time.Second, told.tell); err != nil {
+	if err := board.Cutover(t.Context(), tableAt(t, routing(t, map[string]string{"shop.example.com": green})), []string{blue}, 10*time.Second, told.tell); err != nil {
 		t.Fatal(err)
 	}
 	for open.Load() > 0 {

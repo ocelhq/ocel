@@ -95,11 +95,11 @@ func (r routerStack) Disclaim(ctx context.Context, hostname string) error {
 	return r.s.e.Shielded().withdrawClaims(ctx, r.s.state.Tier, hostname)
 }
 
-func (r routerStack) Flip(ctx context.Context, flip router.Flip, progress progress.Log) error {
-	if err := pin.Flip(ctx, r.s.e.deps.Pins, flip, progress); err != nil {
+func (r routerStack) MovePointer(ctx context.Context, move router.PointerMove, progress progress.Log) error {
+	if err := pin.MovePointer(ctx, r.s.e.deps.Pins, move, progress); err != nil {
 		return err
 	}
-	return r.s.released(ctx, flip.Records, progress)
+	return r.s.released(ctx, move.Records, progress)
 }
 
 func (r routerStack) RemovePointer(context.Context, string, progress.Log) error { return nil }

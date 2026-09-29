@@ -13,7 +13,7 @@ func TestPropagationNote(t *testing.T) {
 		want  string
 	}{
 		{name: "an unrecorded bound says nothing"},
-		{name: "an instant flip says nothing", bound: &progressv1.Propagation{}},
+		{name: "an instant pointer move says nothing", bound: &progressv1.Propagation{}},
 		{
 			name:  "a published bound promises the duration",
 			bound: &progressv1.Propagation{TypicalMs: 5000, Published: true},

@@ -24,7 +24,7 @@ func TestPromoteOntoAPointerOtherThanTheDefaultLeavesTheHostnameAlone(t *testing
 	stack := reconciled(t, w)
 	bound(t, stack)
 	staged(t, stack, fakeEntryURL, fakeAssetPrefix)
-	if err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: promotion()}, progress.Discard()); err != nil {
+	if err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Promotion: promotion()}, progress.Discard()); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
 	live := routeOn(t, w, stack, boundHost)
@@ -37,7 +37,7 @@ func TestPromoteOntoAPointerOtherThanTheDefaultLeavesTheHostnameAlone(t *testing
 	preview := promotion()
 	preview.PromotionID = "p2"
 	preview.Builds = map[string]string{"web": next.Build}
-	if err := openRouter(stack).Flip(context.Background(), router.Flip{Pointer: "pr-7", Promotion: preview}, progress.Discard()); err != nil {
+	if err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Pointer: "pr-7", Promotion: preview}, progress.Discard()); err != nil {
 		t.Fatalf("Promote onto a preview pointer: %v", err)
 	}
 
@@ -56,7 +56,7 @@ func TestRemovingAPreviewPointerLeavesTheHostnamesProductionBoundServing(t *test
 	stack := reconciled(t, w)
 	bound(t, stack)
 	staged(t, stack, fakeEntryURL, fakeAssetPrefix)
-	if err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: promotion()}, progress.Discard()); err != nil {
+	if err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Promotion: promotion()}, progress.Discard()); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
 
@@ -80,7 +80,7 @@ func TestDomainOwnerAsksTheRouteStoreBeforeListingTheAccount(t *testing.T) {
 	}
 	bound(t, stack)
 	staged(t, stack, fakeEntryURL, fakeAssetPrefix)
-	if err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: promotion()}, progress.Discard()); err != nil {
+	if err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Promotion: promotion()}, progress.Discard()); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
 	listed := w.front.count("ListDistributions")
@@ -499,7 +499,7 @@ func TestUnbindDomainOnAStateThatNamesNoStoreTakesTheRouteFromTheInstalledBootst
 	}
 	bound(t, stack)
 	staged(t, stack, fakeEntryURL, fakeAssetPrefix)
-	if err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: promotion()}, progress.Discard()); err != nil {
+	if err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Promotion: promotion()}, progress.Discard()); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
 	arn := ownState(t, stack).KeyValueStore
@@ -561,7 +561,7 @@ func TestBindDomainAfterAPromotionServesThePromotedRelease(t *testing.T) {
 	w := newWorld()
 	stack := reconciled(t, w)
 	staged(t, stack, fakeEntryURL, fakeAssetPrefix)
-	if err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: promotion()}, progress.Discard()); err != nil {
+	if err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Promotion: promotion()}, progress.Discard()); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
 

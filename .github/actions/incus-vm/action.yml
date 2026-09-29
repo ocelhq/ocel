@@ -1,7 +1,7 @@
 name: incus-vm
 description: >-
   The toolchain and host every incus-backed live suite needs: Go with the
-  embedded node bundle and flip helper generated, incus with the qemu driver,
+  embedded node bundle and cutover helper generated, incus with the qemu driver,
   and a Docker daemon keeping images in containerd.
 
 inputs:
@@ -34,7 +34,7 @@ runs:
       shell: bash
       run: go generate -C cli ./...
 
-    - name: The flip helper the provider embeds
+    - name: The cutover helper the provider embeds
       if: inputs.go == 'true'
       shell: bash
       run: go generate -C platform/vps/provider ./...

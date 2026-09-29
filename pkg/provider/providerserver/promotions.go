@@ -198,11 +198,11 @@ func promotionProto(promotion router.Promotion) *contractv1.Promotion {
 	}
 }
 
-func propagationProto(flip *router.Propagation) *progressv1.Propagation {
-	if flip == nil {
+func propagationProto(propagation *router.Propagation) *progressv1.Propagation {
+	if propagation == nil {
 		return nil
 	}
-	return &progressv1.Propagation{TypicalMs: flip.Typical.Milliseconds(), Published: flip.Published}
+	return &progressv1.Propagation{TypicalMs: propagation.Typical.Milliseconds(), Published: propagation.Published}
 }
 
 func newPromotionID() (string, error) {

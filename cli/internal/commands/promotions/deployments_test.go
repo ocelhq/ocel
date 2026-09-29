@@ -345,6 +345,6 @@ func TestPropagationIsAbsentFromThePromotionList(t *testing.T) {
 	}
 
 	if strings.Contains(stdout.String(), "propagates") {
-		t.Errorf("stdout = %q, want the flip note only on a promotion line", stdout.String())
+		t.Errorf("stdout = %q, want the propagation note only on a promotion line", stdout.String())
 	}
 }

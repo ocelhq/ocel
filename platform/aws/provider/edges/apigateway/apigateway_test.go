@@ -80,7 +80,7 @@ func TestTheAPIGatewayRouterBehavesAsEveryRouterMust(t *testing.T) {
 				}
 				return ""
 			},
-			FailNextFlip: func(err error) {
+			FailNextPointerMove: func(err error) {
 				w.gateway.mu.Lock()
 				defer w.gateway.mu.Unlock()
 				w.gateway.stageErr = err
@@ -297,7 +297,7 @@ func TestPromoteRefusesAContainerReleaseByName(t *testing.T) {
 	}
 
 	promotion := router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": record.Build}}
-	err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: promotion}, progress.Discard())
+	err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Promotion: promotion}, progress.Discard())
 	if err == nil || !strings.Contains(err.Error(), "container") || !strings.Contains(err.Error(), "cloudfront") {
 		t.Fatalf("Promote of a container release = %v, want it refused with the edge that can front one: this edge invokes a function, and a container has none", err)
 	}
@@ -314,7 +314,7 @@ func TestPromoteMovesTheStageOnce(t *testing.T) {
 	record := staged(t, stack, entryFunction, "assets/shop/web/r1234abcd")
 
 	promotion := router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": record.Build}}
-	if err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: promotion}, progress.Discard()); err != nil {
+	if err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Promotion: promotion}, progress.Discard()); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
 
@@ -353,7 +353,7 @@ func TestPromoteServesTheFunctionTheDeployNamed(t *testing.T) {
 	}
 
 	promotion := router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": record.Build}}
-	if err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: promotion}, progress.Discard()); err != nil {
+	if err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Promotion: promotion}, progress.Discard()); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
 
@@ -377,7 +377,7 @@ func TestPromoteRefusesWhatTheStageCannotServe(t *testing.T) {
 		w := newWorld()
 		stack := reconciled(t, w)
 
-		err := openRouter(stack).Flip(ctx, router.Flip{Promotion: router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "d1.f1"}}}, progress.Discard())
+		err := openRouter(stack).MovePointer(ctx, router.PointerMove{Promotion: router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "d1.f1"}}}, progress.Discard())
 		if err == nil {
 			t.Fatal("Promote succeeded against a promotion nothing was staged for")
 		}
@@ -391,7 +391,7 @@ func TestPromoteRefusesWhatTheStageCannotServe(t *testing.T) {
 		stack := reconciled(t, w)
 		record := staged(t, stack, "", "assets/one")
 
-		err := openRouter(stack).Flip(ctx, router.Flip{Promotion: router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": record.Build}}}, progress.Discard())
+		err := openRouter(stack).MovePointer(ctx, router.PointerMove{Promotion: router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": record.Build}}}, progress.Discard())
 		if err == nil {
 			t.Fatal("Promote succeeded on a record naming no entry function")
 		}
@@ -415,7 +415,7 @@ func TestPromoteRefusesWhatTheStageCannotServe(t *testing.T) {
 		}
 
 		promotion := router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"api": "d1.f1", "web": "d1.f1"}}
-		err := openRouter(stack).Flip(ctx, router.Flip{Promotion: promotion}, progress.Discard())
+		err := openRouter(stack).MovePointer(ctx, router.PointerMove{Promotion: promotion}, progress.Discard())
 		if err == nil {
 			t.Fatal("Promote succeeded on two apps, want the one-app limit surfaced rather than one app silently served")
 		}
@@ -444,11 +444,11 @@ func assertUnserved(t *testing.T, err error) {
 	t.Helper()
 	var unserved router.Unserved
 	if !errors.As(err, &unserved) {
-		t.Errorf("Flip = %v, want router.Unserved: the stage never moved, so the ledger must take the promotion back", err)
+		t.Errorf("MovePointer = %v, want router.Unserved: the stage never moved, so the ledger must take the promotion back", err)
 	}
 }
 
-func TestAFlipTheStageRefusesIsUnserved(t *testing.T) {
+func TestAPointerMoveTheStageRefusesIsUnserved(t *testing.T) {
 	t.Parallel()
 
 	w := newWorld()
@@ -457,7 +457,7 @@ func TestAFlipTheStageRefusesIsUnserved(t *testing.T) {
 	w.gateway.stageErr = errors.New("stage is being updated by another operation")
 
 	promotion := router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": record.Build}}
-	err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: promotion}, progress.Discard())
+	err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Promotion: promotion}, progress.Discard())
 	if err == nil {
 		t.Fatal("Promote succeeded, want the stage failure surfaced")
 	}
@@ -477,15 +477,15 @@ func TestRollbackMovesTheStageOnce(t *testing.T) {
 			t.Fatalf("PutStaged: %v", err)
 		}
 	}
-	if err := openRouter(stack).Flip(ctx, router.Flip{Promotion: router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": first.Build}}}, progress.Discard()); err != nil {
+	if err := openRouter(stack).MovePointer(ctx, router.PointerMove{Promotion: router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": first.Build}}}, progress.Discard()); err != nil {
 		t.Fatalf("Promote(p1): %v", err)
 	}
-	if err := openRouter(stack).Flip(ctx, router.Flip{Promotion: router.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": second.Build}}}, progress.Discard()); err != nil {
+	if err := openRouter(stack).MovePointer(ctx, router.PointerMove{Promotion: router.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": second.Build}}}, progress.Discard()); err != nil {
 		t.Fatalf("Promote(p2): %v", err)
 	}
 
 	before := w.gateway.count("UpdateStage")
-	if err := openRouter(stack).Flip(ctx, router.Flip{Promotion: router.Promotion{PromotionID: "p3", Ts: 3, Builds: map[string]string{"web": first.Build}}}, progress.Discard()); err != nil {
+	if err := openRouter(stack).MovePointer(ctx, router.PointerMove{Promotion: router.Promotion{PromotionID: "p3", Ts: 3, Builds: map[string]string{"web": first.Build}}}, progress.Discard()); err != nil {
 		t.Fatalf("rollback to p1's build: %v", err)
 	}
 	if got := w.gateway.count("UpdateStage") - before; got != 1 {
@@ -512,12 +512,12 @@ func TestARollbackTheStageRefusesIsUnserved(t *testing.T) {
 	w := newWorld()
 	stack := reconciled(t, w)
 	record := staged(t, stack, entryFunction, "assets/one")
-	if err := openRouter(stack).Flip(ctx, router.Flip{Promotion: router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": record.Build}}}, progress.Discard()); err != nil {
+	if err := openRouter(stack).MovePointer(ctx, router.PointerMove{Promotion: router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": record.Build}}}, progress.Discard()); err != nil {
 		t.Fatalf("Promote(p1): %v", err)
 	}
 	w.gateway.stageErr = errors.New("stage is being updated by another operation")
 
-	err := openRouter(stack).Flip(ctx, router.Flip{Promotion: router.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": record.Build}}}, progress.Discard())
+	err := openRouter(stack).MovePointer(ctx, router.PointerMove{Promotion: router.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": record.Build}}}, progress.Discard())
 	if err == nil {
 		t.Fatal("rollback succeeded, want the stage failure surfaced")
 	}
@@ -578,7 +578,7 @@ func TestReconcileKeepsTheReleaseTheStageIsServing(t *testing.T) {
 		t.Fatalf("Reconcile: %v", err)
 	}
 	record := staged(t, stack, entryFunction, "assets/one")
-	if err := openRouter(stack).Flip(ctx, router.Flip{Promotion: router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": record.Build}}}, progress.Discard()); err != nil {
+	if err := openRouter(stack).MovePointer(ctx, router.PointerMove{Promotion: router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": record.Build}}}, progress.Discard()); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
 
@@ -1009,7 +1009,7 @@ func TestBindDomainAfterAPromotionMapsTheHostOntoThePromotedStage(t *testing.T) 
 	stack := reconciled(t, w)
 	staged(t, stack, entryFunction, "")
 	promotion := router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "d1.f1"}}
-	if err := openRouter(stack).Flip(ctx, router.Flip{Promotion: promotion}, progress.Discard()); err != nil {
+	if err := openRouter(stack).MovePointer(ctx, router.PointerMove{Promotion: promotion}, progress.Discard()); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
 

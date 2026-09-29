@@ -292,7 +292,7 @@ func (d *hostnames) unbindPreviousEdge(ctx context.Context, host string, previou
 		return err
 	}
 	runProgress.Say(fmt.Sprintf("%s answers on both fronts until resolvers drop the record they cached: %s",
-		host, flipWindow(d.cutover.dns)))
+		host, describeRecordTTL(d.cutover.dns)))
 	return nil
 }
 
@@ -587,7 +587,7 @@ func recordLines(records []edge.Record) []string {
 	return out
 }
 
-func flipWindow(records edge.DNSRecords) string {
+func describeRecordTTL(records edge.DNSRecords) string {
 	if records == nil {
 		return unknownTTL
 	}

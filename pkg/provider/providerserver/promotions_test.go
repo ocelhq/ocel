@@ -98,7 +98,7 @@ func TestRollbackPromotesTheBuildsOfTheEarlierPromotionAsANewOne(t *testing.T) {
 		t.Errorf("Rollback() promoted web build %q, want %q, the build p1 promoted", build, buildIdentity(0))
 	}
 	if promoted.GetPropagation() == nil {
-		t.Error("Rollback() reported no propagation, so nothing tells the user how long the flip takes")
+		t.Error("Rollback() reported no propagation, so nothing tells the user how long the pointer move takes")
 	}
 
 	listed, err := client.ListPromotions(context.Background(), &contractv1.ListPromotionsRequest{Slug: "shop"})
@@ -121,23 +121,23 @@ func relayPlane(provider *fake.Provider) *fake.DataPlane {
 	return provider.Routers().(*fake.Routers).DataPlane(fake.RouterRelay)
 }
 
-func TestTheDeployFlipSpeaksThroughThePromotionSpansOwnProgress(t *testing.T) {
+func TestTheDeployPointerMoveSpeaksThroughThePromotionSpansOwnProgress(t *testing.T) {
 	builtProject(t)
 	client, provider := deployServed(t)
-	const marker = "the flip said this through the reporter it was handed"
+	const marker = "the pointer move said this through the reporter it was handed"
 	plane := relayPlane(provider)
-	plane.SayOnFlip(marker)
+	plane.SayOnPointerMove(marker)
 
 	result, events := deploy(t, client, deployRequest())
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
-	flipped := plane.FlipProgress()
-	if flipped == nil {
-		t.Fatal("the deploy never reached the router's flip, so nothing was reported from it")
+	moved := plane.PointerMoveProgress()
+	if moved == nil {
+		t.Fatal("the deploy never reached the router's pointer move, so nothing was reported from it")
 	}
-	if flipped == progress.Discard() {
-		t.Fatal("the deploy handed the flip a discarding reporter, want the Promotion span's own")
+	if moved == progress.Discard() {
+		t.Fatal("the deploy handed the pointer move a discarding reporter, want the Promotion span's own")
 	}
 
 	titles := map[string]string{}
@@ -153,15 +153,15 @@ func TestTheDeployFlipSpeaksThroughThePromotionSpansOwnProgress(t *testing.T) {
 		}
 	}
 	if spoke == "" {
-		t.Fatal("nothing the flip said reached the stream, so the flip reports through a reporter the run does not have")
+		t.Fatal("nothing the pointer move said reached the stream, so the pointer move reports through a reporter the run does not have")
 	}
 	promotion := "Switching traffic to promotion " + result.GetPromotionId()
 	if titles[spoke] != promotion || parents[spoke] != "" {
-		t.Errorf("the flip spoke on span %q, want the span %q", titles[spoke], promotion)
+		t.Errorf("the pointer move spoke on span %q, want the span %q", titles[spoke], promotion)
 	}
 }
 
-func TestADeployAnotherPromoteOvertookWhileItBuiltIsRefusedBusyAndFlipsNothing(t *testing.T) {
+func TestADeployAnotherPromoteOvertookWhileItBuiltIsRefusedBusyAndMovesNothing(t *testing.T) {
 	builtProject(t)
 	client, vendor := deployServed(t)
 	releases := seedPromotions(t, vendor, environment.TierProduction, "shop", "", "p1")
@@ -175,7 +175,7 @@ func TestADeployAnotherPromoteOvertookWhileItBuiltIsRefusedBusyAndFlipsNothing(t
 		})
 		return nil
 	})
-	flipsBefore := relayPlane(vendor).Builds("shop", environment.TierProduction, router.DefaultPointer)
+	servedBefore := relayPlane(vendor).Builds("shop", environment.TierProduction, router.DefaultPointer)
 
 	result, _ := deploy(t, client, deployRequest())
 
@@ -190,8 +190,8 @@ func TestADeployAnotherPromoteOvertookWhileItBuiltIsRefusedBusyAndFlipsNothing(t
 	if active, err := releases.ActivePromotionID(context.Background(), ""); err != nil || active != "p2" {
 		t.Errorf("the pointer names %q, %v, want p2, the promote that overtook the deploy", active, err)
 	}
-	if flipped := relayPlane(vendor).Builds("shop", environment.TierProduction, router.DefaultPointer); !maps.Equal(flipped, flipsBefore) {
-		t.Errorf("the router serves %v after the refused deploy, want %v: a refused deploy flips nothing", flipped, flipsBefore)
+	if moved := relayPlane(vendor).Builds("shop", environment.TierProduction, router.DefaultPointer); !maps.Equal(moved, servedBefore) {
+		t.Errorf("the router serves %v after the refused deploy, want %v: a refused deploy moves nothing", moved, servedBefore)
 	}
 }
 
@@ -325,12 +325,12 @@ func TestADeployWhoseOwnReclaimFailsStillSaysWhyItFailedAndWarnsOfTheReclaim(t *
 func TestADeployWhosePromotionTheLedgerStillNamesKeepsItsStacksWhenItFails(t *testing.T) {
 	builtProject(t)
 	client, vendor := deployServed(t)
-	relayPlane(vendor).FailNextFlip(errors.New("the data plane refused the write"))
+	relayPlane(vendor).FailNextPointerMove(errors.New("the data plane refused the write"))
 
 	result, _ := deploy(t, client, deployRequest())
 
 	if result.GetSuccess() {
-		t.Fatal("Deploy() with a router that refused its flip = success, want it to fail")
+		t.Fatal("Deploy() with a router that refused its pointer move = success, want it to fail")
 	}
 	if destroyed := destroyedStacks(vendor); len(destroyed) != 0 {
 		t.Errorf("the deploy destroyed %v, want its stacks kept: the ledger still records its promotion, and a later reclaim of that promotion owns them", destroyed)
@@ -442,23 +442,23 @@ func TestADeployWhoseCallerHungUpStillReclaimsWhatItProvisioned(t *testing.T) {
 	}
 }
 
-func TestTheRollbackFlipIsHandedProgressThatDiscards(t *testing.T) {
+func TestTheRollbackPointerMoveIsHandedProgressThatDiscards(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
 	edgeProvisioned(t, provider, environment.TierProduction, "shop")
 	seedPromotions(t, provider, environment.TierProduction, "shop", "", "p1", "p2")
 	plane := relayPlane(provider)
-	plane.SayOnFlip("the flip said this into a rollback that streams nothing")
+	plane.SayOnPointerMove("the pointer move said this into a rollback that streams nothing")
 
 	if _, err := client.Rollback(context.Background(), &contractv1.RollbackRequest{Slug: "shop", To: "p1"}); err != nil {
 		t.Fatalf("Rollback() error = %v", err)
 	}
-	flipped := plane.FlipProgress()
-	if flipped == nil {
-		t.Fatal("the rollback never reached the router's flip")
+	moved := plane.PointerMoveProgress()
+	if moved == nil {
+		t.Fatal("the rollback never reached the router's pointer move")
 	}
-	if flipped != progress.Discard() {
-		t.Errorf("the rollback handed the flip %#v, want the discarding reporter: Rollback is a unary RPC that streams nothing", flipped)
+	if moved != progress.Discard() {
+		t.Errorf("the rollback handed the pointer move %#v, want the discarding reporter: Rollback is a unary RPC that streams nothing", moved)
 	}
 }
 
@@ -869,12 +869,12 @@ func TestADeployARouterLeftUnservedStillReclaimsTheBuildItsPromoteDropped(t *tes
 	builtProject(t)
 	client, vendor := deployServed(t)
 	releases := seedKept(t, vendor)
-	relayPlane(vendor).FailNextFlip(errors.New("the data plane refused the write"))
+	relayPlane(vendor).FailNextPointerMove(errors.New("the data plane refused the write"))
 
 	result, _ := deploy(t, client, deployRequest())
 
 	if result.GetSuccess() {
-		t.Fatal("Deploy() with a router that refused its flip = success, want it to fail")
+		t.Fatal("Deploy() with a router that refused its pointer move = success, want it to fail")
 	}
 	if _, found, err := releases.Record(context.Background(), "web", buildIdentity(0)); err != nil || found {
 		t.Errorf("the record of p00's build = found %v, %v, want it reclaimed: the promote dropped p00 whether or not it served", found, err)

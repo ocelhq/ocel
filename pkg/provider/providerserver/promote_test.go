@@ -89,7 +89,7 @@ func (w *promoteWorld) active(t *testing.T) string {
 	return active
 }
 
-func TestAPromoteFlipsEveryRouterOntoTheRecordsItsAppsStaged(t *testing.T) {
+func TestAPromoteMovesEveryRouterOntoTheRecordsItsAppsStaged(t *testing.T) {
 	w := newPromoteWorld(t)
 
 	if err := w.promotes(t, "p1"); err != nil {
@@ -107,14 +107,14 @@ func TestAPromoteFlipsEveryRouterOntoTheRecordsItsAppsStaged(t *testing.T) {
 	}
 }
 
-func TestAPromoteARouterLeavesUnservedIsTakenBackAndTheRoutersThatFlippedServeWhatItDisplaced(t *testing.T) {
+func TestAPromoteARouterLeavesUnservedIsTakenBackAndTheRoutersThatMovedServeWhatItDisplaced(t *testing.T) {
 	w := newPromoteWorld(t)
 	if err := w.promotes(t, "p1"); err != nil {
 		t.Fatalf("promote(p1) = %v", err)
 	}
 
 	refused := errors.New("the data plane refused the write")
-	w.routers.DataPlane(fake.RouterDirect).FailNextFlip(refused)
+	w.routers.DataPlane(fake.RouterDirect).FailNextPointerMove(refused)
 	err := w.promotes(t, "p2")
 
 	var unserved router.Unserved
@@ -135,7 +135,7 @@ func TestAPromoteARouterLeavesUnservedIsTakenBackAndTheRoutersThatFlippedServeWh
 func TestAFirstPromoteARouterLeavesUnservedLeavesNothingServedOnItsPointer(t *testing.T) {
 	w := newPromoteWorld(t)
 
-	w.routers.DataPlane(fake.RouterDirect).FailNextFlip(errors.New("the data plane refused the write"))
+	w.routers.DataPlane(fake.RouterDirect).FailNextPointerMove(errors.New("the data plane refused the write"))
 	if err := w.promotes(t, "p1"); err == nil {
 		t.Fatal("promote(p1) with a router that refused = nil, want it unserved")
 	}
@@ -155,7 +155,7 @@ func TestTwoPromotesRacingOnOnePointerLeaveTheLedgerAndEveryRouterOnTheSameRelea
 	}
 
 	var raced error
-	w.routers.DataPlane(fake.RouterDirect).BeforeNextFlip(func() {
+	w.routers.DataPlane(fake.RouterDirect).BeforeNextPointerMove(func() {
 		raced = w.promotes(t, "p3")
 	})
 	err := w.promotes(t, "p2")
@@ -165,7 +165,7 @@ func TestTwoPromotesRacingOnOnePointerLeaveTheLedgerAndEveryRouterOnTheSameRelea
 	}
 	var unserved router.Unserved
 	if !errors.As(err, &unserved) {
-		t.Errorf("promote(p2), displaced while it flipped = %v, want router.Unserved", err)
+		t.Errorf("promote(p2), displaced while it moved = %v, want router.Unserved", err)
 	}
 	if active := w.active(t); active != "p3" {
 		t.Errorf("the ledger names %q, want p3, the promote that won", active)
@@ -194,7 +194,7 @@ func (h honouring) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Re
 	return h.Store.Write(ctx, entry)
 }
 
-func TestAPromoteInterruptedWhileItFlipsStillTakesItsPromotionBack(t *testing.T) {
+func TestAPromoteInterruptedWhileItMovesStillTakesItsPromotionBack(t *testing.T) {
 	w := newPromoteWorld(t)
 	vendor := fake.NewProvider(fake.Options{})
 	w.ledger = projectLedger{
@@ -210,14 +210,14 @@ func TestAPromoteInterruptedWhileItFlipsStillTakesItsPromotionBack(t *testing.T)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	direct := w.routers.DataPlane(fake.RouterDirect)
-	direct.BeforeNextFlip(cancel)
-	direct.FailNextFlip(errors.New("the flip was interrupted"))
+	direct.BeforeNextPointerMove(cancel)
+	direct.FailNextPointerMove(errors.New("the pointer move was interrupted"))
 	if err := w.promotesReplacing(t, ctx, "p1", "p2"); err == nil {
-		t.Fatal("promote(p2) interrupted while it flipped = nil, want it unserved")
+		t.Fatal("promote(p2) interrupted while it moved = nil, want it unserved")
 	}
 
 	if active := w.active(t); active != "p1" {
-		t.Errorf("the ledger names %q after an interrupted promote, want p1: the interrupt that stopped the flip is not the context the take-back runs under", active)
+		t.Errorf("the ledger names %q after an interrupted promote, want p1: the interrupt that stopped the pointer move is not the context the take-back runs under", active)
 	}
 	if served := w.serves(fake.RouterRelay, "web"); served != "web-p1" {
 		t.Errorf("the relay router serves web %q after an interrupted promote, want web-p1 again", served)
@@ -245,7 +245,7 @@ func (o *overtaking) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.
 	return o.Store.Write(ctx, entry)
 }
 
-func TestAPromoteAnotherOvertookBeforeItsLedgerWriteIsRefusedBusyAndFlipsNothing(t *testing.T) {
+func TestAPromoteAnotherOvertookBeforeItsLedgerWriteIsRefusedBusyAndMovesNothing(t *testing.T) {
 	w := newPromoteWorld(t)
 	vendor := fake.NewProvider(fake.Options{})
 	store := &overtaking{Store: vendor.KeyValues()}
@@ -283,7 +283,7 @@ func TestAPromoteAnotherOvertookBeforeItsLedgerWriteIsRefusedBusyAndFlipsNothing
 	}
 }
 
-func TestAPromoteWhoseRecordAReclaimRemovedAsItLandedIsTakenBackAndFlipsNothing(t *testing.T) {
+func TestAPromoteWhoseRecordAReclaimRemovedAsItLandedIsTakenBackAndMovesNothing(t *testing.T) {
 	w := newPromoteWorld(t)
 	vendor := fake.NewProvider(fake.Options{})
 	store := &overtaking{Store: vendor.KeyValues()}

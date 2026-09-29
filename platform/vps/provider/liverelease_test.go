@@ -114,7 +114,7 @@ func inFlightAgainst(t *testing.T, vm machine, serving release, want int) {
 		if at := inflightOn(t, vm, serving); at >= want {
 			return
 		} else if time.Now().After(deadline) {
-			t.Fatalf("%s reports %d requests held open against it after 30s, want %d: a flip made before the request it is meant to cross reaches the upstream proves nothing about a drain",
+			t.Fatalf("%s reports %d requests held open against it after 30s, want %d: a cutover made before the request it is meant to cross reaches the upstream proves nothing about a drain",
 				serving.physical, at, want)
 		}
 		time.Sleep(100 * time.Millisecond)
@@ -135,7 +135,7 @@ func TestLiveAReleaseServesThroughTheProxyAndNothingElseOnTheBoxCanReachIt(t *te
 	}
 
 	if served := servedBy(t, vm, "/"); served != "one" {
-		t.Fatalf("the proxy served %q, want the release that was just flipped onto", served)
+		t.Fatalf("the proxy served %q, want the release that was just cut over to", served)
 	}
 	if app := vm.inspects(t, "container", one.physical, host.LabelSelector(host.LabelApp)); app != liveApp {
 		t.Errorf("the container has %q under %s, and retention is a set difference over that label", app, host.LabelApp)
@@ -223,16 +223,16 @@ func TestLiveARedeployUnderContinuousLoadDropsNothingAndDrainsWhenTheSlowRequest
 		t.Errorf("the release took %s with a request held open for 8s and a 30s window, so the drain waited out its ceiling rather than returning on the ack", took)
 	}
 	if !strings.Contains(slow, "one 200") {
-		t.Errorf("the request held open across the flip answered %q, want the release it started against, with its original status", strings.TrimSpace(slow))
+		t.Errorf("the request held open across the cutover answered %q, want the release it started against, with its original status", strings.TrimSpace(slow))
 	}
 	for _, code := range strings.Fields(hammered) {
 		if !strings.HasPrefix(code, "2") {
-			t.Errorf("a request under continuous load answered %s during the flip:\n%s", code, hammered)
+			t.Errorf("a request under continuous load answered %s during the cutover:\n%s", code, hammered)
 			break
 		}
 	}
 	if served := servedBy(t, vm, "/"); served != "two" {
-		t.Errorf("the proxy serves %q after the flip", served)
+		t.Errorf("the proxy serves %q after the cutover", served)
 	}
 
 	counted := false

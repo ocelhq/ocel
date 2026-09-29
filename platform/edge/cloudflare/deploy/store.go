@@ -79,15 +79,15 @@ func (s *stack) readServedPromotion(ctx context.Context, pointer string) (string
 	return *out.PromotionID, nil
 }
 
-type flipBody struct {
+type pointerMoveBody struct {
 	Pointer     string                    `json:"pointer,omitempty"`
 	Replaces    string                    `json:"replaces,omitempty"`
 	PromotionID string                    `json:"promotionId"`
 	Records     []router.DeploymentRecord `json:"records"`
 }
 
-func (s *stack) flip(ctx context.Context, body flipBody) (bool, error) {
-	res, err := s.p.storeRequest(ctx, s.state, http.MethodPost, "/flip", body, nil)
+func (s *stack) movePointer(ctx context.Context, body pointerMoveBody) (bool, error) {
+	res, err := s.p.storeRequest(ctx, s.state, http.MethodPost, "/move-pointer", body, nil)
 	switch {
 	case res != nil && res.StatusCode == http.StatusConflict:
 		return true, nil

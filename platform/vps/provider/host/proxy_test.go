@@ -405,7 +405,7 @@ func TestTheContainerIsWrittenAgainWhenTheCommandItStartsWithMoves(t *testing.T)
 		t.Errorf("the proxy is run with no record of the command it is started with:\n%s", containerCommand())
 	}
 	if !strings.Contains(string(frontItem().Content), "command="+started) {
-		t.Errorf("the proxy is surveyed without the command it is started with, so a box already running caddy directly keeps booting on a shape the first flip after every restart reloads:\n%s", frontItem().Content)
+		t.Errorf("the proxy is surveyed without the command it is started with, so a box already running caddy directly keeps booting on a shape the first cutover after every restart reloads:\n%s", frontItem().Content)
 	}
 }
 
@@ -425,7 +425,7 @@ func TestTheFileTheProxyIsStartedFromIsTheWholeOfWhatItServes(t *testing.T) {
 		t.Errorf("the proxy is run with --resume:\n%s", command)
 	}
 	if !strings.Contains(command, quoted(proxyRoot+":"+caddy.ConfigDir+":ro")) {
-		t.Errorf("the proxy is handed something other than %s, the directory ocel writes %s in:\n%s\na deploy replaces that file by staging beside it and renaming, and a bind of the file itself pins the container to the inode it started on, so every flip after the first reloads whatever the box was seeded with",
+		t.Errorf("the proxy is handed something other than %s, the directory ocel writes %s in:\n%s\na deploy replaces that file by staging beside it and renaming, and a bind of the file itself pins the container to the inode it started on, so every cutover after the first reloads whatever the box was seeded with",
 			proxyRoot, ProxyConfig, command)
 	}
 	if caddy.ConfigMount != caddy.ConfigDir+strings.TrimPrefix(ProxyConfig, proxyRoot) {
@@ -524,7 +524,7 @@ func TestASeedWaitsOutAWriteHoldingTheLockAndKeepsTheConfigItRendered(t *testing
 	}
 
 	if _, err := os.Stat(clobbered); err == nil {
-		t.Error("the seed wrote the placeholder config while a deploy held the lock over the pair, and a deploy that moves its rendering into place before the placeholder lands flips the proxy onto a box that 404s every host")
+		t.Error("the seed wrote the placeholder config while a deploy held the lock over the pair, and a deploy that moves its rendering into place before the placeholder lands cuts the proxy over to a box that 404s every host")
 	}
 	if got := fileContents(t, config.Name); got != "rendered by a deploy" {
 		t.Errorf("the seed left %s as %q, want what the deploy that held the lock rendered", config.Name, got)
@@ -970,7 +970,7 @@ func TestABoxOcelBuildsNoHelperForIsStillABoxOcelCanDestroy(t *testing.T) {
 	rig.facts.Arch = "riscv64"
 
 	if _, err := NewBootstrap(rig.host(), testVendor, "shop").PlanRemove(context.Background(), tier); err != nil {
-		t.Fatalf("PlanRemove() over a host ocel builds no flip helper for = %v, want what ocel wrote still taken back: the paths it wrote are the same whatever the box runs", err)
+		t.Fatalf("PlanRemove() over a host ocel builds no cutover helper for = %v, want what ocel wrote still taken back: the paths it wrote are the same whatever the box runs", err)
 	}
 	if _, err := rig.host().Read(context.Background(), tier); err == nil {
 		t.Error("a host reporting an architecture ocel builds no helper for is bootstrapped anyway, and the file the release loop execs would be for another machine")
@@ -1078,7 +1078,7 @@ func TestTheContainerWriteWaitsForTheProxyToAnswerOverItsAdminSocketNotJustToRun
 		t.Fatalf("the write of a proxy that ran before its admin socket answered = %v\n%s", err, said)
 	}
 	if at := asked(t, dir); at < 3 {
-		t.Errorf("the write asked the engine %d times, and a proxy that runs but does not yet answer over its admin socket is one the first flip would find silent", at)
+		t.Errorf("the write asked the engine %d times, and a proxy that runs but does not yet answer over its admin socket is one the first cutover would find silent", at)
 	}
 }
 

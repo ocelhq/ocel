@@ -5,7 +5,7 @@ import { bearer } from "@platform/cf-auth";
 import { authorized } from "./auth";
 import { DeploymentsStore } from "./deployments-do";
 import type { Env } from "./env";
-import type { Flip, PointerRecordResult } from "./store";
+import type { PointerMove, PointerRecordResult } from "./store";
 
 export { DeploymentsStore };
 
@@ -62,14 +62,14 @@ export default class extends WorkerEntrypoint<Env> {
       return Response.json({ promotionId: (await store.readServedPromotion(pointer)) ?? null });
     }
 
-    if (request.method === "POST" && sub === "/flip") {
-      const body = await readJson<Flip>(request);
+    if (request.method === "POST" && sub === "/move-pointer") {
+      const body = await readJson<PointerMove>(request);
       if (!body?.promotionId || !Array.isArray(body.records)) {
         return new Response("Bad Request", { status: 400 });
       }
-      if ((await store.flip(body)) === "stale") {
+      if ((await store.movePointer(body)) === "stale") {
         return new Response(
-          `the pointer no longer serves ${body.replaces || "nothing"}, the promotion this flip replaces`,
+          `the pointer no longer serves ${body.replaces || "nothing"}, the promotion this pointer move replaces`,
           { status: 409 },
         );
       }

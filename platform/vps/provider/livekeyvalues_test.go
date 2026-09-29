@@ -76,7 +76,7 @@ func TestLiveTheRootKeyValueHelperHandsOwnershipToNothingItDidNotCreate(t *testi
 	}
 }
 
-func TestLiveAnEntryTheHelperCouldNotHandOverIsAnEntryItNeverFlipped(t *testing.T) {
+func TestLiveAnEntryTheHelperCouldNotHandOverIsAnEntryItNeverWrote(t *testing.T) {
 	vm := liveMachine(t)
 	vm.purges(t)
 	bootstrapped(t, vm, environment.TierProduction)
@@ -98,6 +98,6 @@ func TestLiveAnEntryTheHelperCouldNotHandOverIsAnEntryItNeverFlipped(t *testing.
 	}
 
 	if _, err := vm.attempt(vm.user, "printf '\"three\"\\n' | sudo "+keyValuesHelper+" production write app/one "+minted); err != nil {
-		t.Errorf("the write that follows a failed one = %v, want it taken against the revision the caller still has: a helper that flips the entry and then reports failure wedges it at a revision nothing knows, and every write after it is refused as stale", err)
+		t.Errorf("the write that follows a failed one = %v, want it taken against the revision the caller still has: a helper that writes the entry and then reports failure wedges it at a revision nothing knows, and every write after it is refused as stale", err)
 	}
 }

@@ -1,7 +1,7 @@
 import { env, runInDurableObject } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import type { Env } from "../src/env";
-import type { DeploymentRecord, Flip } from "../src/store";
+import type { DeploymentRecord, PointerMove } from "../src/store";
 import { ensureSchema, SCHEMA_VERSION } from "../src/store";
 
 declare module "cloudflare:test" {
@@ -28,7 +28,7 @@ function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {
   };
 }
 
-function makeFlip(over: Partial<Flip> = {}): Flip {
+function makePointerMove(over: Partial<PointerMove> = {}): PointerMove {
   return {
     promotionId: "promo-1",
     records: [makeRecord()],
@@ -36,11 +36,11 @@ function makeFlip(over: Partial<Flip> = {}): Flip {
   };
 }
 
-describe("flip", () => {
+describe("movePointer", () => {
   it("serves the records it carries on the pointer and names the promotion it serves", async () => {
     const store = storeStub();
 
-    expect(await store.flip(makeFlip())).toBe("flipped");
+    expect(await store.movePointer(makePointerMove())).toBe("moved");
 
     expect(await store.readServedPromotion()).toBe("promo-1");
     expect(await store.pointerRecord("web")).toEqual({
@@ -52,14 +52,14 @@ describe("flip", () => {
 
   it("replaces the promotion it names and serves the new one", async () => {
     const store = storeStub();
-    await store.flip(makeFlip());
+    await store.movePointer(makePointerMove());
 
-    const next = makeFlip({
+    const next = makePointerMove({
       promotionId: "promo-2",
       replaces: "promo-1",
       records: [makeRecord({ identity: "deploy-2" })],
     });
-    expect(await store.flip(next)).toBe("flipped");
+    expect(await store.movePointer(next)).toBe("moved");
 
     expect(await store.readServedPromotion()).toBe("promo-2");
     expect(await store.pointerRecord("web")).toMatchObject({
@@ -70,21 +70,21 @@ describe("flip", () => {
 
   it("moves nothing when the pointer no longer serves the promotion it names", async () => {
     const store = storeStub();
-    await store.flip(makeFlip());
-    await store.flip(
-      makeFlip({
+    await store.movePointer(makePointerMove());
+    await store.movePointer(
+      makePointerMove({
         promotionId: "promo-2",
         replaces: "promo-1",
         records: [makeRecord({ identity: "deploy-2" })],
       }),
     );
 
-    const stale = makeFlip({
+    const stale = makePointerMove({
       promotionId: "promo-3",
       replaces: "promo-1",
       records: [makeRecord({ identity: "deploy-3" })],
     });
-    expect(await store.flip(stale)).toBe("stale");
+    expect(await store.movePointer(stale)).toBe("stale");
 
     expect(await store.readServedPromotion()).toBe("promo-2");
     expect(await store.pointerRecord("web")).toMatchObject({
@@ -96,7 +96,7 @@ describe("flip", () => {
   it("moves nothing when it names a promotion on a pointer that serves none", async () => {
     const store = storeStub();
 
-    expect(await store.flip(makeFlip({ replaces: "promo-0" }))).toBe("stale");
+    expect(await store.movePointer(makePointerMove({ replaces: "promo-0" }))).toBe("stale");
 
     expect(await store.readServedPromotion()).toBeUndefined();
     expect(await store.pointerRecord("web")).toEqual({ kind: "no-pointer" });
@@ -104,19 +104,21 @@ describe("flip", () => {
 
   it("stops serving an app the new promotion leaves out", async () => {
     const store = storeStub();
-    await store.flip(makeFlip({ records: [makeRecord(), makeRecord({ app: "admin" })] }));
+    await store.movePointer(
+      makePointerMove({ records: [makeRecord(), makeRecord({ app: "admin" })] }),
+    );
 
-    await store.flip(makeFlip({ promotionId: "promo-2", replaces: "promo-1" }));
+    await store.movePointer(makePointerMove({ promotionId: "promo-2", replaces: "promo-1" }));
 
     expect(await store.pointerRecord("admin")).toEqual({ kind: "no-pointer" });
   });
 
   it("moves only the pointer it names", async () => {
     const store = storeStub();
-    await store.flip(makeFlip());
+    await store.movePointer(makePointerMove());
 
-    await store.flip(
-      makeFlip({
+    await store.movePointer(
+      makePointerMove({
         promotionId: "promo-preview",
         pointer: "pr-42",
         records: [makeRecord({ identity: "preview-1" })],
@@ -137,7 +139,7 @@ describe("pointerRecord", () => {
 
   it("omits the record when the known build is still served", async () => {
     const store = storeStub();
-    await store.flip(makeFlip());
+    await store.movePointer(makePointerMove());
 
     expect(await store.pointerRecord("web", undefined, "deploy-1")).toEqual({
       kind: "unchanged",
@@ -147,7 +149,7 @@ describe("pointerRecord", () => {
 
   it("returns the served record when the known build is stale", async () => {
     const store = storeStub();
-    await store.flip(makeFlip());
+    await store.movePointer(makePointerMove());
 
     expect(await store.pointerRecord("web", undefined, "deploy-0")).toEqual({
       kind: "record",
@@ -158,7 +160,7 @@ describe("pointerRecord", () => {
 
   it("resolves the pointer's sole app when no app is given", async () => {
     const store = storeStub();
-    await store.flip(makeFlip({ pointer: "pr-42" }));
+    await store.movePointer(makePointerMove({ pointer: "pr-42" }));
 
     expect(await store.pointerRecord(undefined, "pr-42")).toMatchObject({
       kind: "record",
@@ -168,14 +170,16 @@ describe("pointerRecord", () => {
 
   it("returns ambiguous-app when the pointer serves more than one app", async () => {
     const store = storeStub();
-    await store.flip(makeFlip({ records: [makeRecord(), makeRecord({ app: "admin" })] }));
+    await store.movePointer(
+      makePointerMove({ records: [makeRecord(), makeRecord({ app: "admin" })] }),
+    );
 
     expect(await store.pointerRecord()).toEqual({ kind: "ambiguous-app" });
   });
 
   it("returns no-pointer for an app the pointer does not serve", async () => {
     const store = storeStub();
-    await store.flip(makeFlip());
+    await store.movePointer(makePointerMove());
 
     expect(await store.pointerRecord("admin")).toEqual({ kind: "no-pointer" });
   });
@@ -184,8 +188,8 @@ describe("pointerRecord", () => {
 describe("removePointer", () => {
   it("leaves nothing served on the pointer and every other pointer as it was", async () => {
     const store = storeStub();
-    await store.flip(makeFlip());
-    await store.flip(makeFlip({ promotionId: "promo-preview", pointer: "pr-42" }));
+    await store.movePointer(makePointerMove());
+    await store.movePointer(makePointerMove({ promotionId: "promo-preview", pointer: "pr-42" }));
 
     await store.removePointer("pr-42");
 
@@ -195,15 +199,17 @@ describe("removePointer", () => {
   });
 
   it("removing a pointer that serves nothing is a clean no-op", async () => {
-    await storeStub().removePointer("never-flipped");
+    await storeStub().removePointer("never-moved");
   });
 });
 
 describe("apps", () => {
-  it("names every app ever flipped, even one no pointer serves any more", async () => {
+  it("names every app ever moved, even one no pointer serves any more", async () => {
     const store = storeStub();
-    await store.flip(makeFlip({ records: [makeRecord(), makeRecord({ app: "admin" })] }));
-    await store.flip(makeFlip({ promotionId: "promo-2", replaces: "promo-1" }));
+    await store.movePointer(
+      makePointerMove({ records: [makeRecord(), makeRecord({ app: "admin" })] }),
+    );
+    await store.movePointer(makePointerMove({ promotionId: "promo-2", replaces: "promo-1" }));
 
     expect(await store.listApps()).toEqual(["admin", "web"]);
   });
@@ -268,7 +274,7 @@ describe("destroy", () => {
   it("clears what it serves, ownership and secret, and frees the slug", async () => {
     const store = storeStub();
     await store.initialize("owner-1", "s3cret", false);
-    await store.flip(makeFlip());
+    await store.movePointer(makePointerMove());
 
     await store.destroy();
 
@@ -359,7 +365,7 @@ describe("ensureSchema", () => {
   it("leaves a current schema's rows alone", async () => {
     const store = storeStub();
     await store.initialize("owner-1", "s3cret", false);
-    await store.flip(makeFlip());
+    await store.movePointer(makePointerMove());
 
     await runInDurableObject(storeStub(), (_instance, ctx) => {
       ensureSchema(ctx.storage);

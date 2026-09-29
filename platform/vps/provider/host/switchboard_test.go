@@ -160,7 +160,7 @@ func TestAProgramThatRanAndFailedNeverHasItsOutputReadAsTheReason(t *testing.T) 
 	}
 }
 
-func TestAReleaseGatesFlipsAndDrainsInsideTheSwitchboardAndNeverReloadsTheFrontProxy(t *testing.T) {
+func TestAReleaseGatesCutsOverAndDrainsInsideTheSwitchboardAndNeverReloadsTheFrontProxy(t *testing.T) {
 	t.Parallel()
 
 	box, err := released(t, aRelease(), session.Result{}, session.Result{}, nil)
@@ -168,7 +168,7 @@ func TestAReleaseGatesFlipsAndDrainsInsideTheSwitchboardAndNeverReloadsTheFrontP
 		t.Fatalf("Release() = %v", err)
 	}
 	inside := words([]string{"docker", "exec", SwitchboardContainer, SwitchboardMounted})
-	for _, verb := range []string{"gate", "flip", "idle"} {
+	for _, verb := range []string{"gate", "cutover", "idle"} {
 		at := slices.IndexFunc(box.commands(), func(command string) bool {
 			return strings.Contains(command, inside+" "+quoted(verb))
 		})
@@ -177,7 +177,7 @@ func TestAReleaseGatesFlipsAndDrainsInsideTheSwitchboardAndNeverReloadsTheFrontP
 		}
 	}
 	if reloads := box.count(reloadsFront); reloads != 0 {
-		t.Errorf("a release reloaded %s %d times, want never: a flip changes no hostname", caddy.Container, reloads)
+		t.Errorf("a release reloaded %s %d times, want never: a cutover changes no hostname", caddy.Container, reloads)
 	}
 }
 
@@ -200,12 +200,12 @@ func TestAReleaseOverAConfigTheFrontProxyWasNeverReloadedOntoReloadsItOntoTheOne
 	if reloads := box.count(reloadsFront); reloads != 1 {
 		t.Errorf("a release that rewrote a config the front proxy does not serve reloaded %s %d times, want once: otherwise it keeps terminating what the file no longer says", caddy.Container, reloads)
 	}
-	if flip, reload := box.cutover(), box.after(-1, reloadsFront); flip < 0 || reload < 0 || reload > flip {
-		t.Errorf("the flip ran at %d and the front proxy reloaded at %d: the front proxy takes up what was written before the release commits to it, so a refusal leaves the previous release live", flip, reload)
+	if cutoverAt, reload := box.cutover(), box.after(-1, reloadsFront); cutoverAt < 0 || reload < 0 || reload > cutoverAt {
+		t.Errorf("the cutover ran at %d and the front proxy reloaded at %d: the front proxy takes up what was written before the release commits to it, so a refusal leaves the previous release live", cutoverAt, reload)
 	}
 }
 
-func TestAReleaseWhoseFrontProxyRefusesTheReloadPutsBothFilesBackAndNeverFlips(t *testing.T) {
+func TestAReleaseWhoseFrontProxyRefusesTheReloadPutsBothFilesBackAndNeverCutsOver(t *testing.T) {
 	t.Parallel()
 
 	box := benched(t, session.Result{}, session.Result{})
@@ -230,8 +230,8 @@ func TestAReleaseWhoseFrontProxyRefusesTheReloadPutsBothFilesBackAndNeverFlips(t
 	if box.recorded != table || config != stale {
 		t.Errorf("a release whose front proxy refused the reload left\n%s\n%s\nwant both files as they were: a refused front-proxy reload puts the box back the same way on every path", box.recorded, config)
 	}
-	if flip := box.cutover(); flip >= 0 {
-		t.Errorf("the release flipped at %d after the front proxy refused what it wrote: %v", flip, box.commands())
+	if cutoverAt := box.cutover(); cutoverAt >= 0 {
+		t.Errorf("the release cut over at %d after the front proxy refused what it wrote: %v", cutoverAt, box.commands())
 	}
 	if reloads := box.count(reloadsFront); reloads != 2 {
 		t.Errorf("the front proxy was asked to reload %d times, want twice: onto what was written, then back onto what the files contain again, since a refusal whose answer was lost may have loaded it all the same", reloads)

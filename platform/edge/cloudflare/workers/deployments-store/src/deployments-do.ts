@@ -2,7 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 
 import { matchesSecret } from "@platform/cf-auth";
 import type { Env } from "./env";
-import type { Flip, Flipped, Initialization, PointerRecordResult } from "./store";
+import type { Initialization, PointerMove, PointerMoveOutcome, PointerRecordResult } from "./store";
 import * as store from "./store";
 
 export class DeploymentsStore extends DurableObject<Env> {
@@ -26,8 +26,8 @@ export class DeploymentsStore extends DurableObject<Env> {
     store.ensureSchema(this.ctx.storage);
   }
 
-  async flip(flipped: Flip): Promise<Flipped> {
-    return store.flip(this.ctx.storage, flipped);
+  async movePointer(move: PointerMove): Promise<PointerMoveOutcome> {
+    return store.movePointer(this.ctx.storage, move);
   }
 
   async readServedPromotion(pointer?: string): Promise<string | undefined> {

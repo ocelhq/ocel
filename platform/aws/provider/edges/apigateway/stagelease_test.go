@@ -73,44 +73,44 @@ func leasesLeft(w *world) []string {
 	return left
 }
 
-func stagedFlip(t *testing.T, stack routerStack, id string) error {
+func movePointerOnStage(t *testing.T, stack routerStack, id string) error {
 	t.Helper()
 	record := router.DeploymentRecord{App: "web", Build: "d1.f1", Entry: "/", EntryFunction: entryFunction, AssetPrefix: "assets/one"}
-	return stack.Flip(context.Background(), router.Flip{
+	return stack.MovePointer(context.Background(), router.PointerMove{
 		Promotion: router.Promotion{PromotionID: id, Ts: 1, Builds: map[string]string{"web": record.Build}},
 		Records:   map[string]router.DeploymentRecord{"web": record},
 	}, progress.Discard())
 }
 
-func TestAFlipLetsGoOfTheStageOnceItHasMovedIt(t *testing.T) {
+func TestAPointerMoveLetsGoOfTheStageOnceItHasMovedIt(t *testing.T) {
 	t.Parallel()
 
 	w := newWorld()
 	stack := reconciled(t, w)
 
-	if err := stagedFlip(t, openRouter(stack).Stack.(routerStack), "p1"); err != nil {
-		t.Fatalf("Flip: %v", err)
+	if err := movePointerOnStage(t, openRouter(stack).Stack.(routerStack), "p1"); err != nil {
+		t.Fatalf("MovePointer: %v", err)
 	}
 	if left := leasesLeft(w); len(left) != 0 {
-		t.Errorf("the flip left %v behind, want the stage let go: a lease nobody releases stalls every later promote until its term runs out", left)
+		t.Errorf("the pointer move left %v behind, want the stage let go: a lease nobody releases stalls every later promote until its term runs out", left)
 	}
 }
 
-func TestAStageAnotherPromoteHoldsIsLeftAloneAndTheFlipIsUnserved(t *testing.T) {
+func TestAStageAnotherPromoteHoldsIsLeftAloneAndThePointerMoveIsUnserved(t *testing.T) {
 	t.Parallel()
 
 	w := newWorld()
 	stack := reconciled(t, w)
 	heldStage(t, w, "p-other", time.Now().Add(time.Minute))
 
-	err := stagedFlip(t, openRouter(stack).Stack.(routerStack), "p1")
+	err := movePointerOnStage(t, openRouter(stack).Stack.(routerStack), "p1")
 	var unserved router.Unserved
 	if !errors.As(err, &unserved) {
-		t.Fatalf("Flip onto a stage another promote holds = %v, want router.Unserved", err)
+		t.Fatalf("MovePointer onto a stage another promote holds = %v, want router.Unserved", err)
 	}
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
-		t.Errorf("Flip onto a stage another promote holds = %v, want it refused %s", err, refusal.CodeBusy)
+		t.Errorf("MovePointer onto a stage another promote holds = %v, want it refused %s", err, refusal.CodeBusy)
 	}
 	if got := w.gateway.count("UpdateStage"); got != 0 {
 		t.Errorf("UpdateStage calls = %d, want none while another promote holds the stage", got)
@@ -124,8 +124,8 @@ func TestAStageWhoseHolderNeverLetGoIsTakenOverOnceItsTermIsOver(t *testing.T) {
 	stack := reconciled(t, w)
 	heldStage(t, w, "p-crashed", time.Now().Add(-time.Second))
 
-	if err := stagedFlip(t, openRouter(stack).Stack.(routerStack), "p1"); err != nil {
-		t.Fatalf("Flip onto a stage whose lease ran out = %v, want it moved", err)
+	if err := movePointerOnStage(t, openRouter(stack).Stack.(routerStack), "p1"); err != nil {
+		t.Fatalf("MovePointer onto a stage whose lease ran out = %v, want it moved", err)
 	}
 	if api := w.gateway.named(productionAPIName()); api.variables[entryVariable] != entryFunction {
 		t.Errorf("stage variable %s = %q, want %q", entryVariable, api.variables[entryVariable], entryFunction)
@@ -147,7 +147,7 @@ func TestDestroyLetsGoOfAStageAPromoteNeverReleased(t *testing.T) {
 	}
 }
 
-func TestAFlipWhoseStageAnotherPromoteTookOverOnceItsTermRanOutMovesNothing(t *testing.T) {
+func TestAPointerMoveWhoseStageAnotherPromoteTookOverOnceItsTermRanOutMovesNothing(t *testing.T) {
 	t.Parallel()
 
 	w := newWorld()
@@ -156,28 +156,28 @@ func TestAFlipWhoseStageAnotherPromoteTookOverOnceItsTermRanOutMovesNothing(t *t
 	w.gateway.beforeGetStage = func() { takeStage(t, w, "p-other", time.Now().Add(time.Minute)) }
 	w.gateway.mu.Unlock()
 
-	err := stagedFlip(t, openRouter(stack).Stack.(routerStack), "p1")
+	err := movePointerOnStage(t, openRouter(stack).Stack.(routerStack), "p1")
 	var unserved router.Unserved
 	if !errors.As(err, &unserved) {
-		t.Fatalf("Flip whose stage another promote took over = %v, want router.Unserved", err)
+		t.Fatalf("MovePointer whose stage another promote took over = %v, want router.Unserved", err)
 	}
 	if got := w.gateway.count("UpdateStage"); got != 0 {
 		t.Errorf("UpdateStage calls = %d, want none: the stage belongs to the promote that took it over", got)
 	}
 	if holder := stageHolder(t, w); holder != "p-other" {
-		t.Errorf("the stage is held by %q, want p-other still: a flip lets go only of a stage it holds", holder)
+		t.Errorf("the stage is held by %q, want p-other still: a pointer move lets go only of a stage it holds", holder)
 	}
 }
 
-func TestAFlipWritesTheStageOnlyWhileItsHoldOnTheStageLasts(t *testing.T) {
+func TestAPointerMoveWritesTheStageOnlyWhileItsHoldOnTheStageLasts(t *testing.T) {
 	t.Parallel()
 
 	w := newWorld()
 	stack := reconciled(t, w)
 
 	started := time.Now()
-	if err := stagedFlip(t, openRouter(stack).Stack.(routerStack), "p1"); err != nil {
-		t.Fatalf("Flip: %v", err)
+	if err := movePointerOnStage(t, openRouter(stack).Stack.(routerStack), "p1"); err != nil {
+		t.Fatalf("MovePointer: %v", err)
 	}
 	w.gateway.mu.Lock()
 	deadline := w.gateway.stageDeadline

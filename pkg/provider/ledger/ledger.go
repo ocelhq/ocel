@@ -373,7 +373,7 @@ func (l *Ledger) rewriteRecord(ctx context.Context, promotionID, app, build stri
 		}
 		if len(stored.Value) == 0 {
 			return refusal.Refuse(refusal.CodeBusy,
-				"promote %s: the record of %s build %s was removed while this promote landed, by a reclaim that found no promotion naming it. Nothing was flipped. Run `ocel deploy` again to stage and promote it anew",
+				"promote %s: the record of %s build %s was removed while this promote landed, by a reclaim that found no promotion naming it. Nothing was moved. Run `ocel deploy` again to stage and promote it anew",
 				promotionID, app, build)
 		}
 		_, err = l.keyValues.Write(ctx, stored)

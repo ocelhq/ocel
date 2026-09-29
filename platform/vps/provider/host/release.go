@@ -143,14 +143,14 @@ func (h *Host) Release(ctx context.Context, rel Release, progress progress.Log) 
 		say(progress, fmt.Sprintf("Draining retired container %s for up to %s: past that, %s",
 			containerOf(retiree), rel.DrainTimeout, drainCeiling))
 	}
-	flipped, err := h.stream(ctx, words(flipCommand(rel.DrainTimeout, cut.retiring)), nil, elevation)
+	cutOver, err := h.stream(ctx, words(cutoverCommand(rel.DrainTimeout, cut.retiring)), nil, elevation)
 	if err != nil {
-		return h.unflipped(ctx, rel, cut, "never came back with an exit code", err.Error(), elevation)
+		return h.refuseFailedCutover(ctx, rel, cut, "never came back with an exit code", err.Error(), elevation)
 	}
-	if flipped.Code != 0 {
-		return h.unflipped(ctx, rel, cut, fmt.Sprintf("exited %d", flipped.Code), strings.TrimSpace(flipped.Stderr), elevation)
+	if cutOver.Code != 0 {
+		return h.refuseFailedCutover(ctx, rel, cut, fmt.Sprintf("exited %d", cutOver.Code), strings.TrimSpace(cutOver.Stderr), elevation)
 	}
-	tellDrain(progress, flipped.Stdout, rel.DrainTimeout)
+	tellDrain(progress, cutOver.Stdout, rel.DrainTimeout)
 	return h.stopRetired(ctx, rel, cut, progress, elevation)
 }
 
@@ -182,7 +182,7 @@ func (h *Host) stopRetired(ctx context.Context, rel Release, cut cutover, progre
 		return nil
 	}
 	return refusal.Refuse(refusal.CodeNotReady,
-		"release %s onto %s: flipped onto %s, which now serve, but what follows the flip did not all finish:\n%s",
+		"release %s onto %s: cut over to %s, which now serve, but what follows the cutover did not all finish:\n%s",
 		rel.apps(), h.named(), rel.names(), strings.Join(failed, "\n"))
 }
 
@@ -671,8 +671,8 @@ func idleCommand(targets []string) []string {
 	return switchboardCommand(append([]string{"idle"}, targets...)...)
 }
 
-func flipCommand(window time.Duration, retiring []string) []string {
-	argv := []string{"flip"}
+func cutoverCommand(window time.Duration, retiring []string) []string {
+	argv := []string{"cutover"}
 	if len(retiring) > 0 {
 		argv = append(argv, "--drain-timeout", seconds(window))
 		for _, retiree := range retiring {
@@ -746,7 +746,7 @@ func (h *Host) stranded(ctx context.Context, rel Release, cut cutover, why error
 		rolled = written + " restored"
 	}
 	return router.Unserved{Err: refusal.Refuse(code,
-		"release %s onto %s: could not write %s; the proxy was not flipped: %v\n%s%s",
+		"release %s onto %s: could not write %s; the proxy was not cut over: %v\n%s%s",
 		rel.apps(), h.named(), written, why, rolled, h.discard(ctx, rel, elevation))}
 }
 
@@ -757,7 +757,7 @@ func (h *Host) unfronted(ctx context.Context, rel Release, why error, elevation 
 		rel.apps(), h.named(), why, h.discard(ctx, rel, elevation))}
 }
 
-func (h *Host) unflipped(ctx context.Context, rel Release, cut cutover, outcome, verdict, elevation string) error {
+func (h *Host) refuseFailedCutover(ctx context.Context, rel Release, cut cutover, outcome, verdict, elevation string) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
 	if verdict == "" {
@@ -765,11 +765,11 @@ func (h *Host) unflipped(ctx context.Context, rel Release, cut cutover, outcome,
 	}
 	if _, err := h.putBack(ctx, cut, elevation); err != nil {
 		return refusal.Refuse(refusal.CodeNotReady,
-			"release %s onto %s: the flip helper %s; the live release is unknown\n%s\nproxy not restored; %s may be live and were left running: %v",
+			"release %s onto %s: the cutover helper %s; the live release is unknown\n%s\nproxy not restored; %s may be live and were left running: %v",
 			rel.apps(), h.named(), outcome, verdict, rel.names(), err)
 	}
 	return router.Unserved{Err: refusal.Refuse(refusal.CodeNotReady,
-		"release %s onto %s: the flip helper %s; the previous release is still live\n%s%s",
+		"release %s onto %s: the cutover helper %s; the previous release is still live\n%s%s",
 		rel.apps(), h.named(), outcome, verdict, h.discard(ctx, rel, elevation))}
 }
 
@@ -782,7 +782,7 @@ func (h *Host) putBack(ctx context.Context, cut cutover, elevation string) (bool
 		return false, err
 	}
 	_, err = h.ran(ctx, "put the proxy back onto the previous release",
-		words(switchboardCommand("flip", live.RoutingTable)), nil, elevation)
+		words(switchboardCommand("cutover", live.RoutingTable)), nil, elevation)
 	return true, errors.Join(back.failedPlace, err)
 }
 

@@ -17,7 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
-const flipAttempts = 8
+const moveAttempts = 8
 
 type Routers struct {
 	edges  *Edges
@@ -83,31 +83,31 @@ func (d *DataPlane) Builds(slug string, tier environment.Tier, pointer string) m
 	return maps.Clone(d.served[pointerOf(edge.StackState{Slug: slug, Tier: tier}, pointer)])
 }
 
-func (d *DataPlane) FailNextFlip(err error) {
+func (d *DataPlane) FailNextPointerMove(err error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.failure = err
 }
 
-func (d *DataPlane) BeforeNextFlip(before func()) {
+func (d *DataPlane) BeforeNextPointerMove(before func()) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.before = before
 }
 
-func (d *DataPlane) SayOnFlip(said string) {
+func (d *DataPlane) SayOnPointerMove(said string) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.says = said
 }
 
-func (d *DataPlane) FlipProgress() progress.Log {
+func (d *DataPlane) PointerMoveProgress() progress.Log {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return d.progress
 }
 
-func (d *DataPlane) beginFlip(progress progress.Log) {
+func (d *DataPlane) beginPointerMove(progress progress.Log) {
 	d.mu.Lock()
 	before, said := d.before, d.says
 	d.before, d.progress = nil, progress
@@ -120,7 +120,7 @@ func (d *DataPlane) beginFlip(progress progress.Log) {
 	}
 }
 
-func (d *DataPlane) refuseFlip() error {
+func (d *DataPlane) refusePointerMove() error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	failure := d.failure
@@ -269,26 +269,26 @@ func (s *RouterStack) Disclaim(_ context.Context, hostname string) error {
 	return nil
 }
 
-func (s *RouterStack) Flip(ctx context.Context, flip router.Flip, progress progress.Log) error {
-	s.plane.beginFlip(progress)
-	builds := make(map[string]string, len(flip.Records))
-	for app, record := range flip.Records {
+func (s *RouterStack) MovePointer(ctx context.Context, move router.PointerMove, progress progress.Log) error {
+	s.plane.beginPointerMove(progress)
+	builds := make(map[string]string, len(move.Records))
+	for app, record := range move.Records {
 		builds[app] = record.Build
 	}
-	at := pointerOf(s.stack.State(), flip.Pointer)
-	for range flipAttempts {
+	at := pointerOf(s.stack.State(), move.Pointer)
+	for range moveAttempts {
 		read := s.plane.written(at)
-		if err := flip.RefuseInactive(ctx); err != nil {
+		if err := move.RefuseInactive(ctx); err != nil {
 			return err
 		}
-		if err := s.plane.refuseFlip(); err != nil {
+		if err := s.plane.refusePointerMove(); err != nil {
 			return err
 		}
 		if s.plane.serveOver(at, builds, read) {
 			return nil
 		}
 	}
-	return router.Unserved{Err: fmt.Errorf("flip %s onto %s: another flip moved it on every one of %d attempts", flip.Promotion.PromotionID, at.pointer, flipAttempts)}
+	return router.Unserved{Err: fmt.Errorf("move %s onto %s: another promotion moved the pointer on every one of %d attempts", move.Promotion.PromotionID, at.pointer, moveAttempts)}
 }
 
 func (s *RouterStack) RemovePointer(_ context.Context, pointer string, _ progress.Log) error {

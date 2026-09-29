@@ -339,7 +339,7 @@ func TestAPromoteOfARecordRestagedWhileAReclaimRemovedItIsRefusedBusy(t *testing
 
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
-		t.Fatalf("RewriteRecords() of a record the reclaim removed after its restage = %v, want a busy refusal before any router flips", err)
+		t.Fatalf("RewriteRecords() of a record the reclaim removed after its restage = %v, want a busy refusal before any router moves a pointer", err)
 	}
 }
 

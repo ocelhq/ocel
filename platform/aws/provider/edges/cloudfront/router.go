@@ -59,16 +59,16 @@ func (r routerStack) Claim(context.Context, router.Claim) (edge.Origin, error) {
 
 func (r routerStack) Disclaim(context.Context, string) error { return nil }
 
-func (r routerStack) Flip(ctx context.Context, flip router.Flip, _ progress.Log) error {
+func (r routerStack) MovePointer(ctx context.Context, move router.PointerMove, _ progress.Log) error {
 	s := r.s
 	c, err := s.clients(ctx)
 	if err != nil {
 		return router.Unserved{Err: err}
 	}
-	if err := flip.RefuseInactive(ctx); err != nil {
+	if err := move.RefuseInactive(ctx); err != nil {
 		return err
 	}
-	if err := s.publishOn(ctx, c, flip.Promotion.PromotionID, flip.Records, s.servedHostnames(flip.Pointer), flip.RefuseInactive); err != nil {
+	if err := s.publishOn(ctx, c, move.Promotion.PromotionID, move.Records, s.servedHostnames(move.Pointer), move.RefuseInactive); err != nil {
 		return router.Unserved{Err: err}
 	}
 	return nil

@@ -67,8 +67,8 @@ func run(ctx context.Context, argv []string, in io.Reader, out, errs io.Writer) 
 			return usage(errs)
 		}
 		return speaking.load(ctx, rest[0])
-	case "flip":
-		return speaking.flip(ctx, rest)
+	case "cutover":
+		return speaking.cutover(ctx, rest)
 	case "gate":
 		return gate(rest, out, errs)
 	case "idle":
@@ -112,7 +112,7 @@ func usage(errs io.Writer) int {
 	fmt.Fprintln(errs, "usage: "+switchboard.Name+" serve --listen <host:port> --front <socket> --admit <socket> --table <path> [--relay <addr|cidr>]... [--relay-network <docker network>]... [--https-listen <host:port|docker network:port>] |")
 	fmt.Fprintln(errs, "       load <table> |")
 	fmt.Fprintln(errs, "       gate --deploy-timeout <seconds> <host:port/path>... |")
-	fmt.Fprintln(errs, "       flip [--drain-timeout <seconds> --retire <host:port>...] <table> |")
+	fmt.Fprintln(errs, "       cutover [--drain-timeout <seconds> --retire <host:port>...] <table> |")
 	fmt.Fprintln(errs, "       idle <host:port>... |")
 	fmt.Fprintln(errs, "       upstreams |")
 	fmt.Fprintln(errs, "       leaf [--at <host:port>] <hostname> |")
@@ -301,8 +301,8 @@ func (c controlClient) load(ctx context.Context, path string) int {
 	return c.speak(ctx, http.MethodPost, switchboard.LoadPath, url.Values{switchboard.TableField: {table}})
 }
 
-func (c controlClient) flip(ctx context.Context, argv []string) int {
-	flags := flag.NewFlagSet("flip", flag.ContinueOnError)
+func (c controlClient) cutover(ctx context.Context, argv []string) int {
+	flags := flag.NewFlagSet("cutover", flag.ContinueOnError)
 	flags.SetOutput(c.errs)
 	var retiring repeated
 	flags.Var(&retiring, "retire", "")
@@ -318,11 +318,11 @@ func (c controlClient) flip(ctx context.Context, argv []string) int {
 	if len(retiring) > 0 {
 		form.Set(switchboard.WindowField, (time.Duration(*drainTimeout) * time.Second).String())
 	}
-	return c.speak(ctx, http.MethodPost, switchboard.FlipPath, form)
+	return c.speak(ctx, http.MethodPost, switchboard.CutoverPath, form)
 }
 
 func (c controlClient) speak(ctx context.Context, method, path string, form url.Values) int {
-	if path != switchboard.FlipPath {
+	if path != switchboard.CutoverPath {
 		var stop context.CancelFunc
 		ctx, stop = context.WithTimeout(ctx, controlTimeout)
 		defer stop()

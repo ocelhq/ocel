@@ -32,7 +32,7 @@ type Upstream struct {
 	NumRequests int    `json:"num_requests"`
 }
 
-func (b *Board) Flip(ctx context.Context, path string, retiring []string, window time.Duration, tell func(Drain)) error {
+func (b *Board) Cutover(ctx context.Context, path string, retiring []string, window time.Duration, tell func(Drain)) error {
 	retirees, err := upstreamAddresses(retiring)
 	if err != nil {
 		return err

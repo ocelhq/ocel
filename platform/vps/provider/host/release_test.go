@@ -33,15 +33,15 @@ const (
 )
 
 var (
-	retired    = retiring + ":" + containerimage.PortText
-	flipTo     = physical + ":" + containerimage.PortText
-	apiRetired = apiRetiring + ":" + containerimage.PortText
-	apiFlipTo  = apiCurrent + ":" + containerimage.PortText
+	retired       = retiring + ":" + containerimage.PortText
+	nextTarget    = physical + ":" + containerimage.PortText
+	apiRetired    = apiRetiring + ":" + containerimage.PortText
+	apiNextTarget = apiCurrent + ":" + containerimage.PortText
 )
 
 func aRelease() Release {
 	return Release{
-		Apps:          []AppRelease{{RouteKey: keyed("web"), Target: flipTo, HealthPath: "/healthz"}},
+		Apps:          []AppRelease{{RouteKey: keyed("web"), Target: nextTarget, HealthPath: "/healthz"}},
 		DeployTimeout: 30 * time.Second,
 		DrainTimeout:  30 * time.Second,
 	}
@@ -49,7 +49,7 @@ func aRelease() Release {
 
 func bothApps() Release {
 	rel := aRelease()
-	rel.Apps = append(rel.Apps, AppRelease{RouteKey: keyed("api"), Target: apiFlipTo, HealthPath: "/up"})
+	rel.Apps = append(rel.Apps, AppRelease{RouteKey: keyed("api"), Target: apiNextTarget, HealthPath: "/up"})
 	return rel
 }
 
@@ -80,7 +80,7 @@ func twoAppsServing(t *testing.T) string {
 
 func gates(command string) bool { return strings.Contains(command, quoted("gate")) }
 
-func flips(command string) bool { return strings.Contains(command, quoted("flip")) }
+func cutsOver(command string) bool { return strings.Contains(command, quoted("cutover")) }
 
 func idles(command string) bool { return strings.Contains(command, quoted("idle")) }
 
@@ -93,14 +93,14 @@ func everyIdle(command string) session.Result {
 	return session.Result{Stdout: idle.String()}
 }
 
-type flipped struct {
+type releaseBench struct {
 	*bench
 	recorded string
 }
 
-func (f *flipped) at(fragment string) int { return f.bench.at(fragment) }
+func (f *releaseBench) at(fragment string) int { return f.bench.at(fragment) }
 
-func (f *flipped) after(from int, match func(string) bool) int {
+func (f *releaseBench) after(from int, match func(string) bool) int {
 	for at, command := range f.commands() {
 		if at > from && match(command) {
 			return at
@@ -109,7 +109,7 @@ func (f *flipped) after(from int, match func(string) bool) int {
 	return -1
 }
 
-func (f *flipped) count(match func(string) bool) int {
+func (f *releaseBench) count(match func(string) bool) int {
 	counted := 0
 	for _, command := range f.commands() {
 		if match(command) {
@@ -119,9 +119,9 @@ func (f *flipped) count(match func(string) bool) int {
 	return counted
 }
 
-func (f *flipped) cutover() int { return f.after(-1, flips) }
+func (f *releaseBench) cutover() int { return f.after(-1, cutsOver) }
 
-func (f *flipped) state(t *testing.T) RoutingTable {
+func (f *releaseBench) state(t *testing.T) RoutingTable {
 	t.Helper()
 	f.mu.Lock()
 	recorded := f.recorded
@@ -141,9 +141,9 @@ func upstreamsOf(state RoutingTable) map[string]string {
 	return upstreams
 }
 
-func benchedOn(t *testing.T, recorded string, gate, cutover session.Result) *flipped {
+func benchedOn(t *testing.T, recorded string, gate, cutover session.Result) *releaseBench {
 	t.Helper()
-	box := &flipped{bench: machine(nil), recorded: recorded}
+	box := &releaseBench{bench: machine(nil), recorded: recorded}
 	proxied := servesProxy(box.bench, &box.recorded)
 	var once sync.Once
 	box.answer = func(command string) (session.Result, bool) {
@@ -155,7 +155,7 @@ func benchedOn(t *testing.T, recorded string, gate, cutover session.Result) *fli
 			return gate, true
 		case idles(command):
 			return everyIdle(command), true
-		case flips(command):
+		case cutsOver(command):
 			answered := session.Result{}
 			once.Do(func() { answered = cutover })
 			return answered, true
@@ -166,12 +166,12 @@ func benchedOn(t *testing.T, recorded string, gate, cutover session.Result) *fli
 	return box
 }
 
-func benched(t *testing.T, gate, cutover session.Result) *flipped {
+func benched(t *testing.T, gate, cutover session.Result) *releaseBench {
 	t.Helper()
 	return benchedOn(t, configFor(t, retired), gate, cutover)
 }
 
-func released(t *testing.T, rel Release, gate, cutover session.Result, progress progress.Log) (*flipped, error) {
+func released(t *testing.T, rel Release, gate, cutover session.Result, progress progress.Log) (*releaseBench, error) {
 	t.Helper()
 	box := benched(t, gate, cutover)
 	return box, box.host().Release(context.Background(), rel, progress)
@@ -182,14 +182,14 @@ func unserved(err error) bool {
 	return errors.As(err, &left)
 }
 
-func TestAPromotionOfEveryAppIsOneGateOneWriteAndOneFlip(t *testing.T) {
+func TestAPromotionOfEveryAppIsOneGateOneWriteAndOneCutover(t *testing.T) {
 	t.Parallel()
 
 	box := benchedOn(t, twoAppsServing(t), session.Result{}, session.Result{})
 	var posted string
 	proxied := box.answer
 	box.answer = func(command string) (session.Result, bool) {
-		if flips(command) && posted == "" {
+		if cutsOver(command) && posted == "" {
 			posted = box.recorded
 		}
 		return proxied(command)
@@ -202,7 +202,7 @@ func TestAPromotionOfEveryAppIsOneGateOneWriteAndOneFlip(t *testing.T) {
 	if gate < 0 || box.count(gates) != 1 {
 		t.Fatalf("a promotion of two apps gated as %v, want one gate naming both targets", box.commands())
 	}
-	for _, target := range []string{flipTo + "/healthz", apiFlipTo + "/up"} {
+	for _, target := range []string{nextTarget + "/healthz", apiNextTarget + "/up"} {
 		if !strings.Contains(box.commands()[gate], quoted(target)) {
 			t.Errorf("the gate %q never probes %s", box.commands()[gate], target)
 		}
@@ -218,39 +218,39 @@ func TestAPromotionOfEveryAppIsOneGateOneWriteAndOneFlip(t *testing.T) {
 		}
 	}
 	if written != 1 {
-		t.Errorf("the promotion wrote %s %d times before its flip, want once: %v", ProxyConfig, written, box.commands())
+		t.Errorf("the promotion wrote %s %d times before its cutover, want once: %v", ProxyConfig, written, box.commands())
 	}
-	flip, err := ReadRoutingTable([]byte(posted))
+	cutoverTable, err := ReadRoutingTable([]byte(posted))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := upstreamsOf(flip); got["web"] != flipTo || got["api"] != apiFlipTo {
-		t.Errorf("the one flip posted %v, want both apps onto their new targets at once: a box half on each promotion is the state this flip exists to rule out", got)
+	if got := upstreamsOf(cutoverTable); got["web"] != nextTarget || got["api"] != apiNextTarget {
+		t.Errorf("the one cutover posted %v, want both apps onto their new targets at once: a box half on each promotion is the state this cutover exists to rule out", got)
 	}
 	for _, retiree := range []string{retired, apiRetired} {
 		if !strings.Contains(box.commands()[cutover], quoted("--retire")+" "+quoted(retiree)) {
-			t.Errorf("the flip %q never drains %s", box.commands()[cutover], retiree)
+			t.Errorf("the cutover %q never drains %s", box.commands()[cutover], retiree)
 		}
 	}
-	if flipped := box.count(flips); flipped != 1 {
-		t.Errorf("the promotion posted %d configurations, want the flip alone: caddy restarts every server on any change to what it runs, and a server shut down under load drops the connections it has accepted but not yet read: %v", flipped, box.commands())
+	if cutOver := box.count(cutsOver); cutOver != 1 {
+		t.Errorf("the promotion posted %d configurations, want the cutover alone: caddy restarts every server on any change to what it runs, and a server shut down under load drops the connections it has accepted but not yet read: %v", cutOver, box.commands())
 	}
 	for _, stopped := range []string{retiring, apiRetiring} {
 		if at := box.at("docker stop " + quoted(stopped)); at < cutover {
-			t.Errorf("%s was stopped at %d, before the flip at %d drained it", stopped, at, cutover)
+			t.Errorf("%s was stopped at %d, before the cutover at %d drained it", stopped, at, cutover)
 		}
 	}
-	if got := upstreamsOf(box.state(t)); got["web"] != flipTo || got["api"] != apiFlipTo {
+	if got := upstreamsOf(box.state(t)); got["web"] != nextTarget || got["api"] != apiNextTarget {
 		t.Errorf("the box's own file serves %v after the promotion", got)
 	}
 }
 
-func TestAGateOneAppFailsWritesNothingAndFlipsNoApp(t *testing.T) {
+func TestAGateOneAppFailsWritesNothingAndCutsOverNoApp(t *testing.T) {
 	t.Parallel()
 
 	before := twoAppsServing(t)
 	box := benchedOn(t, before,
-		session.Result{Code: 4, Stdout: switchboard.Ungated + " " + apiFlipTo + "/up\n", Stderr: apiFlipTo + " never answered /up within 30s"},
+		session.Result{Code: 4, Stdout: switchboard.Ungated + " " + apiNextTarget + "/up\n", Stderr: apiNextTarget + " never answered /up within 30s"},
 		session.Result{})
 	err := box.host().Release(context.Background(), bothApps(), nil)
 	if err == nil {
@@ -260,7 +260,7 @@ func TestAGateOneAppFailsWritesNothingAndFlipsNoApp(t *testing.T) {
 		t.Errorf("a failed gate refused with %v, which does not say the previous release still serves, and the ledger then keeps a pointer at a promotion the box never served", err)
 	}
 	if box.after(-1, writesProxy) >= 0 || box.cutover() >= 0 {
-		t.Errorf("a failed gate still wrote or flipped the proxy: %v", box.commands())
+		t.Errorf("a failed gate still wrote or cut over the proxy: %v", box.commands())
 	}
 	if box.recorded != before {
 		t.Errorf("a failed gate left %s changed", ProxyConfig)
@@ -270,10 +270,10 @@ func TestAGateOneAppFailsWritesNothingAndFlipsNoApp(t *testing.T) {
 			t.Errorf("a failed gate left %s running with nothing routing to it: %v", container, box.commands())
 		}
 	}
-	if !strings.Contains(err.Error(), "gate: http://"+apiFlipTo+"/up") {
+	if !strings.Contains(err.Error(), "gate: http://"+apiNextTarget+"/up") {
 		t.Errorf("the refusal reads\n%s\nand never names the gate that failed", err)
 	}
-	if strings.Contains(err.Error(), "gate: http://"+flipTo) {
+	if strings.Contains(err.Error(), "gate: http://"+nextTarget) {
 		t.Errorf("the refusal reads\n%s\nand blames web, whose gate passed", err)
 	}
 	if box.at(logCommand(apiCurrent)) < 0 {
@@ -281,33 +281,33 @@ func TestAGateOneAppFailsWritesNothingAndFlipsNoApp(t *testing.T) {
 	}
 }
 
-func TestAFlipThatFailsPutsEveryAppBackOntoItsPreviousUpstreamAndPostsIt(t *testing.T) {
+func TestACutoverThatFailsPutsEveryAppBackOntoItsPreviousUpstreamAndPostsIt(t *testing.T) {
 	t.Parallel()
 
 	box := benchedOn(t, twoAppsServing(t), session.Result{},
 		session.Result{Code: 2, Stderr: "the proxy answered /load with 400 Bad Request: unknown module"})
 	err := box.host().Release(context.Background(), bothApps(), nil)
 	if err == nil {
-		t.Fatal("a promotion whose flip the proxy rejected released successfully")
+		t.Fatal("a promotion whose cutover the proxy rejected released successfully")
 	}
 	if !unserved(err) {
-		t.Errorf("a flip put back refused with %v, which does not say the previous release still serves", err)
+		t.Errorf("a cutover put back refused with %v, which does not say the previous release still serves", err)
 	}
 	state := box.state(t)
 	if got := upstreamsOf(state); got["web"] != retired || got["api"] != apiRetired {
-		t.Errorf("after a rejected flip %s serves %v, want both apps back on what served before", ProxyConfig, got)
+		t.Errorf("after a rejected cutover %s serves %v, want both apps back on what served before", ProxyConfig, got)
 	}
-	if posted := box.after(box.cutover(), flips); posted < 0 {
+	if posted := box.after(box.cutover(), cutsOver); posted < 0 {
 		t.Errorf("the previous configuration was written back and never posted: %v", box.commands())
 	}
 	for _, container := range []string{physical, apiCurrent} {
 		if box.at("docker rm --force "+quoted(container)) < 0 {
-			t.Errorf("a rejected flip left %s running: %v", container, box.commands())
+			t.Errorf("a rejected cutover left %s running: %v", container, box.commands())
 		}
 	}
 	for _, live := range []string{retiring, apiRetiring} {
 		if box.at("docker stop "+quoted(live)) >= 0 {
-			t.Errorf("a rejected flip stopped %s, which is still what the box serves", live)
+			t.Errorf("a rejected cutover stopped %s, which is still what the box serves", live)
 		}
 	}
 }
@@ -349,7 +349,7 @@ func TestADigestThatMovesAfterTheGateIsRecomposedAndWrittenWithoutGatingAgain(t 
 		t.Errorf("the promotion gated %d times, want once: the targets it gated are still the ones it writes, and only the write moved", gated)
 	}
 	state := box.state(t)
-	if got := upstreamsOf(state); got["web"] != flipTo || got["api"] != apiFlipTo {
+	if got := upstreamsOf(state); got["web"] != nextTarget || got["api"] != apiNextTarget {
 		t.Errorf("the box serves %v, want both apps on their new targets", got)
 	}
 	if !slices.ContainsFunc(state.Routes, func(route AppRoute) bool { return route.Owner == otherSurface }) {
@@ -357,7 +357,7 @@ func TestADigestThatMovesAfterTheGateIsRecomposedAndWrittenWithoutGatingAgain(t 
 	}
 }
 
-func TestAWriteThatKeepsMovingIsRefusedBusyAndFlipsNothing(t *testing.T) {
+func TestAWriteThatKeepsMovingIsRefusedBusyAndCutsOverNothing(t *testing.T) {
 	t.Parallel()
 
 	box := benched(t, session.Result{}, session.Result{})
@@ -380,7 +380,7 @@ func TestAWriteThatKeepsMovingIsRefusedBusyAndFlipsNothing(t *testing.T) {
 		t.Errorf("the release wrote %d times, want %d: the retry is bounded", written, routingRewrites)
 	}
 	if box.cutover() >= 0 {
-		t.Errorf("a release that never wrote its configuration still flipped: %v", box.commands())
+		t.Errorf("a release that never wrote its configuration still cut over: %v", box.commands())
 	}
 	if box.at("docker rm --force "+quoted(physical)) < 0 {
 		t.Errorf("a refused release left %s running: %v", physical, box.commands())
@@ -393,12 +393,12 @@ func TestATargetTheBoxAlreadyServesIsNeverRemovedByAFailedRelease(t *testing.T) 
 	for what, answer := range map[string][2]session.Result{
 		"a gate that read a status":    {{Code: 3, Stderr: "answered /healthz with status 500"}, {}},
 		"a gate nothing ever answered": {{Code: 4, Stderr: "never answered /healthz"}, {}},
-		"a flip":                       {{}, {Code: 2, Stderr: "the proxy answered /load with 400"}},
+		"a cutover":                    {{}, {Code: 2, Stderr: "the proxy answered /load with 400"}},
 	} {
 		t.Run(what, func(t *testing.T) {
 			t.Parallel()
 
-			box := benchedOn(t, configFor(t, flipTo), answer[0], answer[1])
+			box := benchedOn(t, configFor(t, nextTarget), answer[0], answer[1])
 			if err := box.host().Release(context.Background(), aRelease(), nil); err == nil {
 				t.Fatalf("a release failing at %s released successfully", what)
 			}
@@ -409,7 +409,7 @@ func TestATargetTheBoxAlreadyServesIsNeverRemovedByAFailedRelease(t *testing.T) 
 	}
 }
 
-func TestTheOldContainerIsStoppedOnlyAfterTheFlipReturnsAndNothingReloadsTheProxyAfterIt(t *testing.T) {
+func TestTheOldContainerIsStoppedOnlyAfterTheCutoverReturnsAndNothingReloadsTheProxyAfterIt(t *testing.T) {
 	t.Parallel()
 
 	box, err := released(t, aRelease(), session.Result{}, session.Result{}, &fake.Log{})
@@ -422,14 +422,14 @@ func TestTheOldContainerIsStoppedOnlyAfterTheFlipReturnsAndNothingReloadsTheProx
 		t.Fatalf("a successful release ran %v", box.commands())
 	}
 	if stop < call {
-		t.Error("the old container is stopped before the flip that drains it returns")
+		t.Error("the old container is stopped before the cutover that drains it returns")
 	}
 	for at, command := range box.commands() {
-		if at > call && (flips(command) || writesProxy(command)) {
-			t.Errorf("the release ran %q after the flip: caddy restarts every server on any change to what it runs, and a server shut down under load drops the connections it has accepted but not yet read", command)
+		if at > call && (cutsOver(command) || writesProxy(command)) {
+			t.Errorf("the release ran %q after the cutover: caddy restarts every server on any change to what it runs, and a server shut down under load drops the connections it has accepted but not yet read", command)
 		}
 	}
-	if state := box.state(t); state.Routes[0].Upstream != flipTo {
+	if state := box.state(t); state.Routes[0].Upstream != nextTarget {
 		t.Errorf("the box's own file names %q as the live upstream, and a proxy restart reads that file rather than what was posted", state.Routes[0].Upstream)
 	}
 	if strings.Contains(box.recorded, retired) {
@@ -437,7 +437,7 @@ func TestTheOldContainerIsStoppedOnlyAfterTheFlipReturnsAndNothingReloadsTheProx
 	}
 }
 
-func TestEveryWayTheGateOrTheFlipCanFailReachesTheSameEndState(t *testing.T) {
+func TestEveryWayTheGateOrTheCutoverCanFailReachesTheSameEndState(t *testing.T) {
 	t.Parallel()
 
 	for what, answer := range map[string][2]session.Result{
@@ -473,7 +473,7 @@ func TestEveryWayTheGateOrTheFlipCanFailReachesTheSameEndState(t *testing.T) {
 	}
 }
 
-func TestAFailureTheFlipCanOnlyReachAfterItPostedPutsThePreviousConfigBackOnTheProxy(t *testing.T) {
+func TestAFailureTheCutoverCanOnlyReachAfterItPostedPutsThePreviousConfigBackOnTheProxy(t *testing.T) {
 	t.Parallel()
 
 	for what, answered := range map[string]session.Result{
@@ -488,7 +488,7 @@ func TestAFailureTheFlipCanOnlyReachAfterItPostedPutsThePreviousConfigBackOnTheP
 				t.Fatalf("%s released successfully", what)
 			}
 			called := box.cutover()
-			wrote, posted := box.after(called, writesProxy), box.after(called, flips)
+			wrote, posted := box.after(called, writesProxy), box.after(called, cutsOver)
 			if posted < 0 {
 				t.Fatalf("%s rolled the file back and never re-posted it, so the proxy is left live-routing to an upstream this loop then removes: %v", what, box.commands())
 			}
@@ -502,40 +502,40 @@ func TestAFailureTheFlipCanOnlyReachAfterItPostedPutsThePreviousConfigBackOnTheP
 	}
 }
 
-func TestAFlipThatNeverReturnedAnExitCodeEndsWhereANonZeroOneDoes(t *testing.T) {
+func TestACutoverThatNeverReturnedAnExitCodeEndsWhereANonZeroOneDoes(t *testing.T) {
 	t.Parallel()
 
 	box := benched(t, session.Result{}, session.Result{})
 	var once sync.Once
 	box.broke = func(command string) error {
 		var err error
-		if flips(command) {
+		if cutsOver(command) {
 			once.Do(func() { err = errors.New("ssh: connection reset by peer") })
 		}
 		return err
 	}
 	err := box.host().Release(context.Background(), aRelease(), nil)
 	if err == nil {
-		t.Fatal("a flip that never came back released successfully")
+		t.Fatal("a cutover that never came back released successfully")
 	}
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) {
-		t.Errorf("a flip that never came back failed with %T, want the refusal every other failure renders", err)
+		t.Errorf("a cutover that never came back failed with %T, want the refusal every other failure renders", err)
 	}
 	if !strings.Contains(err.Error(), "connection reset by peer") {
-		t.Errorf("a flip that never came back is refused with\n%s\nand never names what went wrong", err)
+		t.Errorf("a cutover that never came back is refused with\n%s\nand never names what went wrong", err)
 	}
 	if box.at("docker stop "+quoted(retiring)) >= 0 {
-		t.Errorf("a flip that never came back stopped the retired container: %v", box.commands())
+		t.Errorf("a cutover that never came back stopped the retired container: %v", box.commands())
 	}
 	if box.at("docker rm --force "+quoted(physical)) < 0 {
-		t.Errorf("a flip that never came back left the new container running: %v", box.commands())
+		t.Errorf("a cutover that never came back left the new container running: %v", box.commands())
 	}
 	if got := upstreamsOf(box.state(t)); got["web"] != retired {
-		t.Errorf("a flip that never came back left %s serving %v, an upstream nothing here saw the proxy accept", ProxyConfig, got)
+		t.Errorf("a cutover that never came back left %s serving %v, an upstream nothing here saw the proxy accept", ProxyConfig, got)
 	}
-	if box.after(box.cutover(), flips) < 0 {
-		t.Errorf("a flip that never came back never re-posted the previous configuration, and it may have posted before the connection died: %v", box.commands())
+	if box.after(box.cutover(), cutsOver) < 0 {
+		t.Errorf("a cutover that never came back never re-posted the previous configuration, and it may have posted before the connection died: %v", box.commands())
 	}
 }
 
@@ -599,14 +599,14 @@ func TestAReleaseWithNothingToRetireNeverAsksForADrain(t *testing.T) {
 	}
 }
 
-func TestTheFlipConfigMovesOnlyTheRouteAndTheHelperIsToldToDrainTheRetiredUpstream(t *testing.T) {
+func TestTheCutoverConfigMovesOnlyTheRouteAndTheHelperIsToldToDrainTheRetiredUpstream(t *testing.T) {
 	t.Parallel()
 
 	box := benched(t, session.Result{}, session.Result{})
 	var posted string
 	proxied := box.answer
 	box.answer = func(command string) (session.Result, bool) {
-		if flips(command) && posted == "" {
+		if cutsOver(command) && posted == "" {
 			posted = box.recorded
 		}
 		return proxied(command)
@@ -616,17 +616,17 @@ func TestTheFlipConfigMovesOnlyTheRouteAndTheHelperIsToldToDrainTheRetiredUpstre
 	}
 	want, err := RenderProxyConfig(caddy.Builtin{}, RoutingTable{
 		Grace:  30 * time.Second,
-		Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: flipTo}},
+		Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: nextTarget}},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if handed := renderedFrom(posted); handed != string(want) {
-		t.Errorf("the config the flip left beside the table is\n%s\nwant the running one with only the route moved:\n%s\nanything else it declares changes what caddy runs, and caddy restarts every server to take it", handed, want)
+		t.Errorf("the config the cutover left beside the table is\n%s\nwant the running one with only the route moved:\n%s\nanything else it declares changes what caddy runs, and caddy restarts every server to take it", handed, want)
 	}
 	gated := box.commands()[box.at(quoted("gate"))]
 	for _, wanted := range []string{
-		quoted(flipTo + "/healthz"),
+		quoted(nextTarget + "/healthz"),
 		quoted("--deploy-timeout") + " " + quoted("30"),
 		quoted(SwitchboardMounted),
 		quoted(SwitchboardContainer),
@@ -642,7 +642,7 @@ func TestTheFlipConfigMovesOnlyTheRouteAndTheHelperIsToldToDrainTheRetiredUpstre
 		quoted(live.RoutingTable),
 	} {
 		if !strings.Contains(cut, wanted) {
-			t.Errorf("the flip is made as %q, which includes no %s", cut, wanted)
+			t.Errorf("the cutover is made as %q, which includes no %s", cut, wanted)
 		}
 	}
 }
@@ -761,7 +761,7 @@ func TestAReleaseWhoseWriteDiesBetweenItsMovesPutsTheTableAndItsConfigBackTogeth
 	t.Parallel()
 
 	prior := configFor(t, retired)
-	box := &flipped{bench: machine(nil), recorded: prior}
+	box := &releaseBench{bench: machine(nil), recorded: prior}
 	config := renderedFrom(prior)
 	proxied := servesPair(box.bench, &box.recorded, &config)
 	died := false
@@ -779,7 +779,7 @@ func TestAReleaseWhoseWriteDiesBetweenItsMovesPutsTheTableAndItsConfigBackTogeth
 				return session.Result{Code: 1, Stderr: "mv: cannot move the rendering into place"}, true
 			}
 			return proxied(command)
-		case gates(command), flips(command):
+		case gates(command), cutsOver(command):
 			return session.Result{}, true
 		case idles(command):
 			return everyIdle(command), true
@@ -801,7 +801,7 @@ func TestAReleaseWhoseWriteDiesBetweenItsMovesPutsTheTableAndItsConfigBackTogeth
 	if rendered != renderedFrom(table) {
 		t.Errorf("a release whose write died between its moves left a config that is not the rendering of the table beside it:\n%s", rendered)
 	}
-	if box.after(slices.IndexFunc(box.commands(), writesProxy), flips) < 0 {
+	if box.after(slices.IndexFunc(box.commands(), writesProxy), cutsOver) < 0 {
 		t.Errorf("the pair was put back and the proxy never reloaded it: %v", box.commands())
 	}
 }
@@ -966,12 +966,12 @@ func TestAReleaseComposesItsRouteOntoWhatAConcurrentDeployLeftRatherThanRefusing
 		t.Fatalf("Release() beside a deploy that rewrote %s after it was read = %v: the compare-and-set exists to refuse a lost update, not a neighbour", ProxyConfig, err)
 	}
 	state := box.state(t)
-	if got := upstreamsOf(state); got["web"] != flipTo || got["api"] != "prod-api-1:8080" {
-		t.Errorf("the box serves %v after the release, want web onto %s beside the neighbour's api: the retry must compose onto what it re-read, not onto what it first read", got, flipTo)
+	if got := upstreamsOf(state); got["web"] != nextTarget || got["api"] != "prod-api-1:8080" {
+		t.Errorf("the box serves %v after the release, want web onto %s beside the neighbour's api: the retry must compose onto what it re-read, not onto what it first read", got, nextTarget)
 	}
 }
 
-func TestAFailureAfterTheFlipSaysTheReleaseIsServingAndNamesWhatIsLeftBehind(t *testing.T) {
+func TestAFailureAfterTheCutoverSaysTheReleaseIsServingAndNamesWhatIsLeftBehind(t *testing.T) {
 	t.Parallel()
 
 	progress := &fake.Log{}
@@ -986,29 +986,29 @@ func TestAFailureAfterTheFlipSaysTheReleaseIsServingAndNamesWhatIsLeftBehind(t *
 
 	err := box.host().Release(context.Background(), aRelease(), progress)
 	if err == nil {
-		t.Fatal("the stop after the flip was refused and the release reported success")
+		t.Fatal("the stop after the cutover was refused and the release reported success")
 	}
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) {
-		t.Fatalf("a failure after the flip failed with %T (%v), want the refusal every other failure renders: a bare machine error reads as a failed release while the new one is in fact serving", err, err)
+		t.Fatalf("a failure after the cutover failed with %T (%v), want the refusal every other failure renders: a bare machine error reads as a failed release while the new one is in fact serving", err, err)
 	}
 	if unserved(err) {
-		t.Errorf("a failure after the flip refused with %v as though the previous release still served, and the ledger would then point away from the release that is live", err)
+		t.Errorf("a failure after the cutover refused with %v as though the previous release still served, and the ledger would then point away from the release that is live", err)
 	}
 	said := err.Error()
 	for what, wanted := range map[string]string{
-		"that the flip already landed":    "flipped",
+		"that the cutover already landed": "cut over",
 		"the release that is now serving": physical,
 		"the container left running":      retiring,
 		"why the stop failed":             "no space left on device",
 	} {
 		if !strings.Contains(said, wanted) {
-			t.Errorf("a failure after the flip is refused with\n%s\nand that names no %s (%s)", said, what, wanted)
+			t.Errorf("a failure after the cutover is refused with\n%s\nand that names no %s (%s)", said, what, wanted)
 		}
 	}
 	warned := strings.Join(progress.Lines(), "\n")
 	if !strings.Contains(warned, "WARN Retired container "+retiring) || !strings.Contains(warned, "502") {
-		t.Errorf("the release reported %q; the drain expired holding requests open and the stop that failed after the flip swallowed the warning", warned)
+		t.Errorf("the release reported %q; the drain expired holding requests open and the stop that failed after the cutover swallowed the warning", warned)
 	}
 }
 
@@ -1111,13 +1111,13 @@ func TestExitedRestartingAndHungReadAsThreeDifferentThings(t *testing.T) {
 	}
 }
 
-func refusedAfter(t *testing.T, putBack session.Result) (*flipped, error) {
+func refusedAfter(t *testing.T, putBack session.Result) (*releaseBench, error) {
 	t.Helper()
 	box := benched(t, session.Result{}, session.Result{Code: 5, Stderr: "cannot parse the proxy's upstreams"})
 	proxied := box.answer
 	posted := 0
 	box.answer = func(command string) (session.Result, bool) {
-		if flips(command) {
+		if cutsOver(command) {
 			box.mu.Lock()
 			posted++
 			again := posted > 1
@@ -1157,7 +1157,7 @@ func TestARefusalNamesTheLiveUpstreamOnceAndTheAnswerFollowsWhetherTheProxyWasPu
 	}
 }
 
-func strandedByWrite(t *testing.T, landed bool, back session.Result) (*flipped, error) {
+func strandedByWrite(t *testing.T, landed bool, back session.Result) (*releaseBench, error) {
 	t.Helper()
 	box := benched(t, session.Result{}, session.Result{})
 	proxied := box.answer
@@ -1183,16 +1183,16 @@ func strandedByWrite(t *testing.T, landed bool, back session.Result) (*flipped, 
 	}
 	err := box.host().Release(context.Background(), aRelease(), nil)
 	if err == nil {
-		t.Fatal("a release whose flip configuration was never written released successfully")
+		t.Fatal("a release whose cutover configuration was never written released successfully")
 	}
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) {
-		t.Errorf("a flip configuration that could not be written failed with %T, want the refusal every other failure renders", err)
+		t.Errorf("a cutover configuration that could not be written failed with %T, want the refusal every other failure renders", err)
 	}
 	return box, err
 }
 
-func TestAFlipConfigurationThatCannotBeWrittenLeavesNeitherARunningContainerNorAHalfWrittenFile(t *testing.T) {
+func TestACutoverConfigurationThatCannotBeWrittenLeavesNeitherARunningContainerNorAHalfWrittenFile(t *testing.T) {
 	t.Parallel()
 
 	for what, landed := range map[string]bool{"a write that never landed": false, "a write that landed and reported failure": true} {
@@ -1204,7 +1204,7 @@ func TestAFlipConfigurationThatCannotBeWrittenLeavesNeitherARunningContainerNorA
 				t.Errorf("%s refused with %v, which does not say the previous release still serves", what, err)
 			}
 			if box.at(`"--retire"`) >= 0 || box.at(quoted("--drain-timeout")) >= 0 {
-				t.Errorf("%s still flipped onto the configuration: %v", what, box.commands())
+				t.Errorf("%s still cut over to the configuration: %v", what, box.commands())
 			}
 			if box.at("docker rm --force "+quoted(physical)) < 0 {
 				t.Errorf("%s left %s running with nothing routing to it: %v", what, physical, box.commands())
@@ -1225,7 +1225,7 @@ func TestAFlipConfigurationThatCannotBeWrittenLeavesNeitherARunningContainerNorA
 	}
 }
 
-func TestAFlipConfigurationThatCannotBeWrittenBackEitherNamesTheFileARestartWouldServe(t *testing.T) {
+func TestACutoverConfigurationThatCannotBeWrittenBackEitherNamesTheFileARestartWouldServe(t *testing.T) {
 	t.Parallel()
 
 	box, err := strandedByWrite(t, true, session.Result{Code: 1, Stderr: "no space left on device"})
@@ -1269,7 +1269,7 @@ func TestTheDrainContractIsStatedOnEveryReleaseThatRetiresSomething(t *testing.T
 	}
 }
 
-func interrupted(t *testing.T, at func(command string) bool, answer session.Result) (*flipped, context.Context) {
+func interrupted(t *testing.T, at func(command string) bool, answer session.Result) (*releaseBench, context.Context) {
 	t.Helper()
 	box := benched(t, session.Result{}, session.Result{})
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1288,20 +1288,20 @@ func interrupted(t *testing.T, at func(command string) bool, answer session.Resu
 	return box, ctx
 }
 
-func TestAReleaseInterruptedAtTheFlipStillPutsTheProxyBackAndRemovesWhatItStarted(t *testing.T) {
+func TestAReleaseInterruptedAtTheCutoverStillPutsTheProxyBackAndRemovesWhatItStarted(t *testing.T) {
 	t.Parallel()
 
 	var once sync.Once
 	box, ctx := interrupted(t, func(command string) bool {
 		hit := false
-		if flips(command) {
+		if cutsOver(command) {
 			once.Do(func() { hit = true })
 		}
 		return hit
 	}, session.Result{Code: 2, Stderr: "the proxy answered nothing"})
 	err := box.host().Release(ctx, aRelease(), nil)
 	if err == nil {
-		t.Fatal("a release whose flip failed under a cancelled context released successfully")
+		t.Fatal("a release whose cutover failed under a cancelled context released successfully")
 	}
 	state := box.state(t)
 	if got := upstreamsOf(state); got["web"] != retired {
@@ -1328,7 +1328,7 @@ func TestAReleaseInterruptedAtItsFirstWriteStillPutsTheFileBackAndRemovesWhatItS
 	}, session.Result{Code: 1, Stderr: "connection reset after the move"})
 	err := box.host().Release(ctx, aRelease(), nil)
 	if err == nil {
-		t.Fatal("a release whose flip configuration was never confirmed released successfully")
+		t.Fatal("a release whose cutover configuration was never confirmed released successfully")
 	}
 	if box.at("docker rm --force "+quoted(physical)) < 0 {
 		t.Errorf("the interrupted release left %s running with nothing routing to it: %v", physical, box.commands())
@@ -1341,7 +1341,7 @@ func TestAReleaseInterruptedAtItsFirstWriteStillPutsTheFileBackAndRemovesWhatItS
 	}
 }
 
-func TestWhatFollowsTheFlipLeavesARouteAnotherReleaseFlippedSinceOnItsUpstream(t *testing.T) {
+func TestWhatFollowsTheCutoverLeavesARouteAnotherReleaseCutOverSinceOnItsUpstream(t *testing.T) {
 	t.Parallel()
 
 	overtaking := "shop-web-overtaker:" + containerimage.PortText
@@ -1349,7 +1349,7 @@ func TestWhatFollowsTheFlipLeavesARouteAnotherReleaseFlippedSinceOnItsUpstream(t
 	proxied := box.answer
 	var once sync.Once
 	box.answer = func(command string) (session.Result, bool) {
-		if flips(command) {
+		if cutsOver(command) {
 			once.Do(func() {
 				box.mu.Lock()
 				box.recorded = documentOf(t, RoutingTable{
@@ -1366,11 +1366,11 @@ func TestWhatFollowsTheFlipLeavesARouteAnotherReleaseFlippedSinceOnItsUpstream(t
 		t.Fatalf("Release() = %v", err)
 	}
 	if got := upstreamsOf(box.state(t))["web"]; got != overtaking {
-		t.Errorf("the release left web routed to %s, want %s: a release that flipped the route since has drained and stopped %s, and routing back onto it serves 502s", got, overtaking, flipTo)
+		t.Errorf("the release left web routed to %s, want %s: a release that cut over the route since has drained and stopped %s, and routing back onto it serves 502s", got, overtaking, nextTarget)
 	}
 }
 
-func TestARetireeThatWouldNotStopSaysTheFlipTookAndStillStopsEveryOther(t *testing.T) {
+func TestARetireeThatWouldNotStopSaysTheCutoverTookAndStillStopsEveryOther(t *testing.T) {
 	t.Parallel()
 
 	box := benchedOn(t, twoAppsServing(t), session.Result{}, session.Result{})
@@ -1387,14 +1387,14 @@ func TestARetireeThatWouldNotStopSaysTheFlipTookAndStillStopsEveryOther(t *testi
 		t.Fatal("a release whose retiree would not stop reported success")
 	}
 	if unserved(err) {
-		t.Errorf("a release whose retiree would not stop after the flip refused with %v as though the previous release still served, and the ledger would then point away from the release that is live", err)
+		t.Errorf("a release whose retiree would not stop after the cutover refused with %v as though the previous release still served, and the ledger would then point away from the release that is live", err)
 	}
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) {
-		t.Errorf("a release whose retiree would not stop after the flip failed with %T, want the refusal every other failure renders", err)
+		t.Errorf("a release whose retiree would not stop after the cutover failed with %T, want the refusal every other failure renders", err)
 	}
 	for detail, wanted := range map[string]string{
-		"that the flip took":       "flipped",
+		"that the cutover took":    "cut over",
 		"what failed":              "no space left on device",
 		"the release that is live": physical,
 	} {
@@ -1445,7 +1445,7 @@ func TestARetireeAlreadyGoneFromTheBoxIsNoStopTheReleaseFailedToMake(t *testing.
 	}
 }
 
-func TestWhatFollowsTheFlipNeverStopsARetireeARouteDialsAgainOrAnotherFlipIsDraining(t *testing.T) {
+func TestWhatFollowsTheCutoverNeverStopsARetireeARouteDialsAgainOrAnotherCutoverIsDraining(t *testing.T) {
 	t.Parallel()
 
 	box := benched(t, session.Result{}, session.Result{})
@@ -1461,11 +1461,11 @@ func TestWhatFollowsTheFlipNeverStopsARetireeARouteDialsAgainOrAnotherFlipIsDrai
 		t.Fatalf("Release() = %v", err)
 	}
 	if box.at("docker stop "+quoted(retiring)) >= 0 {
-		t.Errorf("the release stopped %s after the proxy said it is still in use: a rollback that flipped a route back onto it while this release drained it then serves a stopped container", retiring)
+		t.Errorf("the release stopped %s after the proxy said it is still in use: a rollback that cut over a route back onto it while this release drained it then serves a stopped container", retiring)
 	}
 }
 
-func TestWhatFollowsTheFlipNeverStopsARetireeARollbackRoutedBeforeItsFlipRenamedTheRouteFile(t *testing.T) {
+func TestWhatFollowsTheCutoverNeverStopsARetireeARollbackRoutedBeforeItsCutoverRenamedTheRouteFile(t *testing.T) {
 	t.Parallel()
 
 	box := benched(t, session.Result{}, session.Result{})
@@ -1486,11 +1486,11 @@ func TestWhatFollowsTheFlipNeverStopsARetireeARollbackRoutedBeforeItsFlipRenamed
 		t.Fatalf("Release() = %v", err)
 	}
 	if box.at("docker stop "+quoted(retiring)) >= 0 {
-		t.Errorf("the release stopped %s while %s routes web to it: the rollback that wrote that route flips onto a stopped container and web answers 502 until the next deploy", retiring, ProxyConfig)
+		t.Errorf("the release stopped %s while %s routes web to it: the rollback that wrote that route cuts over to a stopped container and web answers 502 until the next deploy", retiring, ProxyConfig)
 	}
 }
 
-func TestWhatFollowsTheFlipCannotAskWhetherItsRetireeIsIdleStopsNothingAndSaysSo(t *testing.T) {
+func TestWhatFollowsTheCutoverCannotAskWhetherItsRetireeIsIdleStopsNothingAndSaysSo(t *testing.T) {
 	t.Parallel()
 
 	box := benched(t, session.Result{}, session.Result{})
@@ -1526,13 +1526,13 @@ func TestAReleaseWhosePromotionWasOvertakenWhileItGatedWritesNothing(t *testing.
 		t.Fatal("a release whose promotion was overtaken released successfully")
 	}
 	if !unserved(err) {
-		t.Errorf("an overtaken release refused with %v, which does not say it never flipped, and the ledger then keeps it in line to serve", err)
+		t.Errorf("an overtaken release refused with %v, which does not say it never cut over, and the ledger then keeps it in line to serve", err)
 	}
 	if !strings.Contains(err.Error(), "p3 took it") {
 		t.Errorf("an overtaken release is refused with\n%s\nand never says what overtook it", err)
 	}
 	if box.after(-1, writesProxy) >= 0 || box.cutover() >= 0 {
-		t.Errorf("an overtaken release still wrote or flipped the proxy: %v", box.commands())
+		t.Errorf("an overtaken release still wrote or cut over the proxy: %v", box.commands())
 	}
 	if box.recorded != before {
 		t.Errorf("an overtaken release left %s changed", ProxyConfig)
@@ -1547,7 +1547,7 @@ func TestAFailedReleaseLeavesATargetAnotherReleaseIsStillDrainingForThatReleaseT
 
 	for what, answer := range map[string][2]session.Result{
 		"a gate that read a status": {{Code: 3, Stderr: "answered /healthz with status 500"}, {}},
-		"a flip":                    {{}, {Code: 2, Stderr: "the proxy answered /load with 400"}},
+		"a cutover":                 {{}, {Code: 2, Stderr: "the proxy answered /load with 400"}},
 	} {
 		t.Run(what, func(t *testing.T) {
 			t.Parallel()
@@ -1564,7 +1564,7 @@ func TestAFailedReleaseLeavesATargetAnotherReleaseIsStillDrainingForThatReleaseT
 				t.Fatalf("a release failing at %s released successfully", what)
 			}
 			if box.at("docker rm --force "+quoted(physical)) >= 0 {
-				t.Errorf("a release failing at %s removed %s while the proxy said a flip was still draining it: the requests that flip is waiting out are cut, and the release that retired it stops it once they finish", what, physical)
+				t.Errorf("a release failing at %s removed %s while the proxy said a cutover was still draining it: the requests that cutover is waiting out are cut, and the release that retired it stops it once they finish", what, physical)
 			}
 		})
 	}
@@ -1586,7 +1586,7 @@ func TestAFailedReleaseThatCannotAskWhetherItsTargetIsIdleRemovesNothingAndSaysS
 		t.Fatal("a release whose gate failed released successfully")
 	}
 	if box.at("docker rm --force "+quoted(physical)) >= 0 {
-		t.Errorf("the release removed %s without knowing whether a flip was still draining it", physical)
+		t.Errorf("the release removed %s without knowing whether a cutover was still draining it", physical)
 	}
 	if !strings.Contains(err.Error(), physical+" left running") || !strings.Contains(err.Error(), "permission denied reading /proc") {
 		t.Errorf("the refusal reads\n%s\nand never names %s as left running or why", err, physical)
@@ -1605,7 +1605,7 @@ func TestAReleaseOfNoAppsTouchesNothing(t *testing.T) {
 	}
 }
 
-func TestAFlipConfigurationThatLandedAndReportedFailurePutsEveryAppBack(t *testing.T) {
+func TestACutoverConfigurationThatLandedAndReportedFailurePutsEveryAppBack(t *testing.T) {
 	t.Parallel()
 
 	box := benchedOn(t, twoAppsServing(t), session.Result{}, session.Result{})
@@ -1628,10 +1628,10 @@ func TestAFlipConfigurationThatLandedAndReportedFailurePutsEveryAppBack(t *testi
 
 	err := box.host().Release(context.Background(), bothApps(), nil)
 	if err == nil {
-		t.Fatal("a promotion whose flip configuration reported failure released successfully")
+		t.Fatal("a promotion whose cutover configuration reported failure released successfully")
 	}
 	if !unserved(err) {
-		t.Errorf("a flip configuration put back refused with %v, which does not say the previous release still serves", err)
+		t.Errorf("a cutover configuration put back refused with %v, which does not say the previous release still serves", err)
 	}
 	if !strings.Contains(err.Error(), ProxyConfig+" restored") {
 		t.Errorf("the refusal reads\n%s\nand never says %s was put back", err, ProxyConfig)
@@ -1641,7 +1641,7 @@ func TestAFlipConfigurationThatLandedAndReportedFailurePutsEveryAppBack(t *testi
 		t.Errorf("%s serves %v after the put-back, want both apps back on what served before", ProxyConfig, got)
 	}
 	if box.at(quoted("--retire")) >= 0 {
-		t.Errorf("a flip configuration that reported failure was still flipped and drained: %v", box.commands())
+		t.Errorf("a cutover configuration that reported failure was still cut over and drained: %v", box.commands())
 	}
 	for _, container := range []string{physical, apiCurrent} {
 		if box.at("docker rm --force "+quoted(container)) < 0 {

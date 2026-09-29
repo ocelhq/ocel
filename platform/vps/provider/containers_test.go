@@ -45,7 +45,7 @@ func over(machine *box) *vps.Provider {
 	)
 }
 
-func TestStartingAnAppEndsAtARunningLabelledContainerAndFlipsNothing(t *testing.T) {
+func TestStartingAnAppEndsAtARunningLabelledContainerAndCutsOverNothing(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
@@ -65,7 +65,7 @@ func TestStartingAnAppEndsAtARunningLabelledContainerAndFlipsNothing(t *testing.
 	}
 	joined := strings.Join(machine.commands(), "\n")
 	if strings.Contains(joined, host.SwitchboardMounted) || strings.Contains(joined, host.ProxyConfig) {
-		t.Errorf("starting a container reached the proxy:\n%s\nreleases end at a running container, and the flip is a separate call", joined)
+		t.Errorf("starting a container reached the proxy:\n%s\nreleases end at a running container, and the cutover is a separate call", joined)
 	}
 }
 

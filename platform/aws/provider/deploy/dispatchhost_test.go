@@ -272,7 +272,7 @@ func TestAnEdgeThatRunsNoCodeLeavesPathDispatchToTheOrigin(t *testing.T) {
 	}
 }
 
-func TestAppEnvNamesTheRouterItsAppFlipsThroughAndNotItsEdge(t *testing.T) {
+func TestAppEnvNamesTheRouterItsAppPromotesThroughAndNotItsEdge(t *testing.T) {
 	t.Parallel()
 
 	release := releasing(t, routedConfig(t, cloudfront.Kind))
@@ -285,7 +285,7 @@ func TestAppEnvNamesTheRouterItsAppFlipsThroughAndNotItsEdge(t *testing.T) {
 	}
 
 	if env := routed("relay"); env["OCEL_ROUTER_KIND"] != "relay" {
-		t.Errorf("OCEL_ROUTER_KIND = %q behind CloudFront for an app flipping through relay, want relay: the dispatch host names the router on every answer, and liveness expects the router the app pairs with", env["OCEL_ROUTER_KIND"])
+		t.Errorf("OCEL_ROUTER_KIND = %q behind CloudFront for an app promoting through relay, want relay: the dispatch host names the router on every answer, and liveness expects the router the app pairs with", env["OCEL_ROUTER_KIND"])
 	}
 	if env := routed(""); env["OCEL_ROUTER_KIND"] != "" {
 		t.Errorf("OCEL_ROUTER_KIND = %q for an app handed no router, want it unset", env["OCEL_ROUTER_KIND"])

@@ -44,9 +44,9 @@ type promotable struct {
 	record router.DeploymentRecord
 }
 
-func (s *stack) serve(ctx context.Context, flip router.Flip, ready []promotable, progress progress.Log) error {
-	pointer := flip.Pointer
-	claims, err := s.previewClaims(ctx, pointer, slices.Sorted(maps.Keys(flip.Records)))
+func (s *stack) serve(ctx context.Context, move router.PointerMove, ready []promotable, progress progress.Log) error {
+	pointer := move.Pointer
+	claims, err := s.previewClaims(ctx, pointer, slices.Sorted(maps.Keys(move.Records)))
 	if err != nil {
 		return router.Unserved{Err: err}
 	}
@@ -68,7 +68,7 @@ func (s *stack) serve(ctx context.Context, flip router.Flip, ready []promotable,
 		Apps:          apps,
 		DeployTimeout: host.DeployWindow,
 		DrainTimeout:  host.DrainWindow,
-		StillActive:   flip.RefuseInactive,
+		StillActive:   move.RefuseInactive,
 	}, progress)
 }
 

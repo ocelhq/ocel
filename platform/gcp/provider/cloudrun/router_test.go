@@ -78,7 +78,7 @@ func TestTheCloudRunRouterBehavesAsEveryRouterMust(t *testing.T) {
 					}
 					return strings.TrimPrefix(calls[len(calls)-1], webService+"@rev-")
 				},
-				FailNextFlip: func(err error) {
+				FailNextPointerMove: func(err error) {
 					pins.mu.Lock()
 					defer pins.mu.Unlock()
 					pins.refuse = err
@@ -121,7 +121,7 @@ func staged(t *testing.T, stack fake.PromotingStack, identity, revision string) 
 
 func promoted(t *testing.T, stack fake.PromotingStack, id, identity string) error {
 	t.Helper()
-	return stack.Flip(context.Background(), router.Flip{Promotion: router.Promotion{
+	return stack.MovePointer(context.Background(), router.PointerMove{Promotion: router.Promotion{
 		PromotionID: id,
 		Builds:      map[string]string{"web": identity},
 	}}, progress.Discard())
@@ -155,7 +155,7 @@ func TestAPromotionSaysWhichRevisionItPinsEachAppsTrafficTo(t *testing.T) {
 	progress := &fake.Log{}
 
 	promotion := router.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}}
-	if err := stack.Flip(context.Background(), router.Flip{Promotion: promotion}, progress); err != nil {
+	if err := stack.MovePointer(context.Background(), router.PointerMove{Promotion: promotion}, progress); err != nil {
 		t.Fatalf("Promote(p1) = %v", err)
 	}
 	want := "INFO Pinning all of web's traffic to revision web-00001-abc of Cloud Run service " + webService
