@@ -28,7 +28,7 @@ func (h *handlers) Shape(ctx context.Context, req *contractv1.ShapeRequest) (*co
 		Manifest:    unshipped(req.GetManifest()),
 		Environment: req.GetEnvironment(),
 		Edge:        req.GetEdge(),
-	}, "")
+	}, scanPromotionID)
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
@@ -55,7 +55,10 @@ func (h *handlers) Shape(ctx context.Context, req *contractv1.ShapeRequest) (*co
 	return set, nil
 }
 
-const scanDeploymentID = "00000000000000000000000000000000"
+const (
+	scanDeploymentID = "00000000000000000000000000000000"
+	scanPromotionID  = "shape"
+)
 
 func unshipped(manifest *contractv1.Manifest) *contractv1.Manifest {
 	manifest = proto.Clone(manifest).(*contractv1.Manifest)
