@@ -1,0 +1,3 @@
+shop.example.com, ocel-edge-probe.preview.example.com, pr-12--web.preview.example.com, box.example.com {
+	reverse_proxy ocel-switchboard:8443
+}
