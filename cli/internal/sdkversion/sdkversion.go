@@ -10,14 +10,8 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/pkg/constants"
-)
-
-const (
-	JS     = "js"
-	Go     = "go"
-	Python = "python"
-	Rust   = "rust"
 )
 
 type release struct {
@@ -84,15 +78,15 @@ func Compatible(cli, sdk string) bool {
 	}
 }
 
-func Upgrade(language, cli string) string {
-	switch language {
-	case JS:
+func Upgrade(written language.Language, cli string) string {
+	switch written {
+	case language.JS:
 		return "npm i ocel@" + cli
-	case Python:
+	case language.Python:
 		return "uv add ocel==" + pep440(cli)
-	case Rust:
+	case language.Rust:
 		return "cargo add ocel-sdk@" + cli
-	case Go:
+	case language.Go:
 		return "go get ocel.dev@v" + strings.TrimPrefix(cli, "v")
 	}
 	return ""
@@ -113,24 +107,24 @@ func pep440(version string) string {
 	return base
 }
 
-var names = map[string]string{
-	JS:     "the JavaScript SDK (ocel)",
-	Python: "the Python SDK (ocel)",
-	Rust:   "the Rust SDK (ocel-sdk)",
-	Go:     "the Go SDK (ocel.dev)",
+var names = map[language.Language]string{
+	language.JS:     "the JavaScript SDK (ocel)",
+	language.Python: "the Python SDK (ocel)",
+	language.Rust:   "the Rust SDK (ocel-sdk)",
+	language.Go:     "the Go SDK (ocel.dev)",
 }
 
 type MismatchError struct {
-	Language string
+	Language language.Language
 	SDK      string
 	CLI      string
 }
 
-func Name(language string) string {
-	if named, ok := names[language]; ok {
+func Name(written language.Language) string {
+	if named, ok := names[written]; ok {
 		return named
 	}
-	return "the " + language + " SDK"
+	return "the " + string(written) + " SDK"
 }
 
 func (e *MismatchError) Error() string {
@@ -142,20 +136,20 @@ func (e *MismatchError) Error() string {
 	return said
 }
 
-func Check(language, sdk, cli string) error {
+func Check(written language.Language, sdk, cli string) error {
 	if Compatible(cli, sdk) {
 		return nil
 	}
-	return &MismatchError{Language: language, SDK: sdk, CLI: cli}
+	return &MismatchError{Language: written, SDK: sdk, CLI: cli}
 }
 
-func Format(language, version string) string {
-	return language + "/" + version
+func Format(written language.Language, version string) string {
+	return string(written) + "/" + version
 }
 
-func Parse(header string) (language, version string, ok bool) {
-	language, version, ok = strings.Cut(header, "/")
-	return language, version, ok && language != ""
+func Parse(header string) (written language.Language, version string, ok bool) {
+	name, version, ok := strings.Cut(header, "/")
+	return language.Language(name), version, ok && name != ""
 }
 
 type Gate struct {
@@ -181,11 +175,11 @@ func (g *Gate) Interceptor() connect.Interceptor {
 }
 
 func (g *Gate) check(header string) error {
-	language, version, ok := Parse(header)
+	written, version, ok := Parse(header)
 	if !ok {
 		return nil
 	}
-	err := Check(language, version, g.cli)
+	err := Check(written, version, g.cli)
 	if err == nil {
 		return nil
 	}

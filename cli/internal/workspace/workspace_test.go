@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/workspace"
 )
 
@@ -315,8 +316,8 @@ func TestWhatMakesAnAppAPythonProjectIsTheFileThatDeclaresItOne(t *testing.T) {
 
 			loc := located(t, app)
 
-			if loc.Python != tt.python {
-				t.Errorf("Python = %v, want %v — a python app is told by the file that declares the project, the way a go one is told by its go.mod", loc.Python, tt.python)
+			if python := loc.Language == language.Python; python != tt.python {
+				t.Errorf("Language = %q, want python %v — a python app is told by the file that declares the project, the way a go one is told by its go.mod", loc.Language, tt.python)
 			}
 			wantRoot, wantMember := dir, true
 			if tt.python {
@@ -364,8 +365,8 @@ func TestACargoManifestMakesAnAppRustOnlyWhereNoNodeOrPythonProjectClaimsTheDire
 
 			loc := located(t, app)
 
-			if loc.Rust != tt.rust {
-				t.Errorf("Rust = %v, want %v — a Cargo.toml makes an app rust only where nothing else declares the directory an app of its own", loc.Rust, tt.rust)
+			if rust := loc.Language == language.Rust; rust != tt.rust {
+				t.Errorf("Language = %q, want rust %v — a Cargo.toml makes an app rust only where nothing else declares the directory an app of its own", loc.Language, tt.rust)
 			}
 			if tt.rust && loc.Root != app {
 				t.Errorf("Root = %s, want %s — a crate roots its own build, and no node workspace installs it", loc.Root, app)

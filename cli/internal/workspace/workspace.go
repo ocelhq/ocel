@@ -11,18 +11,15 @@ import (
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
+	"github.com/ocelhq/ocel/cli/internal/language"
 	"gopkg.in/yaml.v3"
 )
 
 const (
-	manifestName       = "package.json"
-	goModuleName       = "go.mod"
-	pythonRequirements = "requirements.txt"
-	pythonProjectName  = "pyproject.toml"
-	rustManifestName   = "Cargo.toml"
-	pnpmWorkspaceFile  = "pnpm-workspace.yaml"
-	gitEntry           = ".git"
-	vendorDir          = "node_modules"
+	manifestName      = "package.json"
+	pnpmWorkspaceFile = "pnpm-workspace.yaml"
+	gitEntry          = ".git"
+	vendorDir         = "node_modules"
 )
 
 type App struct {
@@ -37,10 +34,7 @@ type Location struct {
 	Root         string
 	Path         string
 	Member       bool
-	Node         bool
-	Go           bool
-	Python       bool
-	Rust         bool
+	Language     language.Language
 	Manager      Manager
 	App          App
 	BuildCommand string
@@ -115,13 +109,10 @@ func locatedAt(dir, root string) (Location, error) {
 	located := Location{
 		Root:    root,
 		Path:    filepath.ToSlash(rel),
-		Node:    regular(filepath.Join(dir, manifestName)),
-		Go:      regular(filepath.Join(dir, goModuleName)),
-		Python:  pythonProject(dir),
-		Rust:    rustCrate(dir),
 		App:     describe(dir, app),
 		Manager: detect(root),
 	}
+	located.Language, _ = language.Of(dir)
 	if globs, ok := declaredPackages(root); ok {
 		_, located.Member = memberOf(root, dir, globs)
 	}
@@ -173,17 +164,8 @@ func (l Location) Members() []string {
 }
 
 func isStandalone(dir string) bool {
-	return regular(filepath.Join(dir, goModuleName)) || pythonProject(dir) || rustCrate(dir)
-}
-
-func rustCrate(dir string) bool {
-	return regular(filepath.Join(dir, rustManifestName)) &&
-		!regular(filepath.Join(dir, manifestName)) &&
-		!pythonProject(dir)
-}
-
-func pythonProject(dir string) bool {
-	return regular(filepath.Join(dir, pythonRequirements)) || regular(filepath.Join(dir, pythonProjectName))
+	written, _ := language.Of(dir)
+	return written != "" && written != language.JS
 }
 
 func regular(path string) bool {

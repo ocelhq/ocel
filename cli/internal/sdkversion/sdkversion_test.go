@@ -10,6 +10,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/resources/v1/resourcesv1connect"
@@ -62,14 +63,15 @@ func TestUpgradeNamesEachEcosystemsCommand(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		language, cli, want string
+		language  language.Language
+		cli, want string
 	}{
-		{JS, "0.2.0", "npm i ocel@0.2.0"},
-		{Python, "0.2.0", "uv add ocel==0.2.0"},
-		{Python, "0.2.0-rc.1", "uv add ocel==0.2.0rc1"},
-		{Python, "0.2.0-0.nightly.20260923.gabc1234", "uv add ocel==0.2.0.dev20260923"},
-		{Rust, "0.2.0", "cargo add ocel-sdk@0.2.0"},
-		{Go, "0.2.0", "go get ocel.dev@v0.2.0"},
+		{language.JS, "0.2.0", "npm i ocel@0.2.0"},
+		{language.Python, "0.2.0", "uv add ocel==0.2.0"},
+		{language.Python, "0.2.0-rc.1", "uv add ocel==0.2.0rc1"},
+		{language.Python, "0.2.0-0.nightly.20260923.gabc1234", "uv add ocel==0.2.0.dev20260923"},
+		{language.Rust, "0.2.0", "cargo add ocel-sdk@0.2.0"},
+		{language.Go, "0.2.0", "go get ocel.dev@v0.2.0"},
 		{"cobol", "0.2.0", ""},
 	}
 	for _, c := range cases {
@@ -82,7 +84,7 @@ func TestUpgradeNamesEachEcosystemsCommand(t *testing.T) {
 func TestMismatchNamesBothVersionsTheLanguageAndTheFix(t *testing.T) {
 	t.Parallel()
 
-	err := Check(Python, "0.0.2", "0.0.3")
+	err := Check(language.Python, "0.0.2", "0.0.3")
 	want := "the Python SDK (ocel) is version 0.0.2 and this CLI is version 0.0.3; an SDK works with the CLI of its own release — run `uv add ocel==0.0.3`"
 	if err == nil || err.Error() != want {
 		t.Fatalf("Check() = %v, want %q", err, want)
@@ -139,7 +141,7 @@ func TestTheGateRefusesAMismatchedSDKAndKeepsTheRefusal(t *testing.T) {
 	}
 
 	var mismatch *MismatchError
-	if refused := gate.Take(); !errors.As(refused, &mismatch) || mismatch.Language != JS || mismatch.SDK != "0.0.2" {
+	if refused := gate.Take(); !errors.As(refused, &mismatch) || mismatch.Language != language.JS || mismatch.SDK != "0.0.2" {
 		t.Fatalf("Take() = %v, want the js mismatch", refused)
 	}
 	if refused := gate.Take(); refused != nil {

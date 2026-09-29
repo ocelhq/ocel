@@ -13,6 +13,7 @@ import (
 	railpackplan "github.com/railwayapp/railpack/core/plan"
 	"github.com/tailscale/hujson"
 
+	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/workspace"
 )
 
@@ -78,14 +79,14 @@ func Plan(loc workspace.Location) ([]byte, error) {
 }
 
 func providerFor(loc workspace.Location) string {
-	switch {
-	case loc.Go:
+	switch loc.Language {
+	case language.Go:
 		return goProvider
-	case loc.Python:
+	case language.Python:
 		return pythonProvider
-	case loc.Node:
+	case language.JS:
 		return nodeProvider
-	case loc.Rust:
+	case language.Rust:
 		return rustProvider
 	default:
 		return ""

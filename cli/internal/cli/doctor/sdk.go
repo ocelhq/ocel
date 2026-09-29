@@ -11,12 +11,13 @@ import (
 	"github.com/pelletier/go-toml/v2"
 	"golang.org/x/mod/modfile"
 
+	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/sdkversion"
 )
 
 type declaredSDK struct {
-	language string
+	language language.Language
 	manifest string
 	spec     string
 }
@@ -59,7 +60,7 @@ func npmSDK(dir string) (declaredSDK, bool) {
 	}
 	for _, deps := range []map[string]string{manifest.Dependencies, manifest.DevDependencies} {
 		if spec, ok := deps["ocel"]; ok {
-			return declaredSDK{language: sdkversion.JS, manifest: path, spec: spec}, true
+			return declaredSDK{language: language.JS, manifest: path, spec: spec}, true
 		}
 	}
 	return declaredSDK{}, false
@@ -90,7 +91,7 @@ func pythonSDK(dir string) (declaredSDK, bool) {
 		if spec != "" && !strings.ContainsAny(spec[:1], "=<>!~@") {
 			continue
 		}
-		return declaredSDK{language: sdkversion.Python, manifest: path, spec: spec}, true
+		return declaredSDK{language: language.Python, manifest: path, spec: spec}, true
 	}
 	return declaredSDK{}, false
 }
@@ -117,7 +118,7 @@ func rustSDK(dir string) (declaredSDK, bool) {
 	for _, deps := range tables {
 		for name, spec := range deps {
 			if crate, ok := crateSpec(name, spec); ok {
-				return declaredSDK{language: sdkversion.Rust, manifest: path, spec: crate}, true
+				return declaredSDK{language: language.Rust, manifest: path, spec: crate}, true
 			}
 		}
 	}
@@ -153,7 +154,7 @@ func goSDK(dir string) (declaredSDK, bool) {
 	}
 	for _, required := range parsed.Require {
 		if required.Mod.Path == "ocel.dev" {
-			return declaredSDK{language: sdkversion.Go, manifest: path, spec: required.Mod.Version}, true
+			return declaredSDK{language: language.Go, manifest: path, spec: required.Mod.Version}, true
 		}
 	}
 	return declaredSDK{}, false
