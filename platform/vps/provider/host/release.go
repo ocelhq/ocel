@@ -13,6 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -385,6 +386,8 @@ type composed struct {
 	failedPlace error
 	changed     bool
 	reloading   bool
+	served      proxy.Spec
+	admitted    proxy.Spec
 }
 
 func (h *Host) composeRouting(ctx context.Context, compose func(RoutingTable) (RoutingTable, error)) (composed, error) {
@@ -438,7 +441,7 @@ func (h *Host) composeRouting(ctx context.Context, compose func(RoutingTable) (R
 			if err := h.front.Validate(ctx, rendered); err != nil {
 				return shaped, err
 			}
-			shaped.reloading = true
+			shaped.reloading, shaped.admitted = true, proxySpec(table)
 			err = h.replace(ctx, pair.digest(), at, rendered)
 		} else {
 			var admitted []byte
@@ -450,6 +453,9 @@ func (h *Host) composeRouting(ctx context.Context, compose func(RoutingTable) (R
 				if err := h.front.Validate(ctx, admitted); err != nil {
 					return shaped, err
 				}
+			}
+			if shaped.admitted = proxySpec(next); fresh {
+				shaped.served = proxySpec(table)
 			}
 			shaped.written, shaped.failedPlace, err = h.writePair(ctx, pair.digest(), routingPair{table: after, config: admitted}, shaped.reloading)
 			shaped.changed = true

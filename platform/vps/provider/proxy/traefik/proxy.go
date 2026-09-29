@@ -22,7 +22,7 @@ func (t Traefik) RefuseRouted(ctx context.Context, hostnames []string) error {
 
 func (t Traefik) Validate(_ context.Context, rendered []byte) error { return t.validate(rendered) }
 
-func (t Traefik) Reload(ctx context.Context) error { return t.reload(ctx) }
+func (t Traefik) Reload(ctx context.Context, served proxy.Spec) error { return t.reload(ctx, served) }
 
 func (t Traefik) Inspect(ctx context.Context) (proxy.Checks, error) { return t.inspect(ctx) }
 

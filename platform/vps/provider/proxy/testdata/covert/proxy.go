@@ -20,7 +20,7 @@ func (o *Overt) RefuseRouted(context.Context, []string) error { return nil }
 
 func (o *Overt) Validate(context.Context, []byte) error { return nil }
 
-func (o *Overt) Reload(context.Context) error { return nil }
+func (o *Overt) Reload(context.Context, proxy.Spec) error { return nil }
 
 func (o *Overt) Inspect(context.Context) (proxy.Checks, error) { return nil, nil }
 

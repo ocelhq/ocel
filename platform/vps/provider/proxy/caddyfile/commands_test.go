@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddyfile"
 )
 
@@ -54,7 +55,7 @@ func TestReloadRunsCaddyReloadInsideYourContainerNamingTheConfigAndItsAdapter(t 
 
 	machine := &box{}
 	front := caddyfile.Caddyfile{Box: machine, Container: "caddy", Config: "/etc/caddy/Caddyfile"}
-	if err := front.Reload(context.Background()); err != nil {
+	if err := front.Reload(context.Background(), proxy.Spec{}); err != nil {
 		t.Fatalf("Reload() = %v", err)
 	}
 	want := [][]string{{"docker", "exec", "caddy", "caddy", "reload", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"}}
@@ -68,7 +69,7 @@ func TestReloadUnderAPresetRunsTheReloadTheHostToolRunsItself(t *testing.T) {
 
 	machine := &box{}
 	front := caddyfile.Caddyfile{Box: machine, Preset: "coolify", Container: "coolify-proxy", Config: "/config/caddy/Caddyfile.autosave", Network: "coolify"}
-	if err := front.Reload(context.Background()); err != nil {
+	if err := front.Reload(context.Background(), proxy.Spec{}); err != nil {
 		t.Fatalf("Reload() = %v", err)
 	}
 	want := [][]string{{"docker", "exec", "coolify-proxy", "caddy", "reload", "--config", "/config/caddy/Caddyfile.autosave"}}
@@ -81,7 +82,7 @@ func TestReloadOfACaddyServiceGoesThroughTheOneSudoLineBootstrapWrites(t *testin
 	t.Parallel()
 
 	machine := &box{}
-	if err := (caddyfile.Caddyfile{Box: machine, Port: 8480, Config: "/etc/caddy/Caddyfile"}).Reload(context.Background()); err != nil {
+	if err := (caddyfile.Caddyfile{Box: machine, Port: 8480, Config: "/etc/caddy/Caddyfile"}).Reload(context.Background(), proxy.Spec{}); err != nil {
 		t.Fatalf("Reload() = %v", err)
 	}
 	want := [][]string{{"sudo", "-n", "/usr/bin/systemctl", "reload", "caddy.service"}}
@@ -98,7 +99,7 @@ func TestAReloadYourCaddyRefusesCarriesItsErrorVerbatim(t *testing.T) {
 
 	said := `Error: sending configuration to instance: caddy responded with error: HTTP 400: {"error":"loading config: ambiguous site definition: shop.example.com"}`
 	machine := &box{refused: map[string]string{"reload": said}}
-	err := (caddyfile.Caddyfile{Box: machine, Container: "caddy", Config: "/etc/caddy/Caddyfile"}).Reload(context.Background())
+	err := (caddyfile.Caddyfile{Box: machine, Container: "caddy", Config: "/etc/caddy/Caddyfile"}).Reload(context.Background(), proxy.Spec{})
 	if err == nil || !strings.Contains(err.Error(), said) {
 		t.Fatalf("Reload() = %v, want it refused carrying %q", err, said)
 	}

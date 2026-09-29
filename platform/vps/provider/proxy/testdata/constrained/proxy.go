@@ -20,7 +20,7 @@ func (Constrained) RefuseRouted(context.Context, []string) error { return nil }
 
 func (Constrained) Validate(context.Context, []byte) error { return nil }
 
-func (Constrained) Reload(context.Context) error { return nil }
+func (Constrained) Reload(context.Context, proxy.Spec) error { return nil }
 
 func (Constrained) Inspect(context.Context) (proxy.Checks, error) { return nil, nil }
 

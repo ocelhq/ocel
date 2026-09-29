@@ -9,6 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
@@ -45,7 +46,7 @@ func TestAReloadTakesUpTheConfigOnDiskOverTheAdminSocket(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
-	if err := (caddy.Builtin{Box: machine}).Reload(context.Background()); err != nil {
+	if err := (caddy.Builtin{Box: machine}).Reload(context.Background(), proxy.Spec{}); err != nil {
 		t.Fatalf("Reload() = %v", err)
 	}
 	if len(machine.ran) != 1 {
@@ -66,7 +67,7 @@ func TestAReloadTheProxyRefusesIsTheReloadsFailure(t *testing.T) {
 
 	refused := errors.New("adapting config using json: loading tls app: boom")
 	machine := &box{answer: func(string) (string, error) { return "", refused }}
-	if err := (caddy.Builtin{Box: machine}).Reload(context.Background()); !errors.Is(err, refused) {
+	if err := (caddy.Builtin{Box: machine}).Reload(context.Background(), proxy.Spec{}); !errors.Is(err, refused) {
 		t.Errorf("Reload() = %v, want the refused reload returned", err)
 	}
 }

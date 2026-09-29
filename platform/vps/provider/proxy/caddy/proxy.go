@@ -31,7 +31,7 @@ func (Builtin) RefuseRouted(context.Context, []string) error { return nil }
 
 func (Builtin) Validate(context.Context, []byte) error { return nil }
 
-func (b Builtin) Reload(ctx context.Context) error {
+func (b Builtin) Reload(ctx context.Context, _ proxy.Spec) error {
 	_, err := b.Box.Ran(ctx, "reload "+Container+" onto "+ConfigMount, reloading())
 	return err
 }

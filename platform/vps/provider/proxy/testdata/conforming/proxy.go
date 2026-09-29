@@ -20,7 +20,7 @@ func (c *Conforming) RefuseRouted(context.Context, []string) error { return nil 
 
 func (c *Conforming) Validate(context.Context, []byte) error { return nil }
 
-func (c *Conforming) Reload(context.Context) error { return nil }
+func (c *Conforming) Reload(context.Context, proxy.Spec) error { return nil }
 
 func (c *Conforming) Inspect(context.Context) (proxy.Checks, error) { return nil, nil }
 

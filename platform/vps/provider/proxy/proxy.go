@@ -14,7 +14,7 @@ type Proxy interface {
 	Unrendered(config []byte, permission Permission) string
 	RefuseRouted(ctx context.Context, hostnames []string) error
 	Validate(ctx context.Context, rendered []byte) error
-	Reload(ctx context.Context) error
+	Reload(ctx context.Context, served Spec) error
 	Inspect(ctx context.Context) (Checks, error)
 	Certificate(ctx context.Context, hostname string) (Certificate, error)
 }

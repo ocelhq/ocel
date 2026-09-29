@@ -69,21 +69,8 @@ func (t Traefik) render(spec proxy.Spec) ([]byte, error) {
 		Services:    map[string]upstream{service: {LoadBalancer: loadBalancer{Servers: []server{{URL: t.upstream()}}}}},
 	}}
 	for _, hostname := range spec.Hostnames {
-		name, rule := routerName(hostname), "Host(`"+hostname+"`)"
-		config.HTTP.Routers[name] = router{
-			Rule:        rule,
-			EntryPoints: []string{t.HTTPS},
-			Service:     service,
-			Priority:    priority,
-			TLS:         t.tlsFor(hostname, spec.PreviewBase),
-		}
-		config.HTTP.Routers[name+httpSuffix] = router{
-			Rule:        rule,
-			EntryPoints: []string{t.HTTP},
-			Middlewares: []string{redirect},
-			Service:     noop,
-			Priority:    priority,
-		}
+		name := routerName(hostname)
+		config.HTTP.Routers[name], config.HTTP.Routers[name+httpSuffix] = t.routersFor(hostname, spec.PreviewBase)
 	}
 	var written bytes.Buffer
 	encoder := yaml.NewEncoder(&written)
@@ -107,6 +94,23 @@ func (t Traefik) validate(rendered []byte) error {
 		return refusal.Refuse(refusal.CodeInvalid, "the routes ocel would write to %s do not read back: %v", t.file(), err)
 	}
 	return nil
+}
+
+func (t Traefik) routersFor(hostname, base string) (router, router) {
+	rule := "Host(`" + hostname + "`)"
+	return router{
+		Rule:        rule,
+		EntryPoints: []string{t.HTTPS},
+		Service:     service,
+		Priority:    priority,
+		TLS:         t.tlsFor(hostname, base),
+	}, router{
+		Rule:        rule,
+		EntryPoints: []string{t.HTTP},
+		Middlewares: []string{redirect},
+		Service:     noop,
+		Priority:    priority,
+	}
 }
 
 func decodeStrictly(rendered []byte) error {

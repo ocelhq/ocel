@@ -20,7 +20,7 @@ func (l *Late) RefuseRouted(context.Context, []string) error { return nil }
 
 func (l *Late) Validate(context.Context, []byte) error { return nil }
 
-func (l *Late) Reload(context.Context) error { return nil }
+func (l *Late) Reload(context.Context, proxy.Spec) error { return nil }
 
 func (l *Late) Inspect(context.Context) (proxy.Checks, error) { return nil, nil }
 
