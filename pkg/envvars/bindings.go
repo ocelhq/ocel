@@ -27,11 +27,14 @@ var (
 	ErrNotPublished = errors.New("envvars: binding not published")
 
 	ErrTornPair = errors.New("envvars: torn binding pair")
+
+	ErrBindingChanged = errors.New("envvars: binding changed since its version was read")
 )
 
 type NamedBindingWrite struct {
-	Name  string
-	Write BindingWrite
+	Name     string
+	Write    BindingWrite
+	Expected *int64
 }
 
 type BindingWrite struct {
@@ -161,7 +164,7 @@ func (s Store) SetBindings(ctx context.Context, scope Scope, environment, owner 
 
 	versions := make([]int64, len(bindings))
 	if err := forEachConcurrently(ctx, len(bindings), func(ctx context.Context, i int) error {
-		version, err := s.writePair(ctx, scope, environment, owner, bindings[i].Name, bindings[i].Write)
+		version, err := s.writePair(ctx, scope, environment, owner, bindings[i])
 		versions[i] = version
 		return err
 	}); err != nil {
@@ -170,7 +173,8 @@ func (s Store) SetBindings(ctx context.Context, scope Scope, environment, owner 
 	return versions, nil
 }
 
-func (s Store) writePair(ctx context.Context, scope Scope, environment, owner, name string, pair BindingWrite) (int64, error) {
+func (s Store) writePair(ctx context.Context, scope Scope, environment, owner string, write NamedBindingWrite) (int64, error) {
+	name, pair := write.Name, write.Write
 	bound, err := newBindingAssociatedData(scope, environment, name)
 	if err != nil {
 		return 0, err
@@ -186,6 +190,9 @@ func (s Store) writePair(ctx context.Context, scope Scope, environment, owner, n
 	}
 	if owner != OwnerOcel && record.Version > 0 && record.owner() != owner {
 		return 0, s.claimRefusal(scope, name, record.owner(), owner)
+	}
+	if write.Expected != nil && record.Version != *write.Expected {
+		return 0, changedRefusal(name, *write.Expected, record.Version)
 	}
 	recordedValue, err := keyvalue.ReadOrEmpty(ctx, s.KeyValues, bindingValueAt(scope, name, environment))
 	if err != nil {
@@ -223,6 +230,12 @@ func (s Store) racedPair(err error, name string) error {
 			name, ErrTornPair)
 	}
 	return fmt.Errorf("publish binding %s: %w", name, err)
+}
+
+func changedRefusal(name string, expected, recorded int64) error {
+	return fmt.Errorf(
+		"binding %s is at version %d, and this write was made against version %d: another deploy of the same environment published it in between. Run the deploys one after the other: %w",
+		name, recorded, expected, ErrBindingChanged)
 }
 
 func (s Store) claimRefusal(scope Scope, name, by, asking string) error {
@@ -305,6 +318,66 @@ func (s Store) RemoveBindings(ctx context.Context, scope Scope, environment stri
 		return nil, err
 	}
 	return removed, nil
+}
+
+func (s Store) RemoveUnchangedBindings(ctx context.Context, scope Scope, environment string, expected map[string]int64) ([]string, error) {
+	if err := ValidateBindingEnvironment(environment); err != nil {
+		return nil, err
+	}
+	names := slices.Sorted(maps.Keys(expected))
+	for _, name := range names {
+		if err := ValidateBindingName(environment, name); err != nil {
+			return nil, err
+		}
+	}
+	removed := make([]bool, len(names))
+	if err := forEachConcurrently(ctx, len(names), func(ctx context.Context, i int) error {
+		var err error
+		removed[i], err = s.removeUnchanged(ctx, scope, environment, names[i], expected[names[i]])
+		return err
+	}); err != nil {
+		return nil, err
+	}
+	var out []string
+	for i, name := range names {
+		if removed[i] {
+			out = append(out, name)
+		}
+	}
+	return out, nil
+}
+
+func (s Store) removeUnchanged(ctx context.Context, scope Scope, environment, name string, expected int64) (bool, error) {
+	recorded, record, err := s.bindingRecordAt(ctx, scope, environment, name)
+	if err != nil {
+		return false, err
+	}
+	if record.Version == 0 || record.Version != expected {
+		return false, nil
+	}
+	recordedValue, err := keyvalue.ReadOrEmpty(ctx, s.KeyValues, bindingValueAt(scope, name, environment))
+	if err != nil {
+		return false, fmt.Errorf("read binding %s's value: %w", name, err)
+	}
+	owner := record.owner()
+	if err := s.unclaim(ctx, scope, owner, environment, name); err != nil {
+		return false, err
+	}
+	err = s.KeyValues.Remove(ctx, recorded.Key, recorded.Revision)
+	if errors.Is(err, keyvalue.ErrStale) {
+		return false, s.claim(ctx, scope, owner, environment, name)
+	}
+	if err != nil && !errors.Is(err, keyvalue.ErrNotFound) {
+		return false, fmt.Errorf("remove %s: %w", recorded.Key, err)
+	}
+	if recordedValue.Revision == "" {
+		return true, nil
+	}
+	err = s.KeyValues.Remove(ctx, recordedValue.Key, recordedValue.Revision)
+	if err != nil && !errors.Is(err, keyvalue.ErrStale) && !errors.Is(err, keyvalue.ErrNotFound) {
+		return false, fmt.Errorf("remove %s: %w", recordedValue.Key, err)
+	}
+	return true, nil
 }
 
 func (s Store) ResolveBinding(ctx context.Context, scope Scope, environment, name string) (StoredBinding, error) {

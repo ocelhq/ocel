@@ -168,8 +168,8 @@ type deployRun struct {
 	scope     envvars.Scope
 	published *publishedBindings
 
-	inline         []inlineBinding
-	inlineVersions map[string]int64
+	inline        []inlineBinding
+	inlineRecords inlineRecords
 
 	registry provider.RegistryTarget
 	images   provider.ImageStore
@@ -332,10 +332,8 @@ func (r *deployRun) prepare(ctx context.Context, progress progress.Log) error {
 	if err := r.resolveServingDomains(ctx); err != nil {
 		return err
 	}
-	if !r.dry {
-		if err := r.publishInlineBindings(ctx); err != nil {
-			return err
-		}
+	if err := r.readInlineRecords(ctx); err != nil {
+		return err
 	}
 	if err := r.admitBindings(ctx, progress); err != nil {
 		return err
@@ -1341,8 +1339,13 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 	}
 	if err := r.spanEvents.run(r.spans.Promotion, func(u *spanRun) error {
 		return u.phase(func(progress progress.Log) error {
+			if err := r.publishInlineBindings(ctx); err != nil {
+				r.restoreInlineBindings(ctx, progress)
+				return err
+			}
 			dropped, err := r.sharedStack.promote(ctx, promoteRequest{pointer: r.spec.Pointer, replaces: r.replaces, promotion: promotion}, progress)
 			if err != nil {
+				r.restoreInlineBindings(ctx, progress)
 				return errors.Join(err, r.reclaimDropped(ctx, r.spec.Pointer, dropped, progress))
 			}
 			if err := r.checkpoint(ctx); err != nil {
@@ -1422,7 +1425,7 @@ func (r *deployRun) pruneBindings(ctx context.Context, bindings []provider.Bindi
 	if err != nil {
 		return fmt.Errorf("read %s's published bindings: %w", r.scope.Project, err)
 	}
-	var stale []string
+	stale := map[string]int64{}
 	for _, record := range published {
 		if record.Owner != envvars.OwnerOcel || record.Environment != environment {
 			continue
@@ -1430,12 +1433,12 @@ func (r *deployRun) pruneBindings(ctx context.Context, bindings []provider.Bindi
 		if slices.ContainsFunc(bindings, func(binding provider.Binding) bool { return binding.Name == record.Name }) {
 			continue
 		}
-		stale = append(stale, record.Name)
+		stale[record.Name] = record.Version
 	}
 	if len(stale) == 0 {
 		return nil
 	}
-	if _, err := r.values.RemoveBindings(ctx, r.scope, environment, stale); err != nil {
+	if _, err := r.values.RemoveUnchangedBindings(ctx, r.scope, environment, stale); err != nil {
 		return fmt.Errorf("prune %s's published bindings: %w", r.scope.Project, err)
 	}
 	return nil
@@ -1447,8 +1450,16 @@ type publishedBindings struct {
 	environment string
 
 	mu       sync.Mutex
+	carried  []provider.Binding
 	resolved []provider.Binding
 	loaded   bool
+}
+
+func (p *publishedBindings) carry(bindings []provider.Binding) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.carried = bindings
+	p.resolved, p.loaded = nil, false
 }
 
 func (p *publishedBindings) forget() {
@@ -1471,14 +1482,18 @@ func (p *publishedBindings) Published(ctx context.Context) ([]provider.Binding, 
 	if err != nil {
 		return nil, err
 	}
-	bindings := make([]provider.Binding, 0, len(resolved))
+	bindings := slices.Clone(p.carried)
 	for i, published := range resolved {
+		if slices.ContainsFunc(p.carried, func(carried provider.Binding) bool { return carried.Name == names[i] }) {
+			continue
+		}
 		binding, err := bindingPublished(names[i], published)
 		if err != nil {
 			return nil, err
 		}
 		bindings = append(bindings, binding)
 	}
+	slices.SortFunc(bindings, func(a, b provider.Binding) int { return strings.Compare(a.Name, b.Name) })
 	p.resolved, p.loaded = bindings, true
 	return bindings, nil
 }

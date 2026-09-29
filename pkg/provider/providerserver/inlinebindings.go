@@ -2,7 +2,9 @@ package providerserver
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"maps"
 	"net/url"
 	"slices"
 	"strings"
@@ -146,52 +148,128 @@ func redact(message string, secrets []string) string {
 	return message
 }
 
-func (r *deployRun) publishInlineBindings(ctx context.Context) error {
+type inlineRecords struct {
+	versions map[string]int64
+	previous map[string]envvars.StoredBinding
+	writes   map[string]envvars.BindingWrite
+	written  map[string]int64
+}
+
+func (r *deployRun) readInlineRecords(ctx context.Context) error {
 	versions, err := r.inlineRecordVersions(ctx)
 	if err != nil {
 		return err
 	}
-	r.inlineVersions = versions
-	if len(r.inline) == 0 {
-		return nil
+	records := inlineRecords{
+		versions: versions,
+		previous: map[string]envvars.StoredBinding{},
+		writes:   map[string]envvars.BindingWrite{},
+		written:  map[string]int64{},
 	}
-	writes := make([]envvars.NamedBindingWrite, 0, len(r.inline))
+	var present []string
+	carried := make([]provider.Binding, 0, len(r.inline))
 	for _, bound := range r.inline {
+		name := bound.record.GetName()
 		pair, err := envvarsserver.BindingPair(naming.InlineRecordOwner, bound.record)
 		if err != nil {
 			return err
 		}
-		writes = append(writes, envvars.NamedBindingWrite{Name: bound.record.GetName(), Write: pair})
+		records.writes[name] = pair
+		if versions[name] > 0 {
+			present = append(present, name)
+		}
+		binding, err := bindingPublished(name, envvars.StoredBinding{Value: pair.Value, Version: versions[name] + 1})
+		if err != nil {
+			return err
+		}
+		carried = append(carried, binding)
 	}
-	if _, err := r.values.SetBindings(ctx, r.scope, bindingEnvironment(r.spec), naming.InlineRecordOwner, writes); err != nil {
-		return fmt.Errorf("publish the records %s's inline bindings keep: %w", r.scope.Project, err)
+	resolved, err := r.values.ResolveBindings(ctx, r.scope, bindingEnvironment(r.spec), present)
+	if err != nil {
+		return fmt.Errorf("read the records %s's inline bindings keep: %w", r.scope.Project, err)
 	}
-	r.publishedBindings().forget()
+	for _, previous := range resolved {
+		records.previous[previous.Name] = previous
+		records.versions[previous.Name] = previous.Version
+	}
+	r.inlineRecords = records
+	r.publishedBindings().carry(carried)
 	return nil
 }
 
-func (r *deployRun) pruneInlineBindings(ctx context.Context, progress progress.Log) {
-	current, err := r.inlineRecordVersions(ctx)
-	if err != nil {
-		progress.Warn(fmt.Sprintf("Could not read the records %s's inline bindings keep, so none was removed: %v. The next deploy removes any no binding keeps", r.scope.Project, err))
+func (r *deployRun) publishInlineBindings(ctx context.Context) error {
+	for _, bound := range r.inline {
+		name := bound.record.GetName()
+		expected := r.inlineRecords.versions[name]
+		write := envvars.NamedBindingWrite{Name: name, Write: r.inlineRecords.writes[name], Expected: &expected}
+		versions, err := r.values.SetBindings(ctx, r.scope, bindingEnvironment(r.spec), naming.InlineRecordOwner, []envvars.NamedBindingWrite{write})
+		if err != nil {
+			return fmt.Errorf("publish the records %s's inline bindings keep: %w", r.scope.Project, err)
+		}
+		r.inlineRecords.written[name] = versions[0]
+	}
+	return nil
+}
+
+func (r *deployRun) restoreInlineBindings(ctx context.Context, progress progress.Log) {
+	if len(r.inlineRecords.written) == 0 {
 		return
 	}
-	var stale []string
-	for name, version := range current {
-		if r.carriesInline(name) || r.inlineVersions[name] != version {
+	ctx, stop := context.WithTimeout(context.WithoutCancel(ctx), unpromoteWindow)
+	defer stop()
+	active, err := r.ledger.ActivePromotionID(ctx, r.spec.Pointer)
+	if err != nil {
+		progress.Warn(fmt.Sprintf("Could not read whether promotion %s is live, so the records its inline bindings rewrote were left as it wrote them: %v", r.spec.PromotionID, err))
+		return
+	}
+	if active == r.spec.PromotionID {
+		return
+	}
+	environment := bindingEnvironment(r.spec)
+	unwritten := map[string]int64{}
+	var errs []error
+	for _, name := range slices.Sorted(maps.Keys(r.inlineRecords.written)) {
+		written := r.inlineRecords.written[name]
+		previous, existed := r.inlineRecords.previous[name]
+		if !existed {
+			unwritten[name] = written
 			continue
 		}
-		stale = append(stale, name)
+		write := envvars.NamedBindingWrite{
+			Name:     name,
+			Write:    envvars.BindingWrite{Record: previous.Record, Shapes: previous.Shapes, Value: previous.Value, Owner: previous.Owner},
+			Expected: &written,
+		}
+		if _, err := r.values.SetBindings(ctx, r.scope, environment, naming.InlineRecordOwner, []envvars.NamedBindingWrite{write}); err != nil && !errors.Is(err, envvars.ErrBindingChanged) {
+			errs = append(errs, err)
+		}
+	}
+	if _, err := r.values.RemoveUnchangedBindings(ctx, r.scope, environment, unwritten); err != nil {
+		errs = append(errs, err)
+	}
+	if err := errors.Join(errs...); err != nil {
+		progress.Warn(fmt.Sprintf("Promotion %s did not land, and restoring the records its inline bindings rewrote failed, so the live release reads what this deploy wrote until the next deploy: %v", r.spec.PromotionID, err))
+	}
+}
+
+func (r *deployRun) pruneInlineBindings(ctx context.Context, progress progress.Log) {
+	stale := map[string]int64{}
+	for name, version := range r.inlineRecords.versions {
+		if !r.carriesInline(name) {
+			stale[name] = version
+		}
 	}
 	if len(stale) == 0 {
 		return
 	}
-	slices.Sort(stale)
-	if _, err := r.values.RemoveBindings(ctx, r.scope, bindingEnvironment(r.spec), stale); err != nil {
-		progress.Warn(fmt.Sprintf("Could not remove %s, which no inline binding keeps any more: %v. The next deploy removes them", strings.Join(stale, ", "), err))
+	removed, err := r.values.RemoveUnchangedBindings(ctx, r.scope, bindingEnvironment(r.spec), stale)
+	if err != nil {
+		progress.Warn(fmt.Sprintf("Could not remove the records %s's inline bindings no longer keep: %v. The next deploy removes them", r.scope.Project, err))
 		return
 	}
-	progress.Detail("Removed " + strings.Join(stale, ", ") + ", which no inline binding keeps any more")
+	if len(removed) > 0 {
+		progress.Detail("Removed " + strings.Join(removed, ", ") + ", which no inline binding keeps any more")
+	}
 }
 
 func (r *deployRun) inlineRecordVersions(ctx context.Context) (map[string]int64, error) {

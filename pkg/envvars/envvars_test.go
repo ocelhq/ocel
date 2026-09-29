@@ -663,3 +663,79 @@ func TestRevealUnderACancelledContextNeverReadsAsEmptyValues(t *testing.T) {
 		}
 	}
 }
+
+func TestABindingWriteAtTheVersionSeenWinsAndAStaleOneLoses(t *testing.T) {
+	store, scope := fixture()
+	ctx := context.Background()
+	pair := envvars.BindingWrite{Record: []byte("{}"), Value: []byte(`{"name":"db"}`)}
+	absent, seen := int64(0), int64(1)
+
+	if _, err := store.SetBindings(ctx, scope, "", "neon", []envvars.NamedBindingWrite{{Name: "db", Write: pair, Expected: &absent}}); err != nil {
+		t.Fatalf("publishing a binding expected absent = %v", err)
+	}
+	stale := envvars.BindingWrite{Record: []byte("{}"), Value: []byte(`{"name":"stale"}`)}
+	_, err := store.SetBindings(ctx, scope, "", "neon", []envvars.NamedBindingWrite{{Name: "db", Write: stale, Expected: &absent}})
+	if !errors.Is(err, envvars.ErrBindingChanged) {
+		t.Fatalf("a write expecting the binding absent after it was published = %v, want ErrBindingChanged", err)
+	}
+	resolved, err := store.ResolveBinding(ctx, scope, "", "db")
+	if err != nil || string(resolved.Value) != `{"name":"db"}` || resolved.Version != 1 {
+		t.Fatalf("ResolveBinding() = %q v%d, %v, want the first publish untouched", resolved.Value, resolved.Version, err)
+	}
+	versions, err := store.SetBindings(ctx, scope, "", "neon", []envvars.NamedBindingWrite{{Name: "db", Write: pair, Expected: &seen}})
+	if err != nil || versions[0] != 2 {
+		t.Fatalf("a write at the version seen = %v, %v, want version 2", versions, err)
+	}
+}
+
+func TestARemovalAtTheVersionsSeenLeavesARepublishedBinding(t *testing.T) {
+	store, scope := fixture()
+	ctx := context.Background()
+	pair := envvars.BindingWrite{Record: []byte("{}"), Value: []byte(`{"name":"db"}`)}
+	for _, name := range []string{"db", "cache", "db"} {
+		if _, err := store.SetBinding(ctx, scope, "", "neon", name, pair); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	removed, err := store.RemoveUnchangedBindings(ctx, scope, "", map[string]int64{"db": 1, "cache": 1})
+	if err != nil {
+		t.Fatalf("RemoveUnchangedBindings() = %v", err)
+	}
+	if strings.Join(removed, ",") != "cache" {
+		t.Errorf("removed %v, want only cache: db was republished after version 1 was seen", removed)
+	}
+	listed, err := store.ListBindings(ctx, scope, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 1 || listed[0].Name != "db" || listed[0].Version != 2 {
+		t.Errorf("ListBindings() = %+v, want db at version 2 still published", listed)
+	}
+}
+
+func TestConcurrentWritesAtOneVersionSeenLetExactlyOneWin(t *testing.T) {
+	store, scope := fixture()
+	ctx := context.Background()
+	pair := envvars.BindingWrite{Record: []byte("{}"), Value: []byte(`{"name":"db"}`)}
+	absent := int64(0)
+
+	const writers = 8
+	var wg sync.WaitGroup
+	errs := make([]error, writers)
+	for i := range writers {
+		wg.Go(func() {
+			_, errs[i] = store.SetBindings(ctx, scope, "", "neon", []envvars.NamedBindingWrite{{Name: "db", Write: pair, Expected: &absent}})
+		})
+	}
+	wg.Wait()
+	won := 0
+	for _, err := range errs {
+		if err == nil {
+			won++
+		}
+	}
+	if won != 1 {
+		t.Errorf("%d of %d writers expecting the binding absent won, want exactly one: %v", won, writers, errs)
+	}
+}

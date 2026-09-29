@@ -33,7 +33,7 @@ func (r *deployRun) admitBindings(ctx context.Context, progress progress.Log) er
 
 	var missing []string
 	for _, resource := range resources {
-		if resource.Binding == "" || r.writtenByTheDeploy(resource.Binding, published) {
+		if resource.Binding == "" {
 			continue
 		}
 		if _, bound := published[resource.Binding]; !bound {
@@ -44,7 +44,7 @@ func (r *deployRun) admitBindings(ctx context.Context, progress progress.Log) er
 		return r.refuseUnpublished(ctx, missing, names)
 	}
 	for _, resource := range resources {
-		if resource.Binding == "" || r.writtenByTheDeploy(resource.Binding, published) {
+		if resource.Binding == "" {
 			continue
 		}
 		if err := RefuseMismatchedBinding(published[resource.Binding], resource.Declared, resource.Type, proxied); err != nil {
@@ -52,11 +52,6 @@ func (r *deployRun) admitBindings(ctx context.Context, progress progress.Log) er
 		}
 	}
 	return nil
-}
-
-func (r *deployRun) writtenByTheDeploy(name string, published map[string]provider.Binding) bool {
-	_, taken := published[name]
-	return r.dry && !taken && r.carriesInline(name)
 }
 
 func proxied(kind provider.BindingType) bool {

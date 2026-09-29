@@ -7,6 +7,7 @@ import (
 	"net"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -382,6 +383,110 @@ func TestDeployChecksAnInlineBucketThroughTheProvider(t *testing.T) {
 		}
 		if stored := storedBindings(t, vendor); len(stored) != 0 {
 			t.Errorf("records = %v, want nothing published", stored)
+		}
+	})
+}
+
+func inlineOrdersAt(url string) *bindingsv1.Binding {
+	return &bindingsv1.Binding{
+		Name:       inlineOrders,
+		Source:     "ocel.json",
+		Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{Url: url}},
+	}
+}
+
+func resolvedOrders(t *testing.T, vendor *fake.Provider) envvars.StoredBinding {
+	t.Helper()
+	store := envvars.Store{KeyValues: vendor.KeyValues(), Cipher: vendor.Cipher()}
+	resolved, err := store.ResolveBinding(context.Background(), envvars.Scope{Project: "shop", Tier: environment.TierProduction}, "", inlineOrders)
+	if err != nil {
+		t.Fatalf("ResolveBinding: %v", err)
+	}
+	return resolved
+}
+
+func TestAFailedDeployLeavesTheInlineRecordsTheLiveReleaseReads(t *testing.T) {
+	const live = "postgres://app:" + inlinePassword + "@live.example:5432/orders"
+
+	t.Run("a deploy whose provisioning fails never wrote the record", func(t *testing.T) {
+		builtProject(t)
+		client, vendor := deployServed(t)
+		server := servePostgres(t, "170004", 0)
+		publishRecord(t, vendor, environment.TierProduction, naming.InlineRecordOwner, inlineOrdersAt(live))
+		vendor.FakeStacks().Entering(func(spec provider.StackSpec) error {
+			if spec.App == nil {
+				return nil
+			}
+			return errors.New("the function could not be created")
+		})
+
+		if result, _ := deploy(t, client, inlinePostgresRequest(server.url(), "17")); result.GetSuccess() {
+			t.Fatal("Deploy() succeeded, want the provisioning failure")
+		}
+		if resolved := resolvedOrders(t, vendor); !strings.Contains(string(resolved.Value), "live.example") || resolved.Version != 1 {
+			t.Errorf("record = %q v%d, want the live release's record untouched", resolved.Value, resolved.Version)
+		}
+	})
+
+	t.Run("a deploy overtaken at promotion puts the record back", func(t *testing.T) {
+		builtProject(t)
+		client, vendor := deployServed(t)
+		server := servePostgres(t, "170004", 0)
+		publishRecord(t, vendor, environment.TierProduction, naming.InlineRecordOwner, inlineOrdersAt(live))
+		releases := seedPromotions(t, vendor, environment.TierProduction, "shop", "", "p1")
+		overtakenWhileItBuilds(t, vendor, releases)
+
+		if result, _ := deploy(t, client, inlinePostgresRequest(server.url(), "17")); result.GetSuccess() {
+			t.Fatal("Deploy() succeeded, want it overtaken at promotion")
+		}
+		if resolved := resolvedOrders(t, vendor); !strings.Contains(string(resolved.Value), "live.example") {
+			t.Errorf("record = %q, want the live release's record put back", resolved.Value)
+		}
+	})
+}
+
+func TestAnInlineRecordAnotherDeployRepublishedIsNeitherOverwrittenNorPruned(t *testing.T) {
+	t.Run("the carried record is refused rather than written over the other deploy's", func(t *testing.T) {
+		builtProject(t)
+		client, vendor := deployServed(t)
+		server := servePostgres(t, "170004", 0)
+		publishRecord(t, vendor, environment.TierProduction, naming.InlineRecordOwner, inlineOrdersAt("postgres://first.example/orders"))
+		var raced sync.Once
+		vendor.FakeStacks().Entering(func(provider.StackSpec) error {
+			raced.Do(func() {
+				publishRecord(t, vendor, environment.TierProduction, naming.InlineRecordOwner, inlineOrdersAt("postgres://racing.example/orders"))
+			})
+			return nil
+		})
+
+		result, _ := deploy(t, client, inlinePostgresRequest(server.url(), "17"))
+		if result.GetSuccess() {
+			t.Fatal("Deploy() succeeded, want it refused: the record moved since the deploy read it")
+		}
+		if resolved := resolvedOrders(t, vendor); !strings.Contains(string(resolved.Value), "racing.example") || resolved.Version != 2 {
+			t.Errorf("record = %q v%d, want the racing deploy's write kept", resolved.Value, resolved.Version)
+		}
+	})
+
+	t.Run("a record republished while the deploy ran is not pruned", func(t *testing.T) {
+		builtProject(t)
+		client, vendor := deployServed(t)
+		server := servePostgres(t, "170004", 0)
+		archive := naming.InlineRecordName(resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, "archive")
+		publishRecord(t, vendor, environment.TierProduction, naming.InlineRecordOwner, postgresRecord(archive, "ocel.json"))
+		var raced sync.Once
+		vendor.FakeStacks().Entering(func(provider.StackSpec) error {
+			raced.Do(func() {
+				publishRecord(t, vendor, environment.TierProduction, naming.InlineRecordOwner, postgresRecord(archive, "ocel.json"))
+			})
+			return nil
+		})
+
+		if result, _ := deploy(t, client, inlinePostgresRequest(server.url(), "17")); !result.GetSuccess() {
+			t.Fatalf("Deploy() = %q", result.GetError())
+		}
+		if _, kept := storedBindings(t, vendor)[archive]; !kept {
+			t.Errorf("records = %v, want %s kept: another deploy republished it after this one read it", storedBindings(t, vendor), archive)
 		}
 	})
 }
