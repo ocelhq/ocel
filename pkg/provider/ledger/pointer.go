@@ -46,20 +46,17 @@ func (p Pointer) Promote(promotion router.Promotion, replaces string, keep int) 
 	next.Sequence++
 	next.Active = promotion.PromotionID
 	next.Promotions = append([]RecordedPromotion{{Promotion: promotion, Sequence: next.Sequence, Displaced: replaces}}, slices.Clone(p.Promotions)...)
-	kept, dropped := next.retain(keep, replaces)
+	kept, dropped := next.Retain(keep)
 	return kept, dropped, nil
 }
 
 func (p Pointer) Retain(keep int) (Pointer, []RecordedPromotion) {
-	return p.retain(keep, p.Active)
-}
-
-func (p Pointer) retain(keep int, pinned string) (Pointer, []RecordedPromotion) {
+	pinned := append([]string{p.Active}, p.findFallbackChain(p.Active)...)
 	kept := p
 	kept.Promotions = nil
 	var dropped []RecordedPromotion
 	for i, recorded := range p.Promotions {
-		if i < keep || recorded.PromotionID == p.Active || recorded.PromotionID == pinned {
+		if i < keep || slices.Contains(pinned, recorded.PromotionID) {
 			kept.Promotions = append(kept.Promotions, recorded)
 			continue
 		}
@@ -92,14 +89,30 @@ func (p Pointer) History() []router.HistoryEntry {
 }
 
 func (p Pointer) findFallback(promotionID string) string {
+	chain := p.findFallbackChain(promotionID)
+	if len(chain) == 0 {
+		return ""
+	}
+	fallback := chain[len(chain)-1]
+	if p.Promotions[p.findPromotion(fallback)].Unpromoted {
+		return ""
+	}
+	return fallback
+}
+
+func (p Pointer) findFallbackChain(promotionID string) []string {
+	var chain []string
 	for at := p.findPromotion(promotionID); at >= 0; {
 		displaced := p.Promotions[at].Displaced
-		at = p.findPromotion(displaced)
-		if at >= 0 && !p.Promotions[at].Unpromoted {
-			return displaced
+		if at = p.findPromotion(displaced); at < 0 {
+			break
+		}
+		chain = append(chain, displaced)
+		if !p.Promotions[at].Unpromoted {
+			break
 		}
 	}
-	return ""
+	return chain
 }
 
 func (p Pointer) findPromotion(promotionID string) int {

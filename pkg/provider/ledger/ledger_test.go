@@ -415,14 +415,14 @@ func TestATagIsFreedWithThePromotionItNamed(t *testing.T) {
 	if _, err := l.Promote(ctx, tagged, "", ""); err != nil {
 		t.Fatal(err)
 	}
-	promoting(t, l, "", "p2")
+	promoting(t, l, "", "p2", "p3")
 	if _, err := l.Prune(ctx, 1, ""); err != nil {
 		t.Fatal(err)
 	}
 
-	retagged := staged(t, l, "p3")
+	retagged := staged(t, l, "p4")
 	retagged.Tag = "live"
-	if _, err := l.Promote(ctx, retagged, "", "p2"); err != nil {
+	if _, err := l.Promote(ctx, retagged, "", "p3"); err != nil {
 		t.Errorf("a promote tagged with the tag of a pruned promotion = %v, want the tag free", err)
 	}
 }
