@@ -108,7 +108,7 @@ func bakedBuilds(t *testing.T, cfg Config, manifest *contractv1.Manifest, baked 
 	}
 	for _, app := range manifestApps(manifest) {
 		name := app.GetName()
-		id, err := provider.NewBuild(app.GetDeploymentId(), cfg.Env, builds.baked[name].Fingerprint)
+		id, err := provider.NewBuild(app.GetDeploymentId(), "p1", cfg.Env, builds.baked[name].Fingerprint)
 		if err != nil {
 			t.Fatalf("deployment identity for %s: %v", name, err)
 		}

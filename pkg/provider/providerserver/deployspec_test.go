@@ -91,7 +91,7 @@ func TestBuildAppStackMovesWhenAValueVersionMoves(t *testing.T) {
 		Name:         "web",
 		DeploymentId: deploymentID,
 		Variables:    []*contractv1.ManifestVariable{{Key: "API_URL", Version: 1}},
-	}, stackrecords.ProductionEnv)
+	}, stackrecords.ProductionEnv, "p1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func TestBuildAppStackMovesWhenAValueVersionMoves(t *testing.T) {
 		Name:         "web",
 		DeploymentId: deploymentID,
 		Variables:    []*contractv1.ManifestVariable{{Key: "API_URL", Version: 2}},
-	}, stackrecords.ProductionEnv)
+	}, stackrecords.ProductionEnv, "p1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,19 +205,7 @@ func containerRequest(image string) *contractv1.DeployRequest {
 	}
 }
 
-func TestAContainerAppIsPromotedUnderTheDigestItWasBuiltAt(t *testing.T) {
-	t.Parallel()
-
-	spec, err := buildDeploySpec(containerRequest(pinnedTestImage), "p1")
-	if err != nil {
-		t.Fatalf("buildDeploySpec() error = %v", err)
-	}
-	if got := spec.Builds["api"]; got != pinnedTestImage {
-		t.Errorf("the promotion records %q as api's build, want %q: rolling back to it must repoint at a retained image rather than rebuild one", got, pinnedTestImage)
-	}
-}
-
-func TestAServerlessAppBesideAContainerKeepsItsOwnBuildIdentity(t *testing.T) {
+func TestEveryAppIsPromotedUnderTheBuildItsOwnDeployProvisioned(t *testing.T) {
 	t.Parallel()
 
 	spec, err := buildDeploySpec(containerRequest(pinnedTestImage), "p1")
@@ -225,11 +213,26 @@ func TestAServerlessAppBesideAContainerKeepsItsOwnBuildIdentity(t *testing.T) {
 		t.Fatalf("buildDeploySpec() error = %v", err)
 	}
 	for _, entry := range spec.Apps {
-		if entry.App != "web" {
-			continue
+		if spec.Builds[entry.App] != entry.Build.String() {
+			t.Errorf("the promotion records %q as %s's build, want %s, the build whose stack this deploy provisions", spec.Builds[entry.App], entry.App, entry.Build)
 		}
-		if spec.Builds["web"] != entry.Build.String() {
-			t.Errorf("the promotion records %q as web's build, want %s", spec.Builds["web"], entry.Build)
+	}
+}
+
+func TestTwoDeploysOfOneBuiltOutputNeverShareABuild(t *testing.T) {
+	t.Parallel()
+
+	first, err := buildDeploySpec(containerRequest(pinnedTestImage), "p1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := buildDeploySpec(containerRequest(pinnedTestImage), "p2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, app := range []string{"api", "web"} {
+		if first.Builds[app] == second.Builds[app] {
+			t.Errorf("both deploys promote %s build %s, so the second's record would stand in for the first's when a rollback names it", app, first.Builds[app])
 		}
 	}
 }

@@ -22,7 +22,7 @@ type Build struct {
 	fingerprint  string
 }
 
-func NewBuild(deploymentID, environment, values string) (Build, error) {
+func NewBuild(deploymentID, promotionID, environment, values string) (Build, error) {
 	if err := naming.ValidateDeploymentID(deploymentID); err != nil {
 		return Build{}, refusal.Refuse(refusal.CodeInvalid, "deployment identity: %s", err.Error())
 	}
@@ -30,6 +30,7 @@ func NewBuild(deploymentID, environment, values string) (Build, error) {
 		return Build{}, refusal.Refuse(refusal.CodeInvalid, "deployment identity for %q requires an environment name", deploymentID)
 	}
 	h := sha256.New()
+	WriteLenPrefixed(h, []byte(promotionID))
 	WriteLenPrefixed(h, []byte(environment))
 	WriteLenPrefixed(h, []byte(values))
 	return Build{

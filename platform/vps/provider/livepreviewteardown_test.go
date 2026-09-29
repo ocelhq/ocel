@@ -83,7 +83,7 @@ func previewBuild(t *testing.T, pointer string) provider.Build {
 	t.Helper()
 
 	sum := sha256.Sum256([]byte(pointer))
-	build, err := provider.NewBuild(hex.EncodeToString(sum[:])[:32], pointer, "")
+	build, err := provider.NewBuild(hex.EncodeToString(sum[:])[:32], "p1", pointer, "")
 	if err != nil {
 		t.Fatal(err)
 	}

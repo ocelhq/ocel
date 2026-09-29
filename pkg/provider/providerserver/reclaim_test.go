@@ -5,23 +5,26 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
+
+func reclaimedBuild(t *testing.T, values string) provider.Build {
+	t.Helper()
+	build, err := provider.NewBuild(deploymentID, "p1", stackrecords.ProductionEnv, values)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return build
+}
 
 func TestReclaimTargetsKeepAssetsARemainingReleaseStillServes(t *testing.T) {
 	t.Parallel()
 
-	shared, err := provider.NewBuild(deploymentID, stackrecords.ProductionEnv, "shared")
-	if err != nil {
-		t.Fatal(err)
-	}
-	gone, err := provider.NewBuild(deploymentID, stackrecords.ProductionEnv, "gone")
-	if err != nil {
-		t.Fatal(err)
-	}
+	shared, gone := reclaimedBuild(t, "shared"), reclaimedBuild(t, "gone")
 
 	targets, err := ReclaimTargets("shop", stackrecords.ProductionEnv,
-		[]string{"record:web/" + gone.String(), "record:web/" + shared.String()},
+		[]router.DeploymentRecord{{App: "web", Build: gone.String()}, {App: "web", Build: shared.String()}},
 		[]string{"record:web/" + shared.String()},
 		nil)
 	if err != nil {
@@ -45,44 +48,30 @@ func TestReclaimTargetsKeepAssetsARemainingReleaseStillServes(t *testing.T) {
 	}
 }
 
-func TestReclaimTargetsRefuseARecordKeyNothingWrote(t *testing.T) {
+func TestReclaimTargetsRefuseARecordNamingNoBuild(t *testing.T) {
 	t.Parallel()
 
-	if _, err := ReclaimTargets("shop", stackrecords.ProductionEnv, []string{"record:web"}, nil, nil); err == nil {
-		t.Fatal("ReclaimTargets() accepted a key naming no build, want a refusal")
+	for _, build := range []string{"", "garbage", "ocel/web@sha256:" + strings.Repeat("a", 64)} {
+		if _, err := ReclaimTargets("shop", stackrecords.ProductionEnv, []router.DeploymentRecord{{App: "web", Build: build}}, nil, nil); err == nil {
+			t.Errorf("ReclaimTargets() over a record of build %q returned no refusal, want one: a record whose build names no stack is corrupt", build)
+		}
 	}
 }
 
 func TestReclaimTargetsLeaveAContainerReleaseToTheBoxThatRunsIt(t *testing.T) {
 	t.Parallel()
 
-	gone, err := provider.NewBuild(deploymentID, stackrecords.ProductionEnv, "gone")
-	if err != nil {
-		t.Fatal(err)
-	}
+	container, function := reclaimedBuild(t, "container"), reclaimedBuild(t, "function")
 	targets, err := ReclaimTargets("shop", stackrecords.ProductionEnv,
-		[]string{"record:web/ocel/web@sha256:" + strings.Repeat("a", 64), "record:api/" + gone.String()},
+		[]router.DeploymentRecord{
+			{App: "web", Build: container.String(), Image: "ghcr.io/acme/web@sha256:" + strings.Repeat("a", 64)},
+			{App: "api", Build: function.String()},
+		},
 		nil, nil)
 	if err != nil {
-		t.Fatalf("ReclaimTargets() over a promotion naming a container release = %v, want the release the box keeps by image reference left to it: a container app puts nothing in the artifact store and its container comes down with the pointer", err)
+		t.Fatalf("ReclaimTargets() over a record of a container release = %v, want the release the box keeps by image reference left to it: a container app puts nothing in the artifact store and its container comes down with the pointer", err)
 	}
 	if len(targets) != 1 || targets[0].App != "api" {
 		t.Fatalf("ReclaimTargets() returned %+v, want only the function release", targets)
-	}
-}
-
-func TestReclaimTargetsRefuseAKeyThatIsNeitherABuildNorAnImageReference(t *testing.T) {
-	t.Parallel()
-
-	for _, key := range []string{
-		"record:web/garbage@",
-		"record:web/garbage@sha256:",
-		"record:web/@sha256:" + strings.Repeat("a", 64),
-		"record:web/garbage@sha256:" + strings.Repeat("z", 64),
-		"record:web/garbage@sha512:" + strings.Repeat("a", 128),
-	} {
-		if _, err := ReclaimTargets("shop", stackrecords.ProductionEnv, []string{key}, nil, nil); err == nil {
-			t.Errorf("ReclaimTargets() over %q returned no refusal, and a key that names neither a build nor a digest-pinned image reference is a corrupt key rather than a container release the box reclaims", key)
-		}
 	}
 }
