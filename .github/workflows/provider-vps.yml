@@ -43,7 +43,7 @@ on:
       - "cli/internal/terminal/**"
       - "cli/internal/commands/bootstrap/**"
       - "cli/internal/preflight/**"
-      - "cli/internal/cli/doctor/**"
+      - "cli/internal/commands/doctor/**"
       - "cli/internal/build/**"
       - "cli/internal/incustest/**"
       - "cli/internal/commands/deploy/**"

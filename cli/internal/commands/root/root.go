@@ -11,7 +11,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/build"
-	"github.com/ocelhq/ocel/cli/internal/cli/doctor"
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/commands/bindings"
 	"github.com/ocelhq/ocel/cli/internal/commands/bootstrap"
@@ -21,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands/deploy"
 	"github.com/ocelhq/ocel/cli/internal/commands/destroy"
 	"github.com/ocelhq/ocel/cli/internal/commands/dev"
+	"github.com/ocelhq/ocel/cli/internal/commands/doctor"
 	"github.com/ocelhq/ocel/cli/internal/commands/domain"
 	"github.com/ocelhq/ocel/cli/internal/commands/env"
 	"github.com/ocelhq/ocel/cli/internal/commands/generate"
