@@ -4155,6 +4155,7 @@ func (x *RollbackRequest) GetEdge() *EdgeSelection {
 type RollbackResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Promoted      *Promotion             `protobuf:"bytes,1,opt,name=promoted,proto3" json:"promoted,omitempty"`
+	Warnings      []string               `protobuf:"bytes,2,rep,name=warnings,proto3" json:"warnings,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4192,6 +4193,13 @@ func (*RollbackResponse) Descriptor() ([]byte, []int) {
 func (x *RollbackResponse) GetPromoted() *Promotion {
 	if x != nil {
 		return x.Promoted
+	}
+	return nil
+}
+
+func (x *RollbackResponse) GetWarnings() []string {
+	if x != nil {
+		return x.Warnings
 	}
 	return nil
 }
@@ -5086,9 +5094,10 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12\x0e\n" +
 	"\x02to\x18\x02 \x01(\tR\x02to\x12,\n" +
 	"\x03tag\x18\x03 \x01(\tB\x1a\xbaH\x17r\x15\x18@2\x11^[A-Za-z0-9._-]*$R\x03tag\x127\n" +
-	"\x04edge\x18\x04 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\"O\n" +
+	"\x04edge\x18\x04 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\"k\n" +
 	"\x10RollbackResponse\x12;\n" +
-	"\bpromoted\x18\x01 \x01(\v2\x1f.provider.contract.v1.PromotionR\bpromoted\"\xf4\x01\n" +
+	"\bpromoted\x18\x01 \x01(\v2\x1f.provider.contract.v1.PromotionR\bpromoted\x12\x1a\n" +
+	"\bwarnings\x18\x02 \x03(\tR\bwarnings\"\xf4\x01\n" +
 	"\x1cRemoveStalePromotionsRequest\x125\n" +
 	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12\x1e\n" +
 	"\x06keep_n\x18\x02 \x01(\x05B\a\xbaH\x04\x1a\x02(\x00R\x05keepN\x12D\n" +

@@ -17,7 +17,7 @@ type HistoryEntry struct {
 type PruneResult struct {
 	KeptPromotionIDs           []string `json:"keptPromotionIds"`
 	RemovedPromotionIDs        []string `json:"removedPromotionIds"`
-	RemovedRecordKeys          []string `json:"removedRecordKeys"`
+	UnnamedRecordKeys          []string `json:"unnamedRecordKeys"`
 	SurvivingRecordKeys        []string `json:"survivingRecordKeys"`
 	SurvivingPointerRecordKeys []string `json:"survivingPointerRecordKeys"`
 }

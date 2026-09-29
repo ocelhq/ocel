@@ -117,11 +117,15 @@ func runRollback(ctx context.Context, deps cmddeps.Deps, cwd string, opts rollba
 	}
 
 	promoting := run.Phase(progressv1.Phase_PHASE_PROMOTE)
-	promoted, err := promote(ctx, promoting, prov, cfg, target)
+	rolled, err := promote(ctx, promoting, prov, cfg, target)
+	for _, warning := range rolled.GetWarnings() {
+		promoting.Warn(warning)
+	}
 	promoting.End(err)
 	if err != nil {
 		return err
 	}
+	promoted := rolled.GetPromoted()
 	tagSuffix := ""
 	if target.GetTag() != "" {
 		tagSuffix = fmt.Sprintf(", tag %s", target.GetTag())
@@ -152,7 +156,7 @@ func promotionHistory(ctx context.Context, check *events.Scope, prov *providercl
 	return listed.GetPromotions(), err
 }
 
-func promote(ctx context.Context, phase *events.Scope, prov *providerclient.Provider, cfg *projectconfig.Config, target *contractv1.Promotion) (*contractv1.Promotion, error) {
+func promote(ctx context.Context, phase *events.Scope, prov *providerclient.Provider, cfg *projectconfig.Config, target *contractv1.Promotion) (*contractv1.RollbackResponse, error) {
 	unit := phase.Unit(cfg.Slug, fmt.Sprintf("Switching production traffic back to promotion %s", target.GetPromotionId()))
 	var resp *contractv1.RollbackResponse
 	err := prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
@@ -164,7 +168,7 @@ func promote(ctx context.Context, phase *events.Scope, prov *providerclient.Prov
 		return err
 	})
 	unit.End(err)
-	return resp.GetPromoted(), err
+	return resp, err
 }
 
 func activePromotion(history []*contractv1.PromotionHistoryEntry) *contractv1.Promotion {
