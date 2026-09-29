@@ -840,7 +840,7 @@ func checkSpan(t *testing.T, w io.Writer) *run.Span {
 func TestRequirePreviewDomain(t *testing.T) {
 	t.Parallel()
 
-	declared := &project.Project{Domains: map[string][]string{"preview": {"*.preview.acme.com"}}}
+	declared := &project.Project{Domains: project.Domains{Preview: "*.preview.acme.com"}}
 	bare := &project.Project{}
 	global := &contractv1.PreviewWildcard{
 		BaseDomain:     "preview.ocel.app",
@@ -911,30 +911,13 @@ func TestRequirePreviewDomain(t *testing.T) {
 		}
 	})
 
-	t.Run("an app-level preview domain counts as declared", func(t *testing.T) {
-		t.Parallel()
-
-		cfg := &project.Project{
-			Slug: "acme",
-			Apps: []project.App{{Name: "web", Domains: map[string][]string{"preview": {"*.preview.acme.com"}}}},
-		}
-		broken := &contractv1.PreviewWildcard{BaseDomain: "preview.ocel.app", GrammarMin: 1, GrammarMax: 1}
-		var out bytes.Buffer
-		if _, err := requirePreviewDomain(cfg, broken, nil, "pr-1", checkSpan(t, &out)); err != nil {
-			t.Fatalf("requirePreviewDomain err = %v, want nil", err)
-		}
-		if !strings.Contains(out.String(), "*.preview.acme.com") {
-			t.Errorf("out = %q, want it to name the project's own preview domain", out.String())
-		}
-	})
-
 	t.Run("the same label fits without the slug prefix on a declared domain", func(t *testing.T) {
 		t.Parallel()
 
 		cfg := &project.Project{
 			Slug:    "acme",
 			Apps:    []project.App{{Name: "admin"}, {Name: "web"}},
-			Domains: map[string][]string{"preview": {"*.preview.acme.com"}},
+			Domains: project.Domains{Preview: "*.preview.acme.com"},
 		}
 		var out bytes.Buffer
 		if _, err := requirePreviewDomain(cfg, nil, nil, strings.Repeat("b", 55), checkSpan(t, &out)); err != nil {
@@ -971,7 +954,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 	t.Run("a declared domain equal to the global one serves as the project's own and calls nothing ignored", func(t *testing.T) {
 		t.Parallel()
 
-		same := &project.Project{Slug: "acme", Domains: map[string][]string{"preview": {"*.preview.ocel.app"}}}
+		same := &project.Project{Slug: "acme", Domains: project.Domains{Preview: "*.preview.ocel.app"}}
 		var out bytes.Buffer
 		if _, err := requirePreviewDomain(same, global, nil, "pr-1", checkSpan(t, &out)); err != nil {
 			t.Fatalf("requirePreviewDomain err = %v, want nil", err)

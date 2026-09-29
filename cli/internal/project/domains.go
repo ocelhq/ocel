@@ -7,34 +7,26 @@ import (
 	"github.com/ocelhq/ocel/pkg/configdoc"
 )
 
-func normalizeProjectDomains(raw *configdoc.ProjectDomainConfig) (map[string][]string, error) {
-	if raw == nil {
-		return map[string][]string{}, nil
-	}
-	return normalizeDomains(raw.Production, raw.Preview)
+type Domains struct {
+	Production []string
+	Preview    string
 }
 
-func normalizeDomains(production configdoc.StringList, rawPreview string) (map[string][]string, error) {
-	domains := map[string][]string{}
-
-	var preview string
-	if rawPreview != "" {
-		preview = strings.ToLower(rawPreview)
+func normalizeProjectDomains(raw *configdoc.ProjectDomainConfig) (Domains, error) {
+	if raw == nil {
+		return Domains{}, nil
+	}
+	preview := strings.ToLower(raw.Preview)
+	if preview != "" {
 		if err := ValidatePreviewDomain(preview); err != nil {
-			return nil, err
+			return Domains{}, err
 		}
-		domains["preview"] = []string{preview}
 	}
-
-	hosts, err := normalizeProductionDomains(production, preview)
+	production, err := normalizeProductionDomains(raw.Production, preview)
 	if err != nil {
-		return nil, err
+		return Domains{}, err
 	}
-	if len(hosts) > 0 {
-		domains["production"] = hosts
-	}
-
-	return domains, nil
+	return Domains{Production: production, Preview: preview}, nil
 }
 
 func normalizeProductionDomains(raw configdoc.StringList, preview string) ([]string, error) {

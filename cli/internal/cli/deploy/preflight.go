@@ -32,7 +32,7 @@ type preflightFacts struct {
 }
 
 func preflightPreviewUp(ctx context.Context, deps cmddeps.Deps, policy consent.Policy, check *run.Span, prov *providerclient.Provider, cfg *project.Project, pointer string, out io.Writer, in io.Reader) (preflightFacts, error) {
-	resp, err := preflight.Run(ctx, check, prov, cfg, environmentv1.Tier_TIER_PREVIEW, cfg.Slug, preflight.Names(preflight.Hostnames(cfg, "preview")), preflight.Frameworks(cfg), "ocel bootstrap preview")
+	resp, err := preflight.Run(ctx, check, prov, cfg, environmentv1.Tier_TIER_PREVIEW, cfg.Slug, preflight.Names(preflight.Hostnames(cfg, environmentv1.Tier_TIER_PREVIEW)), preflight.Frameworks(cfg), "ocel bootstrap preview")
 	if err != nil {
 		return preflightFacts{}, err
 	}
@@ -71,7 +71,7 @@ func preflightPreviewUp(ctx context.Context, deps cmddeps.Deps, policy consent.P
 }
 
 func preflightDeploy(ctx context.Context, deps cmddeps.Deps, policy consent.Policy, check *run.Span, prov *providerclient.Provider, cfg *project.Project, out io.Writer, in io.Reader) (preflightFacts, error) {
-	domains := preflight.Names(preflight.Hostnames(cfg, "production"))
+	domains := preflight.Names(preflight.Hostnames(cfg, environmentv1.Tier_TIER_PRODUCTION))
 	resp, err := preflight.Run(ctx, check, prov, cfg, environmentv1.Tier_TIER_PRODUCTION, slugToScopeBy(policy.Interactive, domains, cfg), domains, preflight.Frameworks(cfg), "ocel bootstrap production")
 	if err != nil {
 		return preflightFacts{}, err

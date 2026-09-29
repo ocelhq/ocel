@@ -492,7 +492,7 @@ func TestBuildLearnsTheEdge(t *testing.T) {
 				return &project.Project{
 					Dir:           root,
 					Edge:          &project.Edge{Kind: "cloudflare"},
-					AllowDegraded: []string{"edge-middleware", "edge-runtime"},
+					AllowDegraded: []edge.Need{edge.NeedEdgeMiddleware, edge.NeedEdgeRuntime},
 					Apps:          []project.App{nextApp("web", "apps/web")},
 				}
 			},
@@ -505,7 +505,7 @@ func TestBuildLearnsTheEdge(t *testing.T) {
 				return &project.Project{
 					Dir:           root,
 					Edge:          &project.Edge{Kind: "api-gateway"},
-					AllowDegraded: []string{"edge-middleware"},
+					AllowDegraded: []edge.Need{edge.NeedEdgeMiddleware},
 					Apps:          []project.App{nextApp("web", "apps/web")},
 				}
 			},

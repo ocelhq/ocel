@@ -152,7 +152,7 @@ func diagnose(ctx context.Context, deps cmddeps.Deps, cwd string) report {
 
 	hosts := map[environmentv1.Tier][]string{}
 	for _, tier := range tiers {
-		hosts[tier] = preflight.Names(preflight.Hostnames(cfg, bootstrap.Name(tier)))
+		hosts[tier] = preflight.Names(preflight.Hostnames(cfg, tier))
 	}
 	found.add(checked)
 
@@ -321,7 +321,7 @@ func hostCheckDomains(asking bool, cfg *project.Project) []string {
 	}
 	var named []string
 	for _, tier := range tiers {
-		for _, hostname := range preflight.Names(preflight.Hostnames(cfg, bootstrap.Name(tier))) {
+		for _, hostname := range preflight.Names(preflight.Hostnames(cfg, tier)) {
 			if !slices.Contains(named, hostname) {
 				named = append(named, hostname)
 			}
@@ -367,7 +367,7 @@ func askProvider(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, u
 		checkHosts := tier == environmentv1.Tier_TIER_PRODUCTION
 		var resp *contractv1.PreflightResponse
 		err := prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
-			req := preflight.NewRequest(cfg, tier, cfg.Slug, preflight.Names(preflight.Hostnames(cfg, bootstrap.Name(tier))), preflight.Frameworks(cfg))
+			req := preflight.NewRequest(cfg, tier, cfg.Slug, preflight.Names(preflight.Hostnames(cfg, tier)), preflight.Frameworks(cfg))
 			req.CheckHosts = checkHosts
 			req.HostCheckDomains = hostCheckDomains(checkHosts, cfg)
 			resp, err = client.Preflight(ctx, req)
@@ -406,7 +406,7 @@ func askProvider(ctx context.Context, deps cmddeps.Deps, cfg *project.Project, u
 		if tier != environmentv1.Tier_TIER_PRODUCTION || !planned.GetBootstrap().GetPresent() {
 			continue
 		}
-		configured := preflight.Configured(preflight.Hostnames(cfg, bootstrap.Name(tier)))
+		configured := preflight.Configured(preflight.Hostnames(cfg, tier))
 		if len(configured) == 0 {
 			continue
 		}

@@ -11,7 +11,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/deployrecord"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/project"
@@ -291,10 +290,7 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 }
 
 func requirePreviewDomain(cfg *project.Project, wildcard *contractv1.PreviewWildcard, id *contractv1.Identity, pointer string, check *run.Span) (edge.PreviewSite, error) {
-	declared := ""
-	if hosts := preflight.Hostnames(cfg, "preview"); len(hosts) > 0 {
-		declared = hosts[0].Name
-	}
+	declared := cfg.Domains.Preview
 	base := wildcard.GetBaseDomain()
 	configName := filepath.Base(cfg.Path)
 

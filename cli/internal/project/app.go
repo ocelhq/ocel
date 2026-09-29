@@ -33,15 +33,15 @@ type Framework struct {
 func (r Framework) Architecture() string { return arch.Architecture(r.Arch) }
 
 type App struct {
-	Name       string
-	Path       string
-	Framework  Framework
-	Entrypoint string
-	Domains    map[string][]string
-	Compute    string
-	Build      *Build
-	Health     *Health
-	Folder     string
+	Name              string
+	Path              string
+	Framework         Framework
+	Entrypoint        string
+	ProductionDomains []string
+	Compute           string
+	Build             *Build
+	Health            *Health
+	Folder            string
 }
 
 func (a App) RunsOn(compute provider.Compute) bool { return a.Compute == string(compute) }
@@ -103,7 +103,7 @@ func normalizeApps(raw []configdoc.AppConfig, dir string) ([]App, error) {
 		if a.Domains != nil {
 			production = a.Domains.Production
 		}
-		domains, err := normalizeDomains(production, "")
+		domains, err := normalizeProductionDomains(production, "")
 		if err != nil {
 			return nil, fmt.Errorf("app %q: %w", a.Name, err)
 		}
@@ -120,15 +120,15 @@ func normalizeApps(raw []configdoc.AppConfig, dir string) ([]App, error) {
 			return nil, err
 		}
 		apps = append(apps, App{
-			Name:       a.Name,
-			Path:       a.Path,
-			Framework:  framework,
-			Entrypoint: a.Entrypoint,
-			Domains:    domains,
-			Compute:    a.Compute,
-			Build:      build,
-			Health:     health,
-			Folder:     a.Folder,
+			Name:              a.Name,
+			Path:              a.Path,
+			Framework:         framework,
+			Entrypoint:        a.Entrypoint,
+			ProductionDomains: domains,
+			Compute:           a.Compute,
+			Build:             build,
+			Health:            health,
+			Folder:            a.Folder,
 		})
 	}
 

@@ -33,10 +33,10 @@ type Project struct {
 	Provider       *Provider
 	Edge           *Edge
 	DNS            *DNS
-	AllowDegraded  []string
+	AllowDegraded  []edge.Need
 	Apps           []App
 	Bindings       []Binding
-	Domains        map[string][]string
+	Domains        Domains
 	Registry       *Registry
 	EnvSource      envsource.Tiers
 	Dir            string
@@ -53,7 +53,7 @@ func (p *Project) EdgeKind() edge.Kind {
 func (p *Project) EdgeSelection() *contractv1.EdgeSelection {
 	selection := &contractv1.EdgeSelection{
 		Kind:          string(p.EdgeKind()),
-		AllowDegraded: p.AllowDegraded,
+		AllowDegraded: edge.NeedNames(p.AllowDegraded),
 	}
 	if p.DNS != nil {
 		selection.Dns = &contractv1.Dns{Kind: p.DNS.Kind, Zone: p.DNS.Zone}
@@ -141,16 +141,17 @@ func normalizeDNS(raw *configdoc.DnsDescriptor) *DNS {
 	return &DNS{Kind: raw.ID, Zone: raw.Options.Zone}
 }
 
-func normalizeAllowDegraded(raw []string) ([]string, error) {
+func normalizeAllowDegraded(raw []string) ([]edge.Need, error) {
 	if len(raw) == 0 {
 		return nil, nil
 	}
-	out := make([]string, 0, len(raw))
+	out := make([]edge.Need, 0, len(raw))
 	for _, name := range raw {
-		if !edge.ValidNeed(edge.Need(name)) {
+		need := edge.Need(name)
+		if !edge.ValidNeed(need) {
 			return nil, fmt.Errorf("%q is not a need — the needs a deploy may degrade are %s", name, strings.Join(edge.NeedNames(edge.AllNeeds()), ", "))
 		}
-		out = append(out, name)
+		out = append(out, need)
 	}
 	return out, nil
 }

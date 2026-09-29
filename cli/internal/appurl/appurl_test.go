@@ -18,7 +18,7 @@ func TestProduction(t *testing.T) {
 
 	t.Run("an unnamed app takes the project's first production hostname", func(t *testing.T) {
 		t.Parallel()
-		cfg := &project.Project{Domains: map[string][]string{"production": {"acme.com", "www.acme.com"}}}
+		cfg := &project.Project{Domains: project.Domains{Production: []string{"acme.com", "www.acme.com"}}}
 
 		if got, want := appurl.Production(cfg)[variablescope.RootApp], "https://acme.com"; got != want {
 			t.Errorf("url = %q, want %q", got, want)
@@ -28,10 +28,10 @@ func TestProduction(t *testing.T) {
 	t.Run("an app's own domain wins over the project's", func(t *testing.T) {
 		t.Parallel()
 		cfg := &project.Project{
-			Domains: map[string][]string{"production": {"acme.com"}},
+			Domains: project.Domains{Production: []string{"acme.com"}},
 			Apps: []project.App{
 				{Name: "web"},
-				{Name: "api", Domains: map[string][]string{"production": {"api.acme.com", "api2.acme.com"}}},
+				{Name: "api", ProductionDomains: []string{"api.acme.com", "api2.acme.com"}},
 			},
 		}
 
@@ -56,11 +56,11 @@ func TestProduction(t *testing.T) {
 	t.Run("hands a project-level domain to the app the deploy serves it on, and no other", func(t *testing.T) {
 		t.Parallel()
 		cfg := &project.Project{
-			Domains: map[string][]string{"production": {"acme.com"}},
+			Domains: project.Domains{Production: []string{"acme.com"}},
 			Apps:    []project.App{{Name: "web"}, {Name: "api"}},
 		}
 
-		served := appbuild.AttributeHostnames(cfg.Domains["production"], [][]string{nil, nil})
+		served := appbuild.AttributeHostnames(cfg.Domains.Production, [][]string{nil, nil})
 		urls := appurl.Production(cfg)
 		if got, want := urls["web"], "https://"+served[0][0]; got != want {
 			t.Errorf("web url = %q, want %q: the deploy serves a project hostname on the first app `apps` names", got, want)

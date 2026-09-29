@@ -250,7 +250,7 @@ func listProductionHostnames(ctx context.Context, deps cmddeps.Deps, cfg *projec
 		func(ctx context.Context, client contractv1connect.ProviderServiceClient) (err error) {
 			resp, err = client.GetHostnameStatus(ctx, &contractv1.HostnameRequest{
 				Slug:       cfg.Slug,
-				Configured: preflight.Configured(preflight.Hostnames(cfg, "production")),
+				Configured: preflight.Configured(preflight.Hostnames(cfg, environmentv1.Tier_TIER_PRODUCTION)),
 				Edge:       cfg.EdgeSelection(),
 			})
 			return err
@@ -377,7 +377,7 @@ func runDomainAdd(ctx context.Context, deps cmddeps.Deps, cwd, host string, stdo
 	if err != nil {
 		return err
 	}
-	declared := preflight.Hostnames(cfg, "production")
+	declared := preflight.Hostnames(cfg, environmentv1.Tier_TIER_PRODUCTION)
 	configured := preflight.Names(declared)
 	if len(configured) == 0 {
 		return fmt.Errorf("this project declares no domains.production in %s, so there is no production hostname to add: declare one and run `ocel domain add` again — no command edits the config", filepath.Base(cfg.Path))
@@ -472,7 +472,7 @@ func runDomainRm(ctx context.Context, deps cmddeps.Deps, cwd, host string, opts 
 	}
 	req := &contractv1.HostnameRequest{
 		Slug:       cfg.Slug,
-		Configured: preflight.Configured(preflight.Hostnames(cfg, "production")),
+		Configured: preflight.Configured(preflight.Hostnames(cfg, environmentv1.Tier_TIER_PRODUCTION)),
 		Host:       host,
 		Edge:       cfg.EdgeSelection(),
 	}
@@ -626,7 +626,7 @@ func readDomainStatus(ctx context.Context, deps cmddeps.Deps, cfg *project.Proje
 
 	req := &contractv1.HostnameRequest{
 		Slug:       cfg.Slug,
-		Configured: preflight.Configured(preflight.Hostnames(cfg, "production")),
+		Configured: preflight.Configured(preflight.Hostnames(cfg, environmentv1.Tier_TIER_PRODUCTION)),
 		Edge:       cfg.EdgeSelection(),
 		Probe:      true,
 	}

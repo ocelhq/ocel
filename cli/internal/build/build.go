@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/node"
 	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/images"
 )
 
@@ -123,7 +124,7 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, envByApp map
 				Folder:        a.Folder,
 				Env:           envOf(cfg, envByApp, a.Name),
 				EdgeKind:      string(cfg.EdgeKind()),
-				AllowDegraded: cfg.AllowDegraded,
+				AllowDegraded: edge.NeedNames(cfg.AllowDegraded),
 			})
 		case name == appbuild.FrameworkNode:
 			target, err := nodeTarget(cfg, a, outputDir)

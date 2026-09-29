@@ -46,7 +46,7 @@ func Assemble(in Input) (*contractv1.Manifest, error) {
 	return manifest, nil
 }
 
-func assemble(slug string, domains map[string][]string, apps []app, compute string, declarations []declaredResource, bindings []binding, functions []build.Function, values map[string][]variables.Variable) (*contractv1.Manifest, error) {
+func assemble(slug string, domains project.Domains, apps []app, compute string, declarations []declaredResource, bindings []binding, functions []build.Function, values map[string][]variables.Variable) (*contractv1.Manifest, error) {
 	if compute == "" {
 		return nil, fmt.Errorf("project %q was built with no compute resolved — every app on the wire has to name the compute it runs on, and the manifest is built after preflight so that a provider's own answer is what fills it", slug)
 	}
@@ -70,11 +70,6 @@ func assemble(slug string, domains map[string][]string, apps []app, compute stri
 		return nil, err
 	}
 
-	projectDomains, err := tierDomains(domains)
-	if err != nil {
-		return nil, err
-	}
-
 	manifestApps, err := manifestAppsOf(apps, compute, functions, functionsByApp, values)
 	if err != nil {
 		return nil, err
@@ -84,7 +79,7 @@ func assemble(slug string, domains map[string][]string, apps []app, compute stri
 		SchemaVersion: ContractVersion,
 		Slug:          slug,
 		Resources:     resources,
-		Domains:       projectDomains,
+		Domains:       tierDomains(domains),
 		Apps:          manifestApps,
 		Usages:        usages,
 	}, nil

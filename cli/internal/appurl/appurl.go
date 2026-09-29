@@ -10,8 +10,8 @@ import (
 )
 
 func Production(cfg *project.Project) map[string]string {
-	return byApp(cfg, cfg.Domains["production"], func(app project.App) []string {
-		return app.Domains["production"]
+	return byApp(cfg, cfg.Domains.Production, func(app project.App) []string {
+		return app.ProductionDomains
 	})
 }
 

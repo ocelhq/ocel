@@ -25,7 +25,7 @@ type app struct {
 	Framework       appbuild.Framework
 	ClientBundle    bool
 	Compute         string
-	Domains         map[string][]string
+	Domains         []string
 	Folder          string
 	Usages          []usage
 	Image           string
@@ -47,7 +47,7 @@ func appsOf(projectDir string, configured []project.App, usages []attribution.Us
 			Framework:       appbuild.Framework{Name: a.Framework.Name, Arch: a.Framework.Arch},
 			ClientBundle:    language.HasClientBundle(a.Framework.Name, filepath.Join(projectDir, a.Path)),
 			Compute:         a.Compute,
-			Domains:         a.Domains,
+			Domains:         a.ProductionDomains,
 			Folder:          a.Folder,
 			Usages:          byApp[a.Name],
 			Image:           images[a.Name],
@@ -128,14 +128,10 @@ func manifestAppsOf(apps []app, compute string, functions []build.Function, func
 		if framework.Name == "" {
 			framework = frameworkByApp[a.Name]
 		}
-		appDomains, err := tierDomains(a.Domains)
-		if err != nil {
-			return nil, err
-		}
 		manifestApp := &contractv1.ManifestApp{
 			Name:         a.Name,
 			Framework:    frameworkProto(framework.Name, framework.Arch),
-			Domains:      appDomains,
+			Domains:      tierDomains(project.Domains{Production: a.Domains}),
 			Variables:    manifestVariables(values[a.Name]),
 			Folder:       a.Folder,
 			ClientBundle: a.ClientBundle,
@@ -179,26 +175,13 @@ func manifestVariables(values []variables.Variable) []*contractv1.ManifestVariab
 	return out
 }
 
-var domainTiers = map[string]environmentv1.Tier{
-	"production": environmentv1.Tier_TIER_PRODUCTION,
-	"preview":    environmentv1.Tier_TIER_PREVIEW,
-}
-
-func tierDomains(domains map[string][]string) ([]*contractv1.TierDomains, error) {
-	out := make([]*contractv1.TierDomains, 0, len(domains))
-	for named, hostnames := range domains {
-		tier, ok := domainTiers[named]
-		if !ok {
-			return nil, fmt.Errorf("%q is not a domain tier — `domains` accepts \"production\" and \"preview\"", named)
-		}
-		if len(hostnames) == 0 {
-			continue
-		}
-		out = append(out, &contractv1.TierDomains{Tier: tier, Hostnames: hostnames})
+func tierDomains(domains project.Domains) []*contractv1.TierDomains {
+	var out []*contractv1.TierDomains
+	if domains.Preview != "" {
+		out = append(out, &contractv1.TierDomains{Tier: environmentv1.Tier_TIER_PREVIEW, Hostnames: []string{domains.Preview}})
 	}
-	if len(out) == 0 {
-		return nil, nil
+	if len(domains.Production) > 0 {
+		out = append(out, &contractv1.TierDomains{Tier: environmentv1.Tier_TIER_PRODUCTION, Hostnames: domains.Production})
 	}
-	slices.SortFunc(out, func(a, b *contractv1.TierDomains) int { return cmp.Compare(a.GetTier(), b.GetTier()) })
-	return out, nil
+	return out
 }

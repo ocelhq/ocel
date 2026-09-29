@@ -137,8 +137,8 @@ export default {
 };
 `,
 			check: func(t *testing.T, root string, cfg *Project) {
-				if got := cfg.Domains["production"]; len(got) != 1 || got[0] != "app.acme.com" {
-					t.Fatalf("Domains[production] = %v, want [%q] (lowercased)", got, "app.acme.com")
+				if got := cfg.Domains.Production; len(got) != 1 || got[0] != "app.acme.com" {
+					t.Fatalf("Domains.Production = %v, want [%q] (lowercased)", got, "app.acme.com")
 				}
 			},
 		},
@@ -150,8 +150,8 @@ export default {
 };
 `,
 			check: func(t *testing.T, root string, cfg *Project) {
-				if len(cfg.Domains) != 0 {
-					t.Fatalf("Domains = %v, want empty", cfg.Domains)
+				if cfg.Domains.Preview != "" || len(cfg.Domains.Production) != 0 {
+					t.Fatalf("Domains = %+v, want empty", cfg.Domains)
 				}
 			},
 		},
@@ -531,14 +531,14 @@ export default {
 				if len(cfg.Apps) != 2 {
 					t.Fatalf("got %d apps, want 2", len(cfg.Apps))
 				}
-				if got := cfg.Apps[0].Domains["production"]; len(got) != 1 || got[0] != "app.acme.com" {
-					t.Fatalf("Apps[0].Domains[production] = %v, want [%q] (lowercased)", got, "app.acme.com")
+				if got := cfg.Apps[0].ProductionDomains; len(got) != 1 || got[0] != "app.acme.com" {
+					t.Fatalf("Apps[0].ProductionDomains = %v, want [%q] (lowercased)", got, "app.acme.com")
 				}
-				if len(cfg.Apps[1].Domains) != 0 {
-					t.Fatalf("Apps[1].Domains = %v, want empty", cfg.Apps[1].Domains)
+				if len(cfg.Apps[1].ProductionDomains) != 0 {
+					t.Fatalf("Apps[1].ProductionDomains = %v, want empty", cfg.Apps[1].ProductionDomains)
 				}
-				if got := cfg.Domains["production"]; len(got) != 1 || got[0] != "acme.com" {
-					t.Fatalf("Domains[production] = %v, want [%q]", got, "acme.com")
+				if got := cfg.Domains.Production; len(got) != 1 || got[0] != "acme.com" {
+					t.Fatalf("Domains.Production = %v, want [%q]", got, "acme.com")
 				}
 			},
 		},
@@ -554,8 +554,8 @@ export default {
 };
 `,
 			check: func(t *testing.T, root string, cfg *Project) {
-				if got := cfg.Apps[0].Domains["production"]; len(got) != 1 || got[0] != "app.acme.com" {
-					t.Fatalf("Apps[0].Domains[production] = %v, want [app.acme.com]", got)
+				if got := cfg.Apps[0].ProductionDomains; len(got) != 1 || got[0] != "app.acme.com" {
+					t.Fatalf("Apps[0].ProductionDomains = %v, want [app.acme.com]", got)
 				}
 			},
 		},
@@ -568,8 +568,8 @@ export default {
 };
 `,
 			check: func(t *testing.T, root string, cfg *Project) {
-				if got := cfg.Domains["preview"]; len(got) != 1 || got[0] != "*.preview.acme.com" {
-					t.Fatalf("Domains[preview] = %v, want [%q] (lowercased)", got, "*.preview.acme.com")
+				if got := cfg.Domains.Preview; got != "*.preview.acme.com" {
+					t.Fatalf("Domains.Preview = %q, want %q (lowercased)", got, "*.preview.acme.com")
 				}
 			},
 		},
@@ -582,8 +582,8 @@ export default {
 };
 `,
 			check: func(t *testing.T, root string, cfg *Project) {
-				if got := cfg.Domains["production"]; len(got) != 2 || got[0] != "acme.com" || got[1] != "www.acme.com" {
-					t.Fatalf("Domains[production] = %v, want [acme.com www.acme.com]", got)
+				if got := cfg.Domains.Production; len(got) != 2 || got[0] != "acme.com" || got[1] != "www.acme.com" {
+					t.Fatalf("Domains.Production = %v, want [acme.com www.acme.com]", got)
 				}
 			},
 		},
@@ -741,7 +741,7 @@ export default {
 };
 `,
 			check: func(t *testing.T, root string, cfg *Project) {
-				if !slices.Equal(cfg.AllowDegraded, []string{"edge-middleware", "streaming"}) {
+				if !slices.Equal(cfg.AllowDegraded, []edge.Need{edge.NeedEdgeMiddleware, edge.NeedStreaming}) {
 					t.Fatalf("AllowDegraded = %v, want [edge-middleware streaming]", cfg.AllowDegraded)
 				}
 			},

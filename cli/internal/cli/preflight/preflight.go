@@ -114,11 +114,17 @@ type Hostname struct {
 	App  string
 }
 
-func Hostnames(cfg *project.Project, tier string) []Hostname {
+func Hostnames(cfg *project.Project, tier environmentv1.Tier) []Hostname {
+	if tier == environmentv1.Tier_TIER_PREVIEW {
+		if cfg.Domains.Preview == "" {
+			return nil
+		}
+		return []Hostname{{Name: cfg.Domains.Preview}}
+	}
 	var hosts []Hostname
 	seen := map[string]bool{}
-	add := func(domains map[string][]string, app string) {
-		for _, host := range domains[tier] {
+	add := func(domains []string, app string) {
+		for _, host := range domains {
 			if seen[host] {
 				continue
 			}
@@ -126,9 +132,9 @@ func Hostnames(cfg *project.Project, tier string) []Hostname {
 			hosts = append(hosts, Hostname{Name: host, App: app})
 		}
 	}
-	add(cfg.Domains, "")
+	add(cfg.Domains.Production, "")
 	for _, app := range cfg.Apps {
-		add(app.Domains, app.Name)
+		add(app.ProductionDomains, app.Name)
 	}
 	return hosts
 }
