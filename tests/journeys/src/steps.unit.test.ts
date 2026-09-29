@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { Check } from "./checks/context";
-import { fixture } from "./matrix/types";
+import { fixture, variant } from "./matrix/types";
 import { defaults } from "./matrix/variants";
 import { CellRun } from "./run/cellRun";
 import type { ExternalStack } from "./stacks";
@@ -45,6 +45,28 @@ describe("the steps a cell process runs", () => {
     expect(() => stepsPlanned(cell, drifted)).toThrow(
       /lifecycle\/next walks web · deploy, web · ping, web · destroy, not the planned web · deploy, web · pong, web · destroy/,
     );
+  });
+});
+
+describe("the checks a variant adds", () => {
+  it("runs a variant's checks after the fixture's own, in every checked phase", () => {
+    const shielded = variant("shielded", {
+      offeredOn: ["aws"],
+      config: {},
+      checks: [{ title: "refused without the edge", run: async () => undefined }],
+    });
+    const titles = stepsOf(
+      { name: "lifecycle/next-shielded", fixture: living, variant: shielded },
+      ["deploy", "verify", "redeploy"],
+    ).map((step) => step.title);
+    expect(titles).toEqual([
+      "deploy",
+      "ping",
+      "refused without the edge",
+      "redeploy",
+      "redeploy · ping",
+      "redeploy · refused without the edge",
+    ]);
   });
 });
 

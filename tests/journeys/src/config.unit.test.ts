@@ -19,7 +19,14 @@ import {
 import { evidence } from "./evidence";
 import { deploy, sdk } from "./matrix/fixtures";
 import type { Fixture, Variant } from "./matrix/types";
-import { cloudflare, container, defaults, registry } from "./matrix/variants";
+import {
+  cloudflare,
+  cloudflareOnABox,
+  cloudflareOnGoogleCloud,
+  container,
+  defaults,
+  registry,
+} from "./matrix/variants";
 import type { CellUnderTest } from "./run/cellRun";
 
 const TS_BASE = "./ocel.config.ts";
@@ -174,7 +181,7 @@ describe("overlayFor", () => {
 
   it("fronts a vps cloudflare cell with the cloudflare edge under the run's zone and dns", () => {
     expect(
-      overlayFor(cell(deploy.node, cloudflare), "vps", {
+      overlayFor(cell(deploy.node, cloudflareOnABox), "vps", {
         OCEL_JOURNEY_ZONE: "j.example",
         OCEL_JOURNEY_DNS: "cloudflare",
       }),
@@ -189,7 +196,7 @@ describe("overlayFor", () => {
 
   it("fronts a gcp cloudflare cell with the cloudflare edge, and binds its hostnames under the run's zone", () => {
     expect(
-      overlayFor(cell(deploy.node, cloudflare), "gcp", {
+      overlayFor(cell(deploy.node, cloudflareOnGoogleCloud), "gcp", {
         OCEL_JOURNEY_ZONE: "j.example",
         OCEL_JOURNEY_DNS: "cloudflare",
       }),

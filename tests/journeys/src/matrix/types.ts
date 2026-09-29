@@ -52,7 +52,12 @@ export const DEFAULT_VARIANT = "default";
 
 export type ConfigDelta = { compute?: Compute; edge?: Edge; registry?: RegistryConfig };
 
-export type Variant = { name: string; offeredOn: TargetName[]; config: ConfigDelta };
+export type Variant = {
+  name: string;
+  offeredOn: TargetName[];
+  config: ConfigDelta;
+  checks?: Check[];
+};
 
 export function variant(name: string, shape: Omit<Variant, "name">): Variant {
   if (name === DEFAULT_VARIANT || !/^[a-z][a-z0-9-]*$/.test(name)) {

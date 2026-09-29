@@ -20,7 +20,15 @@ import { REGISTRY_TOKEN_ENV, REGISTRY_USER_ENV } from "../registry/settings";
 import { check, step } from "../steps";
 import { deploy, iac, lifecycle, sdk } from "./fixtures";
 import type { Gap } from "./types";
-import { apiGateway, cloudflare, container, defaults, registry } from "./variants";
+import {
+  apiGateway,
+  cloudflare,
+  cloudflareOnABox,
+  cloudflareOnGoogleCloud,
+  container,
+  defaults,
+  registry,
+} from "./variants";
 
 const DEPLOY_NEXT_BEARING = [deploy.next, deploy.workspace];
 const SDK_NEXT_BEARING = [sdk.next, sdk.workspace];
@@ -124,7 +132,7 @@ export const gaps: Gap[] = [
       {
         on: ["vps", "vps.incus"],
         fixtures: [deploy.next, sdk.next, lifecycle.next],
-        variants: [defaults, cloudflare],
+        variants: [defaults, cloudflareOnABox],
         fails: [check(NEXT_CACHE)],
       },
     ],
@@ -312,7 +320,7 @@ export const gaps: Gap[] = [
       },
       {
         on: ["gcp.floci"],
-        variants: [cloudflare],
+        variants: [cloudflareOnGoogleCloud],
         fails: [step.deploy],
         skipsCell: true,
       },
@@ -322,7 +330,9 @@ export const gaps: Gap[] = [
     id: "cloudflare-cannot-reach-the-vm",
     reason:
       "Cloudflare forwards to a public origin, and an incus VM is reachable only from the machine it runs on",
-    where: [{ on: ["vps.incus"], variants: [cloudflare], fails: [step.deploy], skipsCell: true }],
+    where: [
+      { on: ["vps.incus"], variants: [cloudflareOnABox], fails: [step.deploy], skipsCell: true },
+    ],
   },
   {
     id: "no-cloudflare-zone",
@@ -331,7 +341,7 @@ export const gaps: Gap[] = [
     where: [
       {
         on: ["vps", "gcp"],
-        variants: [cloudflare],
+        variants: [cloudflareOnABox, cloudflareOnGoogleCloud],
         whileUnset: ["OCEL_JOURNEY_ZONE", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"],
         fails: [step.deploy],
         skipsCell: true,
