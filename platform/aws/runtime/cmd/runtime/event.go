@@ -93,13 +93,15 @@ func (ev *httpEvent) header() http.Header {
 	if len(ev.Cookies) > 0 {
 		h.Set("Cookie", strings.Join(ev.Cookies, "; "))
 	}
-	if carried := h.Get(edge.HeaderClientAuthorization); carried != "" {
-		h.Set("Authorization", carried)
-	} else if len(ev.RequestContext.Authorizer.IAM) > 0 {
+	signed := len(ev.RequestContext.Authorizer.IAM) > 0
+	if signed {
 		h.Del("Authorization")
+		if carried := h.Get(edge.HeaderClientAuthorization); carried != "" {
+			h.Set("Authorization", carried)
+		}
 	}
 	h.Del(edge.HeaderClientAuthorization)
-	if client := h.Get(edge.HeaderClientAddress); client != "" && len(ev.RequestContext.Authorizer.IAM) > 0 {
+	if client := h.Get(edge.HeaderClientAddress); client != "" && signed {
 		if prior := h.Get("X-Forwarded-For"); prior != "" {
 			client = prior + ", " + client
 		}
