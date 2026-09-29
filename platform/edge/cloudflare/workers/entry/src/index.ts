@@ -8,6 +8,7 @@ import {
 import type { AssetStoreDeps } from "@framework/next-router/assets";
 import { functionUrlImageOrigin } from "@framework/next-router/image";
 import { type CacheDeps, deploymentScope } from "./cache";
+import { withClientAddress } from "./client-address";
 import { type DeploymentRecord, type DeploymentsDeps, resolveDeployment } from "./deployments";
 import { domainApp } from "./domains";
 import { createEdgeInvoker, type EdgeCacheStub, type EdgeObjectStore, ownBundleKey } from "./edge";
@@ -331,6 +332,6 @@ export default {
     );
     if (serveRequest instanceof Response) return serveRequest;
 
-    return serveRequest(request);
+    return serveRequest(withClientAddress(request));
   },
 } satisfies ExportedHandler<Env>;
