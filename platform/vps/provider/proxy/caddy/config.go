@@ -180,7 +180,7 @@ func render(spec proxy.Spec) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	selecting, err = shielded(selecting, spec.ClientCertificates)
+	selecting, err = shieldPolicies(selecting, spec.ClientCertificates)
 	if err != nil {
 		return nil, err
 	}
@@ -266,14 +266,14 @@ func loaded(pins []proxy.Pin) (*certificates, []connectionPolicy, error) {
 	return &certificates{LoadFiles: files}, selecting, nil
 }
 
-func shielded(selecting []connectionPolicy, pulls []proxy.ClientCertificate) ([]connectionPolicy, error) {
+func shieldPolicies(selecting []connectionPolicy, pulls []proxy.ClientCertificate) ([]connectionPolicy, error) {
 	var shielding []connectionPolicy
 	for _, pull := range slices.SortedFunc(slices.Values(pulls), byHostname) {
 		hostname := strings.ToLower(strings.TrimSpace(pull.Hostname))
 		if hostname == "" {
 			return nil, errors.New("a client certificate the proxy requires names no hostname it shields")
 		}
-		trusted, err := leafDER(pull.Certificate)
+		trusted, err := encodeLeafDER(pull.Certificate)
 		if err != nil {
 			return nil, fmt.Errorf("the client certificate %s is shielded by: %w", hostname, err)
 		}
@@ -291,7 +291,7 @@ func byHostname(a, b proxy.ClientCertificate) int {
 	return strings.Compare(strings.ToLower(a.Hostname), strings.ToLower(b.Hostname))
 }
 
-func leafDER(certificate string) (string, error) {
+func encodeLeafDER(certificate string) (string, error) {
 	block, _ := pem.Decode([]byte(certificate))
 	if block == nil || block.Type != "CERTIFICATE" {
 		return "", errors.New("it is no PEM certificate")

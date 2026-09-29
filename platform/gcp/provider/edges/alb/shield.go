@@ -80,7 +80,7 @@ func (e *Edge) changeTrust(ctx context.Context, tier environment.Tier, change fu
 	return trustRecord{}, fmt.Errorf("record which client certificates the %s front of tier %s trusts: it changed under every one of %d attempts", Kind, tier, trustAttempts)
 }
 
-func (e *Edge) trustedOrPlaceholder(ctx context.Context, tier environment.Tier) ([]string, error) {
+func (e *Edge) ensureTrusted(ctx context.Context, tier environment.Tier) ([]string, error) {
 	record, err := e.changeTrust(ctx, tier, func(read trustRecord) (trustRecord, bool) {
 		return read, false
 	})
@@ -90,7 +90,7 @@ func (e *Edge) trustedOrPlaceholder(ctx context.Context, tier environment.Tier) 
 	if len(record.Certificates) > 0 {
 		return record.Certificates, nil
 	}
-	placeholder, err := unpresentableCertificate(time.Now())
+	placeholder, err := mintUnpresentableCertificate(time.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +139,7 @@ func (e *Edge) shield(ctx context.Context, tier environment.Tier, certificate st
 	return front, err
 }
 
-func (e *Edge) frontFor(ctx context.Context, tier environment.Tier, certificate string) (Front, error) {
+func (e *Edge) ensureFront(ctx context.Context, tier environment.Tier, certificate string) (Front, error) {
 	if certificate != "" {
 		return e.shield(ctx, tier, certificate)
 	}
@@ -155,7 +155,7 @@ func (e *Edge) frontFor(ctx context.Context, tier environment.Tier, certificate 
 	return front, nil
 }
 
-func unpresentableCertificate(now time.Time) (string, error) {
+func mintUnpresentableCertificate(now time.Time) (string, error) {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return "", fmt.Errorf("generate a placeholder client certificate: %w", err)

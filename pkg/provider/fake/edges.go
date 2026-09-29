@@ -166,14 +166,14 @@ func Origin(kind router.Kind) edge.Origin {
 	return edge.Origin{Address: "origin." + string(kind) + ".fake.invalid"}
 }
 
-func (e *Edge) claimed(claim router.Claim) edge.Origin {
+func (e *Edge) recordClaim(claim router.Claim) edge.Origin {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.claims = append(e.claims, claim)
 	return Origin(e.routedBy)
 }
 
-func (e *Edge) gaveBack(hostname string) {
+func (e *Edge) recordDisclaim(hostname string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.disclaimed = append(e.disclaimed, hostname)

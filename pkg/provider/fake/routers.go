@@ -199,11 +199,11 @@ func (s *RouterStack) State() router.StackState {
 }
 
 func (s *RouterStack) Claim(_ context.Context, claim router.Claim) (edge.Origin, error) {
-	return s.stack.front.claimed(claim), nil
+	return s.stack.front.recordClaim(claim), nil
 }
 
 func (s *RouterStack) Disclaim(_ context.Context, hostname string) error {
-	s.stack.front.gaveBack(hostname)
+	s.stack.front.recordDisclaim(hostname)
 	return nil
 }
 

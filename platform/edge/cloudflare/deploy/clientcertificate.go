@@ -41,7 +41,7 @@ func (p *cloudflare) ensureClientCertificate(ctx context.Context, hostname strin
 	if err != nil {
 		return "", err
 	}
-	presented, err := p.presentedClientCertificate(ctx, zoneID)
+	presented, err := p.readPresentedClientCertificate(ctx, zoneID)
 	if err != nil {
 		return "", err
 	}
@@ -49,7 +49,7 @@ func (p *cloudflare) ensureClientCertificate(ctx context.Context, hostname strin
 		if err := p.uploadClientCertificate(ctx, zoneID, zoneName); err != nil {
 			return "", err
 		}
-		if presented, err = p.presentedClientCertificate(ctx, zoneID); err != nil {
+		if presented, err = p.readPresentedClientCertificate(ctx, zoneID); err != nil {
 			return "", err
 		}
 		if presented == "" {
@@ -59,7 +59,7 @@ func (p *cloudflare) ensureClientCertificate(ctx context.Context, hostname strin
 	return presented, p.ensureOriginPulls(ctx, zoneID, zoneName)
 }
 
-func (p *cloudflare) presentedClientCertificate(ctx context.Context, zoneID string) (string, error) {
+func (p *cloudflare) readPresentedClientCertificate(ctx context.Context, zoneID string) (string, error) {
 	listed := p.client.OriginTLSClientAuth.ListAutoPaging(ctx, origin_tls_client_auth.OriginTLSClientAuthListParams{ZoneID: cf.F(zoneID)})
 	var presented []zoneClientCertificate
 	for listed.Next() {

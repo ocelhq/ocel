@@ -83,7 +83,7 @@ func (x *Proxy) DomainOwner(ctx context.Context, hostname string) (string, error
 	if err != nil {
 		return "", err
 	}
-	return x.p.forwardedOwner(ctx, zoneID, hostname)
+	return x.p.readForwardedOwner(ctx, zoneID, hostname)
 }
 
 func (x *Proxy) ProjectOwner(slug string, tier environment.Tier) string {

@@ -48,7 +48,7 @@ func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
 	if hostname == "" {
 		return errors.New("unbinding a domain from a Cloudflare stack needs a hostname")
 	}
-	if forwards(s.state, hostname) {
+	if isForwarded(s.state, hostname) {
 		return s.p.unbindOrigin(ctx, &s.state, forwardingOwner(s.p.namespace, s.state.Slug, s.state.Tier), hostname)
 	}
 	accountID, scripts, err := s.entryWorkers("unbind")
