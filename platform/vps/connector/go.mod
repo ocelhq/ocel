@@ -43,3 +43,5 @@ require (
 replace github.com/ocelhq/ocel/pkg => ../../../pkg
 
 replace github.com/ocelhq/ocel/platform/edge/cloudflare/deploy => ../../edge/cloudflare/deploy
+
+replace github.com/ocelhq/ocel/platform/s3 => ../../s3
