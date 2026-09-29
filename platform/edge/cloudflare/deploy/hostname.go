@@ -178,7 +178,7 @@ func (p *cloudflare) DomainOwner(ctx context.Context, hostname string) (string, 
 		}
 		return route.Script, nil
 	}
-	return "", nil
+	return p.forwardedOwner(ctx, zoneID, hostname)
 }
 
 func (p *cloudflare) ensureRoute(ctx context.Context, snap *routeSnapshot, zoneID, pattern, scriptName string, spec routeSpec) error {

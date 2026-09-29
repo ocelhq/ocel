@@ -40,6 +40,23 @@ func deployPermissions() []string {
 	return slices.Concat(accountPermissions, zonePermissions)
 }
 
+var proxyPermissions = []string{
+	"Account · Account Settings · Read",
+	"Zone · Zone · Read",
+	"Zone · DNS · Edit",
+	"Zone · SSL and Certificates · Edit",
+	"Zone · Cache Purge · Purge",
+}
+
+func proxyCredentialPermissions(purpose edge.CredentialPurpose) (edge.CredentialDocument, error) {
+	switch purpose {
+	case edge.PurposeBootstrap, edge.PurposeDeploy:
+		return edge.CredentialDocument{Heading: credentialHeading, Document: strings.Join(proxyPermissions, "\n")}, nil
+	}
+	return edge.CredentialDocument{}, fmt.Errorf(
+		"cloudflare: the token permissions are listed for bootstrap or deploy credentials, not %q", string(purpose))
+}
+
 func credentialPermissions(purpose edge.CredentialPurpose) (edge.CredentialDocument, error) {
 	var permissions []string
 	switch purpose {

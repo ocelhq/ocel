@@ -53,6 +53,13 @@ type cfMock struct {
 	deletedTokens        []string
 	subdomainCalls       []subdomainCall
 	putSecrets           []putSecret
+	updatedRecords       []string
+
+	clientCertificates []map[string]any
+	uploadedKeys       []string
+	originPulls        bool
+	originPullWrites   []bool
+	purges             [][]string
 }
 
 type putSecret struct {
@@ -307,7 +314,66 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 		writeResult(w, m.certificatePacks)
 	})
 
+	mux.HandleFunc("GET /zones/"+m.zoneID+"/origin_tls_client_auth", func(w http.ResponseWriter, r *http.Request) {
+		if !firstPage(r) {
+			writeResult(w, []any{})
+			return
+		}
+		writeResult(w, m.clientCertificates)
+	})
+
+	mux.HandleFunc("POST /zones/"+m.zoneID+"/origin_tls_client_auth", func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		m.uploadedKeys = append(m.uploadedKeys, fmt.Sprint(body["private_key"]))
+		uploaded := map[string]any{
+			"id":          fmt.Sprintf("client-certificate-%d", len(m.clientCertificates)+1),
+			"certificate": body["certificate"],
+			"status":      "pending_deployment",
+			"uploaded_on": fmt.Sprintf("2026-09-29T10:00:%02dZ", len(m.clientCertificates)),
+		}
+		m.clientCertificates = append(m.clientCertificates, uploaded)
+		writeResult(w, uploaded)
+	})
+
+	mux.HandleFunc("GET /zones/"+m.zoneID+"/origin_tls_client_auth/settings", func(w http.ResponseWriter, _ *http.Request) {
+		writeResult(w, map[string]any{"enabled": m.originPulls})
+	})
+
+	mux.HandleFunc("PUT /zones/"+m.zoneID+"/origin_tls_client_auth/settings", func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		enabled, _ := body["enabled"].(bool)
+		m.originPulls = enabled
+		m.originPullWrites = append(m.originPullWrites, enabled)
+		writeResult(w, map[string]any{"enabled": enabled})
+	})
+
+	mux.HandleFunc("POST /zones/"+m.zoneID+"/purge_cache", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Hosts []string `json:"hosts"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		m.purges = append(m.purges, body.Hosts)
+		writeResult(w, map[string]any{"id": "purge"})
+	})
+
 	mux.HandleFunc("/zones/"+m.zoneID+"/dns_records/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPut {
+			id := strings.TrimPrefix(r.URL.Path, "/zones/"+m.zoneID+"/dns_records/")
+			var body map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			m.updatedRecords = append(m.updatedRecords, id)
+			for _, rec := range m.existingRecords {
+				if rec["id"] == id {
+					for _, field := range []string{"name", "type", "content", "proxied", "comment"} {
+						rec[field] = body[field]
+					}
+				}
+			}
+			writeResult(w, map[string]any{"id": id})
+			return
+		}
 		if r.Method == http.MethodDelete {
 			id := strings.TrimPrefix(r.URL.Path, "/zones/"+m.zoneID+"/dns_records/")
 			m.deletedRecords = append(m.deletedRecords, id)

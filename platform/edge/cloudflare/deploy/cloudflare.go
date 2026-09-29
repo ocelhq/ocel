@@ -81,6 +81,8 @@ const clientMaxRetries = 5
 
 func (p *cloudflare) Kind() edge.Kind { return Kind }
 
+func (p *cloudflare) accountID() string { return os.Getenv(envAccountID) }
+
 func (p *cloudflare) cacheStore() cacheStore {
 	store := newCacheStore(p.client, p.namespace)
 	if p.objects != nil {
