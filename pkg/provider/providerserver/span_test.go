@@ -266,9 +266,9 @@ func TestSpanTitlesAreSanitized(t *testing.T) {
 	if got := UnitSpan(naming.UnitEnvironment, "production", progress.Title{Started: "   ", Ended: "   "}, progressv1.Phase_PHASE_PROVISION).Title; got.Started != "span" || got.Ended != "span" {
 		t.Errorf("UnitSpan() title = %q, want a fallback title", got)
 	}
-	long := strings.Repeat("a", maxSpanTitleLen*2)
-	if got := UnitSpan(naming.UnitEnvironment, "production", progress.Title{Started: long, Ended: long}, progressv1.Phase_PHASE_PROVISION).Title; len(got.Started) > maxSpanTitleLen || len(got.Ended) > maxSpanTitleLen {
-		t.Errorf("UnitSpan() title is %d and %d long, want each capped at %d", len(got.Started), len(got.Ended), maxSpanTitleLen)
+	long := strings.Repeat("a", progress.MaxSpanNameLen*2)
+	if got := UnitSpan(naming.UnitEnvironment, "production", progress.Title{Started: long, Ended: long}, progressv1.Phase_PHASE_PROVISION).Title; len(got.Started) > progress.MaxSpanNameLen || len(got.Ended) > progress.MaxSpanNameLen {
+		t.Errorf("UnitSpan() title is %d and %d long, want each capped at %d", len(got.Started), len(got.Ended), progress.MaxSpanNameLen)
 	}
 }
 

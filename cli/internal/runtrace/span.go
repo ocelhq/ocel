@@ -14,8 +14,6 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
-const maxSpanNameLen = 200
-
 type startedScope struct {
 	parentID trace.SpanID
 	name     string
@@ -91,7 +89,7 @@ func (r *Run) ingestSpan(id, parentID trace.SpanID, name string, start, end time
 	if len(attrs) > 0 {
 		opts = append(opts, trace.WithAttributes(attrs...))
 	}
-	_, span := r.tracer.Start(ctx, sanitizeSpanName(name), opts...)
+	_, span := r.tracer.Start(ctx, progress.SanitizeSpanName(name), opts...)
 	if code, ok := spanStatusCode(status); ok {
 		span.SetStatus(code, "")
 	}
@@ -107,24 +105,6 @@ func spanStatusCode(s progressv1.SpanStatus) (codes.Code, bool) {
 	default:
 		return codes.Unset, false
 	}
-}
-
-func sanitizeSpanName(name string) string {
-	var b strings.Builder
-	for _, r := range name {
-		if r < 0x20 || r == 0x7f {
-			continue
-		}
-		b.WriteRune(r)
-		if b.Len() >= maxSpanNameLen {
-			break
-		}
-	}
-	out := strings.TrimSpace(b.String())
-	if out == "" {
-		return "span"
-	}
-	return out
 }
 
 func spanAttributes(attrs []*progressv1.SpanAttribute) []attribute.KeyValue {

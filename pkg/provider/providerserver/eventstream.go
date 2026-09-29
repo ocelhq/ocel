@@ -157,29 +157,29 @@ func newSpanLog(sender *eventStream, span Span) progress.Log {
 }
 
 func (r *spanLog) Say(message string) {
-	r.sender.send(r.span.event(&progressv1.OperationEvent{Message: sanitizeMessage(message)}))
+	r.sender.send(r.span.event(&progressv1.OperationEvent{Message: progress.SanitizeMessage(message)}))
 }
 
 func (r *spanLog) Warn(message string) {
 	r.sender.send(r.span.event(&progressv1.OperationEvent{
 		Level:   progressv1.Level_LEVEL_WARN,
-		Message: sanitizeMessage(message),
+		Message: progress.SanitizeMessage(message),
 	}))
 }
 
 func (r *spanLog) Error(message string) {
 	r.sender.send(r.span.event(&progressv1.OperationEvent{
 		Level:   progressv1.Level_LEVEL_ERROR,
-		Message: sanitizeMessage(message),
+		Message: progress.SanitizeMessage(message),
 	}))
 }
 
 func (r *spanLog) Detail(message string) {
-	r.sender.send(r.span.event(outputEvent(progressv1.Level_LEVEL_INFO, sanitizeMessage(message))))
+	r.sender.send(r.span.event(outputEvent(progressv1.Level_LEVEL_INFO, progress.SanitizeMessage(message))))
 }
 
 func (r *spanLog) Debug(line string) {
-	r.sender.send(r.span.event(outputEvent(progressv1.Level_LEVEL_DEBUG, sanitizeMessage(line))))
+	r.sender.send(r.span.event(outputEvent(progressv1.Level_LEVEL_DEBUG, progress.SanitizeMessage(line))))
 }
 
 func (r *spanLog) Span(name string, start, end time.Time, err error, attrs ...progress.Attr) {
@@ -193,7 +193,7 @@ func degradedEvent(app string, need edge.Need, detail string) *progressv1.Operat
 		Level:   progressv1.Level_LEVEL_WARN,
 		Phase:   progressv1.Phase_PHASE_CHECK,
 		Subject: app,
-		Message: sanitizeMessage(string(need) + " runs degraded: " + detail),
+		Message: progress.SanitizeMessage(string(need) + " runs degraded: " + detail),
 	}
 }
 
@@ -202,7 +202,7 @@ func checkWarning(subject, message string) *progressv1.OperationEvent {
 		Level:   progressv1.Level_LEVEL_WARN,
 		Phase:   progressv1.Phase_PHASE_CHECK,
 		Subject: subject,
-		Message: sanitizeMessage(message),
+		Message: progress.SanitizeMessage(message),
 	}
 }
 
@@ -218,7 +218,7 @@ func dnsManualRecordsEvent(headline string, records []edge.Record, notes ...stri
 	}
 	return &progressv1.OperationEvent{
 		Level:   progressv1.Level_LEVEL_WARN,
-		Message: sanitizeMessage(headline),
+		Message: progress.SanitizeMessage(headline),
 		Body: &progressv1.OperationEvent_DnsManualRecords{DnsManualRecords: &progressv1.DnsManualRecordsEvent{
 			Headline: headline,
 			Records:  manual,

@@ -3,7 +3,6 @@ package providerserver
 import (
 	"crypto/rand"
 	"errors"
-	"strings"
 	"time"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -48,36 +47,8 @@ func (s Span) event(ev *progressv1.OperationEvent) *progressv1.OperationEvent {
 	return ev
 }
 
-const maxSpanTitleLen = 200
-
-func stripControlChars(s string, capLen int) string {
-	var b strings.Builder
-	for _, r := range s {
-		if r < 0x20 || r == 0x7f {
-			continue
-		}
-		b.WriteRune(r)
-		if capLen > 0 && b.Len() >= capLen {
-			break
-		}
-	}
-	return strings.TrimSpace(b.String())
-}
-
 func sanitizeTitle(title progress.Title) progress.Title {
-	return progress.Title{Started: sanitizeName(title.Started), Ended: sanitizeName(title.Ended)}
-}
-
-func sanitizeName(name string) string {
-	out := stripControlChars(name, maxSpanTitleLen)
-	if out == "" {
-		return "span"
-	}
-	return out
-}
-
-func sanitizeMessage(msg string) string {
-	return stripControlChars(msg, 0)
+	return progress.Title{Started: progress.SanitizeSpanName(title.Started), Ended: progress.SanitizeSpanName(title.Ended)}
 }
 
 func UnitSpan(name, subject string, title progress.Title, phase progressv1.Phase) Span {
@@ -90,7 +61,7 @@ func UnitSpan(name, subject string, title progress.Title, phase progressv1.Phase
 }
 
 func NewSpan(parent Span, name string) Span {
-	name = sanitizeName(name)
+	name = progress.SanitizeSpanName(name)
 	return Span{ID: newSpanID(), ParentID: parent.ID, Title: progress.Title{Started: name, Ended: name}, Phase: parent.Phase, Subject: parent.Subject}
 }
 
@@ -159,7 +130,7 @@ func (t *spanEvents) End(span Span, start, end time.Time, err error, attrs ...pr
 }
 
 func (t *spanEvents) EndPartial(span Span, start, end time.Time, result string) {
-	t.ended(span, start, end, progressv1.SpanStatus_SPAN_STATUS_OK, progressv1.Level_LEVEL_WARN, sanitizeName(result), nil)
+	t.ended(span, start, end, progressv1.SpanStatus_SPAN_STATUS_OK, progressv1.Level_LEVEL_WARN, progress.SanitizeSpanName(result), nil)
 }
 
 func (t *spanEvents) ended(span Span, start, end time.Time, status progressv1.SpanStatus, level progressv1.Level, title string, attrs []progress.Attr) {
