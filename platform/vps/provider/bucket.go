@@ -367,7 +367,7 @@ type appAccount struct {
 
 func (p *Provider) storeAccount(ctx context.Context, spec provider.StackSpec, store string, root storeCredential) (appAccount, error) {
 	env := storeRef(spec.Ref).Name.String()
-	key := host.StoreAccountKey(env, appNameOf(spec.App))
+	key := host.StoreAccountKey(spec.Ref.Project, env, appNameOf(spec.App))
 	credential, err := p.stores.once(key, func() (storeCredential, error) {
 		return p.storeCredential(ctx, spec.Ref, key)
 	})
@@ -618,7 +618,7 @@ func (p *Provider) storeAccounts(ctx context.Context, ref provider.StackRef) ([]
 		if app == "" || app == naming.InfraApp {
 			continue
 		}
-		if key := host.StoreAccountKey(env, app); !slices.Contains(accounts, key) {
+		if key := host.StoreAccountKey(ref.Project, env, app); !slices.Contains(accounts, key) {
 			accounts = append(accounts, key)
 		}
 	}
@@ -627,7 +627,7 @@ func (p *Provider) storeAccounts(ctx context.Context, ref provider.StackRef) ([]
 
 func (p *Provider) removeStoreAccount(ctx context.Context, ref provider.StackRef, app string) error {
 	store := storeName(ref)
-	key := host.StoreAccountKey(storeRef(ref).Name.String(), app)
+	key := host.StoreAccountKey(ref.Project, storeRef(ref).Name.String(), app)
 	sealed, err := p.host.Kept(ctx, ref.Tier, key)
 	if err != nil || len(sealed) == 0 {
 		return err
