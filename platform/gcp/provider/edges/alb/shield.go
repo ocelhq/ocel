@@ -5,8 +5,10 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -41,7 +43,6 @@ func (e *Edge) Shielded() *Edge {
 type trustRecord struct {
 	Hostnames   map[string][]string `json:"hostnames,omitempty"`
 	Placeholder string              `json:"placeholder,omitempty"`
-	Provisioned []string            `json:"provisioned,omitempty"`
 }
 
 func (r trustRecord) allowlist() []string {
@@ -56,18 +57,17 @@ func (r trustRecord) allowlist() []string {
 	return slices.Compact(trusted)
 }
 
-func (r trustRecord) withClaim(hostname string, certificates []string) trustRecord {
-	r = r.withCarried(certificates)
+func (r trustRecord) recordClaim(hostname string, certificates []string) trustRecord {
+	r = r.addToHostnamesSharing(certificates)
 	r.Hostnames[hostname] = sortedCertificates(certificates)
 	return r
 }
 
-func (r trustRecord) withCarried(certificates []string) trustRecord {
-	carried := sortedCertificates(certificates)
+func (r trustRecord) addToHostnamesSharing(certificates []string) trustRecord {
 	hostnames := make(map[string][]string, len(r.Hostnames)+1)
 	for hostname, held := range r.Hostnames {
-		if slices.ContainsFunc(held, func(certificate string) bool { return slices.Contains(carried, certificate) }) {
-			held = carried
+		if slices.ContainsFunc(held, func(certificate string) bool { return slices.Contains(certificates, certificate) }) {
+			held = sortedCertificates(slices.Concat(held, certificates))
 		}
 		hostnames[hostname] = held
 	}
@@ -75,12 +75,30 @@ func (r trustRecord) withCarried(certificates []string) trustRecord {
 	return r
 }
 
-func (r trustRecord) withoutClaims(hostnames []string) trustRecord {
+func (r trustRecord) removeClaims(hostnames []string) trustRecord {
 	r.Hostnames = maps.Clone(r.Hostnames)
 	for _, hostname := range hostnames {
 		delete(r.Hostnames, hostname)
 	}
 	return r
+}
+
+func (r trustRecord) refuseOverAllowlisted(tier environment.Tier) error {
+	if allowlisted := len(r.allowlist()); allowlisted > maxAllowlisted {
+		return refusal.Refuse(refusal.CodeInvalid,
+			"the %s load balancer of tier %s would trust %d client certificates, and a Certificate Manager trust config allowlists at most %d: delete the client certificates your Cloudflare zones no longer present, and deploy again",
+			Kind, tier, allowlisted, maxAllowlisted)
+	}
+	return nil
+}
+
+func fingerprintAllowlist(allowlist []string) string {
+	sum := sha256.New()
+	for _, certificate := range sortedCertificates(allowlist) {
+		sum.Write([]byte(certificate))
+		sum.Write([]byte{0})
+	}
+	return hex.EncodeToString(sum.Sum(nil))
 }
 
 func sortedCertificates(certificates []string) []string {
@@ -114,6 +132,9 @@ func (e *Edge) changeTrust(ctx context.Context, tier environment.Tier, change fu
 		changed := change(read)
 		if reflect.DeepEqual(changed, read) {
 			return read, nil
+		}
+		if err := changed.refuseOverAllowlisted(tier); err != nil {
+			return trustRecord{}, err
 		}
 		if entry.Value, err = json.Marshal(changed); err != nil {
 			return trustRecord{}, err
@@ -152,61 +173,66 @@ func (e *Edge) ensureAllowlist(ctx context.Context, tier environment.Tier) ([]st
 }
 
 func (e *Edge) trustClaim(ctx context.Context, tier environment.Tier, hostname string, certificates []string) (LoadBalancer, error) {
-	balancer, record, err := e.applyTrust(ctx, tier, func(read trustRecord) trustRecord { return read.withClaim(hostname, certificates) })
+	sharing := func(read trustRecord) trustRecord { return read.addToHostnamesSharing(certificates) }
+	_, sibling, err := e.readTrust(ctx, tier.Sibling())
+	if err != nil {
+		return LoadBalancer{}, err
+	}
+	if err := sharing(sibling).refuseOverAllowlisted(tier.Sibling()); err != nil {
+		return LoadBalancer{}, err
+	}
+	balancer, err := e.applyTrust(ctx, tier, func(read trustRecord) trustRecord { return read.recordClaim(hostname, certificates) })
 	if err != nil {
 		return LoadBalancer{}, err
 	}
 	if !balancer.provisioned() {
-		if balancer, err = e.raiseTrusting(ctx, tier, record.allowlist()); err != nil {
+		if balancer, err = e.raiseTrusting(ctx, tier); err != nil {
 			return LoadBalancer{}, err
 		}
 	}
-	if _, _, err := e.applyTrust(ctx, tier.Sibling(), func(read trustRecord) trustRecord { return read.withCarried(certificates) }); err != nil {
+	if _, err := e.applyTrust(ctx, tier.Sibling(), sharing); err != nil {
 		return LoadBalancer{}, err
 	}
 	return balancer, nil
 }
 
 func (e *Edge) withdrawClaims(ctx context.Context, tier environment.Tier, hostnames ...string) error {
-	_, _, err := e.applyTrust(ctx, tier, func(read trustRecord) trustRecord { return read.withoutClaims(hostnames) })
+	_, err := e.applyTrust(ctx, tier, func(read trustRecord) trustRecord { return read.removeClaims(hostnames) })
 	return err
 }
 
-func (e *Edge) applyTrust(ctx context.Context, tier environment.Tier, change func(trustRecord) trustRecord) (LoadBalancer, trustRecord, error) {
+func (e *Edge) applyTrust(ctx context.Context, tier environment.Tier, change func(trustRecord) trustRecord) (LoadBalancer, error) {
 	outputs, err := e.deps.Stacks.Outputs(ctx, e.loadBalancerTarget(tier))
 	if err != nil {
-		return LoadBalancer{}, trustRecord{}, err
+		return LoadBalancer{}, err
 	}
 	balancer := loadBalancerOf(outputs)
 	balancer.Shielded = true
 	record, err := e.changeTrust(ctx, tier, change)
 	if err != nil {
-		return LoadBalancer{}, trustRecord{}, err
-	}
-	allowlist := record.allowlist()
-	if len(allowlist) > maxAllowlisted {
-		return LoadBalancer{}, trustRecord{}, fmt.Errorf("the %s load balancer of tier %s would trust %d client certificates, and a Certificate Manager trust config allowlists at most %d: delete the client certificates your Cloudflare zones no longer present, and deploy again",
-			Kind, tier, len(allowlist), maxAllowlisted)
-	}
-	if !balancer.provisioned() || slices.Equal(record.Provisioned, allowlist) {
-		return balancer, record, nil
-	}
-	balancer, err = e.raiseTrusting(ctx, tier, allowlist)
-	return balancer, record, err
-}
-
-func (e *Edge) raiseTrusting(ctx context.Context, tier environment.Tier, allowlist []string) (LoadBalancer, error) {
-	balancer, err := e.raise(ctx, tier, progress.DiscardProgress())
-	if err != nil {
 		return LoadBalancer{}, err
 	}
-	_, err = e.changeTrust(ctx, tier, func(read trustRecord) trustRecord {
-		if slices.Equal(read.allowlist(), allowlist) {
-			read.Provisioned = allowlist
+	if !balancer.provisioned() || balancer.AllowlistFingerprint == fingerprintAllowlist(record.allowlist()) {
+		return balancer, nil
+	}
+	return e.raiseTrusting(ctx, tier)
+}
+
+func (e *Edge) raiseTrusting(ctx context.Context, tier environment.Tier) (LoadBalancer, error) {
+	for range trustAttempts {
+		balancer, err := e.raise(ctx, tier, progress.DiscardProgress())
+		if err != nil {
+			return LoadBalancer{}, err
 		}
-		return read
-	})
-	return balancer, err
+		_, record, err := e.readTrust(ctx, tier)
+		if err != nil {
+			return LoadBalancer{}, err
+		}
+		if balancer.AllowlistFingerprint == fingerprintAllowlist(record.allowlist()) {
+			return balancer, nil
+		}
+	}
+	return LoadBalancer{}, fmt.Errorf("raise the %s load balancer of tier %s trusting the client certificates recorded for it: they changed under every one of %d raises", Kind, tier, trustAttempts)
 }
 
 func (e *Edge) loadBalancerFor(claim router.Claim) *Edge {

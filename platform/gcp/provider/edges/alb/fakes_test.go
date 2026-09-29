@@ -35,6 +35,7 @@ type world struct {
 	declared map[string]map[string]declaration
 	breaks   map[string]error
 	pinning  error
+	onUp     func()
 }
 
 func newWorld() *world {
@@ -65,9 +66,16 @@ func (w *world) Up(_ context.Context, target Target, program Program, _ progress
 	if program == nil {
 		return nil, errors.New("a stack was raised with no program to raise")
 	}
+	w.mu.Lock()
+	overlapping := w.onUp
+	w.onUp = nil
+	w.mu.Unlock()
 	seen, err := declared(program)
 	if err != nil {
 		return nil, err
+	}
+	if overlapping != nil {
+		overlapping()
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -83,11 +91,31 @@ func (w *world) Up(_ context.Context, target Target, program Program, _ progress
 		}
 	}
 	w.backends[stack] = backends
+	if trust, shielding := trustConfigOf(seen); shielding {
+		if w.outputs[stack] == nil {
+			w.outputs[stack] = map[string]string{}
+		}
+		w.outputs[stack][outputAllowlist] = fingerprintAllowlist(trust)
+	}
 	if outputs, up := w.outputs[stack]; up {
 		return maps.Clone(outputs), nil
 	}
 	w.outputs[stack] = map[string]string{}
 	return map[string]string{}, nil
+}
+
+func trustConfigOf(seen map[string]declaration) ([]string, bool) {
+	for _, declared := range seen {
+		if declared.Token != "gcp:certificatemanager/trustConfig:TrustConfig" {
+			continue
+		}
+		var pems []string
+		for _, entry := range declared.Args["allowlistedCertificates"].([]any) {
+			pems = append(pems, entry.(map[string]any)["pemCertificate"].(string))
+		}
+		return pems, true
+	}
+	return nil, false
 }
 
 func (w *world) Destroy(_ context.Context, target Target, _ progress.Progress) error {
@@ -177,6 +205,12 @@ func (w *world) Pin(ctx context.Context, service, revision string, stillActive r
 		w.mu.Unlock()
 		return nil
 	}
+}
+
+func (w *world) beforeNextUp(fn func()) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.onUp = fn
 }
 
 func (w *world) refusePins(err error) {

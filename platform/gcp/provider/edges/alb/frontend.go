@@ -232,6 +232,7 @@ func loadBalancerProgram(spec loadBalancerSpec) Program {
 			}
 			proxyArgs.ServerTlsPolicy = pulumi.Sprintf(serverPolicyPath, project, spec.Names.Policy)
 			validating = append(validating, pulumi.DependsOn([]pulumi.Resource{policy}))
+			ctx.Export(outputAllowlist, pulumi.String(fingerprintAllowlist(spec.ClientCertificates)))
 		}
 		proxy, err := compute.NewTargetHttpsProxy(ctx, spec.Names.Proxy, proxyArgs, validating...)
 		if err != nil {
