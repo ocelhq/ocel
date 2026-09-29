@@ -150,7 +150,7 @@ func headersPolicyResource(ns Namespace, tier environment.Tier) string {
             - Header: %q
             - Header: %q
 `, ns.edgeHeadersPolicyName(tier),
-		fmt.Sprintf("Ocel: names the %q router on every response it served, so a probe can tell which router answered, and drops cache tags.", KindCloudFront),
+		fmt.Sprintf("Ocel: names the %q router on each response it served, so a probe knows which router answered, and drops cache tags.", KindCloudFront),
 		router.HeaderRouter, KindCloudFront, EdgeCacheTagHeader, edge.HeaderEmptyBody)
 }
 

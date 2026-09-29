@@ -206,3 +206,39 @@ func TestTheCoreContainsNothingACloudFrontFrontNeeds(t *testing.T) {
 		})
 	}
 }
+
+func TestEveryCommentTheCloudFrontEdgeSetsFitsTheLengthCloudFrontAccepts(t *testing.T) {
+	const cloudFrontCommentLimit = 128
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		t.Run(string(tier), func(t *testing.T) {
+			var doc yaml.Node
+			if err := yaml.Unmarshal([]byte(featureTemplate(FeatureCloudFrontEdge, tier)), &doc); err != nil {
+				t.Fatalf("template is not valid YAML: %v", err)
+			}
+			comments := yamlValuesAt(&doc, "Comment")
+			if len(comments) == 0 {
+				t.Fatal("the template sets no Comment at all")
+			}
+			for _, comment := range comments {
+				if n := len([]rune(comment)); n > cloudFrontCommentLimit {
+					t.Errorf("Comment %q is %d characters; CloudFront refuses one over %d", comment, n, cloudFrontCommentLimit)
+				}
+			}
+		})
+	}
+}
+
+func yamlValuesAt(node *yaml.Node, key string) []string {
+	var values []string
+	if node.Kind == yaml.MappingNode {
+		for i := 0; i+1 < len(node.Content); i += 2 {
+			if node.Content[i].Value == key && node.Content[i+1].Kind == yaml.ScalarNode {
+				values = append(values, node.Content[i+1].Value)
+			}
+		}
+	}
+	for _, child := range node.Content {
+		values = append(values, yamlValuesAt(child, key)...)
+	}
+	return values
+}
