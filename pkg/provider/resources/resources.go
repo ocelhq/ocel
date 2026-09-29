@@ -31,13 +31,15 @@ type Hooks struct {
 }
 
 type FunctionHooks struct {
-	Provision func(ctx context.Context, spec provider.StackSpec, progress progress.Progress) ([]provider.Function, error)
-	Remove    func(ctx context.Context, ref provider.StackRef, functions []provider.Function, progress progress.Progress) error
+	Provision       func(ctx context.Context, spec provider.StackSpec, progress progress.Progress) ([]provider.Function, error)
+	Remove          func(ctx context.Context, ref provider.StackRef, functions []provider.Function, progress progress.Progress) error
+	RemoveRevisions func(ctx context.Context, ref provider.StackRef, functions []provider.Function, progress progress.Progress) error
 }
 
 type ContainerHooks struct {
-	Provision func(ctx context.Context, spec provider.StackSpec, progress progress.Progress) ([]provider.AppContainer, error)
-	Remove    func(ctx context.Context, ref provider.StackRef, containers []provider.AppContainer, progress progress.Progress) error
+	Provision       func(ctx context.Context, spec provider.StackSpec, progress progress.Progress) ([]provider.AppContainer, error)
+	Remove          func(ctx context.Context, ref provider.StackRef, containers []provider.AppContainer, progress progress.Progress) error
+	RemoveRevisions func(ctx context.Context, ref provider.StackRef, containers []provider.AppContainer, progress progress.Progress) error
 }
 
 type ImageRetentionHooks struct {
@@ -280,7 +282,17 @@ func (f *hookStacks) removeFunctions(ctx context.Context, ref provider.StackRef,
 	if f.hooks.Functions == nil {
 		return refuseOrphans(ref, len(going), "function", because, "Functions")
 	}
-	return f.hooks.Functions.Remove(ctx, ref, going, progress)
+	elsewhere, err := f.readServedElsewhere(ctx, ref)
+	if err != nil {
+		return err
+	}
+	whole, revisions := splitShared(going, elsewhere, func(function provider.Function) physicalRevision {
+		return physicalRevision{physical: function.Physical, revision: function.Revision}
+	})
+	if err := removeAll(ctx, ref, whole, f.hooks.Functions.Remove, progress); err != nil {
+		return err
+	}
+	return removeAll(ctx, ref, revisions, f.hooks.Functions.RemoveRevisions, progress)
 }
 
 func (f *hookStacks) removeContainers(ctx context.Context, ref provider.StackRef, going []provider.AppContainer, because string, progress progress.Progress) error {
@@ -290,7 +302,75 @@ func (f *hookStacks) removeContainers(ctx context.Context, ref provider.StackRef
 	if f.hooks.Containers == nil {
 		return refuseOrphans(ref, len(going), "container", because, "Containers")
 	}
-	return f.hooks.Containers.Remove(ctx, ref, going, progress)
+	elsewhere, err := f.readServedElsewhere(ctx, ref)
+	if err != nil {
+		return err
+	}
+	whole, revisions := splitShared(going, elsewhere, func(container provider.AppContainer) physicalRevision {
+		return physicalRevision{physical: container.Physical, revision: container.Revision}
+	})
+	if err := removeAll(ctx, ref, whole, f.hooks.Containers.Remove, progress); err != nil {
+		return err
+	}
+	return removeAll(ctx, ref, revisions, f.hooks.Containers.RemoveRevisions, progress)
+}
+
+type physicalRevision struct {
+	physical string
+	revision string
+}
+
+func (f *hookStacks) readServedElsewhere(ctx context.Context, ref provider.StackRef) (map[physicalRevision]bool, error) {
+	stacks, err := stackrecords.List(ctx, f.keyValues, ref.Tier, ref.Project)
+	if err != nil {
+		return nil, err
+	}
+	elsewhere := map[physicalRevision]bool{}
+	mark := func(physical, revision string) {
+		if physical == "" {
+			return
+		}
+		elsewhere[physicalRevision{physical: physical}] = true
+		elsewhere[physicalRevision{physical: physical, revision: revision}] = true
+	}
+	for _, stack := range stacks {
+		if stack.Name == ref.Name {
+			continue
+		}
+		for _, function := range stack.Functions {
+			mark(function.Physical, function.Revision)
+		}
+		for _, container := range stack.Containers {
+			mark(container.Physical, container.Revision)
+		}
+	}
+	return elsewhere, nil
+}
+
+func splitShared[T any](going []T, elsewhere map[physicalRevision]bool, revisionOf func(T) physicalRevision) (whole, revisions []T) {
+	for _, each := range going {
+		named := revisionOf(each)
+		switch {
+		case !elsewhere[physicalRevision{physical: named.physical}]:
+			whole = append(whole, each)
+		case named.revision != "" && !elsewhere[named]:
+			revisions = append(revisions, each)
+		}
+	}
+	return whole, revisions
+}
+
+func removeAll[T any](
+	ctx context.Context,
+	ref provider.StackRef,
+	going []T,
+	remove func(context.Context, provider.StackRef, []T, progress.Progress) error,
+	progress progress.Progress,
+) error {
+	if len(going) == 0 || remove == nil {
+		return nil
+	}
+	return remove(ctx, ref, going, progress)
 }
 
 func refuseOrphans(ref provider.StackRef, going int, noun, because, hook string) error {

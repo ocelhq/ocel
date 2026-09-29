@@ -13,6 +13,7 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -21,7 +22,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
+	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 func seedPromotions(t *testing.T, provider *fake.Provider, tier environment.Tier, slug, pointer string, ids ...string) *ledger.Ledger {
@@ -406,6 +409,76 @@ func TestAPruneSaysWhichPromotionsItReclaimedAndHowManyItKept(t *testing.T) {
 				t.Errorf("the prune said %q, want %q", said, tc.wants)
 			}
 		})
+	}
+}
+
+type serviceEveryReleaseRevises struct {
+	mu               sync.Mutex
+	removed          []string
+	removedRevisions []string
+}
+
+func (s *serviceEveryReleaseRevises) hooks() resources.Hooks {
+	return resources.Hooks{Functions: &resources.FunctionHooks{
+		Provision: func(context.Context, provider.StackSpec, progress.Progress) ([]provider.Function, error) {
+			return nil, nil
+		},
+		Remove: func(_ context.Context, _ provider.StackRef, functions []provider.Function, _ progress.Progress) error {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			for _, function := range functions {
+				s.removed = append(s.removed, function.Physical)
+			}
+			return nil
+		},
+		RemoveRevisions: func(_ context.Context, _ provider.StackRef, functions []provider.Function, _ progress.Progress) error {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			for _, function := range functions {
+				s.removedRevisions = append(s.removedRevisions, function.Revision)
+			}
+			return nil
+		},
+	}}
+}
+
+func TestAPruneTakesOnlyTheDroppedReleasesRevisionFromTheServiceTheKeptReleasesServeFrom(t *testing.T) {
+	t.Parallel()
+
+	service := &serviceEveryReleaseRevises{}
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"}).ResourceStacks(service.hooks())
+	client := servedProvider(t, "1.0.0", vendor)
+	edgeProvisioned(t, vendor, environment.TierProduction, "shop")
+	seedPromotions(t, vendor, environment.TierProduction, "shop", "", "p1", "p2", "p3")
+	for i := range 3 {
+		name := naming.AppStack(stackrecords.ProductionEnv, "web", releaseOf(t, buildIdentity(i)))
+		if err := stackrecords.Write(context.Background(), vendor.KeyValues(), environment.TierProduction, "shop", name, stackrecords.Stack{
+			Kind:      provider.StackApp,
+			App:       "web",
+			Build:     buildIdentity(i),
+			Functions: []provider.Function{{Name: "api", Physical: "shop-web-api", Revision: fmt.Sprintf("shop-web-api-%05d", i+1)}},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	stream, err := client.RemoveStalePromotions(context.Background(), &contractv1.RemoveStalePromotionsRequest{
+		Slug:        "shop",
+		KeepN:       2,
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
+	})
+	if err != nil {
+		t.Fatalf("RemoveStalePromotions() error = %v", err)
+	}
+	if result, err := drain(stream); err != nil || !result.GetSuccess() {
+		t.Fatalf("RemoveStalePromotions() = %q, %v", result.GetError(), err)
+	}
+
+	if len(service.removed) != 0 {
+		t.Errorf("the prune took down %v, which the kept promotions serve from", service.removed)
+	}
+	if want := []string{"shop-web-api-00001"}; !slices.Equal(service.removedRevisions, want) {
+		t.Errorf("the prune removed revisions %v, want %v: only the revision the pruned promotion's build deployed", service.removedRevisions, want)
 	}
 }
 

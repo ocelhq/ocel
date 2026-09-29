@@ -16,10 +16,11 @@ import (
 const trafficByLatest = "TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST"
 
 type runServer struct {
-	mu       sync.Mutex
-	service  *run.GoogleCloudRunV2Service
-	revision int
-	writes   int
+	mu        sync.Mutex
+	service   *run.GoogleCloudRunV2Service
+	revision  int
+	revisions []string
+	writes    int
 
 	created  []*run.GoogleCloudRunV2Service
 	patched  []*run.GoogleCloudRunV2Service
@@ -52,8 +53,11 @@ func (s *runServer) serve(t *testing.T) http.HandlerFunc {
 			s.create(w, r)
 		case r.Method == http.MethodPatch:
 			s.patch(w, r)
+		case r.Method == http.MethodDelete && strings.Contains(path, "/revisions/"):
+			s.deleteRevision(w, revisionName(path))
 		case r.Method == http.MethodDelete:
 			s.service = nil
+			s.revisions = nil
 			writeBody(w, &run.GoogleLongrunningOperation{Name: "operations/delete", Done: true})
 		case r.Method == http.MethodGet && strings.Contains(path, "/operations/"):
 			writeBody(w, &run.GoogleLongrunningOperation{Name: strings.TrimPrefix(path, "/v2/"), Done: true})
@@ -128,6 +132,26 @@ func (s *runServer) revised() {
 	s.writes++
 	s.service.LatestReadyRevision = s.service.Name + "/revisions/" + revisionName(s.service.Name) + "-0000" + strconv.Itoa(s.revision)
 	s.service.Etag = "etag-" + strconv.Itoa(s.writes)
+	s.revisions = append(s.revisions, revisionName(s.service.LatestReadyRevision))
+}
+
+func (s *runServer) deleteRevision(w http.ResponseWriter, revision string) {
+	if s.service == nil || !slices.Contains(s.revisions, revision) {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(`{"error":{"code":404,"message":"revision not found"}}`))
+		return
+	}
+	routed := slices.ContainsFunc(s.service.Traffic, func(target *run.GoogleCloudRunV2TrafficTarget) bool {
+		return revisionName(target.Revision) == revision ||
+			target.Type == trafficByLatest && revisionName(s.service.LatestReadyRevision) == revision
+	})
+	if routed || revisionName(s.service.LatestReadyRevision) == revision {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":{"code":400,"status":"FAILED_PRECONDITION","message":"revision ` + revision + ` is the latest or can receive traffic"}}`))
+		return
+	}
+	s.revisions = slices.DeleteFunc(s.revisions, func(standing string) bool { return standing == revision })
+	writeBody(w, &run.GoogleLongrunningOperation{Name: "operations/delete-revision", Done: true})
 }
 
 func allocated(traffic []*run.GoogleCloudRunV2TrafficTarget) []*run.GoogleCloudRunV2TrafficTarget {
@@ -206,6 +230,12 @@ func (s *runServer) releases() []*run.GoogleCloudRunV2Service {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return slices.Clone(s.patched)
+}
+
+func (s *runServer) standing() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.revisions)
 }
 
 func (s *runServer) tries() int {
