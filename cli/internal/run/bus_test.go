@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -12,8 +13,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/progress"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/pkg/statedir"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/types/descriptorpb"
 )
 
 type recording struct {
@@ -233,4 +237,50 @@ func TestATraceSpansDebugDetailReachesEverySinkAsDetailOfItsSubjectAndTheRunsLog
 	if n := strings.Count(string(logged), "installing dependencies"); n != 1 {
 		t.Errorf("the run's log holds the line %d times, want once:\n%s", n, logged)
 	}
+}
+
+func TestNoFieldReachableFromARunEventCanCarryASecret(t *testing.T) {
+	found := secretBearingFields((&streamv1.RunEvent{}).ProtoReflect().Descriptor())
+	if len(found) > 0 {
+		t.Fatalf("run events reach secret-bearing fields %v; the bus writes every event to the terminal, the run log and the trace unredacted", found)
+	}
+}
+
+func TestTheSecretFieldWalkFindsARedactedFieldInAReachableMessage(t *testing.T) {
+	found := secretBearingFields((&bindingsv1.Binding{}).ProtoReflect().Descriptor())
+	if !slices.Contains(found, "common.bindings.v1.PostgresProperties.password") {
+		t.Fatalf("secret-bearing fields of a binding = %v, want the postgres password among them", found)
+	}
+}
+
+func secretBearingFields(root protoreflect.MessageDescriptor) []string {
+	var found []string
+	seen := map[protoreflect.FullName]bool{}
+	var walk func(md protoreflect.MessageDescriptor)
+	walk = func(md protoreflect.MessageDescriptor) {
+		if seen[md.FullName()] {
+			return
+		}
+		seen[md.FullName()] = true
+		switch md.FullName() {
+		case "google.protobuf.Struct", "google.protobuf.Value", "google.protobuf.ListValue", "google.protobuf.Any":
+			found = append(found, string(md.FullName()))
+			return
+		}
+		fields := md.Fields()
+		for i := range fields.Len() {
+			fd := fields.Get(i)
+			if opts, ok := fd.Options().(*descriptorpb.FieldOptions); ok && opts.GetDebugRedact() {
+				found = append(found, string(fd.FullName()))
+			}
+			if fd.IsMap() {
+				fd = fd.MapValue()
+			}
+			if fd.Message() != nil {
+				walk(fd.Message())
+			}
+		}
+	}
+	walk(root)
+	return found
 }
