@@ -90,6 +90,22 @@ func TestTheCloudflareProxyWritesOneProxiedRecordToTheOriginItForwardsTo(t *test
 	}
 }
 
+func TestTheCloudflareProxyRefusesAZoneThatReachesOriginsOverPlainHTTP(t *testing.T) {
+	for _, mode := range []string{"off", "flexible"} {
+		m := proxyZoneMock()
+		m.sslMode = mode
+		_, stack := reconciledProxy(t, m)
+
+		err := stack.BindDomain(context.Background(), edge.DomainBinding{Hostname: "shop.app.com", Origin: &edge.Origin{Address: "198.51.100.4"}})
+		if err == nil || !strings.Contains(err.Error(), mode) {
+			t.Errorf("BindDomain in a zone whose SSL mode is %s = %v, want it refused naming the mode: the origin answers only TLS carrying the zone's client certificate, which plain HTTP never presents", mode, err)
+		}
+		if len(m.createdRecords) != 0 {
+			t.Errorf("SSL mode %s: wrote %v, want nothing forwarded", mode, m.createdRecords)
+		}
+	}
+}
+
 func TestTheCloudflareProxyRefusesAHostnameItHasNoOriginFor(t *testing.T) {
 	_, stack := reconciledProxy(t, proxyZoneMock())
 

@@ -43,6 +43,7 @@ func deployPermissions() []string {
 var proxyPermissions = []string{
 	"Account · Account Settings · Read",
 	"Zone · Zone · Read",
+	"Zone · Zone Settings · Read",
 	"Zone · DNS · Edit",
 	"Zone · SSL and Certificates · Edit",
 	"Zone · Cache Purge · Purge",
