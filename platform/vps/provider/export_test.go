@@ -42,6 +42,10 @@ func DNSVerdict(ctx context.Context, look Lookup, hostname, address string) prov
 	return dnsVerdict(ctx, look, hostname, address, here, unread)
 }
 
+func ProxiedVerdict(ctx context.Context, look Lookup, serving provider.Liveness, hostname, address string) provider.HostCheck {
+	return proxiedVerdict(ctx, look, serving, hostname, address)
+}
+
 func DNSVerdicts(ctx context.Context, look Lookup, hostnames []string, address string) []provider.HostCheck {
 	return dnsVerdicts(ctx, look, hostnames, address)
 }

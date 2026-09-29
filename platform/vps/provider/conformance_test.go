@@ -57,8 +57,8 @@ func TestAProjectThatNamesNoEdgeIsAnsweredByTheSwitchboardOnTheBox(t *testing.T)
 
 	conformance.RunEdges(t, p.Facts(), registry)
 
-	if got := p.Facts().Edges; len(got) != 0 {
-		t.Errorf("Facts().Edges = %v, want none: the proxy on the box answers a hostname, and it is no edge", got)
+	if got := p.Facts().Edges; !slices.Equal(got, []edge.Kind{"cloudflare"}) {
+		t.Errorf("Facts().Edges = %v, want cloudflare alone: the proxy on the box answers a hostname, and it is no edge", got)
 	}
 	if got := p.Facts().DefaultEdge; got != edge.None {
 		t.Errorf("Facts().DefaultEdge = %q, want no edge: a deploy that names none reaches the box's own proxy", got)
@@ -67,7 +67,7 @@ func TestAProjectThatNamesNoEdgeIsAnsweredByTheSwitchboardOnTheBox(t *testing.T)
 		t.Errorf("ListPairedRouters(no edge) = %v, want the switchboard alone", got)
 	}
 
-	for _, named := range []edge.Kind{"cloudflare", "box"} {
+	for _, named := range []edge.Kind{"cloudfront", "box"} {
 		var rejection refusal.Refusal
 		opened, err := registry.Open(named)
 		if !errors.As(err, &rejection) || rejection.Code != refusal.CodeInvalid {
@@ -79,6 +79,25 @@ func TestAProjectThatNamesNoEdgeIsAnsweredByTheSwitchboardOnTheBox(t *testing.T)
 		if strings.Contains(strings.ToLower(rejection.Message), "rout") {
 			t.Errorf("Open(%s) refused with %q; a router is never user-facing, so no refusal names one", named, rejection.Message)
 		}
+	}
+}
+
+func TestCloudflareFrontsTheBoxAsAProxyThatRunsNoCodeAndForwardsToTheSwitchboard(t *testing.T) {
+	t.Parallel()
+
+	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
+	front, err := p.Edges().Open("cloudflare")
+	if err != nil {
+		t.Fatalf("Open(cloudflare) = %v, want the Cloudflare proxy", err)
+	}
+	if facts := front.Facts(); facts.RunsCode || !facts.ProxiesRecords || facts.ServesUnbound {
+		t.Errorf("the cloudflare edge's facts = %+v, want a proxy that forwards records to an origin and runs no worker", facts)
+	}
+	if front.Hooks().EnsureClientCertificate == nil {
+		t.Error("the cloudflare edge presents no client certificate, so the box could not refuse a request that did not come through it")
+	}
+	if got := p.Facts().ListPairedRouters("cloudflare"); !slices.Equal(got, []router.Kind{switchboard.RouterKind}) {
+		t.Errorf("ListPairedRouters(cloudflare) = %v, want the switchboard alone", got)
 	}
 }
 

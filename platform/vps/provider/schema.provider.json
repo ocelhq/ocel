@@ -2,7 +2,9 @@
   "dns": [
     "cloudflare"
   ],
-  "edges": [],
+  "edges": [
+    "cloudflare"
+  ],
   "id": "vps",
   "options": {
     "additionalProperties": false,

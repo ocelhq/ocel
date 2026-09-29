@@ -73,7 +73,7 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 			return nil, provider.RefusalError(err)
 		}
 		if req.GetCheckHosts() {
-			resp.HostChecks = h.hostChecks(ctx, p, tier, req.GetHostCheckDomains())
+			resp.HostChecks = h.hostChecks(ctx, p, provider.HostCheckRequest{Tier: tier, Edge: gate.Edge, Hostnames: req.GetHostCheckDomains()})
 		}
 		if tier == environment.TierPreview {
 			resp.PreviewWildcard, err = recordedPreviewWildcard(ctx, p)

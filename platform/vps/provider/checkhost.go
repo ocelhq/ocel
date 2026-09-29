@@ -12,7 +12,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 const (
@@ -63,6 +65,9 @@ func (p *Provider) CheckHost(ctx context.Context, req provider.HostCheckRequest)
 		}}, nil
 	}
 	checks := dnsVerdicts(ctx, p.lookup(), req.Hostnames, address)
+	if req.Edge == cloudflare.Kind {
+		checks = proxiedVerdicts(ctx, p.lookup(), p.Liveness(), req.Hostnames, address)
+	}
 	if p.host.FrontProxy().Guarantees().OwnsPorts {
 		checks = append(checks, reachVerdict(ctx, p.reach(), address))
 	}
@@ -74,7 +79,7 @@ func (p *Provider) CheckHost(ctx context.Context, req provider.HostCheckRequest)
 	return append(checks, p.host.CheckSwitchboard(ctx, req.Tier)), nil
 }
 
-func dnsVerdicts(ctx context.Context, look Lookup, hostnames []string, address string) []provider.HostCheck {
+func askedHostnames(hostnames []string) []string {
 	var asked []string
 	for _, hostname := range hostnames {
 		named := edge.ProbeHostname(hostname)
@@ -83,6 +88,56 @@ func dnsVerdicts(ctx context.Context, look Lookup, hostnames []string, address s
 		}
 		asked = append(asked, named)
 	}
+	return asked
+}
+
+func proxiedVerdicts(ctx context.Context, look Lookup, serving provider.Liveness, hostnames []string, address string) []provider.HostCheck {
+	var checks []provider.HostCheck
+	for _, named := range askedHostnames(hostnames) {
+		checks = append(checks, proxiedVerdict(ctx, look, serving, named, address))
+	}
+	return checks
+}
+
+func proxiedVerdict(ctx context.Context, look Lookup, serving provider.Liveness, hostname, address string) provider.HostCheck {
+	check := provider.HostCheck{Subject: hostname}
+	found, err := look(ctx, hostname)
+	switch {
+	case notResolved(err) || (err == nil && len(found) == 0):
+		check.Verdict = provider.HostNeedsAction
+		check.Finding = fmt.Sprintf("%s does not resolve, so Cloudflare forwards nothing to this box at %s", hostname, address)
+		check.Fix = "run `ocel domain add`, which writes the proxied record"
+		return check
+	case err != nil:
+		check.Verdict = provider.HostFail
+		check.Finding = fmt.Sprintf("resolve %s: %v", hostname, err)
+		return check
+	}
+	answered, err := serving.ServingRouter(ctx, hostname)
+	switch {
+	case err != nil:
+		check.Verdict = provider.HostFail
+		check.Finding = fmt.Sprintf("ask %s which router answers it: %v", hostname, err)
+	case answered == switchboard.RouterKind:
+		check.Verdict = provider.HostPass
+		check.Finding = fmt.Sprintf("%s resolves to Cloudflare at %s, and the %s on this box answers it", hostname, spell(found), answered)
+		return check
+	case answered != "":
+		check.Verdict = provider.HostFail
+		check.Finding = fmt.Sprintf("%s resolves to %s, and the %s answers it rather than the %s on this box", hostname, spell(found), answered, switchboard.RouterKind)
+	default:
+		check.Verdict = provider.HostFail
+		check.Finding = fmt.Sprintf("%s resolves to %s, and nothing on this box answered it through Cloudflare", hostname, spell(found))
+		if failure := serving.LastProbeFailure(hostname); failure != "" {
+			check.Finding += ": " + failure
+		}
+	}
+	check.Fix = fmt.Sprintf("point the proxied record for %s at %s in your Cloudflare zone", hostname, address)
+	return check
+}
+
+func dnsVerdicts(ctx context.Context, look Lookup, hostnames []string, address string) []provider.HostCheck {
+	asked := askedHostnames(hostnames)
 	if len(asked) == 0 {
 		return nil
 	}
