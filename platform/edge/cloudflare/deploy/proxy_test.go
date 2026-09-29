@@ -431,6 +431,42 @@ func TestTheCloudflareProxyTakesAZoneAnotherRunJustTurnedZoneLevelPullsOnFor(t *
 	}
 }
 
+func TestTheCloudflareProxyDeletesTheCertificateItUploadedWhenAnotherRunUploadedOneFirst(t *testing.T) {
+	m := proxyZoneMock()
+	m.afterListing = func(m *cfMock) {
+		m.clientCertificates = append(m.clientCertificates, map[string]any{"id": "other-run", "certificate": "OTHER RUN", "status": "pending_deployment", "uploaded_on": "2026-09-29T09:00:00Z"})
+	}
+
+	trusted, err := m.proxy(t).Hooks().ClientCertificates.Ensure(context.Background(), "shop.app.com")
+	if err != nil {
+		t.Fatalf("Ensure: %v", err)
+	}
+	if !slices.Equal(trusted, []string{"OTHER RUN"}) {
+		t.Errorf("Ensure = %v, want only the certificate the other run uploaded first: the zone keeps one, and every origin trusts that one", trusted)
+	}
+	if len(m.clientCertificates) != 1 || m.clientCertificates[0]["id"] != "other-run" {
+		t.Errorf("the zone holds %v, want the other run's certificate alone: Cloudflare asks that a zone keep one certificate active", m.clientCertificates)
+	}
+}
+
+func TestTheCloudflareProxyKeepsTheCertificateItUploadedFirstWhenAnotherRunUploadedOneAfter(t *testing.T) {
+	m := proxyZoneMock()
+	m.afterListing = func(m *cfMock) {
+		m.clientCertificates = append(m.clientCertificates, map[string]any{"id": "other-run", "certificate": "OTHER RUN", "status": "pending_deployment", "uploaded_on": "2026-09-29T11:00:00Z"})
+	}
+
+	trusted, err := m.proxy(t).Hooks().ClientCertificates.Ensure(context.Background(), "shop.app.com")
+	if err != nil {
+		t.Fatalf("Ensure: %v", err)
+	}
+	if len(m.deletedClientCertificates) != 0 {
+		t.Errorf("deleted %v, want the certificate uploaded first kept: the run that uploaded after it deletes its own", m.deletedClientCertificates)
+	}
+	if len(trusted) != 2 || !slices.Contains(trusted, "OTHER RUN") {
+		t.Errorf("Ensure = %v, want both certificates trusted until the other run deletes its own", trusted)
+	}
+}
+
 func TestTheCloudflareProxyIssuesAnOriginCertificateForAHostnameAndRevokesIt(t *testing.T) {
 	m := proxyZoneMock()
 	hooks := m.proxy(t).Hooks().OriginCertificates
