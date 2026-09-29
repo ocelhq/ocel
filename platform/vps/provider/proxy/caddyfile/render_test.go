@@ -20,27 +20,33 @@ func golden(t *testing.T, name string) string {
 	return string(read)
 }
 
-func TestTheSnippetIsOneSiteBlockOverEveryHostnameToTheSwitchboardOnItsNetwork(t *testing.T) {
+func TestTheSnippetIsOneSiteBlockOverEveryHostnameInEachWayYourCaddyRuns(t *testing.T) {
 	t.Parallel()
 
-	rendered, err := caddyfile.Caddyfile{Network: "coolify"}.Render(proxy.Spec{Hostnames: served, PreviewBase: "preview.example.com"})
-	if err != nil {
-		t.Fatalf("Render() = %v", err)
-	}
-	if want := golden(t, "network.caddy"); string(rendered) != want {
-		t.Errorf("Render() =\n%s\nwant\n%s", rendered, want)
-	}
-}
+	for name, each := range map[string]struct {
+		front  caddyfile.Caddyfile
+		golden string
+	}{
+		"a container on a network reaches the switchboard by name and holds streams open 30s": {
+			front: caddyfile.Caddyfile{Container: "caddy", Config: "/etc/caddy/Caddyfile", Network: "web"}, golden: "network.caddy"},
+		"Coolify's Caddy, a container on its network": {
+			front: caddyfile.Caddyfile{Preset: "coolify", Container: "coolify-proxy", Config: "/config/caddy/Caddyfile.autosave", Network: "coolify"}, golden: "network.caddy"},
+		"a container on the host's network reaches the loopback port and holds streams open 30s": {
+			front: caddyfile.Caddyfile{Container: "caddy", Config: "/etc/caddy/Caddyfile", Port: 8480}, golden: "hostnetwork.caddy"},
+		"a service reaches the loopback port, without stream_close_delay, which the 2.6 package refuses": {
+			front: caddyfile.Caddyfile{Port: 8480}, golden: "service.caddy"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 
-func TestTheSnippetReachesTheSwitchboardOnTheLoopbackPortWithoutANetwork(t *testing.T) {
-	t.Parallel()
-
-	rendered, err := caddyfile.Caddyfile{Port: 8480}.Render(proxy.Spec{Hostnames: served})
-	if err != nil {
-		t.Fatalf("Render() = %v", err)
-	}
-	if want := golden(t, "loopback.caddy"); string(rendered) != want {
-		t.Errorf("Render() =\n%s\nwant\n%s", rendered, want)
+			rendered, err := each.front.Render(proxy.Spec{Hostnames: served, PreviewBase: "preview.example.com"})
+			if err != nil {
+				t.Fatalf("Render() = %v", err)
+			}
+			if want := golden(t, each.golden); string(rendered) != want {
+				t.Errorf("Render() =\n%s\nwant\n%s", rendered, want)
+			}
+		})
 	}
 }
 
