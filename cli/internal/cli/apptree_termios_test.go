@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/cli/internal/childprocess"
+
 	"golang.org/x/sys/unix"
 )
 
@@ -83,7 +85,7 @@ func TestProcessTreeTermiosRestoredAfterSecondCtrlCForcedExit(t *testing.T) {
 	go func() { waitDone <- cmd.Wait() }()
 	select {
 	case <-waitDone:
-	case <-time.After(appChildGracePeriod + 5*time.Second):
+	case <-time.After(childprocess.GracePeriod + 5*time.Second):
 		_ = cmd.Process.Kill()
 		t.Fatal("CLI did not force-exit promptly after a second Ctrl-C")
 	}

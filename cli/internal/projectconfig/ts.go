@@ -11,8 +11,8 @@ import (
 
 	"github.com/evanw/esbuild/pkg/api"
 
+	"github.com/ocelhq/ocel/cli/internal/childprocess"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
-	"github.com/ocelhq/ocel/cli/internal/procgroup"
 	"github.com/ocelhq/ocel/pkg/constants"
 )
 
@@ -78,7 +78,7 @@ try {
 	cmd.Env = environment
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
-	procgroup.Guard(cmd)
+	childprocess.KillGroupOnCancel(cmd)
 	stdout, err := cmd.Output()
 	if err != nil {
 		if stderr.Len() > 0 {

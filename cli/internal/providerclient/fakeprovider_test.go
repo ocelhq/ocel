@@ -17,7 +17,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/cli/internal/procgroup"
+	"github.com/ocelhq/ocel/cli/internal/childprocess"
 	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -350,7 +350,7 @@ func spawnGrandchildSurvivor(keepPipe, ownGroup bool) error {
 		cmd.Stdout = os.Stdout
 	}
 	if ownGroup {
-		procgroup.Isolate(cmd)
+		childprocess.SetOwnGroup(cmd)
 	}
 	if err := cmd.Start(); err != nil {
 		return err

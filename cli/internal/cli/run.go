@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 
 	"github.com/spf13/cobra"
 
@@ -92,14 +91,9 @@ func runStandalone(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Co
 }
 
 func runChildOnce(ctx context.Context, deps cmddeps.Deps, appArgs []string, env map[string]string, stdin io.Reader, stdout, stderr io.Writer) error {
-	appCmd := exec.CommandContext(ctx, appArgs[0], appArgs[1:]...)
-	appCmd.Env = applyEnv(os.Environ(), env)
-	appCmd.Stdin = stdin
-	appCmd.Stdout = stdout
-	appCmd.Stderr = stderr
-	child, err := spawnAppChild(ctx, appCmd, stdin, deps.StdinIsTerminal(stdin))
+	child, err := startAppChild(ctx, deps, appArgs, env, stdin, stdout, stderr)
 	if err != nil {
 		return err
 	}
-	return appExitError(ctx, child.wait())
+	return appExitError(ctx, child.Wait())
 }

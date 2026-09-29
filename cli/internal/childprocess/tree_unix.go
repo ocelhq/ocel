@@ -1,15 +1,55 @@
 //go:build unix
 
-package cli
+package childprocess
 
 import (
 	"bufio"
+	"errors"
 	"io"
+	"os"
+	"os/exec"
 	"strconv"
 	"strings"
+	"syscall"
 )
 
 const descendantMaxPIDs = 4096
+
+func terminateTree(cmd *exec.Cmd) error {
+	return signalTree(cmd, syscall.SIGTERM)
+}
+
+func killTree(cmd *exec.Cmd) error {
+	return signalTree(cmd, syscall.SIGKILL)
+}
+
+func signalTree(cmd *exec.Cmd, sig syscall.Signal) error {
+	if cmd.Process == nil {
+		return os.ErrProcessDone
+	}
+	pid := cmd.Process.Pid
+	pids := append([]int{pid}, descendantPIDs(pid)...)
+
+	var firstErr error
+	delivered := false
+	for _, p := range pids {
+		err := syscall.Kill(p, sig)
+		switch {
+		case err == nil:
+			delivered = true
+		case errors.Is(err, syscall.ESRCH):
+		case firstErr == nil:
+			firstErr = err
+		}
+	}
+	if firstErr != nil {
+		return firstErr
+	}
+	if !delivered {
+		return os.ErrProcessDone
+	}
+	return nil
+}
 
 func descendantsOf(parents map[int]int, pid int) []int {
 	if len(parents) == 0 {

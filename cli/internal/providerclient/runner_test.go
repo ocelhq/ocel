@@ -17,7 +17,7 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	"github.com/ocelhq/ocel/cli/internal/procgroup"
+	"github.com/ocelhq/ocel/cli/internal/childprocess"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -685,7 +685,7 @@ func TestTeardownReapIsBounded(t *testing.T) {
 
 	cmd := exec.Command(os.Args[0])
 	cmd.Env = append(os.Environ(), fakeProviderEnvVar+"=1", fakeProviderModeEnvVar+"=never-ready")
-	procgroup.Isolate(cmd)
+	childprocess.SetOwnGroup(cmd)
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start process: %v", err)
 	}

@@ -19,6 +19,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
+	"github.com/ocelhq/ocel/cli/internal/childprocess"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/dev/leader"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
@@ -154,14 +155,14 @@ func runLeader(ctx context.Context, deps cmddeps.Deps, reset bool, cfg *projectc
 	}
 	for {
 		select {
-		case err := <-child.err:
+		case err := <-child.Exited():
 			return appExitError(ctx, err)
 		case env := <-updates:
 			if maps.Equal(env, resolved) {
 				continue
 			}
 			resolved = env
-			child.stop()
+			child.Stop()
 			child, err = startAppChild(ctx, deps, appArgs, resolved, stdin, stdout, stderr)
 			if err != nil {
 				return err
@@ -369,16 +370,16 @@ func runFollower(ctx context.Context, deps cmddeps.Deps, running leader.Leader, 
 
 	for {
 		select {
-		case err := <-child.err:
+		case err := <-child.Exited():
 			return appExitError(ctx, err)
 		case env := <-updates:
-			child.stop()
+			child.Stop()
 			child, err = startAppChild(ctx, deps, appArgs, env, stdin, stdout, stderr)
 			if err != nil {
 				return err
 			}
 		case <-streamDone:
-			child.stop()
+			child.Stop()
 			if ctx.Err() != nil {
 				return &exitsig.ExitError{Code: exitsig.InterruptCode}
 			}
@@ -388,13 +389,13 @@ func runFollower(ctx context.Context, deps cmddeps.Deps, running leader.Leader, 
 	}
 }
 
-func startAppChild(ctx context.Context, deps cmddeps.Deps, appArgs []string, env map[string]string, stdin io.Reader, stdout, stderr io.Writer) (*appChild, error) {
+func startAppChild(ctx context.Context, deps cmddeps.Deps, appArgs []string, env map[string]string, stdin io.Reader, stdout, stderr io.Writer) (*childprocess.Child, error) {
 	appCmd := exec.CommandContext(ctx, appArgs[0], appArgs[1:]...)
 	appCmd.Env = applyEnv(os.Environ(), env)
 	appCmd.Stdin = stdin
 	appCmd.Stdout = stdout
 	appCmd.Stderr = stderr
-	return spawnAppChild(ctx, appCmd, stdin, deps.StdinIsTerminal(stdin))
+	return childprocess.Start(ctx, appCmd, stdin, deps.StdinIsTerminal(stdin))
 }
 
 func appExitError(ctx context.Context, err error) error {
@@ -410,7 +411,7 @@ func waitExitError(err error) error {
 	}
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
-		return &exitsig.ExitError{Code: appExitCode(exitErr)}
+		return &exitsig.ExitError{Code: childprocess.ExitCode(exitErr)}
 	}
 	return err
 }

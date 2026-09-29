@@ -1,6 +1,6 @@
 //go:build unix && !linux
 
-package cli
+package childprocess
 
 import (
 	"bytes"

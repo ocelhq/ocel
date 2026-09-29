@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/cli/internal/childprocess"
+
 	"github.com/creack/pty"
 	"golang.org/x/sys/unix"
 
@@ -385,7 +387,7 @@ func TestProcessTreeNonOrphanedSecondCtrlCIsFatal(t *testing.T) {
 		if code := exitErr.ExitCode(); code != exitsig.InterruptCode {
 			t.Fatalf("CLI exit code = %d, want %d (forced exit on the second Ctrl-C)", code, exitsig.InterruptCode)
 		}
-	case <-time.After(appChildGracePeriod + 3*time.Second):
+	case <-time.After(childprocess.GracePeriod + 3*time.Second):
 		_ = cmd.Process.Kill()
 		t.Fatal("CLI did not force-exit promptly after a second Ctrl-C")
 	}

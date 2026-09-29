@@ -17,7 +17,7 @@ import (
 	"connectrpc.com/connect"
 	"connectrpc.com/validate"
 
-	"github.com/ocelhq/ocel/cli/internal/procgroup"
+	"github.com/ocelhq/ocel/cli/internal/childprocess"
 	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/channel"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -155,7 +155,7 @@ func Spawn(ctx context.Context, cfg Config) (*Runner, error) {
 
 	cmd := exec.Command(cfg.BinaryPath, cfg.Args...)
 	cmd.Env = env
-	procgroup.Isolate(cmd)
+	childprocess.SetOwnGroup(cmd)
 
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
@@ -195,7 +195,7 @@ func Spawn(ctx context.Context, cfg Config) (*Runner, error) {
 	go func() {
 		drainWG.Wait()
 		r.waitErr = cmd.Wait()
-		_ = procgroup.Kill(cmd)
+		_ = childprocess.KillGroup(cmd)
 		deregisterLive(r)
 		close(r.done)
 	}()
@@ -464,7 +464,7 @@ func KillAllLive() {
 	liveMu.Unlock()
 
 	for _, r := range runners {
-		_ = procgroup.Kill(r.cmd)
+		_ = childprocess.KillGroup(r.cmd)
 	}
 }
 
@@ -492,7 +492,7 @@ func (r *Runner) teardown() {
 	case <-r.done:
 		return
 	default:
-		_ = procgroup.Terminate(r.cmd)
+		_ = childprocess.TerminateGroup(r.cmd)
 		select {
 		case <-r.done:
 			return
@@ -503,7 +503,7 @@ func (r *Runner) teardown() {
 	select {
 	case <-r.done:
 	default:
-		_ = procgroup.Kill(r.cmd)
+		_ = childprocess.KillGroup(r.cmd)
 	}
 
 	// TODO: a pipe held open outside the group teardown owns (e.g. a

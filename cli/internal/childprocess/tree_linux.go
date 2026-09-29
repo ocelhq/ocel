@@ -1,6 +1,6 @@
 //go:build linux
 
-package cli
+package childprocess
 
 import (
 	"os"

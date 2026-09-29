@@ -1,6 +1,6 @@
 //go:build !unix
 
-package procgroup
+package childprocess
 
 import (
 	"errors"
@@ -8,15 +8,15 @@ import (
 	"os/exec"
 )
 
-func newGroup(cmd *exec.Cmd) {}
+func setOwnGroup(cmd *exec.Cmd) {}
 
-func terminate(cmd *exec.Cmd) error {
-	return kill(cmd)
+func terminateGroup(cmd *exec.Cmd) error {
+	return killGroup(cmd)
 }
 
-func kill(cmd *exec.Cmd) error {
+func killGroup(cmd *exec.Cmd) error {
 	if cmd.Process == nil {
-		return nil
+		return os.ErrProcessDone
 	}
 	err := cmd.Process.Kill()
 	if errors.Is(err, os.ErrPermission) {

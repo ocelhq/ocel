@@ -19,6 +19,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/cli/internal/childprocess"
+
 	"github.com/ocelhq/ocel/cli/internal/dev/leader"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/devstack"
@@ -902,7 +904,7 @@ func TestDevLeavesNothingBehind(t *testing.T) {
 		if devStackStopsWithin < docker.StopsWithin {
 			t.Errorf("the stack is given %s to stop and one container may take %s", devStackStopsWithin, docker.StopsWithin)
 		}
-		if spent := appChildWaitDelay + devStackStopsWithin; devShutdownWindow < spent+time.Second {
+		if spent := childprocess.WaitDelay + devStackStopsWithin; devShutdownWindow < spent+time.Second {
 			t.Errorf("the hard exit lands %s after the interrupt, and the app child then the stack may take %s", devShutdownWindow, spent)
 		}
 		if devShutdownWindow != 14*time.Second {
