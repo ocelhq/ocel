@@ -335,6 +335,32 @@ func TestSpanEventsAreIncludedButFiltered(t *testing.T) {
 	}
 }
 
+func TestARunsLogAndTraceAreReadableByTheirOwnerAlone(t *testing.T) {
+	dir := t.TempDir()
+	ctx, r, err := Start(context.Background(), dir, "ocel deploy")
+	if err != nil {
+		t.Fatalf("Start() = %v", err)
+	}
+	r.Log(ctx, "web", "building project")
+	if err := r.Close(); err != nil {
+		t.Fatalf("Close() = %v", err)
+	}
+
+	for path, want := range map[string]os.FileMode{
+		r.Dir():     0o700,
+		r.LogPath(): 0o600,
+		strings.TrimSuffix(r.LogPath(), ".ndjson") + ".otlp.json": 0o600,
+	} {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("stat %s: %v", path, err)
+		}
+		if got := info.Mode().Perm(); got != want {
+			t.Errorf("%s mode = %o, want %o", path, got, want)
+		}
+	}
+}
+
 func readLines(t *testing.T, path string) []string {
 	t.Helper()
 	raw, err := os.ReadFile(path)

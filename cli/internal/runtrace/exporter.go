@@ -85,7 +85,7 @@ func (e *fileExporter) flushLocked() error {
 	}
 
 	tmp := e.path + ".tmp"
-	if err := os.WriteFile(tmp, raw, 0o644); err != nil {
+	if err := os.WriteFile(tmp, raw, 0o600); err != nil {
 		return err
 	}
 	return os.Rename(tmp, e.path)

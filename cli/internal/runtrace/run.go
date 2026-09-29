@@ -50,12 +50,12 @@ func Start(ctx context.Context, projectDir, command string) (context.Context, *R
 	start := time.Now()
 	id := newTraceID()
 	dir := filepath.Join(projectDir, constants.ProjectStateDirName, "runs")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return ctx, nil, err
 	}
 
 	logPath := filepath.Join(dir, id.String()+".ndjson")
-	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		return ctx, nil, err
 	}
