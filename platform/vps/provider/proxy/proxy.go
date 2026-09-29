@@ -17,6 +17,7 @@ type Proxy interface {
 	Reload(ctx context.Context, served Spec) error
 	Inspect(ctx context.Context) (Checks, error)
 	Certificate(ctx context.Context, hostname string) (Certificate, error)
+	RefuseUnshielded(ctx context.Context, hostname string) error
 }
 
 const (

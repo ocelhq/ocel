@@ -27,3 +27,5 @@ func (Covert) Inspect(context.Context) (proxy.Checks, error) { return nil, nil }
 func (Covert) Certificate(context.Context, string) (proxy.Certificate, error) {
 	return proxy.Certificate{}, nil
 }
+
+func (Covert) RefuseUnshielded(context.Context, string) error { return nil }

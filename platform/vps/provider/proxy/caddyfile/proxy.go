@@ -83,6 +83,13 @@ func (c Caddyfile) Inspect(ctx context.Context) (proxy.Checks, error) {
 	return checks, nil
 }
 
+func (Caddyfile) RefuseUnshielded(_ context.Context, hostname string) error {
+	return refusal.Refuse(refusal.CodeInvalid,
+		"the site block ocel places for %s in %s requires no client certificate, so the edge in front would forward a hostname anyone reaches without it\n"+
+			"Put an edge in front of %s behind ocel's own proxy or with `\"proxy\": \"manual\"`, or bind it with no edge in front",
+		hostname, FileName, hostname)
+}
+
 func (Caddyfile) Certificate(context.Context, string) (proxy.Certificate, error) {
 	return proxy.Certificate{Renewal: Renewal}, nil
 }

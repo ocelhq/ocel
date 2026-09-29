@@ -293,3 +293,35 @@ func TestTheLoopbackVerbsTakeOneHostname(t *testing.T) {
 		}
 	}
 }
+
+func TestAPlainProbeNamesTheRouterThatAnswersAHostnameOverPlainHTTP(t *testing.T) {
+	var asked string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		asked = r.Host
+		w.Header().Set(router.HeaderRouter, "switchboard")
+		w.Header().Set(switchboard.HeardHeader, "http "+r.Host+" "+r.Host)
+	}))
+	t.Cleanup(server.Close)
+
+	code, out, errs := ran(t, "probe", "--plain", "--at", server.Listener.Addr().String(), "web.localhost")
+	if code != 0 || strings.TrimSpace(out) != "switchboard" {
+		t.Fatalf("probe --plain = %d, %q, %q, want the router that answered", code, out, errs)
+	}
+	if asked != "web.localhost" {
+		t.Errorf("the box was asked for %q over plain http, want web.localhost", asked)
+	}
+}
+
+func TestAPlainProbeOfAHostnameTheSwitchboardNeverHearsReportsItNotServed(t *testing.T) {
+	refusing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	t.Cleanup(refusing.Close)
+
+	for what, at := range map[string]string{"a refusal": refusing.Listener.Addr().String(), "a closed port": silent(t)} {
+		code, out, errs := ran(t, "probe", "--plain", "--at", at, "web.localhost")
+		if code != exitNotServingYet || strings.TrimSpace(out) != "" || errs == "" {
+			t.Errorf("probe --plain over %s = %d, %q, %q, want %d naming why nothing was served", what, code, out, errs, exitNotServingYet)
+		}
+	}
+}

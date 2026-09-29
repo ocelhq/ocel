@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -21,6 +22,7 @@ import (
 
 const (
 	servingAt      = "127.0.0.1:443"
+	plainAt        = "127.0.0.1:80"
 	servingTimeout = 10 * time.Second
 	exitUnservable = 6
 	answerBodyCap  = 1 << 12
@@ -28,7 +30,7 @@ const (
 
 func loopback(flags *flag.FlagSet, argv []string, errs io.Writer) (string, string, bool) {
 	flags.SetOutput(errs)
-	at := flags.String("at", servingAt, "")
+	at := flags.String("at", "", "")
 	if err := flags.Parse(argv); err != nil || flags.NArg() != 1 || flags.Arg(0) == "" {
 		return "", "", false
 	}
@@ -57,6 +59,7 @@ func leaf(argv []string, out, errs io.Writer) int {
 	if !ok {
 		return usage(errs)
 	}
+	at = cmp.Or(at, servingAt)
 	spoken, err := handshake(at, hostname)
 	var dialled *net.OpError
 	switch {
@@ -88,10 +91,15 @@ func leaf(argv []string, out, errs io.Writer) int {
 func probe(argv []string, out, errs io.Writer) int {
 	flags := flag.NewFlagSet("probe", flag.ContinueOnError)
 	anyCertificate := flags.Bool("any-certificate", false, "")
+	plain := flags.Bool("plain", false, "")
 	at, hostname, ok := loopback(flags, argv, errs)
 	if !ok {
 		return usage(errs)
 	}
+	if *plain {
+		return probePlain(cmp.Or(at, plainAt), hostname, out, errs)
+	}
+	at = cmp.Or(at, servingAt)
 	spoken, err := handshake(at, hostname)
 	if err != nil {
 		fmt.Fprintf(errs, "%s answered nothing over tls at %s: %v\n", hostname, at, oneLine(err))
@@ -135,6 +143,32 @@ func probe(argv []string, out, errs io.Writer) int {
 		return exitNotServingYet
 	}
 	fmt.Fprintln(out, answered)
+	return 0
+}
+
+func probePlain(at, hostname string, out, errs io.Writer) int {
+	client := &http.Client{
+		Timeout: servingTimeout,
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
+				return (&net.Dialer{}).DialContext(ctx, network, at)
+			},
+		},
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+	defer client.CloseIdleConnections()
+	answer, err := client.Get("http://" + hostname + edge.LivenessProbePath)
+	if err != nil {
+		fmt.Fprintf(errs, "%s answered nothing over plain http at %s: %v\n", hostname, at, oneLine(err))
+		return exitNotServingYet
+	}
+	defer answer.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(answer.Body, answerBodyCap))
+	if answer.Header.Get(switchboard.HeardHeader) == "" {
+		fmt.Fprintf(errs, "%s over plain http at %s answered %d, and %s never heard it\n", hostname, at, answer.StatusCode, switchboard.Name)
+		return exitNotServingYet
+	}
+	fmt.Fprintln(out, strings.TrimSpace(answer.Header.Get(router.HeaderRouter)))
 	return 0
 }
 

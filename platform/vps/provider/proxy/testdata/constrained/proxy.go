@@ -27,3 +27,5 @@ func (Constrained) Inspect(context.Context) (proxy.Checks, error) { return nil, 
 func (Constrained) Certificate(context.Context, string) (proxy.Certificate, error) {
 	return proxy.Certificate{}, nil
 }
+
+func (Constrained) RefuseUnshielded(context.Context, string) error { return nil }

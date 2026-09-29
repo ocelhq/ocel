@@ -37,3 +37,5 @@ func (c *Crowded) admit(_ context.Context, spec proxy.Spec) error {
 	c.admitted = spec
 	return nil
 }
+
+func (c *Crowded) RefuseUnshielded(context.Context, string) error { return nil }

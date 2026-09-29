@@ -31,3 +31,5 @@ func (*Grouped) Inspect(context.Context) (proxy.Checks, error) { return nil, nil
 func (*Grouped) Certificate(context.Context, string) (proxy.Certificate, error) {
 	return proxy.Certificate{}, nil
 }
+
+func (*Grouped) RefuseUnshielded(context.Context, string) error { return nil }

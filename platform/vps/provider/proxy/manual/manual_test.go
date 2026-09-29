@@ -25,6 +25,7 @@ type box struct {
 	shielded   []string
 	answers    map[string]router.Kind
 	failures   map[string]string
+	plain      map[string]router.Kind
 	unread     error
 }
 
@@ -51,6 +52,14 @@ func (b *box) Shielded(context.Context) ([]string, error) {
 func (b *box) Probe(_ context.Context, hostname string) (router.Kind, string, error) {
 	b.asked = append(b.asked, "probe "+hostname)
 	return b.answers[hostname], b.failures[hostname], nil
+}
+
+func (b *box) ProbePlainHTTP(_ context.Context, hostname string) (router.Kind, string, error) {
+	b.asked = append(b.asked, "plain "+hostname)
+	if answered, heard := b.plain[hostname]; heard {
+		return answered, "", nil
+	}
+	return "", hostname + " over plain http at 127.0.0.1:80 answered 403, and ocel-switchboard never heard it", nil
 }
 
 func on443() []listeners.Listener {
@@ -284,5 +293,52 @@ func TestYourProxyFailsTheCheckWhenItAnswersAShieldedHostnameToAClientWithNoCert
 	}
 	if open := verdicts["open.example.com"]; open.Verdict != provider.HostPass {
 		t.Errorf("open.example.com checks %+v, want the routing pass it had: nothing forwards it through an edge", open)
+	}
+}
+
+func TestYourProxyFailsTheCheckWhenItForwardsAShieldedHostnameOverPlainHTTP(t *testing.T) {
+	t.Parallel()
+
+	front := manual.Manual{Port: manual.DefaultPort, Box: &box{
+		listening: on443(),
+		claimed:   []string{"shop.example.com", "guarded.example.com"},
+		shielded:  []string{"shop.example.com", "guarded.example.com"},
+		failures: map[string]string{
+			"shop.example.com":    "remote error: tls: certificate required",
+			"guarded.example.com": "remote error: tls: certificate required",
+		},
+		plain: map[string]router.Kind{"shop.example.com": "switchboard"},
+	}}
+	checks, err := front.Inspect(context.Background())
+	if err != nil {
+		t.Fatalf("Inspect() = %v", err)
+	}
+	shop := verdicts(checks)["shop.example.com"]
+	if shop.Verdict != provider.HostFail || !strings.Contains(shop.Finding, "plain http") || !strings.Contains(shop.Fix, "port 80") {
+		t.Errorf("shop.example.com checks %+v, want a failure saying your proxy forwards it over plain http, and to stop forwarding it on port 80: a request there carries no client certificate", shop)
+	}
+	if guarded := verdicts(checks)["guarded.example.com"]; guarded.Verdict != provider.HostPass {
+		t.Errorf("guarded.example.com checks %+v, want a pass: your proxy refuses it both without a certificate and over plain http", guarded)
+	}
+}
+
+func TestYourProxyIsRefusedAShieldedHostnameItAnswersWithoutTheEdge(t *testing.T) {
+	t.Parallel()
+
+	for what, machine := range map[string]*box{
+		"over tls with no certificate": {answers: map[string]router.Kind{"shop.example.com": "switchboard"}},
+		"over plain http": {
+			failures: map[string]string{"shop.example.com": "remote error: tls: certificate required"},
+			plain:    map[string]router.Kind{"shop.example.com": "switchboard"},
+		},
+	} {
+		err := (manual.Manual{Box: machine}).RefuseUnshielded(context.Background(), "shop.example.com")
+		if err == nil || !strings.Contains(err.Error(), "client certificate") {
+			t.Errorf("RefuseUnshielded over a proxy answering %s = %v, want it refused naming what to require", what, err)
+		}
+	}
+	guarded := &box{failures: map[string]string{"shop.example.com": "remote error: tls: certificate required"}}
+	if err := (manual.Manual{Box: guarded}).RefuseUnshielded(context.Background(), "shop.example.com"); err != nil {
+		t.Errorf("RefuseUnshielded over a proxy refusing both = %v, want nil", err)
 	}
 }

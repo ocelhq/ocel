@@ -27,3 +27,5 @@ func (o *Overt) Inspect(context.Context) (proxy.Checks, error) { return nil, nil
 func (o *Overt) Certificate(context.Context, string) (proxy.Certificate, error) {
 	return proxy.Certificate{}, nil
 }
+
+func (o *Overt) RefuseUnshielded(context.Context, string) error { return nil }

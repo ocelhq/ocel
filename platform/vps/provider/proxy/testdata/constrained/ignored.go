@@ -31,3 +31,5 @@ func (Ignored) Inspect(context.Context) (proxy.Checks, error) { return nil, nil 
 func (Ignored) Certificate(context.Context, string) (proxy.Certificate, error) {
 	return proxy.Certificate{}, nil
 }
+
+func (Ignored) RefuseUnshielded(context.Context, string) error { return nil }
