@@ -1,4 +1,4 @@
-package cli
+package leader
 
 import (
 	"bufio"
@@ -8,17 +8,16 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/ocelhq/ocel/cli/internal/devlock"
 	"github.com/ocelhq/ocel/pkg/channel"
 )
 
-type envStream struct {
+type EnvStream struct {
 	resp   *http.Response
 	reader *bufio.Reader
 }
 
-func subscribeEnv(ctx context.Context, leader devlock.Lease) (*envStream, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+leader.Addr+"/env", nil)
+func Subscribe(ctx context.Context, leader Leader) (*EnvStream, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+leader.Address+"/env", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -33,10 +32,10 @@ func subscribeEnv(ctx context.Context, leader devlock.Lease) (*envStream, error)
 		resp.Body.Close()
 		return nil, fmt.Errorf("dev server answered %s", resp.Status)
 	}
-	return &envStream{resp: resp, reader: bufio.NewReader(resp.Body)}, nil
+	return &EnvStream{resp: resp, reader: bufio.NewReader(resp.Body)}, nil
 }
 
-func (s *envStream) next() (map[string]string, error) {
+func (s *EnvStream) Next() (map[string]string, error) {
 	for {
 		line, err := s.reader.ReadString('\n')
 		if err != nil {
@@ -54,4 +53,4 @@ func (s *envStream) next() (map[string]string, error) {
 	}
 }
 
-func (s *envStream) close() { s.resp.Body.Close() }
+func (s *EnvStream) Close() { s.resp.Body.Close() }

@@ -20,11 +20,10 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/devlock"
+	"github.com/ocelhq/ocel/cli/internal/dev/leader"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/devstack"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
-	"github.com/ocelhq/ocel/cli/internal/election"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
@@ -70,26 +69,26 @@ func runDev(ctx context.Context, deps cmddeps.Deps, reset bool, cwd string, appA
 	}
 
 	for range 3 {
-		role, err := election.Elect(cfg.Dir)
+		running, found, err := leader.Find(cfg.Dir)
 		if err != nil {
-			return fmt.Errorf("determine leader/follower role: %w", err)
+			return fmt.Errorf("look for a running ocel dev: %w", err)
 		}
 
-		if role.Role == election.Follower {
+		if found {
 			if reset {
 				return errors.New("`ocel dev` is already running for this project and owns its dev resources: stop it, then run `ocel dev --reset`")
 			}
-			return runFollower(ctx, deps, role.Leader, appArgs, stdout, stderr, stdin)
+			return runFollower(ctx, deps, running, appArgs, stdout, stderr, stdin)
 		}
 
-		if err := runLeader(ctx, deps, role, reset, cfg, appArgs, stdout, stderr, stdin); !errors.Is(err, election.ErrLost) {
+		if err := runLeader(ctx, deps, reset, cfg, appArgs, stdout, stderr, stdin); !errors.Is(err, leader.ErrAlreadyRunning) {
 			return err
 		}
 	}
-	return errors.New("determine leader/follower role: repeatedly lost the leader election; try again")
+	return errors.New("start ocel dev: another ocel dev kept claiming this project first; try again")
 }
 
-func runLeader(ctx context.Context, deps cmddeps.Deps, result election.Result, reset bool, cfg *projectconfig.Config, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
+func runLeader(ctx context.Context, deps cmddeps.Deps, reset bool, cfg *projectconfig.Config, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
 	source, err := readDevSource(ctx, cfg)
 	if err != nil {
 		return err
@@ -114,7 +113,7 @@ func runLeader(ctx context.Context, deps cmddeps.Deps, result election.Result, r
 	defer func() {
 		host.close()
 		if claimed {
-			_ = result.Release()
+			_ = leader.Release(cfg.Dir)
 		}
 	}()
 	srv := host.srv
@@ -123,7 +122,7 @@ func runLeader(ctx context.Context, deps cmddeps.Deps, result election.Result, r
 	background, stopBackground := context.WithCancel(ctx)
 	defer stopBackground()
 
-	if err := result.Claim(devlock.Lease{Addr: host.addr, Token: srv.AppToken()}); err != nil {
+	if err := leader.Claim(cfg.Dir, leader.Leader{Address: host.addr, Token: srv.AppToken()}); err != nil {
 		return err
 	}
 	claimed = true
@@ -331,14 +330,14 @@ func watchAndReResolve(ctx context.Context, srv *devserver.Server, cfg *projectc
 	}})
 }
 
-func runFollower(ctx context.Context, deps cmddeps.Deps, leader devlock.Lease, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
-	stream, err := subscribeEnv(ctx, leader)
+func runFollower(ctx context.Context, deps cmddeps.Deps, running leader.Leader, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
+	stream, err := leader.Subscribe(ctx, running)
 	if err != nil {
 		return fmt.Errorf("connect to leader: %w", err)
 	}
-	defer stream.close()
+	defer stream.Close()
 
-	first, err := stream.next()
+	first, err := stream.Next()
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			return errors.New("connect to leader: stream closed before first env push")
@@ -355,7 +354,7 @@ func runFollower(ctx context.Context, deps cmddeps.Deps, leader devlock.Lease, a
 	streamDone := make(chan struct{}, 1)
 	go func() {
 		for {
-			env, err := stream.next()
+			env, err := stream.Next()
 			if err != nil {
 				streamDone <- struct{}{}
 				return

@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/devlock"
+	"github.com/ocelhq/ocel/cli/internal/dev/leader"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/devstack"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
@@ -89,7 +89,7 @@ func TestProcessTreeDiesWithTheCLI(t *testing.T) {
 		deps := devDeps()
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = devlock.Remove(root) })
+		t.Cleanup(func() { _ = leader.Release(root) })
 
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
@@ -124,7 +124,7 @@ export default { slug: "test-app" };
 		deps := devDeps()
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = devlock.Remove(root) })
+		t.Cleanup(func() { _ = leader.Release(root) })
 
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
@@ -159,7 +159,7 @@ export default { slug: "test-app" };
 		deps := devDeps()
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = devlock.Remove(root) })
+		t.Cleanup(func() { _ = leader.Release(root) })
 
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
@@ -177,7 +177,7 @@ export default { slug: "test-app" };
 			done <- runDev(ctx, deps, false, root, appArgs, &stdout, &stderr, strings.NewReader(""))
 		}()
 
-		waitForLockfile(t, root)
+		waitForLeaderRecord(t, root)
 		waitForFile(t, startedPath)
 		cancel()
 
@@ -194,7 +194,7 @@ export default { slug: "test-app" };
 		deps := devDeps()
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = devlock.Remove(root) })
+		t.Cleanup(func() { _ = leader.Release(root) })
 
 		listener, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
@@ -207,8 +207,8 @@ export default { slug: "test-app" };
 		go httpSrv.Serve(listener)
 		defer httpSrv.Close()
 
-		if err := devlock.Create(root, devlock.Lease{Addr: listener.Addr().String(), Token: srv.AppToken()}); err != nil {
-			t.Fatalf("devlock.Create: %v", err)
+		if err := leader.Claim(root, leader.Leader{Address: listener.Addr().String(), Token: srv.AppToken()}); err != nil {
+			t.Fatalf("leader.Claim: %v", err)
 		}
 
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `

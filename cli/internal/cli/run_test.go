@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/devlock"
+	"github.com/ocelhq/ocel/cli/internal/dev/leader"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/devstack"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
@@ -31,7 +31,7 @@ func TestRunRun(t *testing.T) {
 		deps := devDeps()
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = devlock.Remove(root) })
+		t.Cleanup(func() { _ = leader.Release(root) })
 
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
@@ -70,9 +70,9 @@ export default { slug: "test-app" };
 			}
 		})
 
-		t.Run("it leaves no lockfile behind, having never advertised itself as leader", func(t *testing.T) {
-			if _, err := devlock.Read(root); !errors.Is(err, fs.ErrNotExist) {
-				t.Fatalf("devlock.Read err = %v, want a not-exist error (ocel run must not advertise as leader)", err)
+		t.Run("it leaves no leader record behind, having never advertised itself as leader", func(t *testing.T) {
+			if _, err := leader.Read(root); !errors.Is(err, fs.ErrNotExist) {
+				t.Fatalf("leader.Read err = %v, want a not-exist error (ocel run must not advertise as leader)", err)
 			}
 		})
 	})
@@ -85,7 +85,7 @@ export default { slug: "test-app" };
 		deps := devDeps()
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = devlock.Remove(root) })
+		t.Cleanup(func() { _ = leader.Release(root) })
 
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
@@ -101,7 +101,7 @@ export default { slug: "test-app" };
 			leaderDone <- runDev(leaderCtx, deps, false, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
 		}()
 
-		waitForLockfile(t, root)
+		waitForLeaderRecord(t, root)
 
 		envDumpPath := filepath.Join(root, "run-env.out")
 		runAppArgs := []string{"sh", "-c", "env > " + envDumpPath + "; exit 9"}
@@ -147,7 +147,7 @@ export default { slug: "test-app" };
 		deps := devDeps()
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = devlock.Remove(root) })
+		t.Cleanup(func() { _ = leader.Release(root) })
 
 		listener, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
@@ -160,8 +160,8 @@ export default { slug: "test-app" };
 		go httpSrv.Serve(listener)
 		defer httpSrv.Close()
 
-		if err := devlock.Create(root, devlock.Lease{Addr: listener.Addr().String(), Token: srv.AppToken()}); err != nil {
-			t.Fatalf("devlock.Write: %v", err)
+		if err := leader.Claim(root, leader.Leader{Address: listener.Addr().String(), Token: srv.AppToken()}); err != nil {
+			t.Fatalf("leader.Claim: %v", err)
 		}
 
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `

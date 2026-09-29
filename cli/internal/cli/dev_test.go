@@ -19,7 +19,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/devlock"
+	"github.com/ocelhq/ocel/cli/internal/dev/leader"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/devstack"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
@@ -121,7 +121,7 @@ func TestRunDev(t *testing.T) {
 		deps := devDeps()
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = devlock.Remove(root) })
+		t.Cleanup(func() { _ = leader.Release(root) })
 
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
 
@@ -166,7 +166,7 @@ func TestRunDev(t *testing.T) {
 		deps := devDeps()
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = devlock.Remove(root) })
+		t.Cleanup(func() { _ = leader.Release(root) })
 
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
 
@@ -195,7 +195,7 @@ func TestRunDev(t *testing.T) {
 		deps := devDeps()
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = devlock.Remove(root) })
+		t.Cleanup(func() { _ = leader.Release(root) })
 
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }] };
@@ -211,7 +211,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 			leaderDone <- runDev(leaderCtx, deps, false, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
 		}()
 
-		waitForLockfile(t, root)
+		waitForLeaderRecord(t, root)
 
 		envDumpPath := filepath.Join(root, "follower-env.out")
 		followerAppArgs := []string{"sh", "-c", "env > " + envDumpPath + "; exit 9"}
@@ -265,11 +265,11 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		deps := devDeps()
 
 		firstClone := t.TempDir()
-		t.Cleanup(func() { _ = devlock.Remove(firstClone) })
+		t.Cleanup(func() { _ = leader.Release(firstClone) })
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(firstClone), "main.ts"), declareResourceScript("first"))
 
 		secondClone := t.TempDir()
-		t.Cleanup(func() { _ = devlock.Remove(secondClone) })
+		t.Cleanup(func() { _ = leader.Release(secondClone) })
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(secondClone), "main.ts"), declareResourceScript("second"))
 
 		leaderCtx, cancelLeader := context.WithCancel(context.Background())
@@ -281,7 +281,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 			leaderDone <- runDev(leaderCtx, deps, false, firstClone, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
 		}()
 
-		waitForLockfile(t, firstClone)
+		waitForLeaderRecord(t, firstClone)
 
 		envDumpPath := filepath.Join(secondClone, "env.out")
 		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 9"}
@@ -326,7 +326,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		deps := devDeps()
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = devlock.Remove(root) })
+		t.Cleanup(func() { _ = leader.Release(root) })
 
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
@@ -343,7 +343,7 @@ export default { slug: "test-app" };
 			leaderDone <- runDev(leaderCtx, deps, false, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
 		}()
 
-		waitForLockfile(t, root)
+		waitForLeaderRecord(t, root)
 
 		envDumpPath := filepath.Join(root, "follower-env.out")
 		followerAppArgs := []string{"sh", "-c", "while true; do env > " + envDumpPath + "; sleep 0.02; done"}
@@ -383,7 +383,7 @@ export default { slug: "test-app" };
 		}
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = devlock.Remove(root) })
+		t.Cleanup(func() { _ = leader.Release(root) })
 
 		deps := devDeps()
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
@@ -401,7 +401,7 @@ export default { slug: "test-app" };
 			leaderDone <- runDev(leaderCtx, deps, false, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
 		}()
 
-		waitForLockfile(t, root)
+		waitForLeaderRecord(t, root)
 
 		envDumpPath := filepath.Join(root, "follower-env.out")
 		followerAppArgs := []string{"sh", "-c", "while true; do env > " + envDumpPath + "; sleep 0.02; done"}
@@ -441,7 +441,7 @@ export default { slug: "test-app" };
 		}
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = devlock.Remove(root) })
+		t.Cleanup(func() { _ = leader.Release(root) })
 
 		deps := devDeps()
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
@@ -482,7 +482,7 @@ export default { slug: "test-app" };
 		}
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = devlock.Remove(root) })
+		t.Cleanup(func() { _ = leader.Release(root) })
 
 		deps := devDeps()
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
@@ -500,7 +500,7 @@ export default { slug: "test-app" };
 			leaderDone <- runDev(leaderCtx, deps, false, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
 		}()
 
-		waitForLockfile(t, root)
+		waitForLeaderRecord(t, root)
 
 		envDumpPath := filepath.Join(root, "follower-env.out")
 		followerAppArgs := []string{"sh", "-c", "while true; do env > " + envDumpPath + "; sleep 0.02; done"}
@@ -552,7 +552,7 @@ export default { slug: "test-app" };
 		t.Cleanup(func() { startWatching = stalled })
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = devlock.Remove(root) })
+		t.Cleanup(func() { _ = leader.Release(root) })
 
 		deps := devDeps()
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
@@ -570,7 +570,7 @@ export default { slug: "test-app" };
 			leaderDone <- runDev(leaderCtx, deps, false, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
 		}()
 
-		waitForLockfile(t, root)
+		waitForLeaderRecord(t, root)
 
 		envDumpPath := filepath.Join(root, "follower-env.out")
 		followerAppArgs := []string{"sh", "-c", "while true; do env > " + envDumpPath + "; sleep 0.02; done"}
@@ -609,7 +609,7 @@ export default { slug: "test-app" };
 		}
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = devlock.Remove(root) })
+		t.Cleanup(func() { _ = leader.Release(root) })
 
 		deps := devDeps()
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
@@ -627,7 +627,7 @@ export default { slug: "test-app" };
 			leaderDone <- runDev(leaderCtx, deps, false, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
 		}()
 
-		waitForLockfile(t, root)
+		waitForLeaderRecord(t, root)
 
 		waitForOutputAfter(t, &leaderStdout, "line 2", func() {
 			clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "API_TOKEN=first\nnot a pair\n")
@@ -649,7 +649,7 @@ export default { slug: "test-app" };
 		deps := devDeps()
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = devlock.Remove(root) })
+		t.Cleanup(func() { _ = leader.Release(root) })
 
 		listener, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
@@ -661,8 +661,8 @@ export default { slug: "test-app" };
 		httpSrv := &http.Server{Handler: srv.Mux()}
 		go httpSrv.Serve(listener)
 
-		if err := devlock.Create(root, devlock.Lease{Addr: listener.Addr().String(), Token: srv.AppToken()}); err != nil {
-			t.Fatalf("devlock.Create: %v", err)
+		if err := leader.Claim(root, leader.Leader{Address: listener.Addr().String(), Token: srv.AppToken()}); err != nil {
+			t.Fatalf("leader.Claim: %v", err)
 		}
 
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
@@ -709,7 +709,7 @@ func TestDevSuppliesDeclaredResourcesItself(t *testing.T) {
 
 	t.Run("a declared postgres comes from the dev stack, says where it landed, and stops with the run", func(t *testing.T) {
 		root := t.TempDir()
-		t.Cleanup(func() { _ = devlock.Remove(root) })
+		t.Cleanup(func() { _ = leader.Release(root) })
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
 
 		engine := &dockertest.Engine{}
@@ -747,7 +747,7 @@ func TestDevSuppliesDeclaredResourcesItself(t *testing.T) {
 
 	t.Run("an app that declares no resource never needs docker", func(t *testing.T) {
 		root := t.TempDir()
-		t.Cleanup(func() { _ = devlock.Remove(root) })
+		t.Cleanup(func() { _ = leader.Release(root) })
 
 		deps := devDeps()
 		deps.OpenDocker = func(context.Context) (docker.Engine, error) {
@@ -764,7 +764,7 @@ func TestDevSuppliesDeclaredResourcesItself(t *testing.T) {
 
 	t.Run("with no docker daemon the refusal names the resource that needed one", func(t *testing.T) {
 		root := t.TempDir()
-		t.Cleanup(func() { _ = devlock.Remove(root) })
+		t.Cleanup(func() { _ = leader.Release(root) })
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
 
 		deps := devDeps()
@@ -786,7 +786,7 @@ func TestDevSuppliesDeclaredResourcesItself(t *testing.T) {
 
 	t.Run("--reset wipes this project's volumes before anything starts", func(t *testing.T) {
 		root := t.TempDir()
-		t.Cleanup(func() { _ = devlock.Remove(root) })
+		t.Cleanup(func() { _ = leader.Release(root) })
 
 		engine := &dockertest.Engine{}
 		deps := devDeps()
@@ -804,7 +804,7 @@ func TestDevSuppliesDeclaredResourcesItself(t *testing.T) {
 
 	t.Run("`ocel run` on its own gets the same resources", func(t *testing.T) {
 		root := t.TempDir()
-		t.Cleanup(func() { _ = devlock.Remove(root) })
+		t.Cleanup(func() { _ = leader.Release(root) })
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
 
 		engine := &dockertest.Engine{}
@@ -846,7 +846,7 @@ func TestDevLeavesNothingBehind(t *testing.T) {
 
 	t.Run("an interrupt while a resource is still coming up stops the container it started", func(t *testing.T) {
 		root := t.TempDir()
-		t.Cleanup(func() { _ = devlock.Remove(root) })
+		t.Cleanup(func() { _ = leader.Release(root) })
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
 
 		ctx, interrupt := context.WithCancel(context.Background())
@@ -870,13 +870,13 @@ func TestDevLeavesNothingBehind(t *testing.T) {
 		}
 	})
 
-	t.Run("the leader keeps its lease until its containers are stopped", func(t *testing.T) {
+	t.Run("the leader keeps its record until its containers are stopped", func(t *testing.T) {
 		root := t.TempDir()
-		t.Cleanup(func() { _ = devlock.Remove(root) })
+		t.Cleanup(func() { _ = leader.Release(root) })
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
 
-		var leaseAtStop error
-		engine := stopWatchingEngine{Engine: &dockertest.Engine{}, onStop: func() { _, leaseAtStop = devlock.Read(root) }}
+		var recordAtStop error
+		engine := stopWatchingEngine{Engine: &dockertest.Engine{}, onStop: func() { _, recordAtStop = leader.Read(root) }}
 		deps := devDeps()
 		deps.OpenDocker = func(context.Context) (docker.Engine, error) { return engine, nil }
 
@@ -887,11 +887,11 @@ func TestDevLeavesNothingBehind(t *testing.T) {
 		if len(engine.Stopped) != 1 {
 			t.Fatalf("stopped %v, want the run's container stopped", engine.Stopped)
 		}
-		if leaseAtStop != nil {
-			t.Fatalf("the lease was already gone while the container was being stopped: %v", leaseAtStop)
+		if recordAtStop != nil {
+			t.Fatalf("the leader record was already gone while the container was being stopped: %v", recordAtStop)
 		}
-		if _, err := devlock.Read(root); !errors.Is(err, fs.ErrNotExist) {
-			t.Fatalf("devlock.Read after exit = %v, want the lease released", err)
+		if _, err := leader.Read(root); !errors.Is(err, fs.ErrNotExist) {
+			t.Fatalf("leader.Read after exit = %v, want the leader record released", err)
 		}
 	})
 
@@ -950,16 +950,16 @@ func devDeps() cmddeps.Deps {
 	return deps
 }
 
-func waitForLockfile(t *testing.T, root string) {
+func waitForLeaderRecord(t *testing.T, root string) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
-		if _, err := devlock.Read(root); err == nil {
+		if _, err := leader.Read(root); err == nil {
 			return
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	t.Fatalf("lockfile for %q never appeared", root)
+	t.Fatalf("the leader record for %q never appeared", root)
 }
 
 type syncBuffer struct {

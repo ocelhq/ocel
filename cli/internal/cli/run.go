@@ -10,8 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/devlock"
-	"github.com/ocelhq/ocel/cli/internal/election"
+	"github.com/ocelhq/ocel/cli/internal/dev/leader"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
@@ -39,25 +38,25 @@ func runRun(ctx context.Context, deps cmddeps.Deps, cwd string, appArgs []string
 		return err
 	}
 
-	leader, found, err := election.FindLeader(cfg.Dir)
+	running, found, err := leader.Find(cfg.Dir)
 	if err != nil {
 		return fmt.Errorf("look for a running dev server: %w", err)
 	}
 	if found {
-		return runOnceAsFollower(ctx, deps, leader, appArgs, stdout, stderr, stdin)
+		return runOnceAsFollower(ctx, deps, running, appArgs, stdout, stderr, stdin)
 	}
 
 	return runStandalone(ctx, deps, cfg, targetScope(cfg, cwd), appArgs, stdout, stderr, stdin)
 }
 
-func runOnceAsFollower(ctx context.Context, deps cmddeps.Deps, leader devlock.Lease, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
-	stream, err := subscribeEnv(ctx, leader)
+func runOnceAsFollower(ctx context.Context, deps cmddeps.Deps, running leader.Leader, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
+	stream, err := leader.Subscribe(ctx, running)
 	if err != nil {
 		return fmt.Errorf("connect to leader: %w", err)
 	}
-	defer stream.close()
+	defer stream.Close()
 
-	env, err := stream.next()
+	env, err := stream.Next()
 	if err != nil {
 		return fmt.Errorf("connect to leader: %w", err)
 	}
