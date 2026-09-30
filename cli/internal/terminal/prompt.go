@@ -45,11 +45,8 @@ func (p Prompt) Confirm(ctx context.Context, question string) (bool, error) {
 		return p.confirmLine(ctx, question)
 	}
 	var answer bool
-	err := p.run(ctx, huh.NewConfirm().Title(question).Affirmative("Yes").Negative("No").Value(&answer))
-	if aborted(err) {
-		return false, nil
-	}
-	return answer, err
+	answered, err := p.answer(ctx, huh.NewConfirm().Title(question).Affirmative("Yes").Negative("No").Value(&answer))
+	return answered && answer, err
 }
 
 func (p Prompt) Phrase(ctx context.Context, label, phrase string) (bool, error) {
@@ -57,16 +54,10 @@ func (p Prompt) Phrase(ctx context.Context, label, phrase string) (bool, error) 
 		return p.phraseLine(ctx, label, phrase)
 	}
 	var typed string
-	err := p.run(ctx, huh.NewInput().
+	answered, err := p.answer(ctx, huh.NewInput().
 		Title("Type the "+label+" ("+phrase+") to confirm").
 		Value(&typed))
-	if aborted(err) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return phrase != "" && typed == phrase, nil
+	return answered && phrase != "" && typed == phrase, err
 }
 
 func (p Prompt) MultiSelect(ctx context.Context, title string, options []Option) ([]string, bool, error) {
@@ -78,7 +69,7 @@ func (p Prompt) MultiSelect(ctx context.Context, title string, options []Option)
 	for _, o := range options {
 		fields = append(fields, huh.NewOption(o.label(), o.Name).Selected(o.Selected))
 	}
-	err := p.run(ctx, huh.NewMultiSelect[string]().
+	answered, err := p.answer(ctx, huh.NewMultiSelect[string]().
 		Title(title).
 		Description("Space toggles, Enter takes this set").
 		Options(fields...).
@@ -87,10 +78,7 @@ func (p Prompt) MultiSelect(ctx context.Context, title string, options []Option)
 		// Drop this once the viewport sizing is fixed upstream.
 		Height(len(fields)+2).
 		Value(&chosen))
-	if aborted(err) {
-		return nil, false, nil
-	}
-	if err != nil {
+	if !answered {
 		return nil, false, err
 	}
 	return chosen, true, nil
@@ -105,11 +93,8 @@ func (p Prompt) Select(ctx context.Context, title string, options []Option) (str
 		fields = append(fields, huh.NewOption(o.label(), o.Name))
 	}
 	var chosen string
-	err := p.run(ctx, huh.NewSelect[string]().Title(title).Options(fields...).Value(&chosen))
-	if aborted(err) {
-		return "", false, nil
-	}
-	if err != nil {
+	answered, err := p.answer(ctx, huh.NewSelect[string]().Title(title).Options(fields...).Value(&chosen))
+	if !answered {
 		return "", false, err
 	}
 	return chosen, true, nil
@@ -120,11 +105,8 @@ func (p Prompt) Input(ctx context.Context, title, description string) (string, b
 		return p.inputLine(ctx, title, description)
 	}
 	var typed string
-	err := p.run(ctx, huh.NewInput().Title(title).Description(description).Value(&typed))
-	if aborted(err) {
-		return "", false, nil
-	}
-	if err != nil {
+	answered, err := p.answer(ctx, huh.NewInput().Title(title).Description(description).Value(&typed))
+	if !answered {
 		return "", false, err
 	}
 	return strings.TrimSpace(typed), true, nil
@@ -135,24 +117,21 @@ func (p Prompt) AwaitEnter(ctx context.Context, question string) (bool, error) {
 		return p.awaitEnterLine(ctx, question)
 	}
 	answer := true
-	err := p.run(ctx, huh.NewConfirm().Title(question).Affirmative("Continue").Negative("Stop").Value(&answer))
-	if aborted(err) {
-		return false, nil
-	}
-	return answer, err
+	answered, err := p.answer(ctx, huh.NewConfirm().Title(question).Affirmative("Continue").Negative("Stop").Value(&answer))
+	return answered && answer, err
 }
 
-func (p Prompt) run(ctx context.Context, field huh.Field) error {
-	return huh.NewForm(huh.NewGroup(field)).
+func (p Prompt) answer(ctx context.Context, field huh.Field) (bool, error) {
+	err := huh.NewForm(huh.NewGroup(field)).
 		WithTheme(promptTheme).
 		WithInput(p.in).
 		WithOutput(p.out).
 		WithShowHelp(false).
 		RunWithContext(ctx)
-}
-
-func aborted(err error) bool {
-	return errors.Is(err, huh.ErrUserAborted) || errors.Is(err, io.EOF)
+	if errors.Is(err, huh.ErrUserAborted) || errors.Is(err, io.EOF) {
+		return false, nil
+	}
+	return err == nil, err
 }
 
 func selectedNames(options []Option) []string {
