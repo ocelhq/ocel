@@ -72,6 +72,28 @@ them into Cloudflare instead:
 
 Dev mode starts the resources the app declares on your machine, linked or not, and reads its values from `.env`, or from the env source the config names for dev, with `.env.local` on top.
 
+## Container apps on AWS
+
+On [AWS](/docs/providers/aws), Cloudflare runs a worker in front of serverless apps and no
+worker in front of container apps, and one project can have both. A container app's
+hostname gets a proxied record pointing at a public load balancer, one per tier, which the
+first such app raises (about $16 a month plus traffic). The load balancer admits only
+Cloudflare's addresses and checks the client certificate your zone presents, as a VPS box
+does. It redirects plain http to https with a 301, since an AWS load balancer cannot send a 308. Each hostname gets an ACM certificate, validated through the DNS writer. A preview
+of a container app gets a proxied record of its own and a route that runs no worker. The
+record wins over the wildcard record and the route over the wildcard route. Removing the
+preview removes both.
+
+The load balancer holds at most 25 certificates besides its default, one per production
+hostname and one per preview wildcard, and at most 100 rules, one per hostname, live
+preview and release. Both limits cover every project in the tier, and AWS raises them on
+request. It reaches at most 100 target groups, which AWS does not raise: one per release
+of a container app, kept ones included.
+
+Middleware, the edge runtime and edge caching need the worker, so a container app behind
+Cloudflare is served streaming alone. A deploy of one that needs more is refused unless
+`allowDegraded` names the need.
+
 ## Previews behind Cloudflare
 
 A preview wildcard is forwarded to the origin through one proxied `*.<base>` record, and
