@@ -89,6 +89,54 @@ func TestShapeHandsTheProviderTheDeployItWouldMake(t *testing.T) {
 	}
 }
 
+func shapedTypes(set *costv1.ResourceSet) map[string]int {
+	types := map[string]int{}
+	for _, resource := range set.GetResources() {
+		types[resource.GetType()]++
+	}
+	return types
+}
+
+func TestShapeOfAnEphemeralPreviewPricesNoResourceItNeverProvisions(t *testing.T) {
+	client, _ := costServed(t, fake.NewProvider(fake.Options{Region: "nowhere"}))
+	req := shapeRequest()
+	req.Environment = &environmentv1.Environment{
+		Tier:      environmentv1.Tier_TIER_PREVIEW,
+		Lifecycle: environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL,
+		Identity:  "preview",
+	}
+
+	set, err := client.Shape(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Shape() error = %v", err)
+	}
+	types := shapedTypes(set)
+	if types[fake.TypePostgres] != 0 || types[fake.TypeBucket] != 0 {
+		t.Errorf("shaped types = %v, want no postgres or bucket: an ephemeral preview has no infra stack of its own", types)
+	}
+	if types[fake.TypeFunction] != 2 {
+		t.Errorf("shaped types = %v, want both apps' functions still priced", types)
+	}
+}
+
+func TestShapeOfAPersistentPreviewPricesTheResourcesItProvisions(t *testing.T) {
+	client, _ := costServed(t, fake.NewProvider(fake.Options{Region: "nowhere"}))
+	req := shapeRequest()
+	req.Environment = &environmentv1.Environment{
+		Tier:      environmentv1.Tier_TIER_PREVIEW,
+		Lifecycle: environmentv1.Lifecycle_LIFECYCLE_PERSISTENT,
+		Identity:  "staging",
+	}
+
+	set, err := client.Shape(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Shape() error = %v", err)
+	}
+	if types := shapedTypes(set); types[fake.TypePostgres] != 1 || types[fake.TypeBucket] != 1 {
+		t.Errorf("shaped types = %v, want the postgres and the bucket its infra stack provisions", types)
+	}
+}
+
 func TestPriceRefusesAUsageFileTheProviderCannotRead(t *testing.T) {
 	client, costs := costServed(t, fake.NewProvider(fake.Options{Region: "nowhere"}))
 

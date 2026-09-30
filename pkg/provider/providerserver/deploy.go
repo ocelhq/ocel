@@ -845,7 +845,7 @@ func appOutcome(app string, err error) *progressv1.AppResult {
 }
 
 func (r *deployRun) provisionInfra(ctx context.Context) error {
-	if r.spec.Infra.IsZero() {
+	if isEphemeralPreview(r.spec) {
 		return nil
 	}
 	resources, err := manifestResources(r.manifest)
