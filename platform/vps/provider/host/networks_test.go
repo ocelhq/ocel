@@ -211,19 +211,36 @@ func TestATierRunningNothingPlansNoContainerOrNetworkRemoval(t *testing.T) {
 	}
 }
 
-func TestTheSwitchboardRejoinsEveryLabelledNetworkWhenItIsWrittenAgain(t *testing.T) {
+func TestTheSwitchboardJoinsEveryLabelledNetworkBeforeItStartsServing(t *testing.T) {
+	t.Parallel()
+
+	board := switchboardBox(nil, Front{})
+	for name, command := range map[string]string{
+		"written again": board.writing(containerRising),
+		"restored":      board.restoring(containerRising),
+	} {
+		created := strings.Index(command, quoted("docker")+" "+quoted("create"))
+		rejoin := strings.Index(command, "docker network ls --quiet --filter "+quoted("label="+LabelTier))
+		started := strings.Index(command, "docker start "+quoted(SwitchboardContainer))
+		rising := strings.Index(command, "while :; do")
+		if created < 0 || rejoin < created || started < rejoin || rising < started {
+			t.Errorf("the switchboard %s is created at %d, rejoins at %d, starts at %d and is waited on at %d: a switchboard that serves before it is back on a project's network answers that project 502 until it is:\n%s",
+				name, created, rejoin, started, rising, command)
+		}
+		if !strings.Contains(command, "docker network connect \"$net\" "+quoted(SwitchboardContainer)+" >/dev/null\n") {
+			t.Errorf("the switchboard %s rejoins with a connect whose failure is swallowed, and a switchboard off a project's network serves that project nothing:\n%s", name, command)
+		}
+	}
+}
+
+func TestASwitchboardWrittenAgainIsStoppedToFinishWhatItServesBeforeItIsRemoved(t *testing.T) {
 	t.Parallel()
 
 	command := switchboardBox(nil, Front{}).writing(containerRising)
-	run := strings.Index(command, quoted("run")+" "+quoted("--detach"))
-	rejoin := strings.Index(command, "docker network ls --quiet --filter "+quoted("label="+LabelTier))
-	rising := strings.Index(command, "while :; do")
-	if run < 0 || rejoin < 0 || rising < 0 || rejoin < run || rejoin > rising {
-		t.Fatalf("the switchboard write runs at %d, rejoins at %d and waits at %d: a switchboard written again is a new container on %s alone, and every project's app is unreachable until it is put back on that project's network:\n%s",
-			run, rejoin, rising, ProxyNetwork, command)
-	}
-	if !strings.Contains(command, "docker network connect \"$net\" "+quoted(SwitchboardContainer)+" >/dev/null\n") {
-		t.Errorf("the switchboard write rejoins with a connect whose failure is swallowed, and a switchboard off a project's network serves that project nothing:\n%s", command)
+	stopped := strings.Index(command, "docker stop "+quoted(SwitchboardContainer))
+	removed := strings.Index(command, "docker rm --force "+quoted(SwitchboardContainer))
+	if stopped < 0 || removed < stopped {
+		t.Errorf("the switchboard written again is stopped at %d and removed at %d: removed while it runs, it is killed with the requests it holds open, and each answers your proxy with a reset:\n%s", stopped, removed, command)
 	}
 }
 

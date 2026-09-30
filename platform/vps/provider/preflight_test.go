@@ -346,7 +346,7 @@ func ahead(machine *scripted, fragment string, said answer) *scripted {
 }
 
 func pruned(script map[string]answer, restored answer) *scripted {
-	return ahead(boxSaying(script), "'docker' 'run'", restored)
+	return ahead(boxSaying(script), "'docker' 'create'", restored)
 }
 
 func prunedBoard() map[string]answer {
@@ -373,7 +373,7 @@ func TestASwitchboardAPruneRemovedIsRestartedAndTheDeployGoesOn(t *testing.T) {
 	if err := preflighting(machine); err != nil {
 		t.Fatalf("PreflightDeploy() = %v, want a switchboard a prune removed restarted from what bootstrap left: Dokploy prunes every stopped container nightly, and the box still has everything the switchboard is made of", err)
 	}
-	runCommand := ranWith(machine, "'docker' 'run'")
+	runCommand := ranWith(machine, "'docker' 'create'")
 	if runCommand == "" {
 		t.Fatalf("the preflight started no container:\n%s", strings.Join(machine.ran, "\n"))
 	}
@@ -391,7 +391,7 @@ func TestASwitchboardAPruneRemovedIsRestartedAndTheDeployGoesOn(t *testing.T) {
 	locked := strings.Index(runCommand, "flock -x 9\n")
 	guarded := strings.Index(runCommand, `if [ "$(docker inspect --type container --format '{{.State.Running}}' 'ocel-switchboard' 2>/dev/null)" != true ]`)
 	removed := strings.Index(runCommand, "docker rm --force 'ocel-switchboard'")
-	run := strings.Index(runCommand, "'docker' 'run'")
+	run := strings.Index(runCommand, "'docker' 'create'")
 	unlocked := strings.Index(runCommand, "flock -u 9\n")
 	closed := strings.LastIndex(runCommand[:max(unlocked, 0)], "\nfi\n")
 	if locked < 0 || locked >= guarded || guarded >= removed || removed >= run || run >= closed || closed >= unlocked {
@@ -418,7 +418,7 @@ func TestASwitchboardAPruneRemovedIsRefusedWhenWhatItMountsIsGoneToo(t *testing.
 				t.Errorf("without %s the refusal is %q, want %q in it", what, err, wanted)
 			}
 		}
-		if runCommand := ranWith(machine, "'docker' 'run'"); runCommand != "" {
+		if runCommand := ranWith(machine, "'docker' 'create'"); runCommand != "" {
 			t.Errorf("without %s the preflight still started a switchboard, and docker creates a bind source that is not there as an empty root directory:\n%s", what, runCommand)
 		}
 	}
