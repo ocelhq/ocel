@@ -226,16 +226,28 @@ func (s *stack) MovePointer(ctx context.Context, move router.PointerMove, _ prog
 	if err != nil {
 		return router.Unserved{Err: err}
 	}
-	if err := move.RefuseInactive(ctx); err != nil {
-		return err
-	}
 	pointer := router.ResolvePointer(move.Pointer)
-	for _, app := range slices.Sorted(maps.Keys(groups)) {
-		for _, hostname := range s.listHosts(pointer, app) {
-			if err := s.forwardRuleTo(ctx, c, s.recorded.Hosts[hostname].Rule, groups[app], move.RefuseInactive); err != nil {
-				return err
+	moving := s.newLease(c, formatPointerLeaseKey(s.state.Tier, s.state.Slug, pointer), "moving "+pointer+" of "+s.state.Slug)
+	worked := false
+	err = moving.hold(ctx, func(ctx context.Context) error {
+		worked = true
+		if err := move.RefuseInactive(ctx); err != nil {
+			return err
+		}
+		for _, app := range slices.Sorted(maps.Keys(groups)) {
+			for _, hostname := range s.listHosts(pointer, app) {
+				if err := s.forwardRuleTo(ctx, c, s.recorded.Hosts[hostname].Rule, groups[app], move.RefuseInactive); err != nil {
+					return err
+				}
 			}
 		}
+		return nil
+	})
+	if err != nil && !worked {
+		return router.Unserved{Err: err}
+	}
+	if err != nil {
+		return err
 	}
 	s.recorded.Served = s.recorded.Served.withPointer(pointer, groups)
 	return nil

@@ -244,3 +244,21 @@ func TestTheALBRouterServesStreamingAndNoNeedThatRunsCodeAtTheEdge(t *testing.T)
 		t.Errorf("Facts() = %+v, want containers reached and no function", facts)
 	}
 }
+
+func TestAPointerMoveWhileAnotherPromoteHoldsThePointerMovesNothingAndIsUnserved(t *testing.T) {
+	f := newFakeAWS()
+	stack := claimedStack(t, f, router.Claim{Hostname: testHostname, App: "admin", Certificate: testCertificate})
+	if err := moveOnto(t, stack, router.DefaultPointer, containerRecord(f)("admin", "b1")); err != nil {
+		t.Fatalf("MovePointer: %v", err)
+	}
+
+	f.hold("ocel/routes/production/shop/@production.lease")
+	err := moveOnto(t, stack, router.DefaultPointer, containerRecord(f)("admin", "b2"))
+	var unserved router.Unserved
+	if !errors.As(err, &unserved) {
+		t.Errorf("MovePointer while another promote holds the pointer = %v, want router.Unserved", err)
+	}
+	if served := f.servedBy(testHostname); served != "b1" {
+		t.Errorf("%s forwards to %q, want b1: the load balancer cannot compare-and-set a rule, so one promote at a time moves a pointer, and the one holding it restores what it read if the ledger displaced it", testHostname, served)
+	}
+}
