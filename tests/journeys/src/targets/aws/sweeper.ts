@@ -11,6 +11,7 @@ import { copyTree } from "../../tree";
 import type { Sweeper } from "../types";
 import { BOOTSTRAP_DESTROY_ARGS, BOOTSTRAP_REFRESH_ARGS } from "./bootstrap";
 import { namespaceFor, namespaceOfSlug, ocelEnvIn, strayNamespaces } from "./namespace";
+import { deleteEdgePolicy, listEdgePolicies, orphanedPolicies } from "./policies";
 import { githubRuns, livelyRuns, ofRun, runIdOf } from "./runs";
 import { reclaimable, type Stranded, sweepable } from "./slugs";
 import { awsStore, cliAt, type Store, taggedNamespaces } from "./store";
@@ -191,6 +192,10 @@ export class AwsSweeper implements Sweeper {
       this.sweepNamespaces(runId, cells, byPart, complaints, busy),
     );
 
+    await despite(complaints, "edge policy sweep", () =>
+      this.sweepOrphanedPolicies(complaints, busy),
+    );
+
     const inUse = async (names: string[]) => {
       const live = await busy(names);
       return new Set(names.filter((name) => underway(name, live)));
@@ -307,6 +312,25 @@ export class AwsSweeper implements Sweeper {
       await despite(complaints, `${namespace} sweep`, () =>
         this.sweepStrayNamespace(runId, namespace, byPart, complaints, true),
       );
+    }
+  }
+
+  private async sweepOrphanedPolicies(complaints: string[], busy: Busy): Promise<void> {
+    const where = await this.world.detect();
+    if (where.world !== "real") {
+      return;
+    }
+    const cli = cliAt(where.endpoint);
+    const namespaces = new Set(await taggedNamespaces(cli));
+    const orphaned = orphanedPolicies(await listEdgePolicies(cli), namespaces);
+    const live = await busy(orphaned.map((policy) => policy.name));
+    for (const policy of orphaned.filter((one) => !underway(one.name, live))) {
+      await despite(complaints, `${policy.kind} ${policy.name}`, async () => {
+        await deleteEdgePolicy(cli, policy);
+        process.stdout.write(
+          `deleted ${policy.kind} ${policy.name}: no stack names its namespace\n`,
+        );
+      });
     }
   }
 
