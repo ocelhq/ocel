@@ -80,8 +80,14 @@ sshd_state() {
     incus exec "$1" -- sh -c 'if command -v sshd >/dev/null; then echo installed; else echo absent; fi' 2>/dev/null || true
 }
 
+interface_state() {
+    local out
+    out=$(incus exec "$1" -- ip -o link show up 2>/dev/null) || return 0
+    awk -F': ' '$2 != "lo" { up = 1 } END { print up ? "up" : "none" }' <<<"$out"
+}
+
 wait_ssh() {
-    local name=$1 addr="" ssh_err="" started=$SECONDS
+    local name=$1 addr="" ssh_err="" started=$SECONDS interfaces=""
     local deadline=$((SECONDS + SSH_WAIT_SECS))
     while [ "$SECONDS" -lt "$deadline" ]; do
         addr=$(addr_of "$name") || addr=""
@@ -92,8 +98,12 @@ wait_ssh() {
                 return 0
             fi
         fi
-        if cloud_init_ended "$name" && [ "$(sshd_state "$name")" = absent ]; then
-            break
+        if cloud_init_ended "$name"; then
+            [ "$(sshd_state "$name")" != absent ] || break
+            if [ -z "$addr" ]; then
+                interfaces=$(interface_state "$name")
+                [ "$interfaces" != none ] || break
+            fi
         fi
         sleep 2
     done
@@ -101,6 +111,9 @@ wait_ssh() {
     cloud_init=$(cloud_init_status "$name")
     sshd=$(sshd_state "$name")
     diagnose_no_ssh "$name" "${sshd:-unreadable}" "${addr:-none}" "${ssh_err:-never attempted}" >&2
+    if [ "$interfaces" = none ]; then
+        die "$name: cloud-init ended ${cloud_init:-unreadable} after $((SECONDS - started))s with no interface up but lo, so the guest never asked for an address; the guest links section above says whether its NIC exists"
+    fi
     die "$name: no SSH after $((SECONDS - started))s, budget ${SSH_WAIT_SECS}s (cloud-init ${cloud_init:-unreadable}, sshd ${sshd:-unreadable}, address ${addr:-none})"
 }
 
@@ -120,8 +133,8 @@ diagnose_no_ssh() {
         printf '%s\n' "$ssh_err"
     diagnose_section "guest sshd (binary, host keys, units, listeners, journal)" \
         incus exec "$name" -- sh -c 'command -v sshd; ls -l /etc/ssh/ssh_host_*_key; systemctl is-active ssh.socket ssh.service; ss -ltn "sport = :22"; journalctl -b -u ssh.socket -u ssh.service --no-pager -n 30'
-    diagnose_section "guest addresses and routes" \
-        incus exec "$name" -- sh -c 'ip -4 -br addr; ip -4 route; cat /etc/resolv.conf'
+    diagnose_section "guest links, addresses, routes and netplan" \
+        incus exec "$name" -- sh -c 'ip -br addr; ip -4 route; ls -l /etc/netplan; cat /etc/resolv.conf'
     diagnose_section "guest name resolution" \
         incus exec "$name" -- getent hosts archive.ubuntu.com
     diagnose_section "guest egress to ${APT_MIRROR:-$STOCK_MIRROR} (status, connect, total, bytes/s)" \
