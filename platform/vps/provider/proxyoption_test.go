@@ -91,7 +91,7 @@ func TestTheProxyOptionRefusesWhatThisOcelDoesNotServe(t *testing.T) {
 		},
 		"a manual port that is not a number": {
 			options: proxied(map[string]any{"manual": map[string]any{"port": "8480"}}),
-			mention: []string{`"provider.vps.proxy.manual.port" must be a number`},
+			mention: []string{`"provider.vps.proxy.manual.port" must be a whole number`},
 		},
 		"a manual port outside the range": {
 			options: proxied(map[string]any{"manual": map[string]any{"port": 70000}}),

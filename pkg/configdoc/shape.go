@@ -3,6 +3,7 @@ package configdoc
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"reflect"
 	"regexp"
 	"slices"
@@ -107,8 +108,13 @@ func checkValue(path string, target reflect.Type, value any) error {
 		}
 		return nil
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
-		reflect.Float32, reflect.Float64:
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		number, ok := value.(float64)
+		if !ok || number != math.Trunc(number) {
+			return typeError(path, "a whole number")
+		}
+		return nil
+	case reflect.Float32, reflect.Float64:
 		if _, ok := value.(float64); !ok {
 			return typeError(path, "a number")
 		}
@@ -145,8 +151,19 @@ func checkObject(path string, target reflect.Type, object map[string]any) error 
 		if err := checkPattern(JoinPath(path, key), fields[index], object[key]); err != nil {
 			return err
 		}
+		if err := checkMinimum(JoinPath(path, key), fields[index], object[key]); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+func checkMinimum(path string, field jsonField, value any) error {
+	number, ok := value.(float64)
+	if field.minimum == nil || !ok || number >= float64(*field.minimum) {
+		return nil
+	}
+	return fmt.Errorf("%q must be %d or more", path, *field.minimum)
 }
 
 func checkPattern(path string, field jsonField, value any) error {
@@ -187,6 +204,7 @@ type jsonField struct {
 	doc      string
 	enum     []string
 	pattern  string
+	minimum  *int
 	secret   string
 	unless   string
 	optional bool
@@ -205,8 +223,13 @@ func jsonFields(target reflect.Type) []jsonField {
 		if raw := field.Tag.Get("enum"); raw != "" {
 			enum = strings.Split(raw, ",")
 		}
+		minimum, err := minimumOf(field)
+		if err != nil {
+			panic(tagError{err})
+		}
 		fields = append(fields, jsonField{
 			name:     name,
+			minimum:  minimum,
 			doc:      field.Tag.Get("doc"),
 			enum:     enum,
 			pattern:  field.Tag.Get("pattern"),
@@ -217,4 +240,16 @@ func jsonFields(target reflect.Type) []jsonField {
 		})
 	}
 	return fields
+}
+
+func minimumOf(field reflect.StructField) (*int, error) {
+	raw := field.Tag.Get("minimum")
+	if raw == "" {
+		return nil, nil
+	}
+	minimum, err := strconv.Atoi(raw)
+	if err != nil {
+		return nil, fmt.Errorf("%s has minimum %q, which is not a whole number", field.Name, raw)
+	}
+	return &minimum, nil
 }

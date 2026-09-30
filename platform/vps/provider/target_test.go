@@ -67,7 +67,7 @@ func TestTheDestinationRefusesWhatItCannotRead(t *testing.T) {
 		},
 		"a port that is not a number": {
 			options: provider.Options{"ssh": map[string]any{"host": "203.0.113.10", "port": "2222"}},
-			mention: `"provider.vps.ssh.port" must be a number`,
+			mention: `"provider.vps.ssh.port" must be a whole number`,
 		},
 		"an object with no host": {options: provider.Options{"ssh": map[string]any{"user": "deploy"}}},
 		"an empty alias":         {options: provider.Options{"ssh": ""}},

@@ -173,6 +173,9 @@ func fieldSchema(field jsonField) object {
 			object{"pattern": interpolationPattern},
 		}
 	}
+	if field.minimum != nil {
+		property["minimum"] = *field.minimum
+	}
 	if field.secret != "" {
 		property["pattern"] = secretPlaceholder.String()
 	}

@@ -114,6 +114,16 @@
             "title": "HealthConfig",
             "type": "object"
           },
+          "maxInstances": {
+            "description": "The most instances of a container app run at once, however busy it is. Left off, as many as minInstances, or 1. A serverless app scales itself and takes no instance counts.",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "minInstances": {
+            "description": "The fewest instances of a container app kept running, however quiet it is. Left off, 1. A serverless app scales itself and takes no instance counts.",
+            "minimum": 0,
+            "type": "integer"
+          },
           "name": {
             "description": "The app's name. It is a label of every resource the app deploys and of its preview hostname, so it is a DNS label.",
             "type": "string"
