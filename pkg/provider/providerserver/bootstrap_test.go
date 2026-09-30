@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	connect "connectrpc.com/connect"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -599,6 +600,46 @@ func TestGetCredentialPermissionsAppendsWhatTheEdgeDocuments(t *testing.T) {
 	}
 	if got := groups[1].GetDocument(); got != string(edge.PurposeDeploy) {
 		t.Errorf("GetCredentialPermissions() second document = %q, want the edge asked for the %s purpose", got, edge.PurposeDeploy)
+	}
+}
+
+func TestGetCredentialPermissionsRefusesAnOptionTheEdgeDoesNotTake(t *testing.T) {
+	t.Parallel()
+
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"})
+	client := servedProvider(t, "1.2.3", documentingProvider{Provider: vendor})
+	options, err := structpb.NewStruct(map[string]any{"tunel": true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = client.GetCredentialPermissions(context.Background(), &contractv1.CredentialPermissionsRequest{
+		Purpose: contractv1.CredentialPurpose_CREDENTIAL_PURPOSE_DEPLOY,
+		Edge:    &contractv1.EdgeSelection{Kind: string(fake.KindDirect), Options: options},
+	})
+	if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
+		t.Fatalf("GetCredentialPermissions() with an option the edge does not take: code = %v (%v), want %v", got, err, connect.CodeInvalidArgument)
+	}
+	if !strings.Contains(err.Error(), "tunel") {
+		t.Errorf("GetCredentialPermissions() error = %v, want it to name the option", err)
+	}
+}
+
+func TestGetCredentialPermissionsRendersOnlyTheVendorsGroupForAnEdgeTheProviderDoesNotServe(t *testing.T) {
+	t.Parallel()
+
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"})
+	client := servedProvider(t, "1.2.3", documentingProvider{Provider: vendor})
+
+	permissions, err := client.GetCredentialPermissions(context.Background(), &contractv1.CredentialPermissionsRequest{
+		Purpose: contractv1.CredentialPurpose_CREDENTIAL_PURPOSE_DEPLOY,
+		Edge:    &contractv1.EdgeSelection{Kind: "elsewhere"},
+	})
+	if err != nil {
+		t.Fatalf("GetCredentialPermissions() error = %v", err)
+	}
+	if groups := permissions.GetGroups(); len(groups) != 1 {
+		t.Fatalf("GetCredentialPermissions() rendered %d groups, want only the vendor's", len(groups))
 	}
 }
 

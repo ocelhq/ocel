@@ -304,6 +304,10 @@ func edgeKind(p provider.Provider, requested string) edge.Kind {
 	return p.Facts().DefaultEdge
 }
 
+func isServedEdge(p provider.Provider, kind edge.Kind) bool {
+	return kind == p.Facts().DefaultEdge || slices.Contains(p.Facts().Edges, kind)
+}
+
 func (h *handlers) GetCredentialPermissions(_ context.Context, req *contractv1.CredentialPermissionsRequest) (*contractv1.CredentialPermissionsResponse, error) {
 	p, err := h.session.use()
 	if err != nil {
@@ -322,17 +326,23 @@ func (h *handlers) GetCredentialPermissions(_ context.Context, req *contractv1.C
 		Document: document.Document,
 	}}
 
-	if front, err := p.Edges().Open(edgeKind(p, req.GetEdge().GetKind()), req.GetEdge().GetOptions().AsMap()); err == nil {
-		if document := front.Hooks().DescribeCredentialPermissions; document != nil {
-			documented, err := document(purpose)
-			if err != nil {
-				return nil, provider.RefusalError(err)
-			}
-			groups = append(groups, &contractv1.CredentialGroup{
-				Heading:  documented.Heading,
-				Document: documented.Document,
-			})
+	kind := edgeKind(p, req.GetEdge().GetKind())
+	if !isServedEdge(p, kind) {
+		return &contractv1.CredentialPermissionsResponse{Groups: groups}, nil
+	}
+	front, err := p.Edges().Open(kind, req.GetEdge().GetOptions().AsMap())
+	if err != nil {
+		return nil, provider.RefusalError(err)
+	}
+	if document := front.Hooks().DescribeCredentialPermissions; document != nil {
+		documented, err := document(purpose)
+		if err != nil {
+			return nil, provider.RefusalError(err)
 		}
+		groups = append(groups, &contractv1.CredentialGroup{
+			Heading:  documented.Heading,
+			Document: documented.Document,
+		})
 	}
 	return &contractv1.CredentialPermissionsResponse{Groups: groups}, nil
 }
