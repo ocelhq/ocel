@@ -22,7 +22,8 @@ creates is keyed on it, so changing it forks a new project.
 
 `provider`, `edge` and `dns` each name one choice: an object keyed by its identifier and
 containing its options, such as `{ "aws": { "region": "us-east-1" } }`, or the identifier alone
-when it needs none, as `"aws"` is above.
+when it needs none, as `"aws"` is above. Each edge takes options of its own: `tunnel` is the
+Cloudflare edge's, and CloudFront, API Gateway and the load balancer take none.
 
 The file is JSON with comments and trailing commas allowed, so a variant you are not using
 can sit beside the one you are.

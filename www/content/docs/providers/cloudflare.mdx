@@ -58,9 +58,11 @@ Zone Settings Read, DNS Edit, SSL and Certificates Edit and Cache Purge on the z
 Account Settings Read on the account; with `tunnel`, it also needs Cloudflare Tunnel Edit on
 the account.
 
-On a VPS box, `"edge": { "cloudflare": { "tunnel": true } }` reaches the box through a
-Cloudflare Tunnel instead of at its address, with no certificates and no SSL mode to set;
-see [through a Cloudflare Tunnel](/docs/providers/vps#through-a-cloudflare-tunnel). Other
+`tunnel` is an option of the Cloudflare edge, and no other edge takes it. On a VPS box,
+`"edge": { "cloudflare": { "tunnel": true } }`, or `cloudflare({ tunnel: true })` in a
+TypeScript config, reaches the box through a Cloudflare Tunnel instead of at its address,
+with no certificates and no SSL mode to set; see
+[through a Cloudflare Tunnel](/docs/providers/vps#through-a-cloudflare-tunnel). Other
 providers refuse `tunnel`.
 
 Hostname records go into the origin provider's own DNS unless you say otherwise. Write
