@@ -66,6 +66,36 @@ func TestAHostnameMovedOntoAnOriginRepointsTheWorkerRouteThatServedItToRunNoWork
 	}
 }
 
+func TestAHostnameThatCannotBeForwardedToItsOriginKeepsTheWorkerRouteThatServedIt(t *testing.T) {
+	m := zoneMock()
+	m.sslMode = "full"
+	m.existingRoutes = []map[string]any{{"id": "served", "pattern": "api.app.com/*", "script": domainEntryScript}}
+	s := originStack(t, m, environment.TierProduction)
+
+	if err := s.BindDomain(t.Context(), edge.DomainBinding{Hostname: "api.app.com", Origin: &edge.Origin{Address: albAddress, Certified: true}}); err == nil {
+		t.Fatal("BindDomain in a zone whose SSL mode is full = nil, want it refused")
+	}
+
+	if len(m.existingRoutes) != 1 || m.existingRoutes[0]["script"] != domainEntryScript {
+		t.Errorf("the zone holds routes %v, want api.app.com/* still running %s: the placeholder record the worker answers behind has no origin behind it", m.existingRoutes, domainEntryScript)
+	}
+}
+
+func TestAHostnameThatCannotBeForwardedToItsOriginLeavesNoRouteThatRunsNoWorker(t *testing.T) {
+	m := zoneMock()
+	m.sslMode = "full"
+	m.existingRoutes = []map[string]any{{"id": "wildcard", "pattern": "*.app.com/*", "script": "user-wildcard"}}
+	s := originStack(t, m, environment.TierProduction)
+
+	if err := s.BindDomain(t.Context(), edge.DomainBinding{Hostname: "api.app.com", Origin: &edge.Origin{Address: albAddress, Certified: true}}); err == nil {
+		t.Fatal("BindDomain in a zone whose SSL mode is full = nil, want it refused")
+	}
+
+	if len(m.existingRoutes) != 1 || m.existingRoutes[0]["id"] != "wildcard" {
+		t.Errorf("the zone holds routes %v, want only the wildcard route, which served api.app.com before the refused bind", m.existingRoutes)
+	}
+}
+
 func TestAForwardedProductionHostnameMovedOntoTheWorkerIsServedByTheEntryWorkerAndNoLongerForwarded(t *testing.T) {
 	m := zoneMock()
 	s := originStack(t, m, environment.TierProduction)
