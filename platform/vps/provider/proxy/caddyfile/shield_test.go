@@ -71,13 +71,13 @@ func TestAShieldedHostnameIsASiteOfItsOwnThatRequiresTheZonesClientCertificateAn
 	}
 	bundle := originFile(t, front, spec).Path
 	want := "blog.example.com, box.example.com {\n" +
-		"\treverse_proxy ocel-switchboard:8443 {\n\t\tstream_close_delay 30s\n\t}\n" +
+		"\treverse_proxy ocel-switchboard:8443 {\n\t\tlb_try_duration 10s\n\t\tlb_try_interval 250ms\n\t\tstream_close_delay 30s\n\t}\n" +
 		"}\n" +
 		"https://shop.example.com {\n" +
 		"\ttls " + bundle + " " + bundle + " {\n" +
 		"\t\tclient_auth {\n\t\t\tmode require\n\t\t\ttrusted_leaf_cert " + trusted + "\n\t\t\ttrusted_leaf_cert " + trustedNext + "\n\t\t}\n" +
 		"\t}\n" +
-		"\treverse_proxy ocel-switchboard:8443 {\n\t\tstream_close_delay 30s\n\t}\n" +
+		"\treverse_proxy ocel-switchboard:8443 {\n\t\tlb_try_duration 10s\n\t\tlb_try_interval 250ms\n\t\tstream_close_delay 30s\n\t}\n" +
 		"}\n" +
 		"http://shop.example.com {\n" +
 		"\tredir https://{host}{uri} 308\n" +
@@ -99,7 +99,7 @@ func TestAShieldedHostnameWithNoOriginCertificateRequiresTheClientCertificateOnT
 	}
 	want := "https://shop.example.com {\n" +
 		"\ttls {\n\t\tclient_auth {\n\t\t\tmode require\n\t\t\ttrusted_leaf_cert " + trusted + "\n\t\t}\n\t}\n" +
-		"\treverse_proxy 127.0.0.1:8480\n" +
+		"\treverse_proxy 127.0.0.1:8480 {\n\t\tlb_try_duration 10s\n\t\tlb_try_interval 250ms\n\t}\n" +
 		"}\n" +
 		"http://shop.example.com {\n\tredir https://{host}{uri} 308\n}\n"
 	if string(rendered) != want {

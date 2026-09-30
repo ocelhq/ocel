@@ -3,6 +3,7 @@ package caddyfile_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
@@ -45,6 +46,28 @@ func TestTheSnippetIsOneSiteBlockOverEveryHostnameInEachWayYourCaddyRuns(t *test
 			}
 			if want := golden(t, each.golden); string(rendered) != want {
 				t.Errorf("Render() =\n%s\nwant\n%s", rendered, want)
+			}
+		})
+	}
+}
+
+func TestEachForwardToTheSwitchboardKeepsTryingItForTheSecondsItTakesToRestart(t *testing.T) {
+	t.Parallel()
+
+	for name, front := range map[string]caddyfile.Caddyfile{
+		"a container on a network": {Container: "caddy", Config: "/etc/caddy/Caddyfile", Network: "web"},
+		"the caddy package":        {Port: 8480},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			rendered, err := front.Render(proxy.Spec{Hostnames: served, PreviewBase: "preview.example.com"})
+			if err != nil {
+				t.Fatalf("Render() = %v", err)
+			}
+			forwards := strings.Count(string(rendered), "reverse_proxy ")
+			if forwards == 0 || strings.Count(string(rendered), "\t\tlb_try_duration 10s\n\t\tlb_try_interval 250ms\n") != forwards {
+				t.Errorf("Render() =\n%s\nwant every reverse_proxy to try the switchboard again for 10s: a request the restarting switchboard refused would otherwise answer 502", rendered)
 			}
 		})
 	}

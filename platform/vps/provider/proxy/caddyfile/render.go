@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
@@ -19,6 +20,8 @@ import (
 const (
 	streamCloseDelay = "30s"
 	redirectToHTTPS  = "redir https://{host}{uri} 308"
+	tryDuration      = 10 * time.Second
+	tryInterval      = 250 * time.Millisecond
 )
 
 type shieldedSite struct {
@@ -34,10 +37,13 @@ func (c Caddyfile) upstream() string {
 }
 
 func (c Caddyfile) forwarding() string {
-	if c.Container == "" {
-		return "\treverse_proxy " + c.upstream() + "\n"
+	block := "\treverse_proxy " + c.upstream() + " {\n" +
+		"\t\tlb_try_duration " + tryDuration.String() + "\n" +
+		"\t\tlb_try_interval " + tryInterval.String() + "\n"
+	if c.Container != "" {
+		block += "\t\tstream_close_delay " + streamCloseDelay + "\n"
 	}
-	return "\treverse_proxy " + c.upstream() + " {\n\t\tstream_close_delay " + streamCloseDelay + "\n\t}\n"
+	return block + "\t}\n"
 }
 
 func (c Caddyfile) render(spec proxy.Spec) ([]byte, error) {

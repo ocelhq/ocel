@@ -1,61 +1,80 @@
 http:
   routers:
-    ocel-ocel-edge-probe-preview-example-com-5ab75bbe:
+    ocel-ocel-edge-probe-preview-example-com-5ab75bbe-419a7e8a:
       rule: Host(`ocel-edge-probe.preview.example.com`)
       entryPoints:
         - websecure
-      service: ocel-switchboard
+      middlewares:
+        - ocel-retry-419a7e8a
+      service: ocel-switchboard-419a7e8a
       priority: 1000000
       tls:
         certResolver: cloudflare
         domains:
           - main: '*.preview.example.com'
-    ocel-ocel-edge-probe-preview-example-com-5ab75bbe-http:
+    ocel-ocel-edge-probe-preview-example-com-5ab75bbe-419a7e8a-http:
       rule: Host(`ocel-edge-probe.preview.example.com`)
       entryPoints:
         - web
       middlewares:
-        - ocel-https
+        - ocel-https-419a7e8a
       service: noop@internal
       priority: 1000000
-    ocel-pr-12--web-preview-example-com-983b404f:
+    ocel-placement-419a7e8a:
+      rule: Host(`419a7e8a.placement.ocel.invalid`)
+      entryPoints:
+        - websecure
+      middlewares:
+        - ocel-retry-419a7e8a
+      service: ocel-switchboard-419a7e8a
+      priority: 1000000
+      tls: {}
+    ocel-pr-12--web-preview-example-com-983b404f-419a7e8a:
       rule: Host(`pr-12--web.preview.example.com`)
       entryPoints:
         - websecure
-      service: ocel-switchboard
+      middlewares:
+        - ocel-retry-419a7e8a
+      service: ocel-switchboard-419a7e8a
       priority: 1000000
       tls: {}
-    ocel-pr-12--web-preview-example-com-983b404f-http:
+    ocel-pr-12--web-preview-example-com-983b404f-419a7e8a-http:
       rule: Host(`pr-12--web.preview.example.com`)
       entryPoints:
         - web
       middlewares:
-        - ocel-https
+        - ocel-https-419a7e8a
       service: noop@internal
       priority: 1000000
-    ocel-shop-example-com-951623a2:
+    ocel-shop-example-com-951623a2-419a7e8a:
       rule: Host(`shop.example.com`)
       entryPoints:
         - websecure
-      service: ocel-switchboard
+      middlewares:
+        - ocel-retry-419a7e8a
+      service: ocel-switchboard-419a7e8a
       priority: 1000000
       tls:
         certResolver: letsencrypt
-    ocel-shop-example-com-951623a2-http:
+    ocel-shop-example-com-951623a2-419a7e8a-http:
       rule: Host(`shop.example.com`)
       entryPoints:
         - web
       middlewares:
-        - ocel-https
+        - ocel-https-419a7e8a
       service: noop@internal
       priority: 1000000
   middlewares:
-    ocel-https:
+    ocel-https-419a7e8a:
       redirectScheme:
         scheme: https
         permanent: true
+    ocel-retry-419a7e8a:
+      retry:
+        attempts: 30
+        initialInterval: 250ms
   services:
-    ocel-switchboard:
+    ocel-switchboard-419a7e8a:
       loadBalancer:
         servers:
           - url: http://ocel-switchboard:8443
