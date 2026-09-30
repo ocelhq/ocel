@@ -3,6 +3,7 @@ package stackrecords
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -63,6 +64,37 @@ func readEnvironmentMeta(ctx context.Context, store keyvalue.Store, name keyvalu
 	}
 	return recorded, meta, nil
 }
+
+func EnsureLifecycle(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, env string, lifecycle Lifecycle) error {
+	name := EnvironmentKey(tier, slug, env)
+	for range ensureLifecycleAttempts {
+		recorded, meta, err := readEnvironmentMeta(ctx, store, name)
+		if err != nil {
+			return err
+		}
+		if err := meta.RefuseOtherLifecycle(env, lifecycle); err != nil {
+			return err
+		}
+		if meta.Lifecycle == lifecycle {
+			return nil
+		}
+		meta.Lifecycle = lifecycle
+		if recorded.Value, err = json.Marshal(meta); err != nil {
+			return fmt.Errorf("record %s: %w", name, err)
+		}
+		_, err = store.Write(ctx, recorded)
+		if err == nil {
+			return nil
+		}
+		if !errors.Is(err, keyvalue.ErrStale) {
+			return fmt.Errorf("record %s: %w", name, err)
+		}
+	}
+	return fmt.Errorf("record %s: it was rewritten between every read of it and the write that followed, %d times over",
+		name, ensureLifecycleAttempts)
+}
+
+const ensureLifecycleAttempts = 5
 
 func RecordEnvironmentMeta(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, env, label string, lifecycle Lifecycle) error {
 	name := EnvironmentKey(tier, slug, env)

@@ -1,8 +1,10 @@
 package providerserver_test
 
 import (
+	"errors"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -145,5 +147,96 @@ func TestAnEphemeralDeployOfAResourceABindingCoversGrantsThatBinding(t *testing.
 				t.Errorf("web was granted %v, want the published orders", grants)
 			}
 		})
+	}
+}
+
+func TestAPersistentPreviewWhoseFirstDeployFailsAfterItsInfraKeepsItsLifecycle(t *testing.T) {
+	client, vendor := previewServed(t)
+	vendor.FakeStacks().Entering(func(spec provider.StackSpec) error {
+		if spec.Kind == provider.StackApp {
+			return errors.New("the app stack failed")
+		}
+		return nil
+	})
+	if result, _ := deploy(t, client, previewOf(environmentv1.Lifecycle_LIFECYCLE_PERSISTENT)); result.GetSuccess() {
+		t.Fatal("Deploy() succeeded, want the app stack to fail it after the infra stack")
+	}
+	vendor.FakeStacks().Entering(nil)
+	provisioned := len(vendor.FakeStacks().Provisioned())
+
+	said := deployRefusal(t, client, previewOf(environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL))
+
+	if !strings.Contains(said, "created persistent") {
+		t.Errorf("Deploy() said %q, want it refused because pr-7 was created persistent", said)
+	}
+	if got := len(vendor.FakeStacks().Provisioned()); got != provisioned {
+		t.Errorf("the ephemeral deploy provisioned %d stacks, want none: pr-7's infra stack would be orphaned", got-provisioned)
+	}
+}
+
+func TestAFirstDeployOfAPreviewRefusedBeforeItProvisionsLeavesTheNameFreeForTheOtherLifecycle(t *testing.T) {
+	client, _ := previewServed(t)
+	deployRefusal(t, client, ephemeralWithOrders())
+
+	if result, _ := deploy(t, client, previewOf(environmentv1.Lifecycle_LIFECYCLE_PERSISTENT)); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want the persistent deploy to create pr-7: the refused ephemeral deploy provisioned nothing to claim it for", result.GetError())
+	}
+
+	if listed := listedLifecycles(t, client)["pr-7"]; listed != environmentv1.Lifecycle_LIFECYCLE_PERSISTENT {
+		t.Errorf("pr-7 is listed %s, want persistent", listed)
+	}
+}
+
+func TestADeployRacingTheFirstDeployOfAPreviewWithTheOtherLifecycleIsRefusedBeforeItProvisions(t *testing.T) {
+	client, vendor := previewServed(t)
+	var raced sync.Once
+	var said string
+	var provisionedByRacer int
+	vendor.FakeStacks().Entering(func(spec provider.StackSpec) error {
+		if spec.Kind != provider.StackInfra {
+			return nil
+		}
+		raced.Do(func() {
+			before := len(vendor.FakeStacks().Provisioned())
+			result, _, err := deployStream(t, client, previewOf(environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL))
+			said = result.GetError() + connectMessage(err)
+			provisionedByRacer = len(vendor.FakeStacks().Provisioned()) - before
+		})
+		return nil
+	})
+
+	if result, _ := deploy(t, client, previewOf(environmentv1.Lifecycle_LIFECYCLE_PERSISTENT)); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want the persistent deploy that claimed pr-7 first to succeed", result.GetError())
+	}
+
+	if !strings.Contains(said, "created persistent") {
+		t.Errorf("the racing ephemeral Deploy() said %q, want it refused because pr-7 was claimed persistent", said)
+	}
+	if provisionedByRacer != 0 {
+		t.Errorf("the racing ephemeral deploy provisioned %d stacks, want none", provisionedByRacer)
+	}
+	if listed := listedLifecycles(t, client)["pr-7"]; listed != environmentv1.Lifecycle_LIFECYCLE_PERSISTENT {
+		t.Errorf("pr-7 is listed %s, want persistent", listed)
+	}
+}
+
+func TestADeployOfTheOtherLifecycleToAPreviewIsRefusedBeforeItRepairsTheBootstrap(t *testing.T) {
+	client, vendor := previewServed(t)
+	if result, _ := deploy(t, client, previewOf(environmentv1.Lifecycle_LIFECYCLE_PERSISTENT)); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want the first deploy to create pr-7", result.GetError())
+	}
+	repairing := true
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{
+		Tier:           environmentv1.Tier_TIER_PREVIEW,
+		Features:       []string{fake.FeatureCache, fake.FeatureImages},
+		RepairOnDeploy: &repairing,
+	})
+	vendor.FakeBootstrap().MarkStale(fake.FeatureCache, fake.FeatureImages)
+	applied := len(vendor.FakeBootstrap().Applied())
+
+	deployRefusal(t, client, previewOf(environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL))
+
+	if got := len(vendor.FakeBootstrap().Applied()); got != applied {
+		t.Errorf("the refused deploy applied the bootstrap %d times, want none: it is refused before it changes anything", got-applied)
 	}
 }
