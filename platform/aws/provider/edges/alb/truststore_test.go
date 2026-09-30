@@ -101,3 +101,23 @@ func TestATrustStorePastItsCAQuotaIsRefusedNamingTheServiceQuota(t *testing.T) {
 		t.Errorf("Claim past the trust store's CA quota = %v, want a refusal naming the Service Quotas code to raise", err)
 	}
 }
+
+func TestADisclaimRetriedAfterTheTrustRecordRefusedTheChangePrunesTheCA(t *testing.T) {
+	f := newFakeAWS()
+	first, second := mintCA(t, "zone one"), mintCA(t, "zone two")
+	stack := claimedStack(t, f,
+		router.Claim{Hostname: testHostname, App: "admin", Certificate: testCertificate, ClientCAs: []string{first}},
+		router.Claim{Hostname: "ops.other.example", App: "admin", Certificate: testCertificate, ClientCAs: []string{second}},
+	)
+
+	f.failPut = errors.New("throttled")
+	if err := stack.Disclaim(context.Background(), "ops.other.example"); err == nil {
+		t.Fatal("Disclaim while the trust record refused the change = nil, want the failure")
+	}
+	if err := stack.Disclaim(context.Background(), "ops.other.example"); err != nil {
+		t.Fatalf("Disclaim again: %v", err)
+	}
+	if trusted := f.trusted(); strings.Contains(trusted, strings.TrimSpace(second)) {
+		t.Errorf("the trust store holds\n%s\nwant zone two's CA pruned: the hostname stays recorded until what it held is released, so a retry finishes the job", trusted)
+	}
+}

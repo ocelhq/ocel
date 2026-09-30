@@ -123,7 +123,7 @@ func (s *stack) Claim(ctx context.Context, claim router.Claim) (edge.Origin, err
 	held.App, held.Pointer, held.Certificate, held.CertificateRequested = claim.App, pointer, claim.Certificate, claim.CertificateRequested
 	s.recordHost(claim.Hostname, held)
 	if superseded.Certificate != "" && superseded.Certificate != claim.Certificate {
-		if err := s.releaseCertificate(ctx, c, listener.arn, superseded); err != nil {
+		if err := s.releaseCertificate(ctx, c, listener.arn, claim.Hostname, superseded); err != nil {
 			return edge.Origin{}, err
 		}
 	}
@@ -177,30 +177,32 @@ func (s *stack) dropHost(ctx context.Context, c Clients, hostname string, held h
 	if err := s.deleteRule(ctx, c, held.Rule); err != nil {
 		return err
 	}
-	delete(s.recorded.Hosts, hostname)
 	if err := s.untrustHostname(ctx, c, hostname); err != nil {
 		return err
 	}
-	if held.Certificate == "" {
-		return nil
+	if held.Certificate != "" {
+		listener, err := s.readPublicListener(ctx, c)
+		var refused refusal.Refusal
+		switch {
+		case errors.As(err, &refused) && refused.Code == refusal.CodeNotReady:
+		case err != nil:
+			return err
+		default:
+			if err := s.releaseCertificate(ctx, c, listener.arn, hostname, held); err != nil {
+				return err
+			}
+		}
 	}
-	listener, err := s.readPublicListener(ctx, c)
-	var refused refusal.Refusal
-	if errors.As(err, &refused) && refused.Code == refusal.CodeNotReady {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	return s.releaseCertificate(ctx, c, listener.arn, held)
+	delete(s.recorded.Hosts, hostname)
+	return nil
 }
 
-func (s *stack) releaseCertificate(ctx context.Context, c Clients, listener string, released hostRule) error {
+func (s *stack) releaseCertificate(ctx context.Context, c Clients, listener, hostname string, released hostRule) error {
 	if !released.CertificateRequested {
 		return nil
 	}
-	for _, held := range s.recorded.Hosts {
-		if held.Certificate == released.Certificate {
+	for other, held := range s.recorded.Hosts {
+		if other != hostname && held.Certificate == released.Certificate {
 			return nil
 		}
 	}
