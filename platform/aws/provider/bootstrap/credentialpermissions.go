@@ -13,8 +13,8 @@ import (
 const (
 	callerAccount = "${aws:PrincipalAccount}"
 
-	managedByTagKey     = "ocel:managed-by"
-	managedByTagPattern = "ocel-cli/*"
+	managedByTagKey   = "ocel:managed-by"
+	managedByTagValue = "ocel"
 
 	LambdaServicePrincipal = "lambda.amazonaws.com"
 
@@ -137,11 +137,11 @@ func inCallerAccount() map[string]any {
 }
 
 func taggedOnCreate() map[string]any {
-	return map[string]any{"StringLike": map[string]any{"aws:RequestTag/" + managedByTagKey: managedByTagPattern}}
+	return map[string]any{"StringEquals": map[string]any{"aws:RequestTag/" + managedByTagKey: managedByTagValue}}
 }
 
 func taggedByOcel() map[string]any {
-	return map[string]any{"StringLike": map[string]any{"aws:ResourceTag/" + managedByTagKey: managedByTagPattern}}
+	return map[string]any{"StringEquals": map[string]any{"aws:ResourceTag/" + managedByTagKey: managedByTagValue}}
 }
 
 func managedByAnAppCluster() map[string]any {
@@ -176,7 +176,7 @@ func attachedPolicyIsAServiceRole(resourceTagged bool) map[string]any {
 		"ArnEquals": map[string]any{"iam:PolicyARN": []string{LambdaBasicExecutionPolicyARN, lambdaVPCAccessPolicyARN, ecsTaskExecutionPolicyARN}},
 	}
 	if resourceTagged {
-		condition["StringLike"] = map[string]any{"aws:ResourceTag/" + managedByTagKey: managedByTagPattern}
+		return mergeConditions(condition, taggedByOcel())
 	}
 	return condition
 }
@@ -198,7 +198,7 @@ func passedTo(service any, resourceTagged bool) map[string]any {
 		"StringEquals": map[string]any{"iam:PassedToService": service},
 	}
 	if resourceTagged {
-		condition["StringLike"] = map[string]any{"aws:ResourceTag/" + managedByTagKey: managedByTagPattern}
+		return mergeConditions(condition, taggedByOcel())
 	}
 	return condition
 }
