@@ -97,7 +97,7 @@ func (a App) runningOn(compute provider.Compute) (App, error) {
 		return App{}, fmt.Errorf("app %q: nothing in %s says what it is built with; set \"framework\" in the app config", a.Name, a.Path)
 	}
 	if a.Container != nil {
-		if err := refuseContainerConfig(a, compute, a.Container.Build, a.Container.Health); err != nil {
+		if err := refuseContainerConfig(a, compute, a.Container); err != nil {
 			return App{}, err
 		}
 	}

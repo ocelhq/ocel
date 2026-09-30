@@ -9,6 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 func TestAProjectNamingNoAppsHasTheNodeAppAtItsRootNamedAfterItsSlug(t *testing.T) {
@@ -141,8 +142,10 @@ func TestAnAppDeclaringServerlessComputeAndContainerConfigIsRefusedAtLoad(t *tes
 	t.Parallel()
 
 	for name, config := range map[string]string{
-		"build":  `"build":{"dockerfile":"Dockerfile"}`,
-		"health": `"health":{"path":"/healthz"}`,
+		"build":        `"build":{"dockerfile":"Dockerfile"}`,
+		"health":       `"health":{"path":"/healthz"}`,
+		"minInstances": `"minInstances":1`,
+		"maxInstances": `"maxInstances":3`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -167,5 +170,44 @@ func TestAnAppDeclaringAComputeHasOnlyThatComputesShape(t *testing.T) {
 	}
 	if web := cfg.Apps[1]; web.Container != nil || web.Framework() != "node" {
 		t.Errorf("web = %+v, want the serverless shape alone", web)
+	}
+}
+
+func TestAContainerAppKeepsTheInstanceCountsItNames(t *testing.T) {
+	t.Parallel()
+
+	cfg := mustLoadJSON(t, `{"slug":"shop","apps":[{"name":"api","path":"api","compute":"container","minInstances":0,"maxInstances":4}]}`)
+	if got, want := cfg.Apps[0].Container.Instances(), (provider.Instances{Min: 0, Max: 4}); got != want {
+		t.Errorf("Instances() = %+v, want %+v", got, want)
+	}
+}
+
+func TestAContainerAppLeftWithoutInstanceCountsRunsOneOrAsManyAsItsFloor(t *testing.T) {
+	t.Parallel()
+
+	for config, want := range map[string]provider.Instances{
+		``:                  {Min: 1, Max: 1},
+		`,"minInstances":3`: {Min: 3, Max: 3},
+		`,"minInstances":0`: {Min: 0, Max: 1},
+		`,"maxInstances":5`: {Min: 1, Max: 5},
+	} {
+		cfg := mustLoadJSON(t, `{"slug":"shop","apps":[{"name":"api","path":"api","compute":"container"`+config+`}]}`)
+		if got := cfg.Apps[0].Container.Instances(); got != want {
+			t.Errorf("%s: Instances() = %+v, want %+v", config, got, want)
+		}
+	}
+}
+
+func TestAContainerAppWhoseCeilingIsBelowItsFloorIsRefusedAtLoad(t *testing.T) {
+	t.Parallel()
+
+	_, err := loadJSON(t, `{"slug":"shop","apps":[{"name":"api","path":"api","compute":"container","minInstances":3,"maxInstances":2}]}`)
+	if err == nil {
+		t.Fatal("Load admitted an app that runs at least 3 instances and at most 2")
+	}
+	for _, want := range []string{`app "api"`, "minInstances 3", "maxInstances 2"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("Load err = %q, want it to name %s", err, want)
+		}
 	}
 }
