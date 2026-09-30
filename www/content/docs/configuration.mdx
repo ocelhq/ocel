@@ -167,6 +167,37 @@ The processor architecture an app's functions or container image are built for.
 Either `x86_64` or `arm64`. Left off, it is what your provider runs the app on. A provider
 that cannot run the one you name refuses the deploy before anything is built.
 
+## minInstances and maxInstances
+
+How many instances of a container app run: at least `minInstances`, however quiet it is, and
+at most `maxInstances`, however busy.
+
+```json title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/0.0.0/ocel.schema.json",
+  "slug": "my-app",
+  "apps": [
+    { "name": "api", "path": "api", "compute": "container", "minInstances": 2, "maxInstances": 10 }
+  ]
+}
+```
+
+Both are whole numbers: `minInstances` from 0, `maxInstances` from 1, and `minInstances` no
+more than `maxInstances`. Left off, `minInstances` is 1 and `maxInstances` is `minInstances`,
+or 1 when that is 0. An app with neither runs one instance and never scales.
+
+Each instance kept running is billed whether it serves a request or not. What the two numbers
+do depends on the provider:
+
+| Provider | Between the two |
+| --- | --- |
+| AWS | The ECS service starts at `minInstances`. When `maxInstances` is higher, it adds tasks when the load balancer counts more than 1,000 requests a minute per task, and removes them when the count falls. `minInstances` must be at least 1. |
+| Google Cloud | Cloud Run's `min-instances` and `max-instances`. Cloud Run scales on concurrent requests, and a `minInstances` of 0 lets the service scale to zero. |
+| VPS | A box runs one container per app, so both must be 1 or left off. |
+
+A serverless app scales itself, so either field on one is refused. The same goes for an app
+whose provider runs it on functions because it names no `compute`.
+
 ## bindings
 
 A resource the code declares is provisioned in your account, unless `bindings` names what it
