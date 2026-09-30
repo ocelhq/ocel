@@ -54,6 +54,7 @@ func RunPorts(t *testing.T, p provider.Provider) {
 	t.Run("Edges", func(t *testing.T) { RunEdges(t, facts, p.Edges()) })
 	t.Run("Routers", func(t *testing.T) { RunRouters(t, facts, p.Edges(), p.Routers()) })
 	t.Run("DNS", func(t *testing.T) { RunDNS(t, facts, p.DNS()) })
+	t.Run("Workers", func(t *testing.T) { RunWorkers(t, facts) })
 }
 
 func bootstrapOf(t *testing.T, p provider.Provider) provider.Bootstrap {

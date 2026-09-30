@@ -27,8 +27,9 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 	}
 
 	resp := &contractv1.PreflightResponse{
-		Identity: &contractv1.Identity{},
-		Computes: provider.ComputeNames(p.Facts().Computes),
+		Identity:       &contractv1.Identity{},
+		Computes:       provider.ComputeNames(p.Facts().Computes),
+		WorkerCeilings: workerCeilingMessages(p.Facts().WorkerCeilings),
 	}
 
 	principal, err := p.Credentials().Whoami(ctx)

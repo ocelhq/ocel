@@ -86,3 +86,10 @@ func buildProvider(t *testing.T) string {
 	}
 	return binary
 }
+
+func TestTopicsTasksAndWorkersAreRefusedAtPreflightAsUnsupported(t *testing.T) {
+	t.Parallel()
+
+	p := aws.NewProvider(aws.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
+	conformance.RunWorkers(t, p.Facts())
+}
