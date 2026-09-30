@@ -205,6 +205,14 @@ type providerSetting struct {
 	value string
 }
 
+func settingFields(settings []providerSetting, layout string) []string {
+	fields := make([]string, 0, len(settings))
+	for _, setting := range settings {
+		fields = append(fields, fmt.Sprintf(layout, setting.name, setting.value))
+	}
+	return fields
+}
+
 func configTemplate(name, slug, provider string, settings []providerSetting) string {
 	if project.IsTypeScript(name) {
 		return typescriptTemplate(slug, provider, settings)
@@ -215,11 +223,7 @@ func configTemplate(name, slug, provider string, settings []providerSetting) str
 	selected := fmt.Sprintf("{ %q: {} }", provider)
 	switch {
 	case len(settings) > 0:
-		fields := make([]string, 0, len(settings))
-		for _, setting := range settings {
-			fields = append(fields, fmt.Sprintf("%q: %q", setting.name, setting.value))
-		}
-		selected = fmt.Sprintf("{ %q: { %s } }", provider, strings.Join(fields, ", "))
+		selected = fmt.Sprintf("{ %q: { %s } }", provider, strings.Join(settingFields(settings, "%q: %q"), ", "))
 	case configdoc.ProviderNamedAlone(provider):
 		selected = strconv.Quote(provider)
 	}
@@ -235,10 +239,7 @@ func yamlTemplate(slug, provider string, settings []providerSetting) string {
 	selected := fmt.Sprintf("\n  %s: {}", provider)
 	switch {
 	case len(settings) > 0:
-		selected = fmt.Sprintf("\n  %s:", provider)
-		for _, setting := range settings {
-			selected += fmt.Sprintf("\n    %s: %q", setting.name, setting.value)
-		}
+		selected = fmt.Sprintf("\n  %s:\n    %s", provider, strings.Join(settingFields(settings, "%s: %q"), "\n    "))
 	case configdoc.ProviderNamedAlone(provider):
 		selected = " " + provider
 	}
@@ -251,11 +252,7 @@ provider:%s
 func typescriptTemplate(slug, provider string, settings []providerSetting) string {
 	options := "{}"
 	if len(settings) > 0 {
-		fields := make([]string, 0, len(settings))
-		for _, setting := range settings {
-			fields = append(fields, fmt.Sprintf("%s: %q", strconv.Quote(setting.name), setting.value))
-		}
-		options = "{ " + strings.Join(fields, ", ") + " }"
+		options = "{ " + strings.Join(settingFields(settings, "%q: %q"), ", ") + " }"
 	}
 	return fmt.Sprintf(`import { defineConfig } from "ocel/config";
 import %s from "ocel/providers/%s";
