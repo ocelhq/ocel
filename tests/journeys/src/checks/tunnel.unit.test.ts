@@ -1,5 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { assertNotServed, assertRedirectedOffPlainHTTP, assertTunnelAddress } from "./tunnel";
+import {
+  assertNotServed,
+  assertRecordKeptAcrossAPromote,
+  assertRedirectedOffPlainHTTP,
+  assertTunnelAddress,
+} from "./tunnel";
 
 describe("the origin a tunneled hostname's proxied record names", () => {
   it("passes when it is a Cloudflare Tunnel", () => {
@@ -66,5 +71,26 @@ describe("a tunneled hostname asked over plain http through Cloudflare", () => {
 
   it("fails when it is served over plain http", () => {
     expect(() => assertRedirectedOffPlainHTTP(200, null, "web.j.example.com")).toThrow(/200/);
+  });
+});
+
+describe("a tunneled hostname's proxied record across a promote", () => {
+  const tunnel = "0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b.cfargotunnel.com";
+
+  it("passes when it still names the tunnel it named before", () => {
+    expect(() =>
+      assertRecordKeptAcrossAPromote(tunnel, tunnel, "web.j.example.com", "redeploy"),
+    ).not.toThrow();
+  });
+
+  it("fails when the promote changed it", () => {
+    expect(() =>
+      assertRecordKeptAcrossAPromote(
+        tunnel,
+        "9a8b7c6d-5e4f-4a3b-2c1d-0e9f8a7b6c5d.cfargotunnel.com",
+        "web.j.example.com",
+        "rollback",
+      ),
+    ).toThrow(/rollback/);
   });
 });

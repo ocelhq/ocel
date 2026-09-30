@@ -133,7 +133,7 @@ export const gaps: Gap[] = [
       {
         on: ["vps", "vps.incus"],
         fixtures: [deploy.next, sdk.next, lifecycle.next],
-        variants: [defaults, cloudflareOnABox],
+        variants: [defaults, cloudflareOnABox, cloudflareTunnel],
         fails: [check(NEXT_CACHE)],
       },
     ],
