@@ -290,7 +290,7 @@ func TestAPreambleSaysAndAsksBeforeAnyRunBeginsAndSummarisesNothing(t *testing.T
 	seen := &recording{}
 	bus.Attach(seen)
 
-	preamble := bus.Preamble()
+	preamble := bus.Preamble(context.Background())
 	preamble.Say("No ocel.json here.")
 	if _, err := preamble.Confirm(func() (bool, error) { return true, nil }); err != nil {
 		t.Fatal(err)
