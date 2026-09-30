@@ -142,7 +142,8 @@ and previews a proxied wildcard record, as with any other hostname Cloudflare fo
 `cloudflared` hands traffic to the switchboard itself, never to the proxy on ports 80 and
 443, so a tunnel works whatever fronts the box: ocel's Caddy, your own proxy, or another
 platform's. The switchboard answers a tunneled hostname only on the listener `cloudflared`
-reaches, on the `ocel` network and published nowhere, and refuses it when it arrives through
+reaches, on the `ocel-tunnel-network` network that only the switchboard and `ocel-tunnel`
+join, published nowhere, and refuses it when it arrives through
 the proxy, so a request that reaches the box's address for it is refused with nothing to
 configure. There are no client or origin certificates, and the zone's SSL mode is not
 checked. A visitor who opens `http://` is redirected to https.

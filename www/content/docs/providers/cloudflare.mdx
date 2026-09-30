@@ -45,10 +45,11 @@ Cloudflare reaches the origin over plain http when the visitor used it, and the 
 answers that with a redirect to https without forwarding it, so ocel changes neither Always
 Use HTTPS nor any redirect rule in your zone.
 
-A promote purges what Cloudflare cached for the hostnames it moved to the new release. The zone's SSL mode
-must be Full (strict). The token needs Zone Read, Zone Settings Read, DNS Edit, SSL and
-Certificates Edit and Cache Purge on the zone, and Account Settings Read and Cloudflare
-Tunnel Edit on the account.
+A promote purges what Cloudflare cached for the hostnames it moved to the new release. Unless
+the edge sets `tunnel`, the zone's SSL mode must be Full (strict). The token needs Zone Read,
+Zone Settings Read, DNS Edit, SSL and Certificates Edit and Cache Purge on the zone, and
+Account Settings Read on the account; with `tunnel`, it also needs Cloudflare Tunnel Edit on
+the account.
 
 On a VPS box, `"edge": { "cloudflare": { "tunnel": true } }` reaches the box through a
 Cloudflare Tunnel instead of at its address, with no certificates and no SSL mode to set;
