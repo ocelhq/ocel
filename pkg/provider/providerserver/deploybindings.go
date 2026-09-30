@@ -29,7 +29,13 @@ func (r *deployRun) admitBindings(ctx context.Context, progress progress.Log) er
 		published[binding.Name] = binding
 		names = append(names, binding.Name)
 	}
-	r.warnShadowed(progress, resources, published)
+	if isEphemeralPreview(r.spec) {
+		if err := r.refuseUncovered(resources, published); err != nil {
+			return err
+		}
+	} else {
+		r.warnShadowed(progress, resources, published)
+	}
 
 	var missing []string
 	for _, resource := range resources {
@@ -52,6 +58,38 @@ func (r *deployRun) admitBindings(ctx context.Context, progress progress.Log) er
 		}
 	}
 	return nil
+}
+
+func (r *deployRun) refuseUncovered(resources []provider.Resource, published map[string]provider.Binding) error {
+	var uncovered []string
+	for _, resource := range resources {
+		if resource.Binding != "" {
+			continue
+		}
+		covering, covered := published[resource.Name]
+		if !covered {
+			uncovered = append(uncovered, resource.Name)
+			continue
+		}
+		if err := RefuseMismatchedBinding(covering, resource.Declared, resource.Type, proxied); err != nil {
+			return err
+		}
+	}
+	if len(uncovered) == 0 {
+		return nil
+	}
+	return refusal.Refuse(refusal.CodeNotReady,
+		"this manifest declares %s, and %s is an ephemeral preview: it provisions no infra of its own, and nothing is published under %s to %s or to the whole preview tier. "+
+			"Deploy it as a named preview (`ocel preview --name <name>`), which is persistent and provisions its own infra, or publish a binding for %s "+
+			"with `ocel bindings set --preview --environment %s` for this preview only, or `ocel bindings set --preview` for every preview",
+		quoteAll(uncovered), r.spec.Env, thatName(len(uncovered)), describeCoordinate(string(r.spec.Tier), r.spec.Env), itOrEach(len(uncovered)), r.spec.Env)
+}
+
+func itOrEach(n int) string {
+	if n == 1 {
+		return "it"
+	}
+	return "each"
 }
 
 func proxied(kind provider.BindingType) bool {

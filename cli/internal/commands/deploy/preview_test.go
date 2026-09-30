@@ -27,6 +27,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/pkg/variablestore"
+	"github.com/ocelhq/ocel/pkg/variablestoreserver"
 )
 
 var errNotARepo = errors.New("determine current git branch: not a git repository")
@@ -40,12 +42,35 @@ func previewDependencies(branch, pr string) Dependencies {
 
 func previewUp(t *testing.T, fixture clitest.FakeProject, dependencies Dependencies, opts previewUpOptions) string {
 	t.Helper()
+	coverEphemeralPreview(t, fixture, dependencies, opts)
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
 	if err := runPreviewUp(context.Background(), dependencies, fixture.Root, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	return stdout.String()
+}
+
+func coverEphemeralPreview(t *testing.T, fixture clitest.FakeProject, dependencies Dependencies, opts previewUpOptions) {
+	t.Helper()
+	env, err := resolveUpEnvironment(dependencies, fixture.Root, opts)
+	if err != nil {
+		t.Fatalf("resolveUpEnvironment: %v", err)
+	}
+	if env.GetLifecycle() != environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL {
+		return
+	}
+	const owner = variablestore.OwnerOcel
+	binding := publishedPostgres("db--main")
+	pair, err := variablestoreserver.BindingPair(owner, binding)
+	if err != nil {
+		t.Fatalf("BindingPair: %v", err)
+	}
+	scope := variablestore.Scope{Project: clitest.FixtureSlug, Tier: environment.TierPreview}
+	if _, err := valueStore(fixture).SetBindings(context.Background(), scope, env.GetIdentity(), owner,
+		[]variablestore.NamedBindingWrite{{Name: binding.GetName(), Write: pair}}); err != nil {
+		t.Fatalf("publish %s to %s: %v", binding.GetName(), env.GetIdentity(), err)
+	}
 }
 
 func previewKey(t *testing.T, ref string) string {
