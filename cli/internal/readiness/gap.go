@@ -109,6 +109,8 @@ func (e MissingFeaturesError) BootstrapRequest() *contractv1.BootstrapRequest {
 	return e.Gap.BootstrapRequest(e.Tier, e.Edge)
 }
 
+func (e MissingFeaturesError) BootstrapProvider() *providerprocess.Provider { return e.Provider }
+
 func (g Gap) RefuseIncomplete(tier environmentv1.Tier) error {
 	if err := g.RefuseMissing(tier); err != nil {
 		return err

@@ -11,19 +11,25 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
+type MissingBootstrapError interface {
+	prerequisite.MissingError
+	BootstrapRequest() *contractv1.BootstrapRequest
+	BootstrapProvider() *providerprocess.Provider
+}
+
 type NoInfrastructureError struct {
-	Tier     environmentv1.Tier
-	Other    environmentv1.Tier
-	Features []string
-	Account  string
-	Edge     *contractv1.EdgeSelection
-	Provider *providerprocess.Provider
+	Tier        environmentv1.Tier
+	PresentTier environmentv1.Tier
+	Features    []string
+	Account     string
+	Edge        *contractv1.EdgeSelection
+	Provider    *providerprocess.Provider
 }
 
 func (e NoInfrastructureError) Error() string {
-	if e.Other != environmentv1.Tier_TIER_UNSPECIFIED {
+	if e.PresentTier != environmentv1.Tier_TIER_UNSPECIFIED {
 		return fmt.Sprintf("this command needs %s infrastructure, but the account points at %s.\nRun `%s` and try again",
-			TierName(e.Tier), infraLabel(e.Other), e.command())
+			TierName(e.Tier), infraLabel(e.PresentTier), e.command())
 	}
 	return fmt.Sprintf("no %s infrastructure is set up yet.\nRun `%s` and try again", TierName(e.Tier), e.command())
 }
@@ -43,6 +49,8 @@ func (e NoInfrastructureError) Remedy() string { return "`" + e.command() + "`" 
 func (e NoInfrastructureError) BootstrapRequest() *contractv1.BootstrapRequest {
 	return &contractv1.BootstrapRequest{Tier: e.Tier, Features: e.Features, Edge: e.Edge}
 }
+
+func (e NoInfrastructureError) BootstrapProvider() *providerprocess.Provider { return e.Provider }
 
 func (e NoInfrastructureError) command() string {
 	command := BootstrapCommand(e.Tier)
