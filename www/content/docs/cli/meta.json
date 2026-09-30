@@ -10,6 +10,7 @@
     "dev",
     "build",
     "deploy",
+    "preview",
     "deployments",
     "rollback",
     "destroy",

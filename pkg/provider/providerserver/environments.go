@@ -62,14 +62,46 @@ func (h *handlers) ListEnvironments(ctx context.Context, req *contractv1.ListEnv
 	}
 	resp := &contractv1.ListEnvironmentsResponse{Environments: make([]*contractv1.PreviewEnvironment, 0, len(environments))}
 	for _, environment := range environments {
-		resp.Environments = append(resp.Environments, &contractv1.PreviewEnvironment{
-			Identity:  environment.Identity,
-			Lifecycle: encodeLifecycle(environment.Lifecycle),
-			Label:     environment.Label,
-			CreatedAt: environment.CreatedAt,
-		})
+		resp.Environments = append(resp.Environments, encodePreviewEnvironment(environment))
 	}
 	return resp, nil
+}
+
+func encodePreviewEnvironment(environment stackrecords.Environment) *contractv1.PreviewEnvironment {
+	return &contractv1.PreviewEnvironment{
+		Identity:  environment.Identity,
+		Lifecycle: encodeLifecycle(environment.Lifecycle),
+		Label:     environment.Label,
+		CreatedAt: environment.CreatedAt,
+	}
+}
+
+func (h *handlers) GetEnvironment(ctx context.Context, req *contractv1.GetEnvironmentRequest) (*contractv1.GetEnvironmentResponse, error) {
+	p, err := h.session.use()
+	if err != nil {
+		return nil, err
+	}
+	if tier := req.GetEnvironment().GetTier(); tier != environmentv1.Tier_TIER_PREVIEW {
+		return nil, provider.RefusalError(refusal.Refuse(refusal.CodeInvalid,
+			"only a preview environment is recorded with a lifecycle to read, and this call names the %s tier", tier))
+	}
+	identity, err := envName(req.GetEnvironment())
+	if err != nil {
+		return nil, provider.RefusalError(err)
+	}
+	meta, err := stackrecords.ReadEnvironmentMeta(ctx, p.KeyValues(), environment.TierPreview, req.GetSlug(), identity)
+	if err != nil {
+		return nil, provider.RefusalError(err)
+	}
+	if meta.Lifecycle == "" {
+		return &contractv1.GetEnvironmentResponse{}, nil
+	}
+	return &contractv1.GetEnvironmentResponse{Environment: encodePreviewEnvironment(stackrecords.Environment{
+		Identity:  identity,
+		Lifecycle: meta.Lifecycle,
+		Label:     meta.Label,
+		CreatedAt: meta.CreatedAt,
+	})}, nil
 }
 
 func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.RemoveEnvironmentRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
@@ -86,6 +118,9 @@ func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.Remove
 		}
 		session, err := h.openEdgeSession(ctx, environment.TierPreview, req.GetSlug(), req.GetEdge())
 		if err != nil {
+			return err
+		}
+		if err := refuseUnconfirmedLifecycle(ctx, session.provider.KeyValues(), req.GetSlug(), pointer, req.GetEnvironment().GetLifecycle()); err != nil {
 			return err
 		}
 		progress.Say(fmt.Sprintf("Removing the routing pointer of %s", environmentPhrase(environment.TierPreview, pointer)))
@@ -113,6 +148,31 @@ func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.Remove
 		}
 		return nil
 	})
+}
+
+func refuseUnconfirmedLifecycle(ctx context.Context, store keyvalue.Store, slug, preview string, confirmed environmentv1.Lifecycle) error {
+	meta, err := stackrecords.ReadEnvironmentMeta(ctx, store, environment.TierPreview, slug, preview)
+	if err != nil {
+		return err
+	}
+	if recorded := encodeLifecycle(meta.Lifecycle); recorded != confirmed {
+		return refusal.Refuse(refusal.CodeBusy,
+			"preview %s is %s, but this removal was confirmed while it was %s, so nothing was torn down: "+
+				"run `ocel preview rm %s` again to confirm what it is now",
+			preview, describeLifecycle(recorded), describeLifecycle(confirmed), preview)
+	}
+	return nil
+}
+
+func describeLifecycle(lifecycle environmentv1.Lifecycle) string {
+	switch lifecycle {
+	case environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL:
+		return "ephemeral"
+	case environmentv1.Lifecycle_LIFECYCLE_PERSISTENT:
+		return "persistent"
+	default:
+		return "not deployed"
+	}
 }
 
 func removeOcelOwnedBindings(ctx context.Context, p provider.Provider, slug, preview string) error {

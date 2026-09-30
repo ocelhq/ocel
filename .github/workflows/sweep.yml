@@ -228,8 +228,7 @@ jobs:
               continue
             }
             [ "$state" != OPEN ] || continue
-            ref=$(gh pr view "$pr" --json headRefName -q .headRefName)
-            echo "preview $identity belongs to pull request $pr, $state on branch $ref"
-            ocel preview rm --ref "$ref" --yes || status=1
+            echo "preview $identity belongs to pull request $pr, $state"
+            ocel preview rm "$identity" --yes || status=1
           done < "$RUNNER_TEMP/previews.tsv"
           exit "$status"

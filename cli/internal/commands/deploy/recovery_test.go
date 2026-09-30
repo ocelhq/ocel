@@ -670,7 +670,7 @@ func TestAPreviewMissingVariablesOpensTheEditorAndResumesOnceTheyAreSet(t *testi
 		done := make(chan error, 1)
 		go func() {
 			clitest.AttachTerminalSink(dependencies.Invocation, &out)
-			done <- runPreviewUp(context.Background(), dependencies, root, previewUpOptions{name: "staging"}, &out, &stderr, strings.NewReader(""))
+			done <- runPreviewUp(context.Background(), dependencies, root, previewUpOptions{name: "staging", persistent: true}, &out, &stderr, strings.NewReader(""))
 		}()
 
 		address, token := awaitEditorURL(t, &out, 1)
@@ -700,8 +700,8 @@ func TestAPreviewMissingVariablesOpensTheEditorAndResumesOnceTheyAreSet(t *testi
 			terminal bool
 			opts     previewUpOptions
 		}{
-			{name: "no terminal", opts: previewUpOptions{name: "staging"}},
-			{name: "no terminal with --yes", opts: previewUpOptions{name: "staging", yes: true}},
+			{name: "no terminal", opts: previewUpOptions{name: "staging", persistent: true}},
+			{name: "no terminal with --yes", opts: previewUpOptions{name: "staging", persistent: true, yes: true}},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				fixture := setUpVariablesProject(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
@@ -1203,7 +1203,7 @@ func TestAPreviewIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 		built := false
 		stubAppBuildRecorder(&dependencies, &built)
 
-		out, err := previewUpWith(t, fixture, dependencies, previewUpOptions{name: "staging"})
+		out, err := previewUpWith(t, fixture, dependencies, previewUpOptions{name: "staging", persistent: true})
 		if err == nil {
 			t.Fatal("runPreviewUp err = nil, want the preview declarations to refuse: the production store is not the preview one")
 		}
@@ -1233,7 +1233,7 @@ func TestAPreviewIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 				envSet(t, fixture, "PAGE_ID", "page_staging", envOptions{preview: true, environment: "staging"})
 				got := captureBuildEnv(&dependencies)
 
-				if out, err := previewUpWith(t, fixture, dependencies, previewUpOptions{name: tc.deploying}); err != nil {
+				if out, err := previewUpWith(t, fixture, dependencies, previewUpOptions{name: tc.deploying, persistent: true}); err != nil {
 					t.Fatalf("runPreviewUp err = %v; output=%s", err, out)
 				}
 				if len(*got) == 0 {
@@ -1253,7 +1253,7 @@ func TestAPreviewIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 		envSet(t, fixture, "PAGE_ID", "page_staging", envOptions{preview: true, environment: "staging"})
 		got := captureBuildEnv(&dependencies)
 
-		if out, err := previewUpWith(t, fixture, dependencies, previewUpOptions{name: "staging"}); err != nil {
+		if out, err := previewUpWith(t, fixture, dependencies, previewUpOptions{name: "staging", persistent: true}); err != nil {
 			t.Fatalf("runPreviewUp err = %v, want staging's own override to satisfy the declarations; output=%s", err, out)
 		}
 		if len(*got) == 0 {
@@ -1275,7 +1275,7 @@ func TestAPreviewIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 		up := func(when string) {
 			t.Helper()
 			*got = nil
-			if out, err := previewUpWith(t, fixture, dependencies, previewUpOptions{name: "staging"}); err != nil {
+			if out, err := previewUpWith(t, fixture, dependencies, previewUpOptions{name: "staging", persistent: true}); err != nil {
 				t.Fatalf("runPreviewUp %s err = %v; output=%s", when, err, out)
 			}
 			if len(*got) == 0 {

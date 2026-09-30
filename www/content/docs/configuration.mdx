@@ -259,7 +259,7 @@ missing and publish it before the deploy:
     URL=$(neonctl connection-string "$NAME")
     jq -n --arg url "$URL" '{name: "orders", source: "neon", postgres: {url: $url}}' |
       ocel bindings set --preview --environment "$NAME"
-- run: ocel preview up --name pr-${{ github.event.number }}
+- run: ocel preview up pr-${{ github.event.number }}
 ```
 
 ## Another config per target

@@ -124,6 +124,68 @@ func TestListEnvironmentsNamesNoLifecycleForAPreviewThatRecordedNone(t *testing.
 	}
 }
 
+func getEnvironment(t *testing.T, client contractv1connect.ProviderServiceClient, identity string) *contractv1.PreviewEnvironment {
+	t.Helper()
+	got, err := client.GetEnvironment(context.Background(), &contractv1.GetEnvironmentRequest{
+		Slug:        "shop",
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: identity},
+	})
+	if err != nil {
+		t.Fatalf("GetEnvironment(%s) error = %v", identity, err)
+	}
+	return got.GetEnvironment()
+}
+
+func TestGetEnvironmentNamesTheLifecycleThePreviewWasCreatedWith(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	recordEnvironment(t, vendor, "pr-7", stackrecords.LifecycleEphemeral)
+	recordEnvironment(t, vendor, "staging", stackrecords.LifecyclePersistent)
+
+	for identity, want := range map[string]environmentv1.Lifecycle{
+		"pr-7":    environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL,
+		"staging": environmentv1.Lifecycle_LIFECYCLE_PERSISTENT,
+	} {
+		got := getEnvironment(t, client, identity)
+		if got.GetIdentity() != identity || got.GetLifecycle() != want {
+			t.Errorf("GetEnvironment(%s) = %v, want %s: it was created %s", identity, got, want, want)
+		}
+	}
+}
+
+func TestGetEnvironmentReturnsNoPreviewWhoseRecordNamesNoLifecycle(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	recordEnvironment(t, vendor, "staging", "")
+
+	if got := getEnvironment(t, client, "staging"); got != nil {
+		t.Errorf("GetEnvironment(staging) = %v, want no preview: a deploy fixes the lifecycle before it provisions anything, so a record without one was never deployed", got)
+	}
+}
+
+func TestGetEnvironmentReturnsNoPreviewWhereNothingIsRecorded(t *testing.T) {
+	t.Parallel()
+	client, _ := contractServed(t, "1.0.0")
+
+	if got := getEnvironment(t, client, "staging"); got != nil {
+		t.Errorf("GetEnvironment(staging) = %v, want no preview: nothing was ever deployed there", got)
+	}
+}
+
+func TestGetEnvironmentRefusesAProductionEnvironment(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	recordEnvironment(t, vendor, "production", stackrecords.LifecyclePersistent)
+
+	got, err := client.GetEnvironment(context.Background(), &contractv1.GetEnvironmentRequest{
+		Slug:        "shop",
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
+	})
+	if code := connect.CodeOf(err); code != connect.CodeInvalidArgument {
+		t.Errorf("GetEnvironment(production) = %v, %v; want it refused as invalid: only a preview has a lifecycle to read", got, err)
+	}
+}
+
 func recordEnvironment(t *testing.T, vendor *fake.Provider, env string, lifecycle stackrecords.Lifecycle) {
 	t.Helper()
 	if err := stackrecords.RecordEnvironmentMeta(context.Background(), vendor.KeyValues(),
@@ -379,8 +441,9 @@ func TestRemoveEnvironmentDropsItsPointer(t *testing.T) {
 	stream, err := client.RemoveEnvironment(context.Background(), &contractv1.RemoveEnvironmentRequest{
 		Slug: "shop",
 		Environment: &environmentv1.Environment{
-			Tier:     environmentv1.Tier_TIER_PREVIEW,
-			Identity: "pr-7",
+			Tier:      environmentv1.Tier_TIER_PREVIEW,
+			Identity:  "pr-7",
+			Lifecycle: environmentv1.Lifecycle_LIFECYCLE_PERSISTENT,
 		},
 	})
 	if err != nil {
@@ -413,6 +476,42 @@ func TestRemoveEnvironmentDropsItsPointer(t *testing.T) {
 		"destroy "+outlived.String(),
 		"destroy "+naming.InfraStack("pr-7").String(),
 		"forget "+name.String())
+}
+
+func TestRemovingAPreviewRefusesWhenItsLifecycleIsNotTheOneTheRemovalWasConfirmedFor(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	deployed(t, vendor, environment.TierPreview, "shop")
+	seedPromotions(t, vendor, environment.TierPreview, "shop", "pr-7", "p1")
+	if err := stackrecords.RecordEnvironmentMeta(context.Background(), vendor.KeyValues(),
+		environment.TierPreview, "shop", "pr-7", "", stackrecords.LifecyclePersistent); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, confirmed := range []environmentv1.Lifecycle{environmentv1.Lifecycle_LIFECYCLE_UNSPECIFIED, environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL} {
+		stream, err := client.RemoveEnvironment(context.Background(), &contractv1.RemoveEnvironmentRequest{
+			Slug:        "shop",
+			Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-7", Lifecycle: confirmed},
+		})
+		if err != nil {
+			t.Fatalf("RemoveEnvironment() error = %v", err)
+		}
+		result, err := drain(stream)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.GetSuccess() || !strings.Contains(result.GetError(), "is persistent") {
+			t.Fatalf("removing persistent pr-7 confirmed as %s = %q, want a refusal naming what it is now: a deploy that made it persistent after the removal was confirmed would otherwise lose it unasked", confirmed, result.GetError())
+		}
+	}
+
+	history, err := ledger.New(vendor.KeyValues(), environment.TierPreview, "shop").History(context.Background(), "pr-7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(history) == 0 {
+		t.Error("pr-7 lost its promotions to a removal that was refused")
+	}
 }
 
 func inOrder(t *testing.T, journal []string, want ...string) {

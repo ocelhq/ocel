@@ -68,6 +68,9 @@ const (
 	// ProviderServiceListEnvironmentsProcedure is the fully-qualified name of the ProviderService's
 	// ListEnvironments RPC.
 	ProviderServiceListEnvironmentsProcedure = "/provider.contract.v1.ProviderService/ListEnvironments"
+	// ProviderServiceGetEnvironmentProcedure is the fully-qualified name of the ProviderService's
+	// GetEnvironment RPC.
+	ProviderServiceGetEnvironmentProcedure = "/provider.contract.v1.ProviderService/GetEnvironment"
 	// ProviderServicePreflightProcedure is the fully-qualified name of the ProviderService's Preflight
 	// RPC.
 	ProviderServicePreflightProcedure = "/provider.contract.v1.ProviderService/Preflight"
@@ -129,6 +132,7 @@ type ProviderServiceClient interface {
 	RemoveProject(context.Context, *v1.ProjectRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 	PlanRemoveProject(context.Context, *v1.ProjectRequest) (*v12.ChangePlan, error)
 	ListEnvironments(context.Context, *v1.ListEnvironmentsRequest) (*v1.ListEnvironmentsResponse, error)
+	GetEnvironment(context.Context, *v1.GetEnvironmentRequest) (*v1.GetEnvironmentResponse, error)
 	Preflight(context.Context, *v1.PreflightRequest) (*v1.PreflightResponse, error)
 	ListPromotions(context.Context, *v1.ListPromotionsRequest) (*v1.ListPromotionsResponse, error)
 	Rollback(context.Context, *v1.RollbackRequest) (*v1.RollbackResponse, error)
@@ -222,6 +226,12 @@ func NewProviderServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+ProviderServiceListEnvironmentsProcedure,
 			connect.WithSchema(providerServiceMethods.ByName("ListEnvironments")),
+			connect.WithClientOptions(opts...),
+		),
+		getEnvironment: connect.NewClient[v1.GetEnvironmentRequest, v1.GetEnvironmentResponse](
+			httpClient,
+			baseURL+ProviderServiceGetEnvironmentProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("GetEnvironment")),
 			connect.WithClientOptions(opts...),
 		),
 		preflight: connect.NewClient[v1.PreflightRequest, v1.PreflightResponse](
@@ -336,6 +346,7 @@ type providerServiceClient struct {
 	removeProject             *connect.Client[v1.ProjectRequest, v11.OperationEvent]
 	planRemoveProject         *connect.Client[v1.ProjectRequest, v12.ChangePlan]
 	listEnvironments          *connect.Client[v1.ListEnvironmentsRequest, v1.ListEnvironmentsResponse]
+	getEnvironment            *connect.Client[v1.GetEnvironmentRequest, v1.GetEnvironmentResponse]
 	preflight                 *connect.Client[v1.PreflightRequest, v1.PreflightResponse]
 	listPromotions            *connect.Client[v1.ListPromotionsRequest, v1.ListPromotionsResponse]
 	rollback                  *connect.Client[v1.RollbackRequest, v1.RollbackResponse]
@@ -427,6 +438,15 @@ func (c *providerServiceClient) PlanRemoveProject(ctx context.Context, req *v1.P
 // ListEnvironments calls provider.contract.v1.ProviderService.ListEnvironments.
 func (c *providerServiceClient) ListEnvironments(ctx context.Context, req *v1.ListEnvironmentsRequest) (*v1.ListEnvironmentsResponse, error) {
 	response, err := c.listEnvironments.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// GetEnvironment calls provider.contract.v1.ProviderService.GetEnvironment.
+func (c *providerServiceClient) GetEnvironment(ctx context.Context, req *v1.GetEnvironmentRequest) (*v1.GetEnvironmentResponse, error) {
+	response, err := c.getEnvironment.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
 	}
@@ -562,6 +582,7 @@ type ProviderServiceHandler interface {
 	RemoveProject(context.Context, *v1.ProjectRequest, *connect.ServerStream[v11.OperationEvent]) error
 	PlanRemoveProject(context.Context, *v1.ProjectRequest) (*v12.ChangePlan, error)
 	ListEnvironments(context.Context, *v1.ListEnvironmentsRequest) (*v1.ListEnvironmentsResponse, error)
+	GetEnvironment(context.Context, *v1.GetEnvironmentRequest) (*v1.GetEnvironmentResponse, error)
 	Preflight(context.Context, *v1.PreflightRequest) (*v1.PreflightResponse, error)
 	ListPromotions(context.Context, *v1.ListPromotionsRequest) (*v1.ListPromotionsResponse, error)
 	Rollback(context.Context, *v1.RollbackRequest) (*v1.RollbackResponse, error)
@@ -651,6 +672,12 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 		ProviderServiceListEnvironmentsProcedure,
 		svc.ListEnvironments,
 		connect.WithSchema(providerServiceMethods.ByName("ListEnvironments")),
+		connect.WithHandlerOptions(opts...),
+	)
+	providerServiceGetEnvironmentHandler := connect.NewUnaryHandlerSimple(
+		ProviderServiceGetEnvironmentProcedure,
+		svc.GetEnvironment,
+		connect.WithSchema(providerServiceMethods.ByName("GetEnvironment")),
 		connect.WithHandlerOptions(opts...),
 	)
 	providerServicePreflightHandler := connect.NewUnaryHandlerSimple(
@@ -773,6 +800,8 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 			providerServicePlanRemoveProjectHandler.ServeHTTP(w, r)
 		case ProviderServiceListEnvironmentsProcedure:
 			providerServiceListEnvironmentsHandler.ServeHTTP(w, r)
+		case ProviderServiceGetEnvironmentProcedure:
+			providerServiceGetEnvironmentHandler.ServeHTTP(w, r)
 		case ProviderServicePreflightProcedure:
 			providerServicePreflightHandler.ServeHTTP(w, r)
 		case ProviderServiceListPromotionsProcedure:
@@ -856,6 +885,10 @@ func (UnimplementedProviderServiceHandler) PlanRemoveProject(context.Context, *v
 
 func (UnimplementedProviderServiceHandler) ListEnvironments(context.Context, *v1.ListEnvironmentsRequest) (*v1.ListEnvironmentsResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.ListEnvironments is not implemented"))
+}
+
+func (UnimplementedProviderServiceHandler) GetEnvironment(context.Context, *v1.GetEnvironmentRequest) (*v1.GetEnvironmentResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.GetEnvironment is not implemented"))
 }
 
 func (UnimplementedProviderServiceHandler) Preflight(context.Context, *v1.PreflightRequest) (*v1.PreflightResponse, error) {

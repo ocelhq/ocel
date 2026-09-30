@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -30,21 +31,19 @@ import (
 )
 
 type previewUpOptions struct {
-	ref      string
-	name     string
-	prebuilt bool
-	yes      bool
-	dry      bool
+	name       string
+	persistent bool
+	prebuilt   bool
+	yes        bool
+	dry        bool
 }
 
 type previewRemoveOptions struct {
-	ref  string
 	name string
 	yes  bool
 }
 
 type previewPruneOptions struct {
-	ref  string
 	name string
 	keep int
 	yes  bool
@@ -52,63 +51,68 @@ type previewPruneOptions struct {
 
 const defaultPreviewPruneKeepN = 3
 
+var reservedPreviewNames = []string{"up", "rm", "ls", "prune"}
+
 func NewPreviewCommand(dependencies Dependencies) *cobra.Command {
 	var upOpts previewUpOptions
 
 	cmd := &cobra.Command{
-		Use:   "preview",
+		Use:   "preview [name]",
 		Short: "Deploy a preview of the current branch",
 		Long: "Deploy a preview of the current branch.\n\n" +
-			"A preview is a full deployment beside production, named after the branch that produced it " +
-			"and torn down without touching anything else. `ocel preview` on its own is `ocel preview up`.",
+			"A preview is a full deployment beside production, torn down without touching anything else. " +
+			"It is named after the branch that produced it unless you name it. `ocel preview` on its own is `ocel preview up`.",
 		Example: "  $ ocel preview\n" +
-			"  $ ocel preview up --name staging\n" +
+			"  $ ocel preview pr-12\n" +
+			"  $ ocel preview staging --persistent\n" +
 			"  $ ocel preview ls\n" +
 			"  $ ocel preview rm",
-		Args: cobra.NoArgs,
+		Args: cobra.MaximumNArgs(1),
 		RunE: previewUpRunE(dependencies, &upOpts),
 	}
 	previewUpFlags(cmd, &upOpts)
 
 	up := &cobra.Command{
-		Use:   "up",
+		Use:   "up [name]",
 		Short: "Deploy or refresh a preview",
 		Long: "Deploy or refresh a preview.\n\n" +
-			"With no flags the preview is the current branch's: deploying the same branch again replaces it, " +
-			"and `ocel preview rm` tears it down. --name instead deploys a preview that keeps its name " +
-			"across branches — a staging environment.\n\n" +
+			"Without a name the preview is the current branch's: deploying the same branch again replaces it, " +
+			"and `ocel preview rm` tears it down. A name addresses one preview from any branch. " +
+			"A name is a DNS label with no `--`, and none of up, rm, ls or prune.\n\n" +
+			"A preview is ephemeral: it gets no infrastructure of its own, only what bindings share, " +
+			"and is torn down without a question. --persistent deploys one with its own infrastructure that " +
+			"asks before it is torn down — a staging environment. A preview keeps the lifecycle it was created with.\n\n" +
 			"--dry builds, then prints every change the preview would make to your account and stops.",
 		Example: "  $ ocel preview up\n" +
-			"  $ ocel preview up --name staging\n" +
-			"  $ ocel preview up --ref feature/checkout\n" +
+			"  $ ocel preview up pr-12\n" +
+			"  $ ocel preview up staging --persistent\n" +
 			"  $ ocel preview up --dry",
-		Args: cobra.NoArgs,
+		Args: cobra.MaximumNArgs(1),
 		RunE: previewUpRunE(dependencies, &upOpts),
 	}
 	previewUpFlags(up, &upOpts)
 
 	var rmOpts previewRemoveOptions
 	rm := &cobra.Command{
-		Use:   "rm",
+		Use:   "rm [name]",
 		Short: "Tear down a preview",
 		Long: "Tear down a preview.\n\n" +
-			"With no flags it takes down the current branch's preview. A named preview asks for " +
-			"confirmation first; --yes skips that.",
+			"Without a name it takes down the current branch's preview. A persistent preview asks for confirmation first; " +
+			"--yes skips that, and without a terminal to ask on it is required.",
 		Example: "  $ ocel preview rm\n" +
-			"  $ ocel preview rm --name staging\n" +
-			"  $ ocel preview rm --ref feature/checkout",
-		Args: cobra.NoArgs,
+			"  $ ocel preview rm pr-12\n" +
+			"  $ ocel preview rm staging --yes",
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cwd, err := os.Getwd()
 			if err != nil {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
 			opts := rmOpts
+			opts.name = readPreviewNameArgument(args)
 			return runPreviewRemove(cmd.Context(), dependencies, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 		},
 	}
-	rm.Flags().StringVar(&rmOpts.ref, "ref", "", "Tear down the preview for this git `ref` instead of the current branch")
-	rm.Flags().StringVar(&rmOpts.name, "name", "", "Tear down the named preview")
 	commands.AddYesFlag(rm, &rmOpts.yes)
 
 	ls := &cobra.Command{
@@ -127,26 +131,24 @@ func NewPreviewCommand(dependencies Dependencies) *cobra.Command {
 
 	var pruneOpts previewPruneOptions
 	prune := &cobra.Command{
-		Use:   "prune",
+		Use:   "prune [name]",
 		Short: "Delete a preview's old deployments",
 		Long: "Delete a preview's old deployments.\n\n" +
-			"Keeps the newest --keep deployments and whatever is live. With no flags it prunes the " +
-			"current branch's preview; --name prunes a named one.",
+			"Keeps the newest --keep deployments and whatever is live. Without a name it prunes the " +
+			"current branch's preview.",
 		Example: "  $ ocel preview prune\n" +
-			"  $ ocel preview prune --name staging\n" +
-			"  $ ocel preview prune --ref feature/checkout --keep 5",
-		Args: cobra.NoArgs,
+			"  $ ocel preview prune staging --keep 5",
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cwd, err := os.Getwd()
 			if err != nil {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
 			opts := pruneOpts
+			opts.name = readPreviewNameArgument(args)
 			return runPreviewPrune(cmd.Context(), dependencies, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 		},
 	}
-	prune.Flags().StringVar(&pruneOpts.ref, "ref", "", "Prune the preview for this git `ref` instead of the current branch")
-	prune.Flags().StringVar(&pruneOpts.name, "name", "", "Prune the named preview")
 	prune.Flags().IntVar(&pruneOpts.keep, "keep", defaultPreviewPruneKeepN, "How many recent deployments to keep (the live one always stays)")
 	commands.AddYesFlag(prune, &pruneOpts.yes)
 
@@ -155,8 +157,7 @@ func NewPreviewCommand(dependencies Dependencies) *cobra.Command {
 }
 
 func previewUpFlags(cmd *cobra.Command, opts *previewUpOptions) {
-	cmd.Flags().StringVar(&opts.name, "name", "", "Deploy the preview with this `name`, kept across branches, instead of the current branch's")
-	cmd.Flags().StringVar(&opts.ref, "ref", "", "Deploy the preview for this git `ref` instead of the current branch")
+	cmd.Flags().BoolVar(&opts.persistent, "persistent", false, "Deploy a persistent preview: its own infrastructure, and a confirmation before it is torn down")
 	cmd.Flags().BoolVar(&opts.prebuilt, "prebuilt", false, prebuiltFlagUsage)
 	cmd.Flags().BoolVar(&opts.dry, "dry", false, dryFlagUsage)
 	commands.AddYesFlag(cmd, &opts.yes)
@@ -169,6 +170,7 @@ func previewUpRunE(dependencies Dependencies, upOpts *previewUpOptions) func(cmd
 			return fmt.Errorf("determine working directory: %w", err)
 		}
 		opts := *upOpts
+		opts.name = readPreviewNameArgument(args)
 		return runPreviewUp(cmd.Context(), dependencies, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	}
 }
@@ -345,7 +347,7 @@ func runPreviewRemove(ctx context.Context, dependencies Dependencies, cwd string
 		return err
 	}
 
-	env, err := resolvePreviewEnvironment(dependencies, cwd, opts.name, opts.ref)
+	env, err := resolvePreviewEnvironment(dependencies, cwd, opts.name, environmentv1.Lifecycle_LIFECYCLE_UNSPECIFIED)
 	if err != nil {
 		return err
 	}
@@ -354,8 +356,15 @@ func runPreviewRemove(ctx context.Context, dependencies Dependencies, cwd string
 
 	return dependencies.WithProvider(ctx, cfg, "ocel preview rm", commands.OpenOptions{Tier: environmentv1.Tier_TIER_PREVIEW, Require: readiness.Features}, func(ctx context.Context, p commands.ProviderRun) error {
 		run, check, provider := p.Run, p.Check, p.Provider
-		if env.GetLifecycle() == environmentv1.Lifecycle_LIFECYCLE_PERSISTENT {
-			proceed, err := policy.Confirm(ctx, check, fmt.Sprintf("Tear down the named preview %q?", env.GetIdentity()))
+		recorded, err := readPreview(ctx, provider, cfg.Slug, env)
+		if err != nil {
+			return err
+		}
+		if question := composeTeardownQuestion(recorded); question != "" {
+			if !policy.Yes && !policy.Interactive {
+				return fmt.Errorf("`ocel preview rm` needs a terminal to ask %q before it tears the preview down; to run it unattended, pass --yes", question)
+			}
+			proceed, err := policy.Confirm(ctx, check, question)
 			if err != nil {
 				return err
 			}
@@ -364,6 +373,7 @@ func runPreviewRemove(ctx context.Context, dependencies Dependencies, cwd string
 				return nil
 			}
 		}
+		env.Lifecycle = recorded.GetLifecycle()
 
 		check.End(nil)
 
@@ -378,6 +388,22 @@ func runPreviewRemove(ctx context.Context, dependencies Dependencies, cwd string
 		run.Succeed(fmt.Sprintf("Tore down preview %s of %s", env.GetIdentity(), cfg.Slug))
 		return nil
 	})
+}
+
+func readPreview(ctx context.Context, provider *providerprocess.Provider, slug string, env *environmentv1.Environment) (recorded *contractv1.PreviewEnvironment, err error) {
+	err = provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) error {
+		got, err := client.GetEnvironment(ctx, &contractv1.GetEnvironmentRequest{Slug: slug, Environment: env})
+		recorded = got.GetEnvironment()
+		return err
+	})
+	return recorded, err
+}
+
+func composeTeardownQuestion(recorded *contractv1.PreviewEnvironment) string {
+	if recorded.GetLifecycle() != environmentv1.Lifecycle_LIFECYCLE_PERSISTENT {
+		return ""
+	}
+	return fmt.Sprintf("Tear down the persistent preview %q?", recorded.GetIdentity())
 }
 
 func runPreviewList(ctx context.Context, dependencies Dependencies, cwd string, stdout io.Writer) error {
@@ -406,7 +432,7 @@ func listPreviews(ctx context.Context, dependencies Dependencies, cfg *project.P
 }
 
 func runPreviewPrune(ctx context.Context, dependencies Dependencies, cwd string, opts previewPruneOptions, stdout, stderr io.Writer, stdin io.Reader) error {
-	env, err := resolvePreviewEnvironment(dependencies, cwd, opts.name, opts.ref)
+	env, err := resolvePreviewEnvironment(dependencies, cwd, opts.name, environmentv1.Lifecycle_LIFECYCLE_UNSPECIFIED)
 	if err != nil {
 		return err
 	}
@@ -433,70 +459,54 @@ func runPreviewPrune(ctx context.Context, dependencies Dependencies, cwd string,
 	})
 }
 
-func persistentPreviewEnvironment(name string) (*environmentv1.Environment, error) {
-	if err := previewid.ValidateLabel(name); err != nil {
-		return nil, err
-	}
-	return &environmentv1.Environment{
-		Tier:      environmentv1.Tier_TIER_PREVIEW,
-		Lifecycle: environmentv1.Lifecycle_LIFECYCLE_PERSISTENT,
-		Identity:  name,
-	}, nil
-}
-
 func resolveUpEnvironment(dependencies Dependencies, cwd string, opts previewUpOptions) (*environmentv1.Environment, error) {
-	if opts.name != "" && opts.ref != "" {
-		return nil, fmt.Errorf("pass --name or --ref, not both: a preview is either named or a branch's")
+	lifecycle := environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL
+	if opts.persistent {
+		lifecycle = environmentv1.Lifecycle_LIFECYCLE_PERSISTENT
 	}
-	if opts.name != "" {
-		return persistentPreviewEnvironment(opts.name)
-	}
+	return resolvePreviewEnvironment(dependencies, cwd, opts.name, lifecycle)
+}
 
-	ref, prNumber := opts.ref, ""
-	if ref == "" {
-		branch, err := dependencies.ReadGitBranch(cwd)
-		if err != nil {
+func resolvePreviewEnvironment(dependencies Dependencies, cwd, name string, lifecycle environmentv1.Lifecycle) (*environmentv1.Environment, error) {
+	if name != "" {
+		if err := refuseInvalidPreviewName(name); err != nil {
 			return nil, err
 		}
-		ref, prNumber = branch, dependencies.DiscoverPRNumber()
+		return &environmentv1.Environment{
+			Tier:      environmentv1.Tier_TIER_PREVIEW,
+			Lifecycle: lifecycle,
+			Identity:  name,
+		}, nil
 	}
-	id, err := previewid.Resolve(ref, prNumber)
+
+	branch, err := dependencies.ReadGitBranch(cwd)
+	if err != nil {
+		return nil, err
+	}
+	id, err := previewid.Resolve(branch, dependencies.DiscoverPRNumber())
 	if err != nil {
 		return nil, err
 	}
 	return &environmentv1.Environment{
 		Tier:      environmentv1.Tier_TIER_PREVIEW,
-		Lifecycle: environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL,
+		Lifecycle: lifecycle,
 		Identity:  id.Key,
 		Label:     id.Label,
 	}, nil
 }
 
-func resolvePreviewEnvironment(dependencies Dependencies, cwd, name, ref string) (*environmentv1.Environment, error) {
-	if name != "" && ref != "" {
-		return nil, fmt.Errorf("pass --name or --ref, not both: a preview is either named or a branch's")
+func readPreviewNameArgument(args []string) string {
+	if len(args) == 0 {
+		return ""
 	}
-	if name != "" {
-		return persistentPreviewEnvironment(name)
-	}
+	return args[0]
+}
 
-	if ref == "" {
-		branch, err := dependencies.ReadGitBranch(cwd)
-		if err != nil {
-			return nil, err
-		}
-		ref = branch
+func refuseInvalidPreviewName(name string) error {
+	if slices.Contains(reservedPreviewNames, name) {
+		return fmt.Errorf("preview name %q is reserved: `ocel preview %s` runs that subcommand, so no preview can be named after it", name, name)
 	}
-	id, err := previewid.Resolve(ref, "")
-	if err != nil {
-		return nil, err
-	}
-	return &environmentv1.Environment{
-		Tier:      environmentv1.Tier_TIER_PREVIEW,
-		Lifecycle: environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL,
-		Identity:  id.Key,
-		Label:     id.Label,
-	}, nil
+	return previewid.ValidateLabel(name)
 }
 
 func renderEnvironments(stdout io.Writer, envs []*contractv1.PreviewEnvironment) {
@@ -521,7 +531,7 @@ func lifecycleTag(l environmentv1.Lifecycle) string {
 	case environmentv1.Lifecycle_LIFECYCLE_PERSISTENT:
 		return "persistent"
 	default:
-		return "unknown"
+		return "—"
 	}
 }
 

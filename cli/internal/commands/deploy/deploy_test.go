@@ -226,7 +226,7 @@ func TestADeployRecordsWhatItDeployed(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-		if err := runPreviewUp(context.Background(), dependencies, fixture.Root, previewUpOptions{name: "e2e-42"}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runPreviewUp(context.Background(), dependencies, fixture.Root, previewUpOptions{name: "e2e-42", persistent: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 

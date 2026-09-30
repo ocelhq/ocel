@@ -63,30 +63,35 @@ export function projectSlug({ runId }) {
   return SLUG_PREFIX + run.slice(0, maxRun).replace(/-+$/, "");
 }
 
-export const REF_HINT_LEN = 12;
+export const NAME_HINT_LEN = 12;
 
-export const REF_HASH_LEN = 8;
+export const NAME_HASH_LEN = 8;
 
-export function previewRef({ dir }) {
+export function previewName({ dir }) {
   const normalized = String(dir ?? "")
     .trim()
     .replace(/\/+$/, "");
   if (!normalized) {
     throw new Error(
-      "previewRef needs a directory: neither NEXT_TEST_DIR nor a working directory was set",
+      "previewName needs a directory: neither NEXT_TEST_DIR nor a working directory was set",
     );
   }
-  const hint = sanitizeToken(basename(normalized)).slice(0, REF_HINT_LEN).replace(/-+$/, "");
-  const hash = createHash("sha256").update(normalized).digest("hex").slice(0, REF_HASH_LEN);
-  return hint ? `${hint}-${hash}` : hash;
+  const hint = sanitizeToken(basename(normalized)).slice(0, NAME_HINT_LEN).replace(/-+$/, "");
+  const hash = createHash("sha256").update(normalized).digest("hex").slice(0, NAME_HASH_LEN);
+  const name = hint ? `${hint}-${hash}` : hash;
+  return /^[a-z]/.test(name) ? name : `e2e-${name}`;
 }
 
 export function projectSlugForRun() {
   return projectSlug({ runId: process.env.GITHUB_RUN_ID });
 }
 
-export function previewRefForApp(appDir) {
-  return previewRef({ dir: process.env.NEXT_TEST_DIR || appDir });
+export function ocelBinary(adapterDir) {
+  return join(adapterDir, "packages", "cli", "bin", "ocel.js");
+}
+
+export function previewNameForApp(appDir) {
+  return previewName({ dir: process.env.NEXT_TEST_DIR || appDir });
 }
 
 export function strandedProjectSlugs(parameterNames, keepSlug) {
@@ -622,7 +627,7 @@ export function tail(text, maxLines) {
 
 export const PLAN_APPLY_HINT = "Run without --dry to apply.";
 
-export function planProblems(output, { resultWritten, listed, ref }) {
+export function planProblems(output, { resultWritten, listed, name }) {
   const problems = [];
   if (!String(output ?? "").includes(PLAN_APPLY_HINT)) {
     problems.push(`the plan never said how to apply it: no "${PLAN_APPLY_HINT}" in the output`);
@@ -635,9 +640,9 @@ export function planProblems(output, { resultWritten, listed, ref }) {
     problems.push(
       "`ocel preview ls` read nothing back, so nothing proves the account is as the plan found it",
     );
-  } else if (readBack.includes(ref)) {
+  } else if (readBack.includes(name)) {
     problems.push(
-      `\`ocel preview ls\` shows ${ref} deployed in the account, and only an apply may deploy one`,
+      `\`ocel preview ls\` shows ${name} deployed in the account, and only an apply may deploy one`,
     );
   }
   return problems;

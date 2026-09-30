@@ -32,7 +32,7 @@ prepared:
    ocel domain use '*.ocel.site' --preview
    ```
    No project declares a preview domain of its own; every run's previews serve
-   on this one, at `<slug>--<ref>.ocel.site`.
+   on this one, at `<slug>--<name>.ocel.site`.
 3. Create the **AWS role the workflow assumes** — no access key is stored. It
    needs a GitHub OIDC trust policy (provider
    `token.actions.githubusercontent.com`, audience `sts.amazonaws.com`, subject
