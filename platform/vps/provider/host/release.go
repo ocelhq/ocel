@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -507,16 +508,17 @@ func originPlacing(paths []string) []string {
 	if len(paths) == 0 {
 		return nil
 	}
-	steps := []string{`if ! group=$(` + words(switchboardCommand("origin-group")) + ` </dev/null); then exit ` + strconv.Itoa(routingPlaceFailed) + `; fi`}
+	dir := filepath.Dir(paths[0])
+	steps := []string{`if ! group=$(` + words(placementCommand(dir, "origin-group")) + ` </dev/null); then exit ` + strconv.Itoa(routingPlaceFailed) + `; fi`}
 	for at, path := range paths {
-		steps = append(steps, `if ! printf '%s' "$origin`+strconv.Itoa(at)+`" | base64 -d | docker exec -i --user "0:$group" `+
-			words(switchboardCommand("place-origin", path)[2:])+`; then exit `+strconv.Itoa(routingPlaceFailed)+`; fi`)
+		steps = append(steps, `if ! printf '%s' "$origin`+strconv.Itoa(at)+`" | base64 -d | docker run -i --user "0:$group" `+
+			words(placementCommand(dir, "place-origin", path)[2:])+`; then exit `+strconv.Itoa(routingPlaceFailed)+`; fi`)
 	}
 	return steps
 }
 
-func originUnplacing(kept []string) string {
-	return `if ! ` + words(switchboardCommand(append([]string{"unplace-origins"}, kept...)...)) +
+func originUnplacing(dir string, kept []string) string {
+	return `if ! ` + words(placementCommand(dir, append([]string{"unplace-origins"}, kept...)...)) +
 		` </dev/null; then exit ` + strconv.Itoa(routingPlaceFailed) + `; fi`
 }
 
@@ -534,7 +536,7 @@ func (h *Host) writePair(ctx context.Context, expected tableDigest, pair routing
 	case 0:
 		return tableDigest(strings.TrimSpace(result.Stdout)), nil, nil
 	case routingPlaceFailed:
-		return tableDigest(strings.TrimSpace(result.Stdout)), h.refuse("place "+file+" through the switchboard", result, elevation), nil
+		return tableDigest(strings.TrimSpace(result.Stdout)), h.refuse("place "+file, result, elevation), nil
 	case routingMoved:
 		return "", nil, h.movedUnder(expected, result)
 	case routingUnseeded:
@@ -590,7 +592,7 @@ func stagedWrite(expected tableDigest, file string, origins []string) string {
 	}
 	if file != "" && file != ProxyConfig {
 		reading = originReading(origins)
-		placing = slices.Concat(originPlacing(origins), []string{placeStep(`printf '%s' "$rendering" | base64 -d | `, file), originUnplacing(origins)})
+		placing = slices.Concat(originPlacing(origins), []string{placeStep(`printf '%s' "$rendering" | base64 -d | `, file), originUnplacing(filepath.Dir(file), origins)})
 	}
 	return strings.Join(slices.Concat(
 		[]string{"set -e"},
@@ -619,7 +621,7 @@ func comparedUnder(expected tableDigest) []string {
 }
 
 func placeStep(feed, at string) string {
-	return `if ! ` + feed + words(switchboardFed("place", at)) + `; then exit ` + strconv.Itoa(routingPlaceFailed) + `; fi`
+	return `if ! ` + feed + words(placementFed(filepath.Dir(at), "place", at)) + `; then exit ` + strconv.Itoa(routingPlaceFailed) + `; fi`
 }
 
 func replacement(expected tableDigest, at string, origins []string) string {
@@ -629,7 +631,7 @@ func replacement(expected tableDigest, at string, origins []string) string {
 		[]string{strings.TrimSuffix(routingLocked("-x"), "\n")},
 		comparedUnder(expected),
 		originPlacing(origins),
-		[]string{placeStep("", at), originUnplacing(origins)},
+		[]string{placeStep("", at), originUnplacing(filepath.Dir(at), origins)},
 	), "\n")
 }
 
@@ -638,7 +640,7 @@ func (h *Host) destinationSum(ctx context.Context, at string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	said, err := h.ran(ctx, "read "+at+" through the switchboard", words(switchboardCommand("placed", at)), nil, elevation)
+	said, err := h.ran(ctx, "read "+at, words(placementCommand(filepath.Dir(at), "placed", at)), nil, elevation)
 	return strings.TrimSpace(said), err
 }
 
@@ -654,7 +656,7 @@ func (h *Host) replace(ctx context.Context, expected tableDigest, at string, ren
 	case routingMoved:
 		return h.movedUnder(expected, result)
 	default:
-		return unelevated(refused, h.refuse("place "+at+" through the switchboard", result, elevation))
+		return unelevated(refused, h.refuse("place "+at, result, elevation))
 	}
 }
 

@@ -193,6 +193,8 @@ func TestLiveABoxMovesOcelsFileToAnotherDirectoryYourTraefikWatchesWithoutDroppi
 	moving.Directory = to
 	moved := &vps.Proxy{Traefik: &moving}
 
+	boardID := "sudo docker inspect --type container --format '{{.Id}}' " + quote(host.SwitchboardContainer)
+	board := vm.ssh(t, boardID)
 	vm.loads(t, bound)
 	vm.awaitAnswers(t, "of one before the move", counting("one", 0))
 	started := vm.clock(t)
@@ -214,6 +216,9 @@ func TestLiveABoxMovesOcelsFileToAnotherDirectoryYourTraefikWatchesWithoutDroppi
 	}
 	if during == 0 {
 		t.Errorf("no request was asked while ocel's file moved between %.3f and %.3f, so the %d answered prove nothing about the move", started, finished, len(heard))
+	}
+	if after := vm.ssh(t, boardID); after != board {
+		t.Errorf("%s is container %s after the move and was %s before, want it left running: a switchboard started again drops what it serves", host.SwitchboardContainer, after, board)
 	}
 	if vm.exists(t, quote(from+"/"+traefik.FileName)) {
 		t.Errorf("%s/%s outlived the move to %s", from, traefik.FileName, to)

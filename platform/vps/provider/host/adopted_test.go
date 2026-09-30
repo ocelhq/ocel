@@ -1,6 +1,7 @@
 package host
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -109,45 +110,69 @@ func TestAProxyIsHandedEveryHostnameTheBoxServesAndThePreviewBase(t *testing.T) 
 
 const coolifyDynamic = "/data/coolify/proxy/dynamic"
 
-func TestTheSwitchboardIsHandedTheDirectoryOfAFileOutsideOcelsOwnToPlaceInAndNoOther(t *testing.T) {
+func TestTheSwitchboardMountsNoDirectoryOfYourProxysSoMovingItLeavesTheSwitchboardAsItIs(t *testing.T) {
 	t.Parallel()
 
-	board := boundToPlace(switchboardOf(t, routedByHand()), coolifyDynamic+"/ocel.yml")
-	running := board.run()
-	if at := slices.Index(running, coolifyDynamic+":"+coolifyDynamic); at < 1 || running[at-1] != "--volume" {
-		t.Errorf("the switchboard runs as %q, want %s bound into it read-write: ocel-deploy cannot write there, and the switchboard places what it renders", running, coolifyDynamic)
-	}
-	if at := slices.Index(running, switchboard.PlaceEnv+"="+coolifyDynamic); at < 1 || running[at-1] != "--env" {
-		t.Errorf("the switchboard runs as %q, want %s set to %s: it refuses to place anywhere else", running, switchboard.PlaceEnv, coolifyDynamic)
-	}
-	if !strings.Contains(string(board.facts()), "bind="+coolifyDynamic+":"+coolifyDynamic+"\n") {
-		t.Errorf("the switchboard's facts read\n%s\nand never name the directory it places in, so a bootstrap that moved it plans nothing", board.facts())
-	}
-
-	for what, front := range map[string]Front{"ocel's own proxy": {}, "a proxy routed by hand": routedByHand()} {
-		for _, bound := range switchboardOf(t, front).binds {
+	for what, front := range map[string]Front{"ocel's own proxy": {}, "a proxy routed by hand": routedByHand(), "Coolify's Traefik": coolifysTraefik(), "Coolify's Caddy": coolifysCaddy()} {
+		board := switchboardOf(t, front)
+		for _, bound := range board.binds {
 			if !strings.HasSuffix(bound, ":ro") && !slices.Contains([]string{switchboard.ControlDir, switchboard.FrontDir}, strings.SplitN(bound, ":", 2)[0]) {
-				t.Errorf("the switchboard beside %s is bound %s read-write, want no directory to place in: nothing it renders goes anywhere ocel-deploy cannot write", what, bound)
+				t.Errorf("the switchboard beside %s is bound %s read-write, want nothing ocel places bound into it", what, bound)
 			}
 		}
-		if env := switchboardOf(t, front).env; slices.ContainsFunc(env, func(set string) bool { return strings.HasPrefix(set, switchboard.PlaceEnv+"=") }) {
-			t.Errorf("the switchboard beside %s runs with %q, want no directory to place in", what, env)
+		if slices.ContainsFunc(board.env, func(set string) bool { return strings.HasPrefix(set, switchboard.PlaceEnv+"=") }) {
+			t.Errorf("the switchboard beside %s runs with %q, want no directory to place in", what, board.env)
 		}
+	}
+	moved := coolifysTraefik()
+	moved.Traefik.Directory = "/data/coolify/proxy/elsewhere"
+	if !bytes.Equal(switchboardOf(t, moved).facts(), switchboardOf(t, coolifysTraefik()).facts()) {
+		t.Error("the switchboard's facts change with the directory your proxy reads, so moving the directory starts it again and drops the requests it serves")
 	}
 }
 
-func TestASwitchboardRestartedAfterAPruneIsBoundToPlaceOnlyWhileTheDirectoryIsThere(t *testing.T) {
+func TestAFileIsPlacedByAContainerThatMountsOnlyItsDirectoryAndTheSwitchboardBinary(t *testing.T) {
 	t.Parallel()
 
-	board := boundToPlace(switchboardBox(nil, routedByHand()), coolifyDynamic+"/ocel.yml")
-	if read := presenceRead(board); !strings.Contains(read, "-d "+quoted(coolifyDynamic)+" ]") {
-		t.Errorf("a deploy restarting the switchboard reads\n%s\nand never checks %s is there, so docker creates it empty and root-owned where the proxy reads its routes", read, coolifyDynamic)
-	}
-	restored := board.restoring(1)
-	for _, want := range []string{"'--volume' " + quoted(coolifyDynamic+":"+coolifyDynamic), "'--env' " + quoted(switchboard.PlaceEnv+"="+coolifyDynamic)} {
-		if !strings.Contains(restored, want) {
-			t.Errorf("a deploy restarts the switchboard as\n%s\nwithout %s, so the next deploy has nowhere to place the proxy's file", restored, want)
+	placing := placementFed(coolifyDynamic, "place", coolifyFile)
+	var mounted []string
+	for at, arg := range placing {
+		switch arg {
+		case "--volume":
+			t.Errorf("the placement runs as %q, want no --volume: docker creates a missing directory for it, empty and root-owned where your proxy reads", placing)
+		case "--mount":
+			mounted = append(mounted, placing[at+1])
 		}
+	}
+	want := []string{
+		"type=bind,source=" + SwitchboardDir + ",target=" + switchboardMount + ",readonly",
+		"type=bind,source=" + coolifyDynamic + ",target=" + coolifyDynamic,
+	}
+	if !slices.Equal(mounted, want) {
+		t.Errorf("the placement mounts %q, want %q", mounted, want)
+	}
+	if at := slices.Index(placing, switchboard.PlaceEnv+"="+coolifyDynamic); at < 1 || placing[at-1] != "--env" {
+		t.Errorf("the placement runs as %q, want %s set to %s: it refuses to place anywhere else", placing, switchboard.PlaceEnv, coolifyDynamic)
+	}
+	for _, want := range []string{"--rm", "-i", "--read-only"} {
+		if !slices.Contains(placing, want) {
+			t.Errorf("the placement runs as %q, want %s", placing, want)
+		}
+	}
+	if at := slices.Index(placing, "--network"); at < 0 || placing[at+1] != "none" {
+		t.Errorf("the placement runs as %q, want it on no network", placing)
+	}
+	if slices.Contains(placing, "--name") {
+		t.Errorf("the placement runs as %q, want it unnamed so two deploys placing at once never collide", placing)
+	}
+}
+
+func TestAPlacementMountsADirectoryWhoseNameHasACommaAsThatDirectory(t *testing.T) {
+	t.Parallel()
+
+	placing := placementCommand("/srv/a,b", "placed", "/srv/a,b/ocel.yml")
+	if !slices.Contains(placing, `type=bind,"source=/srv/a,b","target=/srv/a,b"`) {
+		t.Errorf("the placement runs as %q, want the directory quoted inside its --mount", placing)
 	}
 }
 
@@ -251,7 +276,7 @@ func placedUnderLock(t *testing.T, command string) {
 	t.Helper()
 	locked := strings.Index(command, "exec 9<"+quoted(routingLock)+"\nflock -x 9")
 	compared := strings.Index(command, `if [ "$current" != `)
-	placing := strings.Index(command, words(switchboardFed("place", coolifyFile)))
+	placing := strings.Index(command, words(placementFed(coolifyDynamic, "place", coolifyFile)))
 	if locked < 0 || compared < locked || placing < compared {
 		t.Errorf("the placement runs\n%s\nwant it through the switchboard, fed on stdin, after the table is compared under the routing lock: a deploy that wrote the table after this one can otherwise see its rendering overwritten by this one's", command)
 	}
@@ -274,7 +299,7 @@ func TestAClaimOnABoxWhoseProxyKeepsItsFileElsewherePlacesItsRenderingUnderTheLo
 		t.Errorf("the table write asks for %s, which a proxy that keeps its file elsewhere never reads: %s", ProxyConfig, written)
 	}
 	placedUnderLock(t, written)
-	if moved, placing := strings.Index(written, `mv "$staged" `), strings.Index(written, words(switchboardFed("place", coolifyFile))); moved < 0 || placing < moved {
+	if moved, placing := strings.Index(written, `mv "$staged" `), strings.Index(written, words(placementFed(coolifyDynamic, "place", coolifyFile))); moved < 0 || placing < moved {
 		t.Errorf("the write runs\n%s\nwant the table moved into place before the rendering is placed: the table is what every later write and rollback reads", written)
 	}
 	if placed := adopted.count(places); placed != 1 {
@@ -622,7 +647,7 @@ func TestTheWriteFeedsTheSwitchboardTheRenderingOnlyOnceTheTableItRendersIsInPla
 	before := fileContents(t, box.table)
 	after := string(mustWrite(t, previewing()))
 	fed := pairFed(routingPair{table: []byte(after), config: []byte("routes shop.example.com\n")})
-	asking := strings.Join(switchboardFed("place", coolifyFile)[1:], " ")
+	asking := strings.Join(placementFed(coolifyDynamic, "place", coolifyFile)[1:], " ")
 
 	if code, _, _ := box.run(t, stagedWrite(tableDigest(digested("a table another deploy has since replaced")), coolifyFile, nil), fed); code != routingMoved {
 		t.Errorf("a write over a table that moved = %d, want %d", code, routingMoved)
@@ -692,7 +717,7 @@ func TestAPlacementAloneFeedsTheSwitchboardOnlyWhileTheTableIsTheOneItRenders(t 
 	if got := fileContents(t, box.fed); got != "routes shop.example.com\n" {
 		t.Errorf("the switchboard was fed %q, want the rendering whole", got)
 	}
-	if asked, want := box.asks(t), strings.Join(switchboardFed("place", coolifyFile)[1:], " "); asked != want {
+	if asked, want := box.asks(t), strings.Join(placementFed(coolifyDynamic, "place", coolifyFile)[1:], " "); asked != want {
 		t.Errorf("docker was asked %q, want %q", asked, want)
 	}
 

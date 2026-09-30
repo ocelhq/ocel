@@ -1,6 +1,7 @@
 package host
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -160,6 +161,28 @@ func TestNothingAContainerIsEntitledToIsTheKeyTheRecordsOrTheTierStateItself(t *
 func TestEveryContainerThisPackageRunsIsBoundByTheIsolationRules(t *testing.T) {
 	t.Parallel()
 
-	rendered(t, `[]string{"docker", "run"`, []string{"containerRun", "resourceRun", "run"},
+	rendered(t, `[]string{"docker", "run"`, []string{"containerRun", "placementRun", "resourceRun", "run"},
 		"a container run built somewhere this bench does not read is bound by none of the rules in this file")
+}
+
+func TestAPlacementContainerIsBoundByTheIsolationRulesAndMountsNothingButItsDirectoryAndTheSwitchboardBinary(t *testing.T) {
+	t.Parallel()
+
+	command := words(placementFed("/etc/traefik/dynamic", "place", "/etc/traefik/dynamic/ocel.yml"))
+	for _, refused := range []string{"docker.sock", quoted("--pid"), "--pid=", "--privileged", "--volume"} {
+		if strings.Contains(command, refused) {
+			t.Errorf("a placement runs %q, and names %s", command, refused)
+		}
+	}
+	var mounted []string
+	for _, token := range strings.Fields(command) {
+		for _, field := range strings.Split(strings.Trim(token, "'"), ",") {
+			if from, cut := strings.CutPrefix(field, "source="); cut {
+				mounted = append(mounted, from)
+			}
+		}
+	}
+	if want := []string{SwitchboardDir, "/etc/traefik/dynamic"}; !slices.Equal(mounted, want) {
+		t.Errorf("a placement runs %q and mounts %q, want %q alone: nothing under %s or %s is its business", command, mounted, want, tierRoot, stateRoot)
+	}
 }

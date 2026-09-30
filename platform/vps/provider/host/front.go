@@ -2,6 +2,9 @@ package host
 
 import (
 	"cmp"
+	"context"
+	"fmt"
+	"path/filepath"
 	"slices"
 	"strconv"
 
@@ -156,6 +159,29 @@ func (f Front) directoryOption() string {
 	default:
 		return ""
 	}
+}
+
+func (f Front) directoryPresent() string {
+	at := f.resolvePlacedFile()
+	if at == "" {
+		return ""
+	}
+	dir := filepath.Dir(at)
+	missing := fmt.Sprintf("option %q names the directory %s, which this box does not have: name the directory your proxy reads, or create it",
+		f.directoryOption(), dir)
+	return "if [ ! -d " + quoted(dir) + " ]; then\n" +
+		"printf '%s\\n' " + quoted(missing) + " >&2\n" +
+		"exit 1\n" +
+		"fi\n"
+}
+
+func (h *Host) refuseDirectoryMissing(ctx context.Context, front Front) error {
+	present := front.directoryPresent()
+	if present == "" {
+		return nil
+	}
+	_, err := h.run(ctx, "find the directory "+front.directoryOption()+" names", present, nil)
+	return err
 }
 
 func (f Front) switchboardNote() string {

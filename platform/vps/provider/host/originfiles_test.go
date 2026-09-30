@@ -46,29 +46,29 @@ func (b *loggingShell) fedEach(t *testing.T) []string {
 	return strings.Split(strings.TrimSuffix(fileContents(t, b.feeds), "|\n"), "|\n")
 }
 
-func switchboardSaid(argv ...string) string {
-	return strings.Join(switchboardFed(argv...)[1:], " ")
+func placementSaid(argv ...string) string {
+	return strings.Join(placementFed(coolifyDynamic, argv...)[1:], " ")
 }
 
-func switchboardAsked(argv ...string) string {
-	return strings.Join(switchboardCommand(argv...)[1:], " ")
+func placementAsked(argv ...string) string {
+	return strings.Join(placementCommand(coolifyDynamic, argv...)[1:], " ")
 }
 
 func wantPlacedOrigins(t *testing.T, box *loggingShell, rendering string) {
 	t.Helper()
 	want := []string{
-		switchboardAsked("origin-group"),
-		"exec -i --user 0:" + placedGroup + " " + switchboardAsked("place-origin", shieldedOrigins[0].Path)[len("exec "):],
-		"exec -i --user 0:" + placedGroup + " " + switchboardAsked("place-origin", shieldedOrigins[1].Path)[len("exec "):],
-		switchboardSaid("place", coolifyFile),
-		switchboardAsked(append([]string{"unplace-origins"}, originPaths(shieldedOrigins)...)...),
+		placementAsked("origin-group"),
+		"run -i --user 0:" + placedGroup + " " + placementAsked("place-origin", shieldedOrigins[0].Path)[len("run "):],
+		"run -i --user 0:" + placedGroup + " " + placementAsked("place-origin", shieldedOrigins[1].Path)[len("run "):],
+		placementSaid("place", coolifyFile),
+		placementAsked(append([]string{"unplace-origins"}, originPaths(shieldedOrigins)...)...),
 	}
 	if got := box.called(t); !slices.Equal(got, want) {
 		t.Errorf("docker was asked\n%q\nwant\n%q\nEach origin certificate is placed, as the group of the directory it is placed in, before the file naming it, and the ones it no longer names are unplaced only once it is placed", got, want)
 	}
 	fed := []string{string(shieldedOrigins[0].Bundle), string(shieldedOrigins[1].Bundle), rendering}
 	if got := box.fedEach(t); !slices.Equal(got, fed) {
-		t.Errorf("the switchboard was fed %q, want %q", got, fed)
+		t.Errorf("the placement was fed %q, want %q", got, fed)
 	}
 }
 
@@ -109,7 +109,7 @@ func TestAWriteWithNoOriginCertificateUnplacesTheOnesAnEarlierRenderingNamed(t *
 	if code, _, errs := box.run(t, stagedWrite(tableDigest(digested(before)), coolifyFile, nil), fed); code != 0 {
 		t.Fatalf("the write = %d: %s", code, errs)
 	}
-	want := []string{switchboardSaid("place", coolifyFile), switchboardAsked("unplace-origins")}
+	want := []string{placementSaid("place", coolifyFile), placementAsked("unplace-origins")}
 	if got := box.called(t); !slices.Equal(got, want) {
 		t.Errorf("docker was asked %q, want %q", got, want)
 	}
@@ -166,7 +166,7 @@ func TestDestroyUnplacesTheOriginCertificatesBesideOcelsFileOnceYourProxyNoLonge
 			t.Parallel()
 
 			dir, bin := t.TempDir(), t.TempDir()
-			executable(t, filepath.Join(bin, "docker"), "#!/bin/sh\n[ \"$1\" = inspect ] && echo true\n[ \"$2\" = "+SwitchboardContainer+" ] && exit 1\nexit 0\n")
+			executable(t, filepath.Join(bin, "docker"), "#!/bin/sh\n[ \"$1\" = inspect ] && echo true\n[ \"$1\" = run ] && exit 1\nexit 0\n")
 			for _, name := range []string{switchboard.OriginPrefix + "shop.example.com-aaa.pem", "yours.pem"} {
 				if err := os.WriteFile(filepath.Join(dir, name), []byte(name), 0o640); err != nil {
 					t.Fatal(err)
@@ -174,7 +174,7 @@ func TestDestroyUnplacesTheOriginCertificatesBesideOcelsFileOnceYourProxyNoLonge
 			}
 			taken := front(dir).placedRemovals()[0]
 			if command := taken.command(); !strings.Contains(command, quoted("unplace-origins")) {
-				t.Errorf("the destroy runs\n%s\nwant the origin certificates unplaced through the switchboard", command)
+				t.Errorf("the destroy runs\n%s\nwant the origin certificates unplaced", command)
 			}
 			run := exec.Command("sh", "-c", taken.command())
 			run.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"))
