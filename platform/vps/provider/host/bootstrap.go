@@ -242,6 +242,9 @@ func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 	if err := b.host.refuseDirectoryMissing(ctx, current.Front); err != nil {
 		return err
 	}
+	if err := b.write(ctx, served, current.move.recordUnfinished(), progress); err != nil {
+		return err
+	}
 	if err := current.move.removeOldFront(ctx, progress); err != nil {
 		return err
 	}
@@ -253,9 +256,6 @@ func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 		placeRoutes = current.move.placeRoutes
 	}
 	if err := placeRoutes(ctx); err != nil {
-		return err
-	}
-	if err := b.write(ctx, served, current.move.recordUnfinished(), progress); err != nil {
 		return err
 	}
 	if err := current.move.awaitFront(ctx, req.Tier, progress); err != nil {
