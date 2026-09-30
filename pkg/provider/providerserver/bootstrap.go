@@ -221,9 +221,6 @@ func BootstrapStatusProto(current BootstrapStatus, writing provider.WrittenBy, t
 			Required:      stack.Feature == "" || slices.Contains(required, stack.Feature),
 		})
 	}
-	if current.Present {
-		return status
-	}
 	for _, feature := range required {
 		if !slices.ContainsFunc(current.Stacks, func(stack provider.BootstrapStack) bool { return stack.Feature == feature }) {
 			status.Stacks = append(status.Stacks, &contractv1.BootstrapStack{Feature: feature, Required: true})

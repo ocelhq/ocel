@@ -31,7 +31,6 @@ type Bootstrap struct {
 	planned     *provider.Plan
 	planRefusal error
 	removal     *provider.Plan
-	absent      []string
 }
 
 func NewBootstrap() *Bootstrap {
@@ -151,7 +150,6 @@ func (b *Bootstrap) Describe(_ context.Context, tier environment.Tier) (provider
 	for _, feature := range features {
 		described.Stacks = append(described.Stacks, b.stack(tier, feature))
 	}
-	described.Stacks = append(described.Stacks, b.absentStacks(tier, features)...)
 	return described, nil
 }
 

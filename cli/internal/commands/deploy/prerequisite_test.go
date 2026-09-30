@@ -301,3 +301,31 @@ func TestAFirstDeployOfAProjectNeedingAFeatureBootstrapsWithItAndDeploysInOneRun
 		t.Errorf("the CLI sent %d deploys, want the first bootstrap to leave nothing missing for the deploy; stdout=%s", len(sent), stdout.String())
 	}
 }
+
+func TestADeployAgainstABootstrapLackingAFeatureItNeedsAddsItAndDeploysInOneRun(t *testing.T) {
+	fixture := clitest.SetUpProject(t)
+	clitest.Bootstrap(t, fixture.Provider, environment.TierProduction)
+	fixture.Provider.FakeBootstrap().Offers(provider.Feature{Name: fake.FeatureCache, Summary: "a cache every node app needs", Frameworks: []string{"node"}})
+	writeUsageMonorepo(t, fixture.Root, "  edge: \"direct\",\n")
+	before := len(fixture.Provider.FakeBootstrap().Applied())
+	dependencies := newTestDependencies()
+	terminalStdin(&dependencies)
+	withSetups(&dependencies)
+	stubBuild(&dependencies, apiFunction())
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{}, &stdout, &stderr, strings.NewReader("y\ny\n")); err != nil {
+		t.Fatalf("runDeploy err = %v, want the missing feature offered before the build; stdout=%s", err, stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "does not include what this project needs: "+fake.FeatureCache) {
+		t.Errorf("stdout = %q, want the check to name the feature the bootstrap lacks", stdout.String())
+	}
+	applied := fixture.Provider.FakeBootstrap().Applied()[before:]
+	if len(applied) != 1 || !slices.Contains(applied[0].Features, fake.FeatureCache) {
+		t.Errorf("the provider applied %+v, want one bootstrap that adds %s", applied, fake.FeatureCache)
+	}
+	if sent := sentDeploys(t, fixture); len(sent) != 1 {
+		t.Errorf("the CLI sent %d deploys, want one once the feature was added; stdout=%s", len(sent), stdout.String())
+	}
+}

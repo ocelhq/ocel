@@ -24,7 +24,7 @@ import (
 func previewProject(t *testing.T) clitest.FakeProject {
 	t.Helper()
 	project := clitest.SetUpProject(t)
-	clitest.Bootstrap(t, project.Provider, environment.TierPreview)
+	clitest.Bootstrap(t, project.Provider, environment.TierPreview, fake.FeatureCache, fake.FeatureImages)
 	return project
 }
 
