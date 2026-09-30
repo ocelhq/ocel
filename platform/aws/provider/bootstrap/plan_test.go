@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -370,5 +371,52 @@ func TestRemovalTakesNoKeyFromAnAccountThatBroughtItsOwn(t *testing.T) {
 		if change.Name == "VariablesKey" || change.Name == "VariablesKeyAlias" {
 			t.Errorf("the removal plan takes %s from a stack that owns no key, and a destroy must not claim to take a key or an alias this account brought", change.Name)
 		}
+	}
+}
+
+func TestRemovalPlansEveryStackLeftBesideACoreThatRolledBack(t *testing.T) {
+	ctx := context.Background()
+	stacks := newFakeCFN()
+	core := defaultNamespace.CoreStackName()
+	feature := defaultNamespace.FeatureStackName(FeatureISR, environment.TierProduction)
+	for _, name := range []string{core, feature} {
+		stacks.templates[name] = "Resources: {}"
+	}
+	stacks.statuses[core] = cfntypes.StackStatusRollbackComplete
+	stacks.statuses[feature] = cfntypes.StackStatusCreateComplete
+
+	read, err := Read(ctx, stacks, defaultNamespace, environment.TierProduction)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	groups, err := PlanRemove(ctx, stacks, read)
+	if err != nil {
+		t.Fatalf("PlanRemove: %v", err)
+	}
+	var names []string
+	for _, group := range groups {
+		if group.Action != provider.ActionDelete {
+			t.Errorf("%s is planned as %q, want it deleted", group.Name, group.Action)
+		}
+		names = append(names, group.Name)
+	}
+	if want := []string{feature, core}; !slices.Equal(names, want) {
+		t.Errorf("PlanRemove() plans %v, want %v: a destroy that plans nothing never runs the teardown that removes them", names, want)
+	}
+}
+
+func TestRemovalPlansNothingWhereNoStackStands(t *testing.T) {
+	ctx := context.Background()
+
+	read, err := Read(ctx, newFakeCFN(), defaultNamespace, environment.TierProduction)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	groups, err := PlanRemove(ctx, newFakeCFN(), read)
+	if err != nil {
+		t.Fatalf("PlanRemove: %v", err)
+	}
+	if len(groups) != 0 {
+		t.Errorf("PlanRemove() plans %v on an account with no bootstrap stack, want nothing", groups)
 	}
 }
