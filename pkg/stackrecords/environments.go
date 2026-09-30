@@ -66,19 +66,51 @@ func readEnvironmentMeta(ctx context.Context, store keyvalue.Store, name keyvalu
 }
 
 func EnsureLifecycle(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, env string, lifecycle Lifecycle) error {
-	name := EnvironmentKey(tier, slug, env)
-	for range ensureLifecycleAttempts {
+	return updateEnvironmentMeta(ctx, store, EnvironmentKey(tier, slug, env), func(meta *EnvironmentMeta) (bool, error) {
+		if err := meta.RefuseOtherLifecycle(env, lifecycle); err != nil {
+			return false, err
+		}
+		if meta.Lifecycle == lifecycle {
+			return false, nil
+		}
+		meta.Lifecycle = lifecycle
+		return true, nil
+	})
+}
+
+func RecordEnvironmentMeta(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, env, label string, lifecycle Lifecycle) error {
+	return updateEnvironmentMeta(ctx, store, EnvironmentKey(tier, slug, env), func(meta *EnvironmentMeta) (bool, error) {
+		if err := meta.RefuseOtherLifecycle(env, lifecycle); err != nil {
+			return false, err
+		}
+		meta.Lifecycle = lifecycle
+		if meta.CreatedAt == 0 {
+			meta.CreatedAt = time.Now().Unix()
+		}
+		if label != "" {
+			meta.Label = label
+		}
+		return true, nil
+	})
+}
+
+func updateEnvironmentMeta(ctx context.Context, store keyvalue.Store, name keyvalue.Key, update func(*EnvironmentMeta) (bool, error)) error {
+	var existed bool
+	for range updateEnvironmentMetaAttempts {
 		recorded, meta, err := readEnvironmentMeta(ctx, store, name)
 		if err != nil {
 			return err
 		}
-		if err := meta.RefuseOtherLifecycle(env, lifecycle); err != nil {
+		if existed && recorded.Revision == "" {
+			return refusal.Refuse(refusal.CodeBusy,
+				"preview %s was removed while this deploy recorded it, so ocel did not record it again: deploy it again to recreate it",
+				name.Path[0])
+		}
+		existed = recorded.Revision != ""
+		changed, err := update(&meta)
+		if err != nil || !changed {
 			return err
 		}
-		if meta.Lifecycle == lifecycle {
-			return nil
-		}
-		meta.Lifecycle = lifecycle
 		if recorded.Value, err = json.Marshal(meta); err != nil {
 			return fmt.Errorf("record %s: %w", name, err)
 		}
@@ -91,35 +123,10 @@ func EnsureLifecycle(ctx context.Context, store keyvalue.Store, tier environment
 		}
 	}
 	return fmt.Errorf("record %s: it was rewritten between every read of it and the write that followed, %d times over",
-		name, ensureLifecycleAttempts)
+		name, updateEnvironmentMetaAttempts)
 }
 
-const ensureLifecycleAttempts = 5
-
-func RecordEnvironmentMeta(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, env, label string, lifecycle Lifecycle) error {
-	name := EnvironmentKey(tier, slug, env)
-	recorded, meta, err := readEnvironmentMeta(ctx, store, name)
-	if err != nil {
-		return err
-	}
-	if err := meta.RefuseOtherLifecycle(env, lifecycle); err != nil {
-		return err
-	}
-	meta.Lifecycle = lifecycle
-	if meta.CreatedAt == 0 {
-		meta.CreatedAt = time.Now().Unix()
-	}
-	if label != "" {
-		meta.Label = label
-	}
-	if recorded.Value, err = json.Marshal(meta); err != nil {
-		return fmt.Errorf("record %s: %w", name, err)
-	}
-	if _, err := store.Write(ctx, recorded); err != nil {
-		return fmt.Errorf("record %s: %w", name, err)
-	}
-	return nil
-}
+const updateEnvironmentMetaAttempts = 5
 
 func EnvironmentMetas(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug string) (map[string]EnvironmentMeta, error) {
 	recorded, err := store.List(ctx, EnvironmentsPartition(tier, slug))
