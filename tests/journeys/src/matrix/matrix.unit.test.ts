@@ -1,4 +1,10 @@
 import { describe, expect, it } from "bun:test";
+import {
+  nextCacheChecks,
+  nextDataCacheChecks,
+  nextOriginCacheChecks,
+  nextOriginDataCacheChecks,
+} from "../checks";
 import { NO_FILTER, plan, type RunFilter } from "../plan";
 import { filterFrom } from "../run/filter";
 import { hasReleaseCycle, targetNamed } from "../targets";
@@ -92,6 +98,62 @@ describe("a pull request's run", () => {
     const drawn = filterFrom({ OCEL_JOURNEY_SEED: "42", OCEL_JOURNEY_TOUCHED: "" });
     for (const lane of ["aws.floci", "dev", "vps.incus"] as const) {
       expect(concernIn("sdk", planOn(lane, {}, drawn))).not.toEqual([]);
+    }
+  });
+});
+
+describe("the Next cache a cell is held to", () => {
+  const EDGE_TITLES = [...nextCacheChecks, ...nextDataCacheChecks].map((one) => one.title);
+  const ORIGIN_TITLES = [...nextOriginCacheChecks, ...nextOriginDataCacheChecks].map(
+    (one) => one.title,
+  );
+  const EVERY_CELL = { ...NO_FILTER, runSkipped: true };
+  const ZONED = {
+    OCEL_JOURNEY_ZONE: "journeys.example.com",
+    CLOUDFLARE_API_TOKEN: "token",
+    CLOUDFLARE_ACCOUNT_ID: "account",
+  };
+  const titlesOf = (planned: ReturnType<typeof planOn>, cell: string) =>
+    planned.cells.find((one) => one.name === cell)?.steps.map((one) => one.title) ?? [];
+  const cacheTitlesIn = (titles: string[], of: string[]) =>
+    titles.filter((title) => of.some((cache) => title.endsWith(cache)));
+
+  it("holds a Next app on a box with no edge to the Next server's own cache, expecting it green", () => {
+    for (const lane of ["vps", "vps.incus"] as const) {
+      const planned = planOn(lane, {}, EVERY_CELL);
+      for (const cell of ["deploy/next", "sdk/next", "lifecycle/next"]) {
+        const titles = titlesOf(planned, cell);
+        expect(cacheTitlesIn(titles, EDGE_TITLES)).toEqual([]);
+        expect(cacheTitlesIn(titles, ORIGIN_TITLES)).not.toEqual([]);
+        const listed = Object.keys(planned.expectedFailures[`${cell}/web`] ?? {});
+        expect(cacheTitlesIn(listed, ORIGIN_TITLES)).toEqual([]);
+      }
+    }
+  });
+
+  it("holds a Next app Cloudflare fronts on a box to the edge's cache, listed red under #1457", () => {
+    for (const lane of ["vps", "vps.incus"] as const) {
+      const planned = planOn(lane, ZONED, EVERY_CELL);
+      for (const cell of ["lifecycle/next-cloudflare", "lifecycle/next-cloudflare-tunnel"]) {
+        const titles = titlesOf(planned, cell);
+        expect(cacheTitlesIn(titles, ORIGIN_TITLES)).toEqual([]);
+        const cached = cacheTitlesIn(titles, EDGE_TITLES);
+        expect(cached).not.toEqual([]);
+        for (const title of cached) {
+          expect(
+            planned.expectedFailures[`${cell}/web`]?.[title]?.map((gap) => gap.issue),
+          ).toContain(1457);
+        }
+      }
+    }
+  });
+
+  it("holds a Next app on aws to the edge's cache", () => {
+    const planned = planOn("aws", {}, EVERY_CELL);
+    for (const cell of ["deploy/next", "deploy/next-cloudflare", "lifecycle/next"]) {
+      const titles = titlesOf(planned, cell);
+      expect(cacheTitlesIn(titles, ORIGIN_TITLES)).toEqual([]);
+      expect(cacheTitlesIn(titles, EDGE_TITLES)).not.toEqual([]);
     }
   });
 });

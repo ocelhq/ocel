@@ -1,5 +1,7 @@
 export const CACHE_HEADER = "x-ocel-cache";
 
+export const NEXT_CACHE_HEADER = "x-nextjs-cache";
+
 const ONE_YEAR_SECONDS = 31536000;
 
 export const DYNAMIC_CACHE_CONTROL = "private, no-cache, no-store, max-age=0, must-revalidate";
@@ -25,6 +27,36 @@ export const UNCACHED: Tier[] = ["MISS", "BYPASS"];
 
 export function cacheControlFor(revalidate: number | false): string {
   return revalidate === 0 ? DYNAMIC_CACHE_CONTROL : SERVED_CACHE_CONTROL;
+}
+
+export function nextServerCacheControlFor(revalidate: number | false): string {
+  if (revalidate === 0) {
+    return DYNAMIC_CACHE_CONTROL;
+  }
+  if (revalidate === false) {
+    return `s-maxage=${ONE_YEAR_SECONDS}`;
+  }
+  return `s-maxage=${revalidate}, stale-while-revalidate=${ONE_YEAR_SECONDS - revalidate}`;
+}
+
+export type NextServerTier = "HIT" | "MISS" | "STALE" | "REVALIDATED";
+
+const NEXT_SERVER_TIERS: NextServerTier[] = ["HIT", "MISS", "STALE", "REVALIDATED"];
+
+export const NEXT_SERVER_CACHED: NextServerTier[] = ["HIT", "STALE"];
+
+export function nextServerTierOf(res: Response): NextServerTier | undefined {
+  const stamped = res.headers.get(NEXT_CACHE_HEADER);
+  if (stamped === null) {
+    return undefined;
+  }
+  const tier = NEXT_SERVER_TIERS.find((known) => known === stamped);
+  if (!tier) {
+    throw new Error(
+      `${NEXT_CACHE_HEADER} was ${stamped}, which names no tier the Next server stamps`,
+    );
+  }
+  return tier;
 }
 
 export function imageCacheControl(seconds: number): string {

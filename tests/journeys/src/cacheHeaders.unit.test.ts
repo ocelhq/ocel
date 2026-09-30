@@ -5,6 +5,9 @@ import {
   DYNAMIC_CACHE_CONTROL,
   IMMUTABLE_CACHE_CONTROL,
   imageCacheControl,
+  NEXT_CACHE_HEADER,
+  nextServerCacheControlFor,
+  nextServerTierOf,
   ROUTER_VARY,
   SERVED_CACHE_CONTROL,
   sameDirectives,
@@ -28,6 +31,37 @@ describe("cacheControlFor", () => {
 
   it("reads a zero revalidate as the dynamic literal", () => {
     expect(cacheControlFor(0)).toBe(DYNAMIC_CACHE_CONTROL);
+  });
+});
+
+describe("nextServerCacheControlFor", () => {
+  it("spells a page that never revalidates as a year of shared max-age", () => {
+    expect(nextServerCacheControlFor(false)).toBe("s-maxage=31536000");
+  });
+
+  it("spells a revalidate as the shared max-age, stale until a year has passed", () => {
+    expect(nextServerCacheControlFor(15)).toBe("s-maxage=15, stale-while-revalidate=31535985");
+    expect(nextServerCacheControlFor(3600)).toBe("s-maxage=3600, stale-while-revalidate=31532400");
+  });
+
+  it("reads a zero revalidate as the dynamic literal", () => {
+    expect(nextServerCacheControlFor(0)).toBe(DYNAMIC_CACHE_CONTROL);
+  });
+});
+
+describe("nextServerTierOf", () => {
+  it("reads the tier the Next server stamped a page it serves from its cache with", () => {
+    expect(nextServerTierOf(answered({ [NEXT_CACHE_HEADER]: "STALE" }))).toBe("STALE");
+  });
+
+  it("reads a page the Next server rendered outside its cache as unstamped", () => {
+    expect(nextServerTierOf(answered({}))).toBeUndefined();
+  });
+
+  it("refuses a tier the Next server never stamps", () => {
+    expect(() => nextServerTierOf(answered({ [NEXT_CACHE_HEADER]: "PRERENDER" }))).toThrow(
+      "PRERENDER",
+    );
   });
 });
 

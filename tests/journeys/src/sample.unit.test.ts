@@ -28,9 +28,11 @@ const ALL = [...GROUP, loner];
 const SEEDS = ["1", "2", "3", "4", "5", "938"];
 
 const every: CellsFor = (one) => [
-  { name: one.name, fixture: one, variant: defaults },
-  { name: `${one.name}-edge`, fixture: one, variant: edge },
-  ...(one === loner ? [] : [{ name: `${one.name}-box`, fixture: one, variant: box }]),
+  { name: one.name, fixture: one, variant: defaults, cacheLayer: "edge" },
+  { name: `${one.name}-edge`, fixture: one, variant: edge, cacheLayer: "edge" },
+  ...(one === loner
+    ? []
+    : [{ name: `${one.name}-box`, fixture: one, variant: box, cacheLayer: "edge" as const }]),
 ];
 
 const seeded = (seed: string, touched: string[] = []): Draw => ({ seed, touched });

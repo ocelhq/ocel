@@ -19,7 +19,7 @@ import {
 const fixture = deploy.node;
 
 function named(name: string): Cell {
-  return { name, fixture, variant: defaults };
+  return { name, fixture, variant: defaults, cacheLayer: "edge" };
 }
 
 describe("cellsBySlugPart", () => {

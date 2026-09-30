@@ -1,6 +1,7 @@
 import {
   type Cell,
   type Concern,
+  cacheLayerOf,
   cellName,
   type Fixture,
   type Gap,
@@ -84,6 +85,7 @@ export function cellsOn(fixture: Fixture, target: TargetName): Cell[] {
     name: cellName(fixture, variant),
     fixture,
     variant,
+    cacheLayer: cacheLayerOf(target, variant),
   }));
 }
 

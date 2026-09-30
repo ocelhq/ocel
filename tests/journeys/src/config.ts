@@ -22,7 +22,7 @@ export function journeyZone(env: NodeJS.ProcessEnv): string {
   return env.OCEL_JOURNEY_ZONE?.trim() || BOX_ZONE;
 }
 
-export function vpsZoneOf(cell: Cell, env: NodeJS.ProcessEnv): string {
+export function vpsZoneOf(cell: Pick<Cell, "variant">, env: NodeJS.ProcessEnv): string {
   return cell.variant.config.edge === "cloudflare" ? journeyZone(env) : BOX_ZONE;
 }
 
@@ -76,7 +76,7 @@ function dnsOf(env: NodeJS.ProcessEnv): { dns?: "cloudflare" } {
 }
 
 export function awsSweepOverlay(
-  cell: Cell | undefined,
+  cell: Pick<Cell, "variant"> | undefined,
   slug: string,
   env: NodeJS.ProcessEnv,
 ): Overlay {
