@@ -79,6 +79,8 @@ type cfMock struct {
 	afterListing     func(m *cfMock)
 	purges           [][]string
 	sslMode          string
+
+	tunnels tunnelMock
 }
 
 type putSecret struct {
@@ -530,6 +532,8 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 	mux.HandleFunc("POST /accounts/acct/r2/temp-access-credentials", func(w http.ResponseWriter, _ *http.Request) {
 		writeResult(w, map[string]any{"accessKeyId": "temp-id", "secretAccessKey": "temp-secret", "sessionToken": "temp-session"})
 	})
+
+	m.serveTunnels(mux)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		m.requests++

@@ -33,5 +33,11 @@ func (x *Proxy) Hooks() edge.Hooks {
 			Revoke: x.p.revokeOriginCertificate,
 		},
 		PurgeHostnames: x.p.purgeHostnames,
+		Tunnels: &edge.TunnelHooks{
+			Ensure:    x.p.ensureTunnel,
+			Configure: x.p.configureTunnel,
+			ReadToken: x.p.readTunnelToken,
+			Delete:    x.p.deleteTunnel,
+		},
 	}
 }
