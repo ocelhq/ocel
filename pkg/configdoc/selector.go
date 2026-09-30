@@ -15,8 +15,14 @@ import (
 var selectorsJSON []byte
 
 type selection struct {
-	IDs       []string `json:"ids"`
-	Shorthand []string `json:"shorthand"`
+	IDs       []string                    `json:"ids"`
+	Shorthand []string                    `json:"shorthand"`
+	Required  map[string][]ProviderOption `json:"required,omitempty"`
+}
+
+type ProviderOption struct {
+	Name string `json:"name"`
+	Doc  string `json:"doc"`
 }
 
 type selections struct {
@@ -40,11 +46,15 @@ func ProviderIDs() []string { return slices.Clone(known.Provider.IDs) }
 func AddKnownIDs(provider string, edges, dns []string) (restore func()) {
 	previous := known
 	known = selections{
-		Provider: selection{IDs: append(slices.Clone(previous.Provider.IDs), provider), Shorthand: previous.Provider.Shorthand},
+		Provider: selection{IDs: append(slices.Clone(previous.Provider.IDs), provider), Shorthand: previous.Provider.Shorthand, Required: previous.Provider.Required},
 		Edge:     selection{IDs: slices.Concat(previous.Edge.IDs, edges), Shorthand: slices.Concat(previous.Edge.Shorthand, edges)},
 		DNS:      selection{IDs: slices.Concat(previous.DNS.IDs, dns), Shorthand: slices.Concat(previous.DNS.Shorthand, dns)},
 	}
 	return func() { known = previous }
+}
+
+func RequiredProviderOptions(id string) []ProviderOption {
+	return slices.Clone(known.Provider.Required[id])
 }
 
 func ProviderNamedAlone(id string) bool { return slices.Contains(known.Provider.Shorthand, id) }
