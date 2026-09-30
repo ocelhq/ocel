@@ -12,6 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/environment"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
@@ -34,6 +35,31 @@ func TestAPublicBucketIsRefusedOnAws(t *testing.T) {
 	private := provider.DeployPreflight{Resources: pre.Resources[1:]}
 	if err := refusePublicBuckets(private); err != nil {
 		t.Fatalf("preflight of a private bucket = %v, want it to pass", err)
+	}
+}
+
+func TestAContainerAppWithAFloorOfZeroIsRefusedOnAws(t *testing.T) {
+	t.Parallel()
+
+	container := &contractv1.ManifestApp{Artifact: &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{}}}
+	pre := provider.DeployPreflight{Deploy: provider.DeploySpec{Apps: []provider.AppEntry{
+		{App: "api", Manifest: container, Instances: provider.Instances{Min: 1, Max: 4}},
+		{App: "admin", Manifest: container, Instances: provider.Instances{Min: 0, Max: 2}},
+	}}}
+
+	err := refuseContainersScaledToZero(pre)
+	if err == nil {
+		t.Fatal("preflight let a container app scale to zero behind a load balancer that counts requests per task, and nothing would ever wake it")
+	}
+	for _, want := range []string{"admin", "minInstances", "1"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("preflight = %q, want it to name %s", err, want)
+		}
+	}
+
+	pre.Deploy.Apps = pre.Deploy.Apps[:1]
+	if err := refuseContainersScaledToZero(pre); err != nil {
+		t.Fatalf("preflight of a container app with a floor of one = %v, want it to pass", err)
 	}
 }
 

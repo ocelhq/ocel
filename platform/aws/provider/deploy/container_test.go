@@ -74,6 +74,7 @@ func containerStackSpec(t *testing.T) (Config, provider.StackSpec) {
 			Compute:         provider.ComputeContainer,
 			Image:           containerImage,
 			HealthCheckPath: "/healthz",
+			Instances:       provider.Instances{Min: 1, Max: 1},
 			Values: provider.AppValues{
 				Plain:     map[string]string{"GREETING": "hello"},
 				Sensitive: map[string]string{"API_TOKEN": "sensitive-token"},
@@ -546,5 +547,81 @@ func TestAContainersTaskRunsOnTheArchitectureItsAppDeclares(t *testing.T) {
 		if got := task["runtimePlatform"].ObjectValue()["cpuArchitecture"].StringValue(); got != want {
 			t.Errorf("an app declaring arch %q runs on %s, want %s: its image is built for the architecture it declares", declared, got, want)
 		}
+	}
+}
+
+func runContainerProgram(t *testing.T, cfg Config, spec provider.StackSpec) *inputRecorder {
+	t.Helper()
+	release := releasing(t, cfg)
+	work, err := release.containerWork(spec, fixtureContainerInfra())
+	if err != nil {
+		t.Fatalf("containerWork() = %v", err)
+	}
+	if err := release.placeRule(context.Background(), work); err != nil {
+		t.Fatalf("placeRule() = %v", err)
+	}
+	rec := &inputRecorder{}
+	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("shop", spec.Ref.Name.String(), rec)); err != nil {
+		t.Fatalf("run the container program: %v", err)
+	}
+	return rec
+}
+
+func TestAContainerAppWithOneInstanceCountRunsThatManyTasksAndScalesNothing(t *testing.T) {
+	t.Parallel()
+
+	cfg, spec := containerStackSpec(t)
+	spec.App.Instances = provider.Instances{Min: 3, Max: 3}
+	rec := runContainerProgram(t, cfg, spec)
+
+	if got := recordedOf(t, rec, "aws:ecs/service:Service")["desiredCount"].NumberValue(); got != 3 {
+		t.Errorf("desiredCount = %v, want the 3 instances the app names", got)
+	}
+	for _, typeToken := range []string{"aws:appautoscaling/target:Target", "aws:appautoscaling/policy:Policy"} {
+		if names := rec.registered(typeToken); len(names) != 0 {
+			t.Errorf("an app whose floor is its ceiling declared %s %v, and there is nothing to scale", typeToken, names)
+		}
+	}
+}
+
+func TestAContainerAppScalesOnRequestsBetweenItsFloorAndCeiling(t *testing.T) {
+	t.Parallel()
+
+	cfg, spec := containerStackSpec(t)
+	spec.App.Instances = provider.Instances{Min: 2, Max: 6}
+	rec := runContainerProgram(t, cfg, spec)
+
+	if got := recordedOf(t, rec, "aws:ecs/service:Service")["desiredCount"].NumberValue(); got != 2 {
+		t.Errorf("desiredCount = %v, want the service to start at its floor of 2", got)
+	}
+	target := recordedOf(t, rec, "aws:appautoscaling/target:Target")
+	if target["minCapacity"].NumberValue() != 2 || target["maxCapacity"].NumberValue() != 6 {
+		t.Errorf("the scalable target spans %v to %v, want 2 to 6", target["minCapacity"], target["maxCapacity"])
+	}
+	if got, want := target["resourceId"].StringValue(), "service/ocel-containers-production/shop-prod-web-container-r3f8a1c90"; got != want {
+		t.Errorf("resourceId = %q, want %q, the service this release runs", got, want)
+	}
+	if target["serviceNamespace"].StringValue() != "ecs" || target["scalableDimension"].StringValue() != "ecs:service:DesiredCount" {
+		t.Errorf("the scalable target is %v on %v, want an ECS service's desired count", target["serviceNamespace"], target["scalableDimension"])
+	}
+	if target["tags"].ObjectValue()["ocel:managed-by"].StringValue() != "ocel" {
+		t.Errorf("tags = %v, want the scalable target tagged as ocel's, which is what the deploy credential may change", target["tags"])
+	}
+
+	policy := recordedOf(t, rec, "aws:appautoscaling/policy:Policy")
+	if policy["policyType"].StringValue() != "TargetTrackingScaling" {
+		t.Errorf("policyType = %v, want target tracking", policy["policyType"])
+	}
+	tracking := policy["targetTrackingScalingPolicyConfiguration"].ObjectValue()
+	metric := tracking["predefinedMetricSpecification"].ObjectValue()
+	if metric["predefinedMetricType"].StringValue() != "ALBRequestCountPerTarget" {
+		t.Errorf("the policy tracks %v, want requests per task", metric["predefinedMetricType"])
+	}
+	label := metric["resourceLabel"].StringValue()
+	if !strings.HasPrefix(label, "app/ocel-containers-production/abc/targetgroup/") {
+		t.Errorf("resourceLabel = %q, want the load balancer behind the listener and this release's target group", label)
+	}
+	if tracking["targetValue"].NumberValue() <= 0 {
+		t.Errorf("targetValue = %v, want a request count per task to hold", tracking["targetValue"])
 	}
 }

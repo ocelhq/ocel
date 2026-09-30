@@ -89,6 +89,9 @@ func (r *inputRecorder) NewResource(args pulumi.MockResourceArgs) (string, resou
 		if args.TypeToken == "aws:lb/loadBalancer:LoadBalancer" {
 			state["dnsName"] = resource.NewStringProperty(args.Name + ".us-east-1.elb.amazonaws.com")
 		}
+		if args.TypeToken == "aws:lb/targetGroup:TargetGroup" {
+			state["arnSuffix"] = resource.NewStringProperty("targetgroup/" + args.Name + "/0123456789abcdef")
+		}
 		if _, named := state["name"]; !named {
 			name := args.Name
 			if prefix, ok := state["namePrefix"]; ok && prefix.IsString() {
