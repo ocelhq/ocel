@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { overlayFor } from "../../config";
+import { evidence } from "../../evidence";
 import { projectSlug } from "../../identity";
 import { fixtures } from "../../matrix/fixtures";
 import { cellsOn, fixturesOn } from "../../plan";
@@ -27,11 +28,19 @@ describe("gcpSweepOverlay", () => {
 
   it("names the deploy the slug it was deployed under, not the one the run id spells", () => {
     for (const cell of cells) {
-      const slug = projectSlug(cell.name, "18746093211");
+      const runId = "18746093211";
+      const slug = projectSlug(cell.name, runId);
+      const deployed: CellUnderTest = {
+        name: cell.name,
+        fixture: cell.fixture,
+        variant: cell.variant,
+        dir: "/nowhere",
+        slug,
+        runId,
+        evidence: evidence("/nowhere"),
+      };
       const overlay = gcpSweepOverlay(cell, slug, env);
-      expect(overlay).toEqual(
-        overlayFor({ ...cell, slug } as unknown as CellUnderTest, "gcp", env),
-      );
+      expect(overlay).toEqual(overlayFor(deployed, "gcp", env));
       expect(overlay.slug).not.toBe(slug);
     }
   });
