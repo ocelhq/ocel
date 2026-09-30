@@ -48,11 +48,11 @@ export type Edge = "cloudfront" | "api-gateway" | "cloudflare";
 
 export type CacheLayer = "edge" | "origin";
 
-const CACHE_LAYER_WHEN_NO_EDGE_IS_NAMED: Record<TargetName, CacheLayer> = {
-  dev: "edge",
-  aws: "edge",
-  vps: "origin",
-  gcp: "edge",
+const COMPUTE_WHEN_NONE_IS_NAMED: Record<TargetName, Compute> = {
+  dev: "serverless",
+  aws: "serverless",
+  vps: "container",
+  gcp: "serverless",
 };
 
 export type Phase = "deploy" | "verify" | "redeploy" | "rollback" | "destroy";
@@ -109,7 +109,11 @@ export function fixture(name: string, shape: Omit<Fixture, "name" | "concern">):
 export type Cell = { name: string; fixture: Fixture; variant: Variant; cacheLayer: CacheLayer };
 
 export function cacheLayerOf(target: TargetName, variant: Variant): CacheLayer {
-  return variant.config.edge === undefined ? CACHE_LAYER_WHEN_NO_EDGE_IS_NAMED[target] : "edge";
+  if (variant.config.edge !== undefined) {
+    return "edge";
+  }
+  const compute = variant.config.compute ?? COMPUTE_WHEN_NONE_IS_NAMED[target];
+  return compute === "container" ? "origin" : "edge";
 }
 
 export function cellName(fixture: Pick<Fixture, "name">, variant: Variant): string {

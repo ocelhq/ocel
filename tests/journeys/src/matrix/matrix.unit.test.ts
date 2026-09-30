@@ -148,6 +148,21 @@ describe("the Next cache a cell is held to", () => {
     }
   });
 
+  it("holds a Next app in a container on aws or gcp to the Next server's own cache", () => {
+    const containers = {
+      aws: ["deploy/next-container", "lifecycle/next-container", "sdk/next-container"],
+      gcp: ["deploy/next-container"],
+    } as const;
+    for (const [lane, cells] of Object.entries(containers) as [Lane, readonly string[]][]) {
+      const planned = planOn(lane, {}, EVERY_CELL);
+      for (const cell of cells) {
+        const titles = titlesOf(planned, cell);
+        expect(cacheTitlesIn(titles, EDGE_TITLES)).toEqual([]);
+        expect(cacheTitlesIn(titles, ORIGIN_TITLES)).not.toEqual([]);
+      }
+    }
+  });
+
   it("holds a Next app on aws to the edge's cache", () => {
     const planned = planOn("aws", {}, EVERY_CELL);
     for (const cell of ["deploy/next", "deploy/next-cloudflare", "lifecycle/next"]) {
