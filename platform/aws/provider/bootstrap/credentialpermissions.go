@@ -47,6 +47,7 @@ const (
 	functionLogGroupARN  = "arn:aws:logs:*:*:log-group:/aws/lambda/*"
 	appTargetGroupARN    = "arn:aws:elasticloadbalancing:*:*:targetgroup/*/*"
 	appTaskDefinitionARN = "arn:aws:ecs:*:*:task-definition/*:*"
+	appCertificateARN    = "arn:aws:acm:*:*:certificate/*"
 
 	managedSecretClusterTagKey = "aws:rds:primaryDBClusterArn"
 
@@ -517,6 +518,22 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 			Actions:   []string{"elasticloadbalancing:AddTags"},
 			Resources: []string{containerBalancerARN, containerListenerARN, containerRuleARN, appTargetGroupARN, containerTrustStoreARN},
 			Condition: taggedOnCreate(),
+		},
+		{
+			Actions:   []string{"acm:ImportCertificate"},
+			Resources: []string{appCertificateARN},
+			Condition: taggedOnCreate(),
+		},
+		{
+			Actions: []string{
+				"acm:AddTagsToCertificate",
+				"acm:DeleteCertificate",
+				"acm:DescribeCertificate",
+				"acm:ListTagsForCertificate",
+				"acm:RemoveTagsFromCertificate",
+			},
+			Resources: []string{appCertificateARN},
+			Condition: taggedByOcel(),
 		},
 		{
 			Actions:   []string{"s3:CreateBucket"},

@@ -711,3 +711,32 @@ func TestEveryManagedByConditionAdmitsTheTagOcelWrites(t *testing.T) {
 		}
 	}
 }
+
+func TestEveryCredentialImportsAndReclaimsOnlyTheCertificatesItTagged(t *testing.T) {
+	want := map[grant]bool{
+		{action: "acm:ImportCertificate", resource: appCertificateARN, condition: conditionJSON(t, taggedOnCreate())}:       true,
+		{action: "acm:DescribeCertificate", resource: appCertificateARN, condition: conditionJSON(t, taggedByOcel())}:       true,
+		{action: "acm:ListTagsForCertificate", resource: appCertificateARN, condition: conditionJSON(t, taggedByOcel())}:    true,
+		{action: "acm:AddTagsToCertificate", resource: appCertificateARN, condition: conditionJSON(t, taggedByOcel())}:      true,
+		{action: "acm:RemoveTagsFromCertificate", resource: appCertificateARN, condition: conditionJSON(t, taggedByOcel())}: true,
+		{action: "acm:DeleteCertificate", resource: appCertificateARN, condition: conditionJSON(t, taggedByOcel())}:         true,
+	}
+	for purpose, document := range bothCredentials(t) {
+		granted := map[grant]bool{}
+		for g := range grantsOf(t, document) {
+			if strings.HasPrefix(g.action, "acm:") {
+				granted[g] = true
+			}
+		}
+		for wanted := range want {
+			if !granted[wanted] {
+				t.Errorf("the %s credential does not grant %s on %s under %s: the public load balancer's default certificate is imported into ACM", purpose, wanted.action, wanted.resource, wanted.condition)
+			}
+		}
+		for g := range granted {
+			if !want[g] {
+				t.Errorf("the %s credential grants %s on %s under %s, which reaches certificates Ocel never imported", purpose, g.action, g.resource, g.condition)
+			}
+		}
+	}
+}
