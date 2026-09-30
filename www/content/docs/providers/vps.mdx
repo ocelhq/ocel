@@ -545,8 +545,10 @@ A Next app on a box runs as a plain Next server, such as `next start`, with no o
 front of it, and Next's own server cache inside the container is the only cache. It serves
 prerendered and ISR pages and honours `revalidatePath`, `revalidateTag` and draft mode, and its
 responses carry Next's own `Cache-Control` and `x-nextjs-cache` headers. The cache lives in the
-container, so it outlasts a restart of the container, and a deploy that replaces the container
-starts it over from what the build prerendered.
+container, and a deploy that replaces the container starts it over from what the build
+prerendered. Its pages outlast a restart, but its record of what `revalidatePath` and
+`revalidateTag` marked does not: a page revalidated and not rendered again before a restart
+comes back as its old copy.
 
 [Behind Cloudflare](#behind-cloudflare), no page is cached either. Cloudflare forwards each
 hostname to the box with no worker and no cache rule, and caches only what it caches for any
