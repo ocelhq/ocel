@@ -474,7 +474,7 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 			Condition: taggedByOcel(),
 		},
 		{
-			Actions:   []string{"application-autoscaling:RegisterScalableTarget", "application-autoscaling:TagResource"},
+			Actions:   []string{"application-autoscaling:RegisterScalableTarget"},
 			Resources: []string{scalableTargetARN},
 			Condition: scalesECSServices(taggedOnCreate()),
 		},
@@ -483,10 +483,20 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 				"application-autoscaling:DeleteScalingPolicy",
 				"application-autoscaling:DeregisterScalableTarget",
 				"application-autoscaling:PutScalingPolicy",
-				"application-autoscaling:UntagResource",
+				"application-autoscaling:RegisterScalableTarget",
 			},
 			Resources: []string{scalableTargetARN},
 			Condition: scalesECSServices(taggedByOcel()),
+		},
+		{
+			Actions:   []string{"application-autoscaling:TagResource"},
+			Resources: []string{scalableTargetARN},
+			Condition: taggedOnCreate(),
+		},
+		{
+			Actions:   []string{"application-autoscaling:TagResource", "application-autoscaling:UntagResource"},
+			Resources: []string{scalableTargetARN},
+			Condition: taggedByOcel(),
 		},
 		{
 			Actions: []string{
