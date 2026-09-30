@@ -89,7 +89,7 @@ func TestShapeHandsTheProviderTheDeployItWouldMake(t *testing.T) {
 	}
 }
 
-func shapedTypes(set *costv1.ResourceSet) map[string]int {
+func countShapedTypes(set *costv1.ResourceSet) map[string]int {
 	types := map[string]int{}
 	for _, resource := range set.GetResources() {
 		types[resource.GetType()]++
@@ -110,7 +110,7 @@ func TestShapeOfAnEphemeralPreviewPricesNoResourceItNeverProvisions(t *testing.T
 	if err != nil {
 		t.Fatalf("Shape() error = %v", err)
 	}
-	types := shapedTypes(set)
+	types := countShapedTypes(set)
 	if types[fake.TypePostgres] != 0 || types[fake.TypeBucket] != 0 {
 		t.Errorf("shaped types = %v, want no postgres or bucket: an ephemeral preview has no infra stack of its own", types)
 	}
@@ -132,7 +132,7 @@ func TestShapeOfAPersistentPreviewPricesTheResourcesItProvisions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Shape() error = %v", err)
 	}
-	if types := shapedTypes(set); types[fake.TypePostgres] != 1 || types[fake.TypeBucket] != 1 {
+	if types := countShapedTypes(set); types[fake.TypePostgres] != 1 || types[fake.TypeBucket] != 1 {
 		t.Errorf("shaped types = %v, want the postgres and the bucket its infra stack provisions", types)
 	}
 }

@@ -100,7 +100,7 @@ func ephemeral(env *environmentv1.Environment) bool {
 		env.GetLifecycle() == environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL
 }
 
-func previewLifecycle(spec provider.DeploySpec) stackrecords.Lifecycle {
+func readPreviewLifecycle(spec provider.DeploySpec) stackrecords.Lifecycle {
 	if isEphemeralPreview(spec) {
 		return stackrecords.LifecycleEphemeral
 	}

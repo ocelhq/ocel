@@ -82,10 +82,10 @@ func (r *deployRun) refuseUncovered(resources []provider.Resource, published map
 		"this manifest declares %s, and %s is an ephemeral preview: it provisions no infra of its own, and nothing is published under %s to %s or to the whole preview tier. "+
 			"Deploy it as a named preview (`ocel preview --name <name>`), which is persistent and provisions its own infra, or publish a binding for %s "+
 			"with `ocel bindings set --preview --environment %s` for this preview only, or `ocel bindings set --preview` for every preview",
-		quoteAll(uncovered), r.spec.Env, thatName(len(uncovered)), describeCoordinate(string(r.spec.Tier), r.spec.Env), itOrEach(len(uncovered)), r.spec.Env)
+		quoteAll(uncovered), r.spec.Env, thatName(len(uncovered)), describeCoordinate(string(r.spec.Tier), r.spec.Env), chooseItOrEach(len(uncovered)), r.spec.Env)
 }
 
-func itOrEach(n int) string {
+func chooseItOrEach(n int) string {
 	if n == 1 {
 		return "it"
 	}

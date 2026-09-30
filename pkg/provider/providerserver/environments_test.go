@@ -95,7 +95,7 @@ func TestListEnvironmentsNamesTheLifecycleEachPreviewWasCreatedWith(t *testing.T
 	recordEnvironment(t, vendor, "pr-7", stackrecords.LifecycleEphemeral)
 	recordEnvironment(t, vendor, "staging", stackrecords.LifecyclePersistent)
 
-	lifecycles := listedLifecycles(t, client)
+	lifecycles := listLifecycles(t, client)
 
 	if len(lifecycles) != 2 {
 		t.Fatalf("ListEnvironments() = %v, want the two previews and not production", lifecycles)
@@ -117,7 +117,7 @@ func TestListEnvironmentsNamesNoLifecycleForAPreviewThatRecordedNone(t *testing.
 		naming.InfraStack("staging"),
 	)
 
-	lifecycles := listedLifecycles(t, client)
+	lifecycles := listLifecycles(t, client)
 
 	if lifecycles["staging"] != environmentv1.Lifecycle_LIFECYCLE_UNSPECIFIED {
 		t.Errorf("staging is %s, want unspecified: nothing recorded its lifecycle, and an infra stack is not a record of one", lifecycles["staging"])
@@ -132,7 +132,7 @@ func recordEnvironment(t *testing.T, vendor *fake.Provider, env string, lifecycl
 	}
 }
 
-func listedLifecycles(t *testing.T, client contractv1connect.ProviderServiceClient) map[string]environmentv1.Lifecycle {
+func listLifecycles(t *testing.T, client contractv1connect.ProviderServiceClient) map[string]environmentv1.Lifecycle {
 	t.Helper()
 	listed, err := client.ListEnvironments(context.Background(), &contractv1.ListEnvironmentsRequest{Slug: "shop"})
 	if err != nil {

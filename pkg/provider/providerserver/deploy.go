@@ -379,14 +379,14 @@ func (r *deployRun) refuseOtherLifecycle(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return meta.RefuseOtherLifecycle(r.spec.Env, previewLifecycle(r.spec))
+	return meta.RefuseOtherLifecycle(r.spec.Env, readPreviewLifecycle(r.spec))
 }
 
 func (r *deployRun) ensureLifecycle(ctx context.Context) error {
 	if r.spec.Tier != environment.TierPreview || r.dry {
 		return nil
 	}
-	return stackrecords.EnsureLifecycle(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, r.spec.Env, previewLifecycle(r.spec))
+	return stackrecords.EnsureLifecycle(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, r.spec.Env, readPreviewLifecycle(r.spec))
 }
 
 func (r *deployRun) ensureBootstrap(ctx context.Context, progress progress.Log) error {
@@ -1396,7 +1396,7 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 				return nil
 			}
 			return stackrecords.RecordEnvironmentMeta(ctx, r.provider.KeyValues(),
-				r.spec.Tier, r.spec.Slug, r.spec.Env, r.spec.Label, previewLifecycle(r.spec))
+				r.spec.Tier, r.spec.Slug, r.spec.Env, r.spec.Label, readPreviewLifecycle(r.spec))
 		})
 	}); err != nil {
 		return nil, err
