@@ -9,6 +9,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"math/big"
+	"strconv"
 	"time"
 
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/acm"
@@ -44,13 +45,22 @@ func (w *containerInfraWork) publicSecurityGroup(ctx *pulumi.Context, vpc string
 		Name:        pulumi.String(containerInfraName(w.tier, "public")),
 		Description: pulumi.String("Ocel: the load balancer the edge forwards the hostnames of the " + string(w.tier) + " class to"),
 		VpcId:       pulumi.String(vpc),
-		Ingress: ec2.SecurityGroupIngressArray{&ec2.SecurityGroupIngressArgs{
-			Protocol:    pulumi.String("tcp"),
-			FromPort:    pulumi.Int(awsports.PublicListenerPort),
-			ToPort:      pulumi.Int(awsports.PublicListenerPort),
-			CidrBlocks:  pulumi.ToStringArray(w.public),
-			Description: pulumi.String("Ocel: only the edge reaches the public front, presenting its client certificate"),
-		}},
+		Ingress: ec2.SecurityGroupIngressArray{
+			&ec2.SecurityGroupIngressArgs{
+				Protocol:    pulumi.String("tcp"),
+				FromPort:    pulumi.Int(awsports.PublicListenerPort),
+				ToPort:      pulumi.Int(awsports.PublicListenerPort),
+				CidrBlocks:  pulumi.ToStringArray(w.public),
+				Description: pulumi.String("Ocel: only the edge reaches the public front, presenting its client certificate"),
+			},
+			&ec2.SecurityGroupIngressArgs{
+				Protocol:    pulumi.String("tcp"),
+				FromPort:    pulumi.Int(originListenerPort),
+				ToPort:      pulumi.Int(originListenerPort),
+				CidrBlocks:  pulumi.ToStringArray(w.public),
+				Description: pulumi.String("Ocel: the edge's plain http is redirected to https, forwarding nothing"),
+			},
+		},
 		Egress: ec2.SecurityGroupEgressArray{&ec2.SecurityGroupEgressArgs{
 			Protocol: pulumi.String("-1"), FromPort: pulumi.Int(0), ToPort: pulumi.Int(0),
 			CidrBlocks: pulumi.StringArray{pulumi.String("0.0.0.0/0")},
@@ -101,6 +111,22 @@ func (w *containerInfraWork) runPublicFront(ctx *pulumi.Context, public *ec2.Sec
 		Tags: tags,
 	}, pulumi.IgnoreChanges([]string{"mutualAuthentication"}))
 	if err != nil {
+		return err
+	}
+	if _, err := lb.NewListener(ctx, naming.ResourceID(naming.KindService, "public", "redirect"), &lb.ListenerArgs{
+		LoadBalancerArn: balancer.Arn,
+		Port:            pulumi.Int(originListenerPort),
+		Protocol:        pulumi.String("HTTP"),
+		DefaultActions: lb.ListenerDefaultActionArray{&lb.ListenerDefaultActionArgs{
+			Type: pulumi.String("redirect"),
+			Redirect: &lb.ListenerDefaultActionRedirectArgs{
+				Protocol:   pulumi.String("HTTPS"),
+				Port:       pulumi.String(strconv.Itoa(awsports.PublicListenerPort)),
+				StatusCode: pulumi.String("HTTP_301"),
+			},
+		}},
+		Tags: tags,
+	}); err != nil {
 		return err
 	}
 	if err := w.runLiveness(ctx, listener, tags); err != nil {
