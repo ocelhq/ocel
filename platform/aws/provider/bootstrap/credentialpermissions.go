@@ -520,7 +520,7 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 			Condition: taggedOnCreate(),
 		},
 		{
-			Actions:   []string{"acm:ImportCertificate"},
+			Actions:   []string{"acm:ImportCertificate", "acm:AddTagsToCertificate"},
 			Resources: []string{appCertificateARN},
 			Condition: taggedOnCreate(),
 		},

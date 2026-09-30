@@ -715,6 +715,7 @@ func TestEveryManagedByConditionAdmitsTheTagOcelWrites(t *testing.T) {
 func TestEveryCredentialImportsAndReclaimsOnlyTheCertificatesItTagged(t *testing.T) {
 	want := map[grant]bool{
 		{action: "acm:ImportCertificate", resource: appCertificateARN, condition: conditionJSON(t, taggedOnCreate())}:       true,
+		{action: "acm:AddTagsToCertificate", resource: appCertificateARN, condition: conditionJSON(t, taggedOnCreate())}:    true,
 		{action: "acm:DescribeCertificate", resource: appCertificateARN, condition: conditionJSON(t, taggedByOcel())}:       true,
 		{action: "acm:ListTagsForCertificate", resource: appCertificateARN, condition: conditionJSON(t, taggedByOcel())}:    true,
 		{action: "acm:AddTagsToCertificate", resource: appCertificateARN, condition: conditionJSON(t, taggedByOcel())}:      true,
