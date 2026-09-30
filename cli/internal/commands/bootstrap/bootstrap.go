@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/consent"
@@ -17,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/readiness"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
@@ -206,36 +208,23 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier e
 			return err
 		}
 
-		request := func(dry bool) *contractv1.BootstrapRequest {
-			req := &contractv1.BootstrapRequest{
-				Tier:     tier,
-				Features: requested,
-				Remove:   going,
-				Force:    opts.Force,
-				Edge:     cfg.EdgeSelection(),
-				Dry:      dry,
-			}
-			if opts.RepairDeclared {
-				req.RepairOnDeploy = &opts.Repair
-			}
-			return req
+		req := &contractv1.BootstrapRequest{
+			Tier:     tier,
+			Features: requested,
+			Remove:   going,
+			Force:    opts.Force,
+			Edge:     cfg.EdgeSelection(),
+		}
+		if opts.RepairDeclared {
+			req.RepairOnDeploy = &opts.Repair
 		}
 
-		span := planning.Child(readiness.TierName(tier), progress.Planning.Title(fmt.Sprintf("the changes to the %s bootstrap", readiness.TierName(tier))))
-		plan, err := providerprocess.Plan(ctx, provider, "Bootstrap", request(true), contractv1connect.ProviderServiceClient.Bootstrap)
-		span.End(err)
+		drawn, err := drawPlan(ctx, planning, provider, req)
 		if err != nil {
 			return err
 		}
-		var consented *planv1.ChangePlan
-		rendered := len(plan.GetGroups()) > 0
 		switch {
-		case rendered:
-			var notes []*planv1.Note
-			if !consent.Mutates(plan) {
-				notes = append(notes, &planv1.Note{Text: unchanged(tier)})
-			}
-			consented = planning.Plan(fmt.Sprintf("Proposed changes to the %s bootstrap", readiness.TierName(tier)), plan, notes...)
+		case drawn.rendered():
 		case len(going) > 0:
 			planning.Warn(fmt.Sprintf("Removing %s from the %s bootstrap tears down what it installed.", strings.Join(going, ", "), readiness.TierName(tier)))
 			if dependents := dependentProjects(catalogue, going); len(dependents) > 0 {
@@ -245,7 +234,7 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier e
 			planning.Say(unchanged(tier))
 		}
 		if !picked {
-			edgeID := plan.GetEdgeKind()
+			edgeID := drawn.edgeKind
 			if edgeID == "" {
 				edgeID = string(cfg.EdgeKind())
 			}
@@ -272,11 +261,7 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier e
 			}
 		}
 
-		title := fmt.Sprintf("Bootstrap %s infrastructure with %s?", readiness.TierName(tier), provider.Name())
-		if rendered {
-			title = fmt.Sprintf("%s with %s?", consent.ConfirmVerb(consented), provider.Name())
-		}
-		granted, err := policy.ConfirmPlan(ctx, planning, consented, title)
+		granted, err := confirmPlan(ctx, policy, planning, provider, tier, drawn)
 		if err != nil {
 			return err
 		}
@@ -286,17 +271,57 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier e
 		}
 		planning.End(nil)
 
-		req := request(false)
-		req.Consented = consented
-		req.AcceptReplacements = rendered
 		req.Force = req.Force || len(going) > 0
-
-		if _, err := providerprocess.Stream(ctx, provider, "Bootstrap", req, contractv1connect.ProviderServiceClient.Bootstrap); err != nil {
+		if err := applyPlan(ctx, provider, req, drawn); err != nil {
 			return err
 		}
 		run.Succeed(fmt.Sprintf("Bootstrapped the %s environment", readiness.TierName(tier)))
 		return nil
 	})
+}
+
+type drawnPlan struct {
+	shown    *planv1.ChangePlan
+	edgeKind string
+}
+
+func (d drawnPlan) rendered() bool { return len(d.shown.GetGroups()) > 0 }
+
+func drawPlan(ctx context.Context, planning *run.Span, provider *providerprocess.Provider, req *contractv1.BootstrapRequest) (drawnPlan, error) {
+	tier := readiness.TierName(req.GetTier())
+	dry := proto.CloneOf(req)
+	dry.Dry = true
+	span := planning.Child(tier, progress.Planning.Title(fmt.Sprintf("the changes to the %s bootstrap", tier)))
+	plan, err := providerprocess.Plan(ctx, provider, "Bootstrap", dry, contractv1connect.ProviderServiceClient.Bootstrap)
+	span.End(err)
+	if err != nil {
+		return drawnPlan{}, err
+	}
+	drawn := drawnPlan{edgeKind: plan.GetEdgeKind()}
+	if len(plan.GetGroups()) == 0 {
+		return drawn, nil
+	}
+	var notes []*planv1.Note
+	if !consent.Mutates(plan) {
+		notes = append(notes, &planv1.Note{Text: unchanged(req.GetTier())})
+	}
+	drawn.shown = planning.Plan(fmt.Sprintf("Proposed changes to the %s bootstrap", tier), plan, notes...)
+	return drawn, nil
+}
+
+func confirmPlan(ctx context.Context, policy consent.Policy, planning *run.Span, provider *providerprocess.Provider, tier environmentv1.Tier, drawn drawnPlan) (bool, error) {
+	title := fmt.Sprintf("Bootstrap %s infrastructure with %s?", readiness.TierName(tier), provider.Name())
+	if drawn.rendered() {
+		title = fmt.Sprintf("%s with %s?", consent.ConfirmVerb(drawn.shown), provider.Name())
+	}
+	return policy.ConfirmPlan(ctx, planning, drawn.shown, title)
+}
+
+func applyPlan(ctx context.Context, provider *providerprocess.Provider, req *contractv1.BootstrapRequest, drawn drawnPlan) error {
+	req.Consented = drawn.shown
+	req.AcceptReplacements = drawn.rendered()
+	_, err := providerprocess.Stream(ctx, provider, "Bootstrap", req, contractv1connect.ProviderServiceClient.Bootstrap)
+	return err
 }
 
 func describeBootstrap(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project, tier environmentv1.Tier) (*contractv1.DescribeBootstrapResponse, error) {
