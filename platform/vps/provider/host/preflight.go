@@ -465,8 +465,6 @@ func (h *Host) refuseServingPortsHeld(ctx context.Context, read Reading) error {
 	switch {
 	case move == nil && h.proxyOption.adopted(), move != nil && move.isSameProcess():
 		return h.refuseProxyUnreachable(ctx, read)
-	case move != nil && !move.from.adopted():
-		return nil
 	}
 	owners, err := h.readServingOwners(ctx, read)
 	if err != nil || len(owners) == 0 {

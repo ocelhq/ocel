@@ -264,7 +264,7 @@ func TestAMoveCountsOnlyTheHostnamesTheNewProxyOrdersCertificatesFor(t *testing.
 	}
 }
 
-func TestMovingABoxOffYourProxyIsRefusedWhileAnythingHoldsTheServingPortsNamingWhatToStop(t *testing.T) {
+func TestMovingABoxToAnotherProxyIsRefusedWhileAnythingButOcelsOwnProxyHoldsTheServingPortsNamingWhatToStop(t *testing.T) {
 	t.Parallel()
 
 	for name, tc := range map[string]struct {
@@ -285,6 +285,17 @@ func TestMovingABoxOffYourProxyIsRefusedWhileAnythingHoldsTheServingPortsNamingW
 			held: func(box *bench) { portsOwnedOn(box, nil, socketOwner{80, "nginx"}, socketOwner{443, "nginx"}) },
 			want: "nginx listens on :80 and :443, which your Traefik takes over from a proxy you route yourself\n" +
 				"Ocel never stops a proxy it does not run: stop nginx, then run `ocel bootstrap production` again",
+		},
+		"ocel's own proxy, stopped, to your Traefik": {
+			from: Front{}, to: traefikOnTheHost(),
+			held: func(box *bench) {
+				box.installed[environment.TierProduction] = slices.DeleteFunc(box.installed[environment.TierProduction], func(item Item) bool {
+					return item.Kind == KindContainer && item.Name == caddy.Container
+				})
+				portsOwnedOn(box, nil, socketOwner{80, "apache2"}, socketOwner{443, "apache2"})
+			},
+			want: "apache2 listens on :80 and :443, which your Traefik takes over from ocel's own proxy\n" +
+				"Ocel never stops a proxy it does not run: stop apache2, then run `ocel bootstrap production` again",
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
