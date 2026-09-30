@@ -94,6 +94,7 @@ func (y yourNetwork) switchboardOn(t *testing.T, port int) boxContainer {
 func (y yourNetwork) stated(t *testing.T, board boxContainer) bool {
 	t.Helper()
 	item := board.item("")
+	item.Name = y.board
 	binds := make([]string, 0, len(board.binds))
 	for _, bind := range board.binds {
 		binds = append(binds, y.here(bind))
