@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { access, cp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { repoRoot } from "./paths";
+import { outputRoot, repoRoot } from "./paths";
 
 const NEVER_COPIED = [".git", ".next", ".ocel", "dist", "node_modules", "output"];
 const NEVER_COPIED_FROM_A_PACKAGE = NEVER_COPIED.filter((name) => name !== "dist");
@@ -178,9 +178,20 @@ export async function writeWorkspace(root: string, name: string, members: string
   );
 }
 
+export function lockfileInstallArgs(pid: number): string[] {
+  return [
+    "install",
+    "--lockfile-only",
+    "--ignore-scripts",
+    "--prefer-offline",
+    "--cache-dir",
+    path.join(outputRoot, "pnpm-cache", String(pid)),
+  ];
+}
+
 export async function writeLockfile(root: string): Promise<void> {
   await cp(path.join(repoRoot, LOCKFILE), path.join(root, LOCKFILE));
-  const args = ["install", "--lockfile-only", "--ignore-scripts", "--prefer-offline"];
+  const args = lockfileInstallArgs(process.pid);
   const said = await new Promise<{ code: number | null; output: string }>((resolve, reject) => {
     const child = spawn("pnpm", args, { cwd: root, env: process.env });
     let output = "";
