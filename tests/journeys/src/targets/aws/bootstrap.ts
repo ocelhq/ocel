@@ -21,6 +21,7 @@ const FLOCI_FEATURES = ["isr", "image-optimization", "cloudfront-edge", "apigate
 
 const CELL_BOOTSTRAP_ARGS = ["bootstrap", "production", "--yes", "--features", EVERY_FEATURE];
 export const BOOTSTRAP_DESTROY_ARGS = ["bootstrap", "destroy", "production", "--yes"];
+export const BOOTSTRAP_REFRESH_ARGS = ["bootstrap", "production", "--yes"];
 
 async function awaitDefaultVpc(endpoint: string): Promise<void> {
   const cli = cliAt(endpoint);

@@ -9,7 +9,7 @@ import { cellsOn, fixturesOn } from "../../plan";
 import type { ExternalStack } from "../../stacks";
 import { copyTree } from "../../tree";
 import type { Sweeper } from "../types";
-import { BOOTSTRAP_DESTROY_ARGS } from "./bootstrap";
+import { BOOTSTRAP_DESTROY_ARGS, BOOTSTRAP_REFRESH_ARGS } from "./bootstrap";
 import { namespaceFor, namespaceOfSlug, ocelEnvIn, strayNamespaces } from "./namespace";
 import { githubRuns, livelyRuns, ofRun, runIdOf } from "./runs";
 import { reclaimable, type Stranded, sweepable } from "./slugs";
@@ -104,6 +104,25 @@ export function bootstrapBlockedBy(namespace: string, remaining: string[]): stri
     return undefined;
   }
   return `the ${namespace} bootstrap was left in place: ${remaining.join(", ")} could not be destroyed out of it`;
+}
+
+export async function destroyOnCurrentBootstrap(
+  destroy: () => Promise<unknown>,
+  refreshBootstrap: () => Promise<unknown>,
+): Promise<void> {
+  try {
+    await destroy();
+    return;
+  } catch (first) {
+    try {
+      await refreshBootstrap();
+    } catch (refreshing) {
+      throw new Error(
+        `${String(first)}\nand bringing the bootstrap to this binary, so the destroy could run again, failed: ${String(refreshing)}`,
+      );
+    }
+  }
+  await destroy();
 }
 
 export type Swept = { slug: string; fixture: Fixture; overlay: Overlay };
@@ -241,7 +260,11 @@ export class AwsSweeper implements Sweeper {
           await namespaceStore.releaseLocks(one.slug);
         }
         await writeJourneyConfig(dir, one.overlay);
-        await ocel(dir, ["destroy", "production", "--yes"], ocelEnvIn(dir, namespace));
+        const env = ocelEnvIn(dir, namespace);
+        await destroyOnCurrentBootstrap(
+          () => ocel(dir, ["destroy", "production", "--yes"], env),
+          () => ocel(dir, BOOTSTRAP_REFRESH_ARGS, env),
+        );
         process.stdout.write(`swept ${one.slug} from the ${namespace} bootstrap\n`);
       }).catch((error) => {
         complaints.push(`${one.slug}: ${String(error)}`);
