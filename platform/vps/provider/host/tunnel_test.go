@@ -255,7 +255,7 @@ func TestTheTunnelIsReleasedOnlyOnceNoHostnameIsTunneled(t *testing.T) {
 	if again, err := box.host().ReleaseTunnel(context.Background()); err != nil || !slices.Equal(again, []Tunnel{reserved}) {
 		t.Errorf("ReleaseTunnel() again = %+v, %v; want the retired tunnel handed back until it is forgotten", again, err)
 	}
-	if err := box.host().ForgetTunnel(context.Background(), reserved.ID); err != nil {
+	if err := box.host().ForgetTunnel(context.Background(), reserved.Name); err != nil {
 		t.Fatalf("ForgetTunnel() = %v", err)
 	}
 	if table := readBack(t, box); len(table.Retired) != 0 {

@@ -256,9 +256,9 @@ func (h *Host) ReleaseTunnel(ctx context.Context) ([]Tunnel, error) {
 	return retired, err
 }
 
-func (h *Host) ForgetTunnel(ctx context.Context, id string) error {
+func (h *Host) ForgetTunnel(ctx context.Context, name string) error {
 	return h.reshape(ctx, func(state RoutingTable) (RoutingTable, error) {
-		state.Retired = slices.DeleteFunc(slices.Clone(state.Retired), func(held Tunnel) bool { return held.ID == id })
+		state.Retired = slices.DeleteFunc(slices.Clone(state.Retired), func(held Tunnel) bool { return held.Name == name })
 		return state, nil
 	})
 }

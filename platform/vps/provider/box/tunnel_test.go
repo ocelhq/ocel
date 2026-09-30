@@ -19,9 +19,11 @@ import (
 const tunnelEdge edge.Kind = "cloudflare"
 
 type tunnelEvents struct {
-	opened        []string
-	held          map[string]string
-	refusesDelete error
+	opened           []string
+	held             map[string]string
+	refusesDelete    error
+	refusesConfigure error
+	duringEnsure     func()
 }
 
 func TestATunnelTheEdgeFailedToDeleteIsDeletedByTheNextRelease(t *testing.T) {
@@ -48,6 +50,38 @@ func TestATunnelTheEdgeFailedToDeleteIsDeletedByTheNextRelease(t *testing.T) {
 	}
 }
 
+func TestATunnelOpenedButNeverRunIsDeletedByItsNameWhenReleased(t *testing.T) {
+	m, routed := routedOn(t)
+	ctx := context.Background()
+	m.tunnelEvents.refusesConfigure = errors.New("cloudflare answered 503")
+
+	if _, err := routed.Claim(ctx, tunneledClaim("shop.example.com")); err == nil {
+		t.Fatal("Claim with the configure refused succeeded")
+	}
+	if err := routed.Destroy(ctx); err != nil {
+		t.Fatalf("Destroy: %v", err)
+	}
+
+	if !slices.Contains(m.tunnelEvents.opened, "delete uuid-1") || len(m.retired) != 0 {
+		t.Errorf("the edge saw %v and the box retires %+v, want the tunnel opened under the reserved name deleted: no id was recorded for it, and forgetting it leaves it at the edge", m.tunnelEvents.opened, m.retired)
+	}
+}
+
+func TestATunnelOpenedUnderANameAnotherRunReleasedIsDeleted(t *testing.T) {
+	m, routed := routedOn(t)
+	m.tunnelEvents.duringEnsure = func() { m.tunnel = nil }
+
+	_, err := routed.Claim(context.Background(), tunneledClaim("shop.example.com"))
+
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
+		t.Fatalf("Claim through a tunnel released mid-claim = %v, want it refused busy", err)
+	}
+	if !slices.Contains(m.tunnelEvents.opened, "delete uuid-1") {
+		t.Errorf("the edge saw %v, want the tunnel this claim opened deleted: nothing on the box names it any more, so no release ever would", m.tunnelEvents.opened)
+	}
+}
+
 func (m *machine) openTunnels(kind edge.Kind) (*edge.TunnelHooks, error) {
 	if kind != tunnelEdge {
 		return nil, refusal.Refuse(refusal.CodeInvalid, "the %s edge opens no tunnel", kind)
@@ -63,9 +97,15 @@ func (m *machine) openTunnels(kind edge.Kind) (*edge.TunnelHooks, error) {
 				m.tunnelEvents.held[name] = fmt.Sprintf("uuid-%d", len(m.tunnelEvents.held)+1)
 			}
 			id := m.tunnelEvents.held[name]
+			if m.tunnelEvents.duringEnsure != nil {
+				m.tunnelEvents.duringEnsure()
+			}
 			return edge.Tunnel{ID: id, Address: id + ".cfargotunnel.com"}, nil
 		},
 		Configure: func(_ context.Context, id, service string) error {
+			if m.tunnelEvents.refusesConfigure != nil {
+				return m.tunnelEvents.refusesConfigure
+			}
 			record("configure " + id + " " + service)
 			return nil
 		},
@@ -138,8 +178,8 @@ func (m *machine) ReleaseTunnel(context.Context) ([]host.Tunnel, error) {
 	return slices.Clone(m.retired), nil
 }
 
-func (m *machine) ForgetTunnel(_ context.Context, id string) error {
-	m.retired = slices.DeleteFunc(m.retired, func(held host.Tunnel) bool { return held.ID == id })
+func (m *machine) ForgetTunnel(_ context.Context, name string) error {
+	m.retired = slices.DeleteFunc(m.retired, func(held host.Tunnel) bool { return held.Name == name })
 	return nil
 }
 
