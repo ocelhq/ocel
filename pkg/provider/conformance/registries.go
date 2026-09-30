@@ -87,6 +87,20 @@ func RunRouters(t *testing.T, facts provider.Facts, edges provider.Edges, router
 		}
 	})
 
+	t.Run("every edge pairs with one router it does not forward, the one its own routing runs", func(t *testing.T) {
+		for _, kind := range listReachableEdges(facts) {
+			var own []router.Kind
+			for _, pairing := range facts.Pairings {
+				if pairing.Edge == kind && !pairing.Forwarded && !slices.Contains(own, pairing.Router) {
+					own = append(own, pairing.Router)
+				}
+			}
+			if len(own) != 1 {
+				t.Errorf("the %q edge pairs with %v without forwarding, want exactly one: its preview wildcard and the hostnames it routes itself are answered by one router", kind, own)
+			}
+		}
+	})
+
 	t.Run("a pairing names an edge a request can reach and the computes this provider runs, each once", func(t *testing.T) {
 		for i, pairing := range facts.Pairings {
 			if !slices.Contains(listReachableEdges(facts), pairing.Edge) {
@@ -127,7 +141,13 @@ func RunRouters(t *testing.T, facts provider.Facts, edges provider.Edges, router
 				}
 			}
 			front, err := edges.Open(pairing.Edge)
-			if err != nil || opened.Hooks().Origin != nil {
+			if err != nil {
+				continue
+			}
+			if pairing.Forwarded {
+				if !front.Facts().ProxiesRecords || opened.Hooks().Origin == nil {
+					t.Errorf("the %q edge forwards the %q router's hostnames, and forwarding needs an edge that proxies records and a router with origin hooks", pairing.Edge, pairing.Router)
+				}
 				continue
 			}
 			if front.Facts().RunsCode && !routerFacts.SignsOriginForwards {

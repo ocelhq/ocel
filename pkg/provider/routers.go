@@ -12,9 +12,10 @@ type Routers interface {
 }
 
 type Pairing struct {
-	Edge     edge.Kind
-	Router   router.Kind
-	Computes []Compute
+	Edge      edge.Kind
+	Router    router.Kind
+	Computes  []Compute
+	Forwarded bool
 }
 
 func (f Facts) PairedRouter(front edge.Kind, compute Compute) (router.Kind, bool) {
@@ -34,4 +35,19 @@ func (f Facts) ListPairedRouters(front edge.Kind) []router.Kind {
 		}
 	}
 	return paired
+}
+
+func (f Facts) FindEdgeRouter(front edge.Kind) (router.Kind, bool) {
+	for _, pairing := range f.Pairings {
+		if pairing.Edge == front && !pairing.Forwarded {
+			return pairing.Router, true
+		}
+	}
+	return "", false
+}
+
+func (f Facts) IsForwarded(front edge.Kind, kind router.Kind) bool {
+	return slices.ContainsFunc(f.Pairings, func(pairing Pairing) bool {
+		return pairing.Edge == front && pairing.Router == kind && pairing.Forwarded
+	})
 }
