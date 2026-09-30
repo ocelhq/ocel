@@ -735,6 +735,82 @@ func breaksOnceRan(box *bench, earlier, at string) {
 	}
 }
 
+func TestAnInterruptedMoveRetargetedToAnotherProxyTakesAwayWhatTheFirstMoveLeftOfTheProxyItStartedFrom(t *testing.T) {
+	t.Parallel()
+
+	tier := environment.TierProduction
+	placement := traefik.DerivePlacementHostname("/etc/traefik/dynamic/ocel/ocel.yml")
+	for name, tc := range map[string]struct {
+		from, halfway Front
+		interrupt     func(*bench)
+		left          string
+		holding       func(*bench)
+	}{
+		"ocel's own proxy, interrupted before it was taken away": {
+			from: Front{}, halfway: traefikOnTheHost(),
+			interrupt: func(box *bench) {
+				breaksOnceRan(box, "/dev/stdin "+quoted(FrontRecordPath), "docker rm --force "+quoted(caddy.Container))
+			},
+			left: "docker rm --force " + quoted(caddy.Container),
+			holding: func(box *bench) {
+				portsOwnedOn(box, map[string]string{caddy.HTTPPort: caddy.Container + "\n", caddy.HTTPSPort: caddy.Container + "\n"})
+			},
+		},
+		"your Traefik, interrupted before it read the new directory": {
+			from: traefikOnTheHost(), halfway: traefikIn("/etc/traefik/dynamic/ocel"),
+			interrupt: func(box *bench) {
+				servedFrom(box, func(hostname string) session.Result {
+					if hostname == placement {
+						return session.Result{Code: proxyNotServingYet, Stderr: placement + " never reached ocel-switchboard"}
+					}
+					return throughTheSwitchboard(hostname)
+				})
+			},
+			left:    quoted("unplace") + " " + quoted("/etc/traefik/dynamic/ocel.yml"),
+			holding: func(*bench) {},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			failed := boxRecordedFor(t, tier, tc.from)
+			tc.interrupt(failed)
+			if _, err := movedTo(t, failed, tier, tc.halfway); err == nil {
+				t.Fatalf("Apply() = nil, want the move to %s interrupted", tc.halfway.named())
+			}
+			written := recordLeftBy(failed)
+			if !strings.Contains(written, `"movingFrom"`) {
+				t.Fatalf("the interrupted move left %s as %s, want it unfinished", FrontRecordPath, written)
+			}
+
+			box := boxRecordedFor(t, tier, tc.from)
+			for at, item := range box.installed[tier] {
+				if item.Name == FrontRecordPath {
+					box.installed[tier][at].Content = []byte(written)
+				}
+			}
+			tc.holding(box)
+			servedFrom(box, throughTheSwitchboard)
+			group := movePlanned(t, box, tier, caddyService())
+			if _, planned := changeIn(group, strings.Trim(strings.TrimPrefix(strings.TrimPrefix(tc.left, "docker rm --force "), quoted("unplace")+" "), "'")); !planned {
+				t.Errorf("the plan %+v does not take away what the interrupted move left of %s", group.Changes, tc.from.named())
+			}
+			if _, err := movedTo(t, box, tier, caddyService()); err != nil {
+				t.Fatalf("bootstrap onto your Caddy = %v, want it to finish the move", err)
+			}
+			if box.at(tc.left) < 0 {
+				t.Errorf("the move to your Caddy never ran %s, leaving what the interrupted move left of %s:\n%s", tc.left, tc.from.named(), strings.Join(box.commands(), "\n"))
+			}
+			if record := lastRecord(box); strings.Contains(record, `"movingFrom"`) || !strings.Contains(record, `"caddy"`) {
+				t.Errorf("%s was last written as %s, want your Caddy recorded with no move left to finish", FrontRecordPath, record)
+			}
+			if !stampedComplete(box, tier) {
+				t.Errorf("the move to your Caddy never stamped the tier complete")
+			}
+		})
+	}
+}
+
 func recordLeftBy(interrupted *bench) string {
 	ran := interrupted.commands()
 	if interrupted.broke != nil {

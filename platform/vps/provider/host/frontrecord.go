@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -180,6 +181,20 @@ func frontReading() string {
 	return "if [ -f " + at + " ]; then cat " + at + "; fi"
 }
 
+func (r frontRecord) listStranded(to Front) []removal {
+	var stranded []removal
+	for moved := r; moved.MovingFrom != nil; moved = *moved.MovingFrom {
+		if left := moved.MovingFrom.front(); !left.same(to) {
+			for _, taken := range (frontMove{from: left, to: moved.front()}).listRemovals() {
+				if !slices.ContainsFunc(stranded, func(listed removal) bool { return listed.kind == taken.kind && listed.path == taken.path }) {
+					stranded = append(stranded, taken)
+				}
+			}
+		}
+	}
+	return stranded
+}
+
 func (h *Host) frontRecorded(ctx context.Context, ask asking) (*frontRecord, error) {
 	said, err := ask(ctx, "read which proxy fronts this box", frontReading(), nil)
 	if err != nil {
@@ -222,12 +237,12 @@ func (b Bootstrap) recorded(ctx context.Context, read Reading) (Reading, error) 
 	case existing != nil && existing.MovingFrom != nil && option.same(existing.front()):
 		record, moving = *existing, *existing
 		record.MovingFrom = nil
-		read.move = &frontMove{host: b.host, from: existing.MovingFrom.front(), to: option, resumed: true}
+		read.move = &frontMove{host: b.host, from: existing.MovingFrom.front(), to: option, resumed: true, stranded: existing.MovingFrom.listStranded(option)}
 	case existing != nil && option.same(existing.front()):
 		record = *existing
 	case existing != nil:
 		moving.MovingFrom = existing
-		read.move = &frontMove{host: b.host, from: existing.front(), to: option}
+		read.move = &frontMove{host: b.host, from: existing.front(), to: option, stranded: existing.listStranded(option)}
 	case read.observed(KindContainer, caddy.Container) && option.adopted():
 		moving.MovingFrom = &frontRecord{Tier: read.Tier}
 		read.move = &frontMove{host: b.host, to: option}

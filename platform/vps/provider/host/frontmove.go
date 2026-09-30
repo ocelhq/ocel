@@ -35,6 +35,7 @@ type frontMove struct {
 	table    RoutingTable
 	recorded Item
 	resumed  bool
+	stranded []removal
 }
 
 func (m *frontMove) recordUnfinished() []Item {
@@ -172,7 +173,7 @@ func (m frontMove) splitOffGroup(core []provider.Change) (provider.ChangeGroup, 
 		Action: provider.ActionReplace,
 		Reason: m.describeOutage(),
 	}
-	for _, taken := range m.listRemovals() {
+	for _, taken := range append(m.listRemovals(), m.stranded...) {
 		group.Changes = append(group.Changes, provider.Change{Kind: taken.kind, Name: taken.path, Action: taken.action, Reason: taken.reason})
 	}
 	kept := make([]provider.Change, 0, len(core))
@@ -203,7 +204,13 @@ func (h *Host) readMovedTable(ctx context.Context) (RoutingTable, error) {
 }
 
 func (m *frontMove) removeOldFront(ctx context.Context, progress progress.Log) error {
-	if m == nil || m.isSameProcess() && m.from.Caddy == nil {
+	if m == nil {
+		return nil
+	}
+	if err := m.host.removeAll(ctx, m.stranded, progress); err != nil {
+		return err
+	}
+	if m.isSameProcess() && m.from.Caddy == nil {
 		return nil
 	}
 	return m.host.removeAll(ctx, m.listRemovals(), progress)
