@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/alb"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/arn"
 	elbv2 "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
 	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/appautoscaling"
@@ -513,11 +514,12 @@ func (w *containerWork) run(ctx *pulumi.Context) error {
 func (w *containerWork) scales() bool { return w.instances.Max > w.instances.Min }
 
 func (w *containerWork) scaleOnRequests(ctx *pulumi.Context, service *ecs.Service, group *lb.TargetGroup, tags pulumi.StringMap) error {
-	cluster, found := strings.CutPrefix(arnResource(w.infra.Cluster), "cluster/")
-	if !found {
+	clusterARN, err := arn.Parse(w.infra.Cluster)
+	cluster, found := strings.CutPrefix(clusterARN.Resource, "cluster/")
+	if err != nil || !found {
 		return fmt.Errorf("the container cluster %q is not an ECS cluster ARN, so %s's service has no scalable target to name", w.infra.Cluster, w.app)
 	}
-	balancer, err := balancerARNSuffix(w.readListenerArn())
+	balancer, err := parseBalancerSuffix(w.readListenerArn())
 	if err != nil {
 		return err
 	}
@@ -551,17 +553,10 @@ func (w *containerWork) scaleOnRequests(ctx *pulumi.Context, service *ecs.Servic
 	return err
 }
 
-func arnResource(arn string) string {
-	fields := strings.SplitN(arn, ":", 6)
-	if len(fields) < 6 {
-		return ""
-	}
-	return fields[5]
-}
-
-func balancerARNSuffix(listener string) (string, error) {
-	parts := strings.Split(arnResource(listener), "/")
-	if len(parts) != 5 || parts[0] != "listener" || parts[1] != "app" {
+func parseBalancerSuffix(listener string) (string, error) {
+	parsed, err := arn.Parse(listener)
+	parts := strings.Split(parsed.Resource, "/")
+	if err != nil || len(parts) != 5 || parts[0] != "listener" || parts[1] != "app" {
 		return "", fmt.Errorf("the container front's listener %q is not an application load balancer listener ARN, so requests per task cannot be counted against it", listener)
 	}
 	return strings.Join(parts[1:4], "/"), nil
