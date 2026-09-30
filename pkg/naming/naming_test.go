@@ -270,3 +270,11 @@ func TestADigestBecomesATagUnderOneRule(t *testing.T) {
 		t.Errorf("RepositorySegment() = %q, want %q", got, want)
 	}
 }
+
+func TestAWorkerAndATopicAreComponentsOfTheirOwn(t *testing.T) {
+	for kind, component := range map[Kind]string{KindWorker: "worker", KindTopic: "topic"} {
+		if !kind.Valid() || kind.Component() != component {
+			t.Errorf("%q: valid = %v, component = %q, want %q", kind, kind.Valid(), kind.Component(), component)
+		}
+	}
+}

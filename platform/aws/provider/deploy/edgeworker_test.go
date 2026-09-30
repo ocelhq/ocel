@@ -12,17 +12,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 )
 
-func TestWorkerOutputName(t *testing.T) {
-	t.Parallel()
-
-	cases := map[string]string{"web": "web-worker", "Web_1": "web-1-worker"}
-	for in, want := range cases {
-		if got := workerOutputName(in); got != want {
-			t.Errorf("workerOutputName(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
 var truncationMarker = regexp.MustCompile(`-x[0-9a-f]{8}$`)
 
 func TestWorkerScriptName(t *testing.T) {

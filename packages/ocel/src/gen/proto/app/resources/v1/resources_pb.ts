@@ -6,13 +6,17 @@ import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobu
 import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import type { DeclareEnvRequestSchema, DeclareEnvResponseSchema, ReportEnvProblemsRequestSchema, ReportEnvProblemsResponseSchema } from "./variables_pb.js";
 import { file_app_resources_v1_variables } from "./variables_pb.js";
+import type { Lane } from "../../topic/v1/topic_pb.js";
+import { file_app_topic_v1_topic } from "../../topic/v1/topic_pb.js";
+import type { Duration } from "@bufbuild/protobuf/wkt";
+import { file_google_protobuf_duration } from "@bufbuild/protobuf/wkt";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file app/resources/v1/resources.proto.
  */
 export const file_app_resources_v1_resources: GenFile = /*@__PURE__*/
-  fileDesc("CiBhcHAvcmVzb3VyY2VzL3YxL3Jlc291cmNlcy5wcm90bxIQYXBwLnJlc291cmNlcy52MSJQChJSZXNvdXJjZUlkZW50aWZpZXISLAoEdHlwZRgBIAEoDjIeLmFwcC5yZXNvdXJjZXMudjEuUmVzb3VyY2VUeXBlEgwKBG5hbWUYAiABKAkiEQoPRGVjbGFyZVJlc3BvbnNlIsoBCg5EZWNsYXJlUmVxdWVzdBI2CghyZXNvdXJjZRgBIAEoCzIkLmFwcC5yZXNvdXJjZXMudjEuUmVzb3VyY2VJZGVudGlmaWVyEjQKCHBvc3RncmVzGAIgASgLMiAuYXBwLnJlc291cmNlcy52MS5Qb3N0Z3Jlc0NvbmZpZ0gAEjAKBmJ1Y2tldBgDIAEoCzIeLmFwcC5yZXNvdXJjZXMudjEuQnVja2V0Q29uZmlnSAASDgoGc291cmNlGAQgASgJQggKBmNvbmZpZyIhCg5Qb3N0Z3Jlc0NvbmZpZxIPCgd2ZXJzaW9uGAEgASgJIjcKDEJ1Y2tldENvbmZpZxIXCg9hbGxvd2VkX29yaWdpbnMYASADKAkSDgoGcHVibGljGAIgASgIKoABCgxSZXNvdXJjZVR5cGUSHQoZUkVTT1VSQ0VfVFlQRV9VTlNQRUNJRklFRBAAEhoKFlJFU09VUkNFX1RZUEVfUE9TVEdSRVMQARIYChRSRVNPVVJDRV9UWVBFX0JVQ0tFVBACEhsKF1JFU09VUkNFX1RZUEVfQ09OVEFJTkVSEAMyqAIKD1Jlc291cmNlU2VydmljZRJOCgdEZWNsYXJlEiAuYXBwLnJlc291cmNlcy52MS5EZWNsYXJlUmVxdWVzdBohLmFwcC5yZXNvdXJjZXMudjEuRGVjbGFyZVJlc3BvbnNlElcKCkRlY2xhcmVFbnYSIy5hcHAucmVzb3VyY2VzLnYxLkRlY2xhcmVFbnZSZXF1ZXN0GiQuYXBwLnJlc291cmNlcy52MS5EZWNsYXJlRW52UmVzcG9uc2USbAoRUmVwb3J0RW52UHJvYmxlbXMSKi5hcHAucmVzb3VyY2VzLnYxLlJlcG9ydEVudlByb2JsZW1zUmVxdWVzdBorLmFwcC5yZXNvdXJjZXMudjEuUmVwb3J0RW52UHJvYmxlbXNSZXNwb25zZUI/Wj1naXRodWIuY29tL29jZWxocS9vY2VsL3BrZy9wcm90by9hcHAvcmVzb3VyY2VzL3YxO3Jlc291cmNlc3YxYgZwcm90bzM", [file_app_resources_v1_variables]);
+  fileDesc("CiBhcHAvcmVzb3VyY2VzL3YxL3Jlc291cmNlcy5wcm90bxIQYXBwLnJlc291cmNlcy52MSJQChJSZXNvdXJjZUlkZW50aWZpZXISLAoEdHlwZRgBIAEoDjIeLmFwcC5yZXNvdXJjZXMudjEuUmVzb3VyY2VUeXBlEgwKBG5hbWUYAiABKAkiEQoPRGVjbGFyZVJlc3BvbnNlIpADCg5EZWNsYXJlUmVxdWVzdBI2CghyZXNvdXJjZRgBIAEoCzIkLmFwcC5yZXNvdXJjZXMudjEuUmVzb3VyY2VJZGVudGlmaWVyEjQKCHBvc3RncmVzGAIgASgLMiAuYXBwLnJlc291cmNlcy52MS5Qb3N0Z3Jlc0NvbmZpZ0gAEjAKBmJ1Y2tldBgDIAEoCzIeLmFwcC5yZXNvdXJjZXMudjEuQnVja2V0Q29uZmlnSAASLgoFdG9waWMYBSABKAsyHS5hcHAucmVzb3VyY2VzLnYxLlRvcGljQ29uZmlnSAASLAoEdGFzaxgGIAEoCzIcLmFwcC5yZXNvdXJjZXMudjEuVGFza0NvbmZpZ0gAEjAKBndvcmtlchgHIAEoCzIeLmFwcC5yZXNvdXJjZXMudjEuV29ya2VyQ29uZmlnSAASNAoIY29uc3VtZXIYCCABKAsyIC5hcHAucmVzb3VyY2VzLnYxLkNvbnN1bWVyQ29uZmlnSAASDgoGc291cmNlGAQgASgJQggKBmNvbmZpZyIhCg5Qb3N0Z3Jlc0NvbmZpZxIPCgd2ZXJzaW9uGAEgASgJIjcKDEJ1Y2tldENvbmZpZxIXCg9hbGxvd2VkX29yaWdpbnMYASADKAkSDgoGcHVibGljGAIgASgIIn8KC1JldHJ5UG9saWN5EhQKDG1heF9hdHRlbXB0cxgBIAEoBRIsCgltaW5fZGVsYXkYAiABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24SLAoJbWF4X2RlbGF5GAMgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uIkcKC0JhdGNoUG9saWN5EgwKBHNpemUYASABKAUSKgoHdGltZW91dBgCIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbiJcCgtUb3BpY0NvbmZpZxIOCgZzY2hlbWEYASABKAkSDwoHb3JkZXJlZBgCIAEoCBIsCgVyZXRyeRgDIAEoCzIdLmFwcC5yZXNvdXJjZXMudjEuUmV0cnlQb2xpY3ki9AEKDkNvbnN1bWVyQ29uZmlnEg0KBXRvcGljGAEgASgJEg4KBndvcmtlchgCIAEoCRIsCgVyZXRyeRgDIAEoCzIdLmFwcC5yZXNvdXJjZXMudjEuUmV0cnlQb2xpY3kSEwoLY29uY3VycmVuY3kYBCABKAUSLwoMbWF4X2R1cmF0aW9uGAUgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEiEKBWxhbmVzGAYgAygOMhIuYXBwLnRvcGljLnYxLkxhbmUSLAoFYmF0Y2gYByABKAsyHS5hcHAucmVzb3VyY2VzLnYxLkJhdGNoUG9saWN5IpUCCgpUYXNrQ29uZmlnEg4KBnNjaGVtYRgBIAEoCRIPCgdvcmRlcmVkGAIgASgIEiwKBXJldHJ5GAMgASgLMh0uYXBwLnJlc291cmNlcy52MS5SZXRyeVBvbGljeRITCgtjb25jdXJyZW5jeRgEIAEoBRIvCgxtYXhfZHVyYXRpb24YBSABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24SJgoDdHRsGAYgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEiwKBWJhdGNoGAcgASgLMh0uYXBwLnJlc291cmNlcy52MS5CYXRjaFBvbGljeRIOCgZ3b3JrZXIYCCABKAkSDAoEY3JvbhgJIAEoCSIjCgxXb3JrZXJDb25maWcSEwoLY29uY3VycmVuY3kYASABKAUq6QEKDFJlc291cmNlVHlwZRIdChlSRVNPVVJDRV9UWVBFX1VOU1BFQ0lGSUVEEAASGgoWUkVTT1VSQ0VfVFlQRV9QT1NUR1JFUxABEhgKFFJFU09VUkNFX1RZUEVfQlVDS0VUEAISFwoTUkVTT1VSQ0VfVFlQRV9UT1BJQxAEEhYKElJFU09VUkNFX1RZUEVfVEFTSxAFEhgKFFJFU09VUkNFX1RZUEVfV09SS0VSEAYSGgoWUkVTT1VSQ0VfVFlQRV9DT05TVU1FUhAHIgQIAxADKhdSRVNPVVJDRV9UWVBFX0NPTlRBSU5FUjKoAgoPUmVzb3VyY2VTZXJ2aWNlEk4KB0RlY2xhcmUSIC5hcHAucmVzb3VyY2VzLnYxLkRlY2xhcmVSZXF1ZXN0GiEuYXBwLnJlc291cmNlcy52MS5EZWNsYXJlUmVzcG9uc2USVwoKRGVjbGFyZUVudhIjLmFwcC5yZXNvdXJjZXMudjEuRGVjbGFyZUVudlJlcXVlc3QaJC5hcHAucmVzb3VyY2VzLnYxLkRlY2xhcmVFbnZSZXNwb25zZRJsChFSZXBvcnRFbnZQcm9ibGVtcxIqLmFwcC5yZXNvdXJjZXMudjEuUmVwb3J0RW52UHJvYmxlbXNSZXF1ZXN0GisuYXBwLnJlc291cmNlcy52MS5SZXBvcnRFbnZQcm9ibGVtc1Jlc3BvbnNlQj9aPWdpdGh1Yi5jb20vb2NlbGhxL29jZWwvcGtnL3Byb3RvL2FwcC9yZXNvdXJjZXMvdjE7cmVzb3VyY2VzdjFiBnByb3RvMw", [file_app_resources_v1_variables, file_app_topic_v1_topic, file_google_protobuf_duration]);
 
 /**
  * @generated from message app.resources.v1.ResourceIdentifier
@@ -73,6 +77,30 @@ export type DeclareRequest = Message<"app.resources.v1.DeclareRequest"> & {
      */
     value: BucketConfig;
     case: "bucket";
+  } | {
+    /**
+     * @generated from field: app.resources.v1.TopicConfig topic = 5;
+     */
+    value: TopicConfig;
+    case: "topic";
+  } | {
+    /**
+     * @generated from field: app.resources.v1.TaskConfig task = 6;
+     */
+    value: TaskConfig;
+    case: "task";
+  } | {
+    /**
+     * @generated from field: app.resources.v1.WorkerConfig worker = 7;
+     */
+    value: WorkerConfig;
+    case: "worker";
+  } | {
+    /**
+     * @generated from field: app.resources.v1.ConsumerConfig consumer = 8;
+     */
+    value: ConsumerConfig;
+    case: "consumer";
   } | { case: undefined; value?: undefined };
 
   /**
@@ -128,6 +156,203 @@ export const BucketConfigSchema: GenMessage<BucketConfig> = /*@__PURE__*/
   messageDesc(file_app_resources_v1_resources, 4);
 
 /**
+ * @generated from message app.resources.v1.RetryPolicy
+ */
+export type RetryPolicy = Message<"app.resources.v1.RetryPolicy"> & {
+  /**
+   * @generated from field: int32 max_attempts = 1;
+   */
+  maxAttempts: number;
+
+  /**
+   * @generated from field: google.protobuf.Duration min_delay = 2;
+   */
+  minDelay?: Duration | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Duration max_delay = 3;
+   */
+  maxDelay?: Duration | undefined;
+};
+
+/**
+ * Describes the message app.resources.v1.RetryPolicy.
+ * Use `create(RetryPolicySchema)` to create a new message.
+ */
+export const RetryPolicySchema: GenMessage<RetryPolicy> = /*@__PURE__*/
+  messageDesc(file_app_resources_v1_resources, 5);
+
+/**
+ * @generated from message app.resources.v1.BatchPolicy
+ */
+export type BatchPolicy = Message<"app.resources.v1.BatchPolicy"> & {
+  /**
+   * @generated from field: int32 size = 1;
+   */
+  size: number;
+
+  /**
+   * @generated from field: google.protobuf.Duration timeout = 2;
+   */
+  timeout?: Duration | undefined;
+};
+
+/**
+ * Describes the message app.resources.v1.BatchPolicy.
+ * Use `create(BatchPolicySchema)` to create a new message.
+ */
+export const BatchPolicySchema: GenMessage<BatchPolicy> = /*@__PURE__*/
+  messageDesc(file_app_resources_v1_resources, 6);
+
+/**
+ * @generated from message app.resources.v1.TopicConfig
+ */
+export type TopicConfig = Message<"app.resources.v1.TopicConfig"> & {
+  /**
+   * @generated from field: string schema = 1;
+   */
+  schema: string;
+
+  /**
+   * @generated from field: bool ordered = 2;
+   */
+  ordered: boolean;
+
+  /**
+   * @generated from field: app.resources.v1.RetryPolicy retry = 3;
+   */
+  retry?: RetryPolicy | undefined;
+};
+
+/**
+ * Describes the message app.resources.v1.TopicConfig.
+ * Use `create(TopicConfigSchema)` to create a new message.
+ */
+export const TopicConfigSchema: GenMessage<TopicConfig> = /*@__PURE__*/
+  messageDesc(file_app_resources_v1_resources, 7);
+
+/**
+ * @generated from message app.resources.v1.ConsumerConfig
+ */
+export type ConsumerConfig = Message<"app.resources.v1.ConsumerConfig"> & {
+  /**
+   * @generated from field: string topic = 1;
+   */
+  topic: string;
+
+  /**
+   * @generated from field: string worker = 2;
+   */
+  worker: string;
+
+  /**
+   * @generated from field: app.resources.v1.RetryPolicy retry = 3;
+   */
+  retry?: RetryPolicy | undefined;
+
+  /**
+   * @generated from field: int32 concurrency = 4;
+   */
+  concurrency: number;
+
+  /**
+   * @generated from field: google.protobuf.Duration max_duration = 5;
+   */
+  maxDuration?: Duration | undefined;
+
+  /**
+   * @generated from field: repeated app.topic.v1.Lane lanes = 6;
+   */
+  lanes: Lane[];
+
+  /**
+   * @generated from field: app.resources.v1.BatchPolicy batch = 7;
+   */
+  batch?: BatchPolicy | undefined;
+};
+
+/**
+ * Describes the message app.resources.v1.ConsumerConfig.
+ * Use `create(ConsumerConfigSchema)` to create a new message.
+ */
+export const ConsumerConfigSchema: GenMessage<ConsumerConfig> = /*@__PURE__*/
+  messageDesc(file_app_resources_v1_resources, 8);
+
+/**
+ * @generated from message app.resources.v1.TaskConfig
+ */
+export type TaskConfig = Message<"app.resources.v1.TaskConfig"> & {
+  /**
+   * @generated from field: string schema = 1;
+   */
+  schema: string;
+
+  /**
+   * @generated from field: bool ordered = 2;
+   */
+  ordered: boolean;
+
+  /**
+   * @generated from field: app.resources.v1.RetryPolicy retry = 3;
+   */
+  retry?: RetryPolicy | undefined;
+
+  /**
+   * @generated from field: int32 concurrency = 4;
+   */
+  concurrency: number;
+
+  /**
+   * @generated from field: google.protobuf.Duration max_duration = 5;
+   */
+  maxDuration?: Duration | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Duration ttl = 6;
+   */
+  ttl?: Duration | undefined;
+
+  /**
+   * @generated from field: app.resources.v1.BatchPolicy batch = 7;
+   */
+  batch?: BatchPolicy | undefined;
+
+  /**
+   * @generated from field: string worker = 8;
+   */
+  worker: string;
+
+  /**
+   * @generated from field: string cron = 9;
+   */
+  cron: string;
+};
+
+/**
+ * Describes the message app.resources.v1.TaskConfig.
+ * Use `create(TaskConfigSchema)` to create a new message.
+ */
+export const TaskConfigSchema: GenMessage<TaskConfig> = /*@__PURE__*/
+  messageDesc(file_app_resources_v1_resources, 9);
+
+/**
+ * @generated from message app.resources.v1.WorkerConfig
+ */
+export type WorkerConfig = Message<"app.resources.v1.WorkerConfig"> & {
+  /**
+   * @generated from field: int32 concurrency = 1;
+   */
+  concurrency: number;
+};
+
+/**
+ * Describes the message app.resources.v1.WorkerConfig.
+ * Use `create(WorkerConfigSchema)` to create a new message.
+ */
+export const WorkerConfigSchema: GenMessage<WorkerConfig> = /*@__PURE__*/
+  messageDesc(file_app_resources_v1_resources, 10);
+
+/**
  * @generated from enum app.resources.v1.ResourceType
  */
 export enum ResourceType {
@@ -147,9 +372,24 @@ export enum ResourceType {
   BUCKET = 2,
 
   /**
-   * @generated from enum value: RESOURCE_TYPE_CONTAINER = 3;
+   * @generated from enum value: RESOURCE_TYPE_TOPIC = 4;
    */
-  CONTAINER = 3,
+  TOPIC = 4,
+
+  /**
+   * @generated from enum value: RESOURCE_TYPE_TASK = 5;
+   */
+  TASK = 5,
+
+  /**
+   * @generated from enum value: RESOURCE_TYPE_WORKER = 6;
+   */
+  WORKER = 6,
+
+  /**
+   * @generated from enum value: RESOURCE_TYPE_CONSUMER = 7;
+   */
+  CONSUMER = 7,
 }
 
 /**

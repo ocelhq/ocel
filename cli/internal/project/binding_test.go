@@ -215,3 +215,12 @@ func TestAnInlineBindingIsBoundUnderANameNoPublisherOwns(t *testing.T) {
 		t.Errorf("error %q does not name the reserved prefix", err)
 	}
 }
+
+func TestATopicOrTaskBindingIsRefused(t *testing.T) {
+	for _, typ := range []string{"topic", "task"} {
+		_, err := loadJSON(t, `{"slug":"shop","bindings":{"`+typ+`":{"orders":"@shared-orders"}}}`)
+		if err == nil || !strings.Contains(err.Error(), typ) {
+			t.Errorf("Load() = %v, want bindings.%s refused", err, typ)
+		}
+	}
+}

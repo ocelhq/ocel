@@ -1,0 +1,161 @@
+syntax = "proto3";
+package app.topic.v1;
+
+option go_package = "github.com/ocelhq/ocel/pkg/proto/app/topic/v1;topicv1";
+
+import "buf/validate/validate.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+service TopicService {
+  rpc Send(SendRequest) returns (SendResponse);
+
+  rpc ListDeadLetters(ListDeadLettersRequest) returns (ListDeadLettersResponse);
+
+  rpc RedriveDeadLetters(RedriveDeadLettersRequest) returns (RedriveDeadLettersResponse);
+
+  rpc PurgeDeadLetters(PurgeDeadLettersRequest) returns (PurgeDeadLettersResponse);
+
+  rpc CountDeadLetters(CountDeadLettersRequest) returns (CountDeadLettersResponse);
+}
+
+enum Lane {
+  LANE_UNSPECIFIED = 0;
+  LANE_HIGH = 1;
+  LANE_DEFAULT = 2;
+  LANE_LOW = 3;
+}
+
+message SendRequest {
+  string topic = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  bytes payload = 2 [(buf.validate.field).bytes.max_len = 262144];
+
+  google.protobuf.Timestamp due_at = 3 [(buf.validate.field).cel = {
+    id: "topics.send.due_at"
+    message: "a message is delivered at most 30 days after it is sent"
+    expression: "this <= now + duration('720h')"
+  }];
+
+  string idempotency_key = 4;
+
+  string key = 5;
+
+  Lane lane = 6 [(buf.validate.field).enum.defined_only = true];
+}
+
+message SendResponse {
+  string message_id = 1;
+}
+
+message Message {
+  string id = 1 [(buf.validate.field).string.pattern = "^[0-9A-HJKMNP-TV-Z]{26}$"];
+
+  google.protobuf.Timestamp published_at = 2;
+}
+
+message Attempt {
+  int32 number = 1 [(buf.validate.field).int32.gte = 1];
+
+  int32 of = 2 [(buf.validate.field).int32 = {gte: 1, lte: 100}];
+
+  google.protobuf.Timestamp first_attempted_at = 3;
+}
+
+message Delivery {
+  string execution = 1;
+
+  Message message = 2;
+
+  Attempt attempt = 3;
+
+  google.protobuf.Value payload = 4;
+}
+
+message Envelope {
+  int32 v = 1 [(buf.validate.field).int32.const = 1];
+
+  string topic = 2 [(buf.validate.field).string.pattern = "^[a-z0-9]+(-[a-z0-9]+)*$"];
+
+  string consumer = 3 [(buf.validate.field).string.pattern = "^[a-z0-9]+(-[a-z0-9]+)*$"];
+
+  string execution = 4;
+
+  Message message = 5;
+
+  Attempt attempt = 6;
+
+  string schema = 7 [(buf.validate.field).string.pattern = "^sha256-[0-9a-f]{64}$", (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
+
+  google.protobuf.Value payload = 8;
+
+  repeated Delivery messages = 9 [(buf.validate.field).repeated.max_items = 1000];
+}
+
+message Abort {
+  string reason = 1;
+}
+
+message DeadLetter {
+  string execution = 1;
+
+  Message message = 2;
+
+  google.protobuf.Value payload = 3;
+
+  int32 attempts = 4;
+
+  string error = 5;
+
+  google.protobuf.Timestamp failed_at = 6;
+}
+
+message ListDeadLettersRequest {
+  string topic = 1 [(buf.validate.field).string.min_len = 1];
+
+  string consumer = 2 [(buf.validate.field).string.min_len = 1];
+
+  string cursor = 3;
+
+  int32 limit = 4 [(buf.validate.field).int32 = {gte: 0, lte: 1000}];
+}
+
+message ListDeadLettersResponse {
+  repeated DeadLetter dead_letters = 1;
+
+  string next_cursor = 2;
+}
+
+message RedriveDeadLettersRequest {
+  string topic = 1 [(buf.validate.field).string.min_len = 1];
+
+  string consumer = 2 [(buf.validate.field).string.min_len = 1];
+
+  repeated string executions = 3 [(buf.validate.field).repeated.max_items = 1000];
+}
+
+message RedriveDeadLettersResponse {
+  int64 redriven = 1;
+}
+
+message PurgeDeadLettersRequest {
+  string topic = 1 [(buf.validate.field).string.min_len = 1];
+
+  string consumer = 2 [(buf.validate.field).string.min_len = 1];
+
+  repeated string executions = 3 [(buf.validate.field).repeated.max_items = 1000];
+}
+
+message PurgeDeadLettersResponse {
+  int64 purged = 1;
+}
+
+message CountDeadLettersRequest {
+  string topic = 1 [(buf.validate.field).string.min_len = 1];
+
+  string consumer = 2 [(buf.validate.field).string.min_len = 1];
+}
+
+message CountDeadLettersResponse {
+  int64 count = 1;
+}

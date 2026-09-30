@@ -123,8 +123,8 @@ func normalizeBindings(raw configdoc.Bindings) ([]Binding, error) {
 	}
 	out := make([]Binding, 0, len(raw))
 	for _, key := range slices.Sorted(maps.Keys(raw)) {
-		typ, bindable := naming.ResourceTypeNamed(key)
-		if _, ok := naming.BindableAs(typ); !bindable || !ok {
+		typ, known := naming.ResourceTypeNamed(key)
+		if !known || !slices.Contains(configdoc.BindableTypes(), key) {
 			return nil, fmt.Errorf("`bindings` is keyed by %q, and nothing publishes a record of that type — the types that can be bound are %s",
 				key, strings.Join(configdoc.BindableTypes(), ", "))
 		}

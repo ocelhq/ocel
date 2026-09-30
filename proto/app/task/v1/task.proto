@@ -1,0 +1,184 @@
+syntax = "proto3";
+package app.task.v1;
+
+option go_package = "github.com/ocelhq/ocel/pkg/proto/app/task/v1;taskv1";
+
+import "app/topic/v1/topic.proto";
+import "buf/validate/validate.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+service TaskService {
+  rpc Trigger(TriggerRequest) returns (TriggerResponse);
+
+  rpc BatchTrigger(BatchTriggerRequest) returns (BatchTriggerResponse);
+
+  rpc RetrieveRun(RetrieveRunRequest) returns (RetrieveRunResponse);
+
+  rpc ListRuns(ListRunsRequest) returns (ListRunsResponse);
+
+  rpc CancelRun(CancelRunRequest) returns (CancelRunResponse);
+
+  rpc ReplayRun(ReplayRunRequest) returns (ReplayRunResponse);
+
+  rpc RescheduleRun(RescheduleRunRequest) returns (RescheduleRunResponse);
+}
+
+enum RunStatus {
+  RUN_STATUS_UNSPECIFIED = 0;
+  RUN_STATUS_DELAYED = 1;
+  RUN_STATUS_QUEUED = 2;
+  RUN_STATUS_EXECUTING = 3;
+  RUN_STATUS_COMPLETED = 4;
+  RUN_STATUS_FAILED = 5;
+  RUN_STATUS_CANCELED = 6;
+  RUN_STATUS_EXPIRED = 7;
+  RUN_STATUS_TIMED_OUT = 8;
+}
+
+message Debounce {
+  string key = 1 [(buf.validate.field).string.min_len = 1];
+
+  google.protobuf.Duration delay = 2 [(buf.validate.field).duration = {gt: {}, lte: {seconds: 2592000}}];
+}
+
+message TriggerOptions {
+  google.protobuf.Timestamp due_at = 1 [(buf.validate.field).cel = {
+    id: "tasks.trigger.due_at"
+    message: "a run is due at most 30 days after it is triggered"
+    expression: "this <= now + duration('720h')"
+  }];
+
+  google.protobuf.Duration ttl = 2 [(buf.validate.field).duration = {gt: {}, lte: {seconds: 1209600}}];
+
+  string idempotency_key = 3;
+
+  google.protobuf.Duration idempotency_key_ttl = 4 [(buf.validate.field).duration.gt = {}];
+
+  Debounce debounce = 5;
+
+  string key = 6;
+
+  app.topic.v1.Lane lane = 7 [(buf.validate.field).enum.defined_only = true];
+
+  int32 max_attempts = 8 [(buf.validate.field).int32 = {gte: 0, lte: 100}];
+
+  repeated string tags = 9 [(buf.validate.field).repeated.items.string.min_len = 1];
+
+  google.protobuf.Struct metadata = 10;
+}
+
+message TriggerRequest {
+  string task = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  bytes payload = 2 [(buf.validate.field).bytes.max_len = 262144];
+
+  TriggerOptions options = 3;
+}
+
+message TriggerResponse {
+  string id = 1;
+}
+
+message BatchTriggerItem {
+  bytes payload = 1 [(buf.validate.field).bytes.max_len = 262144];
+
+  TriggerOptions options = 2;
+}
+
+message BatchTriggerRequest {
+  string task = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  repeated BatchTriggerItem items = 2 [(buf.validate.field).repeated = {min_items: 1, max_items: 1000}];
+}
+
+message BatchTriggerResponse {
+  repeated string ids = 1;
+}
+
+message Run {
+  string id = 1;
+
+  string task = 2;
+
+  RunStatus status = 3;
+
+  google.protobuf.Value payload = 4;
+
+  google.protobuf.Value output = 5;
+
+  string error = 6;
+
+  int32 attempts = 7;
+
+  repeated string tags = 8;
+
+  google.protobuf.Struct metadata = 9;
+
+  google.protobuf.Timestamp created_at = 10;
+
+  google.protobuf.Timestamp due_at = 11;
+
+  google.protobuf.Timestamp started_at = 12;
+
+  google.protobuf.Timestamp finished_at = 13;
+
+  google.protobuf.Timestamp expires_at = 14;
+}
+
+message RetrieveRunRequest {
+  string id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message RetrieveRunResponse {
+  Run run = 1;
+}
+
+message ListRunsRequest {
+  string task = 1;
+
+  repeated RunStatus statuses = 2 [(buf.validate.field).repeated.items.enum = {defined_only: true, not_in: [0]}];
+
+  repeated string tags = 3;
+
+  string cursor = 4;
+
+  int32 limit = 5 [(buf.validate.field).int32 = {gte: 0, lte: 1000}];
+}
+
+message ListRunsResponse {
+  repeated Run runs = 1;
+
+  string next_cursor = 2;
+}
+
+message CancelRunRequest {
+  string id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message CancelRunResponse {
+  Run run = 1;
+}
+
+message ReplayRunRequest {
+  string id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message ReplayRunResponse {
+  string id = 1;
+}
+
+message RescheduleRunRequest {
+  string id = 1 [(buf.validate.field).string.min_len = 1];
+
+  google.protobuf.Timestamp due_at = 2 [(buf.validate.field).required = true, (buf.validate.field).cel = {
+    id: "tasks.reschedule.due_at"
+    message: "a run is due at most 30 days from now"
+    expression: "this <= now + duration('720h')"
+  }];
+}
+
+message RescheduleRunResponse {
+  Run run = 1;
+}

@@ -21,6 +21,8 @@ const typeOfCase: {
   postgres: BindingType.POSTGRES,
   bucket: BindingType.BUCKET,
   custom: BindingType.CUSTOM,
+  topic: BindingType.TOPIC,
+  task: BindingType.TASK,
 };
 
 /** The type a binding's properties case declares; UNSPECIFIED when it has none. */

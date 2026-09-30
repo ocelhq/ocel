@@ -17,9 +17,8 @@ type Resource struct {
 	Type     BindingType
 	Binding  string
 
-	Postgres  *PostgresSpec
-	Bucket    *BucketSpec
-	Container *ContainerSpec
+	Postgres *PostgresSpec
+	Bucket   *BucketSpec
 }
 
 type PostgresSpec struct {
@@ -31,17 +30,12 @@ type BucketSpec struct {
 	Public         bool
 }
 
-type ContainerSpec struct {
-	Image string
-	Port  int
-	Env   map[string]string
-}
-
 const (
-	BindingPostgres  BindingType = "postgres"
-	BindingBucket    BindingType = "bucket"
-	BindingContainer BindingType = "container"
-	BindingCustom    BindingType = "custom"
+	BindingPostgres BindingType = "postgres"
+	BindingBucket   BindingType = "bucket"
+	BindingTopic    BindingType = "topic"
+	BindingTask     BindingType = "task"
+	BindingCustom   BindingType = "custom"
 )
 
 const (
@@ -186,6 +180,8 @@ func GrantsOf(message *bindingsv1.Binding) []Grant {
 var bindingTypes = map[bindingsv1.BindingType]BindingType{
 	bindingsv1.BindingType_BINDING_TYPE_POSTGRES: BindingPostgres,
 	bindingsv1.BindingType_BINDING_TYPE_BUCKET:   BindingBucket,
+	bindingsv1.BindingType_BINDING_TYPE_TOPIC:    BindingTopic,
+	bindingsv1.BindingType_BINDING_TYPE_TASK:     BindingTask,
 	bindingsv1.BindingType_BINDING_TYPE_CUSTOM:   BindingCustom,
 }
 
