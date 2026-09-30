@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strings"
 
 	"charm.land/huh/v2"
 )
@@ -93,6 +94,52 @@ func (p Prompt) MultiSelect(ctx context.Context, title string, options []Option)
 		return nil, false, err
 	}
 	return chosen, true, nil
+}
+
+func (p Prompt) Select(ctx context.Context, title string, options []Option) (string, bool, error) {
+	if !p.attended {
+		return p.selectOneLine(ctx, title, options)
+	}
+	fields := make([]huh.Option[string], 0, len(options))
+	for _, o := range options {
+		fields = append(fields, huh.NewOption(o.label(), o.Name))
+	}
+	var chosen string
+	err := p.run(ctx, huh.NewSelect[string]().Title(title).Options(fields...).Value(&chosen))
+	if aborted(err) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return chosen, true, nil
+}
+
+func (p Prompt) Input(ctx context.Context, title, description string) (string, bool, error) {
+	if !p.attended {
+		return p.inputLine(ctx, title, description)
+	}
+	var typed string
+	err := p.run(ctx, huh.NewInput().Title(title).Description(description).Value(&typed))
+	if aborted(err) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return strings.TrimSpace(typed), true, nil
+}
+
+func (p Prompt) AwaitEnter(ctx context.Context, question string) (bool, error) {
+	if !p.attended {
+		return p.awaitEnterLine(ctx, question)
+	}
+	answer := true
+	err := p.run(ctx, huh.NewConfirm().Title(question).Affirmative("Continue").Negative("Stop").Value(&answer))
+	if aborted(err) {
+		return false, nil
+	}
+	return answer, err
 }
 
 func (p Prompt) run(ctx context.Context, field huh.Field) error {
