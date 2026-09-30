@@ -132,7 +132,7 @@ type caPool struct {
 
 const inlineCAPool = "inline"
 
-const requireClientCertificate = "require"
+const requireVerifiedClientCertificate = "require_and_verify"
 
 type handshakeMatch struct {
 	SNI []string `json:"sni"`
@@ -314,7 +314,7 @@ func shieldPolicies(selecting []connectionPolicy, shields []proxy.Shield) ([]con
 			}
 			trusted = append(trusted, der)
 		}
-		client := &clientAuthentication{CA: caPool{Provider: inlineCAPool, TrustedCACerts: trusted}, Mode: requireClientCertificate}
+		client := &clientAuthentication{CA: caPool{Provider: inlineCAPool, TrustedCACerts: trusted}, Mode: requireVerifiedClientCertificate}
 		var chosen *selection
 		if shield.OriginCertificate.Certificate != "" {
 			chosen = &selection{AnyTag: []string{shieldTag + hostname}}

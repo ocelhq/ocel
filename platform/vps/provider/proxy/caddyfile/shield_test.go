@@ -75,7 +75,7 @@ func TestAShieldedHostnameIsASiteOfItsOwnThatRequiresTheZonesClientCertificateAn
 		"}\n" +
 		"https://shop.example.com {\n" +
 		"\ttls " + bundle + " " + bundle + " {\n" +
-		"\t\tclient_auth {\n\t\t\tmode require\n\t\t\ttrust_pool inline {\n\t\t\t\ttrust_der " + trusted + "\n\t\t\t\ttrust_der " + trustedNext + "\n\t\t\t}\n\t\t}\n" +
+		"\t\tclient_auth {\n\t\t\tmode require_and_verify\n\t\t\ttrusted_ca_cert " + trusted + "\n\t\t\ttrusted_ca_cert " + trustedNext + "\n\t\t}\n" +
 		"\t}\n" +
 		"\treverse_proxy ocel-switchboard:8443 {\n\t\tlb_try_duration 10s\n\t\tlb_try_interval 250ms\n\t\tstream_close_delay 30s\n\t}\n" +
 		"}\n" +
@@ -98,7 +98,7 @@ func TestAShieldedHostnameWithNoOriginCertificateRequiresTheClientCertificateOnT
 		t.Fatalf("Render() = %v", err)
 	}
 	want := "https://shop.example.com {\n" +
-		"\ttls {\n\t\tclient_auth {\n\t\t\tmode require\n\t\t\ttrust_pool inline {\n\t\t\t\ttrust_der " + trusted + "\n\t\t\t}\n\t\t}\n\t}\n" +
+		"\ttls {\n\t\tclient_auth {\n\t\t\tmode require_and_verify\n\t\t\ttrusted_ca_cert " + trusted + "\n\t\t}\n\t}\n" +
 		"\treverse_proxy 127.0.0.1:8480 {\n\t\tlb_try_duration 10s\n\t\tlb_try_interval 250ms\n\t}\n" +
 		"}\n" +
 		"http://shop.example.com {\n\tredir https://{host}{uri} 308\n}\n"
