@@ -150,31 +150,44 @@ func TestADeployPlacesTheOriginCertificatesYourProxyNamesWithTheRenderingThatNam
 	}
 }
 
-func TestDestroyUnplacesTheOriginCertificatesBesideOcelCaddyOnceYourCaddyNoLongerNamesThem(t *testing.T) {
+func TestDestroyUnplacesTheOriginCertificatesBesideOcelsFileOnceYourProxyNoLongerNamesThem(t *testing.T) {
 	t.Parallel()
 
-	dir, bin := t.TempDir(), t.TempDir()
-	executable(t, filepath.Join(bin, "docker"), "#!/bin/sh\n[ \"$1\" = inspect ] && echo true\n[ \"$2\" = "+SwitchboardContainer+" ] && exit 1\nexit 0\n")
-	for _, name := range []string{switchboard.OriginPrefix + "shop.example.com-aaa.pem", "yours.pem"} {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(name), 0o640); err != nil {
-			t.Fatal(err)
-		}
-	}
-	filled := CaddyFront{Directory: dir, Container: "caddy", Network: "web"}.Filled()
-	taken := Front{Caddy: &filled}.placedRemovals()[0]
-	if command := taken.command(); !strings.Contains(command, quoted("unplace-origins")) {
-		t.Errorf("the destroy runs\n%s\nwant the origin certificates unplaced through the switchboard", command)
-	}
-	run := exec.Command("sh", "-c", taken.command())
-	run.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"))
-	if said, err := run.CombinedOutput(); err != nil {
-		t.Fatalf("the removal failed: %v\n%s", err, said)
-	}
-	left, err := os.ReadDir(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(left) != 1 || left[0].Name() != "yours.pem" {
-		t.Errorf("the directory holds %v after the destroy, want yours.pem alone: an origin certificate's key never outlives ocel.caddy", left)
+	for name, front := range map[string]func(dir string) Front{
+		"your Caddy": func(dir string) Front {
+			filled := CaddyFront{Directory: dir, Container: "caddy", Network: "web"}.Filled()
+			return Front{Caddy: &filled}
+		},
+		"your Traefik": func(dir string) Front {
+			return Front{Traefik: &TraefikFront{Directory: dir, Resolver: "letsencrypt", Entrypoints: Entrypoints{HTTP: "web", HTTPS: "websecure"}, Network: "web"}}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			dir, bin := t.TempDir(), t.TempDir()
+			executable(t, filepath.Join(bin, "docker"), "#!/bin/sh\n[ \"$1\" = inspect ] && echo true\n[ \"$2\" = "+SwitchboardContainer+" ] && exit 1\nexit 0\n")
+			for _, name := range []string{switchboard.OriginPrefix + "shop.example.com-aaa.pem", "yours.pem"} {
+				if err := os.WriteFile(filepath.Join(dir, name), []byte(name), 0o640); err != nil {
+					t.Fatal(err)
+				}
+			}
+			taken := front(dir).placedRemovals()[0]
+			if command := taken.command(); !strings.Contains(command, quoted("unplace-origins")) {
+				t.Errorf("the destroy runs\n%s\nwant the origin certificates unplaced through the switchboard", command)
+			}
+			run := exec.Command("sh", "-c", taken.command())
+			run.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"))
+			if said, err := run.CombinedOutput(); err != nil {
+				t.Fatalf("the removal failed: %v\n%s", err, said)
+			}
+			left, err := os.ReadDir(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(left) != 1 || left[0].Name() != "yours.pem" {
+				t.Errorf("the directory holds %v after the destroy, want yours.pem alone: an origin certificate's key never outlives ocel's file", left)
+			}
+		})
 	}
 }
