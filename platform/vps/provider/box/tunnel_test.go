@@ -24,6 +24,7 @@ type tunnelEvents struct {
 	refusesDelete    error
 	refusesConfigure error
 	duringEnsure     func()
+	afterRun         func()
 }
 
 func TestATunnelTheEdgeFailedToDeleteIsDeletedByTheNextRelease(t *testing.T) {
@@ -79,6 +80,23 @@ func TestATunnelOpenedUnderANameAnotherRunReleasedIsDeleted(t *testing.T) {
 	}
 	if !slices.Contains(m.tunnelEvents.opened, "delete uuid-1") {
 		t.Errorf("the edge saw %v, want the tunnel this claim opened deleted: nothing on the box names it any more, so no release ever would", m.tunnelEvents.opened)
+	}
+}
+
+func TestATunnelAClaimStartedAfterAnotherRunReleasedItIsStoppedAgain(t *testing.T) {
+	m, routed := routedOn(t)
+	m.tunnelEvents.afterRun = func() {
+		m.retired = append(m.retired, *m.tunnel)
+		m.tunnel = nil
+	}
+
+	_, err := routed.Claim(context.Background(), tunneledClaim("shop.example.com"))
+
+	if !errors.Is(err, host.ErrTunnelReleased) {
+		t.Fatalf("Claim through a tunnel released while it started = %v, want it refused as released", err)
+	}
+	if m.tunnelRunning != "" || !slices.Contains(m.calls, "stop tunnel uuid-1") {
+		t.Errorf("the box runs tunnel %q after %v, want the connector this claim started stopped: the release that retired it stopped nothing yet, and no later release names it", m.tunnelRunning, m.calls)
 	}
 }
 
@@ -167,12 +185,23 @@ func (m *machine) RunTunnel(ctx context.Context, tunnel host.Tunnel, token func(
 	}
 	m.calls = append(m.calls, "run tunnel "+tunnel.ID+" with "+read)
 	m.tunnelRunning = tunnel.ID
+	if m.tunnelEvents.afterRun != nil {
+		m.tunnelEvents.afterRun()
+	}
+	return nil
+}
+
+func (m *machine) StopTunnel(_ context.Context, tunnel host.Tunnel) error {
+	if m.tunnelRunning == tunnel.ID {
+		m.calls = append(m.calls, "stop tunnel "+tunnel.ID)
+		m.tunnelRunning = ""
+	}
 	return nil
 }
 
 func (m *machine) TunnelHost(_ context.Context, tunneled host.TunneledHost, tunnelName string) error {
 	if m.tunnel == nil || m.tunnel.Name != tunnelName {
-		return refusal.Refuse(refusal.CodeBusy, "the tunnel %s no longer reaches the box", tunnelName)
+		return errors.Join(refusal.Refuse(refusal.CodeBusy, "the tunnel %s no longer reaches the box", tunnelName), host.ErrTunnelReleased)
 	}
 	m.calls = append(m.calls, "tunnel "+tunneled.Hostname)
 	m.tunneled = append(slices.DeleteFunc(m.tunneled, func(held host.TunneledHost) bool { return held.Hostname == tunneled.Hostname }), tunneled)
