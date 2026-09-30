@@ -182,17 +182,23 @@ func frontReading() string {
 }
 
 func (r frontRecord) listStranded(to Front) []removal {
-	var stranded []removal
+	stranded := to.listOwned()
+	kept := len(stranded)
 	for moved := r; moved.MovingFrom != nil; moved = *moved.MovingFrom {
-		if left := moved.MovingFrom.front(); !left.same(to) {
-			for _, taken := range (frontMove{from: left, to: moved.front()}).listRemovals() {
-				if !slices.ContainsFunc(stranded, func(listed removal) bool { return listed.kind == taken.kind && listed.path == taken.path }) {
-					stranded = append(stranded, taken)
-				}
+		for _, taken := range (frontMove{from: moved.MovingFrom.front(), to: moved.front()}).listRemovals() {
+			if !slices.ContainsFunc(stranded, func(listed removal) bool { return listed.kind == taken.kind && listed.path == taken.path }) {
+				stranded = append(stranded, taken)
 			}
 		}
 	}
-	return stranded
+	return stranded[kept:]
+}
+
+func (f Front) listOwned() []removal {
+	if f.adopted() {
+		return f.placedRemovals()
+	}
+	return frontMove{from: f}.listRemovals()
 }
 
 func (h *Host) frontRecorded(ctx context.Context, ask asking) (*frontRecord, error) {

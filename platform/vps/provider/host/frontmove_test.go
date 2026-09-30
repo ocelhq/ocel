@@ -811,6 +811,39 @@ func TestAnInterruptedMoveRetargetedToAnotherProxyTakesAwayWhatTheFirstMoveLeftO
 	}
 }
 
+func TestAnInterruptedMoveRetargetedBackToTheDirectoryItStartedFromKeepsTheFileThatStillServes(t *testing.T) {
+	t.Parallel()
+
+	tier := environment.TierProduction
+	placement := traefik.DerivePlacementHostname("/etc/traefik/dynamic/ocel/ocel.yml")
+	failed := boxRecordedFor(t, tier, traefikOnTheHost())
+	servedFrom(failed, func(hostname string) session.Result {
+		if hostname == placement {
+			return session.Result{Code: proxyNotServingYet, Stderr: placement + " never reached ocel-switchboard"}
+		}
+		return throughTheSwitchboard(hostname)
+	})
+	_, err := movedTo(t, failed, tier, traefikIn("/etc/traefik/dynamic/ocel"))
+	refusalOf(t, err, refusal.CodeNotReady)
+
+	back := traefikOnTheHost()
+	back.Traefik.Resolver = "zerossl"
+	box := resumedAfter(t, failed, tier, traefikOnTheHost())
+	servedFrom(box, throughTheSwitchboard)
+	if _, err := movedTo(t, box, tier, back); err != nil {
+		t.Fatalf("bootstrap back to the directory the move started from = %v, want it to finish the move", err)
+	}
+	if at := box.at(quoted("unplace") + " " + quoted("/etc/traefik/dynamic/ocel.yml")); at >= 0 {
+		t.Errorf("the move back took out the file your Traefik still serves from, which it moves back to: %s", box.commands()[at])
+	}
+	if box.at(quoted("unplace")+" "+quoted("/etc/traefik/dynamic/ocel/ocel.yml")) < 0 {
+		t.Errorf("the move back left the file the stopped move placed in /etc/traefik/dynamic/ocel:\n%s", strings.Join(box.commands(), "\n"))
+	}
+	if !stampedComplete(box, tier) {
+		t.Errorf("the move back never stamped the tier complete")
+	}
+}
+
 func TestADeployOntoABoxWhoseMoveIsUnfinishedIsRefusedAndToldThatBootstrapFinishesIt(t *testing.T) {
 	t.Parallel()
 
