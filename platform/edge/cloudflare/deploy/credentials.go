@@ -27,8 +27,9 @@ var tokenMinting = []string{
 
 var zonePermissions = []string{
 	"Zone · Zone · Read",
+	"Zone · Zone Settings · Read",
 	"Zone · DNS · Edit",
-	"Zone · SSL and Certificates · Read",
+	"Zone · SSL and Certificates · Edit",
 	"Zone · Workers Routes · Edit",
 }
 

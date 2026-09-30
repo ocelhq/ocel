@@ -121,6 +121,10 @@ func (p *cloudflare) Hooks() edge.Hooks {
 		VerifyCredentials:             p.verifyCredentials,
 		CheckCodeEntitlement:          p.codeEntitlement,
 		DescribeCredentialPermissions: credentialPermissions,
+		ClientCertificates: &edge.ClientCertificateHooks{
+			Ensure:  p.ensureClientCertificates,
+			Present: p.presentClientCertificates,
+		},
 	}
 }
 
