@@ -115,6 +115,41 @@ hostname Cloudflare forwards names TLS options of its own that require the zone'
 certificate, the origin certificate is listed under `tls.certificates`, and its http router
 only redirects to https.
 
+### Through a Cloudflare Tunnel
+
+Set `tunnel` on the Cloudflare edge and Cloudflare reaches the box through a tunnel the box
+opens to it, instead of at the box's address:
+
+```json title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/0.0.0/ocel.schema.json",
+  "slug": "my-app",
+  "provider": { "vps": { "ssh": "my-box" } },
+  "edge": { "cloudflare": { "tunnel": true } },
+  "dns": "cloudflare",
+  "apps": [{ "name": "web", "path": ".", "domains": { "production": "shop.example.com" } }]
+}
+```
+
+The box runs one tunnel, shared by every project on it that sets `tunnel`, as the
+`ocel-tunnel` container: `cloudflared` pinned by digest, with updates off, reading its token
+from a file only root can read. ocel opens the tunnel when the first project claims a
+hostname through it, configures it in Cloudflare to send every hostname to the switchboard,
+and deletes it when the last one leaves. Each hostname gets a proxied record to the tunnel,
+and previews a proxied wildcard record, as with any other hostname Cloudflare forwards
+([previews behind Cloudflare](/docs/providers/cloudflare#previews-behind-cloudflare)).
+
+`cloudflared` hands traffic to the switchboard itself, never to the proxy on ports 80 and
+443, so a tunnel works whatever fronts the box: ocel's Caddy, your own proxy, or another
+platform's. The switchboard answers a tunneled hostname only on the listener `cloudflared`
+reaches, on the `ocel` network and published nowhere, and refuses it when it arrives through
+the proxy, so a request that reaches the box's address for it is refused with nothing to
+configure. There are no client or origin certificates, and the zone's SSL mode is not
+checked. A visitor who opens `http://` is redirected to https.
+
+Projects with and without `tunnel` share a box. The Cloudflare token also needs
+Account · Cloudflare Tunnel · Edit.
+
 ## Behind your own proxy
 
 If the machine already runs a proxy on ports 80 and 443, ocel can sit behind it instead of
