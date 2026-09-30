@@ -400,6 +400,9 @@ func TestRemovalPlansEveryStackLeftBesideACoreThatRolledBack(t *testing.T) {
 		}
 		names = append(names, group.Name)
 	}
+	if got := groupNamed(t, groups, feature).Feature; got != FeatureISR {
+		t.Errorf("%s is labelled feature %q, want %q", feature, got, FeatureISR)
+	}
 	if want := []string{feature, core}; !slices.Equal(names, want) {
 		t.Errorf("PlanRemove() plans %v, want %v: a destroy that plans nothing never runs the teardown that removes them", names, want)
 	}
