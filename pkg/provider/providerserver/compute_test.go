@@ -21,6 +21,8 @@ func containerDeployRequest(probe string) *contractv1.DeployRequest {
 	req.Manifest.Apps[0].Artifact = &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{
 		Image:           containerTestImage,
 		HealthCheckPath: probe,
+		MinInstances:    1,
+		MaxInstances:    1,
 	}}
 	return req
 }
@@ -87,6 +89,39 @@ func TestTheAppSpecNamesTheImageAndProbeAContainerAppIsProvisionedFrom(t *testin
 	}
 	if app.HealthCheckPath != "/healthz" {
 		t.Errorf("HealthCheckPath = %q, want the path the manifest says the process is probed at", app.HealthCheckPath)
+	}
+}
+
+func TestTheAppSpecNamesTheInstanceCountsAContainerAppRunsBetween(t *testing.T) {
+	daemonWithTheBuiltImage(t, "amd64")
+	builtProject(t)
+	p := fake.NewProvider(fake.Options{})
+	client := servedBy(t, p)
+
+	req := namingARegistry(containerDeployRequest("/"))
+	req.Manifest.Apps[0].GetContainer().MinInstances = 2
+	req.Manifest.Apps[0].GetContainer().MaxInstances = 5
+	result, _ := deploy(t, client, req)
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	specs := p.FakeStacks().Provisioned()
+	if got, want := specs[len(specs)-1].App.Instances, (provider.Instances{Min: 2, Max: 5}); got != want {
+		t.Errorf("Instances = %+v, want %+v, the counts the manifest names", got, want)
+	}
+}
+
+func TestTheWireRefusesAContainerWhoseFloorIsAboveItsCeiling(t *testing.T) {
+	client, _ := contractServed(t, "1.0.0")
+
+	req := containerDeployRequest("/")
+	req.Manifest.Apps[0].GetContainer().MinInstances = 3
+	req.Manifest.Apps[0].GetContainer().MaxInstances = 2
+
+	_, _, err := deployStream(t, client, req)
+	if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
+		t.Fatalf("Deploy() with a container running at least 3 and at most 2: code = %v, want %v", got, connect.CodeInvalidArgument)
 	}
 }
 

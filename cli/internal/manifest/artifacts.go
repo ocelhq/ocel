@@ -29,6 +29,8 @@ func attachArtifact(manifestApp *contractv1.ManifestApp, a app, functions []*con
 		Image:           a.Image,
 		HealthCheckPath: path,
 		Arch:            a.Arch,
+		MinInstances:    uint32(a.Instances.Min),
+		MaxInstances:    uint32(a.Instances.Max),
 	}}
 	return nil
 }

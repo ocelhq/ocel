@@ -8,6 +8,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 const fakeDigest = "sha256:" + "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
@@ -67,6 +68,38 @@ func TestAContainerNamesTheHealthPathTheAppAsksFor(t *testing.T) {
 
 	if got, want := containerOf(t, manifest, "api").GetHealthCheckPath(), "/healthz"; got != want {
 		t.Errorf("health_check_path = %q, want %q", got, want)
+	}
+}
+
+func TestAContainerNamesTheInstanceCountsItsAppRunsBetween(t *testing.T) {
+	t.Parallel()
+
+	manifest, err := assembleOn("container", "proj-1", project.Domains{}, []app{
+		{Name: "api", Compute: "container", Image: "ocel/api@" + fakeDigest, Instances: provider.Instances{Min: 2, Max: 6}},
+	}, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("assemble: %v", err)
+	}
+
+	container := containerOf(t, manifest, "api")
+	if container.GetMinInstances() != 2 || container.GetMaxInstances() != 6 {
+		t.Errorf("container runs between %d and %d instances, want 2 and 6", container.GetMinInstances(), container.GetMaxInstances())
+	}
+}
+
+func TestAConfiguredContainerAppReachesTheManifestWithItsInstanceCountsResolved(t *testing.T) {
+	t.Parallel()
+
+	three := 3
+	apps := appsOf(t.TempDir(), []project.App{
+		{Name: "api", Compute: "container", Container: &project.Container{MinInstances: &three}},
+		{Name: "web", Compute: "container", Container: &project.Container{}},
+	}, nil, nil)
+	if got, want := apps[0].Instances, (provider.Instances{Min: 3, Max: 3}); got != want {
+		t.Errorf("api runs %+v, want %+v", got, want)
+	}
+	if got, want := apps[1].Instances, (provider.Instances{Min: 1, Max: 1}); got != want {
+		t.Errorf("web runs %+v, want %+v", got, want)
 	}
 }
 

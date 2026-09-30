@@ -186,6 +186,8 @@ func withContainerAdmin(req *contractv1.DeployRequest, deploymentID string) *con
 		Artifact: &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{
 			Image:           containerTestImage,
 			HealthCheckPath: "/",
+			MinInstances:    1,
+			MaxInstances:    1,
 		}},
 	}
 	if req.GetEnvironment().GetTier() == environmentv1.Tier_TIER_PRODUCTION {

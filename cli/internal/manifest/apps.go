@@ -28,6 +28,7 @@ type app struct {
 	Usages          []usage
 	Image           string
 	HealthCheckPath string
+	Instances       provider.Instances
 }
 
 func appsOf(projectDir string, configured []project.App, usages []attribution.Usage, images map[string]string) []app {
@@ -49,6 +50,7 @@ func appsOf(projectDir string, configured []project.App, usages []attribution.Us
 			Usages:          byApp[a.Name],
 			Image:           images[a.Name],
 			HealthCheckPath: healthPathOf(a),
+			Instances:       instancesOf(a),
 		})
 	}
 	return out
@@ -59,6 +61,13 @@ func healthPathOf(app project.App) string {
 		return ""
 	}
 	return app.Container.Health.Path
+}
+
+func instancesOf(app project.App) provider.Instances {
+	if app.Container == nil {
+		return provider.Instances{}
+	}
+	return app.Container.Instances()
 }
 
 func servedByFunctions(functions []build.Function, cfg *project.Project) []build.Function {
