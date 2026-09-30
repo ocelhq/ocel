@@ -535,3 +535,32 @@ func TestPreflightNamesNoEdgeScopeForAnEdgeThatChecksNoCredentials(t *testing.T)
 		t.Errorf("Preflight() reported %v, want nothing from an edge that checks no credentials", resp.GetCredentialProblems())
 	}
 }
+
+func TestPreflightSaysWhetherTheTierNeedsAHostnameToServeOn(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a router that serves only on hostnames it is given needs one", func(t *testing.T) {
+		t.Parallel()
+		client, _ := contractServed(t, "1.2.3")
+		resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{RequiredTier: environmentv1.Tier_TIER_PRODUCTION})
+		if err != nil {
+			t.Fatalf("Preflight() error = %v", err)
+		}
+		if !resp.GetHostnameRequired() {
+			t.Error("Preflight() says no hostname is needed, want one: the fake router serves only hostnames it is given")
+		}
+	})
+
+	t.Run("a router that addresses itself needs none", func(t *testing.T) {
+		t.Parallel()
+		client, vendor := contractServed(t, "1.2.3")
+		vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).AddressesItself(true)
+		resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{RequiredTier: environmentv1.Tier_TIER_PRODUCTION})
+		if err != nil {
+			t.Fatalf("Preflight() error = %v", err)
+		}
+		if resp.GetHostnameRequired() {
+			t.Error("Preflight() says a hostname is needed, want none: the router gives every app an address of its own")
+		}
+	})
+}

@@ -105,22 +105,23 @@ func kindList(kinds []edge.Kind) string {
 }
 
 type Edge struct {
-	mu       sync.Mutex
-	kind     edge.Kind
-	routedBy router.Kind
-	owners   map[string]string
-	wildcard string
-	specs    []edge.PreviewWildcardSpec
-	stacks   []edge.StackSpec
-	bindings []edge.DomainBinding
-	serving  map[string]string
-	serves   *[]edge.Need
-	byLabel  bool
-	refusal  error
-	unbound  error
-	bindSays string
-	warns    string
-	verify   func(context.Context) (edge.CredentialIdentity, error)
+	mu              sync.Mutex
+	kind            edge.Kind
+	routedBy        router.Kind
+	owners          map[string]string
+	wildcard        string
+	specs           []edge.PreviewWildcardSpec
+	stacks          []edge.StackSpec
+	bindings        []edge.DomainBinding
+	serving         map[string]string
+	serves          *[]edge.Need
+	byLabel         bool
+	addressesItself bool
+	refusal         error
+	unbound         error
+	bindSays        string
+	warns           string
+	verify          func(context.Context) (edge.CredentialIdentity, error)
 
 	unreadable  error
 	entitlement *edge.CodeEntitlement
@@ -505,6 +506,12 @@ func (e *Edge) RoutesPreviewsByLabel(routes bool) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.byLabel = routes
+}
+
+func (e *Edge) AddressesItself(addresses bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.addressesItself = addresses
 }
 
 const (

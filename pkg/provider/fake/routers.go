@@ -186,6 +186,7 @@ func (e *Edge) routerFacts() router.Facts {
 		Propagation:                 router.Propagation{Typical: 30 * time.Second, Published: true},
 		SignsOriginForwards:         true,
 		RoutesPreviewsByLabel:       e.byLabel,
+		AddressesItself:             e.addressesItself,
 		ReachesFunctions:            true,
 		ReachesContainers:           true,
 		Dispatches:                  e.kind == KindRelay,
