@@ -130,6 +130,9 @@ func (r *Resources) Resolve(ctx context.Context, resources []declaration.Resourc
 	var kinds []resourcesv1.ResourceType
 	byKind := map[resourcesv1.ResourceType][]declaration.Resource{}
 	for _, resource := range resources {
+		if refusedInDev[resource.Type] {
+			return nil, fmt.Errorf("%s %q: ocel dev does not run topics, tasks or workers yet", label(resource.Type), resource.Name)
+		}
 		if _, served := r.backends[resource.Type]; !served {
 			return nil, fmt.Errorf("%s %q: ocel dev serves no %s", label(resource.Type), resource.Name, resource.Type)
 		}
@@ -159,9 +162,16 @@ func (r *Resources) Resolve(ctx context.Context, resources []declaration.Resourc
 	return out, nil
 }
 
+// TODO(#1466): ocel dev runs topics, tasks and workers on the pgmq engine; until then it refuses them.
+var refusedInDev = map[resourcesv1.ResourceType]bool{
+	resourcesv1.ResourceType_RESOURCE_TYPE_TOPIC:    true,
+	resourcesv1.ResourceType_RESOURCE_TYPE_TASK:     true,
+	resourcesv1.ResourceType_RESOURCE_TYPE_CONSUMER: true,
+	resourcesv1.ResourceType_RESOURCE_TYPE_WORKER:   true,
+}
+
 func label(kind resourcesv1.ResourceType) string {
-	bound, _ := naming.BindableAs(kind)
-	return strings.ToLower(naming.EnvFragment(bound))
+	return naming.ResourceTypeName(kind)
 }
 
 func (r *Resources) announceOnce(line string) {

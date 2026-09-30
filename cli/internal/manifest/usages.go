@@ -45,9 +45,11 @@ func FindUsages(ctx context.Context, cfg *project.Project, built build.Output, r
 	if err != nil {
 		return nil, err
 	}
-	declared := make([]attribution.Declaration, len(resources))
-	for i, r := range resources {
-		declared[i] = attribution.Declaration{Type: r.Type, Name: r.Name, Source: r.Source}
+	declared := make([]attribution.Declaration, 0, len(resources))
+	for _, r := range resources {
+		if _, bindable := naming.BindableAs(r.Type); bindable {
+			declared = append(declared, attribution.Declaration{Type: r.Type, Name: r.Name, Source: r.Source})
+		}
 	}
 	return attribution.FindUsages(ctx, cfg.Dir, apps, declared)
 }

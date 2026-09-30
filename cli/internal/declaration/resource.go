@@ -3,6 +3,8 @@ package declaration
 import (
 	"fmt"
 
+	"google.golang.org/protobuf/reflect/protoreflect"
+
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
@@ -12,16 +14,22 @@ type Resource struct {
 	Type     resourcesv1.ResourceType
 	Postgres *resourcesv1.PostgresConfig
 	Bucket   *resourcesv1.BucketConfig
+	Topic    *resourcesv1.TopicConfig
+	Task     *resourcesv1.TaskConfig
+	Consumer *resourcesv1.ConsumerConfig
+	Worker   *resourcesv1.WorkerConfig
 	Source   string
 }
 
 func Parse(req *resourcesv1.DeclareRequest) (Resource, error) {
 	id := req.GetResource()
-	if _, ok := naming.BindableAs(id.GetType()); !ok {
+	configs := req.ProtoReflect().Descriptor().Oneofs().ByName("config")
+	expected := configs.Fields().ByName(protoreflect.Name(naming.ResourceTypeName(id.GetType())))
+	if expected == nil {
 		return Resource{}, fmt.Errorf("unsupported resource type: %s", id.GetType())
 	}
-	if !configMatches(req, id.GetType()) {
-		return Resource{}, fmt.Errorf("resource %s declares itself a %s but has %s config", id.GetName(), id.GetType(), configName(req))
+	if got := req.ProtoReflect().WhichOneof(configs); got != expected {
+		return Resource{}, fmt.Errorf("resource %s declares itself a %s but has %s config", id.GetName(), id.GetType(), configName(got))
 	}
 
 	return Resource{
@@ -29,26 +37,17 @@ func Parse(req *resourcesv1.DeclareRequest) (Resource, error) {
 		Type:     id.GetType(),
 		Postgres: req.GetPostgres(),
 		Bucket:   req.GetBucket(),
+		Topic:    req.GetTopic(),
+		Task:     req.GetTask(),
+		Consumer: req.GetConsumer(),
+		Worker:   req.GetWorker(),
 		Source:   req.GetSource(),
 	}, nil
 }
 
-func configMatches(req *resourcesv1.DeclareRequest, t resourcesv1.ResourceType) bool {
-	switch t {
-	case resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES:
-		return req.GetPostgres() != nil
-	case resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET:
-		return req.GetBucket() != nil
+func configName(field protoreflect.FieldDescriptor) string {
+	if field == nil {
+		return "no"
 	}
-	return false
-}
-
-func configName(req *resourcesv1.DeclareRequest) string {
-	switch req.GetConfig().(type) {
-	case *resourcesv1.DeclareRequest_Postgres:
-		return "postgres"
-	case *resourcesv1.DeclareRequest_Bucket:
-		return "bucket"
-	}
-	return "no"
+	return string(field.Name())
 }
