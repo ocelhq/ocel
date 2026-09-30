@@ -1138,10 +1138,10 @@ jobs:
       REF: ${{ github.event.pull_request.head.ref }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
-      - name: Checkout the base branch, the head one may already be gone
+      - name: Checkout the default branch, the head and a stacked base may already be gone
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.base.ref }}
+          ref: ${{ github.event.repository.default_branch }}
 
       - name: Take the CLI this preview is torn down with
         uses: ./.github/actions/ocel-binary
