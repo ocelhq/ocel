@@ -320,7 +320,7 @@ func TestADeployOntoABoxRecordedForAnotherProxyIsRefusedNamingWhoSetIt(t *testin
 
 			box := bootstrappedOn(t, environment.TierPreview)
 			recordOn(t, box, environment.TierPreview, tc.recorded, "blog")
-			refused := refusalOf(t, box.fronted(tc.ours).FrontAgrees(context.Background()), refusal.CodeInvalid)
+			refused := refusalOf(t, box.fronted(tc.ours).RefuseDisagreeingFront(context.Background(), environment.TierPreview), refusal.CodeInvalid)
 			for _, wanted := range tc.wanted {
 				if !strings.Contains(refused.Message, wanted) {
 					t.Errorf("the refusal says %q, want %q in it", refused.Message, wanted)
@@ -335,8 +335,8 @@ func TestADeployOntoABoxRecordedForItsOwnProxyGoesAhead(t *testing.T) {
 
 	box := bootstrappedOn(t, environment.TierProduction)
 	recordOn(t, box, environment.TierProduction, routedByHand(), "blog")
-	if err := box.fronted(routedByHand()).FrontAgrees(context.Background()); err != nil {
-		t.Errorf("FrontAgrees() = %v, want a box that routes the way this project says let through", err)
+	if err := box.fronted(routedByHand()).RefuseDisagreeingFront(context.Background(), environment.TierProduction); err != nil {
+		t.Errorf("RefuseDisagreeingFront() = %v, want a box that routes the way this project says let through", err)
 	}
 }
 
@@ -360,8 +360,8 @@ func TestAPresetAndTheSameProxySpelledOutAreOneProxy(t *testing.T) {
 
 			box := bootstrappedOn(t, environment.TierProduction)
 			recordOn(t, box, environment.TierProduction, tc.recorded, "blog")
-			if err := box.fronted(tc.ours).FrontAgrees(context.Background()); err != nil {
-				t.Errorf("FrontAgrees() = %v, want a preset and the values it fills agreed as one proxy", err)
+			if err := box.fronted(tc.ours).RefuseDisagreeingFront(context.Background(), environment.TierProduction); err != nil {
+				t.Errorf("RefuseDisagreeingFront() = %v, want a preset and the values it fills agreed as one proxy", err)
 			}
 		})
 	}
@@ -378,7 +378,7 @@ func TestADeployOntoABoxThatRecordsNoProxyIsSentToBootstrap(t *testing.T) {
 
 	box := bootstrappedOn(t, environment.TierProduction)
 	box.installed[environment.TierProduction] = unrecorded(box, environment.TierProduction)
-	refused := refusalOf(t, box.host().FrontAgrees(context.Background()), refusal.CodeNotReady)
+	refused := refusalOf(t, box.host().RefuseDisagreeingFront(context.Background(), environment.TierProduction), refusal.CodeNotReady)
 	if !strings.Contains(refused.Message, FrontRecordPath) || !strings.Contains(refused.Message, "ocel bootstrap") {
 		t.Errorf("the refusal says %q, want it to name %s and the bootstrap that writes it", refused.Message, FrontRecordPath)
 	}

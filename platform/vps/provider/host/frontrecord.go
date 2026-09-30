@@ -160,7 +160,7 @@ func (f Front) unlabelled() Front {
 	return f
 }
 
-func (f Front) agrees(record frontRecord) error {
+func (f Front) refuseDisagreeing(record frontRecord, tier environment.Tier) error {
 	recorded := record.front()
 	if f.same(recorded) {
 		return nil
@@ -171,7 +171,7 @@ func (f Front) agrees(record frontRecord) error {
 	}
 	return refusal.Refuse(refusal.CodeInvalid,
 		"this box routes through %s (set by %s); %s\nOne proxy fronts a box: to move it to another, write the new `proxy` and `%s` moves the box",
-		recorded.named(), record.setter(), remedy, provider.BootstrapCommand(record.Tier))
+		recorded.named(), record.setter(), remedy, provider.BootstrapCommand(tier))
 }
 
 func frontReading() string {
@@ -196,7 +196,7 @@ func (h *Host) frontRecorded(ctx context.Context, ask asking) (*frontRecord, err
 	return &record, nil
 }
 
-func (h *Host) FrontAgrees(ctx context.Context) error {
+func (h *Host) RefuseDisagreeingFront(ctx context.Context, tier environment.Tier) error {
 	record, err := h.frontRecorded(ctx, h.reach)
 	if err != nil {
 		return err
@@ -204,9 +204,9 @@ func (h *Host) FrontAgrees(ctx context.Context) error {
 	if record == nil {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"%s records no proxy for %s, so this deploy cannot tell what fronts it\nRun `%s`",
-			FrontRecordPath, h.named(), provider.BootstrapCommand(environment.TierProduction))
+			FrontRecordPath, h.named(), provider.BootstrapCommand(tier))
 	}
-	return h.proxyOption.agrees(*record)
+	return h.proxyOption.refuseDisagreeing(*record, tier)
 }
 
 func (b Bootstrap) recorded(ctx context.Context, read Reading) (Reading, error) {
@@ -225,7 +225,7 @@ func (b Bootstrap) recorded(ctx context.Context, read Reading) (Reading, error) 
 		read.move = &frontMove{to: option}
 	}
 	if read.move != nil {
-		if read.move.hostnames, err = b.host.claimedHostnames(ctx); err != nil {
+		if read.move.table, err = b.host.readMovedTable(ctx); err != nil {
 			return Reading{}, err
 		}
 	}

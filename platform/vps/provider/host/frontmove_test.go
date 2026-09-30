@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
@@ -172,6 +173,62 @@ func TestMovingABoxOntoOneHostnameCountsItAsOneCertificate(t *testing.T) {
 	box := bootstrappedBehind(t, tier, Front{}, &table, nil)
 	recordOn(t, box, tier, Front{}, "blog")
 	wantChange(t, movePlanned(t, box, tier, routedByHand()), "1 hostname gets a new certificate from a proxy you route yourself", provider.ActionCreate)
+}
+
+func boxRecordedWithCertificatesFor(t *testing.T, tier environment.Tier, recorded Front) *bench {
+	t.Helper()
+	certificate, _ := pulledCertificate(t)
+	state := routed()
+	state.Claims = []HostClaim{
+		{Hostname: claimed, Owner: surface, Pointer: pointed},
+		{Hostname: "pinned.example.com", Owner: surface, Pointer: pointed},
+		{Hostname: "origin.example.com", Owner: surface, Pointer: pointed},
+		{Hostname: "pr-1--web.preview.example.com", Owner: surface, Pointer: pointed},
+		{Hostname: "pr-2--web.preview.example.com", Owner: surface, Pointer: pointed},
+	}
+	state.Connector = "box.example.com"
+	state.PreviewBase = "preview.example.com"
+	state.Pins = []Pin{{Hostname: "pinned.example.com", Path: caddy.PinsDir + "/pinned"}}
+	state.Shields = []Shield{{
+		Hostname: "origin.example.com", Owner: surface, ClientCertificates: []string{certificate},
+		OriginCertificate: proxy.CertificatePair{Certificate: certificate, Key: "KEY"},
+	}}
+	table := string(mustWrite(t, state))
+	box := bootstrappedBehind(t, tier, recorded, &table, nil)
+	recordOn(t, box, tier, recorded, "blog")
+	return box
+}
+
+func TestAMoveCountsOnlyTheHostnamesTheNewProxyOrdersCertificatesFor(t *testing.T) {
+	t.Parallel()
+
+	tier := environment.TierProduction
+	perHost := *traefikOnTheHost().Traefik
+	perHost.PreviewResolver = ""
+	for name, tc := range map[string]struct {
+		from, to Front
+		want     string
+	}{
+		"onto ocel's own proxy, which serves the pinned certificate and the origin certificate": {
+			from: traefikOnTheHost(), to: Front{},
+			want: "5 hostnames get new certificates from ocel's own proxy",
+		},
+		"onto your Traefik with a preview resolver, which orders one wildcard for every preview hostname": {
+			from: Front{}, to: traefikOnTheHost(),
+			want: "4 hostnames get new certificates from your Traefik",
+		},
+		"onto your Traefik without a preview resolver, which orders each preview hostname its own": {
+			from: Front{}, to: Front{Traefik: &perHost},
+			want: "6 hostnames get new certificates from your Traefik",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			move := movePlanned(t, boxRecordedWithCertificatesFor(t, tier, tc.from), tier, tc.to)
+			wantChange(t, move, tc.want, provider.ActionCreate)
+		})
+	}
 }
 
 func TestMovingABoxOffYourProxyIsRefusedWhileAnythingHoldsTheServingPortsNamingWhatToStop(t *testing.T) {
@@ -419,7 +476,7 @@ func TestADeployOntoABoxAnotherProxyFrontsIsStillRefusedAndToldThatBootstrapMove
 
 	tier := environment.TierPreview
 	box := boxRecordedFor(t, tier, coolifysTraefik())
-	refused := refusalOf(t, box.fronted(Front{}).FrontAgrees(context.Background()), refusal.CodeInvalid)
+	refused := refusalOf(t, box.fronted(Front{}).RefuseDisagreeingFront(context.Background(), environment.TierPreview), refusal.CodeInvalid)
 	for _, wanted := range []string{"add `\"proxy\": { \"traefik\": { \"preset\": \"coolify\" } }`", "`ocel bootstrap preview` moves the box"} {
 		if !strings.Contains(refused.Message, wanted) {
 			t.Errorf("the refusal says %q, want %q in it", refused.Message, wanted)
@@ -427,6 +484,16 @@ func TestADeployOntoABoxAnotherProxyFrontsIsStillRefusedAndToldThatBootstrapMove
 	}
 	if strings.Contains(refused.Message, "not supported") {
 		t.Errorf("the refusal says %q, want the move bootstrap makes named instead", refused.Message)
+	}
+}
+
+func TestADeployRefusedOntoABoxAnotherTierMovedNamesTheBootstrapOfTheDeploysOwnTier(t *testing.T) {
+	t.Parallel()
+
+	box := boxRecordedFor(t, environment.TierPreview, coolifysTraefik())
+	refused := refusalOf(t, box.fronted(Front{}).RefuseDisagreeingFront(context.Background(), environment.TierProduction), refusal.CodeInvalid)
+	if !strings.Contains(refused.Message, "`ocel bootstrap production` moves the box") {
+		t.Errorf("the refusal says %q, want the production deploy sent to `ocel bootstrap production`, not the bootstrap of the tier that set the record", refused.Message)
 	}
 }
 

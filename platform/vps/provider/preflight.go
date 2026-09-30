@@ -15,7 +15,7 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPrefl
 	if err := p.host.CheckEngine(ctx); err != nil {
 		return err
 	}
-	if err := p.host.FrontAgrees(ctx); err != nil {
+	if err := p.host.RefuseDisagreeingFront(ctx, pre.Deploy.Tier); err != nil {
 		return err
 	}
 	return refusing([]error{
