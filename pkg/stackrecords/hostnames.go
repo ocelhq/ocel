@@ -42,6 +42,7 @@ func (s *EdgeState) Pair(kind router.Kind, state router.StackState, apps []strin
 type HostnameState struct {
 	Edge        edge.Kind              `json:"edge,omitempty"`
 	Router      router.Kind            `json:"router,omitempty"`
+	App         string                 `json:"app,omitempty"`
 	Pointer     string                 `json:"pointer,omitempty"`
 	Certificate provider.Certificate   `json:"certificate,omitzero"`
 	Superseded  []provider.Certificate `json:"superseded,omitempty"`
