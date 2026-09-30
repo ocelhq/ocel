@@ -811,6 +811,36 @@ func TestAnInterruptedMoveRetargetedToAnotherProxyTakesAwayWhatTheFirstMoveLeftO
 	}
 }
 
+func TestADeployOntoABoxWhoseMoveIsUnfinishedIsRefusedAndToldThatBootstrapFinishesIt(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct{ from, to Front }{
+		"from ocel's own proxy to your Traefik":    {from: Front{}, to: traefikOnTheHost()},
+		"within your Traefik to another directory": {from: traefikOnTheHost(), to: traefikIn("/etc/traefik/dynamic/ocel")},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			tier := environment.TierProduction
+			box := boxRecordedFor(t, tier, tc.from)
+			unfinished, err := frontRecord{Proxy: tc.to.recorded(), Project: "shop", Tier: tier,
+				MovingFrom: &frontRecord{Proxy: tc.from.recorded(), Project: "blog", Tier: tier}}.item()
+			if err != nil {
+				t.Fatal(err)
+			}
+			box.installed[tier] = append(unrecorded(box, tier), unfinished)
+			for _, option := range []Front{tc.to, tc.from} {
+				refused := refusalOf(t, box.fronted(option).RefuseDisagreeingFront(context.Background(), tier), refusal.CodeNotReady)
+				for _, wanted := range []string{"moving from " + tc.from.named() + " to " + tc.to.named(), "`ocel bootstrap production`"} {
+					if !strings.Contains(refused.Message, wanted) {
+						t.Errorf("a deploy behind %s was refused with %q, want %q in it", option.named(), refused.Message, wanted)
+					}
+				}
+			}
+		})
+	}
+}
+
 func recordLeftBy(interrupted *bench) string {
 	ran := interrupted.commands()
 	if interrupted.broke != nil {

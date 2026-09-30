@@ -222,6 +222,11 @@ func (h *Host) RefuseDisagreeingFront(ctx context.Context, tier environment.Tier
 			"%s records no proxy for %s, so this deploy cannot tell what fronts it\nRun `%s`",
 			FrontRecordPath, h.named(), provider.BootstrapCommand(tier))
 	}
+	if record.MovingFrom != nil {
+		return refusal.Refuse(refusal.CodeNotReady,
+			"this box is moving from %s to %s (set by %s), and no deploy lands until the move is finished\nRun `%s` to finish it",
+			record.MovingFrom.front().named(), record.front().named(), record.setter(), provider.BootstrapCommand(tier))
+	}
 	return h.proxyOption.refuseDisagreeing(*record, tier)
 }
 
