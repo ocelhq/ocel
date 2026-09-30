@@ -456,16 +456,26 @@ stopping the old proxy and starting the new one is up to you.
 | --- | --- | --- |
 | Ocel's own proxy → yours | Removes `ocel-proxy` and `/var/lib/ocel/proxy`, and keeps `/etc/ocel/certs` if it isn't empty. Publishes the switchboard or puts it on your proxy's network, places ocel's file, and rewrites the record. Then it prints `Start your proxy on 80 and 443 now`, and waits up to 10 minutes until every hostname the box serves answers through ocel, as `ocel domain add` does. | From `ocel-proxy` stopping until your proxy holds 443 and has its certificates |
 | Yours → ocel's own proxy | Refuses while anything holds port 80 or 443, and names it. Then removes ocel's file from your proxy's directory without reloading your proxy, takes the switchboard off your proxy's network, and starts `ocel-proxy`, which gets each certificate on the first connection for its hostname. | From your proxy stopping until `ocel-proxy` answers |
-| Yours → yours, same proxy: a new `directory`, `network`, `port` or `resolver` | Places ocel's file in the new place and reloads a Caddy. Then it waits until every hostname answers through ocel, and removes the old file. | Only while the switchboard starts again, which it does when `directory`, `network` or `port` changes |
+| Yours → yours, same proxy: a new `directory` or `resolver` | Starts the switchboard again with the new directory mounted, if the directory changed. For a Traefik, places ocel's file in the new directory, touches the old one so your Traefik reads its directory again (it watches no directory beneath the one it is given), waits until it routes through ocel the one name only the new file routes, and removes the old file. For a Caddy, removes the old file and places the new one before one reload, since a Caddy refuses two sites for one hostname. Then it waits until every hostname answers through ocel. | Never |
+| Yours → yours, same proxy: a new `network` or `port` | Starts the switchboard again where the new option says, moves ocel's file as for a new `directory`, and waits until every hostname answers through ocel. With `manual` it prints where to forward, as in `Forward your proxy to 127.0.0.1:8481 now`. | From the switchboard starting again until your proxy forwards to it there |
 | Yours → another of yours | As yours → ocel's own proxy for the old one, then as ocel's own proxy → yours for the new one. | From the old proxy stopping until the new one serves |
 
 Ocel counts two proxies as the same when both are `manual`, both are `traefik`, or both are
 `caddy` running as the same `container` or both as `caddy.service`. Only a new `resolver` or
 `previewResolver` makes the same Traefik order certificates again.
 
+The routes ocel places in your Traefik or Caddy try the switchboard again for about 10 seconds
+when it doesn't accept a connection, so a switchboard starting again drops no request. A
+Traefik tries again only a request it couldn't send, and a Caddy only one it couldn't connect
+for. Ocel's Traefik file also routes `<tag>.placement.ocel.invalid`, where `<tag>` names the
+file's path, so that ocel can tell which of two placed files your Traefik reads. Nothing orders
+a certificate for that name. A proxy you route yourself retries as you configure it.
+
 If the new proxy doesn't serve every hostname within the 10 minutes, bootstrap stops and names
 the hostnames it didn't serve. The box already routes through the new proxy by then. Start it,
-fix its routes, and run `ocel bootstrap <tier>` again to finish.
+fix its routes, and run `ocel bootstrap <tier>` again to finish. If your Traefik doesn't read
+the new `directory` within the 10 minutes, bootstrap stops before it removes the old file, which
+goes on serving.
 
 ## Postgres
 

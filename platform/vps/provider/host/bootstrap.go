@@ -80,7 +80,7 @@ func (b Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 	if err := read.runnableEngine(b.host.named()); err != nil {
 		return provider.Plan{}, err
 	}
-	if err := b.host.servingFree(ctx, read); err != nil {
+	if err := b.host.refuseServingPortsHeld(ctx, read); err != nil {
 		return provider.Plan{}, err
 	}
 	groups := bootstrapplan.ChangeGroups(described, b.Catalogue(), req)
@@ -93,7 +93,7 @@ func (b Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 	}
 	if read.move != nil {
 		var move provider.ChangeGroup
-		move, groups[0].Changes = read.move.group(groups[0].Changes)
+		move, groups[0].Changes = read.move.splitOffGroup(groups[0].Changes)
 		groups = slices.Insert(groups, 1, move)
 	}
 	return provider.Plan{Groups: bootstrapplan.PrefixWithVendor(b.vendor, groups)}, nil
@@ -183,7 +183,7 @@ func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 	if err := current.runnableEngine(b.host.named()); err != nil {
 		return err
 	}
-	if err := b.host.servingFree(ctx, current); err != nil {
+	if err := b.host.refuseServingPortsHeld(ctx, current); err != nil {
 		return err
 	}
 	items := current.Items()
@@ -238,19 +238,23 @@ func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 	if err := b.write(ctx, served, EnvSourceSyncItems(req.Tier, current.Arch), progress); err != nil {
 		return err
 	}
-	if err := b.removeOldFront(ctx, current.move, progress); err != nil {
+	if err := current.move.removeOldFront(ctx, progress); err != nil {
 		return err
 	}
 	if err := b.write(ctx, served, ProxyItems(current.Arch, current.Front), progress); err != nil {
 		return err
 	}
-	if err := b.placeRoutes(ctx, current.move); err != nil {
+	placeRoutes := b.host.rerender
+	if current.move != nil {
+		placeRoutes = current.move.placeRoutes
+	}
+	if err := placeRoutes(ctx); err != nil {
 		return err
 	}
 	if err := b.write(ctx, served, current.recorded, progress); err != nil {
 		return err
 	}
-	if err := b.awaitFront(ctx, req.Tier, current.move, progress); err != nil {
+	if err := current.move.awaitFront(ctx, req.Tier, progress); err != nil {
 		return err
 	}
 	if err := b.write(ctx, served, BackupItems(), progress); err != nil {
@@ -494,14 +498,14 @@ func leavingKnownHosts(forget string) string {
 const dirNonEmpty = "dir=nonempty"
 
 type removal struct {
-	kind      string
-	path      string
-	reason    string
-	action    provider.ChangeAction
-	shared    bool
-	reload    string
-	origins   string
-	unmounted bool
+	kind          string
+	path          string
+	reason        string
+	action        provider.ChangeAction
+	shared        bool
+	reload        string
+	origins       string
+	removedByPath bool
 }
 
 func (r removal) phrase() string { return phrase(r.kind, r.path) }
@@ -541,7 +545,7 @@ func (r removal) command() string {
 			"docker network inspect " + quoted(r.path) + " >/dev/null 2>&1; then printf '%s\\n' " + quoted(networkInUse) + "; fi"
 	case r.kind == KindPlaced:
 		unplaced, unplacedOrigins := words(switchboardCommand("unplace", r.path))+" 2>/dev/null || ", words(switchboardCommand("unplace-origins"))+" 2>/dev/null || "
-		if r.unmounted {
+		if r.removedByPath {
 			unplaced, unplacedOrigins = "", ""
 		}
 		unplaced += "rm -f " + quoted(r.path) + "\n"

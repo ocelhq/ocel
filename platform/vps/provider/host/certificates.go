@@ -221,7 +221,7 @@ func (b frontBox) ReadSpec(ctx context.Context) (proxy.Spec, error) {
 }
 
 func (b frontBox) ProbeAnyCertificate(ctx context.Context, hostname string) (string, string, error) {
-	said, err := b.h.probe(ctx, "probe "+hostname+" on this box's own https port accepting any certificate", hostname, "--any-certificate")
+	said, err := b.h.probeAnyCertificate(ctx, hostname)
 	return string(said.Router), said.Failure, err
 }
 

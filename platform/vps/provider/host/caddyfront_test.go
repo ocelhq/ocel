@@ -192,9 +192,9 @@ func TestBootstrapRefusesACaddyWhoseAdminEndpointIsOff(t *testing.T) {
 		}
 		return session.Result{}, false
 	}
-	err := box.fronted(caddyService()).servingFree(context.Background(), Reading{Tier: environment.TierProduction, Front: caddyService()})
+	err := box.fronted(caddyService()).refuseServingPortsHeld(context.Background(), Reading{Tier: environment.TierProduction, Front: caddyService()})
 	if err == nil || !strings.Contains(err.Error(), "admin off") {
-		t.Errorf("servingFree() = %v, want a Caddy with its admin endpoint off refused: caddy reload needs it", err)
+		t.Errorf("refuseServingPortsHeld() = %v, want a Caddy with its admin endpoint off refused: caddy reload needs it", err)
 	}
 	if slices.ContainsFunc(box.commands(), func(command string) bool { return strings.Contains(command, "docker") }) {
 		t.Errorf("reading a Caddy that runs as a service ran %q, want no docker asked: the box may have no engine yet", box.commands())
@@ -213,9 +213,9 @@ func TestBootstrapRefusesACaddyContainerOffTheHostsNetworkWithoutANetworkNamingI
 		}
 		return session.Result{}, false
 	}
-	err := box.fronted(front).servingFree(context.Background(), Reading{Tier: environment.TierProduction, Front: front})
+	err := box.fronted(front).refuseServingPortsHeld(context.Background(), Reading{Tier: environment.TierProduction, Front: front})
 	if err == nil || !strings.Contains(err.Error(), "proxy.caddy.network") {
-		t.Errorf("servingFree() = %v, want it refused naming proxy.caddy.network", err)
+		t.Errorf("refuseServingPortsHeld() = %v, want it refused naming proxy.caddy.network", err)
 	}
 }
 

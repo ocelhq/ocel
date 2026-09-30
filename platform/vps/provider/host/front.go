@@ -159,14 +159,18 @@ func (f Front) directoryOption() string {
 }
 
 func (f Front) switchboardNote() string {
+	return "routes what your proxy forwards " + f.describeForwarding()
+}
+
+func (f Front) describeForwarding() string {
 	if published := f.published(); len(published) > 0 {
-		return "routes what your proxy forwards to " + published[0].String()
+		return "to " + published[0].String()
 	}
 	joined := f.joined()
 	if len(joined) == 0 {
-		return "routes what your proxy forwards on the " + ProxyNetwork + " network"
+		return "on the " + ProxyNetwork + " network"
 	}
-	return "routes what your proxy forwards on the " + joined[0].name + " network"
+	return "on the " + joined[0].name + " network"
 }
 
 const loopbackAddr = "127.0.0.1"
