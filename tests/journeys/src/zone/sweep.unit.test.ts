@@ -161,6 +161,7 @@ describe("sweepStaleFromZone", () => {
       "-deploy-node-cloudflare.j.example",
       "-deploy-node-cloudflare-tunnel.j.example",
       "-lifecycle-next-cloudflare.j.example",
+      "-lifecycle-next-cloudflare-tunnel.j.example",
     ]);
     for (const one of listings) {
       expect(one.url.pathname).toBe("/client/v4/zones/z1/dns_records");
@@ -222,6 +223,7 @@ describe("sweepRunFromZone", () => {
       "web-j-111-deploy-node-cloudflare.j.example",
       "web-j-111-deploy-node-cloudflare-tunnel.j.example",
       "web-j-111-lifecycle-next-cloudflare.j.example",
+      "web-j-111-lifecycle-next-cloudflare-tunnel.j.example",
     ]);
     expect(deleted(asked)).toEqual([
       "/zones/z1/dns_records/dead",

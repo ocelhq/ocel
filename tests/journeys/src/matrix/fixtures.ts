@@ -116,7 +116,7 @@ export const lifecycle = {
     ],
     on: {
       aws: [defaults, container, cloudflare],
-      vps: [defaults, cloudflareOnABox],
+      vps: [defaults, cloudflareOnABox, cloudflareTunnel],
     },
   }),
 };

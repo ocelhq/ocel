@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import type { Phase } from "../matrix/types";
 import type { Check } from "./context";
 import { askOverPlainHTTP, askOverTLS, type Outcome, readOriginAddress } from "./originShield";
 
@@ -28,6 +29,19 @@ export function assertRedirectedOffPlainHTTP(
   assert.ok(
     REDIRECTS.includes(status) && location === want,
     `http://${hostname}/ answered ${status} to ${location ?? "nowhere"}; want a redirect to ${want}`,
+  );
+}
+
+export function assertRecordKeptAcrossAPromote(
+  before: string,
+  after: string,
+  hostname: string,
+  phase: Phase,
+): void {
+  assert.equal(
+    after,
+    before,
+    `after the ${phase}, ${hostname}'s proxied record names ${after}, want ${before}: a promote flips the release on the box, and the tunnel the record names stays`,
   );
 }
 
@@ -80,8 +94,23 @@ const redirectedOverPlainHTTP: Check = {
   },
 };
 
+const keptAcrossAPromote: Check = {
+  title: "a promote leaves the hostname's proxied record naming the same tunnel",
+  run: async (ctx) => {
+    const hostname = new URL(ctx.baseUrl).hostname;
+    const address = await readOriginAddress(hostname, token());
+    const note = `tunnel record ${ctx.app}`;
+    const before = ctx.notes.get(note);
+    if (ctx.phase !== "verify" && before !== undefined) {
+      assertRecordKeptAcrossAPromote(before, address, hostname, ctx.phase);
+    }
+    ctx.notes.set(note, address);
+  },
+};
+
 export const TUNNELED_ORIGIN_CHECKS: Check[] = [
   reachedThroughATunnel,
+  keptAcrossAPromote,
   refusedAroundTheTunnel,
   redirectedOverPlainHTTP,
 ];

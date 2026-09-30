@@ -228,7 +228,8 @@ account and under the zone the `aws` lane uses, taking `E2E_CLOUDFLARE_API_TOKEN
 `E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID` names that account. With a zone named, every other cell
 of the lane takes its hostnames under it too. The `cloudflare-tunnel` cells reach the box
 through a Cloudflare Tunnel, so `E2E_CLOUDFLARE_API_TOKEN` also holds Account · Cloudflare
-Tunnel · Edit.
+Tunnel · Edit; `lifecycle/next-cloudflare-tunnel` redeploys and rolls back, and checks the
+hostname's record names the same tunnel after each.
 
 The nightly signs in to Google Cloud over workload identity federation — no key is stored.
 
