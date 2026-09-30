@@ -50,7 +50,12 @@ export type Phase = "deploy" | "verify" | "redeploy" | "rollback" | "destroy";
 
 export const DEFAULT_VARIANT = "default";
 
-export type ConfigDelta = { compute?: Compute; edge?: Edge; registry?: RegistryConfig };
+export type ConfigDelta = {
+  compute?: Compute;
+  edge?: Edge;
+  tunnel?: boolean;
+  registry?: RegistryConfig;
+};
 
 export type Variant = {
   name: string;

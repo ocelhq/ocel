@@ -226,7 +226,9 @@ incus VM, and the EC2 lane names no zone. The nightly deploys them into the Clou
 account and under the zone the `aws` lane uses, taking `E2E_CLOUDFLARE_API_TOKEN`,
 `E2E_CLOUDFLARE_ACCOUNT_ID` and `E2E_PREVIEW_DOMAIN`, and refuses to run unless
 `E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID` names that account. With a zone named, every other cell
-of the lane takes its hostnames under it too.
+of the lane takes its hostnames under it too. The `cloudflare-tunnel` cells reach the box
+through a Cloudflare Tunnel, so `E2E_CLOUDFLARE_API_TOKEN` also holds Account · Cloudflare
+Tunnel · Edit.
 
 The nightly signs in to Google Cloud over workload identity federation — no key is stored.
 

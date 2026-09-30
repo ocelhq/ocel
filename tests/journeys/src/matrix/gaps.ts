@@ -25,6 +25,7 @@ import {
   cloudflare,
   cloudflareOnABox,
   cloudflareOnGoogleCloud,
+  cloudflareTunnel,
   container,
   defaults,
   registry,
@@ -335,6 +336,14 @@ export const gaps: Gap[] = [
     ],
   },
   {
+    id: "cloudflare-tunnel-needs-a-real-box",
+    reason:
+      "a tunnel cell asks the box's own address for the hostname, and deploys into the E2E Cloudflare account, which only the nightly real-VPS lane reaches",
+    where: [
+      { on: ["vps.incus"], variants: [cloudflareTunnel], fails: [step.deploy], skipsCell: true },
+    ],
+  },
+  {
     id: "no-cloudflare-zone",
     reason:
       "a cell Cloudflare fronts is answered on a hostname in a zone the run's Cloudflare token can write, and only a run that names both deploys it",
@@ -342,6 +351,13 @@ export const gaps: Gap[] = [
       {
         on: ["vps", "gcp"],
         variants: [cloudflareOnABox, cloudflareOnGoogleCloud],
+        whileUnset: ["OCEL_JOURNEY_ZONE", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"],
+        fails: [step.deploy],
+        skipsCell: true,
+      },
+      {
+        on: ["vps"],
+        variants: [cloudflareTunnel],
         whileUnset: ["OCEL_JOURNEY_ZONE", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"],
         fails: [step.deploy],
         skipsCell: true,
