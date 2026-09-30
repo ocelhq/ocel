@@ -145,6 +145,10 @@ func taggedByOcel() map[string]any {
 	return map[string]any{"StringEquals": map[string]any{"aws:ResourceTag/" + managedByTagKey: managedByTagValue}}
 }
 
+func keyPairSuppliedByCaller() map[string]any {
+	return map[string]any{"StringEqualsIfExists": map[string]any{"acm:CertificateKeyPairOrigin": "CUSTOMER_PROVIDED"}}
+}
+
 func managedByAnAppCluster() map[string]any {
 	return map[string]any{"StringLike": map[string]any{"aws:ResourceTag/" + managedSecretClusterTagKey: appClusterARN}}
 }
@@ -520,14 +524,23 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 			Condition: taggedOnCreate(),
 		},
 		{
-			Actions:   []string{"acm:ImportCertificate", "acm:AddTagsToCertificate"},
+			Actions:   []string{"acm:ImportCertificate"},
 			Resources: []string{appCertificateARN},
 			Condition: taggedOnCreate(),
 		},
 		{
+			Actions:   []string{"acm:AddTagsToCertificate"},
+			Resources: []string{appCertificateARN},
+			Condition: mergeConditions(taggedOnCreate(), keyPairSuppliedByCaller()),
+		},
+		{
+			Actions:   []string{"acm:DeleteCertificate"},
+			Resources: []string{appCertificateARN},
+			Condition: mergeConditions(taggedByOcel(), keyPairSuppliedByCaller()),
+		},
+		{
 			Actions: []string{
 				"acm:AddTagsToCertificate",
-				"acm:DeleteCertificate",
 				"acm:DescribeCertificate",
 				"acm:ListTagsForCertificate",
 				"acm:RemoveTagsFromCertificate",
