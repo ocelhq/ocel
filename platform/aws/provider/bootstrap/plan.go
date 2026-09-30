@@ -83,7 +83,7 @@ func PlanChanges(ctx context.Context, stacks cfn.API, read Reading, req Request,
 
 func PlanRemove(ctx context.Context, stacks cfn.API, read Reading) ([]provider.ChangeGroup, error) {
 	if !read.Deployed.Present {
-		return nil, nil
+		return planRemoveLeftStacks(ctx, stacks, read)
 	}
 	target, err := bootstrapFor(read.ns, read.tier)
 	if err != nil {
@@ -130,6 +130,41 @@ func PlanRemove(ctx context.Context, stacks cfn.API, read Reading) ([]provider.C
 			group = noteStranded(planDelete(ctx, stacks, group, stack.body))
 		}
 		groups = append(groups, group)
+	}
+	return groups, nil
+}
+
+func planRemoveLeftStacks(ctx context.Context, stacks cfn.API, read Reading) ([]provider.ChangeGroup, error) {
+	coreStack, err := read.ns.StackNameFor(read.tier)
+	if err != nil {
+		return nil, err
+	}
+	installed, err := installedFeatures(ctx, stacks, read.ns, read.tier)
+	if err != nil {
+		return nil, err
+	}
+	order, err := FeatureDeleteOrder(installed.Names())
+	if err != nil {
+		return nil, err
+	}
+	names := featureStackNames(read.ns, order, read.tier)
+	names = append(names, read.ns.runtimeStackName(read.tier), coreStack)
+
+	var groups []provider.ChangeGroup
+	for _, name := range names {
+		stack, err := cfn.DescribeStack(ctx, stacks, name)
+		if err != nil {
+			return nil, err
+		}
+		if stack == nil {
+			continue
+		}
+		groups = append(groups, provider.ChangeGroup{
+			Kind:   provider.StackGroupKind,
+			Name:   name,
+			Action: provider.ActionDelete,
+			Reason: "left in " + string(stack.StackStatus) + " with no usable core stack",
+		})
 	}
 	return groups, nil
 }
