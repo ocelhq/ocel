@@ -168,6 +168,8 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 		account: names.WorkloadAccountEmail(spec.Ref.Tier),
 		compute: provider.ComputeContainer,
 		health:  app.HealthCheckPath,
+		least:   app.Instances.Min,
+		most:    app.Instances.Max,
 		public:  true,
 		ingress: ingressFor(factsOf(spec.Edge)),
 	}, progress)

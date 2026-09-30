@@ -55,6 +55,7 @@ func shopManifest() *contractv1.Manifest {
 			{Name: "api", Framework: &contractv1.Framework{Name: "go"},
 				Artifact: &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{
 					Image: "europe-west1-docker.pkg.dev/acme-prod/ocel/api@sha256:" + "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", HealthCheckPath: "/healthz",
+					MinInstances: 1, MaxInstances: 1,
 				}}},
 		},
 		Resources: []*contractv1.ManifestResource{

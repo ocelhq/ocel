@@ -10,12 +10,12 @@ import (
 func TestTheServiceShapeMatchesWhatServiceOfSends(t *testing.T) {
 	t.Parallel()
 
-	for _, compute := range []provider.Compute{provider.ComputeServerless, provider.ComputeContainer} {
-		sent, err := serviceOf(serving{service: "svc", image: "img", compute: compute, health: "/healthz", ingress: ingressLoadBalancer})
+	for compute, least := range map[provider.Compute]int{provider.ComputeServerless: 0, provider.ComputeContainer: 2} {
+		sent, err := serviceOf(serving{service: "svc", image: "img", compute: compute, health: "/healthz", ingress: ingressLoadBalancer, least: least})
 		if err != nil {
 			t.Fatal(err)
 		}
-		properties := serviceProperties(compute, ingressLoadBalancer)
+		properties := serviceProperties(compute, least, ingressLoadBalancer)
 		if properties["ingress"] != sent.Ingress {
 			t.Errorf("%s: shaped ingress %v, serviceOf sends %v", compute, properties["ingress"], sent.Ingress)
 		}

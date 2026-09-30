@@ -24,9 +24,6 @@ const (
 	tfArtifactRepository  = "google_artifact_registry_repository"
 	tfSecretManagerSecret = "google_secret_manager_secret"
 	tfSchedulerJob        = "google_cloud_scheduler_job"
-
-	revisionMinInstancesContainer  = 1
-	revisionMinInstancesServerless = 0
 )
 
 var itemTypes = map[Kind]string{
@@ -83,7 +80,7 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 			if err != nil {
 				return nil, err
 			}
-			tree.Add(scope, string(Vendor), tfCloudRunService, service, region, serviceProperties(provider.ComputeContainer, ingress))
+			tree.Add(scope, string(Vendor), tfCloudRunService, service, region, serviceProperties(provider.ComputeContainer, app.Instances.Min, ingress))
 		} else {
 			specs := req.Functions[app.App]
 			if len(specs) == 0 {
@@ -94,7 +91,7 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 				if err != nil {
 					return nil, err
 				}
-				tree.Add(scope, string(Vendor), tfCloudRunService, service, region, serviceProperties(provider.ComputeServerless, ingress))
+				tree.Add(scope, string(Vendor), tfCloudRunService, service, region, serviceProperties(provider.ComputeServerless, 0, ingress))
 			}
 		}
 		tree.AddShaped(scope, shape.Vendor, shape.Region, shape.Apps[app.App])
@@ -132,11 +129,7 @@ func itemProperties(item item, region string) map[string]any {
 	return map[string]any{}
 }
 
-func serviceProperties(compute provider.Compute, ingress string) map[string]any {
-	minInstances := revisionMinInstancesServerless
-	if compute == provider.ComputeContainer {
-		minInstances = revisionMinInstancesContainer
-	}
+func serviceProperties(compute provider.Compute, minInstances int, ingress string) map[string]any {
 	return map[string]any{
 		"ingress": ingress,
 		"template": map[string]any{
