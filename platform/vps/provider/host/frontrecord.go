@@ -18,9 +18,10 @@ import (
 const FrontRecordPath = live.StateRoot + "/proxy.json"
 
 type frontRecord struct {
-	Proxy   *Front           `json:"proxy"`
-	Project string           `json:"project,omitempty"`
-	Tier    environment.Tier `json:"tier"`
+	Proxy      *Front           `json:"proxy"`
+	Project    string           `json:"project,omitempty"`
+	Tier       environment.Tier `json:"tier"`
+	MovingFrom *frontRecord     `json:"movingFrom,omitempty"`
 }
 
 func (f Front) recorded() *Front {
@@ -216,16 +217,26 @@ func (b Bootstrap) recorded(ctx context.Context, read Reading) (Reading, error) 
 	}
 	option := b.host.proxyOption
 	record := frontRecord{Proxy: option.recorded(), Project: b.project, Tier: read.Tier}
+	moving := record
 	switch {
+	case existing != nil && existing.MovingFrom != nil && option.same(existing.front()):
+		record, moving = *existing, *existing
+		record.MovingFrom = nil
+		read.move = &frontMove{host: b.host, from: existing.MovingFrom.front(), to: option, resumed: true}
 	case existing != nil && option.same(existing.front()):
 		record = *existing
 	case existing != nil:
+		moving.MovingFrom = existing
 		read.move = &frontMove{host: b.host, from: existing.front(), to: option}
 	case read.observed(KindContainer, caddy.Container) && option.adopted():
+		moving.MovingFrom = &frontRecord{Tier: read.Tier}
 		read.move = &frontMove{host: b.host, to: option}
 	}
 	if read.move != nil {
 		if read.move.table, err = b.host.readMovedTable(ctx); err != nil {
+			return Reading{}, err
+		}
+		if read.move.recorded, err = moving.item(); err != nil {
 			return Reading{}, err
 		}
 	}

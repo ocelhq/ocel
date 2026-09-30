@@ -251,10 +251,13 @@ func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 	if err := placeRoutes(ctx); err != nil {
 		return err
 	}
-	if err := b.write(ctx, served, current.recorded, progress); err != nil {
+	if err := b.write(ctx, served, current.move.recordUnfinished(), progress); err != nil {
 		return err
 	}
 	if err := current.move.awaitFront(ctx, req.Tier, progress); err != nil {
+		return err
+	}
+	if err := b.write(ctx, served, current.recorded, progress); err != nil {
 		return err
 	}
 	if err := b.write(ctx, served, BackupItems(), progress); err != nil {
