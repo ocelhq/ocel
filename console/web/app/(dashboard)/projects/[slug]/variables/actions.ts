@@ -9,7 +9,7 @@ import {
 } from "@console/connectors";
 import { db } from "@console/db";
 import { type EnvironmentClass, project } from "@console/db/schema";
-import type { Address, OtherValue, State, Version } from "@ui/variables";
+import type { Coordinate, OtherValue, State, Version } from "@ui/variables";
 import { and, eq } from "drizzle-orm";
 import { requireOrganization } from "@/lib/access";
 import { abilityFor, connectorFor, dial, noteDenial } from "@/lib/connectors";
@@ -141,8 +141,8 @@ export async function readState(projectId: string, env: string): Promise<Answer<
 export async function revealValues(
   projectId: string,
   env: string,
-  cells: Address[],
-): Promise<Answer<{ values: (Address & { value: string })[]; errors: [] }>> {
+  cells: Coordinate[],
+): Promise<Answer<{ values: (Coordinate & { value: string })[]; errors: [] }>> {
   return attempt(async () => {
     const reached = await reach(projectId, env);
     if (!reached.ok) return reached;
@@ -158,7 +158,7 @@ export async function revealValues(
 export async function setValue(
   projectId: string,
   env: string,
-  at: Address,
+  at: Coordinate,
   value: string,
   version: number,
 ): Promise<Answer<null>> {
@@ -177,7 +177,7 @@ export async function setValue(
 export async function setInEnvSource(
   projectId: string,
   env: string,
-  at: Address,
+  at: Coordinate,
   value: string,
 ): Promise<Answer<{ awaitingApproval: boolean }>> {
   return attempt(async () => {
@@ -213,7 +213,7 @@ export async function setInEnvSource(
 export async function removeValue(
   projectId: string,
   env: string,
-  at: Address,
+  at: Coordinate,
   version: number,
 ): Promise<Answer<null>> {
   return attempt(async () => {
@@ -231,7 +231,7 @@ export async function removeValue(
 export async function listVersions(
   projectId: string,
   env: string,
-  at: Address,
+  at: Coordinate,
 ): Promise<Answer<Version[]>> {
   return attempt(async () => {
     const reached = await reach(projectId, env);
@@ -292,9 +292,9 @@ export async function otherValues(
 export async function copyValues(
   projectId: string,
   env: string,
-  cells: (Address & { version: number })[],
+  cells: (Coordinate & { version: number })[],
 ): Promise<
-  Answer<{ results: (Address & { saved: boolean; conflict?: boolean; error?: string })[] }>
+  Answer<{ results: (Coordinate & { saved: boolean; conflict?: boolean; error?: string })[] }>
 > {
   return attempt(async () => {
     const reached = await reach(projectId, env);
