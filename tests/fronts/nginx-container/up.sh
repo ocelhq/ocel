@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-image=mirror.gcr.io/library/nginx:stable-alpine
+image=mirror.gcr.io/library/nginx:1.30-alpine
 conf=/etc/ocel-front-container
 state=/var/lib/ocel-front/nginx-container
 [ "$#" -gt 0 ] || {
