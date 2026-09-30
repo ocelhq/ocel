@@ -148,6 +148,31 @@ func TestShapeOfAPreviewHasItsOwnTierAndWildcard(t *testing.T) {
 	}
 }
 
+func TestShapeOfAnEphemeralPreviewPricesNoDatabaseOrBucketOfItsOwn(t *testing.T) {
+	client, _ := costServed(t)
+
+	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+		Manifest: shopManifest(),
+		Environment: &environmentv1.Environment{
+			Tier:      environmentv1.Tier_TIER_PREVIEW,
+			Lifecycle: environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL,
+			Identity:  "pr-42",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Shape() = %v", err)
+	}
+
+	for _, resource := range set.GetResources() {
+		if resource.GetName() == "main" || resource.GetName() == "uploads" {
+			t.Errorf("an ephemeral preview priced %s %s, which only an infra stack it never gets would provision", resource.GetType(), resource.GetId())
+		}
+	}
+	if counts := typeCounts(set); counts["aws_rds_cluster"] != 0 {
+		t.Errorf("an ephemeral preview priced %d aurora clusters, want none", counts["aws_rds_cluster"])
+	}
+}
+
 func TestShapeBehindAPIGatewayProvisionsARestAPIPerDeploy(t *testing.T) {
 	client, _ := costServed(t)
 

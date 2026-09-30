@@ -32,7 +32,7 @@ func (h *handlers) Shape(ctx context.Context, req *contractv1.ShapeRequest) (*co
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	resources, err := manifestResources(req.GetManifest())
+	resources, err := provisionedResources(spec, req.GetManifest())
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
@@ -53,6 +53,13 @@ func (h *handlers) Shape(ctx context.Context, req *contractv1.ShapeRequest) (*co
 	}
 	set.Source = provider.CostSource
 	return set, nil
+}
+
+func provisionedResources(spec provider.DeploySpec, manifest *contractv1.Manifest) ([]provider.Resource, error) {
+	if isEphemeralPreview(spec) {
+		return nil, nil
+	}
+	return manifestResources(manifest)
 }
 
 const (

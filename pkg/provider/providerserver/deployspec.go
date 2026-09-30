@@ -186,3 +186,7 @@ func fingerprintVariables(variables []*contractv1.ManifestVariable) string {
 	}
 	return hex.EncodeToString(h.Sum(nil))[:provider.FingerprintHexLen]
 }
+
+func isEphemeralPreview(spec provider.DeploySpec) bool {
+	return spec.Infra.IsZero()
+}
