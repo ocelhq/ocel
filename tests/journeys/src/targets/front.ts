@@ -90,8 +90,8 @@ export function frontStep(front: Front, step: FrontStep): string {
   return readFileSync(path.join(front.dir, step), "utf8");
 }
 
-export function coveredNames(zone: string): string[] {
-  return [`*.${zone}`];
+export function coveredNames(...zones: string[]): string[] {
+  return [...new Set(zones)].map((zone) => `*.${zone}`);
 }
 
 export function stepCommand(names: string[]): string {

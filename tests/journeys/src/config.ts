@@ -16,10 +16,14 @@ export const DEFAULT_BASE = "./ocel.json";
 export const VPS_BASE = "./ocel.vps.json";
 export const GCP_BASE = "./ocel.gcp.json";
 
-const VPS_DEFAULT_ZONE = "localhost";
+export const BOX_ZONE = "localhost";
 
 export function journeyZone(env: NodeJS.ProcessEnv): string {
-  return env.OCEL_JOURNEY_ZONE?.trim() || VPS_DEFAULT_ZONE;
+  return env.OCEL_JOURNEY_ZONE?.trim() || BOX_ZONE;
+}
+
+export function vpsZoneOf(cell: Cell, env: NodeJS.ProcessEnv): string {
+  return cell.variant.config.edge === "cloudflare" ? journeyZone(env) : BOX_ZONE;
 }
 
 export type Overlay = {
@@ -117,7 +121,7 @@ export function overlayFor(
       return {
         base: VPS_BASE,
         slug: cell.slug,
-        hostnames: hostnamesOf(cell, journeyZone(env)),
+        hostnames: hostnamesOf(cell, vpsZoneOf(cell, env)),
         ...registryOf(cell, env),
         ...(front ? { proxy: front.proxy } : {}),
         ...(edge ? { edge } : {}),

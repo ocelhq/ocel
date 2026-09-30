@@ -11,7 +11,7 @@ import {
   SECRET_TOKEN,
   UNCAPPED_BODY_BYTES,
 } from "../checks/context";
-import { journeyConfigIn, journeyZone } from "../config";
+import { BOX_ZONE, journeyConfigIn, journeyZone, vpsZoneOf } from "../config";
 import { appHostname, HARNESS_PREFIX, isStranded } from "../identity";
 import type { Lane, Phase } from "../matrix/types";
 import { exitedBadly, ocel, runOcel, spawnOcel, workTree } from "../ocel";
@@ -297,7 +297,7 @@ export class VpsTarget implements Target, ReleaseCycle {
       const said = await sshFed(
         target,
         target.user,
-        stepCommand(coveredNames(this.zone())),
+        stepCommand(coveredNames(BOX_ZONE, this.zone())),
         frontStep(front, "up.sh"),
       );
       const log = path.join(BOOTSTRAP_DIR, `${front.name}-up.log`);
@@ -622,9 +622,10 @@ export class VpsTarget implements Target, ReleaseCycle {
   private hostnamesOf(cell: CellUnderTest): Map<string, string> {
     return new Map(
       cell.fixture.apps.map((app) => {
-        const hostname = appHostname(app, cell.slug, this.zone());
+        const zone = vpsZoneOf(cell, process.env);
+        const hostname = appHostname(app, cell.slug, zone);
         if (!hostname) {
-          throw new Error(`${app} has no hostname on ${this.zone()}`);
+          throw new Error(`${app} has no hostname on ${zone}`);
         }
         return [app, hostname];
       }),
@@ -641,7 +642,7 @@ export class VpsTarget implements Target, ReleaseCycle {
     await cell.evidence.write(
       "deploy",
       "deployment.json",
-      `${JSON.stringify({ slug: cell.slug, zone: this.zone(), apps: Object.fromEntries(urls) }, null, 2)}\n`,
+      `${JSON.stringify({ slug: cell.slug, zone: vpsZoneOf(cell, process.env), apps: Object.fromEntries(urls) }, null, 2)}\n`,
     );
     return {
       baseUrl: (app) => {
@@ -664,7 +665,7 @@ export class VpsTarget implements Target, ReleaseCycle {
   ): Promise<Response> {
     const asked = typeof input === "string" || input instanceof URL ? input.toString() : input.url;
     const url = new URL(asked);
-    if (url.hostname === `${this.zone()}` || !url.hostname.endsWith(`.${this.zone()}`)) {
+    if (url.hostname === BOX_ZONE || !url.hostname.endsWith(`.${BOX_ZONE}`)) {
       return fetch(input, init);
     }
     const front = new URL(await session.gateway.serving(url.hostname));

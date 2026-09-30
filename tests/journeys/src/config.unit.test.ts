@@ -14,6 +14,7 @@ import {
   renderConfig,
   renderJsonConfig,
   VPS_BASE,
+  vpsZoneOf,
   writeJourneyConfig,
 } from "./config";
 import { evidence } from "./evidence";
@@ -54,6 +55,18 @@ describe("journeyZone", () => {
 
   it("takes the zone named", () => {
     expect(journeyZone({ OCEL_JOURNEY_ZONE: "journeys.example" })).toBe("journeys.example");
+  });
+});
+
+describe("vpsZoneOf", () => {
+  it("puts a cell Cloudflare fronts under the zone the run names", () => {
+    expect(vpsZoneOf(cell(deploy.node, cloudflareOnABox), { OCEL_JOURNEY_ZONE: "j.example" })).toBe(
+      "j.example",
+    );
+  });
+
+  it("keeps a cell nothing fronts under the box's own zone, whatever zone the run names", () => {
+    expect(vpsZoneOf(cell(deploy.node), { OCEL_JOURNEY_ZONE: "j.example" })).toBe("localhost");
   });
 });
 
@@ -137,6 +150,14 @@ describe("overlayFor", () => {
     expect(
       overlayFor(cell(deploy.node), "vps", { OCEL_AWS_VARIABLES_KEY: "arn:aws:kms:key/k" }),
     ).toEqual({
+      base: VPS_BASE,
+      slug: "j-1-deploy-node",
+      hostnames: { web: "web-j-1-deploy-node.localhost" },
+    });
+  });
+
+  it("keeps a vps cell nothing fronts off the run's zone, since no record would reach it there", () => {
+    expect(overlayFor(cell(deploy.node), "vps", { OCEL_JOURNEY_ZONE: "j.example" })).toEqual({
       base: VPS_BASE,
       slug: "j-1-deploy-node",
       hostnames: { web: "web-j-1-deploy-node.localhost" },
