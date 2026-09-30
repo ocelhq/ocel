@@ -226,7 +226,10 @@ export type EdgeDescriptor =
       cloudfront: EdgeOptions;
     };
 
-export type EdgeOptions = Record<string, never>;
+export interface EdgeOptions {
+  /** Reach the origin through a tunnel the origin opens to the edge, rather than at its address, so the origin takes no traffic from anything else. Cloudflare in front of a VPS box opens one. */
+  tunnel?: boolean;
+}
 
 /** Where each tier's values are read from. A tier left off reads its default: ocel's own store in your account for production and preview, the project's .env file for dev. */
 export interface EnvSourceConfig {

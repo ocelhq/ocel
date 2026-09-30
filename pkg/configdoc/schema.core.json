@@ -1376,7 +1376,12 @@
         {
           "additionalProperties": {
             "additionalProperties": false,
-            "properties": {},
+            "properties": {
+              "tunnel": {
+                "description": "Reach the origin through a tunnel the origin opens to the edge, rather than at its address, so the origin takes no traffic from anything else. Cloudflare in front of a VPS box opens one.",
+                "type": "boolean"
+              }
+            },
             "title": "EdgeOptions",
             "type": "object"
           },

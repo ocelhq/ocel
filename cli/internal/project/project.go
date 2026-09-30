@@ -19,7 +19,8 @@ type Provider struct {
 }
 
 type Edge struct {
-	Kind edge.Kind
+	Kind   edge.Kind
+	Tunnel bool
 }
 
 type DNS struct {
@@ -55,6 +56,7 @@ func (p *Project) EdgeSelection() *contractv1.EdgeSelection {
 	selection := &contractv1.EdgeSelection{
 		Kind:          string(p.EdgeKind()),
 		AllowDegraded: edge.NeedNames(p.AllowDegraded),
+		Tunnel:        p.Edge != nil && p.Edge.Tunnel,
 	}
 	if p.DNS != nil {
 		selection.Dns = &contractv1.Dns{Kind: p.DNS.Kind, Zone: p.DNS.Zone}
@@ -84,7 +86,7 @@ func normalize(doc *configdoc.Document, configPath string) (*Project, error) {
 
 	var front *Edge
 	if doc.Edge != nil {
-		front = &Edge{Kind: edge.Kind(doc.Edge.ID)}
+		front = &Edge{Kind: edge.Kind(doc.Edge.ID), Tunnel: doc.Edge.Options.Tunnel}
 	}
 
 	allowDegraded, err := normalizeAllowDegraded(doc.AllowDegraded)
