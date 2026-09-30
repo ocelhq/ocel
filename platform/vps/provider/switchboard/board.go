@@ -46,19 +46,17 @@ var (
 
 const HeardHeader = "X-Ocel-Heard"
 
-const (
-	connectingIPHeader = "Cf-Connecting-Ip"
-	visitorHeader      = "Cf-Visitor"
-)
-
-func isVisitedOverHTTP(r *http.Request) bool {
+func (v visitorHeaders) isOverHTTP(r *http.Request) bool {
 	if said := r.Header.Get("X-Forwarded-Proto"); said != "" {
 		return strings.EqualFold(said, "http")
+	}
+	if v.scheme == "" {
+		return false
 	}
 	var visitor struct {
 		Scheme string `json:"scheme"`
 	}
-	return json.Unmarshal([]byte(r.Header.Get(visitorHeader)), &visitor) == nil && strings.EqualFold(visitor.Scheme, "http")
+	return json.Unmarshal([]byte(r.Header.Get(v.scheme)), &visitor) == nil && strings.EqualFold(visitor.Scheme, "http")
 }
 
 type Board struct {
@@ -213,12 +211,13 @@ func (b *Board) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	throughTunnel := arrivedOver(r) == overTunnel
-	if b.table.Load().IsTunneled(r.Host) != throughTunnel {
+	table := b.table.Load()
+	if table.IsTunneled(r.Host) != throughTunnel {
 		named(w.Header())
 		w.WriteHeader(http.StatusMisdirectedRequest)
 		return
 	}
-	if throughTunnel && isVisitedOverHTTP(r) {
+	if throughTunnel && table.visitor.isOverHTTP(r) {
 		http.Redirect(w, r, "https://"+r.Host+r.URL.RequestURI(), http.StatusPermanentRedirect)
 		return
 	}
@@ -340,8 +339,10 @@ func (b *Board) forwarded(out *httputil.ProxyRequest) {
 	case hearsEdge:
 		out.Out.Header.Set("X-Forwarded-Host", out.In.Host)
 		out.Out.Header.Set("X-Forwarded-Proto", "https")
-		if visitor := out.In.Header.Get(connectingIPHeader); visitor != "" {
-			out.Out.Header.Set("X-Forwarded-For", visitor)
+		if header := b.table.Load().visitor.address; header != "" {
+			if visitor := out.In.Header.Get(header); visitor != "" {
+				out.Out.Header.Set("X-Forwarded-For", visitor)
+			}
 		}
 		return
 	case hearsScheme:

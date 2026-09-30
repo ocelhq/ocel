@@ -1,6 +1,7 @@
 package host
 
 import (
+	"cmp"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -273,6 +274,7 @@ type boxContainer struct {
 	joins    bool
 	migrates bool
 	restored bool
+	network  string
 	networks []userNetwork
 
 	user string
@@ -366,9 +368,11 @@ func marshalled(value any) string {
 	return string(written)
 }
 
-func networkCommand() string {
-	return "docker network inspect " + quoted(ProxyNetwork) + " >/dev/null 2>&1 || " +
-		"docker network create " + quoted(ProxyNetwork) + " >/dev/null"
+func networkCommand() string { return networkEnsured(ProxyNetwork) }
+
+func networkEnsured(name string) string {
+	return "docker network inspect " + quoted(name) + " >/dev/null 2>&1 || " +
+		"docker network create " + quoted(name) + " >/dev/null"
 }
 
 func (s boxContainer) run(sysctls ...string) []string {
@@ -381,7 +385,7 @@ func (s boxContainer) composeArgv(leading, sysctls []string) []string {
 	argv := append(slices.Clone(leading),
 		"--name", s.name,
 		"--restart", containerRestart,
-		"--network", ProxyNetwork,
+		"--network", cmp.Or(s.network, ProxyNetwork),
 	)
 	for _, joined := range s.networks {
 		argv = append(argv, "--network", joined.name)
@@ -440,6 +444,10 @@ func (s boxContainer) started() string {
 func (s boxContainer) networksPresent() string {
 	var checks string
 	for _, joined := range s.networks {
+		if joined.createdByOcel {
+			checks += networkEnsured(joined.name) + "\n"
+			continue
+		}
 		missing := fmt.Sprintf("option %q names the docker network %s, which this box does not have: start the proxy that creates it, or create it with docker network create %s",
 			joined.option, joined.name, joined.name)
 		checks += "if ! docker network inspect " + quoted(joined.name) + " >/dev/null 2>&1; then\n" +
@@ -558,7 +566,10 @@ func (f Front) placedRemovals() []removal {
 func proxyRemovals() []removal {
 	return []removal{
 		taking(KindContainer, caddy.Container, "ocel's front proxy"),
+		taking(KindContainer, TunnelContainer, "the tunnel to your edge"),
 		taking(KindContainer, SwitchboardContainer, "ocel's switchboard"),
+		taking(KindNetwork, TunnelNetwork, "kept while anything is attached"),
+		taking(KindDir, TunnelDir, ""),
 		taking(KindDir, switchboard.ControlDir, ""),
 		taking(KindDir, switchboard.FrontDir, ""),
 		taking(KindDir, ProxyData, "certificates and acme key"),

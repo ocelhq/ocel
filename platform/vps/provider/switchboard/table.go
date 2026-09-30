@@ -39,6 +39,12 @@ type Table struct {
 	routed    map[string]bool
 	admitted  map[string]bool
 	tunneled  map[string]bool
+	visitor   visitorHeaders
+}
+
+type visitorHeaders struct {
+	address string
+	scheme  string
 }
 
 type answer struct {
@@ -109,10 +115,12 @@ type tunneled struct {
 }
 
 type tunnel struct {
-	Edge    string `json:"edge"`
-	Name    string `json:"name"`
-	ID      string `json:"id,omitempty"`
-	Address string `json:"address,omitempty"`
+	Edge                 string `json:"edge"`
+	Name                 string `json:"name"`
+	ID                   string `json:"id,omitempty"`
+	Address              string `json:"address,omitempty"`
+	VisitorAddressHeader string `json:"visitorAddressHeader,omitempty"`
+	VisitorSchemeHeader  string `json:"visitorSchemeHeader,omitempty"`
 }
 
 type claimKey struct{ owner, pointer, app string }
@@ -182,6 +190,9 @@ func Read(document []byte) (*Table, error) {
 	}
 	for _, held := range read.Tunneled {
 		table.tunneled[held.Hostname] = true
+	}
+	if read.Tunnel != nil {
+		table.visitor = visitorHeaders{address: read.Tunnel.VisitorAddressHeader, scheme: read.Tunnel.VisitorSchemeHeader}
 	}
 	for _, hostClaim := range read.Claims {
 		table.admitted[hostClaim.Hostname] = true

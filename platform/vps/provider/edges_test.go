@@ -24,8 +24,9 @@ func TestABoxRunsTheTunnelTheCloudflareProxyReachesItThrough(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !p.Facts().RunsTunnels || front.Hooks().Tunnels == nil {
-		t.Errorf("Facts().RunsTunnels = %v with the Cloudflare proxy's tunnels %v, want a box reachable through the tunnel the proxy opens", p.Facts().RunsTunnels, front.Hooks().Tunnels)
+	if !p.Facts().RunsTunnels || front.Hooks().Tunnels == nil || !host.CanRunTunnelTo(cloudflare.Kind) {
+		t.Errorf("Facts().RunsTunnels = %v with the Cloudflare proxy's tunnels %v and a connector on the box %v, want a box reachable through the tunnel the proxy opens",
+			p.Facts().RunsTunnels, front.Hooks().Tunnels, host.CanRunTunnelTo(cloudflare.Kind))
 	}
 }
 

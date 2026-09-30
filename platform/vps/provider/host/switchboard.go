@@ -41,10 +41,10 @@ func switchboardBox(binary []byte, front Front) boxContainer {
 			"--front", switchboard.FrontSocket,
 			"--admit", switchboard.AdmitSocket,
 			"--table", live.RoutingTable,
-			"--tunnel-listen", ProxyNetwork + ":" + switchboard.TunnelListenPort,
+			"--tunnel-listen", TunnelNetwork + ":" + switchboard.TunnelListenPort,
 		}, front.listening()...),
 		ports:    front.published(),
-		networks: front.joined(),
+		networks: append(front.joined(), userNetwork{name: TunnelNetwork, createdByOcel: true}),
 		config:   contentSum(binary),
 		binds: []string{
 			SwitchboardDir + ":" + switchboardMount + ":ro",

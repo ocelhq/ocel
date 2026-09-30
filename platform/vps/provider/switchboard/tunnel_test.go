@@ -21,6 +21,7 @@ func tunneledRouting(t *testing.T, upstreams map[string]string, tunneled ...stri
 		held = append(held, map[string]string{"hostname": hostname, "owner": "ocel--site-0--production"})
 	}
 	table["tunneled"] = held
+	table["tunnel"] = map[string]string{"edge": "cloudflare", "name": "ocel-box", "id": "5a6b7c8d-1", "visitorAddressHeader": "Cf-Connecting-Ip", "visitorSchemeHeader": "Cf-Visitor"}
 	written, err := json.Marshal(table)
 	if err != nil {
 		t.Fatal(err)
@@ -166,5 +167,33 @@ func TestATunneledHostnameIsNeverAdmittedForACertificate(t *testing.T) {
 
 	if table.Admits("shop.example.com") || !table.Admits("blog.example.com") {
 		t.Errorf("Admits(shop) = %v, Admits(blog) = %v, want only blog admitted: the proxy on the box never answers a tunneled hostname, so it asks for no certificate for it", table.Admits("shop.example.com"), table.Admits("blog.example.com"))
+	}
+}
+
+func TestATunnelThatNamesNoVisitorHeadersForwardsNoVisitorTheEdgeClaims(t *testing.T) {
+	t.Parallel()
+	web := backend(t, "web")
+	document := tunneledRouting(t, map[string]string{"shop.example.com": web}, "shop.example.com")
+	var table map[string]any
+	if err := json.Unmarshal(document, &table); err != nil {
+		t.Fatal(err)
+	}
+	table["tunnel"] = map[string]string{"edge": "another-edge", "name": "ocel-box", "id": "5a6b7c8d-1"}
+	document, err := json.Marshal(table)
+	if err != nil {
+		t.Fatal(err)
+	}
+	board := servedWithTunnel(t, document)
+
+	answer := sent(t, noRedirects(), board.tunnel, "shop.example.com", "/", http.Header{
+		"Cf-Connecting-Ip": {"198.51.100.20"},
+		"Cf-Visitor":       {`{"scheme":"http"}`},
+	})
+
+	if answer.StatusCode != http.StatusOK {
+		t.Fatalf("the tunnel was answered %d, want it forwarded: a Cloudflare header on another edge's tunnel says nothing about the visitor", answer.StatusCode)
+	}
+	if got := answer.Header.Get("Seen-X-Forwarded-For"); got == "198.51.100.20" {
+		t.Errorf("the upstream saw X-Forwarded-For %q, want no visitor taken from a header the tunnel's edge does not send", got)
 	}
 }
