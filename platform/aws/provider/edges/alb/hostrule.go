@@ -90,12 +90,19 @@ func (s *stack) placeRule(ctx context.Context, c Clients, listener, hostname str
 		"every priority %s could take on the load balancer was held by another hostname, %d times over: remove a hostname behind it, or run this again", hostname, rulePlacements)
 }
 
-func (s *stack) hasRule(ctx context.Context, c Clients, rule string) bool {
+func (s *stack) hasRule(ctx context.Context, c Clients, rule string) (bool, error) {
 	if rule == "" {
-		return false
+		return false, nil
 	}
-	_, err := readActions(ctx, c, rule)
-	return err == nil
+	read, err := c.Balancers.DescribeRules(ctx, &elbv2.DescribeRulesInput{RuleArns: []string{rule}})
+	var gone *elbv2types.RuleNotFoundException
+	switch {
+	case errors.As(err, &gone):
+		return false, nil
+	case err != nil:
+		return false, fmt.Errorf("read the rule %s: %w", rule, err)
+	}
+	return len(read.Rules) > 0, nil
 }
 
 func readActions(ctx context.Context, c Clients, rule string) ([]elbv2types.Action, error) {

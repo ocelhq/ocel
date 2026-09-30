@@ -51,6 +51,7 @@ type fakeAWS struct {
 	nextRule     int
 	certificates []string
 	failModify   error
+	failDescribe error
 
 	trustStore       string
 	trustStatus      elbv2types.TrustStoreStatus
@@ -147,6 +148,10 @@ func (f *fakeAWS) DescribeRules(_ context.Context, in *elbv2.DescribeRulesInput,
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.count("DescribeRules")
+	if failure := f.failDescribe; failure != nil {
+		f.failDescribe = nil
+		return nil, failure
+	}
 	var out []elbv2types.Rule
 	for _, arn := range in.RuleArns {
 		rule, found := f.rules[arn]

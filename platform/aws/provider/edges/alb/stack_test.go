@@ -76,3 +76,16 @@ func TestARulePastTheListenersQuotaIsRefusedNamingTheServiceQuota(t *testing.T) 
 		t.Errorf("Claim past the listener's rule quota = %v, want a refusal naming the Service Quotas code to raise", err)
 	}
 }
+
+func TestAClaimWhoseRuleCannotBeReadFailsRatherThanRouteTheHostnameTwice(t *testing.T) {
+	f := newFakeAWS()
+	stack := claimedStack(t, f, router.Claim{Hostname: testHostname, App: "admin", Certificate: testCertificate})
+
+	f.failDescribe = errors.New("throttled")
+	if _, err := stack.Claim(context.Background(), router.Claim{Hostname: testHostname, App: "api", Certificate: testCertificate}); err == nil {
+		t.Error("Claim while its rule could not be read = nil, want the failure")
+	}
+	if hosts := f.ruleHosts(); !slices.Equal(hosts, []string{testHostname}) {
+		t.Errorf("the listener routes %v, want the one rule for %s: a read that failed is no proof the rule is gone, and a second rule leaves the first forwarding to the old app", hosts, testHostname)
+	}
+}

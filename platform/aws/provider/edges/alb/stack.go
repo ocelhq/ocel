@@ -103,8 +103,12 @@ func (s *stack) Claim(ctx context.Context, claim router.Claim) (edge.Origin, err
 	}
 	pointer := router.ResolvePointer(claim.Pointer)
 	held, found := s.recorded.Hosts[claim.Hostname]
+	routed, err := s.hasRule(ctx, c, held.Rule)
+	if err != nil {
+		return edge.Origin{}, err
+	}
 	switch {
-	case !found || !s.hasRule(ctx, c, held.Rule):
+	case !found || !routed:
 		rule, err := s.placeRule(ctx, c, listener.arn, claim.Hostname, s.readServedActions(pointer, claim.App))
 		if err != nil {
 			return edge.Origin{}, err
