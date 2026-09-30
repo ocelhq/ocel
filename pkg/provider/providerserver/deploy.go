@@ -331,6 +331,9 @@ func (r *deployRun) prepare(ctx context.Context, progress progress.Log) error {
 	if err := r.ensureBootstrap(ctx, progress); err != nil {
 		return err
 	}
+	if err := r.refuseOtherLifecycle(ctx); err != nil {
+		return err
+	}
 	if err := r.resolveServingDomains(ctx); err != nil {
 		return err
 	}
@@ -363,6 +366,17 @@ func (r *deployRun) prepare(ctx context.Context, progress progress.Log) error {
 		return err
 	}
 	return r.preflight(ctx, progress)
+}
+
+func (r *deployRun) refuseOtherLifecycle(ctx context.Context) error {
+	if r.spec.Tier != environment.TierPreview {
+		return nil
+	}
+	meta, err := stackrecords.ReadEnvironmentMeta(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, r.spec.Env)
+	if err != nil {
+		return err
+	}
+	return meta.RefuseOtherLifecycle(r.spec.Env, previewLifecycle(r.spec))
 }
 
 func (r *deployRun) ensureBootstrap(ctx context.Context, progress progress.Log) error {
@@ -1372,7 +1386,7 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 				return nil
 			}
 			return stackrecords.RecordEnvironmentMeta(ctx, r.provider.KeyValues(),
-				r.spec.Tier, r.spec.Slug, r.spec.Env, r.spec.Label)
+				r.spec.Tier, r.spec.Slug, r.spec.Env, r.spec.Label, previewLifecycle(r.spec))
 		})
 	}); err != nil {
 		return nil, err

@@ -83,7 +83,7 @@ func seedEnvironment(t *testing.T, vendor *fake.Provider, slug string, stacks ..
 	}
 }
 
-func TestListEnvironmentsNamesEveryPreviewAndItsLifecycle(t *testing.T) {
+func TestListEnvironmentsNamesTheLifecycleEachPreviewWasCreatedWith(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")
 	release := naming.NewRelease("b1", "")
@@ -91,26 +91,58 @@ func TestListEnvironmentsNamesEveryPreviewAndItsLifecycle(t *testing.T) {
 		naming.AppStack(stackrecords.ProductionEnv, "web", release),
 		naming.AppStack("pr-7", "web", release),
 		naming.AppStack("staging", "web", release),
+	)
+	recordEnvironment(t, vendor, "pr-7", stackrecords.LifecycleEphemeral)
+	recordEnvironment(t, vendor, "staging", stackrecords.LifecyclePersistent)
+
+	lifecycles := listedLifecycles(t, client)
+
+	if len(lifecycles) != 2 {
+		t.Fatalf("ListEnvironments() = %v, want the two previews and not production", lifecycles)
+	}
+	if lifecycles["pr-7"] != environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL {
+		t.Errorf("pr-7 is %s, want ephemeral: it was created ephemeral", lifecycles["pr-7"])
+	}
+	if lifecycles["staging"] != environmentv1.Lifecycle_LIFECYCLE_PERSISTENT {
+		t.Errorf("staging is %s, want persistent: it was created persistent, whether or not its infra stack is recorded yet", lifecycles["staging"])
+	}
+}
+
+func TestListEnvironmentsNamesNoLifecycleForAPreviewThatRecordedNone(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	release := naming.NewRelease("b1", "")
+	seedEnvironment(t, vendor, "shop",
+		naming.AppStack("staging", "web", release),
 		naming.InfraStack("staging"),
 	)
 
+	lifecycles := listedLifecycles(t, client)
+
+	if lifecycles["staging"] != environmentv1.Lifecycle_LIFECYCLE_UNSPECIFIED {
+		t.Errorf("staging is %s, want unspecified: nothing recorded its lifecycle, and an infra stack is not a record of one", lifecycles["staging"])
+	}
+}
+
+func recordEnvironment(t *testing.T, vendor *fake.Provider, env string, lifecycle stackrecords.Lifecycle) {
+	t.Helper()
+	if err := stackrecords.RecordEnvironmentMeta(context.Background(), vendor.KeyValues(),
+		environment.TierPreview, "shop", env, "", lifecycle); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func listedLifecycles(t *testing.T, client contractv1connect.ProviderServiceClient) map[string]environmentv1.Lifecycle {
+	t.Helper()
 	listed, err := client.ListEnvironments(context.Background(), &contractv1.ListEnvironmentsRequest{Slug: "shop"})
 	if err != nil {
 		t.Fatalf("ListEnvironments() error = %v", err)
-	}
-	if len(listed.GetEnvironments()) != 2 {
-		t.Fatalf("ListEnvironments() = %v, want the two previews and not production", listed.GetEnvironments())
 	}
 	lifecycles := map[string]environmentv1.Lifecycle{}
 	for _, environment := range listed.GetEnvironments() {
 		lifecycles[environment.GetIdentity()] = environment.GetLifecycle()
 	}
-	if lifecycles["pr-7"] != environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL {
-		t.Errorf("pr-7 is %s, want ephemeral: it has no infra stack", lifecycles["pr-7"])
-	}
-	if lifecycles["staging"] != environmentv1.Lifecycle_LIFECYCLE_PERSISTENT {
-		t.Errorf("staging is %s, want persistent: it has an infra stack", lifecycles["staging"])
-	}
+	return lifecycles
 }
 
 func TestListEnvironmentsReturnsWhatTheDeployRecordedAboutEachPreview(t *testing.T) {
@@ -124,11 +156,11 @@ func TestListEnvironmentsReturnsWhatTheDeployRecordedAboutEachPreview(t *testing
 	)
 	before := time.Now().Unix()
 	if err := stackrecords.RecordEnvironmentMeta(context.Background(), vendor.KeyValues(),
-		environment.TierPreview, "shop", "pr-7", "pr-123"); err != nil {
+		environment.TierPreview, "shop", "pr-7", "pr-123", stackrecords.LifecycleEphemeral); err != nil {
 		t.Fatal(err)
 	}
 	if err := stackrecords.RecordEnvironmentMeta(context.Background(), vendor.KeyValues(),
-		environment.TierPreview, "shop", "staging", ""); err != nil {
+		environment.TierPreview, "shop", "staging", "", stackrecords.LifecyclePersistent); err != nil {
 		t.Fatal(err)
 	}
 
@@ -163,13 +195,13 @@ func TestRecordingAPreviewAgainKeepsWhenItWasCreatedAndWhatItIsCalled(t *testing
 	_, vendor := contractServed(t, "1.0.0")
 	ctx := context.Background()
 	if err := stackrecords.RecordEnvironmentMeta(ctx, vendor.KeyValues(),
-		environment.TierPreview, "shop", "pr-7", "pr-123"); err != nil {
+		environment.TierPreview, "shop", "pr-7", "pr-123", stackrecords.LifecycleEphemeral); err != nil {
 		t.Fatal(err)
 	}
 	first := readEnvironmentMeta(t, vendor, "shop", "pr-7")
 
 	if err := stackrecords.RecordEnvironmentMeta(ctx, vendor.KeyValues(),
-		environment.TierPreview, "shop", "pr-7", ""); err != nil {
+		environment.TierPreview, "shop", "pr-7", "", stackrecords.LifecycleEphemeral); err != nil {
 		t.Fatal(err)
 	}
 	second := readEnvironmentMeta(t, vendor, "shop", "pr-7")
@@ -180,6 +212,22 @@ func TestRecordingAPreviewAgainKeepsWhenItWasCreatedAndWhatItIsCalled(t *testing
 	}
 	if second.Label != "pr-123" {
 		t.Errorf("the second deploy labelled the preview %q, want the label kept: this deploy names none", second.Label)
+	}
+}
+
+func TestRecordingAPreviewUnderTheOtherLifecycleIsRefusedAndKeepsTheFirst(t *testing.T) {
+	t.Parallel()
+	_, vendor := contractServed(t, "1.0.0")
+	recordEnvironment(t, vendor, "pr-7", stackrecords.LifecycleEphemeral)
+
+	err := stackrecords.RecordEnvironmentMeta(context.Background(), vendor.KeyValues(),
+		environment.TierPreview, "shop", "pr-7", "", stackrecords.LifecyclePersistent)
+
+	if code, refused := provider.RefusedCode(err); !refused || code != refusal.CodeInvalid {
+		t.Fatalf("RecordEnvironmentMeta() = %v, want a refusal: pr-7 was created ephemeral", err)
+	}
+	if meta := readEnvironmentMeta(t, vendor, "shop", "pr-7"); meta.Lifecycle != stackrecords.LifecycleEphemeral {
+		t.Errorf("pr-7 records %q, want the lifecycle it was created with", meta.Lifecycle)
 	}
 }
 
@@ -265,7 +313,7 @@ func TestRemoveEnvironmentDropsItsPointer(t *testing.T) {
 	outlived := naming.AppStack("pr-7", "web", releaseOf(t, buildIdentity(7)))
 	seedEnvironment(t, vendor, "shop", outlived, naming.InfraStack("pr-7"))
 	if err := stackrecords.RecordEnvironmentMeta(context.Background(), vendor.KeyValues(),
-		environment.TierPreview, "shop", "pr-7", "pr-123"); err != nil {
+		environment.TierPreview, "shop", "pr-7", "pr-123", stackrecords.LifecyclePersistent); err != nil {
 		t.Fatal(err)
 	}
 
