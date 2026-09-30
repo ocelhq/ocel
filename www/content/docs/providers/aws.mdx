@@ -21,6 +21,14 @@ Credentials come from the shell, the same ones `aws sts get-caller-identity` ans
 Then:
 
 ```bash
+ocel deploy
+```
+
+In a terminal, a first deploy that finds no Ocel infrastructure in the account offers to run
+`ocel bootstrap production`, and carries on once it has. Nothing is asked in a script or in CI,
+so run the bootstrap there first:
+
+```bash
 ocel bootstrap production
 ocel deploy
 ```

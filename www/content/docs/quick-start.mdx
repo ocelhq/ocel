@@ -29,15 +29,20 @@ ocel --version
 
 [Homebrew and npm](/docs/install) install the same binary.
 
-## Make a project deployable
+## Deploy
 
 ```bash
 npx create-next-app@latest my-app
 cd my-app
-ocel init --provider aws
+ocel deploy
 ```
 
-`ocel init` writes one file and adds the ocel SDK to your dependencies. It runs offline and signs you into nothing.
+The first deploy sets up what the project is missing, asks before each step, and then deploys:
+
+- **The project.** There is no `ocel.json` yet, so it asks where `my-app` should deploy, writes one, and adds the ocel SDK to your dependencies. The slug is the project's identity in your account. Every resource Ocel creates is keyed on it, so pick it once.
+- **The shared infrastructure.** Your account has none yet, so it offers to run `ocel bootstrap production`. Expect a few minutes for that one. Later deploys reuse it.
+
+Answer no to any of them and nothing changes; the deploy names the command to run when you're ready.
 
 ```json title="ocel.json"
 {
@@ -46,22 +51,6 @@ ocel init --provider aws
   "provider": "aws"
 }
 ```
-
-The slug is the project's identity in your account. Every resource Ocel creates is keyed on it, so pick it once. The `$schema` line is what your editor completes against.
-
-Pin the providers this CLI runs and commit the result, so every machine and every CI run fetches the same bytes:
-
-```bash
-ocel lock
-```
-
-## Deploy
-
-```bash
-ocel deploy
-```
-
-The first deploy finds no shared infrastructure in your account, shows the plan to create it, and waits for a yes. Expect a few minutes for that one. Later deploys reuse it.
 
 ```txt
 → web › Building
@@ -77,6 +66,18 @@ The first deploy finds no shared infrastructure in your account, shows the plan 
 ```
 
 Open the URL. That is your app, in your account.
+
+In a script or in CI nothing is asked, so a missing step stops the deploy and names the command
+that sets it up. Run them first there:
+
+```bash
+ocel init --provider aws
+ocel bootstrap production
+ocel deploy
+```
+
+`ocel lock` pins the providers this CLI runs; commit its result and every machine and every CI
+run fetches the same bytes.
 
 ## Change something and deploy again
 
