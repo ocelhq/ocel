@@ -6,7 +6,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/cli/internal/terminal"
 )
 
 type Kind int
@@ -58,7 +57,7 @@ func (s Setups) Ensure(ctx context.Context, policy consent.Policy, span *run.Spa
 		set[missing.Missing()] = true
 		span.Say(missing.Finding())
 		if setup.Prompt != nil {
-			granted, err := confirm(ctx, policy, span, setup.Prompt(missing))
+			granted, err := policy.Offer(ctx, span, setup.Prompt(missing))
 			if err != nil {
 				return err
 			}
@@ -70,13 +69,4 @@ func (s Setups) Ensure(ctx context.Context, policy consent.Policy, span *run.Spa
 			return err
 		}
 	}
-}
-
-func confirm(ctx context.Context, policy consent.Policy, span *run.Span, question string) (bool, error) {
-	if policy.Yes {
-		return true, nil
-	}
-	return span.Confirm(func() (bool, error) {
-		return terminal.NewPrompt(policy.Out, policy.In).Confirm(ctx, question)
-	})
 }
