@@ -24,6 +24,21 @@ destination spelled out:
 Then:
 
 ```bash
+ocel deploy
+```
+
+In a terminal, a first deploy that finds no Ocel infrastructure in the account offers to run
+`ocel bootstrap production`, and carries on once it has. A VPS serves apps on a hostname you
+own, so a project that declares none is shown the line to add to `ocel.json` and the deploy
+waits while you save it:
+
+```json
+"domains": { "production": "my-app.example.com" }
+```
+
+Nothing is asked in a script or in CI, so run the bootstrap and declare the hostname there first:
+
+```bash
 ocel bootstrap production
 ocel deploy
 ```
