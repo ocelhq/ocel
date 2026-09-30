@@ -21,6 +21,7 @@ import { deploy, sdk } from "./matrix/fixtures";
 import type { Fixture, Variant } from "./matrix/types";
 import {
   cloudflare,
+  cloudflareInFrontOfContainers,
   cloudflareOnABox,
   cloudflareOnGoogleCloud,
   cloudflareTunnel,
@@ -231,6 +232,20 @@ describe("overlayFor", () => {
     ).toMatchObject({
       base: GCP_BASE,
       edge: "cloudflare",
+      dns: "cloudflare",
+      hostnames: { web: expect.stringMatching(/\.j\.example$/) },
+    });
+  });
+
+  it("writes an aws cell's records through Cloudflare when Cloudflare forwards its containers to their origin", () => {
+    expect(
+      overlayFor(cell(deploy.node, cloudflareInFrontOfContainers), "aws", {
+        OCEL_JOURNEY_ZONE: "j.example",
+      }),
+    ).toMatchObject({
+      base: DEFAULT_BASE,
+      edge: "cloudflare",
+      compute: "container",
       dns: "cloudflare",
       hostnames: { web: expect.stringMatching(/\.j\.example$/) },
     });

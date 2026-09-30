@@ -238,3 +238,5 @@ const redirectedOverPlainHTTP: Check = {
 };
 
 export const SHIELDED_ORIGIN_CHECKS: Check[] = [refusedOverTLS, redirectedOverPlainHTTP];
+
+export const CLIENT_CERTIFICATE_CHECKS: Check[] = [refusedOverTLS];

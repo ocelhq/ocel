@@ -23,6 +23,7 @@ import type { Gap } from "./types";
 import {
   apiGateway,
   cloudflare,
+  cloudflareInFrontOfContainers,
   cloudflareOnABox,
   cloudflareOnGoogleCloud,
   cloudflareTunnel,
@@ -325,6 +326,12 @@ export const gaps: Gap[] = [
         fails: [step.deploy],
         skipsCell: true,
       },
+      {
+        on: ["aws.floci"],
+        variants: [cloudflareInFrontOfContainers],
+        fails: [step.deploy],
+        skipsCell: true,
+      },
     ],
   },
   {
@@ -358,6 +365,13 @@ export const gaps: Gap[] = [
       {
         on: ["vps"],
         variants: [cloudflareTunnel],
+        whileUnset: ["OCEL_JOURNEY_ZONE", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"],
+        fails: [step.deploy],
+        skipsCell: true,
+      },
+      {
+        on: ["aws"],
+        variants: [cloudflareInFrontOfContainers],
         whileUnset: ["OCEL_JOURNEY_ZONE", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"],
         fails: [step.deploy],
         skipsCell: true,
