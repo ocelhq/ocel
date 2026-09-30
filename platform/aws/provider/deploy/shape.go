@@ -34,7 +34,6 @@ const (
 
 	lambdaDefaultMemoryMB    = 128
 	lambdaDefaultEphemeralMB = 512
-	fargateDesiredCount      = 1
 )
 
 type ShapeScopes struct {
@@ -144,7 +143,7 @@ func (s costShape) container(scope string, app provider.AppEntry) {
 		"runtime_platform":         map[string]any{"cpu_architecture": fargateCPUArchitecture(app.Arch), "operating_system_family": "LINUX"},
 	})
 	s.plain(scope, tfECSService, app.App, map[string]any{
-		"desired_count":    fargateDesiredCount,
+		"desired_count":    app.Instances.Min,
 		"launch_type":      "FARGATE",
 		"cpu":              containerCPU,
 		"memory":           containerMemory,

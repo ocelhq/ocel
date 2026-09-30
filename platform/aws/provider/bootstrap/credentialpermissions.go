@@ -51,16 +51,20 @@ const (
 
 	managedSecretClusterTagKey = "aws:rds:primaryDBClusterArn"
 
-	containerClusterARN    = "arn:aws:ecs:*:*:cluster/ocel-*"
-	containerServiceARN    = "arn:aws:ecs:*:*:service/ocel-*/*"
-	containerBalancerARN   = "arn:aws:elasticloadbalancing:*:*:loadbalancer/app/ocel-*/*"
-	containerListenerARN   = "arn:aws:elasticloadbalancing:*:*:listener/app/ocel-*/*/*"
-	containerRuleARN       = "arn:aws:elasticloadbalancing:*:*:listener-rule/app/ocel-*/*/*/*"
-	containerTrustStoreARN = "arn:aws:elasticloadbalancing:*:*:truststore/ocel-*/*"
-	containerVPCOriginARN  = "arn:aws:cloudfront::*:vpcorigin/*"
-	vpcOriginLinkedRoleARN = "arn:aws:iam::*:role/aws-service-role/vpcorigin.cloudfront.amazonaws.com/*"
-	ecsLinkedRoleARN       = "arn:aws:iam::*:role/aws-service-role/ecs.amazonaws.com/*"
-	elbLinkedRoleARN       = "arn:aws:iam::*:role/aws-service-role/elasticloadbalancing.amazonaws.com/*"
+	containerClusterARN     = "arn:aws:ecs:*:*:cluster/ocel-*"
+	containerServiceARN     = "arn:aws:ecs:*:*:service/ocel-*/*"
+	containerBalancerARN    = "arn:aws:elasticloadbalancing:*:*:loadbalancer/app/ocel-*/*"
+	containerListenerARN    = "arn:aws:elasticloadbalancing:*:*:listener/app/ocel-*/*/*"
+	containerRuleARN        = "arn:aws:elasticloadbalancing:*:*:listener-rule/app/ocel-*/*/*/*"
+	containerTrustStoreARN  = "arn:aws:elasticloadbalancing:*:*:truststore/ocel-*/*"
+	containerVPCOriginARN   = "arn:aws:cloudfront::*:vpcorigin/*"
+	vpcOriginLinkedRoleARN  = "arn:aws:iam::*:role/aws-service-role/vpcorigin.cloudfront.amazonaws.com/*"
+	ecsLinkedRoleARN        = "arn:aws:iam::*:role/aws-service-role/ecs.amazonaws.com/*"
+	ecsScalingLinkedRoleARN = "arn:aws:iam::*:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/*"
+
+	scalableTargetARN = "arn:aws:application-autoscaling:*:*:scalable-target/*"
+	scalingAlarmARN   = "arn:aws:cloudwatch:*:*:alarm:TargetTracking-service/ocel-*"
+	elbLinkedRoleARN  = "arn:aws:iam::*:role/aws-service-role/elasticloadbalancing.amazonaws.com/*"
 
 	bootstrapEventSourceARN = "arn:aws:lambda:*:*:event-source-mapping:*"
 
@@ -192,6 +196,13 @@ func passedToLambda(resourceTagged bool) map[string]any {
 
 func passedToECSTasks() map[string]any {
 	return passedTo(ecsTasksPrincipal, true)
+}
+
+func scalesECSServices(tagged map[string]any) map[string]any {
+	return mergeConditions(tagged, map[string]any{"StringEquals": map[string]any{
+		"application-autoscaling:service-namespace":  "ecs",
+		"application-autoscaling:scalable-dimension": "ecs:service:DesiredCount",
+	}})
 }
 
 func linkedRoleFor(service string) map[string]any {
@@ -461,6 +472,40 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 			},
 			Resources: []string{containerServiceARN},
 			Condition: taggedByOcel(),
+		},
+		{
+			Actions:   []string{"application-autoscaling:RegisterScalableTarget", "application-autoscaling:TagResource"},
+			Resources: []string{scalableTargetARN},
+			Condition: scalesECSServices(taggedOnCreate()),
+		},
+		{
+			Actions: []string{
+				"application-autoscaling:DeleteScalingPolicy",
+				"application-autoscaling:DeregisterScalableTarget",
+				"application-autoscaling:PutScalingPolicy",
+				"application-autoscaling:UntagResource",
+			},
+			Resources: []string{scalableTargetARN},
+			Condition: scalesECSServices(taggedByOcel()),
+		},
+		{
+			Actions: []string{
+				"application-autoscaling:DescribeScalableTargets",
+				"application-autoscaling:DescribeScalingActivities",
+				"application-autoscaling:DescribeScalingPolicies",
+				"application-autoscaling:ListTagsForResource",
+				"cloudwatch:DescribeAlarms",
+			},
+			Resources: []string{UnscopedResource},
+		},
+		{
+			Actions:   []string{"cloudwatch:DeleteAlarms", "cloudwatch:PutMetricAlarm"},
+			Resources: []string{scalingAlarmARN},
+		},
+		{
+			Actions:   []string{"iam:CreateServiceLinkedRole"},
+			Resources: []string{ecsScalingLinkedRoleARN},
+			Condition: linkedRoleFor("ecs.application-autoscaling.amazonaws.com"),
 		},
 		{
 			Actions: []string{

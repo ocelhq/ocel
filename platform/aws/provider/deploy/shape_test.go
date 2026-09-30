@@ -44,7 +44,7 @@ func shapeRequest(t *testing.T) provider.ShapeRequest {
 			Infra: naming.InfraStack("prod"),
 			Apps: []provider.AppEntry{
 				{App: "web", Stack: naming.AppStack("prod", "web", release), Manifest: &contractv1.ManifestApp{Name: "web", Framework: &contractv1.Framework{Name: "next"}, Artifact: &contractv1.ManifestApp_Serverless{Serverless: &contractv1.ServerlessArtifact{}}}},
-				{App: "api", Stack: naming.AppStack("prod", "api", release), Manifest: &contractv1.ManifestApp{Name: "api", Framework: &contractv1.Framework{Name: "go"}, Artifact: &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{}}}},
+				{App: "api", Stack: naming.AppStack("prod", "api", release), Manifest: &contractv1.ManifestApp{Name: "api", Framework: &contractv1.Framework{Name: "go"}, Artifact: &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{}}}, Instances: provider.Instances{Min: 1, Max: 1}},
 			},
 		},
 		Resources: []provider.Resource{
@@ -207,6 +207,18 @@ func TestShapeScopesAppsUnderTheEnvironmentAndTheContainerInfraAsShared(t *testi
 	}
 	if set.GetResources()[0].GetRegion() != "us-east-1" {
 		t.Errorf("region = %q", set.GetResources()[0].GetRegion())
+	}
+}
+
+func TestAContainerAppIsBilledForTheTasksItsFloorKeepsRunning(t *testing.T) {
+	t.Parallel()
+
+	req := shapeRequest(t)
+	req.Deploy.Apps[1].Instances = provider.Instances{Min: 3, Max: 8}
+	set := shaped(t, nil, req)
+
+	if count := shapedNamed(t, set, "aws_ecs_service", "api")["desired_count"]; count != float64(3) {
+		t.Errorf("the service is shaped at %v tasks, want the 3 its floor keeps running", count)
 	}
 }
 

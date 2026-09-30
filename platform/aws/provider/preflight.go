@@ -17,6 +17,9 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPrefl
 	if err := refusePublicBuckets(pre); err != nil {
 		return err
 	}
+	if err := refuseContainersScaledToZero(pre); err != nil {
+		return err
+	}
 	if err := p.nagStaleEdgeKey(ctx, pre); err != nil {
 		return err
 	}
@@ -104,6 +107,18 @@ func refusePublicBuckets(pre provider.DeployPreflight) error {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"bucket %s asks to be public, and this provider provisions its buckets with public access blocked at the account's edge: serve the objects through your app or a signed url instead, or drop `public` from %s",
 			resource.Name, resource.Name)
+	}
+	return nil
+}
+
+func refuseContainersScaledToZero(pre provider.DeployPreflight) error {
+	for _, app := range pre.Deploy.Apps {
+		if app.Compute() != provider.ComputeContainer || app.Instances.Min > 0 {
+			continue
+		}
+		return refusal.Refuse(refusal.CodeInvalid,
+			"app %s asks for minInstances 0, and a container app on this provider scales on the requests its load balancer counts per task, which a service with no task never receives: give %s minInstances 1 or more",
+			app.App, app.App)
 	}
 	return nil
 }

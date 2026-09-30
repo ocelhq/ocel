@@ -16,6 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	elbv2 "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
 	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
+	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/appautoscaling"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ecs"
 	iam "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/lb"
@@ -58,6 +59,13 @@ const (
 	outputKeyContainerPhysical = "physical"
 
 	maxRulePriority = 50000
+
+	scalingNamespace          = "ecs"
+	scalingDimension          = "ecs:service:DesiredCount"
+	requestsPerTaskPerMinute  = 1000
+	scaleOutCooldownSeconds   = 60
+	scaleInCooldownSeconds    = 300
+	requestCountPerTargetType = "ALBRequestCountPerTarget"
 )
 
 type RulesAPI interface {
@@ -70,6 +78,7 @@ type containerWork struct {
 	arch        string
 	image       string
 	healthPath  string
+	instances   provider.Instances
 	env         map[string]string
 	tags        map[string]string
 	boundary    string
@@ -193,6 +202,7 @@ func (r *release) checkContainer(spec provider.StackSpec) (*containerWork, error
 		arch:       app.Arch,
 		image:      app.Image,
 		healthPath: app.HealthCheckPath,
+		instances:  app.Instances,
 		env:        env,
 		tags:       spec.Tags,
 		boundary:   r.cfg.AppBoundaryARN,
@@ -461,11 +471,15 @@ func (w *containerWork) run(ctx *pulumi.Context) error {
 		return err
 	}
 
+	serviceOptions := []pulumi.ResourceOption{pulumi.DependsOn([]pulumi.Resource{rule})}
+	if w.scales() {
+		serviceOptions = append(serviceOptions, pulumi.IgnoreChanges([]string{"desiredCount"}))
+	}
 	service, err := ecs.NewService(ctx, naming.ResourceID(naming.KindService, containerLocalName), &ecs.ServiceArgs{
 		Name:                          pulumi.String(physical),
 		Cluster:                       pulumi.String(w.infra.Cluster),
 		TaskDefinition:                task.Arn,
-		DesiredCount:                  pulumi.Int(1),
+		DesiredCount:                  pulumi.Int(w.instances.Min),
 		LaunchType:                    pulumi.String("FARGATE"),
 		HealthCheckGracePeriodSeconds: pulumi.Int(healthGraceSeconds),
 		WaitForSteadyState:            pulumi.Bool(true),
@@ -480,15 +494,77 @@ func (w *containerWork) run(ctx *pulumi.Context) error {
 			ContainerPort:  pulumi.Int(containerPortNumber),
 		}},
 		Tags: tags,
-	}, pulumi.DependsOn([]pulumi.Resource{rule}))
+	}, serviceOptions...)
 	if err != nil {
 		return err
+	}
+	if w.scales() {
+		if err := w.scaleOnRequests(ctx, service, group, tags); err != nil {
+			return err
+		}
 	}
 	ctx.Export(w.app, pulumi.Map{
 		outputKeyContainerURL:      pulumi.String(w.readServiceURL()),
 		outputKeyContainerPhysical: service.Name,
 	})
 	return nil
+}
+
+func (w *containerWork) scales() bool { return w.instances.Max > w.instances.Min }
+
+func (w *containerWork) scaleOnRequests(ctx *pulumi.Context, service *ecs.Service, group *lb.TargetGroup, tags pulumi.StringMap) error {
+	cluster, found := strings.CutPrefix(arnResource(w.infra.Cluster), "cluster/")
+	if !found {
+		return fmt.Errorf("the container cluster %q is not an ECS cluster ARN, so %s's service has no scalable target to name", w.infra.Cluster, w.app)
+	}
+	balancer, err := balancerARNSuffix(w.readListenerArn())
+	if err != nil {
+		return err
+	}
+	resourceID := pulumi.Sprintf("service/%s/%s", cluster, service.Name)
+	target, err := appautoscaling.NewTarget(ctx, naming.ResourceID(naming.KindService, containerLocalName, "scaling"), &appautoscaling.TargetArgs{
+		ServiceNamespace:  pulumi.String(scalingNamespace),
+		ScalableDimension: pulumi.String(scalingDimension),
+		ResourceId:        resourceID,
+		MinCapacity:       pulumi.Int(w.instances.Min),
+		MaxCapacity:       pulumi.Int(w.instances.Max),
+		Tags:              tags,
+	})
+	if err != nil {
+		return err
+	}
+	_, err = appautoscaling.NewPolicy(ctx, naming.ResourceID(naming.KindService, containerLocalName, "scaling", "requests"), &appautoscaling.PolicyArgs{
+		PolicyType:        pulumi.String("TargetTrackingScaling"),
+		ServiceNamespace:  target.ServiceNamespace,
+		ScalableDimension: target.ScalableDimension,
+		ResourceId:        target.ResourceId,
+		TargetTrackingScalingPolicyConfiguration: &appautoscaling.PolicyTargetTrackingScalingPolicyConfigurationArgs{
+			TargetValue:      pulumi.Float64(requestsPerTaskPerMinute),
+			ScaleOutCooldown: pulumi.Int(scaleOutCooldownSeconds),
+			ScaleInCooldown:  pulumi.Int(scaleInCooldownSeconds),
+			PredefinedMetricSpecification: &appautoscaling.PolicyTargetTrackingScalingPolicyConfigurationPredefinedMetricSpecificationArgs{
+				PredefinedMetricType: pulumi.String(requestCountPerTargetType),
+				ResourceLabel:        pulumi.Sprintf("%s/%s", balancer, group.ArnSuffix),
+			},
+		},
+	})
+	return err
+}
+
+func arnResource(arn string) string {
+	fields := strings.SplitN(arn, ":", 6)
+	if len(fields) < 6 {
+		return ""
+	}
+	return fields[5]
+}
+
+func balancerARNSuffix(listener string) (string, error) {
+	parts := strings.Split(arnResource(listener), "/")
+	if len(parts) != 5 || parts[0] != "listener" || parts[1] != "app" {
+		return "", fmt.Errorf("the container front's listener %q is not an application load balancer listener ARN, so requests per task cannot be counted against it", listener)
+	}
+	return strings.Join(parts[1:4], "/"), nil
 }
 
 func (w *containerWork) taggedWith(extra map[string]string) map[string]string {
