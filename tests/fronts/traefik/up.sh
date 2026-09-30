@@ -3,7 +3,7 @@ set -eu
 
 traefik=mirror.gcr.io/library/traefik:v3.6
 pebble=ghcr.io/letsencrypt/pebble:latest
-mine=mirror.gcr.io/library/nginx:stable-alpine
+mine=mirror.gcr.io/library/nginx:1.30-alpine
 conf=/etc/ocel-front-traefik
 state=/var/lib/ocel-front/traefik
 
