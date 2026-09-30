@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
 
 func NewSetup() prerequisite.Setup {
@@ -20,14 +21,14 @@ func NewSetup() prerequisite.Setup {
 }
 
 func runSetup(ctx context.Context, policy consent.Policy, span *run.Span, missing prerequisite.MissingError) error {
-	var unnamed readiness.NoHostnameError
-	if !errors.As(missing, &unnamed) {
+	var noHostname readiness.NoHostnameError
+	if !errors.As(missing, &noHostname) {
 		return missing
 	}
 	var saved bool
 	err := span.Ask(func() (err error) {
-		snippet := hostnameSnippet(unnamed.ConfigPath, unnamed.Slug+".example.com")
-		fmt.Fprintf(policy.Out, "Add this to %s:\n\n    %s\n\n", filepath.Base(unnamed.ConfigPath), strings.ReplaceAll(snippet, "\n", "\n    "))
+		snippet := hostnameSnippet(noHostname.ConfigPath, noHostname.Slug+".example.com")
+		fmt.Fprintf(policy.Out, "Add this to %s:\n\n    %s\n\n", filepath.Base(noHostname.ConfigPath), strings.ReplaceAll(snippet, "\n", "\n    "))
 		saved, err = terminal.NewPrompt(policy.Out, policy.In).AwaitEnter(ctx, "Press Enter once it's saved (or n to stop)")
 		return err
 	})
@@ -37,6 +38,15 @@ func runSetup(ctx context.Context, policy consent.Policy, span *run.Span, missin
 	if !saved {
 		return prerequisite.SetupDeclinedError{Missing: missing}
 	}
+	reloaded, err := project.Load(ctx, filepath.Dir(noHostname.ConfigPath), noHostname.ConfigPath)
+	if err != nil {
+		return err
+	}
+	hostnames := reloaded.HostnameNames(environmentv1.Tier_TIER_PRODUCTION)
+	if len(hostnames) == 0 {
+		return missing
+	}
+	span.Say(fmt.Sprintf("Read %s from %s", strings.Join(hostnames, ", "), filepath.Base(noHostname.ConfigPath)))
 	return nil
 }
 
