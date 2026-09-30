@@ -40,6 +40,7 @@ var mockARNs = map[string]string{
 	"aws:lb/listenerRule:ListenerRule":      "listener-rule/app/",
 	"aws:lb/targetGroup:TargetGroup":        "targetgroup/",
 	"aws:cloudwatch/logGroup:LogGroup":      "log-group:",
+	"aws:acm/certificate:Certificate":       "certificate/",
 }
 
 type inputRecorder struct {

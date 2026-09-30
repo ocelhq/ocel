@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/alb"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	elbv2 "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
 	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
@@ -79,6 +81,25 @@ type containerWork struct {
 	service     naming.Coordinate
 	role        naming.Coordinate
 	infra       containerInfra
+	public      bool
+}
+
+func (w *containerWork) listener() string {
+	if w.public {
+		return w.infra.PublicListener
+	}
+	return w.infra.Listener
+}
+
+func (w *containerWork) url() string {
+	if w.public {
+		return "https://" + w.infra.PublicHost
+	}
+	return "http://" + w.infra.OriginHost
+}
+
+func routedPublicly(spec provider.StackSpec) bool {
+	return spec.App != nil && spec.App.Router == alb.Kind
 }
 
 var fargateCPUArchitectures = map[string]string{
@@ -152,7 +173,11 @@ func (r *release) checkContainer(spec provider.StackSpec) (*containerWork, error
 	if err != nil {
 		return nil, err
 	}
-	env, err := containerEnv(app.App, app.Values, r.cfg.OriginSecret, r.cfg.PreviousOriginSecret, bundle.Live)
+	guard, previousGuard := r.cfg.OriginSecret, r.cfg.PreviousOriginSecret
+	if routedPublicly(spec) {
+		guard, previousGuard = "", ""
+	}
+	env, err := containerEnv(app.App, app.Values, guard, previousGuard, bundle.Live)
 	if err != nil {
 		return nil, err
 	}
@@ -177,6 +202,7 @@ func (r *release) checkContainer(spec provider.StackSpec) (*containerWork, error
 		values:     values,
 		service:    serviceCoordinate(project, stack),
 		role:       roleCoordinate(project, stack),
+		public:     routedPublicly(spec),
 	}, nil
 }
 
@@ -246,7 +272,7 @@ func routesContainer(rule elbv2types.Rule, physical string) bool {
 }
 
 func (r *release) placeRule(ctx context.Context, work *containerWork) error {
-	taken, err := takenPriorities(ctx, r.cfg.Rules, work.infra.Listener, work.physical())
+	taken, err := takenPriorities(ctx, r.cfg.Rules, work.listener(), work.physical())
 	if err != nil {
 		return err
 	}
@@ -287,7 +313,9 @@ func containerEnv(app string, values provider.AppValues, originSecret, previousS
 			app, containerPortEnv, containerPort, containerPortEnv)
 	}
 	env[containerPortEnv] = containerPort
-	env[edge.OriginSecretVar] = originSecret
+	if originSecret != "" {
+		env[edge.OriginSecretVar] = originSecret
+	}
 	if previousSecret != "" {
 		env[edge.OriginSecretPreviousVar] = previousSecret
 	}
@@ -411,7 +439,7 @@ func (w *containerWork) run(ctx *pulumi.Context) error {
 		return err
 	}
 	rule, err := lb.NewListenerRule(ctx, naming.ResourceID(naming.KindService, containerLocalName, "rule"), &lb.ListenerRuleArgs{
-		ListenerArn: pulumi.String(w.infra.Listener),
+		ListenerArn: pulumi.String(w.listener()),
 		Priority:    pulumi.Int(w.priority),
 		Conditions: lb.ListenerRuleConditionArray{
 			&lb.ListenerRuleConditionArgs{HttpHeader: &lb.ListenerRuleConditionHttpHeaderArgs{
@@ -457,7 +485,7 @@ func (w *containerWork) run(ctx *pulumi.Context) error {
 		return err
 	}
 	ctx.Export(w.app, pulumi.Map{
-		outputKeyContainerURL:      pulumi.String("http://" + w.infra.OriginHost),
+		outputKeyContainerURL:      pulumi.String(w.url()),
 		outputKeyContainerPhysical: service.Name,
 	})
 	return nil
@@ -524,7 +552,11 @@ func (r *release) provisionContainer(ctx context.Context, spec provider.StackSpe
 	if work.transformed, err = transformStackSpec(ctx, r.cfg.Transform, spec); err != nil {
 		return provider.StackResult{}, err
 	}
-	infra, err := r.ensureContainerInfra(ctx, spec.Ref, progress)
+	public, err := publicRanges(spec)
+	if err != nil {
+		return provider.StackResult{}, err
+	}
+	infra, err := r.ensureContainerInfra(ctx, spec.Ref, public, progress)
 	if err != nil {
 		return provider.StackResult{}, err
 	}
@@ -560,6 +592,21 @@ func (r *release) runContainer(ctx context.Context, spec provider.StackSpec, wor
 	return provider.StackResult{}, fmt.Errorf("place %s's listener rule: every priority it picked was claimed by another deploy before it could take it, %d times over: %w", work.app, rulePlacements, err)
 }
 
+func publicRanges(spec provider.StackSpec) ([]string, error) {
+	if !routedPublicly(spec) {
+		return nil, nil
+	}
+	var ranges []string
+	if spec.Edge != nil {
+		ranges = spec.Edge.Facts().OriginFacingRanges
+	}
+	if len(ranges) == 0 {
+		return nil, refusal.Refuse(refusal.CodeInvalid,
+			"app %s is forwarded to a public load balancer, and the edge in front of it names no addresses it forwards from, so the load balancer would answer the whole internet", spec.App.App)
+	}
+	return ranges, nil
+}
+
 func (r *release) abandonContainer(ctx context.Context, ref provider.StackRef, progress progress.Log) error {
 	if err := r.automation.Destroy(ctx, ref, progress); err != nil {
 		return err
@@ -572,15 +619,20 @@ func (r *release) planContainer(ctx context.Context, spec provider.StackSpec, pr
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	if !present {
+	if !present || (routedPublicly(spec) && infra.PublicListener == "") {
+		shared := provider.ChangeGroup{
+			Kind:   provider.StackGroupKind,
+			Name:   containerInfraRef(spec.Ref.Tier).Name.String(),
+			Action: provider.ActionCreate,
+			Reason: "the first container deploy in the " + string(spec.Ref.Tier) + " tier provisions the load balancer and cluster every container app in it shares",
+			Slow:   true,
+		}
+		if present {
+			shared.Action = provider.ActionUpdate
+			shared.Reason = "the first container app in the " + string(spec.Ref.Tier) + " tier an edge forwards to raises the public load balancer every such app shares"
+		}
 		return provider.Plan{Groups: []provider.ChangeGroup{
-			{
-				Kind:   provider.StackGroupKind,
-				Name:   containerInfraRef(spec.Ref.Tier).Name.String(),
-				Action: provider.ActionCreate,
-				Reason: "the first container deploy in the " + string(spec.Ref.Tier) + " tier provisions the load balancer and cluster every container app in it shares",
-				Slow:   true,
-			},
+			shared,
 			{
 				Kind:   provider.StackGroupKind,
 				Name:   spec.Ref.Name.String(),

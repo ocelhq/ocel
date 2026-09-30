@@ -53,6 +53,9 @@ const (
 	outputKeyCluster       = "cluster"
 	outputKeyExecutionRole = "executionRoleArn"
 	outputKeyLogGroup      = "logGroup"
+
+	outputKeyPublicListener = "publicListenerArn"
+	outputKeyPublicHost     = "publicHost"
 )
 
 type containerInfra struct {
@@ -65,12 +68,16 @@ type containerInfra struct {
 	Cluster       string
 	ExecutionRole string
 	LogGroup      string
+
+	PublicListener string
+	PublicHost     string
 }
 
 type containerInfraWork struct {
 	tier     environment.Tier
 	boundary string
 	tags     map[string]string
+	public   []string
 	outputs  auto.OutputMap
 }
 
@@ -155,7 +162,7 @@ func (r *Stacks) readContainerInfra(ctx context.Context, tier environment.Tier) 
 	return decoded, err == nil, err
 }
 
-func (r *Stacks) ensureContainerInfra(ctx context.Context, ref provider.StackRef, progress progress.Log) (containerInfra, error) {
+func (r *Stacks) ensureContainerInfra(ctx context.Context, ref provider.StackRef, public []string, progress progress.Log) (containerInfra, error) {
 	r.containerInfraLock.Lock()
 	defer r.containerInfraLock.Unlock()
 	tier := ref.Tier
@@ -167,19 +174,22 @@ func (r *Stacks) ensureContainerInfra(ctx context.Context, ref provider.StackRef
 	if err != nil {
 		return containerInfra{}, err
 	}
-	if present {
+	if present && (len(public) == 0 || infra.PublicListener != "") {
 		if err := awsports.WriteContainerFront(ctx, owner.cfg.KeyValues, tier, infra.front()); err != nil {
 			return containerInfra{}, err
 		}
 		return infra, r.claimContainerInfra(ctx, ref)
 	}
-	if progress != nil {
+	if progress != nil && present {
+		progress.Say("Raising the public load balancer of the " + string(tier) + " tier: the edge in front of a container app forwards its hostnames there")
+	} else if progress != nil {
 		progress.Say("Provisioning the shared container infrastructure for the " + string(tier) + " tier: one load balancer and one cluster every container app in it runs behind")
 	}
 	work := &containerInfraWork{
 		tier:     tier,
 		boundary: owner.cfg.AppBoundaryARN,
 		tags:     containerInfraTags(tier),
+		public:   public,
 	}
 	spec := provider.StackSpec{
 		Ref:         containerInfraRef(tier),
@@ -359,6 +369,14 @@ func (w *containerInfraWork) run(ctx *pulumi.Context) error {
 	if err != nil {
 		return err
 	}
+	fronts := pulumi.StringArray{front.ID()}
+	var public *ec2.SecurityGroup
+	if len(w.public) > 0 {
+		if public, err = w.publicSecurityGroup(ctx, vpc.Id, tags); err != nil {
+			return err
+		}
+		fronts = append(fronts, public.ID())
+	}
 	tasks, err := ec2.NewSecurityGroup(ctx, naming.ResourceID(naming.KindService, "tasks", "security-group"), &ec2.SecurityGroupArgs{
 		Name:        pulumi.String(containerInfraName(tier, "tasks")),
 		Description: pulumi.String("Ocel: the tasks every container app in the " + string(tier) + " class runs as"),
@@ -367,7 +385,7 @@ func (w *containerInfraWork) run(ctx *pulumi.Context) error {
 			Protocol:       pulumi.String("tcp"),
 			FromPort:       pulumi.Int(containerPortNumber),
 			ToPort:         pulumi.Int(containerPortNumber),
-			SecurityGroups: pulumi.StringArray{front.ID()},
+			SecurityGroups: fronts,
 			Description:    pulumi.String("Ocel: only the load balancer reaches a task"),
 		}},
 		Egress: ec2.SecurityGroupEgressArray{&ec2.SecurityGroupEgressArgs{
@@ -471,7 +489,10 @@ func (w *containerInfraWork) run(ctx *pulumi.Context) error {
 	ctx.Export(outputKeyCluster, cluster.Arn)
 	ctx.Export(outputKeyExecutionRole, execution.Arn)
 	ctx.Export(outputKeyLogGroup, logs.Name)
-	return nil
+	if public == nil {
+		return nil
+	}
+	return w.runPublicFront(ctx, public, subnets.Ids, tags)
 }
 
 func decodeContainerInfra(outputs auto.OutputMap) (containerInfra, error) {
@@ -497,6 +518,8 @@ func decodeContainerInfra(outputs auto.OutputMap) (containerInfra, error) {
 			return containerInfra{}, err
 		}
 	}
+	infra.PublicListener, _ = fields[outputKeyPublicListener].(string)
+	infra.PublicHost, _ = fields[outputKeyPublicHost].(string)
 	encoded, err := requireStringField(fields, ContainersSlug, outputKeySubnets)
 	if err != nil {
 		return containerInfra{}, err
