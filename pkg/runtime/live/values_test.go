@@ -335,9 +335,25 @@ func TestValuesAreFetchedAndPushedToNodeAsGenerations(t *testing.T) {
 
 		clock = clock.Add(StalenessBound)
 		eventually(t, "a later invocation to retry the refresh", func() bool {
+			if source.count() >= 3 {
+				return true
+			}
 			l.Refresh(context.Background())
-			return source.count() >= 3
+			return false
 		})
+		if got := source.count(); got != 3 {
+			t.Fatalf("fetches = %d, want exactly one retry once the failed refresh settled", got)
+		}
+
+		if msgs := out.messages(t); len(msgs) != 1 {
+			t.Errorf("pushed %+v after the retry failed, want only the generation that resolved", msgs)
+		}
+		if got := l.Generation(); got != 1 {
+			t.Errorf("generation = %d after the retry failed, want 1", got)
+		}
+		if got := source.count(); got != 3 {
+			t.Errorf("fetches = %d after the retry settled, want still 3", got)
+		}
 	})
 
 	t.Run("tells node which keys to expect a push for", func(t *testing.T) {
