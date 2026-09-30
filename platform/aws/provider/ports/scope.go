@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/ocelhq/ocel/pkg/naming"
+
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -15,12 +17,22 @@ const (
 
 	ContainersSlug = "ocel-containers"
 
+	PublicListenerPort = 443
+
 	containerFrontSegment = "front"
 )
 
 type ContainerFront struct {
 	VPCOrigin string `json:"vpcOrigin"`
 	Host      string `json:"host"`
+}
+
+func ContainerClusterName(tier environment.Tier) string {
+	return naming.Join(naming.WordSeparator, ContainersSlug, string(tier))
+}
+
+func PublicBalancerName(tier environment.Tier) string {
+	return naming.Join(naming.WordSeparator, "ocel", "public", string(tier))
 }
 
 func ContainerFrontKey(tier environment.Tier) keyvalue.Key {
