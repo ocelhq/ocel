@@ -53,3 +53,21 @@ func TestTheRoutersAnEdgePairsWithAreListedOnceEachInPairingOrder(t *testing.T) 
 		t.Errorf("ListPairedRouters(other) = %v, want none for an edge nothing pairs", got)
 	}
 }
+
+func TestAnEdgesOwnRouterIsTheOneItPairsWithoutForwardingWhateverTheOrderOfPairings(t *testing.T) {
+	t.Parallel()
+
+	forwardedFirst := provider.Facts{Pairings: []provider.Pairing{
+		{Edge: "front", Router: "containers", Computes: []provider.Compute{provider.ComputeContainer}, Forwarded: true},
+		{Edge: "front", Router: "functions", Computes: []provider.Compute{provider.ComputeServerless}},
+	}}
+	if got, found := forwardedFirst.FindEdgeRouter("front"); !found || got != "functions" {
+		t.Errorf("FindEdgeRouter(front) = %q, %v, want functions: the edge forwards the containers router's hostnames and runs its own routing for the functions router's", got, found)
+	}
+	if !forwardedFirst.IsForwarded("front", "containers") || forwardedFirst.IsForwarded("front", "functions") {
+		t.Error("IsForwarded names the wrong pairing forwarded")
+	}
+	if got, found := forwardedFirst.FindEdgeRouter("other"); found {
+		t.Errorf("FindEdgeRouter(other) = %q, want none for an edge nothing pairs", got)
+	}
+}
