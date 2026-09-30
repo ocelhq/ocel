@@ -339,9 +339,6 @@ func TestPreflightReturnsTheGlobalPreviewWildcard(t *testing.T) {
 	if !wildcard.GetRouteInstalled() {
 		t.Error("Preflight() says the shared entry route is not installed, though the edge owns it")
 	}
-	if wildcard.GetGrammarMin() != edge.PreviewGrammarMin || wildcard.GetGrammarMax() != edge.PreviewGrammarMax {
-		t.Errorf("Preflight() wildcard grammar = %d–%d, want %d–%d", wildcard.GetGrammarMin(), wildcard.GetGrammarMax(), edge.PreviewGrammarMin, edge.PreviewGrammarMax)
-	}
 }
 
 func TestPreflightFallsBackToTheSiblingTier(t *testing.T) {

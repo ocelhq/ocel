@@ -338,7 +338,8 @@ providers, such as Consul or Kubernetes, are invisible to ocel, so it can't chec
 your Traefik orders one certificate for `*.<preview base>`, through a router on
 `ocel-edge-probe.<preview base>` that ocel writes as soon as the preview base is set. Each preview
 hostname is then served that certificate. Without `previewResolver`, each preview hostname
-gets a certificate of its own from `resolver`, the same as any other hostname.
+would get a certificate of its own from `resolver`, which Certificate Transparency logs publish,
+so a preview deploy is refused unless you set `perHostnamePreviewCertificates`.
 
 **Behind Cloudflare.** For a hostname Cloudflare forwards, the https router names no
 `resolver`. It names TLS options `ocel-shield-<hostname with dashes>-<hash>`, which set
@@ -407,7 +408,7 @@ hostnames the box serves, the connector's and `ocel-edge-probe.<base>` among the
 bare port:
 
 ```txt title="ocel.caddy"
-shop.example.com, ocel-edge-probe.preview.example.com, pr-12--web.preview.example.com {
+shop.example.com, ocel-edge-probe.preview.example.com, pr-12-web-q7m2x5k8c3v9n4b6p2z7w5r3.preview.example.com {
 	reverse_proxy ocel-switchboard:8443 {
 		stream_close_delay 30s
 	}
@@ -574,3 +575,4 @@ the box keeps none for it. See [Bucket](/docs/sdk/bucket#on-a-vps).
 | `deployKey` | The public key the `ocel-deploy` login is to answer to, as a path. Omit it and bootstrap mirrors the keys the login it bootstraps with already answers to. |
 | `certificates` | Paths on the machine to the certificate to serve a hostname with, keyed by hostname. Refused alongside `proxy`. |
 | `proxy` | What fronts the machine on ports 80 and 443. Omit it and ocel runs its own. `"manual"` puts ocel [behind your own proxy](#behind-your-own-proxy); [the `proxy` option](#the-proxy-option) lists every form. |
+| `perHostnamePreviewCertificates` | Deploy previews even where the proxy gets a certificate of its own for each preview hostname. Certificate Transparency logs publish every such certificate within minutes, and with it the preview's random hostname. Omit it and that preview deploy is refused: set `previewResolver`, pin a certificate for `*.<preview base>`, or front the box with Cloudflare. |

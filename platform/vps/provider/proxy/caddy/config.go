@@ -36,6 +36,13 @@ const (
 
 var internalZones = []string{"localhost", "local", "internal", "home.arpa"}
 
+func IsInternal(hostname string) bool {
+	lowered := strings.ToLower(strings.TrimSuffix(hostname, "."))
+	return slices.ContainsFunc(internalZones, func(zone string) bool {
+		return lowered == zone || strings.HasSuffix(lowered, "."+zone)
+	})
+}
+
 type config struct {
 	Admin   admin           `json:"admin"`
 	Logging json.RawMessage `json:"logging,omitempty"`

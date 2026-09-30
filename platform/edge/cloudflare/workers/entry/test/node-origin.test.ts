@@ -2,14 +2,18 @@ import { describe, expect, it } from "vitest";
 import type { DeploymentRecord, DeploymentsBinding } from "../src/deployments";
 import { type ResolveBase, resolveServe, type ServeFetch } from "../src/index";
 import { edgeOriginFetch } from "../src/signing";
-import { capturing, FN_URL, makeRecord, withGlobalFetch } from "./origin-deps";
+import {
+  answerEveryRecordWith,
+  capturing,
+  FN_URL,
+  makeRecord,
+  withGlobalFetch,
+} from "./origin-deps";
 
 function bindingReturning(record: DeploymentRecord): DeploymentsBinding {
-  return {
-    async pointerRecord() {
-      return { kind: "record", identity: record.identity, record };
-    },
-  };
+  return answerEveryRecordWith(async () => {
+    return { kind: "record", identity: record.identity, record };
+  });
 }
 
 const assetStore: ResolveBase["assetStore"] = {

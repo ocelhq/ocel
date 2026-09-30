@@ -24,7 +24,7 @@ func (p *Provider) ProgramEdge(ctx context.Context, req provider.EdgeProgramRequ
 		Slug:              req.Slug,
 		Env:               req.Env,
 		PreviewBaseDomain: req.PreviewBaseDomain,
-		Apps:              req.Apps,
+		PreviewKey:        req.PreviewKey,
 		Worker: deploy.WorkerFacts{
 			Region:             p.aws.Region,
 			StateTable:         deployed.StateTable,

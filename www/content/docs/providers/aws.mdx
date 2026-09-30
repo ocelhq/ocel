@@ -45,7 +45,9 @@ ocel deploy
 
 Leave `edge` out and the deployment is fronted by CloudFront. Name an edge to choose it —
 `cloudfront` and `api-gateway` are its own, [`cloudflare`](/docs/providers/cloudflare) is
-bought independently:
+bought independently. On `api-gateway` a preview is served on its alias alone, with no
+hostname per deployment: each hostname would take a REST API of its own, and a region holds
+at most 600.
 
 ```json title="ocel.json"
 {

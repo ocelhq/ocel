@@ -191,7 +191,7 @@ func (l *Ledger) change(ctx context.Context, name string, apply func(Pointer) (P
 }
 
 func (l *Ledger) write(ctx context.Context, stored keyvalue.Entry, next Pointer) error {
-	if next.Active == "" && len(next.Promotions) == 0 {
+	if next.Active == "" && len(next.Promotions) == 0 && len(next.PendingRemovals) == 0 {
 		if len(stored.Value) == 0 {
 			return nil
 		}
@@ -238,6 +238,13 @@ func (l *Ledger) changeAndReadUnnamed(ctx context.Context, pointer string, apply
 	return l.ReadUnnamedRecords(ctx, name, dropped)
 }
 
+func (l *Ledger) ForgetPendingRemovals(ctx context.Context, pointer string, withdrawn []string) error {
+	_, _, err := l.change(ctx, router.ResolvePointer(pointer), func(current Pointer) (Pointer, []RecordedPromotion, error) {
+		return current.ForgetPendingRemovals(withdrawn), nil, nil
+	})
+	return err
+}
+
 func (l *Ledger) Unpromote(ctx context.Context, promotionID, pointer string) error {
 	ctx, stop := context.WithTimeout(context.WithoutCancel(ctx), unpromoteWindow)
 	defer stop()
@@ -282,7 +289,7 @@ func (l *Ledger) Prune(ctx context.Context, keep int, pointer string) (router.Pr
 
 func (l *Ledger) RemovePointer(ctx context.Context, pointer string) (router.PruneResult, error) {
 	return l.changeAndReadUnnamed(ctx, pointer, func(current Pointer) (Pointer, []RecordedPromotion, error) {
-		return Pointer{Name: current.Name}, current.Promotions, nil
+		return Pointer{Name: current.Name}, append(slices.Clone(current.Promotions), current.PendingRemovals...), nil
 	})
 }
 
@@ -306,8 +313,14 @@ func (l *Ledger) ReadUnnamedRecords(ctx context.Context, pointer string, dropped
 	if err != nil {
 		return router.PruneResult{}, err
 	}
+	reclaimable := slices.Clone(dropped)
+	for _, pending := range kept.PendingRemovals {
+		if !slices.ContainsFunc(reclaimable, func(listed RecordedPromotion) bool { return listed.PromotionID == pending.PromotionID }) {
+			reclaimable = append(reclaimable, pending)
+		}
+	}
 	var unnamed []string
-	for _, key := range collectRecordKeys(dropped) {
+	for _, key := range collectRecordKeys(reclaimable) {
 		if !named[key] && slices.Contains(recorded, key) {
 			unnamed = append(unnamed, key)
 		}
@@ -318,7 +331,22 @@ func (l *Ledger) ReadUnnamedRecords(ctx context.Context, pointer string, dropped
 		UnnamedRecordKeys:          unnamed,
 		SurvivingRecordKeys:        slices.DeleteFunc(recorded, func(key string) bool { return slices.Contains(unnamed, key) }),
 		SurvivingPointerRecordKeys: collectRecordKeys(kept.Promotions),
+		DeploymentRemovals:         collectDeploymentRemovals(name, reclaimable),
 	}, nil
+}
+
+func collectDeploymentRemovals(pointer string, promotions []RecordedPromotion) []router.PointerRemoval {
+	var deployments []router.PointerRemoval
+	for _, promotion := range promotions {
+		if len(promotion.Hosts) == 0 {
+			continue
+		}
+		deployments = append(deployments, router.PointerRemoval{
+			Pointer: router.FormatDeploymentPointer(pointer, promotion.PromotionID),
+			Hosts:   promotion.Hosts,
+		})
+	}
+	return deployments
 }
 
 func (l *Ledger) ForgetUnnamedRecords(ctx context.Context, keys []string) error {

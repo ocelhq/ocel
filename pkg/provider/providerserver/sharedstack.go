@@ -212,6 +212,7 @@ func (s *sharedStack) promoteApps(ctx context.Context, req promoteRequest, route
 		}
 		byRouter[kind] = append(byRouter[kind], app)
 	}
+	superseded := groupHostsByRouter(req.superseded, slices.Collect(maps.Keys(byRouter)), routedBy)
 	routers := make([]appRouter, 0, len(byRouter))
 	kinds := slices.Sorted(maps.Keys(byRouter))
 	for _, kind := range kinds {
@@ -219,7 +220,7 @@ func (s *sharedStack) promoteApps(ctx context.Context, req promoteRequest, route
 		if err != nil {
 			return nil, err
 		}
-		routers = append(routers, appRouter{stack: routed, apps: byRouter[kind]})
+		routers = append(routers, appRouter{stack: routed, apps: byRouter[kind], hosts: listAppHosts(req.hosts, byRouter[kind]), superseded: superseded[kind]})
 	}
 	dropped, err := promote(ctx, s.ledger, req, routers, progress)
 	for i, kind := range kinds {
@@ -244,17 +245,128 @@ func (s *sharedStack) purgePromotedHostnames(ctx context.Context, pointer string
 	}
 }
 
-func (s *sharedStack) removePointer(ctx context.Context, pointer string, progress progress.Log) (router.PruneResult, error) {
+func listAppHosts(hosts []edge.PreviewHost, apps []string) []edge.PreviewHost {
+	names := normalizeAppNames(apps)
+	var kept []edge.PreviewHost
+	for _, host := range hosts {
+		if slices.Contains(names, host.App) {
+			kept = append(kept, host)
+		}
+	}
+	return kept
+}
+
+func groupHostsByRouter(hosts []edge.PreviewHost, kinds []router.Kind, routedBy func(app string) (router.Kind, error)) map[router.Kind][]edge.PreviewHost {
+	grouped := map[router.Kind][]edge.PreviewHost{}
+	for _, host := range hosts {
+		kind, err := routedBy(host.App)
+		if err == nil && slices.Contains(kinds, kind) {
+			grouped[kind] = append(grouped[kind], host)
+			continue
+		}
+		for _, kind := range kinds {
+			grouped[kind] = append(grouped[kind], host)
+		}
+	}
+	return grouped
+}
+
+func (s *sharedStack) serveDeployment(ctx context.Context, pointer string, promotion router.Promotion, routedBy func(app string) (router.Kind, error), progress progress.Log) error {
+	if len(promotion.Hosts) == 0 {
+		return nil
+	}
+	byRouter := map[router.Kind][]string{}
+	for _, app := range slices.Sorted(maps.Keys(promotion.Builds)) {
+		kind, err := routedBy(app)
+		if err != nil {
+			return err
+		}
+		byRouter[kind] = append(byRouter[kind], app)
+	}
+	deployment := router.FormatDeploymentPointer(pointer, promotion.PromotionID)
+	stillKept := newStillKept(s.ledger, pointer, promotion.PromotionID)
+	var errs []error
+	for _, kind := range slices.Sorted(maps.Keys(byRouter)) {
+		hosts := listAppHosts(promotion.Hosts, byRouter[kind])
+		if len(hosts) == 0 {
+			continue
+		}
+		errs = append(errs, s.serveDeploymentOn(ctx, kind, deployment, promotion, byRouter[kind], hosts, stillKept, progress))
+	}
+	return errors.Join(errs...)
+}
+
+func (s *sharedStack) serveDeploymentOn(ctx context.Context, kind router.Kind, deployment string, promotion router.Promotion, apps []string, hosts []edge.PreviewHost, stillKept router.StillActive, progress progress.Log) error {
+	routed, err := s.openRouterStack(kind)
+	if err != nil {
+		return err
+	}
+	records, err := s.ledger.readRecords(ctx, promotion, apps)
+	if err != nil {
+		return err
+	}
+	moved := routed.MovePointer(ctx, router.PointerMove{
+		Pointer:     deployment,
+		Promotion:   promotion,
+		Records:     records,
+		Hosts:       hosts,
+		StillActive: stillKept,
+	}, progress)
+	if moved == nil {
+		if dropped := stillKept(ctx); dropped != nil {
+			moved = errors.Join(dropped, routed.RemovePointer(ctx, router.PointerRemoval{Pointer: deployment, Hosts: hosts}, progress))
+		}
+	}
+	return errors.Join(moved, s.adopt(kind, routed))
+}
+
+func (s *sharedStack) removeDeployments(ctx context.Context, deployments []router.PointerRemoval, progress progress.Log) error {
+	if len(deployments) == 0 {
+		return nil
+	}
+	var errs []error
+	for _, kind := range s.listRouterKinds() {
+		routed, err := s.openRouterStack(kind)
+		if err != nil {
+			return err
+		}
+		for _, deployment := range deployments {
+			errs = append(errs, routed.RemovePointer(ctx, deployment, progress))
+		}
+		errs = append(errs, s.adopt(kind, routed))
+	}
+	return errors.Join(errs...)
+}
+
+func (s *sharedStack) forgetRemovedDeployments(ctx context.Context, pointer string, deployments []router.PointerRemoval) error {
+	removed := make([]string, 0, len(deployments))
+	for _, deployment := range deployments {
+		removed = append(removed, deployment.Pointer)
+	}
+	if len(removed) == 0 {
+		return nil
+	}
+	return s.ledger.ForgetPendingRemovals(ctx, pointer, removed)
+}
+
+func (s *sharedStack) removePointer(ctx context.Context, removal router.PointerRemoval, progress progress.Log) (router.PruneResult, error) {
+	recorded, err := s.ledger.Read(ctx, removal.Pointer)
+	if err != nil {
+		return router.PruneResult{}, err
+	}
 	for _, kind := range s.listRouterKinds() {
 		routed, err := s.openRouterStack(kind)
 		if err != nil {
 			return router.PruneResult{}, err
 		}
-		if err := errors.Join(routed.RemovePointer(ctx, pointer, progress), s.adopt(kind, routed)); err != nil {
+		if err := errors.Join(routed.RemovePointer(ctx, removal, progress), s.adopt(kind, routed)); err != nil {
 			return router.PruneResult{}, err
 		}
 	}
-	return s.ledger.RemovePointer(ctx, pointer)
+	if err := s.removeDeployments(ctx, recorded.ListDeploymentRemovals(), progress); err != nil {
+		return router.PruneResult{}, err
+	}
+	return s.ledger.RemovePointer(ctx, removal.Pointer)
 }
 
 func (s *sharedStack) destroy(ctx context.Context) error {

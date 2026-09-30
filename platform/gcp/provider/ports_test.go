@@ -71,6 +71,10 @@ func TestTheAlbEdgeIsRegisteredAndOpensWithTheProvidersOwnPorts(t *testing.T) {
 		t.Error("Facts() says the alb edge does not route previews by label, and the url mask on its preview neg hands Cloud Run " +
 			"the hostname's first label as the service name, so a deploy that is not named it answers nothing")
 	}
+	if routes.Facts().ServesPreviewDeployments {
+		t.Error("Facts() says the alb edge serves each preview deployment on its own hostname, and the url mask maps a label to " +
+			"the one Cloud Run service of that name, which a deployment's own label never names")
+	}
 	for _, need := range []edge.Need{edge.NeedEdgeCache, edge.NeedStreaming} {
 		if !edge.Supports(front, need) {
 			t.Errorf("Supported() does not name %q, and the load balancer with Cloud CDN in front of Cloud Run serves it", need)

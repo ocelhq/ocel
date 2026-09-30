@@ -147,6 +147,9 @@ func (s summary) appURLs() []string {
 			}
 			out = append(out, lead+p.Accent(u))
 		}
+		if u := app.GetDeploymentUrl(); u != "" {
+			out = append(out, gutter+p.Accent(u)+" (this deployment)")
+		}
 	}
 	return out
 }

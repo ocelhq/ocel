@@ -201,12 +201,12 @@ func TestAPreviewHostnameIsShieldedByTheWildcardShieldOverItsPreviewBase(t *test
 	t.Parallel()
 
 	spec := proxy.Spec{
-		Hostnames:   []string{"pr-1--web.preview.example.com", "shop.example.com"},
+		Hostnames:   []string{"pr-1-web-abcdefghijklmnopfhzq6k4d.preview.example.com", "shop.example.com"},
 		PreviewBase: "preview.example.com",
 		Shields:     []proxy.Shield{{Hostname: "*.preview.example.com", ClientCAs: []string{clientCertificate(t)}, OriginCertificate: origin}},
 	}
 	read := rendered(t, coolifyTraefik(), spec)
-	if previewed := routerFor(t, read, "pr-1--web.preview.example.com", "https"); previewed.TLS == nil || previewed.TLS.Options == "" {
+	if previewed := routerFor(t, read, "pr-1-web-abcdefghijklmnopfhzq6k4d.preview.example.com", "https"); previewed.TLS == nil || previewed.TLS.Options == "" {
 		t.Errorf("the preview router is %+v, want the wildcard's shield on it", previewed)
 	}
 	if open := routerFor(t, read, "shop.example.com", "https"); open.TLS == nil || open.TLS.Options != "" {

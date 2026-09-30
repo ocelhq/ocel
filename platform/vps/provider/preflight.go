@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -17,6 +18,11 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPrefl
 	}
 	if err := p.host.RefuseDisagreeingFront(ctx, pre.Deploy.Tier); err != nil {
 		return err
+	}
+	if pre.Deploy.Tier == environment.TierPreview && !p.options.PerHostnamePreviewCertificates {
+		if err := p.host.RefusePerHostnamePreviewCertificates(ctx, pre.PreviewBaseDomain); err != nil {
+			return err
+		}
 	}
 	return refusing([]error{
 		p.host.CheckDisk(ctx, repositories(pre.Deploy)),

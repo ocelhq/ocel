@@ -122,10 +122,6 @@ func TestUsePreviewWildcardRaisesTheEntryAndRecordsItsOwningEdge(t *testing.T) {
 	if !wildcard.GetRouteInstalled() {
 		t.Error("GetPreviewWildcard() says the shared entry route is not installed, though the edge owns it")
 	}
-	if wildcard.GetGrammarMin() != edge.PreviewGrammarMin || wildcard.GetGrammarMax() != edge.PreviewGrammarMax {
-		t.Errorf("grammar = %d..%d, want the contract's %d..%d",
-			wildcard.GetGrammarMin(), wildcard.GetGrammarMax(), edge.PreviewGrammarMin, edge.PreviewGrammarMax)
-	}
 	if len(wildcard.GetCertificate().GetRecordsWritten()) == 0 {
 		t.Error("the wildcard names no written record, though a zone was selected")
 	}

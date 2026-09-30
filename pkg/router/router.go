@@ -41,6 +41,7 @@ type Facts struct {
 	Dispatches                  bool
 	AnswersHostnames            bool
 	StopsServingRemovedPointers bool
+	ServesPreviewDeployments    bool
 }
 
 type Router interface {
@@ -86,7 +87,7 @@ type Stack interface {
 
 	MovePointer(ctx context.Context, move PointerMove, progress progress.Log) error
 
-	RemovePointer(ctx context.Context, pointer string, progress progress.Log) error
+	RemovePointer(ctx context.Context, removal PointerRemoval, progress progress.Log) error
 
 	Destroy(ctx context.Context) error
 }

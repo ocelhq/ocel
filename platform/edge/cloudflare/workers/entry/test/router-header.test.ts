@@ -8,6 +8,7 @@ import {
   type ServeFetch,
   serve,
 } from "../src/index";
+import { answerEveryRecordWith } from "./origin-deps";
 
 function routedDeps(): RouteDeps {
   const store: AssetBucket = {
@@ -61,11 +62,9 @@ const originRecord: DeploymentRecord = {
 };
 
 function bindingReturning(result: PointerRecordResult): DeploymentsBinding {
-  return {
-    async pointerRecord() {
-      return result;
-    },
-  };
+  return answerEveryRecordWith(async () => {
+    return result;
+  });
 }
 
 const base: ResolveBase = {

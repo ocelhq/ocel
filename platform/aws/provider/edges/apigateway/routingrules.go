@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
+	"slices"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -89,34 +90,63 @@ func ruleTarget(rule agv2types.RoutingRule) string {
 	return ""
 }
 
+type listedRules struct {
+	c      Clients
+	domain string
+	rules  []agv2types.RoutingRule
+	found  bool
+}
+
+func listRules(ctx context.Context, c Clients, domain string) (*listedRules, error) {
+	listed := &listedRules{c: c, domain: domain}
+	return listed, listed.relist(ctx)
+}
+
+func (l *listedRules) relist(ctx context.Context) error {
+	rules, found, err := routingRules(ctx, l.c, l.domain)
+	if err != nil {
+		return err
+	}
+	l.rules, l.found = rules, found
+	return nil
+}
+
 func putHostRule(ctx context.Context, c Clients, domain, host, api string, priority int32) error {
+	listed, err := listRules(ctx, c, domain)
+	if err != nil {
+		return err
+	}
+	return listed.putHostRule(ctx, host, api, priority)
+}
+
+func (l *listedRules) putHostRule(ctx context.Context, host, api string, priority int32) error {
 	for attempt := 1; ; attempt++ {
-		rules, found, err := routingRules(ctx, c, domain)
-		if err != nil {
-			return err
+		if !l.found {
+			return missingWildcardError(l.domain, host, api)
 		}
-		if !found {
-			return missingWildcardError(domain, host, api)
-		}
-		existing, taken := hostRuleAmong(rules, host)
+		existing, taken := hostRuleAmong(l.rules, host)
 		if existing != nil {
-			return replaceHostRule(ctx, c, domain, host, api, priority, *existing)
+			return replaceHostRule(ctx, l.c, l.domain, host, api, priority, existing)
 		}
 		want := priority
 		if want == 0 {
 			want = freePriority(host, taken)
 		}
 		if want == 0 {
-			return crowdedWildcardError(domain, host, api)
+			return crowdedWildcardError(l.domain, host, api)
 		}
-		err = createHostRule(ctx, c, domain, host, api, want)
+		created, err := createHostRule(ctx, l.c, l.domain, host, api, want)
 		var conflict *agv2types.ConflictException
 		switch {
 		case err == nil:
+			l.rules = append(l.rules, agv2types.RoutingRule{RoutingRuleId: created, Priority: aws.Int32(want), Conditions: hostCondition(host), Actions: invokeAction(api)})
 			return nil
 		case priority == 0 && errors.As(err, &conflict) && attempt < hostRuleAttempts:
+			if err := l.relist(ctx); err != nil {
+				return err
+			}
 		default:
-			return routeError(domain, host, api, err)
+			return routeError(l.domain, host, api, err)
 		}
 	}
 }
@@ -134,11 +164,11 @@ func hostRuleAmong(rules []agv2types.RoutingRule, host string) (*agv2types.Routi
 	return existing, taken
 }
 
-func replaceHostRule(ctx context.Context, c Clients, domain, host, api string, priority int32, existing agv2types.RoutingRule) error {
+func replaceHostRule(ctx context.Context, c Clients, domain, host, api string, priority int32, existing *agv2types.RoutingRule) error {
 	if priority == 0 {
 		priority = aws.ToInt32(existing.Priority)
 	}
-	if ruleTarget(existing) == api && aws.ToInt32(existing.Priority) == priority {
+	if ruleTarget(*existing) == api && aws.ToInt32(existing.Priority) == priority {
 		return nil
 	}
 	if _, err := c.Routing.PutRoutingRule(ctx, &apigatewayv2.PutRoutingRuleInput{
@@ -150,17 +180,21 @@ func replaceHostRule(ctx context.Context, c Clients, domain, host, api string, p
 	}); err != nil {
 		return routeError(domain, host, api, err)
 	}
+	existing.Priority, existing.Conditions, existing.Actions = aws.Int32(priority), hostCondition(host), invokeAction(api)
 	return nil
 }
 
-func createHostRule(ctx context.Context, c Clients, domain, host, api string, priority int32) error {
-	_, err := c.Routing.CreateRoutingRule(ctx, &apigatewayv2.CreateRoutingRuleInput{
+func createHostRule(ctx context.Context, c Clients, domain, host, api string, priority int32) (*string, error) {
+	created, err := c.Routing.CreateRoutingRule(ctx, &apigatewayv2.CreateRoutingRuleInput{
 		DomainName: aws.String(domain),
 		Priority:   aws.Int32(priority),
 		Conditions: hostCondition(host),
 		Actions:    invokeAction(api),
 	})
-	return err
+	if err != nil {
+		return nil, err
+	}
+	return created.RoutingRuleId, nil
 }
 
 func hostCondition(host string) []agv2types.RoutingRuleCondition {
@@ -183,32 +217,39 @@ func invokeAction(api string) []agv2types.RoutingRuleAction {
 	}}
 }
 
-func deleteHostRule(ctx context.Context, c Clients, domain, host string) error {
-	return deleteRulesMatching(ctx, c, domain, func(name string) bool { return name == host })
+func deleteHostRules(ctx context.Context, c Clients, domain string, hosts []string) error {
+	listed, err := listRules(ctx, c, domain)
+	if err != nil {
+		return err
+	}
+	return listed.deleteHostRules(ctx, hosts)
 }
 
-func deleteLabelledRules(ctx context.Context, c Clients, domain, prefix, suffix string) error {
-	return deleteRulesMatching(ctx, c, domain, func(name string) bool {
-		label, ok := strings.CutSuffix(name, suffix)
-		return ok && strings.HasPrefix(label, prefix)
-	})
+func (l *listedRules) deleteHostRules(ctx context.Context, hosts []string) error {
+	return l.deleteRulesMatching(ctx, func(name string) bool { return slices.Contains(hosts, name) })
 }
 
 func deleteRulesMatching(ctx context.Context, c Clients, domain string, match func(string) bool) error {
-	rules, found, err := routingRules(ctx, c, domain)
-	if err != nil || !found {
+	listed, err := listRules(ctx, c, domain)
+	if err != nil {
 		return err
 	}
+	return listed.deleteRulesMatching(ctx, match)
+}
+
+func (l *listedRules) deleteRulesMatching(ctx context.Context, match func(string) bool) error {
 	var errs []error
-	for _, rule := range rules {
+	l.rules = slices.DeleteFunc(l.rules, func(rule agv2types.RoutingRule) bool {
 		host := ruleHost(rule)
 		if !match(host) {
-			continue
+			return false
 		}
-		if err := deleteRule(ctx, c, domain, aws.ToString(rule.RoutingRuleId), host); err != nil {
+		if err := deleteRule(ctx, l.c, l.domain, aws.ToString(rule.RoutingRuleId), host); err != nil {
 			errs = append(errs, err)
+			return false
 		}
-	}
+		return true
+	})
 	return errors.Join(errs...)
 }
 

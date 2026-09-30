@@ -6,6 +6,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -15,6 +16,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 )
@@ -73,7 +75,24 @@ func encodePreviewEnvironment(environment stackrecords.Environment) *contractv1.
 		Lifecycle: encodeLifecycle(environment.Lifecycle),
 		Label:     environment.Label,
 		CreatedAt: environment.CreatedAt,
+		AliasUrls: formatHostURLs(edge.ListPreviewHostnames(environment.Aliases)),
 	}
+}
+
+func formatHostURLs(hostnames []string) []string {
+	urls := make([]string, 0, len(hostnames))
+	for _, hostname := range hostnames {
+		urls = append(urls, "https://"+hostname)
+	}
+	return urls
+}
+
+func readPreviewRemoval(ctx context.Context, store keyvalue.Store, slug, pointer string) (router.PointerRemoval, error) {
+	meta, err := stackrecords.ReadEnvironmentMeta(ctx, store, environment.TierPreview, slug, pointer)
+	if err != nil {
+		return router.PointerRemoval{}, err
+	}
+	return router.PointerRemoval{Pointer: pointer, Hosts: meta.ListPublishedAliases()}, nil
 }
 
 func (h *handlers) GetEnvironment(ctx context.Context, req *contractv1.GetEnvironmentRequest) (*contractv1.GetEnvironmentResponse, error) {
@@ -101,6 +120,7 @@ func (h *handlers) GetEnvironment(ctx context.Context, req *contractv1.GetEnviro
 		Lifecycle: meta.Lifecycle,
 		Label:     meta.Label,
 		CreatedAt: meta.CreatedAt,
+		Aliases:   meta.Aliases,
 	})}, nil
 }
 
@@ -123,8 +143,12 @@ func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.Remove
 		if err := refuseUnconfirmedLifecycle(ctx, session.provider.KeyValues(), req.GetSlug(), pointer, req.GetEnvironment().GetLifecycle()); err != nil {
 			return err
 		}
+		removal, err := readPreviewRemoval(ctx, session.provider.KeyValues(), req.GetSlug(), pointer)
+		if err != nil {
+			return err
+		}
 		progress.Say(fmt.Sprintf("Removing the routing pointer of %s", environmentPhrase(environment.TierPreview, pointer)))
-		removed, err := session.removePointer(ctx, pointer, progress)
+		removed, err := session.removePointer(ctx, removal, progress)
 		if err != nil {
 			return err
 		}

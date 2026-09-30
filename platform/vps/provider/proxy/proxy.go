@@ -28,7 +28,8 @@ const (
 )
 
 type Guarantees struct {
-	OwnsPorts bool
+	OwnsPorts                                  bool
+	OrdersEachPreviewHostnameItsOwnCertificate bool
 }
 
 type Spec struct {

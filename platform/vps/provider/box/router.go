@@ -20,7 +20,7 @@ func NewRouter(e *Edge) Router { return Router{e: e} }
 func (r Router) Kind() router.Kind { return switchboard.RouterKind }
 
 func (r Router) Facts() router.Facts {
-	return router.Facts{Supported: edge.AllNeeds(), ReachesContainers: true, AnswersHostnames: true, StopsServingRemovedPointers: true}
+	return router.Facts{Supported: edge.AllNeeds(), ReachesContainers: true, AnswersHostnames: true, StopsServingRemovedPointers: true, ServesPreviewDeployments: true}
 }
 
 func (r Router) Hooks() router.Hooks {
@@ -82,15 +82,16 @@ func (r routerStack) MovePointer(ctx context.Context, move router.PointerMove, p
 	return s.serve(ctx, move, ready, progress)
 }
 
-func (r routerStack) RemovePointer(ctx context.Context, pointer string, progress progress.Log) error {
+func (r routerStack) RemovePointer(ctx context.Context, removal router.PointerRemoval, progress progress.Log) error {
 	s := r.s
-	if err := s.e.machine.DisclaimPointer(ctx, s.surface(), router.ResolvePointer(pointer)); err != nil {
+	pointer := router.ResolvePointer(removal.Pointer)
+	if err := s.e.machine.DisclaimPointer(ctx, s.surface(), pointer); err != nil {
 		return err
 	}
 	if err := s.applyOrigins(ctx); err != nil {
 		progress.Warn(s.released("Preview "+pointer, err).Error())
 	}
-	return s.e.machine.UnroutePointer(ctx, s.surface(), router.ResolvePointer(pointer))
+	return s.e.machine.UnroutePointer(ctx, s.surface(), pointer)
 }
 
 func (r routerStack) Destroy(ctx context.Context) error { return r.s.Destroy(ctx) }

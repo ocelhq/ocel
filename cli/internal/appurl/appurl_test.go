@@ -20,7 +20,7 @@ func TestProduction(t *testing.T) {
 		t.Parallel()
 		cfg := &project.Project{Apps: []project.App{{Name: "shop"}}, Domains: project.Domains{Production: []string{"acme.com", "www.acme.com"}}}
 
-		if got, want := appurl.Production(cfg)["shop"], "https://acme.com"; got != want {
+		if got, want := appurl.FormatProductionURLs(cfg)["shop"], "https://acme.com"; got != want {
 			t.Errorf("url = %q, want %q", got, want)
 		}
 	})
@@ -35,7 +35,7 @@ func TestProduction(t *testing.T) {
 			},
 		}
 
-		urls := appurl.Production(cfg)
+		urls := appurl.FormatProductionURLs(cfg)
 		if got, want := urls["web"], "https://acme.com"; got != want {
 			t.Errorf("web url = %q, want the project's %q", got, want)
 		}
@@ -48,7 +48,7 @@ func TestProduction(t *testing.T) {
 		t.Parallel()
 		cfg := &project.Project{Apps: []project.App{{Name: "web"}}}
 
-		if urls := appurl.Production(cfg); len(urls) != 0 {
+		if urls := appurl.FormatProductionURLs(cfg); len(urls) != 0 {
 			t.Errorf("urls = %v, want none: a project that declares no production domain has no hostname to hand out", urls)
 		}
 	})
@@ -61,7 +61,7 @@ func TestProduction(t *testing.T) {
 		}
 
 		served := edge.AttributeHostnames(cfg.Domains.Production, [][]string{nil, nil})
-		urls := appurl.Production(cfg)
+		urls := appurl.FormatProductionURLs(cfg)
 		if got, want := urls["web"], "https://"+served[0][0]; got != want {
 			t.Errorf("web url = %q, want %q: the deploy serves a project hostname on the first app `apps` names", got, want)
 		}
@@ -71,33 +71,19 @@ func TestProduction(t *testing.T) {
 	})
 }
 
-func TestPreview(t *testing.T) {
+func TestPreviewServesEachAppOnTheAliasTheProviderAnswered(t *testing.T) {
 	t.Parallel()
 
-	t.Run("one app is served on the preview's single hostname", func(t *testing.T) {
-		t.Parallel()
-		cfg := &project.Project{Apps: []project.App{{Name: "web"}}}
-
-		urls := appurl.Preview(cfg, func(app string) string {
-			if app != "" {
-				t.Errorf("host(%q), want the unlabelled host where one app is served", app)
-			}
-			return "pr-1.preview.acme.com"
-		})
-		if got, want := urls["web"], "https://pr-1.preview.acme.com"; got != want {
-			t.Errorf("web url = %q, want %q", got, want)
-		}
+	urls := appurl.FormatPreviewURLs(map[string]string{
+		"web": "pr-1-web-abcdefghijklmnop12345678.preview.acme.com",
+		"api": "",
 	})
-
-	t.Run("two apps are each served on their own labelled hostname", func(t *testing.T) {
-		t.Parallel()
-		cfg := &project.Project{Apps: []project.App{{Name: "web"}, {Name: "api"}}}
-
-		urls := appurl.Preview(cfg, func(app string) string { return "pr-1--" + app + ".preview.acme.com" })
-		if got, want := urls["api"], "https://pr-1--api.preview.acme.com"; got != want {
-			t.Errorf("api url = %q, want %q", got, want)
-		}
-	})
+	if got, want := urls["web"], "https://pr-1-web-abcdefghijklmnop12345678.preview.acme.com"; got != want {
+		t.Errorf("web url = %q, want %q", got, want)
+	}
+	if got, ok := urls["api"]; ok {
+		t.Errorf("api url = %q, want none: nothing answered a hostname for it", got)
+	}
 }
 
 func TestPrepend(t *testing.T) {

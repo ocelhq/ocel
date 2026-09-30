@@ -40,6 +40,7 @@ import {
   ocelBinary,
   PLAN_APPLY_HINT,
   PREVIEW_ROOT_STACK_PARAM_PREFIX,
+  PREVIEW_TAIL_LEN,
   planProblems,
   previewName,
   previewNameForApp,
@@ -153,6 +154,14 @@ describe("projectSlug", () => {
     expect(slug.length).toBeLessThanOrEqual(MAX_SLUG_LEN);
   });
 
+  it.each(["31599563227", "9".repeat(200)])(
+    "leaves run %s's preview hostname room for the signed token the shared wildcard appends to the slug",
+    (runId) => {
+      const slug = projectSlug({ runId });
+      expect(`${slug}-${"a".repeat(PREVIEW_TAIL_LEN)}`).toMatch(DNS_LABEL);
+    },
+  );
+
   it("stays a valid label when a hostile run id would cap onto a hyphen", () => {
     const slug = projectSlug({
       runId: `${"a".repeat(MAX_SLUG_LEN - SLUG_PREFIX.length - 1)} tail`,
@@ -181,15 +190,6 @@ describe("previewName", () => {
       previewName({ dir: `/tmp/${install}x` }),
     );
   });
-
-  it.each([`/tmp/next-install-${"a".repeat(64)}`, `/tmp/1${"a".repeat(64)}`])(
-    "leaves the preview label of %s room for the project slug the shared wildcard prefixes it with",
-    (dir) => {
-      const slug = projectSlug({ runId: "31599563227" });
-      const pointer = previewName({ dir }).length;
-      expect(slug.length + 2 + pointer + 2 + APP_NAME.length).toBeLessThanOrEqual(63);
-    },
-  );
 
   it.each(["/tmp/next-e2e-abc", "/tmp/123-app", "/tmp/---", "/tmp/a--b"])(
     "names %s with a DNS label the CLI takes as a preview name",

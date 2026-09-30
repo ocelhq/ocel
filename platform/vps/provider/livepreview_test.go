@@ -50,8 +50,6 @@ func previewEntryOn(t *testing.T, vm machine) edge.Edge {
 	}
 	if _, err := front.ReconcilePreviewWildcard(context.Background(), edge.PreviewWildcardSpec{
 		BaseDomain: livePreviewBase,
-		GrammarMin: edge.PreviewGrammarMin,
-		GrammarMax: edge.PreviewGrammarMax,
 	}); err != nil {
 		t.Fatalf("ReconcilePreviewWildcard: %v", err)
 	}
@@ -114,11 +112,11 @@ func TestLiveEveryHostnameNothingClaimsUnderOrBesideTheBaseIsTheBoxsOwnRefusal(t
 
 	previewEntryOn(t, vm)
 	for what, hostname := range map[string]string{
-		"one label under the base":               "pr-7." + livePreviewBase,
-		"one label containing the app separator": "shop--pr-7--web." + livePreviewBase,
-		"two labels under the base":              "pr-7.api." + livePreviewBase,
-		"the base itself":                        livePreviewBase,
-		"a hostname outside the base":            "pr-7.preview.example.invalid",
+		"one label under the base":              "pr-7." + livePreviewBase,
+		"a preview-shaped label nothing claims": "shop-abcdefghijklmnoproheemcq." + livePreviewBase,
+		"two labels under the base":             "pr-7.api." + livePreviewBase,
+		"the base itself":                       livePreviewBase,
+		"a hostname outside the base":           "pr-7.preview.example.invalid",
 	} {
 		if status := vm.asksFor(t, hostname); status != http.StatusNotFound {
 			t.Errorf("%s (%s) was answered %d, want the switchboard's 404: a hostname nothing on this box claims is told nothing about it", what, hostname, status)

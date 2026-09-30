@@ -60,7 +60,7 @@ func TestRemovingAPreviewPointerLeavesTheHostnamesProductionBoundServing(t *test
 		t.Fatalf("Promote: %v", err)
 	}
 
-	if _, err := removePointer(context.Background(), stack, "pr-7", progress.Discard()); err != nil {
+	if _, err := removePointer(context.Background(), stack, router.PointerRemoval{Pointer: "pr-7"}, progress.Discard()); err != nil {
 		t.Fatalf("RemovePointer: %v", err)
 	}
 
@@ -529,7 +529,7 @@ func TestARemovalRunsThroughWhenTheBootstrapItWasFrontedByIsGone(t *testing.T) {
 	if err := orphaned.UnbindDomain(context.Background(), boundHost); err != nil {
 		t.Errorf("UnbindDomain with no bootstrap installed = %v, want the hostname let go: there is no store left to withdraw it from", err)
 	}
-	if err := openRouter(orphaned).RemovePointer(context.Background(), "", progress.Discard()); err != nil {
+	if err := openRouter(orphaned).RemovePointer(context.Background(), router.PointerRemoval{}, progress.Discard()); err != nil {
 		t.Errorf("RemovePointer with no bootstrap installed = %v, want no complaint: there is no store left to withdraw a hostname from", err)
 	}
 	if err := orphaned.Destroy(context.Background()); err != nil {

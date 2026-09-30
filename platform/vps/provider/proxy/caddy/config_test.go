@@ -182,7 +182,7 @@ func TestTheProxyOrdersOnDemandOnlyWhatTheSwitchboardAdmits(t *testing.T) {
 		"localhost",
 		"ocel-vps-e2e.localhost",
 		"ocel-edge-probe.preview.ocel-vps-e2e.localhost",
-		"shop--pr-7--web.preview.ocel-vps-e2e.localhost",
+		"shop-abcdefghijklmnoproheemcq.preview.ocel-vps-e2e.localhost",
 		"ocel-edge-probe.preview.ocel.home.arpa",
 		"printer.local",
 		"db.corp.internal",

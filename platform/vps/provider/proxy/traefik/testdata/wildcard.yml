@@ -29,8 +29,8 @@ http:
       service: ocel-switchboard-419a7e8a
       priority: 1000000
       tls: {}
-    ocel-pr-12--web-preview-example-com-983b404f-419a7e8a:
-      rule: Host(`pr-12--web.preview.example.com`)
+    ocel-pr-12-web-abcdefghijklmnopp3347l26-preview-example-com-aed6fff6-419a7e8a:
+      rule: Host(`pr-12-web-abcdefghijklmnopp3347l26.preview.example.com`)
       entryPoints:
         - websecure
       middlewares:
@@ -38,8 +38,8 @@ http:
       service: ocel-switchboard-419a7e8a
       priority: 1000000
       tls: {}
-    ocel-pr-12--web-preview-example-com-983b404f-419a7e8a-http:
-      rule: Host(`pr-12--web.preview.example.com`)
+    ocel-pr-12-web-abcdefghijklmnopp3347l26-preview-example-com-aed6fff6-419a7e8a-http:
+      rule: Host(`pr-12-web-abcdefghijklmnopp3347l26.preview.example.com`)
       entryPoints:
         - web
       middlewares:

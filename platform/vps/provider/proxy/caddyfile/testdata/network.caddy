@@ -1,4 +1,4 @@
-shop.example.com, ocel-edge-probe.preview.example.com, pr-12--web.preview.example.com, box.example.com {
+shop.example.com, ocel-edge-probe.preview.example.com, pr-12-web-abcdefghijklmnopp3347l26.preview.example.com, box.example.com {
 	reverse_proxy ocel-switchboard:8443 {
 		lb_try_duration 10s
 		lb_try_interval 250ms

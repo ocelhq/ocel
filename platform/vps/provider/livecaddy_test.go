@@ -275,8 +275,6 @@ func servesAPreviewBehindCaddy(t *testing.T, vm machine, d *vps.Provider, opened
 	ctx := context.Background()
 	if _, err := opened.ReconcilePreviewWildcard(ctx, edge.PreviewWildcardSpec{
 		BaseDomain: frontedPreview,
-		GrammarMin: edge.PreviewGrammarMin,
-		GrammarMax: edge.PreviewGrammarMax,
 	}); err != nil {
 		t.Fatalf("ReconcilePreviewWildcard(%s) behind %s = %v", frontedPreview, cf.front, err)
 	}
@@ -287,7 +285,7 @@ func servesAPreviewBehindCaddy(t *testing.T, vm machine, d *vps.Provider, opened
 	}
 	promotesPreview(t, d, previews, frontedSlug, liveApp, fixtureAt("one"), frontedPointer, 1)
 
-	hostname := edge.SharedPreview(frontedSlug, frontedPreview).Hosts(frontedPointer, []string{liveApp})[0]
+	hostname := signLivePreviewHost(frontedSlug, frontedPreview, frontedPointer, liveApp).Hostname
 	vm.awaitsCaddy(t, hostname, "one")
 	probe := edge.ProbeHostname(edge.PreviewWildcard(frontedPreview))
 	if placed := vm.placedCaddy(t, cf.directory); !strings.Contains(placed, probe) || !strings.Contains(placed, hostname) {

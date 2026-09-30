@@ -37,7 +37,6 @@ func renderGlobalDomain(out io.Writer, resp *contractv1.GetPreviewWildcardRespon
 	if scope := domain.GetEdgeScope(); scope != "" {
 		fmt.Fprintf(out, "  Edge account         %s\n", scope)
 	}
-	fmt.Fprintf(out, "  Hostname grammar     %d–%d\n", domain.GetGrammarMin(), domain.GetGrammarMax())
 	route := "installed"
 	if !domain.GetRouteInstalled() {
 		route = "MISSING — run `ocel domain use '" + wildcardOf(domain.GetBaseDomain()) + "' --preview` to reinstall it"

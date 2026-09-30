@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -17,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -31,6 +33,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/pkg/statedir"
@@ -911,6 +914,15 @@ func servedURLs(result *progressv1.OperationResult) []string {
 	return urls
 }
 
+func findDeploymentURL(result *progressv1.OperationResult, app string) string {
+	for _, appResult := range result.GetApps() {
+		if appResult.GetApp() == app {
+			return appResult.GetDeploymentUrl()
+		}
+	}
+	return ""
+}
+
 func servedAppURLs(result *progressv1.OperationResult, app string) []string {
 	for _, appResult := range result.GetApps() {
 		if appResult.GetApp() == app {
@@ -1182,10 +1194,607 @@ func TestDeployAnnouncesThePreviewHostnameOfTheProjectsOwnWildcard(t *testing.T)
 	if !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
-	want := "https://" + edge.ProjectPreview("preview.example").Host("pr-7", "")
-	if !slices.Equal(servedURLs(result), []string{want}) {
-		t.Errorf("the preview deploy announced %v, want %s: the project's own wildcard serves only this project, so no slug segment names it",
-			servedURLs(result), want)
+	urls := servedURLs(result)
+	if len(urls) != 1 || !regexp.MustCompile(`^https://pr-7-[a-z2-7]{24}\.preview\.example$`).MatchString(urls[0]) {
+		t.Errorf("the preview deploy announced %v, want pr-7 and a signed token under the project's own wildcard", urls)
+	}
+}
+
+func TestAPreviewKeepsItsAliasAndServesEachDeploymentOnAHostnameOfItsOwn(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	previewBootstrapped(t, client)
+
+	first, _ := deploy(t, client, previewRequest())
+	second, _ := deploy(t, client, previewRequest())
+	if !first.GetSuccess() || !second.GetSuccess() {
+		t.Fatalf("Deploy() = %q, %q", first.GetError(), second.GetError())
+	}
+	if !slices.Equal(servedURLs(first), servedURLs(second)) {
+		t.Errorf("the alias moved from %v to %v, want one alias for the life of the preview", servedURLs(first), servedURLs(second))
+	}
+	firstDeployment, secondDeployment := findDeploymentURL(first, "web"), findDeploymentURL(second, "web")
+	if firstDeployment == "" || firstDeployment == secondDeployment || slices.Contains(servedURLs(first), firstDeployment) {
+		t.Fatalf("deployment urls %q and %q beside alias %v, want each deployment a hostname of its own", firstDeployment, secondDeployment, servedURLs(first))
+	}
+
+	plane := vendor.Routers().(*fake.Routers).DataPlane(fake.RouterRelay)
+	if pointer, builds := plane.FindServingPointer(strings.TrimPrefix(servedURLs(second)[0], "https://")); pointer != "pr-7" || builds["web"] == "" {
+		t.Errorf("the alias is served by %q with %v, want the preview's pointer", pointer, builds)
+	}
+	want := router.FormatDeploymentPointer("pr-7", first.GetPromotionId())
+	if pointer, builds := plane.FindServingPointer(strings.TrimPrefix(firstDeployment, "https://")); pointer != want || builds["web"] == "" {
+		t.Errorf("the first deployment's hostname is served by %q with %v after the next deploy, want %s still serving it", pointer, builds, want)
+	}
+}
+
+func TestPruneAndRemoveStopServingTheHostnamesOfWhatTheyDrop(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	previewBootstrapped(t, client)
+	first, _ := deploy(t, client, previewRequest())
+	deploy(t, client, previewRequest())
+	second, _ := deploy(t, client, previewRequest())
+	if !first.GetSuccess() || !second.GetSuccess() {
+		t.Fatalf("Deploy() = %q, %q", first.GetError(), second.GetError())
+	}
+	plane := vendor.Routers().(*fake.Routers).DataPlane(fake.RouterRelay)
+	host := func(url string) string { return strings.TrimPrefix(url, "https://") }
+
+	listed, err := client.ListEnvironments(context.Background(), &contractv1.ListEnvironmentsRequest{Slug: "shop"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := listed.GetEnvironments(); len(got) != 1 || !slices.Equal(got[0].GetAliasUrls(), servedURLs(second)) {
+		t.Errorf("ListEnvironments = %v, want pr-7 listed with its alias %v", got, servedURLs(second))
+	}
+
+	pruning, err := client.RemoveStalePromotions(context.Background(), &contractv1.RemoveStalePromotionsRequest{
+		Slug: "shop", KeepN: 1, Environment: previewRequest().GetEnvironment(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result, err := drain(pruning); err != nil || !result.GetSuccess() {
+		t.Fatalf("RemoveStalePromotions() = %q, %v", result.GetError(), err)
+	}
+	if pointer, _ := plane.FindServingPointer(host(findDeploymentURL(first, "web"))); pointer != "" {
+		t.Errorf("the pruned deployment's hostname is still served by %q, want nothing", pointer)
+	}
+	for _, kept := range []string{servedURLs(second)[0], findDeploymentURL(second, "web")} {
+		if pointer, _ := plane.FindServingPointer(host(kept)); pointer == "" {
+			t.Errorf("%s stopped serving, want what the prune kept still served", kept)
+		}
+	}
+
+	removing, err := client.RemoveEnvironment(context.Background(), &contractv1.RemoveEnvironmentRequest{
+		Slug: "shop", Environment: &environmentv1.Environment{
+			Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-7", Lifecycle: environmentv1.Lifecycle_LIFECYCLE_PERSISTENT,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result, err := drain(removing); err != nil || !result.GetSuccess() {
+		t.Fatalf("RemoveEnvironment() = %q, %v", result.GetError(), err)
+	}
+	if served := plane.ListServedHostnames(); len(served) != 0 {
+		t.Errorf("after the preview was removed %v are still served, want none of its hostnames", served)
+	}
+}
+
+func TestADeploymentHostnameAPruneFailedToWithdrawIsWithdrawnByRemove(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	previewBootstrapped(t, client)
+	first, _ := deploy(t, client, previewRequest())
+	deploy(t, client, previewRequest())
+	third, _ := deploy(t, client, previewRequest())
+	if !first.GetSuccess() || !third.GetSuccess() {
+		t.Fatalf("Deploy() = %q, %q", first.GetError(), third.GetError())
+	}
+	plane := vendor.Routers().(*fake.Routers).DataPlane(fake.RouterRelay)
+
+	plane.FailNextPointerRemoval(errors.New("the data plane is down"))
+	pruning, err := client.RemoveStalePromotions(context.Background(), &contractv1.RemoveStalePromotionsRequest{
+		Slug: "shop", KeepN: 1, Environment: previewRequest().GetEnvironment(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result, err := drain(pruning); err == nil && result.GetSuccess() {
+		t.Fatal("RemoveStalePromotions() succeeded through a refused pointer removal")
+	}
+	if pointer, _ := plane.FindServingPointer(strings.TrimPrefix(findDeploymentURL(first, "web"), "https://")); pointer == "" {
+		t.Fatalf("the pruned deployment's hostname stopped serving through a refused removal, so this test has nothing left to withdraw")
+	}
+
+	removing, err := client.RemoveEnvironment(context.Background(), &contractv1.RemoveEnvironmentRequest{
+		Slug: "shop", Environment: &environmentv1.Environment{
+			Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-7", Lifecycle: environmentv1.Lifecycle_LIFECYCLE_PERSISTENT,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result, err := drain(removing); err != nil || !result.GetSuccess() {
+		t.Fatalf("RemoveEnvironment() = %q, %v", result.GetError(), err)
+	}
+	if served := plane.ListServedHostnames(); len(served) != 0 {
+		t.Errorf("after the preview was removed %v are still served, want the deployment hostname the prune failed to withdraw gone too", served)
+	}
+}
+
+func TestAPruneThatFailedToWithdrawADeploymentHostnameReclaimsItsBuildOnTheRetry(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	previewBootstrapped(t, client)
+	first, _ := deploy(t, client, previewRequest())
+	deploy(t, client, previewRequest())
+	third, _ := deploy(t, client, previewRequest())
+	if !first.GetSuccess() || !third.GetSuccess() {
+		t.Fatalf("Deploy() = %q, %q", first.GetError(), third.GetError())
+	}
+	plane := vendor.Routers().(*fake.Routers).DataPlane(fake.RouterRelay)
+	prune := func() []string {
+		stream, err := client.RemoveStalePromotions(context.Background(), &contractv1.RemoveStalePromotionsRequest{
+			Slug: "shop", KeepN: 1, Environment: previewRequest().GetEnvironment(),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var destroyed []string
+		for _, event := range recorded(stream) {
+			if line := saidLine(event); strings.HasPrefix(line, "Destroying the stack of web build") {
+				destroyed = append(destroyed, line)
+			}
+		}
+		return destroyed
+	}
+
+	plane.FailNextPointerRemoval(errors.New("the data plane is down"))
+	if destroyed := prune(); len(destroyed) != 0 {
+		t.Fatalf("the refused prune destroyed %v, want nothing destroyed while a hostname still routes to it", destroyed)
+	}
+	destroyed := prune()
+	if pointer, _ := plane.FindServingPointer(strings.TrimPrefix(findDeploymentURL(first, "web"), "https://")); pointer != "" {
+		t.Errorf("the retried prune left the pruned deployment's hostname served by %q, want nothing", pointer)
+	}
+	if len(destroyed) == 0 {
+		t.Errorf("the retried prune destroyed nothing, want the builds of the deployments the refused prune dropped")
+	}
+}
+
+func TestAnAliasTheNextDeployReplacesStopsServingAndRemoveStopsServingEveryAlias(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	previewBootstrapped(t, client)
+	plane := vendor.Routers().(*fake.Routers).DataPlane(fake.RouterRelay)
+	host := func(url string) string { return strings.TrimPrefix(url, "https://") }
+
+	first, _ := deploy(t, client, previewRequest())
+	moved := previewRequest()
+	moved.Manifest.Domains[0].Hostnames = []string{"*.moved.example"}
+	second, _ := deploy(t, client, moved)
+	if !first.GetSuccess() || !second.GetSuccess() {
+		t.Fatalf("Deploy() = %q, %q", first.GetError(), second.GetError())
+	}
+	if slices.Equal(servedURLs(first), servedURLs(second)) {
+		t.Fatalf("the alias stayed %v when domains.preview moved, want it on the new wildcard", servedURLs(first))
+	}
+	if pointer, _ := plane.FindServingPointer(host(servedURLs(first)[0])); pointer != "" {
+		t.Errorf("the replaced alias %s is still served by %q, want nothing", servedURLs(first)[0], pointer)
+	}
+	if pointer, _ := plane.FindServingPointer(host(servedURLs(second)[0])); pointer != "pr-7" {
+		t.Errorf("the new alias %s is served by %q, want pr-7", servedURLs(second)[0], pointer)
+	}
+
+	plane.FailNextPointerMove(errors.New("the data plane is down"))
+	third, _ := deploy(t, client, previewRequest())
+	if third.GetSuccess() {
+		t.Fatal("Deploy() succeeded through a refused pointer move")
+	}
+	removing, err := client.RemoveEnvironment(context.Background(), &contractv1.RemoveEnvironmentRequest{
+		Slug: "shop", Environment: &environmentv1.Environment{
+			Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-7", Lifecycle: environmentv1.Lifecycle_LIFECYCLE_PERSISTENT,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result, err := drain(removing); err != nil || !result.GetSuccess() {
+		t.Fatalf("RemoveEnvironment() = %q, %v", result.GetError(), err)
+	}
+	if served := plane.ListServedHostnames(); len(served) != 0 {
+		t.Errorf("after the preview was removed %v are still served, want none of the aliases it ever published", served)
+	}
+}
+
+func TestAPreviewWhoseAliasMoveFailsIsListedOnTheAliasStillServedAndRemoveWithdrawsBoth(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	previewBootstrapped(t, client)
+	plane := vendor.Routers().(*fake.Routers).DataPlane(fake.RouterRelay)
+
+	first, _ := deploy(t, client, previewRequest())
+	if !first.GetSuccess() {
+		t.Fatalf("Deploy() = %q", first.GetError())
+	}
+	moved := previewRequest()
+	moved.Manifest.Domains[0].Hostnames = []string{"*.moved.example"}
+	plane.FailNextPointerMove(errors.New("the data plane is down"))
+	if failed, _ := deploy(t, client, moved); failed.GetSuccess() {
+		t.Fatal("Deploy() succeeded through a refused pointer move")
+	}
+
+	listed, err := client.ListEnvironments(context.Background(), &contractv1.ListEnvironmentsRequest{Slug: "shop"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := listed.GetEnvironments(); len(got) != 1 || !slices.Equal(got[0].GetAliasUrls(), servedURLs(first)) {
+		t.Errorf("ListEnvironments = %v after the move to *.moved.example failed, want pr-7 listed on %v, the alias still served", got, servedURLs(first))
+	}
+
+	removing, err := client.RemoveEnvironment(context.Background(), &contractv1.RemoveEnvironmentRequest{
+		Slug: "shop", Environment: &environmentv1.Environment{
+			Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-7", Lifecycle: environmentv1.Lifecycle_LIFECYCLE_PERSISTENT,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result, err := drain(removing); err != nil || !result.GetSuccess() {
+		t.Fatalf("RemoveEnvironment() = %q, %v", result.GetError(), err)
+	}
+	if served := plane.ListServedHostnames(); len(served) != 0 {
+		t.Errorf("after the preview was removed %v are still served, want every alias it published or tried to", served)
+	}
+}
+
+func dryEnsurePreviewAlias(t *testing.T, client contractv1connect.ProviderServiceClient) map[string]string {
+	t.Helper()
+	ensured, err := client.EnsurePreviewAlias(context.Background(), &contractv1.EnsurePreviewAliasRequest{
+		Slug:        "shop",
+		Environment: previewRequest().GetEnvironment(),
+		Token:       "abcdefghijklmnop",
+		Apps:        []string{"web"},
+		Domains:     []string{"*.preview.example"},
+		Dry:         true,
+	})
+	if err != nil {
+		t.Fatalf("EnsurePreviewAlias: %v", err)
+	}
+	return ensured.GetHostnames()
+}
+
+func TestADryEnsurePreviewAliasOfANewPreviewAnswersNoHostnameAndRecordsNothing(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	previewBootstrapped(t, client)
+
+	if hostnames := dryEnsurePreviewAlias(t, client); len(hostnames) != 0 {
+		t.Errorf("a dry EnsurePreviewAlias of a preview never deployed = %v, want no hostname: its alias is assigned on its first deploy, and one signed now would never exist", hostnames)
+	}
+	for _, key := range []keyvalue.Key{stackrecords.NewPreviewKeyRecordKey(), stackrecords.EnvironmentKey(environment.TierPreview, "shop", "pr-7")} {
+		if _, err := vendor.KeyValues().Read(context.Background(), key); !errors.Is(err, keyvalue.ErrNotFound) {
+			t.Errorf("reading %s after a dry run = %v, want nothing written", key, err)
+		}
+	}
+}
+
+func TestADryEnsurePreviewAliasOfADeployedPreviewAnswersTheAliasItIsServedOn(t *testing.T) {
+	builtProject(t)
+	client, _ := deployServed(t)
+	previewBootstrapped(t, client)
+	result, _ := deploy(t, client, previewRequest())
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+
+	if got, want := dryEnsurePreviewAlias(t, client)["web"], strings.TrimPrefix(servedURLs(result)[0], "https://"); got != want {
+		t.Errorf("a dry EnsurePreviewAlias of a deployed preview answered %q, want %q, the alias it is served on", got, want)
+	}
+}
+
+func TestADryDeployOfANewPreviewSaysItsHostnameIsAssignedOnItsFirstDeploy(t *testing.T) {
+	builtProject(t)
+	client, _ := deployServed(t)
+	previewBootstrapped(t, client)
+	req := previewRequest()
+	req.Dry = true
+
+	result, events := deploy(t, client, req)
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy(dry) = %q", result.GetError())
+	}
+	said := false
+	for _, event := range events {
+		if strings.Contains(event.GetMessage(), "assigned on its first deploy") {
+			said = true
+		}
+		if strings.Contains(event.GetMessage(), "pr-7-") {
+			t.Errorf("the dry deploy said %q, want no hostname for a preview never deployed: one signed now would never exist", event.GetMessage())
+		}
+	}
+	if !said {
+		t.Error("the dry deploy of a new preview never said its hostname is assigned on its first deploy")
+	}
+}
+
+func ensureAlias(t *testing.T, client contractv1connect.ProviderServiceClient, token string) {
+	t.Helper()
+	if _, err := client.EnsurePreviewAlias(context.Background(), &contractv1.EnsurePreviewAliasRequest{
+		Slug:        "shop",
+		Environment: previewRequest().GetEnvironment(),
+		Token:       token,
+		Apps:        []string{"web"},
+		Domains:     []string{"*.preview.example"},
+	}); err != nil {
+		t.Fatalf("EnsurePreviewAlias: %v", err)
+	}
+}
+
+func forgetAlias(t *testing.T, client contractv1connect.ProviderServiceClient, token string) {
+	t.Helper()
+	if _, err := client.ForgetPreviewAlias(context.Background(), &contractv1.ForgetPreviewAliasRequest{
+		Slug:        "shop",
+		Environment: previewRequest().GetEnvironment(),
+		Token:       token,
+	}); err != nil {
+		t.Fatalf("ForgetPreviewAlias: %v", err)
+	}
+}
+
+func isPreviewRecorded(t *testing.T, vendor *fake.Provider) bool {
+	t.Helper()
+	_, err := vendor.KeyValues().Read(context.Background(), stackrecords.EnvironmentKey(environment.TierPreview, "shop", "pr-7"))
+	if err != nil && !errors.Is(err, keyvalue.ErrNotFound) {
+		t.Fatal(err)
+	}
+	return err == nil
+}
+
+func TestAPreviewRefusedForAnOverlongLabelIsNeverRecorded(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	previewBootstrapped(t, client)
+	if result := usePreviewWildcard(t, client, "preview.acme.com", edged(fake.KindRelay, "acme.com")); !result.GetSuccess() {
+		t.Fatalf("UsePreviewWildcard() = %q", result.GetError())
+	}
+	slug := strings.Repeat("s", 45)
+	recorded := func() bool {
+		t.Helper()
+		_, err := vendor.KeyValues().Read(context.Background(), stackrecords.EnvironmentKey(environment.TierPreview, slug, "pr-7"))
+		if err != nil && !errors.Is(err, keyvalue.ErrNotFound) {
+			t.Fatal(err)
+		}
+		return err == nil
+	}
+
+	req := previewDeployRequest()
+	req.Manifest.Slug = slug
+	if result, _, err := deployStream(t, client, req); err == nil && result.GetSuccess() {
+		t.Fatal("Deploy() of a label over 63 characters succeeded")
+	}
+	if recorded() {
+		t.Error("Deploy() refused the label but recorded the preview, want nothing for `ocel preview ls` to list")
+	}
+
+	if _, err := client.EnsurePreviewAlias(context.Background(), &contractv1.EnsurePreviewAliasRequest{
+		Slug: slug, Environment: previewDeployRequest().GetEnvironment(), Token: "abcdefghijklmnop", Apps: []string{"web"},
+	}); err == nil {
+		t.Fatal("EnsurePreviewAlias() of a label over 63 characters succeeded")
+	}
+	if recorded() {
+		t.Error("EnsurePreviewAlias() refused the label but recorded the preview, want nothing for `ocel preview ls` to list")
+	}
+}
+
+func TestForgetPreviewAliasRemovesTheAliasANeverDeployedPreviewWasAssigned(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	previewBootstrapped(t, client)
+	ensureAlias(t, client, "abcdefghijklmnop")
+
+	forgetAlias(t, client, "abcdefghijklmnop")
+
+	if isPreviewRecorded(t, vendor) {
+		t.Error("pr-7 is still recorded after its alias was forgotten before any deploy claimed it, want nothing left for `ocel preview ls` to list")
+	}
+}
+
+func TestForgetPreviewAliasKeepsAPreviewAnotherRunAssignedOrADeployClaimed(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	previewBootstrapped(t, client)
+	ensureAlias(t, client, "abcdefghijklmnop")
+
+	forgetAlias(t, client, "qrstuvwxyzabcdef")
+	if !isPreviewRecorded(t, vendor) {
+		t.Fatal("forgetting an alias token pr-7 was never assigned removed its record, want it kept for the run that was")
+	}
+
+	if result, _ := deploy(t, client, previewRequest()); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+	listed, err := client.ListEnvironments(context.Background(), &contractv1.ListEnvironmentsRequest{Slug: "shop"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	token := strings.TrimPrefix(listed.GetEnvironments()[0].GetAliasUrls()[0], "https://pr-7-")[:edge.PreviewTokenLen]
+	forgetAlias(t, client, token)
+	if !isPreviewRecorded(t, vendor) {
+		t.Error("forgetting the alias of a deployed preview removed its record, want a preview a deploy claimed kept until `ocel preview rm`")
+	}
+}
+
+func TestEnsurePreviewAliasAnswersTheHostnamesThePreviewDeployIsServedOn(t *testing.T) {
+	builtProject(t)
+	client, _ := deployServed(t)
+	previewBootstrapped(t, client)
+
+	ensured, err := client.EnsurePreviewAlias(context.Background(), &contractv1.EnsurePreviewAliasRequest{
+		Slug:        "shop",
+		Environment: previewRequest().GetEnvironment(),
+		Token:       "abcdefghijklmnop",
+		Apps:        []string{"web"},
+		Domains:     []string{"*.preview.example"},
+	})
+	if err != nil {
+		t.Fatalf("EnsurePreviewAlias: %v", err)
+	}
+	hostname := ensured.GetHostnames()["web"]
+	if !strings.HasPrefix(hostname, "pr-7-abcdefghijklmnop") {
+		t.Fatalf("EnsurePreviewAlias = %v, want web on pr-7 and the token the CLI minted", ensured.GetHostnames())
+	}
+
+	result, _ := deploy(t, client, previewRequest())
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+	if want := []string{"https://" + hostname}; !slices.Equal(servedURLs(result), want) {
+		t.Errorf("the deploy announced %v, want %v: the build baked in the alias it was answered", servedURLs(result), want)
+	}
+
+	again, err := client.EnsurePreviewAlias(context.Background(), &contractv1.EnsurePreviewAliasRequest{
+		Slug:        "shop",
+		Environment: previewRequest().GetEnvironment(),
+		Token:       "qrstuvwxyz234567",
+		Apps:        []string{"web"},
+		Domains:     []string{"*.preview.example"},
+	})
+	if err != nil {
+		t.Fatalf("EnsurePreviewAlias again: %v", err)
+	}
+	if again.GetHostnames()["web"] != hostname {
+		t.Errorf("EnsurePreviewAlias again = %v, want the alias the preview already has", again.GetHostnames())
+	}
+	if again.GetToken() != "abcdefghijklmnop" {
+		t.Errorf("EnsurePreviewAlias again answered the token %q, want abcdefghijklmnop, the one the preview was created with, for its deploy to carry", again.GetToken())
+	}
+}
+
+func deployBuiltFor(t *testing.T, client contractv1connect.ProviderServiceClient, token string) *progressv1.OperationResult {
+	t.Helper()
+	req := previewRequest()
+	req.AliasToken = token
+	result, _ := deploy(t, client, req)
+	return result
+}
+
+func TestAPreviewDeployRecreatesTheAliasItsBuildWasGivenWhenAFailedRunForgotIt(t *testing.T) {
+	builtProject(t)
+	client, _ := deployServed(t)
+	previewBootstrapped(t, client)
+	ensureAlias(t, client, "abcdefghijklmnop")
+	forgetAlias(t, client, "abcdefghijklmnop")
+
+	result := deployBuiltFor(t, client, "abcdefghijklmnop")
+
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+	if urls := servedURLs(result); len(urls) != 1 || !strings.HasPrefix(urls[0], "https://pr-7-abcdefghijklmnop") {
+		t.Errorf("the deploy is served on %v, want the alias abcdefghijklmnop its build baked in", urls)
+	}
+}
+
+func TestAPreviewKeepsTheAliasItsBuildWasGivenWhenAFailedRunForgetsItBeforeTheDeployClaimsThePreview(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	previewBootstrapped(t, client)
+	ensureAlias(t, client, "abcdefghijklmnop")
+	vendor.WithHooks(func(hooks *provider.Hooks) {
+		hooks.PreflightDeploy = func(context.Context, provider.DeployPreflight) error {
+			_, err := client.ForgetPreviewAlias(context.Background(), &contractv1.ForgetPreviewAliasRequest{
+				Slug: "shop", Environment: previewRequest().GetEnvironment(), Token: "abcdefghijklmnop",
+			})
+			return err
+		}
+	})
+
+	if result := deployBuiltFor(t, client, "abcdefghijklmnop"); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+	vendor.WithHooks(func(hooks *provider.Hooks) { hooks.PreflightDeploy = nil })
+	next := deployBuiltFor(t, client, "")
+
+	if !next.GetSuccess() {
+		t.Fatalf("the next Deploy() = %q", next.GetError())
+	}
+	if urls := servedURLs(next); len(urls) != 1 || !strings.HasPrefix(urls[0], "https://pr-7-abcdefghijklmnop") {
+		t.Errorf("the next deploy is served on %v, want the alias abcdefghijklmnop the first deploy was served on", urls)
+	}
+	meta, err := stackrecords.ReadEnvironmentMeta(context.Background(), vendor.KeyValues(), environment.TierPreview, "shop", "pr-7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if meta.AliasToken != "abcdefghijklmnop" {
+		t.Errorf("pr-7 records the alias token %q, want abcdefghijklmnop, the one its deploys were served on", meta.AliasToken)
+	}
+	for _, host := range meta.Aliases {
+		if !strings.Contains(host.Hostname, "abcdefghijklmnop") {
+			t.Errorf("pr-7 records the alias %s, want every alias on the token abcdefghijklmnop", host.Hostname)
+		}
+	}
+}
+
+func TestAPreviewDeployRecreatesTheAliasItsBuildWasGivenWhenThePreviewWasRemovedMeanwhile(t *testing.T) {
+	builtProject(t)
+	client, _ := deployServed(t)
+	previewBootstrapped(t, client)
+	if result := deployBuiltFor(t, client, ""); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+	ensureAlias(t, client, "abcdefghijklmnop")
+	built := readListedAliasToken(t, client)
+	removing, err := client.RemoveEnvironment(context.Background(), &contractv1.RemoveEnvironmentRequest{
+		Slug: "shop", Environment: &environmentv1.Environment{
+			Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-7", Lifecycle: environmentv1.Lifecycle_LIFECYCLE_PERSISTENT,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result, err := drain(removing); err != nil || !result.GetSuccess() {
+		t.Fatalf("RemoveEnvironment() = %q, %v", result.GetError(), err)
+	}
+
+	result := deployBuiltFor(t, client, built)
+
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+	if urls := servedURLs(result); len(urls) != 1 || !strings.HasPrefix(urls[0], "https://pr-7-"+built) {
+		t.Errorf("the deploy is served on %v, want the alias %s its build baked in", urls, built)
+	}
+}
+
+func readListedAliasToken(t *testing.T, client contractv1connect.ProviderServiceClient) string {
+	t.Helper()
+	listed, err := client.ListEnvironments(context.Background(), &contractv1.ListEnvironmentsRequest{Slug: "shop"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.TrimPrefix(listed.GetEnvironments()[0].GetAliasUrls()[0], "https://pr-7-")[:edge.PreviewTokenLen]
+}
+
+func TestAPreviewDeployIsRefusedWhenThePreviewWasGivenAnotherAliasSinceItsBuild(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	plane := vendor.Routers().(*fake.Routers).DataPlane(fake.RouterRelay)
+	previewBootstrapped(t, client)
+	ensureAlias(t, client, "abcdefghijklmnop")
+	forgetAlias(t, client, "abcdefghijklmnop")
+	ensureAlias(t, client, "qrstuvwxyz234567")
+
+	result := deployBuiltFor(t, client, "abcdefghijklmnop")
+
+	if result.GetSuccess() || !strings.Contains(result.GetError(), "another alias") {
+		t.Errorf("Deploy() = %v %q, want it refused: its build baked the alias abcdefghijklmnop and the preview is now on qrstuvwxyz234567", result.GetSuccess(), result.GetError())
+	}
+	if served := plane.ListServedHostnames(); len(served) != 0 {
+		t.Errorf("%v are served, want nothing: a build is never served on hostnames it was not built for", served)
 	}
 }
 
@@ -1201,10 +1810,9 @@ func TestDeployAnnouncesThePreviewHostnameOfTheGlobalWildcard(t *testing.T) {
 	if !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
-	want := "https://" + edge.SharedPreview("shop", "preview.acme.com").Host("pr-7", "")
-	if !slices.Equal(servedURLs(result), []string{want}) {
-		t.Errorf("the preview deploy announced %v, want %s: the project declares no domains.preview, so the global wildcard serves it",
-			servedURLs(result), want)
+	urls := servedURLs(result)
+	if len(urls) != 1 || !regexp.MustCompile(`^https://shop-[a-z2-7]{24}\.preview\.acme\.com$`).MatchString(urls[0]) {
+		t.Errorf("the preview deploy announced %v, want the project's slug and a signed token on the global wildcard, and never the preview's name", urls)
 	}
 }
 
@@ -1222,7 +1830,7 @@ func TestAGlobalPreviewDeployOnAnEdgeThatRoutesByLabelHandsTheStacksTheLabelInIt
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	want := edge.SharedPreview("shop", "preview.acme.com").Label("pr-7", "")
+	want, _, _ := strings.Cut(strings.TrimPrefix(servedURLs(result)[0], "https://"), ".")
 	for _, spec := range vendor.FakeStacks().Provisioned() {
 		if spec.App == nil {
 			continue
@@ -1335,13 +1943,10 @@ func TestDeployAnnouncesAPreviewHostnamePerAppWhenTheProjectHasMoreThanOne(t *te
 	if !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
-	want := []string{
-		"https://" + edge.SharedPreview("shop", "preview.acme.com").Host("pr-7", "web"),
-		"https://" + edge.SharedPreview("shop", "preview.acme.com").Host("pr-7", "admin"),
-	}
-	if !slices.Equal(servedURLs(result), want) {
-		t.Errorf("the preview deploy announced %v, want %v: the appless hostname is ambiguous once a project has two apps",
-			servedURLs(result), want)
+	web, admin := servedAppURLs(result, "web"), servedAppURLs(result, "admin")
+	if len(web) != 1 || len(admin) != 1 || web[0] == admin[0] {
+		t.Errorf("the preview deploy announced %v for web and %v for admin, want one hostname per app: the appless hostname is ambiguous once a project has two apps",
+			web, admin)
 	}
 }
 
@@ -1482,5 +2087,99 @@ func TestADeployPassesOnAWarningTheEdgeRaisesWhileItReconciles(t *testing.T) {
 		return event.GetLevel() == progressv1.Level_LEVEL_WARN && strings.Contains(event.GetMessage(), "more than one label below")
 	}) {
 		t.Error("the deploy dropped the warning the edge raised while it reconciled")
+	}
+}
+
+func TestADeploymentHostnameIsNotServedWhenThePreviewIsRemovedBeforeItIsRouted(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	previewBootstrapped(t, client)
+	if first, _ := deploy(t, client, previewRequest()); !first.GetSuccess() {
+		t.Fatalf("Deploy() = %q", first.GetError())
+	}
+	plane := vendor.Routers().(*fake.Routers).DataPlane(fake.RouterRelay)
+
+	var removed *progressv1.OperationResult
+	plane.BeforeNextPointerMove(func() {
+		plane.BeforeNextPointerMove(func() {
+			removing, err := client.RemoveEnvironment(context.Background(), &contractv1.RemoveEnvironmentRequest{
+				Slug: "shop", Environment: &environmentv1.Environment{
+					Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-7", Lifecycle: environmentv1.Lifecycle_LIFECYCLE_PERSISTENT,
+				},
+			})
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			if removed, err = drain(removing); err != nil {
+				t.Error(err)
+			}
+		})
+	})
+	deploy(t, client, previewRequest())
+
+	if !removed.GetSuccess() {
+		t.Fatalf("RemoveEnvironment() between the promote and the deployment hostname's move = %q, want it to succeed", removed.GetError())
+	}
+	if served := plane.ListServedHostnames(); len(served) != 0 {
+		t.Errorf("after the preview was removed between its promote and its deployment hostname's move %v are served, want none: nothing records a deployment hostname routed after rm, so nothing would withdraw it", served)
+	}
+}
+
+func removePreviewWhileItProvisions(t *testing.T, client contractv1connect.ProviderServiceClient, vendor *fake.Provider) {
+	t.Helper()
+	vendor.FakeStacks().Entering(func(spec provider.StackSpec) error {
+		if spec.App == nil {
+			return nil
+		}
+		removing, err := client.RemoveEnvironment(context.Background(), &contractv1.RemoveEnvironmentRequest{
+			Slug: "shop", Environment: &environmentv1.Environment{
+				Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-7", Lifecycle: environmentv1.Lifecycle_LIFECYCLE_PERSISTENT,
+			},
+		})
+		if err != nil {
+			t.Error(err)
+			return nil
+		}
+		if removed, err := drain(removing); err != nil || !removed.GetSuccess() {
+			t.Errorf("RemoveEnvironment() while pr-7 provisioned = %q, %v", removed.GetError(), err)
+		}
+		return nil
+	})
+}
+
+func TestAPreviewRemovedAfterItsDeployClaimedItStaysRemoved(t *testing.T) {
+	for name, existing := range map[string]bool{"on its first deploy": false, "on a deploy of an existing preview": true} {
+		t.Run(name, func(t *testing.T) {
+			builtProject(t)
+			client, vendor := deployServed(t)
+			previewBootstrapped(t, client)
+			plane := vendor.Routers().(*fake.Routers).DataPlane(fake.RouterRelay)
+			if existing {
+				if first, _ := deploy(t, client, previewRequest()); !first.GetSuccess() {
+					t.Fatalf("Deploy() = %q", first.GetError())
+				}
+			}
+			removePreviewWhileItProvisions(t, client, vendor)
+			before := len(vendor.FakeStacks().Provisioned())
+
+			result, _ := deploy(t, client, previewRequest())
+
+			for _, spec := range vendor.FakeStacks().Provisioned()[before:] {
+				if vendor.FakeStacks().Inspect(spec.Ref).Present {
+					t.Errorf("stack %s provisioned for pr-7 is still up after pr-7 was removed, want it reclaimed", spec.Ref.Name)
+				}
+			}
+			if result.GetSuccess() || !strings.Contains(result.GetError(), "pr-7 was removed") {
+				t.Errorf("Deploy() of a preview removed after its deploy claimed it = %q, want it refused as removed", result.GetError())
+			}
+			if isPreviewRecorded(t, vendor) {
+				meta, err := stackrecords.ReadEnvironmentMeta(context.Background(), vendor.KeyValues(), environment.TierPreview, "shop", "pr-7")
+				t.Errorf("pr-7 records %+v (%v) after it was removed, want no record: a removed preview stays removed", meta, err)
+			}
+			if served := plane.ListServedHostnames(); len(served) != 0 {
+				t.Errorf("after pr-7 was removed its deploy serves %v, want nothing served", served)
+			}
+		})
 	}
 }

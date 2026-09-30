@@ -18,7 +18,7 @@ func served() proxy.Spec {
 	return proxy.Spec{
 		Hostnames: []string{
 			"ocel-edge-probe.preview.example.com",
-			"pr-12--web.preview.example.com",
+			"pr-12-web-abcdefghijklmnopp3347l26.preview.example.com",
 			"shop.example.com",
 		},
 		PreviewBase: "preview.example.com",

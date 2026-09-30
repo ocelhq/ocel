@@ -999,9 +999,9 @@ func openRouter(shared edge.EdgeStack) fake.PromotingStack {
 	return fake.PromotingStack{Stack: routerStack{s: s}, Ledger: s.openLedger(c)}
 }
 
-func removePointer(ctx context.Context, stack edge.EdgeStack, pointer string, progress progress.Log) (router.PruneResult, error) {
-	if err := openRouter(stack).RemovePointer(ctx, pointer, progress); err != nil {
+func removePointer(ctx context.Context, stack edge.EdgeStack, removal router.PointerRemoval, progress progress.Log) (router.PruneResult, error) {
+	if err := openRouter(stack).RemovePointer(ctx, removal, progress); err != nil {
 		return router.PruneResult{}, err
 	}
-	return openRouter(stack).Ledger.RemovePointer(ctx, pointer)
+	return openRouter(stack).Ledger.RemovePointer(ctx, removal.Pointer)
 }

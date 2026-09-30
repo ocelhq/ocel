@@ -160,6 +160,11 @@ type deployRun struct {
 
 	wildcard   stackrecords.Wildcard
 	previewOn  string
+	previewKey edge.PreviewKey
+	builtAlias string
+	aliasToken string
+	aliases    []edge.PreviewHost
+	deployment []edge.PreviewHost
 	selection  *contractv1.EdgeSelection
 	configured []ConfiguredHost
 	pending    []string
@@ -261,6 +266,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 		manifest:       req.GetManifest(),
 		spec:           spec,
 		selection:      req.GetEdge(),
+		builtAlias:     req.GetAliasToken(),
 		values:         variablestore.Store{KeyValues: p.KeyValues(), Cipher: p.Cipher()},
 		scope:          variablestore.Scope{Project: spec.Slug, Tier: spec.Tier},
 		artifacts:      map[string]provider.ArtifactRef{},
@@ -337,6 +343,9 @@ func (r *deployRun) prepare(ctx context.Context, progress progress.Log) error {
 	if err := r.resolveServingDomains(ctx); err != nil {
 		return err
 	}
+	if err := r.ensureSignedPreviewHosts(ctx, progress); err != nil {
+		return err
+	}
 	if err := r.readInlineRecords(ctx); err != nil {
 		return err
 	}
@@ -386,7 +395,7 @@ func (r *deployRun) ensureLifecycle(ctx context.Context) error {
 	if r.spec.Tier != environment.TierPreview || r.dry {
 		return nil
 	}
-	return stackrecords.EnsureLifecycle(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, r.spec.Env, readPreviewLifecycle(r.spec))
+	return stackrecords.EnsureLifecycle(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, r.spec.Env, readPreviewLifecycle(r.spec), r.aliasToken)
 }
 
 func (r *deployRun) ensureBootstrap(ctx context.Context, progress progress.Log) error {
@@ -403,7 +412,7 @@ func (r *deployRun) resolveServingDomains(ctx context.Context) error {
 		}
 		r.wildcard = wildcard
 		if len(hosts) > 0 {
-			base, err := r.previewBase()
+			base, err := parsePreviewBase(hosts)
 			if err != nil {
 				return err
 			}
@@ -414,9 +423,7 @@ func (r *deployRun) resolveServingDomains(ctx context.Context) error {
 			r.previewOn = wildcard.BaseDomain
 			return nil
 		}
-		return refusal.Refuse(refusal.CodeNotReady,
-			"this project declares no domains.preview wildcard and no global preview domain is in use, so a preview deploy has nowhere to serve: "+
-				"declare a project-level domains.preview wildcard, or run `ocel domain use '*.preview.example.com' --preview` to serve every project's previews on one wildcard")
+		return refuseNoPreviewDomain()
 	}
 	if len(hosts) == 0 {
 		if r.edgeRouter().Facts().AddressesItself {
@@ -436,6 +443,68 @@ func (r *deployRun) resolveServingDomains(ctx context.Context) error {
 	}
 	r.installDNSCutover(writer, r.selection.GetDns().GetZone())
 	r.cutover.manual = failOnManualRecords(r.sender, r.spans.Hostnames)
+	return nil
+}
+
+func refuseNoPreviewDomain() error {
+	return refusal.Refuse(refusal.CodeNotReady,
+		"this project declares no domains.preview wildcard and no global preview domain is in use, so a preview deploy has nowhere to serve: "+
+			"declare a project-level domains.preview wildcard, or run `ocel domain use '*.preview.example.com' --preview` to serve every project's previews on one wildcard")
+}
+
+func (r *deployRun) ensureSignedPreviewHosts(ctx context.Context, progress progress.Log) error {
+	if r.spec.Tier != environment.TierPreview {
+		return nil
+	}
+	key, err := openOrEnsurePreviewKey(ctx, r.provider, r.dry)
+	if err != nil {
+		return err
+	}
+	r.previewKey = key
+	site, names := r.previewSite(), r.listNonEmptyNormalizedAppNames()
+	if err := refuseOverlongAliases(site, r.spec.Env, names); err != nil {
+		return err
+	}
+	if r.dry {
+		return r.readPreviewHosts(ctx, progress, site, names)
+	}
+	alias, err := r.ensureBuiltAlias(ctx)
+	if err != nil {
+		return err
+	}
+	deployment, err := edge.NewPreviewToken()
+	if err != nil {
+		return err
+	}
+	r.aliasToken = alias
+	r.aliases, r.deployment = site.ListHosts(r.spec.Env, alias, names), site.ListHosts(r.spec.Env, deployment, names)
+	return nil
+}
+
+func (r *deployRun) ensureBuiltAlias(ctx context.Context) (string, error) {
+	if r.builtAlias != "" {
+		return r.builtAlias, stackrecords.RecordBuiltAliasToken(ctx, r.provider.KeyValues(), environment.TierPreview, r.spec.Slug, r.spec.Env, r.builtAlias)
+	}
+	candidate, err := edge.NewPreviewToken()
+	if err != nil {
+		return "", err
+	}
+	return stackrecords.EnsureAliasToken(ctx, r.provider.KeyValues(), environment.TierPreview, r.spec.Slug, r.spec.Env, candidate)
+}
+
+func (r *deployRun) readPreviewHosts(ctx context.Context, progress progress.Log, site edge.PreviewSite, names []string) error {
+	var alias string
+	if r.previewKey != "" {
+		var err error
+		if alias, err = readAliasToken(ctx, r.provider, r.spec.Slug, r.spec.Env); err != nil {
+			return err
+		}
+	}
+	if alias == "" {
+		progress.Say(fmt.Sprintf("Preview %s has never deployed, so its hostname is assigned on its first deploy", r.spec.Env))
+		return nil
+	}
+	r.aliases = site.ListHosts(r.spec.Env, alias, names)
 	return nil
 }
 
@@ -511,7 +580,7 @@ func (r *deployRun) reconcileEdge(ctx context.Context, progress progress.Log) er
 		Slug:              r.spec.Slug,
 		Env:               r.spec.Env,
 		PreviewBaseDomain: base,
-		Apps:              r.appNames(),
+		PreviewKey:        r.previewKey,
 	})
 	if err != nil {
 		return err
@@ -617,9 +686,9 @@ func (r *deployRun) configuredHosts() ([]ConfiguredHost, error) {
 	return productionHosts(declared)
 }
 
-func (r *deployRun) previewBase() (string, error) {
+func parsePreviewBase(hosts []string) (string, error) {
 	var base string
-	for _, host := range r.hostnames() {
+	for _, host := range hosts {
 		resolved, wildcard := strings.CutPrefix(host, "*.")
 		if !wildcard {
 			return "", refusal.Refuse(refusal.CodeInvalid,
@@ -644,21 +713,19 @@ func (r *deployRun) globalPreview() string {
 	return r.wildcard.BaseDomain
 }
 
-func (r *deployRun) appNames() []string {
+func (r *deployRun) listNonEmptyNormalizedAppNames() []string {
 	names := make([]string, 0, len(r.spec.Apps))
 	for _, entry := range r.spec.Apps {
-		if name := strings.ToLower(strings.TrimSpace(entry.App)); name != "" {
-			names = append(names, name)
-		}
+		names = append(names, entry.App)
 	}
-	return names
+	return normalizeAppNames(names)
 }
 
 func (r *deployRun) domainApps() map[string]string {
-	served := r.servedHostnames()
+	served := r.listServedHostnames()
 	owners := make(map[string]string, len(served))
 	for slot, hosts := range served {
-		name := strings.ToLower(strings.TrimSpace(r.spec.Apps[slot].App))
+		name := normalizeAppName(r.spec.Apps[slot].App)
 		if name == "" {
 			continue
 		}
@@ -695,25 +762,34 @@ func tierHostnames(declared []*contractv1.TierDomains, tier environmentv1.Tier) 
 
 func (r *deployRun) previewSite() edge.PreviewSite {
 	if r.hostingMode() == hostingGlobalPreview {
-		return edge.SharedPreview(r.spec.Slug, r.previewOn)
+		return edge.NewSharedPreviewSite(r.spec.Slug, r.previewOn, r.previewKey)
 	}
-	return edge.ProjectPreview(r.previewOn)
+	return edge.NewProjectPreviewSite(r.previewOn, r.previewKey)
 }
 
 func (r *deployRun) previewLabel(slot int) string {
 	if r.hostingMode() != hostingGlobalPreview || !r.readPairedRouter(r.spec.Apps[slot].App).Facts().RoutesPreviewsByLabel {
 		return ""
 	}
-	return r.previewSite().Label(r.spec.Pointer, edge.AppAt(r.appNames(), slot))
+	return findAppHost(r.aliases, r.spec.Apps[slot].App).ReadLabel()
 }
 
-func (r *deployRun) servedHostnames() [][]string {
+func findAppHost(hosts []edge.PreviewHost, app string) edge.PreviewHost {
+	name := normalizeAppName(app)
+	for _, host := range hosts {
+		if host.App == name {
+			return host
+		}
+	}
+	return edge.PreviewHost{}
+}
+
+func (r *deployRun) listServedHostnames() [][]string {
 	if r.spec.Tier == environment.TierPreview {
 		served := make([][]string, len(r.spec.Apps))
-		site, names := r.previewSite(), r.appNames()
-		for slot := range served {
-			if host := site.Host(r.spec.Pointer, edge.AppAt(names, slot)); host != "" {
-				served[slot] = []string{host}
+		for slot, entry := range r.spec.Apps {
+			if host := findAppHost(r.aliases, entry.App); host.Hostname != "" {
+				served[slot] = []string{host.Hostname}
 			}
 		}
 		return served
@@ -786,14 +862,15 @@ func (r *deployRun) preflight(ctx context.Context, progress progress.Log) error 
 		return err
 	}
 	return preflightDeploy(ctx, provider.DeployPreflight{
-		Deploy:    r.spec,
-		Edge:      r.front.Kind(),
-		Resources: resources,
-		Grants:    grants,
-		Apps:      apps,
-		Progress:  progress,
-		WrittenBy: r.gate.WrittenBy,
-		Dry:       r.dry,
+		Deploy:            r.spec,
+		PreviewBaseDomain: r.previewOn,
+		Edge:              r.front.Kind(),
+		Resources:         resources,
+		Grants:            grants,
+		Apps:              apps,
+		Progress:          progress,
+		WrittenBy:         r.gate.WrittenBy,
+		Dry:               r.dry,
 	})
 }
 
@@ -1370,6 +1447,7 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 		Builds:      r.spec.Builds,
 		Tag:         r.spec.Tag,
 		Propagation: &propagation,
+		Hosts:       r.listDeploymentHosts(),
 	}
 	if err := r.spanEvents.run(r.spans.Promotion, func(u *spanRun) error {
 		return u.phase(func(progress progress.Log) error {
@@ -1380,10 +1458,20 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 				r.restoreInlineBindings(ctx, progress)
 				return err
 			}
-			dropped, err := r.promoteApps(ctx, promoteRequest{pointer: r.spec.Pointer, replaces: r.replaces, promotion: promotion}, r.readAppRouter, progress)
+			previous, superseded, err := r.recordAliases(ctx)
 			if err != nil {
 				r.restoreInlineBindings(ctx, progress)
-				return errors.Join(err, r.reclaimDropped(ctx, r.spec.Pointer, dropped, progress))
+				return err
+			}
+			dropped, err := r.promoteApps(ctx, promoteRequest{pointer: r.spec.Pointer, hosts: r.aliases, superseded: superseded, replaces: r.replaces, promotion: promotion}, r.readAppRouter, progress)
+			if err != nil {
+				r.restoreInlineBindings(ctx, progress)
+				return errors.Join(err, r.restoreAliases(ctx, previous), r.reclaimDropped(ctx, r.spec.Pointer, dropped, progress))
+			}
+			if err := r.serveDeployment(ctx, r.spec.Pointer, promotion, r.readAppRouter, progress); err != nil {
+				progress.Warn(fmt.Sprintf("Promotion %s serves on %s, but not on its own deployment hostname: %v",
+					promotion.PromotionID, joinNames(edge.ListPreviewHostnames(r.aliases)), err))
+				r.deployment = nil
 			}
 			if err := r.checkpoint(ctx); err != nil {
 				return err
@@ -1395,13 +1483,30 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 			if r.spec.Tier != environment.TierPreview {
 				return nil
 			}
+			if err := stackrecords.ForgetSuperseded(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, r.spec.Env, superseded); err != nil {
+				return err
+			}
 			return stackrecords.RecordEnvironmentMeta(ctx, r.provider.KeyValues(),
-				r.spec.Tier, r.spec.Slug, r.spec.Env, r.spec.Label, readPreviewLifecycle(r.spec))
+				r.spec.Tier, r.spec.Slug, r.spec.Env, r.aliasToken, r.spec.Label, readPreviewLifecycle(r.spec))
 		})
 	}); err != nil {
 		return nil, err
 	}
 	return r.result(promotion, propagation)
+}
+
+func (r *deployRun) recordAliases(ctx context.Context) (previous, superseded []edge.PreviewHost, err error) {
+	if r.spec.Tier != environment.TierPreview {
+		return nil, nil, nil
+	}
+	return stackrecords.RecordAliases(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, r.spec.Env, r.aliasToken, r.aliases)
+}
+
+func (r *deployRun) restoreAliases(ctx context.Context, previous []edge.PreviewHost) error {
+	if r.spec.Tier != environment.TierPreview {
+		return nil
+	}
+	return stackrecords.RestoreAliases(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, r.spec.Env, r.aliasToken, r.aliases, previous)
 }
 
 func (r *deployRun) result(promotion router.Promotion, propagation router.Propagation) (*progressv1.OperationEvent, error) {
@@ -1411,7 +1516,7 @@ func (r *deployRun) result(promotion router.Promotion, propagation router.Propag
 		Propagation: propagationProto(&propagation),
 	}
 	r.reportApps(result)
-	for slot, hosts := range r.servedHostnames() {
+	for slot, hosts := range r.listServedHostnames() {
 		for _, host := range hosts {
 			if r.hostingMode() == hostingProduction && !r.state.Ready(host, r.front.Kind(), r.readConfiguredRouter(r.spec.Apps[slot].App)) {
 				continue
@@ -1419,8 +1524,30 @@ func (r *deployRun) result(promotion router.Promotion, propagation router.Propag
 			r.outcomes[slot].Urls = append(r.outcomes[slot].Urls, "https://"+host)
 		}
 	}
+	for slot, entry := range r.spec.Apps {
+		if host := findAppHost(r.listDeploymentHosts(), entry.App); host.Hostname != "" {
+			r.outcomes[slot].DeploymentUrl = "https://" + host.Hostname
+		}
+	}
 	result.UrlNotes = r.pending
 	return &progressv1.OperationEvent{Body: &progressv1.OperationEvent_Result{Result: result}}, nil
+}
+
+func (r *deployRun) listDeploymentHosts() []edge.PreviewHost {
+	var hosts []edge.PreviewHost
+	for _, entry := range r.spec.Apps {
+		paired := r.readPairedRouter(entry.App)
+		if !paired.Facts().ServesPreviewDeployments {
+			continue
+		}
+		if r.appRouters[entry.App] != r.edgeKind && routerOriginBehind(r.front, paired) != nil {
+			continue
+		}
+		if host := findAppHost(r.deployment, entry.App); host.Hostname != "" {
+			hosts = append(hosts, host)
+		}
+	}
+	return hosts
 }
 
 func (r *deployRun) publish(ctx context.Context, bindings []provider.Binding) error {

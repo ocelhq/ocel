@@ -8,7 +8,9 @@ import (
 
 var _ proxy.Proxy = Traefik{}
 
-func (Traefik) Guarantees() proxy.Guarantees { return proxy.Guarantees{} }
+func (t Traefik) Guarantees() proxy.Guarantees {
+	return proxy.Guarantees{OrdersEachPreviewHostnameItsOwnCertificate: t.PreviewResolver == ""}
+}
 
 func (t Traefik) Render(spec proxy.Spec) ([]byte, error) { return t.render(spec) }
 

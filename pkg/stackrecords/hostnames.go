@@ -107,8 +107,6 @@ type Wildcard struct {
 	BaseDomain string        `json:"base_domain,omitempty"`
 	Edge       edge.Kind     `json:"edge,omitempty"`
 	Scope      string        `json:"scope,omitempty"`
-	GrammarMin uint32        `json:"grammar_min,omitempty"`
-	GrammarMax uint32        `json:"grammar_max,omitempty"`
 	Host       HostnameState `json:"settled,omitzero"`
 }
 

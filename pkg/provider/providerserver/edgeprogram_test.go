@@ -142,9 +142,8 @@ func TestDeploySendsTheProviderProgramToAnEdgeThatRunsCode(t *testing.T) {
 	if spec.Program.Name != fake.ProgramName("shop", environment.TierProduction) {
 		t.Errorf("Name = %q, want %q", spec.Program.Name, fake.ProgramName("shop", environment.TierProduction))
 	}
-	if spec.Program.Worker.Variables[fake.ProgramPreviewAppsVar] != "web" {
-		t.Errorf("Variables[%s] = %q, want the manifest's app names",
-			fake.ProgramPreviewAppsVar, spec.Program.Worker.Variables[fake.ProgramPreviewAppsVar])
+	if key, carried := spec.Program.Worker.Secrets[edge.PreviewKeyVar]; carried {
+		t.Errorf("Secrets[%s] = %q, want none: production serves no preview hostname to verify", edge.PreviewKeyVar, key)
 	}
 	if spec.Values[fake.ProgramEdgeVar] != string(fake.KindRelay) {
 		t.Errorf("Values = %v, want the values the provider hands the entry", spec.Values)
@@ -289,6 +288,39 @@ func TestPreviewDeployOnItsOwnWildcardServesFromItsOwnWorker(t *testing.T) {
 	if got := spec.Program.Worker.Variables[fake.ProgramPreviewVar]; got != "preview.shop.example" {
 		t.Errorf("Variables[%s] = %q, want the base under the project's own wildcard", fake.ProgramPreviewVar, got)
 	}
+	key := edge.PreviewKey(spec.Program.Worker.Secrets[edge.PreviewKeyVar])
+	aliases := servedURLs(result)
+	if len(aliases) != 1 {
+		t.Fatalf("the deploy announced %v, want one alias", aliases)
+	}
+	if alias := strings.TrimPrefix(aliases[0], "https://"); key == "" || !isSignedBy(key, alias) {
+		t.Errorf("the worker carries preview key %t that did not sign %q, want the key that signed the alias, so the edge refuses a forged label without a lookup", key != "", alias)
+	}
+}
+
+func TestUsePreviewWildcardAndAPreviewDeploySignWithOneKey(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	previewBootstrapped(t, client)
+	if result := usePreviewWildcard(t, client, "preview.acme.com", edged(fake.KindRelay, "acme.com")); !result.GetSuccess() {
+		t.Fatalf("UsePreviewWildcard() = %q", result.GetError())
+	}
+	result, _ := deploy(t, client, previewDeployRequest())
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+
+	specs := vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).Specs()
+	key := edge.PreviewKey(specs[len(specs)-1].Program.Worker.Secrets[edge.PreviewKeyVar])
+	if alias := strings.TrimPrefix(servedURLs(result)[0], "https://"); key == "" || !isSignedBy(key, alias) {
+		t.Errorf("the shared preview entry's key did not sign %q, want the key every project's previews are signed with", alias)
+	}
+}
+
+func isSignedBy(key edge.PreviewKey, hostname string) bool {
+	host := edge.PreviewHost{Hostname: hostname}
+	tail := host.ReadTail()
+	return tail != "" && key.Sign(host.ReadPrefix(), tail[:edge.PreviewTokenLen]) == host.ReadLabel()
 }
 
 func TestPreviewDeployWithNoAppsPrunesItsOwnWorker(t *testing.T) {

@@ -20,6 +20,8 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
+var sharedPreviewLabel = edge.PreviewKey("0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0").Sign("shop", "abcdefghijklmnop")
+
 func previewSpec(label string) provider.StackSpec {
 	return provider.StackSpec{
 		Ref: provider.StackRef{
@@ -46,7 +48,7 @@ func previewSpec(label string) provider.StackSpec {
 func TestAPreviewOnTheSharedWildcardDeploysTheServiceItsHostnameNames(t *testing.T) {
 	server := &runServer{}
 	p := server.open(t)
-	label := edge.SharedPreview("shop", "preview.acme.com").Label("pr-7", "")
+	label := sharedPreviewLabel
 
 	containers, err := p.ProvisionContainers(context.Background(), previewSpec(label), nil)
 	if err != nil {
@@ -61,7 +63,7 @@ func TestAPreviewOnTheSharedWildcardDeploysTheServiceItsHostnameNames(t *testing
 func TestAPreviewFunctionIsNamedApartFromThePreviewItShipsIn(t *testing.T) {
 	server := &runServer{}
 	p := server.open(t)
-	label := edge.SharedPreview("shop", "preview.acme.com").Label("pr-7", "")
+	label := sharedPreviewLabel
 
 	functions, err := p.ProvisionFunctions(context.Background(), previewSpec(label), nil)
 	if err != nil {
@@ -108,7 +110,7 @@ func TestAPreviewOnAnEdgeThatShieldsNothingIsSaidToBeOpenToAnyoneWithItsUrl(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	spec = previewSpec(edge.SharedPreview("shop", "preview.acme.com").Label("pr-7", ""))
+	spec = previewSpec(sharedPreviewLabel)
 	spec.Edge = front
 	if _, err := p.ProvisionContainers(context.Background(), spec, shielded); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)

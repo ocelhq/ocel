@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -18,8 +20,10 @@ const (
 )
 
 type appRouter struct {
-	stack router.Stack
-	apps  []string
+	stack      router.Stack
+	apps       []string
+	hosts      []edge.PreviewHost
+	superseded []edge.PreviewHost
 }
 
 type inactivePromotion struct{ refusal.Refusal }
@@ -28,6 +32,8 @@ func (i inactivePromotion) Unwrap() error { return i.Refusal }
 
 type promoteRequest struct {
 	pointer     string
+	hosts       []edge.PreviewHost
+	superseded  []edge.PreviewHost
 	replaces    string
 	rollsBackTo string
 	promotion   router.Promotion
@@ -48,7 +54,7 @@ func promote(ctx context.Context, l projectLedger, req promoteRequest, routers [
 		if err != nil {
 			return nil, err
 		}
-		moves[i] = router.PointerMove{Pointer: pointer, Promotion: promoted, Records: records, StillActive: newStillActive(l, pointer, promoted.PromotionID)}
+		moves[i] = router.PointerMove{Pointer: pointer, Promotion: promoted, Records: records, Hosts: routed.hosts, Superseded: routed.superseded, StillActive: newStillActive(l, pointer, promoted.PromotionID)}
 	}
 	dropped, err := req.record(ctx, l)
 	if err != nil {
@@ -92,7 +98,7 @@ func restore(ctx context.Context, l projectLedger, pointer string, routed appRou
 			return err
 		}
 		if !found {
-			if err := routed.stack.RemovePointer(ctx, pointer, progress.Discard()); err != nil {
+			if err := routed.stack.RemovePointer(ctx, router.PointerRemoval{Pointer: pointer, Hosts: routed.hosts}, progress.Discard()); err != nil {
 				return err
 			}
 			named, err := l.ActivePromotionID(ctx, pointer)
@@ -109,6 +115,7 @@ func restore(ctx context.Context, l projectLedger, pointer string, routed appRou
 			Pointer:     pointer,
 			Promotion:   active,
 			Records:     records,
+			Hosts:       routed.hosts,
 			StillActive: newStillActive(l, pointer, active.PromotionID),
 		}, progress.Discard())
 		var inactive inactivePromotion
@@ -131,6 +138,21 @@ func newStillActive(l projectLedger, pointer, promotionID string) router.StillAc
 		return inactivePromotion{refusal.Refusal{Code: refusal.CodeBusy, Message: fmt.Sprintf(
 			"promotion %s is no longer active on %s, which now names %s: another deploy moved it while this one moved the pointer, and this deploy stopped rather than serve a release the ledger no longer names. Re-run this deploy once the other one has finished if its release should serve",
 			promotionID, router.ResolvePointer(pointer), describeActive(active))}}
+	}
+}
+
+func newStillKept(l projectLedger, pointer, promotionID string) router.StillActive {
+	return func(ctx context.Context) error {
+		read, err := l.Read(ctx, pointer)
+		if err != nil {
+			return err
+		}
+		if slices.ContainsFunc(read.Promotions, func(kept ledger.RecordedPromotion) bool { return kept.PromotionID == promotionID }) {
+			return nil
+		}
+		return refusal.Refuse(refusal.CodeBusy,
+			"promotion %s is no longer kept on %s: a prune or rm dropped it while this deploy routed its deployment hostname, so this deploy serves nothing on that hostname",
+			promotionID, router.ResolvePointer(pointer))
 	}
 }
 

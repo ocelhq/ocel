@@ -159,7 +159,7 @@ func (s *stack) findDistributionFor(ctx context.Context, c Clients, name string)
 	return findDistribution(ctx, c, name)
 }
 
-func (s *stack) publishOn(ctx context.Context, c Clients, promotionID string, records map[string]router.DeploymentRecord, hostnames []string, stillActive router.StillActive) error {
+func (s *stack) publishOn(ctx context.Context, c Clients, promotionID string, records map[string]router.DeploymentRecord, hostnames, superseded []string, stillActive router.StillActive) error {
 	if len(hostnames) == 0 {
 		return nil
 	}
@@ -173,17 +173,14 @@ func (s *stack) publishOn(ctx context.Context, c Clients, promotionID string, re
 	}
 	routes := s.routes(c)
 	routes.stillActive = stillActive
-	return routes.apply(ctx, puts, nil)
+	return routes.apply(ctx, puts, superseded)
 }
 
-func (s *stack) servedHostnames(pointer string) []string {
-	if host := s.previewHost(pointer); host != "" {
-		return []string{host}
+func (s *stack) listServedHostnames(pointer string, hosts []edge.PreviewHost) []string {
+	if router.IsDefaultPointer(pointer) {
+		return s.state.Bound
 	}
-	if !router.IsDefaultPointer(pointer) {
-		return nil
-	}
-	return s.state.Bound
+	return edge.ListPreviewHostnames(hosts)
 }
 
 func (s *stack) previewBase() string {
@@ -193,42 +190,8 @@ func (s *stack) previewBase() string {
 	return s.own.PreviewBase
 }
 
-func (s *stack) previewSite() edge.PreviewSite {
-	if s.tier() != environment.TierPreview {
-		return edge.PreviewSite{}
-	}
-	return edge.SharedPreview(s.slug(), s.previewBase())
-}
-
 func (s *stack) onPreviewWildcard() bool {
-	return s.own.Distribution == "" && s.previewSite().Serves()
-}
-
-func (s *stack) previewHost(pointer string) string {
-	if router.IsDefaultPointer(pointer) {
-		return ""
-	}
-	return s.previewSite().Host(pointer, "")
-}
-
-func (s *stack) unroutePreviews(ctx context.Context, c Clients) error {
-	if !s.provisioned() || !s.previewSite().Serves() {
-		return nil
-	}
-	pointers, err := s.openLedger(c).Pointers(ctx)
-	if err != nil {
-		return err
-	}
-	hosts := make([]string, 0, len(pointers))
-	for _, pointer := range pointers {
-		if host := s.previewHost(pointer); host != "" {
-			hosts = append(hosts, host)
-		}
-	}
-	if len(hosts) == 0 {
-		return nil
-	}
-	return s.routes(c).apply(ctx, nil, hosts)
+	return s.own.Distribution == "" && s.tier() == environment.TierPreview && s.previewBase() != ""
 }
 
 func (s *stack) routeFor(ctx context.Context, c Clients, promotionID string, records map[string]router.DeploymentRecord) (route, error) {
@@ -361,7 +324,7 @@ func (s *stack) serveActive(ctx context.Context, c Clients, hostname string) err
 		}
 		records[app] = record
 	}
-	return s.publishOn(ctx, c, active.PromotionID, records, []string{hostname}, nil)
+	return s.publishOn(ctx, c, active.PromotionID, records, []string{hostname}, nil, nil)
 }
 
 func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
@@ -400,9 +363,6 @@ func (s *stack) Destroy(ctx context.Context) error {
 		if err := s.UnbindDomain(ctx, hostname); err != nil {
 			errs = append(errs, fmt.Errorf("unbind %q before destroying the stack that serves it: %w", hostname, err))
 		}
-	}
-	if err := s.unroutePreviews(ctx, c); err != nil {
-		errs = append(errs, fmt.Errorf("stop serving this project's previews before the deployments ledger that names them is erased, so a re-run still knows which hostnames to withdraw: %w", err))
 	}
 	if !s.onPreviewWildcard() {
 		dist, found, err := s.findDistributionFor(ctx, c, s.spec().name)

@@ -17,8 +17,10 @@ import (
 
 func TestTheCloudflareRouterBehavesAsEveryRouterMust(t *testing.T) {
 	routerconformance.Run(t, routerconformance.Suite{
-		New:      cloudflareRouterFixture,
-		Hostname: "shop.app.com",
+		New:         cloudflareRouterFixture,
+		Previews:    cloudflareRouterFixture,
+		Hostname:    "shop.app.com",
+		PreviewBase: "preview.app.com",
 	})
 }
 

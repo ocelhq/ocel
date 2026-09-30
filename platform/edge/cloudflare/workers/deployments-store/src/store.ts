@@ -38,6 +38,12 @@ export interface PointerMove {
   replaces?: string | null;
   promotionId: string;
   records: DeploymentRecord[];
+  labels?: ServedLabel[];
+}
+
+export interface ServedLabel {
+  label: string;
+  app: string;
 }
 
 export type PointerMoveOutcome = "moved" | "stale";
@@ -55,7 +61,7 @@ function dropSupersededSchema(store: SqlStore): void {
     .exec<{ value: string }>(`SELECT value FROM meta WHERE key = ?`, SCHEMA_KEY)
     .toArray()[0]?.value;
   if (recorded === String(SCHEMA_VERSION)) return;
-  for (const table of ["records", "promotions", "pointers", "served", "apps"]) {
+  for (const table of ["records", "promotions", "pointers", "served", "apps", "labels"]) {
     store.sql.exec(`DROP TABLE IF EXISTS ${table}`);
   }
 }
@@ -82,7 +88,13 @@ export function ensureSchema(store: SqlStore): void {
      );
      CREATE TABLE IF NOT EXISTS apps (
        app TEXT PRIMARY KEY
-     );`,
+     );
+     CREATE TABLE IF NOT EXISTS labels (
+       label TEXT PRIMARY KEY,
+       pointer TEXT NOT NULL,
+       app TEXT NOT NULL
+     );
+     CREATE INDEX IF NOT EXISTS labels_pointer ON labels (pointer);`,
   );
   setMeta(store, SCHEMA_KEY, String(SCHEMA_VERSION));
 }
@@ -128,6 +140,16 @@ export function movePointer(store: SqlStore, move: PointerMove): PointerMoveOutc
       );
       store.sql.exec(`INSERT OR IGNORE INTO apps (app) VALUES (?)`, record.app);
     }
+    store.sql.exec(`DELETE FROM labels WHERE pointer = ?`, pointer);
+    for (const served of move.labels ?? []) {
+      store.sql.exec(
+        `INSERT INTO labels (label, pointer, app) VALUES (?, ?, ?)
+         ON CONFLICT(label) DO UPDATE SET pointer = excluded.pointer, app = excluded.app`,
+        served.label,
+        pointer,
+        served.app,
+      );
+    }
     store.sql.exec(
       `INSERT INTO pointers (name, promotion_id) VALUES (?, ?)
        ON CONFLICT(name) DO UPDATE SET promotion_id = excluded.promotion_id`,
@@ -142,6 +164,7 @@ export function removePointer(store: SqlStore, pointer: string): void {
   store.transactionSync(() => {
     store.sql.exec(`DELETE FROM served WHERE pointer = ?`, pointer);
     store.sql.exec(`DELETE FROM pointers WHERE name = ?`, pointer);
+    store.sql.exec(`DELETE FROM labels WHERE pointer = ?`, pointer);
   });
 }
 
@@ -158,18 +181,13 @@ export type PointerRecordResult =
   | { kind: "unchanged"; identity: string }
   | { kind: "record"; identity: string; record: DeploymentRecord };
 
-export function pointerRecord(
-  store: SqlStore,
-  app?: string,
-  pointer: string = DEFAULT_POINTER,
-  knownIdentity?: string,
+type ServedRow = { app: string; identity: string; data: string };
+
+function selectServedResult(
+  rows: ServedRow[],
+  app: string | undefined,
+  knownIdentity: string | undefined,
 ): PointerRecordResult {
-  const rows = store.sql
-    .exec<{ app: string; identity: string; data: string }>(
-      `SELECT app, identity, data FROM served WHERE pointer = ? ORDER BY app`,
-      pointer,
-    )
-    .toArray();
   if (app === undefined && rows.length > 1) return { kind: "ambiguous-app" };
   const row = app === undefined ? rows[0] : rows.find((r) => r.app === app);
   if (!row) return { kind: "no-pointer" };
@@ -181,6 +199,38 @@ export function pointerRecord(
   };
 }
 
+export function readLabelRecord(
+  store: SqlStore,
+  label: string,
+  knownIdentity?: string,
+): PointerRecordResult {
+  const rows = store.sql
+    .exec<ServedRow>(
+      `SELECT served.app, served.identity, served.data
+       FROM labels JOIN served ON served.pointer = labels.pointer
+         AND (labels.app = '' OR served.app = labels.app)
+       WHERE labels.label = ?
+       ORDER BY served.app`,
+      label,
+    )
+    .toArray();
+  return selectServedResult(rows, undefined, knownIdentity);
+}
+
+export function readPointerRecord(
+  store: SqlStore,
+  app?: string,
+  knownIdentity?: string,
+): PointerRecordResult {
+  const rows = store.sql
+    .exec<ServedRow>(
+      `SELECT app, identity, data FROM served WHERE pointer = ? ORDER BY app`,
+      DEFAULT_POINTER,
+    )
+    .toArray();
+  return selectServedResult(rows, app, knownIdentity);
+}
+
 export type Initialization = "adopted" | "refused";
 
 export function initialize(
@@ -190,22 +240,22 @@ export function initialize(
   force: boolean,
 ): Initialization {
   return store.transactionSync(() => {
-    if (identityRecorded(store) && !force) return "refused";
+    if (isIdentityRecorded(store) && !force) return "refused";
     setMeta(store, OWNER_KEY, ownerToken);
     setMeta(store, SECRET_KEY, secret);
     return "adopted";
   });
 }
 
-function identityRecorded(store: SqlStore): boolean {
+function isIdentityRecorded(store: SqlStore): boolean {
   return getMeta(store, OWNER_KEY) !== undefined && getMeta(store, SECRET_KEY) !== undefined;
 }
 
-export function storedSecret(store: SqlStore): string | undefined {
+export function readSecret(store: SqlStore): string | undefined {
   return getMeta(store, SECRET_KEY);
 }
 
-export function versionStamp(store: SqlStore): string | undefined {
+export function readVersionStamp(store: SqlStore): string | undefined {
   return getMeta(store, VERSION_KEY);
 }
 

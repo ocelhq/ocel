@@ -135,11 +135,11 @@ func TestAnUnclaimedHostnameThePreviewEntryAndItsProbeAreAllRefused(t *testing.T
 	t.Parallel()
 
 	table := mustRead(t, `{"grace":"30s",
-		"claims":[{"owner":"ocel--shop--pr-1","hostname":"web--pr-1.preview.example.com","pointer":"@pr-1"}],
+		"claims":[{"owner":"ocel--shop--pr-1","hostname":"pr-1-web-abcdefghijklmnopfhzq6k4d.preview.example.com","pointer":"@pr-1"}],
 		"routes":[{"owner":"ocel--shop--pr-1","pointer":"@pr-1","app":"web","upstream":"shop-web-pr-1:3000"}],
 		"preview":"preview.example.com"}`)
 
-	forwarded(t, table, "web--pr-1.preview.example.com", "/")
+	forwarded(t, table, "pr-1-web-abcdefghijklmnopfhzq6k4d.preview.example.com", "/")
 	for _, host := range []string{
 		"blog.example.com", "other.preview.example.com", "a.b.preview.example.com",
 		"ocel-edge-probe.preview.example.com", "preview.example.com", "",

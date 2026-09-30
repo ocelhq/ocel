@@ -3,6 +3,7 @@ package gcp
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -91,21 +92,26 @@ const functionSuffix = "fn"
 var cloudRunService = regexp.MustCompile(`^[a-z]([-a-z0-9]*[a-z0-9])?$`)
 
 func (n Names) PreviewService(label, app, function string) (string, error) {
-	service := label
+	service, suffix := label, ""
 	if function != app {
-		service = strings.Join([]string{label, images.FunctionRoute(app, function), functionSuffix}, naming.FieldSeparator)
+		suffix = naming.FieldSeparator + images.FunctionRoute(app, function) + naming.FieldSeparator + functionSuffix
+		service += suffix
 	}
-	if len(service) > edge.PreviewLabelMaxLen || !cloudRunService.MatchString(service) {
-		return "", refusal.Refuse(refusal.CodeInvalid,
-			"the preview %s would be served by a Cloud Run service named %q, which Cloud Run will not take: "+
-				"a service on a shared preview wildcard is named the label its hostname begins with, "+
-				"because the load balancer hands the whole label to Cloud Run to find it, "+
-				"and Cloud Run takes at most %d characters of lowercase letters, digits and dashes, "+
-				"starting with a letter and ending with a letter or a digit.\n"+
-				"This one is %s = %d characters. Shorten one of them and deploy again",
-			app, service, edge.PreviewLabelMaxLen, edge.LabelParts(service), len(service))
+	if len(service) <= maxServiceName && cloudRunService.MatchString(service) {
+		return service, nil
 	}
-	return service, nil
+	slug := edge.PreviewHost{Hostname: label}.ReadPrefix()
+	shape := fmt.Sprintf("the project slug %q (%d characters) and a %d-character token", slug, len(slug), len("-")+edge.PreviewTailLen)
+	if suffix != "" {
+		shape += fmt.Sprintf(", and a function's service adds %q", suffix)
+	}
+	return "", refusal.Refuse(refusal.CodeInvalid,
+		"the preview %s would be served by a Cloud Run service named %q (%d characters), which Cloud Run will not take: "+
+			"Cloud Run takes at most %d characters of lowercase letters, digits and dashes, starting with a letter and ending with a letter or a digit. "+
+			"On a shared preview wildcard the load balancer hands Cloud Run the label a hostname begins with as the service name, "+
+			"and that label is %s.\n"+
+			"Use a project slug that starts with a letter and leaves the name within %d characters, and deploy again",
+		app, service, len(service), maxServiceName, shape, maxServiceName)
 }
 
 func serviceHash(parts ...string) string { return truncatedHash(serviceHashLen, parts...) }

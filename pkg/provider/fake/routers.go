@@ -27,7 +27,7 @@ type Routers struct {
 func newRouters(edges *Edges) *Routers {
 	routers := &Routers{edges: edges, planes: map[router.Kind]*DataPlane{}}
 	for _, kind := range edges.kinds() {
-		routers.planes[edges.Edge(kind).routedBy] = &DataPlane{served: map[projectPointer]map[string]string{}, writes: map[projectPointer]int{}}
+		routers.planes[edges.Edge(kind).routedBy] = &DataPlane{served: map[projectPointer]map[string]string{}, writes: map[projectPointer]int{}, hosts: map[string]projectPointer{}}
 	}
 	return routers
 }
@@ -59,12 +59,14 @@ func (r *Routers) DataPlane(kind router.Kind) *DataPlane { return r.planes[kind]
 type DataPlane struct {
 	mu         sync.Mutex
 	failure    error
+	unremoved  error
 	before     func()
 	says       string
 	progress   progress.Log
 	propagates *router.Propagation
 	served     map[projectPointer]map[string]string
 	writes     map[projectPointer]int
+	hosts      map[string]projectPointer
 }
 
 type projectPointer struct {
@@ -83,10 +85,32 @@ func (d *DataPlane) Builds(slug string, tier environment.Tier, pointer string) m
 	return maps.Clone(d.served[pointerOf(edge.StackState{Slug: slug, Tier: tier}, pointer)])
 }
 
+func (d *DataPlane) FindServingPointer(hostname string) (pointer string, builds map[string]string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	at, routed := d.hosts[hostname]
+	if !routed {
+		return "", nil
+	}
+	return at.pointer, maps.Clone(d.served[at])
+}
+
+func (d *DataPlane) ListServedHostnames() []string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return slices.Sorted(maps.Keys(d.hosts))
+}
+
 func (d *DataPlane) FailNextPointerMove(err error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.failure = err
+}
+
+func (d *DataPlane) FailNextPointerRemoval(err error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.unremoved = err
 }
 
 func (d *DataPlane) BeforeNextPointerMove(before func()) {
@@ -137,7 +161,7 @@ func (d *DataPlane) written(at projectPointer) int {
 	return d.writes[at]
 }
 
-func (d *DataPlane) serveOver(at projectPointer, builds map[string]string, read int) bool {
+func (d *DataPlane) serveOver(at projectPointer, builds map[string]string, move router.PointerMove, read int) bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if d.writes[at] != read {
@@ -145,14 +169,32 @@ func (d *DataPlane) serveOver(at projectPointer, builds map[string]string, read 
 	}
 	d.served[at] = maps.Clone(builds)
 	d.writes[at]++
+	d.unrouteHosts(at, move.ListHostsToWithdraw())
+	for _, host := range move.Hosts {
+		d.hosts[host.Hostname] = at
+	}
 	return true
 }
 
-func (d *DataPlane) remove(at projectPointer) {
+func (d *DataPlane) unrouteHosts(at projectPointer, hosts []edge.PreviewHost) {
+	for _, host := range hosts {
+		if d.hosts[host.Hostname] == at {
+			delete(d.hosts, host.Hostname)
+		}
+	}
+}
+
+func (d *DataPlane) remove(at projectPointer, hosts []edge.PreviewHost) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	if failure := d.unremoved; failure != nil {
+		d.unremoved = nil
+		return failure
+	}
 	delete(d.served, at)
 	d.writes[at]++
+	d.unrouteHosts(at, hosts)
+	return nil
 }
 
 type Router struct {
@@ -197,6 +239,7 @@ func (e *Edge) routerFacts() router.Facts {
 		Dispatches:                  e.kind == KindRelay,
 		AnswersHostnames:            true,
 		StopsServingRemovedPointers: true,
+		ServesPreviewDeployments:    true,
 	}
 }
 
@@ -290,16 +333,15 @@ func (s *RouterStack) MovePointer(ctx context.Context, move router.PointerMove, 
 		if err := s.plane.refusePointerMove(); err != nil {
 			return err
 		}
-		if s.plane.serveOver(at, builds, read) {
+		if s.plane.serveOver(at, builds, move, read) {
 			return nil
 		}
 	}
 	return router.Unserved{Err: fmt.Errorf("move %s onto %s: another promotion moved the pointer on every one of %d attempts", move.Promotion.PromotionID, at.pointer, moveAttempts)}
 }
 
-func (s *RouterStack) RemovePointer(_ context.Context, pointer string, _ progress.Log) error {
-	s.plane.remove(pointerOf(s.stack.State(), pointer))
-	return nil
+func (s *RouterStack) RemovePointer(_ context.Context, removal router.PointerRemoval, _ progress.Log) error {
+	return s.plane.remove(pointerOf(s.stack.State(), removal.Pointer), removal.Hosts)
 }
 
 func (s *RouterStack) Destroy(context.Context) error { return nil }

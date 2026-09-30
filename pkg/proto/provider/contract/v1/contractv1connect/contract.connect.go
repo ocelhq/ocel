@@ -71,6 +71,12 @@ const (
 	// ProviderServiceGetEnvironmentProcedure is the fully-qualified name of the ProviderService's
 	// GetEnvironment RPC.
 	ProviderServiceGetEnvironmentProcedure = "/provider.contract.v1.ProviderService/GetEnvironment"
+	// ProviderServiceEnsurePreviewAliasProcedure is the fully-qualified name of the ProviderService's
+	// EnsurePreviewAlias RPC.
+	ProviderServiceEnsurePreviewAliasProcedure = "/provider.contract.v1.ProviderService/EnsurePreviewAlias"
+	// ProviderServiceForgetPreviewAliasProcedure is the fully-qualified name of the ProviderService's
+	// ForgetPreviewAlias RPC.
+	ProviderServiceForgetPreviewAliasProcedure = "/provider.contract.v1.ProviderService/ForgetPreviewAlias"
 	// ProviderServicePreflightProcedure is the fully-qualified name of the ProviderService's Preflight
 	// RPC.
 	ProviderServicePreflightProcedure = "/provider.contract.v1.ProviderService/Preflight"
@@ -133,6 +139,8 @@ type ProviderServiceClient interface {
 	PlanRemoveProject(context.Context, *v1.ProjectRequest) (*v12.ChangePlan, error)
 	ListEnvironments(context.Context, *v1.ListEnvironmentsRequest) (*v1.ListEnvironmentsResponse, error)
 	GetEnvironment(context.Context, *v1.GetEnvironmentRequest) (*v1.GetEnvironmentResponse, error)
+	EnsurePreviewAlias(context.Context, *v1.EnsurePreviewAliasRequest) (*v1.EnsurePreviewAliasResponse, error)
+	ForgetPreviewAlias(context.Context, *v1.ForgetPreviewAliasRequest) (*v1.ForgetPreviewAliasResponse, error)
 	Preflight(context.Context, *v1.PreflightRequest) (*v1.PreflightResponse, error)
 	ListPromotions(context.Context, *v1.ListPromotionsRequest) (*v1.ListPromotionsResponse, error)
 	Rollback(context.Context, *v1.RollbackRequest) (*v1.RollbackResponse, error)
@@ -232,6 +240,18 @@ func NewProviderServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+ProviderServiceGetEnvironmentProcedure,
 			connect.WithSchema(providerServiceMethods.ByName("GetEnvironment")),
+			connect.WithClientOptions(opts...),
+		),
+		ensurePreviewAlias: connect.NewClient[v1.EnsurePreviewAliasRequest, v1.EnsurePreviewAliasResponse](
+			httpClient,
+			baseURL+ProviderServiceEnsurePreviewAliasProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("EnsurePreviewAlias")),
+			connect.WithClientOptions(opts...),
+		),
+		forgetPreviewAlias: connect.NewClient[v1.ForgetPreviewAliasRequest, v1.ForgetPreviewAliasResponse](
+			httpClient,
+			baseURL+ProviderServiceForgetPreviewAliasProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("ForgetPreviewAlias")),
 			connect.WithClientOptions(opts...),
 		),
 		preflight: connect.NewClient[v1.PreflightRequest, v1.PreflightResponse](
@@ -347,6 +367,8 @@ type providerServiceClient struct {
 	planRemoveProject         *connect.Client[v1.ProjectRequest, v12.ChangePlan]
 	listEnvironments          *connect.Client[v1.ListEnvironmentsRequest, v1.ListEnvironmentsResponse]
 	getEnvironment            *connect.Client[v1.GetEnvironmentRequest, v1.GetEnvironmentResponse]
+	ensurePreviewAlias        *connect.Client[v1.EnsurePreviewAliasRequest, v1.EnsurePreviewAliasResponse]
+	forgetPreviewAlias        *connect.Client[v1.ForgetPreviewAliasRequest, v1.ForgetPreviewAliasResponse]
 	preflight                 *connect.Client[v1.PreflightRequest, v1.PreflightResponse]
 	listPromotions            *connect.Client[v1.ListPromotionsRequest, v1.ListPromotionsResponse]
 	rollback                  *connect.Client[v1.RollbackRequest, v1.RollbackResponse]
@@ -447,6 +469,24 @@ func (c *providerServiceClient) ListEnvironments(ctx context.Context, req *v1.Li
 // GetEnvironment calls provider.contract.v1.ProviderService.GetEnvironment.
 func (c *providerServiceClient) GetEnvironment(ctx context.Context, req *v1.GetEnvironmentRequest) (*v1.GetEnvironmentResponse, error) {
 	response, err := c.getEnvironment.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// EnsurePreviewAlias calls provider.contract.v1.ProviderService.EnsurePreviewAlias.
+func (c *providerServiceClient) EnsurePreviewAlias(ctx context.Context, req *v1.EnsurePreviewAliasRequest) (*v1.EnsurePreviewAliasResponse, error) {
+	response, err := c.ensurePreviewAlias.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// ForgetPreviewAlias calls provider.contract.v1.ProviderService.ForgetPreviewAlias.
+func (c *providerServiceClient) ForgetPreviewAlias(ctx context.Context, req *v1.ForgetPreviewAliasRequest) (*v1.ForgetPreviewAliasResponse, error) {
+	response, err := c.forgetPreviewAlias.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
 	}
@@ -583,6 +623,8 @@ type ProviderServiceHandler interface {
 	PlanRemoveProject(context.Context, *v1.ProjectRequest) (*v12.ChangePlan, error)
 	ListEnvironments(context.Context, *v1.ListEnvironmentsRequest) (*v1.ListEnvironmentsResponse, error)
 	GetEnvironment(context.Context, *v1.GetEnvironmentRequest) (*v1.GetEnvironmentResponse, error)
+	EnsurePreviewAlias(context.Context, *v1.EnsurePreviewAliasRequest) (*v1.EnsurePreviewAliasResponse, error)
+	ForgetPreviewAlias(context.Context, *v1.ForgetPreviewAliasRequest) (*v1.ForgetPreviewAliasResponse, error)
 	Preflight(context.Context, *v1.PreflightRequest) (*v1.PreflightResponse, error)
 	ListPromotions(context.Context, *v1.ListPromotionsRequest) (*v1.ListPromotionsResponse, error)
 	Rollback(context.Context, *v1.RollbackRequest) (*v1.RollbackResponse, error)
@@ -678,6 +720,18 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 		ProviderServiceGetEnvironmentProcedure,
 		svc.GetEnvironment,
 		connect.WithSchema(providerServiceMethods.ByName("GetEnvironment")),
+		connect.WithHandlerOptions(opts...),
+	)
+	providerServiceEnsurePreviewAliasHandler := connect.NewUnaryHandlerSimple(
+		ProviderServiceEnsurePreviewAliasProcedure,
+		svc.EnsurePreviewAlias,
+		connect.WithSchema(providerServiceMethods.ByName("EnsurePreviewAlias")),
+		connect.WithHandlerOptions(opts...),
+	)
+	providerServiceForgetPreviewAliasHandler := connect.NewUnaryHandlerSimple(
+		ProviderServiceForgetPreviewAliasProcedure,
+		svc.ForgetPreviewAlias,
+		connect.WithSchema(providerServiceMethods.ByName("ForgetPreviewAlias")),
 		connect.WithHandlerOptions(opts...),
 	)
 	providerServicePreflightHandler := connect.NewUnaryHandlerSimple(
@@ -802,6 +856,10 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 			providerServiceListEnvironmentsHandler.ServeHTTP(w, r)
 		case ProviderServiceGetEnvironmentProcedure:
 			providerServiceGetEnvironmentHandler.ServeHTTP(w, r)
+		case ProviderServiceEnsurePreviewAliasProcedure:
+			providerServiceEnsurePreviewAliasHandler.ServeHTTP(w, r)
+		case ProviderServiceForgetPreviewAliasProcedure:
+			providerServiceForgetPreviewAliasHandler.ServeHTTP(w, r)
 		case ProviderServicePreflightProcedure:
 			providerServicePreflightHandler.ServeHTTP(w, r)
 		case ProviderServiceListPromotionsProcedure:
@@ -889,6 +947,14 @@ func (UnimplementedProviderServiceHandler) ListEnvironments(context.Context, *v1
 
 func (UnimplementedProviderServiceHandler) GetEnvironment(context.Context, *v1.GetEnvironmentRequest) (*v1.GetEnvironmentResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.GetEnvironment is not implemented"))
+}
+
+func (UnimplementedProviderServiceHandler) EnsurePreviewAlias(context.Context, *v1.EnsurePreviewAliasRequest) (*v1.EnsurePreviewAliasResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.EnsurePreviewAlias is not implemented"))
+}
+
+func (UnimplementedProviderServiceHandler) ForgetPreviewAlias(context.Context, *v1.ForgetPreviewAliasRequest) (*v1.ForgetPreviewAliasResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.ForgetPreviewAlias is not implemented"))
 }
 
 func (UnimplementedProviderServiceHandler) Preflight(context.Context, *v1.PreflightRequest) (*v1.PreflightResponse, error) {

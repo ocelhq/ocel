@@ -9,19 +9,20 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
-func Production(cfg *project.Project) map[string]string {
+func FormatProductionURLs(cfg *project.Project) map[string]string {
 	return byApp(cfg, cfg.Domains.Production, func(app project.App) []string {
 		return app.ProductionDomains
 	})
 }
 
-func Preview(cfg *project.Project, host func(app string) string) map[string]string {
-	return byApp(cfg, nil, func(app project.App) []string {
-		if len(cfg.Apps) < 2 {
-			return []string{host("")}
+func FormatPreviewURLs(hostnames map[string]string) map[string]string {
+	urls := make(map[string]string, len(hostnames))
+	for app, hostname := range hostnames {
+		if hostname != "" {
+			urls[app] = "https://" + hostname
 		}
-		return []string{host(app.Name)}
-	})
+	}
+	return urls
 }
 
 func byApp(cfg *project.Project, projectHosts []string, declared func(project.App) []string) map[string]string {

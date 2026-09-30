@@ -17,7 +17,7 @@ import (
 
 const (
 	bound   = "shop.example.com"
-	preview = "pr-12--web.preview.example.com"
+	preview = "pr-12-web-abcdefghijklmnopp3347l26.preview.example.com"
 	probed  = "ocel-edge-probe.preview.example.com"
 )
 

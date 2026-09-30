@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -505,6 +507,81 @@ func TestUnpromotingUnderAnInterruptedDeployStillPutsThePointerBack(t *testing.T
 	}
 	if active := activeIn(t, l, ""); active != "p1" {
 		t.Errorf("the pointer names %q, want p1", active)
+	}
+}
+
+func TestPruneNamesTheDeploymentPointerAndHostsOfEachPromotionItDropped(t *testing.T) {
+	l, _ := fixture()
+	ctx := context.Background()
+	for _, id := range []string{"p1", "p2", "p3"} {
+		promotion := staged(t, l, id)
+		promotion.Hosts = []edge.PreviewHost{{Hostname: "pr-7-" + id + ".preview.acme.com", App: "web"}}
+		replaces := activeIn(t, l, "pr-7")
+		if _, err := l.Promote(ctx, promotion, "pr-7", replaces); err != nil {
+			t.Fatalf("Promote(%s) = %v", id, err)
+		}
+	}
+
+	result, err := l.Prune(ctx, 2, "pr-7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []router.PointerRemoval{{Pointer: "pr-7@p1", Hosts: []edge.PreviewHost{{Hostname: "pr-7-p1.preview.acme.com", App: "web"}}}}
+	if !reflect.DeepEqual(result.DeploymentRemovals, want) {
+		t.Errorf("deployments = %+v, want %+v: a pruned deployment stops serving on its own hostnames", result.DeploymentRemovals, want)
+	}
+
+	removed, err := l.RemovePointer(ctx, "pr-7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, removal := range removed.DeploymentRemovals {
+		got = append(got, removal.Pointer)
+	}
+	if want := []string{"pr-7@p3", "pr-7@p2", "pr-7@p1"}; !slices.Equal(got, want) {
+		t.Errorf("deployments = %v, want %v: removing a preview removes every deployment it kept and every one whose withdrawal is still pending", got, want)
+	}
+}
+
+func TestADroppedDeploymentIsNamedByEveryPruneUntilItsWithdrawalIsForgotten(t *testing.T) {
+	l, _ := fixture()
+	ctx := context.Background()
+	for _, id := range []string{"p1", "p2", "p3", "p4"} {
+		promotion := staged(t, l, id)
+		promotion.Hosts = []edge.PreviewHost{{Hostname: "pr-7-" + id + ".preview.acme.com", App: "web"}}
+		if _, err := l.Promote(ctx, promotion, "pr-7", activeIn(t, l, "pr-7")); err != nil {
+			t.Fatalf("Promote(%s) = %v", id, err)
+		}
+	}
+	pointers := func(removals []router.PointerRemoval) []string {
+		var named []string
+		for _, removal := range removals {
+			named = append(named, removal.Pointer)
+		}
+		return named
+	}
+
+	if _, err := l.Prune(ctx, 3, "pr-7"); err != nil {
+		t.Fatal(err)
+	}
+	again, err := l.Prune(ctx, 2, "pr-7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := pointers(again.DeploymentRemovals), []string{"pr-7@p2", "pr-7@p1"}; !slices.Equal(got, want) {
+		t.Errorf("deployments = %v, want %v: p1's withdrawal was never confirmed, so it is retried", got, want)
+	}
+
+	if err := l.ForgetPendingRemovals(ctx, "pr-7", []string{"pr-7@p1", "pr-7@p2"}); err != nil {
+		t.Fatal(err)
+	}
+	read, err := l.Read(ctx, "pr-7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := pointers(read.ListDeploymentRemovals()); !slices.Equal(got, []string{"pr-7@p4", "pr-7@p3"}) {
+		t.Errorf("deployments = %v, want only the kept p4 and p3 once the withdrawals are forgotten", got)
 	}
 }
 

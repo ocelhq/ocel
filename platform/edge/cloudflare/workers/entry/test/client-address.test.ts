@@ -2,16 +2,13 @@ import { createExecutionContext } from "cloudflare:test";
 import { CLIENT_ADDRESS_HEADER } from "@platform/edge-contract/client-address";
 import { describe, expect, it } from "vitest";
 import { withClientAddress } from "../src/client-address";
-import type { DeploymentsBinding } from "../src/deployments";
 import worker, { type Env } from "../src/index";
-import { capturing, makeRecord, withGlobalFetch } from "./origin-deps";
+import { answerEveryRecordWith, capturing, makeRecord, withGlobalFetch } from "./origin-deps";
 
-const binding: DeploymentsBinding = {
-  async pointerRecord() {
-    const record = makeRecord();
-    return { kind: "record", identity: record.identity, record };
-  },
-};
+const binding = answerEveryRecordWith(async () => {
+  const record = makeRecord();
+  return { kind: "record", identity: record.identity, record };
+});
 
 const env: Env = {
   DEPLOYMENTS: binding,

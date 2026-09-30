@@ -283,8 +283,6 @@ func servesAPreviewBehindTraefik(t *testing.T, vm machine, d *vps.Provider, open
 	ctx := context.Background()
 	if _, err := opened.ReconcilePreviewWildcard(ctx, edge.PreviewWildcardSpec{
 		BaseDomain: tf.preview,
-		GrammarMin: edge.PreviewGrammarMin,
-		GrammarMax: edge.PreviewGrammarMax,
 	}); err != nil {
 		t.Fatalf("ReconcilePreviewWildcard(%s) behind %s = %v", tf.preview, tf.front, err)
 	}
@@ -295,7 +293,7 @@ func servesAPreviewBehindTraefik(t *testing.T, vm machine, d *vps.Provider, open
 	}
 	promotesPreview(t, d, previews, frontedSlug, liveApp, fixtureAt("one"), frontedPointer, 1)
 
-	hostname := edge.SharedPreview(frontedSlug, tf.preview).Hosts(frontedPointer, []string{liveApp})[0]
+	hostname := signLivePreviewHost(frontedSlug, tf.preview, frontedPointer, liveApp).Hostname
 	vm.routesThrough(t, hostname, "one")
 	servedByTheBox(t, d, edge.ProbeHostname(edge.PreviewWildcard(tf.preview)))
 

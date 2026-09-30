@@ -103,7 +103,9 @@ func (r routerStack) MovePointer(ctx context.Context, move router.PointerMove, p
 	return r.s.released(ctx, move.Records, progress)
 }
 
-func (r routerStack) RemovePointer(context.Context, string, progress.Log) error { return nil }
+func (r routerStack) RemovePointer(context.Context, router.PointerRemoval, progress.Log) error {
+	return nil
+}
 
 func (r routerStack) Destroy(ctx context.Context) error {
 	shielded, hostnames := r.s.recorded.LoadBalancer.Shielded, slices.Sorted(maps.Keys(r.s.recorded.Hosts))

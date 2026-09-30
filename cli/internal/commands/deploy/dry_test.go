@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -103,6 +104,9 @@ func TestADryPreviewUpShowsThePlanAndWritesNothing(t *testing.T) {
 	}
 	if strings.Contains(out, "Deployed ") {
 		t.Errorf("stdout = %q, want a dry run to report a plan, never a preview being provisioned", out)
+	}
+	if strings.Count(out, "assigned on its first deploy") != 1 || regexp.MustCompile(`staging-[a-z2-7]{24}`).MatchString(out) {
+		t.Errorf("stdout = %q, want it saying once that a new preview's hostname is assigned on its first deploy, and no hostname: one signed now would never exist", out)
 	}
 	if !absent(t, deployrecord.Path(root)) {
 		t.Error("a dry preview up wrote the deploy result, want a run that records nothing it did not do")

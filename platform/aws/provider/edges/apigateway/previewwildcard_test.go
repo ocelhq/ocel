@@ -36,13 +36,22 @@ func previewWildcardSpec() edge.PreviewWildcardSpec {
 		Version:     "v1",
 		BaseDomain:  previewBase,
 		Certificate: previewCert,
-		GrammarMin:  edge.PreviewGrammarMin,
-		GrammarMax:  edge.PreviewGrammarMax,
 	}
 }
 
+const previewKey edge.PreviewKey = "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0"
+
+func listSlugPreviewHosts(slug, pointer string) []edge.PreviewHost {
+	token := (pointer + strings.Repeat("a", edge.PreviewTokenLen))[:edge.PreviewTokenLen]
+	return edge.NewSharedPreviewSite(slug, previewBase, previewKey).ListHosts(pointer, token, []string{"web"})
+}
+
+func listPreviewHosts(pointer string) []edge.PreviewHost {
+	return listSlugPreviewHosts(conformanceSlug, pointer)
+}
+
 func previewHostname() string {
-	return edge.SharedPreview(conformanceSlug, previewBase).Host(previewPoint, "")
+	return listPreviewHosts(previewPoint)[0].Hostname
 }
 
 func previewing(t *testing.T, w *world) (*apiGateway, edge.EdgeStack) {
@@ -83,7 +92,7 @@ func promotePreview(t *testing.T, stack edge.EdgeStack, pointer string) {
 		t.Fatalf("PutStaged: %v", err)
 	}
 	promotion := router.Promotion{PromotionID: "p-" + pointer, Ts: 1, Builds: map[string]string{"web": record.Build}}
-	if err := openRouter(stack).MovePointer(ctx, router.PointerMove{Pointer: pointer, Promotion: promotion}, progress.Discard()); err != nil {
+	if err := openRouter(stack).MovePointer(ctx, router.PointerMove{Pointer: pointer, Hosts: listSlugPreviewHosts(stack.State().Slug, pointer), Promotion: promotion}, progress.Discard()); err != nil {
 		t.Fatalf("Promote(%s): %v", pointer, err)
 	}
 }
@@ -341,6 +350,60 @@ func TestPromoteOffTheGlobalPreviewDomainRoutesNothing(t *testing.T) {
 	}
 }
 
+func TestPromoteStopsRoutingTheHostnamesTheMoveSupersedes(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	w := newWorld()
+	_, stack := previewing(t, w)
+	promotePreview(t, stack, previewPoint)
+	moved := listPreviewHosts("moved")
+
+	promotion := router.Promotion{PromotionID: "p-moved", Ts: 2, Builds: map[string]string{"web": "d1.f1"}}
+	if err := openRouter(stack).MovePointer(ctx, router.PointerMove{Pointer: previewPoint, Hosts: moved, Superseded: listPreviewHosts(previewPoint), Promotion: promotion}, progress.Discard()); err != nil {
+		t.Fatalf("MovePointer: %v", err)
+	}
+
+	rules := rulesOn(t, w, previewWild)
+	if rule := rules[previewHostname()]; rule != nil {
+		t.Errorf("the superseded %s is still routed to %s", previewHostname(), rule.api)
+	}
+	if rules[moved[0].Hostname] == nil {
+		t.Errorf("rules = %v, want the move's %s routed", slices.Sorted(maps.Keys(rules)), moved[0].Hostname)
+	}
+}
+
+func TestAPointerMoveReadsTheSharedWildcardsRulesOnceHoweverManyHostsItRoutes(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	w := newWorld()
+	_, stack := previewing(t, w)
+	promotePreview(t, stack, previewPoint)
+	token := strings.Repeat("b", edge.PreviewTokenLen)
+	moved := edge.NewSharedPreviewSite(conformanceSlug, previewBase, previewKey).ListHosts(previewPoint, token, []string{"web", "api", "docs"})
+	w.gateway.pageSize = 1_000
+	w.gateway.calls = nil
+
+	promotion := router.Promotion{PromotionID: "p-moved", Ts: 2, Builds: map[string]string{"web": "d1.f1"}}
+	if err := openRouter(stack).MovePointer(ctx, router.PointerMove{Pointer: previewPoint, Hosts: moved, Superseded: listPreviewHosts(previewPoint), Promotion: promotion}, progress.Discard()); err != nil {
+		t.Fatalf("MovePointer: %v", err)
+	}
+
+	if listed := w.gateway.count("ListRoutingRules " + previewWild); listed != 1 {
+		t.Errorf("a move routing %d hosts and withdrawing one listed the rules on %s %d times, want once: every project's previews share that domain, so a listing per host grows with all of them", len(moved), previewWild, listed)
+	}
+	rules := rulesOn(t, w, previewWild)
+	for _, host := range moved {
+		if rules[host.Hostname] == nil {
+			t.Errorf("rules = %v, want %s routed", slices.Sorted(maps.Keys(rules)), host.Hostname)
+		}
+	}
+	if rule := rules[previewHostname()]; rule != nil {
+		t.Errorf("the superseded %s is still routed to %s", previewHostname(), rule.api)
+	}
+}
+
 func TestRemovePointerTakesTheRuleAndTheAPI(t *testing.T) {
 	t.Parallel()
 
@@ -351,7 +414,7 @@ func TestRemovePointerTakesTheRuleAndTheAPI(t *testing.T) {
 	api := w.gateway.named(previewAPIName)
 	w.gateway.calls = nil
 
-	if _, err := removePointer(ctx, stack, previewPoint, progress.Discard()); err != nil {
+	if _, err := removePointer(ctx, stack, router.PointerRemoval{Pointer: previewPoint, Hosts: listPreviewHosts(previewPoint)}, progress.Discard()); err != nil {
 		t.Fatalf("RemovePointer: %v", err)
 	}
 
@@ -384,7 +447,7 @@ func TestDestroyTakesEveryPreviewItRouted(t *testing.T) {
 
 	left := rulesOn(t, w, previewWild)
 	for _, pointer := range []string{"pr1", "pr2"} {
-		host := edge.SharedPreview(conformanceSlug, previewBase).Host(pointer, "")
+		host := listPreviewHosts(pointer)[0].Hostname
 		if left[host] != nil {
 			t.Errorf("%s is still routed after the stack that served it was destroyed", host)
 		}
@@ -394,6 +457,43 @@ func TestDestroyTakesEveryPreviewItRouted(t *testing.T) {
 	}
 	if left[anyHost] == nil {
 		t.Error("destroying one project's stack took the catch-all rule with it; the wildcard belongs to the bootstrap, not to a project")
+	}
+}
+
+func TestDestroyLeavesTheRulesOfAProjectWhoseSlugThisOnePrefixes(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	w := newWorld()
+	e, stack := previewing(t, w)
+	promotePreview(t, stack, previewPoint)
+	neighbourSpec := previewStackSpec()
+	neighbourSpec.Slug = conformanceSlug + "-2"
+	neighbour, err := e.Reconcile(ctx, neighbourSpec, edge.StackState{GlobalPreview: previewBase})
+	if err != nil {
+		t.Fatalf("Reconcile(%s): %v", neighbourSpec.Slug, err)
+	}
+	promotePreview(t, neighbour, previewPoint)
+
+	if err := stack.Destroy(ctx); err != nil {
+		t.Fatalf("Destroy: %v", err)
+	}
+
+	left := rulesOn(t, w, previewWild)
+	if left[previewHostname()] != nil {
+		t.Errorf("%s is still routed after the stack that served it was destroyed", previewHostname())
+	}
+	kept := listSlugPreviewHosts(neighbourSpec.Slug, previewPoint)[0].Hostname
+	if left[kept] == nil {
+		t.Errorf("destroying %s took %s, which belongs to %s", conformanceSlug, kept, neighbourSpec.Slug)
+	}
+}
+
+func TestAPreviewIsServedOnItsAliasAloneSoItHoldsOneRestAPIWhateverItsDeployments(t *testing.T) {
+	t.Parallel()
+
+	if NewRouter(defaultNamespace, nil).Facts().ServesPreviewDeployments {
+		t.Error("API Gateway serves each preview deployment on a hostname of its own, and each takes a REST API from the region's fixed 600: twenty kept deployments per preview leave room for under thirty previews")
 	}
 }
 

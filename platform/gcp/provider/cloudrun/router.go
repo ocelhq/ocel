@@ -53,6 +53,8 @@ func (r routerStack) MovePointer(ctx context.Context, move router.PointerMove, p
 	return pin.MovePointer(ctx, r.s.e.pins, move, progress)
 }
 
-func (r routerStack) RemovePointer(context.Context, string, progress.Log) error { return nil }
+func (r routerStack) RemovePointer(context.Context, router.PointerRemoval, progress.Log) error {
+	return nil
+}
 
 func (r routerStack) Destroy(context.Context) error { return nil }

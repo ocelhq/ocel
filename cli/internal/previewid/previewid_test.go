@@ -146,6 +146,15 @@ func TestValidateLabel(t *testing.T) {
 		}
 	})
 
+	t.Run("refuses a double hyphen as reserved, not as the app separator it no longer is", func(t *testing.T) {
+		t.Parallel()
+
+		err := ValidateLabel("staging--web")
+		if err == nil || !strings.Contains(err.Error(), "reserved") || strings.Contains(err.Error(), "app") {
+			t.Errorf("ValidateLabel(staging--web) = %v, want a refusal that says -- is reserved", err)
+		}
+	})
+
 	t.Run("refuses a too-long name actionably", func(t *testing.T) {
 		t.Parallel()
 

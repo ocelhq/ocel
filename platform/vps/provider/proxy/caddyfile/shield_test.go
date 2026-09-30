@@ -116,18 +116,18 @@ func TestAPreviewHostnameIsShieldedByTheWildcardShieldOverItsPreviewBase(t *test
 	client, _ := clientCertificate(t)
 	front := caddyfile.Caddyfile{Directory: "/etc/caddy/ocel.d", Port: 8480}
 	spec := proxy.Spec{
-		Hostnames: []string{"pr-12--web.preview.example.com", "deep.pr-12--web.preview.example.com"},
+		Hostnames: []string{"pr-12-web-abcdefghijklmnopp3347l26.preview.example.com", "deep.pr-12-web-abcdefghijklmnopp3347l26.preview.example.com"},
 		Shields:   []proxy.Shield{{Hostname: "*.preview.example.com", ClientCAs: []string{client}, OriginCertificate: origin}},
 	}
 	rendered, err := front.Render(spec)
 	if err != nil {
 		t.Fatalf("Render() = %v", err)
 	}
-	if !strings.Contains(string(rendered), "https://pr-12--web.preview.example.com {\n\ttls "+originFile(t, front, spec).Path) {
-		t.Errorf("Render() =\n%s\nwant pr-12--web.preview.example.com served the wildcard's origin certificate", rendered)
+	if !strings.Contains(string(rendered), "https://pr-12-web-abcdefghijklmnopp3347l26.preview.example.com {\n\ttls "+originFile(t, front, spec).Path) {
+		t.Errorf("Render() =\n%s\nwant pr-12-web-abcdefghijklmnopp3347l26.preview.example.com served the wildcard's origin certificate", rendered)
 	}
-	if !strings.HasPrefix(string(rendered), "deep.pr-12--web.preview.example.com {\n") {
-		t.Errorf("Render() =\n%s\nwant deep.pr-12--web.preview.example.com left open: a wildcard covers one label", rendered)
+	if !strings.HasPrefix(string(rendered), "deep.pr-12-web-abcdefghijklmnopp3347l26.preview.example.com {\n") {
+		t.Errorf("Render() =\n%s\nwant deep.pr-12-web-abcdefghijklmnopp3347l26.preview.example.com left open: a wildcard covers one label", rendered)
 	}
 }
 
@@ -137,7 +137,7 @@ func TestTheOriginCertificateIsPlacedBesideOcelCaddyAsOneBundleNamedForItsHostna
 	client, _ := clientCertificate(t)
 	front := caddyfile.Caddyfile{Directory: "/etc/caddy/ocel.d", Port: 8480}
 	spec := proxy.Spec{
-		Hostnames: []string{"pr-12--web.preview.example.com"},
+		Hostnames: []string{"pr-12-web-abcdefghijklmnopp3347l26.preview.example.com"},
 		Shields:   []proxy.Shield{{Hostname: "*.preview.example.com", ClientCAs: []string{client}, OriginCertificate: origin}},
 	}
 	placed := originFile(t, front, spec)
@@ -218,7 +218,7 @@ func shieldedBox(t *testing.T) (*box, caddyfile.Caddyfile) {
 	client, _ := clientCertificate(t)
 	machine := &box{
 		said:    map[string]string{caddyfile.AdminServers: golden(t, "shielded.json")},
-		claimed: []string{"blog.example.com", "shop.example.com", "box.example.com", "pr-1--web.preview.example.com"},
+		claimed: []string{"blog.example.com", "shop.example.com", "box.example.com", "pr-1-web-abcdefghijklmnopfhzq6k4d.preview.example.com"},
 		shields: []proxy.Shield{
 			{Hostname: "shop.example.com", ClientCAs: []string{client}, OriginCertificate: origin},
 			{Hostname: "*.preview.example.com", ClientCAs: []string{client}},
@@ -259,11 +259,11 @@ func TestInspectPassesAShieldedHostnameYourCaddyRefusesToAClientWithNoCertificat
 	machine, front := shieldedBox(t)
 	machine.answers = map[string]router.Kind{"blog.example.com": switchboard.RouterKind, "box.example.com": switchboard.RouterKind}
 	machine.failures = map[string]string{
-		"shop.example.com":              "shop.example.com at 127.0.0.1:443: remote error: tls: certificate required",
-		"pr-1--web.preview.example.com": "pr-1--web.preview.example.com at 127.0.0.1:443: remote error: tls: certificate required",
+		"shop.example.com": "shop.example.com at 127.0.0.1:443: remote error: tls: certificate required",
+		"pr-1-web-abcdefghijklmnopfhzq6k4d.preview.example.com": "pr-1-web-abcdefghijklmnopfhzq6k4d.preview.example.com at 127.0.0.1:443: remote error: tls: certificate required",
 	}
 	checks := checked(t, front)
-	for _, hostname := range []string{"blog.example.com", "shop.example.com", "pr-1--web.preview.example.com"} {
+	for _, hostname := range []string{"blog.example.com", "shop.example.com", "pr-1-web-abcdefghijklmnopfhzq6k4d.preview.example.com"} {
 		if check := checks[hostname]; check.Verdict != provider.HostPass {
 			t.Errorf("%s = %+v, want it to pass: a shielded hostname is refused to a probe that presents no certificate", hostname, check)
 		}

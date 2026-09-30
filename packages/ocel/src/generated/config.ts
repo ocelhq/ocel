@@ -360,6 +360,8 @@ export interface VpsProviderOptions {
   certificates?: Record<string, string>;
   /** Path to the public key the ocel-deploy login accepts; defaults to the bootstrapping login's keys. */
   deployKey?: string;
+  /** Deploy previews even though the proxy orders a publicly trusted certificate for each preview hostname, which Certificate Transparency logs publish within minutes. Left out, such a preview deploy is refused: set proxy.traefik.previewResolver, pin a wildcard certificate for the preview base, or front the box with an edge that shields it with an origin certificate instead. */
+  perHostnamePreviewCertificates?: boolean;
   /** What fronts this machine on ports 80 and 443. Leave it out and ocel runs its own proxy; name the one the machine already runs to deploy behind it. */
   proxy?: VpsProxy;
   /** The machine to deploy onto: a Host alias from ssh_config, or the destination spelled out. */

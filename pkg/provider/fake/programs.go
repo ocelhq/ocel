@@ -12,9 +12,8 @@ import (
 const (
 	ProgramStore = "fake-deployments-store"
 
-	ProgramEdgeVar        = "OCEL_EDGE"
-	ProgramPreviewVar     = "OCEL_PREVIEW_BASE_DOMAIN"
-	ProgramPreviewAppsVar = "OCEL_PREVIEW_APPS"
+	ProgramEdgeVar    = "OCEL_EDGE"
+	ProgramPreviewVar = "OCEL_PREVIEW_BASE_DOMAIN"
 )
 
 func (p *Provider) ProgramEdge(_ context.Context, req provider.EdgeProgramRequest) (provider.EdgeProgram, error) {
@@ -22,16 +21,14 @@ func (p *Provider) ProgramEdge(_ context.Context, req provider.EdgeProgramReques
 	if req.PreviewBaseDomain != "" {
 		variables[ProgramPreviewVar] = req.PreviewBaseDomain
 	}
-	if len(req.Apps) > 0 {
-		variables[ProgramPreviewAppsVar] = strings.Join(req.Apps, ",")
+	worker := edge.Worker{Main: req.Entry, Variables: variables}
+	if req.PreviewKey != "" {
+		worker.Secrets = map[string]string{edge.PreviewKeyVar: string(req.PreviewKey)}
 	}
 	return provider.EdgeProgram{
 		Spec: &edge.ProgramSpec{
-			Name: ProgramName(req.Slug, req.Tier),
-			Worker: edge.Worker{
-				Main:      req.Entry,
-				Variables: variables,
-			},
+			Name:            ProgramName(req.Slug, req.Tier),
+			Worker:          worker,
 			StoreScriptName: ProgramStore,
 		},
 		Values: map[string]string{ProgramEdgeVar: string(req.Kind)},
