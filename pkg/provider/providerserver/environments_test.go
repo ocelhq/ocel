@@ -231,6 +231,65 @@ func TestRecordingAPreviewUnderTheOtherLifecycleIsRefusedAndKeepsTheFirst(t *tes
 	}
 }
 
+type concurrentlyRewrittenStore struct {
+	keyvalue.Store
+	rewrite func()
+}
+
+func (s *concurrentlyRewrittenStore) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
+	if rewrite := s.rewrite; rewrite != nil {
+		s.rewrite = nil
+		rewrite()
+	}
+	return s.Store.Write(ctx, entry)
+}
+
+func TestRecordingAPreviewRewrittenByAConcurrentDeployReadsItAgainAndKeepsBothWrites(t *testing.T) {
+	t.Parallel()
+	_, vendor := contractServed(t, "1.0.0")
+	recordEnvironment(t, vendor, "pr-7", stackrecords.LifecycleEphemeral)
+	ctx := context.Background()
+	store := &concurrentlyRewrittenStore{Store: vendor.KeyValues(), rewrite: func() {
+		if err := stackrecords.RecordEnvironmentMeta(ctx, vendor.KeyValues(),
+			environment.TierPreview, "shop", "pr-7", "pr-123", stackrecords.LifecycleEphemeral); err != nil {
+			t.Fatal(err)
+		}
+	}}
+
+	if err := stackrecords.RecordEnvironmentMeta(ctx, store,
+		environment.TierPreview, "shop", "pr-7", "", stackrecords.LifecycleEphemeral); err != nil {
+		t.Fatalf("RecordEnvironmentMeta() = %v, want it to read pr-7 again after the concurrent deploy rewrote it", err)
+	}
+
+	if meta := readEnvironmentMeta(t, vendor, "shop", "pr-7"); meta.Label != "pr-123" {
+		t.Errorf("pr-7 is labelled %q, want the concurrent deploy's pr-123 kept", meta.Label)
+	}
+}
+
+func TestRecordingAPreviewRemovedWhileItIsRecordedIsRefusedAndLeavesItRemoved(t *testing.T) {
+	t.Parallel()
+	_, vendor := contractServed(t, "1.0.0")
+	recordEnvironment(t, vendor, "pr-7", stackrecords.LifecycleEphemeral)
+	ctx := context.Background()
+	key := stackrecords.EnvironmentKey(environment.TierPreview, "shop", "pr-7")
+	store := &concurrentlyRewrittenStore{Store: vendor.KeyValues(), rewrite: func() {
+		if err := keyvalue.Forget(ctx, vendor.KeyValues(), key); err != nil {
+			t.Fatal(err)
+		}
+	}}
+
+	err := stackrecords.RecordEnvironmentMeta(ctx, store,
+		environment.TierPreview, "shop", "pr-7", "pr-123", stackrecords.LifecycleEphemeral)
+
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || !strings.Contains(refused.Message, "pr-7") {
+		t.Errorf("RecordEnvironmentMeta() = %v, want a refusal naming pr-7: it was removed while this deploy recorded it", err)
+	}
+	if _, err := vendor.KeyValues().Read(ctx, key); !errors.Is(err, keyvalue.ErrNotFound) {
+		t.Errorf("Read() of pr-7's record = %v, want it still removed", err)
+	}
+}
+
 func environmentRecordBytes(t *testing.T, vendor *fake.Provider, slug, env string) []byte {
 	t.Helper()
 	recorded, err := vendor.KeyValues().Read(context.Background(), stackrecords.EnvironmentKey(environment.TierPreview, slug, env))
