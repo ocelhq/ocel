@@ -243,21 +243,6 @@ export const gaps: Gap[] = [
     ],
   },
   {
-    id: "no-master-secret",
-    reason:
-      "an RDS cluster with ManageMasterUserPassword reports no master user secret under floci",
-    issue: 884,
-    where: [
-      {
-        on: ["aws.floci"],
-        fixtures: [sdk.node, sdk.withTransforms],
-        variants: [apiGateway],
-        fails: [step.deploy],
-        skipsCell: true,
-      },
-    ],
-  },
-  {
     id: "floci-runs-no-load-balancer",
     reason:
       "the aws provider runs a container on Fargate behind a load balancer floci has no data plane for",
