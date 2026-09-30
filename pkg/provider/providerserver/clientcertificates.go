@@ -79,27 +79,27 @@ func claimTunneled(ctx context.Context, claim router.Claim, take originTake) (or
 	return originClaim{origin: &origin}, nil
 }
 
-func isOriginClaimStale(ctx context.Context, front edge.Edge, hostname string, tunnel edge.Kind, hostState *stackrecords.HostnameState, now time.Time) (stale bool, why string, err error) {
+func readOriginClaimStaleness(ctx context.Context, front edge.Edge, hostname string, tunnel edge.Kind, hostState *stackrecords.HostnameState, now time.Time) (why string, err error) {
 	wanted := tunnel != edge.None
 	switch {
 	case wanted && !hostState.Tunneled:
-		return true, "it is reached through a tunnel now", nil
+		return "it is reached through a tunnel now", nil
 	case !wanted && hostState.Tunneled:
-		return true, "it is no longer reached through a tunnel", nil
+		return "it is no longer reached through a tunnel", nil
 	case wanted:
-		return false, "", nil
+		return "", nil
 	}
 	changed, err := clientCertificatesChanged(ctx, front, hostname, hostState.ClientCertificateDigests)
 	if err != nil {
-		return false, "", err
+		return "", err
 	}
 	if isOriginCertificateDue(hostState, now) {
-		return true, "the certificate its origin answers it with is due for renewal", nil
+		return "the certificate its origin answers it with is due for renewal", nil
 	}
 	if changed {
-		return true, fmt.Sprintf("the client certificates %s presents to its origin changed", describeFront(front.Kind())), nil
+		return fmt.Sprintf("the client certificates %s presents to its origin changed", describeFront(front.Kind())), nil
 	}
-	return false, "", nil
+	return "", nil
 }
 
 func claimTrusting(ctx context.Context, front edge.Edge, hostname string, claim func(context.Context, []string) (edge.Origin, error)) (edge.Origin, []string, error) {

@@ -197,7 +197,7 @@ func (s *stack) claimHostname(ctx context.Context, claim router.Claim) (edge.Ori
 	if err := s.claimUnlessWildcard(ctx, claim); err != nil {
 		return edge.Origin{}, err
 	}
-	if err := s.e.untunnelHost(ctx, claim.Hostname, s.surface()); err != nil {
+	if err := s.e.removeTunneledHost(ctx, claim.Hostname, s.surface()); err != nil {
 		return edge.Origin{}, err
 	}
 	if shielded {

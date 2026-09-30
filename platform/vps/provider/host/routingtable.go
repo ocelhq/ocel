@@ -42,10 +42,10 @@ func WriteRoutingTable(table RoutingTable) ([]byte, error) {
 		Claims:      slices.SortedFunc(slices.Values(table.Claims), byClaimed),
 		Routes:      slices.SortedFunc(slices.Values(table.Routes), byKey),
 		Pins:        slices.SortedFunc(slices.Values(table.Pins), byPinned),
-		Shields:     slices.SortedFunc(slices.Values(table.Shields), byShielded),
+		Shields:     slices.SortedFunc(slices.Values(table.Shields), byHostnameThenOwner),
 		PreviewBase: table.PreviewBase,
 		Connector:   table.Connector,
-		Tunneled:    slices.SortedFunc(slices.Values(table.Tunneled), byTunneled),
+		Tunneled:    slices.SortedFunc(slices.Values(table.Tunneled), byHostnameThenOwner),
 		Tunnel:      table.Tunnel,
 		Retired:     table.Retired,
 	})

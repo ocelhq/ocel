@@ -126,23 +126,23 @@ type Edge struct {
 	unreadable  error
 	entitlement *edge.CodeEntitlement
 
-	proxies    bool
-	issues     bool
-	tunnels    bool
-	opened     []string
-	originLife time.Duration
-	issued     int
-	held       map[string]string
-	revoked    []string
-	presenting []string
-	events     []string
-	claims     []router.Claim
-	entries    []router.Claim
-	holding    []string
-	released   []string
-	disclaimed []string
-	purged     [][]string
-	purgeError error
+	proxies      bool
+	issues       bool
+	runsTunnels  bool
+	tunnelEvents []string
+	originLife   time.Duration
+	issued       int
+	held         map[string]string
+	revoked      []string
+	presenting   []string
+	events       []string
+	claims       []router.Claim
+	entries      []router.Claim
+	holding      []string
+	released     []string
+	disclaimed   []string
+	purged       [][]string
+	purgeError   error
 
 	refusesCertified error
 	refusesBinds     error
@@ -343,7 +343,7 @@ func (e *Edge) DisclaimedPreviewEntries() []string {
 
 func (e *Edge) holdOriginCertificate(claim router.Claim) edge.Origin {
 	if claim.Tunnel != edge.None {
-		return edge.Origin{Address: TunnelAddress(claim.Tunnel), Certified: true, Tunneled: true}
+		return edge.Origin{Address: FormatTunnelAddress(claim.Tunnel), Certified: true, Tunneled: true}
 	}
 	if claim.OriginCertificate.ID != "" {
 		if e.held == nil {
@@ -532,7 +532,7 @@ func (e *Edge) Hooks() edge.Hooks {
 		hooks.ClientCertificates = &edge.ClientCertificateHooks{Ensure: e.ensureClientCertificates, Present: e.presentClientCertificate}
 		hooks.PurgeHostnames = e.purge
 	}
-	if e.tunnels {
+	if e.runsTunnels {
 		hooks.Tunnels = &edge.TunnelHooks{Ensure: e.ensureTunnel, Configure: e.configureTunnel, ReadToken: e.readTunnelToken, Delete: e.deleteTunnel}
 	}
 	if e.issues {
@@ -754,29 +754,29 @@ var (
 	_ edge.DNSRecords = (*DNSRecords)(nil)
 )
 
-func TunnelAddress(kind edge.Kind) string { return "tunnel." + string(kind) + ".fake.invalid" }
+func FormatTunnelAddress(kind edge.Kind) string { return "tunnel." + string(kind) + ".fake.invalid" }
 
-func (e *Edge) Tunnels() {
+func (e *Edge) RunsTunnels() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	e.tunnels = true
+	e.runsTunnels = true
 }
 
 func (e *Edge) TunnelEvents() []string {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	return slices.Clone(e.opened)
+	return slices.Clone(e.tunnelEvents)
 }
 
 func (e *Edge) recordTunnelEvent(event string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	e.opened = append(e.opened, event)
+	e.tunnelEvents = append(e.tunnelEvents, event)
 }
 
 func (e *Edge) ensureTunnel(_ context.Context, name string) (edge.Tunnel, error) {
 	e.recordTunnelEvent("ensure " + name)
-	return edge.Tunnel{ID: "tunnel-" + name, Address: TunnelAddress(e.kind)}, nil
+	return edge.Tunnel{ID: "tunnel-" + name, Address: FormatTunnelAddress(e.kind)}, nil
 }
 
 func (e *Edge) configureTunnel(_ context.Context, id, service string) error {

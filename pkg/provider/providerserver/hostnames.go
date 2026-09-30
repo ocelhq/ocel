@@ -213,8 +213,8 @@ func (d *hostnames) refreshOriginClaim(ctx context.Context, target ConfiguredHos
 	if d.routerOrigin() == nil {
 		return false, nil
 	}
-	stale, why, err := isOriginClaimStale(ctx, d.front, target.Hostname, d.tunnel, hostState, time.Now())
-	if err != nil || !stale {
+	why, err := readOriginClaimStaleness(ctx, d.front, target.Hostname, d.tunnel, hostState, time.Now())
+	if err != nil || why == "" {
 		return false, err
 	}
 	progress.Say(fmt.Sprintf("Claiming %s again: %s", target.Hostname, why))

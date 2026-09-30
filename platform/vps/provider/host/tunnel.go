@@ -15,15 +15,15 @@ import (
 )
 
 const (
-	TunnelContainer    = "ocel-tunnel"
-	TunnelNetwork      = "ocel-tunnel-network"
-	TunnelDir          = live.StateRoot + "/tunnel"
-	tunnelMount        = "/etc/ocel-tunnel"
-	tunnelTokenMounted = tunnelMount + "/token"
-	TunnelService      = "http://" + SwitchboardContainer + ":" + switchboard.TunnelListenPort
-	tunnelRising       = 30
-	tunnelNameSuffix   = 4
-	rootUser           = "0:0"
+	TunnelContainer       = "ocel-tunnel"
+	TunnelNetwork         = "ocel-tunnel-network"
+	TunnelDir             = live.StateRoot + "/tunnel"
+	tunnelMount           = "/etc/ocel-tunnel"
+	tunnelTokenMounted    = tunnelMount + "/token"
+	TunnelService         = "http://" + SwitchboardContainer + ":" + switchboard.TunnelListenPort
+	tunnelStartAttempts   = 30
+	tunnelNameSuffixBytes = 4
+	rootUser              = "0:0"
 )
 
 type Tunnel struct {
@@ -65,14 +65,12 @@ type TunneledHost struct {
 	Owner    string `json:"owner"`
 }
 
-func isTunneled(tunneled []TunneledHost, hostname string) bool {
-	over := ""
-	if _, parent, split := strings.Cut(hostname, "."); split {
-		over = "*." + parent
+func tunneledHostnames(tunneled []TunneledHost) switchboard.TunneledHostnames {
+	hostnames := make([]string, 0, len(tunneled))
+	for _, held := range tunneled {
+		hostnames = append(hostnames, held.Hostname)
 	}
-	return slices.ContainsFunc(tunneled, func(held TunneledHost) bool {
-		return strings.EqualFold(held.Hostname, hostname) || over != "" && strings.EqualFold(held.Hostname, over)
-	})
+	return switchboard.NewTunneledHostnames(hostnames)
 }
 
 func tunnelBox(tunnel Tunnel, connector tunnelConnector) boxContainer {
@@ -95,7 +93,7 @@ func (h *Host) ReserveTunnel(ctx context.Context, front edge.Kind) (Tunnel, erro
 	if err != nil {
 		return Tunnel{}, err
 	}
-	suffix := make([]byte, tunnelNameSuffix)
+	suffix := make([]byte, tunnelNameSuffixBytes)
 	if _, err := rand.Read(suffix); err != nil {
 		return Tunnel{}, err
 	}
@@ -163,7 +161,7 @@ func (h *Host) RunTunnel(ctx context.Context, tunnel Tunnel, token func(context.
 	if err != nil {
 		return err
 	}
-	running, err := h.ran(ctx, "read what "+TunnelContainer+" runs", runningTunnelRead(), nil, elevation)
+	running, err := h.ran(ctx, "read what "+TunnelContainer+" runs", renderTunnelInspect(), nil, elevation)
 	if err != nil {
 		return err
 	}
@@ -175,53 +173,52 @@ func (h *Host) RunTunnel(ctx context.Context, tunnel Tunnel, token func(context.
 		return err
 	}
 	if _, err := h.ran(ctx, "write the token "+TunnelContainer+" runs with",
-		words(tunnelTokenPlacing("place-secret")), strings.NewReader(read), elevation); err != nil {
+		words(renderTunnelTokenArgv("place-secret")), strings.NewReader(read), elevation); err != nil {
 		return err
 	}
-	_, err = h.ran(ctx, "run "+TunnelContainer, networkEnsured(TunnelNetwork)+"\n"+tunnelBox(tunnel, connector).writing(tunnelRising), nil, elevation)
+	_, err = h.ran(ctx, "run "+TunnelContainer, networkEnsured(TunnelNetwork)+"\n"+tunnelBox(tunnel, connector).writing(tunnelStartAttempts), nil, elevation)
 	return err
 }
 
-func tunnelTokenPlacing(verb string) []string {
+func renderTunnelTokenArgv(subcommand string) []string {
 	argv := []string{"docker", "run", "--rm", "--interactive", "--network", "none", "--user", rootUser,
 		"--env", switchboard.PlaceEnv + "=" + tunnelMount,
 		"--volume", SwitchboardDir + ":" + switchboardMount + ":ro",
 		"--volume", TunnelDir + ":" + tunnelMount}
 	argv = append(argv, confined(nil, false)...)
-	return append(argv, SwitchboardImage, SwitchboardMounted, verb, tunnelTokenMounted)
+	return append(argv, SwitchboardImage, SwitchboardMounted, subcommand, tunnelTokenMounted)
 }
 
-func runningTunnelRead() string {
+func renderTunnelInspect() string {
 	return "docker inspect --type container --format " +
 		quoted(fmt.Sprintf(`{{.State.Running}} {{index .Config.Labels %q}}`, configLabel)) + " " +
 		quoted(TunnelContainer) + " 2>/dev/null || true"
 }
 
-func (h *Host) TunnelHost(ctx context.Context, hostname, owner, name string) error {
+func (h *Host) TunnelHost(ctx context.Context, tunneled TunneledHost, tunnelName string) error {
 	return h.reshape(ctx, func(state RoutingTable) (RoutingTable, error) {
-		if err := refuseUnreserved(state, name, h.named()); err != nil {
+		if err := refuseUnreserved(state, tunnelName, h.named()); err != nil {
 			return RoutingTable{}, err
 		}
 		for _, held := range state.Tunneled {
-			if held.Hostname == hostname && held.Owner != owner {
+			if held.Hostname == tunneled.Hostname && held.Owner != tunneled.Owner {
 				return RoutingTable{}, refusal.Refuse(refusal.CodeBusy,
-					"%s is tunneled on this box for %s\nUnbind it there before %s binds it", hostname, held.Owner, owner)
+					"%s is tunneled on this box for %s\nUnbind it there before %s binds it", tunneled.Hostname, held.Owner, tunneled.Owner)
 			}
 		}
-		state.Tunneled = append(untunneled(state.Tunneled, func(held TunneledHost) bool { return held.Hostname == hostname }),
-			TunneledHost{Hostname: hostname, Owner: owner})
+		state.Tunneled = append(dropTunneledHosts(state.Tunneled, func(held TunneledHost) bool { return held.Hostname == tunneled.Hostname }), tunneled)
 		return state, nil
 	})
 }
 
-func (h *Host) UntunnelHost(ctx context.Context, hostname, owner string) error {
+func (h *Host) RemoveTunneledHost(ctx context.Context, tunneled TunneledHost) error {
 	return h.reshape(ctx, func(state RoutingTable) (RoutingTable, error) {
-		state.Tunneled = untunneled(state.Tunneled, func(held TunneledHost) bool { return held.Hostname == hostname && held.Owner == owner })
+		state.Tunneled = dropTunneledHosts(state.Tunneled, func(held TunneledHost) bool { return held == tunneled })
 		return state, nil
 	})
 }
 
-func untunneled(tunneled []TunneledHost, dropped func(TunneledHost) bool) []TunneledHost {
+func dropTunneledHosts(tunneled []TunneledHost, dropped func(TunneledHost) bool) []TunneledHost {
 	return slices.DeleteFunc(slices.Clone(tunneled), dropped)
 }
 
@@ -230,7 +227,7 @@ func (h *Host) IsTunneled(ctx context.Context, hostname string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return isTunneled(state.Tunneled, hostname), nil
+	return tunneledHostnames(state.Tunneled).Has(hostname), nil
 }
 
 func (h *Host) ReleaseTunnel(ctx context.Context) ([]Tunnel, error) {
@@ -252,7 +249,7 @@ func (h *Host) ReleaseTunnel(ctx context.Context) ([]Tunnel, error) {
 		return retired, err
 	}
 	_, err = h.ran(ctx, "remove "+TunnelContainer,
-		"docker rm --force "+quoted(TunnelContainer)+" >/dev/null 2>&1 || true\n"+words(tunnelTokenPlacing("unplace")), nil, elevation)
+		"docker rm --force "+quoted(TunnelContainer)+" >/dev/null 2>&1 || true\n"+words(renderTunnelTokenArgv("unplace")), nil, elevation)
 	return retired, err
 }
 

@@ -25,7 +25,7 @@ func tunnelRelay(t *testing.T, vendor *fake.Provider) *fake.Edge {
 	relay := vendor.Edges().(*fake.Edges).Edge(fake.KindRelay)
 	relay.ProxiesRecords()
 	relay.IssuesOriginCertificates()
-	relay.Tunnels()
+	relay.RunsTunnels()
 	return relay
 }
 
@@ -149,7 +149,7 @@ func TestTheSharedPreviewWildcardThroughATunnelIsClaimedOnTheTunnelWithNoCertifi
 	relay := vendor.Edges().(*fake.Edges).Edge(fake.KindDirect)
 	relay.ProxiesRecords()
 	relay.IssuesOriginCertificates()
-	relay.Tunnels()
+	relay.RunsTunnels()
 
 	if result := usePreviewWildcard(t, client, "preview.acme.com", &contractv1.EdgeSelection{Kind: string(fake.KindDirect), Tunnel: true}); !result.GetSuccess() {
 		t.Fatalf("UsePreviewWildcard() = %q, want previews forwarded through the tunnel", result.GetError())
@@ -175,7 +175,7 @@ func TestAProjectsOwnPreviewWildcardThroughATunnelIsClaimedOnTheTunnel(t *testin
 	previewBootstrapped(t, client)
 	relay := vendor.Edges().(*fake.Edges).Edge(fake.KindDirect)
 	relay.ProxiesRecords()
-	relay.Tunnels()
+	relay.RunsTunnels()
 	req := previewRequest()
 	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindDirect), Tunnel: true}
 
