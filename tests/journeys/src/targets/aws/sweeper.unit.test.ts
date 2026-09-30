@@ -11,6 +11,7 @@ import {
   despite,
   destroyOnCurrentBootstrap,
   sweepPlan,
+  sweepPoliciesThenNamespaces,
   sweepStacks,
 } from "./sweeper";
 
@@ -51,6 +52,44 @@ describe("despite", () => {
     expect(ran).toEqual(["j-1799-intact"]);
     expect(complaints).toEqual([
       "j-1799-half-deleted sweep: Error: the bootstrap stack is stuck in DELETE_FAILED",
+    ]);
+  });
+});
+
+describe("sweepPoliciesThenNamespaces", () => {
+  it("frees orphaned policy slots before a namespace's bootstrap refresh can need one", async () => {
+    const ran: string[] = [];
+
+    await sweepPoliciesThenNamespaces(
+      [],
+      async () => {
+        ran.push("policies");
+      },
+      async () => {
+        ran.push("namespaces");
+      },
+    );
+
+    expect(ran).toEqual(["policies", "namespaces"]);
+  });
+
+  it("still sweeps namespaces when the policy sweep fails", async () => {
+    const complaints: string[] = [];
+    const ran: string[] = [];
+
+    await sweepPoliciesThenNamespaces(
+      complaints,
+      async () => {
+        throw new Error("AccessDenied: cloudfront:ListCachePolicies");
+      },
+      async () => {
+        ran.push("namespaces");
+      },
+    );
+
+    expect(ran).toEqual(["namespaces"]);
+    expect(complaints).toEqual([
+      "edge policy sweep: Error: AccessDenied: cloudfront:ListCachePolicies",
     ]);
   });
 });
