@@ -66,7 +66,7 @@ func CostManifest() *contractv1.Manifest {
 				}}}},
 			{Name: "api", Framework: &contractv1.Framework{Name: "go"},
 				Artifact: &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{
-					Image: "registry.example.com/conformance/api@sha256:" + costImageDigest, HealthCheckPath: "/healthz",
+					Image: "registry.example.com/conformance/api@sha256:" + costImageDigest, HealthCheckPath: "/healthz", MinInstances: 1, MaxInstances: 1,
 				}}},
 		},
 		Resources: []*contractv1.ManifestResource{

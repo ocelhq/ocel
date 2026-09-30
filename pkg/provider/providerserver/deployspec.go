@@ -85,6 +85,7 @@ func appEntry(app *contractv1.ManifestApp, env, promotionID string) (provider.Ap
 		Image:           container.GetImage(),
 		HealthCheckPath: container.GetHealthCheckPath(),
 		Arch:            container.GetArch(),
+		Instances:       provider.Instances{Min: int(container.GetMinInstances()), Max: int(container.GetMaxInstances())},
 	}, nil
 }
 

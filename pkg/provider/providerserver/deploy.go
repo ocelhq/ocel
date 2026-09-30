@@ -1047,6 +1047,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 					Image:           imageToRun(images, entry),
 					HealthCheckPath: entry.HealthCheckPath,
 					Arch:            entry.Arch,
+					Instances:       entry.Instances,
 					Values:          values,
 					Grants:          grants,
 					Routing:         facts.OriginDispatch,

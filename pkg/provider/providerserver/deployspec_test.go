@@ -156,7 +156,7 @@ func containerRequest(image string) *contractv1.DeployRequest {
 		Manifest: &contractv1.Manifest{
 			Slug: "shop",
 			Apps: []*contractv1.ManifestApp{
-				{Name: "api", DeploymentId: deploymentID, Artifact: &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{Image: image, HealthCheckPath: "/"}}},
+				{Name: "api", DeploymentId: deploymentID, Artifact: &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{Image: image, HealthCheckPath: "/", MinInstances: 1, MaxInstances: 1}}},
 				{Name: "web", DeploymentId: deploymentID, Artifact: &contractv1.ManifestApp_Serverless{Serverless: &contractv1.ServerlessArtifact{}}},
 			},
 		},

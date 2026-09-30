@@ -79,6 +79,7 @@ type AppSpec struct {
 	Image           string
 	HealthCheckPath string
 	Arch            string
+	Instances       Instances
 
 	Values AppValues
 
