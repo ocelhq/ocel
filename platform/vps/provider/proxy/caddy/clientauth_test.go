@@ -93,8 +93,8 @@ func TestAHostnameShieldedByAClientCertificateIsHandedOnlyToAClientPresentingIt(
 	if ca := shielding.Client.CA; ca == nil || ca.Provider != "inline" || !slices.Equal(ca.TrustedCACerts, want) {
 		t.Errorf("shop.example.com trusts client CAs %+v, want inline the CA of the certificate the edge presents and of the successor it presents next", ca)
 	}
-	if shielding.Client.Mode != "require" {
-		t.Errorf("shop.example.com authenticates clients in mode %q, want require: a handshake with no certificate is refused", shielding.Client.Mode)
+	if shielding.Client.Mode != "require_and_verify" {
+		t.Errorf("shop.example.com authenticates clients in mode %q, want require_and_verify: Caddy checks a certificate against the CA pool only in that mode, so require admits any certificate at all", shielding.Client.Mode)
 	}
 	if last := policies[len(policies)-1]; last.Client != nil {
 		t.Errorf("the catch-all policy authenticates clients %+v, want every hostname nothing shields served to anyone", last.Client)

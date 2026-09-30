@@ -112,15 +112,15 @@ func clientAuthentication(site shieldedSite) (string, error) {
 	if len(site.shield.ClientCAs) == 0 {
 		return "", fmt.Errorf("%s is shielded by no client CA", site.hostname)
 	}
-	requiring := "\t\tclient_auth {\n\t\t\tmode require\n\t\t\ttrust_pool inline {\n"
+	requiring := "\t\tclient_auth {\n\t\t\tmode require_and_verify\n"
 	for _, authority := range site.shield.ClientCAs {
 		der, err := encodeCertificateDER(authority)
 		if err != nil {
 			return "", fmt.Errorf("a client CA %s is shielded by: %w", site.hostname, err)
 		}
-		requiring += "\t\t\t\ttrust_der " + der + "\n"
+		requiring += "\t\t\ttrusted_ca_cert " + der + "\n"
 	}
-	return requiring + "\t\t\t}\n\t\t}\n", nil
+	return requiring + "\t\t}\n", nil
 }
 
 func encodeCertificateDER(certificate string) (string, error) {
