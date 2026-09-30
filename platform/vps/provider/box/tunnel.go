@@ -47,6 +47,9 @@ func (e *Edge) tunnelHost(ctx context.Context, claim string, kind edge.Kind, own
 		return edge.Origin{}, err
 	}
 	if err := e.machine.TunnelHost(ctx, host.TunneledHost{Hostname: claim, Owner: owner}, tunnel.Name); err != nil {
+		if errors.Is(err, host.ErrTunnelReleased) {
+			return edge.Origin{}, errors.Join(err, e.machine.StopTunnel(ctx, tunnel))
+		}
 		return edge.Origin{}, err
 	}
 	if err := e.machine.RemoveShield(ctx, claim, owner); err != nil {

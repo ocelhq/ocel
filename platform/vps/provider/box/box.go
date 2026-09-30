@@ -47,6 +47,7 @@ type Machine interface {
 	TunnelHost(ctx context.Context, tunneled host.TunneledHost, tunnelName string) error
 	RemoveTunneledHost(ctx context.Context, tunneled host.TunneledHost) error
 	ReleaseTunnel(ctx context.Context) ([]host.Tunnel, error)
+	StopTunnel(ctx context.Context, tunnel host.Tunnel) error
 	ForgetTunnel(ctx context.Context, name string) error
 }
 

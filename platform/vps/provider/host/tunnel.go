@@ -265,12 +265,16 @@ func (h *Host) ReleaseTunnel(ctx context.Context) ([]Tunnel, error) {
 	}); err != nil || !stopping {
 		return retired, err
 	}
+	return retired, h.StopTunnel(ctx, stopped)
+}
+
+func (h *Host) StopTunnel(ctx context.Context, tunnel Tunnel) error {
 	elevation, err := h.reachDocker(ctx)
 	if err != nil {
-		return retired, err
+		return err
 	}
-	_, err = h.ran(ctx, "remove "+TunnelContainer, renderTunnelRemoval(stopped), nil, elevation)
-	return retired, err
+	_, err = h.ran(ctx, "remove "+TunnelContainer, renderTunnelRemoval(tunnel), nil, elevation)
+	return err
 }
 
 func (h *Host) ForgetTunnel(ctx context.Context, name string) error {
