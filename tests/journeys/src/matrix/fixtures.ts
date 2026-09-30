@@ -20,6 +20,7 @@ import { type Fixture, fixture } from "./types";
 import {
   apiGateway,
   cloudflare,
+  cloudflareInFrontOfContainers,
   cloudflareOnABox,
   cloudflareOnGoogleCloud,
   cloudflareTunnel,
@@ -49,7 +50,7 @@ export const deploy = {
     checks: NODE_CHECKS,
     on: {
       dev: [defaults],
-      aws: [container, apiGateway],
+      aws: [container, apiGateway, cloudflareInFrontOfContainers],
       vps: [defaults, registry, cloudflareOnABox, cloudflareTunnel],
       gcp: [defaults, container, cloudflareOnGoogleCloud],
     },

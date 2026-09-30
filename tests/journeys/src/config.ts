@@ -87,11 +87,14 @@ export function overlayFor(
   switch (target) {
     case "aws": {
       const variablesKey = env.OCEL_AWS_VARIABLES_KEY?.trim() || undefined;
+      const forwarded =
+        cell.variant.config.edge === "cloudflare" && cell.variant.config.compute === "container";
       return {
         base: DEFAULT_BASE,
         slug: cell.slug,
         ...cell.variant.config,
         ...dnsOf(env),
+        ...(forwarded && zone ? { dns: "cloudflare" as const } : {}),
         ...(zone ? { hostnames: hostnamesOf(cell, zone) } : {}),
         ...(variablesKey ? { variablesKey } : {}),
       };
