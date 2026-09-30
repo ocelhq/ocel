@@ -39,7 +39,7 @@ func healthy(t *testing.T) (*box, traefik.Traefik) {
 	t.Helper()
 	machine := coolifyBox(t)
 	machine.spec = serving()
-	machine.board = "mount=/ocel/switchboard mount=" + coolifyDynamic + " network=coolify network=ocel "
+	machine.board = "network=coolify network=ocel "
 	machine.routes = map[string][]string{bound: {"switchboard"}, preview: {"switchboard"}, probed: {"switchboard"}}
 	machine.leaves = map[string][]byte{
 		bound:   certificate(t, bound),
@@ -74,7 +74,6 @@ func TestABoxYourTraefikRoutesWholePassesEveryCheck(t *testing.T) {
 	_, front := healthy(t)
 	checks := inspected(t, front)
 	for _, subject := range []string{
-		"ocel-switchboard mounts " + coolifyDynamic,
 		"ocel-switchboard on coolify",
 		coolifyDynamic + "/ocel.yml",
 		bound, preview, probed,
@@ -103,16 +102,13 @@ func TestAnOcelYmlYourHostToolRewroteOrDeletedFailsItsCheck(t *testing.T) {
 	}
 }
 
-func TestASwitchboardOffYourTraefiksNetworkOrWithoutItsDirectoryFailsItsCheck(t *testing.T) {
+func TestASwitchboardOffYourTraefiksNetworkFailsItsCheck(t *testing.T) {
 	t.Parallel()
 
 	machine, front := healthy(t)
-	machine.board = "mount=/ocel/switchboard network=ocel "
-	checks := inspected(t, front)
-	for _, subject := range []string{"ocel-switchboard mounts " + coolifyDynamic, "ocel-switchboard on coolify"} {
-		if check := checks[subject]; check.Verdict != provider.HostFail || !strings.Contains(check.Fix, "ocel bootstrap") {
-			t.Errorf("%s = %+v, want it failed and sent to bootstrap", subject, check)
-		}
+	machine.board = "network=ocel "
+	if check := inspected(t, front)["ocel-switchboard on coolify"]; check.Verdict != provider.HostFail || !strings.Contains(check.Fix, "ocel bootstrap") {
+		t.Errorf("ocel-switchboard on coolify = %+v, want it failed and sent to bootstrap", check)
 	}
 }
 

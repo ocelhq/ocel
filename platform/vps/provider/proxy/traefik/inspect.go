@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -77,37 +76,20 @@ func (t Traefik) inspect(ctx context.Context) (proxy.Checks, error) {
 }
 
 func (t Traefik) switchboardChecks(ctx context.Context) (proxy.Checks, error) {
-	said, err := t.Box.Ran(ctx, "read what "+switchboard.Name+" mounts and which networks it is on", switchboardFacts())
+	if t.Network == "" {
+		return nil, nil
+	}
+	said, err := t.Box.Ran(ctx, "read which networks "+switchboard.Name+" is on", switchboardNetworks())
 	if err != nil {
 		return nil, err
 	}
-	var mounts, networks []string
-	for _, fact := range strings.Fields(said) {
-		if mount, ok := strings.CutPrefix(fact, mountFact); ok {
-			mounts = append(mounts, filepath.Clean(mount))
-		}
-		if network, ok := strings.CutPrefix(fact, networkFact); ok {
-			networks = append(networks, network)
-		}
-	}
-	dir := t.directory()
-	mounted := provider.HostCheck{Subject: switchboard.Name + " mounts " + dir, Verdict: provider.HostPass,
-		Finding: switchboard.Name + " has " + dir + " mounted to place ocel.yml in"}
-	if !slices.Contains(mounts, dir) {
-		mounted.Verdict, mounted.Fix = provider.HostFail, bootstrapFix
-		mounted.Finding = switchboard.Name + " does not have " + dir + " mounted, so ocel cannot place its routes where your Traefik reads them"
-	}
-	checks := proxy.Checks{mounted}
-	if t.Network == "" {
-		return checks, nil
-	}
 	joined := provider.HostCheck{Subject: switchboard.Name + " on " + t.Network, Verdict: provider.HostPass,
 		Finding: switchboard.Name + " is on " + t.Network + ", where your Traefik reaches it by name"}
-	if !slices.Contains(networks, t.Network) {
+	if !slices.Contains(strings.Fields(said), networkFact+t.Network) {
 		joined.Verdict, joined.Fix = provider.HostFail, bootstrapFix
 		joined.Finding = switchboard.Name + " is not on " + t.Network + ", so your Traefik cannot reach it by name"
 	}
-	return append(checks, joined), nil
+	return proxy.Checks{joined}, nil
 }
 
 func (t Traefik) placedCheck(ctx context.Context, spec proxy.Spec) (provider.HostCheck, error) {
