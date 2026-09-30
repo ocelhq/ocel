@@ -77,8 +77,10 @@ func (p *cloudflare) forwardOrigin(ctx context.Context, accountID, owner, hostna
 	if err := p.orderTLSCover(ctx, zoneID, zoneName, hostname); err != nil {
 		return edge.Record{}, err
 	}
-	if err := p.requireStrictOrigin(ctx, zoneID, zoneName); err != nil {
-		return edge.Record{}, err
+	if !origin.Tunneled {
+		if err := p.requireStrictOrigin(ctx, zoneID, zoneName); err != nil {
+			return edge.Record{}, err
+		}
 	}
 	want, err := newProxiedRecord(hostname, origin)
 	if err != nil {
