@@ -19,6 +19,7 @@ import (
 
 type app struct {
 	Name            string
+	Path            string
 	Framework       string
 	Arch            string
 	ClientBundle    bool
@@ -40,6 +41,7 @@ func appsOf(projectDir string, configured []project.App, usages []attribution.Us
 	for _, a := range configured {
 		out = append(out, app{
 			Name:            a.Name,
+			Path:            a.Path,
 			Framework:       a.Framework(),
 			Arch:            a.Arch,
 			ClientBundle:    language.HasClientBundle(a.Framework(), filepath.Join(projectDir, a.Path)),

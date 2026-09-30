@@ -232,6 +232,7 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 			},
 			command:        "ocel preview up",
 			containerArchs: facts.containerArchs,
+			workerCeilings: facts.workerCeilings,
 			urls:           facts.urls,
 			dry:            opts.dry,
 			enabled:        !opts.dry && browser,

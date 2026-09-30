@@ -19,12 +19,14 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 type preflightFacts struct {
 	declined       bool
 	project        *project.Project
 	containerArchs map[string]string
+	workerCeilings []provider.WorkerCeiling
 	urls           map[string]string
 	mintedAlias    string
 	builtAlias     string
@@ -41,7 +43,7 @@ func previewOpenOptions(policy consent.Policy, cfg *project.Project) commands.Op
 	}
 }
 
-func preflightPreviewUp(ctx context.Context, dependencies Dependencies, policy consent.Policy, check *run.Span, provider *providerprocess.Provider, cfg *project.Project, read readiness.Preflight, prebuilt bool, env *environmentv1.Environment) (preflightFacts, error) {
+func preflightPreviewUp(ctx context.Context, dependencies Dependencies, policy consent.Policy, check *run.Span, process *providerprocess.Provider, cfg *project.Project, read readiness.Preflight, prebuilt bool, env *environmentv1.Environment) (preflightFacts, error) {
 	resp := read.Response
 	resolved, archs, err := resolveContainers(ctx, dependencies, check, read, prebuilt)
 	if err != nil {
@@ -67,13 +69,14 @@ func preflightPreviewUp(ctx context.Context, dependencies Dependencies, policy c
 	if err != nil {
 		return preflightFacts{}, err
 	}
-	ensured, err := ensurePreviewAlias(ctx, provider, resolved, env, token, policy.DryRun)
+	ensured, err := ensurePreviewAlias(ctx, process, resolved, env, token, policy.DryRun)
 	if err != nil {
 		return preflightFacts{}, err
 	}
 	facts := preflightFacts{
 		project:        resolved,
 		containerArchs: archs,
+		workerCeilings: provider.WorkerCeilingsOf(resp.GetWorkerCeilings()),
 		urls:           appurl.FormatPreviewURLs(ensured.GetHostnames()),
 		builtAlias:     ensured.GetToken(),
 	}
@@ -136,7 +139,13 @@ func preflightDeploy(ctx context.Context, dependencies Dependencies, policy cons
 	if err != nil {
 		return preflightFacts{}, err
 	}
-	return preflightFacts{declined: !proceed, project: resolved, containerArchs: archs, urls: appurl.FormatProductionURLs(resolved)}, nil
+	return preflightFacts{
+		declined:       !proceed,
+		project:        resolved,
+		containerArchs: archs,
+		workerCeilings: provider.WorkerCeilingsOf(resp.GetWorkerCeilings()),
+		urls:           appurl.FormatProductionURLs(resolved),
+	}, nil
 }
 
 func resolveContainers(ctx context.Context, dependencies Dependencies, check *run.Span, read readiness.Preflight, prebuilt bool) (*project.Project, map[string]string, error) {

@@ -26,6 +26,7 @@ import (
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 type assembly struct {
@@ -36,6 +37,7 @@ type assembly struct {
 	phase          *run.Span
 	span           *run.Span
 	containerArchs map[string]string
+	workerCeilings []provider.WorkerCeiling
 	urls           map[string]string
 }
 
@@ -157,6 +159,8 @@ func assembleManifest(ctx context.Context, dependencies Dependencies, a assembly
 		Built:        built,
 		Usages:       usages,
 		DeploymentID: dependencies.DeploymentID,
+
+		WorkerCeilings: a.workerCeilings,
 	})
 }
 
