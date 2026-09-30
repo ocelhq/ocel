@@ -211,3 +211,17 @@ func TestAContainerAppWhoseCeilingIsBelowItsFloorIsRefusedAtLoad(t *testing.T) {
 		}
 	}
 }
+
+func TestAnInstanceCountNoProviderCanHoldIsRefusedAtLoad(t *testing.T) {
+	t.Parallel()
+
+	_, err := loadJSON(t, `{"slug":"shop","apps":[{"name":"api","path":"api","compute":"container","maxInstances":4294967297}]}`)
+	if err == nil {
+		t.Fatal("Load admitted 4294967297 instances, which wraps to 1 on the wire")
+	}
+	for _, want := range []string{`app "api"`, "maxInstances", "2147483647"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("Load err = %q, want it to name %s", err, want)
+		}
+	}
+}
