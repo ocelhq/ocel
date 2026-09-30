@@ -289,9 +289,14 @@ func bootstrappedOn(t *testing.T, tier environment.Tier) *bench {
 
 func bootstrappedWith(t *testing.T, tier environment.Tier, table, config *string) *bench {
 	t.Helper()
+	return bootstrappedBehind(t, tier, Front{}, table, config)
+}
+
+func bootstrappedBehind(t *testing.T, tier environment.Tier, front Front, table, config *string) *bench {
+	t.Helper()
 
 	keys := []byte(aKey + "\n")
-	items := Items(tier, keys, ArchAMD64, Front{})
+	items := Items(tier, keys, ArchAMD64, front)
 	minted := []byte("the key this box minted for itself")
 	present := make([]Item, 0, len(items)+1)
 	for _, item := range items {
@@ -300,7 +305,7 @@ func bootstrappedWith(t *testing.T, tier environment.Tier, table, config *string
 		}
 		present = append(present, item)
 	}
-	record, err := frontRecordItem(Front{}, "shop", tier)
+	record, err := frontRecordItem(front, "shop", tier)
 	if err != nil {
 		t.Fatal(err)
 	}

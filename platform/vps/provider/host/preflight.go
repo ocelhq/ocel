@@ -458,25 +458,59 @@ func (h *Host) refuseTraefikUnreachable(ctx context.Context, read Reading) error
 }
 
 func (h *Host) servingFree(ctx context.Context, read Reading) error {
+	switch move := read.move; {
+	case move == nil:
+	case move.sameProcess():
+		return h.yoursReachable(ctx, read)
+	case !move.from.adopted():
+		return nil
+	default:
+		owners, err := h.servingOwners(ctx, read)
+		if err != nil || len(owners) == 0 {
+			return err
+		}
+		return refusal.Refuse(refusal.CodeNotReady,
+			"%s, which %s takes over from %s\n"+
+				"Ocel never stops a proxy it does not run: %s, then run `%s` again",
+			owners.uses(), move.to.named(), move.from.named(), owners.freed("docker stop"), provider.BootstrapCommand(read.Tier))
+	}
+	if h.proxyOption.adopted() {
+		return h.yoursReachable(ctx, read)
+	}
+	owners, err := h.servingOwners(ctx, read)
+	if err != nil || len(owners) == 0 {
+		return err
+	}
+	return refusal.Refuse(refusal.CodeNotReady,
+		"%s, where ocel's own proxy serves\n"+
+			"Add `\"proxy\": \"manual\"` to this project's vps options and route to ocel from %s, or %s and run `%s`\n"+
+			"See %s",
+		owners.uses(), owners.names(), owners.freed("docker rm -f"), provider.BootstrapCommand(read.Tier), behindYourOwnProxyDocs)
+}
+
+func (h *Host) yoursReachable(ctx context.Context, read Reading) error {
 	switch {
 	case h.proxyOption.Caddy != nil:
 		return h.proxyOption.caddyfile(frontBox{h}).RefuseUnreachable(ctx)
 	case h.proxyOption.Traefik != nil:
 		return h.refuseTraefikUnreachable(ctx, read)
-	case h.proxyOption.adopted():
+	default:
 		return nil
 	}
+}
+
+func (h *Host) servingOwners(ctx context.Context, read Reading) (portOwners, error) {
 	elevation, err := h.elevate(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	ports, err := readServingPorts(ctx, h.publisherOf(read, elevation), func(ctx context.Context) ([]listeners.Listener, error) {
 		return h.portOwners(ctx, elevation)
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
-	var owners []portOwner
+	var owners portOwners
 	for _, port := range ports {
 		for _, name := range port.containers {
 			owners = withOwner(owners, name, true, port.port)
@@ -489,16 +523,32 @@ func (h *Host) servingFree(ctx context.Context, read Reading) error {
 			owners = withOwner(owners, name, false, port.port)
 		}
 	}
-	if len(owners) == 0 {
-		return nil
-	}
-	uses, names, freed := make([]string, 0, len(owners)), make([]string, 0, len(owners)), []string{}
-	var stopped []string
-	for _, owner := range owners {
+	return owners, nil
+}
+
+type portOwners []portOwner
+
+func (o portOwners) uses() string {
+	uses := make([]string, 0, len(o))
+	for _, owner := range o {
 		uses = append(uses, owner.described())
+	}
+	return strings.Join(uses, " and ")
+}
+
+func (o portOwners) names() string {
+	names := make([]string, 0, len(o))
+	for _, owner := range o {
 		names = append(names, owner.name)
+	}
+	return strings.Join(names, " and ")
+}
+
+func (o portOwners) freed(docker string) string {
+	var stopped, freed []string
+	for _, owner := range o {
 		if owner.container {
-			freed = append(freed, "run `docker rm -f "+owner.name+"`")
+			freed = append(freed, "run `"+docker+" "+owner.name+"`")
 			continue
 		}
 		stopped = append(stopped, owner.name)
@@ -506,10 +556,5 @@ func (h *Host) servingFree(ctx context.Context, read Reading) error {
 	if len(stopped) > 0 {
 		freed = append([]string{"stop " + strings.Join(stopped, " and ")}, freed...)
 	}
-	return refusal.Refuse(refusal.CodeNotReady,
-		"%s, where ocel's own proxy serves\n"+
-			"Add `\"proxy\": \"manual\"` to this project's vps options and route to ocel from %s, or %s and run `%s`\n"+
-			"See %s",
-		strings.Join(uses, " and "), strings.Join(names, " and "), strings.Join(freed, ", "),
-		provider.BootstrapCommand(read.Tier), behindYourOwnProxyDocs)
+	return strings.Join(freed, ", ")
 }

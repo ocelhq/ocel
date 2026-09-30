@@ -160,7 +160,8 @@ func (f Front) unlabelled() Front {
 	return f
 }
 
-func (f Front) agrees(recorded Front, setter string) error {
+func (f Front) agrees(record frontRecord) error {
+	recorded := record.front()
 	if f.same(recorded) {
 		return nil
 	}
@@ -169,8 +170,8 @@ func (f Front) agrees(recorded Front, setter string) error {
 		remedy = "add `\"proxy\": " + recorded.spelled() + "`"
 	}
 	return refusal.Refuse(refusal.CodeInvalid,
-		"this box routes through %s (set by %s); %s\nOne proxy fronts a box, and moving a box to another is not supported yet",
-		recorded.named(), setter, remedy)
+		"this box routes through %s (set by %s); %s\nOne proxy fronts a box: to move it to another, write the new `proxy` and `%s` moves the box",
+		recorded.named(), record.setter(), remedy, provider.BootstrapCommand(record.Tier))
 }
 
 func frontReading() string {
@@ -205,25 +206,26 @@ func (h *Host) FrontAgrees(ctx context.Context) error {
 			"%s records no proxy for %s, so this deploy cannot tell what fronts it\nRun `%s`",
 			FrontRecordPath, h.named(), provider.BootstrapCommand(environment.TierProduction))
 	}
-	return h.proxyOption.agrees(record.front(), record.setter())
+	return h.proxyOption.agrees(*record)
 }
-
-const unrecordedSetter = "a bootstrap that left no record"
 
 func (b Bootstrap) recorded(ctx context.Context, read Reading) (Reading, error) {
 	existing, err := b.host.frontRecorded(ctx, b.host.reach)
 	if err != nil {
 		return Reading{}, err
 	}
-	record := frontRecord{Proxy: b.host.proxyOption.recorded(), Project: b.project, Tier: read.Tier}
+	option := b.host.proxyOption
+	record := frontRecord{Proxy: option.recorded(), Project: b.project, Tier: read.Tier}
 	switch {
-	case existing != nil:
-		if err := b.host.proxyOption.agrees(existing.front(), existing.setter()); err != nil {
-			return Reading{}, err
-		}
+	case existing != nil && option.same(existing.front()):
 		record = *existing
-	case read.observed(KindContainer, caddy.Container):
-		if err := b.host.proxyOption.agrees(Front{}, unrecordedSetter); err != nil {
+	case existing != nil:
+		read.move = &frontMove{from: existing.front(), to: option}
+	case read.observed(KindContainer, caddy.Container) && option.adopted():
+		read.move = &frontMove{to: option}
+	}
+	if read.move != nil {
+		if read.move.hostnames, err = b.host.claimedHostnames(ctx); err != nil {
 			return Reading{}, err
 		}
 	}
