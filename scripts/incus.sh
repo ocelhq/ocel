@@ -40,8 +40,12 @@ die() {
 }
 
 ensure_key() {
+    local lock
     mkdir -p "$STATE_DIR"
-    [ -f "$KEY" ] || ssh-keygen -q -t ed25519 -f "$KEY" -N '' -C ocel-incus
+    exec {lock}>"$STATE_DIR/key.lock"
+    flock "$lock"
+    [ -f "$KEY" ] || ssh-keygen -q -t ed25519 -f "$KEY" -N '' -C ocel-incus >&2
+    exec {lock}>&-
 }
 
 addr_of() {
@@ -291,7 +295,8 @@ cmd_run() {
     trap 'exit 130' INT
     trap 'exit 143' TERM
     local addr
-    addr=$(cmd_create "${from[@]}" "$name" | sed -n 's/^OCEL_INCUS_ADDR=//p')
+    addr=$(cmd_create "${from[@]}" "$name" |
+        awk 'sub(/^OCEL_INCUS_ADDR=/, "") { print; next } { print > "/dev/stderr" }')
     [ -n "$addr" ] || die "$name: created without an address, so there is nothing to hand the command"
     OCEL_INCUS_NAME=$name \
         OCEL_INCUS_ADDR=$addr \

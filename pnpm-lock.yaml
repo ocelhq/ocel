@@ -1182,6 +1182,8 @@ importers:
 
   scripts/check: {}
 
+  scripts/incus-test: {}
+
   scripts/release: {}
 
   tests/fixtures/deploy/next:
