@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/traefik"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
@@ -66,9 +67,6 @@ func TestTheSwitchboardBesideYourTraefikOnItsNetworkHearsHTTPSThereAloneAndStart
 	if strings.Contains(running, "--publish") {
 		t.Errorf("the switchboard runs as %s, want nothing published: your Traefik reaches it on coolify", running)
 	}
-	if !slices.Contains(board.binds, "/data/coolify/proxy/dynamic:/data/coolify/proxy/dynamic") {
-		t.Errorf("the switchboard binds %q, want Coolify's dynamic directory to place ocel.yml in", board.binds)
-	}
 	if written := board.writing(containerRising); !strings.Contains(written, "proxy.traefik.network") {
 		t.Errorf("the switchboard write refuses a missing network without naming the option that set it:\n%s", written)
 	}
@@ -122,11 +120,11 @@ func TestTheLastDestroyBehindYourTraefikTakesOcelYmlOutOfItsDirectoryBeforeTheSw
 	}
 	taken := box.commands()
 	unplaced := slices.IndexFunc(taken, func(command string) bool {
-		return strings.Contains(command, words(switchboardCommand("unplace", coolifyFile)))
+		return strings.Contains(command, words(placementCommand(coolifyDynamic, "unplace", coolifyFile)))
 	})
 	removed := slices.Index(taken, "docker rm --force "+quoted(SwitchboardContainer))
 	if unplaced < 0 || removed < 0 || unplaced > removed {
-		t.Errorf("the destroy ran\n%s\nwant %s unplaced through the switchboard before the switchboard is removed: Traefik would route ocel's hostnames to a service that is gone", strings.Join(taken, "\n"), coolifyFile)
+		t.Errorf("the destroy ran\n%s\nwant %s unplaced before the switchboard is removed: Traefik would route ocel's hostnames to a service that is gone", strings.Join(taken, "\n"), coolifyFile)
 	}
 }
 
@@ -157,57 +155,50 @@ func TestABootstrapBehindATraefikOnTheHostsOwnNetworkGoesAhead(t *testing.T) {
 	}
 }
 
-func TestTheSwitchboardIsWrittenBesideYourTraefikOnlyOntoADirectoryTheBoxHas(t *testing.T) {
+func TestBootstrapBesideYourProxyFindsTheDirectoryItPlacesInAndNamesTheOptionWhenTheBoxHasNone(t *testing.T) {
 	t.Parallel()
 
-	written := switchboardOf(t, coolifysTraefik()).writing(containerRising)
-	asked := strings.Index(written, "-d "+quoted("/data/coolify/proxy/dynamic")+" ]")
-	ran := strings.Index(written, quoted("docker")+" "+quoted("create"))
-	if asked < 0 || ran < 0 || asked > ran {
-		t.Fatalf("the switchboard write asks after Coolify's dynamic directory at %d and runs at %d, want it found before a run that would have docker create it empty and root-owned:\n%s", asked, ran, written)
-	}
-	if !strings.Contains(written, "proxy.traefik.directory") {
-		t.Errorf("the switchboard write refuses a missing directory without naming the option that set it:\n%s", written)
-	}
-}
-
-func TestADeployRecreatingTheSwitchboardTakesADirectoryItCannotLookIntoAsPresent(t *testing.T) {
-	t.Parallel()
-
-	if os.Geteuid() == 0 {
-		t.Skip("root looks into every directory, and this is about the deploy login, which cannot")
-	}
 	root := t.TempDir()
-	shut := filepath.Join(root, "coolify", "proxy")
-	for _, dir := range []string{filepath.Join(shut, "dynamic"), filepath.Join(root, "dokploy")} {
+	caddyIn := CaddyFront{Directory: root + "/caddy"}.Filled()
+	for what, front := range map[string]Front{"Traefik": traefikIn(root + "/traefik"), "Caddy": {Caddy: &caddyIn}} {
+		present := front.directoryPresent()
+		said, err := exec.Command("sh", "-c", present).CombinedOutput()
+		if err == nil || !strings.Contains(string(said), front.directoryOption()) || !strings.Contains(string(said), root) {
+			t.Errorf("finding %s's missing directory = %v, %q; want it refused naming %s and the directory", what, err, said, front.directoryOption())
+		}
+		dir := filepath.Dir(front.resolvePlacedFile())
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
 		}
+		if said, err := exec.Command("sh", "-c", present).CombinedOutput(); err != nil {
+			t.Errorf("finding %s's directory %s = %v, %q; want it found", what, dir, err, said)
+		}
 	}
-	if err := os.Chmod(shut, 0o700); err != nil {
-		t.Fatal(err)
+	for what, front := range map[string]Front{"ocel's own proxy": {}, "a proxy routed by hand": routedByHand()} {
+		if present := front.directoryPresent(); present != "" {
+			t.Errorf("bootstrap beside %s looks for a directory as\n%s\nwant none: nothing is placed", what, present)
+		}
 	}
-	if err := os.Chmod(filepath.Dir(shut), 0o000); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(filepath.Dir(shut), 0o755) })
+}
 
-	for dir, missing := range map[string]bool{
-		filepath.Join(shut, "dynamic"):            false,
-		filepath.Join(root, "dokploy", "dynamic"): true,
-	} {
-		board := boundToPlace(boxContainer{}, filepath.Join(dir, "ocel.yml"))
-		said, err := exec.Command("sh", "-c", presenceRead(board)).CombinedOutput()
-		if err != nil {
-			t.Fatalf("the presence read failed: %v\n%s", err, said)
+func TestBootstrapOntoYourTraefikInADirectoryTheBoxLacksIsRefusedBeforeOcelsProxyIsTakenAway(t *testing.T) {
+	t.Parallel()
+
+	tier := environment.TierProduction
+	box := boxRecordedFor(t, tier, Front{})
+	prior := box.answer
+	box.answer = func(command string) (session.Result, bool) {
+		if strings.Contains(command, "[ ! -d "+quoted("/etc/traefik/dynamic")+" ]") {
+			return session.Result{Code: 1, Stderr: "option \"proxy.traefik.directory\" names the directory /etc/traefik/dynamic, which this box does not have"}, true
 		}
-		if reported := strings.Contains(string(said), "missing="+dir); reported != missing {
-			t.Errorf("the presence read of %s says %q, want it missing = %v: Coolify's directory sits under one the deploy login cannot enter, and one it can see is gone is gone", dir, said, missing)
-		}
-		restored, err := exec.Command("sh", "-c", board.placePresent()).CombinedOutput()
-		if refused := err != nil; refused != missing {
-			t.Errorf("recreating the switchboard onto %s = %v, %q; want it refused = %v", dir, err, restored, missing)
-		}
+		return prior(command)
+	}
+	_, err := movedTo(t, box, tier, traefikOnTheHost())
+	if err == nil || !strings.Contains(err.Error(), "proxy.traefik.directory") {
+		t.Errorf("Apply() = %v, want it refused naming proxy.traefik.directory", err)
+	}
+	if at := box.at("docker rm --force " + quoted(caddy.Container)); at >= 0 {
+		t.Errorf("the bootstrap took ocel's proxy away before finding your Traefik has nowhere to read ocel's file: %s", box.commands()[at])
 	}
 }
 

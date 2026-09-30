@@ -155,7 +155,6 @@ func (m frontMove) listRemovals() []removal {
 		at := m.from.resolvePlacedFile()
 		placed := taking(KindPlaced, at, "ocel's routes in "+m.from.named()+"'s directory")
 		placed.origins = filepath.Dir(at)
-		placed.removedByPath = m.isSameProcess() && m.from.Traefik != nil
 		removed = append(removed, placed)
 	}
 	if len(m.from.reloadGrant()) > 0 && len(m.to.reloadGrant()) == 0 {

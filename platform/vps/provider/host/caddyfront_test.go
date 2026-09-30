@@ -58,9 +58,6 @@ func TestTheSwitchboardHearsYourCaddyOnItsNetworkOnTheHTTPSListenerAlone(t *test
 	if !slices.ContainsFunc(board.networks, func(joined userNetwork) bool { return joined.name == "coolify" }) {
 		t.Errorf("the switchboard joins %v at docker run, want coolify: the listener resolves its address as serve starts", board.networks)
 	}
-	if !slices.Contains(board.env, switchboard.PlaceEnv+"=/data/coolify/proxy/caddy/dynamic") {
-		t.Errorf("the switchboard runs with %q, want it placing in Coolify's dynamic directory", board.env)
-	}
 }
 
 func TestTheSwitchboardIsPublishedOnLoopbackForACaddyOnTheHost(t *testing.T) {
@@ -152,7 +149,7 @@ func TestDestroyReloadsYourCaddyOnlyWhenOcelCaddyWasThereToTake(t *testing.T) {
 
 			dir, bin := t.TempDir(), t.TempDir()
 			ran := filepath.Join(bin, "ran")
-			docker := "#!/bin/sh\nprintf '%s\\n' \"$*\" >> " + quoted(ran) + "\n[ \"$1\" = inspect ] && echo true\n[ \"$2\" = " + SwitchboardContainer + " ] && exit 1\nexit 0\n"
+			docker := "#!/bin/sh\nprintf '%s\\n' \"$*\" >> " + quoted(ran) + "\n[ \"$1\" = inspect ] && echo true\n[ \"$1\" = run ] && exit 1\nexit 0\n"
 			if err := os.WriteFile(filepath.Join(bin, "docker"), []byte(docker), 0o755); err != nil {
 				t.Fatal(err)
 			}
@@ -216,48 +213,5 @@ func TestBootstrapRefusesACaddyContainerOffTheHostsNetworkWithoutANetworkNamingI
 	err := box.fronted(front).refuseServingPortsHeld(context.Background(), Reading{Tier: environment.TierProduction, Front: front})
 	if err == nil || !strings.Contains(err.Error(), "proxy.caddy.network") {
 		t.Errorf("refuseServingPortsHeld() = %v, want it refused naming proxy.caddy.network", err)
-	}
-}
-
-func TestADeployStandingTheSwitchboardAgainTakesCoolifysCaddyDirectoryItCannotEnterAsThere(t *testing.T) {
-	t.Parallel()
-
-	if os.Geteuid() == 0 {
-		t.Skip("root enters every directory, and this is about the deploy login, which cannot")
-	}
-	root := t.TempDir()
-	shut := filepath.Join(root, "coolify", "proxy")
-	for _, dir := range []string{filepath.Join(shut, "caddy", "dynamic"), filepath.Join(root, "etc", "caddy")} {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := os.Chmod(shut, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chmod(filepath.Dir(shut), 0o000); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(filepath.Dir(shut), 0o755) })
-
-	for dir, missing := range map[string]bool{
-		filepath.Join(shut, "caddy", "dynamic"):  false,
-		filepath.Join(root, "etc", "caddy", "d"): true,
-	} {
-		board := boundToPlace(boxContainer{}, filepath.Join(dir, caddyfile.FileName))
-		said, err := exec.Command("sh", "-c", presenceRead(board)).CombinedOutput()
-		if err != nil {
-			t.Fatalf("the presence read failed: %v\n%s", err, said)
-		}
-		if reported := strings.Contains(string(said), "missing="+dir); reported != missing {
-			t.Errorf("the presence read of %s says %q, want it missing = %v: Coolify's directory sits under /data/coolify/proxy, 0700, which the deploy login cannot enter", dir, said, missing)
-		}
-		stood, err := exec.Command("sh", "-c", board.placePresent()).CombinedOutput()
-		if refused := err != nil; refused != missing {
-			t.Errorf("standing the switchboard onto %s = %v, %q; want it refused = %v", dir, err, stood, missing)
-		}
-	}
-	if restoring := switchboardBox(nil, coolifysCaddy()).restoring(1); !strings.Contains(restoring, "/data/coolify/proxy/caddy/dynamic") {
-		t.Errorf("a deploy stands the switchboard again as\n%s\nwithout checking the directory it places in", restoring)
 	}
 }

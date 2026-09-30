@@ -134,6 +134,9 @@ func TestMovingABoxWithinYourOwnProxyPlansTheNewFileBeforeTheOldAndNoOutage(t *t
 	wantChange(t, move, "/etc/traefik/dynamic/ocel/ocel.yml", provider.ActionCreate)
 	wantChange(t, move, "/etc/traefik/dynamic/ocel.yml", provider.ActionDelete)
 	for _, change := range move.Changes {
+		if change.Name == SwitchboardContainer && change.Action.Writes() {
+			t.Errorf("the move would %s %s, want it left running: a switchboard started again drops the requests it was serving", change.Action, change.Name)
+		}
 		if change.Kind == KindCertificates {
 			t.Errorf("the move lists %q, want no certificate ordered again: the same Traefik keeps the ones its resolver holds", change.Name)
 		}
@@ -438,18 +441,20 @@ func TestMovingABoxWithinYourOwnTraefikPlacesTheNewFileWaitsUntilYourTraefikRead
 	}
 	placed := quoted("place") + " " + quoted("/etc/traefik/dynamic/ocel/ocel.yml")
 	read := quoted("--any-certificate") + " " + quoted(traefik.DerivePlacementHostname("/etc/traefik/dynamic/ocel/ocel.yml"))
-	taken := "rm -f " + quoted("/etc/traefik/dynamic/ocel.yml")
+	taken := quoted("unplace") + " " + quoted("/etc/traefik/dynamic/ocel.yml")
 	touched := "touch -c " + quoted("/etc/traefik/dynamic/ocel.yml")
-	wantBefore(t, box, switchboardRun, placed)
 	wantBefore(t, box, placed, touched)
 	wantBefore(t, box, touched, read)
 	wantBefore(t, box, read, taken)
 	wantBefore(t, box, taken, quoted("probe")+" "+quoted(claimed))
-	if at := box.at(quoted("unplace") + " " + quoted("/etc/traefik/dynamic/ocel.yml")); at >= 0 {
-		t.Errorf("the move asked the switchboard to take out a file in a directory it no longer mounts: %s", box.commands()[at])
+	if at := box.at(switchboardRun); at >= 0 {
+		t.Errorf("the move started the switchboard again, dropping the requests it was serving: %s", box.commands()[at])
 	}
-	if at := box.at(taken); at >= 0 && !strings.Contains(box.commands()[at], "rm -f "+quoted("/etc/traefik/dynamic")+"/"+switchboard.OriginPrefix+"*.pem") {
-		t.Errorf("the old file was taken out as\n%s\nwant the origin certificates beside it taken with it, by path", box.commands()[at])
+	if at := box.at(placed); at >= 0 && !strings.Contains(box.commands()[at], "source=/etc/traefik/dynamic/ocel,") {
+		t.Errorf("the new file was placed as\n%s\nwant it placed by a container that mounts the new directory", box.commands()[at])
+	}
+	if at := box.at(taken); at >= 0 && (!strings.Contains(box.commands()[at], "source=/etc/traefik/dynamic,") || !strings.Contains(box.commands()[at], quoted("unplace-origins"))) {
+		t.Errorf("the old file was taken out as\n%s\nwant it and the origin certificates beside it taken out by a container that mounts the old directory", box.commands()[at])
 	}
 	if slices.Contains(said, "Start your proxy on 80 and 443 now") {
 		t.Errorf("the move said %q, want nothing asked of a Traefik that serves throughout", said)
@@ -501,9 +506,11 @@ func TestMovingABoxWithinYourOwnCaddyTakesTheOldFileOutUnreloadedAndReloadsOntoT
 	unplaced := quoted("unplace") + " " + quoted("/etc/caddy/ocel.d/ocel.caddy")
 	placed := quoted("place") + " " + quoted("/etc/caddy/sites/ocel.caddy")
 	reloaded := words(caddyfile.ServiceReload())
-	wantBefore(t, box, unplaced, switchboardRun)
-	wantBefore(t, box, switchboardRun, placed)
+	wantBefore(t, box, unplaced, placed)
 	wantBefore(t, box, placed, reloaded)
+	if at := box.at(switchboardRun); at >= 0 {
+		t.Errorf("the move started the switchboard again, dropping the requests it was serving: %s", box.commands()[at])
+	}
 	wantBefore(t, box, unplaced, reloaded)
 	if at := box.at(unplaced); at >= 0 && strings.Contains(box.commands()[at], "systemctl") {
 		t.Errorf("the old file was taken out as\n%s\nwant no reload until the new file is placed: your Caddy refuses a config with two sites for one hostname, and one with neither serves them nothing", box.commands()[at])

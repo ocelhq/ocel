@@ -219,7 +219,7 @@ preset overrides it, for a proxy whose configuration you have edited.
 | Field | On | What it is | Left out |
 | --- | --- | --- | --- |
 | `preset` | `traefik`: `coolify`, `dokploy`; `caddy`: `coolify` | The tool that runs the proxy. Fills every other field. | |
-| `directory` | `traefik`, `caddy` | The directory on the box that the proxy reads ocel's file from, and that the switchboard mounts to write it. | Required, unless `preset` |
+| `directory` | `traefik`, `caddy` | The directory on the box that the proxy reads ocel's file from. Ocel writes it there from a short-lived container that mounts only that directory. | Required, unless `preset` |
 | `containerDirectory` | `traefik`, `caddy` | Where `directory` is mounted in the container the proxy runs in: Traefik's `providers.file.directory`, or the directory Caddy imports. Ocel's file names the origin certificates it places in `directory` by this path. | `directory` |
 | `resolver` | `traefik` | The `certResolver` every hostname's router names. | Required, unless `preset` |
 | `previewResolver` | `traefik` | A resolver that can issue `*.<preview base>` over DNS-01. Set, previews share one wildcard certificate. | Each preview hostname gets its own from `resolver` |
@@ -268,8 +268,9 @@ The switchboard sits behind your Traefik one of two ways:
   `network` as the fix.
 
 The directory is often not writable by `ocel-deploy` (Coolify's is `0700` and owned by
-another user), so bootstrap mounts it into the switchboard, and the switchboard writes
-`ocel.yml` there under a temporary name and renames it into place. Before each write ocel
+another user), so ocel writes `ocel.yml` from a short-lived container that mounts only that
+directory, under a temporary name, and renames it into place. Bootstrap refuses a `directory`
+the box doesn't have and names the option. Before each write ocel
 decodes what it is about to write, and refuses it if it doesn't decode or contains `{{`, which
 Traefik reads as a template. One file Traefik can't parse stops it from taking up a change to
 any file in that directory, and after a restart it serves none of them. If
@@ -309,7 +310,7 @@ gets a certificate of its own from `resolver`, the same as any other hostname.
 inline under `caFiles`, and `sniStrict: true`. Your Traefik picks TLS options by the name the
 client asks for, so a handshake for the hostname without the zone's certificate is refused, and a
 request that asks for another name, or none, and sends the hostname as `Host` is answered 421.
-The hostname is served its origin certificate, which the switchboard places beside `ocel.yml` as
+The hostname is served its origin certificate, which ocel places beside `ocel.yml` as
 `ocel-origin-<hostname>-<digest>.pem`, readable only by the directory's group, and which
 `ocel.yml` lists under `tls.certificates` by its path in `containerDirectory`. Its http router
 redirects to https and forwards nothing: Traefik's permanent redirect answers 301 to a `GET`
@@ -413,8 +414,8 @@ each hostname, your Caddy gets a certificate for each, preview hostnames include
 claimed; there is no wildcard.
 
 Before placing the file, ocel runs `caddy adapt` on it alone, inside `container` or as
-`/usr/bin/caddy`, and refuses a claim whose file your Caddy can't read. It is placed through the
-switchboard, which is the only thing ocel runs with that directory mounted. Then ocel reloads
+`/usr/bin/caddy`, and refuses a claim whose file your Caddy can't read. It is placed from a
+short-lived container that mounts only that directory. Then ocel reloads
 your Caddy in its own environment, where `{$VAR}` placeholders in your Caddyfile resolve:
 
 | Caddy runs | Reload |
@@ -471,7 +472,7 @@ stopping the old proxy and starting the new one is up to you.
 | --- | --- | --- |
 | Ocel's own proxy → yours | Removes `ocel-proxy` and `/var/lib/ocel/proxy`, and keeps `/etc/ocel/certs` if it isn't empty. Publishes the switchboard or puts it on your proxy's network, places ocel's file, and rewrites the record. Then it prints `Start your proxy on 80 and 443 now`, and waits up to 10 minutes until every hostname the box serves answers through ocel, as `ocel domain add` does. | From `ocel-proxy` stopping until your proxy holds 443 and has its certificates |
 | Yours → ocel's own proxy | Refuses while anything holds port 80 or 443, and names it. Then removes ocel's file from your proxy's directory without reloading your proxy, takes the switchboard off your proxy's network, and starts `ocel-proxy`, which gets each certificate on the first connection for its hostname. | From your proxy stopping until `ocel-proxy` answers |
-| Yours → yours, same proxy: a new `directory` or `resolver` | Starts the switchboard again with the new directory mounted, if the directory changed. For a Traefik, places ocel's file in the new directory, touches the old one so your Traefik reads its directory again (it watches no directory beneath the one it is given), waits until it routes through ocel the one name only the new file routes, and removes the old file. For a Caddy, removes the old file and places the new one before one reload, since a Caddy refuses two sites for one hostname. Then it waits until every hostname answers through ocel. | Never |
+| Yours → yours, same proxy: a new `directory` or `resolver` | Leaves the switchboard running. For a Traefik, places ocel's file in the new directory, touches the old one so your Traefik reads its directory again (it watches no directory beneath the one it is given), waits until it routes through ocel the one name only the new file routes, and removes the old file. For a Caddy, removes the old file and places the new one before one reload, since a Caddy refuses two sites for one hostname. Then it waits until every hostname answers through ocel. | Never |
 | Yours → yours, same proxy: a new `network` or `port` | Starts the switchboard again where the new option says, moves ocel's file as for a new `directory`, and waits until every hostname answers through ocel. With `manual` it prints where to forward, as in `Forward your proxy to 127.0.0.1:8481 now`. | From the switchboard starting again until your proxy forwards to it there |
 | Yours → another of yours | As yours → ocel's own proxy for the old one, then as ocel's own proxy → yours for the new one. | From the old proxy stopping until the new one serves |
 
@@ -480,9 +481,9 @@ Ocel counts two proxies as the same when both are `manual`, both are `traefik`, 
 `previewResolver` makes the same Traefik order certificates again.
 
 The routes ocel places in your Traefik or Caddy try the switchboard again for about 10 seconds
-when it doesn't accept a connection, so a switchboard starting again drops no request. A
-Traefik tries again only a request it couldn't send, and a Caddy only one it couldn't connect
-for. Ocel's Traefik file also routes `<tag>.placement.ocel.invalid`, where `<tag>` names the
+when it doesn't accept a connection. A Traefik tries again only a request it couldn't send, and
+a Caddy only one it couldn't connect for, so a request already sent to a switchboard that is
+stopping can still fail. Ocel's Traefik file also routes `<tag>.placement.ocel.invalid`, where `<tag>` names the
 file's path, so that ocel can tell which of two placed files your Traefik reads. Nothing orders
 a certificate for that name. A proxy you route yourself retries as you configure it.
 

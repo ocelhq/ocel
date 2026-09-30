@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -236,6 +237,9 @@ func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 		return err
 	}
 	if err := b.write(ctx, served, EnvSourceSyncItems(req.Tier, current.Arch), progress); err != nil {
+		return err
+	}
+	if err := b.host.refuseDirectoryMissing(ctx, current.Front); err != nil {
 		return err
 	}
 	if err := current.move.removeOldFront(ctx, progress); err != nil {
@@ -501,14 +505,13 @@ func leavingKnownHosts(forget string) string {
 const dirNonEmpty = "dir=nonempty"
 
 type removal struct {
-	kind          string
-	path          string
-	reason        string
-	action        provider.ChangeAction
-	shared        bool
-	reload        string
-	origins       string
-	removedByPath bool
+	kind    string
+	path    string
+	reason  string
+	action  provider.ChangeAction
+	shared  bool
+	reload  string
+	origins string
 }
 
 func (r removal) phrase() string { return phrase(r.kind, r.path) }
@@ -547,11 +550,7 @@ func (r removal) command() string {
 		return "if ! docker network rm " + quoted(r.path) + " >/dev/null 2>&1 && " +
 			"docker network inspect " + quoted(r.path) + " >/dev/null 2>&1; then printf '%s\\n' " + quoted(networkInUse) + "; fi"
 	case r.kind == KindPlaced:
-		unplaced, unplacedOrigins := words(switchboardCommand("unplace", r.path))+" 2>/dev/null || ", words(switchboardCommand("unplace-origins"))+" 2>/dev/null || "
-		if r.removedByPath {
-			unplaced, unplacedOrigins = "", ""
-		}
-		unplaced += "rm -f " + quoted(r.path) + "\n"
+		unplaced := words(placementCommand(filepath.Dir(r.path), "unplace", r.path)) + " 2>/dev/null || rm -f " + quoted(r.path) + "\n"
 		if r.reload != "" {
 			unplaced += r.reload + "\n"
 		}
@@ -559,7 +558,7 @@ func (r removal) command() string {
 		if r.origins == "" {
 			return placed
 		}
-		return placed + "\n" + unplacedOrigins + "rm -f " + quoted(r.origins) + "/" + switchboard.OriginPrefix + "*.pem"
+		return placed + "\n" + words(placementCommand(r.origins, "unplace-origins")) + " 2>/dev/null || rm -f " + quoted(r.origins) + "/" + switchboard.OriginPrefix + "*.pem"
 	case r.kind == KindRoutingTable || r.kind == KindProxyConfig:
 		return routingLocked("-x") + "rm -f " + quoted(r.path)
 	case r.shared:

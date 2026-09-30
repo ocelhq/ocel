@@ -274,9 +274,6 @@ type boxContainer struct {
 	migrates bool
 	restored bool
 	networks []userNetwork
-
-	placesIn    string
-	placeOption string
 }
 
 func frontProxy() boxContainer {
@@ -414,7 +411,6 @@ func (s boxContainer) composeArgv(leading, sysctls []string) []string {
 func (s boxContainer) writing(attempts int) string {
 	written := "set -e\n" +
 		s.networksPresent() +
-		s.placePresent() +
 		bindsPresent(s.files) +
 		imagePulled(s.image, containerPulls) +
 		"docker stop " + quoted(s.name) + " >/dev/null 2>&1 || true\n" +
@@ -447,22 +443,6 @@ func (s boxContainer) networksPresent() string {
 			"fi\n"
 	}
 	return checks
-}
-
-func (s boxContainer) placePresent() string {
-	if s.placesIn == "" {
-		return ""
-	}
-	missing := fmt.Sprintf("option %q names the directory %s, which this box does not have: name the directory your proxy reads, or create it",
-		s.placeOption, s.placesIn)
-	return "if " + s.placeDirMissingTest() + "; then\n" +
-		"printf '%s\\n' " + quoted(missing) + " >&2\n" +
-		"exit 1\n" +
-		"fi\n"
-}
-
-func (s boxContainer) placeDirMissingTest() string {
-	return "[ ! -d " + quoted(s.placesIn) + " ] && [ -x " + quoted(filepath.Dir(s.placesIn)) + " ]"
 }
 
 func joinedFact(joined userNetwork) string { return "network:" + joined.name + "=" }

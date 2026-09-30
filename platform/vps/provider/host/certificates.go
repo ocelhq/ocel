@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -236,13 +237,13 @@ func (b frontBox) ReadBeside(ctx context.Context, path string) ([]switchboard.Si
 	if err != nil {
 		return nil, err
 	}
-	said, err := b.h.ran(ctx, "read what your proxy reads beside "+path, words(switchboardCommand("beside", path)), nil, elevation)
+	said, err := b.h.ran(ctx, "read what your proxy reads beside "+path, words(placementCommand(filepath.Dir(path), "beside", path)), nil, elevation)
 	if err != nil {
 		return nil, err
 	}
 	var beside []switchboard.SiblingFile
 	if err := json.Unmarshal([]byte(said), &beside); err != nil {
-		return nil, unread("what "+SwitchboardContainer+" read beside "+path, said)
+		return nil, unread("what was read beside "+path, said)
 	}
 	return beside, nil
 }

@@ -2,8 +2,8 @@ package host
 
 import (
 	"context"
+	"encoding/csv"
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -33,7 +33,7 @@ var switchboardCapabilities = []string{"DAC_OVERRIDE", "DAC_READ_SEARCH"}
 func switchboardBinary(arch string) []byte { return embedded(switchboard.Name, arch) }
 
 func switchboardBox(binary []byte, front Front) boxContainer {
-	board := boundToPlace(boxContainer{
+	return boxContainer{
 		name:  SwitchboardContainer,
 		image: SwitchboardImage,
 		command: append([]string{SwitchboardMounted, "serve",
@@ -58,28 +58,40 @@ func switchboardBox(binary []byte, front Front) boxContainer {
 		unready: "answered nothing over its control socket in " + switchboard.ControlDir,
 		inodes:  []string{SwitchboardMounted, "inodes"},
 		joins:   true,
-	}, destination(openFront(front, frontBox{})))
-	board.placeOption = front.directoryOption()
-	return board
+	}
 }
 
-func boundToPlace(board boxContainer, at string) boxContainer {
-	if at == "" {
-		return board
+func placementCommand(dir string, argv ...string) []string { return placementRun(false, dir, argv) }
+
+func placementFed(dir string, argv ...string) []string { return placementRun(true, dir, argv) }
+
+func placementRun(fed bool, dir string, argv []string) []string {
+	run := []string{"docker", "run"}
+	if fed {
+		run = append(run, "-i")
 	}
-	dir := filepath.Dir(at)
-	board.binds = append(board.binds, dir+":"+dir)
-	board.env = append(board.env, switchboard.PlaceEnv+"="+dir)
-	board.placesIn = dir
-	return board
+	run = append(run, "--rm", "--network", "none", "--read-only")
+	run = append(run, confined(switchboardCapabilities, false)...)
+	run = append(run,
+		"--mount", boundMount(SwitchboardDir, switchboardMount, "readonly"),
+		"--mount", boundMount(dir, dir),
+		"--env", switchboard.PlaceEnv+"="+dir,
+		SwitchboardImage, SwitchboardMounted)
+	return append(run, argv...)
+}
+
+func boundMount(source, target string, options ...string) string {
+	var written strings.Builder
+	fields := csv.NewWriter(&written)
+	if err := fields.Write(append([]string{"type=bind", "source=" + source, "target=" + target}, options...)); err != nil {
+		panic(err)
+	}
+	fields.Flush()
+	return strings.TrimSuffix(written.String(), "\n")
 }
 
 func switchboardCommand(argv ...string) []string {
 	return append([]string{"docker", "exec", SwitchboardContainer, SwitchboardMounted}, argv...)
-}
-
-func switchboardFed(argv ...string) []string {
-	return append([]string{"docker", "exec", "-i", SwitchboardContainer, SwitchboardMounted}, argv...)
 }
 
 const (
@@ -102,12 +114,7 @@ func presenceRead(board boxContainer) string {
 		script = append(script, "[ "+test+" "+quoted(path)+" ] || printf 'missing=%s\\n' "+quoted(path))
 	}
 	for _, source := range board.sources() {
-		if source != board.placesIn {
-			missing("-d", source)
-		}
-	}
-	if board.placesIn != "" {
-		script = append(script, board.placeDirMissingTest()+" && printf 'missing=%s\\n' "+quoted(board.placesIn)+" || :")
+		missing("-d", source)
 	}
 	for _, file := range board.files {
 		missing("-f", file)
@@ -123,7 +130,6 @@ func (s boxContainer) restoring(attempts int) string {
 		"if [ \"$(docker inspect --type container --format " + quoted("{{.State.Running}}") + " " + quoted(s.name) + " 2>/dev/null)\" != true ]; then\n" +
 		"docker rm --force " + quoted(s.name) + " >/dev/null 2>&1 || true\n" +
 		s.networksPresent() +
-		s.placePresent() +
 		networkCommand() + "\n" +
 		bindsPresent(s.files) +
 		imagePulled(s.image, containerPulls) +
