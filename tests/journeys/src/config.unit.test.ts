@@ -22,6 +22,7 @@ import type { Fixture, Variant } from "./matrix/types";
 import {
   cloudflare,
   cloudflareInFrontOfContainers,
+  cloudflareInFrontOfMixedComputes,
   cloudflareOnABox,
   cloudflareOnGoogleCloud,
   cloudflareTunnel,
@@ -251,6 +252,22 @@ describe("overlayFor", () => {
     });
   });
 
+  it("runs one app of an aws cell as a container and writes its records through Cloudflare when Cloudflare fronts a project mixing computes", () => {
+    expect(
+      overlayFor(cell(deploy.workspace, cloudflareInFrontOfMixedComputes), "aws", {
+        OCEL_JOURNEY_ZONE: "j.example",
+      }),
+    ).toMatchObject({
+      edge: "cloudflare",
+      computes: { express: "container" },
+      dns: "cloudflare",
+      hostnames: {
+        next: expect.stringMatching(/\.j\.example$/),
+        express: expect.stringMatching(/\.j\.example$/),
+      },
+    });
+  });
+
   it("binds no hostname on a gcp cell no edge fronts", () => {
     expect(
       overlayFor(cell(deploy.node), "gcp", { OCEL_JOURNEY_ZONE: "j.example" }),
@@ -304,6 +321,27 @@ describe("a container cell", () => {
     ) as { apps: Record<string, unknown>[] };
     expect(written.apps[0]).not.toHaveProperty("framework");
     expect(written.apps[0]).not.toHaveProperty("arch");
+  });
+
+  it("runs only the apps a mixed cell names as containers, with no framework or arch", () => {
+    const rendered = renderConfig({
+      base: TS_BASE,
+      slug: "j-1-workspace",
+      computes: { express: "container" },
+    });
+    expect(rendered).toContain(
+      `...(app.name === "express" ? { compute: "container", framework: undefined, arch: undefined } : {}),`,
+    );
+    expect(rendered).not.toContain("    compute:");
+    const written = JSON.parse(
+      renderJsonConfig(ARCHED_JSON_BASE, {
+        base: "./ocel.json",
+        slug: "j-1-go",
+        computes: { web: "container" },
+      }),
+    ) as { apps: Record<string, unknown>[] };
+    expect(written.apps[0]).toMatchObject({ compute: "container" });
+    expect(written.apps[0]).not.toHaveProperty("framework");
   });
 
   it("leaves the framework the fixture declares where the cell runs serverless", () => {

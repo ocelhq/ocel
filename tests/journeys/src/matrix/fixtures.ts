@@ -21,6 +21,7 @@ import {
   apiGateway,
   cloudflare,
   cloudflareInFrontOfContainers,
+  cloudflareInFrontOfMixedComputes,
   cloudflareOnABox,
   cloudflareOnGoogleCloud,
   cloudflareTunnel,
@@ -98,7 +99,7 @@ export const deploy = {
     checks: NODE_CHECKS,
     on: {
       dev: [defaults],
-      aws: [defaults, container, cloudflare],
+      aws: [defaults, container, cloudflare, cloudflareInFrontOfMixedComputes],
       vps: [defaults],
       gcp: [defaults, container],
     },

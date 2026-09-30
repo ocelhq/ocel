@@ -1,4 +1,8 @@
-import { CLIENT_CERTIFICATE_CHECKS, SHIELDED_ORIGIN_CHECKS } from "../checks/originShield";
+import {
+  CLIENT_CERTIFICATE_CHECKS,
+  forwardedAppChecks,
+  SHIELDED_ORIGIN_CHECKS,
+} from "../checks/originShield";
 import { TUNNELED_ORIGIN_CHECKS } from "../checks/tunnel";
 import { JOURNEY_REGISTRY, REGISTRY_TOKEN_ENV } from "../registry/settings";
 import { DEFAULT_VARIANT, TARGETS, type Variant, variant } from "./types";
@@ -24,6 +28,12 @@ export const cloudflareInFrontOfContainers = variant("cloudflare-container", {
   offeredOn: ["aws"],
   config: { edge: "cloudflare", compute: "container" },
   checks: CLIENT_CERTIFICATE_CHECKS,
+});
+
+export const cloudflareInFrontOfMixedComputes = variant("cloudflare-mixed", {
+  offeredOn: ["aws"],
+  config: { edge: "cloudflare", computes: { express: "container" } },
+  checks: forwardedAppChecks(["express"]),
 });
 
 export const cloudflareOnABox = variant("cloudflare", {
