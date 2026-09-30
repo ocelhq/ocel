@@ -20,6 +20,7 @@ func inspecting() map[string]string {
 		"what doctor reads a switchboard a deploy started again with":            restoredCommand(),
 		"what a release reads to tell a stopped retiree from one still draining": runningCommand([]string{retiring}),
 		"what a destroy asks before it reloads your Caddy's container":           coolifysCaddy().caddyReloadCommand(),
+		"what a claim through a tunnel reads to tell whether the tunnel runs":    runningTunnelRead(),
 	}
 }
 
@@ -74,7 +75,7 @@ func TestNoInspectOnTheEvidencePathCanReachTheEnvironmentItWasHanded(t *testing.
 
 func inspectRosters() map[string][]string {
 	return map[string][]string{
-		"docker inspect":         {"caddyReloadCommand", "probe", "restoredCommand", "restoring", "rising", "runningCommand", "servingCommand", "stateCommand"},
+		"docker inspect":         {"caddyReloadCommand", "probe", "restoredCommand", "restoring", "rising", "runningCommand", "runningTunnelRead", "servingCommand", "stateCommand"},
 		"docker network inspect": {"command", "joinNetworkScript", "networkCommand", "networkCreating", "networkForgetting", "networkProbe", "networksPresent"},
 		"docker image inspect":   {"imagePulled"},
 	}

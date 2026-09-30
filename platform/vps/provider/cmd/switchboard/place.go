@@ -20,6 +20,8 @@ import (
 const (
 	stagedPattern = ".ocel.*.tmp"
 	placedMode    = 0o644
+	secretMode    = 0o400
+	secretDirMode = 0o700
 )
 
 func placeable(path string) error {
@@ -57,15 +59,32 @@ func place(argv []string, in io.Reader, errs io.Writer) int {
 	})
 }
 
-func staged(path string, in io.Reader) error {
+func placeSecret(argv []string, in io.Reader, errs io.Writer) int {
+	return confined(argv, errs, func(path string) error {
+		if err := os.Chmod(filepath.Dir(path), secretDirMode); err != nil {
+			return fmt.Errorf("place %s: %w", path, err)
+		}
+		if err := stagedAt(path, in, secretMode); err != nil {
+			return fmt.Errorf("place %s: %w", path, err)
+		}
+		return nil
+	})
+}
+
+func staged(path string, in io.Reader) error { return stagedAt(path, in, placedMode) }
+
+func stagedAt(path string, in io.Reader, mode os.FileMode) error {
 	dir := filepath.Dir(path)
 	file, err := os.CreateTemp(dir, stagedPattern)
 	if err != nil {
 		return err
 	}
 	defer os.Remove(file.Name())
-	_, err = io.Copy(file, in)
-	err = errors.Join(err, file.Chmod(placedMode), file.Sync(), file.Close())
+	err = file.Chmod(mode)
+	if err == nil {
+		_, err = io.Copy(file, in)
+	}
+	err = errors.Join(err, file.Sync(), file.Close())
 	if err != nil {
 		return err
 	}

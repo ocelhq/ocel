@@ -198,6 +198,10 @@ func byShielded(a, b Shield) int {
 	return cmp.Or(strings.Compare(a.Hostname, b.Hostname), strings.Compare(a.Owner, b.Owner))
 }
 
+func byTunneled(a, b TunneledHost) int {
+	return cmp.Or(strings.Compare(a.Hostname, b.Hostname), strings.Compare(a.Owner, b.Owner))
+}
+
 func byKey(a, b AppRoute) int {
 	return strings.Compare(a.identity(), b.identity())
 }

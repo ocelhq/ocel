@@ -54,7 +54,7 @@ type Net struct {
 	ProbeAddress *url.URL
 	Loopback     func(ctx context.Context, hostname string) (router.Kind, error)
 
-	LoopbackOnly bool
+	IsLoopbackOnly func(ctx context.Context, hostname string) (bool, error)
 
 	mu           sync.Mutex
 	lastFailures map[string]string
@@ -97,8 +97,14 @@ func (l *Net) record(hostname, cause string) {
 }
 
 func (l *Net) probe(ctx context.Context, hostname string) (router.Kind, error) {
-	if l.Loopback != nil && (l.LoopbackOnly || edge.Loopback(hostname)) {
-		return l.Loopback(ctx, hostname)
+	if l.Loopback != nil {
+		only, err := l.isLoopbackOnly(ctx, hostname)
+		if err != nil {
+			return "", err
+		}
+		if only || edge.Loopback(hostname) {
+			return l.Loopback(ctx, hostname)
+		}
 	}
 	scheme, addresses, err := l.resolveTarget(ctx, hostname)
 	if err != nil {
@@ -108,6 +114,13 @@ func (l *Net) probe(ctx context.Context, hostname string) (router.Kind, error) {
 		return "", ProbeUnanswered{Cause: err.Error()}
 	}
 	return l.request(ctx, scheme, hostname, addresses)
+}
+
+func (l *Net) isLoopbackOnly(ctx context.Context, hostname string) (bool, error) {
+	if l.IsLoopbackOnly == nil {
+		return false, nil
+	}
+	return l.IsLoopbackOnly(ctx, hostname)
 }
 
 func (l *Net) request(ctx context.Context, scheme, hostname string, addresses []string) (router.Kind, error) {

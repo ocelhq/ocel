@@ -453,7 +453,7 @@ func TestServeAnswersATunneledHostnameOnItsTunnelListenerAndNowhereElse(t *testi
 	table := documentAt(t, []byte(`{"grace":"30s",`+
 		`"claims":[{"owner":"ocel--shop--production","hostname":"shop.example.com","pointer":"@production"}],`+
 		`"routes":[{"owner":"ocel--shop--production","pointer":"@production","app":"web","upstream":"`+web+`"}],`+
-		`"tunneled":["shop.example.com"]}`))
+		`"tunneled":[{"hostname":"shop.example.com","owner":"ocel--shop--production"}]}`))
 	tunnel := freeAddress(t)
 	running := served(t, table, "--tunnel-listen", tunnel)
 

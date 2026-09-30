@@ -353,8 +353,8 @@ func TestAFrontThatAnswersOnlyOnItsOwnMachineIsProbedThereForEveryName(t *testin
 	book := &dnsBook{}
 	var asked []string
 	probe := &Net{
-		System:       book,
-		LoopbackOnly: true,
+		System:         book,
+		IsLoopbackOnly: func(context.Context, string) (bool, error) { return true, nil },
 		Loopback: func(_ context.Context, hostname string) (router.Kind, error) {
 			asked = append(asked, hostname)
 			return "switchboard", nil
@@ -369,6 +369,29 @@ func TestAFrontThatAnswersOnlyOnItsOwnMachineIsProbedThereForEveryName(t *testin
 	}
 	if heard := book.heard(); len(heard) != 0 {
 		t.Errorf("the probe asked DNS %v, want nothing: the machine is asked for the name directly", heard)
+	}
+}
+
+func TestANameTheMachineDoesNotAnswerOnlyOnItselfIsProbedWhereItResolves(t *testing.T) {
+	t.Parallel()
+
+	var looped []string
+	probe := &Net{
+		System: &dnsBook{},
+		IsLoopbackOnly: func(_ context.Context, hostname string) (bool, error) {
+			return hostname != "tunneled.example.com", nil
+		},
+		Loopback: func(_ context.Context, hostname string) (router.Kind, error) {
+			looped = append(looped, hostname)
+			return "switchboard", nil
+		},
+	}
+	_, _ = probe.ServingRouter(context.Background(), "tunneled.example.com")
+	if len(looped) != 0 {
+		t.Errorf("the loopback probe was asked %v, want tunneled.example.com probed where it resolves: the machine answers it only through the edge in front", looped)
+	}
+	if kind, err := probe.ServingRouter(context.Background(), "shop.example.com"); err != nil || kind != "switchboard" || !slices.Equal(looped, []string{"shop.example.com"}) {
+		t.Errorf("Serving(shop.example.com) = %q, %v with the loopback asked %v, want it asked on the machine", kind, err, looped)
 	}
 }
 

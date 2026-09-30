@@ -16,7 +16,11 @@ func tunneledRouting(t *testing.T, upstreams map[string]string, tunneled ...stri
 	if err := json.Unmarshal(routing(t, upstreams), &table); err != nil {
 		t.Fatal(err)
 	}
-	table["tunneled"] = tunneled
+	held := make([]map[string]string, 0, len(tunneled))
+	for _, hostname := range tunneled {
+		held = append(held, map[string]string{"hostname": hostname, "owner": "ocel--site-0--production"})
+	}
+	table["tunneled"] = held
 	written, err := json.Marshal(table)
 	if err != nil {
 		t.Fatal(err)

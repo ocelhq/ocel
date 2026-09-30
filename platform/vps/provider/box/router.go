@@ -51,15 +51,14 @@ func (r routerStack) State() router.StackState {
 }
 
 func (r routerStack) Claim(ctx context.Context, claim router.Claim) (edge.Origin, error) {
-	address, certified, err := r.s.claimHostname(ctx, claim)
-	if err != nil {
-		return edge.Origin{}, err
-	}
-	return edge.Origin{Address: address, Certified: certified}, nil
+	return r.s.claimHostname(ctx, claim)
 }
 
 func (r routerStack) Disclaim(ctx context.Context, hostname string) error {
 	if err := r.s.disclaimHostname(ctx, hostname); err != nil {
+		return err
+	}
+	if err := r.s.e.releaseTunnel(ctx); err != nil {
 		return err
 	}
 	if err := r.s.applyOrigins(ctx); err != nil {

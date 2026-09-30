@@ -86,6 +86,7 @@ func (p *Provider) Facts() provider.Facts {
 		},
 		DNSKinds:                 []provider.DNSKind{dnsCloudflare},
 		RendersTransforms:        true,
+		RunsTunnels:              true,
 		RetainsContainerReleases: true,
 	}
 }

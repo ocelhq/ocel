@@ -164,43 +164,63 @@ func (s *stack) previewClaims(ctx context.Context, pointer string, apps []string
 }
 
 func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) error {
-	address, _, err := s.claimHostname(ctx, router.Claim{Hostname: binding.Hostname, App: binding.App})
+	origin, err := s.claimHostname(ctx, router.Claim{Hostname: binding.Hostname, App: binding.App})
 	if err != nil {
 		return err
 	}
 	s.state.Bind(binding.Hostname)
-	s.state.PublishAddress(binding.Hostname, address)
+	s.state.PublishAddress(binding.Hostname, origin.Address)
 	if route := s.e.machine.RouteBy(binding.Hostname); route != "" && binding.Say != nil {
 		binding.Say(route)
 	}
 	return nil
 }
 
-func (s *stack) claimHostname(ctx context.Context, claim router.Claim) (address string, certified bool, err error) {
+func (s *stack) claimHostname(ctx context.Context, claim router.Claim) (edge.Origin, error) {
 	if claim.Hostname == "" {
-		return "", false, refusal.Refuse(refusal.CodeInvalid, "this binding names no hostname for %s to claim", s.surface())
+		return edge.Origin{}, refusal.Refuse(refusal.CodeInvalid, "this binding names no hostname for %s to claim", s.surface())
 	}
-	if address, err = s.e.machine.Address(ctx); err != nil {
-		return "", false, err
+	if claim.Tunnel != edge.None {
+		return s.claimTunneled(ctx, claim)
+	}
+	address, err := s.e.machine.Address(ctx)
+	if err != nil {
+		return edge.Origin{}, err
 	}
 	shielded := len(claim.ClientCertificates) > 0
-	certified = true
+	certified := true
 	if shielded {
 		if certified, err = s.e.putShield(ctx, claim, s.surface()); err != nil {
-			return "", false, err
+			return edge.Origin{}, err
 		}
 	}
-	if _, wild := strings.CutPrefix(claim.Hostname, "*."); !wild {
-		if err := s.claimServed(ctx, claim); err != nil {
-			return "", false, err
-		}
+	if err := s.claimUnlessWildcard(ctx, claim); err != nil {
+		return edge.Origin{}, err
+	}
+	if err := s.e.untunnelHost(ctx, claim.Hostname, s.surface()); err != nil {
+		return edge.Origin{}, err
 	}
 	if shielded {
 		if err := s.e.machine.RefuseUnshielded(ctx, claim.Hostname); err != nil {
-			return "", false, err
+			return edge.Origin{}, err
 		}
 	}
-	return address, certified, nil
+	return edge.Origin{Address: address, Certified: certified}, nil
+}
+
+func (s *stack) claimTunneled(ctx context.Context, claim router.Claim) (edge.Origin, error) {
+	origin, err := s.e.tunnelHost(ctx, claim.Hostname, claim.Tunnel, s.surface())
+	if err != nil {
+		return edge.Origin{}, err
+	}
+	return origin, s.claimUnlessWildcard(ctx, claim)
+}
+
+func (s *stack) claimUnlessWildcard(ctx context.Context, claim router.Claim) error {
+	if strings.HasPrefix(claim.Hostname, "*.") {
+		return nil
+	}
+	return s.claimServed(ctx, claim)
 }
 
 func (s *stack) claimServed(ctx context.Context, claim router.Claim) error {
@@ -266,6 +286,9 @@ func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
 	if err := s.disclaimHostname(ctx, hostname); err != nil {
 		return err
 	}
+	if err := s.e.releaseTunnel(ctx); err != nil {
+		return err
+	}
 	s.state.Release(hostname)
 	s.state.PublishAddress(hostname, "")
 	if err := s.applyOrigins(ctx); err != nil {
@@ -302,6 +325,9 @@ func (s *stack) Destroy(ctx context.Context) error {
 		errs = append(errs, err)
 	}
 	if err := s.e.machine.ForgetNetwork(ctx, s.state.Tier, s.state.Slug); err != nil {
+		errs = append(errs, err)
+	}
+	if err := s.e.releaseTunnel(ctx); err != nil {
 		errs = append(errs, err)
 	}
 	return errors.Join(errs...)

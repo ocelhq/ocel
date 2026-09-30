@@ -84,6 +84,7 @@ func (state RoutingTable) hostnames() []string {
 	if state.PreviewBase != "" {
 		named = append(named, edge.ProbeHostname(edge.PreviewWildcard(state.PreviewBase)))
 	}
+	named = slices.DeleteFunc(named, func(hostname string) bool { return isTunneled(state.Tunneled, hostname) })
 	slices.Sort(named)
 	return slices.Compact(named)
 }
