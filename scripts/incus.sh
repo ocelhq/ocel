@@ -226,7 +226,7 @@ cmd_bake() {
     cmd_create "$name" > /dev/null
     trap 'incus delete -f "'"$name"'" 2>/dev/null || true' EXIT
     cmd_ssh "$name" "$@"
-    cmd_ssh "$name" 'sudo cloud-init clean --logs --configs network && sudo truncate -s 0 /etc/machine-id && sudo rm -f /var/lib/dbus/machine-id && rm -f ~/.ssh/authorized_keys'
+    cmd_ssh "$name" 'sudo cloud-init clean --logs && sudo truncate -s 0 /etc/machine-id && sudo rm -f /var/lib/dbus/machine-id && rm -f ~/.ssh/authorized_keys'
     incus stop "$name"
     incus publish "$name" --alias "$image" --compression none
 }
