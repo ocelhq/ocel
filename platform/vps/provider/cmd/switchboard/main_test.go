@@ -124,6 +124,17 @@ type serving struct {
 	errs    *strings.Builder
 }
 
+func accepting(control, data string) bool {
+	for network, address := range map[string]string{"unix": control, "tcp": data} {
+		conn, err := net.Dial(network, address)
+		if err != nil {
+			return false
+		}
+		_ = conn.Close()
+	}
+	return true
+}
+
 func served(t *testing.T, table string, flags ...string) serving {
 	t.Helper()
 	running := serving{data: freeAddress(t), front: frontAt(t), admit: admitAt(t), control: controlAt(t), done: make(chan int, 1), errs: &strings.Builder{}}
@@ -137,8 +148,7 @@ func served(t *testing.T, table string, flags ...string) serving {
 	})
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		if conn, err := net.Dial("unix", running.control); err == nil {
-			_ = conn.Close()
+		if accepting(running.control, running.data) {
 			return running
 		}
 		select {
