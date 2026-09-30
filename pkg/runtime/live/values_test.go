@@ -21,7 +21,7 @@ type scriptedSource struct {
 	release chan struct{}
 
 	mu       sync.Mutex
-	calls    int
+	started  int
 	returned int
 	results  []fetchResult
 }
@@ -33,8 +33,8 @@ type fetchResult struct {
 
 func (f *scriptedSource) Fetch(ctx context.Context) (map[string]string, error) {
 	f.mu.Lock()
-	n := f.calls
-	f.calls++
+	n := f.started
+	f.started++
 	f.mu.Unlock()
 	defer func() {
 		f.mu.Lock()
@@ -58,13 +58,13 @@ func (f *scriptedSource) Fetch(ctx context.Context) (map[string]string, error) {
 	return f.results[n].values, f.results[n].err
 }
 
-func (f *scriptedSource) count() int {
+func (f *scriptedSource) startedFetches() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.calls
+	return f.started
 }
 
-func (f *scriptedSource) returns() int {
+func (f *scriptedSource) returnedFetches() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.returned
@@ -237,7 +237,7 @@ func TestValuesAreFetchedAndPushedToNodeAsGenerations(t *testing.T) {
 			l.Refresh(context.Background())
 		}
 
-		consistently(t, "an invocation inside the bound read the store again", func() bool { return source.count() == 1 })
+		consistently(t, "an invocation inside the bound read the store again", func() bool { return source.startedFetches() == 1 })
 		if msgs := out.messages(t); len(msgs) != 1 {
 			t.Errorf("pushed %d messages, want only the first generation", len(msgs))
 		}
@@ -296,9 +296,9 @@ func TestValuesAreFetchedAndPushedToNodeAsGenerations(t *testing.T) {
 		for range 5 {
 			l.Refresh(context.Background())
 		}
-		eventually(t, "the refresh to reach the store", func() bool { return source.count() >= 2 })
+		eventually(t, "the refresh to reach the store", func() bool { return source.startedFetches() >= 2 })
 
-		consistently(t, "an invocation stacked a second refresh on the one already in flight", func() bool { return source.count() == 2 })
+		consistently(t, "an invocation stacked a second refresh on the one already in flight", func() bool { return source.startedFetches() == 2 })
 		close(source.release)
 	})
 
@@ -335,7 +335,7 @@ func TestValuesAreFetchedAndPushedToNodeAsGenerations(t *testing.T) {
 
 		clock = clock.Add(StalenessBound)
 		l.Refresh(context.Background())
-		eventually(t, "the failing refresh to run", func() bool { return source.count() == 2 })
+		eventually(t, "the failing refresh to run", func() bool { return source.startedFetches() == 2 })
 
 		msgs := out.messages(t)
 		if len(msgs) != 1 {
@@ -347,19 +347,28 @@ func TestValuesAreFetchedAndPushedToNodeAsGenerations(t *testing.T) {
 
 		clock = clock.Add(StalenessBound)
 		eventually(t, "a later invocation to retry the refresh", func() bool {
-			if source.count() >= 3 {
+			if source.startedFetches() >= 3 {
 				return true
 			}
 			l.Refresh(context.Background())
 			return false
 		})
-		if got := source.count(); got != 3 {
+		if got := source.startedFetches(); got != 3 {
 			t.Fatalf("fetches = %d, want exactly one retry once the failed refresh settled", got)
 		}
-		eventually(t, "the retried fetch to return", func() bool { return source.returns() == 3 })
+		eventually(t, "the retried fetch to return", func() bool { return source.returnedFetches() == 3 })
 
 		consistently(t, "the failed retry pushed a generation or fetched again", func() bool {
-			return len(out.messages(t)) == 1 && l.Generation() == 1 && source.count() == 3
+			if msgs := out.messages(t); len(msgs) != 1 {
+				t.Fatalf("pushed %d messages after the retry failed (%+v), want only the generation that resolved", len(msgs), msgs)
+			}
+			if got := l.Generation(); got != 1 {
+				t.Fatalf("generation = %d after the retry failed, want 1", got)
+			}
+			if got := source.startedFetches(); got != 3 {
+				t.Fatalf("fetches = %d after the retry settled, want still 3", got)
+			}
+			return true
 		})
 	})
 
@@ -630,8 +639,8 @@ func TestARereadReachesTheStoreInsideTheBoundButNotInsideItsOwnFloor(t *testing.
 			l.Reread(context.Background())
 		}
 
-		if source.count() != 1 {
-			t.Errorf("the store was read %d times, and a reread inside its floor reads nothing", source.count())
+		if source.startedFetches() != 1 {
+			t.Errorf("the store was read %d times, and a reread inside its floor reads nothing", source.startedFetches())
 		}
 	})
 }
@@ -687,7 +696,7 @@ func TestKeepRespectsTheBoundWhenAFetchTakesTime(t *testing.T) {
 			clock.mu.Unlock()
 			l.Refresh(context.Background())
 			eventually(t, "a tick one bound after the last read to read the store again", func() bool {
-				return inner.count() == want
+				return inner.startedFetches() == want
 			})
 			eventually(t, "the refresh to finish", func() bool {
 				l.mu.Lock()
@@ -876,7 +885,7 @@ func TestABindingsRecordIsCheckedForDriftAndDeliveredAtColdStart(t *testing.T) {
 
 		clock = clock.Add(StalenessBound)
 		l.Refresh(context.Background())
-		eventually(t, "the drifting refresh to run", func() bool { return source.count() == 2 })
+		eventually(t, "the drifting refresh to run", func() bool { return source.startedFetches() == 2 })
 
 		consistently(t, "a warm process pushed a generation it could not conform", func() bool { return len(out.messages(t)) == 1 })
 		if msgs := out.messages(t); msgs[0].Values[binding.Key] != good {
