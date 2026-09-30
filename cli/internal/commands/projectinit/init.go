@@ -37,6 +37,7 @@ type initOptions struct {
 	ts         bool
 	yaml       bool
 	configPath string
+	settings   []providerSetting
 }
 
 type Dependencies struct {
@@ -121,7 +122,7 @@ func runInit(ctx context.Context, dependencies Dependencies, cwd, slug string, o
 	if err != nil {
 		return err
 	}
-	err = writeProject(ctx, dependencies, initializing.Phase(progressv1.Phase_PHASE_BUILD), configPath, slug, provider, lang, detected)
+	err = writeProject(ctx, dependencies, initializing.Phase(progressv1.Phase_PHASE_BUILD), configPath, slug, provider, opts.settings, lang, detected)
 	if err == nil {
 		initializing.Succeed("Initialized project " + slug)
 	}
@@ -129,12 +130,12 @@ func runInit(ctx context.Context, dependencies Dependencies, cwd, slug string, o
 	return err
 }
 
-func writeProject(ctx context.Context, dependencies Dependencies, build *run.Span, configPath, slug, provider string, lang sdkLanguage, detected bool) error {
+func writeProject(ctx context.Context, dependencies Dependencies, build *run.Span, configPath, slug, provider string, settings []providerSetting, lang sdkLanguage, detected bool) error {
 	projectDir, name := filepath.Dir(configPath), filepath.Base(configPath)
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {
 		return fmt.Errorf("create directory for %s: %w", name, err)
 	}
-	if err := os.WriteFile(configPath, []byte(configTemplate(name, slug, provider)), 0o644); err != nil {
+	if err := os.WriteFile(configPath, []byte(configTemplate(name, slug, provider, settings)), 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", name, err)
 	}
 	build.Say(fmt.Sprintf("Wrote %s for project %s", name, slug))
@@ -199,15 +200,27 @@ func schemaURL() string {
 	return "https://ocel.dev/schema/" + version.Version + "/ocel.schema.json"
 }
 
-func configTemplate(name, slug, provider string) string {
+type providerSetting struct {
+	name  string
+	value string
+}
+
+func configTemplate(name, slug, provider string, settings []providerSetting) string {
 	if project.IsTypeScript(name) {
-		return typescriptTemplate(slug, provider)
+		return typescriptTemplate(slug, provider, settings)
 	}
 	if project.IsYAML(name) {
-		return yamlTemplate(slug, provider)
+		return yamlTemplate(slug, provider, settings)
 	}
 	selected := fmt.Sprintf("{ %q: {} }", provider)
-	if configdoc.ProviderNamedAlone(provider) {
+	switch {
+	case len(settings) > 0:
+		fields := make([]string, 0, len(settings))
+		for _, setting := range settings {
+			fields = append(fields, fmt.Sprintf("%q: %q", setting.name, setting.value))
+		}
+		selected = fmt.Sprintf("{ %q: { %s } }", provider, strings.Join(fields, ", "))
+	case configdoc.ProviderNamedAlone(provider):
 		selected = strconv.Quote(provider)
 	}
 	return fmt.Sprintf(`{
@@ -218,9 +231,15 @@ func configTemplate(name, slug, provider string) string {
 `, schemaURL(), slug, selected)
 }
 
-func yamlTemplate(slug, provider string) string {
+func yamlTemplate(slug, provider string, settings []providerSetting) string {
 	selected := fmt.Sprintf("\n  %s: {}", provider)
-	if configdoc.ProviderNamedAlone(provider) {
+	switch {
+	case len(settings) > 0:
+		selected = fmt.Sprintf("\n  %s:", provider)
+		for _, setting := range settings {
+			selected += fmt.Sprintf("\n    %s: %q", setting.name, setting.value)
+		}
+	case configdoc.ProviderNamedAlone(provider):
 		selected = " " + provider
 	}
 	return fmt.Sprintf(`# yaml-language-server: $schema=%s
@@ -229,15 +248,23 @@ provider:%s
 `, schemaURL(), slug, selected)
 }
 
-func typescriptTemplate(slug, provider string) string {
+func typescriptTemplate(slug, provider string, settings []providerSetting) string {
+	options := "{}"
+	if len(settings) > 0 {
+		fields := make([]string, 0, len(settings))
+		for _, setting := range settings {
+			fields = append(fields, fmt.Sprintf("%s: %q", strconv.Quote(setting.name), setting.value))
+		}
+		options = "{ " + strings.Join(fields, ", ") + " }"
+	}
 	return fmt.Sprintf(`import { defineConfig } from "ocel/config";
 import %s from "ocel/providers/%s";
 
 export default defineConfig({
   slug: %q,
-  provider: %s({}),
+  provider: %s(%s),
 });
-`, providerIdentifier(provider), provider, slug, providerIdentifier(provider))
+`, providerIdentifier(provider), provider, slug, providerIdentifier(provider), options)
 }
 
 func providerIdentifier(provider string) string {
