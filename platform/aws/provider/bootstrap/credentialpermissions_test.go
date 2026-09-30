@@ -678,11 +678,13 @@ func TestTheDeployCredentialScalesOnlyTheECSServicesItTagged(t *testing.T) {
 	tagged := conditionJSON(t, scalesECSServices(taggedByOcel()))
 	want := []grant{
 		{action: "application-autoscaling:RegisterScalableTarget", resource: scalableTargetARN, condition: onCreate},
-		{action: "application-autoscaling:TagResource", resource: scalableTargetARN, condition: onCreate},
+		{action: "application-autoscaling:RegisterScalableTarget", resource: scalableTargetARN, condition: tagged},
 		{action: "application-autoscaling:DeregisterScalableTarget", resource: scalableTargetARN, condition: tagged},
 		{action: "application-autoscaling:PutScalingPolicy", resource: scalableTargetARN, condition: tagged},
 		{action: "application-autoscaling:DeleteScalingPolicy", resource: scalableTargetARN, condition: tagged},
-		{action: "application-autoscaling:UntagResource", resource: scalableTargetARN, condition: tagged},
+		{action: "application-autoscaling:TagResource", resource: scalableTargetARN, condition: conditionJSON(t, taggedOnCreate())},
+		{action: "application-autoscaling:TagResource", resource: scalableTargetARN, condition: conditionJSON(t, taggedByOcel())},
+		{action: "application-autoscaling:UntagResource", resource: scalableTargetARN, condition: conditionJSON(t, taggedByOcel())},
 		{action: "cloudwatch:PutMetricAlarm", resource: scalingAlarmARN, condition: "null"},
 		{action: "cloudwatch:DeleteAlarms", resource: scalingAlarmARN, condition: "null"},
 		{action: "iam:CreateServiceLinkedRole", resource: ecsScalingLinkedRoleARN, condition: conditionJSON(t, linkedRoleFor("ecs.application-autoscaling.amazonaws.com"))},
