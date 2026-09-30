@@ -160,7 +160,7 @@ func TestWithProviderSetsUpWhatTheTierIsMissingAndChecksItAgain(t *testing.T) {
 	if runs != 1 || !worked {
 		t.Errorf("setup ran %d times and the work ran with the project: %t, want once and true", runs, worked)
 	}
-	if !strings.Contains(asked.String(), "Run `ocel bootstrap preview` now?") {
+	if !strings.Contains(asked.String(), "Run `ocel bootstrap preview --features cache,images` now?") {
 		t.Errorf("asked %q, want the bootstrap offered", asked.String())
 	}
 }
@@ -190,7 +190,7 @@ func TestWithProviderEndsADeclinedSetupAsARunThatChangedNothing(t *testing.T) {
 	if runs != 0 || worked {
 		t.Errorf("setup ran %d times and the work ran: %t, want neither", runs, worked)
 	}
-	if want := "Not set up, so this run changes nothing. When you're ready: `ocel bootstrap preview`"; !strings.Contains(rendered.String(), want) {
+	if want := "Not set up, so this run changes nothing. When you're ready: `ocel bootstrap preview --features cache,images`"; !strings.Contains(rendered.String(), want) {
 		t.Errorf("rendered %q, want %q", rendered.String(), want)
 	}
 }
