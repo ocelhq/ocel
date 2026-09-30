@@ -705,6 +705,20 @@ export default {
 			},
 		},
 		{
+			name: "asks the edge for a tunnel when its options name one",
+			config: `
+export default {
+  slug: "test-app",
+  edge: { relay: { tunnel: true } },
+};
+`,
+			check: func(t *testing.T, root string, cfg *Project) {
+				if selection := cfg.EdgeSelection(); selection.GetKind() != "relay" || !selection.GetTunnel() {
+					t.Fatalf("EdgeSelection() = %v, want relay reached through a tunnel", selection)
+				}
+			},
+		},
+		{
 			name: "parses an edge named alone",
 			config: `
 export default {

@@ -89,7 +89,9 @@ type EdgeDescriptor struct {
 	Selector[EdgeOptions]
 }
 
-type EdgeOptions struct{}
+type EdgeOptions struct {
+	Tunnel bool `json:"tunnel,omitempty" doc:"Reach the origin through a tunnel the origin opens to the edge, rather than at its address, so the origin takes no traffic from anything else. Cloudflare in front of a VPS box opens one."`
+}
 
 func (EdgeDescriptor) checkShape(path string, value any) error {
 	return checkSelector(path, value, "edge", known.Edge, reflect.TypeFor[EdgeOptions]())
