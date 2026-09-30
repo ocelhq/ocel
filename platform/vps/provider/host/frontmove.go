@@ -8,10 +8,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
@@ -26,9 +28,9 @@ const moveWait = 10 * time.Minute
 var movePauses = retryBackoff{base: 2, ceiling: 15, spread: 2}
 
 type frontMove struct {
-	from      Front
-	to        Front
-	hostnames []string
+	from  Front
+	to    Front
+	table RoutingTable
 }
 
 func (m frontMove) sameProcess() bool {
@@ -57,12 +59,34 @@ func (m frontMove) outage() string {
 
 func (m frontMove) reissued() int {
 	if !m.sameProcess() {
-		return len(m.hostnames)
+		return len(m.to.listCertifiedHostnames(m.table))
 	}
 	if m.from.Traefik != nil && (m.from.Traefik.Resolver != m.to.Traefik.Resolver || m.from.Traefik.PreviewResolver != m.to.Traefik.PreviewResolver) {
-		return len(m.hostnames)
+		return len(m.to.listCertifiedHostnames(m.table))
 	}
 	return 0
+}
+
+func (f Front) listCertifiedHostnames(table RoutingTable) []string {
+	spec := proxySpec(table)
+	var wildcard certs.Leaf
+	if f.Traefik != nil && f.Traefik.PreviewResolver != "" && table.PreviewBase != "" {
+		wildcard.Domains = []string{edge.PreviewWildcard(table.PreviewBase)}
+	}
+	var certified []string
+	for _, hostname := range table.hostnames() {
+		shield, shielded := spec.ShieldOf(hostname)
+		switch {
+		case shielded && shield.OriginCertificate.Certificate != "":
+		case !f.adopted() && Covering(table.Pins, hostname) != "":
+		case wildcard.Covers(hostname):
+			certified = append(certified, wildcard.Domains[0])
+		default:
+			certified = append(certified, hostname)
+		}
+	}
+	slices.Sort(certified)
+	return slices.Compact(certified)
 }
 
 func (m frontMove) certificates() []provider.Change {
@@ -145,16 +169,12 @@ func (m frontMove) group(core []provider.Change) (provider.ChangeGroup, []provid
 	return group, kept
 }
 
-func (h *Host) claimedHostnames(ctx context.Context) ([]string, error) {
+func (h *Host) readMovedTable(ctx context.Context) (RoutingTable, error) {
 	pair, err := h.currentPair(ctx)
 	if err != nil || pair.table == nil {
-		return nil, err
+		return RoutingTable{}, err
 	}
-	table, err := ReadRoutingTable(pair.table)
-	if err != nil {
-		return nil, err
-	}
-	return table.hostnames(), nil
+	return ReadRoutingTable(pair.table)
 }
 
 func (b Bootstrap) removeOldFront(ctx context.Context, move *frontMove, progress progress.Log) error {
@@ -193,7 +213,7 @@ func (b Bootstrap) awaitFront(ctx context.Context, tier environment.Tier, move *
 	if !move.sameProcess() {
 		say(progress, "Start your proxy on 80 and 443 now")
 	}
-	if err := b.host.awaitServed(ctx, move.to.named(), move.hostnames, tier); err != nil {
+	if err := b.host.awaitServed(ctx, move.to.named(), move.table.hostnames(), tier); err != nil {
 		return err
 	}
 	if !move.sameProcess() {
