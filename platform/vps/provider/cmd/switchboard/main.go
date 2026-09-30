@@ -109,7 +109,7 @@ func run(ctx context.Context, argv []string, in io.Reader, out, errs io.Writer) 
 }
 
 func usage(errs io.Writer) int {
-	fmt.Fprintln(errs, "usage: "+switchboard.Name+" serve --listen <host:port> --front <socket> --admit <socket> --table <path> [--relay <addr|cidr>]... [--relay-network <docker network>]... [--https-listen <host:port|docker network:port>] |")
+	fmt.Fprintln(errs, "usage: "+switchboard.Name+" serve --listen <host:port> --front <socket> --admit <socket> --table <path> [--relay <addr|cidr>]... [--relay-network <docker network>]... [--https-listen <host:port|docker network:port>] [--tunnel-listen <host:port|docker network:port>] |")
 	fmt.Fprintln(errs, "       load <table> |")
 	fmt.Fprintln(errs, "       gate --deploy-timeout <seconds> <host:port/path>... |")
 	fmt.Fprintln(errs, "       cutover [--drain-timeout <seconds> --retire <host:port>...] <table> |")
@@ -150,6 +150,7 @@ func serve(ctx context.Context, control string, argv []string, errs io.Writer) i
 	admit := flags.String("admit", "", "")
 	path := flags.String("table", "", "")
 	https := flags.String("https-listen", "", "")
+	tunneling := flags.String("tunnel-listen", "", "")
 	var relaying, networks repeated
 	flags.Var(&relaying, "relay", "")
 	flags.Var(&networks, "relay-network", "")
@@ -160,9 +161,14 @@ func serve(ctx context.Context, control string, argv []string, errs io.Writer) i
 	if err != nil {
 		return refuse(errs, err)
 	}
-	var stamping []string
+	var stamping, tunneled []string
 	if *https != "" {
-		if stamping, err = httpsBinds(ctx, *https, systemResolve, net.InterfaceAddrs); err != nil {
+		if stamping, err = listenerBinds(ctx, "--https-listen", *https, systemResolve, net.InterfaceAddrs); err != nil {
+			return refuse(errs, err)
+		}
+	}
+	if *tunneling != "" {
+		if tunneled, err = listenerBinds(ctx, "--tunnel-listen", *tunneling, systemResolve, net.InterfaceAddrs); err != nil {
 			return refuse(errs, err)
 		}
 	}
@@ -202,7 +208,7 @@ func serve(ctx context.Context, control string, argv []string, errs io.Writer) i
 		return unwind(err)
 	}
 	opened = append(opened, admitting)
-	var stamped []net.Listener
+	var stamped, tunnels []net.Listener
 	for _, address := range stamping {
 		listener, err := net.Listen("tcp", address)
 		if err != nil {
@@ -210,6 +216,14 @@ func serve(ctx context.Context, control string, argv []string, errs io.Writer) i
 		}
 		opened = append(opened, listener)
 		stamped = append(stamped, listener)
+	}
+	for _, address := range tunneled {
+		listener, err := net.Listen("tcp", address)
+		if err != nil {
+			return unwind(err)
+		}
+		opened = append(opened, listener)
+		tunnels = append(tunnels, listener)
 	}
 	controller := &http.Server{Handler: board.Control(), ReadHeaderTimeout: switchboard.ReadHeaderTimeout}
 	failed := make(chan error, len(opened))
@@ -231,6 +245,13 @@ func serve(ctx context.Context, control string, argv []string, errs io.Writer) i
 	for _, listener := range stamped {
 		go func() {
 			if err := board.ServeHTTPS(listener); err != nil {
+				failed <- err
+			}
+		}()
+	}
+	for _, listener := range tunnels {
+		go func() {
+			if err := board.ServeTunnel(listener); err != nil {
 				failed <- err
 			}
 		}()
