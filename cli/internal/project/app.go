@@ -186,7 +186,7 @@ func shapeApp(app *App, a configdoc.AppConfig, dir string) error {
 		return err
 	}
 	container := &Container{Build: build, Health: health, MinInstances: a.MinInstances, MaxInstances: a.MaxInstances}
-	if err := refuseInvertedInstances(a.Name, container); err != nil {
+	if err := refuseImpossibleInstances(a.Name, container); err != nil {
 		return err
 	}
 	if compute != provider.ComputeServerless {
@@ -269,7 +269,7 @@ func frameworkOnContainer(app, framework string, compute provider.Compute) error
 	)
 }
 
-func refuseInvertedInstances(app string, container *Container) error {
+func refuseImpossibleInstances(app string, container *Container) error {
 	for key, count := range map[string]*int{"minInstances": container.MinInstances, "maxInstances": container.MaxInstances} {
 		if count != nil && *count > math.MaxInt32 {
 			return fmt.Errorf("app %q sets %s %d, and no provider runs more than %d instances of an app: lower it", app, key, *count, math.MaxInt32)
