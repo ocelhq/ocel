@@ -119,20 +119,23 @@ describe("the Next cache a cell is held to", () => {
   const cacheTitlesIn = (titles: string[], of: string[]) =>
     titles.filter((title) => of.some((cache) => title.endsWith(cache)));
 
-  it("holds a Next app on a box with no edge to the Next server's own cache, green but for the data cache on an incus VM", () => {
+  it("holds a Next app on a box with no edge to the Next server's own cache, green but for the data cache while no zone is named", () => {
+    const zones = [{}, { OCEL_JOURNEY_ZONE: "journeys.example.com" }];
     for (const lane of ["vps", "vps.incus"] as const) {
-      const planned = planOn(lane, {}, EVERY_CELL);
-      for (const cell of ["deploy/next", "sdk/next", "lifecycle/next"]) {
-        const titles = titlesOf(planned, cell);
-        expect(cacheTitlesIn(titles, EDGE_TITLES)).toEqual([]);
-        expect(cacheTitlesIn(titles, ORIGIN_TITLES)).not.toEqual([]);
-        const listed = planned.expectedFailures[`${cell}/web`] ?? {};
-        const red = lane === "vps.incus" ? DATA_CACHE_TITLES : [];
-        expect(cacheTitlesIn(Object.keys(listed), ORIGIN_TITLES)).toEqual(
-          cacheTitlesIn(titles, red),
-        );
-        for (const title of cacheTitlesIn(titles, red)) {
-          expect(listed[title]?.map((gap) => gap.issue)).toEqual([1458]);
+      for (const env of zones) {
+        const planned = planOn(lane, env, EVERY_CELL);
+        const red = "OCEL_JOURNEY_ZONE" in env ? [] : DATA_CACHE_TITLES;
+        for (const cell of ["deploy/next", "sdk/next", "lifecycle/next"]) {
+          const titles = titlesOf(planned, cell);
+          expect(cacheTitlesIn(titles, EDGE_TITLES)).toEqual([]);
+          expect(cacheTitlesIn(titles, ORIGIN_TITLES)).not.toEqual([]);
+          const listed = planned.expectedFailures[`${cell}/web`] ?? {};
+          expect(cacheTitlesIn(Object.keys(listed), ORIGIN_TITLES)).toEqual(
+            cacheTitlesIn(titles, red),
+          );
+          for (const title of cacheTitlesIn(titles, red)) {
+            expect(listed[title]?.map((gap) => gap.issue)).toEqual([1458]);
+          }
         }
       }
     }

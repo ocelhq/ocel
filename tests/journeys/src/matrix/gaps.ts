@@ -144,11 +144,12 @@ export const gaps: Gap[] = [
   {
     id: "no-route-to-its-own-hostname",
     reason:
-      "the data-cache page fetches its app's own *.localhost hostname from inside its container, which neither resolves to the box nor trusts Caddy's local certificate",
+      "with no zone named, the data-cache page fetches its app's own *.localhost hostname from inside its container, which neither resolves to the box nor trusts Caddy's local certificate",
     issue: 1458,
     where: [
       {
-        on: ["vps.incus"],
+        on: ["vps", "vps.incus"],
+        whileUnset: ["OCEL_JOURNEY_ZONE"],
         fixtures: [lifecycle.next, sdk.next],
         variants: [defaults],
         fails: [check(nextOriginDataCacheChecks)],
