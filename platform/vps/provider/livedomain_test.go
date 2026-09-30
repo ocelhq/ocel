@@ -106,7 +106,7 @@ func servingTheBox(t *testing.T) (machine, *vps.Provider, contractv1connect.Prov
 	t.Cleanup(func() { closing(t, p) })
 	p.ProbeAddress = &url.URL{Scheme: "http", Host: vm.addr + ":80"}
 
-	opened, err := p.Edges().Open(edge.None)
+	opened, err := p.Edges().Open(edge.None, nil)
 	if err != nil {
 		t.Fatalf("Open(%q) = %v", edge.None, err)
 	}
@@ -256,7 +256,7 @@ func TestLiveDomainRmStopsTheHostnameServingAndLeavesNothingOfItLoaded(t *testin
 	if strings.Contains(loaded, hostname) {
 		t.Errorf("%s still names %s after the unbind:\n%s", host.ProxyConfig, hostname, loaded)
 	}
-	owner, err := p.Edges().Open(edge.None)
+	owner, err := p.Edges().Open(edge.None, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

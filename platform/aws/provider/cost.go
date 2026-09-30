@@ -42,7 +42,7 @@ func (p *Provider) ShapeCost(ctx context.Context, req provider.ShapeRequest) (*c
 		return nil, err
 	}
 
-	front, err := p.edges().Open(req.Edge)
+	front, err := p.edges().Open(req.Edge, nil)
 	if err != nil {
 		return nil, err
 	}

@@ -1,12 +1,6 @@
-import type { EdgeDescriptor } from "../../generated/config.js";
+import type { AlbEdgeOptions, EdgeDescriptor } from "../../generated/config.js";
 
-/**
- * Options for the Application Load Balancer edge.
- *
- * Empty at release: everything the load balancer needs comes from the
- * provider's own options, so a later option lands without a signature change.
- */
-export type AlbEdgeOptions = Record<string, never>;
+export type { AlbEdgeOptions } from "../../generated/config.js";
 
 /**
  * Declares a global external Application Load Balancer, with Cloud CDN in

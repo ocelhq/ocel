@@ -64,7 +64,7 @@ func TestTheEdgeRegistryOpensTheEdgesThisProviderFronts(t *testing.T) {
 		t.Errorf("ListPairedRouters(alb) = %v, want the load balancer, which is edge and router in one", got)
 	}
 	for _, gone := range []edge.Kind{"direct", "cloud-run"} {
-		if _, err := p.Edges().Open(gone); err == nil {
+		if _, err := p.Edges().Open(gone, nil); err == nil {
 			t.Errorf("Open(%q) opened an edge, want it refused: leave `edge` out for no edge", gone)
 		}
 	}
@@ -80,7 +80,7 @@ func TestAProjectWithNoEdgeBindsNoHostnameAndSaysSo(t *testing.T) {
 	p := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"})
 	registry := p.Edges()
 
-	front, err := registry.Open(edge.None)
+	front, err := registry.Open(edge.None, nil)
 	if err != nil {
 		t.Fatalf("Open(no edge) = %v", err)
 	}

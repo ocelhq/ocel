@@ -12,10 +12,20 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/router"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
-func tunneled() *contractv1.EdgeSelection {
-	return &contractv1.EdgeSelection{Tunnel: true}
+func tunnelOptions(t *testing.T) *structpb.Struct {
+	t.Helper()
+	options, err := structpb.NewStruct(map[string]any{"tunnel": true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return options
+}
+
+func tunneled(t *testing.T) *contractv1.EdgeSelection {
+	return &contractv1.EdgeSelection{Options: tunnelOptions(t)}
 }
 
 func runsTunnels(facts *provider.Facts) { facts.RunsTunnels = true }
@@ -55,7 +65,7 @@ func TestATunnelIsRefusedOnAProviderWhoseOriginRunsNone(t *testing.T) {
 	tunnelRelay(t, vendor)
 	deployed(t, vendor, environment.TierProduction, "shop")
 
-	refused := addHostnameRefusal(t, client, tunneled())
+	refused := addHostnameRefusal(t, client, tunneled(t))
 
 	if !strings.Contains(refused, "tunnel") {
 		t.Errorf("AddHostname() refused with %q, want the tunnel named: this provider's origin runs no tunnel for an edge to reach it through", refused)
@@ -69,10 +79,26 @@ func TestATunnelIsRefusedBehindAnEdgeThatOpensNone(t *testing.T) {
 	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).ProxiesRecords()
 	deployed(t, vendor, environment.TierProduction, "shop")
 
-	refused := addHostnameRefusal(t, client, tunneled())
+	refused := addHostnameRefusal(t, client, tunneled(t))
 
 	if !strings.Contains(refused, "tunnel") || !strings.Contains(refused, string(fake.KindRelay)) {
 		t.Errorf("AddHostname() refused with %q, want the tunnel and the %s edge named: that edge opens no tunnel", refused, fake.KindRelay)
+	}
+}
+
+func TestAnEdgeOptionTheEdgeDoesNotTakeIsRefusedNamingTheEdge(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	deployed(t, vendor, environment.TierProduction, "shop")
+	options, err := structpb.NewStruct(map[string]any{"tunel": true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	refused := addHostnameRefusal(t, client, &contractv1.EdgeSelection{Kind: string(fake.KindRelay), Options: options})
+
+	if !strings.Contains(refused, "edge.relay.tunel") {
+		t.Errorf("AddHostname() refused with %q, want the option named under the %s edge that does not take it", refused, fake.KindRelay)
 	}
 }
 
@@ -83,7 +109,7 @@ func TestAHostnameThroughATunnelIsClaimedWithoutTrustingOrCertifyingTheOrigin(t 
 	relay := tunnelRelay(t, vendor)
 	deployed(t, vendor, environment.TierProduction, "shop")
 
-	addWebHostname(t, client, "app.acme.com", tunneled())
+	addWebHostname(t, client, "app.acme.com", tunneled(t))
 
 	claims := relay.Claims()
 	if len(claims) != 1 || claims[0].Tunnel != fake.KindRelay || len(claims[0].ClientCAs) != 0 || claims[0].OriginCertificate.ID != "" {
@@ -110,7 +136,7 @@ func TestAServedHostnameMovedOntoATunnelIsClaimedAgainAndItsOriginCertificateRev
 	deployed(t, vendor, environment.TierProduction, "shop")
 	addWebHostname(t, client, "app.acme.com", nil)
 
-	addWebHostname(t, client, "app.acme.com", tunneled())
+	addWebHostname(t, client, "app.acme.com", tunneled(t))
 
 	claims := relay.Claims()
 	if len(claims) == 0 || claims[len(claims)-1].Tunnel != fake.KindRelay {
@@ -130,9 +156,9 @@ func TestAHostnameThroughATunnelIsNotClaimedAgainWhenNothingChanged(t *testing.T
 	vendor.WithFacts(runsTunnels)
 	relay := tunnelRelay(t, vendor)
 	deployed(t, vendor, environment.TierProduction, "shop")
-	addWebHostname(t, client, "app.acme.com", tunneled())
+	addWebHostname(t, client, "app.acme.com", tunneled(t))
 
-	addWebHostname(t, client, "app.acme.com", tunneled())
+	addWebHostname(t, client, "app.acme.com", tunneled(t))
 
 	if claims := relay.Claims(); len(claims) != 1 {
 		t.Errorf("the router took %d claims, want the one: the tunnel still reaches the origin", len(claims))
@@ -151,7 +177,7 @@ func TestTheSharedPreviewWildcardThroughATunnelIsClaimedOnTheTunnelWithNoCertifi
 	relay.IssuesOriginCertificates()
 	relay.RunsTunnels()
 
-	if result := usePreviewWildcard(t, client, "preview.acme.com", &contractv1.EdgeSelection{Kind: string(fake.KindDirect), Tunnel: true}); !result.GetSuccess() {
+	if result := usePreviewWildcard(t, client, "preview.acme.com", &contractv1.EdgeSelection{Kind: string(fake.KindDirect), Options: tunnelOptions(t)}); !result.GetSuccess() {
 		t.Fatalf("UsePreviewWildcard() = %q, want previews forwarded through the tunnel", result.GetError())
 	}
 
@@ -177,7 +203,7 @@ func TestAProjectsOwnPreviewWildcardThroughATunnelIsClaimedOnTheTunnel(t *testin
 	relay.ProxiesRecords()
 	relay.RunsTunnels()
 	req := previewRequest()
-	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindDirect), Tunnel: true}
+	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindDirect), Options: tunnelOptions(t)}
 
 	if result, _ := deploy(t, client, req); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want the preview forwarded through the tunnel", result.GetError())

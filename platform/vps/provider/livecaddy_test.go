@@ -141,7 +141,7 @@ func deploysOneBehindCaddy(t *testing.T, vm machine, cf caddyFront, proxy *vps.P
 	}}); err != nil {
 		t.Fatalf("PreflightDeploy() behind %s = %v", cf.front, err)
 	}
-	opened, err := d.Edges().Open(edge.None)
+	opened, err := d.Edges().Open(edge.None, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

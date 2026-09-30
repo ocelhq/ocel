@@ -195,7 +195,7 @@ func TestPlanBootstrap(t *testing.T) {
 	t.Run("an unset account id is an error", func(t *testing.T) {
 		t.Setenv(envAccountID, "")
 		t.Setenv(envAPIToken, "tok")
-		if _, err := New("ocel").Hooks().PlanBootstrap(t.Context(), environment.TierProduction); err == nil {
+		if _, err := New("ocel", Options{}).Hooks().PlanBootstrap(t.Context(), environment.TierProduction); err == nil {
 			t.Fatal("PlanBootstrap without an account id err = nil, want an error")
 		}
 	})
@@ -203,7 +203,7 @@ func TestPlanBootstrap(t *testing.T) {
 	t.Run("an unset api token is an error", func(t *testing.T) {
 		t.Setenv(envAccountID, "acct")
 		t.Setenv(envAPIToken, "")
-		if _, err := New("ocel").Hooks().PlanBootstrap(t.Context(), environment.TierProduction); err == nil {
+		if _, err := New("ocel", Options{}).Hooks().PlanBootstrap(t.Context(), environment.TierProduction); err == nil {
 			t.Fatal("PlanBootstrap without an api token err = nil, want an error")
 		}
 	})

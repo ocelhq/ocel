@@ -34,6 +34,16 @@ function providerFragments() {
     .sort((a, b) => a.id.localeCompare(b.id));
 }
 
+function edgeFragments(dir = join(root, "platform")) {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      return entry.name === "node_modules" || entry.name.startsWith(".") ? [] : edgeFragments(path);
+    }
+    return entry.name === "schema.edge.json" ? [read(path)] : [];
+  });
+}
+
 function qualified(fragment) {
   const prefix = fragment.id[0].toUpperCase() + fragment.id.slice(1);
   const rename = (node) => {
@@ -72,6 +82,29 @@ function servedBy(fragments, field, selector) {
   );
 }
 
+function servedEdges(fragments, selector) {
+  const options = new Map(edgeFragments().map((fragment) => [fragment.id, fragment.options]));
+  const ids = [...new Set(fragments.flatMap((fragment) => fragment.edges))].sort();
+  for (const id of ids) {
+    if (!options.has(id)) {
+      throw new Error(
+        `a provider fronts deployments with the ${id} edge, and no schema.edge.json under platform/ declares its options`,
+      );
+    }
+  }
+  for (const id of options.keys()) {
+    if (!ids.includes(id)) {
+      throw new Error(
+        `platform/ declares options for the ${id} edge, and no provider fronts deployments with it`,
+      );
+    }
+  }
+  return keyed(
+    selector,
+    ids.map((id) => [id, options.get(id)]),
+  );
+}
+
 function schema() {
   const core = read(join(root, "pkg", "configdoc", "schema.core.json"));
   const fragments = providerFragments();
@@ -85,7 +118,7 @@ function schema() {
         provider,
         fragments.map((fragment) => [fragment.id, fragment.options]),
       ),
-      edge: servedBy(fragments, "edges", edge),
+      edge: servedEdges(fragments, edge),
       dns: servedBy(fragments, "dns", dns),
     },
   };

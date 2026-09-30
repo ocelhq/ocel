@@ -44,7 +44,7 @@ func previewEntryOn(t *testing.T, vm machine) edge.Edge {
 
 	p := vm.deploying(t)
 	t.Cleanup(func() { closing(t, p) })
-	front, err := p.Edges().Open(edge.None)
+	front, err := p.Edges().Open(edge.None, nil)
 	if err != nil {
 		t.Fatalf("Open(%q) = %v", edge.None, err)
 	}

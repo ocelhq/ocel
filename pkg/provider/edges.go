@@ -5,5 +5,5 @@ import (
 )
 
 type Edges interface {
-	Open(kind edge.Kind) (edge.Edge, error)
+	Open(kind edge.Kind, options Options) (edge.Edge, error)
 }

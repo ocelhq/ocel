@@ -515,7 +515,7 @@ func openEdge(apis APIs, kind edge.Kind) (edge.Edge, error) {
 	if apis.Edges == nil {
 		return nil, fmt.Errorf("bootstrap: this run has no edge registry, so it cannot reach the %s edge its features depend on", kind)
 	}
-	return apis.Edges.Open(kind)
+	return apis.Edges.Open(kind, nil)
 }
 
 func bootstrapEdges(ctx context.Context, apis APIs, d stepDeps, features, dropped []string) error {

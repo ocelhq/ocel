@@ -11,6 +11,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/naming"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 type Provider struct {
@@ -19,8 +21,8 @@ type Provider struct {
 }
 
 type Edge struct {
-	Kind   edge.Kind
-	Tunnel bool
+	Kind    edge.Kind
+	Options *structpb.Struct
 }
 
 type DNS struct {
@@ -56,7 +58,9 @@ func (p *Project) EdgeSelection() *contractv1.EdgeSelection {
 	selection := &contractv1.EdgeSelection{
 		Kind:          string(p.EdgeKind()),
 		AllowDegraded: edge.NeedNames(p.AllowDegraded),
-		Tunnel:        p.Edge != nil && p.Edge.Tunnel,
+	}
+	if p.Edge != nil {
+		selection.Options = p.Edge.Options
 	}
 	if p.DNS != nil {
 		selection.Dns = &contractv1.Dns{Kind: p.DNS.Kind, Zone: p.DNS.Zone}
@@ -86,7 +90,11 @@ func normalize(doc *configdoc.Document, configPath string) (*Project, error) {
 
 	var front *Edge
 	if doc.Edge != nil {
-		front = &Edge{Kind: edge.Kind(doc.Edge.ID), Tunnel: doc.Edge.Options.Tunnel}
+		options := &structpb.Struct{}
+		if err := protojson.Unmarshal(doc.Edge.Options, options); err != nil {
+			return nil, fmt.Errorf("%s configures edge %q with options that are not an object: %w", configPath, doc.Edge.ID, err)
+		}
+		front = &Edge{Kind: edge.Kind(doc.Edge.ID), Options: options}
 	}
 
 	allowDegraded, err := normalizeAllowDegraded(doc.AllowDegraded)

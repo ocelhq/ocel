@@ -79,7 +79,7 @@ func (p *Provider) CheckHost(ctx context.Context, req provider.HostCheckRequest)
 }
 
 func (p *Provider) hostnameVerdicts(ctx context.Context, req provider.HostCheckRequest, address string) ([]provider.HostCheck, error) {
-	front, err := p.Edges().Open(req.Edge)
+	front, err := p.Edges().Open(req.Edge, nil)
 	if err != nil {
 		return nil, err
 	}

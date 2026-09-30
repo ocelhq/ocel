@@ -33,7 +33,7 @@ func TestAHostnameBoundAgainWithoutAnOriginIsServedByItsEdgeRatherThanTheOriginI
 
 	ctx := context.Background()
 	p := fake.NewProvider(fake.Options{})
-	relay, err := p.Edges().Open(fake.KindRelay)
+	relay, err := p.Edges().Open(fake.KindRelay, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

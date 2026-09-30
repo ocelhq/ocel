@@ -48,7 +48,7 @@ func prunedAndRestarted(t *testing.T, front string) {
 
 	fixtures(t, vm)
 	d := vm.deployingBehind(t, proxy)
-	opened, err := d.Edges().Open(edge.None)
+	opened, err := d.Edges().Open(edge.None, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -70,7 +70,7 @@ func openFakeRouter(t *testing.T, kind edge.Kind, routedBy router.Kind) (routerc
 	t.Helper()
 	p := fake.NewProvider(fake.Options{})
 	spec := edge.StackSpec{Tier: environment.TierProduction, Slug: "conformance"}
-	front, err := p.Edges().Open(kind)
+	front, err := p.Edges().Open(kind, nil)
 	if err != nil {
 		t.Fatalf("Edges().Open(%q): %v", kind, err)
 	}

@@ -100,3 +100,42 @@ func TestDecodeAcceptsNoOptionsAtAll(t *testing.T) {
 		t.Fatalf("Decode(nil) error = %v, want the zero value", err)
 	}
 }
+
+func TestDecodeEdgeOptionsReadsTheEdgesOwnType(t *testing.T) {
+	t.Parallel()
+
+	type tunneling struct {
+		Tunnel bool `json:"tunnel,omitempty"`
+	}
+	got, err := DecodeEdgeOptions[tunneling]("cloudflare", Options{"tunnel": true})
+	if err != nil {
+		t.Fatalf("DecodeEdgeOptions() error = %v", err)
+	}
+	if !got.Tunnel {
+		t.Errorf("DecodeEdgeOptions() = %+v, want the tunnel read", got)
+	}
+}
+
+func TestDecodeEdgeOptionsRefusesAKeyTheEdgeDoesNotTakeByItsPathUnderTheEdge(t *testing.T) {
+	t.Parallel()
+
+	_, err := DecodeEdgeOptions[struct{}]("cloudfront", Options{"tunnel": true})
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) {
+		t.Fatalf("DecodeEdgeOptions() error = %v, want a Refusal", err)
+	}
+	if refused.Code != refusal.CodeUnknownOption {
+		t.Errorf("Refusal.Code = %q, want %q", refused.Code, refusal.CodeUnknownOption)
+	}
+	if !strings.Contains(refused.Message, "edge.cloudfront.tunnel") {
+		t.Errorf("Refusal.Message = %q, want the option's path under the edge that refused it", refused.Message)
+	}
+}
+
+func TestDecodeEdgeOptionsAcceptsNoOptionsAtAll(t *testing.T) {
+	t.Parallel()
+
+	if _, err := DecodeEdgeOptions[struct{}]("cloudfront", nil); err != nil {
+		t.Fatalf("DecodeEdgeOptions(nil) error = %v, want the zero value", err)
+	}
+}

@@ -1406,46 +1406,35 @@
           "properties": {
             "alb": {
               "additionalProperties": false,
-              "properties": {
-                "tunnel": {
-                  "description": "Reach the origin through a tunnel the origin opens to the edge, rather than at its address, so the origin takes no traffic from anything else. Cloudflare in front of a VPS box opens one.",
-                  "type": "boolean"
-                }
-              },
-              "title": "EdgeOptions",
+              "description": "Options for the Application Load Balancer edge. Everything the load balancer needs comes from the provider's own options.",
+              "properties": {},
+              "title": "AlbEdgeOptions",
               "type": "object"
             },
             "api-gateway": {
               "additionalProperties": false,
-              "properties": {
-                "tunnel": {
-                  "description": "Reach the origin through a tunnel the origin opens to the edge, rather than at its address, so the origin takes no traffic from anything else. Cloudflare in front of a VPS box opens one.",
-                  "type": "boolean"
-                }
-              },
-              "title": "EdgeOptions",
+              "description": "Options for the API Gateway edge. Everything API Gateway needs comes from the provider's own options.",
+              "properties": {},
+              "title": "ApiGatewayEdgeOptions",
               "type": "object"
             },
             "cloudflare": {
               "additionalProperties": false,
+              "description": "Options for the Cloudflare edge. The token and account id are read from the environment.",
               "properties": {
                 "tunnel": {
                   "description": "Reach the origin through a tunnel the origin opens to the edge, rather than at its address, so the origin takes no traffic from anything else. Cloudflare in front of a VPS box opens one.",
                   "type": "boolean"
                 }
               },
-              "title": "EdgeOptions",
+              "title": "CloudflareEdgeOptions",
               "type": "object"
             },
             "cloudfront": {
               "additionalProperties": false,
-              "properties": {
-                "tunnel": {
-                  "description": "Reach the origin through a tunnel the origin opens to the edge, rather than at its address, so the origin takes no traffic from anything else. Cloudflare in front of a VPS box opens one.",
-                  "type": "boolean"
-                }
-              },
-              "title": "EdgeOptions",
+              "description": "Options for the CloudFront edge. Everything CloudFront needs comes from the provider's own options.",
+              "properties": {},
+              "title": "CloudFrontEdgeOptions",
               "type": "object"
             }
           }

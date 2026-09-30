@@ -1,0 +1,9 @@
+package cloudflare
+
+type Options struct {
+	Tunnel bool `json:"tunnel,omitempty" doc:"Reach the origin through a tunnel the origin opens to the edge, rather than at its address, so the origin takes no traffic from anything else. Cloudflare in front of a VPS box opens one."`
+}
+
+func (Options) Doc() string {
+	return "Options for the Cloudflare edge. The token and account id are read from the environment."
+}

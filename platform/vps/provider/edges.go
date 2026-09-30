@@ -12,16 +12,20 @@ type edges struct{ provider *Provider }
 
 var supportedEdges = []edge.Kind{cloudflare.Kind}
 
-func (e edges) Open(kind edge.Kind) (edge.Edge, error) {
+func (e edges) Open(kind edge.Kind, options provider.Options) (edge.Edge, error) {
 	switch kind {
 	case edge.None:
 		return e.provider.box(), nil
 	case cloudflare.Kind:
+		decoded, err := provider.DecodeEdgeOptions[cloudflare.Options](cloudflare.Kind, options)
+		if err != nil {
+			return nil, err
+		}
 		namespace, err := provider.NamespaceFromEnv()
 		if err != nil {
 			return nil, err
 		}
-		return cloudflare.NewProxy(namespace.String()), nil
+		return cloudflare.NewProxy(namespace.String(), decoded), nil
 	}
 	return nil, refusal.Refuse(refusal.CodeInvalid,
 		"edge %q is not supported: leave `edge` out, and the proxy on the box answers the project's hostnames, or name %s to front it", kind, cloudflare.Kind)
@@ -32,7 +36,7 @@ func (p *Provider) box() *box.Edge {
 }
 
 func (p *Provider) findTunnelHooks(kind edge.Kind) (*edge.TunnelHooks, error) {
-	front, err := edges{provider: p}.Open(kind)
+	front, err := edges{provider: p}.Open(kind, nil)
 	if err != nil {
 		return nil, err
 	}

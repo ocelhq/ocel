@@ -47,7 +47,7 @@ func onABoxServingPreviews(t *testing.T) (machine, *vps.Provider, edge.EdgeStack
 	})
 
 	p := vm.deploying(t)
-	front, err := p.Edges().Open(edge.None)
+	front, err := p.Edges().Open(edge.None, nil)
 	if err != nil {
 		t.Fatalf("Open(%q) = %v", edge.None, err)
 	}

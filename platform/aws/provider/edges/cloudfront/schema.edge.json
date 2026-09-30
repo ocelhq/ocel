@@ -1,0 +1,10 @@
+{
+  "id": "cloudfront",
+  "options": {
+    "additionalProperties": false,
+    "description": "Options for the CloudFront edge. Everything CloudFront needs comes from the provider's own options.",
+    "properties": {},
+    "title": "CloudFrontEdgeOptions",
+    "type": "object"
+  }
+}

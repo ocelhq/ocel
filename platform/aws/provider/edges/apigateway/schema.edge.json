@@ -1,0 +1,10 @@
+{
+  "id": "api-gateway",
+  "options": {
+    "additionalProperties": false,
+    "description": "Options for the API Gateway edge. Everything API Gateway needs comes from the provider's own options.",
+    "properties": {},
+    "title": "ApiGatewayEdgeOptions",
+    "type": "object"
+  }
+}

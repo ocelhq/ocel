@@ -69,7 +69,7 @@ func TestAProjectThatNamesNoEdgeIsAnsweredByTheSwitchboardOnTheBox(t *testing.T)
 
 	for _, named := range []edge.Kind{"cloudfront", "box"} {
 		var rejection refusal.Refusal
-		opened, err := registry.Open(named)
+		opened, err := registry.Open(named, nil)
 		if !errors.As(err, &rejection) || rejection.Code != refusal.CodeInvalid {
 			t.Fatalf("Open(%s) = %v, %v, want an invalid refusal", named, opened, err)
 		}
@@ -86,7 +86,7 @@ func TestCloudflareFrontsTheBoxAsAProxyThatRunsNoCodeAndForwardsToTheSwitchboard
 	t.Parallel()
 
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
-	front, err := p.Edges().Open("cloudflare")
+	front, err := p.Edges().Open("cloudflare", nil)
 	if err != nil {
 		t.Fatalf("Open(cloudflare) = %v, want the Cloudflare proxy", err)
 	}

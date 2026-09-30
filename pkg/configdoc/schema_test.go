@@ -93,6 +93,64 @@ func TestProviderSchemaRefusesAnUnidentifiedProvider(t *testing.T) {
 	}
 }
 
+func TestEdgeSchemaTitlesTheEdgesOwnOptionsAfterItsName(t *testing.T) {
+	type options struct {
+		Tunnel bool `json:"tunnel,omitempty" doc:"Reach the origin through a tunnel."`
+	}
+	generated, err := EdgeSchema("shield", "Shield", options{})
+	if err != nil {
+		t.Fatalf("edge schema: %v", err)
+	}
+	var fragment struct {
+		ID      string `json:"id"`
+		Options struct {
+			Title      string `json:"title"`
+			Properties map[string]struct {
+				Type        string `json:"type"`
+				Description string `json:"description"`
+			} `json:"properties"`
+			AdditionalProperties bool `json:"additionalProperties"`
+		} `json:"options"`
+	}
+	if err := json.Unmarshal(generated, &fragment); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if fragment.ID != "shield" {
+		t.Errorf("id = %q, want shield", fragment.ID)
+	}
+	if fragment.Options.Title != "ShieldEdgeOptions" {
+		t.Errorf("options title = %q, want ShieldEdgeOptions", fragment.Options.Title)
+	}
+	if tunnel := fragment.Options.Properties["tunnel"]; tunnel.Type != "boolean" || tunnel.Description != "Reach the origin through a tunnel." {
+		t.Errorf("tunnel = %+v", tunnel)
+	}
+	if fragment.Options.AdditionalProperties {
+		t.Error("options accept keys the edge does not declare")
+	}
+}
+
+func TestEdgeSchemaOfAnEdgeWithNoOptionsAcceptsNoKey(t *testing.T) {
+	generated, err := EdgeSchema("relay", "Relay", struct{}{})
+	if err != nil {
+		t.Fatalf("edge schema: %v", err)
+	}
+	var fragment struct {
+		Options map[string]any `json:"options"`
+	}
+	if err := json.Unmarshal(generated, &fragment); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if properties, _ := fragment.Options["properties"].(map[string]any); len(properties) != 0 || fragment.Options["additionalProperties"] != false {
+		t.Errorf("options = %v, want a closed object with no properties", fragment.Options)
+	}
+}
+
+func TestEdgeSchemaRefusesAnUnidentifiedEdge(t *testing.T) {
+	if _, err := EdgeSchema("", "Nameless", struct{}{}); err == nil {
+		t.Fatal("edge schema for an unidentified edge = nil error, want a refusal")
+	}
+}
+
 type patterned struct {
 	Key string `json:"key,omitempty" pattern:"^arn:aws:kms:"`
 }

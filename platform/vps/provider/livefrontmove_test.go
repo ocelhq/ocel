@@ -68,7 +68,7 @@ func servingOne(t *testing.T, vm machine, proxy *vps.Proxy, hostname string) (*v
 	ctx := context.Background()
 	fixtures(t, vm)
 	d := vm.deployingBehind(t, proxy)
-	opened, err := d.Edges().Open(edge.None)
+	opened, err := d.Edges().Open(edge.None, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func servingOne(t *testing.T, vm machine, proxy *vps.Proxy, hostname string) (*v
 		t.Fatalf("AddHostname(%s) = %s", hostname, refused)
 	}
 	t.Cleanup(func() {
-		fronted, err := vm.deployingBehind(t, proxy).Edges().Open(edge.None)
+		fronted, err := vm.deployingBehind(t, proxy).Edges().Open(edge.None, nil)
 		if err != nil {
 			t.Fatal(err)
 		}

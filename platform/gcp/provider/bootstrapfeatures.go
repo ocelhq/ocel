@@ -70,7 +70,7 @@ func (b bootstrap) eachFront(features []string, visit func(provider.Feature, edg
 	}
 	for _, feature := range wanted {
 		for _, kind := range feature.Edges {
-			front, err := b.fronts.Open(kind)
+			front, err := b.fronts.Open(kind, nil)
 			if err != nil {
 				return err
 			}

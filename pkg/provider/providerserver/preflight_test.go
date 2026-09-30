@@ -558,7 +558,7 @@ func TestPreflightNamesNoEdgeScopeForAnEdgeThatChecksNoCredentials(t *testing.T)
 	t.Parallel()
 
 	client, vendor := contractServed(t, "1.2.3")
-	front, err := vendor.Edges().Open(fake.KindRelay)
+	front, err := vendor.Edges().Open(fake.KindRelay, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -64,6 +64,7 @@ type Facts struct {
 	ProxiesRecords        bool
 	ProxiedRecordNote     string
 	ShieldsOrigin         bool
+	TunnelsToOrigin       bool
 	OriginFacingRanges    []string
 	InvalidatesByCacheTag bool
 	CredentialScope       string

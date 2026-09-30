@@ -68,7 +68,7 @@ func (b Bootstrap) installedEdges(ctx context.Context, tier environment.Tier, de
 		if !installed {
 			continue
 		}
-		front, err := b.Edges.Open(kind)
+		front, err := b.Edges.Open(kind, nil)
 		if err != nil {
 			return nil, err
 		}

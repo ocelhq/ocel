@@ -34,10 +34,26 @@ type Deps struct {
 	ArtifactBucket func(ctx context.Context, tier environment.Tier) (string, error)
 }
 
-var constructors = map[edge.Kind]func(Deps) edge.Edge{
-	cloudflare.Kind: func(deps Deps) edge.Edge { return cloudflare.New(string(deps.Namespace)) },
-	cloudfront.Kind: func(deps Deps) edge.Edge { return cloudfront.New(deps.Namespace, cloudfront.FromConfig(deps.AWS)) },
-	apigateway.Kind: func(deps Deps) edge.Edge { return apigateway.New(deps.Namespace, apigateway.FromConfig(deps.AWS)) },
+var constructors = map[edge.Kind]func(Deps, provider.Options) (edge.Edge, error){
+	cloudflare.Kind: constructWithOptions(cloudflare.Kind, func(deps Deps, options cloudflare.Options) edge.Edge {
+		return cloudflare.New(string(deps.Namespace), options)
+	}),
+	cloudfront.Kind: constructWithOptions(cloudfront.Kind, func(deps Deps, _ cloudfront.Options) edge.Edge {
+		return cloudfront.New(deps.Namespace, cloudfront.FromConfig(deps.AWS))
+	}),
+	apigateway.Kind: constructWithOptions(apigateway.Kind, func(deps Deps, _ apigateway.Options) edge.Edge {
+		return apigateway.New(deps.Namespace, apigateway.FromConfig(deps.AWS))
+	}),
+}
+
+func constructWithOptions[O any](kind edge.Kind, construct func(Deps, O) edge.Edge) func(Deps, provider.Options) (edge.Edge, error) {
+	return func(deps Deps, options provider.Options) (edge.Edge, error) {
+		decoded, err := provider.DecodeEdgeOptions[O](kind, options)
+		if err != nil {
+			return nil, err
+		}
+		return construct(deps, decoded), nil
+	}
 }
 
 const DefaultKind = cloudfront.Kind
@@ -48,13 +64,13 @@ type Registry struct {
 
 var _ provider.Edges = Registry{}
 
-func (r Registry) Open(kind edge.Kind) (edge.Edge, error) {
+func (r Registry) Open(kind edge.Kind, options provider.Options) (edge.Edge, error) {
 	construct, ok := constructors[kind]
 	if !ok {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"this provider cannot front deployments with the %q edge; it supports %s", kind, supportedList())
 	}
-	return construct(r.Deps), nil
+	return construct(r.Deps, options)
 }
 
 func SupportedEdges() []edge.Kind {
@@ -67,7 +83,7 @@ func SupportedEdges() []edge.Kind {
 }
 
 func EdgeFor(kind edge.Kind, deps Deps) (edge.Edge, error) {
-	return Registry{Deps: deps}.Open(kind)
+	return Registry{Deps: deps}.Open(kind, nil)
 }
 
 var certificateRegions = map[edge.Kind]func(apiRegion string) string{

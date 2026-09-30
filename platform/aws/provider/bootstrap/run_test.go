@@ -21,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 )
 
@@ -530,7 +531,7 @@ func newFakeEdges(fronts ...edge.Edge) *fakeEdges {
 	return registry
 }
 
-func (e *fakeEdges) Open(kind edge.Kind) (edge.Edge, error) {
+func (e *fakeEdges) Open(kind edge.Kind, _ provider.Options) (edge.Edge, error) {
 	if front, ok := e.opened[kind]; ok {
 		return front, nil
 	}
@@ -540,7 +541,7 @@ func (e *fakeEdges) Open(kind edge.Kind) (edge.Edge, error) {
 }
 
 func (e *fakeEdges) at(kind edge.Kind) *fakeEdge {
-	front, _ := e.Open(kind)
+	front, _ := e.Open(kind, nil)
 	return front.(*fakeEdge)
 }
 

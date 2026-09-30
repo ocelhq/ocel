@@ -20,7 +20,7 @@ type frontRegistry struct {
 	front  *countingFront
 }
 
-func (r *frontRegistry) Open(kind edge.Kind) (edge.Edge, error) {
+func (r *frontRegistry) Open(kind edge.Kind, _ provider.Options) (edge.Edge, error) {
 	r.opened = append(r.opened, kind)
 	return r.front, nil
 }

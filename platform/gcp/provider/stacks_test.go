@@ -106,7 +106,7 @@ func TestAPreviewOnAnEdgeThatShieldsNothingIsSaidToBeOpenToAnyoneWithItsUrl(t *t
 	}
 
 	shielded := &fake.Log{}
-	front, err := p.Edges().Open(alb.Kind)
+	front, err := p.Edges().Open(alb.Kind, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

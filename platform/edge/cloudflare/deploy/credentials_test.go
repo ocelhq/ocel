@@ -34,7 +34,7 @@ func TestCredentialPermissionsListsWhatEachPurposeMints(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			doc, err := New("ocel").Hooks().DescribeCredentialPermissions(tc.purpose)
+			doc, err := New("ocel", Options{}).Hooks().DescribeCredentialPermissions(tc.purpose)
 			if err != nil {
 				t.Fatalf("DescribeCredentialPermissions(%v) error = %v", tc.purpose, err)
 			}
@@ -54,7 +54,7 @@ func TestCredentialPermissionsListsWhatEachPurposeMints(t *testing.T) {
 		})
 	}
 
-	if _, err := New("ocel").Hooks().DescribeCredentialPermissions("admin"); err == nil || !strings.Contains(err.Error(), `"admin"`) {
+	if _, err := New("ocel", Options{}).Hooks().DescribeCredentialPermissions("admin"); err == nil || !strings.Contains(err.Error(), `"admin"`) {
 		t.Errorf("DescribeCredentialPermissions(admin) err = %v, want it to name the purpose it was asked for", err)
 	}
 }

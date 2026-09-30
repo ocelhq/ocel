@@ -10,6 +10,8 @@ const CoreSchemaFile = "schema.core.json"
 
 const ProviderSchemaFile = "schema.provider.json"
 
+const EdgeSchemaFile = "schema.edge.json"
+
 const updateEnvVar = "OCEL_UPDATE_SCHEMA"
 
 func AssertCommitted(t *testing.T, path string, generated []byte) {

@@ -125,7 +125,7 @@ func (p *Provider) resourceHooks() resources.Hooks {
 }
 
 func (p *Provider) Bootstrap(kind edge.Kind) (provider.Bootstrap, error) {
-	if _, err := p.Edges().Open(kind); err != nil {
+	if _, err := p.Edges().Open(kind, nil); err != nil {
 		return nil, err
 	}
 	return bootstrapGate{p: p}, nil
