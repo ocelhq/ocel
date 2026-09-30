@@ -147,12 +147,15 @@ func planRemoveLeftStacks(ctx context.Context, stacks cfn.API, read Reading) ([]
 	if err != nil {
 		return nil, err
 	}
-	names := featureStackNames(read.ns, order, read.tier)
-	names = append(names, read.ns.runtimeStackName(read.tier), coreStack)
+	left := make([]provider.ChangeGroup, 0, len(order)+2)
+	for _, feature := range order {
+		left = append(left, provider.ChangeGroup{Name: read.ns.FeatureStackName(feature, read.tier), Feature: feature})
+	}
+	left = append(left, provider.ChangeGroup{Name: read.ns.runtimeStackName(read.tier)}, provider.ChangeGroup{Name: coreStack})
 
 	var groups []provider.ChangeGroup
-	for _, name := range names {
-		stack, err := cfn.DescribeStack(ctx, stacks, name)
+	for _, group := range left {
+		stack, err := cfn.DescribeStack(ctx, stacks, group.Name)
 		if err != nil {
 			return nil, err
 		}
@@ -160,10 +163,11 @@ func planRemoveLeftStacks(ctx context.Context, stacks cfn.API, read Reading) ([]
 			continue
 		}
 		groups = append(groups, provider.ChangeGroup{
-			Kind:   provider.StackGroupKind,
-			Name:   name,
-			Action: provider.ActionDelete,
-			Reason: "left in " + string(stack.StackStatus) + " with no usable core stack",
+			Kind:    provider.StackGroupKind,
+			Name:    group.Name,
+			Feature: group.Feature,
+			Action:  provider.ActionDelete,
+			Reason:  "left in " + string(stack.StackStatus) + " with no usable core stack",
 		})
 	}
 	return groups, nil
