@@ -10,7 +10,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
@@ -23,25 +22,14 @@ func NewSetup() prerequisite.Setup {
 }
 
 func runSetup(ctx context.Context, _ consent.Policy, span *run.Span, missing prerequisite.MissingError) error {
-	provider, req := bootstrapFor(missing)
-	if provider == nil {
+	var incomplete readiness.MissingBootstrapError
+	if !errors.As(missing, &incomplete) {
 		return missing
 	}
-	if _, err := providerprocess.Stream(ctx, provider, "Bootstrap", req, contractv1connect.ProviderServiceClient.Bootstrap); err != nil {
+	req := incomplete.BootstrapRequest()
+	if _, err := providerprocess.Stream(ctx, incomplete.BootstrapProvider(), "Bootstrap", req, contractv1connect.ProviderServiceClient.Bootstrap); err != nil {
 		return err
 	}
 	span.Say(fmt.Sprintf("Bootstrapped %s", readiness.TierName(req.GetTier())))
 	return nil
-}
-
-func bootstrapFor(missing prerequisite.MissingError) (*providerprocess.Provider, *contractv1.BootstrapRequest) {
-	var absent readiness.NoInfrastructureError
-	if errors.As(missing, &absent) {
-		return absent.Provider, absent.BootstrapRequest()
-	}
-	var lacking readiness.MissingFeaturesError
-	if errors.As(missing, &lacking) {
-		return lacking.Provider, lacking.BootstrapRequest()
-	}
-	return nil, nil
 }
