@@ -20,9 +20,10 @@ import (
 type scriptedSource struct {
 	release chan struct{}
 
-	mu      sync.Mutex
-	calls   int
-	results []fetchResult
+	mu       sync.Mutex
+	calls    int
+	returned int
+	results  []fetchResult
 }
 
 type fetchResult struct {
@@ -35,6 +36,11 @@ func (f *scriptedSource) Fetch(ctx context.Context) (map[string]string, error) {
 	n := f.calls
 	f.calls++
 	f.mu.Unlock()
+	defer func() {
+		f.mu.Lock()
+		f.returned++
+		f.mu.Unlock()
+	}()
 
 	if f.release != nil {
 		select {
@@ -56,6 +62,12 @@ func (f *scriptedSource) count() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.calls
+}
+
+func (f *scriptedSource) returns() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.returned
 }
 
 func resolves(values ...map[string]string) *scriptedSource {
@@ -344,16 +356,11 @@ func TestValuesAreFetchedAndPushedToNodeAsGenerations(t *testing.T) {
 		if got := source.count(); got != 3 {
 			t.Fatalf("fetches = %d, want exactly one retry once the failed refresh settled", got)
 		}
+		eventually(t, "the retried fetch to return", func() bool { return source.returns() == 3 })
 
-		if msgs := out.messages(t); len(msgs) != 1 {
-			t.Errorf("pushed %+v after the retry failed, want only the generation that resolved", msgs)
-		}
-		if got := l.Generation(); got != 1 {
-			t.Errorf("generation = %d after the retry failed, want 1", got)
-		}
-		if got := source.count(); got != 3 {
-			t.Errorf("fetches = %d after the retry settled, want still 3", got)
-		}
+		consistently(t, "the failed retry pushed a generation or fetched again", func() bool {
+			return len(out.messages(t)) == 1 && l.Generation() == 1 && source.count() == 3
+		})
 	})
 
 	t.Run("tells node which keys to expect a push for", func(t *testing.T) {
