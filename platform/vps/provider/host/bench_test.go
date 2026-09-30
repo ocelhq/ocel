@@ -216,7 +216,7 @@ func (b *bench) rendered(command string) session.Result {
 			}
 		}
 		return session.Result{}
-	case strings.Contains(command, "--filter 'publish="):
+	case strings.Contains(command, "'--filter' 'publish="):
 		for _, items := range b.installed {
 			if slices.ContainsFunc(items, func(item Item) bool { return item.Kind == KindContainer && item.Name == caddy.Container }) {
 				return session.Result{Stdout: caddy.Container + "\n"}
