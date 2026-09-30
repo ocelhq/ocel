@@ -65,18 +65,7 @@ func (e *Edges) Open(kind edge.Kind, options provider.Options) (edge.Edge, error
 	if err != nil {
 		return nil, err
 	}
-	if decoded.Tunnel {
-		return tunneledEdge{front}, nil
-	}
-	return front, nil
-}
-
-type tunneledEdge struct{ *Edge }
-
-func (e tunneledEdge) Facts() edge.Facts {
-	facts := e.Edge.Facts()
-	facts.TunnelsToOrigin = true
-	return facts
+	return &Edge{edgeAccount: front.edgeAccount, options: decoded}, nil
 }
 
 func (e *Edges) Verifies(kind edge.Kind, identity edge.CredentialIdentity, err error) {
@@ -142,6 +131,11 @@ func kindList(kinds []edge.Kind) string {
 }
 
 type Edge struct {
+	*edgeAccount
+	options EdgeOptions
+}
+
+type edgeAccount struct {
 	mu              sync.Mutex
 	kind            edge.Kind
 	routedBy        router.Kind
@@ -474,7 +468,7 @@ func (e *Edge) Serving(certificate string) bool {
 }
 
 func newEdge(kind edge.Kind, routedBy router.Kind) *Edge {
-	return &Edge{kind: kind, routedBy: routedBy, owners: map[string]string{}, serving: map[string]string{}}
+	return &Edge{edgeAccount: &edgeAccount{kind: kind, routedBy: routedBy, owners: map[string]string{}, serving: map[string]string{}}}
 }
 
 func (e *Edge) SayOnBind(said string) {
@@ -538,6 +532,7 @@ func (e *Edge) Facts() edge.Facts {
 		RunsCode:        e.kind == KindRelay,
 		ProxiesRecords:  e.proxies,
 		CredentialScope: "fake-account",
+		TunnelsToOrigin: e.options.Tunnel,
 	}
 	if e.proxies {
 		facts.ProxiedRecordNote = "Turn the fake edge's proxy on for these records."

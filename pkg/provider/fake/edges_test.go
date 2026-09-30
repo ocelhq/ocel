@@ -6,6 +6,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 )
 
@@ -51,5 +52,42 @@ func TestAHostnameBoundAgainWithoutAnOriginIsServedByItsEdgeRatherThanTheOriginI
 
 	if serving, err := p.Liveness().ServingRouter(ctx, "shop.example.com"); err != nil || serving != fake.RouterRelay {
 		t.Errorf("ServingRouter() = %q, %v; want %q: the binding no longer forwards to the origin", serving, err, fake.RouterRelay)
+	}
+}
+
+func TestAnEdgeOpenedWithTunnelSetTunnelsToItsOriginAndRecordsWhatItServesOnTheEdgeTheTestsRead(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	edges := fake.NewEdges()
+	tunneled, err := edges.Open(fake.KindRelay, provider.Options{"tunnel": true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	addressed, err := edges.Open(fake.KindRelay, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !tunneled.Facts().TunnelsToOrigin || addressed.Facts().TunnelsToOrigin {
+		t.Errorf("TunnelsToOrigin = %v with tunnel set and %v without, want only the one set to", tunneled.Facts().TunnelsToOrigin, addressed.Facts().TunnelsToOrigin)
+	}
+
+	stack, err := tunneled.Reconcile(ctx, edge.StackSpec{Tier: environment.TierProduction, Slug: "shop"}, edge.StackState{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: "shop.example.com"}); err != nil {
+		t.Fatal(err)
+	}
+	if bound := edges.Edge(fake.KindRelay).Bindings(); len(bound) != 1 || bound[0].Hostname != "shop.example.com" {
+		t.Errorf("Bindings() = %+v, want the binding made through the tunneled edge", bound)
+	}
+}
+
+func TestAnEdgeRefusesAnOptionItDoesNotTake(t *testing.T) {
+	t.Parallel()
+
+	if _, err := fake.NewEdges().Open(fake.KindRelay, provider.Options{"tunel": true}); err == nil {
+		t.Fatal("Open() with a misspelt option = nil, want a refusal")
 	}
 }
