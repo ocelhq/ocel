@@ -13,7 +13,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/deployrecord"
-	"github.com/ocelhq/ocel/cli/internal/prerequisite"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
@@ -175,17 +174,8 @@ func previewUpRunE(dependencies Dependencies, upOpts *previewUpOptions) func(cmd
 }
 
 func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, opts previewUpOptions, stdout, stderr io.Writer, stdin io.Reader) error {
-	policy := consent.NewPolicy("ocel preview up", opts.yes, dependencies.StdinIsTerminal(stdin), stdout, stdin)
-	policy.DryRun = opts.dry
-	if err := policy.Refuse(); err != nil {
-		return err
-	}
-
-	cfg, err := dependencies.EnsureProject(ctx, cwd, policy)
-	if prerequisite.IsDeclined(err) {
-		return nil
-	}
-	if err != nil {
+	policy, cfg, err := ensureProject(ctx, dependencies, "ocel preview up", cwd, opts.yes, opts.dry, stdout, stdin)
+	if err != nil || cfg == nil {
 		return err
 	}
 

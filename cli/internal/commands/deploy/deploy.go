@@ -10,10 +10,8 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/commands"
-	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/deployrecord"
-	"github.com/ocelhq/ocel/cli/internal/prerequisite"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
@@ -86,17 +84,8 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 }
 
 func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts deployOptions, stdout, stderr io.Writer, stdin io.Reader) error {
-	policy := consent.NewPolicy("ocel deploy", opts.yes, dependencies.StdinIsTerminal(stdin), stdout, stdin)
-	policy.DryRun = opts.dry
-	if err := policy.Refuse(); err != nil {
-		return err
-	}
-
-	cfg, err := dependencies.EnsureProject(ctx, cwd, policy)
-	if prerequisite.IsDeclined(err) {
-		return nil
-	}
-	if err != nil {
+	policy, cfg, err := ensureProject(ctx, dependencies, "ocel deploy", cwd, opts.yes, opts.dry, stdout, stdin)
+	if err != nil || cfg == nil {
 		return err
 	}
 
