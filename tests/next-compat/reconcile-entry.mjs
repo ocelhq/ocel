@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { renderOcelConfig, requireNamespace, withoutSkipDriftChecks } from "./lib.mjs";
+import { ocelBinary, renderOcelConfig, requireNamespace, withoutSkipDriftChecks } from "./lib.mjs";
 import { linkSidecar } from "./sidecar.mjs";
 
 const RECONCILE_TIMEOUT_MS = 10 * 60 * 1000;
@@ -37,7 +37,7 @@ export function reconcileEntry(wildcard) {
   console.error(`[ocel-e2e] reconciling the shared preview entry on ${wildcard} (from ${dir})`);
   const res = spawnSync(
     process.execPath,
-    [join(adapterDir, "packages", "ocel", "bin", "run.js"), "domain", "use", wildcard, "--preview"],
+    [ocelBinary(adapterDir), "domain", "use", wildcard, "--preview"],
     {
       cwd: dir,
       stdio: ["ignore", "inherit", "inherit"],

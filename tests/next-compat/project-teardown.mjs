@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import {
+  ocelBinary,
   projectSlugForRun,
   renderOcelConfig,
   requireNamespace,
@@ -34,16 +35,12 @@ export function destroyProject(slug) {
   linkSidecar(dir, sidecarDir);
 
   console.error(`[ocel-e2e] destroying the preview footprint of project ${slug} (from ${dir})`);
-  const res = spawnSync(
-    process.execPath,
-    [join(adapterDir, "packages", "ocel", "bin", "run.js"), "destroy", "preview", "--yes"],
-    {
-      cwd: dir,
-      stdio: ["ignore", "inherit", "inherit"],
-      timeout: TEARDOWN_TIMEOUT_MS,
-      env: withoutSkipDriftChecks(process.env),
-    },
-  );
+  const res = spawnSync(process.execPath, [ocelBinary(adapterDir), "destroy", "preview", "--yes"], {
+    cwd: dir,
+    stdio: ["ignore", "inherit", "inherit"],
+    timeout: TEARDOWN_TIMEOUT_MS,
+    env: withoutSkipDriftChecks(process.env),
+  });
 
   if (res.error || res.signal || res.status !== 0) {
     const why =
