@@ -27,6 +27,7 @@ type Hooks struct {
 	OpenDirectImages    func(ctx context.Context) (ImageStore, error)
 	CheckHost           func(ctx context.Context, req HostCheckRequest) ([]HostCheck, error)
 	ProveIdentity       func(ctx context.Context, audience string) (envsource.IdentityProof, error)
+	OpenTaskStore       func(ctx context.Context) (TaskStore, error)
 	Cost                *CostHooks
 	FunctionImages      *FunctionImageHooks
 }
