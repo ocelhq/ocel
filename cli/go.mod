@@ -48,7 +48,7 @@ require (
 	buf.build/go/protovalidate v1.0.0 // indirect
 	cel.dev/expr v0.25.2 // indirect
 	charm.land/bubbles/v2 v2.0.0 // indirect
-	charm.land/bubbletea/v2 v2.0.2 // indirect
+	charm.land/bubbletea/v2 v2.0.10 // indirect
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/Masterminds/semver/v3 v3.5.0 // indirect
@@ -84,7 +84,7 @@ require (
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
 	github.com/charmbracelet/lipgloss v1.1.0 // indirect
 	github.com/charmbracelet/log v1.0.0 // indirect
-	github.com/charmbracelet/ultraviolet v0.0.0-20260205113103-524a6607adb8 // indirect
+	github.com/charmbracelet/ultraviolet v0.0.0-20260703014108-f5a850f9c2b7 // indirect
 	github.com/charmbracelet/x/cellbuf v0.0.15 // indirect
 	github.com/charmbracelet/x/exp/ordered v0.1.0 // indirect
 	github.com/charmbracelet/x/exp/strings v0.0.0-20240722160745-212f7b056ed0 // indirect
@@ -244,7 +244,6 @@ tool (
 	github.com/air-verse/air
 	google.golang.org/protobuf/cmd/protoc-gen-go
 )
-
 
 replace github.com/ocelhq/ocel/platform/s3 => ../platform/s3
 
