@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
 
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/cloudfront"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/cloudwatch"
@@ -56,6 +58,7 @@ const (
 
 	outputKeyPublicListener = "publicListenerArn"
 	outputKeyPublicHost     = "publicHost"
+	outputKeyPublicRanges   = "publicRanges"
 )
 
 type containerInfra struct {
@@ -71,6 +74,7 @@ type containerInfra struct {
 
 	PublicListener string
 	PublicHost     string
+	PublicRanges   string
 }
 
 type containerInfraWork struct {
@@ -174,7 +178,7 @@ func (r *Stacks) ensureContainerInfra(ctx context.Context, ref provider.StackRef
 	if err != nil {
 		return containerInfra{}, err
 	}
-	if present && (len(public) == 0 || infra.PublicListener != "") {
+	if present && (len(public) == 0 || (infra.PublicListener != "" && infra.PublicRanges == joinRanges(public))) {
 		if err := awsports.WriteContainerFront(ctx, owner.cfg.KeyValues, tier, infra.front()); err != nil {
 			return containerInfra{}, err
 		}
@@ -492,7 +496,12 @@ func (w *containerInfraWork) run(ctx *pulumi.Context) error {
 	if public == nil {
 		return nil
 	}
+	ctx.Export(outputKeyPublicRanges, pulumi.String(joinRanges(w.public)))
 	return w.runPublicFront(ctx, public, subnets.Ids, tags)
+}
+
+func joinRanges(ranges []string) string {
+	return strings.Join(slices.Sorted(slices.Values(ranges)), ",")
 }
 
 func decodeContainerInfra(outputs auto.OutputMap) (containerInfra, error) {
@@ -520,6 +529,7 @@ func decodeContainerInfra(outputs auto.OutputMap) (containerInfra, error) {
 	}
 	infra.PublicListener, _ = fields[outputKeyPublicListener].(string)
 	infra.PublicHost, _ = fields[outputKeyPublicHost].(string)
+	infra.PublicRanges, _ = fields[outputKeyPublicRanges].(string)
 	encoded, err := requireStringField(fields, ContainersSlug, outputKeySubnets)
 	if err != nil {
 		return containerInfra{}, err

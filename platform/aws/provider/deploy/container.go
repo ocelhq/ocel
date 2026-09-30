@@ -84,14 +84,14 @@ type containerWork struct {
 	public      bool
 }
 
-func (w *containerWork) listener() string {
+func (w *containerWork) readListenerArn() string {
 	if w.public {
 		return w.infra.PublicListener
 	}
 	return w.infra.Listener
 }
 
-func (w *containerWork) url() string {
+func (w *containerWork) readServiceURL() string {
 	if w.public {
 		return "https://" + w.infra.PublicHost
 	}
@@ -272,7 +272,7 @@ func routesContainer(rule elbv2types.Rule, physical string) bool {
 }
 
 func (r *release) placeRule(ctx context.Context, work *containerWork) error {
-	taken, err := takenPriorities(ctx, r.cfg.Rules, work.listener(), work.physical())
+	taken, err := takenPriorities(ctx, r.cfg.Rules, work.readListenerArn(), work.physical())
 	if err != nil {
 		return err
 	}
@@ -439,7 +439,7 @@ func (w *containerWork) run(ctx *pulumi.Context) error {
 		return err
 	}
 	rule, err := lb.NewListenerRule(ctx, naming.ResourceID(naming.KindService, containerLocalName, "rule"), &lb.ListenerRuleArgs{
-		ListenerArn: pulumi.String(w.listener()),
+		ListenerArn: pulumi.String(w.readListenerArn()),
 		Priority:    pulumi.Int(w.priority),
 		Conditions: lb.ListenerRuleConditionArray{
 			&lb.ListenerRuleConditionArgs{HttpHeader: &lb.ListenerRuleConditionHttpHeaderArgs{
@@ -485,7 +485,7 @@ func (w *containerWork) run(ctx *pulumi.Context) error {
 		return err
 	}
 	ctx.Export(w.app, pulumi.Map{
-		outputKeyContainerURL:      pulumi.String(w.url()),
+		outputKeyContainerURL:      pulumi.String(w.readServiceURL()),
 		outputKeyContainerPhysical: service.Name,
 	})
 	return nil
