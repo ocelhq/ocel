@@ -81,7 +81,7 @@ func (h *handlers) edgeFor(p provider.Provider, sel *contractv1.EdgeSelection) (
 	return front, nil
 }
 
-func readSelectedTunnel(front edge.Edge) edge.Kind {
+func readTunnelToOrigin(front edge.Edge) edge.Kind {
 	if !front.Facts().TunnelsToOrigin {
 		return edge.None
 	}
@@ -144,7 +144,7 @@ func (h *handlers) openEdgeSession(ctx context.Context, tier environment.Tier, s
 	}
 	shared.setEdgeStack(stack)
 	shared.restoreRouterStates(state)
-	session := &edgeSession{sharedStack: shared, provider: vendor, store: store, state: state, tunnel: readSelectedTunnel(front)}
+	session := &edgeSession{sharedStack: shared, provider: vendor, store: store, state: state, tunnel: readTunnelToOrigin(front)}
 	session.installDNSCutover(writer, sel.GetDns().GetZone())
 	return session, nil
 }
