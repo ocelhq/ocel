@@ -13,7 +13,7 @@ import (
 
 const tunnelDomain = ".cfargotunnel.com"
 
-func tunnelOf(id string) edge.Tunnel { return edge.Tunnel{ID: id, Address: id + tunnelDomain} }
+func newTunnel(id string) edge.Tunnel { return edge.Tunnel{ID: id, Address: id + tunnelDomain} }
 
 func (p *cloudflare) ensureTunnel(ctx context.Context, name string) (edge.Tunnel, error) {
 	accountID, err := requireAccountID("open the tunnel " + name)
@@ -21,7 +21,7 @@ func (p *cloudflare) ensureTunnel(ctx context.Context, name string) (edge.Tunnel
 		return edge.Tunnel{}, err
 	}
 	if id, err := p.findTunnel(ctx, accountID, name); err != nil || id != "" {
-		return tunnelOf(id), err
+		return newTunnel(id), err
 	}
 	created, err := p.client.ZeroTrust.Tunnels.Cloudflared.New(ctx, zero_trust.TunnelCloudflaredNewParams{
 		AccountID: cf.F(accountID),
@@ -29,13 +29,13 @@ func (p *cloudflare) ensureTunnel(ctx context.Context, name string) (edge.Tunnel
 		ConfigSrc: cf.F(zero_trust.TunnelCloudflaredNewParamsConfigSrcCloudflare),
 	})
 	if err == nil {
-		return tunnelOf(created.ID), nil
+		return newTunnel(created.ID), nil
 	}
 	id, ferr := p.findTunnel(ctx, accountID, name)
 	if ferr != nil || id == "" {
 		return edge.Tunnel{}, fmt.Errorf("open the tunnel %s: %w", name, err)
 	}
-	return tunnelOf(id), nil
+	return newTunnel(id), nil
 }
 
 func (p *cloudflare) findTunnel(ctx context.Context, accountID, name string) (string, error) {

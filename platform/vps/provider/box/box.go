@@ -44,8 +44,8 @@ type Machine interface {
 	RemovePreviewEntry(ctx context.Context, base string) error
 	ReserveTunnel(ctx context.Context, front edge.Kind) (host.Tunnel, error)
 	RunTunnel(ctx context.Context, tunnel host.Tunnel, token func(context.Context) (string, error)) error
-	TunnelHost(ctx context.Context, hostname, owner, name string) error
-	UntunnelHost(ctx context.Context, hostname, owner string) error
+	TunnelHost(ctx context.Context, tunneled host.TunneledHost, tunnelName string) error
+	RemoveTunneledHost(ctx context.Context, tunneled host.TunneledHost) error
 	ReleaseTunnel(ctx context.Context) ([]host.Tunnel, error)
 	ForgetTunnel(ctx context.Context, name string) error
 }

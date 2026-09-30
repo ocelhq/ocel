@@ -44,7 +44,7 @@ func running() map[string]string {
 		boardContainer:    words(switchboardBox(nil, Front{}).run()),
 		resourceContainer: words(resourceRun(resourced(), "0123456789ab", EnvFile(resourced().Tier, resourced().Name))),
 		tunnelContainer:   words(tunnelBox(Tunnel{Edge: "cloudflare", ID: "5a6b7c8d-1"}, tunnelConnectors["cloudflare"]).run()),
-		tokenPlacer:       words(tunnelTokenPlacing("place-secret")),
+		tokenPlacer:       words(renderTunnelTokenArgv("place-secret")),
 	}
 }
 
@@ -167,7 +167,7 @@ func TestNothingAContainerIsEntitledToIsTheKeyTheRecordsOrTheTierStateItself(t *
 func TestEveryContainerThisPackageRunsIsBoundByTheIsolationRules(t *testing.T) {
 	t.Parallel()
 
-	rendered(t, `[]string{"docker", "run"`, []string{"containerRun", "placementRun", "resourceRun", "run", "tunnelTokenPlacing"},
+	rendered(t, `[]string{"docker", "run"`, []string{"containerRun", "placementRun", "renderTunnelTokenArgv", "resourceRun", "run"},
 		"a container run built somewhere this bench does not read is bound by none of the rules in this file")
 }
 

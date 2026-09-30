@@ -194,12 +194,16 @@ func byPinned(a, b Pin) int {
 	return cmp.Or(strings.Compare(a.Hostname, b.Hostname), strings.Compare(a.Path, b.Path))
 }
 
-func byShielded(a, b Shield) int {
-	return cmp.Or(strings.Compare(a.Hostname, b.Hostname), strings.Compare(a.Owner, b.Owner))
-}
+type ownedHostname interface{ hostnameAndOwner() (string, string) }
 
-func byTunneled(a, b TunneledHost) int {
-	return cmp.Or(strings.Compare(a.Hostname, b.Hostname), strings.Compare(a.Owner, b.Owner))
+func (s Shield) hostnameAndOwner() (string, string) { return s.Hostname, s.Owner }
+
+func (t TunneledHost) hostnameAndOwner() (string, string) { return t.Hostname, t.Owner }
+
+func byHostnameThenOwner[T ownedHostname](a, b T) int {
+	aHostname, aOwner := a.hostnameAndOwner()
+	bHostname, bOwner := b.hostnameAndOwner()
+	return cmp.Or(strings.Compare(aHostname, bHostname), strings.Compare(aOwner, bOwner))
 }
 
 func byKey(a, b AppRoute) int {

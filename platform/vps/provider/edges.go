@@ -28,10 +28,10 @@ func (e edges) Open(kind edge.Kind) (edge.Edge, error) {
 }
 
 func (p *Provider) box() *box.Edge {
-	return box.New(p.host, p.applyOrigins, p.options.SSH.session().Destination(), p.openTunnels)
+	return box.New(p.host, p.applyOrigins, p.options.SSH.session().Destination(), p.findTunnelHooks)
 }
 
-func (p *Provider) openTunnels(kind edge.Kind) (*edge.TunnelHooks, error) {
+func (p *Provider) findTunnelHooks(kind edge.Kind) (*edge.TunnelHooks, error) {
 	front, err := edges{provider: p}.Open(kind)
 	if err != nil {
 		return nil, err

@@ -38,7 +38,7 @@ type Table struct {
 	connector string
 	routed    map[string]bool
 	admitted  map[string]bool
-	tunneled  map[string]bool
+	tunneled  TunneledHostnames
 	visitor   visitorHeaders
 }
 
@@ -186,11 +186,12 @@ func Read(document []byte) (*Table, error) {
 		connector: read.Connector,
 		routed:    map[string]bool{},
 		admitted:  map[string]bool{},
-		tunneled:  map[string]bool{},
 	}
+	hostnames := make([]string, 0, len(read.Tunneled))
 	for _, held := range read.Tunneled {
-		table.tunneled[held.Hostname] = true
+		hostnames = append(hostnames, held.Hostname)
 	}
+	table.tunneled = NewTunneledHostnames(hostnames)
 	if read.Tunnel != nil {
 		table.visitor = visitorHeaders{address: read.Tunnel.VisitorAddressHeader, scheme: read.Tunnel.VisitorSchemeHeader}
 	}
@@ -345,9 +346,21 @@ func (t *Table) Forward(host, requested string) (Forward, bool) {
 
 func (t *Table) Admits(hostname string) bool { return t.admitted[strings.ToLower(hostname)] }
 
-func (t *Table) IsTunneled(host string) bool {
+func (t *Table) IsTunneled(host string) bool { return t.tunneled.Has(host) }
+
+type TunneledHostnames map[string]bool
+
+func NewTunneledHostnames(hostnames []string) TunneledHostnames {
+	tunneled := TunneledHostnames{}
+	for _, hostname := range hostnames {
+		tunneled[strings.ToLower(hostname)] = true
+	}
+	return tunneled
+}
+
+func (t TunneledHostnames) Has(host string) bool {
 	named := hostOf(host)
-	return t.tunneled[named] || t.tunneled[wildcardOver(named)]
+	return t[named] || t[wildcardOver(named)]
 }
 
 func wildcardOver(hostname string) string {

@@ -290,8 +290,8 @@ func (w *wildcards) refreshEntryClaim(ctx context.Context, front edge.Edge, runP
 	if err != nil || origin == nil {
 		return err
 	}
-	stale, why, err := isOriginClaimStale(ctx, front, w.recorded.Hostname(), readSelectedTunnel(front, w.sel), &w.recorded.Host, time.Now())
-	if err != nil || !stale {
+	why, err := readOriginClaimStaleness(ctx, front, w.recorded.Hostname(), readSelectedTunnel(front, w.sel), &w.recorded.Host, time.Now())
+	if err != nil || why == "" {
 		return err
 	}
 	runProgress.Say("Claiming the shared preview entry on " + w.recorded.Hostname() + " again: " + why)

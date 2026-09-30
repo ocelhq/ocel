@@ -95,7 +95,7 @@ func (h *Host) DisclaimHost(ctx context.Context, hostname, owner string) error {
 		state.Claims = Disclaiming(state.Claims, func(claim HostClaim) bool {
 			return claim.Hostname == hostname && claim.Owner == owner
 		})
-		state.Tunneled = untunneled(state.Tunneled, func(held TunneledHost) bool { return held.Hostname == hostname && held.Owner == owner })
+		state.Tunneled = dropTunneledHosts(state.Tunneled, func(held TunneledHost) bool { return held.Hostname == hostname && held.Owner == owner })
 		return state, nil
 	})
 }
@@ -113,7 +113,7 @@ func (h *Host) DisclaimSurface(ctx context.Context, owner string) error {
 	return h.reshape(ctx, func(state RoutingTable) (RoutingTable, error) {
 		state.Claims = Disclaiming(state.Claims, func(claim HostClaim) bool { return claim.Owner == owner })
 		state.Shields = DropShields(state.Shields, func(shield Shield) bool { return shield.Owner == owner })
-		state.Tunneled = untunneled(state.Tunneled, func(held TunneledHost) bool { return held.Owner == owner })
+		state.Tunneled = dropTunneledHosts(state.Tunneled, func(held TunneledHost) bool { return held.Owner == owner })
 		return state, nil
 	})
 }

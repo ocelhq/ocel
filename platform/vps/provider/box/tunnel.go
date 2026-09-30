@@ -52,7 +52,7 @@ func (e *Edge) tunnelHost(ctx context.Context, claim string, kind edge.Kind, own
 	if err != nil {
 		return edge.Origin{}, err
 	}
-	if err := e.machine.TunnelHost(ctx, claim, owner, tunnel.Name); err != nil {
+	if err := e.machine.TunnelHost(ctx, host.TunneledHost{Hostname: claim, Owner: owner}, tunnel.Name); err != nil {
 		return edge.Origin{}, err
 	}
 	if err := e.machine.RemoveShield(ctx, claim, owner); err != nil {
@@ -61,8 +61,8 @@ func (e *Edge) tunnelHost(ctx context.Context, claim string, kind edge.Kind, own
 	return edge.Origin{Address: tunnel.Address, Certified: true, Tunneled: true}, nil
 }
 
-func (e *Edge) untunnelHost(ctx context.Context, hostname, owner string) error {
-	if err := e.machine.UntunnelHost(ctx, hostname, owner); err != nil {
+func (e *Edge) removeTunneledHost(ctx context.Context, hostname, owner string) error {
+	if err := e.machine.RemoveTunneledHost(ctx, host.TunneledHost{Hostname: hostname, Owner: owner}); err != nil {
 		return err
 	}
 	return e.releaseTunnel(ctx)

@@ -140,7 +140,7 @@ func TestATunnelRunsAsOcelTunnelFromAPinnedImageReadingARootOnlyTokenFile(t *tes
 		}
 	}
 	written := slices.IndexFunc(box.fed, func(fed string) bool { return fed == "the-tunnel-token" })
-	if written < 0 || !strings.Contains(box.commands()[written], words(tunnelTokenPlacing("place-secret"))) {
+	if written < 0 || !strings.Contains(box.commands()[written], words(renderTunnelTokenArgv("place-secret"))) {
 		t.Errorf("the token was not placed root-only in %s from stdin: %v", TunnelDir, box.commands())
 	}
 	if written > at {
@@ -199,7 +199,7 @@ func TestATunneledHostnameIsLeftOutOfTheProxyAndRefusedByTheSwitchboardAroundThe
 		return state
 	}())
 
-	if err := box.host().TunnelHost(context.Background(), claimed, surface, "ocel-203-0-113-10-0a1b2c3d"); err != nil {
+	if err := box.host().TunnelHost(context.Background(), TunneledHost{Hostname: claimed, Owner: surface}, "ocel-203-0-113-10-0a1b2c3d"); err != nil {
 		t.Fatalf("TunnelHost() = %v", err)
 	}
 
@@ -226,7 +226,7 @@ func TestAHostnameIsTunneledOnlyThroughTheTunnelTheBoxReserves(t *testing.T) {
 	t.Parallel()
 	box, _ := tunneledBox(t)
 
-	err := box.host().TunnelHost(context.Background(), "blog.example.com", surface, "ocel-203-0-113-10-ffffffff")
+	err := box.host().TunnelHost(context.Background(), TunneledHost{Hostname: "blog.example.com", Owner: surface}, "ocel-203-0-113-10-ffffffff")
 
 	if !isBusy(err) {
 		t.Errorf("TunnelHost() through a tunnel the box no longer reserves = %v, want it refused busy", err)
@@ -240,8 +240,8 @@ func TestTheTunnelIsReleasedOnlyOnceNoHostnameIsTunneled(t *testing.T) {
 	if retired, err := box.host().ReleaseTunnel(context.Background()); err != nil || len(retired) != 0 {
 		t.Fatalf("ReleaseTunnel() with %s tunneled = %v, %v; want nothing released", claimed, retired, err)
 	}
-	if err := box.host().UntunnelHost(context.Background(), claimed, surface); err != nil {
-		t.Fatalf("UntunnelHost() = %v", err)
+	if err := box.host().RemoveTunneledHost(context.Background(), TunneledHost{Hostname: claimed, Owner: surface}); err != nil {
+		t.Fatalf("RemoveTunneledHost() = %v", err)
 	}
 	retired, err := box.host().ReleaseTunnel(context.Background())
 	if err != nil || !slices.Equal(retired, []Tunnel{reserved}) {
@@ -261,7 +261,7 @@ func TestTheTunnelIsReleasedOnlyOnceNoHostnameIsTunneled(t *testing.T) {
 	if table := readBack(t, box); len(table.Retired) != 0 {
 		t.Errorf("the routing table still retires %+v once the edge deleted it", table.Retired)
 	}
-	if box.took("docker rm --force "+quoted(TunnelContainer)) < 0 || box.at(words(tunnelTokenPlacing("unplace"))) < 0 {
+	if box.took("docker rm --force "+quoted(TunnelContainer)) < 0 || box.at(words(renderTunnelTokenArgv("unplace"))) < 0 {
 		t.Errorf("the tunnel's container and token were not removed: %v", box.taking())
 	}
 }

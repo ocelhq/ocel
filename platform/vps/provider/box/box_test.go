@@ -263,7 +263,7 @@ type boxEdge struct {
 }
 
 func edgeOver(m *machine, store keyvalue.Store) boxEdge {
-	return boxEdge{Edge: box.New(m, m.ApplyOrigins, sshScope, m.openTunnels), keyValues: store}
+	return boxEdge{Edge: box.New(m, m.ApplyOrigins, sshScope, m.findTunnelHooks), keyValues: store}
 }
 
 type boxStack struct {

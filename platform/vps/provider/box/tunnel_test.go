@@ -82,7 +82,7 @@ func TestATunnelOpenedUnderANameAnotherRunReleasedIsDeleted(t *testing.T) {
 	}
 }
 
-func (m *machine) openTunnels(kind edge.Kind) (*edge.TunnelHooks, error) {
+func (m *machine) findTunnelHooks(kind edge.Kind) (*edge.TunnelHooks, error) {
 	if kind != tunnelEdge {
 		return nil, refusal.Refuse(refusal.CodeInvalid, "the %s edge opens no tunnel", kind)
 	}
@@ -154,18 +154,17 @@ func (m *machine) RunTunnel(ctx context.Context, tunnel host.Tunnel, token func(
 	return nil
 }
 
-func (m *machine) TunnelHost(_ context.Context, hostname, owner, name string) error {
-	if m.tunnel == nil || m.tunnel.Name != name {
-		return refusal.Refuse(refusal.CodeBusy, "the tunnel %s no longer reaches the box", name)
+func (m *machine) TunnelHost(_ context.Context, tunneled host.TunneledHost, tunnelName string) error {
+	if m.tunnel == nil || m.tunnel.Name != tunnelName {
+		return refusal.Refuse(refusal.CodeBusy, "the tunnel %s no longer reaches the box", tunnelName)
 	}
-	m.calls = append(m.calls, "tunnel "+hostname)
-	m.tunneled = append(slices.DeleteFunc(m.tunneled, func(held host.TunneledHost) bool { return held.Hostname == hostname }),
-		host.TunneledHost{Hostname: hostname, Owner: owner})
+	m.calls = append(m.calls, "tunnel "+tunneled.Hostname)
+	m.tunneled = append(slices.DeleteFunc(m.tunneled, func(held host.TunneledHost) bool { return held.Hostname == tunneled.Hostname }), tunneled)
 	return nil
 }
 
-func (m *machine) UntunnelHost(_ context.Context, hostname, owner string) error {
-	m.tunneled = slices.DeleteFunc(m.tunneled, func(held host.TunneledHost) bool { return held.Hostname == hostname && held.Owner == owner })
+func (m *machine) RemoveTunneledHost(_ context.Context, tunneled host.TunneledHost) error {
+	m.tunneled = slices.DeleteFunc(m.tunneled, func(held host.TunneledHost) bool { return held == tunneled })
 	return nil
 }
 
