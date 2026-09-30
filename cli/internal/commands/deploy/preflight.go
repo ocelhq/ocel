@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"path/filepath"
 	"strings"
 
@@ -13,7 +12,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -38,7 +36,7 @@ func previewOpenOptions(policy consent.Policy, cfg *project.Project) commands.Op
 	}
 }
 
-func preflightPreviewUp(ctx context.Context, dependencies Dependencies, policy consent.Policy, check *run.Span, provider *providerprocess.Provider, cfg *project.Project, read readiness.Preflight, prebuilt bool, pointer string, out io.Writer, in io.Reader) (preflightFacts, error) {
+func preflightPreviewUp(ctx context.Context, dependencies Dependencies, policy consent.Policy, check *run.Span, cfg *project.Project, read readiness.Preflight, prebuilt bool, pointer string) (preflightFacts, error) {
 	resp := read.Response
 	resolved, archs, err := resolveContainers(ctx, dependencies, check, read, prebuilt)
 	if err != nil {
@@ -80,7 +78,7 @@ func productionOpenOptions(policy consent.Policy, cfg *project.Project) commands
 	}
 }
 
-func preflightDeploy(ctx context.Context, dependencies Dependencies, policy consent.Policy, check *run.Span, provider *providerprocess.Provider, cfg *project.Project, read readiness.Preflight, prebuilt bool, out io.Writer, in io.Reader) (preflightFacts, error) {
+func preflightDeploy(ctx context.Context, dependencies Dependencies, policy consent.Policy, check *run.Span, cfg *project.Project, read readiness.Preflight, prebuilt bool) (preflightFacts, error) {
 	resp := read.Response
 	resolved, archs, err := resolveContainers(ctx, dependencies, check, read, prebuilt)
 	if err != nil {

@@ -203,7 +203,7 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 	return dependencies.WithProvider(ctx, cfg, "ocel preview up", previewOpenOptions(policy, cfg), func(ctx context.Context, p commands.ProviderRun) error {
 		run, check, provider, read := p.Run, p.Check, p.Provider, p.Preflight
 		cfg := p.Project
-		facts, err := preflightPreviewUp(ctx, dependencies, policy, check, provider, cfg, read, opts.prebuilt, env.GetIdentity(), stdout, stdin)
+		facts, err := preflightPreviewUp(ctx, dependencies, policy, check, cfg, read, opts.prebuilt, env.GetIdentity())
 		check.End(err)
 		if err != nil {
 			return err
