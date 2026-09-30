@@ -1,9 +1,11 @@
 package fake_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 )
 
@@ -23,5 +25,31 @@ func TestAnEdgeDescribesPermissionsOnlyOnceItIsGivenADocument(t *testing.T) {
 	}
 	if documented.Heading != "relay token" || documented.Document != "scripts · edit for deploy" {
 		t.Errorf("document = %+v, want the relay token's scopes for the deploy purpose", documented)
+	}
+}
+
+func TestAHostnameBoundAgainWithoutAnOriginIsServedByItsEdgeRatherThanTheOriginItWasForwardedTo(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	p := fake.NewProvider(fake.Options{})
+	relay, err := p.Edges().Open(fake.KindRelay)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stack, err := relay.Reconcile(ctx, edge.StackSpec{Tier: environment.TierProduction, Slug: "shop"}, edge.StackState{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	origin := fake.Origin(fake.RouterDirect)
+	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: "shop.example.com", Origin: &origin}); err != nil {
+		t.Fatalf("BindDomain(forwarded) = %v", err)
+	}
+	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: "shop.example.com"}); err != nil {
+		t.Fatalf("BindDomain(served) = %v", err)
+	}
+
+	if serving, err := p.Liveness().ServingRouter(ctx, "shop.example.com"); err != nil || serving != fake.RouterRelay {
+		t.Errorf("ServingRouter() = %q, %v; want %q: the binding no longer forwards to the origin", serving, err, fake.RouterRelay)
 	}
 }
