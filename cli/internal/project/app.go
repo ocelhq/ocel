@@ -36,8 +36,26 @@ type Serverless struct {
 }
 
 type Container struct {
-	Build  *Build
-	Health *Health
+	Build        *Build
+	Health       *Health
+	MinInstances *int
+	MaxInstances *int
+}
+
+func (c *Container) Instances() provider.Instances {
+	instances := provider.Instances{Min: 1}
+	if c.MinInstances != nil {
+		instances.Min = *c.MinInstances
+	}
+	instances.Max = max(instances.Min, 1)
+	if c.MaxInstances != nil {
+		instances.Max = *c.MaxInstances
+	}
+	return instances
+}
+
+func (c *Container) namesInstances() bool {
+	return c.MinInstances != nil || c.MaxInstances != nil
 }
 
 type Build struct {
@@ -166,8 +184,12 @@ func shapeApp(app *App, a configdoc.AppConfig, dir string) error {
 	if err != nil {
 		return err
 	}
+	container := &Container{Build: build, Health: health, MinInstances: a.MinInstances, MaxInstances: a.MaxInstances}
+	if err := refuseInvertedInstances(a.Name, container); err != nil {
+		return err
+	}
 	if compute != provider.ComputeServerless {
-		app.Container = &Container{Build: build, Health: health}
+		app.Container = container
 	}
 
 	named := strings.TrimSpace(a.Framework)
@@ -188,7 +210,7 @@ func shapeApp(app *App, a configdoc.AppConfig, dir string) error {
 		app.Serverless = &Serverless{Framework: framework, Detected: named == "", Entrypoint: a.Entrypoint}
 	}
 	if compute == provider.ComputeServerless {
-		return refuseContainerConfig(*app, compute, build, health)
+		return refuseContainerConfig(*app, compute, container)
 	}
 	return nil
 }
@@ -246,7 +268,18 @@ func frameworkOnContainer(app, framework string, compute provider.Compute) error
 	)
 }
 
-func refuseContainerConfig(app App, compute provider.Compute, build *Build, health *Health) error {
+func refuseInvertedInstances(app string, container *Container) error {
+	if container.MinInstances == nil || container.MaxInstances == nil || *container.MinInstances <= *container.MaxInstances {
+		return nil
+	}
+	return fmt.Errorf(
+		"app %q sets minInstances %d and maxInstances %d, and an app cannot keep more instances running than it may run at once: raise maxInstances to at least %d, or lower minInstances",
+		app, *container.MinInstances, *container.MaxInstances, *container.MinInstances,
+	)
+}
+
+func refuseContainerConfig(app App, compute provider.Compute, container *Container) error {
+	build, health := container.Build, container.Health
 	if build != nil {
 		return fmt.Errorf(
 			"app %q configures a `build`, and it runs on %q compute, which builds no image: `build` configures a container image and nothing else — give %q `compute: \"container\"`, or remove its `build`",
@@ -257,6 +290,16 @@ func refuseContainerConfig(app App, compute provider.Compute, build *Build, heal
 		return fmt.Errorf(
 			"app %q configures a `health` check, and it runs on %q compute, which runs no process to probe: `health` gates a container release and nothing else — give %q `compute: \"container\"`, or remove its `health`",
 			app.Name, compute, app.Name,
+		)
+	}
+	if container.namesInstances() {
+		key := "minInstances"
+		if container.MinInstances == nil {
+			key = "maxInstances"
+		}
+		return fmt.Errorf(
+			"app %q sets `%s`, and it runs on %q compute, which scales itself: instance counts size a container app and nothing else — give %q `compute: \"container\"`, or remove its `minInstances` and `maxInstances`",
+			app.Name, key, compute, app.Name,
 		)
 	}
 	return nil

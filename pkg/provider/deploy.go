@@ -31,6 +31,12 @@ type AppEntry struct {
 	Image           string
 	HealthCheckPath string
 	Arch            string
+	Instances       Instances
+}
+
+type Instances struct {
+	Min int
+	Max int
 }
 
 func (e AppEntry) Compute() Compute { return ComputeOf(e.Manifest) }

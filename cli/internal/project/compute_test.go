@@ -155,6 +155,25 @@ func TestAServerlessAppThatConfiguresAHealthCheckFailsThePlanByName(t *testing.T
 	}
 }
 
+func TestAServerlessAppThatNamesInstanceCountsFailsThePlanByName(t *testing.T) {
+	t.Parallel()
+
+	three := 3
+	cfg := &Project{Apps: []App{
+		{Name: "api", Serverless: &Serverless{Framework: "node"}, Container: &Container{MaxInstances: &three}},
+	}}
+
+	_, err := cfg.ResolveComputes([]string{"serverless"}, "fake")
+	if err == nil {
+		t.Fatal("ResolveComputes() admitted instance counts on an app its provider runs serverless, which scales itself")
+	}
+	for _, want := range []string{`"api"`, "`maxInstances`", "container"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("ResolveComputes() error = %q, want it to name %s", err, want)
+		}
+	}
+}
+
 func TestAnAppThatFallsBackToContainerIsRefusedTheFrameworkItNames(t *testing.T) {
 	t.Parallel()
 
