@@ -478,6 +478,12 @@ fix its routes, and run `ocel bootstrap <tier>` again to finish. If your Traefik
 the new `directory` within the 10 minutes, bootstrap stops before it removes the old file, which
 goes on serving.
 
+Until a move finishes, every deploy onto the box is refused, whichever `proxy` it sets, and told
+to run `ocel bootstrap <tier>`. That holds however bootstrap stopped, so no deploy writes routes
+a proxy doesn't read yet. Running bootstrap again with the same `proxy` finishes the move. With
+another `proxy` it moves the box there instead, and removes what the stopped move left of the
+proxy it started from.
+
 ## Postgres
 
 `postgres("main")` runs as one container on the box, on your project's own network. It
