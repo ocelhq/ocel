@@ -9,6 +9,7 @@ import {
   malformedQueryCheck,
   nextCacheChecks,
   nextDataCacheChecks,
+  nextOriginDataCacheChecks,
   nodeRuntimeChecks,
   publicOriginCheck,
   rewrittenQueryCheck,
@@ -137,6 +138,20 @@ export const gaps: Gap[] = [
         fixtures: [lifecycle.next],
         variants: [cloudflareOnABox, cloudflareTunnel],
         fails: [check(NEXT_CACHE)],
+      },
+    ],
+  },
+  {
+    id: "no-route-to-its-own-hostname",
+    reason:
+      "the data-cache page fetches its app's own *.localhost hostname from inside its container, which neither resolves to the box nor trusts Caddy's local certificate",
+    issue: 1458,
+    where: [
+      {
+        on: ["vps.incus"],
+        fixtures: [lifecycle.next, sdk.next],
+        variants: [defaults],
+        fails: [check(nextOriginDataCacheChecks)],
       },
     ],
   },
