@@ -8,4 +8,8 @@ describe("cloudflare", () => {
   it("serialises to the cloudflare edge descriptor", () => {
     expect(roundTrip(cloudflare())).toEqual({ cloudflare: {} });
   });
+
+  it("asks for a tunnel to the origin when told to", () => {
+    expect(roundTrip(cloudflare({ tunnel: true }))).toEqual({ cloudflare: { tunnel: true } });
+  });
 });
