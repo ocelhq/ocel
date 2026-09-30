@@ -59,7 +59,7 @@ changes anything: stop it, or run ocel [behind it](#behind-your-own-proxy).
 | `/var/lib/ocel/<tier>/keyvalues`, `/usr/local/lib/ocel/keyvalues` | What is deployed, per tier. |
 | `/var/lib/ocel/releases`, `/usr/local/lib/ocel/releases` | The release window: which images a rollback can still reach. Older images are swept. |
 | Docker | Installed once with Docker's install script, pinned by sha256. A Docker 28.0 or later that `docker.service` already runs is used as it is. Either way, upgrading it is yours. Bootstrap refuses a Docker older than 28.0, the snap package, a rootless Docker, and a masked `docker.service`, and says what to change. Docker stays after `ocel destroy`, and so do its containers. |
-| `/var/lib/ocel/proxy.json` | Which proxy fronts the box, and which project and tier set it. A deploy whose `proxy` option disagrees is refused. |
+| `/var/lib/ocel/proxy.json` | Which proxy fronts the box, and which project and tier set it. A deploy whose `proxy` option disagrees is refused, and only bootstrap [moves the box](#moving-a-box-to-another-proxy). |
 | `ocel-proxy` container, `/var/lib/ocel/proxy/caddy.json` | Caddy on ports 80 and 443. It gets a certificate for a hostname the box serves the first time a client connects to it. Left out [behind your own proxy](#behind-your-own-proxy). |
 | `ocel-switchboard` container, the `ocel` network, `/usr/local/lib/ocel/switchboard`, `/run/ocel-switchboard`, `/run/ocel-front` | Routes each hostname to the app that serves it, and tells the proxy which hostnames it may get a certificate for. Behind your own proxy it is published on `127.0.0.1:8480`, or joins the docker network your proxy is on. If a prune removes it, or its `ocel` network, while it is stopped, the next deploy recreates both, and `ocel doctor` says when. |
 | `/var/lib/ocel/routing/table.json` | The routing table: which project claims each hostname, where each app is served from, and the certificates you pin. Deploys rewrite it and the proxy's config together. |
@@ -182,8 +182,8 @@ no `Forwarded`, `X-Real-Ip` or `True-Client-Ip` header, and none of these spelle
 
 Your proxy manages the certificates, so `certificates` and `proxy` can't be set together. One
 proxy fronts a box. Every project on it must name the same `proxy`, and a deploy that
-doesn't is refused with the value to write. Moving a box from one proxy to another isn't
-supported yet.
+doesn't is refused with the value to write. Bootstrap [moves a box](#moving-a-box-to-another-proxy)
+from one proxy to another.
 
 | | Ocel's own proxy | `manual` | `traefik` | `caddy` |
 | --- | --- | --- | --- | --- |
@@ -450,6 +450,37 @@ sets `X-Forwarded-Host` to `Host`, and drops every `X-Forwarded-*` header it is 
 container on `network`, which on Coolify is every app it runs, can send a plaintext request
 there that your apps take as https, for a `Host` it could send anyway. None can choose
 `X-Forwarded-Host` or `X-Forwarded-For`.
+
+### Moving a box to another proxy
+
+Change `proxy` and run `ocel bootstrap <tier>`. Only bootstrap moves a box. A deploy whose
+`proxy` disagrees with the box is still refused with the value to write, so every other project
+on the box learns of the move on its next deploy. The record then names the project that ran the
+move.
+
+The move is one group in the plan bootstrap shows before it asks to go ahead (`--yes` skips
+the question). The group lists what ocel removes, what it sets up for the new proxy, how many
+hostnames get new certificates from it, and how long the box doesn't serve. Each hostname new to
+your Let's Encrypt account counts toward its limit of 50 new certificates per registered domain
+per week.
+
+Ocel never stops or starts a proxy it doesn't run. Only one process can hold port 443, so
+stopping the old proxy and starting the new one is up to you.
+
+| From → to | What bootstrap does | The box doesn't serve |
+| --- | --- | --- |
+| Ocel's own proxy → yours | Removes `ocel-proxy` and `/var/lib/ocel/proxy`, and keeps `/etc/ocel/certs` if it isn't empty. Publishes the switchboard or puts it on your proxy's network, places ocel's file, and rewrites the record. Then it prints `Start your proxy on 80 and 443 now`, and waits up to 10 minutes until every hostname the box serves answers through ocel, as `ocel domain add` does. | From `ocel-proxy` stopping until your proxy holds 443 and has its certificates |
+| Yours → ocel's own proxy | Refuses while anything holds port 80 or 443, and names it. Then removes ocel's file from your proxy's directory without reloading your proxy, takes the switchboard off your proxy's network, and starts `ocel-proxy`, which gets each certificate on the first connection for its hostname. | From your proxy stopping until `ocel-proxy` answers |
+| Yours → yours, same proxy: a new `directory`, `network`, `port` or `resolver` | Places ocel's file in the new place and reloads a Caddy. Then it waits until every hostname answers through ocel, and removes the old file. | Only while the switchboard starts again, which it does when `directory`, `network` or `port` changes |
+| Yours → another of yours | As yours → ocel's own proxy for the old one, then as ocel's own proxy → yours for the new one. | From the old proxy stopping until the new one serves |
+
+Ocel counts two proxies as the same when both are `manual`, both are `traefik`, or both are
+`caddy` running as the same `container` or both as `caddy.service`. Only a new `resolver` or
+`previewResolver` makes the same Traefik order certificates again.
+
+If the new proxy doesn't serve every hostname within the 10 minutes, bootstrap stops and names
+the hostnames it didn't serve. The box already routes through the new proxy by then. Start it,
+fix its routes, and run `ocel bootstrap <tier>` again to finish.
 
 ## Postgres
 
