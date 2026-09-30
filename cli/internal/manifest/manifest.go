@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 type Input struct {
@@ -23,13 +24,24 @@ type Input struct {
 	Built        build.Output
 	Usages       []attribution.Usage
 	DeploymentID func(projectDir, app string) (string, error)
+
+	WorkerCeilings []provider.WorkerCeiling
 }
 
 func Assemble(in Input) (*contractv1.Manifest, error) {
 	cfg := in.Project
 	functions := servedByFunctions(in.Built.Functions, cfg)
 	apps := appsOf(cfg.Dir, cfg.Apps, in.Usages, in.Built.Images)
-	manifest, err := assemble(cfg.Slug, cfg.Domains, apps, declaredResources(cfg.Dir, in.Resources), bindingsOf(cfg.BindingsFor(in.Tier)), functions, in.Variables)
+	manifest, err := assemble(assembly{
+		slug:         cfg.Slug,
+		domains:      cfg.Domains,
+		apps:         apps,
+		declarations: declaredResources(cfg.Dir, in.Resources),
+		bindings:     bindingsOf(cfg.BindingsFor(in.Tier)),
+		functions:    functions,
+		values:       in.Variables,
+		ceilings:     in.WorkerCeilings,
+	})
 	if err != nil || in.DeploymentID == nil {
 		return manifest, err
 	}
@@ -43,37 +55,53 @@ func Assemble(in Input) (*contractv1.Manifest, error) {
 	return manifest, nil
 }
 
-func assemble(slug string, domains project.Domains, apps []app, declarations []declaredResource, bindings []binding, functions []build.Function, values map[string][]variables.Variable) (*contractv1.Manifest, error) {
-	named := make(map[string]string, len(declarations)+len(functions))
-	resources, seen, err := manifestResources(declarations, named)
+type assembly struct {
+	slug         string
+	domains      project.Domains
+	apps         []app
+	declarations []declaredResource
+	bindings     []binding
+	functions    []build.Function
+	values       map[string][]variables.Variable
+	ceilings     []provider.WorkerCeiling
+}
+
+func assemble(a assembly) (*contractv1.Manifest, error) {
+	resolved, err := resolveTopicsAndWorkers(a.apps, a.declarations, a.ceilings)
 	if err != nil {
 		return nil, err
 	}
-	if err := bindBindings(resources, bindings); err != nil {
+	named := make(map[string]string, len(a.declarations)+len(a.functions))
+	resources, seen, err := manifestResources(a.declarations, resolved.topics, named)
+	if err != nil {
+		return nil, err
+	}
+	if err := bindBindings(resources, a.bindings); err != nil {
 		return nil, err
 	}
 
-	functionsByApp, err := manifestFunctions(functions, named)
+	functionsByApp, err := manifestFunctions(a.functions, named)
 	if err != nil {
 		return nil, err
 	}
 
-	usages, err := manifestUsages(apps, seen)
+	usages, err := manifestUsages(a.apps, seen)
 	if err != nil {
 		return nil, err
 	}
 
-	manifestApps, err := manifestAppsOf(apps, functions, functionsByApp, values)
+	manifestApps, err := manifestAppsOf(a.apps, a.functions, functionsByApp, a.values)
 	if err != nil {
 		return nil, err
 	}
 
 	return &contractv1.Manifest{
-		Slug:      slug,
+		Slug:      a.slug,
 		Resources: resources,
-		Domains:   tierDomains(domains),
+		Domains:   tierDomains(a.domains),
 		Apps:      manifestApps,
 		Usages:    usages,
+		Workers:   resolved.workers,
 	}, nil
 }
 

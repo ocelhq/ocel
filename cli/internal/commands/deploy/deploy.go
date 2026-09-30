@@ -128,6 +128,7 @@ func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts 
 			},
 			command:        "ocel deploy",
 			containerArchs: facts.containerArchs,
+			workerCeilings: facts.workerCeilings,
 			urls:           facts.urls,
 			dry:            opts.dry,
 			enabled:        !opts.dry && browser,

@@ -3,8 +3,6 @@ package providerserver
 import (
 	"fmt"
 
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -36,16 +34,4 @@ func findTopicTaskOrWorker(manifest *contractv1.Manifest) (string, bool) {
 		return fmt.Sprintf("worker %q", workers[0].GetName()), true
 	}
 	return "", false
-}
-
-func workerCeilingMessages(ceilings []provider.WorkerCeiling) []*contractv1.WorkerCeiling {
-	out := make([]*contractv1.WorkerCeiling, 0, len(ceilings))
-	for _, ceiling := range ceilings {
-		message := &contractv1.WorkerCeiling{Compute: string(ceiling.Compute)}
-		if !ceiling.Unbounded {
-			message.MaxDuration = durationpb.New(ceiling.MaxDuration)
-		}
-		out = append(out, message)
-	}
-	return out
 }

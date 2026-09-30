@@ -23,6 +23,7 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 type variablesRecovery struct {
@@ -35,6 +36,7 @@ type variablesRecovery struct {
 
 	command        string
 	containerArchs map[string]string
+	workerCeilings []provider.WorkerCeiling
 	urls           map[string]string
 
 	dry     bool
@@ -154,7 +156,7 @@ func (r variablesRecovery) attempt(ctx context.Context, phase, child *run.Span, 
 	attempt := child.Trace(r.cfg.Slug, "build", progress.Attr{Key: progress.AttrKeyRetryCount, Value: strconv.Itoa(retry)})
 	manifest, inline, err := collectBuildAndAssemble(run.ContextWithSpan(ctx, attempt), r.dependencies, assembly{
 		cfg: r.cfg, declarations: declarations, prebuilt: prebuilt, dry: r.dry, phase: phase, span: child,
-		containerArchs: r.containerArchs, urls: r.urls,
+		containerArchs: r.containerArchs, workerCeilings: r.workerCeilings, urls: r.urls,
 	})
 	attempt.End(err)
 	return manifest, inline, err

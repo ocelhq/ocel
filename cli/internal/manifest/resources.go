@@ -17,6 +17,10 @@ type declaredResource struct {
 	Name     string
 	Postgres *resourcesv1.PostgresConfig
 	Bucket   *resourcesv1.BucketConfig
+	Topic    *resourcesv1.TopicConfig
+	Task     *resourcesv1.TaskConfig
+	Consumer *resourcesv1.ConsumerConfig
+	Worker   *resourcesv1.WorkerConfig
 	Source   string
 }
 
@@ -51,16 +55,24 @@ func declaredResources(configDir string, resources []declaration.Resource) []dec
 			Name:     r.Name,
 			Postgres: r.Postgres,
 			Bucket:   r.Bucket,
+			Topic:    r.Topic,
+			Task:     r.Task,
+			Consumer: r.Consumer,
+			Worker:   r.Worker,
 			Source:   source,
 		}
 	}
 	return declared
 }
 
-func manifestResources(declarations []declaredResource, named map[string]string) ([]*contractv1.ManifestResource, map[identity]declaredResource, error) {
+func manifestResources(declarations []declaredResource, topics map[string]*contractv1.ManifestTopic, named map[string]string) ([]*contractv1.ManifestResource, map[identity]declaredResource, error) {
 	seen := make(map[identity]declaredResource, len(declarations))
 	resources := make([]*contractv1.ManifestResource, 0, len(declarations))
 	for _, d := range declarations {
+		declaredKind, topicTaskOrWorker := topicTaskAndWorkerKinds[d.Type]
+		if topicTaskOrWorker && !declaredKind.declaresTopic {
+			continue
+		}
 		if d.Name == "" {
 			return nil, nil, fmt.Errorf("a resource declaration names no resource")
 		}
@@ -97,6 +109,9 @@ func manifestResources(declarations []declaredResource, named map[string]string)
 		}
 		if d.Bucket != nil {
 			resource.Config = &contractv1.ManifestResource_Bucket{Bucket: d.Bucket}
+		}
+		if topic, found := topics[d.Name]; found && declaredKind.declaresTopic {
+			resource.Config = &contractv1.ManifestResource_Topic{Topic: topic}
 		}
 		resources = append(resources, resource)
 	}

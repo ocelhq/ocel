@@ -69,7 +69,7 @@ func assembleOn(compute provider.Compute, slug string, domains project.Domains, 
 			apps[i].Compute = compute
 		}
 	}
-	return assemble(slug, domains, apps, declarations, bindings, functions, values)
+	return assemble(assembly{slug: slug, domains: domains, apps: apps, declarations: declarations, bindings: bindings, functions: functions, values: values})
 }
 
 func toGolden(m *contractv1.Manifest) goldenManifest {
