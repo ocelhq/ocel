@@ -2,6 +2,7 @@ package switchboard
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -41,6 +42,21 @@ var (
 )
 
 const HeardHeader = "X-Ocel-Heard"
+
+const (
+	connectingIPHeader = "Cf-Connecting-Ip"
+	visitorHeader      = "Cf-Visitor"
+)
+
+func isVisitedOverHTTP(r *http.Request) bool {
+	if said := r.Header.Get("X-Forwarded-Proto"); said != "" {
+		return strings.EqualFold(said, "http")
+	}
+	var visitor struct {
+		Scheme string `json:"scheme"`
+	}
+	return json.Unmarshal([]byte(r.Header.Get(visitorHeader)), &visitor) == nil && strings.EqualFold(visitor.Scheme, "http")
+}
 
 type Board struct {
 	table     atomic.Pointer[Table]
@@ -92,6 +108,7 @@ type arrival int
 const (
 	overFront arrival = iota + 1
 	overHTTPS
+	overTunnel
 )
 
 type arrivalKey struct{}
@@ -144,6 +161,10 @@ func (b *Board) ServeHTTPS(listener net.Listener) error {
 	return b.Serve(markedListener{listener, overHTTPS})
 }
 
+func (b *Board) ServeTunnel(listener net.Listener) error {
+	return b.Serve(markedListener{listener, overTunnel})
+}
+
 func (b *Board) ServeAdmit(listener net.Listener) error {
 	err := b.admitter.Serve(markedListener{listener, overFront})
 	if errors.Is(err, http.ErrServerClosed) {
@@ -187,6 +208,16 @@ func (b *Board) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == edge.LivenessProbePath {
 			header.Set(HeardHeader, b.heard(r))
 		}
+	}
+	throughTunnel := arrivedOver(r) == overTunnel
+	if b.table.Load().IsTunneled(r.Host) != throughTunnel {
+		named(w.Header())
+		w.WriteHeader(http.StatusMisdirectedRequest)
+		return
+	}
+	if throughTunnel && isVisitedOverHTTP(r) {
+		http.Redirect(w, r, "https://"+r.Host+r.URL.RequestURI(), http.StatusPermanentRedirect)
+		return
 	}
 	forward, ctx, hangUp, ok := b.forwarding(r)
 	if !ok {
@@ -258,6 +289,7 @@ const (
 	hearsScheme
 	hearsClient
 	stampsHTTPS
+	hearsEdge
 )
 
 func (b *Board) hears(r *http.Request) hearing {
@@ -266,6 +298,8 @@ func (b *Board) hears(r *http.Request) hearing {
 		return hearsClient
 	case overHTTPS:
 		return stampsHTTPS
+	case overTunnel:
+		return hearsEdge
 	}
 	peer, err := netip.ParseAddrPort(r.RemoteAddr)
 	if err == nil && slices.ContainsFunc(b.relayed, func(prefix netip.Prefix) bool { return prefix.Contains(peer.Addr().Unmap()) }) {
@@ -277,7 +311,7 @@ func (b *Board) hears(r *http.Request) hearing {
 func (b *Board) heard(r *http.Request) string {
 	proto, host := "http", r.Host
 	switch b.hears(r) {
-	case stampsHTTPS:
+	case stampsHTTPS, hearsEdge:
 		proto = "https"
 	case hearsScheme, hearsClient:
 		if said := r.Header.Get("X-Forwarded-Proto"); said != "" {
@@ -299,6 +333,13 @@ func (b *Board) forwarded(out *httputil.ProxyRequest) {
 	case stampsHTTPS:
 		out.SetXForwarded()
 		out.Out.Header.Set("X-Forwarded-Proto", "https")
+		return
+	case hearsEdge:
+		out.Out.Header.Set("X-Forwarded-Host", out.In.Host)
+		out.Out.Header.Set("X-Forwarded-Proto", "https")
+		if visitor := out.In.Header.Get(connectingIPHeader); visitor != "" {
+			out.Out.Header.Set("X-Forwarded-For", visitor)
+		}
 		return
 	case hearsScheme:
 		out.SetXForwarded()

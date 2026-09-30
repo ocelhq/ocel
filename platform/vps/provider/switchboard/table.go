@@ -38,6 +38,7 @@ type Table struct {
 	connector string
 	routed    map[string]bool
 	admitted  map[string]bool
+	tunneled  map[string]bool
 }
 
 type answer struct {
@@ -97,6 +98,14 @@ type writtenTable struct {
 	Shields     []shield `json:"shields,omitempty"`
 	PreviewBase string   `json:"preview,omitempty"`
 	Connector   string   `json:"connector,omitempty"`
+	Tunneled    []string `json:"tunneled,omitempty"`
+	Tunnel      *tunnel  `json:"tunnel,omitempty"`
+}
+
+type tunnel struct {
+	Edge    string `json:"edge"`
+	ID      string `json:"id"`
+	Address string `json:"address"`
 }
 
 type claimKey struct{ owner, pointer, app string }
@@ -162,6 +171,10 @@ func Read(document []byte) (*Table, error) {
 		connector: read.Connector,
 		routed:    map[string]bool{},
 		admitted:  map[string]bool{},
+		tunneled:  map[string]bool{},
+	}
+	for _, hostname := range read.Tunneled {
+		table.tunneled[hostname] = true
 	}
 	for _, hostClaim := range read.Claims {
 		table.admitted[hostClaim.Hostname] = true
@@ -182,7 +195,7 @@ func Read(document []byte) (*Table, error) {
 		}
 	}
 	for hostname := range table.admitted {
-		if pinned[hostname] || pinned[wildcardOver(hostname)] {
+		if pinned[hostname] || pinned[wildcardOver(hostname)] || table.IsTunneled(hostname) {
 			delete(table.admitted, hostname)
 		}
 	}
@@ -212,6 +225,9 @@ func lowered(read *writtenTable) {
 	}
 	for at := range read.Pins {
 		read.Pins[at].Hostname = strings.ToLower(read.Pins[at].Hostname)
+	}
+	for at := range read.Tunneled {
+		read.Tunneled[at] = strings.ToLower(read.Tunneled[at])
 	}
 	read.PreviewBase = strings.ToLower(read.PreviewBase)
 	read.Connector = strings.ToLower(read.Connector)
@@ -310,6 +326,11 @@ func (t *Table) Forward(host, requested string) (Forward, bool) {
 }
 
 func (t *Table) Admits(hostname string) bool { return t.admitted[strings.ToLower(hostname)] }
+
+func (t *Table) IsTunneled(host string) bool {
+	named := hostOf(host)
+	return t.tunneled[named] || t.tunneled[wildcardOver(named)]
+}
 
 func wildcardOver(hostname string) string {
 	if _, parent, split := strings.Cut(hostname, "."); split {

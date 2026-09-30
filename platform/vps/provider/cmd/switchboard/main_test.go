@@ -153,6 +153,7 @@ func served(t *testing.T, table string, flags ...string) serving {
 		}
 		select {
 		case code := <-running.done:
+			running.done <- code
 			t.Fatalf("serve exited %d before its control socket answered: %s", code, running.errs)
 		case <-time.After(10 * time.Millisecond):
 		}
@@ -447,6 +448,35 @@ func TestARelayedNetworkTheSwitchboardHasNoAddressOnIsRefused(t *testing.T) {
 	}
 }
 
+func TestServeAnswersATunneledHostnameOnItsTunnelListenerAndNowhereElse(t *testing.T) {
+	web := backend(t, "web")
+	table := documentAt(t, []byte(`{"grace":"30s",`+
+		`"claims":[{"owner":"ocel--shop--production","hostname":"shop.example.com","pointer":"@production"}],`+
+		`"routes":[{"owner":"ocel--shop--production","pointer":"@production","app":"web","upstream":"`+web+`"}],`+
+		`"tunneled":["shop.example.com"]}`))
+	tunnel := freeAddress(t)
+	running := served(t, table, "--tunnel-listen", tunnel)
+
+	request, err := http.NewRequest(http.MethodGet, "http://"+tunnel+"/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Host = "shop.example.com"
+	request.Header.Set("X-Forwarded-Proto", "https")
+	said, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(said.Body)
+	_ = said.Body.Close()
+	if said.StatusCode != http.StatusOK || string(body) != "web" {
+		t.Errorf("the tunnel listener answered shop.example.com %d %q, want it forwarded to web", said.StatusCode, body)
+	}
+	if status, _, _ := running.ask(t, "shop.example.com"); status != http.StatusMisdirectedRequest {
+		t.Errorf("the data listener answered shop.example.com %d, want 421: a tunneled hostname is reached through the tunnel only", status)
+	}
+}
+
 func TestServeStampsHTTPSOnItsHTTPSListenerWhateverThePeerSends(t *testing.T) {
 	seen := make(chan http.Header, 1)
 	upstream := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
@@ -516,7 +546,7 @@ func TestTheHTTPSListenerOnANetworkBindsOnlyTheSwitchboardsAddressOnIt(t *testin
 			return nil, fmt.Errorf("no such host %s", name)
 		}
 	}
-	got, err := httpsBinds(t.Context(), "coolify:8443", resolve, addresses)
+	got, err := listenerBinds(t.Context(), "--https-listen", "coolify:8443", resolve, addresses)
 	if err != nil {
 		t.Fatalf("httpsBinds() = %v", err)
 	}
@@ -531,7 +561,7 @@ func TestTheHTTPSListenerAtAnAddressBindsThatAddressAsSpelled(t *testing.T) {
 		return nil, nil
 	}
 	for _, spelled := range []string{"127.0.0.1:8443", "[::1]:8443", "10.0.1.7:8443"} {
-		got, err := httpsBinds(t.Context(), spelled, unasked, interfaces())
+		got, err := listenerBinds(t.Context(), "--https-listen", spelled, unasked, interfaces())
 		if err != nil || !slices.Equal(got, []string{spelled}) {
 			t.Errorf("httpsBinds(%s) = %v, %v; want it bound as spelled", spelled, got, err)
 		}
@@ -544,7 +574,7 @@ func TestTheHTTPSListenerRefusesAnAddressThatBindsEveryInterface(t *testing.T) {
 		return nil, nil
 	}
 	for _, spelled := range []string{":8443", "0.0.0.0:8443", "[::]:8443", "[::ffff:0.0.0.0]:8443", "[::%lo]:8443"} {
-		got, err := httpsBinds(t.Context(), spelled, unasked, interfaces("127.0.0.1/8", "172.19.0.2/16", "10.0.1.7/24"))
+		got, err := listenerBinds(t.Context(), "--https-listen", spelled, unasked, interfaces("127.0.0.1/8", "172.19.0.2/16", "10.0.1.7/24"))
 		if err == nil {
 			t.Errorf("httpsBinds(%s) = %v, want a refusal: every interface includes each project network the switchboard joins, and every app container there would be stamped https", spelled, got)
 			continue
@@ -565,7 +595,7 @@ func TestTheHTTPSListenerRefusesANetworkTheSwitchboardHasNoAddressOn(t *testing.
 			return []netip.Addr{netip.MustParseAddr("10.0.1.9")}, nil
 		},
 	} {
-		got, err := httpsBinds(t.Context(), "coolify:8443", resolve, addresses)
+		got, err := listenerBinds(t.Context(), "--https-listen", "coolify:8443", resolve, addresses)
 		if err == nil {
 			t.Errorf("%s: httpsBinds() = %v, want a refusal: a listener bound anywhere else would stamp https for peers the user's proxy is not", name, got)
 			continue
@@ -589,6 +619,7 @@ func TestServeRefusesATableAFrontSocketOrARelayItCannotTake(t *testing.T) {
 		"an https listener with no port":              {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--admit", admitAt(t), "--table", tableFile(t, nil), "--https-listen", "coolify"},
 		"an https listener on a network it is not on": {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--admit", admitAt(t), "--table", tableFile(t, nil), "--https-listen", "ocel-no-such-network.invalid:8443"},
 		"an https listener it cannot bind":            {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--admit", admitAt(t), "--table", tableFile(t, nil), "--https-listen", "192.0.2.1:8443"},
+		"a tunnel listener on every interface":        {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--admit", admitAt(t), "--table", tableFile(t, nil), "--tunnel-listen", ":8444"},
 		"no listen address":                           {"serve", "--front", frontAt(t), "--admit", admitAt(t), "--table", tableFile(t, nil)},
 		"no table":                                    {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--admit", admitAt(t)},
 	} {
