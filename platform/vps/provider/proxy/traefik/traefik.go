@@ -14,15 +14,23 @@ import (
 )
 
 const (
-	FileName = "ocel.yml"
-	priority = 1000000
+	FileName        = "ocel.yml"
+	priority        = 1000000
+	placementDomain = "placement.ocel.invalid"
 )
 
 const (
 	service    = "ocel-switchboard"
 	redirect   = "ocel-https"
+	retry      = "ocel-retry"
+	placement  = "ocel-placement"
 	noop       = "noop@internal"
 	httpSuffix = "-http"
+)
+
+const (
+	retryAttempts = 30
+	retryInterval = 250 * time.Millisecond
 )
 
 const (
@@ -56,6 +64,15 @@ func routerName(hostname string) string {
 	sum := sha256.Sum256([]byte(hostname))
 	return "ocel-" + strings.ReplaceAll(hostname, ".", "-") + "-" + hex.EncodeToString(sum[:])[:8]
 }
+
+func tagPlacement(file string) string {
+	sum := sha256.Sum256([]byte(filepath.Clean(file)))
+	return hex.EncodeToString(sum[:])[:8]
+}
+
+func DerivePlacementHostname(file string) string { return tagPlacement(file) + "." + placementDomain }
+
+func (t Traefik) nameInPlacement(name string) string { return name + "-" + tagPlacement(t.file()) }
 
 func (t Traefik) directory() string { return filepath.Clean(t.Directory) }
 

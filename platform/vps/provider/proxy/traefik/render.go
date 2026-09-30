@@ -67,7 +67,13 @@ type domain struct {
 }
 
 type middleware struct {
-	RedirectScheme redirectScheme `yaml:"redirectScheme"`
+	RedirectScheme *redirectScheme `yaml:"redirectScheme,omitempty"`
+	Retry          *retrying       `yaml:"retry,omitempty"`
+}
+
+type retrying struct {
+	Attempts        int    `yaml:"attempts"`
+	InitialInterval string `yaml:"initialInterval"`
 }
 
 type redirectScheme struct {
@@ -94,9 +100,12 @@ const (
 
 func (t Traefik) render(spec proxy.Spec) ([]byte, error) {
 	config := dynamic{HTTP: routes{
-		Routers:     map[string]router{},
-		Middlewares: map[string]middleware{redirect: {RedirectScheme: redirectScheme{Scheme: "https", Permanent: true}}},
-		Services:    map[string]upstream{service: {LoadBalancer: loadBalancer{Servers: []server{{URL: t.upstream()}}}}},
+		Routers: map[string]router{t.nameInPlacement(placement): t.placementRouter()},
+		Middlewares: map[string]middleware{
+			t.nameInPlacement(redirect): {RedirectScheme: &redirectScheme{Scheme: "https", Permanent: true}},
+			t.nameInPlacement(retry):    {Retry: &retrying{Attempts: retryAttempts, InitialInterval: retryInterval.String()}},
+		},
+		Services: map[string]upstream{t.nameInPlacement(service): {LoadBalancer: loadBalancer{Servers: []server{{URL: t.upstream()}}}}},
 	}}
 	shields, err := t.shieldsOf(spec)
 	if err != nil {
@@ -104,7 +113,7 @@ func (t Traefik) render(spec proxy.Spec) ([]byte, error) {
 	}
 	config.TLS = shields
 	for _, hostname := range spec.Hostnames {
-		name := routerName(hostname)
+		name := t.nameInPlacement(routerName(hostname))
 		config.HTTP.Routers[name], config.HTTP.Routers[name+httpSuffix] = t.routersFor(hostname, spec)
 	}
 	var written bytes.Buffer
@@ -203,15 +212,27 @@ func (t Traefik) routersFor(hostname string, spec proxy.Spec) (router, router) {
 	return router{
 		Rule:        rule,
 		EntryPoints: []string{t.HTTPS},
-		Service:     service,
+		Middlewares: []string{t.nameInPlacement(retry)},
+		Service:     t.nameInPlacement(service),
 		Priority:    priority,
 		TLS:         t.tlsFor(hostname, spec),
 	}, router{
 		Rule:        rule,
 		EntryPoints: []string{t.HTTP},
-		Middlewares: []string{redirect},
+		Middlewares: []string{t.nameInPlacement(redirect)},
 		Service:     noop,
 		Priority:    priority,
+	}
+}
+
+func (t Traefik) placementRouter() router {
+	return router{
+		Rule:        "Host(`" + DerivePlacementHostname(t.file()) + "`)",
+		EntryPoints: []string{t.HTTPS},
+		Middlewares: []string{t.nameInPlacement(retry)},
+		Service:     t.nameInPlacement(service),
+		Priority:    priority,
+		TLS:         &tls{},
 	}
 }
 

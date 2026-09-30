@@ -77,7 +77,20 @@ type readOptions struct {
 
 type readConfig struct {
 	HTTP struct {
-		Routers map[string]readRouter `yaml:"routers"`
+		Routers     map[string]readRouter `yaml:"routers"`
+		Middlewares map[string]struct {
+			Retry *struct {
+				Attempts        int    `yaml:"attempts"`
+				InitialInterval string `yaml:"initialInterval"`
+			} `yaml:"retry"`
+		} `yaml:"middlewares"`
+		Services map[string]struct {
+			LoadBalancer struct {
+				Servers []struct {
+					URL string `yaml:"url"`
+				} `yaml:"servers"`
+			} `yaml:"loadBalancer"`
+		} `yaml:"services"`
 	} `yaml:"http"`
 	TLS struct {
 		Certificates []struct {
