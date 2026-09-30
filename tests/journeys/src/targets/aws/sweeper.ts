@@ -126,6 +126,15 @@ export async function destroyOnCurrentBootstrap(
   await destroy();
 }
 
+export async function sweepPoliciesThenNamespaces(
+  complaints: string[],
+  policies: () => Promise<void>,
+  namespaces: () => Promise<void>,
+): Promise<void> {
+  await despite(complaints, "edge policy sweep", policies);
+  await despite(complaints, "namespace sweep", namespaces);
+}
+
 export type Swept = { slug: string; fixture: Fixture; overlay: Overlay };
 
 export function sweepPlan(
@@ -188,12 +197,10 @@ export class AwsSweeper implements Sweeper {
       real,
     );
 
-    await despite(complaints, "namespace sweep", () =>
-      this.sweepNamespaces(runId, cells, byPart, complaints, busy),
-    );
-
-    await despite(complaints, "edge policy sweep", () =>
-      this.sweepOrphanedPolicies(complaints, busy),
+    await sweepPoliciesThenNamespaces(
+      complaints,
+      () => this.sweepOrphanedPolicies(complaints, busy),
+      () => this.sweepNamespaces(runId, cells, byPart, complaints, busy),
     );
 
     const inUse = async (names: string[]) => {

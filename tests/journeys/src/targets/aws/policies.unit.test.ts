@@ -53,6 +53,10 @@ describe("orphanedPolicies", () => {
       cache("j-1800-deploy-next-cloudflare-cache"),
     ]);
   });
+
+  it("keeps a local run's policy, since nothing can tell whether that run is still going", () => {
+    expect(orphanedPolicies([cache("j-local-victor-deploy-node-cache")], new Set())).toEqual([]);
+  });
 });
 
 function scripted(answers: Record<string, string>, calls: string[][]): Cli {
@@ -97,6 +101,35 @@ describe("listEdgePolicies", () => {
       { kind: "response-headers-policy", id: "h1", name: "j-1-a-headers" },
     ]);
     expect(calls.every((args) => args.includes("custom"))).toBe(true);
+  });
+});
+
+describe("listEdgePolicies across pages", () => {
+  it("follows NextMarker until the listing ends", async () => {
+    const calls: string[][] = [];
+    const cli: Cli = async (args) => {
+      calls.push(args);
+      if (args[1] === "list-response-headers-policies") {
+        return JSON.stringify({ ResponseHeadersPolicyList: { Items: [] } });
+      }
+      const second = args.includes("--marker");
+      return JSON.stringify({
+        CachePolicyList: {
+          Items: [
+            {
+              CachePolicy: {
+                Id: second ? "c2" : "c1",
+                CachePolicyConfig: { Name: second ? "j-1-b-cache" : "j-1-a-cache" },
+              },
+            },
+          ],
+          ...(second ? {} : { NextMarker: "page-2" }),
+        },
+      });
+    };
+
+    expect((await listEdgePolicies(cli)).map((policy) => policy.id)).toEqual(["c1", "c2"]);
+    expect(calls[1]).toContain("page-2");
   });
 });
 

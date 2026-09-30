@@ -1,4 +1,5 @@
 import { HARNESS_PREFIX } from "../../identity";
+import { runIdOf } from "./runs";
 import type { Cli } from "./store";
 
 export type PolicyKind = "cache-policy" | "response-headers-policy";
@@ -21,47 +22,58 @@ export function namespaceOfPolicy(policy: EdgePolicy): string | undefined {
 export function orphanedPolicies(policies: EdgePolicy[], namespaces: Set<string>): EdgePolicy[] {
   return policies.filter((policy) => {
     const namespace = namespaceOfPolicy(policy);
-    return namespace !== undefined && !namespaces.has(namespace);
+    return (
+      namespace !== undefined && runIdOf(policy.name) !== undefined && !namespaces.has(namespace)
+    );
   });
 }
 
-type CachePolicyPage = {
-  CachePolicyList?: {
-    Items?: Array<{ CachePolicy?: { Id?: string; CachePolicyConfig?: { Name?: string } } }>;
-  };
+type PolicyItems = { Items?: unknown[]; NextMarker?: string };
+
+type CachePolicyItem = { CachePolicy?: { Id?: string; CachePolicyConfig?: { Name?: string } } };
+
+type HeadersPolicyItem = {
+  ResponseHeadersPolicy?: { Id?: string; ResponseHeadersPolicyConfig?: { Name?: string } };
 };
 
-type HeadersPolicyPage = {
-  ResponseHeadersPolicyList?: {
-    Items?: Array<{
-      ResponseHeadersPolicy?: { Id?: string; ResponseHeadersPolicyConfig?: { Name?: string } };
-    }>;
-  };
-};
+async function listPages(cli: Cli, command: string, listKey: string): Promise<unknown[]> {
+  const items: unknown[] = [];
+  let marker = "";
+  do {
+    const raw = await cli([
+      "cloudfront",
+      command,
+      "--type",
+      "custom",
+      ...(marker ? ["--marker", marker] : []),
+      "--output",
+      "json",
+    ]);
+    const list = (JSON.parse(raw) as Record<string, PolicyItems | undefined>)[listKey];
+    items.push(...(list?.Items ?? []));
+    marker = list?.NextMarker ?? "";
+  } while (marker);
+  return items;
+}
 
 export async function listEdgePolicies(cli: Cli): Promise<EdgePolicy[]> {
   const found: EdgePolicy[] = [];
-  const cache = JSON.parse(
-    await cli(["cloudfront", "list-cache-policies", "--type", "custom", "--output", "json"]),
-  ) as CachePolicyPage;
-  for (const item of cache.CachePolicyList?.Items ?? []) {
+  for (const item of (await listPages(
+    cli,
+    "list-cache-policies",
+    "CachePolicyList",
+  )) as CachePolicyItem[]) {
     const id = item.CachePolicy?.Id;
     const name = item.CachePolicy?.CachePolicyConfig?.Name;
     if (id && name) {
       found.push({ kind: "cache-policy", id, name });
     }
   }
-  const headers = JSON.parse(
-    await cli([
-      "cloudfront",
-      "list-response-headers-policies",
-      "--type",
-      "custom",
-      "--output",
-      "json",
-    ]),
-  ) as HeadersPolicyPage;
-  for (const item of headers.ResponseHeadersPolicyList?.Items ?? []) {
+  for (const item of (await listPages(
+    cli,
+    "list-response-headers-policies",
+    "ResponseHeadersPolicyList",
+  )) as HeadersPolicyItem[]) {
     const id = item.ResponseHeadersPolicy?.Id;
     const name = item.ResponseHeadersPolicy?.ResponseHeadersPolicyConfig?.Name;
     if (id && name) {
