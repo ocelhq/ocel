@@ -55,10 +55,11 @@ in the source. The credentials ocel logs in with, and a value that
 [references](/docs/cli/env) another project's, stay ocel's own. Switching the tier back to
 `builtin` keeps every value the source had copied, and they become ocel's own again.
 
-A value set for one named preview environment stays ocel's own, and overrides what the env
-source says for that environment alone:
+A value set for one preview stays ocel's own, and overrides what the env source says for that
+preview alone. `--environment` takes the preview's name as `ocel preview ls` lists it:
 
 ```bash
+ocel preview up --name pr-12
 ocel env set API_URL=https://pr-12.example.com --preview --environment pr-12
 ```
 

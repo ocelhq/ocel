@@ -232,14 +232,34 @@ and compares its major version with the one the code declares, and it checks a b
 CORS and policy against what the code asks of it. A binding that fails the check stops the deploy
 before anything is built.
 
-A preview environment per pull request can bind a database branch of its own. Create it in CI,
-then set the variable for that environment before the preview deploys:
+A preview per pull request can bind a database branch of its own. Bind the database to a
+published record instead of writing it inline:
+
+```json title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/0.0.0/ocel.schema.json",
+  "slug": "my-app",
+  "bindings": { "postgres": { "orders": "@orders" } }
+}
+```
+
+Publish production's record once, with `ocel bindings set < orders.json`, and publish none for
+the preview tier as a whole. A record published with `--environment` serves that one preview,
+and can be published before the preview has ever deployed. A preview with no record of its own
+has nothing to bind `orders` to, so its deploy is refused rather than reaching a database
+another preview uses.
+
+In CI, name each preview after its pull request, and on every run create its branch if it is
+missing and publish it before the deploy:
 
 ```yaml title=".github/workflows/preview.yml"
 - run: |
-    URL=$(neonctl branches create --name pr-${{ github.event.number }} --output json | jq -r '.connection_uris[0].connection_uri')
-    ocel env set ORDERS_DATABASE_URL="$URL" --preview --environment pr-${{ github.event.number }}
-- run: ocel preview up
+    NAME=pr-${{ github.event.number }}
+    neonctl branches get "$NAME" > /dev/null 2>&1 || neonctl branches create --name "$NAME"
+    URL=$(neonctl connection-string "$NAME")
+    jq -n --arg url "$URL" '{name: "orders", source: "neon", postgres: {url: $url}}' |
+      ocel bindings set --preview --environment "$NAME"
+- run: ocel preview up --name pr-${{ github.event.number }}
 ```
 
 ## Another config per target
