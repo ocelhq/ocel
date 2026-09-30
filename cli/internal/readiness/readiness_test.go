@@ -1,9 +1,11 @@
 package readiness
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/prerequisite"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -88,69 +90,130 @@ func TestCredentialProblemsAreNilWhenThereAreNoneAndAggregatedOtherwise(t *testi
 	})
 }
 
+func infrastructureIn(tier environmentv1.Tier) *contractv1.PreflightResponse {
+	return &contractv1.PreflightResponse{InfrastructurePresent: true, InfraTier: tier, Bootstrap: &contractv1.BootstrapStatus{Tier: tier, Present: true}}
+}
+
+func refusedFor(t *testing.T, resp *contractv1.PreflightResponse, cfg *project.Project, req Request) prerequisite.MissingError {
+	t.Helper()
+	err := RefuseUnready(resp, nil, cfg, req)
+	var missing prerequisite.MissingError
+	if !errors.As(err, &missing) {
+		t.Fatalf("RefuseUnready err = %v, want a missing prerequisite", err)
+	}
+	return missing
+}
+
 func TestAMatchingInfrastructureTierIsNotRefused(t *testing.T) {
-	cases := []struct {
-		infra, required environmentv1.Tier
-	}{
-		{environmentv1.Tier_TIER_PREVIEW, environmentv1.Tier_TIER_PREVIEW},
-		{environmentv1.Tier_TIER_PRODUCTION, environmentv1.Tier_TIER_PRODUCTION},
-	}
-	for _, c := range cases {
-		if err := refuseOtherTier(c.infra, c.required); err != nil {
-			t.Errorf("refuseOtherTier(%v, %v) = %v, want nil", c.infra, c.required, err)
+	for _, tier := range []environmentv1.Tier{environmentv1.Tier_TIER_PREVIEW, environmentv1.Tier_TIER_PRODUCTION} {
+		if err := RefuseUnready(infrastructureIn(tier), nil, &project.Project{}, Request{Tier: tier, Require: Infrastructure}); err != nil {
+			t.Errorf("RefuseUnready(%v) = %v, want nil", tier, err)
 		}
 	}
 }
 
-func TestAMismatchedInfrastructureTierIsRefused(t *testing.T) {
-	cases := []struct {
-		infra, required environmentv1.Tier
-	}{
-		{environmentv1.Tier_TIER_PRODUCTION, environmentv1.Tier_TIER_PREVIEW},
-		{environmentv1.Tier_TIER_PREVIEW, environmentv1.Tier_TIER_PRODUCTION},
-		{environmentv1.Tier_TIER_UNSPECIFIED, environmentv1.Tier_TIER_PREVIEW},
-		{environmentv1.Tier_TIER_UNSPECIFIED, environmentv1.Tier_TIER_PRODUCTION},
+func TestATierWithNoInfrastructureIsABootstrapToSetUpNamingItsCommand(t *testing.T) {
+	status := &contractv1.BootstrapStatus{Tier: environmentv1.Tier_TIER_PRODUCTION, Stacks: []*contractv1.BootstrapStack{
+		{Name: "ocel-bootstrap", Required: true},
+		{Name: "ocel-bootstrap-isr", Feature: "isr", Required: true},
+		{Name: "ocel-bootstrap-queues", Feature: "queues"},
+	}}
+	resp := &contractv1.PreflightResponse{Bootstrap: status, Identity: &contractv1.Identity{Account: "203.0.113.7"}}
+	missing := refusedFor(t, resp, &project.Project{}, Request{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: Infrastructure})
+	if missing.Missing() != prerequisite.Bootstrap {
+		t.Errorf("missing = %v, want the bootstrap", missing.Missing())
 	}
-	for _, c := range cases {
-		err := refuseOtherTier(c.infra, c.required)
-		if err == nil {
-			t.Errorf("refuseOtherTier(%v, %v) = nil, want error", c.infra, c.required)
-			continue
+	if want := "Run `ocel bootstrap production --features isr` and try again"; !strings.HasSuffix(missing.Error(), want) {
+		t.Errorf("error = %q, want it to end %q: the first bootstrap includes what the project needs", missing.Error(), want)
+	}
+	if !strings.Contains(missing.Finding(), "203.0.113.7") {
+		t.Errorf("finding = %q, want it to name the account with nothing set up", missing.Finding())
+	}
+	var absent NoInfrastructureError
+	if !errors.As(missing, &absent) {
+		t.Fatalf("missing = %T, want a NoInfrastructureError", missing)
+	}
+	if req := absent.BootstrapRequest(); req.GetTier() != environmentv1.Tier_TIER_PRODUCTION || strings.Join(req.GetFeatures(), ",") != "isr" {
+		t.Errorf("bootstrap request = %v, want production with isr", req)
+	}
+}
+
+func TestAnotherTiersInfrastructureIsABootstrapToSetUpForThisOne(t *testing.T) {
+	for _, c := range []struct {
+		infra, required environmentv1.Tier
+		names           string
+	}{
+		{environmentv1.Tier_TIER_PRODUCTION, environmentv1.Tier_TIER_PREVIEW, "preview"},
+		{environmentv1.Tier_TIER_PREVIEW, environmentv1.Tier_TIER_PRODUCTION, "production"},
+	} {
+		missing := refusedFor(t, infrastructureIn(c.infra), &project.Project{}, Request{Tier: c.required, Require: Infrastructure})
+		msg := missing.Error()
+		if !strings.Contains(msg, c.names+" infrastructure") || !strings.HasSuffix(msg, "Run `ocel bootstrap "+c.names+"` and try again") {
+			t.Errorf("error = %q, want it to name %s infrastructure and the bootstrap that sets it up", msg, c.names)
 		}
-		if !strings.Contains(err.Error(), "infrastructure") {
-			t.Errorf("refuseOtherTier(%v, %v) error names no infrastructure: %q", c.infra, c.required, err)
+		if strings.Contains(msg, "ocel deploy can only") || strings.Contains(msg, "ocel preview can only") {
+			t.Errorf("error names a command the caller may not have run, got %q", msg)
 		}
 	}
 }
 
-func TestAnotherTiersRefusalNamesTheInfrastructureAndTheBootstrapCommand(t *testing.T) {
-	err := refuseOtherTier(environmentv1.Tier_TIER_PRODUCTION, environmentv1.Tier_TIER_PREVIEW)
-	if err == nil {
-		t.Fatal("expected error")
+func TestACommandNamingNoTierIsRefusedAnAccountWithNone(t *testing.T) {
+	err := RefuseUnready(infrastructureIn(environmentv1.Tier_TIER_PREVIEW), nil, &project.Project{}, Request{Require: Infrastructure})
+	if err == nil || !strings.Contains(err.Error(), "preview infrastructure") {
+		t.Errorf("RefuseUnready err = %v, want it to name the infrastructure the account points at", err)
 	}
-	msg := err.Error()
-	if !strings.Contains(msg, "preview infrastructure") {
-		t.Errorf("error should name preview infrastructure, got %q", msg)
+}
+
+func TestABootstrapLackingAFeatureTheProjectNeedsIsABootstrapToSetUp(t *testing.T) {
+	resp := infrastructureIn(environmentv1.Tier_TIER_PRODUCTION)
+	resp.Bootstrap = bootstrapOf(
+		&contractv1.BootstrapStack{Name: "ocel-bootstrap", Present: true, DigestCurrent: true, Required: true},
+		&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Feature: "isr", Required: true},
+	)
+	missing := refusedFor(t, resp, &project.Project{}, Request{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: Features})
+	if missing.Missing() != prerequisite.Bootstrap || missing.Remedy() != "`ocel bootstrap production --features isr`" {
+		t.Errorf("missing = %v %q, want the bootstrap that adds isr", missing.Missing(), missing.Remedy())
 	}
-	if !strings.Contains(msg, "ocel bootstrap preview") {
-		t.Errorf("error should tell the user how to fix it, got %q", msg)
+	var lacking MissingFeaturesError
+	if !errors.As(missing, &lacking) || strings.Join(lacking.BootstrapRequest().GetFeatures(), ",") != "isr" {
+		t.Errorf("missing = %#v, want a MissingFeaturesError asking for isr", missing)
 	}
-	if strings.Contains(msg, "ocel preview can only") {
-		t.Errorf("error names a command the caller may not have run, got %q", msg)
+}
+
+func TestAProjectWithNoHostnameWhereTheRouterNeedsOneIsADomainToSetUp(t *testing.T) {
+	resp := infrastructureIn(environmentv1.Tier_TIER_PRODUCTION)
+	resp.HostnameRequired = true
+	cfg := &project.Project{Slug: "shop", Path: "/code/shop/ocel.json"}
+	req := Request{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: Infrastructure, RequireHostname: true}
+	missing := refusedFor(t, resp, cfg, req)
+	if missing.Missing() != prerequisite.Domain {
+		t.Errorf("missing = %v, want the domain", missing.Missing())
+	}
+	for _, want := range []string{"shop", "ocel.json", "domains"} {
+		if !strings.Contains(missing.Error(), want) {
+			t.Errorf("error = %q, want it to name %q", missing.Error(), want)
+		}
+	}
+	var unnamed NoHostnameError
+	if !errors.As(missing, &unnamed) || unnamed.ConfigPath != cfg.Path || unnamed.Slug != "shop" {
+		t.Errorf("missing = %#v, want the config to add the hostname to", missing)
 	}
 
-	err = refuseOtherTier(environmentv1.Tier_TIER_PREVIEW, environmentv1.Tier_TIER_PRODUCTION)
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	msg = err.Error()
-	if !strings.Contains(msg, "production infrastructure") {
-		t.Errorf("error should name production infrastructure, got %q", msg)
-	}
-	if !strings.Contains(msg, "ocel bootstrap production") {
-		t.Errorf("error should tell the user how to fix it, got %q", msg)
-	}
-	if strings.Contains(msg, "ocel deploy can only") {
-		t.Errorf("error names a command the caller may not have run, got %q", msg)
-	}
+	t.Run("a declared hostname is enough", func(t *testing.T) {
+		declared := &project.Project{Slug: "shop", Domains: project.Domains{Production: []string{"shop.example.com"}}}
+		if err := RefuseUnready(resp, nil, declared, req); err != nil {
+			t.Errorf("RefuseUnready err = %v, want a project with a hostname let through", err)
+		}
+	})
+	t.Run("a router that addresses itself needs none", func(t *testing.T) {
+		addressed := infrastructureIn(environmentv1.Tier_TIER_PRODUCTION)
+		if err := RefuseUnready(addressed, nil, cfg, req); err != nil {
+			t.Errorf("RefuseUnready err = %v, want no hostname asked for", err)
+		}
+	})
+	t.Run("a command that serves nothing asks for none", func(t *testing.T) {
+		if err := RefuseUnready(resp, nil, cfg, Request{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: Infrastructure}); err != nil {
+			t.Errorf("RefuseUnready err = %v, want no hostname asked for", err)
+		}
+	})
 }

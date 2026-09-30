@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/prerequisite"
+	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -78,10 +80,33 @@ func (g Gap) RefuseMissing(tier environmentv1.Tier) error {
 	if len(g.Missing) == 0 {
 		return nil
 	}
-	return fmt.Errorf(
+	return MissingFeaturesError{Gap: g, Tier: tier}
+}
+
+type MissingFeaturesError struct {
+	Gap      Gap
+	Tier     environmentv1.Tier
+	Edge     *contractv1.EdgeSelection
+	Provider *providerprocess.Provider
+}
+
+func (e MissingFeaturesError) Error() string {
+	return fmt.Sprintf(
 		"the %s bootstrap does not include what this project needs: %s.\nRun `%s` and try again",
-		TierName(tier), strings.Join(g.Missing, ", "), g.RepairCommand(tier),
+		TierName(e.Tier), strings.Join(e.Gap.Missing, ", "), e.Gap.RepairCommand(e.Tier),
 	)
+}
+
+func (MissingFeaturesError) Missing() prerequisite.Kind { return prerequisite.Bootstrap }
+
+func (e MissingFeaturesError) Finding() string {
+	return fmt.Sprintf("The %s bootstrap does not include what this project needs: %s.", TierName(e.Tier), strings.Join(e.Gap.Missing, ", "))
+}
+
+func (e MissingFeaturesError) Remedy() string { return "`" + e.Gap.RepairCommand(e.Tier) + "`" }
+
+func (e MissingFeaturesError) BootstrapRequest() *contractv1.BootstrapRequest {
+	return e.Gap.BootstrapRequest(e.Tier, e.Edge)
 }
 
 func (g Gap) RefuseIncomplete(tier environmentv1.Tier) error {
@@ -97,22 +122,10 @@ func (g Gap) RefuseIncomplete(tier environmentv1.Tier) error {
 	)
 }
 
-func (g Gap) refuseMissingWarnStale(tier environmentv1.Tier, span *run.Span) error {
-	if err := g.RefuseMissing(tier); err != nil {
-		return err
+func (g Gap) WarnStale(tier environmentv1.Tier, span *run.Span) {
+	if len(g.Stale) == 0 {
+		return
 	}
 	span.Warn(fmt.Sprintf("The %s bootstrap is behind what this build has: %s.\nRun `%s` to refresh it.",
 		TierName(tier), strings.Join(g.Stale, ", "), g.RepairCommand(tier)))
-	return nil
-}
-
-func (g Gap) summary() string {
-	var parts []string
-	if len(g.Missing) > 0 {
-		parts = append(parts, "add "+strings.Join(g.Missing, ", "))
-	}
-	if len(g.Stale) > 0 {
-		parts = append(parts, "refresh "+strings.Join(g.Stale, ", "))
-	}
-	return strings.Join(parts, " and ")
 }

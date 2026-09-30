@@ -3,13 +3,19 @@ package commands_test
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/commands"
+	"github.com/ocelhq/ocel/cli/internal/consent"
+	"github.com/ocelhq/ocel/cli/internal/prerequisite"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/readiness"
+	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/pkg/environment"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
@@ -117,4 +123,102 @@ func TestWithProviderRefusesAProjectNamingNoProviderBeforeAnyWork(t *testing.T) 
 	if worked {
 		t.Error("the work ran for a project naming no provider")
 	}
+}
+
+func previewBootstrapSetup(fixture clitest.FakeProject, t *testing.T, runs *int) prerequisite.Setup {
+	return prerequisite.Setup{
+		Prompt:         func(missing prerequisite.MissingError) string { return "Run " + missing.Remedy() + " now?" },
+		ChangesAccount: true,
+		Run: func(context.Context, consent.Policy, *run.Span, prerequisite.MissingError) error {
+			*runs++
+			clitest.Bootstrap(t, fixture.Provider, environment.TierPreview)
+			return nil
+		},
+	}
+}
+
+func TestWithProviderSetsUpWhatTheTierIsMissingAndChecksItAgain(t *testing.T) {
+	fixture := clitest.SetUpProject(t)
+	invocation := clitest.NewInvocation()
+	runs := 0
+	invocation.Setups = prerequisite.Setups{prerequisite.Bootstrap: previewBootstrapSetup(fixture, t, &runs)}
+	cfg, err := invocation.LoadProject(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("LoadProject: %v", err)
+	}
+	var asked strings.Builder
+	policy := consent.Policy{Interactive: true, In: strings.NewReader("y\n"), Out: &asked}
+
+	worked := false
+	err = invocation.WithProvider(context.Background(), cfg, "ocel test", commands.OpenOptions{Tier: environmentv1.Tier_TIER_PREVIEW, Require: readiness.Infrastructure, Policy: policy}, func(_ context.Context, p commands.ProviderRun) error {
+		worked = p.Project != nil && p.Project.Slug == cfg.Slug
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("WithProvider err = %v, want the preview bootstrap set up and the work run", err)
+	}
+	if runs != 1 || !worked {
+		t.Errorf("setup ran %d times and the work ran with the project: %t, want once and true", runs, worked)
+	}
+	if !strings.Contains(asked.String(), "Run `ocel bootstrap preview` now?") {
+		t.Errorf("asked %q, want the bootstrap offered", asked.String())
+	}
+}
+
+func TestWithProviderEndsADeclinedSetupAsARunThatChangedNothing(t *testing.T) {
+	fixture := clitest.SetUpProject(t)
+	invocation := clitest.NewInvocation()
+	var rendered strings.Builder
+	clitest.AttachTerminalSink(invocation, &rendered)
+	runs := 0
+	invocation.Setups = prerequisite.Setups{prerequisite.Bootstrap: previewBootstrapSetup(fixture, t, &runs)}
+	cfg, err := invocation.LoadProject(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("LoadProject: %v", err)
+	}
+	var asked strings.Builder
+	policy := consent.Policy{Interactive: true, In: strings.NewReader("n\n"), Out: &asked}
+
+	worked := false
+	err = invocation.WithProvider(context.Background(), cfg, "ocel test", commands.OpenOptions{Tier: environmentv1.Tier_TIER_PREVIEW, Require: readiness.Infrastructure, Policy: policy}, func(context.Context, commands.ProviderRun) error {
+		worked = true
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("WithProvider err = %v, want a declined setup to exit 0", err)
+	}
+	if runs != 0 || worked {
+		t.Errorf("setup ran %d times and the work ran: %t, want neither", runs, worked)
+	}
+	if want := "Not set up, so this run changes nothing. When you're ready: `ocel bootstrap preview`"; !strings.Contains(rendered.String(), want) {
+		t.Errorf("rendered %q, want %q", rendered.String(), want)
+	}
+}
+
+func TestEnsureProjectSetsUpAMissingConfigAndLoadsIt(t *testing.T) {
+	dir := t.TempDir()
+	invocation := clitest.NewInvocation()
+	invocation.Setups = prerequisite.Setups{prerequisite.Project: {
+		Prompt: func(prerequisite.MissingError) string { return "Set up a project here?" },
+		Run: func(context.Context, consent.Policy, *run.Span, prerequisite.MissingError) error {
+			return os.WriteFile(filepath.Join(dir, project.DefaultFileName), []byte(`{"slug": "shop", "provider": {"fake": {}}}`), 0o644)
+		},
+	}}
+	var asked strings.Builder
+	policy := consent.Policy{Interactive: true, In: strings.NewReader("y\n"), Out: &asked}
+
+	cfg, err := invocation.EnsureProject(context.Background(), dir, policy)
+	if err != nil {
+		t.Fatalf("EnsureProject err = %v, want the project set up and loaded", err)
+	}
+	if cfg.Slug != "shop" {
+		t.Errorf("slug = %q, want the project the setup wrote", cfg.Slug)
+	}
+
+	t.Run("a declined setup is reported as one", func(t *testing.T) {
+		policy := consent.Policy{Interactive: true, In: strings.NewReader("n\n"), Out: &asked}
+		if _, err := invocation.EnsureProject(context.Background(), t.TempDir(), policy); !prerequisite.IsDeclined(err) {
+			t.Errorf("EnsureProject err = %v, want the decline", err)
+		}
+	})
 }

@@ -12,6 +12,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
+	"github.com/ocelhq/ocel/cli/internal/commands/bootstrap"
+	"github.com/ocelhq/ocel/cli/internal/prerequisite"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -983,6 +985,7 @@ func TestAWriteWithoutTheVariablesKeyOffersTheBootstrapThatAddsIt(t *testing.T) 
 		project := setUpVariablesKeyFixture(t)
 		dependencies := newTestDependencies()
 		dependencies.StdinIsTerminal = func(io.Reader) bool { return true }
+		dependencies.Setups = prerequisite.Setups{prerequisite.Bootstrap: bootstrap.NewSetup()}
 
 		var stdout, stderr bytes.Buffer
 		err := runEnvSet(context.Background(), dependencies, project.Root, "LOG_LEVEL", "debug", envOptions{}, strings.NewReader("y\n"), &stdout, &stderr)

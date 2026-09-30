@@ -7,6 +7,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/consent"
+	"github.com/ocelhq/ocel/cli/internal/prerequisite"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
@@ -25,10 +27,24 @@ type Invocation struct {
 	StdinIsTerminal func(r io.Reader) bool
 	Questions       providerprocess.Questions
 	ConfigPath      func() string
+	Setups          prerequisite.Setups
 }
 
 func (i Invocation) LoadProject(ctx context.Context, cwd string) (*project.Project, error) {
 	return project.Load(ctx, cwd, i.ConfigPath())
+}
+
+func (i Invocation) EnsureProject(ctx context.Context, cwd string, policy consent.Policy) (*project.Project, error) {
+	var cfg *project.Project
+	preamble := i.Events.Preamble()
+	err := i.Setups.Ensure(ctx, policy, preamble, func(ctx context.Context) (err error) {
+		cfg, err = i.LoadProject(ctx, cwd)
+		return err
+	})
+	if prerequisite.IsDeclined(err) {
+		preamble.Say(err.Error())
+	}
+	return cfg, err
 }
 
 func (i Invocation) LoadOptionalProject(ctx context.Context, cwd string) (*project.Project, error) {

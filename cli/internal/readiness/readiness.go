@@ -31,6 +31,8 @@ type Request struct {
 	Domains          []string
 	CheckHosts       bool
 	HostCheckDomains []string
+	RequireHostname  bool
+	Feature          string
 }
 
 func Check(ctx context.Context, span *run.Span, provider *providerprocess.Provider, cfg *project.Project, req Request) (Preflight, error) {
@@ -38,7 +40,10 @@ func Check(ctx context.Context, span *run.Span, provider *providerprocess.Provid
 	read, err := Read(ctx, provider, cfg, req)
 	if err == nil {
 		span.Identity(identityEvent(cfg, req.Tier, read.Response.GetIdentity()))
-		err = RefuseUnready(read.Response, req.Tier, req.Require)
+		err = RefuseUnready(read.Response, provider, cfg, req)
+	}
+	if err == nil && req.Feature != "" {
+		err = refuseMissingFeature(ctx, provider, cfg, read.Response.GetBootstrap(), req)
 	}
 	child.End(err)
 	if err != nil {
@@ -47,26 +52,67 @@ func Check(ctx context.Context, span *run.Span, provider *providerprocess.Provid
 	return read, nil
 }
 
-func RefuseUnready(resp *contractv1.PreflightResponse, tier environmentv1.Tier, require Requirement) error {
-	if require == None {
+func RefuseUnready(resp *contractv1.PreflightResponse, provider *providerprocess.Provider, cfg *project.Project, req Request) error {
+	if req.Require == None {
 		return nil
 	}
 	if err := refuseCredentialProblems(resp.GetCredentialProblems()); err != nil {
 		return err
 	}
-	if require == Credentials {
+	if req.Require == Credentials {
 		return nil
 	}
-	if !resp.GetInfrastructurePresent() {
-		return fmt.Errorf("no infrastructure is set up yet; run `%s` to create it", BootstrapCommand(tier))
-	}
-	if err := refuseOtherTier(resp.GetInfraTier(), tier); err != nil {
+	if err := refuseAbsentInfrastructure(resp, provider, cfg, req.Tier); err != nil {
 		return err
 	}
-	if require == Infrastructure {
+	if req.Require == Features {
+		if err := refuseMissingFeatures(NewGap(resp.GetBootstrap()), provider, cfg, req.Tier); err != nil {
+			return err
+		}
+	}
+	if req.RequireHostname && resp.GetHostnameRequired() && len(cfg.HostnameNames(req.Tier)) == 0 {
+		return NoHostnameError{Slug: cfg.Slug, ConfigPath: cfg.Path, Vendor: resp.GetIdentity().GetProvider()}
+	}
+	return nil
+}
+
+func refuseAbsentInfrastructure(resp *contractv1.PreflightResponse, provider *providerprocess.Provider, cfg *project.Project, tier environmentv1.Tier) error {
+	infra := resp.GetInfraTier()
+	if resp.GetInfrastructurePresent() && infra == tier {
 		return nil
 	}
-	return NewGap(resp.GetBootstrap()).RefuseMissing(tier)
+	if resp.GetInfrastructurePresent() && tier == environmentv1.Tier_TIER_UNSPECIFIED {
+		return fmt.Errorf("the account points at %s, but this command requires %s", infraLabel(infra), infraLabel(tier))
+	}
+	absent := NoInfrastructureError{
+		Tier:     tier,
+		Features: requiredFeatures(resp.GetBootstrap()),
+		Account:  resp.GetIdentity().GetAccount(),
+		Edge:     cfg.EdgeSelection(),
+		Provider: provider,
+	}
+	if resp.GetInfrastructurePresent() {
+		absent.Other = infra
+	}
+	return absent
+}
+
+func refuseMissingFeatures(gap Gap, provider *providerprocess.Provider, cfg *project.Project, tier environmentv1.Tier) error {
+	err := gap.RefuseMissing(tier)
+	var lacking MissingFeaturesError
+	if !errors.As(err, &lacking) {
+		return err
+	}
+	lacking.Edge, lacking.Provider = cfg.EdgeSelection(), provider
+	return lacking
+}
+
+func refuseMissingFeature(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project, status *contractv1.BootstrapStatus, req Request) error {
+	offered, err := hasOffer(ctx, provider, req.Tier, cfg.EdgeSelection(), req.Feature)
+	if err != nil || !offered {
+		return err
+	}
+	return refuseMissingFeatures(NewFeatureGap(status, req.Feature), provider, cfg, req.Tier)
 }
 
 func TierName(tier environmentv1.Tier) string {
@@ -89,19 +135,6 @@ func checkingTitle(tier environmentv1.Tier, slug string) progress.Title {
 		object += " for " + slug
 	}
 	return progress.Checking.Title(object)
-}
-
-func refuseOtherTier(infra, required environmentv1.Tier) error {
-	if infra == required {
-		return nil
-	}
-	if required == environmentv1.Tier_TIER_UNSPECIFIED {
-		return fmt.Errorf("the account points at %s, but this command requires %s", infraLabel(infra), infraLabel(required))
-	}
-	return fmt.Errorf(
-		"this command needs %s infrastructure, but the account points at %s; run `%s` to set it up",
-		TierName(required), infraLabel(infra), BootstrapCommand(required),
-	)
 }
 
 func infraLabel(tier environmentv1.Tier) string {
