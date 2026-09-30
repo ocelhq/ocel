@@ -2,6 +2,7 @@ package cloudflare
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 
@@ -33,10 +34,14 @@ func (s *stack) bindForwarded(ctx context.Context, binding edge.DomainBinding) e
 	if s.state.Tier != environment.TierPreview {
 		served = s.own.EntryWorkers
 	}
-	if err := s.p.ensureRouteWithoutWorker(ctx, zoneID, routePattern(binding.Hostname), served); err != nil {
+	restoreRoute, err := s.p.ensureRouteWithoutWorker(ctx, zoneID, routePattern(binding.Hostname), served)
+	if err != nil {
 		return err
 	}
-	return s.p.bindOrigin(ctx, &s.state, s.formatOwner(), binding)
+	if err := s.p.bindOrigin(ctx, &s.state, s.formatOwner(), binding); err != nil {
+		return errors.Join(err, restoreRoute(ctx))
+	}
+	return nil
 }
 
 func (s *stack) unbindForwarded(ctx context.Context, hostname string) error {
@@ -63,32 +68,44 @@ func (s *stack) stopForwarding(ctx context.Context, zoneID, hostname string) err
 	return nil
 }
 
-func (p *cloudflare) ensureRouteWithoutWorker(ctx context.Context, zoneID, pattern string, served []string) error {
+func (p *cloudflare) ensureRouteWithoutWorker(ctx context.Context, zoneID, pattern string, served []string) (func(context.Context) error, error) {
 	snap := p.routeSnapshot()
 	inZone, err := snap.inZone(ctx, zoneID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	for _, route := range inZone {
 		if route.Pattern != pattern {
 			continue
 		}
 		if route.Script == "" {
-			return nil
+			return func(context.Context) error { return nil }, nil
 		}
 		if slices.Contains(served, route.Script) {
 			if _, err := p.client.Workers.Routes.Update(ctx, route.ID, workers.RouteUpdateParams{ZoneID: cf.F(zoneID), Pattern: cf.F(pattern)}); err != nil {
-				return fmt.Errorf("repoint worker route %q to run no worker: %w", pattern, err)
+				return nil, fmt.Errorf("repoint worker route %q to run no worker: %w", pattern, err)
 			}
 			snap.repointed(zoneID, route.ID, "")
-			return nil
+			return func(ctx context.Context) error {
+				if _, err := p.client.Workers.Routes.Update(ctx, route.ID, workers.RouteUpdateParams{ZoneID: cf.F(zoneID), Pattern: cf.F(pattern), Script: cf.F(route.Script)}); err != nil {
+					return fmt.Errorf("repoint worker route %q back to %q: %w", pattern, route.Script, err)
+				}
+				snap.repointed(zoneID, route.ID, route.Script)
+				return nil
+			}, nil
 		}
-		return fmt.Errorf("worker route %q runs %q, and a hostname forwarded to its origin runs no worker: remove that route and bind it again", pattern, route.Script)
+		return nil, fmt.Errorf("worker route %q runs %q, and a hostname forwarded to its origin runs no worker: remove that route and bind it again", pattern, route.Script)
 	}
 	attached, err := p.client.Workers.Routes.New(ctx, workers.RouteNewParams{ZoneID: cf.F(zoneID), Pattern: cf.F(pattern)})
 	if err != nil {
-		return fmt.Errorf("attach the route that runs no worker on %q: %w", pattern, err)
+		return nil, fmt.Errorf("attach the route that runs no worker on %q: %w", pattern, err)
 	}
 	snap.attached(zoneID, workers.RouteListResponse{ID: attached.ID, Pattern: pattern})
-	return nil
+	return func(ctx context.Context) error {
+		if _, err := p.client.Workers.Routes.Delete(ctx, attached.ID, workers.RouteDeleteParams{ZoneID: cf.F(zoneID)}); err != nil {
+			return fmt.Errorf("remove the route that runs no worker on %q: %w", pattern, err)
+		}
+		snap.detached(zoneID, attached.ID)
+		return nil
+	}, nil
 }
