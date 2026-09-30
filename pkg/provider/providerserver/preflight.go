@@ -47,6 +47,10 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 	if err := h.edgeIdentity(ctx, p, gate.Edge, req.GetEdge(), resp); err != nil {
 		return nil, err
 	}
+	resp.HostnameRequired, err = h.hostnameRequired(p, req.GetEdge())
+	if err != nil {
+		return nil, provider.RefusalError(err)
+	}
 
 	required, err := bootstrapplan.RequiredFeatures(gate.Bootstrap.Catalogue(), req.GetFrameworks(), gate.Edge)
 	if err != nil {
@@ -131,6 +135,18 @@ func (h *handlers) edgeIdentity(
 	}
 	resp.Identity.EdgeScope = scope.Account
 	return nil
+}
+
+func (h *handlers) hostnameRequired(p provider.Provider, sel *contractv1.EdgeSelection) (bool, error) {
+	front, err := h.edgeFor(p, sel)
+	if err != nil {
+		return false, err
+	}
+	paired, err := openPairedRouter(p, front.Kind())
+	if err != nil {
+		return false, err
+	}
+	return !paired.Facts().AddressesItself, nil
 }
 
 func (h *handlers) domainClaims(ctx context.Context, p provider.Provider, tier environment.Tier, req *contractv1.PreflightRequest) ([]*contractv1.DomainClaim, error) {

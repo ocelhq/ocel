@@ -514,6 +514,8 @@ message PreflightResponse {
   repeated HostCheck host_checks = 10;
 
   map<string, string> container_archs = 12 [(buf.validate.field).map.values.string = {in: ["amd64", "arm64"]}];
+
+  bool hostname_required = 13;
 }
 
 

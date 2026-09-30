@@ -3211,6 +3211,7 @@ type PreflightResponse struct {
 	Computes              []string               `protobuf:"bytes,9,rep,name=computes,proto3" json:"computes,omitempty"`
 	HostChecks            []*HostCheck           `protobuf:"bytes,10,rep,name=host_checks,json=hostChecks,proto3" json:"host_checks,omitempty"`
 	ContainerArchs        map[string]string      `protobuf:"bytes,12,rep,name=container_archs,json=containerArchs,proto3" json:"container_archs,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	HostnameRequired      bool                   `protobuf:"varint,13,opt,name=hostname_required,json=hostnameRequired,proto3" json:"hostname_required,omitempty"`
 	unknownFields         protoimpl.UnknownFields
 	sizeCache             protoimpl.SizeCache
 }
@@ -3320,6 +3321,13 @@ func (x *PreflightResponse) GetContainerArchs() map[string]string {
 		return x.ContainerArchs
 	}
 	return nil
+}
+
+func (x *PreflightResponse) GetHostnameRequired() bool {
+	if x != nil {
+		return x.HostnameRequired
+	}
+	return false
 }
 
 type PreviewWildcard struct {
@@ -4881,7 +4889,7 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"containers\"V\n" +
 	"\fContainerApp\x12\x19\n" +
 	"\x03app\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x03app\x12+\n" +
-	"\x04arch\x18\x02 \x01(\tB\x17\xbaH\x14\xd8\x01\x01r\x0fR\x06x86_64R\x05arm64R\x04arch\"\xbd\x06\n" +
+	"\x04arch\x18\x02 \x01(\tB\x17\xbaH\x14\xd8\x01\x01r\x0fR\x06x86_64R\x05arm64R\x04arch\"\xea\x06\n" +
 	"\x11PreflightResponse\x12:\n" +
 	"\n" +
 	"infra_tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierR\tinfraTier\x125\n" +
@@ -4897,7 +4905,8 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\vhost_checks\x18\n" +
 	" \x03(\v2\x1f.provider.contract.v1.HostCheckR\n" +
 	"hostChecks\x12~\n" +
-	"\x0fcontainer_archs\x18\f \x03(\v2;.provider.contract.v1.PreflightResponse.ContainerArchsEntryB\x18\xbaH\x15\x9a\x01\x12*\x10r\x0eR\x05amd64R\x05arm64R\x0econtainerArchs\x1aA\n" +
+	"\x0fcontainer_archs\x18\f \x03(\v2;.provider.contract.v1.PreflightResponse.ContainerArchsEntryB\x18\xbaH\x15\x9a\x01\x12*\x10r\x0eR\x05amd64R\x05arm64R\x0econtainerArchs\x12+\n" +
+	"\x11hostname_required\x18\r \x01(\bR\x10hostnameRequired\x1aA\n" +
 	"\x13ContainerArchsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xf1\x02\n" +
