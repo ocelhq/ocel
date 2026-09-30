@@ -215,7 +215,7 @@ func (w *wildcards) reconcileEntry(ctx context.Context, front edge.Edge, origin 
 	var claimed originClaim
 	if origin != nil {
 		var err error
-		claim := router.Claim{Hostname: w.recorded.Hostname(), Certificate: w.recorded.Host.Certificate.ID, Tunnel: tunnelThrough(front, w.sel)}
+		claim := router.Claim{Hostname: w.recorded.Hostname(), Certificate: w.recorded.Host.Certificate.ID, Tunnel: readSelectedTunnel(front, w.sel)}
 		if claimed, err = claimOrigin(ctx, front, claim, origin.ClaimPreviewEntry, w.reserveOriginCertificate); err != nil {
 			return "", err
 		}
@@ -290,7 +290,7 @@ func (w *wildcards) refreshEntryClaim(ctx context.Context, front edge.Edge, runP
 	if err != nil || origin == nil {
 		return err
 	}
-	stale, why, err := isOriginClaimStale(ctx, front, w.recorded.Hostname(), tunnelThrough(front, w.sel), &w.recorded.Host, time.Now())
+	stale, why, err := isOriginClaimStale(ctx, front, w.recorded.Hostname(), readSelectedTunnel(front, w.sel), &w.recorded.Host, time.Now())
 	if err != nil || !stale {
 		return err
 	}
