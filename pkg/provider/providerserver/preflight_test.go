@@ -262,6 +262,29 @@ func TestPreflightRequiresTheFeaturesTheEdgeNeeds(t *testing.T) {
 	}
 }
 
+func TestPreflightWithNoBootstrapYetReportsEveryFeatureTheProjectNeeds(t *testing.T) {
+	t.Parallel()
+
+	client, _ := contractServed(t, "1.2.3")
+	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
+		Frameworks:   []string{"next"},
+		Edge:         &contractv1.EdgeSelection{Kind: "direct"},
+	})
+	if err != nil {
+		t.Fatalf("Preflight() error = %v", err)
+	}
+	var absent []string
+	for _, stack := range resp.GetBootstrap().GetStacks() {
+		if stack.GetFeature() != "" && stack.GetRequired() && !stack.GetPresent() {
+			absent = append(absent, stack.GetFeature())
+		}
+	}
+	if want := []string{fake.FeatureCache, fake.FeatureImages}; !slices.Equal(absent, want) {
+		t.Errorf("Preflight() reports %v as required and absent, want %v, which a next project needs", absent, want)
+	}
+}
+
 func TestPreflightReturnsTheGlobalPreviewWildcard(t *testing.T) {
 	t.Parallel()
 

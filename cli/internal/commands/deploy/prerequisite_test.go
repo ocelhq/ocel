@@ -26,6 +26,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 )
 
@@ -208,5 +209,30 @@ func TestADeclinedSetupExitsZeroNamingTheCommand(t *testing.T) {
 	}
 	if sent := sentDeploys(t, fixture); len(sent) != 0 {
 		t.Errorf("the CLI sent %d deploys after the setup was declined, want none", len(sent))
+	}
+}
+
+func TestAFirstDeployOfAProjectNeedingAFeatureBootstrapsWithItAndDeploysInOneRun(t *testing.T) {
+	fixture := clitest.SetUpProject(t)
+	removeBootstrap(t, fixture, environment.TierProduction)
+	fixture.Provider.FakeBootstrap().Offers(provider.Feature{Name: fake.FeatureCache, Summary: "a cache every node app needs", Frameworks: []string{"node"}})
+	writeUsageMonorepo(t, fixture.Root, "  edge: \"direct\",\n")
+	before := len(fixture.Provider.FakeBootstrap().Applied())
+	dependencies := newTestDependencies()
+	terminalStdin(&dependencies)
+	withSetups(&dependencies)
+	stubBuild(&dependencies, apiFunction())
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{}, &stdout, &stderr, strings.NewReader("y\ny\n")); err != nil {
+		t.Fatalf("runDeploy err = %v; stdout=%s", err, stdout.String())
+	}
+	applied := fixture.Provider.FakeBootstrap().Applied()[before:]
+	if len(applied) != 1 || !slices.Contains(applied[0].Features, fake.FeatureCache) {
+		t.Errorf("the provider applied %+v, want one bootstrap that includes %s, which the project needs", applied, fake.FeatureCache)
+	}
+	if sent := sentDeploys(t, fixture); len(sent) != 1 {
+		t.Errorf("the CLI sent %d deploys, want the first bootstrap to leave nothing missing for the deploy; stdout=%s", len(sent), stdout.String())
 	}
 }
