@@ -416,7 +416,9 @@ func (e *Edge) bound(binding edge.DomainBinding) error {
 	}
 	e.bindings = append(e.bindings, binding)
 	e.serving[binding.Hostname] = binding.Certificate
-	if binding.Origin != nil {
+	if binding.Origin == nil {
+		delete(e.forwards, binding.Hostname)
+	} else {
 		if e.forwards == nil {
 			e.forwards = map[string]edge.Origin{}
 		}
