@@ -39,6 +39,8 @@ func (s *EdgeState) Pair(kind router.Kind, state router.StackState, apps map[str
 
 type HostnameState struct {
 	Edge        edge.Kind              `json:"edge,omitempty"`
+	Router      router.Kind            `json:"router,omitempty"`
+	Pointer     string                 `json:"pointer,omitempty"`
 	Certificate provider.Certificate   `json:"certificate,omitzero"`
 	Superseded  []provider.Certificate `json:"superseded,omitempty"`
 	Written     []edge.Record          `json:"written,omitempty"`
@@ -114,6 +116,16 @@ func (w Wildcard) IsRecorded() bool { return w.BaseDomain != "" }
 func (s EdgeState) Host(hostname string) HostnameState { return s.Hosts[hostname] }
 
 func (s EdgeState) Hostnames() []string { return slices.Sorted(maps.Keys(s.Hosts)) }
+
+func (s EdgeState) PointerHostnames(pointer string) []string {
+	var hosts []string
+	for _, hostname := range s.Hostnames() {
+		if held := s.Hosts[hostname].Pointer; held != "" && held == router.ResolvePointer(pointer) {
+			hosts = append(hosts, hostname)
+		}
+	}
+	return hosts
+}
 
 func (s EdgeState) Ready(hostname string, front edge.Kind, answering router.Kind) bool {
 	host := s.Host(hostname)

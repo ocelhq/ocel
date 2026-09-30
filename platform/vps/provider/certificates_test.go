@@ -91,7 +91,7 @@ func TestInspectingAPinnedCertificateNeverOpensTheKeyBesideIt(t *testing.T) {
 	if cert.ID != certs.PinHandle(wildcardPin) {
 		t.Fatalf("Issue() = %q, want %q", cert.ID, certs.PinHandle(wildcardPin))
 	}
-	if _, err := p.Certificates().Inspect(context.Background(), edge.None, "pr-7.preview.example.com", cert); err != nil {
+	if _, err := p.Certificates().Inspect(context.Background(), edge.None, "", "pr-7.preview.example.com", cert); err != nil {
 		t.Fatalf("Inspect() = %v", err)
 	}
 
@@ -114,7 +114,7 @@ func TestAPinnedCertificateReportsItsOwnExpiryAndNamesTheOperatorAsTheRenewer(t 
 	p := pinning(t, machine, selfSigned(t, []string{"*.preview.example.com"}, 11*24*time.Hour), wildcardPin)
 	cert := certificateFor(t, p, "pr-7.preview.example.com")
 
-	health, err := p.Certificates().Inspect(context.Background(), edge.None, "pr-7.preview.example.com", cert)
+	health, err := p.Certificates().Inspect(context.Background(), edge.None, "", "pr-7.preview.example.com", cert)
 	if err != nil {
 		t.Fatalf("Inspect() = %v", err)
 	}
@@ -225,7 +225,7 @@ func TestTheProxyHandleIsReadOffTheHandshakeAndNeverOffCaddysDataDirectory(t *te
 	)
 
 	cert := certificateFor(t, p, "shop.example.com")
-	health, err := p.Certificates().Inspect(context.Background(), edge.None, "shop.example.com", cert)
+	health, err := p.Certificates().Inspect(context.Background(), edge.None, "", "shop.example.com", cert)
 	if err != nil {
 		t.Fatalf("Inspect() = %v", err)
 	}
@@ -267,7 +267,7 @@ func TestAProxyServedLeafPastItsNotAfterReportsExpiredRatherThanServing(t *testi
 		)
 
 		cert := certificateFor(t, p, "shop.example.com")
-		health, err := p.Certificates().Inspect(context.Background(), edge.None, "shop.example.com", cert)
+		health, err := p.Certificates().Inspect(context.Background(), edge.None, "", "shop.example.com", cert)
 		if err != nil {
 			t.Fatalf("Inspect() over %s = %v", what, err)
 		}
@@ -300,7 +300,7 @@ func TestAProxyHandleWithNothingServedYetIsPendingRatherThanIssued(t *testing.T)
 	)
 
 	cert := certificateFor(t, p, "shop.example.com")
-	health, err := p.Certificates().Inspect(context.Background(), edge.None, "shop.example.com", cert)
+	health, err := p.Certificates().Inspect(context.Background(), edge.None, "", "shop.example.com", cert)
 	if err != nil {
 		t.Fatalf("Inspect() over a host the proxy serves nothing for = %v, want it reported rather than refused", err)
 	}
@@ -324,7 +324,7 @@ func TestAPinHandleNamingAPathOutsideTheProxysOwnDirectoryIsRefusedBeforeItIsRea
 		func(context.Context) (host.Conn, error) { return machine, nil },
 	)
 
-	_, err := p.Certificates().Inspect(context.Background(), edge.None, "pr-7.preview.example.com",
+	_, err := p.Certificates().Inspect(context.Background(), edge.None, "", "pr-7.preview.example.com",
 		provider.Certificate{ID: certs.PinHandle(elsewhere)})
 	var refused refusal.Refusal
 	if !asRefusal(err, &refused) || !strings.Contains(refused.Message, caddy.PinsDir) {
@@ -354,7 +354,7 @@ func TestABoxHasNoCertificateForThePreviewWildcardItself(t *testing.T) {
 		t.Fatalf("Certificate(%s) = %q: the catch-all terminates nothing and every preview under it has its own http-01 certificate, so a handle here names a certificate this box will never obtain and `ocel domain status` reports forever on a slot nothing fills",
 			wildcard, cert.ID)
 	}
-	health, err := p.Certificates().Inspect(context.Background(), edge.None, wildcard, cert)
+	health, err := p.Certificates().Inspect(context.Background(), edge.None, "", wildcard, cert)
 	if err != nil {
 		t.Fatalf("Inspect() = %v", err)
 	}

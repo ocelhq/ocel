@@ -4,13 +4,16 @@ import (
 	"context"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/router"
+
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 type CertificateChecks struct {
-	Kind edge.Kind
+	Kind   edge.Kind
+	Router router.Kind
 
 	Hostnames []string
 
@@ -46,7 +49,7 @@ func RunCertificates(t *testing.T, certificates provider.Certificates, checks Ce
 	ctx := context.Background()
 
 	t.Run("an empty handle is tolerated and never inspected as one", func(t *testing.T) {
-		health, err := certificates.Inspect(ctx, checks.Kind, "unbound.example.com", provider.Certificate{})
+		health, err := certificates.Inspect(ctx, checks.Kind, checks.Router, "unbound.example.com", provider.Certificate{})
 		if err != nil {
 			t.Fatalf("Inspect() of a binding naming no certificate = %v, want it tolerated: the edge conformance tier binds with an empty one", err)
 		}
@@ -58,7 +61,7 @@ func RunCertificates(t *testing.T, certificates provider.Certificates, checks Ce
 	t.Run("an issued handle names what it terminates and who renews it", func(t *testing.T) {
 		for _, hostname := range certified(t, checks) {
 			cert := issued(t, ctx, certificates, checks, hostname)
-			health, err := certificates.Inspect(ctx, checks.Kind, hostname, cert)
+			health, err := certificates.Inspect(ctx, checks.Kind, checks.Router, hostname, cert)
 			if !health.Terminates {
 				t.Errorf("Inspect(%s, %s).Terminates = false (err = %v), and a zero health makes providerserver skip every certificate case it reports on",
 					hostname, cert.ID, err)
@@ -115,6 +118,7 @@ func issued(t *testing.T, ctx context.Context, certificates provider.Certificate
 	t.Helper()
 	cert, err := certificates.Issue(ctx, provider.CertificateRequest{
 		Kind:     checks.Kind,
+		Router:   checks.Router,
 		Hostname: hostname,
 		Progress: progress.Discard(),
 		Prove: func(context.Context, provider.Certificate, []edge.Record) (provider.Certificate, error) {

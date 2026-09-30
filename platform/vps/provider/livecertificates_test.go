@@ -101,7 +101,7 @@ func TestLiveTheProxyHandleIsReadOffAHandshakeAndAsksTheAdminApiNothing(t *testi
 	}
 
 	spoken := vm.proxyLogBytes(t)
-	served, err := pinned.Certificates().Inspect(ctx, edge.None, caddy.Container,
+	served, err := pinned.Certificates().Inspect(ctx, edge.None, "", caddy.Container,
 		provider.Certificate{ID: certs.ProxyHandle(caddy.Container)})
 	if err != nil {
 		t.Fatalf("Inspect() over a proxy handle = %v", err)
@@ -141,7 +141,7 @@ func TestLiveAPinnedPairIsVerifiedFromTheCertificateAndTheKeyIsNeverRead(t *test
 	if err != nil {
 		t.Fatalf("Issue() over a pinned wildcard = %v", err)
 	}
-	health, err := pinned.Certificates().Inspect(ctx, edge.None, "pr-7.preview.example.invalid", cert)
+	health, err := pinned.Certificates().Inspect(ctx, edge.None, "", "pr-7.preview.example.invalid", cert)
 	if err != nil {
 		t.Fatalf("Inspect() = %v", err)
 	}

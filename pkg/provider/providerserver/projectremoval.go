@@ -92,6 +92,7 @@ func (h *handlers) openRemoval(ctx context.Context, req *contractv1.ProjectReque
 		}
 		removal.setEdgeStack(stack)
 	}
+	removal.restoreRouterStates(state)
 	entries, err := stackrecords.List(ctx, vendor.KeyValues(), tier, req.GetSlug())
 	if err != nil {
 		return nil, err
@@ -141,8 +142,10 @@ func (r *projectRemoval) plan() (*planv1.ChangePlan, error) {
 		Address:   r.state.Edge.Address,
 	}
 	groups := r.front.ProjectRemovals(scope)
-	if origin := r.routerOrigin(); origin != nil {
-		groups = append(groups, origin.PlanProjectRemoval(scope)...)
+	for _, kind := range r.listRouterKinds() {
+		if origin := r.routerOrigin(kind); origin != nil {
+			groups = append(groups, origin.PlanProjectRemoval(scope)...)
+		}
 	}
 	for _, group := range groups {
 		converted, err := edgeGroupProto(group)

@@ -5,6 +5,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/router"
 )
 
 type Certificate struct {
@@ -18,6 +19,7 @@ func (c Certificate) Issued() bool { return c.ID != "" }
 
 type CertificateRequest struct {
 	Kind     edge.Kind
+	Router   router.Kind
 	Hostname string
 	Current  Certificate
 	Prove    func(ctx context.Context, cert Certificate, records []edge.Record) (Certificate, error)
@@ -38,7 +40,7 @@ type CertificateHealth struct {
 type Certificates interface {
 	Issue(ctx context.Context, req CertificateRequest) (Certificate, error)
 
-	Inspect(ctx context.Context, kind edge.Kind, hostname string, cert Certificate) (CertificateHealth, error)
+	Inspect(ctx context.Context, kind edge.Kind, answering router.Kind, hostname string, cert Certificate) (CertificateHealth, error)
 
 	Discard(ctx context.Context, cert Certificate, progress progress.Log) error
 }

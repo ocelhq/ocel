@@ -278,6 +278,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 	if run.state, err = run.store.read(ctx); err != nil {
 		return nil, err
 	}
+	shared.restoreRouterStates(run.state)
 	run.spans = run.newSpans()
 	run.outcomes = pendingOutcomes(spec.Apps)
 	run.dryRunPlan.apps = make([]provider.Plan, len(spec.Apps))
@@ -349,14 +350,11 @@ func (r *deployRun) prepare(ctx context.Context, progress progress.Log) error {
 		}
 		r.replaces = replaces
 	}
+	r.appRouters = pairApps(r.provider.Facts(), r.front.Kind(), r.spec.Apps)
 	if err := r.checkNeeds(ctx); err != nil {
 		return err
 	}
-	if err := r.preflight(ctx, progress); err != nil {
-		return err
-	}
-	r.appRouters = pairApps(r.provider.Facts(), r.front.Kind(), r.spec.Apps)
-	return nil
+	return r.preflight(ctx, progress)
 }
 
 func (r *deployRun) ensureBootstrap(ctx context.Context, progress progress.Log) error {
@@ -465,8 +463,7 @@ func (r *deployRun) reconcileEdge(ctx context.Context, progress progress.Log) er
 	var base string
 	switch r.hostingMode() {
 	case hostingProduction:
-		spec.Domains = r.hostnames()
-		spec.DomainApps = r.domainApps()
+		spec.Domains, spec.DomainApps = r.edgeRoutedDomains()
 	case hostingGlobalPreview:
 		spec.PruneOnly = true
 	default:
@@ -500,7 +497,7 @@ func (r *deployRun) reconcileEdge(ctx context.Context, progress progress.Log) er
 }
 
 func (r *deployRun) forwardPreviews(ctx context.Context, progress progress.Log) error {
-	if r.routerOrigin() == nil || r.front.Facts().RunsCode {
+	if r.routerOrigin(r.router.Kind()) == nil || r.front.Facts().RunsCode {
 		return nil
 	}
 	switch r.hostingMode() {
@@ -672,10 +669,11 @@ func (r *deployRun) previewSite() edge.PreviewSite {
 }
 
 func (r *deployRun) previewLabel(slot int) string {
-	if r.hostingMode() != hostingGlobalPreview || !r.router.Facts().RoutesPreviewsByLabel {
+	app := edge.AppAt(r.appNames(), slot)
+	if r.hostingMode() != hostingGlobalPreview || !r.routerOf(r.readAppRouter(app)).Facts().RoutesPreviewsByLabel {
 		return ""
 	}
-	return r.previewSite().Label(r.spec.Pointer, edge.AppAt(r.appNames(), slot))
+	return r.previewSite().Label(r.spec.Pointer, app)
 }
 
 func (r *deployRun) servedHostnames() [][]string {
@@ -700,7 +698,7 @@ func (r *deployRun) servedHostnames() [][]string {
 func (r *deployRun) checkpoint(ctx context.Context) error {
 	r.state.Kind = r.front.Kind()
 	r.state.Edge = r.edgeStack().State()
-	r.state.Pair(r.router.Kind(), r.routerState(), r.appRouters)
+	r.pairRouters()
 	if r.spec.Tier == environment.TierPreview {
 		r.state.Edge.GlobalPreview = r.globalPreview()
 	}
@@ -710,6 +708,7 @@ func (r *deployRun) checkpoint(ctx context.Context) error {
 func (r *deployRun) checkNeeds(ctx context.Context) error {
 	check := EdgeNeedCheck{
 		Edge:          r.front,
+		Router:        func(app string) router.Router { return r.routerOf(r.appRouters[app]) },
 		Root:          r.artifactRoot,
 		AllowDegraded: r.allowDegraded,
 		Degraded: func(app string, need edge.Need, detail string) {
@@ -1025,7 +1024,7 @@ func (r *deployRun) appServing(entry provider.AppEntry) (AppServing, error) {
 		Stack:             entry.Stack,
 		Coordinate:        appCoordinate(r.spec, entry.App, entry.Build.Release()),
 		EdgeRunsCode:      r.front.Facts().RunsCode,
-		EdgeSignsForwards: r.router.Facts().SignsOriginForwards,
+		EdgeSignsForwards: r.routerOf(r.readAppRouter(entry.App)).Facts().SignsOriginForwards,
 	})
 }
 
@@ -1330,7 +1329,7 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 		r.sender.send(planEvent(r.dryRunPlanProto()))
 		return okResult(), nil
 	}
-	propagation := r.router.Facts().Propagation
+	propagation := r.propagation(slices.Collect(maps.Values(r.appRouters)))
 	promotion := router.Promotion{
 		PromotionID: r.spec.PromotionID,
 		Ts:          time.Now().Unix(),
@@ -1340,11 +1339,14 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 	}
 	if err := r.spanEvents.run(r.spans.Promotion, func(u *spanRun) error {
 		return u.phase(func(progress progress.Log) error {
+			if err := r.forwardAppPreviews(ctx, progress); err != nil {
+				return err
+			}
 			if err := r.publishInlineBindings(ctx); err != nil {
 				r.restoreInlineBindings(ctx, progress)
 				return err
 			}
-			dropped, err := r.sharedStack.promote(ctx, promoteRequest{pointer: r.spec.Pointer, replaces: r.replaces, promotion: promotion}, progress)
+			dropped, err := r.promoteApps(ctx, promoteRequest{pointer: r.spec.Pointer, replaces: r.replaces, promotion: promotion}, r.readAppRouter, progress)
 			if err != nil {
 				r.restoreInlineBindings(ctx, progress)
 				return errors.Join(err, r.reclaimDropped(ctx, r.spec.Pointer, dropped, progress))

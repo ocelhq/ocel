@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strconv"
 
+	"github.com/ocelhq/ocel/pkg/router"
+
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -106,7 +108,7 @@ func (p *Provider) ReportCertificateFor(hostname string, health provider.Certifi
 	p.healthFor[hostname] = health
 }
 
-func (p certificates) Inspect(_ context.Context, _ edge.Kind, hostname string, cert provider.Certificate) (provider.CertificateHealth, error) {
+func (p certificates) Inspect(_ context.Context, _ edge.Kind, _ router.Kind, hostname string, cert provider.Certificate) (provider.CertificateHealth, error) {
 	if err := p.inspections.next(); err != nil {
 		return provider.CertificateHealth{}, err
 	}

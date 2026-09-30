@@ -182,7 +182,12 @@ func (r Router) Hooks() router.Hooks {
 func (e *Edge) routerFacts() router.Facts {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	supported := edge.AllNeeds()
+	if e.routerServes != nil {
+		supported = slices.Clone(*e.routerServes)
+	}
 	return router.Facts{
+		Supported:                   supported,
 		Propagation:                 router.Propagation{Typical: 30 * time.Second, Published: true},
 		SignsOriginForwards:         true,
 		RoutesPreviewsByLabel:       e.byLabel,

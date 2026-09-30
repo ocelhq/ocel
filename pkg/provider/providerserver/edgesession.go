@@ -8,6 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/progress"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -140,6 +141,7 @@ func (h *handlers) openEdgeSession(ctx context.Context, tier environment.Tier, s
 		return nil, err
 	}
 	shared.setEdgeStack(stack)
+	shared.restoreRouterStates(state)
 	session := &edgeSession{sharedStack: shared, provider: vendor, store: store, state: state, tunnel: readSelectedTunnel(front, sel)}
 	session.installDNSCutover(writer, sel.GetDns().GetZone())
 	return session, nil
@@ -152,7 +154,19 @@ func (s *edgeSession) installDNSCutover(writer edge.DNSRecords, zone string) {
 func (s *edgeSession) checkpoint(ctx context.Context) error {
 	s.state.Kind = s.front.Kind()
 	s.state.Edge = s.edgeStack().State()
+	s.recordRouterStates(&s.state)
 	return s.store.write(ctx, s.state)
+}
+
+func (s *edgeSession) releasePointerHostnames(ctx context.Context, pointer string, runProgress progress.Log) error {
+	for _, hostname := range s.state.PointerHostnames(pointer) {
+		runProgress.Say(fmt.Sprintf("Unbinding %s from %s", hostname, describeFront(s.front.Kind())))
+		if err := progress.ReportWarning(runProgress, s.edgeStack().UnbindDomain(ctx, hostname)); err != nil {
+			return err
+		}
+		s.state.Forget(hostname)
+	}
+	return nil
 }
 
 func (s *edgeSession) promoted(ctx context.Context) (bool, error) {

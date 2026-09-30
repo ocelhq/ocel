@@ -164,7 +164,7 @@ func TestACertificateStillProvisioningIsWaitedOutRatherThanReportedIssued(t *tes
 	server.provisioning = 2
 	cert, _ := requested(t, server, "shop.example.com")
 
-	health, err := server.open(t).Certificates().Inspect(context.Background(), alb.Kind, "shop.example.com", cert)
+	health, err := server.open(t).Certificates().Inspect(context.Background(), alb.Kind, "", "shop.example.com", cert)
 	if err != nil {
 		t.Fatalf("InspectCertificate(%s) = %v", cert.ID, err)
 	}
@@ -179,7 +179,7 @@ func TestAnInspectedCertificateSaysWhatItCoversAndWhenItLapses(t *testing.T) {
 	server := newCertServer()
 	cert, _ := requested(t, server, "shop.example.com")
 
-	health, err := server.open(t).Certificates().Inspect(context.Background(), alb.Kind, "shop.example.com", cert)
+	health, err := server.open(t).Certificates().Inspect(context.Background(), alb.Kind, "", "shop.example.com", cert)
 	if err != nil {
 		t.Fatalf("InspectCertificate(%s) = %v", cert.ID, err)
 	}

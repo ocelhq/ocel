@@ -129,7 +129,7 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progr
 	if err != nil {
 		return err
 	}
-	answering, err := findPairedRouter(w.provider, front.Kind())
+	answering, err := findEdgeRouter(w.provider, front.Kind())
 	if err != nil {
 		return err
 	}
@@ -143,7 +143,7 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progr
 		Host:       w.recorded.Host,
 	}
 
-	certifying := w.hostCertificates(cutover, fmt.Sprintf(
+	certifying := w.hostCertificates(cutover, answering, fmt.Sprintf(
 		"If this run gives up waiting, re-run `ocel domain use '%s' --preview`.", wildcard))
 	if err := certifying.certify(ctx, wildcard, progress); err != nil {
 		return err
@@ -196,7 +196,7 @@ func (w *wildcards) entryOrigin(front edge.Edge) (*router.OriginHooks, error) {
 	if facts := front.Facts(); !facts.ProxiesRecords || facts.RunsCode {
 		return nil, nil
 	}
-	paired, err := openPairedRouter(w.provider, front.Kind())
+	paired, err := openEdgeRouter(w.provider, front.Kind())
 	if err != nil {
 		return nil, err
 	}
@@ -303,10 +303,11 @@ func (w *wildcards) refreshEntryClaim(ctx context.Context, front edge.Edge, runP
 	return err
 }
 
-func (w *wildcards) hostCertificates(cutover dnsCutover, notes ...string) hostCertificates {
+func (w *wildcards) hostCertificates(cutover dnsCutover, answering router.Kind, notes ...string) hostCertificates {
 	return hostCertificates{
 		provider:  w.provider,
 		cutover:   cutover,
+		router:    answering,
 		hostState: &w.recorded.Host,
 		persist:   w.save,
 		notes:     notes,
@@ -340,7 +341,7 @@ func (h *handlers) GetPreviewWildcard(ctx context.Context, req *contractv1.Previ
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	health, err := w.provider.Certificates().Inspect(ctx, w.recorded.Edge, w.recorded.Hostname(), w.recorded.Host.Certificate)
+	health, err := w.provider.Certificates().Inspect(ctx, w.recorded.Edge, readEdgeRouter(w.provider, w.recorded.Edge), w.recorded.Hostname(), w.recorded.Host.Certificate)
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
@@ -363,7 +364,7 @@ func recordedPreviewWildcard(ctx context.Context, p provider.Provider) (*contrac
 	}
 	w := &wildcards{provider: p, keyValues: p.KeyValues(), recorded: recorded}
 	wildcard := w.proto(ctx)
-	health, err := p.Certificates().Inspect(ctx, recorded.Edge, recorded.Hostname(), recorded.Host.Certificate)
+	health, err := p.Certificates().Inspect(ctx, recorded.Edge, readEdgeRouter(p, recorded.Edge), recorded.Hostname(), recorded.Host.Certificate)
 	if err != nil {
 		return nil, err
 	}

@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/router"
+
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -47,7 +49,7 @@ func refused(err error) bool {
 	return errors.As(err, &rejection) && rejection.Code == refusal.CodeBusy
 }
 
-func (p certificates) Inspect(ctx context.Context, _ edge.Kind, hostname string, cert provider.Certificate) (provider.CertificateHealth, error) {
+func (p certificates) Inspect(ctx context.Context, _ edge.Kind, _ router.Kind, hostname string, cert provider.Certificate) (provider.CertificateHealth, error) {
 	health := provider.CertificateHealth{Terminates: true}
 	if !cert.Issued() {
 		return health, nil

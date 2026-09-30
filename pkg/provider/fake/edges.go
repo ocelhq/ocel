@@ -83,11 +83,28 @@ func (e *Edges) answering(hostname string) router.Kind {
 	fronts := slices.Collect(maps.Values(e.edges))
 	e.mu.Unlock()
 	for _, front := range fronts {
-		if front.answers(hostname) {
+		if !front.answers(hostname) {
+			continue
+		}
+		forwarded, found := front.forwardedTo(hostname)
+		if !found {
 			return front.routedBy
 		}
+		for _, origin := range fronts {
+			if Origin(origin.routedBy).Address == forwarded.Address {
+				return origin.routedBy
+			}
+		}
+		return front.routedBy
 	}
 	return ""
+}
+
+func (e *Edge) forwardedTo(hostname string) (edge.Origin, bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	origin, found := e.forwards[hostname]
+	return origin, found
 }
 
 func (e *Edges) Edge(kind edge.Kind) *Edge {
@@ -115,13 +132,16 @@ type Edge struct {
 	bindings        []edge.DomainBinding
 	serving         map[string]string
 	serves          *[]edge.Need
+	forwards        map[string]edge.Origin
 	byLabel         bool
 	addressesItself bool
-	refusal         error
-	unbound         error
-	bindSays        string
-	warns           string
-	verify          func(context.Context) (edge.CredentialIdentity, error)
+
+	routerServes *[]edge.Need
+	refusal      error
+	unbound      error
+	bindSays     string
+	warns        string
+	verify       func(context.Context) (edge.CredentialIdentity, error)
 
 	unreadable  error
 	entitlement *edge.CodeEntitlement
@@ -396,6 +416,12 @@ func (e *Edge) bound(binding edge.DomainBinding) error {
 	}
 	e.bindings = append(e.bindings, binding)
 	e.serving[binding.Hostname] = binding.Certificate
+	if binding.Origin != nil {
+		if e.forwards == nil {
+			e.forwards = map[string]edge.Origin{}
+		}
+		e.forwards[binding.Hostname] = *binding.Origin
+	}
 	if e.bindSays != "" && binding.Say != nil {
 		binding.Say(e.bindSays)
 	}
@@ -406,6 +432,7 @@ func (e *Edge) release(hostname string) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	delete(e.serving, hostname)
+	delete(e.forwards, hostname)
 	return progress.MarkWarning(e.unbound)
 }
 
@@ -567,6 +594,12 @@ func (e *Edge) Serves(needs []edge.Need) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.serves = &needs
+}
+
+func (e *Edge) RouterServes(needs []edge.Need) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.routerServes = &needs
 }
 
 func (e *Edge) Bootstrap(context.Context, environment.Tier) (edge.BootstrapOutput, error) {

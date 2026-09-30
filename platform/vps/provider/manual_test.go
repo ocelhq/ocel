@@ -31,7 +31,7 @@ func TestACertificateYourProxyServesIsRenewedByYourProxy(t *testing.T) {
 	machine := &box{leaf: string(served)}
 	p := byHand(machine)
 	cert := certificateFor(t, p, "shop.example.com")
-	health, err := p.Certificates().Inspect(context.Background(), edge.None, "shop.example.com", cert)
+	health, err := p.Certificates().Inspect(context.Background(), edge.None, "", "shop.example.com", cert)
 	if err != nil {
 		t.Fatalf("InspectCertificate() = %v", err)
 	}
@@ -53,7 +53,7 @@ func TestACertificateYourCaddyServesSaysYourCaddyRenewsIt(t *testing.T) {
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}, Proxy: &vps.Proxy{Caddy: &vps.Caddy{Directory: "/etc/caddy/ocel.d"}}},
 		func(context.Context) (host.Conn, error) { return &box{leaf: string(served)}, nil },
 	)
-	health, err := p.Certificates().Inspect(context.Background(), edge.None, "shop.example.com", certificateFor(t, p, "shop.example.com"))
+	health, err := p.Certificates().Inspect(context.Background(), edge.None, "", "shop.example.com", certificateFor(t, p, "shop.example.com"))
 	if err != nil {
 		t.Fatalf("InspectCertificate() = %v", err)
 	}
@@ -72,7 +72,7 @@ func TestACertificateYourTraefikServesIsRenewedThroughTheResolverThatOrderedIt(t
 		func(context.Context) (host.Conn, error) { return machine, nil },
 	)
 	cert := certificateFor(t, p, "shop.example.com")
-	health, err := p.Certificates().Inspect(context.Background(), edge.None, "shop.example.com", cert)
+	health, err := p.Certificates().Inspect(context.Background(), edge.None, "", "shop.example.com", cert)
 	if err != nil {
 		t.Fatalf("InspectCertificate() = %v", err)
 	}

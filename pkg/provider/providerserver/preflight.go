@@ -142,7 +142,7 @@ func (h *handlers) hostnameRequired(p provider.Provider, sel *contractv1.EdgeSel
 	if err != nil {
 		return false, err
 	}
-	paired, err := openPairedRouter(p, front.Kind())
+	paired, err := openEdgeRouter(p, front.Kind())
 	if err != nil {
 		return false, err
 	}
