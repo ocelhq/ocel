@@ -430,7 +430,10 @@ message EdgeSelection {
 
   repeated string allow_degraded = 3;
 
-  bool tunnel = 4;
+  reserved 4;
+  reserved "tunnel";
+
+  google.protobuf.Struct options = 5;
 }
 
 message BootstrapScope {

@@ -36,7 +36,7 @@ func RunEdges(t *testing.T, facts provider.Facts, edges provider.Edges) {
 
 	t.Run("Open answers every edge a request can reach under the kind it was asked for", func(t *testing.T) {
 		for _, kind := range listReachableEdges(facts) {
-			front, err := edges.Open(kind)
+			front, err := edges.Open(kind, nil)
 			if err != nil {
 				t.Errorf("Open(%q) = %v, want the edge Facts.Edges offers", kind, err)
 				continue
@@ -56,12 +56,26 @@ func RunEdges(t *testing.T, facts provider.Facts, edges provider.Edges) {
 		}
 	})
 
+	t.Run("an option an edge does not take is refused under that edge's name", func(t *testing.T) {
+		for _, kind := range supported {
+			front, err := edges.Open(kind, provider.Options{"no-such-option": true})
+			var refused refusal.Refusal
+			if !errors.As(err, &refused) || refused.Code != refusal.CodeUnknownOption {
+				t.Errorf("Open(%q) with an option it does not take = %v, %v, want a Refusal with code %s", kind, front, err, refusal.CodeUnknownOption)
+				continue
+			}
+			if want := "edge." + string(kind) + ".no-such-option"; !strings.Contains(refused.Message, want) {
+				t.Errorf("Open(%q) refused with %q, want the option named as %s", kind, refused.Message, want)
+			}
+		}
+	})
+
 	t.Run("an edge this provider does not serve is refused as invalid", func(t *testing.T) {
 		unserved := edge.Kind("no-such-edge")
 		if slices.Contains(supported, unserved) {
 			t.Skip("this provider serves an edge by that name, so it is the wrong probe")
 		}
-		front, err := edges.Open(unserved)
+		front, err := edges.Open(unserved, nil)
 		if err == nil {
 			t.Fatalf("Open(%q) = %v, want a refusal", unserved, front)
 		}
@@ -140,7 +154,7 @@ func RunRouters(t *testing.T, facts provider.Facts, edges provider.Edges, router
 					t.Errorf("the %q router is paired for container apps and reaches no container", pairing.Router)
 				}
 			}
-			front, err := edges.Open(pairing.Edge)
+			front, err := edges.Open(pairing.Edge, nil)
 			if err != nil {
 				continue
 			}

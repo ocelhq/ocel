@@ -93,7 +93,7 @@ func kindsOf(fronts ...edge.Edge) []edge.Kind {
 	return kinds
 }
 
-func (r edgeRegistry) Open(kind edge.Kind) (edge.Edge, error) {
+func (r edgeRegistry) Open(kind edge.Kind, _ provider.Options) (edge.Edge, error) {
 	front, ok := r.edges[kind]
 	if !ok {
 		return nil, fmt.Errorf("no %s edge here", kind)

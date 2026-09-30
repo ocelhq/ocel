@@ -57,6 +57,16 @@ func TestDecodeEdgeInEitherForm(t *testing.T) {
 	}
 }
 
+func TestDecodeKeepsTheEdgesOptionsAsWrittenForTheEdgeToRead(t *testing.T) {
+	doc, err := Decode([]byte(`{"slug":"acme","edge":{"cloudflare":{"tunnel":true}}}`), env(nil))
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if doc.Edge == nil || doc.Edge.ID != "cloudflare" || string(doc.Edge.Options) != `{"tunnel":true}` {
+		t.Fatalf("edge = %+v, want cloudflare with its options as written", doc.Edge)
+	}
+}
+
 func TestDecodeDNSKeepsItsZoneUnderItsIdentifier(t *testing.T) {
 	doc, err := Decode([]byte(`{"slug":"acme","dns":{"route53":{"zone":"example.com"}}}`), env(nil))
 	if err != nil {
@@ -125,7 +135,6 @@ func TestDecodeRejectsUnknownKeys(t *testing.T) {
 		{"nested object", `{"slug":"acme","discovery":{"path":["declarations"]}}`, "discovery.path"},
 		{"array element", `{"slug":"acme","apps":[{"name":"web","path":".","runtim":"go"}]}`, "apps[0].runtim"},
 		{"registry", `{"slug":"acme","registry":{"server":"ghcr.io","token":"X"}}`, "registry.token"},
-		{"edge options", `{"slug":"acme","edge":{"cloudflare":{"zone":"x"}}}`, "edge.cloudflare.zone"},
 		{"dns options", `{"slug":"acme","dns":{"route53":{"zonee":"x"}}}`, "dns.route53.zonee"},
 		{"a key the app surface dropped", `{"slug":"acme","apps":[{"name":"web","path":".","runtime":"go"}]}`, "apps[0].runtime"},
 	}

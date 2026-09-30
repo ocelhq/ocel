@@ -50,7 +50,7 @@ func TestTheAlbEdgeIsRegisteredAndOpensWithTheProvidersOwnPorts(t *testing.T) {
 	if got := p.Facts().Edges; !slices.Contains(got, alb.Kind) {
 		t.Fatalf("Facts().Edges = %v, want the %q edge among them: a config that names it would be refused", got, alb.Kind)
 	}
-	front, err := registry.Open(alb.Kind)
+	front, err := registry.Open(alb.Kind, nil)
 	if err != nil {
 		t.Fatalf("Open(%q) = %v", alb.Kind, err)
 	}
@@ -86,7 +86,7 @@ func TestAnEdgeThisProviderCannotFrontWithIsRefusedWithThePriceOfTheOneThatCan(t
 	t.Parallel()
 
 	var refused refusal.Refusal
-	_, err := testProvider(t).Edges().Open(edge.Kind("firebase"))
+	_, err := testProvider(t).Edges().Open(edge.Kind("firebase"), nil)
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("Open(firebase) = %v, want an %s refusal", err, refusal.CodeInvalid)
 	}
@@ -107,7 +107,7 @@ func TestCloudflareFrontsTheLoadBalancerAsAProxyThatRunsNoCode(t *testing.T) {
 	if _, err := p.Bootstrap(cloudflare.Kind); err != nil {
 		t.Fatalf("Bootstrap(%q) = %v, want the bootstrap that raises the load balancer it forwards to", cloudflare.Kind, err)
 	}
-	front, err := p.Edges().Open(cloudflare.Kind)
+	front, err := p.Edges().Open(cloudflare.Kind, nil)
 	if err != nil {
 		t.Fatalf("Open(%q) = %v", cloudflare.Kind, err)
 	}
@@ -130,11 +130,11 @@ func TestCloudflareFrontsTheLoadBalancerAsAProxyThatRunsNoCode(t *testing.T) {
 func TestAFrontedServiceStopsAnsweringOnItsOwnCloudRunUrl(t *testing.T) {
 	t.Parallel()
 
-	front, err := testProvider(t).Edges().Open(alb.Kind)
+	front, err := testProvider(t).Edges().Open(alb.Kind, nil)
 	if err != nil {
 		t.Fatalf("Open(%q) = %v", alb.Kind, err)
 	}
-	unfronted, err := testProvider(t).Edges().Open(edge.None)
+	unfronted, err := testProvider(t).Edges().Open(edge.None, nil)
 	if err != nil {
 		t.Fatalf("Open(no edge) = %v", err)
 	}

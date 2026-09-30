@@ -56,7 +56,7 @@ func TestNeedCheckRecordsWhatTheEdgeServes(t *testing.T) {
 	root := servedDescriptor(t, "web", edge.ServeDescriptor{
 		Needs: map[edge.Need]edge.NeedDetail{edge.NeedStreaming: {Count: 3}},
 	})
-	front, err := fake.NewEdges().Open(fake.KindRelay)
+	front, err := fake.NewEdges().Open(fake.KindRelay, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +79,7 @@ func TestNeedCheckRefusesANeedTheEdgeDoesNotServe(t *testing.T) {
 	root := servedDescriptor(t, "web", edge.ServeDescriptor{
 		Needs: map[edge.Need]edge.NeedDetail{edge.NeedStreaming: {Routes: []string{"/feed"}}},
 	})
-	front, err := fake.NewEdges().Open(fake.KindRelay)
+	front, err := fake.NewEdges().Open(fake.KindRelay, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func TestNeedCheckDegradesAWaivedNeedRatherThanRefusing(t *testing.T) {
 	root := servedDescriptor(t, "web", edge.ServeDescriptor{
 		Needs: map[edge.Need]edge.NeedDetail{edge.NeedStreaming: {Count: 1}},
 	})
-	front, err := fake.NewEdges().Open(fake.KindRelay)
+	front, err := fake.NewEdges().Open(fake.KindRelay, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +130,7 @@ func TestNeedCheckRefusesANeedNoEdgeKnows(t *testing.T) {
 	root := servedDescriptor(t, "web", edge.ServeDescriptor{
 		Needs: map[edge.Need]edge.NeedDetail{"teleportation": {Count: 1}},
 	})
-	front, err := fake.NewEdges().Open(fake.KindRelay)
+	front, err := fake.NewEdges().Open(fake.KindRelay, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +145,7 @@ func TestNeedCheckRefusesANeedNoEdgeKnows(t *testing.T) {
 func TestNeedCheckPassesAnAppThatShipsNoDescriptor(t *testing.T) {
 	t.Parallel()
 
-	front, err := fake.NewEdges().Open(fake.KindRelay)
+	front, err := fake.NewEdges().Open(fake.KindRelay, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +178,7 @@ func TestNeedCheckServesACodeNeedWithoutAskingAnEdgeThatChecksNoEntitlement(t *t
 	root := servedDescriptor(t, "web", edge.ServeDescriptor{
 		Needs: map[edge.Need]edge.NeedDetail{edge.NeedEdgeMiddleware: {Count: 1}},
 	})
-	front, err := fake.NewEdges().Open(fake.KindRelay)
+	front, err := fake.NewEdges().Open(fake.KindRelay, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,7 +201,7 @@ func TestNeedCheckRefusesACodeNeedThePlanWithholdsAndAsksOnce(t *testing.T) {
 	root := servedDescriptor(t, "web", edge.ServeDescriptor{
 		Needs: map[edge.Need]edge.NeedDetail{edge.NeedEdgeMiddleware: {Count: 1}, edge.NeedEdgeRuntime: {Count: 1}},
 	})
-	front, err := fake.NewEdges().Open(fake.KindRelay)
+	front, err := fake.NewEdges().Open(fake.KindRelay, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -237,7 +237,7 @@ func TestNeedCheckWarnsOnceNamingTheEdgeWhenItCannotTellWhetherThePlanRunsCode(t
 	root := servedDescriptor(t, "web", edge.ServeDescriptor{
 		Needs: map[edge.Need]edge.NeedDetail{edge.NeedEdgeMiddleware: {Count: 1}, edge.NeedEdgeRuntime: {Count: 1}},
 	})
-	front, err := fake.NewEdges().Open(fake.KindRelay)
+	front, err := fake.NewEdges().Open(fake.KindRelay, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

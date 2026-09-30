@@ -6,7 +6,9 @@ import (
 
 type Proxy struct{ p *cloudflare }
 
-func NewProxy(namespace string) *Proxy { return &Proxy{p: newCloudflare(namespace)} }
+func NewProxy(namespace string, options Options) *Proxy {
+	return &Proxy{p: newCloudflare(namespace, options)}
+}
 
 func (x *Proxy) Kind() edge.Kind { return Kind }
 
@@ -17,6 +19,7 @@ func (x *Proxy) Facts() edge.Facts {
 		ProxiedRecordNote:  "Turn the Cloudflare proxy (orange cloud) on for these records: Cloudflare forwards each hostname to the value it points at.",
 		ShieldsOrigin:      true,
 		OriginFacingRanges: listOriginFacingRanges(),
+		TunnelsToOrigin:    x.p.options.Tunnel,
 		CredentialScope:    readAccountID(),
 	}
 }

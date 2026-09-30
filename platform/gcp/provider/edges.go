@@ -53,14 +53,21 @@ func (e edges) openALB() *alb.Edge {
 	})
 }
 
-func (e edges) Open(kind edge.Kind) (edge.Edge, error) {
+func (e edges) Open(kind edge.Kind, options provider.Options) (edge.Edge, error) {
 	switch kind {
 	case edge.None:
 		return e.openCloudRun(), nil
 	case alb.Kind:
+		if _, err := provider.DecodeEdgeOptions[alb.Options](alb.Kind, options); err != nil {
+			return nil, err
+		}
 		return e.openALB(), nil
 	case cloudflare.Kind:
-		return cloudflareFront{Proxy: cloudflare.NewProxy(string(e.namespace)), origin: e.openALB().Shielded()}, nil
+		decoded, err := provider.DecodeEdgeOptions[cloudflare.Options](cloudflare.Kind, options)
+		if err != nil {
+			return nil, err
+		}
+		return cloudflareFront{Proxy: cloudflare.NewProxy(string(e.namespace), decoded), origin: e.openALB().Shielded()}, nil
 	}
 	return nil, refusal.Refuse(refusal.CodeInvalid,
 		"this provider cannot front deployments with the %q edge: leave `edge` out, and each service answers on the url Cloud Run gives it, "+

@@ -65,7 +65,7 @@ func provisionedWithABucketDeclared(t *testing.T, declared ...string) (*box, *vp
 		t.Fatal(err)
 	}
 
-	front, err := p.Edges().Open(edge.None)
+	front, err := p.Edges().Open(edge.None, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -322,7 +322,7 @@ func (h *handlers) GetCredentialPermissions(_ context.Context, req *contractv1.C
 		Document: document.Document,
 	}}
 
-	if front, err := p.Edges().Open(edgeKind(p, req.GetEdge().GetKind())); err == nil {
+	if front, err := p.Edges().Open(edgeKind(p, req.GetEdge().GetKind()), req.GetEdge().GetOptions().AsMap()); err == nil {
 		if document := front.Hooks().DescribeCredentialPermissions; document != nil {
 			documented, err := document(purpose)
 			if err != nil {

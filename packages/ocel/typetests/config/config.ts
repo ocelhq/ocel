@@ -5,6 +5,7 @@ import { exec, infisical } from "ocel/env-source";
 import awsProvider from "ocel/providers/aws";
 import { route53 } from "ocel/providers/aws/dns";
 import { apiGateway, cloudfront } from "ocel/providers/aws/edge";
+import { alb } from "ocel/providers/gcp/edge";
 
 type Exactly<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 
@@ -51,6 +52,29 @@ export const edgeFromAString = defineConfig({
   slug: "test-app",
   // @ts-expect-error cloudflare takes no options
   edge: cloudflare("nonsense"),
+});
+
+export const cloudflareThroughATunnel = defineConfig({
+  slug: "test-app",
+  edge: cloudflare({ tunnel: true }),
+});
+
+export const cloudfrontThroughATunnel = defineConfig({
+  slug: "test-app",
+  // @ts-expect-error tunnel is an option of the cloudflare edge alone
+  edge: cloudfront({ tunnel: true }),
+});
+
+export const apiGatewayThroughATunnel = defineConfig({
+  slug: "test-app",
+  // @ts-expect-error tunnel is an option of the cloudflare edge alone
+  edge: apiGateway({ tunnel: true }),
+});
+
+export const albThroughATunnel = defineConfig({
+  slug: "test-app",
+  // @ts-expect-error tunnel is an option of the cloudflare edge alone
+  edge: alb({ tunnel: true }),
 });
 
 export const edgeWithAZone = defineConfig({

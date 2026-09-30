@@ -211,7 +211,7 @@ func (w *wildcards) reconcileEntry(ctx context.Context, front edge.Edge, origin 
 	var claimed originClaim
 	if origin != nil {
 		var err error
-		claim := router.Claim{Hostname: w.recorded.Hostname(), Certificate: w.recorded.Host.Certificate.ID, Tunnel: readSelectedTunnel(front, w.sel)}
+		claim := router.Claim{Hostname: w.recorded.Hostname(), Certificate: w.recorded.Host.Certificate.ID, Tunnel: readSelectedTunnel(front)}
 		if claimed, err = claimOrigin(ctx, front, claim, origin.ClaimPreviewEntry, w.reserveOriginCertificate); err != nil {
 			return "", err
 		}
@@ -291,7 +291,7 @@ func (w *wildcards) refreshEntryClaim(ctx context.Context, front edge.Edge, runP
 	if err != nil || origin == nil {
 		return err
 	}
-	why, err := readOriginClaimStaleness(ctx, front, w.recorded.Hostname(), readSelectedTunnel(front, w.sel), &w.recorded.Host, time.Now())
+	why, err := readOriginClaimStaleness(ctx, front, w.recorded.Hostname(), readSelectedTunnel(front), &w.recorded.Host, time.Now())
 	if err != nil || why == "" {
 		return err
 	}
@@ -399,7 +399,7 @@ func (w *wildcards) routeInstalled(ctx context.Context) bool {
 	if !w.recorded.IsRecorded() {
 		return false
 	}
-	front, err := w.provider.Edges().Open(w.recorded.Edge)
+	front, err := w.provider.Edges().Open(w.recorded.Edge, nil)
 	if err != nil {
 		return false
 	}
@@ -446,7 +446,7 @@ func (w *wildcards) refuseReleaseWhileLive(ctx context.Context) error {
 }
 
 func (w *wildcards) owningEdge() (edge.Edge, error) {
-	return w.provider.Edges().Open(w.recorded.Edge)
+	return w.provider.Edges().Open(w.recorded.Edge, nil)
 }
 
 func (w *wildcards) disclaimEntry(ctx context.Context, front edge.Edge, runProgress progress.Log) error {

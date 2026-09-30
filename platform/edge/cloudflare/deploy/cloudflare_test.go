@@ -455,7 +455,7 @@ func TestProviderRequiresItsCredentials(t *testing.T) {
 			t.Setenv(envAccountID, tc.accountID)
 			t.Setenv(envAPIToken, tc.apiToken)
 
-			if err := tc.call(t.Context(), New("ocel")); err == nil {
+			if err := tc.call(t.Context(), New("ocel", Options{})); err == nil {
 				t.Fatal("expected an error when the environment names no credential")
 			}
 		})
@@ -471,7 +471,7 @@ func TestProviderRequiresItsCredentials(t *testing.T) {
 	})
 
 	t.Run("the edge checks its credentials and its plan", func(t *testing.T) {
-		hooks := New("ocel").Hooks()
+		hooks := New("ocel", Options{}).Hooks()
 		if hooks.VerifyCredentials == nil {
 			t.Error("the cloudflare edge checks no credentials, so a preflight cannot say whether its token answers")
 		}
@@ -531,7 +531,7 @@ func TestTeardown(t *testing.T) {
 	t.Run("an unset account id is an error", func(t *testing.T) {
 		t.Setenv(envAccountID, "")
 
-		if err := New("ocel").Teardown(t.Context(), environment.TierProduction); err == nil {
+		if err := New("ocel", Options{}).Teardown(t.Context(), environment.TierProduction); err == nil {
 			t.Fatal("Teardown without an account id err = nil, want an error")
 		}
 	})
@@ -543,7 +543,7 @@ func TestCompatibility(t *testing.T) {
 	t.Run("reports the compat settings the uploaded script has", func(t *testing.T) {
 		t.Parallel()
 
-		compatibility := New("ocel").Facts().Compatibility
+		compatibility := New("ocel", Options{}).Facts().Compatibility
 		if compatibility.IsZero() {
 			t.Fatal("the cloudflare edge names no compatibility, so the code it runs has nothing to load under")
 		}

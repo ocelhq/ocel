@@ -237,6 +237,27 @@ func TestEveryCommittedConfigValidatesAgainstTheSchema(t *testing.T) {
 	}
 }
 
+func TestTheCommittedSchemaTakesTunnelAsACloudflareEdgeOptionAlone(t *testing.T) {
+	root := fixturetest.RepoDir(t)
+	schema := committedSchema(t, root)
+	cases := []struct {
+		edge  string
+		valid bool
+	}{
+		{`{"cloudflare":{"tunnel":true}}`, true},
+		{`{"cloudfront":{"tunnel":true}}`, false},
+		{`{"api-gateway":{"tunnel":true}}`, false},
+		{`{"alb":{"tunnel":true}}`, false},
+		{`{"cloudflare":{"tunel":true}}`, false},
+	}
+	for _, c := range cases {
+		document := documentOf(t, c.edge, "ocel.json", []byte(`{"slug":"shop","edge":`+c.edge+`}`))
+		if err := schema.Validate(document); (err == nil) != c.valid {
+			t.Errorf("the committed schema validates edge %s with %v, want valid = %v", c.edge, err, c.valid)
+		}
+	}
+}
+
 func TestEveryCommittedConfigNamesTheCommittedSchema(t *testing.T) {
 	root := fixturetest.RepoDir(t)
 	want := schemaID(t, root)

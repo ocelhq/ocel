@@ -99,7 +99,7 @@ func (p *Provider) Hooks() provider.Hooks {
 }
 
 func (p *Provider) Bootstrap(kind edge.Kind) (provider.Bootstrap, error) {
-	front, err := p.edges().Open(kind)
+	front, err := p.edges().Open(kind, nil)
 	if err != nil {
 		return nil, err
 	}

@@ -14,7 +14,7 @@ const moveAttempts = 5
 
 type Router struct{ p *cloudflare }
 
-func NewRouter(namespace string) Router { return Router{p: newCloudflare(namespace)} }
+func NewRouter(namespace string) Router { return Router{p: newCloudflare(namespace, Options{})} }
 
 func (r Router) Kind() router.Kind { return router.Kind(Kind) }
 

@@ -1,0 +1,10 @@
+{
+  "id": "alb",
+  "options": {
+    "additionalProperties": false,
+    "description": "Options for the Application Load Balancer edge. Everything the load balancer needs comes from the provider's own options.",
+    "properties": {},
+    "title": "AlbEdgeOptions",
+    "type": "object"
+  }
+}

@@ -60,7 +60,7 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 		tree.Add(shared, string(Vendor), typ, item.Name, region, itemProperties(item, region))
 	}
 
-	front, err := p.Edges().Open(req.Edge)
+	front, err := p.Edges().Open(req.Edge, nil)
 	if err != nil {
 		return nil, err
 	}

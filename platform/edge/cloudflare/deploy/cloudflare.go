@@ -59,6 +59,7 @@ type cloudflare struct {
 	client    *cf.Client
 	store     *http.Client
 	namespace string
+	options   Options
 	objects   func(endpoint string, creds r2.TemporaryCredentialNewResponse) objectAPI
 
 	zoneMu    sync.Mutex
@@ -68,10 +69,10 @@ type cloudflare struct {
 	entryWorkers map[string][]string
 }
 
-func New(namespace string) edge.Edge { return newCloudflare(namespace) }
+func New(namespace string, options Options) edge.Edge { return newCloudflare(namespace, options) }
 
-func newCloudflare(namespace string) *cloudflare {
-	return &cloudflare{client: cf.NewClient(option.WithMaxRetries(clientMaxRetries)), namespace: namespace}
+func newCloudflare(namespace string, options Options) *cloudflare {
+	return &cloudflare{client: cf.NewClient(option.WithMaxRetries(clientMaxRetries)), namespace: namespace, options: options}
 }
 
 func NewAt(namespace, baseURL string) edge.Edge {
@@ -110,6 +111,7 @@ func (p *cloudflare) Facts() edge.Facts {
 		ProxiesRecords:     true,
 		ProxiedRecordNote:  "Turn the Cloudflare proxy (orange cloud) on for these records: each value is a placeholder Cloudflare answers behind.",
 		OriginFacingRanges: listOriginFacingRanges(),
+		TunnelsToOrigin:    p.options.Tunnel,
 		CredentialScope:    readAccountID(),
 	}
 }

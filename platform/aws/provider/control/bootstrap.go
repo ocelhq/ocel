@@ -146,7 +146,7 @@ func (b Bootstrap) open(kind edge.Kind) (edge.Edge, error) {
 	if b.Edge != nil && b.Edge.Kind() == kind {
 		return b.Edge, nil
 	}
-	return b.Edges.Open(kind)
+	return b.Edges.Open(kind, nil)
 }
 
 func (b Bootstrap) adoptions(ctx context.Context, req provider.BootstrapRequest) ([]bootstrap.EdgeAdoption, error) {

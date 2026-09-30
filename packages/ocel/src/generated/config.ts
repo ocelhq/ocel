@@ -202,34 +202,44 @@ export type EdgeDescriptor =
   | "cloudflare"
   | "cloudfront"
   | {
-      alb: EdgeOptions;
+      alb: AlbEdgeOptions;
       "api-gateway"?: never;
       cloudflare?: never;
       cloudfront?: never;
     }
   | {
       alb?: never;
-      "api-gateway": EdgeOptions;
+      "api-gateway": ApiGatewayEdgeOptions;
       cloudflare?: never;
       cloudfront?: never;
     }
   | {
       alb?: never;
       "api-gateway"?: never;
-      cloudflare: EdgeOptions;
+      cloudflare: CloudflareEdgeOptions;
       cloudfront?: never;
     }
   | {
       alb?: never;
       "api-gateway"?: never;
       cloudflare?: never;
-      cloudfront: EdgeOptions;
+      cloudfront: CloudFrontEdgeOptions;
     };
 
-export interface EdgeOptions {
+/** Options for the Application Load Balancer edge. Everything the load balancer needs comes from the provider's own options. */
+export type AlbEdgeOptions = Record<string, never>;
+
+/** Options for the API Gateway edge. Everything API Gateway needs comes from the provider's own options. */
+export type ApiGatewayEdgeOptions = Record<string, never>;
+
+/** Options for the Cloudflare edge. The token and account id are read from the environment. */
+export interface CloudflareEdgeOptions {
   /** Reach the origin through a tunnel the origin opens to the edge, rather than at its address, so the origin takes no traffic from anything else. Cloudflare in front of a VPS box opens one. */
   tunnel?: boolean;
 }
+
+/** Options for the CloudFront edge. Everything CloudFront needs comes from the provider's own options. */
+export type CloudFrontEdgeOptions = Record<string, never>;
 
 /** Where each tier's values are read from. A tier left off reads its default: ocel's own store in your account for production and preview, the project's .env file for dev. */
 export interface EnvSourceConfig {

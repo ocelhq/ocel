@@ -58,11 +58,11 @@ func (p unfronted) Edges() provider.Edges { return originEdges{p.Provider.Edges(
 
 type originEdges struct{ provider.Edges }
 
-func (e originEdges) Open(kind edge.Kind) (edge.Edge, error) {
+func (e originEdges) Open(kind edge.Kind, options provider.Options) (edge.Edge, error) {
 	if kind != edge.None {
-		return e.Edges.Open(kind)
+		return e.Edges.Open(kind, options)
 	}
-	front, err := e.Edges.Open(fake.KindDirect)
+	front, err := e.Edges.Open(fake.KindDirect, options)
 	return origin{front}, err
 }
 

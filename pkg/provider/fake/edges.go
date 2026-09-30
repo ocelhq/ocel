@@ -48,15 +48,35 @@ func (e *Edges) kinds() []edge.Kind {
 	return slices.Clone(e.order)
 }
 
-func (e *Edges) Open(kind edge.Kind) (edge.Edge, error) {
+type EdgeOptions struct {
+	Tunnel bool `json:"tunnel,omitempty"`
+}
+
+func (e *Edges) Open(kind edge.Kind, options provider.Options) (edge.Edge, error) {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 	front, served := e.edges[kind]
+	order := slices.Clone(e.order)
+	e.mu.Unlock()
 	if !served {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"the reference provider serves no edge %q; it serves %s", kind, kindList(e.order))
+			"the reference provider serves no edge %q; it serves %s", kind, kindList(order))
+	}
+	decoded, err := provider.DecodeEdgeOptions[EdgeOptions](kind, options)
+	if err != nil {
+		return nil, err
+	}
+	if decoded.Tunnel {
+		return tunneledEdge{front}, nil
 	}
 	return front, nil
+}
+
+type tunneledEdge struct{ *Edge }
+
+func (e tunneledEdge) Facts() edge.Facts {
+	facts := e.Edge.Facts()
+	facts.TunnelsToOrigin = true
+	return facts
 }
 
 func (e *Edges) Verifies(kind edge.Kind, identity edge.CredentialIdentity, err error) {

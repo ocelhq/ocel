@@ -234,7 +234,7 @@ func TestTheCloudflareProxyForwardsThePreviewWildcardToATunnelWithOneProxiedReco
 }
 
 func TestTheCloudflareProxysTokenNeedsTunnelWriteOnTheAccountOnlyForATunnel(t *testing.T) {
-	doc, err := NewProxy("ocel").Hooks().DescribeCredentialPermissions(edge.PurposeDeploy)
+	doc, err := NewProxy("ocel", Options{}).Hooks().DescribeCredentialPermissions(edge.PurposeDeploy)
 	if err != nil {
 		t.Fatal(err)
 	}

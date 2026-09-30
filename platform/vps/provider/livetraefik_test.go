@@ -175,7 +175,7 @@ func servesBehindTraefik(t *testing.T, vm machine, tf traefikFront) {
 	}}); err != nil {
 		t.Fatalf("PreflightDeploy() behind %s = %v", tf.front, err)
 	}
-	opened, err := d.Edges().Open(edge.None)
+	opened, err := d.Edges().Open(edge.None, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

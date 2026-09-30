@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/configdoc"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
@@ -35,6 +36,14 @@ func RefuseTransforms(vendor Vendor, transforms []string) error {
 }
 
 func Decode[T any](vendor Vendor, options Options) (T, error) {
+	return decodeAt[T](configdoc.JoinPath("provider", string(vendor)), options)
+}
+
+func DecodeEdgeOptions[T any](kind edge.Kind, options Options) (T, error) {
+	return decodeAt[T](configdoc.JoinPath("edge", string(kind)), options)
+}
+
+func decodeAt[T any](path string, options Options) (T, error) {
 	var into T
 	raw, err := json.Marshal(map[string]any(options))
 	if err != nil {
@@ -44,7 +53,7 @@ func Decode[T any](vendor Vendor, options Options) (T, error) {
 	if err := json.Unmarshal(raw, &spelled); err != nil {
 		return into, refusal.Refuse(refusal.CodeInvalid, "options are not representable: %v", err)
 	}
-	if err := checkOptions(vendor, into, spelled); err != nil {
+	if err := checkOptions(path, into, spelled); err != nil {
 		var unknown configdoc.UnknownKeyError
 		if errors.As(err, &unknown) {
 			return into, refusal.Refuse(refusal.CodeUnknownOption, "%s", err)
@@ -59,11 +68,11 @@ func Decode[T any](vendor Vendor, options Options) (T, error) {
 	return into, nil
 }
 
-func checkOptions(vendor Vendor, into any, spelled any) error {
+func checkOptions(path string, into any, spelled any) error {
 	if spelled == nil {
 		return nil
 	}
-	return configdoc.Check(configdoc.JoinPath("provider", string(vendor)), into, spelled)
+	return configdoc.Check(path, into, spelled)
 }
 
 func decodeProblem(err error) string {

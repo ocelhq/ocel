@@ -259,7 +259,7 @@ func servesBehind(t *testing.T, front string, meanwhile func(vm machine)) machin
 		t.Fatalf("PreflightDeploy() behind %s = %v", front, err)
 	}
 
-	opened, err := d.Edges().Open(edge.None)
+	opened, err := d.Edges().Open(edge.None, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

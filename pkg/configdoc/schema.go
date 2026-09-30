@@ -49,6 +49,17 @@ func ProviderSchema[E, D ~string](id string, options any, edges []E, dns []D) ([
 	})
 }
 
+func EdgeSchema[K ~string](id K, name string, options any) ([]byte, error) {
+	if id == "" {
+		return nil, errors.New("an edge schema is keyed by the edge it belongs to, and this one has no identifier")
+	}
+	return tagged(func() ([]byte, error) {
+		shape := schemaOf(reflect.TypeOf(options))
+		shape["title"] = name + "EdgeOptions"
+		return json.MarshalIndent(object{"id": string(id), "options": shape}, "", "  ")
+	})
+}
+
 func sortedIDs[T ~string](ids []T) []any {
 	out := make([]string, 0, len(ids))
 	for _, id := range ids {

@@ -179,6 +179,18 @@ describe("a project's edge", () => {
     defineConfig({ slug: "shop", edge: { "api-gateway": {} } });
   });
 
+  it("takes a tunnel keyed by cloudflare", () => {
+    defineConfig({ slug: "shop", edge: { cloudflare: { tunnel: true } } });
+  });
+
+  it("is refused a tunnel keyed by an edge other than cloudflare", () => {
+    defineConfig({
+      slug: "shop",
+      // @ts-expect-error tunnel is an option of the cloudflare edge alone
+      edge: { cloudfront: { tunnel: true } },
+    });
+  });
+
   it("is refused keyed by two edges", () => {
     defineConfig({
       slug: "shop",

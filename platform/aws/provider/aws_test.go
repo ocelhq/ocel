@@ -241,7 +241,7 @@ func TestTierParamsReadTheEdgeTheyAreGiven(t *testing.T) {
 	}
 
 	for _, opened := range edges.SupportedEdges() {
-		if _, err := p.Edges().Open(opened); err != nil {
+		if _, err := p.Edges().Open(opened, nil); err != nil {
 			t.Fatalf("Open(%q) error = %v", opened, err)
 		}
 	}

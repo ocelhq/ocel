@@ -110,7 +110,7 @@ func waiting(err error) error {
 
 func (p certificates) Inspect(ctx context.Context, kind edge.Kind, answering router.Kind, hostname string, cert provider.Certificate) (provider.CertificateHealth, error) {
 	registry := p.edges()
-	front, err := registry.Open(kind)
+	front, err := registry.Open(kind, nil)
 	if err != nil {
 		return provider.CertificateHealth{}, err
 	}
@@ -152,7 +152,7 @@ func (p certificates) Discard(ctx context.Context, cert provider.Certificate, pr
 
 func (p *Provider) certificatesFor(kind edge.Kind, answering router.Kind, hostname string, progress progress.Log) (certs.Certificates, error) {
 	registry := p.edges()
-	front, err := registry.Open(kind)
+	front, err := registry.Open(kind, nil)
 	if err != nil {
 		return certs.Certificates{}, err
 	}

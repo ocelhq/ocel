@@ -122,7 +122,7 @@ func (p *Provider) Facts() provider.Facts {
 }
 
 func (p *Provider) Bootstrap(kind edge.Kind) (provider.Bootstrap, error) {
-	if _, err := p.edges.Open(kind); err != nil {
+	if _, err := p.edges.Open(kind, nil); err != nil {
 		return nil, err
 	}
 	p.bootstrap.setDefaultEdge(kind)

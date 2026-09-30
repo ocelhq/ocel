@@ -705,16 +705,18 @@ export default {
 			},
 		},
 		{
-			name: "asks the edge for a tunnel when its options name one",
+			name: "hands the edge its options as written",
 			config: `
 export default {
   slug: "test-app",
-  edge: { relay: { tunnel: true } },
+  edge: { relay: { tunnel: true, hops: { max: 2 } } },
 };
 `,
 			check: func(t *testing.T, root string, cfg *Project) {
-				if selection := cfg.EdgeSelection(); selection.GetKind() != "relay" || !selection.GetTunnel() {
-					t.Fatalf("EdgeSelection() = %v, want relay reached through a tunnel", selection)
+				selection := cfg.EdgeSelection()
+				want := map[string]any{"tunnel": true, "hops": map[string]any{"max": float64(2)}}
+				if selection.GetKind() != "relay" || !reflect.DeepEqual(selection.GetOptions().AsMap(), want) {
+					t.Fatalf("EdgeSelection() = %v, want relay handed %v", selection, want)
 				}
 			},
 		},

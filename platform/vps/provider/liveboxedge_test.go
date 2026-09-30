@@ -42,7 +42,7 @@ type front struct {
 func fronting(t *testing.T, p *vps.Provider, slug string) front {
 	t.Helper()
 
-	opened, err := p.Edges().Open(edge.None)
+	opened, err := p.Edges().Open(edge.None, nil)
 	if err != nil {
 		t.Fatalf("Open(%q) = %v", edge.None, err)
 	}
@@ -239,7 +239,7 @@ func TestLiveTheBoxEdgeAnswersTheEdgeContractsLedgerAndDomainObligationsAgainstA
 	edgeconformance.Run(t, edgeconformance.Suite{
 		Hostname: liveHostname,
 		New: func(t *testing.T) (edge.Edge, edge.StackSpec) {
-			front, err := p.Edges().Open(edge.None)
+			front, err := p.Edges().Open(edge.None, nil)
 			if err != nil {
 				t.Fatalf("Open(%q) = %v", edge.None, err)
 			}

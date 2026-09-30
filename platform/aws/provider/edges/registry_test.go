@@ -37,7 +37,7 @@ func TestIgnoredPinNote(t *testing.T) {
 	t.Run("an edge that terminates TLS with a certificate of its own says the pin is ignored", func(t *testing.T) {
 		t.Parallel()
 
-		front, err := registry.Open(cloudflare.Kind)
+		front, err := registry.Open(cloudflare.Kind, nil)
 		if err != nil {
 			t.Fatalf("Open(cloudflare): %v", err)
 		}
@@ -50,7 +50,7 @@ func TestIgnoredPinNote(t *testing.T) {
 	t.Run("an edge ocel certifies keeps the pin", func(t *testing.T) {
 		t.Parallel()
 
-		front, err := registry.Open(cloudfront.Kind)
+		front, err := registry.Open(cloudfront.Kind, nil)
 		if err != nil {
 			t.Fatalf("Open(cloudfront): %v", err)
 		}

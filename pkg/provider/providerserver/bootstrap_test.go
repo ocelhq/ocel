@@ -616,8 +616,8 @@ type documentingEdges struct {
 	provider.Edges
 }
 
-func (e documentingEdges) Open(kind edge.Kind) (edge.Edge, error) {
-	front, err := e.Edges.Open(kind)
+func (e documentingEdges) Open(kind edge.Kind, options provider.Options) (edge.Edge, error) {
+	front, err := e.Edges.Open(kind, options)
 	if err != nil {
 		return nil, err
 	}
