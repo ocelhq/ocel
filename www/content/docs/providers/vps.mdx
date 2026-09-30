@@ -431,7 +431,9 @@ https://shop.example.com {
 	tls /etc/caddy/ocel.d/ocel-origin-shop.example.com-1f2e3d4c5b6a.pem /etc/caddy/ocel.d/ocel-origin-shop.example.com-1f2e3d4c5b6a.pem {
 		client_auth {
 			mode require
-			trusted_leaf_cert MIIC…
+			trust_pool inline {
+				trust_der MIIC…
+			}
 		}
 	}
 	reverse_proxy ocel-switchboard:8443 {
