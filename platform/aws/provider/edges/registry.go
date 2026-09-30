@@ -6,9 +6,13 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/alb"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
@@ -26,6 +30,8 @@ type Deps struct {
 	Certificates map[string]string
 
 	Namespace bootstrap.Namespace
+
+	ArtifactBucket func(ctx context.Context, tier environment.Tier) (string, error)
 }
 
 var constructors = map[edge.Kind]func(Deps) edge.Edge{
@@ -69,7 +75,10 @@ var certificateRegions = map[edge.Kind]func(apiRegion string) string{
 	apigateway.Kind: apigateway.CertificateRegion,
 }
 
-func CertificateRegion(kind edge.Kind, apiRegion string) string {
+func CertificateRegion(kind edge.Kind, answering router.Kind, apiRegion string) string {
+	if answering == alb.Kind {
+		return apiRegion
+	}
 	region, certified := certificateRegions[kind]
 	if !certified {
 		return ""
@@ -77,8 +86,8 @@ func CertificateRegion(kind edge.Kind, apiRegion string) string {
 	return region(apiRegion)
 }
 
-func (r Registry) Certificates(front edge.Edge, deps certs.Deps) certs.Certificates {
-	return certs.CertificatesFor(CertificateRegion(front.Kind(), deps.AWS.Region), deps, r.Deps.Certificates)
+func (r Registry) Certificates(front edge.Edge, answering router.Kind, deps certs.Deps) certs.Certificates {
+	return certs.CertificatesFor(CertificateRegion(front.Kind(), answering, deps.AWS.Region), deps, r.Deps.Certificates)
 }
 
 func IgnoredPinNote(front edge.Edge, certificates certs.Certificates, hostname string) string {

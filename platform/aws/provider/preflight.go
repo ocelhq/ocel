@@ -2,20 +2,23 @@ package aws
 
 import (
 	"context"
+	"fmt"
 	"maps"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
-	"github.com/ocelhq/ocel/platform/aws/provider/edges"
 )
 
 func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPreflight) error {
-	if err := refuseContainersBehindFunctionEdge(pre); err != nil {
+	if err := refuseUnpairedApps(p.Facts(), pre); err != nil {
 		return err
 	}
 	if err := refusePublicBuckets(pre); err != nil {
@@ -100,19 +103,36 @@ func (p *Provider) publishRuntimeLayers(ctx context.Context, pre provider.Deploy
 	return nil
 }
 
-func refuseContainersBehindFunctionEdge(pre provider.DeployPreflight) error {
-	if pre.Edge == edges.DefaultKind {
-		return nil
-	}
+func refuseUnpairedApps(facts provider.Facts, pre provider.DeployPreflight) error {
 	for _, app := range pre.Deploy.Apps {
-		if app.Compute() != provider.ComputeContainer {
+		compute := app.Compute()
+		if _, paired := facts.PairedRouter(pre.Edge, compute); paired {
 			continue
 		}
 		return refusal.Refuse(refusal.CodeInvalid,
-			"app %s runs as a container, and the %q edge reaches a release's entry function rather than an origin that demands the tier's secret, so it has no way to reach one: front this project with %q, or give %s `compute: \"serverless\"`",
-			app.App, pre.Edge, edges.DefaultKind, app.App)
+			"app %s runs as %s, and the %q edge reaches no %s app on this provider: front this project with %s, or change %s's compute",
+			app.App, compute, pre.Edge, compute, describeEdges(listPairedEdges(facts, compute)), app.App)
 	}
 	return nil
+}
+
+func listPairedEdges(facts provider.Facts, compute provider.Compute) []edge.Kind {
+	var kinds []edge.Kind
+	for _, pairing := range facts.Pairings {
+		if slices.Contains(pairing.Computes, compute) && !slices.Contains(kinds, pairing.Edge) {
+			kinds = append(kinds, pairing.Edge)
+		}
+	}
+	slices.Sort(kinds)
+	return kinds
+}
+
+func describeEdges(kinds []edge.Kind) string {
+	quoted := make([]string, 0, len(kinds))
+	for _, kind := range kinds {
+		quoted = append(quoted, fmt.Sprintf("%q", kind))
+	}
+	return strings.Join(quoted, " or ")
 }
 
 func refusePublicBuckets(pre provider.DeployPreflight) error {

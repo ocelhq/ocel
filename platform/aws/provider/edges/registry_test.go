@@ -5,6 +5,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/alb"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
@@ -38,7 +41,7 @@ func TestIgnoredPinNote(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Open(cloudflare): %v", err)
 		}
-		note := IgnoredPinNote(front, registry.Certificates(front, certs.Deps{}), host)
+		note := IgnoredPinNote(front, registry.Certificates(front, router.Kind(front.Kind()), certs.Deps{}), host)
 		if !strings.Contains(note, "ignored") || !strings.Contains(note, host) || !strings.Contains(note, string(cloudflare.Kind)) {
 			t.Errorf("note = %q, want the ignored pin said out loud, naming the host and the edge", note)
 		}
@@ -51,7 +54,7 @@ func TestIgnoredPinNote(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Open(cloudfront): %v", err)
 		}
-		certificates := registry.Certificates(front, certs.Deps{AWS: aws.Config{Region: "eu-west-1"}})
+		certificates := registry.Certificates(front, router.Kind(front.Kind()), certs.Deps{AWS: aws.Config{Region: "eu-west-1"}})
 		if !certificates.Issues() {
 			t.Fatal("Issues() = false, want the certificates of an edge ocel requests certificates for")
 		}
@@ -128,15 +131,17 @@ func TestCertificateRegion(t *testing.T) {
 	t.Parallel()
 
 	for name, tc := range map[string]struct {
-		kind edge.Kind
-		want string
+		kind      edge.Kind
+		answering router.Kind
+		want      string
 	}{
-		"an edge that terminates TLS itself is handed no region": {cloudflare.Kind, ""},
-		"an edge that pins a region takes it":                    {cloudfront.Kind, certs.CloudFrontRegion},
-		"an edge that certifies where the API lives":             {apigateway.Kind, "eu-west-2"},
-		"an edge this provider cannot front with certifies none": {"relay", ""},
+		"an edge that terminates TLS itself is handed no region":            {cloudflare.Kind, router.Kind(cloudflare.Kind), ""},
+		"a load balancer an edge forwards to certifies where the API lives": {cloudflare.Kind, alb.Kind, "eu-west-2"},
+		"an edge that pins a region takes it":                               {cloudfront.Kind, router.Kind(cloudfront.Kind), certs.CloudFrontRegion},
+		"an edge that certifies where the API lives":                        {apigateway.Kind, router.Kind(apigateway.Kind), "eu-west-2"},
+		"an edge this provider cannot front with certifies none":            {"relay", "relay", ""},
 	} {
-		if got := CertificateRegion(tc.kind, "eu-west-2"); got != tc.want {
+		if got := CertificateRegion(tc.kind, tc.answering, "eu-west-2"); got != tc.want {
 			t.Errorf("%s: CertificateRegion = %q, want %q", name, got, tc.want)
 		}
 	}

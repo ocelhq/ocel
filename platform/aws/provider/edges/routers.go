@@ -4,6 +4,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
@@ -16,6 +17,9 @@ var routerConstructors = map[router.Kind]func(Deps) router.Router{
 	},
 	router.Kind(apigateway.Kind): func(deps Deps) router.Router {
 		return apigateway.NewRouter(deps.Namespace, apigateway.FromConfig(deps.AWS))
+	},
+	alb.Kind: func(deps Deps) router.Router {
+		return alb.NewRouter(alb.FromConfig(deps.AWS, deps.ArtifactBucket))
 	},
 }
 
@@ -37,6 +41,7 @@ func Pairings() []provider.Pairing {
 	return []provider.Pairing{
 		{Edge: apigateway.Kind, Router: router.Kind(apigateway.Kind), Computes: serverless},
 		{Edge: cloudflare.Kind, Router: router.Kind(cloudflare.Kind), Computes: serverless},
+		{Edge: cloudflare.Kind, Router: alb.Kind, Computes: []provider.Compute{provider.ComputeContainer}},
 		{Edge: cloudfront.Kind, Router: router.Kind(cloudfront.Kind), Computes: provider.Computes()},
 	}
 }
