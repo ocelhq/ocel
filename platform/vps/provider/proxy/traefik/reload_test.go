@@ -160,15 +160,15 @@ func TestAReloadWaitsOnAHostnameWhoseRouterTheWriteChanges(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{
-		spec:   proxy.Spec{Hostnames: []string{"ocel-edge-probe.preview.example.com", "pr-12--web.preview.example.com"}, PreviewBase: "preview.example.com"},
-		routes: map[string][]string{"ocel-edge-probe.preview.example.com": {"switchboard"}, "pr-12--web.preview.example.com": {"", "switchboard"}},
+		spec:   proxy.Spec{Hostnames: []string{"ocel-edge-probe.preview.example.com", "pr-12-web-abcdefghijklmnopp3347l26.preview.example.com"}, PreviewBase: "preview.example.com"},
+		routes: map[string][]string{"ocel-edge-probe.preview.example.com": {"switchboard"}, "pr-12-web-abcdefghijklmnopp3347l26.preview.example.com": {"", "switchboard"}},
 	}
 	front := coolifys(machine)
 	front.PreviewResolver = "cloudflare"
-	if err := front.Reload(context.Background(), claiming("pr-12--web.preview.example.com")); err != nil {
+	if err := front.Reload(context.Background(), claiming("pr-12-web-abcdefghijklmnopp3347l26.preview.example.com")); err != nil {
 		t.Fatalf("Reload() = %v", err)
 	}
-	if asked := strings.Count(strings.Join(machine.asked, "\n"), "routed pr-12--web.preview.example.com"); asked != 2 {
-		t.Errorf("pr-12--web.preview.example.com was probed %d times, want twice: the preview base moved it onto the wildcard certificate, so its router changed", asked)
+	if asked := strings.Count(strings.Join(machine.asked, "\n"), "routed pr-12-web-abcdefghijklmnopp3347l26.preview.example.com"); asked != 2 {
+		t.Errorf("pr-12-web-abcdefghijklmnopp3347l26.preview.example.com was probed %d times, want twice: the preview base moved it onto the wildcard certificate, so its router changed", asked)
 	}
 }

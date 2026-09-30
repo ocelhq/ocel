@@ -145,11 +145,11 @@ func TestDestroyTakesARuleTheLedgerNeverRecorded(t *testing.T) {
 	w := newWorld()
 	_, stack := previewing(t, w)
 	promotePreview(t, stack, previewPoint)
-	orphan := edge.SharedPreview(conformanceSlug, previewBase).Host("pr-crashed", "")
+	orphan := listPreviewHosts("pr-crashed")[0].Hostname
 	if err := putHostRule(ctx, w.clients(), previewWild, orphan, "api-crashed", 0); err != nil {
 		t.Fatalf("putHostRule: %v", err)
 	}
-	neighbour := edge.SharedPreview("other", previewBase).Host("pr1", "")
+	neighbour := listSlugPreviewHosts("other", "pr1")[0].Hostname
 	if err := putHostRule(ctx, w.clients(), previewWild, neighbour, "api-neighbour", 0); err != nil {
 		t.Fatalf("putHostRule: %v", err)
 	}
@@ -202,8 +202,8 @@ func TestDomainOwnerNamesWhoAnswersARoutingRuleDomain(t *testing.T) {
 
 		w := newWorld()
 		e, _ := previewing(t, w)
-		if err := deleteHostRule(ctx, w.clients(), previewWild, anyHost); err != nil {
-			t.Fatalf("deleteHostRule: %v", err)
+		if err := deleteHostRules(ctx, w.clients(), previewWild, []string{anyHost}); err != nil {
+			t.Fatalf("deleteHostRules: %v", err)
 		}
 		owner, err := e.DomainOwner(ctx, previewWild)
 		if err != nil {

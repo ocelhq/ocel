@@ -11,10 +11,15 @@ import (
 const KeptPromotions = 20
 
 type Pointer struct {
-	Name       string              `json:"name"`
-	Active     string              `json:"active,omitempty"`
-	Sequence   int64               `json:"sequence"`
-	Promotions []RecordedPromotion `json:"promotions"`
+	Name            string              `json:"name"`
+	Active          string              `json:"active,omitempty"`
+	Sequence        int64               `json:"sequence"`
+	Promotions      []RecordedPromotion `json:"promotions"`
+	PendingRemovals []RecordedPromotion `json:"pendingRemovals,omitempty"`
+}
+
+func (p Pointer) ListDeploymentRemovals() []router.PointerRemoval {
+	return collectDeploymentRemovals(p.Name, append(slices.Clone(p.Promotions), p.PendingRemovals...))
 }
 
 type RecordedPromotion struct {
@@ -77,7 +82,21 @@ func (p Pointer) Retain(keep int) (Pointer, []RecordedPromotion) {
 		}
 		dropped = append(dropped, recorded)
 	}
+	kept.PendingRemovals = slices.Clone(p.PendingRemovals)
+	for _, recorded := range dropped {
+		if len(recorded.Hosts) > 0 {
+			kept.PendingRemovals = append(kept.PendingRemovals, recorded)
+		}
+	}
 	return kept, dropped
+}
+
+func (p Pointer) ForgetPendingRemovals(withdrawn []string) Pointer {
+	next := p
+	next.PendingRemovals = slices.DeleteFunc(slices.Clone(p.PendingRemovals), func(pending RecordedPromotion) bool {
+		return slices.Contains(withdrawn, router.FormatDeploymentPointer(p.Name, pending.PromotionID))
+	})
+	return next
 }
 
 func (p Pointer) Unpromote(promotionID string) (Pointer, error) {

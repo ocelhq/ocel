@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -69,52 +70,90 @@ func TestTheCloudFrontEdgeBehavesAsEveryEdgeMust(t *testing.T) {
 }
 
 func TestTheCloudFrontRouterBehavesAsEveryRouterMust(t *testing.T) {
-	previews := func(t *testing.T) routerconformance.Fixture {
-		w := newWorld()
-		e, stack := previewing(t, w)
-		state := stack.State()
-		return routerconformance.Fixture{
-			Router: Router{p: e},
-			Spec:   router.StackSpec{Tier: state.Tier, Slug: state.Slug},
-			Prior:  router.NewStackState(state),
-			Serving: func(pointer string) string {
-				return previewRoutes(t, w)[edge.SharedPreview(conformanceSlug, previewBase).Host(pointer, "")].Release
-			},
-			FailNextPointerMove: func(err error) { w.store.updateErr = err },
-		}
-	}
-	t.Run("on a preview pointer", func(t *testing.T) {
-		routerconformance.Run(t, routerconformance.Suite{
-			New:      previews,
-			Previews: previews,
-			Pointer:  previewPointer,
-			Hostname: boundHost,
-		})
+	routerconformance.Run(t, routerconformance.Suite{
+		New: func(t *testing.T) routerconformance.Fixture {
+			w := newWorld()
+			e := bootstrapped(t, w)
+			stack, err := e.Reconcile(context.Background(), testSpec(), edge.StackState{})
+			if err != nil {
+				t.Fatalf("Reconcile: %v", err)
+			}
+			bound(t, stack)
+			state := stack.State()
+			return routerconformance.Fixture{
+				Router: Router{p: e},
+				Spec:   router.StackSpec{Tier: state.Tier, Slug: state.Slug},
+				Prior:  router.NewStackState(state),
+				Serving: func(string) string {
+					return productionRoutes(t, w)[boundHost].Release
+				},
+				FailNextPointerMove: func(err error) { w.store.updateErr = err },
+			}
+		},
+		Previews: func(t *testing.T) routerconformance.Fixture {
+			w := newWorld()
+			e, stack := previewing(t, w)
+			state := stack.State()
+			moved := &movedHosts{hosts: map[string][]string{}}
+			return routerconformance.Fixture{
+				Router: hostRecordingRouter{Router: Router{p: e}, moved: moved},
+				Spec:   router.StackSpec{Tier: state.Tier, Slug: state.Slug},
+				Prior:  router.NewStackState(state),
+				Serving: func(pointer string) string {
+					for _, hostname := range moved.listHostsOf(pointer) {
+						if published, ok := previewRoutes(t, w)[hostname]; ok {
+							return published.Release
+						}
+					}
+					return ""
+				},
+				FailNextPointerMove: func(err error) { w.store.updateErr = err },
+			}
+		},
+		Hostname: boundHost,
 	})
-	t.Run("on the production pointer", func(t *testing.T) {
-		routerconformance.Run(t, routerconformance.Suite{
-			New: func(t *testing.T) routerconformance.Fixture {
-				w := newWorld()
-				e := bootstrapped(t, w)
-				stack, err := e.Reconcile(context.Background(), testSpec(), edge.StackState{})
-				if err != nil {
-					t.Fatalf("Reconcile: %v", err)
-				}
-				bound(t, stack)
-				state := stack.State()
-				return routerconformance.Fixture{
-					Router: Router{p: e},
-					Spec:   router.StackSpec{Tier: state.Tier, Slug: state.Slug},
-					Prior:  router.NewStackState(state),
-					Serving: func(string) string {
-						return productionRoutes(t, w)[boundHost].Release
-					},
-					FailNextPointerMove: func(err error) { w.store.updateErr = err },
-				}
-			},
-			Hostname: boundHost,
-		})
-	})
+}
+
+type movedHosts struct {
+	mu    sync.Mutex
+	hosts map[string][]string
+}
+
+func (m *movedHosts) record(move router.PointerMove) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.hosts[move.Pointer] = edge.ListPreviewHostnames(move.Hosts)
+}
+
+func (m *movedHosts) listHostsOf(pointer string) []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.hosts[pointer]
+}
+
+type hostRecordingRouter struct {
+	Router
+	moved *movedHosts
+}
+
+func (r hostRecordingRouter) Reconcile(ctx context.Context, spec router.StackSpec, prior router.StackState) (router.Stack, error) {
+	stack, err := r.Router.Reconcile(ctx, spec, prior)
+	return hostRecordingStack{Stack: stack, moved: r.moved}, err
+}
+
+func (r hostRecordingRouter) Open(state router.StackState) (router.Stack, error) {
+	stack, err := r.Router.Open(state)
+	return hostRecordingStack{Stack: stack, moved: r.moved}, err
+}
+
+type hostRecordingStack struct {
+	router.Stack
+	moved *movedHosts
+}
+
+func (s hostRecordingStack) MovePointer(ctx context.Context, move router.PointerMove, progress progress.Log) error {
+	s.moved.record(move)
+	return s.Stack.MovePointer(ctx, move, progress)
 }
 
 func productionRoutes(t *testing.T, w *world) map[string]route {

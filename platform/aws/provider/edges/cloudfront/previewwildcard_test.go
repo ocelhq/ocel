@@ -48,13 +48,18 @@ func previewWildcardSpec() edge.PreviewWildcardSpec {
 		Version:     "v1",
 		BaseDomain:  previewBase,
 		Certificate: previewCert,
-		GrammarMin:  edge.PreviewGrammarMin,
-		GrammarMax:  edge.PreviewGrammarMax,
 	}
 }
 
+const previewKey edge.PreviewKey = "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0"
+
+func listPreviewHosts(pointer string) []edge.PreviewHost {
+	token := (pointer + strings.Repeat("a", edge.PreviewTokenLen))[:edge.PreviewTokenLen]
+	return edge.NewSharedPreviewSite(conformanceSlug, previewBase, previewKey).ListHosts(pointer, token, []string{"web"})
+}
+
 func previewHostname() string {
-	return edge.SharedPreview(conformanceSlug, previewBase).Host(previewPointer, "")
+	return listPreviewHosts(previewPointer)[0].Hostname
 }
 
 func previewBootstrapped(t *testing.T, w *world) *cloudFront {
@@ -98,7 +103,7 @@ func promotePreview(t *testing.T, stack edge.EdgeStack, pointer string) {
 	t.Helper()
 	ctx := context.Background()
 	staged(t, stack, fakeEntryURL, fakeAssetPrefix)
-	if err := openRouter(stack).MovePointer(ctx, router.PointerMove{Pointer: pointer, Promotion: router.Promotion{
+	if err := openRouter(stack).MovePointer(ctx, router.PointerMove{Pointer: pointer, Hosts: listPreviewHosts(pointer), Promotion: router.Promotion{
 		PromotionID: "preview-" + pointer,
 		Ts:          1,
 		Builds:      map[string]string{"web": "d1.f1"},
@@ -399,7 +404,7 @@ func TestDestroyPreviewWildcard(t *testing.T) {
 		promotePreview(t, stack, previewPointer)
 		promotePreview(t, stack, "pr2")
 		arn := fakeRoutesARN(environment.TierPreview)
-		w.store.items[arn]["other-project--pr7."+previewBase] = `{"origin":"stale"}`
+		w.store.items[arn]["other-project-abcdefghijklmnopqrstuvwx."+previewBase] = `{"origin":"stale"}`
 		w.store.items[arn]["www.unrelated.example"] = `{"origin":"kept"}`
 		w.store.listPage = 1
 
@@ -453,7 +458,7 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 		recordFront(t, w, environment.TierPreview)
 		w.front.calls = nil
 
-		if err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Pointer: previewPointer, Promotion: router.Promotion{
+		if err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Pointer: previewPointer, Hosts: listPreviewHosts(previewPointer), Promotion: router.Promotion{
 			PromotionID: "preview-" + previewPointer,
 			Ts:          1,
 			Builds:      map[string]string{"web": "d1.f1"},
@@ -510,6 +515,7 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 		record := staged(t, stack, fakeEntryURL, fakeAssetPrefix)
 		err := openRouter(stack).Stack.MovePointer(context.Background(), router.PointerMove{
 			Pointer:   previewPointer,
+			Hosts:     listPreviewHosts(previewPointer),
 			Promotion: router.Promotion{PromotionID: "refused", Ts: 1, Builds: map[string]string{"web": "d1.f1"}},
 			Records:   map[string]router.DeploymentRecord{record.App: record},
 		}, progress.Discard())
@@ -524,7 +530,7 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 		_, stack := previewing(t, w)
 		promotePreview(t, stack, previewPointer)
 
-		if _, err := removePointer(context.Background(), stack, previewPointer, progress.Discard()); err != nil {
+		if _, err := removePointer(context.Background(), stack, router.PointerRemoval{Pointer: previewPointer, Hosts: listPreviewHosts(previewPointer)}, progress.Discard()); err != nil {
 			t.Fatalf("RemovePointer: %v", err)
 		}
 		if routes := previewRoutes(t, w); len(routes) != 0 {
@@ -532,59 +538,49 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 		}
 	})
 
-	t.Run("destroying the stack takes every preview it published", func(t *testing.T) {
+	t.Run("a move stops serving the hostnames the pointer's move supersedes", func(t *testing.T) {
 		w := newWorld()
 		_, stack := previewing(t, w)
 		promotePreview(t, stack, previewPointer)
-		promotePreview(t, stack, "pr2")
-		w.front.calls = nil
+		moved := listPreviewHosts("moved")
 
-		if err := stack.Destroy(context.Background()); err != nil {
-			t.Fatalf("Destroy: %v", err)
+		if err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{
+			Pointer:    previewPointer,
+			Hosts:      moved,
+			Superseded: listPreviewHosts(previewPointer),
+			Promotion:  router.Promotion{PromotionID: "preview-moved", Ts: 2, Builds: map[string]string{"web": "d1.f1"}},
+		}, progress.Discard()); err != nil {
+			t.Fatalf("MovePointer: %v", err)
 		}
-		if routes := previewRoutes(t, w); len(routes) != 0 {
-			t.Errorf("routes = %v, want none after the stack was destroyed", slices.Sorted(maps.Keys(routes)))
+
+		routes := previewRoutes(t, w)
+		if _, ok := routes[previewHostname()]; ok {
+			t.Errorf("routes = %v, want the superseded %s withdrawn", slices.Sorted(maps.Keys(routes)), previewHostname())
 		}
-		if slices.Contains(w.front.calls, "ListDistributions") {
-			t.Error("destroying a stack that serves on the wildcard listed the account's distributions")
+		if _, ok := routes[moved[0].Hostname]; !ok {
+			t.Errorf("routes = %v, want the move's %s served", slices.Sorted(maps.Keys(routes)), moved[0].Hostname)
 		}
 	})
 
-	t.Run("a stack that moved onto its own preview domain still withdraws what it published", func(t *testing.T) {
-		w := newWorld()
-		e, previewed := previewing(t, w)
-		promotePreview(t, previewed, previewPointer)
-
-		reconciled, err := e.Reconcile(context.Background(), previewStackSpec(), previewed.State())
-		if err != nil {
-			t.Fatalf("Reconcile once the project declares its own preview domain: %v", err)
-		}
-		moved := reconciled.(*stack)
-		moved.state.GlobalPreview = ""
-
-		if err := moved.Destroy(context.Background()); err != nil {
-			t.Fatalf("Destroy: %v", err)
-		}
-		if routes := previewRoutes(t, w); len(routes) != 0 {
-			t.Errorf("routes = %v, want the wildcard hostnames withdrawn even once the stack stopped declaring the base", slices.Sorted(maps.Keys(routes)))
-		}
-	})
-
-	t.Run("a destroy that cannot withdraw the hostnames keeps the ledger that names them", func(t *testing.T) {
+	t.Run("a deployment's hostname keeps its release after the preview moves on", func(t *testing.T) {
 		w := newWorld()
 		_, stack := previewing(t, w)
-		promotePreview(t, stack, previewPointer)
-		w.store.updateErr = errors.New("the store is closed")
+		staged(t, stack, fakeEntryURL, fakeAssetPrefix)
+		deployment := router.FormatDeploymentPointer(previewPointer, "preview-d1")
+		if err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Pointer: deployment, Hosts: listPreviewHosts("deployment1"), Promotion: router.Promotion{
+			PromotionID: "preview-d1",
+			Ts:          1,
+			Builds:      map[string]string{"web": "d1.f1"},
+		}}, progress.Discard()); err != nil {
+			t.Fatalf("Promote(%s): %v", deployment, err)
+		}
 
-		if err := stack.Destroy(context.Background()); err == nil {
-			t.Fatal("Destroy err = nil, want the refusal from the key value store")
+		routes := previewRoutes(t, w)
+		if published, ok := routes[listPreviewHosts("deployment1")[0].Hostname]; !ok || published.Release != "d1.f1" {
+			t.Errorf("routes = %v, want the deployment's own hostname serving d1.f1", slices.Sorted(maps.Keys(routes)))
 		}
-		w.store.updateErr = nil
-		if err := stack.Destroy(context.Background()); err != nil {
-			t.Fatalf("Destroy again: %v", err)
-		}
-		if routes := previewRoutes(t, w); len(routes) != 0 {
-			t.Errorf("routes = %v, want the re-run to find the pointers it needed and withdraw them", slices.Sorted(maps.Keys(routes)))
+		if _, ok := routes[previewHostname()]; ok {
+			t.Errorf("a deployment pointer's move published on the alias %s, want only the hostnames the move names", previewHostname())
 		}
 	})
 
@@ -594,7 +590,7 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 		staged(t, stack, fakeEntryURL, fakeAssetPrefix)
 		w.dynamo.putErr = errors.New("the table is closed")
 
-		if err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Pointer: previewPointer, Promotion: router.Promotion{
+		if err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Pointer: previewPointer, Hosts: listPreviewHosts(previewPointer), Promotion: router.Promotion{
 			PromotionID: "orphan",
 			Ts:          1,
 			Builds:      map[string]string{"web": "d1.f1"},

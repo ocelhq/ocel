@@ -275,8 +275,8 @@ func (s *stack) listHosts(pointer, app string) []string {
 	return hosts
 }
 
-func (s *stack) RemovePointer(ctx context.Context, pointer string, _ progress.Log) error {
-	resolved := router.ResolvePointer(pointer)
+func (s *stack) RemovePointer(ctx context.Context, removal router.PointerRemoval, _ progress.Log) error {
+	resolved := router.ResolvePointer(removal.Pointer)
 	hosts := s.listHosts(resolved, "")
 	delete(s.recorded.Served, resolved)
 	if len(hosts) == 0 {
@@ -298,7 +298,7 @@ func (s *stack) RemovePointer(ctx context.Context, pointer string, _ progress.Lo
 func (s *stack) Destroy(ctx context.Context) error {
 	var errs []error
 	for _, pointer := range s.listPointers() {
-		errs = append(errs, s.RemovePointer(ctx, pointer, progress.Discard()))
+		errs = append(errs, s.RemovePointer(ctx, router.PointerRemoval{Pointer: pointer}, progress.Discard()))
 	}
 	return errors.Join(errs...)
 }

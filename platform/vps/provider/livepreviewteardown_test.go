@@ -3,6 +3,7 @@ package vps_test
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base32"
 	"encoding/hex"
 	"slices"
 	"strings"
@@ -52,8 +53,6 @@ func onABoxServingPreviews(t *testing.T) (machine, *vps.Provider, edge.EdgeStack
 	}
 	if _, err := front.ReconcilePreviewWildcard(context.Background(), edge.PreviewWildcardSpec{
 		BaseDomain: livePreviewBase,
-		GrammarMin: edge.PreviewGrammarMin,
-		GrammarMax: edge.PreviewGrammarMax,
 	}); err != nil {
 		t.Fatalf("ReconcilePreviewWildcard: %v", err)
 	}
@@ -75,7 +74,15 @@ func onABoxServingPreviews(t *testing.T) (machine, *vps.Provider, edge.EdgeStack
 }
 
 func teardownHostname(pointer string) string {
-	return edge.SharedPreview(teardownSlug, livePreviewBase).Hosts(pointer, []string{teardownApp})[0]
+	return signLivePreviewHost(teardownSlug, livePreviewBase, pointer, teardownApp).Hostname
+}
+
+const livePreviewKey edge.PreviewKey = "live-preview-key"
+
+func signLivePreviewHost(slug, base, pointer, app string) edge.PreviewHost {
+	sum := sha256.Sum256([]byte(slug + "/" + pointer))
+	token := base32.NewEncoding("abcdefghijklmnopqrstuvwxyz234567").EncodeToString(sum[:])[:edge.PreviewTokenLen]
+	return edge.NewSharedPreviewSite(slug, base, livePreviewKey).ListHosts(pointer, token, []string{app})[0]
 }
 
 func previewBuild(t *testing.T, pointer string) provider.Build {
@@ -158,7 +165,9 @@ func promotesPreview(t *testing.T, p *vps.Provider, stack edge.EdgeStack, slug, 
 		HealthPath: healthPath,
 	}
 	promotion := router.Promotion{PromotionID: "p-" + pointer, Ts: at, Builds: map[string]string{app: build.String()}}
-	promotesRecord(t, p, stack, pointer, promotion, record)
+	state := stack.State()
+	hosts := []edge.PreviewHost{signLivePreviewHost(slug, state.GlobalPreview, pointer, app)}
+	promoteRecord(t, p, stack, pointer, promotion, record, hosts...)
 }
 
 func previewRemove(t *testing.T, p *vps.Provider, stack edge.EdgeStack, pointer string) *said {
@@ -167,7 +176,7 @@ func previewRemove(t *testing.T, p *vps.Provider, stack edge.EdgeStack, pointer 
 	ctx := context.Background()
 	spoken := &said{}
 	routes := routed(t, p, stack)
-	if err := routes.RemovePointer(ctx, pointer, spoken); err != nil {
+	if err := routes.RemovePointer(ctx, router.PointerRemoval{Pointer: pointer}, spoken); err != nil {
 		t.Fatalf("RemovePointer(%s) = %v", pointer, err)
 	}
 	removed, err := ledger.New(p.KeyValues(), environment.TierPreview, teardownSlug).RemovePointer(ctx, pointer)
@@ -199,7 +208,7 @@ func (vm machine) certificates(t *testing.T) string {
 	t.Helper()
 
 	return vm.ssh(t, "sudo find "+quote(host.ProxyData+"/caddy/certificates")+" -mindepth 2 -maxdepth 2 -type d -name "+
-		quote(teardownSlug+"--*")+" -printf '%f\\n' 2>/dev/null | sort")
+		quote(teardownSlug+"-*")+" -printf '%f\\n' 2>/dev/null | sort")
 }
 
 func (vm machine) teardownImages(t *testing.T) string {

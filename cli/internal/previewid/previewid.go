@@ -73,17 +73,17 @@ func sanitize(ref string) string {
 
 var dnsLabelPattern = regexp.MustCompile(`^[a-z]([a-z0-9-]*[a-z0-9])?$`)
 
-const appSeparator = "--"
+const reservedHyphens = "--"
 
 func ValidateLabel(s string) error {
 	if !dnsLabelPattern.MatchString(s) {
 		return fmt.Errorf("invalid preview name %q: use a DNS-label-safe name (lowercase letters, digits and hyphens)", s)
 	}
-	if strings.Contains(s, appSeparator) {
-		return fmt.Errorf("invalid preview name %q: %q separates the preview from the app in the hostname it is served on (\"<preview>%s<app>\"), so a name may not contain it — use a single hyphen", s, appSeparator, appSeparator)
+	if strings.Contains(s, reservedHyphens) {
+		return fmt.Errorf("invalid preview name %q: %q is reserved in preview names, so a name may not contain it — use a single hyphen", s, reservedHyphens)
 	}
 	if len(s) > maxKeyLen {
-		return fmt.Errorf("preview name %q is too long: the limit is %d characters, the DNS label it is served on", s, maxKeyLen)
+		return fmt.Errorf("preview name %q is too long: the limit is %d characters, the longest a DNS label may be", s, maxKeyLen)
 	}
 	return nil
 }

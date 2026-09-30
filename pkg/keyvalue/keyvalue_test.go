@@ -14,21 +14,21 @@ import (
 
 var values = keyvalue.Partition{Tier: environment.TierProduction, Root: keyvalue.RootValues, Path: []string{"shop"}}
 
-type moving struct {
+type movingStore struct {
 	keyvalue.Store
 	recorded keyvalue.Entry
 	moves    int
 	removed  bool
 }
 
-func (m *moving) Read(context.Context, keyvalue.Key) (keyvalue.Entry, error) {
+func (m *movingStore) Read(context.Context, keyvalue.Key) (keyvalue.Entry, error) {
 	if m.removed {
 		return keyvalue.Entry{}, keyvalue.ErrNotFound
 	}
 	return m.recorded, nil
 }
 
-func (m *moving) Remove(context.Context, keyvalue.Key, keyvalue.Revision) error {
+func (m *movingStore) Remove(context.Context, keyvalue.Key, keyvalue.Revision) error {
 	if m.moves > 0 {
 		m.moves--
 		m.recorded.Revision += "'"
@@ -39,7 +39,7 @@ func (m *moving) Remove(context.Context, keyvalue.Key, keyvalue.Revision) error 
 }
 
 func TestForgetReadsAgainWhenTheEntryMovedUnderIt(t *testing.T) {
-	moved := &moving{recorded: keyvalue.Entry{Key: values.Key("cells"), Revision: "one"}, moves: 2}
+	moved := &movingStore{recorded: keyvalue.Entry{Key: values.Key("cells"), Revision: "one"}, moves: 2}
 	if err := keyvalue.Forget(context.Background(), moved, moved.recorded.Key); err != nil {
 		t.Fatalf("Forget() of an entry rewritten twice = %v, want it removed at the revision it ended at", err)
 	}
@@ -49,9 +49,77 @@ func TestForgetReadsAgainWhenTheEntryMovedUnderIt(t *testing.T) {
 }
 
 func TestForgetRefusesToReportAnEntryGoneThatKeepsMoving(t *testing.T) {
-	moved := &moving{recorded: keyvalue.Entry{Key: values.Key("cells"), Revision: "one"}, moves: 100}
+	moved := &movingStore{recorded: keyvalue.Entry{Key: values.Key("cells"), Revision: "one"}, moves: 100}
 	if err := keyvalue.Forget(context.Background(), moved, moved.recorded.Key); err == nil {
 		t.Fatal("Forget() of an entry it never removed = nil, and every caller reads that as removed")
+	}
+}
+
+type rewritingStore struct {
+	movingStore
+	rewrite json.RawMessage
+}
+
+func (r *rewritingStore) Remove(ctx context.Context, key keyvalue.Key, revision keyvalue.Revision) error {
+	if r.rewrite != nil {
+		r.recorded.Value, r.recorded.Revision, r.rewrite = r.rewrite, r.recorded.Revision+"'", nil
+		return keyvalue.ErrStale
+	}
+	return r.movingStore.Remove(ctx, key, revision)
+}
+
+func matchMine(seen *[]string) func(keyvalue.Entry) (bool, error) {
+	return func(recorded keyvalue.Entry) (bool, error) {
+		*seen = append(*seen, string(recorded.Value))
+		return string(recorded.Value) == `"mine"`, nil
+	}
+}
+
+func TestForgetMatchingKeepsAnEntryThatDoesNotMatch(t *testing.T) {
+	kept := &movingStore{recorded: keyvalue.Entry{Key: values.Key("cells"), Revision: "one", Value: []byte(`"theirs"`)}}
+	var seen []string
+	if err := keyvalue.ForgetMatching(context.Background(), kept, kept.recorded.Key, matchMine(&seen)); err != nil {
+		t.Fatalf("ForgetMatching() = %v", err)
+	}
+	if kept.removed {
+		t.Error("ForgetMatching() removed an entry its match refused")
+	}
+}
+
+func TestForgetMatchingRemovesAMatchingEntryAtTheRevisionItEndedAt(t *testing.T) {
+	moved := &movingStore{recorded: keyvalue.Entry{Key: values.Key("cells"), Revision: "one", Value: []byte(`"mine"`)}, moves: 2}
+	var seen []string
+	if err := keyvalue.ForgetMatching(context.Background(), moved, moved.recorded.Key, matchMine(&seen)); err != nil {
+		t.Fatalf("ForgetMatching() of a matching entry rewritten twice = %v, want it removed", err)
+	}
+	if !moved.removed || len(seen) != 3 {
+		t.Errorf("ForgetMatching() removed = %v after matching %d reads, want it removed after matching each of the 3", moved.removed, len(seen))
+	}
+}
+
+func TestForgetMatchingKeepsAnEntryRewrittenUnderItIntoOneThatNoLongerMatches(t *testing.T) {
+	moved := &rewritingStore{
+		movingStore: movingStore{recorded: keyvalue.Entry{Key: values.Key("cells"), Revision: "one", Value: []byte(`"mine"`)}},
+		rewrite:     []byte(`"theirs"`),
+	}
+	var seen []string
+	if err := keyvalue.ForgetMatching(context.Background(), moved, moved.recorded.Key, matchMine(&seen)); err != nil {
+		t.Fatalf("ForgetMatching() = %v", err)
+	}
+	if moved.removed {
+		t.Error("ForgetMatching() removed an entry rewritten under it into one its match refuses")
+	}
+	if want := []string{`"mine"`, `"theirs"`}; !slices.Equal(seen, want) {
+		t.Errorf("the match saw %v, want %v: each attempt matches what is recorded now", seen, want)
+	}
+}
+
+func TestForgetMatchingPassesOnTheMatchsError(t *testing.T) {
+	recorded := &movingStore{recorded: keyvalue.Entry{Key: values.Key("cells"), Revision: "one", Value: []byte(`"mine"`)}}
+	unreadable := errors.New("unreadable")
+	err := keyvalue.ForgetMatching(context.Background(), recorded, recorded.recorded.Key, func(keyvalue.Entry) (bool, error) { return true, unreadable })
+	if !errors.Is(err, unreadable) || recorded.removed {
+		t.Errorf("ForgetMatching() = %v with removed = %v, want the match's error and the entry kept", err, recorded.removed)
 	}
 }
 
@@ -170,5 +238,57 @@ func TestEveryRevisionMintedIsNew(t *testing.T) {
 	}
 	if first == second || len(first) != 32 {
 		t.Errorf("NewRevision() minted %q then %q, want two different 32-character tokens", first, second)
+	}
+}
+
+func (m *movingStore) Write(_ context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
+	if entry.Revision != m.recorded.Revision {
+		return "", keyvalue.ErrStale
+	}
+	if m.moves > 0 {
+		m.moves--
+		m.recorded.Revision += "'"
+		m.recorded.Value = []byte(`"theirs"`)
+		return "", keyvalue.ErrStale
+	}
+	m.recorded = entry
+	return entry.Revision, nil
+}
+
+func TestChangeReadsAgainAndReappliesTheChangeWhenTheEntryMovedUnderIt(t *testing.T) {
+	moved := &movingStore{recorded: keyvalue.Entry{Key: values.Key("cells"), Revision: "one", Value: []byte(`"mine"`)}, moves: 2}
+	var seen []string
+	err := keyvalue.Change(context.Background(), moved, moved.recorded.Key, func(recorded keyvalue.Entry) ([]byte, bool, error) {
+		seen = append(seen, string(recorded.Value))
+		return []byte(`"changed"`), true, nil
+	})
+	if err != nil {
+		t.Fatalf("Change() of an entry rewritten twice = %v, want the change written at the revision it ended at", err)
+	}
+	if want := []string{`"mine"`, `"theirs"`, `"theirs"`}; !slices.Equal(seen, want) {
+		t.Errorf("the change saw %v, want %v: each attempt starts from what is recorded", seen, want)
+	}
+	if string(moved.recorded.Value) != `"changed"` {
+		t.Errorf("recorded %s, want the change", moved.recorded.Value)
+	}
+}
+
+func TestChangeWritesNothingWhenTheChangeLeavesTheEntryAlone(t *testing.T) {
+	moved := &movingStore{recorded: keyvalue.Entry{Key: values.Key("cells"), Revision: "one", Value: []byte(`"mine"`)}, moves: 100}
+	err := keyvalue.Change(context.Background(), moved, moved.recorded.Key, func(keyvalue.Entry) ([]byte, bool, error) {
+		return nil, false, nil
+	})
+	if err != nil || moved.moves != 100 {
+		t.Errorf("Change() = %v after %d writes, want nil and no write", err, 100-moved.moves)
+	}
+}
+
+func TestChangeRefusesToReportAWriteThatKeepsGoingStale(t *testing.T) {
+	moved := &movingStore{recorded: keyvalue.Entry{Key: values.Key("cells"), Revision: "one"}, moves: 100}
+	err := keyvalue.Change(context.Background(), moved, moved.recorded.Key, func(keyvalue.Entry) ([]byte, bool, error) {
+		return []byte(`"changed"`), true, nil
+	})
+	if err == nil {
+		t.Fatal("Change() of an entry it never wrote = nil")
 	}
 }

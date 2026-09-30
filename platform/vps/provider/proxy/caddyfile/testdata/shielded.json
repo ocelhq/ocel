@@ -8,7 +8,7 @@
         "match": [
           {
             "host": [
-              "pr-1--web.preview.example.com"
+              "pr-1-web-abcdefghijklmnopfhzq6k4d.preview.example.com"
             ]
           }
         ],
@@ -100,7 +100,7 @@
       {
         "match": {
           "sni": [
-            "pr-1--web.preview.example.com"
+            "pr-1-web-abcdefghijklmnopfhzq6k4d.preview.example.com"
           ]
         },
         "client_authentication": {
@@ -147,7 +147,7 @@
           {
             "host": [
               "shop.example.com",
-              "pr-1--web.preview.example.com"
+              "pr-1-web-abcdefghijklmnopfhzq6k4d.preview.example.com"
             ]
           }
         ],

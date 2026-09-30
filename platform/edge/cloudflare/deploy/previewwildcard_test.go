@@ -48,8 +48,6 @@ func previewWildcardSpec() edge.PreviewWildcardSpec {
 	return edge.PreviewWildcardSpec{
 		Version:    "v1",
 		BaseDomain: "preview.app.com",
-		GrammarMin: edge.PreviewGrammarMin,
-		GrammarMax: edge.PreviewGrammarMax,
 		Program:    &edge.ProgramSpec{Worker: edge.Worker{Main: mainModule()}},
 	}
 }

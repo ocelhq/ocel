@@ -6,14 +6,12 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"maps"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
@@ -45,13 +43,17 @@ type promotable struct {
 }
 
 func (s *stack) serve(ctx context.Context, move router.PointerMove, ready []promotable, progress progress.Log) error {
-	pointer := move.Pointer
-	claims, err := s.previewClaims(ctx, pointer, slices.Sorted(maps.Keys(move.Records)))
+	claims, err := s.listPreviewClaims(ctx, move.Pointer, move.Hosts)
 	if err != nil {
 		return router.Unserved{Err: err}
 	}
 	if err := s.claim(ctx, claims); err != nil {
 		return router.Unserved{Err: err}
+	}
+	if len(claims) > 0 {
+		if err := s.disclaimUnnamed(ctx, move.Pointer, claims); err != nil {
+			return router.Unserved{Err: err}
+		}
 	}
 	apps := make([]host.AppRelease, 0, len(ready))
 	for _, release := range ready {
@@ -120,47 +122,55 @@ func (s *stack) rerun(ctx context.Context, release promotable, progress progress
 	return s.e.machine.Promote(ctx, s.state.Tier, s.state.Slug, release.app, record.Image)
 }
 
-func (s *stack) previewSite() edge.PreviewSite {
-	if s.state.Tier != environment.TierPreview {
-		return edge.PreviewSite{}
-	}
-	if s.state.GlobalPreview == "" && s.state.PreviewBase != "" {
-		return edge.ProjectPreview(s.state.PreviewBase)
-	}
-	return edge.SharedPreview(s.state.Slug, s.state.GlobalPreview)
-}
-
-func (s *stack) previewClaims(ctx context.Context, pointer string, apps []string) ([]host.HostClaim, error) {
-	site := s.previewSite()
-	if !site.Serves() || len(apps) == 0 || router.IsDefaultPointer(pointer) {
+func (s *stack) listPreviewClaims(ctx context.Context, pointer string, hosts []edge.PreviewHost) ([]host.HostClaim, error) {
+	if len(hosts) == 0 || router.IsDefaultPointer(pointer) {
 		return nil, nil
 	}
+	claims := make([]host.HostClaim, 0, len(hosts)+1)
+	for _, served := range hosts {
+		claims = append(claims, host.HostClaim{
+			Hostname: served.Hostname, Owner: s.surface(), Pointer: pointer, App: served.App,
+		})
+	}
 	stores, err := s.stores(ctx, router.ResolvePointer(pointer))
+	if err != nil || !stores {
+		return claims, err
+	}
+	hostname, err := formatPreviewStoreHostname(hosts)
 	if err != nil {
 		return nil, err
 	}
-	hostnames := site.Hosts(pointer, apps)
-	if stores {
-		hostnames = append(hostnames, site.Host(pointer, switchboard.StoreLabel))
+	return append(claims, host.HostClaim{
+		Hostname: hostname, Owner: s.surface(), Pointer: pointer, App: switchboard.StoreLabel,
+	}), nil
+}
+
+func formatPreviewStoreHostname(hosts []edge.PreviewHost) (string, error) {
+	first := slices.MinFunc(hosts, func(a, b edge.PreviewHost) int { return strings.Compare(a.Hostname, b.Hostname) })
+	_, base, _ := strings.Cut(first.Hostname, ".")
+	tail := first.ReadTail()
+	if tail == "" || base == "" {
+		return "", refusal.Refuse(refusal.CodeInvalid,
+			"the preview hostname %s ends in no %d-character token to name its store after", first.Hostname, edge.PreviewTailLen)
 	}
-	if err := site.LabelProblem(hostnames); err != nil {
-		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"%s claims no preview hostname on this box: %s", s.surface(), err)
+	return tail + "-" + switchboard.StoreLabel + "." + base, nil
+}
+
+func (s *stack) disclaimUnnamed(ctx context.Context, pointer string, claims []host.HostClaim) error {
+	current, err := s.e.machine.Claims(ctx)
+	if err != nil {
+		return err
 	}
-	claims := make([]host.HostClaim, 0, len(hostnames))
-	for _, hostname := range hostnames {
-		app := ""
-		if at := slices.IndexFunc(apps, func(app string) bool { return site.Host(pointer, app) == hostname }); at >= 0 {
-			app = apps[at]
+	for _, claim := range current {
+		if claim.Owner != s.surface() || claim.Pointer != pointer ||
+			slices.ContainsFunc(claims, func(named host.HostClaim) bool { return named.Hostname == claim.Hostname }) {
+			continue
 		}
-		if hostname == site.Host(pointer, switchboard.StoreLabel) {
-			app = switchboard.StoreLabel
+		if err := s.e.machine.DisclaimHost(ctx, claim.Hostname, s.surface()); err != nil {
+			return err
 		}
-		claims = append(claims, host.HostClaim{
-			Hostname: hostname, Owner: s.surface(), Pointer: pointer, App: app,
-		})
 	}
-	return claims, nil
+	return nil
 }
 
 func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) error {

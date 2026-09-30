@@ -11,7 +11,9 @@ import (
 
 var _ proxy.Proxy = Caddyfile{}
 
-func (Caddyfile) Guarantees() proxy.Guarantees { return proxy.Guarantees{} }
+func (Caddyfile) Guarantees() proxy.Guarantees {
+	return proxy.Guarantees{OrdersEachPreviewHostnameItsOwnCertificate: true}
+}
 
 func (c Caddyfile) Render(spec proxy.Spec) ([]byte, error) { return c.render(spec) }
 

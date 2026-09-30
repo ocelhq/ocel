@@ -165,7 +165,13 @@ func (s *edgeSession) reclaimDropped(ctx context.Context, pointer string, droppe
 	if err != nil {
 		return err
 	}
-	return reclaimUnnamed(ctx, s.provider, s.ledger, pointer, unnamed, progress)
+	if err := s.removeDeployments(ctx, unnamed.DeploymentRemovals, progress); err != nil {
+		return err
+	}
+	if err := reclaimUnnamed(ctx, s.provider, s.ledger, pointer, unnamed, progress); err != nil {
+		return err
+	}
+	return s.forgetRemovedDeployments(ctx, pointer, unnamed.DeploymentRemovals)
 }
 
 func unreclaimedWarning(promotionID string, err error) string {

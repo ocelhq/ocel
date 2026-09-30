@@ -138,8 +138,6 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progr
 		BaseDomain: base,
 		Edge:       front.Kind(),
 		Scope:      front.Facts().CredentialScope,
-		GrammarMin: edge.PreviewGrammarMin,
-		GrammarMax: edge.PreviewGrammarMax,
 		Host:       w.recorded.Host,
 	}
 
@@ -208,8 +206,6 @@ func (w *wildcards) reconcileEntry(ctx context.Context, front edge.Edge, origin 
 	spec := edge.PreviewWildcardSpec{
 		BaseDomain:  base,
 		Certificate: w.recorded.Host.Certificate.ID,
-		GrammarMin:  edge.PreviewGrammarMin,
-		GrammarMax:  edge.PreviewGrammarMax,
 		Warn:        runProgress.Warn,
 	}
 	var claimed originClaim
@@ -221,9 +217,14 @@ func (w *wildcards) reconcileEntry(ctx context.Context, front edge.Edge, origin 
 		}
 		spec.Origin = claimed.origin
 	} else {
+		key, err := ensurePreviewKey(ctx, w.provider)
+		if err != nil {
+			return "", err
+		}
 		program, err := edgeProgramFor(ctx, w.provider, front, provider.EdgeProgramRequest{
 			Tier:              environment.TierPreview,
 			PreviewBaseDomain: base,
+			PreviewKey:        key,
 		})
 		if err != nil {
 			return "", err
@@ -390,8 +391,6 @@ func (w *wildcards) proto(ctx context.Context) *contractv1.PreviewWildcard {
 	return &contractv1.PreviewWildcard{
 		BaseDomain:     w.recorded.BaseDomain,
 		EdgeScope:      w.recorded.Scope,
-		GrammarMin:     w.recorded.GrammarMin,
-		GrammarMax:     w.recorded.GrammarMax,
 		RouteInstalled: w.routeInstalled(ctx),
 	}
 }

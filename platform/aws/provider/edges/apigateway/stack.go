@@ -182,43 +182,54 @@ func stagePatch(promotionID string, records map[string]router.DeploymentRecord) 
 	}), nil
 }
 
-func (s *stack) previewHost(pointer string) (string, string) {
-	base := s.state.GlobalPreview
-	if base == "" || s.tier() != environment.TierPreview {
-		return "", ""
+func (s *stack) findPreviewWildcard() string {
+	if s.tier() != environment.TierPreview {
+		return ""
 	}
-	if router.IsDefaultPointer(pointer) {
-		return "", ""
-	}
-	host := edge.SharedPreview(s.slug(), base).Host(pointer, "")
-	if host == "" {
-		return "", ""
-	}
-	return edge.PreviewWildcard(base), host
+	return edge.PreviewWildcard(s.state.GlobalPreview)
 }
 
-func (s *stack) routePreview(ctx context.Context, c Clients, pointer, api string) error {
-	wildcard, host := s.previewHost(pointer)
-	if host == "" {
+func (s *stack) moveHostRules(ctx context.Context, c Clients, route, withdraw []edge.PreviewHost, api string) error {
+	wildcard := s.findPreviewWildcard()
+	if wildcard == "" || len(route)+len(withdraw) == 0 {
 		return nil
 	}
-	return putHostRule(ctx, c, wildcard, host, api, 0)
+	listed, err := listRules(ctx, c, wildcard)
+	if err != nil {
+		return err
+	}
+	for _, host := range route {
+		if err := listed.putHostRule(ctx, host.Hostname, api, 0); err != nil {
+			return err
+		}
+	}
+	return listed.deleteHostRules(ctx, edge.ListPreviewHostnames(withdraw))
 }
 
-func (s *stack) unroutePreview(ctx context.Context, c Clients, pointer string) error {
-	wildcard, host := s.previewHost(pointer)
-	if host == "" {
+func (s *stack) unroutePreview(ctx context.Context, c Clients, hosts []edge.PreviewHost) error {
+	wildcard := s.findPreviewWildcard()
+	if wildcard == "" || len(hosts) == 0 {
 		return nil
 	}
-	return deleteHostRule(ctx, c, wildcard, host)
+	return deleteHostRules(ctx, c, wildcard, edge.ListPreviewHostnames(hosts))
 }
 
 func (s *stack) unrouteProject(ctx context.Context, c Clients) error {
-	base := s.state.GlobalPreview
-	if base == "" || s.tier() != environment.TierPreview || s.slug() == "" {
+	wildcard := s.findPreviewWildcard()
+	if wildcard == "" || s.slug() == "" {
 		return nil
 	}
-	return deleteLabelledRules(ctx, c, edge.PreviewWildcard(base), s.slug()+edge.PreviewAppSeparator, "."+base)
+	return deleteRulesMatching(ctx, c, wildcard, func(host string) bool {
+		return parsePreviewSlug(host, s.state.GlobalPreview) == s.slug()
+	})
+}
+
+func parsePreviewSlug(hostname, base string) string {
+	label, onBase := strings.CutSuffix(hostname, "."+base)
+	if !onBase {
+		return ""
+	}
+	return edge.PreviewHost{Hostname: label}.ReadPrefix()
 }
 
 func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) error {

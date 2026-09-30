@@ -212,7 +212,7 @@ func TestRemovingAPreviewPointerDropsTheRulesOfItsHostsAlone(t *testing.T) {
 		router.Claim{Hostname: "admin-pr-8.preview.example", App: "admin", Pointer: "pr-8", Certificate: "arn:aws:acm:us-east-1:111122223333:certificate/wildcard"},
 	)
 
-	if err := stack.RemovePointer(context.Background(), "pr-7", progress.Discard()); err != nil {
+	if err := stack.RemovePointer(context.Background(), router.PointerRemoval{Pointer: "pr-7"}, progress.Discard()); err != nil {
 		t.Fatalf("RemovePointer: %v", err)
 	}
 	if hosts := f.ruleHosts(); !slices.Equal(hosts, []string{"admin-pr-8.preview.example"}) {

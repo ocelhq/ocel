@@ -48,7 +48,7 @@ type EdgeProgramRequest struct {
 	Slug              string
 	Env               string
 	PreviewBaseDomain string
-	Apps              []string
+	PreviewKey        edge.PreviewKey
 	Entry             edge.WorkerModule
 }
 
@@ -58,14 +58,15 @@ type EdgeProgram struct {
 }
 
 type DeployPreflight struct {
-	Deploy    DeploySpec
-	Edge      edge.Kind
-	Resources []Resource
-	Grants    []Binding
-	Apps      []AppUsage
-	Progress  progress.Log
-	WrittenBy WrittenBy
-	Dry       bool
+	Deploy            DeploySpec
+	PreviewBaseDomain string
+	Edge              edge.Kind
+	Resources         []Resource
+	Grants            []Binding
+	Apps              []AppUsage
+	Progress          progress.Log
+	WrittenBy         WrittenBy
+	Dry               bool
 }
 
 type AppUsage struct {

@@ -1,4 +1,4 @@
-import type { DeploymentRecord } from "../src/deployments";
+import type { DeploymentRecord, DeploymentsBinding, PointerRecordResult } from "../src/deployments";
 
 export const FN_URL = "https://abc123.lambda-url.eu-west-2.on.aws/";
 
@@ -15,6 +15,12 @@ export function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentReco
     createdAt: 1_000,
     ...over,
   };
+}
+
+export function answerEveryRecordWith(
+  answer: (args: { slug: string; app?: string }) => Promise<PointerRecordResult>,
+): DeploymentsBinding {
+  return { readPointerRecord: answer, readLabelRecord: answer };
 }
 
 export function capturing(): { calls: Request[]; fetch: typeof fetch } {

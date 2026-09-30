@@ -3,11 +3,13 @@ package providerserver_test
 import (
 	"context"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/router"
@@ -21,7 +23,7 @@ func TestAContainerAppsPreviewBehindAnEdgeRunningCodeIsForwardedUnderItsOwnHostA
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("preview Deploy() = %q", result.GetError())
 	}
-	host := edge.ProjectPreview("preview.example").Host("pr-7", "admin")
+	host := servedAppHost(t, result, "admin")
 	direct := p.Edges().(*fake.Edges).Edge(fake.KindDirect)
 	claimed := slices.IndexFunc(direct.Claims(), func(claim router.Claim) bool { return claim.Hostname == host })
 	if claimed < 0 || direct.Claims()[claimed].Pointer != "pr-7" || direct.Claims()[claimed].App != "admin" {
@@ -59,6 +61,28 @@ func TestAContainerAppsPreviewBehindAnEdgeRunningCodeIsForwardedUnderItsOwnHostA
 	}
 }
 
+func TestAContainerAppsPreviewBehindAnEdgeRunningCodePublishesNoDeploymentURLTheEdgeDoesNotForward(t *testing.T) {
+	client, p := mixedServed(t)
+	previewBootstrapped(t, client)
+
+	result, _ := deploy(t, client, withContainerAdmin(previewRequest(), adminDeploymentID))
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("preview Deploy() = %q", result.GetError())
+	}
+	if findDeploymentURL(result, "web") == "" {
+		t.Errorf("web, served by the edge's own router, published no deployment URL")
+	}
+	url := findDeploymentURL(result, "admin")
+	if url == "" {
+		return
+	}
+	host := strings.TrimPrefix(url, "https://")
+	relay := p.Edges().(*fake.Edges).Edge(fake.KindRelay)
+	if !slices.ContainsFunc(relay.Bindings(), func(binding edge.DomainBinding) bool { return binding.Hostname == host && binding.Origin != nil }) {
+		t.Errorf("admin's deployment URL is %s, which the edge does not forward to admin's origin: bindings %+v", url, relay.Bindings())
+	}
+}
+
 func TestAContainerAppsPreviewIsClaimedAgainWithTheWildcardsRenewedCertificateBeforeTheOldOneIsDiscarded(t *testing.T) {
 	client, p := mixedServed(t)
 	previewBootstrapped(t, client)
@@ -69,10 +93,11 @@ func TestAContainerAppsPreviewIsClaimedAgainWithTheWildcardsRenewedCertificateBe
 		return req
 	}
 
-	if result, _ := deploy(t, client, previewed()); !result.GetSuccess() {
-		t.Fatalf("preview Deploy() = %q", result.GetError())
+	deployed, _ := deploy(t, client, previewed())
+	if !deployed.GetSuccess() {
+		t.Fatalf("preview Deploy() = %q", deployed.GetError())
 	}
-	host := edge.ProjectPreview("preview.example").Host("pr-7", "admin")
+	host := servedAppHost(t, deployed, "admin")
 	direct := p.Edges().(*fake.Edges).Edge(fake.KindDirect)
 	first := lastClaimOf(direct.Claims(), host)
 	if first.Certificate == "" || !first.CertificateRequested {
@@ -99,4 +124,13 @@ func lastClaimOf(claims []router.Claim, hostname string) router.Claim {
 		}
 	}
 	return router.Claim{}
+}
+
+func servedAppHost(t *testing.T, result *progressv1.OperationResult, app string) string {
+	t.Helper()
+	urls := servedAppURLs(result, app)
+	if len(urls) == 0 {
+		t.Fatalf("the deploy served %s on no URL", app)
+	}
+	return strings.TrimPrefix(urls[0], "https://")
 }

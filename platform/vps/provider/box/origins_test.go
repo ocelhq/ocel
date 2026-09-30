@@ -62,7 +62,7 @@ func TestAPreviewsHostnamesAreOriginsItsProjectsBucketsAnswer(t *testing.T) {
 	stack := previewStack(t, m)
 	previewed(t, stack, "pr-7", "web")
 
-	claimed := "claim " + slug + "--pr-7." + previewBase
+	claimed := "claim " + listPreviewHosts("pr-7", "web")[0].Hostname
 	at := slices.Index(m.calls, claimed)
 	if at < 0 || !slices.Contains(m.calls[at+1:], "apply origins "+slug+"/preview") {
 		t.Errorf("the preview claimed its hostname and never applied it to its project's buckets: %v", m.calls)

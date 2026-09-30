@@ -131,6 +131,8 @@ message AppResult {
   string error = 3;
 
   repeated string urls = 4;
+
+  string deployment_url = 5;
 }
 
 message OperationResult {

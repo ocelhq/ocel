@@ -410,7 +410,7 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
-	t.Run("a preview whose app list grew re-uploads the shared worker", func(t *testing.T) {
+	t.Run("a preview whose signing key changed re-uploads the shared worker", func(t *testing.T) {
 		t.Setenv(envSkipEdgeReconcile, "1")
 
 		store := fakeStoreServer(t, "s3cr3t")
@@ -418,20 +418,20 @@ func TestReconcile(t *testing.T) {
 		p := m.provider(t)
 
 		spec := previewSpec(store.URL, "v2")
-		spec.Program.Worker = withVar(spec.Program.Worker, "OCEL_PREVIEW_APPS", "web")
+		spec.Program.Worker = withSecret(spec.Program.Worker, edge.PreviewKeyVar, "key-1")
 		state, err := reconcileState(t, p, spec, testState(store.URL, "s3cr3t"))
 		if err != nil {
 			t.Fatalf("Reconcile: %v", err)
 		}
 
-		grown := previewSpec(store.URL, "v2")
-		grown.Program.Worker = withVar(grown.Program.Worker, "OCEL_PREVIEW_APPS", "web,api")
-		if _, err := reconcileState(t, p, grown, state); err != nil {
-			t.Fatalf("Reconcile after the app list grew: %v", err)
+		rotated := previewSpec(store.URL, "v2")
+		rotated.Program.Worker = withSecret(rotated.Program.Worker, edge.PreviewKeyVar, "key-2")
+		if _, err := reconcileState(t, p, rotated, state); err != nil {
+			t.Fatalf("Reconcile after the signing key changed: %v", err)
 		}
 
 		if len(m.putScripts) != 2 {
-			t.Errorf("uploaded scripts = %v, want the shared worker uploaded again for the wider app list", m.putScripts)
+			t.Errorf("uploaded scripts = %v, want the shared worker uploaded again with the new signing key", m.putScripts)
 		}
 	})
 

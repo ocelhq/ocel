@@ -28,6 +28,7 @@ func (r Router) Facts() router.Facts {
 		Dispatches:                  true,
 		AnswersHostnames:            true,
 		StopsServingRemovedPointers: true,
+		ServesPreviewDeployments:    true,
 	}
 }
 
@@ -81,6 +82,7 @@ func (r routerStack) MovePointer(ctx context.Context, move router.PointerMove, _
 			Replaces:    replaces,
 			PromotionID: move.Promotion.PromotionID,
 			Records:     records,
+			Labels:      listPointerLabels(move.Hosts),
 		})
 		if err != nil || !stale {
 			return err
@@ -89,8 +91,16 @@ func (r routerStack) MovePointer(ctx context.Context, move router.PointerMove, _
 	return router.Unserved{Err: fmt.Errorf("move the pointer to promotion %s: the deployments store served another promotion on every one of %d attempts, so this move stopped rather than overwrite it", move.Promotion.PromotionID, moveAttempts)}
 }
 
-func (r routerStack) RemovePointer(ctx context.Context, pointer string, _ progress.Log) error {
-	return r.s.removePointerRecords(ctx, pointer)
+func listPointerLabels(hosts []edge.PreviewHost) []pointerLabel {
+	labels := make([]pointerLabel, 0, len(hosts))
+	for _, host := range hosts {
+		labels = append(labels, pointerLabel{Label: host.ReadLabel(), App: host.App})
+	}
+	return labels
+}
+
+func (r routerStack) RemovePointer(ctx context.Context, removal router.PointerRemoval, _ progress.Log) error {
+	return r.s.removePointerRecords(ctx, removal.Pointer)
 }
 
 func (r routerStack) Destroy(context.Context) error { return nil }

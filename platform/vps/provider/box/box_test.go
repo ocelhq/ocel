@@ -289,7 +289,7 @@ func stackOn(front boxEdge, stack edge.EdgeStack) boxStack {
 }
 
 func removePointer(ctx context.Context, stack boxStack, pointer string, progress progress.Log) (router.PruneResult, error) {
-	if err := stack.RemovePointer(ctx, pointer, progress); err != nil {
+	if err := stack.RemovePointer(ctx, router.PointerRemoval{Pointer: pointer}, progress); err != nil {
 		return router.PruneResult{}, err
 	}
 	return stack.Ledger().RemovePointer(ctx, pointer)

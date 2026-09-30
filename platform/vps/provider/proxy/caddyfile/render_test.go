@@ -10,7 +10,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddyfile"
 )
 
-var served = []string{"shop.example.com", "ocel-edge-probe.preview.example.com", "pr-12--web.preview.example.com", "box.example.com"}
+var served = []string{"shop.example.com", "ocel-edge-probe.preview.example.com", "pr-12-web-abcdefghijklmnopp3347l26.preview.example.com", "box.example.com"}
 
 func golden(t *testing.T, name string) string {
 	t.Helper()

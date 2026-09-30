@@ -21,11 +21,14 @@ const (
 	storeOwnerToken    = "owner-token"
 )
 
+type labelTarget struct{ pointer, app string }
+
 type fakeStore struct {
 	mu       sync.Mutex
 	pointers map[string]string
 	served   map[string]map[string]router.DeploymentRecord
 	apps     map[string]bool
+	labels   map[string]labelTarget
 	moves    []pointerMoveBody
 	version  *string
 	owner    string
@@ -39,6 +42,30 @@ func (f *fakeStore) serving(pointer, app string) string {
 		pointer = router.DefaultPointer
 	}
 	return f.served[pointer][app].Build
+}
+
+func (f *fakeStore) findServedBuild(label string) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	at, found := f.labels[label]
+	if !found {
+		return ""
+	}
+	served := f.served[at.pointer]
+	if at.app == "" && len(served) == 1 {
+		for _, record := range served {
+			return record.Build
+		}
+	}
+	return served[at.app].Build
+}
+
+func (f *fakeStore) dropLabels(pointer string) {
+	for label, at := range f.labels {
+		if at.pointer == pointer {
+			delete(f.labels, label)
+		}
+	}
 }
 
 func (f *fakeStore) moved() []pointerMoveBody {
@@ -59,6 +86,7 @@ func fakeStoreFor(t *testing.T, secret string) (*httptest.Server, *fakeStore) {
 		pointers: map[string]string{},
 		served:   map[string]map[string]router.DeploymentRecord{},
 		apps:     map[string]bool{},
+		labels:   map[string]labelTarget{},
 		owner:    storeOwnerToken,
 		live:     secret,
 	}
@@ -130,6 +158,10 @@ func fakeStoreFor(t *testing.T, secret string) (*httptest.Server, *fakeStore) {
 			f.served[pointer][record.App] = record
 			f.apps[record.App] = true
 		}
+		f.dropLabels(pointer)
+		for _, served := range body.Labels {
+			f.labels[served.Label] = labelTarget{pointer: pointer, app: served.App}
+		}
 		f.pointers[pointer] = body.PromotionID
 		w.WriteHeader(http.StatusNoContent)
 	}))
@@ -143,6 +175,7 @@ func fakeStoreFor(t *testing.T, secret string) (*httptest.Server, *fakeStore) {
 		}
 		delete(f.pointers, body.Pointer)
 		delete(f.served, body.Pointer)
+		f.dropLabels(body.Pointer)
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	mux.HandleFunc("GET /{slug}/apps", authed(func(w http.ResponseWriter, _ *http.Request) {
@@ -166,6 +199,7 @@ func fakeStoreFor(t *testing.T, secret string) (*httptest.Server, *fakeStore) {
 		f.pointers = map[string]string{}
 		f.served = map[string]map[string]router.DeploymentRecord{}
 		f.apps = map[string]bool{}
+		f.labels = map[string]labelTarget{}
 		f.version = nil
 		f.owner, f.live = "", ""
 		w.WriteHeader(http.StatusNoContent)
@@ -250,7 +284,7 @@ func TestRemovingAPointerLeavesNothingServedOnIt(t *testing.T) {
 	state := testState(srv.URL, "s3cr3t")
 	movePointer(t, p, state, pointerMoveOf("promo-preview", "pr-42", router.DeploymentRecord{App: "web", Build: "b1"}))
 
-	if err := (routerStack{s: stackOn(p, state)}).RemovePointer(t.Context(), "pr-42", progress.Discard()); err != nil {
+	if err := (routerStack{s: stackOn(p, state)}).RemovePointer(t.Context(), router.PointerRemoval{Pointer: "pr-42"}, progress.Discard()); err != nil {
 		t.Fatalf("RemovePointer: %v", err)
 	}
 	if served := store.serving("pr-42", "web"); served != "" {
@@ -407,4 +441,47 @@ func TestDestroyInstance(t *testing.T) {
 			t.Fatalf("destroyInstance on an already-wiped instance: err = %v, want nil", err)
 		}
 	})
+}
+
+func TestAPreviewPointerMoveServesEachOfItsHostsByItsLabel(t *testing.T) {
+	t.Parallel()
+
+	srv, store := fakeStoreFor(t, "s3cr3t")
+	p := &cloudflare{}
+	state := testState(srv.URL, "s3cr3t")
+	move := pointerMoveOf("promo-preview", "pr-42",
+		router.DeploymentRecord{App: "web", Build: "b1"},
+		router.DeploymentRecord{App: "admin", Build: "b2"})
+	move.Hosts = []edge.PreviewHost{
+		{Hostname: "pr-42-web-aaaaaaaaaaaaaaaabbbbbbbb.preview.example.com", App: "web"},
+		{Hostname: "pr-42-admin-ccccccccccccccccdddddddd.preview.example.com", App: "admin"},
+	}
+
+	movePointer(t, p, state, move)
+
+	if served := store.findServedBuild("pr-42-web-aaaaaaaaaaaaaaaabbbbbbbb"); served != "b1" {
+		t.Errorf("the web preview label serves %q, want b1", served)
+	}
+	if served := store.findServedBuild("pr-42-admin-ccccccccccccccccdddddddd"); served != "b2" {
+		t.Errorf("the admin preview label serves %q, want b2", served)
+	}
+}
+
+func TestRemovingAPreviewPointerStopsServingItsLabels(t *testing.T) {
+	t.Parallel()
+
+	srv, store := fakeStoreFor(t, "s3cr3t")
+	p := &cloudflare{}
+	state := testState(srv.URL, "s3cr3t")
+	hosts := []edge.PreviewHost{{Hostname: "pr-42-aaaaaaaaaaaaaaaabbbbbbbb.preview.example.com"}}
+	move := pointerMoveOf("promo-preview", "pr-42", router.DeploymentRecord{App: "web", Build: "b1"})
+	move.Hosts = hosts
+	movePointer(t, p, state, move)
+
+	if err := (routerStack{s: stackOn(p, state)}).RemovePointer(t.Context(), router.PointerRemoval{Pointer: "pr-42", Hosts: hosts}, progress.Discard()); err != nil {
+		t.Fatalf("RemovePointer: %v", err)
+	}
+	if served := store.findServedBuild("pr-42-aaaaaaaaaaaaaaaabbbbbbbb"); served != "" {
+		t.Errorf("the preview label serves %q after its pointer was removed, want nothing", served)
+	}
 }

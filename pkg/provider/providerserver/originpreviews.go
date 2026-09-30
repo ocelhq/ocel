@@ -18,8 +18,7 @@ func (r *deployRun) listOriginPreviews() ([]ConfiguredHost, error) {
 		return nil, nil
 	}
 	var hosts []ConfiguredHost
-	site, names := r.previewSite(), r.appNames()
-	for slot, entry := range r.spec.Apps {
+	for _, entry := range r.spec.Apps {
 		kind := r.appRouters[entry.App]
 		if kind == r.edgeKind {
 			continue
@@ -31,8 +30,8 @@ func (r *deployRun) listOriginPreviews() ([]ConfiguredHost, error) {
 		if origin == nil {
 			continue
 		}
-		if host := site.Host(r.spec.Pointer, edge.AppAt(names, slot)); host != "" {
-			hosts = append(hosts, ConfiguredHost{Hostname: host, App: entry.App, Pointer: router.ResolvePointer(r.spec.Pointer)})
+		if host := findAppHost(r.aliases, entry.App); host.Hostname != "" {
+			hosts = append(hosts, ConfiguredHost{Hostname: host.Hostname, App: entry.App, Pointer: router.ResolvePointer(r.spec.Pointer)})
 		}
 	}
 	return hosts, nil

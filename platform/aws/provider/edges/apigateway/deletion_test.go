@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/router"
 )
 
 func deletionTrail(w *world) []string {
@@ -96,7 +97,7 @@ func TestRemovingPreviewsOneByOneSpacesThemAgainstEachOther(t *testing.T) {
 	w.gateway.calls = nil
 
 	for _, pointer := range pointers {
-		if _, err := removePointer(ctx, stack, pointer, progress.Discard()); err != nil {
+		if _, err := removePointer(ctx, stack, router.PointerRemoval{Pointer: pointer, Hosts: listPreviewHosts(pointer)}, progress.Discard()); err != nil {
 			t.Fatalf("RemovePointer(%s): %v", pointer, err)
 		}
 	}

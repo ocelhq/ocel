@@ -17,7 +17,16 @@ export const SLUG_PREFIX = "e2e-";
 
 export const APP_NAME = "app";
 
-export const MAX_SLUG_LEN = 63 - "ocel-".length - "-preview".length;
+const PREVIEW_TOKEN_LEN = 16;
+
+const PREVIEW_MAC_LEN = 8;
+
+export const PREVIEW_TAIL_LEN = PREVIEW_TOKEN_LEN + PREVIEW_MAC_LEN;
+
+export const MAX_SLUG_LEN = Math.min(
+  63 - "ocel-".length - "-preview".length,
+  63 - "-".length - PREVIEW_TAIL_LEN,
+);
 
 export const SKIP_DRIFT_CHECK_ENV = Object.freeze({
   OCEL_SKIP_EDGE_RECONCILE: "1",

@@ -79,7 +79,7 @@ func liveRecord(tag string, staged release) router.DeploymentRecord {
 func promotes(t *testing.T, p *vps.Provider, stack edge.EdgeStack, id, tag string, staged release, at int64) {
 	t.Helper()
 	promotion := router.Promotion{PromotionID: id, Ts: at, Builds: map[string]string{liveApp: tag}}
-	promotesRecord(t, p, stack, "", promotion, liveRecord(tag, staged))
+	promoteRecord(t, p, stack, "", promotion, liveRecord(tag, staged))
 }
 
 var (
@@ -92,7 +92,7 @@ func ownPromotion(promotion router.Promotion) router.Promotion {
 	return promotion
 }
 
-func promotesRecord(t *testing.T, p *vps.Provider, stack edge.EdgeStack, pointer string, promotion router.Promotion, record router.DeploymentRecord) {
+func promoteRecord(t *testing.T, p *vps.Provider, stack edge.EdgeStack, pointer string, promotion router.Promotion, record router.DeploymentRecord, hosts ...edge.PreviewHost) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -113,6 +113,7 @@ func promotesRecord(t *testing.T, p *vps.Provider, stack edge.EdgeStack, pointer
 		Pointer:   pointer,
 		Promotion: promotion,
 		Records:   map[string]router.DeploymentRecord{record.App: record},
+		Hosts:     hosts,
 	}, progress.Discard()); err != nil {
 		t.Fatalf("MovePointer(%s): %v", promotion.PromotionID, err)
 	}

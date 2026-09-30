@@ -412,6 +412,15 @@ func mintCertificate(t *testing.T, hostname string, usage x509.ExtKeyUsage) (cer
 		string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER}))
 }
 
+const conformancePreviewKey edge.PreviewKey = "conformance-preview-key"
+
+func listPreviewHosts(fixture Fixture, base, token string) []edge.PreviewHost {
+	if base == "" {
+		base = "preview.conformance.invalid"
+	}
+	return edge.NewSharedPreviewSite(fixture.Spec.Slug, base, conformancePreviewKey).ListHosts("conformance-preview", token, []string{App})
+}
+
 func runPreviews(t *testing.T, suite Suite, record func(app, build string) router.DeploymentRecord) {
 	t.Run("a preview pointer leaves nothing served when it is removed", func(t *testing.T) {
 		if suite.Previews == nil {
@@ -420,17 +429,67 @@ func runPreviews(t *testing.T, suite Suite, record func(app, build string) route
 		fixture := suite.Previews(t)
 		stack := reconciled(t, fixture)
 		const pointer = "conformance-preview"
-		movePointer(t, stack, pointer, "previewed", record(App, "b1"))
+		hosts := listPreviewHosts(fixture, suite.PreviewBase, "aliasaliasaliasa")
+		movePreview(t, stack, pointer, "previewed", hosts, record(App, "b1"))
 		if served := fixture.Serving(pointer); served != "b1" {
 			t.Fatalf("%s serves %q, want the b1 this preview moved onto; a preview that never landed makes every assertion after it vacuous", pointer, served)
 		}
 
-		removesPointer(t, stack, pointer)
+		removePreview(t, stack, router.PointerRemoval{Pointer: pointer, Hosts: hosts})
 		if served := fixture.Serving(pointer); served != "" {
 			t.Errorf("%s serves %q once the preview is gone, want nothing", pointer, served)
 		}
-		removesPointer(t, stack, pointer)
+		removePreview(t, stack, router.PointerRemoval{Pointer: pointer, Hosts: hosts})
 	})
+
+	t.Run("a preview deployment keeps serving its release after the preview moves on, until it is removed", func(t *testing.T) {
+		if suite.Previews == nil {
+			t.Skip("this router cannot be served on a preview wildcard from the conformance suite alone")
+		}
+		fixture := suite.Previews(t)
+		if !fixture.Router.Facts().ServesPreviewDeployments {
+			t.Skip("Facts().ServesPreviewDeployments is false, so a preview is served on its alias alone")
+		}
+		stack := reconciled(t, fixture)
+		const pointer = "conformance-preview"
+		alias := listPreviewHosts(fixture, suite.PreviewBase, "aliasaliasaliasa")
+		first := router.FormatDeploymentPointer(pointer, "previewed-1")
+		firstHosts := listPreviewHosts(fixture, suite.PreviewBase, "firstfirstfirstf")
+		movePreview(t, stack, pointer, "previewed-1", alias, record(App, "b1"))
+		movePreview(t, stack, first, "previewed-1", firstHosts, record(App, "b1"))
+		movePreview(t, stack, pointer, "previewed-2", alias, record(App, "b2"))
+		movePreview(t, stack, router.FormatDeploymentPointer(pointer, "previewed-2"), "previewed-2", listPreviewHosts(fixture, suite.PreviewBase, "secondsecondseco"), record(App, "b2"))
+
+		if served := fixture.Serving(pointer); served != "b2" {
+			t.Errorf("%s serves %q, want the b2 the preview moved onto last", pointer, served)
+		}
+		if served := fixture.Serving(first); served != "b1" {
+			t.Errorf("%s serves %q after the preview moved on, want the b1 it was deployed with", first, served)
+		}
+		removePreview(t, stack, router.PointerRemoval{Pointer: first, Hosts: firstHosts})
+		if served := fixture.Serving(first); served != "" {
+			t.Errorf("%s serves %q once it was removed, want nothing", first, served)
+		}
+		if served := fixture.Serving(pointer); served != "b2" {
+			t.Errorf("%s serves %q after an older deployment was removed, want the b2 it served", pointer, served)
+		}
+	})
+}
+
+func movePreview(t *testing.T, stack router.Stack, pointer, promotionID string, hosts []edge.PreviewHost, records ...router.DeploymentRecord) {
+	t.Helper()
+	move := newPointerMove(promotionID, records...)
+	move.Pointer, move.Hosts = pointer, hosts
+	if err := stack.MovePointer(context.Background(), move, progress.Discard()); err != nil {
+		t.Fatalf("MovePointer(%s onto %q): %v", promotionID, pointer, err)
+	}
+}
+
+func removePreview(t *testing.T, stack router.Stack, removal router.PointerRemoval) {
+	t.Helper()
+	if err := stack.RemovePointer(context.Background(), removal, progress.Discard()); err != nil {
+		t.Fatalf("RemovePointer(%q): %v", removal.Pointer, err)
+	}
 }
 
 func racesAfterCheck(t *testing.T, fixture Fixture, pointer string, record func(app, build string) router.DeploymentRecord, check int) bool {
@@ -520,7 +579,7 @@ func movePointer(t *testing.T, stack router.Stack, pointer, promotionID string, 
 
 func removesPointer(t *testing.T, stack router.Stack, pointer string) {
 	t.Helper()
-	if err := stack.RemovePointer(context.Background(), pointer, progress.Discard()); err != nil {
+	if err := stack.RemovePointer(context.Background(), router.PointerRemoval{Pointer: pointer}, progress.Discard()); err != nil {
 		t.Fatalf("RemovePointer(%q): %v", pointer, err)
 	}
 }

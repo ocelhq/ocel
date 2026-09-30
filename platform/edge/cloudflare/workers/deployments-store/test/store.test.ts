@@ -43,7 +43,7 @@ describe("movePointer", () => {
     expect(await store.movePointer(makePointerMove())).toBe("moved");
 
     expect(await store.readServedPromotion()).toBe("promo-1");
-    expect(await store.pointerRecord("web")).toEqual({
+    expect(await store.readPointerRecord("web")).toEqual({
       kind: "record",
       identity: "deploy-1",
       record: makeRecord(),
@@ -62,7 +62,7 @@ describe("movePointer", () => {
     expect(await store.movePointer(next)).toBe("moved");
 
     expect(await store.readServedPromotion()).toBe("promo-2");
-    expect(await store.pointerRecord("web")).toMatchObject({
+    expect(await store.readPointerRecord("web")).toMatchObject({
       kind: "record",
       identity: "deploy-2",
     });
@@ -87,7 +87,7 @@ describe("movePointer", () => {
     expect(await store.movePointer(stale)).toBe("stale");
 
     expect(await store.readServedPromotion()).toBe("promo-2");
-    expect(await store.pointerRecord("web")).toMatchObject({
+    expect(await store.readPointerRecord("web")).toMatchObject({
       kind: "record",
       identity: "deploy-2",
     });
@@ -99,7 +99,7 @@ describe("movePointer", () => {
     expect(await store.movePointer(makePointerMove({ replaces: "promo-0" }))).toBe("stale");
 
     expect(await store.readServedPromotion()).toBeUndefined();
-    expect(await store.pointerRecord("web")).toEqual({ kind: "no-pointer" });
+    expect(await store.readPointerRecord("web")).toEqual({ kind: "no-pointer" });
   });
 
   it("stops serving an app the new promotion leaves out", async () => {
@@ -110,7 +110,7 @@ describe("movePointer", () => {
 
     await store.movePointer(makePointerMove({ promotionId: "promo-2", replaces: "promo-1" }));
 
-    expect(await store.pointerRecord("admin")).toEqual({ kind: "no-pointer" });
+    expect(await store.readPointerRecord("admin")).toEqual({ kind: "no-pointer" });
   });
 
   it("moves only the pointer it names", async () => {
@@ -127,21 +127,20 @@ describe("movePointer", () => {
 
     expect(await store.readServedPromotion()).toBe("promo-1");
     expect(await store.readServedPromotion("pr-42")).toBe("promo-preview");
-    expect(await store.pointerRecord("web", "pr-42")).toMatchObject({ identity: "preview-1" });
-    expect(await store.pointerRecord("web")).toMatchObject({ identity: "deploy-1" });
+    expect(await store.readPointerRecord("web")).toMatchObject({ identity: "deploy-1" });
   });
 });
 
-describe("pointerRecord", () => {
+describe("readPointerRecord", () => {
   it("returns no-pointer when nothing is served on the pointer", async () => {
-    expect(await storeStub().pointerRecord("web")).toEqual({ kind: "no-pointer" });
+    expect(await storeStub().readPointerRecord("web")).toEqual({ kind: "no-pointer" });
   });
 
   it("omits the record when the known build is still served", async () => {
     const store = storeStub();
     await store.movePointer(makePointerMove());
 
-    expect(await store.pointerRecord("web", undefined, "deploy-1")).toEqual({
+    expect(await store.readPointerRecord("web", "deploy-1")).toEqual({
       kind: "unchanged",
       identity: "deploy-1",
     });
@@ -151,7 +150,7 @@ describe("pointerRecord", () => {
     const store = storeStub();
     await store.movePointer(makePointerMove());
 
-    expect(await store.pointerRecord("web", undefined, "deploy-0")).toEqual({
+    expect(await store.readPointerRecord("web", "deploy-0")).toEqual({
       kind: "record",
       identity: "deploy-1",
       record: makeRecord(),
@@ -160,9 +159,9 @@ describe("pointerRecord", () => {
 
   it("resolves the pointer's sole app when no app is given", async () => {
     const store = storeStub();
-    await store.movePointer(makePointerMove({ pointer: "pr-42" }));
+    await store.movePointer(makePointerMove());
 
-    expect(await store.pointerRecord(undefined, "pr-42")).toMatchObject({
+    expect(await store.readPointerRecord()).toMatchObject({
       kind: "record",
       identity: "deploy-1",
     });
@@ -174,14 +173,104 @@ describe("pointerRecord", () => {
       makePointerMove({ records: [makeRecord(), makeRecord({ app: "admin" })] }),
     );
 
-    expect(await store.pointerRecord()).toEqual({ kind: "ambiguous-app" });
+    expect(await store.readPointerRecord()).toEqual({ kind: "ambiguous-app" });
   });
 
   it("returns no-pointer for an app the pointer does not serve", async () => {
     const store = storeStub();
     await store.movePointer(makePointerMove());
 
-    expect(await store.pointerRecord("admin")).toEqual({ kind: "no-pointer" });
+    expect(await store.readPointerRecord("admin")).toEqual({ kind: "no-pointer" });
+  });
+});
+
+describe("readLabelRecord", () => {
+  it("resolves a label to the record its pointer serves for the label's app", async () => {
+    const store = storeStub();
+    await store.movePointer(
+      makePointerMove({
+        pointer: "pr-42",
+        records: [makeRecord(), makeRecord({ app: "admin", identity: "admin-1" })],
+        labels: [
+          { label: "pr-42-web-aaaa", app: "web" },
+          { label: "pr-42-admin-bbbb", app: "admin" },
+        ],
+      }),
+    );
+
+    expect(await store.readLabelRecord("pr-42-admin-bbbb")).toEqual({
+      kind: "record",
+      identity: "admin-1",
+      record: makeRecord({ app: "admin", identity: "admin-1" }),
+    });
+    expect(await store.readLabelRecord("pr-42-web-aaaa", "deploy-1")).toEqual({
+      kind: "unchanged",
+      identity: "deploy-1",
+    });
+  });
+
+  it("resolves a label with no app to the pointer's sole app", async () => {
+    const store = storeStub();
+    await store.movePointer(
+      makePointerMove({ pointer: "pr-42", labels: [{ label: "pr-42-aaaa", app: "" }] }),
+    );
+
+    expect(await store.readLabelRecord("pr-42-aaaa")).toMatchObject({
+      kind: "record",
+      identity: "deploy-1",
+    });
+  });
+
+  it("returns no-pointer for a label no move carried", async () => {
+    const store = storeStub();
+    await store.movePointer(makePointerMove({ pointer: "pr-42" }));
+
+    expect(await store.readLabelRecord("pr-42-aaaa")).toEqual({ kind: "no-pointer" });
+  });
+
+  it("stops serving the labels a later move of the pointer leaves out", async () => {
+    const store = storeStub();
+    await store.movePointer(
+      makePointerMove({ pointer: "pr-42", labels: [{ label: "old-aaaa", app: "web" }] }),
+    );
+
+    await store.movePointer(
+      makePointerMove({
+        pointer: "pr-42",
+        promotionId: "promo-2",
+        replaces: "promo-1",
+        records: [makeRecord({ identity: "deploy-2" })],
+        labels: [{ label: "new-bbbb", app: "web" }],
+      }),
+    );
+
+    expect(await store.readLabelRecord("old-aaaa")).toEqual({ kind: "no-pointer" });
+    expect(await store.readLabelRecord("new-bbbb")).toMatchObject({ identity: "deploy-2" });
+  });
+
+  it("keeps serving a deployment pointer's label after the alias moves on", async () => {
+    const store = storeStub();
+    await store.movePointer(
+      makePointerMove({ pointer: "pr-42", labels: [{ label: "alias-aaaa", app: "web" }] }),
+    );
+    await store.movePointer(
+      makePointerMove({
+        pointer: "pr-42@promo-1",
+        labels: [{ label: "first-bbbb", app: "web" }],
+      }),
+    );
+    await store.movePointer(
+      makePointerMove({
+        pointer: "pr-42",
+        promotionId: "promo-2",
+        replaces: "promo-1",
+        records: [makeRecord({ identity: "deploy-2" })],
+        labels: [{ label: "alias-aaaa", app: "web" }],
+      }),
+    );
+
+    expect(await store.readLabelRecord("alias-aaaa")).toMatchObject({ identity: "deploy-2" });
+    expect(await store.readLabelRecord("first-bbbb")).toMatchObject({ identity: "deploy-1" });
   });
 });
 
@@ -189,12 +278,19 @@ describe("removePointer", () => {
   it("leaves nothing served on the pointer and every other pointer as it was", async () => {
     const store = storeStub();
     await store.movePointer(makePointerMove());
-    await store.movePointer(makePointerMove({ promotionId: "promo-preview", pointer: "pr-42" }));
+    await store.movePointer(
+      makePointerMove({
+        promotionId: "promo-preview",
+        pointer: "pr-42",
+        labels: [{ label: "pr-42-aaaa", app: "web" }],
+      }),
+    );
 
     await store.removePointer("pr-42");
 
+    expect(await store.readLabelRecord("pr-42-aaaa")).toEqual({ kind: "no-pointer" });
+
     expect(await store.readServedPromotion("pr-42")).toBeUndefined();
-    expect(await store.pointerRecord("web", "pr-42")).toEqual({ kind: "no-pointer" });
     expect(await store.readServedPromotion()).toBe("promo-1");
   });
 
@@ -218,13 +314,13 @@ describe("apps", () => {
 describe("version stamp", () => {
   it("is readable and updatable", async () => {
     const store = storeStub();
-    expect(await store.versionStamp()).toBeUndefined();
+    expect(await store.readVersionStamp()).toBeUndefined();
 
     await store.setVersionStamp("v1");
-    expect(await store.versionStamp()).toBe("v1");
+    expect(await store.readVersionStamp()).toBe("v1");
 
     await store.setVersionStamp("v2");
-    expect(await store.versionStamp()).toBe("v2");
+    expect(await store.readVersionStamp()).toBe("v2");
   });
 });
 
@@ -279,7 +375,7 @@ describe("destroy", () => {
     await store.destroy();
 
     expect(await store.readServedPromotion()).toBeUndefined();
-    expect(await store.pointerRecord("web")).toEqual({ kind: "no-pointer" });
+    expect(await store.readPointerRecord("web")).toEqual({ kind: "no-pointer" });
     expect(await store.listApps()).toEqual([]);
     expect(await store.authorized("s3cret")).toBe(false);
 
@@ -362,6 +458,28 @@ describe("ensureSchema", () => {
     });
   });
 
+  it("adds the labels table to a store that predates it and keeps the pointers it serves", async () => {
+    const store = storeStub();
+    await store.initialize("owner-1", "s3cret", false);
+    await store.movePointer(makePointerMove());
+
+    await runInDurableObject(storeStub(), (_instance, ctx) => {
+      ctx.storage.sql.exec(`DROP TABLE labels`);
+      ctx.storage.sql.exec(`UPDATE meta SET value = '3' WHERE key = 'schemaVersion'`);
+      ensureSchema(ctx.storage);
+      const tables = ctx.storage.sql
+        .exec<{ name: string }>(`SELECT name FROM sqlite_master WHERE type = 'table'`)
+        .toArray()
+        .map((t) => t.name);
+      expect(tables).toContain("labels");
+    });
+
+    expect(await store.readPointerRecord("web")).toMatchObject({
+      kind: "record",
+      identity: "deploy-1",
+    });
+  });
+
   it("leaves a current schema's rows alone", async () => {
     const store = storeStub();
     await store.initialize("owner-1", "s3cret", false);
@@ -371,7 +489,7 @@ describe("ensureSchema", () => {
       ensureSchema(ctx.storage);
     });
 
-    expect(await store.pointerRecord("web")).toMatchObject({
+    expect(await store.readPointerRecord("web")).toMatchObject({
       kind: "record",
       identity: "deploy-1",
     });

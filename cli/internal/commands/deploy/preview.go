@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -192,10 +193,10 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 		}
 	}
 
-	return dependencies.WithProvider(ctx, cfg, "ocel preview up", previewOpenOptions(policy, cfg), func(ctx context.Context, p commands.ProviderRun) error {
+	return dependencies.WithProvider(ctx, cfg, "ocel preview up", previewOpenOptions(policy, cfg), func(ctx context.Context, p commands.ProviderRun) (err error) {
 		run, check, provider, read := p.Run, p.Check, p.Provider, p.Preflight
 		cfg := p.Project
-		facts, err := preflightPreviewUp(ctx, dependencies, policy, check, cfg, read, opts.prebuilt, env.GetIdentity())
+		facts, err := preflightPreviewUp(ctx, dependencies, policy, check, provider, cfg, read, opts.prebuilt, env)
 		check.End(err)
 		if err != nil {
 			return err
@@ -204,6 +205,12 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 			run.Succeed("Nothing deployed to preview " + env.GetIdentity())
 			return nil
 		}
+		deployed := false
+		defer func() {
+			if !deployed {
+				err = errors.Join(err, forgetUnclaimedPreviewAlias(ctx, provider, cfg.Slug, env, facts.mintedAlias))
+			}
+		}()
 		cfg = facts.project
 
 		browser := dependencies.IsBrowserReachable(stdin)
@@ -253,6 +260,7 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 
 			ProjectRegistry: registry,
 			InlineBindings:  inline,
+			AliasToken:      facts.builtAlias,
 		}
 
 		if opts.dry {
@@ -263,6 +271,7 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 		if err != nil {
 			return err
 		}
+		deployed = true
 
 		record, err := deployrecord.New(cfg, manifest, env, "", out.promotionID, out.apps)
 		if err != nil {
@@ -276,14 +285,14 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 	})
 }
 
-func requirePreviewDomain(cfg *project.Project, wildcard *contractv1.PreviewWildcard, id *contractv1.Identity, pointer string, check *run.Span) (edge.PreviewSite, error) {
+func refuseMissingPreviewDomain(cfg *project.Project, wildcard *contractv1.PreviewWildcard, id *contractv1.Identity, check *run.Span) error {
 	declared := cfg.Domains.Preview
 	base := wildcard.GetBaseDomain()
 	configName := filepath.Base(cfg.Path)
 
 	switch {
 	case declared == "" && base == "":
-		return edge.PreviewSite{}, fmt.Errorf("this project declares no preview domain and this bootstrap has no global one, so a preview deploy has nowhere to serve: "+
+		return fmt.Errorf("this project declares no preview domain and this bootstrap has no global one, so a preview deploy has nowhere to serve: "+
 			"add a project-level domains.preview wildcard (e.g. `domains: { preview: \"*.preview.acme.com\" }`) to %s, "+
 			"or run `ocel domain use '*.preview.acme.com' --preview` once to serve every project's previews on one shared wildcard — "+
 			"a preview domain binds to the whole project, which serves every app and every preview under that one wildcard, so it is never declared per app",
@@ -291,7 +300,7 @@ func requirePreviewDomain(cfg *project.Project, wildcard *contractv1.PreviewWild
 
 	case declared == "":
 		if err := checkGlobalPreviewDomain(wildcard, id, configName); err != nil {
-			return edge.PreviewSite{}, err
+			return err
 		}
 		check.Say(fmt.Sprintf("Serving previews on global *.%s", base))
 
@@ -301,15 +310,7 @@ func requirePreviewDomain(cfg *project.Project, wildcard *contractv1.PreviewWild
 	case base != "":
 		check.Say(fmt.Sprintf("Serving previews on project-level %s; global *.%s ignored", declared, base))
 	}
-
-	site := edge.ProjectPreview(strings.TrimPrefix(declared, "*."))
-	if declared == "" {
-		site = edge.SharedPreview(cfg.Slug, base)
-	}
-	if err := site.LabelProblem(site.Hosts(pointer, previewAppNames(cfg))); err != nil {
-		return edge.PreviewSite{}, err
-	}
-	return site, nil
+	return nil
 }
 
 func previewAppNames(cfg *project.Project) []string {
@@ -332,11 +333,6 @@ func checkGlobalPreviewDomain(wildcard *contractv1.PreviewWildcard, id *contract
 		return fmt.Errorf("the global preview domain *.%s is recorded, but its wildcard route is not installed, so nothing would answer a preview hostname: "+
 			"run `ocel domain use '*.%s' --preview` to reinstall the edge's preview routing and reclaim the wildcard",
 			base, base)
-	}
-	if g := edge.PreviewGrammarMax; g < wildcard.GetGrammarMin() || g > wildcard.GetGrammarMax() {
-		return fmt.Errorf("this CLI names preview hostnames with grammar %d, but the edge serving *.%s speaks %d–%d, so it would not route what this deploy creates: "+
-			"run `ocel domain use '*.%s' --preview` to upgrade the edge, or upgrade the CLI if it is the older half",
-			g, base, wildcard.GetGrammarMin(), wildcard.GetGrammarMax(), base)
 	}
 	return nil
 }
@@ -515,10 +511,11 @@ func renderEnvironments(stdout io.Writer, envs []*contractv1.PreviewEnvironment)
 		return
 	}
 	for _, e := range envs {
-		fmt.Fprintf(stdout, "%s\t%s\t%s\tcreated %s\n",
+		fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\tcreated %s\n",
 			e.GetIdentity(),
 			lifecycleTag(e.GetLifecycle()),
-			labelOrDash(e.GetLabel()),
+			formatValueOrDash(e.GetLabel()),
+			formatValueOrDash(strings.Join(e.GetAliasUrls(), " ")),
 			terminal.EpochDate(e.GetCreatedAt()),
 		)
 	}
@@ -535,9 +532,9 @@ func lifecycleTag(l environmentv1.Lifecycle) string {
 	}
 }
 
-func labelOrDash(label string) string {
-	if label == "" {
+func formatValueOrDash(value string) string {
+	if value == "" {
 		return "—"
 	}
-	return label
+	return value
 }

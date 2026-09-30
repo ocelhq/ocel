@@ -330,8 +330,16 @@ func (r *projectRemoval) unbind(ctx context.Context, runProgress progress.Log) e
 		}
 	}
 	for _, pointer := range r.pointers() {
+		removal := router.PointerRemoval{Pointer: pointer}
+		if r.tier == environment.TierPreview {
+			var err error
+			if removal, err = readPreviewRemoval(ctx, r.provider.KeyValues(), r.slug, pointer); err != nil {
+				errs = append(errs, err)
+				continue
+			}
+		}
 		runProgress.Say(fmt.Sprintf("Removing the %s routing pointer", pointer))
-		if _, err := r.removePointer(ctx, pointer, runProgress); err != nil {
+		if _, err := r.removePointer(ctx, removal, runProgress); err != nil {
 			errs = append(errs, fmt.Errorf("remove pointer %q before the origin it points at is destroyed: %w", pointer, err))
 		}
 	}

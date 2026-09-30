@@ -27,6 +27,7 @@ func (r Router) Facts() router.Facts {
 		ReachesContainers:           true,
 		AnswersHostnames:            true,
 		StopsServingRemovedPointers: true,
+		ServesPreviewDeployments:    true,
 	}
 }
 
@@ -69,13 +70,13 @@ func (r routerStack) MovePointer(ctx context.Context, move router.PointerMove, _
 	if err := move.RefuseInactive(ctx); err != nil {
 		return err
 	}
-	if err := s.publishOn(ctx, c, move.Promotion.PromotionID, move.Records, s.servedHostnames(move.Pointer), move.RefuseInactive); err != nil {
+	if err := s.publishOn(ctx, c, move.Promotion.PromotionID, move.Records, s.listServedHostnames(move.Pointer, move.Hosts), edge.ListPreviewHostnames(move.ListHostsToWithdraw()), move.RefuseInactive); err != nil {
 		return router.Unserved{Err: err}
 	}
 	return nil
 }
 
-func (r routerStack) RemovePointer(ctx context.Context, pointer string, _ progress.Log) error {
+func (r routerStack) RemovePointer(ctx context.Context, removal router.PointerRemoval, _ progress.Log) error {
 	s := r.s
 	c, err := s.clients(ctx)
 	if err != nil {
@@ -84,7 +85,7 @@ func (r routerStack) RemovePointer(ctx context.Context, pointer string, _ progre
 	if !s.provisioned() {
 		return nil
 	}
-	return s.routes(c).apply(ctx, nil, s.servedHostnames(pointer))
+	return s.routes(c).apply(ctx, nil, s.listServedHostnames(removal.Pointer, removal.Hosts))
 }
 
 func (r routerStack) Destroy(context.Context) error { return nil }

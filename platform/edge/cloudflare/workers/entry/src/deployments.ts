@@ -28,10 +28,14 @@ export type PointerRecordResult =
   | { kind: "dangling"; identity: string };
 
 export interface DeploymentsBinding {
-  pointerRecord(args: {
+  readPointerRecord(args: {
     slug: string;
     app?: string;
-    pointer?: string;
+    knownIdentity?: string;
+  }): Promise<PointerRecordResult>;
+  readLabelRecord(args: {
+    slug: string;
+    label: string;
     knownIdentity?: string;
   }): Promise<PointerRecordResult>;
 }
@@ -41,7 +45,7 @@ export interface DeploymentsDeps {
   slug: string;
   host: string;
   app?: string;
-  pointer?: string;
+  label?: string;
   now?: () => number;
 }
 
@@ -84,12 +88,11 @@ export async function resolveDeployment(deps: DeploymentsDeps): Promise<Deployme
 
   let result: PointerRecordResult;
   try {
-    result = await deps.binding.pointerRecord({
-      slug: deps.slug,
-      app: deps.app,
-      pointer: deps.pointer,
-      knownIdentity: cached?.identity,
-    });
+    const knownIdentity = cached?.identity;
+    result =
+      deps.label === undefined
+        ? await deps.binding.readPointerRecord({ slug: deps.slug, app: deps.app, knownIdentity })
+        : await deps.binding.readLabelRecord({ slug: deps.slug, label: deps.label, knownIdentity });
   } catch {
     if (cached) return { kind: "found", record: cached.record };
     return { kind: "unavailable" };

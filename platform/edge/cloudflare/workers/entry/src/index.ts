@@ -17,7 +17,7 @@ import { coloImageCache } from "./image";
 import type { ImageStore } from "./image-store";
 import { nodeOrigin } from "./node";
 import { coloPrerender, type InterceptionTier } from "./prerender";
-import { globalPreviewTarget, normalizeBaseDomain, previewApps, previewTarget } from "./preview";
+import { findPreviewTarget } from "./preview";
 import { revalidationSender } from "./revalidation";
 import { edgeOriginFetch } from "./signing";
 import { invalidateSnapshot } from "./tag-clock";
@@ -270,66 +270,59 @@ export default {
     const originFetch = edgeOriginFetch(env.OCEL_EDGE_ACCESS_KEY_ID, env.OCEL_EDGE_SECRET_KEY);
 
     const host = new URL(request.url).host;
-    const global = env.OCEL_PREVIEW === "1" && env.OCEL_PREVIEW_GLOBAL === "1";
-
-    let pointer: string | undefined;
-    let app = env.OCEL_APP ?? domainApp(env.OCEL_DOMAIN_APPS, host);
-    let slug = env.OCEL_SLUG;
-    const baseDomain =
-      env.OCEL_PREVIEW === "1" ? normalizeBaseDomain(env.OCEL_PREVIEW_BASE_DOMAIN) : "";
-    if (global) {
-      const target = globalPreviewTarget(host, baseDomain);
+    let deployments: DeploymentsDeps = {
+      binding: env.DEPLOYMENTS,
+      slug: env.OCEL_SLUG,
+      host,
+      app: env.OCEL_APP ?? domainApp(env.OCEL_DOMAIN_APPS, host),
+    };
+    if (env.OCEL_PREVIEW === "1") {
+      const target = await findPreviewTarget(host, {
+        baseDomain: env.OCEL_PREVIEW_BASE_DOMAIN,
+        key: env.OCEL_PREVIEW_KEY,
+        slug: env.OCEL_PREVIEW_GLOBAL === "1" ? undefined : env.OCEL_SLUG,
+      });
       if (target === null) return deploymentNotFoundResponse();
-      slug = target.slug;
-      pointer = target.pointer;
-      app = target.app;
-    } else if (baseDomain) {
-      const target = previewTarget(host, baseDomain, previewApps(env.OCEL_PREVIEW_APPS));
-      if (target === null) return deploymentNotFoundResponse();
-      pointer = target.pointer;
-      app = target.app;
+      deployments = { binding: env.DEPLOYMENTS, host, slug: target.slug, label: target.label };
     }
-    if (!slug) return deploymentNotFoundResponse();
+    if (!deployments.slug) return deploymentNotFoundResponse();
 
-    const serveRequest = await resolveServe(
-      { binding: env.DEPLOYMENTS, slug, host, app, pointer },
-      {
-        fetch,
-        originFetch,
-        imageOrigin: functionUrlImageOrigin(env.OCEL_IMAGE_OPTIMIZER_URL, originFetch ?? fetch),
-        imageStore: store,
-        assetStore: {
-          store,
-          cache: caches.default,
-          waitUntil: (promise) => ctx.waitUntil(promise),
-        },
-        cache: {
-          cache: caches.default,
-          waitUntil: (promise) => ctx.waitUntil(promise),
-          enqueueRevalidation: revalidationSender(
-            env.OCEL_REVALIDATE_QUEUE_URL,
-            env.OCEL_EDGE_ACCESS_KEY_ID,
-            env.OCEL_EDGE_SECRET_KEY,
-          ),
-        },
-        interception: store
+    const serveRequest = await resolveServe(deployments, {
+      fetch,
+      originFetch,
+      imageOrigin: functionUrlImageOrigin(env.OCEL_IMAGE_OPTIMIZER_URL, originFetch ?? fetch),
+      imageStore: store,
+      assetStore: {
+        store,
+        cache: caches.default,
+        waitUntil: (promise) => ctx.waitUntil(promise),
+      },
+      cache: {
+        cache: caches.default,
+        waitUntil: (promise) => ctx.waitUntil(promise),
+        enqueueRevalidation: revalidationSender(
+          env.OCEL_REVALIDATE_QUEUE_URL,
+          env.OCEL_EDGE_ACCESS_KEY_ID,
+          env.OCEL_EDGE_SECRET_KEY,
+        ),
+      },
+      interception: store
+        ? {
+            store,
+            snapshotCache: caches.default,
+            waitUntil: (promise) => ctx.waitUntil(promise),
+          }
+        : undefined,
+      edgeRuntime:
+        env.LOADER && store
           ? {
+              loader: env.LOADER,
               store,
-              snapshotCache: caches.default,
-              waitUntil: (promise) => ctx.waitUntil(promise),
+              cacheEntrypoint: ctx.exports.CacheEntrypoint,
+              envelopeKey: env.OCEL_ENVELOPE_KEY,
             }
           : undefined,
-        edgeRuntime:
-          env.LOADER && store
-            ? {
-                loader: env.LOADER,
-                store,
-                cacheEntrypoint: ctx.exports.CacheEntrypoint,
-                envelopeKey: env.OCEL_ENVELOPE_KEY,
-              }
-            : undefined,
-      },
-    );
+    });
     if (serveRequest instanceof Response) return serveRequest;
 
     return serveRequest(withClientAddress(request));

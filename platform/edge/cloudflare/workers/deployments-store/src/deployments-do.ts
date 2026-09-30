@@ -16,7 +16,7 @@ export class DeploymentsStore extends DurableObject<Env> {
   }
 
   async authorized(token: string): Promise<boolean> {
-    const secret = store.storedSecret(this.ctx.storage);
+    const secret = store.readSecret(this.ctx.storage);
     if (secret === undefined) return false;
     return matchesSecret(token, secret);
   }
@@ -42,16 +42,16 @@ export class DeploymentsStore extends DurableObject<Env> {
     return store.listApps(this.ctx.storage);
   }
 
-  async pointerRecord(
-    app?: string,
-    pointer?: string,
-    knownIdentity?: string,
-  ): Promise<PointerRecordResult> {
-    return store.pointerRecord(this.ctx.storage, app, pointer, knownIdentity);
+  async readPointerRecord(app?: string, knownIdentity?: string): Promise<PointerRecordResult> {
+    return store.readPointerRecord(this.ctx.storage, app, knownIdentity);
   }
 
-  async versionStamp(): Promise<string | undefined> {
-    return store.versionStamp(this.ctx.storage);
+  async readLabelRecord(label: string, knownIdentity?: string): Promise<PointerRecordResult> {
+    return store.readLabelRecord(this.ctx.storage, label, knownIdentity);
+  }
+
+  async readVersionStamp(): Promise<string | undefined> {
+    return store.readVersionStamp(this.ctx.storage);
   }
 
   async setVersionStamp(version: string): Promise<void> {

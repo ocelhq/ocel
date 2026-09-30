@@ -1671,3 +1671,27 @@ func TestARoutingTableThatReadsBackTornIsRefusedWithoutQuotingIt(t *testing.T) {
 		t.Errorf("the refusal quotes what was read: %v, want it described without its content: the table holds the private keys of the origin certificates it serves", err)
 	}
 }
+
+func TestAPreviewMovingOnLeavesTheContainerADeploymentPointerStillRoutesToRunning(t *testing.T) {
+	t.Parallel()
+
+	deployment := RouteKey{Owner: surface, Pointer: router.FormatDeploymentPointer(pointed, "0123456789abcdef0123456789abcdef"), App: "web"}
+	box := benchedOn(t, documentOf(t, RoutingTable{
+		Grace: 30 * time.Second,
+		Routes: []AppRoute{
+			{RouteKey: keyed("web"), Upstream: retired},
+			{RouteKey: deployment, Upstream: retired},
+		},
+	}), session.Result{}, session.Result{})
+
+	if err := box.host().Release(context.Background(), aRelease(), nil); err != nil {
+		t.Fatalf("Release() = %v", err)
+	}
+	if box.at("docker stop "+quoted(retiring)) >= 0 {
+		t.Errorf("the release stopped %s, which %s still routes to: a deployment's own hostname answers 502 the moment its preview moves on", retiring, deployment.Pointer)
+	}
+	state := box.state(t)
+	if at := slices.IndexFunc(state.Routes, func(route AppRoute) bool { return route.RouteKey == deployment }); at < 0 || state.Routes[at].Upstream != retired {
+		t.Errorf("the release left routes %v, want %s still on %s", state.Routes, deployment.Pointer, retired)
+	}
+}

@@ -213,12 +213,19 @@ func ReadOrEmpty(ctx context.Context, store Store, key Key) (Entry, error) {
 }
 
 func Forget(ctx context.Context, store Store, key Key) error {
+	return ForgetMatching(ctx, store, key, func(Entry) (bool, error) { return true, nil })
+}
+
+func ForgetMatching(ctx context.Context, store Store, key Key, match func(recorded Entry) (bool, error)) error {
 	for range forgetAttempts {
 		recorded, err := store.Read(ctx, key)
 		if errors.Is(err, ErrNotFound) {
 			return nil
 		}
 		if err != nil {
+			return err
+		}
+		if matched, err := match(recorded); err != nil || !matched {
 			return err
 		}
 		err = store.Remove(ctx, key, recorded.Revision)
@@ -236,3 +243,28 @@ func Forget(ctx context.Context, store Store, key Key) error {
 }
 
 const forgetAttempts = 5
+
+func Change(ctx context.Context, store Store, key Key, change func(recorded Entry) (value []byte, changed bool, err error)) error {
+	for range changeAttempts {
+		recorded, err := ReadOrEmpty(ctx, store, key)
+		if err != nil {
+			return fmt.Errorf("read %s: %w", key, err)
+		}
+		value, changed, err := change(recorded)
+		if err != nil || !changed {
+			return err
+		}
+		recorded.Value = value
+		_, err = store.Write(ctx, recorded)
+		if err == nil {
+			return nil
+		}
+		if !errors.Is(err, ErrStale) {
+			return fmt.Errorf("record %s: %w", key, err)
+		}
+	}
+	return fmt.Errorf("record %s: it was rewritten between every read of it and the write that followed, %d times over",
+		key, changeAttempts)
+}
+
+const changeAttempts = 5

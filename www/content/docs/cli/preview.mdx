@@ -21,7 +21,7 @@ preview domain.
 | `up [name]` | Deploy or refresh a preview. `--persistent` creates a persistent one, `--prebuilt` deploys the existing `.ocel/output` from `ocel build`, and `--dry` prints every change it would make and stops. |
 | `rm [name]` | Tear down a preview. Asks first for a persistent preview; `--yes` skips that, and without a terminal to ask on it stops unless you pass `--yes`. |
 | `prune [name]` | Delete a preview's old deployments. Keeps the newest `--keep` (3 by default) and whatever is live. |
-| `ls` | List this project's previews: name, lifecycle, label and when it was created. |
+| `ls` | List this project's previews: name, lifecycle, label, alias URL and when it was created. |
 
 ## Naming a preview
 
@@ -37,6 +37,32 @@ digits and hyphens, starting with a letter) with no `--`, and it cannot be `up`,
 - run: ocel preview up pr-${{ github.event.number }}
 - run: ocel preview prune pr-${{ github.event.number }}
 ```
+
+## Hostnames
+
+A preview is served on two kinds of hostname, and the name is in neither's control:
+
+| Hostname | Serves | Until |
+| --- | --- | --- |
+| The alias | The newest deployment of the preview | `ocel preview rm` |
+| A deployment's own | That deployment, and nothing newer | `prune` or `rm` drops it |
+
+`up` prints both. The alias's token is chosen when the preview is created and kept, so a
+build already knows the alias. The alias changes only when the preview domain changes
+(`domains.preview`, or the global preview domain) or the project goes from one app to
+several or back. The deploy that changes it stops serving the old alias, and `rm` stops
+serving every alias the preview had.
+
+Each hostname ends in a random token, so nobody can work out a preview's URL from its name
+or the branch. On Cloudflare the token is signed, and the edge turns away a made-up one
+without looking it up. The other edges answer only on hostnames a deploy published.
+
+On the project's own `domains.preview` a hostname starts with the preview's name (and the app,
+when there is more than one): `pr-12-web-<token>.preview.example.com`. On the global preview
+domain it starts with the project's slug: `shop-<token>.preview.example.com`.
+
+A hostname nobody can guess is not access control. A preview URL still leaks through pull
+request comments, chat previews and `Referer` headers, so keep secrets out of previews.
 
 ## Ephemeral and persistent
 

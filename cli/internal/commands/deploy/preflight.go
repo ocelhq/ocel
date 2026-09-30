@@ -12,10 +12,13 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/pkg/edge"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
 type preflightFacts struct {
@@ -23,6 +26,8 @@ type preflightFacts struct {
 	project        *project.Project
 	containerArchs map[string]string
 	urls           map[string]string
+	mintedAlias    string
+	builtAlias     string
 }
 
 func previewOpenOptions(policy consent.Policy, cfg *project.Project) commands.OpenOptions {
@@ -36,7 +41,7 @@ func previewOpenOptions(policy consent.Policy, cfg *project.Project) commands.Op
 	}
 }
 
-func preflightPreviewUp(ctx context.Context, dependencies Dependencies, policy consent.Policy, check *run.Span, cfg *project.Project, read readiness.Preflight, prebuilt bool, pointer string) (preflightFacts, error) {
+func preflightPreviewUp(ctx context.Context, dependencies Dependencies, policy consent.Policy, check *run.Span, provider *providerprocess.Provider, cfg *project.Project, read readiness.Preflight, prebuilt bool, env *environmentv1.Environment) (preflightFacts, error) {
 	resp := read.Response
 	resolved, archs, err := resolveContainers(ctx, dependencies, check, read, prebuilt)
 	if err != nil {
@@ -48,22 +53,59 @@ func preflightPreviewUp(ctx context.Context, dependencies Dependencies, policy c
 	if err := refuseStaleBootstrap(policy, check, resp.GetBootstrap(), environmentv1.Tier_TIER_PREVIEW); err != nil {
 		return preflightFacts{}, err
 	}
-	site, err := requirePreviewDomain(cfg, resp.GetPreviewWildcard(), resp.GetIdentity(), pointer, check)
-	if err != nil {
+	if err := refuseMissingPreviewDomain(cfg, resp.GetPreviewWildcard(), resp.GetIdentity(), check); err != nil {
 		return preflightFacts{}, err
 	}
 	proceed, err := guardNewProject(ctx, policy, check, cfg, resp.GetKnownSlugs())
 	if err != nil {
 		return preflightFacts{}, err
 	}
-	return preflightFacts{
-		declined:       !proceed,
+	if !proceed {
+		return preflightFacts{declined: true}, nil
+	}
+	token, err := edge.NewPreviewToken()
+	if err != nil {
+		return preflightFacts{}, err
+	}
+	ensured, err := ensurePreviewAlias(ctx, provider, resolved, env, token, policy.DryRun)
+	if err != nil {
+		return preflightFacts{}, err
+	}
+	facts := preflightFacts{
 		project:        resolved,
 		containerArchs: archs,
-		urls: appurl.Preview(resolved, func(app string) string {
-			return site.Host(pointer, app)
-		}),
-	}, nil
+		urls:           appurl.FormatPreviewURLs(ensured.GetHostnames()),
+		builtAlias:     ensured.GetToken(),
+	}
+	if !policy.DryRun {
+		facts.mintedAlias = token
+	}
+	return facts, nil
+}
+
+func ensurePreviewAlias(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project, env *environmentv1.Environment, token string, dry bool) (ensured *contractv1.EnsurePreviewAliasResponse, err error) {
+	err = provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) error {
+		ensured, err = client.EnsurePreviewAlias(ctx, &contractv1.EnsurePreviewAliasRequest{
+			Slug:        cfg.Slug,
+			Environment: env,
+			Token:       token,
+			Apps:        previewAppNames(cfg),
+			Domains:     cfg.HostnameNames(environmentv1.Tier_TIER_PREVIEW),
+			Dry:         dry,
+		})
+		return err
+	})
+	return ensured, err
+}
+
+func forgetUnclaimedPreviewAlias(ctx context.Context, provider *providerprocess.Provider, slug string, env *environmentv1.Environment, token string) error {
+	if token == "" {
+		return nil
+	}
+	return provider.Call(context.WithoutCancel(ctx), func(client contractv1connect.ProviderServiceClient) error {
+		_, err := client.ForgetPreviewAlias(context.WithoutCancel(ctx), &contractv1.ForgetPreviewAliasRequest{Slug: slug, Environment: env, Token: token})
+		return err
+	})
 }
 
 func productionOpenOptions(policy consent.Policy, cfg *project.Project) commands.OpenOptions {
@@ -94,7 +136,7 @@ func preflightDeploy(ctx context.Context, dependencies Dependencies, policy cons
 	if err != nil {
 		return preflightFacts{}, err
 	}
-	return preflightFacts{declined: !proceed, project: resolved, containerArchs: archs, urls: appurl.Production(resolved)}, nil
+	return preflightFacts{declined: !proceed, project: resolved, containerArchs: archs, urls: appurl.FormatProductionURLs(resolved)}, nil
 }
 
 func resolveContainers(ctx context.Context, dependencies Dependencies, check *run.Span, read readiness.Preflight, prebuilt bool) (*project.Project, map[string]string, error) {

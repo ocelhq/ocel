@@ -81,7 +81,7 @@ export default class extends WorkerEntrypoint<Env> {
     }
 
     if (request.method === "GET" && sub === "/version-stamp") {
-      return Response.json({ version: (await store.versionStamp()) ?? null });
+      return Response.json({ version: (await store.readVersionStamp()) ?? null });
     }
 
     if (request.method === "PUT" && sub === "/version-stamp") {
@@ -106,12 +106,19 @@ export default class extends WorkerEntrypoint<Env> {
     return new Response("Not Found", { status: 404 });
   }
 
-  async pointerRecord(args: {
+  async readPointerRecord(args: {
     slug: string;
     app?: string;
-    pointer?: string;
     knownIdentity?: string;
   }): Promise<PointerRecordResult> {
-    return stub(this.env, args.slug).pointerRecord(args.app, args.pointer, args.knownIdentity);
+    return stub(this.env, args.slug).readPointerRecord(args.app, args.knownIdentity);
+  }
+
+  async readLabelRecord(args: {
+    slug: string;
+    label: string;
+    knownIdentity?: string;
+  }): Promise<PointerRecordResult> {
+    return stub(this.env, args.slug).readLabelRecord(args.label, args.knownIdentity);
   }
 }

@@ -186,10 +186,21 @@ func TestGetEnvironmentRefusesAProductionEnvironment(t *testing.T) {
 	}
 }
 
+const recordedAliasToken = "aaaaaaaaaaaaaaaa"
+
 func recordEnvironment(t *testing.T, vendor *fake.Provider, env string, lifecycle stackrecords.Lifecycle) {
 	t.Helper()
-	if err := stackrecords.RecordEnvironmentMeta(context.Background(), vendor.KeyValues(),
-		environment.TierPreview, "shop", env, "", lifecycle); err != nil {
+	recordLabelledEnvironment(t, vendor, env, "", lifecycle)
+}
+
+func recordLabelledEnvironment(t *testing.T, vendor *fake.Provider, env, label string, lifecycle stackrecords.Lifecycle) {
+	t.Helper()
+	ctx := context.Background()
+	if err := stackrecords.EnsureLifecycle(ctx, vendor.KeyValues(), environment.TierPreview, "shop", env, lifecycle, recordedAliasToken); err != nil {
+		t.Fatal(err)
+	}
+	if err := stackrecords.RecordEnvironmentMeta(ctx, vendor.KeyValues(),
+		environment.TierPreview, "shop", env, recordedAliasToken, label, lifecycle); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -217,14 +228,8 @@ func TestListEnvironmentsReturnsWhatTheDeployRecordedAboutEachPreview(t *testing
 		naming.InfraStack("staging"),
 	)
 	before := time.Now().Unix()
-	if err := stackrecords.RecordEnvironmentMeta(context.Background(), vendor.KeyValues(),
-		environment.TierPreview, "shop", "pr-7", "pr-123", stackrecords.LifecycleEphemeral); err != nil {
-		t.Fatal(err)
-	}
-	if err := stackrecords.RecordEnvironmentMeta(context.Background(), vendor.KeyValues(),
-		environment.TierPreview, "shop", "staging", "", stackrecords.LifecyclePersistent); err != nil {
-		t.Fatal(err)
-	}
+	recordLabelledEnvironment(t, vendor, "pr-7", "pr-123", stackrecords.LifecycleEphemeral)
+	recordLabelledEnvironment(t, vendor, "staging", "", stackrecords.LifecyclePersistent)
 
 	listed, err := client.ListEnvironments(context.Background(), &contractv1.ListEnvironmentsRequest{Slug: "shop"})
 	if err != nil {
@@ -256,14 +261,11 @@ func TestRecordingAPreviewAgainKeepsWhenItWasCreatedAndWhatItIsCalled(t *testing
 	t.Parallel()
 	_, vendor := contractServed(t, "1.0.0")
 	ctx := context.Background()
-	if err := stackrecords.RecordEnvironmentMeta(ctx, vendor.KeyValues(),
-		environment.TierPreview, "shop", "pr-7", "pr-123", stackrecords.LifecycleEphemeral); err != nil {
-		t.Fatal(err)
-	}
+	recordLabelledEnvironment(t, vendor, "pr-7", "pr-123", stackrecords.LifecycleEphemeral)
 	first := readEnvironmentMeta(t, vendor, "shop", "pr-7")
 
 	if err := stackrecords.RecordEnvironmentMeta(ctx, vendor.KeyValues(),
-		environment.TierPreview, "shop", "pr-7", "", stackrecords.LifecycleEphemeral); err != nil {
+		environment.TierPreview, "shop", "pr-7", recordedAliasToken, "", stackrecords.LifecycleEphemeral); err != nil {
 		t.Fatal(err)
 	}
 	second := readEnvironmentMeta(t, vendor, "shop", "pr-7")
@@ -283,7 +285,7 @@ func TestRecordingAPreviewUnderTheOtherLifecycleIsRefusedAndKeepsTheFirst(t *tes
 	recordEnvironment(t, vendor, "pr-7", stackrecords.LifecycleEphemeral)
 
 	err := stackrecords.RecordEnvironmentMeta(context.Background(), vendor.KeyValues(),
-		environment.TierPreview, "shop", "pr-7", "", stackrecords.LifecyclePersistent)
+		environment.TierPreview, "shop", "pr-7", recordedAliasToken, "", stackrecords.LifecyclePersistent)
 
 	if code, refused := provider.RefusedCode(err); !refused || code != refusal.CodeInvalid {
 		t.Fatalf("RecordEnvironmentMeta() = %v, want a refusal: pr-7 was created ephemeral", err)
@@ -313,13 +315,13 @@ func TestRecordingAPreviewRewrittenByAConcurrentDeployReadsItAgainAndKeepsBothWr
 	ctx := context.Background()
 	store := &concurrentlyRewrittenStore{Store: vendor.KeyValues(), rewrite: func() {
 		if err := stackrecords.RecordEnvironmentMeta(ctx, vendor.KeyValues(),
-			environment.TierPreview, "shop", "pr-7", "pr-123", stackrecords.LifecycleEphemeral); err != nil {
+			environment.TierPreview, "shop", "pr-7", recordedAliasToken, "pr-123", stackrecords.LifecycleEphemeral); err != nil {
 			t.Fatal(err)
 		}
 	}}
 
 	if err := stackrecords.RecordEnvironmentMeta(ctx, store,
-		environment.TierPreview, "shop", "pr-7", "", stackrecords.LifecycleEphemeral); err != nil {
+		environment.TierPreview, "shop", "pr-7", recordedAliasToken, "", stackrecords.LifecycleEphemeral); err != nil {
 		t.Fatalf("RecordEnvironmentMeta() = %v, want it to read pr-7 again after the concurrent deploy rewrote it", err)
 	}
 
@@ -341,7 +343,7 @@ func TestRecordingAPreviewRemovedWhileItIsRecordedIsRefusedAndLeavesItRemoved(t 
 	}}
 
 	err := stackrecords.RecordEnvironmentMeta(ctx, store,
-		environment.TierPreview, "shop", "pr-7", "pr-123", stackrecords.LifecycleEphemeral)
+		environment.TierPreview, "shop", "pr-7", recordedAliasToken, "pr-123", stackrecords.LifecycleEphemeral)
 
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || !strings.Contains(refused.Message, "pr-7") {
@@ -433,10 +435,7 @@ func TestRemoveEnvironmentDropsItsPointer(t *testing.T) {
 	seedPromotions(t, vendor, environment.TierPreview, "shop", "pr-7", "p1", "p2")
 	outlived := naming.AppStack("pr-7", "web", releaseOf(t, buildIdentity(7)))
 	seedEnvironment(t, vendor, "shop", outlived, naming.InfraStack("pr-7"))
-	if err := stackrecords.RecordEnvironmentMeta(context.Background(), vendor.KeyValues(),
-		environment.TierPreview, "shop", "pr-7", "pr-123", stackrecords.LifecyclePersistent); err != nil {
-		t.Fatal(err)
-	}
+	recordLabelledEnvironment(t, vendor, "pr-7", "pr-123", stackrecords.LifecyclePersistent)
 
 	stream, err := client.RemoveEnvironment(context.Background(), &contractv1.RemoveEnvironmentRequest{
 		Slug: "shop",
@@ -483,10 +482,7 @@ func TestRemovingAPreviewRefusesWhenItsLifecycleIsNotTheOneTheRemovalWasConfirme
 	client, vendor := contractServed(t, "1.0.0")
 	deployed(t, vendor, environment.TierPreview, "shop")
 	seedPromotions(t, vendor, environment.TierPreview, "shop", "pr-7", "p1")
-	if err := stackrecords.RecordEnvironmentMeta(context.Background(), vendor.KeyValues(),
-		environment.TierPreview, "shop", "pr-7", "", stackrecords.LifecyclePersistent); err != nil {
-		t.Fatal(err)
-	}
+	recordLabelledEnvironment(t, vendor, "pr-7", "", stackrecords.LifecyclePersistent)
 
 	for _, confirmed := range []environmentv1.Lifecycle{environmentv1.Lifecycle_LIFECYCLE_UNSPECIFIED, environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL} {
 		stream, err := client.RemoveEnvironment(context.Background(), &contractv1.RemoveEnvironmentRequest{

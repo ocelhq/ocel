@@ -6,13 +6,17 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
+	"github.com/ocelhq/ocel/cli/internal/deployrecord"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
@@ -20,6 +24,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -91,6 +96,51 @@ func assertEnvironment(t *testing.T, env *environmentv1.Environment, lifecycle e
 	t.Helper()
 	if env.GetTier() != environmentv1.Tier_TIER_PREVIEW || env.GetLifecycle() != lifecycle || env.GetIdentity() != identity {
 		t.Errorf("environment = %v, want a %s preview named %q", env, lifecycle, identity)
+	}
+}
+
+func TestAPreviewBuildIsGivenTheAliasItsDeployIsServedOn(t *testing.T) {
+	fixture := setUpPreviewProject(t)
+	addAppToFixtureConfig(t, fixture.Root)
+	identity := previewKey(t, "feature/login")
+	dependencies := previewDependencies("feature/login", "")
+	stubBuild(&dependencies, apiFunction())
+
+	previewUp(t, fixture, dependencies, previewUpOptions{})
+	built := manifestVariable(t, sentDeploy(t, fixture).GetManifest(), "api", processenv.AppURLEnvVar).GetValue()
+	if !regexp.MustCompile(`^https://` + regexp.QuoteMeta(identity) + `-[a-z2-7]{24}\.preview\.acme\.com$`).MatchString(built) {
+		t.Fatalf("the build was given %q, want the preview's name and a signed token under *.preview.acme.com", built)
+	}
+
+	recorded, err := os.ReadFile(deployrecord.Path(fixture.Root))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var record deployrecord.Record
+	if err := json.Unmarshal(recorded, &record); err != nil {
+		t.Fatal(err)
+	}
+	if len(record.Apps) != 1 || !slices.Contains(record.Apps[0].URLs, built) {
+		t.Errorf("the deploy recorded %+v, want it served on %s, the alias its build was given", record.Apps, built)
+	}
+}
+
+func TestAPreviewDeployCarriesTheAliasItsBuildWasGivenAndNotTheOneThisRunMinted(t *testing.T) {
+	fixture := setUpPreviewProject(t)
+	addAppToFixtureConfig(t, fixture.Root)
+	identity := previewKey(t, "feature/login")
+	if _, err := stackrecords.EnsureAliasToken(context.Background(), fixture.Provider.KeyValues(), environment.TierPreview, clitest.FixtureSlug, identity, "abcdefghijklmnop"); err != nil {
+		t.Fatal(err)
+	}
+	dependencies := previewDependencies("feature/login", "")
+	stubBuild(&dependencies, apiFunction())
+
+	previewUp(t, fixture, dependencies, previewUpOptions{})
+
+	sent := sentDeploy(t, fixture)
+	built := manifestVariable(t, sent.GetManifest(), "api", processenv.AppURLEnvVar).GetValue()
+	if !strings.HasPrefix(built, "https://"+identity+"-abcdefghijklmnop") || sent.GetAliasToken() != "abcdefghijklmnop" {
+		t.Errorf("the build was given %q and the deploy carried the alias %q, want both on abcdefghijklmnop, the alias another run recorded first", built, sent.GetAliasToken())
 	}
 }
 
@@ -281,7 +331,7 @@ export default {
 
 func useGlobalPreviewDomain(t *testing.T, fixture clitest.FakeProject, base string) {
 	t.Helper()
-	wildcard := stackrecords.Wildcard{BaseDomain: base, Edge: fake.KindRelay, GrammarMin: 1, GrammarMax: 1}
+	wildcard := stackrecords.Wildcard{BaseDomain: base, Edge: fake.KindRelay}
 	encoded, err := json.Marshal(wildcard)
 	if err != nil {
 		t.Fatal(err)
@@ -393,8 +443,8 @@ func TestPreviewRemoveTearsDownThePreviewItsNameNames(t *testing.T) {
 		fixture := setUpPreviewProject(t)
 		dependencies := previewDependencies("feature/login", "")
 		previewUp(t, fixture, dependencies, previewUpOptions{})
-		if err := stackrecords.RecordEnvironmentMeta(context.Background(), fixture.Provider.KeyValues(),
-			environment.TierPreview, clitest.FixtureSlug, "staging", "", ""); err != nil {
+		if _, err := stackrecords.EnsureAliasToken(context.Background(), fixture.Provider.KeyValues(),
+			environment.TierPreview, clitest.FixtureSlug, "staging", "aaaaaaaaaaaaaaaa"); err != nil {
 			t.Fatal(err)
 		}
 
@@ -634,6 +684,7 @@ func TestPreviewListRendersEveryEnvironment(t *testing.T) {
 	for _, sub := range []string{
 		previewKey(t, "feature/login"), "ephemeral", "pr-7",
 		"staging", "persistent", "—",
+		"https://staging-", "https://" + previewKey(t, "feature/login") + "-",
 	} {
 		if !strings.Contains(out, sub) {
 			t.Errorf("stdout = %q, want it to contain %q", out, sub)
@@ -781,15 +832,13 @@ func checkSpan(t *testing.T, w io.Writer) *run.Span {
 	return run.Phase(progressv1.Phase_PHASE_CHECK)
 }
 
-func TestAPreviewNeedsADomainWhoseLabelsFit(t *testing.T) {
+func TestAPreviewNeedsADomainToServeOn(t *testing.T) {
 	t.Parallel()
 
 	declared := &project.Project{Domains: project.Domains{Preview: "*.preview.acme.com"}}
 	bare := &project.Project{}
 	global := &contractv1.PreviewWildcard{
 		BaseDomain:     "preview.ocel.app",
-		GrammarMin:     1,
-		GrammarMax:     1,
 		RouteInstalled: true,
 	}
 
@@ -797,9 +846,9 @@ func TestAPreviewNeedsADomainWhoseLabelsFit(t *testing.T) {
 		t.Parallel()
 
 		var out bytes.Buffer
-		_, err := requirePreviewDomain(bare, nil, nil, "pr-1", checkSpan(t, &out))
+		err := refuseMissingPreviewDomain(bare, nil, nil, checkSpan(t, &out))
 		if err == nil {
-			t.Fatal("requirePreviewDomain err = nil, want a refusal")
+			t.Fatal("refuseMissingPreviewDomain err = nil, want a refusal")
 		}
 		for _, want := range []string{"declares no preview domain", "no global one", "domains.preview", "ocel domain use"} {
 			if !strings.Contains(err.Error(), want) {
@@ -812,8 +861,8 @@ func TestAPreviewNeedsADomainWhoseLabelsFit(t *testing.T) {
 		t.Parallel()
 
 		var out bytes.Buffer
-		if _, err := requirePreviewDomain(bare, global, nil, "pr-1", checkSpan(t, &out)); err != nil {
-			t.Fatalf("requirePreviewDomain err = %v, want nil", err)
+		if err := refuseMissingPreviewDomain(bare, global, nil, checkSpan(t, &out)); err != nil {
+			t.Fatalf("refuseMissingPreviewDomain err = %v, want nil", err)
 		}
 		for _, want := range []string{"Serving previews on global *.preview.ocel.app"} {
 			if !strings.Contains(out.String(), want) {
@@ -822,59 +871,12 @@ func TestAPreviewNeedsADomainWhoseLabelsFit(t *testing.T) {
 		}
 	})
 
-	t.Run("the slug prefix pushing a global label past 63 characters refuses", func(t *testing.T) {
-		t.Parallel()
-
-		cfg := &project.Project{Slug: "acme", Apps: []project.App{{Name: "admin"}, {Name: "web"}}}
-		var out bytes.Buffer
-		_, err := requirePreviewDomain(cfg, global, nil, strings.Repeat("b", 60), checkSpan(t, &out))
-		if err == nil {
-			t.Fatal("requirePreviewDomain err = nil, want a refusal")
-		}
-		for _, want := range []string{"DNS labels cap at 63", `project "acme" (4)`, "10 over"} {
-			if !strings.Contains(err.Error(), want) {
-				t.Errorf("err = %v, want it to contain %q", err, want)
-			}
-		}
-	})
-
-	t.Run("a single-app project with no apps array still has its global label capped", func(t *testing.T) {
-		t.Parallel()
-
-		cfg := &project.Project{Slug: "acme"}
-		pointer := strings.Repeat("b", 63)
-		var out bytes.Buffer
-		_, err := requirePreviewDomain(cfg, global, nil, pointer, checkSpan(t, &out))
-		if err == nil {
-			t.Fatal("requirePreviewDomain err = nil, want a refusal")
-		}
-		for _, want := range []string{"acme--" + pointer + " is 69 characters", "DNS labels cap at 63", `project "acme" (4)`, "6 over"} {
-			if !strings.Contains(err.Error(), want) {
-				t.Errorf("err = %v, want it to contain %q", err, want)
-			}
-		}
-	})
-
-	t.Run("the same label fits without the slug prefix on a declared domain", func(t *testing.T) {
-		t.Parallel()
-
-		cfg := &project.Project{
-			Slug:    "acme",
-			Apps:    []project.App{{Name: "admin"}, {Name: "web"}},
-			Domains: project.Domains{Preview: "*.preview.acme.com"},
-		}
-		var out bytes.Buffer
-		if _, err := requirePreviewDomain(cfg, nil, nil, strings.Repeat("b", 55), checkSpan(t, &out)); err != nil {
-			t.Fatalf("requirePreviewDomain err = %v, want nil", err)
-		}
-	})
-
 	t.Run("a declared domain and no global one is unchanged and silent", func(t *testing.T) {
 		t.Parallel()
 
 		var out bytes.Buffer
-		if _, err := requirePreviewDomain(declared, nil, nil, "pr-1", checkSpan(t, &out)); err != nil {
-			t.Fatalf("requirePreviewDomain err = %v, want nil", err)
+		if err := refuseMissingPreviewDomain(declared, nil, nil, checkSpan(t, &out)); err != nil {
+			t.Fatalf("refuseMissingPreviewDomain err = %v, want nil", err)
 		}
 		if out.String() != "" {
 			t.Errorf("out = %q, want nothing said", out.String())
@@ -885,8 +887,8 @@ func TestAPreviewNeedsADomainWhoseLabelsFit(t *testing.T) {
 		t.Parallel()
 
 		var out bytes.Buffer
-		if _, err := requirePreviewDomain(declared, global, nil, "pr-1", checkSpan(t, &out)); err != nil {
-			t.Fatalf("requirePreviewDomain err = %v, want nil", err)
+		if err := refuseMissingPreviewDomain(declared, global, nil, checkSpan(t, &out)); err != nil {
+			t.Fatalf("refuseMissingPreviewDomain err = %v, want nil", err)
 		}
 		for _, want := range []string{"*.preview.acme.com", "*.preview.ocel.app", "ignored"} {
 			if !strings.Contains(out.String(), want) {
@@ -900,28 +902,22 @@ func TestAPreviewNeedsADomainWhoseLabelsFit(t *testing.T) {
 
 		same := &project.Project{Slug: "acme", Domains: project.Domains{Preview: "*.preview.ocel.app"}}
 		var out bytes.Buffer
-		if _, err := requirePreviewDomain(same, global, nil, "pr-1", checkSpan(t, &out)); err != nil {
-			t.Fatalf("requirePreviewDomain err = %v, want nil", err)
+		if err := refuseMissingPreviewDomain(same, global, nil, checkSpan(t, &out)); err != nil {
+			t.Fatalf("refuseMissingPreviewDomain err = %v, want nil", err)
 		}
 		if got := out.String(); !strings.Contains(got, "Serving previews on project-level *.preview.ocel.app, also the global preview domain") || strings.Contains(got, "ignored") {
 			t.Errorf("out = %q, want the one wildcard named as both, nothing ignored", got)
-		}
-
-		var over bytes.Buffer
-		_, err := requirePreviewDomain(same, global, nil, strings.Repeat("b", 60), checkSpan(t, &over))
-		if err != nil {
-			t.Errorf("err = %v, want a 60-character label admitted: the hostnames are the project's own, so no slug segment counts against the cap", err)
 		}
 	})
 
 	t.Run("an edge account mismatch refuses with the account to point at", func(t *testing.T) {
 		t.Parallel()
 
-		elsewhere := &contractv1.PreviewWildcard{BaseDomain: "preview.ocel.app", EdgeScope: "edge-owner", GrammarMin: 1, GrammarMax: 1, RouteInstalled: true}
+		elsewhere := &contractv1.PreviewWildcard{BaseDomain: "preview.ocel.app", EdgeScope: "edge-owner", RouteInstalled: true}
 		var out bytes.Buffer
-		_, err := requirePreviewDomain(bare, elsewhere, &contractv1.Identity{EdgeScope: "edge-other"}, "pr-1", checkSpan(t, &out))
+		err := refuseMissingPreviewDomain(bare, elsewhere, &contractv1.Identity{EdgeScope: "edge-other"}, checkSpan(t, &out))
 		if err == nil {
-			t.Fatal("requirePreviewDomain err = nil, want an account refusal")
+			t.Fatal("refuseMissingPreviewDomain err = nil, want an account refusal")
 		}
 		for _, want := range []string{"edge-owner", "edge-other", "edge account"} {
 			if !strings.Contains(err.Error(), want) {
@@ -933,11 +929,11 @@ func TestAPreviewNeedsADomainWhoseLabelsFit(t *testing.T) {
 	t.Run("a missing wildcard route refuses, pointing at ocel domain use", func(t *testing.T) {
 		t.Parallel()
 
-		uninstalled := &contractv1.PreviewWildcard{BaseDomain: "preview.ocel.app", GrammarMin: 1, GrammarMax: 1}
+		uninstalled := &contractv1.PreviewWildcard{BaseDomain: "preview.ocel.app"}
 		var out bytes.Buffer
-		_, err := requirePreviewDomain(bare, uninstalled, nil, "pr-1", checkSpan(t, &out))
+		err := refuseMissingPreviewDomain(bare, uninstalled, nil, checkSpan(t, &out))
 		if err == nil {
-			t.Fatal("requirePreviewDomain err = nil, want a route refusal")
+			t.Fatal("refuseMissingPreviewDomain err = nil, want a route refusal")
 		}
 		for _, want := range []string{"wildcard route is not installed", "ocel domain use '*.preview.ocel.app' --preview"} {
 			if !strings.Contains(err.Error(), want) {
@@ -946,23 +942,6 @@ func TestAPreviewNeedsADomainWhoseLabelsFit(t *testing.T) {
 		}
 	})
 
-	t.Run("a grammar outside the installed worker's range refuses", func(t *testing.T) {
-		t.Parallel()
-
-		for _, g := range []*contractv1.PreviewWildcard{
-			{BaseDomain: "preview.ocel.app", GrammarMin: 2, GrammarMax: 3, RouteInstalled: true},
-			{BaseDomain: "preview.ocel.app", GrammarMin: 0, GrammarMax: 0, RouteInstalled: true},
-		} {
-			var out bytes.Buffer
-			_, err := requirePreviewDomain(bare, g, nil, "pr-1", checkSpan(t, &out))
-			if err == nil {
-				t.Fatalf("requirePreviewDomain with grammar %d–%d = nil, want a refusal", g.GetGrammarMin(), g.GetGrammarMax())
-			}
-			if !strings.Contains(err.Error(), "ocel domain use") {
-				t.Errorf("err = %v, want it to point at `ocel domain use`", err)
-			}
-		}
-	})
 }
 
 func runPreviewCommand(t *testing.T, fixture clitest.FakeProject, dependencies Dependencies, stdin string, args ...string) (string, error) {
@@ -1009,5 +988,43 @@ func TestPreviewListShowsADashForAPreviewWithNoLifecycle(t *testing.T) {
 
 	if fields := strings.Split(out.String(), "\t"); len(fields) < 2 || fields[1] != "—" {
 		t.Errorf("ocel preview ls printed %q, want a dash where the lifecycle goes: the provider named none", out.String())
+	}
+}
+
+func TestAFirstPreviewUpThatBuildsNothingToDeployLeavesNoPreviewBehind(t *testing.T) {
+	fixture := setUpPreviewProject(t)
+	writeConfig(t, fixture.Root, "")
+	clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(fixture.Root), "main.ts"), "export {};\n")
+	dependencies := previewDependencies("feature/login", "")
+
+	out := previewUp(t, fixture, dependencies, previewUpOptions{name: "staging", persistent: true})
+	if !strings.Contains(out, "Nothing to deploy") {
+		t.Fatalf("stdout = %q, want nothing to deploy", out)
+	}
+
+	_, err := fixture.Provider.KeyValues().Read(context.Background(), stackrecords.EnvironmentKey(environment.TierPreview, clitest.FixtureSlug, "staging"))
+	if !errors.Is(err, keyvalue.ErrNotFound) {
+		t.Errorf("reading staging's record after its first preview up had nothing to deploy = %v, want nothing recorded: `ocel preview ls` would list a preview that was never deployed", err)
+	}
+}
+
+func TestAFirstPreviewUpWhoseBuildFailsLeavesNoPreviewBehind(t *testing.T) {
+	fixture := setUpPreviewProject(t)
+	addAppToFixtureConfig(t, fixture.Root)
+	dependencies := previewDependencies("feature/login", "")
+	stubBuild(&dependencies, apiFunction())
+	dependencies.BuildApps = func(context.Context, *project.Project, map[string]map[string]string, map[string]string, build.Log) (build.Output, error) {
+		return build.Output{}, errors.New("simulated build failure")
+	}
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runPreviewUp(context.Background(), dependencies, fixture.Root, previewUpOptions{name: "staging", persistent: true}, &stdout, &stderr, strings.NewReader("")); err == nil {
+		t.Fatal("runPreviewUp succeeded through a failed build")
+	}
+
+	_, err := fixture.Provider.KeyValues().Read(context.Background(), stackrecords.EnvironmentKey(environment.TierPreview, clitest.FixtureSlug, "staging"))
+	if !errors.Is(err, keyvalue.ErrNotFound) {
+		t.Errorf("reading staging's record after its first preview up failed to build = %v, want nothing recorded: `ocel preview ls` would list a preview that was never deployed", err)
 	}
 }

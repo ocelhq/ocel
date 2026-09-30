@@ -2,7 +2,6 @@ package deploy
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 )
@@ -21,7 +20,6 @@ const (
 	envPreview           = "OCEL_PREVIEW"
 	envPreviewGlobal     = "OCEL_PREVIEW_GLOBAL"
 	envPreviewBaseDomain = "OCEL_PREVIEW_BASE_DOMAIN"
-	envPreviewApps       = "OCEL_PREVIEW_APPS"
 
 	storeServiceBinding = "DEPLOYMENTS"
 )
@@ -51,23 +49,22 @@ func sharedWorker(kind edge.Kind, entry edge.WorkerModule, f WorkerFacts) (edge.
 	return worker, nil
 }
 
-func withPreviewVariables(worker edge.Worker, baseDomain string, apps []string) edge.Worker {
+func addPreviewVariables(worker edge.Worker, baseDomain string) edge.Worker {
 	worker = withVar(worker, envPreview, "1")
-	worker = withVar(worker, envPreviewApps, previewAppNames(apps))
 	if baseDomain != "" {
 		worker = withVar(worker, envPreviewBaseDomain, baseDomain)
 	}
 	return worker
 }
 
-func previewAppNames(apps []string) string {
-	names := make([]string, 0, len(apps))
-	for _, app := range apps {
-		if name := strings.ToLower(strings.TrimSpace(app)); name != "" {
-			names = append(names, name)
-		}
+func addSecret(worker edge.Worker, name, value string) edge.Worker {
+	secrets := make(map[string]string, len(worker.Secrets)+1)
+	for k, v := range worker.Secrets {
+		secrets[k] = v
 	}
-	return strings.Join(names, ",")
+	secrets[name] = value
+	worker.Secrets = secrets
+	return worker
 }
 
 func withVar(worker edge.Worker, name, value string) edge.Worker {

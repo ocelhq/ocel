@@ -265,6 +265,11 @@ func (g Gate) Remove(ctx context.Context, shown provider.Plan, tier environment.
 	if err := g.Bootstrap.Remove(ctx, tier, progress); err != nil {
 		return err
 	}
+	if tier == environment.TierPreview {
+		if err := keyvalue.Forget(ctx, g.KeyValues, stackrecords.NewPreviewKeyRecordKey()); err != nil {
+			return err
+		}
+	}
 	return keyvalue.Forget(ctx, g.KeyValues, stackrecords.BootstrapKey(tier))
 }
 

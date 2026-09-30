@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { DeploymentRecord, DeploymentsBinding } from "../src/deployments";
 import { type RouteDeps, resolveRouteDeps } from "../src/index";
+import { answerEveryRecordWith } from "./origin-deps";
 
 function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {
   return {
@@ -29,21 +30,17 @@ function bindingReturning(
   identity: string | undefined,
   record: DeploymentRecord | undefined,
 ): DeploymentsBinding {
-  return {
-    async pointerRecord() {
-      if (!identity) return { kind: "no-pointer" };
-      if (!record) return { kind: "dangling", identity };
-      return { kind: "record", identity, record };
-    },
-  };
+  return answerEveryRecordWith(async () => {
+    if (!identity) return { kind: "no-pointer" };
+    if (!record) return { kind: "dangling", identity };
+    return { kind: "record", identity, record };
+  });
 }
 
 function failingBinding(): DeploymentsBinding {
-  return {
-    async pointerRecord() {
-      throw new Error("store unreachable");
-    },
-  };
+  return answerEveryRecordWith(async () => {
+    throw new Error("store unreachable");
+  });
 }
 
 const assetStore: RouteDeps["assetStore"] = {

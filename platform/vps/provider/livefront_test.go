@@ -373,8 +373,6 @@ func servesAPreviewBehind(t *testing.T, vm machine, d *vps.Provider, opened edge
 	ctx := context.Background()
 	if _, err := opened.ReconcilePreviewWildcard(ctx, edge.PreviewWildcardSpec{
 		BaseDomain: frontedPreview,
-		GrammarMin: edge.PreviewGrammarMin,
-		GrammarMax: edge.PreviewGrammarMax,
 	}); err != nil {
 		t.Fatalf("ReconcilePreviewWildcard(%s) behind %s = %v", frontedPreview, front, err)
 	}
@@ -385,7 +383,7 @@ func servesAPreviewBehind(t *testing.T, vm machine, d *vps.Provider, opened edge
 	}
 	promotesPreview(t, d, previews, frontedSlug, liveApp, fixtureAt("one"), frontedPointer, 1)
 
-	hostname := edge.SharedPreview(frontedSlug, frontedPreview).Hosts(frontedPointer, []string{liveApp})[0]
+	hostname := signLivePreviewHost(frontedSlug, frontedPreview, frontedPointer, liveApp).Hostname
 	if served := vm.throughTheFront(t, hostname, "/"); served != "one" {
 		t.Errorf("%s answered %q for the preview %s, want the release it was promoted to", front, served, hostname)
 	}

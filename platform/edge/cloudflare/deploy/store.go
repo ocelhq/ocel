@@ -84,6 +84,12 @@ type pointerMoveBody struct {
 	Replaces    string                    `json:"replaces,omitempty"`
 	PromotionID string                    `json:"promotionId"`
 	Records     []router.DeploymentRecord `json:"records"`
+	Labels      []pointerLabel            `json:"labels,omitempty"`
+}
+
+type pointerLabel struct {
+	Label string `json:"label"`
+	App   string `json:"app"`
 }
 
 func (s *stack) movePointer(ctx context.Context, body pointerMoveBody) (bool, error) {

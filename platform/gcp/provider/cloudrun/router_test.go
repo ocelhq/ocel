@@ -92,6 +92,12 @@ func TestTheCloudRunRouterBehavesAsEveryRouterMust(t *testing.T) {
 	})
 }
 
+func TestTheCloudRunRouterServesNoPreviewDeploymentOnAHostnameOfItsOwn(t *testing.T) {
+	if cloudrun.NewRouter(cloudrun.New(&pinRecorder{})).Facts().ServesPreviewDeployments {
+		t.Error("Facts() says Cloud Run serves each preview deployment on its own hostname, and a service answers on its own url alone")
+	}
+}
+
 func fronting(t *testing.T, pins *pinRecorder) fake.PromotingStack {
 	t.Helper()
 	front := cloudrun.New(pins)

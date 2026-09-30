@@ -82,7 +82,7 @@ func runBuild(ctx context.Context, dependencies Dependencies, cwd string) (err e
 	}
 	phase := building.Phase(progressv1.Phase_PHASE_BUILD)
 
-	clients := builtInClients(cfg, appurl.Production(cfg))
+	clients := builtInClients(cfg, appurl.FormatProductionURLs(cfg))
 	built, err := dependencies.BuildApps(run.ContextWithSpan(ctx, phase), cfg, build.Env(clients), declaredArchs(cfg), appBuildLog(phase))
 	if err != nil {
 		return err

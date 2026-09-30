@@ -38,6 +38,10 @@ service ProviderService {
 
     rpc GetEnvironment(GetEnvironmentRequest) returns (GetEnvironmentResponse);
 
+    rpc EnsurePreviewAlias(EnsurePreviewAliasRequest) returns (EnsurePreviewAliasResponse);
+
+    rpc ForgetPreviewAlias(ForgetPreviewAliasRequest) returns (ForgetPreviewAliasResponse);
+
     rpc Preflight(PreflightRequest) returns (PreflightResponse);
 
     rpc ListPromotions(ListPromotionsRequest) returns (ListPromotionsResponse);
@@ -286,6 +290,8 @@ message DeployRequest {
   ImageRegistry project_registry = 6;
 
   repeated common.bindings.v1.Binding inline_bindings = 7;
+
+  string alias_token = 8 [(buf.validate.field).string.pattern = "^([a-z2-7]{16})?$"];
 }
 
 message ShapeRequest {
@@ -480,7 +486,39 @@ message PreviewEnvironment {
   string label = 3;
 
   int64 created_at = 4;
+
+  repeated string alias_urls = 5;
 }
+
+message EnsurePreviewAliasRequest {
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  common.environment.v1.Environment environment = 2;
+
+  string token = 3 [(buf.validate.field).string.pattern = "^[a-z2-7]{16}$"];
+
+  repeated string apps = 4;
+
+  repeated string domains = 5;
+
+  bool dry = 6;
+}
+
+message EnsurePreviewAliasResponse {
+  map<string, string> hostnames = 1;
+
+  string token = 2;
+}
+
+message ForgetPreviewAliasRequest {
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  common.environment.v1.Environment environment = 2;
+
+  string token = 3 [(buf.validate.field).string.pattern = "^[a-z2-7]{16}$"];
+}
+
+message ForgetPreviewAliasResponse {}
 
 message PreflightRequest {
   common.environment.v1.Tier required_tier = 1 [(buf.validate.field).enum.defined_only = true];
@@ -537,10 +575,6 @@ message PreviewWildcard {
   string base_domain = 1;
 
   string edge_scope = 2;
-
-  uint32 grammar_min = 3;
-
-  uint32 grammar_max = 4;
 
   bool route_installed = 5;
 

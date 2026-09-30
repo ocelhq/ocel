@@ -967,6 +967,30 @@ func TestTheSummaryEndsWithTheNotesOnItsUrlsAndWhereTheRunsLogIs(t *testing.T) {
 	}
 }
 
+func TestAPreviewSummaryNamesTheAliasAndThenTheDeploymentsOwnURL(t *testing.T) {
+	t.Parallel()
+
+	var out bytes.Buffer
+	sink := newTranscript(&out, Presentation{}, nil)
+	sink.Receive(resultEvent(&streamv1.RunSummary{
+		Success:    true,
+		Headline:   "Preview pr-12 is up",
+		DurationMs: 41_000,
+		Apps: []*progressv1.AppResult{{
+			App: "web", Outcome: progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED,
+			Urls:          []string{"https://pr-12-aliasaliasaliasaq2b3c4d5.acme.example.com"},
+			DeploymentUrl: "https://pr-12-deploydeploydeplz9y8x7w6v.acme.example.com",
+		}},
+	}))
+
+	want := "✓ Preview pr-12 is up in 41s\n" +
+		"  web  https://pr-12-aliasaliasaliasaq2b3c4d5.acme.example.com\n" +
+		"       https://pr-12-deploydeploydeplz9y8x7w6v.acme.example.com (this deployment)\n"
+	if got := out.String(); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
 func TestACancelledRunsSummarySaysSoAndWhatToRerunAfterAVerbatimBlockWithOneBlankLine(t *testing.T) {
 	t.Parallel()
 

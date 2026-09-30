@@ -1,118 +1,117 @@
 package edge
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"strings"
 )
 
-const (
-	PreviewAppSeparator = "--"
+const PreviewLabelMaxLen = 63
 
-	PreviewLabelMaxLen = 63
-)
+const previewPrefixMaxLen = PreviewLabelMaxLen - 1 - PreviewTailLen
+
+type PreviewHost struct {
+	Hostname string `json:"hostname"`
+	App      string `json:"app,omitempty"`
+}
+
+func (h PreviewHost) ReadLabel() string {
+	label, _, _ := strings.Cut(h.Hostname, ".")
+	return label
+}
+
+func (h PreviewHost) ReadPrefix() string {
+	prefix, _ := h.split()
+	return prefix
+}
+
+func (h PreviewHost) ReadTail() string {
+	_, tail := h.split()
+	return tail
+}
+
+func (h PreviewHost) split() (prefix, tail string) {
+	label := h.ReadLabel()
+	cut := len(label) - PreviewTailLen - 1
+	if cut < 1 || label[cut] != '-' {
+		return "", ""
+	}
+	return label[:cut], label[cut+1:]
+}
+
+func ListPreviewHostnames(hosts []PreviewHost) []string {
+	names := make([]string, 0, len(hosts))
+	for _, host := range hosts {
+		names = append(names, host.Hostname)
+	}
+	return names
+}
 
 type PreviewSite struct {
 	slug string
 	base string
+	key  PreviewKey
 }
 
-func SharedPreview(slug, baseDomain string) PreviewSite {
-	return PreviewSite{slug: slug, base: baseDomain}
+func NewSharedPreviewSite(slug, baseDomain string, key PreviewKey) PreviewSite {
+	return PreviewSite{slug: slug, base: baseDomain, key: key}
 }
 
-func ProjectPreview(baseDomain string) PreviewSite {
-	return PreviewSite{base: baseDomain}
+func NewProjectPreviewSite(baseDomain string, key PreviewKey) PreviewSite {
+	return PreviewSite{base: baseDomain, key: key}
 }
 
-func (s PreviewSite) Serves() bool { return s.base != "" }
+func (s PreviewSite) IsServing() bool { return s.base != "" }
 
-func (s PreviewSite) Label(pointer, app string) string {
-	return previewLabel(s.slug, pointer, app)
-}
-
-func (s PreviewSite) Host(pointer, app string) string {
-	return previewHost(s.slug, pointer, app, s.base)
-}
-
-func (s PreviewSite) Hosts(pointer string, apps []string) []string {
-	if len(apps) < 2 {
-		if host := s.Host(pointer, ""); host != "" {
-			return []string{host}
-		}
+func (s PreviewSite) ListHosts(name, token string, apps []string) []PreviewHost {
+	if !s.IsServing() || name == "" || token == "" {
 		return nil
 	}
-	hosts := make([]string, 0, len(apps))
-	for slot := range apps {
-		if host := s.Host(pointer, AppAt(apps, slot)); host != "" {
-			hosts = append(hosts, host)
+	if len(apps) < 2 {
+		host := PreviewHost{Hostname: s.signLabel(name, "", token) + "." + s.base}
+		if len(apps) == 1 {
+			host.App = apps[0]
 		}
+		return []PreviewHost{host}
+	}
+	hosts := make([]PreviewHost, 0, len(apps))
+	for _, app := range apps {
+		hosts = append(hosts, PreviewHost{Hostname: s.signLabel(name, app, deriveAppToken(token, app)) + "." + s.base, App: app})
 	}
 	return hosts
 }
 
-func AppAt(apps []string, slot int) string {
-	if len(apps) < 2 || slot < 0 || slot >= len(apps) {
-		return ""
+func (s PreviewSite) signLabel(name, app, token string) string {
+	if s.slug != "" {
+		return s.key.Sign(s.slug, token)
 	}
-	return apps[slot]
+	return s.key.Sign(fitPrefix(name, app), token)
 }
 
-func (s PreviewSite) LabelProblem(hostnames []string) error {
-	for _, hostname := range hostnames {
-		label, _, _ := strings.Cut(hostname, ".")
-		if label == "" || strings.Contains(label, "*") || len(label) <= PreviewLabelMaxLen {
+func fitPrefix(name, app string) string {
+	if app == "" {
+		return strings.TrimRight(name[:min(len(name), previewPrefixMaxLen)], "-")
+	}
+	room := previewPrefixMaxLen - len(app) - 1
+	if room < 1 {
+		return strings.TrimRight(app[:min(len(app), previewPrefixMaxLen)], "-")
+	}
+	return strings.TrimRight(name[:min(len(name), room)], "-") + "-" + app
+}
+
+func deriveAppToken(token, app string) string {
+	sum := sha256.Sum256([]byte(token + "/" + app))
+	return previewEncoding.EncodeToString(sum[:])[:PreviewTokenLen]
+}
+
+func (s PreviewSite) RefuseOverlongLabels(hosts []PreviewHost) error {
+	for _, host := range hosts {
+		label := host.ReadLabel()
+		if len(label) <= PreviewLabelMaxLen {
 			continue
 		}
-		return fmt.Errorf("%s is %d characters; DNS labels cap at %d — %s, %d over: shorten one of them and deploy again",
-			label, len(label), PreviewLabelMaxLen, s.labelParts(label), len(label)-PreviewLabelMaxLen)
+		return fmt.Errorf("%s is %d characters; DNS labels cap at %d — project %q (%d) + a token (%d), %d over: shorten the project slug and deploy again",
+			label, len(label), PreviewLabelMaxLen, s.slug, len(s.slug), PreviewTailLen+1, len(label)-PreviewLabelMaxLen)
 	}
 	return nil
-}
-
-func (s PreviewSite) labelParts(label string) string {
-	parts := strings.Split(label, PreviewAppSeparator)
-	names := []string{"preview", "app"}
-	if len(parts) > 1 && parts[0] == s.slug {
-		names = []string{"project", "preview", "app"}
-	}
-	for len(names) < len(parts) {
-		names = append(names, "name")
-	}
-	return LabelParts(label, names...)
-}
-
-func LabelParts(label string, names ...string) string {
-	parts := strings.Split(label, PreviewAppSeparator)
-	described := make([]string, 0, len(parts))
-	for i, part := range parts {
-		if i < len(names) {
-			described = append(described, fmt.Sprintf("%s %q (%d)", names[i], part, len(part)))
-			continue
-		}
-		described = append(described, fmt.Sprintf("%q (%d)", part, len(part)))
-	}
-	return strings.Join(described, " + ")
-}
-
-func previewLabel(slug, pointer, app string) string {
-	if pointer == "" {
-		return ""
-	}
-	parts := make([]string, 0, 3)
-	if slug != "" {
-		parts = append(parts, slug)
-	}
-	parts = append(parts, pointer)
-	if app != "" {
-		parts = append(parts, app)
-	}
-	return strings.Join(parts, PreviewAppSeparator)
-}
-
-func previewHost(slug, pointer, app, baseDomain string) string {
-	label := previewLabel(slug, pointer, app)
-	if label == "" || baseDomain == "" {
-		return ""
-	}
-	return label + "." + baseDomain
 }

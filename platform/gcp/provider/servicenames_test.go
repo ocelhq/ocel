@@ -148,9 +148,15 @@ func TestAFunctionOfOneAppAndAnAppNamedForItAreTwoServices(t *testing.T) {
 	}
 }
 
+const previewKey edge.PreviewKey = "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0"
+
+func signSharedPreviewLabel(slug, app string) string {
+	return edge.NewSharedPreviewSite(slug, "preview.acme.com", previewKey).ListHosts("pr-7", "abcdefghijklmnop", []string{app})[0].ReadLabel()
+}
+
 func TestAPreviewServedOnTheSharedWildcardIsNamedTheLabelInItsHostname(t *testing.T) {
 	names := serviceNames(t)
-	label := edge.SharedPreview("shop", "preview.acme.com").Label("pr-7", "")
+	label := signSharedPreviewLabel("shop", "web")
 
 	service, err := names.PreviewService(label, "web", "web")
 	if err != nil {
@@ -165,11 +171,11 @@ func TestAPreviewServedOnTheSharedWildcardIsNamedTheLabelInItsHostname(t *testin
 	}
 }
 
-func TestAPreviewFunctionThatIsNotTheAppIsNamedApartFromEveryPreviewHostname(t *testing.T) {
+func TestAPreviewFunctionThatIsNotTheAppIsNamedApartFromThePreviewHostname(t *testing.T) {
 	names := serviceNames(t)
-	site := edge.SharedPreview("shop", "preview.acme.com")
+	label := signSharedPreviewLabel("shop", "web")
 
-	part, err := names.PreviewService(site.Label("pr-7", ""), "web", "fn--web--checkout")
+	part, err := names.PreviewService(label, "web", "fn--web--checkout")
 	if err != nil {
 		t.Fatalf("PreviewService() = %v", err)
 	}
@@ -179,51 +185,55 @@ func TestAPreviewFunctionThatIsNotTheAppIsNamedApartFromEveryPreviewHostname(t *
 	if !strings.Contains(part, "checkout") {
 		t.Errorf("PreviewService() = %q, want the route the function serves named in it", part)
 	}
-	for _, app := range []string{"", "web", "checkout"} {
-		if host := site.Label("pr-7", app); host == part {
-			t.Errorf("PreviewService() = %q, which is the label %s answers on: a hostname would reach a function nothing routes to it", part, host)
-		}
-	}
-	beside, err := names.PreviewService(site.Label("pr-7", "web"), "web", "fn--web--checkout")
-	if err != nil {
-		t.Fatalf("PreviewService() = %v", err)
-	}
-	if beside == part {
-		t.Errorf("the one-app and the many-app preview both name %q, and they are two previews with two hostnames", part)
+	if part == label {
+		t.Errorf("PreviewService() = %q, which is the label the preview answers on: a hostname would reach a function nothing routes to it", part)
 	}
 }
 
-func TestAPreviewLabelCloudRunWouldRefuseIsRefusedWithItsParts(t *testing.T) {
+func TestAPreviewServiceLongerThanCloudRunTakesIsRefusedNamingTheSlugToShorten(t *testing.T) {
 	names := serviceNames(t)
-	pointer := strings.Repeat("pr-70", 12)
+	slug := "the-longest-shop-anyone-named"
 
-	_, err := names.PreviewService(edge.SharedPreview("shop", "preview.acme.com").Label(pointer, "web"), "web", "web")
+	_, err := names.PreviewService(signSharedPreviewLabel(slug, "web"), "web", "web")
 	if err == nil {
-		t.Fatal("PreviewService() named a service Cloud Run will not take")
+		t.Fatal("PreviewService() named a service longer than the 49 characters Cloud Run takes")
 	}
 	if code, refused := provider.RefusedCode(err); !refused || code != refusal.CodeInvalid {
 		t.Errorf("PreviewService() code = %v, want %v", code, refusal.CodeInvalid)
 	}
-	for _, part := range []string{"shop", pointer, "web", "60"} {
+	for _, part := range []string{slug, "29", "25-character token", "49"} {
 		if !strings.Contains(err.Error(), part) {
-			t.Errorf("PreviewService() = %v, want %q named in it: the parts and their lengths are what a user can shorten", err, part)
+			t.Errorf("PreviewService() = %v, want %q named in it: the slug and its length are what a user can shorten", err, part)
 		}
 	}
 }
 
-func TestThePreviewRefusalNamesTheDoubleDashesCloudRunTakes(t *testing.T) {
+func TestAPreviewFunctionServiceLongerThanCloudRunTakesIsRefusedNamingTheRoute(t *testing.T) {
 	names := serviceNames(t)
-	site := edge.SharedPreview("shop", "preview.acme.com")
 
-	if _, err := names.PreviewService(site.Label("pr-7", "web"), "web", "web"); err != nil {
-		t.Fatalf("PreviewService(%q) = %v, want a label joined by %q taken", site.Label("pr-7", "web"), err, edge.PreviewAppSeparator)
-	}
-	_, err := names.PreviewService(site.Label(strings.Repeat("pr-70", 12), "web"), "web", "web")
+	_, err := names.PreviewService(signSharedPreviewLabel("shop", "web"), "web", "fn--web--checkout-and-pay-now")
 	if err == nil {
-		t.Fatal("PreviewService() named a service Cloud Run will not take")
+		t.Fatal("PreviewService() named a service longer than the 49 characters Cloud Run takes")
 	}
-	if strings.Contains(err.Error(), "single dash") {
-		t.Errorf("the refusal reads %v, and Cloud Run takes the %q every preview label joins its fields with", err, edge.PreviewAppSeparator)
+	if !strings.Contains(err.Error(), "checkout-and-pay-now") {
+		t.Errorf("PreviewService() = %v, want the function's route named in it: it is part of the service's name", err)
+	}
+}
+
+func TestAPreviewOfAProjectWhoseSlugStartsWithADigitIsRefusedBeforeCloudRunIsAsked(t *testing.T) {
+	names := serviceNames(t)
+
+	_, err := names.PreviewService(signSharedPreviewLabel("7shop", "web"), "web", "web")
+	if err == nil {
+		t.Fatal("PreviewService() named a service starting with a digit, which Cloud Run will not take")
+	}
+	if code, refused := provider.RefusedCode(err); !refused || code != refusal.CodeInvalid {
+		t.Errorf("PreviewService() code = %v, want %v", code, refusal.CodeInvalid)
+	}
+	for _, part := range []string{"7shop", "letter"} {
+		if !strings.Contains(err.Error(), part) {
+			t.Errorf("PreviewService() = %v, want %q named in it: the slug is what the user can rename", err, part)
+		}
 	}
 }
 
@@ -233,7 +243,7 @@ func TestAPreviewLabelNothingNamedIsRefusedRatherThanDeployingSomethingUnreachab
 	if _, err := names.PreviewService("", "web", "web"); err == nil {
 		t.Fatal("PreviewService() named a service from an empty label")
 	}
-	if _, err := names.PreviewService("Shop--PR_7", "web", "web"); err == nil {
+	if _, err := names.PreviewService("Shop-PR_7", "web", "web"); err == nil {
 		t.Fatal("PreviewService() named a service from a label Cloud Run will not take")
 	}
 }

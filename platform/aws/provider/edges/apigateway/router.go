@@ -88,7 +88,7 @@ func (r routerStack) MovePointer(ctx context.Context, move router.PointerMove, _
 			return err
 		}
 		stageWritten = true
-		return s.routePreview(ctx, c, pointer, id)
+		return s.moveHostRules(ctx, c, move.Hosts, move.ListHostsToWithdraw(), id)
 	})
 	if err != nil && !stageWritten {
 		return router.Unserved{Err: err}
@@ -96,8 +96,8 @@ func (r routerStack) MovePointer(ctx context.Context, move router.PointerMove, _
 	return err
 }
 
-func (r routerStack) RemovePointer(ctx context.Context, pointer string, _ progress.Log) error {
-	s := r.s
+func (r routerStack) RemovePointer(ctx context.Context, removal router.PointerRemoval, _ progress.Log) error {
+	s, pointer := r.s, removal.Pointer
 	c, err := s.p.clientsFor(ctx)
 	if err != nil {
 		return err
@@ -105,7 +105,7 @@ func (r routerStack) RemovePointer(ctx context.Context, pointer string, _ progre
 	if router.IsDefaultPointer(pointer) {
 		return s.unsetStage(ctx, c)
 	}
-	if err := s.unroutePreview(ctx, c, pointer); err != nil {
+	if err := s.unroutePreview(ctx, c, removal.Hosts); err != nil {
 		return err
 	}
 	id, found, err := findAPI(ctx, c, apiName(s.p.ns, s.slug(), s.tier(), pointer))

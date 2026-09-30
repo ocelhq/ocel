@@ -7,8 +7,8 @@ import (
 )
 
 const boulderSaid = `{"level":"error","ts":1788128443.02,"logger":"tls.obtain","msg":"could not get certificate from issuer",` +
-	`"identifier":"shop--pr-7--web.preview.acme.com","issuer":"acme-v02.api.letsencrypt.org-directory",` +
-	`"error":"[shop--pr-7--web.preview.acme.com] Obtain: [shop--pr-7--web.preview.acme.com] creating new order: ` +
+	`"identifier":"shop-abcdefghijklmnoproheemcq.preview.acme.com","issuer":"acme-v02.api.letsencrypt.org-directory",` +
+	`"error":"[shop-abcdefghijklmnoproheemcq.preview.acme.com] Obtain: [shop-abcdefghijklmnoproheemcq.preview.acme.com] creating new order: ` +
 	`attempt 1: https://acme-v02.api.letsencrypt.org/acme/new-order: HTTP 429 urn:ietf:params:acme:error:rateLimited - ` +
 	`Error creating new order :: too many certificates (50) already issued for \"acme.com\" in the last 168h0m0s, ` +
 	`retry after 2026-09-05T12:00:00Z: see https://letsencrypt.org/docs/rate-limits/ (ca=https://acme-v02.api.letsencrypt.org/directory)"}`
@@ -20,7 +20,7 @@ func TestACertificateAuthoritysRateLimitIsTranslatedRatherThanRelayed(t *testing
 	if !limited {
 		t.Fatal("the CA's rate-limit response was not read as one, so the box would relay a line of acme jargon and say nothing about what to do next")
 	}
-	said := limit.Refusal("shop--pr-7--web.preview.acme.com").Error()
+	said := limit.Refusal("shop-abcdefghijklmnoproheemcq.preview.acme.com").Error()
 
 	for what, want := range map[string]string{
 		"the registered domain the ceiling counts against": "acme.com",
