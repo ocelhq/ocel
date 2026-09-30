@@ -459,12 +459,13 @@ func (h *Host) refuseTraefikUnreachable(ctx context.Context, read Reading) error
 
 func (h *Host) refuseServingPortsHeld(ctx context.Context, read Reading) error {
 	move := read.move
-	if move != nil && move.resumed {
-		move = nil
-	}
 	switch {
 	case move == nil && h.proxyOption.adopted(), move != nil && move.isSameProcess():
 		return h.refuseProxyUnreachable(ctx, read)
+	case move != nil && move.resumed && move.to.adopted():
+		return nil
+	case move != nil && move.resumed:
+		move = nil
 	}
 	owners, err := h.readServingOwners(ctx, read)
 	if err != nil || len(owners) == 0 {

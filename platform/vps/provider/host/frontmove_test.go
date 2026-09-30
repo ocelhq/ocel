@@ -383,7 +383,7 @@ func TestMovingABoxFromOcelsOwnProxyToYourProxyTakesOcelsProxyAwayStartsTheSwitc
 	wantBefore(t, box, "docker rm --force "+quoted(caddy.Container), switchboardRun)
 	wantBefore(t, box, "rm -rf "+quoted(ProxyData), switchboardRun)
 	wantBefore(t, box, switchboardRun, quoted("place")+" "+quoted("/etc/traefik/dynamic/ocel.yml"))
-	wantBefore(t, box, quoted("place")+" "+quoted("/etc/traefik/dynamic/ocel.yml"), "/dev/stdin "+quoted(FrontRecordPath))
+	wantBefore(t, box, "/dev/stdin "+quoted(FrontRecordPath), "docker rm --force "+quoted(caddy.Container))
 	if record := box.fed[box.at("/dev/stdin "+quoted(FrontRecordPath))]; !strings.Contains(record, `"project":"shop"`) || !strings.Contains(record, `"traefik"`) {
 		t.Errorf("%s was written as %s, want your Traefik recorded as set by shop, the project that moved the box", FrontRecordPath, record)
 	}
@@ -723,5 +723,114 @@ func TestAMoveOntoYourProxyRefusedBeforeItServedWaitsForItAgainWhenBootstrapRuns
 	}
 	if stampedComplete(box, tier) {
 		t.Errorf("bootstrap run again stamped the tier complete though your Traefik still serves nothing")
+	}
+}
+
+func breaksOnceRan(box *bench, earlier, at string) {
+	box.broke = func(command string) error {
+		if strings.Contains(command, at) && box.at(earlier) >= 0 {
+			return errors.New("the connection to the box dropped")
+		}
+		return nil
+	}
+}
+
+func recordLeftBy(interrupted *bench) string {
+	ran := interrupted.commands()
+	if interrupted.broke != nil {
+		ran = ran[:len(ran)-1]
+	}
+	written := ""
+	for at, command := range ran {
+		if strings.Contains(command, "/dev/stdin "+quoted(FrontRecordPath)) {
+			written = interrupted.fed[at]
+		}
+	}
+	return written
+}
+
+func TestAMoveOffOcelsOwnProxyInterruptedAnywhereIsFinishedByTheNextBootstrap(t *testing.T) {
+	t.Parallel()
+
+	tier := environment.TierProduction
+	takenAway := "docker rm --force " + quoted(caddy.Container)
+	placed := quoted("place") + " " + quoted("/etc/traefik/dynamic/ocel.yml")
+	recordWritten := "/dev/stdin " + quoted(FrontRecordPath)
+	for name, tc := range map[string]struct {
+		interrupt func(*bench)
+		removed   bool
+	}{
+		"before ocel's proxy is taken away": {
+			interrupt: func(box *bench) { breaksOnceRan(box, recordWritten, takenAway) },
+		},
+		"once ocel's proxy is taken away": {
+			interrupt: func(box *bench) { breaksOnceRan(box, takenAway, switchboardRun) },
+			removed:   true,
+		},
+		"once the switchboard started for your proxy": {
+			interrupt: func(box *bench) { breaksOnceRan(box, takenAway, placed) },
+			removed:   true,
+		},
+		"once ocel's file is placed": {
+			interrupt: func(box *bench) {
+				servedFrom(box, throughTheSwitchboard)
+				breaksOnceRan(box, placed, recordWritten)
+			},
+			removed: true,
+		},
+		"while it waits for your proxy": {
+			interrupt: func(box *bench) {
+				servedFrom(box, func(string) session.Result {
+					return session.Result{Code: proxyNotServingYet, Stderr: "connection refused on 127.0.0.1:443"}
+				})
+			},
+			removed: true,
+		},
+		"once your proxy served": {
+			interrupt: func(box *bench) {
+				servedFrom(box, throughTheSwitchboard)
+				breaksOnceRan(box, quoted("probe"), recordWritten)
+			},
+			removed: true,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			failed := boxRecordedFor(t, tier, Front{})
+			tc.interrupt(failed)
+			if _, err := movedTo(t, failed, tier, traefikOnTheHost()); err == nil {
+				t.Fatalf("Apply() = nil, want the move interrupted %s", name)
+			}
+
+			box := boxRecordedFor(t, tier, Front{})
+			if written := recordLeftBy(failed); written != "" {
+				for at, item := range box.installed[tier] {
+					if item.Name == FrontRecordPath {
+						box.installed[tier][at].Content = []byte(written)
+					}
+				}
+			}
+			if tc.removed {
+				box.installed[tier] = slices.DeleteFunc(box.installed[tier], func(item Item) bool {
+					return item.Kind == KindContainer && item.Name == caddy.Container
+				})
+				portsOwnedOn(box, nil, socketOwner{80, "traefik"}, socketOwner{443, "traefik"})
+			} else {
+				portsOwnedOn(box, map[string]string{caddy.HTTPPort: caddy.Container + "\n", caddy.HTTPSPort: caddy.Container + "\n"})
+			}
+			servedFrom(box, throughTheSwitchboard)
+			if _, err := movedTo(t, box, tier, traefikOnTheHost()); err != nil {
+				t.Fatalf("bootstrap run again = %v, want it to finish the move", err)
+			}
+			wantBefore(t, box, takenAway, placed)
+			wantBefore(t, box, placed, quoted("probe")+" "+quoted(claimed))
+			if record := lastRecord(box); strings.Contains(record, `"movingFrom"`) || !strings.Contains(record, `"traefik"`) {
+				t.Errorf("%s was last written as %s, want your Traefik recorded with no move left to finish", FrontRecordPath, record)
+			}
+			if !stampedComplete(box, tier) {
+				t.Errorf("bootstrap run again never stamped the tier complete:\n%s", strings.Join(box.commands(), "\n"))
+			}
+		})
 	}
 }
