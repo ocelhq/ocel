@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+shopt -s inherit_errexit
 
 STATE_DIR="${OCEL_INCUS_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/ocel-incus}"
 KEY="$STATE_DIR/id_ed25519"
@@ -58,36 +59,63 @@ ssh_opts() {
         -o LogLevel=ERROR
 }
 
+cloud_init_status() {
+    local out
+    out=$(incus exec "$1" -- cloud-init status 2>/dev/null) || true
+    sed -n 's/^status: //p' <<<"$out"
+}
+
 cloud_init_ended() {
-    incus exec "$1" -- cloud-init status 2>/dev/null |
-        grep -qE '^status: (done|error|degraded)'
+    case $(cloud_init_status "$1") in
+    done | error | degraded) return 0 ;;
+    *) return 1 ;;
+    esac
+}
+
+sshd_state() {
+    incus exec "$1" -- sh -c 'if command -v sshd >/dev/null; then echo installed; else echo absent; fi' 2>/dev/null || true
 }
 
 wait_ssh() {
-    local name=$1 addr grace=15 deadline=$((SECONDS + SSH_WAIT_SECS))
+    local name=$1 addr="" ssh_err="" started=$SECONDS
+    local deadline=$((SECONDS + SSH_WAIT_SECS))
     while [ "$SECONDS" -lt "$deadline" ]; do
-        addr=$(addr_of "$name")
+        addr=$(addr_of "$name") || addr=""
         if [ -n "$addr" ]; then
             mapfile -t opts < <(ssh_opts)
-            if ssh "${opts[@]}" -o ConnectTimeout=3 "$SSH_USER@$addr" true 2>/dev/null; then
+            if ssh_err=$(ssh "${opts[@]}" -o ConnectTimeout=3 "$SSH_USER@$addr" true 2>&1); then
                 echo "$addr"
                 return 0
             fi
         fi
-        if [ "$deadline" -gt $((SECONDS + grace)) ] && cloud_init_ended "$name"; then
-            deadline=$((SECONDS + grace))
+        if cloud_init_ended "$name" && [ "$(sshd_state "$name")" = absent ]; then
+            break
         fi
         sleep 2
     done
-    diagnose_no_ssh "$name" >&2
-    die "$name: no SSH after ${SSH_WAIT_SECS}s"
+    local cloud_init sshd
+    cloud_init=$(cloud_init_status "$name")
+    sshd=$(sshd_state "$name")
+    diagnose_no_ssh "$name" "${sshd:-unreadable}" "${addr:-none}" "${ssh_err:-never attempted}" >&2
+    die "$name: no SSH after $((SECONDS - started))s, budget ${SSH_WAIT_SECS}s (cloud-init ${cloud_init:-unreadable}, sshd ${sshd:-unreadable}, address ${addr:-none})"
 }
 
 diagnose_no_ssh() {
-    local name=$1
-    echo "incus.sh: cloud-init installs sshd over the network, so no SSH usually"
-    echo "incus.sh: means the VM has no egress. cloud-init reports:"
+    local name=$1 sshd=$2 addr=$3 ssh_err=$4
+    case $sshd in
+    absent)
+        echo "incus.sh: cloud-init ended without installing sshd, which it fetches over"
+        echo "incus.sh: the network; the egress sections below say whether the VM had any."
+        ;;
+    installed) echo "incus.sh: sshd is installed; the sshd section below says whether it listens." ;;
+    *) echo "incus.sh: the guest did not answer whether sshd is installed." ;;
+    esac
+    echo "incus.sh: cloud-init reports:"
     incus exec "$name" -- cloud-init status --long 2>&1 | sed 's/^/    /' || true
+    diagnose_section "host ssh to $addr, last attempt" \
+        printf '%s\n' "$ssh_err"
+    diagnose_section "guest sshd (binary, host keys, units, listeners, journal)" \
+        incus exec "$name" -- sh -c 'command -v sshd; ls -l /etc/ssh/ssh_host_*_key; systemctl is-active ssh.socket ssh.service; ss -ltn "sport = :22"; journalctl -b -u ssh.socket -u ssh.service --no-pager -n 30'
     diagnose_section "guest addresses and routes" \
         incus exec "$name" -- sh -c 'ip -4 -br addr; ip -4 route; cat /etc/resolv.conf'
     diagnose_section "guest name resolution" \
