@@ -47,7 +47,7 @@ type Machine interface {
 	TunnelHost(ctx context.Context, hostname, owner, name string) error
 	UntunnelHost(ctx context.Context, hostname, owner string) error
 	ReleaseTunnel(ctx context.Context) ([]host.Tunnel, error)
-	ForgetTunnel(ctx context.Context, id string) error
+	ForgetTunnel(ctx context.Context, name string) error
 }
 
 type Origins func(ctx context.Context, project string, tier environment.Tier) error

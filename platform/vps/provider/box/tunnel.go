@@ -1,11 +1,13 @@
 package box
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
@@ -32,9 +34,17 @@ func (e *Edge) openTunnel(ctx context.Context, kind edge.Kind) (host.Tunnel, err
 	reserved.ID, reserved.Address = opened.ID, opened.Address
 	token := func(ctx context.Context) (string, error) { return hooks.ReadToken(ctx, opened.ID) }
 	if err := e.machine.RunTunnel(ctx, reserved, token); err != nil {
+		if isBusy(err) {
+			return host.Tunnel{}, errors.Join(err, hooks.Delete(ctx, opened.ID))
+		}
 		return host.Tunnel{}, err
 	}
 	return reserved, nil
+}
+
+func isBusy(err error) bool {
+	var refused refusal.Refusal
+	return errors.As(err, &refused) && refused.Code == refusal.CodeBusy
 }
 
 func (e *Edge) tunnelHost(ctx context.Context, claim string, kind edge.Kind, owner string) (edge.Origin, error) {
@@ -68,15 +78,23 @@ func (e *Edge) releaseTunnel(ctx context.Context) error {
 }
 
 func (e *Edge) deleteTunnel(ctx context.Context, tunnel host.Tunnel) error {
-	if tunnel.ID == "" {
-		return e.machine.ForgetTunnel(ctx, tunnel.ID)
-	}
 	hooks, err := e.tunnels(tunnel.Edge)
 	if err == nil {
-		err = hooks.Delete(ctx, tunnel.ID)
+		err = deleteAtEdge(ctx, hooks, tunnel)
 	}
 	if err != nil {
-		return fmt.Errorf("nothing on this box goes through the tunnel %s any more, and it is stopped here, but deleting it at the %s edge failed, so the next release deletes it: %w", tunnel.ID, tunnel.Edge, err)
+		return fmt.Errorf("nothing on this box goes through the tunnel %s any more, and it is stopped here, but deleting it at the %s edge failed, so the next release deletes it: %w", cmp.Or(tunnel.ID, tunnel.Name), tunnel.Edge, err)
 	}
-	return e.machine.ForgetTunnel(ctx, tunnel.ID)
+	return e.machine.ForgetTunnel(ctx, tunnel.Name)
+}
+
+func deleteAtEdge(ctx context.Context, hooks *edge.TunnelHooks, tunnel host.Tunnel) error {
+	if tunnel.ID != "" {
+		return hooks.Delete(ctx, tunnel.ID)
+	}
+	opened, err := hooks.Ensure(ctx, tunnel.Name)
+	if err != nil {
+		return err
+	}
+	return hooks.Delete(ctx, opened.ID)
 }
