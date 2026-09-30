@@ -78,6 +78,10 @@ export interface AppConfig {
   framework?: "node" | "next" | "go" | "python" | "rust";
   /** How a container app is checked before it is served. */
   health?: HealthConfig;
+  /** The most instances of a container app run at once, however busy it is. Left off, as many as minInstances, or 1. A serverless app scales itself and takes no instance counts. */
+  maxInstances?: number;
+  /** The fewest instances of a container app kept running, however quiet it is. Left off, 1. A serverless app scales itself and takes no instance counts. */
+  minInstances?: number;
   /** The app's name. It is a label of every resource the app deploys and of its preview hostname, so it is a DNS label. */
   name: string;
   /** The app's directory, relative to the config. */

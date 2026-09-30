@@ -316,3 +316,26 @@ func TestAddedKnownIDsDecodeUntilRestored(t *testing.T) {
 		t.Errorf("decode after restore err = %v, want the added ids unknown again", err)
 	}
 }
+
+func TestDecodeKeepsTheInstanceCountsAContainerAppNames(t *testing.T) {
+	doc, err := Decode([]byte(`{"slug":"acme","apps":[{"name":"a","path":".","compute":"container","minInstances":0,"maxInstances":4},{"name":"b","path":"."}]}`), env(nil))
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if doc.Apps[0].MinInstances == nil || *doc.Apps[0].MinInstances != 0 || doc.Apps[0].MaxInstances == nil || *doc.Apps[0].MaxInstances != 4 {
+		t.Fatalf("app a = %+v", doc.Apps[0])
+	}
+	if doc.Apps[1].MinInstances != nil || doc.Apps[1].MaxInstances != nil {
+		t.Fatalf("app b names no instance counts, and decoded %+v", doc.Apps[1])
+	}
+}
+
+func TestDecodeRefusesAnInstanceCountThatIsNotAWholeNumber(t *testing.T) {
+	_, err := Decode([]byte(`{"slug":"acme","apps":[{"name":"a","path":".","maxInstances":2.5}]}`), env(nil))
+	if err == nil {
+		t.Fatal("decoded 2.5 instances")
+	}
+	if !strings.Contains(err.Error(), `"apps[0].maxInstances" must be a whole number`) {
+		t.Fatalf("error %q does not name the key and a whole number", err)
+	}
+}

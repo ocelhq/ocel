@@ -226,3 +226,48 @@ func TestANamedTypeUsedInMoreThanOnePlaceIsDocumentedAsItselfEverywhere(t *testi
 		}
 	}
 }
+
+func TestCoreSchemaTakesInstanceCountsAsWholeNumbersFromTheirFloor(t *testing.T) {
+	generated, err := Schema()
+	if err != nil {
+		t.Fatalf("schema: %v", err)
+	}
+	var schema struct {
+		Properties struct {
+			Apps struct {
+				Items struct {
+					Properties map[string]struct {
+						Type    string `json:"type"`
+						Minimum *int   `json:"minimum"`
+					} `json:"properties"`
+				} `json:"items"`
+			} `json:"apps"`
+		} `json:"properties"`
+	}
+	if err := json.Unmarshal(generated, &schema); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	for key, floor := range map[string]int{"minInstances": 0, "maxInstances": 1} {
+		property := schema.Properties.Apps.Items.Properties[key]
+		if property.Type != "integer" || property.Minimum == nil || *property.Minimum != floor {
+			t.Errorf("%s = %+v, want an integer from %d", key, property, floor)
+		}
+	}
+}
+
+type floored struct {
+	Count *int `json:"count,omitempty" minimum:"1"`
+}
+
+func TestAValueIsCheckedAgainstItsMinimum(t *testing.T) {
+	if err := Check("apps[0]", floored{}, map[string]any{"count": float64(1)}); err != nil {
+		t.Fatalf("a count at its minimum was refused: %v", err)
+	}
+	err := Check("apps[0]", floored{}, map[string]any{"count": float64(0)})
+	if err == nil {
+		t.Fatal("a count below its minimum was taken")
+	}
+	if !strings.Contains(err.Error(), `"apps[0].count" must be 1 or more`) {
+		t.Errorf("error = %q, want it to name the key and the minimum", err)
+	}
+}

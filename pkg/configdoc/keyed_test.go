@@ -98,7 +98,7 @@ func TestAKeyedUnionRefusesAnythingButOneKnownKeyOrAShorthand(t *testing.T) {
 		"no key":                       {map[string]any{}, []string{`"trip.route"`, "exactly one", "lane, road"}},
 		"two keys":                     {map[string]any{"lane": map[string]any{}, "road": map[string]any{"name": "A1"}}, []string{`"trip.route"`, "exactly one", "lane, road"}},
 		"a key it does not know":       {map[string]any{"river": map[string]any{}}, []string{"trip.route.river", "lane, road"}},
-		"a key whose value is wrong":   {map[string]any{"lane": map[string]any{"width": "wide"}}, []string{`"trip.route.lane.width"`, "a number"}},
+		"a key whose value is wrong":   {map[string]any{"lane": map[string]any{"width": "wide"}}, []string{`"trip.route.lane.width"`, "a whole number"}},
 		"neither text nor an object":   {7.0, []string{`"trip.route"`, `"lane", "walk"`, "lane, road"}},
 	}
 	for name, c := range cases {

@@ -36,6 +36,9 @@ type AppConfig struct {
 	Domains    *AppDomainConfig `json:"domains,omitempty" doc:"The hostnames this app is served on."`
 	Build      *BuildConfig     `json:"build,omitempty" doc:"How a container app's image is built."`
 	Health     *HealthConfig    `json:"health,omitempty" doc:"How a container app is checked before it is served."`
+
+	MinInstances *int `json:"minInstances,omitempty" minimum:"0" doc:"The fewest instances of a container app kept running, however quiet it is. Left off, 1. A serverless app scales itself and takes no instance counts."`
+	MaxInstances *int `json:"maxInstances,omitempty" minimum:"1" doc:"The most instances of a container app run at once, however busy it is. Left off, as many as minInstances, or 1. A serverless app scales itself and takes no instance counts."`
 }
 
 type BuildConfig struct {
