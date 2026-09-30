@@ -14,9 +14,14 @@ export function assertTunnelAddress(address: string, hostname: string): void {
 }
 
 export function assertNotServed(outcome: Outcome, where: string): void {
-  if (outcome.kind !== "answered" || outcome.status === undefined || outcome.status >= 400) return;
+  if (outcome.kind === "refused" || outcome.kind === "unreachable") return;
+  if (outcome.kind === "answered" && outcome.status !== undefined && outcome.status >= 400) return;
+  const said =
+    outcome.kind === "answered"
+      ? `answered ${outcome.status ?? "with no status line"}:\n${outcome.said.slice(0, 300)}`
+      : `connected and then settled nothing: ${outcome.reason}`;
   throw new assert.AssertionError({
-    message: `${where} answered ${outcome.status} for a hostname only the tunnel reaches:\n${outcome.said.slice(0, 300)}`,
+    message: `${where} ${said}\nwant a refusal or an error status for a hostname only the tunnel reaches`,
   });
 }
 

@@ -57,6 +57,21 @@ describe("a tunneled hostname asked of the box directly", () => {
       ),
     ).toThrow(/answered 200/);
   });
+
+  it("fails when the box connected and then said nothing that settles it", () => {
+    expect(() =>
+      assertNotServed({ kind: "undecided", reason: "closed with nothing said" }, "the box"),
+    ).toThrow(/closed with nothing said/);
+  });
+
+  it("fails when the box answered with no status line", () => {
+    expect(() =>
+      assertNotServed(
+        { kind: "answered", status: undefined, location: undefined, said: "garbage" },
+        "the box",
+      ),
+    ).toThrow(/garbage/);
+  });
 });
 
 describe("a tunneled hostname asked over plain http through Cloudflare", () => {
