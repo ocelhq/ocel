@@ -2653,7 +2653,7 @@ type EdgeSelection struct {
 	Kind          string                 `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
 	Dns           *Dns                   `protobuf:"bytes,2,opt,name=dns,proto3" json:"dns,omitempty"`
 	AllowDegraded []string               `protobuf:"bytes,3,rep,name=allow_degraded,json=allowDegraded,proto3" json:"allow_degraded,omitempty"`
-	Options       *structpb.Struct       `protobuf:"bytes,5,opt,name=options,proto3" json:"options,omitempty"`
+	Options       *structpb.Struct       `protobuf:"bytes,4,opt,name=options,proto3" json:"options,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5183,12 +5183,12 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x05edges\x18\x06 \x03(\tR\x05edges\"-\n" +
 	"\x03Dns\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x12\n" +
-	"\x04zone\x18\x02 \x01(\tR\x04zone\"\xb8\x01\n" +
+	"\x04zone\x18\x02 \x01(\tR\x04zone\"\xaa\x01\n" +
 	"\rEdgeSelection\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12+\n" +
 	"\x03dns\x18\x02 \x01(\v2\x19.provider.contract.v1.DnsR\x03dns\x12%\n" +
 	"\x0eallow_degraded\x18\x03 \x03(\tR\rallowDegraded\x121\n" +
-	"\aoptions\x18\x05 \x01(\v2\x17.google.protobuf.StructR\aoptionsJ\x04\b\x04\x10\x05R\x06tunnel\"\xbe\x01\n" +
+	"\aoptions\x18\x04 \x01(\v2\x17.google.protobuf.StructR\aoptions\"\xbe\x01\n" +
 	"\x0eBootstrapScope\x129\n" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\b\xbaH\x05\x82\x01\x02\x10\x01R\x04tier\x127\n" +
 	"\x04edge\x18\x02 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\x128\n" +
