@@ -100,9 +100,9 @@ checking this box answers, since it resolves to Cloudflare rather than to the bo
 
 Behind [your own proxy](#behind-your-own-proxy), ocel cannot make it refuse a request that
 skips Cloudflare. Configure it to require a client certificate for each hostname Cloudflare
-forwards, trusting only the certificates listed for that hostname under `shields` in
-`/var/lib/ocel/routing/table.json`, and serve it with the origin certificate listed beside
-them. On port 80 a request carries no client certificate, so answer those hostnames there
+forwards that chains to one of the CAs listed for that hostname under `shields` in
+`/var/lib/ocel/routing/table.json` (`clientCAs`), trusting no other CA, and serve it with the
+origin certificate listed beside them. On port 80 a request carries no client certificate, so answer those hostnames there
 with a redirect to https and forward them nowhere; refusing them instead leaves a visitor
 who opens `http://` with an error. A deploy refuses to forward a hostname your proxy answers to a
 client with no certificate or forwards over plain http, and `ocel doctor` fails it.

@@ -21,25 +21,32 @@ On a [VPS](/docs/providers/vps) or [Google Cloud](/docs/providers/gcp), Cloudfla
 worker: it forwards each hostname to the origin through a proxied record. The origin answers
 only what arrives with the certificate your zone presents to origins (zone-level
 authenticated origin pulls, with a certificate of your own rather than Cloudflare's shared
-one). Every origin trusts every client certificate the zone holds. If the zone holds none,
-ocel mints one good for ten years, uploads it, has the origin trust it, then turns
-zone-level pulls on. Two deploys that find the zone holding none at once each upload one,
-and the one that uploaded second deletes its own, so the zone keeps one. Past that, ocel
-never replaces or deletes a zone's client certificate: it is shared by every origin the
-zone forwards to. The origins ocel runs accept it past its
-expiry, as Cloudflare keeps presenting it, except a VPS box behind your own Traefik, which
-refuses it once it lapses. A zone that already presents Cloudflare's shared
+one). Every origin trusts the CA of every client certificate the zone holds. If the zone
+holds none, ocel mints a CA and a client certificate it signs, both good for ten years,
+uploads the client certificate, has the origin trust the CA, then turns zone-level pulls on.
+The client certificate carries its CA in its CA Issuers access (a `data:` URI), which is how
+a later deploy reads the CA back from the zone. Two deploys that find the zone holding none
+at once each upload one, and the one that uploaded second deletes its own, so the zone keeps
+one. Past that, ocel never replaces or deletes a zone's client certificate: it is shared by
+every origin the zone forwards to. A load balancer on AWS or Google Cloud refuses the
+certificate once it or its CA lapses; the origins on a VPS box accept it past its expiry,
+except behind your own Traefik. A zone that already presents Cloudflare's shared
 certificate (global pulls on, or zone-level pulls on with no certificate of the zone's own)
 is refused, since another origin in it may trust only that one: upload a certificate of
 your own first.
 
 To rotate the certificate, or retire a leaked key, upload the new one to the zone
-(**SSL/TLS > Origin Server > Authenticated Origin Pulls**). Cloudflare presents the
+(**SSL/TLS > Origin Server > Authenticated Origin Pulls**). ocel must be able to read the CA
+it chains to: upload a self-signed certificate, or one that names its CA's certificate as a
+`data:application/pkix-cert;base64,` URI in its CA Issuers access, as ocel's own does. A
+load balancer on AWS trusts only a CA, so behind one only the second kind works; a deploy
+refuses a zone holding a certificate whose CA ocel cannot read. Cloudflare presents the
 certificate uploaded last at once, so until the next step origins refuse it. Deploy one
-project on each VPS box and on each Google Cloud tier the zone forwards to: each origin
-then trusts both. Delete the old certificate from the zone, then deploy every project with a
-hostname in the zone once more: an origin stops trusting the old certificate for a hostname
-once that hostname's own project deploys, since another zone may still present it.
+project on each VPS box, on each Google Cloud tier and on each AWS tier with container apps
+the zone forwards to: each origin then trusts both. Delete the old certificate from the
+zone, then deploy every project with a hostname in the zone once more: an origin stops
+trusting the old CA for a hostname once that hostname's own project deploys, since another
+zone may still present it.
 
 Cloudflare reaches the origin over plain http when the visitor used it, and the origin
 answers that with a redirect to https without forwarding it, so ocel changes neither Always
@@ -85,10 +92,17 @@ record wins over the wildcard record and the route over the wildcard route. Remo
 preview removes both.
 
 The load balancer holds at most 25 certificates besides its default, one per production
-hostname and one per preview wildcard, and at most 100 rules, one per hostname, live
-preview and release. Both limits cover every project in the tier, and AWS raises them on
-request. It reaches at most 100 target groups, which AWS does not raise: one per release
-of a container app, kept ones included.
+hostname and one per preview wildcard, at most 100 rules, one per hostname and live preview,
+and a trust store of at most 25 CAs, one per zone that forwards to it. These limits cover
+every project in the tier, and AWS raises each on request: a deploy that reaches one is
+refused naming the Service Quotas entry to raise (Elastic Load Balancing, L-9365A611 for
+certificates, L-7EED9B64 for rules, L-43FE5A42 for CAs). It reaches at most 100 target
+groups, which AWS does not raise: one per release of a container app, kept ones included.
+The trust store holds only the CAs a hostname behind it still trusts: removing a hostname
+drops a CA no other hostname trusts. A certificate ocel did not request for the hostname,
+such as one it found in ACM and reused or the one `ocel domain use --preview` wildcard every
+project's previews share, stays on the load balancer once the hostname is removed, since
+another project's hostname may answer with it.
 
 Middleware, the edge runtime and edge caching need the worker, so a container app behind
 Cloudflare is served streaming alone. A deploy of one that needs more is refused unless
