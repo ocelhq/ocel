@@ -373,11 +373,17 @@ func networkCommand() string {
 }
 
 func (s boxContainer) run(sysctls ...string) []string {
-	argv := []string{"docker", "run", "--detach",
+	return s.composeArgv([]string{"docker", "run", "--detach"}, sysctls)
+}
+
+func (s boxContainer) create() []string { return s.composeArgv([]string{"docker", "create"}, nil) }
+
+func (s boxContainer) composeArgv(leading, sysctls []string) []string {
+	argv := append(slices.Clone(leading),
 		"--name", s.name,
 		"--restart", containerRestart,
 		"--network", ProxyNetwork,
-	}
+	)
 	for _, joined := range s.networks {
 		argv = append(argv, "--network", joined.name)
 	}
@@ -411,15 +417,16 @@ func (s boxContainer) writing(attempts int) string {
 		s.placePresent() +
 		bindsPresent(s.files) +
 		imagePulled(s.image, containerPulls) +
+		"docker stop " + quoted(s.name) + " >/dev/null 2>&1 || true\n" +
 		"docker rm --force " + quoted(s.name) + " >/dev/null 2>&1 || true\n" +
 		s.started()
-	if s.joins {
-		written += rejoining(s.name)
-	}
 	return written + s.rising(attempts)
 }
 
 func (s boxContainer) started() string {
+	if s.joins {
+		return words(s.create()) + " >/dev/null\n" + rejoining(s.name) + "docker start " + quoted(s.name) + " >/dev/null\n"
+	}
 	run := words(s.run()) + " >/dev/null\n"
 	if !s.migrates {
 		return run

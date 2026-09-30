@@ -162,7 +162,7 @@ func TestTheSwitchboardIsWrittenBesideYourTraefikOnlyOntoADirectoryTheBoxHas(t *
 
 	written := switchboardOf(t, coolifysTraefik()).writing(containerRising)
 	asked := strings.Index(written, "-d "+quoted("/data/coolify/proxy/dynamic")+" ]")
-	ran := strings.Index(written, quoted("run")+" "+quoted("--detach"))
+	ran := strings.Index(written, quoted("docker")+" "+quoted("create"))
 	if asked < 0 || ran < 0 || asked > ran {
 		t.Fatalf("the switchboard write asks after Coolify's dynamic directory at %d and runs at %d, want it found before a run that would have docker create it empty and root-owned:\n%s", asked, ran, written)
 	}

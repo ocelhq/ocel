@@ -30,7 +30,7 @@ func ranWith(t *testing.T, k kernel, container boxContainer) string {
 	runs := filepath.Join(dir, "runs")
 	executable(t, filepath.Join(dir, dockerEngine), "#!/bin/sh\n"+
 		"case \"$1\" in\n"+
-		"run) printf '%s\\n' \"$*\" >> "+quoted(runs)+" ;;\n"+
+		"run|create) printf '%s\\n' \"$*\" >> "+quoted(runs)+" ;;\n"+
 		"inspect) echo running ;;\n"+
 		"esac\nexit 0\n")
 	container.files = nil

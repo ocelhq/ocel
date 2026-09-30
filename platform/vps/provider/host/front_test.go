@@ -106,7 +106,7 @@ func TestTheSwitchboardIsWrittenOntoYourProxysNetworkOnlyWhenItExists(t *testing
 
 	written := switchboardOf(t, routedOnANetwork()).writing(containerRising)
 	asked := strings.Index(written, "docker network inspect "+quoted("coolify"))
-	ran := strings.Index(written, quoted("run")+" "+quoted("--detach"))
+	ran := strings.Index(written, quoted("docker")+" "+quoted("create"))
 	if asked < 0 || ran < 0 || asked > ran {
 		t.Fatalf("the switchboard write asks after coolify at %d and runs at %d, want the network found before a run that would fail on it:\n%s", asked, ran, written)
 	}

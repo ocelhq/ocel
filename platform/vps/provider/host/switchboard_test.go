@@ -408,7 +408,7 @@ func TestASwitchboardRestoredIsTheOneBootstrapRunsWithTheBinaryTheBoxHas(t *test
 				bootstrapped = *item.box
 			}
 		}
-		want := slices.Clone(bootstrapped.run())
+		want := slices.Clone(bootstrapped.create())
 		labelled := slices.Index(want, configLabel+"="+bootstrapped.config)
 		want[labelled] = configLabel + "=" + sum
 		want = slices.Insert(want, labelled+1, "--label", restoredLabel+"="+restoredBy)
@@ -433,13 +433,13 @@ func TestASwitchboardAPruneLeftStoppedWithItsNetworkGoneIsRecreatedInPlaceOfTheS
 	if err := b.fronted(coolifysTraefik()).CheckProxy(context.Background()); err != nil {
 		t.Fatalf("CheckProxy() = %v, want the switchboard recreated: Coolify prunes the ocel network of a stopped switchboard and leaves the container, which docker start can then never start", err)
 	}
-	at := b.at(quoted("run") + " " + quoted("--detach"))
+	at := b.at(quoted("docker") + " " + quoted("create"))
 	if at < 0 {
 		t.Fatalf("no command started the switchboard again:\n%s", strings.Join(b.commands(), "\n---\n"))
 	}
 	command := b.commands()[at]
 	removed := strings.Index(command, "docker rm --force "+quoted(SwitchboardContainer))
-	if removed < 0 || removed > strings.Index(command, quoted("run")+" "+quoted("--detach")) {
+	if removed < 0 || removed > strings.Index(command, quoted("docker")+" "+quoted("create")) {
 		t.Errorf("the switchboard was recreated as\n%s\nwant the stopped one removed first, and only while it is not running", command)
 	}
 }
@@ -452,9 +452,9 @@ func TestASwitchboardRestoredOnYourProxysNetworkAsksAfterItBeforeRunning(t *test
 	if err := b.fronted(routedOnANetwork()).CheckProxy(context.Background()); err != nil {
 		t.Fatalf("CheckProxy() = %v, want the switchboard restored", err)
 	}
-	command := b.commands()[b.at(quoted("run")+" "+quoted("--detach"))]
+	command := b.commands()[b.at(quoted("docker")+" "+quoted("create"))]
 	asked := strings.Index(command, "docker network inspect "+quoted("coolify"))
-	ran := strings.Index(command, quoted("run")+" "+quoted("--detach"))
+	ran := strings.Index(command, quoted("docker")+" "+quoted("create"))
 	if asked < 0 || asked > ran {
 		t.Fatalf("the switchboard was restored asking after coolify at %d and running at %d, want the network found before a run docker would refuse without naming the option:\n%s", asked, ran, command)
 	}

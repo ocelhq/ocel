@@ -128,7 +128,6 @@ func (s boxContainer) restoring(attempts int) string {
 		bindsPresent(s.files) +
 		imagePulled(s.image, containerPulls) +
 		s.started() +
-		rejoining(s.name) +
 		"fi\n" +
 		"flock -u 9\n" +
 		s.rising(attempts)
