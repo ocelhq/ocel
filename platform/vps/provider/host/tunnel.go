@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -25,6 +26,8 @@ const (
 	tunnelNameSuffixBytes = 4
 	rootUser              = "0:0"
 )
+
+var ErrTunnelReleased = errors.New("the tunnel was released")
 
 type Tunnel struct {
 	Edge                 edge.Kind `json:"edge"`
@@ -134,11 +137,17 @@ func tunnelName(address, suffix string) string {
 
 func refuseUnreserved(state RoutingTable, name, named string) error {
 	if state.Tunnel == nil || state.Tunnel.Name != name {
-		return refusal.Refuse(refusal.CodeBusy,
-			"the tunnel %s no longer reaches %s: another run released it while this one claimed through it\nDeploy again", name, named)
+		return releasedTunnel{refusal.Refuse(refusal.CodeBusy,
+			"the tunnel %s no longer reaches %s: another run released it while this one claimed through it\nDeploy again", name, named)}
 	}
 	return nil
 }
+
+type releasedTunnel struct{ error }
+
+func (r releasedTunnel) Unwrap() error { return r.error }
+
+func (releasedTunnel) Is(target error) bool { return target == ErrTunnelReleased }
 
 func (h *Host) RunTunnel(ctx context.Context, tunnel Tunnel, token func(context.Context) (string, error)) error {
 	if tunnel.ID == "" || tunnel.Address == "" {

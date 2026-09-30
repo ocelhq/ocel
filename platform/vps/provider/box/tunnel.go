@@ -7,7 +7,6 @@ import (
 	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
@@ -34,17 +33,12 @@ func (e *Edge) openTunnel(ctx context.Context, kind edge.Kind) (host.Tunnel, err
 	reserved.ID, reserved.Address = opened.ID, opened.Address
 	token := func(ctx context.Context) (string, error) { return hooks.ReadToken(ctx, opened.ID) }
 	if err := e.machine.RunTunnel(ctx, reserved, token); err != nil {
-		if isBusy(err) {
+		if errors.Is(err, host.ErrTunnelReleased) {
 			return host.Tunnel{}, errors.Join(err, hooks.Delete(ctx, opened.ID))
 		}
 		return host.Tunnel{}, err
 	}
 	return reserved, nil
-}
-
-func isBusy(err error) bool {
-	var refused refusal.Refusal
-	return errors.As(err, &refused) && refused.Code == refusal.CodeBusy
 }
 
 func (e *Edge) tunnelHost(ctx context.Context, claim string, kind edge.Kind, owner string) (edge.Origin, error) {

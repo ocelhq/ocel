@@ -185,8 +185,8 @@ func TestATunnelIsRunOnlyUnderTheNameTheBoxReserved(t *testing.T) {
 
 	err := box.host().RunTunnel(context.Background(), stale, tokenOf("the-tunnel-token"))
 
-	if !isBusy(err) || box.at(quoted("docker")+" "+quoted("run")) >= 0 {
-		t.Errorf("RunTunnel() under a name the box no longer reserves = %v, running %v, want it refused busy with nothing run: that tunnel is being deleted", err, box.commands())
+	if !isBusy(err) || !errors.Is(err, ErrTunnelReleased) || box.at(quoted("docker")+" "+quoted("run")) >= 0 {
+		t.Errorf("RunTunnel() under a name the box no longer reserves = %v, running %v, want it refused busy as a released tunnel with nothing run: that tunnel is being deleted", err, box.commands())
 	}
 }
 
