@@ -45,7 +45,7 @@ func TestTheInitSetupAsksForTheProviderAndWhatItRequiresThenWritesTheConfig(t *t
 
 	var out bytes.Buffer
 	policy := consent.Policy{Interactive: true, In: strings.NewReader(choiceOf(t, "vps") + "\n203.0.113.7\n"), Out: &out}
-	if err := NewSetup(dependencies).Run(context.Background(), policy, run.NewBus(time.Now).Preamble(), missingConfigIn(t, dir)); err != nil {
+	if err := NewSetup(dependencies).Run(context.Background(), policy, run.NewBus(time.Now).Preamble(context.Background()), missingConfigIn(t, dir)); err != nil {
 		t.Fatalf("Run err = %v, want the project initialized", err)
 	}
 	written, err := os.ReadFile(filepath.Join(dir, project.DefaultFileName))
@@ -66,7 +66,7 @@ func TestAnInitSetupLeftUnansweredIsADecline(t *testing.T) {
 	dir := initTestDir(t, "shop")
 
 	policy := consent.Policy{Interactive: true, In: strings.NewReader(""), Out: &bytes.Buffer{}}
-	err := NewSetup(dependencies).Run(context.Background(), policy, run.NewBus(time.Now).Preamble(), missingConfigIn(t, dir))
+	err := NewSetup(dependencies).Run(context.Background(), policy, run.NewBus(time.Now).Preamble(context.Background()), missingConfigIn(t, dir))
 	if !prerequisite.IsDeclined(err) {
 		t.Errorf("Run err = %v, want a decline", err)
 	}

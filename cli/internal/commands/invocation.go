@@ -36,7 +36,7 @@ func (i Invocation) LoadProject(ctx context.Context, cwd string) (*project.Proje
 
 func (i Invocation) EnsureProject(ctx context.Context, cwd string, policy consent.Policy) (*project.Project, error) {
 	var cfg *project.Project
-	preamble := i.Events.Preamble()
+	preamble := i.Events.Preamble(ctx)
 	err := i.Setups.Ensure(ctx, policy, preamble, func(ctx context.Context) (err error) {
 		cfg, err = i.LoadProject(ctx, cwd)
 		return err
