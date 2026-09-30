@@ -52,6 +52,7 @@ export const DEFAULT_VARIANT = "default";
 
 export type ConfigDelta = {
   compute?: Compute;
+  computes?: Record<string, Compute>;
   edge?: Edge;
   tunnel?: boolean;
   registry?: RegistryConfig;

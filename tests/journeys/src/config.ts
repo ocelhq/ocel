@@ -26,6 +26,7 @@ export type Overlay = {
   base: string;
   slug: string;
   compute?: Compute;
+  computes?: Record<string, Compute>;
   edge?: Edge;
   tunnel?: boolean;
   dns?: "cloudflare";
@@ -87,8 +88,10 @@ export function overlayFor(
   switch (target) {
     case "aws": {
       const variablesKey = env.OCEL_AWS_VARIABLES_KEY?.trim() || undefined;
+      const { compute, computes } = cell.variant.config;
       const forwarded =
-        cell.variant.config.edge === "cloudflare" && cell.variant.config.compute === "container";
+        cell.variant.config.edge === "cloudflare" &&
+        (compute === "container" || Object.values(computes ?? {}).includes("container"));
       return {
         base: DEFAULT_BASE,
         slug: cell.slug,
@@ -135,6 +138,12 @@ function appOverlay(overlay: Overlay): string {
   if (overlay.compute === "container") {
     lines.push(`    framework: undefined,`);
     lines.push(`    arch: undefined,`);
+  }
+  for (const [app, compute] of Object.entries(overlay.computes ?? {})) {
+    const unset = compute === "container" ? ", framework: undefined, arch: undefined" : "";
+    lines.push(
+      `    ...(app.name === ${JSON.stringify(app)} ? { compute: ${JSON.stringify(compute)}${unset} } : {}),`,
+    );
   }
   if (overlay.hostnames) {
     lines.push(
@@ -197,10 +206,12 @@ type Document = Record<string, unknown> & {
 
 function appDocument(app: App, overlay: Overlay): App {
   const written: App = { ...app };
-  if (overlay.compute) {
-    written.compute = overlay.compute;
+  const compute =
+    (app.name === undefined ? undefined : overlay.computes?.[app.name]) ?? overlay.compute;
+  if (compute) {
+    written.compute = compute;
   }
-  if (overlay.compute === "container") {
+  if (compute === "container") {
     delete written.framework;
     delete written.arch;
   }

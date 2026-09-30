@@ -24,6 +24,7 @@ import {
   apiGateway,
   cloudflare,
   cloudflareInFrontOfContainers,
+  cloudflareInFrontOfMixedComputes,
   cloudflareOnABox,
   cloudflareOnGoogleCloud,
   cloudflareTunnel,
@@ -328,7 +329,7 @@ export const gaps: Gap[] = [
       },
       {
         on: ["aws.floci"],
-        variants: [cloudflareInFrontOfContainers],
+        variants: [cloudflareInFrontOfContainers, cloudflareInFrontOfMixedComputes],
         fails: [step.deploy],
         skipsCell: true,
       },
@@ -371,7 +372,7 @@ export const gaps: Gap[] = [
       },
       {
         on: ["aws"],
-        variants: [cloudflareInFrontOfContainers],
+        variants: [cloudflareInFrontOfContainers, cloudflareInFrontOfMixedComputes],
         whileUnset: ["OCEL_JOURNEY_ZONE", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"],
         fails: [step.deploy],
         skipsCell: true,

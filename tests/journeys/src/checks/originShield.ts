@@ -240,3 +240,16 @@ const redirectedOverPlainHTTP: Check = {
 export const SHIELDED_ORIGIN_CHECKS: Check[] = [refusedOverTLS, redirectedOverPlainHTTP];
 
 export const CLIENT_CERTIFICATE_CHECKS: Check[] = [refusedOverTLS];
+
+export function forwardedAppChecks(apps: string[]): Check[] {
+  return [
+    {
+      title: `${refusedOverTLS.title}, for ${apps.join(" and ")}, which Cloudflare forwards`,
+      run: async (ctx) => {
+        if (apps.includes(ctx.app)) {
+          await refusedOverTLS.run(ctx);
+        }
+      },
+    },
+  ];
+}
