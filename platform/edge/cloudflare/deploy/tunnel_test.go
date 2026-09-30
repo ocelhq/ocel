@@ -233,12 +233,12 @@ func TestTheCloudflareProxyForwardsThePreviewWildcardToATunnelWithOneProxiedReco
 	}
 }
 
-func TestTheCloudflareProxysTokenNeedsTunnelWriteOnTheAccount(t *testing.T) {
+func TestTheCloudflareProxysTokenNeedsTunnelWriteOnTheAccountOnlyForATunnel(t *testing.T) {
 	doc, err := NewProxy("ocel").Hooks().DescribeCredentialPermissions(edge.PurposeDeploy)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(doc.Document, "Account · Cloudflare Tunnel · Edit") {
-		t.Errorf("the proxy's permissions are %q, want Cloudflare Tunnel edit on the account: a tunnel is opened, configured and deleted there", doc.Document)
+	if !strings.Contains(doc.Document, "Account · Cloudflare Tunnel · Edit (only when the edge sets `tunnel`)") {
+		t.Errorf("the proxy's permissions are %q, want Cloudflare Tunnel edit on the account, marked as needed only for a tunnel: a tunnel is opened, configured and deleted there, and a token without `tunnel` never touches one", doc.Document)
 	}
 }

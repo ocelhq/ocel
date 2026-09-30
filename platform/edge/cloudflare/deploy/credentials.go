@@ -42,7 +42,7 @@ func deployPermissions() []string {
 
 var proxyPermissions = []string{
 	"Account · Account Settings · Read",
-	"Account · Cloudflare Tunnel · Edit",
+	"Account · Cloudflare Tunnel · Edit (only when the edge sets `tunnel`)",
 	"Zone · Zone · Read",
 	"Zone · Zone Settings · Read",
 	"Zone · DNS · Edit",
