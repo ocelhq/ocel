@@ -421,8 +421,8 @@ func (s boxContainer) writing(attempts int) string {
 	return s.prepared() + s.replaced() + s.rising(attempts)
 }
 
-func (s boxContainer) writingUnderRoutingLock(attempts int) string {
-	return s.prepared() + routingLocked("-x") + s.replaced() + "flock -u 9\n" + s.rising(attempts)
+func (s boxContainer) writingUnderRoutingLock(attempts int, guard []string) string {
+	return s.prepared() + routingLocked("-x") + strings.Join(guard, "\n") + "\n" + s.replaced() + "flock -u 9\n" + s.rising(attempts)
 }
 
 func (s boxContainer) prepared() string {
