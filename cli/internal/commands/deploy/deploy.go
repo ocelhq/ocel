@@ -109,7 +109,7 @@ func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts 
 	return dependencies.WithProvider(ctx, cfg, "ocel deploy", productionOpenOptions(policy, cfg), func(ctx context.Context, p commands.ProviderRun) error {
 		run, check, provider, read := p.Run, p.Check, p.Provider, p.Preflight
 		cfg := p.Project
-		facts, err := preflightDeploy(ctx, dependencies, policy, check, provider, cfg, read, opts.prebuilt, stdout, stdin)
+		facts, err := preflightDeploy(ctx, dependencies, policy, check, cfg, read, opts.prebuilt)
 		check.End(err)
 		if err != nil {
 			return err
