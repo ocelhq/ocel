@@ -106,7 +106,7 @@ function runOf(
     on: { aws: [defaults] },
   });
   return new CellRun({
-    cell: { name: stacked.name, fixture: stacked, variant: defaults },
+    cell: { name: stacked.name, fixture: stacked, variant: defaults, cacheLayer: "edge" },
     target: targetFor(called, over.exists, over.answer),
     runId: "1",
     keep: over.keep ?? false,
@@ -241,7 +241,7 @@ describe("a cell run", () => {
     const run = runOf(called);
     const target = targetFor(called);
     const failing = new CellRun({
-      cell: { name: "iac/with-sst", fixture: run.fixture, variant: defaults },
+      cell: { name: "iac/with-sst", fixture: run.fixture, variant: defaults, cacheLayer: "edge" },
       target: {
         ...target,
         prepareProcess: async () => {

@@ -29,7 +29,9 @@ describe("gcpSweepOverlay", () => {
     for (const cell of cells) {
       const slug = projectSlug(cell.name, "18746093211");
       const overlay = gcpSweepOverlay(cell, slug, env);
-      expect(overlay).toEqual(overlayFor({ ...cell, slug } as CellUnderTest, "gcp", env));
+      expect(overlay).toEqual(
+        overlayFor({ ...cell, slug } as unknown as CellUnderTest, "gcp", env),
+      );
       expect(overlay.slug).not.toBe(slug);
     }
   });

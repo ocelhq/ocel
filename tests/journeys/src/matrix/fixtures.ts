@@ -6,6 +6,8 @@ import {
   nativeModuleChecks,
   nextCacheChecks,
   nextDataCacheChecks,
+  nextOriginCacheChecks,
+  nextOriginDataCacheChecks,
   nextRoutingChecks,
   nextStateChecks,
   nodeRuntimeChecks,
@@ -41,8 +43,16 @@ const NODE_SDK_CHECKS = [
   ...httpProbeChecks,
   ...envChecks,
 ];
-const NEXT_ROUTING_AND_CACHE_CHECKS = [...nextRoutingChecks, ...nextCacheChecks];
-const NEXT_STATE_AND_DATA_CACHE_CHECKS = [...nextStateChecks, ...nextDataCacheChecks];
+const NEXT_ROUTING_AND_CACHE_CHECKS = [
+  ...nextRoutingChecks,
+  ...nextCacheChecks,
+  ...nextOriginCacheChecks,
+];
+const NEXT_STATE_AND_DATA_CACHE_CHECKS = [
+  ...nextStateChecks,
+  ...nextDataCacheChecks,
+  ...nextOriginDataCacheChecks,
+];
 const BINDING_CHECKS = [...healthChecks, ...staticChecks, ...bindingChecks];
 
 export const deploy = {

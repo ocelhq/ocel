@@ -71,7 +71,9 @@ export function phasesOf(fixture: Fixture, keep: boolean): Phase[] {
 
 export function stepsOf(cell: Cell, phases: Phase[]): Step[] {
   const { apps, stack } = cell.fixture;
-  const checks = [...cell.fixture.checks, ...(cell.variant.checks ?? [])];
+  const checks = [...cell.fixture.checks, ...(cell.variant.checks ?? [])].filter(
+    (one) => one.cacheLayer === undefined || one.cacheLayer === cell.cacheLayer,
+  );
   const at = (point: StackPoint) => stack?.checks[point] ?? [];
   const perApp = (make: (app: string) => Step[]): Step[] => apps.flatMap(make);
   const has = (phase: Phase) => phases.includes(phase);

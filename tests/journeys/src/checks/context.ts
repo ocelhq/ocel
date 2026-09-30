@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { Phase } from "../matrix/types";
+import type { CacheLayer, Phase } from "../matrix/types";
 import { REGISTRY_TOKEN_ENV } from "../registry/settings";
 
 export type Fetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
@@ -27,6 +27,7 @@ export type CheckContext = {
 
 export type Check = {
   title: string;
+  cacheLayer?: CacheLayer;
   run: (ctx: CheckContext) => Promise<void>;
 };
 

@@ -46,6 +46,15 @@ export const UNNAMED_CONCERNS: Concern[] = CONCERNS.filter(
 
 export type Edge = "cloudfront" | "api-gateway" | "cloudflare";
 
+export type CacheLayer = "edge" | "origin";
+
+const CACHE_LAYER_WHEN_NO_EDGE_IS_NAMED: Record<TargetName, CacheLayer> = {
+  dev: "edge",
+  aws: "edge",
+  vps: "origin",
+  gcp: "edge",
+};
+
 export type Phase = "deploy" | "verify" | "redeploy" | "rollback" | "destroy";
 
 export const DEFAULT_VARIANT = "default";
@@ -97,7 +106,11 @@ export function fixture(name: string, shape: Omit<Fixture, "name" | "concern">):
   return { name, concern: concern as Concern, ...shape };
 }
 
-export type Cell = { name: string; fixture: Fixture; variant: Variant };
+export type Cell = { name: string; fixture: Fixture; variant: Variant; cacheLayer: CacheLayer };
+
+export function cacheLayerOf(target: TargetName, variant: Variant): CacheLayer {
+  return variant.config.edge === undefined ? CACHE_LAYER_WHEN_NO_EDGE_IS_NAMED[target] : "edge";
+}
 
 export function cellName(fixture: Pick<Fixture, "name">, variant: Variant): string {
   return variant.name === DEFAULT_VARIANT ? fixture.name : `${fixture.name}-${variant.name}`;

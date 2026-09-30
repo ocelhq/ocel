@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { Check } from "./checks/context";
-import { fixture, variant } from "./matrix/types";
+import { type Cell, fixture, variant } from "./matrix/types";
 import { defaults } from "./matrix/variants";
 import { CellRun } from "./run/cellRun";
 import type { ExternalStack } from "./stacks";
@@ -14,7 +14,12 @@ const living = fixture("lifecycle/next", {
   checks: [ping],
   on: { aws: [defaults] },
 });
-const cell = { name: "lifecycle/next", fixture: living, variant: defaults };
+const cell: Cell = {
+  name: "lifecycle/next",
+  fixture: living,
+  variant: defaults,
+  cacheLayer: "edge",
+};
 const serving = {
   phases: ["deploy" as const, "verify" as const, "destroy" as const],
   steps: [
@@ -56,7 +61,7 @@ describe("the checks a variant adds", () => {
       checks: [{ title: "refused without the edge", run: async () => undefined }],
     });
     const titles = stepsOf(
-      { name: "lifecycle/next-shielded", fixture: living, variant: shielded },
+      { name: "lifecycle/next-shielded", fixture: living, variant: shielded, cacheLayer: "edge" },
       ["deploy", "verify", "redeploy"],
     ).map((step) => step.title);
     expect(titles).toEqual([
@@ -67,6 +72,26 @@ describe("the checks a variant adds", () => {
       "redeploy · ping",
       "redeploy · refused without the edge",
     ]);
+  });
+});
+
+describe("the checks a cache layer holds", () => {
+  it("runs a check held to one cache layer only on a cell whose cache is served there", () => {
+    const layered = fixture("deploy/next", {
+      apps: ["web"],
+      checks: [
+        ping,
+        { title: "stamped by the edge", cacheLayer: "edge", run: async () => undefined },
+        { title: "stamped by the Next server", cacheLayer: "origin", run: async () => undefined },
+      ],
+      on: { aws: [defaults] },
+    });
+    const titlesAt = (cacheLayer: Cell["cacheLayer"]) =>
+      stepsOf({ name: "deploy/next", fixture: layered, variant: defaults, cacheLayer }, [
+        "verify",
+      ]).map((step) => step.title);
+    expect(titlesAt("edge")).toEqual(["ping", "stamped by the edge"]);
+    expect(titlesAt("origin")).toEqual(["ping", "stamped by the Next server"]);
   });
 });
 
@@ -156,7 +181,12 @@ describe("a cell with an external stack", () => {
   };
 
   it("deploys the stack before ocel, and destroys it only before the checks that follow it", async () => {
-    const cell = { name: stacked.name, fixture: stacked, variant: defaults };
+    const cell: Cell = {
+      name: stacked.name,
+      fixture: stacked,
+      variant: defaults,
+      cacheLayer: "edge",
+    };
     const run = new CellRun({
       cell,
       target,

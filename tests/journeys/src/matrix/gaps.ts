@@ -128,14 +128,14 @@ export const gaps: Gap[] = [
     ],
   },
   {
-    id: "no-router-on-a-box",
-    reason: "vps serves a Next app from a container behind Caddy, with no cache router in front",
-    issue: 900,
+    id: "cloudflare-proxies-a-box-uncached",
+    reason: "Cloudflare in front of a box proxies container apps without caching them",
+    issue: 1457,
     where: [
       {
         on: ["vps", "vps.incus"],
-        fixtures: [deploy.next, sdk.next, lifecycle.next],
-        variants: [defaults, cloudflareOnABox, cloudflareTunnel],
+        fixtures: [lifecycle.next],
+        variants: [cloudflareOnABox, cloudflareTunnel],
         fails: [check(NEXT_CACHE)],
       },
     ],
