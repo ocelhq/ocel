@@ -10,11 +10,12 @@ import {
   askOverTLS,
   assertRedirectedToHTTPS,
   assertRefused,
-  handshakeAlerted,
+  hostnameDeclined,
   type Outcome,
   readOriginAddress,
   statusOf,
 } from "./originShield";
+import { askTheBoxOverTLS, assertNotServed } from "./tunnel";
 
 const realFetch = globalThis.fetch;
 
@@ -181,13 +182,15 @@ describe("asking an origin over TLS with no client certificate", () => {
     expect(() => assertRefused(outcome, "the origin")).toThrow(/connected and then/);
   });
 
-  it("reads a handshake the origin ends with an alert as refused only when the asker counts an alert as refusal", async () => {
+  it("still asks at TLS 1.2 at most, so an origin that only speaks TLS 1.3 fails the check", async () => {
     const port = await listening(
-      tls.createServer({ cert: certificate, key, minVersion: "TLSv1.3" }),
+      tls.createServer({ cert: certificate, key, minVersion: "TLSv1.3" }, (socket) => {
+        socket.once("data", () => socket.end(ANSWER));
+      }),
     );
-    expect((await askOverTLS(origin(port))).kind).toBe("undecided");
-    const outcome = await askOverTLS(origin(port), handshakeAlerted);
-    expect(outcome.kind).toBe("refused");
+    const outcome = await askOverTLS(origin(port));
+    expect(outcome.kind).not.toBe("refused");
+    expect(() => assertRefused(outcome, "the origin")).toThrow();
   });
 
   it("fails the check when the origin connects and never speaks", async () => {
@@ -253,5 +256,56 @@ describe("asking an origin over plain HTTP", () => {
     const outcome = await askOverPlainHTTP(origin(closed));
     expect(outcome.kind).toBe("unreachable");
     expect(() => assertRedirectedToHTTPS(outcome, "the origin", HOSTNAME)).toThrow(/never reached/);
+  });
+});
+
+describe("asking the box for a tunneled hostname over TLS directly", () => {
+  it("fails the check when a box that only speaks TLS 1.3 serves the hostname", async () => {
+    const port = await listening(
+      tls.createServer({ cert: certificate, key, minVersion: "TLSv1.3" }, (socket) => {
+        socket.once("data", () => socket.end(ANSWER));
+      }),
+    );
+    const outcome = await askTheBoxOverTLS(origin(port));
+    expect(outcome).toMatchObject({ kind: "answered", status: 200 });
+    expect(() => assertNotServed(outcome, "the box")).toThrow(/answered 200/);
+  });
+
+  it("passes when the box declines the hostname during the handshake", async () => {
+    const declining = tls.createServer({
+      cert: certificate,
+      key,
+      SNICallback: (_hostname, done) => done(new Error("no certificate for this hostname")),
+    });
+    declining.on("tlsClientError", () => {});
+    const port = await listening(declining);
+    const outcome = await askTheBoxOverTLS(origin(port));
+    expect(["refused", "closed"]).toContain(outcome.kind);
+    expect(() => assertNotServed(outcome, "the box")).not.toThrow();
+  });
+
+  it("reads only an alert that declines the hostname as refusal, never one about the protocol version", () => {
+    const alerted = (code: string, message: string) => Object.assign(new Error(message), { code });
+    expect(
+      hostnameDeclined(
+        alerted("ERR_SSL_TLSV1_UNRECOGNIZED_NAME", "tlsv1 unrecognized name:SSL alert number 112"),
+      ),
+    ).toBe(true);
+    expect(
+      hostnameDeclined(
+        alerted(
+          "ERR_SSL_TLSV1_ALERT_INTERNAL_ERROR",
+          "tlsv1 alert internal error:SSL alert number 80",
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      hostnameDeclined(
+        alerted(
+          "ERR_SSL_TLSV1_ALERT_PROTOCOL_VERSION",
+          "tlsv1 alert protocol version:SSL alert number 70",
+        ),
+      ),
+    ).toBe(false);
   });
 });

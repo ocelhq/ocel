@@ -6,10 +6,11 @@ import type { Check } from "./context";
 const CLOUDFLARE_API = "https://api.cloudflare.com/client/v4";
 const ORIGIN_TIMEOUT_MS = 10_000;
 const ORIGIN_RECORD_TYPES = ["A", "AAAA", "CNAME"];
-const MAX_TLS_VERSION = "TLSv1.2";
+const CLIENT_CERTIFICATE_TLS_VERSION = "TLSv1.2";
 const CLIENT_CERTIFICATE_REFUSALS =
   /certificate[ _]required|handshake[ _]failure|bad[ _]certificate|access[ _]denied/i;
 const HUNG_UP = ["ECONNRESET", "EPIPE"];
+const HOSTNAME_DECLINED = /unrecognized[ _]name|alert[ _]internal[ _]error/i;
 
 type Listed<T> = { success: boolean; result: T[] };
 
@@ -140,13 +141,21 @@ export function clientCertificateRefused(error: Error & { code?: string }): bool
   return CLIENT_CERTIFICATE_REFUSALS.test(reasonOf(error));
 }
 
-export function handshakeAlerted(error: Error & { code?: string }): boolean {
-  return (error.code ?? "").startsWith("ERR_SSL_") && /alert/i.test(reasonOf(error));
+export function hostnameDeclined(error: Error & { code?: string }): boolean {
+  return (error.code ?? "").startsWith("ERR_SSL_") && HOSTNAME_DECLINED.test(reasonOf(error));
 }
+
+export type TLSAsking = {
+  refusal: (error: Error & { code?: string }) => boolean;
+  maxVersion: tls.SecureVersion;
+};
 
 export function askOverTLS(
   origin: Origin,
-  refusal: (error: Error & { code?: string }) => boolean = clientCertificateRefused,
+  { refusal, maxVersion }: TLSAsking = {
+    refusal: clientCertificateRefused,
+    maxVersion: CLIENT_CERTIFICATE_TLS_VERSION,
+  },
 ): Promise<Outcome> {
   return ask(
     origin,
@@ -155,7 +164,7 @@ export function askOverTLS(
         socket,
         servername: origin.hostname,
         rejectUnauthorized: false,
-        maxVersion: MAX_TLS_VERSION,
+        maxVersion,
       });
       spoken.once("secureConnect", () => spoken.write(request(origin.hostname)));
       return spoken;

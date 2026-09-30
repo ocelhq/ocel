@@ -4,7 +4,8 @@ import type { Check } from "./context";
 import {
   askOverPlainHTTP,
   askOverTLS,
-  handshakeAlerted,
+  hostnameDeclined,
+  type Origin,
   type Outcome,
   readOriginAddress,
 } from "./originShield";
@@ -17,6 +18,10 @@ export function assertTunnelAddress(address: string, hostname: string): void {
     address.endsWith(TUNNEL_DOMAIN),
     `${hostname}'s proxied record names ${address}, want a Cloudflare Tunnel (<uuid>${TUNNEL_DOMAIN})`,
   );
+}
+
+export function askTheBoxOverTLS(origin: Origin): Promise<Outcome> {
+  return askOverTLS(origin, { refusal: hostnameDeclined, maxVersion: "TLSv1.3" });
 }
 
 export function assertNotServed(outcome: Outcome, where: string): void {
@@ -87,7 +92,7 @@ const refusedAroundTheTunnel: Check = {
     const hostname = new URL(ctx.baseUrl).hostname;
     const address = box();
     assertNotServed(
-      await askOverTLS({ address, port: 443, hostname }, handshakeAlerted),
+      await askTheBoxOverTLS({ address, port: 443, hostname }),
       `${address}:443 for ${hostname}`,
     );
     assertNotServed(
