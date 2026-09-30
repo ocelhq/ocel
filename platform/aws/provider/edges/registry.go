@@ -35,9 +35,13 @@ type Deps struct {
 }
 
 var constructors = map[edge.Kind]func(Deps, provider.Options) (edge.Edge, error){
-	cloudflare.Kind: constructWithOptions(cloudflare.Kind, func(deps Deps, options cloudflare.Options) edge.Edge {
-		return cloudflare.New(string(deps.Namespace), options)
-	}),
+	cloudflare.Kind: func(deps Deps, options provider.Options) (edge.Edge, error) {
+		decoded, err := cloudflare.DecodeOptions(options)
+		if err != nil {
+			return nil, err
+		}
+		return cloudflare.New(string(deps.Namespace), decoded), nil
+	},
 	cloudfront.Kind: constructWithOptions(cloudfront.Kind, func(deps Deps, _ cloudfront.Options) edge.Edge {
 		return cloudfront.New(deps.Namespace, cloudfront.FromConfig(deps.AWS))
 	}),

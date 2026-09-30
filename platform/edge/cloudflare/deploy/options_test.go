@@ -1,10 +1,14 @@
 package cloudflare
 
 import (
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/configdoc"
 	"github.com/ocelhq/ocel/pkg/configdoc/schematest"
+	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 func TestEdgeSchemaIsCommitted(t *testing.T) {
@@ -24,5 +28,17 @@ func TestTheEdgeReachesItsOriginThroughATunnelOnlyWhenItsOptionsAskForOne(t *tes
 	}
 	if !New("ocel", Options{Tunnel: true}).Facts().TunnelsToOrigin {
 		t.Error("the worker edge set to tunnel reports no tunnel, and the provider must see it to refuse one it cannot run")
+	}
+}
+
+func TestOptionsDecodeTunnelAndRefuseAKeyTheEdgeDoesNotTake(t *testing.T) {
+	decoded, err := DecodeOptions(provider.Options{"tunnel": true})
+	if err != nil || !decoded.Tunnel {
+		t.Fatalf("DecodeOptions(tunnel) = %+v, %v; want tunnel set", decoded, err)
+	}
+	_, err = DecodeOptions(provider.Options{"cache": true})
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeUnknownOption || !strings.Contains(err.Error(), "edge.cloudflare.cache") {
+		t.Errorf("DecodeOptions(cache) error = %v, want an unknown-option refusal naming edge.cloudflare.cache", err)
 	}
 }

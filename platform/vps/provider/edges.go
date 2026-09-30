@@ -17,7 +17,7 @@ func (e edges) Open(kind edge.Kind, options provider.Options) (edge.Edge, error)
 	case edge.None:
 		return e.provider.box(), nil
 	case cloudflare.Kind:
-		decoded, err := provider.DecodeEdgeOptions[cloudflare.Options](cloudflare.Kind, options)
+		decoded, err := cloudflare.DecodeOptions(options)
 		if err != nil {
 			return nil, err
 		}
