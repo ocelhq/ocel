@@ -2,6 +2,7 @@ package project
 
 import (
 	"fmt"
+	"math"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -269,6 +270,11 @@ func frameworkOnContainer(app, framework string, compute provider.Compute) error
 }
 
 func refuseInvertedInstances(app string, container *Container) error {
+	for key, count := range map[string]*int{"minInstances": container.MinInstances, "maxInstances": container.MaxInstances} {
+		if count != nil && *count > math.MaxInt32 {
+			return fmt.Errorf("app %q sets %s %d, and no provider runs more than %d instances of an app: lower it", app, key, *count, math.MaxInt32)
+		}
+	}
 	if container.MinInstances == nil || container.MaxInstances == nil || *container.MinInstances <= *container.MaxInstances {
 		return nil
 	}
