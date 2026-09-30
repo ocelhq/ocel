@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	elbv2 "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
@@ -38,6 +39,7 @@ type recorded struct {
 
 type stack struct {
 	open     func(context.Context, environment.Tier) (Clients, error)
+	pause    func(context.Context, time.Duration) error
 	state    edge.StackState
 	recorded recorded
 }
@@ -92,7 +94,7 @@ func (s *stack) Claim(ctx context.Context, claim router.Claim) (edge.Origin, err
 		return edge.Origin{}, err
 	}
 	if len(claim.ClientCAs) > 0 {
-		if err := s.trustClientCAs(ctx, c, listener, claim.Hostname, claim.ClientCAs); err != nil {
+		if err := s.trustClientCAs(ctx, c, claim.Hostname, claim.ClientCAs); err != nil {
 			return edge.Origin{}, err
 		}
 	}

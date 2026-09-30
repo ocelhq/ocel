@@ -2,6 +2,7 @@ package alb
 
 import (
 	"context"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -12,11 +13,12 @@ import (
 const Kind router.Kind = "elb"
 
 type Router struct {
-	open func(context.Context, environment.Tier) (Clients, error)
+	open  func(context.Context, environment.Tier) (Clients, error)
+	pause func(context.Context, time.Duration) error
 }
 
 func NewRouter(open func(context.Context, environment.Tier) (Clients, error)) Router {
-	return Router{open: open}
+	return Router{open: open, pause: pauseFor}
 }
 
 func (r Router) Kind() router.Kind { return Kind }
@@ -47,7 +49,7 @@ func (r Router) Reconcile(_ context.Context, spec router.StackSpec, prior router
 }
 
 func (r Router) Open(state router.StackState) (router.Stack, error) {
-	s := &stack{open: r.open, state: state.Edge}
+	s := &stack{open: r.open, pause: r.pause, state: state.Edge}
 	if err := state.Edge.Private.Into(&s.recorded); err != nil {
 		return nil, err
 	}

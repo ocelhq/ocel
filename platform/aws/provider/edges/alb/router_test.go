@@ -5,6 +5,7 @@ import (
 	"errors"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -30,7 +31,7 @@ func containerRecord(f *fakeAWS) func(app, build string) router.DeploymentRecord
 
 func fixtureOn(t *testing.T, f *fakeAWS, tier environment.Tier, pointer string) routerconformance.Fixture {
 	t.Helper()
-	r := NewRouter(f.clients)
+	r := newTestRouter(f)
 	spec := router.StackSpec{Tier: tier, Slug: "shop"}
 	stack, err := r.Reconcile(context.Background(), spec, router.StackState{})
 	if err != nil {
@@ -76,9 +77,15 @@ func TestTheALBRouterBehavesAsEveryRouterMust(t *testing.T) {
 	})
 }
 
+func newTestRouter(f *fakeAWS) Router {
+	r := NewRouter(f.clients)
+	r.pause = func(context.Context, time.Duration) error { return nil }
+	return r
+}
+
 func claimedStack(t *testing.T, f *fakeAWS, claims ...router.Claim) router.Stack {
 	t.Helper()
-	r := NewRouter(f.clients)
+	r := newTestRouter(f)
 	stack, err := r.Reconcile(context.Background(), router.StackSpec{Tier: environment.TierProduction, Slug: "shop"}, router.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
@@ -103,7 +110,7 @@ func moveOnto(t *testing.T, stack router.Stack, pointer string, records ...route
 
 func TestAClaimAnswersOnThePublicBalancerWithTheHostnamesCertificateAndARuleForIt(t *testing.T) {
 	f := newFakeAWS()
-	r := NewRouter(f.clients)
+	r := newTestRouter(f)
 	stack, err := r.Reconcile(context.Background(), router.StackSpec{Tier: environment.TierProduction, Slug: "shop"}, router.StackState{})
 	if err != nil {
 		t.Fatal(err)
@@ -229,7 +236,7 @@ func TestAClaimBeforeAnyContainerAppDeployedBehindCloudflareIsNotReady(t *testin
 }
 
 func TestTheALBRouterServesStreamingAndNoNeedThatRunsCodeAtTheEdge(t *testing.T) {
-	facts := NewRouter(newFakeAWS().clients).Facts()
+	facts := newTestRouter(newFakeAWS()).Facts()
 	if !slices.Equal(facts.Supported, []edge.Need{edge.NeedStreaming}) {
 		t.Errorf("Facts().Supported = %v, want streaming alone: Cloudflare forwards to the balancer and runs none of the edge's code for these apps", facts.Supported)
 	}
