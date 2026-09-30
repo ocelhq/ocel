@@ -104,8 +104,9 @@ func (h *Host) RouteBy(hostname string) string {
 }
 
 type userNetwork struct {
-	name   string
-	option string
+	name          string
+	option        string
+	createdByOcel bool
 }
 
 func (f Front) joined() []userNetwork {

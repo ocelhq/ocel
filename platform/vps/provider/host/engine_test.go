@@ -63,6 +63,7 @@ func aLiveProxy(t *testing.T) liveProxy {
 
 	engineOrSkip(t)
 	name, network := probeName(t), enginetest.Network(t)
+	tunneling := aTunnelNetwork(t)
 	board := name + "-board"
 	t.Cleanup(func() { taken(t, name) })
 	t.Cleanup(func() { taken(t, board) })
@@ -104,7 +105,9 @@ func aLiveProxy(t *testing.T) liveProxy {
 		routingLock, dir,
 		quoted(caddy.Container), quoted(name),
 		quoted(SwitchboardContainer), quoted(board),
-		quoted(ProxyNetwork+":"+switchboard.TunnelListenPort), quoted("127.0.0.1:"+switchboard.TunnelListenPort),
+		quoted(TunnelNetwork+":"+switchboard.TunnelListenPort), quoted("127.0.0.1:"+switchboard.TunnelListenPort),
+		quoted(TunnelNetwork), quoted(tunneling),
+		`"`+TunnelNetwork+`"`, `"`+tunneling+`"`,
 		quoted(ProxyNetwork), quoted(network),
 		`"`+ProxyNetwork+`"`, `"`+network+`"`,
 		unprivileged, "",
@@ -121,6 +124,16 @@ func aLiveProxy(t *testing.T) liveProxy {
 		}
 	}
 	return proxy
+}
+
+func aTunnelNetwork(t *testing.T) string {
+	t.Helper()
+	name := probeName(t) + "-tunnel"
+	if said, err := exec.Command(dockerEngine, append(append([]string{"network", "create"}, enginetest.RunLabelArgs(t)...), name)...).CombinedOutput(); err != nil {
+		t.Fatalf("create %s: %v\n%s", name, err, said)
+	}
+	t.Cleanup(func() { _ = exec.Command(dockerEngine, "network", "rm", name).Run() })
+	return name
 }
 
 var pinnable = sync.OnceValue(func() bool {

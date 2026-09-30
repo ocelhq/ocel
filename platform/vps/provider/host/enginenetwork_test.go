@@ -52,6 +52,7 @@ func onYourNetwork(t *testing.T) yourNetwork {
 		t.Fatalf("create %s: %v\n%s", yours, err, said)
 	}
 	t.Cleanup(func() { _ = exec.Command(dockerEngine, "network", "rm", yours).Run() })
+	tunneling := aTunnelNetwork(t)
 	t.Cleanup(func() { taken(t, board) })
 
 	dir := enginetest.BindSource(t)
@@ -73,7 +74,9 @@ func onYourNetwork(t *testing.T) yourNetwork {
 		ConnectorRun, filepath.Join(dir, "connector"),
 		live.RoutingDir, routing,
 		routingLock, dir,
-		quoted(ProxyNetwork+":"+switchboard.TunnelListenPort), quoted("127.0.0.1:"+switchboard.TunnelListenPort),
+		quoted(TunnelNetwork+":"+switchboard.TunnelListenPort), quoted("127.0.0.1:"+switchboard.TunnelListenPort),
+		quoted(TunnelNetwork), quoted(tunneling),
+		`"`+TunnelNetwork+`"`, `"`+tunneling+`"`,
 		networkFlag+quoted(ProxyNetwork), networkFlag+quoted("name="+boxNetwork+",alias="+switchboard.Name),
 		networkFlag+quoted(yours), networkFlag+quoted("name="+yours+",alias="+switchboard.Name),
 		quoted(ProxyNetwork), quoted(boxNetwork),

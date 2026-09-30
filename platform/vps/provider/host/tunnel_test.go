@@ -70,6 +70,35 @@ func TestABoxReachedThroughOneEdgesTunnelRefusesAnothers(t *testing.T) {
 	}
 }
 
+func TestABoxRefusesATunnelToAnEdgeItRunsNoConnectorFor(t *testing.T) {
+	t.Parallel()
+	box := claimingBox(t, routed())
+
+	_, err := box.host().ReserveTunnel(context.Background(), "another-edge")
+
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+		t.Errorf("ReserveTunnel(another-edge) = %v, want it refused invalid: the box runs no connector for that edge", err)
+	}
+	if recorded := readBack(t, box).Tunnel; recorded != nil {
+		t.Errorf("the routing table records tunnel %+v, want none reserved", recorded)
+	}
+}
+
+func TestATunnelIsReservedWithTheVisitorHeadersItsEdgeSends(t *testing.T) {
+	t.Parallel()
+	box := claimingBox(t, routed())
+
+	reserved, err := box.host().ReserveTunnel(context.Background(), tunnelEdge)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if reserved.VisitorAddressHeader != "Cf-Connecting-Ip" || reserved.VisitorSchemeHeader != "Cf-Visitor" {
+		t.Errorf("ReserveTunnel() = %+v, want the headers Cloudflare names the visitor in, which the switchboard trusts only on the tunnel listener", reserved)
+	}
+}
+
 func TestATunnelRunsAsOcelTunnelFromAPinnedImageReadingARootOnlyTokenFile(t *testing.T) {
 	t.Parallel()
 	box := claimingBox(t, routed())
@@ -92,13 +121,15 @@ func TestATunnelRunsAsOcelTunnelFromAPinnedImageReadingARootOnlyTokenFile(t *tes
 		t.Fatalf("no container was run: %v", box.commands())
 	}
 	run := box.commands()[at]
-	for _, want := range []string{quoted(TunnelContainer), quoted(TunnelImage), quoted("--no-autoupdate"), quoted("TUNNEL_TOKEN_FILE=" + tunnelTokenMounted), quoted("--network") + " " + quoted(ProxyNetwork)} {
+	for _, want := range []string{quoted(TunnelContainer), quoted(tunnelConnectors[tunnelEdge].image), quoted("--no-autoupdate"), quoted("TUNNEL_TOKEN_FILE=" + tunnelTokenMounted), quoted("--network") + " " + quoted(TunnelNetwork)} {
 		if !strings.Contains(run, want) {
 			t.Errorf("the tunnel was run as %q, want %s in it", run, want)
 		}
 	}
-	if !strings.Contains(TunnelImage, "@sha256:") {
-		t.Errorf("TunnelImage = %q, want it pinned by digest", TunnelImage)
+	for kind, connector := range tunnelConnectors {
+		if !strings.Contains(connector.image, "@sha256:") {
+			t.Errorf("the %s tunnel runs %q, want it pinned by digest", kind, connector.image)
+		}
 	}
 	if strings.Contains(run, "--publish") {
 		t.Errorf("the tunnel was run publishing a port: %q; it only dials out", run)
@@ -254,18 +285,44 @@ func TestDisclaimingAHostnameOrASurfaceStopsTunnelingIt(t *testing.T) {
 	}
 }
 
-func TestTheSwitchboardListensForTheTunnelOnTheOcelNetworkAndPublishesNothingForIt(t *testing.T) {
+func TestTheTunnelListenerIsBoundOnANetworkOnlyTheSwitchboardAndTheTunnelJoin(t *testing.T) {
 	t.Parallel()
-	for name, front := range map[string]Front{"ocel's caddy": {}, "a manual proxy": {Manual: &ManualFront{Port: 8080}}} {
+	joined := quoted("--network") + " " + quoted(TunnelNetwork)
+	for what, command := range running() {
+		if strings.Contains(command, joined) != (what == boardContainer || what == tunnelContainer) {
+			t.Errorf("%s runs %q, want only the switchboard and the tunnel on %s: the tunnel listener trusts what the edge says about the visitor", what, command, TunnelNetwork)
+		}
+	}
+	if tunnel := running()[tunnelContainer]; strings.Contains(tunnel, quoted("--network")+" "+quoted(ProxyNetwork)) {
+		t.Errorf("the tunnel runs %q, want it off the %s network", tunnel, ProxyNetwork)
+	}
+	for name, front := range map[string]Front{
+		"ocel's caddy":            {},
+		"a manual proxy":          {Manual: &ManualFront{Port: 8080}},
+		"a manual proxy on ocel":  {Manual: &ManualFront{Port: 8080, Network: ProxyNetwork}},
+		"your caddy on a network": {Caddy: &CaddyFront{Directory: "/etc/caddy", Network: "coolify"}},
+		"your traefik":            {Traefik: &TraefikFront{Directory: "/etc/traefik", Network: "coolify"}},
+	} {
 		board := switchboardBox(nil, front)
-		command := strings.Join(board.command, " ")
-		if !strings.Contains(command, "--tunnel-listen "+ProxyNetwork+":"+switchboard.TunnelListenPort) {
-			t.Errorf("behind %s the switchboard runs %q, want it listening for the tunnel on the %s network", name, command, ProxyNetwork)
+		command := words(board.command)
+		if !strings.Contains(command, quoted("--tunnel-listen")+" "+quoted(TunnelNetwork+":"+switchboard.TunnelListenPort)) {
+			t.Errorf("behind %s the switchboard runs %q, want its tunnel listener bound on the %s network only", name, command, TunnelNetwork)
 		}
 		for _, port := range board.ports {
 			if port.target == switchboard.TunnelListenPort {
 				t.Errorf("behind %s the switchboard publishes its tunnel listener as %v", name, port)
 			}
 		}
+		if slices.ContainsFunc(front.joined(), func(joined userNetwork) bool { return joined.name == TunnelNetwork }) {
+			t.Errorf("behind %s your proxy's network is %s", name, TunnelNetwork)
+		}
+		for what, script := range map[string]string{"started": board.writing(containerRising), "started again": board.restoring(containerRising)} {
+			if !strings.Contains(script, "docker network create "+quoted(TunnelNetwork)) {
+				t.Errorf("behind %s the switchboard is %s without %s created first:\n%s", name, what, TunnelNetwork, script)
+			}
+		}
+	}
+	if !slices.ContainsFunc(proxyRemovals(), func(taken removal) bool { return taken.kind == KindNetwork && taken.path == TunnelNetwork }) {
+		t.Errorf("a teardown leaves the %s network behind", TunnelNetwork)
 	}
 }
