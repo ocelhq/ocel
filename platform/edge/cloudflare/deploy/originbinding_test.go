@@ -46,7 +46,7 @@ func TestAProductionHostnameBoundWithAnOriginIsForwardedThroughAProxiedRecordAnd
 	}
 }
 
-func TestAHostnameMovedOntoAnOriginDropsTheWorkerRouteThatServedIt(t *testing.T) {
+func TestAHostnameMovedOntoAnOriginRepointsTheWorkerRouteThatServedItToRunNoWorker(t *testing.T) {
 	m := zoneMock()
 	m.existingRoutes = []map[string]any{{"id": "served", "pattern": "api.app.com/*", "script": domainEntryScript}}
 	s := originStack(t, m, environment.TierProduction)
@@ -54,7 +54,48 @@ func TestAHostnameMovedOntoAnOriginDropsTheWorkerRouteThatServedIt(t *testing.T)
 	if err := s.BindDomain(t.Context(), edge.DomainBinding{Hostname: "api.app.com", Origin: &edge.Origin{Address: albAddress, Certified: true}}); err != nil {
 		t.Fatalf("BindDomain: %v", err)
 	}
-	assertSet(t, "deleted routes", m.deletedRoutes, []string{"served"})
+
+	if len(m.deletedRoutes) != 0 || len(m.createdRoutes) != 0 {
+		t.Errorf("deleted routes %v and created %v, want the route repointed in place, so no request between the two falls to a wildcard route", m.deletedRoutes, m.createdRoutes)
+	}
+	if len(m.existingRoutes) != 1 || m.existingRoutes[0]["id"] != "served" {
+		t.Fatalf("the zone holds routes %v, want the one route that served api.app.com", m.existingRoutes)
+	}
+	if script, named := m.existingRoutes[0]["script"]; named && script != nil && script != "" {
+		t.Errorf("api.app.com/* runs %v, want no worker", script)
+	}
+}
+
+func TestAForwardedProductionHostnameMovedOntoTheWorkerIsServedByTheEntryWorkerAndNoLongerForwarded(t *testing.T) {
+	m := zoneMock()
+	s := originStack(t, m, environment.TierProduction)
+	if err := s.BindDomain(t.Context(), edge.DomainBinding{Hostname: "api.app.com", Origin: &edge.Origin{Address: albAddress, Certified: true}}); err != nil {
+		t.Fatalf("BindDomain with an origin: %v", err)
+	}
+
+	if err := s.BindDomain(t.Context(), edge.DomainBinding{Hostname: "api.app.com"}); err != nil {
+		t.Fatalf("BindDomain onto the worker: %v", err)
+	}
+
+	if len(m.existingRoutes) != 1 || m.existingRoutes[0]["pattern"] != "api.app.com/*" || m.existingRoutes[0]["script"] != domainEntryScript {
+		t.Errorf("the zone holds routes %v, want api.app.com/* running %s", m.existingRoutes, domainEntryScript)
+	}
+	if len(m.deletedRoutes) != 0 || len(m.deletedRecords) != 0 {
+		t.Errorf("deleted routes %v and records %v, want both repointed in place so the hostname answers throughout the move", m.deletedRoutes, m.deletedRecords)
+	}
+	if len(m.existingRecords) != 1 || m.existingRecords[0]["proxied"] != true || m.existingRecords[0]["comment"] != recordComment || m.existingRecords[0]["content"] == albAddress {
+		t.Errorf("the zone holds records %v, want one proxied record no longer forwarding to %s and naming no forwarding owner", m.existingRecords, albAddress)
+	}
+	if got := s.State(); len(got.Records) != 0 || got.Addresses["api.app.com"] != "" {
+		t.Errorf("the stack still records %v and addresses %v, want api.app.com no longer forwarded", got.Records, got.Addresses)
+	}
+
+	if err := s.UnbindDomain(t.Context(), "api.app.com"); err != nil {
+		t.Fatalf("UnbindDomain: %v", err)
+	}
+	if len(m.existingRoutes) != 0 {
+		t.Errorf("the zone still holds routes %v after unbinding, want the entry worker's route removed", m.existingRoutes)
+	}
 }
 
 func TestAProductionHostnameBoundWithAnOriginUnderAWildcardWorkerRouteGetsAnExactRouteThatRunsNoWorker(t *testing.T) {

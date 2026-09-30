@@ -29,13 +29,11 @@ func (s *stack) bindForwarded(ctx context.Context, binding edge.DomainBinding) e
 	if err != nil {
 		return err
 	}
-	pattern := routePattern(binding.Hostname)
+	var served []string
 	if s.state.Tier != environment.TierPreview {
-		if err := s.p.detachRoute(ctx, zoneID, pattern, s.own.EntryWorkers); err != nil {
-			return err
-		}
+		served = s.own.EntryWorkers
 	}
-	if err := s.p.ensureRouteWithoutWorker(ctx, zoneID, pattern); err != nil {
+	if err := s.p.ensureRouteWithoutWorker(ctx, zoneID, routePattern(binding.Hostname), served); err != nil {
 		return err
 	}
 	return s.p.bindOrigin(ctx, &s.state, s.formatOwner(), binding)
@@ -56,7 +54,16 @@ func (s *stack) unbindForwarded(ctx context.Context, hostname string) error {
 	return s.p.unbindOrigin(ctx, &s.state, s.formatOwner(), hostname)
 }
 
-func (p *cloudflare) ensureRouteWithoutWorker(ctx context.Context, zoneID, pattern string) error {
+func (s *stack) stopForwarding(ctx context.Context, zoneID, hostname string) error {
+	if err := s.p.unforwardRecords(ctx, zoneID, s.formatOwner(), hostname); err != nil {
+		return err
+	}
+	s.state.PublishAddress(hostname, "")
+	s.state.RecordWrites(removeRecordsNamed(s.state.Records, hostname))
+	return nil
+}
+
+func (p *cloudflare) ensureRouteWithoutWorker(ctx context.Context, zoneID, pattern string, served []string) error {
 	snap := p.routeSnapshot()
 	inZone, err := snap.inZone(ctx, zoneID)
 	if err != nil {
@@ -67,6 +74,13 @@ func (p *cloudflare) ensureRouteWithoutWorker(ctx context.Context, zoneID, patte
 			continue
 		}
 		if route.Script == "" {
+			return nil
+		}
+		if slices.Contains(served, route.Script) {
+			if _, err := p.client.Workers.Routes.Update(ctx, route.ID, workers.RouteUpdateParams{ZoneID: cf.F(zoneID), Pattern: cf.F(pattern)}); err != nil {
+				return fmt.Errorf("repoint worker route %q to run no worker: %w", pattern, err)
+			}
+			snap.repointed(zoneID, route.ID, "")
 			return nil
 		}
 		return fmt.Errorf("worker route %q runs %q, and a hostname forwarded to its origin runs no worker: remove that route and bind it again", pattern, route.Script)

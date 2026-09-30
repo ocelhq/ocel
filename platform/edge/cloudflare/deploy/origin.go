@@ -219,6 +219,35 @@ func (p *cloudflare) dropForwardRecords(ctx context.Context, zoneID, owner, host
 	return errors.Join(errs...)
 }
 
+func (p *cloudflare) unforwardRecords(ctx context.Context, zoneID, owner, hostname string) error {
+	live, err := p.listAddressRecords(ctx, zoneID, hostname)
+	if err != nil {
+		return err
+	}
+	body, err := recordBody(edge.Record{Name: hostname, Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true})
+	if err != nil {
+		return err
+	}
+	var errs []error
+	rewritten := false
+	for _, rec := range live {
+		if held, _ := parseCommentOwner(rec.Comment); held != owner {
+			continue
+		}
+		if rewritten {
+			if _, err := p.client.DNS.Records.Delete(ctx, rec.ID, dns.RecordDeleteParams{ZoneID: cf.F(zoneID)}); err != nil {
+				errs = append(errs, fmt.Errorf("delete DNS record %s %s: %w", hostname, rec.Type, err))
+			}
+			continue
+		}
+		if _, err := p.client.DNS.Records.Update(ctx, rec.ID, dns.RecordUpdateParams{ZoneID: cf.F(zoneID), Body: body}); err != nil {
+			return fmt.Errorf("repoint DNS record %s off its origin: %w", hostname, err)
+		}
+		rewritten = true
+	}
+	return errors.Join(errs...)
+}
+
 func (p *cloudflare) readForwardedOwner(ctx context.Context, zoneID, hostname string) (string, error) {
 	live, err := p.listAddressRecords(ctx, zoneID, hostname)
 	if err != nil {
