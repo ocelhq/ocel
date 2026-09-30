@@ -507,10 +507,11 @@ func TestEachValueIsProjectedAsAFileInADirectoryNamedToTheChild(t *testing.T) {
 			got, err := os.ReadFile(filepath.Join(root, "DB_PASSWORD"))
 			return err == nil && string(got) == "rotated"
 		})
+		eventually(t, "the first generation's directory to go: a replaced generation leaves no plaintext behind", func() bool {
+			_, err := os.Stat(filepath.Join(root, "..1"))
+			return os.IsNotExist(err)
+		})
 
-		if _, err := os.Stat(filepath.Join(root, "..1")); !os.IsNotExist(err) {
-			t.Errorf("the first generation's directory is still there (%v); a replaced generation leaves no plaintext behind", err)
-		}
 		if _, err := os.Stat(filepath.Join(root, "..2")); err != nil {
 			t.Errorf("the serving generation's directory is missing: %v", err)
 		}
