@@ -255,7 +255,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 			sharedStack: shared,
 			provider:    p,
 			store:       edgeStateStore{keyValues: p.KeyValues(), name: stackrecords.EdgeStackKey(spec.Tier, spec.Slug)},
-			tunnel:      readSelectedTunnel(front),
+			tunnel:      readTunnelToOrigin(front),
 		},
 		gate:           gate,
 		features:       features,
