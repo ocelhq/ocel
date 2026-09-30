@@ -97,7 +97,26 @@ function selectors(merged) {
     shorthand: selector.oneOf[0].enum,
   });
   const { provider, edge, dns } = merged.properties;
-  return { provider: selection(provider), edge: selection(edge), dns: selection(dns) };
+  return {
+    provider: { ...selection(provider), required: requiredText(provider) },
+    edge: selection(edge),
+    dns: selection(dns),
+  };
+}
+
+function requiredText(selector) {
+  const acceptsText = (node) =>
+    node?.type === "string" || (node?.oneOf ?? []).some((one) => one.type === "string");
+  return Object.fromEntries(
+    Object.entries(selector.oneOf[1].properties)
+      .map(([id, options]) => [
+        id,
+        (options.required ?? [])
+          .filter((name) => acceptsText(options.properties?.[name]))
+          .map((name) => ({ name, doc: options.properties[name].description ?? "" })),
+      ])
+      .filter(([, required]) => required.length > 0),
+  );
 }
 
 const RESERVED = new Set(["OcelConfig"]);

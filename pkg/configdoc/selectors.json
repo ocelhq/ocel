@@ -1,7 +1,25 @@
 {
   "provider": {
     "ids": ["aws", "gcp", "vps"],
-    "shorthand": ["aws"]
+    "shorthand": ["aws"],
+    "required": {
+      "gcp": [
+        {
+          "name": "project",
+          "doc": "The Google Cloud project to deploy into."
+        },
+        {
+          "name": "region",
+          "doc": "The region to deploy into. A project spans them all, so this names the one."
+        }
+      ],
+      "vps": [
+        {
+          "name": "ssh",
+          "doc": "The machine to deploy onto: a Host alias from ssh_config, or the destination spelled out."
+        }
+      ]
+    }
   },
   "edge": {
     "ids": ["alb", "api-gateway", "cloudflare", "cloudfront"],
