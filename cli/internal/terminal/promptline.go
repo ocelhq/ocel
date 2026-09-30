@@ -80,6 +80,55 @@ func (p Prompt) selectLine(ctx context.Context, title string, options []Option) 
 	}
 }
 
+func (p Prompt) selectOneLine(ctx context.Context, title string, options []Option) (string, bool, error) {
+	for {
+		fmt.Fprintf(p.out, "%s:\n", title)
+		for i, o := range options {
+			fmt.Fprintf(p.out, "  %d) %s\n", i+1, o.label())
+		}
+		fmt.Fprint(p.out, "Number of your choice: ")
+
+		line, err := p.readLine(ctx)
+		if errors.Is(err, io.EOF) {
+			return "", false, nil
+		}
+		if err != nil {
+			return "", false, err
+		}
+		index, err := strconv.Atoi(strings.TrimSpace(line))
+		if err != nil || index < 1 || index > len(options) {
+			fmt.Fprintf(p.out, "%q is not one of 1-%d\n", strings.TrimSpace(line), len(options))
+			continue
+		}
+		return options[index-1].Name, true, nil
+	}
+}
+
+func (p Prompt) inputLine(ctx context.Context, title, description string) (string, bool, error) {
+	fmt.Fprintf(p.out, "%s (%s): ", title, description)
+	line, err := p.readLine(ctx)
+	if errors.Is(err, io.EOF) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return strings.TrimSpace(line), true, nil
+}
+
+func (p Prompt) awaitEnterLine(ctx context.Context, question string) (bool, error) {
+	fmt.Fprintf(p.out, "%s ", question)
+	line, err := p.readLine(ctx)
+	if errors.Is(err, io.EOF) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	answer := strings.TrimSpace(line)
+	return !strings.EqualFold(answer, "n") && !strings.EqualFold(answer, "no"), nil
+}
+
 func toggle(options []Option, chosen []string, line string) ([]string, error) {
 	next := slices.Clone(chosen)
 	for _, field := range strings.Split(line, ",") {
@@ -146,7 +195,7 @@ func readLineFrom(stdin io.Reader) (string, error) {
 		line, err = stdinReader.ReadString('\n')
 		stdinMu.Unlock()
 	} else {
-		line, err = bufio.NewReader(stdin).ReadString('\n')
+		line, err = readOneLine(stdin)
 	}
 
 	line = strings.TrimRight(line, "\r\n")
@@ -157,4 +206,21 @@ func readLineFrom(stdin io.Reader) (string, error) {
 		err = fmt.Errorf("failed to read input: %w", err)
 	}
 	return line, err
+}
+
+func readOneLine(r io.Reader) (string, error) {
+	var line []byte
+	b := make([]byte, 1)
+	for {
+		n, err := r.Read(b)
+		if n > 0 {
+			line = append(line, b[0])
+			if b[0] == '\n' {
+				return string(line), nil
+			}
+		}
+		if err != nil {
+			return string(line), err
+		}
+	}
 }
