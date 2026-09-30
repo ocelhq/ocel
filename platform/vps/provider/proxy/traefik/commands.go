@@ -10,14 +10,11 @@ func containerLabels() []string {
 	return []string{"sh", "-c", "docker ps --quiet | xargs -r docker inspect --type container --format '" + labelled + "'"}
 }
 
-const (
-	mountFact   = "mount="
-	networkFact = "network="
-)
+const networkFact = "network="
 
-func switchboardFacts() []string {
+func switchboardNetworks() []string {
 	return []string{"docker", "inspect", "--type", "container", "--format",
-		"{{range .Mounts}}" + mountFact + "{{.Destination}} {{end}}{{range $name, $_ := .NetworkSettings.Networks}}" + networkFact + "{{$name}} {{end}}",
+		"{{range $name, $_ := .NetworkSettings.Networks}}" + networkFact + "{{$name}} {{end}}",
 		switchboard.Name}
 }
 
