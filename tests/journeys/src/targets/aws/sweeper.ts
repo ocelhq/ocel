@@ -32,6 +32,22 @@ export function cellsBySlugPart(cells: Cell[]): Map<string, Cell> {
   return byPart;
 }
 
+export const NAMESPACE_SWEEPS_AT_ONCE = 4;
+
+export async function forEachAtMost<T>(
+  limit: number,
+  items: T[],
+  work: (item: T) => Promise<void>,
+): Promise<void> {
+  let next = 0;
+  const lanes = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    for (let index = next++; index < items.length; index = next++) {
+      await work(items[index] as T);
+    }
+  });
+  await Promise.all(lanes);
+}
+
 export async function despite(
   complaints: string[],
   said: string,
@@ -315,11 +331,14 @@ export class AwsSweeper implements Sweeper {
     const mine = cells.map((cell) => namespaceFor(cell.name, runId));
     const stray = strayNamespaces(await taggedNamespaces(cliAt(where.endpoint)), mine);
     const live = await busy(stray);
-    for (const namespace of stray.filter((name) => !underway(name, live))) {
-      await despite(complaints, `${namespace} sweep`, () =>
-        this.sweepStrayNamespace(runId, namespace, byPart, complaints, true),
-      );
-    }
+    await forEachAtMost(
+      NAMESPACE_SWEEPS_AT_ONCE,
+      stray.filter((name) => !underway(name, live)),
+      (namespace) =>
+        despite(complaints, `${namespace} sweep`, () =>
+          this.sweepStrayNamespace(runId, namespace, byPart, complaints, true),
+        ),
+    );
   }
 
   private async sweepOrphanedPolicies(complaints: string[], busy: Busy): Promise<void> {
