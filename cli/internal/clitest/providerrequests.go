@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -15,6 +16,7 @@ import (
 type ProviderRequests struct {
 	mu     sync.Mutex
 	bodies map[string][][]byte
+	order  []string
 }
 
 func (r *ProviderRequests) record(next http.Handler) http.Handler {
@@ -35,6 +37,7 @@ func (r *ProviderRequests) record(next http.Handler) http.Handler {
 			r.bodies = map[string][][]byte{}
 		}
 		r.bodies[req.URL.Path] = append(r.bodies[req.URL.Path], message)
+		r.order = append(r.order, req.URL.Path)
 		r.mu.Unlock()
 		next.ServeHTTP(w, req)
 	})
@@ -56,4 +59,10 @@ func RequestsTo[M proto.Message](t *testing.T, r *ProviderRequests, procedure st
 		sent = append(sent, message)
 	}
 	return sent
+}
+
+func (r *ProviderRequests) Procedures() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.order)
 }
