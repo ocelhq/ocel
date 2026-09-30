@@ -1,6 +1,7 @@
 package cloudflare
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -129,6 +130,15 @@ func TestTheWorkerEdgesTokenMayEditTheZonesClientCertificatesAndReadItsSSLMode(t
 			if !strings.Contains(document.Document, needed) {
 				t.Errorf("the %s token lists\n%s\nwant %q: forwarding a hostname to an origin reads the zone's SSL mode and uploads its client certificate", purpose, document.Document, needed)
 			}
+		}
+	}
+}
+
+func TestBothCloudflareEdgesNameTheRangesCloudflareReachesAnOriginFrom(t *testing.T) {
+	m := zoneMock()
+	for name, facts := range map[string]edge.Facts{"worker": m.provider(t).Facts(), "proxy": m.proxy(t).Facts()} {
+		if !slices.Contains(facts.OriginFacingRanges, "173.245.48.0/20") || !slices.Contains(facts.OriginFacingRanges, "131.0.72.0/22") {
+			t.Errorf("the %s edge names origin-facing ranges %v, want the ranges Cloudflare publishes at cloudflare.com/ips-v4", name, facts.OriginFacingRanges)
 		}
 	}
 }

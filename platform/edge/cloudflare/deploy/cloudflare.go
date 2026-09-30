@@ -102,14 +102,15 @@ func (p *cloudflare) cacheStore() cacheStore {
 
 func (p *cloudflare) Facts() edge.Facts {
 	return edge.Facts{
-		Supported:         edge.AllNeeds(),
-		Compatibility:     edge.Compatibility{Date: compatDate, Flags: slices.Clone(compatFlags)},
-		RunsCode:          true,
-		Entry:             workerModule(entryBundle),
-		ServesUnbound:     true,
-		ProxiesRecords:    true,
-		ProxiedRecordNote: "Turn the Cloudflare proxy (orange cloud) on for these records: each value is a placeholder Cloudflare answers behind.",
-		CredentialScope:   readAccountID(),
+		Supported:          edge.AllNeeds(),
+		Compatibility:      edge.Compatibility{Date: compatDate, Flags: slices.Clone(compatFlags)},
+		RunsCode:           true,
+		Entry:              workerModule(entryBundle),
+		ServesUnbound:      true,
+		ProxiesRecords:     true,
+		ProxiedRecordNote:  "Turn the Cloudflare proxy (orange cloud) on for these records: each value is a placeholder Cloudflare answers behind.",
+		OriginFacingRanges: listOriginFacingRanges(),
+		CredentialScope:    readAccountID(),
 	}
 }
 
