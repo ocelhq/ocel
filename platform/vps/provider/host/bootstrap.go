@@ -91,6 +91,11 @@ func (b Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 	if groups[0].Reason == "" {
 		groups[0].Reason = bootstrapDocs
 	}
+	if read.move != nil {
+		var move provider.ChangeGroup
+		move, groups[0].Changes = read.move.group(groups[0].Changes)
+		groups = slices.Insert(groups, 1, move)
+	}
 	return provider.Plan{Groups: bootstrapplan.PrefixWithVendor(b.vendor, groups)}, nil
 }
 
@@ -233,13 +238,19 @@ func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 	if err := b.write(ctx, served, EnvSourceSyncItems(req.Tier, current.Arch), progress); err != nil {
 		return err
 	}
-	if err := b.write(ctx, served, current.recorded, progress); err != nil {
+	if err := b.removeOldFront(ctx, current.move, progress); err != nil {
 		return err
 	}
 	if err := b.write(ctx, served, ProxyItems(current.Arch, current.Front), progress); err != nil {
 		return err
 	}
-	if err := b.host.rerender(ctx); err != nil {
+	if err := b.placeRoutes(ctx, current.move); err != nil {
+		return err
+	}
+	if err := b.write(ctx, served, current.recorded, progress); err != nil {
+		return err
+	}
+	if err := b.awaitFront(ctx, req.Tier, current.move, progress); err != nil {
 		return err
 	}
 	if err := b.write(ctx, served, BackupItems(), progress); err != nil {
@@ -483,13 +494,14 @@ func leavingKnownHosts(forget string) string {
 const dirNonEmpty = "dir=nonempty"
 
 type removal struct {
-	kind    string
-	path    string
-	reason  string
-	action  provider.ChangeAction
-	shared  bool
-	reload  string
-	origins string
+	kind      string
+	path      string
+	reason    string
+	action    provider.ChangeAction
+	shared    bool
+	reload    string
+	origins   string
+	unmounted bool
 }
 
 func (r removal) phrase() string { return phrase(r.kind, r.path) }
@@ -528,7 +540,11 @@ func (r removal) command() string {
 		return "if ! docker network rm " + quoted(r.path) + " >/dev/null 2>&1 && " +
 			"docker network inspect " + quoted(r.path) + " >/dev/null 2>&1; then printf '%s\\n' " + quoted(networkInUse) + "; fi"
 	case r.kind == KindPlaced:
-		unplaced := words(switchboardCommand("unplace", r.path)) + " 2>/dev/null || rm -f " + quoted(r.path) + "\n"
+		unplaced, unplacedOrigins := words(switchboardCommand("unplace", r.path))+" 2>/dev/null || ", words(switchboardCommand("unplace-origins"))+" 2>/dev/null || "
+		if r.unmounted {
+			unplaced, unplacedOrigins = "", ""
+		}
+		unplaced += "rm -f " + quoted(r.path) + "\n"
 		if r.reload != "" {
 			unplaced += r.reload + "\n"
 		}
@@ -536,7 +552,7 @@ func (r removal) command() string {
 		if r.origins == "" {
 			return placed
 		}
-		return placed + "\n" + words(switchboardCommand("unplace-origins")) + " 2>/dev/null || rm -f " + quoted(r.origins) + "/" + switchboard.OriginPrefix + "*.pem"
+		return placed + "\n" + unplacedOrigins + "rm -f " + quoted(r.origins) + "/" + switchboard.OriginPrefix + "*.pem"
 	case r.kind == KindRoutingTable || r.kind == KindProxyConfig:
 		return routingLocked("-x") + "rm -f " + quoted(r.path)
 	case r.shared:

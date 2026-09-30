@@ -391,6 +391,7 @@ type Reading struct {
 	Engine   Engine
 
 	recorded    []Item
+	move        *frontMove
 	unelevated  bool
 	rerendering bool
 }

@@ -241,21 +241,6 @@ func TestABootstrapLeavesARecordThatAgreesUnchanged(t *testing.T) {
 	}
 }
 
-func TestABootstrapWhoseProxyTheBoxDoesNotRouteThroughIsRefusedWithWhatToWrite(t *testing.T) {
-	t.Parallel()
-
-	tier := environment.TierProduction
-	box := bootstrappedOn(t, tier)
-	recordOn(t, box, tier, routedByHand(), "blog")
-	_, err := NewBootstrap(box.host(), testVendor, "shop").Plan(context.Background(), provider.BootstrapRequest{Tier: tier})
-	refused := refusalOf(t, err, refusal.CodeInvalid)
-	for _, wanted := range []string{"a proxy you route yourself", "set by blog/production", "add `\"proxy\": \"manual\"`"} {
-		if !strings.Contains(refused.Message, wanted) {
-			t.Errorf("the refusal says %q, want %q in it", refused.Message, wanted)
-		}
-	}
-}
-
 func TestADeployOntoABoxRecordedForAnotherProxyIsRefusedNamingWhoSetIt(t *testing.T) {
 	t.Parallel()
 
@@ -427,25 +412,15 @@ func recordChange(t *testing.T, plan provider.Plan) provider.Change {
 	return provider.Change{}
 }
 
-func TestABootstrapUnderAProxyRoutedByHandOntoABoxOcelsOwnProxyFrontsUnrecordedIsRefused(t *testing.T) {
+func TestABootstrapUnderAProxyRoutedByHandOntoABoxOcelsOwnProxyFrontsUnrecordedMovesItOffOcelsOwnProxy(t *testing.T) {
 	t.Parallel()
 
 	tier := environment.TierProduction
 	box := bootstrappedOn(t, tier)
 	box.installed[tier] = unrecorded(box, tier)
-	boot := NewBootstrap(box.fronted(routedByHand()), testVendor, "shop")
-	_, planned := boot.Plan(context.Background(), provider.BootstrapRequest{Tier: tier})
-	applied := boot.Apply(context.Background(), provider.BootstrapRequest{Tier: tier, WrittenBy: "the-suite"}, nil)
-	for step, err := range map[string]error{"Plan": planned, "Apply": applied} {
-		refused := refusalOf(t, err, refusal.CodeInvalid)
-		for _, wanted := range []string{"ocel's own proxy", "remove `\"proxy\"`"} {
-			if !strings.Contains(refused.Message, wanted) {
-				t.Errorf("%s refused with %q, want %q in it: %s runs on this box, so it is fronted by ocel's own proxy whether or not a record says so", step, refused.Message, wanted, caddy.Container)
-			}
-		}
-	}
-	if at := box.at("/dev/stdin " + quoted(FrontRecordPath)); at >= 0 {
-		t.Errorf("the refused bootstrap still wrote %s: %s", FrontRecordPath, box.commands()[at])
+	move := movePlanned(t, box, tier, routedByHand())
+	if want := string(testVendor) + "/ocel's own proxy → a proxy you route yourself"; move.Name != want {
+		t.Errorf("the plan names the move %q, want %q: %s runs on this box, so it is fronted by ocel's own proxy whether or not a record says so", move.Name, want, caddy.Container)
 	}
 	survey := box.commands()[box.at("for p in")]
 	if !strings.Contains(survey, "docker inspect --type container") || !strings.Contains(survey, quoted(caddy.Container)) {
