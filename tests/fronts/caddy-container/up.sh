@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-image=mirror.gcr.io/library/caddy:2
+image=mirror.gcr.io/library/caddy:2.11
 network=ocel-front-caddy
 conf=/etc/ocel-front-caddy
 state=/var/lib/ocel-front/caddy-container
