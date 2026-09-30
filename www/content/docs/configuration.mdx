@@ -184,10 +184,14 @@ at most `maxInstances`, however busy.
 
 Both are whole numbers: `minInstances` from 0, `maxInstances` from 1, and `minInstances` no
 more than `maxInstances`. Left off, `minInstances` is 1 and `maxInstances` is `minInstances`,
-or 1 when that is 0. An app with neither runs one instance and never scales.
+or 1 when that is 0. A container app that sets neither runs exactly one instance on every
+provider, and never scales.
 
-Each instance kept running is billed whether it serves a request or not. What the two numbers
-do depends on the provider:
+Each instance kept running is billed whether it serves a request or not. The two numbers are
+set once per app, with no override for a tier or a preview, so every preview keeps the same
+`minInstances` running as production does, and each one is billed for them.
+
+What the two numbers do depends on the provider:
 
 | Provider | Between the two |
 | --- | --- |
