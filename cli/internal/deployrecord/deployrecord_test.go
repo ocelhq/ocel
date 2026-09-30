@@ -22,7 +22,7 @@ func TestWriteLeavesTheDocumentedRecordInTheProjectStateDir(t *testing.T) {
 		err := Write(dir, Record{
 			Slug:        "proj-123",
 			Environment: Environment{Tier: "preview", Identity: "e2e-42"},
-			Provider:    Provider{Name: "aws"},
+			Provider:    Provider{Name: "fake"},
 			PromotionID: "dep_abc",
 			Tag:         "v1",
 			Apps:        []App{{Name: "web", BuildID: "bld_1", DeploymentID: "3f7c1b9a5e2d4c8f", URLs: []string{"https://app.example.com"}}},

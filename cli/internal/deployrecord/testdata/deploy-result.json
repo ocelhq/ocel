@@ -5,7 +5,7 @@
     "identity": "e2e-42"
   },
   "provider": {
-    "name": "aws"
+    "name": "fake"
   },
   "promotionId": "dep_abc",
   "tag": "v1",
