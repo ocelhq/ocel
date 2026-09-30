@@ -486,6 +486,25 @@ describe("a matrix that cannot be planned", () => {
     );
   });
 
+  it("refuses a variant that mixes computes with no edge on a fixture held to one cache layer", () => {
+    const mixed = variant("mixed", {
+      offeredOn: ["aws"],
+      config: { computes: { web: "container" } },
+    });
+    const mixedBehindEdge = variant("mixed-edge", {
+      offeredOn: ["aws"],
+      config: { edge: "cloudflare", computes: { web: "container" } },
+    });
+    const layered: Check = { title: "layered", cacheLayer: "origin", run: async () => undefined };
+    expect(() => planOf([one("deploy/next", { checks: [layered], on: { aws: [mixed] } })])).toThrow(
+      /deploy\/next asks aws for the mixed variant, which mixes computes behind no edge/,
+    );
+    expect(() =>
+      planOf([one("deploy/next", { checks: [layered], on: { aws: [mixedBehindEdge] } })]),
+    ).not.toThrow();
+    expect(() => planOf([one("deploy/node", { on: { aws: [mixed] } })])).not.toThrow();
+  });
+
   it("refuses a sample group with two representatives", () => {
     const represents = (name: string) =>
       one(name, { sample: { group: "g", representative: true } });
