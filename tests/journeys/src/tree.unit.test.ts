@@ -1,17 +1,20 @@
 import { beforeAll, describe, expect, it } from "bun:test";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { deploy, sdk } from "./matrix/fixtures";
 import type { Fixture } from "./matrix/types";
 import { appDirs, configTree, treeRoot } from "./ocel";
+import { outputRoot } from "./paths";
 import type { CellUnderTest } from "./run/cellRun";
 import {
+  lockfileInstallArgs,
   nestedMembers,
   rootManifest,
   splitWorkspaceFile,
   workspaceClosure,
   workspaceFileFor,
+  writeLockfile,
 } from "./tree";
 
 const ROOT_WORKSPACE = `packages:
@@ -175,5 +178,42 @@ describe("the workspace file a tree gets", () => {
     expect(written).toContain("  - packages/sdk\n");
     expect(written).not.toContain("apps/*");
     expect(written).toContain("linkWorkspacePackages: true");
+  });
+});
+
+describe("the pnpm resolution that writes a tree's lockfile", () => {
+  function cacheDirOf(args: string[]): string | undefined {
+    const at = args.indexOf("--cache-dir");
+    return at === -1 ? undefined : args[at + 1];
+  }
+
+  it("gives each worker process its own metadata cache under the journeys output", () => {
+    const first = cacheDirOf(lockfileInstallArgs(101));
+    const second = cacheDirOf(lockfileInstallArgs(202));
+    expect(first).toBe(path.join(outputRoot, "pnpm-cache", "101"));
+    expect(second).toBe(path.join(outputRoot, "pnpm-cache", "202"));
+  });
+
+  it("spawns pnpm with the cache of the process that runs it", async () => {
+    const scratch = await mkdtemp(path.join(tmpdir(), "lockfile-"));
+    const bin = path.join(scratch, "bin");
+    const root = path.join(scratch, "tree");
+    const said = path.join(scratch, "argv");
+    await mkdir(bin);
+    await mkdir(root);
+    await writeFile(
+      path.join(bin, "pnpm"),
+      `#!/bin/sh\nprintf '%s\\n' "$@" > ${JSON.stringify(said)}\n`,
+    );
+    await chmod(path.join(bin, "pnpm"), 0o755);
+    const pathBefore = process.env.PATH;
+    process.env.PATH = `${bin}${path.delimiter}${pathBefore}`;
+    try {
+      await writeLockfile(root);
+    } finally {
+      process.env.PATH = pathBefore;
+    }
+    const argv = (await readFile(said, "utf8")).trim().split("\n");
+    expect(argv).toEqual(lockfileInstallArgs(process.pid));
   });
 });
