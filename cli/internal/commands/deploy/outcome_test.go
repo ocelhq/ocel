@@ -71,6 +71,7 @@ func TestPropagationOnThePreviewDeployPromotionLine(t *testing.T) {
 
 			var stdout, stderr bytes.Buffer
 			clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+			coverEphemeralPreview(t, fixture, dependencies, previewUpOptions{})
 			if err := runPreviewUp(context.Background(), dependencies, fixture.Root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
 				t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 			}
