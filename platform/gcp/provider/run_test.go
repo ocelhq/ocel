@@ -62,11 +62,12 @@ func TestAContainerRevisionKeepsAnInstanceUpAndIsProbedOnItsOwnPath(t *testing.T
 		image:   "europe-west1-docker.pkg.dev/acme/ocel/api@sha256:abc",
 		compute: provider.ComputeContainer,
 		health:  "/healthz",
+		least:   1,
 	})
 
 	template := desired.Template
 	if template.Scaling.MinInstanceCount != 1 {
-		t.Errorf("a container keeps %d instances up, want one: it is billed for the instance rather than the request", template.Scaling.MinInstanceCount)
+		t.Errorf("a container keeps %d instances up, want the one its app names", template.Scaling.MinInstanceCount)
 	}
 	container := template.Containers[0]
 	if container.Resources.CpuIdle {

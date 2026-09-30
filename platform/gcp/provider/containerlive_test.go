@@ -131,3 +131,19 @@ func TestTheProviderWrapsEveryContainerInTheRuntimeItShips(t *testing.T) {
 		t.Error("ContainerRuntime(arm64) = nil, want a refusal: Cloud Run runs x86_64 alone")
 	}
 }
+
+func TestAContainerRevisionRunsBetweenTheInstanceCountsItsAppNames(t *testing.T) {
+	server := &runServer{}
+	spec := containerStackDeclaring(environment.TierProduction, "prod", provider.AppValues{})
+	spec.App.Instances = provider.Instances{Min: 0, Max: 7}
+
+	p := server.open(t)
+	if _, err := p.ProvisionContainers(context.Background(), spec, nil); err != nil {
+		t.Fatalf("ProvisionContainers() = %v", err)
+	}
+
+	scaling := server.current().Template.Scaling
+	if scaling.MinInstanceCount != 0 || scaling.MaxInstanceCount != 7 {
+		t.Errorf("the revision scales between %d and %d instances, want 0 and 7", scaling.MinInstanceCount, scaling.MaxInstanceCount)
+	}
+}
