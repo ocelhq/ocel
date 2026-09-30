@@ -607,3 +607,87 @@ func TestMovingABoxFromOcelsOwnProxyIsNotRefusedForThePortsOcelsOwnProxyHoldsOrF
 		})
 	}
 }
+
+func resumedAfter(t *testing.T, failed *bench, tier environment.Tier, from Front) *bench {
+	t.Helper()
+	written := lastRecord(failed)
+	if written == "" {
+		t.Fatalf("the refused move wrote no %s:\n%s", FrontRecordPath, strings.Join(failed.commands(), "\n"))
+	}
+	box := boxRecordedFor(t, tier, from)
+	for at, item := range box.installed[tier] {
+		if item.Name == FrontRecordPath {
+			box.installed[tier][at].Content = []byte(written)
+		}
+	}
+	return box
+}
+
+func lastRecord(box *bench) string {
+	written := ""
+	for at, command := range box.commands() {
+		if strings.Contains(command, "/dev/stdin "+quoted(FrontRecordPath)) {
+			written = box.fed[at]
+		}
+	}
+	return written
+}
+
+func stampedComplete(box *bench, tier environment.Tier) bool {
+	for at, command := range box.commands() {
+		if strings.Contains(command, "/dev/stdin "+quoted(StampPath(tier))) && strings.Contains(box.fed[at], string(StateComplete)) {
+			return true
+		}
+	}
+	return false
+}
+
+func TestAMoveWithinYourOwnTraefikRefusedBeforeItReadTheNewFileTakesTheOldOutWhenBootstrapRunsAgainAndItHas(t *testing.T) {
+	t.Parallel()
+
+	tier := environment.TierProduction
+	placement := traefik.DerivePlacementHostname("/etc/traefik/dynamic/ocel/ocel.yml")
+	failed := boxRecordedFor(t, tier, traefikOnTheHost())
+	servedFrom(failed, func(hostname string) session.Result {
+		if hostname == placement {
+			return session.Result{Code: proxyNotServingYet, Stderr: placement + " never reached ocel-switchboard"}
+		}
+		return throughTheSwitchboard(hostname)
+	})
+	_, err := movedTo(t, failed, tier, traefikIn("/etc/traefik/dynamic/ocel"))
+	refusalOf(t, err, refusal.CodeNotReady)
+
+	box := resumedAfter(t, failed, tier, traefikOnTheHost())
+	servedFrom(box, throughTheSwitchboard)
+	if _, err := movedTo(t, box, tier, traefikIn("/etc/traefik/dynamic/ocel")); err != nil {
+		t.Fatalf("Apply() again = %v", err)
+	}
+	wantBefore(t, box, quoted("--any-certificate")+" "+quoted(placement), "rm -f "+quoted("/etc/traefik/dynamic/ocel.yml"))
+	if record := lastRecord(box); strings.Contains(record, `"movingFrom"`) || !strings.Contains(record, `"/etc/traefik/dynamic/ocel"`) {
+		t.Errorf("%s was last written as %s, want your Traefik's new directory recorded with no move left to finish", FrontRecordPath, record)
+	}
+}
+
+func TestAMoveOntoYourProxyRefusedBeforeItServedWaitsForItAgainWhenBootstrapRunsAgainWithItHoldingTheServingPorts(t *testing.T) {
+	t.Parallel()
+
+	tier := environment.TierProduction
+	unserved := func(string) session.Result {
+		return session.Result{Code: proxyNotServingYet, Stderr: "connection refused on 127.0.0.1:443"}
+	}
+	failed := boxRecordedFor(t, tier, caddyService())
+	servedFrom(failed, unserved)
+	_, err := movedTo(t, failed, tier, traefikOnTheHost())
+	refusalOf(t, err, refusal.CodeNotReady)
+
+	box := resumedAfter(t, failed, tier, caddyService())
+	portsOwnedOn(box, nil, socketOwner{80, "traefik"}, socketOwner{443, "traefik"})
+	servedFrom(box, unserved)
+	_, err = movedTo(t, box, tier, traefikOnTheHost())
+	if refused := refusalOf(t, err, refusal.CodeNotReady); !strings.Contains(refused.Message, "your Traefik did not serve box.example.com, "+claimed) {
+		t.Errorf("bootstrap run again refused with %q, want it to wait again for your Traefik to serve %s", refused.Message, claimed)
+	}
+	if stampedComplete(box, tier) {
+		t.Errorf("bootstrap run again stamped the tier complete though your Traefik still serves nothing")
+	}
+}

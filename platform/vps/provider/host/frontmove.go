@@ -29,10 +29,19 @@ const moveWait = 10 * time.Minute
 var movePauses = retryBackoff{base: 2, ceiling: 15, spread: 2}
 
 type frontMove struct {
-	host  *Host
-	from  Front
-	to    Front
-	table RoutingTable
+	host     *Host
+	from     Front
+	to       Front
+	table    RoutingTable
+	recorded Item
+	resumed  bool
+}
+
+func (m *frontMove) recordUnfinished() []Item {
+	if m == nil {
+		return nil
+	}
+	return []Item{m.recorded}
 }
 
 func (f Front) identifyProcess() string {
